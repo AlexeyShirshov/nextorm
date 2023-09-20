@@ -1,7 +1,7 @@
 # Next ORM
 The goal is not be as fast as Dapper but get rid of manual sql code.\
 All sql code and parameters should be generated automatically, with intellisense, type checking and other c# features.\
-NextORM will not be truly ORM, because Object abbreviation can be surely removed - no change tracking (as inneficient), no creation entity class and mapping to it. For queries the only wau to get data is projection (via anonymous types). 
+NextORM will not be truly ORM, because Object abbreviation can be surely removed - no change tracking (as inneficient), no creation entity class and mapping to it. For queries the only way to get data is projection (via anonymous types). 
 ## Features
 * use only projection without mapping rdbms resultset to specific entities
 * stream data (use IAsyncEnumerable). It is still posible to fetch all data into list (or any) using System.Linq.Async (ToListAsync, for example)
@@ -16,7 +16,7 @@ NextORM will not be truly ORM, because Object abbreviation can be surely removed
         int Id {get;set;}
     }
     //...
-    // load data to anonymous object
+    // load data into anonymous object
     await foreach(var row in dataContext.SimpleEntity.Select(entity=>new {Id=entity.Id}))
     {
         _logger.LogInformation("Id = {id}", row.Id);
@@ -26,3 +26,10 @@ NextORM will not be truly ORM, because Object abbreviation can be surely removed
     {
         _logger.LogInformation("Id = {id}", row.Id);
     }
+### Subquery with strong typings
+    await foreach(var row in _sut.From(_sut.From("simple_entity").Select(tbl=>new {Id=tbl.Int("id")})).Select(subQuery=>new {subQuery.Id}))
+    {
+        _logger.LogInformation("Id = {id}", row.Id);
+    }
+    // generated code is 
+    // select id from (select id from simple_entity)
