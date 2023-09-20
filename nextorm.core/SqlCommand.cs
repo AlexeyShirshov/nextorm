@@ -5,20 +5,24 @@ using System.Reflection;
 using System.Text;
 
 namespace nextorm.core;
-public class SqlCommand<TResult> : IAsyncEnumerable<TResult>
+public class SqlCommand
 {
     private DbCommand? _dbCommand;
-    private SqlClient _sqlClient;
-    private readonly LambdaExpression _exp;
     private List<SelectExpression>? _selectList;
     private FromExpression? _from;
+    private SqlClient _sqlClient;
+    private readonly LambdaExpression _exp;
+    private bool _isPrepared;
     private bool _hasCtor;
     private Type? _srcType;
-
+    public SqlCommand(SqlClient sqlClient, LambdaExpression exp)
+    {
+        _sqlClient = sqlClient;
+        _exp = exp;
+    }
     public FromExpression? From { get => _from; set => _from = value; }
     public List<SelectExpression>? SelectList => _selectList;
     public Type? EntityType => _srcType;
-
     public SqlClient SqlClient 
     { 
         get => _sqlClient; 
@@ -28,38 +32,14 @@ public class SqlCommand<TResult> : IAsyncEnumerable<TResult>
             _sqlClient = value; 
         }
     }
+    public bool IsPrepared => _isPrepared;
 
-    public SqlCommand(SqlClient sqlClient, LambdaExpression exp)
+    protected void PrepareDbCommand()
     {
-        _sqlClient = sqlClient;
-        _exp = exp;
-    }
+        if (_exp is null)
+            throw new BuildSqlCommandException("Lambda expression for anonymous type must exists");
 
-    public IAsyncEnumerator<TResult> GetAsyncEnumerator(CancellationToken cancellationToken = default)
-    {
-        _dbCommand ??= PrepareDbCommand();
-        return new ResultSetEnumerator<TResult>(this, _sqlClient, _dbCommand, cancellationToken);
-    }
-
-    public TResult Map(IDataRecord dataRecord)
-    {
-        if (_selectList is null)
-            throw new InvalidOperationException("Command not prepared");
-
-        var resultType = typeof(TResult);
-
-        // foreach (var column in _selectList)
-        // {
-        //     resultType.GetMember(column.PropertyName).OfType<PropertyInfo>().Single().SetValue(result, dataRecord.GetValue(column.Index));
-        // }
-
-        return (TResult)Activator.CreateInstance(resultType, _selectList!.Select(column =>
-            Convert.ChangeType(dataRecord.GetValue(column.Index), column.PropertyType!)).ToArray())!;
-    }
-
-    private DbCommand PrepareDbCommand()
-    {
-        var resultType = typeof(TResult);
+        var resultType = _exp.ReturnType;
 
         _hasCtor = resultType.IsValueType || resultType.GetConstructor(Type.EmptyTypes) is not null;
 
@@ -68,6 +48,9 @@ public class SqlCommand<TResult> : IAsyncEnumerable<TResult>
             //resultType.GetConstructors().OrderByDescending(it=>it.GetParameters().Length).FirstOrDefault()
         }
 
+        if (_from is not null && _from.Table.IsT1 && !_from.Table.AsT1.IsPrepared)
+            _from.Table.AsT1.PrepareDbCommand();
+            
         if (_exp.Body is NewExpression ctor)
         {
             _selectList = new List<SelectExpression>();
@@ -101,10 +84,42 @@ public class SqlCommand<TResult> : IAsyncEnumerable<TResult>
                     ? sqlTable.Name
                     : _sqlClient.GetTableName(_srcType);
 
-                _from = new FromExpression { TableName = tableName };
+                _from = new FromExpression(tableName);
             }
+            else throw new BuildSqlCommandException("");
         }
 
+        _isPrepared = true;
+    }
+    protected DbCommand GetDbCommand()
+    {
+        if (!_isPrepared) PrepareDbCommand();
         return _sqlClient.CreateCommand(this);
+    }
+}
+public class SqlCommandFinal<TResult> : SqlCommand, IAsyncEnumerable<TResult>
+{
+    public SqlCommandFinal(SqlClient sqlClient, LambdaExpression exp) : base(sqlClient, exp)
+    {
+    }
+
+    public IAsyncEnumerator<TResult> GetAsyncEnumerator(CancellationToken cancellationToken = default)
+    {
+        return new ResultSetEnumerator<TResult>(this, SqlClient, GetDbCommand(), cancellationToken);
+    }
+    public TResult Map(IDataRecord dataRecord)
+    {
+        if (SelectList is null)
+            throw new InvalidOperationException("Command not prepared");
+
+        var resultType = typeof(TResult);
+
+        // foreach (var column in _selectList)
+        // {
+        //     resultType.GetMember(column.PropertyName).OfType<PropertyInfo>().Single().SetValue(result, dataRecord.GetValue(column.Index));
+        // }
+
+        return (TResult)Activator.CreateInstance(resultType, SelectList!.Select(column =>
+            Convert.ChangeType(dataRecord.GetValue(column.Index), column.PropertyType!)).ToArray())!;
     }
 }

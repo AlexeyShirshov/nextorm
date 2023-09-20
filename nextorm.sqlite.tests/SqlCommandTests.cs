@@ -46,4 +46,12 @@ public class SqlCommandTests
             _logger.LogInformation("Id = {id}", row.Id);
         }
     }
+    [Fact]
+    public async void SelectSubQuery_ShouldReturnData()
+    {
+        await foreach(var row in _sut.From(_sut.From("simple_entity").Select(tbl=>new {Id=tbl.Long("id")})).Select(subQuery=>new {subQuery.Id}))
+        {
+            _logger.LogInformation("Id = {id}", row.Id);
+        }
+    }
 }

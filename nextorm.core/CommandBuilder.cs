@@ -5,32 +5,37 @@ namespace nextorm.core;
 public class CommandBuilder<TEntity>
 {
     private readonly SqlClient _sqlClient;
-
+    private readonly SqlCommand? _query;
     public CommandBuilder(SqlClient sqlClient)
     {
         _sqlClient = sqlClient;
     }
-
-    public SqlCommand<T> Select<T>(Expression<Func<TEntity, T>> exp)
+    public CommandBuilder(SqlClient sqlClient, SqlCommandFinal<TEntity> query)
     {
-        return new SqlCommand<T>(_sqlClient,exp);
+        _sqlClient = sqlClient;
+        _query = query;
+    }
+    public SqlCommandFinal<T> Select<T>(Expression<Func<TEntity, T>> exp)
+    {
+        if (_query is null)
+            return new SqlCommandFinal<T>(_sqlClient,exp);
+        
+        return new SqlCommandFinal<T>(_sqlClient,exp) {From = new FromExpression(_query)};
     }
 }
-
 public class CommandBuilder
 {
     private readonly SqlClient _sqlClient;
-    private readonly string _table;
-
+    private readonly string? _table;
     public CommandBuilder(SqlClient sqlClient, string table)
     {
         _sqlClient = sqlClient;
         _table = table;
     }
-
-    public SqlCommand<T> Select<T>(Expression<Func<TableAlias, T>> exp)
+    public SqlCommandFinal<T> Select<T>(Expression<Func<TableAlias, T>> exp)
     {
-        return new SqlCommand<T>(_sqlClient,exp) {From = new FromExpression {TableName = _table}};
+        if (string.IsNullOrEmpty(_table)) throw new InvalidOperationException("Table must be specified");
+        return new SqlCommandFinal<T>(_sqlClient,exp) {From = new FromExpression(_table)};
     }
 }
 
