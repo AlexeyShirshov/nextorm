@@ -1,6 +1,6 @@
 # Next ORM
-The goal is not be as fast as Dapper but get rid of manual sql code.
-All sql code and parameters should be generated automatically, with intellisense, type checking and other c# features.
+The goal is not be as fast as Dapper but get rid of manual sql code.\
+All sql code and parameters should be generated automatically, with intellisense, type checking and other c# features.\
 NextORM will not be truly ORM, because Object abbreviation can be surely removed - no change tracking (as inneficient), no creation entity class and mapping to it. For queries the only wau to get data is projection (via anonymous types). 
 ## Features
 * use only projection without mapping rdbms resultset to specific entities
