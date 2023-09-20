@@ -23,13 +23,13 @@ public class SqlCommand
     public FromExpression? From { get => _from; set => _from = value; }
     public List<SelectExpression>? SelectList => _selectList;
     public Type? EntityType => _srcType;
-    public SqlClient SqlClient 
-    { 
-        get => _sqlClient; 
+    public SqlClient SqlClient
+    {
+        get => _sqlClient;
         set
         {
             _dbCommand = null;
-            _sqlClient = value; 
+            _sqlClient = value;
         }
     }
     public bool IsPrepared => _isPrepared;
@@ -41,16 +41,16 @@ public class SqlCommand
 
         var resultType = _exp.ReturnType;
 
-        _hasCtor = resultType.IsValueType || resultType.GetConstructor(Type.EmptyTypes) is not null;
+        // _hasCtor = resultType.IsValueType || resultType.GetConstructor(Type.EmptyTypes) is not null;
 
-        if (!_hasCtor)
-        {
-            //resultType.GetConstructors().OrderByDescending(it=>it.GetParameters().Length).FirstOrDefault()
-        }
+        // if (!_hasCtor)
+        // {
+        //     //resultType.GetConstructors().OrderByDescending(it=>it.GetParameters().Length).FirstOrDefault()
+        // }
 
         if (_from is not null && _from.Table.IsT1 && !_from.Table.AsT1.IsPrepared)
             _from.Table.AsT1.PrepareDbCommand();
-            
+
         if (_exp.Body is NewExpression ctor)
         {
             _selectList = new List<SelectExpression>();
@@ -97,9 +97,11 @@ public class SqlCommand
         return _sqlClient.CreateCommand(this);
     }
 }
-public class SqlCommandFinal<TResult> : SqlCommand, IAsyncEnumerable<TResult>
+public class SqlCommand<TResult> : SqlCommand, IAsyncEnumerable<TResult>
 {
-    public SqlCommandFinal(SqlClient sqlClient, LambdaExpression exp) : base(sqlClient, exp)
+    private Delegate _factory;
+
+    public SqlCommand(SqlClient sqlClient, LambdaExpression exp) : base(sqlClient, exp)
     {
     }
 
@@ -109,7 +111,7 @@ public class SqlCommandFinal<TResult> : SqlCommand, IAsyncEnumerable<TResult>
     }
     public TResult Map(IDataRecord dataRecord)
     {
-        if (SelectList is null)
+        if (!IsPrepared)
             throw new InvalidOperationException("Command not prepared");
 
         var resultType = typeof(TResult);
@@ -119,7 +121,24 @@ public class SqlCommandFinal<TResult> : SqlCommand, IAsyncEnumerable<TResult>
         //     resultType.GetMember(column.PropertyName).OfType<PropertyInfo>().Single().SetValue(result, dataRecord.GetValue(column.Index));
         // }
 
-        return (TResult)Activator.CreateInstance(resultType, SelectList!.Select(column =>
-            Convert.ChangeType(dataRecord.GetValue(column.Index), column.PropertyType!)).ToArray())!;
+        // return (TResult)Activator.CreateInstance(resultType, SelectList!.Select(column =>
+        //     Convert.ChangeType(dataRecord.GetValue(column.Index), column.PropertyType!)).ToArray())!;
+
+        if (_factory is null)
+        {
+            var ctorInfo = resultType.GetConstructors().OrderByDescending(it => it.GetParameters().Length).FirstOrDefault();
+            
+            var param = Expression.Parameter(typeof(IDataRecord));
+            //var @params = SelectList.Select(column => Expression.Parameter(column.PropertyType!)).ToArray();
+
+            var newParams = SelectList!.Select(column => Expression.Call(param, column.GetDataRecordMethod(), Expression.Constant(column.Index))).ToArray();
+            var exp = Expression.New(ctorInfo, newParams);
+
+            _factory = Expression.Lambda(exp, param).Compile();
+        }
+
+        //return (TResult)_factory.DynamicInvoke(SelectList!.Select(column => Convert.ChangeType(dataRecord.GetValue(column.Index), column.PropertyType!)).ToArray())!;
+
+        return (TResult)_factory.DynamicInvoke(dataRecord)!;
     }
 }

@@ -4,14 +4,14 @@ using System.Data.Common;
 namespace nextorm.core;
 public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>
 {
-    private readonly SqlCommandFinal<TResult> _cmd;
+    private readonly SqlCommand<TResult> _cmd;
     private readonly SqlClient _sqlClient;
     private readonly DbCommand _sqlCommand;
     private readonly CancellationToken _cancellationToken;
     private DbDataReader _reader;
     private DbConnection _conn;
 
-    public ResultSetEnumerator(SqlCommandFinal<TResult> cmd, SqlClient sqlClient, DbCommand sqlCommand, CancellationToken cancellationToken)
+    public ResultSetEnumerator(SqlCommand<TResult> cmd, SqlClient sqlClient, DbCommand sqlCommand, CancellationToken cancellationToken)
     {
         _cmd = cmd;
         _sqlClient = sqlClient;

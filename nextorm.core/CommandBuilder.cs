@@ -10,17 +10,17 @@ public class CommandBuilder<TEntity>
     {
         _sqlClient = sqlClient;
     }
-    public CommandBuilder(SqlClient sqlClient, SqlCommandFinal<TEntity> query)
+    public CommandBuilder(SqlClient sqlClient, SqlCommand<TEntity> query)
     {
         _sqlClient = sqlClient;
         _query = query;
     }
-    public SqlCommandFinal<T> Select<T>(Expression<Func<TEntity, T>> exp)
+    public SqlCommand<T> Select<T>(Expression<Func<TEntity, T>> exp)
     {
         if (_query is null)
-            return new SqlCommandFinal<T>(_sqlClient,exp);
+            return new SqlCommand<T>(_sqlClient,exp);
         
-        return new SqlCommandFinal<T>(_sqlClient,exp) {From = new FromExpression(_query)};
+        return new SqlCommand<T>(_sqlClient,exp) {From = new FromExpression(_query)};
     }
 }
 public class CommandBuilder
@@ -32,10 +32,10 @@ public class CommandBuilder
         _sqlClient = sqlClient;
         _table = table;
     }
-    public SqlCommandFinal<T> Select<T>(Expression<Func<TableAlias, T>> exp)
+    public SqlCommand<T> Select<T>(Expression<Func<TableAlias, T>> exp)
     {
         if (string.IsNullOrEmpty(_table)) throw new InvalidOperationException("Table must be specified");
-        return new SqlCommandFinal<T>(_sqlClient,exp) {From = new FromExpression(_table)};
+        return new SqlCommand<T>(_sqlClient,exp) {From = new FromExpression(_table)};
     }
 }
 

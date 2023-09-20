@@ -65,15 +65,15 @@ public class SqlClient
 
         return from.Table.Match(
             tableName => tableName + (string.IsNullOrEmpty(from.TableAlias) ? string.Empty : MakeTableAlias(from.TableAlias)),
-            cmd => "(" + MakeSql(cmd.SelectList!, cmd.From!, cmd.EntityType!) + ")" + (string.IsNullOrEmpty(from.TableAlias) ? string.Empty : MakeTableAlias(from.TableAlias))
+            cmd => "(" + MakeSql(cmd.SelectList, cmd.From, cmd.EntityType) + ")" + (string.IsNullOrEmpty(from.TableAlias) ? string.Empty : MakeTableAlias(from.TableAlias))
         );
 
 
     }
 
-    private string MakeTableAlias(string tableAlias)
+    public virtual string MakeTableAlias(string tableAlias)
     {
-        throw new NotImplementedException();
+        return " as " + tableAlias;
     }
 
     internal bool GetColumnName(MemberInfo member)
