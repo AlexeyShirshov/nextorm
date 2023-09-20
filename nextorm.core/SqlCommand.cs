@@ -7,17 +7,27 @@ using System.Text;
 namespace nextorm.core;
 public class SqlCommand<TResult> : IAsyncEnumerable<TResult>
 {
-    private DbCommand _dbCommand;
+    private DbCommand? _dbCommand;
     private SqlClient _sqlClient;
     private readonly LambdaExpression _exp;
-    private List<SelectExpression> _selectList;
-    private FromExpression _from;
+    private List<SelectExpression>? _selectList;
+    private FromExpression? _from;
     private bool _hasCtor;
-    private Type _srcType;
+    private Type? _srcType;
 
-    public FromExpression From { get => _from; set => _from = value; }
-    public List<SelectExpression> SelectList => _selectList;
-    public Type EntityType => _srcType;
+    public FromExpression? From { get => _from; set => _from = value; }
+    public List<SelectExpression>? SelectList => _selectList;
+    public Type? EntityType => _srcType;
+
+    public SqlClient SqlClient 
+    { 
+        get => _sqlClient; 
+        set
+        {
+            _dbCommand = null;
+            _sqlClient = value; 
+        }
+    }
 
     public SqlCommand(SqlClient sqlClient, LambdaExpression exp)
     {
@@ -33,6 +43,9 @@ public class SqlCommand<TResult> : IAsyncEnumerable<TResult>
 
     public TResult Map(IDataRecord dataRecord)
     {
+        if (_selectList is null)
+            throw new InvalidOperationException("Command not prepared");
+
         var resultType = typeof(TResult);
 
         // foreach (var column in _selectList)
@@ -40,8 +53,8 @@ public class SqlCommand<TResult> : IAsyncEnumerable<TResult>
         //     resultType.GetMember(column.PropertyName).OfType<PropertyInfo>().Single().SetValue(result, dataRecord.GetValue(column.Index));
         // }
 
-        return (TResult)Activator.CreateInstance(resultType, _selectList.Select(column =>
-            Convert.ChangeType(dataRecord.GetValue(column.Index), column.PropertyType)).ToArray());
+        return (TResult)Activator.CreateInstance(resultType, _selectList!.Select(column =>
+            Convert.ChangeType(dataRecord.GetValue(column.Index), column.PropertyType!)).ToArray())!;
     }
 
     private DbCommand PrepareDbCommand()
