@@ -27,7 +27,8 @@ NextORM will not be truly ORM, because Object abbreviation can be surely removed
         _logger.LogInformation("Id = {id}", row.Id);
     }
 ### Subquery with strong typings
-    await foreach(var row in dataContext.From(dataContext.From("simple_entity").Select(tbl=>new {Id=tbl.Int("id")})).Select(subQuery=>new {subQuery.Id}))
+    var innerQuery = dataContext.From("simple_entity").Select(tbl=>new {Id=tbl.Int("id")});
+    await foreach(var row in dataContext.From(innerQuery).Select(subQuery=>new {subQuery.Id}))
     {
         _logger.LogInformation("Id = {id}", row.Id);
     }
