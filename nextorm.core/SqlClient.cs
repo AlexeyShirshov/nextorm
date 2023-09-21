@@ -2,12 +2,15 @@ using System.Data.Common;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
+using Microsoft.Extensions.Logging;
 using OneOf;
 
 namespace nextorm.core;
 
 public class SqlClient
 {
+    internal ILogger? Logger { get; set; }
+
     public virtual DbConnection CreateConnection()
     {
         throw new NotImplementedException();

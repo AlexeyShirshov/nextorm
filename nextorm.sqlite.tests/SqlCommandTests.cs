@@ -6,10 +6,10 @@ namespace nextorm.sqlite.tests;
 
 public class SqlCommandTests
 {
-    private readonly DataContext _sut;
+    private readonly TestDataContext _sut;
     private readonly ILogger<SqlCommandTests> _logger;
 
-    public SqlCommandTests(DataContext sut, ILogger<SqlCommandTests> logger)
+    public SqlCommandTests(TestDataContext sut, ILogger<SqlCommandTests> logger)
     {
         _sut = sut;
         _logger = logger;
@@ -26,7 +26,11 @@ public class SqlCommandTests
             _logger.LogInformation("Id = {id}", row.Id);
         }
     }
-
+    [Fact]
+    public async void SelectEntityToList_ShouldReturnData()
+    {
+        (await _sut.SimpleEntity.Select(entity=>new {Id=(long)entity.Id}).CountAsync()).Should().Be(10);
+    }
     [Fact]
     public async Task SelectModifiedEntity_ShouldReturnData()
     {

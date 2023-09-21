@@ -1,5 +1,6 @@
 using System.Data;
 using System.Data.Common;
+using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
 public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>
@@ -21,25 +22,42 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>
     public TResult Current => _cmd.Map(_reader);
     public async ValueTask DisposeAsync()
     {
-        GC.SuppressFinalize(this);        
-        
-        if (_conn is not null)
-            await _conn.DisposeAsync();
-        
+        GC.SuppressFinalize(this);
+
         if (_reader is not null)
+        {
+            if (_sqlClient.Logger?.IsEnabled(LogLevel.Debug) ?? false) _sqlClient.Logger.LogDebug("Disposing data reader");
             await _reader.DisposeAsync();
+        }
+
+        if (_conn is not null)
+        {
+            if (_sqlClient.Logger?.IsEnabled(LogLevel.Debug) ?? false) _sqlClient.Logger.LogDebug("Disposing connection");
+            await _conn.DisposeAsync();
+        }
     }
 
     public async ValueTask<bool> MoveNextAsync()
     {
         if (_conn is null)
         {
+            if (_sqlClient.Logger?.IsEnabled(LogLevel.Debug) ?? false) _sqlClient.Logger.LogDebug("Creating connection");
+
             _conn = _sqlClient.CreateConnection();
             _sqlCommand.Connection = _conn;
 
             if (_conn.State == ConnectionState.Closed)
+            {
+                if (_sqlClient.Logger?.IsEnabled(LogLevel.Debug) ?? false) _sqlClient.Logger.LogDebug("Opening connection");
+
                 await _conn.OpenAsync(_cancellationToken);
-        
+            }
+
+            if (_sqlClient.Logger?.IsEnabled(LogLevel.Debug) ?? false)
+            {
+                _sqlClient.Logger.LogDebug(_sqlCommand.CommandText);
+            }
+
             _reader = await _sqlCommand.ExecuteReaderAsync(_cancellationToken);
         }
 

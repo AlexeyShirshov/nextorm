@@ -3,6 +3,7 @@ using System.Data.Common;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
+using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
 public class SqlCommand
@@ -13,8 +14,9 @@ public class SqlCommand
     private SqlClient _sqlClient;
     private readonly LambdaExpression _exp;
     private bool _isPrepared;
-    private bool _hasCtor;
+    //private bool _hasCtor;
     private Type? _srcType;
+    internal ILogger? Logger { get; set; }
     public SqlCommand(SqlClient sqlClient, LambdaExpression exp)
     {
         _sqlClient = sqlClient;
@@ -29,6 +31,7 @@ public class SqlCommand
         set
         {
             _dbCommand = null;
+            _isPrepared = false;
             _sqlClient = value;
         }
     }
@@ -39,7 +42,7 @@ public class SqlCommand
         if (_exp is null)
             throw new BuildSqlCommandException("Lambda expression for anonymous type must exists");
 
-        var resultType = _exp.ReturnType;
+        //var resultType = _exp.ReturnType;
 
         // _hasCtor = resultType.IsValueType || resultType.GetConstructor(Type.EmptyTypes) is not null;
 
@@ -94,12 +97,12 @@ public class SqlCommand
     protected DbCommand GetDbCommand()
     {
         if (!_isPrepared) PrepareDbCommand();
-        return _sqlClient.CreateCommand(this);
+        return _dbCommand ??= _sqlClient.CreateCommand(this);
     }
 }
 public class SqlCommand<TResult> : SqlCommand, IAsyncEnumerable<TResult>
 {
-    private Delegate _factory;
+    private Delegate? _factory;
 
     public SqlCommand(SqlClient sqlClient, LambdaExpression exp) : base(sqlClient, exp)
     {
@@ -126,8 +129,8 @@ public class SqlCommand<TResult> : SqlCommand, IAsyncEnumerable<TResult>
 
         if (_factory is null)
         {
-            var ctorInfo = resultType.GetConstructors().OrderByDescending(it => it.GetParameters().Length).FirstOrDefault();
-            
+            var ctorInfo = resultType.GetConstructors().OrderByDescending(it => it.GetParameters().Length).FirstOrDefault() ?? throw new BuildSqlCommandException($"Cannot get ctor from {resultType}");
+
             var param = Expression.Parameter(typeof(IDataRecord));
             //var @params = SelectList.Select(column => Expression.Parameter(column.PropertyType!)).ToArray();
 
