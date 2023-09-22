@@ -11,5 +11,6 @@ CREATE TABLE complex_entity
     m numeric,
     dt datetime,
     onlyDate date not null,
-    b boolean
+    b boolean,
+    requiredString text not null
 )

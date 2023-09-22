@@ -18,8 +18,8 @@ public class SqlCommandTests
     [Fact]
     public async void SelectEntity_ShouldReturnData()
     {
-        long idx=0;
-        await foreach(var row in _sut.SimpleEntity.Select(entity=>new {Id=(long)entity.Id}))
+        long idx = 0;
+        await foreach (var row in _sut.SimpleEntity.Select(entity => new { Id = (long)entity.Id }))
         {
             idx++;
             idx.Should().Be(row.Id);
@@ -29,13 +29,13 @@ public class SqlCommandTests
     [Fact]
     public async void SelectEntityToList_ShouldReturnData()
     {
-        (await _sut.SimpleEntity.Select(entity=>new {Id=(long)entity.Id}).CountAsync()).Should().Be(10);
+        (await _sut.SimpleEntity.Select(entity => new { Id = (long)entity.Id }).CountAsync()).Should().Be(10);
     }
     [Fact]
     public async Task SelectModifiedEntity_ShouldReturnData()
     {
-        long idx=1;
-        await foreach(var row in _sut.SimpleEntity.Select(entity=>new {Id=(long)entity.Id+1}))
+        long idx = 1;
+        await foreach (var row in _sut.SimpleEntity.Select(entity => new { Id = (long)entity.Id + 1 }))
         {
             idx++;
             idx.Should().Be(row.Id);
@@ -45,7 +45,7 @@ public class SqlCommandTests
     [Fact]
     public async void SelectTable_ShouldReturnData()
     {
-        await foreach(var row in _sut.From("simple_entity").Select(tbl=>new {Id=tbl.Long("id")}))
+        await foreach (var row in _sut.From("simple_entity").Select(tbl => new { Id = tbl.Long("id") }))
         {
             _logger.LogInformation("Id = {id}", row.Id);
         }
@@ -53,9 +53,17 @@ public class SqlCommandTests
     [Fact]
     public async void SelectSubQuery_ShouldReturnData()
     {
-        await foreach(var row in _sut.From(_sut.From("simple_entity").Select(tbl=>new {Id=tbl.Long("id")})).Select(subQuery=>new {subQuery.Id}))
+        await foreach (var row in _sut.From(_sut.From("simple_entity").Select(tbl => new { Id = tbl.Long("id") })).Select(subQuery => new { subQuery.Id }))
         {
             _logger.LogInformation("Id = {id}", row.Id);
+        }
+    }
+    [Fact]
+    public async Task SelectComplexEntity_ShouldReturnData()
+    {
+        await foreach (var row in _sut.ComplexEntity.Select(it => new { it.Id, it.Datetime, it.RequiredString, it.Boolean, it.Date, it.Double, it.Int, it.Numeric, it.Real, it.SmallInt, it.String, it.TinyInt }))
+        {
+            _logger.LogInformation("{entity}", row);
         }
     }
 }

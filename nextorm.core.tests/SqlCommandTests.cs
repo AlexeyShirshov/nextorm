@@ -32,15 +32,31 @@ public class SqlCommandTests
         r.Id.Should().Be(1);
         r.P.Should().Be(2);
     }
+    [Fact]
+    public void Expression_Test3()
+    {
+        Expression<Func<ctor, t>> exp = (c) => new t(c.IsSome() ? null : c.GetP());
+
+        var l = Expression.Lambda(exp.Body, exp.Parameters[0] ).Compile();
+
+        var r = l.DynamicInvoke(new ctor()) as t;
+
+        r.Should().NotBeNull();
+    }
 }
 class ctor
 {
     public int GetId()=>1;
     public int GetP()=>2;
+    public bool IsSome()=>true;
 }
 public class t
 {
     public t()
+    {
+
+    }
+    public t(int? r)
     {
 
     }

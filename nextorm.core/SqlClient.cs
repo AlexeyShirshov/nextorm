@@ -68,7 +68,11 @@ public class SqlClient
 
         return from.Table.Match(
             tableName => tableName + (string.IsNullOrEmpty(from.TableAlias) ? string.Empty : MakeTableAlias(from.TableAlias)),
-            cmd => "(" + MakeSql(cmd.SelectList, cmd.From, cmd.EntityType) + ")" + (string.IsNullOrEmpty(from.TableAlias) ? string.Empty : MakeTableAlias(from.TableAlias))
+            cmd => 
+            {
+                if (!cmd.IsPrepared) throw new BuildSqlCommandException("Inner query is not prepared");
+                return "(" + MakeSql(cmd.SelectList!, cmd.From!, cmd.EntityType!) + ")" + (string.IsNullOrEmpty(from.TableAlias) ? string.Empty : MakeTableAlias(from.TableAlias));
+            }
         );
 
 

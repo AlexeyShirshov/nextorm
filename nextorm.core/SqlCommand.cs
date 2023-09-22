@@ -63,7 +63,7 @@ public class SqlCommand
                 var arg = ctor.Arguments[idx];
                 var ctorParam = ctor.Constructor!.GetParameters()[idx];
 
-                _selectList.Add(new SelectExpression { Index = idx, PropertyName = ctorParam.Name!, PropertyType = ctorParam.ParameterType, Expression = arg });
+                _selectList.Add(new SelectExpression(ctorParam.ParameterType) { Index = idx, PropertyName = ctorParam.Name!, Expression = arg });
             }
 
             if (_selectList.Count == 0)
@@ -134,7 +134,25 @@ public class SqlCommand<TResult> : SqlCommand, IAsyncEnumerable<TResult>
             var param = Expression.Parameter(typeof(IDataRecord));
             //var @params = SelectList.Select(column => Expression.Parameter(column.PropertyType!)).ToArray();
 
-            var newParams = SelectList!.Select(column => Expression.Call(param, column.GetDataRecordMethod(), Expression.Constant(column.Index))).ToArray();
+            var newParams = SelectList!.Select(column =>
+            {
+                if (column.Nullable)
+                {
+                    var recordType = typeof(IDataRecord);
+
+                    return Expression.Condition(
+                        Expression.Call(param, recordType.GetMethod(nameof(IDataRecord.IsDBNull))!, Expression.Constant(column.Index)),
+                        Expression.Constant(null, column.PropertyType),
+                        Expression.Convert(
+                            Expression.Call(param, column.GetDataRecordMethod(), Expression.Constant(column.Index)),
+                            column.PropertyType
+                        )
+                    );
+                }
+
+                return (Expression)Expression.Call(param, column.GetDataRecordMethod(), Expression.Constant(column.Index));
+            }).ToArray();
+
             var exp = Expression.New(ctorInfo, newParams);
 
             _factory = Expression.Lambda(exp, param).Compile();
