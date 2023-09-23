@@ -9,8 +9,8 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>
     private readonly SqlClient _sqlClient;
     private readonly DbCommand _sqlCommand;
     private readonly CancellationToken _cancellationToken;
-    private DbDataReader _reader;
-    private DbConnection _conn;
+    private DbDataReader? _reader;
+    private DbConnection? _conn;
 
     public ResultSetEnumerator(SqlCommand<TResult> cmd, SqlClient sqlClient, DbCommand sqlCommand, CancellationToken cancellationToken)
     {
@@ -19,7 +19,7 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>
         _sqlCommand = sqlCommand;
         _cancellationToken = cancellationToken;
     }
-    public TResult Current => _cmd.Map(_reader);
+    public TResult Current => _cmd.Map(_reader!);
     public async ValueTask DisposeAsync()
     {
         GC.SuppressFinalize(this);
@@ -61,6 +61,6 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>
             _reader = await _sqlCommand.ExecuteReaderAsync(_cancellationToken);
         }
 
-        return await _reader.ReadAsync();
+        return await _reader!.ReadAsync(_cancellationToken);
     }
 }
