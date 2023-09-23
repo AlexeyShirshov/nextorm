@@ -79,4 +79,23 @@ public class SqlCommandTests
         }
         _logger.LogInformation("Loop cancelled");
     }
+    [Fact]
+    public async void SelectEntityIntoDTO_ShouldReturnData()
+    {
+        long idx = 0;
+        await foreach (var row in _sut.SimpleEntity.Select(entity => new SimpleEntityDTO(entity.Id)))
+        {
+            idx++;
+            idx.Should().Be(row.Id);
+            _logger.LogInformation("Id = {id}", row.Id);
+        }
+    }
+    [Fact]
+    public async void SelectTableIntoDTO_ShouldReturnData()
+    {
+        await foreach (var row in _sut.From("simple_entity").Select(tbl => new SimpleEntityDTO (tbl.Long("id"))))
+        {
+            _logger.LogInformation("Id = {id}", row.Id);
+        }
+    }
 }
