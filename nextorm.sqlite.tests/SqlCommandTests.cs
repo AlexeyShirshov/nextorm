@@ -107,4 +107,12 @@ public class SqlCommandTests
             _logger.LogInformation("Id = {id}", row.Item1);
         }
     }
+    [Fact]
+    public async void SelectEntityIntoRecord_ShouldReturnData()
+    {
+        await foreach (var row in _sut.From("simple_entity").Select(tbl => new SimpleEntityRecord(tbl.Long("id"))))
+        {
+            _logger.LogInformation("Id = {id}", row.Id);
+        }
+    }
 }
