@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.TestPlatform.CommunicationUtilities.ObjectModel;
+using System.Data.Common;
 using System.Linq;
 
 namespace nextorm.sqlite.tests;
@@ -96,6 +97,14 @@ public class SqlCommandTests
         await foreach (var row in _sut.From("simple_entity").Select(tbl => new SimpleEntityDTO (tbl.Long("id"))))
         {
             _logger.LogInformation("Id = {id}", row.Id);
+        }
+    }
+    [Fact]
+    public async void SelectEntityIntoTuple_ShouldReturnData()
+    {
+        await foreach (var row in _sut.From("simple_entity").Select(tbl => new Tuple<long>(tbl.Long("id"))))
+        {
+            _logger.LogInformation("Id = {id}", row.Item1);
         }
     }
 }
