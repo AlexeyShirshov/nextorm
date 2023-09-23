@@ -1,5 +1,6 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
+using Microsoft.VisualStudio.TestPlatform.CommunicationUtilities.ObjectModel;
 using System.Linq;
 
 namespace nextorm.sqlite.tests;
@@ -65,5 +66,17 @@ public class SqlCommandTests
         {
             _logger.LogInformation("{entity}", row);
         }
+    }
+    [Fact]
+    public async Task SelectEntity_ShouldCancel_WhenCancel()
+    {
+        CancellationTokenSource tokenSource = new();
+        await foreach (var row in _sut.SimpleEntity.Select(entity => new { Id = (long)entity.Id }).WithCancellation(tokenSource.Token))
+        {
+            _logger.LogInformation("{entity}", row);
+            tokenSource.Cancel();
+            break;
+        }
+        _logger.LogInformation("Loop cancelled");
     }
 }

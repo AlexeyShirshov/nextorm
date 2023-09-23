@@ -4,6 +4,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
 using Microsoft.Extensions.Logging;
+using Microsoft.VisualBasic.FileIO;
 
 namespace nextorm.core;
 public class SqlCommand
@@ -30,18 +31,21 @@ public class SqlCommand
         get => _sqlClient;
         set
         {
-            _dbCommand = null;
-            _isPrepared = false;
+            ResetPreparation();
             _sqlClient = value;
         }
     }
     public bool IsPrepared => _isPrepared;
-
-    protected void PrepareDbCommand()
+    public void ResetPreparation()
     {
-        if (_exp is null)
-            throw new BuildSqlCommandException("Lambda expression for anonymous type must exists");
-
+        _isPrepared = false;
+        _selectList = null;
+        _srcType = null;
+        _from = null;
+        _dbCommand = null;
+    }
+    protected void PrepareDbCommand(CancellationToken cancellationToken)
+    {
         //var resultType = _exp.ReturnType;
 
         // _hasCtor = resultType.IsValueType || resultType.GetConstructor(Type.EmptyTypes) is not null;
@@ -52,51 +56,75 @@ public class SqlCommand
         // }
 
         if (_from is not null && _from.Table.IsT1 && !_from.Table.AsT1.IsPrepared)
-            _from.Table.AsT1.PrepareDbCommand();
+            _from.Table.AsT1.PrepareDbCommand(cancellationToken);
 
-        if (_exp.Body is NewExpression ctor)
+        var selectList = _selectList;
+
+        if (selectList is null)
         {
-            _selectList = new List<SelectExpression>();
+            if (_exp is null)
+                throw new BuildSqlCommandException("Lambda expression for anonymous type must exists");
 
-            for (var idx = 0; idx < ctor.Arguments.Count; idx++)
+            selectList = new List<SelectExpression>();
+
+            if (_exp.Body is NewExpression ctor)
             {
-                var arg = ctor.Arguments[idx];
-                var ctorParam = ctor.Constructor!.GetParameters()[idx];
+                for (var idx = 0; idx < ctor.Arguments.Count; idx++)
+                {
+                    if (cancellationToken.IsCancellationRequested)
+                        return;
 
-                _selectList.Add(new SelectExpression(ctorParam.ParameterType) { Index = idx, PropertyName = ctorParam.Name!, Expression = arg });
+                    var arg = ctor.Arguments[idx];
+                    var ctorParam = ctor.Constructor!.GetParameters()[idx];
+
+                    selectList.Add(new SelectExpression(ctorParam.ParameterType) { Index = idx, PropertyName = ctorParam.Name!, Expression = arg });
+                }
+
+                if (selectList.Count == 0)
+                    throw new BuildSqlCommandException("Select must return new anonymous type with at least one property");
+
             }
-
-            if (_selectList.Count == 0)
-                throw new BuildSqlCommandException("Select must return new anonymous type with at least one property");
-
-        }
-        else
-        {
-            throw new BuildSqlCommandException("Select must return new anonymous type");
-        }
-
-        _srcType = _exp.Parameters[0].Type;
-
-        if (_from is null)
-        {
-            if (_srcType != typeof(TableAlias))
+            else
             {
-                var sqlTable = _srcType.GetCustomAttribute<SqlTableAttribute>();
+                throw new BuildSqlCommandException("Select must return new anonymous type");
+            }
+        }
+
+        var srcType = _srcType;
+        if (srcType is null)
+        {
+            if (_exp is null)
+                throw new BuildSqlCommandException("Lambda expression for anonymous type must exists");
+            
+            srcType = _exp.Parameters[0].Type;
+        }
+
+        FromExpression? from = _from;
+
+        if (from is null)
+        {
+            if (srcType != typeof(TableAlias))
+            {
+                var sqlTable = srcType.GetCustomAttribute<SqlTableAttribute>();
 
                 var tableName = sqlTable is not null
                     ? sqlTable.Name
-                    : _sqlClient.GetTableName(_srcType);
+                    : _sqlClient.GetTableName(srcType);
 
-                _from = new FromExpression(tableName);
+                from = new FromExpression(tableName);
             }
-            else throw new BuildSqlCommandException("");
+            else throw new BuildSqlCommandException($"From must be specified for {nameof(TableAlias)} as source type");
         }
 
         _isPrepared = true;
+        _selectList = selectList;
+        _srcType = srcType;
+        _from = from;
+
     }
-    protected DbCommand GetDbCommand()
+    protected DbCommand GetDbCommand(CancellationToken cancellationToken)
     {
-        if (!_isPrepared) PrepareDbCommand();
+        if (!_isPrepared) PrepareDbCommand(cancellationToken);
         return _dbCommand ??= _sqlClient.CreateCommand(this);
     }
 }
@@ -110,7 +138,7 @@ public class SqlCommand<TResult> : SqlCommand, IAsyncEnumerable<TResult>
 
     public IAsyncEnumerator<TResult> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
-        return new ResultSetEnumerator<TResult>(this, SqlClient, GetDbCommand(), cancellationToken);
+        return new ResultSetEnumerator<TResult>(this, SqlClient, GetDbCommand(cancellationToken), cancellationToken);
     }
     public TResult Map(IDataRecord dataRecord)
     {
