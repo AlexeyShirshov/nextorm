@@ -28,20 +28,25 @@ public class StringExpressionVisitor : ExpressionVisitor
     {
         if (node.Expression?.Type == _entityType)
         {
-            if (_entityType.IsAnonymous())
-            {
-                if (_from is null || _from.Table.IsT0) throw new BuildSqlCommandException("From must be specified for nested queries");
-                var innerCol = _from.Table.AsT1.SelectList!.SingleOrDefault(col=>col.PropertyName == node.Member.Name) ?? throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
-                _builder.Append(_sqlClient.MakeColumn(innerCol.Expression, _from.Table.AsT1.EntityType!, _from.Table.AsT1.From!));
-            }
-            else
-            {
+            // if (_entityType.IsAnonymous())
+            // {
+                //if (_from is null || _from.Table.IsT0) throw new BuildSqlCommandException("From must be specified for nested queries");
+                // var innerCol = _from.Table.AsT1.SelectList!.SingleOrDefault(col=>col.PropertyName == node.Member.Name) ?? throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
+                // _builder.Append(_sqlClient.MakeColumn(innerCol.Expression, _from.Table.AsT1.EntityType!, _from.Table.AsT1.From!));
+            // }
+            // else
+            // {
                 var col = node.Member.GetCustomAttribute<ColumnAttribute>();
                 if (col is not null)
                     _builder.Append(col.Name);
+                else if (_from.Table.IsT1)
+                {
+                    var innerCol = _from.Table.AsT1.SelectList!.SingleOrDefault(col=>col.PropertyName == node.Member.Name) ?? throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
+                    _builder.Append(_sqlClient.MakeColumn(innerCol.Expression, _from.Table.AsT1.EntityType!, _from.Table.AsT1.From!));
+                }
                 else
-                    _builder.Append(_sqlClient.GetColumnName(node.Member));
-            }
+                    _builder.Append(_sqlClient.GetColumnName(node.Member));                
+            //}
             return node;
         }
 

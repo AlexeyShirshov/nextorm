@@ -115,4 +115,13 @@ public class SqlCommandTests
             _logger.LogInformation("Id = {id}", row.Id);
         }
     }
+    [Fact]
+    public async void SelectNestedEntityIntoRecord_ShouldReturnData()
+    {
+        var nested = _sut.From("simple_entity").Select(tbl => new SimpleEntityRecord(tbl.Long("id")));
+        await foreach (var row in _sut.From(nested).Select(rec=>new {rec.Id}))
+        {
+            _logger.LogInformation("Id = {id}", row.Id);
+        }
+    }
 }
