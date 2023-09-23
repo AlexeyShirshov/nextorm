@@ -1,6 +1,7 @@
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.TestPlatform.CommunicationUtilities.ObjectModel;
+using Microsoft.VisualStudio.TestPlatform.ObjectModel.Adapter;
 using System.Data.Common;
 using System.Linq;
 
@@ -122,6 +123,47 @@ public class SqlCommandTests
         await foreach (var row in _sut.From(nested).Select(rec=>new {rec.Id}))
         {
             _logger.LogInformation("Id = {id}", row.Id);
+        }
+    }
+    [Fact]
+    public async Task SelectComplexEntityWithCalculatedFields_ShouldReturnData()
+    {
+        await foreach (var row in _sut.ComplexEntity.Select(it => new { it.Id, it.RequiredString, it.String, CalcString=it.RequiredString + "/" + it.String }))
+        {
+            if (row.Id == 3)
+                row.CalcString.Should().BeNull();
+            else
+                row.CalcString.Should().Be($"{row.RequiredString}/{row.String}");
+        }
+    }
+    [Fact]
+    public async Task SelectNestedComplexEntityWithCalculatedFields_ShouldReturnData()
+    {
+        var nested = _sut.ComplexEntity.Select(it => new { it.Id, it.RequiredString, it.String, CalcString=it.RequiredString + "/" + it.String });
+
+        await foreach (var row in _sut.From(nested).Select(t1=>new {t1.Id, t1.RequiredString, t1.String, t1.CalcString}))
+        {
+            if (row.Id == 3)
+                row.CalcString.Should().BeNull();
+            else
+                row.CalcString.Should().Be($"{row.RequiredString}/{row.String}");
+        }
+    }
+    [Fact]
+    public async Task SelectComplexEntityWithCalculatedFields_WhenConditional_ShouldReturnString()
+    {
+        await foreach (var row in _sut.ComplexEntity.Select(it => new { it.Id, it.RequiredString, it.String, CalcString=it.RequiredString + "/" + (it.String ?? "") }))
+        {
+            row.CalcString.Should().Be($"{row.RequiredString}/{row.String ?? string.Empty}");
+        }
+    }
+    [Fact]
+    public async Task SelectComplexEntityWithCalculatedNumericFields_ShouldReturnData()
+    {
+        await foreach (var row in _sut.ComplexEntity.Select(it => new { it.Id, it.TinyInt, it.SmallInt, it.Real, it.Double, Calc=it.TinyInt + it.SmallInt, Calc2=(it.Real??1)+it.Double }))
+        {
+            row.Calc.Should().Be(row.TinyInt + row.SmallInt);
+            row.Calc2.Should().Be((row.Real ?? 1f) + row.Double);
         }
     }
 }

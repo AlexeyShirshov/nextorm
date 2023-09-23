@@ -5,11 +5,16 @@ using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace nextorm.core;
-public class StringExpressionVisitor : ExpressionVisitor
+public class StringExpressionVisitor : ExpressionVisitor, ICloneable
 {
     private readonly Type _entityType;
     private readonly SqlClient _sqlClient;
     private readonly FromExpression _from;
+
+    private readonly StringBuilder _builder = new();
+    private bool _needAlias;
+
+    public bool NeedAlias => _needAlias;
 
     public StringExpressionVisitor(Type entityType, SqlClient sqlClient, FromExpression from)
     {
@@ -17,12 +22,63 @@ public class StringExpressionVisitor : ExpressionVisitor
         _sqlClient = sqlClient;
         _from = from;
     }
+    protected override Expression VisitMethodCall(MethodCallExpression node)
+    {
+        if (node.Object?.Type == typeof(TableAlias))
+        {
+            // switch (node.Method.Name)
+            // {
+            //     case "Long":
+            //         if (node.Arguments[0] is ConstantExpression constExp)
+            //             _builder.Append(constExp.Value?.ToString());
 
-    private readonly StringBuilder _builder = new();
+            //         break;
+            // }
+
+            _builder.Append(node switch
+            {
+                { 
+                    Method.Name: 
+                        nameof(TableAlias.Long) 
+                        or nameof(TableAlias.Int)
+                        or nameof(TableAlias.Boolean)
+                        or nameof(TableAlias.Byte)
+                        or nameof(TableAlias.DateTime)
+                        or nameof(TableAlias.Decimal) 
+                        or nameof(TableAlias.Double)
+                        or nameof(TableAlias.Float)
+                        or nameof(TableAlias.Guid)
+                        or nameof(TableAlias.NullableLong)
+                        or nameof(TableAlias.NullableInt)
+                        or nameof(TableAlias.NullableBoolean)
+                        or nameof(TableAlias.NullableByte)
+                        or nameof(TableAlias.NullableDateTime)
+                        or nameof(TableAlias.NullableDecimal)
+                        or nameof(TableAlias.NullableDouble)
+                        or nameof(TableAlias.NullableFloat)
+                        or nameof(TableAlias.NullableGuid),
+                    Arguments: [ConstantExpression constExp] 
+                } => constExp.Value?.ToString(),
+                _ => throw new NotSupportedException(node.Method.Name)
+            });
+
+            return node;
+        }
+
+        return base.VisitMethodCall(node);
+    }
     protected override Expression VisitConstant(ConstantExpression node)
     {
-        _builder.Append(node.Value?.ToString());
-        return base.VisitConstant(node);
+        if (node.Type == typeof(string) || node.Type == typeof(Guid))
+        {
+            _builder.Append('\'').Append(node.Value?.ToString()).Append('\'');
+        }
+        else
+            _builder.Append(node.Value?.ToString());
+
+        return node;
+
+        // return base.VisitConstant(node);
     }
     protected override Expression VisitMember(MemberExpression node)
     {
@@ -30,22 +86,26 @@ public class StringExpressionVisitor : ExpressionVisitor
         {
             // if (_entityType.IsAnonymous())
             // {
-                //if (_from is null || _from.Table.IsT0) throw new BuildSqlCommandException("From must be specified for nested queries");
-                // var innerCol = _from.Table.AsT1.SelectList!.SingleOrDefault(col=>col.PropertyName == node.Member.Name) ?? throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
-                // _builder.Append(_sqlClient.MakeColumn(innerCol.Expression, _from.Table.AsT1.EntityType!, _from.Table.AsT1.From!));
+            //if (_from is null || _from.Table.IsT0) throw new BuildSqlCommandException("From must be specified for nested queries");
+            // var innerCol = _from.Table.AsT1.SelectList!.SingleOrDefault(col=>col.PropertyName == node.Member.Name) ?? throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
+            // _builder.Append(_sqlClient.MakeColumn(innerCol.Expression, _from.Table.AsT1.EntityType!, _from.Table.AsT1.From!));
             // }
             // else
             // {
-                var col = node.Member.GetCustomAttribute<ColumnAttribute>();
-                if (col is not null)
-                    _builder.Append(col.Name);
-                else if (_from.Table.IsT1)
-                {
-                    var innerCol = _from.Table.AsT1.SelectList!.SingleOrDefault(col=>col.PropertyName == node.Member.Name) ?? throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
-                    _builder.Append(_sqlClient.MakeColumn(innerCol.Expression, _from.Table.AsT1.EntityType!, _from.Table.AsT1.From!));
-                }
+            var colAttr = node.Member.GetCustomAttribute<ColumnAttribute>();
+            if (colAttr is not null)
+                _builder.Append(colAttr.Name);
+            else if (_from.Table.IsT1)
+            {
+                var innerCol = _from.Table.AsT1.SelectList!.SingleOrDefault(col => col.PropertyName == node.Member.Name) ?? throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
+                var col = _sqlClient.MakeColumn(innerCol, _from.Table.AsT1.EntityType!, _from.Table.AsT1.From!);
+                if (col.NeedAlias)
+                    _builder.Append(innerCol.PropertyName);
                 else
-                    _builder.Append(_sqlClient.GetColumnName(node.Member));                
+                    _builder.Append(col.Column);
+            }
+            else
+                _builder.Append(_sqlClient.GetColumnName(node.Member));
             //}
             return node;
         }
@@ -54,10 +114,23 @@ public class StringExpressionVisitor : ExpressionVisitor
     }
     protected override Expression VisitBinary(BinaryExpression node)
     {
+        _needAlias = true;
+
         switch (node.NodeType)
         {
             case ExpressionType.Coalesce:
-                throw new NotImplementedException();
+                var leftVisitor = Clone();
+                leftVisitor.Visit(node.Left);
+
+                var rightVisitor = Clone();
+                rightVisitor.Visit(node.Right);
+
+                _builder.Append(_sqlClient.MakeCoalesce(
+                    leftVisitor.ToString(),
+                    rightVisitor.ToString()
+                ));
+
+                return node;
             case ExpressionType.Conditional:
                 throw new NotImplementedException();
             case ExpressionType.Switch:
@@ -68,7 +141,12 @@ public class StringExpressionVisitor : ExpressionVisitor
         switch (node.NodeType)
         {
             case ExpressionType.Add:
-                _builder.Append('+'); break;
+                if (node.Type == typeof(string))
+                    _builder.Append(_sqlClient.ConcatStringOperator);
+                else
+                    _builder.Append('+');
+
+                break;
             case ExpressionType.And:
                 _builder.Append('&'); break;
             case ExpressionType.AndAlso:
@@ -110,7 +188,7 @@ public class StringExpressionVisitor : ExpressionVisitor
             case ExpressionType.Subtract:
                 _builder.Append('-'); break;
             default:
-                throw new NotSupportedException();
+                throw new NotSupportedException(node.NodeType.ToString());
         }
         Visit(node.Right);
         return node;
@@ -118,5 +196,15 @@ public class StringExpressionVisitor : ExpressionVisitor
     public override string ToString()
     {
         return _builder.ToString();
+    }
+
+    object ICloneable.Clone()
+    {
+        return Clone();
+    }
+
+    public StringExpressionVisitor Clone()
+    {
+        return new StringExpressionVisitor(_entityType, _sqlClient, _from);
     }
 }

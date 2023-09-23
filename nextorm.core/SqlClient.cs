@@ -40,7 +40,16 @@ public class SqlClient
         sqlBuilder.Append("select ");
         foreach (var item in selectList)
         {
-            sqlBuilder.Append(MakeColumn(item.Expression, entityType, from)).Append(", ");
+            var col = MakeColumn(item, entityType, from);
+
+            sqlBuilder.Append(col.Column);
+            
+            if (col.NeedAlias)
+            {
+                sqlBuilder.Append(MakeColumnAlias(item.PropertyName!));
+            }
+
+            sqlBuilder.Append(", ");
         }
 
         sqlBuilder.Length -= 2;
@@ -49,15 +58,18 @@ public class SqlClient
         return sqlBuilder.ToString();
     }
 
-    public string MakeColumn(OneOf<ScalarSqlCommand, Expression> expression, Type entityType, FromExpression from)
+    public (bool NeedAlias, string Column) MakeColumn(SelectExpression selectExp, Type entityType, FromExpression from)
     {
+        var expression = selectExp.Expression;
+
         return expression.Match(
             cmd => throw new NotImplementedException(),
             exp =>
             {
                 var visitor = new StringExpressionVisitor(entityType, this, from);
                 visitor.Visit(exp);
-                return visitor.ToString();
+
+                return (visitor.NeedAlias, visitor.ToString());
             }
         );
     }
@@ -82,9 +94,19 @@ public class SqlClient
     {
         return " as " + tableAlias;
     }
-
+    public virtual string MakeColumnAlias(string colAlias)
+    {
+        return " as " + colAlias;
+    }
     internal bool GetColumnName(MemberInfo member)
     {
         throw new NotImplementedException();
     }
+
+    public virtual string MakeCoalesce(string v1, string v2)
+    {
+        return $"isnull({v1},{v2})";
+    }
+
+    public virtual string ConcatStringOperator=>"+";
 }
