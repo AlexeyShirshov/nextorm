@@ -26,6 +26,7 @@ public class Startup
         {
             builder.UseLoggerFactory(sp.GetRequiredService<ILoggerFactory>());
             builder.UseSqlite(@$"{Directory.GetCurrentDirectory()}\data\test.db");
+            builder.LogSensetiveData(true);
         });
     }
 }

@@ -14,14 +14,16 @@ public class SqlCommand
     private FromExpression? _from;
     private SqlClient _sqlClient;
     private readonly LambdaExpression _exp;
+    private readonly Expression? _condition;
     private bool _isPrepared;
     //private bool _hasCtor;
     private Type? _srcType;
     internal ILogger? Logger { get; set; }
-    public SqlCommand(SqlClient sqlClient, LambdaExpression exp)
+    public SqlCommand(SqlClient sqlClient, LambdaExpression exp, Expression? condition)
     {
         _sqlClient = sqlClient;
         _exp = exp;
+        _condition = condition;
     }
     public FromExpression? From { get => _from; set => _from = value; }
     public List<SelectExpression>? SelectList => _selectList;
@@ -36,6 +38,9 @@ public class SqlCommand
         }
     }
     public bool IsPrepared => _isPrepared;
+
+    public Expression? Condition => _condition;
+
     public void ResetPreparation()
     {
         _isPrepared = false;
@@ -132,7 +137,7 @@ public class SqlCommand<TResult> : SqlCommand, IAsyncEnumerable<TResult>
 {
     private Delegate? _factory;
 
-    public SqlCommand(SqlClient sqlClient, LambdaExpression exp) : base(sqlClient, exp)
+    public SqlCommand(SqlClient sqlClient, LambdaExpression exp, Expression? condition) : base(sqlClient, exp, condition)
     {
     }
 

@@ -56,6 +56,14 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>
             if (_sqlClient.Logger?.IsEnabled(LogLevel.Debug) ?? false)
             {
                 _sqlClient.Logger.LogDebug(_sqlCommand.CommandText);
+
+                if (_sqlClient.LogSensetiveData)
+                {
+                    foreach (DbParameter p in _sqlCommand.Parameters)
+                    {
+                        _sqlClient.Logger.LogDebug("param {name} is {value}", p.ParameterName, p.Value);
+                    }
+                }
             }
 
             _reader = await _sqlCommand.ExecuteReaderAsync(_cancellationToken);

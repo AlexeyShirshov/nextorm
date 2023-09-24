@@ -5,23 +5,23 @@ using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace nextorm.core;
-public class StringExpressionVisitor : ExpressionVisitor, ICloneable
+public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
 {
     private readonly Type _entityType;
     private readonly SqlClient _sqlClient;
     private readonly FromExpression _from;
-
-    private readonly StringBuilder _builder = new();
+    protected readonly StringBuilder _builder = new();
+    private readonly List<Param> _params = new (); 
     private bool _needAlias;
-
-    public bool NeedAlias => _needAlias;
-
-    public StringExpressionVisitor(Type entityType, SqlClient sqlClient, FromExpression from)
+    public BaseExpressionVisitor(Type entityType, SqlClient sqlClient, FromExpression from)
     {
         _entityType = entityType;
         _sqlClient = sqlClient;
         _from = from;
     }
+    public bool NeedAlias => _needAlias;
+    public List<Param> Params => _params;
+
     protected override Expression VisitMethodCall(MethodCallExpression node)
     {
         if (node.Object?.Type == typeof(TableAlias))
@@ -37,14 +37,14 @@ public class StringExpressionVisitor : ExpressionVisitor, ICloneable
 
             _builder.Append(node switch
             {
-                { 
-                    Method.Name: 
-                        nameof(TableAlias.Long) 
+                {
+                    Method.Name:
+                        nameof(TableAlias.Long)
                         or nameof(TableAlias.Int)
                         or nameof(TableAlias.Boolean)
                         or nameof(TableAlias.Byte)
                         or nameof(TableAlias.DateTime)
-                        or nameof(TableAlias.Decimal) 
+                        or nameof(TableAlias.Decimal)
                         or nameof(TableAlias.Double)
                         or nameof(TableAlias.Float)
                         or nameof(TableAlias.Guid)
@@ -57,7 +57,7 @@ public class StringExpressionVisitor : ExpressionVisitor, ICloneable
                         or nameof(TableAlias.NullableDouble)
                         or nameof(TableAlias.NullableFloat)
                         or nameof(TableAlias.NullableGuid),
-                    Arguments: [ConstantExpression constExp] 
+                    Arguments: [ConstantExpression constExp]
                 } => constExp.Value?.ToString(),
                 _ => throw new NotSupportedException(node.Method.Name)
             });
@@ -69,16 +69,39 @@ public class StringExpressionVisitor : ExpressionVisitor, ICloneable
     }
     protected override Expression VisitConstant(ConstantExpression node)
     {
-        if (node.Type == typeof(string) || node.Type == typeof(Guid))
+        if (!EmitValue(node.Type, node.Value))
         {
-            _builder.Append('\'').Append(node.Value?.ToString()).Append('\'');
+            // if (node.Type.IsClosure())
+            // {
+            //     var o = GetFirstProp(node.Value);
+
+            //     EmitValue(o.Item1, o.Item2);
+            // }
         }
-        else
-            _builder.Append(node.Value?.ToString());
 
         return node;
 
         // return base.VisitConstant(node);
+        // static (Type, object?) GetFirstProp(object value)
+        // {
+        //     var field = value.GetType().GetFields(BindingFlags.Instance | BindingFlags.Public).First();
+        //     return (field.FieldType, field.GetValue(value));
+        // }
+        bool EmitValue(Type t, object? v)
+        {
+            if (v is null)
+                _builder.Append("null");
+            else if (t == typeof(string) || t == typeof(Guid))
+            {
+                _builder.Append('\'').Append(v?.ToString()).Append('\'');
+            }
+            else if (t.IsPrimitive)
+                _builder.Append(v?.ToString());
+            else
+                return false;
+
+            return true;
+        }
     }
     protected override Expression VisitMember(MemberExpression node)
     {
@@ -109,6 +132,20 @@ public class StringExpressionVisitor : ExpressionVisitor, ICloneable
             //}
             return node;
         }
+        else 
+        {
+            //if (node.NodeType == ExpressionType.MemberAccess && node.Expression is ConstantExpression constExp)
+            {
+                // var valueVisitor = new ValueVisitor(constExp);
+                // valueVisitor.Visit(constExp);
+                // valueVisitor.Value.Get
+                var value = Expression.Lambda(node).Compile().DynamicInvoke();
+                _params.Add(new Param {Name = node.Member.Name, Value = value});
+                _builder.Append(_sqlClient.MakeParam(node.Member.Name));
+
+                return node;
+            }
+        }
 
         return base.VisitMember(node);
     }
@@ -121,9 +158,11 @@ public class StringExpressionVisitor : ExpressionVisitor, ICloneable
             case ExpressionType.Coalesce:
                 var leftVisitor = Clone();
                 leftVisitor.Visit(node.Left);
+                Params.AddRange(leftVisitor.Params);
 
                 var rightVisitor = Clone();
                 rightVisitor.Visit(node.Right);
+                Params.AddRange(rightVisitor.Params);
 
                 _builder.Append(_sqlClient.MakeCoalesce(
                     leftVisitor.ToString(),
@@ -203,8 +242,8 @@ public class StringExpressionVisitor : ExpressionVisitor, ICloneable
         return Clone();
     }
 
-    public StringExpressionVisitor Clone()
+    public virtual BaseExpressionVisitor Clone()
     {
-        return new StringExpressionVisitor(_entityType, _sqlClient, _from);
+        return new BaseExpressionVisitor(_entityType, _sqlClient, _from);
     }
 }

@@ -10,6 +10,8 @@ namespace nextorm.core;
 public class SqlClient
 {
     internal ILogger? Logger { get; set; }
+    private readonly List<Param> _params = new();
+    internal bool LogSensetiveData { get; set; }
 
     public virtual DbConnection CreateConnection()
     {
@@ -27,14 +29,26 @@ public class SqlClient
     }
     public DbCommand CreateCommand(SqlCommand cmd)
     {
+        var dbCommand = CreateCommand(MakeSql(cmd));
+
+        dbCommand.Parameters.AddRange(_params.Select(it => CreateParam(it.Name, it.Value)).ToArray());
+
+        return dbCommand;
+    }
+    public virtual DbParameter CreateParam(string name, object? value)
+    {
+        throw new NotImplementedException();
+    }
+    public virtual string MakeSql(SqlCommand cmd)
+    {
         ArgumentNullException.ThrowIfNull(cmd.SelectList);
         ArgumentNullException.ThrowIfNull(cmd.From);
         ArgumentNullException.ThrowIfNull(cmd.EntityType);
 
-        return CreateCommand(MakeSql(cmd.SelectList, cmd.From, cmd.EntityType));
-    }
-    public virtual string MakeSql(List<SelectExpression> selectList, FromExpression from, Type entityType)
-    {
+        var selectList = cmd.SelectList;
+        var from = cmd.From;
+        var entityType = cmd.EntityType;
+
         var sqlBuilder = new StringBuilder();
 
         sqlBuilder.Append("select ");
@@ -43,7 +57,7 @@ public class SqlClient
             var col = MakeColumn(item, entityType, from);
 
             sqlBuilder.Append(col.Column);
-            
+
             if (col.NeedAlias)
             {
                 sqlBuilder.Append(MakeColumnAlias(item.PropertyName!));
@@ -55,7 +69,21 @@ public class SqlClient
         sqlBuilder.Length -= 2;
         sqlBuilder.Append(" from ").Append(MakeFrom(from));
 
+        if (cmd.Condition is not null)
+        {
+            sqlBuilder.Append(" where ").Append(MakeWhere(entityType, from, cmd.Condition));
+        }
+
         return sqlBuilder.ToString();
+    }
+
+    private string MakeWhere(Type entityType, FromExpression from, Expression condition)
+    {
+        var visitor = new WhereExpressionVisitor(entityType, this, from);
+        visitor.Visit(condition);
+        _params.AddRange(visitor.Params);
+
+        return visitor.ToString();
     }
 
     public (bool NeedAlias, string Column) MakeColumn(SelectExpression selectExp, Type entityType, FromExpression from)
@@ -66,8 +94,9 @@ public class SqlClient
             cmd => throw new NotImplementedException(),
             exp =>
             {
-                var visitor = new StringExpressionVisitor(entityType, this, from);
+                var visitor = new BaseExpressionVisitor(entityType, this, from);
                 visitor.Visit(exp);
+                _params.AddRange(visitor.Params);
 
                 return (visitor.NeedAlias, visitor.ToString());
             }
@@ -80,10 +109,10 @@ public class SqlClient
 
         return from.Table.Match(
             tableName => tableName + (string.IsNullOrEmpty(from.TableAlias) ? string.Empty : MakeTableAlias(from.TableAlias)),
-            cmd => 
+            cmd =>
             {
                 if (!cmd.IsPrepared) throw new BuildSqlCommandException("Inner query is not prepared");
-                return "(" + MakeSql(cmd.SelectList!, cmd.From!, cmd.EntityType!) + ")" + (string.IsNullOrEmpty(from.TableAlias) ? string.Empty : MakeTableAlias(from.TableAlias));
+                return "(" + MakeSql(cmd) + ")" + (string.IsNullOrEmpty(from.TableAlias) ? string.Empty : MakeTableAlias(from.TableAlias));
             }
         );
 
@@ -108,5 +137,9 @@ public class SqlClient
         return $"isnull({v1},{v2})";
     }
 
-    public virtual string ConcatStringOperator=>"+";
+    public virtual string MakeParam(string name)
+    {
+        throw new NotImplementedException();
+    }
+    public virtual string ConcatStringOperator => "+";
 }

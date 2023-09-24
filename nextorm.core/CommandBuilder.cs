@@ -7,6 +7,8 @@ public class CommandBuilder<TEntity>
 {
     private readonly SqlClient _sqlClient;
     private readonly SqlCommand? _query;
+    private Expression? _condition;
+
     internal ILogger? Logger { get; set; }
     public CommandBuilder(SqlClient sqlClient)
     {
@@ -20,9 +22,19 @@ public class CommandBuilder<TEntity>
     public SqlCommand<T> Select<T>(Expression<Func<TEntity, T>> exp)
     {
         if (_query is null)
-            return new SqlCommand<T>(_sqlClient,exp);
+            return new SqlCommand<T>(_sqlClient,exp, _condition);
         
-        return new SqlCommand<T>(_sqlClient,exp) {From = new FromExpression(_query), Logger = Logger};
+        return new SqlCommand<T>(_sqlClient,exp, _condition) {From = new FromExpression(_query), Logger = Logger};
+    }
+
+    public CommandBuilder<TEntity> Where(Expression<Func<TEntity, bool>> condition)
+    {
+        if (_condition is not null)
+            _condition =Expression.AndAlso(_condition, condition);
+        else
+            _condition = condition;
+
+        return this;
     }
 }
 public class CommandBuilder
@@ -30,6 +42,7 @@ public class CommandBuilder
     private readonly SqlClient _sqlClient;
     private readonly string? _table;
     internal ILogger? Logger { get; set; }
+    private Expression? _condition;
     public CommandBuilder(SqlClient sqlClient, string table)
     {
         _sqlClient = sqlClient;
@@ -38,7 +51,7 @@ public class CommandBuilder
     public SqlCommand<T> Select<T>(Expression<Func<TableAlias, T>> exp)
     {
         if (string.IsNullOrEmpty(_table)) throw new InvalidOperationException("Table must be specified");
-        return new SqlCommand<T>(_sqlClient,exp) {From = new FromExpression(_table), Logger = Logger};
+        return new SqlCommand<T>(_sqlClient,exp,_condition) {From = new FromExpression(_table), Logger = Logger};
     }
 }
 

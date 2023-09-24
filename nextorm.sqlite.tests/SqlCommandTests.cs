@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.TestPlatform.CommunicationUtilities.ObjectModel;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel.Adapter;
 using System.Data.Common;
+using System.Data.Entity.Core.Common.CommandTrees.ExpressionBuilder;
 using System.Linq;
 
 namespace nextorm.sqlite.tests;
@@ -165,5 +166,72 @@ public class SqlCommandTests
             row.Calc.Should().Be(row.TinyInt + row.SmallInt);
             row.Calc2.Should().Be((row.Real ?? 1f) + row.Double);
         }
+    }
+    [Fact]
+    public async void SelectEntity_WhenFilterById_ShouldReturnFilteredData()
+    {
+        long idx = 0;
+        await foreach (var row in _sut.SimpleEntity
+            .Where(entity=>entity.Id == 1)
+            .Select(entity => new { Id = (long)entity.Id }))
+        {
+            idx++;
+            row.Id.Should().Be(1);
+        }
+        idx.Should().Be(1);
+    }
+    [InlineData(1)]
+    [Theory]
+    public async void SelectEntityParam_WhenFilterById_ShouldReturnFilteredData(long id)
+    {
+        long idx = 0;
+        await foreach (var row in _sut.SimpleEntity
+            .Where(entity=>entity.Id == id)
+            .Select(entity => new { Id = (long)entity.Id }))
+        {
+            idx++;
+            row.Id.Should().Be(1);
+        }
+        idx.Should().Be(1);
+    }
+    [InlineData("dadfasd")]
+    [InlineData(null)]
+    [Theory]
+    public async void ComplexEntityParam_WhenFilterByString_ShouldReturnFilteredData(string str)
+    {
+        await foreach (var row in _sut.ComplexEntity
+            .Where(entity=>entity.String == str)
+            .Select(entity => new { entity.Id, entity.String }))
+        {
+            row.String.Should().Be(str);
+            
+            if (row.Id == 3)
+                row.String.Should().BeNull();
+        }
+        
+    }
+    [Fact]
+    public async void SelectEntityParam2_WhenFilterById_ShouldReturnFilteredData()
+    {
+        var e = new cls1(1);
+        long idx = 0;
+        await foreach (var row in _sut.SimpleEntity
+            .Where(entity=>entity.Id == e.Id)
+            .Select(entity => new { Id = (long)entity.Id }))
+        {
+            idx++;
+            row.Id.Should().Be(1);
+        }
+        idx.Should().Be(1);
+    }
+    class cls1
+    {
+        public cls1(int id)
+        {
+            Id = id;
+        }
+
+        public long Id { get; set; }
+        public string OtherValue { get; set; } = "h";
     }
 }
