@@ -140,7 +140,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
                 // valueVisitor.Visit(constExp);
                 // valueVisitor.Value.Get
                 var value = Expression.Lambda(node).Compile().DynamicInvoke();
-                _params.Add(new Param {Name = node.Member.Name, Value = value});
+                _params.Add(new Param(node.Member.Name, value));
                 _builder.Append(_sqlClient.MakeParam(node.Member.Name));
 
                 return node;

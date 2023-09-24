@@ -1,5 +1,6 @@
 using System.Data;
 using System.Data.Common;
+using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
@@ -63,6 +64,10 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>
                     {
                         _sqlClient.Logger.LogDebug("param {name} is {value}", p.ParameterName, p.Value);
                     }
+                }
+                else if (_sqlCommand.Parameters?.Count > 0)
+                {
+                    _sqlClient.Logger.LogDebug("Use {method} to see param values", nameof(_sqlClient.LogSensetiveData));
                 }
             }
 
