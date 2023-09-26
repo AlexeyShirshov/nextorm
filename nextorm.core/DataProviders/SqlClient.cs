@@ -7,9 +7,8 @@ using OneOf;
 
 namespace nextorm.core;
 
-public class SqlClient
+public class SqlClient : DataProvider
 {
-    internal ILogger? Logger { get; set; }
     private readonly List<Param> _params = new();
     internal bool LogSensetiveData { get; set; }
 
@@ -112,7 +111,7 @@ public class SqlClient
             cmd =>
             {
                 if (!cmd.IsPrepared) throw new BuildSqlCommandException("Inner query is not prepared");
-                return "(" + MakeSql(cmd) + ")" + (string.IsNullOrEmpty(from.TableAlias) ? string.Empty : MakeTableAlias(from.TableAlias));
+                return "(" + MakeSql(cmd as SqlCommand) + ")" + (string.IsNullOrEmpty(from.TableAlias) ? string.Empty : MakeTableAlias(from.TableAlias));
             }
         );
 
@@ -141,5 +140,18 @@ public class SqlClient
     {
         throw new NotImplementedException();
     }
+    public override IAsyncEnumerator<TResult> CreateEnumerator<TResult>(QueryCommand queryCommand, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(queryCommand);
+
+        if (queryCommand is SqlCommand<TResult> sqlCommand)
+            return new ResultSetEnumerator<TResult>(sqlCommand, this, sqlCommand.GetDbCommand(cancellationToken), cancellationToken);
+
+        throw new NotSupportedException(queryCommand.GetType().ToString());
+    }
     public virtual string ConcatStringOperator => "+";
+    public override IQueryCommand<T> CreateCommand<T>(LambdaExpression exp, Expression? condition)
+    {
+        return new SqlCommand<T>(this, exp, condition);
+    }
 }

@@ -91,7 +91,7 @@ public class SqlCommandTests
     [Fact]
     public async void SelectTableIntoDTO_ShouldReturnData()
     {
-        await foreach (var row in _sut.From("simple_entity").Select(tbl => new SimpleEntityDTO (tbl.Long("id"))))
+        await foreach (var row in _sut.From("simple_entity").Select(tbl => new SimpleEntityDTO(tbl.Long("id"))))
         {
             _logger.LogInformation("Id = {id}", row.Id);
         }
@@ -116,7 +116,7 @@ public class SqlCommandTests
     public async void SelectNestedEntityIntoRecord_ShouldReturnData()
     {
         var nested = _sut.From("simple_entity").Select(tbl => new SimpleEntityRecord(tbl.Long("id")));
-        await foreach (var row in _sut.From(nested).Select(rec=>new {rec.Id}))
+        await foreach (var row in _sut.From(nested).Select(rec => new { rec.Id }))
         {
             _logger.LogInformation("Id = {id}", row.Id);
         }
@@ -124,7 +124,7 @@ public class SqlCommandTests
     [Fact]
     public async Task SelectComplexEntityWithCalculatedFields_ShouldReturnData()
     {
-        await foreach (var row in _sut.ComplexEntity.Select(it => new { it.Id, it.RequiredString, it.String, CalcString=it.RequiredString + "/" + it.String }))
+        await foreach (var row in _sut.ComplexEntity.Select(it => new { it.Id, it.RequiredString, it.String, CalcString = it.RequiredString + "/" + it.String }))
         {
             if (row.Id == 3)
                 row.CalcString.Should().BeNull();
@@ -135,9 +135,9 @@ public class SqlCommandTests
     [Fact]
     public async Task SelectNestedComplexEntityWithCalculatedFields_ShouldReturnData()
     {
-        var nested = _sut.ComplexEntity.Select(it => new { it.Id, it.RequiredString, it.String, CalcString=it.RequiredString + "/" + it.String });
+        var nested = _sut.ComplexEntity.Select(it => new { it.Id, it.RequiredString, it.String, CalcString = it.RequiredString + "/" + it.String });
 
-        await foreach (var row in _sut.From(nested).Select(t1=>new {t1.Id, t1.RequiredString, t1.String, t1.CalcString}))
+        await foreach (var row in _sut.From(nested).Select(t1 => new { t1.Id, t1.RequiredString, t1.String, t1.CalcString }))
         {
             if (row.Id == 3)
                 row.CalcString.Should().BeNull();
@@ -148,7 +148,7 @@ public class SqlCommandTests
     [Fact]
     public async Task SelectComplexEntityWithCalculatedFields_WhenConditional_ShouldReturnString()
     {
-        await foreach (var row in _sut.ComplexEntity.Select(it => new { it.Id, it.RequiredString, it.String, CalcString=it.RequiredString + "/" + (it.String ?? "") }))
+        await foreach (var row in _sut.ComplexEntity.Select(it => new { it.Id, it.RequiredString, it.String, CalcString = it.RequiredString + "/" + (it.String ?? "") }))
         {
             row.CalcString.Should().Be($"{row.RequiredString}/{row.String ?? string.Empty}");
         }
@@ -156,10 +156,27 @@ public class SqlCommandTests
     [Fact]
     public async Task SelectComplexEntityWithCalculatedNumericFields_ShouldReturnData()
     {
-        await foreach (var row in _sut.ComplexEntity.Select(it => new { it.Id, it.TinyInt, it.SmallInt, it.Real, it.Double, Calc=it.TinyInt + it.SmallInt, Calc2=(it.Real??1)+it.Double }))
+        await foreach (var row in _sut.ComplexEntity.Select(it => new { it.Id, it.TinyInt, it.SmallInt, it.Real, it.Double, Calc = it.TinyInt + it.SmallInt, Calc2 = (it.Real ?? 1) + it.Double }))
         {
             row.Calc.Should().Be(row.TinyInt + row.SmallInt);
             row.Calc2.Should().Be((row.Real ?? 1f) + row.Double);
+        }
+    }
+    [Fact]
+    public async Task SelectComplexEntityWithCalculatedNumericFields2_ShouldReturnData()
+    {
+        await foreach (var row in _sut.ComplexEntity.Select(it => new { it.Id, it.TinyInt, it.SmallInt, Calc = (it.TinyInt + it.SmallInt) * 2 }))
+        {
+            row.Calc.Should().Be((row.TinyInt + row.SmallInt) * 2);
+        }
+    }
+    [InlineData(2)]
+    [Theory]
+    public async Task SelectComplexEntityWithCalculatedNumericFieldsWithParam_ShouldReturnData(int i)
+    {
+        await foreach (var row in _sut.ComplexEntity.Select(it => new { it.Id, it.TinyInt, it.SmallInt, Calc = (it.TinyInt + it.SmallInt) * i }))
+        {
+            row.Calc.Should().Be((row.TinyInt + row.SmallInt) * i);
         }
     }
     [Fact]
@@ -167,7 +184,7 @@ public class SqlCommandTests
     {
         long idx = 0;
         await foreach (var row in _sut.SimpleEntity
-            .Where(entity=>entity.Id == 1)
+            .Where(entity => entity.Id == 1)
             .Select(entity => new { Id = (long)entity.Id }))
         {
             idx++;
@@ -175,19 +192,71 @@ public class SqlCommandTests
         }
         idx.Should().Be(1);
     }
+    [Fact]
+    public async void SelectEntity_WhenFilterByIdNeg_ShouldReturnFilteredData()
+    {
+        long idx = 0;
+        await foreach (var row in _sut.SimpleEntity
+            .Where(entity => entity.Id != 1)
+            .Select(entity => new { Id = (long)entity.Id }))
+        {
+            idx++;
+        }
+        idx.Should().Be(9);
+    }
+    [Fact]
+    public async void SelectEntity_WhenFilterByIdGt_ShouldReturnFilteredData()
+    {
+        long idx = 0;
+        await foreach (var row in _sut.SimpleEntity
+            .Where(entity => entity.Id > 1)
+            .Select(entity => new { Id = (long)entity.Id }))
+        {
+            idx++;
+        }
+        idx.Should().Be(9);
+    }
+    [Fact]
+    public async void SelectEntity_WhenFilterByIdGte_ShouldReturnFilteredData()
+    {
+        long idx = 0;
+        await foreach (var row in _sut.SimpleEntity
+            .Where(entity => entity.Id >= 9)
+            .Select(entity => new { Id = (long)entity.Id }))
+        {
+            idx++;
+        }
+        idx.Should().Be(2);
+    }
+    [Fact]
+    public async void SelectEntity_WhenFilterByIdLt_ShouldReturnFilteredData()
+    {
+        var r = await _sut.SimpleEntity
+            .Where(entity => entity.Id < 1)
+            .Select(entity => new { Id = (long)entity.Id }).AnyAsync();
+
+        r.Should().BeFalse();
+    }
+    [Fact]
+    public async void SelectEntity_WhenFilterByIdLte_ShouldReturnFilteredData()
+    {
+        var row = await _sut.SimpleEntity
+            .Where(entity => entity.Id <= 1)
+            .Select(entity => new { Id = (long)entity.Id }).FirstOrDefaultAsync();
+
+        row.Should().NotBeNull();
+        row.Id.Should().Be(1);
+    }
     [InlineData(1)]
     [Theory]
     public async void SelectEntityParam_WhenFilterById_ShouldReturnFilteredData(long id)
     {
-        long idx = 0;
-        await foreach (var row in _sut.SimpleEntity
-            .Where(entity=>entity.Id == id)
-            .Select(entity => new { Id = (long)entity.Id }))
-        {
-            idx++;
-            row.Id.Should().Be(1);
-        }
-        idx.Should().Be(1);
+        var row = await _sut.SimpleEntity
+            .Where(entity => entity.Id == id)
+            .Select(entity => new { Id = (long)entity.Id }).FirstOrDefaultAsync();
+
+        row.Should().NotBeNull();
+        row.Id.Should().Be(1);
     }
     [InlineData("dadfasd")]
     [InlineData(null)]
@@ -195,29 +264,39 @@ public class SqlCommandTests
     public async void ComplexEntityParam_WhenFilterByString_ShouldReturnFilteredData(string str)
     {
         await foreach (var row in _sut.ComplexEntity
-            .Where(entity=>entity.String == str)
+            .Where(entity => entity.String == str)
             .Select(entity => new { entity.Id, entity.String }))
         {
             row.String.Should().Be(str);
-            
+
             if (row.Id == 3)
                 row.String.Should().BeNull();
         }
-        
+
     }
     [Fact]
     public async void SelectEntityParam2_WhenFilterById_ShouldReturnFilteredData()
     {
         var e = new cls1(1);
-        long idx = 0;
-        await foreach (var row in _sut.SimpleEntity
-            .Where(entity=>entity.Id == e.Id)
-            .Select(entity => new { Id = (long)entity.Id }))
-        {
-            idx++;
-            row.Id.Should().Be(1);
-        }
-        idx.Should().Be(1);
+
+        var row = await _sut.SimpleEntity
+            .Where(entity => entity.Id == e.Id)
+            .Select(entity => new { Id = (long)entity.Id }).FirstOrDefaultAsync();
+
+        row.Should().NotBeNull();
+
+        row.Id.Should().Be(1);
+    }
+    [Fact]
+    public async void SelectTableWithWhere_ShouldReturnData()
+    {
+        var row = await _sut.From("simple_entity")
+            .Where(tbl => tbl.Long("id") == 1)
+            .Select(tbl => new { Id = tbl.Long("id") }).FirstOrDefaultAsync();
+
+        row.Should().NotBeNull();
+
+        row.Id.Should().Be(1);
     }
     class cls1
     {

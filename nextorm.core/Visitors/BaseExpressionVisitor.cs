@@ -176,6 +176,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
                 throw new NotImplementedException();
         }
 
+        _builder.Append('(');
         Visit(node.Left);
         switch (node.NodeType)
         {
@@ -183,53 +184,55 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
                 if (node.Type == typeof(string))
                     _builder.Append(_sqlClient.ConcatStringOperator);
                 else
-                    _builder.Append('+');
+                    _builder.Append(" + ");
 
                 break;
             case ExpressionType.And:
-                _builder.Append('&'); break;
+                _builder.Append(" & "); break;
             case ExpressionType.AndAlso:
                 _builder.Append(" and "); break;
             case ExpressionType.Decrement:
-                _builder.Append("-1"); break;
+                _builder.Append(" -1 "); break;
             case ExpressionType.Divide:
-                _builder.Append('/'); break;
+                _builder.Append(" / "); break;
             case ExpressionType.GreaterThan:
-                _builder.Append('>'); break;
+                _builder.Append(" > "); break;
             case ExpressionType.GreaterThanOrEqual:
-                _builder.Append(">="); break;
+                _builder.Append(" >= "); break;
             case ExpressionType.Increment:
-                _builder.Append("+1"); break;
+                _builder.Append(" + 1"); break;
             case ExpressionType.LeftShift:
-                _builder.Append("<<"); break;
+                _builder.Append(" << "); break;
             case ExpressionType.LessThan:
-                _builder.Append('<'); break;
+                _builder.Append(" < "); break;
             case ExpressionType.LessThanOrEqual:
-                _builder.Append("<="); break;
+                _builder.Append(" <= "); break;
             case ExpressionType.Modulo:
-                _builder.Append('%'); break;
+                _builder.Append(" % "); break;
             case ExpressionType.Multiply:
-                _builder.Append('*'); break;
+                _builder.Append(" * "); break;
             case ExpressionType.Negate:
-                _builder.Append('-'); break;
+                _builder.Append(" - "); break;
             case ExpressionType.Not:
-                _builder.Append('~'); break;
+                _builder.Append(" ~ "); break;
             case ExpressionType.NotEqual:
-                _builder.Append("!="); break;
+                _builder.Append(" != "); break;
             case ExpressionType.Or:
-                _builder.Append('|'); break;
+                _builder.Append(" | "); break;
             case ExpressionType.OrElse:
                 _builder.Append(" or "); break;
             case ExpressionType.Power:
-                _builder.Append('^'); break;
+                _builder.Append(" ^ "); break;
             case ExpressionType.RightShift:
-                _builder.Append(">>"); break;
+                _builder.Append(" >> "); break;
             case ExpressionType.Subtract:
-                _builder.Append('-'); break;
+                _builder.Append(" - "); break;
             default:
                 throw new NotSupportedException(node.NodeType.ToString());
         }
         Visit(node.Right);
+        _builder.Append(')');
+
         return node;
     }
     public override string ToString()

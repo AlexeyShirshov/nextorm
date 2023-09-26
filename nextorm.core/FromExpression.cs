@@ -8,10 +8,10 @@ public class FromExpression
      {
           Table = table;
      }
-     public FromExpression(SqlCommand subQuery)
+     public FromExpression(QueryCommand subQuery)
      {
           Table = subQuery;
      }
-     public OneOf<string, SqlCommand> Table { get; set; }
+     public OneOf<string, QueryCommand> Table { get; set; }
      public string? TableAlias { get; set; }
 }

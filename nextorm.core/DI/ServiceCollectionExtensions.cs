@@ -8,11 +8,11 @@ public static class ServiceCollectionExtensions
         where T : DataContext
     {
         if (optionsBuilder is not null)
-        {            
-            services.AddScoped(sp=>
+        {
+            services.AddScoped(sp =>
             {
                 var builder = new DataContextOptionsBuilder();
-                optionsBuilder(sp,  builder);
+                optionsBuilder(sp, builder);
                 return builder;
             });
         }
@@ -23,8 +23,14 @@ public static class ServiceCollectionExtensions
         where T : DataContext
     {
         if (optionsBuilder is not null)
-        {            
-            services.Configure(optionsBuilder);
+        {
+            //services.Configure(optionsBuilder);
+            services.AddScoped(_ =>
+            {
+                var builder = new DataContextOptionsBuilder();
+                optionsBuilder(builder);
+                return builder;
+            });
         }
 
         services.AddScoped<T>();

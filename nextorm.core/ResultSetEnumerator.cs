@@ -20,7 +20,7 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>
         _sqlCommand = sqlCommand;
         _cancellationToken = cancellationToken;
     }
-    public TResult Current => _cmd.Map(_reader!);
+    public TResult Current => (_cmd as IQueryCommand<TResult>).Map(_reader!);
     public async ValueTask DisposeAsync()
     {
         GC.SuppressFinalize(this);
@@ -37,7 +37,6 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>
             await _conn.DisposeAsync();
         }
     }
-
     public async ValueTask<bool> MoveNextAsync()
     {
         if (_conn is null)
@@ -73,6 +72,8 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>
 
             _reader = await _sqlCommand.ExecuteReaderAsync(_cancellationToken);
         }
+
+        if (_sqlClient.Logger?.IsEnabled(LogLevel.Trace) ?? false) _sqlClient.Logger.LogTrace("Move next");
 
         return await _reader!.ReadAsync(_cancellationToken);
     }

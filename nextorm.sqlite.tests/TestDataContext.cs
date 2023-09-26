@@ -2,7 +2,7 @@ using nextorm.core;
 
 namespace nextorm.sqlite.tests;
 
-public class TestDataContext : DataContext
+public class TestDataContext : SqlDataContext
 {
     public TestDataContext(DataContextOptionsBuilder optionsBuilder) : base(optionsBuilder)
     {

@@ -16,8 +16,13 @@ public class Startup
     {
         services.AddLogging(builder=>builder.AddXunitOutput());
 
-        services.AddScoped<SqlClient>();
+        services.AddScoped<DataProvider, InMemoryDataProvider>();
 
         services.AddScoped<CommandBuilder<ISimpleEntity>>();
+
+        services.AddNextOrmContext<InMemoryDataContext>(builder=>
+        {
+            builder.UseInMemoryClient();
+        });
     }
 }
