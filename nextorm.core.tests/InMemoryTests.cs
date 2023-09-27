@@ -15,7 +15,7 @@ public class InMemoryTests
     [Fact]
     public async void TestWhere()
     {
-        var r = await _sut.SimpleEntity.Where(it => it.Id == 1).Select(it => new { it.Id }).FirstOrDefaultAsync();
+        var r = await _sut.SimpleEntity.Where(it => it.Id == 1).Select(it => new { it.Id }).SingleOrDefaultAsync();
 
         r.Should().NotBeNull();
         r.Id.Should().Be(1);

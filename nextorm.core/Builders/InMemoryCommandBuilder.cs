@@ -4,22 +4,20 @@ namespace nextorm.core;
 
 public class InMemoryCommandBuilder<TEntity> : CommandBuilder<TEntity>
 {
-    private readonly Expression _accessor;
-    private IEnumerable<TEntity> _data;
+    private IEnumerable<TEntity>? _data;
 
-    public InMemoryCommandBuilder(DataProvider sqlClient, Expression accessor) : base(sqlClient)
+    public InMemoryCommandBuilder(IDataProvider dataProvider) : base(dataProvider)
     {
-        _accessor = accessor;
     }
     public void AddRange(IEnumerable<TEntity> data)
     {
         _data = data;
     }
-    protected override void OnCommandCreated<T>(IQueryCommand<T> cmd)
+    protected override void OnCommandCreated<T>(QueryCommand<T> cmd)
     {
-        if (cmd is QueryCommand<T> queryCmd)
-            queryCmd.Data = _data.GetEnumerator() as IEnumerator<object>;
+        cmd.AddOrUpdatePayload(()=>new InMemoryDataPayload<TEntity>(_data));
 
         base.OnCommandCreated(cmd);
     }
 }
+public record InMemoryDataPayload<T>(IEnumerable<T>? Data) : IPayload;

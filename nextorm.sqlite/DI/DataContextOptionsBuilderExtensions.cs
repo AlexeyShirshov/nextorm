@@ -8,7 +8,7 @@ public static class DataContextOptionsBuilderExtensions
     {
         ArgumentException.ThrowIfNullOrEmpty(filepath);
 
-        builder.UseSqlClient(new SqliteClient($"Data Source='{filepath}'"));
+        builder.UseSqlClient(new SqliteDataProvider($"Data Source='{filepath}'"));
         return builder;
     }
 }

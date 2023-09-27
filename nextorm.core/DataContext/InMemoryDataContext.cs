@@ -10,6 +10,6 @@ public class InMemoryDataContext : DataContext
     protected InMemoryCommandBuilder<T> Create<T, InMemoryDataContextT>(Expression<Func<InMemoryDataContextT, InMemoryCommandBuilder<T>>> accessor)
         where InMemoryDataContextT : InMemoryDataContext
     {
-        return new (_sqlClient, accessor) {Logger = _cmdLogger};
+        return new (_dataProvider) {Logger = _cmdLogger};
     }
 }

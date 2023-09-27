@@ -5,38 +5,34 @@ namespace nextorm.core;
 
 public class CommandBuilder<TEntity>
 {
-    private readonly DataProvider _sqlClient;
-    private readonly IQueryCommand? _query;
+    private readonly IDataProvider _dataProvider;
+    private readonly QueryCommand? _query;
     private Expression? _condition;
 
     internal ILogger? Logger { get; set; }
-    public CommandBuilder(DataProvider sqlClient)
+    public CommandBuilder(IDataProvider dataProvider)
     {
-        _sqlClient = sqlClient;
+        _dataProvider = dataProvider;
     }
-    public CommandBuilder(DataProvider sqlClient, IQueryCommand<TEntity> query)
+    public CommandBuilder(IDataProvider dataProvider, QueryCommand<TEntity> query)
     {
-        _sqlClient = sqlClient;
+        _dataProvider = dataProvider;
         _query = query;
     }
-    public IQueryCommand<T> Select<T>(Expression<Func<TEntity, T>> exp)
+    public QueryCommand<TResult> Select<TResult>(Expression<Func<TEntity, TResult>> exp)
     {
-        var cmd = _sqlClient.CreateCommand<T>(exp, _condition);
+        var cmd = _dataProvider.CreateCommand<TResult>(exp, _condition);
         cmd.Logger = Logger;
 
         if (_query is not null)
-            cmd.From = new FromExpression(_query as QueryCommand);
+            cmd.From = new FromExpression(_query);
 
         OnCommandCreated(cmd);
         
         return cmd;
-        // if (_query is null)
-        //     return new SqlCommand<T>(_sqlClient, exp, _condition);
-
-        // return new SqlCommand<T>(_sqlClient, exp, _condition) { From = new FromExpression(_query), Logger = Logger };
     }
 
-    protected virtual void OnCommandCreated<T>(IQueryCommand<T> cmd)
+    protected virtual void OnCommandCreated<T>(QueryCommand<T> cmd)
     {
         
     }
@@ -53,19 +49,19 @@ public class CommandBuilder<TEntity>
 }
 public class CommandBuilder
 {
-    private readonly SqlClient _sqlClient;
+    private readonly SqlDataProvider _dataProvider;
     private readonly string? _table;
     internal ILogger? Logger { get; set; }
     private Expression? _condition;
-    public CommandBuilder(SqlClient sqlClient, string table)
+    public CommandBuilder(SqlDataProvider dataProvider, string table)
     {
-        _sqlClient = sqlClient;
+        _dataProvider = dataProvider;
         _table = table;
     }
-    public SqlCommand<T> Select<T>(Expression<Func<TableAlias, T>> exp)
+    public QueryCommand<T> Select<T>(Expression<Func<TableAlias, T>> exp)
     {
         if (string.IsNullOrEmpty(_table)) throw new InvalidOperationException("Table must be specified");
-        return new SqlCommand<T>(_sqlClient, exp, _condition) { From = new FromExpression(_table), Logger = Logger };
+        return new QueryCommand<T>(_dataProvider, exp, _condition) { From = new FromExpression(_table), Logger = Logger };
     }
 
     public CommandBuilder Where(Expression<Func<TableAlias, bool>> condition)

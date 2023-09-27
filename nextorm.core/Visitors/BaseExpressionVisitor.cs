@@ -8,15 +8,15 @@ namespace nextorm.core;
 public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
 {
     private readonly Type _entityType;
-    private readonly SqlClient _sqlClient;
+    private readonly SqlDataProvider _dataProvider;
     private readonly FromExpression _from;
     protected readonly StringBuilder _builder = new();
     private readonly List<Param> _params = new (); 
     private bool _needAlias;
-    public BaseExpressionVisitor(Type entityType, SqlClient sqlClient, FromExpression from)
+    public BaseExpressionVisitor(Type entityType, SqlDataProvider dataProvider, FromExpression from)
     {
         _entityType = entityType;
-        _sqlClient = sqlClient;
+        _dataProvider = dataProvider;
         _from = from;
     }
     public bool NeedAlias => _needAlias;
@@ -107,28 +107,20 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
     {
         if (node.Expression?.Type == _entityType)
         {
-            // if (_entityType.IsAnonymous())
-            // {
-            //if (_from is null || _from.Table.IsT0) throw new BuildSqlCommandException("From must be specified for nested queries");
-            // var innerCol = _from.Table.AsT1.SelectList!.SingleOrDefault(col=>col.PropertyName == node.Member.Name) ?? throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
-            // _builder.Append(_sqlClient.MakeColumn(innerCol.Expression, _from.Table.AsT1.EntityType!, _from.Table.AsT1.From!));
-            // }
-            // else
-            // {
             var colAttr = node.Member.GetCustomAttribute<ColumnAttribute>();
             if (colAttr is not null)
                 _builder.Append(colAttr.Name);
             else if (_from.Table.IsT1)
             {
                 var innerCol = _from.Table.AsT1.SelectList!.SingleOrDefault(col => col.PropertyName == node.Member.Name) ?? throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
-                var col = _sqlClient.MakeColumn(innerCol, _from.Table.AsT1.EntityType!, _from.Table.AsT1.From!);
+                var col = _dataProvider.MakeColumn(innerCol, _from.Table.AsT1.EntityType!, _from.Table.AsT1.From!);
                 if (col.NeedAlias)
                     _builder.Append(innerCol.PropertyName);
                 else
                     _builder.Append(col.Column);
             }
             else
-                _builder.Append(_sqlClient.GetColumnName(node.Member));
+                _builder.Append(_dataProvider.GetColumnName(node.Member));
             //}
             return node;
         }
@@ -141,7 +133,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
                 // valueVisitor.Value.Get
                 var value = Expression.Lambda(node).Compile().DynamicInvoke();
                 _params.Add(new Param(node.Member.Name, value));
-                _builder.Append(_sqlClient.MakeParam(node.Member.Name));
+                _builder.Append(_dataProvider.MakeParam(node.Member.Name));
 
                 return node;
             }
@@ -164,7 +156,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
                 rightVisitor.Visit(node.Right);
                 Params.AddRange(rightVisitor.Params);
 
-                _builder.Append(_sqlClient.MakeCoalesce(
+                _builder.Append(_dataProvider.MakeCoalesce(
                     leftVisitor.ToString(),
                     rightVisitor.ToString()
                 ));
@@ -182,7 +174,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
         {
             case ExpressionType.Add:
                 if (node.Type == typeof(string))
-                    _builder.Append(_sqlClient.ConcatStringOperator);
+                    _builder.Append(_dataProvider.ConcatStringOperator);
                 else
                     _builder.Append(" + ");
 
@@ -247,6 +239,6 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
 
     public virtual BaseExpressionVisitor Clone()
     {
-        return new BaseExpressionVisitor(_entityType, _sqlClient, _from);
+        return new BaseExpressionVisitor(_entityType, _dataProvider, _from);
     }
 }

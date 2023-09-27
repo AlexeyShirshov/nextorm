@@ -16,7 +16,7 @@ public class Startup
     {
         services.AddLogging(builder=>builder.AddXunitOutput());
 
-        services.AddScoped<DataProvider, InMemoryDataProvider>();
+        services.AddScoped<IDataProvider, InMemoryDataProvider>();
 
         services.AddScoped<CommandBuilder<ISimpleEntity>>();
 

@@ -4,20 +4,20 @@ namespace nextorm.core;
 
 public class DataContext
 {
-    protected readonly DataProvider _sqlClient;
+    protected readonly IDataProvider _dataProvider;
     protected readonly ILogger? _cmdLogger;
     public DataContext(DataContextOptionsBuilder optionsBuilder)
     {
         ArgumentNullException.ThrowIfNull(optionsBuilder);
-        ArgumentNullException.ThrowIfNull(optionsBuilder.SqlClient);
+        ArgumentNullException.ThrowIfNull(optionsBuilder.DataProvider);
 
-        _sqlClient = optionsBuilder.SqlClient;
+        _dataProvider = optionsBuilder.DataProvider;
 
         if (optionsBuilder.LoggerFactory is not null)
         {
-            _sqlClient.Logger = optionsBuilder.LoggerFactory.CreateLogger(typeof(SqlClient));
-            _cmdLogger = optionsBuilder.LoggerFactory.CreateLogger(typeof(SqlCommand));
+            _dataProvider.Logger = optionsBuilder.LoggerFactory.CreateLogger(typeof(IDataProvider));
+            _cmdLogger = optionsBuilder.LoggerFactory.CreateLogger(typeof(QueryCommand));
         }
     }
-    public CommandBuilder<T> From<T>(IQueryCommand<T> query) => new(_sqlClient, query) { Logger = _cmdLogger };
+    public CommandBuilder<T> From<T>(QueryCommand<T> query) => new(_dataProvider, query) { Logger = _cmdLogger };
 }

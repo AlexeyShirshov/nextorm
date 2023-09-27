@@ -5,11 +5,11 @@ using nextorm.core;
 
 namespace nextorm.sqlite;
 
-public class SqliteClient : SqlClient
+public class SqliteDataProvider : SqlDataProvider
 {
     private readonly string _connectionString;
 
-    public SqliteClient(string connectionString)
+    public SqliteDataProvider(string connectionString)
     {
         _connectionString = connectionString;
     }

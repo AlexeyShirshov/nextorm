@@ -10,7 +10,7 @@ public class SelectExpression
     private readonly Type _realType;
     public int Index {get;set;}
     public string? PropertyName {get;set;}
-    public OneOf<ScalarSqlCommand,Expression> Expression {get;set;}
+    public OneOf<QueryCommand,Expression> Expression {get;set;}
     public Type PropertyType { get; set; }
 
     private readonly bool _nullable;

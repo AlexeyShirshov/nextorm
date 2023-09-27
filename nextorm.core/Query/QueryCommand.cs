@@ -1,49 +1,38 @@
+using System.Collections;
 using System.Linq.Expressions;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
 
-public interface IQueryCommand
+public class QueryCommand
 {
-    FromExpression? From { get; set; }
-    List<SelectExpression>? SelectList { get; }
-    Type? EntityType { get; }
-    DataProvider SqlClient { get; set; }
-    bool IsPrepared { get; }
-    Expression? Condition { get; }
-    ILogger? Logger { get; set; }
-    void ResetPreparation();
-    void PrepareCommand(CancellationToken cancellationToken);
-}
-
-public class QueryCommand : IQueryCommand
-{
+    private readonly ArrayList _payload = new();
     protected List<SelectExpression>? _selectList;
     protected FromExpression? _from;
-    protected DataProvider _sqlClient;
+    protected IDataProvider _dataProvider;
     protected readonly LambdaExpression _exp;
     protected readonly Expression? _condition;
     protected bool _isPrepared;
     //private bool _hasCtor;
     protected Type? _srcType;
     public ILogger? Logger { get; set; }
-    public QueryCommand(DataProvider sqlClient, LambdaExpression exp, Expression? condition)
+    public QueryCommand(IDataProvider dataProvider, LambdaExpression exp, Expression? condition)
     {
-        _sqlClient = sqlClient;
+        _dataProvider = dataProvider;
         _exp = exp;
         _condition = condition;
     }
     public FromExpression? From { get => _from; set => _from = value; }
     public List<SelectExpression>? SelectList => _selectList;
     public Type? EntityType => _srcType;
-    public DataProvider SqlClient
+    public IDataProvider DataProvider
     {
-        get => _sqlClient;
+        get => _dataProvider;
         set
         {
             ResetPreparation();
-            _sqlClient = value;
+            _dataProvider = value;
         }
     }
     public bool IsPrepared => _isPrepared;
@@ -54,6 +43,66 @@ public class QueryCommand : IQueryCommand
         _selectList = null;
         _srcType = null;
         _from = null;
+
+        _dataProvider.ResetPreparation(this);
+    }
+    public bool RemovePayload<T>()
+        where T : class, IPayload
+    {
+        foreach (var item in _payload)
+        {
+            if (item is T)
+            {
+                _payload.Remove(item);
+                return true;
+            }
+        }
+        return false;
+    }
+    public bool TryGetPayload<T>(out T? payload)
+        where T : class, IPayload
+    {
+        foreach (var item in _payload)
+        {
+            if (item is T p)
+            {
+                payload = p;
+                return true;
+            }
+        }
+        payload = default;
+        return false;
+    }
+    public T? GetOrAddPayload<T>(Func<T> factory)
+        where T : class, IPayload
+    {
+        if (!TryGetPayload<T>(out var payload))
+        {
+            payload = factory is null
+                ? default
+                : factory();
+            _payload.Add(payload);
+        }
+        return payload;
+    }
+    public T? AddOrUpdatePayload<T>(Func<T> factory)
+        where T : class, IPayload
+    {
+        for (int i = 0; i < _payload.Count; i++)
+        {
+            var item = _payload[i];
+
+            if (item is T)
+            {
+                var p = factory();
+                _payload[i] = p;
+                return p;
+            }
+        }
+
+        var payload = factory();
+        _payload.Add(payload);
+        return payload;
     }
     public virtual void PrepareCommand(CancellationToken cancellationToken)
     {
@@ -65,7 +114,7 @@ public class QueryCommand : IQueryCommand
         if (selectList is null)
         {
             if (_exp is null)
-                throw new BuildSqlCommandException("Lambda expression for anonymous type must exists");
+                throw new PrepareException("Lambda expression for anonymous type must exists");
 
             selectList = new List<SelectExpression>();
 
@@ -83,12 +132,12 @@ public class QueryCommand : IQueryCommand
                 }
 
                 if (selectList.Count == 0)
-                    throw new BuildSqlCommandException("Select must return new anonymous type with at least one property");
+                    throw new PrepareException("Select must return new anonymous type with at least one property");
 
             }
             else
             {
-                throw new BuildSqlCommandException("Select must return new anonymous type");
+                throw new PrepareException("Select must return new anonymous type");
             }
         }
 
@@ -96,40 +145,34 @@ public class QueryCommand : IQueryCommand
         if (srcType is null)
         {
             if (_exp is null)
-                throw new BuildSqlCommandException("Lambda expression for anonymous type must exists");
+                throw new PrepareException("Lambda expression for anonymous type must exists");
             
             srcType = _exp.Parameters[0].Type;
         }
 
+        FromExpression? from = _from ?? _dataProvider.GetFrom(srcType);
+
         _isPrepared = true;
         _selectList = selectList;
         _srcType = srcType;
+        _from = from;
     }
 }
 
-public class QueryCommand<TResult> : QueryCommand, IQueryCommand<TResult>
+public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
 {
-    private Delegate? _factory;
-    public Delegate? Factory
-    {
-        get=>_factory;
-        set=>_factory = value;
-    }
-    public QueryCommand(DataProvider sqlClient, LambdaExpression exp, Expression? condition) : base(sqlClient, exp, condition)
+    public QueryCommand(IDataProvider dataProvider, LambdaExpression exp, Expression? condition) : base(dataProvider, exp, condition)
     {
     }
-
-    public IEnumerator<object> Data { get; set; }
-
     public IAsyncEnumerator<TResult> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
         if (!IsPrepared)
             PrepareCommand(cancellationToken);
 
-        return new InMemoryEnumerator<TResult>(this, Data);
+        return DataProvider.CreateEnumerator<TResult>(this, cancellationToken);
     }
 
-    public Expression MapColumn(SelectExpression column, ParameterExpression param, Type recordType)
+    public Expression MapColumn(SelectExpression column, ParameterExpression param, Type _)
     {
         return Expression.PropertyOrField(param, column.PropertyName!);
     }

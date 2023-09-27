@@ -5,12 +5,12 @@ namespace nextorm.core;
 public class DataContextOptionsBuilder
 {
     private ILoggerFactory? _loggerFactory;
-    private DataProvider? _sqlClient;
+    private IDataProvider? _dataProvider;
     private bool _logSensetiveData;
 
     public bool ShouldLogSensetiveData => _logSensetiveData;
 
-    internal DataProvider? SqlClient => _sqlClient;
+    internal IDataProvider? DataProvider => _dataProvider;
     internal ILoggerFactory? LoggerFactory => _loggerFactory; 
 
     public DataContextOptionsBuilder UseLoggerFactory(ILoggerFactory loggerFactory)
@@ -20,11 +20,11 @@ public class DataContextOptionsBuilder
         _loggerFactory = loggerFactory;
         return this;
     }
-    public DataContextOptionsBuilder UseSqlClient(SqlClient sqlClient)
+    public DataContextOptionsBuilder UseSqlClient(SqlDataProvider dataProvider)
     {
-        ArgumentNullException.ThrowIfNull(sqlClient);
+        ArgumentNullException.ThrowIfNull(dataProvider);
 
-        _sqlClient = sqlClient;        
+        _dataProvider = dataProvider;        
         return this;
     }
     public DataContextOptionsBuilder LogSensetiveData(bool logSensetiveData)
@@ -35,7 +35,7 @@ public class DataContextOptionsBuilder
 
     public DataContextOptionsBuilder UseInMemoryClient()
     {
-        _sqlClient = new InMemoryDataProvider();
+        _dataProvider = new InMemoryDataProvider();
         return this;
     }
 }

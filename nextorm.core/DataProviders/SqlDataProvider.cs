@@ -1,3 +1,4 @@
+using System.Data;
 using System.Data.Common;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -7,7 +8,7 @@ using OneOf;
 
 namespace nextorm.core;
 
-public class SqlClient : DataProvider
+public class SqlDataProvider : IDataProvider
 {
     private readonly List<Param> _params = new();
     internal bool LogSensetiveData { get; set; }
@@ -26,7 +27,7 @@ public class SqlClient : DataProvider
     {
         throw new NotImplementedException();
     }
-    public DbCommand CreateCommand(SqlCommand cmd)
+    public DbCommand CreateCommand(QueryCommand cmd)
     {
         var dbCommand = CreateCommand(MakeSql(cmd));
 
@@ -38,7 +39,7 @@ public class SqlClient : DataProvider
     {
         throw new NotImplementedException();
     }
-    public virtual string MakeSql(SqlCommand cmd)
+    public virtual string MakeSql(QueryCommand cmd)
     {
         ArgumentNullException.ThrowIfNull(cmd.SelectList);
         ArgumentNullException.ThrowIfNull(cmd.From);
@@ -111,13 +112,10 @@ public class SqlClient : DataProvider
             cmd =>
             {
                 if (!cmd.IsPrepared) throw new BuildSqlCommandException("Inner query is not prepared");
-                return "(" + MakeSql(cmd as SqlCommand) + ")" + (string.IsNullOrEmpty(from.TableAlias) ? string.Empty : MakeTableAlias(from.TableAlias));
+                return "(" + MakeSql(cmd) + ")" + (string.IsNullOrEmpty(from.TableAlias) ? string.Empty : MakeTableAlias(from.TableAlias));
             }
         );
-
-
     }
-
     public virtual string MakeTableAlias(string tableAlias)
     {
         return " as " + tableAlias;
@@ -140,18 +138,58 @@ public class SqlClient : DataProvider
     {
         throw new NotImplementedException();
     }
-    public override IAsyncEnumerator<TResult> CreateEnumerator<TResult>(QueryCommand queryCommand, CancellationToken cancellationToken)
+    public IAsyncEnumerator<TResult> CreateEnumerator<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
 
-        if (queryCommand is SqlCommand<TResult> sqlCommand)
-            return new ResultSetEnumerator<TResult>(sqlCommand, this, sqlCommand.GetDbCommand(cancellationToken), cancellationToken);
-
-        throw new NotSupportedException(queryCommand.GetType().ToString());
+        var dbCommandPayload = queryCommand.GetOrAddPayload(()=>new DbCommandPayload(CreateCommand(queryCommand)));
+        
+        return new ResultSetEnumerator<TResult>(queryCommand, this, dbCommandPayload!.DbCommand, cancellationToken);
     }
     public virtual string ConcatStringOperator => "+";
-    public override IQueryCommand<T> CreateCommand<T>(LambdaExpression exp, Expression? condition)
+
+    public ILogger? Logger { get; set; }
+
+    public QueryCommand<T> CreateCommand<T>(LambdaExpression exp, Expression? condition)
     {
-        return new SqlCommand<T>(this, exp, condition);
+        return new QueryCommand<T>(this, exp, condition);
     }
+
+    public void ResetPreparation(QueryCommand queryCommand)
+    {
+        queryCommand.RemovePayload<DbCommandPayload>();
+    }
+
+    public FromExpression? GetFrom(Type srcType)
+    {
+        if (srcType != typeof(TableAlias))
+        {
+            var sqlTable = srcType.GetCustomAttribute<SqlTableAttribute>();
+
+            var tableName = sqlTable is not null
+                ? sqlTable.Name
+                : GetTableName(srcType);
+
+            return new FromExpression(tableName);
+        }
+        else throw new BuildSqlCommandException($"From must be specified for {nameof(TableAlias)} as source type");
+    }
+
+    public Expression MapColumn(SelectExpression column, ParameterExpression param, Type recordType)
+    {
+        if (column.Nullable)
+        {
+            return Expression.Condition(
+                Expression.Call(param, recordType.GetMethod(nameof(IDataRecord.IsDBNull))!, Expression.Constant(column.Index)),
+                Expression.Constant(null, column.PropertyType),
+                Expression.Convert(
+                    Expression.Call(param, column.GetDataRecordMethod(), Expression.Constant(column.Index)),
+                    column.PropertyType
+                )
+            );
+        }
+
+        return Expression.Call(param, column.GetDataRecordMethod(), Expression.Constant(column.Index));
+    }
+    record DbCommandPayload (DbCommand DbCommand): IPayload;
 }
