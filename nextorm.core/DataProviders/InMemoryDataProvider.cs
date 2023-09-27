@@ -55,7 +55,7 @@ public class InMemoryDataProvider : IDataProvider
 
     public void ResetPreparation(QueryCommand queryCommand)
     {
-
+        queryCommand.RemovePayload<CreateEnumeratorPayload>();
     }
     record CreateEnumeratorPayload(Delegate Delegate) : IPayload;
 }
