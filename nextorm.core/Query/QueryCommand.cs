@@ -73,6 +73,32 @@ public class QueryCommand
         payload = default;
         return false;
     }
+    public bool TryGetNotNullPayload<T>(out T? payload)
+        where T : class, IPayload
+    {
+        foreach (var item in _payload)
+        {
+            if (item is T p && p is not null)
+            {
+                payload = p;
+                return true;
+            }
+        }
+        payload = default;
+        return false;
+    }
+    public T GetNotNullOrAddPayload<T>(Func<T> factory)
+        where T : class, IPayload
+    {
+        if (!TryGetNotNullPayload<T>(out var payload))
+        {
+            ArgumentNullException.ThrowIfNull(factory);
+
+            payload = factory();
+            _payload.Add(payload);
+        }
+        return payload!;
+    }
     public T? GetOrAddPayload<T>(Func<T?> factory)
         where T : class, IPayload
     {
@@ -135,7 +161,7 @@ public class QueryCommand
                     throw new PrepareException("Select must return new anonymous type with at least one property");
 
             }
-            else
+            else if (_dataProvider.NeedMapping)
             {
                 throw new PrepareException("Select must return new anonymous type");
             }
@@ -180,12 +206,15 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         if (!IsPrepared)
             throw new InvalidOperationException("Command not prepared");
 
+        var resultType = typeof(TResult);
+
+        var recordType = dataRecord.GetType();
+
+        if (resultType == recordType)
+            return (TResult) dataRecord;
+            
         var factory = GetOrAddPayload(() =>
         {
-            var resultType = typeof(TResult);
-
-            var recordType = dataRecord.GetType();
-
             var ctorInfo = resultType.GetConstructors().OrderByDescending(it => it.GetParameters().Length).FirstOrDefault() ?? throw new PrepareException($"Cannot get ctor from {resultType}");
 
             var param = Expression.Parameter(recordType);

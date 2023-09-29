@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Data;
 using System.Data.Common;
 using System.Linq.Expressions;
@@ -142,13 +143,15 @@ public class SqlDataProvider : IDataProvider
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
 
-        var dbCommandPayload = queryCommand.GetOrAddPayload(()=>new DbCommandPayload(CreateCommand(queryCommand)));
-        
+        var dbCommandPayload = queryCommand.GetOrAddPayload(() => new DbCommandPayload(CreateCommand(queryCommand)));
+
         return new ResultSetEnumerator<TResult>(queryCommand, this, dbCommandPayload!.DbCommand, cancellationToken);
     }
     public virtual string ConcatStringOperator => "+";
 
     public ILogger? Logger { get; set; }
+
+    public bool NeedMapping => true;
 
     public QueryCommand<T> CreateCommand<T>(LambdaExpression exp, Expression? condition)
     {
@@ -164,13 +167,19 @@ public class SqlDataProvider : IDataProvider
     {
         if (srcType != typeof(TableAlias))
         {
-            var sqlTable = srcType.GetCustomAttribute<SqlTableAttribute>();
+            var sqlTableAttr = srcType.GetCustomAttribute<SqlTableAttribute>();
 
-            var tableName = sqlTable is not null
-                ? sqlTable.Name
-                : GetTableName(srcType);
+            if (sqlTableAttr is not null)
+                return new FromExpression(sqlTableAttr.Name);
+            else
+            {
+                var tableAttr = srcType.GetCustomAttribute<TableAttribute>();
 
-            return new FromExpression(tableName);
+                if (tableAttr is not null)
+                    return new FromExpression(tableAttr.Name);
+            }
+
+            return new FromExpression(GetTableName(srcType));
         }
         else throw new BuildSqlCommandException($"From must be specified for {nameof(TableAlias)} as source type");
     }
@@ -191,5 +200,6 @@ public class SqlDataProvider : IDataProvider
 
         return Expression.Call(param, column.GetDataRecordMethod(), Expression.Constant(column.Index));
     }
-    record DbCommandPayload (DbCommand DbCommand): IPayload;
+
+    record DbCommandPayload(DbCommand DbCommand) : IPayload;
 }

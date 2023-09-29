@@ -298,6 +298,15 @@ public class SqlCommandTests
 
         row.Id.Should().Be(1);
     }
+    [Fact]
+    public async void SelectTableWithWhereCalc_ShouldReturnData()
+    {
+        var row = await _sut.From("simple_entity")
+            .Where(tbl => tbl.Long("id")+2 == 1)
+            .Select(tbl => new { Id = tbl.Long("id") }).FirstOrDefaultAsync();
+
+        row.Should().BeNull();
+    }
     class cls1
     {
         public cls1(int id)

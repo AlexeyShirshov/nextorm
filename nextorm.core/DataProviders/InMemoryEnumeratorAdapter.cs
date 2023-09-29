@@ -1,14 +1,17 @@
+using System.Linq.Expressions;
+
 namespace nextorm.core;
 
 public class InMemoryEnumeratorAdapter<TResult, TEntity> : IAsyncEnumerator<TResult>
 {
     private readonly QueryCommand<TResult> _cmd;
     private readonly IAsyncEnumerator<TEntity> _inner;
-
-    public InMemoryEnumeratorAdapter(QueryCommand<TResult> cmd, IAsyncEnumerator<TEntity> inner)
+    private readonly Func<TEntity, bool>? _condition;
+    public InMemoryEnumeratorAdapter(QueryCommand<TResult> cmd, IAsyncEnumerator<TEntity> inner, Expression<Func<TEntity, bool>>? condition)
     {
         _cmd = cmd;
         _inner = inner;
+        _condition = condition?.Compile();
     }
 
     public TResult Current =>_cmd.Map(_inner.Current!);
@@ -19,8 +22,16 @@ public class InMemoryEnumeratorAdapter<TResult, TEntity> : IAsyncEnumerator<TRes
         return _inner.DisposeAsync();
     }
 
-    public ValueTask<bool> MoveNextAsync()
+    public async ValueTask<bool> MoveNextAsync()
     {
-        return _inner.MoveNextAsync();
+next:
+        var r = await _inner.MoveNextAsync();
+
+        if (r && _condition is not null && !_condition(_inner.Current))
+        {
+            goto next;
+        }
+
+        return r;
     }
 }

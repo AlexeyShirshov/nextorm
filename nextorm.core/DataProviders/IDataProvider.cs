@@ -6,6 +6,8 @@ namespace nextorm.core;
 public interface IDataProvider
 {
     public ILogger? Logger { get; set; }
+    bool NeedMapping { get; }
+
     IAsyncEnumerator<TResult> CreateEnumerator<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken);
     QueryCommand<TResult> CreateCommand<TResult>(LambdaExpression exp, Expression? condition);
     void ResetPreparation(QueryCommand queryCommand);

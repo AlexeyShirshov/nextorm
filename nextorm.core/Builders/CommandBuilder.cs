@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
 
-public class CommandBuilder<TEntity>
+public class CommandBuilder<TEntity> : IAsyncEnumerable<TEntity>
 {
     private readonly IDataProvider _dataProvider;
     private readonly QueryCommand? _query;
@@ -28,13 +28,13 @@ public class CommandBuilder<TEntity>
             cmd.From = new FromExpression(_query);
 
         OnCommandCreated(cmd);
-        
+
         return cmd;
     }
 
     protected virtual void OnCommandCreated<TResult>(QueryCommand<TResult> cmd)
     {
-        
+
     }
 
     public CommandBuilder<TEntity> Where(Expression<Func<TEntity, bool>> condition)
@@ -46,6 +46,9 @@ public class CommandBuilder<TEntity>
 
         return this;
     }
+    public static implicit operator QueryCommand<TEntity>(CommandBuilder<TEntity> builder) => builder.ToCommand();
+    public QueryCommand<TEntity> ToCommand() => Select(it => it);
+    public IAsyncEnumerator<TEntity> GetAsyncEnumerator(CancellationToken cancellationToken = default) => ToCommand().GetAsyncEnumerator(cancellationToken);
 }
 public class CommandBuilder
 {

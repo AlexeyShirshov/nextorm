@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Threading;
 using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
@@ -8,6 +9,8 @@ namespace nextorm.core;
 public class InMemoryDataProvider : IDataProvider
 {
     public ILogger? Logger { get; set; }
+
+    public bool NeedMapping => false;
 
     public QueryCommand<TResult> CreateCommand<TResult>(LambdaExpression exp, Expression? condition)
     {
@@ -27,7 +30,7 @@ public class InMemoryDataProvider : IDataProvider
             var subQueryType = subQuery.GetType();
             if (!subQueryType.IsGenericType)
                 throw new DataProviderException("Cannot use table as source for in-memory provider");
-        
+
             var resultType = subQueryType.GenericTypeArguments[0];
 
             var delPayload = subQuery.GetOrAddPayload(() =>
@@ -37,7 +40,8 @@ public class InMemoryDataProvider : IDataProvider
                 var callCreateEnumerator = Expression.Call(param, miCreateEnumerator.MakeGenericMethod(resultType), Expression.Constant(subQuery), Expression.Constant(cancellationToken));
 
                 var miCreateEnumeratorAdapter = typeof(InMemoryDataProvider).GetMethod(nameof(CreateEnumeratorAdapter), BindingFlags.NonPublic | BindingFlags.Static)!;
-                var callCreateEnumeratorAdapter = Expression.Call(null, miCreateEnumeratorAdapter.MakeGenericMethod(typeof(TResult), resultType), Expression.Constant(queryCommand), callCreateEnumerator);
+                var callCreateEnumeratorAdapter = Expression.Call(
+                    null, miCreateEnumeratorAdapter.MakeGenericMethod(typeof(TResult), resultType), Expression.Constant(queryCommand), callCreateEnumerator);
 
                 return new CreateMainEnumeratorPayload(Expression.Lambda(callCreateEnumeratorAdapter, param).Compile());
             });
@@ -48,38 +52,39 @@ public class InMemoryDataProvider : IDataProvider
         {
             var delPayload = queryCommand.GetOrAddPayload(() =>
             {
-                var mi = typeof(InMemoryDataProvider).GetMethod(nameof(CreateEnumerator), BindingFlags.NonPublic | BindingFlags.Instance)!;
+                var miCreateEnumerator = typeof(InMemoryDataProvider).GetMethod(nameof(CreateEnumerator), BindingFlags.NonPublic | BindingFlags.Static)!;
                 var param = Expression.Parameter(typeof(InMemoryDataProvider));
-                var callExp = Expression.Call(param, mi.MakeGenericMethod(typeof(TResult), queryCommand.EntityType!), Expression.Constant(queryCommand));
+                var callExp = Expression.Call(null, miCreateEnumerator.MakeGenericMethod(typeof(TResult), queryCommand.EntityType!), Expression.Constant(queryCommand), Expression.Constant(cancellationToken));
                 return new CreateEnumeratorPayload(Expression.Lambda(callExp, param).Compile());
             });
 
             return (IAsyncEnumerator<TResult>)delPayload!.Delegate.DynamicInvoke(this)!;
         }
     }
-    protected static IEnumerator<TEntity> GetData<TEntity>(QueryCommand queryCommand)
+    protected static IAsyncEnumerator<TResult> CreateEnumerator<TResult, TEntity>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
     {
-        var dataPayload = queryCommand.GetOrAddPayload(() =>
-        {
-            return new InMemoryDataPayload<TEntity>(Array.Empty<TEntity>().AsEnumerable());
-        });
-
-        var data = dataPayload!.Data!;
-
-        if (queryCommand.Condition is not null)
-        {
-            var predicate = (queryCommand.Condition as Expression<Func<TEntity, bool>>)!.Compile();
-            data = data.Where(predicate);
+        if (queryCommand.TryGetPayload<InMemoryAsyncDataPayload<TEntity>>(out var asyncDataPayload) && asyncDataPayload!.Data is not null)
+        {            
+            return CreateEnumeratorAdapter(queryCommand, asyncDataPayload.Data.GetAsyncEnumerator(cancellationToken));
         }
-        return data.GetEnumerator();
-    }
-    protected InMemoryEnumerator<TResult, TEntity> CreateEnumerator<TResult, TEntity>(QueryCommand<TResult> queryCommand)
-    {
-        return new InMemoryEnumerator<TResult, TEntity>(queryCommand, GetData<TEntity>(queryCommand));
+        else 
+        {
+            var dataPayload = queryCommand.GetNotNullOrAddPayload(()=>new InMemoryDataPayload<TEntity>(Array.Empty<TEntity>().AsEnumerable()));
+
+            var data = dataPayload.Data!;
+
+            if (queryCommand.Condition is not null)
+            {
+                var predicate = (queryCommand.Condition as Expression<Func<TEntity, bool>>)!.Compile();
+                data = data.Where(predicate);
+            }
+
+            return new InMemoryEnumerator<TResult, TEntity>(queryCommand, data.GetEnumerator());
+        }
     }
     protected static InMemoryEnumeratorAdapter<TResult, TEntity> CreateEnumeratorAdapter<TResult, TEntity>(QueryCommand<TResult> queryCommand, IAsyncEnumerator<TEntity> enumerator)
     {
-        return new InMemoryEnumeratorAdapter<TResult, TEntity>(queryCommand, enumerator);
+        return new InMemoryEnumeratorAdapter<TResult, TEntity>(queryCommand, enumerator, queryCommand.Condition as Expression<Func<TEntity, bool>>);
     }
     public FromExpression? GetFrom(Type srcType)
     {
