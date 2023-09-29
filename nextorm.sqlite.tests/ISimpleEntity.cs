@@ -11,3 +11,8 @@ public interface ISimpleEntity
     [Column("id")]
     int Id {get;set;}
 }
+
+public class SimpleEntity : ISimpleEntity
+{
+    public int Id { get; set; }
+}

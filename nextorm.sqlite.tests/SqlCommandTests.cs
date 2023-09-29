@@ -307,6 +307,17 @@ public class SqlCommandTests
 
         row.Should().BeNull();
     }
+    [Fact]
+    public async void SelectEntityAsClass_ShouldReturnData()
+    {
+        long idx = 0;
+        await foreach (var row in _sut.SimpleEntityAsClass)
+        {
+            idx++;
+            idx.Should().Be(row.Id);
+            _logger.LogInformation("Id = {id}", row.Id);
+        }
+    }
     class cls1
     {
         public cls1(int id)

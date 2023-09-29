@@ -167,16 +167,31 @@ public class SqlDataProvider : IDataProvider
     {
         if (srcType != typeof(TableAlias))
         {
-            var sqlTableAttr = srcType.GetCustomAttribute<SqlTableAttribute>();
+            var sqlTableAttr = srcType.GetCustomAttribute<SqlTableAttribute>(true);
 
             if (sqlTableAttr is not null)
                 return new FromExpression(sqlTableAttr.Name);
             else
             {
-                var tableAttr = srcType.GetCustomAttribute<TableAttribute>();
+                var tableAttr = srcType.GetCustomAttribute<TableAttribute>(true);
 
                 if (tableAttr is not null)
                     return new FromExpression(tableAttr.Name);
+            }
+
+            foreach (var interf in srcType.GetInterfaces())
+            {
+                sqlTableAttr = interf.GetCustomAttribute<SqlTableAttribute>(true);
+
+                if (sqlTableAttr is not null)
+                    return new FromExpression(sqlTableAttr.Name);
+                else
+                {
+                    var tableAttr = interf.GetCustomAttribute<TableAttribute>(true);
+
+                    if (tableAttr is not null)
+                        return new FromExpression(tableAttr.Name);
+                }
             }
 
             return new FromExpression(GetTableName(srcType));

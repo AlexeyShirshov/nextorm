@@ -11,7 +11,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
     private readonly SqlDataProvider _dataProvider;
     private readonly FromExpression _from;
     protected readonly StringBuilder _builder = new();
-    private readonly List<Param> _params = new (); 
+    private readonly List<Param> _params = new();
     private bool _needAlias;
     public BaseExpressionVisitor(Type entityType, SqlDataProvider dataProvider, FromExpression from)
     {
@@ -59,6 +59,10 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
                         or nameof(TableAlias.NullableGuid),
                     Arguments: [ConstantExpression constExp]
                 } => constExp.Value?.ToString(),
+                {
+                    Method.Name: nameof(TableAlias.Column),
+                    Arguments: [Expression exp]
+                } => GetColumn(exp),
                 _ => throw new NotSupportedException(node.Method.Name)
             });
 
@@ -66,6 +70,15 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
         }
 
         return base.VisitMethodCall(node);
+
+        string GetColumn(Expression exp)
+        {
+            throw new NotImplementedException();
+            // Expression.Invoke(exp).
+            // var visitor = Clone();
+            // visitor.Visit(exp);
+            // return visitor.ToString();
+        }
     }
     protected override Expression VisitConstant(ConstantExpression node)
     {
@@ -124,7 +137,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
             //}
             return node;
         }
-        else 
+        else
         {
             //if (node.NodeType == ExpressionType.MemberAccess && node.Expression is ConstantExpression constExp)
             {

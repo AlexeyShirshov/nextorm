@@ -8,7 +8,9 @@ public class TestDataContext : SqlDataContext
     {
         SimpleEntity = Create<ISimpleEntity>();
         ComplexEntity = Create<IComplexEntity>();
+        SimpleEntityAsClass = Create<SimpleEntity>();
     }
     public CommandBuilder<ISimpleEntity> SimpleEntity {get;set;}
     public CommandBuilder<IComplexEntity> ComplexEntity {get;set;}
+    public CommandBuilder<SimpleEntity> SimpleEntityAsClass {get;set;}
 }

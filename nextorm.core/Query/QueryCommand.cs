@@ -1,5 +1,7 @@
 using System.Collections;
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq.Expressions;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
 
@@ -135,6 +137,15 @@ public class QueryCommand
         if (_from is not null && _from.Table.IsT1 && !_from.Table.AsT1.IsPrepared)
             _from.Table.AsT1.PrepareCommand(cancellationToken);
 
+        var srcType = _srcType;
+        if (srcType is null)
+        {
+            if (_exp is null)
+                throw new PrepareException("Lambda expression for anonymous type must exists");
+
+            srcType = _exp.Parameters[0].Type;
+        }
+
         var selectList = _selectList;
 
         if (selectList is null)
@@ -163,17 +174,42 @@ public class QueryCommand
             }
             else if (_dataProvider.NeedMapping)
             {
-                throw new PrepareException("Select must return new anonymous type");
-            }
-        }
+                var props = srcType.GetProperties(BindingFlags.FlattenHierarchy | BindingFlags.Public | BindingFlags.Instance).Where(prop => prop.CanWrite).ToArray();
+                for (int idx = 0; idx < props.Length; idx++)
+                {
+                    var prop = props[idx];
+                    var colAttr = prop.GetCustomAttribute<ColumnAttribute>(true);
+                    if (colAttr is not null)
+                    {
+                        Expression<Func<TableAlias, object>> exp = tbl => tbl.Column(colAttr.Name!);
+                        selectList.Add(new SelectExpression(prop.PropertyType) { Index = idx, PropertyName = prop.Name, Expression = exp });
+                    }
+                    else
+                    {
+                        foreach (var interf in srcType.GetInterfaces())
+                        {
+                            var intMap = srcType.GetInterfaceMap(interf);
 
-        var srcType = _srcType;
-        if (srcType is null)
-        {
-            if (_exp is null)
-                throw new PrepareException("Lambda expression for anonymous type must exists");
-            
-            srcType = _exp.Parameters[0].Type;
+                            var implIdx = Array.IndexOf(intMap.TargetMethods, prop.GetMethod);
+                            if (implIdx >= 0)
+                            {
+                                var intMethod = intMap.InterfaceMethods[implIdx];
+
+                                prop = interf.GetProperties().FirstOrDefault(prop => prop.GetMethod == intMethod);
+                                colAttr = prop?.GetCustomAttribute<ColumnAttribute>(true);
+                                if (colAttr is not null)
+                                {
+                                    Expression<Func<TableAlias, object>> exp = tbl => tbl.Column(colAttr.Name!);
+                                    selectList.Add(new SelectExpression(prop.PropertyType) { Index = idx, PropertyName = prop.Name, Expression = exp });
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (selectList.Count == 0)
+                    throw new PrepareException("Select must return new anonymous type");
+            }
         }
 
         FromExpression? from = _from ?? _dataProvider.GetFrom(srcType);
@@ -182,6 +218,12 @@ public class QueryCommand
         _selectList = selectList;
         _srcType = srcType;
         _from = from;
+
+        static bool MethodsImplements(InterfaceMapping interfaceMap, MethodInfo interfaceMethod, MethodInfo classMethod)
+        {
+            var implIndex = Array.IndexOf(interfaceMap.InterfaceMethods, interfaceMethod);
+            return interfaceMethod == interfaceMap.TargetMethods[implIndex];
+        }
     }
 }
 
@@ -211,8 +253,8 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         var recordType = dataRecord.GetType();
 
         if (resultType == recordType)
-            return (TResult) dataRecord;
-            
+            return (TResult)dataRecord;
+
         var factory = GetOrAddPayload(() =>
         {
             var ctorInfo = resultType.GetConstructors().OrderByDescending(it => it.GetParameters().Length).FirstOrDefault() ?? throw new PrepareException($"Cannot get ctor from {resultType}");
@@ -220,11 +262,19 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
             var param = Expression.Parameter(recordType);
             //var @params = SelectList.Select(column => Expression.Parameter(column.PropertyType!)).ToArray();
 
-            var newParams = SelectList!.Select(column => _dataProvider.MapColumn(column, param, recordType)).ToArray();
+            if (ctorInfo.GetParameters().Length == SelectList!.Count)
+            {
+                var newParams = SelectList!.Select(column => _dataProvider.MapColumn(column, param, recordType)).ToArray();
 
-            var exp = Expression.New(ctorInfo, newParams);
+                var exp = Expression.New(ctorInfo, newParams);
 
-            return new MapPayload(Expression.Lambda(exp, param).Compile());
+                return new MapPayload(Expression.Lambda(exp, param).Compile());
+            }
+            else
+            {
+                var exp = Expression.New(ctorInfo);
+                return new MapPayload(Expression.Lambda(exp, param).Compile());
+            }
         });
 
         return (TResult)factory!.Delegate.DynamicInvoke(dataRecord)!;
