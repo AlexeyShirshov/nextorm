@@ -20,7 +20,7 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>
         _sqlCommand = sqlCommand;
         _cancellationToken = cancellationToken;
     }
-    public TResult Current => (_dataProvider as IDataProvider).Map<TResult>(_cmd, _reader!);
+    public TResult Current => _cmd.Map(_reader!);
     public async ValueTask DisposeAsync()
     {
         GC.SuppressFinalize(this);

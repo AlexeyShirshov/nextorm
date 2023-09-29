@@ -7,6 +7,6 @@ public class SqlDataContext : DataContext
         if (_dataProvider is SqlDataProvider sql)
             sql.LogSensetiveData = optionsBuilder.ShouldLogSensetiveData;
     }
-    public CommandBuilder From(string table) => new(_dataProvider as SqlDataProvider, table) { Logger = _cmdLogger };
+    public CommandBuilder From(string table) => new((SqlDataProvider)_dataProvider, table) { Logger = _cmdLogger };
     public CommandBuilder<T> Create<T>() => new(_dataProvider) { Logger = _cmdLogger };
 }

@@ -20,4 +20,22 @@ public class InMemoryTests
         r.Should().NotBeNull();
         r.Id.Should().Be(1);
     }
+    [Fact]
+    public async void TestWhere_Subquery()
+    {
+        var subQuery = _sut.SimpleEntity.Where(it => it.Id == 1).Select(it => new { it.Id });
+        var r = await _sut.From(subQuery).Select(it => new { it.Id }).SingleOrDefaultAsync();
+
+        r.Should().NotBeNull();
+        r.Id.Should().Be(1);
+    }
+    // [Fact]
+    // public async void TestWhere_Subquery2()
+    // {
+    //     var subQuery = _sut.SimpleEntity.Where(it => it.Id == 1).Select(it => new { it.Id });
+    //     var r = await _sut.From(subQuery).Select(it => new { it.Id }).SingleOrDefaultAsync();
+
+    //     r.Should().NotBeNull();
+    //     r.Id.Should().Be(1);
+    // }
 }

@@ -3,7 +3,7 @@ using System.Runtime.Serialization;
 namespace nextorm.core;
 
 [Serializable]
-internal class PrepareException : Exception
+public class PrepareException : Exception
 {
     public PrepareException()
     {

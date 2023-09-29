@@ -19,5 +19,5 @@ public class DataContext
             _cmdLogger = optionsBuilder.LoggerFactory.CreateLogger(typeof(QueryCommand));
         }
     }
-    public CommandBuilder<T> From<T>(QueryCommand<T> query) => new(_dataProvider, query) { Logger = _cmdLogger };
+    public CommandBuilder<TResult> From<TResult>(QueryCommand<TResult> query) => new(_dataProvider, query) { Logger = _cmdLogger };
 }

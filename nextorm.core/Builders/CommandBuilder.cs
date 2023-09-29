@@ -32,7 +32,7 @@ public class CommandBuilder<TEntity>
         return cmd;
     }
 
-    protected virtual void OnCommandCreated<T>(QueryCommand<T> cmd)
+    protected virtual void OnCommandCreated<TResult>(QueryCommand<TResult> cmd)
     {
         
     }
@@ -58,10 +58,10 @@ public class CommandBuilder
         _dataProvider = dataProvider;
         _table = table;
     }
-    public QueryCommand<T> Select<T>(Expression<Func<TableAlias, T>> exp)
+    public QueryCommand<TResult> Select<TResult>(Expression<Func<TableAlias, TResult>> exp)
     {
         if (string.IsNullOrEmpty(_table)) throw new InvalidOperationException("Table must be specified");
-        return new QueryCommand<T>(_dataProvider, exp, _condition) { From = new FromExpression(_table), Logger = Logger };
+        return new QueryCommand<TResult>(_dataProvider, exp, _condition) { From = new FromExpression(_table), Logger = Logger };
     }
 
     public CommandBuilder Where(Expression<Func<TableAlias, bool>> condition)

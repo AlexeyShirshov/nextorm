@@ -139,7 +139,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
             }
         }
 
-        return base.VisitMember(node);
+        //return base.VisitMember(node);
     }
     protected override Expression VisitBinary(BinaryExpression node)
     {

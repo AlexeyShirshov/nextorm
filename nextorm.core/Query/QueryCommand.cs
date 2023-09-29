@@ -73,7 +73,7 @@ public class QueryCommand
         payload = default;
         return false;
     }
-    public T? GetOrAddPayload<T>(Func<T> factory)
+    public T? GetOrAddPayload<T>(Func<T?> factory)
         where T : class, IPayload
     {
         if (!TryGetPayload<T>(out var payload))
@@ -85,7 +85,7 @@ public class QueryCommand
         }
         return payload;
     }
-    public T? AddOrUpdatePayload<T>(Func<T> factory)
+    public T? AddOrUpdatePayload<T>(Func<T?> factory)
         where T : class, IPayload
     {
         for (int i = 0; i < _payload.Count; i++)
@@ -169,11 +169,37 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         if (!IsPrepared)
             PrepareCommand(cancellationToken);
 
-        return DataProvider.CreateEnumerator<TResult>(this, cancellationToken);
+        return DataProvider.CreateEnumerator(this, cancellationToken);
     }
-
-    public Expression MapColumn(SelectExpression column, ParameterExpression param, Type _)
+    // public Expression MapColumn(SelectExpression column, ParameterExpression param, Type _)
+    // {
+    //     return Expression.PropertyOrField(param, column.PropertyName!);
+    // }
+    public TResult Map(object dataRecord)
     {
-        return Expression.PropertyOrField(param, column.PropertyName!);
+        if (!IsPrepared)
+            throw new InvalidOperationException("Command not prepared");
+
+        var factory = GetOrAddPayload(() =>
+        {
+            var resultType = typeof(TResult);
+
+            var recordType = dataRecord.GetType();
+
+            var ctorInfo = resultType.GetConstructors().OrderByDescending(it => it.GetParameters().Length).FirstOrDefault() ?? throw new PrepareException($"Cannot get ctor from {resultType}");
+
+            var param = Expression.Parameter(recordType);
+            //var @params = SelectList.Select(column => Expression.Parameter(column.PropertyType!)).ToArray();
+
+            var newParams = SelectList!.Select(column => _dataProvider.MapColumn(column, param, recordType)).ToArray();
+
+            var exp = Expression.New(ctorInfo, newParams);
+
+            return new MapPayload(Expression.Lambda(exp, param).Compile());
+        });
+
+        return (TResult)factory!.Delegate.DynamicInvoke(dataRecord)!;
     }
+    record MapPayload(Delegate Delegate) : IPayload;
+
 }

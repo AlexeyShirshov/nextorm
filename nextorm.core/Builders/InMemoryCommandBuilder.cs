@@ -13,7 +13,7 @@ public class InMemoryCommandBuilder<TEntity> : CommandBuilder<TEntity>
     {
         _data = data;
     }
-    protected override void OnCommandCreated<T>(QueryCommand<T> cmd)
+    protected override void OnCommandCreated<TResult>(QueryCommand<TResult> cmd)
     {
         cmd.AddOrUpdatePayload(()=>new InMemoryDataPayload<TEntity>(_data));
 
