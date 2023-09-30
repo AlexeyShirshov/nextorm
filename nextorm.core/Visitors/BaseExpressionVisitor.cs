@@ -62,7 +62,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
                 {
                     Method.Name: nameof(TableAlias.Column),
                     Arguments: [Expression exp]
-                } => GetColumn(exp),
+                } => Expression.Lambda(exp).Compile().DynamicInvoke()?.ToString(),
                 _ => throw new NotSupportedException(node.Method.Name)
             });
 
@@ -70,15 +70,6 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
         }
 
         return base.VisitMethodCall(node);
-
-        string GetColumn(Expression exp)
-        {
-            throw new NotImplementedException();
-            // Expression.Invoke(exp).
-            // var visitor = Clone();
-            // visitor.Visit(exp);
-            // return visitor.ToString();
-        }
     }
     protected override Expression VisitConstant(ConstantExpression node)
     {

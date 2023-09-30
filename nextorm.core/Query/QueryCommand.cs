@@ -178,11 +178,12 @@ public class QueryCommand
                 for (int idx = 0; idx < props.Length; idx++)
                 {
                     var prop = props[idx];
+                    if (prop is null) continue;
                     var colAttr = prop.GetCustomAttribute<ColumnAttribute>(true);
                     if (colAttr is not null)
                     {
                         Expression<Func<TableAlias, object>> exp = tbl => tbl.Column(colAttr.Name!);
-                        selectList.Add(new SelectExpression(prop.PropertyType) { Index = idx, PropertyName = prop.Name, Expression = exp });
+                        selectList.Add(new SelectExpression(prop.PropertyType) { Index = idx, PropertyName = prop.Name, Expression = exp, PropertyInfo = prop });
                     }
                     else
                     {
@@ -190,17 +191,17 @@ public class QueryCommand
                         {
                             var intMap = srcType.GetInterfaceMap(interf);
 
-                            var implIdx = Array.IndexOf(intMap.TargetMethods, prop.GetMethod);
+                            var implIdx = Array.IndexOf(intMap.TargetMethods, prop!.GetMethod);
                             if (implIdx >= 0)
                             {
                                 var intMethod = intMap.InterfaceMethods[implIdx];
 
-                                prop = interf.GetProperties().FirstOrDefault(prop => prop.GetMethod == intMethod);
-                                colAttr = prop?.GetCustomAttribute<ColumnAttribute>(true);
+                                var intProp = interf.GetProperties().FirstOrDefault(prop => prop.GetMethod == intMethod);
+                                colAttr = intProp?.GetCustomAttribute<ColumnAttribute>(true);
                                 if (colAttr is not null)
                                 {
                                     Expression<Func<TableAlias, object>> exp = tbl => tbl.Column(colAttr.Name!);
-                                    selectList.Add(new SelectExpression(prop.PropertyType) { Index = idx, PropertyName = prop.Name, Expression = exp });
+                                    selectList.Add(new SelectExpression(prop!.PropertyType) { Index = idx, PropertyName = prop.Name, Expression = exp, PropertyInfo = prop });
                                 }
                             }
                         }
@@ -218,12 +219,6 @@ public class QueryCommand
         _selectList = selectList;
         _srcType = srcType;
         _from = from;
-
-        static bool MethodsImplements(InterfaceMapping interfaceMap, MethodInfo interfaceMethod, MethodInfo classMethod)
-        {
-            var implIndex = Array.IndexOf(interfaceMap.InterfaceMethods, interfaceMethod);
-            return interfaceMethod == interfaceMap.TargetMethods[implIndex];
-        }
     }
 }
 
@@ -266,14 +261,31 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
             {
                 var newParams = SelectList!.Select(column => _dataProvider.MapColumn(column, param, recordType)).ToArray();
 
-                var exp = Expression.New(ctorInfo, newParams);
+                var ctor = Expression.New(ctorInfo, newParams);
 
-                return new MapPayload(Expression.Lambda(exp, param).Compile());
+                var lambda = Expression.Lambda(ctor, param);
+
+                if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Init expression for {type}: {exp}", resultType, lambda);
+
+                return new MapPayload(lambda.Compile());
             }
             else
             {
-                var exp = Expression.New(ctorInfo);
-                return new MapPayload(Expression.Lambda(exp, param).Compile());
+                var bindings = SelectList!.Select(column => 
+                {
+                    var propInfo = column.PropertyInfo ?? resultType.GetProperty(column.PropertyName!)!;
+                    return Expression.Bind(propInfo, _dataProvider.MapColumn(column, param, recordType));
+                }).ToArray();
+
+                var ctor = Expression.New(ctorInfo);
+
+                var memberInit = Expression.MemberInit(ctor, bindings);
+
+                var lambda = Expression.Lambda(memberInit, param);
+
+                if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Init expression for {type}: {exp}", resultType, lambda);
+
+                return new MapPayload(lambda.Compile());
             }
         });
 

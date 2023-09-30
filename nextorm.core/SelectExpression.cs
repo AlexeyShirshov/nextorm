@@ -16,7 +16,7 @@ public class SelectExpression
     private readonly bool _nullable;
 
     public bool Nullable { get; }
-
+    internal PropertyInfo? PropertyInfo { get; set; }
 
     public SelectExpression(Type propertyType)
     {
