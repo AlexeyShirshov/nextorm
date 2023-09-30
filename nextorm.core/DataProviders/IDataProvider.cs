@@ -11,6 +11,6 @@ public interface IDataProvider
     IAsyncEnumerator<TResult> CreateEnumerator<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken);
     QueryCommand<TResult> CreateCommand<TResult>(LambdaExpression exp, Expression? condition);
     void ResetPreparation(QueryCommand queryCommand);
-    FromExpression? GetFrom(Type srcType);
+    FromExpression? GetFrom(Type srcType, QueryCommand queryCommand);
     public Expression MapColumn(SelectExpression column, ParameterExpression param, Type recordType);
 }

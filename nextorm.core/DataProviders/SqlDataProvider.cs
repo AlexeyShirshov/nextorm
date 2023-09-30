@@ -26,7 +26,7 @@ public class SqlDataProvider : IDataProvider
 
     public virtual string GetTableName(Type type)
     {
-        throw new NotImplementedException();
+        throw new NotImplementedException(type.ToString());
     }
     public DbCommand CreateCommand(QueryCommand cmd)
     {
@@ -70,10 +70,41 @@ public class SqlDataProvider : IDataProvider
         sqlBuilder.Length -= 2;
         sqlBuilder.Append(" from ").Append(MakeFrom(from));
 
+        if (cmd.Joins.Any())
+        {
+            foreach (var join in cmd.Joins)
+            {
+                sqlBuilder.Append(MakeJoin(join, cmd));                
+            }
+        }
+
         if (cmd.Condition is not null)
         {
             sqlBuilder.Append(" where ").Append(MakeWhere(entityType, from, cmd.Condition));
         }
+
+        return sqlBuilder.ToString();
+    }
+
+    private string MakeJoin(JoinExpression join, QueryCommand cmd)
+    {
+        var sqlBuilder = new StringBuilder();
+        
+        switch(join.JoinType)
+        {
+            case JoinType.Inner:
+                sqlBuilder.Append(" join ");
+                break;
+            default:
+                throw new NotImplementedException(join.JoinType.ToString());
+        }
+
+        var visitor = new JoinExpressionVisitor(cmd.EntityType!, this, cmd.From!);
+        visitor.Visit(join.JoinCondition);
+        var fromExp = GetFrom(visitor.JoinType);
+
+        sqlBuilder.Append(MakeFrom(fromExp)).Append(" on ");
+        sqlBuilder.Append(MakeWhere(cmd.EntityType!, cmd.From!, visitor.JoinCondition));
 
         return sqlBuilder.ToString();
     }
@@ -163,42 +194,57 @@ public class SqlDataProvider : IDataProvider
         queryCommand.RemovePayload<DbCommandPayload>();
     }
 
-    public FromExpression? GetFrom(Type srcType)
+    public FromExpression? GetFrom(Type srcType, QueryCommand queryCommand)
     {
         if (srcType != typeof(TableAlias))
         {
-            var sqlTableAttr = srcType.GetCustomAttribute<SqlTableAttribute>(true);
+            if (queryCommand.Joins.Any() && srcType.FullName!.StartsWith("nextorm.core.Projection"))
+            {
+                var prop_t1 = srcType.GetProperty("t1") ?? throw new BuildSqlCommandException($"Projection {srcType} must have t1 property");
+
+                var f = GetFrom(prop_t1.PropertyType);
+
+                f.TableAlias = "t1";
+
+                return f;
+            }
+            else
+                return GetFrom(srcType);
+        }
+        else throw new BuildSqlCommandException($"From must be specified for {nameof(TableAlias)} as source type");        
+    }
+
+    private FromExpression GetFrom(Type t)
+    {
+        var sqlTableAttr = t.GetCustomAttribute<SqlTableAttribute>(true);
+
+        if (sqlTableAttr is not null)
+            return new FromExpression(sqlTableAttr.Name);
+        else
+        {
+            var tableAttr = t.GetCustomAttribute<TableAttribute>(true);
+
+            if (tableAttr is not null)
+                return new FromExpression(tableAttr.Name);
+        }
+
+        foreach (var interf in t.GetInterfaces())
+        {
+            sqlTableAttr = interf.GetCustomAttribute<SqlTableAttribute>(true);
 
             if (sqlTableAttr is not null)
                 return new FromExpression(sqlTableAttr.Name);
             else
             {
-                var tableAttr = srcType.GetCustomAttribute<TableAttribute>(true);
+                var tableAttr = interf.GetCustomAttribute<TableAttribute>(true);
 
                 if (tableAttr is not null)
                     return new FromExpression(tableAttr.Name);
             }
-
-            foreach (var interf in srcType.GetInterfaces())
-            {
-                sqlTableAttr = interf.GetCustomAttribute<SqlTableAttribute>(true);
-
-                if (sqlTableAttr is not null)
-                    return new FromExpression(sqlTableAttr.Name);
-                else
-                {
-                    var tableAttr = interf.GetCustomAttribute<TableAttribute>(true);
-
-                    if (tableAttr is not null)
-                        return new FromExpression(tableAttr.Name);
-                }
-            }
-
-            return new FromExpression(GetTableName(srcType));
         }
-        else throw new BuildSqlCommandException($"From must be specified for {nameof(TableAlias)} as source type");
-    }
 
+        return new FromExpression(GetTableName(t));
+    }
     public Expression MapColumn(SelectExpression column, ParameterExpression param, Type recordType)
     {
         if (column.Nullable)

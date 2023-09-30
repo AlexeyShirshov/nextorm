@@ -69,6 +69,11 @@ public class InMemoryDataProvider : IDataProvider
         }
         else 
         {
+            if (queryCommand.Joins.Any() && typeof(TEntity).FullName!.StartsWith("nextorm.core.Projection"))
+            {
+                throw new NotImplementedException("joins");
+            }
+
             var dataPayload = queryCommand.GetNotNullOrAddPayload(()=>new InMemoryDataPayload<TEntity>(Array.Empty<TEntity>().AsEnumerable()));
 
             var data = dataPayload.Data!;
@@ -86,7 +91,7 @@ public class InMemoryDataProvider : IDataProvider
     {
         return new InMemoryEnumeratorAdapter<TResult, TEntity>(queryCommand, enumerator, queryCommand.Condition as Expression<Func<TEntity, bool>>);
     }
-    public FromExpression? GetFrom(Type srcType)
+    public FromExpression? GetFrom(Type srcType, QueryCommand queryCommand)
     {
         return null;
     }

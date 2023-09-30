@@ -39,6 +39,7 @@ public class QueryCommand
     }
     public bool IsPrepared => _isPrepared;
     public Expression? Condition => _condition;
+    public List<JoinExpression> Joins { get; } = new();
     public virtual void ResetPreparation()
     {
         _isPrepared = false;
@@ -48,6 +49,7 @@ public class QueryCommand
 
         _dataProvider.ResetPreparation(this);
     }
+    #region Payload
     public bool RemovePayload<T>()
         where T : class, IPayload
     {
@@ -132,6 +134,24 @@ public class QueryCommand
         _payload.Add(payload);
         return payload;
     }
+    public void AddOrUpdatePayload<T>(T? payload)
+        where T : class, IPayload
+    {
+        for (int i = 0; i < _payload.Count; i++)
+        {
+            var item = _payload[i];
+
+            if (item is T)
+            {
+                _payload[i] = payload;
+                return;
+            }
+        }
+
+        _payload.Add(payload);
+    }
+    #endregion
+
     public virtual void PrepareCommand(CancellationToken cancellationToken)
     {
         if (_from is not null && _from.Table.IsT1 && !_from.Table.AsT1.IsPrepared)
@@ -145,6 +165,8 @@ public class QueryCommand
 
             srcType = _exp.Parameters[0].Type;
         }
+
+        FromExpression? from = _from ?? _dataProvider.GetFrom(srcType, this);
 
         var selectList = _selectList;
 
@@ -212,8 +234,6 @@ public class QueryCommand
                     throw new PrepareException("Select must return new anonymous type");
             }
         }
-
-        FromExpression? from = _from ?? _dataProvider.GetFrom(srcType);
 
         _isPrepared = true;
         _selectList = selectList;

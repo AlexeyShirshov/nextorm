@@ -111,26 +111,33 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
     {
         if (node.Expression?.Type == _entityType)
         {
-            var colAttr = node.Member.GetCustomAttribute<ColumnAttribute>();
-            if (colAttr is not null)
-                _builder.Append(colAttr.Name);
-            else if (_from.Table.IsT1)
+            if (node.Expression!.Type!.FullName!.StartsWith("nextorm.core.Projection"))
             {
-                var innerCol = _from.Table.AsT1.SelectList!.SingleOrDefault(col => col.PropertyName == node.Member.Name) ?? throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
-                var col = _dataProvider.MakeColumn(innerCol, _from.Table.AsT1.EntityType!, _from.Table.AsT1.From!);
-                if (col.NeedAlias)
-                    _builder.Append(innerCol.PropertyName);
-                else
-                    _builder.Append(col.Column);
+                return node;
             }
             else
-                _builder.Append(_dataProvider.GetColumnName(node.Member));
-            //}
-            return node;
+            {
+                var colAttr = node.Member.GetCustomAttribute<ColumnAttribute>();
+                if (colAttr is not null)
+                    _builder.Append(colAttr.Name);
+                else if (_from.Table.IsT1)
+                {
+                    var innerCol = _from.Table.AsT1.SelectList!.SingleOrDefault(col => col.PropertyName == node.Member.Name) ?? throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
+                    var col = _dataProvider.MakeColumn(innerCol, _from.Table.AsT1.EntityType!, _from.Table.AsT1.From!);
+                    if (col.NeedAlias)
+                        _builder.Append(innerCol.PropertyName);
+                    else
+                        _builder.Append(col.Column);
+                }
+                else
+                    _builder.Append(_dataProvider.GetColumnName(node.Member));
+                //}
+                return node;
+            }
         }
         else
         {
-            //if (node.NodeType == ExpressionType.MemberAccess && node.Expression is ConstantExpression constExp)
+            if (!node.Has<ParameterExpression>())
             {
                 // var valueVisitor = new ValueVisitor(constExp);
                 // valueVisitor.Visit(constExp);
@@ -143,7 +150,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
             }
         }
 
-        //return base.VisitMember(node);
+        return base.VisitMember(node);
     }
     protected override Expression VisitBinary(BinaryExpression node)
     {
