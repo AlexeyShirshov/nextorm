@@ -13,4 +13,16 @@ public static class TypeExtensions
         && type.Attributes.HasFlag(TypeAttributes.NotPublic) 
         && Attribute.IsDefined(type, typeof(CompilerGeneratedAttribute), false)
         && type.Name.StartsWith("<>c__DisplayClass");
+
+    public static bool TryGetProjectionDimension(this Type type, out int dim)
+    {
+        const string m = "nextorm.core.Projection`";
+        dim = 0;
+        if (type.FullName!.StartsWith(m))
+        {
+            dim = int.Parse(type.FullName[m.Length..type.FullName!.IndexOf("[", m.Length)]);
+            return true;
+        }
+        return false;
+    }
 }

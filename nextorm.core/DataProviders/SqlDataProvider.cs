@@ -80,7 +80,7 @@ public class SqlDataProvider : IDataProvider
 
         if (cmd.Condition is not null)
         {
-            sqlBuilder.Append(" where ").Append(MakeWhere(entityType, from, cmd.Condition));
+            sqlBuilder.Append(" where ").Append(MakeWhere(entityType, from, cmd.Condition, 0));
         }
 
         return sqlBuilder.ToString();
@@ -99,19 +99,31 @@ public class SqlDataProvider : IDataProvider
                 throw new NotImplementedException(join.JoinType.ToString());
         }
 
-        var visitor = new JoinExpressionVisitor(cmd.EntityType!, this, cmd.From!);
+        var visitor = new JoinExpressionVisitor(cmd.EntityType!, this, cmd.From!, 0);
         visitor.Visit(join.JoinCondition);
         var fromExp = GetFrom(visitor.JoinType);
+        join.JoinCondition.Parameters[0].Type.TryGetProjectionDimension(out var dim);
+        fromExp.TableAlias = GetAliasFromProjection(cmd, visitor.JoinType, dim);
 
         sqlBuilder.Append(MakeFrom(fromExp)).Append(" on ");
-        sqlBuilder.Append(MakeWhere(cmd.EntityType!, cmd.From!, visitor.JoinCondition));
+        sqlBuilder.Append(MakeWhere(cmd.EntityType!, cmd.From!, visitor.JoinCondition, dim));
 
         return sqlBuilder.ToString();
     }
-
-    private string MakeWhere(Type entityType, FromExpression from, Expression condition)
+    private static string GetAliasFromProjection(QueryCommand cmd, Type declaringType, int from)
     {
-        var visitor = new WhereExpressionVisitor(entityType, this, from);
+        int idx = 0;
+        foreach (var prop in cmd.EntityType!.GetProperties(BindingFlags.Instance | BindingFlags.Public))
+        {
+            if (++idx > from && prop.PropertyType == declaringType)
+                return prop.Name;
+        }
+
+        throw new BuildSqlCommandException($"Cannot find alias of type {declaringType} in {cmd.EntityType}");
+    }
+    private string MakeWhere(Type entityType, FromExpression from, Expression condition, int dim)
+    {
+        var visitor = new WhereExpressionVisitor(entityType, this, from, dim);
         visitor.Visit(condition);
         _params.AddRange(visitor.Params);
 
@@ -126,7 +138,7 @@ public class SqlDataProvider : IDataProvider
             cmd => throw new NotImplementedException(),
             exp =>
             {
-                var visitor = new BaseExpressionVisitor(entityType, this, from);
+                var visitor = new BaseExpressionVisitor(entityType, this, from, 0);
                 visitor.Visit(exp);
                 _params.AddRange(visitor.Params);
 
@@ -260,6 +272,11 @@ public class SqlDataProvider : IDataProvider
         }
 
         return Expression.Call(param, column.GetDataRecordMethod(), Expression.Constant(column.Index));
+    }
+
+    public virtual string MakeBool(bool v)
+    {
+        return v ? "1" : "0";
     }
 
     record DbCommandPayload(DbCommand DbCommand) : IPayload;

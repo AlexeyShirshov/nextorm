@@ -15,9 +15,9 @@ public enum JoinType
 public class JoinExpression
 {
     public JoinType JoinType {get;set;}
-    public Expression JoinCondition{get;set;}
+    public LambdaExpression JoinCondition{get;set;}
 
-    public JoinExpression(Expression joinCondition)
+    public JoinExpression(LambdaExpression joinCondition)
     {
         JoinCondition = joinCondition;
     }

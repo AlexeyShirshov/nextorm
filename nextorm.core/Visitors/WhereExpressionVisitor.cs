@@ -4,7 +4,7 @@ namespace nextorm.core;
 
 public class WhereExpressionVisitor : BaseExpressionVisitor
 {
-    public WhereExpressionVisitor(Type entityType, SqlDataProvider dataProvider, FromExpression from) : base(entityType, dataProvider, from)
+    public WhereExpressionVisitor(Type entityType, SqlDataProvider dataProvider, FromExpression from, int dim) : base(entityType, dataProvider, from, dim)
     {
     }
     protected override Expression VisitBinary(BinaryExpression node)

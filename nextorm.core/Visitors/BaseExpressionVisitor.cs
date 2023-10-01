@@ -3,6 +3,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
+using System.Xml;
 
 namespace nextorm.core;
 public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
@@ -10,14 +11,16 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
     private readonly Type _entityType;
     private readonly SqlDataProvider _dataProvider;
     private readonly FromExpression _from;
+    private readonly int _dim;
     protected readonly StringBuilder _builder = new();
     private readonly List<Param> _params = new();
     private bool _needAlias;
-    public BaseExpressionVisitor(Type entityType, SqlDataProvider dataProvider, FromExpression from)
+    public BaseExpressionVisitor(Type entityType, SqlDataProvider dataProvider, FromExpression from, int dim)
     {
         _entityType = entityType;
         _dataProvider = dataProvider;
         _from = from;
+        _dim = dim;
     }
     public bool NeedAlias => _needAlias;
     public List<Param> Params => _params;
@@ -100,7 +103,12 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
                 _builder.Append('\'').Append(v?.ToString()).Append('\'');
             }
             else if (t.IsPrimitive)
-                _builder.Append(v?.ToString());
+            {
+                if (t == typeof(bool))
+                    _builder.Append(_dataProvider.MakeBool((bool)v));
+                else
+                    _builder.Append(v?.ToString());
+            }
             else
                 return false;
 
@@ -113,6 +121,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
         {
             if (node.Expression!.Type!.FullName!.StartsWith("nextorm.core.Projection"))
             {
+                _builder.Append(node.Member.Name).Append('.');
                 return node;
             }
             else
@@ -137,7 +146,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
         }
         else
         {
-            if (!node.Has<ParameterExpression>())
+            if (!node.Has<ParameterExpression>(out var param))
             {
                 // var valueVisitor = new ValueVisitor(constExp);
                 // valueVisitor.Visit(constExp);
@@ -148,10 +157,54 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
 
                 return node;
             }
+            else
+            {
+                string alias;
+                if (param!.Type!.TryGetProjectionDimension(out var _))
+                {
+                    var aliasVisitor = new AliasFromProjectionVisitor();
+                    aliasVisitor.Visit(node.Expression);
+                    alias = aliasVisitor.Alias + ".";
+                }
+                else
+                    alias = GetAliasFromProjection(node.Member.DeclaringType!);
+
+                _builder.Append(alias);
+
+                var colAttr = node.Member.GetCustomAttribute<ColumnAttribute>();
+                if (colAttr is not null)
+                    _builder.Append(colAttr.Name);
+                else if (_from.Table.IsT1)
+                {
+                    var innerCol = _from.Table.AsT1.SelectList!.SingleOrDefault(col => col.PropertyName == node.Member.Name) ?? throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
+                    var col = _dataProvider.MakeColumn(innerCol, _from.Table.AsT1.EntityType!, _from.Table.AsT1.From!);
+                    if (col.NeedAlias)
+                        _builder.Append(innerCol.PropertyName);
+                    else
+                        _builder.Append(col.Column);
+                }
+                else
+                    _builder.Append(_dataProvider.GetColumnName(node.Member));
+                //}
+                return node;
+            }
         }
 
         return base.VisitMember(node);
     }
+
+    private string GetAliasFromProjection(Type declaringType)
+    {
+        var idx = 0;
+        foreach (var prop in _entityType.GetProperties(BindingFlags.Instance | BindingFlags.Public))
+        {
+            if (++idx > _dim && prop.PropertyType == declaringType)
+                return prop.Name + ".";
+        }
+
+        throw new BuildSqlCommandException($"Cannot find alias of type {declaringType} in {_entityType}");
+    }
+
     protected override Expression VisitBinary(BinaryExpression node)
     {
         _needAlias = true;
@@ -250,6 +303,6 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
 
     public virtual BaseExpressionVisitor Clone()
     {
-        return new BaseExpressionVisitor(_entityType, _dataProvider, _from);
+        return new BaseExpressionVisitor(_entityType, _dataProvider, _from, _dim);
     }
 }
