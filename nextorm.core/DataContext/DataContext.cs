@@ -20,4 +20,5 @@ public class DataContext
         }
     }
     public CommandBuilder<TResult> From<TResult>(QueryCommand<TResult> query) => new(_dataProvider, query) { Logger = _cmdLogger };
+    public CommandBuilder<TResult> From<TResult>(CommandBuilder<TResult> builder) => new(_dataProvider, builder) { Logger = _cmdLogger };
 }

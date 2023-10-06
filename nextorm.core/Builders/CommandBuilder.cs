@@ -162,6 +162,11 @@ public class CommandBuilder<TEntity> : IAsyncEnumerable<TEntity>
         var cb = new CommandBuilderP2<TEntity, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition)) { Logger = Logger, _condition = _condition, _query = _query, Payload = Payload, BaseBuilder = this };
         return cb;
     }
+    public CommandBuilderP2<TEntity, TJoinEntity> Join<TJoinEntity>(QueryCommand<TJoinEntity> query, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
+    {
+        var cb = new CommandBuilderP2<TEntity, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition) {Query = query}) { Logger = Logger, _condition = _condition, _query = _query, Payload = Payload, BaseBuilder = this };
+        return cb;
+    }
 }
 public class CommandBuilder
 {

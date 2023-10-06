@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
 
-public class QueryCommand
+public class QueryCommand : ISourceProvider
 {
     private readonly ArrayList _payload = new();
     protected List<SelectExpression>? _selectList;
@@ -168,6 +168,12 @@ public class QueryCommand
 
         FromExpression? from = _from ?? _dataProvider.GetFrom(srcType, this);
 
+        foreach (var join in Joins)
+        {
+            if (!(join.Query?.IsPrepared ?? true))
+                join.Query!.PrepareCommand(cancellationToken);
+        }
+
         var selectList = _selectList;
 
         if (selectList is null)
@@ -239,6 +245,14 @@ public class QueryCommand
         _selectList = selectList;
         _srcType = srcType;
         _from = from;
+    }
+    public QueryCommand FindSourceFromAlias(string? aliasRaw)
+    {
+        if (string.IsNullOrEmpty(aliasRaw))
+            return _from!.Table.AsT1;
+        
+        var idx = int.Parse(aliasRaw[1..]);
+        return Joins[idx-2].Query;
     }
 }
 

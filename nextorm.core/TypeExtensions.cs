@@ -8,7 +8,8 @@ public static class TypeExtensions
     public static bool IsAnonymous(this Type type)=>type.IsSealed 
         && type.IsGenericType 
         && type.Attributes.HasFlag(TypeAttributes.NotPublic) 
-        && Attribute.IsDefined(type, typeof(CompilerGeneratedAttribute), false);
+        && Attribute.IsDefined(type, typeof(CompilerGeneratedAttribute), false)
+        && type.Name.StartsWith("<>f__AnonymousType");
     public static bool IsClosure(this Type type)=>type.IsSealed 
         && type.Attributes.HasFlag(TypeAttributes.NotPublic) 
         && Attribute.IsDefined(type, typeof(CompilerGeneratedAttribute), false)

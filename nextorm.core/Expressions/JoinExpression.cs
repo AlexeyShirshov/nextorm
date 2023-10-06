@@ -16,7 +16,7 @@ public class JoinExpression
 {
     public JoinType JoinType {get;set;}
     public LambdaExpression JoinCondition{get;set;}
-
+    public QueryCommand Query { get; init; }
     public JoinExpression(LambdaExpression joinCondition)
     {
         JoinCondition = joinCondition;

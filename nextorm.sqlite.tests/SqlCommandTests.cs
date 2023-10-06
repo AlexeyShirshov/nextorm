@@ -318,7 +318,19 @@ public class SqlCommandTests
             _logger.LogInformation("Id = {id}", row.Id);
         }
     }
-    class cls1
+     [Fact]
+    public async void SelectSubQueryWhere_ShouldReturnData()
+    {
+        var idx = 0;
+        await foreach (var row in _sut.From(_sut.SimpleEntity.Where(it => it.Id > 8)).Select(it => new { it.Id }))
+        {
+            idx++;
+            _logger.LogInformation("Id = {id}", row.Id);
+        }
+
+        idx.Should().Be(2);
+    }
+   class cls1
     {
         public cls1(int id)
         {
