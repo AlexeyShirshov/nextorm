@@ -5,6 +5,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.ObjectPool;
 using OneOf;
 
 namespace nextorm.core;
@@ -12,13 +13,36 @@ namespace nextorm.core;
 public class SqlDataProvider : IDataProvider
 {
     private readonly List<Param> _params = new();
-    internal bool LogSensetiveData { get; set; }
+    private DbConnection? _conn;
+    internal readonly ObjectPool<StringBuilder> _sbPool = new DefaultObjectPoolProvider().Create(new StringBuilderPooledObjectPolicy());
+    //private DbCommand? _cmd;
 
+    internal bool LogSensetiveData { get; set; }
+    public DbConnection GetConnection()
+    {
+        if (_conn is null)
+        {
+            if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Creating connection");
+            _conn = CreateConnection();
+        }
+        return _conn;
+    }
     public virtual DbConnection CreateConnection()
     {
         throw new NotImplementedException();
     }
+    // public DbCommand GetCommand(string sql)
+    // {
+    //     if (_cmd is null)
+    //         _cmd=CreateCommand(sql);
 
+    //     return _cmd;
+    // }
+    // public void ReturnCommand(DbCommand dbCommand)
+    // {
+    //     _cmd.CommandText=string.Empty;
+    //     _cmd.Parameters.Clear();
+    // }
     public virtual DbCommand CreateCommand(string sql)
     {
         throw new NotImplementedException();
@@ -50,7 +74,7 @@ public class SqlDataProvider : IDataProvider
         var from = cmd.From;
         var entityType = cmd.EntityType;
 
-        var sqlBuilder = new StringBuilder();
+        var sqlBuilder = _sbPool.Get();
 
         sqlBuilder.Append("select ");
         foreach (var item in selectList)
@@ -75,12 +99,18 @@ public class SqlDataProvider : IDataProvider
             sqlBuilder.Append(" where ").Append(MakeWhere(entityType, from, cmd.Condition));
         }
 
-        return sqlBuilder.ToString();
+        var r = sqlBuilder.ToString();
+
+        _sbPool.Return(sqlBuilder);
+
+        return r;
+
+        //return "select id from simple_entity";
     }
 
     private string MakeWhere(Type entityType, FromExpression from, Expression condition)
     {
-        var visitor = new WhereExpressionVisitor(entityType, this, from);
+        using var visitor = new WhereExpressionVisitor(entityType, this, from);
         visitor.Visit(condition);
         _params.AddRange(visitor.Params);
 
@@ -95,7 +125,7 @@ public class SqlDataProvider : IDataProvider
             cmd => throw new NotImplementedException(),
             exp =>
             {
-                var visitor = new BaseExpressionVisitor(entityType, this, from);
+                using var visitor = new BaseExpressionVisitor(entityType, this, from);
                 visitor.Visit(exp);
                 _params.AddRange(visitor.Params);
 
@@ -144,8 +174,11 @@ public class SqlDataProvider : IDataProvider
         ArgumentNullException.ThrowIfNull(queryCommand);
 
         var dbCommandPayload = queryCommand.GetOrAddPayload(() => new DbCommandPayload(CreateCommand(queryCommand)));
-
-        return new ResultSetEnumerator<TResult>(queryCommand, this, dbCommandPayload!.DbCommand, cancellationToken);
+        var cmd=dbCommandPayload!.DbCommand;
+        // var cmd = CreateCommand(queryCommand);
+        
+        //return new EmptyEnumerator<TResult>(queryCommand, this, cmd, cancellationToken);
+        return new ResultSetEnumerator<TResult>(queryCommand, this, cmd, cancellationToken);
     }
     public virtual string ConcatStringOperator => "+";
 
@@ -199,7 +232,7 @@ public class SqlDataProvider : IDataProvider
         else throw new BuildSqlCommandException($"From must be specified for {nameof(TableAlias)} as source type");
     }
 
-    public Expression MapColumn(SelectExpression column, ParameterExpression param, Type recordType)
+    public Expression MapColumn(SelectExpression column, Expression param, Type recordType)
     {
         if (column.Nullable)
         {
@@ -217,4 +250,81 @@ public class SqlDataProvider : IDataProvider
     }
 
     record DbCommandPayload(DbCommand DbCommand) : IPayload;
+}
+
+internal class EmptyEnumerator<TResult> : IAsyncEnumerator<TResult>
+{
+    private readonly QueryCommand<TResult> _cmd;
+    private readonly SqlDataProvider _dataProvider;
+    private readonly DbCommand _sqlCommand;
+    private readonly CancellationToken _cancellationToken;
+    private DbDataReader? _reader;
+    private DbConnection? _conn;
+
+    public EmptyEnumerator(QueryCommand<TResult> cmd, SqlDataProvider dataProvider, DbCommand sqlCommand, CancellationToken cancellationToken)
+    {
+        _cmd = cmd;
+        _dataProvider = dataProvider;
+        _sqlCommand = sqlCommand;
+        _cancellationToken = cancellationToken;
+    }
+    public TResult Current => default;
+
+    public async ValueTask DisposeAsync()
+    {
+        GC.SuppressFinalize(this);
+
+        if (_reader is not null)
+        {
+            if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Disposing data reader");
+            await _reader.DisposeAsync();
+        }
+
+        // if (_conn is not null)
+        // {
+        //     if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Disposing connection");
+        //     await _conn.DisposeAsync();
+        // }
+
+        //await _conn?.CloseAsync();
+    }
+
+    public async ValueTask<bool> MoveNextAsync()
+    {
+        if (_conn is null)
+        {
+            _conn = _dataProvider.GetConnection();
+            _sqlCommand.Connection = _conn;
+
+            if (_conn.State == ConnectionState.Closed)
+            {
+                if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Opening connection");
+
+                await _conn.OpenAsync(_cancellationToken);
+            }
+
+            if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false)
+            {
+                _dataProvider.Logger.LogDebug(_sqlCommand.CommandText);
+
+                if (_dataProvider.LogSensetiveData)
+                {
+                    foreach (DbParameter p in _sqlCommand.Parameters)
+                    {
+                        _dataProvider.Logger.LogDebug("param {name} is {value}", p.ParameterName, p.Value);
+                    }
+                }
+                else if (_sqlCommand.Parameters?.Count > 0)
+                {
+                    _dataProvider.Logger.LogDebug("Use {method} to see param values", nameof(_dataProvider.LogSensetiveData));
+                }
+            }
+
+            _reader = await _sqlCommand.ExecuteReaderAsync(_cancellationToken);
+        }
+
+        if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false) _dataProvider.Logger.LogTrace("Move next");
+
+        return await _reader!.ReadAsync(_cancellationToken);
+    }
 }

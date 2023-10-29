@@ -11,6 +11,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "nextorm.sqlite.tests", "nex
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "nextorm.sqlite", "nextorm.sqlite\nextorm.sqlite.csproj", "{938E3D3C-3D1E-493E-8BEF-2F2C08CF0250}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "nextorm.core.benchmark", "nextorm.core.benchmark\nextorm.core.benchmark.csproj", "{9492E454-04AE-48FD-A3F6-13F6EC1615A1}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -36,5 +38,9 @@ Global
 		{938E3D3C-3D1E-493E-8BEF-2F2C08CF0250}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{938E3D3C-3D1E-493E-8BEF-2F2C08CF0250}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{938E3D3C-3D1E-493E-8BEF-2F2C08CF0250}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9492E454-04AE-48FD-A3F6-13F6EC1615A1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9492E454-04AE-48FD-A3F6-13F6EC1615A1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9492E454-04AE-48FD-A3F6-13F6EC1615A1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9492E454-04AE-48FD-A3F6-13F6EC1615A1}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

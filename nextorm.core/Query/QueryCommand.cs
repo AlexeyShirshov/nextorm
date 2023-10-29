@@ -7,9 +7,9 @@ using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
 
-public class QueryCommand
+public class QueryCommand : IPayloadManager
 {
-    private readonly ArrayList _payload = new();
+    private IPayloadManager _payloadMgr;
     protected List<SelectExpression>? _selectList;
     protected FromExpression? _from;
     protected IDataProvider _dataProvider;
@@ -39,6 +39,7 @@ public class QueryCommand
     }
     public bool IsPrepared => _isPrepared;
     public Expression? Condition => _condition;
+    //public bool Cacheable => _cache;
     public virtual void ResetPreparation()
     {
         _isPrepared = false;
@@ -47,90 +48,6 @@ public class QueryCommand
         _from = null;
 
         _dataProvider.ResetPreparation(this);
-    }
-    public bool RemovePayload<T>()
-        where T : class, IPayload
-    {
-        foreach (var item in _payload)
-        {
-            if (item is T)
-            {
-                _payload.Remove(item);
-                return true;
-            }
-        }
-        return false;
-    }
-    public bool TryGetPayload<T>(out T? payload)
-        where T : class, IPayload
-    {
-        foreach (var item in _payload)
-        {
-            if (item is T p)
-            {
-                payload = p;
-                return true;
-            }
-        }
-        payload = default;
-        return false;
-    }
-    public bool TryGetNotNullPayload<T>(out T? payload)
-        where T : class, IPayload
-    {
-        foreach (var item in _payload)
-        {
-            if (item is T p && p is not null)
-            {
-                payload = p;
-                return true;
-            }
-        }
-        payload = default;
-        return false;
-    }
-    public T GetNotNullOrAddPayload<T>(Func<T> factory)
-        where T : class, IPayload
-    {
-        if (!TryGetNotNullPayload<T>(out var payload))
-        {
-            ArgumentNullException.ThrowIfNull(factory);
-
-            payload = factory();
-            _payload.Add(payload);
-        }
-        return payload!;
-    }
-    public T? GetOrAddPayload<T>(Func<T?> factory)
-        where T : class, IPayload
-    {
-        if (!TryGetPayload<T>(out var payload))
-        {
-            payload = factory is null
-                ? default
-                : factory();
-            _payload.Add(payload);
-        }
-        return payload;
-    }
-    public T? AddOrUpdatePayload<T>(Func<T?> factory)
-        where T : class, IPayload
-    {
-        for (int i = 0; i < _payload.Count; i++)
-        {
-            var item = _payload[i];
-
-            if (item is T)
-            {
-                var p = factory();
-                _payload[i] = p;
-                return p;
-            }
-        }
-
-        var payload = factory();
-        _payload.Add(payload);
-        return payload;
     }
     public virtual void PrepareCommand(CancellationToken cancellationToken)
     {
@@ -147,6 +64,7 @@ public class QueryCommand
         }
 
         var selectList = _selectList;
+        var cache = true;
 
         if (selectList is null)
         {
@@ -157,6 +75,8 @@ public class QueryCommand
 
             if (_exp.Body is NewExpression ctor)
             {
+                cache = !ctor.Type.IsAnonymous();
+
                 for (var idx = 0; idx < ctor.Arguments.Count; idx++)
                 {
                     if (cancellationToken.IsCancellationRequested)
@@ -219,11 +139,45 @@ public class QueryCommand
         _selectList = selectList;
         _srcType = srcType;
         _from = from;
+
+        _payloadMgr = new FastPayloadManager(cache ? new Dictionary<Type,object?>() : null);
+    }
+
+    public bool RemovePayload<T>() where T : class, IPayload
+    {
+        return _payloadMgr.RemovePayload<T>();
+    }
+
+    public bool TryGetPayload<T>(out T? payload) where T : class, IPayload
+    {
+        return _payloadMgr.TryGetPayload<T>(out payload);
+    }
+
+    public bool TryGetNotNullPayload<T>(out T? payload) where T : class, IPayload
+    {
+        return _payloadMgr.TryGetNotNullPayload<T>(out payload);
+    }
+
+    public T GetNotNullOrAddPayload<T>(Func<T> factory) where T : class, IPayload
+    {
+        return _payloadMgr.GetNotNullOrAddPayload<T>(factory);
+    }
+
+    public T? GetOrAddPayload<T>(Func<T?> factory) where T : class, IPayload
+    {
+        return _payloadMgr.GetOrAddPayload<T>(factory);
+    }
+
+    public T? AddOrUpdatePayload<T>(Func<T?> factory) where T : class, IPayload
+    {
+        return _payloadMgr.AddOrUpdatePayload<T>(factory);
     }
 }
 
 public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
 {
+    private Func<object, TResult>? _mapCache;
+    //private readonly IPayloadManager _payloadMap = new FastPayloadManager(new Dictionary<Type, object?>());
     public QueryCommand(IDataProvider dataProvider, LambdaExpression exp, Expression? condition) : base(dataProvider, exp, condition)
     {
     }
@@ -250,47 +204,53 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         if (resultType == recordType)
             return (TResult)dataRecord;
 
-        var factory = GetOrAddPayload(() =>
+        // var factory = () =>
+        // {
+        //     var ctorInfo = resultType.GetConstructors().OrderByDescending(it => it.GetParameters().Length).FirstOrDefault() ?? throw new PrepareException($"Cannot get ctor from {resultType}");
+
+        //     var param = Expression.Parameter(typeof(object));
+        //     //var @params = SelectList.Select(column => Expression.Parameter(column.PropertyType!)).ToArray();
+
+        //     if (ctorInfo.GetParameters().Length == SelectList!.Count)
+        //     {
+        //         var newParams = SelectList!.Select(column => _dataProvider.MapColumn(column, Expression.Convert(param,recordType), recordType)).ToArray();
+
+        //         var ctor = Expression.New(ctorInfo, newParams);
+
+        //         var lambda = Expression.Lambda<Func<object,TResult>>(ctor, param);
+
+        //         if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Init expression for {type}: {exp}", resultType, lambda);
+
+        //         return lambda.Compile();
+        //     }
+        //     else
+        //     {
+        //         var bindings = SelectList!.Select(column =>
+        //         {
+        //             var propInfo = column.PropertyInfo ?? resultType.GetProperty(column.PropertyName!)!;
+        //             return Expression.Bind(propInfo, _dataProvider.MapColumn(column, Expression.Convert(param,recordType), recordType));
+        //         }).ToArray();
+
+        //         var ctor = Expression.New(ctorInfo);
+
+        //         var memberInit = Expression.MemberInit(ctor, bindings);
+
+        //         var lambda = Expression.Lambda<Func<object,TResult>>(memberInit, param);
+
+        //         if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Init expression for {type}: {exp}", resultType, lambda);
+
+        //         return lambda.Compile();
+        //     }
+        // };
+
+        if (_mapCache is null)
         {
-            var ctorInfo = resultType.GetConstructors().OrderByDescending(it => it.GetParameters().Length).FirstOrDefault() ?? throw new PrepareException($"Cannot get ctor from {resultType}");
+            _mapCache=(object _)=>Activator.CreateInstance<TResult>();
+            //_mapCache=factory();
+        }
 
-            var param = Expression.Parameter(recordType);
-            //var @params = SelectList.Select(column => Expression.Parameter(column.PropertyType!)).ToArray();
-
-            if (ctorInfo.GetParameters().Length == SelectList!.Count)
-            {
-                var newParams = SelectList!.Select(column => _dataProvider.MapColumn(column, param, recordType)).ToArray();
-
-                var ctor = Expression.New(ctorInfo, newParams);
-
-                var lambda = Expression.Lambda(ctor, param);
-
-                if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Init expression for {type}: {exp}", resultType, lambda);
-
-                return new MapPayload(lambda.Compile());
-            }
-            else
-            {
-                var bindings = SelectList!.Select(column => 
-                {
-                    var propInfo = column.PropertyInfo ?? resultType.GetProperty(column.PropertyName!)!;
-                    return Expression.Bind(propInfo, _dataProvider.MapColumn(column, param, recordType));
-                }).ToArray();
-
-                var ctor = Expression.New(ctorInfo);
-
-                var memberInit = Expression.MemberInit(ctor, bindings);
-
-                var lambda = Expression.Lambda(memberInit, param);
-
-                if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Init expression for {type}: {exp}", resultType, lambda);
-
-                return new MapPayload(lambda.Compile());
-            }
-        });
-
-        return (TResult)factory!.Delegate.DynamicInvoke(dataRecord)!;
+        return _mapCache(dataRecord);
     }
-    record MapPayload(Delegate Delegate) : IPayload;
+    //record MapPayload(Delegate Delegate) : IPayload;
 
 }

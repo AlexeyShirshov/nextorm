@@ -3,21 +3,25 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
+using Microsoft.Extensions.ObjectPool;
 
 namespace nextorm.core;
-public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
+public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 {
     private readonly Type _entityType;
     private readonly SqlDataProvider _dataProvider;
     private readonly FromExpression _from;
-    protected readonly StringBuilder _builder = new();
+    protected readonly StringBuilder _builder;
     private readonly List<Param> _params = new();
     private bool _needAlias;
+    private bool disposedValue;
+
     public BaseExpressionVisitor(Type entityType, SqlDataProvider dataProvider, FromExpression from)
     {
         _entityType = entityType;
         _dataProvider = dataProvider;
         _from = from;
+        _builder = dataProvider._sbPool.Get();
     }
     public bool NeedAlias => _needAlias;
     public List<Param> Params => _params;
@@ -152,11 +156,12 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
         switch (node.NodeType)
         {
             case ExpressionType.Coalesce:
-                var leftVisitor = Clone();
+            {
+                using var leftVisitor = Clone();
                 leftVisitor.Visit(node.Left);
                 Params.AddRange(leftVisitor.Params);
 
-                var rightVisitor = Clone();
+                using var rightVisitor = Clone();
                 rightVisitor.Visit(node.Right);
                 Params.AddRange(rightVisitor.Params);
 
@@ -166,6 +171,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
                 ));
 
                 return node;
+            }
             case ExpressionType.Conditional:
                 throw new NotImplementedException();
             case ExpressionType.Switch:
@@ -244,5 +250,31 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
     public virtual BaseExpressionVisitor Clone()
     {
         return new BaseExpressionVisitor(_entityType, _dataProvider, _from);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!disposedValue)
+        {
+            if (disposing)
+            {
+                _dataProvider._sbPool.Return(_builder);
+            }
+            disposedValue = true;
+        }
+    }
+
+    // // TODO: override finalizer only if 'Dispose(bool disposing)' has code to free unmanaged resources
+    // ~BaseExpressionVisitor()
+    // {
+    //     // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+    //     Dispose(disposing: false);
+    // }
+
+    public void Dispose()
+    {
+        // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+        Dispose(disposing: true);
+        GC.SuppressFinalize(this);
     }
 }

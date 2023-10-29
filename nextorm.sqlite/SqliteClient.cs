@@ -23,6 +23,9 @@ public class SqliteDataProvider : SqlDataProvider
         return new SQLiteCommand(sql);
     }
     public override string ConcatStringOperator => "||";
+
+    public string ConnectionString => _connectionString;
+
     public override string MakeCoalesce(string v1, string v2)
     {
         return $"ifnull({v1}, {v2})";

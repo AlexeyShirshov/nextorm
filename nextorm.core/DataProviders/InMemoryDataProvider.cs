@@ -91,7 +91,7 @@ public class InMemoryDataProvider : IDataProvider
         return null;
     }
 
-    public Expression MapColumn(SelectExpression column, ParameterExpression param, Type recordType)
+    public Expression MapColumn(SelectExpression column, Expression param, Type recordType)
     {
         return Expression.PropertyOrField(param, column.PropertyName!);
     }

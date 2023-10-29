@@ -31,11 +31,11 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>
             await _reader.DisposeAsync();
         }
 
-        if (_conn is not null)
-        {
-            if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Disposing connection");
-            await _conn.DisposeAsync();
-        }
+        // if (_conn is not null)
+        // {
+        //     if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Disposing connection");
+        //     await _conn.DisposeAsync();
+        // }
     }
     public async ValueTask<bool> MoveNextAsync()
     {
@@ -43,7 +43,7 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>
         {
             if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Creating connection");
 
-            _conn = _dataProvider.CreateConnection();
+            _conn = _dataProvider.GetConnection();
             _sqlCommand.Connection = _conn;
 
             if (_conn.State == ConnectionState.Closed)

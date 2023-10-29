@@ -6,6 +6,9 @@ public class DataContext
 {
     protected readonly IDataProvider _dataProvider;
     protected readonly ILogger? _cmdLogger;
+
+    public IDataProvider DataProvider => _dataProvider;
+
     public DataContext(DataContextOptionsBuilder optionsBuilder)
     {
         ArgumentNullException.ThrowIfNull(optionsBuilder);

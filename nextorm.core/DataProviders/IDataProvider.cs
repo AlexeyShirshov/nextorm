@@ -12,5 +12,5 @@ public interface IDataProvider
     QueryCommand<TResult> CreateCommand<TResult>(LambdaExpression exp, Expression? condition);
     void ResetPreparation(QueryCommand queryCommand);
     FromExpression? GetFrom(Type srcType);
-    public Expression MapColumn(SelectExpression column, ParameterExpression param, Type recordType);
+    public Expression MapColumn(SelectExpression column, Expression param, Type recordType);
 }
