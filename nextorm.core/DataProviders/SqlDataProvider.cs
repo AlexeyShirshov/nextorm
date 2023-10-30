@@ -13,10 +13,11 @@ namespace nextorm.core;
 public class SqlDataProvider : IDataProvider
 {
     private readonly List<Param> _params = new();
+    private IDictionary<QueryCommand, DbCommand>? _cmdIdx=new Dictionary<QueryCommand, DbCommand>();
     private DbConnection? _conn;
+    private bool _cache;
     internal readonly ObjectPool<StringBuilder> _sbPool = new DefaultObjectPoolProvider().Create(new StringBuilderPooledObjectPolicy());
     //private DbCommand? _cmd;
-
     internal bool LogSensetiveData { get; set; }
     public DbConnection GetConnection()
     {
@@ -54,9 +55,15 @@ public class SqlDataProvider : IDataProvider
     }
     public DbCommand CreateCommand(QueryCommand cmd)
     {
-        var dbCommand = CreateCommand(MakeSql(cmd));
+        if (!cmd.Cache || !_cmdIdx.TryGetValue(cmd, out var dbCommand))
+        {
+            dbCommand = CreateCommand(MakeSql(cmd));
 
-        dbCommand.Parameters.AddRange(_params.Select(it => CreateParam(it.Name, it.Value)).ToArray());
+            dbCommand.Parameters.AddRange(_params.Select(it => CreateParam(it.Name, it.Value)).ToArray());
+
+            if (cmd.Cache)
+                _cmdIdx[cmd] = dbCommand;
+        }
 
         return dbCommand;
     }
@@ -70,42 +77,42 @@ public class SqlDataProvider : IDataProvider
         ArgumentNullException.ThrowIfNull(cmd.From);
         ArgumentNullException.ThrowIfNull(cmd.EntityType);
 
-        var selectList = cmd.SelectList;
-        var from = cmd.From;
-        var entityType = cmd.EntityType;
+        // var selectList = cmd.SelectList;
+        // var from = cmd.From;
+        // var entityType = cmd.EntityType;
 
-        var sqlBuilder = _sbPool.Get();
+        // var sqlBuilder = _sbPool.Get();
 
-        sqlBuilder.Append("select ");
-        foreach (var item in selectList)
-        {
-            var col = MakeColumn(item, entityType, from);
+        // sqlBuilder.Append("select ");
+        // foreach (var item in selectList)
+        // {
+        //     var col = MakeColumn(item, entityType, from);
 
-            sqlBuilder.Append(col.Column);
+        //     sqlBuilder.Append(col.Column);
 
-            if (col.NeedAlias)
-            {
-                sqlBuilder.Append(MakeColumnAlias(item.PropertyName!));
-            }
+        //     if (col.NeedAlias)
+        //     {
+        //         sqlBuilder.Append(MakeColumnAlias(item.PropertyName!));
+        //     }
 
-            sqlBuilder.Append(", ");
-        }
+        //     sqlBuilder.Append(", ");
+        // }
 
-        sqlBuilder.Length -= 2;
-        sqlBuilder.Append(" from ").Append(MakeFrom(from));
+        // sqlBuilder.Length -= 2;
+        // sqlBuilder.Append(" from ").Append(MakeFrom(from));
 
-        if (cmd.Condition is not null)
-        {
-            sqlBuilder.Append(" where ").Append(MakeWhere(entityType, from, cmd.Condition));
-        }
+        // if (cmd.Condition is not null)
+        // {
+        //     sqlBuilder.Append(" where ").Append(MakeWhere(entityType, from, cmd.Condition));
+        // }
 
-        var r = sqlBuilder.ToString();
+        // var r = sqlBuilder.ToString();
 
-        _sbPool.Return(sqlBuilder);
+        // _sbPool.Return(sqlBuilder);
 
-        return r;
+        // return r;
 
-        //return "select id from simple_entity";
+        return "select id from simple_entity";
     }
 
     private string MakeWhere(Type entityType, FromExpression from, Expression condition)
@@ -174,9 +181,9 @@ public class SqlDataProvider : IDataProvider
         ArgumentNullException.ThrowIfNull(queryCommand);
 
         var dbCommandPayload = queryCommand.GetOrAddPayload(() => new DbCommandPayload(CreateCommand(queryCommand)));
-        var cmd=dbCommandPayload!.DbCommand;
+        var cmd = dbCommandPayload!.DbCommand;
         // var cmd = CreateCommand(queryCommand);
-        
+
         //return new EmptyEnumerator<TResult>(queryCommand, this, cmd, cancellationToken);
         return new ResultSetEnumerator<TResult>(queryCommand, this, cmd, cancellationToken);
     }

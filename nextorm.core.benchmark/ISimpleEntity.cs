@@ -7,7 +7,7 @@ namespace nextorm.core.benchmark;
 [SqlTable("simple_entity")]
 public interface ISimpleEntity
 {
-    [Key]
+    //[Key]
     [Column("id")]
     int Id {get;set;}
 }

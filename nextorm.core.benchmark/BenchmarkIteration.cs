@@ -30,13 +30,13 @@ public class BenchmarkIteration
         _conn = new SqliteConnection(((SqliteDataProvider)_ctx.DataProvider).ConnectionString);
         _conn.Open();
     }
-    [Benchmark(Baseline = true)]
-    public async Task NextormCached()
-    {
-        await foreach (var row in _cmd)
-        {
-        }
-    }
+    // [Benchmark(Baseline = true)]
+    // public async Task NextormCached()
+    // {
+    //     await foreach (var row in _cmd)
+    //     {
+    //     }
+    // }
     // [Benchmark()]
     // public async Task NextormToListCached()
     // {
@@ -44,10 +44,19 @@ public class BenchmarkIteration
     //     {
     //     }
     // }
+    // [Benchmark()]
+    // public async Task Nextorm()
+    // {
+    //     await foreach (var row in _ctx.SimpleEntity.Select(entity => new { Id = entity.Id }))
+    //     {
+    //     }
+    // }
     [Benchmark()]
-    public async Task Nextorm()
+    public async Task NextormQueryCache()
     {
-        await foreach (var row in _ctx.SimpleEntity.Select(entity => new SimpleEntity{ Id= entity.Id }))
+        var cmd = _ctx.SimpleEntity.Select(entity => new { Id = entity.Id });
+        cmd.Cache = true;
+        await foreach (var row in cmd)
         {
         }
     }
@@ -65,11 +74,11 @@ public class BenchmarkIteration
         {
         }
     }
-    [Benchmark]
-    public async Task Dapper()
-    {
-        foreach (var row in await _conn.QueryAsync<SimpleEntity>("select * from simple_entity"))
-        {
-        }
-    }
+    // [Benchmark]
+    // public async Task Dapper()
+    // {
+    //     foreach (var row in await _conn.QueryAsync<SimpleEntity>("select * from simple_entity"))
+    //     {
+    //     }
+    // }
 }
