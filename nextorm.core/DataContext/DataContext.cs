@@ -2,7 +2,7 @@ using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
 
-public class DataContext
+public class DataContext : IDisposable, IAsyncDisposable
 {
     protected readonly IDataProvider _dataProvider;
     protected readonly ILogger? _cmdLogger;
@@ -19,5 +19,14 @@ public class DataContext
             _cmdLogger = optionsBuilder.LoggerFactory.CreateLogger(typeof(QueryCommand));
         }
     }
+    public IDataProvider DataProvider => _dataProvider;
     public CommandBuilder<TResult> From<TResult>(QueryCommand<TResult> query) => new(_dataProvider, query) { Logger = _cmdLogger };
+    public ValueTask DisposeAsync()
+    {
+        return _dataProvider.DisposeAsync();
+    }
+    public void Dispose()
+    {
+        _dataProvider.Dispose();
+    }
 }

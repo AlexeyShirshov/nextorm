@@ -2,10 +2,12 @@ namespace nextorm.core;
 
 public class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TResult>
 {
-    private readonly QueryCommand<TResult> _cmd;
+    private readonly CompiledQuery<TResult> _cmd;
     private readonly IEnumerator<TEntity> _data;
-    public InMemoryEnumerator(QueryCommand<TResult> cmd, IEnumerator<TEntity> data)
+    public InMemoryEnumerator(CompiledQuery<TResult> cmd, IEnumerator<TEntity> data)
     {
+        ArgumentNullException.ThrowIfNull(cmd);
+        
         _cmd = cmd;
         _data = data;
     }

@@ -5,20 +5,45 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.ObjectPool;
 using OneOf;
 
 namespace nextorm.core;
 
 public class SqlDataProvider : IDataProvider
 {
-    private readonly List<Param> _params = new();
+    private IDictionary<QueryCommand, object> _cmdIdx = new Dictionary<QueryCommand, object>();
+    private DbConnection? _conn;
+    private bool _clearCache;
+    private bool disposedValue;
+    internal readonly ObjectPool<StringBuilder> _sbPool = new DefaultObjectPoolProvider().Create(new StringBuilderPooledObjectPolicy());
+    //private DbCommand? _cmd;
     internal bool LogSensetiveData { get; set; }
-
+    public DbConnection GetConnection()
+    {
+        if (_conn is null)
+        {
+            if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Creating connection");
+            _conn = CreateConnection();
+        }
+        return _conn;
+    }
     public virtual DbConnection CreateConnection()
     {
         throw new NotImplementedException();
     }
+    // public DbCommand GetCommand(string sql)
+    // {
+    //     if (_cmd is null)
+    //         _cmd=CreateCommand(sql);
 
+    //     return _cmd;
+    // }
+    // public void ReturnCommand(DbCommand dbCommand)
+    // {
+    //     _cmd.CommandText=string.Empty;
+    //     _cmd.Parameters.Clear();
+    // }
     public virtual DbCommand CreateCommand(string sql)
     {
         throw new NotImplementedException();
@@ -28,19 +53,36 @@ public class SqlDataProvider : IDataProvider
     {
         throw new NotImplementedException();
     }
-    public DbCommand CreateCommand(QueryCommand cmd)
+    public DatabaseCompiledQuery<TResult> CreateCompiledQuery<TResult>(QueryCommand<TResult> cmd)
     {
-        var dbCommand = CreateCommand(MakeSql(cmd));
+        var (sql, @params) = MakeSql(cmd);
+        var dbCommand = CreateCommand(sql);
 
-        dbCommand.Parameters.AddRange(_params.Select(it => CreateParam(it.Name, it.Value)).ToArray());
+        dbCommand.Parameters.AddRange(@params.Select(it => CreateParam(it.Name, it.Value)).ToArray());
 
-        return dbCommand;
+        return new DatabaseCompiledQuery<TResult>(dbCommand, cmd.GetMap(typeof(TResult), typeof(DbDataReader)));
+    }
+    public DatabaseCompiledQuery<TResult> GetCompiledQuery<TResult>(QueryCommand<TResult> cmd)
+    {
+        var compiled = cmd.Compiled as DatabaseCompiledQuery<TResult>;
+        if (compiled is not null)
+            return compiled;
+
+        if (!cmd.Cache || !_cmdIdx.TryGetValue(cmd, out var query))
+        {
+            query = CreateCompiledQuery(cmd);
+
+            if (cmd.Cache)
+                _cmdIdx[cmd] = query;
+        }
+
+        return (DatabaseCompiledQuery<TResult>)query;
     }
     public virtual DbParameter CreateParam(string name, object? value)
     {
         throw new NotImplementedException();
     }
-    public virtual string MakeSql(QueryCommand cmd)
+    public virtual (string, List<Param>) MakeSql(QueryCommand cmd)
     {
         ArgumentNullException.ThrowIfNull(cmd.SelectList);
         ArgumentNullException.ThrowIfNull(cmd.From);
@@ -50,12 +92,14 @@ public class SqlDataProvider : IDataProvider
         var from = cmd.From;
         var entityType = cmd.EntityType;
 
-        var sqlBuilder = new StringBuilder();
+        var sqlBuilder = _sbPool.Get();
+
+        var @params = new List<Param>();
 
         sqlBuilder.Append("select ");
         foreach (var item in selectList)
         {
-            var col = MakeColumn(item, entityType, from);
+            var col = MakeColumn(item, entityType, from, @params);
 
             sqlBuilder.Append(col.Column);
 
@@ -68,26 +112,30 @@ public class SqlDataProvider : IDataProvider
         }
 
         sqlBuilder.Length -= 2;
-        sqlBuilder.Append(" from ").Append(MakeFrom(from));
+        sqlBuilder.Append(" from ").Append(MakeFrom(from, @params));
 
         if (cmd.Condition is not null)
         {
-            sqlBuilder.Append(" where ").Append(MakeWhere(entityType, from, cmd.Condition));
+            sqlBuilder.Append(" where ").Append(MakeWhere(entityType, from, cmd.Condition, @params));
         }
 
-        return sqlBuilder.ToString();
+        var r = sqlBuilder.ToString();
+
+        _sbPool.Return(sqlBuilder);
+
+        return (r, @params);
     }
 
-    private string MakeWhere(Type entityType, FromExpression from, Expression condition)
+    private string MakeWhere(Type entityType, FromExpression from, Expression condition, List<Param> @params)
     {
-        var visitor = new WhereExpressionVisitor(entityType, this, from);
+        using var visitor = new WhereExpressionVisitor(entityType, this, from);
         visitor.Visit(condition);
-        _params.AddRange(visitor.Params);
+        @params.AddRange(visitor.Params);
 
         return visitor.ToString();
     }
 
-    public (bool NeedAlias, string Column) MakeColumn(SelectExpression selectExp, Type entityType, FromExpression from)
+    public (bool NeedAlias, string Column) MakeColumn(SelectExpression selectExp, Type entityType, FromExpression from, List<Param> @params)
     {
         var expression = selectExp.Expression;
 
@@ -95,16 +143,16 @@ public class SqlDataProvider : IDataProvider
             cmd => throw new NotImplementedException(),
             exp =>
             {
-                var visitor = new BaseExpressionVisitor(entityType, this, from);
+                using var visitor = new BaseExpressionVisitor(entityType, this, from);
                 visitor.Visit(exp);
-                _params.AddRange(visitor.Params);
+                @params.AddRange(visitor.Params);
 
                 return (visitor.NeedAlias, visitor.ToString());
             }
         );
     }
 
-    public virtual string MakeFrom(FromExpression from)
+    public virtual string MakeFrom(FromExpression from, List<Param> @params)
     {
         ArgumentNullException.ThrowIfNull(from);
 
@@ -113,7 +161,9 @@ public class SqlDataProvider : IDataProvider
             cmd =>
             {
                 if (!cmd.IsPrepared) throw new BuildSqlCommandException("Inner query is not prepared");
-                return "(" + MakeSql(cmd) + ")" + (string.IsNullOrEmpty(from.TableAlias) ? string.Empty : MakeTableAlias(from.TableAlias));
+                var (sql, p) = MakeSql(cmd);
+                @params.AddRange(p);
+                return "(" + sql + ")" + (string.IsNullOrEmpty(from.TableAlias) ? string.Empty : MakeTableAlias(from.TableAlias));
             }
         );
     }
@@ -143,9 +193,27 @@ public class SqlDataProvider : IDataProvider
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
 
-        var dbCommandPayload = queryCommand.GetOrAddPayload(() => new DbCommandPayload(CreateCommand(queryCommand)));
+        DatabaseCompiledQuery<TResult> compiledQuery;
+        if (queryCommand.Cache)
+            compiledQuery = GetCompiledQuery(queryCommand);
+        else
+        {
+            var factory = () => new CompiledQueryPayload<TResult>(GetCompiledQuery(queryCommand));
+            CompiledQueryPayload<TResult>? compiledQueryPayload;
+            if (_clearCache)
+            {
+                compiledQueryPayload = queryCommand.AddOrUpdatePayload(factory);
+                _clearCache = false;
+            }
+            else
+                compiledQueryPayload = queryCommand.GetOrAddPayload(factory);
 
-        return new ResultSetEnumerator<TResult>(queryCommand, this, dbCommandPayload!.DbCommand, cancellationToken);
+            compiledQuery = compiledQueryPayload!.CompiledQuery;
+        }
+        // var cmd = CreateCommand(queryCommand);
+
+        //return new EmptyEnumerator<TResult>(queryCommand, this, cmd, cancellationToken);
+        return new ResultSetEnumerator<TResult>(this, compiledQuery, cancellationToken);
     }
     public virtual string ConcatStringOperator => "+";
 
@@ -160,7 +228,7 @@ public class SqlDataProvider : IDataProvider
 
     public void ResetPreparation(QueryCommand queryCommand)
     {
-        queryCommand.RemovePayload<DbCommandPayload>();
+        _clearCache = true;
     }
 
     public FromExpression? GetFrom(Type srcType)
@@ -199,7 +267,7 @@ public class SqlDataProvider : IDataProvider
         else throw new BuildSqlCommandException($"From must be specified for {nameof(TableAlias)} as source type");
     }
 
-    public Expression MapColumn(SelectExpression column, ParameterExpression param, Type recordType)
+    public Expression MapColumn(SelectExpression column, Expression param, Type recordType)
     {
         if (column.Nullable)
         {
@@ -216,5 +284,48 @@ public class SqlDataProvider : IDataProvider
         return Expression.Call(param, column.GetDataRecordMethod(), Expression.Constant(column.Index));
     }
 
-    record DbCommandPayload(DbCommand DbCommand) : IPayload;
+    public void Compile<TResult>(QueryCommand<TResult> cmd)
+    {
+        if (!cmd.IsPrepared)
+            cmd.PrepareCommand(CancellationToken.None);
+
+        cmd.Compiled = CreateCompiledQuery(cmd);
+    }
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!disposedValue)
+        {
+            if (disposing)
+            {
+                _conn?.Dispose();
+            }
+
+            // TODO: free unmanaged resources (unmanaged objects) and override finalizer
+            // TODO: set large fields to null
+            disposedValue = true;
+        }
+    }
+
+    // // TODO: override finalizer only if 'Dispose(bool disposing)' has code to free unmanaged resources
+    // ~SqlDataProvider()
+    // {
+    //     // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+    //     Dispose(disposing: false);
+    // }
+
+    public void Dispose()
+    {
+        // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+        Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        if (_conn is not null)
+            return _conn.DisposeAsync();
+
+        return ValueTask.CompletedTask;
+    }
+    record CompiledQueryPayload<TResult>(DatabaseCompiledQuery<TResult> CompiledQuery) : IPayload;
 }
