@@ -2,5 +2,5 @@ namespace nextorm.core;
 
 public interface ISourceProvider
 {
-    QueryCommand FindSourceFromAlias(string? alias);
+    QueryCommand? FindSourceFromAlias(string? alias);
 }

@@ -14,6 +14,9 @@ public static class TypeExtensions
         && type.Attributes.HasFlag(TypeAttributes.NotPublic) 
         && Attribute.IsDefined(type, typeof(CompilerGeneratedAttribute), false)
         && type.Name.StartsWith("<>c__DisplayClass");
+    public static bool IsTuple(this Type type)=>type.IsGenericType 
+        && type.Attributes.HasFlag(TypeAttributes.NotPublic) 
+        && type.Name.StartsWith("Tuple`");
 
     public static bool TryGetProjectionDimension(this Type type, out int dim)
     {

@@ -9,9 +9,9 @@ public class DataContextOptionsBuilder
     private bool _logSensetiveData;
 
     public bool ShouldLogSensetiveData => _logSensetiveData;
-
     internal IDataProvider? DataProvider => _dataProvider;
-    internal ILoggerFactory? LoggerFactory => _loggerFactory; 
+    internal ILoggerFactory? LoggerFactory => _loggerFactory;
+    public bool CacheQueryCommand { get; set; }=true;
 
     public DataContextOptionsBuilder UseLoggerFactory(ILoggerFactory loggerFactory)
     {

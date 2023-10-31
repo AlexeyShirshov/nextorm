@@ -5,20 +5,23 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Xml;
+using Microsoft.Extensions.ObjectPool;
 
 namespace nextorm.core;
-public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
+public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 {
     private readonly Type _entityType;
     private readonly SqlDataProvider _dataProvider;
     private readonly ISourceProvider _tableProvider;
     private readonly int _dim;
-    protected readonly StringBuilder _builder = new();
+    protected readonly StringBuilder _builder;
     private readonly List<Param> _params = new();
     private bool _needAliasForColumn;
     private string? _colName;
     private readonly IAliasProvider? _aliasProvider;
     private readonly bool _dontNeedAlias;
+
+    private bool disposedValue;
 
     public BaseExpressionVisitor(Type entityType, SqlDataProvider dataProvider, ISourceProvider tableProvider, int dim, IAliasProvider? aliasProvider, bool dontNeedAlias)
     {
@@ -28,6 +31,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
         _dim = dim;
         _aliasProvider = aliasProvider;
         _dontNeedAlias = dontNeedAlias;
+        _builder = dataProvider._sbPool.Get();
     }
     public bool NeedAliasForColumn => _needAliasForColumn;
     public List<Param> Params => _params;
@@ -144,7 +148,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
                 {
                     var innerQuery = _tableProvider.FindSourceFromAlias(null);
                     var innerCol = innerQuery.SelectList!.SingleOrDefault(col => col.PropertyName == node.Member.Name) ?? throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
-                    var col = _dataProvider.MakeColumn(innerCol, innerQuery.EntityType!, innerQuery, false);
+                    var col = _dataProvider.MakeColumn(innerCol, innerQuery.EntityType!, innerQuery, false, _params);
                     if (col.NeedAliasForColumn)
                         _builder.Append(innerCol.PropertyName);
                     else
@@ -203,7 +207,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
                 {
                     var innerQuery = _tableProvider.FindSourceFromAlias(alias);
                     var innerCol = innerQuery.SelectList!.SingleOrDefault(col => col.PropertyName == node.Member.Name) ?? throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
-                    var col = _dataProvider.MakeColumn(innerCol, innerQuery.EntityType!, innerQuery, hasAlias);
+                    var col = _dataProvider.MakeColumn(innerCol, innerQuery.EntityType!, innerQuery, hasAlias,_params);
                     if (col.NeedAliasForColumn)
                         _builder.Append(innerCol.PropertyName);
                     else
@@ -245,11 +249,12 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
         switch (node.NodeType)
         {
             case ExpressionType.Coalesce:
-                var leftVisitor = Clone();
+            {
+                using var leftVisitor = Clone();
                 leftVisitor.Visit(node.Left);
                 Params.AddRange(leftVisitor.Params);
 
-                var rightVisitor = Clone();
+                using var rightVisitor = Clone();
                 rightVisitor.Visit(node.Right);
                 Params.AddRange(rightVisitor.Params);
 
@@ -259,6 +264,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
                 ));
 
                 return node;
+            }
             case ExpressionType.Conditional:
                 throw new NotImplementedException();
             case ExpressionType.Switch:
@@ -337,5 +343,31 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable
     public virtual BaseExpressionVisitor Clone()
     {
         return new BaseExpressionVisitor(_entityType, _dataProvider, _tableProvider, _dim, _aliasProvider, _dontNeedAlias);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!disposedValue)
+        {
+            if (disposing)
+            {
+                _dataProvider._sbPool.Return(_builder);
+            }
+            disposedValue = true;
+        }
+    }
+
+    // // TODO: override finalizer only if 'Dispose(bool disposing)' has code to free unmanaged resources
+    // ~BaseExpressionVisitor()
+    // {
+    //     // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+    //     Dispose(disposing: false);
+    // }
+
+    public void Dispose()
+    {
+        // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+        Dispose(disposing: true);
+        GC.SuppressFinalize(this);
     }
 }

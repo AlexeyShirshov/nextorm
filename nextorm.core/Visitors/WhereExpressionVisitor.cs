@@ -11,11 +11,11 @@ public class WhereExpressionVisitor : BaseExpressionVisitor
     {
         if (node.NodeType == ExpressionType.Equal)
         {
-            var leftVisitor = Clone();
+            using var leftVisitor = Clone();
             leftVisitor.Visit(node.Left);
             Params.AddRange(leftVisitor.Params);
 
-            var rightVisitor = Clone();
+            using var rightVisitor = Clone();
             rightVisitor.Visit(node.Right);
             Params.AddRange(rightVisitor.Params);
 

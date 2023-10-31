@@ -7,24 +7,28 @@ using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
 
-public class QueryCommand : ISourceProvider
+public class QueryCommand : IPayloadManager, ISourceProvider
 {
-    private readonly ArrayList _payload = new();
+    private IPayloadManager _payloadMgr;
     protected List<SelectExpression>? _selectList;
+    private int _columnsHash;
     protected FromExpression? _from;
+    private int _joinHash;
     protected IDataProvider _dataProvider;
     protected readonly LambdaExpression _exp;
     protected readonly Expression? _condition;
     protected bool _isPrepared;
-    //private bool _hasCtor;
+    private int? _hash;
     protected Type? _srcType;
-    public ILogger? Logger { get; set; }
+    private bool _dontCache;
     public QueryCommand(IDataProvider dataProvider, LambdaExpression exp, Expression? condition)
     {
         _dataProvider = dataProvider;
         _exp = exp;
         _condition = condition;
+        _payloadMgr = new FastPayloadManager(new Dictionary<Type, object?>());
     }
+    public ILogger? Logger { get; set; }
     public FromExpression? From { get => _from; set => _from = value; }
     public List<SelectExpression>? SelectList => _selectList;
     public Type? EntityType => _srcType;
@@ -40,118 +44,21 @@ public class QueryCommand : ISourceProvider
     public bool IsPrepared => _isPrepared;
     public Expression? Condition => _condition;
     public List<JoinExpression> Joins { get; } = new();
+    public bool Cache
+    {
+        get => !_dontCache;
+        set => _dontCache = !value;
+    }
     public virtual void ResetPreparation()
     {
         _isPrepared = false;
         _selectList = null;
         _srcType = null;
         _from = null;
+        _hash = null;
 
         _dataProvider.ResetPreparation(this);
     }
-    #region Payload
-    public bool RemovePayload<T>()
-        where T : class, IPayload
-    {
-        foreach (var item in _payload)
-        {
-            if (item is T)
-            {
-                _payload.Remove(item);
-                return true;
-            }
-        }
-        return false;
-    }
-    public bool TryGetPayload<T>(out T? payload)
-        where T : class, IPayload
-    {
-        foreach (var item in _payload)
-        {
-            if (item is T p)
-            {
-                payload = p;
-                return true;
-            }
-        }
-        payload = default;
-        return false;
-    }
-    public bool TryGetNotNullPayload<T>(out T? payload)
-        where T : class, IPayload
-    {
-        foreach (var item in _payload)
-        {
-            if (item is T p && p is not null)
-            {
-                payload = p;
-                return true;
-            }
-        }
-        payload = default;
-        return false;
-    }
-    public T GetNotNullOrAddPayload<T>(Func<T> factory)
-        where T : class, IPayload
-    {
-        if (!TryGetNotNullPayload<T>(out var payload))
-        {
-            ArgumentNullException.ThrowIfNull(factory);
-
-            payload = factory();
-            _payload.Add(payload);
-        }
-        return payload!;
-    }
-    public T? GetOrAddPayload<T>(Func<T?> factory)
-        where T : class, IPayload
-    {
-        if (!TryGetPayload<T>(out var payload))
-        {
-            payload = factory is null
-                ? default
-                : factory();
-            _payload.Add(payload);
-        }
-        return payload;
-    }
-    public T? AddOrUpdatePayload<T>(Func<T?> factory)
-        where T : class, IPayload
-    {
-        for (int i = 0; i < _payload.Count; i++)
-        {
-            var item = _payload[i];
-
-            if (item is T)
-            {
-                var p = factory();
-                _payload[i] = p;
-                return p;
-            }
-        }
-
-        var payload = factory();
-        _payload.Add(payload);
-        return payload;
-    }
-    public void AddOrUpdatePayload<T>(T? payload)
-        where T : class, IPayload
-    {
-        for (int i = 0; i < _payload.Count; i++)
-        {
-            var item = _payload[i];
-
-            if (item is T)
-            {
-                _payload[i] = payload;
-                return;
-            }
-        }
-
-        _payload.Add(payload);
-    }
-    #endregion
-
     public virtual void PrepareCommand(CancellationToken cancellationToken)
     {
         if (_from is not null && _from.Table.IsT1 && !_from.Table.AsT1.IsPrepared)
@@ -168,13 +75,17 @@ public class QueryCommand : ISourceProvider
 
         FromExpression? from = _from ?? _dataProvider.GetFrom(srcType, this);
 
+        var joinHash=7;
         foreach (var join in Joins)
         {
             if (!(join.Query?.IsPrepared ?? true))
                 join.Query!.PrepareCommand(cancellationToken);
+
+            joinHash=joinHash*13+join.GetHashCode();
         }
 
         var selectList = _selectList;
+        var columnsHash = 7;
 
         if (selectList is null)
         {
@@ -185,15 +96,38 @@ public class QueryCommand : ISourceProvider
 
             if (_exp.Body is NewExpression ctor)
             {
+                //var isTuple = ctor.Type.IsTuple();
+
                 for (var idx = 0; idx < ctor.Arguments.Count; idx++)
                 {
                     if (cancellationToken.IsCancellationRequested)
                         return;
 
+                    SelectExpression selExp;
                     var arg = ctor.Arguments[idx];
-                    var ctorParam = ctor.Constructor!.GetParameters()[idx];
+                    // if (arg is MemberExpression me)
+                    // {
+                    //     selExp = new SelectExpression(me.Type)
+                    //     {
+                    //         Index = idx,
+                    //         PropertyName = me.Member.Name!,
+                    //         Expression = arg
+                    //     };
+                    // }
+                    // else
+                    // {
+                        var ctorParam = ctor.Constructor!.GetParameters()[idx];
 
-                    selectList.Add(new SelectExpression(ctorParam.ParameterType) { Index = idx, PropertyName = ctorParam.Name!, Expression = arg });
+                        selExp = new SelectExpression(ctorParam.ParameterType)
+                        {
+                            Index = idx,
+                            PropertyName = ctorParam.Name!,
+                            Expression = arg
+                        };
+                    //}
+                    selectList.Add(selExp);
+
+                    columnsHash = columnsHash * 13 + selExp.GetHashCode();
                 }
 
                 if (selectList.Count == 0)
@@ -205,18 +139,35 @@ public class QueryCommand : ISourceProvider
                 var props = srcType.GetProperties(BindingFlags.FlattenHierarchy | BindingFlags.Public | BindingFlags.Instance).Where(prop => prop.CanWrite).ToArray();
                 for (int idx = 0; idx < props.Length; idx++)
                 {
+                    if (cancellationToken.IsCancellationRequested)
+                        return;
+
                     var prop = props[idx];
                     if (prop is null) continue;
                     var colAttr = prop.GetCustomAttribute<ColumnAttribute>(true);
                     if (colAttr is not null)
                     {
                         Expression<Func<TableAlias, object>> exp = tbl => tbl.Column(colAttr.Name!);
-                        selectList.Add(new SelectExpression(prop.PropertyType) { Index = idx, PropertyName = prop.Name, Expression = exp, PropertyInfo = prop });
+
+                        var selExp = new SelectExpression(prop.PropertyType)
+                        {
+                            Index = idx,
+                            PropertyName = prop.Name,
+                            Expression = exp,
+                            PropertyInfo = prop
+                        };
+
+                        selectList.Add(selExp);
+
+                        columnsHash = columnsHash * 13 + selExp.GetHashCode();
                     }
                     else
                     {
                         foreach (var interf in srcType.GetInterfaces())
                         {
+                            if (cancellationToken.IsCancellationRequested)
+                                return;
+
                             var intMap = srcType.GetInterfaceMap(interf);
 
                             var implIdx = Array.IndexOf(intMap.TargetMethods, prop!.GetMethod);
@@ -229,7 +180,18 @@ public class QueryCommand : ISourceProvider
                                 if (colAttr is not null)
                                 {
                                     Expression<Func<TableAlias, object>> exp = tbl => tbl.Column(colAttr.Name!);
-                                    selectList.Add(new SelectExpression(prop!.PropertyType) { Index = idx, PropertyName = prop.Name, Expression = exp, PropertyInfo = prop });
+
+                                    var selExp = new SelectExpression(prop!.PropertyType)
+                                    {
+                                        Index = idx,
+                                        PropertyName = prop.Name,
+                                        Expression = exp,
+                                        PropertyInfo = prop
+                                    };
+
+                                    selectList.Add(selExp);
+
+                                    columnsHash = columnsHash * 13 + selExp.GetHashCode();
                                 }
                             }
                         }
@@ -243,10 +205,121 @@ public class QueryCommand : ISourceProvider
 
         _isPrepared = true;
         _selectList = selectList;
+        _columnsHash = columnsHash;
         _srcType = srcType;
         _from = from;
+        _joinHash=joinHash;
+
+        //_payloadMgr = new FastPayloadManager(cache ? new Dictionary<Type, object?>() : null);
+
+        string capitalize(string str)
+        {
+            return string.Concat(new ReadOnlySpan<char>(Char.ToUpper(str[0])), str.AsSpan()[1..]);
+        }
     }
-    public QueryCommand FindSourceFromAlias(string? aliasRaw)
+
+    public bool RemovePayload<T>() where T : class, IPayload
+    {
+        return _payloadMgr.RemovePayload<T>();
+    }
+
+    public bool TryGetPayload<T>(out T? payload) where T : class, IPayload
+    {
+        return _payloadMgr.TryGetPayload<T>(out payload);
+    }
+
+    public bool TryGetNotNullPayload<T>(out T? payload) where T : class, IPayload
+    {
+        return _payloadMgr.TryGetNotNullPayload<T>(out payload);
+    }
+
+    public T GetNotNullOrAddPayload<T>(Func<T> factory) where T : class, IPayload
+    {
+        return _payloadMgr.GetNotNullOrAddPayload<T>(factory);
+    }
+
+    public T? GetOrAddPayload<T>(Func<T?> factory) where T : class, IPayload
+    {
+        return _payloadMgr.GetOrAddPayload<T>(factory);
+    }
+
+    public T? AddOrUpdatePayload<T>(Func<T?> factory) where T : class, IPayload
+    {
+        return _payloadMgr.AddOrUpdatePayload<T>(factory);
+    }
+    public void AddOrUpdatePayload<T>(T? payload) where T : class, IPayload
+    {
+        _payloadMgr.AddOrUpdatePayload<T>(payload);
+    }
+    public override int GetHashCode()
+    {
+        if (_hash.HasValue)
+            return _hash.Value;
+
+        unchecked
+        {
+            HashCode hash = new();
+            if (_from is not null)
+                hash.Add(_from);
+
+            if (_srcType is not null)
+                hash.Add(_srcType);
+
+            if (_condition is not null)
+                hash.Add(_condition, ExpressionEqualityComparer.Instance);
+
+            hash.Add(_columnsHash);
+
+            hash.Add(_joinHash);
+
+            _hash = hash.ToHashCode();
+
+            return _hash.Value;
+        }
+    }
+    public override bool Equals(object? obj)
+    {
+        return Equals(obj as QueryCommand);
+    }
+    public bool Equals(QueryCommand? cmd)
+    {
+        if (cmd is null) return false;
+
+        if (!Equals(_from, cmd._from)) return false;
+
+        if (_srcType != cmd._srcType) return false;
+
+        if (!ExpressionEqualityComparer.Instance.Equals(_condition, cmd._condition)) return false;
+
+        if (_selectList is null && cmd._selectList is not null) return false;
+        if (_selectList is not null && cmd._selectList is null) return false;
+
+        if (_selectList is not null && cmd._selectList is not null)
+        {
+            if (_selectList.Count != cmd._selectList.Count) return false;
+
+            for (int i = 0; i < _selectList.Count; i++)
+            {
+                if (!_selectList[i].Equals(cmd._selectList[i])) return false;
+            }
+        }
+
+        if (Joins is null && cmd.Joins is not null) return false;
+        if (Joins is not null && cmd.Joins is null) return false;
+
+        if (Joins is not null && cmd.Joins is not null)
+        {
+            if (Joins.Count != cmd.Joins.Count) return false;
+
+            for (int i = 0; i < Joins.Count; i++)
+            {
+                if (!Joins[i].Equals(cmd.Joins[i])) return false;
+            }
+        }
+
+        return true;
+    }
+    public QueryCommand? FindSourceFromAlias(string? aliasRaw)
     {
         if (string.IsNullOrEmpty(aliasRaw))
             return _from!.Table.AsT1;
@@ -258,9 +331,13 @@ public class QueryCommand : ISourceProvider
 
 public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
 {
+    //private readonly IPayloadManager _payloadMap = new FastPayloadManager(new Dictionary<Type, object?>());
     public QueryCommand(IDataProvider dataProvider, LambdaExpression exp, Expression? condition) : base(dataProvider, exp, condition)
     {
     }
+
+    internal CompiledQuery<TResult> Compiled { get; set; }
+
     public IAsyncEnumerator<TResult> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
         if (!IsPrepared)
@@ -272,59 +349,50 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
     // {
     //     return Expression.PropertyOrField(param, column.PropertyName!);
     // }
-    public TResult Map(object dataRecord)
+    public Func<Func<object, TResult>> GetMap(Type resultType, Type recordType)
     {
         if (!IsPrepared)
             throw new InvalidOperationException("Command not prepared");
 
-        var resultType = typeof(TResult);
-
-        var recordType = dataRecord.GetType();
-
-        if (resultType == recordType)
-            return (TResult)dataRecord;
-
-        var factory = GetOrAddPayload(() =>
+        return () =>
         {
             var ctorInfo = resultType.GetConstructors().OrderByDescending(it => it.GetParameters().Length).FirstOrDefault() ?? throw new PrepareException($"Cannot get ctor from {resultType}");
 
-            var param = Expression.Parameter(recordType);
+            var param = Expression.Parameter(typeof(object));
             //var @params = SelectList.Select(column => Expression.Parameter(column.PropertyType!)).ToArray();
 
             if (ctorInfo.GetParameters().Length == SelectList!.Count)
             {
-                var newParams = SelectList!.Select(column => _dataProvider.MapColumn(column, param, recordType)).ToArray();
+                var newParams = SelectList!.Select(column => _dataProvider.MapColumn(column, Expression.Convert(param, recordType), recordType)).ToArray();
 
                 var ctor = Expression.New(ctorInfo, newParams);
 
-                var lambda = Expression.Lambda(ctor, param);
+                var lambda = Expression.Lambda<Func<object, TResult>>(ctor, param);
 
                 if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Init expression for {type}: {exp}", resultType, lambda);
 
-                return new MapPayload(lambda.Compile());
+                return lambda.Compile();
             }
             else
             {
-                var bindings = SelectList!.Select(column => 
+                var bindings = SelectList!.Select(column =>
                 {
                     var propInfo = column.PropertyInfo ?? resultType.GetProperty(column.PropertyName!)!;
-                    return Expression.Bind(propInfo, _dataProvider.MapColumn(column, param, recordType));
+                    return Expression.Bind(propInfo, _dataProvider.MapColumn(column, Expression.Convert(param, recordType), recordType));
                 }).ToArray();
 
                 var ctor = Expression.New(ctorInfo);
 
                 var memberInit = Expression.MemberInit(ctor, bindings);
 
-                var lambda = Expression.Lambda(memberInit, param);
+                var lambda = Expression.Lambda<Func<object, TResult>>(memberInit, param);
 
                 if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Init expression for {type}: {exp}", resultType, lambda);
 
-                return new MapPayload(lambda.Compile());
+                return lambda.Compile();
             }
-        });
-
-        return (TResult)factory!.Delegate.DynamicInvoke(dataRecord)!;
+        };
     }
-    record MapPayload(Delegate Delegate) : IPayload;
+    //record MapPayload(Delegate Delegate) : IPayload;
 
 }
