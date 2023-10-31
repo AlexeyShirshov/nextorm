@@ -121,7 +121,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             else if (_from.Table.IsT1)
             {
                 var innerCol = _from.Table.AsT1.SelectList!.SingleOrDefault(col => col.PropertyName == node.Member.Name) ?? throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
-                var col = _dataProvider.MakeColumn(innerCol, _from.Table.AsT1.EntityType!, _from.Table.AsT1.From!);
+                var col = _dataProvider.MakeColumn(innerCol, _from.Table.AsT1.EntityType!, _from.Table.AsT1.From!, _params);
                 if (col.NeedAlias)
                     _builder.Append(innerCol.PropertyName);
                 else

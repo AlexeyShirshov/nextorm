@@ -8,27 +8,25 @@ namespace nextorm.core;
 public class SelectExpression
 {
     private readonly Type _realType;
-    public int Index {get;set;}
-    public string? PropertyName {get;set;}
-    public OneOf<QueryCommand,Expression> Expression {get;set;}
-    public Type PropertyType { get; set; }
-
     private readonly bool _nullable;
-
+    public int Index { get; set; }
+    public string? PropertyName { get; set; }
+    public OneOf<QueryCommand, Expression> Expression { get; set; }
+    public Type PropertyType { get; set; }
     public bool Nullable { get; }
     internal PropertyInfo? PropertyInfo { get; set; }
 
     public SelectExpression(Type propertyType)
     {
         PropertyType = propertyType;
-        _nullable =PropertyType.IsGenericType && PropertyType.GetGenericTypeDefinition() == typeof(Nullable<>);
+        _nullable = PropertyType.IsGenericType && PropertyType.GetGenericTypeDefinition() == typeof(Nullable<>);
         Nullable = PropertyType.IsClass || _nullable;
-        
+
         if (_nullable)
         {
-            _realType =  System.Nullable.GetUnderlyingType(PropertyType)!;
+            _realType = System.Nullable.GetUnderlyingType(PropertyType)!;
         }
-        else 
+        else
         {
             _realType = PropertyType;
         }
@@ -84,5 +82,40 @@ public class SelectExpression
         }
         else
             throw new NotSupportedException($"Property '{PropertyName}' with index ({Index}) has type {_realType} which is not supported");
+    }
+    public override int GetHashCode()
+    {
+        unchecked
+        {
+            var hash = new HashCode();
+
+            hash.Add(Index);
+
+            hash.Add(PropertyType);
+
+            hash.Add(PropertyName);
+
+            Expression.Switch(cmd => hash.Add(cmd), exp => hash.Add(exp, ExpressionEqualityComparer.Instance));
+
+            return hash.ToHashCode();
+        }
+    }
+    public override bool Equals(object? obj)
+    {
+        return Equals(obj as SelectExpression);
+    }
+    public bool Equals(SelectExpression? exp)
+    {
+        if (exp is null) return false;
+
+        if (Index != exp.Index) return false;
+
+        if (PropertyType != exp.PropertyType) return false;
+
+        if (PropertyName != exp.PropertyName) return false;
+
+        if (!Expression.Match(cmd => cmd.Equals(exp.Expression.AsT0), e => ExpressionEqualityComparer.Instance.Equals(e, exp.Expression.AsT1))) return false;
+
+        return true;
     }
 }

@@ -2,12 +2,15 @@
 using BenchmarkDotNet.Running;
 using nextorm.core.benchmark;
 
-BenchmarkRunner.Run<BenchmarkIteration>();
+BenchmarkRunner.Run<InMemoryBenchmarkIteration>();
+//BenchmarkRunner.Run<SqliteBenchmarkIteration>();
+//BenchmarkRunner.Run<SqliteBenchmarkLargeIteration>();
 
-// var runner = new BenchmarkIteration();
+// var runner = new InMemoryBenchmarkIteration();
 
 // for (var i = 0; i < 2; i++)
-//     await runner.Dapper();
+//     await runner.Nextorm();
 
+//await runner.FillLargeTable();
 // Console.WriteLine("Press any key to exit");
 // Console.ReadKey();

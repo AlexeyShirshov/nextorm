@@ -4,10 +4,10 @@ namespace nextorm.core;
 
 public class InMemoryEnumeratorAdapter<TResult, TEntity> : IAsyncEnumerator<TResult>
 {
-    private readonly QueryCommand<TResult> _cmd;
+    private readonly CompiledQuery<TResult> _cmd;
     private readonly IAsyncEnumerator<TEntity> _inner;
     private readonly Func<TEntity, bool>? _condition;
-    public InMemoryEnumeratorAdapter(QueryCommand<TResult> cmd, IAsyncEnumerator<TEntity> inner, Expression<Func<TEntity, bool>>? condition)
+    public InMemoryEnumeratorAdapter(CompiledQuery<TResult> cmd, IAsyncEnumerator<TEntity> inner, Expression<Func<TEntity, bool>>? condition)
     {
         _cmd = cmd;
         _inner = inner;

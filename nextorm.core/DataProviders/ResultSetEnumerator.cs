@@ -6,21 +6,21 @@ using Microsoft.Extensions.Logging;
 namespace nextorm.core;
 public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>
 {
-    private readonly QueryCommand<TResult> _cmd;
+    //private readonly QueryCommand<TResult> _cmd;
     private readonly SqlDataProvider _dataProvider;
-    private readonly DbCommand _sqlCommand;
+    private readonly DatabaseCompiledQuery<TResult> _compiledQuery;
     private readonly CancellationToken _cancellationToken;
     private DbDataReader? _reader;
     private DbConnection? _conn;
 
-    public ResultSetEnumerator(QueryCommand<TResult> cmd, SqlDataProvider dataProvider, DbCommand sqlCommand, CancellationToken cancellationToken)
+    public ResultSetEnumerator(SqlDataProvider dataProvider, DatabaseCompiledQuery<TResult> compiledQuery, CancellationToken cancellationToken)
     {
-        _cmd = cmd;
+        //_cmd = cmd;
         _dataProvider = dataProvider;
-        _sqlCommand = sqlCommand;
+        _compiledQuery = compiledQuery;
         _cancellationToken = cancellationToken;
     }
-    public TResult Current => _cmd.Map(_reader!);
+    public TResult Current => _compiledQuery.Map(_reader!);
     public async ValueTask DisposeAsync()
     {
         GC.SuppressFinalize(this);
@@ -31,6 +31,7 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>
             await _reader.DisposeAsync();
         }
 
+        _compiledQuery.dbCommand.Connection = null;
         // if (_conn is not null)
         // {
         //     if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Disposing connection");
@@ -44,7 +45,9 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>
             if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Creating connection");
 
             _conn = _dataProvider.GetConnection();
-            _sqlCommand.Connection = _conn;
+
+            var sqlCommand = _compiledQuery.dbCommand;
+            sqlCommand.Connection = _conn;
 
             if (_conn.State == ConnectionState.Closed)
             {
@@ -55,22 +58,22 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>
 
             if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false)
             {
-                _dataProvider.Logger.LogDebug(_sqlCommand.CommandText);
+                _dataProvider.Logger.LogDebug(sqlCommand.CommandText);
 
                 if (_dataProvider.LogSensetiveData)
                 {
-                    foreach (DbParameter p in _sqlCommand.Parameters)
+                    foreach (DbParameter p in sqlCommand.Parameters)
                     {
                         _dataProvider.Logger.LogDebug("param {name} is {value}", p.ParameterName, p.Value);
                     }
                 }
-                else if (_sqlCommand.Parameters?.Count > 0)
+                else if (sqlCommand.Parameters?.Count > 0)
                 {
                     _dataProvider.Logger.LogDebug("Use {method} to see param values", nameof(_dataProvider.LogSensetiveData));
                 }
             }
 
-            _reader = await _sqlCommand.ExecuteReaderAsync(_cancellationToken);
+            _reader = await sqlCommand.ExecuteReaderAsync(_cancellationToken);
         }
 
         if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false) _dataProvider.Logger.LogTrace("Move next");

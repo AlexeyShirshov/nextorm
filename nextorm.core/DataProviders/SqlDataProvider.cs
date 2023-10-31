@@ -12,10 +12,10 @@ namespace nextorm.core;
 
 public class SqlDataProvider : IDataProvider
 {
-    private readonly List<Param> _params = new();
-    private IDictionary<QueryCommand, DbCommand>? _cmdIdx=new Dictionary<QueryCommand, DbCommand>();
+    private IDictionary<QueryCommand, object> _cmdIdx = new Dictionary<QueryCommand, object>();
     private DbConnection? _conn;
-    private bool _cache;
+    private bool _clearCache;
+    private bool disposedValue;
     internal readonly ObjectPool<StringBuilder> _sbPool = new DefaultObjectPoolProvider().Create(new StringBuilderPooledObjectPolicy());
     //private DbCommand? _cmd;
     internal bool LogSensetiveData { get; set; }
@@ -53,78 +53,89 @@ public class SqlDataProvider : IDataProvider
     {
         throw new NotImplementedException();
     }
-    public DbCommand CreateCommand(QueryCommand cmd)
+    public DatabaseCompiledQuery<TResult> CreateCompiledQuery<TResult>(QueryCommand<TResult> cmd)
     {
-        if (!cmd.Cache || !_cmdIdx.TryGetValue(cmd, out var dbCommand))
-        {
-            dbCommand = CreateCommand(MakeSql(cmd));
+        var (sql, @params) = MakeSql(cmd);
+        var dbCommand = CreateCommand(sql);
 
-            dbCommand.Parameters.AddRange(_params.Select(it => CreateParam(it.Name, it.Value)).ToArray());
+        dbCommand.Parameters.AddRange(@params.Select(it => CreateParam(it.Name, it.Value)).ToArray());
+
+        return new DatabaseCompiledQuery<TResult>(dbCommand, cmd.GetMap(typeof(TResult), typeof(DbDataReader)));
+    }
+    public DatabaseCompiledQuery<TResult> GetCompiledQuery<TResult>(QueryCommand<TResult> cmd)
+    {
+        var compiled = cmd.Compiled as DatabaseCompiledQuery<TResult>;
+        if (compiled is not null)
+            return compiled;
+
+        if (!cmd.Cache || !_cmdIdx.TryGetValue(cmd, out var query))
+        {
+            query = CreateCompiledQuery(cmd);
 
             if (cmd.Cache)
-                _cmdIdx[cmd] = dbCommand;
+                _cmdIdx[cmd] = query;
         }
 
-        return dbCommand;
+        return (DatabaseCompiledQuery<TResult>)query;
     }
     public virtual DbParameter CreateParam(string name, object? value)
     {
         throw new NotImplementedException();
     }
-    public virtual string MakeSql(QueryCommand cmd)
+    public virtual (string, List<Param>) MakeSql(QueryCommand cmd)
     {
         ArgumentNullException.ThrowIfNull(cmd.SelectList);
         ArgumentNullException.ThrowIfNull(cmd.From);
         ArgumentNullException.ThrowIfNull(cmd.EntityType);
 
-        // var selectList = cmd.SelectList;
-        // var from = cmd.From;
-        // var entityType = cmd.EntityType;
+        var selectList = cmd.SelectList;
+        var from = cmd.From;
+        var entityType = cmd.EntityType;
 
-        // var sqlBuilder = _sbPool.Get();
+        var sqlBuilder = _sbPool.Get();
 
-        // sqlBuilder.Append("select ");
-        // foreach (var item in selectList)
-        // {
-        //     var col = MakeColumn(item, entityType, from);
+        var @params = new List<Param>();
 
-        //     sqlBuilder.Append(col.Column);
+        sqlBuilder.Append("select ");
+        foreach (var item in selectList)
+        {
+            var col = MakeColumn(item, entityType, from, @params);
 
-        //     if (col.NeedAlias)
-        //     {
-        //         sqlBuilder.Append(MakeColumnAlias(item.PropertyName!));
-        //     }
+            sqlBuilder.Append(col.Column);
 
-        //     sqlBuilder.Append(", ");
-        // }
+            if (col.NeedAlias)
+            {
+                sqlBuilder.Append(MakeColumnAlias(item.PropertyName!));
+            }
 
-        // sqlBuilder.Length -= 2;
-        // sqlBuilder.Append(" from ").Append(MakeFrom(from));
+            sqlBuilder.Append(", ");
+        }
 
-        // if (cmd.Condition is not null)
-        // {
-        //     sqlBuilder.Append(" where ").Append(MakeWhere(entityType, from, cmd.Condition));
-        // }
+        sqlBuilder.Length -= 2;
+        sqlBuilder.Append(" from ").Append(MakeFrom(from, @params));
 
-        // var r = sqlBuilder.ToString();
+        if (cmd.Condition is not null)
+        {
+            sqlBuilder.Append(" where ").Append(MakeWhere(entityType, from, cmd.Condition, @params));
+        }
 
-        // _sbPool.Return(sqlBuilder);
+        var r = sqlBuilder.ToString();
 
-        // return r;
+        _sbPool.Return(sqlBuilder);
 
-        return "select id from simple_entity";
+        return (r, @params);
     }
 
-    private string MakeWhere(Type entityType, FromExpression from, Expression condition)
+    private string MakeWhere(Type entityType, FromExpression from, Expression condition, List<Param> @params)
     {
         using var visitor = new WhereExpressionVisitor(entityType, this, from);
         visitor.Visit(condition);
-        _params.AddRange(visitor.Params);
+        @params.AddRange(visitor.Params);
 
         return visitor.ToString();
     }
 
-    public (bool NeedAlias, string Column) MakeColumn(SelectExpression selectExp, Type entityType, FromExpression from)
+    public (bool NeedAlias, string Column) MakeColumn(SelectExpression selectExp, Type entityType, FromExpression from, List<Param> @params)
     {
         var expression = selectExp.Expression;
 
@@ -134,14 +145,14 @@ public class SqlDataProvider : IDataProvider
             {
                 using var visitor = new BaseExpressionVisitor(entityType, this, from);
                 visitor.Visit(exp);
-                _params.AddRange(visitor.Params);
+                @params.AddRange(visitor.Params);
 
                 return (visitor.NeedAlias, visitor.ToString());
             }
         );
     }
 
-    public virtual string MakeFrom(FromExpression from)
+    public virtual string MakeFrom(FromExpression from, List<Param> @params)
     {
         ArgumentNullException.ThrowIfNull(from);
 
@@ -150,7 +161,9 @@ public class SqlDataProvider : IDataProvider
             cmd =>
             {
                 if (!cmd.IsPrepared) throw new BuildSqlCommandException("Inner query is not prepared");
-                return "(" + MakeSql(cmd) + ")" + (string.IsNullOrEmpty(from.TableAlias) ? string.Empty : MakeTableAlias(from.TableAlias));
+                var (sql, p) = MakeSql(cmd);
+                @params.AddRange(p);
+                return "(" + sql + ")" + (string.IsNullOrEmpty(from.TableAlias) ? string.Empty : MakeTableAlias(from.TableAlias));
             }
         );
     }
@@ -180,12 +193,27 @@ public class SqlDataProvider : IDataProvider
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
 
-        var dbCommandPayload = queryCommand.GetOrAddPayload(() => new DbCommandPayload(CreateCommand(queryCommand)));
-        var cmd = dbCommandPayload!.DbCommand;
+        DatabaseCompiledQuery<TResult> compiledQuery;
+        if (queryCommand.Cache)
+            compiledQuery = GetCompiledQuery(queryCommand);
+        else
+        {
+            var factory = () => new CompiledQueryPayload<TResult>(GetCompiledQuery(queryCommand));
+            CompiledQueryPayload<TResult>? compiledQueryPayload;
+            if (_clearCache)
+            {
+                compiledQueryPayload = queryCommand.AddOrUpdatePayload(factory);
+                _clearCache = false;
+            }
+            else
+                compiledQueryPayload = queryCommand.GetOrAddPayload(factory);
+
+            compiledQuery = compiledQueryPayload!.CompiledQuery;
+        }
         // var cmd = CreateCommand(queryCommand);
 
         //return new EmptyEnumerator<TResult>(queryCommand, this, cmd, cancellationToken);
-        return new ResultSetEnumerator<TResult>(queryCommand, this, cmd, cancellationToken);
+        return new ResultSetEnumerator<TResult>(this, compiledQuery, cancellationToken);
     }
     public virtual string ConcatStringOperator => "+";
 
@@ -200,7 +228,7 @@ public class SqlDataProvider : IDataProvider
 
     public void ResetPreparation(QueryCommand queryCommand)
     {
-        queryCommand.RemovePayload<DbCommandPayload>();
+        _clearCache = true;
     }
 
     public FromExpression? GetFrom(Type srcType)
@@ -256,82 +284,48 @@ public class SqlDataProvider : IDataProvider
         return Expression.Call(param, column.GetDataRecordMethod(), Expression.Constant(column.Index));
     }
 
-    record DbCommandPayload(DbCommand DbCommand) : IPayload;
-}
-
-internal class EmptyEnumerator<TResult> : IAsyncEnumerator<TResult>
-{
-    private readonly QueryCommand<TResult> _cmd;
-    private readonly SqlDataProvider _dataProvider;
-    private readonly DbCommand _sqlCommand;
-    private readonly CancellationToken _cancellationToken;
-    private DbDataReader? _reader;
-    private DbConnection? _conn;
-
-    public EmptyEnumerator(QueryCommand<TResult> cmd, SqlDataProvider dataProvider, DbCommand sqlCommand, CancellationToken cancellationToken)
+    public void Compile<TResult>(QueryCommand<TResult> cmd)
     {
-        _cmd = cmd;
-        _dataProvider = dataProvider;
-        _sqlCommand = sqlCommand;
-        _cancellationToken = cancellationToken;
+        if (!cmd.IsPrepared)
+            cmd.PrepareCommand(CancellationToken.None);
+
+        cmd.Compiled = CreateCompiledQuery(cmd);
     }
-    public TResult Current => default;
-
-    public async ValueTask DisposeAsync()
+    protected virtual void Dispose(bool disposing)
     {
+        if (!disposedValue)
+        {
+            if (disposing)
+            {
+                _conn?.Dispose();
+            }
+
+            // TODO: free unmanaged resources (unmanaged objects) and override finalizer
+            // TODO: set large fields to null
+            disposedValue = true;
+        }
+    }
+
+    // // TODO: override finalizer only if 'Dispose(bool disposing)' has code to free unmanaged resources
+    // ~SqlDataProvider()
+    // {
+    //     // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+    //     Dispose(disposing: false);
+    // }
+
+    public void Dispose()
+    {
+        // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
+        Dispose(disposing: true);
         GC.SuppressFinalize(this);
-
-        if (_reader is not null)
-        {
-            if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Disposing data reader");
-            await _reader.DisposeAsync();
-        }
-
-        // if (_conn is not null)
-        // {
-        //     if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Disposing connection");
-        //     await _conn.DisposeAsync();
-        // }
-
-        //await _conn?.CloseAsync();
     }
 
-    public async ValueTask<bool> MoveNextAsync()
+    public ValueTask DisposeAsync()
     {
-        if (_conn is null)
-        {
-            _conn = _dataProvider.GetConnection();
-            _sqlCommand.Connection = _conn;
+        if (_conn is not null)
+            return _conn.DisposeAsync();
 
-            if (_conn.State == ConnectionState.Closed)
-            {
-                if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Opening connection");
-
-                await _conn.OpenAsync(_cancellationToken);
-            }
-
-            if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false)
-            {
-                _dataProvider.Logger.LogDebug(_sqlCommand.CommandText);
-
-                if (_dataProvider.LogSensetiveData)
-                {
-                    foreach (DbParameter p in _sqlCommand.Parameters)
-                    {
-                        _dataProvider.Logger.LogDebug("param {name} is {value}", p.ParameterName, p.Value);
-                    }
-                }
-                else if (_sqlCommand.Parameters?.Count > 0)
-                {
-                    _dataProvider.Logger.LogDebug("Use {method} to see param values", nameof(_dataProvider.LogSensetiveData));
-                }
-            }
-
-            _reader = await _sqlCommand.ExecuteReaderAsync(_cancellationToken);
-        }
-
-        if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false) _dataProvider.Logger.LogTrace("Move next");
-
-        return await _reader!.ReadAsync(_cancellationToken);
+        return ValueTask.CompletedTask;
     }
+    record CompiledQueryPayload<TResult>(DatabaseCompiledQuery<TResult> CompiledQuery) : IPayload;
 }

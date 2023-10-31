@@ -17,15 +17,17 @@ public class QueryCommand : IPayloadManager
     protected readonly LambdaExpression _exp;
     protected readonly Expression? _condition;
     protected bool _isPrepared;
-    //private bool _hasCtor;
+    private int? _hash;
     protected Type? _srcType;
-    public ILogger? Logger { get; set; }
+    private bool _dontCache;
     public QueryCommand(IDataProvider dataProvider, LambdaExpression exp, Expression? condition)
     {
         _dataProvider = dataProvider;
         _exp = exp;
         _condition = condition;
+        _payloadMgr = new FastPayloadManager(new Dictionary<Type, object?>());
     }
+    public ILogger? Logger { get; set; }
     public FromExpression? From { get => _from; set => _from = value; }
     public List<SelectExpression>? SelectList => _selectList;
     public Type? EntityType => _srcType;
@@ -40,13 +42,18 @@ public class QueryCommand : IPayloadManager
     }
     public bool IsPrepared => _isPrepared;
     public Expression? Condition => _condition;
-    public bool Cache {get;set;}
+    public bool Cache
+    {
+        get => !_dontCache;
+        set => _dontCache = !value;
+    }
     public virtual void ResetPreparation()
     {
         _isPrepared = false;
         _selectList = null;
         _srcType = null;
         _from = null;
+        _hash = null;
 
         _dataProvider.ResetPreparation(this);
     }
@@ -65,7 +72,6 @@ public class QueryCommand : IPayloadManager
         }
 
         var selectList = _selectList;
-        var cache = true;
         var columnsHash = 7;
 
         if (selectList is null)
@@ -77,23 +83,35 @@ public class QueryCommand : IPayloadManager
 
             if (_exp.Body is NewExpression ctor)
             {
-                cache = !ctor.Type.IsAnonymous();
+                //var isTuple = ctor.Type.IsTuple();
 
                 for (var idx = 0; idx < ctor.Arguments.Count; idx++)
                 {
                     if (cancellationToken.IsCancellationRequested)
                         return;
 
+                    SelectExpression selExp;
                     var arg = ctor.Arguments[idx];
-                    var ctorParam = ctor.Constructor!.GetParameters()[idx];
-
-                    var selExp = new SelectExpression(ctorParam.ParameterType)
+                    if (arg is MemberExpression me)
                     {
-                        Index = idx,
-                        PropertyName = ctorParam.Name!,
-                        Expression = arg
-                    };
+                        selExp = new SelectExpression(me.Type)
+                        {
+                            Index = idx,
+                            PropertyName = me.Member.Name!,
+                            Expression = arg
+                        };
+                    }
+                    else
+                    {
+                        var ctorParam = ctor.Constructor!.GetParameters()[idx];
 
+                        selExp = new SelectExpression(ctorParam.ParameterType)
+                        {
+                            Index = idx,
+                            PropertyName = ctorParam.Name!,
+                            Expression = arg
+                        };
+                    }
                     selectList.Add(selExp);
 
                     columnsHash = columnsHash * 13 + selExp.GetHashCode();
@@ -108,6 +126,9 @@ public class QueryCommand : IPayloadManager
                 var props = srcType.GetProperties(BindingFlags.FlattenHierarchy | BindingFlags.Public | BindingFlags.Instance).Where(prop => prop.CanWrite).ToArray();
                 for (int idx = 0; idx < props.Length; idx++)
                 {
+                    if (cancellationToken.IsCancellationRequested)
+                        return;
+
                     var prop = props[idx];
                     if (prop is null) continue;
                     var colAttr = prop.GetCustomAttribute<ColumnAttribute>(true);
@@ -131,6 +152,9 @@ public class QueryCommand : IPayloadManager
                     {
                         foreach (var interf in srcType.GetInterfaces())
                         {
+                            if (cancellationToken.IsCancellationRequested)
+                                return;
+
                             var intMap = srcType.GetInterfaceMap(interf);
 
                             var implIdx = Array.IndexOf(intMap.TargetMethods, prop!.GetMethod);
@@ -174,7 +198,12 @@ public class QueryCommand : IPayloadManager
         _srcType = srcType;
         _from = from;
 
-        _payloadMgr = new FastPayloadManager(cache ? new Dictionary<Type, object?>() : null);
+        //_payloadMgr = new FastPayloadManager(cache ? new Dictionary<Type, object?>() : null);
+
+        string capitalize(string str)
+        {
+            return string.Concat(new ReadOnlySpan<char>(Char.ToUpper(str[0])), str.AsSpan()[1..]);
+        }
     }
 
     public bool RemovePayload<T>() where T : class, IPayload
@@ -208,6 +237,9 @@ public class QueryCommand : IPayloadManager
     }
     public override int GetHashCode()
     {
+        if (_hash.HasValue)
+            return _hash.Value;
+
         var ec = ExpressionEqualityComparer.Instance;
 
         unchecked
@@ -224,18 +256,20 @@ public class QueryCommand : IPayloadManager
 
             hash.Add(_columnsHash);
 
-            return hash.ToHashCode();
+            _hash = hash.ToHashCode();
+
+            return _hash.Value;
         }
     }
     public override bool Equals(object? obj)
     {
         return Equals(obj as QueryCommand);
     }
-    public bool Equals(QueryCommand cmd)
+    public bool Equals(QueryCommand? cmd)
     {
         if (cmd is null) return false;
 
-        if (_from != cmd._from) return false;
+        if (!Equals(_from, cmd._from)) return false;
 
         if (_srcType != cmd._srcType) return false;
 
@@ -250,7 +284,7 @@ public class QueryCommand : IPayloadManager
 
             for (int i = 0; i < _selectList.Count; i++)
             {
-                if (_selectList[i] != cmd._selectList[i]) return false;
+                if (!_selectList[i].Equals(cmd._selectList[i])) return false;
             }
         }
 
@@ -260,11 +294,13 @@ public class QueryCommand : IPayloadManager
 
 public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
 {
-    private Func<object, TResult>? _mapCache;
     //private readonly IPayloadManager _payloadMap = new FastPayloadManager(new Dictionary<Type, object?>());
     public QueryCommand(IDataProvider dataProvider, LambdaExpression exp, Expression? condition) : base(dataProvider, exp, condition)
     {
     }
+
+    internal CompiledQuery<TResult> Compiled { get; set; }
+
     public IAsyncEnumerator<TResult> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
         if (!IsPrepared)
@@ -276,19 +312,12 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
     // {
     //     return Expression.PropertyOrField(param, column.PropertyName!);
     // }
-    public TResult Map(object dataRecord)
+    public Func<Func<object, TResult>> GetMap(Type resultType, Type recordType)
     {
         if (!IsPrepared)
             throw new InvalidOperationException("Command not prepared");
 
-        var resultType = typeof(TResult);
-
-        var recordType = dataRecord.GetType();
-
-        if (resultType == recordType)
-            return (TResult)dataRecord;
-
-        var factory = () =>
+        return () =>
         {
             var ctorInfo = resultType.GetConstructors().OrderByDescending(it => it.GetParameters().Length).FirstOrDefault() ?? throw new PrepareException($"Cannot get ctor from {resultType}");
 
@@ -297,11 +326,11 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
 
             if (ctorInfo.GetParameters().Length == SelectList!.Count)
             {
-                var newParams = SelectList!.Select(column => _dataProvider.MapColumn(column, Expression.Convert(param,recordType), recordType)).ToArray();
+                var newParams = SelectList!.Select(column => _dataProvider.MapColumn(column, Expression.Convert(param, recordType), recordType)).ToArray();
 
                 var ctor = Expression.New(ctorInfo, newParams);
 
-                var lambda = Expression.Lambda<Func<object,TResult>>(ctor, param);
+                var lambda = Expression.Lambda<Func<object, TResult>>(ctor, param);
 
                 if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Init expression for {type}: {exp}", resultType, lambda);
 
@@ -312,28 +341,20 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
                 var bindings = SelectList!.Select(column =>
                 {
                     var propInfo = column.PropertyInfo ?? resultType.GetProperty(column.PropertyName!)!;
-                    return Expression.Bind(propInfo, _dataProvider.MapColumn(column, Expression.Convert(param,recordType), recordType));
+                    return Expression.Bind(propInfo, _dataProvider.MapColumn(column, Expression.Convert(param, recordType), recordType));
                 }).ToArray();
 
                 var ctor = Expression.New(ctorInfo);
 
                 var memberInit = Expression.MemberInit(ctor, bindings);
 
-                var lambda = Expression.Lambda<Func<object,TResult>>(memberInit, param);
+                var lambda = Expression.Lambda<Func<object, TResult>>(memberInit, param);
 
                 if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Init expression for {type}: {exp}", resultType, lambda);
 
                 return lambda.Compile();
             }
         };
-
-        if (_mapCache is null)
-        {
-            //_mapCache = (object _) => Activator.CreateInstance<TResult>();
-            _mapCache=factory();
-        }
-
-        return _mapCache(dataRecord);
     }
     //record MapPayload(Delegate Delegate) : IPayload;
 
