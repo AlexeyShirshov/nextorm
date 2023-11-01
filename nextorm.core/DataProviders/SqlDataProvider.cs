@@ -55,7 +55,7 @@ public class SqlDataProvider : IDataProvider
     }
     public DatabaseCompiledQuery<TResult> CreateCompiledQuery<TResult>(QueryCommand<TResult> cmd)
     {
-        var (sql, @params) = MakeSql(cmd);
+        var (sql, @params) = MakeSelect(cmd);
         var dbCommand = CreateCommand(sql);
 
         dbCommand.Parameters.AddRange(@params.Select(it => CreateParam(it.Name, it.Value)).ToArray());
@@ -82,7 +82,7 @@ public class SqlDataProvider : IDataProvider
     {
         throw new NotImplementedException();
     }
-    public virtual (string, List<Param>) MakeSql(QueryCommand cmd)
+    public virtual (string, List<Param>) MakeSelect(QueryCommand cmd)
     {
         ArgumentNullException.ThrowIfNull(cmd.SelectList);
         ArgumentNullException.ThrowIfNull(cmd.From);
@@ -99,11 +99,11 @@ public class SqlDataProvider : IDataProvider
         sqlBuilder.Append("select ");
         foreach (var item in selectList)
         {
-            var col = MakeColumn(item, entityType, cmd, false, @params);
+            var (needAliasForColumn, column) = MakeColumn(item, entityType, cmd, false, @params);
 
-            sqlBuilder.Append(col.Column);
+            sqlBuilder.Append(column);
 
-            if (col.NeedAliasForColumn)
+            if (needAliasForColumn)
             {
                 sqlBuilder.Append(MakeColumnAlias(item.PropertyName!));
             }
@@ -114,13 +114,13 @@ public class SqlDataProvider : IDataProvider
         sqlBuilder.Length -= 2;
         sqlBuilder.Append(" from ").Append(MakeFrom(from, @params));
 
-        if (cmd.Joins.Any())
+        // if (cmd.Joins.Any())
+        // {
+        foreach (var join in cmd.Joins)
         {
-            foreach (var join in cmd.Joins)
-            {
-                sqlBuilder.Append(MakeJoin(join, cmd, @params));
-            }
+            sqlBuilder.Append(MakeJoin(join, cmd, @params));
         }
+        //}
 
         if (cmd.Condition is not null)
         {
@@ -136,7 +136,7 @@ public class SqlDataProvider : IDataProvider
 
     private string MakeJoin(JoinExpression join, QueryCommand cmd, List<Param> @params)
     {
-        var sqlBuilder = new StringBuilder();
+        var sqlBuilder = _sbPool.Get();
 
         switch (join.JoinType)
         {
@@ -158,7 +158,7 @@ public class SqlDataProvider : IDataProvider
         if (visitor.JoinType.IsAnonymous())
         {
             //fromExp = GetFrom(join.Query.EntityType);
-            var (sql,p)=MakeSql(join.Query);
+            var (sql, p) = MakeSelect(join.Query);
             @params.AddRange(p);
             sqlBuilder.Append('(').Append(sql).Append(") ");
             sqlBuilder.Append(GetAliasFromProjection(cmd, visitor.JoinType, 1));
@@ -169,15 +169,19 @@ public class SqlDataProvider : IDataProvider
 
             fromExp.TableAlias = GetAliasFromProjection(cmd, visitor.JoinType, dim);
 
-            sqlBuilder.Append(MakeFrom(fromExp,@params));
+            sqlBuilder.Append(MakeFrom(fromExp, @params));
         }
 
         sqlBuilder.Append(" on ");
         sqlBuilder.Append(MakeWhere(cmd.EntityType!, cmd, visitor.JoinCondition, dim, dim == 1
                 ? new ExpressionAliasProvider(join.JoinCondition)
-                : new ProjectionAliasProvider(dim, cmd.EntityType!),@params));
+                : new ProjectionAliasProvider(dim, cmd.EntityType!), @params));
 
-        return sqlBuilder.ToString();
+        var r = sqlBuilder.ToString();
+
+        _sbPool.Return(sqlBuilder);
+
+        return r;
     }
     private static string GetAliasFromProjection(QueryCommand cmd, Type declaringType, int from)
     {
@@ -225,7 +229,7 @@ public class SqlDataProvider : IDataProvider
             cmd =>
             {
                 if (!cmd.IsPrepared) throw new BuildSqlCommandException("Inner query is not prepared");
-                var (sql, p) = MakeSql(cmd);
+                var (sql, p) = MakeSelect(cmd);
                 @params.AddRange(p);
                 return "(" + sql + ")" + (string.IsNullOrEmpty(from.TableAlias) ? string.Empty : MakeTableAlias(from.TableAlias));
             }

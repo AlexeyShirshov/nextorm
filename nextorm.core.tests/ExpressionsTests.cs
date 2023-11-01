@@ -11,9 +11,9 @@ public class SqlCommandTests
     {
         Expression<Func<int, int, t>> exp = (id, p) => new t(id, p);
 
-        var l = Expression.Lambda(exp.Body, exp.Parameters[0], exp.Parameters[1] ).Compile();
+        var l = Expression.Lambda(exp.Body, exp.Parameters[0], exp.Parameters[1]).Compile();
 
-        var r = l.DynamicInvoke(1,2) as t;
+        var r = l.DynamicInvoke(1, 2) as t;
 
         r.Should().NotBeNull();
         r.Id.Should().Be(1);
@@ -24,7 +24,7 @@ public class SqlCommandTests
     {
         Expression<Func<ctor, t>> exp = (c) => new t(c.GetId(), c.GetP());
 
-        var l = Expression.Lambda(exp.Body, exp.Parameters[0] ).Compile();
+        var l = Expression.Lambda(exp.Body, exp.Parameters[0]).Compile();
 
         var r = l.DynamicInvoke(new ctor()) as t;
 
@@ -37,18 +37,28 @@ public class SqlCommandTests
     {
         Expression<Func<ctor, t>> exp = (c) => new t(c.IsSome() ? null : c.GetP());
 
-        var l = Expression.Lambda(exp.Body, exp.Parameters[0] ).Compile();
+        var l = Expression.Lambda(exp.Body, exp.Parameters[0]).Compile();
 
         var r = l.DynamicInvoke(new ctor()) as t;
 
         r.Should().NotBeNull();
     }
+    [Fact]
+    public void TestTypename()
+    {
+        // Given
+        var name = typeof(Projection<,>).FullName;
+        // When
+        var t = typeof(Projection<,>).Assembly.GetType(name);
+        // Then
+        t.Should().NotBeNull();
+    }
 }
 class ctor
 {
-    public int GetId()=>1;
-    public int GetP()=>2;
-    public bool IsSome()=>true;
+    public int GetId() => 1;
+    public int GetP() => 2;
+    public bool IsSome() => true;
 }
 public class t
 {
