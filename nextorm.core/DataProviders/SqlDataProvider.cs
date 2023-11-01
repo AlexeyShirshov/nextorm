@@ -51,11 +51,11 @@ public class SqlDataProvider : IDataProvider
 
     public virtual string GetTableName(Type type)
     {
-        throw new NotImplementedException();
+        throw new NotImplementedException(type.ToString());
     }
     public DatabaseCompiledQuery<TResult> CreateCompiledQuery<TResult>(QueryCommand<TResult> cmd)
     {
-        var (sql, @params) = MakeSql(cmd);
+        var (sql, @params) = MakeSelect(cmd);
         var dbCommand = CreateCommand(sql);
 
         dbCommand.Parameters.AddRange(@params.Select(it => CreateParam(it.Name, it.Value)).ToArray());
@@ -82,7 +82,7 @@ public class SqlDataProvider : IDataProvider
     {
         throw new NotImplementedException();
     }
-    public virtual (string, List<Param>) MakeSql(QueryCommand cmd)
+    public virtual (string, List<Param>) MakeSelect(QueryCommand cmd)
     {
         ArgumentNullException.ThrowIfNull(cmd.SelectList);
         ArgumentNullException.ThrowIfNull(cmd.From);
@@ -99,11 +99,11 @@ public class SqlDataProvider : IDataProvider
         sqlBuilder.Append("select ");
         foreach (var item in selectList)
         {
-            var col = MakeColumn(item, entityType, from, @params);
+            var (needAliasForColumn, column) = MakeColumn(item, entityType, cmd, false, @params);
 
-            sqlBuilder.Append(col.Column);
+            sqlBuilder.Append(column);
 
-            if (col.NeedAlias)
+            if (needAliasForColumn)
             {
                 sqlBuilder.Append(MakeColumnAlias(item.PropertyName!));
             }
@@ -114,9 +114,17 @@ public class SqlDataProvider : IDataProvider
         sqlBuilder.Length -= 2;
         sqlBuilder.Append(" from ").Append(MakeFrom(from, @params));
 
+        // if (cmd.Joins.Any())
+        // {
+        foreach (var join in cmd.Joins)
+        {
+            sqlBuilder.Append(MakeJoin(join, cmd, @params));
+        }
+        //}
+
         if (cmd.Condition is not null)
         {
-            sqlBuilder.Append(" where ").Append(MakeWhere(entityType, from, cmd.Condition, @params));
+            sqlBuilder.Append(" where ").Append(MakeWhere(entityType, cmd, cmd.Condition, 0, null, @params));
         }
 
         var r = sqlBuilder.ToString();
@@ -126,16 +134,76 @@ public class SqlDataProvider : IDataProvider
         return (r, @params);
     }
 
-    private string MakeWhere(Type entityType, FromExpression from, Expression condition, List<Param> @params)
+    private string MakeJoin(JoinExpression join, QueryCommand cmd, List<Param> @params)
     {
-        using var visitor = new WhereExpressionVisitor(entityType, this, from);
+        var sqlBuilder = _sbPool.Get();
+
+        switch (join.JoinType)
+        {
+            case JoinType.Inner:
+                sqlBuilder.Append(" join ");
+                break;
+            default:
+                throw new NotImplementedException(join.JoinType.ToString());
+        }
+
+        var visitor = new JoinExpressionVisitor();
+        visitor.Visit(join.JoinCondition);
+
+        var dim = 1;
+        if (join.JoinCondition.Parameters[0].Type.TryGetProjectionDimension(out var joinDim))
+            dim = joinDim;
+
+        FromExpression fromExp;
+        if (visitor.JoinType.IsAnonymous())
+        {
+            //fromExp = GetFrom(join.Query.EntityType);
+            var (sql, p) = MakeSelect(join.Query);
+            @params.AddRange(p);
+            sqlBuilder.Append('(').Append(sql).Append(") ");
+            sqlBuilder.Append(GetAliasFromProjection(cmd, visitor.JoinType, 1));
+        }
+        else
+        {
+            fromExp = GetFrom(visitor.JoinType);
+
+            fromExp.TableAlias = GetAliasFromProjection(cmd, visitor.JoinType, dim);
+
+            sqlBuilder.Append(MakeFrom(fromExp, @params));
+        }
+
+        sqlBuilder.Append(" on ");
+        sqlBuilder.Append(MakeWhere(cmd.EntityType!, cmd, visitor.JoinCondition, dim, dim == 1
+                ? new ExpressionAliasProvider(join.JoinCondition)
+                : new ProjectionAliasProvider(dim, cmd.EntityType!), @params));
+
+        var r = sqlBuilder.ToString();
+
+        _sbPool.Return(sqlBuilder);
+
+        return r;
+    }
+    private static string GetAliasFromProjection(QueryCommand cmd, Type declaringType, int from)
+    {
+        int idx = 0;
+        foreach (var prop in cmd.EntityType!.GetProperties(BindingFlags.Instance | BindingFlags.Public))
+        {
+            if (++idx > from && prop.PropertyType == declaringType)
+                return prop.Name;
+        }
+
+        throw new BuildSqlCommandException($"Cannot find alias of type {declaringType} in {cmd.EntityType}");
+    }
+    private string MakeWhere(Type entityType, ISourceProvider tableSource, Expression condition, int dim, IAliasProvider? aliasProvider, List<Param> @params)
+    {
+        using var visitor = new WhereExpressionVisitor(entityType, this, tableSource, dim, aliasProvider);
         visitor.Visit(condition);
         @params.AddRange(visitor.Params);
 
         return visitor.ToString();
     }
 
-    public (bool NeedAlias, string Column) MakeColumn(SelectExpression selectExp, Type entityType, FromExpression from, List<Param> @params)
+    public (bool NeedAliasForColumn, string Column) MakeColumn(SelectExpression selectExp, Type entityType, ISourceProvider tableProvider, bool dontNeedAlias, List<Param> @params)
     {
         var expression = selectExp.Expression;
 
@@ -143,11 +211,11 @@ public class SqlDataProvider : IDataProvider
             cmd => throw new NotImplementedException(),
             exp =>
             {
-                using var visitor = new BaseExpressionVisitor(entityType, this, from);
+                using var visitor = new BaseExpressionVisitor(entityType, this, tableProvider, 0, null, dontNeedAlias);
                 visitor.Visit(exp);
                 @params.AddRange(visitor.Params);
 
-                return (visitor.NeedAlias, visitor.ToString());
+                return (visitor.NeedAliasForColumn || selectExp.PropertyName != visitor.ColumnName, visitor.ToString());
             }
         );
     }
@@ -161,7 +229,7 @@ public class SqlDataProvider : IDataProvider
             cmd =>
             {
                 if (!cmd.IsPrepared) throw new BuildSqlCommandException("Inner query is not prepared");
-                var (sql, p) = MakeSql(cmd);
+                var (sql, p) = MakeSelect(cmd);
                 @params.AddRange(p);
                 return "(" + sql + ")" + (string.IsNullOrEmpty(from.TableAlias) ? string.Empty : MakeTableAlias(from.TableAlias));
             }
@@ -175,9 +243,9 @@ public class SqlDataProvider : IDataProvider
     {
         return " as " + colAlias;
     }
-    internal bool GetColumnName(MemberInfo member)
+    internal string GetColumnName(MemberInfo member)
     {
-        throw new NotImplementedException();
+        throw new NotImplementedException(member.Name);
     }
 
     public virtual string MakeCoalesce(string v1, string v2)
@@ -187,7 +255,7 @@ public class SqlDataProvider : IDataProvider
 
     public virtual string MakeParam(string name)
     {
-        throw new NotImplementedException();
+        throw new NotImplementedException(name);
     }
     public IAsyncEnumerator<TResult> CreateEnumerator<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
     {
@@ -231,42 +299,57 @@ public class SqlDataProvider : IDataProvider
         _clearCache = true;
     }
 
-    public FromExpression? GetFrom(Type srcType)
+    public FromExpression? GetFrom(Type srcType, QueryCommand queryCommand)
     {
         if (srcType != typeof(TableAlias))
         {
-            var sqlTableAttr = srcType.GetCustomAttribute<SqlTableAttribute>(true);
+            if (queryCommand.Joins.Any() && srcType.FullName!.StartsWith("nextorm.core.Projection"))
+            {
+                var prop_t1 = srcType.GetProperty("t1") ?? throw new BuildSqlCommandException($"Projection {srcType} must have t1 property");
+
+                var f = GetFrom(prop_t1.PropertyType);
+
+                f.TableAlias = "t1";
+
+                return f;
+            }
+            else
+                return GetFrom(srcType);
+        }
+        else throw new BuildSqlCommandException($"From must be specified for {nameof(TableAlias)} as source type");
+    }
+
+    private FromExpression GetFrom(Type t)
+    {
+        var sqlTableAttr = t.GetCustomAttribute<SqlTableAttribute>(true);
+
+        if (sqlTableAttr is not null)
+            return new FromExpression(sqlTableAttr.Name);
+        else
+        {
+            var tableAttr = t.GetCustomAttribute<TableAttribute>(true);
+
+            if (tableAttr is not null)
+                return new FromExpression(tableAttr.Name);
+        }
+
+        foreach (var interf in t.GetInterfaces())
+        {
+            sqlTableAttr = interf.GetCustomAttribute<SqlTableAttribute>(true);
 
             if (sqlTableAttr is not null)
                 return new FromExpression(sqlTableAttr.Name);
             else
             {
-                var tableAttr = srcType.GetCustomAttribute<TableAttribute>(true);
+                var tableAttr = interf.GetCustomAttribute<TableAttribute>(true);
 
                 if (tableAttr is not null)
                     return new FromExpression(tableAttr.Name);
             }
-
-            foreach (var interf in srcType.GetInterfaces())
-            {
-                sqlTableAttr = interf.GetCustomAttribute<SqlTableAttribute>(true);
-
-                if (sqlTableAttr is not null)
-                    return new FromExpression(sqlTableAttr.Name);
-                else
-                {
-                    var tableAttr = interf.GetCustomAttribute<TableAttribute>(true);
-
-                    if (tableAttr is not null)
-                        return new FromExpression(tableAttr.Name);
-                }
-            }
-
-            return new FromExpression(GetTableName(srcType));
         }
-        else throw new BuildSqlCommandException($"From must be specified for {nameof(TableAlias)} as source type");
-    }
 
+        return new FromExpression(GetTableName(t));
+    }
     public Expression MapColumn(SelectExpression column, Expression param, Type recordType)
     {
         if (column.Nullable)
@@ -284,6 +367,10 @@ public class SqlDataProvider : IDataProvider
         return Expression.Call(param, column.GetDataRecordMethod(), Expression.Constant(column.Index));
     }
 
+    public virtual string MakeBool(bool v)
+    {
+        return v ? "1" : "0";
+    }
     public void Compile<TResult>(QueryCommand<TResult> cmd)
     {
         if (!cmd.IsPrepared)

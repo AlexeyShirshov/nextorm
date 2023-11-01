@@ -11,7 +11,7 @@ public interface IDataProvider : IAsyncDisposable, IDisposable
     IAsyncEnumerator<TResult> CreateEnumerator<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken);
     QueryCommand<TResult> CreateCommand<TResult>(LambdaExpression exp, Expression? condition);
     void ResetPreparation(QueryCommand queryCommand);
-    FromExpression? GetFrom(Type srcType);
+    FromExpression? GetFrom(Type srcType, QueryCommand queryCommand);
     Expression MapColumn(SelectExpression column, Expression param, Type recordType);
     void Compile<TResult>(QueryCommand<TResult> query);
 }

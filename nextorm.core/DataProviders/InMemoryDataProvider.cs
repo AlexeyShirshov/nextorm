@@ -1,3 +1,5 @@
+using System.Collections;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -71,15 +73,66 @@ public class InMemoryDataProvider : IDataProvider
         }
         else
         {
-            var dataPayload = queryCommand.GetNotNullOrAddPayload(() => new InMemoryDataPayload<TEntity>(Array.Empty<TEntity>().AsEnumerable()));
-
-            var data = dataPayload.Data!;
-
-            if (queryCommand.Condition is not null)
+            IEnumerable<TEntity> data;
+            if (queryCommand.Joins.Any() && typeof(TEntity).FullName!.StartsWith("nextorm.core.Projection"))
             {
-                var predicate = (queryCommand.Condition as Expression<Func<TEntity, bool>>)!.Compile();
-                data = data.Where(predicate);
+                var dim = 2;
+                object? joinResult = null;
+                Type? firstType = null;
+                foreach (var join in queryCommand.Joins)
+                {
+                    firstType ??= join.JoinCondition.Parameters[0].Type;
+                    var secondType = join.JoinCondition.Parameters[1].Type;
+
+                    switch (join.JoinType)
+                    {
+                        case JoinType.Inner:
+                            {
+                                var prjType = CreateProjectionType(firstType, secondType, dim);
+                                var miCreateEnumerator = typeof(InMemoryDataProvider).GetMethod(nameof(LoopJoin), BindingFlags.NonPublic | BindingFlags.Static)!;
+                                var param = Expression.Parameter(typeof(InMemoryDataProvider));
+                                var p1 = Expression.Parameter(typeof(QueryCommand));
+                                var p2 = Expression.Parameter(typeof(object));
+                                var p3 = Expression.Parameter(typeof(JoinExpression));
+                                var p4 = Expression.Parameter(typeof(int));
+                                var callExp = Expression.Call(null, miCreateEnumerator.MakeGenericMethod(firstType, secondType, prjType),
+                                    p1,
+                                    Expression.Convert(p2, typeof(IEnumerable<>).MakeGenericType(firstType)),
+                                    p3,
+                                    p4
+                                );
+                                var d = Expression.Lambda(callExp,
+                                    p1,
+                                    p2,
+                                    p3,
+                                    p4
+                                ).Compile();
+
+                                joinResult = d.DynamicInvoke(queryCommand, joinResult, join, dim);
+
+                                firstType = prjType;
+                                break;
+                            }
+                        default:
+                            throw new NotSupportedException(join.JoinType.ToString());
+                    }
+
+                    dim++;
+                }
+
+                data = (IEnumerable<TEntity>)joinResult!;
             }
+            else
+            {
+                var dataPayload = queryCommand.GetNotNullOrAddPayload(() => new InMemoryDataPayload<TEntity>(Array.Empty<TEntity>().AsEnumerable()));
+
+                data = dataPayload.Data!;
+            }
+            // if (queryCommand.Condition is not null)
+            // {
+            //     var predicate = (queryCommand.Condition as Expression<Func<TEntity, bool>>)!.Compile();
+            //     data = data.Where(predicate);
+            // }
 
             var compiledQuery = queryCommand.Compiled;
             if (compiledQuery is null)
@@ -94,11 +147,113 @@ public class InMemoryDataProvider : IDataProvider
 
                 compiledQuery = (CompiledQuery<TResult>)query;
             }
-            return new InMemoryEnumerator<TResult, TEntity>(compiledQuery, data.GetEnumerator());
+
+            return new InMemoryEnumerator<TResult, TEntity>(compiledQuery, data.GetEnumerator(), queryCommand.Condition as Expression<Func<TEntity, bool>>);
+        }
+    }
+
+    static IEnumerable<TResult> LoopJoin<TLeft, TRight, TResult>(QueryCommand queryCommand, IEnumerable<TLeft> leftData, JoinExpression join, int dim)
+    {
+        if (leftData is null)
+        {
+            var dataPayload = queryCommand.GetNotNullOrAddPayload(() => new InMemoryDataPayload<TLeft>(Array.Empty<TLeft>().AsEnumerable()));
+            leftData = dataPayload.Data!;
+        }
+
+        var joinPayload = queryCommand.GetNotNullOrAddPayload(() => new InMemoryDataPayload<TRight>(Array.Empty<TRight>().AsEnumerable()));
+
+        var res = new List<TResult>();
+
+        foreach (var item in leftData)
+        {
+            foreach (var itemInner in joinPayload.Data!)
+            {
+                var d = ((Expression<Func<TLeft, TRight, bool>>)join.JoinCondition).Compile();
+                var r = d(item, itemInner)!;
+
+                if (r)
+                {
+                    res.Add((TResult)CreateProjection(item, itemInner, dim));
+                }
+            }
+        }
+
+        return res;
+    }
+    static Type CreateProjectionType(Type firstType, Type secondType, int dim)
+    {
+        var typeName = $"nextorm.core.Projection`{dim}";
+        var t = typeof(InMemoryDataProvider).Assembly.GetType(typeName) ?? throw new InvalidOperationException($"Cannot create type {typeName}");
+        var types = dim switch
+        {
+            2 => new List<Type> { firstType, secondType },
+            >= 3 => ExtractTypesFromProjection(firstType, secondType),
+            _ => throw new NotImplementedException(dim.ToString())
+        };
+        return t.MakeGenericType(types.ToArray());
+
+        static List<Type> ExtractTypesFromProjection(Type basePrjType, Type addition)
+        {
+            var types = new List<Type>();
+            foreach (var propInfo in basePrjType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            {
+                types.Add(propInfo.PropertyType);
+            }
+            types.Add(addition);
+            return types;
+        }
+    }
+    static object CreateProjection<TLeft, TRight>(TLeft left, TRight right, int dim)
+    {
+        if (dim == 2) return new Projection<TLeft, TRight> { t1 = left, t2 = right };
+        if (dim >= 3)
+        {
+            var (types, values) = ExtractTypesFromProjection(left);
+            types.Add(typeof(TRight));
+            var typeName = $"nextorm.core.Projection`{dim}";
+            var t = Type.GetType(typeName)!;
+            var prjType = t.MakeGenericType(types.ToArray());
+            values.Add(right!);
+
+            //var leftType = typeof(TLeft);
+
+            var bindings = values.Select((value, idx) =>
+            {
+                var propInfo = prjType.GetProperty("t" + (idx + 1).ToString())!;
+                return Expression.Bind(propInfo, Expression.Constant(value));
+            }).ToArray();
+
+            var ctor = Expression.New(prjType.GetConstructor(Type.EmptyTypes)!);
+
+            var memberInit = Expression.MemberInit(ctor, bindings);
+
+            var lambda = Expression.Lambda(memberInit);
+
+            return lambda.Compile().DynamicInvoke()!;
+        }
+
+        throw new NotSupportedException(dim.ToString());
+
+        static (List<Type>, List<object?>) ExtractTypesFromProjection(TLeft projection)
+        {
+            var types = new List<Type>();
+            var values = new List<object?>();
+            var leftType = typeof(TLeft);
+            foreach (var propInfo in leftType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            {
+                types.Add(propInfo.PropertyType);
+                values.Add(propInfo.GetValue(projection));
+            }
+            return (types, values);
         }
     }
     protected InMemoryEnumeratorAdapter<TResult, TEntity> CreateEnumeratorAdapter<TResult, TEntity>(QueryCommand<TResult> queryCommand, IAsyncEnumerator<TEntity> enumerator)
     {
+        if (queryCommand.Joins.Any() && typeof(TEntity).FullName!.StartsWith("nextorm.core.Projection"))
+        {
+            throw new NotImplementedException("joins");
+        }
+
         var compiledQuery = queryCommand.Compiled;
         if (compiledQuery is null)
         {
@@ -110,13 +265,13 @@ public class InMemoryDataProvider : IDataProvider
                     _cmdIdx[queryCommand] = query;
 
             }
-            
+
             compiledQuery = (CompiledQuery<TResult>)query;
         }
 
         return new InMemoryEnumeratorAdapter<TResult, TEntity>(compiledQuery, enumerator, queryCommand.Condition as Expression<Func<TEntity, bool>>);
     }
-    public FromExpression? GetFrom(Type srcType)
+    public FromExpression? GetFrom(Type srcType, QueryCommand queryCommand)
     {
         return null;
     }

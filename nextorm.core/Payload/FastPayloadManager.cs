@@ -8,7 +8,6 @@ public class FastPayloadManager : IPayloadManager
     {
         _dic = dic;
     }
-
     public T? AddOrUpdatePayload<T>(Func<T?> factory) where T : class, IPayload
     {
         if (_dic is null) return factory?.Invoke();
@@ -17,7 +16,12 @@ public class FastPayloadManager : IPayloadManager
         _dic[typeof(T)] = value;
         return value;
     }
+    public void AddOrUpdatePayload<T>(T? payload) where T : class, IPayload
+    {
+        if (_dic is null) return;
 
+        _dic[typeof(T)]=payload;
+    }
     public T GetNotNullOrAddPayload<T>(Func<T> factory) where T : class, IPayload
     {
         if (_dic is null) return factory();

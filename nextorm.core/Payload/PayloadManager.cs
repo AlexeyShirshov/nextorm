@@ -111,5 +111,20 @@ public class PayloadManager : IPayloadManager
         
         return payload;
     }
+    public void AddOrUpdatePayload<T>(T? payload)
+        where T : class, IPayload
+    {
+        for (int i = 0; i < _payload.Count; i++)
+        {
+            var item = _payload[i];
 
+            if (item is T)
+            {
+                _payload[i] = payload;
+                return;
+            }
+        }
+
+        _payload.Add(payload);
+    }
 }

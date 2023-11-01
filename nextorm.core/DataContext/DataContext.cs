@@ -21,6 +21,7 @@ public class DataContext : IDisposable, IAsyncDisposable
     }
     public IDataProvider DataProvider => _dataProvider;
     public CommandBuilder<TResult> From<TResult>(QueryCommand<TResult> query) => new(_dataProvider, query) { Logger = _cmdLogger };
+    public CommandBuilder<TResult> From<TResult>(CommandBuilder<TResult> builder) => new(_dataProvider, builder) { Logger = _cmdLogger };
     public ValueTask DisposeAsync()
     {
         return _dataProvider.DisposeAsync();
