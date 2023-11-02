@@ -187,65 +187,56 @@ public class InMemoryDataProvider : IDataProvider
         var types = dim switch
         {
             2 => new List<Type> { firstType, secondType },
-            >= 3 => ExtractTypesFromProjection(firstType, secondType),
+            >= 3 => new List<Type>(firstType.GetGenericArguments()) { secondType },
             _ => throw new NotImplementedException(dim.ToString())
         };
-        return t.MakeGenericType(types.ToArray());
 
-        static List<Type> ExtractTypesFromProjection(Type basePrjType, Type addition)
-        {
-            var types = new List<Type>();
-            foreach (var propInfo in basePrjType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
-            {
-                types.Add(propInfo.PropertyType);
-            }
-            types.Add(addition);
-            return types;
-        }
+        return t.MakeGenericType(types.ToArray());
     }
-    static object CreateProjection<TLeft, TRight>(TLeft left, TRight right, int dim)
+    static IProjection CreateProjection<TLeft, TRight>(TLeft left, TRight right, int dim)
     {
         if (dim == 2) return new Projection<TLeft, TRight> { t1 = left, t2 = right };
-        if (dim >= 3)
+        if (dim >= 3 && left is IProjection proj)
         {
-            var (types, values) = ExtractTypesFromProjection(left);
-            types.Add(typeof(TRight));
-            var typeName = $"nextorm.core.Projection`{dim}";
-            var t = Type.GetType(typeName)!;
-            var prjType = t.MakeGenericType(types.ToArray());
-            values.Add(right!);
+            return proj.Extend(right);
+            // var (types, values) = ExtractTypesFromProjection(left);
+            // types.Add(typeof(TRight));
+            // var typeName = $"nextorm.core.Projection`{dim}";
+            // var t = Type.GetType(typeName)!;
+            // var prjType = t.MakeGenericType(types.ToArray());
+            // values.Add(right!);
 
-            //var leftType = typeof(TLeft);
+            // //var leftType = typeof(TLeft);
 
-            var bindings = values.Select((value, idx) =>
-            {
-                var propInfo = prjType.GetProperty("t" + (idx + 1).ToString())!;
-                return Expression.Bind(propInfo, Expression.Constant(value));
-            }).ToArray();
+            // var bindings = values.Select((value, idx) =>
+            // {
+            //     var propInfo = prjType.GetProperty("t" + (idx + 1).ToString())!;
+            //     return Expression.Bind(propInfo, Expression.Constant(value));
+            // }).ToArray();
 
-            var ctor = Expression.New(prjType.GetConstructor(Type.EmptyTypes)!);
+            // var ctor = Expression.New(prjType.GetConstructor(Type.EmptyTypes)!);
 
-            var memberInit = Expression.MemberInit(ctor, bindings);
+            // var memberInit = Expression.MemberInit(ctor, bindings);
 
-            var lambda = Expression.Lambda(memberInit);
+            // var lambda = Expression.Lambda(memberInit);
 
-            return lambda.Compile().DynamicInvoke()!;
+            // return lambda.Compile().DynamicInvoke()!;
         }
 
         throw new NotSupportedException(dim.ToString());
 
-        static (List<Type>, List<object?>) ExtractTypesFromProjection(TLeft projection)
-        {
-            var types = new List<Type>();
-            var values = new List<object?>();
-            var leftType = typeof(TLeft);
-            foreach (var propInfo in leftType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
-            {
-                types.Add(propInfo.PropertyType);
-                values.Add(propInfo.GetValue(projection));
-            }
-            return (types, values);
-        }
+        // static (List<Type>, List<object?>) ExtractTypesFromProjection(TLeft projection)
+        // {
+        //     var types = new List<Type>();
+        //     var values = new List<object?>();
+        //     var leftType = typeof(TLeft);
+        //     foreach (var propInfo in leftType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        //     {
+        //         types.Add(propInfo.PropertyType);
+        //         values.Add(propInfo.GetValue(projection));
+        //     }
+        //     return (types, values);
+        // }
     }
     protected InMemoryEnumeratorAdapter<TResult, TEntity> CreateEnumeratorAdapter<TResult, TEntity>(QueryCommand<TResult> queryCommand, IAsyncEnumerator<TEntity> enumerator)
     {
