@@ -10,7 +10,7 @@ namespace nextorm.core.benchmark;
 public class SqliteBenchmarkIteration
 {
     private readonly TestDataContext _ctx;
-    private readonly QueryCommand<SimpleEntity> _cmd;
+    private readonly QueryCommand<Tuple<int>> _cmd;
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
 
@@ -20,8 +20,8 @@ public class SqliteBenchmarkIteration
         builder.UseSqlite(@$"{Directory.GetCurrentDirectory()}\data\test.db");
         _ctx = new TestDataContext(builder);
 
-        _cmd = _ctx.SimpleEntity.Select(entity => new SimpleEntity { Id = entity.Id });
-        (_ctx.DataProvider as SqlDataProvider).Compile(_cmd);
+        _cmd = _ctx.SimpleEntity.Select(entity => new Tuple<int>(entity.Id));
+        (_ctx.DataProvider as SqlDataProvider)!.Compile(_cmd);
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(@$"Filename={Directory.GetCurrentDirectory()}\data\test.db");
@@ -30,7 +30,7 @@ public class SqliteBenchmarkIteration
 
         _conn = new SqliteConnection(((SqliteDataProvider)_ctx.DataProvider).ConnectionString);
         _conn.Open();
-    }    
+    }
     [Benchmark(Baseline = true)]
     public async Task NextormCached()
     {
@@ -38,27 +38,27 @@ public class SqliteBenchmarkIteration
         {
         }
     }
-    // [Benchmark()]
-    // public async Task NextormToListCached()
-    // {
-    //     foreach (var row in await _cmd.ToListAsync())
-    //     {
-    //     }
-    // }
     [Benchmark()]
-    public async Task Nextorm()
+    public async Task NextormToListCached()
     {
-        await foreach (var row in _ctx.SimpleEntity.Select(entity => new { Id = entity.Id }))
+        foreach (var row in await _cmd.ToListAsync())
         {
         }
     }
-    // [Benchmark()]
-    // public async Task NextormToList()
-    // {
-    //     foreach (var row in await _ctx.SimpleEntity.Select(entity => new { entity.Id }).ToListAsync())
-    //     {
-    //     }
-    // }
+    [Benchmark()]
+    public async Task Nextorm()
+    {
+        await foreach (var row in _ctx.SimpleEntity.Select(entity => new { entity.Id }))
+        {
+        }
+    }
+    [Benchmark()]
+    public async Task NextormToList()
+    {
+        foreach (var row in await _ctx.SimpleEntity.Select(entity => new { entity.Id }).ToListAsync())
+        {
+        }
+    }
     [Benchmark]
     public async Task EFCore()
     {

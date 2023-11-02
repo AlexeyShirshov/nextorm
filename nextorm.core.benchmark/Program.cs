@@ -2,8 +2,8 @@
 using BenchmarkDotNet.Running;
 using nextorm.core.benchmark;
 
-BenchmarkRunner.Run<InMemoryBenchmarkIteration>();
-//BenchmarkRunner.Run<SqliteBenchmarkIteration>();
+//BenchmarkRunner.Run<InMemoryBenchmarkIteration>();
+BenchmarkRunner.Run<SqliteBenchmarkIteration>();
 //BenchmarkRunner.Run<SqliteBenchmarkLargeIteration>();
 
 // var runner = new InMemoryBenchmarkIteration();
