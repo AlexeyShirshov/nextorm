@@ -12,7 +12,7 @@ namespace nextorm.core;
 
 public class SqlDataProvider : IDataProvider
 {
-    private IDictionary<QueryCommand, object> _cmdIdx = new Dictionary<QueryCommand, object>();
+    private IDictionary<QueryCommand, CacheEntry> _cmdIdx = new Dictionary<QueryCommand, CacheEntry>();
     private DbConnection? _conn;
     private bool _clearCache;
     private bool disposedValue;
@@ -68,15 +68,15 @@ public class SqlDataProvider : IDataProvider
         if (compiled is not null)
             return compiled;
 
-        if (!cmd.Cache || !_cmdIdx.TryGetValue(cmd, out var query))
+        if (!cmd.Cache || !_cmdIdx.TryGetValue(cmd, out var cacheEntry))
         {
-            query = CreateCompiledQuery(cmd);
+            cacheEntry = new CacheEntry(CreateCompiledQuery(cmd));
 
             if (cmd.Cache)
-                _cmdIdx[cmd] = query;
+                _cmdIdx[cmd] = cacheEntry;
         }
 
-        return (DatabaseCompiledQuery<TResult>)query;
+        return (DatabaseCompiledQuery<TResult>)cacheEntry.CompiledQuery;
     }
     public virtual DbParameter CreateParam(string name, object? value)
     {
@@ -371,12 +371,12 @@ public class SqlDataProvider : IDataProvider
     {
         return v ? "1" : "0";
     }
-    public void Compile<TResult>(QueryCommand<TResult> cmd)
+    public void Compile<TResult>(QueryCommand<TResult> cmd, CancellationToken cancellationToken)
     {
         if (!cmd.IsPrepared)
-            cmd.PrepareCommand(CancellationToken.None);
+            cmd.PrepareCommand(cancellationToken);
 
-        cmd.Compiled = CreateCompiledQuery(cmd);
+        cmd.CacheEntry = new CacheEntry(CreateCompiledQuery(cmd));
     }
     protected virtual void Dispose(bool disposing)
     {

@@ -75,13 +75,13 @@ public class QueryCommand : IPayloadManager, ISourceProvider
 
         FromExpression? from = _from ?? _dataProvider.GetFrom(srcType, this);
 
-        var joinHash=7;
+        var joinHash = 7;
         foreach (var join in Joins)
         {
             if (!(join.Query?.IsPrepared ?? true))
                 join.Query!.PrepareCommand(cancellationToken);
 
-            joinHash=joinHash*13+join.GetHashCode();
+            joinHash = joinHash * 13 + join.GetHashCode();
         }
 
         var selectList = _selectList;
@@ -116,14 +116,14 @@ public class QueryCommand : IPayloadManager, ISourceProvider
                     // }
                     // else
                     // {
-                        var ctorParam = ctor.Constructor!.GetParameters()[idx];
+                    var ctorParam = ctor.Constructor!.GetParameters()[idx];
 
-                        selExp = new SelectExpression(ctorParam.ParameterType)
-                        {
-                            Index = idx,
-                            PropertyName = ctorParam.Name!,
-                            Expression = arg
-                        };
+                    selExp = new SelectExpression(ctorParam.ParameterType)
+                    {
+                        Index = idx,
+                        PropertyName = ctorParam.Name!,
+                        Expression = arg
+                    };
                     //}
                     selectList.Add(selExp);
 
@@ -208,7 +208,7 @@ public class QueryCommand : IPayloadManager, ISourceProvider
         _columnsHash = columnsHash;
         _srcType = srcType;
         _from = from;
-        _joinHash=joinHash;
+        _joinHash = joinHash;
 
         //_payloadMgr = new FastPayloadManager(cache ? new Dictionary<Type, object?>() : null);
 
@@ -323,9 +323,9 @@ public class QueryCommand : IPayloadManager, ISourceProvider
     {
         if (string.IsNullOrEmpty(aliasRaw))
             return _from!.Table.AsT1;
-        
+
         var idx = int.Parse(aliasRaw[1..]);
-        return Joins[idx-2].Query;
+        return Joins[idx - 2].Query;
     }
 }
 
@@ -336,8 +336,8 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
     {
     }
 
-    internal CompiledQuery<TResult> Compiled { get; set; }
-
+    internal CompiledQuery<TResult>? Compiled => CacheEntry?.CompiledQuery as CompiledQuery<TResult>;
+    internal CacheEntry CacheEntry { get; set; }
     public IAsyncEnumerator<TResult> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
         if (!IsPrepared)

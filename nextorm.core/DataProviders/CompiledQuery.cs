@@ -1,40 +1,38 @@
 using System.Data.Common;
+using System.Linq.Expressions;
+using System.Runtime.CompilerServices;
 
 namespace nextorm.core;
 public class CompiledQuery<TResult>
 {
-    private Func<object, TResult>? _mapCache;
-    private readonly Func<Func<object, TResult>> _getMap;
+    public readonly Func<object, TResult> MapDelegate;
+    //private readonly Func<Func<object, TResult>> _getMap;
     public CompiledQuery(Func<Func<object, TResult>> getMap)
     {
-        _getMap=getMap;
+        MapDelegate = getMap();
     }
-    public TResult Map(object dataRecord)
+    // [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    // public TResult Map(object dataRecord)
+    // {
+    //     return MapDelegate(dataRecord);
+    // }
+}
+public class InMemoryCompiledQuery<TResult, TEntity> : CompiledQuery<TResult>
+{
+    public readonly Func<TEntity, bool>? Condition;
+    public InMemoryCompiledQuery(Func<Func<object, TResult>> func, Expression<Func<TEntity, bool>>? condition)
+        : base(func)
     {
-        var resultType = typeof(TResult);
-
-        var recordType = dataRecord.GetType();
-
-        if (resultType == recordType)
-            return (TResult)dataRecord;
-
-        if (_mapCache is null)
-        {
-            //_mapCache = (object _) => Activator.CreateInstance<TResult>();
-            _mapCache=_getMap();
-        }
-
-        return _mapCache(dataRecord);
-
+        Condition = condition?.Compile();
     }
 }
 public class DatabaseCompiledQuery<TResult> : CompiledQuery<TResult>
 {
-    public DbCommand dbCommand;
+    public readonly DbCommand DbCommand;
 
-    public DatabaseCompiledQuery(DbCommand dbCommand, Func<Func<object, TResult>> getMap) 
+    public DatabaseCompiledQuery(DbCommand dbCommand, Func<Func<object, TResult>> getMap)
         : base(getMap)
     {
-        this.dbCommand = dbCommand;
-    }   
+        DbCommand = dbCommand;
+    }
 }

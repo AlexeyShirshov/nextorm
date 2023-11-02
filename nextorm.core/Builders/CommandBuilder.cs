@@ -5,22 +5,13 @@ using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
 
-public class CommandBuilder<TEntity> : IAsyncEnumerable<TEntity>
+public class CommandBuilder<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
 {
     #region Fields
     private ArrayList _payload = new();
     private readonly IDataProvider _dataProvider;
     private QueryCommand? _query;
     private Expression? _condition;
-    #endregion
-    #region Properties
-    internal ILogger? Logger { get; set; }
-    internal QueryCommand? Query { get => _query; set => _query = value; }
-    internal IDataProvider DataProvider => _dataProvider;
-    internal Expression? Condition { get => _condition; set => _condition = value; }
-    internal ArrayList Payload { get => _payload; init => _payload = value; }
-    public delegate void CommandCreatedHandler<T>(CommandBuilder<T> sender, QueryCommand queryCommand);
-    public event CommandCreatedHandler<TEntity>? CommandCreatedEvent;
     #endregion
     public CommandBuilder(IDataProvider dataProvider)
     {
@@ -31,6 +22,15 @@ public class CommandBuilder<TEntity> : IAsyncEnumerable<TEntity>
         _dataProvider = dataProvider;
         _query = query;
     }
+    #region Properties
+    internal ILogger? Logger { get; set; }
+    internal QueryCommand? Query { get => _query; set => _query = value; }
+    internal IDataProvider DataProvider => _dataProvider;
+    internal Expression? Condition { get => _condition; set => _condition = value; }
+    internal ArrayList Payload { get => _payload; init => _payload = value; }
+    public delegate void CommandCreatedHandler<T>(CommandBuilder<T> sender, QueryCommand queryCommand);
+    public event CommandCreatedHandler<TEntity>? CommandCreatedEvent;
+    #endregion
     #region Payload
     public bool RemovePayload<T>()
         where T : class, IPayload
@@ -147,12 +147,30 @@ public class CommandBuilder<TEntity> : IAsyncEnumerable<TEntity>
 
     public CommandBuilder<TEntity> Where(Expression<Func<TEntity, bool>> condition)
     {
-        if (_condition is not null)
-            _condition = Expression.AndAlso(_condition, condition);
-        else
-            _condition = condition;
+        // if (_condition is not null)
+        //     _condition = Expression.AndAlso(_condition, condition);
+        // else
+        //     _condition = condition;
 
-        return this;
+        var b = Clone();
+        b._condition = condition;
+        return b;
+    }
+    object ICloneable.Clone()
+    {
+        return CloneImp();
+    }
+    public CommandBuilder<TEntity> Clone()
+    {
+        return (CommandBuilder<TEntity>)CloneImp();
+    }
+    protected virtual object CloneImp()
+    {
+        var r = new CommandBuilder<TEntity>(_dataProvider) { Logger = Logger, _query = _query, _payload = _payload };
+
+        r.CommandCreatedEvent += CommandCreatedEvent;
+
+        return r;
     }
     public static implicit operator QueryCommand<TEntity>(CommandBuilder<TEntity> builder) => builder.ToCommand();
     public QueryCommand<TEntity> ToCommand() => Select(it => it);
@@ -164,7 +182,7 @@ public class CommandBuilder<TEntity> : IAsyncEnumerable<TEntity>
     }
     public CommandBuilderP2<TEntity, TJoinEntity> Join<TJoinEntity>(QueryCommand<TJoinEntity> query, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
     {
-        var cb = new CommandBuilderP2<TEntity, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition) {Query = query}) { Logger = Logger, _condition = _condition, _query = _query, Payload = Payload, BaseBuilder = this };
+        var cb = new CommandBuilderP2<TEntity, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition) { Query = query }) { Logger = Logger, _condition = _condition, _query = _query, Payload = Payload, BaseBuilder = this };
         return cb;
     }
 }

@@ -21,7 +21,7 @@ public class SqliteBenchmarkIteration
         _ctx = new TestDataContext(builder);
 
         _cmd = _ctx.SimpleEntity.Select(entity => new SimpleEntity { Id = entity.Id });
-        (_ctx.DataProvider as SqlDataProvider).Compile(_cmd);
+        (_ctx.DataProvider as SqlDataProvider).Compile(_cmd, CancellationToken.None);
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(@$"Filename={Directory.GetCurrentDirectory()}\data\test.db");
@@ -30,7 +30,7 @@ public class SqliteBenchmarkIteration
 
         _conn = new SqliteConnection(((SqliteDataProvider)_ctx.DataProvider).ConnectionString);
         _conn.Open();
-    }    
+    }
     [Benchmark(Baseline = true)]
     public async Task NextormCached()
     {

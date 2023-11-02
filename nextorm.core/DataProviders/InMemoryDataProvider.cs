@@ -8,23 +8,38 @@ using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
 
-public class InMemoryDataProvider : IDataProvider
+public partial class InMemoryDataProvider : IDataProvider
 {
     private bool disposedValue;
-    private IDictionary<QueryCommand, object> _cmdIdx = new Dictionary<QueryCommand, object>();
-    public ILogger? Logger { get; set; }
-
-    public bool NeedMapping => false;
+    private readonly IDictionary<QueryCommand, InMemoryCacheEntry> _cmdIdx = new Dictionary<QueryCommand, InMemoryCacheEntry>();
 
     public QueryCommand<TResult> CreateCommand<TResult>(LambdaExpression exp, Expression? condition)
     {
         return new QueryCommand<TResult>(this, exp, condition);
     }
+    public ILogger? Logger { get; set; }
+
+    public bool NeedMapping => false;
 
     public IAsyncEnumerator<TResult> CreateEnumerator<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
 
+        var ce = queryCommand.CacheEntry;
+        if (ce is InMemoryCacheEntry cache || _cmdIdx.TryGetValue(queryCommand, out cache!) && cache is not null)
+        {
+            return (IAsyncEnumerator<TResult>)cache.CreateEnumerator.DynamicInvoke(this, queryCommand, cache, cancellationToken)!;
+        }
+
+        var del = CreateEnumeratorDelegate(queryCommand, cancellationToken);
+
+        cache = new InMemoryCacheEntry(null, del);
+        _cmdIdx[queryCommand] = cache;
+
+        return (IAsyncEnumerator<TResult>)del!.DynamicInvoke(this, queryCommand, cache, cancellationToken)!;
+    }
+    protected Delegate CreateEnumeratorDelegate<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
+    {
         if (queryCommand.From is not null)
         {
             if (queryCommand.From.Table.IsT0)
@@ -37,44 +52,59 @@ public class InMemoryDataProvider : IDataProvider
 
             var resultType = subQueryType.GenericTypeArguments[0];
 
-            var delPayload = subQuery.GetOrAddPayload(() =>
-            {
-                var miCreateEnumerator = typeof(InMemoryDataProvider).GetMethod(nameof(CreateEnumerator), BindingFlags.Public | BindingFlags.Instance)!;
-                var param = Expression.Parameter(typeof(InMemoryDataProvider));
-                var callCreateEnumerator = Expression.Call(param, miCreateEnumerator.MakeGenericMethod(resultType), Expression.Constant(subQuery), Expression.Constant(cancellationToken));
+            //var delPayload = subQuery.GetOrAddPayload(() =>
+            //{
+            var miCreateEnumerator = typeof(InMemoryDataProvider).GetMethod(nameof(CreateEnumerator), BindingFlags.Public | BindingFlags.Instance)!;
+            var param = Expression.Parameter(typeof(InMemoryDataProvider));
+            var callCreateEnumerator = Expression.Call(param, miCreateEnumerator.MakeGenericMethod(resultType), Expression.Constant(subQuery), Expression.Constant(cancellationToken));
 
-                var miCreateEnumeratorAdapter = typeof(InMemoryDataProvider).GetMethod(nameof(CreateEnumeratorAdapter), BindingFlags.NonPublic | BindingFlags.Instance)!;
-                var callCreateEnumeratorAdapter = Expression.Call(
-                    param, miCreateEnumeratorAdapter.MakeGenericMethod(typeof(TResult), resultType), Expression.Constant(queryCommand), callCreateEnumerator);
+            var miCreateEnumeratorAdapter = typeof(InMemoryDataProvider).GetMethod(nameof(CreateEnumeratorAdapter), BindingFlags.NonPublic | BindingFlags.Instance)!;
+            var callCreateEnumeratorAdapter = Expression.Call(
+                param, miCreateEnumeratorAdapter.MakeGenericMethod(typeof(TResult), resultType), Expression.Constant(queryCommand), callCreateEnumerator);
 
-                return new CreateMainEnumeratorPayload(Expression.Lambda(callCreateEnumeratorAdapter, param).Compile());
-            });
+            var delPayload = new CreateMainEnumeratorPayload(Expression.Lambda(callCreateEnumeratorAdapter, param).Compile());
+            // });
 
-            return (IAsyncEnumerator<TResult>)delPayload!.Delegate.DynamicInvoke(this)!;
+            return delPayload!.Delegate;
         }
         else
         {
-            var delPayload = queryCommand.GetOrAddPayload(() =>
-            {
-                var miCreateEnumerator = typeof(InMemoryDataProvider).GetMethod(nameof(CreateEnumerator), BindingFlags.NonPublic | BindingFlags.Instance)!;
-                var param = Expression.Parameter(typeof(InMemoryDataProvider));
-                var callExp = Expression.Call(param, miCreateEnumerator.MakeGenericMethod(typeof(TResult), queryCommand.EntityType!), Expression.Constant(queryCommand), Expression.Constant(cancellationToken));
-                return new CreateEnumeratorPayload(Expression.Lambda(callExp, param).Compile());
-            });
+            // var delPayload = queryCommand.GetOrAddPayload(() =>
+            // {
+            var miCreateEnumerator = typeof(InMemoryDataProvider).GetMethod(nameof(CreateEnumerator), BindingFlags.NonPublic | BindingFlags.Instance)!;
+            var param = Expression.Parameter(typeof(InMemoryDataProvider));
+            var p1 = Expression.Parameter(typeof(QueryCommand<TResult>));
+            var p2 = Expression.Parameter(typeof(InMemoryCacheEntry));
+            var p3 = Expression.Parameter(typeof(CancellationToken));
+            var callExp = Expression.Call(param, miCreateEnumerator.MakeGenericMethod(typeof(TResult), queryCommand.EntityType!),
+                p1, p2, p3
+            );
+            var delPayload = new CreateEnumeratorPayload(Expression.Lambda(callExp, param, p1, p2, p3).Compile());
+            //});
 
-            return (IAsyncEnumerator<TResult>)delPayload!.Delegate.DynamicInvoke(this)!;
+            return delPayload!.Delegate;
         }
     }
-    protected IAsyncEnumerator<TResult> CreateEnumerator<TResult, TEntity>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
+    private IAsyncEnumerator<TResult> CreateEnumerator<TResult, TEntity>(QueryCommand<TResult> queryCommand, InMemoryCacheEntry cacheEntry, CancellationToken cancellationToken)
     {
-        if (queryCommand.TryGetPayload<InMemoryAsyncDataPayload<TEntity>>(out var asyncDataPayload) && asyncDataPayload!.Data is not null)
+        if (cacheEntry.Data is not IAsyncEnumerable<TEntity> asyncData)
         {
-            return CreateEnumeratorAdapter(queryCommand, asyncDataPayload.Data.GetAsyncEnumerator(cancellationToken));
+            if (queryCommand.TryGetPayload<InMemoryAsyncDataPayload<TEntity>>(out var asyncDataPayload) && asyncDataPayload!.Data is not null)
+                asyncData = asyncDataPayload.Data;
+            else
+                asyncData = null;
+        }
+
+        if (asyncData is not null)
+        {
+            cacheEntry.Data = asyncData;
+            return CreateEnumeratorAdapter(queryCommand, cacheEntry, asyncData.GetAsyncEnumerator(cancellationToken));
         }
         else
         {
-            IEnumerable<TEntity> data;
-            if (queryCommand.Joins.Any() && typeof(TEntity).FullName!.StartsWith("nextorm.core.Projection"))
+            IEnumerable<TEntity>? data = cacheEntry.Data as IEnumerable<TEntity>;
+
+            if (queryCommand.Joins.Any() && typeof(TEntity).IsAssignableFrom(typeof(IProjection)))
             {
                 var dim = 2;
                 object? joinResult = null;
@@ -122,36 +152,24 @@ public class InMemoryDataProvider : IDataProvider
 
                 data = (IEnumerable<TEntity>)joinResult!;
             }
-            else
+            else if (data is null)
             {
                 var dataPayload = queryCommand.GetNotNullOrAddPayload(() => new InMemoryDataPayload<TEntity>(Array.Empty<TEntity>().AsEnumerable()));
 
                 data = dataPayload.Data!;
-            }
-            // if (queryCommand.Condition is not null)
-            // {
-            //     var predicate = (queryCommand.Condition as Expression<Func<TEntity, bool>>)!.Compile();
-            //     data = data.Where(predicate);
-            // }
 
-            var compiledQuery = queryCommand.Compiled;
-            if (compiledQuery is null)
+                cacheEntry.Data = data;
+            }
+
+            if (cacheEntry.CompiledQuery is not InMemoryCompiledQuery<TResult, TEntity> compiledQuery)
             {
-                if (!queryCommand.Cache || !_cmdIdx.TryGetValue(queryCommand, out var query))
-                {
-                    query = CreateCompiledQuery(queryCommand);
-
-                    if (queryCommand.Cache)
-                        _cmdIdx[queryCommand] = query;
-                }
-
-                compiledQuery = (CompiledQuery<TResult>)query;
+                compiledQuery = (InMemoryCompiledQuery<TResult, TEntity>)CreateCompiledQuery<TResult, TEntity>(queryCommand);
+                cacheEntry.CompiledQuery = compiledQuery;
             }
 
-            return new InMemoryEnumerator<TResult, TEntity>(compiledQuery, data.GetEnumerator(), queryCommand.Condition as Expression<Func<TEntity, bool>>);
+            return new InMemoryEnumerator<TResult, TEntity>(compiledQuery, data.GetEnumerator());
         }
     }
-
     static IEnumerable<TResult> LoopJoin<TLeft, TRight, TResult>(QueryCommand queryCommand, IEnumerable<TLeft> leftData, JoinExpression join, int dim)
     {
         if (leftData is null)
@@ -238,29 +256,20 @@ public class InMemoryDataProvider : IDataProvider
         //     return (types, values);
         // }
     }
-    protected InMemoryEnumeratorAdapter<TResult, TEntity> CreateEnumeratorAdapter<TResult, TEntity>(QueryCommand<TResult> queryCommand, IAsyncEnumerator<TEntity> enumerator)
+    private InMemoryEnumeratorAdapter<TResult, TEntity> CreateEnumeratorAdapter<TResult, TEntity>(QueryCommand<TResult> queryCommand, InMemoryCacheEntry cacheEntry, IAsyncEnumerator<TEntity> enumerator)
     {
-        if (queryCommand.Joins.Any() && typeof(TEntity).FullName!.StartsWith("nextorm.core.Projection"))
+        if (queryCommand.Joins.Any() && typeof(TEntity).IsAssignableFrom(typeof(IProjection)))
         {
             throw new NotImplementedException("joins");
         }
 
-        var compiledQuery = queryCommand.Compiled;
-        if (compiledQuery is null)
+        if (cacheEntry.CompiledQuery is not InMemoryCompiledQuery<TResult, TEntity> compiledQuery)
         {
-            if (!queryCommand.Cache || !_cmdIdx.TryGetValue(queryCommand, out var query))
-            {
-                query = CreateCompiledQuery(queryCommand);
-
-                if (queryCommand.Cache)
-                    _cmdIdx[queryCommand] = query;
-
-            }
-
-            compiledQuery = (CompiledQuery<TResult>)query;
+            compiledQuery = (InMemoryCompiledQuery<TResult, TEntity>)CreateCompiledQuery<TResult, TEntity>(queryCommand);
+            cacheEntry.CompiledQuery = compiledQuery;
         }
 
-        return new InMemoryEnumeratorAdapter<TResult, TEntity>(compiledQuery, enumerator, queryCommand.Condition as Expression<Func<TEntity, bool>>);
+        return new InMemoryEnumeratorAdapter<TResult, TEntity>(compiledQuery, enumerator);
     }
     public FromExpression? GetFrom(Type srcType, QueryCommand queryCommand)
     {
@@ -318,16 +327,36 @@ public class InMemoryDataProvider : IDataProvider
         Dispose(disposing: true);
         GC.SuppressFinalize(this);
     }
-    public void Compile<TResult>(QueryCommand<TResult> query)
+    public void Compile<TResult>(QueryCommand<TResult> query, CancellationToken cancellationToken)
     {
         if (!query.IsPrepared)
-            query.PrepareCommand(CancellationToken.None);
+            query.PrepareCommand(cancellationToken);
 
-        query.Compiled = CreateCompiledQuery(query);
+        //query.Compiled = CreateCompiledQuery(query);
+        var miCreateCompiledQuery = typeof(InMemoryDataProvider).GetMethod(nameof(CreateCompiledQuery), BindingFlags.NonPublic | BindingFlags.Static)!;
+        var param = Expression.Parameter(typeof(QueryCommand<TResult>));
+        var callExp = Expression.Call(null, miCreateCompiledQuery.MakeGenericMethod(typeof(TResult), query.EntityType),
+            param
+        );
+
+        var lambda = Expression.Lambda<Func<QueryCommand<TResult>, CompiledQuery<TResult>>>(callExp, param).Compile();
+
+        query.CacheEntry = new InMemoryCacheEntry(lambda(query), CreateEnumeratorDelegate(query, cancellationToken));
     }
 
-    private static CompiledQuery<TResult> CreateCompiledQuery<TResult>(QueryCommand<TResult> query)
+    private static CompiledQuery<TResult> CreateCompiledQuery<TResult, TEntity>(QueryCommand<TResult> query)
     {
-        return new CompiledQuery<TResult>(query.GetMap(typeof(TResult), query.EntityType));
+        return new InMemoryCompiledQuery<TResult, TEntity>(query.GetMap(typeof(TResult), query.EntityType), query.Condition as Expression<Func<TEntity, bool>>);
+    }
+    class InMemoryCacheEntry : CacheEntry
+    {
+        public InMemoryCacheEntry(object? compiledQuery, Delegate createEnumerator)
+            : base(compiledQuery!)
+        {
+            CreateEnumerator = createEnumerator;
+        }
+
+        public Delegate CreateEnumerator { get; }
+        public object? Data { get; set; }
     }
 }

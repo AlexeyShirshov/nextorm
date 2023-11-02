@@ -7,20 +7,20 @@ using Dapper;
 namespace nextorm.core.benchmark;
 
 [MemoryDiagnoser]
-public class SqlBenchmarkLargeIteration
+public class SqliteBenchmarkWhere
 {
     private readonly TestDataContext _ctx;
-    private readonly QueryCommand<LargeEntity> _cmd;
+    private readonly QueryCommand<SimpleEntity> _cmd;
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
 
-    public SqlBenchmarkLargeIteration()
+    public SqliteBenchmarkWhere()
     {
         var builder = new DataContextOptionsBuilder();
         builder.UseSqlite(@$"{Directory.GetCurrentDirectory()}\data\test.db");
         _ctx = new TestDataContext(builder);
 
-        _cmd = _ctx.LargeEntity.Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt });
+        _cmd = _ctx.SimpleEntity.Where(it => it.Id == 5693).Select(entity => new SimpleEntity { Id = entity.Id });
         (_ctx.DataProvider as SqlDataProvider).Compile(_cmd, CancellationToken.None);
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
@@ -31,13 +31,6 @@ public class SqlBenchmarkLargeIteration
         _conn = new SqliteConnection(((SqliteDataProvider)_ctx.DataProvider).ConnectionString);
         _conn.Open();
     }
-    // public async Task FillLargeTable()
-    // {
-    //     var r = new Random(Environment.TickCount);
-
-    //     for(var i=0;i<10_000;i++)
-    //         await _conn.ExecuteAsync("insert into large_table(someString,dt) values(@str,@dt)", new {str=Guid.NewGuid().ToString(),dt=DateTime.Now.AddDays(r.Next(-10,10))});
-    // }
     [Benchmark(Baseline = true)]
     public async Task NextormCached()
     {
@@ -55,7 +48,7 @@ public class SqlBenchmarkLargeIteration
     [Benchmark()]
     public async Task Nextorm()
     {
-        await foreach (var row in _ctx.LargeEntity.Select(entity => new { entity.Id, entity.Str, entity.Dt }))
+        await foreach (var row in _ctx.SimpleEntity.Where(it => it.Id == 5693).Select(entity => new { Id = entity.Id }))
         {
         }
     }
@@ -69,14 +62,14 @@ public class SqlBenchmarkLargeIteration
     [Benchmark]
     public async Task EFCore()
     {
-        foreach (var row in await _efCtx.LargeEntities.Select(entity => new { entity.Id, entity.Str, entity.Dt }).ToListAsync())
+        foreach (var row in await _efCtx.SimpleEntities.Where(it => it.Id == 5693).Select(entity => new { entity.Id }).ToListAsync())
         {
         }
     }
     [Benchmark]
     public async Task Dapper()
     {
-        foreach (var row in await _conn.QueryAsync<LargeEntity>("select * from large_table"))
+        foreach (var row in await _conn.QueryAsync<SimpleEntity>("select * from simple_entity where id=@id", new { id = 5693 }))
         {
         }
     }
