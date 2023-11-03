@@ -12,13 +12,12 @@ namespace nextorm.core;
 
 public class SqlDataProvider : IDataProvider
 {
-    private IDictionary<QueryCommand, CacheEntry> _cmdIdx = new Dictionary<QueryCommand, CacheEntry>();
+    private readonly IDictionary<QueryCommand, SqlCacheEntry> _cmdIdx = new Dictionary<QueryCommand, SqlCacheEntry>();
     private DbConnection? _conn;
     private bool _clearCache;
     private bool disposedValue;
     internal readonly ObjectPool<StringBuilder> _sbPool = new DefaultObjectPoolProvider().Create(new StringBuilderPooledObjectPolicy());
     //private DbCommand? _cmd;
-    internal bool LogSensetiveData { get; set; }
     public DbConnection GetConnection()
     {
         if (_conn is null)
@@ -28,6 +27,10 @@ public class SqlDataProvider : IDataProvider
         }
         return _conn;
     }
+    internal bool LogSensetiveData { get; set; }
+    public virtual string ConcatStringOperator => "+";
+    public ILogger? Logger { get; set; }
+    public bool NeedMapping => true;
     public virtual DbConnection CreateConnection()
     {
         throw new NotImplementedException();
@@ -62,22 +65,22 @@ public class SqlDataProvider : IDataProvider
 
         return new DatabaseCompiledQuery<TResult>(dbCommand, cmd.GetMap(typeof(TResult), typeof(DbDataReader)));
     }
-    public DatabaseCompiledQuery<TResult> GetCompiledQuery<TResult>(QueryCommand<TResult> cmd)
-    {
-        var compiled = cmd.Compiled as DatabaseCompiledQuery<TResult>;
-        if (compiled is not null)
-            return compiled;
+    // public DatabaseCompiledQuery<TResult> GetCompiledQuery<TResult>(QueryCommand<TResult> cmd)
+    // {
+    //     var compiled = cmd.Compiled as DatabaseCompiledQuery<TResult>;
+    //     if (compiled is not null)
+    //         return compiled;
 
-        if (!cmd.Cache || !_cmdIdx.TryGetValue(cmd, out var cacheEntry))
-        {
-            cacheEntry = new CacheEntry(CreateCompiledQuery(cmd));
+    //     if (!cmd.Cache || !_cmdIdx.TryGetValue(cmd, out var cacheEntry))
+    //     {
+    //         cacheEntry = new SqlCacheEntry(CreateCompiledQuery(cmd));
 
-            if (cmd.Cache)
-                _cmdIdx[cmd] = cacheEntry;
-        }
+    //         if (cmd.Cache)
+    //             _cmdIdx[cmd] = cacheEntry;
+    //     }
 
-        return (DatabaseCompiledQuery<TResult>)cacheEntry.CompiledQuery;
-    }
+    //     return (DatabaseCompiledQuery<TResult>)cacheEntry.CompiledQuery;
+    // }
     public virtual DbParameter CreateParam(string name, object? value)
     {
         throw new NotImplementedException();
@@ -261,34 +264,29 @@ public class SqlDataProvider : IDataProvider
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
 
-        DatabaseCompiledQuery<TResult> compiledQuery;
-        if (queryCommand.Cache)
-            compiledQuery = GetCompiledQuery(queryCommand);
+        var ce = queryCommand.CacheEntry;
+        if (ce is SqlCacheEntry cacheEntry || _cmdIdx.TryGetValue(queryCommand, out cacheEntry!) && cacheEntry is not null)
+        {
+            if (cacheEntry.Enumerator is not ResultSetEnumerator<TResult> enumerator)
+            {
+                enumerator = new ResultSetEnumerator<TResult>(this, (DatabaseCompiledQuery<TResult>)cacheEntry.CompiledQuery, cancellationToken);
+                cacheEntry.Enumerator = enumerator;
+            }
+
+            return enumerator;
+        }
         else
         {
-            var factory = () => new CompiledQueryPayload<TResult>(GetCompiledQuery(queryCommand));
-            CompiledQueryPayload<TResult>? compiledQueryPayload;
-            if (_clearCache)
-            {
-                compiledQueryPayload = queryCommand.AddOrUpdatePayload(factory);
-                _clearCache = false;
-            }
-            else
-                compiledQueryPayload = queryCommand.GetOrAddPayload(factory);
+            var compiledQuery = CreateCompiledQuery(queryCommand);
+            var enumerator = new ResultSetEnumerator<TResult>(this, compiledQuery, cancellationToken);
+            cacheEntry = new SqlCacheEntry(compiledQuery) { Enumerator = enumerator };
 
-            compiledQuery = compiledQueryPayload!.CompiledQuery;
+            if (queryCommand.Cache)
+                _cmdIdx[queryCommand] = cacheEntry;
+
+            return enumerator;
         }
-        // var cmd = CreateCommand(queryCommand);
-
-        //return new EmptyEnumerator<TResult>(queryCommand, this, cmd, cancellationToken);
-        return new ResultSetEnumerator<TResult>(this, compiledQuery, cancellationToken);
     }
-    public virtual string ConcatStringOperator => "+";
-
-    public ILogger? Logger { get; set; }
-
-    public bool NeedMapping => true;
-
     public QueryCommand<T> CreateCommand<T>(LambdaExpression exp, Expression? condition)
     {
         return new QueryCommand<T>(this, exp, condition);
@@ -414,5 +412,14 @@ public class SqlDataProvider : IDataProvider
 
         return ValueTask.CompletedTask;
     }
-    record CompiledQueryPayload<TResult>(DatabaseCompiledQuery<TResult> CompiledQuery) : IPayload;
+    //record CompiledQueryPayload<TResult>(DatabaseCompiledQuery<TResult> CompiledQuery) : IPayload;
+    class SqlCacheEntry : CacheEntry
+    {
+
+        public SqlCacheEntry(object? compiledQuery)
+            : base(compiledQuery!)
+        {
+        }
+        public object? Enumerator { get; set; }
+    }
 }

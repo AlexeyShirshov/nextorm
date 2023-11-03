@@ -31,6 +31,8 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>
         {
             if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Disposing data reader");
             await _reader.DisposeAsync();
+
+            _reader = null;
         }
 
         _compiledQuery.DbCommand.Connection = null;
@@ -47,7 +49,19 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>
             if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Creating connection");
 
             _conn = _dataProvider.GetConnection();
+            await InitReader();
+        }
+        else if (_reader is null)
+        {
+            await InitReader();
+        }
 
+        if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false) _dataProvider.Logger.LogTrace("Move next");
+
+        return await _reader!.ReadAsync(_cancellationToken);
+
+        async Task InitReader()
+        {
             var sqlCommand = _compiledQuery.DbCommand;
             sqlCommand.Connection = _conn;
 
@@ -77,9 +91,5 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>
 
             _reader = await sqlCommand.ExecuteReaderAsync(_cancellationToken);
         }
-
-        if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false) _dataProvider.Logger.LogTrace("Move next");
-
-        return await _reader!.ReadAsync(_cancellationToken);
     }
 }
