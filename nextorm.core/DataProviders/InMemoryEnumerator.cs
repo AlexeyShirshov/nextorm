@@ -1,18 +1,44 @@
+using System.Linq.Expressions;
+using System.Runtime.CompilerServices;
+
 namespace nextorm.core;
 
-public class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TResult>
+public class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TResult>, IEnumeratorInit
 {
-    private readonly CompiledQuery<TResult> _cmd;
-    private readonly IEnumerator<TEntity> _data;
-    public InMemoryEnumerator(CompiledQuery<TResult> cmd, IEnumerator<TEntity> data)
+    //private readonly CompiledQuery<TResult> _cmd;
+    private readonly Func<object, TResult>? _map;
+    private IEnumerator<TEntity>? _data;
+    private readonly Func<TEntity, bool>? _condition;
+    //private readonly bool _noMap;
+
+    public InMemoryEnumerator(InMemoryCompiledQuery<TResult, TEntity> cmd)
     {
         ArgumentNullException.ThrowIfNull(cmd);
-        
-        _cmd = cmd;
-        _data = data;
-    }
 
-    public TResult Current => _cmd.Map(_data.Current!);
+        _map = typeof(TResult) == typeof(TEntity)
+            ? null
+            : cmd.MapDelegate;
+
+        //if (cmd is InMemoryCompiledQuery<TResult, TEntity> cq)
+        _condition = cmd.Condition;
+
+        //_noMap = ;
+    }
+    public void Init(object data)
+    {
+        _data = ((IEnumerable<TEntity>)data).GetEnumerator();
+    }
+    public TResult Current
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get
+        {
+            if (_map is null) return (TResult)(object)_data!.Current!;
+
+            return _map(_data!.Current!);
+            // return default;
+        }
+    }
 
     public ValueTask DisposeAsync()
     {
@@ -22,6 +48,19 @@ public class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TResult>
 
     public ValueTask<bool> MoveNextAsync()
     {
-        return ValueTask.FromResult(_data.MoveNext());
+    next:
+        var r = _data!.MoveNext();
+
+        if (r && _condition is not null && !_condition(_data.Current))
+        {
+            goto next;
+        }
+
+        return ValueTask.FromResult(r);
     }
+}
+
+internal interface IEnumeratorInit
+{
+    void Init(object data);
 }

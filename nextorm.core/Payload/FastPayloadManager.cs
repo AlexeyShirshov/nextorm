@@ -8,20 +8,28 @@ public class FastPayloadManager : IPayloadManager
     {
         _dic = dic;
     }
-
-    public T? AddOrUpdatePayload<T>(Func<T?> factory) where T : class, IPayload
+    public T? AddOrUpdatePayload<T>(Func<T?> factory, Func<T?, T?>? update = null) where T : class, IPayload
     {
         if (_dic is null) return factory?.Invoke();
 
-        var value = factory is null ? default : factory();
-        _dic[typeof(T)] = value;
-        return value;
-    }
+        if (update is not null && _dic.TryGetValue(typeof(T), out var value))
+            value = update(value as T);
+        else
+            value = factory is null ? default : factory();
 
+        _dic[typeof(T)] = value;
+        return value as T;
+    }
+    public void AddOrUpdatePayload<T>(T? payload) where T : class, IPayload
+    {
+        if (_dic is null) return;
+
+        _dic[typeof(T)] = payload;
+    }
     public T GetNotNullOrAddPayload<T>(Func<T> factory) where T : class, IPayload
     {
         if (_dic is null) return factory();
-        
+
         if (_dic.TryGetValue(typeof(T), out var value) && value is T p)
         {
             if (p is not null)
@@ -72,7 +80,7 @@ public class FastPayloadManager : IPayloadManager
     {
         if (_dic is null)
         {
-            payload=default;
+            payload = default;
             return false;
         }
 

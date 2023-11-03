@@ -13,7 +13,7 @@ public class InMemoryTests
     {
         _sut = sut;
         _logger = logger;
-        
+
         _sut.SimpleEntity.WithData(new[] { new SimpleEntity { Id = 1 }, new SimpleEntity { Id = 2 } });
     }
     [Fact]
@@ -69,12 +69,12 @@ public class InMemoryTests
     public async Task TestTuples()
     {
         // Given
-        var query = _sut.SimpleEntity.Select(it=>new Tuple<int,int>(it.Id,it.Id+10));
-        _sut.DataProvider.Compile(query);
+        var query = _sut.SimpleEntity.Select(it => new Tuple<int, int>(it.Id, it.Id + 10));
+        _sut.DataProvider.Compile(query, CancellationToken.None);
         // When
         await foreach (var item in query)
         {
-            _logger.LogInformation("Value is {id}",item.Item2);
+            _logger.LogInformation("Value is {id}", item.Item2);
         }
         // Then
     }

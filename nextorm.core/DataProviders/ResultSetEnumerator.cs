@@ -10,6 +10,7 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>
     private readonly SqlDataProvider _dataProvider;
     private readonly DatabaseCompiledQuery<TResult> _compiledQuery;
     private readonly CancellationToken _cancellationToken;
+    private readonly Func<object, TResult> _map;
     private DbDataReader? _reader;
     private DbConnection? _conn;
 
@@ -19,8 +20,9 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>
         _dataProvider = dataProvider;
         _compiledQuery = compiledQuery;
         _cancellationToken = cancellationToken;
+        _map = compiledQuery.MapDelegate;
     }
-    public TResult Current => _compiledQuery.Map(_reader!);
+    public TResult Current => _map(_reader!);
     public async ValueTask DisposeAsync()
     {
         GC.SuppressFinalize(this);
@@ -31,7 +33,7 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>
             await _reader.DisposeAsync();
         }
 
-        _compiledQuery.dbCommand.Connection = null;
+        _compiledQuery.DbCommand.Connection = null;
         // if (_conn is not null)
         // {
         //     if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Disposing connection");
@@ -46,7 +48,7 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>
 
             _conn = _dataProvider.GetConnection();
 
-            var sqlCommand = _compiledQuery.dbCommand;
+            var sqlCommand = _compiledQuery.DbCommand;
             sqlCommand.Connection = _conn;
 
             if (_conn.State == ConnectionState.Closed)

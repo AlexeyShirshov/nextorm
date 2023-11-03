@@ -2,11 +2,13 @@
 using BenchmarkDotNet.Running;
 using nextorm.core.benchmark;
 
-//BenchmarkRunner.Run<InMemoryBenchmarkIteration>();
-BenchmarkRunner.Run<SqliteBenchmarkIteration>();
+// BenchmarkRunner.Run<InMemoryBenchmarkIteration>();
+BenchmarkRunner.Run<InMemoryBenchmarkWhere>();
+// BenchmarkRunner.Run<SqliteBenchmarkIteration>();
 //BenchmarkRunner.Run<SqliteBenchmarkLargeIteration>();
+//BenchmarkRunner.Run<SqliteBenchmarkWhere>();
 
-// var runner = new InMemoryBenchmarkIteration();
+// var runner = new InMemoryBenchmarkWhere();
 
 // for (var i = 0; i < 2; i++)
 //     await runner.Nextorm();

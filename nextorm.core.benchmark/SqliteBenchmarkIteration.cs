@@ -21,7 +21,7 @@ public class SqliteBenchmarkIteration
         _ctx = new TestDataContext(builder);
 
         _cmd = _ctx.SimpleEntity.Select(entity => new Tuple<int>(entity.Id));
-        (_ctx.DataProvider as SqlDataProvider)!.Compile(_cmd);
+        (_ctx.DataProvider as SqlDataProvider).Compile(_cmd, CancellationToken.None);
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(@$"Filename={Directory.GetCurrentDirectory()}\data\test.db");

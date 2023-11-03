@@ -7,16 +7,16 @@ using Dapper;
 namespace nextorm.core.benchmark;
 
 [MemoryDiagnoser]
-public class InMemoryBenchmarkIteration
+public class InMemoryBenchmarkWhere
 {
     private readonly InMemoryDataContext _ctx;
     private readonly QueryCommand<Tuple<int>> _cmd;
     private readonly IEnumerable<SimpleEntity> _data;
-    public InMemoryBenchmarkIteration()
+    public InMemoryBenchmarkWhere()
     {
         var data = new List<SimpleEntity>(10_000);
         for (var i = 0; i < 10_000; i++)
-            data.Add(new SimpleEntity { Id = 1 });
+            data.Add(new SimpleEntity { Id = i });
         _data = data;
 
         var builder = new DataContextOptionsBuilder();
@@ -24,7 +24,7 @@ public class InMemoryBenchmarkIteration
         _ctx = new InMemoryDataContext(builder);
         _ctx.SimpleEntity.WithData(_data);
 
-        _cmd = _ctx.SimpleEntity.Select(entity => new Tuple<int>(entity.Id));
+        _cmd = _ctx.SimpleEntity.Where(it => it.Id < 15693).Select(entity => new Tuple<int>(entity.Id));
         _ctx.DataProvider.Compile(_cmd, CancellationToken.None);
     }
     [Benchmark(Baseline = true)]
@@ -44,7 +44,7 @@ public class InMemoryBenchmarkIteration
     [Benchmark()]
     public async Task Nextorm()
     {
-        await foreach (var row in _ctx.SimpleEntity.Select(entity => new { entity.Id }))
+        await foreach (var row in _ctx.SimpleEntity.Where(it => it.Id < 15693).Select(entity => new { entity.Id }))
         {
         }
     }
@@ -58,7 +58,7 @@ public class InMemoryBenchmarkIteration
     [Benchmark]
     public void Linq()
     {
-        foreach (var row in _data.Select(entity => new { entity.Id }))
+        foreach (var row in _data.Where(it => it.Id < 15693).Select(entity => new { entity.Id }))
         {
         }
     }
