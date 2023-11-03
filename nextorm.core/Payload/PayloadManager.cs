@@ -2,11 +2,11 @@ using System.Collections;
 
 namespace nextorm.core;
 public class PayloadManager : IPayloadManager
-{   
+{
     private readonly ArrayList? _payload;
     public PayloadManager(ArrayList? payload)
     {
-        _payload=payload;
+        _payload = payload;
     }
     private bool _cache => _payload is not null;
     public bool RemovePayload<T>()
@@ -66,7 +66,7 @@ public class PayloadManager : IPayloadManager
             ArgumentNullException.ThrowIfNull(factory);
 
             payload = factory();
-           
+
             if (_cache)
                 _payload.Add(payload);
         }
@@ -80,13 +80,13 @@ public class PayloadManager : IPayloadManager
             payload = factory is null
                 ? default
                 : factory();
-            
+
             if (_cache)
                 _payload.Add(payload);
         }
         return payload;
     }
-    public T? AddOrUpdatePayload<T>(Func<T?> factory)
+    public T? AddOrUpdatePayload<T>(Func<T?> factory, Func<T?, T?>? update = null)
         where T : class, IPayload
     {
         if (_cache)
@@ -95,9 +95,12 @@ public class PayloadManager : IPayloadManager
             {
                 var item = _payload[i];
 
-                if (item is T)
+                if (item is T exists)
                 {
-                    var p = factory();
+                    var p = update != null
+                        ? update(exists)
+                        : factory();
+
                     _payload[i] = p;
                     return p;
                 }
@@ -108,7 +111,7 @@ public class PayloadManager : IPayloadManager
 
         if (_cache)
             _payload.Add(payload);
-        
+
         return payload;
     }
     public void AddOrUpdatePayload<T>(T? payload)

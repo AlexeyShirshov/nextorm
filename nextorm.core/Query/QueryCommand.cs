@@ -49,6 +49,7 @@ public class QueryCommand : IPayloadManager, ISourceProvider
         get => !_dontCache;
         set => _dontCache = !value;
     }
+    internal QueryCommand? FromQuery => From?.Table.AsT1;
     public virtual void ResetPreparation()
     {
         _isPrepared = false;
@@ -76,14 +77,21 @@ public class QueryCommand : IPayloadManager, ISourceProvider
         FromExpression? from = _from ?? _dataProvider.GetFrom(srcType, this);
 
         var joinHash = 7;
-        foreach (var join in Joins)
+        if (Joins.Any())
         {
-            if (!(join.Query?.IsPrepared ?? true))
-                join.Query!.PrepareCommand(cancellationToken);
+            if (_from is not null && string.IsNullOrEmpty(_from.TableAlias)) _from.TableAlias = "t1";
 
-            joinHash = joinHash * 13 + join.GetHashCode();
+            foreach (var join in Joins)
+            {
+                if (!(join.Query?.IsPrepared ?? true))
+                    join.Query!.PrepareCommand(cancellationToken);
+
+                unchecked
+                {
+                    joinHash = joinHash * 13 + join.GetHashCode();
+                }
+            }
         }
-
         var selectList = _selectList;
         var columnsHash = 7;
 
@@ -127,7 +135,10 @@ public class QueryCommand : IPayloadManager, ISourceProvider
                     //}
                     selectList.Add(selExp);
 
-                    columnsHash = columnsHash * 13 + selExp.GetHashCode();
+                    unchecked
+                    {
+                        columnsHash = columnsHash * 13 + selExp.GetHashCode();
+                    }
                 }
 
                 if (selectList.Count == 0)
@@ -159,7 +170,10 @@ public class QueryCommand : IPayloadManager, ISourceProvider
 
                         selectList.Add(selExp);
 
-                        columnsHash = columnsHash * 13 + selExp.GetHashCode();
+                        unchecked
+                        {
+                            columnsHash = columnsHash * 13 + selExp.GetHashCode();
+                        }
                     }
                     else
                     {
@@ -191,7 +205,10 @@ public class QueryCommand : IPayloadManager, ISourceProvider
 
                                     selectList.Add(selExp);
 
-                                    columnsHash = columnsHash * 13 + selExp.GetHashCode();
+                                    unchecked
+                                    {
+                                        columnsHash = columnsHash * 13 + selExp.GetHashCode();
+                                    }
                                 }
                             }
                         }
@@ -243,9 +260,9 @@ public class QueryCommand : IPayloadManager, ISourceProvider
         return _payloadMgr.GetOrAddPayload<T>(factory);
     }
 
-    public T? AddOrUpdatePayload<T>(Func<T?> factory) where T : class, IPayload
+    public T? AddOrUpdatePayload<T>(Func<T?> factory, Func<T?, T?>? update = null) where T : class, IPayload
     {
-        return _payloadMgr.AddOrUpdatePayload<T>(factory);
+        return _payloadMgr.AddOrUpdatePayload<T>(factory, update);
     }
     public void AddOrUpdatePayload<T>(T? payload) where T : class, IPayload
     {

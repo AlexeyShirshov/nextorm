@@ -28,7 +28,14 @@ public partial class InMemoryDataProvider : IDataProvider
         var ce = queryCommand.CacheEntry;
         if (ce is InMemoryCacheEntry cache || _cmdIdx.TryGetValue(queryCommand, out cache!) && cache is not null)
         {
-            return (IAsyncEnumerator<TResult>)cache.CreateEnumerator.DynamicInvoke(this, queryCommand, cache, cancellationToken)!;
+            if (cache.Enumerator is IEnumeratorInit enumerator && cache.Data is not null)
+            {
+                enumerator.Init(cache.Data);
+                return (IAsyncEnumerator<TResult>)enumerator;
+            }
+
+            if (cache.CreateEnumerator is not null)
+                return (IAsyncEnumerator<TResult>)cache.CreateEnumerator.DynamicInvoke(this, queryCommand, cache, cancellationToken)!;
         }
 
         var del = CreateEnumeratorDelegate(queryCommand, cancellationToken);
@@ -56,13 +63,19 @@ public partial class InMemoryDataProvider : IDataProvider
             //{
             var miCreateEnumerator = typeof(InMemoryDataProvider).GetMethod(nameof(CreateEnumerator), BindingFlags.Public | BindingFlags.Instance)!;
             var param = Expression.Parameter(typeof(InMemoryDataProvider));
-            var callCreateEnumerator = Expression.Call(param, miCreateEnumerator.MakeGenericMethod(resultType), Expression.Constant(subQuery), Expression.Constant(cancellationToken));
+            var p1 = Expression.Parameter(typeof(QueryCommand<TResult>));
+            var p2 = Expression.Parameter(typeof(InMemoryCacheEntry));
+            var p3 = Expression.Parameter(typeof(CancellationToken));
+            var callCreateEnumerator = Expression.Call(param, miCreateEnumerator.MakeGenericMethod(resultType),
+                Expression.Convert(Expression.Property(p1, nameof(QueryCommand.FromQuery)), subQueryType), p3
+            );
 
             var miCreateEnumeratorAdapter = typeof(InMemoryDataProvider).GetMethod(nameof(CreateEnumeratorAdapter), BindingFlags.NonPublic | BindingFlags.Instance)!;
-            var callCreateEnumeratorAdapter = Expression.Call(
-                param, miCreateEnumeratorAdapter.MakeGenericMethod(typeof(TResult), resultType), Expression.Constant(queryCommand), callCreateEnumerator);
+            var callCreateEnumeratorAdapter = Expression.Call(param, miCreateEnumeratorAdapter.MakeGenericMethod(typeof(TResult), resultType),
+                p1, p2, callCreateEnumerator
+            );
 
-            var delPayload = new CreateMainEnumeratorPayload(Expression.Lambda(callCreateEnumeratorAdapter, param).Compile());
+            var delPayload = new CreateMainEnumeratorPayload(Expression.Lambda(callCreateEnumeratorAdapter, param, p1, p2, p3).Compile());
             // });
 
             return delPayload!.Delegate;
@@ -104,7 +117,7 @@ public partial class InMemoryDataProvider : IDataProvider
         {
             IEnumerable<TEntity>? data = cacheEntry.Data as IEnumerable<TEntity>;
 
-            if (queryCommand.Joins.Any() && typeof(TEntity).IsAssignableFrom(typeof(IProjection)))
+            if (queryCommand.Joins.Any() && typeof(TEntity).IsAssignableTo(typeof(IProjection)))
             {
                 var dim = 2;
                 object? joinResult = null;
@@ -161,13 +174,22 @@ public partial class InMemoryDataProvider : IDataProvider
                 cacheEntry.Data = data;
             }
 
-            if (cacheEntry.CompiledQuery is not InMemoryCompiledQuery<TResult, TEntity> compiledQuery)
+            if (cacheEntry.Enumerator is not InMemoryEnumerator<TResult, TEntity> enumerator)
             {
-                compiledQuery = (InMemoryCompiledQuery<TResult, TEntity>)CreateCompiledQuery<TResult, TEntity>(queryCommand);
-                cacheEntry.CompiledQuery = compiledQuery;
-            }
+                if (cacheEntry.CompiledQuery is not InMemoryCompiledQuery<TResult, TEntity> compiledQuery)
+                {
+                    compiledQuery = (InMemoryCompiledQuery<TResult, TEntity>)CreateCompiledQuery<TResult, TEntity>(queryCommand);
+                    cacheEntry.CompiledQuery = compiledQuery;
+                }
 
-            return new InMemoryEnumerator<TResult, TEntity>(compiledQuery, data.GetEnumerator());
+                enumerator = new InMemoryEnumerator<TResult, TEntity>(compiledQuery);
+                enumerator.Init(data);
+                cacheEntry.Enumerator = enumerator;
+            }
+            else
+                enumerator.Init(data);
+
+            return enumerator;
         }
     }
     static IEnumerable<TResult> LoopJoin<TLeft, TRight, TResult>(QueryCommand queryCommand, IEnumerable<TLeft> leftData, JoinExpression join, int dim)
@@ -258,7 +280,7 @@ public partial class InMemoryDataProvider : IDataProvider
     }
     private InMemoryEnumeratorAdapter<TResult, TEntity> CreateEnumeratorAdapter<TResult, TEntity>(QueryCommand<TResult> queryCommand, InMemoryCacheEntry cacheEntry, IAsyncEnumerator<TEntity> enumerator)
     {
-        if (queryCommand.Joins.Any() && typeof(TEntity).IsAssignableFrom(typeof(IProjection)))
+        if (queryCommand.Joins.Any() && typeof(TEntity).IsAssignableTo(typeof(IProjection)))
         {
             throw new NotImplementedException("joins");
         }
@@ -327,21 +349,23 @@ public partial class InMemoryDataProvider : IDataProvider
         Dispose(disposing: true);
         GC.SuppressFinalize(this);
     }
-    public void Compile<TResult>(QueryCommand<TResult> query, CancellationToken cancellationToken)
+    public void Compile<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
     {
-        if (!query.IsPrepared)
-            query.PrepareCommand(cancellationToken);
+        if (!queryCommand.IsPrepared)
+            queryCommand.PrepareCommand(cancellationToken);
 
         //query.Compiled = CreateCompiledQuery(query);
         var miCreateCompiledQuery = typeof(InMemoryDataProvider).GetMethod(nameof(CreateCompiledQuery), BindingFlags.NonPublic | BindingFlags.Static)!;
         var param = Expression.Parameter(typeof(QueryCommand<TResult>));
-        var callExp = Expression.Call(null, miCreateCompiledQuery.MakeGenericMethod(typeof(TResult), query.EntityType),
+        var callExp = Expression.Call(null, miCreateCompiledQuery.MakeGenericMethod(typeof(TResult), queryCommand.EntityType),
             param
         );
 
         var lambda = Expression.Lambda<Func<QueryCommand<TResult>, CompiledQuery<TResult>>>(callExp, param).Compile();
 
-        query.CacheEntry = new InMemoryCacheEntry(lambda(query), CreateEnumeratorDelegate(query, cancellationToken));
+        var ce = new InMemoryCacheEntry(lambda(queryCommand), CreateEnumeratorDelegate(queryCommand, cancellationToken));
+        queryCommand.CacheEntry = ce;
+        ce.Enumerator = (IAsyncEnumerator<TResult>)ce.CreateEnumerator.DynamicInvoke(this, queryCommand, ce, cancellationToken)!;
     }
 
     private static CompiledQuery<TResult> CreateCompiledQuery<TResult, TEntity>(QueryCommand<TResult> query)
@@ -355,8 +379,8 @@ public partial class InMemoryDataProvider : IDataProvider
         {
             CreateEnumerator = createEnumerator;
         }
-
         public Delegate CreateEnumerator { get; }
         public object? Data { get; set; }
+        public object? Enumerator { get; set; }
     }
 }

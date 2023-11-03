@@ -7,6 +7,6 @@ public interface IPayloadManager
     bool TryGetNotNullPayload<T>(out T? payload) where T : class, IPayload;
     T GetNotNullOrAddPayload<T>(Func<T> factory) where T : class, IPayload;
     T? GetOrAddPayload<T>(Func<T?> factory) where T : class, IPayload;
-    T? AddOrUpdatePayload<T>(Func<T?> factory) where T : class, IPayload;
+    T? AddOrUpdatePayload<T>(Func<T?> factory, Func<T?, T?>? update = null) where T : class, IPayload;
     void AddOrUpdatePayload<T>(T? payload) where T : class, IPayload;
 }

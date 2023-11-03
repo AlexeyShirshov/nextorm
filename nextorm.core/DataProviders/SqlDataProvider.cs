@@ -303,7 +303,7 @@ public class SqlDataProvider : IDataProvider
     {
         if (srcType != typeof(TableAlias))
         {
-            if (queryCommand.Joins.Any() && srcType.FullName!.StartsWith("nextorm.core.Projection"))
+            if (queryCommand.Joins.Any() && srcType.IsAssignableTo(typeof(IProjection)))
             {
                 var prop_t1 = srcType.GetProperty("t1") ?? throw new BuildSqlCommandException($"Projection {srcType} must have t1 property");
 

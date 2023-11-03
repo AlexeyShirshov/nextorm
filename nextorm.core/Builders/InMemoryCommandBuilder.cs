@@ -35,45 +35,45 @@ public static class InMemoryCommandBuilderExtensions
     public static void WithData<TEntity>(this CommandBuilder<TEntity> builder, IEnumerable<TEntity>? data)
     {
         if (data is not null)
-            builder.AddOrUpdatePayload(()=>
+            builder.PayloadManager.AddOrUpdatePayload(() =>
             {
                 builder.CommandCreatedEvent += OnCommandCreated;
                 return new InMemoryDataPayload<TEntity>(data);
             },
-            existing=>
+            existing =>
             {
                 return new InMemoryDataPayload<TEntity>(data);
             });
         else
         {
-            builder.RemovePayload<InMemoryDataPayload<TEntity>>();
+            builder.PayloadManager.RemovePayload<InMemoryDataPayload<TEntity>>();
             builder.CommandCreatedEvent -= OnCommandCreated;
         }
     }
     public static void WithAsyncData<TEntity>(this CommandBuilder<TEntity> builder, IAsyncEnumerable<TEntity>? data)
     {
         if (data is not null)
-            builder.AddOrUpdatePayload(()=>
+            builder.PayloadManager.AddOrUpdatePayload(() =>
             {
                 builder.CommandCreatedEvent += OnCommandCreated;
                 return new InMemoryAsyncDataPayload<TEntity>(data);
             },
-            existing=>
+            existing =>
             {
                 return new InMemoryAsyncDataPayload<TEntity>(data);
             });
         else
         {
-            builder.RemovePayload<InMemoryAsyncDataPayload<TEntity>>();
+            builder.PayloadManager.RemovePayload<InMemoryAsyncDataPayload<TEntity>>();
             builder.CommandCreatedEvent -= OnCommandCreated;
         }
     }
     private static void OnCommandCreated<TEntity>(CommandBuilder<TEntity> sender, QueryCommand queryCommand)
     {
-        if (sender.TryGetPayload<InMemoryDataPayload<TEntity>>(out var payload))
+        if (sender.PayloadManager.TryGetPayload<InMemoryDataPayload<TEntity>>(out var payload))
             queryCommand.AddOrUpdatePayload(payload);
 
-        if (sender.TryGetPayload<InMemoryAsyncDataPayload<TEntity>>(out var asyncPayload))
+        if (sender.PayloadManager.TryGetPayload<InMemoryAsyncDataPayload<TEntity>>(out var asyncPayload))
             queryCommand.AddOrUpdatePayload(asyncPayload);
     }
 }
