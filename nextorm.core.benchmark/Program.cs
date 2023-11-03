@@ -3,10 +3,10 @@ using BenchmarkDotNet.Running;
 using nextorm.core.benchmark;
 
 // BenchmarkRunner.Run<InMemoryBenchmarkIteration>();
-BenchmarkRunner.Run<InMemoryBenchmarkWhere>();
+// BenchmarkRunner.Run<InMemoryBenchmarkWhere>();
 // BenchmarkRunner.Run<SqliteBenchmarkIteration>();
 //BenchmarkRunner.Run<SqliteBenchmarkLargeIteration>();
-//BenchmarkRunner.Run<SqliteBenchmarkWhere>();
+BenchmarkRunner.Run<SqliteBenchmarkWhere>();
 
 // var runner = new InMemoryBenchmarkWhere();
 
