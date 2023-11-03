@@ -78,4 +78,28 @@ public class InMemoryTests
         }
         // Then
     }
+    [Fact]
+    public async Task TestFetch()
+    {
+        SimpleEntity[] data = new SimpleEntity[100];
+        for (var i = 0; i < data.Length; i++)
+            data[i] = new SimpleEntity { Id = i };
+
+        await foreach (var row in _sut.SimpleEntity
+            .WithData(data)
+            .Select(it => new { it.Id }).Fetch(CancellationToken.None))
+        {
+            _logger.LogInformation("Get {id}", row.Id);
+        }
+    }
+    [Fact]
+    public async void TestQueryCache()
+    {
+        var s = await _sut.SimpleEntity.Where(it => it.Id == 2).Select(it => new { it.Id }).FirstOrDefaultAsync();
+
+        s = await _sut.SimpleEntity.Where(it => it.Id == 2).Select(it => new { it.Id }).FirstOrDefaultAsync();
+        // When
+
+        // Then
+    }
 }

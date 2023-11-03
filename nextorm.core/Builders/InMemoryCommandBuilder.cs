@@ -32,7 +32,7 @@ namespace nextorm.core;
 
 public static class InMemoryCommandBuilderExtensions
 {
-    public static void WithData<TEntity>(this CommandBuilder<TEntity> builder, IEnumerable<TEntity>? data)
+    public static CommandBuilder<TEntity> WithData<TEntity>(this CommandBuilder<TEntity> builder, IEnumerable<TEntity>? data)
     {
         if (data is not null)
             builder.PayloadManager.AddOrUpdatePayload(() =>
@@ -49,8 +49,10 @@ public static class InMemoryCommandBuilderExtensions
             builder.PayloadManager.RemovePayload<InMemoryDataPayload<TEntity>>();
             builder.CommandCreatedEvent -= OnCommandCreated;
         }
+
+        return builder;
     }
-    public static void WithAsyncData<TEntity>(this CommandBuilder<TEntity> builder, IAsyncEnumerable<TEntity>? data)
+    public static CommandBuilder<TEntity> WithAsyncData<TEntity>(this CommandBuilder<TEntity> builder, IAsyncEnumerable<TEntity>? data)
     {
         if (data is not null)
             builder.PayloadManager.AddOrUpdatePayload(() =>
@@ -67,6 +69,8 @@ public static class InMemoryCommandBuilderExtensions
             builder.PayloadManager.RemovePayload<InMemoryAsyncDataPayload<TEntity>>();
             builder.CommandCreatedEvent -= OnCommandCreated;
         }
+
+        return builder;
     }
     private static void OnCommandCreated<TEntity>(CommandBuilder<TEntity> sender, QueryCommand queryCommand)
     {

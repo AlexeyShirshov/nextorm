@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Data;
 using System.Data.Common;
@@ -412,6 +413,12 @@ public class SqlDataProvider : IDataProvider
 
         return ValueTask.CompletedTask;
     }
+
+    // public async IAsyncEnumerable<TResult> CreateFetchEnumerator<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
+    // {
+    //     throw new NotImplementedException();
+    // }
+
     //record CompiledQueryPayload<TResult>(DatabaseCompiledQuery<TResult> CompiledQuery) : IPayload;
     class SqlCacheEntry : CacheEntry
     {

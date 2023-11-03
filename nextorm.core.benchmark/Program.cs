@@ -6,12 +6,14 @@ using nextorm.core.benchmark;
 // BenchmarkRunner.Run<InMemoryBenchmarkWhere>();
 // BenchmarkRunner.Run<SqliteBenchmarkIteration>();
 //BenchmarkRunner.Run<SqliteBenchmarkLargeIteration>();
-BenchmarkRunner.Run<SqliteBenchmarkWhere>();
+// BenchmarkRunner.Run<SqliteBenchmarkWhere>();
+BenchmarkRunner.Run<SqliteBenchmarkSimulateWork>();
 
-// var runner = new InMemoryBenchmarkWhere();
+
+// var runner = new SqliteBenchmarkSimulateWork();
 
 // for (var i = 0; i < 2; i++)
-//     await runner.Nextorm();
+//     await runner.NextormCached();
 
 //await runner.FillLargeTable();
 // Console.WriteLine("Press any key to exit");

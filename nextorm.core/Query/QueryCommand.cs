@@ -1,8 +1,11 @@
 using System.Collections;
+using System.Collections.Concurrent;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
@@ -411,5 +414,57 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         };
     }
     //record MapPayload(Delegate Delegate) : IPayload;
+    // public IEnumerable<TResult> Fetch(CancellationToken cancellationToken)
+    // {
+    //     return Fetch(100, cancellationToken);
+    // }
+    // public IEnumerable<TResult> Fetch(int capacity, CancellationToken cancellationToken)
+    // {
+    //     var bus = new BlockingCollection<TResult>(capacity);
 
+    //     Task.Run(async () =>
+    //     {
+    //         await foreach (var item in this.WithCancellation(cancellationToken))
+    //         {
+    //             bus.Add(item);
+    //         }
+    //         bus.CompleteAdding();
+    //     }, cancellationToken);
+
+    //     while (!bus.IsCompleted)
+    //     {
+    //         TResult? r = default;
+    //         try { r = bus.Take(cancellationToken); } catch (InvalidOperationException) { continue; }
+    //         yield return r;
+    //     }
+    // }
+    // public IAsyncEnumerable<TResult> FetchAsync(CancellationToken cancellationToken)
+    // {
+    //     return FetchAsync(10, cancellationToken);
+    // }
+    public IAsyncEnumerable<TResult> Fetch(CancellationToken cancellationToken)
+    {
+        var bus = Channel.CreateUnbounded<TResult>(new UnboundedChannelOptions
+        {
+            SingleWriter = true,
+            SingleReader = true
+        });
+
+        var _ = Task.Run(async () =>
+        {
+            await foreach (var item in this.WithCancellation(cancellationToken))
+            {
+                if (cancellationToken.IsCancellationRequested)
+                    break;
+
+                await bus.Writer.WriteAsync(item, cancellationToken);
+            }
+
+            bus.Writer.Complete();
+        }, cancellationToken);
+
+        return bus.Reader.ReadAllAsync(cancellationToken);
+        // while (await bus.Reader.WaitToReadAsync(cancellationToken))
+        //     yield return await bus.Reader.ReadAsync(cancellationToken);
+    }
 }

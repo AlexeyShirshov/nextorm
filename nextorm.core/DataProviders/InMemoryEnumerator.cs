@@ -9,9 +9,11 @@ public class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TResult>, I
     private readonly Func<object, TResult>? _map;
     private IEnumerator<TEntity>? _data;
     private readonly Func<TEntity, bool>? _condition;
+    private readonly CancellationToken _cancellationToken;
+
     //private readonly bool _noMap;
 
-    public InMemoryEnumerator(InMemoryCompiledQuery<TResult, TEntity> cmd)
+    public InMemoryEnumerator(InMemoryCompiledQuery<TResult, TEntity> cmd, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(cmd);
 
@@ -21,6 +23,7 @@ public class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TResult>, I
 
         //if (cmd is InMemoryCompiledQuery<TResult, TEntity> cq)
         _condition = cmd.Condition;
+        _cancellationToken = cancellationToken;
 
         //_noMap = ;
     }
@@ -48,7 +51,10 @@ public class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TResult>, I
 
     public ValueTask<bool> MoveNextAsync()
     {
-    next:
+        if (_cancellationToken.IsCancellationRequested)
+            return ValueTask.FromResult(false);
+
+        next:
         var r = _data!.MoveNext();
 
         if (r && _condition is not null && !_condition(_data.Current))

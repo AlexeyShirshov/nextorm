@@ -182,7 +182,7 @@ public partial class InMemoryDataProvider : IDataProvider
                     cacheEntry.CompiledQuery = compiledQuery;
                 }
 
-                enumerator = new InMemoryEnumerator<TResult, TEntity>(compiledQuery);
+                enumerator = new InMemoryEnumerator<TResult, TEntity>(compiledQuery, cancellationToken);
                 enumerator.Init(data);
                 cacheEntry.Enumerator = enumerator;
             }
