@@ -57,14 +57,14 @@ public class SqlDataProvider : IDataProvider
     {
         throw new NotImplementedException(type.ToString());
     }
-    public DatabaseCompiledQuery<TResult> CreateCompiledQuery<TResult>(QueryCommand<TResult> cmd)
+    public (DatabaseCompiledQuery<TResult>, List<Param>) CreateCompiledQuery<TResult>(QueryCommand<TResult> cmd)
     {
-        var (sql, @params) = MakeSelect(cmd);
-        var dbCommand = CreateCommand(sql);
+        var (sql, @params) = MakeSelect(cmd, false);
+        var dbCommand = CreateCommand(sql!);
 
-        dbCommand.Parameters.AddRange(@params.Select(it => CreateParam(it.Name, it.Value)).ToArray());
+        //dbCommand.Parameters.AddRange(@params.Select(it => CreateParam(it.Name, it.Value)).ToArray());
 
-        return new DatabaseCompiledQuery<TResult>(dbCommand, cmd.GetMap(typeof(TResult), typeof(DbDataReader)));
+        return (new DatabaseCompiledQuery<TResult>(dbCommand, cmd.GetMap(typeof(TResult), typeof(DbDataReader)), @params.Count == 0), @params);
     }
     // public DatabaseCompiledQuery<TResult> GetCompiledQuery<TResult>(QueryCommand<TResult> cmd)
     // {
@@ -86,7 +86,7 @@ public class SqlDataProvider : IDataProvider
     {
         throw new NotImplementedException();
     }
-    public virtual (string, List<Param>) MakeSelect(QueryCommand cmd)
+    public virtual (string?, List<Param>) MakeSelect(QueryCommand cmd, bool paramMode)
     {
         ArgumentNullException.ThrowIfNull(cmd.SelectList);
         ArgumentNullException.ThrowIfNull(cmd.From);
@@ -96,61 +96,76 @@ public class SqlDataProvider : IDataProvider
         var from = cmd.From;
         var entityType = cmd.EntityType;
 
-        var sqlBuilder = _sbPool.Get();
+        var sqlBuilder = paramMode ? null : _sbPool.Get();
 
         var @params = new List<Param>();
 
-        sqlBuilder.Append("select ");
+        if (!paramMode) sqlBuilder!.Append("select ");
         foreach (var item in selectList)
         {
-            var (needAliasForColumn, column) = MakeColumn(item, entityType, cmd, false, @params);
+            var (needAliasForColumn, column) = MakeColumn(item, entityType, cmd, false, @params, paramMode);
 
-            sqlBuilder.Append(column);
-
-            if (needAliasForColumn)
+            if (!paramMode)
             {
-                sqlBuilder.Append(MakeColumnAlias(item.PropertyName!));
-            }
+                sqlBuilder!.Append(column);
 
-            sqlBuilder.Append(", ");
+                if (needAliasForColumn)
+                {
+                    sqlBuilder.Append(MakeColumnAlias(item.PropertyName!));
+                }
+
+                sqlBuilder.Append(", ");
+            }
         }
 
-        sqlBuilder.Length -= 2;
-        sqlBuilder.Append(" from ").Append(MakeFrom(from, @params));
+        var fromStr = MakeFrom(from, @params, paramMode);
+        if (!paramMode)
+        {
+            sqlBuilder!.Length -= 2;
+            sqlBuilder.Append(" from ").Append(fromStr);
+        }
 
         // if (cmd.Joins.Any())
         // {
         foreach (var join in cmd.Joins)
         {
-            sqlBuilder.Append(MakeJoin(join, cmd, @params));
+            var joinSql = MakeJoin(join, cmd, @params, paramMode);
+            if (!paramMode) sqlBuilder!.Append(joinSql);
         }
         //}
 
         if (cmd.Condition is not null)
         {
-            sqlBuilder.Append(" where ").Append(MakeWhere(entityType, cmd, cmd.Condition, 0, null, @params));
+            var whereSql = MakeWhere(entityType, cmd, cmd.Condition, 0, null, @params, paramMode);
+            if (!paramMode) sqlBuilder!.Append(" where ").Append(whereSql);
         }
 
-        var r = sqlBuilder.ToString();
+        string? r = null;
+        if (!paramMode)
+        {
+            r = sqlBuilder!.ToString();
 
-        _sbPool.Return(sqlBuilder);
+            _sbPool.Return(sqlBuilder);
+        }
 
         return (r, @params);
     }
 
-    private string MakeJoin(JoinExpression join, QueryCommand cmd, List<Param> @params)
+    private string MakeJoin(JoinExpression join, QueryCommand cmd, List<Param> @params, bool paramMode)
     {
-        var sqlBuilder = _sbPool.Get();
+        var sqlBuilder = paramMode ? null : _sbPool.Get();
 
-        switch (join.JoinType)
+        if (!paramMode)
         {
-            case JoinType.Inner:
-                sqlBuilder.Append(" join ");
-                break;
-            default:
-                throw new NotImplementedException(join.JoinType.ToString());
+            switch (join.JoinType)
+            {
+                case JoinType.Inner:
+                    sqlBuilder!.Append(" join ");
+                    break;
+                default:
+                    throw new NotImplementedException(join.JoinType.ToString());
+            }
         }
-
         var visitor = new JoinExpressionVisitor();
         visitor.Visit(join.JoinCondition);
 
@@ -162,29 +177,47 @@ public class SqlDataProvider : IDataProvider
         if (visitor.JoinType.IsAnonymous())
         {
             //fromExp = GetFrom(join.Query.EntityType);
-            var (sql, p) = MakeSelect(join.Query);
+            var (sql, p) = MakeSelect(join.Query, paramMode);
             @params.AddRange(p);
-            sqlBuilder.Append('(').Append(sql).Append(") ");
-            sqlBuilder.Append(GetAliasFromProjection(cmd, visitor.JoinType, 1));
+            if (!paramMode)
+            {
+                sqlBuilder!.Append('(').Append(sql).Append(") ");
+                sqlBuilder.Append(GetAliasFromProjection(cmd, visitor.JoinType, 1));
+            }
         }
         else
         {
             fromExp = GetFrom(visitor.JoinType);
 
-            fromExp.TableAlias = GetAliasFromProjection(cmd, visitor.JoinType, dim);
+            if (!paramMode)
+                fromExp.TableAlias = GetAliasFromProjection(cmd, visitor.JoinType, dim);
 
-            sqlBuilder.Append(MakeFrom(fromExp, @params));
+            var fromSql = MakeFrom(fromExp, @params, paramMode);
+            if (!paramMode)
+            {
+                sqlBuilder!.Append(fromSql);
+            }
         }
 
-        sqlBuilder.Append(" on ");
-        sqlBuilder.Append(MakeWhere(cmd.EntityType!, cmd, visitor.JoinCondition, dim, dim == 1
-                ? new ExpressionAliasProvider(join.JoinCondition)
-                : new ProjectionAliasProvider(dim, cmd.EntityType!), @params));
+        var whereSql = MakeWhere(cmd.EntityType!, cmd, visitor.JoinCondition, dim, dim == 1
+                        ? new ExpressionAliasProvider(join.JoinCondition)
+                        : new ProjectionAliasProvider(dim, cmd.EntityType!), @params, paramMode);
 
-        var r = sqlBuilder.ToString();
+        if (!paramMode)
+        {
+            sqlBuilder!.Append(" on ");
 
-        _sbPool.Return(sqlBuilder);
+            sqlBuilder.Append(whereSql);
+        }
 
+        string? r = null;
+
+        if (!paramMode)
+        {
+            r = sqlBuilder!.ToString();
+
+            _sbPool.Return(sqlBuilder);
+        }
         return r;
     }
     private static string GetAliasFromProjection(QueryCommand cmd, Type declaringType, int from)
@@ -198,16 +231,18 @@ public class SqlDataProvider : IDataProvider
 
         throw new BuildSqlCommandException($"Cannot find alias of type {declaringType} in {cmd.EntityType}");
     }
-    private string MakeWhere(Type entityType, ISourceProvider tableSource, Expression condition, int dim, IAliasProvider? aliasProvider, List<Param> @params)
+    private string MakeWhere(Type entityType, ISourceProvider tableSource, Expression condition, int dim, IAliasProvider? aliasProvider, List<Param> @params, bool paramMode)
     {
-        using var visitor = new WhereExpressionVisitor(entityType, this, tableSource, dim, aliasProvider);
+        using var visitor = new WhereExpressionVisitor(entityType, this, tableSource, dim, aliasProvider, paramMode);
         visitor.Visit(condition);
         @params.AddRange(visitor.Params);
+
+        if (paramMode) return string.Empty;
 
         return visitor.ToString();
     }
 
-    public (bool NeedAliasForColumn, string Column) MakeColumn(SelectExpression selectExp, Type entityType, ISourceProvider tableProvider, bool dontNeedAlias, List<Param> @params)
+    public (bool NeedAliasForColumn, string Column) MakeColumn(SelectExpression selectExp, Type entityType, ISourceProvider tableProvider, bool dontNeedAlias, List<Param> @params, bool paramMode)
     {
         var expression = selectExp.Expression;
 
@@ -215,16 +250,18 @@ public class SqlDataProvider : IDataProvider
             cmd => throw new NotImplementedException(),
             exp =>
             {
-                using var visitor = new BaseExpressionVisitor(entityType, this, tableProvider, 0, null, dontNeedAlias);
+                using var visitor = new BaseExpressionVisitor(entityType, this, tableProvider, 0, null, dontNeedAlias, paramMode);
                 visitor.Visit(exp);
                 @params.AddRange(visitor.Params);
+
+                if (paramMode) return (false, string.Empty);
 
                 return (visitor.NeedAliasForColumn || selectExp.PropertyName != visitor.ColumnName, visitor.ToString());
             }
         );
     }
 
-    public virtual string MakeFrom(FromExpression from, List<Param> @params)
+    public virtual string MakeFrom(FromExpression from, List<Param> @params, bool paramMode)
     {
         ArgumentNullException.ThrowIfNull(from);
 
@@ -233,8 +270,11 @@ public class SqlDataProvider : IDataProvider
             cmd =>
             {
                 if (!cmd.IsPrepared) throw new BuildSqlCommandException("Inner query is not prepared");
-                var (sql, p) = MakeSelect(cmd);
+                var (sql, p) = MakeSelect(cmd, paramMode);
                 @params.AddRange(p);
+
+                if (paramMode) return string.Empty;
+
                 return "(" + sql + ")" + (string.IsNullOrEmpty(from.TableAlias) ? string.Empty : MakeTableAlias(from.TableAlias));
             }
         );
@@ -274,12 +314,16 @@ public class SqlDataProvider : IDataProvider
                 cacheEntry.Enumerator = enumerator;
             }
 
+            if (cacheEntry.CompiledQuery is DatabaseCompiledQuery<TResult> cq && !cq.NoParams)
+                enumerator.Init(ExtractParams(queryCommand));
+
             return enumerator;
         }
         else
         {
-            var compiledQuery = CreateCompiledQuery(queryCommand);
+            var (compiledQuery, @params) = CreateCompiledQuery(queryCommand);
             var enumerator = new ResultSetEnumerator<TResult>(this, compiledQuery, cancellationToken);
+            enumerator.Init(@params);
             cacheEntry = new SqlCacheEntry(compiledQuery) { Enumerator = enumerator };
 
             if (queryCommand.Cache)
@@ -288,6 +332,7 @@ public class SqlDataProvider : IDataProvider
             return enumerator;
         }
     }
+    private List<Param> ExtractParams(QueryCommand queryCommand) => MakeSelect(queryCommand, true).Item2;
     public QueryCommand<T> CreateCommand<T>(LambdaExpression exp, Expression? condition)
     {
         return new QueryCommand<T>(this, exp, condition);

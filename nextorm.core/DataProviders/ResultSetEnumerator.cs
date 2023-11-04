@@ -4,13 +4,14 @@ using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
-public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>
+public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumeratorInit
 {
     //private readonly QueryCommand<TResult> _cmd;
     private readonly SqlDataProvider _dataProvider;
     private readonly DatabaseCompiledQuery<TResult> _compiledQuery;
     private readonly CancellationToken _cancellationToken;
     private readonly Func<object, TResult> _map;
+    private List<Param>? _params;
     private DbDataReader? _reader;
     private DbConnection? _conn;
 
@@ -35,13 +36,19 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>
             _reader = null;
         }
 
-        _compiledQuery.DbCommand.Connection = null;
+        //_compiledQuery.DbCommand.Connection = null;
         // if (_conn is not null)
         // {
         //     if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Disposing connection");
         //     await _conn.DisposeAsync();
         // }
     }
+
+    public void Init(object data)
+    {
+        _params = (List<Param>)data;
+    }
+
     public async ValueTask<bool> MoveNextAsync()
     {
         if (_conn is null)
@@ -62,7 +69,7 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>
 
         async Task InitReader()
         {
-            var sqlCommand = _compiledQuery.DbCommand;
+            var sqlCommand = _compiledQuery.GetCommand(_params!, _dataProvider);
             sqlCommand.Connection = _conn;
 
             if (_conn.State == ConnectionState.Closed)

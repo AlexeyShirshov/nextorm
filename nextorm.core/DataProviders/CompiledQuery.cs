@@ -28,11 +28,21 @@ public class InMemoryCompiledQuery<TResult, TEntity> : CompiledQuery<TResult>
 }
 public class DatabaseCompiledQuery<TResult> : CompiledQuery<TResult>
 {
-    public readonly DbCommand DbCommand;
-
-    public DatabaseCompiledQuery(DbCommand dbCommand, Func<Func<object, TResult>> getMap)
+    private readonly DbCommand _dbCommand;
+    public readonly bool NoParams;
+    public DbCommand GetCommand(List<Param> @params, SqlDataProvider dataProvider)
+    {
+        if (!NoParams)
+        {
+            _dbCommand.Parameters.Clear();
+            _dbCommand.Parameters.AddRange(@params.Select(it => dataProvider.CreateParam(it.Name, it.Value)).ToArray());
+        }
+        return _dbCommand;
+    }
+    public DatabaseCompiledQuery(DbCommand dbCommand, Func<Func<object, TResult>> getMap, bool noParams)
         : base(getMap)
     {
-        DbCommand = dbCommand;
+        _dbCommand = dbCommand;
+        NoParams = noParams;
     }
 }

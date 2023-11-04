@@ -4,7 +4,7 @@ namespace nextorm.core;
 
 public class WhereExpressionVisitor : BaseExpressionVisitor
 {
-    public WhereExpressionVisitor(Type entityType, SqlDataProvider dataProvider, ISourceProvider tableSource, int dim, IAliasProvider? aliasProvider) : base(entityType, dataProvider, tableSource, dim, aliasProvider, false)
+    public WhereExpressionVisitor(Type entityType, SqlDataProvider dataProvider, ISourceProvider tableSource, int dim, IAliasProvider? aliasProvider, bool paramMode) : base(entityType, dataProvider, tableSource, dim, aliasProvider, false, paramMode)
     {
     }
     protected override Expression VisitBinary(BinaryExpression node)
@@ -19,16 +19,18 @@ public class WhereExpressionVisitor : BaseExpressionVisitor
             rightVisitor.Visit(node.Right);
             Params.AddRange(rightVisitor.Params);
 
-            var left = leftVisitor.ToString();
-            var right = rightVisitor.ToString();
+            if (!_paramMode)
+            {
+                var left = leftVisitor.ToString();
+                var right = rightVisitor.ToString();
 
-            var hasNull  = left == "null" || right == "null";
+                var hasNull = left == "null" || right == "null";
 
-            _builder.Append(left).Append(hasNull 
-                ? " is "
-                : " = ");
-            _builder.Append(right);
-            
+                _builder!.Append(left).Append(hasNull
+                    ? " is "
+                    : " = ");
+                _builder!.Append(right);
+            }
             return node;
         }
 

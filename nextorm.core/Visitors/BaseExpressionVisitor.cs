@@ -14,16 +14,16 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     private readonly SqlDataProvider _dataProvider;
     private readonly ISourceProvider _tableProvider;
     private readonly int _dim;
-    protected readonly StringBuilder _builder;
+    protected readonly StringBuilder? _builder;
     private readonly List<Param> _params = new();
     private bool _needAliasForColumn;
     private string? _colName;
     private readonly IAliasProvider? _aliasProvider;
     private readonly bool _dontNeedAlias;
-
+    protected readonly bool _paramMode;
     private bool disposedValue;
 
-    public BaseExpressionVisitor(Type entityType, SqlDataProvider dataProvider, ISourceProvider tableProvider, int dim, IAliasProvider? aliasProvider, bool dontNeedAlias)
+    public BaseExpressionVisitor(Type entityType, SqlDataProvider dataProvider, ISourceProvider tableProvider, int dim, IAliasProvider? aliasProvider, bool dontNeedAlias, bool paramMode)
     {
         _entityType = entityType;
         _dataProvider = dataProvider;
@@ -31,12 +31,13 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         _dim = dim;
         _aliasProvider = aliasProvider;
         _dontNeedAlias = dontNeedAlias;
-        _builder = dataProvider._sbPool.Get();
+        _paramMode = paramMode;
+        _builder = paramMode ? null : dataProvider._sbPool.Get();
     }
     public bool NeedAliasForColumn => _needAliasForColumn;
     public List<Param> Params => _params;
     public ISourceProvider SourceProvider => _tableProvider;
-    public string? ColumnName=>_colName;
+    public string? ColumnName => _colName;
     protected override Expression VisitMethodCall(MethodCallExpression node)
     {
         if (node.Object?.Type == typeof(TableAlias))
@@ -49,38 +50,39 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 
             //         break;
             // }
-
-            _builder.Append(node switch
+            if (!_paramMode)
             {
+                _builder!.Append(node switch
                 {
-                    Method.Name:
-                        nameof(TableAlias.Long)
-                        or nameof(TableAlias.Int)
-                        or nameof(TableAlias.Boolean)
-                        or nameof(TableAlias.Byte)
-                        or nameof(TableAlias.DateTime)
-                        or nameof(TableAlias.Decimal)
-                        or nameof(TableAlias.Double)
-                        or nameof(TableAlias.Float)
-                        or nameof(TableAlias.Guid)
-                        or nameof(TableAlias.NullableLong)
-                        or nameof(TableAlias.NullableInt)
-                        or nameof(TableAlias.NullableBoolean)
-                        or nameof(TableAlias.NullableByte)
-                        or nameof(TableAlias.NullableDateTime)
-                        or nameof(TableAlias.NullableDecimal)
-                        or nameof(TableAlias.NullableDouble)
-                        or nameof(TableAlias.NullableFloat)
-                        or nameof(TableAlias.NullableGuid),
-                    Arguments: [ConstantExpression constExp]
-                } => constExp.Value?.ToString(),
-                {
-                    Method.Name: nameof(TableAlias.Column),
-                    Arguments: [Expression exp]
-                } => Expression.Lambda(exp).Compile().DynamicInvoke()?.ToString(),
-                _ => throw new NotSupportedException(node.Method.Name)
-            });
-
+                    {
+                        Method.Name:
+                            nameof(TableAlias.Long)
+                            or nameof(TableAlias.Int)
+                            or nameof(TableAlias.Boolean)
+                            or nameof(TableAlias.Byte)
+                            or nameof(TableAlias.DateTime)
+                            or nameof(TableAlias.Decimal)
+                            or nameof(TableAlias.Double)
+                            or nameof(TableAlias.Float)
+                            or nameof(TableAlias.Guid)
+                            or nameof(TableAlias.NullableLong)
+                            or nameof(TableAlias.NullableInt)
+                            or nameof(TableAlias.NullableBoolean)
+                            or nameof(TableAlias.NullableByte)
+                            or nameof(TableAlias.NullableDateTime)
+                            or nameof(TableAlias.NullableDecimal)
+                            or nameof(TableAlias.NullableDouble)
+                            or nameof(TableAlias.NullableFloat)
+                            or nameof(TableAlias.NullableGuid),
+                        Arguments: [ConstantExpression constExp]
+                    } => constExp.Value?.ToString(),
+                    {
+                        Method.Name: nameof(TableAlias.Column),
+                        Arguments: [Expression exp]
+                    } => Expression.Lambda(exp).Compile().DynamicInvoke()?.ToString(),
+                    _ => throw new NotSupportedException(node.Method.Name)
+                });
+            }
             return node;
         }
 
@@ -88,14 +90,17 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     }
     protected override Expression VisitConstant(ConstantExpression node)
     {
-        if (!EmitValue(node.Type, node.Value))
+        if (!_paramMode)
         {
-            // if (node.Type.IsClosure())
-            // {
-            //     var o = GetFirstProp(node.Value);
+            if (!EmitValue(node.Type, node.Value))
+            {
+                // if (node.Type.IsClosure())
+                // {
+                //     var o = GetFirstProp(node.Value);
 
-            //     EmitValue(o.Item1, o.Item2);
-            // }
+                //     EmitValue(o.Item1, o.Item2);
+                // }
+            }
         }
 
         return node;
@@ -109,17 +114,17 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         bool EmitValue(Type t, object? v)
         {
             if (v is null)
-                _builder.Append("null");
+                _builder!.Append("null");
             else if (t == typeof(string) || t == typeof(Guid))
             {
-                _builder.Append('\'').Append(v?.ToString()).Append('\'');
+                _builder!.Append('\'').Append(v?.ToString()).Append('\'');
             }
             else if (t.IsPrimitive)
             {
                 if (t == typeof(bool))
-                    _builder.Append(_dataProvider.MakeBool((bool)v));
+                    _builder!.Append(_dataProvider.MakeBool((bool)v));
                 else
-                    _builder.Append(v?.ToString());
+                    _builder!.Append(v?.ToString());
             }
             else
                 return false;
@@ -131,9 +136,11 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     {
         if (node.Expression?.Type == _entityType)
         {
-            if (node.Expression!.Type!.FullName!.StartsWith("nextorm.core.Projection"))
+            if (node.Expression!.Type!.IsAssignableTo(typeof(IProjection)))
             {
-                _builder.Append(node.Member.Name).Append('.');
+                if (!_paramMode)
+                    _builder!.Append(node.Member.Name).Append('.');
+
                 return node;
             }
             else
@@ -141,20 +148,25 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 var colAttr = node.Member.GetCustomAttribute<ColumnAttribute>();
                 if (colAttr is not null)
                 {
-                    _builder.Append(colAttr.Name);
+                    if (!_paramMode)
+                        _builder!.Append(colAttr.Name);
+
                     _colName = colAttr.Name;
                 }
                 else //if (node.Expression!.Type.IsAnonymous())
                 {
                     var innerQuery = _tableProvider.FindSourceFromAlias(null);
                     var innerCol = innerQuery.SelectList!.SingleOrDefault(col => col.PropertyName == node.Member.Name) ?? throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
-                    var col = _dataProvider.MakeColumn(innerCol, innerQuery.EntityType!, innerQuery, false, _params);
-                    if (col.NeedAliasForColumn)
-                        _builder.Append(innerCol.PropertyName);
-                    else
+                    var col = _dataProvider.MakeColumn(innerCol, innerQuery.EntityType!, innerQuery, false, _params, _paramMode);
+                    if (!_paramMode)
                     {
-                        _builder.Append(col.Column);
-                        //_colName = col.Name;
+                        if (col.NeedAliasForColumn)
+                            _builder!.Append(innerCol.PropertyName);
+                        else
+                        {
+                            _builder!.Append(col.Column);
+                            //_colName = col.Name;
+                        }
                     }
                 }
                 // else
@@ -172,7 +184,9 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 // valueVisitor.Value.Get
                 var value = Expression.Lambda(node).Compile().DynamicInvoke();
                 _params.Add(new Param(node.Member.Name, value));
-                _builder.Append(_dataProvider.MakeParam(node.Member.Name));
+
+                if (!_paramMode)
+                    _builder!.Append(_dataProvider.MakeParam(node.Member.Name));
 
                 return node;
             }
@@ -192,7 +206,8 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                     else
                         alias = GetAliasFromParam(param);
 
-                    _builder.Append(alias).Append('.');
+                    if (!_paramMode)
+                        _builder!.Append(alias).Append('.');
 
                     hasAlias = true;
                 }
@@ -200,23 +215,32 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 var colAttr = node.Member.GetCustomAttribute<ColumnAttribute>();
                 if (colAttr is not null)
                 {
-                    _builder.Append(colAttr.Name);
+                    if (!_paramMode)
+                        _builder!.Append(colAttr.Name);
+
                     _colName = colAttr.Name;
                 }
                 else if (node.Expression!.Type.IsAnonymous())
                 {
                     var innerQuery = _tableProvider.FindSourceFromAlias(alias);
                     var innerCol = innerQuery.SelectList!.SingleOrDefault(col => col.PropertyName == node.Member.Name) ?? throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
-                    var col = _dataProvider.MakeColumn(innerCol, innerQuery.EntityType!, innerQuery, hasAlias,_params);
-                    if (col.NeedAliasForColumn)
-                        _builder.Append(innerCol.PropertyName);
-                    else
-                        _builder.Append(col.Column);
+                    var col = _dataProvider.MakeColumn(innerCol, innerQuery.EntityType!, innerQuery, hasAlias, _params, _paramMode);
+
+                    if (!_paramMode)
+                    {
+                        if (col.NeedAliasForColumn)
+                            _builder!.Append(innerCol.PropertyName);
+                        else
+                            _builder!.Append(col.Column);
+                    }
                 }
                 else
                 {
                     var c = _dataProvider.GetColumnName(node.Member);
-                    _builder.Append(c);
+
+                    if (!_paramMode)
+                        _builder!.Append(c);
+
                     _colName = c;
                 }
                 //}
@@ -249,90 +273,102 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         switch (node.NodeType)
         {
             case ExpressionType.Coalesce:
-            {
-                using var leftVisitor = Clone();
-                leftVisitor.Visit(node.Left);
-                Params.AddRange(leftVisitor.Params);
+                {
+                    using var leftVisitor = Clone();
+                    leftVisitor.Visit(node.Left);
+                    Params.AddRange(leftVisitor.Params);
 
-                using var rightVisitor = Clone();
-                rightVisitor.Visit(node.Right);
-                Params.AddRange(rightVisitor.Params);
+                    using var rightVisitor = Clone();
+                    rightVisitor.Visit(node.Right);
+                    Params.AddRange(rightVisitor.Params);
 
-                _builder.Append(_dataProvider.MakeCoalesce(
-                    leftVisitor.ToString(),
-                    rightVisitor.ToString()
-                ));
+                    if (!_paramMode)
+                    {
+                        _builder!.Append(_dataProvider.MakeCoalesce(
+                            leftVisitor.ToString(),
+                            rightVisitor.ToString()
+                        ));
+                    }
 
-                return node;
-            }
+                    return node;
+                }
             case ExpressionType.Conditional:
                 throw new NotImplementedException();
             case ExpressionType.Switch:
                 throw new NotImplementedException();
         }
 
-        _builder.Append('(');
-        Visit(node.Left);
-        switch (node.NodeType)
-        {
-            case ExpressionType.Add:
-                if (node.Type == typeof(string))
-                    _builder.Append(_dataProvider.ConcatStringOperator);
-                else
-                    _builder.Append(" + ");
+        if (!_paramMode)
+            _builder!.Append('(');
 
-                break;
-            case ExpressionType.And:
-                _builder.Append(" & "); break;
-            case ExpressionType.AndAlso:
-                _builder.Append(" and "); break;
-            case ExpressionType.Decrement:
-                _builder.Append(" -1 "); break;
-            case ExpressionType.Divide:
-                _builder.Append(" / "); break;
-            case ExpressionType.GreaterThan:
-                _builder.Append(" > "); break;
-            case ExpressionType.GreaterThanOrEqual:
-                _builder.Append(" >= "); break;
-            case ExpressionType.Increment:
-                _builder.Append(" + 1"); break;
-            case ExpressionType.LeftShift:
-                _builder.Append(" << "); break;
-            case ExpressionType.LessThan:
-                _builder.Append(" < "); break;
-            case ExpressionType.LessThanOrEqual:
-                _builder.Append(" <= "); break;
-            case ExpressionType.Modulo:
-                _builder.Append(" % "); break;
-            case ExpressionType.Multiply:
-                _builder.Append(" * "); break;
-            case ExpressionType.Negate:
-                _builder.Append(" - "); break;
-            case ExpressionType.Not:
-                _builder.Append(" ~ "); break;
-            case ExpressionType.NotEqual:
-                _builder.Append(" != "); break;
-            case ExpressionType.Or:
-                _builder.Append(" | "); break;
-            case ExpressionType.OrElse:
-                _builder.Append(" or "); break;
-            case ExpressionType.Power:
-                _builder.Append(" ^ "); break;
-            case ExpressionType.RightShift:
-                _builder.Append(" >> "); break;
-            case ExpressionType.Subtract:
-                _builder.Append(" - "); break;
-            default:
-                throw new NotSupportedException(node.NodeType.ToString());
+        Visit(node.Left);
+
+        if (!_paramMode)
+        {
+            switch (node.NodeType)
+            {
+                case ExpressionType.Add:
+                    if (node.Type == typeof(string))
+                        _builder!.Append(_dataProvider.ConcatStringOperator);
+                    else
+                        _builder!.Append(" + ");
+
+                    break;
+                case ExpressionType.And:
+                    _builder!.Append(" & "); break;
+                case ExpressionType.AndAlso:
+                    _builder!.Append(" and "); break;
+                case ExpressionType.Decrement:
+                    _builder!.Append(" -1 "); break;
+                case ExpressionType.Divide:
+                    _builder!.Append(" / "); break;
+                case ExpressionType.GreaterThan:
+                    _builder!.Append(" > "); break;
+                case ExpressionType.GreaterThanOrEqual:
+                    _builder!.Append(" >= "); break;
+                case ExpressionType.Increment:
+                    _builder!.Append(" + 1"); break;
+                case ExpressionType.LeftShift:
+                    _builder!.Append(" << "); break;
+                case ExpressionType.LessThan:
+                    _builder!.Append(" < "); break;
+                case ExpressionType.LessThanOrEqual:
+                    _builder!.Append(" <= "); break;
+                case ExpressionType.Modulo:
+                    _builder!.Append(" % "); break;
+                case ExpressionType.Multiply:
+                    _builder!.Append(" * "); break;
+                case ExpressionType.Negate:
+                    _builder!.Append(" - "); break;
+                case ExpressionType.Not:
+                    _builder!.Append(" ~ "); break;
+                case ExpressionType.NotEqual:
+                    _builder!.Append(" != "); break;
+                case ExpressionType.Or:
+                    _builder!.Append(" | "); break;
+                case ExpressionType.OrElse:
+                    _builder!.Append(" or "); break;
+                case ExpressionType.Power:
+                    _builder!.Append(" ^ "); break;
+                case ExpressionType.RightShift:
+                    _builder!.Append(" >> "); break;
+                case ExpressionType.Subtract:
+                    _builder!.Append(" - "); break;
+                default:
+                    throw new NotSupportedException(node.NodeType.ToString());
+            }
         }
+
         Visit(node.Right);
-        _builder.Append(')');
+
+        if (!_paramMode)
+            _builder!.Append(')');
 
         return node;
     }
     public override string ToString()
     {
-        return _builder.ToString();
+        return _builder!.ToString();
     }
 
     object ICloneable.Clone()
@@ -342,7 +378,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 
     public virtual BaseExpressionVisitor Clone()
     {
-        return new BaseExpressionVisitor(_entityType, _dataProvider, _tableProvider, _dim, _aliasProvider, _dontNeedAlias);
+        return new BaseExpressionVisitor(_entityType, _dataProvider, _tableProvider, _dim, _aliasProvider, _dontNeedAlias, _paramMode);
     }
 
     protected virtual void Dispose(bool disposing)
@@ -351,7 +387,8 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         {
             if (disposing)
             {
-                _dataProvider._sbPool.Return(_builder);
+                if (!_paramMode)
+                    _dataProvider._sbPool.Return(_builder!);
             }
             disposedValue = true;
         }

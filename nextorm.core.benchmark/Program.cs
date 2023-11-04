@@ -6,8 +6,8 @@ using nextorm.core.benchmark;
 // BenchmarkRunner.Run<InMemoryBenchmarkWhere>();
 // BenchmarkRunner.Run<SqliteBenchmarkIteration>();
 //BenchmarkRunner.Run<SqliteBenchmarkLargeIteration>();
-// BenchmarkRunner.Run<SqliteBenchmarkWhere>();
-BenchmarkRunner.Run<SqliteBenchmarkSimulateWork>();
+BenchmarkRunner.Run<SqliteBenchmarkWhere>();
+// BenchmarkRunner.Run<SqliteBenchmarkSimulateWork>();
 
 
 // var runner = new SqliteBenchmarkSimulateWork();

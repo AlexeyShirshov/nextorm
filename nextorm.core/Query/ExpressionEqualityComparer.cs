@@ -54,6 +54,7 @@ public sealed class ExpressionEqualityComparer : IEqualityComparer<Expression?>
                     break;
 
                 case ConstantExpression constantExpression:
+                    //hash.Add(constantExpression.Type);
                     switch (constantExpression.Value)
                     {
                         case IQueryable:
@@ -115,7 +116,11 @@ public sealed class ExpressionEqualityComparer : IEqualityComparer<Expression?>
                     break;
 
                 case MemberExpression memberExpression:
-                    hash.Add(memberExpression.Expression, this);
+                    if (memberExpression.Expression is ConstantExpression ce)
+                        hash.Add(ce.Type);
+                    else
+                        hash.Add(memberExpression.Expression, this);
+
                     hash.Add(memberExpression.Member);
                     break;
 
@@ -149,7 +154,8 @@ public sealed class ExpressionEqualityComparer : IEqualityComparer<Expression?>
                     break;
 
                 case ParameterExpression parameterExpression:
-                    AddToHashIfNotNull(parameterExpression.Name);
+                    //AddToHashIfNotNull(parameterExpression.Name);
+                    hash.Add(parameterExpression.Type);
                     break;
 
                 case RuntimeVariablesExpression runtimeVariablesExpression:
@@ -433,7 +439,9 @@ public sealed class ExpressionEqualityComparer : IEqualityComparer<Expression?>
 
         private bool CompareMember(MemberExpression a, MemberExpression b)
             => Equals(a.Member, b.Member)
-                && Compare(a.Expression, b.Expression);
+                && a.Expression is ConstantExpression ce1 && b.Expression is ConstantExpression ce2
+                    ? ce1.Type == ce2.Type
+                    : Compare(a.Expression, b.Expression);
 
         private bool CompareMemberInit(MemberInitExpression a, MemberInitExpression b)
             => Compare(a.NewExpression, b.NewExpression)
@@ -455,8 +463,8 @@ public sealed class ExpressionEqualityComparer : IEqualityComparer<Expression?>
         private bool CompareParameter(ParameterExpression a, ParameterExpression b)
             => _parameterScope != null
                 && _parameterScope.TryGetValue(a, out var mapped)
-                    ? mapped.Name == b.Name
-                    : a.Name == b.Name;
+                    ? mapped.Type == b.Type
+                    : a.Type == b.Type;
 
         private bool CompareRuntimeVariables(RuntimeVariablesExpression a, RuntimeVariablesExpression b)
             => CompareExpressionList(a.Variables, b.Variables);

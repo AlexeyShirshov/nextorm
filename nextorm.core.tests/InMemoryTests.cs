@@ -95,11 +95,15 @@ public class InMemoryTests
     [Fact]
     public async void TestQueryCache()
     {
-        var s = await _sut.SimpleEntity.Where(it => it.Id == 2).Select(it => new { it.Id }).FirstOrDefaultAsync();
+        var id = 2;
+        var q1 = _sut.SimpleEntity.Where(it => it.Id == id).Select(it => new { it.Id });
 
-        s = await _sut.SimpleEntity.Where(it => it.Id == 2).Select(it => new { it.Id }).FirstOrDefaultAsync();
-        // When
+        var q2 = _sut.SimpleEntity.Where(it2 => it2.Id == id).Select(it3 => new { it3.Id });
 
-        // Then
+        id = 3;
+        var q3 = _sut.SimpleEntity.Where(it => it.Id == id).Select(it => new { it.Id });
+
+        q1.GetHashCode().Should().Be(q2.GetHashCode());
+        q1.GetHashCode().Should().Be(q3.GetHashCode());
     }
 }
