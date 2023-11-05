@@ -4,14 +4,14 @@ using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
-public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumeratorInit
+public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>
 {
     //private readonly QueryCommand<TResult> _cmd;
     private readonly SqlDataProvider _dataProvider;
     private readonly DatabaseCompiledQuery<TResult> _compiledQuery;
     private readonly CancellationToken _cancellationToken;
     private readonly Func<object, TResult> _map;
-    private List<Param>? _params;
+    // private List<Param>? _params;
     private DbDataReader? _reader;
     private DbConnection? _conn;
 
@@ -44,10 +44,10 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
         // }
     }
 
-    public void Init(object data)
-    {
-        _params = (List<Param>)data;
-    }
+    // public void Init(object data)
+    // {
+    //     _params = (List<Param>)data;
+    // }
 
     public async ValueTask<bool> MoveNextAsync()
     {
@@ -69,7 +69,7 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
 
         async Task InitReader()
         {
-            var sqlCommand = _compiledQuery.GetCommand(_params!, _dataProvider);
+            var sqlCommand = _compiledQuery.DbCommand;
             sqlCommand.Connection = _conn;
 
             if (_conn.State == ConnectionState.Closed)

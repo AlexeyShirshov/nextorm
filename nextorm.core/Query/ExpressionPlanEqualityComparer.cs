@@ -4,19 +4,19 @@ using System.Reflection;
 
 namespace nextorm.core;
 
-public sealed class ExpressionEqualityComparer : IEqualityComparer<Expression?>
+public sealed class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
 {
     /// <summary>
     ///     Creates a new <see cref="ExpressionEqualityComparer" />.
     /// </summary>
-    private ExpressionEqualityComparer()
+    private ExpressionPlanEqualityComparer()
     {
     }
 
     /// <summary>
     ///     Gets an instance of <see cref="ExpressionEqualityComparer" />.
     /// </summary>
-    public static ExpressionEqualityComparer Instance { get; } = new();
+    public static ExpressionPlanEqualityComparer Instance { get; } = new();
 
     /// <inheritdoc />
     public int GetHashCode(Expression obj)
@@ -54,6 +54,7 @@ public sealed class ExpressionEqualityComparer : IEqualityComparer<Expression?>
                     break;
 
                 case ConstantExpression constantExpression:
+                    //hash.Add(constantExpression.Type);
                     switch (constantExpression.Value)
                     {
                         case IQueryable:
@@ -115,16 +116,16 @@ public sealed class ExpressionEqualityComparer : IEqualityComparer<Expression?>
                     break;
 
                 case MemberExpression memberExpression:
-                    if (memberExpression.Has<ConstantExpression>())
+                    if (memberExpression.Expression is ConstantExpression ce)
                     {
-                        var value = Expression.Lambda(memberExpression).Compile().DynamicInvoke();
-                        //Console.WriteLine(value);
-                        AddToHashIfNotNull(value);
-                        break;
+                        hash.Add(ce.Type);
+                        hash.Add(memberExpression.Member.MemberType);
                     }
-
-                    hash.Add(memberExpression.Expression, this);
-                    hash.Add(memberExpression.Member);
+                    else
+                    {
+                        hash.Add(memberExpression.Expression, this);
+                        hash.Add(memberExpression.Member);
+                    }
                     break;
 
                 case MemberInitExpression memberInitExpression:
@@ -157,9 +158,8 @@ public sealed class ExpressionEqualityComparer : IEqualityComparer<Expression?>
                     break;
 
                 case ParameterExpression parameterExpression:
+                    //AddToHashIfNotNull(parameterExpression.Name);
                     hash.Add(parameterExpression.Type);
-                    // 
-                    // AddToHashIfNotNull(value);
                     break;
 
                 case RuntimeVariablesExpression runtimeVariablesExpression:
@@ -442,8 +442,8 @@ public sealed class ExpressionEqualityComparer : IEqualityComparer<Expression?>
                 && Compare(a.Body, b.Body);
 
         private bool CompareMember(MemberExpression a, MemberExpression b)
-            => a.Expression is ConstantExpression && b.Expression is ConstantExpression
-                ? Equals(Expression.Lambda(a).Compile().DynamicInvoke(), Expression.Lambda(b).Compile().DynamicInvoke())
+            => a.Expression is ConstantExpression ce1 && b.Expression is ConstantExpression ce2
+                ? Equals(a.Member.MemberType, b.Member.MemberType) && ce1.Type == ce2.Type
                 : Equals(a.Member, b.Member) && Compare(a.Expression, b.Expression);
 
         private bool CompareMemberInit(MemberInitExpression a, MemberInitExpression b)
@@ -464,20 +464,10 @@ public sealed class ExpressionEqualityComparer : IEqualityComparer<Expression?>
                 && CompareMemberList(a.Members, b.Members);
 
         private bool CompareParameter(ParameterExpression a, ParameterExpression b)
-        {
-            if (_parameterScope != null
-               && _parameterScope.TryGetValue(a, out var mapped)
-                   ? mapped.Type == b.Type
-                   : a.Type == b.Type)
-            {
-                // var valueA = Expression.Lambda(a).Compile().DynamicInvoke();
-                // var valueB = Expression.Lambda(b).Compile().DynamicInvoke();
-                // return Equals(valueA, valueB);
-                return true;
-            }
-
-            return false;
-        }
+            => _parameterScope != null
+                && _parameterScope.TryGetValue(a, out var mapped)
+                    ? mapped.Type == b.Type
+                    : a.Type == b.Type;
 
         private bool CompareRuntimeVariables(RuntimeVariablesExpression a, RuntimeVariablesExpression b)
             => CompareExpressionList(a.Variables, b.Variables);

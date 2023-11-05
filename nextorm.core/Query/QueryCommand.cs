@@ -15,15 +15,19 @@ public class QueryCommand : IPayloadManager, ISourceProvider
     private IPayloadManager _payloadMgr;
     protected List<SelectExpression>? _selectList;
     private int _columnsHash;
-    protected FromExpression? _from;
     private int _joinHash;
+    protected FromExpression? _from;
     protected IDataProvider _dataProvider;
     protected readonly LambdaExpression _exp;
     protected readonly Expression? _condition;
     protected bool _isPrepared;
     private int? _hash;
+    internal int? _hashPlan;
     protected Type? _srcType;
     private bool _dontCache;
+    internal int? PlanHash;
+    internal int ColumnsPlanHash;
+    internal int JoinPlanHash;
     public QueryCommand(IDataProvider dataProvider, LambdaExpression exp, Expression? condition)
     {
         _dataProvider = dataProvider;
@@ -80,6 +84,7 @@ public class QueryCommand : IPayloadManager, ISourceProvider
         FromExpression? from = _from ?? _dataProvider.GetFrom(srcType, this);
 
         var joinHash = 7;
+        var joinPlanHash = 7;
         if (Joins.Any())
         {
             if (_from is not null && string.IsNullOrEmpty(_from.TableAlias)) _from.TableAlias = "t1";
@@ -92,11 +97,15 @@ public class QueryCommand : IPayloadManager, ISourceProvider
                 unchecked
                 {
                     joinHash = joinHash * 13 + join.GetHashCode();
+                    joinPlanHash = joinPlanHash * 13 + JoinExpressionPlanEqualityComparer.Instance.GetHashCode(join);
                 }
             }
         }
+
+
         var selectList = _selectList;
         var columnsHash = 7;
+        var columnsPlanHash = 7;
 
         if (selectList is null)
         {
@@ -141,6 +150,7 @@ public class QueryCommand : IPayloadManager, ISourceProvider
                     unchecked
                     {
                         columnsHash = columnsHash * 13 + selExp.GetHashCode();
+                        columnsPlanHash = columnsPlanHash * 13 + SelectExpressionPlanEqualityComparer.Instance.GetHashCode(selExp);
                     }
                 }
 
@@ -176,6 +186,7 @@ public class QueryCommand : IPayloadManager, ISourceProvider
                         unchecked
                         {
                             columnsHash = columnsHash * 13 + selExp.GetHashCode();
+                            columnsPlanHash = columnsPlanHash * 13 + SelectExpressionPlanEqualityComparer.Instance.GetHashCode(selExp);
                         }
                     }
                     else
@@ -211,6 +222,7 @@ public class QueryCommand : IPayloadManager, ISourceProvider
                                     unchecked
                                     {
                                         columnsHash = columnsHash * 13 + selExp.GetHashCode();
+                                        columnsPlanHash = columnsPlanHash * 13 + SelectExpressionPlanEqualityComparer.Instance.GetHashCode(selExp);
                                     }
                                 }
                             }
@@ -226,16 +238,18 @@ public class QueryCommand : IPayloadManager, ISourceProvider
         _isPrepared = true;
         _selectList = selectList;
         _columnsHash = columnsHash;
+        ColumnsPlanHash = columnsPlanHash;
         _srcType = srcType;
         _from = from;
         _joinHash = joinHash;
+        JoinPlanHash = joinPlanHash;
 
         //_payloadMgr = new FastPayloadManager(cache ? new Dictionary<Type, object?>() : null);
 
-        string capitalize(string str)
-        {
-            return string.Concat(new ReadOnlySpan<char>(Char.ToUpper(str[0])), str.AsSpan()[1..]);
-        }
+        // string capitalize(string str)
+        // {
+        //     return string.Concat(new ReadOnlySpan<char>(Char.ToUpper(str[0])), str.AsSpan()[1..]);
+        // }
     }
 
     public bool RemovePayload<T>() where T : class, IPayload
@@ -293,6 +307,8 @@ public class QueryCommand : IPayloadManager, ISourceProvider
             hash.Add(_joinHash);
 
             _hash = hash.ToHashCode();
+
+            //Console.WriteLine(_hash);
 
             return _hash.Value;
         }

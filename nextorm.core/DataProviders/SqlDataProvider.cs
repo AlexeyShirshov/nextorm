@@ -13,7 +13,8 @@ namespace nextorm.core;
 
 public class SqlDataProvider : IDataProvider
 {
-    private readonly IDictionary<QueryCommand, SqlCacheEntry> _cmdIdx = new Dictionary<QueryCommand, SqlCacheEntry>();
+    private readonly IDictionary<QueryCommand, SqlCacheEntry> _queryCache = new Dictionary<QueryCommand, SqlCacheEntry>();
+    private readonly IDictionary<QueryPlan, SqlCacheEntry> _queryPlanCache = new Dictionary<QueryPlan, SqlCacheEntry>();
     private DbConnection? _conn;
     private bool _clearCache;
     private bool disposedValue;
@@ -57,14 +58,45 @@ public class SqlDataProvider : IDataProvider
     {
         throw new NotImplementedException(type.ToString());
     }
-    public (DatabaseCompiledQuery<TResult>, List<Param>) CreateCompiledQuery<TResult>(QueryCommand<TResult> cmd)
+    private SqlCacheEntry CreateCompiledQuery<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
     {
-        var (sql, @params) = MakeSelect(cmd, false);
-        var dbCommand = CreateCommand(sql!);
+        DatabaseCompiledQuery<TResult>? compiledQuery = null;
+        var queryPlan = new QueryPlan(queryCommand);
+        if (!queryCommand.Cache || !_queryPlanCache.TryGetValue(queryPlan, out var planCache))
+        {
+            var (sql, @params) = MakeSelect(queryCommand, false);
 
-        //dbCommand.Parameters.AddRange(@params.Select(it => CreateParam(it.Name, it.Value)).ToArray());
+            var compiledPlan = new DatabaseCompiledPlan<TResult>(sql!, queryCommand.GetMap(typeof(TResult), typeof(DbDataReader)), @params.Count == 0);
 
-        return (new DatabaseCompiledQuery<TResult>(dbCommand, cmd.GetMap(typeof(TResult), typeof(DbDataReader)), @params.Count == 0), @params);
+            planCache = new SqlCacheEntry(compiledPlan);
+
+            if (queryCommand.Cache)
+                _queryPlanCache[queryPlan] = planCache;
+
+            var dbCommand = CreateCommand(sql!);
+
+            dbCommand.Parameters.AddRange(@params.Select(it => CreateParam(it.Name, it.Value)).ToArray());
+
+            compiledQuery = new DatabaseCompiledQuery<TResult>(dbCommand, compiledPlan.MapDelegate);
+        }
+        else if (planCache.CompiledQuery is DatabaseCompiledPlan<TResult> plan)
+        {
+            //var dbCommand = plan.GetCommand(ExtractParams(queryCommand), this);
+            var dbCommand = CreateCommand(plan._sql);
+
+            dbCommand.Parameters.Add(CreateParam(MakeParam("p"), 1));
+
+            compiledQuery = new DatabaseCompiledQuery<TResult>(dbCommand, plan.MapDelegate);
+        }
+
+        var enumerator = new ResultSetEnumerator<TResult>(this, compiledQuery!, cancellationToken);
+
+        var cacheEntry = new SqlCacheEntry(compiledQuery) { Enumerator = enumerator };
+
+        if (queryCommand.Cache)
+            _queryCache[queryCommand] = cacheEntry;
+
+        return cacheEntry;
     }
     // public DatabaseCompiledQuery<TResult> GetCompiledQuery<TResult>(QueryCommand<TResult> cmd)
     // {
@@ -306,7 +338,7 @@ public class SqlDataProvider : IDataProvider
         ArgumentNullException.ThrowIfNull(queryCommand);
 
         var ce = queryCommand.CacheEntry;
-        if (ce is SqlCacheEntry cacheEntry || _cmdIdx.TryGetValue(queryCommand, out cacheEntry!) && cacheEntry is not null)
+        if (ce is SqlCacheEntry cacheEntry || (queryCommand.Cache && _queryCache.TryGetValue(queryCommand, out cacheEntry!) && cacheEntry is not null))
         {
             if (cacheEntry.Enumerator is not ResultSetEnumerator<TResult> enumerator)
             {
@@ -314,22 +346,13 @@ public class SqlDataProvider : IDataProvider
                 cacheEntry.Enumerator = enumerator;
             }
 
-            if (cacheEntry.CompiledQuery is DatabaseCompiledQuery<TResult> cq && !cq.NoParams)
-                enumerator.Init(ExtractParams(queryCommand));
-
             return enumerator;
         }
         else
         {
-            var (compiledQuery, @params) = CreateCompiledQuery(queryCommand);
-            var enumerator = new ResultSetEnumerator<TResult>(this, compiledQuery, cancellationToken);
-            enumerator.Init(@params);
-            cacheEntry = new SqlCacheEntry(compiledQuery) { Enumerator = enumerator };
+            cacheEntry = CreateCompiledQuery(queryCommand, cancellationToken);
 
-            if (queryCommand.Cache)
-                _cmdIdx[queryCommand] = cacheEntry;
-
-            return enumerator;
+            return (IAsyncEnumerator<TResult>)cacheEntry.Enumerator!;
         }
     }
     private List<Param> ExtractParams(QueryCommand queryCommand) => MakeSelect(queryCommand, true).Item2;
@@ -420,7 +443,7 @@ public class SqlDataProvider : IDataProvider
         if (!cmd.IsPrepared)
             cmd.PrepareCommand(cancellationToken);
 
-        cmd.CacheEntry = new CacheEntry(CreateCompiledQuery(cmd));
+        cmd.CacheEntry = CreateCompiledQuery(cmd, cancellationToken);
     }
     protected virtual void Dispose(bool disposing)
     {
@@ -473,5 +496,32 @@ public class SqlDataProvider : IDataProvider
         {
         }
         public object? Enumerator { get; set; }
+    }
+    class QueryPlan
+    {
+        public readonly QueryCommand QueryCommand;
+        public QueryPlan(QueryCommand cmd)
+        {
+            QueryCommand = cmd;
+        }
+        public override int GetHashCode()
+        {
+            if (!QueryCommand._hashPlan.HasValue)
+            {
+                QueryCommand._hashPlan = QueryPlanEqualityComparer.Instance.GetHashCode(QueryCommand);
+            }
+
+            return QueryCommand._hashPlan.Value;
+        }
+        public override bool Equals(object? obj)
+        {
+            return Equals(obj as QueryPlan);
+        }
+        public bool Equals(QueryPlan? obj)
+        {
+            if (obj is null) return false;
+
+            return QueryPlanEqualityComparer.Instance.Equals(QueryCommand, obj.QueryCommand);
+        }
     }
 }

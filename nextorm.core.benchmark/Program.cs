@@ -10,10 +10,10 @@ BenchmarkRunner.Run<SqliteBenchmarkWhere>();
 // BenchmarkRunner.Run<SqliteBenchmarkSimulateWork>();
 
 
-// var runner = new SqliteBenchmarkSimulateWork();
+// var runner = new SqliteBenchmarkWhere();
 
 // for (var i = 0; i < 2; i++)
-//     await runner.NextormCached();
+//     await runner.Nextorm();
 
 //await runner.FillLargeTable();
 // Console.WriteLine("Press any key to exit");

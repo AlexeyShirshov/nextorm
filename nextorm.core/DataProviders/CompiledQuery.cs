@@ -6,7 +6,10 @@ namespace nextorm.core;
 public class CompiledQuery<TResult>
 {
     public readonly Func<object, TResult> MapDelegate;
-    //private readonly Func<Func<object, TResult>> _getMap;
+    public CompiledQuery(Func<object, TResult> mapDelegate)
+    {
+        MapDelegate = mapDelegate;
+    }
     public CompiledQuery(Func<Func<object, TResult>> getMap)
     {
         MapDelegate = getMap();
@@ -28,21 +31,37 @@ public class InMemoryCompiledQuery<TResult, TEntity> : CompiledQuery<TResult>
 }
 public class DatabaseCompiledQuery<TResult> : CompiledQuery<TResult>
 {
-    private readonly DbCommand _dbCommand;
-    public readonly bool NoParams;
-    public DbCommand GetCommand(List<Param> @params, SqlDataProvider dataProvider)
-    {
-        if (!NoParams)
-        {
-            _dbCommand.Parameters.Clear();
-            _dbCommand.Parameters.AddRange(@params.Select(it => dataProvider.CreateParam(it.Name, it.Value)).ToArray());
-        }
-        return _dbCommand;
-    }
-    public DatabaseCompiledQuery(DbCommand dbCommand, Func<Func<object, TResult>> getMap, bool noParams)
+    public readonly DbCommand DbCommand;
+    public DatabaseCompiledQuery(DbCommand dbCommand, Func<Func<object, TResult>> getMap)
         : base(getMap)
     {
-        _dbCommand = dbCommand;
+        DbCommand = dbCommand;
+    }
+    public DatabaseCompiledQuery(DbCommand dbCommand, Func<object, TResult> mapDelegate)
+        : base(mapDelegate)
+    {
+        DbCommand = dbCommand;
+    }
+}
+public class DatabaseCompiledPlan<TResult> : CompiledQuery<TResult>
+{
+    internal readonly string _sql;
+    public readonly bool NoParams;
+    public DatabaseCompiledPlan(string sql, Func<Func<object, TResult>> getMap, bool noParams)
+        : base(getMap)
+    {
+        _sql = sql;
         NoParams = noParams;
     }
+    public DbCommand GetCommand(List<Param> @params, SqlDataProvider dataProvider)
+    {
+        var dbCommand = dataProvider.CreateCommand(_sql);
+
+        if (!NoParams)
+            dbCommand.Parameters.AddRange(@params.Select(it => dataProvider.CreateParam(it.Name, it.Value)).ToArray());
+
+        return dbCommand;
+    }
+    public DatabaseCompiledQuery<TResult> CompileQuery(List<Param> @params, SqlDataProvider dataProvider)
+        => new DatabaseCompiledQuery<TResult>(GetCommand(@params, dataProvider), MapDelegate);
 }

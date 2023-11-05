@@ -114,8 +114,7 @@ public class SelectExpression
 
         if (PropertyName != exp.PropertyName) return false;
 
-        if (!Expression.Match(cmd => cmd.Equals(exp.Expression.AsT0), e => ExpressionEqualityComparer.Instance.Equals(e, exp.Expression.AsT1))) return false;
-
-        return true;
+        return Expression.IsT0 == exp.Expression.IsT0
+            && Expression.Match(cmd => cmd.Equals(exp.Expression.AsT0), e => ExpressionEqualityComparer.Instance.Equals(e, exp.Expression.AsT1));
     }
 }

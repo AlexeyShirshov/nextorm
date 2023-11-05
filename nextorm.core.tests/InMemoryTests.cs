@@ -1,3 +1,4 @@
+using System.Formats.Asn1;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualStudio.TestPlatform.ObjectModel;
@@ -93,17 +94,42 @@ public class InMemoryTests
         }
     }
     [Fact]
-    public async void TestQueryCache()
+    public void TestQueryCache()
     {
         var id = 2;
-        var q1 = _sut.SimpleEntity.Where(it => it.Id == id).Select(it => new { it.Id });
 
+        var q1 = _sut.SimpleEntity.Where(it => it.Id == id).Select(it => new { it.Id });
+        q1.PrepareCommand(CancellationToken.None);
         var q2 = _sut.SimpleEntity.Where(it2 => it2.Id == id).Select(it3 => new { it3.Id });
+        q2.PrepareCommand(CancellationToken.None);
+
+        var hashCode = q1.GetHashCode();
+        hashCode.Should().Be(q2.GetHashCode());
+        q1.Should().Be(q2);
 
         id = 3;
-        var q3 = _sut.SimpleEntity.Where(it => it.Id == id).Select(it => new { it.Id });
 
-        q1.GetHashCode().Should().Be(q2.GetHashCode());
-        q1.GetHashCode().Should().Be(q3.GetHashCode());
+        var q3 = _sut.SimpleEntity.Where(it => it.Id == id).Select(it => new { it.Id });
+        q3.PrepareCommand(CancellationToken.None);
+
+        hashCode.Should().NotBe(q3.GetHashCode());
+    }
+    [Fact]
+    public void TestQueryPlanCache()
+    {
+        var (id1, id2) = (2, 3);
+
+        var q1 = _sut.SimpleEntity.Where(it => it.Id == id1).Select(it => new { it.Id });
+        q1.PrepareCommand(CancellationToken.None);
+        var q2 = _sut.SimpleEntity.Where(it2 => it2.Id == id2).Select(it3 => new { it3.Id });
+        q2.PrepareCommand(CancellationToken.None);
+
+        var hashCode = q1.GetHashCode();
+        hashCode.Should().NotBe(q2.GetHashCode());
+
+        var planEC = QueryPlanEqualityComparer.Instance;
+
+        planEC.GetHashCode(q1).Should().Be(planEC.GetHashCode(q2));
+        planEC.Equals(q1, q2).Should().BeTrue();
     }
 }
