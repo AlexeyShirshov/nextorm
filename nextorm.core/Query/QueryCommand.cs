@@ -94,11 +94,11 @@ public class QueryCommand : IPayloadManager, ISourceProvider
                 if (!(join.Query?.IsPrepared ?? true))
                     join.Query!.PrepareCommand(cancellationToken);
 
-                unchecked
-                {
-                    joinHash = joinHash * 13 + join.GetHashCode();
-                    joinPlanHash = joinPlanHash * 13 + JoinExpressionPlanEqualityComparer.Instance.GetHashCode(join);
-                }
+                if (!_dontCache) unchecked
+                    {
+                        joinHash = joinHash * 13 + join.GetHashCode();
+                        joinPlanHash = joinPlanHash * 13 + JoinExpressionPlanEqualityComparer.Instance.GetHashCode(join);
+                    }
             }
         }
 
@@ -147,11 +147,11 @@ public class QueryCommand : IPayloadManager, ISourceProvider
                     //}
                     selectList.Add(selExp);
 
-                    unchecked
-                    {
-                        columnsHash = columnsHash * 13 + selExp.GetHashCode();
-                        columnsPlanHash = columnsPlanHash * 13 + SelectExpressionPlanEqualityComparer.Instance.GetHashCode(selExp);
-                    }
+                    if (!_dontCache) unchecked
+                        {
+                            columnsHash = columnsHash * 13 + selExp.GetHashCode();
+                            columnsPlanHash = columnsPlanHash * 13 + SelectExpressionPlanEqualityComparer.Instance.GetHashCode(selExp);
+                        }
                 }
 
                 if (selectList.Count == 0)
@@ -183,11 +183,11 @@ public class QueryCommand : IPayloadManager, ISourceProvider
 
                         selectList.Add(selExp);
 
-                        unchecked
-                        {
-                            columnsHash = columnsHash * 13 + selExp.GetHashCode();
-                            columnsPlanHash = columnsPlanHash * 13 + SelectExpressionPlanEqualityComparer.Instance.GetHashCode(selExp);
-                        }
+                        if (!_dontCache) unchecked
+                            {
+                                columnsHash = columnsHash * 13 + selExp.GetHashCode();
+                                columnsPlanHash = columnsPlanHash * 13 + SelectExpressionPlanEqualityComparer.Instance.GetHashCode(selExp);
+                            }
                     }
                     else
                     {
@@ -219,11 +219,11 @@ public class QueryCommand : IPayloadManager, ISourceProvider
 
                                     selectList.Add(selExp);
 
-                                    unchecked
-                                    {
-                                        columnsHash = columnsHash * 13 + selExp.GetHashCode();
-                                        columnsPlanHash = columnsPlanHash * 13 + SelectExpressionPlanEqualityComparer.Instance.GetHashCode(selExp);
-                                    }
+                                    if (!_dontCache) unchecked
+                                        {
+                                            columnsHash = columnsHash * 13 + selExp.GetHashCode();
+                                            columnsPlanHash = columnsPlanHash * 13 + SelectExpressionPlanEqualityComparer.Instance.GetHashCode(selExp);
+                                        }
                                 }
                             }
                         }
@@ -300,7 +300,7 @@ public class QueryCommand : IPayloadManager, ISourceProvider
                 hash.Add(_srcType);
 
             if (_condition is not null)
-                hash.Add(_condition, ExpressionEqualityComparer.Instance);
+                hash.Add(_condition, PreciseExpressionEqualityComparer.Instance);
 
             hash.Add(_columnsHash);
 
@@ -325,7 +325,7 @@ public class QueryCommand : IPayloadManager, ISourceProvider
 
         if (_srcType != cmd._srcType) return false;
 
-        if (!ExpressionEqualityComparer.Instance.Equals(_condition, cmd._condition)) return false;
+        if (!PreciseExpressionEqualityComparer.Instance.Equals(_condition, cmd._condition)) return false;
 
         if (_selectList is null && cmd._selectList is not null) return false;
         if (_selectList is not null && cmd._selectList is null) return false;
@@ -373,7 +373,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
     }
 
     internal CompiledQuery<TResult>? Compiled => CacheEntry?.CompiledQuery as CompiledQuery<TResult>;
-    internal CacheEntry CacheEntry { get; set; }
+    internal CacheEntry? CacheEntry { get; set; }
     public IAsyncEnumerator<TResult> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
         if (!IsPrepared)

@@ -3,6 +3,7 @@ using nextorm.sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Data.Sqlite;
 using Dapper;
+using System.Linq.Expressions;
 
 namespace nextorm.core.benchmark;
 
@@ -57,6 +58,23 @@ public class SqliteBenchmarkWhere
         for (var i = 0; i < Iterations; i++)
         {
             var p = i;
+            // var cmd = new QueryCommand<SimpleEntity>(_ctx.DataProvider,
+            //     (ISimpleEntity entity) => new SimpleEntity { Id = entity.Id },
+            //     (ISimpleEntity it) => it.Id == p);
+            var cmd = _ctx.SimpleEntity.Where(it => it.Id == p).Select(entity => new { entity.Id });
+            cmd.Cache = false;
+            // cmd.PrepareCommand(CancellationToken.None);
+            await foreach (var row in cmd)
+            {
+            }
+        }
+    }
+    [Benchmark()]
+    public async Task NextormCached()
+    {
+        for (var i = 0; i < Iterations; i++)
+        {
+            var p = i;
             await foreach (var row in _ctx.SimpleEntity.Where(it => it.Id == p).Select(entity => new { entity.Id }))
             {
             }
@@ -69,20 +87,20 @@ public class SqliteBenchmarkWhere
     //     {
     //     }
     // }
-    [Benchmark]
-    public async Task EFCore()
-    {
-        for (var i = 0; i < Iterations; i++)
-            foreach (var row in await _efCtx.SimpleEntities.Where(it => it.Id == i).Select(entity => new { entity.Id }).ToListAsync())
-            {
-            }
-    }
-    [Benchmark]
-    public async Task Dapper()
-    {
-        for (var i = 0; i < Iterations; i++)
-            foreach (var row in await _conn.QueryAsync<SimpleEntity>("select id from simple_entity where id=@id", new { id = i }))
-            {
-            }
-    }
+    // [Benchmark]
+    // public async Task EFCore()
+    // {
+    //     for (var i = 0; i < Iterations; i++)
+    //         foreach (var row in await _efCtx.SimpleEntities.Where(it => it.Id == i).Select(entity => new { entity.Id }).ToListAsync())
+    //         {
+    //         }
+    // }
+    // [Benchmark(Baseline = true)]
+    // public async Task Dapper()
+    // {
+    //     for (var i = 0; i < Iterations; i++)
+    //         foreach (var row in await _conn.QueryAsync<SimpleEntity>("select id from simple_entity where id=@id", new { id = i }))
+    //         {
+    //         }
+    // }
 }

@@ -8,8 +8,7 @@ Intel Core i7-4500U CPU 1.80GHz (Haswell), 1 CPU, 4 logical and 2 physical cores
 
 
 ```
-| Method  | Mean     | Error    | StdDev   | Gen0     | Gen1     | Allocated  |
-|-------- |---------:|---------:|---------:|---------:|---------:|-----------:|
-| Nextorm | 72.55 ms | 0.584 ms | 0.488 ms | 857.1429 | 714.2857 | 1812.87 KB |
-| EFCore  | 22.31 ms | 0.216 ms | 0.202 ms | 500.0000 |        - | 1059.04 KB |
-| Dapper  | 13.20 ms | 0.071 ms | 0.066 ms |  78.1250 |        - |  188.92 KB |
+| Method        | Mean     | Error    | StdDev   | Gen0     | Gen1     | Allocated  |
+|-------------- |---------:|---------:|---------:|---------:|---------:|-----------:|
+| Nextorm       | 62.53 ms | 1.119 ms | 1.046 ms | 750.0000 | 625.0000 | 1721.76 KB |
+| NextormCached | 38.38 ms | 0.464 ms | 0.387 ms | 428.5714 | 357.1429 |  971.66 KB |

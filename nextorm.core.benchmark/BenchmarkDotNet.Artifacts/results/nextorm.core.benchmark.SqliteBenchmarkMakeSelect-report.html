@@ -2,7 +2,7 @@
 <html lang='en'>
 <head>
 <meta charset='utf-8' />
-<title>nextorm.core.benchmark.SqliteBenchmarkWhere-20231106-120556</title>
+<title>nextorm.core.benchmark.SqliteBenchmarkMakeSelect-20231106-084153</title>
 
 <style type="text/css">
 	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
@@ -22,10 +22,10 @@ Intel Core i7-4500U CPU 1.80GHz (Haswell), 1 CPU, 4 logical and 2 physical cores
 <pre><code></code></pre>
 
 <table>
-<thead><tr><th>Method </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Gen0</th><th>Gen1</th><th>Allocated</th>
+<thead><tr><th>Method</th><th>Mean</th><th>Error</th><th>StdDev</th><th>Ratio</th><th>Gen0</th><th>Gen1</th><th>Allocated</th><th>Alloc Ratio</th>
 </tr>
-</thead><tbody><tr><td>Nextorm</td><td>62.53 ms</td><td>1.119 ms</td><td>1.046 ms</td><td>750.0000</td><td>625.0000</td><td>1721.76 KB</td>
-</tr><tr><td>NextormCached</td><td>38.38 ms</td><td>0.464 ms</td><td>0.387 ms</td><td>428.5714</td><td>357.1429</td><td>971.66 KB</td>
+</thead><tbody><tr><td>MakeParams</td><td>162.6 &mu;s</td><td>1.44 &mu;s</td><td>1.28 &mu;s</td><td>1.00</td><td>2.6855</td><td>2.4414</td><td>5.75 KB</td><td>1.00</td>
+</tr><tr><td>MakeSelect</td><td>165.8 &mu;s</td><td>1.37 &mu;s</td><td>1.28 &mu;s</td><td>1.02</td><td>2.9297</td><td>2.6855</td><td>6.07 KB</td><td>1.06</td>
 </tr></tbody></table>
 </body>
 </html>
