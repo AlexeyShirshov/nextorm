@@ -17,6 +17,7 @@ namespace nextorm.core;
 public class SqlDataProvider : IDataProvider
 {
     private readonly IDictionary<QueryCommand, SqlCacheEntry> _queryCache = new Dictionary<QueryCommand, SqlCacheEntry>();
+    private readonly IDictionary<ExpressionKey, Delegate> _expCache = new ExpressionCache<Delegate>();
 #if PLAN_CACHE
     private readonly IDictionary<QueryPlan, SqlCacheEntry> _queryPlanCache = new Dictionary<QueryPlan, SqlCacheEntry>();
 #endif
@@ -38,6 +39,7 @@ public class SqlDataProvider : IDataProvider
     public virtual string ConcatStringOperator => "+";
     public ILogger? Logger { get; set; }
     public bool NeedMapping => true;
+    public IDictionary<ExpressionKey, Delegate> ExpressionsCache => _expCache;
     public virtual DbConnection CreateConnection()
     {
         throw new NotImplementedException();
@@ -113,9 +115,6 @@ public class SqlDataProvider : IDataProvider
         var enumerator = new ResultSetEnumerator<TResult>(this, compiledQuery!, cancellationToken);
 
         var cacheEntry = new SqlCacheEntry(compiledQuery) { Enumerator = enumerator };
-
-        if (queryCommand.Cache)
-            _queryCache[queryCommand] = cacheEntry;
 
         return cacheEntry;
     }
@@ -286,6 +285,7 @@ public class SqlDataProvider : IDataProvider
     }
     private string MakeWhere(Type entityType, ISourceProvider tableSource, Expression condition, int dim, IAliasProvider? aliasProvider, List<Param> @params, bool paramMode)
     {
+        if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Where expression: {exp}", condition);
         using var visitor = new WhereExpressionVisitor(entityType, this, tableSource, dim, aliasProvider, paramMode);
         visitor.Visit(condition);
         @params.AddRange(visitor.Params);
@@ -371,7 +371,12 @@ public class SqlDataProvider : IDataProvider
         }
         else
         {
+            if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Query cache miss");
+
             cacheEntry = CreateCompiledQuery(queryCommand, cancellationToken);
+
+            if (queryCommand.Cache)
+                _queryCache[queryCommand] = cacheEntry;
 
             return (IAsyncEnumerator<TResult>)cacheEntry.Enumerator!;
         }
@@ -518,6 +523,8 @@ public class SqlDataProvider : IDataProvider
         }
         public object? Enumerator { get; set; }
     }
+#if PLAN_CACHE
+
     class QueryPlan
     {
         public readonly QueryCommand QueryCommand;
@@ -545,6 +552,7 @@ public class SqlDataProvider : IDataProvider
             return QueryPlanEqualityComparer.Instance.Equals(QueryCommand, obj.QueryCommand);
         }
     }
+#endif
     class EmptyEnumerator<TResult> : IAsyncEnumerator<TResult>
     {
         public TResult Current => default;

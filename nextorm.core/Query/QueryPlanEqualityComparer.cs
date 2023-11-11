@@ -1,3 +1,5 @@
+//#define PLAN_CACHE
+
 using System.Diagnostics.CodeAnalysis;
 using nextorm.core;
 
@@ -50,9 +52,10 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand>
         if (obj is null)
             return 0;
 
+#if PLAN_CACHE
         if (obj.PlanHash.HasValue)
             return obj.PlanHash.Value;
-
+#endif
         unchecked
         {
             HashCode hash = new();
@@ -65,6 +68,7 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand>
             if (obj.Condition is not null)
                 hash.Add(obj.Condition, ExpressionPlanEqualityComparer.Instance);
 
+#if PLAN_CACHE
             hash.Add(obj.ColumnsPlanHash);
 
             hash.Add(obj.JoinPlanHash);
@@ -72,6 +76,10 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand>
             obj.PlanHash = hash.ToHashCode();
 
             return obj.PlanHash.Value;
+#else
+            return hash.ToHashCode();
+#endif
+
         }
     }
 }

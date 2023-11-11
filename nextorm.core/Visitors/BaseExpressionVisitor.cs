@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Xml;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.ObjectPool;
 
 namespace nextorm.core;
@@ -177,21 +178,42 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         }
         else
         {
-            if (!node.Has<ParameterExpression>(out var param))
+            var visitor = new TwoTypeExpressionVisitor<ParameterExpression, ConstantExpression>();
+            visitor.Visit(node.Expression);
+
+            //if (node.Expression is ConstantExpression ce)
+            if (!visitor.Has1 && visitor.Has2)
             {
-                // var valueVisitor = new ValueVisitor(constExp);
-                // valueVisitor.Visit(constExp);
-                // valueVisitor.Value.Get
-                var value = Expression.Lambda(node).Compile().DynamicInvoke();
-                _params.Add(new Param(node.Member.Name, value));
+                var ce = visitor.Target2!;
+                var key = new ExpressionKey(node);
+                if (!_dataProvider.ExpressionsCache.TryGetValue(key, out var del))
+                {
+                    //value = 1;
+                    var p = Expression.Parameter(ce.Type);
+                    var replace = new ReplaceConstantExpressionVisitor(p);
+                    var body = replace.Visit(node)!;
+                    del = Expression.Lambda(body, p).Compile();
+
+                    _dataProvider.ExpressionsCache[key] = del;
+
+                    if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false)
+                    {
+                        _dataProvider.Logger.LogDebug("Expression cache miss on visit where. hascode: {hash}, value: {value}", key.GetHashCode(), del.DynamicInvoke(ce.Value));
+                    }
+                    else if (_dataProvider.Logger?.IsEnabled(LogLevel.Information) ?? false) _dataProvider.Logger.LogInformation("Expression cache miss on visit where");
+                }
+                // var value = 1;
+                _params.Add(new Param(node.Member.Name, del.DynamicInvoke(ce.Value)));
 
                 if (!_paramMode)
                     _builder!.Append(_dataProvider.MakeParam(node.Member.Name));
 
                 return node;
             }
-            else
+            else if (visitor.Has1)
             {
+                var param = visitor.Target1;
+
                 var hasAlias = false;
                 string? alias = null;
 

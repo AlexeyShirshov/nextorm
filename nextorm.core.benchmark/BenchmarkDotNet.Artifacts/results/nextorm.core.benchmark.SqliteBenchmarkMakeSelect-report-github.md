@@ -8,7 +8,7 @@ Intel Core i7-4500U CPU 1.80GHz (Haswell), 1 CPU, 4 logical and 2 physical cores
 
 
 ```
-| Method     | Mean     | Error   | StdDev  | Ratio | Gen0   | Gen1   | Allocated | Alloc Ratio |
-|----------- |---------:|--------:|--------:|------:|-------:|-------:|----------:|------------:|
-| MakeParams | 162.6 μs | 1.44 μs | 1.28 μs |  1.00 | 2.6855 | 2.4414 |   5.75 KB |        1.00 |
-| MakeSelect | 165.8 μs | 1.37 μs | 1.28 μs |  1.02 | 2.9297 | 2.6855 |   6.07 KB |        1.06 |
+| Method     | Mean     | Error     | StdDev    | Ratio | RatioSD | Gen0   | Allocated | Alloc Ratio |
+|----------- |---------:|----------:|----------:|------:|--------:|-------:|----------:|------------:|
+| MakeParams | 6.251 μs | 0.1769 μs | 0.5217 μs |  1.00 |    0.00 | 0.7782 |    1.6 KB |        1.00 |
+| MakeSelect | 7.043 μs | 0.1667 μs | 0.4862 μs |  1.13 |    0.14 | 0.9384 |   1.92 KB |        1.20 |

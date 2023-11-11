@@ -1,16 +1,29 @@
 using System.Collections;
 using System.Linq.Expressions;
 using System.Reflection;
+using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
 
 public sealed class PreciseExpressionEqualityComparer : IEqualityComparer<Expression?>
 {
-    private readonly IDictionary<Expression, object?> _cache = new Dictionary<Expression, object?>(ExpressionEqualityComparer.Instance);
-    private PreciseExpressionEqualityComparer()
+    private readonly IDictionary<ExpressionKey, Delegate> _cache;
+    private readonly ILogger? _logger;
+
+    public PreciseExpressionEqualityComparer()
+        : this(new ExpressionCache<Delegate>())
     {
     }
-    public static PreciseExpressionEqualityComparer Instance { get; } = new();
+    public PreciseExpressionEqualityComparer(IDictionary<ExpressionKey, Delegate>? cache)
+        : this(cache, null)
+    {
+    }
+    public PreciseExpressionEqualityComparer(IDictionary<ExpressionKey, Delegate>? cache, ILogger? logger)
+    {
+        _cache = cache ?? new ExpressionCache<Delegate>();
+        _logger = logger;
+    }
+    //public static PreciseExpressionEqualityComparer Instance { get; } = new();
     public int GetHashCode(Expression obj)
     {
         if (obj == null)
@@ -107,22 +120,27 @@ public sealed class PreciseExpressionEqualityComparer : IEqualityComparer<Expres
                     break;
 
                 case MemberExpression memberExpression:
-                    if (memberExpression.Expression is not null)
+                    if (memberExpression.Expression is not null && memberExpression.Expression.Has<ConstantExpression>(out var ce))
                     {
-                        if (!_cache.TryGetValue(memberExpression.Expression, out var value))
+                        var key = new ExpressionKey(memberExpression);
+                        if (!_cache.TryGetValue(key, out var del))
                         {
-                            if (memberExpression.Has<ConstantExpression>())
+                            var p = Expression.Parameter(ce!.Type);
+                            var replace = new ReplaceConstantExpressionVisitor(p);
+                            var body = replace.Visit(memberExpression)!;
+                            del = Expression.Lambda(body, p).Compile();
+                            //value = 1;
+                            _cache[key] = del;
+
+                            if (_logger?.IsEnabled(LogLevel.Debug) ?? false)
                             {
-                                value = Expression.Lambda(memberExpression).Compile().DynamicInvoke();
-                                _cache[memberExpression.Expression] = value;
-                                //Console.WriteLine(value);
+                                _logger.LogDebug("Expression cache miss on gethashcode. hascode: {hash}, value: {value}", key.GetHashCode(), del.DynamicInvoke(ce.Value));
                             }
-                            else goto l1;
+                            else if (_logger?.IsEnabled(LogLevel.Information) ?? false) _logger.LogInformation("Expression cache miss on gethashcode");
                         }
-                        AddToHashIfNotNull(value);
+                        AddToHashIfNotNull(del.DynamicInvoke(ce!.Value));
                         break;
                     }
-                l1:
                     hash.Add(memberExpression.Expression, this);
                     hash.Add(memberExpression.Member);
                     break;
@@ -448,25 +466,38 @@ public sealed class PreciseExpressionEqualityComparer : IEqualityComparer<Expres
 
         private bool CompareMember(MemberExpression a, MemberExpression b)
         {
-            if (a.Expression is not null && b.Expression is not null)
+            if (!Equals(a.Member, b.Member)) return false;
+
+            if (a.Expression is not null && a.Expression.Has<ConstantExpression>(out var ceA)
+                && b.Expression is not null && b.Expression.Has<ConstantExpression>(out var ceB))
             {
-                if (_equalityComparer._cache.TryGetValue(a.Expression, out var valueA) && _equalityComparer._cache.TryGetValue(b.Expression, out var valueB))
+                var (keyA, keyB) = (new ExpressionKey(a), new ExpressionKey(b));
+                if (_equalityComparer._cache.TryGetValue(keyA, out var delA) && _equalityComparer._cache.TryGetValue(keyB, out var delB))
                 {
-                    return Equals(valueA, valueB);
+                    return Equals(delA.DynamicInvoke(ceA!.Value), delB.DynamicInvoke(ceB!.Value));
                 }
-                else if (a.Expression.Has<ConstantExpression>() && b.Expression.Has<ConstantExpression>())
+                else
                 {
-                    valueA = Expression.Lambda(a).Compile().DynamicInvoke();
-                    valueB = Expression.Lambda(b).Compile().DynamicInvoke();
+                    if (_equalityComparer._logger?.IsEnabled(LogLevel.Information) ?? false) _equalityComparer._logger.LogInformation("Expression cache miss on equals");
 
-                    _equalityComparer._cache[a.Expression] = valueA;
-                    _equalityComparer._cache[b.Expression] = valueB;
+                    var pA = Expression.Parameter(ceA!.Type);
+                    var replace = new ReplaceConstantExpressionVisitor(pA);
+                    var bodyA = replace.Visit(a)!;
+                    delA = Expression.Lambda(bodyA, pA).Compile();
 
-                    return Equals(valueA, valueB);
+                    var pB = Expression.Parameter(ceB!.Type);
+                    replace = new ReplaceConstantExpressionVisitor(pB);
+                    var bodyB = replace.Visit(b)!;
+                    delB = Expression.Lambda(bodyB, pB).Compile();
+
+                    _equalityComparer._cache[keyA] = delA;
+                    _equalityComparer._cache[keyB] = delB;
+
+                    return Equals(delA.DynamicInvoke(ceA.Value), delB.DynamicInvoke(ceB.Value));
                 }
             }
 
-            return Equals(a.Member, b.Member) && Compare(a.Expression, b.Expression);
+            return Compare(a.Expression, b.Expression);
         }
         private bool CompareMemberInit(MemberInitExpression a, MemberInitExpression b)
             => Compare(a.NewExpression, b.NewExpression)

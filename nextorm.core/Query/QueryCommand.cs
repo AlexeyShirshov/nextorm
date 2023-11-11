@@ -1,3 +1,5 @@
+//#define PLAN_CACHE
+
 using System.Collections;
 using System.Collections.Concurrent;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -25,9 +27,11 @@ public class QueryCommand : IPayloadManager, ISourceProvider
     internal int? _hashPlan;
     protected Type? _srcType;
     private bool _dontCache;
+#if PLAN_CACHE
     internal int? PlanHash;
     internal int ColumnsPlanHash;
     internal int JoinPlanHash;
+#endif
     public QueryCommand(IDataProvider dataProvider, LambdaExpression exp, Expression? condition)
     {
         _dataProvider = dataProvider;
@@ -84,7 +88,9 @@ public class QueryCommand : IPayloadManager, ISourceProvider
         FromExpression? from = _from ?? _dataProvider.GetFrom(srcType, this);
 
         var joinHash = 7;
+#if PLAN_CACHE
         var joinPlanHash = 7;
+#endif
         if (Joins.Any())
         {
             if (_from is not null && string.IsNullOrEmpty(_from.TableAlias)) _from.TableAlias = "t1";
@@ -97,7 +103,9 @@ public class QueryCommand : IPayloadManager, ISourceProvider
                 if (!_dontCache) unchecked
                     {
                         joinHash = joinHash * 13 + join.GetHashCode();
+#if PLAN_CACHE
                         joinPlanHash = joinPlanHash * 13 + JoinExpressionPlanEqualityComparer.Instance.GetHashCode(join);
+#endif
                     }
             }
         }
@@ -105,8 +113,9 @@ public class QueryCommand : IPayloadManager, ISourceProvider
 
         var selectList = _selectList;
         var columnsHash = 7;
+#if PLAN_CACHE
         var columnsPlanHash = 7;
-
+#endif
         if (selectList is null)
         {
             if (_exp is null)
@@ -150,7 +159,9 @@ public class QueryCommand : IPayloadManager, ISourceProvider
                     if (!_dontCache) unchecked
                         {
                             columnsHash = columnsHash * 13 + selExp.GetHashCode();
+#if PLAN_CACHE
                             columnsPlanHash = columnsPlanHash * 13 + SelectExpressionPlanEqualityComparer.Instance.GetHashCode(selExp);
+#endif
                         }
                 }
 
@@ -186,7 +197,9 @@ public class QueryCommand : IPayloadManager, ISourceProvider
                         if (!_dontCache) unchecked
                             {
                                 columnsHash = columnsHash * 13 + selExp.GetHashCode();
+#if PLAN_CACHE
                                 columnsPlanHash = columnsPlanHash * 13 + SelectExpressionPlanEqualityComparer.Instance.GetHashCode(selExp);
+#endif
                             }
                     }
                     else
@@ -222,7 +235,9 @@ public class QueryCommand : IPayloadManager, ISourceProvider
                                     if (!_dontCache) unchecked
                                         {
                                             columnsHash = columnsHash * 13 + selExp.GetHashCode();
+#if PLAN_CACHE
                                             columnsPlanHash = columnsPlanHash * 13 + SelectExpressionPlanEqualityComparer.Instance.GetHashCode(selExp);
+#endif
                                         }
                                 }
                             }
@@ -238,12 +253,14 @@ public class QueryCommand : IPayloadManager, ISourceProvider
         _isPrepared = true;
         _selectList = selectList;
         _columnsHash = columnsHash;
-        ColumnsPlanHash = columnsPlanHash;
         _srcType = srcType;
         _from = from;
         _joinHash = joinHash;
-        JoinPlanHash = joinPlanHash;
 
+#if PLAN_CACHE
+        ColumnsPlanHash = columnsPlanHash;
+        JoinPlanHash = joinPlanHash;
+#endif
         //_payloadMgr = new FastPayloadManager(cache ? new Dictionary<Type, object?>() : null);
 
         // string capitalize(string str)
@@ -300,7 +317,7 @@ public class QueryCommand : IPayloadManager, ISourceProvider
                 hash.Add(_srcType);
 
             if (_condition is not null)
-                hash.Add(_condition, PreciseExpressionEqualityComparer.Instance);
+                hash.Add(_condition, new PreciseExpressionEqualityComparer((_dataProvider as SqlDataProvider)?.ExpressionsCache, (_dataProvider as SqlDataProvider)?.Logger));
 
             hash.Add(_columnsHash);
 
@@ -325,7 +342,7 @@ public class QueryCommand : IPayloadManager, ISourceProvider
 
         if (_srcType != cmd._srcType) return false;
 
-        if (!PreciseExpressionEqualityComparer.Instance.Equals(_condition, cmd._condition)) return false;
+        if (!new PreciseExpressionEqualityComparer((_dataProvider as SqlDataProvider)?.ExpressionsCache, (_dataProvider as SqlDataProvider)?.Logger).Equals(_condition, cmd._condition)) return false;
 
         if (_selectList is null && cmd._selectList is not null) return false;
         if (_selectList is not null && cmd._selectList is null) return false;
@@ -458,7 +475,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
     // {
     //     return FetchAsync(10, cancellationToken);
     // }
-    public IAsyncEnumerable<TResult> Fetch(CancellationToken cancellationToken)
+    public IAsyncEnumerable<TResult> Fetch(CancellationToken cancellationToken = default)
     {
         var bus = Channel.CreateUnbounded<TResult>(new UnboundedChannelOptions
         {

@@ -53,7 +53,7 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>
     {
         if (_conn is null)
         {
-            if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Creating connection");
+            if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Getting connection");
 
             _conn = _dataProvider.GetConnection();
             await InitReader();

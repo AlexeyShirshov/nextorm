@@ -21,10 +21,11 @@ public class SqliteBenchmarkIteration
         _ctx = new TestDataContext(builder);
 
         _cmd = _ctx.SimpleEntity.Select(entity => new Tuple<int>(entity.Id));
-        (_ctx.DataProvider as SqlDataProvider).Compile(_cmd, CancellationToken.None);
+        (_ctx.DataProvider as SqlDataProvider)!.Compile(_cmd, CancellationToken.None);
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(@$"Filename={Directory.GetCurrentDirectory()}\data\test.db");
+        efBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
 
         _efCtx = new EFDataContext(efBuilder.Options);
 
@@ -32,30 +33,44 @@ public class SqliteBenchmarkIteration
         _conn.Open();
     }
     [Benchmark(Baseline = true)]
-    public async Task NextormCached()
+    public async Task NextormCompiled()
     {
         await foreach (var row in _cmd)
         {
         }
     }
     [Benchmark()]
-    public async Task NextormToListCached()
+    public async Task NextormCompiledToList()
     {
         foreach (var row in await _cmd.ToListAsync())
         {
         }
     }
     [Benchmark()]
-    public async Task Nextorm()
+    public async Task NextormCompiledFetch()
+    {
+        await foreach (var row in _cmd.Fetch())
+        {
+        }
+    }
+    [Benchmark()]
+    public async Task NextormCached()
     {
         await foreach (var row in _ctx.SimpleEntity.Select(entity => new { entity.Id }))
         {
         }
     }
     [Benchmark()]
-    public async Task NextormToList()
+    public async Task NextormCachedToList()
     {
         foreach (var row in await _ctx.SimpleEntity.Select(entity => new { entity.Id }).ToListAsync())
+        {
+        }
+    }
+    [Benchmark()]
+    public async Task NextormCachedFetch()
+    {
+        await foreach (var row in _ctx.SimpleEntity.Select(entity => new { entity.Id }).Fetch())
         {
         }
     }
