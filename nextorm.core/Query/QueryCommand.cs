@@ -27,6 +27,10 @@ public class QueryCommand : IPayloadManager, ISourceProvider
     internal int? _hashPlan;
     protected Type? _srcType;
     private bool _dontCache;
+#if DEBUG
+    private int? _conditionHash;
+    public int? ConditionHash => _conditionHash;
+#endif
 #if PLAN_CACHE
     internal int? PlanHash;
     internal int ColumnsPlanHash;
@@ -317,7 +321,14 @@ public class QueryCommand : IPayloadManager, ISourceProvider
                 hash.Add(_srcType);
 
             if (_condition is not null)
-                hash.Add(_condition, new PreciseExpressionEqualityComparer((_dataProvider as SqlDataProvider)?.ExpressionsCache, (_dataProvider as SqlDataProvider)?.Logger));
+            {
+                var comp = new PreciseExpressionEqualityComparer((_dataProvider as SqlDataProvider)?.ExpressionsCache, (_dataProvider as SqlDataProvider)?.Logger);
+                var condHash = comp.GetHashCode(_condition);
+                hash.Add(condHash);
+#if DEBUG
+                _conditionHash = condHash;
+#endif
+            }
 
             hash.Add(_columnsHash);
 

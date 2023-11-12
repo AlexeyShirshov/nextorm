@@ -12,7 +12,7 @@ public class SqliteBenchmarkSimulateWork
 {
     const int WorkDuration = 1;
     const int WorkIterations = 1000;
-    const int SmallIterations = 2;
+    const int SmallIterations = 10;
     const int LargeListSize = 500;
     private readonly TestDataContext _ctx;
     private readonly QueryCommand<LargeEntity> _cmd;
@@ -56,7 +56,8 @@ public class SqliteBenchmarkSimulateWork
             await DoWork();
             for (var i = 0; i < SmallIterations; i++)
             {
-                var s = _ctx.SimpleEntity.Where(it => it.Id == (row.Id + i)).Select(entity => new { entity.Id }).FirstOrDefaultAsync();
+                var p = i;
+                var s = _ctx.SimpleEntity.Where(it => it.Id == (row.Id + p)).Select(entity => new { entity.Id }).FirstOrDefaultAsync();
             }
         }
     }
@@ -68,7 +69,8 @@ public class SqliteBenchmarkSimulateWork
             await DoWork();
             for (var i = 0; i < SmallIterations; i++)
             {
-                var s = _ctx.SimpleEntity.Where(it => it.Id == (row.Id + i)).Select(entity => new { entity.Id }).FirstOrDefaultAsync();
+                var p = i;
+                var s = _ctx.SimpleEntity.Where(it => it.Id == (row.Id + p)).Select(entity => new { entity.Id }).FirstOrDefaultAsync();
             }
         }
     }
@@ -80,7 +82,8 @@ public class SqliteBenchmarkSimulateWork
             await DoWork();
             for (var i = 0; i < SmallIterations; i++)
             {
-                var s = _ctx.SimpleEntity.Where(it => it.Id == (row.Id + i)).Select(entity => new { entity.Id }).FirstOrDefaultAsync();
+                var p = i;
+                var s = _ctx.SimpleEntity.Where(it => it.Id == (row.Id + p)).Select(entity => new { entity.Id }).FirstOrDefaultAsync();
             }
         }
     }
@@ -119,7 +122,8 @@ public class SqliteBenchmarkSimulateWork
             await DoWork();
             for (var i = 0; i < SmallIterations; i++)
             {
-                var s = (await _efCtx.SimpleEntities.Where(it => it.Id == (row.Id + i)).Select(entity => new { entity.Id }).ToListAsync()).FirstOrDefault();
+                var p = i;
+                var s = (await _efCtx.SimpleEntities.Where(it => it.Id == (row.Id + p)).Select(entity => new { entity.Id }).ToListAsync()).FirstOrDefault();
             }
         }
     }
@@ -132,7 +136,8 @@ public class SqliteBenchmarkSimulateWork
             await DoWork();
             for (var i = 0; i < SmallIterations; i++)
             {
-                var s = await _conn.QueryFirstOrDefaultAsync<SimpleEntity>("select id from simple_entity where id=@id", new { id = row.Id + i });
+                var p = i;
+                var s = await _conn.QueryFirstOrDefaultAsync<SimpleEntity>("select id from simple_entity where id=@id", new { id = row.Id + p });
             }
         }
     }

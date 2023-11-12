@@ -74,13 +74,14 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                             or nameof(TableAlias.NullableDecimal)
                             or nameof(TableAlias.NullableDouble)
                             or nameof(TableAlias.NullableFloat)
-                            or nameof(TableAlias.NullableGuid),
+                            or nameof(TableAlias.NullableGuid)
+                            or nameof(TableAlias.Column),
                         Arguments: [ConstantExpression constExp]
                     } => constExp.Value?.ToString(),
                     {
                         Method.Name: nameof(TableAlias.Column),
                         Arguments: [Expression exp]
-                    } => Expression.Lambda(exp).Compile().DynamicInvoke()?.ToString(),
+                    } => CompileExp(exp),
                     _ => throw new NotSupportedException(node.Method.Name)
                 });
             }
@@ -88,6 +89,25 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         }
 
         return base.VisitMethodCall(node);
+        string? CompileExp(Expression exp)
+        {
+            if (exp.Has<ConstantExpression>(out var ce))
+            {
+                var key = new ExpressionKey(exp);
+                if (!_dataProvider.ExpressionsCache.TryGetValue(key, out var del))
+                {
+                    if (_dataProvider.Logger?.IsEnabled(LogLevel.Information) ?? false) _dataProvider.Logger.LogInformation("Select expression miss");
+                    var p = Expression.Parameter(ce!.Type);
+                    var rv = new ReplaceConstantExpressionVisitor(p);
+                    var body = rv.Visit(exp);
+                    del = Expression.Lambda(body, p).Compile();
+                    _dataProvider.ExpressionsCache[key] = del;
+                }
+                return del.DynamicInvoke(ce!.Value)?.ToString();
+            }
+
+            throw new NotImplementedException();
+        }
     }
     protected override Expression VisitConstant(ConstantExpression node)
     {
@@ -276,17 +296,17 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     {
         return _aliasProvider?.FindAlias(param);
     }
-    private string GetAliasFromProjection(Type declaringType)
-    {
-        var idx = 0;
-        foreach (var prop in _entityType.GetProperties(BindingFlags.Instance | BindingFlags.Public))
-        {
-            if (++idx > _dim && prop.PropertyType == declaringType)
-                return prop.Name;
-        }
+    // private string GetAliasFromProjection(Type declaringType)
+    // {
+    //     var idx = 0;
+    //     foreach (var prop in _entityType.GetProperties(BindingFlags.Instance | BindingFlags.Public))
+    //     {
+    //         if (++idx > _dim && prop.PropertyType == declaringType)
+    //             return prop.Name;
+    //     }
 
-        throw new BuildSqlCommandException($"Cannot find alias of type {declaringType} in {_entityType}");
-    }
+    //     throw new BuildSqlCommandException($"Cannot find alias of type {declaringType} in {_entityType}");
+    // }
 
     protected override Expression VisitBinary(BinaryExpression node)
     {

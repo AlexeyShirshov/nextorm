@@ -371,7 +371,13 @@ public class SqlDataProvider : IDataProvider
         }
         else
         {
+#if DEBUG
+            if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Query cache miss with hash: {hash} and condition hash: {chash}",
+                queryCommand.GetHashCode(),
+                queryCommand.ConditionHash);
+#else
             if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Query cache miss");
+#endif
 
             cacheEntry = CreateCompiledQuery(queryCommand, cancellationToken);
 
