@@ -3,6 +3,7 @@ using nextorm.sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Data.Sqlite;
 using Dapper;
+using Microsoft.Extensions.Logging;
 
 namespace nextorm.core.benchmark;
 
@@ -14,10 +15,15 @@ public class SqliteBenchmarkIteration
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
 
-    public SqliteBenchmarkIteration()
+    public SqliteBenchmarkIteration(bool withLogging = false)
     {
         var builder = new DataContextOptionsBuilder();
         builder.UseSqlite(@$"{Directory.GetCurrentDirectory()}\data\test.db");
+        if (withLogging)
+        {
+            builder.UseLoggerFactory(LoggerFactory.Create(config => config.AddConsole().SetMinimumLevel(LogLevel.Debug)));
+            builder.LogSensetiveData(true);
+        }
         _ctx = new TestDataContext(builder);
 
         _cmd = _ctx.SimpleEntity.Select(entity => new Tuple<int>(entity.Id));
@@ -32,45 +38,38 @@ public class SqliteBenchmarkIteration
         _conn = new SqliteConnection(((SqliteDataProvider)_ctx.DataProvider).ConnectionString);
         _conn.Open();
     }
+    [Benchmark()]
+    public async Task NextormCompiledAsync()
+    {
+        await foreach (var row in _cmd)
+        {
+        }
+    }
     [Benchmark(Baseline = true)]
     public async Task NextormCompiled()
     {
-        await foreach (var row in _cmd)
+        foreach (var row in await _cmd.Get())
         {
         }
     }
     [Benchmark()]
     public async Task NextormCompiledToList()
     {
-        foreach (var row in await _cmd.ToListAsync())
-        {
-        }
-    }
-    [Benchmark()]
-    public async Task NextormCompiledFetch()
-    {
-        await foreach (var row in _cmd.Fetch())
+        foreach (var row in (await _cmd.Get()).ToList())
         {
         }
     }
     [Benchmark()]
     public async Task NextormCached()
     {
-        await foreach (var row in _ctx.SimpleEntity.Select(entity => new { entity.Id }))
+        foreach (var row in await _ctx.SimpleEntity.Select(entity => new { entity.Id }).Get())
         {
         }
     }
     [Benchmark()]
     public async Task NextormCachedToList()
     {
-        foreach (var row in await _ctx.SimpleEntity.Select(entity => new { entity.Id }).ToListAsync())
-        {
-        }
-    }
-    [Benchmark()]
-    public async Task NextormCachedFetch()
-    {
-        await foreach (var row in _ctx.SimpleEntity.Select(entity => new { entity.Id }).Fetch())
+        foreach (var row in (await _ctx.SimpleEntity.Select(entity => new { entity.Id }).Get()).ToList())
         {
         }
     }

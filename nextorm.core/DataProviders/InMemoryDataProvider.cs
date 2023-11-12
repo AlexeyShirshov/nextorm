@@ -21,7 +21,7 @@ public partial class InMemoryDataProvider : IDataProvider
 
     public bool NeedMapping => false;
 
-    public IAsyncEnumerator<TResult> CreateEnumerator<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
+    public IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
 
@@ -61,7 +61,7 @@ public partial class InMemoryDataProvider : IDataProvider
 
             //var delPayload = subQuery.GetOrAddPayload(() =>
             //{
-            var miCreateEnumerator = typeof(InMemoryDataProvider).GetMethod(nameof(CreateEnumerator), BindingFlags.Public | BindingFlags.Instance)!;
+            var miCreateEnumerator = typeof(InMemoryDataProvider).GetMethod(nameof(CreateAsyncEnumerator), BindingFlags.Public | BindingFlags.Instance)!;
             var param = Expression.Parameter(typeof(InMemoryDataProvider));
             var p1 = Expression.Parameter(typeof(QueryCommand<TResult>));
             var p2 = Expression.Parameter(typeof(InMemoryCacheEntry));
@@ -84,7 +84,7 @@ public partial class InMemoryDataProvider : IDataProvider
         {
             // var delPayload = queryCommand.GetOrAddPayload(() =>
             // {
-            var miCreateEnumerator = typeof(InMemoryDataProvider).GetMethod(nameof(CreateEnumerator), BindingFlags.NonPublic | BindingFlags.Instance)!;
+            var miCreateEnumerator = typeof(InMemoryDataProvider).GetMethod(nameof(CreateAsyncEnumerator), BindingFlags.NonPublic | BindingFlags.Instance)!;
             var param = Expression.Parameter(typeof(InMemoryDataProvider));
             var p1 = Expression.Parameter(typeof(QueryCommand<TResult>));
             var p2 = Expression.Parameter(typeof(InMemoryCacheEntry));
@@ -372,6 +372,12 @@ public partial class InMemoryDataProvider : IDataProvider
     {
         return new InMemoryCompiledQuery<TResult, TEntity>(query.GetMap(typeof(TResult), query.EntityType), query.Condition as Expression<Func<TEntity, bool>>);
     }
+
+    public Task<IEnumerator<TResult>> CreateEnumerator<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
+    {
+        throw new NotImplementedException();
+    }
+
     class InMemoryCacheEntry : CacheEntry
     {
         public InMemoryCacheEntry(object? compiledQuery, Delegate createEnumerator)

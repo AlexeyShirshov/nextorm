@@ -166,17 +166,22 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             }
             else
             {
-                var colAttr = node.Member.GetCustomAttribute<ColumnAttribute>();
-                if (colAttr is not null)
+                if (!_paramMode)
                 {
-                    if (!_paramMode)
+                    var colAttr = node.Member.GetCustomAttribute<ColumnAttribute>();
+                    if (colAttr is not null)
+                    {
+
                         _builder!.Append(colAttr.Name);
 
-                    _colName = colAttr.Name;
+                        _colName = colAttr.Name;
+                        return node;
+                    }
                 }
-                else //if (node.Expression!.Type.IsAnonymous())
+
+                var innerQuery = _tableProvider.FindSourceFromAlias(null);
+                if (innerQuery is not null)
                 {
-                    var innerQuery = _tableProvider.FindSourceFromAlias(null);
                     var innerCol = innerQuery.SelectList!.SingleOrDefault(col => col.PropertyName == node.Member.Name) ?? throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
                     var col = _dataProvider.MakeColumn(innerCol, innerQuery.EntityType!, innerQuery, false, _params, _paramMode);
                     if (!_paramMode)
@@ -190,10 +195,8 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                         }
                     }
                 }
-                // else
-                //     _builder.Append(_dataProvider.GetColumnName(node.Member));
-                //}
-                return node;
+                else if (!_paramMode)
+                    throw new NotImplementedException(node.Member.Name);
             }
         }
         else
@@ -232,39 +235,43 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             }
             else if (visitor.Has1)
             {
-                var param = visitor.Target1;
+                var lambdaParameter = visitor.Target1;
 
                 var hasAlias = false;
-                string? alias = null;
+                string? aliasForColumn = null;
 
                 if (!_dontNeedAlias)
                 {
-                    if (param!.Type!.TryGetProjectionDimension(out var _))
+                    if (lambdaParameter!.Type!.TryGetProjectionDimension(out var _))
                     {
                         var aliasVisitor = new AliasFromProjectionVisitor();
                         aliasVisitor.Visit(node.Expression);
-                        alias = aliasVisitor.Alias;
+                        aliasForColumn = aliasVisitor.Alias;
                     }
                     else
-                        alias = GetAliasFromParam(param);
+                        aliasForColumn = GetAliasFromParam(lambdaParameter);
 
                     if (!_paramMode)
-                        _builder!.Append(alias).Append('.');
+                        _builder!.Append(aliasForColumn).Append('.');
 
                     hasAlias = true;
                 }
 
-                var colAttr = node.Member.GetCustomAttribute<ColumnAttribute>();
-                if (colAttr is not null)
+                if (!_paramMode)
                 {
-                    if (!_paramMode)
+                    var colAttr = node.Member.GetCustomAttribute<ColumnAttribute>();
+                    if (colAttr is not null)
+                    {
                         _builder!.Append(colAttr.Name);
 
-                    _colName = colAttr.Name;
+                        _colName = colAttr.Name;
+                    }
+                    return node;
                 }
-                else if (node.Expression!.Type.IsAnonymous())
+
+                var innerQuery = _tableProvider.FindSourceFromAlias(aliasForColumn);
+                if (innerQuery is not null)
                 {
-                    var innerQuery = _tableProvider.FindSourceFromAlias(alias);
                     var innerCol = innerQuery.SelectList!.SingleOrDefault(col => col.PropertyName == node.Member.Name) ?? throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
                     var col = _dataProvider.MakeColumn(innerCol, innerQuery.EntityType!, innerQuery, hasAlias, _params, _paramMode);
 
@@ -278,12 +285,14 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 }
                 else
                 {
-                    var c = _dataProvider.GetColumnName(node.Member);
-
                     if (!_paramMode)
+                    {
+                        var c = _dataProvider.GetColumnName(node.Member);
+
                         _builder!.Append(c);
 
-                    _colName = c;
+                        _colName = c;
+                    }
                 }
                 //}
                 return node;
@@ -315,6 +324,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         switch (node.NodeType)
         {
             case ExpressionType.Coalesce:
+                if (!_paramMode)
                 {
                     using var leftVisitor = Clone();
                     leftVisitor.Visit(node.Left);
@@ -324,16 +334,13 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                     rightVisitor.Visit(node.Right);
                     Params.AddRange(rightVisitor.Params);
 
-                    if (!_paramMode)
-                    {
-                        _builder!.Append(_dataProvider.MakeCoalesce(
-                            leftVisitor.ToString(),
-                            rightVisitor.ToString()
-                        ));
-                    }
-
+                    _builder!.Append(_dataProvider.MakeCoalesce(
+                        leftVisitor.ToString(),
+                        rightVisitor.ToString()
+                    ));
                     return node;
                 }
+                break;
             case ExpressionType.Conditional:
                 throw new NotImplementedException();
             case ExpressionType.Switch:
@@ -420,6 +427,8 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 
     public virtual BaseExpressionVisitor Clone()
     {
+        if (_paramMode) throw new NotSupportedException("Cannot clone in param mode");
+
         return new BaseExpressionVisitor(_entityType, _dataProvider, _tableProvider, _dim, _aliasProvider, _dontNeedAlias, _paramMode);
     }
 

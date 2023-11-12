@@ -45,13 +45,25 @@ public class SqliteBenchmarkWhere
         _conn = new SqliteConnection(((SqliteDataProvider)_ctx.DataProvider).ConnectionString);
         _conn.Open();
     }
+    [Benchmark()]
+    public async Task NextormCompiledAsync()
+    {
+        for (var i = 0; i < Iterations; i++)
+        {
+            await foreach (var row in _cmds[i])
+            {
+            }
+        }
+    }
     [Benchmark(Baseline = true)]
     public async Task NextormCompiled()
     {
         for (var i = 0; i < Iterations; i++)
-            await foreach (var row in _cmds[i])
+        {
+            foreach (var row in await _cmds[i].Get())
             {
             }
+        }
     }
     // [Benchmark()]
     // public async Task NextormToListCached()
@@ -83,7 +95,7 @@ public class SqliteBenchmarkWhere
         for (var i = 0; i < Iterations; i++)
         {
             var p = i;
-            await foreach (var row in _ctx.SimpleEntity.Where(it => it.Id == p).Select(entity => new { entity.Id }))
+            foreach (var row in await _ctx.SimpleEntity.Where(it => it.Id == p).Select(entity => new { entity.Id }).Get())
             {
             }
         }

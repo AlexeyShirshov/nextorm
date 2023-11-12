@@ -11,16 +11,16 @@ public class WhereExpressionVisitor : BaseExpressionVisitor
     {
         if (node.NodeType == ExpressionType.Equal)
         {
-            using var leftVisitor = Clone();
-            leftVisitor.Visit(node.Left);
-            Params.AddRange(leftVisitor.Params);
-
-            using var rightVisitor = Clone();
-            rightVisitor.Visit(node.Right);
-            Params.AddRange(rightVisitor.Params);
-
             if (!_paramMode)
             {
+                using var leftVisitor = Clone();
+                leftVisitor.Visit(node.Left);
+                Params.AddRange(leftVisitor.Params);
+
+                using var rightVisitor = Clone();
+                rightVisitor.Visit(node.Right);
+                Params.AddRange(rightVisitor.Params);
+
                 var left = leftVisitor.ToString();
                 var right = rightVisitor.ToString();
 
@@ -30,8 +30,9 @@ public class WhereExpressionVisitor : BaseExpressionVisitor
                     ? " is "
                     : " = ");
                 _builder!.Append(right);
+
+                return node;
             }
-            return node;
         }
 
         return base.VisitBinary(node);

@@ -1,4 +1,6 @@
 //#define PLAN_CACHE
+//#define ONLY_PLAN_CACHE
+//#define INITALGO_2
 
 using System.Collections.Concurrent;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -16,8 +18,11 @@ namespace nextorm.core;
 
 public class SqlDataProvider : IDataProvider
 {
+#if !ONLY_PLAN_CACHE
     private readonly IDictionary<QueryCommand, SqlCacheEntry> _queryCache = new Dictionary<QueryCommand, SqlCacheEntry>();
+#endif
     private readonly IDictionary<ExpressionKey, Delegate> _expCache = new ExpressionCache<Delegate>();
+    //    private readonly IDictionary<ExpressionKey, Delegate> _mapCache = new ExpressionCache<Delegate>();
 #if PLAN_CACHE
     private readonly IDictionary<QueryPlan, SqlCacheEntry> _queryPlanCache = new Dictionary<QueryPlan, SqlCacheEntry>();
 #endif
@@ -40,6 +45,7 @@ public class SqlDataProvider : IDataProvider
     public ILogger? Logger { get; set; }
     public bool NeedMapping => true;
     public IDictionary<ExpressionKey, Delegate> ExpressionsCache => _expCache;
+    //public IDictionary<ExpressionKey, Delegate> MapCache => _mapCache;
     public virtual DbConnection CreateConnection()
     {
         throw new NotImplementedException();
@@ -74,6 +80,10 @@ public class SqlDataProvider : IDataProvider
             || !_queryPlanCache.TryGetValue(queryPlan, out var planCache))
 #endif            
         {
+#if PLAN_CACHE
+            if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Query plan cache miss with hash: {hash}",
+                queryPlan.GetHashCode());
+#endif            
             var (sql, @params) = MakeSelect(queryCommand, false);
             // var (sql, @params) = MakeSelect(queryCommand, true);
             // var cacheEntryX = new SqlCacheEntry(null) { Enumerator = new EmptyEnumerator<TResult>() };
@@ -81,7 +91,7 @@ public class SqlDataProvider : IDataProvider
             //     _queryCache[queryCommand] = cacheEntryX;
             // return cacheEntryX;
 
-            var map = queryCommand.GetMap(typeof(TResult), typeof(DbDataReader));
+            var map = queryCommand.GetMap(typeof(TResult), typeof(DbDataReader))();
 
 #if PLAN_CACHE
             if (queryCommand.Cache)
@@ -104,15 +114,15 @@ public class SqlDataProvider : IDataProvider
 #if PLAN_CACHE
         else if (planCache.CompiledQuery is DatabaseCompiledPlan<TResult> plan)
         {
-            //var dbCommand = plan.GetCommand(ExtractParams(queryCommand), this);
-            var dbCommand = CreateCommand(plan._sql);
+            var dbCommand = plan.GetCommand(ExtractParams(queryCommand), this);
+            // var dbCommand = CreateCommand(plan._sql);
 
-            dbCommand.Parameters.Add(CreateParam(MakeParam("p"), 1));
+            // dbCommand.Parameters.Add(CreateParam(MakeParam("p"), 1));
 
             compiledQuery = new DatabaseCompiledQuery<TResult>(dbCommand, plan.MapDelegate);
         }
 #endif
-        var enumerator = new ResultSetEnumerator<TResult>(this, compiledQuery!, cancellationToken);
+        var enumerator = new ResultSetEnumerator<TResult>(this, compiledQuery!);
 
         var cacheEntry = new SqlCacheEntry(compiledQuery) { Enumerator = enumerator };
 
@@ -285,7 +295,7 @@ public class SqlDataProvider : IDataProvider
     }
     private string MakeWhere(Type entityType, ISourceProvider tableSource, Expression condition, int dim, IAliasProvider? aliasProvider, List<Param> @params, bool paramMode)
     {
-        if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Where expression: {exp}", condition);
+        // if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Where expression: {exp}", condition);
         using var visitor = new WhereExpressionVisitor(entityType, this, tableSource, dim, aliasProvider, paramMode);
         visitor.Visit(condition);
         @params.AddRange(visitor.Params);
@@ -354,20 +364,25 @@ public class SqlDataProvider : IDataProvider
     {
         throw new NotImplementedException(name);
     }
-    public IAsyncEnumerator<TResult> CreateEnumerator<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
+    public IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
 
         var ce = queryCommand.CacheEntry;
-        if (ce is SqlCacheEntry cacheEntry || (queryCommand.Cache && _queryCache.TryGetValue(queryCommand, out cacheEntry!) && cacheEntry is not null))
+        if (ce is SqlCacheEntry cacheEntry
+#if !ONLY_PLAN_CACHE
+            || (queryCommand.Cache && _queryCache.TryGetValue(queryCommand, out cacheEntry!) && cacheEntry is not null)
+#endif
+            )
         {
             // if (cacheEntry.Enumerator is not ResultSetEnumerator<TResult> enumerator)
             // {
             //     enumerator = new ResultSetEnumerator<TResult>(this, (DatabaseCompiledQuery<TResult>)cacheEntry.CompiledQuery, cancellationToken);
             //     cacheEntry.Enumerator = enumerator;
             // }
-
-            return (IAsyncEnumerator<TResult>)cacheEntry.Enumerator!;
+            var sqlEnumerator = (ResultSetEnumerator<TResult>)cacheEntry.Enumerator!;
+            sqlEnumerator.InitReader(cancellationToken);
+            return sqlEnumerator;
         }
         else
         {
@@ -381,10 +396,13 @@ public class SqlDataProvider : IDataProvider
 
             cacheEntry = CreateCompiledQuery(queryCommand, cancellationToken);
 
+#if !ONLY_PLAN_CACHE
             if (queryCommand.Cache)
                 _queryCache[queryCommand] = cacheEntry;
-
-            return (IAsyncEnumerator<TResult>)cacheEntry.Enumerator!;
+#endif
+            var sqlEnumerator = (ResultSetEnumerator<TResult>)cacheEntry.Enumerator!;
+            sqlEnumerator.InitReader(cancellationToken);
+            return sqlEnumerator;
         }
     }
     private List<Param> ExtractParams(QueryCommand queryCommand) => MakeSelect(queryCommand, true).Item2;
@@ -514,13 +532,56 @@ public class SqlDataProvider : IDataProvider
         return ValueTask.CompletedTask;
     }
 
+    public async Task<IEnumerator<TResult>> CreateEnumerator<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(queryCommand);
+
+        var ce = queryCommand.CacheEntry;
+        if (ce is SqlCacheEntry cacheEntry
+#if !ONLY_PLAN_CACHE
+            || (queryCommand.Cache && _queryCache.TryGetValue(queryCommand, out cacheEntry!) && cacheEntry is not null)
+#endif
+            )
+        {
+            // if (cacheEntry.Enumerator is not ResultSetEnumerator<TResult> enumerator)
+            // {
+            //     enumerator = new ResultSetEnumerator<TResult>(this, (DatabaseCompiledQuery<TResult>)cacheEntry.CompiledQuery, cancellationToken);
+            //     cacheEntry.Enumerator = enumerator;
+            // }
+            var sqlEnumerator = (ResultSetEnumerator<TResult>)cacheEntry.Enumerator!;
+            await sqlEnumerator.InitReaderAsync(cancellationToken);
+            return sqlEnumerator;
+        }
+        else
+        {
+#if DEBUG
+            if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Query cache miss with hash: {hash} and condition hash: {chash}",
+                queryCommand.GetHashCode(),
+                queryCommand.ConditionHash);
+#else
+            if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Query cache miss");
+#endif
+
+            cacheEntry = CreateCompiledQuery(queryCommand, cancellationToken);
+
+#if !ONLY_PLAN_CACHE
+            if (queryCommand.Cache)
+                _queryCache[queryCommand] = cacheEntry;
+#endif
+
+            var sqlEnumerator = (ResultSetEnumerator<TResult>)cacheEntry.Enumerator!;
+            await sqlEnumerator.InitReaderAsync(cancellationToken);
+            return sqlEnumerator;
+        }
+    }
+
     // public async IAsyncEnumerable<TResult> CreateFetchEnumerator<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
     // {
     //     throw new NotImplementedException();
     // }
 
     //record CompiledQueryPayload<TResult>(DatabaseCompiledQuery<TResult> CompiledQuery) : IPayload;
-    class SqlCacheEntry : CacheEntry
+    public class SqlCacheEntry : CacheEntry
     {
 
         public SqlCacheEntry(object? compiledQuery)

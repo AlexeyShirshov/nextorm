@@ -1,12 +1,15 @@
 //#define PLAN_CACHE
+#define INITALGO_1
 
 using System.Collections;
 using System.Collections.Concurrent;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Data;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 
@@ -24,7 +27,9 @@ public class QueryCommand : IPayloadManager, ISourceProvider
     protected readonly Expression? _condition;
     protected bool _isPrepared;
     private int? _hash;
+#if PLAN_CACHE
     internal int? _hashPlan;
+#endif
     protected Type? _srcType;
     private bool _dontCache;
 #if DEBUG
@@ -386,7 +391,12 @@ public class QueryCommand : IPayloadManager, ISourceProvider
     public QueryCommand? FindSourceFromAlias(string? aliasRaw)
     {
         if (string.IsNullOrEmpty(aliasRaw))
-            return _from!.Table.AsT1;
+        {
+            if (_from?.Table.IsT1 ?? false)
+                return _from!.Table.AsT1;
+
+            return null;
+        }
 
         var idx = int.Parse(aliasRaw[1..]);
         return Joins[idx - 2].Query;
@@ -401,44 +411,75 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
     }
 
     internal CompiledQuery<TResult>? Compiled => CacheEntry?.CompiledQuery as CompiledQuery<TResult>;
-    internal CacheEntry? CacheEntry { get; set; }
+    public CacheEntry? CacheEntry { get; set; }
     public IAsyncEnumerator<TResult> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
         if (!IsPrepared)
             PrepareCommand(cancellationToken);
 
-        return DataProvider.CreateEnumerator(this, cancellationToken);
+        return DataProvider.CreateAsyncEnumerator(this, cancellationToken);
     }
     // public Expression MapColumn(SelectExpression column, ParameterExpression param, Type _)
     // {
     //     return Expression.PropertyOrField(param, column.PropertyName!);
     // }
+#if INITALGO_1
     public Func<Func<object, TResult>> GetMap(Type resultType, Type recordType)
+#else
+    public Func<Func<object, object[]?, TResult>> GetMap(Type resultType, Type recordType)
+#endif
     {
         if (!IsPrepared)
             throw new InvalidOperationException("Command not prepared");
 
-        return () =>
+        // var key = new ExpressionKey(_exp);
+        // if (!(_dataProvider as SqlDataProvider).MapCache.TryGetValue(key, out var del))
+        // {
+        //     if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Map delegate cache miss for: {exp}", _exp);
+
+        var del = () =>
         {
             var ctorInfo = resultType.GetConstructors().OrderByDescending(it => it.GetParameters().Length).FirstOrDefault() ?? throw new PrepareException($"Cannot get ctor from {resultType}");
 
             var param = Expression.Parameter(typeof(object));
+#if !INITALGO_1
+            var valuesParam = Expression.Parameter(typeof(object[]));
+            var getValuesMethod = recordType.GetMethod(nameof(IDataRecord.GetValues))!;
+            var assignValuesVariable = Expression.Call(Expression.Convert(param, recordType), getValuesMethod, valuesParam);
+#endif
+            //return Expression.Lambda<Func<object, TResult>>(Expression.New(ctorInfo), param).Compile();
             //var @params = SelectList.Select(column => Expression.Parameter(column.PropertyType!)).ToArray();
 
             if (ctorInfo.GetParameters().Length == SelectList!.Count)
             {
+#if INITALGO_1
                 var newParams = SelectList!.Select(column => _dataProvider.MapColumn(column, Expression.Convert(param, recordType), recordType)).ToArray();
-
+#else
+                var newParams = SelectList!.Select(column => Expression.Convert(Expression.ArrayIndex(valuesParam, Expression.Constant(column.Index)), column.PropertyType)).ToArray();
+#endif
                 var ctor = Expression.New(ctorInfo, newParams);
 
+#if INITALGO_1
                 var lambda = Expression.Lambda<Func<object, TResult>>(ctor, param);
-
-                if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Init expression for {type}: {exp}", resultType, lambda);
-
+                if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Get instance of {type} as: {exp}", resultType, lambda);
+#else
+                var body = Expression.Block(typeof(TResult), new Expression[] { assignValuesVariable, ctor });
+                var lambda = Expression.Lambda<Func<object, object[]?, TResult>>(body, param, valuesParam);
+                if (Logger?.IsEnabled(LogLevel.Debug) ?? false)
+                {
+                    var sb = new StringBuilder();
+                    sb.AppendLine();
+                    sb.Append(assignValuesVariable.ToString()).AppendLine(";");
+                    sb.Append(ctor.ToString()).AppendLine(";");
+                    var dumpExp = lambda.ToString().Replace("...", sb.ToString());
+                    Logger.LogDebug("Get instance of {type} as: {exp}", resultType, dumpExp);
+                }
+#endif
                 return lambda.Compile();
             }
             else
             {
+#if INITALGO_1
                 var bindings = SelectList!.Select(column =>
                 {
                     var propInfo = column.PropertyInfo ?? resultType.GetProperty(column.PropertyName!)!;
@@ -449,13 +490,53 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
 
                 var memberInit = Expression.MemberInit(ctor, bindings);
 
-                var lambda = Expression.Lambda<Func<object, TResult>>(memberInit, param);
+                var body = memberInit;
+                var lambda = Expression.Lambda<Func<object, TResult>>(body, param);
 
-                if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Init expression for {type}: {exp}", resultType, lambda);
+                if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Get instance of {type} as: {exp}", resultType, lambda);
+#else
+                //var fieldCountProp = recordType.GetProperty(nameof(IDataRecord.FieldCount))!;
 
+                //var valuesVariable = Expression.Variable(typeof(object[]));
+                //var initValuesVariable = Expression.Assign(valuesVariable, Expression.NewArrayBounds(typeof(object), Expression.Property(Expression.Convert(param, recordType), fieldCountProp)));
+
+                var bindings = SelectList!.Select(column =>
+                {
+                    var propInfo = column.PropertyInfo ?? resultType.GetProperty(column.PropertyName!)!;
+                    return Expression.Bind(propInfo, Expression.Convert(Expression.ArrayIndex(valuesParam, Expression.Constant(column.Index)), column.PropertyType));
+                    //return Expression.Bind(propInfo, _dataProvider.MapColumn(column, Expression.Convert(param, recordType), recordType));
+                }).ToArray();
+
+                var ctor = Expression.New(ctorInfo);
+
+                var memberInit = Expression.MemberInit(ctor, bindings);
+
+                var body = Expression.Block(typeof(TResult), new Expression[] { assignValuesVariable, memberInit });
+                var lambda = Expression.Lambda<Func<object, object[]?, TResult>>(body, param, valuesParam);
+
+                if (Logger?.IsEnabled(LogLevel.Debug) ?? false)
+                {
+                    var sb = new StringBuilder();
+                    sb.AppendLine();
+                    //sb.Append(initValuesVariable.ToString()).AppendLine(";");
+                    sb.Append(assignValuesVariable.ToString()).AppendLine(";");
+                    sb.Append(memberInit.ToString()).AppendLine(";");
+                    var dumpExp = lambda.ToString().Replace("...", sb.ToString());
+                    Logger.LogDebug("Get instance of {type} as: {exp}", resultType, dumpExp);
+                }
+#endif
                 return lambda.Compile();
             }
         };
+
+        //         (_dataProvider as SqlDataProvider).MapCache[key] = del;
+        //     }
+
+#if INITALGO_1
+        return (Func<Func<object, TResult>>)del;
+#else
+        return (Func<Func<object, object[]?, TResult>>)del;
+#endif
     }
     //record MapPayload(Delegate Delegate) : IPayload;
     // public IEnumerable<TResult> Fetch(CancellationToken cancellationToken)
@@ -496,7 +577,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
 
         var _ = Task.Run(async () =>
         {
-            await foreach (var item in this.WithCancellation(cancellationToken))
+            foreach (var item in await Get(cancellationToken))
             {
                 if (cancellationToken.IsCancellationRequested)
                     break;
@@ -510,5 +591,22 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         return bus.Reader.ReadAllAsync(cancellationToken);
         // while (await bus.Reader.WaitToReadAsync(cancellationToken))
         //     yield return await bus.Reader.ReadAsync(cancellationToken);
+    }
+    public async Task<IEnumerable<TResult>> Get(CancellationToken cancellationToken = default)
+    {
+        if (!IsPrepared)
+            PrepareCommand(cancellationToken);
+
+        return new InternalEnumerator(await DataProvider.CreateEnumerator(this, cancellationToken));
+    }
+    class InternalEnumerator : IEnumerable<TResult>
+    {
+        private readonly IEnumerator<TResult> _enumerator;
+        public InternalEnumerator(IEnumerator<TResult> enumerator)
+        {
+            _enumerator = enumerator;
+        }
+        IEnumerator<TResult> IEnumerable<TResult>.GetEnumerator() => _enumerator;
+        IEnumerator IEnumerable.GetEnumerator() => _enumerator;
     }
 }

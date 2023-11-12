@@ -1,6 +1,6 @@
 namespace nextorm.core;
 
-internal class CacheEntry
+public class CacheEntry
 {
     public CacheEntry(object compiledQuery)
     {

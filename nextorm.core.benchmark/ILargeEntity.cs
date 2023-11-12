@@ -9,7 +9,7 @@ public interface ILargeEntity
 {
     //[Key]
     [Column("id")]
-    int Id { get; set; }
+    long Id { get; set; }
     [Column("someString")]
     string? Str { get; set; }
     [Column("dt")]
@@ -19,7 +19,7 @@ public interface ILargeEntity
 [Table("large_table")]
 public class LargeEntity : ILargeEntity
 {
-    public int Id { get; set; }
+    public long Id { get; set; }
     [Column("someString")]
     public string? Str { get; set; }
     public DateTime? Dt { get; set; }

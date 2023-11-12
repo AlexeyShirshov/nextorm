@@ -8,8 +8,8 @@ public interface IDataProvider : IAsyncDisposable, IDisposable
     ILogger? Logger { get; set; }
     bool NeedMapping { get; }
 
-    IAsyncEnumerator<TResult> CreateEnumerator<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken);
-    //IAsyncEnumerable<TResult> CreateFetchEnumerator<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken);
+    IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken);
+    Task<IEnumerator<TResult>> CreateEnumerator<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken);
     QueryCommand<TResult> CreateCommand<TResult>(LambdaExpression exp, Expression? condition);
     void ResetPreparation(QueryCommand queryCommand);
     FromExpression? GetFrom(Type srcType, QueryCommand queryCommand);

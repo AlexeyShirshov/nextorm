@@ -1,3 +1,5 @@
+//#define INITALGO_2
+
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 
@@ -19,7 +21,11 @@ public class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TResult>, I
 
         _map = typeof(TResult) == typeof(TEntity)
             ? null
+#if INITALGO_2
+            : (object o) => cmd.MapDelegate(o, null);
+#else
             : cmd.MapDelegate;
+#endif
 
         //if (cmd is InMemoryCompiledQuery<TResult, TEntity> cq)
         _condition = cmd.Condition;
