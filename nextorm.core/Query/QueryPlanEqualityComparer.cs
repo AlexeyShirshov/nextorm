@@ -1,7 +1,8 @@
 //#define PLAN_CACHE
 
 using System.Diagnostics.CodeAnalysis;
-using nextorm.core;
+
+namespace nextorm.core;
 
 public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand>
 {

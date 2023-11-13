@@ -94,6 +94,7 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
         if (_reader is not null) return;
 
         var sqlCommand = _compiledQuery.DbCommand;
+        sqlCommand.Connection = _conn;
 
         if (_conn.State == ConnectionState.Closed)
         {
@@ -101,7 +102,6 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
             if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Opening connection");
 #endif
             await _conn.OpenAsync(cancellationToken);
-            sqlCommand.Connection = _conn;
         }
 
 #if DEBUG

@@ -1,5 +1,5 @@
-//#define PLAN_CACHE
-//#define ONLY_PLAN_CACHE
+#define PLAN_CACHE
+#define ONLY_PLAN_CACHE
 //#define INITALGO_2
 
 using System.Collections.Concurrent;

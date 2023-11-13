@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Data.Sqlite;
 using Dapper;
 using Microsoft.Extensions.Logging;
+using TupleLargeEntity = System.Tuple<long, string?, System.DateTime?>;
 
 namespace nextorm.core.benchmark;
 
@@ -15,7 +16,7 @@ public class SqliteBenchmarkSimulateWork
     const int SmallIterations = 10;
     const int LargeListSize = 500;
     private readonly TestDataContext _ctx;
-    private readonly QueryCommand<LargeEntity> _cmd;
+    private readonly QueryCommand<TupleLargeEntity> _cmd;
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
 
@@ -30,7 +31,7 @@ public class SqliteBenchmarkSimulateWork
         }
         _ctx = new TestDataContext(builder);
 
-        _cmd = _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt });
+        _cmd = _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new TupleLargeEntity(entity.Id, entity.Str, entity.Dt));
         (_ctx.DataProvider as SqlDataProvider)!.Compile(_cmd, CancellationToken.None);
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
@@ -57,7 +58,7 @@ public class SqliteBenchmarkSimulateWork
             for (var i = 0; i < SmallIterations; i++)
             {
                 var p = i;
-                var s = _ctx.SimpleEntity.Where(it => it.Id == (row.Id + p)).Select(entity => new { entity.Id }).FirstOrDefaultAsync();
+                var s = _ctx.SimpleEntity.Where(it => it.Id == (row.Item1 + p)).Select(entity => new { entity.Id }).FirstOrDefaultAsync();
             }
         }
     }
@@ -70,7 +71,7 @@ public class SqliteBenchmarkSimulateWork
             for (var i = 0; i < SmallIterations; i++)
             {
                 var p = i;
-                var s = (await _ctx.SimpleEntity.Where(it => it.Id == (row.Id + p)).Select(entity => new { entity.Id }).Get()).FirstOrDefault();
+                var s = (await _ctx.SimpleEntity.Where(it => it.Id == (row.Item1 + p)).Select(entity => new { entity.Id }).Get()).FirstOrDefault();
             }
         }
     }
@@ -83,7 +84,7 @@ public class SqliteBenchmarkSimulateWork
             for (var i = 0; i < SmallIterations; i++)
             {
                 var p = i;
-                var s = (await _ctx.SimpleEntity.Where(it => it.Id == (row.Id + p)).Select(entity => new { entity.Id }).Get()).FirstOrDefault();
+                var s = (await _ctx.SimpleEntity.Where(it => it.Id == (row.Item1 + p)).Select(entity => new { entity.Id }).Get()).FirstOrDefault();
             }
         }
     }
@@ -96,35 +97,47 @@ public class SqliteBenchmarkSimulateWork
             for (var i = 0; i < SmallIterations; i++)
             {
                 var p = i;
-                var s = (await _ctx.SimpleEntity.Where(it => it.Id == (row.Id + p)).Select(entity => new { entity.Id }).Get()).FirstOrDefault();
+                var s = (await _ctx.SimpleEntity.Where(it => it.Id == (row.Item1 + p)).Select(entity => new { entity.Id }).Get()).FirstOrDefault();
             }
         }
     }
     [Benchmark()]
     public async Task NextormCached()
     {
-        foreach (var row in await _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }).Get())
+        foreach (var row in await _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new { entity.Id, entity.Str, entity.Dt }).Get())
         {
             await DoWork();
-            var s = (await _ctx.SimpleEntity.Where(it => it.Id == row.Id).Select(entity => new { entity.Id }).Get()).FirstOrDefault();
+            for (var i = 0; i < SmallIterations; i++)
+            {
+                var p = i;
+                var s = (await _ctx.SimpleEntity.Where(it => it.Id == row.Id + p).Select(entity => new { entity.Id }).Get()).FirstOrDefault();
+            }
         }
     }
     [Benchmark()]
     public async Task NextormCachedFetch()
     {
-        await foreach (var row in _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }).Fetch())
+        await foreach (var row in _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new { entity.Id, entity.Str, entity.Dt }).Fetch())
         {
             await DoWork();
-            var s = (await _ctx.SimpleEntity.Where(it => it.Id == row.Id).Select(entity => new { entity.Id }).Get()).FirstOrDefault();
+            for (var i = 0; i < SmallIterations; i++)
+            {
+                var p = i;
+                var s = (await _ctx.SimpleEntity.Where(it => it.Id == row.Id + p).Select(entity => new { entity.Id }).Get()).FirstOrDefault();
+            }
         }
     }
     [Benchmark()]
     public async Task NextormCachedToList()
     {
-        foreach (var row in (await _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }).Get()).ToList())
+        foreach (var row in (await _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new { entity.Id, entity.Str, entity.Dt }).Get()).ToList())
         {
             await DoWork();
-            var s = (await _ctx.SimpleEntity.Where(it => it.Id == row.Id).Select(entity => new { entity.Id }).Get()).FirstOrDefault();
+            for (var i = 0; i < SmallIterations; i++)
+            {
+                var p = i;
+                var s = (await _ctx.SimpleEntity.Where(it => it.Id == row.Id + p).Select(entity => new { entity.Id }).Get()).FirstOrDefault();
+            }
         }
     }
     [Benchmark]
@@ -144,7 +157,7 @@ public class SqliteBenchmarkSimulateWork
     [Benchmark()]
     public async Task Dapper()
     {
-        foreach (var row in await _conn.QueryAsync<LargeEntity>("select id, someString, dt from large_table where id < @limit", new { limit = LargeListSize }))
+        foreach (var row in await _conn.QueryAsync<LargeEntityDapper>("select id, someString, dt from large_table where id < @limit", new { limit = LargeListSize }))
         {
             await DoWork();
             for (var i = 0; i < SmallIterations; i++)

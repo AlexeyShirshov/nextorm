@@ -2,7 +2,7 @@
 <html lang='en'>
 <head>
 <meta charset='utf-8' />
-<title>nextorm.core.benchmark.SqliteBenchmarkLargeIteration-20231112-194932</title>
+<title>nextorm.core.benchmark.SqliteBenchmarkLargeIteration-20231113-151848</title>
 
 <style type="text/css">
 	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
@@ -13,19 +13,20 @@
 </head>
 <body>
 <pre><code>
-BenchmarkDotNet v0.13.9+228a464e8be6c580ad9408e98f18813f6407fb5a, Windows 10 (10.0.19045.3570/22H2/2022Update)
-Intel Core i7-4500U CPU 1.80GHz (Haswell), 1 CPU, 4 logical and 2 physical cores
-.NET SDK 7.0.403
+BenchmarkDotNet v0.13.9+228a464e8be6c580ad9408e98f18813f6407fb5a, Windows 11 (10.0.22621.2428/22H2/2022Update/SunValley2)
+Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical cores
+.NET SDK 7.0.113
   [Host]     : .NET 7.0.13 (7.0.1323.51816), X64 RyuJIT AVX2
   DefaultJob : .NET 7.0.13 (7.0.1323.51816), X64 RyuJIT AVX2
 </code></pre>
 <pre><code></code></pre>
 
 <table>
-<thead><tr><th>Method   </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Ratio</th><th>RatioSD</th><th>Gen0</th><th>Allocated</th><th>Alloc Ratio</th>
+<thead><tr><th>Method </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Ratio</th><th>RatioSD</th><th>Gen0</th><th>Gen1</th><th>Gen2</th><th>Allocated</th><th>Alloc Ratio</th>
 </tr>
-</thead><tbody><tr><td>IterateManual</td><td>18.37 ms</td><td>0.235 ms</td><td>0.220 ms</td><td>1.13</td><td>0.02</td><td>1062.5000</td><td>2.14 MB</td><td>1.00</td>
-</tr><tr><td>AdoWithDelegate</td><td>16.28 ms</td><td>0.260 ms</td><td>0.231 ms</td><td>1.00</td><td>0.00</td><td>1062.5000</td><td>2.14 MB</td><td>1.00</td>
+</thead><tbody><tr><td>NextormCached</td><td>11.567 ms</td><td>0.1854 ms</td><td>0.1734 ms</td><td>1.18</td><td>0.02</td><td>468.7500</td><td>-</td><td>-</td><td>2.14 MB</td><td>1.28</td>
+</tr><tr><td>Dapper</td><td>13.959 ms</td><td>0.0781 ms</td><td>0.0731 ms</td><td>1.42</td><td>0.01</td><td>453.1250</td><td>265.6250</td><td>125.0000</td><td>2.84 MB</td><td>1.69</td>
+</tr><tr><td>AdoTupleIter</td><td>9.844 ms</td><td>0.0586 ms</td><td>0.0548 ms</td><td>1.00</td><td>0.00</td><td>359.3750</td><td>-</td><td>-</td><td>1.68 MB</td><td>1.00</td>
 </tr></tbody></table>
 </body>
 </html>
