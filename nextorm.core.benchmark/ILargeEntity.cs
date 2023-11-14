@@ -24,9 +24,3 @@ public class LargeEntity : ILargeEntity
     public string? Str { get; set; }
     public DateTime? Dt { get; set; }
 }
-public class LargeEntityDapper
-{
-    public long Id { get; set; }
-    public string? SomeString { get; set; }
-    public DateTime? Dt { get; set; }
-}

@@ -14,5 +14,6 @@ public interface IDataProvider : IAsyncDisposable, IDisposable
     void ResetPreparation(QueryCommand queryCommand);
     FromExpression? GetFrom(Type srcType, QueryCommand queryCommand);
     Expression MapColumn(SelectExpression column, Expression param, Type recordType);
-    void Compile<TResult>(QueryCommand<TResult> query, CancellationToken cancellationToken);
+    void Compile<TResult>(QueryCommand<TResult> query, bool forToListCalls, CancellationToken cancellationToken);
+    Task<IEnumerable<TResult>> ToListAsync<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken);
 }

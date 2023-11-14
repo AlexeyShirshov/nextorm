@@ -52,6 +52,7 @@ public class InMemoryCompiledQuery<TResult, TEntity> : CompiledQuery<TResult>
 public class DatabaseCompiledQuery<TResult> : CompiledQuery<TResult>
 {
     public readonly DbCommand DbCommand;
+    public readonly System.Data.CommandBehavior Behavior = System.Data.CommandBehavior.SingleResult;
 #if INITALGO_2
     public DatabaseCompiledQuery(DbCommand dbCommand, Func<Func<object, object[]?, TResult>> getMap)
         : base(getMap)
@@ -69,10 +70,12 @@ public class DatabaseCompiledQuery<TResult> : CompiledQuery<TResult>
     {
         DbCommand = dbCommand;
     }
-    public DatabaseCompiledQuery(DbCommand dbCommand, Func<object, TResult> mapDelegate)
+    public DatabaseCompiledQuery(DbCommand dbCommand, Func<object, TResult> mapDelegate, bool singleRow = false)
         : base(mapDelegate)
     {
         DbCommand = dbCommand;
+        if (singleRow)
+            Behavior = System.Data.CommandBehavior.SingleResult | System.Data.CommandBehavior.SingleRow;
     }
 #endif
 }

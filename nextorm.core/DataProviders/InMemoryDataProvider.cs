@@ -349,7 +349,7 @@ public partial class InMemoryDataProvider : IDataProvider
         Dispose(disposing: true);
         GC.SuppressFinalize(this);
     }
-    public void Compile<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
+    public void Compile<TResult>(QueryCommand<TResult> queryCommand, bool forToListCalls, CancellationToken cancellationToken)
     {
         if (!queryCommand.IsPrepared)
             queryCommand.PrepareCommand(cancellationToken);
@@ -374,6 +374,11 @@ public partial class InMemoryDataProvider : IDataProvider
     }
 
     public Task<IEnumerator<TResult>> CreateEnumerator<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
+    {
+        throw new NotImplementedException();
+    }
+
+    public Task<IEnumerable<TResult>> ToListAsync<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
     {
         throw new NotImplementedException();
     }

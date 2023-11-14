@@ -8,7 +8,7 @@ using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
-public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerator<TResult>
+public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerator<TResult>, IEnumerable<TResult>
 {
     //private readonly QueryCommand<TResult> _cmd;
     private readonly SqlDataProvider _dataProvider;
@@ -21,7 +21,7 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
 #endif
     // private List<Param>? _params;
     private DbDataReader? _reader;
-    private DbConnection _conn;
+    private readonly DbConnection _conn;
     private bool disposedValue;
 #if INITALGO_2
     private object[]? _buffer;
@@ -107,7 +107,7 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
 #if DEBUG
         if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false)
         {
-            _dataProvider.Logger.LogDebug(sqlCommand.CommandText);
+            _dataProvider.Logger.LogDebug("Generated query: {sql}", sqlCommand.CommandText);
 
             if (_dataProvider.LogSensetiveData)
             {
@@ -122,7 +122,7 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
             }
         }
 #endif
-        _reader = await sqlCommand.ExecuteReaderAsync(cancellationToken);
+        _reader = await sqlCommand.ExecuteReaderAsync(_compiledQuery.Behavior, cancellationToken);
 
 #if INITALGO_2
         _buffer ??= new object[_reader!.FieldCount];
@@ -174,5 +174,15 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
         // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
         Dispose(disposing: true);
         GC.SuppressFinalize(this);
+    }
+
+    public IEnumerator<TResult> GetEnumerator()
+    {
+        return this;
+    }
+
+    IEnumerator IEnumerable.GetEnumerator()
+    {
+        return this;
     }
 }

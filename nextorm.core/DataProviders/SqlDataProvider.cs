@@ -1,5 +1,5 @@
-#define PLAN_CACHE
-#define ONLY_PLAN_CACHE
+//#define PLAN_CACHE
+//#define ONLY_PLAN_CACHE
 //#define INITALGO_2
 
 using System.Collections.Concurrent;
@@ -71,7 +71,7 @@ public class SqlDataProvider : IDataProvider
     {
         throw new NotImplementedException(type.ToString());
     }
-    private SqlCacheEntry CreateCompiledQuery<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
+    private SqlCacheEntry CreateCompiledQuery<TResult>(QueryCommand<TResult> queryCommand, bool crateEnumerator, CancellationToken cancellationToken)
     {
         DatabaseCompiledQuery<TResult>? compiledQuery = null;
 #if PLAN_CACHE
@@ -122,9 +122,13 @@ public class SqlDataProvider : IDataProvider
             compiledQuery = new DatabaseCompiledQuery<TResult>(dbCommand, plan.MapDelegate);
         }
 #endif
-        var enumerator = new ResultSetEnumerator<TResult>(this, compiledQuery!);
+        var cacheEntry = new SqlCacheEntry(compiledQuery);
 
-        var cacheEntry = new SqlCacheEntry(compiledQuery) { Enumerator = enumerator };
+        if (crateEnumerator)
+        {
+            var enumerator = new ResultSetEnumerator<TResult>(this, compiledQuery!);
+            cacheEntry.Enumerator = enumerator;
+        }
 
         return cacheEntry;
     }
@@ -394,7 +398,7 @@ public class SqlDataProvider : IDataProvider
             if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Query cache miss");
 #endif
 
-            cacheEntry = CreateCompiledQuery(queryCommand, cancellationToken);
+            cacheEntry = CreateCompiledQuery(queryCommand, true, cancellationToken);
 
 #if !ONLY_PLAN_CACHE
             if (queryCommand.Cache)
@@ -488,12 +492,12 @@ public class SqlDataProvider : IDataProvider
     {
         return v ? "1" : "0";
     }
-    public void Compile<TResult>(QueryCommand<TResult> cmd, CancellationToken cancellationToken)
+    public void Compile<TResult>(QueryCommand<TResult> cmd, bool forToListCalls, CancellationToken cancellationToken)
     {
         if (!cmd.IsPrepared)
             cmd.PrepareCommand(cancellationToken);
 
-        cmd.CacheEntry = CreateCompiledQuery(cmd, cancellationToken);
+        cmd.CacheEntry = CreateCompiledQuery(cmd, !forToListCalls, cancellationToken);
     }
     protected virtual void Dispose(bool disposing)
     {
@@ -562,7 +566,7 @@ public class SqlDataProvider : IDataProvider
             if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Query cache miss");
 #endif
 
-            cacheEntry = CreateCompiledQuery(queryCommand, cancellationToken);
+            cacheEntry = CreateCompiledQuery(queryCommand, true, cancellationToken);
 
 #if !ONLY_PLAN_CACHE
             if (queryCommand.Cache)
@@ -573,6 +577,81 @@ public class SqlDataProvider : IDataProvider
             await sqlEnumerator.InitReaderAsync(cancellationToken);
             return sqlEnumerator;
         }
+    }
+
+    public async Task<IEnumerable<TResult>> ToListAsync<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(queryCommand);
+
+        var ce = queryCommand.CacheEntry;
+        if (ce is SqlCacheEntry cacheEntry
+#if !ONLY_PLAN_CACHE
+            || (queryCommand.Cache && _queryCache.TryGetValue(queryCommand, out cacheEntry!) && cacheEntry is not null)
+#endif
+            )
+        {
+        }
+        else
+        {
+#if DEBUG
+            if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Query cache miss with hash: {hash} and condition hash: {chash}",
+                queryCommand.GetHashCode(),
+                queryCommand.ConditionHash);
+#else
+            if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Query cache miss");
+#endif
+
+            cacheEntry = CreateCompiledQuery(queryCommand, false, cancellationToken);
+
+#if !ONLY_PLAN_CACHE
+            if (queryCommand.Cache)
+                _queryCache[queryCommand] = cacheEntry;
+#endif
+        }
+        var compiledQuery = (DatabaseCompiledQuery<TResult>)cacheEntry.CompiledQuery;
+
+#if DEBUG
+        if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Getting connection");
+#endif
+        var conn = GetConnection();
+        var sqlCommand = compiledQuery.DbCommand;
+        sqlCommand.Connection = conn;
+
+        if (conn.State == ConnectionState.Closed)
+        {
+#if DEBUG
+            if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Opening connection");
+#endif
+            await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+#if DEBUG
+        if (Logger?.IsEnabled(LogLevel.Debug) ?? false)
+        {
+            Logger.LogDebug("Generated query: {sql}", sqlCommand.CommandText);
+
+            if (LogSensetiveData)
+            {
+                foreach (DbParameter p in sqlCommand.Parameters)
+                {
+                    Logger.LogDebug("param {name} is {value}", p.ParameterName, p.Value);
+                }
+            }
+            else if (sqlCommand.Parameters?.Count > 0)
+            {
+                Logger.LogDebug("Use {method} to see param values", nameof(LogSensetiveData));
+            }
+        }
+#endif
+        using var reader = await sqlCommand.ExecuteReaderAsync(compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
+
+        var l = new List<TResult>(cacheEntry.LastRowCount);
+        while (reader.Read())
+        {
+            l.Add(compiledQuery.MapDelegate(reader));
+        }
+        cacheEntry.LastRowCount = l.Count;
+        return l;
     }
 
     // public async IAsyncEnumerable<TResult> CreateFetchEnumerator<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
@@ -589,6 +668,7 @@ public class SqlDataProvider : IDataProvider
         {
         }
         public object? Enumerator { get; set; }
+        public int LastRowCount { get; internal set; }
     }
 #if PLAN_CACHE
 

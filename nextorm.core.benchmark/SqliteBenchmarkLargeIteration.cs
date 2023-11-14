@@ -11,6 +11,8 @@ using System.Linq.Expressions;
 using System.Collections;
 using System.Data.Common;
 using System.Data.SqlClient;
+using Microsoft.VisualBasic;
+using System.Runtime.InteropServices;
 
 namespace nextorm.core.benchmark;
 
@@ -18,7 +20,8 @@ namespace nextorm.core.benchmark;
 public class SqliteBenchmarkLargeIteration
 {
     private readonly TestDataContext _ctx;
-    private readonly QueryCommand<TupleLargeEntity> _cmd;
+    private readonly QueryCommand<TupleLargeEntity> _cmdExec;
+    private readonly QueryCommand<TupleLargeEntity> _cmdToList;
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
     private readonly SqliteCommand _adoCmd;
@@ -34,8 +37,11 @@ public class SqliteBenchmarkLargeIteration
         }
         _ctx = new TestDataContext(builder);
 
-        _cmd = _ctx.LargeEntity.Select(entity => new TupleLargeEntity(entity.Id, entity.Str, entity.Dt));
-        (_ctx.DataProvider as SqlDataProvider)!.Compile(_cmd, CancellationToken.None);
+        _cmdExec = _ctx.LargeEntity.Select(entity => new TupleLargeEntity(entity.Id, entity.Str, entity.Dt));
+        (_ctx.DataProvider as SqlDataProvider)!.Compile(_cmdExec, false, CancellationToken.None);
+
+        _cmdToList = _ctx.LargeEntity.Select(entity => new TupleLargeEntity(entity.Id, entity.Str, entity.Dt));
+        (_ctx.DataProvider as SqlDataProvider)!.Compile(_cmdToList, true, CancellationToken.None);
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(@$"Filename={Directory.GetCurrentDirectory()}\data\test.db");
@@ -61,17 +67,17 @@ public class SqliteBenchmarkLargeIteration
     //     {
     //     }
     // }
-    // [Benchmark(Baseline = true)]
+    // [Benchmark()]
     // public async Task NextormCompiled()
     // {
-    //     foreach (var row in await _cmd.Get())
+    //     foreach (var row in await _cmdExec.Exec())
     //     {
     //     }
     // }
     // [Benchmark()]
     // public async Task NextormCompiledToList()
     // {
-    //     foreach (var row in (await _cmd.Get()).ToList())
+    //     foreach (var row in await _cmdToList.ToListAsync())
     //     {
     //     }
     // }
@@ -85,7 +91,7 @@ public class SqliteBenchmarkLargeIteration
     [Benchmark()]
     public async Task NextormCached()
     {
-        foreach (var row in await _ctx.LargeEntity.Select(entity => new { entity.Id, entity.Str, entity.Dt }).Get())
+        foreach (var row in await _ctx.LargeEntity.Select(entity => new { entity.Id, entity.Str, entity.Dt }).Exec())
         {
         }
     }
@@ -96,13 +102,13 @@ public class SqliteBenchmarkLargeIteration
     //     {
     //     }
     // }
-    // [Benchmark()]
-    // public async Task NextormCachedToList()
-    // {
-    //     foreach (var row in (await _ctx.LargeEntity.Select(entity => new { entity.Id, entity.Str, entity.Dt }).Get()).ToList())
-    //     {
-    //     }
-    // }
+    [Benchmark()]
+    public async Task NextormCachedToList()
+    {
+        foreach (var row in await _ctx.LargeEntity.Select(entity => new { entity.Id, entity.Str, entity.Dt }).ToListAsync())
+        {
+        }
+    }
     // [Benchmark]
     // public async Task EFCore()
     // {
@@ -113,7 +119,7 @@ public class SqliteBenchmarkLargeIteration
     [Benchmark]
     public async Task Dapper()
     {
-        foreach (var row in await _conn.QueryAsync<LargeEntityDapper>("select id, someString, dt from large_table"))
+        foreach (var row in await _conn.QueryAsync<LargeEntity>("select id, someString as str, dt from large_table"))
         {
         }
     }
@@ -221,8 +227,26 @@ public class SqliteBenchmarkLargeIteration
     //         tuple.dt = dt;
     //     }
     // }
+    [Benchmark()]
+    public void AdoTupleToList()
+    {
+        Expression<Func<ILargeEntity, (long id, string? str, DateTime? dt)>> lambda = record => new ValueTuple<long, string?, DateTime?>(record.Id, record.Str, record.Dt);
+        if (_conn.State != System.Data.ConnectionState.Open)
+        {
+            _conn.Open();
+        }
+        var l = new List<(long id, string? str, DateTime? dt)>();
+        var i = 0;
+        using var reader = _adoCmd.ExecuteReader(CommandBehavior.SingleResult);
+        while (reader.Read())
+        {
+            l.Add(default);
+            var listSpan = CollectionsMarshal.AsSpan(l);
+            TupleFactory(ref listSpan[i++], reader);
+        }
+    }
     [Benchmark(Baseline = true)]
-    public void AdoTupleIter()
+    public void AdoTupleIteration()
     {
         Expression<Func<ILargeEntity, (long id, string? str, DateTime? dt)>> lambda = record => new ValueTuple<long, string?, DateTime?>(record.Id, record.Str, record.Dt);
         if (_conn.State != System.Data.ConnectionState.Open)
@@ -233,12 +257,12 @@ public class SqliteBenchmarkLargeIteration
         foreach (ref var t in ee)
         {
         }
-        void TupleFactory(ref (long id, string? str, DateTime? dt) tuple, DbDataReader reader)
-        {
-            tuple.id = reader.GetInt64(0);
-            tuple.str = reader.GetString(1);
-            tuple.dt = reader.IsDBNull(2) ? null : reader.GetDateTime(2);
-        }
+    }
+    void TupleFactory(ref (long id, string? str, DateTime? dt) tuple, DbDataReader reader)
+    {
+        tuple.id = reader.GetInt64(0);
+        tuple.str = reader.GetString(1);
+        tuple.dt = reader.IsDBNull(2) ? null : reader.GetDateTime(2);
     }
     class TupleEnumerator<T> : IDisposable
         where T : struct
@@ -302,6 +326,28 @@ public class SqliteBenchmarkLargeIteration
 
     //     }
     // }
+    [Benchmark()]
+    public async Task AdoClassToListWithInit()
+    {
+        if (_conn.State != System.Data.ConnectionState.Open)
+        {
+            await _conn.OpenAsync().ConfigureAwait(false);
+        }
+        using var reader = await _adoCmd.ExecuteReaderAsync(CommandBehavior.SequentialAccess | CommandBehavior.SingleResult).ConfigureAwait(false);
+        var l = new List<LargeEntity>(10_000);
+        while (await reader.ReadAsync().ConfigureAwait(false))
+        {
+            var Id = reader.GetInt64(0);
+            var Str = reader.GetString(1);
+            DateTime? Dt = reader.IsDBNull(2) ? null : reader.GetDateTime(2);
+            var o = new LargeEntity() { Id = Id, Str = Str, Dt = Dt };
+            l.Add(o);
+        }
+        foreach (var row in l)
+        {
+
+        }
+    }
     // [Benchmark()]
     // public async Task AdoTupleToList()
     // {

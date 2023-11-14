@@ -17,7 +17,7 @@ namespace nextorm.core;
 
 public class QueryCommand : IPayloadManager, ISourceProvider
 {
-    private IPayloadManager _payloadMgr;
+    private readonly IPayloadManager _payloadMgr;
     protected List<SelectExpression>? _selectList;
     private int _columnsHash;
     private int _joinHash;
@@ -567,7 +567,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
     // {
     //     return FetchAsync(10, cancellationToken);
     // }
-    public IAsyncEnumerable<TResult> Fetch(CancellationToken cancellationToken = default)
+    public IAsyncEnumerable<TResult> Pipeline(CancellationToken cancellationToken = default)
     {
         var bus = Channel.CreateUnbounded<TResult>(new UnboundedChannelOptions
         {
@@ -577,7 +577,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
 
         var _ = Task.Run(async () =>
         {
-            foreach (var item in await Get(cancellationToken))
+            foreach (var item in await Exec(cancellationToken))
             {
                 if (cancellationToken.IsCancellationRequested)
                     break;
@@ -592,17 +592,29 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         // while (await bus.Reader.WaitToReadAsync(cancellationToken))
         //     yield return await bus.Reader.ReadAsync(cancellationToken);
     }
-    public async Task<IEnumerable<TResult>> Get(CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<TResult>> Exec(CancellationToken cancellationToken = default)
     {
         if (!IsPrepared)
             PrepareCommand(cancellationToken);
 
-        return new InternalEnumerator(await DataProvider.CreateEnumerator(this, cancellationToken));
+        var enumerator = await DataProvider.CreateEnumerator(this, cancellationToken);
+
+        if (enumerator is IEnumerable<TResult> ee)
+            return ee;
+
+        return new InternalEnumerable(enumerator);
     }
-    class InternalEnumerator : IEnumerable<TResult>
+    public async Task<IEnumerable<TResult>> ToListAsync(CancellationToken cancellationToken = default)
+    {
+        if (!IsPrepared)
+            PrepareCommand(cancellationToken);
+
+        return await DataProvider.ToListAsync(this, cancellationToken);
+    }
+    class InternalEnumerable : IEnumerable<TResult>
     {
         private readonly IEnumerator<TResult> _enumerator;
-        public InternalEnumerator(IEnumerator<TResult> enumerator)
+        public InternalEnumerable(IEnumerator<TResult> enumerator)
         {
             _enumerator = enumerator;
         }

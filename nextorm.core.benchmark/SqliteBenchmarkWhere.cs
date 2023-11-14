@@ -32,7 +32,7 @@ public class SqliteBenchmarkWhere
         for (var i = 0; i < Iterations; i++)
         {
             var cmd = _ctx.SimpleEntity.Where(it => it.Id == i).Select(entity => new SimpleEntity { Id = entity.Id });
-            (_ctx.DataProvider as SqlDataProvider)!.Compile(cmd, CancellationToken.None);
+            (_ctx.DataProvider as SqlDataProvider)!.Compile(cmd, false, CancellationToken.None);
             _cmds[i] = cmd;
         }
 
@@ -60,7 +60,7 @@ public class SqliteBenchmarkWhere
     {
         for (var i = 0; i < Iterations; i++)
         {
-            foreach (var row in await _cmds[i].Get())
+            foreach (var row in await _cmds[i].Exec())
             {
             }
         }
@@ -95,7 +95,7 @@ public class SqliteBenchmarkWhere
         for (var i = 0; i < Iterations; i++)
         {
             var p = i;
-            foreach (var row in await _ctx.SimpleEntity.Where(it => it.Id == p).Select(entity => new { entity.Id }).Get())
+            foreach (var row in await _ctx.SimpleEntity.Where(it => it.Id == p).Select(entity => new { entity.Id }).Exec())
             {
             }
         }
