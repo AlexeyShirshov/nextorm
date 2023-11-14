@@ -74,13 +74,13 @@ public class SqliteBenchmarkLargeIteration
     //     {
     //     }
     // }
-    // [Benchmark()]
-    // public async Task NextormCompiledToList()
-    // {
-    //     foreach (var row in await _cmdToList.ToListAsync())
-    //     {
-    //     }
-    // }
+    [Benchmark()]
+    public async Task NextormCompiledToList()
+    {
+        foreach (var row in await _cmdToList.ToListAsync())
+        {
+        }
+    }
     // [Benchmark()]
     // public async Task NextormCachedAsync()
     // {
@@ -152,31 +152,35 @@ public class SqliteBenchmarkLargeIteration
 
     //     //Console.WriteLine("end method");
     // }
-    // [Benchmark(Baseline = true)]
-    // public async Task AdoWithDelegate()
-    // {
-    //     if (_conn.State != System.Data.ConnectionState.Open)
-    //     {
-    //         await _conn.OpenAsync();
-    //     }
-    //     using var reader = await _adoCmd.ExecuteReaderAsync(CommandBehavior.SequentialAccess | CommandBehavior.SingleResult);
-    //     var l = new List<LargeEntity>();
-    //     //var buf = new object[3];
-    //     var cq = (DatabaseCompiledQuery<LargeEntity>)_cmd.CacheEntry.CompiledQuery;
-    //     while (reader.Read())
-    //     {
-    //         var o = cq.MapDelegate(reader);
-    //         //reader.GetValues(buf);
-    //         // var Id = reader.GetInt64(0);
-    //         // var Str = reader.GetString(1);
-    //         // DateTime? Dt = reader.IsDBNull(2) ? null : reader.GetDateTime(2);
-    //         // var o = new LargeEntity() { Id = Id, Str = Str, Dt = Dt };
-    //         // o.Id = (long)buf[0];
-    //         // o.Str = (string)buf[1];
-    //         // o.Dt = Convert.ToDateTime(buf[2]);
-    //         l.Add(o);
-    //     }
-    // }
+    [Benchmark()]
+    public async Task AdoWithDelegate()
+    {
+        if (_conn.State == System.Data.ConnectionState.Closed)
+        {
+            await _conn.OpenAsync();
+        }
+        using var reader = await _adoCmd.ExecuteReaderAsync(CommandBehavior.SingleResult);
+        var l = new List<TupleLargeEntity>();
+        //var buf = new object[3];
+        var cq = (DatabaseCompiledQuery<TupleLargeEntity>)_cmdToList.CacheEntry!.CompiledQuery;
+        while (reader.Read())
+        {
+            var o = cq.MapDelegate(reader);
+            //reader.GetValues(buf);
+            // var Id = reader.GetInt64(0);
+            // var Str = reader.GetString(1);
+            // DateTime? Dt = reader.IsDBNull(2) ? null : reader.GetDateTime(2);
+            // var o = new LargeEntity() { Id = Id, Str = Str, Dt = Dt };
+            // o.Id = (long)buf[0];
+            // o.Str = (string)buf[1];
+            // o.Dt = Convert.ToDateTime(buf[2]);
+            l.Add(o);
+        }
+        foreach (var row in l)
+        {
+
+        }
+    }
     // [Benchmark()]
     // public async Task AdoRead()
     // {
@@ -248,7 +252,7 @@ public class SqliteBenchmarkLargeIteration
     [Benchmark(Baseline = true)]
     public void AdoTupleIteration()
     {
-        Expression<Func<ILargeEntity, (long id, string? str, DateTime? dt)>> lambda = record => new ValueTuple<long, string?, DateTime?>(record.Id, record.Str, record.Dt);
+        //Expression<Func<ILargeEntity, (long id, string? str, DateTime? dt)>> lambda = record => new ValueTuple<long, string?, DateTime?>(record.Id, record.Str, record.Dt);
         if (_conn.State != System.Data.ConnectionState.Open)
         {
             _conn.Open();
@@ -268,13 +272,12 @@ public class SqliteBenchmarkLargeIteration
         where T : struct
     {
         public delegate void InitTupleDelegate(ref T obj, DbDataReader reader);
-        private readonly DbCommand _adoCmd;
         private readonly InitTupleDelegate _map;
         private T _current;
-        private DbDataReader? _reader;
+        private readonly DbDataReader _reader;
         public TupleEnumerator(DbCommand adoCmd, InitTupleDelegate map)
         {
-            _adoCmd = adoCmd;
+            _reader = adoCmd.ExecuteReader(CommandBehavior.SequentialAccess | CommandBehavior.SingleResult);
             _map = map;
         }
         public ref T Current
@@ -287,8 +290,6 @@ public class SqliteBenchmarkLargeIteration
         }
         public bool MoveNext()
         {
-            _reader ??= _adoCmd.ExecuteReader(CommandBehavior.SequentialAccess | CommandBehavior.SingleResult);
-
             return _reader.Read();
         }
         public TupleEnumerator<T> GetEnumerator()
@@ -297,11 +298,7 @@ public class SqliteBenchmarkLargeIteration
         }
         public void Dispose()
         {
-            if (_reader is not null)
-            {
-                _reader.Dispose();
-                _reader = null;
-            }
+            _reader?.Dispose();
         }
     }
     // [Benchmark()]

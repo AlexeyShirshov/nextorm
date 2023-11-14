@@ -1,5 +1,6 @@
 //#define INITALGO_2
 
+using System.Buffers;
 using System.Data.Common;
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
@@ -49,7 +50,7 @@ public class InMemoryCompiledQuery<TResult, TEntity> : CompiledQuery<TResult>
         Condition = condition?.Compile();
     }
 }
-public class DatabaseCompiledQuery<TResult> : CompiledQuery<TResult>
+public class DatabaseCompiledQuery<TResult> : CompiledQuery<TResult>, IReplaceParam
 {
     public readonly DbCommand DbCommand;
     public readonly System.Data.CommandBehavior Behavior = System.Data.CommandBehavior.SingleResult;
@@ -76,6 +77,23 @@ public class DatabaseCompiledQuery<TResult> : CompiledQuery<TResult>
         DbCommand = dbCommand;
         if (singleRow)
             Behavior = System.Data.CommandBehavior.SingleResult | System.Data.CommandBehavior.SingleRow;
+    }
+
+    public void ReplaceParams(object[] @params, IDataProvider dataProvider)
+    {
+        //if (dataProvider is SqlDataProvider sqlDataProvider)
+        for (var i = 0; i < @params.Length; i++)
+        {
+            var paramName = string.Format("norm_p{0}", i);
+            foreach (DbParameter p in DbCommand.Parameters)
+            {
+                if (p.ParameterName == paramName)
+                {
+                    p.Value = @params[i];
+                    break;
+                }
+            }
+        }
     }
 #endif
 }

@@ -2,7 +2,7 @@
 <html lang='en'>
 <head>
 <meta charset='utf-8' />
-<title>nextorm.core.benchmark.SqliteBenchmarkSimulateWork-20231113-155728</title>
+<title>nextorm.core.benchmark.SqliteBenchmarkSimulateWork-20231114-194018</title>
 
 <style type="text/css">
 	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
@@ -22,17 +22,12 @@ Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical 
 <pre><code></code></pre>
 
 <table>
-<thead><tr><th>Method         </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Ratio</th><th>RatioSD</th><th>Gen0</th><th>Gen1</th><th>Allocated</th><th>Alloc Ratio</th>
+<thead><tr><th>Method                 </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Gen0</th><th>Gen1</th><th>Allocated</th>
 </tr>
-</thead><tbody><tr><td>NextormCompiledAsync</td><td>205.5 ms</td><td>3.18 ms</td><td>2.97 ms</td><td>1.03</td><td>0.02</td><td>7000.0000</td><td>2000.0000</td><td>35.96 MB</td><td>0.96</td>
-</tr><tr><td>NextormCompiled</td><td>200.5 ms</td><td>1.56 ms</td><td>1.39 ms</td><td>1.00</td><td>0.00</td><td>7333.3333</td><td>1666.6667</td><td>37.29 MB</td><td>1.00</td>
-</tr><tr><td>NextormCompiledFetch</td><td>394.5 ms</td><td>6.28 ms</td><td>5.88 ms</td><td>1.97</td><td>0.03</td><td>7000.0000</td><td>2000.0000</td><td>36.77 MB</td><td>0.99</td>
-</tr><tr><td>NextormCompiledToList</td><td>391.1 ms</td><td>3.73 ms</td><td>3.11 ms</td><td>1.95</td><td>0.02</td><td>7000.0000</td><td>2000.0000</td><td>36.77 MB</td><td>0.99</td>
-</tr><tr><td>NextormCached</td><td>195.7 ms</td><td>0.99 ms</td><td>0.83 ms</td><td>0.98</td><td>0.01</td><td>7333.3333</td><td>2000.0000</td><td>36.65 MB</td><td>0.98</td>
-</tr><tr><td>NextormCachedFetch</td><td>404.9 ms</td><td>7.98 ms</td><td>10.37 ms</td><td>2.04</td><td>0.05</td><td>7000.0000</td><td>2000.0000</td><td>36.67 MB</td><td>0.98</td>
-</tr><tr><td>NextormCachedToList</td><td>389.4 ms</td><td>3.71 ms</td><td>3.47 ms</td><td>1.94</td><td>0.02</td><td>7000.0000</td><td>2000.0000</td><td>36.67 MB</td><td>0.98</td>
-</tr><tr><td>EFCore</td><td>1,691.7 ms</td><td>10.17 ms</td><td>9.02 ms</td><td>8.44</td><td>0.07</td><td>18000.0000</td><td>17000.0000</td><td>80.92 MB</td><td>2.17</td>
-</tr><tr><td>Dapper</td><td>207.3 ms</td><td>1.56 ms</td><td>1.38 ms</td><td>1.03</td><td>0.01</td><td>2000.0000</td><td>-</td><td>9.2 MB</td><td>0.25</td>
+</thead><tbody><tr><td>NextormCompiledToList</td><td>214.6 ms</td><td>4.19 ms</td><td>5.45 ms</td><td>2500.0000</td><td>-</td><td>12.03 MB</td>
+</tr><tr><td>NextormCachedToList</td><td>406.9 ms</td><td>7.78 ms</td><td>8.96 ms</td><td>7000.0000</td><td>2000.0000</td><td>35.9 MB</td>
+</tr><tr><td>NextormCachedWithParamsToList</td><td>313.6 ms</td><td>6.17 ms</td><td>8.02 ms</td><td>3000.0000</td><td>1000.0000</td><td>19.62 MB</td>
+</tr><tr><td>Dapper</td><td>236.2 ms</td><td>4.61 ms</td><td>6.00 ms</td><td>2333.3333</td><td>-</td><td>11.48 MB</td>
 </tr></tbody></table>
 </body>
 </html>

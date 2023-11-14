@@ -53,10 +53,10 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand>
         if (obj is null)
             return 0;
 
-#if PLAN_CACHE
-        if (obj.PlanHash.HasValue)
-            return obj.PlanHash.Value;
-#endif
+        // #if PLAN_CACHE
+        //         if (obj.PlanHash.HasValue)
+        //             return obj.PlanHash.Value;
+        // #endif
         unchecked
         {
             HashCode hash = new();
@@ -74,12 +74,12 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand>
 
             hash.Add(obj.JoinPlanHash);
 
-            obj.PlanHash = hash.ToHashCode();
+            // obj.PlanHash = hash.ToHashCode();
 
-            return obj.PlanHash.Value;
+            // return obj.PlanHash.Value;
 #else
-            return hash.ToHashCode();
 #endif
+            return hash.ToHashCode();
 
         }
     }

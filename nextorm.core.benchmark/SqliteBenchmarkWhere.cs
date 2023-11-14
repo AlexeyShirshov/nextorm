@@ -14,7 +14,8 @@ public class SqliteBenchmarkWhere
 {
     const int Iterations = 100;
     private readonly TestDataContext _ctx;
-    private readonly QueryCommand<SimpleEntity>[] _cmds = new QueryCommand<SimpleEntity>[100];
+    private readonly QueryCommand<Tuple<int>> _cmd;
+    private readonly QueryCommand<Tuple<int>> _cmdToList;
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
 
@@ -29,12 +30,11 @@ public class SqliteBenchmarkWhere
         }
         _ctx = new TestDataContext(builder);
 
-        for (var i = 0; i < Iterations; i++)
-        {
-            var cmd = _ctx.SimpleEntity.Where(it => it.Id == i).Select(entity => new SimpleEntity { Id = entity.Id });
-            (_ctx.DataProvider as SqlDataProvider)!.Compile(cmd, false, CancellationToken.None);
-            _cmds[i] = cmd;
-        }
+        _cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new Tuple<int>(entity.Id));
+        (_ctx.DataProvider as SqlDataProvider)!.Compile(_cmd, false, CancellationToken.None);
+
+        _cmdToList = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new Tuple<int>(entity.Id));
+        (_ctx.DataProvider as SqlDataProvider)!.Compile(_cmdToList, true, CancellationToken.None);
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(@$"Filename={Directory.GetCurrentDirectory()}\data\test.db");
@@ -50,7 +50,7 @@ public class SqliteBenchmarkWhere
     {
         for (var i = 0; i < Iterations; i++)
         {
-            await foreach (var row in _cmds[i])
+            await foreach (var row in _cmd.WithParams(i))
             {
             }
         }
@@ -60,18 +60,21 @@ public class SqliteBenchmarkWhere
     {
         for (var i = 0; i < Iterations; i++)
         {
-            foreach (var row in await _cmds[i].Exec())
+            foreach (var row in await _cmd.WithParams(i).Exec())
             {
             }
         }
     }
-    // [Benchmark()]
-    // public async Task NextormToListCached()
-    // {
-    //     foreach (var row in await _cmd.ToListAsync())
-    //     {
-    //     }
-    // }
+    [Benchmark()]
+    public async Task NextormCompiledToList()
+    {
+        for (var i = 0; i < Iterations; i++)
+        {
+            foreach (var row in await _cmdToList.WithParams(i).ToListAsync())
+            {
+            }
+        }
+    }
     // [Benchmark()]
     // public async Task Nextorm()
     // {
@@ -92,21 +95,25 @@ public class SqliteBenchmarkWhere
     [Benchmark()]
     public async Task NextormCached()
     {
+        var cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new { entity.Id });
         for (var i = 0; i < Iterations; i++)
         {
-            var p = i;
-            foreach (var row in await _ctx.SimpleEntity.Where(it => it.Id == p).Select(entity => new { entity.Id }).Exec())
+            foreach (var row in await cmd.WithParams(i).Exec())
             {
             }
         }
     }
-    // [Benchmark()]
-    // public async Task NextormToList()
-    // {
-    //     foreach (var row in await _ctx.SimpleEntity.Select(entity => new { entity.Id }).ToListAsync())
-    //     {
-    //     }
-    // }
+    [Benchmark()]
+    public async Task NextormCachedToList()
+    {
+        var cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new { entity.Id });
+        for (var i = 0; i < Iterations; i++)
+        {
+            foreach (var row in await cmd.WithParams(i).ToListAsync())
+            {
+            }
+        }
+    }
     [Benchmark]
     public async Task EFCore()
     {

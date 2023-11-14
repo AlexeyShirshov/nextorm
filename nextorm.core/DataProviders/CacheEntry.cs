@@ -1,3 +1,4 @@
+
 namespace nextorm.core;
 
 public class CacheEntry
@@ -7,4 +8,9 @@ public class CacheEntry
         CompiledQuery = compiledQuery;
     }
     public object CompiledQuery { get; set; }
+}
+
+public interface IReplaceParam
+{
+    void ReplaceParams(object[] @params, IDataProvider dataProvider);
 }

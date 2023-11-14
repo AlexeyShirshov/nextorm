@@ -87,8 +87,32 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             }
             return node;
         }
+        else if (node.Method.DeclaringType == typeof(NORM) && _tableProvider is IParamProvider paramProvider)
+        {
+            var paramIdx = node switch
+            {
+                {
+                    Method.Name: nameof(NORM.Param),
+                    Arguments: [ConstantExpression constExp]
+                } => constExp.Value is int i ? i : -1,
+                _ => -1
+            };
+
+            if (paramIdx >= 0)
+            {
+                var paramName = string.Format("norm_p{0}", paramIdx);
+                _params.Add(new Param(paramName, paramProvider.GetParam(paramIdx)));
+                if (!_paramMode)
+                    _builder!.Append(_dataProvider.MakeParam(paramName));
+
+                return node;
+            }
+            else
+                throw new NotSupportedException(node.Method.Name);
+        }
 
         return base.VisitMethodCall(node);
+
         string? CompileExp(Expression exp)
         {
             if (exp.Has<ConstantExpression>(out var ce))

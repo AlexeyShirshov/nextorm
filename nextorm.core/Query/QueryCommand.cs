@@ -12,12 +12,14 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.ObjectPool;
 
 namespace nextorm.core;
 
-public class QueryCommand : IPayloadManager, ISourceProvider
+public class QueryCommand : IPayloadManager, ISourceProvider, IParamProvider
 {
-    private readonly IPayloadManager _payloadMgr;
+    protected readonly IPayloadManager _payloadMgr;
+    private readonly List<JoinExpression> _joins;
     protected List<SelectExpression>? _selectList;
     private int _columnsHash;
     private int _joinHash;
@@ -26,10 +28,10 @@ public class QueryCommand : IPayloadManager, ISourceProvider
     protected readonly LambdaExpression _exp;
     protected readonly Expression? _condition;
     protected bool _isPrepared;
-    private int? _hash;
-#if PLAN_CACHE
-    internal int? _hashPlan;
-#endif
+    protected int? _hash;
+    // #if PLAN_CACHE
+    //     internal int? _hashPlan;
+    // #endif
     protected Type? _srcType;
     private bool _dontCache;
 #if DEBUG
@@ -37,16 +39,22 @@ public class QueryCommand : IPayloadManager, ISourceProvider
     public int? ConditionHash => _conditionHash;
 #endif
 #if PLAN_CACHE
-    internal int? PlanHash;
+    //    internal int? PlanHash;
     internal int ColumnsPlanHash;
     internal int JoinPlanHash;
 #endif
+    protected ArrayList _params = new();
     public QueryCommand(IDataProvider dataProvider, LambdaExpression exp, Expression? condition)
+        : this(dataProvider, exp, condition, new FastPayloadManager(new Dictionary<Type, object?>()), new())
+    {
+    }
+    protected QueryCommand(IDataProvider dataProvider, LambdaExpression exp, Expression? condition, IPayloadManager payloadMgr, List<JoinExpression> joins)
     {
         _dataProvider = dataProvider;
         _exp = exp;
         _condition = condition;
-        _payloadMgr = new FastPayloadManager(new Dictionary<Type, object?>());
+        _payloadMgr = payloadMgr;
+        _joins = joins;
     }
     public ILogger? Logger { get; set; }
     public FromExpression? From { get => _from; set => _from = value; }
@@ -63,7 +71,7 @@ public class QueryCommand : IPayloadManager, ISourceProvider
     }
     public bool IsPrepared => _isPrepared;
     public Expression? Condition => _condition;
-    public List<JoinExpression> Joins { get; } = new();
+    public List<JoinExpression> Joins => _joins;
     public bool Cache
     {
         get => !_dontCache;
@@ -335,6 +343,11 @@ public class QueryCommand : IPayloadManager, ISourceProvider
 #endif
             }
 
+            foreach (var param in _params)
+            {
+                hash.Add(param);
+            }
+
             hash.Add(_columnsHash);
 
             hash.Add(_joinHash);
@@ -354,11 +367,24 @@ public class QueryCommand : IPayloadManager, ISourceProvider
     {
         if (cmd is null) return false;
 
+        if (!new PreciseExpressionEqualityComparer((_dataProvider as SqlDataProvider)?.ExpressionsCache, (_dataProvider as SqlDataProvider)?.Logger).Equals(_condition, cmd._condition)) return false;
+
+        if (_params is null && cmd._params is not null) return false;
+        if (_params is not null && cmd._params is null) return false;
+
+        if (_params is not null && cmd._params is not null)
+        {
+            if (_params.Count != cmd._params.Count) return false;
+
+            for (int i = 0; i < _params.Count; i++)
+            {
+                if (!Equals(_params[i], cmd._params[i])) return false;
+            }
+        }
+
         if (!Equals(_from, cmd._from)) return false;
 
         if (_srcType != cmd._srcType) return false;
-
-        if (!new PreciseExpressionEqualityComparer((_dataProvider as SqlDataProvider)?.ExpressionsCache, (_dataProvider as SqlDataProvider)?.Logger).Equals(_condition, cmd._condition)) return false;
 
         if (_selectList is null && cmd._selectList is not null) return false;
         if (_selectList is not null && cmd._selectList is null) return false;
@@ -401,6 +427,19 @@ public class QueryCommand : IPayloadManager, ISourceProvider
         var idx = int.Parse(aliasRaw[1..]);
         return Joins[idx - 2].Query;
     }
+
+    public object? GetParam(int paramIdx) => _params.Count > paramIdx ? _params[paramIdx] : null;
+    protected virtual void CopyTo(QueryCommand dst)
+    {
+        dst._selectList = _selectList;
+        dst._columnsHash = _columnsHash;
+        dst._joinHash = _joinHash;
+        dst._from = _from;
+        dst._isPrepared = _isPrepared;
+        dst._srcType = _srcType;
+        dst._dontCache = _dontCache;
+        dst.Logger = Logger;
+    }
 }
 
 public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
@@ -409,8 +448,12 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
     public QueryCommand(IDataProvider dataProvider, LambdaExpression exp, Expression? condition) : base(dataProvider, exp, condition)
     {
     }
+    protected QueryCommand(IDataProvider dataProvider, LambdaExpression exp, Expression? condition, IPayloadManager payloadMgr, List<JoinExpression> joins)
+    : base(dataProvider, exp, condition, payloadMgr, joins)
+    {
 
-    internal CompiledQuery<TResult>? Compiled => CacheEntry?.CompiledQuery as CompiledQuery<TResult>;
+    }
+    //internal CompiledQuery<TResult>? Compiled => CacheEntry?.CompiledQuery as CompiledQuery<TResult>;
     public CacheEntry? CacheEntry { get; set; }
     public IAsyncEnumerator<TResult> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
@@ -597,6 +640,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         if (!IsPrepared)
             PrepareCommand(cancellationToken);
 
+        // return Array.Empty<TResult>();
         var enumerator = await DataProvider.CreateEnumerator(this, cancellationToken);
 
         if (enumerator is IEnumerable<TResult> ee)
@@ -610,6 +654,36 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
             PrepareCommand(cancellationToken);
 
         return await DataProvider.ToListAsync(this, cancellationToken);
+    }
+
+    public QueryCommand<TResult> WithParams(params object[] @params)
+    {
+        QueryCommand<TResult> cmd;
+
+        if (CacheEntry?.CompiledQuery is IReplaceParam rp)
+        {
+            rp.ReplaceParams(@params, _dataProvider);
+            cmd = this;
+        }
+        else
+        {
+            cmd = new QueryCommand<TResult>(_dataProvider, _exp, _condition, _payloadMgr, Joins);
+            CopyTo(cmd);
+            cmd._params.AddRange(@params);
+        }
+
+        return cmd;
+    }
+    protected override void CopyTo(QueryCommand dst)
+    {
+        CopyTo(dst as QueryCommand<TResult>);
+    }
+    protected void CopyTo(QueryCommand<TResult>? dst)
+    {
+        if (dst is not null)
+        {
+            dst.CacheEntry = CacheEntry;
+        }
     }
     class InternalEnumerable : IEnumerable<TResult>
     {

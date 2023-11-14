@@ -12,6 +12,7 @@ public class SqliteBenchmarkIteration
 {
     private readonly TestDataContext _ctx;
     private readonly QueryCommand<Tuple<int>> _cmd;
+    private readonly QueryCommand<Tuple<int>> _cmdToList;
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
 
@@ -28,6 +29,9 @@ public class SqliteBenchmarkIteration
 
         _cmd = _ctx.SimpleEntity.Select(entity => new Tuple<int>(entity.Id));
         (_ctx.DataProvider as SqlDataProvider)!.Compile(_cmd, false, CancellationToken.None);
+
+        _cmdToList = _ctx.SimpleEntity.Select(entity => new Tuple<int>(entity.Id));
+        (_ctx.DataProvider as SqlDataProvider)!.Compile(_cmdToList, true, CancellationToken.None);
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(@$"Filename={Directory.GetCurrentDirectory()}\data\test.db");
@@ -55,7 +59,7 @@ public class SqliteBenchmarkIteration
     [Benchmark()]
     public async Task NextormCompiledToList()
     {
-        foreach (var row in (await _cmd.Exec()).ToList())
+        foreach (var row in await _cmdToList.ToListAsync())
         {
         }
     }
@@ -69,7 +73,7 @@ public class SqliteBenchmarkIteration
     [Benchmark()]
     public async Task NextormCachedToList()
     {
-        foreach (var row in (await _ctx.SimpleEntity.Select(entity => new { entity.Id }).Exec()).ToList())
+        foreach (var row in await _ctx.SimpleEntity.Select(entity => new { entity.Id }).ToListAsync())
         {
         }
     }
@@ -83,7 +87,7 @@ public class SqliteBenchmarkIteration
     [Benchmark]
     public async Task Dapper()
     {
-        foreach (var row in await _conn.QueryAsync<SimpleEntity>("select * from simple_entity"))
+        foreach (var row in await _conn.QueryAsync<SimpleEntity>("select id from simple_entity"))
         {
         }
     }

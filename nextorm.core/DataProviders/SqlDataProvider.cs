@@ -1,5 +1,5 @@
-//#define PLAN_CACHE
-//#define ONLY_PLAN_CACHE
+// #define PLAN_CACHE
+// #define ONLY_PLAN_CACHE
 //#define INITALGO_2
 
 using System.Collections.Concurrent;
@@ -390,11 +390,11 @@ public class SqlDataProvider : IDataProvider
         }
         else
         {
-#if DEBUG
+#if DEBUG && !ONLY_PLAN_CACHE
             if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Query cache miss with hash: {hash} and condition hash: {chash}",
                 queryCommand.GetHashCode(),
                 queryCommand.ConditionHash);
-#else
+#elif !ONLY_PLAN_CACHE
             if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Query cache miss");
 #endif
 
@@ -558,11 +558,11 @@ public class SqlDataProvider : IDataProvider
         }
         else
         {
-#if DEBUG
+#if DEBUG && !ONLY_PLAN_CACHE
             if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Query cache miss with hash: {hash} and condition hash: {chash}",
                 queryCommand.GetHashCode(),
                 queryCommand.ConditionHash);
-#else
+#elif !ONLY_PLAN_CACHE
             if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Query cache miss");
 #endif
 
@@ -662,7 +662,6 @@ public class SqlDataProvider : IDataProvider
     //record CompiledQueryPayload<TResult>(DatabaseCompiledQuery<TResult> CompiledQuery) : IPayload;
     public class SqlCacheEntry : CacheEntry
     {
-
         public SqlCacheEntry(object? compiledQuery)
             : base(compiledQuery!)
         {
@@ -675,19 +674,12 @@ public class SqlDataProvider : IDataProvider
     class QueryPlan
     {
         public readonly QueryCommand QueryCommand;
+        private int? _hashPlan;
         public QueryPlan(QueryCommand cmd)
         {
             QueryCommand = cmd;
         }
-        public override int GetHashCode()
-        {
-            if (!QueryCommand._hashPlan.HasValue)
-            {
-                QueryCommand._hashPlan = QueryPlanEqualityComparer.Instance.GetHashCode(QueryCommand);
-            }
-
-            return QueryCommand._hashPlan.Value;
-        }
+        public override int GetHashCode() => _hashPlan ??= QueryPlanEqualityComparer.Instance.GetHashCode(QueryCommand);
         public override bool Equals(object? obj)
         {
             return Equals(obj as QueryPlan);
