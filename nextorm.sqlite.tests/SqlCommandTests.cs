@@ -135,7 +135,7 @@ public class SqlCommandTests
     [Fact]
     public async Task SelectNestedComplexEntityWithCalculatedFields_ShouldReturnData()
     {
-        var nested = _sut.ComplexEntity.Select(it => new { it.Id, it.RequiredString, it.String, CalcString = it.RequiredString + "/" + (it.String ?? "") });
+        var nested = _sut.ComplexEntity.Select(it => new { it.Id, it.RequiredString, it.String, CalcString = it.RequiredString + "/" + it.String });
 
         await foreach (var row in _sut.From(nested).Select(t1 => new { t1.Id, t1.RequiredString, t1.String, t1.CalcString }))
         {

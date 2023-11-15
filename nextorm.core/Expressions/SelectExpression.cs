@@ -19,7 +19,7 @@ public class SelectExpression
     {
         PropertyType = propertyType;
         _nullable = PropertyType.IsGenericType && PropertyType.GetGenericTypeDefinition() == typeof(Nullable<>);
-        Nullable = _nullable;
+        Nullable = PropertyType.IsClass || _nullable;
 
         if (_nullable)
         {

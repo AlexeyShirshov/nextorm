@@ -195,9 +195,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                     var colAttr = node.Member.GetCustomAttribute<ColumnAttribute>();
                     if (colAttr is not null)
                     {
-
                         _builder!.Append(colAttr.Name);
-
                         _colName = colAttr.Name;
                         return node;
                     }
@@ -261,8 +259,8 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             {
                 var lambdaParameter = visitor.Target1;
 
-                var hasAlias = false;
-                string? aliasForColumn = null;
+                var hasTableAliasForColumn = false;
+                string? tableAliasForColumn = null;
 
                 if (!_dontNeedAlias)
                 {
@@ -270,15 +268,15 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                     {
                         var aliasVisitor = new AliasFromProjectionVisitor();
                         aliasVisitor.Visit(node.Expression);
-                        aliasForColumn = aliasVisitor.Alias;
+                        tableAliasForColumn = aliasVisitor.Alias;
                     }
                     else
-                        aliasForColumn = GetAliasFromParam(lambdaParameter);
+                        tableAliasForColumn = GetAliasFromParam(lambdaParameter);
 
                     if (!_paramMode)
-                        _builder!.Append(aliasForColumn).Append('.');
+                        _builder!.Append(tableAliasForColumn).Append('.');
 
-                    hasAlias = true;
+                    hasTableAliasForColumn = true;
                 }
 
                 if (!_paramMode)
@@ -287,17 +285,16 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                     if (colAttr is not null)
                     {
                         _builder!.Append(colAttr.Name);
-
                         _colName = colAttr.Name;
+                        return node;
                     }
-                    return node;
                 }
 
-                var innerQuery = _tableProvider.FindSourceFromAlias(aliasForColumn);
+                var innerQuery = _tableProvider.FindSourceFromAlias(tableAliasForColumn);
                 if (innerQuery is not null)
                 {
                     var innerCol = innerQuery.SelectList!.SingleOrDefault(col => col.PropertyName == node.Member.Name) ?? throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
-                    var col = _dataProvider.MakeColumn(innerCol, innerQuery.EntityType!, innerQuery, hasAlias, _params, _paramMode);
+                    var col = _dataProvider.MakeColumn(innerCol, innerQuery.EntityType!, innerQuery, hasTableAliasForColumn, _params, _paramMode);
 
                     if (!_paramMode)
                     {

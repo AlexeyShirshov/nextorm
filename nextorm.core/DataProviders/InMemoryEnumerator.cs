@@ -1,9 +1,10 @@
+using System.Collections;
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 
 namespace nextorm.core;
 
-public class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TResult>, IEnumeratorInit
+public class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TResult>, IEnumerator<TResult>, IEnumeratorInit
 {
     //private readonly CompiledQuery<TResult> _cmd;
     private readonly Func<TEntity, TResult>? _map;
@@ -43,6 +44,8 @@ public class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TResult>, I
         }
     }
 
+    object? IEnumerator.Current => Current;
+
     public ValueTask DisposeAsync()
     {
         GC.SuppressFinalize(this);
@@ -63,6 +66,20 @@ public class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TResult>, I
         }
 
         return ValueTask.FromResult(r);
+    }
+
+    public bool MoveNext()
+    {
+        return _data!.MoveNext();
+    }
+
+    public void Reset()
+    {
+    }
+
+    public void Dispose()
+    {
+        GC.SuppressFinalize(this);
     }
 }
 

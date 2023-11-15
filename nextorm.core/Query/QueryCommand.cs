@@ -611,7 +611,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
     //     return FetchAsync(10, cancellationToken);
     // }
     public IAsyncEnumerable<TResult> Pipeline(params object[] @params) => Pipeline(CancellationToken.None, @params);
-    public IAsyncEnumerable<TResult> Pipeline(CancellationToken cancellationToken, params object[] @params)
+    public async IAsyncEnumerable<TResult> Pipeline(CancellationToken cancellationToken, params object[] @params)
     {
         var bus = Channel.CreateUnbounded<TResult>(new UnboundedChannelOptions
         {
@@ -619,22 +619,29 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
             SingleReader = true
         });
 
-        var _ = Task.Run(async () =>
+        var t = Task.Run(async () =>
         {
-            foreach (var item in await Exec(cancellationToken, @params))
+            try
             {
-                if (cancellationToken.IsCancellationRequested)
-                    break;
+                foreach (var item in await Exec(cancellationToken, @params))
+                {
+                    if (cancellationToken.IsCancellationRequested)
+                        break;
 
-                await bus.Writer.WriteAsync(item, cancellationToken);
+                    await bus.Writer.WriteAsync(item, cancellationToken);
+                }
             }
-
-            bus.Writer.Complete();
+            finally
+            {
+                bus.Writer.Complete();
+            }
         }, cancellationToken);
 
-        return bus.Reader.ReadAllAsync(cancellationToken);
-        // while (await bus.Reader.WaitToReadAsync(cancellationToken))
-        //     yield return await bus.Reader.ReadAsync(cancellationToken);
+        // return bus.Reader.ReadAllAsync(cancellationToken);
+        while (await bus.Reader.WaitToReadAsync(cancellationToken))
+            yield return await bus.Reader.ReadAsync(cancellationToken);
+
+        await t;
     }
     public IAsyncEnumerable<TResult> ExecAsync(params object[] @params) => ExecAsync(CancellationToken.None, @params);
     public async IAsyncEnumerable<TResult> ExecAsync([EnumeratorCancellation] CancellationToken cancellationToken, params object[] @params)
