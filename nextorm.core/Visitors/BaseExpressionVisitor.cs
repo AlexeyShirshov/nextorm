@@ -87,7 +87,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             }
             return node;
         }
-        else if (node.Method.DeclaringType == typeof(NORM) && _tableProvider is IParamProvider paramProvider)
+        else if (node.Method.DeclaringType == typeof(NORM) /*&& _tableProvider is IParamProvider paramProvider*/)
         {
             var paramIdx = node switch
             {
@@ -101,7 +101,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             if (paramIdx >= 0)
             {
                 var paramName = string.Format("norm_p{0}", paramIdx);
-                _params.Add(new Param(paramName, paramProvider.GetParam(paramIdx)));
+                _params.Add(new Param(paramName, null));
                 if (!_paramMode)
                     _builder!.Append(_dataProvider.MakeParam(paramName));
 

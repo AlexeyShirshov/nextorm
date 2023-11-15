@@ -1,77 +1,47 @@
-//#define INITALGO_2
-
 using System.Buffers;
+using System.Data;
 using System.Data.Common;
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 
 namespace nextorm.core;
-public class CompiledQuery<TResult>
+public class CompiledQuery<TResult, TRecord>
 {
-#if INITALGO_2
-    public readonly Func<object, object[]?, TResult> MapDelegate;
-    public CompiledQuery(Func<object, object[]?, TResult> mapDelegate)
-    {
-        MapDelegate = mapDelegate;
-    }
-    public CompiledQuery(Func<Func<object, object[]?, TResult>> getMap)
-    {
-        MapDelegate = getMap();
-    }
-#else
-    public readonly Func<object, TResult> MapDelegate;
+    public readonly Func<TRecord, TResult> MapDelegate;
 
-    public CompiledQuery(Func<object, TResult> mapDelegate)
+    public CompiledQuery(Func<TRecord, TResult> mapDelegate)
     {
         MapDelegate = mapDelegate;
     }
-    public CompiledQuery(Func<Func<object, TResult>> getMap)
+    public CompiledQuery(Func<Func<TRecord, TResult>> getMap)
     {
         MapDelegate = getMap();
     }
-#endif
     // [MethodImpl(MethodImplOptions.AggressiveInlining)]
     // public TResult Map(object dataRecord)
     // {
     //     return MapDelegate(dataRecord);
     // }
 }
-public class InMemoryCompiledQuery<TResult, TEntity> : CompiledQuery<TResult>
+public class InMemoryCompiledQuery<TResult, TEntity> : CompiledQuery<TResult, TEntity>
 {
     public readonly Func<TEntity, bool>? Condition;
-#if INITALGO_2
-    public InMemoryCompiledQuery(Func<Func<object, object[]?, TResult>> func, Expression<Func<TEntity, bool>>? condition)
+    public InMemoryCompiledQuery(Func<Func<TEntity, TResult>> func, Expression<Func<TEntity, bool>>? condition)
         : base(func)
-#else
-    public InMemoryCompiledQuery(Func<Func<object, TResult>> func, Expression<Func<TEntity, bool>>? condition)
-        : base(func)
-#endif
     {
         Condition = condition?.Compile();
     }
 }
-public class DatabaseCompiledQuery<TResult> : CompiledQuery<TResult>, IReplaceParam
+public class DatabaseCompiledQuery<TResult> : CompiledQuery<TResult, IDataRecord>//, IReplaceParam
 {
     public readonly DbCommand DbCommand;
     public readonly System.Data.CommandBehavior Behavior = System.Data.CommandBehavior.SingleResult;
-#if INITALGO_2
-    public DatabaseCompiledQuery(DbCommand dbCommand, Func<Func<object, object[]?, TResult>> getMap)
+    public DatabaseCompiledQuery(DbCommand dbCommand, Func<Func<IDataRecord, TResult>> getMap)
         : base(getMap)
     {
         DbCommand = dbCommand;
     }
-    public DatabaseCompiledQuery(DbCommand dbCommand, Func<object, object[]?, TResult> mapDelegate)
-        : base(mapDelegate)
-    {
-        DbCommand = dbCommand;
-    }
-#else
-    public DatabaseCompiledQuery(DbCommand dbCommand, Func<Func<object, TResult>> getMap)
-        : base(getMap)
-    {
-        DbCommand = dbCommand;
-    }
-    public DatabaseCompiledQuery(DbCommand dbCommand, Func<object, TResult> mapDelegate, bool singleRow = false)
+    public DatabaseCompiledQuery(DbCommand dbCommand, Func<IDataRecord, TResult> mapDelegate, bool singleRow = false)
         : base(mapDelegate)
     {
         DbCommand = dbCommand;
@@ -79,55 +49,39 @@ public class DatabaseCompiledQuery<TResult> : CompiledQuery<TResult>, IReplacePa
             Behavior = System.Data.CommandBehavior.SingleResult | System.Data.CommandBehavior.SingleRow;
     }
 
-    public void ReplaceParams(object[] @params, IDataProvider dataProvider)
-    {
-        //if (dataProvider is SqlDataProvider sqlDataProvider)
-        for (var i = 0; i < @params.Length; i++)
-        {
-            var paramName = string.Format("norm_p{0}", i);
-            foreach (DbParameter p in DbCommand.Parameters)
-            {
-                if (p.ParameterName == paramName)
-                {
-                    p.Value = @params[i];
-                    break;
-                }
-            }
-        }
-    }
-#endif
+    // public void ReplaceParams(object[] @params, IDataProvider dataProvider)
+    // {
+    //     //if (dataProvider is SqlDataProvider sqlDataProvider)
+    //     for (var i = 0; i < @params.Length; i++)
+    //     {
+    //         var paramName = string.Format("norm_p{0}", i);
+    //         foreach (DbParameter p in DbCommand.Parameters)
+    //         {
+    //             if (p.ParameterName == paramName)
+    //             {
+    //                 p.Value = @params[i];
+    //                 break;
+    //             }
+    //         }
+    //     }
+    // }
 }
-public class DatabaseCompiledPlan<TResult> : CompiledQuery<TResult>
+public class DatabaseCompiledPlan<TResult> : CompiledQuery<TResult, IDataRecord>
 {
     internal readonly string _sql;
     public readonly bool NoParams;
-#if INITALGO_2
-    public DatabaseCompiledPlan(string sql, Func<Func<object, object[]?, TResult>> getMap, bool noParams)
+    public DatabaseCompiledPlan(string sql, Func<Func<IDataRecord, TResult>> getMap, bool noParams)
         : base(getMap)
     {
         _sql = sql;
         NoParams = noParams;
     }
-    public DatabaseCompiledPlan(string sql, Func<object, object[]?, TResult> map, bool noParams)
+    public DatabaseCompiledPlan(string sql, Func<IDataRecord, TResult> map, bool noParams)
         : base(map)
     {
         _sql = sql;
         NoParams = noParams;
     }
-#else
-    public DatabaseCompiledPlan(string sql, Func<Func<object, TResult>> getMap, bool noParams)
-        : base(getMap)
-    {
-        _sql = sql;
-        NoParams = noParams;
-    }
-    public DatabaseCompiledPlan(string sql, Func<object, TResult> map, bool noParams)
-        : base(map)
-    {
-        _sql = sql;
-        NoParams = noParams;
-    }
-#endif
     public DbCommand GetCommand(List<Param> @params, SqlDataProvider dataProvider)
     {
         var dbCommand = dataProvider.CreateCommand(_sql);
@@ -138,5 +92,5 @@ public class DatabaseCompiledPlan<TResult> : CompiledQuery<TResult>
         return dbCommand;
     }
     public DatabaseCompiledQuery<TResult> CompileQuery(List<Param> @params, SqlDataProvider dataProvider)
-        => new DatabaseCompiledQuery<TResult>(GetCommand(@params, dataProvider), MapDelegate);
+        => new(GetCommand(@params, dataProvider), MapDelegate);
 }

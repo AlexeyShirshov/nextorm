@@ -13,7 +13,7 @@ BenchmarkRunner.Run<SqliteBenchmarkSimulateWork>();
 // var runner = new SqliteBenchmarkSimulateWork(true);
 
 // for (var i = 0; i < 2; i++)
-//     await runner.NextormCompiledToList();
+//     await runner.EFCoreCompiled();
 
 //await runner.FillLargeTable();
 // Console.WriteLine("Press any key to exit");

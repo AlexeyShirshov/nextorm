@@ -1,6 +1,6 @@
 namespace nextorm.core;
 
-public interface IParamProvider
-{
-    object? GetParam(int paramIdx);
-}
+// public interface IParamProvider
+// {
+//     object? GetParam(int paramIdx);
+// }

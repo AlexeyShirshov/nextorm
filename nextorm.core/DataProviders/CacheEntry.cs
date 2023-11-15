@@ -10,7 +10,7 @@ public class CacheEntry
     public object CompiledQuery { get; set; }
 }
 
-public interface IReplaceParam
-{
-    void ReplaceParams(object[] @params, IDataProvider dataProvider);
-}
+// public interface IReplaceParam
+// {
+//     void ReplaceParams(object[] @params, IDataProvider dataProvider);
+// }

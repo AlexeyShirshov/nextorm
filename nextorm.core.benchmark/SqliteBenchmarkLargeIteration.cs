@@ -25,26 +25,32 @@ public class SqliteBenchmarkLargeIteration
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
     private readonly SqliteCommand _adoCmd;
-
+    private readonly Func<EFDataContext, IAsyncEnumerable<LargeEntity>> _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.LargeEntities);
+    private readonly ILoggerFactory? _logFactory;
     public SqliteBenchmarkLargeIteration(bool withLogging = false)
     {
         var builder = new DataContextOptionsBuilder();
         builder.UseSqlite(@$"{Directory.GetCurrentDirectory()}\data\test.db");
         if (withLogging)
         {
-            builder.UseLoggerFactory(LoggerFactory.Create(config => config.AddConsole().SetMinimumLevel(LogLevel.Debug)));
+            _logFactory = LoggerFactory.Create(config => config.AddConsole().SetMinimumLevel(LogLevel.Debug));
+            builder.UseLoggerFactory(_logFactory);
             builder.LogSensetiveData(true);
         }
         _ctx = new TestDataContext(builder);
 
-        _cmdExec = _ctx.LargeEntity.Select(entity => new TupleLargeEntity(entity.Id, entity.Str, entity.Dt));
-        (_ctx.DataProvider as SqlDataProvider)!.Compile(_cmdExec, false, CancellationToken.None);
+        _cmdExec = _ctx.LargeEntity.Select(entity => new TupleLargeEntity(entity.Id, entity.Str, entity.Dt)).Compile(false);
 
-        _cmdToList = _ctx.LargeEntity.Select(entity => new TupleLargeEntity(entity.Id, entity.Str, entity.Dt));
-        (_ctx.DataProvider as SqlDataProvider)!.Compile(_cmdToList, true, CancellationToken.None);
+        _cmdToList = _ctx.LargeEntity.Select(entity => new TupleLargeEntity(entity.Id, entity.Str, entity.Dt)).Compile(true);
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(@$"Filename={Directory.GetCurrentDirectory()}\data\test.db");
+        efBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
+        if (withLogging)
+        {
+            efBuilder.UseLoggerFactory(_logFactory);
+            efBuilder.EnableSensitiveDataLogging(true);
+        }
 
         _efCtx = new EFDataContext(efBuilder.Options);
 
@@ -67,13 +73,13 @@ public class SqliteBenchmarkLargeIteration
     //     {
     //     }
     // }
-    // [Benchmark()]
-    // public async Task NextormCompiled()
-    // {
-    //     foreach (var row in await _cmdExec.Exec())
-    //     {
-    //     }
-    // }
+    [Benchmark()]
+    public async Task NextormCompiled()
+    {
+        foreach (var row in await _cmdExec.Exec())
+        {
+        }
+    }
     [Benchmark()]
     public async Task NextormCompiledToList()
     {
@@ -109,17 +115,38 @@ public class SqliteBenchmarkLargeIteration
         {
         }
     }
-    // [Benchmark]
-    // public async Task EFCore()
-    // {
-    //     foreach (var row in await _efCtx.LargeEntities.Select(entity => new { entity.Id, entity.Str, entity.Dt }).ToListAsync())
-    //     {
-    //     }
-    // }
+    [Benchmark]
+    public async Task EFCore()
+    {
+        foreach (var row in await _efCtx.LargeEntities.Select(entity => new { entity.Id, entity.Str, entity.Dt }).ToListAsync())
+        {
+        }
+    }
+    [Benchmark]
+    public async Task EFCoreStream()
+    {
+        await foreach (var row in _efCtx.LargeEntities.Select(entity => new { entity.Id, entity.Str, entity.Dt }).AsAsyncEnumerable())
+        {
+        }
+    }
+    [Benchmark]
+    public async Task EFCoreCompiled()
+    {
+        await foreach (var row in _efCompiled(_efCtx).Select(entity => new TupleLargeEntity(entity.Id, entity.Str, entity.Dt)))
+        {
+        }
+    }
     [Benchmark]
     public async Task Dapper()
     {
         foreach (var row in await _conn.QueryAsync<LargeEntity>("select id, someString as str, dt from large_table"))
+        {
+        }
+    }
+    [Benchmark]
+    public async Task DapperUnbuffered()
+    {
+        await foreach (var row in _conn.QueryUnbufferedAsync<LargeEntity>("select id, someString as str, dt from large_table"))
         {
         }
     }
@@ -250,16 +277,20 @@ public class SqliteBenchmarkLargeIteration
         }
     }
     [Benchmark(Baseline = true)]
-    public void AdoTupleIteration()
+    public async Task AdoTupleIteration()
     {
         //Expression<Func<ILargeEntity, (long id, string? str, DateTime? dt)>> lambda = record => new ValueTuple<long, string?, DateTime?>(record.Id, record.Str, record.Dt);
         if (_conn.State != System.Data.ConnectionState.Open)
         {
-            _conn.Open();
+            await _conn.OpenAsync();
         }
-        using var ee = new TupleEnumerator<(long id, string? str, DateTime? dt)>(_adoCmd, TupleFactory);
-        foreach (ref var t in ee)
+        using var ee = new TupleEnumerator<(long id, string? str, DateTime? dt)>(await _adoCmd.ExecuteReaderAsync(CommandBehavior.SequentialAccess | CommandBehavior.SingleResult), TupleFactory);
+        Enumerate(ee);
+        static void Enumerate(TupleEnumerator<(long id, string? str, DateTime? dt)> ee)
         {
+            foreach (ref var t in ee)
+            {
+            }
         }
     }
     void TupleFactory(ref (long id, string? str, DateTime? dt) tuple, DbDataReader reader)
@@ -275,9 +306,9 @@ public class SqliteBenchmarkLargeIteration
         private readonly InitTupleDelegate _map;
         private T _current;
         private readonly DbDataReader _reader;
-        public TupleEnumerator(DbCommand adoCmd, InitTupleDelegate map)
+        public TupleEnumerator(DbDataReader reader, InitTupleDelegate map)
         {
-            _reader = adoCmd.ExecuteReader(CommandBehavior.SequentialAccess | CommandBehavior.SingleResult);
+            _reader = reader;
             _map = map;
         }
         public ref T Current

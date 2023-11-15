@@ -21,30 +21,36 @@ public class SqliteBenchmarkSimulateWork
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
     private readonly QueryCommand<Tuple<int>> _cmdInner;
-
+    private readonly Func<EFDataContext, int, IAsyncEnumerable<LargeEntity>> _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx, int lim) => ctx.LargeEntities.Where(it => it.Id < lim));
+    private readonly Func<EFDataContext, long, int, IAsyncEnumerable<SimpleEntity>> _efInnerCompiled = EF.CompileAsyncQuery((EFDataContext ctx, long id, int i) => ctx.SimpleEntities.Where(it => it.Id == id + i));
+    private readonly ILoggerFactory? _logFactory;
     public SqliteBenchmarkSimulateWork(bool withLogging = false)
     {
+
         var builder = new DataContextOptionsBuilder();
         builder.UseSqlite(@$"{Directory.GetCurrentDirectory()}\data\test.db");
         if (withLogging)
         {
-            builder.UseLoggerFactory(LoggerFactory.Create(config => config.AddConsole().SetMinimumLevel(LogLevel.Debug)));
+            _logFactory = LoggerFactory.Create(config => config.AddConsole().SetMinimumLevel(LogLevel.Debug));
+            builder.UseLoggerFactory(_logFactory);
             builder.LogSensetiveData(true);
         }
         _ctx = new TestDataContext(builder);
 
-        _cmd = _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new TupleLargeEntity(entity.Id, entity.Str, entity.Dt));
-        (_ctx.DataProvider as SqlDataProvider)!.Compile(_cmd, false, CancellationToken.None);
+        _cmd = _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new TupleLargeEntity(entity.Id, entity.Str, entity.Dt)).Compile(false);
 
-        _cmdToList = _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new TupleLargeEntity(entity.Id, entity.Str, entity.Dt));
-        (_ctx.DataProvider as SqlDataProvider)!.Compile(_cmdToList, true, CancellationToken.None);
+        _cmdToList = _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new TupleLargeEntity(entity.Id, entity.Str, entity.Dt)).Compile(true);
 
-        _cmdInner = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0) + NORM.Param<int>(1)).Select(entity => new Tuple<int>(entity.Id));
-        (_ctx.DataProvider as SqlDataProvider)!.Compile(_cmdInner, false, CancellationToken.None);
+        _cmdInner = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0) + NORM.Param<int>(1)).Select(entity => new Tuple<int>(entity.Id)).Compile(false);
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(@$"Filename={Directory.GetCurrentDirectory()}\data\test.db");
         efBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
+        if (withLogging)
+        {
+            efBuilder.UseLoggerFactory(_logFactory);
+            efBuilder.EnableSensitiveDataLogging(true);
+        }
 
         _efCtx = new EFDataContext(efBuilder.Options);
 
@@ -104,7 +110,7 @@ public class SqliteBenchmarkSimulateWork
             await DoWork();
             for (var i = 0; i < SmallIterations; i++)
             {
-                var s = (await _cmdInner.WithParams(row.Item1, i).Exec()).FirstOrDefault();
+                var s = (await _cmdInner.Exec(row.Item1, i)).FirstOrDefault();
             }
         }
     }
@@ -151,29 +157,54 @@ public class SqliteBenchmarkSimulateWork
     [Benchmark()]
     public async Task NextormCachedWithParamsToList()
     {
-        var cmdInner = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0) + NORM.Param<int>(1)).Select(entity => new { entity.Id });
+        var cmdInner = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0) + NORM.Param<int>(1)).Select(entity => new { entity.Id }).Compile(false);
         foreach (var row in await _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new { entity.Id, entity.Str, entity.Dt }).ToListAsync())
         {
             await DoWork();
             for (var i = 0; i < SmallIterations; i++)
             {
-                var s = (await cmdInner.WithParams(row.Id, i).Exec()).FirstOrDefault();
+                var s = (await cmdInner.Exec(row.Id, i)).FirstOrDefault();
             }
         }
     }
-    // [Benchmark]
-    // public async Task EFCore()
-    // {
-    //     foreach (var row in await _efCtx.LargeEntities.Where(it => it.Id < LargeListSize).Select(entity => new { entity.Id, entity.Str, entity.Dt }).ToListAsync())
-    //     {
-    //         await DoWork();
-    //         for (var i = 0; i < SmallIterations; i++)
-    //         {
-    //             var p = i;
-    //             var s = (await _efCtx.SimpleEntities.Where(it => it.Id == (row.Id + p)).Select(entity => new { entity.Id }).ToListAsync()).FirstOrDefault();
-    //         }
-    //     }
-    // }
+    [Benchmark]
+    public async Task EFCore()
+    {
+        foreach (var row in await _efCtx.LargeEntities.Where(it => it.Id < LargeListSize).Select(entity => new { entity.Id, entity.Str, entity.Dt }).ToListAsync())
+        {
+            await DoWork();
+            for (var i = 0; i < SmallIterations; i++)
+            {
+                var p = i;
+                var s = (await _efCtx.SimpleEntities.Where(it => it.Id == (row.Id + p)).Select(entity => new { entity.Id }).ToListAsync()).FirstOrDefault();
+            }
+        }
+    }
+    [Benchmark]
+    public async Task EFCoreStream()
+    {
+        await foreach (var row in _efCtx.LargeEntities.Where(it => it.Id < LargeListSize).Select(entity => new { entity.Id, entity.Str, entity.Dt }).AsAsyncEnumerable())
+        {
+            await DoWork();
+            for (var i = 0; i < SmallIterations; i++)
+            {
+                var p = i;
+                var s = (await _efCtx.SimpleEntities.Where(it => it.Id == (row.Id + p)).Select(entity => new { entity.Id }).AsAsyncEnumerable().ToListAsync()).FirstOrDefault();
+            }
+        }
+    }
+    [Benchmark]
+    public async Task EFCoreCompiled()
+    {
+        await foreach (var row in _efCompiled(_efCtx, LargeListSize).Select(entity => new { entity.Id, entity.Str, entity.Dt }))
+        {
+            await DoWork();
+            for (var i = 0; i < SmallIterations; i++)
+            {
+                var s = (await _efInnerCompiled(_efCtx, row.Id, i).Select(entity => new { entity.Id }).ToListAsync()).FirstOrDefault();
+            }
+        }
+    }
     [Benchmark()]
     public async Task Dapper()
     {

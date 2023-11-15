@@ -71,7 +71,7 @@ public class InMemoryTests
     {
         // Given
         var query = _sut.SimpleEntity.Select(it => new Tuple<int, int>(it.Id, it.Id + 10));
-        _sut.DataProvider.Compile(query, CancellationToken.None);
+        _sut.DataProvider.Compile(query, false, CancellationToken.None);
         // When
         await foreach (var item in query)
         {
@@ -88,7 +88,7 @@ public class InMemoryTests
 
         await foreach (var row in _sut.SimpleEntity
             .WithData(data)
-            .Select(it => new { it.Id }).Fetch(CancellationToken.None))
+            .Select(it => new { it.Id }).Pipeline())
         {
             _logger.LogInformation("Get {id}", row.Id);
         }

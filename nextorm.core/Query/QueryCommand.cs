@@ -16,7 +16,7 @@ using Microsoft.Extensions.ObjectPool;
 
 namespace nextorm.core;
 
-public class QueryCommand : IPayloadManager, ISourceProvider, IParamProvider
+public class QueryCommand : IPayloadManager, ISourceProvider//, IParamProvider
 {
     protected readonly IPayloadManager _payloadMgr;
     private readonly List<JoinExpression> _joins;
@@ -43,7 +43,7 @@ public class QueryCommand : IPayloadManager, ISourceProvider, IParamProvider
     internal int ColumnsPlanHash;
     internal int JoinPlanHash;
 #endif
-    protected ArrayList _params = new();
+    //protected ArrayList _params = new();
     public QueryCommand(IDataProvider dataProvider, LambdaExpression exp, Expression? condition)
         : this(dataProvider, exp, condition, new FastPayloadManager(new Dictionary<Type, object?>()), new())
     {
@@ -343,10 +343,10 @@ public class QueryCommand : IPayloadManager, ISourceProvider, IParamProvider
 #endif
             }
 
-            foreach (var param in _params)
-            {
-                hash.Add(param);
-            }
+            // foreach (var param in _params)
+            // {
+            //     hash.Add(param);
+            // }
 
             hash.Add(_columnsHash);
 
@@ -369,18 +369,18 @@ public class QueryCommand : IPayloadManager, ISourceProvider, IParamProvider
 
         if (!new PreciseExpressionEqualityComparer((_dataProvider as SqlDataProvider)?.ExpressionsCache, (_dataProvider as SqlDataProvider)?.Logger).Equals(_condition, cmd._condition)) return false;
 
-        if (_params is null && cmd._params is not null) return false;
-        if (_params is not null && cmd._params is null) return false;
+        // if (_params is null && cmd._params is not null) return false;
+        // if (_params is not null && cmd._params is null) return false;
 
-        if (_params is not null && cmd._params is not null)
-        {
-            if (_params.Count != cmd._params.Count) return false;
+        // if (_params is not null && cmd._params is not null)
+        // {
+        //     if (_params.Count != cmd._params.Count) return false;
 
-            for (int i = 0; i < _params.Count; i++)
-            {
-                if (!Equals(_params[i], cmd._params[i])) return false;
-            }
-        }
+        //     for (int i = 0; i < _params.Count; i++)
+        //     {
+        //         if (!Equals(_params[i], cmd._params[i])) return false;
+        //     }
+        // }
 
         if (!Equals(_from, cmd._from)) return false;
 
@@ -428,18 +428,18 @@ public class QueryCommand : IPayloadManager, ISourceProvider, IParamProvider
         return Joins[idx - 2].Query;
     }
 
-    public object? GetParam(int paramIdx) => _params.Count > paramIdx ? _params[paramIdx] : null;
-    protected virtual void CopyTo(QueryCommand dst)
-    {
-        dst._selectList = _selectList;
-        dst._columnsHash = _columnsHash;
-        dst._joinHash = _joinHash;
-        dst._from = _from;
-        dst._isPrepared = _isPrepared;
-        dst._srcType = _srcType;
-        dst._dontCache = _dontCache;
-        dst.Logger = Logger;
-    }
+    //public object? GetParam(int paramIdx) => _params.Count > paramIdx ? _params[paramIdx] : null;
+    // protected virtual void CopyTo(QueryCommand dst)
+    // {
+    //     dst._selectList = _selectList;
+    //     dst._columnsHash = _columnsHash;
+    //     dst._joinHash = _joinHash;
+    //     dst._from = _from;
+    //     dst._isPrepared = _isPrepared;
+    //     dst._srcType = _srcType;
+    //     dst._dontCache = _dontCache;
+    //     dst.Logger = Logger;
+    // }
 }
 
 public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
@@ -460,127 +460,127 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         if (!IsPrepared)
             PrepareCommand(cancellationToken);
 
-        return DataProvider.CreateAsyncEnumerator(this, cancellationToken);
+        return DataProvider.CreateAsyncEnumerator(this, null, cancellationToken);
     }
     // public Expression MapColumn(SelectExpression column, ParameterExpression param, Type _)
     // {
     //     return Expression.PropertyOrField(param, column.PropertyName!);
     // }
-#if INITALGO_1
-    public Func<Func<object, TResult>> GetMap(Type resultType, Type recordType)
-#else
-    public Func<Func<object, object[]?, TResult>> GetMap(Type resultType, Type recordType)
-#endif
-    {
-        if (!IsPrepared)
-            throw new InvalidOperationException("Command not prepared");
+    // #if INITALGO_1
+    //     public Func<Func<object, TResult>> GetMap(Type resultType, Type recordType)
+    // #else
+    //     public Func<Func<object, object[]?, TResult>> GetMap(Type resultType, Type recordType)
+    // #endif
+    //     {
+    //         if (!IsPrepared)
+    //             throw new InvalidOperationException("Command not prepared");
 
-        // var key = new ExpressionKey(_exp);
-        // if (!(_dataProvider as SqlDataProvider).MapCache.TryGetValue(key, out var del))
-        // {
-        //     if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Map delegate cache miss for: {exp}", _exp);
+    //         // var key = new ExpressionKey(_exp);
+    //         // if (!(_dataProvider as SqlDataProvider).MapCache.TryGetValue(key, out var del))
+    //         // {
+    //         //     if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Map delegate cache miss for: {exp}", _exp);
 
-        var del = () =>
-        {
-            var ctorInfo = resultType.GetConstructors().OrderByDescending(it => it.GetParameters().Length).FirstOrDefault() ?? throw new PrepareException($"Cannot get ctor from {resultType}");
+    //         var del = () =>
+    //         {
+    //             var ctorInfo = resultType.GetConstructors().OrderByDescending(it => it.GetParameters().Length).FirstOrDefault() ?? throw new PrepareException($"Cannot get ctor from {resultType}");
 
-            var param = Expression.Parameter(typeof(object));
-#if !INITALGO_1
-            var valuesParam = Expression.Parameter(typeof(object[]));
-            var getValuesMethod = recordType.GetMethod(nameof(IDataRecord.GetValues))!;
-            var assignValuesVariable = Expression.Call(Expression.Convert(param, recordType), getValuesMethod, valuesParam);
-#endif
-            //return Expression.Lambda<Func<object, TResult>>(Expression.New(ctorInfo), param).Compile();
-            //var @params = SelectList.Select(column => Expression.Parameter(column.PropertyType!)).ToArray();
+    //             var param = Expression.Parameter(typeof(object));
+    // #if !INITALGO_1
+    //             var valuesParam = Expression.Parameter(typeof(object[]));
+    //             var getValuesMethod = recordType.GetMethod(nameof(IDataRecord.GetValues))!;
+    //             var assignValuesVariable = Expression.Call(Expression.Convert(param, recordType), getValuesMethod, valuesParam);
+    // #endif
+    //             //return Expression.Lambda<Func<object, TResult>>(Expression.New(ctorInfo), param).Compile();
+    //             //var @params = SelectList.Select(column => Expression.Parameter(column.PropertyType!)).ToArray();
 
-            if (ctorInfo.GetParameters().Length == SelectList!.Count)
-            {
-#if INITALGO_1
-                var newParams = SelectList!.Select(column => _dataProvider.MapColumn(column, Expression.Convert(param, recordType), recordType)).ToArray();
-#else
-                var newParams = SelectList!.Select(column => Expression.Convert(Expression.ArrayIndex(valuesParam, Expression.Constant(column.Index)), column.PropertyType)).ToArray();
-#endif
-                var ctor = Expression.New(ctorInfo, newParams);
+    //             if (ctorInfo.GetParameters().Length == SelectList!.Count)
+    //             {
+    // #if INITALGO_1
+    //                 var newParams = SelectList!.Select(column => _dataProvider.MapColumn(column, Expression.Convert(param, recordType), recordType)).ToArray();
+    // #else
+    //                 var newParams = SelectList!.Select(column => Expression.Convert(Expression.ArrayIndex(valuesParam, Expression.Constant(column.Index)), column.PropertyType)).ToArray();
+    // #endif
+    //                 var ctor = Expression.New(ctorInfo, newParams);
 
-#if INITALGO_1
-                var lambda = Expression.Lambda<Func<object, TResult>>(ctor, param);
-                if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Get instance of {type} as: {exp}", resultType, lambda);
-#else
-                var body = Expression.Block(typeof(TResult), new Expression[] { assignValuesVariable, ctor });
-                var lambda = Expression.Lambda<Func<object, object[]?, TResult>>(body, param, valuesParam);
-                if (Logger?.IsEnabled(LogLevel.Debug) ?? false)
-                {
-                    var sb = new StringBuilder();
-                    sb.AppendLine();
-                    sb.Append(assignValuesVariable.ToString()).AppendLine(";");
-                    sb.Append(ctor.ToString()).AppendLine(";");
-                    var dumpExp = lambda.ToString().Replace("...", sb.ToString());
-                    Logger.LogDebug("Get instance of {type} as: {exp}", resultType, dumpExp);
-                }
-#endif
-                return lambda.Compile();
-            }
-            else
-            {
-#if INITALGO_1
-                var bindings = SelectList!.Select(column =>
-                {
-                    var propInfo = column.PropertyInfo ?? resultType.GetProperty(column.PropertyName!)!;
-                    return Expression.Bind(propInfo, _dataProvider.MapColumn(column, Expression.Convert(param, recordType), recordType));
-                }).ToArray();
+    // #if INITALGO_1
+    //                 var lambda = Expression.Lambda<Func<object, TResult>>(ctor, param);
+    //                 if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Get instance of {type} as: {exp}", resultType, lambda);
+    // #else
+    //                 var body = Expression.Block(typeof(TResult), new Expression[] { assignValuesVariable, ctor });
+    //                 var lambda = Expression.Lambda<Func<object, object[]?, TResult>>(body, param, valuesParam);
+    //                 if (Logger?.IsEnabled(LogLevel.Debug) ?? false)
+    //                 {
+    //                     var sb = new StringBuilder();
+    //                     sb.AppendLine();
+    //                     sb.Append(assignValuesVariable.ToString()).AppendLine(";");
+    //                     sb.Append(ctor.ToString()).AppendLine(";");
+    //                     var dumpExp = lambda.ToString().Replace("...", sb.ToString());
+    //                     Logger.LogDebug("Get instance of {type} as: {exp}", resultType, dumpExp);
+    //                 }
+    // #endif
+    //                 return lambda.Compile();
+    //             }
+    //             else
+    //             {
+    // #if INITALGO_1
+    //                 var bindings = SelectList!.Select(column =>
+    //                 {
+    //                     var propInfo = column.PropertyInfo ?? resultType.GetProperty(column.PropertyName!)!;
+    //                     return Expression.Bind(propInfo, _dataProvider.MapColumn(column, Expression.Convert(param, recordType), recordType));
+    //                 }).ToArray();
 
-                var ctor = Expression.New(ctorInfo);
+    //                 var ctor = Expression.New(ctorInfo);
 
-                var memberInit = Expression.MemberInit(ctor, bindings);
+    //                 var memberInit = Expression.MemberInit(ctor, bindings);
 
-                var body = memberInit;
-                var lambda = Expression.Lambda<Func<object, TResult>>(body, param);
+    //                 var body = memberInit;
+    //                 var lambda = Expression.Lambda<Func<object, TResult>>(body, param);
 
-                if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Get instance of {type} as: {exp}", resultType, lambda);
-#else
-                //var fieldCountProp = recordType.GetProperty(nameof(IDataRecord.FieldCount))!;
+    //                 if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Get instance of {type} as: {exp}", resultType, lambda);
+    // #else
+    //                 //var fieldCountProp = recordType.GetProperty(nameof(IDataRecord.FieldCount))!;
 
-                //var valuesVariable = Expression.Variable(typeof(object[]));
-                //var initValuesVariable = Expression.Assign(valuesVariable, Expression.NewArrayBounds(typeof(object), Expression.Property(Expression.Convert(param, recordType), fieldCountProp)));
+    //                 //var valuesVariable = Expression.Variable(typeof(object[]));
+    //                 //var initValuesVariable = Expression.Assign(valuesVariable, Expression.NewArrayBounds(typeof(object), Expression.Property(Expression.Convert(param, recordType), fieldCountProp)));
 
-                var bindings = SelectList!.Select(column =>
-                {
-                    var propInfo = column.PropertyInfo ?? resultType.GetProperty(column.PropertyName!)!;
-                    return Expression.Bind(propInfo, Expression.Convert(Expression.ArrayIndex(valuesParam, Expression.Constant(column.Index)), column.PropertyType));
-                    //return Expression.Bind(propInfo, _dataProvider.MapColumn(column, Expression.Convert(param, recordType), recordType));
-                }).ToArray();
+    //                 var bindings = SelectList!.Select(column =>
+    //                 {
+    //                     var propInfo = column.PropertyInfo ?? resultType.GetProperty(column.PropertyName!)!;
+    //                     return Expression.Bind(propInfo, Expression.Convert(Expression.ArrayIndex(valuesParam, Expression.Constant(column.Index)), column.PropertyType));
+    //                     //return Expression.Bind(propInfo, _dataProvider.MapColumn(column, Expression.Convert(param, recordType), recordType));
+    //                 }).ToArray();
 
-                var ctor = Expression.New(ctorInfo);
+    //                 var ctor = Expression.New(ctorInfo);
 
-                var memberInit = Expression.MemberInit(ctor, bindings);
+    //                 var memberInit = Expression.MemberInit(ctor, bindings);
 
-                var body = Expression.Block(typeof(TResult), new Expression[] { assignValuesVariable, memberInit });
-                var lambda = Expression.Lambda<Func<object, object[]?, TResult>>(body, param, valuesParam);
+    //                 var body = Expression.Block(typeof(TResult), new Expression[] { assignValuesVariable, memberInit });
+    //                 var lambda = Expression.Lambda<Func<object, object[]?, TResult>>(body, param, valuesParam);
 
-                if (Logger?.IsEnabled(LogLevel.Debug) ?? false)
-                {
-                    var sb = new StringBuilder();
-                    sb.AppendLine();
-                    //sb.Append(initValuesVariable.ToString()).AppendLine(";");
-                    sb.Append(assignValuesVariable.ToString()).AppendLine(";");
-                    sb.Append(memberInit.ToString()).AppendLine(";");
-                    var dumpExp = lambda.ToString().Replace("...", sb.ToString());
-                    Logger.LogDebug("Get instance of {type} as: {exp}", resultType, dumpExp);
-                }
-#endif
-                return lambda.Compile();
-            }
-        };
+    //                 if (Logger?.IsEnabled(LogLevel.Debug) ?? false)
+    //                 {
+    //                     var sb = new StringBuilder();
+    //                     sb.AppendLine();
+    //                     //sb.Append(initValuesVariable.ToString()).AppendLine(";");
+    //                     sb.Append(assignValuesVariable.ToString()).AppendLine(";");
+    //                     sb.Append(memberInit.ToString()).AppendLine(";");
+    //                     var dumpExp = lambda.ToString().Replace("...", sb.ToString());
+    //                     Logger.LogDebug("Get instance of {type} as: {exp}", resultType, dumpExp);
+    //                 }
+    // #endif
+    //                 return lambda.Compile();
+    //             }
+    //         };
 
-        //         (_dataProvider as SqlDataProvider).MapCache[key] = del;
-        //     }
+    //         //         (_dataProvider as SqlDataProvider).MapCache[key] = del;
+    //         //     }
 
-#if INITALGO_1
-        return (Func<Func<object, TResult>>)del;
-#else
-        return (Func<Func<object, object[]?, TResult>>)del;
-#endif
-    }
+    // #if INITALGO_1
+    //         return (Func<Func<object, TResult>>)del;
+    // #else
+    //         return (Func<Func<object, object[]?, TResult>>)del;
+    // #endif
+    //     }
     //record MapPayload(Delegate Delegate) : IPayload;
     // public IEnumerable<TResult> Fetch(CancellationToken cancellationToken)
     // {
@@ -610,7 +610,8 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
     // {
     //     return FetchAsync(10, cancellationToken);
     // }
-    public IAsyncEnumerable<TResult> Pipeline(CancellationToken cancellationToken = default)
+    public IAsyncEnumerable<TResult> Pipeline(params object[] @params) => Pipeline(CancellationToken.None, @params);
+    public IAsyncEnumerable<TResult> Pipeline(CancellationToken cancellationToken, params object[] @params)
     {
         var bus = Channel.CreateUnbounded<TResult>(new UnboundedChannelOptions
         {
@@ -620,7 +621,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
 
         var _ = Task.Run(async () =>
         {
-            foreach (var item in await Exec(cancellationToken))
+            foreach (var item in await Exec(cancellationToken, @params))
             {
                 if (cancellationToken.IsCancellationRequested)
                     break;
@@ -635,56 +636,76 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         // while (await bus.Reader.WaitToReadAsync(cancellationToken))
         //     yield return await bus.Reader.ReadAsync(cancellationToken);
     }
-    public async Task<IEnumerable<TResult>> Exec(CancellationToken cancellationToken = default)
+    public IAsyncEnumerable<TResult> ExecAsync(params object[] @params) => ExecAsync(CancellationToken.None, @params);
+    public async IAsyncEnumerable<TResult> ExecAsync([EnumeratorCancellation] CancellationToken cancellationToken, params object[] @params)
+    {
+        if (!IsPrepared)
+            PrepareCommand(cancellationToken);
+
+        await using var ee = DataProvider.CreateAsyncEnumerator(this, @params, cancellationToken);
+        while (await ee.MoveNextAsync())
+            yield return ee.Current;
+    }
+    public Task<IEnumerable<TResult>> Exec(params object[] @params) => Exec(CancellationToken.None, @params);
+    public async Task<IEnumerable<TResult>> Exec(CancellationToken cancellationToken, params object[] @params)
     {
         if (!IsPrepared)
             PrepareCommand(cancellationToken);
 
         // return Array.Empty<TResult>();
-        var enumerator = await DataProvider.CreateEnumerator(this, cancellationToken);
+        var enumerator = await DataProvider.CreateEnumerator(this, @params, cancellationToken);
 
         if (enumerator is IEnumerable<TResult> ee)
             return ee;
 
         return new InternalEnumerable(enumerator);
     }
-    public async Task<IEnumerable<TResult>> ToListAsync(CancellationToken cancellationToken = default)
+    public Task<IEnumerable<TResult>> ToListAsync(params object[] @params) => ToListAsync(CancellationToken.None, @params);
+    public async Task<IEnumerable<TResult>> ToListAsync(CancellationToken cancellationToken, params object[] @params)
     {
         if (!IsPrepared)
             PrepareCommand(cancellationToken);
 
-        return await DataProvider.ToListAsync(this, cancellationToken);
+        return await DataProvider.ToListAsync(this, @params, cancellationToken);
     }
-
-    public QueryCommand<TResult> WithParams(params object[] @params)
+    public QueryCommand<TResult> Compile(bool forToListCalls, CancellationToken cancellationToken = default)
     {
-        QueryCommand<TResult> cmd;
+        if (!IsPrepared)
+            PrepareCommand(cancellationToken);
 
-        if (CacheEntry?.CompiledQuery is IReplaceParam rp)
-        {
-            rp.ReplaceParams(@params, _dataProvider);
-            cmd = this;
-        }
-        else
-        {
-            cmd = new QueryCommand<TResult>(_dataProvider, _exp, _condition, _payloadMgr, Joins);
-            CopyTo(cmd);
-            cmd._params.AddRange(@params);
-        }
+        _dataProvider.Compile(this, forToListCalls, cancellationToken);
 
-        return cmd;
+        return this;
     }
-    protected override void CopyTo(QueryCommand dst)
-    {
-        CopyTo(dst as QueryCommand<TResult>);
-    }
-    protected void CopyTo(QueryCommand<TResult>? dst)
-    {
-        if (dst is not null)
-        {
-            dst.CacheEntry = CacheEntry;
-        }
-    }
+    // public QueryCommand<TResult> WithParams(params object[] @params)
+    // {
+    //     QueryCommand<TResult> cmd;
+
+    //     if (CacheEntry?.CompiledQuery is IReplaceParam rp)
+    //     {
+    //         rp.ReplaceParams(@params, _dataProvider);
+    //         cmd = this;
+    //     }
+    //     else
+    //     {
+    //         cmd = new QueryCommand<TResult>(_dataProvider, _exp, _condition, _payloadMgr, Joins);
+    //         CopyTo(cmd);
+    //         cmd._params.AddRange(@params);
+    //     }
+
+    //     return cmd;
+    // }
+    // protected override void CopyTo(QueryCommand dst)
+    // {
+    //     CopyTo(dst as QueryCommand<TResult>);
+    // }
+    // protected void CopyTo(QueryCommand<TResult>? dst)
+    // {
+    //     if (dst is not null)
+    //     {
+    //         dst.CacheEntry = CacheEntry;
+    //     }
+    // }
     class InternalEnumerable : IEnumerable<TResult>
     {
         private readonly IEnumerator<TResult> _enumerator;

@@ -10,7 +10,7 @@ namespace nextorm.core;
 
 public partial class InMemoryDataProvider : IDataProvider
 {
-    private bool disposedValue;
+    private bool _disposedValue;
     private readonly IDictionary<QueryCommand, InMemoryCacheEntry> _cmdIdx = new Dictionary<QueryCommand, InMemoryCacheEntry>();
 
     public QueryCommand<TResult> CreateCommand<TResult>(LambdaExpression exp, Expression? condition)
@@ -21,7 +21,7 @@ public partial class InMemoryDataProvider : IDataProvider
 
     public bool NeedMapping => false;
 
-    public IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
+    public IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
 
@@ -298,7 +298,7 @@ public partial class InMemoryDataProvider : IDataProvider
         return null;
     }
 
-    public Expression MapColumn(SelectExpression column, Expression param, Type recordType)
+    public Expression MapColumn(SelectExpression column, Expression param)
     {
         if (column.Expression.IsT0)
             throw new NotSupportedException();
@@ -323,7 +323,7 @@ public partial class InMemoryDataProvider : IDataProvider
 
     protected virtual void Dispose(bool disposing)
     {
-        if (!disposedValue)
+        if (!_disposedValue)
         {
             if (disposing)
             {
@@ -332,7 +332,7 @@ public partial class InMemoryDataProvider : IDataProvider
 
             // TODO: free unmanaged resources (unmanaged objects) and override finalizer
             // TODO: set large fields to null
-            disposedValue = true;
+            _disposedValue = true;
         }
     }
 
@@ -361,28 +361,81 @@ public partial class InMemoryDataProvider : IDataProvider
             param
         );
 
-        var lambda = Expression.Lambda<Func<QueryCommand<TResult>, CompiledQuery<TResult>>>(callExp, param).Compile();
+        var lambda = Expression.Lambda(callExp, param).Compile();
 
-        var ce = new InMemoryCacheEntry(lambda(queryCommand), CreateEnumeratorDelegate(queryCommand, cancellationToken));
+        var ce = new InMemoryCacheEntry(lambda.DynamicInvoke(queryCommand), CreateEnumeratorDelegate(queryCommand, cancellationToken));
         queryCommand.CacheEntry = ce;
         ce.Enumerator = (IAsyncEnumerator<TResult>)ce.CreateEnumerator.DynamicInvoke(this, queryCommand, ce, cancellationToken)!;
     }
 
-    private static CompiledQuery<TResult> CreateCompiledQuery<TResult, TEntity>(QueryCommand<TResult> query)
+    private CompiledQuery<TResult, TEntity> CreateCompiledQuery<TResult, TEntity>(QueryCommand<TResult> query)
     {
-        return new InMemoryCompiledQuery<TResult, TEntity>(query.GetMap(typeof(TResult), query.EntityType), query.Condition as Expression<Func<TEntity, bool>>);
+        return new InMemoryCompiledQuery<TResult, TEntity>(GetMap<TResult, TEntity>(query), query.Condition as Expression<Func<TEntity, bool>>);
     }
 
-    public Task<IEnumerator<TResult>> CreateEnumerator<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
-    {
-        throw new NotImplementedException();
-    }
-
-    public Task<IEnumerable<TResult>> ToListAsync<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
+    public Task<IEnumerator<TResult>> CreateEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
     {
         throw new NotImplementedException();
     }
 
+    public Task<IEnumerable<TResult>> ToListAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
+    {
+        throw new NotImplementedException();
+    }
+    public Func<Func<TEntity, TResult>> GetMap<TResult, TEntity>(QueryCommand<TResult> queryCommand)
+    {
+#if DEBUG
+        if (!queryCommand.IsPrepared)
+            throw new InvalidOperationException("Command not prepared");
+#endif
+        // var key = new ExpressionKey(_exp);
+        // if (!(_dataProvider as SqlDataProvider).MapCache.TryGetValue(key, out var del))
+        // {
+        //     if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Map delegate cache miss for: {exp}", _exp);
+        var resultType = typeof(TResult);
+
+        return () =>
+        {
+            var ctorInfo = resultType.GetConstructors().OrderByDescending(it => it.GetParameters().Length).FirstOrDefault() ?? throw new PrepareException($"Cannot get ctor from {resultType}");
+
+            var param = Expression.Parameter(typeof(TEntity));
+            //return Expression.Lambda<Func<object, TResult>>(Expression.New(ctorInfo), param).Compile();
+            //var @params = SelectList.Select(column => Expression.Parameter(column.PropertyType!)).ToArray();
+
+            if (ctorInfo.GetParameters().Length == queryCommand.SelectList!.Count)
+            {
+                var newParams = queryCommand.SelectList!.Select(column => MapColumn(column, param)).ToArray();
+
+                var ctor = Expression.New(ctorInfo, newParams);
+
+                var lambda = Expression.Lambda<Func<TEntity, TResult>>(ctor, param);
+                if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Get instance of {type} as: {exp}", resultType, lambda);
+                return lambda.Compile();
+            }
+            else
+            {
+                var bindings = queryCommand.SelectList!.Select(column =>
+                {
+                    var propInfo = column.PropertyInfo ?? resultType.GetProperty(column.PropertyName!)!;
+                    return Expression.Bind(propInfo, MapColumn(column, param));
+                }).ToArray();
+
+                var ctor = Expression.New(ctorInfo);
+
+                var memberInit = Expression.MemberInit(ctor, bindings);
+
+                var body = memberInit;
+                var lambda = Expression.Lambda<Func<TEntity, TResult>>(body, param);
+
+                if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Get instance of {type} as: {exp}", resultType, lambda);
+
+                return lambda.Compile();
+            }
+        };
+
+        //         (_dataProvider as SqlDataProvider).MapCache[key] = del;
+        //     }
+    }
     class InMemoryCacheEntry : CacheEntry
     {
         public InMemoryCacheEntry(object? compiledQuery, Delegate createEnumerator)

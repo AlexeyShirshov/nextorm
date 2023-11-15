@@ -15,27 +15,32 @@ public class SqliteBenchmarkIteration
     private readonly QueryCommand<Tuple<int>> _cmdToList;
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
-
+    private readonly Func<EFDataContext, IAsyncEnumerable<SimpleEntity>> _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.SimpleEntities);
+    private readonly ILoggerFactory? _logFactory;
     public SqliteBenchmarkIteration(bool withLogging = false)
     {
         var builder = new DataContextOptionsBuilder();
         builder.UseSqlite(@$"{Directory.GetCurrentDirectory()}\data\test.db");
         if (withLogging)
         {
-            builder.UseLoggerFactory(LoggerFactory.Create(config => config.AddConsole().SetMinimumLevel(LogLevel.Debug)));
+            _logFactory = LoggerFactory.Create(config => config.AddConsole().SetMinimumLevel(LogLevel.Debug));
+            builder.UseLoggerFactory(_logFactory);
             builder.LogSensetiveData(true);
         }
         _ctx = new TestDataContext(builder);
 
-        _cmd = _ctx.SimpleEntity.Select(entity => new Tuple<int>(entity.Id));
-        (_ctx.DataProvider as SqlDataProvider)!.Compile(_cmd, false, CancellationToken.None);
+        _cmd = _ctx.SimpleEntity.Select(entity => new Tuple<int>(entity.Id)).Compile(false);
 
-        _cmdToList = _ctx.SimpleEntity.Select(entity => new Tuple<int>(entity.Id));
-        (_ctx.DataProvider as SqlDataProvider)!.Compile(_cmdToList, true, CancellationToken.None);
+        _cmdToList = _ctx.SimpleEntity.Select(entity => new Tuple<int>(entity.Id)).Compile(true);
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(@$"Filename={Directory.GetCurrentDirectory()}\data\test.db");
         efBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
+        if (withLogging)
+        {
+            efBuilder.UseLoggerFactory(_logFactory);
+            efBuilder.EnableSensitiveDataLogging(true);
+        }
 
         _efCtx = new EFDataContext(efBuilder.Options);
 
@@ -85,9 +90,30 @@ public class SqliteBenchmarkIteration
         }
     }
     [Benchmark]
+    public async Task EFCoreStream()
+    {
+        await foreach (var row in _efCtx.SimpleEntities.Select(entity => new { entity.Id }).AsAsyncEnumerable())
+        {
+        }
+    }
+    [Benchmark]
+    public async Task EFCoreCompiled()
+    {
+        await foreach (var row in _efCompiled(_efCtx).Select(entity => new { entity.Id }))
+        {
+        }
+    }
+    [Benchmark]
     public async Task Dapper()
     {
         foreach (var row in await _conn.QueryAsync<SimpleEntity>("select id from simple_entity"))
+        {
+        }
+    }
+    [Benchmark]
+    public async Task DapperUnbuffered()
+    {
+        await foreach (var row in _conn.QueryUnbufferedAsync<SimpleEntity>("select id from simple_entity"))
         {
         }
     }

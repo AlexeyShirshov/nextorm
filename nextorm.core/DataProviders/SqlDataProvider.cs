@@ -1,6 +1,5 @@
 // #define PLAN_CACHE
 // #define ONLY_PLAN_CACHE
-//#define INITALGO_2
 
 using System.Collections.Concurrent;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -28,7 +27,7 @@ public class SqlDataProvider : IDataProvider
 #endif
     private DbConnection? _conn;
     // private bool _clearCache;
-    private bool disposedValue;
+    private bool _disposedValue;
     internal readonly ObjectPool<StringBuilder> _sbPool = new DefaultObjectPoolProvider().Create(new StringBuilderPooledObjectPolicy());
     //private DbCommand? _cmd;
     public DbConnection GetConnection()
@@ -91,7 +90,7 @@ public class SqlDataProvider : IDataProvider
             //     _queryCache[queryCommand] = cacheEntryX;
             // return cacheEntryX;
 
-            var map = queryCommand.GetMap(typeof(TResult), typeof(DbDataReader))();
+            var map = GetMap(queryCommand)();
 
 #if PLAN_CACHE
             if (queryCommand.Cache)
@@ -368,7 +367,7 @@ public class SqlDataProvider : IDataProvider
     {
         throw new NotImplementedException(name);
     }
-    public IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
+    public IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
 
@@ -384,9 +383,9 @@ public class SqlDataProvider : IDataProvider
             //     enumerator = new ResultSetEnumerator<TResult>(this, (DatabaseCompiledQuery<TResult>)cacheEntry.CompiledQuery, cancellationToken);
             //     cacheEntry.Enumerator = enumerator;
             // }
-            var sqlEnumerator = (ResultSetEnumerator<TResult>)cacheEntry.Enumerator!;
-            sqlEnumerator.InitReader(cancellationToken);
-            return sqlEnumerator;
+            // var sqlEnumerator = (ResultSetEnumerator<TResult>)cacheEntry.Enumerator!;
+            // sqlEnumerator.InitReader(cancellationToken);
+            // return sqlEnumerator;
         }
         else
         {
@@ -404,10 +403,10 @@ public class SqlDataProvider : IDataProvider
             if (queryCommand.Cache)
                 _queryCache[queryCommand] = cacheEntry;
 #endif
-            var sqlEnumerator = (ResultSetEnumerator<TResult>)cacheEntry.Enumerator!;
-            sqlEnumerator.InitReader(cancellationToken);
-            return sqlEnumerator;
         }
+        var sqlEnumerator = (ResultSetEnumerator<TResult>)cacheEntry.Enumerator!;
+        sqlEnumerator.InitReader(@params, cancellationToken);
+        return sqlEnumerator;
     }
     private List<Param> ExtractParams(QueryCommand queryCommand) => MakeSelect(queryCommand, true).Item2;
     public QueryCommand<T> CreateCommand<T>(LambdaExpression exp, Expression? condition)
@@ -471,12 +470,12 @@ public class SqlDataProvider : IDataProvider
 
         return new FromExpression(GetTableName(t));
     }
-    public Expression MapColumn(SelectExpression column, Expression param, Type recordType)
+    public Expression MapColumn(SelectExpression column, Expression param)
     {
         if (column.Nullable)
         {
             return Expression.Condition(
-                Expression.Call(param, recordType.GetMethod(nameof(IDataRecord.IsDBNull))!, Expression.Constant(column.Index)),
+                Expression.Call(param, typeof(IDataRecord).GetMethod(nameof(IDataRecord.IsDBNull))!, Expression.Constant(column.Index)),
                 Expression.Constant(null, column.PropertyType),
                 Expression.Convert(
                     Expression.Call(param, column.GetDataRecordMethod(), Expression.Constant(column.Index)),
@@ -501,7 +500,7 @@ public class SqlDataProvider : IDataProvider
     }
     protected virtual void Dispose(bool disposing)
     {
-        if (!disposedValue)
+        if (!_disposedValue)
         {
             if (disposing)
             {
@@ -510,7 +509,7 @@ public class SqlDataProvider : IDataProvider
 
             // TODO: free unmanaged resources (unmanaged objects) and override finalizer
             // TODO: set large fields to null
-            disposedValue = true;
+            _disposedValue = true;
         }
     }
 
@@ -536,7 +535,7 @@ public class SqlDataProvider : IDataProvider
         return ValueTask.CompletedTask;
     }
 
-    public async Task<IEnumerator<TResult>> CreateEnumerator<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
+    public async Task<IEnumerator<TResult>> CreateEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
 
@@ -552,9 +551,9 @@ public class SqlDataProvider : IDataProvider
             //     enumerator = new ResultSetEnumerator<TResult>(this, (DatabaseCompiledQuery<TResult>)cacheEntry.CompiledQuery, cancellationToken);
             //     cacheEntry.Enumerator = enumerator;
             // }
-            var sqlEnumerator = (ResultSetEnumerator<TResult>)cacheEntry.Enumerator!;
-            await sqlEnumerator.InitReaderAsync(cancellationToken);
-            return sqlEnumerator;
+            // var sqlEnumerator = (ResultSetEnumerator<TResult>)cacheEntry.Enumerator!;
+            // await sqlEnumerator.InitReaderAsync(cancellationToken, @params);
+            // return sqlEnumerator;
         }
         else
         {
@@ -573,26 +572,30 @@ public class SqlDataProvider : IDataProvider
                 _queryCache[queryCommand] = cacheEntry;
 #endif
 
-            var sqlEnumerator = (ResultSetEnumerator<TResult>)cacheEntry.Enumerator!;
-            await sqlEnumerator.InitReaderAsync(cancellationToken);
-            return sqlEnumerator;
         }
-    }
 
-    public async Task<IEnumerable<TResult>> ToListAsync<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
+        var sqlEnumerator = (ResultSetEnumerator<TResult>)cacheEntry.Enumerator!;
+        await sqlEnumerator.InitReaderAsync(@params, cancellationToken);
+        return sqlEnumerator;
+    }
+    public async Task<IEnumerable<TResult>> ToListAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
-
+        var setParams = @params is not null;
         var ce = queryCommand.CacheEntry;
-        if (ce is SqlCacheEntry cacheEntry
+        if (ce is not SqlCacheEntry cacheEntry)
+        {
 #if !ONLY_PLAN_CACHE
-            || (queryCommand.Cache && _queryCache.TryGetValue(queryCommand, out cacheEntry!) && cacheEntry is not null)
+            //QueryCommandKey? cmdKey = null;
+            if (queryCommand.Cache)
+            {
+                //cmdKey = new QueryCommandKey(queryCommand, @params);
+                if (_queryCache.TryGetValue(queryCommand, out cacheEntry!))
+                {
+                    goto hasCacheEtry;
+                }
+            }
 #endif
-            )
-        {
-        }
-        else
-        {
 #if DEBUG
             if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Query cache miss with hash: {hash} and condition hash: {chash}",
                 queryCommand.GetHashCode(),
@@ -608,6 +611,8 @@ public class SqlDataProvider : IDataProvider
                 _queryCache[queryCommand] = cacheEntry;
 #endif
         }
+
+    hasCacheEtry:
         var compiledQuery = (DatabaseCompiledQuery<TResult>)cacheEntry.CompiledQuery;
 
 #if DEBUG
@@ -615,6 +620,22 @@ public class SqlDataProvider : IDataProvider
 #endif
         var conn = GetConnection();
         var sqlCommand = compiledQuery.DbCommand;
+
+        if (setParams)
+        {
+            for (var i = 0; i < @params!.Length; i++)
+            {
+                var paramName = string.Format("norm_p{0}", i);
+                foreach (DbParameter p in sqlCommand.Parameters)
+                {
+                    if (p.ParameterName == paramName)
+                    {
+                        p.Value = @params[i];
+                        break;
+                    }
+                }
+            }
+        }
         sqlCommand.Connection = conn;
 
         if (conn.State == ConnectionState.Closed)
@@ -653,6 +674,68 @@ public class SqlDataProvider : IDataProvider
         cacheEntry.LastRowCount = l.Count;
         return l;
     }
+    public Func<Func<IDataRecord, TResult>> GetMap<TResult>(QueryCommand<TResult> queryCommand)
+    {
+#if DEBUG
+        if (!queryCommand.IsPrepared)
+            throw new InvalidOperationException("Command not prepared");
+#endif
+        // var key = new ExpressionKey(_exp);
+        // if (!(_dataProvider as SqlDataProvider).MapCache.TryGetValue(key, out var del))
+        // {
+        //     if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Map delegate cache miss for: {exp}", _exp);
+        var resultType = typeof(TResult);
+
+        return () =>
+        {
+            var ctorInfo = resultType.GetConstructors().OrderByDescending(it => it.GetParameters().Length).FirstOrDefault() ?? throw new PrepareException($"Cannot get ctor from {resultType}");
+
+            var param = Expression.Parameter(typeof(IDataRecord));
+
+            if (ctorInfo.GetParameters().Length == queryCommand.SelectList!.Count)
+            {
+                var newParams = queryCommand.SelectList!.Select(column => MapColumn(column, param)).ToArray();
+                var ctor = Expression.New(ctorInfo, newParams);
+
+                var lambda = Expression.Lambda<Func<IDataRecord, TResult>>(ctor, param);
+                if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Get instance of {type} as: {exp}", resultType, lambda);
+                // var body = Expression.Block(typeof(TResult), new Expression[] { assignValuesVariable, ctor });
+                // var lambda = Expression.Lambda<Func<object, object[]?, TResult>>(body, param, valuesParam);
+                // if (Logger?.IsEnabled(LogLevel.Debug) ?? false)
+                // {
+                //     var sb = new StringBuilder();
+                //     sb.AppendLine();
+                //     sb.Append(assignValuesVariable.ToString()).AppendLine(";");
+                //     sb.Append(ctor.ToString()).AppendLine(";");
+                //     var dumpExp = lambda.ToString().Replace("...", sb.ToString());
+                //     Logger.LogDebug("Get instance of {type} as: {exp}", resultType, dumpExp);
+                // }
+                return lambda.Compile();
+            }
+            else
+            {
+                var bindings = queryCommand.SelectList!.Select(column =>
+                {
+                    var propInfo = column.PropertyInfo ?? resultType.GetProperty(column.PropertyName!)!;
+                    return Expression.Bind(propInfo, MapColumn(column, param));
+                }).ToArray();
+
+                var ctor = Expression.New(ctorInfo);
+
+                var memberInit = Expression.MemberInit(ctor, bindings);
+
+                var body = memberInit;
+                var lambda = Expression.Lambda<Func<IDataRecord, TResult>>(body, param);
+
+                if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Get instance of {type} as: {exp}", resultType, lambda);
+
+                return lambda.Compile();
+            }
+        };
+
+        //         (_dataProvider as SqlDataProvider).MapCache[key] = del;
+        //     }
+    }
 
     // public async IAsyncEnumerable<TResult> CreateFetchEnumerator<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
     // {
@@ -669,6 +752,55 @@ public class SqlDataProvider : IDataProvider
         public object? Enumerator { get; set; }
         public int LastRowCount { get; internal set; }
     }
+    // class QueryCommandKey
+    // {
+    //     public readonly QueryCommand QueryCommand;
+    //     private readonly object[]? _params;
+    //     private int? _hash;
+    //     public QueryCommandKey(QueryCommand cmd, object[]? @params)
+    //     {
+    //         QueryCommand = cmd;
+    //         _params = @params;
+    //     }
+    //     public override int GetHashCode()
+    //     {
+    //         if (_hash.HasValue) return _hash.Value;
+
+    //         var hash = new HashCode();
+
+    //         hash.Add(QueryCommand.GetHashCode());
+
+    //         if (_params is not null)
+    //             foreach (var p in _params)
+    //                 hash.Add(p);
+
+    //         _hash = hash.ToHashCode();
+
+    //         return _hash.Value;
+    //     }
+    //     public override bool Equals(object? obj)
+    //     {
+    //         return Equals(obj as QueryCommandKey);
+    //     }
+    //     public bool Equals(QueryCommandKey? cmd)
+    //     {
+    //         if (cmd is null) return false;
+
+    //         if (_params is null && cmd._params is not null) return false;
+    //         if (_params is not null && cmd._params is null) return false;
+
+    //         if (_params is not null && cmd._params is not null)
+    //         {
+    //             if (_params.Length != cmd._params.Length) return false;
+
+    //             for (int i = 0; i < _params.Length; i++)
+    //             {
+    //                 if (!Equals(_params[i], cmd._params[i])) return false;
+    //             }
+    //         }
+    //         return Equals(QueryCommand, cmd.QueryCommand);
+    //     }
+    // }
 #if PLAN_CACHE
 
     class QueryPlan

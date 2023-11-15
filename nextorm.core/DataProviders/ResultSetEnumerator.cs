@@ -1,5 +1,3 @@
-//#define INITALGO_2
-
 using System.Collections;
 using System.Data;
 using System.Data.Common;
@@ -14,18 +12,12 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
     private readonly SqlDataProvider _dataProvider;
     private readonly DatabaseCompiledQuery<TResult> _compiledQuery;
     private CancellationToken _cancellationToken;
-#if INITALGO_2
-    private readonly Func<object, object[]?, TResult> _map;
-#else
-    private readonly Func<object, TResult> _map;
-#endif
+    private object[]? _params;
+    private readonly Func<IDataRecord, TResult> _map;
     // private List<Param>? _params;
     private DbDataReader? _reader;
     private readonly DbConnection _conn;
-    private bool disposedValue;
-#if INITALGO_2
-    private object[]? _buffer;
-#endif
+    private bool _disposedValue;
     public ResultSetEnumerator(SqlDataProvider dataProvider, DatabaseCompiledQuery<TResult> compiledQuery)
     {
         //_cmd = cmd;
@@ -38,9 +30,6 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
 #endif
         _conn = _dataProvider.GetConnection();
     }
-#if INITALGO_2
-    public TResult Current => _map(_reader!, _buffer!);
-#else
     public TResult Current
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -50,7 +39,6 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
         }
     }
     object? IEnumerator.Current => _map(_reader!);
-#endif
     public async ValueTask DisposeAsync()
     {
         GC.SuppressFinalize(this);
@@ -78,23 +66,38 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
 
     public async ValueTask<bool> MoveNextAsync()
     {
-        if (_reader is null) await InitReaderAsync(_cancellationToken);
+        if (_reader is null) await InitReaderAsync(_params, _cancellationToken);
 #if DEBUG
         if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false) _dataProvider.Logger.LogTrace("Move next");
 #endif
         return await _reader!.ReadAsync(_cancellationToken);
     }
-    public void InitReader(CancellationToken cancellationToken)
+    public void InitReader(object[]? @params, CancellationToken cancellationToken)
     {
         _cancellationToken = cancellationToken;
-
+        _params = @params;
     }
-    public async Task InitReaderAsync(CancellationToken cancellationToken)
+    public async Task InitReaderAsync(object[]? @params, CancellationToken cancellationToken)
     {
-        if (_reader is not null) return;
-
         var sqlCommand = _compiledQuery.DbCommand;
         sqlCommand.Connection = _conn;
+
+        if (@params is not null)
+            for (var i = 0; i < @params!.Length; i++)
+            {
+                var paramName = string.Format("norm_p{0}", i);
+                sqlCommand.Parameters[paramName].Value = @params[i];
+                // foreach (DbParameter p in sqlCommand.Parameters)
+                // {
+                //     if (p.ParameterName == paramName)
+                //     {
+                //         p.Value = @params[i];
+                //         break;
+                //     }
+                // }
+            }
+
+        if (_reader is not null) return;
 
         if (_conn.State == ConnectionState.Closed)
         {
@@ -123,10 +126,6 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
         }
 #endif
         _reader = await sqlCommand.ExecuteReaderAsync(_compiledQuery.Behavior, cancellationToken);
-
-#if INITALGO_2
-        _buffer ??= new object[_reader!.FieldCount];
-#endif
     }
 
     public bool MoveNext()
@@ -150,7 +149,7 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
 
             _reader = null;
         }
-        if (!disposedValue)
+        if (!_disposedValue)
         {
             if (disposing)
             {
@@ -158,7 +157,7 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
 
             // TODO: free unmanaged resources (unmanaged objects) and override finalizer
             // TODO: set large fields to null
-            disposedValue = true;
+            _disposedValue = true;
         }
     }
 
