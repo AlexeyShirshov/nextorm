@@ -4,19 +4,19 @@ using System.Reflection;
 
 namespace nextorm.core;
 
-public sealed class ExpressionEqualityComparer : IEqualityComparer<Expression?>
+public sealed class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
 {
     /// <summary>
     ///     Creates a new <see cref="ExpressionEqualityComparer" />.
     /// </summary>
-    private ExpressionEqualityComparer()
+    private ExpressionPlanEqualityComparer()
     {
     }
 
     /// <summary>
     ///     Gets an instance of <see cref="ExpressionEqualityComparer" />.
     /// </summary>
-    public static ExpressionEqualityComparer Instance { get; } = new();
+    public static ExpressionPlanEqualityComparer Instance { get; } = new();
 
     /// <inheritdoc />
     public int GetHashCode(Expression obj)
@@ -54,6 +54,7 @@ public sealed class ExpressionEqualityComparer : IEqualityComparer<Expression?>
                     break;
 
                 case ConstantExpression constantExpression:
+                    //hash.Add(constantExpression.Type);
                     switch (constantExpression.Value)
                     {
                         case IQueryable:
@@ -115,8 +116,16 @@ public sealed class ExpressionEqualityComparer : IEqualityComparer<Expression?>
                     break;
 
                 case MemberExpression memberExpression:
-                    hash.Add(memberExpression.Expression, this);
-                    hash.Add(memberExpression.Member);
+                    if (memberExpression.Expression is ConstantExpression ce)
+                    {
+                        hash.Add(ce.Type);
+                        hash.Add(memberExpression.Member.MemberType);
+                    }
+                    else
+                    {
+                        hash.Add(memberExpression.Expression, this);
+                        hash.Add(memberExpression.Member);
+                    }
                     break;
 
                 case MemberInitExpression memberInitExpression:
@@ -149,7 +158,8 @@ public sealed class ExpressionEqualityComparer : IEqualityComparer<Expression?>
                     break;
 
                 case ParameterExpression parameterExpression:
-                    AddToHashIfNotNull(parameterExpression.Type);
+                    //AddToHashIfNotNull(parameterExpression.Name);
+                    hash.Add(parameterExpression.Type);
                     break;
 
                 case RuntimeVariablesExpression runtimeVariablesExpression:
@@ -432,8 +442,9 @@ public sealed class ExpressionEqualityComparer : IEqualityComparer<Expression?>
                 && Compare(a.Body, b.Body);
 
         private bool CompareMember(MemberExpression a, MemberExpression b)
-            => Equals(a.Member, b.Member)
-                && Compare(a.Expression, b.Expression);
+            => a.Expression is ConstantExpression ce1 && b.Expression is ConstantExpression ce2
+                ? Equals(a.Member.MemberType, b.Member.MemberType) && ce1.Type == ce2.Type
+                : Equals(a.Member, b.Member) && Compare(a.Expression, b.Expression);
 
         private bool CompareMemberInit(MemberInitExpression a, MemberInitExpression b)
             => Compare(a.NewExpression, b.NewExpression)

@@ -5,7 +5,7 @@ namespace nextorm.core;
 public class InMemoryEnumeratorAdapter<TResult, TEntity> : IAsyncEnumerator<TResult>
 {
     //private readonly CompiledQuery<TResult> _cmd;
-    private readonly Func<object, TResult> _map;
+    private readonly Func<TEntity, TResult> _map;
     private readonly IAsyncEnumerator<TEntity> _inner;
     private readonly Func<TEntity, bool>? _condition;
     public InMemoryEnumeratorAdapter(InMemoryCompiledQuery<TResult, TEntity> cmd, IAsyncEnumerator<TEntity> inner)

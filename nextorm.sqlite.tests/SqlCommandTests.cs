@@ -302,7 +302,7 @@ public class SqlCommandTests
     public async void SelectTableWithWhereCalc_ShouldReturnData()
     {
         var row = await _sut.From("simple_entity")
-            .Where(tbl => tbl.Long("id")+2 == 1)
+            .Where(tbl => tbl.Long("id") + 2 == 1)
             .Select(tbl => new { Id = tbl.Long("id") }).FirstOrDefaultAsync();
 
         row.Should().BeNull();
@@ -318,7 +318,7 @@ public class SqlCommandTests
             _logger.LogInformation("Id = {id}", row.Id);
         }
     }
-     [Fact]
+    [Fact]
     public async void SelectSubQueryWhere_ShouldReturnData()
     {
         var idx = 0;
@@ -330,7 +330,7 @@ public class SqlCommandTests
 
         idx.Should().Be(2);
     }
-   class cls1
+    class cls1
     {
         public cls1(int id)
         {

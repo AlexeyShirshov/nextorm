@@ -15,7 +15,6 @@ public class SelectExpression
     public Type PropertyType { get; set; }
     public bool Nullable { get; }
     internal PropertyInfo? PropertyInfo { get; set; }
-
     public SelectExpression(Type propertyType)
     {
         PropertyType = propertyType;
@@ -95,7 +94,7 @@ public class SelectExpression
 
             hash.Add(PropertyName);
 
-            Expression.Switch(cmd => hash.Add(cmd), exp => hash.Add(exp, ExpressionEqualityComparer.Instance));
+            Expression.Switch(cmd => hash.Add(cmd), exp => hash.Add(exp, new PreciseExpressionEqualityComparer()));
 
             return hash.ToHashCode();
         }
@@ -114,8 +113,7 @@ public class SelectExpression
 
         if (PropertyName != exp.PropertyName) return false;
 
-        if (!Expression.Match(cmd => cmd.Equals(exp.Expression.AsT0), e => ExpressionEqualityComparer.Instance.Equals(e, exp.Expression.AsT1))) return false;
-
-        return true;
+        return Expression.IsT0 == exp.Expression.IsT0
+            && Expression.Match(cmd => cmd.Equals(exp.Expression.AsT0), e => new PreciseExpressionEqualityComparer().Equals(e, exp.Expression.AsT1));
     }
 }

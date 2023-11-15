@@ -16,3 +16,19 @@ public class ReplaceExpressionVisitor : ExpressionVisitor
         return base.VisitParameter(node);
     }
 }
+public class ReplaceConstantExpressionVisitor : ExpressionVisitor
+{
+    private readonly ParameterExpression _parameter;
+
+    public ReplaceConstantExpressionVisitor(ParameterExpression parameter)
+    {
+        _parameter = parameter;
+    }
+    protected override Expression VisitConstant(ConstantExpression node)
+    {
+        if (_parameter.Type == node.Type)
+            return _parameter;
+
+        return base.VisitConstant(node);
+    }
+}

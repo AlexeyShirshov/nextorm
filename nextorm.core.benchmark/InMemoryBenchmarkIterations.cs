@@ -24,8 +24,7 @@ public class InMemoryBenchmarkIteration
         _ctx = new InMemoryDataContext(builder);
         _ctx.SimpleEntity.WithData(_data);
 
-        _cmd = _ctx.SimpleEntity.Select(entity => new Tuple<int>(entity.Id));
-        _ctx.DataProvider.Compile(_cmd, CancellationToken.None);
+        _cmd = _ctx.SimpleEntity.Select(entity => new Tuple<int>(entity.Id)).Compile(false);
     }
     [Benchmark(Baseline = true)]
     public async Task NextormCached()

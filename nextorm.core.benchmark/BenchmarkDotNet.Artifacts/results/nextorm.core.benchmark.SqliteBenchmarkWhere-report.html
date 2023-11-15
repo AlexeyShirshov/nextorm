@@ -2,7 +2,7 @@
 <html lang='en'>
 <head>
 <meta charset='utf-8' />
-<title>nextorm.core.benchmark.SqliteBenchmarkWhere-20231102-154819</title>
+<title>nextorm.core.benchmark.SqliteBenchmarkWhere-20231115-183518</title>
 
 <style type="text/css">
 	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
@@ -13,21 +13,27 @@
 </head>
 <body>
 <pre><code>
-BenchmarkDotNet v0.13.9+228a464e8be6c580ad9408e98f18813f6407fb5a, Windows 10 (10.0.19045.3570/22H2/2022Update)
-Intel Core i7-4500U CPU 1.80GHz (Haswell), 1 CPU, 4 logical and 2 physical cores
-.NET SDK 7.0.403
-  [Host]     : .NET 7.0.13 (7.0.1323.51816), X64 RyuJIT AVX2
-  DefaultJob : .NET 7.0.13 (7.0.1323.51816), X64 RyuJIT AVX2
+BenchmarkDotNet v0.13.9+228a464e8be6c580ad9408e98f18813f6407fb5a, Windows 11 (10.0.22621.2428/22H2/2022Update/SunValley2)
+Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical cores
+.NET SDK 7.0.114
+  [Host]     : .NET 7.0.14 (7.0.1423.51910), X64 RyuJIT AVX2
+  DefaultJob : .NET 7.0.14 (7.0.1423.51910), X64 RyuJIT AVX2
 </code></pre>
 <pre><code></code></pre>
 
 <table>
-<thead><tr><th>Method </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Ratio</th><th>RatioSD</th><th>Gen0</th><th>Allocated</th><th>Alloc Ratio</th>
+<thead><tr><th>Method         </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Ratio</th><th>RatioSD</th><th>Gen0</th><th>Gen1</th><th>Allocated</th><th>Alloc Ratio</th>
 </tr>
-</thead><tbody><tr><td>NextormCached</td><td>171.1 &mu;s</td><td>3.39 &mu;s</td><td>4.76 &mu;s</td><td>1.00</td><td>0.00</td><td>0.7324</td><td>1.93 KB</td><td>1.00</td>
-</tr><tr><td>Nextorm</td><td>215.9 &mu;s</td><td>3.91 &mu;s</td><td>5.73 &mu;s</td><td>1.27</td><td>0.05</td><td>2.1973</td><td>4.96 KB</td><td>2.57</td>
-</tr><tr><td>EFCore</td><td>299.3 &mu;s</td><td>5.16 &mu;s</td><td>5.94 &mu;s</td><td>1.75</td><td>0.06</td><td>4.8828</td><td>10.36 KB</td><td>5.37</td>
-</tr><tr><td>Dapper</td><td>177.7 &mu;s</td><td>3.46 &mu;s</td><td>3.71 &mu;s</td><td>1.04</td><td>0.03</td><td>0.7324</td><td>1.9 KB</td><td>0.98</td>
+</thead><tbody><tr><td>NextormCompiledAsync</td><td>4.202 ms</td><td>0.0693 ms</td><td>0.0648 ms</td><td>1.01</td><td>0.03</td><td>46.8750</td><td>-</td><td>230.55 KB</td><td>1.02</td>
+</tr><tr><td>NextormCompiled</td><td>4.157 ms</td><td>0.0800 ms</td><td>0.0749 ms</td><td>1.00</td><td>0.00</td><td>46.8750</td><td>-</td><td>225.86 KB</td><td>1.00</td>
+</tr><tr><td>NextormCompiledToList</td><td>4.034 ms</td><td>0.0488 ms</td><td>0.0433 ms</td><td>0.97</td><td>0.02</td><td>46.8750</td><td>-</td><td>233.26 KB</td><td>1.03</td>
+</tr><tr><td>NextormCached</td><td>4.462 ms</td><td>0.0585 ms</td><td>0.0547 ms</td><td>1.07</td><td>0.02</td><td>62.5000</td><td>-</td><td>288.5 KB</td><td>1.28</td>
+</tr><tr><td>NextormCachedToList</td><td>4.435 ms</td><td>0.0518 ms</td><td>0.0484 ms</td><td>1.07</td><td>0.02</td><td>62.5000</td><td>-</td><td>295.9 KB</td><td>1.31</td>
+</tr><tr><td>EFCore</td><td>9.795 ms</td><td>0.0970 ms</td><td>0.0810 ms</td><td>2.35</td><td>0.04</td><td>218.7500</td><td>46.8750</td><td>1061.3 KB</td><td>4.70</td>
+</tr><tr><td>EFCoreStream</td><td>9.788 ms</td><td>0.1039 ms</td><td>0.0972 ms</td><td>2.36</td><td>0.05</td><td>234.3750</td><td>46.8750</td><td>1080.29 KB</td><td>4.78</td>
+</tr><tr><td>EFCoreCompiled</td><td>5.900 ms</td><td>0.0484 ms</td><td>0.0404 ms</td><td>1.42</td><td>0.03</td><td>109.3750</td><td>31.2500</td><td>534.38 KB</td><td>2.37</td>
+</tr><tr><td>Dapper</td><td>4.154 ms</td><td>0.0439 ms</td><td>0.0343 ms</td><td>0.99</td><td>0.02</td><td>39.0625</td><td>-</td><td>188.91 KB</td><td>0.84</td>
+</tr><tr><td>DapperUnbuffered</td><td>4.188 ms</td><td>0.0734 ms</td><td>0.0686 ms</td><td>1.01</td><td>0.02</td><td>39.0625</td><td>-</td><td>209.46 KB</td><td>0.93</td>
 </tr></tbody></table>
 </body>
 </html>

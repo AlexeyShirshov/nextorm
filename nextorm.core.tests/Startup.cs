@@ -10,17 +10,22 @@ public class Startup
 {
     public void Configure()
     {
-        
+
     }
     public void ConfigureServices(IServiceCollection services)
     {
-        services.AddLogging(builder=>builder.AddXunitOutput());
+        services.AddLogging(builder =>
+        {
+            builder.SetMinimumLevel(LogLevel.Trace);
+            builder.AddXunitOutput();
+            builder.AddConsole();
+        });
 
         services.AddScoped<IDataProvider, InMemoryDataProvider>();
 
         services.AddScoped<CommandBuilder<ISimpleEntity>>();
 
-        services.AddNextOrmContext<InMemoryDataContext>(builder=>
+        services.AddNextOrmContext<InMemoryDataContext>(builder =>
         {
             builder.UseInMemoryClient();
         });
