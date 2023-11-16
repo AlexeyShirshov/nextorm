@@ -9,6 +9,7 @@ namespace nextorm.core.benchmark;
 [MemoryDiagnoser]
 public class InMemoryBenchmarkWhere
 {
+    const int Iterations = 100;
     private readonly InMemoryDataContext _ctx;
     private readonly QueryCommand<Tuple<int>> _cmd;
     private readonly IEnumerable<SimpleEntity> _data;
@@ -24,13 +25,16 @@ public class InMemoryBenchmarkWhere
         _ctx = new InMemoryDataContext(builder);
         _ctx.SimpleEntity.WithData(_data);
 
-        _cmd = _ctx.SimpleEntity.Where(it => it.Id < 15693).Select(entity => new Tuple<int>(entity.Id)).Compile(false);
+        _cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new Tuple<int>(entity.Id)).Compile(false);
     }
     [Benchmark(Baseline = true)]
-    public async Task NextormCached()
+    public void NextormCompiledParam()
     {
-        await foreach (var row in _cmd)
+        for (var i = 0; i < Iterations; i++)
         {
+            foreach (var row in _cmd.AsEnumerable(i))
+            {
+            }
         }
     }
     // [Benchmark()]
@@ -41,24 +45,36 @@ public class InMemoryBenchmarkWhere
     //     }
     // }
     [Benchmark()]
-    public async Task Nextorm()
+    public void NextormCachedParam()
     {
-        await foreach (var row in _ctx.SimpleEntity.Where(it => it.Id < 15693).Select(entity => new { entity.Id }))
+        var cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new { entity.Id }).Compile(false);
+        for (var i = 0; i < Iterations; i++)
         {
+            foreach (var row in cmd.AsEnumerable(i))
+            {
+            }
         }
     }
-    // [Benchmark()]
-    // public async Task NextormToList()
-    // {
-    //     foreach (var row in await _ctx.SimpleEntity.Select(entity => new { entity.Id }).ToListAsync())
-    //     {
-    //     }
-    // }
+    [Benchmark()]
+    public void NextormCached()
+    {
+        for (var i = 0; i < Iterations; i++)
+        {
+            var p = i;
+            var cmd = _ctx.SimpleEntity.Where(it => it.Id == p).Select(entity => new { entity.Id });
+            foreach (var row in cmd.AsEnumerable())
+            {
+            }
+        }
+    }
     [Benchmark]
     public void Linq()
     {
-        foreach (var row in _data.Where(it => it.Id < 15693).Select(entity => new { entity.Id }))
+        for (var i = 0; i < Iterations; i++)
         {
+            foreach (var row in _data.Where(it => it.Id == i).Select(entity => new { entity.Id }))
+            {
+            }
         }
     }
 }

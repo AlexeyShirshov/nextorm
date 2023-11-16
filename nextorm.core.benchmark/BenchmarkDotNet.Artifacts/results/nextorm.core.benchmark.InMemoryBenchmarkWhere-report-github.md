@@ -1,15 +1,16 @@
 ```
 
-BenchmarkDotNet v0.13.9+228a464e8be6c580ad9408e98f18813f6407fb5a, Windows 10 (10.0.19045.3570/22H2/2022Update)
-Intel Core i7-4500U CPU 1.80GHz (Haswell), 1 CPU, 4 logical and 2 physical cores
-.NET SDK 7.0.403
-  [Host]     : .NET 7.0.13 (7.0.1323.51816), X64 RyuJIT AVX2
-  DefaultJob : .NET 7.0.13 (7.0.1323.51816), X64 RyuJIT AVX2
+BenchmarkDotNet v0.13.9+228a464e8be6c580ad9408e98f18813f6407fb5a, Windows 11 (10.0.22621.2428/22H2/2022Update/SunValley2)
+Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical cores
+.NET SDK 7.0.114
+  [Host]     : .NET 7.0.14 (7.0.1423.51910), X64 RyuJIT AVX2
+  DefaultJob : .NET 7.0.14 (7.0.1423.51910), X64 RyuJIT AVX2
 
 
 ```
-| Method        | Mean     | Error   | StdDev   | Ratio | RatioSD | Gen0     | Allocated | Alloc Ratio |
-|-------------- |---------:|--------:|---------:|------:|--------:|---------:|----------:|------------:|
-| NextormCached | 418.3 μs | 8.32 μs | 14.13 μs |  1.00 |    0.00 | 114.7461 | 234.41 KB |        1.00 |
-| Nextorm       | 454.3 μs | 8.76 μs | 23.98 μs |  1.07 |    0.06 | 116.2109 | 237.34 KB |        1.01 |
-| Linq          | 278.0 μs | 6.24 μs | 18.41 μs |  0.67 |    0.05 | 114.7461 | 234.52 KB |        1.00 |
+| Method               | Mean      | Error     | StdDev    | Ratio | RatioSD | Gen0     | Gen1     | Allocated  | Alloc Ratio |
+|--------------------- |----------:|----------:|----------:|------:|--------:|---------:|---------:|-----------:|------------:|
+| NextormCompiledParam |  9.493 ms | 0.0805 ms | 0.0753 ms |  1.00 |    0.00 |        - |        - |   26.62 KB |        1.00 |
+| NextormCachedParam   | 10.852 ms | 0.1473 ms | 0.1378 ms |  1.14 |    0.01 |        - |        - |   52.83 KB |        1.98 |
+| NextormCached        | 22.827 ms | 0.4325 ms | 0.6474 ms |  2.44 |    0.07 | 375.0000 | 343.7500 | 1808.78 KB |       67.95 |
+| Linq                 |  4.876 ms | 0.0405 ms | 0.0338 ms |  0.51 |    0.01 |        - |        - |   17.29 KB |        0.65 |

@@ -653,6 +653,13 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         while (await ee.MoveNextAsync())
             yield return ee.Current;
     }
+    public IEnumerable<TResult> AsEnumerable(params object[] @params)
+    {
+        if (!IsPrepared)
+            PrepareCommand(CancellationToken.None);
+
+        return (IEnumerable<TResult>)DataProvider.CreateEnumerator(this, @params);
+    }
     public Task<IEnumerable<TResult>> Exec(params object[] @params) => Exec(CancellationToken.None, @params);
     public async Task<IEnumerable<TResult>> Exec(CancellationToken cancellationToken, params object[] @params)
     {
@@ -660,15 +667,22 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
             PrepareCommand(cancellationToken);
 
         // return Array.Empty<TResult>();
-        var enumerator = await DataProvider.CreateEnumerator(this, @params, cancellationToken);
+        var enumerator = await DataProvider.CreateEnumeratorAsync(this, @params, cancellationToken);
 
         if (enumerator is IEnumerable<TResult> ee)
             return ee;
 
         return new InternalEnumerable(enumerator);
     }
-    public Task<IEnumerable<TResult>> ToListAsync(params object[] @params) => ToListAsync(CancellationToken.None, @params);
-    public async Task<IEnumerable<TResult>> ToListAsync(CancellationToken cancellationToken, params object[] @params)
+    public List<TResult> ToList(params object[] @params)
+    {
+        if (!IsPrepared)
+            PrepareCommand(CancellationToken.None);
+
+        return DataProvider.ToList(this, @params);
+    }
+    public Task<List<TResult>> ToListAsync(params object[] @params) => ToListAsync(CancellationToken.None, @params);
+    public async Task<List<TResult>> ToListAsync(CancellationToken cancellationToken, params object[] @params)
     {
         if (!IsPrepared)
             PrepareCommand(cancellationToken);

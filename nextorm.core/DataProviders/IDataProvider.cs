@@ -13,6 +13,8 @@ public interface IDataProvider : IAsyncDisposable, IDisposable
     FromExpression? GetFrom(Type srcType, QueryCommand queryCommand);
     void Compile<TResult>(QueryCommand<TResult> query, bool forToListCalls, CancellationToken cancellationToken);
     IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken);
-    Task<IEnumerator<TResult>> CreateEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken);
-    Task<IEnumerable<TResult>> ToListAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken);
+    Task<IEnumerator<TResult>> CreateEnumeratorAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken);
+    Task<List<TResult>> ToListAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken);
+    List<TResult> ToList<TResult>(QueryCommand<TResult> queryCommand, object[]? @params);
+    IEnumerator<TResult> CreateEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[] @params);
 }

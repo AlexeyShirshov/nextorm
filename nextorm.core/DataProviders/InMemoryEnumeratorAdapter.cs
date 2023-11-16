@@ -1,3 +1,4 @@
+#define PARAM_CONDITION
 using System.Linq.Expressions;
 
 namespace nextorm.core;
@@ -7,7 +8,13 @@ public class InMemoryEnumeratorAdapter<TResult, TEntity> : IAsyncEnumerator<TRes
     //private readonly CompiledQuery<TResult> _cmd;
     private readonly Func<TEntity, TResult> _map;
     private readonly IAsyncEnumerator<TEntity> _inner;
-    private readonly Func<TEntity, bool>? _condition;
+#if PARAM_CONDITION
+    private object[]? _params;
+    private readonly Func<TEntity, object[]?, bool>? _condition;
+#else
+    private Func<TEntity, bool>? _condition;
+#endif
+
     public InMemoryEnumeratorAdapter(InMemoryCompiledQuery<TResult, TEntity> cmd, IAsyncEnumerator<TEntity> inner)
     {
         _map = cmd.MapDelegate;
@@ -28,7 +35,13 @@ public class InMemoryEnumeratorAdapter<TResult, TEntity> : IAsyncEnumerator<TRes
     next:
         var r = await _inner.MoveNextAsync();
 
-        if (r && _condition is not null && !_condition(_inner.Current))
+        if (r && _condition is not null
+#if PARAM_CONDITION
+            && !_condition(_inner.Current, _params)
+#else
+            && !_condition(_inner.Current)
+#endif
+        )
         {
             goto next;
         }

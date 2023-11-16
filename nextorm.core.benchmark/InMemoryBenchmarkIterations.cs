@@ -27,37 +27,51 @@ public class InMemoryBenchmarkIteration
         _cmd = _ctx.SimpleEntity.Select(entity => new Tuple<int>(entity.Id)).Compile(false);
     }
     [Benchmark(Baseline = true)]
-    public async Task NextormCached()
+    public async Task NextormCompiled()
     {
         await foreach (var row in _cmd)
         {
         }
     }
-    // [Benchmark()]
-    // public async Task NextormToListCached()
-    // {
-    //     foreach (var row in await _cmd.ToListAsync())
-    //     {
-    //     }
-    // }
     [Benchmark()]
-    public async Task Nextorm()
+    public async Task NextormCached()
+    {
+        foreach (var row in await _ctx.SimpleEntity.Select(entity => new { entity.Id }).Exec())
+        {
+        }
+    }
+    [Benchmark()]
+    public void NextormCachedSync()
+    {
+        foreach (var row in _ctx.SimpleEntity.Select(entity => new { entity.Id }).AsEnumerable())
+        {
+        }
+    }
+    [Benchmark()]
+    public async Task NextormCachedAsync()
     {
         await foreach (var row in _ctx.SimpleEntity.Select(entity => new { entity.Id }))
         {
         }
     }
-    // [Benchmark()]
-    // public async Task NextormToList()
-    // {
-    //     foreach (var row in await _ctx.SimpleEntity.Select(entity => new { entity.Id }).ToListAsync())
-    //     {
-    //     }
-    // }
+    [Benchmark()]
+    public void NextormCachedToList()
+    {
+        foreach (var row in _ctx.SimpleEntity.Select(entity => new { entity.Id }).ToList())
+        {
+        }
+    }
     [Benchmark]
     public void Linq()
     {
         foreach (var row in _data.Select(entity => new { entity.Id }))
+        {
+        }
+    }
+    [Benchmark]
+    public void LinqToList()
+    {
+        foreach (var row in _data.Select(entity => new { entity.Id }).ToList())
         {
         }
     }

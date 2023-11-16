@@ -2,7 +2,7 @@
 <html lang='en'>
 <head>
 <meta charset='utf-8' />
-<title>nextorm.core.benchmark.InMemoryBenchmarkIteration-20231103-154923</title>
+<title>nextorm.core.benchmark.InMemoryBenchmarkIteration-20231116-184843</title>
 
 <style type="text/css">
 	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
@@ -13,20 +13,24 @@
 </head>
 <body>
 <pre><code>
-BenchmarkDotNet v0.13.9+228a464e8be6c580ad9408e98f18813f6407fb5a, Windows 10 (10.0.19045.3570/22H2/2022Update)
-Intel Core i7-4500U CPU 1.80GHz (Haswell), 1 CPU, 4 logical and 2 physical cores
-.NET SDK 7.0.403
-  [Host]     : .NET 7.0.13 (7.0.1323.51816), X64 RyuJIT AVX2
-  DefaultJob : .NET 7.0.13 (7.0.1323.51816), X64 RyuJIT AVX2
+BenchmarkDotNet v0.13.9+228a464e8be6c580ad9408e98f18813f6407fb5a, Windows 11 (10.0.22621.2428/22H2/2022Update/SunValley2)
+Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical cores
+.NET SDK 7.0.114
+  [Host]     : .NET 7.0.14 (7.0.1423.51910), X64 RyuJIT AVX2
+  DefaultJob : .NET 7.0.14 (7.0.1423.51910), X64 RyuJIT AVX2
 </code></pre>
 <pre><code></code></pre>
 
 <table>
-<thead><tr><th>Method </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Ratio</th><th>RatioSD</th><th>Gen0</th><th>Allocated</th><th>Alloc Ratio</th>
+<thead><tr><th>Method       </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Ratio</th><th>RatioSD</th><th>Gen0</th><th>Gen1</th><th>Allocated</th><th>Alloc Ratio</th>
 </tr>
-</thead><tbody><tr><td>NextormCached</td><td>371.4 &mu;s</td><td>7.97 &mu;s</td><td>22.62 &mu;s</td><td>1.00</td><td>0.00</td><td>114.7461</td><td>234.41 KB</td><td>1.00</td>
-</tr><tr><td>Nextorm</td><td>392.5 &mu;s</td><td>7.78 &mu;s</td><td>16.58 &mu;s</td><td>1.05</td><td>0.08</td><td>115.7227</td><td>236.33 KB</td><td>1.01</td>
-</tr><tr><td>Linq</td><td>231.1 &mu;s</td><td>4.61 &mu;s</td><td>12.15 &mu;s</td><td>0.62</td><td>0.05</td><td>114.7461</td><td>234.45 KB</td><td>1.00</td>
+</thead><tbody><tr><td>NextormCompiled</td><td>195.64 &mu;s</td><td>3.093 &mu;s</td><td>2.893 &mu;s</td><td>1.00</td><td>0.00</td><td>51.0254</td><td>-</td><td>234.56 KB</td><td>1.00</td>
+</tr><tr><td>NextormCached</td><td>152.49 &mu;s</td><td>2.973 &mu;s</td><td>3.304 &mu;s</td><td>0.78</td><td>0.02</td><td>51.5137</td><td>-</td><td>237.01 KB</td><td>1.01</td>
+</tr><tr><td>NextormCachedSync</td><td>151.70 &mu;s</td><td>3.005 &mu;s</td><td>5.644 &mu;s</td><td>0.75</td><td>0.02</td><td>51.5137</td><td>-</td><td>236.87 KB</td><td>1.01</td>
+</tr><tr><td>NextormCachedAsync</td><td>203.70 &mu;s</td><td>3.939 &mu;s</td><td>7.399 &mu;s</td><td>1.07</td><td>0.03</td><td>51.5137</td><td>-</td><td>236.87 KB</td><td>1.01</td>
+</tr><tr><td>NextormCachedToList</td><td>201.01 &mu;s</td><td>3.731 &mu;s</td><td>3.490 &mu;s</td><td>1.03</td><td>0.03</td><td>63.4766</td><td>27.0996</td><td>315.13 KB</td><td>1.34</td>
+</tr><tr><td>Linq</td><td>122.11 &mu;s</td><td>2.403 &mu;s</td><td>2.360 &mu;s</td><td>0.63</td><td>0.01</td><td>51.0254</td><td>-</td><td>234.45 KB</td><td>1.00</td>
+</tr><tr><td>LinqToList</td><td>98.37 &mu;s</td><td>1.931 &mu;s</td><td>3.063 &mu;s</td><td>0.51</td><td>0.02</td><td>61.1572</td><td>20.5078</td><td>312.63 KB</td><td>1.33</td>
 </tr></tbody></table>
 </body>
 </html>

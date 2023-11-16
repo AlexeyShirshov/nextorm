@@ -535,7 +535,7 @@ public class SqlDataProvider : IDataProvider
         return ValueTask.CompletedTask;
     }
 
-    public async Task<IEnumerator<TResult>> CreateEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
+    public async Task<IEnumerator<TResult>> CreateEnumeratorAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
 
@@ -578,7 +578,7 @@ public class SqlDataProvider : IDataProvider
         await sqlEnumerator.InitReaderAsync(@params, cancellationToken);
         return sqlEnumerator;
     }
-    public async Task<IEnumerable<TResult>> ToListAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
+    public async Task<List<TResult>> ToListAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
         var setParams = @params is not null;
@@ -735,6 +735,16 @@ public class SqlDataProvider : IDataProvider
 
         //         (_dataProvider as SqlDataProvider).MapCache[key] = del;
         //     }
+    }
+
+    public List<TResult> ToList<TResult>(QueryCommand<TResult> queryCommand, object[]? @params)
+    {
+        throw new NotImplementedException();
+    }
+
+    public IEnumerator<TResult> CreateEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[] @params)
+    {
+        throw new NotImplementedException();
     }
 
     // public async IAsyncEnumerable<TResult> CreateFetchEnumerator<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
