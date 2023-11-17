@@ -8,29 +8,35 @@ NextORM will not be truly ORM, because Object abbreviation can be surely removed
 * ability to write custom queries without any entities and metadata at all 
 ## Examples
 ### Select data via entity to map props and type to columns and table respectively
-    [SqlTable("simple_entity")]
-    public interface ISimpleEntity
-    {
-        [Key]
-        [Column("id")]
-        int Id {get;set;}
-    }
-    //...
-    // load data into anonymous object
-    await foreach(var row in dataContext.SimpleEntity.Select(entity=>new {Id=entity.Id}))
-    {
-        _logger.LogInformation("Id = {id}", row.Id);
-    }
+```c#
+[SqlTable("simple_entity")]
+public interface ISimpleEntity
+{
+    [Key]
+    [Column("id")]
+    int Id {get;set;}
+}
+//...
+// load data into anonymous object
+await foreach(var row in dataContext.SimpleEntity.Select(entity=>new { entity.Id }))
+{
+    _logger.LogInformation("Id = {id}", row.Id);
+}
+```
 ### Select data without any entity, meta attributes, etc. Pure sql
-    await foreach(var row in dataContext.From("simple_entity").Select(tbl=>new {Id=tbl.Int("id")}))
-    {
-        _logger.LogInformation("Id = {id}", row.Id);
-    }
+```c#
+await foreach(var row in dataContext.From("simple_entity").Select(tbl=>new { Id = tbl.Int("id") }))
+{
+    _logger.LogInformation("Id = {id}", row.Id);
+}
+```
 ### Subquery with strong typings
-    var innerQuery = dataContext.From("simple_entity").Select(tbl=>new {Id=tbl.Int("id")});
-    await foreach(var row in dataContext.From(innerQuery).Select(subQuery=>new {subQuery.Id}))
-    {
-        _logger.LogInformation("Id = {id}", row.Id);
-    }
-    // generated code is 
-    // select id from (select id from simple_entity)
+```c#
+var innerQuery = dataContext.From("simple_entity").Select(tbl=>new { Id = tbl.Int("id") });
+await foreach(var row in dataContext.From(innerQuery).Select(subQuery=>new { subQuery.Id }))
+{
+    _logger.LogInformation("Id = {id}", row.Id);
+}
+// generated code is 
+// select id from (select id from simple_entity)
+```

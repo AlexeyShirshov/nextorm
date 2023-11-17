@@ -1,6 +1,6 @@
-./vs
+.vs
+.vscode
 obj
 bin
-.vscode
 TestResults
 *.log
