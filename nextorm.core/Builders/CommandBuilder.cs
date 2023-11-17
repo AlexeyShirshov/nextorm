@@ -8,7 +8,7 @@ namespace nextorm.core;
 public class CommandBuilder<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
 {
     #region Fields
-    private IPayloadManager _payloadMgr = new FastPayloadManager(new Dictionary<Type, object?>());
+    //private IPayloadManager _payloadMgr = new FastPayloadManager(new Dictionary<Type, object?>());
     private readonly IDataProvider _dataProvider;
     private QueryCommand? _query;
     private Expression<Func<TEntity, bool>>? _condition;
@@ -27,7 +27,7 @@ public class CommandBuilder<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
     internal QueryCommand? Query { get => _query; set => _query = value; }
     internal IDataProvider DataProvider => _dataProvider;
     internal Expression<Func<TEntity, bool>>? Condition { get => _condition; set => _condition = value; }
-    internal IPayloadManager PayloadManager { get => _payloadMgr; init => _payloadMgr = value; }
+    //internal IPayloadManager PayloadManager { get => _payloadMgr; init => _payloadMgr = value; }
     public delegate void CommandCreatedHandler<T>(CommandBuilder<T> sender, QueryCommand queryCommand);
     public event CommandCreatedHandler<TEntity>? CommandCreatedEvent;
     #endregion
@@ -83,7 +83,7 @@ public class CommandBuilder<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
     protected virtual void CopyTo(CommandBuilder<TEntity> dst)
     {
         dst._query = _query;
-        dst._payloadMgr = _payloadMgr;
+        //dst._payloadMgr = _payloadMgr;
         dst.CommandCreatedEvent += CommandCreatedEvent;
     }
     protected virtual object CloneImp()
@@ -105,7 +105,7 @@ public class CommandBuilder<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
             query = ToCommand();
         }
 
-        var cb = new CommandBuilderP2<TEntity, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition)) { Logger = Logger, _query = query, PayloadManager = PayloadManager, BaseBuilder = this };
+        var cb = new CommandBuilderP2<TEntity, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition)) { Logger = Logger, _query = query/*, PayloadManager = PayloadManager*/, BaseBuilder = this };
         return cb;
     }
     public CommandBuilderP2<TEntity, TJoinEntity> Join<TJoinEntity>(QueryCommand<TJoinEntity> query, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
@@ -116,7 +116,7 @@ public class CommandBuilder<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
             queryBase = ToCommand();
         }
 
-        var cb = new CommandBuilderP2<TEntity, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition) { Query = query }) { Logger = Logger, _query = queryBase, PayloadManager = PayloadManager, BaseBuilder = this };
+        var cb = new CommandBuilderP2<TEntity, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition) { Query = query }) { Logger = Logger, _query = queryBase/*, PayloadManager = PayloadManager*/, BaseBuilder = this };
         return cb;
     }
 }

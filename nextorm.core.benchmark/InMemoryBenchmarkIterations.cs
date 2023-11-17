@@ -3,14 +3,18 @@ using nextorm.core;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Data.Sqlite;
 using Dapper;
+using BenchmarkDotNet.Jobs;
 
 namespace nextorm.core.benchmark;
 
 [MemoryDiagnoser]
+[SimpleJob(RuntimeMoniker.Net70, baseline: true)]
+[SimpleJob(RuntimeMoniker.Net80)]
 public class InMemoryBenchmarkIteration
 {
     private readonly InMemoryDataContext _ctx;
     private readonly QueryCommand<Tuple<int>> _cmd;
+    private readonly QueryCommand<Tuple<int>> _cmdToList;
     private readonly IEnumerable<SimpleEntity> _data;
     public InMemoryBenchmarkIteration()
     {
@@ -25,11 +29,26 @@ public class InMemoryBenchmarkIteration
         _ctx.SimpleEntity.WithData(_data);
 
         _cmd = _ctx.SimpleEntity.Select(entity => new Tuple<int>(entity.Id)).Compile(false);
+        _cmdToList = _ctx.SimpleEntity.Select(entity => new Tuple<int>(entity.Id)).Compile(true);
     }
-    [Benchmark(Baseline = true)]
-    public async Task NextormCompiled()
+    // [Benchmark()]
+    // public async Task NextormCompiled()
+    // {
+    //     await foreach (var row in _cmd)
+    //     {
+    //     }
+    // }
+    [Benchmark()]
+    public void NextormCompiledSync()
     {
-        await foreach (var row in _cmd)
+        foreach (var row in _cmd.AsEnumerable())
+        {
+        }
+    }
+    [Benchmark()]
+    public void NextormCompiledSyncToList()
+    {
+        foreach (var row in _cmdToList.ToList())
         {
         }
     }
@@ -40,21 +59,21 @@ public class InMemoryBenchmarkIteration
         {
         }
     }
-    [Benchmark()]
+    [Benchmark(Baseline = true)]
     public void NextormCachedSync()
     {
         foreach (var row in _ctx.SimpleEntity.Select(entity => new { entity.Id }).AsEnumerable())
         {
         }
     }
-    [Benchmark()]
-    public async Task NextormCachedAsync()
-    {
-        await foreach (var row in _ctx.SimpleEntity.Select(entity => new { entity.Id }))
-        {
-        }
-    }
-    [Benchmark()]
+    // [Benchmark()]
+    // public async Task NextormCachedAsync()
+    // {
+    //     await foreach (var row in _ctx.SimpleEntity.Select(entity => new { entity.Id }))
+    //     {
+    //     }
+    // }
+    // [Benchmark()]
     public void NextormCachedToList()
     {
         foreach (var row in _ctx.SimpleEntity.Select(entity => new { entity.Id }).ToList())

@@ -16,9 +16,9 @@ using Microsoft.Extensions.ObjectPool;
 
 namespace nextorm.core;
 
-public class QueryCommand : IPayloadManager, ISourceProvider//, IParamProvider
+public class QueryCommand : /*IPayloadManager,*/ ISourceProvider//, IParamProvider
 {
-    protected readonly IPayloadManager _payloadMgr;
+    //protected readonly IPayloadManager _payloadMgr;
     private readonly List<JoinExpression> _joins;
     protected List<SelectExpression>? _selectList;
     private int _columnsHash;
@@ -45,15 +45,15 @@ public class QueryCommand : IPayloadManager, ISourceProvider//, IParamProvider
 #endif
     //protected ArrayList _params = new();
     public QueryCommand(IDataProvider dataProvider, LambdaExpression exp, Expression? condition)
-        : this(dataProvider, exp, condition, new FastPayloadManager(new Dictionary<Type, object?>()), new())
+        : this(dataProvider, exp, condition/*, new FastPayloadManager(new Dictionary<Type, object?>())*/, new())
     {
     }
-    protected QueryCommand(IDataProvider dataProvider, LambdaExpression exp, Expression? condition, IPayloadManager payloadMgr, List<JoinExpression> joins)
+    protected QueryCommand(IDataProvider dataProvider, LambdaExpression exp, Expression? condition/*, IPayloadManager payloadMgr*/, List<JoinExpression> joins)
     {
         _dataProvider = dataProvider;
         _exp = exp;
         _condition = condition;
-        _payloadMgr = payloadMgr;
+        //_payloadMgr = payloadMgr;
         _joins = joins;
     }
     public ILogger? Logger { get; set; }
@@ -286,39 +286,39 @@ public class QueryCommand : IPayloadManager, ISourceProvider//, IParamProvider
         // }
     }
 
-    public bool RemovePayload<T>() where T : class, IPayload
-    {
-        return _payloadMgr.RemovePayload<T>();
-    }
+    // public bool RemovePayload<T>() where T : class, IPayload
+    // {
+    //     return _payloadMgr.RemovePayload<T>();
+    // }
 
-    public bool TryGetPayload<T>(out T? payload) where T : class, IPayload
-    {
-        return _payloadMgr.TryGetPayload<T>(out payload);
-    }
+    // public bool TryGetPayload<T>(out T? payload) where T : class, IPayload
+    // {
+    //     return _payloadMgr.TryGetPayload<T>(out payload);
+    // }
 
-    public bool TryGetNotNullPayload<T>(out T? payload) where T : class, IPayload
-    {
-        return _payloadMgr.TryGetNotNullPayload<T>(out payload);
-    }
+    // public bool TryGetNotNullPayload<T>(out T? payload) where T : class, IPayload
+    // {
+    //     return _payloadMgr.TryGetNotNullPayload<T>(out payload);
+    // }
 
-    public T GetNotNullOrAddPayload<T>(Func<T> factory) where T : class, IPayload
-    {
-        return _payloadMgr.GetNotNullOrAddPayload<T>(factory);
-    }
+    // public T GetNotNullOrAddPayload<T>(Func<T> factory) where T : class, IPayload
+    // {
+    //     return _payloadMgr.GetNotNullOrAddPayload<T>(factory);
+    // }
 
-    public T? GetOrAddPayload<T>(Func<T?> factory) where T : class, IPayload
-    {
-        return _payloadMgr.GetOrAddPayload<T>(factory);
-    }
+    // public T? GetOrAddPayload<T>(Func<T?> factory) where T : class, IPayload
+    // {
+    //     return _payloadMgr.GetOrAddPayload<T>(factory);
+    // }
 
-    public T? AddOrUpdatePayload<T>(Func<T?> factory, Func<T?, T?>? update = null) where T : class, IPayload
-    {
-        return _payloadMgr.AddOrUpdatePayload<T>(factory, update);
-    }
-    public void AddOrUpdatePayload<T>(T? payload) where T : class, IPayload
-    {
-        _payloadMgr.AddOrUpdatePayload<T>(payload);
-    }
+    // public T? AddOrUpdatePayload<T>(Func<T?> factory, Func<T?, T?>? update = null) where T : class, IPayload
+    // {
+    //     return _payloadMgr.AddOrUpdatePayload<T>(factory, update);
+    // }
+    // public void AddOrUpdatePayload<T>(T? payload) where T : class, IPayload
+    // {
+    //     _payloadMgr.AddOrUpdatePayload<T>(payload);
+    // }
     public override int GetHashCode()
     {
         if (_hash.HasValue)
@@ -448,8 +448,8 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
     public QueryCommand(IDataProvider dataProvider, LambdaExpression exp, Expression? condition) : base(dataProvider, exp, condition)
     {
     }
-    protected QueryCommand(IDataProvider dataProvider, LambdaExpression exp, Expression? condition, IPayloadManager payloadMgr, List<JoinExpression> joins)
-    : base(dataProvider, exp, condition, payloadMgr, joins)
+    protected QueryCommand(IDataProvider dataProvider, LambdaExpression exp, Expression? condition/*, IPayloadManager payloadMgr*/, List<JoinExpression> joins)
+        : base(dataProvider, exp, condition/*, payloadMgr*/, joins)
     {
 
     }

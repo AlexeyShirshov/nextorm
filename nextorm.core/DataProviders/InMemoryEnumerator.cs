@@ -34,12 +34,12 @@ public class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TResult>, I
         //_noMap = ;
     }
 #if PARAM_CONDITION
-    public void Init(object data, object[]? @params)
+    public void Init(IEnumerable<TEntity> data, object[]? @params)
 #else
-    public void Init(object data, Func<TEntity, bool>? condition)
+    public void Init(IEnumerable<TEntity> data, Func<TEntity, bool>? condition)
 #endif
     {
-        _data = ((IEnumerable<TEntity>)data).GetEnumerator();
+        _data = data.GetEnumerator();
 #if PARAM_CONDITION
         _params = @params;
 #else
@@ -124,8 +124,8 @@ public class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TResult>, I
 internal interface IEnumeratorInit<TEntity>
 {
 #if PARAM_CONDITION
-    void Init(object data, object[]? @params);
+    void Init(IEnumerable<TEntity> data, object[]? @params);
 #else
-    void Init(object data, Func<TEntity, bool>? condition);
+    void Init(IEnumerable<TEntity> data, Func<TEntity, bool>? condition);
 #endif
 }
