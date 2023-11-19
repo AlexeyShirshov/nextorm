@@ -1,15 +1,21 @@
+#define PARAM_CONDITION
 using System.Collections;
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 
 namespace nextorm.core;
 
-public class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TResult>, IEnumerator<TResult>, IEnumeratorInit
+public class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TResult>, IEnumerator<TResult>, IEnumeratorInit<TEntity>, IEnumerable<TResult>
 {
     //private readonly CompiledQuery<TResult> _cmd;
     private readonly Func<TEntity, TResult>? _map;
     private IEnumerator<TEntity>? _data;
-    private readonly Func<TEntity, bool>? _condition;
+#if PARAM_CONDITION
+    private object[]? _params;
+    private readonly Func<TEntity, object[]?, bool>? _condition;
+#else
+    private Func<TEntity, bool>? _condition;
+#endif
     private readonly CancellationToken _cancellationToken;
 
     //private readonly bool _noMap;
@@ -22,15 +28,23 @@ public class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TResult>, I
             ? null
             : cmd.MapDelegate;
 
-        //if (cmd is InMemoryCompiledQuery<TResult, TEntity> cq)
         _condition = cmd.Condition;
         _cancellationToken = cancellationToken;
 
         //_noMap = ;
     }
-    public void Init(object data)
+#if PARAM_CONDITION
+    public void Init(IEnumerable<TEntity> data, object[]? @params)
+#else
+    public void Init(IEnumerable<TEntity> data, Func<TEntity, bool>? condition)
+#endif
     {
-        _data = ((IEnumerable<TEntity>)data).GetEnumerator();
+        _data = data.GetEnumerator();
+#if PARAM_CONDITION
+        _params = @params;
+#else
+        _condition = condition;
+#endif
     }
     public TResult Current
     {
@@ -60,7 +74,13 @@ public class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TResult>, I
         next:
         var r = _data!.MoveNext();
 
-        if (r && _condition is not null && !_condition(_data.Current))
+        if (r && _condition is not null
+#if PARAM_CONDITION
+            && !_condition(_data.Current, _params)
+#else
+            && !_condition(_data.Current)
+#endif
+        )
         {
             goto next;
         }
@@ -70,7 +90,21 @@ public class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TResult>, I
 
     public bool MoveNext()
     {
-        return _data!.MoveNext();
+    next:
+        var r = _data!.MoveNext();
+
+        if (r && _condition is not null
+#if PARAM_CONDITION
+            && !_condition(_data.Current, _params)
+#else
+            && !_condition(_data.Current)
+#endif
+        )
+        {
+            goto next;
+        }
+
+        return r;
     }
 
     public void Reset()
@@ -81,9 +115,17 @@ public class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TResult>, I
     {
         GC.SuppressFinalize(this);
     }
+
+    public IEnumerator<TResult> GetEnumerator() => this;
+
+    IEnumerator IEnumerable.GetEnumerator() => this;
 }
 
-internal interface IEnumeratorInit
+internal interface IEnumeratorInit<TEntity>
 {
-    void Init(object data);
+#if PARAM_CONDITION
+    void Init(IEnumerable<TEntity> data, object[]? @params);
+#else
+    void Init(IEnumerable<TEntity> data, Func<TEntity, bool>? condition);
+#endif
 }

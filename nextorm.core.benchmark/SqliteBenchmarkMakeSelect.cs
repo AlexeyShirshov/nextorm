@@ -4,9 +4,12 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Data.Sqlite;
 using Dapper;
 using System.Linq.Expressions;
+using BenchmarkDotNet.Jobs;
 
 namespace nextorm.core.benchmark;
 
+[SimpleJob(RuntimeMoniker.Net70, baseline: true)]
+[SimpleJob(RuntimeMoniker.Net80)]
 [MemoryDiagnoser]
 public class SqliteBenchmarkMakeSelect
 {

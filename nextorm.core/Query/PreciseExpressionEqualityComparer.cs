@@ -125,20 +125,21 @@ public sealed class PreciseExpressionEqualityComparer : IEqualityComparer<Expres
                         var key = new ExpressionKey(memberExpression);
                         if (!_cache.TryGetValue(key, out var del))
                         {
-                            var p = Expression.Parameter(ce!.Type);
-                            var replace = new ReplaceConstantExpressionVisitor(p);
-                            var body = replace.Visit(memberExpression)!;
-                            del = Expression.Lambda(body, p).Compile();
+                            //var p = Expression.Parameter(ce!.Type);
+                            //var replace = new ReplaceConstantExpressionVisitor(p);
+                            //var body = replace.Visit(memberExpression)!;
+                            var body = Expression.Convert(memberExpression, typeof(object));
+                            del = Expression.Lambda<Func<object>>(body).Compile();
                             //value = 1;
                             _cache[key] = del;
 
                             if (_logger?.IsEnabled(LogLevel.Debug) ?? false)
                             {
-                                _logger.LogDebug("Expression cache miss on gethashcode. hascode: {hash}, value: {value}", key.GetHashCode(), del.DynamicInvoke(ce.Value));
+                                _logger.LogDebug("Expression cache miss on gethashcode. hascode: {hash}, value: {value}", key.GetHashCode(), ((Func<object>)del)());
                             }
                             else if (_logger?.IsEnabled(LogLevel.Information) ?? false) _logger.LogInformation("Expression cache miss on gethashcode");
                         }
-                        AddToHashIfNotNull(del.DynamicInvoke(ce!.Value));
+                        AddToHashIfNotNull(((Func<object>)del)());
                         break;
                     }
                     hash.Add(memberExpression.Expression, this);
@@ -474,26 +475,28 @@ public sealed class PreciseExpressionEqualityComparer : IEqualityComparer<Expres
                 var (keyA, keyB) = (new ExpressionKey(a), new ExpressionKey(b));
                 if (_equalityComparer._cache.TryGetValue(keyA, out var delA) && _equalityComparer._cache.TryGetValue(keyB, out var delB))
                 {
-                    return Equals(delA.DynamicInvoke(ceA!.Value), delB.DynamicInvoke(ceB!.Value));
+                    return Equals(((Func<object>)delA)(), ((Func<object>)delB)());
                 }
                 else
                 {
                     if (_equalityComparer._logger?.IsEnabled(LogLevel.Information) ?? false) _equalityComparer._logger.LogInformation("Expression cache miss on equals");
 
-                    var pA = Expression.Parameter(ceA!.Type);
-                    var replace = new ReplaceConstantExpressionVisitor(pA);
-                    var bodyA = replace.Visit(a)!;
-                    delA = Expression.Lambda(bodyA, pA).Compile();
+                    //var pA = Expression.Parameter(ceA!.Type);
+                    //var replace = new ReplaceConstantExpressionVisitor(pA);
+                    //var bodyA = replace.Visit(a)!;
+                    var bodyA = Expression.Convert(a, typeof(object));
+                    delA = Expression.Lambda<Func<object>>(bodyA).Compile();
 
-                    var pB = Expression.Parameter(ceB!.Type);
-                    replace = new ReplaceConstantExpressionVisitor(pB);
-                    var bodyB = replace.Visit(b)!;
-                    delB = Expression.Lambda(bodyB, pB).Compile();
+                    // var pB = Expression.Parameter(ceB!.Type);
+                    // replace = new ReplaceConstantExpressionVisitor(pB);
+                    //var bodyB = replace.Visit(b)!;
+                    var bodyB = Expression.Convert(b, typeof(object));
+                    delB = Expression.Lambda<Func<object>>(bodyB).Compile();
 
                     _equalityComparer._cache[keyA] = delA;
                     _equalityComparer._cache[keyB] = delB;
 
-                    return Equals(delA.DynamicInvoke(ceA.Value), delB.DynamicInvoke(ceB.Value));
+                    return Equals(((Func<object>)delA)(), ((Func<object>)delB)());
                 }
             }
 

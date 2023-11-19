@@ -2,7 +2,7 @@
 <html lang='en'>
 <head>
 <meta charset='utf-8' />
-<title>nextorm.core.benchmark.SqliteBenchmarkSimulateWork-20231115-191524</title>
+<title>nextorm.core.benchmark.SqliteBenchmarkSimulateWork-20231119-112236</title>
 
 <style type="text/css">
 	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
@@ -13,24 +13,32 @@
 </head>
 <body>
 <pre><code>
-BenchmarkDotNet v0.13.9+228a464e8be6c580ad9408e98f18813f6407fb5a, Windows 11 (10.0.22621.2428/22H2/2022Update/SunValley2)
+BenchmarkDotNet v0.13.9+228a464e8be6c580ad9408e98f18813f6407fb5a, Windows 11 (10.0.22621.2715/22H2/2022Update/SunValley2)
 Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical cores
-.NET SDK 7.0.114
-  [Host]     : .NET 7.0.14 (7.0.1423.51910), X64 RyuJIT AVX2
-  DefaultJob : .NET 7.0.14 (7.0.1423.51910), X64 RyuJIT AVX2
+.NET SDK 8.0.100
+  [Host]   : .NET 8.0.0 (8.0.23.53103), X64 RyuJIT AVX2
+  .NET 7.0 : .NET 7.0.14 (7.0.1423.51910), X64 RyuJIT AVX2
+  .NET 8.0 : .NET 8.0.0 (8.0.23.53103), X64 RyuJIT AVX2
 </code></pre>
 <pre><code></code></pre>
 
 <table>
-<thead><tr><th>Method                 </th><th>Mean </th><th>Error</th><th>StdDev</th><th>Ratio</th><th>RatioSD</th><th>Gen0</th><th>Gen1</th><th>Allocated</th><th>Alloc Ratio</th>
+<thead><tr><th>Method                 </th><th>Job</th><th>Runtime</th><th>Mean </th><th>Error</th><th>StdDev</th><th>Ratio</th><th>RatioSD</th><th>Gen0</th><th>Gen1</th><th>Allocated</th><th>Alloc Ratio</th>
 </tr>
-</thead><tbody><tr><td>NextormCompiledToList</td><td>209.12 ms</td><td>2.311 ms</td><td>2.049 ms</td><td>1.00</td><td>0.00</td><td>2333.3333</td><td>-</td><td>11.65 MB</td><td>1.00</td>
-</tr><tr><td>NextormCachedToList</td><td>402.24 ms</td><td>7.953 ms</td><td>11.657 ms</td><td>1.92</td><td>0.05</td><td>7000.0000</td><td>2000.0000</td><td>35.48 MB</td><td>3.05</td>
-</tr><tr><td>NextormCachedWithParamsToList</td><td>216.80 ms</td><td>4.251 ms</td><td>5.527 ms</td><td>1.05</td><td>0.03</td><td>2333.3333</td><td>-</td><td>11.67 MB</td><td>1.00</td>
-</tr><tr><td>EFCore</td><td>1,771.40 ms</td><td>34.995 ms</td><td>47.902 ms</td><td>8.61</td><td>0.24</td><td>18000.0000</td><td>17000.0000</td><td>81.61 MB</td><td>7.00</td>
-</tr><tr><td>EFCoreStream</td><td>1,398.55 ms</td><td>9.425 ms</td><td>8.816 ms</td><td>6.69</td><td>0.07</td><td>14000.0000</td><td>13000.0000</td><td>66.48 MB</td><td>5.70</td>
-</tr><tr><td>EFCoreCompiled</td><td>64.29 ms</td><td>1.183 ms</td><td>1.107 ms</td><td>0.31</td><td>0.01</td><td>2625.0000</td><td>-</td><td>12.16 MB</td><td>1.04</td>
-</tr><tr><td>Dapper</td><td>235.60 ms</td><td>2.576 ms</td><td>2.409 ms</td><td>1.13</td><td>0.02</td><td>2333.3333</td><td>-</td><td>11.48 MB</td><td>0.99</td>
+</thead><tbody><tr><td>NextormCompiledToList</td><td>.NET 7.0</td><td>.NET 7.0</td><td>211.95 ms</td><td>4.016 ms</td><td>3.756 ms</td><td>1.00</td><td>0.00</td><td>2333.3333</td><td>-</td><td>11.65 MB</td><td>1.00</td>
+</tr><tr><td>NextormCachedToList</td><td>.NET 7.0</td><td>.NET 7.0</td><td>340.87 ms</td><td>4.936 ms</td><td>4.618 ms</td><td>1.61</td><td>0.03</td><td>7000.0000</td><td>-</td><td>34.13 MB</td><td>2.93</td>
+</tr><tr><td>NextormCachedWithParamsToList</td><td>.NET 7.0</td><td>.NET 7.0</td><td>212.47 ms</td><td>2.281 ms</td><td>2.022 ms</td><td>1.00</td><td>0.02</td><td>2333.3333</td><td>-</td><td>11.67 MB</td><td>1.00</td>
+</tr><tr><td>EFCore</td><td>.NET 7.0</td><td>.NET 7.0</td><td>1,807.78 ms</td><td>32.635 ms</td><td>43.567 ms</td><td>8.54</td><td>0.30</td><td>18000.0000</td><td>17000.0000</td><td>80.92 MB</td><td>6.94</td>
+</tr><tr><td>EFCoreStream</td><td>.NET 7.0</td><td>.NET 7.0</td><td>1,440.21 ms</td><td>24.314 ms</td><td>22.743 ms</td><td>6.80</td><td>0.19</td><td>14000.0000</td><td>13000.0000</td><td>65.18 MB</td><td>5.59</td>
+</tr><tr><td>EFCoreCompiled</td><td>.NET 7.0</td><td>.NET 7.0</td><td>62.01 ms</td><td>1.124 ms</td><td>1.717 ms</td><td>0.29</td><td>0.01</td><td>2666.6667</td><td>-</td><td>12.16 MB</td><td>1.04</td>
+</tr><tr><td>Dapper</td><td>.NET 7.0</td><td>.NET 7.0</td><td>240.81 ms</td><td>4.733 ms</td><td>6.154 ms</td><td>1.14</td><td>0.03</td><td>2333.3333</td><td>-</td><td>11.48 MB</td><td>0.99</td>
+</tr><tr><td>NextormCompiledToList</td><td>.NET 8.0</td><td>.NET 8.0</td><td>208.26 ms</td><td>4.161 ms</td><td>7.287 ms</td><td>0.98</td><td>0.03</td><td>2500.0000</td><td>-</td><td>11.65 MB</td><td>1.00</td>
+</tr><tr><td>NextormCachedToList</td><td>.NET 8.0</td><td>.NET 8.0</td><td>316.19 ms</td><td>3.978 ms</td><td>3.527 ms</td><td>1.49</td><td>0.03</td><td>7000.0000</td><td>-</td><td>33.45 MB</td><td>2.87</td>
+</tr><tr><td>NextormCachedWithParamsToList</td><td>.NET 8.0</td><td>.NET 8.0</td><td>208.26 ms</td><td>3.808 ms</td><td>5.700 ms</td><td>0.98</td><td>0.04</td><td>2500.0000</td><td>-</td><td>11.67 MB</td><td>1.00</td>
+</tr><tr><td>EFCore</td><td>.NET 8.0</td><td>.NET 8.0</td><td>1,593.50 ms</td><td>30.690 ms</td><td>44.985 ms</td><td>7.47</td><td>0.28</td><td>18000.0000</td><td>17000.0000</td><td>81.8 MB</td><td>7.02</td>
+</tr><tr><td>EFCoreStream</td><td>.NET 8.0</td><td>.NET 8.0</td><td>1,251.84 ms</td><td>23.057 ms</td><td>22.645 ms</td><td>5.91</td><td>0.16</td><td>14000.0000</td><td>13000.0000</td><td>65.53 MB</td><td>5.62</td>
+</tr><tr><td>EFCoreCompiled</td><td>.NET 8.0</td><td>.NET 8.0</td><td>46.71 ms</td><td>0.920 ms</td><td>1.432 ms</td><td>0.22</td><td>0.01</td><td>2636.3636</td><td>-</td><td>12.16 MB</td><td>1.04</td>
+</tr><tr><td>Dapper</td><td>.NET 8.0</td><td>.NET 8.0</td><td>217.50 ms</td><td>4.293 ms</td><td>4.015 ms</td><td>1.03</td><td>0.03</td><td>2500.0000</td><td>-</td><td>11.48 MB</td><td>0.99</td>
 </tr></tbody></table>
 </body>
 </html>

@@ -16,9 +16,9 @@ using Microsoft.Extensions.ObjectPool;
 
 namespace nextorm.core;
 
-public class QueryCommand : IPayloadManager, ISourceProvider//, IParamProvider
+public class QueryCommand : /*IPayloadManager,*/ ISourceProvider//, IParamProvider
 {
-    protected readonly IPayloadManager _payloadMgr;
+    //protected readonly IPayloadManager _payloadMgr;
     private readonly List<JoinExpression> _joins;
     protected List<SelectExpression>? _selectList;
     private int _columnsHash;
@@ -45,15 +45,15 @@ public class QueryCommand : IPayloadManager, ISourceProvider//, IParamProvider
 #endif
     //protected ArrayList _params = new();
     public QueryCommand(IDataProvider dataProvider, LambdaExpression exp, Expression? condition)
-        : this(dataProvider, exp, condition, new FastPayloadManager(new Dictionary<Type, object?>()), new())
+        : this(dataProvider, exp, condition/*, new FastPayloadManager(new Dictionary<Type, object?>())*/, new())
     {
     }
-    protected QueryCommand(IDataProvider dataProvider, LambdaExpression exp, Expression? condition, IPayloadManager payloadMgr, List<JoinExpression> joins)
+    protected QueryCommand(IDataProvider dataProvider, LambdaExpression exp, Expression? condition/*, IPayloadManager payloadMgr*/, List<JoinExpression> joins)
     {
         _dataProvider = dataProvider;
         _exp = exp;
         _condition = condition;
-        _payloadMgr = payloadMgr;
+        //_payloadMgr = payloadMgr;
         _joins = joins;
     }
     public ILogger? Logger { get; set; }
@@ -286,39 +286,39 @@ public class QueryCommand : IPayloadManager, ISourceProvider//, IParamProvider
         // }
     }
 
-    public bool RemovePayload<T>() where T : class, IPayload
-    {
-        return _payloadMgr.RemovePayload<T>();
-    }
+    // public bool RemovePayload<T>() where T : class, IPayload
+    // {
+    //     return _payloadMgr.RemovePayload<T>();
+    // }
 
-    public bool TryGetPayload<T>(out T? payload) where T : class, IPayload
-    {
-        return _payloadMgr.TryGetPayload<T>(out payload);
-    }
+    // public bool TryGetPayload<T>(out T? payload) where T : class, IPayload
+    // {
+    //     return _payloadMgr.TryGetPayload<T>(out payload);
+    // }
 
-    public bool TryGetNotNullPayload<T>(out T? payload) where T : class, IPayload
-    {
-        return _payloadMgr.TryGetNotNullPayload<T>(out payload);
-    }
+    // public bool TryGetNotNullPayload<T>(out T? payload) where T : class, IPayload
+    // {
+    //     return _payloadMgr.TryGetNotNullPayload<T>(out payload);
+    // }
 
-    public T GetNotNullOrAddPayload<T>(Func<T> factory) where T : class, IPayload
-    {
-        return _payloadMgr.GetNotNullOrAddPayload<T>(factory);
-    }
+    // public T GetNotNullOrAddPayload<T>(Func<T> factory) where T : class, IPayload
+    // {
+    //     return _payloadMgr.GetNotNullOrAddPayload<T>(factory);
+    // }
 
-    public T? GetOrAddPayload<T>(Func<T?> factory) where T : class, IPayload
-    {
-        return _payloadMgr.GetOrAddPayload<T>(factory);
-    }
+    // public T? GetOrAddPayload<T>(Func<T?> factory) where T : class, IPayload
+    // {
+    //     return _payloadMgr.GetOrAddPayload<T>(factory);
+    // }
 
-    public T? AddOrUpdatePayload<T>(Func<T?> factory, Func<T?, T?>? update = null) where T : class, IPayload
-    {
-        return _payloadMgr.AddOrUpdatePayload<T>(factory, update);
-    }
-    public void AddOrUpdatePayload<T>(T? payload) where T : class, IPayload
-    {
-        _payloadMgr.AddOrUpdatePayload<T>(payload);
-    }
+    // public T? AddOrUpdatePayload<T>(Func<T?> factory, Func<T?, T?>? update = null) where T : class, IPayload
+    // {
+    //     return _payloadMgr.AddOrUpdatePayload<T>(factory, update);
+    // }
+    // public void AddOrUpdatePayload<T>(T? payload) where T : class, IPayload
+    // {
+    //     _payloadMgr.AddOrUpdatePayload<T>(payload);
+    // }
     public override int GetHashCode()
     {
         if (_hash.HasValue)
@@ -448,8 +448,8 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
     public QueryCommand(IDataProvider dataProvider, LambdaExpression exp, Expression? condition) : base(dataProvider, exp, condition)
     {
     }
-    protected QueryCommand(IDataProvider dataProvider, LambdaExpression exp, Expression? condition, IPayloadManager payloadMgr, List<JoinExpression> joins)
-    : base(dataProvider, exp, condition, payloadMgr, joins)
+    protected QueryCommand(IDataProvider dataProvider, LambdaExpression exp, Expression? condition/*, IPayloadManager payloadMgr*/, List<JoinExpression> joins)
+        : base(dataProvider, exp, condition/*, payloadMgr*/, joins)
     {
 
     }
@@ -623,12 +623,12 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         {
             try
             {
-                foreach (var item in await Exec(cancellationToken, @params))
+                foreach (var item in AsEnumerable(@params))
                 {
                     if (cancellationToken.IsCancellationRequested)
                         break;
 
-                    await bus.Writer.WriteAsync(item, cancellationToken);
+                    await bus.Writer.WriteAsync(item, cancellationToken).ConfigureAwait(false);
                 }
             }
             finally
@@ -638,10 +638,10 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         }, cancellationToken);
 
         // return bus.Reader.ReadAllAsync(cancellationToken);
-        while (await bus.Reader.WaitToReadAsync(cancellationToken))
-            yield return await bus.Reader.ReadAsync(cancellationToken);
+        while (await bus.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
+            yield return await bus.Reader.ReadAsync(cancellationToken).ConfigureAwait(false);
 
-        await t;
+        await t.ConfigureAwait(false);
     }
     public IAsyncEnumerable<TResult> ExecAsync(params object[] @params) => ExecAsync(CancellationToken.None, @params);
     public async IAsyncEnumerable<TResult> ExecAsync([EnumeratorCancellation] CancellationToken cancellationToken, params object[] @params)
@@ -650,8 +650,15 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
             PrepareCommand(cancellationToken);
 
         await using var ee = DataProvider.CreateAsyncEnumerator(this, @params, cancellationToken);
-        while (await ee.MoveNextAsync())
+        while (await ee.MoveNextAsync().ConfigureAwait(false))
             yield return ee.Current;
+    }
+    public IEnumerable<TResult> AsEnumerable(params object[] @params)
+    {
+        if (!IsPrepared)
+            PrepareCommand(CancellationToken.None);
+
+        return (IEnumerable<TResult>)DataProvider.CreateEnumerator(this, @params);
     }
     public Task<IEnumerable<TResult>> Exec(params object[] @params) => Exec(CancellationToken.None, @params);
     public async Task<IEnumerable<TResult>> Exec(CancellationToken cancellationToken, params object[] @params)
@@ -660,20 +667,27 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
             PrepareCommand(cancellationToken);
 
         // return Array.Empty<TResult>();
-        var enumerator = await DataProvider.CreateEnumerator(this, @params, cancellationToken);
+        var enumerator = await DataProvider.CreateEnumeratorAsync(this, @params, cancellationToken).ConfigureAwait(false);
 
         if (enumerator is IEnumerable<TResult> ee)
             return ee;
 
         return new InternalEnumerable(enumerator);
     }
-    public Task<IEnumerable<TResult>> ToListAsync(params object[] @params) => ToListAsync(CancellationToken.None, @params);
-    public async Task<IEnumerable<TResult>> ToListAsync(CancellationToken cancellationToken, params object[] @params)
+    public List<TResult> ToList(params object[] @params)
+    {
+        if (!IsPrepared)
+            PrepareCommand(CancellationToken.None);
+
+        return DataProvider.ToList(this, @params);
+    }
+    public Task<List<TResult>> ToListAsync(params object[] @params) => ToListAsync(CancellationToken.None, @params);
+    public async Task<List<TResult>> ToListAsync(CancellationToken cancellationToken, params object[] @params)
     {
         if (!IsPrepared)
             PrepareCommand(cancellationToken);
 
-        return await DataProvider.ToListAsync(this, @params, cancellationToken);
+        return await DataProvider.ToListAsync(this, @params, cancellationToken).ConfigureAwait(false);
     }
     public QueryCommand<TResult> Compile(bool forToListCalls, CancellationToken cancellationToken = default)
     {

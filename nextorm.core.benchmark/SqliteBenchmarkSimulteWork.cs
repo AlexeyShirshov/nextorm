@@ -5,9 +5,15 @@ using Microsoft.Data.Sqlite;
 using Dapper;
 using Microsoft.Extensions.Logging;
 using TupleLargeEntity = System.Tuple<long, string?, System.DateTime?>;
+using BenchmarkDotNet.Jobs;
+using BenchmarkDotNet.Columns;
 
 namespace nextorm.core.benchmark;
 
+[SimpleJob(RuntimeMoniker.Net70, baseline: true)]
+[SimpleJob(RuntimeMoniker.Net80)]
+[GroupBenchmarksBy(BenchmarkDotNet.Configs.BenchmarkLogicalGroupRule.ByJob, BenchmarkDotNet.Configs.BenchmarkLogicalGroupRule.ByCategory)]
+[HideColumns(Column.Job, Column.Runtime, Column.RatioSD, Column.Error, Column.StdDev)]
 [MemoryDiagnoser]
 public class SqliteBenchmarkSimulateWork
 {

@@ -46,7 +46,7 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
         if (_reader is not null)
         {
             if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Disposing data reader");
-            await _reader.DisposeAsync();
+            await _reader.DisposeAsync().ConfigureAwait(false);
 
             _reader = null;
         }
@@ -66,11 +66,11 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
 
     public async ValueTask<bool> MoveNextAsync()
     {
-        if (_reader is null) await InitReaderAsync(_params, _cancellationToken);
+        if (_reader is null) await InitReaderAsync(_params, _cancellationToken).ConfigureAwait(false);
 #if DEBUG
         if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false) _dataProvider.Logger.LogTrace("Move next");
 #endif
-        return await _reader!.ReadAsync(_cancellationToken);
+        return await _reader!.ReadAsync(_cancellationToken).ConfigureAwait(false);
     }
     public void InitReader(object[]? @params, CancellationToken cancellationToken)
     {
@@ -104,7 +104,7 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
 #if DEBUG
             if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Opening connection");
 #endif
-            await _conn.OpenAsync(cancellationToken);
+            await _conn.OpenAsync(cancellationToken).ConfigureAwait(false);
         }
 
 #if DEBUG
@@ -125,7 +125,7 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
             }
         }
 #endif
-        _reader = await sqlCommand.ExecuteReaderAsync(_compiledQuery.Behavior, cancellationToken);
+        _reader = await sqlCommand.ExecuteReaderAsync(_compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
     }
 
     public bool MoveNext()

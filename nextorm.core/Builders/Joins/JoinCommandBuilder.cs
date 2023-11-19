@@ -15,7 +15,7 @@ public class CommandBuilderP2<T1, T2> : CommandBuilder<Projection<T1, T2>>
         if (Condition is not null)
             throw new NotImplementedException();
 
-        var cb = new CommandBuilderP3<T1, T2, T3>(DataProvider) { Logger = Logger, Query = Query, PayloadManager = PayloadManager, BaseBuilder = BaseBuilder };
+        var cb = new CommandBuilderP3<T1, T2, T3>(DataProvider) { Logger = Logger, Query = Query/*, PayloadManager = PayloadManager*/, BaseBuilder = BaseBuilder };
         cb.Joins.Add(JoinCondition);
         cb.Joins.Add(new JoinExpression(joinCondition));
         return cb;

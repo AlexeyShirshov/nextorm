@@ -34,53 +34,31 @@ public static class InMemoryCommandBuilderExtensions
 {
     public static CommandBuilder<TEntity> WithData<TEntity>(this CommandBuilder<TEntity> builder, IEnumerable<TEntity>? data)
     {
-        if (data is not null)
-            builder.PayloadManager.AddOrUpdatePayload(() =>
-            {
-                builder.CommandCreatedEvent += OnCommandCreated;
-                return new InMemoryDataPayload<TEntity>(data);
-            },
-            existing =>
-            {
-                return new InMemoryDataPayload<TEntity>(data);
-            });
-        else
+        if (builder.DataProvider is InMemoryDataProvider inMemoryProvider)
         {
-            builder.PayloadManager.RemovePayload<InMemoryDataPayload<TEntity>>();
-            builder.CommandCreatedEvent -= OnCommandCreated;
+            inMemoryProvider.Data[typeof(TEntity)] = data;
         }
 
         return builder;
     }
     public static CommandBuilder<TEntity> WithAsyncData<TEntity>(this CommandBuilder<TEntity> builder, IAsyncEnumerable<TEntity>? data)
     {
-        if (data is not null)
-            builder.PayloadManager.AddOrUpdatePayload(() =>
-            {
-                builder.CommandCreatedEvent += OnCommandCreated;
-                return new InMemoryAsyncDataPayload<TEntity>(data);
-            },
-            existing =>
-            {
-                return new InMemoryAsyncDataPayload<TEntity>(data);
-            });
-        else
+        if (builder.DataProvider is InMemoryDataProvider inMemoryProvider)
         {
-            builder.PayloadManager.RemovePayload<InMemoryAsyncDataPayload<TEntity>>();
-            builder.CommandCreatedEvent -= OnCommandCreated;
+            inMemoryProvider.Data[typeof(TEntity)] = data;
         }
 
         return builder;
     }
-    private static void OnCommandCreated<TEntity>(CommandBuilder<TEntity> sender, QueryCommand queryCommand)
-    {
-        if (sender.PayloadManager.TryGetPayload<InMemoryDataPayload<TEntity>>(out var payload))
-            queryCommand.AddOrUpdatePayload(payload);
+    // private static void OnCommandCreated<TEntity>(CommandBuilder<TEntity> sender, QueryCommand queryCommand)
+    // {
+    //     if (sender.PayloadManager.TryGetPayload<InMemoryDataPayload<TEntity>>(out var payload))
+    //         queryCommand.AddOrUpdatePayload(payload);
 
-        if (sender.PayloadManager.TryGetPayload<InMemoryAsyncDataPayload<TEntity>>(out var asyncPayload))
-            queryCommand.AddOrUpdatePayload(asyncPayload);
-    }
+    //     if (sender.PayloadManager.TryGetPayload<InMemoryAsyncDataPayload<TEntity>>(out var asyncPayload))
+    //         queryCommand.AddOrUpdatePayload(asyncPayload);
+    // }
 }
 
-public record InMemoryDataPayload<T>(IEnumerable<T>? Data) : IPayload;
-public record InMemoryAsyncDataPayload<T>(IAsyncEnumerable<T>? Data) : IPayload;
+// public record InMemoryDataPayload<T>(IEnumerable<T>? Data) : IPayload;
+// public record InMemoryAsyncDataPayload<T>(IAsyncEnumerable<T>? Data) : IPayload;
