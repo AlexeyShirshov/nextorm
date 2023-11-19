@@ -154,13 +154,13 @@ public partial class InMemoryDataProvider : IDataProvider
                         case JoinType.Inner:
                             {
                                 var prjType = CreateProjectionType(firstType, secondType, dim);
-                                var miCreateEnumerator = typeof(InMemoryDataProvider).GetMethod(nameof(LoopJoin), BindingFlags.NonPublic | BindingFlags.Static)!;
-                                var param = Expression.Parameter(typeof(InMemoryDataProvider));
+                                var miCreateEnumerator = typeof(InMemoryDataProvider).GetMethod(nameof(LoopJoin), BindingFlags.NonPublic | BindingFlags.Instance)!;
+                                var @this = Expression.Constant(this);
                                 var p1 = Expression.Parameter(typeof(QueryCommand));
                                 var p2 = Expression.Parameter(typeof(object));
                                 var p3 = Expression.Parameter(typeof(JoinExpression));
                                 var p4 = Expression.Parameter(typeof(int));
-                                var callExp = Expression.Call(null, miCreateEnumerator.MakeGenericMethod(firstType, secondType, prjType),
+                                var callExp = Expression.Call(@this, miCreateEnumerator.MakeGenericMethod(firstType, secondType, prjType),
                                     p1,
                                     Expression.Convert(p2, typeof(IEnumerable<>).MakeGenericType(firstType)),
                                     p3,
