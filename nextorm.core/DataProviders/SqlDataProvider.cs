@@ -44,6 +44,7 @@ public class SqlDataProvider : IDataProvider
     public ILogger? Logger { get; set; }
     public bool NeedMapping => true;
     public IDictionary<ExpressionKey, Delegate> ExpressionsCache => _expCache;
+    public virtual string EmptyString => "''";
     //public IDictionary<ExpressionKey, Delegate> MapCache => _mapCache;
     public virtual DbConnection CreateConnection()
     {
@@ -154,7 +155,7 @@ public class SqlDataProvider : IDataProvider
     public virtual (string?, List<Param>) MakeSelect(QueryCommand cmd, bool paramMode)
     {
         ArgumentNullException.ThrowIfNull(cmd.SelectList);
-        ArgumentNullException.ThrowIfNull(cmd.From);
+        //ArgumentNullException.ThrowIfNull(cmd.From);
         ArgumentNullException.ThrowIfNull(cmd.EntityType);
 
         var selectList = cmd.SelectList;
@@ -176,34 +177,39 @@ public class SqlDataProvider : IDataProvider
 
                 if (needAliasForColumn)
                 {
-                    sqlBuilder.Append(MakeColumnAlias(item.PropertyName!));
+                    sqlBuilder.Append(MakeColumnAlias(item.PropertyName));
                 }
 
                 sqlBuilder.Append(", ");
             }
         }
 
-        var fromStr = MakeFrom(from, @params, paramMode);
-        if (!paramMode)
+        if (from is not null)
         {
-            sqlBuilder!.Length -= 2;
-            sqlBuilder.Append(" from ").Append(fromStr);
-        }
+            var fromStr = MakeFrom(from, @params, paramMode);
+            if (!paramMode)
+            {
+                sqlBuilder!.Length -= 2;
+                sqlBuilder.Append(" from ").Append(fromStr);
+            }
 
-        // if (cmd.Joins.Any())
-        // {
-        foreach (var join in cmd.Joins)
-        {
-            var joinSql = MakeJoin(join, cmd, @params, paramMode);
-            if (!paramMode) sqlBuilder!.Append(joinSql);
-        }
-        //}
+            // if (cmd.Joins.Any())
+            // {
+            foreach (var join in cmd.Joins)
+            {
+                var joinSql = MakeJoin(join, cmd, @params, paramMode);
+                if (!paramMode) sqlBuilder!.Append(joinSql);
+            }
+            //}
 
-        if (cmd.Condition is not null)
-        {
-            var whereSql = MakeWhere(entityType, cmd, cmd.Condition, 0, null, @params, paramMode);
-            if (!paramMode) sqlBuilder!.Append(" where ").Append(whereSql);
+            if (cmd.Condition is not null)
+            {
+                var whereSql = MakeWhere(entityType, cmd, cmd.Condition, 0, null, @params, paramMode);
+                if (!paramMode) sqlBuilder!.Append(" where ").Append(whereSql);
+            }
         }
+        else if (!paramMode && sqlBuilder?.Length > 0)
+            sqlBuilder.Length -= 2;
 
         string? r = null;
         if (!paramMode)
@@ -322,7 +328,7 @@ public class SqlDataProvider : IDataProvider
 
                 if (paramMode) return (false, string.Empty);
 
-                return (visitor.NeedAliasForColumn || selectExp.PropertyName != visitor.ColumnName, visitor.ToString());
+                return (visitor.NeedAliasForColumn, visitor.ToString());
             }
         );
     }
@@ -349,8 +355,11 @@ public class SqlDataProvider : IDataProvider
     {
         return " as " + tableAlias;
     }
-    public virtual string MakeColumnAlias(string colAlias)
+    public virtual string MakeColumnAlias(string? colAlias)
     {
+        if (string.IsNullOrEmpty(colAlias))
+            return string.Empty;
+
         return " as " + colAlias;
     }
     internal string GetColumnName(MemberInfo member)
@@ -405,7 +414,7 @@ public class SqlDataProvider : IDataProvider
 #endif
         }
         var sqlEnumerator = (ResultSetEnumerator<TResult>)cacheEntry.Enumerator!;
-        sqlEnumerator.InitReader(@params, cancellationToken);
+        sqlEnumerator.InitEnumerator(@params, cancellationToken);
         return sqlEnumerator;
     }
     private List<Param> ExtractParams(QueryCommand queryCommand) => MakeSelect(queryCommand, true).Item2;
@@ -436,7 +445,8 @@ public class SqlDataProvider : IDataProvider
             else
                 return GetFrom(srcType);
         }
-        else throw new BuildSqlCommandException($"From must be specified for {nameof(TableAlias)} as source type");
+        else //throw new BuildSqlCommandException($"From must be specified for {nameof(TableAlias)} as source type");
+            return null;
     }
 
     private FromExpression GetFrom(Type t)
@@ -688,46 +698,58 @@ public class SqlDataProvider : IDataProvider
 
         return () =>
         {
-            var ctorInfo = resultType.GetConstructors().OrderByDescending(it => it.GetParameters().Length).FirstOrDefault() ?? throw new PrepareException($"Cannot get ctor from {resultType}");
-
             var param = Expression.Parameter(typeof(IDataRecord));
             Expression<Func<IDataRecord, TResult>> lambda;
 
-            if (ctorInfo.GetParameters().Length == queryCommand.SelectList!.Count)
+            if (queryCommand.OneColumn)
             {
-                var newParams = queryCommand.SelectList!.Select(column => MapColumn(column, param)).ToArray();
-                var ctor = Expression.New(ctorInfo, newParams);
-
-                lambda = Expression.Lambda<Func<IDataRecord, TResult>>(ctor, param);
-                //if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Get instance of {type} as: {exp}", resultType, lambda);
-                // var body = Expression.Block(typeof(TResult), new Expression[] { assignValuesVariable, ctor });
-                // var lambda = Expression.Lambda<Func<object, object[]?, TResult>>(body, param, valuesParam);
-                // if (Logger?.IsEnabled(LogLevel.Debug) ?? false)
-                // {
-                //     var sb = new StringBuilder();
-                //     sb.AppendLine();
-                //     sb.Append(assignValuesVariable.ToString()).AppendLine(";");
-                //     sb.Append(ctor.ToString()).AppendLine(";");
-                //     var dumpExp = lambda.ToString().Replace("...", sb.ToString());
-                //     Logger.LogDebug("Get instance of {type} as: {exp}", resultType, dumpExp);
-                // }
-                // return lambda.Compile();
+                lambda = queryCommand.SelectList![0].Expression.Match(_ => throw new NotImplementedException(), exp =>
+                {
+                    var vis = new ReplaceMemberVisitor(queryCommand.EntityType!, this, param);
+                    var body = vis.Visit(((LambdaExpression)exp).Body);
+                    return Expression.Lambda<Func<IDataRecord, TResult>>(body, param);
+                });
             }
             else
             {
-                var bindings = queryCommand.SelectList!.Select(column =>
+                var ctorInfo = resultType.GetConstructors().OrderByDescending(it => it.GetParameters().Length).FirstOrDefault() ?? throw new PrepareException($"Cannot get ctor from {resultType}");
+
+                if (ctorInfo.GetParameters().Length == queryCommand.SelectList!.Count)
                 {
-                    var propInfo = column.PropertyInfo ?? resultType.GetProperty(column.PropertyName!)!;
-                    return Expression.Bind(propInfo, MapColumn(column, param));
-                }).ToArray();
+                    var newParams = queryCommand.SelectList!.Select(column => MapColumn(column, param)).ToArray();
+                    var ctor = Expression.New(ctorInfo, newParams);
 
-                var ctor = Expression.New(ctorInfo);
+                    lambda = Expression.Lambda<Func<IDataRecord, TResult>>(ctor, param);
+                    //if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Get instance of {type} as: {exp}", resultType, lambda);
+                    // var body = Expression.Block(typeof(TResult), new Expression[] { assignValuesVariable, ctor });
+                    // var lambda = Expression.Lambda<Func<object, object[]?, TResult>>(body, param, valuesParam);
+                    // if (Logger?.IsEnabled(LogLevel.Debug) ?? false)
+                    // {
+                    //     var sb = new StringBuilder();
+                    //     sb.AppendLine();
+                    //     sb.Append(assignValuesVariable.ToString()).AppendLine(";");
+                    //     sb.Append(ctor.ToString()).AppendLine(";");
+                    //     var dumpExp = lambda.ToString().Replace("...", sb.ToString());
+                    //     Logger.LogDebug("Get instance of {type} as: {exp}", resultType, dumpExp);
+                    // }
+                    // return lambda.Compile();
+                }
+                else
+                {
+                    var bindings = queryCommand.SelectList!.Select(column =>
+                    {
+                        var propInfo = column.PropertyInfo ?? resultType.GetProperty(column.PropertyName!)!;
+                        return Expression.Bind(propInfo, MapColumn(column, param));
+                    }).ToArray();
 
-                var memberInit = Expression.MemberInit(ctor, bindings);
+                    var ctor = Expression.New(ctorInfo);
 
-                var body = memberInit;
-                lambda = Expression.Lambda<Func<IDataRecord, TResult>>(body, param);
+                    var memberInit = Expression.MemberInit(ctor, bindings);
 
+                    var body = memberInit;
+                    lambda = Expression.Lambda<Func<IDataRecord, TResult>>(body, param);
+
+                }
             }
 
             if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Get instance of {type} as: {exp}", resultType, lambda);
@@ -748,12 +770,145 @@ public class SqlDataProvider : IDataProvider
 
     public List<TResult> ToList<TResult>(QueryCommand<TResult> queryCommand, object[]? @params)
     {
-        throw new NotImplementedException();
+        ArgumentNullException.ThrowIfNull(queryCommand);
+
+        var setParams = @params is not null;
+        var ce = queryCommand.CacheEntry;
+        if (ce is SqlCacheEntry cacheEntry
+#if !ONLY_PLAN_CACHE
+            || (queryCommand.Cache && _queryCache.TryGetValue(queryCommand, out cacheEntry!) && cacheEntry is not null)
+#endif
+            )
+        {
+            // if (cacheEntry.Enumerator is not ResultSetEnumerator<TResult> enumerator)
+            // {
+            //     enumerator = new ResultSetEnumerator<TResult>(this, (DatabaseCompiledQuery<TResult>)cacheEntry.CompiledQuery, cancellationToken);
+            //     cacheEntry.Enumerator = enumerator;
+            // }
+            // var sqlEnumerator = (ResultSetEnumerator<TResult>)cacheEntry.Enumerator!;
+            // sqlEnumerator.InitReader(cancellationToken);
+            // return sqlEnumerator;
+        }
+        else
+        {
+#if DEBUG && !ONLY_PLAN_CACHE
+            if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Query cache miss with hash: {hash} and condition hash: {chash}",
+                queryCommand.GetHashCode(),
+                queryCommand.ConditionHash);
+#elif !ONLY_PLAN_CACHE
+            if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Query cache miss");
+#endif
+
+            cacheEntry = CreateCompiledQuery(queryCommand, true, CancellationToken.None);
+
+#if !ONLY_PLAN_CACHE
+            if (queryCommand.Cache)
+                _queryCache[queryCommand] = cacheEntry;
+#endif
+        }
+
+        var compiledQuery = (DatabaseCompiledQuery<TResult>)cacheEntry.CompiledQuery;
+
+#if DEBUG
+        if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Getting connection");
+#endif
+        var conn = GetConnection();
+        var sqlCommand = compiledQuery.DbCommand;
+
+        if (setParams)
+        {
+            for (var i = 0; i < @params!.Length; i++)
+            {
+                var paramName = string.Format("norm_p{0}", i);
+                foreach (DbParameter p in sqlCommand.Parameters)
+                {
+                    if (p.ParameterName == paramName)
+                    {
+                        p.Value = @params[i];
+                        break;
+                    }
+                }
+            }
+        }
+        sqlCommand.Connection = conn;
+
+        if (conn.State == ConnectionState.Closed)
+        {
+#if DEBUG
+            if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Opening connection");
+#endif
+            conn.Open();
+        }
+
+#if DEBUG
+        if (Logger?.IsEnabled(LogLevel.Debug) ?? false)
+        {
+            Logger.LogDebug("Generated query: {sql}", sqlCommand.CommandText);
+
+            if (LogSensetiveData)
+            {
+                foreach (DbParameter p in sqlCommand.Parameters)
+                {
+                    Logger.LogDebug("param {name} is {value}", p.ParameterName, p.Value);
+                }
+            }
+            else if (sqlCommand.Parameters?.Count > 0)
+            {
+                Logger.LogDebug("Use {method} to see param values", nameof(LogSensetiveData));
+            }
+        }
+#endif
+        using var reader = sqlCommand.ExecuteReader(compiledQuery.Behavior);
+
+        var l = new List<TResult>(cacheEntry.LastRowCount);
+        while (reader.Read())
+        {
+            l.Add(compiledQuery.MapDelegate(reader));
+        }
+        cacheEntry.LastRowCount = l.Count;
+        return l;
     }
 
     public IEnumerator<TResult> CreateEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[] @params)
     {
-        throw new NotImplementedException();
+        ArgumentNullException.ThrowIfNull(queryCommand);
+
+        var ce = queryCommand.CacheEntry;
+        if (ce is SqlCacheEntry cacheEntry
+#if !ONLY_PLAN_CACHE
+            || (queryCommand.Cache && _queryCache.TryGetValue(queryCommand, out cacheEntry!) && cacheEntry is not null)
+#endif
+            )
+        {
+            // if (cacheEntry.Enumerator is not ResultSetEnumerator<TResult> enumerator)
+            // {
+            //     enumerator = new ResultSetEnumerator<TResult>(this, (DatabaseCompiledQuery<TResult>)cacheEntry.CompiledQuery, cancellationToken);
+            //     cacheEntry.Enumerator = enumerator;
+            // }
+            // var sqlEnumerator = (ResultSetEnumerator<TResult>)cacheEntry.Enumerator!;
+            // sqlEnumerator.InitReader(cancellationToken);
+            // return sqlEnumerator;
+        }
+        else
+        {
+#if DEBUG && !ONLY_PLAN_CACHE
+            if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Query cache miss with hash: {hash} and condition hash: {chash}",
+                queryCommand.GetHashCode(),
+                queryCommand.ConditionHash);
+#elif !ONLY_PLAN_CACHE
+            if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Query cache miss");
+#endif
+
+            cacheEntry = CreateCompiledQuery(queryCommand, true, CancellationToken.None);
+
+#if !ONLY_PLAN_CACHE
+            if (queryCommand.Cache)
+                _queryCache[queryCommand] = cacheEntry;
+#endif
+        }
+        var sqlEnumerator = (ResultSetEnumerator<TResult>)cacheEntry.Enumerator!;
+        sqlEnumerator.InitReader(@params);
+        return sqlEnumerator;
     }
 
     // public async IAsyncEnumerable<TResult> CreateFetchEnumerator<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)

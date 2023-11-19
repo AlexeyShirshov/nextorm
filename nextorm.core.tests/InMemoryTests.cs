@@ -132,4 +132,36 @@ public class InMemoryTests
         planEC.GetHashCode(q1).Should().Be(planEC.GetHashCode(q2));
         planEC.Equals(q1, q2).Should().BeTrue();
     }
+    [Fact]
+    public void SelectPrimitive_ShouldReturnData()
+    {
+        const int limit = 5;
+        // Given
+        var q1 = _sut.SimpleEntity.Where(it => it.Id < limit).Select(it => it.Id);
+        // When
+        var r = q1.ToList();
+        // Then
+        for (var i = 0; i < r.Count; i++)
+        {
+            r[i].Should().Be(i + 1);
+        }
+    }
+    [Fact]
+    public void SelectAny_ShouldReturnData()
+    {
+        var cb = new CommandBuilder(_sut.DataProvider);
+        var cmd = (QueryCommand)_sut.SimpleEntity;
+        // Given
+        var l = cb.Select(_ => NORM.SQL.exists(cmd)).ToList();
+        // When
+        l.Count.Should().Be(1);
+        l[0].Should().BeTrue();
+    }
+    [Fact]
+    public void SelectAny2_ShouldReturnData()
+    {
+        var r = _sut.SimpleEntity.Any();
+
+        r.Should().BeTrue();
+    }
 }

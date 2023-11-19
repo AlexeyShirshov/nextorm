@@ -93,6 +93,11 @@ public class SqliteBenchmarkIteration
         }
     }
     [Benchmark]
+    public async Task EFCoreAny()
+    {
+        await _efCtx.SimpleEntities.Select(entity => new { entity.Id }).AnyAsync();
+    }
+    [Benchmark]
     public async Task EFCoreStream()
     {
         await foreach (var row in _efCtx.SimpleEntities.Select(entity => new { entity.Id }).AsAsyncEnumerable())

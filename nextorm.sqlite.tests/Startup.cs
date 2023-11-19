@@ -15,14 +15,14 @@ public class Startup
     }
     public void ConfigureServices(IServiceCollection services)
     {
-        services.AddLogging(builder=>
+        services.AddLogging(builder =>
         {
             builder.SetMinimumLevel(LogLevel.Trace);
             builder.AddXunitOutput();
             builder.AddConsole();
         });
-        
-        services.AddNextOrmContext<TestDataContext>((sp,builder)=>
+
+        services.AddNextOrmContext<TestDataContext>((sp, builder) =>
         {
             builder.UseLoggerFactory(sp.GetRequiredService<ILoggerFactory>());
             builder.UseSqlite(@$"{Directory.GetCurrentDirectory()}\data\test.db");

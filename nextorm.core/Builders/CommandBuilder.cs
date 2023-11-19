@@ -119,22 +119,48 @@ public class CommandBuilder<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
         var cb = new CommandBuilderP2<TEntity, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition) { Query = query }) { Logger = Logger, _query = queryBase/*, PayloadManager = PayloadManager*/, BaseBuilder = this };
         return cb;
     }
+
+    public bool Any(params object[] @params)
+    {
+        var cmd = ToCommand();
+        var cb = new CommandBuilder(_dataProvider);
+        var queryCommand = cb.Select(_ => NORM.SQL.exists(cmd));
+        queryCommand.PrepareCommand(CancellationToken.None);
+        var ee = _dataProvider.CreateEnumerator(queryCommand, @params);
+        return ee.MoveNext() && ee.Current;
+    }
+    public Task<bool> AnyAsync(params object[] @params) => AnyAsync(CancellationToken.None, @params);
+    public async Task<bool> AnyAsync(CancellationToken cancellationToken, params object[] @params)
+    {
+        var cmd = ToCommand();
+        var cb = new CommandBuilder(_dataProvider);
+        var queryCommand = cb.Select(_ => NORM.SQL.exists(cmd));
+        queryCommand.PrepareCommand(CancellationToken.None);
+        using var ee = await _dataProvider.CreateEnumeratorAsync(queryCommand, @params, cancellationToken);
+        return ee.MoveNext() && ee.Current;
+    }
 }
 public class CommandBuilder
 {
-    private readonly SqlDataProvider _dataProvider;
+    private readonly IDataProvider _dataProvider;
     private readonly string? _table;
     internal ILogger? Logger { get; set; }
     private Expression? _condition;
-    public CommandBuilder(SqlDataProvider dataProvider, string table)
+    public CommandBuilder(IDataProvider dataProvider) : this(dataProvider, null) { }
+    public CommandBuilder(IDataProvider dataProvider, string? table)
     {
         _dataProvider = dataProvider;
         _table = table;
     }
     public QueryCommand<TResult> Select<TResult>(Expression<Func<TableAlias, TResult>> exp)
     {
-        if (string.IsNullOrEmpty(_table)) throw new InvalidOperationException("Table must be specified");
-        return new QueryCommand<TResult>(_dataProvider, exp, _condition) { From = new FromExpression(_table), Logger = Logger };
+        //if (string.IsNullOrEmpty(_table)) throw new InvalidOperationException("Table must be specified");
+        var cmd = new QueryCommand<TResult>(_dataProvider, exp, _condition) { Logger = Logger };
+
+        if (!string.IsNullOrEmpty(_table))
+            cmd.From = new FromExpression(_table);
+
+        return cmd;
     }
 
     public CommandBuilder Where(Expression<Func<TableAlias, bool>> condition)

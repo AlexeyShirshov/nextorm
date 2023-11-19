@@ -16,7 +16,10 @@ public partial class InMemoryDataProvider : IDataProvider
     private readonly IDictionary<Type, object?> _data = new Dictionary<Type, object?>();
     private bool _disposedValue;
     private readonly IDictionary<QueryCommand, CacheEntry> _cmdIdx = new Dictionary<QueryCommand, CacheEntry>();
-
+    public InMemoryDataProvider()
+    {
+        _data[typeof(TableAlias)] = new TableAlias?[] { null };
+    }
     public QueryCommand<TResult> CreateCommand<TResult>(LambdaExpression exp, Expression? condition)
     {
         return new QueryCommand<TResult>(this, exp, condition);
@@ -26,7 +29,7 @@ public partial class InMemoryDataProvider : IDataProvider
     public bool NeedMapping => false;
 
     public IDictionary<Type, object?> Data => _data;
-
+    public IDictionary<ExpressionKey, Delegate> ExpressionsCache => _expCache;
     public IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
@@ -485,35 +488,46 @@ public partial class InMemoryDataProvider : IDataProvider
 
         return () =>
         {
-            var ctorInfo = resultType.GetConstructors().OrderByDescending(it => it.GetParameters().Length).FirstOrDefault() ?? throw new PrepareException($"Cannot get ctor from {resultType}");
-
-            var param = Expression.Parameter(typeof(TEntity));
-
             Expression<Func<TEntity, TResult>> lambda;
-
-            if (ctorInfo.GetParameters().Length == queryCommand.SelectList!.Count)
+            if (queryCommand.OneColumn)
             {
-                var newParams = queryCommand.SelectList!.Select(column => MapColumn(column, param)).ToArray();
-
-                var ctor = Expression.New(ctorInfo, newParams);
-
-                lambda = Expression.Lambda<Func<TEntity, TResult>>(ctor, param);
-
+                lambda = queryCommand.SelectList![0].Expression.Match(_ => throw new NotImplementedException(), exp =>
+                {
+                    var corVisitor = new CorrelatedQueryExpressionVisitor(this);
+                    var newExp = corVisitor.Visit(exp);
+                    return (Expression<Func<TEntity, TResult>>)newExp;
+                });
             }
             else
             {
-                var bindings = queryCommand.SelectList!.Select(column =>
+                var ctorInfo = resultType.GetConstructors().OrderByDescending(it => it.GetParameters().Length).FirstOrDefault() ?? throw new PrepareException($"Cannot get ctor from {resultType}");
+
+                var param = Expression.Parameter(typeof(TEntity));
+
+
+                if (ctorInfo.GetParameters().Length == queryCommand.SelectList!.Count)
                 {
-                    var propInfo = column.PropertyInfo ?? resultType.GetProperty(column.PropertyName!)!;
-                    return Expression.Bind(propInfo, MapColumn(column, param));
-                }).ToArray();
+                    var newParams = queryCommand.SelectList!.Select(column => MapColumn(column, param)).ToArray();
 
-                var ctor = Expression.New(ctorInfo);
+                    var ctor = Expression.New(ctorInfo, newParams);
 
-                var memberInit = Expression.MemberInit(ctor, bindings);
+                    lambda = Expression.Lambda<Func<TEntity, TResult>>(ctor, param);
+                }
+                else
+                {
+                    var bindings = queryCommand.SelectList!.Select(column =>
+                    {
+                        var propInfo = column.PropertyInfo ?? resultType.GetProperty(column.PropertyName!)!;
+                        return Expression.Bind(propInfo, MapColumn(column, param));
+                    }).ToArray();
 
-                var body = memberInit;
-                lambda = Expression.Lambda<Func<TEntity, TResult>>(body, param);
+                    var ctor = Expression.New(ctorInfo);
+
+                    var memberInit = Expression.MemberInit(ctor, bindings);
+
+                    var body = memberInit;
+                    lambda = Expression.Lambda<Func<TEntity, TResult>>(body, param);
+                }
             }
 
             if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Get instance of {type} as: {exp}", resultType, lambda);

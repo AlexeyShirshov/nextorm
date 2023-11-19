@@ -72,10 +72,60 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
 #endif
         return await _reader!.ReadAsync(_cancellationToken).ConfigureAwait(false);
     }
-    public void InitReader(object[]? @params, CancellationToken cancellationToken)
+    public void InitEnumerator(object[]? @params, CancellationToken cancellationToken)
     {
         _cancellationToken = cancellationToken;
         _params = @params;
+    }
+    public void InitReader(object[]? @params)
+    {
+        var sqlCommand = _compiledQuery.DbCommand;
+        sqlCommand.Connection = _conn;
+
+        if (@params is not null)
+            for (var i = 0; i < @params!.Length; i++)
+            {
+                var paramName = string.Format("norm_p{0}", i);
+                sqlCommand.Parameters[paramName].Value = @params[i];
+                // foreach (DbParameter p in sqlCommand.Parameters)
+                // {
+                //     if (p.ParameterName == paramName)
+                //     {
+                //         p.Value = @params[i];
+                //         break;
+                //     }
+                // }
+            }
+
+        if (_reader is not null) return;
+
+        if (_conn.State == ConnectionState.Closed)
+        {
+#if DEBUG
+            if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Opening connection");
+#endif
+            _conn.Open();
+        }
+
+#if DEBUG
+        if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false)
+        {
+            _dataProvider.Logger.LogDebug("Generated query: {sql}", sqlCommand.CommandText);
+
+            if (_dataProvider.LogSensetiveData)
+            {
+                foreach (DbParameter p in sqlCommand.Parameters)
+                {
+                    _dataProvider.Logger.LogDebug("param {name} is {value}", p.ParameterName, p.Value);
+                }
+            }
+            else if (sqlCommand.Parameters?.Count > 0)
+            {
+                _dataProvider.Logger.LogDebug("Use {method} to see param values", nameof(_dataProvider.LogSensetiveData));
+            }
+        }
+#endif
+        _reader = sqlCommand.ExecuteReader(_compiledQuery.Behavior);
     }
     public async Task InitReaderAsync(object[]? @params, CancellationToken cancellationToken)
     {

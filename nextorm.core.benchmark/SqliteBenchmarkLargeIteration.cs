@@ -22,7 +22,7 @@ namespace nextorm.core.benchmark;
 [SimpleJob(RuntimeMoniker.Net70, baseline: true)]
 [SimpleJob(RuntimeMoniker.Net80)]
 [GroupBenchmarksBy(BenchmarkLogicalGroupRule.ByJob, BenchmarkLogicalGroupRule.ByCategory)]
-[HideColumns(Column.Job, Column.Runtime, Column.RatioSD, Column.Error, Column.StdDev)]
+[HideColumns(Column.Runtime, Column.RatioSD, Column.Error, Column.StdDev)]
 [MemoryDiagnoser]
 [Config(typeof(NextormConfig))]
 public class SqliteBenchmarkLargeIteration

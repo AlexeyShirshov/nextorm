@@ -8,13 +8,13 @@ using nextorm.core.benchmark;
 // BenchmarkRunner.Run<SqliteBenchmarkIteration>();
 // BenchmarkRunner.Run<SqliteBenchmarkLargeIteration>();
 // BenchmarkRunner.Run<SqliteBenchmarkWhere>();
-BenchmarkRunner.Run<SqliteBenchmarkSimulateWork>();
+// BenchmarkRunner.Run<SqliteBenchmarkSimulateWork>();
 // BenchmarkRunner.Run<SqliteBenchmarkMakeSelect>();
 
-// var runner = new InMemoryBenchmarkIteration();
+var runner = new SqliteBenchmarkIteration(true);
 
-// for (var i = 0; i < 2; i++)
-//     runner.NextormCachedSync();
+for (var i = 0; i < 1; i++)
+    runner.EFCoreAny();
 
 //await runner.FillLargeTable();
 // Console.WriteLine("Press any key to exit");

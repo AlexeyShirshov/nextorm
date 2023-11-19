@@ -110,6 +110,36 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             else
                 throw new NotSupportedException(node.Method.Name);
         }
+        else if (node.Method.DeclaringType == typeof(NORM.NORM_SQL) /*&& _tableProvider is IParamProvider paramProvider*/)
+        {
+            if (node.Method.Name == nameof(NORM.NORM_SQL.exists)
+                && node.Arguments is [Expression exp] && exp.Type.IsAssignableTo(typeof(QueryCommand)))
+            {
+                if (!_paramMode)
+                    _builder!.Append("exists(");
+
+                QueryCommand innerQuery;
+                var keyCmd = new ExpressionKey(exp);
+                if (!_dataProvider.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
+                {
+                    var d = Expression.Lambda<Func<QueryCommand>>(exp).Compile();
+                    _dataProvider.ExpressionsCache[keyCmd] = d;
+                    innerQuery = d();
+                }
+                else
+                    innerQuery = ((Func<QueryCommand>)dCmd)();
+
+                var (sql, p) = _dataProvider.MakeSelect(innerQuery, _paramMode);
+                _params.AddRange(p);
+
+                if (!_paramMode)
+                {
+                    _builder!.Append(sql).Append(')');
+                }
+
+                return node;
+            }
+        }
 
         return base.VisitMethodCall(node);
 
@@ -218,8 +248,87 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                     }
                 }
                 else if (!_paramMode)
-                    throw new NotImplementedException(node.Member.Name);
+                {
+                    if (_dataProvider.NeedMapping)
+                    {
+                        var props = _entityType.GetProperties(BindingFlags.FlattenHierarchy | BindingFlags.Public | BindingFlags.Instance).Where(prop => prop.CanWrite).ToArray();
+                        for (int idx = 0; idx < props.Length; idx++)
+                        {
+                            // if (cancellationToken.IsCancellationRequested)
+                            //     return;
+
+                            var prop = props[idx];
+                            if (prop is null) continue;
+                            var colAttr = prop.GetCustomAttribute<ColumnAttribute>(true);
+                            if (colAttr is not null)
+                            {
+                                _builder!.Append(colAttr.Name);
+                                _colName = colAttr.Name;
+                                return node;
+                            }
+                            else
+                            {
+                                foreach (var interf in _entityType.GetInterfaces())
+                                {
+                                    // if (cancellationToken.IsCancellationRequested)
+                                    //     return;
+
+                                    var intMap = _entityType.GetInterfaceMap(interf);
+
+                                    var implIdx = Array.IndexOf(intMap.TargetMethods, prop!.GetMethod);
+                                    if (implIdx >= 0)
+                                    {
+                                        var intMethod = intMap.InterfaceMethods[implIdx];
+
+                                        var intProp = interf.GetProperties().FirstOrDefault(prop => prop.GetMethod == intMethod);
+                                        colAttr = intProp?.GetCustomAttribute<ColumnAttribute>(true);
+                                        if (colAttr is not null)
+                                        {
+                                            _builder!.Append(colAttr.Name);
+                                            _colName = colAttr.Name;
+                                            return node;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    else
+                        throw new NotImplementedException(node.Member.Name);
+                }
             }
+        }
+        else if (node.Expression is null)
+        {
+            if (!_paramMode && node.Member.DeclaringType == typeof(string))
+            {
+                if (node.Member.Name == nameof(string.Empty))
+                    _builder!.Append(_dataProvider.EmptyString);
+
+                return node;
+            }
+
+            var key = new ExpressionKey(node);
+            if (!_dataProvider.ExpressionsCache.TryGetValue(key, out var del))
+            {
+                var body = Expression.Convert(node, typeof(object));
+                del = Expression.Lambda<Func<object>>(body).Compile();
+
+                _dataProvider.ExpressionsCache[key] = del;
+
+                if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false)
+                {
+                    _dataProvider.Logger.LogDebug("Expression cache miss on visit where. hascode: {hash}, value: {value}", key.GetHashCode(), ((Func<object>)del)());
+                }
+                else if (_dataProvider.Logger?.IsEnabled(LogLevel.Information) ?? false) _dataProvider.Logger.LogInformation("Expression cache miss on visit where");
+            }
+
+            _params.Add(new Param(node.Member.Name, ((Func<object>)del)()));
+
+            if (!_paramMode)
+                _builder!.Append(_dataProvider.MakeParam(node.Member.Name));
+
+            return node;
         }
         else
         {

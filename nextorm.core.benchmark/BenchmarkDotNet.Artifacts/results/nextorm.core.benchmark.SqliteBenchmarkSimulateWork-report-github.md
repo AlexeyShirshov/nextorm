@@ -9,19 +9,20 @@ Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical 
 
 
 ```
-| Method                        | Job      | Runtime  | Mean        | Error     | StdDev    | Ratio | RatioSD | Gen0       | Gen1       | Allocated | Alloc Ratio |
-|------------------------------ |--------- |--------- |------------:|----------:|----------:|------:|--------:|-----------:|-----------:|----------:|------------:|
-| NextormCompiledToList         | .NET 7.0 | .NET 7.0 |   211.95 ms |  4.016 ms |  3.756 ms |  1.00 |    0.00 |  2333.3333 |          - |  11.65 MB |        1.00 |
-| NextormCachedToList           | .NET 7.0 | .NET 7.0 |   340.87 ms |  4.936 ms |  4.618 ms |  1.61 |    0.03 |  7000.0000 |          - |  34.13 MB |        2.93 |
-| NextormCachedWithParamsToList | .NET 7.0 | .NET 7.0 |   212.47 ms |  2.281 ms |  2.022 ms |  1.00 |    0.02 |  2333.3333 |          - |  11.67 MB |        1.00 |
-| EFCore                        | .NET 7.0 | .NET 7.0 | 1,807.78 ms | 32.635 ms | 43.567 ms |  8.54 |    0.30 | 18000.0000 | 17000.0000 |  80.92 MB |        6.94 |
-| EFCoreStream                  | .NET 7.0 | .NET 7.0 | 1,440.21 ms | 24.314 ms | 22.743 ms |  6.80 |    0.19 | 14000.0000 | 13000.0000 |  65.18 MB |        5.59 |
-| EFCoreCompiled                | .NET 7.0 | .NET 7.0 |    62.01 ms |  1.124 ms |  1.717 ms |  0.29 |    0.01 |  2666.6667 |          - |  12.16 MB |        1.04 |
-| Dapper                        | .NET 7.0 | .NET 7.0 |   240.81 ms |  4.733 ms |  6.154 ms |  1.14 |    0.03 |  2333.3333 |          - |  11.48 MB |        0.99 |
-| NextormCompiledToList         | .NET 8.0 | .NET 8.0 |   208.26 ms |  4.161 ms |  7.287 ms |  0.98 |    0.03 |  2500.0000 |          - |  11.65 MB |        1.00 |
-| NextormCachedToList           | .NET 8.0 | .NET 8.0 |   316.19 ms |  3.978 ms |  3.527 ms |  1.49 |    0.03 |  7000.0000 |          - |  33.45 MB |        2.87 |
-| NextormCachedWithParamsToList | .NET 8.0 | .NET 8.0 |   208.26 ms |  3.808 ms |  5.700 ms |  0.98 |    0.04 |  2500.0000 |          - |  11.67 MB |        1.00 |
-| EFCore                        | .NET 8.0 | .NET 8.0 | 1,593.50 ms | 30.690 ms | 44.985 ms |  7.47 |    0.28 | 18000.0000 | 17000.0000 |   81.8 MB |        7.02 |
-| EFCoreStream                  | .NET 8.0 | .NET 8.0 | 1,251.84 ms | 23.057 ms | 22.645 ms |  5.91 |    0.16 | 14000.0000 | 13000.0000 |  65.53 MB |        5.62 |
-| EFCoreCompiled                | .NET 8.0 | .NET 8.0 |    46.71 ms |  0.920 ms |  1.432 ms |  0.22 |    0.01 |  2636.3636 |          - |  12.16 MB |        1.04 |
-| Dapper                        | .NET 8.0 | .NET 8.0 |   217.50 ms |  4.293 ms |  4.015 ms |  1.03 |    0.03 |  2500.0000 |          - |  11.48 MB |        0.99 |
+| Method                        | Mean        | Ratio | Gen0       | Gen1       | Allocated | Alloc Ratio |
+|------------------------------ |------------:|------:|-----------:|-----------:|----------:|------------:|
+| NextormCompiledToList         |   218.99 ms |  1.00 |  2333.3333 |          - |  11.65 MB |        1.00 |
+| NextormCachedToList           |   340.60 ms |  1.58 |  7000.0000 |          - |  33.44 MB |        2.87 |
+| NextormCachedWithParamsToList |   218.40 ms |  1.01 |  2333.3333 |          - |  11.67 MB |        1.00 |
+| EFCore                        | 1,791.66 ms |  8.41 | 18000.0000 | 17000.0000 |  81.49 MB |        6.99 |
+| EFCoreStream                  | 1,486.71 ms |  6.62 | 14000.0000 | 13000.0000 |  65.18 MB |        5.59 |
+| EFCoreCompiled                |    64.87 ms |  0.30 |  2625.0000 |          - |  12.16 MB |        1.04 |
+| Dapper                        |   240.20 ms |  1.11 |  2333.3333 |          - |  11.48 MB |        0.99 |
+|                               |             |       |            |            |           |             |
+| NextormCompiledToList         |   208.44 ms |     ? |  2500.0000 |          - |  11.65 MB |           ? |
+| NextormCachedToList           |   318.99 ms |     ? |  7000.0000 |          - |  33.45 MB |           ? |
+| NextormCachedWithParamsToList |   206.38 ms |     ? |  2500.0000 |          - |  11.67 MB |           ? |
+| EFCore                        | 1,598.29 ms |     ? | 18000.0000 | 17000.0000 |  81.27 MB |           ? |
+| EFCoreStream                  | 1,254.23 ms |     ? | 14000.0000 | 13000.0000 |  65.53 MB |           ? |
+| EFCoreCompiled                |    45.80 ms |     ? |  2636.3636 |          - |  12.16 MB |           ? |
+| Dapper                        |   222.78 ms |     ? |  2500.0000 |          - |  11.48 MB |           ? |

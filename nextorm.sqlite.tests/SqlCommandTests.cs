@@ -340,4 +340,52 @@ public class SqlCommandTests
         public long Id { get; set; }
         public string OtherValue { get; set; } = "h";
     }
+    [Fact]
+    public void SelectPrimitive_ShouldReturnData()
+    {
+        const int limit = 5;
+        // Given
+        var q1 = _sut.SimpleEntity.Where(it => it.Id < limit).Select(it => it.Id);
+        // When
+        var r = q1.ToList();
+        // Then
+        for (var i = 0; i < r.Count; i++)
+        {
+            r[i].Should().Be(i + 1);
+        }
+    }
+    [Fact]
+    public void SelectPrimitiveOnComplex_ShouldReturnData()
+    {
+        const int limit = 5;
+        // Given
+        var q1 = _sut.ComplexEntity.Where(it => it.Id < limit).Select(it => (it.String ?? string.Empty) + it.RequiredString);
+        // When
+        var r = q1.ToList();
+        // Then
+        for (var i = 0; i < r.Count; i++)
+        {
+            r[i].Should().NotBeNullOrEmpty();
+        }
+    }
+    [Fact]
+    public void SelectBoolOnComplex_ShouldReturnData()
+    {
+        // Given
+        var q1 = _sut.ComplexEntity.Where(it => it.Boolean == true).Select(it => it.Boolean);
+        // When
+        var r = q1.ToList();
+        // Then
+        for (var i = 0; i < r.Count; i++)
+        {
+            r[i].Should().BeTrue();
+        }
+    }
+    [Fact]
+    public async Task Any_ShouldReturnTrue()
+    {
+        var r = await _sut.ComplexEntity.Where(it => it.Boolean == true).AnyAsync();
+
+        r.Should().BeTrue();
+    }
 }

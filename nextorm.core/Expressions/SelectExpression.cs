@@ -15,6 +15,8 @@ public class SelectExpression
     public Type PropertyType { get; set; }
     public bool Nullable { get; }
     internal PropertyInfo? PropertyInfo { get; set; }
+    public List<QueryCommand>? ReferencedQueries { get; set; }
+
     public SelectExpression(Type propertyType)
     {
         PropertyType = propertyType;
@@ -96,6 +98,10 @@ public class SelectExpression
 
             Expression.Switch(cmd => hash.Add(cmd), exp => hash.Add(exp, new PreciseExpressionEqualityComparer()));
 
+            if (ReferencedQueries is not null)
+                foreach (var cmd in ReferencedQueries)
+                    hash.Add(cmd);
+
             return hash.ToHashCode();
         }
     }
@@ -113,7 +119,23 @@ public class SelectExpression
 
         if (PropertyName != exp.PropertyName) return false;
 
-        return Expression.IsT0 == exp.Expression.IsT0
-            && Expression.Match(cmd => cmd.Equals(exp.Expression.AsT0), e => new PreciseExpressionEqualityComparer().Equals(e, exp.Expression.AsT1));
+        if (Expression.IsT0 != exp.Expression.IsT0
+            || !Expression.Match(cmd => cmd.Equals(exp.Expression.AsT0), e => new PreciseExpressionEqualityComparer().Equals(e, exp.Expression.AsT1)))
+            return false;
+
+        if (ReferencedQueries is null && exp.ReferencedQueries is not null) return false;
+        if (ReferencedQueries is not null && exp.ReferencedQueries is null) return false;
+
+        if (ReferencedQueries is not null && exp.ReferencedQueries is not null)
+        {
+            if (ReferencedQueries.Count != exp.ReferencedQueries.Count) return false;
+
+            for (int i = 0; i < ReferencedQueries.Count; i++)
+            {
+                if (!ReferencedQueries[i].Equals(exp.ReferencedQueries[i])) return false;
+            }
+        }
+
+        return true;
     }
 }

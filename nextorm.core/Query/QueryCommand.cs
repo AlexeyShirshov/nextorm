@@ -78,6 +78,9 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider//, IParamProvid
         set => _dontCache = !value;
     }
     internal QueryCommand? FromQuery => From?.Table.AsT1;
+
+    public bool OneColumn { get; private set; }
+
     public virtual void ResetPreparation()
     {
         _isPrepared = false;
@@ -90,6 +93,8 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider//, IParamProvid
     }
     public virtual void PrepareCommand(CancellationToken cancellationToken)
     {
+        OneColumn = false;
+
         if (_from is not null && _from.Table.IsT1 && !_from.Table.AsT1.IsPrepared)
             _from.Table.AsT1.PrepareCommand(cancellationToken);
 
@@ -136,7 +141,7 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider//, IParamProvid
         if (selectList is null)
         {
             if (_exp is null)
-                throw new PrepareException("Lambda expression for anonymous type must exists");
+                throw new PrepareException("Lambda expression must exists");
 
             selectList = new List<SelectExpression>();
 
@@ -186,8 +191,36 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider//, IParamProvid
                     throw new PrepareException("Select must return new anonymous type with at least one property");
 
             }
+            else if (_exp.Body.Type.IsPrimitive || _exp.Body.Type == typeof(string) || (_exp.Body.Type.IsGenericType && _exp.Body.Type.GetGenericTypeDefinition() == typeof(Nullable<>)))
+            {
+                OneColumn = true;
+                var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataProvider, cancellationToken);
+                var selectExp = innerQueryVisitor.Visit(_exp);
+                // if (_dataProvider.NeedMapping)
+                // {
+
+                // }
+                // else
+                {
+                    var selExp = new SelectExpression(_exp.Body.Type)
+                    {
+                        //Index = 0,
+                        Expression = selectExp,
+                        ReferencedQueries = innerQueryVisitor.ReferencedQueries
+                    };
+                    selectList.Add(selExp);
+                    if (!_dontCache) unchecked
+                        {
+                            columnsHash = columnsHash * 13 + selExp.GetHashCode();
+#if PLAN_CACHE
+                        columnsPlanHash = columnsPlanHash * 13 + SelectExpressionPlanEqualityComparer.Instance.GetHashCode(selExp);
+#endif
+                        }
+                }
+            }
             else if (_dataProvider.NeedMapping)
             {
+                var p = Expression.Parameter(srcType);
                 var props = srcType.GetProperties(BindingFlags.FlattenHierarchy | BindingFlags.Public | BindingFlags.Instance).Where(prop => prop.CanWrite).ToArray();
                 for (int idx = 0; idx < props.Length; idx++)
                 {
@@ -199,7 +232,8 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider//, IParamProvid
                     var colAttr = prop.GetCustomAttribute<ColumnAttribute>(true);
                     if (colAttr is not null)
                     {
-                        Expression<Func<TableAlias, object>> exp = tbl => tbl.Column(colAttr.Name!);
+                        //Expression<Func<TableAlias, object>> exp = tbl => tbl.Column(colAttr.Name!);
+                        Expression exp = Expression.Lambda(Expression.Property(p, prop), p);
 
                         var selExp = new SelectExpression(prop.PropertyType)
                         {
@@ -237,7 +271,8 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider//, IParamProvid
                                 colAttr = intProp?.GetCustomAttribute<ColumnAttribute>(true);
                                 if (colAttr is not null)
                                 {
-                                    Expression<Func<TableAlias, object>> exp = tbl => tbl.Column(colAttr.Name!);
+                                    //Expression<Func<TableAlias, object>> exp = tbl => tbl.Column(colAttr.Name!);
+                                    Expression exp = Expression.Lambda(Expression.Property(p, prop), p);
 
                                     var selExp = new SelectExpression(prop!.PropertyType)
                                     {
@@ -265,6 +300,8 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider//, IParamProvid
                 if (selectList.Count == 0)
                     throw new PrepareException("Select must return new anonymous type");
             }
+            // else
+            //     throw new NotImplementedException();
         }
 
         _isPrepared = true;
