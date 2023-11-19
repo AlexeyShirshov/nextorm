@@ -33,7 +33,7 @@ public class InMemoryEnumeratorAdapter<TResult, TEntity> : IAsyncEnumerator<TRes
     public async ValueTask<bool> MoveNextAsync()
     {
     next:
-        var r = await _inner.MoveNextAsync();
+        var r = await _inner.MoveNextAsync().ConfigureAwait(false);
 
         if (r && _condition is not null
 #if PARAM_CONDITION

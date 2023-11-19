@@ -623,12 +623,12 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         {
             try
             {
-                foreach (var item in await Exec(cancellationToken, @params))
+                foreach (var item in AsEnumerable(@params))
                 {
                     if (cancellationToken.IsCancellationRequested)
                         break;
 
-                    await bus.Writer.WriteAsync(item, cancellationToken);
+                    await bus.Writer.WriteAsync(item, cancellationToken).ConfigureAwait(false);
                 }
             }
             finally
@@ -638,10 +638,10 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         }, cancellationToken);
 
         // return bus.Reader.ReadAllAsync(cancellationToken);
-        while (await bus.Reader.WaitToReadAsync(cancellationToken))
-            yield return await bus.Reader.ReadAsync(cancellationToken);
+        while (await bus.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
+            yield return await bus.Reader.ReadAsync(cancellationToken).ConfigureAwait(false);
 
-        await t;
+        await t.ConfigureAwait(false);
     }
     public IAsyncEnumerable<TResult> ExecAsync(params object[] @params) => ExecAsync(CancellationToken.None, @params);
     public async IAsyncEnumerable<TResult> ExecAsync([EnumeratorCancellation] CancellationToken cancellationToken, params object[] @params)
@@ -650,7 +650,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
             PrepareCommand(cancellationToken);
 
         await using var ee = DataProvider.CreateAsyncEnumerator(this, @params, cancellationToken);
-        while (await ee.MoveNextAsync())
+        while (await ee.MoveNextAsync().ConfigureAwait(false))
             yield return ee.Current;
     }
     public IEnumerable<TResult> AsEnumerable(params object[] @params)
@@ -667,7 +667,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
             PrepareCommand(cancellationToken);
 
         // return Array.Empty<TResult>();
-        var enumerator = await DataProvider.CreateEnumeratorAsync(this, @params, cancellationToken);
+        var enumerator = await DataProvider.CreateEnumeratorAsync(this, @params, cancellationToken).ConfigureAwait(false);
 
         if (enumerator is IEnumerable<TResult> ee)
             return ee;
@@ -687,7 +687,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         if (!IsPrepared)
             PrepareCommand(cancellationToken);
 
-        return await DataProvider.ToListAsync(this, @params, cancellationToken);
+        return await DataProvider.ToListAsync(this, @params, cancellationToken).ConfigureAwait(false);
     }
     public QueryCommand<TResult> Compile(bool forToListCalls, CancellationToken cancellationToken = default)
     {

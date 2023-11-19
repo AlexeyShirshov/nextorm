@@ -47,7 +47,7 @@ public class InMemoryBenchmarkWhere
     [Benchmark()]
     public void NextormCachedParam()
     {
-        var cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new { entity.Id }).Compile(false);
+        var cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new { entity.Id });
         for (var i = 0; i < Iterations; i++)
         {
             foreach (var row in cmd.AsEnumerable(i))

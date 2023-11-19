@@ -38,13 +38,11 @@ public partial class InMemoryDataProvider : IDataProvider
     private InMemoryCacheEntry<TResult> GetCacheEntry<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
     {
         var ce = queryCommand.CacheEntry;
-        if (queryCommand.Cache)
-        {
-            if (ce is InMemoryCacheEntry<TResult> cc)
-                return cc;
-            else if (_cmdIdx.TryGetValue(queryCommand, out ce) && ce is InMemoryCacheEntry<TResult> cache2)
-                return cache2;
-        }
+        if (ce is InMemoryCacheEntry<TResult> cc)
+            return cc;
+
+        if (queryCommand.Cache && _cmdIdx.TryGetValue(queryCommand, out ce) && ce is InMemoryCacheEntry<TResult> cache2)
+            return cache2;
 
         var del = CreateEnumeratorDelegate(queryCommand, cancellationToken);
         var cache = new InMemoryCacheEntry<TResult>(null, del);
@@ -105,16 +103,28 @@ public partial class InMemoryDataProvider : IDataProvider
             var callExp = Expression.Call(@this, miCreateEnumerator.MakeGenericMethod(typeof(TResult), queryCommand.EntityType!),
                 p1, p2, p4, p3
             );
-            var del = Expression.Lambda<Func<QueryCommand<TResult>, InMemoryCacheEntry<TResult>, object[]?, CancellationToken, IAsyncEnumerator<TResult>>>(callExp, p1, p2, p4, p3).Compile();
-            //var delPayload = new CreateEnumeratorPayload();
-            //});
 
-            return del;
+            var key = new ExpressionKey(callExp);
+            Func<QueryCommand<TResult>, InMemoryCacheEntry<TResult>, object[]?, CancellationToken, IAsyncEnumerator<TResult>> createEnumeratorDelegate;
+            if (!_expCache.TryGetValue(key, out var d))
+            {
+                createEnumeratorDelegate = Expression.Lambda<Func<QueryCommand<TResult>, InMemoryCacheEntry<TResult>, object[]?, CancellationToken, IAsyncEnumerator<TResult>>>(callExp, p1, p2, p4, p3).Compile();
+                _expCache[key] = createEnumeratorDelegate;
+            }
+            else
+                createEnumeratorDelegate = (Func<QueryCommand<TResult>, InMemoryCacheEntry<TResult>, object[]?, CancellationToken, IAsyncEnumerator<TResult>>)d;
+
+            return createEnumeratorDelegate;
         }
     }
     private IAsyncEnumerator<TResult> CreateEnumerator<TResult, TEntity>(QueryCommand<TResult> queryCommand, InMemoryCacheEntry<TResult> cacheEntry, object[] @params, CancellationToken cancellationToken)
     {
-        object? v;
+        object? v = null;
+
+        IEnumerable<TEntity>? data = cacheEntry.Data as IEnumerable<TEntity>;
+        if (data is not null)
+            goto next;
+
         if (cacheEntry.Data is not IAsyncEnumerable<TEntity> asyncData)
         {
             if (!_data.TryGetValue(typeof(TEntity), out v) || v is not IAsyncEnumerable<TEntity> av)
@@ -128,7 +138,6 @@ public partial class InMemoryDataProvider : IDataProvider
 
     next:
         {
-            IEnumerable<TEntity>? data = cacheEntry.Data as IEnumerable<TEntity>;
 
             if (queryCommand.Joins.Any() && typeof(TEntity).IsAssignableTo(typeof(IProjection)))
             {
@@ -414,17 +423,43 @@ public partial class InMemoryDataProvider : IDataProvider
         var callExp = Expression.Call(@this, miCreateCompiledQuery.MakeGenericMethod(typeof(TResult), queryCommand.EntityType),
             param
         );
-        var body = Expression.Convert(callExp, typeof(object));
-        var lambda = Expression.Lambda<Func<QueryCommand<TResult>, object>>(body, param).Compile();
 
-        var ce = new InMemoryCacheEntry<TResult>(lambda(queryCommand), CreateEnumeratorDelegate(queryCommand, cancellationToken));
+        var key = new ExpressionKey(callExp);
+        Func<QueryCommand<TResult>, object> createCompiledQueryDelegate;
+        if (!_expCache.TryGetValue(key, out var del))
+        {
+            var body = Expression.Convert(callExp, typeof(object));
+            createCompiledQueryDelegate = Expression.Lambda<Func<QueryCommand<TResult>, object>>(body, param).Compile();
+            _expCache[key] = createCompiledQueryDelegate;
+        }
+        else
+            createCompiledQueryDelegate = (Func<QueryCommand<TResult>, object>)del;
+
+        var ce = new InMemoryCacheEntry<TResult>(createCompiledQueryDelegate(queryCommand), CreateEnumeratorDelegate(queryCommand, cancellationToken));
         queryCommand.CacheEntry = ce;
         ce.Enumerator = ce.CreateEnumerator(queryCommand, ce, null, cancellationToken)!;
     }
 
     private CompiledQuery<TResult, TEntity> CreateCompiledQuery<TResult, TEntity>(QueryCommand<TResult> query)
     {
-        return new InMemoryCompiledQuery<TResult, TEntity>(GetMap<TResult, TEntity>(query), query.Condition as Expression<Func<TEntity, bool>>);
+        Func<TEntity, object[]?, bool>? conditionDelegate = null;
+        if (query.Condition is Expression<Func<TEntity, bool>> condition)
+        {
+            var key = new ExpressionKey(condition);
+            if (!_expCache.TryGetValue(key, out var d))
+            {
+                var p = Expression.Parameter(typeof(object[]));
+                var replaceParam = new ParamExpressionVisitor2(p);
+                var lambda = (LambdaExpression)replaceParam.Visit(condition)!;
+
+                var @params = new List<ParameterExpression>(lambda.Parameters) { p };
+                conditionDelegate = Expression.Lambda<Func<TEntity, object[]?, bool>>(lambda.Body, @params).Compile();
+                _expCache[key] = conditionDelegate;
+            }
+            else
+                conditionDelegate = (Func<TEntity, object[]?, bool>?)d;
+        }
+        return new InMemoryCompiledQuery<TResult, TEntity>(GetMap<TResult, TEntity>(query), conditionDelegate);
     }
 
     public Task<IEnumerator<TResult>> CreateEnumeratorAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
@@ -453,8 +488,8 @@ public partial class InMemoryDataProvider : IDataProvider
             var ctorInfo = resultType.GetConstructors().OrderByDescending(it => it.GetParameters().Length).FirstOrDefault() ?? throw new PrepareException($"Cannot get ctor from {resultType}");
 
             var param = Expression.Parameter(typeof(TEntity));
-            //return Expression.Lambda<Func<object, TResult>>(Expression.New(ctorInfo), param).Compile();
-            //var @params = SelectList.Select(column => Expression.Parameter(column.PropertyType!)).ToArray();
+
+            Expression<Func<TEntity, TResult>> lambda;
 
             if (ctorInfo.GetParameters().Length == queryCommand.SelectList!.Count)
             {
@@ -462,9 +497,8 @@ public partial class InMemoryDataProvider : IDataProvider
 
                 var ctor = Expression.New(ctorInfo, newParams);
 
-                var lambda = Expression.Lambda<Func<TEntity, TResult>>(ctor, param);
-                if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Get instance of {type} as: {exp}", resultType, lambda);
-                return lambda.Compile();
+                lambda = Expression.Lambda<Func<TEntity, TResult>>(ctor, param);
+
             }
             else
             {
@@ -479,12 +513,18 @@ public partial class InMemoryDataProvider : IDataProvider
                 var memberInit = Expression.MemberInit(ctor, bindings);
 
                 var body = memberInit;
-                var lambda = Expression.Lambda<Func<TEntity, TResult>>(body, param);
-
-                if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Get instance of {type} as: {exp}", resultType, lambda);
-
-                return lambda.Compile();
+                lambda = Expression.Lambda<Func<TEntity, TResult>>(body, param);
             }
+
+            if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Get instance of {type} as: {exp}", resultType, lambda);
+            var key = new ExpressionKey(lambda);
+            if (!_expCache.TryGetValue(key, out var d))
+            {
+                d = lambda.Compile();
+                _expCache[key] = d;
+            }
+
+            return (Func<TEntity, TResult>)d;
         };
 
         //         (_dataProvider as SqlDataProvider).MapCache[key] = del;

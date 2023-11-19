@@ -575,7 +575,7 @@ public class SqlDataProvider : IDataProvider
         }
 
         var sqlEnumerator = (ResultSetEnumerator<TResult>)cacheEntry.Enumerator!;
-        await sqlEnumerator.InitReaderAsync(@params, cancellationToken);
+        await sqlEnumerator.InitReaderAsync(@params, cancellationToken).ConfigureAwait(false);
         return sqlEnumerator;
     }
     public async Task<List<TResult>> ToListAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
@@ -691,14 +691,15 @@ public class SqlDataProvider : IDataProvider
             var ctorInfo = resultType.GetConstructors().OrderByDescending(it => it.GetParameters().Length).FirstOrDefault() ?? throw new PrepareException($"Cannot get ctor from {resultType}");
 
             var param = Expression.Parameter(typeof(IDataRecord));
+            Expression<Func<IDataRecord, TResult>> lambda;
 
             if (ctorInfo.GetParameters().Length == queryCommand.SelectList!.Count)
             {
                 var newParams = queryCommand.SelectList!.Select(column => MapColumn(column, param)).ToArray();
                 var ctor = Expression.New(ctorInfo, newParams);
 
-                var lambda = Expression.Lambda<Func<IDataRecord, TResult>>(ctor, param);
-                if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Get instance of {type} as: {exp}", resultType, lambda);
+                lambda = Expression.Lambda<Func<IDataRecord, TResult>>(ctor, param);
+                //if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Get instance of {type} as: {exp}", resultType, lambda);
                 // var body = Expression.Block(typeof(TResult), new Expression[] { assignValuesVariable, ctor });
                 // var lambda = Expression.Lambda<Func<object, object[]?, TResult>>(body, param, valuesParam);
                 // if (Logger?.IsEnabled(LogLevel.Debug) ?? false)
@@ -710,7 +711,7 @@ public class SqlDataProvider : IDataProvider
                 //     var dumpExp = lambda.ToString().Replace("...", sb.ToString());
                 //     Logger.LogDebug("Get instance of {type} as: {exp}", resultType, dumpExp);
                 // }
-                return lambda.Compile();
+                // return lambda.Compile();
             }
             else
             {
@@ -725,12 +726,20 @@ public class SqlDataProvider : IDataProvider
                 var memberInit = Expression.MemberInit(ctor, bindings);
 
                 var body = memberInit;
-                var lambda = Expression.Lambda<Func<IDataRecord, TResult>>(body, param);
+                lambda = Expression.Lambda<Func<IDataRecord, TResult>>(body, param);
 
-                if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Get instance of {type} as: {exp}", resultType, lambda);
-
-                return lambda.Compile();
             }
+
+            if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Get instance of {type} as: {exp}", resultType, lambda);
+
+            var key = new ExpressionKey(lambda);
+            if (!_expCache.TryGetValue(key, out var d))
+            {
+                d = lambda.Compile();
+                _expCache[key] = d;
+            }
+
+            return (Func<IDataRecord, TResult>)d;
         };
 
         //         (_dataProvider as SqlDataProvider).MapCache[key] = del;
