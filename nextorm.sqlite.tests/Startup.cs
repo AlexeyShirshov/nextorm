@@ -22,7 +22,7 @@ public class Startup
         services.AddNextOrmContext<TestDataContext>((sp, builder) =>
         {
             builder.UseLoggerFactory(sp.GetRequiredService<ILoggerFactory>());
-            builder.UseSqlite(@$"{Directory.GetCurrentDirectory()}\data\test.db");
+            builder.UseSqlite(@$"{Directory.GetCurrentDirectory()}{Path.DirectorySeparatorChar}data{Path.DirectorySeparatorChar}test.db");
             builder.LogSensetiveData(true);
         });
     }
