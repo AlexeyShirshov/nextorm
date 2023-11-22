@@ -25,6 +25,8 @@ jobs:
         run: dotnet restore
       - name: Build
         run: dotnet build --no-restore
+      - name: copy database
+        run: cp nextorm.sqlite.tests/data/test.db nextorm.sqlite.tests/bin/Debug/net7.0/data
       - name: list files
         run: tree --du -h
       - name: Test
