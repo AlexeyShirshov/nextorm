@@ -17,8 +17,6 @@ jobs:
       - uses: actions/checkout@v3
       - name: Install apt packages
         run: sudo apt-get install tree
-      - name: list files
-        run: tree --du -h
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
         with:
@@ -27,5 +25,7 @@ jobs:
         run: dotnet restore
       - name: Build
         run: dotnet build --no-restore
+      - name: list files
+        run: tree --du -h
       - name: Test
         run: dotnet test --no-build --verbosity normal
