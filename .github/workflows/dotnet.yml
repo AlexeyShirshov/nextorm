@@ -15,8 +15,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
+      - name: Install apt packages
+        run: sudo apt-get install tree
       - name: list files
-        run: ls -R
+        run: tree --du -h
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
         with:
