@@ -8,6 +8,11 @@ public static class DataContextOptionsBuilderExtensions
     {
         ArgumentException.ThrowIfNullOrEmpty(filepath);
 
+#if DEBUG
+        if (!File.Exists(filepath))
+            throw new ArgumentException($"File '{filepath}' does not exist");
+#endif
+
         builder.UseSqlClient(new SqliteDataProvider($"Data Source='{filepath}'"));
         return builder;
     }
