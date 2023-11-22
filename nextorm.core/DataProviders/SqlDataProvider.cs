@@ -1,8 +1,6 @@
 // #define PLAN_CACHE
 // #define ONLY_PLAN_CACHE
 
-using System.Collections.Concurrent;
-using System.ComponentModel.DataAnnotations.Schema;
 using System.Data;
 using System.Data.Common;
 using System.Linq.Expressions;
@@ -10,13 +8,14 @@ using System.Reflection;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.ObjectPool;
-using OneOf;
 
 
 namespace nextorm.core;
 
 public class SqlDataProvider : IDataProvider
 {
+    private readonly IDictionary<Type, IEntityMeta> _metadata = new Dictionary<Type, IEntityMeta>();
+
 #if !ONLY_PLAN_CACHE
     private readonly IDictionary<QueryCommand, SqlCacheEntry> _queryCache = new Dictionary<QueryCommand, SqlCacheEntry>();
 #endif
@@ -34,17 +33,17 @@ public class SqlDataProvider : IDataProvider
     {
         if (_conn is null)
         {
-            if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Creating connection");
             _conn = CreateConnection();
         }
         return _conn;
     }
-    internal bool LogSensetiveData { get; set; }
+    protected internal bool LogSensetiveData { get; set; }
     public virtual string ConcatStringOperator => "+";
     public ILogger? Logger { get; set; }
     public bool NeedMapping => true;
     public IDictionary<ExpressionKey, Delegate> ExpressionsCache => _expCache;
     public virtual string EmptyString => "''";
+    public IDictionary<Type, IEntityMeta> Metadata => _metadata;
     //public IDictionary<ExpressionKey, Delegate> MapCache => _mapCache;
     public virtual DbConnection CreateConnection()
     {
@@ -222,7 +221,7 @@ public class SqlDataProvider : IDataProvider
         return (r, @params);
     }
 
-    private string MakeJoin(JoinExpression join, QueryCommand cmd, List<Param> @params, bool paramMode)
+    private string? MakeJoin(JoinExpression join, QueryCommand cmd, List<Param> @params, bool paramMode)
     {
         var sqlBuilder = paramMode ? null : _sbPool.Get();
 
@@ -245,28 +244,31 @@ public class SqlDataProvider : IDataProvider
             dim = joinDim;
 
         FromExpression fromExp;
-        if (visitor.JoinType.IsAnonymous())
+        if (visitor.JoinType is not null)
         {
-            //fromExp = GetFrom(join.Query.EntityType);
-            var (sql, p) = MakeSelect(join.Query, paramMode);
-            @params.AddRange(p);
-            if (!paramMode)
+            if (visitor.JoinType.IsAnonymous())
             {
-                sqlBuilder!.Append('(').Append(sql).Append(") ");
-                sqlBuilder.Append(GetAliasFromProjection(cmd, visitor.JoinType, 1));
+                //fromExp = GetFrom(join.Query.EntityType);
+                var (sql, p) = MakeSelect(join.Query, paramMode);
+                @params.AddRange(p);
+                if (!paramMode)
+                {
+                    sqlBuilder!.Append('(').Append(sql).Append(") ");
+                    sqlBuilder.Append(GetAliasFromProjection(cmd, visitor.JoinType, 1));
+                }
             }
-        }
-        else
-        {
-            fromExp = GetFrom(visitor.JoinType);
-
-            if (!paramMode)
-                fromExp.TableAlias = GetAliasFromProjection(cmd, visitor.JoinType, dim);
-
-            var fromSql = MakeFrom(fromExp, @params, paramMode);
-            if (!paramMode)
+            else
             {
-                sqlBuilder!.Append(fromSql);
+                fromExp = GetFrom(visitor.JoinType);
+
+                if (!paramMode)
+                    fromExp.TableAlias = GetAliasFromProjection(cmd, visitor.JoinType, dim);
+
+                var fromSql = MakeFrom(fromExp, @params, paramMode);
+                if (!paramMode)
+                {
+                    sqlBuilder!.Append(fromSql);
+                }
             }
         }
 
@@ -451,32 +453,35 @@ public class SqlDataProvider : IDataProvider
 
     private FromExpression GetFrom(Type t)
     {
-        var sqlTableAttr = t.GetCustomAttribute<SqlTableAttribute>(true);
+        // var sqlTableAttr = t.GetCustomAttribute<SqlTableAttribute>(true);
 
-        if (sqlTableAttr is not null)
-            return new FromExpression(sqlTableAttr.Name);
-        else
-        {
-            var tableAttr = t.GetCustomAttribute<TableAttribute>(true);
+        // if (sqlTableAttr is not null)
+        //     return new FromExpression(sqlTableAttr.Name);
+        // else
+        // {
+        //     var tableAttr = t.GetCustomAttribute<TableAttribute>(true);
 
-            if (tableAttr is not null)
-                return new FromExpression(tableAttr.Name);
-        }
+        //     if (tableAttr is not null)
+        //         return new FromExpression(tableAttr.Name);
+        // }
 
-        foreach (var interf in t.GetInterfaces())
-        {
-            sqlTableAttr = interf.GetCustomAttribute<SqlTableAttribute>(true);
+        // foreach (var interf in t.GetInterfaces())
+        // {
+        //     sqlTableAttr = interf.GetCustomAttribute<SqlTableAttribute>(true);
 
-            if (sqlTableAttr is not null)
-                return new FromExpression(sqlTableAttr.Name);
-            else
-            {
-                var tableAttr = interf.GetCustomAttribute<TableAttribute>(true);
+        //     if (sqlTableAttr is not null)
+        //         return new FromExpression(sqlTableAttr.Name);
+        //     else
+        //     {
+        //         var tableAttr = interf.GetCustomAttribute<TableAttribute>(true);
 
-                if (tableAttr is not null)
-                    return new FromExpression(tableAttr.Name);
-            }
-        }
+        //         if (tableAttr is not null)
+        //             return new FromExpression(tableAttr.Name);
+        //     }
+        // }
+
+        if (_metadata.TryGetValue(t, out var entity) && !string.IsNullOrEmpty(entity.TableName))
+            return new FromExpression(entity.TableName);
 
         return new FromExpression(GetTableName(t));
     }
@@ -998,19 +1003,19 @@ public class SqlDataProvider : IDataProvider
         }
     }
 #endif
-    class EmptyEnumerator<TResult> : IAsyncEnumerator<TResult>
-    {
-        public TResult Current => default;
+    // class EmptyEnumerator<TResult> : IAsyncEnumerator<TResult>
+    // {
+    //     public TResult Current => default;
 
-        public ValueTask DisposeAsync()
-        {
-            //throw new NotImplementedException();
-            return ValueTask.CompletedTask;
-        }
+    //     public ValueTask DisposeAsync()
+    //     {
+    //         //throw new NotImplementedException();
+    //         return ValueTask.CompletedTask;
+    //     }
 
-        public ValueTask<bool> MoveNextAsync()
-        {
-            return ValueTask.FromResult(false);
-        }
-    }
+    //     public ValueTask<bool> MoveNextAsync()
+    //     {
+    //         return ValueTask.FromResult(false);
+    //     }
+    // }
 }

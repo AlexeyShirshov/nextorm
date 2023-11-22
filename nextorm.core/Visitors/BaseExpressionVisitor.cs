@@ -1,12 +1,6 @@
-using System.ComponentModel.DataAnnotations.Schema;
-using System.Data.Common;
 using System.Linq.Expressions;
-using System.Reflection;
-using System.Runtime.CompilerServices;
 using System.Text;
-using System.Xml;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.ObjectPool;
 
 namespace nextorm.core;
 public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
@@ -222,13 +216,20 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             {
                 if (!_paramMode)
                 {
-                    var colAttr = node.Member.GetCustomAttribute<ColumnAttribute>();
-                    if (colAttr is not null)
+                    var colName = node.Member.GetPropertyColumnName(_dataProvider);
+                    if (!string.IsNullOrEmpty(colName))
                     {
-                        _builder!.Append(colAttr.Name);
-                        _colName = colAttr.Name;
+                        _builder!.Append(colName);
+                        _colName = colName;
                         return node;
                     }
+                    //var colAttr = node.Member.GetCustomAttribute<ColumnAttribute>();
+                    // if (colAttr is not null)
+                    // {
+                    //     _builder!.Append(colAttr.Name);
+                    //     _colName = colAttr.Name;
+                    //     return node;
+                    // }
                 }
 
                 var innerQuery = _tableProvider.FindSourceFromAlias(null);
@@ -251,47 +252,54 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 {
                     if (_dataProvider.NeedMapping)
                     {
-                        var props = _entityType.GetProperties(BindingFlags.FlattenHierarchy | BindingFlags.Public | BindingFlags.Instance).Where(prop => prop.CanWrite).ToArray();
-                        for (int idx = 0; idx < props.Length; idx++)
+                        var colName = node.Member.GetPropertyColumnName(_dataProvider);
+                        if (!string.IsNullOrEmpty(colName))
                         {
-                            // if (cancellationToken.IsCancellationRequested)
-                            //     return;
-
-                            var prop = props[idx];
-                            if (prop is null) continue;
-                            var colAttr = prop.GetCustomAttribute<ColumnAttribute>(true);
-                            if (colAttr is not null)
-                            {
-                                _builder!.Append(colAttr.Name);
-                                _colName = colAttr.Name;
-                                return node;
-                            }
-                            else
-                            {
-                                foreach (var interf in _entityType.GetInterfaces())
-                                {
-                                    // if (cancellationToken.IsCancellationRequested)
-                                    //     return;
-
-                                    var intMap = _entityType.GetInterfaceMap(interf);
-
-                                    var implIdx = Array.IndexOf(intMap.TargetMethods, prop!.GetMethod);
-                                    if (implIdx >= 0)
-                                    {
-                                        var intMethod = intMap.InterfaceMethods[implIdx];
-
-                                        var intProp = interf.GetProperties().FirstOrDefault(prop => prop.GetMethod == intMethod);
-                                        colAttr = intProp?.GetCustomAttribute<ColumnAttribute>(true);
-                                        if (colAttr is not null)
-                                        {
-                                            _builder!.Append(colAttr.Name);
-                                            _colName = colAttr.Name;
-                                            return node;
-                                        }
-                                    }
-                                }
-                            }
+                            _builder!.Append(colName);
+                            _colName = colName;
+                            return node;
                         }
+                        // var props = _entityType.GetProperties(BindingFlags.FlattenHierarchy | BindingFlags.Public | BindingFlags.Instance).Where(prop => prop.CanWrite).ToArray();
+                        // for (int idx = 0; idx < props.Length; idx++)
+                        // {
+                        //     // if (cancellationToken.IsCancellationRequested)
+                        //     //     return;
+
+                        //     var prop = props[idx];
+                        //     if (prop is null) continue;
+                        //     var colAttr = prop.GetCustomAttribute<ColumnAttribute>(true);
+                        //     if (colAttr is not null)
+                        //     {
+                        //         _builder!.Append(colAttr.Name);
+                        //         _colName = colAttr.Name;
+                        //         return node;
+                        //     }
+                        //     else
+                        //     {
+                        //         foreach (var interf in _entityType.GetInterfaces())
+                        //         {
+                        //             // if (cancellationToken.IsCancellationRequested)
+                        //             //     return;
+
+                        //             var intMap = _entityType.GetInterfaceMap(interf);
+
+                        //             var implIdx = Array.IndexOf(intMap.TargetMethods, prop!.GetMethod);
+                        //             if (implIdx >= 0)
+                        //             {
+                        //                 var intMethod = intMap.InterfaceMethods[implIdx];
+
+                        //                 var intProp = interf.GetProperties().FirstOrDefault(prop => prop.GetMethod == intMethod);
+                        //                 colAttr = intProp?.GetCustomAttribute<ColumnAttribute>(true);
+                        //                 if (colAttr is not null)
+                        //                 {
+                        //                     _builder!.Append(colAttr.Name);
+                        //                     _colName = colAttr.Name;
+                        //                     return node;
+                        //                 }
+                        //             }
+                        //         }
+                        //     }
+                        // }
                     }
                     else
                         throw new NotImplementedException(node.Member.Name);
@@ -391,13 +399,20 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 
                 if (!_paramMode)
                 {
-                    var colAttr = node.Member.GetCustomAttribute<ColumnAttribute>();
-                    if (colAttr is not null)
+                    var colName = node.Member.GetPropertyColumnName(_dataProvider);
+                    if (!string.IsNullOrEmpty(colName))
                     {
-                        _builder!.Append(colAttr.Name);
-                        _colName = colAttr.Name;
+                        _builder!.Append(colName);
+                        _colName = colName;
                         return node;
                     }
+                    // var colAttr = node.Member.GetCustomAttribute<ColumnAttribute>();
+                    // if (colAttr is not null)
+                    // {
+                    //     _builder!.Append(colAttr.Name);
+                    //     _colName = colAttr.Name;
+                    //     return node;
+                    // }
                 }
 
                 var innerQuery = _tableProvider.FindSourceFromAlias(tableAliasForColumn);

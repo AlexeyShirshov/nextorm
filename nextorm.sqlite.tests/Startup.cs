@@ -1,9 +1,6 @@
-using System.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using nextorm.core;
-using Xunit.Abstractions;
-using Xunit.DependencyInjection;
 using Xunit.DependencyInjection.Logging;
 
 namespace nextorm.sqlite.tests;

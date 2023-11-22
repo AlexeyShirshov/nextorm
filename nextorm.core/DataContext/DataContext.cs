@@ -24,10 +24,12 @@ public class DataContext : IDisposable, IAsyncDisposable
     public CommandBuilder<TResult> From<TResult>(CommandBuilder<TResult> builder) => new(_dataProvider, builder) { Logger = _cmdLogger };
     public ValueTask DisposeAsync()
     {
+        GC.SuppressFinalize(this);
         return _dataProvider.DisposeAsync();
     }
     public void Dispose()
     {
+        GC.SuppressFinalize(this);
         _dataProvider.Dispose();
     }
 }

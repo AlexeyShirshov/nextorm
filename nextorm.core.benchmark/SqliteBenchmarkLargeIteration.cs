@@ -8,10 +8,7 @@ using System.Data;
 
 using TupleLargeEntity = System.Tuple<long, string?, System.DateTime?>;
 using System.Linq.Expressions;
-using System.Collections;
 using System.Data.Common;
-using System.Data.SqlClient;
-using Microsoft.VisualBasic;
 using System.Runtime.InteropServices;
 using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Columns;

@@ -1,10 +1,6 @@
 #define PARAM_CONDITION
-using System.Collections;
-using System.Collections.Specialized;
-using System.ComponentModel;
 using System.Linq.Expressions;
 using System.Reflection;
-using System.Threading;
 using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
@@ -30,6 +26,9 @@ public partial class InMemoryDataProvider : IDataProvider
 
     public IDictionary<Type, object?> Data => _data;
     public IDictionary<ExpressionKey, Delegate> ExpressionsCache => _expCache;
+
+    public IDictionary<Type, IEntityMeta> Metadata => throw new NotImplementedException();
+
     public IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(queryCommand);

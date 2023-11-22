@@ -2,17 +2,10 @@
 #define INITALGO_1
 
 using System.Collections;
-using System.Collections.Concurrent;
-using System.ComponentModel.DataAnnotations.Schema;
-using System.Data;
 using System.Linq.Expressions;
-using System.Reflection;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-using System.Text;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.ObjectPool;
 
 namespace nextorm.core;
 
@@ -221,26 +214,26 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider//, IParamProvid
             else if (_dataProvider.NeedMapping)
             {
                 var p = Expression.Parameter(srcType);
-                var props = srcType.GetProperties(BindingFlags.FlattenHierarchy | BindingFlags.Public | BindingFlags.Instance).Where(prop => prop.CanWrite).ToArray();
-                for (int idx = 0; idx < props.Length; idx++)
+
+                if (_dataProvider.Metadata.TryGetValue(srcType, out var entityMeta))
                 {
-                    if (cancellationToken.IsCancellationRequested)
-                        return;
-
-                    var prop = props[idx];
-                    if (prop is null) continue;
-                    var colAttr = prop.GetCustomAttribute<ColumnAttribute>(true);
-                    if (colAttr is not null)
+                    for (int idx = 0; idx < entityMeta.Properties.Count; idx++)
                     {
-                        //Expression<Func<TableAlias, object>> exp = tbl => tbl.Column(colAttr.Name!);
-                        Expression exp = Expression.Lambda(Expression.Property(p, prop), p);
+                        var prop = entityMeta.Properties[idx];
 
-                        var selExp = new SelectExpression(prop.PropertyType)
+                        var pi = prop.PropertyInfo;
+
+                        if (cancellationToken.IsCancellationRequested)
+                            return;
+
+                        Expression exp = Expression.Lambda(Expression.Property(p, pi), p);
+
+                        var selExp = new SelectExpression(pi.PropertyType)
                         {
                             Index = idx,
-                            PropertyName = prop.Name,
+                            PropertyName = pi.Name,
                             Expression = exp,
-                            PropertyInfo = prop
+                            PropertyInfo = pi
                         };
 
                         selectList.Add(selExp);
@@ -253,49 +246,82 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider//, IParamProvid
 #endif
                             }
                     }
-                    else
-                    {
-                        foreach (var interf in srcType.GetInterfaces())
-                        {
-                            if (cancellationToken.IsCancellationRequested)
-                                return;
-
-                            var intMap = srcType.GetInterfaceMap(interf);
-
-                            var implIdx = Array.IndexOf(intMap.TargetMethods, prop!.GetMethod);
-                            if (implIdx >= 0)
-                            {
-                                var intMethod = intMap.InterfaceMethods[implIdx];
-
-                                var intProp = interf.GetProperties().FirstOrDefault(prop => prop.GetMethod == intMethod);
-                                colAttr = intProp?.GetCustomAttribute<ColumnAttribute>(true);
-                                if (colAttr is not null)
-                                {
-                                    //Expression<Func<TableAlias, object>> exp = tbl => tbl.Column(colAttr.Name!);
-                                    Expression exp = Expression.Lambda(Expression.Property(p, prop), p);
-
-                                    var selExp = new SelectExpression(prop!.PropertyType)
-                                    {
-                                        Index = idx,
-                                        PropertyName = prop.Name,
-                                        Expression = exp,
-                                        PropertyInfo = prop
-                                    };
-
-                                    selectList.Add(selExp);
-
-                                    if (!_dontCache) unchecked
-                                        {
-                                            columnsHash = columnsHash * 13 + selExp.GetHashCode();
-#if PLAN_CACHE
-                                            columnsPlanHash = columnsPlanHash * 13 + SelectExpressionPlanEqualityComparer.Instance.GetHashCode(selExp);
-#endif
-                                        }
-                                }
-                            }
-                        }
-                    }
                 }
+                //                 var props = srcType.GetProperties(BindingFlags.FlattenHierarchy | BindingFlags.Public | BindingFlags.Instance).Where(prop => prop.CanWrite).ToArray();
+                //                 for (int idx = 0; idx < props.Length; idx++)
+                //                 {
+                //                     if (cancellationToken.IsCancellationRequested)
+                //                         return;
+
+                //                     var prop = props[idx];
+                //                     if (prop is null) continue;
+                //                     var colAttr = prop.GetCustomAttribute<ColumnAttribute>(true);
+                //                     if (colAttr is not null)
+                //                     {
+                //                         //Expression<Func<TableAlias, object>> exp = tbl => tbl.Column(colAttr.Name!);
+                //                         Expression exp = Expression.Lambda(Expression.Property(p, prop), p);
+
+                //                         var selExp = new SelectExpression(prop.PropertyType)
+                //                         {
+                //                             Index = idx,
+                //                             PropertyName = prop.Name,
+                //                             Expression = exp,
+                //                             PropertyInfo = prop
+                //                         };
+
+                //                         selectList.Add(selExp);
+
+                //                         if (!_dontCache) unchecked
+                //                             {
+                //                                 columnsHash = columnsHash * 13 + selExp.GetHashCode();
+                // #if PLAN_CACHE
+                //                                 columnsPlanHash = columnsPlanHash * 13 + SelectExpressionPlanEqualityComparer.Instance.GetHashCode(selExp);
+                // #endif
+                //                             }
+                //                     }
+                //                     else
+                //                     {
+                //                         foreach (var interf in srcType.GetInterfaces())
+                //                         {
+                //                             if (cancellationToken.IsCancellationRequested)
+                //                                 return;
+
+                //                             var intMap = srcType.GetInterfaceMap(interf);
+
+                //                             var implIdx = Array.IndexOf(intMap.TargetMethods, prop!.GetMethod);
+                //                             if (implIdx >= 0)
+                //                             {
+                //                                 var intMethod = intMap.InterfaceMethods[implIdx];
+
+                //                                 var intProp = interf.GetProperties().FirstOrDefault(prop => prop.GetMethod == intMethod);
+                //                                 colAttr = intProp?.GetCustomAttribute<ColumnAttribute>(true);
+                //                                 if (colAttr is not null)
+                //                                 {
+                //                                     //Expression<Func<TableAlias, object>> exp = tbl => tbl.Column(colAttr.Name!);
+                //                                     Expression exp = Expression.Lambda(Expression.Property(p, prop), p);
+
+                //                                     var selExp = new SelectExpression(prop!.PropertyType)
+                //                                     {
+                //                                         Index = idx,
+                //                                         PropertyName = prop.Name,
+                //                                         Expression = exp,
+                //                                         PropertyInfo = prop
+                //                                     };
+
+                //                                     selectList.Add(selExp);
+
+                //                                     if (!_dontCache) unchecked
+                //                                         {
+                //                                             columnsHash = columnsHash * 13 + selExp.GetHashCode();
+                // #if PLAN_CACHE
+                //                                             columnsPlanHash = columnsPlanHash * 13 + SelectExpressionPlanEqualityComparer.Instance.GetHashCode(selExp);
+                // #endif
+                //                                         }
+                //                                 }
+                //                             }
+                //                         }
+                //                     }
+                //                 }
 
                 if (selectList.Count == 0)
                     throw new PrepareException("Select must return new anonymous type");
@@ -463,6 +489,23 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider//, IParamProvid
 
         var idx = int.Parse(aliasRaw[1..]);
         return Joins[idx - 2].Query;
+    }
+    public bool Any(params object[] @params)
+    {
+        var cb = new CommandBuilder(_dataProvider);
+        var queryCommand = cb.Select(_ => NORM.SQL.exists(this));
+        queryCommand.PrepareCommand(CancellationToken.None);
+        var ee = _dataProvider.CreateEnumerator(queryCommand, @params);
+        return ee.MoveNext() && ee.Current;
+    }
+    public Task<bool> AnyAsync(params object[] @params) => AnyAsync(CancellationToken.None, @params);
+    public async Task<bool> AnyAsync(CancellationToken cancellationToken, params object[] @params)
+    {
+        var cb = new CommandBuilder(_dataProvider);
+        var queryCommand = cb.Select(_ => NORM.SQL.exists(this));
+        queryCommand.PrepareCommand(CancellationToken.None);
+        using var ee = await _dataProvider.CreateEnumeratorAsync(queryCommand, @params, cancellationToken);
+        return ee.MoveNext() && ee.Current;
     }
 
     //public object? GetParam(int paramIdx) => _params.Count > paramIdx ? _params[paramIdx] : null;

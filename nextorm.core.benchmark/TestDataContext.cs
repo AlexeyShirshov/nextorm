@@ -1,5 +1,3 @@
-using nextorm.core;
-
 namespace nextorm.core.benchmark;
 
 public class TestDataContext : SqlDataContext
@@ -9,6 +7,6 @@ public class TestDataContext : SqlDataContext
         SimpleEntity = Create<ISimpleEntity>();
         LargeEntity = Create<ILargeEntity>();
     }
-    public CommandBuilder<ISimpleEntity> SimpleEntity {get;set;}
-    public CommandBuilder<ILargeEntity> LargeEntity {get;set;}
+    public CommandBuilder<ISimpleEntity> SimpleEntity { get; set; }
+    public CommandBuilder<ILargeEntity> LargeEntity { get; set; }
 }

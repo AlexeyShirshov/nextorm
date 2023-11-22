@@ -8,6 +8,7 @@ public interface IDataProvider : IAsyncDisposable, IDisposable
     ILogger? Logger { get; set; }
     bool NeedMapping { get; }
     IDictionary<ExpressionKey, Delegate> ExpressionsCache { get; }
+    IDictionary<Type, IEntityMeta> Metadata { get; }
     QueryCommand<TResult> CreateCommand<TResult>(LambdaExpression exp, Expression? condition);
     void ResetPreparation(QueryCommand queryCommand);
     FromExpression? GetFrom(Type srcType, QueryCommand queryCommand);

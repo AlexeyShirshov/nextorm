@@ -14,7 +14,7 @@ public class PayloadManager : IPayloadManager
     {
         if (!_cache) return false;
 
-        foreach (var item in _payload)
+        foreach (var item in _payload!)
         {
             if (item is T)
             {
@@ -29,7 +29,7 @@ public class PayloadManager : IPayloadManager
     {
         if (_cache)
         {
-            foreach (var item in _payload)
+            foreach (var item in _payload!)
             {
                 if (item is T p)
                 {
@@ -46,7 +46,7 @@ public class PayloadManager : IPayloadManager
     {
         if (_cache)
         {
-            foreach (var item in _payload)
+            foreach (var item in _payload!)
             {
                 if (item is T p && p is not null)
                 {
@@ -68,7 +68,7 @@ public class PayloadManager : IPayloadManager
             payload = factory();
 
             if (_cache)
-                _payload.Add(payload);
+                _payload!.Add(payload);
         }
         return payload!;
     }
@@ -82,7 +82,7 @@ public class PayloadManager : IPayloadManager
                 : factory();
 
             if (_cache)
-                _payload.Add(payload);
+                _payload!.Add(payload);
         }
         return payload;
     }
@@ -91,7 +91,7 @@ public class PayloadManager : IPayloadManager
     {
         if (_cache)
         {
-            for (int i = 0; i < _payload.Count; i++)
+            for (int i = 0; i < _payload!.Count; i++)
             {
                 var item = _payload[i];
 
@@ -110,14 +110,14 @@ public class PayloadManager : IPayloadManager
         var payload = factory();
 
         if (_cache)
-            _payload.Add(payload);
+            _payload!.Add(payload);
 
         return payload;
     }
     public void AddOrUpdatePayload<T>(T? payload)
         where T : class, IPayload
     {
-        for (int i = 0; i < _payload.Count; i++)
+        for (int i = 0; i < _payload!.Count; i++)
         {
             var item = _payload[i];
 

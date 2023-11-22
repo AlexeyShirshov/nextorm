@@ -1,14 +1,12 @@
-using System.Collections;
 using System.Linq.Expressions;
 using System.Reflection;
 using nextorm.core;
-using System.Linq;
 
 public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 {
     private readonly CancellationToken _cancellationToken;
     private readonly IDataProvider _dataProvider;
-    private readonly List<QueryCommand> _refs;
+    private readonly List<QueryCommand>? _refs;
     private static MethodInfo AnyMIGeneric = typeof(CorrelatedQueryExpressionVisitor).GetMethod(nameof(Any), BindingFlags.NonPublic | BindingFlags.Instance)!;
     public CorrelatedQueryExpressionVisitor(IDataProvider dataProvider, CancellationToken cancellationToken)
     {
@@ -22,7 +20,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         _dataProvider = dataProvider;
     }
 
-    public List<QueryCommand> ReferencedQueries => _refs;
+    public List<QueryCommand>? ReferencedQueries => _refs;
 
     // protected override Expression VisitConstant(ConstantExpression node)
     // {

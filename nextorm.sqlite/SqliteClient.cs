@@ -1,6 +1,6 @@
 using System.Data.Common;
-using System.Data.Entity.Core.Metadata.Edm;
 using System.Data.SQLite;
+using Microsoft.Extensions.Logging;
 using nextorm.core;
 
 namespace nextorm.sqlite;
@@ -16,6 +16,14 @@ public class SqliteDataProvider : SqlDataProvider
 
     public override DbConnection CreateConnection()
     {
+        if (Logger?.IsEnabled(LogLevel.Debug) ?? false)
+        {
+            if (LogSensetiveData)
+                Logger.LogDebug("Creating connection with {connStr}", _connectionString);
+            else
+                Logger.LogDebug("Creating connection");
+        }
+
         return new SQLiteConnection(_connectionString);
     }
     public override DbCommand CreateCommand(string sql)

@@ -2,7 +2,6 @@ using System.Collections;
 using System.Data;
 using System.Data.Common;
 using System.Runtime.CompilerServices;
-using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;

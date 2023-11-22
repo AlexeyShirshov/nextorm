@@ -3,8 +3,6 @@ using nextorm.sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Data.Sqlite;
 using Dapper;
-using System.Linq.Expressions;
-using BenchmarkDotNet.Loggers;
 using Microsoft.Extensions.Logging;
 using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Columns;

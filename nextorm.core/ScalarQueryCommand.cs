@@ -1,5 +1,3 @@
-using System.Linq.Expressions;
-
 namespace nextorm.core;
 
 // public class ScalarQueryCommand<T> : QueryCommand<T>

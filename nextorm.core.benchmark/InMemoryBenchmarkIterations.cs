@@ -1,8 +1,4 @@
 ﻿using BenchmarkDotNet.Attributes;
-using nextorm.core;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Data.Sqlite;
-using Dapper;
 using BenchmarkDotNet.Jobs;
 
 namespace nextorm.core.benchmark;

@@ -2,8 +2,6 @@
 using System.Buffers;
 using System.Data;
 using System.Data.Common;
-using System.Linq.Expressions;
-using System.Runtime.CompilerServices;
 
 namespace nextorm.core;
 public class CompiledQuery<TResult, TRecord>

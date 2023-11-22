@@ -1,6 +1,4 @@
 #define PARAM_CONDITION
-using System.Linq.Expressions;
-
 namespace nextorm.core;
 
 public class InMemoryEnumeratorAdapter<TResult, TEntity> : IAsyncEnumerator<TResult>

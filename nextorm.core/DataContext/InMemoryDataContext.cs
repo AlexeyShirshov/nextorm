@@ -1,5 +1,3 @@
-using System.Linq.Expressions;
-
 namespace nextorm.core;
 
 public class InMemoryDataContext : DataContext
@@ -9,6 +7,6 @@ public class InMemoryDataContext : DataContext
     }
     protected CommandBuilder<T> Create<T>()
     {
-        return new (_dataProvider) {Logger = _cmdLogger};
+        return new(_dataProvider) { Logger = _cmdLogger };
     }
 }

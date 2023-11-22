@@ -1,7 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Xunit.Abstractions;
-using Xunit.DependencyInjection;
 using Xunit.DependencyInjection.Logging;
 
 namespace nextorm.core.tests;

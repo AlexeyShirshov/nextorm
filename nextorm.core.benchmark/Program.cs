@@ -1,6 +1,4 @@
-﻿
-using BenchmarkDotNet.Running;
-using nextorm.core.benchmark;
+﻿using nextorm.core.benchmark;
 
 // BenchmarkRunner.Run<ExpressionsExperiments>();
 // BenchmarkRunner.Run<InMemoryBenchmarkIteration>();
@@ -14,7 +12,7 @@ using nextorm.core.benchmark;
 var runner = new SqliteBenchmarkIteration(true);
 
 for (var i = 0; i < 1; i++)
-    runner.EFCoreAny();
+    await runner.EFCoreAny();
 
 //await runner.FillLargeTable();
 // Console.WriteLine("Press any key to exit");

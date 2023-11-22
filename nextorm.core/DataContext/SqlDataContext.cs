@@ -10,6 +10,14 @@ public class SqlDataContext : DataContext
             //sql.CacheQueryCommand=optionsBuilder.CacheQueryCommand;
         }
     }
+    protected new SqlDataProvider DataProvider => (SqlDataProvider)_dataProvider;
     public CommandBuilder From(string table) => new((SqlDataProvider)_dataProvider, table) { Logger = _cmdLogger };
-    public CommandBuilder<T> Create<T>() => new(_dataProvider) { Logger = _cmdLogger };
+    //public CommandBuilder<T> Create<T>() => ;
+    public CommandBuilder<T> Create<T>(Action<EntityBuilder<T>>? configEntity = null)
+    {
+        var eb = new EntityBuilder<T>();
+        configEntity?.Invoke(eb);
+        DataProvider.Metadata[typeof(T)] = eb.Build();
+        return new(_dataProvider) { Logger = _cmdLogger };
+    }
 }

@@ -388,4 +388,22 @@ public class SqlCommandTests
 
         r.Should().BeTrue();
     }
+    [Fact]
+    public async Task SelectAny_ShouldReturnTrue()
+    {
+        var r = await _sut.ComplexEntity.Where(it => it.Boolean == true).Select(it => it).AnyAsync();
+
+        r.Should().BeTrue();
+    }
+    [Fact]
+    public async Task SelectAsterisk_ShouldReturnTrue()
+    {
+        long idx = 0;
+        await foreach (var row in _sut.SimpleEntityAsClass.Select(it => it))
+        {
+            idx++;
+            idx.Should().Be(row.Id);
+            _logger.LogInformation("Id: {id}", row.Id);
+        }
+    }
 }
