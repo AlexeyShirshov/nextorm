@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: list files
-        run: ls
+        run: ls -R
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
         with:
