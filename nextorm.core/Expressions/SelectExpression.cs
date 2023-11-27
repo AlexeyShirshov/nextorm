@@ -32,54 +32,64 @@ public class SelectExpression
             _realType = PropertyType;
         }
     }
-
+    private readonly static MethodInfo GetInt32MI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetInt32))!;
+    private readonly static MethodInfo GetInt64MI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetInt64))!;
+    private readonly static MethodInfo GetDateTimeMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetDateTime))!;
+    private readonly static MethodInfo GetStringMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetString))!;
+    private readonly static MethodInfo GetBooleanMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetBoolean))!;
+    private readonly static MethodInfo GetDoubleMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetDouble))!;
+    private readonly static MethodInfo GetDecimalMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetDecimal))!;
+    private readonly static MethodInfo GetFloatMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetFloat))!;
+    private readonly static MethodInfo GetInt16MI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetInt16))!;
+    private readonly static MethodInfo GetByteMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetByte))!;
+    private readonly static MethodInfo GetGuidMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetGuid))!;
     public MethodInfo GetDataRecordMethod()
     {
-        var recordType = typeof(IDataRecord);
+        // var recordType = typeof(IDataRecord);
 
         if (_realType == typeof(int))
         {
-            return recordType.GetMethod(nameof(IDataRecord.GetInt32))!;
+            return GetInt32MI;
         }
         else if (_realType == typeof(long))
         {
-            return recordType.GetMethod(nameof(IDataRecord.GetInt64))!;
+            return GetInt64MI;
         }
         else if (_realType == typeof(DateTime))
         {
-            return recordType.GetMethod(nameof(IDataRecord.GetDateTime))!;
+            return GetDateTimeMI;
         }
         else if (_realType == typeof(string))
         {
-            return recordType.GetMethod(nameof(IDataRecord.GetString))!;
+            return GetStringMI;
         }
         else if (_realType == typeof(bool))
         {
-            return recordType.GetMethod(nameof(IDataRecord.GetBoolean))!;
+            return GetBooleanMI;
         }
         else if (_realType == typeof(double))
         {
-            return recordType.GetMethod(nameof(IDataRecord.GetDouble))!;
+            return GetDoubleMI;
         }
         else if (_realType == typeof(decimal))
         {
-            return recordType.GetMethod(nameof(IDataRecord.GetDecimal))!;
+            return GetDecimalMI;
         }
         else if (_realType == typeof(float))
         {
-            return recordType.GetMethod(nameof(IDataRecord.GetFloat))!;
+            return GetFloatMI;
         }
         else if (_realType == typeof(short))
         {
-            return recordType.GetMethod(nameof(IDataRecord.GetInt16))!;
+            return GetInt16MI;
         }
         else if (_realType == typeof(byte))
         {
-            return recordType.GetMethod(nameof(IDataRecord.GetByte))!;
+            return GetByteMI;
         }
         else if (_realType == typeof(Guid))
         {
-            return recordType.GetMethod(nameof(IDataRecord.GetGuid))!;
+            return GetGuidMI;
         }
         else
             throw new NotSupportedException($"Property '{PropertyName}' with index ({Index}) has type {_realType} which is not supported");

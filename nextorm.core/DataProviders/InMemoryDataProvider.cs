@@ -7,6 +7,11 @@ namespace nextorm.core;
 
 public partial class InMemoryDataProvider : IDataProvider
 {
+    private readonly static MethodInfo miCreateAsyncEnumerator = typeof(InMemoryDataProvider).GetMethod(nameof(CreateAsyncEnumerator), BindingFlags.Public | BindingFlags.Instance)!;
+    private readonly static MethodInfo miCreateEnumeratorAdapter = typeof(InMemoryDataProvider).GetMethod(nameof(CreateEnumeratorAdapter), BindingFlags.NonPublic | BindingFlags.Instance)!;
+    private readonly static MethodInfo miCreateEnumerator = typeof(InMemoryDataProvider).GetMethod(nameof(CreateEnumerator), BindingFlags.NonPublic | BindingFlags.Instance)!;
+    private readonly static MethodInfo miLoopJoin = typeof(InMemoryDataProvider).GetMethod(nameof(LoopJoin), BindingFlags.NonPublic | BindingFlags.Instance)!;
+    private readonly static MethodInfo miCreateCompiledQuery = typeof(InMemoryDataProvider).GetMethod(nameof(CreateCompiledQuery), BindingFlags.NonPublic | BindingFlags.Instance)!;
     //delegate CreateEnumeratorDelegateFunc<QueryCommand<TResult>, InMemoryCacheEntry<TResult>, object[], CancellationToken,TResult>
     private readonly IDictionary<ExpressionKey, Delegate> _expCache = new ExpressionCache<Delegate>();
     private readonly IDictionary<Type, object?> _data = new Dictionary<Type, object?>();
@@ -71,17 +76,17 @@ public partial class InMemoryDataProvider : IDataProvider
 
             //var delPayload = subQuery.GetOrAddPayload(() =>
             //{
-            var miCreateEnumerator = typeof(InMemoryDataProvider).GetMethod(nameof(CreateAsyncEnumerator), BindingFlags.Public | BindingFlags.Instance)!;
+
             var @this = Expression.Constant(this);
             var p1 = Expression.Parameter(typeof(QueryCommand<TResult>));
             var p2 = Expression.Parameter(typeof(InMemoryCacheEntry<TResult>));
             var p3 = Expression.Parameter(typeof(CancellationToken));
             var p4 = Expression.Parameter(typeof(object[]));
-            var callCreateEnumerator = Expression.Call(@this, miCreateEnumerator.MakeGenericMethod(resultType),
+            var callCreateEnumerator = Expression.Call(@this, miCreateAsyncEnumerator.MakeGenericMethod(resultType),
                 Expression.Convert(Expression.Property(p1, nameof(QueryCommand.FromQuery)), subQueryType), p4, p3
             );
 
-            var miCreateEnumeratorAdapter = typeof(InMemoryDataProvider).GetMethod(nameof(CreateEnumeratorAdapter), BindingFlags.NonPublic | BindingFlags.Instance)!;
+
             var callCreateEnumeratorAdapter = Expression.Call(@this, miCreateEnumeratorAdapter.MakeGenericMethod(typeof(TResult), resultType),
                 p1, p2, callCreateEnumerator
             );
@@ -96,7 +101,7 @@ public partial class InMemoryDataProvider : IDataProvider
         {
             // var delPayload = queryCommand.GetOrAddPayload(() =>
             // {
-            var miCreateEnumerator = typeof(InMemoryDataProvider).GetMethod(nameof(CreateEnumerator), BindingFlags.NonPublic | BindingFlags.Instance)!;
+
             var @this = Expression.Constant(this);
             var p1 = Expression.Parameter(typeof(QueryCommand<TResult>));
             var p2 = Expression.Parameter(typeof(InMemoryCacheEntry<TResult>));
@@ -156,26 +161,32 @@ public partial class InMemoryDataProvider : IDataProvider
                         case JoinType.Inner:
                             {
                                 var prjType = CreateProjectionType(firstType, secondType, dim);
-                                var miCreateEnumerator = typeof(InMemoryDataProvider).GetMethod(nameof(LoopJoin), BindingFlags.NonPublic | BindingFlags.Instance)!;
+
                                 var @this = Expression.Constant(this);
                                 var p1 = Expression.Parameter(typeof(QueryCommand));
                                 var p2 = Expression.Parameter(typeof(object));
                                 var p3 = Expression.Parameter(typeof(JoinExpression));
                                 var p4 = Expression.Parameter(typeof(int));
-                                var callExp = Expression.Call(@this, miCreateEnumerator.MakeGenericMethod(firstType, secondType, prjType),
+                                var callExp = Expression.Call(@this, miLoopJoin.MakeGenericMethod(firstType, secondType, prjType),
                                     p1,
                                     Expression.Convert(p2, typeof(IEnumerable<>).MakeGenericType(firstType)),
                                     p3,
                                     p4
                                 );
-                                var d = Expression.Lambda(callExp,
-                                    p1,
-                                    p2,
-                                    p3,
-                                    p4
-                                ).Compile();
+                                var key = new ExpressionKey(callExp);
+                                if (!_expCache.TryGetValue(key, out var del))
+                                {
+                                    var d = Expression.Lambda<Func<QueryCommand, object?, JoinExpression, int, object>>(callExp,
+                                        p1,
+                                        p2,
+                                        p3,
+                                        p4
+                                    ).Compile();
+                                    _expCache[key] = d;
+                                    del = d;
+                                }
 
-                                joinResult = d.DynamicInvoke(queryCommand, joinResult, join, dim);
+                                joinResult = ((Func<QueryCommand, object?, JoinExpression, int, object>)del)(queryCommand, joinResult, join, dim);
 
                                 firstType = prjType;
                                 break;
@@ -419,7 +430,7 @@ public partial class InMemoryDataProvider : IDataProvider
             queryCommand.PrepareCommand(cancellationToken);
 
         //query.Compiled = CreateCompiledQuery(query);
-        var miCreateCompiledQuery = typeof(InMemoryDataProvider).GetMethod(nameof(CreateCompiledQuery), BindingFlags.NonPublic | BindingFlags.Instance)!;
+
         var @this = Expression.Constant(this);
         var param = Expression.Parameter(typeof(QueryCommand<TResult>));
         var callExp = Expression.Call(@this, miCreateCompiledQuery.MakeGenericMethod(typeof(TResult), queryCommand.EntityType),

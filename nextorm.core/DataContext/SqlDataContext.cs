@@ -15,9 +15,12 @@ public class SqlDataContext : DataContext
     //public CommandBuilder<T> Create<T>() => ;
     public CommandBuilder<T> Create<T>(Action<EntityBuilder<T>>? configEntity = null)
     {
-        var eb = new EntityBuilder<T>();
-        configEntity?.Invoke(eb);
-        DataProvider.Metadata[typeof(T)] = eb.Build();
+        if (!DataProvider.Metadata.ContainsKey(typeof(T)))
+        {
+            var eb = new EntityBuilder<T>();
+            configEntity?.Invoke(eb);
+            DataProvider.Metadata[typeof(T)] = eb.Build();
+        }
         return new(_dataProvider) { Logger = _cmdLogger };
     }
 }

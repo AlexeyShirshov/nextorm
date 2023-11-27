@@ -34,7 +34,7 @@ public class SqliteBenchmarkSimulateWork
     {
 
         var builder = new DataContextOptionsBuilder();
-        builder.UseSqlite(@$"{Directory.GetCurrentDirectory()}\data\test.db");
+        builder.UseSqlite(Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db"));
         if (withLogging)
         {
             _logFactory = LoggerFactory.Create(config => config.AddConsole().SetMinimumLevel(LogLevel.Debug));
@@ -50,7 +50,7 @@ public class SqliteBenchmarkSimulateWork
         _cmdInner = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0) + NORM.Param<int>(1)).Select(entity => new Tuple<int>(entity.Id)).Compile(false);
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
-        efBuilder.UseSqlite(@$"Filename={Directory.GetCurrentDirectory()}\data\test.db");
+        efBuilder.UseSqlite(@$"Filename={Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db")}");
         efBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
         if (withLogging)
         {

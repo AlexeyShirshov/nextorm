@@ -1,4 +1,4 @@
-//#define PLAN_CACHE
+// #define PLAN_CACHE
 #define INITALGO_1
 
 using System.Collections;
@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
 
-public class QueryCommand : /*IPayloadManager,*/ ISourceProvider//, IParamProvider
+public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
 {
     //protected readonly IPayloadManager _payloadMgr;
     private readonly List<JoinExpression> _joins;
@@ -29,8 +29,11 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider//, IParamProvid
     private bool _dontCache;
 #if DEBUG
     private int? _conditionHash;
+    private int _paramIdx;
+
     public int? ConditionHash => _conditionHash;
 #endif
+    public Expression SelectExpression => _exp;
 #if PLAN_CACHE
     //    internal int? PlanHash;
     internal int ColumnsPlanHash;
@@ -72,7 +75,8 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider//, IParamProvid
     }
     internal QueryCommand? FromQuery => From?.Table.AsT1;
 
-    public bool OneColumn { get; private set; }
+    public bool OneColumn { get; set; }
+    public bool IgnoreColumns { get; set; }
 
     public virtual void ResetPreparation()
     {
@@ -131,7 +135,7 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider//, IParamProvid
 #if PLAN_CACHE
         var columnsPlanHash = 7;
 #endif
-        if (selectList is null)
+        if (selectList is null && !IgnoreColumns)
         {
             if (_exp is null)
                 throw new PrepareException("Lambda expression must exists");
@@ -206,7 +210,7 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider//, IParamProvid
                         {
                             columnsHash = columnsHash * 13 + selExp.GetHashCode();
 #if PLAN_CACHE
-                        columnsPlanHash = columnsPlanHash * 13 + SelectExpressionPlanEqualityComparer.Instance.GetHashCode(selExp);
+                            columnsPlanHash = columnsPlanHash * 13 + SelectExpressionPlanEqualityComparer.Instance.GetHashCode(selExp);
 #endif
                         }
                 }
@@ -430,8 +434,6 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider//, IParamProvid
     {
         if (cmd is null) return false;
 
-        if (!new PreciseExpressionEqualityComparer((_dataProvider as SqlDataProvider)?.ExpressionsCache, (_dataProvider as SqlDataProvider)?.Logger).Equals(_condition, cmd._condition)) return false;
-
         // if (_params is null && cmd._params is not null) return false;
         // if (_params is not null && cmd._params is null) return false;
 
@@ -448,6 +450,8 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider//, IParamProvid
         if (!Equals(_from, cmd._from)) return false;
 
         if (_srcType != cmd._srcType) return false;
+
+        if (!new PreciseExpressionEqualityComparer((_dataProvider as SqlDataProvider)?.ExpressionsCache, (_dataProvider as SqlDataProvider)?.Logger).Equals(_condition, cmd._condition)) return false;
 
         if (_selectList is null && cmd._selectList is not null) return false;
         if (_selectList is not null && cmd._selectList is null) return false;
@@ -494,6 +498,8 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider//, IParamProvid
     {
         var cb = new CommandBuilder(_dataProvider);
         var queryCommand = cb.Select(_ => NORM.SQL.exists(this));
+        queryCommand.SingleRow = true;
+        IgnoreColumns = true;
         queryCommand.PrepareCommand(CancellationToken.None);
         var ee = _dataProvider.CreateEnumerator(queryCommand, @params);
         return ee.MoveNext() && ee.Current;
@@ -503,12 +509,18 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider//, IParamProvid
     {
         var cb = new CommandBuilder(_dataProvider);
         var queryCommand = cb.Select(_ => NORM.SQL.exists(this));
+        queryCommand.SingleRow = true;
+        IgnoreColumns = true;
         queryCommand.PrepareCommand(CancellationToken.None);
         using var ee = await _dataProvider.CreateEnumeratorAsync(queryCommand, @params, cancellationToken);
         return ee.MoveNext() && ee.Current;
     }
 
-    //public object? GetParam(int paramIdx) => _params.Count > paramIdx ? _params[paramIdx] : null;
+    public string GetParamName()
+    {
+        return string.Format("p{0}", _paramIdx++);
+    }
+
     // protected virtual void CopyTo(QueryCommand dst)
     // {
     //     dst._selectList = _selectList;
@@ -535,6 +547,8 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
     }
     //internal CompiledQuery<TResult>? Compiled => CacheEntry?.CompiledQuery as CompiledQuery<TResult>;
     public CacheEntry? CacheEntry { get; set; }
+    public bool SingleRow { get; set; }
+
     public IAsyncEnumerator<TResult> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
         if (!IsPrepared)

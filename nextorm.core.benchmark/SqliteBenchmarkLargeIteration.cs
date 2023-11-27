@@ -35,7 +35,7 @@ public class SqliteBenchmarkLargeIteration
     public SqliteBenchmarkLargeIteration(bool withLogging = false)
     {
         var builder = new DataContextOptionsBuilder();
-        builder.UseSqlite(@$"{Directory.GetCurrentDirectory()}\data\test.db");
+        builder.UseSqlite(Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db"));
         if (withLogging)
         {
             _logFactory = LoggerFactory.Create(config => config.AddConsole().SetMinimumLevel(LogLevel.Debug));
@@ -49,7 +49,7 @@ public class SqliteBenchmarkLargeIteration
         _cmdToList = _ctx.LargeEntity.Select(entity => new TupleLargeEntity(entity.Id, entity.Str, entity.Dt)).Compile(true);
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
-        efBuilder.UseSqlite(@$"Filename={Directory.GetCurrentDirectory()}\data\test.db");
+        efBuilder.UseSqlite(@$"Filename={Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db")}");
         efBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
         if (withLogging)
         {
@@ -414,4 +414,22 @@ public class SqliteBenchmarkLargeIteration
     //     {
     //     }
     // }
+    public async Task NextormInfiniteLoop()
+    {
+        while (true)
+        {
+            var s = Guid.NewGuid().ToString();
+
+            foreach (var row in await _ctx.LargeEntity.Where(it => it.Str == s).Select(entity => new { entity.Id, entity.Str, entity.Dt }).ToListAsync())
+            {
+            }
+        }
+    }
+    public async Task EFCoreInfiniteLoop()
+    {
+        while (true)
+            foreach (var row in await _efCtx.LargeEntities.Where(it => it.Str == Guid.NewGuid().ToString()).Select(entity => new { entity.Id, entity.Str, entity.Dt }).ToListAsync())
+            {
+            }
+    }
 }

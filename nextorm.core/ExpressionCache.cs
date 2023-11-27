@@ -1,7 +1,8 @@
+using System.Collections.Concurrent;
 using System.Linq.Expressions;
 
 namespace nextorm.core;
-public class ExpressionCache<T> : Dictionary<ExpressionKey, T>
+public class ExpressionCache<T> : ConcurrentDictionary<ExpressionKey, T>
 {
 
 }

@@ -17,7 +17,7 @@ public class SqliteBenchmarkMakeSelect
     public SqliteBenchmarkMakeSelect()
     {
         var builder = new DataContextOptionsBuilder();
-        builder.UseSqlite(@$"{Directory.GetCurrentDirectory()}\data\test.db");
+        builder.UseSqlite(Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db"));
         _ctx = new TestDataContext(builder);
 
         _provider = (SqlDataProvider)_ctx.DataProvider;
@@ -29,11 +29,28 @@ public class SqliteBenchmarkMakeSelect
     [Benchmark(Baseline = true)]
     public void MakeParams()
     {
-        _provider.MakeSelect(_cmd, true);
+        var p = 10;
+        var cmd = _ctx.SimpleEntity.Where(it => it.Id == p).Select(entity => new { entity.Id });
+        cmd.PrepareCommand(CancellationToken.None);
+        cmd.GetHashCode();
+        cmd.Equals(cmd);
+        _provider.MakeSelect(cmd, true);
     }
     [Benchmark()]
     public void MakeSelect()
     {
-        _provider.MakeSelect(_cmd, false);
+        var p = 10;
+        var cmd = _ctx.SimpleEntity.Where(it => it.Id == p).Select(entity => new { entity.Id });
+        cmd.PrepareCommand(CancellationToken.None);
+        _provider.MakeSelect(cmd, false);
+    }
+    [Benchmark()]
+    public void Lookup()
+    {
+        var p = 10;
+        var cmd = _ctx.SimpleEntity.Where(it => it.Id == p).Select(entity => new { entity.Id });
+        cmd.PrepareCommand(CancellationToken.None);
+        cmd.GetHashCode();
+        cmd.Equals(cmd);
     }
 }

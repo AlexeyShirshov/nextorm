@@ -9,7 +9,7 @@ using BenchmarkDotNet.Columns;
 
 namespace nextorm.core.benchmark;
 
-[SimpleJob(RuntimeMoniker.Net70, baseline: true)]
+//[SimpleJob(RuntimeMoniker.Net70, baseline: true)]
 [SimpleJob(RuntimeMoniker.Net80)]
 [GroupBenchmarksBy(BenchmarkDotNet.Configs.BenchmarkLogicalGroupRule.ByJob, BenchmarkDotNet.Configs.BenchmarkLogicalGroupRule.ByCategory)]
 [HideColumns(Column.Job, Column.RatioSD, Column.Error, Column.StdDev)]
@@ -28,7 +28,7 @@ public class SqliteBenchmarkWhere
     public SqliteBenchmarkWhere(bool withLogging = false)
     {
         var builder = new DataContextOptionsBuilder();
-        builder.UseSqlite(@$"{Directory.GetCurrentDirectory()}\data\test.db");
+        builder.UseSqlite(Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db"));
         if (withLogging)
         {
             _logFactory = LoggerFactory.Create(config => config.AddConsole().SetMinimumLevel(LogLevel.Debug));
@@ -42,7 +42,7 @@ public class SqliteBenchmarkWhere
         _cmdToList = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new Tuple<int>(entity.Id)).Compile(true);
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
-        efBuilder.UseSqlite(@$"Filename={Directory.GetCurrentDirectory()}\data\test.db");
+        efBuilder.UseSqlite(@$"Filename={Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db")}");
         efBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
         if (withLogging)
         {
@@ -107,12 +107,25 @@ public class SqliteBenchmarkWhere
     // }
     [Benchmark()]
     [BenchmarkCategory("Stream")]
-    public async Task NextormCached()
+    public async Task NextormCachedParam()
     {
         var cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new { entity.Id }).Compile(false);
         for (var i = 0; i < Iterations; i++)
         {
             foreach (var row in await cmd.Exec(i))
+            {
+            }
+        }
+    }
+    [Benchmark()]
+    [BenchmarkCategory("Stream")]
+    public async Task NextormCached()
+    {
+        for (var i = 0; i < Iterations; i++)
+        {
+            var p = i;
+            var cmd = _ctx.SimpleEntity.Where(it => it.Id == p).Select(entity => new { entity.Id });
+            foreach (var row in await cmd.Exec())
             {
             }
         }

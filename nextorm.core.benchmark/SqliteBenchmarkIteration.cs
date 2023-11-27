@@ -8,7 +8,7 @@ using BenchmarkDotNet.Jobs;
 
 namespace nextorm.core.benchmark;
 
-[SimpleJob(RuntimeMoniker.Net70, baseline: true)]
+//[SimpleJob(RuntimeMoniker.Net70, baseline: true)]
 [SimpleJob(RuntimeMoniker.Net80)]
 [MemoryDiagnoser]
 public class SqliteBenchmarkIteration
@@ -23,7 +23,7 @@ public class SqliteBenchmarkIteration
     public SqliteBenchmarkIteration(bool withLogging = false)
     {
         var builder = new DataContextOptionsBuilder();
-        builder.UseSqlite(@$"{Directory.GetCurrentDirectory()}\data\test.db");
+        builder.UseSqlite(Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db"));
         if (withLogging)
         {
             _logFactory = LoggerFactory.Create(config => config.AddConsole().SetMinimumLevel(LogLevel.Debug));
@@ -37,7 +37,7 @@ public class SqliteBenchmarkIteration
         _cmdToList = _ctx.SimpleEntity.Select(entity => new Tuple<int>(entity.Id)).Compile(true);
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
-        efBuilder.UseSqlite(@$"Filename={Directory.GetCurrentDirectory()}\data\test.db");
+        efBuilder.UseSqlite(@$"Filename={Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db")}");
         efBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
         if (withLogging)
         {

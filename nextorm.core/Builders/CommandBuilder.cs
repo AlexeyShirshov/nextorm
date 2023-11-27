@@ -123,6 +123,8 @@ public class CommandBuilder<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
         var cmd = ToCommand();
         var cb = new CommandBuilder(_dataProvider);
         var queryCommand = cb.Select(_ => NORM.SQL.exists(cmd));
+        queryCommand.SingleRow = true;
+        cmd.IgnoreColumns = true;
         queryCommand.PrepareCommand(CancellationToken.None);
         var ee = _dataProvider.CreateEnumerator(queryCommand, @params);
         return ee.MoveNext() && ee.Current;
@@ -133,6 +135,8 @@ public class CommandBuilder<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
         var cmd = ToCommand();
         var cb = new CommandBuilder(_dataProvider);
         var queryCommand = cb.Select(_ => NORM.SQL.exists(cmd));
+        queryCommand.SingleRow = true;
+        cmd.IgnoreColumns = true;
         queryCommand.PrepareCommand(CancellationToken.None);
         using var ee = await _dataProvider.CreateEnumeratorAsync(queryCommand, @params, cancellationToken);
         return ee.MoveNext() && ee.Current;

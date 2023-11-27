@@ -54,14 +54,14 @@ public class InMemoryCompiledQuery<TResult, TEntity> : CompiledQuery<TResult, TE
 }
 public class DatabaseCompiledQuery<TResult> : CompiledQuery<TResult, IDataRecord>//, IReplaceParam
 {
-    public readonly DbCommand DbCommand;
+    public DbCommand DbCommand;
     public readonly System.Data.CommandBehavior Behavior = System.Data.CommandBehavior.SingleResult;
     public DatabaseCompiledQuery(DbCommand dbCommand, Func<Func<IDataRecord, TResult>> getMap)
         : base(getMap)
     {
         DbCommand = dbCommand;
     }
-    public DatabaseCompiledQuery(DbCommand dbCommand, Func<IDataRecord, TResult> mapDelegate, bool singleRow = false)
+    public DatabaseCompiledQuery(DbCommand dbCommand, Func<IDataRecord, TResult> mapDelegate, bool singleRow)
         : base(mapDelegate)
     {
         DbCommand = dbCommand;
@@ -90,6 +90,8 @@ public class DatabaseCompiledPlan<TResult> : CompiledQuery<TResult, IDataRecord>
 {
     internal readonly string _sql;
     public readonly bool NoParams;
+    public SqlDataProvider.SqlCacheEntry? CacheEntry { get; internal set; }
+
     public DatabaseCompiledPlan(string sql, Func<Func<IDataRecord, TResult>> getMap, bool noParams)
         : base(getMap)
     {
@@ -102,15 +104,18 @@ public class DatabaseCompiledPlan<TResult> : CompiledQuery<TResult, IDataRecord>
         _sql = sql;
         NoParams = noParams;
     }
-    public DbCommand GetCommand(List<Param> @params, SqlDataProvider dataProvider)
-    {
-        var dbCommand = dataProvider.CreateCommand(_sql);
+    // public DbCommand GetCommand(IEnumerable<Param> @params, SqlDataProvider dataProvider)
+    // {
+    //     if (DbCommand is null)
+    //         DbCommand = dataProvider.CreateCommand(_sql);
+    //     else if (!NoParams)
+    //         DbCommand.Parameters.Clear();
 
-        if (!NoParams)
-            dbCommand.Parameters.AddRange(@params.Select(it => dataProvider.CreateParam(it.Name, it.Value)).ToArray());
+    //     if (!NoParams)
+    //         DbCommand.Parameters.AddRange(@params.Select(it => dataProvider.CreateParam(it.Name, it.Value)).ToArray());
 
-        return dbCommand;
-    }
-    public DatabaseCompiledQuery<TResult> CompileQuery(List<Param> @params, SqlDataProvider dataProvider)
-        => new(GetCommand(@params, dataProvider), MapDelegate);
+    //     return DbCommand;
+    // }
+    // public DatabaseCompiledQuery<TResult> CompileQuery(IEnumerable<Param> @params, SqlDataProvider dataProvider, bool singleRow)
+    //     => new(GetCommand(@params, dataProvider), MapDelegate, singleRow);
 }

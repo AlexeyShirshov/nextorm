@@ -14,20 +14,22 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     private bool _needAliasForColumn;
     private string? _colName;
     private readonly IAliasProvider? _aliasProvider;
+    private readonly IParamProvider _paramProvider;
     private readonly bool _dontNeedAlias;
     protected readonly bool _paramMode;
-    private bool disposedValue;
+    private bool _disposedValue;
 
-    public BaseExpressionVisitor(Type entityType, SqlDataProvider dataProvider, ISourceProvider tableProvider, int dim, IAliasProvider? aliasProvider, bool dontNeedAlias, bool paramMode)
+    public BaseExpressionVisitor(Type entityType, SqlDataProvider dataProvider, ISourceProvider tableProvider, int dim, IAliasProvider? aliasProvider, IParamProvider paramProvider, bool dontNeedAlias, bool paramMode)
     {
         _entityType = entityType;
         _dataProvider = dataProvider;
         _tableProvider = tableProvider;
         _dim = dim;
         _aliasProvider = aliasProvider;
+        _paramProvider = paramProvider;
         _dontNeedAlias = dontNeedAlias;
         _paramMode = paramMode;
-        _builder = paramMode ? null : dataProvider._sbPool.Get();
+        _builder = paramMode ? null : SqlDataProvider._sbPool.Get();
     }
     public bool NeedAliasForColumn => _needAliasForColumn;
     public List<Param> Params => _params;
@@ -134,6 +136,28 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 return node;
             }
         }
+        else if (!node.Has<ParameterExpression>())
+        {
+            object? value = null;
+            var keyCmd = new ExpressionKey(node);
+            if (!_dataProvider.ExpressionsCache.TryGetValue(keyCmd, out var d))
+            {
+                var del = Expression.Lambda<Func<object>>(node).Compile();
+                _dataProvider.ExpressionsCache[keyCmd] = del;
+                value = del();
+            }
+            else
+                value = ((Func<object>)d)();
+
+            var paramName = _paramProvider.GetParamName();
+            var p = new Param(paramName, value);
+            _params.Add(p);
+
+            if (!_paramMode)
+                _builder!.Append(_dataProvider.MakeParam(paramName));
+
+            return node;
+        }
 
         return base.VisitMethodCall(node);
 
@@ -236,7 +260,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 if (innerQuery is not null)
                 {
                     var innerCol = innerQuery.SelectList!.SingleOrDefault(col => col.PropertyName == node.Member.Name) ?? throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
-                    var col = _dataProvider.MakeColumn(innerCol, innerQuery.EntityType!, innerQuery, false, _params, _paramMode);
+                    var col = _dataProvider.MakeColumn(innerCol, innerQuery.EntityType!, innerQuery, false, innerQuery, _params, _paramMode);
                     if (!_paramMode)
                     {
                         if (col.NeedAliasForColumn)
@@ -419,7 +443,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 if (innerQuery is not null)
                 {
                     var innerCol = innerQuery.SelectList!.SingleOrDefault(col => col.PropertyName == node.Member.Name) ?? throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
-                    var col = _dataProvider.MakeColumn(innerCol, innerQuery.EntityType!, innerQuery, hasTableAliasForColumn, _params, _paramMode);
+                    var col = _dataProvider.MakeColumn(innerCol, innerQuery.EntityType!, innerQuery, hasTableAliasForColumn, innerQuery, _params, _paramMode);
 
                     if (!_paramMode)
                     {
@@ -575,19 +599,19 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     {
         if (_paramMode) throw new NotSupportedException("Cannot clone in param mode");
 
-        return new BaseExpressionVisitor(_entityType, _dataProvider, _tableProvider, _dim, _aliasProvider, _dontNeedAlias, _paramMode);
+        return new BaseExpressionVisitor(_entityType, _dataProvider, _tableProvider, _dim, _aliasProvider, _paramProvider, _dontNeedAlias, _paramMode);
     }
 
     protected virtual void Dispose(bool disposing)
     {
-        if (!disposedValue)
+        if (!_disposedValue)
         {
             if (disposing)
             {
                 if (!_paramMode)
-                    _dataProvider._sbPool.Return(_builder!);
+                    SqlDataProvider._sbPool.Return(_builder!);
             }
-            disposedValue = true;
+            _disposedValue = true;
         }
     }
 
