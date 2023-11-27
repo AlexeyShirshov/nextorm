@@ -18,9 +18,9 @@ public class ReplaceExpressionVisitor : ExpressionVisitor
 }
 public class ReplaceConstantExpressionVisitor : ExpressionVisitor
 {
-    private readonly ParameterExpression _parameter;
+    private readonly Expression _parameter;
 
-    public ReplaceConstantExpressionVisitor(ParameterExpression parameter)
+    public ReplaceConstantExpressionVisitor(Expression parameter)
     {
         _parameter = parameter;
     }

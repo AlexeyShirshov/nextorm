@@ -125,21 +125,20 @@ public sealed class PreciseExpressionEqualityComparer : IEqualityComparer<Expres
                         var key = new ExpressionKey(memberExpression);
                         if (!_cache.TryGetValue(key, out var del))
                         {
-                            //var p = Expression.Parameter(ce!.Type);
-                            //var replace = new ReplaceConstantExpressionVisitor(p);
-                            //var body = replace.Visit(memberExpression)!;
-                            var body = Expression.Convert(memberExpression, typeof(object));
-                            del = Expression.Lambda<Func<object>>(body).Compile();
+                            var p = Expression.Parameter(typeof(object));
+                            var replace = new ReplaceConstantExpressionVisitor(Expression.Convert(p, ce!.Type));
+                            var body = Expression.Convert(replace.Visit(memberExpression), typeof(object));
+                            del = Expression.Lambda<Func<object?, object>>(body, p).Compile();
                             //value = 1;
                             _cache[key] = del;
 
                             if (_logger?.IsEnabled(LogLevel.Debug) ?? false)
                             {
-                                _logger.LogDebug("Expression cache miss on gethashcode. hascode: {hash}, value: {value}", key.GetHashCode(), ((Func<object>)del)());
+                                _logger.LogDebug("Expression cache miss on gethashcode. hascode: {hash}, value: {value}", key.GetHashCode(), ((Func<object?, object>)del)(ce.Value));
                             }
-                            else if (_logger?.IsEnabled(LogLevel.Information) ?? false) _logger.LogInformation("Expression cache miss on gethashcode");
+                            else if (_logger?.IsEnabled(LogLevel.Debug) ?? false) _logger.LogDebug("Expression cache miss on gethashcode");
                         }
-                        AddToHashIfNotNull(((Func<object>)del)());
+                        AddToHashIfNotNull(((Func<object?, object>)del)(ce!.Value));
                         break;
                     }
                     hash.Add(memberExpression.Expression, this);
@@ -475,28 +474,26 @@ public sealed class PreciseExpressionEqualityComparer : IEqualityComparer<Expres
                 var (keyA, keyB) = (new ExpressionKey(a), new ExpressionKey(b));
                 if (_equalityComparer._cache.TryGetValue(keyA, out var delA) && _equalityComparer._cache.TryGetValue(keyB, out var delB))
                 {
-                    return Equals(((Func<object>)delA)(), ((Func<object>)delB)());
+                    return Equals(((Func<object?, object>)delA)(ceA!.Value), ((Func<object?, object>)delB)(ceB!.Value));
                 }
                 else
                 {
-                    if (_equalityComparer._logger?.IsEnabled(LogLevel.Information) ?? false) _equalityComparer._logger.LogInformation("Expression cache miss on equals");
+                    if (_equalityComparer._logger?.IsEnabled(LogLevel.Debug) ?? false) _equalityComparer._logger.LogDebug("Expression cache miss on equals");
 
-                    //var pA = Expression.Parameter(ceA!.Type);
-                    //var replace = new ReplaceConstantExpressionVisitor(pA);
-                    //var bodyA = replace.Visit(a)!;
-                    var bodyA = Expression.Convert(a, typeof(object));
-                    delA = Expression.Lambda<Func<object>>(bodyA).Compile();
+                    var pA = Expression.Parameter(typeof(object));
+                    var replaceA = new ReplaceConstantExpressionVisitor(Expression.Convert(pA, ceA!.Type));
+                    var bodyA = Expression.Convert(replaceA.Visit(a), typeof(object));
+                    delA = Expression.Lambda<Func<object?, object>>(bodyA, pA).Compile();
 
-                    // var pB = Expression.Parameter(ceB!.Type);
-                    // replace = new ReplaceConstantExpressionVisitor(pB);
-                    //var bodyB = replace.Visit(b)!;
-                    var bodyB = Expression.Convert(b, typeof(object));
-                    delB = Expression.Lambda<Func<object>>(bodyB).Compile();
+                    var pB = Expression.Parameter(typeof(object));
+                    var replaceB = new ReplaceConstantExpressionVisitor(Expression.Convert(pB, ceB!.Type));
+                    var bodyB = Expression.Convert(replaceB.Visit(a), typeof(object));
+                    delB = Expression.Lambda<Func<object?, object>>(bodyB, pB).Compile();
 
                     _equalityComparer._cache[keyA] = delA;
                     _equalityComparer._cache[keyB] = delB;
 
-                    return Equals(((Func<object>)delA)(), ((Func<object>)delB)());
+                    return Equals(((Func<object?, object>)delA)(ceA.Value), ((Func<object?, object>)delB)(ceB.Value));
                 }
             }
 

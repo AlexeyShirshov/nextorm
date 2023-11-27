@@ -120,26 +120,12 @@ public class CommandBuilder<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
 
     public bool Any(params object[] @params)
     {
-        var cmd = ToCommand();
-        var cb = new CommandBuilder(_dataProvider);
-        var queryCommand = cb.Select(_ => NORM.SQL.exists(cmd));
-        queryCommand.SingleRow = true;
-        cmd.IgnoreColumns = true;
-        queryCommand.PrepareCommand(CancellationToken.None);
-        var ee = _dataProvider.CreateEnumerator(queryCommand, @params);
-        return ee.MoveNext() && ee.Current;
+        return ToCommand().Any(@params);
     }
     public Task<bool> AnyAsync(params object[] @params) => AnyAsync(CancellationToken.None, @params);
-    public async Task<bool> AnyAsync(CancellationToken cancellationToken, params object[] @params)
+    public Task<bool> AnyAsync(CancellationToken cancellationToken, params object[] @params)
     {
-        var cmd = ToCommand();
-        var cb = new CommandBuilder(_dataProvider);
-        var queryCommand = cb.Select(_ => NORM.SQL.exists(cmd));
-        queryCommand.SingleRow = true;
-        cmd.IgnoreColumns = true;
-        queryCommand.PrepareCommand(CancellationToken.None);
-        using var ee = await _dataProvider.CreateEnumeratorAsync(queryCommand, @params, cancellationToken);
-        return ee.MoveNext() && ee.Current;
+        return ToCommand().AnyAsync(cancellationToken, @params);
     }
 }
 public class CommandBuilder

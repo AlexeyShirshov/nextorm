@@ -1,5 +1,5 @@
-// #define PLAN_CACHE
-// #define ONLY_PLAN_CACHE
+#define PLAN_CACHE
+#define ONLY_PLAN_CACHE
 
 using System.Collections.Concurrent;
 using System.Data;
@@ -45,6 +45,8 @@ public class SqlDataProvider : IDataProvider
     public IDictionary<ExpressionKey, Delegate> ExpressionsCache => _expCache;
     public virtual string EmptyString => "''";
     public IDictionary<Type, IEntityMeta> Metadata => _metadata;
+    public ILogger? CommandLogger { get; set; }
+
     //public IDictionary<ExpressionKey, Delegate> MapCache => _mapCache;
     public virtual DbConnection CreateConnection()
     {
@@ -81,7 +83,7 @@ public class SqlDataProvider : IDataProvider
 #endif            
         {
 #if PLAN_CACHE
-            if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Query plan cache miss with hash: {hash}",
+            if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Query plan cache miss with hash: {hash}",
                 queryPlan.GetHashCode());
 #endif            
             var (sql, @params) = MakeSelect(queryCommand, false);
@@ -125,6 +127,11 @@ public class SqlDataProvider : IDataProvider
 #if PLAN_CACHE
         else //if (planCache.CompiledQuery is DatabaseCompiledPlan<TResult> plan)
         {
+
+#if DEBUG
+            if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Query plan cache hit");
+#endif
+
             var plan = (DatabaseCompiledPlan<TResult>)planCache.CompiledQuery;
             // var dbCommand = plan.GetCommand(plan.NoParams
             //     ? Array.Empty<Param>()
@@ -263,6 +270,10 @@ public class SqlDataProvider : IDataProvider
 
             _sbPool.Return(sqlBuilder);
         }
+
+#if DEBUG
+        if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Generate sql with param mode {mode}: {sql}", paramMode, r);
+#endif
 
         return (r, @params);
     }
@@ -447,11 +458,11 @@ public class SqlDataProvider : IDataProvider
         else
         {
 #if DEBUG && !ONLY_PLAN_CACHE
-            if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Query cache miss with hash: {hash} and condition hash: {chash}",
+            if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Query cache miss with hash: {hash} and condition hash: {chash}",
                 queryCommand.GetHashCode(),
                 queryCommand.ConditionHash);
 #elif !ONLY_PLAN_CACHE
-            if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Query cache miss");
+            if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Query cache miss");
 #endif
 
             cacheEntry = CreateCompiledQuery(queryCommand, true, cancellationToken);
@@ -619,11 +630,11 @@ public class SqlDataProvider : IDataProvider
         else
         {
 #if DEBUG && !ONLY_PLAN_CACHE
-            if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Query cache miss with hash: {hash} and condition hash: {chash}",
+            if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Query cache miss with hash: {hash} and condition hash: {chash}",
                 queryCommand.GetHashCode(),
                 queryCommand.ConditionHash);
 #elif !ONLY_PLAN_CACHE
-            if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Query cache miss");
+            if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Query cache miss");
 #endif
 
             cacheEntry = CreateCompiledQuery(queryCommand, true, cancellationToken);
@@ -657,12 +668,12 @@ public class SqlDataProvider : IDataProvider
                 }
             }
 #endif
-#if DEBUG
-            if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Query cache miss with hash: {hash} and condition hash: {chash}",
+#if DEBUG && !ONLY_PLAN_CACHE
+            if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Query cache miss with hash: {hash} and condition hash: {chash}",
                 queryCommand.GetHashCode(),
                 queryCommand.ConditionHash);
-#else
-            if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Query cache miss");
+#elif !ONLY_PLAN_CACHE
+            if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Query cache miss");
 #endif
 
             cacheEntry = CreateCompiledQuery(queryCommand, false, cancellationToken);
@@ -672,8 +683,9 @@ public class SqlDataProvider : IDataProvider
                 _queryCache[queryCommand] = cacheEntry;
 #endif
         }
-
+#if !ONLY_PLAN_CACHE
     hasCacheEtry:
+#endif
         var compiledQuery = (DatabaseCompiledQuery<TResult>)cacheEntry.CompiledQuery;
 
 #if DEBUG
@@ -710,7 +722,7 @@ public class SqlDataProvider : IDataProvider
 #if DEBUG
         if (Logger?.IsEnabled(LogLevel.Debug) ?? false)
         {
-            Logger.LogDebug("Generated query: {sql}", sqlCommand.CommandText);
+            Logger.LogDebug("Executing query: {sql}", sqlCommand.CommandText);
 
             if (LogSensetiveData)
             {
@@ -843,11 +855,11 @@ public class SqlDataProvider : IDataProvider
         else
         {
 #if DEBUG && !ONLY_PLAN_CACHE
-            if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Query cache miss with hash: {hash} and condition hash: {chash}",
+            if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Query cache miss with hash: {hash} and condition hash: {chash}",
                 queryCommand.GetHashCode(),
                 queryCommand.ConditionHash);
 #elif !ONLY_PLAN_CACHE
-            if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Query cache miss");
+            if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Query cache miss");
 #endif
 
             cacheEntry = CreateCompiledQuery(queryCommand, true, CancellationToken.None);
@@ -894,7 +906,7 @@ public class SqlDataProvider : IDataProvider
 #if DEBUG
         if (Logger?.IsEnabled(LogLevel.Debug) ?? false)
         {
-            Logger.LogDebug("Generated query: {sql}", sqlCommand.CommandText);
+            Logger.LogDebug("Executing query: {sql}", sqlCommand.CommandText);
 
             if (LogSensetiveData)
             {
@@ -943,11 +955,11 @@ public class SqlDataProvider : IDataProvider
         else
         {
 #if DEBUG && !ONLY_PLAN_CACHE
-            if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Query cache miss with hash: {hash} and condition hash: {chash}",
+            if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Query cache miss with hash: {hash} and condition hash: {chash}",
                 queryCommand.GetHashCode(),
                 queryCommand.ConditionHash);
 #elif !ONLY_PLAN_CACHE
-            if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Query cache miss");
+            if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Query cache miss");
 #endif
 
             cacheEntry = CreateCompiledQuery(queryCommand, true, CancellationToken.None);

@@ -1,5 +1,7 @@
 using FluentAssertions;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using nextorm.core;
 
 namespace nextorm.sqlite.tests;
 
@@ -7,11 +9,13 @@ public class SqlCommandTests
 {
     private readonly TestDataContext _sut;
     private readonly ILogger<SqlCommandTests> _logger;
+    private readonly IServiceProvider _sp;
 
-    public SqlCommandTests(TestDataContext sut, ILogger<SqlCommandTests> logger)
+    public SqlCommandTests(TestDataContext sut, ILogger<SqlCommandTests> logger, IServiceProvider sp)
     {
         _sut = sut;
         _logger = logger;
+        _sp = sp;
     }
 
     [Fact]
@@ -405,5 +409,14 @@ public class SqlCommandTests
             idx.Should().Be(row.Id);
             _logger.LogInformation("Id: {id}", row.Id);
         }
+    }
+    [Fact]
+    public async Task SelectAnyParam_ShouldReturnTrue()
+    {
+        var r = await _sut.ComplexEntity.Where(it => it.Boolean == NORM.Param<bool>(0)).AnyAsync(true);
+
+        r.Should().BeTrue();
+
+        _sp.GetRequiredService<ILoggerFactory>().Dispose();
     }
 }

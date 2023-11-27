@@ -120,6 +120,7 @@ public sealed class ExpressionPlanEqualityComparer : IEqualityComparer<Expressio
                     {
                         hash.Add(ce.Type);
                         hash.Add(memberExpression.Member.MemberType);
+                        hash.Add(memberExpression.Member.Name);
                     }
                     else
                     {
@@ -443,7 +444,7 @@ public sealed class ExpressionPlanEqualityComparer : IEqualityComparer<Expressio
 
         private bool CompareMember(MemberExpression a, MemberExpression b)
             => a.Expression is ConstantExpression ce1 && b.Expression is ConstantExpression ce2
-                ? Equals(a.Member.MemberType, b.Member.MemberType) && ce1.Type == ce2.Type
+                ? Equals(a.Member.MemberType, b.Member.MemberType) && ce1.Type == ce2.Type && a.Member.Name == b.Member.Name
                 : Equals(a.Member, b.Member) && Compare(a.Expression, b.Expression);
 
         private bool CompareMemberInit(MemberInitExpression a, MemberInitExpression b)

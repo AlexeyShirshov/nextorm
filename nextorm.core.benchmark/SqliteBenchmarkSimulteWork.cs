@@ -10,7 +10,6 @@ using BenchmarkDotNet.Columns;
 
 namespace nextorm.core.benchmark;
 
-[SimpleJob(RuntimeMoniker.Net70, baseline: true)]
 [SimpleJob(RuntimeMoniker.Net80)]
 [GroupBenchmarksBy(BenchmarkDotNet.Configs.BenchmarkLogicalGroupRule.ByJob, BenchmarkDotNet.Configs.BenchmarkLogicalGroupRule.ByCategory)]
 [HideColumns(Column.Job, Column.Runtime, Column.RatioSD, Column.Error, Column.StdDev)]
@@ -117,6 +116,7 @@ public class SqliteBenchmarkSimulateWork
             for (var i = 0; i < SmallIterations; i++)
             {
                 var s = (await _cmdInner.Exec(row.Item1, i)).FirstOrDefault();
+                //var s = await _cmdInner.AnyAsync(row.Item1, i);
             }
         }
     }
@@ -147,19 +147,19 @@ public class SqliteBenchmarkSimulateWork
     //         }
     //     }
     // }
-    [Benchmark()]
-    public async Task NextormCachedToList()
-    {
-        foreach (var row in await _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new { entity.Id, entity.Str, entity.Dt }).ToListAsync())
-        {
-            await DoWork();
-            for (var i = 0; i < SmallIterations; i++)
-            {
-                var p = i;
-                var s = (await _ctx.SimpleEntity.Where(it => it.Id == row.Id + p).Select(entity => new { entity.Id }).Exec()).FirstOrDefault();
-            }
-        }
-    }
+    // [Benchmark()]
+    // public async Task NextormCachedToList()
+    // {
+    //     foreach (var row in await _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new { entity.Id, entity.Str, entity.Dt }).ToListAsync())
+    //     {
+    //         await DoWork();
+    //         for (var i = 0; i < SmallIterations; i++)
+    //         {
+    //             var p = i;
+    //             var s = (await _ctx.SimpleEntity.Where(it => it.Id == row.Id + p).Select(entity => new { entity.Id }).Exec()).FirstOrDefault();
+    //         }
+    //     }
+    // }
     [Benchmark()]
     public async Task NextormCachedWithParamsToList()
     {
@@ -173,32 +173,32 @@ public class SqliteBenchmarkSimulateWork
             }
         }
     }
-    [Benchmark]
-    public async Task EFCore()
-    {
-        foreach (var row in await _efCtx.LargeEntities.Where(it => it.Id < LargeListSize).Select(entity => new { entity.Id, entity.Str, entity.Dt }).ToListAsync())
-        {
-            await DoWork();
-            for (var i = 0; i < SmallIterations; i++)
-            {
-                var p = i;
-                var s = (await _efCtx.SimpleEntities.Where(it => it.Id == (row.Id + p)).Select(entity => new { entity.Id }).ToListAsync()).FirstOrDefault();
-            }
-        }
-    }
-    [Benchmark]
-    public async Task EFCoreStream()
-    {
-        await foreach (var row in _efCtx.LargeEntities.Where(it => it.Id < LargeListSize).Select(entity => new { entity.Id, entity.Str, entity.Dt }).AsAsyncEnumerable())
-        {
-            await DoWork();
-            for (var i = 0; i < SmallIterations; i++)
-            {
-                var p = i;
-                var s = (await _efCtx.SimpleEntities.Where(it => it.Id == (row.Id + p)).Select(entity => new { entity.Id }).AsAsyncEnumerable().ToListAsync()).FirstOrDefault();
-            }
-        }
-    }
+    // [Benchmark]
+    // public async Task EFCore()
+    // {
+    //     foreach (var row in await _efCtx.LargeEntities.Where(it => it.Id < LargeListSize).Select(entity => new { entity.Id, entity.Str, entity.Dt }).ToListAsync())
+    //     {
+    //         await DoWork();
+    //         for (var i = 0; i < SmallIterations; i++)
+    //         {
+    //             var p = i;
+    //             var s = (await _efCtx.SimpleEntities.Where(it => it.Id == (row.Id + p)).Select(entity => new { entity.Id }).ToListAsync()).FirstOrDefault();
+    //         }
+    //     }
+    // }
+    // [Benchmark]
+    // public async Task EFCoreStream()
+    // {
+    //     await foreach (var row in _efCtx.LargeEntities.Where(it => it.Id < LargeListSize).Select(entity => new { entity.Id, entity.Str, entity.Dt }).AsAsyncEnumerable())
+    //     {
+    //         await DoWork();
+    //         for (var i = 0; i < SmallIterations; i++)
+    //         {
+    //             var p = i;
+    //             var s = (await _efCtx.SimpleEntities.Where(it => it.Id == (row.Id + p)).Select(entity => new { entity.Id }).AsAsyncEnumerable().ToListAsync()).FirstOrDefault();
+    //         }
+    //     }
+    // }
     [Benchmark]
     public async Task EFCoreCompiled()
     {

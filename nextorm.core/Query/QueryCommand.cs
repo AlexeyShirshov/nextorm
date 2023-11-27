@@ -1,4 +1,4 @@
-// #define PLAN_CACHE
+#define PLAN_CACHE
 #define INITALGO_1
 
 using System.Collections;
@@ -29,7 +29,6 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
     private bool _dontCache;
 #if DEBUG
     private int? _conditionHash;
-    private int _paramIdx;
 
     public int? ConditionHash => _conditionHash;
 #endif
@@ -39,6 +38,7 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
     internal int ColumnsPlanHash;
     internal int JoinPlanHash;
 #endif
+    private int _paramIdx;
     //protected ArrayList _params = new();
     public QueryCommand(IDataProvider dataProvider, LambdaExpression exp, Expression? condition)
         : this(dataProvider, exp, condition/*, new FastPayloadManager(new Dictionary<Type, object?>())*/, new())
@@ -90,6 +90,9 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
     }
     public virtual void PrepareCommand(CancellationToken cancellationToken)
     {
+#if DEBUG
+        if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Preparing command");
+#endif
         OneColumn = false;
 
         if (_from is not null && _from.Table.IsT1 && !_from.Table.AsT1.IsPrepared)
@@ -481,9 +484,9 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
 
         return true;
     }
-    public QueryCommand? FindSourceFromAlias(string? aliasRaw)
+    public QueryCommand? FindSourceFromAlias(string? alias)
     {
-        if (string.IsNullOrEmpty(aliasRaw))
+        if (string.IsNullOrEmpty(alias))
         {
             if (_from?.Table.IsT1 ?? false)
                 return _from!.Table.AsT1;
@@ -491,28 +494,29 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
             return null;
         }
 
-        var idx = int.Parse(aliasRaw[1..]);
+        var idx = int.Parse(alias[1..]);
         return Joins[idx - 2].Query;
     }
     public bool Any(params object[] @params)
     {
-        var cb = new CommandBuilder(_dataProvider);
-        var queryCommand = cb.Select(_ => NORM.SQL.exists(this));
+        var queryCommand = _dataProvider.CreateCommand<bool>((TableAlias _) => NORM.SQL.exists(this), null);
         queryCommand.SingleRow = true;
         IgnoreColumns = true;
         queryCommand.PrepareCommand(CancellationToken.None);
-        var ee = _dataProvider.CreateEnumerator(queryCommand, @params);
+        using var ee = _dataProvider.CreateEnumerator(queryCommand, @params);
         return ee.MoveNext() && ee.Current;
     }
     public Task<bool> AnyAsync(params object[] @params) => AnyAsync(CancellationToken.None, @params);
     public async Task<bool> AnyAsync(CancellationToken cancellationToken, params object[] @params)
     {
-        var cb = new CommandBuilder(_dataProvider);
-        var queryCommand = cb.Select(_ => NORM.SQL.exists(this));
+        // var cb = new CommandBuilder(_dataProvider);
+        // var queryCommand = cb.Select(_ => NORM.SQL.exists(this));
+        //var queryCommand = new QueryCommand<bool>(_dataProvider, (bool _) => NORM.SQL.exists(this), null) { Logger = _dataProvider.CommandLogger, SingleRow = true };
+        var queryCommand = _dataProvider.CreateCommand<bool>((TableAlias _) => NORM.SQL.exists(this), null);
         queryCommand.SingleRow = true;
         IgnoreColumns = true;
-        queryCommand.PrepareCommand(CancellationToken.None);
-        using var ee = await _dataProvider.CreateEnumeratorAsync(queryCommand, @params, cancellationToken);
+        queryCommand.PrepareCommand(cancellationToken);
+        using var ee = await _dataProvider.CreateEnumeratorAsync(queryCommand, @params, cancellationToken).ConfigureAwait(false);
         return ee.MoveNext() && ee.Current;
     }
 

@@ -6,6 +6,7 @@ namespace nextorm.core;
 public interface IDataProvider : IAsyncDisposable, IDisposable
 {
     ILogger? Logger { get; set; }
+    ILogger? CommandLogger { get; set; }
     bool NeedMapping { get; }
     IDictionary<ExpressionKey, Delegate> ExpressionsCache { get; }
     IDictionary<Type, IEntityMeta> Metadata { get; }

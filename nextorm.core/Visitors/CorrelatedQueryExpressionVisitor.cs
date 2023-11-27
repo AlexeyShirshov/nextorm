@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using System.Reflection;
-using nextorm.core;
+using Microsoft.Extensions.Logging;
+namespace nextorm.core;
 
 public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 {
@@ -48,6 +49,8 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                 var keyCmd = new ExpressionKey(exp);
                 if (!_dataProvider.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
                 {
+                    if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Exists expression miss");
+
                     var d = Expression.Lambda<Func<QueryCommand>>(exp).Compile();
                     _dataProvider.ExpressionsCache[keyCmd] = d;
                     cmd = d();
@@ -78,7 +81,9 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                 }
                 else
                 {
-                    cmd.PrepareCommand(_cancellationToken);
+                    if (!cmd.IsPrepared)
+                        cmd.PrepareCommand(_cancellationToken);
+
                     _refs.Add(cmd);
                 }
             }

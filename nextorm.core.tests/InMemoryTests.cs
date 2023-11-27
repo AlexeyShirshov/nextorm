@@ -127,8 +127,8 @@ public class InMemoryTests
 
         var planEC = QueryPlanEqualityComparer.Instance;
 
-        planEC.GetHashCode(q1).Should().Be(planEC.GetHashCode(q2));
-        planEC.Equals(q1, q2).Should().BeTrue();
+        planEC.GetHashCode(q1).Should().NotBe(planEC.GetHashCode(q2));
+        planEC.Equals(q1, q2).Should().BeFalse();
     }
     [Fact]
     public void SelectPrimitive_ShouldReturnData()

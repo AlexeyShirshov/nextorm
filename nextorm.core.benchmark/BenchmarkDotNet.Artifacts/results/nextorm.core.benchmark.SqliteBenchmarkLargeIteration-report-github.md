@@ -1,6 +1,6 @@
 ```
 
-BenchmarkDotNet v0.13.9+228a464e8be6c580ad9408e98f18813f6407fb5a, Windows 11 (10.0.22621.2715/22H2/2022Update/SunValley2)
+BenchmarkDotNet v0.13.10, Windows 11 (10.0.22621.2715/22H2/2022Update/SunValley2)
 Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical cores
 .NET SDK 8.0.100
   [Host]   : .NET 8.0.0 (8.0.23.53103), X64 RyuJIT AVX2
@@ -9,34 +9,34 @@ Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical 
 
 
 ```
-| Method                 | Mean      | Ratio | Gen0     | Gen1     | Gen2     | Allocated | Alloc Ratio |
-|----------------------- |----------:|------:|---------:|---------:|---------:|----------:|------------:|
-| NextormCompiledToList  | 12.568 ms |     ? | 390.6250 | 281.2500 |        - |   2.21 MB |           ? |
-| NextormCachedToList    | 12.263 ms |     ? | 390.6250 | 281.2500 |        - |   2.22 MB |           ? |
-| EFCore                 | 18.164 ms |     ? | 750.0000 | 375.0000 | 125.0000 |   4.23 MB |           ? |
-| Dapper                 | 14.545 ms |     ? | 468.7500 | 281.2500 | 125.0000 |   2.84 MB |           ? |
-| AdoWithDelegate        | 12.811 ms |     ? | 375.0000 | 265.6250 | 125.0000 |   2.39 MB |           ? |
-| AdoTupleToList         | 11.716 ms |     ? | 421.8750 | 281.2500 | 281.2500 |   2.68 MB |           ? |
-| AdoClassToListWithInit | 11.467 ms |     ? | 390.6250 | 281.2500 |        - |   2.21 MB |           ? |
-|                        |           |       |          |          |          |           |             |
-| NextormCompiled        | 11.552 ms |  1.10 | 468.7500 |        - |        - |   2.14 MB |        1.27 |
-| NextormCached          | 11.591 ms |  1.11 | 468.7500 |        - |        - |   2.14 MB |        1.28 |
-| EFCoreStream           | 12.617 ms |  1.20 | 875.0000 |        - |        - |   3.98 MB |        2.37 |
-| EFCoreCompiled         | 14.961 ms |  1.42 | 984.3750 |        - |        - |   4.43 MB |        2.64 |
-| DapperUnbuffered       | 12.346 ms |  1.17 | 578.1250 |        - |        - |   2.59 MB |        1.55 |
-| AdoTupleIteration      | 10.539 ms |  1.00 | 359.3750 |        - |        - |   1.68 MB |        1.00 |
-|                        |           |       |          |          |          |           |             |
-| NextormCompiledToList  | 10.304 ms |     ? | 390.6250 | 328.1250 |        - |   2.21 MB |           ? |
-| NextormCachedToList    | 10.235 ms |     ? | 375.0000 | 312.5000 |        - |   2.22 MB |           ? |
-| EFCore                 | 15.193 ms |     ? | 687.5000 | 312.5000 | 156.2500 |   4.23 MB |           ? |
-| Dapper                 | 13.090 ms |     ? | 453.1250 | 265.6250 | 125.0000 |   2.84 MB |           ? |
-| AdoWithDelegate        | 11.605 ms |     ? | 375.0000 | 265.6250 | 125.0000 |   2.39 MB |           ? |
-| AdoTupleToList         |  9.964 ms |     ? | 421.8750 | 281.2500 | 281.2500 |   2.68 MB |           ? |
-| AdoClassToListWithInit |  9.793 ms |     ? | 375.0000 | 312.5000 |        - |   2.21 MB |           ? |
-|                        |           |       |          |          |          |           |             |
-| NextormCompiled        | 10.274 ms |     ? | 468.7500 |        - |        - |   2.14 MB |           ? |
-| NextormCached          | 10.218 ms |     ? | 468.7500 |        - |        - |   2.14 MB |           ? |
-| EFCoreStream           | 11.757 ms |     ? | 875.0000 |        - |        - |   3.98 MB |           ? |
-| EFCoreCompiled         | 12.941 ms |     ? | 984.3750 |        - |        - |   4.43 MB |           ? |
-| DapperUnbuffered       | 10.989 ms |     ? | 578.1250 |        - |        - |   2.59 MB |           ? |
-| AdoTupleIteration      |  9.280 ms |     ? | 359.3750 |        - |        - |   1.68 MB |           ? |
+| Method                 | Job      | Categories | Mean      | Ratio | Gen0     | Gen1     | Gen2     | Allocated | Alloc Ratio |
+|----------------------- |--------- |----------- |----------:|------:|---------:|---------:|---------:|----------:|------------:|
+| NextormCompiledToList  | .NET 7.0 | Buffered   | 12.183 ms |  1.09 | 390.6250 | 296.8750 |        - |   2.21 MB |        1.00 |
+| NextormCachedToList    | .NET 7.0 | Buffered   | 12.585 ms |  1.13 | 390.6250 | 265.6250 |        - |   2.22 MB |        1.00 |
+| EFCore                 | .NET 7.0 | Buffered   | 18.296 ms |  1.64 | 750.0000 | 375.0000 | 125.0000 |   4.23 MB |        1.91 |
+| Dapper                 | .NET 7.0 | Buffered   | 14.658 ms |  1.31 | 453.1250 | 265.6250 | 125.0000 |   2.84 MB |        1.29 |
+| AdoWithDelegate        | .NET 7.0 | Buffered   | 13.131 ms |  1.17 | 375.0000 | 265.6250 | 125.0000 |   2.39 MB |        1.08 |
+| AdoTupleToList         | .NET 7.0 | Buffered   | 11.404 ms |  1.02 | 421.8750 | 281.2500 | 281.2500 |   2.68 MB |        1.21 |
+| AdoClassToListWithInit | .NET 7.0 | Buffered   | 11.173 ms |  1.00 | 375.0000 | 296.8750 |        - |   2.21 MB |        1.00 |
+|                        |          |            |           |       |          |          |          |           |             |
+| NextormCompiled        | .NET 7.0 | Stream     | 12.449 ms |  1.16 | 468.7500 |        - |        - |   2.14 MB |        1.27 |
+| NextormCached          | .NET 7.0 | Stream     | 13.413 ms |  1.25 | 468.7500 |        - |        - |   2.14 MB |        1.28 |
+| EFCoreStream           | .NET 7.0 | Stream     | 13.334 ms |  1.24 | 875.0000 |        - |        - |   3.98 MB |        2.37 |
+| EFCoreCompiled         | .NET 7.0 | Stream     | 15.524 ms |  1.45 | 968.7500 |        - |        - |   4.43 MB |        2.64 |
+| DapperUnbuffered       | .NET 7.0 | Stream     | 13.016 ms |  1.21 | 578.1250 |        - |        - |   2.59 MB |        1.55 |
+| AdoTupleIteration      | .NET 7.0 | Stream     | 10.724 ms |  1.00 | 359.3750 |        - |        - |   1.68 MB |        1.00 |
+|                        |          |            |           |       |          |          |          |           |             |
+| NextormCompiledToList  | .NET 8.0 | Buffered   | 10.207 ms |     ? | 375.0000 | 328.1250 |        - |   2.21 MB |           ? |
+| NextormCachedToList    | .NET 8.0 | Buffered   | 10.699 ms |     ? | 390.6250 | 281.2500 |        - |   2.22 MB |           ? |
+| EFCore                 | .NET 8.0 | Buffered   | 16.819 ms |     ? | 687.5000 | 343.7500 | 156.2500 |   4.23 MB |           ? |
+| Dapper                 | .NET 8.0 | Buffered   | 14.340 ms |     ? | 453.1250 | 265.6250 | 125.0000 |   2.84 MB |           ? |
+| AdoWithDelegate        | .NET 8.0 | Buffered   | 12.677 ms |     ? | 375.0000 | 265.6250 | 125.0000 |   2.39 MB |           ? |
+| AdoTupleToList         | .NET 8.0 | Buffered   | 10.468 ms |     ? | 421.8750 | 281.2500 | 281.2500 |   2.68 MB |           ? |
+| AdoClassToListWithInit | .NET 8.0 | Buffered   | 10.287 ms |     ? | 375.0000 | 312.5000 |        - |   2.21 MB |           ? |
+|                        |          |            |           |       |          |          |          |           |             |
+| NextormCompiled        | .NET 8.0 | Stream     | 10.407 ms |     ? | 468.7500 |        - |        - |   2.14 MB |           ? |
+| NextormCached          | .NET 8.0 | Stream     | 10.367 ms |     ? | 468.7500 |        - |        - |   2.14 MB |           ? |
+| EFCoreStream           | .NET 8.0 | Stream     | 11.869 ms |     ? | 875.0000 |        - |        - |   3.98 MB |           ? |
+| EFCoreCompiled         | .NET 8.0 | Stream     | 13.514 ms |     ? | 984.3750 |        - |        - |   4.43 MB |           ? |
+| DapperUnbuffered       | .NET 8.0 | Stream     | 11.015 ms |     ? | 578.1250 |        - |        - |   2.59 MB |           ? |
+| AdoTupleIteration      | .NET 8.0 | Stream     |  9.530 ms |     ? | 359.3750 |        - |        - |   1.68 MB |           ? |

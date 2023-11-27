@@ -11,7 +11,7 @@ public class SqlDataContext : DataContext
         }
     }
     protected new SqlDataProvider DataProvider => (SqlDataProvider)_dataProvider;
-    public CommandBuilder From(string table) => new((SqlDataProvider)_dataProvider, table) { Logger = _cmdLogger };
+    public CommandBuilder From(string table) => new((SqlDataProvider)_dataProvider, table) { Logger = _dataProvider.CommandLogger };
     //public CommandBuilder<T> Create<T>() => ;
     public CommandBuilder<T> Create<T>(Action<EntityBuilder<T>>? configEntity = null)
     {
@@ -21,6 +21,6 @@ public class SqlDataContext : DataContext
             configEntity?.Invoke(eb);
             DataProvider.Metadata[typeof(T)] = eb.Build();
         }
-        return new(_dataProvider) { Logger = _cmdLogger };
+        return new(_dataProvider) { Logger = _dataProvider.CommandLogger };
     }
 }

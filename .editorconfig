@@ -8,3 +8,14 @@ dotnet_naming_symbols.private_fields.applicable_accessibilities = private
 
 dotnet_naming_style.prefix_underscore.capitalization = camel_case
 dotnet_naming_style.prefix_underscore.required_prefix = _
+
+
+[*.cs]
+# S125: Sections of code should not be commented out
+dotnet_diagnostic.S125.severity = silent
+
+# S108:
+dotnet_diagnostic.S108.severity = silent
+
+# CA2254:
+dotnet_diagnostic.CA2254.severity = silent

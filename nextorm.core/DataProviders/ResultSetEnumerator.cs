@@ -2,6 +2,7 @@ using System.Collections;
 using System.Data;
 using System.Data.Common;
 using System.Runtime.CompilerServices;
+using System.Text;
 using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
@@ -24,9 +25,8 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
         _compiledQuery = compiledQuery;
         _map = compiledQuery.MapDelegate;
 
-#if DEBUG
         if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Getting connection");
-#endif
+
         _conn = _dataProvider.GetConnection();
     }
     public TResult Current
@@ -66,9 +66,9 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
     public async ValueTask<bool> MoveNextAsync()
     {
         if (_reader is null) await InitReaderAsync(_params, _cancellationToken).ConfigureAwait(false);
-#if DEBUG
+
         if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false) _dataProvider.Logger.LogTrace("Move next");
-#endif
+
         return await _reader!.ReadAsync(_cancellationToken).ConfigureAwait(false);
     }
     public void InitEnumerator(object[]? @params, CancellationToken cancellationToken)
@@ -78,55 +78,22 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
     }
     public void InitReader(object[]? @params)
     {
-        var sqlCommand = _compiledQuery.DbCommand;
-        sqlCommand.Connection = _conn;
-
-        if (@params is not null)
-            for (var i = 0; i < @params!.Length; i++)
-            {
-                var paramName = string.Format("norm_p{0}", i);
-                sqlCommand.Parameters[paramName].Value = @params[i];
-                // foreach (DbParameter p in sqlCommand.Parameters)
-                // {
-                //     if (p.ParameterName == paramName)
-                //     {
-                //         p.Value = @params[i];
-                //         break;
-                //     }
-                // }
-            }
+        var sqlCommand = CreateCommand(@params);
 
         if (_reader is not null) return;
 
         if (_conn.State == ConnectionState.Closed)
         {
-#if DEBUG
             if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Opening connection");
-#endif
             _conn.Open();
         }
 
-#if DEBUG
-        if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false)
-        {
-            _dataProvider.Logger.LogDebug("Generated query: {sql}", sqlCommand.CommandText);
+        LogCommand(sqlCommand);
 
-            if (_dataProvider.LogSensetiveData)
-            {
-                foreach (DbParameter p in sqlCommand.Parameters)
-                {
-                    _dataProvider.Logger.LogDebug("param {name} is {value}", p.ParameterName, p.Value);
-                }
-            }
-            else if (sqlCommand.Parameters?.Count > 0)
-            {
-                _dataProvider.Logger.LogDebug("Use {method} to see param values", nameof(_dataProvider.LogSensetiveData));
-            }
-        }
-#endif
         _reader = sqlCommand.ExecuteReader(_compiledQuery.Behavior);
     }
-    public async Task InitReaderAsync(object[]? @params, CancellationToken cancellationToken)
+
+    private DbCommand CreateCommand(object[]? @params)
     {
         var sqlCommand = _compiledQuery.DbCommand;
         sqlCommand.Connection = _conn;
@@ -146,35 +113,68 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
                 // }
             }
 
+        return sqlCommand;
+    }
+
+    public async Task InitReaderAsync(object[]? @params, CancellationToken cancellationToken)
+    {
+        var sqlCommand = CreateCommand(@params);
+
         if (_reader is not null) return;
 
         if (_conn.State == ConnectionState.Closed)
         {
-#if DEBUG
             if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Opening connection");
-#endif
             await _conn.OpenAsync(cancellationToken).ConfigureAwait(false);
         }
 
-#if DEBUG
+        LogCommand(sqlCommand);
+
+        _reader = await sqlCommand.ExecuteReaderAsync(_compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
+    }
+
+    private void LogCommand(DbCommand sqlCommand)
+    {
         if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false)
         {
-            _dataProvider.Logger.LogDebug("Generated query: {sql}", sqlCommand.CommandText);
+            var sb = new StringBuilder();
+            sb.AppendLine("Executing query: {sql}");
+
+            //_dataProvider.Logger.LogDebug("Executing query: {sql}", sqlCommand.CommandText);
+
+            var ps = new ArrayList
+            {
+                sqlCommand.CommandText
+            };
 
             if (_dataProvider.LogSensetiveData)
             {
+                var idx = 0;
                 foreach (DbParameter p in sqlCommand.Parameters)
                 {
-                    _dataProvider.Logger.LogDebug("param {name} is {value}", p.ParameterName, p.Value);
+                    sb.AppendLine($"param {{name_{idx}}} = {{value_{idx}}}");
+                    ps.Add(p.ParameterName);
+                    ps.Add(p.Value);
+                    idx++;
+                    //_dataProvider.Logger.LogDebug("param {name} is {value}", p.ParameterName, p.Value);
                 }
             }
             else if (sqlCommand.Parameters?.Count > 0)
             {
+                _dataProvider.Logger.LogDebug(sb.ToString(), sqlCommand.CommandText);
                 _dataProvider.Logger.LogDebug("Use {method} to see param values", nameof(_dataProvider.LogSensetiveData));
+                return;
             }
+
+            if (_dataProvider.LogSensetiveData)
+            {
+                sb.Length -= Environment.NewLine.Length;
+                _dataProvider.Logger.LogDebug(sb.ToString(), ps.ToArray());
+            }
+            else
+                _dataProvider.Logger.LogDebug(sb.ToString(), sqlCommand.CommandText);
+
         }
-#endif
-        _reader = await sqlCommand.ExecuteReaderAsync(_compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
     }
 
     public bool MoveNext()

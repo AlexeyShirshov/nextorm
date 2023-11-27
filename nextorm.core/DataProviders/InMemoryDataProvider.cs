@@ -26,13 +26,11 @@ public partial class InMemoryDataProvider : IDataProvider
         return new QueryCommand<TResult>(this, exp, condition);
     }
     public ILogger? Logger { get; set; }
-
     public bool NeedMapping => false;
-
     public IDictionary<Type, object?> Data => _data;
     public IDictionary<ExpressionKey, Delegate> ExpressionsCache => _expCache;
-
     public IDictionary<Type, IEntityMeta> Metadata => throw new NotImplementedException();
+    public ILogger? CommandLogger { get; set; }
 
     public IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
     {
@@ -514,29 +512,37 @@ public partial class InMemoryDataProvider : IDataProvider
 
                 var param = Expression.Parameter(typeof(TEntity));
 
-
-                if (ctorInfo.GetParameters().Length == queryCommand.SelectList!.Count)
+                if (queryCommand.IgnoreColumns)
                 {
-                    var newParams = queryCommand.SelectList!.Select(column => MapColumn(column, param)).ToArray();
-
-                    var ctor = Expression.New(ctorInfo, newParams);
+                    var ctor = Expression.New(ctorInfo);
 
                     lambda = Expression.Lambda<Func<TEntity, TResult>>(ctor, param);
                 }
                 else
                 {
-                    var bindings = queryCommand.SelectList!.Select(column =>
+                    if (ctorInfo.GetParameters().Length == queryCommand.SelectList!.Count)
                     {
-                        var propInfo = column.PropertyInfo ?? resultType.GetProperty(column.PropertyName!)!;
-                        return Expression.Bind(propInfo, MapColumn(column, param));
-                    }).ToArray();
+                        var newParams = queryCommand.SelectList!.Select(column => MapColumn(column, param)).ToArray();
 
-                    var ctor = Expression.New(ctorInfo);
+                        var ctor = Expression.New(ctorInfo, newParams);
 
-                    var memberInit = Expression.MemberInit(ctor, bindings);
+                        lambda = Expression.Lambda<Func<TEntity, TResult>>(ctor, param);
+                    }
+                    else
+                    {
+                        var bindings = queryCommand.SelectList!.Select(column =>
+                        {
+                            var propInfo = column.PropertyInfo ?? resultType.GetProperty(column.PropertyName!)!;
+                            return Expression.Bind(propInfo, MapColumn(column, param));
+                        }).ToArray();
 
-                    var body = memberInit;
-                    lambda = Expression.Lambda<Func<TEntity, TResult>>(body, param);
+                        var ctor = Expression.New(ctorInfo);
+
+                        var memberInit = Expression.MemberInit(ctor, bindings);
+
+                        var body = memberInit;
+                        lambda = Expression.Lambda<Func<TEntity, TResult>>(body, param);
+                    }
                 }
             }
 

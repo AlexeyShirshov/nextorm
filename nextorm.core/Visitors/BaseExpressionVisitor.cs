@@ -168,7 +168,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 var key = new ExpressionKey(exp);
                 if (!_dataProvider.ExpressionsCache.TryGetValue(key, out var del))
                 {
-                    if (_dataProvider.Logger?.IsEnabled(LogLevel.Information) ?? false) _dataProvider.Logger.LogInformation("Select expression miss");
+                    if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Select expression miss");
                     //var p = Expression.Parameter(ce!.Type);
                     //var rv = new ReplaceConstantExpressionVisitor(p);
                     //var body = rv.Visit(exp);
@@ -352,7 +352,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 {
                     _dataProvider.Logger.LogDebug("Expression cache miss on visit where. hascode: {hash}, value: {value}", key.GetHashCode(), ((Func<object>)del)());
                 }
-                else if (_dataProvider.Logger?.IsEnabled(LogLevel.Information) ?? false) _dataProvider.Logger.LogInformation("Expression cache miss on visit where");
+                else if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Expression cache miss on visit where");
             }
 
             _params.Add(new Param(node.Member.Name, ((Func<object>)del)()));
@@ -374,23 +374,21 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 var key = new ExpressionKey(node);
                 if (!_dataProvider.ExpressionsCache.TryGetValue(key, out var del))
                 {
-                    //value = 1;
-                    // var p = Expression.Parameter(ce.Type);
-                    // var replace = new ReplaceConstantExpressionVisitor(p);
-                    // var body = replace.Visit(node)!;
-                    var body = Expression.Convert(node, typeof(object));
-                    del = Expression.Lambda<Func<object>>(body).Compile();
+                    var p = Expression.Parameter(typeof(object));
+                    var replace = new ReplaceConstantExpressionVisitor(Expression.Convert(p, visitor.Target2!.Type));
+                    var body = Expression.Convert(replace.Visit(node), typeof(object));
+                    del = Expression.Lambda<Func<object?, object>>(body, p).Compile();
 
                     _dataProvider.ExpressionsCache[key] = del;
 
                     if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false)
                     {
-                        _dataProvider.Logger.LogDebug("Expression cache miss on visit where. hascode: {hash}, value: {value}", key.GetHashCode(), ((Func<object>)del)());
+                        _dataProvider.Logger.LogDebug("Expression cache miss on visit where. hascode: {hash}, value: {value}", key.GetHashCode(), ((Func<object?, object>)del)(visitor.Target2.Value));
                     }
-                    else if (_dataProvider.Logger?.IsEnabled(LogLevel.Information) ?? false) _dataProvider.Logger.LogInformation("Expression cache miss on visit where");
+                    else if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Expression cache miss on visit where");
                 }
                 // var value = 1;
-                _params.Add(new Param(node.Member.Name, ((Func<object>)del)()));
+                _params.Add(new Param(node.Member.Name, ((Func<object?, object>)del)(visitor.Target2!.Value)));
 
                 if (!_paramMode)
                     _builder!.Append(_dataProvider.MakeParam(node.Member.Name));

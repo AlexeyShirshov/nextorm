@@ -16,7 +16,6 @@ using BenchmarkDotNet.Configs;
 
 namespace nextorm.core.benchmark;
 
-[SimpleJob(RuntimeMoniker.Net70, baseline: true)]
 [SimpleJob(RuntimeMoniker.Net80)]
 [GroupBenchmarksBy(BenchmarkLogicalGroupRule.ByJob, BenchmarkLogicalGroupRule.ByCategory)]
 [HideColumns(Column.Runtime, Column.RatioSD, Column.Error, Column.StdDev)]
@@ -428,8 +427,11 @@ public class SqliteBenchmarkLargeIteration
     public async Task EFCoreInfiniteLoop()
     {
         while (true)
-            foreach (var row in await _efCtx.LargeEntities.Where(it => it.Str == Guid.NewGuid().ToString()).Select(entity => new { entity.Id, entity.Str, entity.Dt }).ToListAsync())
+        {
+            var s = Guid.NewGuid().ToString();
+            foreach (var row in await _efCtx.LargeEntities.Where(it => it.Str == s).Select(entity => new { entity.Id, entity.Str, entity.Dt }).ToListAsync())
             {
             }
+        }
     }
 }
