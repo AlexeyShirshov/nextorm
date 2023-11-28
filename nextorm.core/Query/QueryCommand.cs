@@ -394,6 +394,9 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
         if (_hash.HasValue)
             return _hash.Value;
 
+        if (!IsPrepared)
+            PrepareCommand(CancellationToken.None);
+
         unchecked
         {
             HashCode hash = new();
@@ -436,6 +439,9 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
     public bool Equals(QueryCommand? cmd)
     {
         if (cmd is null) return false;
+
+        if (!IsPrepared)
+            PrepareCommand(CancellationToken.None);
 
         // if (_params is null && cmd._params is not null) return false;
         // if (_params is not null && cmd._params is null) return false;
@@ -497,29 +503,6 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
         var idx = int.Parse(alias[1..]);
         return Joins[idx - 2].Query;
     }
-    public bool Any(params object[] @params)
-    {
-        var queryCommand = _dataProvider.CreateCommand<bool>((TableAlias _) => NORM.SQL.exists(this), null);
-        queryCommand.SingleRow = true;
-        IgnoreColumns = true;
-        queryCommand.PrepareCommand(CancellationToken.None);
-        using var ee = _dataProvider.CreateEnumerator(queryCommand, @params);
-        return ee.MoveNext() && ee.Current;
-    }
-    public Task<bool> AnyAsync(params object[] @params) => AnyAsync(CancellationToken.None, @params);
-    public async Task<bool> AnyAsync(CancellationToken cancellationToken, params object[] @params)
-    {
-        // var cb = new CommandBuilder(_dataProvider);
-        // var queryCommand = cb.Select(_ => NORM.SQL.exists(this));
-        //var queryCommand = new QueryCommand<bool>(_dataProvider, (bool _) => NORM.SQL.exists(this), null) { Logger = _dataProvider.CommandLogger, SingleRow = true };
-        var queryCommand = _dataProvider.CreateCommand<bool>((TableAlias _) => NORM.SQL.exists(this), null);
-        queryCommand.SingleRow = true;
-        IgnoreColumns = true;
-        queryCommand.PrepareCommand(cancellationToken);
-        using var ee = await _dataProvider.CreateEnumeratorAsync(queryCommand, @params, cancellationToken).ConfigureAwait(false);
-        return ee.MoveNext() && ee.Current;
-    }
-
     public string GetParamName()
     {
         return string.Format("p{0}", _paramIdx++);
@@ -787,6 +770,42 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
 
         return await DataProvider.ToListAsync(this, @params, cancellationToken).ConfigureAwait(false);
     }
+    public bool Any(params object[] @params)
+    {
+        if (this is not QueryCommand<bool> queryCommand || !queryCommand.SingleRow)
+        {
+            if (!IsPrepared)
+                PrepareCommand(CancellationToken.None);
+            queryCommand = _dataProvider.CreateCommand<bool>((TableAlias _) => NORM.SQL.exists(this), null);
+            queryCommand.SingleRow = true;
+            IgnoreColumns = true;
+        }
+
+        if (!queryCommand.IsPrepared)
+            queryCommand.PrepareCommand(CancellationToken.None);
+
+        using var ee = _dataProvider.CreateEnumerator(queryCommand, @params);
+        return ee.MoveNext() && ee.Current;
+    }
+    public Task<bool> AnyAsync(params object[] @params) => AnyAsync(CancellationToken.None, @params);
+    public async Task<bool> AnyAsync(CancellationToken cancellationToken, params object[] @params)
+    {
+        if (this is not QueryCommand<bool> queryCommand || !queryCommand.SingleRow)
+        {
+            if (!IsPrepared)
+                PrepareCommand(cancellationToken);
+            queryCommand = _dataProvider.CreateCommand<bool>((TableAlias _) => NORM.SQL.exists(this), null);
+            queryCommand.SingleRow = true;
+            IgnoreColumns = true;
+        }
+
+        if (!queryCommand.IsPrepared)
+            queryCommand.PrepareCommand(cancellationToken);
+
+        using var ee = await _dataProvider.CreateEnumeratorAsync(queryCommand, @params, cancellationToken).ConfigureAwait(false);
+        return ee.MoveNext() && ee.Current;
+    }
+
     public QueryCommand<TResult> Compile(bool forToListCalls, CancellationToken cancellationToken = default)
     {
         if (!IsPrepared)

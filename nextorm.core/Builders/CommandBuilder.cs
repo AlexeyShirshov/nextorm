@@ -117,15 +117,22 @@ public class CommandBuilder<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
         var cb = new CommandBuilderP2<TEntity, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition) { Query = query }) { Logger = Logger, _query = queryBase/*, PayloadManager = PayloadManager*/, BaseBuilder = this };
         return cb;
     }
-
+    public QueryCommand<bool> AnyCommand()
+    {
+        var cmd = ToCommand();
+        var queryCommand = _dataProvider.CreateCommand<bool>((TableAlias _) => NORM.SQL.exists(cmd), null);
+        queryCommand.SingleRow = true;
+        cmd.IgnoreColumns = true;
+        return queryCommand;
+    }
     public bool Any(params object[] @params)
     {
-        return ToCommand().Any(@params);
+        return AnyCommand().Any(@params);
     }
     public Task<bool> AnyAsync(params object[] @params) => AnyAsync(CancellationToken.None, @params);
     public Task<bool> AnyAsync(CancellationToken cancellationToken, params object[] @params)
     {
-        return ToCommand().AnyAsync(cancellationToken, @params);
+        return AnyCommand().AnyAsync(cancellationToken, @params);
     }
 }
 public class CommandBuilder

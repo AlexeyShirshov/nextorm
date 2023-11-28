@@ -416,7 +416,5 @@ public class SqlCommandTests
         var r = await _sut.ComplexEntity.Where(it => it.Boolean == NORM.Param<bool>(0)).AnyAsync(true);
 
         r.Should().BeTrue();
-
-        _sp.GetRequiredService<ILoggerFactory>().Dispose();
     }
 }
