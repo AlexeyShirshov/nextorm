@@ -8,19 +8,21 @@ namespace nextorm.core;
 public sealed class PreciseExpressionEqualityComparer : IEqualityComparer<Expression?>
 {
     private readonly IDictionary<ExpressionKey, Delegate> _cache;
+    private readonly IQueryProvider _queryProvider;
     private readonly ILogger? _logger;
 
-    public PreciseExpressionEqualityComparer()
-        : this(new ExpressionCache<Delegate>())
+    // public PreciseExpressionEqualityComparer()
+    //     : this(new ExpressionCache<Delegate>())
+    // {
+    // }
+    public PreciseExpressionEqualityComparer(IDictionary<ExpressionKey, Delegate>? cache, IQueryProvider queryProvider)
+        : this(cache, queryProvider, null)
     {
     }
-    public PreciseExpressionEqualityComparer(IDictionary<ExpressionKey, Delegate>? cache)
-        : this(cache, null)
-    {
-    }
-    public PreciseExpressionEqualityComparer(IDictionary<ExpressionKey, Delegate>? cache, ILogger? logger)
+    public PreciseExpressionEqualityComparer(IDictionary<ExpressionKey, Delegate>? cache, IQueryProvider queryProvider, ILogger? logger)
     {
         _cache = cache ?? new ExpressionCache<Delegate>();
+        _queryProvider = queryProvider;
         _logger = logger;
     }
     //public static PreciseExpressionEqualityComparer Instance { get; } = new();
@@ -122,11 +124,11 @@ public sealed class PreciseExpressionEqualityComparer : IEqualityComparer<Expres
                 case MemberExpression memberExpression:
                     if (memberExpression.Expression is not null && memberExpression.Expression.Has<ConstantExpression>(out var ce))
                     {
-                        var key = new ExpressionKey(memberExpression);
+                        var key = new ExpressionKey(memberExpression, _cache, _queryProvider);
                         if (!_cache.TryGetValue(key, out var del))
                         {
                             var p = Expression.Parameter(typeof(object));
-                            var replace = new ReplaceConstantExpressionVisitor(Expression.Convert(p, ce!.Type));
+                            var replace = new ReplaceConstantVisitor(Expression.Convert(p, ce!.Type));
                             var body = Expression.Convert(replace.Visit(memberExpression), typeof(object));
                             del = Expression.Lambda<Func<object?, object>>(body, p).Compile();
                             //value = 1;
@@ -471,7 +473,7 @@ public sealed class PreciseExpressionEqualityComparer : IEqualityComparer<Expres
             if (a.Expression is not null && a.Expression.Has<ConstantExpression>(out var ceA)
                 && b.Expression is not null && b.Expression.Has<ConstantExpression>(out var ceB))
             {
-                var (keyA, keyB) = (new ExpressionKey(a), new ExpressionKey(b));
+                var (keyA, keyB) = (new ExpressionKey(a, _equalityComparer._cache, _equalityComparer._queryProvider), new ExpressionKey(b, _equalityComparer._cache, _equalityComparer._queryProvider));
                 if (_equalityComparer._cache.TryGetValue(keyA, out var delA) && _equalityComparer._cache.TryGetValue(keyB, out var delB))
                 {
                     return Equals(((Func<object?, object>)delA)(ceA!.Value), ((Func<object?, object>)delB)(ceB!.Value));
@@ -481,12 +483,12 @@ public sealed class PreciseExpressionEqualityComparer : IEqualityComparer<Expres
                     if (_equalityComparer._logger?.IsEnabled(LogLevel.Debug) ?? false) _equalityComparer._logger.LogDebug("Expression cache miss on equals");
 
                     var pA = Expression.Parameter(typeof(object));
-                    var replaceA = new ReplaceConstantExpressionVisitor(Expression.Convert(pA, ceA!.Type));
+                    var replaceA = new ReplaceConstantVisitor(Expression.Convert(pA, ceA!.Type));
                     var bodyA = Expression.Convert(replaceA.Visit(a), typeof(object));
                     delA = Expression.Lambda<Func<object?, object>>(bodyA, pA).Compile();
 
                     var pB = Expression.Parameter(typeof(object));
-                    var replaceB = new ReplaceConstantExpressionVisitor(Expression.Convert(pB, ceB!.Type));
+                    var replaceB = new ReplaceConstantVisitor(Expression.Convert(pB, ceB!.Type));
                     var bodyB = Expression.Convert(replaceB.Visit(a), typeof(object));
                     delB = Expression.Lambda<Func<object?, object>>(bodyB, pB).Compile();
 

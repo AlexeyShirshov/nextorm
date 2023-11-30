@@ -33,7 +33,7 @@ public class BenchmarkQueryCommand
         // _plan2 = new SqlDataProvider.QueryPlan(_cmd);
 
         _eq = ExpressionEqualityComparer.Instance;
-        _eqPlan = ExpressionPlanEqualityComparer.Instance;
+        _eqPlan = new ExpressionPlanEqualityComparer(_provider.ExpressionsCache, null);
     }
     // [Benchmark(Baseline = true)]
     // public void WhereEqualityComparer()

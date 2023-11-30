@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>nextorm.core.benchmark.SqliteBenchmarkAny-20231130-203958</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.13.10, Windows 11 (10.0.22621.2715/22H2/2022Update/SunValley2)
+Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical cores
+.NET SDK 8.0.100
+  [Host]   : .NET 8.0.0 (8.0.23.53103), X64 RyuJIT AVX2
+  .NET 8.0 : .NET 8.0.0 (8.0.23.53103), X64 RyuJIT AVX2
+</code></pre>
+<pre><code>Job=.NET 8.0  Runtime=.NET 8.0  
+</code></pre>
+
+<table>
+<thead><tr><th>Method              </th><th>Categories</th><th>Mean</th><th>Error</th><th>StdDev</th><th>Gen0</th><th>Gen1</th><th>Allocated</th>
+</tr>
+</thead><tbody><tr><td>NextormCompiled</td><td></td><td>40.86 &mu;s</td><td>0.784 &mu;s</td><td>0.734 &mu;s</td><td>0.3662</td><td>-</td><td>2000 B</td>
+</tr><tr><td>NextormCached</td><td></td><td>55.23 &mu;s</td><td>0.864 &mu;s</td><td>0.766 &mu;s</td><td>1.4648</td><td>-</td><td>7105 B</td>
+</tr><tr><td>EFCore</td><td></td><td>63.88 &mu;s</td><td>1.147 &mu;s</td><td>1.072 &mu;s</td><td>1.4648</td><td>0.4883</td><td>7040 B</td>
+</tr><tr><td>EFCoreCompiled</td><td></td><td>52.05 &mu;s</td><td>0.802 &mu;s</td><td>0.711 &mu;s</td><td>1.0376</td><td>0.3052</td><td>5072 B</td>
+</tr><tr><td>Dapper</td><td></td><td>37.66 &mu;s</td><td>0.493 &mu;s</td><td>0.437 &mu;s</td><td>0.1221</td><td>-</td><td>816 B</td>
+</tr><tr><td>NextormFilterCompiled</td><td>Filter</td><td>41.48 &mu;s</td><td>0.294 &mu;s</td><td>0.230 &mu;s</td><td>0.4272</td><td>-</td><td>2016 B</td>
+</tr><tr><td>NextormFilterCached</td><td>Filter</td><td>60.55 &mu;s</td><td>1.175 &mu;s</td><td>1.154 &mu;s</td><td>1.5869</td><td>-</td><td>7810 B</td>
+</tr><tr><td>EFCoreFilter</td><td>Filter</td><td>78.82 &mu;s</td><td>0.889 &mu;s</td><td>0.694 &mu;s</td><td>1.9531</td><td>0.4883</td><td>9320 B</td>
+</tr><tr><td>EFCoreFilterCompiled</td><td>Filter</td><td>53.85 &mu;s</td><td>0.495 &mu;s</td><td>0.463 &mu;s</td><td>1.0376</td><td>0.3052</td><td>5096 B</td>
+</tr><tr><td>DapperFilter</td><td>Filter</td><td>39.34 &mu;s</td><td>0.706 &mu;s</td><td>0.661 &mu;s</td><td>0.1221</td><td>-</td><td>832 B</td>
+</tr><tr><td>NextormFilterParamCompiled</td><td>FilterParam</td><td>43.29 &mu;s</td><td>0.817 &mu;s</td><td>0.874 &mu;s</td><td>0.4272</td><td>-</td><td>2248 B</td>
+</tr><tr><td>NextormFilterParamCached</td><td>FilterParam</td><td>68.31 &mu;s</td><td>1.356 &mu;s</td><td>1.665 &mu;s</td><td>1.9531</td><td>-</td><td>10178 B</td>
+</tr><tr><td>EFCoreFilterParam</td><td>FilterParam</td><td>84.45 &mu;s</td><td>0.674 &mu;s</td><td>0.630 &mu;s</td><td>1.9531</td><td>0.4883</td><td>9889 B</td>
+</tr><tr><td>EFCoreFilterParamCompiled</td><td>FilterParam</td><td>55.48 &mu;s</td><td>0.759 &mu;s</td><td>0.634 &mu;s</td><td>1.1597</td><td>0.3662</td><td>5592 B</td>
+</tr><tr><td>DapperFilterParam</td><td>FilterParam</td><td>42.08 &mu;s</td><td>0.588 &mu;s</td><td>0.521 &mu;s</td><td>0.3052</td><td>-</td><td>1496 B</td>
+</tr></tbody></table>
+</body>
+</html>

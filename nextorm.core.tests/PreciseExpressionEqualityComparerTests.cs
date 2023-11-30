@@ -7,7 +7,7 @@ public class PreciseExpressionEqualityComparerTests
 
     public PreciseExpressionEqualityComparerTests()
     {
-        _sut = new PreciseExpressionEqualityComparer();
+        _sut = new PreciseExpressionEqualityComparer(null, null);
 
     }
     [Fact]

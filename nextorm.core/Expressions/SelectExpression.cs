@@ -16,8 +16,10 @@ public class SelectExpression
     public bool Nullable { get; }
     internal PropertyInfo? PropertyInfo { get; set; }
     public List<QueryCommand>? ReferencedQueries { get; set; }
+    private readonly IDictionary<ExpressionKey, Delegate> _expCache;
+    private readonly IQueryProvider _queryProvider;
 
-    public SelectExpression(Type propertyType)
+    public SelectExpression(Type propertyType, IDictionary<ExpressionKey, Delegate> expCache, IQueryProvider queryProvider)
     {
         PropertyType = propertyType;
         _nullable = PropertyType.IsGenericType && PropertyType.GetGenericTypeDefinition() == typeof(Nullable<>);
@@ -31,6 +33,8 @@ public class SelectExpression
         {
             _realType = PropertyType;
         }
+        _expCache = expCache;
+        _queryProvider = queryProvider;
     }
     private readonly static MethodInfo GetInt32MI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetInt32))!;
     private readonly static MethodInfo GetInt64MI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetInt64))!;
@@ -106,11 +110,11 @@ public class SelectExpression
 
             hash.Add(PropertyName);
 
-            Expression.Switch(cmd => hash.Add(cmd), exp => hash.Add(exp, new PreciseExpressionEqualityComparer()));
+            Expression.Switch(cmd => hash.Add(cmd), exp => hash.Add(exp, new PreciseExpressionEqualityComparer(_expCache, _queryProvider)));
 
-            if (ReferencedQueries is not null)
-                foreach (var cmd in ReferencedQueries)
-                    hash.Add(cmd);
+            // if (ReferencedQueries is not null)
+            //     foreach (var cmd in ReferencedQueries)
+            //         hash.Add(cmd);
 
             return hash.ToHashCode();
         }
@@ -130,7 +134,7 @@ public class SelectExpression
         if (PropertyName != exp.PropertyName) return false;
 
         if (Expression.IsT0 != exp.Expression.IsT0
-            || !Expression.Match(cmd => cmd.Equals(exp.Expression.AsT0), e => new PreciseExpressionEqualityComparer().Equals(e, exp.Expression.AsT1)))
+            || !Expression.Match(cmd => cmd.Equals(exp.Expression.AsT0), e => new PreciseExpressionEqualityComparer(_expCache, _queryProvider).Equals(e, exp.Expression.AsT1)))
             return false;
 
         if (ReferencedQueries is null && exp.ReferencedQueries is not null) return false;

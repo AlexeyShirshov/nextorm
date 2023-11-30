@@ -1,6 +1,6 @@
 
 using System.Linq.Expressions;
-using nextorm.core;
+namespace nextorm.core;
 
 public class ParamExpressionVisitor : ExpressionVisitor
 {

@@ -2,6 +2,7 @@ using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using nextorm.core;
+using OneOf.Types;
 
 namespace nextorm.sqlite.tests;
 
@@ -388,6 +389,7 @@ public class SqlCommandTests
     [Fact]
     public async Task Any_ShouldReturnTrue()
     {
+        await SelectAnyParam_ShouldReturnTrue();
         var r = await _sut.ComplexEntity.Where(it => it.Boolean == true).AnyAsync();
 
         r.Should().BeTrue();
@@ -416,5 +418,12 @@ public class SqlCommandTests
         var r = await _sut.ComplexEntity.Where(it => it.Boolean == NORM.Param<bool>(0)).AnyAsync(true);
 
         r.Should().BeTrue();
+    }
+    [Fact]
+    public async Task SelectAnyAsProp_ShouldReturnTrue()
+    {
+        var r = await _sut.ComplexEntity.Select(it => new { it.Id, exists = NORM.SQL.exists(_sut.SimpleEntity) }).ToListAsync();
+
+        r.Should().NotBeEmpty();
     }
 }

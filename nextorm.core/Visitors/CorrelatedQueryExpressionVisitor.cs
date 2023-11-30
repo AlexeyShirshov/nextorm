@@ -6,14 +6,22 @@ namespace nextorm.core;
 public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 {
     private readonly CancellationToken _cancellationToken;
+    private readonly bool _forPrepare = false;
     private readonly IDataProvider _dataProvider;
-    private readonly List<QueryCommand>? _refs;
+    private readonly IQueryProvider? _queryProvider;
+    //private readonly List<QueryCommand>? _refs;
     private static MethodInfo AnyMIGeneric = typeof(CorrelatedQueryExpressionVisitor).GetMethod(nameof(Any), BindingFlags.NonPublic | BindingFlags.Instance)!;
-    public CorrelatedQueryExpressionVisitor(IDataProvider dataProvider, CancellationToken cancellationToken)
+    private static PropertyInfo ReferencedQuieriesPI = typeof(IQueryProvider).GetProperty(nameof(IQueryProvider.ReferencedColumns), BindingFlags.Public | BindingFlags.Instance)!;
+    private static PropertyInfo ItemPI = typeof(IReadOnlyList<QueryCommand>).GetProperty("Item")!;
+    private ParameterExpression? _p;
+
+    public CorrelatedQueryExpressionVisitor(IDataProvider dataProvider, IQueryProvider queryProvider, bool forPrepare, CancellationToken cancellationToken)
     {
         _dataProvider = dataProvider;
         _cancellationToken = cancellationToken;
-        _refs = new();
+        _forPrepare = forPrepare;
+        _queryProvider = queryProvider;
+        //_refs = new();
     }
 
     public CorrelatedQueryExpressionVisitor(IDataProvider dataProvider)
@@ -21,7 +29,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         _dataProvider = dataProvider;
     }
 
-    public List<QueryCommand>? ReferencedQueries => _refs;
+    //public List<QueryCommand>? ReferencedQueries => _refs;
 
     // protected override Expression VisitConstant(ConstantExpression node)
     // {
@@ -43,22 +51,32 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         if (node.Method.DeclaringType == typeof(NORM.NORM_SQL))
         {
             if (node.Method.Name == nameof(NORM.NORM_SQL.exists)
-                && node.Arguments is [Expression exp] && exp.Type.IsAssignableTo(typeof(QueryCommand)))
+                && node.Arguments is [Expression exp] && exp.Type.IsAssignableTo(typeof(QueryCommand)) && exp.Has<ConstantExpression>(out var ce))
             {
                 QueryCommand cmd;
-                var keyCmd = new ExpressionKey(exp);
+                var keyCmd = new ExpressionKey(exp, _dataProvider.ExpressionsCache, _queryProvider);
                 if (!_dataProvider.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
                 {
-                    if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Exists expression miss");
+                    // if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Exists expression miss");
 
-                    var d = Expression.Lambda<Func<QueryCommand>>(exp).Compile();
+                    var pExp = Expression.Parameter(typeof(object));
+                    var replace = new ReplaceConstantVisitor(Expression.Convert(pExp, ce!.Type));
+                    var body = replace.Visit(exp);
+                    var d = Expression.Lambda<Func<object?, object>>(body, pExp).Compile();
+
                     _dataProvider.ExpressionsCache[keyCmd] = d;
-                    cmd = d();
+                    cmd = (QueryCommand)d(ce.Value);
+
+                    if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false)
+                    {
+                        _dataProvider.Logger.LogTrace("Exists expression miss. hascode: {hash}, value: {value}", keyCmd.GetHashCode(), d(ce.Value));
+                    }
+                    else if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Exists expression miss");
                 }
                 else
-                    cmd = ((Func<QueryCommand>)dCmd)();
+                    cmd = (QueryCommand)((Func<object?, object>)dCmd)(ce!.Value);
 
-                if (_refs is null)
+                if (!_forPrepare)
                 {
                     var asEnumMI = AnyMIGeneric.MakeGenericMethod(cmd.EntityType);
                     var dp = Expression.Constant(this);
@@ -67,7 +85,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                     var lambda = Expression.Lambda<Func<QueryCommand, bool>>(body, p1);
 
                     Func<QueryCommand, bool> del;
-                    var key = new ExpressionKey(lambda);
+                    var key = new ExpressionKey(lambda, _dataProvider.ExpressionsCache, _queryProvider);
                     if (!_dataProvider.ExpressionsCache.TryGetValue(key, out var dLambda))
                     {
                         var d = lambda.Compile();
@@ -84,20 +102,28 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                     if (!cmd.IsPrepared)
                         cmd.PrepareCommand(_cancellationToken);
 
-                    _refs.Add(cmd);
+                    var idx = _queryProvider!.AddCommand(cmd);
+
+                    //Expression dfg = (IQueryProvider queryProvider) => NORM.SQL.exists(queryProvider.ReferencedColumns[idx]);
+                    //var replace = new ReplaceArgumentVisitor(0, (IQueryProvider queryProvider) => queryProvider.ReferencedColumns[idx]);
+                    //node.Arguments[0]=(Expression)(IQueryProvider queryProvider) => queryProvider.ReferencedColumns[idx];
+                    _p = Expression.Parameter(typeof(IQueryProvider));
+                    var lambda = Expression.Lambda(Expression.Call(node.Object, node.Method, Expression.Property(Expression.Property(_p, ReferencedQuieriesPI), ItemPI, Expression.Constant(idx))), _p);
+                    return lambda;
                 }
             }
         }
         return base.VisitMethodCall(node);
     }
-    // protected override Expression VisitMember(MemberExpression node)
-    // {
-    //     if (node.Expression.Type.IsAssignableTo(typeof(QueryCommand)))
-    //     {
+    protected override Expression VisitLambda<T>(Expression<T> node)
+    {
+        if (node is LambdaExpression lambdaExpression && lambdaExpression.Parameters is [Expression exp] && exp.Type == typeof(TableAlias))
+        {
+            return Visit(lambdaExpression.Body);
+        }
 
-    //     }
-    //     return base.VisitMember(node);
-    // }
+        return base.VisitLambda(node);
+    }
     bool Any<TResult>(QueryCommand cmd)
     {
         var ee = (IEnumerable<TResult>)_dataProvider.CreateEnumerator((QueryCommand<TResult>)cmd, null);

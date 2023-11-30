@@ -61,7 +61,7 @@ public class CommandBuilder<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
         var b = Clone();
         if (_condition is not null)
         {
-            var replVisitor = new ReplaceExpressionVisitor(_condition.Parameters[0]);
+            var replVisitor = new ReplaceParameterVisitor(_condition.Parameters[0]);
             var newBody = Expression.AndAlso(_condition.Body, replVisitor.Visit(condition.Body));
             b._condition = Expression.Lambda<Func<TEntity, bool>>(newBody, _condition.Parameters[0]);
         }

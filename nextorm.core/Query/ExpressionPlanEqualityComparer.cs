@@ -1,22 +1,37 @@
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Linq.Expressions;
 using System.Reflection;
+using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
 
 public sealed class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
 {
-    /// <summary>
-    ///     Creates a new <see cref="ExpressionEqualityComparer" />.
-    /// </summary>
-    private ExpressionPlanEqualityComparer()
+    private readonly static IDictionary<QueryCommandKey, Func<object?, QueryCommand>> _cmdCache = new ConcurrentDictionary<QueryCommandKey, Func<object?, QueryCommand>>();
+    private readonly IDictionary<ExpressionKey, Delegate> _cache;
+    private readonly IQueryProvider _queryProvider;
+    private readonly ILogger? _logger;
+
+    // public PreciseExpressionEqualityComparer()
+    //     : this(new ExpressionCache<Delegate>())
+    // {
+    // }
+    public ExpressionPlanEqualityComparer(IDictionary<ExpressionKey, Delegate>? cache, IQueryProvider queryProvider)
+        : this(cache, queryProvider, null)
     {
+    }
+    public ExpressionPlanEqualityComparer(IDictionary<ExpressionKey, Delegate>? cache, IQueryProvider queryProvider, ILogger? logger)
+    {
+        _cache = cache ?? new ExpressionCache<Delegate>();
+        _queryProvider = queryProvider;
+        _logger = logger;
     }
 
     /// <summary>
     ///     Gets an instance of <see cref="ExpressionEqualityComparer" />.
     /// </summary>
-    public static ExpressionPlanEqualityComparer Instance { get; } = new();
+    //public static ExpressionPlanEqualityComparer Instance { get; } = new();
 
     /// <inheritdoc />
     public int GetHashCode(Expression obj)
@@ -83,9 +98,17 @@ public sealed class ExpressionPlanEqualityComparer : IEqualityComparer<Expressio
                     break;
 
                 case IndexExpression indexExpression:
-                    hash.Add(indexExpression.Object, this);
-                    AddListToHash(indexExpression.Arguments);
-                    hash.Add(indexExpression.Indexer);
+                    if (indexExpression.Type.IsAssignableTo(typeof(QueryCommand)) && indexExpression.Arguments is [ConstantExpression cex] && cex.Value is int idx)
+                    {
+                        var cmd = _queryProvider.ReferencedColumns[idx];
+                        hash.Add(cmd, new QueryPlanEqualityComparer(_cache, _queryProvider));
+                    }
+                    else
+                    {
+                        hash.Add(indexExpression.Object, this);
+                        AddListToHash(indexExpression.Arguments);
+                        hash.Add(indexExpression.Indexer);
+                    }
                     break;
 
                 case InvocationExpression invocationExpression:
@@ -118,9 +141,37 @@ public sealed class ExpressionPlanEqualityComparer : IEqualityComparer<Expressio
                 case MemberExpression memberExpression:
                     if (memberExpression.Expression is ConstantExpression ce)
                     {
-                        hash.Add(ce.Type);
-                        hash.Add(memberExpression.Member.MemberType);
-                        hash.Add(memberExpression.Member.Name);
+                        if (typeof(QueryCommand).IsAssignableFrom(memberExpression.Type))
+                        {
+                            var key = new QueryCommandKey(ce.Type, memberExpression.Member.Name);
+                            if (!_cmdCache.TryGetValue(key, out var del))
+                            {
+                                var p = Expression.Parameter(typeof(object));
+                                var replace = new ReplaceConstantVisitor(Expression.Convert(p, ce!.Type));
+                                var body = replace.Visit(memberExpression);
+                                del = Expression.Lambda<Func<object?, QueryCommand>>(body, p).Compile();
+                                //value = 1;
+                                _cmdCache[key] = del;
+
+                                if (_logger?.IsEnabled(LogLevel.Trace) ?? false)
+                                {
+                                    _logger.LogTrace("Expression cache miss on gethashcode. hascode: {hash}, value: {value}", key.GetHashCode(), del(ce.Value));
+                                }
+                                else if (_logger?.IsEnabled(LogLevel.Debug) ?? false) _logger.LogDebug("Expression cache miss on gethashcode");
+                            }
+                            var cmd = del(ce!.Value);
+
+                            hash.Add(cmd, new QueryPlanEqualityComparer(_cache, _queryProvider));
+
+                            // var cmd = Expression.Lambda<Func<QueryCommand>>(memberExpression).Compile()();
+                            // hash.Add(cmd, new QueryPlanEqualityComparer(_cache));
+                        }
+                        else
+                        {
+                            hash.Add(ce.Type);
+                            hash.Add(memberExpression.Type);
+                            hash.Add(memberExpression.Member.Name);
+                        }
                     }
                     else
                     {
@@ -700,4 +751,44 @@ public sealed class ExpressionPlanEqualityComparer : IEqualityComparer<Expressio
                 && Compare(a.Filter, b.Filter)
                 && Compare(a.Variable, b.Variable);
     }
+    class QueryCommandKey
+    {
+        private readonly Type _type;
+        private readonly string _name;
+        private int? _hash;
+
+        public QueryCommandKey(Type type, string name)
+        {
+            _type = type;
+            _name = name;
+        }
+        public override int GetHashCode()
+        {
+            if (_hash.HasValue)
+                return _hash.Value;
+
+            unchecked
+            {
+                HashCode hash = new();
+
+                hash.Add(_type);
+                hash.Add(_name);
+
+                _hash = hash.ToHashCode();
+
+                return _hash.Value;
+            }
+        }
+        public override bool Equals(object? obj)
+        {
+            return Equals(obj as QueryCommandKey);
+        }
+        public bool Equals(QueryCommandKey? obj)
+        {
+            if (obj is null) return false;
+
+            return _type == obj._type && _name == obj._name;
+        }
+    }
 }
+

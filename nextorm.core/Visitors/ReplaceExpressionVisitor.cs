@@ -1,10 +1,10 @@
 using System.Linq.Expressions;
 
-public class ReplaceExpressionVisitor : ExpressionVisitor
+public class ReplaceParameterVisitor : ExpressionVisitor
 {
     private readonly Expression _parameter;
 
-    public ReplaceExpressionVisitor(Expression parameter)
+    public ReplaceParameterVisitor(Expression parameter)
     {
         _parameter = parameter;
     }
@@ -16,11 +16,11 @@ public class ReplaceExpressionVisitor : ExpressionVisitor
         return base.VisitParameter(node);
     }
 }
-public class ReplaceConstantExpressionVisitor : ExpressionVisitor
+public class ReplaceConstantVisitor : ExpressionVisitor
 {
     private readonly Expression _parameter;
 
-    public ReplaceConstantExpressionVisitor(Expression parameter)
+    public ReplaceConstantVisitor(Expression parameter)
     {
         _parameter = parameter;
     }

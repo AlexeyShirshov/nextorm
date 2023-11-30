@@ -9,9 +9,9 @@ using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
 
-public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
+public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider, IQueryProvider
 {
-    //protected readonly IPayloadManager _payloadMgr;
+    private List<QueryCommand> _referencedQueries;
     private readonly List<JoinExpression> _joins;
     protected List<SelectExpression>? _selectList;
     private int _columnsHash;
@@ -77,6 +77,7 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
 
     public bool OneColumn { get; set; }
     public bool IgnoreColumns { get; set; }
+    public IReadOnlyList<QueryCommand> ReferencedColumns => _referencedQueries;
 
     public virtual void ResetPreparation()
     {
@@ -108,31 +109,31 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
         }
 
         FromExpression? from = _from ?? _dataProvider.GetFrom(srcType, this);
+        var (joinHash, joinPlanHash) = JoinHash(cancellationToken);
+        var (selectList, columnsHash, columnsPlanHash) = ColumnsHash(srcType, cancellationToken);
 
-        var joinHash = 7;
+        _isPrepared = true;
+        _selectList = selectList;
+        _columnsHash = columnsHash;
+        _srcType = srcType;
+        _from = from;
+        _joinHash = joinHash;
+
 #if PLAN_CACHE
-        var joinPlanHash = 7;
+        ColumnsPlanHash = columnsPlanHash;
+        JoinPlanHash = joinPlanHash;
 #endif
-        if (Joins.Any())
-        {
-            if (_from is not null && string.IsNullOrEmpty(_from.TableAlias)) _from.TableAlias = "t1";
+        //_payloadMgr = new FastPayloadManager(cache ? new Dictionary<Type, object?>() : null);
 
-            foreach (var join in Joins)
-            {
-                if (!(join.Query?.IsPrepared ?? true))
-                    join.Query!.PrepareCommand(cancellationToken);
+        // string capitalize(string str)
+        // {
+        //     return string.Concat(new ReadOnlySpan<char>(Char.ToUpper(str[0])), str.AsSpan()[1..]);
+        // }
+    }
 
-                if (!_dontCache) unchecked
-                    {
-                        joinHash = joinHash * 13 + join.GetHashCode();
-#if PLAN_CACHE
-                        joinPlanHash = joinPlanHash * 13 + JoinExpressionPlanEqualityComparer.Instance.GetHashCode(join);
-#endif
-                    }
-            }
-        }
-
-
+    private (List<SelectExpression>?, int, int) ColumnsHash(Type? srcType, CancellationToken cancellationToken)
+    {
+        var comparer = new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
         var selectList = _selectList;
         var columnsHash = 7;
 #if PLAN_CACHE
@@ -149,10 +150,11 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
             {
                 //var isTuple = ctor.Type.IsTuple();
 
+                var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataProvider, this, true, cancellationToken);
                 for (var idx = 0; idx < ctor.Arguments.Count; idx++)
                 {
                     if (cancellationToken.IsCancellationRequested)
-                        return;
+                        return (selectList, columnsHash, columnsPlanHash);
 
                     SelectExpression selExp;
                     var arg = ctor.Arguments[idx];
@@ -169,11 +171,11 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
                     // {
                     var ctorParam = ctor.Constructor!.GetParameters()[idx];
 
-                    selExp = new SelectExpression(ctorParam.ParameterType)
+                    selExp = new SelectExpression(ctorParam.ParameterType, _dataProvider.ExpressionsCache, this)
                     {
                         Index = idx,
                         PropertyName = ctorParam.Name!,
-                        Expression = arg
+                        Expression = innerQueryVisitor.Visit(arg)
                     };
                     //}
                     selectList.Add(selExp);
@@ -182,7 +184,7 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
                         {
                             columnsHash = columnsHash * 13 + selExp.GetHashCode();
 #if PLAN_CACHE
-                            columnsPlanHash = columnsPlanHash * 13 + SelectExpressionPlanEqualityComparer.Instance.GetHashCode(selExp);
+                            columnsPlanHash = columnsPlanHash * 13 + comparer.GetHashCode(selExp);
 #endif
                         }
                 }
@@ -194,7 +196,7 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
             else if (_exp.Body.Type.IsPrimitive || _exp.Body.Type == typeof(string) || (_exp.Body.Type.IsGenericType && _exp.Body.Type.GetGenericTypeDefinition() == typeof(Nullable<>)))
             {
                 OneColumn = true;
-                var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataProvider, cancellationToken);
+                var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataProvider, this, true, cancellationToken);
                 var selectExp = innerQueryVisitor.Visit(_exp);
                 // if (_dataProvider.NeedMapping)
                 // {
@@ -202,18 +204,18 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
                 // }
                 // else
                 {
-                    var selExp = new SelectExpression(_exp.Body.Type)
+                    var selExp = new SelectExpression(_exp.Body.Type, _dataProvider.ExpressionsCache, this)
                     {
                         //Index = 0,
                         Expression = selectExp,
-                        ReferencedQueries = innerQueryVisitor.ReferencedQueries
+                        //ReferencedQueries = innerQueryVisitor.ReferencedQueries
                     };
                     selectList.Add(selExp);
                     if (!_dontCache) unchecked
                         {
                             columnsHash = columnsHash * 13 + selExp.GetHashCode();
 #if PLAN_CACHE
-                            columnsPlanHash = columnsPlanHash * 13 + SelectExpressionPlanEqualityComparer.Instance.GetHashCode(selExp);
+                            columnsPlanHash = columnsPlanHash * 13 + comparer.GetHashCode(selExp);
 #endif
                         }
                 }
@@ -231,11 +233,11 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
                         var pi = prop.PropertyInfo;
 
                         if (cancellationToken.IsCancellationRequested)
-                            return;
+                            return (selectList, columnsHash, columnsPlanHash);
 
                         Expression exp = Expression.Lambda(Expression.Property(p, pi), p);
 
-                        var selExp = new SelectExpression(pi.PropertyType)
+                        var selExp = new SelectExpression(pi.PropertyType, _dataProvider.ExpressionsCache, this)
                         {
                             Index = idx,
                             PropertyName = pi.Name,
@@ -249,7 +251,7 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
                             {
                                 columnsHash = columnsHash * 13 + selExp.GetHashCode();
 #if PLAN_CACHE
-                                columnsPlanHash = columnsPlanHash * 13 + SelectExpressionPlanEqualityComparer.Instance.GetHashCode(selExp);
+                                columnsPlanHash = columnsPlanHash * 13 + comparer.GetHashCode(selExp);
 #endif
                             }
                     }
@@ -336,24 +338,36 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
             // else
             //     throw new NotImplementedException();
         }
+        return (selectList, columnsHash, columnsPlanHash);
+    }
 
-        _isPrepared = true;
-        _selectList = selectList;
-        _columnsHash = columnsHash;
-        _srcType = srcType;
-        _from = from;
-        _joinHash = joinHash;
-
+    private (int, int) JoinHash(CancellationToken cancellationToken)
+    {
+        var comparer = new JoinExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
+        var joinHash = 7;
 #if PLAN_CACHE
-        ColumnsPlanHash = columnsPlanHash;
-        JoinPlanHash = joinPlanHash;
+        var joinPlanHash = 7;
 #endif
-        //_payloadMgr = new FastPayloadManager(cache ? new Dictionary<Type, object?>() : null);
+        if (Joins.Any())
+        {
+            if (_from is not null && string.IsNullOrEmpty(_from.TableAlias)) _from.TableAlias = "t1";
 
-        // string capitalize(string str)
-        // {
-        //     return string.Concat(new ReadOnlySpan<char>(Char.ToUpper(str[0])), str.AsSpan()[1..]);
-        // }
+            foreach (var join in Joins)
+            {
+                if (!(join.Query?.IsPrepared ?? true))
+                    join.Query!.PrepareCommand(cancellationToken);
+
+                if (!_dontCache) unchecked
+                    {
+                        joinHash = joinHash * 13 + join.GetHashCode();
+#if PLAN_CACHE
+                        joinPlanHash = joinPlanHash * 13 + comparer.GetHashCode(join);
+#endif
+                    }
+            }
+        }
+
+        return (joinHash, joinPlanHash);
     }
 
     // public bool RemovePayload<T>() where T : class, IPayload
@@ -408,7 +422,7 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
 
             if (_condition is not null)
             {
-                var comp = new PreciseExpressionEqualityComparer((_dataProvider as SqlDataProvider)?.ExpressionsCache, (_dataProvider as SqlDataProvider)?.Logger);
+                var comp = new PreciseExpressionEqualityComparer((_dataProvider as SqlDataProvider)?.ExpressionsCache, this, (_dataProvider as SqlDataProvider)?.Logger);
                 var condHash = comp.GetHashCode(_condition);
                 hash.Add(condHash);
 #if DEBUG
@@ -460,7 +474,7 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
 
         if (_srcType != cmd._srcType) return false;
 
-        if (!new PreciseExpressionEqualityComparer((_dataProvider as SqlDataProvider)?.ExpressionsCache, (_dataProvider as SqlDataProvider)?.Logger).Equals(_condition, cmd._condition)) return false;
+        if (!new PreciseExpressionEqualityComparer((_dataProvider as SqlDataProvider)?.ExpressionsCache, this, (_dataProvider as SqlDataProvider)?.Logger).Equals(_condition, cmd._condition)) return false;
 
         if (_selectList is null && cmd._selectList is not null) return false;
         if (_selectList is not null && cmd._selectList is null) return false;
@@ -506,6 +520,14 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
     public string GetParamName()
     {
         return string.Format("p{0}", _paramIdx++);
+    }
+
+    public int AddCommand(QueryCommand cmd)
+    {
+        _referencedQueries ??= new List<QueryCommand>();
+        var idx = _referencedQueries.Count;
+        _referencedQueries.Add(cmd);
+        return idx;
     }
 
     // protected virtual void CopyTo(QueryCommand dst)

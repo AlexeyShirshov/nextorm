@@ -1,10 +1,32 @@
 using System.Diagnostics.CodeAnalysis;
-using nextorm.core;
+using Microsoft.Extensions.Logging;
+namespace nextorm.core;
 
 public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromExpression>
 {
-    private FromExpressionPlanEqualityComparer() { }
-    public static FromExpressionPlanEqualityComparer Instance => new();
+    private readonly IDictionary<ExpressionKey, Delegate> _cache;
+    private readonly IQueryProvider _queryProvider;
+    private readonly ILogger? _logger;
+    //private readonly ExpressionPlanEqualityComparer _expComparer;
+    private QueryPlanEqualityComparer? _cmdComparer;
+
+    // public PreciseExpressionEqualityComparer()
+    //     : this(new ExpressionCache<Delegate>())
+    // {
+    // }
+    public FromExpressionPlanEqualityComparer(IDictionary<ExpressionKey, Delegate>? cache, IQueryProvider queryProvider)
+        : this(cache, queryProvider, null)
+    {
+    }
+    public FromExpressionPlanEqualityComparer(IDictionary<ExpressionKey, Delegate>? cache, IQueryProvider queryProvider, ILogger? logger)
+    {
+        _cache = cache ?? new ExpressionCache<Delegate>();
+        _queryProvider = queryProvider;
+        _logger = logger;
+        //_expComparer = new ExpressionPlanEqualityComparer(cache);        
+    }
+    // private FromExpressionPlanEqualityComparer() { }
+    // public static FromExpressionPlanEqualityComparer Instance => new();
     public bool Equals(FromExpression? x, FromExpression? y)
     {
         if (x == y) return true;
@@ -12,8 +34,11 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
 
         return x.TableAlias == y.TableAlias && x.Table.IsT0 == y.Table.IsT0 && x.Table.Match(
                 tbl => tbl == y.Table.AsT0,
-                cmd => QueryPlanEqualityComparer.Instance.Equals(cmd, y.Table.AsT1)
-                );
+                cmd =>
+                {
+                    _cmdComparer ??= new QueryPlanEqualityComparer(_cache, _queryProvider);
+                    return _cmdComparer.Equals(cmd, y.Table.AsT1);
+                });
     }
 
     public int GetHashCode([DisallowNull] FromExpression obj)
@@ -28,7 +53,11 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
 
             obj.Table.Switch(
                  tbl => hash.Add(tbl),
-                 cmd => hash.Add(cmd, QueryPlanEqualityComparer.Instance)
+                 cmd =>
+                 {
+                     _cmdComparer ??= new QueryPlanEqualityComparer(_cache, _queryProvider);
+                     hash.Add(cmd, _cmdComparer);
+                 }
             );
 
             return hash.ToHashCode();

@@ -109,7 +109,7 @@ public partial class InMemoryDataProvider : IDataProvider
                 p1, p2, p4, p3
             );
 
-            var key = new ExpressionKey(callExp);
+            var key = new ExpressionKey(callExp, _expCache, queryCommand);
             Func<QueryCommand<TResult>, InMemoryCacheEntry<TResult>, object[]?, CancellationToken, IAsyncEnumerator<TResult>> createEnumeratorDelegate;
             if (!_expCache.TryGetValue(key, out var d))
             {
@@ -171,7 +171,7 @@ public partial class InMemoryDataProvider : IDataProvider
                                     p3,
                                     p4
                                 );
-                                var key = new ExpressionKey(callExp);
+                                var key = new ExpressionKey(callExp, _expCache, queryCommand);
                                 if (!_expCache.TryGetValue(key, out var del))
                                 {
                                     var d = Expression.Lambda<Func<QueryCommand, object?, JoinExpression, int, object>>(callExp,
@@ -376,7 +376,7 @@ public partial class InMemoryDataProvider : IDataProvider
         if (column.Expression.IsT0)
             throw new NotSupportedException();
 
-        var replace = new ReplaceExpressionVisitor(param);
+        var replace = new ReplaceParameterVisitor(param);
         return replace.Visit(column.Expression.AsT1);
         //return Expression.PropertyOrField(param, column.PropertyName!);
     }
@@ -435,7 +435,7 @@ public partial class InMemoryDataProvider : IDataProvider
             param
         );
 
-        var key = new ExpressionKey(callExp);
+        var key = new ExpressionKey(callExp, _expCache, queryCommand);
         Func<QueryCommand<TResult>, object> createCompiledQueryDelegate;
         if (!_expCache.TryGetValue(key, out var del))
         {
@@ -456,7 +456,7 @@ public partial class InMemoryDataProvider : IDataProvider
         Func<TEntity, object[]?, bool>? conditionDelegate = null;
         if (query.Condition is Expression<Func<TEntity, bool>> condition)
         {
-            var key = new ExpressionKey(condition);
+            var key = new ExpressionKey(condition, _expCache, query);
             if (!_expCache.TryGetValue(key, out var d))
             {
                 var p = Expression.Parameter(typeof(object[]));
@@ -547,7 +547,7 @@ public partial class InMemoryDataProvider : IDataProvider
             }
 
             if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Get instance of {type} as: {exp}", resultType, lambda);
-            var key = new ExpressionKey(lambda);
+            var key = new ExpressionKey(lambda, _expCache, queryCommand);
             if (!_expCache.TryGetValue(key, out var d))
             {
                 d = lambda.Compile();

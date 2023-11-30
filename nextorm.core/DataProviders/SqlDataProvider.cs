@@ -77,7 +77,7 @@ public class SqlDataProvider : IDataProvider
     {
         DatabaseCompiledQuery<TResult>? compiledQuery = null;
 #if PLAN_CACHE
-        var queryPlan = new QueryPlan(queryCommand);
+        var queryPlan = new QueryPlan(queryCommand, _expCache);
         if (!queryCommand.Cache
             || !_queryPlanCache.TryGetValue(queryPlan, out var planCache))
 #endif            
@@ -198,6 +198,9 @@ public class SqlDataProvider : IDataProvider
     public virtual (string?, List<Param>) MakeSelect(QueryCommand cmd, bool paramMode)
     {
 #if DEBUG
+        if (!cmd.IsPrepared)
+            throw new InvalidOperationException("Command not prepared");
+
         if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Making sql with param mode {mode}", paramMode);
 #endif
         //ArgumentNullException.ThrowIfNull(cmd.SelectList);
@@ -215,13 +218,13 @@ public class SqlDataProvider : IDataProvider
         if (!paramMode) sqlBuilder!.Append("select ");
         if (cmd.IgnoreColumns || selectList is null)
         {
-            if (!paramMode) sqlBuilder!.Append(" * , ");
+            if (!paramMode) sqlBuilder!.Append("*, ");
         }
         else
         {
             foreach (var item in selectList)
             {
-                var (needAliasForColumn, column) = MakeColumn(item, entityType, cmd, false, cmd, @params, paramMode);
+                var (needAliasForColumn, column) = MakeColumn(item, entityType, cmd, false, cmd, cmd, @params, paramMode);
 
                 if (!paramMode)
                 {
@@ -256,11 +259,11 @@ public class SqlDataProvider : IDataProvider
 
             if (cmd.Condition is not null)
             {
-                var whereSql = MakeWhere(entityType, cmd, cmd.Condition, 0, null, cmd, @params, paramMode);
+                var whereSql = MakeWhere(entityType, cmd, cmd.Condition, 0, null, cmd, cmd, @params, paramMode);
                 if (!paramMode) sqlBuilder!.Append(" where ").Append(whereSql);
             }
         }
-        else if (!paramMode && sqlBuilder?.Length > 0)
+        else if (!paramMode && sqlBuilder.Length > 0)
             sqlBuilder.Length -= 2;
 
         string? r = null;
@@ -272,7 +275,7 @@ public class SqlDataProvider : IDataProvider
         }
 
 #if DEBUG
-        if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Generate sql with param mode {mode}: {sql}", paramMode, r);
+        if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Generated sql with param mode {mode}: {sql}", paramMode, r);
 #endif
 
         return (r, @params);
@@ -331,7 +334,7 @@ public class SqlDataProvider : IDataProvider
 
         var whereSql = MakeWhere(cmd.EntityType!, cmd, visitor.JoinCondition, dim, dim == 1
                         ? new ExpressionAliasProvider(join.JoinCondition)
-                        : new ProjectionAliasProvider(dim, cmd.EntityType!), cmd, @params, paramMode);
+                        : new ProjectionAliasProvider(dim, cmd.EntityType!), cmd, cmd, @params, paramMode);
 
         if (!paramMode)
         {
@@ -361,10 +364,10 @@ public class SqlDataProvider : IDataProvider
 
         throw new BuildSqlCommandException($"Cannot find alias of type {declaringType} in {cmd.EntityType}");
     }
-    private string MakeWhere(Type entityType, ISourceProvider tableSource, Expression condition, int dim, IAliasProvider? aliasProvider, IParamProvider paramProvider, List<Param> @params, bool paramMode)
+    private string MakeWhere(Type entityType, ISourceProvider tableSource, Expression condition, int dim, IAliasProvider? aliasProvider, IParamProvider paramProvider, IQueryProvider queryProvider, List<Param> @params, bool paramMode)
     {
         // if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Where expression: {exp}", condition);
-        using var visitor = new WhereExpressionVisitor(entityType, this, tableSource, dim, aliasProvider, paramProvider, paramMode);
+        using var visitor = new WhereExpressionVisitor(entityType, this, tableSource, dim, aliasProvider, paramProvider, queryProvider, paramMode);
         visitor.Visit(condition);
         @params.AddRange(visitor.Params);
 
@@ -373,7 +376,7 @@ public class SqlDataProvider : IDataProvider
         return visitor.ToString();
     }
 
-    public (bool NeedAliasForColumn, string Column) MakeColumn(SelectExpression selectExp, Type entityType, ISourceProvider tableProvider, bool dontNeedAlias, IParamProvider paramProvider, List<Param> @params, bool paramMode)
+    public (bool NeedAliasForColumn, string Column) MakeColumn(SelectExpression selectExp, Type entityType, ISourceProvider tableProvider, bool dontNeedAlias, IParamProvider paramProvider, IQueryProvider queryProvider, List<Param> @params, bool paramMode)
     {
         var expression = selectExp.Expression;
 
@@ -381,7 +384,7 @@ public class SqlDataProvider : IDataProvider
             cmd => throw new NotImplementedException(),
             exp =>
             {
-                using var visitor = new BaseExpressionVisitor(entityType, this, tableProvider, 0, null, paramProvider, dontNeedAlias, paramMode);
+                using var visitor = new BaseExpressionVisitor(entityType, this, tableProvider, 0, null, paramProvider, queryProvider, dontNeedAlias, paramMode);
                 visitor.Visit(exp);
                 @params.AddRange(visitor.Params);
 
@@ -768,7 +771,7 @@ public class SqlDataProvider : IDataProvider
             {
                 lambda = queryCommand.SelectList![0].Expression.Match(_ => throw new NotImplementedException(), exp =>
                 {
-                    var vis = new ReplaceMemberVisitor(queryCommand.EntityType!, this, param);
+                    var vis = new ReplaceMemberVisitor(queryCommand.EntityType!, this, queryCommand, param);
                     var body = vis.Visit(((LambdaExpression)exp).Body);
                     return Expression.Lambda<Func<IDataRecord, TResult>>(body, param);
                 });
@@ -817,7 +820,7 @@ public class SqlDataProvider : IDataProvider
 
             if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Get instance of {type} as: {exp}", resultType, lambda);
 
-            var key = new ExpressionKey(lambda);
+            var key = new ExpressionKey(lambda, _expCache, queryCommand);
             if (!_expCache.TryGetValue(key, out var d))
             {
                 d = lambda.Compile();
@@ -1042,12 +1045,14 @@ public class SqlDataProvider : IDataProvider
     public class QueryPlan
     {
         public readonly QueryCommand QueryCommand;
+        private readonly QueryPlanEqualityComparer _comparer;
         private int? _hashPlan;
-        public QueryPlan(QueryCommand cmd)
+        public QueryPlan(QueryCommand cmd, IDictionary<ExpressionKey, Delegate>? cache)
         {
             QueryCommand = cmd;
+            _comparer = new QueryPlanEqualityComparer(cache, cmd);
         }
-        public override int GetHashCode() => _hashPlan ??= QueryPlanEqualityComparer.Instance.GetHashCode(QueryCommand);
+        public override int GetHashCode() => _hashPlan ??= _comparer.GetHashCode(QueryCommand);
         public override bool Equals(object? obj)
         {
             return Equals(obj as QueryPlan);
@@ -1056,7 +1061,7 @@ public class SqlDataProvider : IDataProvider
         {
             if (obj is null) return false;
 
-            return QueryPlanEqualityComparer.Instance.Equals(QueryCommand, obj.QueryCommand);
+            return _comparer.Equals(QueryCommand, obj.QueryCommand);
         }
     }
 #endif

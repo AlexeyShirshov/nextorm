@@ -15,11 +15,12 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     private string? _colName;
     private readonly IAliasProvider? _aliasProvider;
     private readonly IParamProvider _paramProvider;
+    private readonly IQueryProvider _queryProvider;
     private readonly bool _dontNeedAlias;
     protected readonly bool _paramMode;
     private bool _disposedValue;
 
-    public BaseExpressionVisitor(Type entityType, SqlDataProvider dataProvider, ISourceProvider tableProvider, int dim, IAliasProvider? aliasProvider, IParamProvider paramProvider, bool dontNeedAlias, bool paramMode)
+    public BaseExpressionVisitor(Type entityType, SqlDataProvider dataProvider, ISourceProvider tableProvider, int dim, IAliasProvider? aliasProvider, IParamProvider paramProvider, IQueryProvider queryProvider, bool dontNeedAlias, bool paramMode)
     {
         _entityType = entityType;
         _dataProvider = dataProvider;
@@ -27,6 +28,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         _dim = dim;
         _aliasProvider = aliasProvider;
         _paramProvider = paramProvider;
+        _queryProvider = queryProvider;
         _dontNeedAlias = dontNeedAlias;
         _paramMode = paramMode;
         _builder = paramMode ? null : SqlDataProvider._sbPool.Get();
@@ -111,19 +113,65 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             if (node.Method.Name == nameof(NORM.NORM_SQL.exists)
                 && node.Arguments is [Expression exp] && exp.Type.IsAssignableTo(typeof(QueryCommand)))
             {
+                QueryCommand innerQuery;
+                var expVisitor = new TwoTypeExpressionVisitor<ParameterExpression, ConstantExpression>();
+                expVisitor.Visit(exp);
+
                 if (!_paramMode)
                     _builder!.Append("exists(");
 
-                QueryCommand innerQuery;
-                var keyCmd = new ExpressionKey(exp);
+                var keyCmd = new ExpressionKey(exp, _dataProvider.ExpressionsCache, _queryProvider);
                 if (!_dataProvider.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
                 {
-                    var d = Expression.Lambda<Func<QueryCommand>>(exp).Compile();
+                    object? paramValue;
+                    Expression body;
+                    ParameterExpression pExp;
+                    if (expVisitor.Has1)
+                    {
+                        pExp = Expression.Parameter(typeof(object));
+                        var replParam = new ReplaceParameterVisitor(Expression.Convert(pExp, typeof(IQueryProvider)));
+                        body = replParam.Visit(exp);
+                        paramValue = _queryProvider;
+                    }
+                    else if (expVisitor.Has2)
+                    {
+                        pExp = Expression.Parameter(typeof(object));
+                        var ce = expVisitor.Target2;
+                        var replace = new ReplaceConstantVisitor(Expression.Convert(pExp, ce!.Type));
+                        paramValue = ce.Value;
+                        body = replace.Visit(exp);
+                    }
+                    else
+                        throw new InvalidOperationException();
+
+                    var d = Expression.Lambda<Func<object?, object>>(body, pExp).Compile();
                     _dataProvider.ExpressionsCache[keyCmd] = d;
-                    innerQuery = d();
+                    innerQuery = (QueryCommand)d(paramValue);
+
+                    if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false)
+                    {
+                        _dataProvider.Logger.LogTrace("Expression cache miss on visit exists. hascode: {hash}, value: {value}", keyCmd.GetHashCode(), d(paramValue));
+                    }
+                    else if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Expression cache miss on visit exists");
                 }
                 else
-                    innerQuery = ((Func<QueryCommand>)dCmd)();
+                {
+                    object? paramValue;
+
+                    if (expVisitor.Has1)
+                    {
+                        paramValue = _queryProvider;
+                    }
+                    else if (expVisitor.Has2)
+                    {
+                        var ce = expVisitor.Target2;
+                        paramValue = ce!.Value;
+                    }
+                    else
+                        throw new InvalidOperationException();
+
+                    innerQuery = (QueryCommand)((Func<object?, object>)dCmd)(paramValue);
+                }
 
                 var (sql, p) = _dataProvider.MakeSelect(innerQuery, _paramMode);
                 _params.AddRange(p);
@@ -139,12 +187,18 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         else if (!node.Has<ParameterExpression>())
         {
             object? value = null;
-            var keyCmd = new ExpressionKey(node);
+            var keyCmd = new ExpressionKey(node, _dataProvider.ExpressionsCache, _queryProvider);
             if (!_dataProvider.ExpressionsCache.TryGetValue(keyCmd, out var d))
             {
                 var del = Expression.Lambda<Func<object>>(node).Compile();
                 _dataProvider.ExpressionsCache[keyCmd] = del;
                 value = del();
+
+                if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false)
+                {
+                    _dataProvider.Logger.LogTrace("Expression cache miss on visit method call. hascode: {hash}, value: {value}", keyCmd.GetHashCode(), del());
+                }
+                else if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Expression cache miss on visit method call");
             }
             else
                 value = ((Func<object>)d)();
@@ -158,6 +212,10 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 
             return node;
         }
+        else
+        {
+
+        }
 
         return base.VisitMethodCall(node);
 
@@ -165,21 +223,35 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         {
             //if (exp.Has<ConstantExpression>(out var ce))
             {
-                var key = new ExpressionKey(exp);
+                var key = new ExpressionKey(exp, _dataProvider.ExpressionsCache, _queryProvider);
                 if (!_dataProvider.ExpressionsCache.TryGetValue(key, out var del))
                 {
-                    if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Select expression miss");
+                    //if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Select expression miss");
                     //var p = Expression.Parameter(ce!.Type);
                     //var rv = new ReplaceConstantExpressionVisitor(p);
                     //var body = rv.Visit(exp);
                     del = Expression.Lambda<Func<string>>(exp).Compile();
                     _dataProvider.ExpressionsCache[key] = del;
+
+                    if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false)
+                    {
+                        _dataProvider.Logger.LogTrace("Select expression miss. hascode: {hash}, value: {value}", key.GetHashCode(), ((Func<string>)del)());
+                    }
+                    else if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Select expression miss");
                 }
                 return ((Func<string>)del)();
             }
 
             throw new NotImplementedException();
         }
+    }
+    protected override Expression VisitLambda<T>(Expression<T> node)
+    {
+        if (typeof(T).IsAssignableTo(typeof(QueryCommand)))
+        {
+
+        }
+        return base.VisitLambda(node);
     }
     protected override Expression VisitConstant(ConstantExpression node)
     {
@@ -260,7 +332,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 if (innerQuery is not null)
                 {
                     var innerCol = innerQuery.SelectList!.SingleOrDefault(col => col.PropertyName == node.Member.Name) ?? throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
-                    var col = _dataProvider.MakeColumn(innerCol, innerQuery.EntityType!, innerQuery, false, innerQuery, _params, _paramMode);
+                    var col = _dataProvider.MakeColumn(innerCol, innerQuery.EntityType!, innerQuery, false, innerQuery, innerQuery, _params, _paramMode);
                     if (!_paramMode)
                     {
                         if (col.NeedAliasForColumn)
@@ -340,7 +412,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 return node;
             }
 
-            var key = new ExpressionKey(node);
+            var key = new ExpressionKey(node, _dataProvider.ExpressionsCache, _queryProvider);
             if (!_dataProvider.ExpressionsCache.TryGetValue(key, out var del))
             {
                 var body = Expression.Convert(node, typeof(object));
@@ -348,9 +420,9 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 
                 _dataProvider.ExpressionsCache[key] = del;
 
-                if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false)
+                if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false)
                 {
-                    _dataProvider.Logger.LogDebug("Expression cache miss on visit where. hascode: {hash}, value: {value}", key.GetHashCode(), ((Func<object>)del)());
+                    _dataProvider.Logger.LogTrace("Expression cache miss on visit where. hascode: {hash}, value: {value}", key.GetHashCode(), ((Func<object>)del)());
                 }
                 else if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Expression cache miss on visit where");
             }
@@ -371,11 +443,11 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             if (!visitor.Has1 && visitor.Has2)
             {
                 //var ce = visitor.Target2!;
-                var key = new ExpressionKey(node);
+                var key = new ExpressionKey(node, _dataProvider.ExpressionsCache, _queryProvider);
                 if (!_dataProvider.ExpressionsCache.TryGetValue(key, out var del))
                 {
                     var p = Expression.Parameter(typeof(object));
-                    var replace = new ReplaceConstantExpressionVisitor(Expression.Convert(p, visitor.Target2!.Type));
+                    var replace = new ReplaceConstantVisitor(Expression.Convert(p, visitor.Target2!.Type));
                     var body = Expression.Convert(replace.Visit(node), typeof(object));
                     del = Expression.Lambda<Func<object?, object>>(body, p).Compile();
 
@@ -441,7 +513,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 if (innerQuery is not null)
                 {
                     var innerCol = innerQuery.SelectList!.SingleOrDefault(col => col.PropertyName == node.Member.Name) ?? throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
-                    var col = _dataProvider.MakeColumn(innerCol, innerQuery.EntityType!, innerQuery, hasTableAliasForColumn, innerQuery, _params, _paramMode);
+                    var col = _dataProvider.MakeColumn(innerCol, innerQuery.EntityType!, innerQuery, hasTableAliasForColumn, innerQuery, innerQuery, _params, _paramMode);
 
                     if (!_paramMode)
                     {
@@ -597,7 +669,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     {
         if (_paramMode) throw new NotSupportedException("Cannot clone in param mode");
 
-        return new BaseExpressionVisitor(_entityType, _dataProvider, _tableProvider, _dim, _aliasProvider, _paramProvider, _dontNeedAlias, _paramMode);
+        return new BaseExpressionVisitor(_entityType, _dataProvider, _tableProvider, _dim, _aliasProvider, _paramProvider, _queryProvider, _dontNeedAlias, _paramMode);
     }
 
     protected virtual void Dispose(bool disposing)
