@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
 
-public interface IDataProvider : IAsyncDisposable, IDisposable
+public interface IDataContext : IAsyncDisposable, IDisposable
 {
     ILogger? Logger { get; set; }
     ILogger? CommandLogger { get; set; }
@@ -21,4 +21,16 @@ public interface IDataProvider : IAsyncDisposable, IDisposable
     List<TResult> ToList<TResult>(QueryCommand<TResult> queryCommand, object[]? @params);
     Task<TResult?> ExecuteScalar<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken);
     TResult? ExecuteScalar<TResult>(QueryCommand<TResult> queryCommand, object[]? @params);
+    public Entity<TResult> From<TResult>(QueryCommand<TResult> query) => new(this, query) { Logger = CommandLogger };
+    public Entity<TResult> From<TResult>(Entity<TResult> builder) => new(this, builder) { Logger = CommandLogger };
+    public Entity<T> Create<T>(Action<EntityBuilder<T>>? configEntity = null)
+    {
+        if (!Metadata.ContainsKey(typeof(T)))
+        {
+            var eb = new EntityBuilder<T>();
+            configEntity?.Invoke(eb);
+            Metadata[typeof(T)] = eb.Build();
+        }
+        return new(this) { Logger = CommandLogger };
+    }
 }

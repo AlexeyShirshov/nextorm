@@ -4,5 +4,5 @@ namespace nextorm.sqlite.tests;
 
 public abstract class Repository
 {
-    public abstract CommandBuilder<SimpleEntity> SimpleEntity { get; }
+    public abstract Entity<SimpleEntity> SimpleEntity { get; }
 }

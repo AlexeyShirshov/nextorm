@@ -3,7 +3,7 @@ using System.Reflection;
 namespace nextorm.core;
 public static class MemberInfoExtensions
 {
-    public static string GetPropertyColumnName(this MemberInfo mi, IDataProvider dataProvider)
+    public static string GetPropertyColumnName(this MemberInfo mi, IDataContext dataProvider)
     {
         if (mi is PropertyInfo pi && dataProvider.Metadata.TryGetValue(mi.DeclaringType!, pi, out var prop))
         {

@@ -1,23 +1,24 @@
 #define PARAM_CONDITION
+using System.Collections.Concurrent;
 using System.Linq.Expressions;
 using System.Reflection;
 using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
 
-public partial class InMemoryDataProvider : IDataProvider
+public partial class InMemoryContext : IDataContext
 {
-    private readonly static MethodInfo miCreateAsyncEnumerator = typeof(InMemoryDataProvider).GetMethod(nameof(CreateAsyncEnumerator), BindingFlags.Public | BindingFlags.Instance)!;
-    private readonly static MethodInfo miCreateEnumeratorAdapter = typeof(InMemoryDataProvider).GetMethod(nameof(CreateEnumeratorAdapter), BindingFlags.NonPublic | BindingFlags.Instance)!;
-    private readonly static MethodInfo miCreateEnumerator = typeof(InMemoryDataProvider).GetMethod(nameof(CreateEnumerator), BindingFlags.NonPublic | BindingFlags.Instance)!;
-    private readonly static MethodInfo miLoopJoin = typeof(InMemoryDataProvider).GetMethod(nameof(LoopJoin), BindingFlags.NonPublic | BindingFlags.Instance)!;
-    private readonly static MethodInfo miCreateCompiledQuery = typeof(InMemoryDataProvider).GetMethod(nameof(CreateCompiledQuery), BindingFlags.NonPublic | BindingFlags.Instance)!;
-    //delegate CreateEnumeratorDelegateFunc<QueryCommand<TResult>, InMemoryCacheEntry<TResult>, object[], CancellationToken,TResult>
+    private readonly static MethodInfo miCreateAsyncEnumerator = typeof(InMemoryContext).GetMethod(nameof(CreateAsyncEnumerator), BindingFlags.Public | BindingFlags.Instance)!;
+    private readonly static MethodInfo miCreateEnumeratorAdapter = typeof(InMemoryContext).GetMethod(nameof(CreateEnumeratorAdapter), BindingFlags.NonPublic | BindingFlags.Instance)!;
+    private readonly static MethodInfo miCreateEnumerator = typeof(InMemoryContext).GetMethod(nameof(CreateEnumerator), BindingFlags.NonPublic | BindingFlags.Instance)!;
+    private readonly static MethodInfo miLoopJoin = typeof(InMemoryContext).GetMethod(nameof(LoopJoin), BindingFlags.NonPublic | BindingFlags.Instance)!;
+    private readonly static MethodInfo miCreateCompiledQuery = typeof(InMemoryContext).GetMethod(nameof(CreateCompiledQuery), BindingFlags.NonPublic | BindingFlags.Instance)!;
+    private readonly static IDictionary<Type, IEntityMeta> _metadata = new ConcurrentDictionary<Type, IEntityMeta>();
     private readonly IDictionary<ExpressionKey, Delegate> _expCache = new ExpressionCache<Delegate>();
     private readonly IDictionary<Type, object?> _data = new Dictionary<Type, object?>();
     private bool _disposedValue;
     private readonly IDictionary<QueryCommand, CacheEntry> _cmdIdx = new Dictionary<QueryCommand, CacheEntry>();
-    public InMemoryDataProvider()
+    public InMemoryContext()
     {
         _data[typeof(TableAlias)] = new TableAlias?[] { null };
     }
@@ -29,7 +30,7 @@ public partial class InMemoryDataProvider : IDataProvider
     public bool NeedMapping => false;
     public IDictionary<Type, object?> Data => _data;
     public IDictionary<ExpressionKey, Delegate> ExpressionsCache => _expCache;
-    public IDictionary<Type, IEntityMeta> Metadata => throw new NotImplementedException();
+    public IDictionary<Type, IEntityMeta> Metadata => _metadata;
     public ILogger? CommandLogger { get; set; }
 
     public IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
@@ -296,7 +297,7 @@ public partial class InMemoryDataProvider : IDataProvider
     static Type CreateProjectionType(Type firstType, Type secondType, int dim)
     {
         var typeName = $"nextorm.core.Projection`{dim}";
-        var t = typeof(InMemoryDataProvider).Assembly.GetType(typeName) ?? throw new InvalidOperationException($"Cannot create type {typeName}");
+        var t = typeof(InMemoryContext).Assembly.GetType(typeName) ?? throw new InvalidOperationException($"Cannot create type {typeName}");
         var types = dim switch
         {
             2 => new List<Type> { firstType, secondType },

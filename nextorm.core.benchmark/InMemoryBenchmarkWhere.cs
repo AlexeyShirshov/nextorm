@@ -8,7 +8,7 @@ namespace nextorm.core.benchmark;
 public class InMemoryBenchmarkWhere
 {
     const int Iterations = 100;
-    private readonly InMemoryDataContext _ctx;
+    private readonly InMemoryDataRepository _ctx;
     private readonly QueryCommand<Tuple<int>> _cmd;
     private readonly IEnumerable<SimpleEntity> _data;
     public InMemoryBenchmarkWhere()
@@ -18,9 +18,8 @@ public class InMemoryBenchmarkWhere
             data.Add(new SimpleEntity { Id = i });
         _data = data;
 
-        var builder = new DataContextOptionsBuilder();
-        builder.UseInMemoryClient();
-        _ctx = new InMemoryDataContext(builder);
+        var provider = new InMemoryContext();
+        _ctx = new InMemoryDataRepository(provider);
         _ctx.SimpleEntity.WithData(_data);
 
         _cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new Tuple<int>(entity.Id)).Compile(false);

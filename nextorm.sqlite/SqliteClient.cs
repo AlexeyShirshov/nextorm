@@ -5,13 +5,14 @@ using nextorm.core;
 
 namespace nextorm.sqlite;
 
-public class SqliteDataProvider : SqlDataProvider
+public class SqliteDbContext : DbContext
 {
     private readonly string _connectionString;
 
-    public SqliteDataProvider(string connectionString)
+    public SqliteDbContext(DataContextOptionsBuilder optionsBuilder)
+        : base(optionsBuilder)
     {
-        _connectionString = connectionString;
+        _connectionString = (string)optionsBuilder.Property[DataContextOptionsBuilderExtensions.ConnectionString];
     }
 
     public override DbConnection CreateConnection()

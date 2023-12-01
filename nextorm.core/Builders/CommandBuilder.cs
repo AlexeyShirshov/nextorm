@@ -3,20 +3,20 @@ using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
 
-public class CommandBuilder<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
+public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
 {
     #region Fields
     //private IPayloadManager _payloadMgr = new FastPayloadManager(new Dictionary<Type, object?>());
-    private readonly IDataProvider _dataProvider;
+    private readonly IDataContext _dataProvider;
     private QueryCommand? _query;
     private Expression<Func<TEntity, bool>>? _condition;
     private static Lazy<QueryCommand<bool>>? _anyCommand;
     #endregion
-    public CommandBuilder(IDataProvider dataProvider)
+    public Entity(IDataContext dataProvider)
     {
         _dataProvider = dataProvider;
     }
-    public CommandBuilder(IDataProvider dataProvider, QueryCommand<TEntity> query)
+    public Entity(IDataContext dataProvider, QueryCommand<TEntity> query)
     {
         _dataProvider = dataProvider;
         _query = query;
@@ -24,10 +24,10 @@ public class CommandBuilder<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
     #region Properties
     internal ILogger? Logger { get; set; }
     internal QueryCommand? Query { get => _query; set => _query = value; }
-    internal IDataProvider DataProvider => _dataProvider;
+    internal IDataContext DataProvider => _dataProvider;
     internal Expression<Func<TEntity, bool>>? Condition { get => _condition; set => _condition = value; }
     //internal IPayloadManager PayloadManager { get => _payloadMgr; init => _payloadMgr = value; }
-    public delegate void CommandCreatedHandler<T>(CommandBuilder<T> sender, QueryCommand queryCommand);
+    public delegate void CommandCreatedHandler<T>(Entity<T> sender, QueryCommand queryCommand);
     public event CommandCreatedHandler<TEntity>? CommandCreatedEvent;
     #endregion
 
@@ -55,7 +55,7 @@ public class CommandBuilder<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
 
     }
 
-    public CommandBuilder<TEntity> Where(Expression<Func<TEntity, bool>> condition)
+    public Entity<TEntity> Where(Expression<Func<TEntity, bool>> condition)
     {
         ArgumentNullException.ThrowIfNull(condition);
 
@@ -75,11 +75,11 @@ public class CommandBuilder<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
     {
         return CloneImp();
     }
-    public CommandBuilder<TEntity> Clone()
+    public Entity<TEntity> Clone()
     {
-        return (CommandBuilder<TEntity>)CloneImp();
+        return (Entity<TEntity>)CloneImp();
     }
-    protected virtual void CopyTo(CommandBuilder<TEntity> dst)
+    protected virtual void CopyTo(Entity<TEntity> dst)
     {
         dst._query = _query;
         //dst._payloadMgr = _payloadMgr;
@@ -87,16 +87,16 @@ public class CommandBuilder<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
     }
     protected virtual object CloneImp()
     {
-        var r = new CommandBuilder<TEntity>(_dataProvider) { Logger = Logger };
+        var r = new Entity<TEntity>(_dataProvider) { Logger = Logger };
 
         CopyTo(r);
 
         return r;
     }
-    public static implicit operator QueryCommand<TEntity>(CommandBuilder<TEntity> builder) => builder.ToCommand();
+    public static implicit operator QueryCommand<TEntity>(Entity<TEntity> builder) => builder.ToCommand();
     public QueryCommand<TEntity> ToCommand() => Select(it => it);
     public IAsyncEnumerator<TEntity> GetAsyncEnumerator(CancellationToken cancellationToken = default) => ToCommand().GetAsyncEnumerator(cancellationToken);
-    public CommandBuilderP2<TEntity, TJoinEntity> Join<TJoinEntity>(CommandBuilder<TJoinEntity> _, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
+    public EntityP2<TEntity, TJoinEntity> Join<TJoinEntity>(Entity<TJoinEntity> _, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
     {
         QueryCommand? query = null;
         if (_condition is not null || _query is not null)
@@ -104,10 +104,10 @@ public class CommandBuilder<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
             query = ToCommand();
         }
 
-        var cb = new CommandBuilderP2<TEntity, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition)) { Logger = Logger, _query = query/*, PayloadManager = PayloadManager*/, BaseBuilder = this };
+        var cb = new EntityP2<TEntity, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition)) { Logger = Logger, _query = query/*, PayloadManager = PayloadManager*/, BaseBuilder = this };
         return cb;
     }
-    public CommandBuilderP2<TEntity, TJoinEntity> Join<TJoinEntity>(QueryCommand<TJoinEntity> query, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
+    public EntityP2<TEntity, TJoinEntity> Join<TJoinEntity>(QueryCommand<TJoinEntity> query, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
     {
         QueryCommand? queryBase = null;
         if (_condition is not null || _query is not null)
@@ -115,7 +115,7 @@ public class CommandBuilder<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
             queryBase = ToCommand();
         }
 
-        var cb = new CommandBuilderP2<TEntity, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition) { Query = query }) { Logger = Logger, _query = queryBase/*, PayloadManager = PayloadManager*/, BaseBuilder = this };
+        var cb = new EntityP2<TEntity, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition) { Query = query }) { Logger = Logger, _query = queryBase/*, PayloadManager = PayloadManager*/, BaseBuilder = this };
         return cb;
     }
     public QueryCommand<bool> AnyCommand()
@@ -135,7 +135,7 @@ public class CommandBuilder<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
         return _dataProvider.ExecuteScalar(queryCommand, @params);
     }
 
-    internal protected static QueryCommand<bool> GetAnyCommand(IDataProvider dataProvider, QueryCommand cmd)
+    internal protected static QueryCommand<bool> GetAnyCommand(IDataContext dataProvider, QueryCommand cmd)
     {
         var created = false;
         if (_anyCommand is null)
@@ -171,12 +171,12 @@ public class CommandBuilder<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
 }
 public class CommandBuilder
 {
-    private readonly IDataProvider _dataProvider;
+    private readonly IDataContext _dataProvider;
     private readonly string? _table;
     internal ILogger? Logger { get; set; }
     private Expression? _condition;
-    public CommandBuilder(IDataProvider dataProvider) : this(dataProvider, null) { }
-    public CommandBuilder(IDataProvider dataProvider, string? table)
+    public CommandBuilder(IDataContext dataProvider) : this(dataProvider, null) { }
+    public CommandBuilder(IDataContext dataProvider, string? table)
     {
         _dataProvider = dataProvider;
         _table = table;

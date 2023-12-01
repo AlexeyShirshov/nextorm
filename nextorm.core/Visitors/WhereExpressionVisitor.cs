@@ -4,7 +4,7 @@ namespace nextorm.core;
 
 public class WhereExpressionVisitor : BaseExpressionVisitor
 {
-    public WhereExpressionVisitor(Type entityType, SqlDataProvider dataProvider, ISourceProvider tableSource, int dim, IAliasProvider? aliasProvider, IParamProvider paramProvider, IQueryProvider queryProvider, bool paramMode)
+    public WhereExpressionVisitor(Type entityType, DbContext dataProvider, ISourceProvider tableSource, int dim, IAliasProvider? aliasProvider, IParamProvider paramProvider, IQueryProvider queryProvider, bool paramMode)
         : base(entityType, dataProvider, tableSource, dim, aliasProvider, paramProvider, queryProvider, false, paramMode)
     {
     }

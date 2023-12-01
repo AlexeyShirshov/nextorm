@@ -1,12 +1,17 @@
 namespace nextorm.core.benchmark;
 
-public class TestDataContext : SqlDataContext
+public class TestDataRepository
 {
-    public TestDataContext(DataContextOptionsBuilder optionsBuilder) : base(optionsBuilder)
+    private readonly IDataContext _dataProvider;
+
+    public TestDataRepository(IDataContext dataProvider)
     {
-        SimpleEntity = Create<ISimpleEntity>();
-        LargeEntity = Create<ILargeEntity>();
+        SimpleEntity = dataProvider.Create<ISimpleEntity>();
+        LargeEntity = dataProvider.Create<ILargeEntity>();
+        _dataProvider = dataProvider;
     }
-    public CommandBuilder<ISimpleEntity> SimpleEntity { get; set; }
-    public CommandBuilder<ILargeEntity> LargeEntity { get; set; }
+    public Entity<ISimpleEntity> SimpleEntity { get; set; }
+    public Entity<ILargeEntity> LargeEntity { get; set; }
+
+    public IDataContext DataProvider => _dataProvider;
 }

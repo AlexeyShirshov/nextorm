@@ -18,7 +18,7 @@ namespace nextorm.core.benchmark;
 public class SqliteBenchmarkWhere
 {
     const int Iterations = 100;
-    private readonly TestDataContext _ctx;
+    private readonly TestDataRepository _ctx;
     private readonly QueryCommand<Tuple<int>> _cmd;
     private readonly QueryCommand<Tuple<int>> _cmdToList;
     private readonly EFDataContext _efCtx;
@@ -35,7 +35,8 @@ public class SqliteBenchmarkWhere
             builder.UseLoggerFactory(_logFactory);
             builder.LogSensetiveData(true);
         }
-        _ctx = new TestDataContext(builder);
+        var provider = new SqliteDbContext(builder);
+        _ctx = new TestDataRepository(provider);
 
         _cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new Tuple<int>(entity.Id)).Compile(false);
 
@@ -52,7 +53,7 @@ public class SqliteBenchmarkWhere
 
         _efCtx = new EFDataContext(efBuilder.Options);
 
-        _conn = new SqliteConnection(((SqliteDataProvider)_ctx.DataProvider).ConnectionString);
+        _conn = new SqliteConnection(((SqliteDbContext)_ctx.DataProvider).ConnectionString);
     }
     [Benchmark()]
     [BenchmarkCategory("Stream")]

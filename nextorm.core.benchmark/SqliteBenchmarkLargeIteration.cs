@@ -23,7 +23,7 @@ namespace nextorm.core.benchmark;
 [Config(typeof(NextormConfig))]
 public class SqliteBenchmarkLargeIteration
 {
-    private readonly TestDataContext _ctx;
+    private readonly TestDataRepository _ctx;
     private readonly QueryCommand<TupleLargeEntity> _cmdExec;
     private readonly QueryCommand<TupleLargeEntity> _cmdToList;
     private readonly EFDataContext _efCtx;
@@ -41,7 +41,8 @@ public class SqliteBenchmarkLargeIteration
             builder.UseLoggerFactory(_logFactory);
             builder.LogSensetiveData(true);
         }
-        _ctx = new TestDataContext(builder);
+        var provider = new SqliteDbContext(builder);
+        _ctx = new TestDataRepository(provider);
 
         _cmdExec = _ctx.LargeEntity.Select(entity => new TupleLargeEntity(entity.Id, entity.Str, entity.Dt)).Compile(false);
 
@@ -58,7 +59,7 @@ public class SqliteBenchmarkLargeIteration
 
         _efCtx = new EFDataContext(efBuilder.Options);
 
-        _conn = new SqliteConnection(((SqliteDataProvider)_ctx.DataProvider).ConnectionString);
+        _conn = new SqliteConnection(((SqliteDbContext)_ctx.DataProvider).ConnectionString);
 
         _adoCmd = _conn.CreateCommand();
         _adoCmd.CommandText = "select id, someString, dt from large_table";

@@ -7,7 +7,7 @@ namespace nextorm.core.benchmark;
 [SimpleJob(RuntimeMoniker.Net80)]
 public class InMemoryBenchmarkIteration
 {
-    private readonly InMemoryDataContext _ctx;
+    private readonly InMemoryDataRepository _ctx;
     private readonly QueryCommand<Tuple<int>> _cmd;
     private readonly QueryCommand<Tuple<int>> _cmdToList;
     private readonly IEnumerable<SimpleEntity> _data;
@@ -18,9 +18,8 @@ public class InMemoryBenchmarkIteration
             data.Add(new SimpleEntity { Id = 1 });
         _data = data;
 
-        var builder = new DataContextOptionsBuilder();
-        builder.UseInMemoryClient();
-        _ctx = new InMemoryDataContext(builder);
+        var provider = new InMemoryContext();
+        _ctx = new InMemoryDataRepository(provider);
         _ctx.SimpleEntity.WithData(_data);
 
         _cmd = _ctx.SimpleEntity.Select(entity => new Tuple<int>(entity.Id)).Compile(false);

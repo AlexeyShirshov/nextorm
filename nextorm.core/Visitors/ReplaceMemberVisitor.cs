@@ -4,11 +4,11 @@ namespace nextorm.core;
 public class ReplaceMemberVisitor : ExpressionVisitor
 {
     private readonly Type _entityType;
-    private readonly SqlDataProvider _sqlDataProvider;
+    private readonly DbContext _sqlDataProvider;
     private readonly IQueryProvider _queryProvider;
     private readonly ParameterExpression _param;
 
-    public ReplaceMemberVisitor(Type entityType, SqlDataProvider sqlDataProvider, IQueryProvider queryProvider, ParameterExpression param)
+    public ReplaceMemberVisitor(Type entityType, DbContext sqlDataProvider, IQueryProvider queryProvider, ParameterExpression param)
     {
         _entityType = entityType;
         _sqlDataProvider = sqlDataProvider;

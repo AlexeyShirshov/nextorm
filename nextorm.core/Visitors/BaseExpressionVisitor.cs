@@ -6,7 +6,7 @@ namespace nextorm.core;
 public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 {
     private readonly Type _entityType;
-    private readonly SqlDataProvider _dataProvider;
+    private readonly DbContext _dataProvider;
     private readonly ISourceProvider _tableProvider;
     private readonly int _dim;
     protected readonly StringBuilder? _builder;
@@ -20,7 +20,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     protected readonly bool _paramMode;
     private bool _disposedValue;
 
-    public BaseExpressionVisitor(Type entityType, SqlDataProvider dataProvider, ISourceProvider tableProvider, int dim, IAliasProvider? aliasProvider, IParamProvider paramProvider, IQueryProvider queryProvider, bool dontNeedAlias, bool paramMode)
+    public BaseExpressionVisitor(Type entityType, DbContext dataProvider, ISourceProvider tableProvider, int dim, IAliasProvider? aliasProvider, IParamProvider paramProvider, IQueryProvider queryProvider, bool dontNeedAlias, bool paramMode)
     {
         _entityType = entityType;
         _dataProvider = dataProvider;
@@ -31,7 +31,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         _queryProvider = queryProvider;
         _dontNeedAlias = dontNeedAlias;
         _paramMode = paramMode;
-        _builder = paramMode ? null : SqlDataProvider._sbPool.Get();
+        _builder = paramMode ? null : DbContext._sbPool.Get();
     }
     public bool NeedAliasForColumn => _needAliasForColumn;
     public List<Param> Params => _params;
@@ -331,7 +331,10 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 var innerQuery = _tableProvider.FindSourceFromAlias(null);
                 if (innerQuery is not null)
                 {
-                    var innerCol = innerQuery.SelectList!.SingleOrDefault(col => col.PropertyName == node.Member.Name) ?? throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
+                    var innerCol = innerQuery.SelectList!.SingleOrDefault(col => col.PropertyName == node.Member.Name);
+                    if (innerCol is null)
+                        throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
+
                     var col = _dataProvider.MakeColumn(innerCol, innerQuery.EntityType!, innerQuery, false, innerQuery, innerQuery, _params, _paramMode);
                     if (!_paramMode)
                     {
@@ -512,7 +515,10 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 var innerQuery = _tableProvider.FindSourceFromAlias(tableAliasForColumn);
                 if (innerQuery is not null)
                 {
-                    var innerCol = innerQuery.SelectList!.SingleOrDefault(col => col.PropertyName == node.Member.Name) ?? throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
+                    var innerCol = innerQuery.SelectList!.SingleOrDefault(col => col.PropertyName == node.Member.Name);
+                    if (innerCol is null)
+                        throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
+
                     var col = _dataProvider.MakeColumn(innerCol, innerQuery.EntityType!, innerQuery, hasTableAliasForColumn, innerQuery, innerQuery, _params, _paramMode);
 
                     if (!_paramMode)
@@ -679,7 +685,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             if (disposing)
             {
                 if (!_paramMode)
-                    SqlDataProvider._sbPool.Return(_builder!);
+                    DbContext._sbPool.Return(_builder!);
             }
             _disposedValue = true;
         }

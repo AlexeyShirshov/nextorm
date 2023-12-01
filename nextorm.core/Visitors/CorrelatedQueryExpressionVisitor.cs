@@ -7,7 +7,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 {
     private readonly CancellationToken _cancellationToken;
     private readonly bool _forPrepare = false;
-    private readonly IDataProvider _dataProvider;
+    private readonly IDataContext _dataProvider;
     private readonly IQueryProvider _queryProvider;
     private readonly Type? _entityType;
 
@@ -17,7 +17,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
     private static PropertyInfo ItemPI = typeof(IReadOnlyList<QueryCommand>).GetProperty("Item")!;
     private ParameterExpression? _p;
 
-    public CorrelatedQueryExpressionVisitor(IDataProvider dataProvider, IQueryProvider queryProvider, CancellationToken cancellationToken)
+    public CorrelatedQueryExpressionVisitor(IDataContext dataProvider, IQueryProvider queryProvider, CancellationToken cancellationToken)
     {
         _dataProvider = dataProvider;
         _cancellationToken = cancellationToken;
@@ -26,7 +26,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         //_refs = new();
     }
 
-    public CorrelatedQueryExpressionVisitor(IDataProvider dataProvider, IQueryProvider queryProvider, Type entityType)
+    public CorrelatedQueryExpressionVisitor(IDataContext dataProvider, IQueryProvider queryProvider, Type entityType)
     {
         _dataProvider = dataProvider;
         _queryProvider = queryProvider;

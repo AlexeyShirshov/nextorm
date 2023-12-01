@@ -20,7 +20,7 @@ public class SqliteBenchmarkSimulateWork
     const int WorkIterations = 1000;
     const int SmallIterations = 10;
     const int LargeListSize = 500;
-    private readonly TestDataContext _ctx;
+    private readonly TestDataRepository _ctx;
     private readonly QueryCommand<TupleLargeEntity> _cmd;
     private readonly QueryCommand<TupleLargeEntity> _cmdToList;
     private readonly EFDataContext _efCtx;
@@ -40,7 +40,8 @@ public class SqliteBenchmarkSimulateWork
             builder.UseLoggerFactory(_logFactory);
             builder.LogSensetiveData(true);
         }
-        _ctx = new TestDataContext(builder);
+        var provider = new SqliteDbContext(builder);
+        _ctx = new TestDataRepository(provider);
 
         _cmd = _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new TupleLargeEntity(entity.Id, entity.Str, entity.Dt)).Compile(false);
 
@@ -59,7 +60,7 @@ public class SqliteBenchmarkSimulateWork
 
         _efCtx = new EFDataContext(efBuilder.Options);
 
-        _conn = new SqliteConnection(((SqliteDataProvider)_ctx.DataProvider).ConnectionString);
+        _conn = new SqliteConnection(((SqliteDbContext)_ctx.DataProvider).ConnectionString);
         //_conn.Open();
     }
     private static ValueTask DoWork()

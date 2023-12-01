@@ -90,7 +90,7 @@ public class DatabaseCompiledPlan<TResult> : CompiledQuery<TResult, IDataRecord>
 {
     internal readonly string _sql;
     public readonly bool NoParams;
-    public SqlDataProvider.SqlCacheEntry? CacheEntry { get; internal set; }
+    public DbContext.SqlCacheEntry? CacheEntry { get; internal set; }
 
     public DatabaseCompiledPlan(string sql, Func<Func<IDataRecord, TResult>> getMap, bool noParams)
         : base(getMap)

@@ -4,8 +4,8 @@ namespace nextorm.core.tests;
 
 public class InMemoryJoinTests
 {
-    private readonly InMemoryDataContext _sut;
-    public InMemoryJoinTests(InMemoryDataContext sut)
+    private readonly InMemoryRepository _sut;
+    public InMemoryJoinTests(InMemoryRepository sut)
     {
         _sut = sut;
         _sut.SimpleEntity.WithData(new[] { new SimpleEntity { Id = 1 }, new SimpleEntity { Id = 2 } });

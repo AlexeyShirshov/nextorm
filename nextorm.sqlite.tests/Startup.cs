@@ -19,11 +19,13 @@ public class Startup
             builder.AddConsole();
         });
 
-        services.AddNextOrmContext<TestDataContext>((sp, builder) =>
+        services.AddNextOrmContext<SqliteDbContext>((sp, builder) =>
         {
             builder.UseLoggerFactory(sp.GetRequiredService<ILoggerFactory>());
             builder.UseSqlite(Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db"));
             builder.LogSensetiveData(true);
         });
+
+        services.AddScoped<TestDataRepository>();
     }
 }

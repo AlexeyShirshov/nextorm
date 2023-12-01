@@ -1,10 +1,15 @@
 namespace nextorm.core.tests;
 
-public class InMemoryDataContext : core.InMemoryDataContext
+public class InMemoryRepository
 {
-    public InMemoryDataContext(DataContextOptionsBuilder optionsBuilder) : base(optionsBuilder)
+    private readonly IDataContext _dataProvider;
+
+    public InMemoryRepository(IDataContext dataProvider)
     {
-        SimpleEntity = Create<SimpleEntity>();
+        SimpleEntity = dataProvider.Create<SimpleEntity>();
+        _dataProvider = dataProvider;
     }
-    public CommandBuilder<SimpleEntity> SimpleEntity {get;set;}
+    public IDataContext DataProvider => _dataProvider;
+    public Entity<SimpleEntity> SimpleEntity { get; set; }
+
 }

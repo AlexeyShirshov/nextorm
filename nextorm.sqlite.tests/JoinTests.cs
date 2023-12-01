@@ -5,9 +5,9 @@ namespace nextorm.sqlite.tests;
 
 public class JoinTests
 {
-    private readonly TestDataContext _sut;
+    private readonly TestDataRepository _sut;
     private readonly ILogger<JoinTests> _logger;
-    public JoinTests(TestDataContext sut, ILogger<JoinTests> logger)
+    public JoinTests(TestDataRepository sut, ILogger<JoinTests> logger)
     {
         _sut = sut;
         _logger = logger;

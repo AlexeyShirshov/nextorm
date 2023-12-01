@@ -15,7 +15,7 @@ public class SelectExpression
     public Type PropertyType { get; set; }
     public bool Nullable { get; }
     internal PropertyInfo? PropertyInfo { get; set; }
-    public List<QueryCommand>? ReferencedQueries { get; set; }
+    // public List<QueryCommand>? ReferencedQueries { get; set; }
     private readonly IDictionary<ExpressionKey, Delegate> _expCache;
     private readonly IQueryProvider _queryProvider;
 
@@ -36,6 +36,7 @@ public class SelectExpression
         _expCache = expCache;
         _queryProvider = queryProvider;
     }
+    //public readonly bool IsEmpty => _realType is null;
     private readonly static MethodInfo GetInt32MI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetInt32))!;
     private readonly static MethodInfo GetInt64MI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetInt64))!;
     private readonly static MethodInfo GetDateTimeMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetDateTime))!;
@@ -110,7 +111,8 @@ public class SelectExpression
 
             hash.Add(PropertyName);
 
-            Expression.Switch(cmd => hash.Add(cmd), exp => hash.Add(exp, new PreciseExpressionEqualityComparer(_expCache, _queryProvider)));
+            var @this = this;
+            Expression.Switch(cmd => hash.Add(cmd), exp => hash.Add(exp, new PreciseExpressionEqualityComparer(@this._expCache, @this._queryProvider)));
 
             // if (ReferencedQueries is not null)
             //     foreach (var cmd in ReferencedQueries)
@@ -121,6 +123,8 @@ public class SelectExpression
     }
     public override bool Equals(object? obj)
     {
+        // if (obj is null) return false;
+        // return Equals((SelectExpression)obj);
         return Equals(obj as SelectExpression);
     }
     public bool Equals(SelectExpression? exp)
@@ -133,22 +137,23 @@ public class SelectExpression
 
         if (PropertyName != exp.PropertyName) return false;
 
+        var @this = this;
         if (Expression.IsT0 != exp.Expression.IsT0
-            || !Expression.Match(cmd => cmd.Equals(exp.Expression.AsT0), e => new PreciseExpressionEqualityComparer(_expCache, _queryProvider).Equals(e, exp.Expression.AsT1)))
+            || !Expression.Match(cmd => cmd.Equals(exp.Expression.AsT0), e => new PreciseExpressionEqualityComparer(@this._expCache, @this._queryProvider).Equals(e, exp.Expression.AsT1)))
             return false;
 
-        if (ReferencedQueries is null && exp.ReferencedQueries is not null) return false;
-        if (ReferencedQueries is not null && exp.ReferencedQueries is null) return false;
+        // if (ReferencedQueries is null && exp.ReferencedQueries is not null) return false;
+        // if (ReferencedQueries is not null && exp.ReferencedQueries is null) return false;
 
-        if (ReferencedQueries is not null && exp.ReferencedQueries is not null)
-        {
-            if (ReferencedQueries.Count != exp.ReferencedQueries.Count) return false;
+        // if (ReferencedQueries is not null && exp.ReferencedQueries is not null)
+        // {
+        //     if (ReferencedQueries.Count != exp.ReferencedQueries.Count) return false;
 
-            for (int i = 0; i < ReferencedQueries.Count; i++)
-            {
-                if (!ReferencedQueries[i].Equals(exp.ReferencedQueries[i])) return false;
-            }
-        }
+        //     for (int i = 0; i < ReferencedQueries.Count; i++)
+        //     {
+        //         if (!ReferencedQueries[i].Equals(exp.ReferencedQueries[i])) return false;
+        //     }
+        // }
 
         return true;
     }

@@ -4,8 +4,8 @@ namespace nextorm.core;
 
 public static class ServiceCollectionExtensions
 {
-    public static void AddNextOrmContext<T>(this IServiceCollection services, Action<IServiceProvider, DataContextOptionsBuilder>? optionsBuilder = null)
-        where T : DataContext
+    public static void AddNextOrmContext<T>(this IServiceCollection services, Action<IServiceProvider, DataContextOptionsBuilder>? optionsBuilder)
+        where T : class, IDataContext
     {
         if (optionsBuilder is not null)
         {
@@ -17,10 +17,11 @@ public static class ServiceCollectionExtensions
             });
         }
 
+        services.AddScoped<IDataContext, T>();
         services.AddScoped<T>();
     }
-    public static void AddNextOrmContext<T>(this IServiceCollection services, Action<DataContextOptionsBuilder>? optionsBuilder = null)
-        where T : DataContext
+    public static void AddNextOrmContext<T>(this IServiceCollection services, Action<DataContextOptionsBuilder>? optionsBuilder)
+        where T : class, IDataContext
     {
         if (optionsBuilder is not null)
         {
@@ -33,6 +34,13 @@ public static class ServiceCollectionExtensions
             });
         }
 
+        services.AddScoped<IDataContext, T>();
+        services.AddScoped<T>();
+    }
+    public static void AddNextOrmContext<T>(this IServiceCollection services)
+        where T : class, IDataContext
+    {
+        services.AddScoped<IDataContext, T>();
         services.AddScoped<T>();
     }
 }

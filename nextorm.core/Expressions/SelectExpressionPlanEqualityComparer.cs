@@ -49,7 +49,7 @@ public sealed class SelectExpressionPlanEqualityComparer : IEqualityComparer<Sel
             });
     }
 
-    public int GetHashCode([DisallowNull] SelectExpression obj)
+    public int GetHashCode(SelectExpression obj)
     {
         if (obj is null) return 0;
 

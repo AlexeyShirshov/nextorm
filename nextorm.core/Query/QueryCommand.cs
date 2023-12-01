@@ -17,7 +17,7 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
     private int _columnsHash;
     private int _joinHash;
     protected FromExpression? _from;
-    protected IDataProvider _dataProvider;
+    protected IDataContext _dataProvider;
     protected readonly LambdaExpression _exp;
     protected readonly Expression? _condition;
     protected bool _isPrepared;
@@ -40,11 +40,11 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
 #endif
     private int _paramIdx;
     //protected ArrayList _params = new();
-    public QueryCommand(IDataProvider dataProvider, LambdaExpression exp, Expression? condition)
+    public QueryCommand(IDataContext dataProvider, LambdaExpression exp, Expression? condition)
         : this(dataProvider, exp, condition/*, new FastPayloadManager(new Dictionary<Type, object?>())*/, new())
     {
     }
-    protected QueryCommand(IDataProvider dataProvider, LambdaExpression exp, Expression? condition/*, IPayloadManager payloadMgr*/, List<JoinExpression> joins)
+    protected QueryCommand(IDataContext dataProvider, LambdaExpression exp, Expression? condition/*, IPayloadManager payloadMgr*/, List<JoinExpression> joins)
     {
         _dataProvider = dataProvider;
         _exp = exp;
@@ -56,7 +56,7 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
     public FromExpression? From { get => _from; set => _from = value; }
     public List<SelectExpression>? SelectList => _selectList;
     public Type? EntityType => _srcType;
-    public IDataProvider DataProvider
+    public IDataContext DataProvider
     {
         get => _dataProvider;
         set
@@ -422,7 +422,7 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
 
             if (_condition is not null)
             {
-                var comp = new PreciseExpressionEqualityComparer((_dataProvider as SqlDataProvider)?.ExpressionsCache, this, (_dataProvider as SqlDataProvider)?.Logger);
+                var comp = new PreciseExpressionEqualityComparer((_dataProvider as DbContext)?.ExpressionsCache, this, (_dataProvider as DbContext)?.Logger);
                 var condHash = comp.GetHashCode(_condition);
                 hash.Add(condHash);
 #if DEBUG
@@ -474,7 +474,7 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
 
         if (_srcType != cmd._srcType) return false;
 
-        if (!new PreciseExpressionEqualityComparer((_dataProvider as SqlDataProvider)?.ExpressionsCache, this, (_dataProvider as SqlDataProvider)?.Logger).Equals(_condition, cmd._condition)) return false;
+        if (!new PreciseExpressionEqualityComparer((_dataProvider as DbContext)?.ExpressionsCache, this, (_dataProvider as DbContext)?.Logger).Equals(_condition, cmd._condition)) return false;
 
         if (_selectList is null && cmd._selectList is not null) return false;
         if (_selectList is not null && cmd._selectList is null) return false;
@@ -551,10 +551,10 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
 public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
 {
     //private readonly IPayloadManager _payloadMap = new FastPayloadManager(new Dictionary<Type, object?>());
-    public QueryCommand(IDataProvider dataProvider, LambdaExpression exp, Expression? condition) : base(dataProvider, exp, condition)
+    public QueryCommand(IDataContext dataProvider, LambdaExpression exp, Expression? condition) : base(dataProvider, exp, condition)
     {
     }
-    protected QueryCommand(IDataProvider dataProvider, LambdaExpression exp, Expression? condition/*, IPayloadManager payloadMgr*/, List<JoinExpression> joins)
+    protected QueryCommand(IDataContext dataProvider, LambdaExpression exp, Expression? condition/*, IPayloadManager payloadMgr*/, List<JoinExpression> joins)
         : base(dataProvider, exp, condition/*, payloadMgr*/, joins)
     {
 
@@ -805,7 +805,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
                 PrepareCommand(CancellationToken.None);
             IgnoreColumns = true;
 
-            queryCommand = CommandBuilder<TResult>.GetAnyCommand(_dataProvider, this);
+            queryCommand = Entity<TResult>.GetAnyCommand(_dataProvider, this);
         }
 
         return _dataProvider.ExecuteScalar(queryCommand, @params);
@@ -819,7 +819,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
                 PrepareCommand(cancellationToken);
             IgnoreColumns = true;
 
-            queryCommand = CommandBuilder<TResult>.GetAnyCommand(_dataProvider, this);
+            queryCommand = Entity<TResult>.GetAnyCommand(_dataProvider, this);
         }
 
         return await _dataProvider.ExecuteScalar(queryCommand, @params, cancellationToken).ConfigureAwait(false);

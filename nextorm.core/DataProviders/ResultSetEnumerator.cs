@@ -9,7 +9,7 @@ namespace nextorm.core;
 public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerator<TResult>, IEnumerable<TResult>
 {
     //private readonly QueryCommand<TResult> _cmd;
-    private readonly SqlDataProvider _dataProvider;
+    private readonly DbContext _dataProvider;
     private readonly DatabaseCompiledQuery<TResult> _compiledQuery;
     private CancellationToken _cancellationToken;
     private object[]? _params;
@@ -18,7 +18,7 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
     private DbDataReader? _reader;
     private readonly DbConnection _conn;
     private bool _disposedValue;
-    public ResultSetEnumerator(SqlDataProvider dataProvider, DatabaseCompiledQuery<TResult> compiledQuery)
+    public ResultSetEnumerator(DbContext dataProvider, DatabaseCompiledQuery<TResult> compiledQuery)
     {
         //_cmd = cmd;
         _dataProvider = dataProvider;

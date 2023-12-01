@@ -2,15 +2,24 @@ using nextorm.core;
 
 namespace nextorm.sqlite.tests;
 
-public class TestDataContext : SqlDataContext
+public class TestDataRepository
 {
-    public TestDataContext(DataContextOptionsBuilder optionsBuilder) : base(optionsBuilder)
+    private readonly IDataContext _dataProvider;
+
+    public TestDataRepository(IDataContext dataProvider)
     {
-        SimpleEntity = Create<ISimpleEntity>();
-        ComplexEntity = Create<IComplexEntity>();
-        SimpleEntityAsClass = Create<SimpleEntity>();
+        SimpleEntity = dataProvider.Create<ISimpleEntity>();
+        ComplexEntity = dataProvider.Create<IComplexEntity>();
+        SimpleEntityAsClass = dataProvider.Create<SimpleEntity>();
+        _dataProvider = dataProvider;
     }
-    public CommandBuilder<ISimpleEntity> SimpleEntity { get; set; }
-    public CommandBuilder<IComplexEntity> ComplexEntity { get; set; }
-    public CommandBuilder<SimpleEntity> SimpleEntityAsClass { get; set; }
+    public Entity<ISimpleEntity> SimpleEntity { get; set; }
+    public Entity<IComplexEntity> ComplexEntity { get; set; }
+    public Entity<SimpleEntity> SimpleEntityAsClass { get; set; }
+
+    public IDataContext DataProvider => _dataProvider;
+
+    public CommandBuilder From(string table) => (_dataProvider as DbContext).From(table);
+    public Entity<TResult> From<TResult>(QueryCommand<TResult> query) => _dataProvider.From(query);
+    public Entity<TResult> From<TResult>(Entity<TResult> builder) => _dataProvider.From(builder);
 }

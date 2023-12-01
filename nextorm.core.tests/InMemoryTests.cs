@@ -5,10 +5,10 @@ namespace nextorm.core.tests;
 
 public class InMemoryTests
 {
-    private readonly InMemoryDataContext _sut;
+    private readonly InMemoryRepository _sut;
     private readonly ILogger<InMemoryTests> _logger;
 
-    public InMemoryTests(InMemoryDataContext sut, ILogger<InMemoryTests> logger)
+    public InMemoryTests(InMemoryRepository sut, ILogger<InMemoryTests> logger)
     {
         _sut = sut;
         _logger = logger;
@@ -27,7 +27,7 @@ public class InMemoryTests
     public async Task TestWhere_Subquery()
     {
         var subQuery = _sut.SimpleEntity.Where(it => it.Id >= 1).Select(it => new { it.Id });
-        var r = await _sut.From(subQuery).Where(it => it.Id == 2).Select(it => new { it.Id }).SingleOrDefaultAsync();
+        var r = await _sut.DataProvider.From(subQuery).Where(it => it.Id == 2).Select(it => new { it.Id }).SingleOrDefaultAsync();
 
         r.Should().NotBeNull();
         r.Id.Should().Be(2);

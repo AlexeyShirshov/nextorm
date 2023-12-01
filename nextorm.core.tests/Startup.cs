@@ -19,13 +19,10 @@ public class Startup
             builder.AddConsole();
         });
 
-        services.AddScoped<IDataProvider, InMemoryDataProvider>();
+        services.AddScoped<Entity<ISimpleEntity>>();
 
-        services.AddScoped<CommandBuilder<ISimpleEntity>>();
+        services.AddNextOrmContext<InMemoryContext>();
 
-        services.AddNextOrmContext<InMemoryDataContext>(builder =>
-        {
-            builder.UseInMemoryClient();
-        });
+        services.AddScoped<InMemoryRepository>();
     }
 }

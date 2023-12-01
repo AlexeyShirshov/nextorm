@@ -1,10 +1,15 @@
 namespace nextorm.core.benchmark;
 
-public class InMemoryDataContext : core.InMemoryDataContext
+public class InMemoryDataRepository
 {
-    public InMemoryDataContext(DataContextOptionsBuilder optionsBuilder) : base(optionsBuilder)
+    private readonly IDataContext _dataProvider;
+
+    public InMemoryDataRepository(IDataContext dataProvider)
     {
-        SimpleEntity = Create<SimpleEntity>();
+        SimpleEntity = dataProvider.Create<SimpleEntity>();
+        _dataProvider = dataProvider;
     }
-    public CommandBuilder<SimpleEntity> SimpleEntity {get;set;}
+    public Entity<SimpleEntity> SimpleEntity { get; set; }
+
+    public IDataContext DataProvider => _dataProvider;
 }

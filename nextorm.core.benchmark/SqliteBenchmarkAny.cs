@@ -15,7 +15,7 @@ namespace nextorm.core.benchmark;
 [Config(typeof(NextormConfig))]
 public class SqliteBenchmarkAny
 {
-    private readonly TestDataContext _ctx;
+    private readonly TestDataRepository _ctx;
     private readonly QueryCommand<bool> _cmd;
     private readonly QueryCommand<bool> _cmdFilter;
     private readonly QueryCommand<bool> _cmdFilterParam;
@@ -35,7 +35,8 @@ public class SqliteBenchmarkAny
             builder.UseLoggerFactory(_logFactory);
             builder.LogSensetiveData(true);
         }
-        _ctx = new TestDataContext(builder);
+        var provider = new SqliteDbContext(builder);
+        _ctx = new TestDataRepository(provider);
 
         _cmd = _ctx.SimpleEntity.AnyCommand().Compile(true);
         // _cmdFilter = _ctx.SimpleEntity.Where(it => it.Id > 5).AnyCommand().Compile(false);
@@ -52,7 +53,7 @@ public class SqliteBenchmarkAny
 
         _efCtx = new EFDataContext(efBuilder.Options);
 
-        _conn = new SqliteConnection(((SqliteDataProvider)_ctx.DataProvider).ConnectionString);
+        _conn = new SqliteConnection(((SqliteDbContext)_ctx.DataProvider).ConnectionString);
     }
     [Benchmark()]
     public async Task NextormCompiled()

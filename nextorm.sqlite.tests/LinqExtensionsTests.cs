@@ -5,8 +5,8 @@ namespace nextorm.core;
 
 public class LinqExtensionsTests
 {
-    private readonly TestDataContext _sut;
-    public LinqExtensionsTests(TestDataContext sut)
+    private readonly TestDataRepository _sut;
+    public LinqExtensionsTests(TestDataRepository sut)
     {
         _sut = sut;
     }

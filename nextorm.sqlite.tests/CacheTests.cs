@@ -3,9 +3,9 @@ using Microsoft.Extensions.Logging;
 namespace nextorm.sqlite.tests;
 public class CacheTests
 {
-    private readonly TestDataContext _sut;
+    private readonly TestDataRepository _sut;
     private readonly ILogger<CacheTests> _logger;
-    public CacheTests(TestDataContext sut, ILogger<CacheTests> logger)
+    public CacheTests(TestDataRepository sut, ILogger<CacheTests> logger)
     {
         _sut = sut;
         _logger = logger;

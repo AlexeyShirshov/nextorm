@@ -8,11 +8,11 @@ namespace nextorm.sqlite.tests;
 
 public class SqlCommandTests
 {
-    private readonly TestDataContext _sut;
+    private readonly TestDataRepository _sut;
     private readonly ILogger<SqlCommandTests> _logger;
     private readonly IServiceProvider _sp;
 
-    public SqlCommandTests(TestDataContext sut, ILogger<SqlCommandTests> logger, IServiceProvider sp)
+    public SqlCommandTests(TestDataRepository sut, ILogger<SqlCommandTests> logger, IServiceProvider sp)
     {
         _sut = sut;
         _logger = logger;

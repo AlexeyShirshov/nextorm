@@ -9,8 +9,8 @@ namespace nextorm.core.benchmark;
 [MemoryDiagnoser]
 public class BenchmarkQueryCommand
 {
-    private readonly TestDataContext _ctx;
-    private readonly SqlDataProvider _provider;
+    private readonly TestDataRepository _ctx;
+    private readonly DbContext _provider;
     private readonly QueryCommand _cmd;
     // private readonly SqlDataProvider.QueryPlan _plan;
     // private readonly SqlDataProvider.QueryPlan _plan2;
@@ -21,9 +21,10 @@ public class BenchmarkQueryCommand
     {
         var builder = new DataContextOptionsBuilder();
         builder.UseSqlite(Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db"));
-        _ctx = new TestDataContext(builder);
+        var provider = new SqliteDbContext(builder);
+        _ctx = new TestDataRepository(provider);
 
-        _provider = (SqlDataProvider)_ctx.DataProvider;
+        _provider = (DbContext)_ctx.DataProvider;
 
         var p = 10;
         _cmd = _ctx.SimpleEntity.Where(it => it.Id == p).Select(entity => new { entity.Id });
