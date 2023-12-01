@@ -501,7 +501,7 @@ public partial class InMemoryDataProvider : IDataProvider
             {
                 lambda = queryCommand.SelectList![0].Expression.Match(_ => throw new NotImplementedException(), exp =>
                 {
-                    var corVisitor = new CorrelatedQueryExpressionVisitor(this);
+                    var corVisitor = new CorrelatedQueryExpressionVisitor(this, queryCommand, typeof(TEntity));
                     var newExp = corVisitor.Visit(exp);
                     return (Expression<Func<TEntity, TResult>>)newExp;
                 });
@@ -578,6 +578,22 @@ public partial class InMemoryDataProvider : IDataProvider
         cacheEntry.LastRowCount = l.Count;
 
         return l;
+    }
+
+    public Task<TResult?> ExecuteScalar<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
+    {
+        throw new NotImplementedException();
+    }
+    public TResult? ExecuteScalar<TResult>(QueryCommand<TResult> queryCommand, object[]? @params)
+    {
+        var cacheEntry = GetCacheEntry(queryCommand, CancellationToken.None);
+
+        using var ee = (IEnumerator<TResult>)cacheEntry.CreateEnumerator(queryCommand, cacheEntry, @params, CancellationToken.None)!;
+
+        if (ee.MoveNext())
+            return ee.Current;
+
+        return default;
     }
 
     public class InMemoryCacheEntry<TResult> : CacheEntry

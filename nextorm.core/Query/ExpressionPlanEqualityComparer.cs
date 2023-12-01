@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
 
-public sealed class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
+public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
 {
     private readonly static IDictionary<QueryCommandKey, Func<object?, QueryCommand>> _cmdCache = new ConcurrentDictionary<QueryCommandKey, Func<object?, QueryCommand>>();
     private readonly IDictionary<ExpressionKey, Delegate> _cache;
@@ -100,7 +100,7 @@ public sealed class ExpressionPlanEqualityComparer : IEqualityComparer<Expressio
                 case IndexExpression indexExpression:
                     if (indexExpression.Type.IsAssignableTo(typeof(QueryCommand)) && indexExpression.Arguments is [ConstantExpression cex] && cex.Value is int idx)
                     {
-                        var cmd = _queryProvider.ReferencedColumns[idx];
+                        var cmd = _queryProvider.ReferencedQueries[idx];
                         hash.Add(cmd, new QueryPlanEqualityComparer(_cache, _queryProvider));
                     }
                     else

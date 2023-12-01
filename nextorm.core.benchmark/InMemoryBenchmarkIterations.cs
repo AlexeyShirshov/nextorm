@@ -4,7 +4,6 @@ using BenchmarkDotNet.Jobs;
 namespace nextorm.core.benchmark;
 
 [MemoryDiagnoser]
-[SimpleJob(RuntimeMoniker.Net70, baseline: true)]
 [SimpleJob(RuntimeMoniker.Net80)]
 public class InMemoryBenchmarkIteration
 {

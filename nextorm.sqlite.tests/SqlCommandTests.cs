@@ -426,4 +426,15 @@ public class SqlCommandTests
 
         r.Should().NotBeEmpty();
     }
+    [Fact]
+    public async Task SelectAnyOnBuilder_ShouldReturnTrue()
+    {
+        var r = await _sut.SimpleEntity.AnyAsync();
+
+        r.Should().BeTrue();
+
+        r = await _sut.SimpleEntity.Where(it => it.Id == 234234).AnyAsync();
+
+        r.Should().BeFalse();
+    }
 }

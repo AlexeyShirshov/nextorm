@@ -53,7 +53,6 @@ public class SqliteBenchmarkWhere
         _efCtx = new EFDataContext(efBuilder.Options);
 
         _conn = new SqliteConnection(((SqliteDataProvider)_ctx.DataProvider).ConnectionString);
-        _conn.Open();
     }
     [Benchmark()]
     [BenchmarkCategory("Stream")]

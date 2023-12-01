@@ -1,6 +1,7 @@
 #define PLAN_CACHE
 #define ONLY_PLAN_CACHE
 
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Data;
 using System.Data.Common;
@@ -93,7 +94,9 @@ public class SqlDataProvider : IDataProvider
             //     _queryCache[queryCommand] = cacheEntryX;
             // return cacheEntryX;
 
-            var map = GetMap(queryCommand)();
+            Func<IDataRecord, TResult>? map = queryCommand.SingleRow && queryCommand.OneColumn
+                ? null
+                : GetMap(queryCommand)();
 
 #if PLAN_CACHE
             var compiledPlan = new DatabaseCompiledPlan<TResult>(sql!, map, @params.Count == 0);
@@ -566,12 +569,12 @@ public class SqlDataProvider : IDataProvider
     {
         return v ? "1" : "0";
     }
-    public void Compile<TResult>(QueryCommand<TResult> cmd, bool forToListCalls, CancellationToken cancellationToken)
+    public void Compile<TResult>(QueryCommand<TResult> cmd, bool bufferedOrScalarCalls, CancellationToken cancellationToken)
     {
         if (!cmd.IsPrepared)
             cmd.PrepareCommand(cancellationToken);
 
-        cmd.CacheEntry = CreateCompiledQuery(cmd, !forToListCalls, cancellationToken);
+        cmd.CacheEntry = CreateCompiledQuery(cmd, !bufferedOrScalarCalls, cancellationToken);
     }
     protected virtual void Dispose(bool disposing)
     {
@@ -656,6 +659,122 @@ public class SqlDataProvider : IDataProvider
     public async Task<List<TResult>> ToListAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
+
+        var (reader, cacheEntry, compiledQuery) = await CreateReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
+        using (reader)
+        {
+            var l = new List<TResult>(cacheEntry.LastRowCount);
+            while (reader.Read())
+            {
+                l.Add(compiledQuery.MapDelegate(reader));
+            }
+
+            cacheEntry.LastRowCount = l.Count;
+            return l;
+        }
+    }
+    public TResult? ExecuteScalar<TResult>(QueryCommand<TResult> queryCommand, object[]? @params)
+    {
+        ArgumentNullException.ThrowIfNull(queryCommand);
+
+        var setParams = @params is not null;
+        var ce = queryCommand.CacheEntry;
+        if (ce is not SqlCacheEntry cacheEntry)
+        {
+#if !ONLY_PLAN_CACHE
+            //QueryCommandKey? cmdKey = null;
+            if (queryCommand.Cache)
+            {
+                //cmdKey = new QueryCommandKey(queryCommand, @params);
+                if (_queryCache.TryGetValue(queryCommand, out cacheEntry!))
+                {
+                    goto hasCacheEtry;
+                }
+            }
+#endif
+#if DEBUG && !ONLY_PLAN_CACHE
+            if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Query cache miss with hash: {hash} and condition hash: {chash}",
+                queryCommand.GetHashCode(),
+                queryCommand.ConditionHash);
+#elif !ONLY_PLAN_CACHE
+            if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Query cache miss");
+#endif
+
+            cacheEntry = CreateCompiledQuery(queryCommand, false, CancellationToken.None);
+
+#if !ONLY_PLAN_CACHE
+            if (queryCommand.Cache)
+                _queryCache[queryCommand] = cacheEntry;
+#endif
+        }
+
+#if !ONLY_PLAN_CACHE
+    hasCacheEtry:
+#endif
+        var compiledQuery = (DatabaseCompiledQuery<TResult>)cacheEntry.CompiledQuery;
+
+#if DEBUG
+        if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Getting connection");
+#endif
+        var conn = GetConnection();
+        var sqlCommand = compiledQuery.DbCommand;
+
+        if (setParams)
+        {
+            for (var i = 0; i < @params!.Length; i++)
+            {
+                var paramName = string.Format("norm_p{0}", i);
+                foreach (DbParameter p in sqlCommand.Parameters)
+                {
+                    if (p.ParameterName == paramName)
+                    {
+                        p.Value = @params[i];
+                        break;
+                    }
+                }
+            }
+        }
+        sqlCommand.Connection = conn;
+
+        if (conn.State == ConnectionState.Closed)
+        {
+#if DEBUG
+            if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Opening connection");
+#endif
+            conn.Open();
+        }
+
+#if DEBUG
+        if (Logger?.IsEnabled(LogLevel.Debug) ?? false)
+        {
+            Logger.LogDebug("Executing query: {sql}", sqlCommand.CommandText);
+
+            if (LogSensetiveData)
+            {
+                foreach (DbParameter p in sqlCommand.Parameters)
+                {
+                    Logger.LogDebug("param {name} is {value}", p.ParameterName, p.Value);
+                }
+            }
+            else if (sqlCommand.Parameters?.Count > 0)
+            {
+                Logger.LogDebug("Use {method} to see param values", nameof(LogSensetiveData));
+            }
+        }
+#endif
+
+        var r = sqlCommand.ExecuteScalar();
+
+        if (r is null or DBNull) return default;
+        if (r is TResult res) return res;
+        var type = typeof(TResult);
+        return (TResult)Convert.ChangeType(r, type);
+    }
+
+    public async Task<TResult?> ExecuteScalar<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(queryCommand);
+
         var setParams = @params is not null;
         var ce = queryCommand.CacheEntry;
         if (ce is not SqlCacheEntry cacheEntry)
@@ -686,6 +805,7 @@ public class SqlDataProvider : IDataProvider
                 _queryCache[queryCommand] = cacheEntry;
 #endif
         }
+
 #if !ONLY_PLAN_CACHE
     hasCacheEtry:
 #endif
@@ -740,16 +860,105 @@ public class SqlDataProvider : IDataProvider
             }
         }
 #endif
-        using var reader = await sqlCommand.ExecuteReaderAsync(compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
 
-        var l = new List<TResult>(cacheEntry.LastRowCount);
-        while (reader.Read())
-        {
-            l.Add(compiledQuery.MapDelegate(reader));
-        }
-        cacheEntry.LastRowCount = l.Count;
-        return l;
+        var r = await sqlCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+
+        if (r is null or DBNull) return default;
+        if (r is TResult res) return res;
+        var type = typeof(TResult);
+        return (TResult)Convert.ChangeType(r, type);
     }
+    private async Task<(DbDataReader, SqlCacheEntry, DatabaseCompiledQuery<TResult>)> CreateReader<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
+    {
+        var setParams = @params is not null;
+        var ce = queryCommand.CacheEntry;
+        if (ce is not SqlCacheEntry cacheEntry)
+        {
+#if !ONLY_PLAN_CACHE
+            //QueryCommandKey? cmdKey = null;
+            if (queryCommand.Cache)
+            {
+                //cmdKey = new QueryCommandKey(queryCommand, @params);
+                if (_queryCache.TryGetValue(queryCommand, out cacheEntry!))
+                {
+                    goto hasCacheEtry;
+                }
+            }
+#endif
+#if DEBUG && !ONLY_PLAN_CACHE
+            if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Query cache miss with hash: {hash} and condition hash: {chash}",
+                queryCommand.GetHashCode(),
+                queryCommand.ConditionHash);
+#elif !ONLY_PLAN_CACHE
+            if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Query cache miss");
+#endif
+
+            cacheEntry = CreateCompiledQuery(queryCommand, false, cancellationToken);
+
+#if !ONLY_PLAN_CACHE
+            if (queryCommand.Cache)
+                _queryCache[queryCommand] = cacheEntry;
+#endif
+        }
+
+#if !ONLY_PLAN_CACHE
+    hasCacheEtry:
+#endif
+        var compiledQuery = (DatabaseCompiledQuery<TResult>)cacheEntry.CompiledQuery;
+
+#if DEBUG
+        if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Getting connection");
+#endif
+        var conn = GetConnection();
+        var sqlCommand = compiledQuery.DbCommand;
+
+        if (setParams)
+        {
+            for (var i = 0; i < @params!.Length; i++)
+            {
+                var paramName = string.Format("norm_p{0}", i);
+                foreach (DbParameter p in sqlCommand.Parameters)
+                {
+                    if (p.ParameterName == paramName)
+                    {
+                        p.Value = @params[i];
+                        break;
+                    }
+                }
+            }
+        }
+        sqlCommand.Connection = conn;
+
+        if (conn.State == ConnectionState.Closed)
+        {
+#if DEBUG
+            if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Opening connection");
+#endif
+            await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+#if DEBUG
+        if (Logger?.IsEnabled(LogLevel.Debug) ?? false)
+        {
+            Logger.LogDebug("Executing query: {sql}", sqlCommand.CommandText);
+
+            if (LogSensetiveData)
+            {
+                foreach (DbParameter p in sqlCommand.Parameters)
+                {
+                    Logger.LogDebug("param {name} is {value}", p.ParameterName, p.Value);
+                }
+            }
+            else if (sqlCommand.Parameters?.Count > 0)
+            {
+                Logger.LogDebug("Use {method} to see param values", nameof(LogSensetiveData));
+            }
+        }
+#endif
+
+        return (await sqlCommand.ExecuteReaderAsync(compiledQuery.Behavior, cancellationToken).ConfigureAwait(false), cacheEntry, compiledQuery);
+    }
+
     public Func<Func<IDataRecord, TResult>> GetMap<TResult>(QueryCommand<TResult> queryCommand)
     {
 #if DEBUG
@@ -1065,19 +1274,36 @@ public class SqlDataProvider : IDataProvider
         }
     }
 #endif
-    // class EmptyEnumerator<TResult> : IAsyncEnumerator<TResult>
-    // {
-    //     public TResult Current => default;
+    class EmptyEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerator<TResult>
+    {
+        public TResult Current => default;
 
-    //     public ValueTask DisposeAsync()
-    //     {
-    //         //throw new NotImplementedException();
-    //         return ValueTask.CompletedTask;
-    //     }
+        object IEnumerator.Current => default;
 
-    //     public ValueTask<bool> MoveNextAsync()
-    //     {
-    //         return ValueTask.FromResult(false);
-    //     }
-    // }
+        public void Dispose()
+        {
+
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            //throw new NotImplementedException();
+            return ValueTask.CompletedTask;
+        }
+
+        public bool MoveNext()
+        {
+            return false;
+        }
+
+        public ValueTask<bool> MoveNextAsync()
+        {
+            return ValueTask.FromResult(false);
+        }
+
+        public void Reset()
+        {
+
+        }
+    }
 }

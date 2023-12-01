@@ -10,6 +10,7 @@ public class CommandBuilder<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
     private readonly IDataProvider _dataProvider;
     private QueryCommand? _query;
     private Expression<Func<TEntity, bool>>? _condition;
+    private static Lazy<QueryCommand<bool>>? _anyCommand;
     #endregion
     public CommandBuilder(IDataProvider dataProvider)
     {
@@ -127,12 +128,45 @@ public class CommandBuilder<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
     }
     public bool Any(params object[] @params)
     {
-        return AnyCommand().Any(@params);
+        var cmd = ToCommand();
+        cmd.IgnoreColumns = true;
+        var queryCommand = GetAnyCommand(_dataProvider, cmd);
+
+        return _dataProvider.ExecuteScalar(queryCommand, @params);
     }
-    public Task<bool> AnyAsync(params object[] @params) => AnyAsync(CancellationToken.None, @params);
-    public Task<bool> AnyAsync(CancellationToken cancellationToken, params object[] @params)
+
+    internal protected static QueryCommand<bool> GetAnyCommand(IDataProvider dataProvider, QueryCommand cmd)
     {
-        return AnyCommand().AnyAsync(cancellationToken, @params);
+        var created = false;
+        if (_anyCommand is null)
+        {
+            _anyCommand = new Lazy<QueryCommand<bool>>(() =>
+            {
+                created = true;
+                var queryCommand = dataProvider.CreateCommand<bool>((TableAlias _) => NORM.SQL.exists(cmd), null);
+                queryCommand.SingleRow = true;
+                queryCommand.PrepareCommand(CancellationToken.None);
+                return queryCommand;
+            });
+        }
+        var queryCommand = _anyCommand.Value;
+        if (!created)
+        {
+            cmd.PrepareCommand(CancellationToken.None);
+            queryCommand.ReplaceCommand(cmd, 0);
+        }
+
+        return queryCommand;
+    }
+
+    public Task<bool> AnyAsync(params object[] @params) => AnyAsync(CancellationToken.None, @params);
+    public async Task<bool> AnyAsync(CancellationToken cancellationToken, params object[] @params)
+    {
+        var cmd = ToCommand();
+        cmd.IgnoreColumns = true;
+        var queryCommand = GetAnyCommand(_dataProvider, cmd);
+
+        return await _dataProvider.ExecuteScalar(queryCommand, @params, cancellationToken).ConfigureAwait(false);
     }
 }
 public class CommandBuilder
