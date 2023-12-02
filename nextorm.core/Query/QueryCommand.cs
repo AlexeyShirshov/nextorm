@@ -39,18 +39,20 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
     internal int JoinPlanHash;
 #endif
     private int _paramIdx;
+    public Paging Paging;
     //protected ArrayList _params = new();
-    public QueryCommand(IDataContext dataProvider, LambdaExpression exp, Expression? condition)
-        : this(dataProvider, exp, condition/*, new FastPayloadManager(new Dictionary<Type, object?>())*/, new())
+    public QueryCommand(IDataContext dataProvider, LambdaExpression exp, Expression? condition, Paging paging)
+        : this(dataProvider, exp, condition/*, new FastPayloadManager(new Dictionary<Type, object?>())*/, new(), paging)
     {
     }
-    protected QueryCommand(IDataContext dataProvider, LambdaExpression exp, Expression? condition/*, IPayloadManager payloadMgr*/, List<JoinExpression> joins)
+    protected QueryCommand(IDataContext dataProvider, LambdaExpression exp, Expression? condition/*, IPayloadManager payloadMgr*/, List<JoinExpression> joins, Paging paging)
     {
         _dataProvider = dataProvider;
         _exp = exp;
         _condition = condition;
         //_payloadMgr = payloadMgr;
         _joins = joins;
+        Paging = paging;
     }
     public ILogger? Logger { get; set; }
     public FromExpression? From { get => _from; set => _from = value; }
@@ -74,9 +76,8 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
         set => _dontCache = !value;
     }
     internal QueryCommand? FromQuery => From?.Table.AsT1;
-
-    public bool OneColumn { get; set; }
-    public bool IgnoreColumns { get; set; }
+    internal bool OneColumn { get; set; }
+    internal bool IgnoreColumns { get; set; }
     public IReadOnlyList<QueryCommand> ReferencedQueries => _referencedQueries;
 
     public virtual void ResetPreparation()
@@ -439,6 +440,9 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
 
             hash.Add(_joinHash);
 
+            hash.Add(Paging.Limit);
+            hash.Add(Paging.Offset);
+
             _hash = hash.ToHashCode();
 
             //Console.WriteLine(_hash);
@@ -473,6 +477,8 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
         if (!Equals(_from, cmd._from)) return false;
 
         if (_srcType != cmd._srcType) return false;
+
+        if (Paging.Limit != cmd.Paging.Limit || Paging.Offset != cmd.Paging.Offset) return false;
 
         if (!new PreciseExpressionEqualityComparer((_dataProvider as DbContext)?.ExpressionsCache, this, (_dataProvider as DbContext)?.Logger).Equals(_condition, cmd._condition)) return false;
 
@@ -551,18 +557,26 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
 public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
 {
     //private readonly IPayloadManager _payloadMap = new FastPayloadManager(new Dictionary<Type, object?>());
-    public QueryCommand(IDataContext dataProvider, LambdaExpression exp, Expression? condition) : base(dataProvider, exp, condition)
+    public QueryCommand(IDataContext dataProvider, LambdaExpression exp, Expression? condition, Paging paging) : base(dataProvider, exp, condition, paging)
     {
     }
-    protected QueryCommand(IDataContext dataProvider, LambdaExpression exp, Expression? condition/*, IPayloadManager payloadMgr*/, List<JoinExpression> joins)
-        : base(dataProvider, exp, condition/*, payloadMgr*/, joins)
+    protected QueryCommand(IDataContext dataProvider, LambdaExpression exp, Expression? condition/*, IPayloadManager payloadMgr*/, List<JoinExpression> joins, Paging paging)
+        : base(dataProvider, exp, condition/*, payloadMgr*/, joins, paging)
     {
 
     }
     //internal CompiledQuery<TResult>? Compiled => CacheEntry?.CompiledQuery as CompiledQuery<TResult>;
     public CacheEntry? CacheEntry { get; set; }
     public bool SingleRow { get; set; }
+    public QueryCommand<TResult> Compile(bool bufferedOrScalarCalls, CancellationToken cancellationToken = default)
+    {
+        if (!IsPrepared)
+            PrepareCommand(cancellationToken);
 
+        _dataProvider.Compile(this, bufferedOrScalarCalls, cancellationToken);
+
+        return this;
+    }
     public IAsyncEnumerator<TResult> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
         if (!IsPrepared)
@@ -570,154 +584,6 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
 
         return DataProvider.CreateAsyncEnumerator(this, null, cancellationToken);
     }
-    // public Expression MapColumn(SelectExpression column, ParameterExpression param, Type _)
-    // {
-    //     return Expression.PropertyOrField(param, column.PropertyName!);
-    // }
-    // #if INITALGO_1
-    //     public Func<Func<object, TResult>> GetMap(Type resultType, Type recordType)
-    // #else
-    //     public Func<Func<object, object[]?, TResult>> GetMap(Type resultType, Type recordType)
-    // #endif
-    //     {
-    //         if (!IsPrepared)
-    //             throw new InvalidOperationException("Command not prepared");
-
-    //         // var key = new ExpressionKey(_exp);
-    //         // if (!(_dataProvider as SqlDataProvider).MapCache.TryGetValue(key, out var del))
-    //         // {
-    //         //     if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Map delegate cache miss for: {exp}", _exp);
-
-    //         var del = () =>
-    //         {
-    //             var ctorInfo = resultType.GetConstructors().OrderByDescending(it => it.GetParameters().Length).FirstOrDefault() ?? throw new PrepareException($"Cannot get ctor from {resultType}");
-
-    //             var param = Expression.Parameter(typeof(object));
-    // #if !INITALGO_1
-    //             var valuesParam = Expression.Parameter(typeof(object[]));
-    //             var getValuesMethod = recordType.GetMethod(nameof(IDataRecord.GetValues))!;
-    //             var assignValuesVariable = Expression.Call(Expression.Convert(param, recordType), getValuesMethod, valuesParam);
-    // #endif
-    //             //return Expression.Lambda<Func<object, TResult>>(Expression.New(ctorInfo), param).Compile();
-    //             //var @params = SelectList.Select(column => Expression.Parameter(column.PropertyType!)).ToArray();
-
-    //             if (ctorInfo.GetParameters().Length == SelectList!.Count)
-    //             {
-    // #if INITALGO_1
-    //                 var newParams = SelectList!.Select(column => _dataProvider.MapColumn(column, Expression.Convert(param, recordType), recordType)).ToArray();
-    // #else
-    //                 var newParams = SelectList!.Select(column => Expression.Convert(Expression.ArrayIndex(valuesParam, Expression.Constant(column.Index)), column.PropertyType)).ToArray();
-    // #endif
-    //                 var ctor = Expression.New(ctorInfo, newParams);
-
-    // #if INITALGO_1
-    //                 var lambda = Expression.Lambda<Func<object, TResult>>(ctor, param);
-    //                 if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Get instance of {type} as: {exp}", resultType, lambda);
-    // #else
-    //                 var body = Expression.Block(typeof(TResult), new Expression[] { assignValuesVariable, ctor });
-    //                 var lambda = Expression.Lambda<Func<object, object[]?, TResult>>(body, param, valuesParam);
-    //                 if (Logger?.IsEnabled(LogLevel.Debug) ?? false)
-    //                 {
-    //                     var sb = new StringBuilder();
-    //                     sb.AppendLine();
-    //                     sb.Append(assignValuesVariable.ToString()).AppendLine(";");
-    //                     sb.Append(ctor.ToString()).AppendLine(";");
-    //                     var dumpExp = lambda.ToString().Replace("...", sb.ToString());
-    //                     Logger.LogDebug("Get instance of {type} as: {exp}", resultType, dumpExp);
-    //                 }
-    // #endif
-    //                 return lambda.Compile();
-    //             }
-    //             else
-    //             {
-    // #if INITALGO_1
-    //                 var bindings = SelectList!.Select(column =>
-    //                 {
-    //                     var propInfo = column.PropertyInfo ?? resultType.GetProperty(column.PropertyName!)!;
-    //                     return Expression.Bind(propInfo, _dataProvider.MapColumn(column, Expression.Convert(param, recordType), recordType));
-    //                 }).ToArray();
-
-    //                 var ctor = Expression.New(ctorInfo);
-
-    //                 var memberInit = Expression.MemberInit(ctor, bindings);
-
-    //                 var body = memberInit;
-    //                 var lambda = Expression.Lambda<Func<object, TResult>>(body, param);
-
-    //                 if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Get instance of {type} as: {exp}", resultType, lambda);
-    // #else
-    //                 //var fieldCountProp = recordType.GetProperty(nameof(IDataRecord.FieldCount))!;
-
-    //                 //var valuesVariable = Expression.Variable(typeof(object[]));
-    //                 //var initValuesVariable = Expression.Assign(valuesVariable, Expression.NewArrayBounds(typeof(object), Expression.Property(Expression.Convert(param, recordType), fieldCountProp)));
-
-    //                 var bindings = SelectList!.Select(column =>
-    //                 {
-    //                     var propInfo = column.PropertyInfo ?? resultType.GetProperty(column.PropertyName!)!;
-    //                     return Expression.Bind(propInfo, Expression.Convert(Expression.ArrayIndex(valuesParam, Expression.Constant(column.Index)), column.PropertyType));
-    //                     //return Expression.Bind(propInfo, _dataProvider.MapColumn(column, Expression.Convert(param, recordType), recordType));
-    //                 }).ToArray();
-
-    //                 var ctor = Expression.New(ctorInfo);
-
-    //                 var memberInit = Expression.MemberInit(ctor, bindings);
-
-    //                 var body = Expression.Block(typeof(TResult), new Expression[] { assignValuesVariable, memberInit });
-    //                 var lambda = Expression.Lambda<Func<object, object[]?, TResult>>(body, param, valuesParam);
-
-    //                 if (Logger?.IsEnabled(LogLevel.Debug) ?? false)
-    //                 {
-    //                     var sb = new StringBuilder();
-    //                     sb.AppendLine();
-    //                     //sb.Append(initValuesVariable.ToString()).AppendLine(";");
-    //                     sb.Append(assignValuesVariable.ToString()).AppendLine(";");
-    //                     sb.Append(memberInit.ToString()).AppendLine(";");
-    //                     var dumpExp = lambda.ToString().Replace("...", sb.ToString());
-    //                     Logger.LogDebug("Get instance of {type} as: {exp}", resultType, dumpExp);
-    //                 }
-    // #endif
-    //                 return lambda.Compile();
-    //             }
-    //         };
-
-    //         //         (_dataProvider as SqlDataProvider).MapCache[key] = del;
-    //         //     }
-
-    // #if INITALGO_1
-    //         return (Func<Func<object, TResult>>)del;
-    // #else
-    //         return (Func<Func<object, object[]?, TResult>>)del;
-    // #endif
-    //     }
-    //record MapPayload(Delegate Delegate) : IPayload;
-    // public IEnumerable<TResult> Fetch(CancellationToken cancellationToken)
-    // {
-    //     return Fetch(100, cancellationToken);
-    // }
-    // public IEnumerable<TResult> Fetch(int capacity, CancellationToken cancellationToken)
-    // {
-    //     var bus = new BlockingCollection<TResult>(capacity);
-
-    //     Task.Run(async () =>
-    //     {
-    //         await foreach (var item in this.WithCancellation(cancellationToken))
-    //         {
-    //             bus.Add(item);
-    //         }
-    //         bus.CompleteAdding();
-    //     }, cancellationToken);
-
-    //     while (!bus.IsCompleted)
-    //     {
-    //         TResult? r = default;
-    //         try { r = bus.Take(cancellationToken); } catch (InvalidOperationException) { continue; }
-    //         yield return r;
-    //     }
-    // }
-    // public IAsyncEnumerable<TResult> FetchAsync(CancellationToken cancellationToken)
-    // {
-    //     return FetchAsync(10, cancellationToken);
-    // }
     public IAsyncEnumerable<TResult> Pipeline(params object[] @params) => Pipeline(CancellationToken.None, @params);
     public async IAsyncEnumerable<TResult> Pipeline(CancellationToken cancellationToken, params object[] @params)
     {
@@ -757,7 +623,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         if (!IsPrepared)
             PrepareCommand(cancellationToken);
 
-        await using var ee = DataProvider.CreateAsyncEnumerator(this, @params, cancellationToken);
+        await using var ee = _dataProvider.CreateAsyncEnumerator(this, @params, cancellationToken);
         while (await ee.MoveNextAsync().ConfigureAwait(false))
             yield return ee.Current;
     }
@@ -766,7 +632,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         if (!IsPrepared)
             PrepareCommand(CancellationToken.None);
 
-        return (IEnumerable<TResult>)DataProvider.CreateEnumerator(this, @params);
+        return (IEnumerable<TResult>)_dataProvider.CreateEnumerator(this, @params);
     }
     public Task<IEnumerable<TResult>> Exec(params object[] @params) => Exec(CancellationToken.None, @params);
     public async Task<IEnumerable<TResult>> Exec(CancellationToken cancellationToken, params object[] @params)
@@ -775,7 +641,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
             PrepareCommand(cancellationToken);
 
         // return Array.Empty<TResult>();
-        var enumerator = await DataProvider.CreateEnumeratorAsync(this, @params, cancellationToken).ConfigureAwait(false);
+        var enumerator = await _dataProvider.CreateEnumeratorAsync(this, @params, cancellationToken).ConfigureAwait(false);
 
         if (enumerator is IEnumerable<TResult> ee)
             return ee;
@@ -787,7 +653,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         if (!IsPrepared)
             PrepareCommand(CancellationToken.None);
 
-        return DataProvider.ToList(this, @params);
+        return _dataProvider.ToList(this, @params);
     }
     public Task<List<TResult>> ToListAsync(params object[] @params) => ToListAsync(CancellationToken.None, @params);
     public async Task<List<TResult>> ToListAsync(CancellationToken cancellationToken, params object[] @params)
@@ -795,44 +661,202 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         if (!IsPrepared)
             PrepareCommand(cancellationToken);
 
-        return await DataProvider.ToListAsync(this, @params, cancellationToken).ConfigureAwait(false);
+        return await _dataProvider.ToListAsync(this, @params, cancellationToken).ConfigureAwait(false);
     }
     public bool Any(params object[] @params)
     {
-        if (this is not QueryCommand<bool> queryCommand || !queryCommand.SingleRow)
+        bool oldIgnoreColumns = IgnoreColumns;
+        try
         {
-            if (!IsPrepared)
-                PrepareCommand(CancellationToken.None);
-            IgnoreColumns = true;
+            if (this is not QueryCommand<bool> queryCommand || !queryCommand.SingleRow)
+            {
+                if (!IgnoreColumns || !IsPrepared)
+                {
+                    IgnoreColumns = true;
+                    PrepareCommand(CancellationToken.None);
+                }
 
-            queryCommand = Entity<TResult>.GetAnyCommand(_dataProvider, this);
+                queryCommand = Entity<TResult>.GetAnyCommand(_dataProvider, this);
+            }
+
+            return _dataProvider.ExecuteScalar(queryCommand, @params);
         }
-
-        return _dataProvider.ExecuteScalar(queryCommand, @params);
+        finally
+        {
+            IgnoreColumns = oldIgnoreColumns;
+        }
     }
     public Task<bool> AnyAsync(params object[] @params) => AnyAsync(CancellationToken.None, @params);
     public async Task<bool> AnyAsync(CancellationToken cancellationToken, params object[] @params)
     {
-        if (this is not QueryCommand<bool> queryCommand || !queryCommand.SingleRow)
+        bool oldIgnoreColumns = IgnoreColumns;
+        try
         {
-            if (!IsPrepared)
-                PrepareCommand(cancellationToken);
-            IgnoreColumns = true;
+            if (this is not QueryCommand<bool> queryCommand || !queryCommand.SingleRow)
+            {
+                if (!IgnoreColumns || !IsPrepared)
+                {
+                    IgnoreColumns = true;
+                    PrepareCommand(cancellationToken);
+                }
 
-            queryCommand = Entity<TResult>.GetAnyCommand(_dataProvider, this);
+                queryCommand = Entity<TResult>.GetAnyCommand(_dataProvider, this);
+            }
+
+            return await _dataProvider.ExecuteScalar(queryCommand, @params, cancellationToken).ConfigureAwait(false);
         }
+        finally
+        {
+            IgnoreColumns = oldIgnoreColumns;
+        }
+    }
+    public TResult First(params object[] @params)
+    {
+        int oldLim = Paging.Limit;
+        try
+        {
+            if (Paging.Limit != 1 || !IsPrepared)
+            {
+                oldLim = 1;
+                PrepareCommand(CancellationToken.None);
+            }
 
-        return await _dataProvider.ExecuteScalar(queryCommand, @params, cancellationToken).ConfigureAwait(false);
+            return _dataProvider.First(this, @params);
+        }
+        finally
+        {
+            Paging.Limit = oldLim;
+        }
     }
 
-    public QueryCommand<TResult> Compile(bool bufferedOrScalarCalls, CancellationToken cancellationToken = default)
+    public Task<TResult> FirstAsync(CancellationToken cancellationToken, params object[] @params)
     {
-        if (!IsPrepared)
-            PrepareCommand(cancellationToken);
+        int oldLim = Paging.Limit;
+        try
+        {
+            if (Paging.Limit != 1 || !IsPrepared)
+            {
+                oldLim = 1;
+                PrepareCommand(cancellationToken);
+            }
 
-        _dataProvider.Compile(this, bufferedOrScalarCalls, cancellationToken);
+            return _dataProvider.FirstAsync(this, @params, cancellationToken);
+        }
+        finally
+        {
+            Paging.Limit = oldLim;
+        }
+    }
+    public TResult? FirstOrDefault(params object[] @params)
+    {
+        int oldLim = Paging.Limit;
+        try
+        {
+            if (Paging.Limit != 1 || !IsPrepared)
+            {
+                oldLim = 1;
+                PrepareCommand(CancellationToken.None);
+            }
 
-        return this;
+            return _dataProvider.FirstOrDefault(this, @params);
+        }
+        finally
+        {
+            Paging.Limit = oldLim;
+        }
+    }
+
+    public Task<TResult?> FirstOrDefaultAsync(CancellationToken cancellationToken, params object[] @params)
+    {
+        int oldLim = Paging.Limit;
+        try
+        {
+            if (Paging.Limit != 1 || !IsPrepared)
+            {
+                oldLim = 1;
+                PrepareCommand(cancellationToken);
+            }
+
+            return _dataProvider.FirstOrDefaultAsync(this, @params, cancellationToken);
+        }
+        finally
+        {
+            Paging.Limit = oldLim;
+        }
+    }
+    public TResult Single(params object[] @params)
+    {
+        int oldLim = Paging.Limit;
+        try
+        {
+            if (Paging.Limit != 2 || !IsPrepared)
+            {
+                oldLim = 2;
+                PrepareCommand(CancellationToken.None);
+            }
+
+            return _dataProvider.Single(this, @params);
+        }
+        finally
+        {
+            Paging.Limit = oldLim;
+        }
+    }
+
+    public Task<TResult> SingleAsync(CancellationToken cancellationToken, params object[] @params)
+    {
+        int oldLim = Paging.Limit;
+        try
+        {
+            if (Paging.Limit != 2 || !IsPrepared)
+            {
+                oldLim = 2;
+                PrepareCommand(cancellationToken);
+            }
+
+            return _dataProvider.SingleAsync(this, @params, cancellationToken);
+        }
+        finally
+        {
+            Paging.Limit = oldLim;
+        }
+    }
+    public TResult? SingleOrDefault(params object[] @params)
+    {
+        int oldLim = Paging.Limit;
+        try
+        {
+            if (Paging.Limit != 2 || !IsPrepared)
+            {
+                oldLim = 2;
+                PrepareCommand(CancellationToken.None);
+            }
+
+            return _dataProvider.SingleOrDefault(this, @params);
+        }
+        finally
+        {
+            Paging.Limit = oldLim;
+        }
+    }
+
+    public Task<TResult?> SingleOrDefaultAsync(CancellationToken cancellationToken, params object[] @params)
+    {
+        int oldLim = Paging.Limit;
+        try
+        {
+            if (Paging.Limit != 2 || !IsPrepared)
+            {
+                oldLim = 2;
+                PrepareCommand(cancellationToken);
+            }
+
+            return _dataProvider.SingleOrDefaultAsync(this, @params, cancellationToken);
+        }
+        finally
+        {
+            Paging.Limit = oldLim;
+        }
     }
     // public QueryCommand<TResult> WithParams(params object[] @params)
     // {

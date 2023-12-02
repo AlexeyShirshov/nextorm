@@ -493,11 +493,6 @@ public class DbContext : IDataContext
         return sqlEnumerator;
     }
     private List<Param> ExtractParams(QueryCommand queryCommand) => MakeSelect(queryCommand, true).Item2;
-    public QueryCommand<T> CreateCommand<T>(LambdaExpression exp, Expression? condition)
-    {
-        return new QueryCommand<T>(this, exp, condition);
-    }
-
     public void ResetPreparation(QueryCommand queryCommand)
     {
         //_clearCache = true;
@@ -1191,6 +1186,46 @@ public class DbContext : IDataContext
         //         (_dataProvider as SqlDataProvider).MapCache[key] = del;
         //     }
     }
+
+    public TResult First<TResult>(QueryCommand<TResult> queryCommand, object[] @params)
+    {
+        throw new NotImplementedException();
+    }
+
+    public Task<TResult> FirstAsync<TResult>(QueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
+    {
+        throw new NotImplementedException();
+    }
+    public TResult? FirstOrDefault<TResult>(QueryCommand<TResult> queryCommand, object[] @params)
+    {
+        throw new NotImplementedException();
+    }
+
+    public Task<TResult?> FirstOrDefaultAsync<TResult>(QueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
+    {
+        throw new NotImplementedException();
+    }
+
+    public TResult Single<TResult>(QueryCommand<TResult> queryCommand, object[] @params)
+    {
+        throw new NotImplementedException();
+    }
+
+    public Task<TResult> SingleAsync<TResult>(QueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
+    {
+        throw new NotImplementedException();
+    }
+
+    public TResult? SingleOrDefault<TResult>(QueryCommand<TResult> queryCommand, object[] @params)
+    {
+        throw new NotImplementedException();
+    }
+
+    public Task<TResult?> SingleOrDefaultAsync<TResult>(QueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
+    {
+        throw new NotImplementedException();
+    }
+
     //record CompiledQueryPayload<TResult>(DatabaseCompiledQuery<TResult> CompiledQuery) : IPayload;
     public class SqlCacheEntry : CacheEntry
     {

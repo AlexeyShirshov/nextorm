@@ -10,7 +10,21 @@ public interface IDataContext : IAsyncDisposable, IDisposable
     bool NeedMapping { get; }
     IDictionary<ExpressionKey, Delegate> ExpressionsCache { get; }
     IDictionary<Type, IEntityMeta> Metadata { get; }
-    QueryCommand<TResult> CreateCommand<TResult>(LambdaExpression exp, Expression? condition);
+    public Entity<T> Create<T>(Action<EntityBuilder<T>>? configEntity = null)
+    {
+        if (!Metadata.ContainsKey(typeof(T)))
+        {
+            var eb = new EntityBuilder<T>();
+            configEntity?.Invoke(eb);
+            Metadata[typeof(T)] = eb.Build();
+        }
+        return new(this) { Logger = CommandLogger };
+    }
+    public QueryCommand<T> CreateCommand<T>(LambdaExpression exp, Expression? condition, Paging paging)
+    {
+        return new QueryCommand<T>(this, exp, condition, paging);
+    }
+
     void ResetPreparation(QueryCommand queryCommand);
     FromExpression? GetFrom(Type srcType, QueryCommand queryCommand);
     void Compile<TResult>(QueryCommand<TResult> query, bool bufferedOrScalarCalls, CancellationToken cancellationToken);
@@ -23,14 +37,12 @@ public interface IDataContext : IAsyncDisposable, IDisposable
     TResult? ExecuteScalar<TResult>(QueryCommand<TResult> queryCommand, object[]? @params);
     public Entity<TResult> From<TResult>(QueryCommand<TResult> query) => new(this, query) { Logger = CommandLogger };
     public Entity<TResult> From<TResult>(Entity<TResult> builder) => new(this, builder) { Logger = CommandLogger };
-    public Entity<T> Create<T>(Action<EntityBuilder<T>>? configEntity = null)
-    {
-        if (!Metadata.ContainsKey(typeof(T)))
-        {
-            var eb = new EntityBuilder<T>();
-            configEntity?.Invoke(eb);
-            Metadata[typeof(T)] = eb.Build();
-        }
-        return new(this) { Logger = CommandLogger };
-    }
+    TResult First<TResult>(QueryCommand<TResult> queryCommand, object[] @params);
+    Task<TResult> FirstAsync<TResult>(QueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken);
+    TResult? FirstOrDefault<TResult>(QueryCommand<TResult> queryCommand, object[] @params);
+    Task<TResult?> FirstOrDefaultAsync<TResult>(QueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken);
+    TResult Single<TResult>(QueryCommand<TResult> queryCommand, object[] @params);
+    Task<TResult> SingleAsync<TResult>(QueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken);
+    TResult? SingleOrDefault<TResult>(QueryCommand<TResult> queryCommand, object[] @params);
+    Task<TResult?> SingleOrDefaultAsync<TResult>(QueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken);
 }

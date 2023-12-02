@@ -42,6 +42,8 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand>
 
         if (x.EntityType != y.EntityType) return false;
 
+        if (x.Paging.Limit != y.Paging.Limit || x.Paging.Offset != y.Paging.Offset) return false;
+
         if (!_expComparer.Equals(x.Condition, y.Condition)) return false;
 
         if (x.SelectList is null && y.SelectList is not null) return false;
@@ -104,6 +106,10 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand>
             // return obj.PlanHash.Value;
 #else
 #endif
+
+            hash.Add(obj.Paging.Limit);
+            hash.Add(obj.Paging.Offset);
+
             return hash.ToHashCode();
 
         }

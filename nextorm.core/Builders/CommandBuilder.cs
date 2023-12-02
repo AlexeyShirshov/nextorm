@@ -26,6 +26,8 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
     internal QueryCommand? Query { get => _query; set => _query = value; }
     internal IDataContext DataProvider => _dataProvider;
     internal Expression<Func<TEntity, bool>>? Condition { get => _condition; set => _condition = value; }
+    public Paging Paging;
+
     //internal IPayloadManager PayloadManager { get => _payloadMgr; init => _payloadMgr = value; }
     public delegate void CommandCreatedHandler<T>(Entity<T> sender, QueryCommand queryCommand);
     public event CommandCreatedHandler<TEntity>? CommandCreatedEvent;
@@ -33,7 +35,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
 
     public QueryCommand<TResult> Select<TResult>(Expression<Func<TEntity, TResult>> exp)
     {
-        var cmd = _dataProvider.CreateCommand<TResult>(exp, _condition);
+        var cmd = _dataProvider.CreateCommand<TResult>(exp, _condition, Paging);
         cmd.Logger = Logger;
 
         if (_query is not null)
@@ -71,6 +73,31 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
 
         return b;
     }
+    public Entity<TEntity> Limit(int limit)
+    {
+        var b = Clone();
+
+        b.Paging.Limit = limit;
+
+        return b;
+    }
+    public Entity<TEntity> Offset(int offset)
+    {
+        var b = Clone();
+
+        b.Paging.Offset = offset;
+
+        return b;
+    }
+    public Entity<TEntity> Page(int limit, int offset)
+    {
+        var b = Clone();
+
+        b.Paging.Limit = limit;
+        b.Paging.Offset = offset;
+
+        return b;
+    }
     object ICloneable.Clone()
     {
         return CloneImp();
@@ -84,6 +111,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
         dst._query = _query;
         //dst._payloadMgr = _payloadMgr;
         dst.CommandCreatedEvent += CommandCreatedEvent;
+        dst.Paging = Paging;
     }
     protected virtual object CloneImp()
     {
@@ -121,7 +149,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
     public QueryCommand<bool> AnyCommand()
     {
         var cmd = ToCommand();
-        var queryCommand = _dataProvider.CreateCommand<bool>((TableAlias _) => NORM.SQL.exists(cmd), null);
+        var queryCommand = _dataProvider.CreateCommand<bool>((TableAlias _) => NORM.SQL.exists(cmd), null, default);
         queryCommand.SingleRow = true;
         cmd.IgnoreColumns = true;
         return queryCommand;
@@ -134,7 +162,58 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
 
         return _dataProvider.ExecuteScalar(queryCommand, @params);
     }
-
+    public List<TEntity> ToList(params object[] @params)
+    {
+        return ToCommand().ToList(@params);
+    }
+    public Task<List<TEntity>> ToListAsync(CancellationToken cancellationToken, params object[] @params)
+    {
+        return ToCommand().ToListAsync(cancellationToken, @params);
+    }
+    public TEntity First(params object[] @params)
+    {
+        return ToCommand().First(@params);
+    }
+    public Task<TEntity> FirstAsync(CancellationToken cancellationToken, params object[] @params)
+    {
+        return ToCommand().FirstAsync(cancellationToken, @params);
+    }
+    public QueryCommand<TEntity> FirstOrFirstOrDefaultCommand()
+    {
+        var cmd = ToCommand();
+        cmd.Paging.Limit = 1;
+        return cmd;
+    }
+    public TEntity? FirstOrDefault(params object[] @params)
+    {
+        return ToCommand().FirstOrDefault(@params);
+    }
+    public Task<TEntity?> FirstOrDefaultAsync(CancellationToken cancellationToken, params object[] @params)
+    {
+        return ToCommand().FirstOrDefaultAsync(cancellationToken, @params);
+    }
+    public TEntity Single(params object[] @params)
+    {
+        return ToCommand().Single(@params);
+    }
+    public Task<TEntity> SingleAsync(CancellationToken cancellationToken, params object[] @params)
+    {
+        return ToCommand().SingleAsync(cancellationToken, @params);
+    }
+    public QueryCommand<TEntity> SingleOrSingleOrDefaultCommand()
+    {
+        var cmd = ToCommand();
+        cmd.Paging.Limit = 2;
+        return cmd;
+    }
+    public TEntity? SingleOrDefault(params object[] @params)
+    {
+        return ToCommand().SingleOrDefault(@params);
+    }
+    public Task<TEntity?> SingleOrDefaultAsync(CancellationToken cancellationToken, params object[] @params)
+    {
+        return ToCommand().SingleOrDefaultAsync(cancellationToken, @params);
+    }
     internal protected static QueryCommand<bool> GetAnyCommand(IDataContext dataProvider, QueryCommand cmd)
     {
         var created = false;
@@ -143,7 +222,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
             _anyCommand = new Lazy<QueryCommand<bool>>(() =>
             {
                 created = true;
-                var queryCommand = dataProvider.CreateCommand<bool>((TableAlias _) => NORM.SQL.exists(cmd), null);
+                var queryCommand = dataProvider.CreateCommand<bool>((TableAlias _) => NORM.SQL.exists(cmd), null, default);
                 queryCommand.SingleRow = true;
                 queryCommand.PrepareCommand(CancellationToken.None);
                 return queryCommand;
@@ -184,7 +263,7 @@ public class CommandBuilder
     public QueryCommand<TResult> Select<TResult>(Expression<Func<TableAlias, TResult>> exp)
     {
         //if (string.IsNullOrEmpty(_table)) throw new InvalidOperationException("Table must be specified");
-        var cmd = new QueryCommand<TResult>(_dataProvider, exp, _condition) { Logger = Logger };
+        var cmd = new QueryCommand<TResult>(_dataProvider, exp, _condition, default) { Logger = Logger };
 
         if (!string.IsNullOrEmpty(_table))
             cmd.From = new FromExpression(_table);
