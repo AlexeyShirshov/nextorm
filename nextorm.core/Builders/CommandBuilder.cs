@@ -167,6 +167,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
     {
         return ToCommand().ToList(@params);
     }
+    public Task<List<TEntity>> ToListAsync(params object[] @params) => ToListAsync(CancellationToken.None, @params);
     public Task<List<TEntity>> ToListAsync(CancellationToken cancellationToken, params object[] @params)
     {
         return ToCommand().ToListAsync(cancellationToken, @params);
@@ -175,20 +176,30 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
     {
         return ToCommand().First(@params);
     }
+    public Task<TEntity> FirstAsync(params object[] @params) => FirstAsync(CancellationToken.None, @params);
     public Task<TEntity> FirstAsync(CancellationToken cancellationToken, params object[] @params)
     {
         return ToCommand().FirstAsync(cancellationToken, @params);
     }
-    public QueryCommand<TEntity> FirstOrFirstOrDefaultCommand()
+    public QueryCommand<TEntity?> FirstOrFirstOrDefault()
     {
         var cmd = ToCommand();
         cmd.Paging.Limit = 1;
+        cmd.SingleRow=true;
+        return cmd;
+    }
+    public QueryCommand<TResult?> FirstOrFirstOrDefault<TResult>(Expression<Func<TEntity, TResult>> exp)
+    {
+        var cmd = Select(exp);
+        cmd.Paging.Limit = 1;
+        cmd.SingleRow=true;
         return cmd;
     }
     public TEntity? FirstOrDefault(params object[] @params)
     {
         return ToCommand().FirstOrDefault(@params);
     }
+    public Task<TEntity?> FirstOrDefaultAsync(params object[] @params) => FirstOrDefaultAsync(CancellationToken.None, @params);
     public Task<TEntity?> FirstOrDefaultAsync(CancellationToken cancellationToken, params object[] @params)
     {
         return ToCommand().FirstOrDefaultAsync(cancellationToken, @params);
@@ -197,11 +208,18 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
     {
         return ToCommand().Single(@params);
     }
+    public Task<TEntity> SingleAsync(params object[] @params) => SingleAsync(CancellationToken.None, @params);
     public Task<TEntity> SingleAsync(CancellationToken cancellationToken, params object[] @params)
     {
         return ToCommand().SingleAsync(cancellationToken, @params);
     }
-    public QueryCommand<TEntity> SingleOrSingleOrDefaultCommand()
+    public QueryCommand<TResult?> SingleOrSingleOrDefault<TResult>(Expression<Func<TEntity, TResult>> exp)
+    {
+        var cmd = Select(exp);
+        cmd.Paging.Limit = 2;
+        return cmd;
+    }
+    public QueryCommand<TEntity> SingleOrSingleOrDefault()
     {
         var cmd = ToCommand();
         cmd.Paging.Limit = 2;
@@ -211,6 +229,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
     {
         return ToCommand().SingleOrDefault(@params);
     }
+    public Task<TEntity?> SingleOrDefaultAsync(params object[] @params) => SingleOrDefaultAsync(CancellationToken.None, @params);
     public Task<TEntity?> SingleOrDefaultAsync(CancellationToken cancellationToken, params object[] @params)
     {
         return ToCommand().SingleOrDefaultAsync(cancellationToken, @params);

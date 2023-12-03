@@ -27,7 +27,7 @@ public interface IDataContext : IAsyncDisposable, IDisposable
 
     void ResetPreparation(QueryCommand queryCommand);
     FromExpression? GetFrom(Type srcType, QueryCommand queryCommand);
-    void Compile<TResult>(QueryCommand<TResult> query, bool bufferedOrScalarCalls, CancellationToken cancellationToken);
+    void Compile<TResult>(QueryCommand<TResult> query, bool nonStreamCalls, CancellationToken cancellationToken);
     IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken);
     IEnumerator<TResult> CreateEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[] @params);
     Task<IEnumerator<TResult>> CreateEnumeratorAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken);

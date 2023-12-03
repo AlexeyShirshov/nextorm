@@ -13,19 +13,17 @@ namespace nextorm.core.benchmark;
 [SimpleJob(RuntimeMoniker.Net80)]
 [MemoryDiagnoser]
 [Config(typeof(NextormConfig))]
-public class SqliteBenchmarkAny
+public class SqliteBenchmarkFirst
 {
     private readonly TestDataRepository _ctx;
-    private readonly QueryCommand<bool> _cmd;
-    private readonly QueryCommand<bool> _cmdFilter;
-    private readonly QueryCommand<bool> _cmdFilterParam;
+    private readonly QueryCommand<int> _cmd;
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
-    private readonly Func<EFDataContext, Task<bool>> _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.SimpleEntities.Any());
-    private readonly Func<EFDataContext, Task<bool>> _efCompiledFilter = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.SimpleEntities.Where(it => it.Id > 5).Any());
-    private readonly Func<EFDataContext, int, Task<bool>> _efCompiledFilterParam = EF.CompileAsyncQuery((EFDataContext ctx, int id) => ctx.SimpleEntities.Where(it => it.Id > id).Any());
+    private readonly Func<EFDataContext, Task<int>> _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.SimpleEntities.Select(it => it.Id).First());
+    private readonly Func<EFDataContext, Task<int>> _efCompiledFirstOrDefault = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.SimpleEntities.Select(it => it.Id).FirstOrDefault());
+    // private readonly Func<EFDataContext, int, Task<int>> _efCompiledFilterParam = EF.CompileAsyncQuery((EFDataContext ctx, int id) => ctx.SimpleEntities.Where(it => it.Id > id).Select(it => it.Id).First());
     private readonly ILoggerFactory? _logFactory;
-    public SqliteBenchmarkAny(bool withLogging = false)
+    public SqliteBenchmarkFirst(bool withLogging = false)
     {
         var builder = new DbContextBuilder();
         builder.UseSqlite(Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db"));
@@ -37,9 +35,7 @@ public class SqliteBenchmarkAny
         }
         _ctx = new TestDataRepository(builder.CreateDbContext());
 
-        _cmd = _ctx.SimpleEntity.AnyCommand().Compile(true);
-        // _cmdFilter = _ctx.SimpleEntity.Where(it => it.Id > 5).AnyCommand().Compile(true);
-        // _cmdFilterParam = _ctx.SimpleEntity.Where(it => it.Id > NORM.Param<int>(0)).AnyCommand().Compile(true);
+        _cmd = _ctx.SimpleEntity.FirstOrFirstOrDefault(it => it.Id).Compile(true);
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(@$"Filename={Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db")}");
@@ -54,30 +50,55 @@ public class SqliteBenchmarkAny
 
         _conn = new SqliteConnection(((SqliteDbContext)_ctx.DataProvider).ConnectionString);
     }
-    [Benchmark()]
-    public async Task NextormCompiled()
+    [Benchmark(Baseline = true)]
+    public async Task NextormFirstCompiled()
     {
-        await _cmd.AnyAsync();
+        await _cmd.FirstAsync();
     }
     [Benchmark()]
-    public async Task NextormCached()
+    public async Task NextormFirstOrDefaultCompiled()
     {
-        await _ctx.SimpleEntity.AnyAsync();
+        await _cmd.FirstOrDefaultAsync();
+    }
+    [Benchmark()]
+    public async Task NextormFirstCached()
+    {
+        await _ctx.SimpleEntity.Select(it => it.Id).FirstAsync();
+    }
+    [Benchmark()]
+    public async Task NextormFirstOrDefaultCached()
+    {
+        await _ctx.SimpleEntity.Select(it => it.Id).FirstOrDefaultAsync();
     }
     [Benchmark]
-    public async Task EFCore()
+    public async Task EFCoreFirst()
     {
-        await _efCtx.SimpleEntities.AnyAsync();
+        await _efCtx.SimpleEntities.Select(it => it.Id).FirstAsync();
     }
     [Benchmark]
-    public async Task EFCoreCompiled()
+    public async Task EFCoreFirstOrDefault()
+    {
+        await _efCtx.SimpleEntities.Select(it => it.Id).FirstOrDefaultAsync();
+    }
+    [Benchmark]
+    public async Task EFCoreFirstCompiled()
     {
         await _efCompiled(_efCtx);
     }
     [Benchmark]
-    public async Task Dapper()
+    public async Task EFCoreFirstOrDefaultCompiled()
     {
-        await _conn.ExecuteScalarAsync<bool>("select exists(select id from simple_entity)");
+        await _efCompiledFirstOrDefault(_efCtx);
+    }
+    [Benchmark]
+    public async Task DapperFirst()
+    {
+        await _conn.QueryFirstAsync<int>("select id from simple_entity");
+    }
+    [Benchmark]
+    public async Task DapperFirstOrDefault()
+    {
+        await _conn.QueryFirstOrDefaultAsync<int?>("select id from simple_entity");
     }
     // [Benchmark()]
     // [BenchmarkCategory("Filter")]

@@ -11,14 +11,16 @@ using nextorm.core.benchmark;
 // BenchmarkRunner.Run<SqliteBenchmarkWhere>();
 // BenchmarkRunner.Run<SqliteBenchmarkSimulateWork>();
 // BenchmarkRunner.Run<SqliteBenchmarkMakeSelect>();
-BenchmarkRunner.Run<SqliteBenchmarkAny>();
+// BenchmarkRunner.Run<SqliteBenchmarkAny>();
+BenchmarkRunner.Run<SqliteBenchmarkFirst>();
+// BenchmarkRunner.Run<SqliteBenchmarkSingle>();
 
 // runner.QueryCommandPlanEqualityComparer();
-// var runner = new SqliteBenchmarkAny();
+// var runner = new SqliteBenchmarkFirst(true);
 // await runner.NextormCompiledToList();
 // while (true)
-// for (var i = 0; i < 10; i++)
-// await runner.NextormCompiled();
+// for (var i = 0; i < 2; i++)
+//     await runner.NextormFirstCompiled();
 
 //await runner.FillLargeTable();
 // Console.WriteLine("Press any key to exit");

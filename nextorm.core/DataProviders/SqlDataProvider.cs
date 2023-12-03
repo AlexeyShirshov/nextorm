@@ -84,7 +84,7 @@ public class DbContext : IDataContext
     {
         throw new NotImplementedException(type.ToString());
     }
-    private SqlCacheEntry CreateCompiledQuery<TResult>(QueryCommand<TResult> queryCommand, bool crateEnumerator, CancellationToken cancellationToken)
+    private SqlCacheEntry CreateCompiledQuery<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, CancellationToken cancellationToken)
     {
         DatabaseCompiledQuery<TResult>? compiledQuery = null;
 #if PLAN_CACHE
@@ -127,7 +127,7 @@ public class DbContext : IDataContext
 
             var cacheEntry = new SqlCacheEntry(compiledQuery);
 
-            if (crateEnumerator)
+            if (createEnumerator)
             {
                 var enumerator = new ResultSetEnumerator<TResult>(this, compiledQuery!);
                 cacheEntry.Enumerator = enumerator;
@@ -175,7 +175,7 @@ public class DbContext : IDataContext
             {
                 var cacheEntry = new SqlCacheEntry(compiledQuery);
 
-                if (crateEnumerator)
+                if (createEnumerator)
                 {
                     var enumerator = new ResultSetEnumerator<TResult>(this, compiledQuery!);
                     cacheEntry.Enumerator = enumerator;
@@ -589,12 +589,12 @@ public class DbContext : IDataContext
     {
         return v ? "1" : "0";
     }
-    public void Compile<TResult>(QueryCommand<TResult> cmd, bool bufferedOrScalarCalls, CancellationToken cancellationToken)
+    public void Compile<TResult>(QueryCommand<TResult> cmd, bool nonStreamCalls, CancellationToken cancellationToken)
     {
         if (!cmd.IsPrepared)
             cmd.PrepareCommand(cancellationToken);
 
-        cmd.CacheEntry = CreateCompiledQuery(cmd, !bufferedOrScalarCalls, cancellationToken);
+        cmd.CacheEntry = CreateCompiledQuery(cmd, !nonStreamCalls, cancellationToken);
     }
     protected virtual void Dispose(bool disposing)
     {
@@ -1215,15 +1215,23 @@ public class DbContext : IDataContext
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
 
-        var (reader, cacheEntry, compiledQuery) = CreateReader(queryCommand, @params);
-        using (reader)
+        if (queryCommand.OneColumn)
         {
-            if (reader.Read())
+            var r = ExecuteScalar(queryCommand, @params) ?? throw new InvalidOperationException();
+            return r;
+        }
+        else
+        {
+            var (reader, cacheEntry, compiledQuery) = CreateReader(queryCommand, @params);
+            using (reader)
             {
-                return compiledQuery.MapDelegate(reader);
-            }
+                if (reader.Read())
+                {
+                    return compiledQuery.MapDelegate(reader);
+                }
 
-            throw new InvalidOperationException();
+                throw new InvalidOperationException();
+            }
         }
     }
 
@@ -1231,30 +1239,46 @@ public class DbContext : IDataContext
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
 
-        var (reader, cacheEntry, compiledQuery) = await CreateReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
-        using (reader)
+        if (queryCommand.OneColumn)
         {
-            if (reader.Read())
+            var r = await ExecuteScalar(queryCommand, @params, cancellationToken) ?? throw new InvalidOperationException();
+            return r;
+        }
+        else
+        {
+            var (reader, cacheEntry, compiledQuery) = await CreateReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
+            using (reader)
             {
-                return compiledQuery.MapDelegate(reader);
-            }
+                if (reader.Read())
+                {
+                    return compiledQuery.MapDelegate(reader);
+                }
 
-            throw new InvalidOperationException();
+                throw new InvalidOperationException();
+            }
         }
     }
     public TResult? FirstOrDefault<TResult>(QueryCommand<TResult> queryCommand, object[] @params)
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
 
-        var (reader, cacheEntry, compiledQuery) = CreateReader(queryCommand, @params);
-        using (reader)
+        if (queryCommand.OneColumn)
         {
-            if (reader.Read())
+            var r = ExecuteScalar(queryCommand, @params);
+            return r;
+        }
+        else
+        {
+            var (reader, cacheEntry, compiledQuery) = CreateReader(queryCommand, @params);
+            using (reader)
             {
-                return compiledQuery.MapDelegate(reader);
-            }
+                if (reader.Read())
+                {
+                    return compiledQuery.MapDelegate(reader);
+                }
 
-            return default;
+                return default;
+            }
         }
     }
 
@@ -1262,15 +1286,23 @@ public class DbContext : IDataContext
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
 
-        var (reader, cacheEntry, compiledQuery) = await CreateReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
-        using (reader)
+        if (queryCommand.OneColumn)
         {
-            if (reader.Read())
+            var r = await ExecuteScalar(queryCommand, @params, cancellationToken);
+            return r;
+        }
+        else
+        {
+            var (reader, cacheEntry, compiledQuery) = await CreateReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
+            using (reader)
             {
-                return compiledQuery.MapDelegate(reader);
-            }
+                if (reader.Read())
+                {
+                    return compiledQuery.MapDelegate(reader);
+                }
 
-            return default;
+                return default;
+            }
         }
     }
 

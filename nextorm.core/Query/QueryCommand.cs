@@ -574,12 +574,12 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
     //internal CompiledQuery<TResult>? Compiled => CacheEntry?.CompiledQuery as CompiledQuery<TResult>;
     public CacheEntry? CacheEntry { get; set; }
     public bool SingleRow { get; set; }
-    public QueryCommand<TResult> Compile(bool bufferedOrScalarCalls, CancellationToken cancellationToken = default)
+    public QueryCommand<TResult> Compile(bool nonStreamCalls, CancellationToken cancellationToken = default)
     {
         if (!IsPrepared)
             PrepareCommand(cancellationToken);
 
-        _dataProvider.Compile(this, bufferedOrScalarCalls, cancellationToken);
+        _dataProvider.Compile(this, nonStreamCalls, cancellationToken);
 
         return this;
     }
@@ -718,150 +718,155 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
     }
     public TResult First(params object[] @params)
     {
-        int oldLim = Paging.Limit;
-        try
+        // int oldLim = Paging.Limit;
+        // try
+        // {
+        if (Paging.Limit != 1 || !IsPrepared)
         {
-            if (Paging.Limit != 1 || !IsPrepared)
-            {
-                oldLim = 1;
-                PrepareCommand(CancellationToken.None);
-            }
+            SingleRow = true;
+            Paging.Limit = 1;
+            PrepareCommand(CancellationToken.None);
+        }
 
-            return _dataProvider.First(this, @params);
-        }
-        finally
-        {
-            Paging.Limit = oldLim;
-        }
+        return _dataProvider.First(this, @params);
+        // }
+        // finally
+        // {
+        //     Paging.Limit = oldLim;
+        // }
     }
-
+    public Task<TResult> FirstAsync(params object[] @params) => FirstAsync(CancellationToken.None, @params);
     public Task<TResult> FirstAsync(CancellationToken cancellationToken, params object[] @params)
     {
-        int oldLim = Paging.Limit;
-        try
+        // int oldLim = Paging.Limit;
+        // try
+        // {
+        if (Paging.Limit != 1 || !IsPrepared)
         {
-            if (Paging.Limit != 1 || !IsPrepared)
-            {
-                oldLim = 1;
-                PrepareCommand(cancellationToken);
-            }
+            SingleRow = true;
+            Paging.Limit = 1;
+            PrepareCommand(cancellationToken);
+        }
 
-            return _dataProvider.FirstAsync(this, @params, cancellationToken);
-        }
-        finally
-        {
-            Paging.Limit = oldLim;
-        }
+        return _dataProvider.FirstAsync(this, @params, cancellationToken);
+        // }
+        // finally
+        // {
+        //     Paging.Limit = oldLim;
+        // }
     }
     public TResult? FirstOrDefault(params object[] @params)
     {
-        int oldLim = Paging.Limit;
-        try
+        // int oldLim = Paging.Limit;
+        // try
+        // {
+        if (Paging.Limit != 1 || !IsPrepared)
         {
-            if (Paging.Limit != 1 || !IsPrepared)
-            {
-                oldLim = 1;
-                PrepareCommand(CancellationToken.None);
-            }
+            SingleRow = true;
+            Paging.Limit = 1;
+            PrepareCommand(CancellationToken.None);
+        }
 
-            return _dataProvider.FirstOrDefault(this, @params);
-        }
-        finally
-        {
-            Paging.Limit = oldLim;
-        }
+        return _dataProvider.FirstOrDefault(this, @params);
+        // }
+        // finally
+        // {
+        //     Paging.Limit = oldLim;
+        // }
     }
+    public Task<TResult?> FirstOrDefaultAsync(params object[] @params) => FirstOrDefaultAsync(CancellationToken.None, @params);
     public Task<TResult?> FirstOrDefaultAsync(CancellationToken cancellationToken, params object[] @params)
     {
-        int oldLim = Paging.Limit;
-        try
+        // int oldLim = Paging.Limit;
+        // try
+        // {
+        if (Paging.Limit != 1 || !IsPrepared)
         {
-            if (Paging.Limit != 1 || !IsPrepared)
-            {
-                oldLim = 1;
-                PrepareCommand(cancellationToken);
-            }
+            SingleRow = true;
+            Paging.Limit = 1;
+            PrepareCommand(cancellationToken);
+        }
 
-            return _dataProvider.FirstOrDefaultAsync(this, @params, cancellationToken);
-        }
-        finally
-        {
-            Paging.Limit = oldLim;
-        }
+        return _dataProvider.FirstOrDefaultAsync(this, @params, cancellationToken);
+        // }
+        // finally
+        // {
+        //     Paging.Limit = oldLim;
+        // }
     }
     public TResult Single(params object[] @params)
     {
-        int oldLim = Paging.Limit;
-        try
+        // int oldLim = Paging.Limit;
+        // try
+        // {
+        if (Paging.Limit != 2 || !IsPrepared)
         {
-            if (Paging.Limit != 2 || !IsPrepared)
-            {
-                oldLim = 2;
-                PrepareCommand(CancellationToken.None);
-            }
+            Paging.Limit = 2;
+            PrepareCommand(CancellationToken.None);
+        }
 
-            return _dataProvider.Single(this, @params);
-        }
-        finally
-        {
-            Paging.Limit = oldLim;
-        }
+        return _dataProvider.Single(this, @params);
+        // }
+        // finally
+        // {
+        //     Paging.Limit = oldLim;
+        // }
     }
-
+    public Task<TResult> SingleAsync(params object[] @params) => SingleAsync(CancellationToken.None, @params);
     public Task<TResult> SingleAsync(CancellationToken cancellationToken, params object[] @params)
     {
-        int oldLim = Paging.Limit;
-        try
+        // int oldLim = Paging.Limit;
+        // try
+        // {
+        if (Paging.Limit != 2 || !IsPrepared)
         {
-            if (Paging.Limit != 2 || !IsPrepared)
-            {
-                oldLim = 2;
-                PrepareCommand(cancellationToken);
-            }
+            Paging.Limit = 2;
+            PrepareCommand(cancellationToken);
+        }
 
-            return _dataProvider.SingleAsync(this, @params, cancellationToken);
-        }
-        finally
-        {
-            Paging.Limit = oldLim;
-        }
+        return _dataProvider.SingleAsync(this, @params, cancellationToken);
+        // }
+        // finally
+        // {
+        //     Paging.Limit = oldLim;
+        // }
     }
     public TResult? SingleOrDefault(params object[] @params)
     {
-        int oldLim = Paging.Limit;
-        try
+        // int oldLim = Paging.Limit;
+        // try
+        // {
+        if (Paging.Limit != 2 || !IsPrepared)
         {
-            if (Paging.Limit != 2 || !IsPrepared)
-            {
-                oldLim = 2;
-                PrepareCommand(CancellationToken.None);
-            }
+            Paging.Limit = 2;
+            PrepareCommand(CancellationToken.None);
+        }
 
-            return _dataProvider.SingleOrDefault(this, @params);
-        }
-        finally
-        {
-            Paging.Limit = oldLim;
-        }
+        return _dataProvider.SingleOrDefault(this, @params);
+        // }
+        // finally
+        // {
+        //     Paging.Limit = oldLim;
+        // }
     }
-
+    public Task<TResult?> SingleOrDefaultAsync(params object[] @params) => SingleOrDefaultAsync(CancellationToken.None, @params);
     public Task<TResult?> SingleOrDefaultAsync(CancellationToken cancellationToken, params object[] @params)
     {
-        int oldLim = Paging.Limit;
-        try
+        // int oldLim = Paging.Limit;
+        // try
+        // {
+        if (Paging.Limit != 2 || !IsPrepared)
         {
-            if (Paging.Limit != 2 || !IsPrepared)
-            {
-                oldLim = 2;
-                PrepareCommand(cancellationToken);
-            }
+            Paging.Limit = 2;
+            PrepareCommand(cancellationToken);
+        }
 
-            return _dataProvider.SingleOrDefaultAsync(this, @params, cancellationToken);
-        }
-        finally
-        {
-            Paging.Limit = oldLim;
-        }
+        return _dataProvider.SingleOrDefaultAsync(this, @params, cancellationToken);
+        // }
+        // finally
+        // {
+        //     Paging.Limit = oldLim;
+        // }
     }
     // public QueryCommand<TResult> WithParams(params object[] @params)
     // {
