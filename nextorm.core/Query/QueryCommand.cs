@@ -529,12 +529,18 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
     }
     public void ReplaceCommand(QueryCommand cmd, int idx)
     {
+        if (_dataProvider != cmd._dataProvider)
+            throw new InvalidOperationException("Different data context");
+
         _referencedQueries[idx] = cmd;
         var comparer = new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
         ColumnsPlanHash = 7 * 13 + comparer.GetHashCode(_selectList![0]);
     }
     public int AddCommand(QueryCommand cmd)
     {
+        if (_dataProvider != cmd._dataProvider)
+            throw new InvalidOperationException("Different data context");
+
         _referencedQueries ??= new List<QueryCommand>();
         var idx = _referencedQueries.Count;
         _referencedQueries.Add(cmd);
@@ -765,7 +771,6 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
             Paging.Limit = oldLim;
         }
     }
-
     public Task<TResult?> FirstOrDefaultAsync(CancellationToken cancellationToken, params object[] @params)
     {
         int oldLim = Paging.Limit;

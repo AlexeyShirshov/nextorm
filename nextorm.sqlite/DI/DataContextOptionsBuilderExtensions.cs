@@ -5,8 +5,7 @@ namespace nextorm.sqlite;
 
 public static class DataContextOptionsBuilderExtensions
 {
-    public const string ConnectionString = "sqlite:conn";
-    public static DataContextOptionsBuilder UseSqlite(this DataContextOptionsBuilder builder, string filepath)
+    public static DbContextBuilder UseSqlite(this DbContextBuilder builder, string filepath)
     {
         ArgumentException.ThrowIfNullOrEmpty(filepath);
 
@@ -15,7 +14,7 @@ public static class DataContextOptionsBuilderExtensions
             throw new ArgumentException($"File '{filepath}' does not exist");
 #endif
 
-        builder.Property[ConnectionString] = $"Data Source='{filepath}'";
+        builder.Factory = (b) => new SqliteDbContext($"Data Source='{filepath}'", b);
         return builder;
     }
 }

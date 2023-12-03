@@ -27,7 +27,7 @@ public class SqliteBenchmarkAny
     private readonly ILoggerFactory? _logFactory;
     public SqliteBenchmarkAny(bool withLogging = false)
     {
-        var builder = new DataContextOptionsBuilder();
+        var builder = new DbContextBuilder();
         builder.UseSqlite(Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db"));
         if (withLogging)
         {
@@ -35,8 +35,7 @@ public class SqliteBenchmarkAny
             builder.UseLoggerFactory(_logFactory);
             builder.LogSensetiveData(true);
         }
-        var provider = new SqliteDbContext(builder);
-        _ctx = new TestDataRepository(provider);
+        _ctx = new TestDataRepository(builder.CreateDbContext());
 
         _cmd = _ctx.SimpleEntity.AnyCommand().Compile(true);
         // _cmdFilter = _ctx.SimpleEntity.Where(it => it.Id > 5).AnyCommand().Compile(false);

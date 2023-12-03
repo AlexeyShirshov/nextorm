@@ -437,4 +437,106 @@ public class SqlCommandTests
 
         r.Should().BeFalse();
     }
+    [Fact]
+    public void Top_ShouldLimitData()
+    {
+        // Given
+        var r = _sut.SimpleEntity.Limit(1).Select(it => it.Id).ToList();
+        // When
+        r.Count.Should().Be(1);
+        r[0].Should().Be(1);
+    }
+    [Fact]
+    public void Top_ShouldLimitOffsetData()
+    {
+        // Given
+        var r = _sut.SimpleEntity.Page(1, 1).Select(it => it.Id).ToList();
+        // When
+        r.Count.Should().Be(1);
+        r[0].Should().Be(2);
+    }
+    [Fact]
+    public void First_ShouldReturnFirst()
+    {
+        // Given
+        var r = _sut.SimpleEntity.Select(it => it.Id).First();
+
+        // When
+        r.Should().Be(1);
+        // Then
+    }
+    [Fact]
+    public void FirstOffset_ShouldReturnFirst()
+    {
+        // Given
+        var r = _sut.SimpleEntity.Offset(1).Select(it => it.Id).First();
+
+        // When
+        r.Should().Be(2);
+        // Then
+    }
+    [Fact]
+    public void FirstOffsetEmpty_ShouldThrow()
+    {
+        var test = () =>
+        {
+            _sut.SimpleEntity.Offset(10).Select(it => it.Id).First();
+        };
+
+        test.Should().Throw<InvalidOperationException>();
+    }
+    [Fact]
+    public void FirstOrDefault_ShouldReturnFirst()
+    {
+        var r = _sut.SimpleEntity.Offset(10).Select(it => it.Id).FirstOrDefault();
+
+        r.Should().Be(default);
+    }
+    [Fact]
+    public void Single_ShouldReturnSingle()
+    {
+        // Given
+        var r = _sut.SimpleEntity.Page(1, 1).Select(it => it.Id).Single();
+
+        // When
+        r.Should().Be(2);
+        // Then
+    }
+    [Fact]
+    public void SingleEmpty_ShouldThrow()
+    {
+        var test = () =>
+        {
+            _sut.SimpleEntity.Offset(10).Select(it => it.Id).Single();
+        };
+
+        test.Should().Throw<InvalidOperationException>();
+    }
+    [Fact]
+    public void SingleMany_ShouldThrow()
+    {
+        var test = () =>
+        {
+            _sut.SimpleEntity.Select(it => it.Id).Single();
+        };
+
+        test.Should().Throw<InvalidOperationException>();
+    }
+    [Fact]
+    public void SingleOrDefault_ShouldReturnData()
+    {
+        var r = _sut.SimpleEntity.Offset(10).Select(it => it.Id).SingleOrDefault();
+
+        r.Should().Be(default);
+    }
+    [Fact]
+    public void SingleOrDefaultMany_ShouldThrow()
+    {
+        var test = () =>
+        {
+            _sut.SimpleEntity.Select(it => it.Id).SingleOrDefault();
+        };
+
+        test.Should().Throw<InvalidOperationException>();
+    }
 }

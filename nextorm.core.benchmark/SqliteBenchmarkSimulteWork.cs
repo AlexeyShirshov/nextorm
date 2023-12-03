@@ -32,7 +32,7 @@ public class SqliteBenchmarkSimulateWork
     public SqliteBenchmarkSimulateWork(bool withLogging = false)
     {
 
-        var builder = new DataContextOptionsBuilder();
+        var builder = new DbContextBuilder();
         builder.UseSqlite(Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db"));
         if (withLogging)
         {
@@ -40,8 +40,7 @@ public class SqliteBenchmarkSimulateWork
             builder.UseLoggerFactory(_logFactory);
             builder.LogSensetiveData(true);
         }
-        var provider = new SqliteDbContext(builder);
-        _ctx = new TestDataRepository(provider);
+        _ctx = new TestDataRepository(builder.CreateDbContext());
 
         _cmd = _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new TupleLargeEntity(entity.Id, entity.Str, entity.Dt)).Compile(false);
 

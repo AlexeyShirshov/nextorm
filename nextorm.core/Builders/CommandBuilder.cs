@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Linq.Expressions;
 using Microsoft.Extensions.Logging;
 
@@ -10,7 +11,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
     private readonly IDataContext _dataProvider;
     private QueryCommand? _query;
     private Expression<Func<TEntity, bool>>? _condition;
-    private static Lazy<QueryCommand<bool>>? _anyCommand;
+    private static readonly IDictionary<IDataContext, Lazy<QueryCommand<bool>>> _anyCommandCache = new ConcurrentDictionary<IDataContext, Lazy<QueryCommand<bool>>>();
     #endregion
     public Entity(IDataContext dataProvider)
     {
@@ -217,9 +218,9 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
     internal protected static QueryCommand<bool> GetAnyCommand(IDataContext dataProvider, QueryCommand cmd)
     {
         var created = false;
-        if (_anyCommand is null)
+        if (!_anyCommandCache.TryGetValue(dataProvider, out var anyCommand))
         {
-            _anyCommand = new Lazy<QueryCommand<bool>>(() =>
+            anyCommand = new Lazy<QueryCommand<bool>>(() =>
             {
                 created = true;
                 var queryCommand = dataProvider.CreateCommand<bool>((TableAlias _) => NORM.SQL.exists(cmd), null, default);
@@ -227,8 +228,10 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
                 queryCommand.PrepareCommand(CancellationToken.None);
                 return queryCommand;
             });
+            _anyCommandCache[dataProvider] = anyCommand;
         }
-        var queryCommand = _anyCommand.Value;
+
+        var queryCommand = anyCommand.Value;
         if (!created)
         {
             cmd.PrepareCommand(CancellationToken.None);

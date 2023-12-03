@@ -1,5 +1,6 @@
 using System.Data.Common;
 using System.Data.SQLite;
+using System.Text;
 using Microsoft.Extensions.Logging;
 using nextorm.core;
 
@@ -9,10 +10,10 @@ public class SqliteDbContext : DbContext
 {
     private readonly string _connectionString;
 
-    public SqliteDbContext(DataContextOptionsBuilder optionsBuilder)
+    public SqliteDbContext(string connectionString, DbContextBuilder optionsBuilder)
         : base(optionsBuilder)
     {
-        _connectionString = (string)optionsBuilder.Property[DataContextOptionsBuilderExtensions.ConnectionString];
+        _connectionString = connectionString;
     }
 
     public override DbConnection CreateConnection()
@@ -46,5 +47,24 @@ public class SqliteDbContext : DbContext
     public override DbParameter CreateParam(string name, object? value)
     {
         return new SQLiteParameter(name, value);
+    }
+    protected override void MakePage(Paging paging, StringBuilder sb)
+    {
+        // var sb = _sbPool.Get();
+        // try
+        // {
+        sb.Append("limit ").Append(paging.Limit > 0
+            ? paging.Limit
+            : -1);
+
+        if (paging.Offset > 0)
+            sb.Append(" offset ").Append(paging.Offset);
+
+        //     return sb.ToString();
+        // }
+        // finally
+        // {
+        //     _sbPool.Return(sb);
+        // }
     }
 }

@@ -15,10 +15,9 @@ public class SqliteBenchmarkMakeSelect
 
     public SqliteBenchmarkMakeSelect()
     {
-        var builder = new DataContextOptionsBuilder();
+        var builder = new DbContextBuilder();
         builder.UseSqlite(Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db"));
-        var provider = new SqliteDbContext(builder);
-        _ctx = new TestDataRepository(provider);
+        _ctx = new TestDataRepository(builder.CreateDbContext());
 
         _provider = (DbContext)_ctx.DataProvider;
 

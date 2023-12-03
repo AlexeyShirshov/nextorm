@@ -19,7 +19,7 @@ public class Startup
             builder.AddConsole();
         });
 
-        services.AddNextOrmContext<SqliteDbContext>((sp, builder) =>
+        services.AddNextOrmContext((sp, builder) =>
         {
             builder.UseLoggerFactory(sp.GetRequiredService<ILoggerFactory>());
             builder.UseSqlite(Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db"));

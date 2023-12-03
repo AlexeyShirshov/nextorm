@@ -33,7 +33,7 @@ public class SqliteBenchmarkLargeIteration
     private readonly ILoggerFactory? _logFactory;
     public SqliteBenchmarkLargeIteration(bool withLogging = false)
     {
-        var builder = new DataContextOptionsBuilder();
+        var builder = new DbContextBuilder();
         builder.UseSqlite(Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db"));
         if (withLogging)
         {
@@ -41,8 +41,7 @@ public class SqliteBenchmarkLargeIteration
             builder.UseLoggerFactory(_logFactory);
             builder.LogSensetiveData(true);
         }
-        var provider = new SqliteDbContext(builder);
-        _ctx = new TestDataRepository(provider);
+        _ctx = new TestDataRepository(builder.CreateDbContext());
 
         _cmdExec = _ctx.LargeEntity.Select(entity => new TupleLargeEntity(entity.Id, entity.Str, entity.Dt)).Compile(false);
 

@@ -19,7 +19,7 @@ public class DbContext : IDataContext
     private readonly static MethodInfo IsDBNullMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.IsDBNull))!;
     private readonly static IDictionary<Type, IEntityMeta> _metadata = new ConcurrentDictionary<Type, IEntityMeta>();
     private readonly static IDictionary<ExpressionKey, Delegate> _expCache = new ExpressionCache<Delegate>();
-    internal readonly static ObjectPool<StringBuilder> _sbPool = new DefaultObjectPoolProvider().Create(new StringBuilderPooledObjectPolicy());
+    internal protected readonly static ObjectPool<StringBuilder> _sbPool = new DefaultObjectPoolProvider().Create(new StringBuilderPooledObjectPolicy());
 
 #if !ONLY_PLAN_CACHE
     private readonly IDictionary<QueryCommand, SqlCacheEntry> _queryCache = new Dictionary<QueryCommand, SqlCacheEntry>();
@@ -30,7 +30,7 @@ public class DbContext : IDataContext
     private DbConnection? _conn;
     // private bool _clearCache;
     private bool _disposedValue;
-    public DbContext(DataContextOptionsBuilder optionsBuilder)
+    public DbContext(DbContextBuilder optionsBuilder)
     {
         ArgumentNullException.ThrowIfNull(optionsBuilder);
 
@@ -275,9 +275,19 @@ public class DbContext : IDataContext
                 var whereSql = MakeWhere(entityType, cmd, cmd.Condition, 0, null, cmd, cmd, @params, paramMode);
                 if (!paramMode) sqlBuilder!.Append(" where ").Append(whereSql);
             }
+
+            if (!paramMode)
+            {
+                if (cmd.Paging.Limit > 0 || cmd.Paging.Offset > 0)
+                {
+                    sqlBuilder!.Append(' ');
+                    MakePage(cmd.Paging, sqlBuilder);
+                }
+            }
         }
-        else if (!paramMode && sqlBuilder.Length > 0)
+        else if (!paramMode && sqlBuilder!.Length > 0)
             sqlBuilder.Length -= 2;
+
 
         string? r = null;
         if (!paramMode)
@@ -292,6 +302,11 @@ public class DbContext : IDataContext
 #endif
 
         return (r, @params);
+    }
+
+    protected virtual void MakePage(Paging paging, StringBuilder sqlBuilder)
+    {
+        throw new NotImplementedException();
     }
 
     private string? MakeJoin(JoinExpression join, QueryCommand cmd, List<Param> @params, bool paramMode)
@@ -682,6 +697,23 @@ public class DbContext : IDataContext
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
 
+        var (reader, cacheEntry, compiledQuery) = CreateReader(queryCommand, @params);
+        using (reader)
+        {
+            var l = new List<TResult>(cacheEntry.LastRowCount);
+            while (reader.Read())
+            {
+                l.Add(compiledQuery.MapDelegate(reader));
+            }
+
+            cacheEntry.LastRowCount = l.Count;
+            return l;
+        }
+    }
+    private (DbDataReader, SqlCacheEntry, DatabaseCompiledQuery<TResult>) CreateReader<TResult>(QueryCommand<TResult> queryCommand, object[]? @params)
+    {
+        ArgumentNullException.ThrowIfNull(queryCommand);
+
         var setParams = @params is not null;
         var ce = queryCommand.CacheEntry;
         if (ce is SqlCacheEntry cacheEntry
@@ -768,15 +800,7 @@ public class DbContext : IDataContext
             }
         }
 #endif
-        using var reader = sqlCommand.ExecuteReader(compiledQuery.Behavior);
-
-        var l = new List<TResult>(cacheEntry.LastRowCount);
-        while (reader.Read())
-        {
-            l.Add(compiledQuery.MapDelegate(reader));
-        }
-        cacheEntry.LastRowCount = l.Count;
-        return l;
+        return (sqlCommand.ExecuteReader(compiledQuery.Behavior), cacheEntry, compiledQuery);
     }
     public TResult? ExecuteScalar<TResult>(QueryCommand<TResult> queryCommand, object[]? @params)
     {
@@ -1189,41 +1213,159 @@ public class DbContext : IDataContext
 
     public TResult First<TResult>(QueryCommand<TResult> queryCommand, object[] @params)
     {
-        throw new NotImplementedException();
+        ArgumentNullException.ThrowIfNull(queryCommand);
+
+        var (reader, cacheEntry, compiledQuery) = CreateReader(queryCommand, @params);
+        using (reader)
+        {
+            if (reader.Read())
+            {
+                return compiledQuery.MapDelegate(reader);
+            }
+
+            throw new InvalidOperationException();
+        }
     }
 
-    public Task<TResult> FirstAsync<TResult>(QueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
+    public async Task<TResult> FirstAsync<TResult>(QueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
     {
-        throw new NotImplementedException();
+        ArgumentNullException.ThrowIfNull(queryCommand);
+
+        var (reader, cacheEntry, compiledQuery) = await CreateReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
+        using (reader)
+        {
+            if (reader.Read())
+            {
+                return compiledQuery.MapDelegate(reader);
+            }
+
+            throw new InvalidOperationException();
+        }
     }
     public TResult? FirstOrDefault<TResult>(QueryCommand<TResult> queryCommand, object[] @params)
     {
-        throw new NotImplementedException();
+        ArgumentNullException.ThrowIfNull(queryCommand);
+
+        var (reader, cacheEntry, compiledQuery) = CreateReader(queryCommand, @params);
+        using (reader)
+        {
+            if (reader.Read())
+            {
+                return compiledQuery.MapDelegate(reader);
+            }
+
+            return default;
+        }
     }
 
-    public Task<TResult?> FirstOrDefaultAsync<TResult>(QueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
+    public async Task<TResult?> FirstOrDefaultAsync<TResult>(QueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
     {
-        throw new NotImplementedException();
+        ArgumentNullException.ThrowIfNull(queryCommand);
+
+        var (reader, cacheEntry, compiledQuery) = await CreateReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
+        using (reader)
+        {
+            if (reader.Read())
+            {
+                return compiledQuery.MapDelegate(reader);
+            }
+
+            return default;
+        }
     }
 
     public TResult Single<TResult>(QueryCommand<TResult> queryCommand, object[] @params)
     {
-        throw new NotImplementedException();
+        ArgumentNullException.ThrowIfNull(queryCommand);
+
+        var (reader, cacheEntry, compiledQuery) = CreateReader(queryCommand, @params);
+        using (reader)
+        {
+            TResult r = default!;
+            var hasResult = false;
+            while (reader.Read())
+            {
+                if (hasResult)
+                    throw new InvalidOperationException();
+
+                r = compiledQuery.MapDelegate(reader);
+                hasResult = true;
+            }
+
+            if (!hasResult)
+                throw new InvalidOperationException();
+
+            return r!;
+        }
     }
 
-    public Task<TResult> SingleAsync<TResult>(QueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
+    public async Task<TResult> SingleAsync<TResult>(QueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
     {
-        throw new NotImplementedException();
+        ArgumentNullException.ThrowIfNull(queryCommand);
+
+        var (reader, cacheEntry, compiledQuery) = await CreateReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
+        using (reader)
+        {
+            TResult r = default!;
+            var hasResult = false;
+            while (reader.Read())
+            {
+                if (hasResult)
+                    throw new InvalidOperationException();
+
+                r = compiledQuery.MapDelegate(reader);
+                hasResult = true;
+            }
+
+            if (!hasResult)
+                throw new InvalidOperationException();
+
+            return r!;
+        }
     }
 
     public TResult? SingleOrDefault<TResult>(QueryCommand<TResult> queryCommand, object[] @params)
     {
-        throw new NotImplementedException();
+        ArgumentNullException.ThrowIfNull(queryCommand);
+
+        var (reader, cacheEntry, compiledQuery) = CreateReader(queryCommand, @params);
+        using (reader)
+        {
+            TResult? r = default;
+            var hasResult = false;
+            while (reader.Read())
+            {
+                if (hasResult)
+                    throw new InvalidOperationException();
+
+                r = compiledQuery.MapDelegate(reader);
+                hasResult = true;
+            }
+
+            return r;
+        }
     }
 
-    public Task<TResult?> SingleOrDefaultAsync<TResult>(QueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
+    public async Task<TResult?> SingleOrDefaultAsync<TResult>(QueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
     {
-        throw new NotImplementedException();
+        ArgumentNullException.ThrowIfNull(queryCommand);
+
+        var (reader, cacheEntry, compiledQuery) = await CreateReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
+        using (reader)
+        {
+            TResult? r = default;
+            var hasResult = false;
+            while (reader.Read())
+            {
+                if (hasResult)
+                    throw new InvalidOperationException();
+
+                r = compiledQuery.MapDelegate(reader);
+                hasResult = true;
+            }
+
+            return r;
+        }
     }
 
     //record CompiledQueryPayload<TResult>(DatabaseCompiledQuery<TResult> CompiledQuery) : IPayload;
