@@ -1,4 +1,4 @@
-using nextorm.core;
+namespace nextorm.core;
 
 public interface IQueryProvider
 {

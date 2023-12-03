@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using nextorm.core;
+namespace nextorm.core;
 
 public static class QueryCommandExtensions
 {
