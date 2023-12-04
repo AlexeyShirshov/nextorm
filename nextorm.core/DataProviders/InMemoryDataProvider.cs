@@ -594,20 +594,20 @@ public partial class InMemoryContext : IDataContext
         return l;
     }
 
-    public Task<TResult?> ExecuteScalar<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
+    public Task<(TResult? result, bool isNull)> ExecuteScalar<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
     {
         throw new NotImplementedException();
     }
-    public TResult? ExecuteScalar<TResult>(QueryCommand<TResult> queryCommand, object[]? @params)
+    public (TResult? result, bool isNull) ExecuteScalar<TResult>(QueryCommand<TResult> queryCommand, object[]? @params)
     {
         var cacheEntry = GetCacheEntry(queryCommand, CancellationToken.None);
 
         using var ee = (IEnumerator<TResult>)cacheEntry.CreateEnumerator(queryCommand, cacheEntry, @params, CancellationToken.None)!;
 
         if (ee.MoveNext())
-            return ee.Current;
+            return (ee.Current, false);
 
-        return default;
+        return (default, true);
     }
 
     public TResult First<TResult>(QueryCommand<TResult> queryCommand, object[] @params)

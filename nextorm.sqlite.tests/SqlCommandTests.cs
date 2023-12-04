@@ -496,7 +496,7 @@ public class SqlCommandTests
     public void Single_ShouldReturnSingle()
     {
         // Given
-        var r = _sut.SimpleEntity.Page(1, 1).Select(it => it.Id).Single();
+        var r = _sut.SimpleEntity.Where(it => it.Id == 2).Select(it => it.Id).Single();
 
         // When
         r.Should().Be(2);

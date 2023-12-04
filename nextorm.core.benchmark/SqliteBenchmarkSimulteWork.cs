@@ -25,9 +25,9 @@ public class SqliteBenchmarkSimulateWork
     private readonly QueryCommand<TupleLargeEntity> _cmdToList;
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
-    private readonly QueryCommand<Tuple<int>> _cmdInner;
+    private readonly QueryCommand<Tuple<int>?> _cmdInner;
     private readonly Func<EFDataContext, int, IAsyncEnumerable<LargeEntity>> _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx, int lim) => ctx.LargeEntities.Where(it => it.Id < lim));
-    private readonly Func<EFDataContext, long, int, IAsyncEnumerable<SimpleEntity>> _efInnerCompiled = EF.CompileAsyncQuery((EFDataContext ctx, long id, int i) => ctx.SimpleEntities.Where(it => it.Id == id + i));
+    private readonly Func<EFDataContext, long, int, Task<SimpleEntity?>> _efInnerCompiled = EF.CompileAsyncQuery((EFDataContext ctx, long id, int i) => ctx.SimpleEntities.Where(it => it.Id == id + i).FirstOrDefault());
     private readonly ILoggerFactory? _logFactory;
     public SqliteBenchmarkSimulateWork(bool withLogging = false)
     {
@@ -46,7 +46,7 @@ public class SqliteBenchmarkSimulateWork
 
         _cmdToList = _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new TupleLargeEntity(entity.Id, entity.Str, entity.Dt)).Compile(true);
 
-        _cmdInner = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0) + NORM.Param<int>(1)).Select(entity => new Tuple<int>(entity.Id)).Compile(false);
+        _cmdInner = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0) + NORM.Param<int>(1)).FirstOrFirstOrDefault(entity => new Tuple<int>(entity.Id)).Compile(true);
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(@$"Filename={Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db")}");
@@ -115,7 +115,7 @@ public class SqliteBenchmarkSimulateWork
             await DoWork();
             for (var i = 0; i < SmallIterations; i++)
             {
-                var s = (await _cmdInner.Exec(row.Item1, i)).FirstOrDefault();
+                await _cmdInner.FirstOrDefaultAsync(row.Item1, i);
                 //var s = await _cmdInner.AnyAsync(row.Item1, i);
             }
         }
@@ -163,13 +163,13 @@ public class SqliteBenchmarkSimulateWork
     [Benchmark()]
     public async Task NextormCachedWithParamsToList()
     {
-        var cmdInner = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0) + NORM.Param<int>(1)).Select(entity => new { entity.Id }).Compile(false);
+        var cmdInner = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0) + NORM.Param<int>(1)).FirstOrFirstOrDefault(entity => new { entity.Id }).Compile(true);
         foreach (var row in await _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new { entity.Id, entity.Str, entity.Dt }).ToListAsync())
         {
             await DoWork();
             for (var i = 0; i < SmallIterations; i++)
             {
-                var s = (await cmdInner.Exec(row.Id, i)).FirstOrDefault();
+                await cmdInner.FirstOrDefaultAsync(row.Id, i);
             }
         }
     }
@@ -207,7 +207,7 @@ public class SqliteBenchmarkSimulateWork
             await DoWork();
             for (var i = 0; i < SmallIterations; i++)
             {
-                var s = (await _efInnerCompiled(_efCtx, row.Id, i).Select(entity => new { entity.Id }).ToListAsync()).FirstOrDefault();
+                await _efInnerCompiled(_efCtx, row.Id, i);
             }
         }
     }
@@ -220,8 +220,8 @@ public class SqliteBenchmarkSimulateWork
             for (var i = 0; i < SmallIterations; i++)
             {
                 var p = i;
-                //var s = await _conn.QueryFirstOrDefaultAsync<SimpleEntity>("select id from simple_entity where id=@id", new { id = row.Id + p });
-                var s = (await _conn.QueryAsync<SimpleEntity>("select id from simple_entity where id=@id+@p", new { id = row.Id, p })).FirstOrDefault();
+                await _conn.QueryFirstOrDefaultAsync<SimpleEntity>("select id from simple_entity where id=@id+@p", new { id = row.Id, p });
+                // var s = (await _conn.QueryAsync<SimpleEntity>("select id from simple_entity where id=@id+@p", new { id = row.Id, p })).FirstOrDefault();
             }
         }
     }

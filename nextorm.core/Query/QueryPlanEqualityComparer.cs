@@ -7,8 +7,8 @@ namespace nextorm.core;
 
 public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand>
 {
-    private readonly IDictionary<ExpressionKey, Delegate> _cache;
-    private readonly ILogger? _logger;
+    // private readonly IDictionary<ExpressionKey, Delegate> _cache;
+    // private readonly ILogger? _logger;
     private readonly ExpressionPlanEqualityComparer _expComparer;
     private readonly SelectExpressionPlanEqualityComparer _selectComparer;
     private readonly FromExpressionPlanEqualityComparer _fromComparer;
@@ -24,8 +24,8 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand>
     }
     public QueryPlanEqualityComparer(IDictionary<ExpressionKey, Delegate>? cache, IQueryProvider queryProvider, ILogger? logger)
     {
-        _cache = cache ?? new ExpressionCache<Delegate>();
-        _logger = logger;
+        // _cache = cache ?? new ExpressionCache<Delegate>();
+        // _logger = logger;
         _expComparer = new ExpressionPlanEqualityComparer(cache, queryProvider);
         _selectComparer = new SelectExpressionPlanEqualityComparer(cache, queryProvider);
         _fromComparer = new FromExpressionPlanEqualityComparer(cache, queryProvider);

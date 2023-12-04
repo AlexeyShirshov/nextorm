@@ -14,7 +14,7 @@ using Microsoft.Extensions.ObjectPool;
 
 namespace nextorm.core;
 
-public class DbContext : IDataContext
+public partial class DbContext : IDataContext
 {
     private readonly static MethodInfo IsDBNullMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.IsDBNull))!;
     private readonly static IDictionary<Type, IEntityMeta> _metadata = new ConcurrentDictionary<Type, IEntityMeta>();
@@ -84,7 +84,7 @@ public class DbContext : IDataContext
     {
         throw new NotImplementedException(type.ToString());
     }
-    private SqlCacheEntry CreateCompiledQuery<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, CancellationToken cancellationToken)
+    private SqlCacheEntry CreateCompiledQuery<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, CancellationToken cancellationToken)
     {
         DatabaseCompiledQuery<TResult>? compiledQuery = null;
 #if PLAN_CACHE
@@ -110,12 +110,12 @@ public class DbContext : IDataContext
 
 #if PLAN_CACHE
             var compiledPlan = new DatabaseCompiledPlan<TResult>(sql!, map, @params.Count == 0);
-            if (queryCommand.Cache)
+            if (queryCommand.Cache && storeInCache)
             {
                 planCache = new SqlCacheEntry(compiledPlan);
 
                 //    if (queryCommand.Cache)
-                _queryPlanCache[queryPlan] = planCache;
+                _queryPlanCache[queryPlan.GetCacheVersion()] = planCache;
             }
 #endif
             var dbCommand = CreateCommand(sql!);
@@ -496,7 +496,7 @@ public class DbContext : IDataContext
             if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Query cache miss");
 #endif
 
-            cacheEntry = CreateCompiledQuery(queryCommand, true, cancellationToken);
+            cacheEntry = CreateCompiledQuery(queryCommand, true, true, cancellationToken);
 
 #if !ONLY_PLAN_CACHE
             if (queryCommand.Cache)
@@ -594,7 +594,7 @@ public class DbContext : IDataContext
         if (!cmd.IsPrepared)
             cmd.PrepareCommand(cancellationToken);
 
-        cmd.CacheEntry = CreateCompiledQuery(cmd, !nonStreamCalls, cancellationToken);
+        cmd.CacheEntry = CreateCompiledQuery(cmd, !nonStreamCalls, false, cancellationToken);
     }
     protected virtual void Dispose(bool disposing)
     {
@@ -663,7 +663,7 @@ public class DbContext : IDataContext
             if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Query cache miss");
 #endif
 
-            cacheEntry = CreateCompiledQuery(queryCommand, true, cancellationToken);
+            cacheEntry = CreateCompiledQuery(queryCommand, true, true, cancellationToken);
 
 #if !ONLY_PLAN_CACHE
             if (queryCommand.Cache)
@@ -741,7 +741,7 @@ public class DbContext : IDataContext
             if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Query cache miss");
 #endif
 
-            cacheEntry = CreateCompiledQuery(queryCommand, true, CancellationToken.None);
+            cacheEntry = CreateCompiledQuery(queryCommand, true, true, CancellationToken.None);
 
 #if !ONLY_PLAN_CACHE
             if (queryCommand.Cache)
@@ -802,7 +802,7 @@ public class DbContext : IDataContext
 #endif
         return (sqlCommand.ExecuteReader(compiledQuery.Behavior), cacheEntry, compiledQuery);
     }
-    public TResult? ExecuteScalar<TResult>(QueryCommand<TResult> queryCommand, object[]? @params)
+    public (TResult? result, bool isNull) ExecuteScalar<TResult>(QueryCommand<TResult> queryCommand, object[]? @params)
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
 
@@ -829,7 +829,7 @@ public class DbContext : IDataContext
             if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Query cache miss");
 #endif
 
-            cacheEntry = CreateCompiledQuery(queryCommand, false, CancellationToken.None);
+            cacheEntry = CreateCompiledQuery(queryCommand, false, true, CancellationToken.None);
 
 #if !ONLY_PLAN_CACHE
             if (queryCommand.Cache)
@@ -894,12 +894,12 @@ public class DbContext : IDataContext
 
         var r = sqlCommand.ExecuteScalar();
 
-        if (r is null or DBNull) return default;
-        if (r is TResult res) return res;
+        if (r is null or DBNull) return (default, true);
+        if (r is TResult res) return (res, false);
         var type = typeof(TResult);
-        return (TResult)Convert.ChangeType(r, type);
+        return ((TResult)Convert.ChangeType(r, type), false);
     }
-    public async Task<TResult?> ExecuteScalar<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
+    public async Task<(TResult? result, bool isNull)> ExecuteScalar<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
 
@@ -926,7 +926,7 @@ public class DbContext : IDataContext
             if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Query cache miss");
 #endif
 
-            cacheEntry = CreateCompiledQuery(queryCommand, false, cancellationToken);
+            cacheEntry = CreateCompiledQuery(queryCommand, false, true, cancellationToken);
 
 #if !ONLY_PLAN_CACHE
             if (queryCommand.Cache)
@@ -991,10 +991,10 @@ public class DbContext : IDataContext
 
         var r = await sqlCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
 
-        if (r is null or DBNull) return default;
-        if (r is TResult res) return res;
+        if (r is null or DBNull) return (default, true);
+        if (r is TResult res) return (res, false);
         var type = typeof(TResult);
-        return (TResult)Convert.ChangeType(r, type);
+        return ((TResult)Convert.ChangeType(r, type), false);
     }
     private async Task<(DbDataReader, SqlCacheEntry, DatabaseCompiledQuery<TResult>)> CreateReader<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
     {
@@ -1021,7 +1021,7 @@ public class DbContext : IDataContext
             if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Query cache miss");
 #endif
 
-            cacheEntry = CreateCompiledQuery(queryCommand, false, cancellationToken);
+            cacheEntry = CreateCompiledQuery(queryCommand, false, true, cancellationToken);
 
 #if !ONLY_PLAN_CACHE
             if (queryCommand.Cache)
@@ -1116,7 +1116,7 @@ public class DbContext : IDataContext
             if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Query cache miss");
 #endif
 
-            cacheEntry = CreateCompiledQuery(queryCommand, true, CancellationToken.None);
+            cacheEntry = CreateCompiledQuery(queryCommand, true, true, CancellationToken.None);
 
 #if !ONLY_PLAN_CACHE
             if (queryCommand.Cache)
@@ -1217,8 +1217,9 @@ public class DbContext : IDataContext
 
         if (queryCommand.OneColumn)
         {
-            var r = ExecuteScalar(queryCommand, @params) ?? throw new InvalidOperationException();
-            return r;
+            var (result, isNull) = ExecuteScalar(queryCommand, @params);
+            if (isNull) throw new InvalidOperationException();
+            return result!;
         }
         else
         {
@@ -1241,12 +1242,13 @@ public class DbContext : IDataContext
 
         if (queryCommand.OneColumn)
         {
-            var r = await ExecuteScalar(queryCommand, @params, cancellationToken) ?? throw new InvalidOperationException();
-            return r;
+            var (result, isNull) = await ExecuteScalar(queryCommand, @params, cancellationToken);
+            if (isNull) throw new InvalidOperationException();
+            return result!;
         }
         else
         {
-            var (reader, cacheEntry, compiledQuery) = await CreateReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
+            var (reader, _, compiledQuery) = await CreateReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
             using (reader)
             {
                 if (reader.Read())
@@ -1264,8 +1266,8 @@ public class DbContext : IDataContext
 
         if (queryCommand.OneColumn)
         {
-            var r = ExecuteScalar(queryCommand, @params);
-            return r;
+            var (result, _) = ExecuteScalar(queryCommand, @params);
+            return result;
         }
         else
         {
@@ -1288,12 +1290,12 @@ public class DbContext : IDataContext
 
         if (queryCommand.OneColumn)
         {
-            var r = await ExecuteScalar(queryCommand, @params, cancellationToken);
-            return r;
+            var (result, _) = await ExecuteScalar(queryCommand, @params, cancellationToken);
+            return result;
         }
         else
         {
-            var (reader, cacheEntry, compiledQuery) = await CreateReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
+            var (reader, _, compiledQuery) = await CreateReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
             using (reader)
             {
                 if (reader.Read())
@@ -1310,7 +1312,7 @@ public class DbContext : IDataContext
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
 
-        var (reader, cacheEntry, compiledQuery) = CreateReader(queryCommand, @params);
+        var (reader, _, compiledQuery) = CreateReader(queryCommand, @params);
         using (reader)
         {
             TResult r = default!;
@@ -1335,7 +1337,7 @@ public class DbContext : IDataContext
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
 
-        var (reader, cacheEntry, compiledQuery) = await CreateReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
+        var (reader, _, compiledQuery) = await CreateReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
         using (reader)
         {
             TResult r = default!;
@@ -1360,7 +1362,7 @@ public class DbContext : IDataContext
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
 
-        var (reader, cacheEntry, compiledQuery) = CreateReader(queryCommand, @params);
+        var (reader, _, compiledQuery) = CreateReader(queryCommand, @params);
         using (reader)
         {
             TResult? r = default;
@@ -1382,7 +1384,7 @@ public class DbContext : IDataContext
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
 
-        var (reader, cacheEntry, compiledQuery) = await CreateReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
+        var (reader, _, compiledQuery) = await CreateReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
         using (reader)
         {
             TResult? r = default;
@@ -1400,90 +1402,6 @@ public class DbContext : IDataContext
         }
     }
 
-    //record CompiledQueryPayload<TResult>(DatabaseCompiledQuery<TResult> CompiledQuery) : IPayload;
-    public class SqlCacheEntry : CacheEntry
-    {
-        public SqlCacheEntry(object? compiledQuery)
-            : base(compiledQuery!)
-        {
-        }
-        public object? Enumerator { get; set; }
-        public int LastRowCount { get; internal set; }
-    }
-    // class QueryCommandKey
-    // {
-    //     public readonly QueryCommand QueryCommand;
-    //     private readonly object[]? _params;
-    //     private int? _hash;
-    //     public QueryCommandKey(QueryCommand cmd, object[]? @params)
-    //     {
-    //         QueryCommand = cmd;
-    //         _params = @params;
-    //     }
-    //     public override int GetHashCode()
-    //     {
-    //         if (_hash.HasValue) return _hash.Value;
-
-    //         var hash = new HashCode();
-
-    //         hash.Add(QueryCommand.GetHashCode());
-
-    //         if (_params is not null)
-    //             foreach (var p in _params)
-    //                 hash.Add(p);
-
-    //         _hash = hash.ToHashCode();
-
-    //         return _hash.Value;
-    //     }
-    //     public override bool Equals(object? obj)
-    //     {
-    //         return Equals(obj as QueryCommandKey);
-    //     }
-    //     public bool Equals(QueryCommandKey? cmd)
-    //     {
-    //         if (cmd is null) return false;
-
-    //         if (_params is null && cmd._params is not null) return false;
-    //         if (_params is not null && cmd._params is null) return false;
-
-    //         if (_params is not null && cmd._params is not null)
-    //         {
-    //             if (_params.Length != cmd._params.Length) return false;
-
-    //             for (int i = 0; i < _params.Length; i++)
-    //             {
-    //                 if (!Equals(_params[i], cmd._params[i])) return false;
-    //             }
-    //         }
-    //         return Equals(QueryCommand, cmd.QueryCommand);
-    //     }
-    // }
-#if PLAN_CACHE
-
-    public class QueryPlan
-    {
-        public readonly QueryCommand QueryCommand;
-        private readonly QueryPlanEqualityComparer _comparer;
-        private int? _hashPlan;
-        public QueryPlan(QueryCommand cmd, IDictionary<ExpressionKey, Delegate>? cache)
-        {
-            QueryCommand = cmd;
-            _comparer = new QueryPlanEqualityComparer(cache, cmd);
-        }
-        public override int GetHashCode() => _hashPlan ??= _comparer.GetHashCode(QueryCommand);
-        public override bool Equals(object? obj)
-        {
-            return Equals(obj as QueryPlan);
-        }
-        public bool Equals(QueryPlan? obj)
-        {
-            if (obj is null) return false;
-
-            return _comparer.Equals(QueryCommand, obj.QueryCommand);
-        }
-    }
-#endif
     class EmptyEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerator<TResult>
     {
         public TResult Current => default;

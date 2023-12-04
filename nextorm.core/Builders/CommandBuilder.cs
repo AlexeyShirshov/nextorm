@@ -161,7 +161,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
         cmd.IgnoreColumns = true;
         var queryCommand = GetAnyCommand(_dataProvider, cmd);
 
-        return _dataProvider.ExecuteScalar(queryCommand, @params);
+        return _dataProvider.ExecuteScalar(queryCommand, @params).result;
     }
     public List<TEntity> ToList(params object[] @params)
     {
@@ -185,14 +185,14 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
     {
         var cmd = ToCommand();
         cmd.Paging.Limit = 1;
-        cmd.SingleRow=true;
+        cmd.SingleRow = true;
         return cmd;
     }
     public QueryCommand<TResult?> FirstOrFirstOrDefault<TResult>(Expression<Func<TEntity, TResult>> exp)
     {
         var cmd = Select(exp);
         cmd.Paging.Limit = 1;
-        cmd.SingleRow=true;
+        cmd.SingleRow = true;
         return cmd;
     }
     public TEntity? FirstOrDefault(params object[] @params)
@@ -267,7 +267,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
         cmd.IgnoreColumns = true;
         var queryCommand = GetAnyCommand(_dataProvider, cmd);
 
-        return await _dataProvider.ExecuteScalar(queryCommand, @params, cancellationToken).ConfigureAwait(false);
+        return (await _dataProvider.ExecuteScalar(queryCommand, @params, cancellationToken).ConfigureAwait(false)).result;
     }
 }
 public class CommandBuilder
