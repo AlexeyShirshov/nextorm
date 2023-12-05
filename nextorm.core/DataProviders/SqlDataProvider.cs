@@ -120,7 +120,7 @@ public partial class DbContext : IDataContext
 #endif
             var dbCommand = CreateCommand(sql!);
             dbCommand.Parameters.AddRange(@params.Select(it => CreateParam(it.Name, it.Value)).ToArray());
-
+            //dbCommand.Prepare();
             //return new SqlCacheEntry(null) { Enumerator = new EmptyEnumerator<TResult>() };
 
             compiledQuery = new DatabaseCompiledQuery<TResult>(dbCommand, map, queryCommand.SingleRow);
@@ -988,9 +988,9 @@ public partial class DbContext : IDataContext
             }
         }
 #endif
-
         var r = await sqlCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
 
+        // var r = true;
         if (r is null or DBNull) return (default, true);
         if (r is TResult res) return (res, false);
         var type = typeof(TResult);

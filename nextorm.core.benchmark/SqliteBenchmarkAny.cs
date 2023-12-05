@@ -15,53 +15,96 @@ namespace nextorm.core.benchmark;
 [Config(typeof(NextormConfig))]
 public class SqliteBenchmarkAny
 {
-    private readonly TestDataRepository _ctx;
+    private TestDataRepository _ctx;
     private QueryCommand<bool> _cmd;
-    private QueryCommand<bool> _cmdFilter;
-    private QueryCommand<bool> _cmdFilterParam;
+    // private QueryCommand<bool> _cmdFilter;
+    // private QueryCommand<bool> _cmdFilterParam;
     private EFDataContext _efCtx;
-    private readonly SqliteConnection _conn;
+    private SqliteConnection _conn;
     private Func<EFDataContext, Task<bool>> _efCompiled;
-    private readonly Func<EFDataContext, Task<bool>> _efCompiledFilter = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.SimpleEntities.Where(it => it.Id > 5).Any());
-    private readonly Func<EFDataContext, int, Task<bool>> _efCompiledFilterParam = EF.CompileAsyncQuery((EFDataContext ctx, int id) => ctx.SimpleEntities.Where(it => it.Id > id).Any());
-    private readonly ILoggerFactory? _logFactory;
+    // private readonly Func<EFDataContext, Task<bool>> _efCompiledFilter = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.SimpleEntities.Where(it => it.Id > 5).Any());
+    // private readonly Func<EFDataContext, int, Task<bool>> _efCompiledFilterParam = EF.CompileAsyncQuery((EFDataContext ctx, int id) => ctx.SimpleEntities.Where(it => it.Id > id).Any());
+    //private ILoggerFactory? _logFactory;
     public SqliteBenchmarkAny(bool withLogging = false)
     {
+        SetupNext(withLogging);
+
+        SetupEF(withLogging);
+
+        SetupDapper();
+    }
+
+    private void SetupNext(bool withLogging)
+    {
         var builder = new DbContextBuilder();
-        builder.UseSqlite(Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db"));
+        builder.UseSqlite(GetDatabasePath());
         if (withLogging)
         {
-            _logFactory = LoggerFactory.Create(config => config.AddConsole().SetMinimumLevel(LogLevel.Trace));
-            builder.UseLoggerFactory(_logFactory);
+            var logFactory = LoggerFactory.Create(config => config.AddConsole().SetMinimumLevel(LogLevel.Trace));
+            builder.UseLoggerFactory(logFactory);
             builder.LogSensetiveData(true);
         }
         _ctx = new TestDataRepository(builder.CreateDbContext());
 
+        _cmd = _ctx.SimpleEntity.AnyCommand().Compile(true);
+    }
+
+    private static string GetDatabasePath()
+    {
+        return Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db");
+    }
+
+    private void SetupDapper()
+    {
+        var connString = $"Data Source='{GetDatabasePath()}'";
+        _conn = new SqliteConnection(connString);
+    }
+
+    private void SetupEF(bool withLogging)
+    {
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
-        efBuilder.UseSqlite(@$"Filename={Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db")}");
+        efBuilder.UseSqlite(@$"Filename={GetDatabasePath()}");
         efBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
         if (withLogging)
         {
-            efBuilder.UseLoggerFactory(_logFactory);
+            var logFactory = LoggerFactory.Create(config => config.AddConsole().SetMinimumLevel(LogLevel.Trace));
+            efBuilder.UseLoggerFactory(logFactory);
             efBuilder.EnableSensitiveDataLogging(true);
         }
 
         _efCtx = new EFDataContext(efBuilder.Options);
 
-        _conn = new SqliteConnection(((SqliteDbContext)_ctx.DataProvider).ConnectionString);
-    }
-    [GlobalSetup(Targets = new[] { nameof(NextormCompiled) })]
-    public void CompileQueries()
-    {
-        _cmd = _ctx.SimpleEntity.AnyCommand().Compile(true);
-        // _cmdFilter = _ctx.SimpleEntity.Where(it => it.Id > 5).AnyCommand().Compile(true);
-        // _cmdFilterParam = _ctx.SimpleEntity.Where(it => it.Id > NORM.Param<int>(0)).AnyCommand().Compile(true);
-    }
-    [GlobalSetup(Targets = new[] { nameof(EFCoreCompiled) })]
-    public void CompileEFQueries()
-    {
         _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.SimpleEntities.Any());
     }
+    // [GlobalSetup(Targets = new[] { nameof(NextormCached) })]
+    // public void PrepareNext()
+    // {
+    //     SetupNext(false);
+    // }
+    // [GlobalSetup(Targets = new[] { nameof(NextormCompiled) })]
+    // public void CompileQueries()
+    // {
+    //     SetupNext(false);
+    //     _cmd = _ctx.SimpleEntity.AnyCommand().Compile(true);
+    //     // _cmdFilter = _ctx.SimpleEntity.Where(it => it.Id > 5).AnyCommand().Compile(true);
+    //     // _cmdFilterParam = _ctx.SimpleEntity.Where(it => it.Id > NORM.Param<int>(0)).AnyCommand().Compile(true);
+    // }
+    // [GlobalSetup(Targets = new[] { nameof(EFCoreCompiled) })]
+    // public void CompileEFQueries()
+    // {
+    //     SetupEF(false);
+    //     _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.SimpleEntities.Any());
+    // }
+    // [GlobalSetup(Targets = new[] { nameof(EFCore) })]
+    // public void PrepareEFCore()
+    // {
+    //     SetupEF(false);
+    // }
+    // [GlobalSetup(Targets = new[] { nameof(Dapper) })]
+    // public void PrepareDapper()
+    // {
+    //     SetupDapper();
+    // }
     [Benchmark()]
     public async Task NextormCompiled()
     {
