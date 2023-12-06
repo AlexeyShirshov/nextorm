@@ -20,14 +20,14 @@ public interface IDataContext : IAsyncDisposable, IDisposable
         }
         return new(this) { Logger = CommandLogger };
     }
-    public QueryCommand<T> CreateCommand<T>(LambdaExpression exp, Expression? condition, Paging paging)
+    public QueryCommand<T> CreateCommand<T>(LambdaExpression exp, Expression? condition, Paging paging, List<Sorting>? sorting)
     {
-        return new QueryCommand<T>(this, exp, condition, paging);
+        return new QueryCommand<T>(this, exp, condition, paging, sorting);
     }
 
     void ResetPreparation(QueryCommand queryCommand);
     FromExpression? GetFrom(Type srcType, QueryCommand queryCommand);
-    void Compile<TResult>(QueryCommand<TResult> query, bool nonStreamCalls, CancellationToken cancellationToken);
+    void Compile<TResult>(QueryCommand<TResult> queryCommand, bool nonStreamCalls, CancellationToken cancellationToken);
     IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken);
     IEnumerator<TResult> CreateEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[] @params);
     Task<IEnumerator<TResult>> CreateEnumeratorAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken);

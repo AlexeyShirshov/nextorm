@@ -147,7 +147,7 @@ public class InMemoryTests
     [Fact]
     public void SelectAny_ShouldReturnData()
     {
-        var cb = new CommandBuilder(_sut.DataProvider);
+        var cb = new Entity(_sut.DataProvider);
         var cmd = (QueryCommand)_sut.SimpleEntity;
         // Given
         var l = cb.Select(_ => NORM.SQL.exists(cmd)).ToList();
@@ -266,5 +266,14 @@ public class InMemoryTests
         };
 
         test.Should().Throw<InvalidOperationException>();
+    }
+    [Fact]
+    public void OrderBy_ShouldSortData()
+    {
+        // Given
+        var r = _sut.SimpleEntity.OrderByDescending(it => it.Id).First();
+        // When
+        r.Id.Should().Be(2);
+        // Then
     }
 }

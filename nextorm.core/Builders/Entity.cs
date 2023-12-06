@@ -7,11 +7,12 @@ namespace nextorm.core;
 public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
 {
     #region Fields
+    private static readonly IDictionary<IDataContext, Lazy<QueryCommand<bool>>> _anyCommandCache = new ConcurrentDictionary<IDataContext, Lazy<QueryCommand<bool>>>();
     //private IPayloadManager _payloadMgr = new FastPayloadManager(new Dictionary<Type, object?>());
     private readonly IDataContext _dataProvider;
     private QueryCommand? _query;
     private Expression<Func<TEntity, bool>>? _condition;
-    private static readonly IDictionary<IDataContext, Lazy<QueryCommand<bool>>> _anyCommandCache = new ConcurrentDictionary<IDataContext, Lazy<QueryCommand<bool>>>();
+    private List<Sorting>? _sorting;
     #endregion
     public Entity(IDataContext dataProvider)
     {
@@ -36,7 +37,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
 
     public QueryCommand<TResult> Select<TResult>(Expression<Func<TEntity, TResult>> exp)
     {
-        var cmd = _dataProvider.CreateCommand<TResult>(exp, _condition, Paging);
+        var cmd = _dataProvider.CreateCommand<TResult>(exp, _condition, Paging, _sorting);
         cmd.Logger = Logger;
 
         if (_query is not null)
@@ -60,10 +61,8 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
 
     public Entity<TEntity> Where(Expression<Func<TEntity, bool>> condition)
     {
-        ArgumentNullException.ThrowIfNull(condition);
-
         var b = Clone();
-        if (_condition is not null)
+        if (_condition is not null && condition is not null)
         {
             var replVisitor = new ReplaceParameterVisitor(_condition.Parameters[0]);
             var newBody = Expression.AndAlso(_condition.Body, replVisitor.Visit(condition.Body));
@@ -113,6 +112,8 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
         //dst._payloadMgr = _payloadMgr;
         dst.CommandCreatedEvent += CommandCreatedEvent;
         dst.Paging = Paging;
+        dst._condition = _condition;
+        dst._sorting = _sorting;
     }
     protected virtual object CloneImp()
     {
@@ -150,7 +151,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
     public QueryCommand<bool> AnyCommand()
     {
         var cmd = ToCommand();
-        var queryCommand = _dataProvider.CreateCommand<bool>((TableAlias _) => NORM.SQL.exists(cmd), null, default);
+        var queryCommand = _dataProvider.CreateCommand<bool>((TableAlias _) => NORM.SQL.exists(cmd), null, default, null);
         queryCommand.SingleRow = true;
         cmd.IgnoreColumns = true;
         return queryCommand;
@@ -242,7 +243,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
             anyCommand = new Lazy<QueryCommand<bool>>(() =>
             {
                 created = true;
-                var queryCommand = dataProvider.CreateCommand<bool>((TableAlias _) => NORM.SQL.exists(cmd), null, default);
+                var queryCommand = dataProvider.CreateCommand<bool>((TableAlias _) => NORM.SQL.exists(cmd), null, default, null);
                 queryCommand.SingleRow = true;
                 queryCommand.PrepareCommand(CancellationToken.None);
                 return queryCommand;
@@ -269,15 +270,27 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
 
         return (await _dataProvider.ExecuteScalar(queryCommand, @params, cancellationToken).ConfigureAwait(false)).result;
     }
+    public Entity<TEntity> OrderBy(Expression<Func<TEntity, object?>> orderExp, OrderDirection direction)
+    {
+        var b = Clone();
+        if (b._sorting is null)
+            b._sorting = [new Sorting { Expression = orderExp, Direction = direction }];
+        else
+            b._sorting.Add(new Sorting { Expression = orderExp, Direction = direction });
+        return b;
+    }
+    public Entity<TEntity> OrderBy(Expression<Func<TEntity, object?>> orderExp) => OrderBy(orderExp, OrderDirection.Asc);
+    public Entity<TEntity> OrderByDescending(Expression<Func<TEntity, object?>> orderExp) => OrderBy(orderExp, OrderDirection.Desc);
 }
-public class CommandBuilder
+public class Entity : ICloneable
 {
     private readonly IDataContext _dataProvider;
     private readonly string? _table;
     internal ILogger? Logger { get; set; }
-    private Expression? _condition;
-    public CommandBuilder(IDataContext dataProvider) : this(dataProvider, null) { }
-    public CommandBuilder(IDataContext dataProvider, string? table)
+    private Expression<Func<TableAlias, bool>>? _condition;
+    private List<Sorting>? _sorting;
+    public Entity(IDataContext dataProvider) : this(dataProvider, null) { }
+    public Entity(IDataContext dataProvider, string? table)
     {
         _dataProvider = dataProvider;
         _table = table;
@@ -285,21 +298,47 @@ public class CommandBuilder
     public QueryCommand<TResult> Select<TResult>(Expression<Func<TableAlias, TResult>> exp)
     {
         //if (string.IsNullOrEmpty(_table)) throw new InvalidOperationException("Table must be specified");
-        var cmd = new QueryCommand<TResult>(_dataProvider, exp, _condition, default) { Logger = Logger };
+        var cmd = new QueryCommand<TResult>(_dataProvider, exp, _condition, default, _sorting) { Logger = Logger };
 
         if (!string.IsNullOrEmpty(_table))
             cmd.From = new FromExpression(_table);
 
         return cmd;
     }
-
-    public CommandBuilder Where(Expression<Func<TableAlias, bool>> condition)
+    object ICloneable.Clone()
     {
-        if (_condition is not null)
-            _condition = Expression.AndAlso(_condition, condition);
-        else
-            _condition = condition;
+        return CloneImp();
+    }
+    public Entity Clone()
+    {
+        return (Entity)CloneImp();
+    }
+    protected virtual void CopyTo(Entity dst)
+    {
+        dst._condition = _condition;
+        dst._sorting = _sorting;
+    }
+    protected virtual object CloneImp()
+    {
+        var r = new Entity(_dataProvider, _table) { Logger = Logger };
 
-        return this;
+        CopyTo(r);
+
+        return r;
+    }
+
+    public Entity Where(Expression<Func<TableAlias, bool>> condition)
+    {
+        var b = Clone();
+        if (_condition is not null && condition is not null)
+        {
+            var replVisitor = new ReplaceParameterVisitor(_condition.Parameters[0]);
+            var newBody = Expression.AndAlso(_condition.Body, replVisitor.Visit(condition.Body));
+            b._condition = Expression.Lambda<Func<TableAlias, bool>>(newBody, _condition.Parameters[0]);
+        }
+        else
+            b._condition = condition;
+
+        return b;
     }
 }

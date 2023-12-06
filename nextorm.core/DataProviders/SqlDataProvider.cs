@@ -50,7 +50,7 @@ public partial class DbContext : IDataContext
     public virtual string EmptyString => "''";
     public IDictionary<Type, IEntityMeta> Metadata => _metadata;
     public ILogger? CommandLogger { get; set; }
-    public CommandBuilder From(string table) => new(this, table) { Logger = CommandLogger };
+    public Entity From(string table) => new(this, table) { Logger = CommandLogger };
     public DbConnection GetConnection()
     {
         if (_conn is null)
@@ -1223,7 +1223,7 @@ public partial class DbContext : IDataContext
         }
         else
         {
-            var (reader, cacheEntry, compiledQuery) = CreateReader(queryCommand, @params);
+            var (reader, _, compiledQuery) = CreateReader(queryCommand, @params);
             using (reader)
             {
                 if (reader.Read())

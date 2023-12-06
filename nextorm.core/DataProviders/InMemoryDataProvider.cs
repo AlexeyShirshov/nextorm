@@ -139,6 +139,20 @@ public partial class InMemoryContext : IDataContext
             asyncData = av;
         }
 
+        if (queryCommand.Sorting is not null)
+        {
+            throw new NotImplementedException();
+            // IOrderedEnumerable<TEntity>? intData = null;
+            // foreach (var sorting in queryCommand.Sorting)
+            // {
+            //     var del = ((Expression<Func<TEntity, object>>)sorting.Expression).Compile();
+            //     if (sorting.Direction == OrderDirection.Asc)
+            //         intData = asyncData.OrderBy(del);
+            //     else
+            //         intData = (intData ?? data).OrderByDescending(del);
+            // }
+            // data = intData;
+        }
         cacheEntry.Data = asyncData;
         return CreateEnumeratorAdapter(queryCommand, cacheEntry, asyncData.GetAsyncEnumerator(cancellationToken));
 
@@ -205,9 +219,22 @@ public partial class InMemoryContext : IDataContext
                     ev = Array.Empty<TEntity>();
 
                 data = ev;
-
-                cacheEntry.Data = data;
             }
+
+            if (queryCommand.Sorting is not null)
+            {
+                IOrderedEnumerable<TEntity>? intData = null;
+                foreach (var sorting in queryCommand.Sorting)
+                {
+                    var del = ((Expression<Func<TEntity, object>>)sorting.Expression).Compile();
+                    if (sorting.Direction == OrderDirection.Asc)
+                        intData = (intData ?? data).OrderBy(del);
+                    else
+                        intData = (intData ?? data).OrderByDescending(del);
+                }
+                data = intData;
+            }
+            cacheEntry.Data = data;
 
             if (cacheEntry.Enumerator is not InMemoryEnumerator<TResult, TEntity> enumerator)
             {
@@ -423,7 +450,7 @@ public partial class InMemoryContext : IDataContext
         Dispose(disposing: true);
         GC.SuppressFinalize(this);
     }
-    public void Compile<TResult>(QueryCommand<TResult> queryCommand, bool forToListCalls, CancellationToken cancellationToken)
+    public void Compile<TResult>(QueryCommand<TResult> queryCommand, bool nonStreamCalls, CancellationToken cancellationToken)
     {
         if (!queryCommand.IsPrepared)
             queryCommand.PrepareCommand(cancellationToken);
