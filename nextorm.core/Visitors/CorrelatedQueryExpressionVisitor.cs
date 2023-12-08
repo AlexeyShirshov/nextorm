@@ -128,6 +128,53 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                 }
             }
         }
+        else if (node.Object?.Type.IsAssignableTo(typeof(QueryCommand)) ?? false)
+        {
+            // if (node.Object.Has<ParameterExpression>())
+            // {
+
+            // }
+            // else
+            {
+                QueryCommand cmd;
+
+                var keyCmd = new ExpressionKey(node.Object, _dataProvider.ExpressionsCache, _queryProvider);
+                if (!_dataProvider.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
+                {
+                    var d = Expression.Lambda<Func<QueryCommand>>(node.Object).Compile();
+
+                    _dataProvider.ExpressionsCache[keyCmd] = d;
+                    cmd = d();
+
+                    if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false)
+                    {
+                        _dataProvider.Logger.LogTrace("Subquery expression miss. hascode: {hash}, value: {value}", keyCmd.GetHashCode(), d());
+                    }
+                    else if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Subquery expression miss");
+                }
+                else
+                    cmd = ((Func<QueryCommand>)dCmd)();
+                if (!_forPrepare)
+                {
+                    throw new NotImplementedException();
+                }
+                else
+                {
+                    if (!cmd.IsPrepared)
+                        cmd.PrepareCommand(_cancellationToken);
+
+                    var idx = _queryProvider!.AddCommand(cmd);
+
+                    //Expression dfg = (IQueryProvider queryProvider) => NORM.SQL.exists(queryProvider.ReferencedColumns[idx]);
+                    //var replace = new ReplaceArgumentVisitor(0, (IQueryProvider queryProvider) => queryProvider.ReferencedColumns[idx]);
+                    //node.Arguments[0]=(Expression)(IQueryProvider queryProvider) => queryProvider.ReferencedColumns[idx];
+                    _p = Expression.Parameter(typeof(IQueryProvider));
+                    var lambda = Expression.Lambda(Expression.Property(Expression.Property(_p, ReferencedQuieriesPI), ItemPI, Expression.Constant(idx)), _p);
+                    return lambda;
+                }
+            }
+        }
+
         return base.VisitMethodCall(node);
     }
     protected override Expression VisitLambda<T>(Expression<T> node)

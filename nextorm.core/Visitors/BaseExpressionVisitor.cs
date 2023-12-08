@@ -212,6 +212,10 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 
             return node;
         }
+        else if (node.Object?.Type.IsAssignableFrom(typeof(QueryCommand)) ?? false)
+        {
+            throw new NotImplementedException();
+        }
         else
         {
 
@@ -244,6 +248,29 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 
             throw new NotImplementedException();
         }
+    }
+    protected override Expression VisitIndex(IndexExpression node)
+    {
+        if (node.Type.IsAssignableTo(typeof(QueryCommand)) && node.Arguments is [ConstantExpression ce] && ce.Value is int idx)
+        {
+            if (!_paramMode)
+            {
+                _builder!.Append('(');
+            }
+            _needAliasForColumn = true;
+            var innerQuery = _queryProvider.ReferencedQueries[idx];
+            var (sql, p) = _dataProvider.MakeSelect(innerQuery, _paramMode);
+            _params.AddRange(p);
+
+            if (!_paramMode)
+            {
+                _builder!.Append(sql).Append(')');
+            }
+
+            return node;
+        }
+
+        return base.VisitIndex(node);
     }
     protected override Expression VisitLambda<T>(Expression<T> node)
     {

@@ -558,5 +558,11 @@ public class SqlCommandTests
         r[1].Id.Should().Be(3);
         r[2].Id.Should().Be(2);
     }
+    [Fact]
+    public async Task SubQuerySelect_ShouldReturnData()
+    {
+        var r = await _sut.ComplexEntity.Select(it => new { it.Id, sid = _sut.SimpleEntity.Where(it => it.Id == 1).Select(it => it.Id).First() }).ToListAsync();
 
+        r.Should().NotBeEmpty();
+    }
 }
