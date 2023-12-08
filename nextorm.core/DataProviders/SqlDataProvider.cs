@@ -276,6 +276,26 @@ public partial class DbContext : IDataContext
                 if (!paramMode) sqlBuilder!.Append(" where ").Append(whereSql);
             }
 
+            if (cmd.Sorting is not null)
+            {
+                if (!paramMode) sqlBuilder!.Append(" order by ");
+
+                foreach (var sorting in cmd.Sorting)
+                {
+                    var sortingSql = MakeSort(entityType, cmd, sorting.Expression, 0, null, cmd, cmd, @params, paramMode);
+                    if (!paramMode)
+                    {
+                        sqlBuilder!.Append(sortingSql);
+                        if (sorting.Direction == OrderDirection.Desc)
+                            sqlBuilder.Append(" desc");
+
+                        sqlBuilder.Append(", ");
+                    }
+                }
+
+                if (!paramMode) sqlBuilder!.Length -= 2;
+            }
+
             if (!paramMode)
             {
                 if (cmd.Paging.Limit > 0 || cmd.Paging.Offset > 0)
@@ -397,6 +417,17 @@ public partial class DbContext : IDataContext
         // if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Where expression: {exp}", condition);
         using var visitor = new WhereExpressionVisitor(entityType, this, tableSource, dim, aliasProvider, paramProvider, queryProvider, paramMode);
         visitor.Visit(condition);
+        @params.AddRange(visitor.Params);
+
+        if (paramMode) return string.Empty;
+
+        return visitor.ToString();
+    }
+    private string MakeSort(Type entityType, ISourceProvider tableSource, Expression sorting, int dim, IAliasProvider? aliasProvider, IParamProvider paramProvider, IQueryProvider queryProvider, List<Param> @params, bool paramMode)
+    {
+        // if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Where expression: {exp}", condition);
+        using var visitor = new BaseExpressionVisitor(entityType, this, tableSource, dim, aliasProvider, paramProvider, queryProvider, true, paramMode);
+        visitor.Visit(sorting);
         @params.AddRange(visitor.Params);
 
         if (paramMode) return string.Empty;

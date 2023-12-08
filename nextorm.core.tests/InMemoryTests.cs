@@ -276,4 +276,13 @@ public class InMemoryTests
         r.Id.Should().Be(2);
         // Then
     }
+    [Fact]
+    public void OrderBy2_ShouldSortData()
+    {
+        // Given
+        var r = _sut.SimpleEntity.OrderBy(_ => 1).OrderByDescending(it => it.Id).First();
+        // When
+        r.Id.Should().Be(2);
+        // Then
+    }
 }

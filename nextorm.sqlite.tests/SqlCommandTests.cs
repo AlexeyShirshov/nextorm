@@ -539,4 +539,24 @@ public class SqlCommandTests
 
         test.Should().Throw<InvalidOperationException>();
     }
+    [Fact]
+    public void OrderBy_ShouldSortData()
+    {
+        // Given
+        var r = _sut.SimpleEntity.OrderByDescending(it => it.Id).Select(it => it.Id).First();
+        // When
+        r.Should().Be(10);
+        // Then
+    }
+    [Fact]
+    public void OrderBy2_ShouldSortData()
+    {
+        // Given
+        var r = _sut.ComplexEntity.OrderBy(it => it.Int).OrderByDescending(it => it.Id).Select(it => new { it.Id }).ToList();
+        // When
+        r[0].Id.Should().Be(1);
+        r[1].Id.Should().Be(3);
+        r[2].Id.Should().Be(2);
+    }
+
 }
