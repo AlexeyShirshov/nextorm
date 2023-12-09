@@ -11,7 +11,7 @@ public class SelectExpression
     private readonly bool _nullable;
     public int Index { get; set; }
     public string? PropertyName { get; set; }
-    public OneOf<QueryCommand, Expression> Expression { get; set; }
+    public Expression? Expression { get; set; }
     public Type PropertyType { get; set; }
     public bool Nullable { get; }
     internal PropertyInfo? PropertyInfo { get; set; }
@@ -112,7 +112,7 @@ public class SelectExpression
             hash.Add(PropertyName);
 
             var @this = this;
-            Expression.Switch(cmd => hash.Add(cmd), exp => hash.Add(exp, new PreciseExpressionEqualityComparer(@this._expCache, @this._queryProvider)));
+            hash.Add(Expression, new PreciseExpressionEqualityComparer(@this._expCache, @this._queryProvider));
 
             // if (ReferencedQueries is not null)
             //     foreach (var cmd in ReferencedQueries)
@@ -138,8 +138,7 @@ public class SelectExpression
         if (PropertyName != exp.PropertyName) return false;
 
         var @this = this;
-        if (Expression.IsT0 != exp.Expression.IsT0
-            || !Expression.Match(cmd => cmd.Equals(exp.Expression.AsT0), e => new PreciseExpressionEqualityComparer(@this._expCache, @this._queryProvider).Equals(e, exp.Expression.AsT1)))
+        if (!new PreciseExpressionEqualityComparer(@this._expCache, @this._queryProvider).Equals(Expression, exp.Expression))
             return false;
 
         // if (ReferencedQueries is null && exp.ReferencedQueries is not null) return false;

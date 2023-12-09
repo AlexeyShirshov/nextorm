@@ -226,7 +226,7 @@ public partial class InMemoryContext : IDataContext
                 IOrderedEnumerable<TEntity>? intData = null;
                 foreach (var sorting in queryCommand.Sorting)
                 {
-                    var del = ((Expression<Func<TEntity, object>>)sorting.Expression).Compile();
+                    var del = ((Expression<Func<TEntity, object>>)sorting.PreparedExpression).Compile();
                     if (sorting.Direction == OrderDirection.Asc)
                         intData = (intData ?? data).OrderBy(del);
                     else
@@ -401,11 +401,8 @@ public partial class InMemoryContext : IDataContext
 
     public Expression MapColumn(SelectExpression column, Expression param)
     {
-        if (column.Expression.IsT0)
-            throw new NotSupportedException();
-
         var replace = new ReplaceParameterVisitor(param);
-        return replace.Visit(column.Expression.AsT1);
+        return replace.Visit(column.Expression);
         //return Expression.PropertyOrField(param, column.PropertyName!);
     }
 
@@ -550,12 +547,9 @@ public partial class InMemoryContext : IDataContext
             Expression<Func<TEntity, TResult>> lambda;
             if (queryCommand.OneColumn)
             {
-                lambda = queryCommand.SelectList![0].Expression.Match(_ => throw new NotImplementedException(), exp =>
-                {
-                    var corVisitor = new CorrelatedQueryExpressionVisitor(this, queryCommand, typeof(TEntity));
-                    var newExp = corVisitor.Visit(exp);
-                    return (Expression<Func<TEntity, TResult>>)newExp;
-                });
+                var corVisitor = new CorrelatedQueryExpressionVisitor(this, queryCommand, typeof(TEntity));
+                var newExp = corVisitor.Visit(queryCommand.SelectList![0].Expression);
+                lambda = (Expression<Func<TEntity, TResult>>)newExp;
             }
             else
             {

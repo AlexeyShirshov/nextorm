@@ -184,6 +184,10 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 return node;
             }
         }
+        else if (node.Object?.Type.IsAssignableTo(typeof(QueryCommand)) ?? false)
+        {
+
+        }
         else if (!node.Has<ParameterExpression>())
         {
             object? value = null;

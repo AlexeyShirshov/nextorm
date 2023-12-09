@@ -37,16 +37,11 @@ public sealed class SelectExpressionPlanEqualityComparer : IEqualityComparer<Sel
 
         if (x.PropertyName != y.PropertyName) return false;
 
-        return x.Expression.IsT0 == y.Expression.IsT0
-            && x.Expression.Match(cmd =>
-            {
-                _cmdComparer ??= new QueryPlanEqualityComparer(_cache, _queryProvider);
-                return _cmdComparer.Equals(cmd, y.Expression.AsT0);
-            }, e =>
-            {
-                _expComparer ??= new ExpressionPlanEqualityComparer(_cache, _queryProvider);
-                return _expComparer.Equals(e, y.Expression.AsT1);
-            });
+        _expComparer ??= new ExpressionPlanEqualityComparer(_cache, _queryProvider);
+        if (!_expComparer.Equals(x.Expression, y.Expression))
+            return false;
+
+        return true;
     }
 
     public int GetHashCode(SelectExpression obj)
@@ -63,15 +58,8 @@ public sealed class SelectExpressionPlanEqualityComparer : IEqualityComparer<Sel
 
             hash.Add(obj.PropertyName);
 
-            obj.Expression.Switch(cmd =>
-            {
-                _cmdComparer ??= new QueryPlanEqualityComparer(_cache, _queryProvider);
-                hash.Add(cmd, _cmdComparer);
-            }, exp =>
-            {
-                _expComparer ??= new ExpressionPlanEqualityComparer(_cache, _queryProvider);
-                hash.Add(exp, _expComparer);
-            });
+            _expComparer ??= new ExpressionPlanEqualityComparer(_cache, _queryProvider);
+            hash.Add(obj.Expression, _expComparer);
 
             return hash.ToHashCode();
         }

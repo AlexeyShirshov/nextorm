@@ -427,6 +427,13 @@ public class SqlCommandTests
         r.Should().NotBeEmpty();
     }
     [Fact]
+    public async Task SelectExists_ShouldReturnTrue()
+    {
+        var r = await _sut.ComplexEntity.Select(it => new { it.Id, exists = _sut.SimpleEntity.Any() }).ToListAsync();
+
+        r.Should().NotBeEmpty();
+    }
+    [Fact]
     public async Task SelectAnyOnBuilder_ShouldReturnTrue()
     {
         var r = await _sut.SimpleEntity.AnyAsync();
@@ -559,10 +566,40 @@ public class SqlCommandTests
         r[2].Id.Should().Be(2);
     }
     [Fact]
+    public void OrderBySubquery_ShouldSortData()
+    {
+        // Given
+        var r = _sut.ComplexEntity.OrderBy(_ => _sut.SimpleEntity.Where(it => it.Id == 1).Select(it => it.Id).First()).OrderBy(it => it.Id).Select(it => new { it.Id }).ToList();
+        // When
+        r[0].Id.Should().Be(1);
+        r[1].Id.Should().Be(2);
+        r[2].Id.Should().Be(3);
+    }
+    [Fact]
     public async Task SubQuerySelect_ShouldReturnData()
     {
         var r = await _sut.ComplexEntity.Select(it => new { it.Id, sid = _sut.SimpleEntity.Where(it => it.Id == 1).Select(it => it.Id).First() }).ToListAsync();
 
         r.Should().NotBeEmpty();
+
+        r[0].sid.Should().Be(1);
+    }
+    [Fact]
+    public async Task SubQuerySelectOrder_ShouldReturnData()
+    {
+        var r = await _sut.ComplexEntity.Select(it => new { it.Id, sid = _sut.SimpleEntity.OrderByDescending(it => it.Id).Select(it => it.Id).First() }).ToListAsync();
+
+        r.Should().NotBeEmpty();
+
+        r[0].sid.Should().Be(10);
+    }
+    [Fact]
+    public async Task SubQuerySelectOrderSingle_ShouldReturnData()
+    {
+        var r = await _sut.ComplexEntity.Select(it => new { it.Id, sid = _sut.SimpleEntity.OrderByDescending(it => it.Id).Select(it => it.Id).Single() }).ToListAsync();
+
+        r.Should().NotBeEmpty();
+
+        r[0].sid.Should().Be(10);
     }
 }

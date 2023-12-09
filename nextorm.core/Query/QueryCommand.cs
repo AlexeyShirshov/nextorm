@@ -4,6 +4,7 @@
 using System.Collections;
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 
@@ -383,19 +384,25 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
         var sortingPlanHash = 7;
         if (_sorting is not null)
         {
-            foreach (var sort in _sorting)
+            var sortingSpan = CollectionsMarshal.AsSpan(_sorting);
+            for (var i = 0; i < _sorting.Count; i++)
             {
                 if (cancellationToken.IsCancellationRequested)
                     break;
+
+                ref var sort = ref sortingSpan[i];
+
+                var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataProvider, this, cancellationToken);
+                sort.PreparedExpression = innerQueryVisitor.Visit(sort.SortExpression);
 
                 if (!_dontCache) unchecked
                     {
                         sortingHash = sortingHash * 13 + (int)sort.Direction;
                         var comp = new PreciseExpressionEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger);
-                        sortingHash = sortingHash * 13 + comp.GetHashCode(sort.Expression);
+                        sortingHash = sortingHash * 13 + comp.GetHashCode(sort.PreparedExpression);
 
                         var compPlan = new ExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger);
-                        sortingPlanHash = sortingPlanHash * 13 + compPlan.GetHashCode(sort.Expression);
+                        sortingPlanHash = sortingPlanHash * 13 + compPlan.GetHashCode(sort.PreparedExpression);
                     }
             }
         }
@@ -553,7 +560,7 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
             {
                 if (Sorting[i].Direction != cmd.Sorting[i].Direction) return false;
 
-                if (!comp.Equals(Sorting[i].Expression, cmd.Sorting[i].Expression)) return false;
+                if (!comp.Equals(Sorting[i].PreparedExpression, cmd.Sorting[i].PreparedExpression)) return false;
             }
         }
 
@@ -587,8 +594,8 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
     }
     public int AddCommand(QueryCommand cmd)
     {
-        if (_dataProvider != cmd._dataProvider)
-            throw new InvalidOperationException("Different data context");
+        // if (_dataProvider != cmd._dataProvider)
+        //     throw new InvalidOperationException("Different data context");
 
         _referencedQueries ??= new List<QueryCommand>();
         var idx = _referencedQueries.Count;

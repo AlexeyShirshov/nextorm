@@ -282,7 +282,7 @@ public partial class DbContext : IDataContext
 
                 foreach (var sorting in cmd.Sorting)
                 {
-                    var sortingSql = MakeSort(entityType, cmd, sorting.Expression, 0, null, cmd, cmd, @params, paramMode);
+                    var sortingSql = MakeSort(entityType, cmd, sorting.PreparedExpression, 0, null, cmd, cmd, @params, paramMode);
                     if (!paramMode)
                     {
                         sqlBuilder!.Append(sortingSql);
@@ -437,21 +437,13 @@ public partial class DbContext : IDataContext
 
     public (bool NeedAliasForColumn, string Column) MakeColumn(SelectExpression selectExp, Type entityType, ISourceProvider tableProvider, bool dontNeedAlias, IParamProvider paramProvider, IQueryProvider queryProvider, List<Param> @params, bool paramMode)
     {
-        var expression = selectExp.Expression;
+        using var visitor = new BaseExpressionVisitor(entityType, this, tableProvider, 0, null, paramProvider, queryProvider, dontNeedAlias, paramMode);
+        visitor.Visit(selectExp.Expression);
+        @params.AddRange(visitor.Params);
 
-        return expression.Match(
-            cmd => throw new NotImplementedException(),
-            exp =>
-            {
-                using var visitor = new BaseExpressionVisitor(entityType, this, tableProvider, 0, null, paramProvider, queryProvider, dontNeedAlias, paramMode);
-                visitor.Visit(exp);
-                @params.AddRange(visitor.Params);
+        if (paramMode) return (false, string.Empty);
 
-                if (paramMode) return (false, string.Empty);
-
-                return (visitor.NeedAliasForColumn, visitor.ToString());
-            }
-        );
+        return (visitor.NeedAliasForColumn, visitor.ToString());
     }
 
     public virtual string MakeFrom(FromExpression from, List<Param> @params, bool paramMode)
@@ -1177,12 +1169,9 @@ public partial class DbContext : IDataContext
 
             if (queryCommand.OneColumn)
             {
-                lambda = queryCommand.SelectList![0].Expression.Match(_ => throw new NotImplementedException(), exp =>
-                {
-                    var vis = new ReplaceMemberVisitor(queryCommand.EntityType!, this, queryCommand, param);
-                    var body = vis.Visit(((LambdaExpression)exp).Body);
-                    return Expression.Lambda<Func<IDataRecord, TResult>>(body, param);
-                });
+                var vis = new ReplaceMemberVisitor(queryCommand.EntityType!, this, queryCommand, param);
+                var body = vis.Visit(((LambdaExpression)queryCommand.SelectList![0].Expression).Body);
+                lambda = Expression.Lambda<Func<IDataRecord, TResult>>(body, param);
             }
             else
             {

@@ -124,6 +124,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
         return r;
     }
     public static implicit operator QueryCommand<TEntity>(Entity<TEntity> builder) => builder.ToCommand();
+    public static implicit operator QueryCommand(Entity<TEntity> builder) => builder.ToCommand();
     public QueryCommand<TEntity> ToCommand() => Select(it => it);
     public IAsyncEnumerator<TEntity> GetAsyncEnumerator(CancellationToken cancellationToken = default) => ToCommand().GetAsyncEnumerator(cancellationToken);
     public EntityP2<TEntity, TJoinEntity> Join<TJoinEntity>(Entity<TJoinEntity> _, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
@@ -274,9 +275,9 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
     {
         var b = Clone();
         if (b._sorting is null)
-            b._sorting = [new Sorting { Expression = orderExp, Direction = direction }];
+            b._sorting = [new Sorting(orderExp) { Direction = direction }];
         else
-            b._sorting.Add(new Sorting { Expression = orderExp, Direction = direction });
+            b._sorting.Add(new Sorting(orderExp) { Direction = direction });
         return b;
     }
     public Entity<TEntity> OrderBy(Expression<Func<TEntity, object?>> orderExp) => OrderBy(orderExp, OrderDirection.Asc);
