@@ -21,11 +21,11 @@ public class SqliteBenchmarkSimulateWork
     const int SmallIterations = 10;
     const int LargeListSize = 500;
     private readonly TestDataRepository _ctx;
-    private readonly QueryCommand<TupleLargeEntity> _cmd;
-    private readonly QueryCommand<TupleLargeEntity> _cmdToList;
+    private readonly QueryCommand<LargeEntity> _cmd;
+    private readonly QueryCommand<LargeEntity> _cmdToList;
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
-    private readonly QueryCommand<Tuple<int>?> _cmdInner;
+    private readonly QueryCommand<SimpleEntity?> _cmdInner;
     private readonly Func<EFDataContext, int, IAsyncEnumerable<LargeEntity>> _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx, int lim) => ctx.LargeEntities.Where(it => it.Id < lim));
     private readonly Func<EFDataContext, long, int, Task<SimpleEntity?>> _efInnerCompiled = EF.CompileAsyncQuery((EFDataContext ctx, long id, int i) => ctx.SimpleEntities.Where(it => it.Id == id + i).FirstOrDefault());
     private readonly ILoggerFactory? _logFactory;
@@ -42,11 +42,11 @@ public class SqliteBenchmarkSimulateWork
         }
         _ctx = new TestDataRepository(builder.CreateDbContext());
 
-        _cmd = _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new TupleLargeEntity(entity.Id, entity.Str, entity.Dt)).Compile(false);
+        _cmd = _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }).Compile(false);
 
-        _cmdToList = _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new TupleLargeEntity(entity.Id, entity.Str, entity.Dt)).Compile(true);
+        _cmdToList = _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }).Compile(true);
 
-        _cmdInner = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0) + NORM.Param<int>(1)).FirstOrFirstOrDefault(entity => new Tuple<int>(entity.Id)).Compile(true);
+        _cmdInner = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0) + NORM.Param<int>(1)).FirstOrFirstOrDefault(entity => new SimpleEntity { Id = entity.Id }).Compile(true);
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(@$"Filename={Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db")}");
@@ -115,7 +115,7 @@ public class SqliteBenchmarkSimulateWork
             await DoWork();
             for (var i = 0; i < SmallIterations; i++)
             {
-                await _cmdInner.FirstOrDefaultAsync(row.Item1, i);
+                await _cmdInner.FirstOrDefaultAsync(row.Id, i);
                 //var s = await _cmdInner.AnyAsync(row.Item1, i);
             }
         }

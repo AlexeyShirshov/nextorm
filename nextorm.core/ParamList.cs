@@ -2,16 +2,11 @@ namespace nextorm.core;
 
 public class ParamList : List<Param>
 {
-    
+
 }
 
-public class Param
+public class Param(string name, object? value)
 {
-    public Param(string name, object? value)
-    {
-        Name= name;
-        Value = value;
-    }
-    public string Name { get; set; }
-    public object? Value { get; set; }
+    public string Name { get; set; } = name;
+    public object? Value { get; set; } = value;
 }

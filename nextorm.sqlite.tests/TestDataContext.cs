@@ -6,9 +6,9 @@ public class TestDataRepository(IDataContext dataProvider)
 {
     private readonly IDataContext _dataProvider = dataProvider;
 
-    public Entity<ISimpleEntity> SimpleEntity { get; set; } = dataProvider.Create<ISimpleEntity>();
-    public Entity<IComplexEntity> ComplexEntity { get; set; } = dataProvider.Create<IComplexEntity>();
-    public Entity<SimpleEntity> SimpleEntityAsClass { get; set; } = dataProvider.Create<SimpleEntity>();
+    public Entity<ISimpleEntity> SimpleEntity { get; } = dataProvider.Create<ISimpleEntity>();
+    public Entity<IComplexEntity> ComplexEntity { get; } = dataProvider.Create<IComplexEntity>();
+    public Entity<SimpleEntity> SimpleEntityAsClass { get; } = dataProvider.Create<SimpleEntity>();
 
     public IDataContext DataProvider => _dataProvider;
 

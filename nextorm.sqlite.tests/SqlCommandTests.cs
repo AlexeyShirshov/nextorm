@@ -602,4 +602,48 @@ public class SqlCommandTests
 
         r[0].sid.Should().Be(10);
     }
+    [Fact]
+    public async Task ManualSql_ShouldWork()
+    {
+        // Given
+        var cmd = _sut.SimpleEntity.Select(it => it.Id).Compile("select id from simple_entity --this is my sql", true);
+        // When
+        var r = await cmd.ToListAsync();
+
+        // Then
+
+        r.Should().NotBeEmpty();
+
+        r.Count.Should().Be(10);
+
+        r[0].Should().Be(1);
+    }
+    [Fact]
+    public async Task ManualSqlWithParam_ShouldWork()
+    {
+        // Given
+        var cmd = _sut.SimpleEntity.Select(it => new SimpleEntity { Id = it.Id }).Compile("select id from simple_entity where id = @id", new { id = 1 }, true);
+        // When
+        var r = await cmd.FirstAsync();
+
+        // Then
+
+        r.Should().NotBeNull();
+
+        r.Id.Should().Be(1);
+    }
+    [Fact]
+    public async Task ManualSqlWithTwoParam_ShouldWork()
+    {
+        // Given
+        var cmd = _sut.SimpleEntity.Select(it => new SimpleEntity { Id = it.Id }).Compile("select id from simple_entity where id = @id+@norm_p0", new { id = 1 }, true);
+        // When
+        var r = await cmd.FirstAsync(1);
+
+        // Then
+
+        r.Should().NotBeNull();
+
+        r.Id.Should().Be(2);
+    }
 }

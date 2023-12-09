@@ -69,7 +69,7 @@ public class InMemoryTests
     {
         // Given
         var query = _sut.SimpleEntity.Select(it => new Tuple<int, int>(it.Id, it.Id + 10));
-        _sut.DataProvider.Compile(query, false, CancellationToken.None);
+        _sut.DataProvider.Compile(query, false, true, CancellationToken.None);
         // When
         await foreach (var item in query)
         {

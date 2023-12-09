@@ -246,7 +246,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
                 created = true;
                 var queryCommand = dataProvider.CreateCommand<bool>((TableAlias _) => NORM.SQL.exists(cmd), null, default, null);
                 queryCommand.SingleRow = true;
-                queryCommand.PrepareCommand(CancellationToken.None);
+                queryCommand.PrepareCommand(false, CancellationToken.None);
                 return queryCommand;
             });
             _anyCommandCache[dataProvider] = anyCommand;
@@ -255,7 +255,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
         var queryCommand = anyCommand.Value;
         if (!created)
         {
-            cmd.PrepareCommand(CancellationToken.None);
+            cmd.PrepareCommand(false, CancellationToken.None);
             queryCommand.ReplaceCommand(cmd, 0);
         }
 

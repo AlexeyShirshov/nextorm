@@ -118,7 +118,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                 else
                 {
                     if (!cmd.IsPrepared)
-                        cmd.PrepareCommand(_cancellationToken);
+                        cmd.PrepareCommand(false, _cancellationToken);
 
                     var idx = _queryProvider!.AddCommand(cmd);
 
@@ -221,7 +221,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             }
 
             if (!cmd.IsPrepared)
-                cmd.PrepareCommand(_cancellationToken);
+                cmd.PrepareCommand(false, _cancellationToken);
 
             var idx = _queryProvider!.AddCommand(cmd);
 

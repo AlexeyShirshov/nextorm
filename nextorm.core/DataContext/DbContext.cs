@@ -84,20 +84,24 @@ public partial class DbContext : IDataContext
     {
         throw new NotImplementedException(type.ToString());
     }
-    private SqlCacheEntry CreateCompiledQuery<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, CancellationToken cancellationToken)
+    private SqlCacheEntry CreateCompiledQuery<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, CancellationToken cancellationToken,
+        Func<(string, List<Param>)>? makeSelect = null)
     {
         DatabaseCompiledQuery<TResult>? compiledQuery = null;
 #if PLAN_CACHE
         var queryPlan = new QueryPlan(queryCommand, _expCache);
-        if (!queryCommand.Cache
+        if (!queryCommand.Cache || !storeInCache
             || !_queryPlanCache.TryGetValue(queryPlan, out var planCache))
-#endif            
+#endif
         {
 #if PLAN_CACHE
-            if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Query plan cache miss with hash: {hash}",
+            if ((Logger?.IsEnabled(LogLevel.Debug) ?? false) && storeInCache) Logger.LogDebug("Query plan cache miss with hash: {hash}",
                 queryPlan.GetHashCode());
-#endif            
-            var (sql, @params) = MakeSelect(queryCommand, false);
+#endif
+            var (sql, @params) = makeSelect == null
+                ? MakeSelect(queryCommand, false)
+                : makeSelect();
+
             // var (sql, @params) = MakeSelect(queryCommand, true);
             // var cacheEntryX = new SqlCacheEntry(null) { Enumerator = new EmptyEnumerator<TResult>() };
             // if (queryCommand.Cache)
@@ -119,7 +123,8 @@ public partial class DbContext : IDataContext
             }
 #endif
             var dbCommand = CreateCommand(sql!);
-            dbCommand.Parameters.AddRange(@params.Select(it => CreateParam(it.Name, it.Value)).ToArray());
+            if (!compiledPlan.NoParams)
+                dbCommand.Parameters.AddRange(@params.Select(it => CreateParam(it.Name, it.Value)).ToArray());
             //dbCommand.Prepare();
             //return new SqlCacheEntry(null) { Enumerator = new EmptyEnumerator<TResult>() };
 
@@ -157,10 +162,14 @@ public partial class DbContext : IDataContext
             if (!plan.NoParams || compiledQuery?.DbCommand is null)
             {
                 var dbCommand = compiledQuery?.DbCommand ?? CreateCommand(plan._sql);
-                if (compiledQuery?.DbCommand is not null)
-                    dbCommand.Parameters.Clear();
 
-                dbCommand.Parameters.AddRange(ExtractParams(queryCommand).Select(it => CreateParam(it.Name, it.Value)).ToArray());
+                if (!plan.NoParams)
+                {
+                    if (compiledQuery?.DbCommand is not null)
+                        dbCommand.Parameters.Clear();
+
+                    dbCommand.Parameters.AddRange(ExtractParams(queryCommand).Select(it => CreateParam(it.Name, it.Value)).ToArray());
+                }
 
                 compiledQuery ??= new DatabaseCompiledQuery<TResult>(dbCommand, plan.MapDelegate, queryCommand.SingleRow);
             }
@@ -184,6 +193,7 @@ public partial class DbContext : IDataContext
                 plan.CacheEntry = cacheEntry;
 
             }
+
             return plan.CacheEntry;
         }
 #endif
@@ -612,12 +622,29 @@ public partial class DbContext : IDataContext
     {
         return v ? "1" : "0";
     }
-    public void Compile<TResult>(QueryCommand<TResult> cmd, bool nonStreamCalls, CancellationToken cancellationToken)
+    public void Compile<TResult>(string sql, object? @params, QueryCommand<TResult> cmd, bool nonStreamCalls, bool storeInCache, CancellationToken cancellationToken)
     {
         if (!cmd.IsPrepared)
-            cmd.PrepareCommand(cancellationToken);
+            cmd.PrepareCommand(!storeInCache, cancellationToken);
 
-        cmd.CacheEntry = CreateCompiledQuery(cmd, !nonStreamCalls, false, cancellationToken);
+        List<Param> ps = new();
+        if (@params is not null)
+        {
+            var t = @params.GetType();
+            foreach (var prop in t.GetProperties(BindingFlags.Instance | BindingFlags.Public))
+            {
+                ps.Add(new Param(prop.Name, prop.GetValue(@params)));
+            }
+        }
+
+        cmd.CacheEntry = CreateCompiledQuery(cmd, !nonStreamCalls, storeInCache, cancellationToken, () => (sql, ps));
+    }
+    public void Compile<TResult>(QueryCommand<TResult> cmd, bool nonStreamCalls, bool storeInCache, CancellationToken cancellationToken)
+    {
+        if (!cmd.IsPrepared)
+            cmd.PrepareCommand(!storeInCache, cancellationToken);
+
+        cmd.CacheEntry = CreateCompiledQuery(cmd, !nonStreamCalls, storeInCache, cancellationToken);
     }
     protected virtual void Dispose(bool disposing)
     {
@@ -1068,14 +1095,18 @@ public partial class DbContext : IDataContext
             for (var i = 0; i < @params!.Length; i++)
             {
                 var paramName = string.Format("norm_p{0}", i);
+                var added = false;
                 foreach (DbParameter p in sqlCommand.Parameters)
                 {
                     if (p.ParameterName == paramName)
                     {
                         p.Value = @params[i];
+                        added = true;
                         break;
                     }
                 }
+                if (!added)
+                    sqlCommand.Parameters.Add(CreateParam(paramName, @params[i]));
             }
         }
         sqlCommand.Connection = conn;
