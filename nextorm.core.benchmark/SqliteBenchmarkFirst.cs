@@ -17,9 +17,11 @@ public class SqliteBenchmarkFirst
 {
     private readonly TestDataRepository _ctx;
     private readonly QueryCommand<int> _cmd;
+    private readonly QueryCommand<LargeEntity?> _cmdEnt;
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
     private readonly Func<EFDataContext, Task<int>> _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.SimpleEntities.Select(it => it.Id).First());
+    private readonly Func<EFDataContext, Task<LargeEntity>> _efLargeCompiled = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.LargeEntities.First());
     private readonly Func<EFDataContext, Task<int>> _efCompiledFirstOrDefault = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.SimpleEntities.Select(it => it.Id).FirstOrDefault());
     // private readonly Func<EFDataContext, int, Task<int>> _efCompiledFilterParam = EF.CompileAsyncQuery((EFDataContext ctx, int id) => ctx.SimpleEntities.Where(it => it.Id > id).Select(it => it.Id).First());
     private readonly ILoggerFactory? _logFactory;
@@ -36,6 +38,7 @@ public class SqliteBenchmarkFirst
         _ctx = new TestDataRepository(builder.CreateDbContext());
 
         _cmd = _ctx.SimpleEntity.FirstOrFirstOrDefault(it => it.Id).Compile(true);
+        _cmdEnt = _ctx.LargeEntity.FirstOrFirstOrDefault(it => new LargeEntity { Id = it.Id, Str = it.Str, Dt = it.Dt }).Compile(true);
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(@$"Filename={Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db")}");
@@ -54,6 +57,11 @@ public class SqliteBenchmarkFirst
     public async Task NextormFirstCompiled()
     {
         await _cmd.FirstAsync();
+    }
+    [Benchmark()]
+    public async Task NextormLargeFirstCompiled()
+    {
+        await _cmdEnt.FirstAsync();
     }
     [Benchmark()]
     public async Task NextormFirstOrDefaultCompiled()
@@ -86,6 +94,11 @@ public class SqliteBenchmarkFirst
         await _efCompiled(_efCtx);
     }
     [Benchmark]
+    public async Task EFCoreLargeFirstCompiled()
+    {
+        await _efLargeCompiled(_efCtx);
+    }
+    [Benchmark]
     public async Task EFCoreFirstOrDefaultCompiled()
     {
         await _efCompiledFirstOrDefault(_efCtx);
@@ -93,12 +106,17 @@ public class SqliteBenchmarkFirst
     [Benchmark]
     public async Task DapperFirst()
     {
-        await _conn.QueryFirstAsync<int>("select id from simple_entity");
+        await _conn.QueryFirstAsync<int>("select id from simple_entity limit 1");
+    }
+    [Benchmark]
+    public async Task DapperLargeFirst()
+    {
+        await _conn.QueryFirstAsync<LargeEntity>("select id, someString as str, dt from large_table limit 1");
     }
     [Benchmark]
     public async Task DapperFirstOrDefault()
     {
-        await _conn.QueryFirstOrDefaultAsync<int?>("select id from simple_entity");
+        await _conn.QueryFirstOrDefaultAsync<int?>("select id from simple_entity limit 1");
     }
     // [Benchmark()]
     // [BenchmarkCategory("Filter")]

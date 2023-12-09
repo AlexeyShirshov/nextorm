@@ -11,8 +11,8 @@ using nextorm.core.benchmark;
 // BenchmarkRunner.Run<SqliteBenchmarkWhere>();
 // BenchmarkRunner.Run<SqliteBenchmarkSimulateWork>();
 // BenchmarkRunner.Run<SqliteBenchmarkMakeSelect>();
-BenchmarkRunner.Run<SqliteBenchmarkAny>();
-// BenchmarkRunner.Run<SqliteBenchmarkFirst>();
+// BenchmarkRunner.Run<SqliteBenchmarkAny>();
+BenchmarkRunner.Run<SqliteBenchmarkFirst>();
 // BenchmarkRunner.Run<SqliteBenchmarkSingle>();
 
 // runner.QueryCommandPlanEqualityComparer();

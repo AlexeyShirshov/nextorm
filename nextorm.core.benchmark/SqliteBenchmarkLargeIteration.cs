@@ -25,7 +25,7 @@ public class SqliteBenchmarkLargeIteration
 {
     private readonly TestDataRepository _ctx;
     private readonly QueryCommand<TupleLargeEntity> _cmdExec;
-    private readonly QueryCommand<TupleLargeEntity> _cmdToList;
+    private readonly QueryCommand<LargeEntity> _cmdToList;
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
     private readonly SqliteCommand _adoCmd;
@@ -45,7 +45,7 @@ public class SqliteBenchmarkLargeIteration
 
         _cmdExec = _ctx.LargeEntity.Select(entity => new TupleLargeEntity(entity.Id, entity.Str, entity.Dt)).Compile(false);
 
-        _cmdToList = _ctx.LargeEntity.Select(entity => new TupleLargeEntity(entity.Id, entity.Str, entity.Dt)).Compile(true);
+        _cmdToList = _ctx.LargeEntity.Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }).Compile(true);
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(@$"Filename={Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db")}");
@@ -201,9 +201,9 @@ public class SqliteBenchmarkLargeIteration
             await _conn.OpenAsync();
         }
         using var reader = await _adoCmd.ExecuteReaderAsync(CommandBehavior.SingleResult);
-        var l = new List<TupleLargeEntity>();
+        var l = new List<LargeEntity>();
         //var buf = new object[3];
-        var cq = (DatabaseCompiledQuery<TupleLargeEntity>)_cmdToList.CacheEntry!.CompiledQuery;
+        var cq = (DatabaseCompiledQuery<LargeEntity>)_cmdToList.CacheEntry!.CompiledQuery;
         while (reader.Read())
         {
             var o = cq.MapDelegate(reader);

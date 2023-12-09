@@ -1,7 +1,7 @@
 ```
 
-BenchmarkDotNet v0.13.10, Windows 11 (10.0.22621.2715/22H2/2022Update/SunValley2)
-Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical cores
+BenchmarkDotNet v0.13.10, Windows 10 (10.0.19045.3636/22H2/2022Update)
+Intel Core i7-4500U CPU 1.80GHz (Haswell), 1 CPU, 4 logical and 2 physical cores
 .NET SDK 8.0.100
   [Host]   : .NET 8.0.0 (8.0.23.53103), X64 RyuJIT AVX2
   .NET 8.0 : .NET 8.0.0 (8.0.23.53103), X64 RyuJIT AVX2
@@ -9,15 +9,18 @@ Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical 
 Job=.NET 8.0  Runtime=.NET 8.0  
 
 ```
-| Method                        | Mean     | Error    | StdDev   | Ratio | RatioSD | Gen0   | Gen1   | Allocated | Alloc Ratio |
-|------------------------------ |---------:|---------:|---------:|------:|--------:|-------:|-------:|----------:|------------:|
-| NextormFirstCompiled          | 39.33 μs | 0.553 μs | 0.517 μs |  1.00 |    0.00 | 0.4272 |      - |   2.01 KB |        1.00 |
-| NextormFirstOrDefaultCompiled | 39.59 μs | 0.490 μs | 0.434 μs |  1.01 |    0.01 | 0.4272 |      - |   2.01 KB |        1.00 |
-| NextormFirstCached            | 47.89 μs | 0.743 μs | 0.695 μs |  1.22 |    0.02 | 0.9766 |      - |   4.56 KB |        2.27 |
-| NextormFirstOrDefaultCached   | 46.84 μs | 0.900 μs | 1.170 μs |  1.19 |    0.03 | 0.9766 |      - |   4.56 KB |        2.27 |
-| EFCoreFirst                   | 72.88 μs | 1.443 μs | 1.603 μs |  1.85 |    0.05 | 1.7090 | 0.2441 |   8.29 KB |        4.13 |
-| EFCoreFirstOrDefault          | 73.51 μs | 1.393 μs | 1.303 μs |  1.87 |    0.04 | 1.7090 | 0.2441 |   8.29 KB |        4.13 |
-| EFCoreFirstCompiled           | 51.85 μs | 0.607 μs | 0.538 μs |  1.32 |    0.02 | 1.0376 | 0.3052 |   4.95 KB |        2.46 |
-| EFCoreFirstOrDefaultCompiled  | 52.28 μs | 0.904 μs | 0.846 μs |  1.33 |    0.02 | 1.0376 | 0.3052 |   4.95 KB |        2.46 |
-| DapperFirst                   | 42.06 μs | 0.644 μs | 0.603 μs |  1.07 |    0.02 | 0.1831 |      - |   1.06 KB |        0.53 |
-| DapperFirstOrDefault          | 43.37 μs | 0.846 μs | 0.830 μs |  1.10 |    0.02 | 0.2441 |      - |   1.16 KB |        0.58 |
+| Method                        | Mean     | Error   | StdDev  | Ratio | RatioSD | Gen0   | Allocated | Alloc Ratio |
+|------------------------------ |---------:|--------:|--------:|------:|--------:|-------:|----------:|------------:|
+| NextormFirstCompiled          | 129.4 μs | 2.01 μs | 1.78 μs |  1.00 |    0.00 | 0.9766 |   2.01 KB |        1.00 |
+| NextormLargeFirstCompiled     | 135.8 μs | 2.39 μs | 2.24 μs |  1.05 |    0.01 | 0.9766 |   2.47 KB |        1.23 |
+| NextormFirstOrDefaultCompiled | 129.3 μs | 2.00 μs | 1.87 μs |  1.00 |    0.01 | 0.9766 |   2.01 KB |        1.00 |
+| NextormFirstCached            | 141.1 μs | 2.64 μs | 2.71 μs |  1.09 |    0.02 | 1.9531 |   4.05 KB |        2.02 |
+| NextormFirstOrDefaultCached   | 144.0 μs | 2.31 μs | 5.39 μs |  1.15 |    0.07 | 1.9531 |   4.05 KB |        2.02 |
+| EFCoreFirst                   | 184.8 μs | 3.53 μs | 3.31 μs |  1.43 |    0.04 | 3.9063 |   8.29 KB |        4.13 |
+| EFCoreFirstOrDefault          | 186.2 μs | 2.19 μs | 1.95 μs |  1.44 |    0.03 | 3.9063 |   8.29 KB |        4.13 |
+| EFCoreFirstCompiled           | 149.7 μs | 2.65 μs | 2.48 μs |  1.16 |    0.02 | 2.1973 |   4.95 KB |        2.46 |
+| EFCoreLargeFirstCompiled      | 155.0 μs | 1.89 μs | 1.48 μs |  1.20 |    0.02 | 2.4414 |   5.27 KB |        2.62 |
+| EFCoreFirstOrDefaultCompiled  | 149.4 μs | 2.65 μs | 2.35 μs |  1.15 |    0.02 | 2.1973 |   4.95 KB |        2.46 |
+| DapperFirst                   | 131.8 μs | 1.84 μs | 1.72 μs |  1.02 |    0.01 | 0.4883 |   1.07 KB |        0.53 |
+| DapperLargeFirst              | 159.2 μs | 3.17 μs | 8.89 μs |  1.16 |    0.10 | 0.4883 |   1.48 KB |        0.74 |
+| DapperFirstOrDefault          | 156.0 μs | 3.00 μs | 3.68 μs |  1.20 |    0.03 | 0.4883 |   1.17 KB |        0.58 |
