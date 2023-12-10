@@ -3,22 +3,21 @@ using System.Data;
 
 namespace nextorm.core;
 
-public class DatabaseCompiledPlan<TResult> : CompiledQuery<TResult, IDataRecord>
+public class DbCompiledPlan<TResult> : CompiledQuery<TResult, IDataRecord>
 {
-    internal readonly string _sql;
+    public readonly string? SqlStmt;
     public readonly bool NoParams;
-    public SqlCacheEntry? CacheEntry { get; internal set; }
-
-    public DatabaseCompiledPlan(string sql, Func<Func<IDataRecord, TResult>> getMap, bool noParams)
+    public DbCompiledQuery<TResult>? QueryTemplate;
+    public DbCompiledPlan(string? sql, Func<Func<IDataRecord, TResult>?> getMap, bool noParams)
         : base(getMap)
     {
-        _sql = sql;
+        SqlStmt = sql;
         NoParams = noParams;
     }
-    public DatabaseCompiledPlan(string sql, Func<IDataRecord, TResult> map, bool noParams)
+    public DbCompiledPlan(string? sql, Func<IDataRecord, TResult>? map, bool noParams)
         : base(map)
     {
-        _sql = sql;
+        SqlStmt = sql;
         NoParams = noParams;
     }
     // public DbCommand GetCommand(IEnumerable<Param> @params, SqlDataProvider dataProvider)

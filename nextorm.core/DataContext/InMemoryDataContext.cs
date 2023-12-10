@@ -43,11 +43,11 @@ public partial class InMemoryContext : IDataContext
 
     private InMemoryCacheEntry<TResult> GetCacheEntry<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
     {
-        var ce = queryCommand.CacheEntry;
+        var ce = queryCommand._compiledQuery;
         if (ce is InMemoryCacheEntry<TResult> cc)
             return cc;
 
-        if (queryCommand.Cache && _cmdIdx.TryGetValue(queryCommand, out ce) && ce is InMemoryCacheEntry<TResult> cache2)
+        if (queryCommand.Cache && _cmdIdx.TryGetValue(queryCommand, out var ce2) && ce2 is InMemoryCacheEntry<TResult> cache2)
             return cache2;
 
         var del = CreateEnumeratorDelegate(queryCommand, cancellationToken);
@@ -473,14 +473,14 @@ public partial class InMemoryContext : IDataContext
             createCompiledQueryDelegate = (Func<QueryCommand<TResult>, object>)del;
 
         var ce = new InMemoryCacheEntry<TResult>(createCompiledQueryDelegate(queryCommand), CreateEnumeratorDelegate(queryCommand, cancellationToken));
-        queryCommand.CacheEntry = ce;
+        queryCommand._compiledQuery = ce;
         ce.Enumerator = ce.CreateEnumerator(queryCommand, ce, null, cancellationToken)!;
     }
 
     private CompiledQuery<TResult, TEntity> CreateCompiledQuery<TResult, TEntity>(QueryCommand<TResult> query)
     {
         Func<TEntity, object[]?, bool>? conditionDelegate = null;
-        if (query.Condition is Expression<Func<TEntity, bool>> condition)
+        if (query.PreparedCondition is Expression<Func<TEntity, bool>> condition)
         {
             var key = new ExpressionKey(condition, _expCache, query);
             if (!_expCache.TryGetValue(key, out var d))
@@ -848,8 +848,8 @@ public partial class InMemoryContext : IDataContext
             CreateEnumerator = createEnumerator;
         }
         public Func<QueryCommand<TResult>, InMemoryCacheEntry<TResult>, object[]?, CancellationToken, IAsyncEnumerator<TResult>> CreateEnumerator { get; }
-        public object? Data { get; set; }
-        public object? Enumerator { get; set; }
-        public int LastRowCount { get; internal set; }
+        public object? Data;
+        public IAsyncEnumerator<TResult>? Enumerator;
+        public int LastRowCount;
     }
 }

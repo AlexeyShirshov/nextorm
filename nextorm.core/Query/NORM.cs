@@ -8,5 +8,8 @@ public static class NORM
     public class NORM_SQL
     {
         public bool exists(QueryCommand cmd) => default!;
+        public bool @in<T>(T column, QueryCommand<T> cmd) => default!;
+        public T any<T>(QueryCommand<T> cmd) => default!;
+        public T all<T>(QueryCommand<T> cmd) => default!;
     }
 }

@@ -110,7 +110,10 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         }
         else if (node.Method.DeclaringType == typeof(NORM.NORM_SQL) /*&& _tableProvider is IParamProvider paramProvider*/)
         {
-            if (node.Method.Name == nameof(NORM.NORM_SQL.exists)
+            if ((node.Method.Name == nameof(NORM.NORM_SQL.exists)
+                || node.Method.Name == nameof(NORM.NORM_SQL.all)
+                || node.Method.Name == nameof(NORM.NORM_SQL.any)
+                )
                 && node.Arguments is [Expression exp] && exp.Type.IsAssignableTo(typeof(QueryCommand)))
             {
                 QueryCommand innerQuery;
@@ -118,7 +121,13 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 expVisitor.Visit(exp);
 
                 if (!_paramMode)
-                    _builder!.Append("exists(");
+                    _builder!.Append(node.Method.Name switch
+                    {
+                        nameof(NORM.NORM_SQL.exists) => "exists(",
+                        nameof(NORM.NORM_SQL.all) => "all(",
+                        nameof(NORM.NORM_SQL.any) => "any(",
+                        _ => throw new NotImplementedException()
+                    });
 
                 var keyCmd = new ExpressionKey(exp, _dataProvider.ExpressionsCache, _queryProvider);
                 if (!_dataProvider.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
@@ -183,10 +192,38 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 
                 return node;
             }
+
+            throw new NotImplementedException();
         }
         else if (node.Object?.Type.IsAssignableTo(typeof(QueryCommand)) ?? false)
         {
 
+        }
+        else if (node.Type == typeof(string))
+        {
+            if (node.Object is null)
+            {
+                if (node.Method.Name == nameof(string.Concat))
+                {
+                    if (!_paramMode)
+                        _builder!.Append('(');
+
+                    foreach (var arg in node.Arguments)
+                    {
+                        Visit(arg);
+                        _builder!.Append(_dataProvider.ConcatStringOperator);
+                    }
+
+                    if (!_paramMode)
+                    {
+                        _builder!.Length -= _dataProvider.ConcatStringOperator.Length;
+                        _builder!.Append(')');
+                    }
+
+                    return node;
+                }
+            }
+            throw new NotImplementedException();
         }
         else if (!node.Has<ParameterExpression>())
         {

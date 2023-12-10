@@ -1,10 +1,11 @@
+using System.Data;
 using System.Diagnostics;
 namespace nextorm.core;
 
 public static class QueryCommandExtensions
 {
-    // public static TResult? FirstOrDefault<TResult>(this QueryCommand<TResult> queryCommand, params object[] @params)
-    // {
-    //     return queryCommand.ToNullable().FirstOrDefaultNullable(@params);
-    // }
+    public static DbCompiledQuery<TResult>? GetCompiledQuery<TResult>(this QueryCommand<TResult> queryCommand)
+    {
+        return queryCommand.GetCompiledQuery<IDataRecord>() as DbCompiledQuery<TResult>;
+    }
 }

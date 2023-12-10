@@ -203,10 +203,10 @@ public class SqliteBenchmarkLargeIteration
         using var reader = await _adoCmd.ExecuteReaderAsync(CommandBehavior.SingleResult);
         var l = new List<LargeEntity>();
         //var buf = new object[3];
-        var cq = (DatabaseCompiledQuery<LargeEntity>)_cmdToList.CacheEntry!.CompiledQuery;
+        var cq = _cmdToList.GetCompiledQuery();
         while (reader.Read())
         {
-            var o = cq.MapDelegate(reader);
+            var o = cq!.MapDelegate!(reader);
             //reader.GetValues(buf);
             // var Id = reader.GetInt64(0);
             // var Str = reader.GetString(1);

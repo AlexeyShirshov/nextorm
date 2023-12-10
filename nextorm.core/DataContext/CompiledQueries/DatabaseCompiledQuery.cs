@@ -4,37 +4,22 @@ using System.Data.Common;
 
 namespace nextorm.core;
 
-public class DatabaseCompiledQuery<TResult> : CompiledQuery<TResult, IDataRecord>//, IReplaceParam
+public class DbCompiledQuery<TResult> : CompiledQuery<TResult, IDataRecord>
 {
-    public DbCommand DbCommand;
-    public readonly System.Data.CommandBehavior Behavior = System.Data.CommandBehavior.SingleResult;
-    public DatabaseCompiledQuery(DbCommand dbCommand, Func<Func<IDataRecord, TResult>> getMap)
+    public readonly CommandBehavior Behavior = CommandBehavior.SingleResult;
+    public DbCompiledQuery(DbCommand dbCommand, Func<Func<IDataRecord, TResult>?> getMap)
         : base(getMap)
     {
         DbCommand = dbCommand;
     }
-    public DatabaseCompiledQuery(DbCommand dbCommand, Func<IDataRecord, TResult> mapDelegate, bool singleRow)
+    public DbCompiledQuery(DbCommand dbCommand, Func<IDataRecord, TResult>? mapDelegate, bool singleRow)
         : base(mapDelegate)
     {
         DbCommand = dbCommand;
         if (singleRow)
-            Behavior = System.Data.CommandBehavior.SingleResult | System.Data.CommandBehavior.SingleRow;
+            Behavior = CommandBehavior.SingleResult | CommandBehavior.SingleRow;
     }
-
-    // public void ReplaceParams(object[] @params, IDataProvider dataProvider)
-    // {
-    //     //if (dataProvider is SqlDataProvider sqlDataProvider)
-    //     for (var i = 0; i < @params.Length; i++)
-    //     {
-    //         var paramName = string.Format("norm_p{0}", i);
-    //         foreach (DbParameter p in DbCommand.Parameters)
-    //         {
-    //             if (p.ParameterName == paramName)
-    //             {
-    //                 p.Value = @params[i];
-    //                 break;
-    //             }
-    //         }
-    //     }
-    // }
+    public DbCommand DbCommand;
+    public ResultSetEnumerator<TResult>? Enumerator;
+    public int LastRowCount;
 }

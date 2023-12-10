@@ -1,9 +1,5 @@
-#define PLAN_CACHE
-#define ONLY_PLAN_CACHE
-
 namespace nextorm.core;
 
-#if PLAN_CACHE
 public class QueryPlan
 {
     public QueryCommand QueryCommand;
@@ -32,4 +28,3 @@ public class QueryPlan
         return this;
     }
 }
-#endif

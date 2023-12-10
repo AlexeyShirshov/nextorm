@@ -6,13 +6,13 @@ using System.Data.Common;
 namespace nextorm.core;
 public class CompiledQuery<TResult, TRecord>
 {
-    public readonly Func<TRecord, TResult> MapDelegate;
+    public readonly Func<TRecord, TResult>? MapDelegate;
 
-    public CompiledQuery(Func<TRecord, TResult> mapDelegate)
+    public CompiledQuery(Func<TRecord, TResult>? mapDelegate)
     {
         MapDelegate = mapDelegate;
     }
-    public CompiledQuery(Func<Func<TRecord, TResult>> getMap)
+    public CompiledQuery(Func<Func<TRecord, TResult>?> getMap)
     {
         MapDelegate = getMap();
     }

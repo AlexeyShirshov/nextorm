@@ -1,3 +1,4 @@
+using System.Data.SQLite;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -603,10 +604,52 @@ public class SqlCommandTests
         r[0].sid.Should().Be(10);
     }
     [Fact]
+    public async Task WhereSubQuery_ShouldReturnData()
+    {
+        var r = await _sut.ComplexEntity.Where(it => it.Id == _sut.SimpleEntity.OrderBy(it => it.Id).Select(it => it.Id).First()).Select(it => new { it.Id }).FirstOrDefaultAsync();
+
+        r.Should().NotBeNull();
+
+        r.Id.Should().Be(1);
+    }
+    [Fact]
+    public async Task WhereInSubQuery_ShouldReturnData()
+    {
+        var r = await _sut.ComplexEntity.Where(it => NORM.SQL.@in((int)it.Id, _sut.SimpleEntity.Where(it => it.Id == 2).Select(it => it.Id))).Select(it => it.Id).FirstOrDefaultAsync();
+
+        r.Should().Be(2);
+    }
+    [Fact]
+    public async Task WhereAnySubQuery_ShouldReturnData()
+    {
+        var test = async () =>
+        {
+            var r = await _sut.SimpleEntity.Where(it => it.Id == NORM.SQL.any(_sut.ComplexEntity.Select(it => it.Id))).Select(it => it.Id).ToListAsync();
+
+            r.Should().NotBeEmpty();
+            r.Count.Should().Be(3);
+        };
+
+        await test.Should().ThrowAsync<SQLiteException>();
+    }
+    [Fact]
+    public async Task WhereAllSubQuery_ShouldReturnData()
+    {
+        var test = async () =>
+        {
+            var r = await _sut.SimpleEntity.Where(it => it.Id == NORM.SQL.all(_sut.ComplexEntity.Select(it => it.Id))).Select(it => it.Id).ToListAsync();
+
+            r.Should().NotBeEmpty();
+            r.Count.Should().Be(3);
+        };
+
+        await test.Should().ThrowAsync<SQLiteException>();
+    }
+    [Fact]
     public async Task ManualSql_ShouldWork()
     {
         // Given
-        var cmd = _sut.SimpleEntity.Select(it => it.Id).Compile("select id from simple_entity --this is my sql", true);
+        var cmd = _sut.SimpleEntity.Select(it => it.Id).Compile("select id from simple_entity --this is my sql");
         // When
         var r = await cmd.ToListAsync();
 
@@ -617,6 +660,16 @@ public class SqlCommandTests
         r.Count.Should().Be(10);
 
         r[0].Should().Be(1);
+
+        cmd = _sut.SimpleEntity.Select(it => it.Id).Compile("select id from simple_entity where id=-1");
+        // When
+        r = await cmd.ToListAsync();
+
+        r.Should().BeEmpty();
+
+        r = await _sut.SimpleEntity.Select(it => it.Id).ToListAsync();
+
+        r.Should().NotBeEmpty();
     }
     [Fact]
     public async Task ManualSqlWithParam_ShouldWork()

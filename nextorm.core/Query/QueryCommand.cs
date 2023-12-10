@@ -1,6 +1,3 @@
-#define PLAN_CACHE
-#define INITALGO_1
-
 using System.Collections;
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
@@ -18,6 +15,7 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
     private int _columnsHash;
     private int _joinHash;
     private int _sortingHash;
+    private int _whereHash;
     protected FromExpression? _from;
     protected IDataContext _dataProvider;
     protected readonly LambdaExpression _exp;
@@ -29,20 +27,14 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
     // #endif
     protected Type? _srcType;
     private bool _dontCache;
-#if DEBUG
-    private int? _conditionHash;
-
-    public int? ConditionHash => _conditionHash;
-#endif
-    public Expression SelectExpression => _exp;
-#if PLAN_CACHE
     //    internal int? PlanHash;
     internal int ColumnsPlanHash;
     internal int JoinPlanHash;
     internal int SortingPlanHash;
-#endif
+    internal int WherePlanHash;
     private int _paramIdx;
     public Paging Paging;
+    internal Expression PreparedCondition;
     protected readonly List<Sorting>? _sorting;
 
     //protected ArrayList _params = new();
@@ -60,6 +52,7 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
         Paging = paging;
         _sorting = sorting;
     }
+    public Expression SelectExpression => _exp;
     public ILogger? Logger { get; set; }
     public FromExpression? From { get => _from; set => _from = value; }
     public List<SelectExpression>? SelectList => _selectList;
@@ -74,7 +67,7 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
         }
     }
     public bool IsPrepared => _isPrepared;
-    public Expression? Condition => _condition;
+    //public Expression? Condition => _condition;
     public List<JoinExpression> Joins => _joins;
     public bool Cache
     {
@@ -119,6 +112,7 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
         FromExpression? from = _from ?? _dataProvider.GetFrom(srcType, this);
         var (joinHash, joinPlanHash) = PrepareJoin(prepareMapOnly, cancellationToken);
         var (selectList, columnsHash, columnsPlanHash) = PrepareColumns(prepareMapOnly, srcType, cancellationToken);
+        var (whereHash, wherePlanHash) = PrepareWhere(prepareMapOnly, srcType, cancellationToken);
         var (sortingHash, sortingPlanHash) = PrepareSorting(prepareMapOnly, srcType, cancellationToken);
 
         _isPrepared = true;
@@ -128,12 +122,12 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
         _from = from;
         _joinHash = joinHash;
         _sortingHash = sortingHash;
+        _whereHash = whereHash;
 
-#if PLAN_CACHE
         ColumnsPlanHash = columnsPlanHash;
         JoinPlanHash = joinPlanHash;
         SortingPlanHash = sortingPlanHash;
-#endif
+        WherePlanHash = wherePlanHash;
         //_payloadMgr = new FastPayloadManager(cache ? new Dictionary<Type, object?>() : null);
 
         // string capitalize(string str)
@@ -147,9 +141,7 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
         SelectExpressionPlanEqualityComparer? comparer = null;
         var selectList = _selectList;
         var columnsHash = 7;
-#if PLAN_CACHE
         var columnsPlanHash = 7;
-#endif
         if (selectList is null && !IgnoreColumns)
         {
             if (_exp is null)
@@ -194,10 +186,9 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
                     if (!_dontCache && !noHash) unchecked
                         {
                             columnsHash = columnsHash * 13 + selExp.GetHashCode();
-#if PLAN_CACHE
+
                             comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
                             columnsPlanHash = columnsPlanHash * 13 + comparer.GetHashCode(selExp);
-#endif
                         }
                 }
 
@@ -227,10 +218,8 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
                         {
 
                             columnsHash = columnsHash * 13 + selExp.GetHashCode();
-#if PLAN_CACHE
                             comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
                             columnsPlanHash = columnsPlanHash * 13 + comparer.GetHashCode(selExp);
-#endif
                         }
                 }
             }
@@ -264,10 +253,8 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
                         if (!_dontCache && !noHash) unchecked
                             {
                                 columnsHash = columnsHash * 13 + selExp.GetHashCode();
-#if PLAN_CACHE
                                 comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
                                 columnsPlanHash = columnsPlanHash * 13 + comparer.GetHashCode(selExp);
-#endif
                             }
                     }
                 }
@@ -359,9 +346,7 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
     {
         JoinExpressionPlanEqualityComparer? comparer = null;
         var joinHash = 7;
-#if PLAN_CACHE
         var joinPlanHash = 7;
-#endif
         if (Joins.Count != 0)
         {
             if (_from is not null && string.IsNullOrEmpty(_from.TableAlias)) _from.TableAlias = "t1";
@@ -375,9 +360,7 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
                     {
                         comparer ??= new JoinExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
                         joinHash = joinHash * 13 + join.GetHashCode();
-#if PLAN_CACHE
                         joinPlanHash = joinPlanHash * 13 + comparer.GetHashCode(join);
-#endif
                     }
             }
         }
@@ -417,6 +400,30 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
         }
 
         return (sortingHash, sortingPlanHash);
+    }
+    private (int, int) PrepareWhere(bool noHash, Type? srcType, CancellationToken cancellationToken)
+    {
+        PreciseExpressionEqualityComparer? comp = null;
+        ExpressionPlanEqualityComparer? compPlan = null;
+
+        var whereHash = 7;
+        var wherePlanHash = 7;
+        if (_condition is not null && !noHash)
+        {
+            var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataProvider, this, cancellationToken);
+            PreparedCondition = innerQueryVisitor.Visit(_condition);
+
+            if (!_dontCache && !noHash) unchecked
+                {
+                    comp ??= new PreciseExpressionEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger);
+                    whereHash = whereHash * 13 + comp.GetHashCode(PreparedCondition);
+
+                    compPlan ??= new ExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger);
+                    wherePlanHash = wherePlanHash * 13 + compPlan.GetHashCode(PreparedCondition);
+                }
+        }
+
+        return (whereHash, wherePlanHash);
     }
     // public bool RemovePayload<T>() where T : class, IPayload
     // {
@@ -468,20 +475,7 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
             if (_srcType is not null)
                 hash.Add(_srcType);
 
-            if (_condition is not null)
-            {
-                var comp = new PreciseExpressionEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger);
-                var condHash = comp.GetHashCode(_condition);
-                hash.Add(condHash);
-#if DEBUG
-                _conditionHash = condHash;
-#endif
-            }
-
-            // foreach (var param in _params)
-            // {
-            //     hash.Add(param);
-            // }
+            hash.Add(_whereHash);
 
             hash.Add(_columnsHash);
 
@@ -529,7 +523,7 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
 
         if (Paging.Limit != cmd.Paging.Limit || Paging.Offset != cmd.Paging.Offset) return false;
 
-        if (!new PreciseExpressionEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger).Equals(_condition, cmd._condition)) return false;
+        if (!new PreciseExpressionEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger).Equals(PreparedCondition, cmd.PreparedCondition)) return false;
 
         if (_selectList is null && cmd._selectList is not null) return false;
         if (_selectList is not null && cmd._selectList is null) return false;
@@ -644,6 +638,7 @@ public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider
 
 public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
 {
+    internal object? _compiledQuery;
     //private readonly IPayloadManager _payloadMap = new FastPayloadManager(new Dictionary<Type, object?>());
     public QueryCommand(IDataContext dataProvider, LambdaExpression exp, Expression? condition, Paging paging, List<Sorting>? sorting) : base(dataProvider, exp, condition, paging, sorting)
     {
@@ -654,14 +649,14 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
 
     }
     //internal CompiledQuery<TResult>? Compiled => CacheEntry?.CompiledQuery as CompiledQuery<TResult>;
-    public CacheEntry? CacheEntry { get; set; }
+    public CompiledQuery<TResult, TRecord>? GetCompiledQuery<TRecord>() => _compiledQuery as CompiledQuery<TResult, TRecord>;
     public bool SingleRow { get; set; }
     public QueryCommand<TResult> FromSql(string sql, CancellationToken cancellationToken = default) => Compile(sql, null, true, true, cancellationToken);
     public QueryCommand<TResult> FromSql(string sql, object? @params, CancellationToken cancellationToken = default) => Compile(sql, @params, true, true, cancellationToken);
     public QueryCommand<TResult> Compile(string sql, CancellationToken cancellationToken = default) => Compile(sql, null, true, cancellationToken);
     public QueryCommand<TResult> Compile(string sql, object? @params, CancellationToken cancellationToken = default) => Compile(sql, @params, true, cancellationToken);
     public QueryCommand<TResult> Compile(string sql, bool nonStreamCalls, CancellationToken cancellationToken = default) => Compile(sql, null, nonStreamCalls, cancellationToken);
-    public QueryCommand<TResult> Compile(string sql, object? @params, bool nonStreamCalls, CancellationToken cancellationToken = default) => Compile(sql, @params, nonStreamCalls, false, cancellationToken);
+    public QueryCommand<TResult> Compile(string sql, object? @params, bool nonStreamCalls, CancellationToken cancellationToken = default) => Compile(sql, @params, nonStreamCalls, true, cancellationToken);
     public QueryCommand<TResult> Compile(string sql, object? @params, bool nonStreamCalls, bool storeInCache, CancellationToken cancellationToken = default)
     {
         _dataProvider.Compile(sql, @params, this, nonStreamCalls, storeInCache, cancellationToken);

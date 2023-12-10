@@ -1,5 +1,3 @@
-#define PLAN_CACHE
-
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 
@@ -44,7 +42,7 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand>
 
         if (x.Paging.Limit != y.Paging.Limit || x.Paging.Offset != y.Paging.Offset) return false;
 
-        if (!_expComparer.Equals(x.Condition, y.Condition)) return false;
+        if (!_expComparer.Equals(x.PreparedCondition, y.PreparedCondition)) return false;
 
         if (x.SelectList is null && y.SelectList is not null) return false;
         if (x.SelectList is not null && y.SelectList is null) return false;
@@ -93,10 +91,8 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand>
             if (obj.EntityType is not null)
                 hash.Add(obj.EntityType);
 
-            if (obj.Condition is not null)
-                hash.Add(obj.Condition, _expComparer);
+            hash.Add(obj.WherePlanHash);
 
-#if PLAN_CACHE
             hash.Add(obj.ColumnsPlanHash);
 
             hash.Add(obj.JoinPlanHash);
@@ -104,8 +100,6 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand>
             // obj.PlanHash = hash.ToHashCode();
 
             // return obj.PlanHash.Value;
-#else
-#endif
 
             hash.Add(obj.Paging.Limit);
             hash.Add(obj.Paging.Offset);

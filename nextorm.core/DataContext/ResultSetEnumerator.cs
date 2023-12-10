@@ -10,15 +10,15 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
 {
     //private readonly QueryCommand<TResult> _cmd;
     private readonly DbContext _dataProvider;
-    private readonly DatabaseCompiledQuery<TResult> _compiledQuery;
+    private readonly DbCompiledQuery<TResult> _compiledQuery;
     private CancellationToken _cancellationToken;
     private object[]? _params;
-    private readonly Func<IDataRecord, TResult> _map;
+    private readonly Func<IDataRecord, TResult>? _map;
     // private List<Param>? _params;
     private DbDataReader? _reader;
     private readonly DbConnection _conn;
     private bool _disposedValue;
-    public ResultSetEnumerator(DbContext dataProvider, DatabaseCompiledQuery<TResult> compiledQuery)
+    public ResultSetEnumerator(DbContext dataProvider, DbCompiledQuery<TResult> compiledQuery)
     {
         //_cmd = cmd;
         _dataProvider = dataProvider;
@@ -34,10 +34,10 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get
         {
-            return _map(_reader!);
+            return _map!(_reader!);
         }
     }
-    object? IEnumerator.Current => _map(_reader!);
+    object? IEnumerator.Current => _map!(_reader!);
     public async ValueTask DisposeAsync()
     {
         GC.SuppressFinalize(this);
@@ -99,20 +99,25 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
         sqlCommand.Connection = _conn;
 
         if (@params is not null)
+        {
             for (var i = 0; i < @params!.Length; i++)
             {
                 var paramName = string.Format("norm_p{0}", i);
-                sqlCommand.Parameters[paramName].Value = @params[i];
-                // foreach (DbParameter p in sqlCommand.Parameters)
-                // {
-                //     if (p.ParameterName == paramName)
-                //     {
-                //         p.Value = @params[i];
-                //         break;
-                //     }
-                // }
+                //sqlCommand.Parameters[paramName].Value = @params[i];
+                var added = false;
+                foreach (DbParameter p in sqlCommand.Parameters)
+                {
+                    if (p.ParameterName == paramName)
+                    {
+                        p.Value = @params[i];
+                        added = true;
+                        break;
+                    }
+                }
+                if (!added)
+                    sqlCommand.Parameters.Add(_dataProvider.CreateParam(paramName, @params[i]));
             }
-
+        }
         return sqlCommand;
     }
 
