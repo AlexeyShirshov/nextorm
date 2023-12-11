@@ -11,7 +11,7 @@ public class InMemoryJoinTests
         _sut.SimpleEntity.WithData(new[] { new SimpleEntity { Id = 1 }, new SimpleEntity { Id = 2 } });
     }
     [Fact]
-    public async void TestJoin()
+    public async Task TestJoin()
     {
         var query = _sut.SimpleEntity.Join(_sut.SimpleEntity, (t1, t2) => t1.Id == t2.Id + 1).Select(p => new { FirstId = p.t1.Id, SecondId = p.t2.Id });
 
@@ -25,7 +25,7 @@ public class InMemoryJoinTests
         idx.Should().BeGreaterThan(0);
     }
     [Fact]
-    public async void TestJoin2()
+    public async Task TestJoin2()
     {
         var query = _sut.SimpleEntity
             .Join(_sut.SimpleEntity, (t1, t2) => t1.Id == t2.Id + 1)

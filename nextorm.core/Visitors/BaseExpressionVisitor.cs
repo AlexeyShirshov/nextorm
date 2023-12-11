@@ -192,6 +192,53 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 
                 return node;
             }
+            else if (node.Method.Name == nameof(NORM.NORM_SQL.@in)
+                && node.Arguments is [Expression parExp, Expression cmdExp] && cmdExp.Type.IsAssignableTo(typeof(QueryCommand)))
+            {
+                if (!_paramMode)
+                    Visit(parExp);
+
+                if (!_paramMode) _builder!.Append(" in (");
+
+                var constRepl = new ReplaceConstantsExpressionVisitor(_queryProvider);
+                var body = constRepl.Visit(cmdExp);
+
+                QueryCommand innerQuery;
+
+                if (constRepl.Params.Count > 0)
+                {
+                    var keyCmd = new ExpressionKey(cmdExp, _dataProvider.ExpressionsCache, _queryProvider);
+                    if (!_dataProvider.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
+                    {
+                        var d = Expression.Lambda(body, constRepl.Params.Select(it => it.Item1)).Compile();
+
+                        _dataProvider.ExpressionsCache[keyCmd] = d;
+                        innerQuery = (QueryCommand)d.DynamicInvoke(constRepl.Params.Select(it => it.Item2).ToArray())!;
+
+                        if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false)
+                        {
+                            _dataProvider.Logger.LogTrace("Subquery expression miss: {exp}", cmdExp);
+                        }
+                        else if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Subquery expression miss");
+                    }
+                    else
+                        innerQuery = (QueryCommand)dCmd.DynamicInvoke(constRepl.Params.Select(it => it.Item2).ToArray())!;
+
+                }
+                else
+                    throw new InvalidOperationException();
+
+                var (sql, p) = _dataProvider.MakeSelect(innerQuery, _paramMode);
+                _params.AddRange(p);
+
+                if (!_paramMode)
+                {
+                    _builder!.Append(sql).Append(')');
+                }
+
+                return node;
+            }
+
 
             throw new NotImplementedException();
         }

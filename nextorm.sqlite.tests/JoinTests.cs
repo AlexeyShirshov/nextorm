@@ -13,7 +13,7 @@ public class JoinTests
         _logger = logger;
     }
     [Fact]
-    public async void SelectJoin_ShouldReturnData()
+    public async Task SelectJoin_ShouldReturnData()
     {
         long idx = 0;
         await foreach (var row in _sut.SimpleEntity.Join(_sut.ComplexEntity, (s, c) => s.Id == c.Id).Select(p => new { p.t1.Id, p.t2.RequiredString }))
@@ -27,7 +27,7 @@ public class JoinTests
         idx.Should().BeGreaterThan(0);
     }
     [Fact]
-    public async void Select2Join_ShouldReturnData()
+    public async Task Select2Join_ShouldReturnData()
     {
         long idx = 1;
         await foreach (var row in _sut.SimpleEntity
@@ -44,7 +44,7 @@ public class JoinTests
         idx.Should().BeGreaterThan(1);
     }
     [Fact]
-    public async void SelectJoinWithWhere_ShouldReturnData()
+    public async Task SelectJoinWithWhere_ShouldReturnData()
     {
         long idx = 0;
         await foreach (var row in _sut.SimpleEntity
@@ -61,7 +61,7 @@ public class JoinTests
         idx.Should().Be(1);
     }
     [Fact]
-    public async void SelectWhereJoin_ShouldReturnData()
+    public async Task SelectWhereJoin_ShouldReturnData()
     {
         // Func<Task> act = async () =>
         // {
@@ -84,7 +84,7 @@ public class JoinTests
         // await act.Should().ThrowAsync<InvalidOperationException>();
     }
     [Fact]
-    public async void SelectJoinSubquery_ShouldReturnData()
+    public async Task SelectJoinSubquery_ShouldReturnData()
     {
         var subQuery = _sut.ComplexEntity.Where(it => it.Id == 3).Select(it => new { it.Id, it.RequiredString, it.Boolean });
         long idx = 2;
@@ -99,7 +99,7 @@ public class JoinTests
         idx.Should().BeGreaterThan(0);
     }
     [Fact]
-    public async void SelectJoinSubqueryWithJoin_ShouldReturnData()
+    public async Task SelectJoinSubqueryWithJoin_ShouldReturnData()
     {
         var subQuery = _sut.ComplexEntity.Join(_sut.ComplexEntity, (c1, c2) => c1.RequiredString == c2.String).Select(p => new { Id1 = p.t1.Id, Id2 = p.t2.Id, Double = p.t1.Double + p.t2.Double });
         long idx = 0;

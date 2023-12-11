@@ -12,13 +12,13 @@ public class LinqExtensionsTests
     }
 
     [Fact]
-    public async void First_ShouldReturnEntity()
+    public async Task First_ShouldReturnEntity()
     {
         var e = await _sut.ComplexEntity.Select(it => new { it.Id, it.TinyInt, it.SmallInt }).FirstAsync();
         e.Should().NotBeNull();
     }
     [Fact]
-    public async void First_ShouldNotReturnEntity()
+    public async Task First_ShouldNotReturnEntity()
     {
         var e = await _sut.ComplexEntity
             .Where(it => it.Id < 0)
@@ -26,7 +26,7 @@ public class LinqExtensionsTests
         e.Should().BeNull();
     }
     [Fact]
-    public async void Single_ShouldReturnEntity()
+    public async Task Single_ShouldReturnEntity()
     {
         var e = await _sut.ComplexEntity
             .Where(it => it.Id == 1)
@@ -34,7 +34,7 @@ public class LinqExtensionsTests
         e.Should().NotBeNull();
     }
     [Fact]
-    public async void Single_ShouldNotReturnEntity()
+    public async Task Single_ShouldNotReturnEntity()
     {
         var e = await _sut.ComplexEntity
             .Where(it => it.Id < 0)
@@ -42,13 +42,13 @@ public class LinqExtensionsTests
         e.Should().BeNull();
     }
     [Fact]
-    public async void Any_ShouldReturnTrue()
+    public async Task Any_ShouldReturnTrue()
     {
         var e = await _sut.ComplexEntity.Select(it => new { it.Id, it.TinyInt, it.SmallInt }).AnyAsync();
         e.Should().BeTrue();
     }
     [Fact]
-    public async void Single_ShouldReturnFalse()
+    public async Task Single_ShouldReturnFalse()
     {
         var e = await _sut.ComplexEntity
             .Where(it => it.Id < 0)

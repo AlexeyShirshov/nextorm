@@ -21,7 +21,7 @@ public class SqlCommandTests
     }
 
     [Fact]
-    public async void SelectEntity_ShouldReturnData()
+    public async Task SelectEntity_ShouldReturnData()
     {
         long idx = 0;
         await foreach (var row in _sut.SimpleEntity.Select(entity => new { Id = (long)entity.Id }))
@@ -32,7 +32,7 @@ public class SqlCommandTests
         }
     }
     [Fact]
-    public async void SelectEntityToList_ShouldReturnData()
+    public async Task SelectEntityToList_ShouldReturnData()
     {
         (await _sut.SimpleEntity.Select(entity => new { Id = (long)entity.Id }).CountAsync()).Should().Be(10);
     }
@@ -48,7 +48,7 @@ public class SqlCommandTests
         }
     }
     [Fact]
-    public async void SelectTable_ShouldReturnData()
+    public async Task SelectTable_ShouldReturnData()
     {
         await foreach (var row in _sut.From("simple_entity").Select(tbl => new { Id = tbl.Long("id") }))
         {
@@ -56,7 +56,7 @@ public class SqlCommandTests
         }
     }
     [Fact]
-    public async void SelectSubQuery_ShouldReturnData()
+    public async Task SelectSubQuery_ShouldReturnData()
     {
         await foreach (var row in _sut.From(_sut.From("simple_entity").Select(tbl => new { Id = tbl.Long("id") })).Select(subQuery => new { subQuery.Id }))
         {
@@ -84,7 +84,7 @@ public class SqlCommandTests
         _logger.LogInformation("Loop cancelled");
     }
     [Fact]
-    public async void SelectEntityIntoDTO_ShouldReturnData()
+    public async Task SelectEntityIntoDTO_ShouldReturnData()
     {
         long idx = 0;
         await foreach (var row in _sut.SimpleEntity.Select(entity => new SimpleEntityDTO(entity.Id)))
@@ -95,7 +95,7 @@ public class SqlCommandTests
         }
     }
     [Fact]
-    public async void SelectTableIntoDTO_ShouldReturnData()
+    public async Task SelectTableIntoDTO_ShouldReturnData()
     {
         await foreach (var row in _sut.From("simple_entity").Select(tbl => new SimpleEntityDTO(tbl.Long("id"))))
         {
@@ -103,7 +103,7 @@ public class SqlCommandTests
         }
     }
     [Fact]
-    public async void SelectEntityIntoTuple_ShouldReturnData()
+    public async Task SelectEntityIntoTuple_ShouldReturnData()
     {
         await foreach (var row in _sut.From("simple_entity").Select(tbl => new Tuple<long>(tbl.Long("id"))))
         {
@@ -111,7 +111,7 @@ public class SqlCommandTests
         }
     }
     [Fact]
-    public async void SelectEntityIntoRecord_ShouldReturnData()
+    public async Task SelectEntityIntoRecord_ShouldReturnData()
     {
         await foreach (var row in _sut.From("simple_entity").Select(tbl => new SimpleEntityRecord(tbl.Long("id"))))
         {
@@ -119,7 +119,7 @@ public class SqlCommandTests
         }
     }
     [Fact]
-    public async void SelectNestedEntityIntoRecord_ShouldReturnData()
+    public async Task SelectNestedEntityIntoRecord_ShouldReturnData()
     {
         var nested = _sut.From("simple_entity").Select(tbl => new SimpleEntityRecord(tbl.Long("id")));
         await foreach (var row in _sut.From(nested).Select(rec => new { rec.Id }))
@@ -186,7 +186,7 @@ public class SqlCommandTests
         }
     }
     [Fact]
-    public async void SelectEntity_WhenFilterById_ShouldReturnFilteredData()
+    public async Task SelectEntity_WhenFilterById_ShouldReturnFilteredData()
     {
         long idx = 0;
         await foreach (var row in _sut.SimpleEntity
@@ -199,7 +199,7 @@ public class SqlCommandTests
         idx.Should().Be(1);
     }
     [Fact]
-    public async void SelectEntity_WhenFilterByIdNeg_ShouldReturnFilteredData()
+    public async Task SelectEntity_WhenFilterByIdNeg_ShouldReturnFilteredData()
     {
         long idx = 0;
         await foreach (var row in _sut.SimpleEntity
@@ -211,7 +211,7 @@ public class SqlCommandTests
         idx.Should().Be(9);
     }
     [Fact]
-    public async void SelectEntity_WhenFilterByIdGt_ShouldReturnFilteredData()
+    public async Task SelectEntity_WhenFilterByIdGt_ShouldReturnFilteredData()
     {
         long idx = 0;
         await foreach (var row in _sut.SimpleEntity
@@ -223,7 +223,7 @@ public class SqlCommandTests
         idx.Should().Be(9);
     }
     [Fact]
-    public async void SelectEntity_WhenFilterByIdGte_ShouldReturnFilteredData()
+    public async Task SelectEntity_WhenFilterByIdGte_ShouldReturnFilteredData()
     {
         long idx = 0;
         await foreach (var row in _sut.SimpleEntity
@@ -235,7 +235,7 @@ public class SqlCommandTests
         idx.Should().Be(2);
     }
     [Fact]
-    public async void SelectEntity_WhenFilterByIdLt_ShouldReturnFilteredData()
+    public async Task SelectEntity_WhenFilterByIdLt_ShouldReturnFilteredData()
     {
         var r = await _sut.SimpleEntity
             .Where(entity => entity.Id < 1)
@@ -244,7 +244,7 @@ public class SqlCommandTests
         r.Should().BeFalse();
     }
     [Fact]
-    public async void SelectEntity_WhenFilterByIdLte_ShouldReturnFilteredData()
+    public async Task SelectEntity_WhenFilterByIdLte_ShouldReturnFilteredData()
     {
         var row = await _sut.SimpleEntity
             .Where(entity => entity.Id <= 1)
@@ -255,7 +255,7 @@ public class SqlCommandTests
     }
     [InlineData(1)]
     [Theory]
-    public async void SelectEntityParam_WhenFilterById_ShouldReturnFilteredData(long id)
+    public async Task SelectEntityParam_WhenFilterById_ShouldReturnFilteredData(long id)
     {
         var row = await _sut.SimpleEntity
             .Where(entity => entity.Id == id)
@@ -267,7 +267,7 @@ public class SqlCommandTests
     [InlineData("dadfasd")]
     [InlineData(null)]
     [Theory]
-    public async void ComplexEntityParam_WhenFilterByString_ShouldReturnFilteredData(string str)
+    public async Task ComplexEntityParam_WhenFilterByString_ShouldReturnFilteredData(string str)
     {
         await foreach (var row in _sut.ComplexEntity
             .Where(entity => entity.String == str)
@@ -281,7 +281,7 @@ public class SqlCommandTests
 
     }
     [Fact]
-    public async void SelectEntityParam2_WhenFilterById_ShouldReturnFilteredData()
+    public async Task SelectEntityParam2_WhenFilterById_ShouldReturnFilteredData()
     {
         var e = new cls1(1);
 
@@ -294,7 +294,7 @@ public class SqlCommandTests
         row.Id.Should().Be(1);
     }
     [Fact]
-    public async void SelectTableWithWhere_ShouldReturnData()
+    public async Task SelectTableWithWhere_ShouldReturnData()
     {
         var row = await _sut.From("simple_entity")
             .Where(tbl => tbl.Long("id") == 1)
@@ -305,7 +305,7 @@ public class SqlCommandTests
         row.Id.Should().Be(1);
     }
     [Fact]
-    public async void SelectTableWithWhereCalc_ShouldReturnData()
+    public async Task SelectTableWithWhereCalc_ShouldReturnData()
     {
         var row = await _sut.From("simple_entity")
             .Where(tbl => tbl.Long("id") + 2 == 1)
@@ -314,7 +314,7 @@ public class SqlCommandTests
         row.Should().BeNull();
     }
     [Fact]
-    public async void SelectEntityAsClass_ShouldReturnData()
+    public async Task SelectEntityAsClass_ShouldReturnData()
     {
         long idx = 0;
         await foreach (var row in _sut.SimpleEntityAsClass)
@@ -325,7 +325,7 @@ public class SqlCommandTests
         }
     }
     [Fact]
-    public async void SelectSubQueryWhere_ShouldReturnData()
+    public async Task SelectSubQueryWhere_ShouldReturnData()
     {
         var idx = 0;
         await foreach (var row in _sut.From(_sut.SimpleEntity.Where(it => it.Id > 8)).Select(it => new { it.Id }))

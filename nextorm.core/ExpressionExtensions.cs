@@ -71,3 +71,39 @@ public class TwoTypeExpressionVisitor<T1, T2> : ExpressionVisitor
         return base.Visit(node);
     }
 }
+public class ReplaceConstantsExpressionVisitor : ExpressionVisitor
+{
+    private readonly List<(ParameterExpression, object)> _params = new();
+    private readonly object[]? _replaceParams;
+
+    public List<(ParameterExpression, object)> Params => _params;
+    public ReplaceConstantsExpressionVisitor(params object[]? @params)
+    {
+        _replaceParams = @params;
+    }
+    protected override Expression VisitConstant(ConstantExpression node)
+    {
+        return GetConstantParameter(node);
+    }
+    protected override Expression VisitParameter(ParameterExpression node)
+    {
+        if (_replaceParams is not null)
+        {
+            foreach (var param in _replaceParams)
+            {
+                if (param.GetType() == node.Type || param.GetType().IsAssignableFrom(node.Type) || param.GetType().IsAssignableTo(node.Type))
+                {
+                    _params.Add((node, param));
+                    return node;
+                }
+            }
+        }
+        return base.VisitParameter(node);
+    }
+    private ParameterExpression GetConstantParameter(ConstantExpression node)
+    {
+        var p = Expression.Parameter(node.Type);
+        _params.Add((p, node.Value));
+        return p;
+    }
+}

@@ -29,4 +29,21 @@ public static class TypeExtensions
         }
         return false;
     }
+    public static bool Similar(this Type x, Type y)
+    {
+        if (y is null) return false;
+
+        if (x == y
+        || x.IsAssignableFrom(y)
+        || x.IsAssignableTo(y))
+            return true;
+
+        if (x.IsGenericType && x.GetGenericTypeDefinition() == typeof(Nullable<>) && x.GenericTypeArguments[0].Similar(y))
+            return true;
+
+        if (y.IsGenericType && y.GetGenericTypeDefinition() == typeof(Nullable<>) && y.GenericTypeArguments[0].Similar(x))
+            return true;
+
+        return false;
+    }
 }
