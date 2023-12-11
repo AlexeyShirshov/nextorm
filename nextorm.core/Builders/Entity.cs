@@ -1,13 +1,19 @@
+using Microsoft.Extensions.Logging;
 using System.Collections.Concurrent;
 using System.Linq.Expressions;
-using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
-
-public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
+public class BaseEntity
+{
+    protected BaseEntity()
+    {
+    }
+    protected static readonly IDictionary<IDataContext, Lazy<QueryCommand<bool>>> _anyCommandCache = new ConcurrentDictionary<IDataContext, Lazy<QueryCommand<bool>>>();
+}
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Minor Code Smell", "S2292:Trivial properties should be auto-implemented", Justification = "<Pending>")]
+public class Entity<TEntity> : BaseEntity, IAsyncEnumerable<TEntity>, ICloneable
 {
     #region Fields
-    private static readonly IDictionary<IDataContext, Lazy<QueryCommand<bool>>> _anyCommandCache = new ConcurrentDictionary<IDataContext, Lazy<QueryCommand<bool>>>();
     //private IPayloadManager _payloadMgr = new FastPayloadManager(new Dictionary<Type, object?>());
     private readonly IDataContext _dataProvider;
     private QueryCommand? _query;
@@ -188,14 +194,18 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
         var cmd = ToCommand();
         cmd.Paging.Limit = 1;
         cmd.SingleRow = true;
+#pragma warning disable CS8619 // Nullability of reference types in value doesn't match target type.
         return cmd;
+#pragma warning restore CS8619 // Nullability of reference types in value doesn't match target type.
     }
     public QueryCommand<TResult?> FirstOrFirstOrDefault<TResult>(Expression<Func<TEntity, TResult>> exp)
     {
         var cmd = Select(exp);
         cmd.Paging.Limit = 1;
         cmd.SingleRow = true;
+#pragma warning disable CS8619 // Nullability of reference types in value doesn't match target type.
         return cmd;
+#pragma warning restore CS8619 // Nullability of reference types in value doesn't match target type.
     }
     public TEntity? FirstOrDefault(params object[] @params)
     {
@@ -219,7 +229,9 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
     {
         var cmd = Select(exp);
         cmd.Paging.Limit = 2;
+#pragma warning disable CS8619 // Nullability of reference types in value doesn't match target type.
         return cmd;
+#pragma warning restore CS8619 // Nullability of reference types in value doesn't match target type.
     }
     public QueryCommand<TEntity> SingleOrSingleOrDefault()
     {

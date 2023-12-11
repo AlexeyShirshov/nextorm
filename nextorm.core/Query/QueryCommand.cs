@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
 
-public class QueryCommand : /*IPayloadManager,*/ ISourceProvider, IParamProvider, IQueryProvider, ICloneable
+public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
 {
     private List<QueryCommand>? _referencedQueries;
     private readonly List<JoinExpression> _joins;

@@ -1,8 +1,8 @@
 #define PARAM_CONDITION
+using Microsoft.Extensions.Logging;
 using System.Collections.Concurrent;
 using System.Linq.Expressions;
 using System.Reflection;
-using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
 
@@ -550,7 +550,7 @@ public partial class InMemoryContext : IDataContext
             {
                 var corVisitor = new CorrelatedQueryExpressionVisitor(this, queryCommand, typeof(TEntity));
                 var newExp = corVisitor.Visit(queryCommand.SelectList![0].Expression);
-                lambda = (Expression<Func<TEntity, TResult>>)newExp;
+                lambda = (Expression<Func<TEntity, TResult>>)newExp!;
             }
             else
             {

@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.ObjectPool;
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Data;
@@ -5,8 +7,6 @@ using System.Data.Common;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.ObjectPool;
 
 
 namespace nextorm.core;
@@ -99,7 +99,7 @@ public partial class DbContext : IDataContext
 
     private DbCompiledQuery<TResult> GetCompiledQuery<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken, out DbConnection conn, out DbCommand sqlCommand)
     {
-        var compiledQuery = queryCommand.GetCompiledQuery() ?? CreateCompiledQuery(queryCommand, false, true, cancellationToken);
+        var compiledQuery = queryCommand.GetCompiledQuery() ?? CreateCompiledQuery(queryCommand, false, true);
 
 #if DEBUG
         if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Getting connection");
@@ -130,8 +130,7 @@ public partial class DbContext : IDataContext
         return compiledQuery;
     }
 
-    private DbCompiledQuery<TResult> CreateCompiledQuery<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, CancellationToken cancellationToken,
-        Func<(string, List<Param>)>? makeSelect = null)
+    private DbCompiledQuery<TResult> CreateCompiledQuery<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, Func<(string, List<Param>)>? makeSelect = null)
     {
         QueryPlan? queryPlan = null;
         object? planCache = null;
@@ -654,14 +653,14 @@ public partial class DbContext : IDataContext
             }
         }
 
-        cmd._compiledQuery = CreateCompiledQuery(cmd, !nonStreamCalls, storeInCache, cancellationToken, () => (sql, ps));
+        cmd._compiledQuery = CreateCompiledQuery(cmd, !nonStreamCalls, storeInCache, () => (sql, ps));
     }
     public void Compile<TResult>(QueryCommand<TResult> cmd, bool nonStreamCalls, bool storeInCache, CancellationToken cancellationToken)
     {
         if (!cmd.IsPrepared)
             cmd.PrepareCommand(!storeInCache, cancellationToken);
 
-        cmd._compiledQuery = CreateCompiledQuery(cmd, !nonStreamCalls, storeInCache, cancellationToken);
+        cmd._compiledQuery = CreateCompiledQuery(cmd, !nonStreamCalls, storeInCache);
     }
     protected virtual void Dispose(bool disposing)
     {
@@ -703,7 +702,7 @@ public partial class DbContext : IDataContext
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
 
-        var compiledQuery = queryCommand.GetCompiledQuery() ?? CreateCompiledQuery(queryCommand, true, true, CancellationToken.None);
+        var compiledQuery = queryCommand.GetCompiledQuery() ?? CreateCompiledQuery(queryCommand, true, true);
         var sqlEnumerator = compiledQuery.Enumerator!;
         sqlEnumerator.InitEnumerator(@params, cancellationToken);
         return sqlEnumerator;
@@ -712,7 +711,7 @@ public partial class DbContext : IDataContext
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
 
-        var compiledQuery = queryCommand.GetCompiledQuery() ?? CreateCompiledQuery(queryCommand, true, true, CancellationToken.None);
+        var compiledQuery = queryCommand.GetCompiledQuery() ?? CreateCompiledQuery(queryCommand, true, true);
 
         var sqlEnumerator = compiledQuery.Enumerator!;
         await sqlEnumerator.InitReaderAsync(@params, cancellationToken).ConfigureAwait(false);
@@ -837,7 +836,7 @@ public partial class DbContext : IDataContext
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
 
-        var compiledQuery = queryCommand.GetCompiledQuery() ?? CreateCompiledQuery(queryCommand, true, true, CancellationToken.None);
+        var compiledQuery = queryCommand.GetCompiledQuery() ?? CreateCompiledQuery(queryCommand, true, true);
 
         var sqlEnumerator = compiledQuery.Enumerator!;
         sqlEnumerator.InitReader(@params);

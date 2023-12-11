@@ -5,7 +5,7 @@ namespace nextorm.core;
 public class EntityP2<T1, T2> : Entity<Projection<T1, T2>>
 {
     public JoinExpression JoinCondition { get; set; }
-    public Entity<T1> BaseBuilder { get; init; }
+    public Entity<T1>? BaseBuilder { get; init; }
     public EntityP2(IDataContext dataProvider, JoinExpression join) : base(dataProvider)
     {
         JoinCondition = join;
@@ -24,7 +24,7 @@ public class EntityP2<T1, T2> : Entity<Projection<T1, T2>>
     {
         cmd.Joins.Add(JoinCondition);
         base.OnCommandCreated(cmd);
-        BaseBuilder.RaiseCommandCreated(cmd);
+        BaseBuilder!.RaiseCommandCreated(cmd);
     }
     protected override object CloneImp()
     {
@@ -42,7 +42,7 @@ public class EntityP2<T1, T2> : Entity<Projection<T1, T2>>
 public class EntityP3<T1, T2, T3> : Entity<Projection<T1, T2, T3>>
 {
     public List<JoinExpression> Joins { get; set; } = new();
-    public Entity<T1> BaseBuilder { get; init; }
+    public Entity<T1>? BaseBuilder { get; init; }
     // public CommandBuilder<Projection<TEntity, TJoinEntity>> Join<TJoinEntity>(CommandBuilder<TJoinEntity> joinBuilder, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
     // {
 
@@ -54,6 +54,6 @@ public class EntityP3<T1, T2, T3> : Entity<Projection<T1, T2, T3>>
     {
         cmd.Joins.AddRange(Joins);
         base.OnCommandCreated(cmd);
-        BaseBuilder.RaiseCommandCreated(cmd);
+        BaseBuilder!.RaiseCommandCreated(cmd);
     }
 }
