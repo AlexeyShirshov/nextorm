@@ -11,7 +11,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "nextorm.sqlite.tests", "nex
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "nextorm.sqlite", "nextorm.sqlite\nextorm.sqlite.csproj", "{938E3D3C-3D1E-493E-8BEF-2F2C08CF0250}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "nextorm.core.benchmark", "nextorm.core.benchmark\nextorm.core.benchmark.csproj", "{9492E454-04AE-48FD-A3F6-13F6EC1615A1}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "nextorm.benchmark", "nextorm.core.benchmark\nextorm.benchmark.csproj", "{9492E454-04AE-48FD-A3F6-13F6EC1615A1}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "nextorm.core.sourcegenerator", "nextorm.core.sourcegenerator\nextorm.core.sourcegenerator.csproj", "{A0490BBD-6EE6-4A1A-8F0D-51E940B54E2A}"
 EndProject
@@ -19,9 +19,6 @@ Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
 		Release|Any CPU = Release|Any CPU
-	EndGlobalSection
-	GlobalSection(SolutionProperties) = preSolution
-		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{60E425BA-4F2A-492B-B356-3147B530B92F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
@@ -48,5 +45,8 @@ Global
 		{A0490BBD-6EE6-4A1A-8F0D-51E940B54E2A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A0490BBD-6EE6-4A1A-8F0D-51E940B54E2A}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A0490BBD-6EE6-4A1A-8F0D-51E940B54E2A}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
 	EndGlobalSection
 EndGlobal

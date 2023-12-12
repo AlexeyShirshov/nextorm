@@ -11,14 +11,18 @@ public class ExpressionKey
 {
     private int? _hash;
     private readonly Expression _exp;
-    private readonly ExpressionPlanEqualityComparer _comparer;
+    private readonly IQueryProvider _queryProvider;
+
+    //private readonly ExpressionPlanEqualityComparer _comparer;
 
     public ExpressionKey(Expression exp, IDictionary<ExpressionKey, Delegate> cache, IQueryProvider queryProvider)
     {
         _exp = exp;
-        _comparer = new ExpressionPlanEqualityComparer(cache, queryProvider);
+        _queryProvider = queryProvider;
+        //_comparer = new ExpressionPlanEqualityComparer(cache, queryProvider);
     }
-    public override int GetHashCode() => _hash ??= _comparer.GetHashCode(_exp);
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Minor Bug", "S2328:\"GetHashCode\" should not reference mutable fields", Justification = "<Pending>")]
+    public override int GetHashCode() => _hash ??= _queryProvider.GetExpressionPlanEqualityComparer().GetHashCode(_exp);
     public override bool Equals(object? obj)
     {
         return Equals(obj as ExpressionKey);
@@ -26,7 +30,7 @@ public class ExpressionKey
     public bool Equals(ExpressionKey? obj)
     {
         if (obj is null) return false;
-        return _comparer.Equals(_exp, obj._exp);
+        return _queryProvider.GetExpressionPlanEqualityComparer().Equals(_exp, obj._exp);
     }
     //public static implicit operator ExpressionKey(Expression exp) => new ExpressionKey(exp);
 }

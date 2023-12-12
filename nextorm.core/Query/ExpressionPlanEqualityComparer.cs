@@ -9,7 +9,7 @@ namespace nextorm.core;
 public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
 {
     private readonly static IDictionary<QueryCommandKey, Func<object?, QueryCommand>> _cmdCache = new ConcurrentDictionary<QueryCommandKey, Func<object?, QueryCommand>>();
-    private readonly IDictionary<ExpressionKey, Delegate> _cache;
+    //private readonly IDictionary<ExpressionKey, Delegate> _cache;
     private readonly IQueryProvider _queryProvider;
     private readonly ILogger? _logger;
 
@@ -23,7 +23,7 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
     }
     public ExpressionPlanEqualityComparer(IDictionary<ExpressionKey, Delegate>? cache, IQueryProvider queryProvider, ILogger? logger)
     {
-        _cache = cache ?? new ExpressionCache<Delegate>();
+        //_cache = cache ?? new ExpressionCache<Delegate>();
         _queryProvider = queryProvider;
         _logger = logger;
     }

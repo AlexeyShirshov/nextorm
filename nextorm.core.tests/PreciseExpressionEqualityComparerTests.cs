@@ -7,7 +7,7 @@ public class PreciseExpressionEqualityComparerTests
 
     public PreciseExpressionEqualityComparerTests()
     {
-        _sut = new PreciseExpressionEqualityComparer(null, null);
+        _sut = new PreciseExpressionEqualityComparer(null, new QueryProvider());
 
     }
     [Fact]
@@ -51,4 +51,26 @@ public class PreciseExpressionEqualityComparerTests
 
         _sut.Equals(exp1, exp2).Should().BeFalse();
     }
+}
+
+class QueryProvider : IQueryProvider
+{
+    public IReadOnlyList<QueryCommand> ReferencedQueries => throw new NotImplementedException();
+
+    public int AddCommand(QueryCommand cmd)
+    {
+        throw new NotImplementedException();
+    }
+
+    public ExpressionPlanEqualityComparer GetExpressionPlanEqualityComparer() => new(null, this);
+
+    public FromExpressionPlanEqualityComparer GetFromExpressionPlanEqualityComparer() => new(null, this);
+
+    public JoinExpressionPlanEqualityComparer GetJoinExpressionPlanEqualityComparer() => new(null, this);
+
+    public PreciseExpressionEqualityComparer GetPreciseExpressionEqualityComparer() => new(null, this);
+
+    public QueryPlanEqualityComparer GetQueryPlanEqualityComparer() => new(null, this);
+
+    public SelectExpressionPlanEqualityComparer GetSelectExpressionPlanEqualityComparer() => new(null, this);
 }

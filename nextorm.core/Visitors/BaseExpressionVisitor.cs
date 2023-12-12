@@ -314,25 +314,25 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         string? CompileExp(Expression exp)
         {
             //if (exp.Has<ConstantExpression>(out var ce))
+            //{
+            var key = new ExpressionKey(exp, _dataProvider.ExpressionsCache, _queryProvider);
+            if (!_dataProvider.ExpressionsCache.TryGetValue(key, out var del))
             {
-                var key = new ExpressionKey(exp, _dataProvider.ExpressionsCache, _queryProvider);
-                if (!_dataProvider.ExpressionsCache.TryGetValue(key, out var del))
-                {
-                    //if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Select expression miss");
-                    //var p = Expression.Parameter(ce!.Type);
-                    //var rv = new ReplaceConstantExpressionVisitor(p);
-                    //var body = rv.Visit(exp);
-                    del = Expression.Lambda<Func<string>>(exp).Compile();
-                    _dataProvider.ExpressionsCache[key] = del;
+                //if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Select expression miss");
+                //var p = Expression.Parameter(ce!.Type);
+                //var rv = new ReplaceConstantExpressionVisitor(p);
+                //var body = rv.Visit(exp);
+                del = Expression.Lambda<Func<string>>(exp).Compile();
+                _dataProvider.ExpressionsCache[key] = del;
 
-                    if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false)
-                    {
-                        _dataProvider.Logger.LogTrace("Select expression miss. hascode: {hash}, value: {value}", key.GetHashCode(), ((Func<string>)del)());
-                    }
-                    else if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Select expression miss");
+                if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false)
+                {
+                    _dataProvider.Logger.LogTrace("Select expression miss. hascode: {hash}, value: {value}", key.GetHashCode(), ((Func<string>)del)());
                 }
-                return ((Func<string>)del)();
+                else if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Select expression miss");
             }
+            return ((Func<string>)del)();
+            //}
 
             throw new NotImplementedException();
         }
@@ -397,14 +397,14 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 _builder!.Append("null");
             else if (t == typeof(string) || t == typeof(Guid))
             {
-                _builder!.Append('\'').Append(v?.ToString()).Append('\'');
+                _builder!.Append('\'').Append(v.ToString()).Append('\'');
             }
             else if (t.IsPrimitive)
             {
                 if (t == typeof(bool))
                     _builder!.Append(_dataProvider.MakeBool((bool)v));
                 else
-                    _builder!.Append(v?.ToString());
+                    _builder!.Append(v.ToString());
             }
             else
                 return false;
@@ -571,9 +571,9 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 
                     _dataProvider.ExpressionsCache[key] = del;
 
-                    if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false)
+                    if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false)
                     {
-                        _dataProvider.Logger.LogDebug("Expression cache miss on visit where. hascode: {hash}, value: {value}", key.GetHashCode(), ((Func<object?, object>)del)(visitor.Target2.Value));
+                        _dataProvider.Logger.LogTrace("Expression cache miss on visit where. hascode: {hash}, value: {value}", key.GetHashCode(), ((Func<object?, object>)del)(visitor.Target2.Value));
                     }
                     else if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Expression cache miss on visit where");
                 }
@@ -805,14 +805,6 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             _disposedValue = true;
         }
     }
-
-    // // TODO: override finalizer only if 'Dispose(bool disposing)' has code to free unmanaged resources
-    // ~BaseExpressionVisitor()
-    // {
-    //     // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
-    //     Dispose(disposing: false);
-    // }
-
     public void Dispose()
     {
         // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method

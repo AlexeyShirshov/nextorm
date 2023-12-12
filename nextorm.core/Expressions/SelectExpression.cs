@@ -5,27 +5,28 @@ using OneOf;
 
 namespace nextorm.core;
 
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE1006:Naming Styles", Justification = "<Pending>")]
 public class SelectExpression
 {
     private readonly Type _realType;
-    private readonly bool _nullable;
+    //private readonly bool _nullable;
+    public readonly bool Nullable;
     public int Index { get; set; }
     public string? PropertyName { get; set; }
     public Expression? Expression { get; set; }
     public Type PropertyType { get; set; }
-    public bool Nullable { get; }
     internal PropertyInfo? PropertyInfo { get; set; }
     // public List<QueryCommand>? ReferencedQueries { get; set; }
-    private readonly IDictionary<ExpressionKey, Delegate> _expCache;
+    //private readonly IDictionary<ExpressionKey, Delegate> _expCache;
     private readonly IQueryProvider _queryProvider;
 
     public SelectExpression(Type propertyType, IDictionary<ExpressionKey, Delegate> expCache, IQueryProvider queryProvider)
     {
         PropertyType = propertyType;
-        _nullable = PropertyType.IsGenericType && PropertyType.GetGenericTypeDefinition() == typeof(Nullable<>);
-        Nullable = PropertyType.IsClass || _nullable;
+        var nullable = PropertyType.IsGenericType && PropertyType.GetGenericTypeDefinition() == typeof(Nullable<>);
+        Nullable = PropertyType.IsClass || nullable;
 
-        if (_nullable)
+        if (nullable)
         {
             _realType = System.Nullable.GetUnderlyingType(PropertyType)!;
         }
@@ -33,7 +34,7 @@ public class SelectExpression
         {
             _realType = PropertyType;
         }
-        _expCache = expCache;
+        //_expCache = expCache;
         _queryProvider = queryProvider;
     }
     //public readonly bool IsEmpty => _realType is null;
@@ -111,8 +112,7 @@ public class SelectExpression
 
             hash.Add(PropertyName);
 
-            var @this = this;
-            hash.Add(Expression, new PreciseExpressionEqualityComparer(@this._expCache, @this._queryProvider));
+            hash.Add(Expression, _queryProvider.GetPreciseExpressionEqualityComparer());
 
             // if (ReferencedQueries is not null)
             //     foreach (var cmd in ReferencedQueries)
@@ -137,8 +137,7 @@ public class SelectExpression
 
         if (PropertyName != exp.PropertyName) return false;
 
-        var @this = this;
-        if (!new PreciseExpressionEqualityComparer(@this._expCache, @this._queryProvider).Equals(Expression, exp.Expression))
+        if (!_queryProvider.GetPreciseExpressionEqualityComparer().Equals(Expression, exp.Expression))
             return false;
 
         // if (ReferencedQueries is null && exp.ReferencedQueries is not null) return false;

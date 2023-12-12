@@ -120,7 +120,7 @@ public class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TResult>, I
     IEnumerator IEnumerable.GetEnumerator() => this;
 }
 
-internal interface IEnumeratorInit<TEntity>
+internal interface IEnumeratorInit<in TEntity>
 {
 #if PARAM_CONDITION
     void Init(IEnumerable<TEntity> data, object[]? @params);

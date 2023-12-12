@@ -36,6 +36,11 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     public Paging Paging;
     internal Expression? PreparedCondition;
     private QueryPlanEqualityComparer? _queryPlanComparer;
+    private ExpressionPlanEqualityComparer? _expressionPlanComparer;
+    private SelectExpressionPlanEqualityComparer? _selectExpressionPlanComparer;
+    private FromExpressionPlanEqualityComparer? _fromExpressionPlanComparer;
+    private JoinExpressionPlanEqualityComparer? _joinExpressionPlanComparer;
+    private PreciseExpressionEqualityComparer? _preciseExpressionComparer;
     protected readonly List<Sorting>? _sorting;
 
     //protected ArrayList _params = new();
@@ -139,7 +144,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
 
     private (List<SelectExpression>?, int, int) PrepareColumns(bool noHash, Type? srcType, CancellationToken cancellationToken)
     {
-        SelectExpressionPlanEqualityComparer? comparer = null;
+        //SelectExpressionPlanEqualityComparer? comparer = null;
         var selectList = _selectList;
         var columnsHash = 7;
         var columnsPlanHash = 7;
@@ -188,8 +193,8 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
                         {
                             columnsHash = columnsHash * 13 + selExp.GetHashCode();
 
-                            comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
-                            columnsPlanHash = columnsPlanHash * 13 + comparer.GetHashCode(selExp);
+                            //comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
+                            columnsPlanHash = columnsPlanHash * 13 + GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
                         }
                 }
 
@@ -219,8 +224,8 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
                     {
 
                         columnsHash = columnsHash * 13 + selExp.GetHashCode();
-                        comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
-                        columnsPlanHash = columnsPlanHash * 13 + comparer.GetHashCode(selExp);
+                        //comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
+                        columnsPlanHash = columnsPlanHash * 13 + GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
                     }
                 // }
             }
@@ -254,8 +259,8 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
                         if (!_dontCache && !noHash) unchecked
                             {
                                 columnsHash = columnsHash * 13 + selExp.GetHashCode();
-                                comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
-                                columnsPlanHash = columnsPlanHash * 13 + comparer.GetHashCode(selExp);
+                                //comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
+                                columnsPlanHash = columnsPlanHash * 13 + GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
                             }
                     }
                 }
@@ -345,7 +350,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     }
     private (int, int) PrepareJoin(bool noHash, CancellationToken cancellationToken)
     {
-        JoinExpressionPlanEqualityComparer? comparer = null;
+        //JoinExpressionPlanEqualityComparer? comparer = null;
         var joinHash = 7;
         var joinPlanHash = 7;
         if (Joins.Count != 0)
@@ -359,9 +364,9 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
 
                 if (!_dontCache && !noHash) unchecked
                     {
-                        comparer ??= new JoinExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
+                        //comparer ??= new JoinExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
                         joinHash = joinHash * 13 + join.GetHashCode();
-                        joinPlanHash = joinPlanHash * 13 + comparer.GetHashCode(join);
+                        joinPlanHash = joinPlanHash * 13 + GetJoinExpressionPlanEqualityComparer().GetHashCode(join);
                     }
             }
         }
@@ -370,8 +375,8 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     }
     private (int, int) PrepareSorting(bool noHash, CancellationToken cancellationToken)
     {
-        PreciseExpressionEqualityComparer? comp = null;
-        ExpressionPlanEqualityComparer? compPlan = null;
+        //PreciseExpressionEqualityComparer? comp = null;
+        //ExpressionPlanEqualityComparer? compPlan = null;
 
         var sortingHash = 7;
         var sortingPlanHash = 7;
@@ -391,11 +396,11 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
                 if (!_dontCache && !noHash) unchecked
                     {
                         sortingHash = sortingHash * 13 + (int)sort.Direction;
-                        comp ??= new PreciseExpressionEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger);
-                        sortingHash = sortingHash * 13 + comp.GetHashCode(sort.PreparedExpression);
+                        //comp ??= new PreciseExpressionEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger);
+                        sortingHash = sortingHash * 13 + GetPreciseExpressionEqualityComparer().GetHashCode(sort.PreparedExpression);
 
-                        compPlan ??= new ExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger);
-                        sortingPlanHash = sortingPlanHash * 13 + compPlan.GetHashCode(sort.PreparedExpression);
+                        //compPlan ??= new ExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger);
+                        sortingPlanHash = sortingPlanHash * 13 + GetExpressionPlanEqualityComparer().GetHashCode(sort.PreparedExpression);
                     }
             }
         }
@@ -404,8 +409,8 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     }
     private (int, int) PrepareWhere(bool noHash, CancellationToken cancellationToken)
     {
-        PreciseExpressionEqualityComparer? comp = null;
-        ExpressionPlanEqualityComparer? compPlan = null;
+        //PreciseExpressionEqualityComparer? comp = null;
+        //ExpressionPlanEqualityComparer? compPlan = null;
 
         var whereHash = 7;
         var wherePlanHash = 7;
@@ -416,11 +421,11 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
 
             if (!_dontCache && !noHash) unchecked
                 {
-                    comp ??= new PreciseExpressionEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger);
-                    whereHash = whereHash * 13 + comp.GetHashCode(PreparedCondition);
+                    //comp ??= new PreciseExpressionEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger);
+                    whereHash = whereHash * 13 + GetPreciseExpressionEqualityComparer().GetHashCode(PreparedCondition);
 
-                    compPlan ??= new ExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger);
-                    wherePlanHash = wherePlanHash * 13 + compPlan.GetHashCode(PreparedCondition);
+                    //compPlan ??= new ExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger);
+                    wherePlanHash = wherePlanHash * 13 + GetExpressionPlanEqualityComparer().GetHashCode(PreparedCondition);
                 }
         }
 
@@ -525,7 +530,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
 
         if (Paging.Limit != cmd.Paging.Limit || Paging.Offset != cmd.Paging.Offset) return false;
 
-        if (!new PreciseExpressionEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger).Equals(PreparedCondition, cmd.PreparedCondition)) return false;
+        if (!GetPreciseExpressionEqualityComparer().Equals(PreparedCondition, cmd.PreparedCondition)) return false;
 
         if (_selectList is null && cmd._selectList is not null) return false;
         if (_selectList is not null && cmd._selectList is null) return false;
@@ -559,7 +564,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         if (Sorting is not null && cmd.Sorting is not null)
         {
             if (Sorting.Count != cmd.Sorting.Count) return false;
-            var comp = new PreciseExpressionEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger);
+            var comp = GetPreciseExpressionEqualityComparer();
 
             for (int i = 0; i < Sorting.Count; i++)
             {
@@ -594,7 +599,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
             throw new InvalidOperationException("Different data context");
 
         _referencedQueries![idx] = cmd;
-        var comparer = new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
+        var comparer = GetSelectExpressionPlanEqualityComparer();
         ColumnsPlanHash = 7 * 13 + comparer.GetHashCode(_selectList![0]);
     }
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0028:Simplify collection initialization", Justification = "<Pending>")]
@@ -639,6 +644,16 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     }
 
     public QueryPlanEqualityComparer GetQueryPlanEqualityComparer() => _queryPlanComparer ??= new QueryPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
+
+    public ExpressionPlanEqualityComparer GetExpressionPlanEqualityComparer() => _expressionPlanComparer ??= new ExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
+
+    public SelectExpressionPlanEqualityComparer GetSelectExpressionPlanEqualityComparer() => _selectExpressionPlanComparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
+
+    public FromExpressionPlanEqualityComparer GetFromExpressionPlanEqualityComparer() => _fromExpressionPlanComparer ??= new FromExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
+
+    public JoinExpressionPlanEqualityComparer GetJoinExpressionPlanEqualityComparer() => _joinExpressionPlanComparer ??= new JoinExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
+
+    public PreciseExpressionEqualityComparer GetPreciseExpressionEqualityComparer() => _preciseExpressionComparer ??= new PreciseExpressionEqualityComparer(_dataProvider.ExpressionsCache, this);
 }
 
 public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>

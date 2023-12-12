@@ -4,11 +4,11 @@ namespace nextorm.core;
 
 public sealed class SelectExpressionPlanEqualityComparer : IEqualityComparer<SelectExpression>
 {
-    private readonly IDictionary<ExpressionKey, Delegate> _cache;
+    //private readonly IDictionary<ExpressionKey, Delegate> _cache;
     private readonly IQueryProvider _queryProvider;
-    private readonly ILogger? _logger;
-    private ExpressionPlanEqualityComparer? _expComparer;
-    private QueryPlanEqualityComparer? _cmdComparer;
+    //private readonly ILogger? _logger;
+    //private ExpressionPlanEqualityComparer? _expComparer;
+    //private QueryPlanEqualityComparer? _cmdComparer;
 
     // public PreciseExpressionEqualityComparer()
     //     : this(new ExpressionCache<Delegate>())
@@ -20,9 +20,9 @@ public sealed class SelectExpressionPlanEqualityComparer : IEqualityComparer<Sel
     }
     public SelectExpressionPlanEqualityComparer(IDictionary<ExpressionKey, Delegate>? cache, IQueryProvider queryProvider, ILogger? logger)
     {
-        _cache = cache ?? new ExpressionCache<Delegate>();
+        //_cache = cache ?? new ExpressionCache<Delegate>();
         _queryProvider = queryProvider;
-        _logger = logger;
+        //_logger = logger;
     }
     // private SelectExpressionPlanEqualityComparer() { }
     // public static SelectExpressionPlanEqualityComparer Instance => new();
@@ -37,8 +37,8 @@ public sealed class SelectExpressionPlanEqualityComparer : IEqualityComparer<Sel
 
         if (x.PropertyName != y.PropertyName) return false;
 
-        _expComparer ??= new ExpressionPlanEqualityComparer(_cache, _queryProvider);
-        if (!_expComparer.Equals(x.Expression, y.Expression))
+        //_expComparer ??= new ExpressionPlanEqualityComparer(_cache, _queryProvider);
+        if (!_queryProvider.GetExpressionPlanEqualityComparer().Equals(x.Expression, y.Expression))
             return false;
 
         return true;
@@ -58,8 +58,8 @@ public sealed class SelectExpressionPlanEqualityComparer : IEqualityComparer<Sel
 
             hash.Add(obj.PropertyName);
 
-            _expComparer ??= new ExpressionPlanEqualityComparer(_cache, _queryProvider);
-            hash.Add(obj.Expression, _expComparer);
+            //_expComparer ??= new ExpressionPlanEqualityComparer(_cache, _queryProvider);
+            hash.Add(obj.Expression, _queryProvider.GetExpressionPlanEqualityComparer());
 
             return hash.ToHashCode();
         }

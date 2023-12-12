@@ -2,7 +2,7 @@
 <html lang='en'>
 <head>
 <meta charset='utf-8' />
-<title>nextorm.core.benchmark.SqliteBenchmarkWhere-20231210-124515</title>
+<title>nextorm.core.benchmark.SqliteBenchmarkWhere-20231212-200807</title>
 
 <style type="text/css">
 	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
@@ -13,8 +13,8 @@
 </head>
 <body>
 <pre><code>
-BenchmarkDotNet v0.13.10, Windows 10 (10.0.19045.3636/22H2/2022Update)
-Intel Core i7-4500U CPU 1.80GHz (Haswell), 1 CPU, 4 logical and 2 physical cores
+BenchmarkDotNet v0.13.10, Windows 11 (10.0.22621.2715/22H2/2022Update/SunValley2)
+Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical cores
 .NET SDK 8.0.100
   [Host]   : .NET 8.0.0 (8.0.23.53103), X64 RyuJIT AVX2
   .NET 8.0 : .NET 8.0.0 (8.0.23.53103), X64 RyuJIT AVX2
@@ -25,17 +25,17 @@ Intel Core i7-4500U CPU 1.80GHz (Haswell), 1 CPU, 4 logical and 2 physical cores
 <table>
 <thead><tr><th>Method         </th><th>Categories</th><th>Mean</th><th>Ratio</th><th>Gen0</th><th>Gen1</th><th>Allocated</th><th>Alloc Ratio</th>
 </tr>
-</thead><tbody><tr><td>NextormCompiledToList</td><td>Buffered</td><td>13.21 ms</td><td>?</td><td>125.0000</td><td>62.5000</td><td>271.1 KB</td><td>?</td>
-</tr><tr><td>NextormCachedToList</td><td>Buffered</td><td>13.55 ms</td><td>?</td><td>125.0000</td><td>62.5000</td><td>276.38 KB</td><td>?</td>
-</tr><tr><td>EFCore</td><td>Buffered</td><td>20.86 ms</td><td>?</td><td>500.0000</td><td>-</td><td>1071.53 KB</td><td>?</td>
-</tr><tr><td>Dapper</td><td>Buffered</td><td>13.60 ms</td><td>?</td><td>78.1250</td><td>-</td><td>188.52 KB</td><td>?</td>
-</tr><tr><td>NextormCompiledAsync</td><td>Stream</td><td>13.47 ms</td><td>1.02</td><td>109.3750</td><td>-</td><td>253.91 KB</td><td>1.02</td>
-</tr><tr><td>NextormCompiled</td><td>Stream</td><td>13.21 ms</td><td>1.00</td><td>109.3750</td><td>-</td><td>250.01 KB</td><td>1.00</td>
-</tr><tr><td>NextormCachedParam</td><td>Stream</td><td>13.55 ms</td><td>1.03</td><td>125.0000</td><td>-</td><td>255.16 KB</td><td>1.02</td>
-</tr><tr><td>NextormCached</td><td>Stream</td><td>17.86 ms</td><td>1.35</td><td>468.7500</td><td>156.2500</td><td>1015.52 KB</td><td>4.06</td>
-</tr><tr><td>EFCoreStream</td><td>Stream</td><td>20.73 ms</td><td>1.57</td><td>500.0000</td><td>-</td><td>1060.82 KB</td><td>4.24</td>
-</tr><tr><td>EFCoreCompiled</td><td>Stream</td><td>15.56 ms</td><td>1.18</td><td>250.0000</td><td>-</td><td>534.4 KB</td><td>2.14</td>
-</tr><tr><td>DapperUnbuffered</td><td>Stream</td><td>13.55 ms</td><td>1.03</td><td>93.7500</td><td>-</td><td>211.8 KB</td><td>0.85</td>
+</thead><tbody><tr><td>NextormCompiledToList</td><td>Buffered</td><td>4.091 ms</td><td>?</td><td>46.8750</td><td>-</td><td>236.39 KB</td><td>?</td>
+</tr><tr><td>NextormCachedToList</td><td>Buffered</td><td>4.545 ms</td><td>?</td><td>46.8750</td><td>-</td><td>243.02 KB</td><td>?</td>
+</tr><tr><td>EFCore</td><td>Buffered</td><td>8.957 ms</td><td>?</td><td>218.7500</td><td>31.2500</td><td>1101.17 KB</td><td>?</td>
+</tr><tr><td>Dapper</td><td>Buffered</td><td>4.312 ms</td><td>?</td><td>39.0625</td><td>-</td><td>188.52 KB</td><td>?</td>
+</tr><tr><td>NextormCompiledAsync</td><td>Stream</td><td>4.043 ms</td><td>0.98</td><td>46.8750</td><td>-</td><td>228.99 KB</td><td>1.02</td>
+</tr><tr><td>NextormCompiled</td><td>Stream</td><td>4.108 ms</td><td>1.00</td><td>46.8750</td><td>-</td><td>225.08 KB</td><td>1.00</td>
+</tr><tr><td>NextormCachedParam</td><td>Stream</td><td>4.422 ms</td><td>1.08</td><td>46.8750</td><td>-</td><td>231.94 KB</td><td>1.03</td>
+</tr><tr><td>NextormCached</td><td>Stream</td><td>6.958 ms</td><td>1.69</td><td>210.9375</td><td>203.1250</td><td>979.6 KB</td><td>4.35</td>
+</tr><tr><td>EFCoreStream</td><td>Stream</td><td>8.578 ms</td><td>2.08</td><td>218.7500</td><td>31.2500</td><td>1060.78 KB</td><td>4.71</td>
+</tr><tr><td>EFCoreCompiled</td><td>Stream</td><td>5.409 ms</td><td>1.32</td><td>109.3750</td><td>31.2500</td><td>534.38 KB</td><td>2.37</td>
+</tr><tr><td>DapperUnbuffered</td><td>Stream</td><td>4.252 ms</td><td>1.03</td><td>39.0625</td><td>-</td><td>211.8 KB</td><td>0.94</td>
 </tr></tbody></table>
 </body>
 </html>

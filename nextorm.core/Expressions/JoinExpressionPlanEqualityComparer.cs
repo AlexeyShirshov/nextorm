@@ -4,10 +4,10 @@ namespace nextorm.core;
 
 public sealed class JoinExpressionPlanEqualityComparer : IEqualityComparer<JoinExpression>
 {
-    private readonly IDictionary<ExpressionKey, Delegate> _cache;
+    //private readonly IDictionary<ExpressionKey, Delegate> _cache;
     private readonly IQueryProvider _queryProvider;
-    private readonly ILogger? _logger;
-    private ExpressionPlanEqualityComparer? _expComparer;
+    //private readonly ILogger? _logger;
+    //private ExpressionPlanEqualityComparer? _expComparer;
     //private QueryPlanEqualityComparer? _cmdComparer;
 
     // public PreciseExpressionEqualityComparer()
@@ -20,9 +20,9 @@ public sealed class JoinExpressionPlanEqualityComparer : IEqualityComparer<JoinE
     }
     public JoinExpressionPlanEqualityComparer(IDictionary<ExpressionKey, Delegate>? cache, IQueryProvider queryProvider, ILogger? logger)
     {
-        _cache = cache ?? new ExpressionCache<Delegate>();
+        //_cache = cache ?? new ExpressionCache<Delegate>();
         _queryProvider = queryProvider;
-        _logger = logger;
+        //_logger = logger;
     }
     //     private JoinExpressionPlanEqualityComparer() { }
     //     public static JoinExpressionPlanEqualityComparer Instance => new();
@@ -33,8 +33,8 @@ public sealed class JoinExpressionPlanEqualityComparer : IEqualityComparer<JoinE
 
         if (x.JoinType != y.JoinType) return false;
 
-        _expComparer ??= new ExpressionPlanEqualityComparer(_cache, _queryProvider);
-        if (!_expComparer.Equals(x.JoinCondition, y.JoinCondition)) return false;
+        //_expComparer ??= new ExpressionPlanEqualityComparer(_cache, _queryProvider);
+        if (!_queryProvider.GetExpressionPlanEqualityComparer().Equals(x.JoinCondition, y.JoinCondition)) return false;
 
         //_cmdComparer ??= new QueryPlanEqualityComparer(_cache, _queryProvider);
         if (!_queryProvider.GetQueryPlanEqualityComparer().Equals(x.Query, y.Query)) return false;
@@ -51,8 +51,8 @@ public sealed class JoinExpressionPlanEqualityComparer : IEqualityComparer<JoinE
 
             hash.Add(obj.JoinType);
 
-            _expComparer ??= new ExpressionPlanEqualityComparer(_cache, _queryProvider);
-            hash.Add(obj.JoinCondition, _expComparer);
+            //_expComparer ??= new ExpressionPlanEqualityComparer(_cache, _queryProvider);
+            hash.Add(obj.JoinCondition, _queryProvider.GetExpressionPlanEqualityComparer());
 
             if (obj.Query is not null)
             {

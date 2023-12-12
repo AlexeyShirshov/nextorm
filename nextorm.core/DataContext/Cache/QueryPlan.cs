@@ -10,6 +10,7 @@ public class QueryPlan
         QueryCommand = cmd;
         //_comparer = new QueryPlanEqualityComparer(cache, cmd);
     }
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Minor Bug", "S2328:\"GetHashCode\" should not reference mutable fields", Justification = "<Pending>")]
     public override int GetHashCode() => _hashPlan ??= QueryCommand.GetQueryPlanEqualityComparer().GetHashCode(QueryCommand);
     public override bool Equals(object? obj)
     {
