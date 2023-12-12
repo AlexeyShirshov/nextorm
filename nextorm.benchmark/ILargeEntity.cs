@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations.Schema;
+using nextorm.core;
 
-namespace nextorm.core.benchmark;
+namespace nextorm.benchmark;
 
 [SqlTable("large_table")]
 public interface ILargeEntity

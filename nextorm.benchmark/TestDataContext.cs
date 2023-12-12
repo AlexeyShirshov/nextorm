@@ -1,4 +1,6 @@
-namespace nextorm.core.benchmark;
+using nextorm.core;
+
+namespace nextorm.benchmark;
 
 public class TestDataRepository
 {

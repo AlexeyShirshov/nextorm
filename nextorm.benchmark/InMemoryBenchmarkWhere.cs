@@ -1,7 +1,8 @@
 ﻿using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Jobs;
+using nextorm.core;
 
-namespace nextorm.core.benchmark;
+namespace nextorm.benchmark;
 
 [SimpleJob(RuntimeMoniker.Net80)]
 [MemoryDiagnoser]

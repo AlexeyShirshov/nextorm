@@ -13,8 +13,9 @@ using System.Runtime.InteropServices;
 using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Columns;
 using BenchmarkDotNet.Configs;
+using nextorm.core;
 
-namespace nextorm.core.benchmark;
+namespace nextorm.benchmark;
 
 [SimpleJob(RuntimeMoniker.Net80)]
 [GroupBenchmarksBy(BenchmarkLogicalGroupRule.ByJob, BenchmarkLogicalGroupRule.ByCategory)]

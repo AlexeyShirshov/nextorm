@@ -2,7 +2,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using BenchmarkDotNet.Attributes;
 
-namespace nextorm.core.benchmark;
+namespace nextorm.benchmark;
 
 [MemoryDiagnoser]
 public class ExpressionsExperiments

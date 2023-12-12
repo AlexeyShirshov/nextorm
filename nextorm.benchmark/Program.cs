@@ -1,5 +1,5 @@
 ﻿using BenchmarkDotNet.Running;
-using nextorm.core.benchmark;
+using nextorm.benchmark;
 
 // BenchmarkRunner.Run<ExpressionsExperiments>();
 // BenchmarkRunner.Run<BenchmarkQueryCommand>();

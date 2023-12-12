@@ -6,24 +6,27 @@ using Dapper;
 using Microsoft.Extensions.Logging;
 using BenchmarkDotNet.Jobs;
 using OneOf.Types;
+using nextorm.core;
 
-namespace nextorm.core.benchmark;
+namespace nextorm.benchmark;
 
 //[SimpleJob(RuntimeMoniker.Net70, baseline: true)]
 [SimpleJob(RuntimeMoniker.Net80)]
 [MemoryDiagnoser]
 [Config(typeof(NextormConfig))]
-public class SqliteBenchmarkSingle
+public class SqliteBenchmarkFirst
 {
     private readonly TestDataRepository _ctx;
     private readonly QueryCommand<int> _cmd;
+    private readonly QueryCommand<LargeEntity?> _cmdEnt;
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
-    private readonly Func<EFDataContext, Task<int>> _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.SimpleEntities.Where(it => it.Id == 1).Select(it => it.Id).Single());
-    private readonly Func<EFDataContext, Task<int>> _efCompiledSingleOrDefault = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.SimpleEntities.Where(it => it.Id == 1).Select(it => it.Id).SingleOrDefault());
-    // private readonly Func<EFDataContext, int, Task<int>> _efCompiledFilterParam = EF.CompileAsyncQuery((EFDataContext ctx, int id) => ctx.SimpleEntities.Where(it => it.Id > id).Select(it => it.Id).Single());
+    private readonly Func<EFDataContext, Task<int>> _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.SimpleEntities.Select(it => it.Id).First());
+    private readonly Func<EFDataContext, Task<LargeEntity>> _efLargeCompiled = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.LargeEntities.First());
+    private readonly Func<EFDataContext, Task<int>> _efCompiledFirstOrDefault = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.SimpleEntities.Select(it => it.Id).FirstOrDefault());
+    // private readonly Func<EFDataContext, int, Task<int>> _efCompiledFilterParam = EF.CompileAsyncQuery((EFDataContext ctx, int id) => ctx.SimpleEntities.Where(it => it.Id > id).Select(it => it.Id).First());
     private readonly ILoggerFactory? _logFactory;
-    public SqliteBenchmarkSingle(bool withLogging = false)
+    public SqliteBenchmarkFirst(bool withLogging = false)
     {
         var builder = new DbContextBuilder();
         builder.UseSqlite(Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db"));
@@ -35,7 +38,8 @@ public class SqliteBenchmarkSingle
         }
         _ctx = new TestDataRepository(builder.CreateDbContext());
 
-        _cmd = _ctx.SimpleEntity.Where(it => it.Id == 1).SingleOrSingleOrDefault(it => it.Id).Compile(true);
+        _cmd = _ctx.SimpleEntity.FirstOrFirstOrDefault(it => it.Id).Compile(true);
+        _cmdEnt = _ctx.LargeEntity.FirstOrFirstOrDefault(it => new LargeEntity { Id = it.Id, Str = it.Str, Dt = it.Dt }).Compile(true);
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(@$"Filename={Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db")}");
@@ -51,54 +55,69 @@ public class SqliteBenchmarkSingle
         _conn = new SqliteConnection(((SqliteDbContext)_ctx.DataProvider).ConnectionString);
     }
     [Benchmark(Baseline = true)]
-    public async Task NextormSingleCompiled()
+    public async Task NextormFirstCompiled()
     {
-        await _cmd.SingleAsync();
+        await _cmd.FirstAsync();
     }
     [Benchmark()]
-    public async Task NextormSingleOrDefaultCompiled()
+    public async Task NextormLargeFirstCompiled()
     {
-        await _cmd.SingleOrDefaultAsync();
+        await _cmdEnt.FirstAsync();
     }
     [Benchmark()]
-    public async Task NextormSingleCached()
+    public async Task NextormFirstOrDefaultCompiled()
     {
-        await _ctx.SimpleEntity.Where(it => it.Id == 1).Select(it => it.Id).SingleAsync();
+        await _cmd.FirstOrDefaultAsync();
     }
     [Benchmark()]
-    public async Task NextormSingleOrDefaultCached()
+    public async Task NextormFirstCached()
     {
-        await _ctx.SimpleEntity.Where(it => it.Id == 1).Select(it => it.Id).SingleOrDefaultAsync();
+        await _ctx.SimpleEntity.Select(it => it.Id).FirstAsync();
+    }
+    [Benchmark()]
+    public async Task NextormFirstOrDefaultCached()
+    {
+        await _ctx.SimpleEntity.Select(it => it.Id).FirstOrDefaultAsync();
     }
     [Benchmark]
-    public async Task EFCoreSingle()
+    public async Task EFCoreFirst()
     {
-        await _efCtx.SimpleEntities.Where(it => it.Id == 1).Select(it => it.Id).SingleAsync();
+        await _efCtx.SimpleEntities.Select(it => it.Id).FirstAsync();
     }
     [Benchmark]
-    public async Task EFCoreSingleOrDefault()
+    public async Task EFCoreFirstOrDefault()
     {
-        await _efCtx.SimpleEntities.Where(it => it.Id == 1).Select(it => it.Id).SingleOrDefaultAsync();
+        await _efCtx.SimpleEntities.Select(it => it.Id).FirstOrDefaultAsync();
     }
     [Benchmark]
-    public async Task EFCoreSingleCompiled()
+    public async Task EFCoreFirstCompiled()
     {
         await _efCompiled(_efCtx);
     }
     [Benchmark]
-    public async Task EFCoreSingleOrDefaultCompiled()
+    public async Task EFCoreLargeFirstCompiled()
     {
-        await _efCompiledSingleOrDefault(_efCtx);
+        await _efLargeCompiled(_efCtx);
     }
     [Benchmark]
-    public async Task DapperSingle()
+    public async Task EFCoreFirstOrDefaultCompiled()
     {
-        await _conn.QuerySingleAsync<int>("select id from simple_entity where id = 1");
+        await _efCompiledFirstOrDefault(_efCtx);
     }
     [Benchmark]
-    public async Task DapperSingleOrDefault()
+    public async Task DapperFirst()
     {
-        await _conn.QuerySingleOrDefaultAsync<int?>("select id from simple_entity where id = 1");
+        await _conn.QueryFirstAsync<int>("select id from simple_entity limit 1");
+    }
+    [Benchmark]
+    public async Task DapperLargeFirst()
+    {
+        await _conn.QueryFirstAsync<LargeEntity>("select id, someString as str, dt from large_table limit 1");
+    }
+    [Benchmark]
+    public async Task DapperFirstOrDefault()
+    {
+        await _conn.QueryFirstOrDefaultAsync<int?>("select id from simple_entity limit 1");
     }
     // [Benchmark()]
     // [BenchmarkCategory("Filter")]

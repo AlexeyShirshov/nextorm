@@ -2,8 +2,10 @@ using BenchmarkDotNet.Attributes;
 using nextorm.sqlite;
 using Microsoft.EntityFrameworkCore;
 using BenchmarkDotNet.Jobs;
+using nextorm.core;
+using DbContext = nextorm.core.DbContext;
 
-namespace nextorm.core.benchmark;
+namespace nextorm.benchmark;
 
 [SimpleJob(RuntimeMoniker.Net80)]
 [MemoryDiagnoser]

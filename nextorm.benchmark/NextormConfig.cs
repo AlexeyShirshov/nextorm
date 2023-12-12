@@ -1,7 +1,7 @@
 using BenchmarkDotNet.Columns;
 using BenchmarkDotNet.Configs;
 
-namespace nextorm.core.benchmark;
+namespace nextorm.benchmark;
 
 internal class NextormConfig : ManualConfig
 {

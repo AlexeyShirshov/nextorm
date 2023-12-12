@@ -6,8 +6,9 @@ using Dapper;
 using Microsoft.Extensions.Logging;
 using BenchmarkDotNet.Jobs;
 using OneOf.Types;
+using nextorm.core;
 
-namespace nextorm.core.benchmark;
+namespace nextorm.benchmark;
 
 //[SimpleJob(RuntimeMoniker.Net70, baseline: true)]
 [SimpleJob(RuntimeMoniker.Net80)]

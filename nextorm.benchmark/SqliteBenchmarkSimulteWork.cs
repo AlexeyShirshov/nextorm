@@ -7,8 +7,9 @@ using Microsoft.Extensions.Logging;
 using TupleLargeEntity = System.Tuple<long, string?, System.DateTime?>;
 using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Columns;
+using nextorm.core;
 
-namespace nextorm.core.benchmark;
+namespace nextorm.benchmark;
 
 [SimpleJob(RuntimeMoniker.Net80)]
 [GroupBenchmarksBy(BenchmarkDotNet.Configs.BenchmarkLogicalGroupRule.ByJob, BenchmarkDotNet.Configs.BenchmarkLogicalGroupRule.ByCategory)]

@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 
-namespace nextorm.core.benchmark;
+namespace nextorm.benchmark;
 class EFDataContext : Microsoft.EntityFrameworkCore.DbContext
 {
     public EFDataContext(DbContextOptions<EFDataContext> options) : base(options)
