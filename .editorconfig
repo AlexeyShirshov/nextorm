@@ -24,3 +24,7 @@ dotnet_diagnostic.CA2254.severity = silent
 dotnet_diagnostic.S3060.severity = silent
 
 dotnet_diagnostic.S1104.severity = silent
+
+dotnet_diagnostic.S3604.severity = silent
+
+dotnet_diagnostic.S2292.severity = silent

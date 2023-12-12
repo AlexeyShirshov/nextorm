@@ -3,14 +3,14 @@ namespace nextorm.core;
 public class QueryPlan
 {
     public QueryCommand QueryCommand;
-    private readonly QueryPlanEqualityComparer _comparer;
+    //private readonly QueryPlanEqualityComparer _comparer;
     private int? _hashPlan;
     public QueryPlan(QueryCommand cmd, IDictionary<ExpressionKey, Delegate>? cache)
     {
         QueryCommand = cmd;
-        _comparer = new QueryPlanEqualityComparer(cache, cmd);
+        //_comparer = new QueryPlanEqualityComparer(cache, cmd);
     }
-    public override int GetHashCode() => _hashPlan ??= _comparer.GetHashCode(QueryCommand);
+    public override int GetHashCode() => _hashPlan ??= QueryCommand.GetQueryPlanEqualityComparer().GetHashCode(QueryCommand);
     public override bool Equals(object? obj)
     {
         return Equals(obj as QueryPlan);
@@ -19,7 +19,7 @@ public class QueryPlan
     {
         if (obj is null) return false;
 
-        return _comparer.Equals(QueryCommand, obj.QueryCommand);
+        return QueryCommand.GetQueryPlanEqualityComparer().Equals(QueryCommand, obj.QueryCommand);
     }
 
     public QueryPlan GetCacheVersion()

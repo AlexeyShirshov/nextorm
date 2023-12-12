@@ -1,6 +1,5 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.ObjectPool;
-using System.Collections;
 using System.Collections.Concurrent;
 using System.Data;
 using System.Data.Common;
@@ -97,7 +96,7 @@ public partial class DbContext : IDataContext
         }
     }
 
-    private DbCompiledQuery<TResult> GetCompiledQuery<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken, out DbConnection conn, out DbCommand sqlCommand)
+    private DbCompiledQuery<TResult> GetCompiledQuery<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, out DbConnection conn, out DbCommand sqlCommand)
     {
         var compiledQuery = queryCommand.GetCompiledQuery() ?? CreateCompiledQuery(queryCommand, false, true);
 
@@ -305,7 +304,7 @@ public partial class DbContext : IDataContext
         {
             foreach (var item in selectList)
             {
-                var (needAliasForColumn, column) = MakeColumn(item, entityType, cmd, false, cmd, cmd, @params, paramMode);
+                var (needAliasForColumn, column) = MakeColumn(item, entityType, cmd, false, @params, paramMode);
 
                 if (!paramMode)
                 {
@@ -340,7 +339,7 @@ public partial class DbContext : IDataContext
 
             if (cmd.PreparedCondition is not null)
             {
-                var whereSql = MakeWhere(entityType, cmd, cmd.PreparedCondition, 0, null, cmd, cmd, @params, paramMode);
+                var whereSql = MakeWhere(entityType, cmd, cmd.PreparedCondition, 0, null, @params, paramMode);
                 if (!paramMode) sqlBuilder!.Append(" where ").Append(whereSql);
             }
 
@@ -350,7 +349,7 @@ public partial class DbContext : IDataContext
 
                 foreach (var sorting in cmd.Sorting)
                 {
-                    var sortingSql = MakeSort(entityType, cmd, sorting.PreparedExpression, 0, null, cmd, cmd, @params, paramMode);
+                    var sortingSql = MakeSort(entityType, cmd, sorting.PreparedExpression!, 0, null, @params, paramMode);
                     if (!paramMode)
                     {
                         sqlBuilder!.Append(sortingSql);
@@ -425,7 +424,7 @@ public partial class DbContext : IDataContext
             if (visitor.JoinType.IsAnonymous())
             {
                 //fromExp = GetFrom(join.Query.EntityType);
-                var (sql, p) = MakeSelect(join.Query, paramMode);
+                var (sql, p) = MakeSelect(join.Query!, paramMode);
                 @params.AddRange(p);
                 if (!paramMode)
                 {
@@ -448,9 +447,9 @@ public partial class DbContext : IDataContext
             }
         }
 
-        var whereSql = MakeWhere(cmd.EntityType!, cmd, visitor.JoinCondition, dim, dim == 1
+        var whereSql = MakeWhere(cmd.EntityType!, cmd, visitor.JoinCondition!, dim, dim == 1
                         ? new ExpressionAliasProvider(join.JoinCondition)
-                        : new ProjectionAliasProvider(dim, cmd.EntityType!), cmd, cmd, @params, paramMode);
+                        : new ProjectionAliasProvider(dim, cmd.EntityType!), @params, paramMode);
 
         if (!paramMode)
         {
@@ -480,10 +479,10 @@ public partial class DbContext : IDataContext
 
         throw new BuildSqlCommandException($"Cannot find alias of type {declaringType} in {cmd.EntityType}");
     }
-    private string MakeWhere(Type entityType, ISourceProvider tableSource, Expression condition, int dim, IAliasProvider? aliasProvider, IParamProvider paramProvider, IQueryProvider queryProvider, List<Param> @params, bool paramMode)
+    private string MakeWhere(Type entityType, IQueryContext queryContext, Expression condition, int dim, IAliasProvider? aliasProvider, List<Param> @params, bool paramMode)
     {
         // if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Where expression: {exp}", condition);
-        using var visitor = new WhereExpressionVisitor(entityType, this, tableSource, dim, aliasProvider, paramProvider, queryProvider, paramMode);
+        using var visitor = new WhereExpressionVisitor(entityType, this, queryContext, dim, aliasProvider, queryContext, queryContext, paramMode);
         visitor.Visit(condition);
         @params.AddRange(visitor.Params);
 
@@ -491,7 +490,11 @@ public partial class DbContext : IDataContext
 
         return visitor.ToString();
     }
+    private string MakeSort(Type entityType, IQueryContext queryContext, Expression sorting, int dim, IAliasProvider? aliasProvider, List<Param> @params, bool paramMode)
+        => MakeSort(entityType, queryContext, sorting, dim, aliasProvider, queryContext, queryContext, @params, paramMode);
+#pragma warning disable C107 // Methods should not have too many parameters
     private string MakeSort(Type entityType, ISourceProvider tableSource, Expression sorting, int dim, IAliasProvider? aliasProvider, IParamProvider paramProvider, IQueryProvider queryProvider, List<Param> @params, bool paramMode)
+#pragma warning restore C107 // Methods should not have too many parameters
     {
         // if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Where expression: {exp}", condition);
         using var visitor = new BaseExpressionVisitor(entityType, this, tableSource, dim, aliasProvider, paramProvider, queryProvider, true, paramMode);
@@ -502,7 +505,8 @@ public partial class DbContext : IDataContext
 
         return visitor.ToString();
     }
-
+    public (bool NeedAliasForColumn, string Column) MakeColumn(SelectExpression selectExp, Type entityType, IQueryContext queryContext, bool dontNeedAlias, List<Param> @params, bool paramMode)
+        => MakeColumn(selectExp, entityType, queryContext, dontNeedAlias, queryContext, queryContext, @params, paramMode);
     public (bool NeedAliasForColumn, string Column) MakeColumn(SelectExpression selectExp, Type entityType, ISourceProvider tableProvider, bool dontNeedAlias, IParamProvider paramProvider, IQueryProvider queryProvider, List<Param> @params, bool paramMode)
     {
         using var visitor = new BaseExpressionVisitor(entityType, this, tableProvider, 0, null, paramProvider, queryProvider, dontNeedAlias, paramMode);
@@ -638,10 +642,10 @@ public partial class DbContext : IDataContext
     {
         return v ? "1" : "0";
     }
-    public void Compile<TResult>(string sql, object? @params, QueryCommand<TResult> cmd, bool nonStreamCalls, bool storeInCache, CancellationToken cancellationToken)
+    public void Compile<TResult>(string sql, object? @params, QueryCommand<TResult> queryCommand, bool nonStreamCalls, bool storeInCache, CancellationToken cancellationToken)
     {
-        if (!cmd.IsPrepared)
-            cmd.PrepareCommand(!storeInCache, cancellationToken);
+        if (!queryCommand.IsPrepared)
+            queryCommand.PrepareCommand(!storeInCache, cancellationToken);
 
         List<Param> ps = new();
         if (@params is not null)
@@ -653,14 +657,14 @@ public partial class DbContext : IDataContext
             }
         }
 
-        cmd._compiledQuery = CreateCompiledQuery(cmd, !nonStreamCalls, storeInCache, () => (sql, ps));
+        queryCommand._compiledQuery = CreateCompiledQuery(queryCommand, !nonStreamCalls, storeInCache, () => (sql, ps));
     }
-    public void Compile<TResult>(QueryCommand<TResult> cmd, bool nonStreamCalls, bool storeInCache, CancellationToken cancellationToken)
+    public void Compile<TResult>(QueryCommand<TResult> queryCommand, bool nonStreamCalls, bool storeInCache, CancellationToken cancellationToken)
     {
-        if (!cmd.IsPrepared)
-            cmd.PrepareCommand(!storeInCache, cancellationToken);
+        if (!queryCommand.IsPrepared)
+            queryCommand.PrepareCommand(!storeInCache, cancellationToken);
 
-        cmd._compiledQuery = CreateCompiledQuery(cmd, !nonStreamCalls, storeInCache);
+        queryCommand._compiledQuery = CreateCompiledQuery(queryCommand, !nonStreamCalls, storeInCache);
     }
     protected virtual void Dispose(bool disposing)
     {
@@ -671,19 +675,9 @@ public partial class DbContext : IDataContext
                 _conn?.Dispose();
             }
 
-            // TODO: free unmanaged resources (unmanaged objects) and override finalizer
-            // TODO: set large fields to null
             _disposedValue = true;
         }
     }
-
-    // // TODO: override finalizer only if 'Dispose(bool disposing)' has code to free unmanaged resources
-    // ~SqlDataProvider()
-    // {
-    //     // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
-    //     Dispose(disposing: false);
-    // }
-
     public void Dispose()
     {
         // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
@@ -721,7 +715,7 @@ public partial class DbContext : IDataContext
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
 
-        var (reader, compiledQuery) = await CreateReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
+        var (reader, compiledQuery) = await ExecuteReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
         using (reader)
         {
             var l = new List<TResult>(compiledQuery.LastRowCount);
@@ -755,7 +749,7 @@ public partial class DbContext : IDataContext
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
 
-        var compiledQuery = GetCompiledQuery(queryCommand, @params, CancellationToken.None, out var conn, out var sqlCommand);
+        var compiledQuery = GetCompiledQuery(queryCommand, @params, out var conn, out var sqlCommand);
 
         if (conn.State == ConnectionState.Closed)
         {
@@ -773,7 +767,7 @@ public partial class DbContext : IDataContext
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
 
-        GetCompiledQuery(queryCommand, @params, CancellationToken.None, out DbConnection conn, out DbCommand sqlCommand);
+        GetCompiledQuery(queryCommand, @params, out DbConnection conn, out DbCommand sqlCommand);
 
         if (conn.State == ConnectionState.Closed)
         {
@@ -796,7 +790,7 @@ public partial class DbContext : IDataContext
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
 
-        var compiledQuery = GetCompiledQuery(queryCommand, @params, cancellationToken, out var conn, out var sqlCommand);
+        GetCompiledQuery(queryCommand, @params, out var conn, out var sqlCommand);
 
         if (conn.State == ConnectionState.Closed)
         {
@@ -816,9 +810,9 @@ public partial class DbContext : IDataContext
         var type = typeof(TResult);
         return ((TResult)Convert.ChangeType(r, type), false);
     }
-    private async Task<(DbDataReader, DbCompiledQuery<TResult>)> CreateReader<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
+    private async Task<(DbDataReader, DbCompiledQuery<TResult>)> ExecuteReader<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
     {
-        var compiledQuery = GetCompiledQuery(queryCommand, @params, cancellationToken, out var conn, out var sqlCommand);
+        var compiledQuery = GetCompiledQuery(queryCommand, @params, out var conn, out var sqlCommand);
 
         if (conn.State == ConnectionState.Closed)
         {
@@ -832,7 +826,7 @@ public partial class DbContext : IDataContext
 
         return (await sqlCommand.ExecuteReaderAsync(compiledQuery.Behavior, cancellationToken).ConfigureAwait(false), compiledQuery);
     }
-    public IEnumerator<TResult> CreateEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[] @params)
+    public IEnumerator<TResult> CreateEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[]? @params)
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
 
@@ -961,7 +955,7 @@ public partial class DbContext : IDataContext
         }
         else
         {
-            var (reader, compiledQuery) = await CreateReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
+            var (reader, compiledQuery) = await ExecuteReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
             using (reader)
             {
                 if (reader.Read())
@@ -1008,7 +1002,7 @@ public partial class DbContext : IDataContext
         }
         else
         {
-            var (reader, compiledQuery) = await CreateReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
+            var (reader, compiledQuery) = await ExecuteReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
             using (reader)
             {
                 if (reader.Read())
@@ -1050,7 +1044,7 @@ public partial class DbContext : IDataContext
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
 
-        var (reader, compiledQuery) = await CreateReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
+        var (reader, compiledQuery) = await ExecuteReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
         using (reader)
         {
             TResult r = default!;
@@ -1097,7 +1091,7 @@ public partial class DbContext : IDataContext
     {
         ArgumentNullException.ThrowIfNull(queryCommand);
 
-        var (reader, compiledQuery) = await CreateReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
+        var (reader, compiledQuery) = await ExecuteReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
         using (reader)
         {
             TResult? r = default;
@@ -1115,36 +1109,36 @@ public partial class DbContext : IDataContext
         }
     }
 
-    class EmptyEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerator<TResult>
-    {
-        public TResult Current => default;
+    // class EmptyEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerator<TResult>
+    // {
+    //     public TResult Current => default;
 
-        object IEnumerator.Current => default;
+    //     object IEnumerator.Current => default;
 
-        public void Dispose()
-        {
+    //     public void Dispose()
+    //     {
 
-        }
+    //     }
 
-        public ValueTask DisposeAsync()
-        {
-            //throw new NotImplementedException();
-            return ValueTask.CompletedTask;
-        }
+    //     public ValueTask DisposeAsync()
+    //     {
+    //         //throw new NotImplementedException();
+    //         return ValueTask.CompletedTask;
+    //     }
 
-        public bool MoveNext()
-        {
-            return false;
-        }
+    //     public bool MoveNext()
+    //     {
+    //         return false;
+    //     }
 
-        public ValueTask<bool> MoveNextAsync()
-        {
-            return ValueTask.FromResult(false);
-        }
+    //     public ValueTask<bool> MoveNextAsync()
+    //     {
+    //         return ValueTask.FromResult(false);
+    //     }
 
-        public void Reset()
-        {
+    //     public void Reset()
+    //     {
 
-        }
-    }
+    //     }
+    // }
 }

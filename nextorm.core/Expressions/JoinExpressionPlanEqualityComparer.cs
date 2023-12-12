@@ -8,7 +8,7 @@ public sealed class JoinExpressionPlanEqualityComparer : IEqualityComparer<JoinE
     private readonly IQueryProvider _queryProvider;
     private readonly ILogger? _logger;
     private ExpressionPlanEqualityComparer? _expComparer;
-    private QueryPlanEqualityComparer? _cmdComparer;
+    //private QueryPlanEqualityComparer? _cmdComparer;
 
     // public PreciseExpressionEqualityComparer()
     //     : this(new ExpressionCache<Delegate>())
@@ -36,8 +36,8 @@ public sealed class JoinExpressionPlanEqualityComparer : IEqualityComparer<JoinE
         _expComparer ??= new ExpressionPlanEqualityComparer(_cache, _queryProvider);
         if (!_expComparer.Equals(x.JoinCondition, y.JoinCondition)) return false;
 
-        _cmdComparer ??= new QueryPlanEqualityComparer(_cache, _queryProvider);
-        if (!_cmdComparer.Equals(x.Query, y.Query)) return false;
+        //_cmdComparer ??= new QueryPlanEqualityComparer(_cache, _queryProvider);
+        if (!_queryProvider.GetQueryPlanEqualityComparer().Equals(x.Query, y.Query)) return false;
 
         return true;
     }
@@ -56,8 +56,8 @@ public sealed class JoinExpressionPlanEqualityComparer : IEqualityComparer<JoinE
 
             if (obj.Query is not null)
             {
-                _cmdComparer ??= new QueryPlanEqualityComparer(_cache, _queryProvider);
-                hash.Add(obj.Query, _cmdComparer);
+                //_cmdComparer ??= new QueryPlanEqualityComparer(_cache, _queryProvider);
+                hash.Add(obj.Query, _queryProvider.GetQueryPlanEqualityComparer());
             }
 
             return hash.ToHashCode();

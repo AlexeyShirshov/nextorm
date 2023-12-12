@@ -101,7 +101,7 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
                     if (indexExpression.Type.IsAssignableTo(typeof(QueryCommand)) && indexExpression.Arguments is [ConstantExpression cex] && cex.Value is int idx)
                     {
                         var cmd = _queryProvider.ReferencedQueries[idx];
-                        hash.Add(cmd, new QueryPlanEqualityComparer(_cache, _queryProvider));
+                        hash.Add(cmd, _queryProvider.GetQueryPlanEqualityComparer());
                     }
                     else
                     {
@@ -161,7 +161,7 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
                             }
                             var cmd = del(ce!.Value);
 
-                            hash.Add(cmd, new QueryPlanEqualityComparer(_cache, _queryProvider));
+                            hash.Add(cmd, _queryProvider.GetQueryPlanEqualityComparer());
 
                             // var cmd = Expression.Lambda<Func<QueryCommand>>(memberExpression).Compile()();
                             // hash.Add(cmd, new QueryPlanEqualityComparer(_cache));

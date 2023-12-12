@@ -8,7 +8,7 @@ NextORM is not really an ORM, because abbreviation "Object" can be removed. Ther
 * [ability to write queries without any entities and metadata at all](#markdown-header-select-data-without-any-entity-meta-attributes-etc-pure-sql)
 ## Examples
 ### Select data via entity to map props and type to columns and table respectively
-```c#
+``` csharp
 [SqlTable("simple_entity")]
 public interface ISimpleEntity
 {
@@ -24,14 +24,14 @@ foreach(var row in await dataContext.SimpleEntity.Select(entity => new { entity.
 }
 ```
 ### Select data without any entity, meta attributes, etc. Pure sql
-```c#
+``` csharp
 foreach(var row in await dataContext.From("simple_entity").Select(tbl => new { Id = tbl.Int("id") }).ToListAsync())
 {
     _logger.LogInformation("Id = {id}", row.Id);
 }
 ```
 ### Subquery with strong typings
-```c#
+``` csharp
 var innerQuery = dataContext.From("simple_entity").Select(tbl => new { Id = tbl.Int("id") });
 await foreach(var row in dataContext.From(innerQuery).Select(subQuery=>new { subQuery.Id }))
 {

@@ -1,9 +1,9 @@
+using Microsoft.Extensions.Logging;
 using System.Collections;
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading.Channels;
-using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
 
@@ -34,7 +34,8 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     internal int WherePlanHash;
     private int _paramIdx;
     public Paging Paging;
-    internal Expression PreparedCondition;
+    internal Expression? PreparedCondition;
+    private QueryPlanEqualityComparer? _queryPlanComparer;
     protected readonly List<Sorting>? _sorting;
 
     //protected ArrayList _params = new();
@@ -112,8 +113,8 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         FromExpression? from = _from ?? _dataProvider.GetFrom(srcType, this);
         var (joinHash, joinPlanHash) = PrepareJoin(prepareMapOnly, cancellationToken);
         var (selectList, columnsHash, columnsPlanHash) = PrepareColumns(prepareMapOnly, srcType, cancellationToken);
-        var (whereHash, wherePlanHash) = PrepareWhere(prepareMapOnly, srcType, cancellationToken);
-        var (sortingHash, sortingPlanHash) = PrepareSorting(prepareMapOnly, srcType, cancellationToken);
+        var (whereHash, wherePlanHash) = PrepareWhere(prepareMapOnly, cancellationToken);
+        var (sortingHash, sortingPlanHash) = PrepareSorting(prepareMapOnly, cancellationToken);
 
         _isPrepared = true;
         _selectList = selectList;
@@ -206,28 +207,28 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
 
                 // }
                 // else
+                //{
+                var selExp = new SelectExpression(_exp.Body.Type, _dataProvider.ExpressionsCache, this)
                 {
-                    var selExp = new SelectExpression(_exp.Body.Type, _dataProvider.ExpressionsCache, this)
+                    //Index = 0,
+                    Expression = selectExp,
+                    //ReferencedQueries = innerQueryVisitor.ReferencedQueries
+                };
+                selectList.Add(selExp);
+                if (!_dontCache && !noHash) unchecked
                     {
-                        //Index = 0,
-                        Expression = selectExp,
-                        //ReferencedQueries = innerQueryVisitor.ReferencedQueries
-                    };
-                    selectList.Add(selExp);
-                    if (!_dontCache && !noHash) unchecked
-                        {
 
-                            columnsHash = columnsHash * 13 + selExp.GetHashCode();
-                            comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
-                            columnsPlanHash = columnsPlanHash * 13 + comparer.GetHashCode(selExp);
-                        }
-                }
+                        columnsHash = columnsHash * 13 + selExp.GetHashCode();
+                        comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
+                        columnsPlanHash = columnsPlanHash * 13 + comparer.GetHashCode(selExp);
+                    }
+                // }
             }
             else if (_dataProvider.NeedMapping)
             {
-                var p = Expression.Parameter(srcType);
+                var p = Expression.Parameter(srcType!);
 
-                if (_dataProvider.Metadata.TryGetValue(srcType, out var entityMeta))
+                if (_dataProvider.Metadata.TryGetValue(srcType!, out var entityMeta))
                 {
                     for (int idx = 0; idx < entityMeta.Properties.Count; idx++)
                     {
@@ -367,14 +368,14 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
 
         return (joinHash, joinPlanHash);
     }
-    private (int, int) PrepareSorting(bool noHash, Type? srcType, CancellationToken cancellationToken)
+    private (int, int) PrepareSorting(bool noHash, CancellationToken cancellationToken)
     {
         PreciseExpressionEqualityComparer? comp = null;
         ExpressionPlanEqualityComparer? compPlan = null;
 
         var sortingHash = 7;
         var sortingPlanHash = 7;
-        if (_sorting is not null && !noHash)
+        if (_sorting is not null)
         {
             var sortingSpan = CollectionsMarshal.AsSpan(_sorting);
             for (var i = 0; i < _sorting.Count; i++)
@@ -401,14 +402,14 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
 
         return (sortingHash, sortingPlanHash);
     }
-    private (int, int) PrepareWhere(bool noHash, Type? srcType, CancellationToken cancellationToken)
+    private (int, int) PrepareWhere(bool noHash, CancellationToken cancellationToken)
     {
         PreciseExpressionEqualityComparer? comp = null;
         ExpressionPlanEqualityComparer? compPlan = null;
 
         var whereHash = 7;
         var wherePlanHash = 7;
-        if (_condition is not null && !noHash)
+        if (_condition is not null)
         {
             var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataProvider, this, cancellationToken);
             PreparedCondition = innerQueryVisitor.Visit(_condition);
@@ -458,6 +459,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     // {
     //     _payloadMgr.AddOrUpdatePayload<T>(payload);
     // }
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Minor Bug", "S2328:\"GetHashCode\" should not reference mutable fields", Justification = "<Pending>")]
     public override int GetHashCode()
     {
         if (_hash.HasValue)
@@ -591,10 +593,11 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         if (_dataProvider != cmd._dataProvider)
             throw new InvalidOperationException("Different data context");
 
-        _referencedQueries[idx] = cmd;
+        _referencedQueries![idx] = cmd;
         var comparer = new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
         ColumnsPlanHash = 7 * 13 + comparer.GetHashCode(_selectList![0]);
     }
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0028:Simplify collection initialization", Justification = "<Pending>")]
     public int AddCommand(QueryCommand cmd)
     {
         // if (_dataProvider != cmd._dataProvider)
@@ -634,6 +637,8 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         CopyTo(cmd);
         return cmd;
     }
+
+    public QueryPlanEqualityComparer GetQueryPlanEqualityComparer() => _queryPlanComparer ??= new QueryPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
 }
 
 public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>

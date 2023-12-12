@@ -107,3 +107,28 @@ public class ReplaceConstantsExpressionVisitor : ExpressionVisitor
         return p;
     }
 }
+public class PredicateExpressionVisitor<T>(Func<Expression?, Func<T, bool>, bool> predicate) : ExpressionVisitor
+{
+    private readonly Func<Expression?, Func<T, bool>, bool> _predicate = predicate;
+    private T? _value;
+    private bool _result;
+    public T? Value => _value;
+    public bool Result => _result;
+
+    [return: NotNullIfNotNull("node")]
+    public override Expression? Visit(Expression? node)
+    {
+        if (_predicate(node, StoreValue))
+        {
+            _result = true;
+            return node;
+        }
+
+        return base.Visit(node);
+    }
+    private bool StoreValue(T value)
+    {
+        _value = value;
+        return true;
+    }
+}

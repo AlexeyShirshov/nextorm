@@ -1,8 +1,10 @@
+using Microsoft.Extensions.Logging;
 using System.Linq.Expressions;
 using System.Reflection;
-using Microsoft.Extensions.Logging;
 namespace nextorm.core;
 
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE1006:Naming Styles", Justification = "<Pending>")]
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S3011:Reflection should not be used to increase accessibility of classes, methods, or fields", Justification = "<Pending>")]
 public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 {
     private readonly CancellationToken _cancellationToken;
@@ -12,14 +14,14 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
     private readonly Type? _entityType;
 
     //private readonly List<QueryCommand>? _refs;
-    private static MethodInfo AnyMIGeneric = typeof(CorrelatedQueryExpressionVisitor).GetMethod(nameof(Any), BindingFlags.NonPublic | BindingFlags.Instance)!;
-    private static MethodInfo ToCommandMI = typeof(Entity<>).GetMethod("ToCommand", BindingFlags.Public | BindingFlags.Instance)!;
-    private static MethodInfo ExistsMI = typeof(NORM.NORM_SQL).GetMethod(nameof(NORM.NORM_SQL.exists), BindingFlags.Public | BindingFlags.Instance)!;
-    private static MethodInfo ConcatMI = typeof(string).GetMethods(BindingFlags.Public | BindingFlags.Static).First(it => it.Name == nameof(string.Concat) && it.GetParameters().Length == 2);
-    private static PropertyInfo ReferencedQuieriesPI = typeof(IQueryProvider).GetProperty(nameof(IQueryProvider.ReferencedQueries), BindingFlags.Public | BindingFlags.Instance)!;
-    private static PropertyInfo ItemPI = typeof(IReadOnlyList<QueryCommand>).GetProperty("Item")!;
-    private static PropertyInfo SQLPI = typeof(NORM).GetProperty(nameof(NORM.SQL))!;
-    private ParameterExpression? _p;
+    private static readonly MethodInfo AnyMIGeneric = typeof(CorrelatedQueryExpressionVisitor).GetMethod(nameof(Any), BindingFlags.NonPublic | BindingFlags.Instance)!;
+    //private static MethodInfo ToCommandMI = typeof(Entity<>).GetMethod("ToCommand", BindingFlags.Public | BindingFlags.Instance)!;
+    private static readonly MethodInfo ExistsMI = typeof(NORM.NORM_SQL).GetMethod(nameof(NORM.NORM_SQL.exists), BindingFlags.Public | BindingFlags.Instance)!;
+    private static readonly MethodInfo ConcatMI = typeof(string).GetMethods(BindingFlags.Public | BindingFlags.Static).First(it => it.Name == nameof(string.Concat) && it.GetParameters().Length == 2);
+    private static readonly PropertyInfo ReferencedQuieriesPI = typeof(IQueryProvider).GetProperty(nameof(IQueryProvider.ReferencedQueries), BindingFlags.Public | BindingFlags.Instance)!;
+    private static readonly PropertyInfo ItemPI = typeof(IReadOnlyList<QueryCommand>).GetProperty("Item")!;
+    private static readonly PropertyInfo SQLPI = typeof(NORM).GetProperty(nameof(NORM.SQL))!;
+    //private ParameterExpression? _p;
 
     public CorrelatedQueryExpressionVisitor(IDataContext dataProvider, IQueryProvider queryProvider, CancellationToken cancellationToken)
     {
@@ -69,7 +71,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 
                 if (!_forPrepare)
                 {
-                    var asEnumMI = AnyMIGeneric.MakeGenericMethod(cmd.EntityType);
+                    var asEnumMI = AnyMIGeneric.MakeGenericMethod(cmd.EntityType!);
                     var dp = Expression.Constant(this);
                     var p1 = Expression.Parameter(typeof(QueryCommand));
                     var body = Expression.Call(dp, asEnumMI, p1);
@@ -98,19 +100,19 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                     //Expression dfg = (IQueryProvider queryProvider) => NORM.SQL.exists(queryProvider.ReferencedColumns[idx]);
                     //var replace = new ReplaceArgumentVisitor(0, (IQueryProvider queryProvider) => queryProvider.ReferencedColumns[idx]);
                     //node.Arguments[0]=(Expression)(IQueryProvider queryProvider) => queryProvider.ReferencedColumns[idx];
-                    _p = Expression.Parameter(typeof(IQueryProvider));
+                    var p = Expression.Parameter(typeof(IQueryProvider));
                     var lambda = Expression.Lambda(
                         Expression.Call(node.Object, node.Method,
                             Expression.Convert(
                                 Expression.Property(
-                                    Expression.Property(_p, ReferencedQuieriesPI)
+                                    Expression.Property(p, ReferencedQuieriesPI)
                                     , ItemPI
                                     , Expression.Constant(idx)
                                 )
                                 , exp.Type
                             )
                         )
-                        , _p
+                        , p
                     );
                     return lambda;
                 }
@@ -134,20 +136,20 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                     //Expression dfg = (IQueryProvider queryProvider) => NORM.SQL.exists(queryProvider.ReferencedColumns[idx]);
                     //var replace = new ReplaceArgumentVisitor(0, (IQueryProvider queryProvider) => queryProvider.ReferencedColumns[idx]);
                     //node.Arguments[0]=(Expression)(IQueryProvider queryProvider) => queryProvider.ReferencedColumns[idx];
-                    _p = Expression.Parameter(typeof(IQueryProvider));
+                    var p = Expression.Parameter(typeof(IQueryProvider));
                     var lambda = Expression.Lambda(
                         Expression.Call(node.Object, node.Method,
                             propExp,
                             Expression.Convert(
                                 Expression.Property(
-                                    Expression.Property(_p, ReferencedQuieriesPI)
+                                    Expression.Property(p, ReferencedQuieriesPI)
                                     , ItemPI
                                     , Expression.Constant(idx)
                                 )
                             , cmdExp.Type
                             )
                         )
-                        , _p
+                        , p
                     );
 
                     return lambda;
@@ -223,10 +225,15 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
     private QueryCommand GetQueryCommand(Expression exp)
     {
         QueryCommand cmd;
+        var predVisitor = new PredicateExpressionVisitor<int>((exp, storeValue) => exp is IndexExpression idxExp
+            && idxExp.Object is MemberExpression propExp && propExp.Member == ReferencedQuieriesPI && propExp.Expression is ParameterExpression && exp.Type.IsAssignableTo(typeof(IQueryProvider))
+            && idxExp.Arguments is [ConstantExpression c] && c.Value is int idx && storeValue(idx)
+        );
+        predVisitor.Visit(exp);
 
-        if (exp is LambdaExpression lambda && lambda.Body is IndexExpression idxExp && idxExp.Arguments is [ConstantExpression c] && c.Value is int idx)
+        if (predVisitor.Result)
         {
-            cmd = _queryProvider.ReferencedQueries[idx];
+            cmd = _queryProvider.ReferencedQueries[predVisitor.Value];
         }
         else
         {
@@ -292,19 +299,19 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             // Expression dfg = (IQueryProvider queryProvider) => NORM.SQL.exists(queryProvider.ReferencedQueries[idx]);
             //var replace = new ReplaceArgumentVisitor(0, (IQueryProvider queryProvider) => queryProvider.ReferencedColumns[idx]);
             //node.Arguments[0]=(Expression)(IQueryProvider queryProvider) => queryProvider.ReferencedColumns[idx];
-            _p = Expression.Parameter(typeof(IQueryProvider));
+            var p = Expression.Parameter(typeof(IQueryProvider));
             LambdaExpression lambda;
 
             if (node.Method.Name.StartsWith("Any"))
             {
                 lambda = Expression.Lambda(
                     Expression.Call(Expression.Property(null, SQLPI), ExistsMI,
-                        Expression.Property(Expression.Property(_p, ReferencedQuieriesPI), ItemPI, Expression.Constant(idx))
-                    ), _p
+                        Expression.Property(Expression.Property(p, ReferencedQuieriesPI), ItemPI, Expression.Constant(idx))
+                    ), p
                 );
             }
             else
-                lambda = Expression.Lambda(Expression.Property(Expression.Property(_p, ReferencedQuieriesPI), ItemPI, Expression.Constant(idx)), _p);
+                lambda = Expression.Lambda(Expression.Property(Expression.Property(p, ReferencedQuieriesPI), ItemPI, Expression.Constant(idx)), p);
 
             return lambda;
         }

@@ -1,5 +1,5 @@
-using System.Linq.Expressions;
 using Microsoft.Extensions.Logging;
+using System.Linq.Expressions;
 
 namespace nextorm.core;
 
@@ -30,7 +30,7 @@ public interface IDataContext : IAsyncDisposable, IDisposable
     void Compile<TResult>(string sql, object? @params, QueryCommand<TResult> queryCommand, bool nonStreamCalls, bool storeInCache, CancellationToken cancellationToken);
     void Compile<TResult>(QueryCommand<TResult> queryCommand, bool nonStreamCalls, bool storeInCache, CancellationToken cancellationToken);
     IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken);
-    IEnumerator<TResult> CreateEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[] @params);
+    IEnumerator<TResult> CreateEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[]? @params);
     Task<IEnumerator<TResult>> CreateEnumeratorAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken);
     Task<List<TResult>> ToListAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken);
     List<TResult> ToList<TResult>(QueryCommand<TResult> queryCommand, object[]? @params);
