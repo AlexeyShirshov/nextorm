@@ -8,12 +8,12 @@ public class TestDataRepository
 
     public TestDataRepository(IDataContext dataProvider)
     {
-        SimpleEntity = dataProvider.Create<ISimpleEntity>();
-        LargeEntity = dataProvider.Create<ILargeEntity>();
+        SimpleEntity = dataProvider.Create<SimpleEntity>();
+        LargeEntity = dataProvider.Create<LargeEntity>();
         _dataProvider = dataProvider;
     }
-    public Entity<ISimpleEntity> SimpleEntity { get; set; }
-    public Entity<ILargeEntity> LargeEntity { get; set; }
+    public Entity<SimpleEntity> SimpleEntity { get; set; }
+    public Entity<LargeEntity> LargeEntity { get; set; }
 
-    public IDataContext DataProvider => _dataProvider;
+    public IDataContext DbContext => _dataProvider;
 }

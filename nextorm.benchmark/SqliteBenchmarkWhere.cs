@@ -37,6 +37,7 @@ public class SqliteBenchmarkWhere
             builder.LogSensetiveData(true);
         }
         _ctx = new TestDataRepository(builder.CreateDbContext());
+        _ctx.DbContext.EnsureConnectionOpen();
 
         _cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new Tuple<int>(entity.Id)).Compile(false);
 
@@ -53,7 +54,8 @@ public class SqliteBenchmarkWhere
 
         _efCtx = new EFDataContext(efBuilder.Options);
 
-        _conn = new SqliteConnection(((SqliteDbContext)_ctx.DataProvider).ConnectionString);
+        _conn = new SqliteConnection(((SqliteDbContext)_ctx.DbContext).ConnectionString);
+        _conn.Open();
     }
     [Benchmark()]
     [BenchmarkCategory("Stream")]

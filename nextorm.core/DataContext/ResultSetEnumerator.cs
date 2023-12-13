@@ -25,8 +25,7 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
         _compiledQuery = compiledQuery;
         _map = compiledQuery.MapDelegate;
 
-        if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Getting connection");
-
+        // if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Getting connection");
         _conn = _dataProvider.GetConnection();
     }
     public TResult Current

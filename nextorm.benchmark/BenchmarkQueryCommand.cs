@@ -25,7 +25,7 @@ public class BenchmarkQueryCommand
         builder.UseSqlite(Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db"));
         _ctx = new TestDataRepository(builder.CreateDbContext());
 
-        _provider = (DbContext)_ctx.DataProvider;
+        _provider = (DbContext)_ctx.DbContext;
 
         var p = 10;
         _cmd = _ctx.SimpleEntity.Where(it => it.Id == p).Select(entity => new { entity.Id });

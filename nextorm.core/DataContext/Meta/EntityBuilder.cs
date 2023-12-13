@@ -44,6 +44,7 @@ public class EntityBuilder<T>
             }
             else
             {
+                var added = false;
                 foreach (var interf in entityType.GetInterfaces())
                 {
                     var intMap = entityType.GetInterfaceMap(interf);
@@ -58,10 +59,14 @@ public class EntityBuilder<T>
                         if (!string.IsNullOrEmpty(colAttr?.Name))
                         {
                             propsMeta.Add(new PropertyMeta { ColumnName = colAttr.Name, PropertyInfo = prop });
+                            added = true;
                             break;
                         }
                     }
                 }
+
+                if (!added)
+                    propsMeta.Add(new PropertyMeta { ColumnName = prop.Name, PropertyInfo = prop });
             }
         }
 
@@ -71,7 +76,7 @@ public class EntityBuilder<T>
     private static string? AutoBuildTableName()
     {
         var entityType = typeof(T);
-        string? tableName = null;
+        string? tableName = entityType.Name;
 
         var sqlTableAttr = entityType.GetCustomAttribute<SqlTableAttribute>(true);
 

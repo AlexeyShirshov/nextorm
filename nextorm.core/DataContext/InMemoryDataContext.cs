@@ -32,10 +32,11 @@ public partial class InMemoryContext : IDataContext
     public IDictionary<ExpressionKey, Delegate> ExpressionsCache => _expCache;
     public IDictionary<Type, IEntityMeta> Metadata => _metadata;
     public ILogger? CommandLogger { get; set; }
-
+    public void EnsureConnectionOpen() { }
+    public Task EnsureConnectionOpenAsync() => Task.CompletedTask;
     public IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(queryCommand);
+        //ArgumentNullException.ThrowIfNull(queryCommand);
         var cacheEntry = GetCacheEntry(queryCommand, cancellationToken);
 
         return cacheEntry.CreateEnumerator(queryCommand, cacheEntry, @params, cancellationToken)!;

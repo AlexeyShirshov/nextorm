@@ -3,6 +3,7 @@ using Microsoft.Extensions.ObjectPool;
 using System.Collections.Concurrent;
 using System.Data;
 using System.Data.Common;
+using System.Diagnostics;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
@@ -21,6 +22,8 @@ public partial class DbContext : IDataContext
     private DbConnection? _conn;
     // private bool _clearCache;
     private bool _disposedValue;
+    private bool _connOpen;
+
     public DbContext(DbContextBuilder optionsBuilder)
     {
         ArgumentNullException.ThrowIfNull(optionsBuilder);
@@ -42,10 +45,39 @@ public partial class DbContext : IDataContext
     public IDictionary<Type, IEntityMeta> Metadata => _metadata;
     public ILogger? CommandLogger { get; set; }
     public Entity From(string table) => new(this, table) { Logger = CommandLogger };
+    public void EnsureConnectionOpen()
+    {
+        var conn = GetConnection();
+        //if (conn.State == ConnectionState.Closed)
+        if (!_connOpen)
+        {
+#if DEBUG
+            if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Opening connection");
+#endif
+            conn.Open();
+            _connOpen = true;
+        }
+    }
+    public async Task EnsureConnectionOpenAsync()
+    {
+        var conn = GetConnection();
+        //if (conn.State == ConnectionState.Closed)
+        if (!_connOpen)
+        {
+#if DEBUG
+            if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Opening connection");
+#endif
+            await conn.OpenAsync();
+            _connOpen = true;
+        }
+    }
     public DbConnection GetConnection()
     {
         if (_conn is null)
         {
+#if DEBUG
+            if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Getting connection");
+#endif
             _conn = CreateConnection();
         }
         return _conn;
@@ -76,6 +108,7 @@ public partial class DbContext : IDataContext
         throw new NotImplementedException(type.ToString());
     }
     private List<Param> ExtractParams(QueryCommand queryCommand) => MakeSelect(queryCommand, true).Item2;
+    [Conditional("DEBUG")]
     private void LogParams(DbCommand sqlCommand)
     {
         if (Logger?.IsEnabled(LogLevel.Debug) ?? false)
@@ -100,10 +133,9 @@ public partial class DbContext : IDataContext
     {
         var compiledQuery = queryCommand.GetCompiledQuery() ?? CreateCompiledQuery(queryCommand, false, true);
 
-#if DEBUG
-        if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Getting connection");
-#endif
-        conn = GetConnection();
+        // #if DEBUG
+        //         if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Getting connection");
+        // #endif
         sqlCommand = compiledQuery.DbCommand;
         if (@params is not null)
         {
@@ -125,6 +157,7 @@ public partial class DbContext : IDataContext
                     sqlCommand.Parameters.Add(CreateParam(paramName, @params[i]));
             }
         }
+        conn = GetConnection();
         sqlCommand.Connection = conn;
         return compiledQuery;
     }
@@ -340,12 +373,12 @@ public partial class DbContext : IDataContext
             if (cmd.PreparedCondition is not null)
             {
                 var whereSql = MakeWhere(entityType, cmd, cmd.PreparedCondition, 0, null, @params, paramMode);
-                if (!paramMode) sqlBuilder!.Append(" where ").Append(whereSql);
+                if (!paramMode) sqlBuilder!.AppendLine().Append(" where ").Append(whereSql);
             }
 
             if (cmd.Sorting is not null)
             {
-                if (!paramMode) sqlBuilder!.Append(" order by ");
+                if (!paramMode) sqlBuilder!.AppendLine().Append(" order by ");
 
                 foreach (var sorting in cmd.Sorting)
                 {
@@ -362,14 +395,15 @@ public partial class DbContext : IDataContext
 
                 if (!paramMode) sqlBuilder!.Length -= 2;
             }
-
-            if (!paramMode)
+            else if (RequireSorting(cmd) && !paramMode)
             {
-                if (cmd.Paging.Limit > 0 || cmd.Paging.Offset > 0)
-                {
-                    sqlBuilder!.Append(' ');
-                    MakePage(cmd.Paging, sqlBuilder);
-                }
+                sqlBuilder!.AppendLine().Append(" order by ").Append(EmptySorting());
+            }
+
+            if (!paramMode && !cmd.Paging.IsEmpty)
+            {
+                sqlBuilder!.AppendLine();
+                MakePage(cmd.Paging, sqlBuilder);
             }
         }
         else if (!paramMode && sqlBuilder!.Length > 0)
@@ -390,7 +424,8 @@ public partial class DbContext : IDataContext
 
         return (r, @params);
     }
-
+    protected virtual string EmptySorting() => throw new NotImplementedException();
+    protected virtual bool RequireSorting(QueryCommand queryCommand) => false;
     protected virtual void MakePage(Paging paging, StringBuilder sqlBuilder)
     {
         throw new NotImplementedException();
@@ -694,7 +729,7 @@ public partial class DbContext : IDataContext
     }
     public IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(queryCommand);
+        //ArgumentNullException.ThrowIfNull(queryCommand);
 
         var compiledQuery = queryCommand.GetCompiledQuery() ?? CreateCompiledQuery(queryCommand, true, true);
         var sqlEnumerator = compiledQuery.Enumerator!;
@@ -703,7 +738,7 @@ public partial class DbContext : IDataContext
     }
     public async Task<IEnumerator<TResult>> CreateEnumeratorAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(queryCommand);
+        //ArgumentNullException.ThrowIfNull(queryCommand);
 
         var compiledQuery = queryCommand.GetCompiledQuery() ?? CreateCompiledQuery(queryCommand, true, true);
 
@@ -713,7 +748,7 @@ public partial class DbContext : IDataContext
     }
     public async Task<List<TResult>> ToListAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(queryCommand);
+        ////ArgumentNullException.ThrowIfNull(queryCommand);
 
         var (reader, compiledQuery) = await ExecuteReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
         using (reader)
@@ -722,6 +757,7 @@ public partial class DbContext : IDataContext
             while (reader.Read())
             {
                 l.Add(compiledQuery.MapDelegate!(reader));
+                //l.Add(default);
             }
 
             compiledQuery.LastRowCount = l.Count;
@@ -730,7 +766,7 @@ public partial class DbContext : IDataContext
     }
     public List<TResult> ToList<TResult>(QueryCommand<TResult> queryCommand, object[]? @params)
     {
-        ArgumentNullException.ThrowIfNull(queryCommand);
+        ////ArgumentNullException.ThrowIfNull(queryCommand);
 
         var (reader, compiledQuery) = CreateReader(queryCommand, @params);
         using (reader)
@@ -747,11 +783,10 @@ public partial class DbContext : IDataContext
     }
     private (DbDataReader, DbCompiledQuery<TResult>) CreateReader<TResult>(QueryCommand<TResult> queryCommand, object[]? @params)
     {
-        ArgumentNullException.ThrowIfNull(queryCommand);
-
         var compiledQuery = GetCompiledQuery(queryCommand, @params, out var conn, out var sqlCommand);
 
-        if (conn.State == ConnectionState.Closed)
+        //if (conn.State == ConnectionState.Closed)
+        if (!_connOpen)
         {
 #if DEBUG
             if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Opening connection");
@@ -765,11 +800,12 @@ public partial class DbContext : IDataContext
     }
     public (TResult? result, bool isNull) ExecuteScalar<TResult>(QueryCommand<TResult> queryCommand, object[]? @params)
     {
-        ArgumentNullException.ThrowIfNull(queryCommand);
+        //ArgumentNullException.ThrowIfNull(queryCommand);
 
         GetCompiledQuery(queryCommand, @params, out DbConnection conn, out DbCommand sqlCommand);
 
-        if (conn.State == ConnectionState.Closed)
+        //if (conn.State == ConnectionState.Closed)
+        if (!_connOpen)
         {
 #if DEBUG
             if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Opening connection");
@@ -788,11 +824,12 @@ public partial class DbContext : IDataContext
     }
     public async Task<(TResult? result, bool isNull)> ExecuteScalar<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(queryCommand);
+        //ArgumentNullException.ThrowIfNull(queryCommand);
 
         GetCompiledQuery(queryCommand, @params, out var conn, out var sqlCommand);
 
-        if (conn.State == ConnectionState.Closed)
+        //if (conn.State == ConnectionState.Closed)
+        if (!_connOpen)
         {
 #if DEBUG
             if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Opening connection");
@@ -814,7 +851,8 @@ public partial class DbContext : IDataContext
     {
         var compiledQuery = GetCompiledQuery(queryCommand, @params, out var conn, out var sqlCommand);
 
-        if (conn.State == ConnectionState.Closed)
+        //if (conn.State == ConnectionState.Closed)
+        if (!_connOpen)
         {
 #if DEBUG
             if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Opening connection");
@@ -828,7 +866,7 @@ public partial class DbContext : IDataContext
     }
     public IEnumerator<TResult> CreateEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[]? @params)
     {
-        ArgumentNullException.ThrowIfNull(queryCommand);
+        //ArgumentNullException.ThrowIfNull(queryCommand);
 
         var compiledQuery = queryCommand.GetCompiledQuery() ?? CreateCompiledQuery(queryCommand, true, true);
 
@@ -920,7 +958,7 @@ public partial class DbContext : IDataContext
 
     public TResult First<TResult>(QueryCommand<TResult> queryCommand, object[] @params)
     {
-        ArgumentNullException.ThrowIfNull(queryCommand);
+        //ArgumentNullException.ThrowIfNull(queryCommand);
 
         if (queryCommand.OneColumn)
         {
@@ -945,7 +983,7 @@ public partial class DbContext : IDataContext
 
     public async Task<TResult> FirstAsync<TResult>(QueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(queryCommand);
+        //ArgumentNullException.ThrowIfNull(queryCommand);
 
         if (queryCommand.OneColumn)
         {
@@ -969,7 +1007,7 @@ public partial class DbContext : IDataContext
     }
     public TResult? FirstOrDefault<TResult>(QueryCommand<TResult> queryCommand, object[] @params)
     {
-        ArgumentNullException.ThrowIfNull(queryCommand);
+        //ArgumentNullException.ThrowIfNull(queryCommand);
 
         if (queryCommand.OneColumn)
         {
@@ -993,7 +1031,7 @@ public partial class DbContext : IDataContext
 
     public async Task<TResult?> FirstOrDefaultAsync<TResult>(QueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(queryCommand);
+        //ArgumentNullException.ThrowIfNull(queryCommand);
 
         if (queryCommand.OneColumn)
         {
@@ -1017,7 +1055,7 @@ public partial class DbContext : IDataContext
 
     public TResult Single<TResult>(QueryCommand<TResult> queryCommand, object[] @params)
     {
-        ArgumentNullException.ThrowIfNull(queryCommand);
+        //ArgumentNullException.ThrowIfNull(queryCommand);
 
         var (reader, compiledQuery) = CreateReader(queryCommand, @params);
         using (reader)
@@ -1042,7 +1080,7 @@ public partial class DbContext : IDataContext
 
     public async Task<TResult> SingleAsync<TResult>(QueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(queryCommand);
+        //ArgumentNullException.ThrowIfNull(queryCommand);
 
         var (reader, compiledQuery) = await ExecuteReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
         using (reader)
@@ -1067,7 +1105,7 @@ public partial class DbContext : IDataContext
 
     public TResult? SingleOrDefault<TResult>(QueryCommand<TResult> queryCommand, object[] @params)
     {
-        ArgumentNullException.ThrowIfNull(queryCommand);
+        //ArgumentNullException.ThrowIfNull(queryCommand);
 
         var (reader, compiledQuery) = CreateReader(queryCommand, @params);
         using (reader)
@@ -1089,7 +1127,7 @@ public partial class DbContext : IDataContext
 
     public async Task<TResult?> SingleOrDefaultAsync<TResult>(QueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(queryCommand);
+        //ArgumentNullException.ThrowIfNull(queryCommand);
 
         var (reader, compiledQuery) = await ExecuteReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
         using (reader)

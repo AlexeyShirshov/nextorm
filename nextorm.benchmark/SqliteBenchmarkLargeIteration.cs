@@ -43,6 +43,7 @@ public class SqliteBenchmarkLargeIteration
             builder.LogSensetiveData(true);
         }
         _ctx = new TestDataRepository(builder.CreateDbContext());
+        _ctx.DbContext.EnsureConnectionOpen();
 
         _cmdExec = _ctx.LargeEntity.Select(entity => new TupleLargeEntity(entity.Id, entity.Str, entity.Dt)).Compile(false);
 
@@ -59,7 +60,8 @@ public class SqliteBenchmarkLargeIteration
 
         _efCtx = new EFDataContext(efBuilder.Options);
 
-        _conn = new SqliteConnection(((SqliteDbContext)_ctx.DataProvider).ConnectionString);
+        _conn = new SqliteConnection(((SqliteDbContext)_ctx.DbContext).ConnectionString);
+        _conn.Open();
 
         _adoCmd = _conn.CreateCommand();
         _adoCmd.CommandText = "select id, someString, dt from large_table";

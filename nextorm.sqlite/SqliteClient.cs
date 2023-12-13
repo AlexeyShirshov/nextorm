@@ -48,17 +48,17 @@ public class SqliteDbContext : DbContext
     {
         return new SQLiteParameter(name, value);
     }
-    protected override void MakePage(Paging paging, StringBuilder sb)
+    protected override void MakePage(Paging paging, StringBuilder sqlBuilder)
     {
         // var sb = _sbPool.Get();
         // try
         // {
-        sb.Append("limit ").Append(paging.Limit > 0
+        sqlBuilder.Append("limit ").Append(paging.Limit > 0
             ? paging.Limit
             : -1);
 
         if (paging.Offset > 0)
-            sb.Append(" offset ").Append(paging.Offset);
+            sqlBuilder.Append(" offset ").Append(paging.Offset);
 
         //     return sb.ToString();
         // }

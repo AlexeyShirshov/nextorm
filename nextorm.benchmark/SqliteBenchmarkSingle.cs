@@ -35,6 +35,7 @@ public class SqliteBenchmarkSingle
             builder.LogSensetiveData(true);
         }
         _ctx = new TestDataRepository(builder.CreateDbContext());
+        _ctx.DbContext.EnsureConnectionOpen();
 
         _cmd = _ctx.SimpleEntity.Where(it => it.Id == 1).SingleOrSingleOrDefault(it => it.Id).Compile(true);
 
@@ -49,7 +50,8 @@ public class SqliteBenchmarkSingle
 
         _efCtx = new EFDataContext(efBuilder.Options);
 
-        _conn = new SqliteConnection(((SqliteDbContext)_ctx.DataProvider).ConnectionString);
+        _conn = new SqliteConnection(((SqliteDbContext)_ctx.DbContext).ConnectionString);
+        _conn.Open();
     }
     [Benchmark(Baseline = true)]
     public async Task NextormSingleCompiled()

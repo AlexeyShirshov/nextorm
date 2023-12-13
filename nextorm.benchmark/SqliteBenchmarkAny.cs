@@ -48,6 +48,8 @@ public class SqliteBenchmarkAny
         _ctx = new TestDataRepository(builder.CreateDbContext());
 
         _cmd = _ctx.SimpleEntity.AnyCommand().Compile(true);
+
+        _ctx.DbContext.EnsureConnectionOpen();
     }
 
     private static string GetDatabasePath()
@@ -59,6 +61,7 @@ public class SqliteBenchmarkAny
     {
         var connString = $"Data Source='{GetDatabasePath()}'";
         _conn = new SqliteConnection(connString);
+        _conn.Open();
     }
 
     private void SetupEF(bool withLogging)

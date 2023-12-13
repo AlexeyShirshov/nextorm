@@ -24,7 +24,8 @@ public interface IDataContext : IAsyncDisposable, IDisposable
     {
         return new QueryCommand<T>(this, exp, condition, paging, sorting);
     }
-
+    void EnsureConnectionOpen();
+    Task EnsureConnectionOpenAsync();
     void ResetPreparation(QueryCommand queryCommand);
     FromExpression? GetFrom(Type srcType, QueryCommand queryCommand);
     void Compile<TResult>(string sql, object? @params, QueryCommand<TResult> queryCommand, bool nonStreamCalls, bool storeInCache, CancellationToken cancellationToken);

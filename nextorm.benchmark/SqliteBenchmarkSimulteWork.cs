@@ -42,6 +42,7 @@ public class SqliteBenchmarkSimulateWork
             builder.LogSensetiveData(true);
         }
         _ctx = new TestDataRepository(builder.CreateDbContext());
+        _ctx.DbContext.EnsureConnectionOpen();
 
         _cmd = _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }).Compile(false);
 
@@ -60,8 +61,8 @@ public class SqliteBenchmarkSimulateWork
 
         _efCtx = new EFDataContext(efBuilder.Options);
 
-        _conn = new SqliteConnection(((SqliteDbContext)_ctx.DataProvider).ConnectionString);
-        //_conn.Open();
+        _conn = new SqliteConnection(((SqliteDbContext)_ctx.DbContext).ConnectionString);
+        _conn.Open();
     }
     private static ValueTask DoWork()
     {

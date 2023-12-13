@@ -1,0 +1,26 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\nextorm.core\nextorm.core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="5.1.2" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>12.0</LangVersion>
+    <PackageId>nextorm.sqlserver</PackageId>
+    <Title>Nextorm MS SqlServer provider</Title>
+    <Version>1.0.1-alpha</Version>
+    <PackageTags>orm;sql;micro-orm</PackageTags>
+    <Description>Microsoft SQL Server provider for Nextorm</Description>
+    <Authors>Alexey Shirshov</Authors>
+    <Copyright>Alexey Shirshov</Copyright>
+
+  </PropertyGroup>
+
+</Project>
