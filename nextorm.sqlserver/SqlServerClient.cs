@@ -23,11 +23,11 @@ public class SqlServerClient(string connectionString, DbContextBuilder optionsBu
     }
     public override DbCommand CreateCommand(string sql)
     {
-        return new SqlCommand(sql);
+        return new SqlCommand(sql) { CommandType = System.Data.CommandType.Text };
     }
     public override DbParameter CreateParam(string name, object? value)
     {
-        return new SqlParameter(name, value);
+        return new SqlParameter(name, value) { SqlDbType = System.Data.SqlDbType.Int };
     }
     public override string MakeParam(string name)
     {

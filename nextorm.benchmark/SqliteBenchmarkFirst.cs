@@ -40,7 +40,7 @@ public class SqliteBenchmarkFirst
         _ctx.DbContext.EnsureConnectionOpen();
 
         _cmd = _ctx.SimpleEntity.FirstOrFirstOrDefault(it => it.Id).Compile(true);
-        _cmdEnt = _ctx.LargeEntity.FirstOrFirstOrDefault(it => new LargeEntity { Id = it.Id, Str = it.Str, Dt = it.Dt }).Compile(true);
+        _cmdEnt = _ctx.LargeEntity.Where(it => it.Id == NORM.Param<int>(0)).FirstOrFirstOrDefault().Compile(true);
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(@$"Filename={Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db")}");
@@ -56,71 +56,71 @@ public class SqliteBenchmarkFirst
         _conn = new SqliteConnection(((SqliteDbContext)_ctx.DbContext).ConnectionString);
         _conn.Open();
     }
-    [Benchmark(Baseline = true)]
-    public async Task NextormFirstCompiled()
-    {
-        await _cmd.FirstAsync();
-    }
+    // [Benchmark(Baseline = true)]
+    // public async Task NextormFirstCompiled()
+    // {
+    //     await _cmd.FirstAsync();
+    // }
     [Benchmark()]
     public async Task NextormLargeFirstCompiled()
     {
-        await _cmdEnt.FirstAsync();
+        await _cmdEnt.FirstAsync(1);
     }
-    [Benchmark()]
-    public async Task NextormFirstOrDefaultCompiled()
-    {
-        await _cmd.FirstOrDefaultAsync();
-    }
-    [Benchmark()]
-    public async Task NextormFirstCached()
-    {
-        await _ctx.SimpleEntity.Select(it => it.Id).FirstAsync();
-    }
-    [Benchmark()]
-    public async Task NextormFirstOrDefaultCached()
-    {
-        await _ctx.SimpleEntity.Select(it => it.Id).FirstOrDefaultAsync();
-    }
-    [Benchmark]
-    public async Task EFCoreFirst()
-    {
-        await _efCtx.SimpleEntities.Select(it => it.Id).FirstAsync();
-    }
-    [Benchmark]
-    public async Task EFCoreFirstOrDefault()
-    {
-        await _efCtx.SimpleEntities.Select(it => it.Id).FirstOrDefaultAsync();
-    }
-    [Benchmark]
-    public async Task EFCoreFirstCompiled()
-    {
-        await _efCompiled(_efCtx);
-    }
-    [Benchmark]
-    public async Task EFCoreLargeFirstCompiled()
-    {
-        await _efLargeCompiled(_efCtx);
-    }
-    [Benchmark]
-    public async Task EFCoreFirstOrDefaultCompiled()
-    {
-        await _efCompiledFirstOrDefault(_efCtx);
-    }
-    [Benchmark]
-    public async Task DapperFirst()
-    {
-        await _conn.QueryFirstAsync<int>("select id from simple_entity limit 1");
-    }
+    // [Benchmark()]
+    // public async Task NextormFirstOrDefaultCompiled()
+    // {
+    //     await _cmd.FirstOrDefaultAsync();
+    // }
+    // [Benchmark()]
+    // public async Task NextormFirstCached()
+    // {
+    //     await _ctx.SimpleEntity.Select(it => it.Id).FirstAsync();
+    // }
+    // [Benchmark()]
+    // public async Task NextormFirstOrDefaultCached()
+    // {
+    //     await _ctx.SimpleEntity.Select(it => it.Id).FirstOrDefaultAsync();
+    // }
+    // [Benchmark]
+    // public async Task EFCoreFirst()
+    // {
+    //     await _efCtx.SimpleEntities.Select(it => it.Id).FirstAsync();
+    // }
+    // [Benchmark]
+    // public async Task EFCoreFirstOrDefault()
+    // {
+    //     await _efCtx.SimpleEntities.Select(it => it.Id).FirstOrDefaultAsync();
+    // }
+    // [Benchmark]
+    // public async Task EFCoreFirstCompiled()
+    // {
+    //     await _efCompiled(_efCtx);
+    // }
+    // [Benchmark]
+    // public async Task EFCoreLargeFirstCompiled()
+    // {
+    //     await _efLargeCompiled(_efCtx);
+    // }
+    // [Benchmark]
+    // public async Task EFCoreFirstOrDefaultCompiled()
+    // {
+    //     await _efCompiledFirstOrDefault(_efCtx);
+    // }
+    // [Benchmark]
+    // public async Task DapperFirst()
+    // {
+    //     await _conn.QueryFirstAsync<int>("select id from simple_entity limit 1");
+    // }
     [Benchmark]
     public async Task DapperLargeFirst()
     {
-        await _conn.QueryFirstAsync<LargeEntity>("select id, someString as str, dt from large_table limit 1");
+        await _conn.QueryFirstAsync<LargeEntity>("select id, someString as str, dt from large_table where id = @id", new { id = 1 });
     }
-    [Benchmark]
-    public async Task DapperFirstOrDefault()
-    {
-        await _conn.QueryFirstOrDefaultAsync<int?>("select id from simple_entity limit 1");
-    }
+    // [Benchmark]
+    // public async Task DapperFirstOrDefault()
+    // {
+    //     await _conn.QueryFirstOrDefaultAsync<int?>("select id from simple_entity limit 1");
+    // }
     // [Benchmark()]
     // [BenchmarkCategory("Filter")]
     // public async Task NextormFilterCompiled()

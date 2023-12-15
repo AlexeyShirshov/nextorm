@@ -640,27 +640,31 @@ public partial class InMemoryContext : IDataContext
         return l;
     }
 
-    public async Task<(TResult? result, bool isNull)> ExecuteScalar<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
+    public async Task<TResult?> ExecuteScalar<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, bool throwIfNull, CancellationToken cancellationToken)
     {
         var cacheEntry = GetCacheEntry(queryCommand, CancellationToken.None);
 
         await using var ee = cacheEntry.CreateEnumerator(queryCommand, cacheEntry, @params, CancellationToken.None)!;
 
         if (await ee.MoveNextAsync())
-            return (ee.Current, false);
+            return ee.Current;
 
-        return (default, true);
+        if (throwIfNull) throw new InvalidOperationException();
+
+        return default;
     }
-    public (TResult? result, bool isNull) ExecuteScalar<TResult>(QueryCommand<TResult> queryCommand, object[]? @params)
+    public TResult? ExecuteScalar<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, bool throwIfNull)
     {
         var cacheEntry = GetCacheEntry(queryCommand, CancellationToken.None);
 
         using var ee = (IEnumerator<TResult>)cacheEntry.CreateEnumerator(queryCommand, cacheEntry, @params, CancellationToken.None)!;
 
         if (ee.MoveNext())
-            return (ee.Current, false);
+            return ee.Current;
 
-        return (default, true);
+        if (throwIfNull) throw new InvalidOperationException();
+
+        return default;
     }
 
     public TResult First<TResult>(QueryCommand<TResult> queryCommand, object[] @params)

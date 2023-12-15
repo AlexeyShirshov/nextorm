@@ -6,13 +6,13 @@ using nextorm.benchmark;
 // BenchmarkRunner.Run<InMemoryBenchmarkIteration>();
 // BenchmarkRunner.Run<InMemoryBenchmarkWhere>();
 // BenchmarkRunner.Run<InMemoryBenchmarkAny>();
-BenchmarkRunner.Run<SqliteBenchmarkIteration>();
+// BenchmarkRunner.Run<SqliteBenchmarkIteration>();
 // BenchmarkRunner.Run<SqliteBenchmarkLargeIteration>();
 // BenchmarkRunner.Run<SqliteBenchmarkWhere>();
 // BenchmarkRunner.Run<SqliteBenchmarkSimulateWork>();
 // BenchmarkRunner.Run<SqliteBenchmarkMakeSelect>();
 // BenchmarkRunner.Run<SqliteBenchmarkAny>();
-// BenchmarkRunner.Run<SqliteBenchmarkFirst>();
+BenchmarkRunner.Run<SqliteBenchmarkFirst>();
 // BenchmarkRunner.Run<SqliteBenchmarkSingle>();
 
 // runner.QueryCommandPlanEqualityComparer();

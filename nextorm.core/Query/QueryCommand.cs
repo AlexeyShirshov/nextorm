@@ -103,7 +103,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
 #endif
         OneColumn = false;
 
-        if (_from is not null && _from.Table.IsT1 && !_from.Table.AsT1.IsPrepared)
+        if (_from is not null && _from.Table.IsT1 && !_from.Table.AsT1._isPrepared)
             _from.Table.AsT1.PrepareCommand(prepareMapOnly, cancellationToken);
 
         var srcType = _srcType;
@@ -359,7 +359,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
 
             foreach (var join in Joins)
             {
-                if (!(join.Query?.IsPrepared ?? true))
+                if (!(join.Query?._isPrepared ?? true))
                     join.Query!.PrepareCommand(noHash, cancellationToken);
 
                 if (!_dontCache && !noHash) unchecked
@@ -470,7 +470,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         if (_hash.HasValue)
             return _hash.Value;
 
-        if (!IsPrepared)
+        if (!_isPrepared)
             PrepareCommand(false, CancellationToken.None);
 
         unchecked
@@ -508,7 +508,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     {
         if (cmd is null) return false;
 
-        if (!IsPrepared)
+        if (!_isPrepared)
             PrepareCommand(false, CancellationToken.None);
 
         // if (_params is null && cmd._params is not null) return false;
@@ -691,7 +691,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
     }
     public IAsyncEnumerator<TResult> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
-        if (!IsPrepared)
+        if (!_isPrepared)
             PrepareCommand(false, cancellationToken);
 
         return DataProvider.CreateAsyncEnumerator(this, null, cancellationToken);
@@ -732,7 +732,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
     public IAsyncEnumerable<TResult> ExecAsync(params object[] @params) => ExecAsync(CancellationToken.None, @params);
     public async IAsyncEnumerable<TResult> ExecAsync([EnumeratorCancellation] CancellationToken cancellationToken, params object[] @params)
     {
-        if (!IsPrepared)
+        if (!_isPrepared)
             PrepareCommand(false, cancellationToken);
 
         await using var ee = _dataProvider.CreateAsyncEnumerator(this, @params, cancellationToken);
@@ -741,7 +741,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
     }
     public IEnumerable<TResult> AsEnumerable(params object[] @params)
     {
-        if (!IsPrepared)
+        if (!_isPrepared)
             PrepareCommand(false, CancellationToken.None);
 
         return (IEnumerable<TResult>)_dataProvider.CreateEnumerator(this, @params);
@@ -749,7 +749,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
     public Task<IEnumerable<TResult>> Exec(params object[] @params) => Exec(CancellationToken.None, @params);
     public async Task<IEnumerable<TResult>> Exec(CancellationToken cancellationToken, params object[] @params)
     {
-        if (!IsPrepared)
+        if (!_isPrepared)
             PrepareCommand(false, cancellationToken);
 
         // return Array.Empty<TResult>();
@@ -762,7 +762,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
     }
     public List<TResult> ToList(params object[] @params)
     {
-        if (!IsPrepared)
+        if (!_isPrepared)
             PrepareCommand(false, CancellationToken.None);
 
         return _dataProvider.ToList(this, @params);
@@ -770,7 +770,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
     public Task<List<TResult>> ToListAsync(params object[] @params) => ToListAsync(CancellationToken.None, @params);
     public async Task<List<TResult>> ToListAsync(CancellationToken cancellationToken, params object[] @params)
     {
-        if (!IsPrepared)
+        if (!_isPrepared)
             PrepareCommand(false, cancellationToken);
 
         return await _dataProvider.ToListAsync(this, @params, cancellationToken).ConfigureAwait(false);
@@ -782,7 +782,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         {
             if (this is not QueryCommand<bool> queryCommand || !queryCommand.SingleRow)
             {
-                if (!IgnoreColumns || !IsPrepared)
+                if (!IgnoreColumns || !_isPrepared)
                 {
                     IgnoreColumns = true;
                     PrepareCommand(false, CancellationToken.None);
@@ -791,7 +791,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
                 queryCommand = Entity<TResult>.GetAnyCommand(_dataProvider, this);
             }
 
-            return _dataProvider.ExecuteScalar(queryCommand, @params).Item1;
+            return _dataProvider.ExecuteScalar(queryCommand, @params, true);
         }
         finally
         {
@@ -806,7 +806,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         {
             if (this is not QueryCommand<bool> queryCommand || !queryCommand.SingleRow)
             {
-                if (!IgnoreColumns || !IsPrepared)
+                if (!IgnoreColumns || !_isPrepared)
                 {
                     IgnoreColumns = true;
                     PrepareCommand(false, cancellationToken);
@@ -815,7 +815,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
                 queryCommand = Entity<TResult>.GetAnyCommand(_dataProvider, this);
             }
 
-            return (await _dataProvider.ExecuteScalar(queryCommand, @params, cancellationToken).ConfigureAwait(false)).result;
+            return await _dataProvider.ExecuteScalar(queryCommand, @params, true, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
@@ -827,7 +827,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         int oldLim = Paging.Limit;
         try
         {
-            if (Paging.Limit != 1 || !IsPrepared)
+            if (Paging.Limit != 1 || !_isPrepared)
             {
                 SingleRow = true;
                 Paging.Limit = 1;
@@ -847,7 +847,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         int oldLim = Paging.Limit;
         try
         {
-            if (Paging.Limit != 1 || !IsPrepared)
+            if (Paging.Limit != 1 || !_isPrepared)
             {
                 SingleRow = true;
                 Paging.Limit = 1;
@@ -866,7 +866,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         int oldLim = Paging.Limit;
         try
         {
-            if (Paging.Limit != 1 || !IsPrepared)
+            if (Paging.Limit != 1 || !_isPrepared)
             {
                 SingleRow = true;
                 Paging.Limit = 1;
@@ -886,7 +886,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         int oldLim = Paging.Limit;
         try
         {
-            if (Paging.Limit != 1 || !IsPrepared)
+            if (Paging.Limit != 1 || !_isPrepared)
             {
                 SingleRow = true;
                 Paging.Limit = 1;
@@ -905,7 +905,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         int oldLim = Paging.Limit;
         try
         {
-            if (Paging.Limit != 2 || !IsPrepared)
+            if (Paging.Limit != 2 || !_isPrepared)
             {
                 Paging.Limit = 2;
                 PrepareCommand(false, CancellationToken.None);
@@ -924,7 +924,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         int oldLim = Paging.Limit;
         try
         {
-            if (Paging.Limit != 2 || !IsPrepared)
+            if (Paging.Limit != 2 || !_isPrepared)
             {
                 Paging.Limit = 2;
                 PrepareCommand(false, cancellationToken);
@@ -942,7 +942,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         int oldLim = Paging.Limit;
         try
         {
-            if (Paging.Limit != 2 || !IsPrepared)
+            if (Paging.Limit != 2 || !_isPrepared)
             {
                 Paging.Limit = 2;
                 PrepareCommand(false, CancellationToken.None);
@@ -961,7 +961,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         int oldLim = Paging.Limit;
         try
         {
-            if (Paging.Limit != 2 || !IsPrepared)
+            if (Paging.Limit != 2 || !_isPrepared)
             {
                 Paging.Limit = 2;
                 PrepareCommand(false, cancellationToken);
