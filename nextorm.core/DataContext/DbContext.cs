@@ -161,7 +161,8 @@ public class DbContext : IDataContext
                 //     sqlCommand.Parameters.Add(CreateParam(paramName, @params[i]));
             }
         }
-        conn = sqlCommand.Connection!;
+        conn = null;
+        //conn = sqlCommand.Connection!;
         // conn = GetConnection();
         // sqlCommand.Connection = conn;
         return compiledQuery;
@@ -205,7 +206,7 @@ public class DbContext : IDataContext
 
             dbCommand.Connection = GetConnection();
 
-            dbCommand.Prepare();
+            //dbCommand.Prepare();
             //return new SqlCacheEntry(null) { Enumerator = new EmptyEnumerator<TResult>() };
 
             var compiledQuery = new DbCompiledQuery<TResult>(dbCommand, map, queryCommand.SingleRow);
@@ -1034,16 +1035,17 @@ public class DbContext : IDataContext
         // }
 
         //_logParams?.Invoke(sqlCommand);
+        //Logger?.LogInformation(compiledQuery.Behavior.ToString("g"));
 
         var reader = sqlCommand.ExecuteReader(compiledQuery.Behavior | CommandBehavior.SequentialAccess);
 
         //var (reader, compiledQuery) = CreateReader(queryCommand, @params);
         using (reader)
         {
-            if (reader.Read())
-            {
-                return compiledQuery.MapDelegate!(reader);
-            }
+            // if (reader.Read())
+            // {
+            //     return compiledQuery.MapDelegate!(reader);
+            // }
 
             return default;
         }

@@ -99,7 +99,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             if (paramIdx >= 0)
             {
                 var paramName = string.Format("norm_p{0}", paramIdx);
-                _params.Add(new Param(paramName, null));
+                _params.Add(new Param(paramName, 1));
                 if (!_paramMode)
                     _builder!.Append(_dataProvider.MakeParam(paramName));
 

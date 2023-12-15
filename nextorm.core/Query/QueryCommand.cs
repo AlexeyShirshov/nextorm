@@ -863,22 +863,22 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
     }
     public TResult? FirstOrDefault(params object[] @params)
     {
-        int oldLim = Paging.Limit;
-        try
-        {
-            if (Paging.Limit != 1 || !_isPrepared)
-            {
-                SingleRow = true;
-                Paging.Limit = 1;
-                PrepareCommand(false, CancellationToken.None);
-            }
+        // int oldLim = Paging.Limit;
+        // try
+        // {
+        //     if (Paging.Limit != 1 || !_isPrepared)
+        //     {
+        //         SingleRow = true;
+        //         Paging.Limit = 1;
+        //         PrepareCommand(false, CancellationToken.None);
+        //     }
 
-            return _dataProvider.FirstOrDefault(this, @params);
-        }
-        finally
-        {
-            Paging.Limit = oldLim;
-        }
+        return _dataProvider.FirstOrDefault(this, @params);
+        // }
+        // finally
+        // {
+        //     Paging.Limit = oldLim;
+        // }
     }
     public Task<TResult?> FirstOrDefaultAsync(params object[] @params) => FirstOrDefaultAsync(CancellationToken.None, @params);
     public Task<TResult?> FirstOrDefaultAsync(CancellationToken cancellationToken, params object[] @params)
