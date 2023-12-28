@@ -35,8 +35,8 @@ public interface IDataContext : IAsyncDisposable, IDisposable
     Task<IEnumerator<TResult>> CreateEnumeratorAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken);
     Task<List<TResult>> ToListAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken);
     List<TResult> ToList<TResult>(QueryCommand<TResult> queryCommand, object[]? @params);
-    Task<(TResult? result, bool isNull)> ExecuteScalar<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken);
-    (TResult? result, bool isNull) ExecuteScalar<TResult>(QueryCommand<TResult> queryCommand, object[]? @params);
+    Task<TResult?> ExecuteScalar<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, bool throwIfNull, CancellationToken cancellationToken);
+    TResult? ExecuteScalar<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, bool throwIfNull);
     public Entity<TResult> From<TResult>(QueryCommand<TResult> query) => new(this, query) { Logger = CommandLogger };
     public Entity<TResult> From<TResult>(Entity<TResult> builder) => new(this, builder) { Logger = CommandLogger };
     TResult First<TResult>(QueryCommand<TResult> queryCommand, object[] @params);

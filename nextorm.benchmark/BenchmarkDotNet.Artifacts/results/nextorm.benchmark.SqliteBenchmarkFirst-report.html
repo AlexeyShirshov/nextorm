@@ -2,7 +2,7 @@
 <html lang='en'>
 <head>
 <meta charset='utf-8' />
-<title>nextorm.benchmark.SqliteBenchmarkIteration-20231228-135140</title>
+<title>nextorm.benchmark.SqliteBenchmarkFirst-20231228-134631</title>
 
 <style type="text/css">
 	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
@@ -23,12 +23,12 @@ Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical 
 </code></pre>
 
 <table>
-<thead><tr><th>Method         </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Gen0</th><th>Gen1</th><th>Allocated</th>
+<thead><tr><th>Method             </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Gen0</th><th>Gen1</th><th>Allocated</th>
 </tr>
-</thead><tbody><tr><td>NextormCompiledToList</td><td>33.44 &mu;s</td><td>0.662 &mu;s</td><td>0.883 &mu;s</td><td>0.3662</td><td>-</td><td>1.73 KB</td>
-</tr><tr><td>NextormCachedToList</td><td>40.38 &mu;s</td><td>0.783 &mu;s</td><td>0.932 &mu;s</td><td>0.7324</td><td>-</td><td>3.76 KB</td>
-</tr><tr><td>EFCore</td><td>63.15 &mu;s</td><td>1.246 &mu;s</td><td>1.280 &mu;s</td><td>1.8311</td><td>0.3662</td><td>8.63 KB</td>
-</tr><tr><td>Dapper</td><td>42.14 &mu;s</td><td>0.816 &mu;s</td><td>0.907 &mu;s</td><td>0.3662</td><td>-</td><td>1.88 KB</td>
+</thead><tbody><tr><td>NextormLargeFirstCompiled</td><td>34.62 &mu;s</td><td>0.680 &mu;s</td><td>0.954 &mu;s</td><td>0.3662</td><td>-</td><td>1.76 KB</td>
+</tr><tr><td>NextormFirstCached</td><td>87.91 &mu;s</td><td>1.411 &mu;s</td><td>1.320 &mu;s</td><td>2.6855</td><td>1.2207</td><td>13.32 KB</td>
+</tr><tr><td>EFCoreLargeFirstCompiled</td><td>57.03 &mu;s</td><td>0.658 &mu;s</td><td>0.616 &mu;s</td><td>1.0986</td><td>0.3662</td><td>5.27 KB</td>
+</tr><tr><td>DapperLargeFirst</td><td>49.93 &mu;s</td><td>0.984 &mu;s</td><td>1.443 &mu;s</td><td>0.4272</td><td>-</td><td>2.02 KB</td>
 </tr></tbody></table>
 </body>
 </html>

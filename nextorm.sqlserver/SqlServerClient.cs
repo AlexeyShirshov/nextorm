@@ -1,14 +1,28 @@
 ﻿using System.Data.Common;
 using System.Text;
-using Microsoft.Data.SqlClient;
+using System.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 using nextorm.core;
 
 namespace nextorm.sqlserver;
 
-public class SqlServerClient(string connectionString, DbContextBuilder optionsBuilder) : DbContext(optionsBuilder)
+public class SqlServerClient : DbContext
 {
-    private readonly string _connectionString = connectionString;
+    private readonly string? _connectionString;
+    private readonly DbConnection? _connection;
+
+    public SqlServerClient(string connectionString, DbContextBuilder optionsBuilder)
+        : base(optionsBuilder)
+    {
+        _connectionString = connectionString;
+    }
+
+    public SqlServerClient(DbConnection connection, DbContextBuilder optionsBuilder)
+        : base(optionsBuilder)
+    {
+        _connection = connection;
+    }
+
     public override DbConnection CreateConnection()
     {
         if (Logger?.IsEnabled(LogLevel.Debug) ?? false)
@@ -19,11 +33,11 @@ public class SqlServerClient(string connectionString, DbContextBuilder optionsBu
                 Logger.LogDebug("Creating connection");
         }
 
-        return new SqlConnection(_connectionString);
+        return _connection ?? new SqlConnection(_connectionString);
     }
     public override DbCommand CreateCommand(string sql)
     {
-        return new SqlCommand(sql);
+        return new SqlCommand(sql) { CommandType = System.Data.CommandType.Text };
     }
     public override DbParameter CreateParam(string name, object? value)
     {
@@ -47,5 +61,10 @@ public class SqlServerClient(string connectionString, DbContextBuilder optionsBu
     protected override string EmptySorting()
     {
         return "(select null as anyorder)";
+    }
+    protected override bool MakeTop(int limit, out string? topStmt)
+    {
+        topStmt = string.Format("top({0})", limit);
+        return true;
     }
 }

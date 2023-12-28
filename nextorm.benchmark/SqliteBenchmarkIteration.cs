@@ -20,7 +20,7 @@ public class SqliteBenchmarkIteration
     private readonly QueryCommand<SimpleEntity> _cmdManualToList;
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
-    private readonly Func<EFDataContext, IAsyncEnumerable<SimpleEntity>> _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.SimpleEntities);
+    // private readonly Func<EFDataContext, DbSet<SimpleEntity>> _efCompiled = EF.CompileQuery((EFDataContext ctx) => ctx.SimpleEntities);
     private readonly ILoggerFactory? _logFactory;
     public SqliteBenchmarkIteration(bool withLogging = false)
     {
@@ -90,13 +90,13 @@ public class SqliteBenchmarkIteration
     //     {
     //     }
     // }
-    // [Benchmark()]
-    // public async Task NextormCachedToList()
-    // {
-    //     foreach (var row in await _ctx.SimpleEntity.Select(entity => new { entity.Id }).ToListAsync())
-    //     {
-    //     }
-    // }
+    [Benchmark()]
+    public async Task NextormCachedToList()
+    {
+        foreach (var row in await _ctx.SimpleEntity.ToListAsync())
+        {
+        }
+    }
     // [Benchmark()]
     // public async Task NextormManualSQLCachedToList()
     // {
@@ -105,13 +105,13 @@ public class SqliteBenchmarkIteration
     //     {
     //     }
     // }
-    // [Benchmark]
-    // public async Task EFCore()
-    // {
-    //     foreach (var row in await _efCtx.SimpleEntities.Select(entity => new { entity.Id }).ToListAsync())
-    //     {
-    //     }
-    // }
+    [Benchmark]
+    public async Task EFCore()
+    {
+        foreach (var row in await _efCtx.SimpleEntities.ToListAsync())
+        {
+        }
+    }
     // [Benchmark]
     // public async Task EFCoreAny()
     // {
@@ -127,7 +127,7 @@ public class SqliteBenchmarkIteration
     // [Benchmark]
     // public async Task EFCoreCompiled()
     // {
-    //     await foreach (var row in _efCompiled(_efCtx).Select(entity => new { entity.Id }))
+    //     foreach (var row in await _efCompiled(_efCtx))
     //     {
     //     }
     // }

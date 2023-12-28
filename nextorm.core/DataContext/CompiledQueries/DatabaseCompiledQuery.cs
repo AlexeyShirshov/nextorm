@@ -6,7 +6,7 @@ namespace nextorm.core;
 
 public class DbCompiledQuery<TResult> : CompiledQuery<TResult, IDataRecord>
 {
-    public readonly CommandBehavior Behavior = CommandBehavior.SingleResult;
+    public readonly CommandBehavior Behavior = 0;
     public DbCompiledQuery(DbCommand dbCommand, Func<Func<IDataRecord, TResult>?> getMap)
         : base(getMap)
     {
@@ -17,7 +17,7 @@ public class DbCompiledQuery<TResult> : CompiledQuery<TResult, IDataRecord>
     {
         DbCommand = dbCommand;
         if (singleRow)
-            Behavior = CommandBehavior.SingleResult | CommandBehavior.SingleRow;
+            Behavior = CommandBehavior.SingleRow;
     }
     public DbCommand DbCommand;
     public ResultSetEnumerator<TResult>? Enumerator;
