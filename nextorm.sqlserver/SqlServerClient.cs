@@ -41,7 +41,7 @@ public class SqlServerClient : DbContext
     }
     public override DbParameter CreateParam(string name, object? value)
     {
-        return new SqlParameter(name, value) { SqlDbType = System.Data.SqlDbType.Int };
+        return new SqlParameter(name, value);
     }
     public override string MakeParam(string name)
     {
