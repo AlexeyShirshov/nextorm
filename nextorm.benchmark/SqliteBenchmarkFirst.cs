@@ -71,11 +71,11 @@ public class SqliteBenchmarkFirst
     // {
     //     await _cmd.FirstOrDefaultAsync();
     // }
-    // [Benchmark()]
-    // public async Task NextormFirstCached()
-    // {
-    //     await _ctx.SimpleEntity.Select(it => it.Id).FirstAsync();
-    // }
+    [Benchmark()]
+    public async Task NextormFirstCached()
+    {
+        await _ctx.LargeEntity.Where(it => it.Id == NORM.Param<int>(0)).FirstAsync(1);
+    }
     // [Benchmark()]
     // public async Task NextormFirstOrDefaultCached()
     // {
@@ -96,11 +96,11 @@ public class SqliteBenchmarkFirst
     // {
     //     await _efCompiled(_efCtx);
     // }
-    // [Benchmark]
-    // public async Task EFCoreLargeFirstCompiled()
-    // {
-    //     await _efLargeCompiled(_efCtx);
-    // }
+    [Benchmark]
+    public async Task EFCoreLargeFirstCompiled()
+    {
+        await _efLargeCompiled(_efCtx);
+    }
     // [Benchmark]
     // public async Task EFCoreFirstOrDefaultCompiled()
     // {

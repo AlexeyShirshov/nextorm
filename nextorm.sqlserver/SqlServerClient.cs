@@ -1,6 +1,6 @@
 ﻿using System.Data.Common;
 using System.Text;
-using Microsoft.Data.SqlClient;
+using System.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 using nextorm.core;
 
@@ -61,5 +61,10 @@ public class SqlServerClient : DbContext
     protected override string EmptySorting()
     {
         return "(select null as anyorder)";
+    }
+    protected override bool MakeTop(int limit, out string? topStmt)
+    {
+        topStmt = string.Format("top({0})", limit);
+        return true;
     }
 }
