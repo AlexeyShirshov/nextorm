@@ -1108,11 +1108,12 @@ public class DbContext : IDataContext
             var compiledQuery = GetCompiledQuery(queryCommand, @params);
             var sqlCommand = compiledQuery.DbCommand;
             var reader = sqlCommand.ExecuteReader(compiledQuery.Behavior);
+            var mapper = compiledQuery.MapDelegate!;
             using (reader)
             {
                 if (reader.Read())
                 {
-                    return compiledQuery.MapDelegate!(reader);
+                    return mapper(reader);
                 }
 
                 throw new InvalidOperationException();
@@ -1134,11 +1135,12 @@ public class DbContext : IDataContext
             var compiledQuery = await GetCompiledQuery(queryCommand, @params, cancellationToken).ConfigureAwait(false);
             var sqlCommand = compiledQuery.DbCommand;
             var reader = await sqlCommand.ExecuteReaderAsync(compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
+            var mapper = compiledQuery.MapDelegate!;
             using (reader)
             {
                 if (reader.Read())
                 {
-                    return compiledQuery.MapDelegate!(reader);
+                    return mapper(reader);
                 }
 
                 throw new InvalidOperationException();
@@ -1167,13 +1169,13 @@ public class DbContext : IDataContext
             var compiledQuery = GetCompiledQuery(queryCommand, @params);
             var sqlCommand = compiledQuery.DbCommand;
             var reader = sqlCommand.ExecuteReader(compiledQuery.Behavior);
-
+            var mapper = compiledQuery.MapDelegate!;
             //var (reader, compiledQuery) = CreateReader(queryCommand, @params);
             using (reader)
             {
                 if (reader.Read())
                 {
-                    return compiledQuery.MapDelegate!(reader);
+                    return mapper(reader);
                 }
 
                 return default;
@@ -1195,12 +1197,12 @@ public class DbContext : IDataContext
             var compiledQuery = await GetCompiledQuery(queryCommand, @params, cancellationToken).ConfigureAwait(false);
             var sqlCommand = compiledQuery.DbCommand;
             var reader = await sqlCommand.ExecuteReaderAsync(compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
-
+            var mapper = compiledQuery.MapDelegate!;
             using (reader)
             {
                 if (reader.Read())
                 {
-                    return compiledQuery.MapDelegate!(reader);
+                    return mapper(reader);
                 }
 
                 return default;
