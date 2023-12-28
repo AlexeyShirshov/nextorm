@@ -977,12 +977,12 @@ public class DbContext : IDataContext
         var r = await sqlCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
 
         // var r = true;
+        if (r is TResult res) return res;
         if (r is null or DBNull)
         {
             if (throwIfNull) throw new InvalidOperationException();
             return default;
         }
-        if (r is TResult res) return res;
         var type = typeof(TResult);
         return (TResult)Convert.ChangeType(r, type);
     }
