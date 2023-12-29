@@ -28,8 +28,26 @@ public interface IDataContext : IAsyncDisposable, IDisposable
     Task EnsureConnectionOpenAsync();
     void ResetPreparation(QueryCommand queryCommand);
     FromExpression? GetFrom(Type srcType, QueryCommand queryCommand);
-    void Compile<TResult>(string sql, object? @params, QueryCommand<TResult> queryCommand, bool nonStreamCalls, bool storeInCache, CancellationToken cancellationToken);
-    void Compile<TResult>(QueryCommand<TResult> queryCommand, bool nonStreamCalls, bool storeInCache, CancellationToken cancellationToken);
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <typeparam name="TResult"></typeparam>
+    /// <param name="sql"></param>
+    /// <param name="params"></param>
+    /// <param name="queryCommand"></param>
+    /// <param name="nonStreamUsing">true, if optimized for buffered or scalar value results; false for non-buffered (stream) using, when result is IEnumerable or IAsyncEnumerable</param>
+    /// <param name="storeInCache">true to store query plan in cache, overwise it is stored only in query command</param>
+    /// <param name="cancellationToken"></param>
+    void Compile<TResult>(string sql, object? @params, QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken);
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <typeparam name="TResult"></typeparam>
+    /// <param name="queryCommand"></param>
+    /// <param name="nonStreamUsing">true, if optimized for buffered or scalar value results; false for non-buffered (stream) using, when result is IEnumerable or IAsyncEnumerable</param>
+    /// <param name="storeInCache">true to store query plan in cache, overwise it is stored only in query command</param>
+    /// <param name="cancellationToken"></param>
+    void Compile<TResult>(QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken);
     IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken);
     IEnumerator<TResult> CreateEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[]? @params);
     Task<IEnumerator<TResult>> CreateEnumeratorAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken);

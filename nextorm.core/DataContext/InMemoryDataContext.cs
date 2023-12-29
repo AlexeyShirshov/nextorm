@@ -448,8 +448,8 @@ public partial class InMemoryContext : IDataContext
         Dispose(disposing: true);
         GC.SuppressFinalize(this);
     }
-    public void Compile<TResult>(string sql, object? @params, QueryCommand<TResult> queryCommand, bool nonStreamCalls, bool storeInCache, CancellationToken cancellationToken) => throw new NotImplementedException();
-    public void Compile<TResult>(QueryCommand<TResult> queryCommand, bool nonStreamCalls, bool storeInCache, CancellationToken cancellationToken)
+    public void Compile<TResult>(string sql, object? @params, QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken) => throw new NotImplementedException();
+    public void Compile<TResult>(QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken)
     {
         if (!queryCommand.IsPrepared)
             queryCommand.PrepareCommand(cancellationToken);

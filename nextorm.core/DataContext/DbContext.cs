@@ -14,12 +14,12 @@ namespace nextorm.core;
 public class DbContext : IDataContext
 {
     private readonly static MethodInfo IsDBNullMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.IsDBNull))!;
-    private readonly static IDictionary<Type, IEntityMeta> _metadata = new ConcurrentDictionary<Type, IEntityMeta>();
-    private readonly static IDictionary<ExpressionKey, Delegate> _expCache = new ExpressionCache<Delegate>();
+    private readonly static ConcurrentDictionary<Type, IEntityMeta> _metadata = new ConcurrentDictionary<Type, IEntityMeta>();
+    private readonly static ExpressionCache<Delegate> _expCache = new ExpressionCache<Delegate>();
     internal protected readonly static ObjectPool<StringBuilder> _sbPool = new DefaultObjectPoolProvider().Create(new StringBuilderPooledObjectPolicy());
     private readonly static string[] _params = ["norm_p0", "norm_p1", "norm_p2", "norm_p3", "norm_p4"];
     //    private readonly IDictionary<QueryCommand, SqlCacheEntry> _queryCache = new Dictionary<QueryCommand, SqlCacheEntry>();
-    private readonly IDictionary<QueryPlan, object> _queryPlanCache = new Dictionary<QueryPlan, object>();
+    private readonly Dictionary<QueryPlan, object> _queryPlanCache = new Dictionary<QueryPlan, object>();
     private DbConnection? _conn;
     // private bool _clearCache;
     private bool _disposedValue;
@@ -165,8 +165,11 @@ public class DbContext : IDataContext
 
         if (!_connOpen)
         {
-            if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Opening connection");
-            conn.Open();
+            if (conn.State == ConnectionState.Closed)
+            {
+                if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Opening connection");
+                conn.Open();
+            }
             _connOpen = true;
         }
 
@@ -215,8 +218,11 @@ public class DbContext : IDataContext
 
         if (!_connOpen)
         {
-            if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Opening connection");
-            await conn.OpenAsync(cancellationToken);
+            if (conn.State == ConnectionState.Closed)
+            {
+                if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Opening connection");
+                await conn.OpenAsync(cancellationToken);
+            }
             _connOpen = true;
         }
 
@@ -799,7 +805,7 @@ public class DbContext : IDataContext
     {
         return v ? "1" : "0";
     }
-    public void Compile<TResult>(string sql, object? @params, QueryCommand<TResult> queryCommand, bool nonStreamCalls, bool storeInCache, CancellationToken cancellationToken)
+    public void Compile<TResult>(string sql, object? @params, QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken)
     {
         if (!queryCommand.IsPrepared)
             queryCommand.PrepareCommand(!storeInCache, cancellationToken);
@@ -814,14 +820,14 @@ public class DbContext : IDataContext
             }
         }
 
-        queryCommand._compiledQuery = CreateCompiledQuery(queryCommand, !nonStreamCalls, storeInCache, () => (sql, ps));
+        queryCommand._compiledQuery = CreateCompiledQuery(queryCommand, !nonStreamUsing, storeInCache, () => (sql, ps));
     }
-    public void Compile<TResult>(QueryCommand<TResult> queryCommand, bool nonStreamCalls, bool storeInCache, CancellationToken cancellationToken)
+    public void Compile<TResult>(QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken)
     {
         if (!queryCommand.IsPrepared)
             queryCommand.PrepareCommand(!storeInCache, cancellationToken);
 
-        queryCommand._compiledQuery = CreateCompiledQuery(queryCommand, !nonStreamCalls, storeInCache);
+        queryCommand._compiledQuery = CreateCompiledQuery(queryCommand, !nonStreamUsing, storeInCache);
     }
     protected virtual void Dispose(bool disposing)
     {

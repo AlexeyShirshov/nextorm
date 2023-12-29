@@ -626,6 +626,9 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         dst._hash = _hash;
         dst.ColumnsPlanHash = ColumnsPlanHash;
         dst.JoinPlanHash = JoinPlanHash;
+        dst.WherePlanHash = WherePlanHash;
+        dst.SortingPlanHash = SortingPlanHash;
+        dst.PreparedCondition = PreparedCondition;
     }
 
     protected virtual QueryCommand CreateSelf()
@@ -675,17 +678,23 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
     public QueryCommand<TResult> FromSql(string sql, object? @params, CancellationToken cancellationToken = default) => Compile(sql, @params, true, true, cancellationToken);
     public QueryCommand<TResult> Compile(string sql, CancellationToken cancellationToken = default) => Compile(sql, null, true, cancellationToken);
     public QueryCommand<TResult> Compile(string sql, object? @params, CancellationToken cancellationToken = default) => Compile(sql, @params, true, cancellationToken);
-    public QueryCommand<TResult> Compile(string sql, bool nonStreamCalls, CancellationToken cancellationToken = default) => Compile(sql, null, nonStreamCalls, cancellationToken);
-    public QueryCommand<TResult> Compile(string sql, object? @params, bool nonStreamCalls, CancellationToken cancellationToken = default) => Compile(sql, @params, nonStreamCalls, true, cancellationToken);
-    public QueryCommand<TResult> Compile(string sql, object? @params, bool nonStreamCalls, bool storeInCache, CancellationToken cancellationToken = default)
+    public QueryCommand<TResult> Compile(string sql, bool nonStreamUsing, CancellationToken cancellationToken = default) => Compile(sql, null, nonStreamUsing, cancellationToken);
+    public QueryCommand<TResult> Compile(string sql, object? @params, bool nonStreamUsing, CancellationToken cancellationToken = default) => Compile(sql, @params, nonStreamUsing, true, cancellationToken);
+    public QueryCommand<TResult> Compile(string sql, object? @params, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken = default)
     {
-        _dataProvider.Compile(sql, @params, this, nonStreamCalls, storeInCache, cancellationToken);
+        _dataProvider.Compile(sql, @params, this, nonStreamUsing, storeInCache, cancellationToken);
 
         return this;
     }
-    public QueryCommand<TResult> Compile(bool nonStreamCalls, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="nonStreamUsing">true, if optimized for buffered or scalar value results; false for non-buffered (stream) using, when result is IEnumerable or IAsyncEnumerable</param>
+    /// <param name="cancellationToken"></param>
+    /// <returns></returns>
+    public QueryCommand<TResult> Compile(bool nonStreamUsing = true, CancellationToken cancellationToken = default)
     {
-        _dataProvider.Compile(this, nonStreamCalls, false, cancellationToken);
+        _dataProvider.Compile(this, nonStreamUsing, false, cancellationToken);
 
         return this;
     }

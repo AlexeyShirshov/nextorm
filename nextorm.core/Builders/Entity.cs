@@ -189,7 +189,7 @@ public class Entity<TEntity> : BaseEntity, IAsyncEnumerable<TEntity>, ICloneable
     {
         return ToCommand().FirstAsync(cancellationToken, @params);
     }
-    public QueryCommand<TEntity?> FirstOrFirstOrDefault()
+    public QueryCommand<TEntity?> FirstOrFirstOrDefaultCommand()
     {
         var cmd = ToCommand();
         cmd.Paging.Limit = 1;
@@ -198,7 +198,7 @@ public class Entity<TEntity> : BaseEntity, IAsyncEnumerable<TEntity>, ICloneable
         return cmd;
 #pragma warning restore CS8619 // Nullability of reference types in value doesn't match target type.
     }
-    public QueryCommand<TResult?> FirstOrFirstOrDefault<TResult>(Expression<Func<TEntity, TResult>> exp)
+    public QueryCommand<TResult?> FirstOrFirstOrDefaultCommand<TResult>(Expression<Func<TEntity, TResult>> exp)
     {
         var cmd = Select(exp);
         cmd.Paging.Limit = 1;
@@ -225,7 +225,7 @@ public class Entity<TEntity> : BaseEntity, IAsyncEnumerable<TEntity>, ICloneable
     {
         return ToCommand().SingleAsync(cancellationToken, @params);
     }
-    public QueryCommand<TResult?> SingleOrSingleOrDefault<TResult>(Expression<Func<TEntity, TResult>> exp)
+    public QueryCommand<TResult?> SingleOrSingleOrDefaultCommand<TResult>(Expression<Func<TEntity, TResult>> exp)
     {
         var cmd = Select(exp);
         cmd.Paging.Limit = 2;
@@ -233,7 +233,7 @@ public class Entity<TEntity> : BaseEntity, IAsyncEnumerable<TEntity>, ICloneable
         return cmd;
 #pragma warning restore CS8619 // Nullability of reference types in value doesn't match target type.
     }
-    public QueryCommand<TEntity> SingleOrSingleOrDefault()
+    public QueryCommand<TEntity> SingleOrSingleOrDefaultCommand()
     {
         var cmd = ToCommand();
         cmd.Paging.Limit = 2;
