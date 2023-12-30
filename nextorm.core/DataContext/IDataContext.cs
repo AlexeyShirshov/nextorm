@@ -10,6 +10,7 @@ public interface IDataContext : IAsyncDisposable, IDisposable
     bool NeedMapping { get; }
     IDictionary<ExpressionKey, Delegate> ExpressionsCache { get; }
     IDictionary<Type, IEntityMeta> Metadata { get; }
+    IDictionary<Type, List<SelectExpression>> SelectListCache { get; }
     public Entity<T> Create<T>(Action<EntityBuilder<T>>? configEntity = null)
     {
         if (!Metadata.ContainsKey(typeof(T)))

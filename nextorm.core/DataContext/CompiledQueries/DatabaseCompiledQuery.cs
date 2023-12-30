@@ -22,4 +22,5 @@ public class DbCompiledQuery<TResult> : CompiledQuery<TResult, IDataRecord>
     public DbCommand DbCommand;
     public ResultSetEnumerator<TResult>? Enumerator;
     public int LastRowCount;
+    public List<int> ParamMap = [];
 }

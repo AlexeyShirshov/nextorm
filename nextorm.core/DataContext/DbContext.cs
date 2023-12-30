@@ -15,6 +15,7 @@ public class DbContext : IDataContext
 {
     private readonly static MethodInfo IsDBNullMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.IsDBNull))!;
     private readonly static ConcurrentDictionary<Type, IEntityMeta> _metadata = new ConcurrentDictionary<Type, IEntityMeta>();
+    private readonly static ConcurrentDictionary<Type, List<SelectExpression>> _selectListCache = new();
     private readonly static ExpressionCache<Delegate> _expCache = new ExpressionCache<Delegate>();
     internal protected readonly static ObjectPool<StringBuilder> _sbPool = new DefaultObjectPoolProvider().Create(new StringBuilderPooledObjectPolicy());
     private readonly static string[] _params = ["norm_p0", "norm_p1", "norm_p2", "norm_p3", "norm_p4"];
@@ -46,6 +47,7 @@ public class DbContext : IDataContext
     public IDictionary<ExpressionKey, Delegate> ExpressionsCache => _expCache;
     public virtual string EmptyString => "''";
     public IDictionary<Type, IEntityMeta> Metadata => _metadata;
+    public IDictionary<Type, List<SelectExpression>> SelectListCache => _selectListCache;
     public ILogger? CommandLogger { get; set; }
     public Entity From(string table) => new(this, table) { Logger = CommandLogger };
     public void EnsureConnectionOpen()
@@ -137,27 +139,41 @@ public class DbContext : IDataContext
             var parameters = sqlCommand.Parameters;
             for (var i = 0; i < @params.Length; i++)
             {
-                var paramName = i < 5 ? _params[i] : string.Format("norm_p{0}", i);
-                // parameters[0].Value = @params[i];
-                //sqlCommand.Parameters[paramName].Value = @params[i];
-                //var added = false;
-                var idx = parameters.IndexOf(paramName);
+                var idx = -1;
+                if (i < compiledQuery.ParamMap.Count)
+                {
+                    idx = compiledQuery.ParamMap[i];
+                }
+
+                string? paramName = null;
+                if (idx < 0)
+                {
+                    paramName = i < 5 ? _params[i] : string.Format("norm_p{0}", i);
+                    // parameters[0].Value = @params[i];
+                    //sqlCommand.Parameters[paramName].Value = @params[i];
+                    //var added = false;
+                    idx = parameters.IndexOf(paramName);
+
+                    if (idx >= 0)
+                    {
+                        if (i < compiledQuery.ParamMap.Count)
+                            compiledQuery.ParamMap[i] = idx;
+                        else
+                            compiledQuery.ParamMap.Add(idx);
+                    }
+                }
+
                 if (idx >= 0)
                     parameters[idx].Value = @params[i];
                 else
-                    parameters.Add(CreateParam(paramName, @params[i]));
-                // for (var j = 0; j < parameters.Count; j++)
-                // {
-                //     var p = sqlCommand.Parameters[j];
-                //     if (p.ParameterName == paramName)
-                //     {
-                //         p.Value = @params[i];
-                //         added = true;
-                //         break;
-                //     }
-                // }
-                // if (!added)
-                //     sqlCommand.Parameters.Add(CreateParam(paramName, @params[i]));
+                {
+                    if (i < compiledQuery.ParamMap.Count)
+                        compiledQuery.ParamMap[i] = parameters.Count;
+                    else
+                        compiledQuery.ParamMap.Add(parameters.Count);
+
+                    parameters.Add(CreateParam(paramName!, @params[i]));
+                }
             }
         }
 
@@ -190,15 +206,41 @@ public class DbContext : IDataContext
             var parameters = sqlCommand.Parameters;
             for (var i = 0; i < @params.Length; i++)
             {
-                var paramName = i < 5 ? _params[i] : string.Format("norm_p{0}", i);
-                // parameters[0].Value = @params[i];
-                //sqlCommand.Parameters[paramName].Value = @params[i];
-                //var added = false;
-                var idx = parameters.IndexOf(paramName);
+                var idx = -1;
+                if (i < compiledQuery.ParamMap.Count)
+                {
+                    idx = compiledQuery.ParamMap[i];
+                }
+
+                string? paramName = null;
+                if (idx < 0)
+                {
+                    paramName = i < 5 ? _params[i] : string.Format("norm_p{0}", i);
+                    // parameters[0].Value = @params[i];
+                    //sqlCommand.Parameters[paramName].Value = @params[i];
+                    //var added = false;
+                    idx = parameters.IndexOf(paramName);
+
+                    if (idx >= 0)
+                    {
+                        if (i < compiledQuery.ParamMap.Count)
+                            compiledQuery.ParamMap[i] = idx;
+                        else
+                            compiledQuery.ParamMap.Add(idx);
+                    }
+                }
+
                 if (idx >= 0)
                     parameters[idx].Value = @params[i];
                 else
-                    parameters.Add(CreateParam(paramName, @params[i]));
+                {
+                    if (i < compiledQuery.ParamMap.Count)
+                        compiledQuery.ParamMap[i] = parameters.Count;
+                    else
+                        compiledQuery.ParamMap.Add(parameters.Count);
+
+                    parameters.Add(CreateParam(paramName!, @params[i]));
+                }
                 // for (var j = 0; j < parameters.Count; j++)
                 // {
                 //     var p = sqlCommand.Parameters[j];
@@ -450,7 +492,7 @@ public class DbContext : IDataContext
         }
         else
         {
-            if (!paramMode && !cmd.Paging.IsTop && MakeTop(cmd.Paging.Limit, out var topStmt))
+            if (!paramMode && cmd.Paging.IsTop && MakeTop(cmd.Paging.Limit, out var topStmt))
             {
                 sqlBuilder!.Append(topStmt).Append(' ');
                 pageApplyed = true;
@@ -1086,13 +1128,13 @@ public class DbContext : IDataContext
 
             if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Get instance of {type} as: {exp}", resultType, lambda);
 
-            var key = new ExpressionKey(lambda, _expCache, queryCommand);
-            if (!_expCache.TryGetValue(key, out var d))
-            {
-                d = lambda.Compile();
-                _expCache[key] = d;
-            }
-
+            // var key = new ExpressionKey(lambda, _expCache, queryCommand);
+            // if (!_expCache.TryGetValue(key, out var d))
+            // {
+            //     d = lambda.Compile();
+            //     _expCache[key] = d;
+            // }
+            var d = lambda.Compile();
             return (Func<IDataRecord, TResult>)d;
         };
 

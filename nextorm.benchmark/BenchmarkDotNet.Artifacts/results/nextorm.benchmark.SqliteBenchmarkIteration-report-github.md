@@ -11,7 +11,7 @@ Job=.NET 8.0  Runtime=.NET 8.0
 ```
 | Method                | Mean     | Error    | StdDev   | Gen0   | Gen1   | Allocated |
 |---------------------- |---------:|---------:|---------:|-------:|-------:|----------:|
-| NextormCompiledToList | 33.44 μs | 0.662 μs | 0.883 μs | 0.3662 |      - |   1.73 KB |
-| NextormCachedToList   | 40.38 μs | 0.783 μs | 0.932 μs | 0.7324 |      - |   3.76 KB |
-| EFCore                | 63.15 μs | 1.246 μs | 1.280 μs | 1.8311 | 0.3662 |   8.63 KB |
-| Dapper                | 42.14 μs | 0.816 μs | 0.907 μs | 0.3662 |      - |   1.88 KB |
+| NextormCompiledToList | 35.04 μs | 0.643 μs | 0.570 μs | 0.3662 |      - |   1.73 KB |
+| NextormCachedToList   | 38.22 μs | 0.741 μs | 0.793 μs | 0.7324 |      - |   3.41 KB |
+| EFCore                | 64.18 μs | 1.260 μs | 1.500 μs | 1.8311 | 0.3662 |   8.63 KB |
+| Dapper                | 42.79 μs | 0.772 μs | 0.858 μs | 0.3662 |      - |   1.88 KB |

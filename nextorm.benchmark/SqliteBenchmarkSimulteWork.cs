@@ -15,6 +15,7 @@ namespace nextorm.benchmark;
 [GroupBenchmarksBy(BenchmarkDotNet.Configs.BenchmarkLogicalGroupRule.ByJob, BenchmarkDotNet.Configs.BenchmarkLogicalGroupRule.ByCategory)]
 [HideColumns(Column.Job, Column.Runtime, Column.RatioSD, Column.Error, Column.StdDev)]
 [MemoryDiagnoser]
+[Config(typeof(NextormConfig))]
 public class SqliteBenchmarkSimulateWork
 {
     const int WorkDuration = 1;
@@ -27,8 +28,8 @@ public class SqliteBenchmarkSimulateWork
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
     private readonly QueryCommand<SimpleEntity?> _cmdInner;
-    private readonly Func<EFDataContext, int, IAsyncEnumerable<LargeEntity>> _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx, int lim) => ctx.LargeEntities.Where(it => it.Id < lim));
-    private readonly Func<EFDataContext, long, int, Task<SimpleEntity?>> _efInnerCompiled = EF.CompileAsyncQuery((EFDataContext ctx, long id, int i) => ctx.SimpleEntities.Where(it => it.Id == id + i).FirstOrDefault());
+    private readonly Func<EFDataContext, IAsyncEnumerable<LargeEntity>> _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.LargeEntities.Where(it => it.Id < LargeListSize));
+    private readonly Func<EFDataContext, long, int, Task<SimpleEntity?>> _efInnerCompiled = EF.CompileAsyncQuery((EFDataContext ctx, long id, int i) => ctx.SimpleEntities.Where(it => (it.Id - i) == id).FirstOrDefault());
     private readonly ILoggerFactory? _logFactory;
     public SqliteBenchmarkSimulateWork(bool withLogging = false)
     {
@@ -204,7 +205,7 @@ public class SqliteBenchmarkSimulateWork
     [Benchmark]
     public async Task EFCoreCompiled()
     {
-        await foreach (var row in _efCompiled(_efCtx, LargeListSize).Select(entity => new { entity.Id, entity.Str, entity.Dt }))
+        foreach (var row in await _efCompiled(_efCtx).ToListAsync())
         {
             await DoWork();
             for (var i = 0; i < SmallIterations; i++)
