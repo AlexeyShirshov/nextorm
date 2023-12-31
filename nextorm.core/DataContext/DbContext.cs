@@ -6,6 +6,7 @@ using System.Data.Common;
 using System.Diagnostics;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text;
 
 
@@ -14,15 +15,16 @@ namespace nextorm.core;
 public class DbContext : IDataContext
 {
     private readonly static MethodInfo IsDBNullMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.IsDBNull))!;
-    private readonly static ConcurrentDictionary<Type, IEntityMeta> _metadata = new ConcurrentDictionary<Type, IEntityMeta>();
+    private readonly static ConcurrentDictionary<Type, IEntityMeta> _metadata = new();
     private readonly static ConcurrentDictionary<Type, List<SelectExpression>> _selectListCache = new();
-    private readonly static ExpressionCache<Delegate> _expCache = new ExpressionCache<Delegate>();
+    //private readonly static ConcurrentDictionary<Expression, List<SelectExpression>> _selectListExpCache = new(ExpressionEqualityComparer.Instance);
+    private readonly static ExpressionCache<Delegate> _expCache = new();
     internal protected readonly static ObjectPool<StringBuilder> _sbPool = new DefaultObjectPoolProvider().Create(new StringBuilderPooledObjectPolicy());
     private readonly static string[] _params = ["norm_p0", "norm_p1", "norm_p2", "norm_p3", "norm_p4"];
     //    private readonly IDictionary<QueryCommand, SqlCacheEntry> _queryCache = new Dictionary<QueryCommand, SqlCacheEntry>();
     private readonly Dictionary<QueryPlan, object> _queryPlanCache = new Dictionary<QueryPlan, object>();
     private DbConnection? _conn;
-    // private bool _clearCache;
+    protected bool _connCreated;
     private bool _disposedValue;
     private bool _connOpen;
     private readonly Action<DbCommand>? _logParams;
@@ -48,6 +50,7 @@ public class DbContext : IDataContext
     public virtual string EmptyString => "''";
     public IDictionary<Type, IEntityMeta> Metadata => _metadata;
     public IDictionary<Type, List<SelectExpression>> SelectListCache => _selectListCache;
+    //public IDictionary<Expression, List<SelectExpression>> SelectListExpessionCache => _selectListExpCache;
     public ILogger? CommandLogger { get; set; }
     public Entity From(string table) => new(this, table) { Logger = CommandLogger };
     public void EnsureConnectionOpen()
@@ -76,11 +79,13 @@ public class DbContext : IDataContext
         if (_conn is null)
         {
             if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Getting connection");
+            _connCreated = true;
             _conn = CreateConnection();
-            _conn.StateChange += (sender, args) => _connOpen = args.CurrentState == ConnectionState.Open;
+            _conn.StateChange += OnStateChanged;
         }
         return _conn;
     }
+    private void OnStateChanged(object sender, StateChangeEventArgs args) => _connOpen = args.CurrentState == ConnectionState.Open;
     public virtual DbConnection CreateConnection()
     {
         throw new NotImplementedException();
@@ -106,6 +111,7 @@ public class DbContext : IDataContext
     {
         throw new NotImplementedException(type.ToString());
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private List<Param> ExtractParams(QueryCommand queryCommand) => MakeSelect(queryCommand, true).Item2;
     private void LogParams(DbCommand sqlCommand)
     {
@@ -419,10 +425,16 @@ public class DbContext : IDataContext
 
                     if (!plan.NoParams)
                     {
-                        if (compiledQuery?.DbCommand is not null)
-                            dbCommand.Parameters.Clear();
+                        // if (compiledQuery?.DbCommand is not null)
+                        //     dbCommand.Parameters.Clear();
 
-                        dbCommand.Parameters.AddRange(ExtractParams(queryCommand).Select(it => CreateParam(it.Name, it.Value)).ToArray());
+                        // dbCommand.Parameters.AddRange(ExtractParams(queryCommand).Select(it => CreateParam(it.Name, it.Value)).ToArray());
+                        var pp = ExtractParams(queryCommand);
+                        for (int i = 0; i < pp.Count; i++)
+                        {
+                            dbCommand.Parameters[i].Value = pp[i].Value;
+                            Debug.Assert(dbCommand.Parameters[i].ParameterName == pp[i].Name, $"ParameterName {dbCommand.Parameters[i].ParameterName} not equals {pp[i].Name}");
+                        }
                     }
 
                     compiledQuery ??= new DbCompiledQuery<TResult>(dbCommand, plan.MapDelegate, queryCommand.SingleRow);
@@ -875,9 +887,12 @@ public class DbContext : IDataContext
     {
         if (!_disposedValue)
         {
-            if (disposing)
+            if (disposing && _conn is not null)
             {
-                _conn?.Dispose();
+                if (_connCreated)
+                    _conn.Dispose();
+                else
+                    _conn.StateChange -= OnStateChanged;
             }
 
             _disposedValue = true;
@@ -893,8 +908,13 @@ public class DbContext : IDataContext
     public ValueTask DisposeAsync()
     {
         if (_conn is not null)
-            return _conn.DisposeAsync();
-
+        {
+            if (_connCreated)
+                _conn.Dispose();
+            else
+                _conn.StateChange -= OnStateChanged;
+        }
+        GC.SuppressFinalize(this);
         return ValueTask.CompletedTask;
     }
     public IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)

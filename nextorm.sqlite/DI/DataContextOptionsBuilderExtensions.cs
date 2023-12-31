@@ -1,4 +1,5 @@
 using System.Configuration;
+using System.Data.Common;
 using nextorm.core;
 
 namespace nextorm.sqlite;
@@ -15,6 +16,12 @@ public static class DataContextOptionsBuilderExtensions
 #endif
 
         builder.Factory = (b) => new SqliteDbContext($"Data Source='{filepath}'", b);
+        return builder;
+    }
+    public static DbContextBuilder UseSqlite(this DbContextBuilder builder, DbConnection connection)
+    {
+        builder.Factory = (b) => new SqliteDbContext(connection, b);
+
         return builder;
     }
 }

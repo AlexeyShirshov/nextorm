@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>nextorm.benchmark.SqliteBenchmarkLargeIteration-20231231-115446</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.13.10, Windows 11 (10.0.22621.2861/22H2/2022Update/SunValley2)
+Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical cores
+.NET SDK 8.0.100
+  [Host]   : .NET 8.0.0 (8.0.23.53103), X64 RyuJIT AVX2
+  .NET 8.0 : .NET 8.0.0 (8.0.23.53103), X64 RyuJIT AVX2
+</code></pre>
+<pre><code>Job=.NET 8.0  Runtime=.NET 8.0  
+</code></pre>
+
+<table>
+<thead><tr><th>Method                 </th><th>Mean</th><th>Gen0</th><th>Gen1</th><th>Gen2</th><th>Allocated</th>
+</tr>
+</thead><tbody><tr><td>NextormCompiled</td><td>10.14 ms</td><td>468.7500</td><td>-</td><td>-</td><td>2.14 MB</td>
+</tr><tr><td>NextormCachedSelectList</td><td>10.16 ms</td><td>468.7500</td><td>-</td><td>-</td><td>2.14 MB</td>
+</tr><tr><td>NextormCached</td><td>10.20 ms</td><td>468.7500</td><td>-</td><td>-</td><td>2.14 MB</td>
+</tr><tr><td>AdoTupleToList</td><td>10.21 ms</td><td>421.8750</td><td>281.2500</td><td>281.2500</td><td>2.68 MB</td>
+</tr><tr><td>NextormCachedToList</td><td>10.50 ms</td><td>390.6250</td><td>296.8750</td><td>-</td><td>2.22 MB</td>
+</tr><tr><td>NextormCompiledToList</td><td>10.57 ms</td><td>390.6250</td><td>281.2500</td><td>-</td><td>2.21 MB</td>
+</tr><tr><td>NextormCachedSelectListToList</td><td>10.71 ms</td><td>390.6250</td><td>296.8750</td><td>-</td><td>2.22 MB</td>
+</tr><tr><td>DapperUnbuffered</td><td>11.22 ms</td><td>578.1250</td><td>-</td><td>-</td><td>2.59 MB</td>
+</tr><tr><td>EFCoreStream</td><td>11.56 ms</td><td>875.0000</td><td>-</td><td>-</td><td>3.98 MB</td>
+</tr><tr><td>AdoWithDelegate</td><td>12.52 ms</td><td>375.0000</td><td>265.6250</td><td>125.0000</td><td>2.39 MB</td>
+</tr><tr><td>EFCoreCompiled</td><td>12.85 ms</td><td>984.3750</td><td>-</td><td>-</td><td>4.43 MB</td>
+</tr><tr><td>Dapper</td><td>13.74 ms</td><td>453.1250</td><td>265.6250</td><td>125.0000</td><td>2.84 MB</td>
+</tr><tr><td>EFCore</td><td>15.90 ms</td><td>656.2500</td><td>312.5000</td><td>125.0000</td><td>4.23 MB</td>
+</tr></tbody></table>
+</body>
+</html>

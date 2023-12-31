@@ -81,15 +81,15 @@ public class SqliteBenchmarkLargeIteration
     //     }
     // }
     [Benchmark()]
-    [BenchmarkCategory("Stream")]
+    //[BenchmarkCategory("Stream")]
     public async Task NextormCompiled()
     {
-        foreach (var row in await _cmdExec.Exec())
+        foreach (var row in await _cmdExec.AsEnumerableAsync())
         {
         }
     }
     [Benchmark()]
-    [BenchmarkCategory("Buffered")]
+    //[BenchmarkCategory("Buffered")]
     public async Task NextormCompiledToList()
     {
         foreach (var row in await _cmdToList.ToListAsync())
@@ -104,10 +104,10 @@ public class SqliteBenchmarkLargeIteration
     //     }
     // }
     [Benchmark()]
-    [BenchmarkCategory("Stream")]
+    //[BenchmarkCategory("Stream")]
     public async Task NextormCached()
     {
-        foreach (var row in await _ctx.LargeEntity.Select(entity => new { entity.Id, entity.Str, entity.Dt }).Exec())
+        foreach (var row in await _ctx.LargeEntity.Select(entity => new { entity.Id, entity.Str, entity.Dt }).AsEnumerableAsync())
         {
         }
     }
@@ -119,15 +119,22 @@ public class SqliteBenchmarkLargeIteration
     //     }
     // }
     [Benchmark()]
-    [BenchmarkCategory("Buffered")]
+    //[BenchmarkCategory("Buffered")]
     public async Task NextormCachedToList()
     {
         foreach (var row in await _ctx.LargeEntity.Select(entity => new { entity.Id, entity.Str, entity.Dt }).ToListAsync())
         {
         }
     }
+    // [Benchmark()]
+    // public async Task NextormCachedFetch()
+    // {
+    //     await foreach (var row in _ctx.LargeEntity.Select(entity => new { entity.Id, entity.Str, entity.Dt }).Fetch())
+    //     {
+    //     }
+    // }
     [Benchmark]
-    [BenchmarkCategory("Buffered")]
+    //[BenchmarkCategory("Buffered")]
     public async Task EFCore()
     {
         foreach (var row in await _efCtx.LargeEntities.Select(entity => new { entity.Id, entity.Str, entity.Dt }).ToListAsync())
@@ -135,7 +142,7 @@ public class SqliteBenchmarkLargeIteration
         }
     }
     [Benchmark]
-    [BenchmarkCategory("Stream")]
+    //[BenchmarkCategory("Stream")]
     public async Task EFCoreStream()
     {
         await foreach (var row in _efCtx.LargeEntities.Select(entity => new { entity.Id, entity.Str, entity.Dt }).AsAsyncEnumerable())
@@ -143,7 +150,7 @@ public class SqliteBenchmarkLargeIteration
         }
     }
     [Benchmark]
-    [BenchmarkCategory("Stream")]
+    //[BenchmarkCategory("Stream")]
     public async Task EFCoreCompiled()
     {
         await foreach (var row in _efCompiled(_efCtx).Select(entity => new TupleLargeEntity(entity.Id, entity.Str, entity.Dt)))
@@ -151,7 +158,7 @@ public class SqliteBenchmarkLargeIteration
         }
     }
     [Benchmark]
-    [BenchmarkCategory("Buffered")]
+    //[BenchmarkCategory("Buffered")]
     public async Task Dapper()
     {
         foreach (var row in await _conn.QueryAsync<LargeEntity>("select id, someString as str, dt from large_table"))
@@ -159,7 +166,7 @@ public class SqliteBenchmarkLargeIteration
         }
     }
     [Benchmark]
-    [BenchmarkCategory("Stream")]
+    //[BenchmarkCategory("Stream")]
     public async Task DapperUnbuffered()
     {
         await foreach (var row in _conn.QueryUnbufferedAsync<LargeEntity>("select id, someString as str, dt from large_table"))
@@ -196,7 +203,7 @@ public class SqliteBenchmarkLargeIteration
     //     //Console.WriteLine("end method");
     // }
     [Benchmark()]
-    [BenchmarkCategory("Buffered")]
+    //[BenchmarkCategory("Buffered")]
     public async Task AdoWithDelegate()
     {
         if (_conn.State == System.Data.ConnectionState.Closed)
@@ -276,7 +283,7 @@ public class SqliteBenchmarkLargeIteration
     //     }
     // }
     [Benchmark()]
-    [BenchmarkCategory("Buffered")]
+    //[BenchmarkCategory("Buffered")]
     public void AdoTupleToList()
     {
         Expression<Func<ILargeEntity, (long id, string? str, DateTime? dt)>> lambda = record => new ValueTuple<long, string?, DateTime?>(record.Id, record.Str, record.Dt);
@@ -294,8 +301,8 @@ public class SqliteBenchmarkLargeIteration
             TupleFactory(ref listSpan[i++], reader);
         }
     }
-    [Benchmark(Baseline = true)]
-    [BenchmarkCategory("Stream")]
+    //[Benchmark(Baseline = true)]
+    //[BenchmarkCategory("Stream")]
     public async Task AdoTupleIteration()
     {
         //Expression<Func<ILargeEntity, (long id, string? str, DateTime? dt)>> lambda = record => new ValueTuple<long, string?, DateTime?>(record.Id, record.Str, record.Dt);
@@ -373,8 +380,8 @@ public class SqliteBenchmarkLargeIteration
 
     //     }
     // }
-    [Benchmark(Baseline = true)]
-    [BenchmarkCategory("Buffered")]
+    //[Benchmark(Baseline = true)]
+    //[BenchmarkCategory("Buffered")]
     public async Task AdoClassToListWithInit()
     {
         if (_conn.State != System.Data.ConnectionState.Open)

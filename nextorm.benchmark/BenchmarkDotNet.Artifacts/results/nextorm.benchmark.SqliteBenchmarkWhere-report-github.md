@@ -11,15 +11,15 @@ Job=.NET 8.0  Runtime=.NET 8.0
 ```
 | Method                | Categories | Mean     | Ratio | Gen0     | Gen1    | Allocated  | Alloc Ratio |
 |---------------------- |----------- |---------:|------:|---------:|--------:|-----------:|------------:|
-| NextormCompiledToList | Buffered   | 3.227 ms |     ? |  27.3438 |       - |  140.29 KB |           ? |
-| NextormCachedToList   | Buffered   | 3.513 ms |     ? |  31.2500 |       - |  151.87 KB |           ? |
-| Dapper                | Buffered   | 4.299 ms |     ? |  39.0625 |       - |  185.39 KB |           ? |
-| EFCore                | Buffered   | 9.181 ms |     ? | 218.7500 | 31.2500 | 1071.47 KB |           ? |
+| NextormCachedToList   | Buffered   | 3.430 ms |     ? |  31.2500 |  3.9063 |  152.01 KB |           ? |
+| NextormCompiledToList | Buffered   | 3.700 ms |     ? |  27.3438 |       - |  140.29 KB |           ? |
+| Dapper                | Buffered   | 4.057 ms |     ? |  39.0625 |       - |  185.39 KB |           ? |
+| EFCore                | Buffered   | 8.771 ms |     ? | 218.7500 | 31.2500 | 1071.48 KB |           ? |
 |                       |            |          |       |          |         |            |             |
-| DapperUnbuffered      | Stream     | 4.088 ms |  0.98 |  39.0625 |       - |  208.67 KB |        0.93 |
-| NextormCompiledAsync  | Stream     | 4.097 ms |  0.98 |  46.8750 |       - |  228.99 KB |        1.02 |
-| NextormCompiled       | Stream     | 4.165 ms |  1.00 |  46.8750 |       - |  225.08 KB |        1.00 |
-| NextormCachedParam    | Stream     | 4.699 ms |  1.13 |  46.8750 |       - |  235.92 KB |        1.05 |
-| EFCoreCompiled        | Stream     | 5.579 ms |  1.34 | 109.3750 | 31.2500 |  534.38 KB |        2.37 |
-| NextormCached         | Stream     | 5.612 ms |  1.34 | 148.4375 |       - |  686.82 KB |        3.05 |
-| EFCoreStream          | Stream     | 9.203 ms |  2.20 | 218.7500 | 31.2500 |  1072.5 KB |        4.76 |
+| NextormCompiledAsync  | Stream     | 4.024 ms |  0.87 |  46.8750 |       - |  228.99 KB |        1.02 |
+| NextormCachedParam    | Stream     | 4.554 ms |  0.99 |  46.8750 |       - |  236.05 KB |        1.05 |
+| DapperUnbuffered      | Stream     | 4.597 ms |  1.00 |  39.0625 |       - |  208.67 KB |        0.93 |
+| NextormCompiled       | Stream     | 4.601 ms |  1.00 |  46.8750 |       - |  225.08 KB |        1.00 |
+| EFCoreCompiled        | Stream     | 5.356 ms |  1.16 | 109.3750 | 31.2500 |  534.38 KB |        2.37 |
+| NextormCached         | Stream     | 6.077 ms |  1.32 | 140.6250 |       - |  664.17 KB |        2.95 |
+| EFCoreStream          | Stream     | 8.792 ms |  1.91 | 218.7500 | 31.2500 | 1060.78 KB |        4.71 |

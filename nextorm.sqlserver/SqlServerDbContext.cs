@@ -6,18 +6,18 @@ using nextorm.core;
 
 namespace nextorm.sqlserver;
 
-public class SqlServerClient : DbContext
+public class SqlServerDbContext : DbContext
 {
     private readonly string? _connectionString;
     private readonly DbConnection? _connection;
 
-    public SqlServerClient(string connectionString, DbContextBuilder optionsBuilder)
+    public SqlServerDbContext(string connectionString, DbContextBuilder optionsBuilder)
         : base(optionsBuilder)
     {
         _connectionString = connectionString;
     }
 
-    public SqlServerClient(DbConnection connection, DbContextBuilder optionsBuilder)
+    public SqlServerDbContext(DbConnection connection, DbContextBuilder optionsBuilder)
         : base(optionsBuilder)
     {
         _connection = connection;
@@ -33,8 +33,17 @@ public class SqlServerClient : DbContext
                 Logger.LogDebug("Creating connection");
         }
 
-        return _connection ?? new SqlConnection(_connectionString);
+        if (_connection is not null)
+        {
+            _connCreated = false;
+            return _connection;
+        }
+
+        return new SqlConnection(_connectionString);
     }
+    public string ConnectionString => string.IsNullOrEmpty(_connectionString)
+        ? _connection!.ConnectionString
+        : _connectionString!;
     public override DbCommand CreateCommand(string sql)
     {
         return new SqlCommand(sql) { CommandType = System.Data.CommandType.Text };

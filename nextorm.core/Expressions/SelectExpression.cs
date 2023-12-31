@@ -49,6 +49,9 @@ public class SelectExpression
     private readonly static MethodInfo GetInt16MI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetInt16))!;
     private readonly static MethodInfo GetByteMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetByte))!;
     private readonly static MethodInfo GetGuidMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetGuid))!;
+    internal int HashCode;
+    internal int PlanHashCode;
+
     public MethodInfo GetDataRecordMethod()
     {
         // var recordType = typeof(IDataRecord);

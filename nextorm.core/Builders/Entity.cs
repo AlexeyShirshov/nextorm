@@ -133,6 +133,11 @@ public class Entity<TEntity> : BaseEntity, IAsyncEnumerable<TEntity>, ICloneable
     public static implicit operator QueryCommand(Entity<TEntity> builder) => builder.ToCommand();
     public QueryCommand<TEntity> ToCommand() => Select(it => it);
     public IAsyncEnumerator<TEntity> GetAsyncEnumerator(CancellationToken cancellationToken = default) => ToCommand().GetAsyncEnumerator(cancellationToken);
+    public IAsyncEnumerable<TEntity> AsAsyncEnumerable(params object[] @params) => AsAsyncEnumerable(CancellationToken.None, @params);
+    public IAsyncEnumerable<TEntity> AsAsyncEnumerable(CancellationToken cancellationToken, params object[] @params) => ToCommand().AsAsyncEnumerable(cancellationToken, @params);
+    public Task<IEnumerable<TEntity>> AsEnumerableAsync(params object[] @params) => AsEnumerableAsync(CancellationToken.None, @params);
+    public Task<IEnumerable<TEntity>> AsEnumerableAsync(CancellationToken cancellationToken, params object[] @params) => ToCommand().AsEnumerableAsync(cancellationToken, @params);
+    public IEnumerable<TEntity> AsEnumerable(params object[] @params) => ToCommand().AsEnumerable(@params);
     public EntityP2<TEntity, TJoinEntity> Join<TJoinEntity>(Entity<TJoinEntity> _, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
     {
         QueryCommand? query = null;

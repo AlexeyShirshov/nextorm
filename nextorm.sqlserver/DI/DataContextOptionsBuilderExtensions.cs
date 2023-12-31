@@ -9,13 +9,13 @@ public static class DataContextOptionsBuilderExtensions
     {
         ArgumentException.ThrowIfNullOrEmpty(connectionString);
 
-        builder.Factory = (b) => new SqlServerClient(connectionString, b);
+        builder.Factory = (b) => new SqlServerDbContext(connectionString, b);
 
         return builder;
     }
     public static DbContextBuilder UseSqlServer(this DbContextBuilder builder, DbConnection connection)
     {
-        builder.Factory = (b) => new SqlServerClient(connection, b);
+        builder.Factory = (b) => new SqlServerDbContext(connection, b);
 
         return builder;
     }

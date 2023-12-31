@@ -13,7 +13,7 @@ public class EntityBuilder<T>
     {
         return new EntityMeta(string.IsNullOrEmpty(_tableName)
             ? AutoBuildTableName()
-            : _tableName, !_props.Any()
+            : _tableName, _props.Count == 0
                 ? AutoBuildProperties()
                 : _props.Select(pb => pb.Build()).ToArray());
     }

@@ -8,14 +8,18 @@ namespace nextorm.sqlite;
 
 public class SqliteDbContext : DbContext
 {
-    private readonly string _connectionString;
-
+    private readonly string? _connectionString;
+    private readonly DbConnection? _connection;
     public SqliteDbContext(string connectionString, DbContextBuilder optionsBuilder)
         : base(optionsBuilder)
     {
         _connectionString = connectionString;
     }
-
+    public SqliteDbContext(DbConnection connection, DbContextBuilder optionsBuilder)
+            : base(optionsBuilder)
+    {
+        _connection = connection;
+    }
     public override DbConnection CreateConnection()
     {
         if (Logger?.IsEnabled(LogLevel.Debug) ?? false)
@@ -26,6 +30,12 @@ public class SqliteDbContext : DbContext
                 Logger.LogDebug("Creating connection");
         }
 
+        if (_connection is not null)
+        {
+            _connCreated = false;
+            return _connection;
+        }
+
         return new SQLiteConnection(_connectionString);
     }
     public override DbCommand CreateCommand(string sql)
@@ -34,7 +44,9 @@ public class SqliteDbContext : DbContext
     }
     public override string ConcatStringOperator => "||";
 
-    public string ConnectionString => _connectionString;
+    public string ConnectionString => string.IsNullOrEmpty(_connectionString)
+        ? _connection!.ConnectionString
+        : _connectionString!;
 
     public override string MakeCoalesce(string v1, string v2)
     {

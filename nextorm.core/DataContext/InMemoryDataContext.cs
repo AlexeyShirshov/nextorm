@@ -15,6 +15,7 @@ public partial class InMemoryContext : IDataContext
     private readonly static MethodInfo miCreateCompiledQuery = typeof(InMemoryContext).GetMethod(nameof(CreateCompiledQuery), BindingFlags.NonPublic | BindingFlags.Instance)!;
     private readonly static IDictionary<Type, IEntityMeta> _metadata = new ConcurrentDictionary<Type, IEntityMeta>();
     private readonly static ConcurrentDictionary<Type, List<SelectExpression>> _selectListCache = new();
+    //private readonly static ConcurrentDictionary<Expression, List<SelectExpression>> _selectListExpCache = new(ExpressionEqualityComparer.Instance);
     private readonly IDictionary<ExpressionKey, Delegate> _expCache = new ExpressionCache<Delegate>();
     private readonly IDictionary<Type, object?> _data = new Dictionary<Type, object?>();
     private bool _disposedValue;
@@ -33,6 +34,7 @@ public partial class InMemoryContext : IDataContext
     public IDictionary<ExpressionKey, Delegate> ExpressionsCache => _expCache;
     public IDictionary<Type, IEntityMeta> Metadata => _metadata;
     public IDictionary<Type, List<SelectExpression>> SelectListCache => _selectListCache;
+    //public IDictionary<Expression, List<SelectExpression>> SelectListExpessionCache => _selectListExpCache;
     public ILogger? CommandLogger { get; set; }
     public void EnsureConnectionOpen() { }
     public Task EnsureConnectionOpenAsync() => Task.CompletedTask;
