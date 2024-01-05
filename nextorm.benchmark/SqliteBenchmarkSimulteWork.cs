@@ -40,7 +40,7 @@ public class SqliteBenchmarkSimulateWork
         {
             _logFactory = LoggerFactory.Create(config => config.AddConsole().SetMinimumLevel(LogLevel.Debug));
             builder.UseLoggerFactory(_logFactory);
-            builder.LogSensetiveData(true);
+            builder.LogSensitiveData(true);
         }
         _ctx = new TestDataRepository(builder.CreateDbContext());
         _ctx.DbContext.EnsureConnectionOpen();

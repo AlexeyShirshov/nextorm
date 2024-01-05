@@ -43,7 +43,7 @@ public class SqliteBenchmarkAny
         {
             var logFactory = LoggerFactory.Create(config => config.AddConsole().SetMinimumLevel(LogLevel.Trace));
             builder.UseLoggerFactory(logFactory);
-            builder.LogSensetiveData(true);
+            builder.LogSensitiveData(true);
         }
         _ctx = new TestDataRepository(builder.CreateDbContext());
 

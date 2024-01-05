@@ -17,35 +17,61 @@ namespace nextorm.benchmark;
 [Config(typeof(NextormConfig))]
 public class SqliteBenchmarkCache
 {
+    private readonly SQLiteConnection _conn;
     private readonly DbContextBuilder _builder;
+    private readonly ILoggerFactory? _logFactory;
+    private readonly DbContextOptionsBuilder<EFDataContext> _efBuilder;
+
     public SqliteBenchmarkCache(bool withLogging = false)
     {
         var filepath = Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db");
-        var conn = new SQLiteConnection($"Data Source='{filepath}'");
+        _conn = new SQLiteConnection($"Data Source='{filepath}'");
         _builder = new DbContextBuilder();
-        _builder.UseSqlite(conn);
+        _builder.UseSqlite(_conn);
         if (withLogging)
         {
-            var logFactory = LoggerFactory.Create(config => config.AddConsole().SetMinimumLevel(LogLevel.Trace));
-            _builder.UseLoggerFactory(logFactory);
-            _builder.LogSensetiveData(true);
+            _logFactory = LoggerFactory.Create(config => config.AddConsole().SetMinimumLevel(LogLevel.Trace));
+            _builder.UseLoggerFactory(_logFactory);
+            _builder.LogSensitiveData(true);
         }
-        conn.Open();
+
+        _efBuilder = new DbContextOptionsBuilder<EFDataContext>();
+        _efBuilder.UseSqlite(_conn);
+        _efBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
+        if (withLogging)
+        {
+            _efBuilder.UseLoggerFactory(_logFactory);
+            _efBuilder.EnableSensitiveDataLogging(true);
+        }
+
+        _conn.Open();
     }
     [Benchmark()]
-    public void Cached()
+    public void NextormCached()
     {
         using var ctx = _builder.CreateDbContext();
         var repo = new TestDataRepository(ctx);
         repo.LargeEntity.Where(it => it.Id == 1).Select(it => new { it.Id, it.Str, it.Dt }).ToList();
     }
+    // [Benchmark()]
+    // public void NextormNonCached()
+    // {
+    //     using var ctx = _builder.CreateDbContext();
+    //     var repo = new TestDataRepository(ctx);
+    //     var cmd = repo.LargeEntity.Where(it => it.Id == 1).Select(it => new { it.Id, it.Str, it.Dt });
+    //     cmd.Cache = false;
+    //     cmd.ToList();
+    // }
     [Benchmark()]
-    public void NonCached()
+    public void EFcore()
     {
-        using var ctx = _builder.CreateDbContext();
-        var repo = new TestDataRepository(ctx);
-        var cmd = repo.LargeEntity.Where(it => it.Id == 1).Select(it => new { it.Id, it.Str, it.Dt });
-        cmd.Cache = false;
-        cmd.ToList();
+        using var ctx = new EFDataContext(_efBuilder.Options);
+        var cmd = ctx.LargeEntities.Where(it => it.Id == 1).Select(it => new { it.Id, it.Str, it.Dt });
+        var _ = cmd.ToList();
+    }
+    [Benchmark()]
+    public void Dapper()
+    {
+        _conn.Query<LargeEntity>("select id, someString as str, dt from large_table where id=@id", new { id = 1 });
     }
 }

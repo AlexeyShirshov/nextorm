@@ -22,7 +22,7 @@ public class DbContext : IDataContext
     internal protected readonly static ObjectPool<StringBuilder> _sbPool = new DefaultObjectPoolProvider().Create(new StringBuilderPooledObjectPolicy());
     private readonly static string[] _params = ["norm_p0", "norm_p1", "norm_p2", "norm_p3", "norm_p4"];
     //    private readonly IDictionary<QueryCommand, SqlCacheEntry> _queryCache = new Dictionary<QueryCommand, SqlCacheEntry>();
-    private readonly Dictionary<QueryPlan, object> _queryPlanCache = new Dictionary<QueryPlan, object>();
+    private readonly static ConcurrentDictionary<QueryPlan, object> _queryPlanCache = new();
     private DbConnection? _conn;
     protected bool _connCreated;
     private bool _disposedValue;
@@ -39,7 +39,7 @@ public class DbContext : IDataContext
             if (Logger.IsEnabled(LogLevel.Debug))
                 _logParams = LogParams;
         }
-        LogSensetiveData = optionsBuilder.ShouldLogSensetiveData;
+        LogSensetiveData = optionsBuilder.ShouldLogSensitiveData;
     }
     //private DbCommand? _cmd;
     protected internal bool LogSensetiveData { get; set; }
