@@ -12,8 +12,9 @@
     <Description>A high performance ORM (object-relational mapping) library supporting PostgreSQL, SQL Server, MySQL, Sqlite</Description>
     <Authors>Alexey Shirshov</Authors>
     <Copyright>Alexey Shirshov</Copyright>
-    <PackageReleaseNotes>https://nextorm.github.io/releasenotes/</PackageReleaseNotes>
+    <PackageReleaseNotes>https://alexeyshirshov.github.io/nextorm/</PackageReleaseNotes>
     <PackageProjectUrl>https://github.com/AlexeyShirshov/nextorm</PackageProjectUrl>
+    <PackageReadmeFile>readme.md</PackageReadmeFile>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageIcon></PackageIcon>
     <RepositoryType>git</RepositoryType>
@@ -27,4 +28,7 @@
     <PackageReference Include="OneOf" Version="3.0.263" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="..\readme.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 </Project>
