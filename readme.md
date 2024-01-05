@@ -40,3 +40,13 @@ await foreach(var row in dataContext.From(innerQuery).Select(subQuery=>new { sub
 // generated code is 
 // select id from (select id from simple_entity)
 ```
+## Benchmarks
+| Method                | Nextorm |            Dapper           | EF core |
+|-----------------------|:-------:|:---------------------------:|:-------:|
+| Iteration             |   |                             |         |   |
+| Wide object iteration |         |  |         |   |
+| Where                 |         |                             |         |
+| Simulate work         |         |                             |         |
+| Any                   |         |                             |         |
+| First                 |         |                             |         |
+| Single                |         |                             |         |
