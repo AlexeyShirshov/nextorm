@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 namespace nextorm.core;
 
@@ -14,11 +13,11 @@ public sealed class SelectExpressionPlanEqualityComparer : IEqualityComparer<Sel
     //     : this(new ExpressionCache<Delegate>())
     // {
     // }
-    public SelectExpressionPlanEqualityComparer(IDictionary<ExpressionKey, Delegate>? cache, IQueryProvider queryProvider)
-        : this(cache, queryProvider, null)
+    public SelectExpressionPlanEqualityComparer(IQueryProvider queryProvider)
+        : this(queryProvider, null)
     {
     }
-    public SelectExpressionPlanEqualityComparer(IDictionary<ExpressionKey, Delegate>? cache, IQueryProvider queryProvider, ILogger? logger)
+    public SelectExpressionPlanEqualityComparer(IQueryProvider queryProvider, ILogger? logger)
     {
         //_cache = cache ?? new ExpressionCache<Delegate>();
         _queryProvider = queryProvider;
@@ -63,6 +62,5 @@ public sealed class SelectExpressionPlanEqualityComparer : IEqualityComparer<Sel
 
             return hash.ToHashCode();
         }
-
     }
 }

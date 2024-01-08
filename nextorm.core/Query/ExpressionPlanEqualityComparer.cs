@@ -1,14 +1,14 @@
+using Microsoft.Extensions.Logging;
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Linq.Expressions;
 using System.Reflection;
-using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
 
 public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
 {
-    private readonly static IDictionary<QueryCommandKey, Func<object?, QueryCommand>> _cmdCache = new ConcurrentDictionary<QueryCommandKey, Func<object?, QueryCommand>>();
+    private readonly static ConcurrentDictionary<QueryCommandKey, Func<object?, QueryCommand>> _cmdCache = new();
     //private readonly IDictionary<ExpressionKey, Delegate> _cache;
     private readonly IQueryProvider _queryProvider;
     private readonly ILogger? _logger;
@@ -17,11 +17,11 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
     //     : this(new ExpressionCache<Delegate>())
     // {
     // }
-    public ExpressionPlanEqualityComparer(IDictionary<ExpressionKey, Delegate>? cache, IQueryProvider queryProvider)
-        : this(cache, queryProvider, null)
+    public ExpressionPlanEqualityComparer(IQueryProvider queryProvider)
+        : this(queryProvider, null)
     {
     }
-    public ExpressionPlanEqualityComparer(IDictionary<ExpressionKey, Delegate>? cache, IQueryProvider queryProvider, ILogger? logger)
+    public ExpressionPlanEqualityComparer(IQueryProvider queryProvider, ILogger? logger)
     {
         //_cache = cache ?? new ExpressionCache<Delegate>();
         _queryProvider = queryProvider;
@@ -109,6 +109,7 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
                         AddListToHash(indexExpression.Arguments);
                         hash.Add(indexExpression.Indexer);
                     }
+
                     break;
 
                 case InvocationExpression invocationExpression:
@@ -159,6 +160,7 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
                                 }
                                 else if (_logger?.IsEnabled(LogLevel.Debug) ?? false) _logger.LogDebug("Expression cache miss on gethashcode");
                             }
+
                             var cmd = del(ce!.Value);
 
                             hash.Add(cmd, _queryProvider.GetQueryPlanEqualityComparer());
@@ -178,6 +180,7 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
                         hash.Add(memberExpression.Expression, this);
                         hash.Add(memberExpression.Member);
                     }
+
                     break;
 
                 case MemberInitExpression memberInitExpression:
@@ -515,7 +518,7 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
                 && CompareExpressionList(a.Arguments, b.Arguments)
                 && CompareMemberList(a.Members, b.Members);
 
-        private bool CompareParameter(ParameterExpression a, ParameterExpression b)
+        private readonly bool CompareParameter(ParameterExpression a, ParameterExpression b)
             => _parameterScope != null
                 && _parameterScope.TryGetValue(a, out var mapped)
                     ? mapped.Type == b.Type
@@ -751,7 +754,9 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
                 && Compare(a.Filter, b.Filter)
                 && Compare(a.Variable, b.Variable);
     }
-    class QueryCommandKey
+
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Minor Code Smell", "S3897:Classes that provide \"Equals(<T>)\" should implement \"IEquatable<T>\"", Justification = "<Pending>")]
+    private sealed class QueryCommandKey
     {
         private readonly Type _type;
         private readonly string _name;
@@ -762,6 +767,7 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
             _type = type;
             _name = name;
         }
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Minor Bug", "S2328:\"GetHashCode\" should not reference mutable fields", Justification = "<Pending>")]
         public override int GetHashCode()
         {
             if (_hash.HasValue)

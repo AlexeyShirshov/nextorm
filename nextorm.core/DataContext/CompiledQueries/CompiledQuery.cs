@@ -1,8 +1,4 @@
 #define PARAM_CONDITION
-using System.Buffers;
-using System.Data;
-using System.Data.Common;
-
 namespace nextorm.core;
 public class CompiledQuery<TResult, TRecord>
 {

@@ -12,6 +12,7 @@ namespace nextorm.benchmark;
 //[SimpleJob(RuntimeMoniker.Net70, baseline: true)]
 [SimpleJob(RuntimeMoniker.Net80)]
 [MemoryDiagnoser]
+[Config(typeof(NextormConfig))]
 public class SqliteBenchmarkIteration
 {
     private readonly TestDataRepository _ctx;

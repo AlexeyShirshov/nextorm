@@ -7,6 +7,7 @@ using System.Threading.Channels;
 
 namespace nextorm.core;
 
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Minor Code Smell", "S3897:Classes that provide \"Equals(<T>)\" should implement \"IEquatable<T>\"", Justification = "<Pending>")]
 public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
 {
     private List<QueryCommand>? _referencedQueries;
@@ -32,6 +33,8 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     internal int JoinPlanHash;
     internal int SortingPlanHash;
     internal int WherePlanHash;
+    internal int ResultPlanHash;
+    internal Type? ResultType;
     private int _paramIdx;
     public Paging Paging;
     internal Expression? PreparedCondition;
@@ -41,6 +44,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     private FromExpressionPlanEqualityComparer? _fromExpressionPlanComparer;
     private JoinExpressionPlanEqualityComparer? _joinExpressionPlanComparer;
     private PreciseExpressionEqualityComparer? _preciseExpressionComparer;
+    private SortingExpressionPlanEqualityComparer? _sortingExpressionPlanComparer;
     protected readonly List<Sorting>? _sorting;
 
     //protected ArrayList _params = new();
@@ -157,56 +161,56 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
             if (_exp.Body is NewExpression ctor)
             {
                 //if (!CacheList || !_dataProvider.SelectListExpessionCache.TryGetValue(ctor, out selectList))
+                //{
+                selectList = new List<SelectExpression>();
+
+                var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataProvider, this, cancellationToken);
+                for (var idx = 0; idx < ctor.Arguments.Count; idx++)
                 {
-                    selectList = new List<SelectExpression>();
+                    if (cancellationToken.IsCancellationRequested)
+                        return (selectList, columnsHash, columnsPlanHash);
 
-                    var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataProvider, this, cancellationToken);
-                    for (var idx = 0; idx < ctor.Arguments.Count; idx++)
+                    SelectExpression selExp;
+                    var arg = ctor.Arguments[idx];
+                    // if (arg is MemberExpression me)
+                    // {
+                    //     selExp = new SelectExpression(me.Type)
+                    //     {
+                    //         Index = idx,
+                    //         PropertyName = me.Member.Name!,
+                    //         Expression = arg
+                    //     };
+                    // }
+                    // else
+                    // {
+                    var ctorParam = ctor.Constructor!.GetParameters()[idx];
+
+                    selExp = new SelectExpression(ctorParam.ParameterType, _dataProvider.ExpressionsCache, this)
                     {
-                        if (cancellationToken.IsCancellationRequested)
-                            return (selectList, columnsHash, columnsPlanHash);
+                        Index = idx,
+                        PropertyName = ctorParam.Name!,
+                        Expression = innerQueryVisitor.Visit(arg)
+                    };
+                    //}
+                    selExp.HashCode = selExp.GetHashCode();
+                    selExp.PlanHashCode = GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
+                    selectList.Add(selExp);
 
-                        SelectExpression selExp;
-                        var arg = ctor.Arguments[idx];
-                        // if (arg is MemberExpression me)
-                        // {
-                        //     selExp = new SelectExpression(me.Type)
-                        //     {
-                        //         Index = idx,
-                        //         PropertyName = me.Member.Name!,
-                        //         Expression = arg
-                        //     };
-                        // }
-                        // else
-                        // {
-                        var ctorParam = ctor.Constructor!.GetParameters()[idx];
-
-                        selExp = new SelectExpression(ctorParam.ParameterType, _dataProvider.ExpressionsCache, this)
+                    if (!_dontCache && !noHash) unchecked
                         {
-                            Index = idx,
-                            PropertyName = ctorParam.Name!,
-                            Expression = innerQueryVisitor.Visit(arg)
-                        };
-                        //}
-                        selExp.HashCode = selExp.GetHashCode();
-                        selExp.PlanHashCode = GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
-                        selectList.Add(selExp);
+                            columnsHash = columnsHash * 13 + selExp.HashCode;
 
-                        if (!_dontCache && !noHash) unchecked
-                            {
-                                columnsHash = columnsHash * 13 + selExp.HashCode;
-
-                                //comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
-                                columnsPlanHash = columnsPlanHash * 13 + selExp.PlanHashCode;
-                            }
-                    }
-
-                    if (selectList.Count == 0)
-                        throw new PrepareException("Select must return new anonymous type with at least one property");
-
-                    // if (CacheList)
-                    //     _dataProvider.SelectListExpessionCache[ctor] = selectList;
+                            //comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
+                            columnsPlanHash = columnsPlanHash * 13 + selExp.PlanHashCode;
+                        }
                 }
+
+                if (selectList.Count == 0)
+                    throw new PrepareException("Select must return new anonymous type with at least one property");
+
+                // if (CacheList)
+                //     _dataProvider.SelectListExpessionCache[ctor] = selectList;
+                //}
                 // else if (!_dontCache && !noHash)
                 // {
                 //     for (int i = 0; i < selectList.Count; i++) unchecked
@@ -314,6 +318,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
             // else
             //     throw new NotImplementedException();
         }
+
         return (selectList, columnsHash, columnsPlanHash);
     }
     private (int, int) PrepareJoin(bool noHash, CancellationToken cancellationToken)
@@ -368,7 +373,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
                         sortingHash = sortingHash * 13 + GetPreciseExpressionEqualityComparer().GetHashCode(sort.PreparedExpression);
 
                         //compPlan ??= new ExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger);
-                        sortingPlanHash = sortingPlanHash * 13 + GetExpressionPlanEqualityComparer().GetHashCode(sort.PreparedExpression);
+                        sortingPlanHash = sortingPlanHash * 13 + GetSortingExpressionPlanEqualityComparer().GetHashCodeRef(in sort);
                     }
             }
         }
@@ -587,6 +592,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         dst._selectList = _selectList;
         dst._columnsHash = _columnsHash;
         dst._joinHash = _joinHash;
+        dst._sortingHash = _sortingHash;
         dst._from = _from;
         dst._isPrepared = _isPrepared;
         dst._srcType = _srcType;
@@ -597,6 +603,8 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         dst.WherePlanHash = WherePlanHash;
         dst.SortingPlanHash = SortingPlanHash;
         dst.PreparedCondition = PreparedCondition;
+        dst.ResultPlanHash = ResultPlanHash;
+        dst.ResultType = ResultType;
     }
 
     protected virtual QueryCommand CreateSelf()
@@ -614,17 +622,18 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         return cmd;
     }
 
-    public QueryPlanEqualityComparer GetQueryPlanEqualityComparer() => _queryPlanComparer ??= new QueryPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
+    public QueryPlanEqualityComparer GetQueryPlanEqualityComparer() => _queryPlanComparer ??= new QueryPlanEqualityComparer(this);
 
-    public ExpressionPlanEqualityComparer GetExpressionPlanEqualityComparer() => _expressionPlanComparer ??= new ExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
+    public ExpressionPlanEqualityComparer GetExpressionPlanEqualityComparer() => _expressionPlanComparer ??= new ExpressionPlanEqualityComparer(this);
 
-    public SelectExpressionPlanEqualityComparer GetSelectExpressionPlanEqualityComparer() => _selectExpressionPlanComparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
+    public SelectExpressionPlanEqualityComparer GetSelectExpressionPlanEqualityComparer() => _selectExpressionPlanComparer ??= new SelectExpressionPlanEqualityComparer(this);
 
-    public FromExpressionPlanEqualityComparer GetFromExpressionPlanEqualityComparer() => _fromExpressionPlanComparer ??= new FromExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
+    public FromExpressionPlanEqualityComparer GetFromExpressionPlanEqualityComparer() => _fromExpressionPlanComparer ??= new FromExpressionPlanEqualityComparer(this);
 
-    public JoinExpressionPlanEqualityComparer GetJoinExpressionPlanEqualityComparer() => _joinExpressionPlanComparer ??= new JoinExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
+    public JoinExpressionPlanEqualityComparer GetJoinExpressionPlanEqualityComparer() => _joinExpressionPlanComparer ??= new JoinExpressionPlanEqualityComparer(this);
 
     public PreciseExpressionEqualityComparer GetPreciseExpressionEqualityComparer() => _preciseExpressionComparer ??= new PreciseExpressionEqualityComparer(_dataProvider.ExpressionsCache, this);
+    public SortingExpressionPlanEqualityComparer GetSortingExpressionPlanEqualityComparer() => _sortingExpressionPlanComparer ??= new SortingExpressionPlanEqualityComparer(this);
 }
 
 public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
@@ -638,6 +647,12 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         : base(dataProvider, exp, condition/*, payloadMgr*/, joins, paging, sorting)
     {
 
+    }
+    public override void PrepareCommand(bool prepareMapOnly, CancellationToken cancellationToken)
+    {
+        base.PrepareCommand(prepareMapOnly, cancellationToken);
+        ResultPlanHash = typeof(TResult).GetHashCode();
+        ResultType = typeof(TResult);
     }
     //internal CompiledQuery<TResult>? Compiled => CacheEntry?.CompiledQuery as CompiledQuery<TResult>;
     public CompiledQuery<TResult, TRecord>? GetCompiledQuery<TRecord>() => _compiledQuery as CompiledQuery<TResult, TRecord>;
@@ -674,7 +689,9 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         return DataProvider.CreateAsyncEnumerator(this, null, cancellationToken);
     }
     public IAsyncEnumerable<TResult> Pipeline(params object[] @params) => Pipeline(CancellationToken.None, @params);
+#pragma warning disable CS8425 // Async-iterator member has one or more parameters of type 'CancellationToken' but none of them is decorated with the 'EnumeratorCancellation' attribute, so the cancellation token parameter from the generated 'IAsyncEnumerable<>.GetAsyncEnumerator' will be unconsumed
     public async IAsyncEnumerable<TResult> Pipeline(CancellationToken cancellationToken, params object[] @params)
+#pragma warning restore CS8425 // Async-iterator member has one or more parameters of type 'CancellationToken' but none of them is decorated with the 'EnumeratorCancellation' attribute, so the cancellation token parameter from the generated 'IAsyncEnumerable<>.GetAsyncEnumerator' will be unconsumed
     {
         var bus = Channel.CreateUnbounded<TResult>(new UnboundedChannelOptions
         {
@@ -707,14 +724,26 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         await t.ConfigureAwait(false);
     }
     public IAsyncEnumerable<TResult> AsAsyncEnumerable(params object[] @params) => AsAsyncEnumerable(CancellationToken.None, @params);
-    public async IAsyncEnumerable<TResult> AsAsyncEnumerable([EnumeratorCancellation] CancellationToken cancellationToken, params object[] @params)
+    public IAsyncEnumerable<TResult> AsAsyncEnumerable(CancellationToken cancellationToken, params object[] @params)
     {
         if (!_isPrepared)
             PrepareCommand(false, cancellationToken);
 
-        await using var ee = _dataProvider.CreateAsyncEnumerator(this, @params, cancellationToken);
-        while (await ee.MoveNextAsync().ConfigureAwait(false))
-            yield return ee.Current;
+        var asyncEnumerator = _dataProvider.CreateAsyncEnumerator(this, @params, cancellationToken);
+
+        if (asyncEnumerator is IAsyncEnumerable<TResult> asyncEnumerable)
+            return asyncEnumerable;
+
+        return Iterate();
+
+        async IAsyncEnumerable<TResult> Iterate()
+        {
+            await using (asyncEnumerator)
+            {
+                while (await asyncEnumerator.MoveNextAsync().ConfigureAwait(false))
+                    yield return asyncEnumerator.Current;
+            }
+        }
     }
     public IEnumerable<TResult> AsEnumerable(params object[] @params)
     {
@@ -730,12 +759,18 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
             PrepareCommand(false, cancellationToken);
 
         // return Array.Empty<TResult>();
-        var enumerator = await _dataProvider.CreateEnumeratorAsync(this, @params, cancellationToken).ConfigureAwait(false);
+        var enumerator = _dataProvider.CreateAsyncEnumerator(this, @params, cancellationToken);
+
+        if (enumerator is IAsyncInit<TResult> rr)
+        {
+            await rr.InitReaderAsync(@params, cancellationToken);
+            return new InternalEnumerable(rr);
+        }
 
         if (enumerator is IEnumerable<TResult> ee)
             return ee;
 
-        return new InternalEnumerable(enumerator);
+        throw new NotImplementedException();
     }
     public List<TResult> ToList(params object[] @params)
     {

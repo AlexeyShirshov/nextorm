@@ -5,7 +5,6 @@ using Microsoft.Data.Sqlite;
 using Dapper;
 using Microsoft.Extensions.Logging;
 using BenchmarkDotNet.Jobs;
-using OneOf.Types;
 using nextorm.core;
 
 namespace nextorm.benchmark;

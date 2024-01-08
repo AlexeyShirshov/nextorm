@@ -1,4 +1,3 @@
-using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 namespace nextorm.core;
 public struct Sorting(Expression expression)

@@ -1,7 +1,7 @@
+using Microsoft.Extensions.Logging;
 using System.Collections;
 using System.Linq.Expressions;
 using System.Reflection;
-using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
 
@@ -134,15 +134,17 @@ public sealed class PreciseExpressionEqualityComparer : IEqualityComparer<Expres
                             //value = 1;
                             _cache[key] = del;
 
-                            if (_logger?.IsEnabled(LogLevel.Debug) ?? false)
+                            if (_logger?.IsEnabled(LogLevel.Trace) ?? false)
                             {
-                                _logger.LogDebug("Expression cache miss on gethashcode. hascode: {hash}, value: {value}", key.GetHashCode(), ((Func<object?, object>)del)(ce.Value));
+                                _logger.LogTrace("Expression cache miss on gethashcode. hascode: {hash}, value: {value}", key.GetHashCode(), ((Func<object?, object>)del)(ce.Value));
                             }
                             else if (_logger?.IsEnabled(LogLevel.Debug) ?? false) _logger.LogDebug("Expression cache miss on gethashcode");
                         }
+
                         AddToHashIfNotNull(((Func<object?, object>)del)(ce!.Value));
                         break;
                     }
+
                     hash.Add(memberExpression.Expression, this);
                     hash.Add(memberExpression.Member);
                     break;
@@ -518,7 +520,7 @@ public sealed class PreciseExpressionEqualityComparer : IEqualityComparer<Expres
                 && CompareExpressionList(a.Arguments, b.Arguments)
                 && CompareMemberList(a.Members, b.Members);
 
-        private bool CompareParameter(ParameterExpression a, ParameterExpression b)
+        private readonly bool CompareParameter(ParameterExpression a, ParameterExpression b)
         {
             if (_parameterScope != null
                && _parameterScope.TryGetValue(a, out var mapped)

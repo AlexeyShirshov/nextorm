@@ -4,7 +4,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Data.Sqlite;
 using Dapper;
 using Microsoft.Extensions.Logging;
-using TupleLargeEntity = System.Tuple<long, string?, System.DateTime?>;
 using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Columns;
 using nextorm.core;

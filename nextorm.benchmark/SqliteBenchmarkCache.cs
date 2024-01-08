@@ -5,9 +5,7 @@ using System.Data.SQLite;
 using Dapper;
 using Microsoft.Extensions.Logging;
 using BenchmarkDotNet.Jobs;
-using OneOf.Types;
 using nextorm.core;
-using Microsoft.Diagnostics.Runtime.DacInterface;
 
 namespace nextorm.benchmark;
 
