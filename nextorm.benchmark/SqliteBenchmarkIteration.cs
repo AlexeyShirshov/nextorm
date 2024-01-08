@@ -21,7 +21,7 @@ public class SqliteBenchmarkIteration
     private readonly QueryCommand<SimpleEntity> _cmdManualToList;
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
-    // private readonly Func<EFDataContext, DbSet<SimpleEntity>> _efCompiled = EF.CompileQuery((EFDataContext ctx) => ctx.SimpleEntities);
+    private readonly Func<EFDataContext, IAsyncEnumerable<SimpleEntity>> _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.SimpleEntities);
     private readonly ILoggerFactory? _logFactory;
     public SqliteBenchmarkIteration(bool withLogging = false)
     {
@@ -56,13 +56,13 @@ public class SqliteBenchmarkIteration
         _conn = new SqliteConnection(((SqliteDbContext)_ctx.DbContext).ConnectionString);
         _conn.Open();
     }
-    // [Benchmark()]
-    // public async Task NextormCompiledAsync()
-    // {
-    //     await foreach (var row in _cmd)
-    //     {
-    //     }
-    // }
+    [Benchmark()]
+    public async Task NextormCompiledStream()
+    {
+        await foreach (var row in _cmd)
+        {
+        }
+    }
     // [Benchmark(Baseline = true)]
     // public async Task NextormCompiled()
     // {
@@ -125,20 +125,20 @@ public class SqliteBenchmarkIteration
     //     {
     //     }
     // }
-    // [Benchmark]
-    // public async Task EFCoreCompiled()
-    // {
-    //     foreach (var row in await _efCompiled(_efCtx))
-    //     {
-    //     }
-    // }
-    // [Benchmark]
-    // public async Task DapperUnbuffered()
-    // {
-    //     await foreach (var row in _conn.QueryUnbufferedAsync<SimpleEntity>("select id from simple_entity"))
-    //     {
-    //     }
-    // }
+    [Benchmark]
+    public async Task EFCoreCompiled()
+    {
+        foreach (var row in await _efCompiled(_efCtx).ToListAsync())
+        {
+        }
+    }
+    [Benchmark]
+    public async Task DapperUnbuffered()
+    {
+        await foreach (var row in _conn.QueryUnbufferedAsync<SimpleEntity>("select id from simple_entity"))
+        {
+        }
+    }
     [Benchmark]
     public async Task Dapper()
     {

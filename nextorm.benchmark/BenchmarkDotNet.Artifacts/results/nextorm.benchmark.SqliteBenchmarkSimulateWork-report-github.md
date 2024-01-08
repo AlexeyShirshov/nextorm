@@ -11,7 +11,7 @@ Job=.NET 8.0  Runtime=.NET 8.0
 ```
 | Method                        | Mean     | Ratio | Gen0      | Gen1      | Allocated | Alloc Ratio |
 |------------------------------ |---------:|------:|----------:|----------:|----------:|------------:|
-| NextormCompiledToList         | 160.5 ms |  1.00 | 1250.0000 |         - |   6.21 MB |        1.00 |
-| NextormCachedWithParamsToList | 162.5 ms |  1.01 | 1250.0000 |         - |   6.23 MB |        1.00 |
-| Dapper                        | 208.8 ms |  1.30 | 2000.0000 |         - |   9.44 MB |        1.52 |
-| EFCoreCompiled                | 298.9 ms |  1.86 | 6000.0000 | 2000.0000 |  27.03 MB |        4.35 |
+| Dapper                        | 203.4 ms |  0.96 | 2000.0000 |         - |   9.44 MB |        0.91 |
+| NextormCachedWithParamsToList | 207.9 ms |  0.98 | 2000.0000 |         - |  10.42 MB |        1.00 |
+| NextormCompiledToList         | 211.8 ms |  1.00 | 2000.0000 |         - |   10.4 MB |        1.00 |
+| EFCoreCompiled                | 288.7 ms |  1.36 | 6000.0000 | 2000.0000 |  27.03 MB |        2.60 |

@@ -11,17 +11,17 @@ using nextorm.benchmark;
 // BenchmarkRunner.Run<SqliteBenchmarkWhere>();
 // BenchmarkRunner.Run<SqliteBenchmarkSimulateWork>();
 // BenchmarkRunner.Run<SqliteBenchmarkMakeSelect>();
-// BenchmarkRunner.Run<SqliteBenchmarkAny>();
+BenchmarkRunner.Run<SqliteBenchmarkAny>();
 // BenchmarkRunner.Run<SqliteBenchmarkFirst>();
 // BenchmarkRunner.Run<SqliteBenchmarkSingle>();
 // BenchmarkRunner.Run<SqliteBenchmarkCache>();
 
 // runner.QueryCommandPlanEqualityComparer();
-var runner = new SqliteBenchmarkIteration(true);
+// var runner = new SqliteBenchmarkAny();
 // await runner.NextormCompiledToList();
 // while (true)
-for (var i = 0; i < 100; i++)
-    await runner.NextormCompiledToList();
+// for (var i = 0; i < 100; i++)
+//     await runner.NextormCompiled();
 
 //await runner.FillLargeTable();
 // Console.WriteLine("Press any key to exit");

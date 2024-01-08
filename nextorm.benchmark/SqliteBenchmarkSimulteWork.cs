@@ -32,9 +32,9 @@ public class SqliteBenchmarkSimulateWork
     private readonly ILoggerFactory? _logFactory;
     public SqliteBenchmarkSimulateWork(bool withLogging = false)
     {
-
         var builder = new DbContextBuilder();
-        builder.UseSqlite(Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db"));
+        var filepath = Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db");
+        builder.UseSqlite(filepath);
         if (withLogging)
         {
             _logFactory = LoggerFactory.Create(config => config.AddConsole().SetMinimumLevel(LogLevel.Debug));
@@ -48,10 +48,10 @@ public class SqliteBenchmarkSimulateWork
 
         _cmdToList = _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }).Compile(true);
 
-        _cmdInner = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0) + NORM.Param<int>(1)).FirstOrFirstOrDefaultCommand(entity => new SimpleEntity { Id = entity.Id }).Compile(true);
+        _cmdInner = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0) + NORM.Param<int>(1)).FirstOrFirstOrDefaultCommand().Compile(true);
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
-        efBuilder.UseSqlite(@$"Filename={Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db")}");
+        efBuilder.UseSqlite(@$"Filename={filepath}");
         efBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
         if (withLogging)
         {

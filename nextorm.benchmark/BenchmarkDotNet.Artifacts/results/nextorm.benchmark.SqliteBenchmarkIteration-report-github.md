@@ -11,7 +11,10 @@ Job=.NET 8.0  Runtime=.NET 8.0
 ```
 | Method                | Mean     | Error    | StdDev   | Gen0   | Gen1   | Allocated |
 |---------------------- |---------:|---------:|---------:|-------:|-------:|----------:|
-| NextormCompiledToList | 41.08 μs | 0.723 μs | 0.676 μs | 0.4883 |      - |   2.39 KB |
-| Dapper                | 42.28 μs | 0.543 μs | 0.481 μs | 0.3662 |      - |   1.88 KB |
-| NextormCachedToList   | 45.99 μs | 0.899 μs | 0.883 μs | 0.8545 |      - |   4.08 KB |
-| EFCore                | 63.65 μs | 0.969 μs | 0.859 μs | 1.8311 | 0.3662 |   8.63 KB |
+| NextormCompiledToList | 41.05 μs | 0.387 μs | 0.302 μs | 0.4883 |      - |   2.39 KB |
+| NextormCompiledStream | 41.38 μs | 0.797 μs | 0.853 μs | 0.4272 |      - |   2.12 KB |
+| Dapper                | 42.83 μs | 0.844 μs | 1.155 μs | 0.3662 |      - |   1.88 KB |
+| NextormCachedToList   | 45.65 μs | 0.640 μs | 0.599 μs | 0.8545 |      - |   4.08 KB |
+| DapperUnbuffered      | 49.22 μs | 0.818 μs | 1.200 μs | 0.3662 |      - |    1.8 KB |
+| EFCoreCompiled        | 57.95 μs | 1.054 μs | 0.880 μs | 1.5259 | 0.4883 |   7.19 KB |
+| EFCore                | 63.49 μs | 0.948 μs | 0.792 μs | 1.8311 | 0.3662 |   8.63 KB |

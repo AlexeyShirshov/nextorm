@@ -20,8 +20,8 @@ public class SqliteBenchmarkWhere
 {
     const int Iterations = 100;
     private readonly TestDataRepository _ctx;
-    private readonly QueryCommand<Tuple<int>> _cmd;
-    private readonly QueryCommand<Tuple<int>> _cmdToList;
+    private readonly QueryCommand<SimpleEntity> _cmd;
+    private readonly QueryCommand<SimpleEntity> _cmdToList;
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
     private readonly Func<EFDataContext, int, IAsyncEnumerable<SimpleEntity>> _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx, int i) => ctx.SimpleEntities.Where(it => it.Id == i));
@@ -29,7 +29,8 @@ public class SqliteBenchmarkWhere
     public SqliteBenchmarkWhere(bool withLogging = false)
     {
         var builder = new DbContextBuilder();
-        builder.UseSqlite(Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db"));
+        var filepath = Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db");
+        builder.UseSqlite(filepath);
         if (withLogging)
         {
             _logFactory = LoggerFactory.Create(config => config.AddConsole().SetMinimumLevel(LogLevel.Debug));
@@ -39,12 +40,12 @@ public class SqliteBenchmarkWhere
         _ctx = new TestDataRepository(builder.CreateDbContext());
         _ctx.DbContext.EnsureConnectionOpen();
 
-        _cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new Tuple<int>(entity.Id)).Compile(false);
+        _cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).ToCommand().Compile(false);
 
-        _cmdToList = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new Tuple<int>(entity.Id)).Compile(true);
+        _cmdToList = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).ToCommand().Compile(true);
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
-        efBuilder.UseSqlite(@$"Filename={Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db")}");
+        efBuilder.UseSqlite(@$"Filename={filepath}");
         efBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
         if (withLogging)
         {

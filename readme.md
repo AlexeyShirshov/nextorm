@@ -1,13 +1,19 @@
 # Next ORM
-The goal is to be as fast as Dapper but get rid of writing sql code manualy.\
+
+The goal is to be as fast as Dapper but get rid of writing sql code manually.\
 All sql code and parameters should be generated automatically, with intellisense, type checking and other c# features.\
-NextORM is not really an ORM, because abbreviation "Object" can be removed. There is no change tracking (as ineffective), the entity class is not required. There are many ways to map data from database to objects: declarative (via attributes), fluent api, directly in query. 
+NextORM is not really an ORM, because abbreviation "Object" can be removed. There is no change tracking (as ineffective), the entity class is not required. There are many ways to map data from database to objects: declarative (via attributes), fluent api, directly in query.
+
 ## Features
+
 * query compilation
 * query parametrization
-* [ability to write queries without any entities and metadata at all](#markdown-header-select-data-without-any-entity-meta-attributes-etc-pure-sql)
+* [ability to write queries without any entities and metadata at all](#select-data-without-any-entity-meta-attributes-etc-pure-sql)
+
 ## Examples
+
 ### Select data via entity to map props and type to columns and table respectively
+
 ``` csharp
 [SqlTable("simple_entity")]
 public interface ISimpleEntity
@@ -23,14 +29,18 @@ foreach(var row in await dataContext.SimpleEntity.Select(entity => new { entity.
     _logger.LogInformation("Id = {id}", row.Id);
 }
 ```
+
 ### Select data without any entity, meta attributes, etc. Pure sql
+
 ``` csharp
 foreach(var row in await dataContext.From("simple_entity").Select(tbl => new { Id = tbl.Int("id") }).ToListAsync())
 {
     _logger.LogInformation("Id = {id}", row.Id);
 }
 ```
+
 ### Subquery with strong typings
+
 ``` csharp
 var innerQuery = dataContext.From("simple_entity").Select(tbl => new { Id = tbl.Int("id") });
 await foreach(var row in dataContext.From(innerQuery).Select(subQuery=>new { subQuery.Id }))
@@ -40,13 +50,27 @@ await foreach(var row in dataContext.From(innerQuery).Select(subQuery=>new { sub
 // generated code is 
 // select id from (select id from simple_entity)
 ```
+
 ## Benchmarks
-| Method                | Nextorm |            Dapper           | EF core |
+
+Benchmark is running under the following conditions:
+
+* Nextorm is compiled buffered
+* Dapper is buffered
+* EF core is compiled buffered
+* All queries is async
+* Data provider is SQLite
+* Computer configuration: Intel(R) Core(TM) i5-9600KF CPU @ 3.70GHz, RAM 16Gb
+
+| Method                | Nextorm |  Dapper | EF core |
 |-----------------------|:-------:|:---------------------------:|:-------:|
-| Iteration             |   |                             |         |   |
-| Wide object iteration |         |  |         |   |
-| Where                 |         |                             |         |
-| Simulate work         |         |                             |         |
-| Any                   |         |                             |         |
-| First                 |         |                             |         |
-| Single                |         |                             |         |
+| [Iteration](https://github.com/AlexeyShirshov/nextorm/blob/main/nextorm.benchmark/BenchmarkDotNet.Artifacts/results/nextorm.benchmark.SqliteBenchmarkIteration-report-github.md)             | 41.08 μs | 42.28 μs | 57.95 us |   |
+| [Wide object iteration](https://github.com/AlexeyShirshov/nextorm/blob/main/nextorm.benchmark/BenchmarkDotNet.Artifacts/results/nextorm.benchmark.SqliteBenchmarkLargeIteration-report-github.md) | 10.060 ms | 13.789 ms | 12.858 ms |   |
+| [Where](https://github.com/AlexeyShirshov/nextorm/blob/main/nextorm.benchmark/BenchmarkDotNet.Artifacts/results/nextorm.benchmark.SqliteBenchmarkWhere-report-github.md)                 | 4.002 ms | 4.208 ms | 5.442 ms |
+| [Simulate work](https://github.com/AlexeyShirshov/nextorm/blob/main/nextorm.benchmark/BenchmarkDotNet.Artifacts/results/nextorm.benchmark.SqliteBenchmarkSimulateWork-report-github.md)         | 211.8 ms | 203.4 ms | 288.7 ms |
+| [Any](https://github.com/AlexeyShirshov/nextorm/blob/main/nextorm.benchmark/BenchmarkDotNet.Artifacts/results/nextorm.benchmark.SqliteBenchmarkAny-report-github.md)                   | 40.24 us | 38.55 us | 52.53 us |
+| [FirstOrDefault](https://github.com/AlexeyShirshov/nextorm/blob/main/nextorm.benchmark/BenchmarkDotNet.Artifacts/results/nextorm.benchmark.SqliteBenchmarkFirst-report-github.md)                 | 499.2 us | 456.8 us | 589.6 us |
+| [SingleOrDefault](https://github.com/AlexeyShirshov/nextorm/blob/main/nextorm.benchmark/BenchmarkDotNet.Artifacts/results/nextorm.benchmark.SqliteBenchmarkSingle-report-github.md)                | 45.55 us | 40.06 us | 54.41 us |
+| First place | 3 | 4 | |
+| Second place | 4 | 2 | 1 |
+| Third place | | 1 | 6 |

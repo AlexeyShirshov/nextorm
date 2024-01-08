@@ -5,31 +5,46 @@ using System.Data.Common;
 namespace nextorm.core;
 
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S3881:\"IDisposable\" should be implemented correctly", Justification = "<Pending>")]
-public class DbCompiledQuery<TResult> : CompiledQuery<TResult, IDataRecord>, IDisposable
+public class DbCompiledQuery<TResult> : CompiledQuery<TResult, IDataRecord>, IDisposable, IDbCommandHolder
 {
     public readonly CommandBehavior Behavior = 0;
     public DbCompiledQuery(DbCommand dbCommand, Func<Func<IDataRecord, TResult>?> getMap)
         : base(getMap)
     {
         DbCommand = dbCommand;
+        DbCommandParams = dbCommand.Parameters;
     }
     public DbCompiledQuery(DbCommand dbCommand, Func<IDataRecord, TResult>? mapDelegate, bool singleRow)
         : base(mapDelegate)
     {
         DbCommand = dbCommand;
+        DbCommandParams = dbCommand.Parameters;
         if (singleRow)
             Behavior = CommandBehavior.SingleRow;
     }
     public DbCommand DbCommand;
+    public DbParameterCollection DbCommandParams;
     public ResultSetEnumerator<TResult>? Enumerator;
     public int LastRowCount;
     public List<int> ParamMap = [];
+    private DbConnection? _connection;
+
+    DbCommand IDbCommandHolder.DbCommand => DbCommand;
+    // public DbConnection? Connection
+    // {
+    //     get => _connection;
+    //     set
+    //     {
+    //         _connection = value;
+    //         DbCommand.Connection = value;
+    //     }
+    // }
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Bug", "S2583:Conditionally executed code should be reachable", Justification = "<Pending>")]
-    public void InitParams(object[]? @params, DbContext dataContext)
+    public void InitParams(object[]? @params, DbContext dataContext, DbConnection conn)
     {
         if (@params is not null)
         {
-            var parameters = DbCommand.Parameters;
+            var parameters = DbCommandParams;
             for (var i = 0; i < @params.Length; i++)
             {
                 var idx = -1;
@@ -69,11 +84,20 @@ public class DbCompiledQuery<TResult> : CompiledQuery<TResult, IDataRecord>, IDi
                 }
             }
         }
+
+        if (DbCommand.Connection != conn)
+            DbCommand.Connection = conn;
     }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "CA1816:Dispose methods should call SuppressFinalize", Justification = "<Pending>")]
     public void Dispose()
     {
-        DbCommand.Connection = null;
+        // DbCommand.Connection = null;
     }
+}
+
+internal interface IDbCommandHolder
+{
+    DbCommand DbCommand { get; }
+    // DbConnection? Connection { get; set; }
 }

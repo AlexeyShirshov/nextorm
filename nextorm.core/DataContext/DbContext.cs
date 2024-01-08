@@ -136,7 +136,6 @@ public class DbContext : IDataContext
             }
         }
     }
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Bug", "S2583:Conditionally executed code should be reachable", Justification = "<Pending>")]
     private DbCompiledQuery<TResult> GetCompiledQuery<TResult>(QueryCommand<TResult> queryCommand, object[]? @params)
     {
         var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, false, true);
@@ -144,7 +143,6 @@ public class DbContext : IDataContext
         // #if DEBUG
         //         if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Getting connection");
         // #endif
-        compiledQuery.InitParams(@params, this);
 
         var conn = GetConnection();
 
@@ -159,9 +157,9 @@ public class DbContext : IDataContext
             _connOpen = true;
         }
 
-        var sqlCommand = compiledQuery.DbCommand;
-        sqlCommand.Connection = conn;
-        _logParams?.Invoke(sqlCommand);
+        compiledQuery.InitParams(@params, this, conn);
+
+        _logParams?.Invoke(compiledQuery.DbCommand);
 
         return compiledQuery;
     }
@@ -173,7 +171,6 @@ public class DbContext : IDataContext
         // #if DEBUG
         //         if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Getting connection");
         // #endif
-        compiledQuery.InitParams(@params, this);
 
         var conn = GetConnection();
 
@@ -188,9 +185,10 @@ public class DbContext : IDataContext
             _connOpen = true;
         }
 
-        var sqlCommand = compiledQuery.DbCommand;
-        sqlCommand.Connection = conn;
-        _logParams?.Invoke(sqlCommand);
+        compiledQuery.InitParams(@params, this, conn);
+        // var sqlCommand = compiledQuery.DbCommand;
+        // sqlCommand.Connection = conn;
+        _logParams?.Invoke(compiledQuery.DbCommand);
 
         return compiledQuery;
     }
@@ -808,16 +806,9 @@ public class DbContext : IDataContext
     {
         if (!_disposed)
         {
-            if (disposing && _conn is not null)
+            if (disposing)
             {
-                if (_connCreated)
-                {
-                    if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Dispose connection");
-                    _conn.Dispose();
-                    _conn = null;
-                }
-                else
-                    _conn.StateChange -= OnStateChanged;
+                DisposeStaff();
             }
 
             _disposed = true;
@@ -832,10 +823,23 @@ public class DbContext : IDataContext
 
     public ValueTask DisposeAsync()
     {
+        DisposeStaff();
+
+        GC.SuppressFinalize(this);
+        return ValueTask.CompletedTask;
+    }
+
+    private void DisposeStaff()
+    {
         if (_conn is not null)
         {
             if (_connCreated)
             {
+                // foreach (IDbCommandHolder cached in _queryPlanCache.Values)
+                // {
+                //     cached.Connection = null;
+                // }
+
                 if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Dispose connection");
                 _conn.Dispose();
                 _conn = null;
@@ -843,10 +847,8 @@ public class DbContext : IDataContext
             else
                 _conn.StateChange -= OnStateChanged;
         }
-
-        GC.SuppressFinalize(this);
-        return ValueTask.CompletedTask;
     }
+
     public IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
     {
         //ArgumentNullException.ThrowIfNull(queryCommand);
