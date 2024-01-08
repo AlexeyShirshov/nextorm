@@ -5,7 +5,6 @@ using Microsoft.Data.Sqlite;
 using Dapper;
 using Microsoft.Extensions.Logging;
 using BenchmarkDotNet.Jobs;
-using OneOf.Types;
 using nextorm.core;
 
 namespace nextorm.benchmark;
@@ -32,7 +31,7 @@ public class SqliteBenchmarkSingle
         {
             _logFactory = LoggerFactory.Create(config => config.AddConsole().SetMinimumLevel(LogLevel.Trace));
             builder.UseLoggerFactory(_logFactory);
-            builder.LogSensetiveData(true);
+            builder.LogSensitiveData(true);
         }
         _ctx = new TestDataRepository(builder.CreateDbContext());
         _ctx.DbContext.EnsureConnectionOpen();

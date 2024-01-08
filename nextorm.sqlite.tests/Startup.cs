@@ -23,7 +23,7 @@ public class Startup
         {
             builder.UseLoggerFactory(sp.GetRequiredService<ILoggerFactory>());
             builder.UseSqlite(Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db"));
-            builder.LogSensetiveData(true);
+            builder.LogSensitiveData(true);
         });
 
         services.AddScoped<TestDataRepository>();

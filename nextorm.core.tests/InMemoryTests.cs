@@ -125,7 +125,7 @@ public class InMemoryTests
         var hashCode = q1.GetHashCode();
         hashCode.Should().NotBe(q2.GetHashCode());
 
-        var planEC = new QueryPlanEqualityComparer(null, q1);
+        var planEC = new QueryPlanEqualityComparer(q1);
 
         planEC.GetHashCode(q1).Should().NotBe(planEC.GetHashCode(q2));
         planEC.Equals(q1, q2).Should().BeFalse();

@@ -1,4 +1,3 @@
-using System.Configuration;
 using System.Data.Common;
 using nextorm.core;
 

@@ -27,7 +27,7 @@ public class SqlServerDbContext : DbContext
     {
         if (Logger?.IsEnabled(LogLevel.Debug) ?? false)
         {
-            if (LogSensetiveData)
+            if (LogSensitiveData)
                 Logger.LogDebug("Creating connection with {connStr}", _connectionString);
             else
                 Logger.LogDebug("Creating connection");

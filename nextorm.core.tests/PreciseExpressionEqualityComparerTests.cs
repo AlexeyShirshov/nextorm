@@ -1,5 +1,5 @@
-using System.Linq.Expressions;
 using FluentAssertions;
+using System.Linq.Expressions;
 namespace nextorm.core.tests;
 public class PreciseExpressionEqualityComparerTests
 {
@@ -62,15 +62,17 @@ class QueryProvider : IQueryProvider
         throw new NotImplementedException();
     }
 
-    public ExpressionPlanEqualityComparer GetExpressionPlanEqualityComparer() => new(null, this);
+    public ExpressionPlanEqualityComparer GetExpressionPlanEqualityComparer() => new(this);
 
-    public FromExpressionPlanEqualityComparer GetFromExpressionPlanEqualityComparer() => new(null, this);
+    public FromExpressionPlanEqualityComparer GetFromExpressionPlanEqualityComparer() => new(this);
 
-    public JoinExpressionPlanEqualityComparer GetJoinExpressionPlanEqualityComparer() => new(null, this);
+    public JoinExpressionPlanEqualityComparer GetJoinExpressionPlanEqualityComparer() => new(this);
 
     public PreciseExpressionEqualityComparer GetPreciseExpressionEqualityComparer() => new(null, this);
 
-    public QueryPlanEqualityComparer GetQueryPlanEqualityComparer() => new(null, this);
+    public QueryPlanEqualityComparer GetQueryPlanEqualityComparer() => new(this);
 
-    public SelectExpressionPlanEqualityComparer GetSelectExpressionPlanEqualityComparer() => new(null, this);
+    public SelectExpressionPlanEqualityComparer GetSelectExpressionPlanEqualityComparer() => new(this);
+
+    public SortingExpressionPlanEqualityComparer GetSortingExpressionPlanEqualityComparer() => new(this);
 }

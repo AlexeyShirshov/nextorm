@@ -9,7 +9,8 @@ Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical 
 Job=.NET 8.0  Runtime=.NET 8.0  
 
 ```
-| Method    | Mean     | Error   | StdDev  | Gen0   | Gen1   | Allocated |
-|---------- |---------:|--------:|--------:|-------:|-------:|----------:|
-| NonCached | 318.0 μs | 6.13 μs | 7.75 μs | 3.4180 | 2.9297 |   17.1 KB |
-| Cached    | 323.3 μs | 6.28 μs | 8.38 μs | 3.4180 | 2.9297 |  17.84 KB |
+| Method        | Mean      | Error    | StdDev   | Gen0   | Gen1   | Allocated |
+|-------------- |----------:|---------:|---------:|-------:|-------:|----------:|
+| Dapper        |  46.87 μs | 0.790 μs | 0.739 μs | 0.7324 |      - |   3.54 KB |
+| NextormCached |  49.82 μs | 0.984 μs | 0.921 μs | 1.3428 |      - |   6.58 KB |
+| EFcore        | 137.54 μs | 2.419 μs | 2.144 μs | 9.7656 | 0.4883 |   45.1 KB |

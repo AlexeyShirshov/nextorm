@@ -2,7 +2,7 @@
 <html lang='en'>
 <head>
 <meta charset='utf-8' />
-<title>nextorm.benchmark.SqliteBenchmarkCache-20231231-123102</title>
+<title>nextorm.benchmark.SqliteBenchmarkCache-20240105-164320</title>
 
 <style type="text/css">
 	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
@@ -23,10 +23,11 @@ Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical 
 </code></pre>
 
 <table>
-<thead><tr><th>Method</th><th>Mean</th><th>Error</th><th>StdDev</th><th>Gen0</th><th>Gen1</th><th>Allocated</th>
+<thead><tr><th>Method </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Gen0</th><th>Gen1</th><th>Allocated</th>
 </tr>
-</thead><tbody><tr><td>NonCached</td><td>318.0 &mu;s</td><td>6.13 &mu;s</td><td>7.75 &mu;s</td><td>3.4180</td><td>2.9297</td><td>17.1 KB</td>
-</tr><tr><td>Cached</td><td>323.3 &mu;s</td><td>6.28 &mu;s</td><td>8.38 &mu;s</td><td>3.4180</td><td>2.9297</td><td>17.84 KB</td>
+</thead><tbody><tr><td>Dapper</td><td>46.87 &mu;s</td><td>0.790 &mu;s</td><td>0.739 &mu;s</td><td>0.7324</td><td>-</td><td>3.54 KB</td>
+</tr><tr><td>NextormCached</td><td>49.82 &mu;s</td><td>0.984 &mu;s</td><td>0.921 &mu;s</td><td>1.3428</td><td>-</td><td>6.58 KB</td>
+</tr><tr><td>EFcore</td><td>137.54 &mu;s</td><td>2.419 &mu;s</td><td>2.144 &mu;s</td><td>9.7656</td><td>0.4883</td><td>45.1 KB</td>
 </tr></tbody></table>
 </body>
 </html>

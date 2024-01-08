@@ -1,9 +1,7 @@
 using System.Data.SQLite;
 using FluentAssertions;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using nextorm.core;
-using OneOf.Types;
 
 namespace nextorm.sqlite.tests;
 

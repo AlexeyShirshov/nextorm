@@ -452,7 +452,7 @@ public sealed class ExpressionEqualityComparer : IEqualityComparer<Expression?>
                 && CompareExpressionList(a.Arguments, b.Arguments)
                 && CompareMemberList(a.Members, b.Members);
 
-        private bool CompareParameter(ParameterExpression a, ParameterExpression b)
+        private readonly bool CompareParameter(ParameterExpression a, ParameterExpression b)
             => _parameterScope != null
                 && _parameterScope.TryGetValue(a, out var mapped)
                     ? mapped.Type == b.Type

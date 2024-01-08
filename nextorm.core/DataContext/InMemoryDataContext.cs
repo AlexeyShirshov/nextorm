@@ -34,7 +34,7 @@ public partial class InMemoryContext : IDataContext
     public IDictionary<ExpressionKey, Delegate> ExpressionsCache => _expCache;
     public IDictionary<Type, IEntityMeta> Metadata => _metadata;
     public IDictionary<Type, List<SelectExpression>> SelectListCache => _selectListCache;
-    //public IDictionary<Expression, List<SelectExpression>> SelectListExpessionCache => _selectListExpCache;
+    //public IDictionary<Expression, List<SelectExpression>> SelectListExpressionCache => _selectListExpCache;
     public ILogger? CommandLogger { get; set; }
     public void EnsureConnectionOpen() { }
     public Task EnsureConnectionOpenAsync() => Task.CompletedTask;
@@ -504,10 +504,10 @@ public partial class InMemoryContext : IDataContext
         return new InMemoryCompiledQuery<TResult, TEntity>(GetMap<TResult, TEntity>(query), conditionDelegate);
     }
 
-    public Task<IEnumerator<TResult>> CreateEnumeratorAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
-    {
-        return Task.FromResult((IEnumerator<TResult>)CreateAsyncEnumerator(queryCommand, @params, cancellationToken));
-    }
+    // public Task<IEnumerator<TResult>> CreateEnumeratorAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
+    // {
+    //     return Task.FromResult((IEnumerator<TResult>)CreateAsyncEnumerator(queryCommand, @params, cancellationToken));
+    // }
 
     public async Task<List<TResult>> ToListAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
     {

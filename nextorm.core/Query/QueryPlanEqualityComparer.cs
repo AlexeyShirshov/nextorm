@@ -1,5 +1,5 @@
-using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics.CodeAnalysis;
 
 namespace nextorm.core;
 
@@ -17,11 +17,11 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand>
     //     : this(new ExpressionCache<Delegate>())
     // {
     // }
-    public QueryPlanEqualityComparer(IDictionary<ExpressionKey, Delegate>? cache, IQueryProvider queryProvider)
-        : this(cache, queryProvider, null)
+    public QueryPlanEqualityComparer(IQueryProvider queryProvider)
+        : this(queryProvider, null)
     {
     }
-    public QueryPlanEqualityComparer(IDictionary<ExpressionKey, Delegate>? cache, IQueryProvider queryProvider, ILogger? logger)
+    public QueryPlanEqualityComparer(IQueryProvider queryProvider, ILogger? logger)
     {
         // _cache = cache ?? new ExpressionCache<Delegate>();
         // _logger = logger;
@@ -41,6 +41,8 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand>
         if (!_queryProvider.GetFromExpressionPlanEqualityComparer().Equals(x.From, y.From)) return false;
 
         if (x.EntityType != y.EntityType) return false;
+
+        if (x.ResultType != y.ResultType) return false;
 
         if (x.Paging.Limit != y.Paging.Limit || x.Paging.Offset != y.Paging.Offset) return false;
 
@@ -72,6 +74,19 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand>
             }
         }
 
+        if (x.Sorting is null && y.Sorting is not null) return false;
+        if (x.Sorting is not null && y.Sorting is null) return false;
+
+        if (x.Sorting is not null && y.Sorting is not null)
+        {
+            if (x.Sorting.Count != y.Sorting.Count) return false;
+
+            for (int i = 0; i < x.Sorting.Count; i++)
+            {
+                if (!_queryProvider.GetSortingExpressionPlanEqualityComparer().Equals(x.Sorting[i], y.Sorting[i])) return false;
+            }
+        }
+
         return true;
     }
 
@@ -93,15 +108,15 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand>
             if (obj.EntityType is not null)
                 hash.Add(obj.EntityType);
 
+            hash.Add(obj.ResultPlanHash);
+
             hash.Add(obj.WherePlanHash);
 
             hash.Add(obj.ColumnsPlanHash);
 
             hash.Add(obj.JoinPlanHash);
 
-            // obj.PlanHash = hash.ToHashCode();
-
-            // return obj.PlanHash.Value;
+            hash.Add(obj.SortingPlanHash);
 
             hash.Add(obj.Paging.Limit);
             hash.Add(obj.Paging.Offset);

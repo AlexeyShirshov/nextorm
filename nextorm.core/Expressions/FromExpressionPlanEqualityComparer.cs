@@ -1,5 +1,4 @@
 using System.Diagnostics.CodeAnalysis;
-using Microsoft.Extensions.Logging;
 namespace nextorm.core;
 
 public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromExpression>
@@ -14,7 +13,7 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
     //     : this(new ExpressionCache<Delegate>())
     // {
     // }
-    public FromExpressionPlanEqualityComparer(IDictionary<ExpressionKey, Delegate>? cache, IQueryProvider queryProvider)
+    public FromExpressionPlanEqualityComparer(IQueryProvider queryProvider)
     //        : this(cache, queryProvider, null)
     {
         //_cache = cache ?? new ExpressionCache<Delegate>();

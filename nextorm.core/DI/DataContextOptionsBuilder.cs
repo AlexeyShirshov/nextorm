@@ -7,9 +7,9 @@ public class DbContextBuilder
     //private readonly Dictionary<string, object> _props = new();
     private ILoggerFactory? _loggerFactory;
     //private IDataProvider? _dataProvider;
-    private bool _logSensetiveData;
+    private bool _logSensitiveData;
     private Func<DbContextBuilder, IDataContext>? _factory;
-    public bool ShouldLogSensetiveData => _logSensetiveData;
+    public bool ShouldLogSensitiveData => _logSensitiveData;
     //internal IDataProvider? DataProvider => _dataProvider;
     internal ILoggerFactory? LoggerFactory => _loggerFactory;
     public bool CacheQueryCommand { get; set; } = true;
@@ -30,9 +30,9 @@ public class DbContextBuilder
     //     _dataProvider = dataProvider;        
     //     return this;
     // }
-    public DbContextBuilder LogSensetiveData(bool logSensetiveData)
+    public DbContextBuilder LogSensitiveData(bool logSensitiveData)
     {
-        _logSensetiveData = logSensetiveData;
+        _logSensitiveData = logSensitiveData;
         return this;
     }
 

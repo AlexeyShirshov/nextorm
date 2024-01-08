@@ -6,7 +6,7 @@ using System.Text;
 using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
-public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerator<TResult>, IEnumerable<TResult>
+public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IAsyncEnumerable<TResult>, IEnumerable<TResult>, IAsyncInit<TResult>
 {
     //private readonly QueryCommand<TResult> _cmd;
     private readonly DbContext _dataProvider;
@@ -16,8 +16,8 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
     private readonly Func<IDataRecord, TResult>? _map;
     // private List<Param>? _params;
     private DbDataReader? _reader;
-    private readonly DbConnection _conn;
-    private bool _disposedValue;
+    private DbConnection? _conn;
+    private bool _disposed;
     public ResultSetEnumerator(DbContext dataProvider, DbCompiledQuery<TResult> compiledQuery)
     {
         //_cmd = cmd;
@@ -26,7 +26,7 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
         _map = compiledQuery.MapDelegate;
 
         // if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Getting connection");
-        _conn = _dataProvider.GetConnection();
+        //_conn = _dataProvider.GetConnection();
     }
     public TResult Current
     {
@@ -65,21 +65,32 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
     public async ValueTask<bool> MoveNextAsync()
     {
         if (_reader is null) await InitReaderAsync(_params, _cancellationToken).ConfigureAwait(false);
-
+#if DEBUG
         if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false) _dataProvider.Logger.LogTrace("Move next");
-
+#endif
         return await _reader!.ReadAsync(_cancellationToken).ConfigureAwait(false);
+    }
+    public bool MoveNext()
+    {
+        if (_reader is null) InitReader(_params);
+#if DEBUG
+        if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false) _dataProvider.Logger.LogTrace("Move next");
+#endif
+        return _reader!.Read();
     }
     public void InitEnumerator(object[]? @params, CancellationToken cancellationToken)
     {
         _cancellationToken = cancellationToken;
         _params = @params;
+        _conn = _dataProvider.GetConnection();
     }
     public void InitReader(object[]? @params)
     {
-        var sqlCommand = CreateCommand(@params);
-
         if (_reader is not null) return;
+#if DEBUG
+        if (_conn is null) throw new InvalidOperationException("Connection is empty");
+#endif
+        var sqlCommand = CreateCommand(@params);
 
         if (_conn.State == ConnectionState.Closed)
         {
@@ -91,40 +102,13 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
 
         _reader = sqlCommand.ExecuteReader(_compiledQuery.Behavior);
     }
-
-    private DbCommand CreateCommand(object[]? @params)
-    {
-        var sqlCommand = _compiledQuery.DbCommand;
-        sqlCommand.Connection = _conn;
-
-        if (@params is not null)
-        {
-            for (var i = 0; i < @params!.Length; i++)
-            {
-                var paramName = string.Format("norm_p{0}", i);
-                //sqlCommand.Parameters[paramName].Value = @params[i];
-                var added = false;
-                foreach (DbParameter p in sqlCommand.Parameters)
-                {
-                    if (p.ParameterName == paramName)
-                    {
-                        p.Value = @params[i];
-                        added = true;
-                        break;
-                    }
-                }
-                if (!added)
-                    sqlCommand.Parameters.Add(_dataProvider.CreateParam(paramName, @params[i]));
-            }
-        }
-        return sqlCommand;
-    }
-
     public async Task InitReaderAsync(object[]? @params, CancellationToken cancellationToken)
     {
-        var sqlCommand = CreateCommand(@params);
-
         if (_reader is not null) return;
+#if DEBUG
+        if (_conn is null) throw new InvalidOperationException("Connection is empty");
+#endif
+        var sqlCommand = CreateCommand(@params);
 
         if (_conn.State == ConnectionState.Closed)
         {
@@ -136,7 +120,14 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
 
         _reader = await sqlCommand.ExecuteReaderAsync(_compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
     }
+    private DbCommand CreateCommand(object[]? @params)
+    {
+        _compiledQuery.InitParams(@params, _dataProvider);
 
+        var sqlCommand = _compiledQuery.DbCommand;
+        sqlCommand.Connection = _conn;
+        return sqlCommand;
+    }
     private void LogCommand(DbCommand sqlCommand)
     {
         if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false)
@@ -151,7 +142,7 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
                 sqlCommand.CommandText
             };
 
-            if (_dataProvider.LogSensetiveData)
+            if (_dataProvider.LogSensitiveData)
             {
                 var idx = 0;
                 foreach (DbParameter p in sqlCommand.Parameters)
@@ -166,11 +157,11 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
             else if (sqlCommand.Parameters?.Count > 0)
             {
                 _dataProvider.Logger.LogDebug(sb.ToString(), sqlCommand.CommandText);
-                _dataProvider.Logger.LogDebug("Use {method} to see param values", nameof(_dataProvider.LogSensetiveData));
+                _dataProvider.Logger.LogDebug("Use {method} to see param values", nameof(_dataProvider.LogSensitiveData));
                 return;
             }
 
-            if (_dataProvider.LogSensetiveData)
+            if (_dataProvider.LogSensitiveData)
             {
                 sb.Length -= Environment.NewLine.Length;
                 _dataProvider.Logger.LogDebug(sb.ToString(), ps.ToArray());
@@ -180,20 +171,7 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
 
         }
     }
-
-    public bool MoveNext()
-    {
-#if DEBUG
-        if (_reader is null) throw new InvalidOperationException("DbDataReader is not initialized");
-#endif
-        return _reader!.Read();
-    }
-
     public void Reset()
-    {
-    }
-
-    protected virtual void Dispose(bool disposing)
     {
         if (_reader is not null)
         {
@@ -201,20 +179,24 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
             _reader.Dispose();
 
             _reader = null;
+            _conn = null;
         }
-        if (!_disposedValue)
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        Reset();
+
+        if (!_disposed)
         {
             if (disposing)
             {
             }
 
-            // TODO: free unmanaged resources (unmanaged objects) and override finalizer
-            // TODO: set large fields to null
-            _disposedValue = true;
+            _disposed = true;
         }
     }
 
-    // // TODO: override finalizer only if 'Dispose(bool disposing)' has code to free unmanaged resources
     // ~ResultSetEnumerator()
     // {
     //     // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
@@ -237,4 +219,14 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerat
     {
         return this;
     }
+
+    public IAsyncEnumerator<TResult> GetAsyncEnumerator(CancellationToken cancellationToken = default)
+    {
+        return this;
+    }
+}
+
+internal interface IAsyncInit<out TResult> : IEnumerator<TResult>
+{
+    Task InitReaderAsync(object[]? @params, CancellationToken cancellationToken);
 }

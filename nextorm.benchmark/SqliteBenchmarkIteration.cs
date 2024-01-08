@@ -12,6 +12,7 @@ namespace nextorm.benchmark;
 //[SimpleJob(RuntimeMoniker.Net70, baseline: true)]
 [SimpleJob(RuntimeMoniker.Net80)]
 [MemoryDiagnoser]
+[Config(typeof(NextormConfig))]
 public class SqliteBenchmarkIteration
 {
     private readonly TestDataRepository _ctx;
@@ -30,7 +31,7 @@ public class SqliteBenchmarkIteration
         {
             _logFactory = LoggerFactory.Create(config => config.AddConsole().SetMinimumLevel(LogLevel.Debug));
             builder.UseLoggerFactory(_logFactory);
-            builder.LogSensetiveData(true);
+            builder.LogSensitiveData(true);
         }
         _ctx = new TestDataRepository(builder.CreateDbContext());
         _ctx.DbContext.EnsureConnectionOpen();

@@ -24,7 +24,7 @@ public class SqliteDbContext : DbContext
     {
         if (Logger?.IsEnabled(LogLevel.Debug) ?? false)
         {
-            if (LogSensetiveData)
+            if (LogSensitiveData)
                 Logger.LogDebug("Creating connection with {connStr}", _connectionString);
             else
                 Logger.LogDebug("Creating connection");
@@ -36,8 +36,19 @@ public class SqliteDbContext : DbContext
             return _connection;
         }
 
-        return new SQLiteConnection(_connectionString);
+        var conn = new SQLiteConnection(_connectionString);
+#if DEBUG
+        conn.Disposed += ConnDisposed;
+#endif
+        return conn;
     }
+#if DEBUG
+    private void ConnDisposed(object? sender, EventArgs e)
+    {
+        if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Connection disposed");
+        ((SQLiteConnection)sender).Disposed -= ConnDisposed;
+    }
+#endif
     public override DbCommand CreateCommand(string sql)
     {
         return new SQLiteCommand(sql);

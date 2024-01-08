@@ -1,5 +1,5 @@
-using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics.CodeAnalysis;
 namespace nextorm.core;
 
 public sealed class JoinExpressionPlanEqualityComparer : IEqualityComparer<JoinExpression>
@@ -14,11 +14,11 @@ public sealed class JoinExpressionPlanEqualityComparer : IEqualityComparer<JoinE
     //     : this(new ExpressionCache<Delegate>())
     // {
     // }
-    public JoinExpressionPlanEqualityComparer(IDictionary<ExpressionKey, Delegate>? cache, IQueryProvider queryProvider)
-        : this(cache, queryProvider, null)
+    public JoinExpressionPlanEqualityComparer(IQueryProvider queryProvider)
+        : this(queryProvider, null)
     {
     }
-    public JoinExpressionPlanEqualityComparer(IDictionary<ExpressionKey, Delegate>? cache, IQueryProvider queryProvider, ILogger? logger)
+    public JoinExpressionPlanEqualityComparer(IQueryProvider queryProvider, ILogger? logger)
     {
         //_cache = cache ?? new ExpressionCache<Delegate>();
         _queryProvider = queryProvider;

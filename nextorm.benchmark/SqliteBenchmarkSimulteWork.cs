@@ -4,7 +4,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Data.Sqlite;
 using Dapper;
 using Microsoft.Extensions.Logging;
-using TupleLargeEntity = System.Tuple<long, string?, System.DateTime?>;
 using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Columns;
 using nextorm.core;
@@ -40,7 +39,7 @@ public class SqliteBenchmarkSimulateWork
         {
             _logFactory = LoggerFactory.Create(config => config.AddConsole().SetMinimumLevel(LogLevel.Debug));
             builder.UseLoggerFactory(_logFactory);
-            builder.LogSensetiveData(true);
+            builder.LogSensitiveData(true);
         }
         _ctx = new TestDataRepository(builder.CreateDbContext());
         _ctx.DbContext.EnsureConnectionOpen();

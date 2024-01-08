@@ -19,7 +19,7 @@ public class ReplaceMemberVisitor : ExpressionVisitor
     protected override Expression VisitMember(MemberExpression node)
     {
         if (node.Member.DeclaringType == _entityType)
-            return _sqlDataProvider.MapColumn(new SelectExpression(node.Type, _sqlDataProvider.ExpressionsCache, _queryProvider) { Index = 0, PropertyName = node.Member.Name }, _param);
+            return DbContext.MapColumn(new SelectExpression(node.Type, _sqlDataProvider.ExpressionsCache, _queryProvider) { Index = 0, PropertyName = node.Member.Name }, _param);
 
         return base.VisitMember(node);
     }
@@ -29,7 +29,7 @@ public class ReplaceMemberVisitor : ExpressionVisitor
         {
             if (node.Method.Name == nameof(NORM.NORM_SQL.exists))
             {
-                return _sqlDataProvider.MapColumn(new SelectExpression(node.Type, _sqlDataProvider.ExpressionsCache, _queryProvider) { Index = 0 }, _param);
+                return DbContext.MapColumn(new SelectExpression(node.Type, _sqlDataProvider.ExpressionsCache, _queryProvider) { Index = 0 }, _param);
             }
         }
         return base.VisitMethodCall(node);

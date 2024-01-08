@@ -1,11 +1,12 @@
 namespace nextorm.core;
 
-public class QueryPlan
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Minor Code Smell", "S3897:Classes that provide \"Equals(<T>)\" should implement \"IEquatable<T>\"", Justification = "<Pending>")]
+public sealed class QueryPlan
 {
     public QueryCommand QueryCommand;
     //private readonly QueryPlanEqualityComparer _comparer;
     private int? _hashPlan;
-    public QueryPlan(QueryCommand cmd, IDictionary<ExpressionKey, Delegate>? cache)
+    public QueryPlan(QueryCommand cmd)
     {
         QueryCommand = cmd;
         //_comparer = new QueryPlanEqualityComparer(cache, cmd);
