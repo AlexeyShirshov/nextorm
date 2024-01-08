@@ -2,7 +2,7 @@
 <html lang='en'>
 <head>
 <meta charset='utf-8' />
-<title>nextorm.benchmark.SqliteBenchmarkSingle-20240108-200001</title>
+<title>nextorm.benchmark.SqliteBenchmarkSingle-20240108-213845</title>
 
 <style type="text/css">
 	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
@@ -25,16 +25,16 @@ Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical 
 <table>
 <thead><tr><th>Method                  </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Ratio</th><th>RatioSD</th><th>Gen0</th><th>Gen1</th><th>Allocated</th><th>Alloc Ratio</th>
 </tr>
-</thead><tbody><tr><td>DapperSingleOrDefault</td><td>40.06 &mu;s</td><td>0.801 &mu;s</td><td>0.890 &mu;s</td><td>0.89</td><td>0.03</td><td>0.2441</td><td>-</td><td>1.15 KB</td><td>0.60</td>
-</tr><tr><td>DapperSingle</td><td>40.95 &mu;s</td><td>0.818 &mu;s</td><td>1.795 &mu;s</td><td>0.89</td><td>0.03</td><td>0.1831</td><td>-</td><td>1.05 KB</td><td>0.55</td>
-</tr><tr><td>NextormSingleCompiled</td><td>44.96 &mu;s</td><td>0.536 &mu;s</td><td>0.501 &mu;s</td><td>1.00</td><td>0.00</td><td>0.3662</td><td>-</td><td>1.91 KB</td><td>1.00</td>
-</tr><tr><td>NextormSingleOrDefaultCompiled</td><td>45.55 &mu;s</td><td>0.900 &mu;s</td><td>1.036 &mu;s</td><td>1.01</td><td>0.03</td><td>0.3662</td><td>-</td><td>1.91 KB</td><td>1.00</td>
-</tr><tr><td>EFCoreSingleCompiled</td><td>53.10 &mu;s</td><td>0.908 &mu;s</td><td>0.849 &mu;s</td><td>1.18</td><td>0.02</td><td>1.0376</td><td>0.3052</td><td>4.97 KB</td><td>2.61</td>
-</tr><tr><td>EFCoreSingleOrDefaultCompiled</td><td>54.41 &mu;s</td><td>1.052 &mu;s</td><td>0.984 &mu;s</td><td>1.21</td><td>0.02</td><td>1.0376</td><td>0.3052</td><td>4.97 KB</td><td>2.61</td>
-</tr><tr><td>NextormSingleCached</td><td>57.42 &mu;s</td><td>1.143 &mu;s</td><td>1.404 &mu;s</td><td>1.28</td><td>0.04</td><td>1.0986</td><td>-</td><td>5.09 KB</td><td>2.67</td>
-</tr><tr><td>NextormSingleOrDefaultCached</td><td>57.73 &mu;s</td><td>1.147 &mu;s</td><td>1.645 &mu;s</td><td>1.30</td><td>0.04</td><td>1.0986</td><td>-</td><td>5.09 KB</td><td>2.67</td>
-</tr><tr><td>EFCoreSingleOrDefault</td><td>82.54 &mu;s</td><td>1.646 &mu;s</td><td>1.761 &mu;s</td><td>1.84</td><td>0.06</td><td>2.1973</td><td>0.4883</td><td>10.6 KB</td><td>5.56</td>
-</tr><tr><td>EFCoreSingle</td><td>84.11 &mu;s</td><td>1.660 &mu;s</td><td>2.100 &mu;s</td><td>1.87</td><td>0.06</td><td>2.1973</td><td>0.4883</td><td>10.31 KB</td><td>5.41</td>
+</thead><tbody><tr><td>NextormSingleCompiled</td><td>31.52 &mu;s</td><td>0.610 &mu;s</td><td>0.627 &mu;s</td><td>1.00</td><td>0.00</td><td>0.2441</td><td>-</td><td>1.23 KB</td><td>1.00</td>
+</tr><tr><td>NextormSingleOrDefaultCompiled</td><td>36.65 &mu;s</td><td>0.529 &mu;s</td><td>0.495 &mu;s</td><td>1.16</td><td>0.02</td><td>0.2441</td><td>-</td><td>1.23 KB</td><td>1.00</td>
+</tr><tr><td>DapperSingle</td><td>38.91 &mu;s</td><td>0.665 &mu;s</td><td>0.622 &mu;s</td><td>1.23</td><td>0.03</td><td>0.1831</td><td>-</td><td>1.05 KB</td><td>0.85</td>
+</tr><tr><td>DapperSingleOrDefault</td><td>39.60 &mu;s</td><td>0.615 &mu;s</td><td>0.576 &mu;s</td><td>1.25</td><td>0.03</td><td>0.2441</td><td>-</td><td>1.15 KB</td><td>0.94</td>
+</tr><tr><td>NextormSingleCached</td><td>41.70 &mu;s</td><td>0.834 &mu;s</td><td>1.054 &mu;s</td><td>1.33</td><td>0.04</td><td>0.8545</td><td>-</td><td>4.41 KB</td><td>3.59</td>
+</tr><tr><td>NextormSingleOrDefaultCached</td><td>42.40 &mu;s</td><td>0.834 &mu;s</td><td>1.142 &mu;s</td><td>1.33</td><td>0.04</td><td>0.8545</td><td>-</td><td>4.41 KB</td><td>3.59</td>
+</tr><tr><td>EFCoreSingleCompiled</td><td>51.40 &mu;s</td><td>0.468 &mu;s</td><td>0.415 &mu;s</td><td>1.63</td><td>0.03</td><td>1.0376</td><td>0.3052</td><td>4.97 KB</td><td>4.05</td>
+</tr><tr><td>EFCoreSingleOrDefaultCompiled</td><td>51.99 &mu;s</td><td>0.464 &mu;s</td><td>0.434 &mu;s</td><td>1.65</td><td>0.04</td><td>1.0376</td><td>0.3052</td><td>4.97 KB</td><td>4.05</td>
+</tr><tr><td>EFCoreSingle</td><td>82.47 &mu;s</td><td>1.463 &mu;s</td><td>1.368 &mu;s</td><td>2.61</td><td>0.07</td><td>2.1973</td><td>0.4883</td><td>10.3 KB</td><td>8.40</td>
+</tr><tr><td>EFCoreSingleOrDefault</td><td>82.55 &mu;s</td><td>1.618 &mu;s</td><td>2.103 &mu;s</td><td>2.63</td><td>0.07</td><td>2.1973</td><td>0.4883</td><td>10.3 KB</td><td>8.40</td>
 </tr></tbody></table>
 </body>
 </html>

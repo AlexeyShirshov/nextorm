@@ -9,10 +9,10 @@ Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical 
 Job=.NET 8.0  Runtime=.NET 8.0  
 
 ```
-| Method                    | Mean     | Error    | StdDev   | Gen0    | Gen1   | Allocated |
-|-------------------------- |---------:|---------:|---------:|--------:|-------:|----------:|
-| DapperLargeFirst          | 456.8 μs |  8.97 μs | 11.66 μs |  3.9063 |      - |  19.63 KB |
-| NextormLargeFirstCompiled | 499.2 μs |  7.57 μs |  7.08 μs |  4.8828 |      - |   25.1 KB |
-| NextormFirst              | 582.6 μs | 10.55 μs |  8.81 μs | 13.6719 |      - |  64.58 KB |
-| EFCoreLargeFirstCompiled  | 589.6 μs |  8.55 μs |  8.00 μs | 11.7188 | 3.9063 |  57.34 KB |
-| NextormFirstParam         | 627.3 μs | 12.13 μs | 12.46 μs | 11.7188 |      - |  55.18 KB |
+| Method                    | Mean     | Error   | StdDev  | Gen0    | Gen1   | Allocated |
+|-------------------------- |---------:|--------:|--------:|--------:|-------:|----------:|
+| NextormLargeFirstCompiled | 337.4 μs | 5.48 μs | 5.12 μs |  3.4180 |      - |  17.05 KB |
+| DapperLargeFirst          | 432.2 μs | 7.11 μs | 6.65 μs |  3.9063 |      - |  19.63 KB |
+| NextormFirst              | 468.4 μs | 9.21 μs | 9.86 μs | 11.7188 |      - |  56.69 KB |
+| NextormFirstParam         | 511.5 μs | 8.57 μs | 8.01 μs |  9.7656 |      - |  47.14 KB |
+| EFCoreLargeFirstCompiled  | 586.9 μs | 7.96 μs | 7.06 μs | 11.7188 | 3.9063 |  57.34 KB |

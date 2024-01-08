@@ -11,13 +11,13 @@ Job=.NET 8.0  Runtime=.NET 8.0
 ```
 | Method                         | Mean     | Error    | StdDev   | Ratio | RatioSD | Gen0   | Gen1   | Allocated | Alloc Ratio |
 |------------------------------- |---------:|---------:|---------:|------:|--------:|-------:|-------:|----------:|------------:|
-| DapperSingleOrDefault          | 40.06 μs | 0.801 μs | 0.890 μs |  0.89 |    0.03 | 0.2441 |      - |   1.15 KB |        0.60 |
-| DapperSingle                   | 40.95 μs | 0.818 μs | 1.795 μs |  0.89 |    0.03 | 0.1831 |      - |   1.05 KB |        0.55 |
-| NextormSingleCompiled          | 44.96 μs | 0.536 μs | 0.501 μs |  1.00 |    0.00 | 0.3662 |      - |   1.91 KB |        1.00 |
-| NextormSingleOrDefaultCompiled | 45.55 μs | 0.900 μs | 1.036 μs |  1.01 |    0.03 | 0.3662 |      - |   1.91 KB |        1.00 |
-| EFCoreSingleCompiled           | 53.10 μs | 0.908 μs | 0.849 μs |  1.18 |    0.02 | 1.0376 | 0.3052 |   4.97 KB |        2.61 |
-| EFCoreSingleOrDefaultCompiled  | 54.41 μs | 1.052 μs | 0.984 μs |  1.21 |    0.02 | 1.0376 | 0.3052 |   4.97 KB |        2.61 |
-| NextormSingleCached            | 57.42 μs | 1.143 μs | 1.404 μs |  1.28 |    0.04 | 1.0986 |      - |   5.09 KB |        2.67 |
-| NextormSingleOrDefaultCached   | 57.73 μs | 1.147 μs | 1.645 μs |  1.30 |    0.04 | 1.0986 |      - |   5.09 KB |        2.67 |
-| EFCoreSingleOrDefault          | 82.54 μs | 1.646 μs | 1.761 μs |  1.84 |    0.06 | 2.1973 | 0.4883 |   10.6 KB |        5.56 |
-| EFCoreSingle                   | 84.11 μs | 1.660 μs | 2.100 μs |  1.87 |    0.06 | 2.1973 | 0.4883 |  10.31 KB |        5.41 |
+| NextormSingleCompiled          | 31.52 μs | 0.610 μs | 0.627 μs |  1.00 |    0.00 | 0.2441 |      - |   1.23 KB |        1.00 |
+| NextormSingleOrDefaultCompiled | 36.65 μs | 0.529 μs | 0.495 μs |  1.16 |    0.02 | 0.2441 |      - |   1.23 KB |        1.00 |
+| DapperSingle                   | 38.91 μs | 0.665 μs | 0.622 μs |  1.23 |    0.03 | 0.1831 |      - |   1.05 KB |        0.85 |
+| DapperSingleOrDefault          | 39.60 μs | 0.615 μs | 0.576 μs |  1.25 |    0.03 | 0.2441 |      - |   1.15 KB |        0.94 |
+| NextormSingleCached            | 41.70 μs | 0.834 μs | 1.054 μs |  1.33 |    0.04 | 0.8545 |      - |   4.41 KB |        3.59 |
+| NextormSingleOrDefaultCached   | 42.40 μs | 0.834 μs | 1.142 μs |  1.33 |    0.04 | 0.8545 |      - |   4.41 KB |        3.59 |
+| EFCoreSingleCompiled           | 51.40 μs | 0.468 μs | 0.415 μs |  1.63 |    0.03 | 1.0376 | 0.3052 |   4.97 KB |        4.05 |
+| EFCoreSingleOrDefaultCompiled  | 51.99 μs | 0.464 μs | 0.434 μs |  1.65 |    0.04 | 1.0376 | 0.3052 |   4.97 KB |        4.05 |
+| EFCoreSingle                   | 82.47 μs | 1.463 μs | 1.368 μs |  2.61 |    0.07 | 2.1973 | 0.4883 |   10.3 KB |        8.40 |
+| EFCoreSingleOrDefault          | 82.55 μs | 1.618 μs | 2.103 μs |  2.63 |    0.07 | 2.1973 | 0.4883 |   10.3 KB |        8.40 |
