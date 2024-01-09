@@ -41,10 +41,16 @@ The current status (1.0.1-alpha) is a prof of concept.
 
 ## Installation
 
-- from cli  
-```dotnet add package nextorm```
-- from package manager  
-```Install-Package nextorm```
+- from cli `dotnet add package nextorm`
+- from package manager `Install-Package nextorm`
+
+Don't forget to add `--prerelease` flag since all current versions is not stable.
+To add specific database provider use the following:
+
+- `dotnet add package nextorm.sqlserver`
+- `dotnet add package nextorm.sqlite`
+
+In-memory provider is built-in in core library.
 
 ## Releases
 
