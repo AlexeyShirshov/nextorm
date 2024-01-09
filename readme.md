@@ -61,6 +61,7 @@ Benchmark is running under the following conditions:
 * All queries is async
 * Data provider is SQLite
 * Computer configuration: Intel(R) Core(TM) i5-9600KF CPU @ 3.70GHz, RAM 16Gb
+* .NET SDK 8.0.100
 
 | Method                | Nextorm |  Dapper | EF core |
 |-----------------------|:-------:|:---------------------------:|:-------:|
