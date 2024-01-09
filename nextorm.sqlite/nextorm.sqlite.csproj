@@ -4,6 +4,22 @@
     <TargetFrameworks>net7.0;net8.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <PackageId>nextorm.sqlite</PackageId>
+    <Title>Nextorm SQLite provider</Title>
+    <Version>1.0.1-alpha</Version>
+    <PackageTags>orm;sql;micro-orm</PackageTags>
+    <Description>SQLite provider for Nextorm</Description>
+    <Authors>Alexey Shirshov</Authors>
+    <Copyright>Alexey Shirshov</Copyright>
+    <Authors>Alexey Shirshov</Authors>
+    <Copyright>Alexey Shirshov</Copyright>
+    <PackageReleaseNotes>https://alexeyshirshov.github.io/nextorm/</PackageReleaseNotes>
+    <PackageProjectUrl>https://github.com/AlexeyShirshov/nextorm</PackageProjectUrl>
+    <PackageReadmeFile>readme.md</PackageReadmeFile>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageIcon></PackageIcon>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/AlexeyShirshov/nextorm</RepositoryUrl>
   </PropertyGroup>
 
   <ItemGroup>
@@ -14,4 +30,7 @@
     <PackageReference Include="System.Data.SQLite" Version="1.0.118" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="readme.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 </Project>
