@@ -5,7 +5,7 @@ using System.Data.Common;
 namespace nextorm.core;
 
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S3881:\"IDisposable\" should be implemented correctly", Justification = "<Pending>")]
-public class DbCompiledQuery<TResult> : CompiledQuery<TResult, IDataRecord>, IDisposable, IDbCommandHolder
+public sealed class DbCompiledQuery<TResult> : CompiledQuery<TResult, IDataRecord>
 {
     public readonly CommandBehavior Behavior = 0;
     public DbCompiledQuery(DbCommand dbCommand, Func<Func<IDataRecord, TResult>?> getMap)
@@ -27,20 +27,8 @@ public class DbCompiledQuery<TResult> : CompiledQuery<TResult, IDataRecord>, IDi
     public ResultSetEnumerator<TResult>? Enumerator;
     public int LastRowCount;
     public List<int> ParamMap = [];
-    private DbConnection? _connection;
-
-    DbCommand IDbCommandHolder.DbCommand => DbCommand;
-    // public DbConnection? Connection
-    // {
-    //     get => _connection;
-    //     set
-    //     {
-    //         _connection = value;
-    //         DbCommand.Connection = value;
-    //     }
-    // }
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Bug", "S2583:Conditionally executed code should be reachable", Justification = "<Pending>")]
-    public void InitParams(object[]? @params, DbContext dataContext, DbConnection conn)
+    public void PrepareDbCommand(object[]? @params, DbContext dataContext, DbConnection conn)
     {
         if (@params is not null)
         {
@@ -88,16 +76,4 @@ public class DbCompiledQuery<TResult> : CompiledQuery<TResult, IDataRecord>, IDi
         if (DbCommand.Connection != conn)
             DbCommand.Connection = conn;
     }
-
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "CA1816:Dispose methods should call SuppressFinalize", Justification = "<Pending>")]
-    public void Dispose()
-    {
-        // DbCommand.Connection = null;
-    }
-}
-
-internal interface IDbCommandHolder
-{
-    DbCommand DbCommand { get; }
-    // DbConnection? Connection { get; set; }
 }

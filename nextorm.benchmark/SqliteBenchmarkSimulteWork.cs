@@ -1,7 +1,7 @@
 ﻿using BenchmarkDotNet.Attributes;
 using nextorm.sqlite;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Data.Sqlite;
+using System.Data.SQLite;
 using Dapper;
 using Microsoft.Extensions.Logging;
 using BenchmarkDotNet.Jobs;
@@ -25,7 +25,7 @@ public class SqliteBenchmarkSimulateWork
     private readonly QueryCommand<LargeEntity> _cmd;
     private readonly QueryCommand<LargeEntity> _cmdToList;
     private readonly EFDataContext _efCtx;
-    private readonly SqliteConnection _conn;
+    private readonly SQLiteConnection _conn;
     private readonly QueryCommand<SimpleEntity?> _cmdInner;
     private readonly Func<EFDataContext, IAsyncEnumerable<LargeEntity>> _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.LargeEntities.Where(it => it.Id < LargeListSize));
     private readonly Func<EFDataContext, long, int, Task<SimpleEntity?>> _efInnerCompiled = EF.CompileAsyncQuery((EFDataContext ctx, long id, int i) => ctx.SimpleEntities.Where(it => (it.Id - i) == id).FirstOrDefault());
@@ -34,13 +34,17 @@ public class SqliteBenchmarkSimulateWork
     {
         var builder = new DbContextBuilder();
         var filepath = Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db");
-        builder.UseSqlite(filepath);
+        _conn = new SQLiteConnection($"Data Source='{filepath}'");
+        _conn.Open();
+
+        builder.UseSqlite(_conn);
         if (withLogging)
         {
             _logFactory = LoggerFactory.Create(config => config.AddConsole().SetMinimumLevel(LogLevel.Debug));
             builder.UseLoggerFactory(_logFactory);
             builder.LogSensitiveData(true);
         }
+
         _ctx = new TestDataRepository(builder.CreateDbContext());
         _ctx.DbContext.EnsureConnectionOpen();
 
@@ -51,7 +55,7 @@ public class SqliteBenchmarkSimulateWork
         _cmdInner = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0) + NORM.Param<int>(1)).FirstOrFirstOrDefaultCommand().Compile(true);
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
-        efBuilder.UseSqlite(@$"Filename={filepath}");
+        efBuilder.UseSqlite(_conn);
         efBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
         if (withLogging)
         {
@@ -60,15 +64,6 @@ public class SqliteBenchmarkSimulateWork
         }
 
         _efCtx = new EFDataContext(efBuilder.Options);
-
-        _conn = new SqliteConnection(((SqliteDbContext)_ctx.DbContext).ConnectionString);
-        _conn.Open();
-    }
-    private static ValueTask DoWork()
-    {
-        //await Task.Delay(1);
-        //for (var i = 0; i < workIterations; i++) { }
-        return ValueTask.CompletedTask;
     }
     // [Benchmark()]
     // public async Task NextormCompiledAsync()
@@ -114,7 +109,6 @@ public class SqliteBenchmarkSimulateWork
     {
         foreach (var row in await _cmdToList.ToListAsync())
         {
-            await DoWork();
             for (var i = 0; i < SmallIterations; i++)
             {
                 await _cmdInner.FirstOrDefaultAsync(row.Id, i);
@@ -168,7 +162,6 @@ public class SqliteBenchmarkSimulateWork
         var cmdInner = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0) + NORM.Param<int>(1)).FirstOrFirstOrDefaultCommand(entity => new { entity.Id }).Compile(true);
         foreach (var row in await _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new { entity.Id, entity.Str, entity.Dt }).ToListAsync())
         {
-            await DoWork();
             for (var i = 0; i < SmallIterations; i++)
             {
                 await cmdInner.FirstOrDefaultAsync(row.Id, i);
@@ -206,7 +199,6 @@ public class SqliteBenchmarkSimulateWork
     {
         foreach (var row in await _efCompiled(_efCtx).ToListAsync())
         {
-            await DoWork();
             for (var i = 0; i < SmallIterations; i++)
             {
                 await _efInnerCompiled(_efCtx, row.Id, i);
@@ -218,7 +210,6 @@ public class SqliteBenchmarkSimulateWork
     {
         foreach (var row in await _conn.QueryAsync<LargeEntity>("select id, someString as str, dt from large_table where id < @limit", new { limit = LargeListSize }))
         {
-            await DoWork();
             for (var i = 0; i < SmallIterations; i++)
             {
                 var p = i;

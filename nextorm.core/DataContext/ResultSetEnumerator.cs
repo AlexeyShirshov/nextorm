@@ -122,7 +122,7 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IAsyncEnu
     }
     private DbCommand CreateCommand(object[]? @params)
     {
-        _compiledQuery.InitParams(@params, _dataProvider, _conn!);
+        _compiledQuery.PrepareDbCommand(@params, _dataProvider, _conn!);
 
         return _compiledQuery.DbCommand;
     }

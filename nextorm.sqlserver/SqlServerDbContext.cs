@@ -35,7 +35,7 @@ public class SqlServerDbContext : DbContext
 
         if (_connection is not null)
         {
-            _connCreated = false;
+            _connWasCreatedByMe = false;
             return _connection;
         }
 

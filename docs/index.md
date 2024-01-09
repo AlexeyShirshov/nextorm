@@ -3,15 +3,18 @@
 ## Overview
 
 Nextorm perform two main functions:
+
 - Generate SQL code
 - Map relational data into language (or rather a framework) structures such as classes, primitive types, arrays, lists, etc.
 
 Nextorm uses protocol-level libraries (for example, SqlClient for Microsoft SQL Server or SQLite for SQLite) and designed to create a high performance data access layer independent of SQL and specific RDBMS.
 
-
 ## Status
+
 The current status (1.0.1-alpha) is a prof of concept.
+
 ## Roadmap
+
 - [1.0.2-alpha](https://github.com/AlexeyShirshov/nextorm/milestones/1.0-a.2)
 - [1.0.3-alpha](https://github.com/AlexeyShirshov/nextorm/milestones/1.0-a.3)
 - [1.0.4-alpha](https://github.com/AlexeyShirshov/nextorm/milestones/1.0-a.4)
@@ -35,7 +38,9 @@ The current status (1.0.1-alpha) is a prof of concept.
 - [1.4-beta](https://github.com/AlexeyShirshov/nextorm/milestones/1.4-b.1)
 - [1.4-rc](https://github.com/AlexeyShirshov/nextorm/milestones/1.4-rc.1)
 - [1.4](https://github.com/AlexeyShirshov/nextorm/milestones/1.4)
+
 ## Installation
+
 - from cli  
 ```dotnet add package nextorm```
 - from package manager  
@@ -44,6 +49,7 @@ The current status (1.0.1-alpha) is a prof of concept.
 ## Releases
 
 ### 1.0.1-alpha
+
 - [Where clause](https://github.com/AlexeyShirshov/nextorm/issues/1)
 - [Joins](https://github.com/AlexeyShirshov/nextorm/issues/2)
 - [Paging](https://github.com/AlexeyShirshov/nextorm/issues/7)

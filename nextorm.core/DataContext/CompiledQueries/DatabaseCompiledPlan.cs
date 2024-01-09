@@ -1,9 +1,10 @@
 #define PARAM_CONDITION
 using System.Data;
+using System.Data.Common;
 
 namespace nextorm.core;
 
-public class DbCompiledPlan<TResult> : CompiledQuery<TResult, IDataRecord>
+public sealed class DbCompiledPlan<TResult> : CompiledQuery<TResult, IDataRecord>, IDbCommandHolder
 {
     public readonly string? SqlStmt;
     public readonly bool NoParams;
@@ -19,6 +20,11 @@ public class DbCompiledPlan<TResult> : CompiledQuery<TResult, IDataRecord>
     {
         SqlStmt = sql;
         NoParams = noParams;
+    }
+    public void ResetConnection(DbConnection conn)
+    {
+        if (QueryTemplate?.DbCommand?.Connection == conn)
+            QueryTemplate.DbCommand.Connection = null;
     }
     // public DbCommand GetCommand(IEnumerable<Param> @params, SqlDataProvider dataProvider)
     // {

@@ -16,7 +16,7 @@ public interface ILargeEntity
 }
 
 [Table("large_table")]
-public class LargeEntity : ILargeEntity
+public sealed class LargeEntity //: ILargeEntity
 {
     public long Id { get; set; }
     [Column("someString")]
