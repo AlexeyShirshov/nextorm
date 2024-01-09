@@ -2,11 +2,19 @@ using Microsoft.Extensions.Logging;
 using System.Diagnostics.CodeAnalysis;
 namespace nextorm.core;
 
-public sealed class SortingExpressionPlanEqualityComparer(IQueryProvider queryProvider) : IEqualityComparer<Sorting>
+public sealed class SortingExpressionPlanEqualityComparer(IQueryProvider queryProvider) : IEqualityComparer<Sorting>, IValueEqualityComparer<Sorting>
 {
     private readonly IQueryProvider _queryProvider = queryProvider;
 
     public bool Equals(Sorting x, Sorting y)
+    {
+        if (x.Direction != y.Direction) return false;
+
+        if (!_queryProvider.GetExpressionPlanEqualityComparer().Equals(x.PreparedExpression, y.PreparedExpression)) return false;
+
+        return true;
+    }
+    public bool ValueEquals(in Sorting x, in Sorting y)
     {
         if (x.Direction != y.Direction) return false;
 
@@ -40,4 +48,10 @@ public sealed class SortingExpressionPlanEqualityComparer(IQueryProvider queryPr
             return hash.ToHashCode();
         }
     }
+}
+
+public interface IValueEqualityComparer<T>
+    where T : struct
+{
+    bool ValueEquals(in T x, in T y);
 }

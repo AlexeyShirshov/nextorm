@@ -1,6 +1,7 @@
 #define PARAM_CONDITION
 using System.Data;
 using System.Data.Common;
+using System.Diagnostics;
 
 namespace nextorm.core;
 
@@ -26,20 +27,23 @@ public sealed class DbCompiledQuery<TResult> : CompiledQuery<TResult, IDataRecor
     public DbParameterCollection DbCommandParams;
     public ResultSetEnumerator<TResult>? Enumerator;
     public int LastRowCount;
-    public List<int> ParamMap = [];
+    public int[] ParamMap;
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Bug", "S2583:Conditionally executed code should be reachable", Justification = "<Pending>")]
     public void PrepareDbCommand(object[]? @params, DbContext dataContext, DbConnection conn)
     {
         if (@params is not null)
         {
             var parameters = DbCommandParams;
+            if (ParamMap is null)
+            {
+                ParamMap = new int[@params.Length];
+                for (var i = 0; i < @params.Length; i++) ParamMap[i] = -1;
+            }
+            Debug.Assert(@params.Length == ParamMap.Length, "Arrays must be equal size", "{0} and {1} found", @params.Length, ParamMap.Length);
+
             for (var i = 0; i < @params.Length; i++)
             {
-                var idx = -1;
-                if (i < ParamMap.Count)
-                {
-                    idx = ParamMap[i];
-                }
+                var idx = ParamMap[i];
 
                 string? paramName = null;
                 if (idx < 0)
@@ -52,22 +56,17 @@ public sealed class DbCompiledQuery<TResult> : CompiledQuery<TResult, IDataRecor
 
                     if (idx >= 0)
                     {
-                        if (i < ParamMap.Count)
-                            ParamMap[i] = idx;
-                        else
-                            ParamMap.Add(idx);
+                        ParamMap[i] = idx;
                     }
                 }
 
                 if (idx >= 0)
+                {
                     parameters[idx].Value = @params[i];
+                }
                 else
                 {
-                    if (i < ParamMap.Count)
-                        ParamMap[i] = parameters.Count;
-                    else
-                        ParamMap.Add(parameters.Count);
-
+                    ParamMap[i] = parameters.Count;
                     parameters.Add(dataContext.CreateParam(paramName!, @params[i]));
                 }
             }

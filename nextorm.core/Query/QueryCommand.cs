@@ -605,6 +605,13 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         dst.PreparedCondition = PreparedCondition;
         dst.ResultPlanHash = ResultPlanHash;
         dst.ResultType = ResultType;
+        dst.Paging = Paging;
+        dst._queryPlanComparer = _queryPlanComparer;
+        dst._fromExpressionPlanComparer = _fromExpressionPlanComparer;
+        dst._expressionPlanComparer = _expressionPlanComparer;
+        dst._selectExpressionPlanComparer = _selectExpressionPlanComparer;
+        dst._joinExpressionPlanComparer = _joinExpressionPlanComparer;
+        dst._sortingExpressionPlanComparer = _sortingExpressionPlanComparer;
     }
 
     protected virtual QueryCommand CreateSelf()

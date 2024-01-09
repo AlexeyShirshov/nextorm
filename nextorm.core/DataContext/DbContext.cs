@@ -323,23 +323,18 @@ public class DbContext : IDataContext
 
             var compiledQuery = plan.QueryTemplate;
 
-            if (makeSelect is not null || string.IsNullOrEmpty(plan.SqlStmt))
+            if (makeSelect is not null)
             {
-                var (sql, @params) = makeSelect == null
-                    ? MakeSelect(queryCommand, false)
-                    : makeSelect();
+                var (sql, @params) = makeSelect();
 
                 var dbCommand = compiledQuery?.DbCommand;
-                if (dbCommand is not null)
+                if (dbCommand is not null && dbCommand.CommandText == sql && compiledQuery!.DbCommandParams.Count == @params?.Count)
                 {
-                    dbCommand.CommandText = sql;
-                    if (@params?.Count > 0)
+                    // TODO: thread safety!
+                    for (int i = 0; i < @params.Count; i++)
                     {
-                        for (int i = 0; i < @params.Count; i++)
-                        {
-                            dbCommand.Parameters[i].Value = @params[i].Value;
-                            Debug.Assert(dbCommand.Parameters[i].ParameterName == @params[i].Name, $"ParameterName {dbCommand.Parameters[i].ParameterName} not equals {@params[i].Name}");
-                        }
+                        dbCommand.Parameters[i].Value = @params[i].Value;
+                        Debug.Assert(dbCommand.Parameters[i].ParameterName == @params[i].Name, $"ParameterName {dbCommand.Parameters[i].ParameterName} not equals {@params[i].Name}");
                     }
                 }
                 else
@@ -348,9 +343,20 @@ public class DbContext : IDataContext
 
                     if (@params?.Count > 0)
                         dbCommand.Parameters.AddRange(@params.Select(it => CreateParam(it.Name, it.Value)).ToArray());
-                }
 
-                compiledQuery ??= new DbCompiledQuery<TResult>(dbCommand, plan.MapDelegate, queryCommand.SingleRow);
+                    compiledQuery = new DbCompiledQuery<TResult>(dbCommand, plan.MapDelegate, queryCommand.SingleRow);
+                }
+            }
+            else if (string.IsNullOrEmpty(plan.SqlStmt))
+            {
+                var (sql, @params) = MakeSelect(queryCommand, false);
+
+                var dbCommand = CreateCommand(sql!);
+
+                if (@params?.Count > 0)
+                    dbCommand.Parameters.AddRange(@params.Select(it => CreateParam(it.Name, it.Value)).ToArray());
+
+                compiledQuery = new DbCompiledQuery<TResult>(dbCommand, plan.MapDelegate, queryCommand.SingleRow);
             }
             else
             {
