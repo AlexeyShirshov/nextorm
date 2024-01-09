@@ -1036,6 +1036,7 @@ public class DbContext : IDataContext
         var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, true, true);
 
         var sqlEnumerator = compiledQuery.Enumerator!;
+        sqlEnumerator.InitEnumerator(@params, CancellationToken.None);
         sqlEnumerator.InitReader(@params);
 
         return sqlEnumerator;
