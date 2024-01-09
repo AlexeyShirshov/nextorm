@@ -21,7 +21,18 @@
     <Description>Microsoft SQL Server provider for Nextorm</Description>
     <Authors>Alexey Shirshov</Authors>
     <Copyright>Alexey Shirshov</Copyright>
-
+    <Authors>Alexey Shirshov</Authors>
+    <Copyright>Alexey Shirshov</Copyright>
+    <PackageReleaseNotes>https://alexeyshirshov.github.io/nextorm/</PackageReleaseNotes>
+    <PackageProjectUrl>https://github.com/AlexeyShirshov/nextorm</PackageProjectUrl>
+    <PackageReadmeFile>readme.md</PackageReadmeFile>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageIcon></PackageIcon>
+    <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/AlexeyShirshov/nextorm</RepositoryUrl>
   </PropertyGroup>
-
+  
+  <ItemGroup>
+    <None Include="readme.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
 </Project>
