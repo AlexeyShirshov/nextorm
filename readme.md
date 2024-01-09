@@ -58,7 +58,7 @@ Benchmark is running under the following conditions:
 * Nextorm is compiled buffered
 * Dapper is buffered
 * EF core is compiled buffered
-* All queries is async
+* All queries are async
 * Data provider is SQLite
 * Computer configuration: Intel(R) Core(TM) i5-9600KF CPU @ 3.70GHz, RAM 16Gb
 * .NET SDK 8.0.100
