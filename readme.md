@@ -64,8 +64,8 @@ Benchmark is running under the following conditions:
 
 | Method                | Nextorm |  Dapper | EF core |
 |-----------------------|:-------:|:---------------------------:|:-------:|
-| [Data fetch](https://github.com/AlexeyShirshov/nextorm/blob/main/nextorm.benchmark/BenchmarkDotNet.Artifacts/results/nextorm.benchmark.SqliteBenchmarkIteration-report-github.md)             | 41.08 μs | 42.28 μs | 57.95 us |   |
-| [Wide data fetch](https://github.com/AlexeyShirshov/nextorm/blob/main/nextorm.benchmark/BenchmarkDotNet.Artifacts/results/nextorm.benchmark.SqliteBenchmarkLargeIteration-report-github.md) | 10.060 ms | 13.789 ms | 12.858 ms |   |
+| [Data fetch](https://github.com/AlexeyShirshov/nextorm/blob/main/nextorm.benchmark/BenchmarkDotNet.Artifacts/results/nextorm.benchmark.SqliteBenchmarkIteration-report-github.md)             | 41.08 μs | 42.28 μs | 57.95 us |
+| [Wide data fetch](https://github.com/AlexeyShirshov/nextorm/blob/main/nextorm.benchmark/BenchmarkDotNet.Artifacts/results/nextorm.benchmark.SqliteBenchmarkLargeIteration-report-github.md) | 10.060 ms | 13.789 ms | 12.858 ms |
 | [Where](https://github.com/AlexeyShirshov/nextorm/blob/main/nextorm.benchmark/BenchmarkDotNet.Artifacts/results/nextorm.benchmark.SqliteBenchmarkWhere-report-github.md)                 | 4.002 ms | 4.208 ms | 5.442 ms |
 | [Simulate work](https://github.com/AlexeyShirshov/nextorm/blob/main/nextorm.benchmark/BenchmarkDotNet.Artifacts/results/nextorm.benchmark.SqliteBenchmarkSimulateWork-report-github.md)         | 160.8 ms | 213.2 ms | 246.1 ms |
 | [Any](https://github.com/AlexeyShirshov/nextorm/blob/main/nextorm.benchmark/BenchmarkDotNet.Artifacts/results/nextorm.benchmark.SqliteBenchmarkAny-report-github.md)                   | 31.74 us | 38.83 us | 54.16 us |
