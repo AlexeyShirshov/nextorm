@@ -7,7 +7,7 @@
     <LangVersion>12.0</LangVersion>
     <PackageId>nextorm</PackageId>
     <Title>Nextorm</Title>
-    <Version>1.0.1-alpha</Version>
+    <Version>1.0.1-alpha.141</Version>
     <PackageTags>orm;sql;micro-orm</PackageTags>
     <Description>A high performance ORM (object-relational mapping) library supporting PostgreSQL, SQL Server, MySQL, Sqlite</Description>
     <Authors>Alexey Shirshov</Authors>
