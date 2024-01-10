@@ -2,7 +2,7 @@
 <html lang='en'>
 <head>
 <meta charset='utf-8' />
-<title>nextorm.benchmark.SqliteBenchmarkIteration-20240110-150904</title>
+<title>nextorm.benchmark.SqliteBenchmarkIteration-20240110-211614</title>
 
 <style type="text/css">
 	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
@@ -15,9 +15,9 @@
 <pre><code>
 BenchmarkDotNet v0.13.10, Windows 11 (10.0.22621.2861/22H2/2022Update/SunValley2)
 Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical cores
-.NET SDK 8.0.100
-  [Host]   : .NET 8.0.0 (8.0.23.53103), X64 RyuJIT AVX2
-  .NET 8.0 : .NET 8.0.0 (8.0.23.53103), X64 RyuJIT AVX2
+.NET SDK 8.0.101
+  [Host]   : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX2
+  .NET 8.0 : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX2
 </code></pre>
 <pre><code>Job=.NET 8.0  Runtime=.NET 8.0  
 </code></pre>
@@ -25,9 +25,9 @@ Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical 
 <table>
 <thead><tr><th>Method         </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Gen0</th><th>Allocated</th>
 </tr>
-</thead><tbody><tr><td>NextormCompiledToList</td><td>34.27 &mu;s</td><td>0.358 &mu;s</td><td>0.317 &mu;s</td><td>0.3662</td><td>1.73 KB</td>
-</tr><tr><td>NextormCompiledStream</td><td>39.88 &mu;s</td><td>0.676 &mu;s</td><td>0.830 &mu;s</td><td>0.3052</td><td>1.46 KB</td>
-</tr><tr><td>NextormCachedToList</td><td>42.04 &mu;s</td><td>0.413 &mu;s</td><td>0.345 &mu;s</td><td>0.6104</td><td>2.98 KB</td>
+</thead><tbody><tr><td>NextormCompiledStream</td><td>35.33 &mu;s</td><td>0.702 &mu;s</td><td>0.937 &mu;s</td><td>0.3052</td><td>1.46 KB</td>
+</tr><tr><td>NextormCompiledToList</td><td>41.57 &mu;s</td><td>0.580 &mu;s</td><td>0.514 &mu;s</td><td>0.3662</td><td>1.73 KB</td>
+</tr><tr><td>NextormCachedToList</td><td>43.79 &mu;s</td><td>0.290 &mu;s</td><td>0.272 &mu;s</td><td>0.6104</td><td>2.98 KB</td>
 </tr></tbody></table>
 </body>
 </html>

@@ -49,10 +49,10 @@ public class SqliteDbContext : DbContext
         ((SQLiteConnection)sender).Disposed -= ConnDisposed;
     }
 #endif
-    public override DbCommand CreateCommand(string sql)
-    {
-        return new SQLiteCommand(sql);
-    }
+    // public override DbCommand CreateCommand(string sql)
+    // {
+    //     return new SQLiteCommand(sql);
+    // }
     public override string ConcatStringOperator => "||";
 
     public string ConnectionString => string.IsNullOrEmpty(_connectionString)

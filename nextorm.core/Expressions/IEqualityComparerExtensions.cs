@@ -12,11 +12,12 @@ public static class IEqualityComparerExtensions
             if (y is null) return false;
             else
             {
-                if (x.Count != y.Count) return false;
+                var xCount = x.Count;
+                if (xCount != y.Count) return false;
                 var xSpan = CollectionsMarshal.AsSpan(x);
                 var ySpan = CollectionsMarshal.AsSpan(y);
 
-                for (int i = 0; i < x.Count; i++)
+                for (int i = 0; i < xCount; i++)
                 {
                     if (!comparer.Equals(xSpan[i], ySpan[i])) return false;
                 }
@@ -36,11 +37,12 @@ public static class IEqualityComparerExtensions
             if (y is null) return false;
             else
             {
-                if (x.Count != y.Count) return false;
+                var xCount = x.Count;
+                if (xCount != y.Count) return false;
                 var xSpan = CollectionsMarshal.AsSpan(x);
                 var ySpan = CollectionsMarshal.AsSpan(y);
 
-                for (int i = 0; i < x.Count; i++)
+                for (int i = 0; i < xCount; i++)
                 {
                     if (!comparer.ValueEquals(in xSpan[i], in ySpan[i])) return false;
                 }

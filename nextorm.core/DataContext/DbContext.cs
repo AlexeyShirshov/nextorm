@@ -9,7 +9,6 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
 
-
 namespace nextorm.core;
 
 public class DbContext : IDataContext
@@ -21,13 +20,12 @@ public class DbContext : IDataContext
     //private readonly static ConcurrentDictionary<Expression, List<SelectExpression>> _selectListExpCache = new(ExpressionEqualityComparer.Instance);
     private readonly static ExpressionCache<Delegate> _expCache = new();
     internal protected readonly static ObjectPool<StringBuilder> _sbPool = new DefaultObjectPoolProvider().Create(new StringBuilderPooledObjectPolicy());
-    //    private readonly IDictionary<QueryCommand, SqlCacheEntry> _queryCache = new Dictionary<QueryCommand, SqlCacheEntry>();
-    private readonly static ConcurrentDictionary<QueryPlan, IDbCommandHolder> _queryPlanCache = new();
+    private static readonly AsyncLocal<Dictionary<QueryPlan, IDbCommandHolder>> _queryPlanCache = new() { Value = [] };
     private DbConnection? _conn;
     protected bool _connWasCreatedByMe;
     private bool _disposed;
     private bool _connOpen;
-    private readonly Action<DbCommand>? _logParams;
+    private readonly bool _logParams;
     public DbContext(DbContextBuilder optionsBuilder)
     {
         ArgumentNullException.ThrowIfNull(optionsBuilder);
@@ -37,25 +35,22 @@ public class DbContext : IDataContext
             Logger = optionsBuilder.LoggerFactory.CreateLogger(GetType());
             CommandLogger = optionsBuilder.LoggerFactory.CreateLogger(typeof(QueryCommand));
             ResultSetEnumeratorLogger = optionsBuilder.LoggerFactory.CreateLogger("nextorm.core.ResultSetEnumerator");
-            if (Logger.IsEnabled(LogLevel.Debug))
-                _logParams = LogParams;
+            _logParams = Logger.IsEnabled(LogLevel.Debug);
         }
 
         LogSensitiveData = optionsBuilder.ShouldLogSensitiveData;
     }
-    //private DbCommand? _cmd;
     protected internal bool LogSensitiveData { get; set; }
     public virtual string ConcatStringOperator => "+";
-    public ILogger? Logger { get; }
-    public bool NeedMapping => true;
-    public IDictionary<ExpressionKey, Delegate> ExpressionsCache => _expCache;
     public virtual string EmptyString => "''";
-    public IDictionary<Type, IEntityMeta> Metadata => _metadata;
-    public IDictionary<Type, List<SelectExpression>> SelectListCache => _selectListCache;
-    //public IDictionary<Expression, List<SelectExpression>> SelectListExpressionCache => _selectListExpCache;
+    public ILogger? Logger { get; }
     public ILogger? CommandLogger { get; }
     public ILogger? ResultSetEnumeratorLogger { get; }
-
+    public bool NeedMapping => true;
+    public IDictionary<ExpressionKey, Delegate> ExpressionsCache => _expCache;
+    public IDictionary<Type, IEntityMeta> Metadata => _metadata;
+    public IDictionary<Type, List<SelectExpression>> SelectListCache => _selectListCache;
+    private static Dictionary<QueryPlan, IDbCommandHolder> QueryPlanCache => _queryPlanCache.Value!;
     public Entity From(string table) => new(this, table) { Logger = CommandLogger };
     public event EventHandler? Disposed;
     public void EnsureConnectionOpen()
@@ -104,7 +99,7 @@ public class DbContext : IDataContext
             conn.Disposed -= ConnDisposed;
             conn.StateChange -= OnStateChanged;
 
-            foreach (var cached in _queryPlanCache.Values)
+            foreach (var cached in QueryPlanCache.Values)
             {
                 cached.ResetConnection(conn, this);
             }
@@ -126,9 +121,11 @@ public class DbContext : IDataContext
     //     _cmd.CommandText=string.Empty;
     //     _cmd.Parameters.Clear();
     // }
-    public virtual DbCommand CreateCommand(string sql)
+    public DbCommand CreateCommand(string sql)
     {
-        throw new NotImplementedException();
+        var cmd = GetConnection().CreateCommand();
+        cmd.CommandText = sql;
+        return cmd;
     }
 
     public virtual string GetTableName(Type type)
@@ -139,27 +136,22 @@ public class DbContext : IDataContext
     private List<Param> ExtractParams(QueryCommand queryCommand) => MakeSelect(queryCommand, true).Item2;
     private void LogParams(DbCommand sqlCommand)
     {
-        if (Logger?.IsEnabled(LogLevel.Debug) ?? false)
-        {
-            Logger.LogDebug("Executing query: {sql}", sqlCommand.CommandText);
+        Logger!.LogDebug("Executing query: {sql}", sqlCommand.CommandText);
 
-            if (LogSensitiveData)
+        if (LogSensitiveData)
+        {
+            foreach (DbParameter p in sqlCommand.Parameters)
             {
-                foreach (DbParameter p in sqlCommand.Parameters)
-                {
-                    Logger.LogDebug("param {name} is {value}", p.ParameterName, p.Value);
-                }
-            }
-            else if (sqlCommand.Parameters?.Count > 0)
-            {
-                Logger.LogDebug("Use {method} to see param values", nameof(LogSensitiveData));
+                Logger!.LogDebug("param {name} is {value}", p.ParameterName, p.Value);
             }
         }
+        else if (sqlCommand.Parameters?.Count > 0)
+        {
+            Logger!.LogDebug("Use {method} to see param values", nameof(LogSensitiveData));
+        }
     }
-    private DbCompiledQuery<TResult> GetCompiledQuery<TResult>(QueryCommand<TResult> queryCommand, object[]? @params)
+    private DbCommand GetCompiledQuery<TResult>(DbCompiledQuery<TResult> compiledQuery, object[]? @params)
     {
-        var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, false, true);
-
         // #if DEBUG
         //         if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Getting connection");
         // #endif
@@ -177,16 +169,16 @@ public class DbContext : IDataContext
             _connOpen = true;
         }
 
-        compiledQuery.PrepareDbCommand(@params, this, conn);
+        var cmd = compiledQuery.GetDbCommand(@params, this, conn);
 
-        _logParams?.Invoke(compiledQuery.DbCommand);
+        if (_logParams) LogParams(cmd);
 
-        return compiledQuery;
+        return cmd;
     }
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Bug", "S2583:Conditionally executed code should be reachable", Justification = "<Pending>")]
-    private async ValueTask<DbCompiledQuery<TResult>> GetCompiledQuery<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
+    private async ValueTask<DbCommand> GetCompiledQuery<TResult>(DbCompiledQuery<TResult> compiledQuery, object[]? @params, CancellationToken cancellationToken)
     {
-        var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, false, true);
+        //var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, false, true);
 
         // #if DEBUG
         //         if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Getting connection");
@@ -205,12 +197,12 @@ public class DbContext : IDataContext
             _connOpen = true;
         }
 
-        compiledQuery.PrepareDbCommand(@params, this, conn);
+        var cmd = compiledQuery.GetDbCommand(@params, this, conn);
         // var sqlCommand = compiledQuery.DbCommand;
         // sqlCommand.Connection = conn;
-        _logParams?.Invoke(compiledQuery.DbCommand);
+        if (_logParams) LogParams(cmd);
 
-        return compiledQuery;
+        return cmd;
     }
     // private DbCompiledQuery<TResult> GetCompiledQuery<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, out DbConnection conn, out DbCommand sqlCommand)
     // {
@@ -263,7 +255,7 @@ public class DbContext : IDataContext
         if (queryCommand.Cache && storeInCache)
         {
             queryPlan = new QueryPlan(queryCommand, manualSql);
-            _queryPlanCache.TryGetValue(queryPlan, out planCache);
+            QueryPlanCache.TryGetValue(queryPlan, out planCache);
         }
 
         if (planCache is null)
@@ -307,7 +299,7 @@ public class DbContext : IDataContext
             if (storeInCache && queryCommand.Cache)
             {
                 var compiledPlan = new DbCompiledPlan<TResult>(makeParams is null ? sql! : null, map, noParams, compiledQuery);
-                _queryPlanCache[queryPlan!.GetCacheVersion()] = compiledPlan;
+                QueryPlanCache[queryPlan!.GetCacheVersion()] = compiledPlan;
             }
 
             return compiledQuery;
@@ -441,7 +433,7 @@ public class DbContext : IDataContext
         var sqlBuilder = paramMode ? null : _sbPool.Get();
 
         var @params = new List<Param>();
-        var pageApplyed = false;
+        var pageApplied = false;
 
         if (!paramMode) sqlBuilder!.Append("select ");
         if (cmd.IgnoreColumns || selectList is null)
@@ -453,7 +445,7 @@ public class DbContext : IDataContext
             if (!paramMode && cmd.Paging.IsTop && MakeTop(cmd.Paging.Limit, out var topStmt))
             {
                 sqlBuilder!.Append(topStmt).Append(' ');
-                pageApplyed = true;
+                pageApplied = true;
             }
 
             foreach (var item in selectList)
@@ -517,12 +509,12 @@ public class DbContext : IDataContext
 
                 if (!paramMode) sqlBuilder!.Length -= 2;
             }
-            else if (!pageApplyed && RequireSorting(cmd) && !paramMode)
+            else if (!pageApplied && RequireSorting(cmd) && !paramMode)
             {
                 sqlBuilder!.AppendLine().Append(" order by ").Append(EmptySorting());
             }
 
-            if (!pageApplyed && !paramMode && !cmd.Paging.IsEmpty)
+            if (!pageApplied && !paramMode && !cmd.Paging.IsEmpty)
             {
                 sqlBuilder!.AppendLine();
                 MakePage(cmd.Paging, sqlBuilder);
@@ -753,33 +745,6 @@ public class DbContext : IDataContext
 
     private FromExpression GetFrom(Type t)
     {
-        // var sqlTableAttr = t.GetCustomAttribute<SqlTableAttribute>(true);
-
-        // if (sqlTableAttr is not null)
-        //     return new FromExpression(sqlTableAttr.Name);
-        // else
-        // {
-        //     var tableAttr = t.GetCustomAttribute<TableAttribute>(true);
-
-        //     if (tableAttr is not null)
-        //         return new FromExpression(tableAttr.Name);
-        // }
-
-        // foreach (var interf in t.GetInterfaces())
-        // {
-        //     sqlTableAttr = interf.GetCustomAttribute<SqlTableAttribute>(true);
-
-        //     if (sqlTableAttr is not null)
-        //         return new FromExpression(sqlTableAttr.Name);
-        //     else
-        //     {
-        //         var tableAttr = interf.GetCustomAttribute<TableAttribute>(true);
-
-        //         if (tableAttr is not null)
-        //             return new FromExpression(tableAttr.Name);
-        //     }
-        // }
-
         if (_metadata.TryGetValue(t, out var entity) && !string.IsNullOrEmpty(entity.TableName))
             return new FromExpression(entity.TableName);
 
@@ -810,8 +775,6 @@ public class DbContext : IDataContext
     {
         if (!queryCommand.IsPrepared)
             queryCommand.PrepareCommand(!storeInCache, cancellationToken);
-
-
 
         queryCommand._compiledQuery = CreateCompiledQuery(queryCommand, !nonStreamUsing, storeInCache, sql, () =>
         {
@@ -869,7 +832,7 @@ public class DbContext : IDataContext
 
             if (_connWasCreatedByMe)
             {
-                foreach (var cached in _queryPlanCache.Values)
+                foreach (var cached in QueryPlanCache.Values)
                 {
                     cached.ResetConnection(_conn, this);
                 }
@@ -906,8 +869,9 @@ public class DbContext : IDataContext
         ////ArgumentNullException.ThrowIfNull(queryCommand);
 
         // var (reader, compiledQuery) = await ExecuteReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
-        var compiledQuery = await GetCompiledQuery(queryCommand, @params, cancellationToken).ConfigureAwait(false);
-        var sqlCommand = compiledQuery.DbCommand;
+        var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, false, true);
+        var sqlCommand = await GetCompiledQuery(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
+        //var sqlCommand = compiledQuery.DbCommand;
         var reader = await sqlCommand.ExecuteReaderAsync(compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
         using (reader)
         {
@@ -927,9 +891,9 @@ public class DbContext : IDataContext
     {
         ////ArgumentNullException.ThrowIfNull(queryCommand);
 
-        // var (reader, compiledQuery) = CreateReader(queryCommand, @params);
-        var compiledQuery = GetCompiledQuery(queryCommand, @params);
-        var sqlCommand = compiledQuery.DbCommand;
+        var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, false, true);
+        var sqlCommand = GetCompiledQuery(compiledQuery, @params);
+        //var sqlCommand = compiledQuery.DbCommand;
         var reader = sqlCommand.ExecuteReader(compiledQuery.Behavior);
         using (reader)
         {
@@ -964,9 +928,9 @@ public class DbContext : IDataContext
     {
         //ArgumentNullException.ThrowIfNull(queryCommand);
 
-        // GetCompiledQuery(queryCommand, @params, out var conn, out var sqlCommand);
-        var compiledQuery = GetCompiledQuery(queryCommand, @params);
-        var sqlCommand = compiledQuery.DbCommand;
+        var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, false, true);
+        var sqlCommand = GetCompiledQuery(compiledQuery, @params);
+        //var sqlCommand = compiledQuery.DbCommand;
 
         //if (conn.State == ConnectionState.Closed)
         // if (!_connOpen)
@@ -995,9 +959,9 @@ public class DbContext : IDataContext
         CheckDisposed();
         //ArgumentNullException.ThrowIfNull(queryCommand);
 
-        // GetCompiledQuery(queryCommand, @params, out var conn, out var sqlCommand);
-        var compiledQuery = await GetCompiledQuery(queryCommand, @params, cancellationToken);
-        var sqlCommand = compiledQuery.DbCommand;
+        var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, false, true);
+        var sqlCommand = await GetCompiledQuery(compiledQuery, @params, cancellationToken);
+        //var sqlCommand = compiledQuery.DbCommand;
 
         //if (conn.State == ConnectionState.Closed)
         // if (!_connOpen)
@@ -1147,9 +1111,9 @@ public class DbContext : IDataContext
         }
         else
         {
-            // var (reader, compiledQuery) = CreateReader(queryCommand, @params);
-            var compiledQuery = GetCompiledQuery(queryCommand, @params);
-            var sqlCommand = compiledQuery.DbCommand;
+            var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, false, true);
+            var sqlCommand = GetCompiledQuery(compiledQuery, @params);
+            //var sqlCommand = compiledQuery.DbCommand;
             var reader = sqlCommand.ExecuteReader(compiledQuery.Behavior);
             var mapper = compiledQuery.MapDelegate!;
             using (reader)
@@ -1174,9 +1138,9 @@ public class DbContext : IDataContext
         }
         else
         {
-            // var (reader, compiledQuery) = await ExecuteReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
-            var compiledQuery = await GetCompiledQuery(queryCommand, @params, cancellationToken).ConfigureAwait(false);
-            var sqlCommand = compiledQuery.DbCommand;
+            var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, false, true);
+            var sqlCommand = await GetCompiledQuery(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
+            //var sqlCommand = compiledQuery.DbCommand;
             var reader = await sqlCommand.ExecuteReaderAsync(compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
             var mapper = compiledQuery.MapDelegate!;
             using (reader)
@@ -1209,8 +1173,9 @@ public class DbContext : IDataContext
 
             //_logParams?.Invoke(sqlCommand);
             //Logger?.LogInformation(compiledQuery.Behavior.ToString("g"));
-            var compiledQuery = GetCompiledQuery(queryCommand, @params);
-            var sqlCommand = compiledQuery.DbCommand;
+            var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, false, true);
+            var sqlCommand = GetCompiledQuery(compiledQuery, @params);
+            //var sqlCommand = compiledQuery.DbCommand;
             var reader = sqlCommand.ExecuteReader(compiledQuery.Behavior);
             var mapper = compiledQuery.MapDelegate!;
             //var (reader, compiledQuery) = CreateReader(queryCommand, @params);
@@ -1236,9 +1201,9 @@ public class DbContext : IDataContext
         }
         else
         {
-            //var (reader, compiledQuery) = await ExecuteReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
-            var compiledQuery = await GetCompiledQuery(queryCommand, @params, cancellationToken).ConfigureAwait(false);
-            var sqlCommand = compiledQuery.DbCommand;
+            var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, false, true);
+            var sqlCommand = await GetCompiledQuery(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
+            //var sqlCommand = compiledQuery.DbCommand;
             var reader = await sqlCommand.ExecuteReaderAsync(compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
             var mapper = compiledQuery.MapDelegate!;
             using (reader)
@@ -1257,9 +1222,9 @@ public class DbContext : IDataContext
     {
         //ArgumentNullException.ThrowIfNull(queryCommand);
 
-        // var (reader, compiledQuery) = CreateReader(queryCommand, @params);
-        var compiledQuery = GetCompiledQuery(queryCommand, @params);
-        var sqlCommand = compiledQuery.DbCommand;
+        var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, false, true);
+        var sqlCommand = GetCompiledQuery(compiledQuery, @params);
+        //var sqlCommand = compiledQuery.DbCommand;
         var reader = sqlCommand.ExecuteReader(compiledQuery.Behavior);
         using (reader)
         {
@@ -1286,9 +1251,9 @@ public class DbContext : IDataContext
     {
         //ArgumentNullException.ThrowIfNull(queryCommand);
 
-        // var (reader, compiledQuery) = await ExecuteReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
-        var compiledQuery = await GetCompiledQuery(queryCommand, @params, cancellationToken).ConfigureAwait(false);
-        var sqlCommand = compiledQuery.DbCommand;
+        var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, false, true);
+        var sqlCommand = await GetCompiledQuery(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
+        //var sqlCommand = compiledQuery.DbCommand;
         var reader = await sqlCommand.ExecuteReaderAsync(compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
         using (reader)
         {
@@ -1315,9 +1280,9 @@ public class DbContext : IDataContext
     {
         //ArgumentNullException.ThrowIfNull(queryCommand);
 
-        // var (reader, compiledQuery) = CreateReader(queryCommand, @params);
-        var compiledQuery = GetCompiledQuery(queryCommand, @params);
-        var sqlCommand = compiledQuery.DbCommand;
+        var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, false, true);
+        var sqlCommand = GetCompiledQuery(compiledQuery, @params);
+        //var sqlCommand = compiledQuery.DbCommand;
         var reader = sqlCommand.ExecuteReader(compiledQuery.Behavior);
 
         using (reader)
@@ -1342,9 +1307,9 @@ public class DbContext : IDataContext
     {
         //ArgumentNullException.ThrowIfNull(queryCommand);
 
-        // var (reader, compiledQuery) = await ExecuteReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
-        var compiledQuery = await GetCompiledQuery(queryCommand, @params, cancellationToken).ConfigureAwait(false);
-        var sqlCommand = compiledQuery.DbCommand;
+        var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, false, true);
+        var sqlCommand = await GetCompiledQuery(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
+        //var sqlCommand = compiledQuery.DbCommand;
         var reader = await sqlCommand.ExecuteReaderAsync(compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
         using (reader)
         {

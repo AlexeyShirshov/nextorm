@@ -51,25 +51,28 @@ public class SqliteBenchmarkCache
         var repo = new TestDataRepository(ctx);
         repo.LargeEntity.Where(it => it.Id == 1).Select(it => new { it.Id, it.Str, it.Dt }).ToList();
     }
-    // [Benchmark()]
-    // public void NextormNonCached()
-    // {
-    //     using var ctx = _builder.CreateDbContext();
-    //     var repo = new TestDataRepository(ctx);
-    //     var cmd = repo.LargeEntity.Where(it => it.Id == 1).Select(it => new { it.Id, it.Str, it.Dt });
-    //     cmd.Cache = false;
-    //     cmd.ToList();
-    // }
+    [Benchmark()]
+    public void NextormNonCached()
+    {
+        using var ctx = _builder.CreateDbContext();
+        var repo = new TestDataRepository(ctx);
+        var cmd = repo.LargeEntity.Where(it => it.Id == 1).Select(it => new { it.Id, it.Str, it.Dt });
+        cmd.Cache = false;
+        cmd.ToList();
+    }
     [Benchmark()]
     public void EFcore()
     {
         using var ctx = new EFDataContext(_efBuilder.Options);
         var cmd = ctx.LargeEntities.Where(it => it.Id == 1).Select(it => new { it.Id, it.Str, it.Dt });
         var _ = cmd.ToList();
+        // pseudo code
+        //Microsoft.EntityFrameworkCore.DbContext.ClearCache();
     }
     [Benchmark()]
     public void Dapper()
     {
         _conn.Query<LargeEntity>("select id, someString as str, dt from large_table where id=@id", new { id = 1 });
+        SqlMapper.PurgeQueryCache();
     }
 }

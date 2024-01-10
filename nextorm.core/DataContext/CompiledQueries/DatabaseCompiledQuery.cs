@@ -13,27 +13,33 @@ public sealed class DbCompiledQuery<TResult> : CompiledQuery<TResult, IDataRecor
         : base(getMap)
     {
         DbCommand = dbCommand;
-        DbCommandParams = dbCommand.Parameters;
+        CommandText = dbCommand.CommandText;
+        //DbCommandParams = dbCommand.Parameters;
     }
     public DbCompiledQuery(DbCommand dbCommand, Func<IDataRecord, TResult>? mapDelegate, bool singleRow)
         : base(mapDelegate)
     {
         DbCommand = dbCommand;
-        DbCommandParams = dbCommand.Parameters;
+        CommandText = dbCommand.CommandText;
+        //DbCommandParams = dbCommand.Parameters;
         if (singleRow)
             Behavior = CommandBehavior.SingleRow;
     }
     public DbCommand DbCommand;
-    public DbParameterCollection DbCommandParams;
+    private readonly string CommandText;
+
+    //public DbParameterCollection DbCommandParams;
     public ResultSetEnumerator<TResult>? Enumerator;
     public int LastRowCount;
     public int[] ParamMap;
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Bug", "S2583:Conditionally executed code should be reachable", Justification = "<Pending>")]
-    public void PrepareDbCommand(object[]? @params, DbContext dataContext, DbConnection conn)
+    public DbCommand GetDbCommand(object[]? @params, DbContext dataContext, DbConnection conn)
     {
+        var cmd = DbCommand;
+        var parameters = cmd.Parameters;
+
         if (@params is not null)
         {
-            var parameters = DbCommandParams;
             if (ParamMap is null)
             {
                 ParamMap = new int[@params.Length];
@@ -62,17 +68,37 @@ public sealed class DbCompiledQuery<TResult> : CompiledQuery<TResult, IDataRecor
 
                 if (idx >= 0)
                 {
-                    parameters[idx].Value = @params[i];
+                    if (parameters[idx].Value != @params[i])
+                    {
+                        // if (cmd == DbCommand)
+                        // {
+                        // cmd = conn.CreateCommand();
+                        // cmd.CommandText = CommandText;
+                        // foreach (var p in parameters) cmd.Parameters.Add(p);
+                        // parameters = cmd.Parameters;
+                        //}
+                        parameters[idx].Value = @params[i];
+                    }
                 }
                 else
                 {
+                    // if (cmd == DbCommand)
+                    // {
+                    //     cmd = conn.CreateCommand();
+                    //     cmd.CommandText = CommandText;
+                    //     foreach (var p in parameters) cmd.Parameters.Add(p);
+                    //     parameters = cmd.Parameters;
+                    // }
+
                     ParamMap[i] = parameters.Count;
                     parameters.Add(dataContext.CreateParam(paramName!, @params[i]));
                 }
             }
         }
 
-        if (DbCommand.Connection != conn)
-            DbCommand.Connection = conn;
+        if (cmd.Connection != conn)
+            cmd.Connection = conn;
+
+        return cmd;
     }
 }
