@@ -5,8 +5,9 @@ namespace nextorm.core;
 
 public interface IDataContext : IAsyncDisposable, IDisposable
 {
-    ILogger? Logger { get; set; }
-    ILogger? CommandLogger { get; set; }
+    ILogger? Logger { get; }
+    ILogger? CommandLogger { get; }
+    ILogger? ResultSetEnumeratorLogger { get; }
     bool NeedMapping { get; }
     IDictionary<ExpressionKey, Delegate> ExpressionsCache { get; }
     IDictionary<Type, IEntityMeta> Metadata { get; }

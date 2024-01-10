@@ -28,14 +28,15 @@ public partial class InMemoryContext : IDataContext
     // {
     //     return new QueryCommand<TResult>(this, exp, condition);
     // }
-    public ILogger? Logger { get; set; }
+    public ILogger? Logger { get; }
     public bool NeedMapping => false;
     public IDictionary<Type, object?> Data => _data;
     public IDictionary<ExpressionKey, Delegate> ExpressionsCache => _expCache;
     public IDictionary<Type, IEntityMeta> Metadata => _metadata;
     public IDictionary<Type, List<SelectExpression>> SelectListCache => _selectListCache;
     //public IDictionary<Expression, List<SelectExpression>> SelectListExpressionCache => _selectListExpCache;
-    public ILogger? CommandLogger { get; set; }
+    public ILogger? CommandLogger { get; }
+    public ILogger? ResultSetEnumeratorLogger { get; }
     public void EnsureConnectionOpen() { }
     public Task EnsureConnectionOpenAsync() => Task.CompletedTask;
     public IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)

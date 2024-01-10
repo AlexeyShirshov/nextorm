@@ -67,15 +67,15 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     public FromExpression? From { get => _from; set => _from = value; }
     public List<SelectExpression>? SelectList => _selectList;
     public Type? EntityType => _srcType;
-    public IDataContext DataProvider
-    {
-        get => _dataProvider;
-        set
-        {
-            ResetPreparation();
-            _dataProvider = value;
-        }
-    }
+    // public IDataContext DataProvider
+    // {
+    //     get => _dataProvider;
+    //     set
+    //     {
+    //         ResetPreparation();
+    //         _dataProvider = value;
+    //     }
+    // }
     public bool IsPrepared => _isPrepared;
     //public Expression? Condition => _condition;
     public List<JoinExpression> Joins => _joins;
@@ -693,7 +693,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         if (!_isPrepared)
             PrepareCommand(false, cancellationToken);
 
-        return DataProvider.CreateAsyncEnumerator(this, null, cancellationToken);
+        return _dataProvider.CreateAsyncEnumerator(this, null, cancellationToken);
     }
     public IAsyncEnumerable<TResult> Pipeline(params object[] @params) => Pipeline(CancellationToken.None, @params);
 #pragma warning disable CS8425 // Async-iterator member has one or more parameters of type 'CancellationToken' but none of them is decorated with the 'EnumeratorCancellation' attribute, so the cancellation token parameter from the generated 'IAsyncEnumerable<>.GetAsyncEnumerator' will be unconsumed

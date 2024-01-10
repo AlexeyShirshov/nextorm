@@ -17,11 +17,11 @@ BenchmarkRunner.Run<SqliteBenchmarkIteration>();
 // BenchmarkRunner.Run<SqliteBenchmarkCache>();
 
 // runner.QueryCommandPlanEqualityComparer();
-// var runner = new SqliteBenchmarkSimulateWork();
+// var runner = new SqliteBenchmarkIteration();
 // await runner.NextormCompiledToList();
 // while (true)
 // for (var i = 0; i < 100; i++)
-// await runner.NextormCachedWithParamsToList();
+//     await runner.NextormCompiledToList();
 
 //await runner.FillLargeTable();
 // Console.WriteLine("Press any key to exit");

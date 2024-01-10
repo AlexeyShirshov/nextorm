@@ -106,13 +106,13 @@ public class SqliteBenchmarkIteration
     //     {
     //     }
     // }
-    [Benchmark]
-    public async Task EFCore()
-    {
-        foreach (var row in await _efCtx.SimpleEntities.ToListAsync())
-        {
-        }
-    }
+    // [Benchmark]
+    // public async Task EFCore()
+    // {
+    //     foreach (var row in await _efCtx.SimpleEntities.ToListAsync())
+    //     {
+    //     }
+    // }
     // [Benchmark]
     // public async Task EFCoreAny()
     // {
@@ -125,25 +125,25 @@ public class SqliteBenchmarkIteration
     //     {
     //     }
     // }
-    [Benchmark]
-    public async Task EFCoreCompiled()
-    {
-        foreach (var row in await _efCompiled(_efCtx).ToListAsync())
-        {
-        }
-    }
-    [Benchmark]
-    public async Task DapperUnbuffered()
-    {
-        await foreach (var row in _conn.QueryUnbufferedAsync<SimpleEntity>("select id from simple_entity"))
-        {
-        }
-    }
-    [Benchmark]
-    public async Task Dapper()
-    {
-        foreach (var row in await _conn.QueryAsync<SimpleEntity>("select id from simple_entity"))
-        {
-        }
-    }
+    // [Benchmark]
+    // public async Task EFCoreCompiled()
+    // {
+    //     foreach (var row in await _efCompiled(_efCtx).ToListAsync())
+    //     {
+    //     }
+    // }
+    // [Benchmark]
+    // public async Task DapperUnbuffered()
+    // {
+    //     await foreach (var row in _conn.QueryUnbufferedAsync<SimpleEntity>("select id from simple_entity"))
+    //     {
+    //     }
+    // }
+    // [Benchmark]
+    // public async Task Dapper()
+    // {
+    //     foreach (var row in await _conn.QueryAsync<SimpleEntity>("select id from simple_entity"))
+    //     {
+    //     }
+    // }
 }

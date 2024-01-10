@@ -36,6 +36,7 @@ public class DbContext : IDataContext
         {
             Logger = optionsBuilder.LoggerFactory.CreateLogger(GetType());
             CommandLogger = optionsBuilder.LoggerFactory.CreateLogger(typeof(QueryCommand));
+            ResultSetEnumeratorLogger = optionsBuilder.LoggerFactory.CreateLogger("nextorm.core.ResultSetEnumerator");
             if (Logger.IsEnabled(LogLevel.Debug))
                 _logParams = LogParams;
         }
@@ -45,14 +46,16 @@ public class DbContext : IDataContext
     //private DbCommand? _cmd;
     protected internal bool LogSensitiveData { get; set; }
     public virtual string ConcatStringOperator => "+";
-    public ILogger? Logger { get; set; }
+    public ILogger? Logger { get; }
     public bool NeedMapping => true;
     public IDictionary<ExpressionKey, Delegate> ExpressionsCache => _expCache;
     public virtual string EmptyString => "''";
     public IDictionary<Type, IEntityMeta> Metadata => _metadata;
     public IDictionary<Type, List<SelectExpression>> SelectListCache => _selectListCache;
     //public IDictionary<Expression, List<SelectExpression>> SelectListExpressionCache => _selectListExpCache;
-    public ILogger? CommandLogger { get; set; }
+    public ILogger? CommandLogger { get; }
+    public ILogger? ResultSetEnumeratorLogger { get; }
+
     public Entity From(string table) => new(this, table) { Logger = CommandLogger };
     public event EventHandler? Disposed;
     public void EnsureConnectionOpen()
@@ -103,7 +106,7 @@ public class DbContext : IDataContext
 
             foreach (var cached in _queryPlanCache.Values)
             {
-                cached.ResetConnection(conn);
+                cached.ResetConnection(conn, this);
             }
         }
     }
@@ -252,14 +255,14 @@ public class DbContext : IDataContext
     //     return compiledQuery;
     // }
 
-    private DbCompiledQuery<TResult> CreateCompiledQuery<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, Func<(string, List<Param>)>? makeSelect = null)
+    private DbCompiledQuery<TResult> CreateCompiledQuery<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, string? manualSql = null, Func<List<Param>>? makeParams = null)
     {
         QueryPlan? queryPlan = null;
         IDbCommandHolder? planCache = null;
 
         if (queryCommand.Cache && storeInCache)
         {
-            queryPlan = new QueryPlan(queryCommand);
+            queryPlan = new QueryPlan(queryCommand, manualSql);
             _queryPlanCache.TryGetValue(queryPlan, out planCache);
         }
 
@@ -268,9 +271,9 @@ public class DbContext : IDataContext
             if ((Logger?.IsEnabled(LogLevel.Debug) ?? false) && storeInCache && queryCommand.Cache)
                 Logger.LogDebug("Query plan cache miss with hash: {hash}", queryPlan!.GetHashCode());
 
-            var (sql, @params) = makeSelect == null
+            var (sql, @params) = makeParams == null
                 ? MakeSelect(queryCommand, false)
-                : makeSelect();
+                : (manualSql, makeParams());
 
             // var (sql, @params) = MakeSelect(queryCommand, true);
             // var cacheEntryX = new SqlCacheEntry(null) { Enumerator = new EmptyEnumerator<TResult>() };
@@ -288,7 +291,7 @@ public class DbContext : IDataContext
             if (!noParams)
                 dbCommand.Parameters.AddRange(@params.Select(it => CreateParam(it.Name, it.Value)).ToArray());
 
-            dbCommand.Connection = GetConnection();
+            // dbCommand.Connection = GetConnection();
 
             //dbCommand.Prepare();
             //return new SqlCacheEntry(null) { Enumerator = new EmptyEnumerator<TResult>() };
@@ -297,15 +300,14 @@ public class DbContext : IDataContext
 
             if (createEnumerator)
             {
-                var enumerator = new ResultSetEnumerator<TResult>(this, compiledQuery!);
+                var enumerator = new ResultSetEnumerator<TResult>(compiledQuery!);
                 compiledQuery.Enumerator = enumerator;
             }
 
             if (storeInCache && queryCommand.Cache)
             {
-                var compiledPlan = new DbCompiledPlan<TResult>(makeSelect is null ? sql! : null, map, noParams);
+                var compiledPlan = new DbCompiledPlan<TResult>(makeParams is null ? sql! : null, map, noParams, compiledQuery);
                 _queryPlanCache[queryPlan!.GetCacheVersion()] = compiledPlan;
-                compiledPlan.QueryTemplate = compiledQuery;
             }
 
             return compiledQuery;
@@ -321,48 +323,51 @@ public class DbContext : IDataContext
             //     ? Array.Empty<Param>()
             //     : ExtractParams(queryCommand), this);
 
-            var compiledQuery = plan.QueryTemplate;
+            var compiledQuery = plan.CompiledQuery;
 
-            if (makeSelect is not null)
+            if (makeParams is not null)
             {
-                var (sql, @params) = makeSelect();
+                Debug.Assert(string.IsNullOrEmpty(plan.SqlStmt), "SqlStmt must be null");
 
-                var dbCommand = compiledQuery?.DbCommand;
-                if (dbCommand is not null && dbCommand.CommandText == sql && compiledQuery!.DbCommandParams.Count == @params?.Count)
-                {
-                    // TODO: thread safety!
-                    for (int i = 0; i < @params.Count; i++)
-                    {
-                        dbCommand.Parameters[i].Value = @params[i].Value;
-                        Debug.Assert(dbCommand.Parameters[i].ParameterName == @params[i].Name, $"ParameterName {dbCommand.Parameters[i].ParameterName} not equals {@params[i].Name}");
-                    }
-                }
-                else
-                {
-                    dbCommand = CreateCommand(sql!);
+                // var (sql, @params) = (manualSql, makeParams());
 
-                    if (@params?.Count > 0)
-                        dbCommand.Parameters.AddRange(@params.Select(it => CreateParam(it.Name, it.Value)).ToArray());
+                // var dbCommand = compiledQuery?.DbCommand;
+                // if (dbCommand is not null && dbCommand.CommandText == sql && compiledQuery!.DbCommandParams.Count == @params?.Count)
+                // {
+                //     // TODO: thread safety!
+                //     for (int i = 0; i < @params.Count; i++)
+                //     {
+                //         dbCommand.Parameters[i].Value = @params[i].Value;
+                //         Debug.Assert(dbCommand.Parameters[i].ParameterName == @params[i].Name, $"ParameterName {dbCommand.Parameters[i].ParameterName} not equals {@params[i].Name}");
+                //     }
+                // }
+                // else
+                // {
+                //     dbCommand = CreateCommand(sql!);
 
-                    compiledQuery = new DbCompiledQuery<TResult>(dbCommand, plan.MapDelegate, queryCommand.SingleRow);
-                }
+                //     if (@params?.Count > 0)
+                //         dbCommand.Parameters.AddRange(@params.Select(it => CreateParam(it.Name, it.Value)).ToArray());
+
+                //     compiledQuery = new DbCompiledQuery<TResult>(dbCommand, plan.MapDelegate, queryCommand.SingleRow);
+                // }
             }
             else if (string.IsNullOrEmpty(plan.SqlStmt))
             {
-                var (sql, @params) = MakeSelect(queryCommand, false);
+                Debug.Fail("SqlStmt must be not null");
+                // var (sql, @params) = MakeSelect(queryCommand, false);
 
-                var dbCommand = CreateCommand(sql!);
+                // var dbCommand = CreateCommand(sql!);
 
-                if (@params?.Count > 0)
-                    dbCommand.Parameters.AddRange(@params.Select(it => CreateParam(it.Name, it.Value)).ToArray());
+                // if (@params?.Count > 0)
+                //     dbCommand.Parameters.AddRange(@params.Select(it => CreateParam(it.Name, it.Value)).ToArray());
 
-                compiledQuery = new DbCompiledQuery<TResult>(dbCommand, plan.MapDelegate, queryCommand.SingleRow);
+                // compiledQuery = new DbCompiledQuery<TResult>(dbCommand, plan.MapDelegate, queryCommand.SingleRow);
             }
             else
             {
-                if (!plan.NoParams || compiledQuery?.DbCommand is null)
+                if (!plan.NoParams || compiledQuery.DbCommand is null)
                 {
-                    var dbCommand = compiledQuery?.DbCommand ?? CreateCommand(plan.SqlStmt);
+                    var dbCommand = compiledQuery.DbCommand ?? CreateCommand(plan.SqlStmt);
 
                     if (!plan.NoParams)
                     {
@@ -378,21 +383,21 @@ public class DbContext : IDataContext
                         }
                     }
 
-                    compiledQuery ??= new DbCompiledQuery<TResult>(dbCommand, plan.MapDelegate, queryCommand.SingleRow);
+                    //compiledQuery ??= new DbCompiledQuery<TResult>(dbCommand, plan.MapDelegate, queryCommand.SingleRow);
                 }
             }
 
-            if (plan.QueryTemplate is null)
-            {
-                if (createEnumerator)
-                {
-                    var enumerator = new ResultSetEnumerator<TResult>(this, compiledQuery!);
-                    compiledQuery.Enumerator = enumerator;
-                }
+            // if (plan.CompiledQuery is null)
+            // {
+            //     if (createEnumerator)
+            //     {
+            //         var enumerator = new ResultSetEnumerator<TResult>(compiledQuery!);
+            //         compiledQuery.Enumerator = enumerator;
+            //     }
 
-                plan.QueryTemplate = compiledQuery;
+            //     plan.CompiledQuery = compiledQuery;
 
-            }
+            // }
 
             return compiledQuery;
         }
@@ -806,17 +811,21 @@ public class DbContext : IDataContext
         if (!queryCommand.IsPrepared)
             queryCommand.PrepareCommand(!storeInCache, cancellationToken);
 
-        List<Param> ps = new();
-        if (@params is not null)
-        {
-            var t = @params.GetType();
-            foreach (var prop in t.GetProperties(BindingFlags.Instance | BindingFlags.Public))
-            {
-                ps.Add(new Param(prop.Name, prop.GetValue(@params)));
-            }
-        }
 
-        queryCommand._compiledQuery = CreateCompiledQuery(queryCommand, !nonStreamUsing, storeInCache, () => (sql, ps));
+
+        queryCommand._compiledQuery = CreateCompiledQuery(queryCommand, !nonStreamUsing, storeInCache, sql, () =>
+        {
+            List<Param> ps = new();
+            if (@params is not null)
+            {
+                var t = @params.GetType();
+                foreach (var prop in t.GetProperties(BindingFlags.Instance | BindingFlags.Public))
+                {
+                    ps.Add(new Param(prop.Name, prop.GetValue(@params)));
+                }
+            }
+            return ps;
+        });
     }
     public void Compile<TResult>(QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken)
     {
@@ -862,7 +871,7 @@ public class DbContext : IDataContext
             {
                 foreach (var cached in _queryPlanCache.Values)
                 {
-                    cached.ResetConnection(_conn);
+                    cached.ResetConnection(_conn, this);
                 }
 
                 if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Dispose connection");
@@ -879,7 +888,7 @@ public class DbContext : IDataContext
 
         var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, true, true);
         var sqlEnumerator = compiledQuery.Enumerator!;
-        sqlEnumerator.InitEnumerator(@params, cancellationToken);
+        sqlEnumerator.InitEnumerator(this, @params, cancellationToken);
         return sqlEnumerator;
     }
     // public async Task<IEnumerator<TResult>> CreateEnumeratorAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
@@ -1042,7 +1051,7 @@ public class DbContext : IDataContext
         var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, true, true);
 
         var sqlEnumerator = compiledQuery.Enumerator!;
-        sqlEnumerator.InitEnumerator(@params, CancellationToken.None);
+        sqlEnumerator.InitEnumerator(this, @params, CancellationToken.None);
         sqlEnumerator.InitReader(@params);
 
         return sqlEnumerator;

@@ -647,7 +647,7 @@ public class SqlCommandTests
     public async Task ManualSql_ShouldWork()
     {
         // Given
-        var cmd = _sut.SimpleEntity.Select(it => it.Id).Compile("select id from simple_entity --this is my sql");
+        var cmd = _sut.SimpleEntity.Select(it => it.Id).Compile("select id from simple_entity --this is custom sql");
         // When
         var r = await cmd.ToListAsync();
 

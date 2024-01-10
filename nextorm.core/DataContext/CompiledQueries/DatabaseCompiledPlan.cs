@@ -8,23 +8,27 @@ public sealed class DbCompiledPlan<TResult> : CompiledQuery<TResult, IDataRecord
 {
     public readonly string? SqlStmt;
     public readonly bool NoParams;
-    public DbCompiledQuery<TResult>? QueryTemplate;
-    public DbCompiledPlan(string? sql, Func<Func<IDataRecord, TResult>?> getMap, bool noParams)
-        : base(getMap)
-    {
-        SqlStmt = sql;
-        NoParams = noParams;
-    }
-    public DbCompiledPlan(string? sql, Func<IDataRecord, TResult>? map, bool noParams)
+    public readonly DbCompiledQuery<TResult> CompiledQuery;
+    // public DbCompiledPlan(string? sql, Func<Func<IDataRecord, TResult>?> getMap, bool noParams)
+    //     : base(getMap)
+    // {
+    //     SqlStmt = sql;
+    //     NoParams = noParams;
+    // }
+    public DbCompiledPlan(string? sql, Func<IDataRecord, TResult>? map, bool noParams, DbCompiledQuery<TResult> compiledQuery)
         : base(map)
     {
         SqlStmt = sql;
         NoParams = noParams;
+        CompiledQuery = compiledQuery;
     }
-    public void ResetConnection(DbConnection conn)
+    public void ResetConnection(DbConnection conn, IDataContext dbContext)
     {
-        if (QueryTemplate?.DbCommand?.Connection == conn)
-            QueryTemplate.DbCommand.Connection = null;
+        if (CompiledQuery?.DbCommand?.Connection == conn)
+            CompiledQuery.DbCommand.Connection = null;
+
+        if (CompiledQuery?.Enumerator?.DbContext == dbContext)
+            CompiledQuery.Enumerator.DbContext = null;
     }
     // public DbCommand GetCommand(IEnumerable<Param> @params, SqlDataProvider dataProvider)
     // {
