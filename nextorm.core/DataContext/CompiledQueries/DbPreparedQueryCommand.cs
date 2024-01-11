@@ -1,4 +1,3 @@
-#define PARAM_CONDITION
 using System.Data;
 using System.Data.Common;
 using System.Diagnostics;
@@ -6,32 +5,29 @@ using System.Diagnostics;
 namespace nextorm.core;
 
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S3881:\"IDisposable\" should be implemented correctly", Justification = "<Pending>")]
-public sealed class DbCompiledQuery<TResult> : CompiledQuery<TResult, IDataRecord>
+public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResult, IDataRecord>, IDbCommandHolder
 {
     public readonly CommandBehavior Behavior = 0;
-    public DbCompiledQuery(DbCommand dbCommand, Func<Func<IDataRecord, TResult>?> getMap)
-        : base(getMap)
+    public DbCommand DbCommand;
+    public ResultSetEnumerator<TResult>? Enumerator;
+    public int LastRowCount;
+    public int[]? ParamMap;
+    public readonly string? SqlStmt;
+    public readonly bool NoParams;
+    public DbPreparedQueryCommand(DbCommand dbCommand, Func<IDataRecord, TResult>? mapDelegate, bool singleRow, bool scalar, string? sql, bool noParams)
+        : base(mapDelegate, scalar)
     {
         DbCommand = dbCommand;
-        CommandText = dbCommand.CommandText;
-        //DbCommandParams = dbCommand.Parameters;
-    }
-    public DbCompiledQuery(DbCommand dbCommand, Func<IDataRecord, TResult>? mapDelegate, bool singleRow)
-        : base(mapDelegate)
-    {
-        DbCommand = dbCommand;
-        CommandText = dbCommand.CommandText;
+        // CommandText = dbCommand.CommandText;
         //DbCommandParams = dbCommand.Parameters;
         if (singleRow)
             Behavior = CommandBehavior.SingleRow;
-    }
-    public DbCommand DbCommand;
-    private readonly string CommandText;
 
+        SqlStmt = sql;
+        NoParams = noParams;
+    }
+    // private readonly string CommandText;
     //public DbParameterCollection DbCommandParams;
-    public ResultSetEnumerator<TResult>? Enumerator;
-    public int LastRowCount;
-    public int[] ParamMap;
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Bug", "S2583:Conditionally executed code should be reachable", Justification = "<Pending>")]
     public DbCommand GetDbCommand(object[]? @params, DbContext dataContext, DbConnection conn)
     {
@@ -100,5 +96,13 @@ public sealed class DbCompiledQuery<TResult> : CompiledQuery<TResult, IDataRecor
             cmd.Connection = conn;
 
         return cmd;
+    }
+    public void ResetConnection(DbConnection conn, IDataContext dbContext)
+    {
+        if (DbCommand?.Connection == conn)
+            DbCommand.Connection = null;
+
+        if (Enumerator?.DbContext == dbContext)
+            Enumerator.DbContext = null;
     }
 }

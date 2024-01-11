@@ -12,7 +12,7 @@ public interface IDataContext : IAsyncDisposable, IDisposable
     IDictionary<ExpressionKey, Delegate> ExpressionsCache { get; }
     IDictionary<Type, IEntityMeta> Metadata { get; }
     IDictionary<Type, List<SelectExpression>> SelectListCache { get; }
-    //IDictionary<Expression, List<SelectExpression>> SelectListExpessionCache { get; }
+    //IDictionary<Expression, List<SelectExpression>> SelectListExpressionCache { get; }
     public Entity<T> Create<T>(Action<EntityBuilder<T>>? configEntity = null)
     {
         if (!Metadata.ContainsKey(typeof(T)))
@@ -50,22 +50,23 @@ public interface IDataContext : IAsyncDisposable, IDisposable
     /// <param name="nonStreamUsing">true, if optimized for buffered or scalar value results; false for non-buffered (stream) using, when result is IEnumerable or IAsyncEnumerable</param>
     /// <param name="storeInCache">true to store query plan in cache, overwise it is stored only in query command</param>
     /// <param name="cancellationToken"></param>
-    void Compile<TResult>(QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken);
-    IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken);
-    IEnumerator<TResult> CreateEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[]? @params);
-    // Task<IEnumerator<TResult>> CreateEnumeratorAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken);
-    Task<List<TResult>> ToListAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken);
-    List<TResult> ToList<TResult>(QueryCommand<TResult> queryCommand, object[]? @params);
-    Task<TResult?> ExecuteScalar<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, bool throwIfNull, CancellationToken cancellationToken);
-    TResult? ExecuteScalar<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, bool throwIfNull);
-    public Entity<TResult> From<TResult>(QueryCommand<TResult> query) => new(this, query) { Logger = CommandLogger };
-    public Entity<TResult> From<TResult>(Entity<TResult> builder) => new(this, builder) { Logger = CommandLogger };
-    TResult First<TResult>(QueryCommand<TResult> queryCommand, object[] @params);
-    Task<TResult> FirstAsync<TResult>(QueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken);
-    TResult? FirstOrDefault<TResult>(QueryCommand<TResult> queryCommand, object[] @params);
-    Task<TResult?> FirstOrDefaultAsync<TResult>(QueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken);
-    TResult Single<TResult>(QueryCommand<TResult> queryCommand, object[] @params);
-    Task<TResult> SingleAsync<TResult>(QueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken);
-    TResult? SingleOrDefault<TResult>(QueryCommand<TResult> queryCommand, object[] @params);
-    Task<TResult?> SingleOrDefaultAsync<TResult>(QueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken);
+    // void Compile<TResult>(QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken);
+    IPreparedQueryCommand GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, CancellationToken cancellationToken, string? manualSql = null, Func<List<Param>>? makeParams = null);
+    IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(IPreparedQueryCommand preparedQueryCommand, object[]? @params, CancellationToken cancellationToken);
+    IEnumerator<TResult> CreateEnumerator<TResult>(IPreparedQueryCommand preparedQueryCommand, object[]? @params);
+    // Task<IEnumerator<TResult>> CreateEnumeratorAsync<TResult>(IPreparedQueryCommand preparedQueryCommand, object[]? @params, CancellationToken cancellationToken);
+    Task<List<TResult>> ToListAsync<TResult>(IPreparedQueryCommand preparedQueryCommand, object[]? @params, CancellationToken cancellationToken);
+    List<TResult> ToList<TResult>(IPreparedQueryCommand preparedQueryCommand, object[]? @params);
+    Task<TResult?> ExecuteScalar<TResult>(IPreparedQueryCommand preparedQueryCommand, object[]? @params, bool throwIfNull, CancellationToken cancellationToken);
+    TResult? ExecuteScalar<TResult>(IPreparedQueryCommand preparedQueryCommand, object[]? @params, bool throwIfNull);
+    TResult First<TResult>(IPreparedQueryCommand preparedQueryCommand, object[]? @params);
+    Task<TResult> FirstAsync<TResult>(IPreparedQueryCommand preparedQueryCommand, object[]? @params, CancellationToken cancellationToken);
+    TResult? FirstOrDefault<TResult>(IPreparedQueryCommand preparedQueryCommand, object[]? @params);
+    Task<TResult?> FirstOrDefaultAsync<TResult>(IPreparedQueryCommand preparedQueryCommand, object[]? @params, CancellationToken cancellationToken);
+    TResult Single<TResult>(IPreparedQueryCommand preparedQueryCommand, object[]? @params);
+    Task<TResult> SingleAsync<TResult>(IPreparedQueryCommand preparedQueryCommand, object[]? @params, CancellationToken cancellationToken);
+    TResult? SingleOrDefault<TResult>(IPreparedQueryCommand preparedQueryCommand, object[]? @params);
+    Task<TResult?> SingleOrDefaultAsync<TResult>(IPreparedQueryCommand preparedQueryCommand, object[]? @params, CancellationToken cancellationToken);
+    Entity<TResult> From<TResult>(QueryCommand<TResult> query) => new(this, query) { Logger = CommandLogger };
+    Entity<TResult> From<TResult>(Entity<TResult> builder) => new(this, builder) { Logger = CommandLogger };
 }

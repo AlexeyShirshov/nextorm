@@ -20,7 +20,9 @@ public class DbContext : IDataContext
     //private readonly static ConcurrentDictionary<Expression, List<SelectExpression>> _selectListExpCache = new(ExpressionEqualityComparer.Instance);
     private readonly static ExpressionCache<Delegate> _expCache = new();
     internal protected readonly static ObjectPool<StringBuilder> _sbPool = new DefaultObjectPoolProvider().Create(new StringBuilderPooledObjectPolicy());
-    private static readonly AsyncLocal<Dictionary<QueryPlan, IDbCommandHolder>> _queryPlanCache = new() { Value = [] };
+    //private static readonly AsyncLocal<Dictionary<QueryPlan, IDbCommandHolder>> _queryPlanCache = new() { Value = [] };
+    [ThreadStatic]
+    private static Dictionary<QueryPlan, IDbCommandHolder>? _queryPlanCache;
     private DbConnection? _conn;
     protected bool _connWasCreatedByMe;
     private bool _disposed;
@@ -50,7 +52,7 @@ public class DbContext : IDataContext
     public IDictionary<ExpressionKey, Delegate> ExpressionsCache => _expCache;
     public IDictionary<Type, IEntityMeta> Metadata => _metadata;
     public IDictionary<Type, List<SelectExpression>> SelectListCache => _selectListCache;
-    private static Dictionary<QueryPlan, IDbCommandHolder> QueryPlanCache => _queryPlanCache.Value!;
+    private static Dictionary<QueryPlan, IDbCommandHolder> QueryPlanCache => _queryPlanCache ??= [];
     public Entity From(string table) => new(this, table) { Logger = CommandLogger };
     public event EventHandler? Disposed;
     public void EnsureConnectionOpen()
@@ -150,7 +152,7 @@ public class DbContext : IDataContext
             Logger!.LogDebug("Use {method} to see param values", nameof(LogSensitiveData));
         }
     }
-    private DbCommand GetCompiledQuery<TResult>(DbCompiledQuery<TResult> compiledQuery, object[]? @params)
+    private DbCommand GetDbCommand<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, object[]? @params)
     {
         // #if DEBUG
         //         if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Getting connection");
@@ -176,7 +178,7 @@ public class DbContext : IDataContext
         return cmd;
     }
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Bug", "S2583:Conditionally executed code should be reachable", Justification = "<Pending>")]
-    private async ValueTask<DbCommand> GetCompiledQuery<TResult>(DbCompiledQuery<TResult> compiledQuery, object[]? @params, CancellationToken cancellationToken)
+    private async ValueTask<DbCommand> GetDbCommand<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, object[]? @params, CancellationToken cancellationToken)
     {
         //var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, false, true);
 
@@ -247,10 +249,12 @@ public class DbContext : IDataContext
     //     return compiledQuery;
     // }
 
-    private DbCompiledQuery<TResult> CreateCompiledQuery<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, string? manualSql = null, Func<List<Param>>? makeParams = null)
+    public IPreparedQueryCommand GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, CancellationToken cancellationToken, string? manualSql = null, Func<List<Param>>? makeParams = null)
     {
         QueryPlan? queryPlan = null;
         IDbCommandHolder? planCache = null;
+
+        if (!queryCommand.IsPrepared) queryCommand.PrepareCommand(false, cancellationToken);
 
         if (queryCommand.Cache && storeInCache)
         {
@@ -288,7 +292,7 @@ public class DbContext : IDataContext
             //dbCommand.Prepare();
             //return new SqlCacheEntry(null) { Enumerator = new EmptyEnumerator<TResult>() };
 
-            var compiledQuery = new DbCompiledQuery<TResult>(dbCommand, map, queryCommand.SingleRow);
+            var compiledQuery = new DbPreparedQueryCommand<TResult>(dbCommand, map, queryCommand.SingleRow, queryCommand.OneColumn, makeParams is null ? sql! : null, noParams);
 
             if (createEnumerator)
             {
@@ -298,8 +302,7 @@ public class DbContext : IDataContext
 
             if (storeInCache && queryCommand.Cache)
             {
-                var compiledPlan = new DbCompiledPlan<TResult>(makeParams is null ? sql! : null, map, noParams, compiledQuery);
-                QueryPlanCache[queryPlan!.GetCacheVersion()] = compiledPlan;
+                QueryPlanCache[queryPlan!.GetCacheVersion()] = compiledQuery;
             }
 
             return compiledQuery;
@@ -310,16 +313,11 @@ public class DbContext : IDataContext
             if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Query plan cache hit");
 #endif
 
-            var plan = (DbCompiledPlan<TResult>)planCache;
-            // var dbCommand = plan.GetCommand(plan.NoParams
-            //     ? Array.Empty<Param>()
-            //     : ExtractParams(queryCommand), this);
-
-            var compiledQuery = plan.CompiledQuery;
+            var compiledQuery = (DbPreparedQueryCommand<TResult>)planCache;
 
             if (makeParams is not null)
             {
-                Debug.Assert(string.IsNullOrEmpty(plan.SqlStmt), "SqlStmt must be null");
+                Debug.Assert(string.IsNullOrEmpty(compiledQuery.SqlStmt), "SqlStmt must be null");
 
                 // var (sql, @params) = (manualSql, makeParams());
 
@@ -343,7 +341,7 @@ public class DbContext : IDataContext
                 //     compiledQuery = new DbCompiledQuery<TResult>(dbCommand, plan.MapDelegate, queryCommand.SingleRow);
                 // }
             }
-            else if (string.IsNullOrEmpty(plan.SqlStmt))
+            else if (string.IsNullOrEmpty(compiledQuery.SqlStmt))
             {
                 Debug.Fail("SqlStmt must be not null");
                 // var (sql, @params) = MakeSelect(queryCommand, false);
@@ -357,11 +355,11 @@ public class DbContext : IDataContext
             }
             else
             {
-                if (!plan.NoParams || compiledQuery.DbCommand is null)
+                if (!compiledQuery.NoParams || compiledQuery.DbCommand is null)
                 {
-                    var dbCommand = compiledQuery.DbCommand ?? CreateCommand(plan.SqlStmt);
+                    var dbCommand = compiledQuery.DbCommand ?? CreateCommand(compiledQuery.SqlStmt);
 
-                    if (!plan.NoParams)
+                    if (!compiledQuery.NoParams)
                     {
                         // if (compiledQuery?.DbCommand is not null)
                         //     dbCommand.Parameters.Clear();
@@ -776,7 +774,7 @@ public class DbContext : IDataContext
         if (!queryCommand.IsPrepared)
             queryCommand.PrepareCommand(!storeInCache, cancellationToken);
 
-        queryCommand._compiledQuery = CreateCompiledQuery(queryCommand, !nonStreamUsing, storeInCache, sql, () =>
+        queryCommand._compiledQuery = GetPreparedQueryCommand(queryCommand, !nonStreamUsing, storeInCache, cancellationToken, sql, () =>
         {
             List<Param> ps = new();
             if (@params is not null)
@@ -790,13 +788,13 @@ public class DbContext : IDataContext
             return ps;
         });
     }
-    public void Compile<TResult>(QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken)
-    {
-        if (!queryCommand.IsPrepared)
-            queryCommand.PrepareCommand(!storeInCache, cancellationToken);
+    // public void Compile<TResult>(QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken)
+    // {
+    //     if (!queryCommand.IsPrepared)
+    //         queryCommand.PrepareCommand(!storeInCache, cancellationToken);
 
-        queryCommand._compiledQuery = CreateCompiledQuery(queryCommand, !nonStreamUsing, storeInCache);
-    }
+    //     queryCommand._compiledQuery = GetPreparedQueryCommand(queryCommand, !nonStreamUsing, storeInCache);
+    // }
     protected virtual void Dispose(bool disposing)
     {
         if (!_disposed)
@@ -845,14 +843,17 @@ public class DbContext : IDataContext
         Disposed?.Invoke(this, EventArgs.Empty);
     }
 
-    public IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
+    public IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(IPreparedQueryCommand queryCommand, object[]? @params, CancellationToken cancellationToken)
     {
         //ArgumentNullException.ThrowIfNull(queryCommand);
 
-        var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, true, true);
-        var sqlEnumerator = compiledQuery.Enumerator!;
-        sqlEnumerator.InitEnumerator(this, @params, cancellationToken);
-        return sqlEnumerator;
+        if (queryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
+        {
+            var sqlEnumerator = compiledQuery.Enumerator!;
+            sqlEnumerator.InitEnumerator(this, @params, cancellationToken);
+            return sqlEnumerator;
+        }
+        throw new NotSupportedException(queryCommand.GetType().Name);
     }
     // public async Task<IEnumerator<TResult>> CreateEnumeratorAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
     // {
@@ -864,49 +865,52 @@ public class DbContext : IDataContext
     //     await sqlEnumerator.InitReaderAsync(@params, cancellationToken).ConfigureAwait(false);
     //     return sqlEnumerator;
     // }
-    public async Task<List<TResult>> ToListAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
+    public async Task<List<TResult>> ToListAsync<TResult>(IPreparedQueryCommand queryCommand, object[]? @params, CancellationToken cancellationToken)
     {
         ////ArgumentNullException.ThrowIfNull(queryCommand);
 
-        // var (reader, compiledQuery) = await ExecuteReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
-        var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, false, true);
-        var sqlCommand = await GetCompiledQuery(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
-        //var sqlCommand = compiledQuery.DbCommand;
-        var reader = await sqlCommand.ExecuteReaderAsync(compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
-        using (reader)
+        if (queryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
         {
-            var l = new List<TResult>(compiledQuery.LastRowCount);
-            var mapper = compiledQuery.MapDelegate!;
-            while (reader.Read())
+            var sqlCommand = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
+            //var sqlCommand = compiledQuery.DbCommand;
+            var reader = await sqlCommand.ExecuteReaderAsync(compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
+            using (reader)
             {
-                l.Add(mapper(reader));
-                //l.Add(default);
-            }
+                var l = new List<TResult>(compiledQuery.LastRowCount);
+                var mapper = compiledQuery.MapDelegate!;
+                while (reader.Read())
+                {
+                    l.Add(mapper(reader));
+                    //l.Add(default);
+                }
 
-            compiledQuery.LastRowCount = l.Count;
-            return l;
+                compiledQuery.LastRowCount = l.Count;
+                return l;
+            }
         }
+        throw new NotSupportedException(queryCommand.GetType().Name);
     }
-    public List<TResult> ToList<TResult>(QueryCommand<TResult> queryCommand, object[]? @params)
+    public List<TResult> ToList<TResult>(IPreparedQueryCommand queryCommand, object[]? @params)
     {
-        ////ArgumentNullException.ThrowIfNull(queryCommand);
-
-        var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, false, true);
-        var sqlCommand = GetCompiledQuery(compiledQuery, @params);
-        //var sqlCommand = compiledQuery.DbCommand;
-        var reader = sqlCommand.ExecuteReader(compiledQuery.Behavior);
-        using (reader)
+        if (queryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
         {
-            var l = new List<TResult>(compiledQuery.LastRowCount);
-            var mapper = compiledQuery.MapDelegate!;
-            while (reader.Read())
+            var sqlCommand = GetDbCommand(compiledQuery, @params);
+            //var sqlCommand = compiledQuery.DbCommand;
+            var reader = sqlCommand.ExecuteReader(compiledQuery.Behavior);
+            using (reader)
             {
-                l.Add(mapper(reader));
-            }
+                var l = new List<TResult>(compiledQuery.LastRowCount);
+                var mapper = compiledQuery.MapDelegate!;
+                while (reader.Read())
+                {
+                    l.Add(mapper(reader));
+                }
 
-            compiledQuery.LastRowCount = l.Count;
-            return l;
+                compiledQuery.LastRowCount = l.Count;
+                return l;
+            }
         }
+        throw new NotSupportedException(queryCommand.GetType().Name);
     }
     // private (DbDataReader, DbCompiledQuery<TResult>) CreateReader<TResult>(QueryCommand<TResult> queryCommand, object[]? @params)
     // {
@@ -924,67 +928,69 @@ public class DbContext : IDataContext
 
     //     return (sqlCommand.ExecuteReader(compiledQuery.Behavior), compiledQuery);
     // }
-    public TResult? ExecuteScalar<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, bool throwIfNull)
+    public TResult? ExecuteScalar<TResult>(IPreparedQueryCommand queryCommand, object[]? @params, bool throwIfNull)
     {
-        //ArgumentNullException.ThrowIfNull(queryCommand);
-
-        var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, false, true);
-        var sqlCommand = GetCompiledQuery(compiledQuery, @params);
-        //var sqlCommand = compiledQuery.DbCommand;
-
-        //if (conn.State == ConnectionState.Closed)
-        // if (!_connOpen)
-        // {
-        //     if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Opening connection");
-        //     conn.Open();
-        //     _connOpen = true;
-        // }
-
-        // _logParams?.Invoke(sqlCommand);
-
-        var r = sqlCommand.ExecuteScalar();
-
-        if (r is TResult res) return res;
-        if (r is null or DBNull)
+        if (queryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
         {
-            if (throwIfNull) throw new InvalidOperationException();
-            return default;
-        }
+            var sqlCommand = GetDbCommand(compiledQuery, @params);
+            //var sqlCommand = compiledQuery.DbCommand;
 
-        var type = typeof(TResult);
-        return (TResult)Convert.ChangeType(r, type);
+            //if (conn.State == ConnectionState.Closed)
+            // if (!_connOpen)
+            // {
+            //     if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Opening connection");
+            //     conn.Open();
+            //     _connOpen = true;
+            // }
+
+            // _logParams?.Invoke(sqlCommand);
+
+            var r = sqlCommand.ExecuteScalar();
+
+            if (r is TResult res) return res;
+            if (r is null or DBNull)
+            {
+                if (throwIfNull) throw new InvalidOperationException();
+                return default;
+            }
+
+            var type = typeof(TResult);
+            return (TResult)Convert.ChangeType(r, type);
+        }
+        throw new NotSupportedException(queryCommand.GetType().Name);
     }
-    public async Task<TResult?> ExecuteScalar<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, bool throwIfNull, CancellationToken cancellationToken)
+    public async Task<TResult?> ExecuteScalar<TResult>(IPreparedQueryCommand queryCommand, object[]? @params, bool throwIfNull, CancellationToken cancellationToken)
     {
         CheckDisposed();
-        //ArgumentNullException.ThrowIfNull(queryCommand);
-
-        var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, false, true);
-        var sqlCommand = await GetCompiledQuery(compiledQuery, @params, cancellationToken);
-        //var sqlCommand = compiledQuery.DbCommand;
-
-        //if (conn.State == ConnectionState.Closed)
-        // if (!_connOpen)
-        // {
-        //     if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Opening connection");
-        //     await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
-        //     _connOpen = true;
-        // }
-
-        // _logParams?.Invoke(sqlCommand);
-
-        var r = await sqlCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
-
-        // var r = true;
-        if (r is TResult res) return res;
-        if (r is null or DBNull)
+        if (queryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
         {
-            if (throwIfNull) throw new InvalidOperationException();
-            return default;
-        }
+            var sqlCommand = await GetDbCommand(compiledQuery, @params, cancellationToken);
+            //var sqlCommand = compiledQuery.DbCommand;
 
-        var type = typeof(TResult);
-        return (TResult)Convert.ChangeType(r, type);
+            //if (conn.State == ConnectionState.Closed)
+            // if (!_connOpen)
+            // {
+            //     if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Opening connection");
+            //     await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
+            //     _connOpen = true;
+            // }
+
+            // _logParams?.Invoke(sqlCommand);
+
+            var r = await sqlCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+
+            // var r = true;
+            if (r is TResult res) return res;
+            if (r is null or DBNull)
+            {
+                if (throwIfNull) throw new InvalidOperationException();
+                return default;
+            }
+
+            var type = typeof(TResult);
+            return (TResult)Convert.ChangeType(r, type);
+        }
+        throw new NotSupportedException(queryCommand.GetType().Name);
     }
     [Conditional("DEBUG")]
     private void CheckDisposed()
@@ -1008,17 +1014,17 @@ public class DbContext : IDataContext
 
     //     return (await sqlCommand.ExecuteReaderAsync(compiledQuery.Behavior, cancellationToken).ConfigureAwait(false), compiledQuery);
     // }
-    public IEnumerator<TResult> CreateEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[]? @params)
+    public IEnumerator<TResult> CreateEnumerator<TResult>(IPreparedQueryCommand queryCommand, object[]? @params)
     {
-        //ArgumentNullException.ThrowIfNull(queryCommand);
+        if (queryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
+        {
+            var sqlEnumerator = compiledQuery.Enumerator!;
+            sqlEnumerator.InitEnumerator(this, @params, CancellationToken.None);
+            sqlEnumerator.InitReader(@params);
 
-        var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, true, true);
-
-        var sqlEnumerator = compiledQuery.Enumerator!;
-        sqlEnumerator.InitEnumerator(this, @params, CancellationToken.None);
-        sqlEnumerator.InitReader(@params);
-
-        return sqlEnumerator;
+            return sqlEnumerator;
+        }
+        throw new NotSupportedException(queryCommand.GetType().Name);
     }
     public Func<Func<IDataRecord, TResult>> GetMap<TResult>(QueryCommand<TResult> queryCommand)
     {
@@ -1101,232 +1107,237 @@ public class DbContext : IDataContext
         //     }
     }
 
-    public TResult First<TResult>(QueryCommand<TResult> queryCommand, object[] @params)
+    public TResult First<TResult>(IPreparedQueryCommand queryCommand, object[] @params)
     {
         //ArgumentNullException.ThrowIfNull(queryCommand);
 
-        if (queryCommand.OneColumn)
+        if (queryCommand.IsScalar)
         {
-            return ExecuteScalar(queryCommand, @params, true)!;
+            return ExecuteScalar<TResult>(queryCommand, @params, true)!;
         }
         else
         {
-            var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, false, true);
-            var sqlCommand = GetCompiledQuery(compiledQuery, @params);
+            if (queryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
+            {
+                var sqlCommand = GetDbCommand(compiledQuery, @params);
+                //var sqlCommand = compiledQuery.DbCommand;
+                var reader = sqlCommand.ExecuteReader(compiledQuery.Behavior);
+                var mapper = compiledQuery.MapDelegate!;
+                using (reader)
+                {
+                    if (reader.Read())
+                    {
+                        return mapper(reader);
+                    }
+
+                    throw new InvalidOperationException();
+                }
+            }
+            throw new NotSupportedException(queryCommand.GetType().Name);
+        }
+    }
+
+    public async Task<TResult> FirstAsync<TResult>(IPreparedQueryCommand queryCommand, object[] @params, CancellationToken cancellationToken)
+    {
+        //ArgumentNullException.ThrowIfNull(queryCommand);
+
+        if (queryCommand.IsScalar)
+        {
+            return (await ExecuteScalar<TResult>(queryCommand, @params, true, cancellationToken))!;
+        }
+        else
+        {
+            if (queryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
+            {
+                var sqlCommand = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
+                //var sqlCommand = compiledQuery.DbCommand;
+                var reader = await sqlCommand.ExecuteReaderAsync(compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
+                var mapper = compiledQuery.MapDelegate!;
+                using (reader)
+                {
+                    if (reader.Read())
+                    {
+                        return mapper(reader);
+                    }
+
+                    throw new InvalidOperationException();
+                }
+            }
+            throw new NotSupportedException(queryCommand.GetType().Name);
+        }
+    }
+    public TResult? FirstOrDefault<TResult>(IPreparedQueryCommand queryCommand, object[] @params)
+    {
+        if (queryCommand.IsScalar)
+        {
+            return ExecuteScalar<TResult>(queryCommand, @params, false);
+        }
+        else
+        {
+            if (queryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
+            {
+                var sqlCommand = GetDbCommand(compiledQuery, @params);
+                //var sqlCommand = compiledQuery.DbCommand;
+                var reader = sqlCommand.ExecuteReader(compiledQuery.Behavior);
+                var mapper = compiledQuery.MapDelegate!;
+                //var (reader, compiledQuery) = CreateReader(queryCommand, @params);
+                using (reader)
+                {
+                    if (reader.Read())
+                    {
+                        return mapper(reader);
+                    }
+
+                    return default;
+                }
+            }
+            throw new NotSupportedException(queryCommand.GetType().Name);
+        }
+    }
+
+    public async Task<TResult?> FirstOrDefaultAsync<TResult>(IPreparedQueryCommand queryCommand, object[] @params, CancellationToken cancellationToken)
+    {
+        //ArgumentNullException.ThrowIfNull(queryCommand);
+
+        if (queryCommand.IsScalar)
+        {
+            return await ExecuteScalar<TResult>(queryCommand, @params, false, cancellationToken);
+        }
+        else
+        {
+            if (queryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
+            {
+                var sqlCommand = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
+                //var sqlCommand = compiledQuery.DbCommand;
+                var reader = await sqlCommand.ExecuteReaderAsync(compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
+                var mapper = compiledQuery.MapDelegate!;
+                using (reader)
+                {
+                    if (reader.Read())
+                    {
+                        return mapper(reader);
+                    }
+
+                    return default;
+                }
+            }
+            throw new NotSupportedException(queryCommand.GetType().Name);
+        }
+    }
+
+    public TResult Single<TResult>(IPreparedQueryCommand queryCommand, object[] @params)
+    {
+        if (queryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
+        {
+            var sqlCommand = GetDbCommand(compiledQuery, @params);
             //var sqlCommand = compiledQuery.DbCommand;
             var reader = sqlCommand.ExecuteReader(compiledQuery.Behavior);
-            var mapper = compiledQuery.MapDelegate!;
             using (reader)
             {
-                if (reader.Read())
+                TResult r = default!;
+                var hasResult = false;
+                var mapper = compiledQuery.MapDelegate!;
+                while (reader.Read())
                 {
-                    return mapper(reader);
+                    if (hasResult)
+                        throw new InvalidOperationException();
+
+                    r = mapper(reader);
+                    hasResult = true;
                 }
 
-                throw new InvalidOperationException();
+                if (!hasResult)
+                    throw new InvalidOperationException();
+
+                return r!;
             }
         }
+        throw new NotSupportedException(queryCommand.GetType().Name);
     }
 
-    public async Task<TResult> FirstAsync<TResult>(QueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
+    public async Task<TResult> SingleAsync<TResult>(IPreparedQueryCommand queryCommand, object[] @params, CancellationToken cancellationToken)
     {
-        //ArgumentNullException.ThrowIfNull(queryCommand);
-
-        if (queryCommand.OneColumn)
+        if (queryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
         {
-            return (await ExecuteScalar(queryCommand, @params, true, cancellationToken))!;
-        }
-        else
-        {
-            var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, false, true);
-            var sqlCommand = await GetCompiledQuery(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
+            var sqlCommand = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
             //var sqlCommand = compiledQuery.DbCommand;
             var reader = await sqlCommand.ExecuteReaderAsync(compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
-            var mapper = compiledQuery.MapDelegate!;
             using (reader)
             {
-                if (reader.Read())
+                TResult r = default!;
+                var hasResult = false;
+                var mapper = compiledQuery.MapDelegate!;
+                while (reader.Read())
                 {
-                    return mapper(reader);
+                    if (hasResult)
+                        throw new InvalidOperationException();
+
+                    r = mapper(reader);
+                    hasResult = true;
                 }
 
-                throw new InvalidOperationException();
+                if (!hasResult)
+                    throw new InvalidOperationException();
+
+                return r!;
             }
         }
+        throw new NotSupportedException(queryCommand.GetType().Name);
     }
-    public TResult? FirstOrDefault<TResult>(QueryCommand<TResult> queryCommand, object[] @params)
+
+    public TResult? SingleOrDefault<TResult>(IPreparedQueryCommand queryCommand, object[] @params)
     {
-        //ArgumentNullException.ThrowIfNull(queryCommand);
-
-        if (queryCommand.OneColumn)
+        if (queryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
         {
-            return ExecuteScalar(queryCommand, @params, false);
-        }
-        else
-        {
-            // if (!_connOpen)
-            // {
-            //     if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Opening connection");
-            //     conn.Open();
-            //     _connOpen = true;
-            // }
-
-            //_logParams?.Invoke(sqlCommand);
-            //Logger?.LogInformation(compiledQuery.Behavior.ToString("g"));
-            var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, false, true);
-            var sqlCommand = GetCompiledQuery(compiledQuery, @params);
+            var sqlCommand = GetDbCommand(compiledQuery, @params);
             //var sqlCommand = compiledQuery.DbCommand;
             var reader = sqlCommand.ExecuteReader(compiledQuery.Behavior);
-            var mapper = compiledQuery.MapDelegate!;
-            //var (reader, compiledQuery) = CreateReader(queryCommand, @params);
+
             using (reader)
             {
-                if (reader.Read())
+                TResult? r = default;
+                var hasResult = false;
+                var mapper = compiledQuery.MapDelegate!;
+                while (reader.Read())
                 {
-                    return mapper(reader);
+                    if (hasResult)
+                        throw new InvalidOperationException();
+
+                    r = mapper(reader);
+                    hasResult = true;
                 }
 
-                return default;
+                return r;
             }
         }
+        throw new NotSupportedException(queryCommand.GetType().Name);
     }
 
-    public async Task<TResult?> FirstOrDefaultAsync<TResult>(QueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
+    public async Task<TResult?> SingleOrDefaultAsync<TResult>(IPreparedQueryCommand queryCommand, object[] @params, CancellationToken cancellationToken)
     {
-        //ArgumentNullException.ThrowIfNull(queryCommand);
-
-        if (queryCommand.OneColumn)
+        if (queryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
         {
-            return await ExecuteScalar(queryCommand, @params, false, cancellationToken);
-        }
-        else
-        {
-            var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, false, true);
-            var sqlCommand = await GetCompiledQuery(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
+            var sqlCommand = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
             //var sqlCommand = compiledQuery.DbCommand;
             var reader = await sqlCommand.ExecuteReaderAsync(compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
-            var mapper = compiledQuery.MapDelegate!;
             using (reader)
             {
-                if (reader.Read())
+                TResult? r = default;
+                var hasResult = false;
+                var mapper = compiledQuery.MapDelegate!;
+                while (reader.Read())
                 {
-                    return mapper(reader);
+                    if (hasResult)
+                        throw new InvalidOperationException();
+
+                    r = mapper(reader);
+                    hasResult = true;
                 }
 
-                return default;
+                return r;
             }
         }
-    }
-
-    public TResult Single<TResult>(QueryCommand<TResult> queryCommand, object[] @params)
-    {
-        //ArgumentNullException.ThrowIfNull(queryCommand);
-
-        var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, false, true);
-        var sqlCommand = GetCompiledQuery(compiledQuery, @params);
-        //var sqlCommand = compiledQuery.DbCommand;
-        var reader = sqlCommand.ExecuteReader(compiledQuery.Behavior);
-        using (reader)
-        {
-            TResult r = default!;
-            var hasResult = false;
-            var mapper = compiledQuery.MapDelegate!;
-            while (reader.Read())
-            {
-                if (hasResult)
-                    throw new InvalidOperationException();
-
-                r = mapper(reader);
-                hasResult = true;
-            }
-
-            if (!hasResult)
-                throw new InvalidOperationException();
-
-            return r!;
-        }
-    }
-
-    public async Task<TResult> SingleAsync<TResult>(QueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
-    {
-        //ArgumentNullException.ThrowIfNull(queryCommand);
-
-        var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, false, true);
-        var sqlCommand = await GetCompiledQuery(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
-        //var sqlCommand = compiledQuery.DbCommand;
-        var reader = await sqlCommand.ExecuteReaderAsync(compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
-        using (reader)
-        {
-            TResult r = default!;
-            var hasResult = false;
-            var mapper = compiledQuery.MapDelegate!;
-            while (reader.Read())
-            {
-                if (hasResult)
-                    throw new InvalidOperationException();
-
-                r = mapper(reader);
-                hasResult = true;
-            }
-
-            if (!hasResult)
-                throw new InvalidOperationException();
-
-            return r!;
-        }
-    }
-
-    public TResult? SingleOrDefault<TResult>(QueryCommand<TResult> queryCommand, object[] @params)
-    {
-        //ArgumentNullException.ThrowIfNull(queryCommand);
-
-        var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, false, true);
-        var sqlCommand = GetCompiledQuery(compiledQuery, @params);
-        //var sqlCommand = compiledQuery.DbCommand;
-        var reader = sqlCommand.ExecuteReader(compiledQuery.Behavior);
-
-        using (reader)
-        {
-            TResult? r = default;
-            var hasResult = false;
-            var mapper = compiledQuery.MapDelegate!;
-            while (reader.Read())
-            {
-                if (hasResult)
-                    throw new InvalidOperationException();
-
-                r = mapper(reader);
-                hasResult = true;
-            }
-
-            return r;
-        }
-    }
-
-    public async Task<TResult?> SingleOrDefaultAsync<TResult>(QueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
-    {
-        //ArgumentNullException.ThrowIfNull(queryCommand);
-
-        var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, false, true);
-        var sqlCommand = await GetCompiledQuery(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
-        //var sqlCommand = compiledQuery.DbCommand;
-        var reader = await sqlCommand.ExecuteReaderAsync(compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
-        using (reader)
-        {
-            TResult? r = default;
-            var hasResult = false;
-            var mapper = compiledQuery.MapDelegate!;
-            while (reader.Read())
-            {
-                if (hasResult)
-                    throw new InvalidOperationException();
-
-                r = mapper(reader);
-                hasResult = true;
-            }
-
-            return r;
-        }
+        throw new NotSupportedException(queryCommand.GetType().Name);
     }
 
     // class EmptyEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerator<TResult>

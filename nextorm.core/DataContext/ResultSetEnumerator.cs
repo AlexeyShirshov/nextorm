@@ -10,7 +10,7 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IAsyncEnu
 {
     //private readonly QueryCommand<TResult> _cmd;
     private DbContext? _dbContext;
-    private readonly DbCompiledQuery<TResult> _compiledQuery;
+    private readonly DbPreparedQueryCommand<TResult> _compiledQuery;
     private CancellationToken _cancellationToken;
     private object[]? _params;
     private readonly Func<IDataRecord, TResult>? _map;
@@ -20,7 +20,7 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IAsyncEnu
     private DbDataReader? _reader;
     private DbConnection? _conn;
     private bool _disposed;
-    public ResultSetEnumerator(DbCompiledQuery<TResult> compiledQuery)
+    public ResultSetEnumerator(DbPreparedQueryCommand<TResult> compiledQuery)
     {
         //_cmd = cmd;
         _compiledQuery = compiledQuery;

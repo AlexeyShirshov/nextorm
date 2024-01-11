@@ -1,7 +1,7 @@
 #define PARAM_CONDITION
 namespace nextorm.core;
 
-public class InMemoryCompiledQuery<TResult, TEntity> : CompiledQuery<TResult, TEntity>
+public class InMemoryCompiledQuery<TResult, TEntity> : PreparedQueryCommand<TResult, TEntity>
 {
 #if PARAM_CONDITION
     public readonly Func<TEntity, object[]?, bool>? Condition;
@@ -9,7 +9,7 @@ public class InMemoryCompiledQuery<TResult, TEntity> : CompiledQuery<TResult, TE
     public readonly Func<TEntity, bool>? Condition;
 #endif
     public InMemoryCompiledQuery(Func<Func<TEntity, TResult>> func, Func<TEntity, object[]?, bool>? condition)
-        : base(func)
+        : base(func, false)
     {
         Condition = condition;
         // #if PARAM_CONDITION

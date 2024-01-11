@@ -19,7 +19,7 @@ public partial class InMemoryContext : IDataContext
     private readonly IDictionary<ExpressionKey, Delegate> _expCache = new ExpressionCache<Delegate>();
     private readonly IDictionary<Type, object?> _data = new Dictionary<Type, object?>();
     private bool _disposedValue;
-    private readonly IDictionary<QueryCommand, CacheEntry> _cmdIdx = new Dictionary<QueryCommand, CacheEntry>();
+    private readonly IDictionary<QueryPlan, IPreparedQueryCommand> _cmdIdx = new Dictionary<QueryPlan, IPreparedQueryCommand>();
     public InMemoryContext()
     {
         _data[typeof(TableAlias)] = new TableAlias?[] { null };
@@ -46,23 +46,54 @@ public partial class InMemoryContext : IDataContext
 
         return cacheEntry.CreateEnumerator(queryCommand, cacheEntry, @params, cancellationToken)!;
     }
-
     private InMemoryCacheEntry<TResult> GetCacheEntry<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
     {
-        var ce = queryCommand._compiledQuery;
-        if (ce is InMemoryCacheEntry<TResult> cc)
-            return cc;
+        return (InMemoryCacheEntry<TResult>)GetPreparedQueryCommand(queryCommand, false, true, cancellationToken);
+    }
+    public IPreparedQueryCommand GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, CancellationToken cancellationToken, string? manualSql = null, Func<List<Param>>? makeParams = null)
+    {
+        QueryPlan? queryPlan = null;
+        IPreparedQueryCommand? planCache = null;
 
-        if (queryCommand.Cache && _cmdIdx.TryGetValue(queryCommand, out var ce2) && ce2 is InMemoryCacheEntry<TResult> cache2)
-            return cache2;
+        if (!queryCommand.IsPrepared) queryCommand.PrepareCommand(false, cancellationToken);
 
-        var del = CreateEnumeratorDelegate(queryCommand, cancellationToken);
-        var cache = new InMemoryCacheEntry<TResult>(null, del);
+        if (queryCommand.Cache && storeInCache)
+        {
+            queryPlan = new QueryPlan(queryCommand, manualSql);
+            _cmdIdx.TryGetValue(queryPlan, out planCache);
+        }
 
-        if (queryCommand.Cache)
-            _cmdIdx[queryCommand] = cache;
+        if (planCache is null)
+        {
+            var @this = Expression.Constant(this);
+            var param = Expression.Parameter(typeof(QueryCommand<TResult>));
+            var callExp = Expression.Call(@this, miCreateCompiledQuery.MakeGenericMethod(typeof(TResult), queryCommand.EntityType),
+                param
+            );
 
-        return cache;
+            var key = new ExpressionKey(callExp, _expCache, queryCommand);
+            Func<QueryCommand<TResult>, object> createCompiledQueryDelegate;
+            if (!_expCache.TryGetValue(key, out var del))
+            {
+                var body = Expression.Convert(callExp, typeof(object));
+                createCompiledQueryDelegate = Expression.Lambda<Func<QueryCommand<TResult>, object>>(body, param).Compile();
+                _expCache[key] = createCompiledQueryDelegate;
+            }
+            else
+                createCompiledQueryDelegate = (Func<QueryCommand<TResult>, object>)del;
+
+            var ce = new InMemoryCacheEntry<TResult>(createCompiledQueryDelegate(queryCommand), CreateEnumeratorDelegate(queryCommand, cancellationToken));
+            queryCommand._compiledQuery = ce;
+            ce.Enumerator = ce.CreateEnumerator(queryCommand, ce, null, cancellationToken)!;
+
+            planCache = ce;
+
+            if (queryCommand.Cache)
+                _cmdIdx[queryPlan!.GetCacheVersion()] = planCache;
+
+        }
+
+        return planCache!;
     }
 
     protected Func<QueryCommand<TResult>, InMemoryCacheEntry<TResult>, object[]?, CancellationToken, IAsyncEnumerator<TResult>> CreateEnumeratorDelegate<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
@@ -454,36 +485,36 @@ public partial class InMemoryContext : IDataContext
         GC.SuppressFinalize(this);
     }
     public void Compile<TResult>(string sql, object? @params, QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken) => throw new NotImplementedException();
-    public void Compile<TResult>(QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken)
-    {
-        if (!queryCommand.IsPrepared)
-            queryCommand.PrepareCommand(cancellationToken);
+    // public void Compile<TResult>(QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken)
+    // {
+    //     if (!queryCommand.IsPrepared)
+    //         queryCommand.PrepareCommand(cancellationToken);
 
-        //query.Compiled = CreateCompiledQuery(query);
+    //     //query.Compiled = CreateCompiledQuery(query);
 
-        var @this = Expression.Constant(this);
-        var param = Expression.Parameter(typeof(QueryCommand<TResult>));
-        var callExp = Expression.Call(@this, miCreateCompiledQuery.MakeGenericMethod(typeof(TResult), queryCommand.EntityType),
-            param
-        );
+    //     var @this = Expression.Constant(this);
+    //     var param = Expression.Parameter(typeof(QueryCommand<TResult>));
+    //     var callExp = Expression.Call(@this, miCreateCompiledQuery.MakeGenericMethod(typeof(TResult), queryCommand.EntityType),
+    //         param
+    //     );
 
-        var key = new ExpressionKey(callExp, _expCache, queryCommand);
-        Func<QueryCommand<TResult>, object> createCompiledQueryDelegate;
-        if (!_expCache.TryGetValue(key, out var del))
-        {
-            var body = Expression.Convert(callExp, typeof(object));
-            createCompiledQueryDelegate = Expression.Lambda<Func<QueryCommand<TResult>, object>>(body, param).Compile();
-            _expCache[key] = createCompiledQueryDelegate;
-        }
-        else
-            createCompiledQueryDelegate = (Func<QueryCommand<TResult>, object>)del;
+    //     var key = new ExpressionKey(callExp, _expCache, queryCommand);
+    //     Func<QueryCommand<TResult>, object> createCompiledQueryDelegate;
+    //     if (!_expCache.TryGetValue(key, out var del))
+    //     {
+    //         var body = Expression.Convert(callExp, typeof(object));
+    //         createCompiledQueryDelegate = Expression.Lambda<Func<QueryCommand<TResult>, object>>(body, param).Compile();
+    //         _expCache[key] = createCompiledQueryDelegate;
+    //     }
+    //     else
+    //         createCompiledQueryDelegate = (Func<QueryCommand<TResult>, object>)del;
 
-        var ce = new InMemoryCacheEntry<TResult>(createCompiledQueryDelegate(queryCommand), CreateEnumeratorDelegate(queryCommand, cancellationToken));
-        queryCommand._compiledQuery = ce;
-        ce.Enumerator = ce.CreateEnumerator(queryCommand, ce, null, cancellationToken)!;
-    }
+    //     var ce = new InMemoryCacheEntry<TResult>(createCompiledQueryDelegate(queryCommand), CreateEnumeratorDelegate(queryCommand, cancellationToken));
+    //     queryCommand._compiledQuery = ce;
+    //     ce.Enumerator = ce.CreateEnumerator(queryCommand, ce, null, cancellationToken)!;
+    // }
 
-    private CompiledQuery<TResult, TEntity> CreateCompiledQuery<TResult, TEntity>(QueryCommand<TResult> query)
+    private PreparedQueryCommand<TResult, TEntity> CreateCompiledQuery<TResult, TEntity>(QueryCommand<TResult> query)
     {
         Func<TEntity, object[]?, bool>? conditionDelegate = null;
         if (query.PreparedCondition is Expression<Func<TEntity, bool>> condition)
@@ -510,32 +541,33 @@ public partial class InMemoryContext : IDataContext
     //     return Task.FromResult((IEnumerator<TResult>)CreateAsyncEnumerator(queryCommand, @params, cancellationToken));
     // }
 
-    public async Task<List<TResult>> ToListAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
+    public async Task<List<TResult>> ToListAsync<TResult>(IPreparedQueryCommand queryCommand, object[]? @params, CancellationToken cancellationToken)
     {
-        var cacheEntry = GetCacheEntry(queryCommand, CancellationToken.None);
-
-        await using var ee = cacheEntry.CreateEnumerator(queryCommand, cacheEntry, @params, CancellationToken.None)!;
-        var l = new List<TResult>(cacheEntry.LastRowCount == 0
-            ? queryCommand.Paging.Limit
-            : cacheEntry.LastRowCount);
-
-        var (rowCnt, absRowCnt) = (0, 0);
-
-        while (await ee.MoveNextAsync())
+        if (queryCommand is InMemoryCacheEntry<TResult> cacheEntry)
         {
-            if (queryCommand.Paging.Offset > 0 && absRowCnt++ < queryCommand.Paging.Offset)
-                continue;
+            await using var ee = cacheEntry.CreateEnumerator(queryCommand, cacheEntry, @params, CancellationToken.None)!;
+            var l = new List<TResult>(cacheEntry.LastRowCount == 0
+                ? queryCommand.Paging.Limit
+                : cacheEntry.LastRowCount);
 
-            l.Add(ee.Current);
+            var (rowCnt, absRowCnt) = (0, 0);
 
-            if (queryCommand.Paging.Limit > 0 && ++rowCnt >= queryCommand.Paging.Limit)
-                break;
+            while (await ee.MoveNextAsync())
+            {
+                if (queryCommand.Paging.Offset > 0 && absRowCnt++ < queryCommand.Paging.Offset)
+                    continue;
+
+                l.Add(ee.Current);
+
+                if (queryCommand.Paging.Limit > 0 && ++rowCnt >= queryCommand.Paging.Limit)
+                    break;
+            }
+
+            cacheEntry.LastRowCount = l.Count;
+
+            return l;
         }
-
-        cacheEntry.LastRowCount = l.Count;
-
-        return l;
-
+        throw new NotSupportedException(queryCommand.GetType().Name);
     }
     public Func<Func<TEntity, TResult>> GetMap<TResult, TEntity>(QueryCommand<TResult> queryCommand)
     {
@@ -850,14 +882,16 @@ public partial class InMemoryContext : IDataContext
         return r;
     }
 
-    public class InMemoryCacheEntry<TResult> : CacheEntry
+    public sealed class InMemoryCacheEntry<TResult> : IPreparedQueryCommand
     {
-        public InMemoryCacheEntry(object? compiledQuery, Func<QueryCommand<TResult>, InMemoryCacheEntry<TResult>, object[]?, CancellationToken, IAsyncEnumerator<TResult>> createEnumerator)
-            : base(compiledQuery!)
+        public InMemoryCacheEntry(object compiledQuery, Func<QueryCommand<TResult>, InMemoryCacheEntry<TResult>, object[]?, CancellationToken, IAsyncEnumerator<TResult>> createEnumerator)
         {
             CreateEnumerator = createEnumerator;
+            CompiledQuery = compiledQuery;
         }
         public Func<QueryCommand<TResult>, InMemoryCacheEntry<TResult>, object[]?, CancellationToken, IAsyncEnumerator<TResult>> CreateEnumerator { get; }
+        public object CompiledQuery { get; set; }
+        public bool IsScalar => throw new NotImplementedException();
         public object? Data;
         public IAsyncEnumerator<TResult>? Enumerator;
         public int LastRowCount;
