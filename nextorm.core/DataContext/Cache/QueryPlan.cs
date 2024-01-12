@@ -38,7 +38,7 @@ public sealed class QueryPlan(QueryCommand cmd, string? sql)
     {
         var newCmd = QueryCommand.Clone();
         Debug.Assert(_comparer == newCmd.GetQueryPlanEqualityComparer(), "QueryPlanEqualityComparer must be equals, if not see QueryCommand.CopyTo function");
-        Debug.Assert(_hashPlan == new HashCode().Map(hash =>
+        Debug.Assert(GetHashCode() == new HashCode().Map(hash =>
         {
             hash.Add(newCmd, _comparer);
             hash.Add(_sql);

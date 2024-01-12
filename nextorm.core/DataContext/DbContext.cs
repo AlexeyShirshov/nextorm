@@ -249,7 +249,7 @@ public class DbContext : IDataContext
     //     return compiledQuery;
     // }
 
-    public IPreparedQueryCommand GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, CancellationToken cancellationToken, string? manualSql = null, Func<List<Param>>? makeParams = null)
+    public IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, CancellationToken cancellationToken, string? manualSql = null, Func<List<Param>>? makeParams = null)
     {
         QueryPlan? queryPlan = null;
         IDbCommandHolder? planCache = null;
@@ -769,12 +769,12 @@ public class DbContext : IDataContext
     {
         return v ? "1" : "0";
     }
-    public void Compile<TResult>(string sql, object? @params, QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken)
+    public IPreparedQueryCommand<TResult> Compile<TResult>(string sql, object? @params, QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken)
     {
         if (!queryCommand.IsPrepared)
             queryCommand.PrepareCommand(!storeInCache, cancellationToken);
 
-        queryCommand._compiledQuery = GetPreparedQueryCommand(queryCommand, !nonStreamUsing, storeInCache, cancellationToken, sql, () =>
+        return GetPreparedQueryCommand(queryCommand, !nonStreamUsing, storeInCache, cancellationToken, sql, () =>
         {
             List<Param> ps = new();
             if (@params is not null)
@@ -843,7 +843,7 @@ public class DbContext : IDataContext
         Disposed?.Invoke(this, EventArgs.Empty);
     }
 
-    public IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(IPreparedQueryCommand queryCommand, object[]? @params, CancellationToken cancellationToken)
+    public IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
     {
         //ArgumentNullException.ThrowIfNull(queryCommand);
 
@@ -865,7 +865,7 @@ public class DbContext : IDataContext
     //     await sqlEnumerator.InitReaderAsync(@params, cancellationToken).ConfigureAwait(false);
     //     return sqlEnumerator;
     // }
-    public async Task<List<TResult>> ToListAsync<TResult>(IPreparedQueryCommand queryCommand, object[]? @params, CancellationToken cancellationToken)
+    public async Task<List<TResult>> ToListAsync<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
     {
         ////ArgumentNullException.ThrowIfNull(queryCommand);
 
@@ -890,7 +890,7 @@ public class DbContext : IDataContext
         }
         throw new NotSupportedException(queryCommand.GetType().Name);
     }
-    public List<TResult> ToList<TResult>(IPreparedQueryCommand queryCommand, object[]? @params)
+    public List<TResult> ToList<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[]? @params)
     {
         if (queryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
         {
@@ -928,7 +928,7 @@ public class DbContext : IDataContext
 
     //     return (sqlCommand.ExecuteReader(compiledQuery.Behavior), compiledQuery);
     // }
-    public TResult? ExecuteScalar<TResult>(IPreparedQueryCommand queryCommand, object[]? @params, bool throwIfNull)
+    public TResult? ExecuteScalar<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[]? @params, bool throwIfNull)
     {
         if (queryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
         {
@@ -959,7 +959,7 @@ public class DbContext : IDataContext
         }
         throw new NotSupportedException(queryCommand.GetType().Name);
     }
-    public async Task<TResult?> ExecuteScalar<TResult>(IPreparedQueryCommand queryCommand, object[]? @params, bool throwIfNull, CancellationToken cancellationToken)
+    public async Task<TResult?> ExecuteScalar<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[]? @params, bool throwIfNull, CancellationToken cancellationToken)
     {
         CheckDisposed();
         if (queryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
@@ -1014,7 +1014,7 @@ public class DbContext : IDataContext
 
     //     return (await sqlCommand.ExecuteReaderAsync(compiledQuery.Behavior, cancellationToken).ConfigureAwait(false), compiledQuery);
     // }
-    public IEnumerator<TResult> CreateEnumerator<TResult>(IPreparedQueryCommand queryCommand, object[]? @params)
+    public IEnumerator<TResult> CreateEnumerator<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[]? @params)
     {
         if (queryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
         {
@@ -1107,7 +1107,7 @@ public class DbContext : IDataContext
         //     }
     }
 
-    public TResult First<TResult>(IPreparedQueryCommand queryCommand, object[] @params)
+    public TResult First<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[] @params)
     {
         //ArgumentNullException.ThrowIfNull(queryCommand);
 
@@ -1137,7 +1137,7 @@ public class DbContext : IDataContext
         }
     }
 
-    public async Task<TResult> FirstAsync<TResult>(IPreparedQueryCommand queryCommand, object[] @params, CancellationToken cancellationToken)
+    public async Task<TResult> FirstAsync<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
     {
         //ArgumentNullException.ThrowIfNull(queryCommand);
 
@@ -1166,7 +1166,7 @@ public class DbContext : IDataContext
             throw new NotSupportedException(queryCommand.GetType().Name);
         }
     }
-    public TResult? FirstOrDefault<TResult>(IPreparedQueryCommand queryCommand, object[] @params)
+    public TResult? FirstOrDefault<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[] @params)
     {
         if (queryCommand.IsScalar)
         {
@@ -1195,7 +1195,7 @@ public class DbContext : IDataContext
         }
     }
 
-    public async Task<TResult?> FirstOrDefaultAsync<TResult>(IPreparedQueryCommand queryCommand, object[] @params, CancellationToken cancellationToken)
+    public async Task<TResult?> FirstOrDefaultAsync<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
     {
         //ArgumentNullException.ThrowIfNull(queryCommand);
 
@@ -1225,7 +1225,7 @@ public class DbContext : IDataContext
         }
     }
 
-    public TResult Single<TResult>(IPreparedQueryCommand queryCommand, object[] @params)
+    public TResult Single<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[] @params)
     {
         if (queryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
         {
@@ -1255,7 +1255,7 @@ public class DbContext : IDataContext
         throw new NotSupportedException(queryCommand.GetType().Name);
     }
 
-    public async Task<TResult> SingleAsync<TResult>(IPreparedQueryCommand queryCommand, object[] @params, CancellationToken cancellationToken)
+    public async Task<TResult> SingleAsync<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
     {
         if (queryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
         {
@@ -1285,7 +1285,7 @@ public class DbContext : IDataContext
         throw new NotSupportedException(queryCommand.GetType().Name);
     }
 
-    public TResult? SingleOrDefault<TResult>(IPreparedQueryCommand queryCommand, object[] @params)
+    public TResult? SingleOrDefault<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[] @params)
     {
         if (queryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
         {
@@ -1313,7 +1313,7 @@ public class DbContext : IDataContext
         throw new NotSupportedException(queryCommand.GetType().Name);
     }
 
-    public async Task<TResult?> SingleOrDefaultAsync<TResult>(IPreparedQueryCommand queryCommand, object[] @params, CancellationToken cancellationToken)
+    public async Task<TResult?> SingleOrDefaultAsync<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
     {
         if (queryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
         {
@@ -1339,7 +1339,6 @@ public class DbContext : IDataContext
         }
         throw new NotSupportedException(queryCommand.GetType().Name);
     }
-
     // class EmptyEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerator<TResult>
     // {
     //     public TResult Current => default;

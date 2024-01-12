@@ -9,8 +9,8 @@ namespace nextorm.benchmark;
 public class InMemoryBenchmarkAny
 {
     private readonly InMemoryDataRepository _ctx;
-    private readonly QueryCommand<bool> _cmd;
-    private readonly QueryCommand<bool> _cmdToList;
+    private readonly IPreparedQueryCommand<bool> _cmd;
+    private readonly IPreparedQueryCommand<bool> _cmdToList;
     private readonly IEnumerable<SimpleEntity> _data;
     public InMemoryBenchmarkAny()
     {
@@ -29,7 +29,7 @@ public class InMemoryBenchmarkAny
     [Benchmark()]
     public void NextormCompiled()
     {
-        _cmd.Any();
+        _ctx.DataProvider.Any(_cmd, null);
     }
     [Benchmark()]
     public void NextormCached()

@@ -380,7 +380,8 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
     }
     bool Any<TResult>(QueryCommand cmd)
     {
-        var ee = (IEnumerable<TResult>)_dataProvider.CreateEnumerator((QueryCommand<TResult>)cmd, null);
+        var preparedCommand = _dataProvider.GetPreparedQueryCommand((QueryCommand<TResult>)cmd, false, true, CancellationToken.None);
+        var ee = (IEnumerable<TResult>)_dataProvider.CreateEnumerator<TResult>(preparedCommand, null);
         return ee.Any();
     }
 }

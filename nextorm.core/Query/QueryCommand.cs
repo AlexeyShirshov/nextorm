@@ -13,16 +13,16 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     private List<QueryCommand>? _referencedQueries;
     private readonly List<JoinExpression> _joins;
     protected List<SelectExpression>? _selectList;
-    private int _columnsHash;
-    private int _joinHash;
-    private int _sortingHash;
-    private int _whereHash;
+    // private int _columnsHash;
+    // private int _joinHash;
+    // private int _sortingHash;
+    // private int _whereHash;
     protected FromExpression? _from;
     protected IDataContext _dataProvider;
     protected readonly LambdaExpression _exp;
     protected readonly Expression? _condition;
     protected bool _isPrepared;
-    protected int? _hash;
+    // protected int? _hash;
     // #if PLAN_CACHE
     //     internal int? _hashPlan;
     // #endif
@@ -101,7 +101,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         _selectList = null;
         _srcType = null;
         _from = null;
-        _hash = null;
+        // _hash = null;
 
         _dataProvider.ResetPreparation(this);
     }
@@ -133,12 +133,12 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
 
         _isPrepared = true;
         _selectList = selectList ?? [];
-        _columnsHash = columnsHash;
+        // _columnsHash = columnsHash;
         _srcType = srcType;
         _from = from;
-        _joinHash = joinHash;
-        _sortingHash = sortingHash;
-        _whereHash = whereHash;
+        // _joinHash = joinHash;
+        // _sortingHash = sortingHash;
+        // _whereHash = whereHash;
 
         ColumnsPlanHash = columnsPlanHash;
         JoinPlanHash = joinPlanHash;
@@ -203,7 +203,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
 
                     if (!_dontCache && !noHash) unchecked
                         {
-                            columnsHash = columnsHash * 13 + selExp.HashCode;
+                            //columnsHash = columnsHash * 13 + selExp.HashCode;
 
                             //comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
                             columnsPlanHash = columnsPlanHash * 13 + selExp.PlanHashCode;
@@ -253,8 +253,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
 
                 if (!_dontCache && !noHash) unchecked
                     {
-
-                        columnsHash = columnsHash * 13 + selExp.HashCode;
+                        //columnsHash = columnsHash * 13 + selExp.HashCode;
                         //comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
                         columnsPlanHash = columnsPlanHash * 13 + selExp.PlanHashCode;
                     }
@@ -295,7 +294,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
 
                             if (!_dontCache && !noHash) unchecked
                                 {
-                                    columnsHash = columnsHash * 13 + selExp.HashCode;
+                                    //columnsHash = columnsHash * 13 + selExp.HashCode;
                                     //comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
                                     columnsPlanHash = columnsPlanHash * 13 + selExp.PlanHashCode;
                                 }
@@ -314,7 +313,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
                         {
                             var selExp = selectList[i];
 
-                            columnsHash = columnsHash * 13 + selExp.HashCode;
+                            //columnsHash = columnsHash * 13 + selExp.HashCode;
                             //comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
                             columnsPlanHash = columnsPlanHash * 13 + selExp.PlanHashCode;
                         }
@@ -343,7 +342,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
                 if (!_dontCache && !noHash) unchecked
                     {
                         //comparer ??= new JoinExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
-                        joinHash = joinHash * 13 + join.GetHashCode();
+                        //joinHash = joinHash * 13 + join.GetHashCode();
                         joinPlanHash = joinPlanHash * 13 + GetJoinExpressionPlanEqualityComparer().GetHashCode(join);
                     }
             }
@@ -373,9 +372,9 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
 
                 if (!_dontCache && !noHash) unchecked
                     {
-                        sortingHash = sortingHash * 13 + (int)sort.Direction;
-                        //comp ??= new PreciseExpressionEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger);
-                        sortingHash = sortingHash * 13 + GetPreciseExpressionEqualityComparer().GetHashCode(sort.PreparedExpression);
+                        // sortingHash = sortingHash * 13 + (int)sort.Direction;
+                        // //comp ??= new PreciseExpressionEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger);
+                        // sortingHash = sortingHash * 13 + GetPreciseExpressionEqualityComparer().GetHashCode(sort.PreparedExpression);
 
                         //compPlan ??= new ExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger);
                         sortingPlanHash = sortingPlanHash * 13 + GetSortingExpressionPlanEqualityComparer().GetHashCodeRef(in sort);
@@ -400,7 +399,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
             if (!_dontCache && !noHash) unchecked
                 {
                     //comp ??= new PreciseExpressionEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger);
-                    whereHash = whereHash * 13 + GetPreciseExpressionEqualityComparer().GetHashCode(PreparedCondition);
+                    //whereHash = whereHash * 13 + GetPreciseExpressionEqualityComparer().GetHashCode(PreparedCondition);
 
                     //compPlan ??= new ExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger);
                     wherePlanHash = wherePlanHash * 13 + GetExpressionPlanEqualityComparer().GetHashCode(PreparedCondition);
@@ -445,38 +444,40 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Minor Bug", "S2328:\"GetHashCode\" should not reference mutable fields", Justification = "<Pending>")]
     public override int GetHashCode()
     {
-        if (_hash.HasValue)
-            return _hash.Value;
+        throw new NotSupportedException();
 
-        if (!_isPrepared)
-            PrepareCommand(false, CancellationToken.None);
+        // if (_hash.HasValue)
+        //     return _hash.Value;
 
-        unchecked
-        {
-            HashCode hash = new();
-            if (_from is not null)
-                hash.Add(_from);
+        // if (!_isPrepared)
+        //     PrepareCommand(false, CancellationToken.None);
 
-            if (_srcType is not null)
-                hash.Add(_srcType);
+        // unchecked
+        // {
+        //     HashCode hash = new();
+        //     if (_from is not null)
+        //         hash.Add(_from);
 
-            hash.Add(_whereHash);
+        //     if (_srcType is not null)
+        //         hash.Add(_srcType);
 
-            hash.Add(_columnsHash);
+        //     hash.Add(_whereHash);
 
-            hash.Add(_joinHash);
+        //     hash.Add(_columnsHash);
 
-            hash.Add(_sortingHash);
+        //     hash.Add(_joinHash);
 
-            hash.Add(Paging.Limit);
-            hash.Add(Paging.Offset);
+        //     hash.Add(_sortingHash);
 
-            _hash = hash.ToHashCode();
+        //     hash.Add(Paging.Limit);
+        //     hash.Add(Paging.Offset);
 
-            //Console.WriteLine(_hash);
+        //     _hash = hash.ToHashCode();
 
-            return _hash.Value;
-        }
+        //     //Console.WriteLine(_hash);
+
+        //     return _hash.Value;
+        // }
     }
     public override bool Equals(object? obj)
     {
@@ -484,6 +485,8 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     }
     public bool Equals(QueryCommand? cmd)
     {
+        throw new NotSupportedException();
+
         if (cmd is null) return false;
 
         if (!_isPrepared)
@@ -595,14 +598,14 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     protected virtual void CopyTo(QueryCommand dst)
     {
         dst._selectList = _selectList;
-        dst._columnsHash = _columnsHash;
-        dst._joinHash = _joinHash;
-        dst._sortingHash = _sortingHash;
+        // dst._columnsHash = _columnsHash;
+        // dst._joinHash = _joinHash;
+        // dst._sortingHash = _sortingHash;
         dst._from = _from;
         dst._isPrepared = _isPrepared;
         dst._srcType = _srcType;
         dst._dontCache = _dontCache;
-        dst._hash = _hash;
+        // dst._hash = _hash;
         dst.ColumnsPlanHash = ColumnsPlanHash;
         dst.JoinPlanHash = JoinPlanHash;
         dst.WherePlanHash = WherePlanHash;
@@ -669,17 +672,15 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
     //internal CompiledQuery<TResult>? Compiled => CacheEntry?.CompiledQuery as CompiledQuery<TResult>;
     public PreparedQueryCommand<TResult, TRecord>? GetCompiledQuery<TRecord>() => _compiledQuery as PreparedQueryCommand<TResult, TRecord>;
     public bool SingleRow { get; set; }
-    public QueryCommand<TResult> FromSql(string sql, CancellationToken cancellationToken = default) => Compile(sql, null, true, true, cancellationToken);
-    public QueryCommand<TResult> FromSql(string sql, object? @params, CancellationToken cancellationToken = default) => Compile(sql, @params, true, true, cancellationToken);
-    public QueryCommand<TResult> Compile(string sql, CancellationToken cancellationToken = default) => Compile(sql, null, true, cancellationToken);
-    public QueryCommand<TResult> Compile(string sql, object? @params, CancellationToken cancellationToken = default) => Compile(sql, @params, true, cancellationToken);
-    public QueryCommand<TResult> Compile(string sql, bool nonStreamUsing, CancellationToken cancellationToken = default) => Compile(sql, null, nonStreamUsing, cancellationToken);
-    public QueryCommand<TResult> Compile(string sql, object? @params, bool nonStreamUsing, CancellationToken cancellationToken = default) => Compile(sql, @params, nonStreamUsing, true, cancellationToken);
-    public QueryCommand<TResult> Compile(string sql, object? @params, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken = default)
+    public IPreparedQueryCommand<TResult> FromSql(string sql, CancellationToken cancellationToken = default) => Compile(sql, null, true, true, cancellationToken);
+    public IPreparedQueryCommand<TResult> FromSql(string sql, object? @params, CancellationToken cancellationToken = default) => Compile(sql, @params, true, true, cancellationToken);
+    public IPreparedQueryCommand<TResult> Compile(string sql, CancellationToken cancellationToken = default) => Compile(sql, null, true, cancellationToken);
+    public IPreparedQueryCommand<TResult> Compile(string sql, object? @params, CancellationToken cancellationToken = default) => Compile(sql, @params, true, cancellationToken);
+    public IPreparedQueryCommand<TResult> Compile(string sql, bool nonStreamUsing, CancellationToken cancellationToken = default) => Compile(sql, null, nonStreamUsing, cancellationToken);
+    public IPreparedQueryCommand<TResult> Compile(string sql, object? @params, bool nonStreamUsing, CancellationToken cancellationToken = default) => Compile(sql, @params, nonStreamUsing, true, cancellationToken);
+    public IPreparedQueryCommand<TResult> Compile(string sql, object? @params, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken = default)
     {
-        _dataProvider.Compile(sql, @params, this, nonStreamUsing, storeInCache, cancellationToken);
-
-        return this;
+        return _dataProvider.Compile(sql, @params, this, nonStreamUsing, storeInCache, cancellationToken);
     }
     /// <summary>
     /// 
@@ -687,12 +688,10 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
     /// <param name="nonStreamUsing">true, if optimized for buffered or scalar value results; false for non-buffered (stream) using, when result is IEnumerable or IAsyncEnumerable</param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    // public QueryCommand<TResult> Compile(bool nonStreamUsing = true, CancellationToken cancellationToken = default)
-    // {
-    //     _dataProvider.Compile(this, nonStreamUsing, false, cancellationToken);
-
-    //     return this;
-    // }
+    public IPreparedQueryCommand<TResult> Compile(bool nonStreamUsing = true, CancellationToken cancellationToken = default)
+    {
+        return _dataProvider.GetPreparedQueryCommand(this, !nonStreamUsing, false, cancellationToken);
+    }
     public IAsyncEnumerator<TResult> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
         var preparedCommand = _dataProvider.GetPreparedQueryCommand(this, true, true, cancellationToken);
@@ -734,62 +733,24 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
 
         await t.ConfigureAwait(false);
     }
-    public IAsyncEnumerable<TResult> AsAsyncEnumerable(params object[] @params) => AsAsyncEnumerable(CancellationToken.None, @params);
-    public IAsyncEnumerable<TResult> AsAsyncEnumerable(CancellationToken cancellationToken, params object[] @params)
-    {
-        var preparedCommand = _dataProvider.GetPreparedQueryCommand(this, true, true, cancellationToken);
-        var asyncEnumerator = _dataProvider.CreateAsyncEnumerator<TResult>(preparedCommand, @params, cancellationToken);
-
-        if (asyncEnumerator is IAsyncEnumerable<TResult> asyncEnumerable)
-            return asyncEnumerable;
-
-        return Iterate();
-
-        async IAsyncEnumerable<TResult> Iterate()
-        {
-            await using (asyncEnumerator)
-            {
-                while (await asyncEnumerator.MoveNextAsync().ConfigureAwait(false))
-                    yield return asyncEnumerator.Current;
-            }
-        }
-    }
-    public IEnumerable<TResult> AsEnumerable(params object[] @params)
-    {
-        var preparedCommand = _dataProvider.GetPreparedQueryCommand(this, true, true, CancellationToken.None);
-
-        return (IEnumerable<TResult>)_dataProvider.CreateEnumerator<TResult>(preparedCommand, @params);
-    }
-    public Task<IEnumerable<TResult>> AsEnumerableAsync(params object[] @params) => AsEnumerableAsync(CancellationToken.None, @params);
-    public async Task<IEnumerable<TResult>> AsEnumerableAsync(CancellationToken cancellationToken, params object[] @params)
-    {
-        var preparedCommand = _dataProvider.GetPreparedQueryCommand(this, true, true, cancellationToken);
-        var enumerator = _dataProvider.CreateAsyncEnumerator<TResult>(preparedCommand, @params, cancellationToken);
-
-        if (enumerator is IAsyncInit<TResult> rr)
-        {
-            await rr.InitReaderAsync(@params, cancellationToken);
-            return new InternalEnumerable(rr);
-        }
-
-        if (enumerator is IEnumerable<TResult> ee)
-            return ee;
-
-        throw new NotImplementedException();
-    }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public IAsyncEnumerable<TResult> AsAsyncEnumerable(params object[] @params) => _dataProvider.AsAsyncEnumerable<TResult>(_dataProvider.GetPreparedQueryCommand(this, true, true, CancellationToken.None), CancellationToken.None, @params);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public IAsyncEnumerable<TResult> AsAsyncEnumerable(CancellationToken cancellationToken, params object[] @params) => _dataProvider.AsAsyncEnumerable<TResult>(_dataProvider.GetPreparedQueryCommand(this, true, true, cancellationToken), cancellationToken, @params);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public IEnumerable<TResult> AsEnumerable(params object[] @params) => _dataProvider.AsEnumerable(_dataProvider.GetPreparedQueryCommand(this, true, true, CancellationToken.None), @params);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Task<IEnumerable<TResult>> AsEnumerableAsync(params object[] @params) => _dataProvider.AsEnumerableAsync<TResult>(_dataProvider.GetPreparedQueryCommand(this, true, true, CancellationToken.None), CancellationToken.None, @params);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Task<IEnumerable<TResult>> AsEnumerableAsync(CancellationToken cancellationToken, params object[] @params) => _dataProvider.AsEnumerableAsync<TResult>(_dataProvider.GetPreparedQueryCommand(this, true, true, cancellationToken), cancellationToken, @params);
     public List<TResult> ToList(params object[] @params)
     {
         var preparedCommand = _dataProvider.GetPreparedQueryCommand(this, false, true, CancellationToken.None);
 
         return _dataProvider.ToList<TResult>(preparedCommand, @params);
     }
-    public Task<List<TResult>> ToListAsync(params object[] @params) => ToListAsync(CancellationToken.None, @params);
-    public Task<List<TResult>> ToListAsync(CancellationToken cancellationToken, params object[] @params)
-    {
-        var preparedCommand = _dataProvider.GetPreparedQueryCommand(this, false, true, cancellationToken);
-
-        return _dataProvider.ToListAsync<TResult>(preparedCommand, @params, cancellationToken);
-    }
+    public Task<List<TResult>> ToListAsync(params object[] @params) => _dataProvider.ToListAsync(_dataProvider.GetPreparedQueryCommand(this, false, true, CancellationToken.None), @params, CancellationToken.None);
+    public Task<List<TResult>> ToListAsync(CancellationToken cancellationToken, params object[] @params) => _dataProvider.ToListAsync(_dataProvider.GetPreparedQueryCommand(this, false, true, cancellationToken), @params, cancellationToken);
     public bool Any(params object[] @params)
     {
         bool oldIgnoreColumns = IgnoreColumns;
@@ -1024,14 +985,4 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
     //         dst.CacheEntry = CacheEntry;
     //     }
     // }
-    class InternalEnumerable : IEnumerable<TResult>
-    {
-        private readonly IEnumerator<TResult> _enumerator;
-        public InternalEnumerable(IEnumerator<TResult> enumerator)
-        {
-            _enumerator = enumerator;
-        }
-        IEnumerator<TResult> IEnumerable<TResult>.GetEnumerator() => _enumerator;
-        IEnumerator IEnumerable.GetEnumerator() => _enumerator;
-    }
 }

@@ -2,7 +2,7 @@
 <html lang='en'>
 <head>
 <meta charset='utf-8' />
-<title>nextorm.benchmark.SqliteBenchmarkIteration-20240110-211614</title>
+<title>nextorm.benchmark.SqliteBenchmarkIteration-20240112-124037</title>
 
 <style type="text/css">
 	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
@@ -13,7 +13,7 @@
 </head>
 <body>
 <pre><code>
-BenchmarkDotNet v0.13.10, Windows 11 (10.0.22621.2861/22H2/2022Update/SunValley2)
+BenchmarkDotNet v0.13.10, Windows 11 (10.0.22621.3007/22H2/2022Update/SunValley2)
 Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical cores
 .NET SDK 8.0.101
   [Host]   : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX2
@@ -23,11 +23,14 @@ Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical 
 </code></pre>
 
 <table>
-<thead><tr><th>Method         </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Gen0</th><th>Allocated</th>
+<thead><tr><th>Method         </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Gen0</th><th>Gen1</th><th>Allocated</th>
 </tr>
-</thead><tbody><tr><td>NextormCompiledStream</td><td>35.33 &mu;s</td><td>0.702 &mu;s</td><td>0.937 &mu;s</td><td>0.3052</td><td>1.46 KB</td>
-</tr><tr><td>NextormCompiledToList</td><td>41.57 &mu;s</td><td>0.580 &mu;s</td><td>0.514 &mu;s</td><td>0.3662</td><td>1.73 KB</td>
-</tr><tr><td>NextormCachedToList</td><td>43.79 &mu;s</td><td>0.290 &mu;s</td><td>0.272 &mu;s</td><td>0.6104</td><td>2.98 KB</td>
+</thead><tbody><tr><td>NextormCompiledToList</td><td>32.68 &mu;s</td><td>0.463 &mu;s</td><td>0.433 &mu;s</td><td>0.3052</td><td>-</td><td>1.66 KB</td>
+</tr><tr><td>NextormCompiledStream</td><td>33.24 &mu;s</td><td>0.349 &mu;s</td><td>0.310 &mu;s</td><td>0.3052</td><td>-</td><td>1.48 KB</td>
+</tr><tr><td>NextormCachedToList</td><td>35.71 &mu;s</td><td>0.437 &mu;s</td><td>0.388 &mu;s</td><td>0.6104</td><td>-</td><td>2.91 KB</td>
+</tr><tr><td>DapperUnbuffered</td><td>44.68 &mu;s</td><td>0.608 &mu;s</td><td>0.569 &mu;s</td><td>0.3662</td><td>-</td><td>1.8 KB</td>
+</tr><tr><td>Dapper</td><td>47.17 &mu;s</td><td>0.529 &mu;s</td><td>0.495 &mu;s</td><td>0.3662</td><td>-</td><td>1.88 KB</td>
+</tr><tr><td>EFCoreCompiled</td><td>57.19 &mu;s</td><td>0.867 &mu;s</td><td>0.769 &mu;s</td><td>1.5259</td><td>0.4883</td><td>7.19 KB</td>
 </tr></tbody></table>
 </body>
 </html>

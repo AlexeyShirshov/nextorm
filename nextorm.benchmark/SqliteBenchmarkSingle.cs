@@ -15,8 +15,9 @@ namespace nextorm.benchmark;
 [Config(typeof(NextormConfig))]
 public class SqliteBenchmarkSingle
 {
+    private readonly IDataContext _db;
     private readonly TestDataRepository _ctx;
-    private readonly QueryCommand<int> _cmd;
+    private readonly IPreparedQueryCommand<int> _cmd;
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
     private readonly Func<EFDataContext, Task<int>> _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.SimpleEntities.Where(it => it.Id == 1).Select(it => it.Id).Single());
@@ -33,8 +34,9 @@ public class SqliteBenchmarkSingle
             builder.UseLoggerFactory(_logFactory);
             builder.LogSensitiveData(true);
         }
-        _ctx = new TestDataRepository(builder.CreateDbContext());
-        _ctx.DbContext.EnsureConnectionOpen();
+        _db = builder.CreateDbContext();
+        _ctx = new TestDataRepository(_db);
+        _db.EnsureConnectionOpen();
 
         _cmd = _ctx.SimpleEntity.Where(it => it.Id == 1).SingleOrSingleOrDefaultCommand(it => it.Id).Compile(true);
 
@@ -55,12 +57,12 @@ public class SqliteBenchmarkSingle
     [Benchmark(Baseline = true)]
     public async Task NextormSingleCompiled()
     {
-        await _cmd.SingleAsync();
+        await _db.SingleAsync(_cmd);
     }
     [Benchmark()]
     public async Task NextormSingleOrDefaultCompiled()
     {
-        await _cmd.SingleOrDefaultAsync();
+        await _db.SingleOrDefaultAsync(_cmd);
     }
     [Benchmark()]
     public async Task NextormSingleCached()

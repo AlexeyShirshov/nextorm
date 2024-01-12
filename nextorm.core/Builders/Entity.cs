@@ -173,8 +173,8 @@ public class Entity<TEntity> : BaseEntity, IAsyncEnumerable<TEntity>, ICloneable
         var cmd = ToCommand();
         cmd.IgnoreColumns = true;
         var queryCommand = GetAnyCommand(_dataProvider, cmd);
-
-        return _dataProvider.ExecuteScalar(queryCommand, @params, true);
+        var preparedCommand = _dataProvider.GetPreparedQueryCommand(queryCommand, false, true, CancellationToken.None);
+        return _dataProvider.ExecuteScalar<bool>(preparedCommand, @params, true);
     }
     public List<TEntity> ToList(params object[] @params)
     {
@@ -285,8 +285,8 @@ public class Entity<TEntity> : BaseEntity, IAsyncEnumerable<TEntity>, ICloneable
         var cmd = ToCommand();
         cmd.IgnoreColumns = true;
         var queryCommand = GetAnyCommand(_dataProvider, cmd);
-
-        return await _dataProvider.ExecuteScalar(queryCommand, @params, true, cancellationToken).ConfigureAwait(false);
+        var preparedCommand = _dataProvider.GetPreparedQueryCommand(queryCommand, false, true, cancellationToken);
+        return await _dataProvider.ExecuteScalar<bool>(preparedCommand, @params, true, cancellationToken).ConfigureAwait(false);
     }
     public Entity<TEntity> OrderBy(Expression<Func<TEntity, object?>> orderExp, OrderDirection direction)
     {

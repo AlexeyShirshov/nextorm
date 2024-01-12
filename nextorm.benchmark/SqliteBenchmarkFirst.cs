@@ -15,9 +15,10 @@ namespace nextorm.benchmark;
 [Config(typeof(NextormConfig))]
 public class SqliteBenchmarkFirst
 {
+    private readonly IDataContext _db;
     private readonly TestDataRepository _ctx;
-    private readonly QueryCommand<int> _cmd;
-    private readonly QueryCommand<LargeEntity?> _cmdEntCompiled;
+    private readonly IPreparedQueryCommand<int> _cmd;
+    private readonly IPreparedQueryCommand<LargeEntity?> _cmdEntCompiled;
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
     private readonly Func<EFDataContext, Task<int>> _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.SimpleEntities.Select(it => it.Id).First());
@@ -35,8 +36,9 @@ public class SqliteBenchmarkFirst
             builder.UseLoggerFactory(_logFactory);
             builder.LogSensitiveData(true);
         }
-        _ctx = new TestDataRepository(builder.CreateDbContext());
-        _ctx.DbContext.EnsureConnectionOpen();
+        _db = builder.CreateDbContext();
+        _ctx = new TestDataRepository(_db);
+        _db.EnsureConnectionOpen();
 
         _cmd = _ctx.SimpleEntity.FirstOrFirstOrDefaultCommand(it => it.Id).Compile(true);
         _cmdEntCompiled = _ctx.LargeEntity.Where(it => it.Id == NORM.Param<int>(0)).FirstOrFirstOrDefaultCommand().Compile(true);
@@ -64,7 +66,7 @@ public class SqliteBenchmarkFirst
     public async Task NextormLargeFirstCompiled()
     {
         for (int i = 0; i < 10; i++)
-            await _cmdEntCompiled.FirstOrDefaultAsync(i);
+            await _db.FirstOrDefaultAsync(_cmdEntCompiled, i);
     }
     // [Benchmark()]
     // public async Task NextormFirstOrDefaultCompiled()

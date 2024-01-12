@@ -9,9 +9,11 @@ namespace nextorm.benchmark;
 public class InMemoryBenchmarkIteration
 {
     private readonly InMemoryDataRepository _ctx;
-    private readonly QueryCommand<Tuple<int>> _cmd;
-    private readonly QueryCommand<Tuple<int>> _cmdToList;
+    private readonly IPreparedQueryCommand<Tuple<int>> _cmd;
+    private readonly IPreparedQueryCommand<Tuple<int>> _cmdToList;
     private readonly IEnumerable<SimpleEntity> _data;
+    private readonly IDataContext _provider;
+
     public InMemoryBenchmarkIteration()
     {
         var data = new List<SimpleEntity>(10_000);
@@ -19,8 +21,8 @@ public class InMemoryBenchmarkIteration
             data.Add(new SimpleEntity { Id = 1 });
         _data = data;
 
-        var provider = new InMemoryContext();
-        _ctx = new InMemoryDataRepository(provider);
+        _provider = new InMemoryContext();
+        _ctx = new InMemoryDataRepository(_provider);
         _ctx.SimpleEntity.WithData(_data);
 
         _cmd = _ctx.SimpleEntity.Select(entity => new Tuple<int>(entity.Id)).Compile(false);
@@ -36,14 +38,14 @@ public class InMemoryBenchmarkIteration
     [Benchmark()]
     public void NextormCompiledSync()
     {
-        foreach (var row in _cmd.AsEnumerable())
+        foreach (var row in _provider.AsEnumerable(_cmd))
         {
         }
     }
     [Benchmark()]
     public void NextormCompiledSyncToList()
     {
-        foreach (var row in _cmdToList.ToList())
+        foreach (var row in _provider.ToList(_cmdToList))
         {
         }
     }

@@ -24,9 +24,10 @@ namespace nextorm.benchmark;
 [Config(typeof(NextormConfig))]
 public class SqliteBenchmarkLargeIteration
 {
+    private readonly IDataContext _db;
     private readonly TestDataRepository _ctx;
-    private readonly QueryCommand<TupleLargeEntity> _cmdExec;
-    private readonly QueryCommand<LargeEntity> _cmdToList;
+    private readonly IPreparedQueryCommand<TupleLargeEntity> _cmdExec;
+    private readonly IPreparedQueryCommand<LargeEntity> _cmdToList;
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
     private readonly SqliteCommand _adoCmd;
@@ -42,8 +43,9 @@ public class SqliteBenchmarkLargeIteration
             builder.UseLoggerFactory(_logFactory);
             builder.LogSensitiveData(true);
         }
-        _ctx = new TestDataRepository(builder.CreateDbContext());
-        _ctx.DbContext.EnsureConnectionOpen();
+        _db = builder.CreateDbContext();
+        _ctx = new TestDataRepository(_db);
+        _db.EnsureConnectionOpen();
 
         _cmdExec = _ctx.LargeEntity.Select(entity => new TupleLargeEntity(entity.Id, entity.Str, entity.Dt)).Compile(false);
 
@@ -84,7 +86,7 @@ public class SqliteBenchmarkLargeIteration
     //[BenchmarkCategory("Stream")]
     public async Task NextormCompiled()
     {
-        foreach (var row in await _cmdExec.AsEnumerableAsync())
+        foreach (var row in await _db.AsEnumerableAsync(_cmdExec))
         {
         }
     }
@@ -92,7 +94,7 @@ public class SqliteBenchmarkLargeIteration
     //[BenchmarkCategory("Buffered")]
     public async Task NextormCompiledToList()
     {
-        foreach (var row in await _cmdToList.ToListAsync())
+        foreach (var row in await _db.ToListAsync(_cmdToList))
         {
         }
     }
@@ -213,7 +215,7 @@ public class SqliteBenchmarkLargeIteration
         using var reader = await _adoCmd.ExecuteReaderAsync(CommandBehavior.SingleResult);
         var l = new List<LargeEntity>();
         //var buf = new object[3];
-        var cq = _cmdToList.GetCompiledQuery();
+        var cq = _cmdToList as DbPreparedQueryCommand<LargeEntity>;
         while (reader.Read())
         {
             var o = cq!.MapDelegate!(reader);

@@ -42,9 +42,9 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand>
 
         if (x.Paging.Limit != y.Paging.Limit || x.Paging.Offset != y.Paging.Offset) return false;
 
-        if (!_expComparer.Equals(x.PreparedCondition, y.PreparedCondition)) return false;
-
         if (!_selectComparer.Equals(x.SelectList, y.SelectList)) return false;
+
+        if (!_expComparer.Equals(x.PreparedCondition, y.PreparedCondition)) return false;
 
         // if (x.SelectList is null && y.SelectList is not null) return false;
         // if (x.SelectList is not null && y.SelectList is null) return false;

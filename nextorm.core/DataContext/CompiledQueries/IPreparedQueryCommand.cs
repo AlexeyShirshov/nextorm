@@ -1,6 +1,6 @@
 namespace nextorm.core;
 
-public interface IPreparedQueryCommand
+public interface IPreparedQueryCommand<TResult>
 {
     bool IsScalar { get; }
 }

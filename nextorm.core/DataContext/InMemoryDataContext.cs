@@ -8,7 +8,7 @@ namespace nextorm.core;
 
 public partial class InMemoryContext : IDataContext
 {
-    private readonly static MethodInfo miCreateAsyncEnumerator = typeof(InMemoryContext).GetMethod(nameof(CreateAsyncEnumerator), BindingFlags.Public | BindingFlags.Instance)!;
+    private readonly static MethodInfo miCreateAsyncEnumerator = typeof(InMemoryContext).GetMethod(nameof(CreateAsyncEnumerator), BindingFlags.NonPublic | BindingFlags.Instance)!;
     private readonly static MethodInfo miCreateEnumeratorAdapter = typeof(InMemoryContext).GetMethod(nameof(CreateEnumeratorAdapter), BindingFlags.NonPublic | BindingFlags.Instance)!;
     private readonly static MethodInfo miCreateEnumerator = typeof(InMemoryContext).GetMethod(nameof(CreateEnumerator), BindingFlags.NonPublic | BindingFlags.Instance)!;
     private readonly static MethodInfo miLoopJoin = typeof(InMemoryContext).GetMethod(nameof(LoopJoin), BindingFlags.NonPublic | BindingFlags.Instance)!;
@@ -19,7 +19,7 @@ public partial class InMemoryContext : IDataContext
     private readonly IDictionary<ExpressionKey, Delegate> _expCache = new ExpressionCache<Delegate>();
     private readonly IDictionary<Type, object?> _data = new Dictionary<Type, object?>();
     private bool _disposedValue;
-    private readonly IDictionary<QueryPlan, IPreparedQueryCommand> _cmdIdx = new Dictionary<QueryPlan, IPreparedQueryCommand>();
+    private readonly IDictionary<QueryPlan, object> _cmdIdx = new Dictionary<QueryPlan, object>();
     public InMemoryContext()
     {
         _data[typeof(TableAlias)] = new TableAlias?[] { null };
@@ -39,28 +39,21 @@ public partial class InMemoryContext : IDataContext
     public ILogger? ResultSetEnumeratorLogger { get; }
     public void EnsureConnectionOpen() { }
     public Task EnsureConnectionOpenAsync() => Task.CompletedTask;
-    public IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
-    {
-        //ArgumentNullException.ThrowIfNull(queryCommand);
-        var cacheEntry = GetCacheEntry(queryCommand, cancellationToken);
-
-        return cacheEntry.CreateEnumerator(queryCommand, cacheEntry, @params, cancellationToken)!;
-    }
     private InMemoryCacheEntry<TResult> GetCacheEntry<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
     {
         return (InMemoryCacheEntry<TResult>)GetPreparedQueryCommand(queryCommand, false, true, cancellationToken);
     }
-    public IPreparedQueryCommand GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, CancellationToken cancellationToken, string? manualSql = null, Func<List<Param>>? makeParams = null)
+    public IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, CancellationToken cancellationToken, string? manualSql = null, Func<List<Param>>? makeParams = null)
     {
         QueryPlan? queryPlan = null;
-        IPreparedQueryCommand? planCache = null;
+        IPreparedQueryCommand<TResult>? planCache = null;
 
         if (!queryCommand.IsPrepared) queryCommand.PrepareCommand(false, cancellationToken);
 
         if (queryCommand.Cache && storeInCache)
         {
             queryPlan = new QueryPlan(queryCommand, manualSql);
-            _cmdIdx.TryGetValue(queryPlan, out planCache);
+            if (_cmdIdx.TryGetValue(queryPlan, out var planCache2)) planCache = planCache2 as IPreparedQueryCommand<TResult>;
         }
 
         if (planCache is null)
@@ -82,7 +75,7 @@ public partial class InMemoryContext : IDataContext
             else
                 createCompiledQueryDelegate = (Func<QueryCommand<TResult>, object>)del;
 
-            var ce = new InMemoryCacheEntry<TResult>(createCompiledQueryDelegate(queryCommand), CreateEnumeratorDelegate(queryCommand, cancellationToken));
+            var ce = new InMemoryCacheEntry<TResult>(createCompiledQueryDelegate(queryCommand), CreateEnumeratorDelegate(queryCommand, cancellationToken), queryCommand);
             queryCommand._compiledQuery = ce;
             ce.Enumerator = ce.CreateEnumerator(queryCommand, ce, null, cancellationToken)!;
 
@@ -95,7 +88,6 @@ public partial class InMemoryContext : IDataContext
 
         return planCache!;
     }
-
     protected Func<QueryCommand<TResult>, InMemoryCacheEntry<TResult>, object[]?, CancellationToken, IAsyncEnumerator<TResult>> CreateEnumeratorDelegate<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
     {
         if (queryCommand.From is not null)
@@ -484,7 +476,7 @@ public partial class InMemoryContext : IDataContext
         Dispose(disposing: true);
         GC.SuppressFinalize(this);
     }
-    public void Compile<TResult>(string sql, object? @params, QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken) => throw new NotImplementedException();
+    public IPreparedQueryCommand<TResult> Compile<TResult>(string sql, object? @params, QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken) => throw new NotImplementedException();
     // public void Compile<TResult>(QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken)
     // {
     //     if (!queryCommand.IsPrepared)
@@ -541,34 +533,6 @@ public partial class InMemoryContext : IDataContext
     //     return Task.FromResult((IEnumerator<TResult>)CreateAsyncEnumerator(queryCommand, @params, cancellationToken));
     // }
 
-    public async Task<List<TResult>> ToListAsync<TResult>(IPreparedQueryCommand queryCommand, object[]? @params, CancellationToken cancellationToken)
-    {
-        if (queryCommand is InMemoryCacheEntry<TResult> cacheEntry)
-        {
-            await using var ee = cacheEntry.CreateEnumerator(queryCommand, cacheEntry, @params, CancellationToken.None)!;
-            var l = new List<TResult>(cacheEntry.LastRowCount == 0
-                ? queryCommand.Paging.Limit
-                : cacheEntry.LastRowCount);
-
-            var (rowCnt, absRowCnt) = (0, 0);
-
-            while (await ee.MoveNextAsync())
-            {
-                if (queryCommand.Paging.Offset > 0 && absRowCnt++ < queryCommand.Paging.Offset)
-                    continue;
-
-                l.Add(ee.Current);
-
-                if (queryCommand.Paging.Limit > 0 && ++rowCnt >= queryCommand.Paging.Limit)
-                    break;
-            }
-
-            cacheEntry.LastRowCount = l.Count;
-
-            return l;
-        }
-        throw new NotSupportedException(queryCommand.GetType().Name);
-    }
     public Func<Func<TEntity, TResult>> GetMap<TResult, TEntity>(QueryCommand<TResult> queryCommand)
     {
 #if DEBUG
@@ -644,256 +608,299 @@ public partial class InMemoryContext : IDataContext
         //         (_dataProvider as SqlDataProvider).MapCache[key] = del;
         //     }
     }
-
-    public IEnumerator<TResult> CreateEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[] @params)
+    public IEnumerator<TResult> CreateEnumerator<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[] @params)
     {
-        return (IEnumerator<TResult>)CreateAsyncEnumerator(queryCommand, @params, CancellationToken.None);
+        return (IEnumerator<TResult>)CreateAsyncEnumerator<TResult>(queryCommand, @params, CancellationToken.None);
     }
-
-    public List<TResult> ToList<TResult>(QueryCommand<TResult> queryCommand, object[]? @params)
+    protected IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
     {
-        var cacheEntry = GetCacheEntry(queryCommand, CancellationToken.None);
-
-        using var ee = (IEnumerator<TResult>)cacheEntry.CreateEnumerator(queryCommand, cacheEntry, @params, CancellationToken.None)!;
-        var l = new List<TResult>(cacheEntry.LastRowCount == 0
-            ? queryCommand.Paging.Limit
-            : cacheEntry.LastRowCount);
-
-        var (rowCnt, absRowCnt) = (0, 0);
-
-        while (ee.MoveNext())
+        var cacheEntry = GetCacheEntry(queryCommand, cancellationToken);
+        return cacheEntry.CreateEnumerator(cacheEntry.QueryCommand, cacheEntry, @params, cancellationToken)!;
+    }
+    public IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
+    {
+        if (queryCommand is InMemoryCacheEntry<TResult> cacheEntry)
         {
-            if (queryCommand.Paging.Offset > 0 && absRowCnt++ < queryCommand.Paging.Offset)
-                continue;
-
-            l.Add(ee.Current);
-
-            if (queryCommand.Paging.Limit > 0 && ++rowCnt >= queryCommand.Paging.Limit)
-                break;
+            return cacheEntry.CreateEnumerator(cacheEntry.QueryCommand, cacheEntry, @params, cancellationToken)!;
         }
-
-        cacheEntry.LastRowCount = l.Count;
-
-        return l;
+        throw new NotSupportedException(queryCommand.GetType().Name);
     }
 
-    public async Task<TResult?> ExecuteScalar<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, bool throwIfNull, CancellationToken cancellationToken)
+    public async Task<List<TResult>> ToListAsync<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
     {
-        var cacheEntry = GetCacheEntry(queryCommand, CancellationToken.None);
-
-        await using var ee = cacheEntry.CreateEnumerator(queryCommand, cacheEntry, @params, CancellationToken.None)!;
-
-        if (await ee.MoveNextAsync())
-            return ee.Current;
-
-        if (throwIfNull) throw new InvalidOperationException();
-
-        return default;
-    }
-    public TResult? ExecuteScalar<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, bool throwIfNull)
-    {
-        var cacheEntry = GetCacheEntry(queryCommand, CancellationToken.None);
-
-        using var ee = (IEnumerator<TResult>)cacheEntry.CreateEnumerator(queryCommand, cacheEntry, @params, CancellationToken.None)!;
-
-        if (ee.MoveNext())
-            return ee.Current;
-
-        if (throwIfNull) throw new InvalidOperationException();
-
-        return default;
-    }
-
-    public TResult First<TResult>(QueryCommand<TResult> queryCommand, object[] @params)
-    {
-        var cacheEntry = GetCacheEntry(queryCommand, CancellationToken.None);
-
-        using var ee = (IEnumerator<TResult>)cacheEntry.CreateEnumerator(queryCommand, cacheEntry, @params, CancellationToken.None)!;
-
-        var absRowCnt = 0;
-
-        while (ee.MoveNext())
+        if (queryCommand is InMemoryCacheEntry<TResult> cacheEntry)
         {
-            if (queryCommand.Paging.Offset > 0 && absRowCnt++ < queryCommand.Paging.Offset)
-                continue;
+            await using var ee = cacheEntry.CreateEnumerator(cacheEntry.QueryCommand, cacheEntry, @params, CancellationToken.None)!;
+            var l = new List<TResult>(cacheEntry.LastRowCount);
 
-            return ee.Current;
+            var (rowCnt, absRowCnt) = (0, 0);
+
+            while (await ee.MoveNextAsync())
+            {
+                if (cacheEntry.QueryCommand.Paging.Offset > 0 && absRowCnt++ < cacheEntry.QueryCommand.Paging.Offset)
+                    continue;
+
+                l.Add(ee.Current);
+
+                if (cacheEntry.QueryCommand.Paging.Limit > 0 && ++rowCnt >= cacheEntry.QueryCommand.Paging.Limit)
+                    break;
+            }
+
+            cacheEntry.LastRowCount = l.Count;
+
+            return l;
         }
-
-        throw new InvalidOperationException();
+        throw new NotSupportedException(queryCommand.GetType().Name);
     }
-    public TResult? FirstOrDefault<TResult>(QueryCommand<TResult> queryCommand, object[] @params)
+    public List<TResult> ToList<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[]? @params)
     {
-        var cacheEntry = GetCacheEntry(queryCommand, CancellationToken.None);
-
-        using var ee = (IEnumerator<TResult>)cacheEntry.CreateEnumerator(queryCommand, cacheEntry, @params, CancellationToken.None)!;
-
-        var absRowCnt = 0;
-
-        while (ee.MoveNext())
+        if (queryCommand is InMemoryCacheEntry<TResult> cacheEntry)
         {
-            if (queryCommand.Paging.Offset > 0 && absRowCnt++ < queryCommand.Paging.Offset)
-                continue;
+            using var ee = (IEnumerator<TResult>)cacheEntry.CreateEnumerator(cacheEntry.QueryCommand, cacheEntry, @params, CancellationToken.None)!;
+            var l = new List<TResult>(cacheEntry.LastRowCount);
 
-            return ee.Current;
+            var (rowCnt, absRowCnt) = (0, 0);
+
+            while (ee.MoveNext())
+            {
+                if (cacheEntry.QueryCommand.Paging.Offset > 0 && absRowCnt++ < cacheEntry.QueryCommand.Paging.Offset)
+                    continue;
+
+                l.Add(ee.Current);
+
+                if (cacheEntry.QueryCommand.Paging.Limit > 0 && ++rowCnt >= cacheEntry.QueryCommand.Paging.Limit)
+                    break;
+            }
+
+            cacheEntry.LastRowCount = l.Count;
+
+            return l;
         }
-
-        return default;
-    }
-    public async Task<TResult> FirstAsync<TResult>(QueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
-    {
-        var cacheEntry = GetCacheEntry(queryCommand, CancellationToken.None);
-
-        await using var ee = cacheEntry.CreateEnumerator(queryCommand, cacheEntry, @params, CancellationToken.None)!;
-
-        var absRowCnt = 0;
-
-        while (await ee.MoveNextAsync())
-        {
-            if (queryCommand.Paging.Offset > 0 && absRowCnt++ < queryCommand.Paging.Offset)
-                continue;
-
-            return ee.Current;
-        }
-
-        throw new InvalidOperationException();
-    }
-
-    public async Task<TResult?> FirstOrDefaultAsync<TResult>(QueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
-    {
-        var cacheEntry = GetCacheEntry(queryCommand, CancellationToken.None);
-
-        await using var ee = cacheEntry.CreateEnumerator(queryCommand, cacheEntry, @params, CancellationToken.None)!;
-
-        var absRowCnt = 0;
-
-        while (await ee.MoveNextAsync())
-        {
-            if (queryCommand.Paging.Offset > 0 && absRowCnt++ < queryCommand.Paging.Offset)
-                continue;
-
-            return ee.Current;
-        }
-
-        return default;
+        throw new NotSupportedException(queryCommand.GetType().Name);
     }
 
-    public TResult Single<TResult>(QueryCommand<TResult> queryCommand, object[] @params)
+    public async Task<TResult?> ExecuteScalar<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[]? @params, bool throwIfNull, CancellationToken cancellationToken)
     {
-        var cacheEntry = GetCacheEntry(queryCommand, CancellationToken.None);
-
-        using var ee = (IEnumerator<TResult>)cacheEntry.CreateEnumerator(queryCommand, cacheEntry, @params, CancellationToken.None)!;
-
-        var absRowCnt = 0;
-        TResult? r = default;
-        bool hasResult = false;
-
-        while (ee.MoveNext())
+        if (queryCommand is InMemoryCacheEntry<TResult> cacheEntry)
         {
-            if (queryCommand.Paging.Offset > 0 && absRowCnt++ < queryCommand.Paging.Offset)
-                continue;
+            await using var ee = cacheEntry.CreateEnumerator(cacheEntry.QueryCommand, cacheEntry, @params, CancellationToken.None)!;
 
-            if (hasResult)
-                throw new InvalidOperationException();
+            if (await ee.MoveNextAsync())
+                return ee.Current;
 
-            r = ee.Current;
-            hasResult = true;
+            if (throwIfNull) throw new InvalidOperationException();
+
+            return default;
         }
+        throw new NotSupportedException(queryCommand.GetType().Name);
+    }
+    public TResult? ExecuteScalar<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[]? @params, bool throwIfNull)
+    {
+        if (queryCommand is InMemoryCacheEntry<TResult> cacheEntry)
+        {
+            using var ee = (IEnumerator<TResult>)cacheEntry.CreateEnumerator(cacheEntry.QueryCommand, cacheEntry, @params, CancellationToken.None)!;
 
-        if (!hasResult)
+            if (ee.MoveNext())
+                return ee.Current;
+
+            if (throwIfNull) throw new InvalidOperationException();
+
+            return default;
+        }
+        throw new NotSupportedException(queryCommand.GetType().Name);
+    }
+
+    public TResult First<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[] @params)
+    {
+        if (queryCommand is InMemoryCacheEntry<TResult> cacheEntry)
+        {
+            using var ee = (IEnumerator<TResult>)cacheEntry.CreateEnumerator(cacheEntry.QueryCommand, cacheEntry, @params, CancellationToken.None)!;
+
+            var absRowCnt = 0;
+
+            while (ee.MoveNext())
+            {
+                if (cacheEntry.QueryCommand.Paging.Offset > 0 && absRowCnt++ < cacheEntry.QueryCommand.Paging.Offset)
+                    continue;
+
+                return ee.Current;
+            }
+
             throw new InvalidOperationException();
-
-        return r!;
-    }
-    public TResult? SingleOrDefault<TResult>(QueryCommand<TResult> queryCommand, object[] @params)
-    {
-        var cacheEntry = GetCacheEntry(queryCommand, CancellationToken.None);
-
-        using var ee = (IEnumerator<TResult>)cacheEntry.CreateEnumerator(queryCommand, cacheEntry, @params, CancellationToken.None)!;
-
-        var absRowCnt = 0;
-        TResult? r = default;
-        bool hasResult = false;
-
-        while (ee.MoveNext())
-        {
-            if (queryCommand.Paging.Offset > 0 && absRowCnt++ < queryCommand.Paging.Offset)
-                continue;
-
-            if (hasResult)
-                throw new InvalidOperationException();
-
-            r = ee.Current;
-            hasResult = true;
         }
-
-        return r;
+        throw new NotSupportedException(queryCommand.GetType().Name);
     }
-    public async Task<TResult> SingleAsync<TResult>(QueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
+    public TResult? FirstOrDefault<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[] @params)
     {
-        var cacheEntry = GetCacheEntry(queryCommand, CancellationToken.None);
-
-        await using var ee = cacheEntry.CreateEnumerator(queryCommand, cacheEntry, @params, CancellationToken.None)!;
-
-        var absRowCnt = 0;
-        TResult? r = default;
-        bool hasResult = false;
-
-        while (await ee.MoveNextAsync())
+        if (queryCommand is InMemoryCacheEntry<TResult> cacheEntry)
         {
-            if (queryCommand.Paging.Offset > 0 && absRowCnt++ < queryCommand.Paging.Offset)
-                continue;
+            using var ee = (IEnumerator<TResult>)cacheEntry.CreateEnumerator(cacheEntry.QueryCommand, cacheEntry, @params, CancellationToken.None)!;
 
-            if (hasResult)
-                throw new InvalidOperationException();
+            var absRowCnt = 0;
 
-            r = ee.Current;
-            hasResult = true;
+            while (ee.MoveNext())
+            {
+                if (cacheEntry.QueryCommand.Paging.Offset > 0 && absRowCnt++ < cacheEntry.QueryCommand.Paging.Offset)
+                    continue;
+
+                return ee.Current;
+            }
+
+            return default;
         }
+        throw new NotSupportedException(queryCommand.GetType().Name);
+    }
+    public async Task<TResult> FirstAsync<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
+    {
+        if (queryCommand is InMemoryCacheEntry<TResult> cacheEntry)
+        {
+            await using var ee = cacheEntry.CreateEnumerator(cacheEntry.QueryCommand, cacheEntry, @params, CancellationToken.None)!;
 
-        if (!hasResult)
+            var absRowCnt = 0;
+
+            while (await ee.MoveNextAsync())
+            {
+                if (cacheEntry.QueryCommand.Paging.Offset > 0 && absRowCnt++ < cacheEntry.QueryCommand.Paging.Offset)
+                    continue;
+
+                return ee.Current;
+            }
+
             throw new InvalidOperationException();
-
-        return r!;
+        }
+        throw new NotSupportedException(queryCommand.GetType().Name);
     }
 
-    public async Task<TResult?> SingleOrDefaultAsync<TResult>(QueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
+    public async Task<TResult?> FirstOrDefaultAsync<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
     {
-        var cacheEntry = GetCacheEntry(queryCommand, CancellationToken.None);
-
-        await using var ee = cacheEntry.CreateEnumerator(queryCommand, cacheEntry, @params, CancellationToken.None)!;
-
-        var absRowCnt = 0;
-        TResult? r = default;
-        bool hasResult = false;
-
-        while (await ee.MoveNextAsync())
+        if (queryCommand is InMemoryCacheEntry<TResult> cacheEntry)
         {
-            if (queryCommand.Paging.Offset > 0 && absRowCnt++ < queryCommand.Paging.Offset)
-                continue;
+            await using var ee = cacheEntry.CreateEnumerator(cacheEntry.QueryCommand, cacheEntry, @params, CancellationToken.None)!;
 
-            if (hasResult)
+            var absRowCnt = 0;
+
+            while (await ee.MoveNextAsync())
+            {
+                if (cacheEntry.QueryCommand.Paging.Offset > 0 && absRowCnt++ < cacheEntry.QueryCommand.Paging.Offset)
+                    continue;
+
+                return ee.Current;
+            }
+
+            return default;
+        }
+        throw new NotSupportedException(queryCommand.GetType().Name);
+    }
+
+    public TResult Single<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[] @params)
+    {
+        if (queryCommand is InMemoryCacheEntry<TResult> cacheEntry)
+        {
+            using var ee = (IEnumerator<TResult>)cacheEntry.CreateEnumerator(cacheEntry.QueryCommand, cacheEntry, @params, CancellationToken.None)!;
+
+            var absRowCnt = 0;
+            TResult? r = default;
+            bool hasResult = false;
+
+            while (ee.MoveNext())
+            {
+                if (cacheEntry.QueryCommand.Paging.Offset > 0 && absRowCnt++ < cacheEntry.QueryCommand.Paging.Offset)
+                    continue;
+
+                if (hasResult)
+                    throw new InvalidOperationException();
+
+                r = ee.Current;
+                hasResult = true;
+            }
+
+            if (!hasResult)
                 throw new InvalidOperationException();
 
-            r = ee.Current;
-            hasResult = true;
+            return r!;
         }
+        throw new NotSupportedException(queryCommand.GetType().Name);
+    }
+    public TResult? SingleOrDefault<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[] @params)
+    {
+        if (queryCommand is InMemoryCacheEntry<TResult> cacheEntry)
+        {
+            using var ee = (IEnumerator<TResult>)cacheEntry.CreateEnumerator(cacheEntry.QueryCommand, cacheEntry, @params, CancellationToken.None)!;
 
-        return r;
+            var absRowCnt = 0;
+            TResult? r = default;
+            bool hasResult = false;
+
+            while (ee.MoveNext())
+            {
+                if (cacheEntry.QueryCommand.Paging.Offset > 0 && absRowCnt++ < cacheEntry.QueryCommand.Paging.Offset)
+                    continue;
+
+                if (hasResult)
+                    throw new InvalidOperationException();
+
+                r = ee.Current;
+                hasResult = true;
+            }
+
+            return r;
+        }
+        throw new NotSupportedException(queryCommand.GetType().Name);
+    }
+    public async Task<TResult> SingleAsync<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
+    {
+        if (queryCommand is InMemoryCacheEntry<TResult> cacheEntry)
+        {
+            await using var ee = cacheEntry.CreateEnumerator(cacheEntry.QueryCommand, cacheEntry, @params, CancellationToken.None)!;
+
+            var absRowCnt = 0;
+            TResult? r = default;
+            bool hasResult = false;
+
+            while (await ee.MoveNextAsync())
+            {
+                if (cacheEntry.QueryCommand.Paging.Offset > 0 && absRowCnt++ < cacheEntry.QueryCommand.Paging.Offset)
+                    continue;
+
+                if (hasResult)
+                    throw new InvalidOperationException();
+
+                r = ee.Current;
+                hasResult = true;
+            }
+
+            if (!hasResult)
+                throw new InvalidOperationException();
+
+            return r!;
+        }
+        throw new NotSupportedException(queryCommand.GetType().Name);
     }
 
-    public sealed class InMemoryCacheEntry<TResult> : IPreparedQueryCommand
+    public async Task<TResult?> SingleOrDefaultAsync<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
     {
-        public InMemoryCacheEntry(object compiledQuery, Func<QueryCommand<TResult>, InMemoryCacheEntry<TResult>, object[]?, CancellationToken, IAsyncEnumerator<TResult>> createEnumerator)
+        if (queryCommand is InMemoryCacheEntry<TResult> cacheEntry)
         {
-            CreateEnumerator = createEnumerator;
-            CompiledQuery = compiledQuery;
+            await using var ee = cacheEntry.CreateEnumerator(cacheEntry.QueryCommand, cacheEntry, @params, CancellationToken.None)!;
+
+            var absRowCnt = 0;
+            TResult? r = default;
+            bool hasResult = false;
+
+            while (await ee.MoveNextAsync())
+            {
+                if (cacheEntry.QueryCommand.Paging.Offset > 0 && absRowCnt++ < cacheEntry.QueryCommand.Paging.Offset)
+                    continue;
+
+                if (hasResult)
+                    throw new InvalidOperationException();
+
+                r = ee.Current;
+                hasResult = true;
+            }
+
+            return r;
         }
-        public Func<QueryCommand<TResult>, InMemoryCacheEntry<TResult>, object[]?, CancellationToken, IAsyncEnumerator<TResult>> CreateEnumerator { get; }
-        public object CompiledQuery { get; set; }
-        public bool IsScalar => throw new NotImplementedException();
-        public object? Data;
-        public IAsyncEnumerator<TResult>? Enumerator;
-        public int LastRowCount;
+        throw new NotSupportedException(queryCommand.GetType().Name);
     }
 }

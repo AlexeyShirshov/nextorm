@@ -1,7 +1,7 @@
 using System.Runtime.CompilerServices;
 
 namespace nextorm.core;
-public class PreparedQueryCommand<TResult, TRecord> : IPreparedQueryCommand
+public class PreparedQueryCommand<TResult, TRecord> : IPreparedQueryCommand<TResult>
 {
     public readonly Func<TRecord, TResult>? MapDelegate;
     private readonly bool _scalar;

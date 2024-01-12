@@ -649,7 +649,7 @@ public class SqlCommandTests
         // Given
         var cmd = _sut.SimpleEntity.Select(it => it.Id).Compile("select id from simple_entity --this is custom sql");
         // When
-        var r = await cmd.ToListAsync();
+        var r = await _sut.DataProvider.ToListAsync(cmd);
 
         // Then
 
@@ -661,7 +661,7 @@ public class SqlCommandTests
 
         cmd = _sut.SimpleEntity.Select(it => it.Id).Compile("select id from simple_entity where id=-1");
         // When
-        r = await cmd.ToListAsync();
+        r = await _sut.DataProvider.ToListAsync(cmd);
 
         r.Should().BeEmpty();
 
@@ -675,7 +675,7 @@ public class SqlCommandTests
         // Given
         var cmd = _sut.SimpleEntity.Select(it => new SimpleEntity { Id = it.Id }).Compile("select id from simple_entity where id = @id", new { id = 1 }, true);
         // When
-        var r = await cmd.FirstAsync();
+        var r = await _sut.DataProvider.FirstAsync(cmd);
 
         // Then
 
@@ -689,7 +689,7 @@ public class SqlCommandTests
         // Given
         var cmd = _sut.SimpleEntity.Select(it => new SimpleEntity { Id = it.Id }).Compile("select id from simple_entity where id = @id+@norm_p0", new { id = 1 }, true);
         // When
-        var r = await cmd.FirstAsync(1);
+        var r = await _sut.DataProvider.FirstAsync(cmd, 1);
 
         // Then
 
