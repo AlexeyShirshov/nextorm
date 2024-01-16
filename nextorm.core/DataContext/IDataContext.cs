@@ -12,7 +12,8 @@ public interface IDataContext : IAsyncDisposable, IDisposable
     IDictionary<ExpressionKey, Delegate> ExpressionsCache { get; }
     IDictionary<Type, IEntityMeta> Metadata { get; }
     IDictionary<Type, List<SelectExpression>> SelectListCache { get; }
-    //IDictionary<Expression, List<SelectExpression>> SelectListExpressionCache { get; }
+    public Dictionary<string, object> Properties { get; }
+    public Lazy<QueryCommand<bool>> AnyCommand { get; set; }
     public Entity<T> Create<T>(Action<EntityBuilder<T>>? configEntity = null)
     {
         if (!Metadata.ContainsKey(typeof(T)))
@@ -81,7 +82,7 @@ public interface IDataContext : IAsyncDisposable, IDisposable
     /// <param name="nonStreamUsing">true, if optimized for buffered or scalar value results; false for non-buffered (stream) using, when result is IEnumerable or IAsyncEnumerable</param>
     /// <param name="storeInCache">true to store query plan in cache, overwise it is stored only in query command</param>
     /// <param name="cancellationToken"></param>
-    IPreparedQueryCommand<TResult> Compile<TResult>(string sql, object? @params, QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken);
+    IPreparedQueryCommand<TResult> PrepareFromSql<TResult>(string sql, object? @params, QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken);
     /// <summary>
     /// 
     /// </summary>

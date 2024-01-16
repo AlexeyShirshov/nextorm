@@ -1,18 +1,18 @@
 ```
 
-BenchmarkDotNet v0.13.10, Windows 11 (10.0.22621.2861/22H2/2022Update/SunValley2)
+BenchmarkDotNet v0.13.10, Windows 11 (10.0.22621.3007/22H2/2022Update/SunValley2)
 Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical cores
-.NET SDK 8.0.100
-  [Host]   : .NET 8.0.0 (8.0.23.53103), X64 RyuJIT AVX2
-  .NET 8.0 : .NET 8.0.0 (8.0.23.53103), X64 RyuJIT AVX2
+.NET SDK 8.0.101
+  [Host]   : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX2
+  .NET 8.0 : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX2
 
 Job=.NET 8.0  Runtime=.NET 8.0  
 
 ```
-| Method          | Mean     | Error    | StdDev   | Gen0   | Gen1   | Allocated |
-|---------------- |---------:|---------:|---------:|-------:|-------:|----------:|
-| NextormCompiled | 31.74 μs | 0.342 μs | 0.320 μs | 0.2441 |      - |    1264 B |
-| NextormCached   | 36.33 μs | 0.573 μs | 0.536 μs | 0.4272 |      - |    2288 B |
-| Dapper          | 38.83 μs | 0.698 μs | 0.653 μs | 0.1221 |      - |     816 B |
-| EFCoreCompiled  | 54.16 μs | 0.766 μs | 0.717 μs | 1.0376 | 0.3052 |    5072 B |
-| EFCore          | 64.59 μs | 1.286 μs | 1.202 μs | 1.4648 | 0.4883 |    7040 B |
+| Method          | Mean     | Error     | StdDev    | Gen0     | Gen1    | Allocated |
+|---------------- |---------:|----------:|----------:|---------:|--------:|----------:|
+| NextormCompiled | 3.118 ms | 0.0509 ms | 0.0476 ms |  27.3438 |       - | 128.91 KB |
+| Dapper          | 4.047 ms | 0.0798 ms | 0.0980 ms |  31.2500 |       - |  146.1 KB |
+| NextormCached   | 4.260 ms | 0.0645 ms | 0.0603 ms |  93.7500 |       - | 464.17 KB |
+| EFCoreCompiled  | 5.540 ms | 0.0781 ms | 0.0730 ms | 117.1875 | 39.0625 |  546.1 KB |
+| EFCore          | 8.347 ms | 0.1607 ms | 0.1578 ms | 187.5000 | 31.2500 | 904.77 KB |

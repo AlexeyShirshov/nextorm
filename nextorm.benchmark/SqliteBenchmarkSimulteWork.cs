@@ -49,11 +49,11 @@ public class SqliteBenchmarkSimulateWork
         _ctx = new TestDataRepository(_db);
         _ctx.DbContext.EnsureConnectionOpen();
 
-        _cmd = _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }).Compile(false);
+        _cmd = _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }).Prepare(false);
 
-        _cmdToList = _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }).Compile(true);
+        _cmdToList = _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }).Prepare(true);
 
-        _cmdInner = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0) + NORM.Param<int>(1)).FirstOrFirstOrDefaultCommand().Compile(true);
+        _cmdInner = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0) + NORM.Param<int>(1)).FirstOrFirstOrDefaultCommand().Prepare(true);
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(_conn);
@@ -159,7 +159,7 @@ public class SqliteBenchmarkSimulateWork
     [Benchmark()]
     public async Task NextormCachedWithParamsToList()
     {
-        var cmdInner = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0) + NORM.Param<int>(1)).FirstOrFirstOrDefaultCommand(entity => new { entity.Id }).Compile();
+        var cmdInner = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0) + NORM.Param<int>(1)).FirstOrFirstOrDefaultCommand(entity => new { entity.Id }).Prepare();
         foreach (var row in await _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new { entity.Id, entity.Str, entity.Dt }).ToListAsync())
         {
             for (var i = 0; i < SmallIterations; i++)

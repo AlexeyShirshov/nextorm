@@ -38,11 +38,11 @@ public class SqliteBenchmarkIteration
         _ctx = new TestDataRepository(_db);
         _db.EnsureConnectionOpen();
 
-        _cmd = _ctx.SimpleEntity.ToCommand().Compile(false);
+        _cmd = _ctx.SimpleEntity.ToCommand().Prepare(false);
 
-        _cmdToList = _ctx.SimpleEntity.ToCommand().Compile(true);
+        _cmdToList = _ctx.SimpleEntity.ToCommand().Prepare(true);
 
-        _cmdManualToList = _ctx.SimpleEntity.ToCommand().Compile("select id from simple_entity", true);
+        _cmdManualToList = _ctx.SimpleEntity.ToCommand().PrepareFromSql("select id from simple_entity", true);
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(@$"Filename={Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db")}");
@@ -79,13 +79,13 @@ public class SqliteBenchmarkIteration
         {
         }
     }
-    // [Benchmark()]
-    // public async Task NextormCompiledManualToList()
-    // {
-    //     foreach (var row in await _cmdManualToList.ToListAsync())
-    //     {
-    //     }
-    // }
+    [Benchmark()]
+    public async Task NextormCompiledManualSqlToList()
+    {
+        foreach (var row in await _db.ToListAsync(_cmdManualToList))
+        {
+        }
+    }
     // [Benchmark()]
     // public async Task NextormCached()
     // {
@@ -100,14 +100,14 @@ public class SqliteBenchmarkIteration
         {
         }
     }
-    // [Benchmark()]
-    // public async Task NextormManualSQLCachedToList()
-    // {
-    //     var cmd = _ctx.SimpleEntity.Select(entity => new { entity.Id }).FromSql("select id from simple_entity");
-    //     foreach (var row in await cmd.ToListAsync())
-    //     {
-    //     }
-    // }
+    [Benchmark()]
+    public async Task NextormCachedManualSqlToList()
+    {
+        var cmd = _ctx.SimpleEntity.ToCommand().WithSql("select id from simple_entity");
+        foreach (var row in await cmd.ToListAsync())
+        {
+        }
+    }
     // [Benchmark]
     // public async Task EFCore()
     // {

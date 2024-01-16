@@ -3,16 +3,17 @@ using System.Collections.Concurrent;
 using System.Linq.Expressions;
 
 namespace nextorm.core;
-public class BaseEntity
-{
-    protected BaseEntity()
-    {
-    }
-    protected static readonly IDictionary<IDataContext, Lazy<QueryCommand<bool>>> _anyCommandCache = new ConcurrentDictionary<IDataContext, Lazy<QueryCommand<bool>>>();
-}
+// public class BaseEntity
+// {
+//     protected BaseEntity()
+//     {
+//     }
+//     protected static readonly IDictionary<IDataContext, Lazy<QueryCommand<bool>>> _anyCommandCache = new ConcurrentDictionary<IDataContext, Lazy<QueryCommand<bool>>>();
+// }
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Minor Code Smell", "S2292:Trivial properties should be auto-implemented", Justification = "<Pending>")]
-public class Entity<TEntity> : BaseEntity, IAsyncEnumerable<TEntity>, ICloneable
+public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
 {
+    // private const string AnyCommandProperty = "nextorm.core.AnyCommand";
     #region Fields
     //private IPayloadManager _payloadMgr = new FastPayloadManager(new Dictionary<Type, object?>());
     private readonly IDataContext _dataProvider;
@@ -256,7 +257,7 @@ public class Entity<TEntity> : BaseEntity, IAsyncEnumerable<TEntity>, ICloneable
     internal protected static QueryCommand<bool> GetAnyCommand(IDataContext dataProvider, QueryCommand cmd)
     {
         var created = false;
-        if (!_anyCommandCache.TryGetValue(dataProvider, out var anyCommand))
+        if (dataProvider.AnyCommand is not Lazy<QueryCommand<bool>> anyCommand)
         {
             anyCommand = new Lazy<QueryCommand<bool>>(() =>
             {
@@ -266,7 +267,7 @@ public class Entity<TEntity> : BaseEntity, IAsyncEnumerable<TEntity>, ICloneable
                 queryCommand.PrepareCommand(false, CancellationToken.None);
                 return queryCommand;
             });
-            _anyCommandCache[dataProvider] = anyCommand;
+            dataProvider.AnyCommand = anyCommand;
         }
 
         var queryCommand = anyCommand.Value;

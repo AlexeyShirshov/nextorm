@@ -25,7 +25,7 @@ public class InMemoryBenchmarkWhere
         _ctx = new InMemoryDataRepository(_provider);
         _ctx.SimpleEntity.WithData(_data);
 
-        _cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new Tuple<int>(entity.Id)).Compile(false);
+        _cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new Tuple<int>(entity.Id)).Prepare(false);
     }
     [Benchmark(Baseline = true)]
     public void NextormCompiledParam()

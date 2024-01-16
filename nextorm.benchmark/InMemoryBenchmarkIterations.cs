@@ -25,8 +25,8 @@ public class InMemoryBenchmarkIteration
         _ctx = new InMemoryDataRepository(_provider);
         _ctx.SimpleEntity.WithData(_data);
 
-        _cmd = _ctx.SimpleEntity.Select(entity => new Tuple<int>(entity.Id)).Compile(false);
-        _cmdToList = _ctx.SimpleEntity.Select(entity => new Tuple<int>(entity.Id)).Compile(true);
+        _cmd = _ctx.SimpleEntity.Select(entity => new Tuple<int>(entity.Id)).Prepare(false);
+        _cmdToList = _ctx.SimpleEntity.Select(entity => new Tuple<int>(entity.Id)).Prepare(true);
     }
     // [Benchmark()]
     // public async Task NextormCompiled()

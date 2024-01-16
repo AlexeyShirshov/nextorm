@@ -23,7 +23,7 @@ public class InMemoryBenchmarkAny
         _ctx = new InMemoryDataRepository(provider);
         _ctx.SimpleEntity.WithData(_data);
 
-        _cmd = _ctx.SimpleEntity.AnyCommand().Compile(true);
+        _cmd = _ctx.SimpleEntity.AnyCommand().Prepare(true);
         // _cmdToList = _ctx.SimpleEntity.Select(entity => new Tuple<int>(entity.Id)).Compile(true);
     }
     [Benchmark()]

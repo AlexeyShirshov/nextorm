@@ -40,8 +40,8 @@ public class SqliteBenchmarkFirst
         _ctx = new TestDataRepository(_db);
         _db.EnsureConnectionOpen();
 
-        _cmd = _ctx.SimpleEntity.FirstOrFirstOrDefaultCommand(it => it.Id).Compile(true);
-        _cmdEntCompiled = _ctx.LargeEntity.Where(it => it.Id == NORM.Param<int>(0)).FirstOrFirstOrDefaultCommand().Compile(true);
+        _cmd = _ctx.SimpleEntity.FirstOrFirstOrDefaultCommand(it => it.Id).Prepare(true);
+        _cmdEntCompiled = _ctx.LargeEntity.Where(it => it.Id == NORM.Param<int>(0)).FirstOrFirstOrDefaultCommand().Prepare(true);
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(@$"Filename={Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db")}");

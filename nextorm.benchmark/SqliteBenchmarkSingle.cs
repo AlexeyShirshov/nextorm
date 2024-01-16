@@ -38,7 +38,7 @@ public class SqliteBenchmarkSingle
         _ctx = new TestDataRepository(_db);
         _db.EnsureConnectionOpen();
 
-        _cmd = _ctx.SimpleEntity.Where(it => it.Id == 1).SingleOrSingleOrDefaultCommand(it => it.Id).Compile(true);
+        _cmd = _ctx.SimpleEntity.Where(it => it.Id == 1).SingleOrSingleOrDefaultCommand(it => it.Id).Prepare(true);
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(@$"Filename={Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db")}");

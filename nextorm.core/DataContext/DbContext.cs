@@ -20,9 +20,10 @@ public class DbContext : IDataContext
     //private readonly static ConcurrentDictionary<Expression, List<SelectExpression>> _selectListExpCache = new(ExpressionEqualityComparer.Instance);
     private readonly static ExpressionCache<Delegate> _expCache = new();
     internal protected readonly static ObjectPool<StringBuilder> _sbPool = new DefaultObjectPoolProvider().Create(new StringBuilderPooledObjectPolicy());
-    //private static readonly AsyncLocal<Dictionary<QueryPlan, IDbCommandHolder>> _queryPlanCache = new() { Value = [] };
+    //private static readonly AsyncLocal<Dictionary<QueryPlan, IDbCommandHolder>> _queryPlanCache = new() { Value = [] };    
     [ThreadStatic]
     private static Dictionary<QueryPlan, IDbCommandHolder>? _queryPlanCache;
+    private readonly Dictionary<string, object> _properties = [];
     private DbConnection? _conn;
     protected bool _connWasCreatedByMe;
     private bool _disposed;
@@ -42,6 +43,7 @@ public class DbContext : IDataContext
 
         LogSensitiveData = optionsBuilder.ShouldLogSensitiveData;
     }
+    #region Properties
     protected internal bool LogSensitiveData { get; set; }
     public virtual string ConcatStringOperator => "+";
     public virtual string EmptyString => "''";
@@ -53,7 +55,12 @@ public class DbContext : IDataContext
     public IDictionary<Type, IEntityMeta> Metadata => _metadata;
     public IDictionary<Type, List<SelectExpression>> SelectListCache => _selectListCache;
     private static Dictionary<QueryPlan, IDbCommandHolder> QueryPlanCache => _queryPlanCache ??= [];
+    public Dictionary<string, object> Properties => _properties;
+
+    public Lazy<QueryCommand<bool>> AnyCommand { get; set; }
+
     public Entity From(string table) => new(this, table) { Logger = CommandLogger };
+    #endregion
     public event EventHandler? Disposed;
     public void EnsureConnectionOpen()
     {
@@ -254,7 +261,7 @@ public class DbContext : IDataContext
         QueryPlan? queryPlan = null;
         IDbCommandHolder? planCache = null;
 
-        if (!queryCommand.IsPrepared) queryCommand.PrepareCommand(false, cancellationToken);
+        if (!queryCommand.IsPrepared) queryCommand.PrepareCommand(!storeInCache, cancellationToken);
 
         if (queryCommand.Cache && storeInCache)
         {
@@ -769,10 +776,10 @@ public class DbContext : IDataContext
     {
         return v ? "1" : "0";
     }
-    public IPreparedQueryCommand<TResult> Compile<TResult>(string sql, object? @params, QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken)
+    public IPreparedQueryCommand<TResult> PrepareFromSql<TResult>(string sql, object? @params, QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken)
     {
-        if (!queryCommand.IsPrepared)
-            queryCommand.PrepareCommand(!storeInCache, cancellationToken);
+        // if (!queryCommand.IsPrepared)
+        //     queryCommand.PrepareCommand(!storeInCache, cancellationToken);
 
         return GetPreparedQueryCommand(queryCommand, !nonStreamUsing, storeInCache, cancellationToken, sql, () =>
         {

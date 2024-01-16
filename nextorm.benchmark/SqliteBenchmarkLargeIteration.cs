@@ -47,9 +47,9 @@ public class SqliteBenchmarkLargeIteration
         _ctx = new TestDataRepository(_db);
         _db.EnsureConnectionOpen();
 
-        _cmdExec = _ctx.LargeEntity.Select(entity => new TupleLargeEntity(entity.Id, entity.Str, entity.Dt)).Compile(false);
+        _cmdExec = _ctx.LargeEntity.Select(entity => new TupleLargeEntity(entity.Id, entity.Str, entity.Dt)).Prepare(false);
 
-        _cmdToList = _ctx.LargeEntity.Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }).Compile(true);
+        _cmdToList = _ctx.LargeEntity.Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }).Prepare(true);
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(@$"Filename={Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db")}");

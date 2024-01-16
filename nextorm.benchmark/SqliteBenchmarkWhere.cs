@@ -42,9 +42,9 @@ public class SqliteBenchmarkWhere
         _ctx = new TestDataRepository(_db);
         _db.EnsureConnectionOpen();
 
-        _cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).ToCommand().Compile(false);
+        _cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).ToCommand().Prepare(false);
 
-        _cmdToList = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).ToCommand().Compile(true);
+        _cmdToList = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).ToCommand().Prepare(true);
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(@$"Filename={filepath}");
@@ -114,7 +114,7 @@ public class SqliteBenchmarkWhere
     //[BenchmarkCategory("Stream")]
     public async Task NextormCachedParam()
     {
-        var cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new { entity.Id }).Compile(false);
+        var cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new { entity.Id }).Prepare(false);
         for (var i = 0; i < Iterations; i++)
         {
             foreach (var row in await _db.AsEnumerableAsync(cmd, i))
@@ -139,7 +139,7 @@ public class SqliteBenchmarkWhere
     //[BenchmarkCategory("Buffered")]
     public async Task NextormCachedToList()
     {
-        var cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new { entity.Id }).Compile(true);
+        var cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new { entity.Id }).Prepare(true);
         for (var i = 0; i < Iterations; i++)
         {
             foreach (var row in await _db.ToListAsync(cmd, i))

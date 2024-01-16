@@ -6,10 +6,10 @@ using nextorm.benchmark;
 // BenchmarkRunner.Run<InMemoryBenchmarkIteration>();
 // BenchmarkRunner.Run<InMemoryBenchmarkWhere>();
 // BenchmarkRunner.Run<InMemoryBenchmarkAny>();
-// BenchmarkRunner.Run<SqliteBenchmarkIteration>();
+BenchmarkRunner.Run<SqliteBenchmarkIteration>();
 // BenchmarkRunner.Run<SqliteBenchmarkLargeIteration>();
 // BenchmarkRunner.Run<SqliteBenchmarkWhere>();
-BenchmarkRunner.Run<SqliteBenchmarkSimulateWork>();
+// BenchmarkRunner.Run<SqliteBenchmarkSimulateWork>();
 // BenchmarkRunner.Run<SqliteBenchmarkMakeSelect>();
 // BenchmarkRunner.Run<SqliteBenchmarkAny>();
 // BenchmarkRunner.Run<SqliteBenchmarkFirst>();
@@ -17,11 +17,11 @@ BenchmarkRunner.Run<SqliteBenchmarkSimulateWork>();
 // BenchmarkRunner.Run<SqliteBenchmarkCache>();
 
 // runner.QueryCommandPlanEqualityComparer();
-// var runner = new SqliteBenchmarkSimulateWork(true);
+// var runner = new SqliteBenchmarkIteration();
 // await runner.NextormCompiledToList();
 // while (true)
-// for (var i = 0; i < 10; i++)
-//     runner.NextormCachedToList();
+// for (var i = 0; i < 50; i++)
+//     await runner.NextormManualSQLCachedToList();
 
 //await runner.FillLargeTable();
 // Console.WriteLine("Press any key to exit");

@@ -28,6 +28,7 @@ public partial class InMemoryContext : IDataContext
     // {
     //     return new QueryCommand<TResult>(this, exp, condition);
     // }
+    private readonly Dictionary<string, object> _properties = [];
     public ILogger? Logger { get; }
     public bool NeedMapping => false;
     public IDictionary<Type, object?> Data => _data;
@@ -37,6 +38,8 @@ public partial class InMemoryContext : IDataContext
     //public IDictionary<Expression, List<SelectExpression>> SelectListExpressionCache => _selectListExpCache;
     public ILogger? CommandLogger { get; }
     public ILogger? ResultSetEnumeratorLogger { get; }
+    public Dictionary<string, object> Properties => _properties;
+    public Lazy<QueryCommand<bool>> AnyCommand { get; set; }
     public void EnsureConnectionOpen() { }
     public Task EnsureConnectionOpenAsync() => Task.CompletedTask;
     private InMemoryCacheEntry<TResult> GetCacheEntry<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
@@ -476,7 +479,7 @@ public partial class InMemoryContext : IDataContext
         Dispose(disposing: true);
         GC.SuppressFinalize(this);
     }
-    public IPreparedQueryCommand<TResult> Compile<TResult>(string sql, object? @params, QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken) => throw new NotImplementedException();
+    public IPreparedQueryCommand<TResult> PrepareFromSql<TResult>(string sql, object? @params, QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken) => throw new NotImplementedException();
     // public void Compile<TResult>(QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken)
     // {
     //     if (!queryCommand.IsPrepared)

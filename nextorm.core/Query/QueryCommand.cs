@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using System.Collections;
 using System.Linq.Expressions;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading.Channels;
@@ -654,6 +655,9 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
 public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
 {
     internal object? _compiledQuery;
+    private string? _manualSql;
+    private Func<List<Param>>? _makeParams;
+
     //private readonly IPayloadManager _payloadMap = new FastPayloadManager(new Dictionary<Type, object?>());
     public QueryCommand(IDataContext dataProvider, LambdaExpression exp, Expression? condition, Paging paging, List<Sorting>? sorting) : base(dataProvider, exp, condition, paging, sorting)
     {
@@ -666,21 +670,46 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
     public override void PrepareCommand(bool prepareMapOnly, CancellationToken cancellationToken)
     {
         base.PrepareCommand(prepareMapOnly, cancellationToken);
-        ResultPlanHash = typeof(TResult).GetHashCode();
+        if (!prepareMapOnly)
+        {
+            ResultPlanHash = typeof(TResult).GetHashCode();
+        }
         ResultType = typeof(TResult);
     }
     //internal CompiledQuery<TResult>? Compiled => CacheEntry?.CompiledQuery as CompiledQuery<TResult>;
     public PreparedQueryCommand<TResult, TRecord>? GetCompiledQuery<TRecord>() => _compiledQuery as PreparedQueryCommand<TResult, TRecord>;
     public bool SingleRow { get; set; }
-    public IPreparedQueryCommand<TResult> FromSql(string sql, CancellationToken cancellationToken = default) => Compile(sql, null, true, true, cancellationToken);
-    public IPreparedQueryCommand<TResult> FromSql(string sql, object? @params, CancellationToken cancellationToken = default) => Compile(sql, @params, true, true, cancellationToken);
-    public IPreparedQueryCommand<TResult> Compile(string sql, CancellationToken cancellationToken = default) => Compile(sql, null, true, cancellationToken);
-    public IPreparedQueryCommand<TResult> Compile(string sql, object? @params, CancellationToken cancellationToken = default) => Compile(sql, @params, true, cancellationToken);
-    public IPreparedQueryCommand<TResult> Compile(string sql, bool nonStreamUsing, CancellationToken cancellationToken = default) => Compile(sql, null, nonStreamUsing, cancellationToken);
-    public IPreparedQueryCommand<TResult> Compile(string sql, object? @params, bool nonStreamUsing, CancellationToken cancellationToken = default) => Compile(sql, @params, nonStreamUsing, true, cancellationToken);
-    public IPreparedQueryCommand<TResult> Compile(string sql, object? @params, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken = default)
+    public QueryCommand<TResult> WithSql(string sql)
     {
-        return _dataProvider.Compile(sql, @params, this, nonStreamUsing, storeInCache, cancellationToken);
+        _manualSql = sql;
+        _makeParams = null;
+        return this;
+    }
+    public QueryCommand<TResult> WithSql(string sql, object? @params)
+    {
+        _manualSql = sql;
+        _makeParams = () =>
+        {
+            List<Param> ps = [];
+            if (@params is not null)
+            {
+                var t = @params.GetType();
+                foreach (var prop in t.GetProperties(BindingFlags.Instance | BindingFlags.Public))
+                {
+                    ps.Add(new Param(prop.Name, prop.GetValue(@params)));
+                }
+            }
+            return ps;
+        };
+        return this;
+    }
+    public IPreparedQueryCommand<TResult> PrepareFromSql(string sql, CancellationToken cancellationToken = default) => PrepareFromSql(sql, null, true, cancellationToken);
+    public IPreparedQueryCommand<TResult> PrepareFromSql(string sql, object? @params, CancellationToken cancellationToken = default) => PrepareFromSql(sql, @params, true, cancellationToken);
+    public IPreparedQueryCommand<TResult> PrepareFromSql(string sql, bool nonStreamUsing, CancellationToken cancellationToken = default) => PrepareFromSql(sql, null, nonStreamUsing, cancellationToken);
+    public IPreparedQueryCommand<TResult> PrepareFromSql(string sql, object? @params, bool nonStreamUsing, CancellationToken cancellationToken = default) => PrepareFromSql(sql, @params, nonStreamUsing, false, cancellationToken);
+    public IPreparedQueryCommand<TResult> PrepareFromSql(string sql, object? @params, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken = default)
+    {
+        return _dataProvider.PrepareFromSql(sql, @params, this, nonStreamUsing, storeInCache, cancellationToken);
     }
     /// <summary>
     /// 
@@ -688,13 +717,13 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
     /// <param name="nonStreamUsing">true, if optimized for buffered or scalar value results; false for non-buffered (stream) using, when result is IEnumerable or IAsyncEnumerable</param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    public IPreparedQueryCommand<TResult> Compile(bool nonStreamUsing = true, CancellationToken cancellationToken = default)
+    public IPreparedQueryCommand<TResult> Prepare(bool nonStreamUsing = true, CancellationToken cancellationToken = default)
     {
-        return _dataProvider.GetPreparedQueryCommand(this, !nonStreamUsing, false, cancellationToken);
+        return _dataProvider.GetPreparedQueryCommand(this, !nonStreamUsing, false, cancellationToken, _manualSql, _makeParams);
     }
     public IAsyncEnumerator<TResult> GetAsyncEnumerator(CancellationToken cancellationToken = default)
     {
-        var preparedCommand = _dataProvider.GetPreparedQueryCommand(this, true, true, cancellationToken);
+        var preparedCommand = _dataProvider.GetPreparedQueryCommand(this, true, true, cancellationToken, _manualSql, _makeParams);
 
         return _dataProvider.CreateAsyncEnumerator<TResult>(preparedCommand, null, cancellationToken);
     }
@@ -734,23 +763,23 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         await t.ConfigureAwait(false);
     }
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public IAsyncEnumerable<TResult> AsAsyncEnumerable(params object[] @params) => _dataProvider.AsAsyncEnumerable<TResult>(_dataProvider.GetPreparedQueryCommand(this, true, true, CancellationToken.None), CancellationToken.None, @params);
+    public IAsyncEnumerable<TResult> AsAsyncEnumerable(params object[] @params) => _dataProvider.AsAsyncEnumerable<TResult>(_dataProvider.GetPreparedQueryCommand(this, true, true, CancellationToken.None, _manualSql, _makeParams), CancellationToken.None, @params);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public IAsyncEnumerable<TResult> AsAsyncEnumerable(CancellationToken cancellationToken, params object[] @params) => _dataProvider.AsAsyncEnumerable<TResult>(_dataProvider.GetPreparedQueryCommand(this, true, true, cancellationToken), cancellationToken, @params);
+    public IAsyncEnumerable<TResult> AsAsyncEnumerable(CancellationToken cancellationToken, params object[] @params) => _dataProvider.AsAsyncEnumerable<TResult>(_dataProvider.GetPreparedQueryCommand(this, true, true, cancellationToken, _manualSql, _makeParams), cancellationToken, @params);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public IEnumerable<TResult> AsEnumerable(params object[] @params) => _dataProvider.AsEnumerable(_dataProvider.GetPreparedQueryCommand(this, true, true, CancellationToken.None), @params);
+    public IEnumerable<TResult> AsEnumerable(params object[] @params) => _dataProvider.AsEnumerable(_dataProvider.GetPreparedQueryCommand(this, true, true, CancellationToken.None, _manualSql, _makeParams), @params);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Task<IEnumerable<TResult>> AsEnumerableAsync(params object[] @params) => _dataProvider.AsEnumerableAsync<TResult>(_dataProvider.GetPreparedQueryCommand(this, true, true, CancellationToken.None), CancellationToken.None, @params);
+    public Task<IEnumerable<TResult>> AsEnumerableAsync(params object[] @params) => _dataProvider.AsEnumerableAsync<TResult>(_dataProvider.GetPreparedQueryCommand(this, true, true, CancellationToken.None, _manualSql, _makeParams), CancellationToken.None, @params);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Task<IEnumerable<TResult>> AsEnumerableAsync(CancellationToken cancellationToken, params object[] @params) => _dataProvider.AsEnumerableAsync<TResult>(_dataProvider.GetPreparedQueryCommand(this, true, true, cancellationToken), cancellationToken, @params);
+    public Task<IEnumerable<TResult>> AsEnumerableAsync(CancellationToken cancellationToken, params object[] @params) => _dataProvider.AsEnumerableAsync<TResult>(_dataProvider.GetPreparedQueryCommand(this, true, true, cancellationToken, _manualSql, _makeParams), cancellationToken, @params);
     public List<TResult> ToList(params object[] @params)
     {
-        var preparedCommand = _dataProvider.GetPreparedQueryCommand(this, false, true, CancellationToken.None);
+        var preparedCommand = _dataProvider.GetPreparedQueryCommand(this, false, true, CancellationToken.None, _manualSql, _makeParams);
 
         return _dataProvider.ToList<TResult>(preparedCommand, @params);
     }
-    public Task<List<TResult>> ToListAsync(params object[] @params) => _dataProvider.ToListAsync(_dataProvider.GetPreparedQueryCommand(this, false, true, CancellationToken.None), @params, CancellationToken.None);
-    public Task<List<TResult>> ToListAsync(CancellationToken cancellationToken, params object[] @params) => _dataProvider.ToListAsync(_dataProvider.GetPreparedQueryCommand(this, false, true, cancellationToken), @params, cancellationToken);
+    public Task<List<TResult>> ToListAsync(params object[] @params) => _dataProvider.ToListAsync(_dataProvider.GetPreparedQueryCommand(this, false, true, CancellationToken.None, _manualSql, _makeParams), @params, CancellationToken.None);
+    public Task<List<TResult>> ToListAsync(CancellationToken cancellationToken, params object[] @params) => _dataProvider.ToListAsync(_dataProvider.GetPreparedQueryCommand(this, false, true, cancellationToken, _manualSql, _makeParams), @params, cancellationToken);
     public bool Any(params object[] @params)
     {
         bool oldIgnoreColumns = IgnoreColumns;
@@ -767,7 +796,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
                 queryCommand = Entity<TResult>.GetAnyCommand(_dataProvider, this);
             }
 
-            var preparedCommand = _dataProvider.GetPreparedQueryCommand(queryCommand, false, true, CancellationToken.None);
+            var preparedCommand = _dataProvider.GetPreparedQueryCommand(queryCommand, false, true, CancellationToken.None, _manualSql, _makeParams);
             return _dataProvider.ExecuteScalar<bool>(preparedCommand, @params, true);
         }
         finally
@@ -792,7 +821,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
                 queryCommand = Entity<TResult>.GetAnyCommand(_dataProvider, this);
             }
 
-            var preparedCommand = _dataProvider.GetPreparedQueryCommand(queryCommand, false, true, cancellationToken);
+            var preparedCommand = _dataProvider.GetPreparedQueryCommand(queryCommand, false, true, cancellationToken, _manualSql, _makeParams);
             return await _dataProvider.ExecuteScalar<bool>(preparedCommand, @params, true, cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -811,7 +840,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
                 Paging.Limit = 1;
                 PrepareCommand(false, CancellationToken.None);
             }
-            var preparedCommand = _dataProvider.GetPreparedQueryCommand(this, false, true, CancellationToken.None);
+            var preparedCommand = _dataProvider.GetPreparedQueryCommand(this, false, true, CancellationToken.None, _manualSql, _makeParams);
             return _dataProvider.First<TResult>(preparedCommand, @params);
         }
         finally
@@ -831,7 +860,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
                 Paging.Limit = 1;
                 PrepareCommand(false, cancellationToken);
             }
-            var preparedCommand = _dataProvider.GetPreparedQueryCommand(this, false, true, cancellationToken);
+            var preparedCommand = _dataProvider.GetPreparedQueryCommand(this, false, true, cancellationToken, _manualSql, _makeParams);
             return _dataProvider.FirstAsync<TResult>(preparedCommand, @params, cancellationToken);
         }
         finally
@@ -850,7 +879,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
                 Paging.Limit = 1;
                 PrepareCommand(false, CancellationToken.None);
             }
-            var preparedCommand = _dataProvider.GetPreparedQueryCommand(this, false, true, CancellationToken.None);
+            var preparedCommand = _dataProvider.GetPreparedQueryCommand(this, false, true, CancellationToken.None, _manualSql, _makeParams);
             return _dataProvider.FirstOrDefault<TResult>(preparedCommand, @params);
         }
         finally
@@ -870,7 +899,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
                 Paging.Limit = 1;
                 PrepareCommand(false, cancellationToken);
             }
-            var preparedCommand = _dataProvider.GetPreparedQueryCommand(this, false, true, cancellationToken);
+            var preparedCommand = _dataProvider.GetPreparedQueryCommand(this, false, true, cancellationToken, _manualSql, _makeParams);
             return _dataProvider.FirstOrDefaultAsync<TResult>(preparedCommand, @params, cancellationToken);
         }
         finally
@@ -888,7 +917,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
                 Paging.Limit = 2;
                 PrepareCommand(false, CancellationToken.None);
             }
-            var preparedCommand = _dataProvider.GetPreparedQueryCommand(this, false, true, CancellationToken.None);
+            var preparedCommand = _dataProvider.GetPreparedQueryCommand(this, false, true, CancellationToken.None, _manualSql, _makeParams);
             return _dataProvider.Single<TResult>(preparedCommand, @params);
         }
         finally
@@ -907,7 +936,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
                 Paging.Limit = 2;
                 PrepareCommand(false, cancellationToken);
             }
-            var preparedCommand = _dataProvider.GetPreparedQueryCommand(this, false, true, cancellationToken);
+            var preparedCommand = _dataProvider.GetPreparedQueryCommand(this, false, true, cancellationToken, _manualSql, _makeParams);
             return _dataProvider.SingleAsync<TResult>(preparedCommand, @params, cancellationToken);
         }
         finally
@@ -925,7 +954,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
                 Paging.Limit = 2;
                 PrepareCommand(false, CancellationToken.None);
             }
-            var preparedCommand = _dataProvider.GetPreparedQueryCommand(this, false, true, CancellationToken.None);
+            var preparedCommand = _dataProvider.GetPreparedQueryCommand(this, false, true, CancellationToken.None, _manualSql, _makeParams);
             return _dataProvider.SingleOrDefault<TResult>(preparedCommand, @params);
         }
         finally
@@ -944,7 +973,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
                 Paging.Limit = 2;
                 PrepareCommand(false, cancellationToken);
             }
-            var preparedCommand = _dataProvider.GetPreparedQueryCommand(this, false, true, cancellationToken);
+            var preparedCommand = _dataProvider.GetPreparedQueryCommand(this, false, true, cancellationToken, _manualSql, _makeParams);
             return _dataProvider.SingleOrDefaultAsync<TResult>(preparedCommand, @params, cancellationToken);
         }
         finally
