@@ -67,7 +67,7 @@ public class SqliteBenchmarkSimulateWork
         _efCtx = new EFDataContext(efBuilder.Options);
     }
     // [Benchmark()]
-    // public async Task NextormCompiledAsync()
+    // public async Task NextormPreparedAsync()
     // {
     //     await foreach (var row in _cmd)
     //     {
@@ -80,18 +80,18 @@ public class SqliteBenchmarkSimulateWork
     //     }
     // }
     [Benchmark()]
-    public async Task NextormCompiled()
+    public async Task NextormPreparedStreamAsync()
     {
-        foreach (var row in await _db.AsEnumerableAsync(_cmd))
+        foreach (var row in await _cmd.AsEnumerableAsync(_db))
         {
             for (var i = 0; i < SmallIterations; i++)
             {
-                var _ = await _db.FirstOrDefaultAsync(_cmdInner, row.Id, i);
+                var _ = await _cmdInner.FirstOrDefaultAsync(_db, row.Id, i);
             }
         }
     }
     // [Benchmark()]
-    // public async Task NextormCompiledFetch()
+    // public async Task NextormPreparedFetch()
     // {
     //     await foreach (var row in _cmd.Pipeline())
     //     {
@@ -104,19 +104,19 @@ public class SqliteBenchmarkSimulateWork
     //     }
     // }
     [Benchmark(Baseline = true)]
-    public async Task NextormCompiledToList()
+    public async Task NextormPreparedToListAsync()
     {
-        foreach (var row in await _db.ToListAsync(_cmdToList))
+        foreach (var row in await _cmdToList.ToListAsync(_db))
         {
             for (var i = 0; i < SmallIterations; i++)
             {
-                await _db.FirstOrDefaultAsync(_cmdInner, row.Id, i);
+                await _cmdInner.FirstOrDefaultAsync(_db, row.Id, i);
                 //var s = await _cmdInner.AnyAsync(row.Item1, i);
             }
         }
     }
     [Benchmark()]
-    public async Task NextormCached()
+    public async Task NextormCachedAsyncStream()
     {
         await foreach (var row in _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new { entity.Id, entity.Str, entity.Dt }))
         {
@@ -150,14 +150,8 @@ public class SqliteBenchmarkSimulateWork
             }
         }
     }
-
-    private void SimpleFirstOrDefault(long id, int p)
-    {
-        var _ = _ctx.SimpleEntity.Where(it => it.Id == id + p).Select(entity => new { entity.Id }).FirstOrDefault();
-    }
-
     [Benchmark()]
-    public async Task NextormCachedWithParamsToList()
+    public async Task NextormPreparedForLoopToListAsync()
     {
         var cmdInner = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0) + NORM.Param<int>(1)).FirstOrFirstOrDefaultCommand(entity => new { entity.Id }).Prepare();
         foreach (var row in await _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new { entity.Id, entity.Str, entity.Dt }).ToListAsync())
@@ -195,7 +189,7 @@ public class SqliteBenchmarkSimulateWork
     //     }
     // }
     [Benchmark]
-    public async Task EFCoreCompiled()
+    public async Task EFCoreCompiledToListAsync()
     {
         foreach (var row in await _efCompiled(_efCtx).ToListAsync())
         {
@@ -206,7 +200,7 @@ public class SqliteBenchmarkSimulateWork
         }
     }
     [Benchmark()]
-    public async Task Dapper()
+    public async Task DapperAsync()
     {
         foreach (var row in await _conn.QueryAsync<LargeEntity>("select id, someString as str, dt from large_table where id < @limit", new { limit = LargeListSize }))
         {
@@ -219,7 +213,7 @@ public class SqliteBenchmarkSimulateWork
         }
     }
     [Benchmark()]
-    public async Task DapperUnbuffered()
+    public async Task DapperAsyncStream()
     {
         await foreach (var row in _conn.QueryUnbufferedAsync<LargeEntity>("select id, someString as str, dt from large_table where id < @limit", new { limit = LargeListSize }))
         {

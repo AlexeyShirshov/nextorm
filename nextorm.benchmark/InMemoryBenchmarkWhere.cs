@@ -28,7 +28,7 @@ public class InMemoryBenchmarkWhere
         _cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new Tuple<int>(entity.Id)).Prepare(false);
     }
     [Benchmark(Baseline = true)]
-    public void NextormCompiledParam()
+    public void NextormPreparedParam()
     {
         for (var i = 0; i < Iterations; i++)
         {

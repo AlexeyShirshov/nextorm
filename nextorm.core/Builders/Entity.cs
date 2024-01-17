@@ -300,6 +300,8 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
     }
     public Entity<TEntity> OrderBy(Expression<Func<TEntity, object?>> orderExp) => OrderBy(orderExp, OrderDirection.Asc);
     public Entity<TEntity> OrderByDescending(Expression<Func<TEntity, object?>> orderExp) => OrderBy(orderExp, OrderDirection.Desc);
+
+    public IPreparedQueryCommand<TEntity> Prepare(bool nonStreamUsing = true, CancellationToken cancellationToken = default) => ToCommand().Prepare(nonStreamUsing, cancellationToken);
 }
 public class Entity : ICloneable
 {

@@ -27,7 +27,7 @@ public class InMemoryBenchmarkAny
         // _cmdToList = _ctx.SimpleEntity.Select(entity => new Tuple<int>(entity.Id)).Compile(true);
     }
     [Benchmark()]
-    public void NextormCompiled()
+    public void NextormPrepared()
     {
         _ctx.DataProvider.Any(_cmd, null);
     }

@@ -87,7 +87,7 @@ public class SqliteBenchmarkAny
     // {
     //     SetupNext(false);
     // }
-    // [GlobalSetup(Targets = new[] { nameof(NextormCompiled) })]
+    // [GlobalSetup(Targets = new[] { nameof(NextormPrepared) })]
     // public void CompileQueries()
     // {
     //     SetupNext(false);
@@ -112,7 +112,7 @@ public class SqliteBenchmarkAny
     //     SetupDapper();
     // }
     [Benchmark()]
-    public async Task NextormCompiled()
+    public async Task NextormPrepared()
     {
         for (var i = 0; i < Iterations; i++)
             await _db.AnyAsync(_cmd, i);

@@ -29,21 +29,21 @@ public class InMemoryBenchmarkIteration
         _cmdToList = _ctx.SimpleEntity.Select(entity => new Tuple<int>(entity.Id)).Prepare(true);
     }
     // [Benchmark()]
-    // public async Task NextormCompiled()
+    // public async Task NextormPrepared()
     // {
     //     await foreach (var row in _cmd)
     //     {
     //     }
     // }
     [Benchmark()]
-    public void NextormCompiledSync()
+    public void NextormPreparedSync()
     {
         foreach (var row in _provider.AsEnumerable(_cmd))
         {
         }
     }
     [Benchmark()]
-    public void NextormCompiledSyncToList()
+    public void NextormPreparedSyncToList()
     {
         foreach (var row in _provider.ToList(_cmdToList))
         {

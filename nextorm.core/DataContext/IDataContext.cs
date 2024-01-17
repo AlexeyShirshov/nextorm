@@ -82,7 +82,7 @@ public interface IDataContext : IAsyncDisposable, IDisposable
     /// <param name="nonStreamUsing">true, if optimized for buffered or scalar value results; false for non-buffered (stream) using, when result is IEnumerable or IAsyncEnumerable</param>
     /// <param name="storeInCache">true to store query plan in cache, overwise it is stored only in query command</param>
     /// <param name="cancellationToken"></param>
-    IPreparedQueryCommand<TResult> PrepareFromSql<TResult>(string sql, object? @params, QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken);
+    //IPreparedQueryCommand<TResult> PrepareFromSql<TResult>(string sql, object? @params, QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken);
     /// <summary>
     /// 
     /// </summary>
@@ -92,7 +92,7 @@ public interface IDataContext : IAsyncDisposable, IDisposable
     /// <param name="storeInCache">true to store query plan in cache, overwise it is stored only in query command</param>
     /// <param name="cancellationToken"></param>
     // void Compile<TResult>(QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken);
-    IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, CancellationToken cancellationToken, string? manualSql = null, Func<List<Param>>? makeParams = null);
+    IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, CancellationToken cancellationToken);
     IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken);
     IEnumerator<TResult> CreateEnumerator<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params);
     // Task<IEnumerator<TResult>> CreateEnumeratorAsync<TResult>(IPreparedQueryCommand preparedQueryCommand, object[]? @params, CancellationToken cancellationToken);

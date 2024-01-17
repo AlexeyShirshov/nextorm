@@ -256,16 +256,18 @@ public class DbContext : IDataContext
     //     return compiledQuery;
     // }
 
-    public IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, CancellationToken cancellationToken, string? manualSql = null, Func<List<Param>>? makeParams = null)
+    public IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, CancellationToken cancellationToken)
     {
         QueryPlan? queryPlan = null;
         IDbCommandHolder? planCache = null;
 
         if (!queryCommand.IsPrepared) queryCommand.PrepareCommand(!storeInCache, cancellationToken);
 
+        var ext = queryCommand.CustomData as DbQueryCommandExtension;
+
         if (queryCommand.Cache && storeInCache)
         {
-            queryPlan = new QueryPlan(queryCommand, manualSql);
+            queryPlan = new QueryPlan(queryCommand, ext?.ManualSql);
             QueryPlanCache.TryGetValue(queryPlan, out planCache);
         }
 
@@ -274,9 +276,9 @@ public class DbContext : IDataContext
             if ((Logger?.IsEnabled(LogLevel.Debug) ?? false) && storeInCache && queryCommand.Cache)
                 Logger.LogDebug("Query plan cache miss with hash: {hash}", queryPlan!.GetHashCode());
 
-            var (sql, @params) = makeParams == null
+            var (sql, @params) = ext is null
                 ? MakeSelect(queryCommand, false)
-                : (manualSql, makeParams());
+                : (ext.ManualSql, ext.MakeParams?.Invoke());
 
             // var (sql, @params) = MakeSelect(queryCommand, true);
             // var cacheEntryX = new SqlCacheEntry(null) { Enumerator = new EmptyEnumerator<TResult>() };
@@ -299,7 +301,7 @@ public class DbContext : IDataContext
             //dbCommand.Prepare();
             //return new SqlCacheEntry(null) { Enumerator = new EmptyEnumerator<TResult>() };
 
-            var compiledQuery = new DbPreparedQueryCommand<TResult>(dbCommand, map, queryCommand.SingleRow, queryCommand.OneColumn, makeParams is null ? sql! : null, noParams);
+            var compiledQuery = new DbPreparedQueryCommand<TResult>(dbCommand, map, queryCommand.SingleRow, queryCommand.OneColumn, ext is null ? sql! : null, noParams);
 
             if (createEnumerator)
             {
@@ -322,7 +324,7 @@ public class DbContext : IDataContext
 
             var compiledQuery = (DbPreparedQueryCommand<TResult>)planCache;
 
-            if (makeParams is not null)
+            if (queryCommand.CustomData is DbQueryCommandExtension)
             {
                 Debug.Assert(string.IsNullOrEmpty(compiledQuery.SqlStmt), "SqlStmt must be null");
 
@@ -776,25 +778,25 @@ public class DbContext : IDataContext
     {
         return v ? "1" : "0";
     }
-    public IPreparedQueryCommand<TResult> PrepareFromSql<TResult>(string sql, object? @params, QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken)
-    {
-        // if (!queryCommand.IsPrepared)
-        //     queryCommand.PrepareCommand(!storeInCache, cancellationToken);
+    // public IPreparedQueryCommand<TResult> PrepareFromSql<TResult>(string sql, object? @params, QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken)
+    // {
+    //     // if (!queryCommand.IsPrepared)
+    //     //     queryCommand.PrepareCommand(!storeInCache, cancellationToken);
 
-        return GetPreparedQueryCommand(queryCommand, !nonStreamUsing, storeInCache, cancellationToken, sql, () =>
-        {
-            List<Param> ps = new();
-            if (@params is not null)
-            {
-                var t = @params.GetType();
-                foreach (var prop in t.GetProperties(BindingFlags.Instance | BindingFlags.Public))
-                {
-                    ps.Add(new Param(prop.Name, prop.GetValue(@params)));
-                }
-            }
-            return ps;
-        });
-    }
+    //     return GetPreparedQueryCommand(queryCommand, !nonStreamUsing, storeInCache, cancellationToken, sql, () =>
+    //     {
+    //         List<Param> ps = new();
+    //         if (@params is not null)
+    //         {
+    //             var t = @params.GetType();
+    //             foreach (var prop in t.GetProperties(BindingFlags.Instance | BindingFlags.Public))
+    //             {
+    //                 ps.Add(new Param(prop.Name, prop.GetValue(@params)));
+    //             }
+    //         }
+    //         return ps;
+    //     });
+    // }
     // public void Compile<TResult>(QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken)
     // {
     //     if (!queryCommand.IsPrepared)

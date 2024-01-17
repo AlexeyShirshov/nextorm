@@ -46,7 +46,7 @@ public partial class InMemoryContext : IDataContext
     {
         return (InMemoryCacheEntry<TResult>)GetPreparedQueryCommand(queryCommand, false, true, cancellationToken);
     }
-    public IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, CancellationToken cancellationToken, string? manualSql = null, Func<List<Param>>? makeParams = null)
+    public IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, CancellationToken cancellationToken)
     {
         QueryPlan? queryPlan = null;
         IPreparedQueryCommand<TResult>? planCache = null;
@@ -55,7 +55,7 @@ public partial class InMemoryContext : IDataContext
 
         if (queryCommand.Cache && storeInCache)
         {
-            queryPlan = new QueryPlan(queryCommand, manualSql);
+            queryPlan = new QueryPlan(queryCommand, null);
             if (_cmdIdx.TryGetValue(queryPlan, out var planCache2)) planCache = planCache2 as IPreparedQueryCommand<TResult>;
         }
 
@@ -79,7 +79,6 @@ public partial class InMemoryContext : IDataContext
                 createCompiledQueryDelegate = (Func<QueryCommand<TResult>, object>)del;
 
             var ce = new InMemoryCacheEntry<TResult>(createCompiledQueryDelegate(queryCommand), CreateEnumeratorDelegate(queryCommand, cancellationToken), queryCommand);
-            queryCommand._compiledQuery = ce;
             ce.Enumerator = ce.CreateEnumerator(queryCommand, ce, null, cancellationToken)!;
 
             planCache = ce;

@@ -42,9 +42,9 @@ public class SqliteBenchmarkWhere
         _ctx = new TestDataRepository(_db);
         _db.EnsureConnectionOpen();
 
-        _cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).ToCommand().Prepare(false);
+        _cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Prepare(false);
 
-        _cmdToList = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).ToCommand().Prepare(true);
+        _cmdToList = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Prepare();
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(@$"Filename={filepath}");
@@ -62,33 +62,33 @@ public class SqliteBenchmarkWhere
     }
     [Benchmark()]
     //[BenchmarkCategory("Stream")]
-    public async Task NextormCompiledAsync()
+    public async Task NextormPreparedAsyncStream()
     {
         for (var i = 0; i < Iterations; i++)
         {
-            await foreach (var row in _db.AsAsyncEnumerable(_cmd, i))
+            await foreach (var row in _cmd.AsAsyncEnumerable(_db, i))
             {
             }
         }
     }
     [Benchmark(Baseline = true)]
     //[BenchmarkCategory("Stream")]
-    public async Task NextormCompiled()
+    public async Task NextormPreparedStreamAsync()
     {
         for (var i = 0; i < Iterations; i++)
         {
-            foreach (var row in await _db.AsEnumerableAsync(_cmd, i))
+            foreach (var row in await _cmd.AsEnumerableAsync(_db, i))
             {
             }
         }
     }
     [Benchmark()]
     //[BenchmarkCategory("Buffered")]
-    public async Task NextormCompiledToList()
+    public async Task NextormPreparedToListAsync()
     {
         for (var i = 0; i < Iterations; i++)
         {
-            foreach (var row in await _db.ToListAsync(_cmdToList, i))
+            foreach (var row in await _cmdToList.ToListAsync(_db, i))
             {
             }
         }
@@ -110,21 +110,21 @@ public class SqliteBenchmarkWhere
     //         }
     //     }
     // }
+    // [Benchmark()]
+    // //[BenchmarkCategory("Stream")]
+    // public async Task NextormCachedParamStream()
+    // {
+    //     var cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new { entity.Id }).Prepare(false);
+    //     for (var i = 0; i < Iterations; i++)
+    //     {
+    //         foreach (var row in await _db.AsEnumerableAsync(cmd, i))
+    //         {
+    //         }
+    //     }
+    // }
     [Benchmark()]
     //[BenchmarkCategory("Stream")]
-    public async Task NextormCachedParam()
-    {
-        var cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new { entity.Id }).Prepare(false);
-        for (var i = 0; i < Iterations; i++)
-        {
-            foreach (var row in await _db.AsEnumerableAsync(cmd, i))
-            {
-            }
-        }
-    }
-    [Benchmark()]
-    //[BenchmarkCategory("Stream")]
-    public async Task NextormCached()
+    public async Task NextormCachedStreamAsync()
     {
         for (var i = 0; i < Iterations; i++)
         {
@@ -135,21 +135,21 @@ public class SqliteBenchmarkWhere
             }
         }
     }
-    [Benchmark()]
-    //[BenchmarkCategory("Buffered")]
-    public async Task NextormCachedToList()
-    {
-        var cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new { entity.Id }).Prepare(true);
-        for (var i = 0; i < Iterations; i++)
-        {
-            foreach (var row in await _db.ToListAsync(cmd, i))
-            {
-            }
-        }
-    }
+    // [Benchmark()]
+    // //[BenchmarkCategory("Buffered")]
+    // public async Task NextormCachedToList()
+    // {
+    //     var cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new { entity.Id }).Prepare(true);
+    //     for (var i = 0; i < Iterations; i++)
+    //     {
+    //         foreach (var row in await _db.ToListAsync(cmd, i))
+    //         {
+    //         }
+    //     }
+    // }
     [Benchmark]
     //[BenchmarkCategory("Buffered")]
-    public async Task EFCore()
+    public async Task EFCoreToListAsync()
     {
         for (var i = 0; i < Iterations; i++)
         {
@@ -161,7 +161,7 @@ public class SqliteBenchmarkWhere
     }
     [Benchmark]
     //[BenchmarkCategory("Stream")]
-    public async Task EFCoreStream()
+    public async Task EFCoreAsyncStream()
     {
         for (var i = 0; i < Iterations; i++)
         {
@@ -173,18 +173,18 @@ public class SqliteBenchmarkWhere
     }
     [Benchmark]
     //[BenchmarkCategory("Stream")]
-    public async Task EFCoreCompiled()
+    public async Task EFCoreCompiledAsyncStream()
     {
         for (var i = 0; i < Iterations; i++)
         {
-            await foreach (var row in _efCompiled(_efCtx, i).Select(entity => new { entity.Id }))
+            await foreach (var row in _efCompiled(_efCtx, i))
             {
             }
         }
     }
     [Benchmark]
     //[BenchmarkCategory("Buffered")]
-    public async Task Dapper()
+    public async Task DapperAsync()
     {
         for (var i = 0; i < Iterations; i++)
             foreach (var row in await _conn.QueryAsync<SimpleEntity>("select id from simple_entity where id=@id", new { id = i }))
@@ -193,7 +193,7 @@ public class SqliteBenchmarkWhere
     }
     [Benchmark]
     //[BenchmarkCategory("Stream")]
-    public async Task DapperUnbuffered()
+    public async Task DapperAsyncStream()
     {
         for (var i = 0; i < Iterations; i++)
             await foreach (var row in _conn.QueryUnbufferedAsync<SimpleEntity>("select id from simple_entity where id=@id", new { id = i }))

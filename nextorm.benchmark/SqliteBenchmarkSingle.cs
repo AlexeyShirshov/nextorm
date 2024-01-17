@@ -55,14 +55,16 @@ public class SqliteBenchmarkSingle
         _conn.Open();
     }
     [Benchmark(Baseline = true)]
-    public async Task NextormSingleCompiled()
+    public async Task NextormPreparedSingleOrDefault()
     {
-        await _db.SingleAsync(_cmd);
+        for (int i = 0; i < 10; i++)
+            await _cmd.SingleAsync(_db, i);
     }
     [Benchmark()]
-    public async Task NextormSingleOrDefaultCompiled()
+    public async Task NextormCompiledSingleOrDefault()
     {
-        await _db.SingleOrDefaultAsync(_cmd);
+        for (int i = 0; i < 10; i++)
+            await _cmd.SingleOrDefaultAsync(_db, i);
     }
     [Benchmark()]
     public async Task NextormSingleCached()
