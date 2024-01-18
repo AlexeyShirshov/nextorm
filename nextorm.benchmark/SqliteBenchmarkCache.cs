@@ -65,7 +65,7 @@ public class SqliteBenchmarkCache
     {
         using var ctx = new EFDataContext(_efBuilder.Options);
         var cmd = ctx.LargeEntities.Where(it => it.Id == 1).Select(it => new { it.Id, it.Str, it.Dt });
-        var _ = cmd.ToList();
+        _ = cmd.ToList();
         // pseudo code
         //Microsoft.EntityFrameworkCore.DbContext.ClearCache();
     }

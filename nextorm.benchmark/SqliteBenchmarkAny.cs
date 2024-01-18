@@ -112,13 +112,13 @@ public class SqliteBenchmarkAny
     //     SetupDapper();
     // }
     [Benchmark()]
-    public async Task NextormPrepared()
+    public async Task Nextorm_Prepared()
     {
         for (var i = 0; i < Iterations; i++)
             await _db.AnyAsync(_cmd, i);
     }
     [Benchmark()]
-    public async Task NextormCached()
+    public async Task Nextorm_Cached()
     {
         for (var i = 0; i < Iterations; i++)
             await _ctx.SimpleEntity.Where(e => e.Id == i).AnyAsync();
@@ -130,7 +130,7 @@ public class SqliteBenchmarkAny
             await _efCtx.SimpleEntities.AnyAsync(e => e.Id == i);
     }
     [Benchmark]
-    public async Task EFCoreCompiled()
+    public async Task EFCore_Compiled()
     {
         for (var i = 0; i < Iterations; i++)
             await _efCompiled(_efCtx, i);

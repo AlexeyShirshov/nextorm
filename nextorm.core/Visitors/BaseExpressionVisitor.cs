@@ -594,7 +594,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 
                 if (!_dontNeedAlias)
                 {
-                    if (lambdaParameter!.Type!.TryGetProjectionDimension(out var _))
+                    if (lambdaParameter!.Type!.TryGetProjectionDimension(out _))
                     {
                         var aliasVisitor = new AliasFromProjectionVisitor();
                         aliasVisitor.Visit(node.Expression);

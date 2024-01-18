@@ -9,10 +9,10 @@ using nextorm.benchmark;
 // BenchmarkRunner.Run<SqliteBenchmarkIteration>();
 // BenchmarkRunner.Run<SqliteBenchmarkLargeIteration>();
 // BenchmarkRunner.Run<SqliteBenchmarkWhere>();
-// BenchmarkRunner.Run<SqliteBenchmarkSimulateWork>();
+BenchmarkRunner.Run<SqliteBenchmarkSimulateWork>();
 // BenchmarkRunner.Run<SqliteBenchmarkMakeSelect>();
 // BenchmarkRunner.Run<SqliteBenchmarkAny>();
-BenchmarkRunner.Run<SqliteBenchmarkFirst>();
+// BenchmarkRunner.Run<SqliteBenchmarkFirst>();
 // BenchmarkRunner.Run<SqliteBenchmarkSingle>();
 // BenchmarkRunner.Run<SqliteBenchmarkCache>();
 

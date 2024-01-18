@@ -129,7 +129,7 @@ public class SqliteBenchmarkFirst
     public async Task Dapper_Entity_FirstOrDefault()
     {
         for (int i = 0; i < 10; i++)
-            await _conn.QueryFirstOrDefaultAsync<LargeEntity>("select id, someString as str, dt from large_table where id = @id", new { id = i });
+            await _conn.QueryFirstOrDefaultAsync<LargeEntity>("select id, someString as str, dt from large_table where id = @id limit 1", new { id = i });
     }
     [Benchmark]
     public async Task Dapper_Scalar_FirstOrDefault()
@@ -137,65 +137,4 @@ public class SqliteBenchmarkFirst
         for (int i = 0; i < 10; i++)
             await _conn.QueryFirstOrDefaultAsync<int?>("select id from simple_entity where id = @id limit 1", new { id = i });
     }
-    // [Benchmark()]
-    // [BenchmarkCategory("Filter")]
-    // public async Task NextormFilterCompiled()
-    // {
-    //     await _cmdFilter.AnyAsync();
-    // }
-    // [Benchmark()]
-    // [BenchmarkCategory("Filter")]
-    // public async Task NextormFilterCached()
-    // {
-    //     await _ctx.SimpleEntity.Where(it => it.Id > 5).AnyAsync();
-    // }
-    // [Benchmark]
-    // [BenchmarkCategory("Filter")]
-    // public async Task EFCoreFilter()
-    // {
-    //     await _efCtx.SimpleEntities.Where(it => it.Id > 5).AnyAsync();
-    // }
-    // [Benchmark]
-    // [BenchmarkCategory("Filter")]
-    // public async Task EFCoreFilterCompiled()
-    // {
-    //     await _efCompiledFilter(_efCtx);
-    // }
-    // [Benchmark]
-    // [BenchmarkCategory("Filter")]
-    // public async Task DapperFilter()
-    // {
-    //     await _conn.ExecuteScalarAsync<bool>("select exists(select id from simple_entity where id > 5)");
-    // }
-    // [Benchmark()]
-    // [BenchmarkCategory("FilterParam")]
-    // public async Task NextormFilterParamCompiled()
-    // {
-    //     await _cmdFilterParam.AnyAsync(5);
-    // }
-    // [Benchmark()]
-    // [BenchmarkCategory("FilterParam")]
-    // public async Task NextormFilterParamCached()
-    // {
-    //     await _ctx.SimpleEntity.Where(it => it.Id > NORM.Param<int>(0)).AnyAsync(5);
-    // }
-    // [Benchmark]
-    // [BenchmarkCategory("FilterParam")]
-    // public async Task EFCoreFilterParam()
-    // {
-    //     var id = 5;
-    //     await _efCtx.SimpleEntities.Where(it => it.Id > id).AnyAsync();
-    // }
-    // [Benchmark]
-    // [BenchmarkCategory("FilterParam")]
-    // public async Task EFCoreFilterParamCompiled()
-    // {
-    //     await _efCompiledFilterParam(_efCtx, 5);
-    // }
-    // [Benchmark]
-    // [BenchmarkCategory("FilterParam")]
-    // public async Task DapperFilterParam()
-    // {
-    //     await _conn.ExecuteScalarAsync<bool>("select exists(select id from simple_entity where id > @id)", new { id = 5 });
-    // }
 }

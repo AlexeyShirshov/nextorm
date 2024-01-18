@@ -59,7 +59,7 @@ public class SqliteBenchmarkIteration
         _conn.Open();
     }
     [Benchmark()]
-    public async Task NextormPreparedStream()
+    public async Task Nextorm_Prepared_AsyncStream()
     {
         await foreach (var row in _cmd.AsAsyncEnumerable(_db))
         {
@@ -73,14 +73,14 @@ public class SqliteBenchmarkIteration
     //     }
     // }
     [Benchmark()]
-    public async Task NextormPreparedToList()
+    public async Task Nextorm_Prepared_ToListAsync()
     {
         foreach (var row in await _cmdToList.ToListAsync(_db))
         {
         }
     }
     [Benchmark()]
-    public async Task NextormPreparedManualSqlToList()
+    public async Task Nextorm_PreparedManualSql_ToListAsync()
     {
         foreach (var row in await _cmdManualToList.ToListAsync(_db))
         {
@@ -94,14 +94,14 @@ public class SqliteBenchmarkIteration
     //     }
     // }
     [Benchmark()]
-    public async Task NextormCachedToList()
+    public async Task Nextorm_Cached_ToListAsync()
     {
         foreach (var row in await _ctx.SimpleEntity.ToListAsync())
         {
         }
     }
     [Benchmark()]
-    public async Task NextormCachedManualSqlToList()
+    public async Task Nextorm_CachedManualSql_ToListAsync()
     {
         var cmd = _ctx.SimpleEntity.ToCommand().WithSql("select id from simple_entity");
         foreach (var row in await cmd.ToListAsync())
@@ -128,14 +128,14 @@ public class SqliteBenchmarkIteration
     //     }
     // }
     [Benchmark]
-    public async Task EFCoreCompiledAsyncStream()
+    public async Task EFCore_Compiled_ToListAsync()
     {
         foreach (var row in await _efCompiled(_efCtx).ToListAsync())
         {
         }
     }
     [Benchmark]
-    public async Task DapperAsyncStream()
+    public async Task Dapper_AsyncStream()
     {
         await foreach (var row in _conn.QueryUnbufferedAsync<SimpleEntity>("select id from simple_entity"))
         {

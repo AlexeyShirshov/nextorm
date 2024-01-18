@@ -82,7 +82,7 @@ public class SqliteBenchmarkLargeIteration
     // }
     [Benchmark()]
     //[BenchmarkCategory("Stream")]
-    public async Task NextormPreparedStreamAsync()
+    public async Task Nextorm_Prepared_StreamAsync()
     {
         foreach (var row in await _cmdExec.AsEnumerableAsync(_db))
         {
@@ -90,7 +90,7 @@ public class SqliteBenchmarkLargeIteration
     }
     [Benchmark()]
     //[BenchmarkCategory("Buffered")]
-    public async Task NextormPreparedToListAsync()
+    public async Task Nextorm_Prepared_ToListAsync()
     {
         foreach (var row in await _cmdToList.ToListAsync(_db))
         {
@@ -105,7 +105,7 @@ public class SqliteBenchmarkLargeIteration
     // }
     [Benchmark()]
     //[BenchmarkCategory("Stream")]
-    public async Task NextormCachedStreamAsync()
+    public async Task Nextorm_Cached_StreamAsync()
     {
         foreach (var row in await _ctx.LargeEntity.Select(entity => new { entity.Id, entity.Str, entity.Dt }).AsEnumerableAsync())
         {
@@ -120,7 +120,7 @@ public class SqliteBenchmarkLargeIteration
     // }
     [Benchmark()]
     //[BenchmarkCategory("Buffered")]
-    public async Task NextormCachedToListAsync()
+    public async Task Nextorm_Cached_ToListAsync()
     {
         foreach (var row in await _ctx.LargeEntity.Select(entity => new { entity.Id, entity.Str, entity.Dt }).ToListAsync())
         {
@@ -135,7 +135,7 @@ public class SqliteBenchmarkLargeIteration
     // }
     [Benchmark]
     //[BenchmarkCategory("Buffered")]
-    public async Task EFCoreToListAsync()
+    public async Task EFCore_ToListAsync()
     {
         foreach (var row in await _efCtx.LargeEntities.Select(entity => new { entity.Id, entity.Str, entity.Dt }).ToListAsync())
         {
@@ -143,7 +143,7 @@ public class SqliteBenchmarkLargeIteration
     }
     [Benchmark]
     //[BenchmarkCategory("Stream")]
-    public async Task EFCoreAsyncStream()
+    public async Task EFCore_AsyncStream()
     {
         await foreach (var row in _efCtx.LargeEntities.Select(entity => new { entity.Id, entity.Str, entity.Dt }).AsAsyncEnumerable())
         {
@@ -151,7 +151,7 @@ public class SqliteBenchmarkLargeIteration
     }
     [Benchmark]
     //[BenchmarkCategory("Stream")]
-    public async Task EFCoreCompiledAsyncStream()
+    public async Task EFCore_Compiled_AsyncStream()
     {
         await foreach (var row in _efCompiled(_efCtx))
         {
@@ -159,7 +159,7 @@ public class SqliteBenchmarkLargeIteration
     }
     [Benchmark]
     //[BenchmarkCategory("Buffered")]
-    public async Task DapperAsync()
+    public async Task Dapper_Async()
     {
         foreach (var row in await _conn.QueryAsync<LargeEntity>("select id, someString as str, dt from large_table"))
         {
@@ -167,7 +167,7 @@ public class SqliteBenchmarkLargeIteration
     }
     [Benchmark]
     //[BenchmarkCategory("Stream")]
-    public async Task DapperAsyncStream()
+    public async Task Dapper_AsyncStream()
     {
         await foreach (var row in _conn.QueryUnbufferedAsync<LargeEntity>("select id, someString as str, dt from large_table"))
         {

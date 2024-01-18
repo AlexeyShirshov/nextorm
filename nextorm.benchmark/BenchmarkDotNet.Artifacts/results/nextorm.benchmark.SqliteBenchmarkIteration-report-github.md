@@ -9,13 +9,13 @@ Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical 
 Job=.NET 8.0  Runtime=.NET 8.0  
 
 ```
-| Method                         | Mean     | Error    | StdDev   | Gen0   | Gen1   | Allocated |
-|------------------------------- |---------:|---------:|---------:|-------:|-------:|----------:|
-| NextormCompiledManualSqlToList | 33.14 μs | 0.542 μs | 0.507 μs | 0.3052 |      - |   1.66 KB |
-| NextormCompiledToList          | 33.24 μs | 0.530 μs | 0.495 μs | 0.3052 |      - |   1.66 KB |
-| NextormCompiledStream          | 33.76 μs | 0.654 μs | 0.895 μs | 0.3052 |      - |   1.48 KB |
-| NextormCachedToList            | 35.58 μs | 0.558 μs | 0.522 μs | 0.6104 |      - |   2.89 KB |
-| NextormCachedManualSqlToList   | 35.62 μs | 0.620 μs | 0.580 μs | 0.6104 |      - |   3.01 KB |
-| Dapper                         | 41.96 μs | 0.353 μs | 0.295 μs | 0.3662 |      - |   1.88 KB |
-| DapperUnbuffered               | 42.81 μs | 0.846 μs | 0.831 μs | 0.3662 |      - |    1.8 KB |
-| EFCoreCompiled                 | 58.04 μs | 1.054 μs | 1.171 μs | 1.5259 | 0.4883 |   7.19 KB |
+| Method                                | Mean     | Error    | StdDev   | Gen0   | Gen1   | Allocated |
+|-------------------------------------- |---------:|---------:|---------:|-------:|-------:|----------:|
+| Nextorm_Prepared_AsyncStream          | 32.97 μs | 0.658 μs | 0.758 μs | 0.3052 |      - |   1.48 KB |
+| Nextorm_Prepared_ToListAsync          | 33.12 μs | 0.657 μs | 0.963 μs | 0.3052 |      - |   1.66 KB |
+| Nextorm_PreparedManualSql_ToListAsync | 33.47 μs | 0.547 μs | 0.511 μs | 0.3052 |      - |   1.66 KB |
+| Nextorm_CachedManualSql_ToListAsync   | 35.76 μs | 0.714 μs | 0.733 μs | 0.6104 |      - |   3.01 KB |
+| Nextorm_Cached_ToListAsync            | 36.05 μs | 0.715 μs | 1.361 μs | 0.6104 |      - |   2.89 KB |
+| DapperAsync                           | 40.61 μs | 0.698 μs | 0.619 μs | 0.3662 |      - |   1.88 KB |
+| Dapper_AsyncStream                    | 41.30 μs | 0.788 μs | 0.809 μs | 0.3662 |      - |    1.8 KB |
+| EFCore_Compiled_ToListAsync           | 57.51 μs | 1.098 μs | 1.027 μs | 1.5259 | 0.4883 |   7.19 KB |
