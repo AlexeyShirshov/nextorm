@@ -1348,6 +1348,11 @@ public class DbContext : IDataContext
         }
         throw new NotSupportedException(queryCommand.GetType().Name);
     }
+
+    public virtual string MakeCount(bool distinct, bool big)
+    {
+        throw new NotImplementedException();
+    }
     // class EmptyEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerator<TResult>
     // {
     //     public TResult Current => default;

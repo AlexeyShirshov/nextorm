@@ -300,8 +300,9 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
     }
     public Entity<TEntity> OrderBy(Expression<Func<TEntity, object?>> orderExp) => OrderBy(orderExp, OrderDirection.Asc);
     public Entity<TEntity> OrderByDescending(Expression<Func<TEntity, object?>> orderExp) => OrderBy(orderExp, OrderDirection.Desc);
-
     public IPreparedQueryCommand<TEntity> Prepare(bool nonStreamUsing = true, CancellationToken cancellationToken = default) => ToCommand().Prepare(nonStreamUsing, cancellationToken);
+    public int Count() => Select(e => NORM.SQL.count()).First();
+    public Task<int> CountAsync() => Select(e => NORM.SQL.count()).FirstAsync();
 }
 public class Entity : ICloneable
 {

@@ -90,4 +90,14 @@ public class SqliteDbContext : DbContext
         //     _sbPool.Return(sb);
         // }
     }
+    public override string MakeCount(bool distinct, bool big)
+    {
+        if (big) throw new NotSupportedException("count big is not supported");
+
+        return distinct switch
+        {
+            true => "count(distinct ",
+            _ => "count("
+        };
+    }
 }

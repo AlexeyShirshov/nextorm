@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Linq.Expressions;
 using System.Text;
 using Microsoft.Extensions.Logging;
@@ -198,7 +199,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 if (!_paramMode)
                     Visit(parExp);
 
-                if (!_paramMode) _builder!.Append(" in (");
+                if (!_paramMode) _builder!.Append("in (");
 
                 var constRepl = new ReplaceConstantsExpressionVisitor(_queryProvider);
                 var body = constRepl.Visit(cmdExp);
@@ -238,7 +239,29 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 
                 return node;
             }
+            else if (node.Method.Name == nameof(NORM.NORM_SQL.count)
+                || node.Method.Name == nameof(NORM.NORM_SQL.distinct_count)
+                || node.Method.Name == nameof(NORM.NORM_SQL.count_big)
+                || node.Method.Name == nameof(NORM.NORM_SQL.distinct_count_big))
+            {
+                if (!_paramMode) _builder!.Append(_dataProvider.MakeCount(node.Method.Name.StartsWith("distinct"), node.Method.Name.EndsWith("big")));
 
+                if (node.Arguments is [NewArrayExpression args] && args.Expressions is not [])//ReadOnlyCollection<Expression> args
+                {
+                    foreach (var argExp in args.Expressions)
+                    {
+                        using var visitor = new BaseExpressionVisitor(_entityType, _dataProvider, _tableProvider, 0, null, _paramProvider, _queryProvider, _dontNeedAlias, _paramMode);
+                        visitor.Visit(argExp);
+                        _params.AddRange(visitor.Params);
+                        if (!_paramMode) _builder!.Append(visitor.ToString()).Append(", ");
+                    }
+                    if (!_paramMode) _builder!.Length -= 2;
+                }
+
+                if (!_paramMode) _builder!.Append(')');
+
+                return node;
+            }
 
             throw new NotImplementedException();
         }

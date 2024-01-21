@@ -155,7 +155,8 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                     return lambda;
                 }
             }
-            throw new NotImplementedException();
+
+            return node;
         }
         else if (node.Object is not null && node.Object.Type.IsGenericType && node.Object.Type.GetGenericTypeDefinition().IsAssignableTo(typeof(Entity<>)))
         {
