@@ -697,4 +697,18 @@ public class SqlCommandTests
 
         r.Id.Should().Be(2);
     }
+    [Fact]
+    public async Task Select_MemeberInit()
+    {
+        // Given
+        var cmd = _sut.SimpleEntity.Select(it => new SimpleEntity { Id = it.Id });
+        // When
+        var r = await cmd.FirstAsync();
+
+        // Then
+
+        r.Should().NotBeNull();
+
+        r.Id.Should().Be(1);
+    }
 }

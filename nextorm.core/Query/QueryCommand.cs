@@ -265,6 +265,42 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
                     }
                 // }
             }
+            else if (_exp.Body is MemberInitExpression init)
+            {
+                selectList = new List<SelectExpression>();
+                var bindings = init.Bindings;
+                var bindingsCount = bindings.Count;
+                var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataContext, this, cancellationToken);
+                for (var idx = 0; idx < bindingsCount; idx++)
+                {
+                    if (cancellationToken.IsCancellationRequested)
+                        return (selectList, columnsHash, columnsPlanHash);
+
+                    var binding = bindings[idx] as MemberAssignment;
+
+                    var selExp = new SelectExpression((binding.Member as PropertyInfo).PropertyType, _dataContext.ExpressionsCache, this)
+                    {
+                        Index = idx,
+                        PropertyName = binding.Member.Name!,
+                        Expression = innerQueryVisitor.Visit(binding.Expression)
+                    };
+                    //}
+                    selExp.HashCode = selExp.GetHashCode();
+                    selExp.PlanHashCode = GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
+                    selectList.Add(selExp);
+
+                    if (!_dontCache && !noHash) unchecked
+                        {
+                            //columnsHash = columnsHash * 13 + selExp.HashCode;
+
+                            //comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
+                            columnsPlanHash = columnsPlanHash * 13 + selExp.PlanHashCode;
+                        }
+                }
+
+                if (selectList.Count == 0)
+                    throw new PrepareException("Select must return new anonymous type with at least one property");
+            }
             else if (_dataContext.NeedMapping)
             {
                 if (/*!CacheList || */!_dataContext.SelectListCache.TryGetValue(srcType!, out selectList))
@@ -574,6 +610,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         }
 
         var idx = int.Parse(alias[1..]);
+        if (idx <= 1) return null;
         return Joins[idx - 2].Query;
     }
     public string GetParamName()

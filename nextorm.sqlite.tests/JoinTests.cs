@@ -112,4 +112,24 @@ public class JoinTests
 
         idx.Should().Be(0);
     }
+    [Fact]
+    public async Task SelectJoinEntity_ShouldReturnData()
+    {
+        long idx = 0;
+        await foreach (var row in _sut.ComplexEntity.Join(_sut.SimpleEntity, (c, s) => c.Id == s.Id).Select(p => new cls { Id = p.t2.Id, Str = p.t1.RequiredString }))
+        {
+            idx++;
+            idx.Should().Be(row.Id);
+            row.Str.Should().NotBeNullOrEmpty();
+            _logger.LogInformation("Id = {id}, String = {str}", row.Id, row.Str);
+        }
+
+        idx.Should().BeGreaterThan(0);
+    }
+}
+
+public class cls
+{
+    public int Id { get; set; }
+    public string Str { get; set; }
 }
