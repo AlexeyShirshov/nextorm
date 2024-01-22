@@ -94,10 +94,6 @@ public class SqliteDbContext : DbContext
     {
         if (big) throw new NotSupportedException("count big is not supported");
 
-        return distinct switch
-        {
-            true => "count(distinct ",
-            _ => "count("
-        };
+        return base.MakeCount(distinct, false);
     }
 }

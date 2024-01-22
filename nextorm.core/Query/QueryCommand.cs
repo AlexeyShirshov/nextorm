@@ -832,6 +832,17 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
             IgnoreColumns = oldIgnoreColumns;
         }
     }
+    public TResult? ExecuteScalar(params object[] @params)
+    {
+        var preparedCommand = _dataContext.GetPreparedQueryCommand(this, false, true, CancellationToken.None);
+        return _dataContext.ExecuteScalar<TResult>(preparedCommand, @params, false);
+    }
+    public Task<TResult?> ExecuteScalarAsync(CancellationToken cancellationToken, params object[] @params)
+    {
+        var preparedCommand = _dataContext.GetPreparedQueryCommand(this, false, true, cancellationToken);
+        return _dataContext.ExecuteScalar<TResult>(preparedCommand, @params, false, cancellationToken);
+    }
+
     public TResult First(params object[] @params)
     {
         int oldLim = Paging.Limit;

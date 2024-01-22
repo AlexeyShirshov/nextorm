@@ -16,7 +16,6 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
     //private readonly List<QueryCommand>? _refs;
     private static readonly MethodInfo AnyMIGeneric = typeof(CorrelatedQueryExpressionVisitor).GetMethod(nameof(Any), BindingFlags.NonPublic | BindingFlags.Instance)!;
     //private static MethodInfo ToCommandMI = typeof(Entity<>).GetMethod("ToCommand", BindingFlags.Public | BindingFlags.Instance)!;
-    private static readonly MethodInfo ExistsMI = typeof(NORM.NORM_SQL).GetMethod(nameof(NORM.NORM_SQL.exists), BindingFlags.Public | BindingFlags.Instance)!;
     private static readonly MethodInfo ConcatMI = typeof(string).GetMethods(BindingFlags.Public | BindingFlags.Static).First(it => it.Name == nameof(string.Concat) && it.GetParameters().Length == 2);
     private static readonly PropertyInfo ReferencedQuieriesPI = typeof(IQueryProvider).GetProperty(nameof(IQueryProvider.ReferencedQueries), BindingFlags.Public | BindingFlags.Instance)!;
     private static readonly PropertyInfo ItemPI = typeof(IReadOnlyList<QueryCommand>).GetProperty("Item")!;
@@ -306,7 +305,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             if (node.Method.Name.StartsWith("Any"))
             {
                 lambda = Expression.Lambda(
-                    Expression.Call(Expression.Property(null, SQLPI), ExistsMI,
+                    Expression.Call(Expression.Property(null, SQLPI), NORM.NORM_SQL.ExistsMI,
                         Expression.Property(Expression.Property(p, ReferencedQuieriesPI), ItemPI, Expression.Constant(idx))
                     ), p
                 );

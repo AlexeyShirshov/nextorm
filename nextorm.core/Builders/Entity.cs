@@ -55,7 +55,6 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
 
         return cmd;
     }
-
     internal void RaiseCommandCreated<TResult>(QueryCommand<TResult> cmd)
     {
         CommandCreatedEvent?.Invoke(this, cmd);
@@ -301,8 +300,123 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
     public Entity<TEntity> OrderBy(Expression<Func<TEntity, object?>> orderExp) => OrderBy(orderExp, OrderDirection.Asc);
     public Entity<TEntity> OrderByDescending(Expression<Func<TEntity, object?>> orderExp) => OrderBy(orderExp, OrderDirection.Desc);
     public IPreparedQueryCommand<TEntity> Prepare(bool nonStreamUsing = true, CancellationToken cancellationToken = default) => ToCommand().Prepare(nonStreamUsing, cancellationToken);
-    public int Count() => Select(e => NORM.SQL.count()).First();
-    public Task<int> CountAsync() => Select(e => NORM.SQL.count()).FirstAsync();
+    public int Count(params object[] @params)
+    {
+        var cmd = Select(e => NORM.SQL.count());
+        cmd.SingleRow = true;
+        return cmd.ExecuteScalar(@params);
+    }
+    public Task<int> CountAsync(params object[] @params) => CountAsync(CancellationToken.None, @params);
+    public Task<int> CountAsync(CancellationToken cancellationToken, params object[] @params)
+    {
+        var cmd = Select(e => NORM.SQL.count());
+        cmd.SingleRow = true;
+        return cmd.ExecuteScalarAsync(cancellationToken, @params);
+    }
+    public TResult? Min<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params)
+    {
+        var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.MinMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
+        cmd.SingleRow = true;
+        return cmd.ExecuteScalar(@params);
+    }
+    public Task<TResult?> MinAsync<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params) => MinAsync(exp, CancellationToken.None, @params);
+    public Task<TResult?> MinAsync<TResult>(Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params)
+    {
+        var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.MinMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
+        cmd.SingleRow = true;
+        return cmd.ExecuteScalarAsync(cancellationToken, @params);
+    }
+    public TResult? Max<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params)
+    {
+        var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.MaxMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
+        cmd.SingleRow = true;
+        return cmd.ExecuteScalar(@params);
+    }
+    public Task<TResult?> MaxAsync<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params) => MaxAsync(exp, CancellationToken.None, @params);
+    public Task<TResult?> MaxAsync<TResult>(Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params)
+    {
+        var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.MaxMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
+        cmd.SingleRow = true;
+        return cmd.ExecuteScalarAsync(cancellationToken, @params);
+    }
+    public TResult? Avg<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params)
+    {
+        var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.AvgMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
+        cmd.SingleRow = true;
+        return cmd.ExecuteScalar(@params);
+    }
+    public Task<TResult?> AvgAsync<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params) => AvgAsync(exp, CancellationToken.None, @params);
+    public Task<TResult?> AvgAsync<TResult>(Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params)
+    {
+        var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.AvgMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
+        cmd.SingleRow = true;
+        return cmd.ExecuteScalarAsync(cancellationToken, @params);
+    }
+    public TResult? Sum<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params)
+    {
+        var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.SumMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
+        cmd.SingleRow = true;
+        return cmd.ExecuteScalar(@params);
+    }
+    public Task<TResult?> SumAsync<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params) => SumAsync(exp, CancellationToken.None, @params);
+    public Task<TResult?> SumAsync<TResult>(Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params)
+    {
+        var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.SumMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
+        cmd.SingleRow = true;
+        return cmd.ExecuteScalarAsync(cancellationToken, @params);
+    }
+    public TResult? Stdev<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params)
+    {
+        var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.StdevMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
+        cmd.SingleRow = true;
+        return cmd.ExecuteScalar(@params);
+    }
+    public Task<TResult?> StdevAsync<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params) => StdevAsync(exp, CancellationToken.None, @params);
+    public Task<TResult?> StdevAsync<TResult>(Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params)
+    {
+        var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.StdevMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
+        cmd.SingleRow = true;
+        return cmd.ExecuteScalarAsync(cancellationToken, @params);
+    }
+    public TResult? Stdevp<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params)
+    {
+        var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.StdevpMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
+        cmd.SingleRow = true;
+        return cmd.ExecuteScalar(@params);
+    }
+    public Task<TResult?> StdevpAsync<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params) => StdevpAsync(exp, CancellationToken.None, @params);
+    public Task<TResult?> StdevpAsync<TResult>(Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params)
+    {
+        var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.StdevpMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
+        cmd.SingleRow = true;
+        return cmd.ExecuteScalarAsync(cancellationToken, @params);
+    }
+    public TResult? Var<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params)
+    {
+        var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.VarMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
+        cmd.SingleRow = true;
+        return cmd.ExecuteScalar(@params);
+    }
+    public Task<TResult?> VarAsync<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params) => VarAsync(exp, CancellationToken.None, @params);
+    public Task<TResult?> VarAsync<TResult>(Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params)
+    {
+        var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.VarMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
+        cmd.SingleRow = true;
+        return cmd.ExecuteScalarAsync(cancellationToken, @params);
+    }
+    public TResult? Varp<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params)
+    {
+        var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.VarpMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
+        cmd.SingleRow = true;
+        return cmd.ExecuteScalar(@params);
+    }
+    public Task<TResult?> VarpAsync<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params) => VarpAsync(exp, CancellationToken.None, @params);
+    public Task<TResult?> VarpAsync<TResult>(Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params)
+    {
+        var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.VarpMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
+        cmd.SingleRow = true;
+        return cmd.ExecuteScalarAsync(cancellationToken, @params);
+    }
 }
 public class Entity : ICloneable
 {

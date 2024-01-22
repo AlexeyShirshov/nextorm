@@ -4,10 +4,9 @@ using nextorm.core;
 
 namespace nextorm.sqlite.tests;
 
-public class AggregatesTests(TestDataRepository sut, ILogger<SqlCommandTests> logger)
+public class AggregatesTests(TestDataRepository sut)
 {
     private readonly TestDataRepository _sut = sut;
-    private readonly ILogger<SqlCommandTests> _logger = logger;
     [Fact]
     public void Count_ShouldReturn10()
     {
@@ -37,8 +36,53 @@ public class AggregatesTests(TestDataRepository sut, ILogger<SqlCommandTests> lo
     [Fact]
     public void CountDistinct_ShouldReturn1()
     {
-        var cnt = _sut.ComplexEntity.Select(e => NORM.SQL.distinct_count(e.Int)).First();
+        var cnt = _sut.ComplexEntity.Select(e => NORM.SQL.count_distinct(e.Int)).First();
 
         cnt.Should().Be(1);
+    }
+    [Fact]
+    public void Min_ShouldReturn1()
+    {
+        var cnt = _sut.SimpleEntity.Select(e => NORM.SQL.min(e.Id)).First();
+
+        cnt.Should().Be(1);
+
+        _sut.SimpleEntity.Min(e => e.Id).Should().Be(cnt);
+    }
+    [Fact]
+    public void Max_ShouldReturn10()
+    {
+        var cnt = _sut.SimpleEntity.Select(e => NORM.SQL.max(e.Id)).First();
+
+        cnt.Should().Be(10);
+
+        _sut.SimpleEntity.Max(e => e.Id).Should().Be(cnt);
+    }
+    [Fact]
+    public void Avg_ShouldReturn6()
+    {
+        var cnt = _sut.SimpleEntity.Select(e => NORM.SQL.avg(e.Id)).First();
+
+        cnt.Should().Be(6);
+
+        _sut.SimpleEntity.Avg(e => e.Id).Should().Be(cnt);
+    }
+    [Fact]
+    public void Sum_ShouldReturn55()
+    {
+        var cnt = _sut.SimpleEntity.Select(e => NORM.SQL.sum(e.Id)).First();
+
+        cnt.Should().Be(55);
+
+        _sut.SimpleEntity.Sum(e => e.Id).Should().Be(cnt);
+    }
+    [Fact]
+    public void Stdev_ShouldReturn3()
+    {
+        var cnt = _sut.SimpleEntity.Select(e => NORM.SQL.stdev(e.Id)).First();
+
+        cnt.Should().Be(3);
+
+        _sut.SimpleEntity.Stdev(e => e.Id).Should().Be(cnt);
     }
 }

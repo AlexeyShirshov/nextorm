@@ -240,11 +240,11 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 return node;
             }
             else if (node.Method.Name == nameof(NORM.NORM_SQL.count)
-                || node.Method.Name == nameof(NORM.NORM_SQL.distinct_count)
+                || node.Method.Name == nameof(NORM.NORM_SQL.count_distinct)
                 || node.Method.Name == nameof(NORM.NORM_SQL.count_big)
-                || node.Method.Name == nameof(NORM.NORM_SQL.distinct_count_big))
+                || node.Method.Name == nameof(NORM.NORM_SQL.count_big_distinct))
             {
-                if (!_paramMode) _builder!.Append(_dataProvider.MakeCount(node.Method.Name.StartsWith("distinct"), node.Method.Name.EndsWith("big")));
+                if (!_paramMode) _builder!.Append(_dataProvider.MakeCount(node.Method.Name.EndsWith("distinct"), node.Method.Name.Contains("big")));
 
                 if (node.Arguments is [NewArrayExpression args] && args.Expressions is not [])//ReadOnlyCollection<Expression> args
                 {
@@ -259,6 +259,64 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 }
 
                 if (!_paramMode) _builder!.Append(')');
+
+                return node;
+            }
+            else if (node.Method.Name == nameof(NORM.NORM_SQL.min)
+                || node.Method.Name == nameof(NORM.NORM_SQL.max))
+            {
+                if (!_paramMode) _builder!.Append(node.Method.Name).Append('(');
+
+                foreach (var argExp in node.Arguments)
+                {
+                    using var visitor = new BaseExpressionVisitor(_entityType, _dataProvider, _tableProvider, 0, null, _paramProvider, _queryProvider, _dontNeedAlias, _paramMode);
+                    visitor.Visit(argExp);
+                    _params.AddRange(visitor.Params);
+                    if (!_paramMode) _builder!.Append(visitor.ToString()).Append(", ");
+                }
+
+                if (!_paramMode)
+                {
+                    _builder!.Length -= 2;
+                    _builder!.Append(')');
+                }
+
+                return node;
+            }
+            else if (node.Method.Name == nameof(NORM.NORM_SQL.avg)
+                || node.Method.Name == nameof(NORM.NORM_SQL.sum)
+                || node.Method.Name == nameof(NORM.NORM_SQL.stdev)
+                || node.Method.Name == nameof(NORM.NORM_SQL.stdevp)
+                || node.Method.Name == nameof(NORM.NORM_SQL.var)
+                || node.Method.Name == nameof(NORM.NORM_SQL.varp)
+                || node.Method.Name == nameof(NORM.NORM_SQL.avg_distinct)
+                || node.Method.Name == nameof(NORM.NORM_SQL.sum_distinct)
+                || node.Method.Name == nameof(NORM.NORM_SQL.stdev_distinct)
+                || node.Method.Name == nameof(NORM.NORM_SQL.stdevp_distinct)
+                || node.Method.Name == nameof(NORM.NORM_SQL.var_distinct)
+                || node.Method.Name == nameof(NORM.NORM_SQL.varp_distinct)
+                )
+            {
+                if (!_paramMode)
+                {
+                    _builder!.Append(node.Method.Name.Replace("_distinct", string.Empty)).Append('(');
+                    if (node.Method.Name.EndsWith("distinct"))
+                        _builder!.Append("distinct ");
+                }
+
+                foreach (var argExp in node.Arguments)
+                {
+                    using var visitor = new BaseExpressionVisitor(_entityType, _dataProvider, _tableProvider, 0, null, _paramProvider, _queryProvider, _dontNeedAlias, _paramMode);
+                    visitor.Visit(argExp);
+                    _params.AddRange(visitor.Params);
+                    if (!_paramMode) _builder!.Append(visitor.ToString()).Append(", ");
+                }
+
+                if (!_paramMode)
+                {
+                    _builder!.Length -= 2;
+                    _builder!.Append(')');
+                }
 
                 return node;
             }
