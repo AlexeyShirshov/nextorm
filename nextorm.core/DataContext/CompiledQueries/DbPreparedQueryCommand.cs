@@ -8,7 +8,9 @@ namespace nextorm.core;
 public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResult, IDataRecord>, IDbCommandHolder
 {
     public readonly CommandBehavior Behavior = 0;
-    public DbCommand DbCommand;
+    public readonly DbCommand DbCommand;
+    private DbConnection? DbCommandConnection;
+    public readonly DbParameterCollection DbCommandParams;
     public ResultSetEnumerator<TResult>? Enumerator;
     public int LastRowCount;
     public int[]? ParamMap;
@@ -18,8 +20,8 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
         : base(mapDelegate, scalar)
     {
         DbCommand = dbCommand;
-        // CommandText = dbCommand.CommandText;
-        //DbCommandParams = dbCommand.Parameters;
+        DbCommandConnection = dbCommand.Connection;
+        DbCommandParams = dbCommand.Parameters;
         if (singleRow)
             Behavior = CommandBehavior.SingleRow;
 
@@ -32,7 +34,7 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
     public DbCommand GetDbCommand(object[]? @params, DbContext dataContext, DbConnection conn)
     {
         var cmd = DbCommand;
-        var parameters = cmd.Parameters;
+        var parameters = DbCommandParams;//cmd.Parameters;
 
         if (@params is not null)
         {
@@ -92,8 +94,11 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
             }
         }
 
-        if (cmd.Connection != conn)
+        if (DbCommandConnection != conn)
+        {
+            DbCommandConnection = conn;
             cmd.Connection = conn;
+        }
 
         return cmd;
     }
@@ -104,5 +109,7 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
 
         if (Enumerator?.DbContext == dbContext)
             Enumerator.DbContext = null;
+
+        DbCommandConnection = null;
     }
 }

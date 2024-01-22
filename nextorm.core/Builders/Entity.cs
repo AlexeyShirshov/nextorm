@@ -47,7 +47,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
     //public event CommandCreatedHandler<TEntity>? CommandCreatedEvent;
     #endregion
 
-    public virtual QueryCommand<TResult> Select<TResult>(Expression<Func<TEntity, TResult>> exp)
+    public QueryCommand<TResult> Select<TResult>(Expression<Func<TEntity, TResult>> exp)
     {
         var cmd = _dataProvider.CreateCommand<TResult>(exp, _condition, Paging, _sorting?.ToArray(), _group, _having);
         cmd.Logger = Logger;
@@ -70,7 +70,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
 
     }
 
-    public virtual Entity<TEntity> Where(Expression<Func<TEntity, bool>> condition)
+    public Entity<TEntity> Where(Expression<Func<TEntity, bool>> condition)
     {
         var b = Clone();
         if (_condition is not null && condition is not null)
@@ -325,7 +325,6 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
         return b;
     }
     public Entity<TEntity> OrderBy(Expression<Func<TEntity, object?>> orderExp) => OrderBy(orderExp, OrderDirection.Asc);
-    public Entity<TEntity> OrderByDescending(Expression<Func<TEntity, object?>> orderExp) => OrderBy(orderExp, OrderDirection.Desc);
     public Entity<TEntity> OrderBy(int columnIdx, OrderDirection direction)
     {
         if (columnIdx < 1) throw new ArgumentException("Column index must be greater than zero", nameof(columnIdx));
@@ -338,6 +337,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
         return b;
     }
     public Entity<TEntity> OrderBy(int columnIdx) => OrderBy(columnIdx, OrderDirection.Asc);
+    public Entity<TEntity> OrderByDescending(Expression<Func<TEntity, object?>> orderExp) => OrderBy(orderExp, OrderDirection.Desc);
     public Entity<TEntity> OrderByDescending(int columnIdx) => OrderBy(columnIdx, OrderDirection.Desc);
     public IPreparedQueryCommand<TEntity> Prepare(bool nonStreamUsing = true, CancellationToken cancellationToken = default) => ToCommand().Prepare(nonStreamUsing, cancellationToken);
     public int Count(params object[] @params)

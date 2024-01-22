@@ -12,7 +12,7 @@ public interface ISimpleEntity
 }
 
 [Table("simple_entity")]
-public class SimpleEntity : ISimpleEntity
+public sealed class SimpleEntity : ISimpleEntity
 {
     public int Id { get; set; }
 }

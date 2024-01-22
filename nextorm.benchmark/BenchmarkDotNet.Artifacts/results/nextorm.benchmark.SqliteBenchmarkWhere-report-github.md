@@ -11,14 +11,14 @@ Job=.NET 8.0  Runtime=.NET 8.0
 ```
 | Method                            | Mean     | Ratio | Gen0     | Gen1    | Allocated  | Alloc Ratio |
 |---------------------------------- |---------:|------:|---------:|--------:|-----------:|------------:|
-| Nextorm_Prepared_ToListAsync      | 3.024 ms |  1.00 |  27.3438 |       - |  133.26 KB |        1.01 |
-| Nextorm_Prepared_AsyncStream      | 3.026 ms |  1.00 |  23.4375 |       - |  125.08 KB |        0.95 |
-| Nextorm_Prepared_StreamAsync      | 3.035 ms |  1.00 |  27.3438 |       - |  132.11 KB |        1.00 |
-| Nextorm_CachedForLoop_ToListAsync | 3.268 ms |  1.08 |  31.2500 |  3.9063 |  144.96 KB |        1.10 |
-| Dapper_Async                      | 3.932 ms |  1.30 |  39.0625 |       - |  185.39 KB |        1.40 |
-| Dapper_AsyncStream                | 3.988 ms |  1.32 |  42.9688 |       - |  208.67 KB |        1.58 |
-| Nextorm_Cached_StreamAsync        | 4.336 ms |  1.43 | 125.0000 |       - |  585.26 KB |        4.43 |
-| Nextorm_Cached_ToListAsync        | 4.376 ms |  1.44 | 125.0000 |       - |  589.54 KB |        4.46 |
-| EFCore_Compiled_AsyncStream       | 5.137 ms |  1.69 | 109.3750 | 31.2500 |   527.9 KB |        4.00 |
-| EFCore_ToListAsync                | 8.885 ms |  2.93 | 218.7500 | 31.2500 | 1102.73 KB |        8.35 |
-| EFCore_AsyncStream                | 8.968 ms |  2.95 | 218.7500 | 31.2500 | 1084.21 KB |        8.21 |
+| Nextorm_Prepared_ToListAsync      | 3.106 ms |  0.84 |  27.3438 |       - |  133.26 KB |        1.01 |
+| Nextorm_CachedForLoop_ToListAsync | 3.362 ms |  0.91 |  31.2500 |  3.9063 |  144.99 KB |        1.10 |
+| Nextorm_Prepared_StreamAsync      | 3.685 ms |  1.00 |  27.3438 |       - |  132.11 KB |        1.00 |
+| Nextorm_Prepared_AsyncStream      | 3.715 ms |  1.01 |  23.4375 |       - |  125.08 KB |        0.95 |
+| Dapper_AsyncStream                | 4.615 ms |  1.26 |  39.0625 |       - |  208.67 KB |        1.58 |
+| Dapper_Async                      | 4.656 ms |  1.27 |  39.0625 |       - |  185.39 KB |        1.40 |
+| Nextorm_Cached_ToListAsync        | 4.989 ms |  1.35 | 125.0000 |       - |  580.94 KB |        4.40 |
+| Nextorm_Cached_StreamAsync        | 5.036 ms |  1.37 | 125.0000 |       - |  579.79 KB |        4.39 |
+| EFCore_Compiled_AsyncStream       | 5.456 ms |  1.48 | 109.3750 | 31.2500 |  527.89 KB |        4.00 |
+| EFCore_ToListAsync                | 8.716 ms |  2.36 | 218.7500 | 31.2500 | 1071.48 KB |        8.11 |
+| EFCore_AsyncStream                | 8.808 ms |  2.38 | 218.7500 | 31.2500 | 1060.78 KB |        8.03 |

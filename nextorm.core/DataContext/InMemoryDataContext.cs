@@ -14,7 +14,7 @@ public partial class InMemoryContext : IDataContext
     private readonly static MethodInfo miLoopJoin = typeof(InMemoryContext).GetMethod(nameof(LoopJoin), BindingFlags.NonPublic | BindingFlags.Instance)!;
     private readonly static MethodInfo miCreateCompiledQuery = typeof(InMemoryContext).GetMethod(nameof(CreateCompiledQuery), BindingFlags.NonPublic | BindingFlags.Instance)!;
     private readonly static IDictionary<Type, IEntityMeta> _metadata = new ConcurrentDictionary<Type, IEntityMeta>();
-    private readonly static ConcurrentDictionary<Type, List<SelectExpression>> _selectListCache = new();
+    private readonly static ConcurrentDictionary<Type, SelectExpression[]> _selectListCache = new();
     //private readonly static ConcurrentDictionary<Expression, List<SelectExpression>> _selectListExpCache = new(ExpressionEqualityComparer.Instance);
     private readonly IDictionary<ExpressionKey, Delegate> _expCache = new ExpressionCache<Delegate>();
     private readonly IDictionary<Type, object?> _data = new Dictionary<Type, object?>();
@@ -34,7 +34,7 @@ public partial class InMemoryContext : IDataContext
     public IDictionary<Type, object?> Data => _data;
     public IDictionary<ExpressionKey, Delegate> ExpressionsCache => _expCache;
     public IDictionary<Type, IEntityMeta> Metadata => _metadata;
-    public IDictionary<Type, List<SelectExpression>> SelectListCache => _selectListCache;
+    public IDictionary<Type, SelectExpression[]> SelectListCache => _selectListCache;
     //public IDictionary<Expression, List<SelectExpression>> SelectListExpressionCache => _selectListExpCache;
     public ILogger? CommandLogger { get; }
     public ILogger? ResultSetEnumeratorLogger { get; }
@@ -570,7 +570,7 @@ public partial class InMemoryContext : IDataContext
                 }
                 else
                 {
-                    if (ctorInfo.GetParameters().Length == queryCommand.SelectList!.Count)
+                    if (ctorInfo.GetParameters().Length == queryCommand.SelectList!.Length)
                     {
                         var newParams = queryCommand.SelectList!.Select(column => MapColumn(column, param)).ToArray();
 
@@ -610,27 +610,27 @@ public partial class InMemoryContext : IDataContext
         //         (_dataProvider as SqlDataProvider).MapCache[key] = del;
         //     }
     }
-    public IEnumerator<TResult> CreateEnumerator<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[] @params)
+    public IEnumerator<TResult> CreateEnumerator<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params)
     {
-        return (IEnumerator<TResult>)CreateAsyncEnumerator<TResult>(queryCommand, @params, CancellationToken.None);
+        return (IEnumerator<TResult>)CreateAsyncEnumerator<TResult>(preparedQueryCommand, @params, CancellationToken.None);
     }
     protected IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
     {
         var cacheEntry = GetCacheEntry(queryCommand, cancellationToken);
         return cacheEntry.CreateEnumerator(cacheEntry.QueryCommand, cacheEntry, @params, cancellationToken)!;
     }
-    public IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
+    public IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
     {
-        if (queryCommand is InMemoryCacheEntry<TResult> cacheEntry)
+        if (preparedQueryCommand is InMemoryCacheEntry<TResult> cacheEntry)
         {
             return cacheEntry.CreateEnumerator(cacheEntry.QueryCommand, cacheEntry, @params, cancellationToken)!;
         }
-        throw new NotSupportedException(queryCommand.GetType().Name);
+        throw new NotSupportedException(preparedQueryCommand.GetType().Name);
     }
 
-    public async Task<List<TResult>> ToListAsync<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
+    public async Task<List<TResult>> ToListAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
     {
-        if (queryCommand is InMemoryCacheEntry<TResult> cacheEntry)
+        if (preparedQueryCommand is InMemoryCacheEntry<TResult> cacheEntry)
         {
             await using var ee = cacheEntry.CreateEnumerator(cacheEntry.QueryCommand, cacheEntry, @params, CancellationToken.None)!;
             var l = new List<TResult>(cacheEntry.LastRowCount);
@@ -652,11 +652,11 @@ public partial class InMemoryContext : IDataContext
 
             return l;
         }
-        throw new NotSupportedException(queryCommand.GetType().Name);
+        throw new NotSupportedException(preparedQueryCommand.GetType().Name);
     }
-    public List<TResult> ToList<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[]? @params)
+    public List<TResult> ToList<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params)
     {
-        if (queryCommand is InMemoryCacheEntry<TResult> cacheEntry)
+        if (preparedQueryCommand is InMemoryCacheEntry<TResult> cacheEntry)
         {
             using var ee = (IEnumerator<TResult>)cacheEntry.CreateEnumerator(cacheEntry.QueryCommand, cacheEntry, @params, CancellationToken.None)!;
             var l = new List<TResult>(cacheEntry.LastRowCount);
@@ -678,12 +678,12 @@ public partial class InMemoryContext : IDataContext
 
             return l;
         }
-        throw new NotSupportedException(queryCommand.GetType().Name);
+        throw new NotSupportedException(preparedQueryCommand.GetType().Name);
     }
 
-    public async Task<TResult?> ExecuteScalar<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[]? @params, bool throwIfNull, CancellationToken cancellationToken)
+    public async Task<TResult?> ExecuteScalar<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, bool throwIfNull, CancellationToken cancellationToken)
     {
-        if (queryCommand is InMemoryCacheEntry<TResult> cacheEntry)
+        if (preparedQueryCommand is InMemoryCacheEntry<TResult> cacheEntry)
         {
             await using var ee = cacheEntry.CreateEnumerator(cacheEntry.QueryCommand, cacheEntry, @params, CancellationToken.None)!;
 
@@ -694,11 +694,11 @@ public partial class InMemoryContext : IDataContext
 
             return default;
         }
-        throw new NotSupportedException(queryCommand.GetType().Name);
+        throw new NotSupportedException(preparedQueryCommand.GetType().Name);
     }
-    public TResult? ExecuteScalar<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[]? @params, bool throwIfNull)
+    public TResult? ExecuteScalar<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, bool throwIfNull)
     {
-        if (queryCommand is InMemoryCacheEntry<TResult> cacheEntry)
+        if (preparedQueryCommand is InMemoryCacheEntry<TResult> cacheEntry)
         {
             using var ee = (IEnumerator<TResult>)cacheEntry.CreateEnumerator(cacheEntry.QueryCommand, cacheEntry, @params, CancellationToken.None)!;
 
@@ -709,12 +709,12 @@ public partial class InMemoryContext : IDataContext
 
             return default;
         }
-        throw new NotSupportedException(queryCommand.GetType().Name);
+        throw new NotSupportedException(preparedQueryCommand.GetType().Name);
     }
 
-    public TResult First<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[] @params)
+    public TResult First<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params)
     {
-        if (queryCommand is InMemoryCacheEntry<TResult> cacheEntry)
+        if (preparedQueryCommand is InMemoryCacheEntry<TResult> cacheEntry)
         {
             using var ee = (IEnumerator<TResult>)cacheEntry.CreateEnumerator(cacheEntry.QueryCommand, cacheEntry, @params, CancellationToken.None)!;
 
@@ -730,11 +730,11 @@ public partial class InMemoryContext : IDataContext
 
             throw new InvalidOperationException();
         }
-        throw new NotSupportedException(queryCommand.GetType().Name);
+        throw new NotSupportedException(preparedQueryCommand.GetType().Name);
     }
-    public TResult? FirstOrDefault<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[] @params)
+    public TResult? FirstOrDefault<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params)
     {
-        if (queryCommand is InMemoryCacheEntry<TResult> cacheEntry)
+        if (preparedQueryCommand is InMemoryCacheEntry<TResult> cacheEntry)
         {
             using var ee = (IEnumerator<TResult>)cacheEntry.CreateEnumerator(cacheEntry.QueryCommand, cacheEntry, @params, CancellationToken.None)!;
 
@@ -750,11 +750,11 @@ public partial class InMemoryContext : IDataContext
 
             return default;
         }
-        throw new NotSupportedException(queryCommand.GetType().Name);
+        throw new NotSupportedException(preparedQueryCommand.GetType().Name);
     }
-    public async Task<TResult> FirstAsync<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
+    public async Task<TResult> FirstAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
     {
-        if (queryCommand is InMemoryCacheEntry<TResult> cacheEntry)
+        if (preparedQueryCommand is InMemoryCacheEntry<TResult> cacheEntry)
         {
             await using var ee = cacheEntry.CreateEnumerator(cacheEntry.QueryCommand, cacheEntry, @params, CancellationToken.None)!;
 
@@ -770,12 +770,12 @@ public partial class InMemoryContext : IDataContext
 
             throw new InvalidOperationException();
         }
-        throw new NotSupportedException(queryCommand.GetType().Name);
+        throw new NotSupportedException(preparedQueryCommand.GetType().Name);
     }
 
-    public async Task<TResult?> FirstOrDefaultAsync<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
+    public async Task<TResult?> FirstOrDefaultAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
     {
-        if (queryCommand is InMemoryCacheEntry<TResult> cacheEntry)
+        if (preparedQueryCommand is InMemoryCacheEntry<TResult> cacheEntry)
         {
             await using var ee = cacheEntry.CreateEnumerator(cacheEntry.QueryCommand, cacheEntry, @params, CancellationToken.None)!;
 
@@ -791,12 +791,12 @@ public partial class InMemoryContext : IDataContext
 
             return default;
         }
-        throw new NotSupportedException(queryCommand.GetType().Name);
+        throw new NotSupportedException(preparedQueryCommand.GetType().Name);
     }
 
-    public TResult Single<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[] @params)
+    public TResult Single<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params)
     {
-        if (queryCommand is InMemoryCacheEntry<TResult> cacheEntry)
+        if (preparedQueryCommand is InMemoryCacheEntry<TResult> cacheEntry)
         {
             using var ee = (IEnumerator<TResult>)cacheEntry.CreateEnumerator(cacheEntry.QueryCommand, cacheEntry, @params, CancellationToken.None)!;
 
@@ -821,11 +821,11 @@ public partial class InMemoryContext : IDataContext
 
             return r!;
         }
-        throw new NotSupportedException(queryCommand.GetType().Name);
+        throw new NotSupportedException(preparedQueryCommand.GetType().Name);
     }
-    public TResult? SingleOrDefault<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[] @params)
+    public TResult? SingleOrDefault<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params)
     {
-        if (queryCommand is InMemoryCacheEntry<TResult> cacheEntry)
+        if (preparedQueryCommand is InMemoryCacheEntry<TResult> cacheEntry)
         {
             using var ee = (IEnumerator<TResult>)cacheEntry.CreateEnumerator(cacheEntry.QueryCommand, cacheEntry, @params, CancellationToken.None)!;
 
@@ -847,11 +847,11 @@ public partial class InMemoryContext : IDataContext
 
             return r;
         }
-        throw new NotSupportedException(queryCommand.GetType().Name);
+        throw new NotSupportedException(preparedQueryCommand.GetType().Name);
     }
-    public async Task<TResult> SingleAsync<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
+    public async Task<TResult> SingleAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
     {
-        if (queryCommand is InMemoryCacheEntry<TResult> cacheEntry)
+        if (preparedQueryCommand is InMemoryCacheEntry<TResult> cacheEntry)
         {
             await using var ee = cacheEntry.CreateEnumerator(cacheEntry.QueryCommand, cacheEntry, @params, CancellationToken.None)!;
 
@@ -876,12 +876,12 @@ public partial class InMemoryContext : IDataContext
 
             return r!;
         }
-        throw new NotSupportedException(queryCommand.GetType().Name);
+        throw new NotSupportedException(preparedQueryCommand.GetType().Name);
     }
 
-    public async Task<TResult?> SingleOrDefaultAsync<TResult>(IPreparedQueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
+    public async Task<TResult?> SingleOrDefaultAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
     {
-        if (queryCommand is InMemoryCacheEntry<TResult> cacheEntry)
+        if (preparedQueryCommand is InMemoryCacheEntry<TResult> cacheEntry)
         {
             await using var ee = cacheEntry.CreateEnumerator(cacheEntry.QueryCommand, cacheEntry, @params, CancellationToken.None)!;
 
@@ -903,6 +903,6 @@ public partial class InMemoryContext : IDataContext
 
             return r;
         }
-        throw new NotSupportedException(queryCommand.GetType().Name);
+        throw new NotSupportedException(preparedQueryCommand.GetType().Name);
     }
 }

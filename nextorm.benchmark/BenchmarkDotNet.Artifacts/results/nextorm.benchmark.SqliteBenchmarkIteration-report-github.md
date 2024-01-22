@@ -11,11 +11,11 @@ Job=.NET 8.0  Runtime=.NET 8.0
 ```
 | Method                                | Mean     | Error    | StdDev   | Gen0   | Gen1   | Allocated |
 |-------------------------------------- |---------:|---------:|---------:|-------:|-------:|----------:|
-| Nextorm_Prepared_AsyncStream          | 32.97 μs | 0.658 μs | 0.758 μs | 0.3052 |      - |   1.48 KB |
-| Nextorm_Prepared_ToListAsync          | 33.12 μs | 0.657 μs | 0.963 μs | 0.3052 |      - |   1.66 KB |
-| Nextorm_PreparedManualSql_ToListAsync | 33.47 μs | 0.547 μs | 0.511 μs | 0.3052 |      - |   1.66 KB |
-| Nextorm_CachedManualSql_ToListAsync   | 35.76 μs | 0.714 μs | 0.733 μs | 0.6104 |      - |   3.01 KB |
-| Nextorm_Cached_ToListAsync            | 36.05 μs | 0.715 μs | 1.361 μs | 0.6104 |      - |   2.89 KB |
-| DapperAsync                           | 40.61 μs | 0.698 μs | 0.619 μs | 0.3662 |      - |   1.88 KB |
-| Dapper_AsyncStream                    | 41.30 μs | 0.788 μs | 0.809 μs | 0.3662 |      - |    1.8 KB |
-| EFCore_Compiled_ToListAsync           | 57.51 μs | 1.098 μs | 1.027 μs | 1.5259 | 0.4883 |   7.19 KB |
+| Nextorm_PreparedManualSql_ToListAsync | 33.49 μs | 0.665 μs | 0.766 μs | 0.3052 |      - |   1.66 KB |
+| Nextorm_Cached_ToListAsync            | 36.06 μs | 0.706 μs | 0.785 μs | 0.6104 |      - |   2.91 KB |
+| Nextorm_Prepared_ToListAsync          | 39.38 μs | 0.775 μs | 0.892 μs | 0.3052 |      - |   1.66 KB |
+| Nextorm_Prepared_AsyncStream          | 39.85 μs | 0.729 μs | 0.682 μs | 0.3052 |      - |   1.48 KB |
+| Dapper_AsyncStream                    | 41.85 μs | 0.622 μs | 0.551 μs | 0.3662 |      - |    1.8 KB |
+| Nextorm_CachedManualSql_ToListAsync   | 42.32 μs | 0.824 μs | 0.809 μs | 0.6104 |      - |   3.02 KB |
+| DapperAsync                           | 42.57 μs | 0.829 μs | 1.018 μs | 0.3662 |      - |   1.88 KB |
+| EFCore_Compiled_ToListAsync           | 58.78 μs | 1.084 μs | 1.014 μs | 1.5259 | 0.4883 |   7.19 KB |

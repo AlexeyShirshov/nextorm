@@ -12,25 +12,25 @@ public static class NORM
     public static T Param<T>(int idx) => default!;
     public class NORM_SQL
     {
-        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Browsable(false)]
         public static readonly MethodInfo ExistsMI = typeof(NORM_SQL).GetMethod(nameof(exists), BindingFlags.Public | BindingFlags.Instance)!;
-        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Browsable(false)]
         public static readonly MethodInfo MinMI = typeof(NORM_SQL).GetMethod(nameof(min), BindingFlags.Public | BindingFlags.Instance)!;
-        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Browsable(false)]
         public static readonly MethodInfo MaxMI = typeof(NORM_SQL).GetMethod(nameof(max), BindingFlags.Public | BindingFlags.Instance)!;
-        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Browsable(false)]
         public static readonly MethodInfo AvgMI = typeof(NORM_SQL).GetMethod(nameof(avg), BindingFlags.Public | BindingFlags.Instance)!;
-        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Browsable(false)]
         public static readonly MethodInfo SumMI = typeof(NORM_SQL).GetMethod(nameof(sum), BindingFlags.Public | BindingFlags.Instance)!;
-        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Browsable(false)]
         public static readonly MethodInfo StdevMI = typeof(NORM_SQL).GetMethod(nameof(stdev), BindingFlags.Public | BindingFlags.Instance)!;
-        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Browsable(false)]
         public static readonly MethodInfo StdevpMI = typeof(NORM_SQL).GetMethod(nameof(stdevp), BindingFlags.Public | BindingFlags.Instance)!;
-        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Browsable(false)]
         public static readonly MethodInfo VarMI = typeof(NORM_SQL).GetMethod(nameof(var), BindingFlags.Public | BindingFlags.Instance)!;
-        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Browsable(false)]
         public static readonly MethodInfo VarpMI = typeof(NORM_SQL).GetMethod(nameof(varp), BindingFlags.Public | BindingFlags.Instance)!;
-        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Browsable(false)]
         public static readonly ConstantExpression SQLExpression = Expression.Constant(new NORM_SQL());
         public bool exists(QueryCommand cmd) => default!;
         public bool @in<T>(T column, QueryCommand<T> cmd) => default!;

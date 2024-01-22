@@ -13,7 +13,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
 {
     private List<QueryCommand>? _referencedQueries;
     private readonly List<JoinExpression> _joins;
-    protected List<SelectExpression>? _selectList;
+    protected SelectExpression[]? _selectList;
     private object _customData;
     // private int _columnsHash;
     // private int _joinHash;
@@ -71,7 +71,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     public LambdaExpression SelectExpression => _exp;
     public ILogger? Logger { get; set; }
     public FromExpression? From { get => _from; set => _from = value; }
-    public List<SelectExpression>? SelectList => _selectList;
+    public SelectExpression[]? SelectList => _selectList;
     public Type? EntityType => _srcType;
     // public IDataContext DataProvider
     // {
@@ -137,10 +137,10 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         }
 
         FromExpression? from = _from ?? _dataContext.GetFrom(srcType, this);
-        var (joinHash, joinPlanHash) = PrepareJoin(prepareMapOnly, cancellationToken);
-        var (selectList, columnsHash, columnsPlanHash) = PrepareColumns(prepareMapOnly, srcType, cancellationToken);
-        var (whereHash, wherePlanHash) = PrepareWhere(prepareMapOnly, cancellationToken);
-        var (sortingHash, sortingPlanHash) = PrepareSorting(prepareMapOnly, cancellationToken);
+        var joinPlanHash = PrepareJoin(prepareMapOnly, cancellationToken);
+        var (selectList, columnsPlanHash) = PrepareColumns(prepareMapOnly, srcType, cancellationToken);
+        var wherePlanHash = PrepareWhere(prepareMapOnly, cancellationToken);
+        var sortingPlanHash = PrepareSorting(prepareMapOnly, cancellationToken);
 
         _isPrepared = true;
         _selectList = selectList ?? [];
@@ -163,11 +163,10 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         // }
     }
 
-    private (List<SelectExpression>?, int, int) PrepareColumns(bool noHash, Type? srcType, CancellationToken cancellationToken)
+    private (SelectExpression[]?, int) PrepareColumns(bool noHash, Type? srcType, CancellationToken cancellationToken)
     {
         //SelectExpressionPlanEqualityComparer? comparer = null;
         var selectList = _selectList;
-        var columnsHash = 7;
         var columnsPlanHash = 7;
         if (selectList is null && !IgnoreColumns)
         {
@@ -178,16 +177,20 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
             {
                 //if (!CacheList || !_dataProvider.SelectListExpessionCache.TryGetValue(ctor, out selectList))
                 //{
-                selectList = new List<SelectExpression>();
+                //var selList = new List<SelectExpression>();
+                var args = ctor.Arguments;
+                var argsCount = args.Count;
+
+                selectList = new SelectExpression[argsCount];
 
                 var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataContext, this, cancellationToken);
-                for (var idx = 0; idx < ctor.Arguments.Count; idx++)
+                for (var idx = 0; idx < argsCount; idx++)
                 {
                     if (cancellationToken.IsCancellationRequested)
-                        return (selectList, columnsHash, columnsPlanHash);
+                        return (selectList, columnsPlanHash);
 
                     SelectExpression selExp;
-                    var arg = ctor.Arguments[idx];
+                    var arg = args[idx];
                     // if (arg is MemberExpression me)
                     // {
                     //     selExp = new SelectExpression(me.Type)
@@ -208,9 +211,9 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
                         Expression = innerQueryVisitor.Visit(arg)
                     };
                     //}
-                    selExp.HashCode = selExp.GetHashCode();
+                    // selExp.HashCode = selExp.GetHashCode();
                     selExp.PlanHashCode = GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
-                    selectList.Add(selExp);
+                    selectList[idx] = selExp;
 
                     if (!_dontCache && !noHash) unchecked
                         {
@@ -221,9 +224,10 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
                         }
                 }
 
-                if (selectList.Count == 0)
+                if (selectList.Length == 0)
                     throw new PrepareException("Select must return new anonymous type with at least one property");
 
+                // selectList = selList.ToArray();
                 // if (CacheList)
                 //     _dataProvider.SelectListExpessionCache[ctor] = selectList;
                 //}
@@ -241,7 +245,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
             }
             else if (_exp.Body.Type.IsPrimitive || _exp.Body.Type == typeof(string) || (_exp.Body.Type.IsGenericType && _exp.Body.Type.GetGenericTypeDefinition() == typeof(Nullable<>)))
             {
-                selectList = new List<SelectExpression>();
+                // var selList = new List<SelectExpression>();
 
                 OneColumn = true;
                 var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataContext, this, cancellationToken);
@@ -258,9 +262,9 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
                     Expression = selectExp,
                     //ReferencedQueries = innerQueryVisitor.ReferencedQueries
                 };
-                selExp.HashCode = selExp.GetHashCode();
+                // selExp.HashCode = selExp.GetHashCode();
                 selExp.PlanHashCode = GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
-                selectList.Add(selExp);
+                // selList.Add(selExp);
 
                 if (!_dontCache && !noHash) unchecked
                     {
@@ -268,18 +272,22 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
                         //comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
                         columnsPlanHash = columnsPlanHash * 13 + selExp.PlanHashCode;
                     }
-                // }
+
+                selectList = [selExp];
             }
             else if (_exp.Body is MemberInitExpression init)
             {
-                selectList = new List<SelectExpression>();
+                // var selList = new List<SelectExpression>();
                 var bindings = init.Bindings;
                 var bindingsCount = bindings.Count;
+
+                selectList = new SelectExpression[bindingsCount];
+
                 var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataContext, this, cancellationToken);
                 for (var idx = 0; idx < bindingsCount; idx++)
                 {
                     if (cancellationToken.IsCancellationRequested)
-                        return (selectList, columnsHash, columnsPlanHash);
+                        return (selectList, columnsPlanHash);
 
                     var binding = bindings[idx] as MemberAssignment;
 
@@ -290,9 +298,10 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
                         Expression = innerQueryVisitor.Visit(binding.Expression)
                     };
                     //}
-                    selExp.HashCode = selExp.GetHashCode();
+                    // selExp.HashCode = selExp.GetHashCode();
                     selExp.PlanHashCode = GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
-                    selectList.Add(selExp);
+                    // selList.Add(selExp);
+                    selectList[idx] = selExp;
 
                     if (!_dontCache && !noHash) unchecked
                         {
@@ -303,27 +312,34 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
                         }
                 }
 
-                if (selectList.Count == 0)
+                if (selectList.Length == 0)
                     throw new PrepareException("Select must return new anonymous type with at least one property");
+
+                // selectList = selList.ToArray();
             }
             else if (_dataContext.NeedMapping)
             {
                 if (/*!CacheList || */!_dataContext.SelectListCache.TryGetValue(srcType!, out selectList))
                 {
-                    selectList = new List<SelectExpression>();
+                    // var selList = new List<SelectExpression>();
 
                     var p = Expression.Parameter(srcType!);
 
                     if (_dataContext.Metadata.TryGetValue(srcType!, out var entityMeta))
                     {
-                        for (int idx = 0; idx < entityMeta.Properties.Count; idx++)
+                        var props = entityMeta.Properties;
+                        var propsCount = props.Count;
+
+                        selectList = new SelectExpression[propsCount];
+
+                        for (int idx = 0; idx < propsCount; idx++)
                         {
-                            var prop = entityMeta.Properties[idx];
+                            if (cancellationToken.IsCancellationRequested)
+                                return (selectList, columnsPlanHash);
+
+                            var prop = props[idx];
 
                             var pi = prop.PropertyInfo;
-
-                            if (cancellationToken.IsCancellationRequested)
-                                return (selectList, columnsHash, columnsPlanHash);
 
                             Expression exp = Expression.Lambda(Expression.Property(p, pi), p);
 
@@ -335,9 +351,10 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
                                 PropertyInfo = pi
                             };
 
-                            selExp.HashCode = selExp.GetHashCode();
+                            // selExp.HashCode = selExp.GetHashCode();
                             selExp.PlanHashCode = GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
-                            selectList.Add(selExp);
+                            // selList.Add(selExp);
+                            selectList[idx] = selExp;
 
                             if (!_dontCache && !noHash) unchecked
                                 {
@@ -348,15 +365,15 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
                         }
                     }
 
-                    if (selectList.Count == 0)
+                    if (!(selectList?.Length > 0))
                         throw new PrepareException("Select must return new anonymous type");
 
-                    //if (CacheList)
+                    // selectList = selList.ToArray();
                     _dataContext.SelectListCache[srcType!] = selectList;
                 }
                 else if (!_dontCache && !noHash)
                 {
-                    for (int i = 0; i < selectList.Count; i++) unchecked
+                    for (int i = 0; i < selectList.Length; i++) unchecked
                         {
                             var selExp = selectList[i];
 
@@ -370,12 +387,10 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
             //     throw new NotImplementedException();
         }
 
-        return (selectList, columnsHash, columnsPlanHash);
+        return (selectList, columnsPlanHash);
     }
-    private (int, int) PrepareJoin(bool noHash, CancellationToken cancellationToken)
+    private int PrepareJoin(bool noHash, CancellationToken cancellationToken)
     {
-        //JoinExpressionPlanEqualityComparer? comparer = null;
-        var joinHash = 7;
         var joinPlanHash = 7;
         if (Joins.Count != 0)
         {
@@ -395,14 +410,10 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
             }
         }
 
-        return (joinHash, joinPlanHash);
+        return joinPlanHash;
     }
-    private (int, int) PrepareSorting(bool noHash, CancellationToken cancellationToken)
+    private int PrepareSorting(bool noHash, CancellationToken cancellationToken)
     {
-        //PreciseExpressionEqualityComparer? comp = null;
-        //ExpressionPlanEqualityComparer? compPlan = null;
-
-        var sortingHash = 7;
         var sortingPlanHash = 7;
         if (_sorting is not null)
         {
@@ -447,14 +458,10 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
             }
         }
 
-        return (sortingHash, sortingPlanHash);
+        return sortingPlanHash;
     }
-    private (int, int) PrepareWhere(bool noHash, CancellationToken cancellationToken)
+    private int PrepareWhere(bool noHash, CancellationToken cancellationToken)
     {
-        //PreciseExpressionEqualityComparer? comp = null;
-        //ExpressionPlanEqualityComparer? compPlan = null;
-
-        var whereHash = 7;
         var wherePlanHash = 7;
         if (_condition is not null)
         {
@@ -471,7 +478,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
                 }
         }
 
-        return (whereHash, wherePlanHash);
+        return wherePlanHash;
     }
     // public bool RemovePayload<T>() where T : class, IPayload
     // {

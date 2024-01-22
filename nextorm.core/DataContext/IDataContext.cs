@@ -11,9 +11,9 @@ public interface IDataContext : IAsyncDisposable, IDisposable
     bool NeedMapping { get; }
     IDictionary<ExpressionKey, Delegate> ExpressionsCache { get; }
     IDictionary<Type, IEntityMeta> Metadata { get; }
-    IDictionary<Type, List<SelectExpression>> SelectListCache { get; }
+    IDictionary<Type, SelectExpression[]> SelectListCache { get; }
     public Dictionary<string, object> Properties { get; }
-    public Lazy<QueryCommand<bool>> AnyCommand { get; set; }
+    public Lazy<QueryCommand<bool>>? AnyCommand { get; set; }
     public Entity<T> Create<T>(Action<EntityBuilder<T>>? configEntity = null)
     {
         if (!Metadata.ContainsKey(typeof(T)))
