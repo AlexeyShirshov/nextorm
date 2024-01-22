@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Collections.Concurrent;
 using System.Linq.Expressions;
 
@@ -19,6 +20,8 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
     private readonly IDataContext _dataProvider;
     private QueryCommand? _query;
     private Expression<Func<TEntity, bool>>? _condition;
+    private LambdaExpression? _group;
+    private Expression<Func<TEntity, bool>>? _having;
     private List<Sorting>? _sorting;
     #endregion
     public Entity(IDataContext dataProvider)
@@ -35,37 +38,39 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
     internal QueryCommand? Query { get => _query; set => _query = value; }
     internal IDataContext DataProvider => _dataProvider;
     internal Expression<Func<TEntity, bool>>? Condition { get => _condition; set => _condition = value; }
+    public List<Sorting>? Sorting { get => _sorting; set => _sorting = value; }
+
     public Paging Paging;
 
     //internal IPayloadManager PayloadManager { get => _payloadMgr; init => _payloadMgr = value; }
-    public delegate void CommandCreatedHandler<T>(Entity<T> sender, QueryCommand queryCommand);
-    public event CommandCreatedHandler<TEntity>? CommandCreatedEvent;
+    //public delegate void CommandCreatedHandler<T>(Entity<T> sender, QueryCommand queryCommand);
+    //public event CommandCreatedHandler<TEntity>? CommandCreatedEvent;
     #endregion
 
-    public QueryCommand<TResult> Select<TResult>(Expression<Func<TEntity, TResult>> exp)
+    public virtual QueryCommand<TResult> Select<TResult>(Expression<Func<TEntity, TResult>> exp)
     {
-        var cmd = _dataProvider.CreateCommand<TResult>(exp, _condition, Paging, _sorting);
+        var cmd = _dataProvider.CreateCommand<TResult>(exp, _condition, Paging, _sorting?.ToArray(), _group, _having);
         cmd.Logger = Logger;
 
         if (_query is not null)
             cmd.From = new FromExpression(_query);
 
         OnCommandCreated(cmd);
-        RaiseCommandCreated(cmd);
+        //RaiseCommandCreated(cmd);
 
         return cmd;
     }
-    internal void RaiseCommandCreated<TResult>(QueryCommand<TResult> cmd)
-    {
-        CommandCreatedEvent?.Invoke(this, cmd);
-    }
+    // internal void RaiseCommandCreated<TResult>(QueryCommand<TResult> cmd)
+    // {
+    //     CommandCreatedEvent?.Invoke(this, cmd);
+    // }
 
     protected virtual void OnCommandCreated<TResult>(QueryCommand<TResult> cmd)
     {
 
     }
 
-    public Entity<TEntity> Where(Expression<Func<TEntity, bool>> condition)
+    public virtual Entity<TEntity> Where(Expression<Func<TEntity, bool>> condition)
     {
         var b = Clone();
         if (_condition is not null && condition is not null)
@@ -116,7 +121,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
     {
         dst._query = _query;
         //dst._payloadMgr = _payloadMgr;
-        dst.CommandCreatedEvent += CommandCreatedEvent;
+        //dst.CommandCreatedEvent += CommandCreatedEvent;
         dst.Paging = Paging;
         dst._condition = _condition;
         dst._sorting = _sorting;
@@ -160,10 +165,32 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
         var cb = new EntityP2<TEntity, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition) { Query = query }) { Logger = Logger, _query = queryBase/*, PayloadManager = PayloadManager*/, BaseBuilder = this };
         return cb;
     }
+    public Entity<TEntity> GroupBy<TResult>(Expression<Func<TEntity, TResult>> exp)
+    {
+        var b = Clone();
+
+        b._group = exp;
+
+        return b;
+    }
+    public Entity<TEntity> Having(Expression<Func<TEntity, bool>> condition)
+    {
+        var b = Clone();
+        if (_having is not null && condition is not null)
+        {
+            var replVisitor = new ReplaceParameterVisitor(_having.Parameters[0]);
+            var newBody = Expression.AndAlso(_having.Body, replVisitor.Visit(condition.Body));
+            b._having = Expression.Lambda<Func<TEntity, bool>>(newBody, _having.Parameters[0]);
+        }
+        else
+            b._having = condition;
+
+        return b;
+    }
     public QueryCommand<bool> AnyCommand()
     {
         var cmd = ToCommand();
-        var queryCommand = _dataProvider.CreateCommand<bool>((TableAlias _) => NORM.SQL.exists(cmd), null, default, null);
+        var queryCommand = _dataProvider.CreateCommand<bool>((TableAlias _) => NORM.SQL.exists(cmd), null, default, null, null, null);
         queryCommand.SingleRow = true;
         cmd.IgnoreColumns = true;
         return queryCommand;
@@ -261,7 +288,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
             anyCommand = new Lazy<QueryCommand<bool>>(() =>
             {
                 created = true;
-                var queryCommand = dataProvider.CreateCommand<bool>((TableAlias _) => NORM.SQL.exists(cmd), null, default, null);
+                var queryCommand = dataProvider.CreateCommand<bool>((TableAlias _) => NORM.SQL.exists(cmd), null, default, null, null, null);
                 queryCommand.SingleRow = true;
                 queryCommand.PrepareCommand(false, CancellationToken.None);
                 return queryCommand;
@@ -299,6 +326,19 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
     }
     public Entity<TEntity> OrderBy(Expression<Func<TEntity, object?>> orderExp) => OrderBy(orderExp, OrderDirection.Asc);
     public Entity<TEntity> OrderByDescending(Expression<Func<TEntity, object?>> orderExp) => OrderBy(orderExp, OrderDirection.Desc);
+    public Entity<TEntity> OrderBy(int columnIdx, OrderDirection direction)
+    {
+        if (columnIdx < 1) throw new ArgumentException("Column index must be greater than zero", nameof(columnIdx));
+
+        var b = Clone();
+        if (b._sorting is null)
+            b._sorting = [new Sorting(columnIdx) { Direction = direction }];
+        else
+            b._sorting.Add(new Sorting(columnIdx) { Direction = direction });
+        return b;
+    }
+    public Entity<TEntity> OrderBy(int columnIdx) => OrderBy(columnIdx, OrderDirection.Asc);
+    public Entity<TEntity> OrderByDescending(int columnIdx) => OrderBy(columnIdx, OrderDirection.Desc);
     public IPreparedQueryCommand<TEntity> Prepare(bool nonStreamUsing = true, CancellationToken cancellationToken = default) => ToCommand().Prepare(nonStreamUsing, cancellationToken);
     public int Count(params object[] @params)
     {
@@ -418,6 +458,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
         return cmd.ExecuteScalarAsync(cancellationToken, @params);
     }
 }
+
 public class Entity : ICloneable
 {
     private readonly IDataContext _dataProvider;
@@ -425,6 +466,8 @@ public class Entity : ICloneable
     internal ILogger? Logger { get; set; }
     private Expression<Func<TableAlias, bool>>? _condition;
     private List<Sorting>? _sorting;
+    private LambdaExpression? _group;
+    private Expression<Func<TableAlias, bool>>? _having;
     public Entity(IDataContext dataProvider) : this(dataProvider, null) { }
     public Entity(IDataContext dataProvider, string? table)
     {
@@ -434,7 +477,7 @@ public class Entity : ICloneable
     public QueryCommand<TResult> Select<TResult>(Expression<Func<TableAlias, TResult>> exp)
     {
         //if (string.IsNullOrEmpty(_table)) throw new InvalidOperationException("Table must be specified");
-        var cmd = new QueryCommand<TResult>(_dataProvider, exp, _condition, default, _sorting) { Logger = Logger };
+        var cmd = new QueryCommand<TResult>(_dataProvider, exp, _condition, default, _sorting?.ToArray(), _group, _having) { Logger = Logger };
 
         if (!string.IsNullOrEmpty(_table))
             cmd.From = new FromExpression(_table);

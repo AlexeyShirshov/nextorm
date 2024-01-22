@@ -28,7 +28,7 @@ public static class IEqualityComparerExtensions
 
         return true; // both nulls
     }
-    public static bool ValueListEquals<T>(this IValueEqualityComparer<T> comparer, List<T>? x, List<T>? y)
+    public static bool Equals<T>(this IValueEqualityComparer<T> comparer, T[]? x, T[]? y)
         where T : struct
     {
         if (x is null && y is not null) return false;
@@ -37,10 +37,10 @@ public static class IEqualityComparerExtensions
             if (y is null) return false;
             else
             {
-                var xCount = x.Count;
-                if (xCount != y.Count) return false;
-                var xSpan = CollectionsMarshal.AsSpan(x);
-                var ySpan = CollectionsMarshal.AsSpan(y);
+                var xCount = x.Length;
+                if (xCount != y.Length) return false;
+                var xSpan = x.AsSpan();
+                var ySpan = y.AsSpan();
 
                 for (int i = 0; i < xCount; i++)
                 {

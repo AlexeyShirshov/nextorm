@@ -24,9 +24,9 @@ public interface IDataContext : IAsyncDisposable, IDisposable
         }
         return new(this) { Logger = CommandLogger };
     }
-    public QueryCommand<T> CreateCommand<T>(LambdaExpression exp, Expression? condition, Paging paging, List<Sorting>? sorting)
+    public QueryCommand<T> CreateCommand<T>(LambdaExpression exp, LambdaExpression? condition, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having)
     {
-        return new QueryCommand<T>(this, exp, condition, paging, sorting);
+        return new QueryCommand<T>(this, exp, condition, paging, sorting, group, having);
     }
     public Task<bool> AnyAsync(IPreparedQueryCommand<bool> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken) => ExecuteScalar<bool>(preparedQueryCommand, @params, true, cancellationToken);
     public Task<bool> AnyAsync(IPreparedQueryCommand<bool> preparedQueryCommand, CancellationToken cancellationToken) => ExecuteScalar<bool>(preparedQueryCommand, null, true, cancellationToken);

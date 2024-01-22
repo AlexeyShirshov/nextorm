@@ -22,7 +22,9 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     protected FromExpression? _from;
     protected IDataContext _dataContext;
     protected readonly LambdaExpression _exp;
-    protected readonly Expression? _condition;
+    protected readonly LambdaExpression? _condition;
+    protected readonly LambdaExpression? _groupExp;
+    protected readonly LambdaExpression? _having;
     protected bool _isPrepared;
     // protected int? _hash;
     // #if PLAN_CACHE
@@ -47,14 +49,14 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     private JoinExpressionPlanEqualityComparer? _joinExpressionPlanComparer;
     private PreciseExpressionEqualityComparer? _preciseExpressionComparer;
     private SortingExpressionPlanEqualityComparer? _sortingExpressionPlanComparer;
-    protected readonly List<Sorting>? _sorting;
+    protected readonly Sorting[]? _sorting;
 
     //protected ArrayList _params = new();
-    public QueryCommand(IDataContext dataProvider, LambdaExpression exp, Expression? condition, Paging paging, List<Sorting>? sorting)
-        : this(dataProvider, exp, condition/*, new FastPayloadManager(new Dictionary<Type, object?>())*/, new(), paging, sorting)
+    public QueryCommand(IDataContext dataProvider, LambdaExpression exp, LambdaExpression? condition, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having)
+        : this(dataProvider, exp, condition, new(), paging, sorting, group, having)
     {
     }
-    protected QueryCommand(IDataContext dataProvider, LambdaExpression exp, Expression? condition/*, IPayloadManager payloadMgr*/, List<JoinExpression> joins, Paging paging, List<Sorting>? sorting)
+    protected QueryCommand(IDataContext dataProvider, LambdaExpression exp, LambdaExpression? condition, List<JoinExpression> joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having)
     {
         _dataContext = dataProvider;
         _exp = exp;
@@ -63,8 +65,10 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         _joins = joins;
         Paging = paging;
         _sorting = sorting;
+        _groupExp = group;
+        _having = having;
     }
-    public Expression SelectExpression => _exp;
+    public LambdaExpression SelectExpression => _exp;
     public ILogger? Logger { get; set; }
     public FromExpression? From { get => _from; set => _from = value; }
     public List<SelectExpression>? SelectList => _selectList;
@@ -96,11 +100,12 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     internal bool OneColumn { get; set; }
     internal bool IgnoreColumns { get; set; }
     public IReadOnlyList<QueryCommand> ReferencedQueries => _referencedQueries!;
-    public List<Sorting>? Sorting => _sorting;
+    public Sorting[]? Sorting => _sorting;
 
     public object CustomData { get => _customData; set => _customData = value; }
     public IDataContext DataContext { get => _dataContext; set => _dataContext = value; }
-
+    public LambdaExpression? GroupBy { get => _groupExp; }
+    public LambdaExpression? Having { get => _having; }
     public virtual void ResetPreparation()
     {
         _isPrepared = false;
@@ -401,26 +406,44 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         var sortingPlanHash = 7;
         if (_sorting is not null)
         {
-            var sortingSpan = CollectionsMarshal.AsSpan(_sorting);
-            for (var i = 0; i < _sorting.Count; i++)
+            var sortingSpan = _sorting.AsSpan();
+            var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataContext, this, cancellationToken);
+
+            for (var i = 0; i < _sorting.Length; i++)
             {
                 if (cancellationToken.IsCancellationRequested)
                     break;
 
                 ref var sort = ref sortingSpan[i];
 
-                var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataContext, this, cancellationToken);
-                sort.PreparedExpression = innerQueryVisitor.Visit(sort.SortExpression);
+                if (sort.SortExpression is not null)
+                {
+                    sort.PreparedExpression = innerQueryVisitor.Visit(sort.SortExpression);
 
-                if (!_dontCache && !noHash) unchecked
-                    {
-                        // sortingHash = sortingHash * 13 + (int)sort.Direction;
-                        // //comp ??= new PreciseExpressionEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger);
-                        // sortingHash = sortingHash * 13 + GetPreciseExpressionEqualityComparer().GetHashCode(sort.PreparedExpression);
+                    if (!_dontCache && !noHash) unchecked
+                        {
+                            // sortingHash = sortingHash * 13 + (int)sort.Direction;
+                            // //comp ??= new PreciseExpressionEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger);
+                            // sortingHash = sortingHash * 13 + GetPreciseExpressionEqualityComparer().GetHashCode(sort.PreparedExpression);
 
-                        //compPlan ??= new ExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger);
-                        sortingPlanHash = sortingPlanHash * 13 + GetSortingExpressionPlanEqualityComparer().GetHashCodeRef(in sort);
-                    }
+                            //compPlan ??= new ExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger);
+                            sortingPlanHash = sortingPlanHash * 13 + GetSortingExpressionPlanEqualityComparer().GetHashCodeRef(in sort);
+                        }
+                }
+                else if (sort.ColumnIndex.HasValue)
+                {
+                    if (!_dontCache && !noHash) unchecked
+                        {
+                            // sortingHash = sortingHash * 13 + (int)sort.Direction;
+                            // //comp ??= new PreciseExpressionEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger);
+                            // sortingHash = sortingHash * 13 + GetPreciseExpressionEqualityComparer().GetHashCode(sort.PreparedExpression);
+
+                            //compPlan ??= new ExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger);
+                            sortingPlanHash = sortingPlanHash * 13 + sort.ColumnIndex.Value;
+                        }
+                }
+                else
+                    throw new InvalidOperationException("Expression on column index numst be specified");
             }
         }
 
@@ -528,76 +551,6 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     public bool Equals(QueryCommand? cmd)
     {
         throw new NotSupportedException();
-
-        if (cmd is null) return false;
-
-        if (!_isPrepared)
-            PrepareCommand(false, CancellationToken.None);
-
-        // if (_params is null && cmd._params is not null) return false;
-        // if (_params is not null && cmd._params is null) return false;
-
-        // if (_params is not null && cmd._params is not null)
-        // {
-        //     if (_params.Count != cmd._params.Count) return false;
-
-        //     for (int i = 0; i < _params.Count; i++)
-        //     {
-        //         if (!Equals(_params[i], cmd._params[i])) return false;
-        //     }
-        // }
-
-        if (!Equals(_from, cmd._from)) return false;
-
-        if (_srcType != cmd._srcType) return false;
-
-        if (Paging.Limit != cmd.Paging.Limit || Paging.Offset != cmd.Paging.Offset) return false;
-
-        if (!GetPreciseExpressionEqualityComparer().Equals(PreparedCondition, cmd.PreparedCondition)) return false;
-
-        if (_selectList is null && cmd._selectList is not null) return false;
-        if (_selectList is not null && cmd._selectList is null) return false;
-
-        if (_selectList is not null && cmd._selectList is not null)
-        {
-            if (_selectList.Count != cmd._selectList.Count) return false;
-
-            for (int i = 0; i < _selectList.Count; i++)
-            {
-                if (!_selectList[i].Equals(cmd._selectList[i])) return false;
-            }
-        }
-
-        if (Joins is null && cmd.Joins is not null) return false;
-        if (Joins is not null && cmd.Joins is null) return false;
-
-        if (Joins is not null && cmd.Joins is not null)
-        {
-            if (Joins.Count != cmd.Joins.Count) return false;
-
-            for (int i = 0; i < Joins.Count; i++)
-            {
-                if (!Joins[i].Equals(cmd.Joins[i])) return false;
-            }
-        }
-
-        if (Sorting is null && cmd.Sorting is not null) return false;
-        if (Sorting is not null && cmd.Sorting is null) return false;
-
-        if (Sorting is not null && cmd.Sorting is not null)
-        {
-            if (Sorting.Count != cmd.Sorting.Count) return false;
-            var comp = GetPreciseExpressionEqualityComparer();
-
-            for (int i = 0; i < Sorting.Count; i++)
-            {
-                if (Sorting[i].Direction != cmd.Sorting[i].Direction) return false;
-
-                if (!comp.Equals(Sorting[i].PreparedExpression, cmd.Sorting[i].PreparedExpression)) return false;
-            }
-        }
-
-        return true;
     }
     public QueryCommand? FindSourceFromAlias(string? alias)
     {
@@ -667,7 +620,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
 
     protected virtual QueryCommand CreateSelf()
     {
-        return new QueryCommand(_dataContext, _exp, _condition, Joins, Paging, _sorting);
+        return new QueryCommand(_dataContext, _exp, _condition, Joins, Paging, _sorting, _groupExp, _having);
     }
     public QueryCommand Clone()
     {
@@ -679,28 +632,22 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         CopyTo(cmd);
         return cmd;
     }
-
     public QueryPlanEqualityComparer GetQueryPlanEqualityComparer() => _queryPlanComparer ??= new QueryPlanEqualityComparer(this);
-
     public ExpressionPlanEqualityComparer GetExpressionPlanEqualityComparer() => _expressionPlanComparer ??= new ExpressionPlanEqualityComparer(this);
-
     public SelectExpressionPlanEqualityComparer GetSelectExpressionPlanEqualityComparer() => _selectExpressionPlanComparer ??= new SelectExpressionPlanEqualityComparer(this);
-
     public FromExpressionPlanEqualityComparer GetFromExpressionPlanEqualityComparer() => _fromExpressionPlanComparer ??= new FromExpressionPlanEqualityComparer(this);
-
     public JoinExpressionPlanEqualityComparer GetJoinExpressionPlanEqualityComparer() => _joinExpressionPlanComparer ??= new JoinExpressionPlanEqualityComparer(this);
-
     public PreciseExpressionEqualityComparer GetPreciseExpressionEqualityComparer() => _preciseExpressionComparer ??= new PreciseExpressionEqualityComparer(_dataContext.ExpressionsCache, this);
     public SortingExpressionPlanEqualityComparer GetSortingExpressionPlanEqualityComparer() => _sortingExpressionPlanComparer ??= new SortingExpressionPlanEqualityComparer(this);
 }
 
 public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
 {
-    public QueryCommand(IDataContext dataProvider, LambdaExpression exp, Expression? condition, Paging paging, List<Sorting>? sorting) : base(dataProvider, exp, condition, paging, sorting)
+    public QueryCommand(IDataContext dataProvider, LambdaExpression exp, LambdaExpression? condition, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having) : base(dataProvider, exp, condition, paging, sorting, group, having)
     {
     }
-    protected QueryCommand(IDataContext dataProvider, LambdaExpression exp, Expression? condition/*, IPayloadManager payloadMgr*/, List<JoinExpression> joins, Paging paging, List<Sorting>? sorting)
-        : base(dataProvider, exp, condition/*, payloadMgr*/, joins, paging, sorting)
+    protected QueryCommand(IDataContext dataProvider, LambdaExpression exp, LambdaExpression? condition, List<JoinExpression> joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having)
+        : base(dataProvider, exp, condition, joins, paging, sorting, group, having)
     {
 
     }
@@ -997,8 +944,19 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
     }
     protected override QueryCommand CreateSelf()
     {
-        return new QueryCommand<TResult>(_dataContext, _exp, _condition, Joins, Paging, _sorting);
+        return new QueryCommand<TResult>(_dataContext, _exp, _condition, Joins, Paging, _sorting, _groupExp, _having);
     }
+    public QueryCommand<TResult> OrderBy(int columnIndex, OrderDirection direction)
+    {
+        if (columnIndex < 1) throw new ArgumentException("Column index must be greater than zero", nameof(columnIndex));
+        var cmd = new QueryCommand<TResult>(_dataContext, _exp, _condition, Joins, Paging, _sorting is null
+            ? [new Sorting(columnIndex) { Direction = direction }]
+            : [.. _sorting, new Sorting(columnIndex) { Direction = direction }], _groupExp, _having);
+        CopyTo(cmd);
+        return cmd;
+    }
+    public QueryCommand<TResult> OrderBy(int columnIndex) => OrderBy(columnIndex, OrderDirection.Asc);
+    public QueryCommand<TResult> OrderByDescending(int columnIndex) => OrderBy(columnIndex, OrderDirection.Desc);
     // public QueryCommand<TResult> WithParams(params object[] @params)
     // {
     //     QueryCommand<TResult> cmd;

@@ -24,7 +24,7 @@ public class EntityP2<T1, T2> : Entity<Projection<T1, T2>>
     {
         cmd.Joins.Add(JoinCondition);
         base.OnCommandCreated(cmd);
-        BaseBuilder!.RaiseCommandCreated(cmd);
+        // BaseBuilder!.RaiseCommandCreated(cmd);
     }
     protected override object CloneImp()
     {
@@ -54,6 +54,6 @@ public class EntityP3<T1, T2, T3> : Entity<Projection<T1, T2, T3>>
     {
         cmd.Joins.AddRange(Joins);
         base.OnCommandCreated(cmd);
-        BaseBuilder!.RaiseCommandCreated(cmd);
+        // BaseBuilder!.RaiseCommandCreated(cmd);
     }
 }

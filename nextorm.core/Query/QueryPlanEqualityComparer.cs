@@ -73,7 +73,7 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand>
         //     }
         // }
 
-        if (!_sortComparer.ValueListEquals(x.Sorting, y.Sorting)) return false;
+        if (!_sortComparer.Equals(x.Sorting, y.Sorting)) return false;
         // if (x.Sorting is null && y.Sorting is not null) return false;
         // if (x.Sorting is not null && y.Sorting is null) return false;
 

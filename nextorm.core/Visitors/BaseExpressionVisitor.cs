@@ -199,7 +199,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 if (!_paramMode)
                     Visit(parExp);
 
-                if (!_paramMode) _builder!.Append("in (");
+                if (!_paramMode) _builder!.Append(" in (");
 
                 var constRepl = new ReplaceConstantsExpressionVisitor(_queryProvider);
                 var body = constRepl.Visit(cmdExp);
@@ -531,7 +531,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                     if (innerCol is null)
                         throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
 
-                    var col = _dataProvider.MakeColumn(innerCol, innerQuery.EntityType!, innerQuery, false, innerQuery, innerQuery, _params, _paramMode);
+                    var col = _dataProvider.MakeColumn(innerCol.Expression!, innerQuery.EntityType!, innerQuery, false, innerQuery, innerQuery, _params, _paramMode);
                     if (!_paramMode)
                     {
                         if (col.NeedAliasForColumn)
@@ -715,7 +715,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                     if (innerCol is null)
                         throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
 
-                    var col = _dataProvider.MakeColumn(innerCol, innerQuery.EntityType!, innerQuery, hasTableAliasForColumn, innerQuery, innerQuery, _params, _paramMode);
+                    var col = _dataProvider.MakeColumn(innerCol.Expression!, innerQuery.EntityType!, innerQuery, hasTableAliasForColumn, innerQuery, innerQuery, _params, _paramMode);
 
                     if (!_paramMode)
                     {

@@ -457,7 +457,7 @@ public class DbContext : IDataContext
 
             foreach (var item in selectList)
             {
-                var (needAliasForColumn, column) = MakeColumn(item, entityType, cmd, false, @params, paramMode);
+                var (needAliasForColumn, column) = MakeColumn(item.Expression, entityType, cmd, false, @params, paramMode);
 
                 if (!paramMode)
                 {
@@ -497,16 +497,39 @@ public class DbContext : IDataContext
                 if (!paramMode) sqlBuilder!.AppendLine().Append(" where ").Append(whereSql);
             }
 
+            if (cmd.GroupBy is not null)
+            {
+                throw new NotImplementedException();
+                // var whereSql = MakeSelect(entityType, cmd, cmd.GroupBy, 0, null, @params, paramMode);
+                // if (!paramMode) sqlBuilder!.AppendLine().Append(" group by ").Append(whereSql);
+            }
+
+            if (cmd.Having is not null)
+            {
+                throw new NotImplementedException();
+            }
+
             if (cmd.Sorting is not null)
             {
                 if (!paramMode) sqlBuilder!.AppendLine().Append(" order by ");
 
                 foreach (var sorting in cmd.Sorting)
                 {
-                    var sortingSql = MakeSort(entityType, cmd, sorting.PreparedExpression!, 0, null, @params, paramMode);
-                    if (!paramMode)
+                    if (sorting.PreparedExpression is not null)
                     {
-                        sqlBuilder!.Append(sortingSql);
+                        var sortingSql = MakeSort(entityType, cmd, sorting.PreparedExpression, 0, null, @params, paramMode);
+                        if (!paramMode)
+                        {
+                            sqlBuilder!.Append(sortingSql);
+                            if (sorting.Direction == OrderDirection.Desc)
+                                sqlBuilder.Append(" desc");
+
+                            sqlBuilder.Append(", ");
+                        }
+                    }
+                    else if (!paramMode && sorting.ColumnIndex.HasValue)
+                    {
+                        sqlBuilder!.Append(sorting.ColumnIndex);
                         if (sorting.Direction == OrderDirection.Desc)
                             sqlBuilder.Append(" desc");
 
@@ -668,12 +691,12 @@ public class DbContext : IDataContext
 
         return visitor.ToString();
     }
-    public (bool NeedAliasForColumn, string Column) MakeColumn(SelectExpression selectExp, Type entityType, IQueryContext queryContext, bool dontNeedAlias, List<Param> @params, bool paramMode)
+    public (bool NeedAliasForColumn, string Column) MakeColumn(Expression selectExp, Type entityType, IQueryContext queryContext, bool dontNeedAlias, List<Param> @params, bool paramMode)
         => MakeColumn(selectExp, entityType, queryContext, dontNeedAlias, queryContext, queryContext, @params, paramMode);
-    public (bool NeedAliasForColumn, string Column) MakeColumn(SelectExpression selectExp, Type entityType, ISourceProvider tableProvider, bool dontNeedAlias, IParamProvider paramProvider, IQueryProvider queryProvider, List<Param> @params, bool paramMode)
+    public (bool NeedAliasForColumn, string Column) MakeColumn(Expression selectExp, Type entityType, ISourceProvider tableProvider, bool dontNeedAlias, IParamProvider paramProvider, IQueryProvider queryProvider, List<Param> @params, bool paramMode)
     {
         using var visitor = new BaseExpressionVisitor(entityType, this, tableProvider, 0, null, paramProvider, queryProvider, dontNeedAlias, paramMode);
-        visitor.Visit(selectExp.Expression);
+        visitor.Visit(selectExp);
         @params.AddRange(visitor.Params);
 
         if (paramMode) return (false, string.Empty);

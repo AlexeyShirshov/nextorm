@@ -555,6 +555,15 @@ public class SqlCommandTests
         // Then
     }
     [Fact]
+    public void OrderByNumber_ShouldSortData()
+    {
+        // Given
+        var r = _sut.SimpleEntity.Select(it => it.Id).OrderByDescending(1).First();
+        // When
+        r.Should().Be(10);
+        // Then
+    }
+    [Fact]
     public void OrderBy2_ShouldSortData()
     {
         // Given
