@@ -77,7 +77,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                     var lambda = Expression.Lambda<Func<QueryCommand, bool>>(body, p1);
 
                     Func<QueryCommand, bool> del;
-                    var key = new ExpressionKey(lambda, _dataProvider.ExpressionsCache, _queryProvider);
+                    var key = new ExpressionKey(lambda, _queryProvider);
                     if (!_dataProvider.ExpressionsCache.TryGetValue(key, out var dLambda))
                     {
                         var d = lambda.Compile();
@@ -161,7 +161,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         {
             QueryCommand cmd;
 
-            var keyCmd = new ExpressionKey(node.Object, _dataProvider.ExpressionsCache, _queryProvider);
+            var keyCmd = new ExpressionKey(node.Object, _queryProvider);
             if (!_dataProvider.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
             {
                 //var d = Expression.Lambda<Func<QueryCommand>>(Expression.Call(node.Object, ToCommandMI)).Compile();
@@ -194,7 +194,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             {
                 QueryCommand cmd;
 
-                var keyCmd = new ExpressionKey(node.Object, _dataProvider.ExpressionsCache, _queryProvider);
+                var keyCmd = new ExpressionKey(node.Object, _queryProvider);
                 if (!_dataProvider.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
                 {
                     var p = Expression.Parameter(typeof(object));
@@ -242,7 +242,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 
             if (constRepl.Params.Count > 0)
             {
-                var keyCmd = new ExpressionKey(exp, _dataProvider.ExpressionsCache, _queryProvider);
+                var keyCmd = new ExpressionKey(exp, _queryProvider);
                 if (!_dataProvider.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
                 {
                     var d = Expression.Lambda(body, constRepl.Params.Select(it => it.Item1)).Compile();

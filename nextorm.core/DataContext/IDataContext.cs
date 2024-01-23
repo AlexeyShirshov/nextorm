@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using System.Linq.Expressions;
+using System.Runtime.CompilerServices;
 
 namespace nextorm.core;
 
@@ -24,16 +25,25 @@ public interface IDataContext : IAsyncDisposable, IDisposable
         }
         return new(this) { Logger = CommandLogger };
     }
-    public QueryCommand<T> CreateCommand<T>(LambdaExpression exp, LambdaExpression? condition, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having)
+    public QueryCommand<T> CreateCommand<T>(LambdaExpression exp, LambdaExpression? condition, JoinExpression[]? joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having)
     {
-        return new QueryCommand<T>(this, exp, condition, paging, sorting, group, having);
+        return new QueryCommand<T>(this, exp, condition, joins, paging, sorting, group, having);
     }
+    public QueryCommand<T> CreateCommand<T>(Type srcType, LambdaExpression? condition, JoinExpression[]? joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having)
+    {
+        return new QueryCommand<T>(this, srcType, condition, joins, paging, sorting, group, having);
+    }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<bool> AnyAsync(IPreparedQueryCommand<bool> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken) => ExecuteScalar<bool>(preparedQueryCommand, @params, true, cancellationToken);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<bool> AnyAsync(IPreparedQueryCommand<bool> preparedQueryCommand, CancellationToken cancellationToken) => ExecuteScalar<bool>(preparedQueryCommand, null, true, cancellationToken);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<bool> AnyAsync(IPreparedQueryCommand<bool> preparedQueryCommand, params object[]? @params) => ExecuteScalar<bool>(preparedQueryCommand, @params, true, CancellationToken.None);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Any(IPreparedQueryCommand<bool> preparedQueryCommand, params object[]? @params) => ExecuteScalar<bool>(preparedQueryCommand, @params, true);
-    public Task<IEnumerable<TResult>> AsEnumerableAsync<TResult>(IPreparedQueryCommand<TResult> preparedCommand, params object[] @params) => AsEnumerableAsync<TResult>(preparedCommand, CancellationToken.None, @params);
-    public async Task<IEnumerable<TResult>> AsEnumerableAsync<TResult>(IPreparedQueryCommand<TResult> preparedCommand, CancellationToken cancellationToken, params object[] @params)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Task<IEnumerable<TResult>> GetEnumerableAsync<TResult>(IPreparedQueryCommand<TResult> preparedCommand, params object[] @params) => GetEnumerableAsync<TResult>(preparedCommand, CancellationToken.None, @params);
+    public async Task<IEnumerable<TResult>> GetEnumerableAsync<TResult>(IPreparedQueryCommand<TResult> preparedCommand, CancellationToken cancellationToken, params object[] @params)
     {
         var enumerator = CreateAsyncEnumerator<TResult>(preparedCommand, @params, cancellationToken);
 
@@ -48,8 +58,9 @@ public interface IDataContext : IAsyncDisposable, IDisposable
 
         throw new NotImplementedException();
     }
-    public IAsyncEnumerable<TResult> AsAsyncEnumerable<TResult>(IPreparedQueryCommand<TResult> preparedCommand, params object[] @params) => AsAsyncEnumerable<TResult>(preparedCommand, CancellationToken.None, @params);
-    public IAsyncEnumerable<TResult> AsAsyncEnumerable<TResult>(IPreparedQueryCommand<TResult> preparedCommand, CancellationToken cancellationToken, params object[] @params)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public IAsyncEnumerable<TResult> GetAsyncEnumerable<TResult>(IPreparedQueryCommand<TResult> preparedCommand, params object[] @params) => GetAsyncEnumerable<TResult>(preparedCommand, CancellationToken.None, @params);
+    public IAsyncEnumerable<TResult> GetAsyncEnumerable<TResult>(IPreparedQueryCommand<TResult> preparedCommand, CancellationToken cancellationToken, params object[] @params)
     {
         var asyncEnumerator = CreateAsyncEnumerator<TResult>(preparedCommand, @params, cancellationToken);
 
@@ -67,7 +78,8 @@ public interface IDataContext : IAsyncDisposable, IDisposable
             }
         }
     }
-    public IEnumerable<TResult> AsEnumerable<TResult>(IPreparedQueryCommand<TResult> preparedCommand, params object[] @params) => (IEnumerable<TResult>)CreateEnumerator<TResult>(preparedCommand, @params);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public IEnumerable<TResult> GetEnumerable<TResult>(IPreparedQueryCommand<TResult> preparedCommand, params object[] @params) => (IEnumerable<TResult>)CreateEnumerator<TResult>(preparedCommand, @params);
     void EnsureConnectionOpen();
     Task EnsureConnectionOpenAsync();
     void ResetPreparation(QueryCommand queryCommand);
@@ -97,23 +109,33 @@ public interface IDataContext : IAsyncDisposable, IDisposable
     IEnumerator<TResult> CreateEnumerator<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params);
     // Task<IEnumerator<TResult>> CreateEnumeratorAsync<TResult>(IPreparedQueryCommand preparedQueryCommand, object[]? @params, CancellationToken cancellationToken);
     Task<List<TResult>> ToListAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<List<TResult>> ToListAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, params object[]? @params) => ToListAsync(preparedQueryCommand, @params, CancellationToken.None);
     List<TResult> ToList<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public List<TResult> ToList<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand) => ToList(preparedQueryCommand, null);
     Task<TResult?> ExecuteScalar<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, bool throwIfNull, CancellationToken cancellationToken);
     TResult? ExecuteScalar<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, bool throwIfNull);
     TResult First<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params);
     Task<TResult> FirstAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<TResult> FirstAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, params object[]? @params) => FirstAsync(preparedQueryCommand, @params, CancellationToken.None);
     TResult? FirstOrDefault<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params);
     Task<TResult?> FirstOrDefaultAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<TResult?> FirstOrDefaultAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, params object[]? @params) => FirstOrDefaultAsync(preparedQueryCommand, @params, CancellationToken.None);
     TResult Single<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params);
     Task<TResult> SingleAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<TResult> SingleAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, params object[]? @params) => SingleAsync(preparedQueryCommand, @params, CancellationToken.None);
     TResult? SingleOrDefault<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params);
     Task<TResult?> SingleOrDefaultAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<TResult?> SingleOrDefaultAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, params object[]? @params) => SingleOrDefaultAsync(preparedQueryCommand, @params, CancellationToken.None);
-    Entity<TResult> From<TResult>(QueryCommand<TResult> query) => new(this, query) { Logger = CommandLogger };
-    Entity<TResult> From<TResult>(Entity<TResult> builder) => new(this, builder) { Logger = CommandLogger };
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Entity<TResult> From<TResult>(QueryCommand<TResult> query) => new(this, query) { Logger = CommandLogger };
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Entity<TResult> From<TResult>(Entity<TResult> builder) => new(this, builder) { Logger = CommandLogger };
+    void PurgeQueryCache();
+    // bool CacheExpressions { get; set; }
 }

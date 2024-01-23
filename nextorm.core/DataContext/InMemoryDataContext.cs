@@ -19,7 +19,7 @@ public partial class InMemoryContext : IDataContext
     private readonly IDictionary<ExpressionKey, Delegate> _expCache = new ExpressionCache<Delegate>();
     private readonly IDictionary<Type, object?> _data = new Dictionary<Type, object?>();
     private bool _disposedValue;
-    private readonly IDictionary<QueryPlan, object> _cmdIdx = new Dictionary<QueryPlan, object>();
+    private readonly Dictionary<QueryPlan, object> _cmdIdx = [];
     public InMemoryContext()
     {
         _data[typeof(TableAlias)] = new TableAlias?[] { null };
@@ -39,7 +39,9 @@ public partial class InMemoryContext : IDataContext
     public ILogger? CommandLogger { get; }
     public ILogger? ResultSetEnumeratorLogger { get; }
     public Dictionary<string, object> Properties => _properties;
-    public Lazy<QueryCommand<bool>> AnyCommand { get; set; }
+    public Lazy<QueryCommand<bool>>? AnyCommand { get; set; }
+    public bool CacheExpressions { get; set; }
+
     public void EnsureConnectionOpen() { }
     public Task EnsureConnectionOpenAsync() => Task.CompletedTask;
     private InMemoryCacheEntry<TResult> GetCacheEntry<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
@@ -67,7 +69,7 @@ public partial class InMemoryContext : IDataContext
                 param
             );
 
-            var key = new ExpressionKey(callExp, _expCache, queryCommand);
+            var key = new ExpressionKey(callExp, queryCommand);
             Func<QueryCommand<TResult>, object> createCompiledQueryDelegate;
             if (!_expCache.TryGetValue(key, out var del))
             {
@@ -141,7 +143,7 @@ public partial class InMemoryContext : IDataContext
                 p1, p2, p4, p3
             );
 
-            var key = new ExpressionKey(callExp, _expCache, queryCommand);
+            var key = new ExpressionKey(callExp, queryCommand);
             Func<QueryCommand<TResult>, InMemoryCacheEntry<TResult>, object[]?, CancellationToken, IAsyncEnumerator<TResult>> createEnumeratorDelegate;
             if (!_expCache.TryGetValue(key, out var d))
             {
@@ -190,13 +192,15 @@ public partial class InMemoryContext : IDataContext
     next:
         {
 
-            if (queryCommand.Joins.Any() && typeof(TEntity).IsAssignableTo(typeof(IProjection)))
+            if (queryCommand.Joins?.Length > 0 && typeof(TEntity).IsAssignableTo(typeof(IProjection)))
             {
                 var dim = 2;
                 object? joinResult = null;
                 Type? firstType = null;
-                foreach (var join in queryCommand.Joins)
+                for (var idx = 0; idx < queryCommand.Joins.Length; idx++)
                 {
+                    var join = queryCommand.Joins[idx];
+
                     firstType ??= join.JoinCondition.Parameters[0].Type;
                     var secondType = join.JoinCondition.Parameters[1].Type;
 
@@ -217,7 +221,7 @@ public partial class InMemoryContext : IDataContext
                                     p3,
                                     p4
                                 );
-                                var key = new ExpressionKey(callExp, _expCache, queryCommand);
+                                var key = new ExpressionKey(callExp, queryCommand);
                                 if (!_expCache.TryGetValue(key, out var del))
                                 {
                                     var d = Expression.Lambda<Func<QueryCommand, object?, JoinExpression, int, object>>(callExp,
@@ -412,7 +416,7 @@ public partial class InMemoryContext : IDataContext
     }
     private InMemoryEnumeratorAdapter<TResult, TEntity> CreateEnumeratorAdapter<TResult, TEntity>(QueryCommand<TResult> queryCommand, InMemoryCacheEntry<TResult> cacheEntry, IAsyncEnumerator<TEntity> enumerator)
     {
-        if (queryCommand.Joins.Any() && typeof(TEntity).IsAssignableTo(typeof(IProjection)))
+        if (queryCommand.Joins?.Length > 0 && typeof(TEntity).IsAssignableTo(typeof(IProjection)))
         {
             throw new NotImplementedException("joins");
         }
@@ -513,7 +517,7 @@ public partial class InMemoryContext : IDataContext
         Func<TEntity, object[]?, bool>? conditionDelegate = null;
         if (query.PreparedCondition is Expression<Func<TEntity, bool>> condition)
         {
-            var key = new ExpressionKey(condition, _expCache, query);
+            var key = new ExpressionKey(condition, query);
             if (!_expCache.TryGetValue(key, out var d))
             {
                 var p = Expression.Parameter(typeof(object[]));
@@ -597,7 +601,7 @@ public partial class InMemoryContext : IDataContext
             }
 
             if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Get instance of {type} as: {exp}", resultType, lambda);
-            var key = new ExpressionKey(lambda, _expCache, queryCommand);
+            var key = new ExpressionKey(lambda, queryCommand);
             if (!_expCache.TryGetValue(key, out var d))
             {
                 d = lambda.Compile();
@@ -904,5 +908,10 @@ public partial class InMemoryContext : IDataContext
             return r;
         }
         throw new NotSupportedException(preparedQueryCommand.GetType().Name);
+    }
+
+    public void PurgeQueryCache()
+    {
+        _cmdIdx.Clear();
     }
 }

@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Collections.Concurrent;
 using System.Linq.Expressions;
+using System.Runtime.CompilerServices;
 
 namespace nextorm.core;
 // public class BaseEntity
@@ -12,7 +13,7 @@ namespace nextorm.core;
 //     protected static readonly IDictionary<IDataContext, Lazy<QueryCommand<bool>>> _anyCommandCache = new ConcurrentDictionary<IDataContext, Lazy<QueryCommand<bool>>>();
 // }
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Minor Code Smell", "S2292:Trivial properties should be auto-implemented", Justification = "<Pending>")]
-public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
+public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 {
     // private const string AnyCommandProperty = "nextorm.core.AnyCommand";
     #region Fields
@@ -23,6 +24,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
     private LambdaExpression? _group;
     private Expression<Func<TEntity, bool>>? _having;
     private List<Sorting>? _sorting;
+    protected List<JoinExpression>? _joins;
     #endregion
     public Entity(IDataContext dataProvider)
     {
@@ -39,7 +41,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
     internal IDataContext DataProvider => _dataProvider;
     internal Expression<Func<TEntity, bool>>? Condition { get => _condition; set => _condition = value; }
     public List<Sorting>? Sorting { get => _sorting; set => _sorting = value; }
-
+    public List<JoinExpression>? Joins { get => _joins; set => _joins = value; }
     public Paging Paging;
 
     //internal IPayloadManager PayloadManager { get => _payloadMgr; init => _payloadMgr = value; }
@@ -49,26 +51,35 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
 
     public QueryCommand<TResult> Select<TResult>(Expression<Func<TEntity, TResult>> exp)
     {
-        var cmd = _dataProvider.CreateCommand<TResult>(exp, _condition, Paging, _sorting?.ToArray(), _group, _having);
+        var cmd = _dataProvider.CreateCommand<TResult>(exp, _condition, _joins?.ToArray(), Paging, _sorting?.ToArray(), _group, _having);
         cmd.Logger = Logger;
 
         if (_query is not null)
             cmd.From = new FromExpression(_query);
 
-        OnCommandCreated(cmd);
+        // OnCommandCreated(cmd);
         //RaiseCommandCreated(cmd);
 
         return cmd;
     }
-    // internal void RaiseCommandCreated<TResult>(QueryCommand<TResult> cmd)
-    // {
-    //     CommandCreatedEvent?.Invoke(this, cmd);
-    // }
-
-    protected virtual void OnCommandCreated<TResult>(QueryCommand<TResult> cmd)
+    public QueryCommand<TEntity> ToCommand()
     {
+        var cmd = _dataProvider.CreateCommand<TEntity>(typeof(TEntity), _condition, _joins?.ToArray(), Paging, _sorting?.ToArray(), _group, _having);
+        cmd.Logger = Logger;
 
+        if (_query is not null)
+            cmd.From = new FromExpression(_query);
+
+        // OnCommandCreated(cmd);
+        //RaiseCommandCreated(cmd);
+
+        return cmd;
     }
+
+    // protected virtual void OnCommandCreated<TResult>(QueryCommand<TResult> cmd)
+    // {
+
+    // }
 
     public Entity<TEntity> Where(Expression<Func<TEntity, bool>> condition)
     {
@@ -136,13 +147,18 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
     }
     public static implicit operator QueryCommand<TEntity>(Entity<TEntity> builder) => builder.ToCommand();
     public static implicit operator QueryCommand(Entity<TEntity> builder) => builder.ToCommand();
-    public QueryCommand<TEntity> ToCommand() => Select(it => it);
-    public IAsyncEnumerator<TEntity> GetAsyncEnumerator(CancellationToken cancellationToken = default) => ToCommand().GetAsyncEnumerator(cancellationToken);
-    public IAsyncEnumerable<TEntity> AsAsyncEnumerable(params object[] @params) => AsAsyncEnumerable(CancellationToken.None, @params);
-    public IAsyncEnumerable<TEntity> AsAsyncEnumerable(CancellationToken cancellationToken, params object[] @params) => ToCommand().AsAsyncEnumerable(cancellationToken, @params);
-    public Task<IEnumerable<TEntity>> AsEnumerableAsync(params object[] @params) => AsEnumerableAsync(CancellationToken.None, @params);
-    public Task<IEnumerable<TEntity>> AsEnumerableAsync(CancellationToken cancellationToken, params object[] @params) => ToCommand().AsEnumerableAsync(cancellationToken, @params);
-    public IEnumerable<TEntity> AsEnumerable(params object[] @params) => ToCommand().AsEnumerable(@params);
+    // public QueryCommand<TEntity> ToCommand() => Select<TEntity>(typeof(TEntity));
+    // public IAsyncEnumerator<TEntity> GetAsyncEnumerator(CancellationToken cancellationToken = default) => ToCommand().GetAsyncEnumerator(cancellationToken);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public IAsyncEnumerable<TEntity> ToAsyncEnumerable(params object[] @params) => ToAsyncEnumerable(CancellationToken.None, @params);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public IAsyncEnumerable<TEntity> ToAsyncEnumerable(CancellationToken cancellationToken, params object[] @params) => ToCommand().ToAsyncEnumerable(cancellationToken, @params);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Task<IEnumerable<TEntity>> ToEnumerableAsync(params object[] @params) => ToEnumerableAsync(CancellationToken.None, @params);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Task<IEnumerable<TEntity>> ToEnumerableAsync(CancellationToken cancellationToken, params object[] @params) => ToCommand().ToEnumerableAsync(cancellationToken, @params);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public IEnumerable<TEntity> ToEnumerable(params object[] @params) => ToCommand().ToEnumerable(@params);
     public EntityP2<TEntity, TJoinEntity> Join<TJoinEntity>(Entity<TJoinEntity> _, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
     {
         QueryCommand? query = null;
@@ -190,7 +206,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
     public QueryCommand<bool> AnyCommand()
     {
         var cmd = ToCommand();
-        var queryCommand = _dataProvider.CreateCommand<bool>((TableAlias _) => NORM.SQL.exists(cmd), null, default, null, null, null);
+        var queryCommand = _dataProvider.CreateCommand<bool>((TableAlias _) => NORM.SQL.exists(cmd), null, null, default, null, null, null);
         queryCommand.SingleRow = true;
         cmd.IgnoreColumns = true;
         return queryCommand;
@@ -207,6 +223,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
     {
         return ToCommand().ToList(@params);
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<List<TEntity>> ToListAsync(params object[] @params) => ToListAsync(CancellationToken.None, @params);
     public Task<List<TEntity>> ToListAsync(CancellationToken cancellationToken, params object[] @params)
     {
@@ -216,6 +233,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
     {
         return ToCommand().First(@params);
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<TEntity> FirstAsync(params object[] @params) => FirstAsync(CancellationToken.None, @params);
     public Task<TEntity> FirstAsync(CancellationToken cancellationToken, params object[] @params)
     {
@@ -243,6 +261,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
     {
         return ToCommand().FirstOrDefault(@params);
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<TEntity?> FirstOrDefaultAsync(params object[] @params) => FirstOrDefaultAsync(CancellationToken.None, @params);
     public Task<TEntity?> FirstOrDefaultAsync(CancellationToken cancellationToken, params object[] @params)
     {
@@ -252,6 +271,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
     {
         return ToCommand().Single(@params);
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<TEntity> SingleAsync(params object[] @params) => SingleAsync(CancellationToken.None, @params);
     public Task<TEntity> SingleAsync(CancellationToken cancellationToken, params object[] @params)
     {
@@ -275,6 +295,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
     {
         return ToCommand().SingleOrDefault(@params);
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<TEntity?> SingleOrDefaultAsync(params object[] @params) => SingleOrDefaultAsync(CancellationToken.None, @params);
     public Task<TEntity?> SingleOrDefaultAsync(CancellationToken cancellationToken, params object[] @params)
     {
@@ -288,7 +309,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
             anyCommand = new Lazy<QueryCommand<bool>>(() =>
             {
                 created = true;
-                var queryCommand = dataProvider.CreateCommand<bool>((TableAlias _) => NORM.SQL.exists(cmd), null, default, null, null, null);
+                var queryCommand = dataProvider.CreateCommand<bool>((TableAlias _) => NORM.SQL.exists(cmd), null, null, default, null, null, null);
                 queryCommand.SingleRow = true;
                 queryCommand.PrepareCommand(false, CancellationToken.None);
                 return queryCommand;
@@ -306,6 +327,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
         return queryCommand;
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<bool> AnyAsync(params object[] @params) => AnyAsync(CancellationToken.None, @params);
     public async Task<bool> AnyAsync(CancellationToken cancellationToken, params object[] @params)
     {
@@ -324,6 +346,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
             b._sorting.Add(new Sorting(orderExp) { Direction = direction });
         return b;
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Entity<TEntity> OrderBy(Expression<Func<TEntity, object?>> orderExp) => OrderBy(orderExp, OrderDirection.Asc);
     public Entity<TEntity> OrderBy(int columnIdx, OrderDirection direction)
     {
@@ -336,9 +359,13 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
             b._sorting.Add(new Sorting(columnIdx) { Direction = direction });
         return b;
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Entity<TEntity> OrderBy(int columnIdx) => OrderBy(columnIdx, OrderDirection.Asc);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Entity<TEntity> OrderByDescending(Expression<Func<TEntity, object?>> orderExp) => OrderBy(orderExp, OrderDirection.Desc);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Entity<TEntity> OrderByDescending(int columnIdx) => OrderBy(columnIdx, OrderDirection.Desc);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IPreparedQueryCommand<TEntity> Prepare(bool nonStreamUsing = true, CancellationToken cancellationToken = default) => ToCommand().Prepare(nonStreamUsing, cancellationToken);
     public int Count(params object[] @params)
     {
@@ -346,6 +373,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
         cmd.SingleRow = true;
         return cmd.ExecuteScalar(@params);
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<int> CountAsync(params object[] @params) => CountAsync(CancellationToken.None, @params);
     public Task<int> CountAsync(CancellationToken cancellationToken, params object[] @params)
     {
@@ -359,6 +387,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
         cmd.SingleRow = true;
         return cmd.ExecuteScalar(@params);
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<TResult?> MinAsync<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params) => MinAsync(exp, CancellationToken.None, @params);
     public Task<TResult?> MinAsync<TResult>(Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params)
     {
@@ -372,6 +401,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
         cmd.SingleRow = true;
         return cmd.ExecuteScalar(@params);
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<TResult?> MaxAsync<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params) => MaxAsync(exp, CancellationToken.None, @params);
     public Task<TResult?> MaxAsync<TResult>(Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params)
     {
@@ -385,6 +415,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
         cmd.SingleRow = true;
         return cmd.ExecuteScalar(@params);
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<TResult?> AvgAsync<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params) => AvgAsync(exp, CancellationToken.None, @params);
     public Task<TResult?> AvgAsync<TResult>(Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params)
     {
@@ -398,6 +429,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
         cmd.SingleRow = true;
         return cmd.ExecuteScalar(@params);
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<TResult?> SumAsync<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params) => SumAsync(exp, CancellationToken.None, @params);
     public Task<TResult?> SumAsync<TResult>(Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params)
     {
@@ -411,6 +443,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
         cmd.SingleRow = true;
         return cmd.ExecuteScalar(@params);
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<TResult?> StdevAsync<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params) => StdevAsync(exp, CancellationToken.None, @params);
     public Task<TResult?> StdevAsync<TResult>(Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params)
     {
@@ -424,6 +457,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
         cmd.SingleRow = true;
         return cmd.ExecuteScalar(@params);
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<TResult?> StdevpAsync<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params) => StdevpAsync(exp, CancellationToken.None, @params);
     public Task<TResult?> StdevpAsync<TResult>(Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params)
     {
@@ -437,6 +471,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
         cmd.SingleRow = true;
         return cmd.ExecuteScalar(@params);
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<TResult?> VarAsync<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params) => VarAsync(exp, CancellationToken.None, @params);
     public Task<TResult?> VarAsync<TResult>(Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params)
     {
@@ -450,6 +485,7 @@ public class Entity<TEntity> : IAsyncEnumerable<TEntity>, ICloneable
         cmd.SingleRow = true;
         return cmd.ExecuteScalar(@params);
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<TResult?> VarpAsync<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params) => VarpAsync(exp, CancellationToken.None, @params);
     public Task<TResult?> VarpAsync<TResult>(Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params)
     {
@@ -468,6 +504,7 @@ public class Entity : ICloneable
     private List<Sorting>? _sorting;
     private LambdaExpression? _group;
     private Expression<Func<TableAlias, bool>>? _having;
+    protected List<JoinExpression>? _joins;
     public Entity(IDataContext dataProvider) : this(dataProvider, null) { }
     public Entity(IDataContext dataProvider, string? table)
     {
@@ -477,7 +514,7 @@ public class Entity : ICloneable
     public QueryCommand<TResult> Select<TResult>(Expression<Func<TableAlias, TResult>> exp)
     {
         //if (string.IsNullOrEmpty(_table)) throw new InvalidOperationException("Table must be specified");
-        var cmd = new QueryCommand<TResult>(_dataProvider, exp, _condition, default, _sorting?.ToArray(), _group, _having) { Logger = Logger };
+        var cmd = new QueryCommand<TResult>(_dataProvider, exp, _condition, _joins?.ToArray(), default, _sorting?.ToArray(), _group, _having) { Logger = Logger };
 
         if (!string.IsNullOrEmpty(_table))
             cmd.From = new FromExpression(_table);

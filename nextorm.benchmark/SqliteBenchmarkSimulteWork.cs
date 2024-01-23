@@ -82,7 +82,7 @@ public class SqliteBenchmarkSimulateWork
     [Benchmark()]
     public async Task Nextorm_Prepared_StreamAsync()
     {
-        foreach (var row in await _cmd.AsEnumerableAsync(_db))
+        foreach (var row in await _cmd.ToEnumerableAsync(_db))
         {
             for (var i = 0; i < SmallIterations; i++)
             {
@@ -118,7 +118,7 @@ public class SqliteBenchmarkSimulateWork
     [Benchmark()]
     public async Task Nextorm_Cached_AsyncStream()
     {
-        await foreach (var row in _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new { entity.Id, entity.Str, entity.Dt }))
+        await foreach (var row in _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new { entity.Id, entity.Str, entity.Dt }).ToAsyncEnumerable())
         {
             for (var i = 0; i < SmallIterations; i++)
             {

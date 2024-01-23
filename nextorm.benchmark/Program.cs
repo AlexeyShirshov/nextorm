@@ -6,23 +6,23 @@ using nextorm.benchmark;
 // BenchmarkRunner.Run<InMemoryBenchmarkIteration>();
 // BenchmarkRunner.Run<InMemoryBenchmarkWhere>();
 // BenchmarkRunner.Run<InMemoryBenchmarkAny>();
-BenchmarkRunner.Run<SqliteBenchmarkIteration>();
+// BenchmarkRunner.Run<SqliteBenchmarkIteration>();
 // BenchmarkRunner.Run<SqliteBenchmarkLargeIteration>();
 // BenchmarkRunner.Run<SqliteBenchmarkWhere>();
 // BenchmarkRunner.Run<SqliteBenchmarkSimulateWork>();
 // BenchmarkRunner.Run<SqliteBenchmarkMakeSelect>();
-// BenchmarkRunner.Run<SqliteBenchmarkAny>();
+BenchmarkRunner.Run<SqliteBenchmarkAny>();
 // BenchmarkRunner.Run<SqliteBenchmarkFirst>();
 // BenchmarkRunner.Run<SqliteBenchmarkSingle>();
 // BenchmarkRunner.Run<SqliteBenchmarkCache>();
 // BenchmarkRunner.Run<SqliteBenchmarkJoin>();
 
 // runner.QueryCommandPlanEqualityComparer();
-// var runner = new SqliteBenchmarkIteration();
+// var runner = new BenchmarkQueryCommand();
 // await runner.NextormPreparedToList();
 // while (true)
-// for (var i = 0; i < 200; i++)
-//     await runner.Nextorm_Prepared_ToListAsync();
+// for (var i = 0; i < 2; i++)
+// runner.DontCacheExpressions();
 
 //await runner.FillLargeTable();
 // Console.WriteLine("Press any key to exit");

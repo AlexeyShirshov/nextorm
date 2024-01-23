@@ -84,7 +84,7 @@ public class SqliteBenchmarkLargeIteration
     //[BenchmarkCategory("Stream")]
     public async Task Nextorm_Prepared_StreamAsync()
     {
-        foreach (var row in await _cmdExec.AsEnumerableAsync(_db))
+        foreach (var row in await _cmdExec.ToEnumerableAsync(_db))
         {
         }
     }
@@ -107,7 +107,7 @@ public class SqliteBenchmarkLargeIteration
     //[BenchmarkCategory("Stream")]
     public async Task Nextorm_Cached_StreamAsync()
     {
-        foreach (var row in await _ctx.LargeEntity.Select(entity => new { entity.Id, entity.Str, entity.Dt }).AsEnumerableAsync())
+        foreach (var row in await _ctx.LargeEntity.Select(entity => new { entity.Id, entity.Str, entity.Dt }).ToEnumerableAsync())
         {
         }
     }

@@ -32,7 +32,7 @@ public class InMemoryBenchmarkWhere
     {
         for (var i = 0; i < Iterations; i++)
         {
-            foreach (var row in _provider.AsEnumerable(_cmd, i))
+            foreach (var row in _provider.GetEnumerable(_cmd, i))
             {
             }
         }
@@ -50,7 +50,7 @@ public class InMemoryBenchmarkWhere
         var cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new { entity.Id });
         for (var i = 0; i < Iterations; i++)
         {
-            foreach (var row in cmd.AsEnumerable(i))
+            foreach (var row in cmd.ToEnumerable(i))
             {
             }
         }
@@ -62,7 +62,7 @@ public class InMemoryBenchmarkWhere
         {
             var p = i;
             var cmd = _ctx.SimpleEntity.Where(it => it.Id == p).Select(entity => new { entity.Id });
-            foreach (var row in cmd.AsEnumerable())
+            foreach (var row in cmd.ToEnumerable())
             {
             }
         }

@@ -66,7 +66,7 @@ public class SqliteBenchmarkWhere
     {
         for (var i = 0; i < Iterations; i++)
         {
-            await foreach (var row in _cmd.AsAsyncEnumerable(_db, i))
+            await foreach (var row in _cmd.ToAsyncEnumerable(_db, i))
             {
             }
         }
@@ -77,7 +77,7 @@ public class SqliteBenchmarkWhere
     {
         for (var i = 0; i < Iterations; i++)
         {
-            foreach (var row in await _cmd.AsEnumerableAsync(_db, i))
+            foreach (var row in await _cmd.ToEnumerableAsync(_db, i))
             {
             }
         }
@@ -130,7 +130,7 @@ public class SqliteBenchmarkWhere
         {
             var p = i;
             var cmd = _ctx.SimpleEntity.Where(it => it.Id == p).Select(entity => new { entity.Id });
-            foreach (var row in await cmd.AsEnumerableAsync())
+            foreach (var row in await cmd.ToEnumerableAsync())
             {
             }
         }

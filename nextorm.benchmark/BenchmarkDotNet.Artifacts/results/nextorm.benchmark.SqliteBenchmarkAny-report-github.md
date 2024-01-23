@@ -9,10 +9,10 @@ Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical 
 Job=.NET 8.0  Runtime=.NET 8.0  
 
 ```
-| Method          | Mean     | Error     | StdDev    | Gen0     | Gen1    | Allocated |
-|---------------- |---------:|----------:|----------:|---------:|--------:|----------:|
-| NextormCompiled | 3.118 ms | 0.0509 ms | 0.0476 ms |  27.3438 |       - | 128.91 KB |
-| Dapper          | 4.047 ms | 0.0798 ms | 0.0980 ms |  31.2500 |       - |  146.1 KB |
-| NextormCached   | 4.260 ms | 0.0645 ms | 0.0603 ms |  93.7500 |       - | 464.17 KB |
-| EFCoreCompiled  | 5.540 ms | 0.0781 ms | 0.0730 ms | 117.1875 | 39.0625 |  546.1 KB |
-| EFCore          | 8.347 ms | 0.1607 ms | 0.1578 ms | 187.5000 | 31.2500 | 904.77 KB |
+| Method           | Mean     | Error     | StdDev    | Median   | Gen0     | Gen1    | Allocated |
+|----------------- |---------:|----------:|----------:|---------:|---------:|--------:|----------:|
+| Nextorm_Prepared | 3.134 ms | 0.0312 ms | 0.0292 ms | 3.130 ms |  27.3438 |       - | 128.91 KB |
+| Dapper           | 4.170 ms | 0.0832 ms | 0.1661 ms | 4.096 ms |  31.2500 |       - |  146.1 KB |
+| Nextorm_Cached   | 4.220 ms | 0.0747 ms | 0.0699 ms | 4.217 ms |  85.9375 |       - | 423.54 KB |
+| EFCore_Compiled  | 5.583 ms | 0.0722 ms | 0.0675 ms | 5.590 ms | 117.1875 | 39.0625 |  546.1 KB |
+| EFCore           | 8.324 ms | 0.1586 ms | 0.1484 ms | 8.297 ms | 187.5000 | 31.2500 | 904.77 KB |

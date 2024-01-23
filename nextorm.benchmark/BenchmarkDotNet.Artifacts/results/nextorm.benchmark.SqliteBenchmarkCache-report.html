@@ -2,7 +2,7 @@
 <html lang='en'>
 <head>
 <meta charset='utf-8' />
-<title>nextorm.benchmark.SqliteBenchmarkCache-20240105-164320</title>
+<title>nextorm.benchmark.SqliteBenchmarkCache-20240123-195306</title>
 
 <style type="text/css">
 	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
@@ -13,21 +13,46 @@
 </head>
 <body>
 <pre><code>
-BenchmarkDotNet v0.13.10, Windows 11 (10.0.22621.2861/22H2/2022Update/SunValley2)
+BenchmarkDotNet v0.13.10, Windows 11 (10.0.22621.3007/22H2/2022Update/SunValley2)
 Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical cores
-.NET SDK 8.0.100
-  [Host]   : .NET 8.0.0 (8.0.23.53103), X64 RyuJIT AVX2
-  .NET 8.0 : .NET 8.0.0 (8.0.23.53103), X64 RyuJIT AVX2
+.NET SDK 8.0.101
+  [Host]     : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX2
+  Job-XSIDBE : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX2
 </code></pre>
-<pre><code>Job=.NET 8.0  Runtime=.NET 8.0  
+<pre><code>Runtime=.NET 8.0  IterationCount=20  
 </code></pre>
 
 <table>
-<thead><tr><th>Method </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Gen0</th><th>Gen1</th><th>Allocated</th>
+<thead><tr><th>Method    </th><th>Iterations</th><th>Mean</th><th>Error</th><th>StdDev</th>
 </tr>
-</thead><tbody><tr><td>Dapper</td><td>46.87 &mu;s</td><td>0.790 &mu;s</td><td>0.739 &mu;s</td><td>0.7324</td><td>-</td><td>3.54 KB</td>
-</tr><tr><td>NextormCached</td><td>49.82 &mu;s</td><td>0.984 &mu;s</td><td>0.921 &mu;s</td><td>1.3428</td><td>-</td><td>6.58 KB</td>
-</tr><tr><td>EFcore</td><td>137.54 &mu;s</td><td>2.419 &mu;s</td><td>2.144 &mu;s</td><td>9.7656</td><td>0.4883</td><td>45.1 KB</td>
+</thead><tbody><tr><td>Dapper</td><td>1</td><td>249.5 &mu;s</td><td>5.35 &mu;s</td><td>5.94 &mu;s</td>
+</tr><tr><td>NextormNonCached</td><td>1</td><td>315.7 &mu;s</td><td>5.10 &mu;s</td><td>5.45 &mu;s</td>
+</tr><tr><td>NextormCached</td><td>1</td><td>316.7 &mu;s</td><td>4.30 &mu;s</td><td>4.78 &mu;s</td>
+</tr><tr><td>NextormPrepared</td><td>1</td><td>327.2 &mu;s</td><td>7.50 &mu;s</td><td>8.64 &mu;s</td>
+</tr><tr><td>NextormPrepared</td><td>2</td><td>368.0 &mu;s</td><td>9.45 &mu;s</td><td>10.88 &mu;s</td>
+</tr><tr><td>NextormCached</td><td>2</td><td>386.2 &mu;s</td><td>8.88 &mu;s</td><td>9.51 &mu;s</td>
+</tr><tr><td>NextormPrepared</td><td>3</td><td>404.5 &mu;s</td><td>13.19 &mu;s</td><td>15.19 &mu;s</td>
+</tr><tr><td>NextormPrepared</td><td>4</td><td>426.0 &mu;s</td><td>10.12 &mu;s</td><td>10.83 &mu;s</td>
+</tr><tr><td>NextormCached</td><td>3</td><td>454.8 &mu;s</td><td>9.78 &mu;s</td><td>10.87 &mu;s</td>
+</tr><tr><td>NextormPrepared</td><td>5</td><td>466.0 &mu;s</td><td>15.02 &mu;s</td><td>17.30 &mu;s</td>
+</tr><tr><td>NextormCached</td><td>4</td><td>526.7 &mu;s</td><td>28.31 &mu;s</td><td>30.29 &mu;s</td>
+</tr><tr><td>NextormCached</td><td>5</td><td>570.3 &mu;s</td><td>9.96 &mu;s</td><td>11.07 &mu;s</td>
+</tr><tr><td>NextormPrepared</td><td>10</td><td>640.1 &mu;s</td><td>11.94 &mu;s</td><td>12.26 &mu;s</td>
+</tr><tr><td>NextormNonCached</td><td>2</td><td>644.0 &mu;s</td><td>10.27 &mu;s</td><td>11.42 &mu;s</td>
+</tr><tr><td>NextormPrepared</td><td>15</td><td>750.0 &mu;s</td><td>7.26 &mu;s</td><td>8.36 &mu;s</td>
+</tr><tr><td>Dapper</td><td>2</td><td>754.5 &mu;s</td><td>13.65 &mu;s</td><td>14.61 &mu;s</td>
+</tr><tr><td>Dapper</td><td>3</td><td>843.5 &mu;s</td><td>51.63 &mu;s</td><td>57.38 &mu;s</td>
+</tr><tr><td>NextormCached</td><td>10</td><td>846.5 &mu;s</td><td>24.52 &mu;s</td><td>28.24 &mu;s</td>
+</tr><tr><td>Dapper</td><td>4</td><td>861.6 &mu;s</td><td>26.23 &mu;s</td><td>30.21 &mu;s</td>
+</tr><tr><td>Dapper</td><td>5</td><td>917.7 &mu;s</td><td>29.57 &mu;s</td><td>34.05 &mu;s</td>
+</tr><tr><td>NextormNonCached</td><td>3</td><td>966.3 &mu;s</td><td>18.72 &mu;s</td><td>19.23 &mu;s</td>
+</tr><tr><td>NextormCached</td><td>15</td><td>1,093.4 &mu;s</td><td>17.65 &mu;s</td><td>19.62 &mu;s</td>
+</tr><tr><td>Dapper</td><td>10</td><td>1,136.5 &mu;s</td><td>26.75 &mu;s</td><td>30.81 &mu;s</td>
+</tr><tr><td>NextormNonCached</td><td>4</td><td>1,318.4 &mu;s</td><td>43.23 &mu;s</td><td>46.25 &mu;s</td>
+</tr><tr><td>Dapper</td><td>15</td><td>1,418.6 &mu;s</td><td>66.21 &mu;s</td><td>76.25 &mu;s</td>
+</tr><tr><td>NextormNonCached</td><td>5</td><td>1,635.0 &mu;s</td><td>44.47 &mu;s</td><td>51.22 &mu;s</td>
+</tr><tr><td>NextormNonCached</td><td>10</td><td>3,248.6 &mu;s</td><td>112.32 &mu;s</td><td>129.35 &mu;s</td>
+</tr><tr><td>NextormNonCached</td><td>15</td><td>4,603.3 &mu;s</td><td>61.64 &mu;s</td><td>70.99 &mu;s</td>
 </tr></tbody></table>
 </body>
 </html>

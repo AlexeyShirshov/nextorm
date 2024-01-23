@@ -61,7 +61,7 @@ public class SqliteBenchmarkIteration
     [Benchmark()]
     public async Task Nextorm_Prepared_AsyncStream()
     {
-        await foreach (var row in _cmd.AsAsyncEnumerable(_db))
+        await foreach (var row in _cmd.ToAsyncEnumerable(_db))
         {
         }
     }
@@ -103,7 +103,7 @@ public class SqliteBenchmarkIteration
     [Benchmark()]
     public async Task Nextorm_CachedManualSql_ToListAsync()
     {
-        var cmd = _ctx.SimpleEntity.ToCommand().WithSql("select id from simple_entity");
+        var cmd = _ctx.SimpleEntity.WithSql("select id from simple_entity");
         foreach (var row in await cmd.ToListAsync())
         {
         }

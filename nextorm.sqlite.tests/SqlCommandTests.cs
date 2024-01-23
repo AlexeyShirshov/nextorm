@@ -22,7 +22,7 @@ public class SqlCommandTests
     public async Task SelectEntity_ShouldReturnData()
     {
         long idx = 0;
-        await foreach (var row in _sut.SimpleEntity.Select(entity => new { Id = (long)entity.Id }))
+        await foreach (var row in _sut.SimpleEntity.Select(entity => new { Id = (long)entity.Id }).ToAsyncEnumerable())
         {
             idx++;
             idx.Should().Be(row.Id);
@@ -32,13 +32,13 @@ public class SqlCommandTests
     [Fact]
     public async Task SelectEntityToList_ShouldReturnData()
     {
-        (await _sut.SimpleEntity.Select(entity => new { Id = (long)entity.Id }).CountAsync()).Should().Be(10);
+        (await _sut.SimpleEntity.Select(entity => new { Id = (long)entity.Id }).ToAsyncEnumerable().CountAsync()).Should().Be(10);
     }
     [Fact]
     public async Task SelectModifiedEntity_ShouldReturnData()
     {
         long idx = 1;
-        await foreach (var row in _sut.SimpleEntity.Select(entity => new { Id = (long)entity.Id + 1 }))
+        await foreach (var row in _sut.SimpleEntity.Select(entity => new { Id = (long)entity.Id + 1 }).ToAsyncEnumerable())
         {
             idx++;
             idx.Should().Be(row.Id);
@@ -48,7 +48,7 @@ public class SqlCommandTests
     [Fact]
     public async Task SelectTable_ShouldReturnData()
     {
-        await foreach (var row in _sut.From("simple_entity").Select(tbl => new { Id = tbl.Long("id") }))
+        await foreach (var row in _sut.From("simple_entity").Select(tbl => new { Id = tbl.Long("id") }).ToAsyncEnumerable())
         {
             _logger.LogInformation("Id = {id}", row.Id);
         }
@@ -56,7 +56,7 @@ public class SqlCommandTests
     [Fact]
     public async Task SelectSubQuery_ShouldReturnData()
     {
-        await foreach (var row in _sut.From(_sut.From("simple_entity").Select(tbl => new { Id = tbl.Long("id") })).Select(subQuery => new { subQuery.Id }))
+        await foreach (var row in _sut.From(_sut.From("simple_entity").Select(tbl => new { Id = tbl.Long("id") })).Select(subQuery => new { subQuery.Id }).ToAsyncEnumerable())
         {
             _logger.LogInformation("Id = {id}", row.Id);
         }
@@ -64,7 +64,7 @@ public class SqlCommandTests
     [Fact]
     public async Task SelectComplexEntity_ShouldReturnData()
     {
-        await foreach (var row in _sut.ComplexEntity.Select(it => new { it.Id, it.Datetime, it.RequiredString, it.Boolean, it.Date, it.Double, it.Int, it.Numeric, it.Real, it.SmallInt, it.String, it.TinyInt }))
+        await foreach (var row in _sut.ComplexEntity.Select(it => new { it.Id, it.Datetime, it.RequiredString, it.Boolean, it.Date, it.Double, it.Int, it.Numeric, it.Real, it.SmallInt, it.String, it.TinyInt }).ToAsyncEnumerable())
         {
             _logger.LogInformation("{entity}", row);
         }
@@ -73,7 +73,7 @@ public class SqlCommandTests
     public async Task SelectEntity_ShouldCancel_WhenCancel()
     {
         CancellationTokenSource tokenSource = new();
-        await foreach (var row in _sut.SimpleEntity.Select(entity => new { Id = (long)entity.Id }).WithCancellation(tokenSource.Token))
+        await foreach (var row in _sut.SimpleEntity.Select(entity => new { Id = (long)entity.Id }).ToAsyncEnumerable().WithCancellation(tokenSource.Token))
         {
             _logger.LogInformation("{entity}", row);
             tokenSource.Cancel();
@@ -85,7 +85,7 @@ public class SqlCommandTests
     public async Task SelectEntityIntoDTO_ShouldReturnData()
     {
         long idx = 0;
-        await foreach (var row in _sut.SimpleEntity.Select(entity => new SimpleEntityDTO(entity.Id)))
+        await foreach (var row in _sut.SimpleEntity.Select(entity => new SimpleEntityDTO(entity.Id)).ToAsyncEnumerable())
         {
             idx++;
             idx.Should().Be(row.Id);
@@ -95,7 +95,7 @@ public class SqlCommandTests
     [Fact]
     public async Task SelectTableIntoDTO_ShouldReturnData()
     {
-        await foreach (var row in _sut.From("simple_entity").Select(tbl => new SimpleEntityDTO(tbl.Long("id"))))
+        await foreach (var row in _sut.From("simple_entity").Select(tbl => new SimpleEntityDTO(tbl.Long("id"))).ToAsyncEnumerable())
         {
             _logger.LogInformation("Id = {id}", row.Id);
         }
@@ -103,7 +103,7 @@ public class SqlCommandTests
     [Fact]
     public async Task SelectEntityIntoTuple_ShouldReturnData()
     {
-        await foreach (var row in _sut.From("simple_entity").Select(tbl => new Tuple<long>(tbl.Long("id"))))
+        await foreach (var row in _sut.From("simple_entity").Select(tbl => new Tuple<long>(tbl.Long("id"))).ToAsyncEnumerable())
         {
             _logger.LogInformation("Id = {id}", row.Item1);
         }
@@ -111,7 +111,7 @@ public class SqlCommandTests
     [Fact]
     public async Task SelectEntityIntoRecord_ShouldReturnData()
     {
-        await foreach (var row in _sut.From("simple_entity").Select(tbl => new SimpleEntityRecord(tbl.Long("id"))))
+        await foreach (var row in _sut.From("simple_entity").Select(tbl => new SimpleEntityRecord(tbl.Long("id"))).ToAsyncEnumerable())
         {
             _logger.LogInformation("Id = {id}", row.Id);
         }
@@ -120,7 +120,7 @@ public class SqlCommandTests
     public async Task SelectNestedEntityIntoRecord_ShouldReturnData()
     {
         var nested = _sut.From("simple_entity").Select(tbl => new SimpleEntityRecord(tbl.Long("id")));
-        await foreach (var row in _sut.From(nested).Select(rec => new { rec.Id }))
+        await foreach (var row in _sut.From(nested).Select(rec => new { rec.Id }).ToAsyncEnumerable())
         {
             _logger.LogInformation("Id = {id}", row.Id);
         }
@@ -128,7 +128,7 @@ public class SqlCommandTests
     [Fact]
     public async Task SelectComplexEntityWithCalculatedFields_ShouldReturnData()
     {
-        await foreach (var row in _sut.ComplexEntity.Select(it => new { it.Id, it.RequiredString, it.String, CalcString = it.RequiredString + "/" + it.String }))
+        await foreach (var row in _sut.ComplexEntity.Select(it => new { it.Id, it.RequiredString, it.String, CalcString = it.RequiredString + "/" + it.String }).ToAsyncEnumerable())
         {
             if (row.Id == 3)
                 row.CalcString.Should().BeNull();
@@ -141,7 +141,7 @@ public class SqlCommandTests
     {
         var nested = _sut.ComplexEntity.Select(it => new { it.Id, it.RequiredString, it.String, CalcString = it.RequiredString + "/" + it.String });
 
-        await foreach (var row in _sut.From(nested).Select(t1 => new { t1.Id, t1.RequiredString, t1.String, t1.CalcString }))
+        await foreach (var row in _sut.From(nested).Select(t1 => new { t1.Id, t1.RequiredString, t1.String, t1.CalcString }).ToAsyncEnumerable())
         {
             if (row.Id == 3)
                 row.CalcString.Should().BeNull();
@@ -152,7 +152,7 @@ public class SqlCommandTests
     [Fact]
     public async Task SelectComplexEntityWithCalculatedFields_WhenConditional_ShouldReturnString()
     {
-        await foreach (var row in _sut.ComplexEntity.Select(it => new { it.Id, it.RequiredString, it.String, CalcString = it.RequiredString + "/" + (it.String ?? "") }))
+        await foreach (var row in _sut.ComplexEntity.Select(it => new { it.Id, it.RequiredString, it.String, CalcString = it.RequiredString + "/" + (it.String ?? "") }).ToAsyncEnumerable())
         {
             row.CalcString.Should().Be($"{row.RequiredString}/{row.String ?? string.Empty}");
         }
@@ -160,7 +160,7 @@ public class SqlCommandTests
     [Fact]
     public async Task SelectComplexEntityWithCalculatedNumericFields_ShouldReturnData()
     {
-        await foreach (var row in _sut.ComplexEntity.Select(it => new { it.Id, it.TinyInt, it.SmallInt, it.Real, it.Double, Calc = it.TinyInt + it.SmallInt, Calc2 = (it.Real ?? 1) + it.Double }))
+        await foreach (var row in _sut.ComplexEntity.Select(it => new { it.Id, it.TinyInt, it.SmallInt, it.Real, it.Double, Calc = it.TinyInt + it.SmallInt, Calc2 = (it.Real ?? 1) + it.Double }).ToAsyncEnumerable())
         {
             row.Calc.Should().Be(row.TinyInt + row.SmallInt);
             row.Calc2.Should().Be((row.Real ?? 1f) + row.Double);
@@ -169,7 +169,7 @@ public class SqlCommandTests
     [Fact]
     public async Task SelectComplexEntityWithCalculatedNumericFields2_ShouldReturnData()
     {
-        await foreach (var row in _sut.ComplexEntity.Select(it => new { it.Id, it.TinyInt, it.SmallInt, Calc = (it.TinyInt + it.SmallInt) * 2 }))
+        await foreach (var row in _sut.ComplexEntity.Select(it => new { it.Id, it.TinyInt, it.SmallInt, Calc = (it.TinyInt + it.SmallInt) * 2 }).ToAsyncEnumerable())
         {
             row.Calc.Should().Be((row.TinyInt + row.SmallInt) * 2);
         }
@@ -178,7 +178,7 @@ public class SqlCommandTests
     [Theory]
     public async Task SelectComplexEntityWithCalculatedNumericFieldsWithParam_ShouldReturnData(int i)
     {
-        await foreach (var row in _sut.ComplexEntity.Select(it => new { it.Id, it.TinyInt, it.SmallInt, Calc = (it.TinyInt + it.SmallInt) * i }))
+        await foreach (var row in _sut.ComplexEntity.Select(it => new { it.Id, it.TinyInt, it.SmallInt, Calc = (it.TinyInt + it.SmallInt) * i }).ToAsyncEnumerable())
         {
             row.Calc.Should().Be((row.TinyInt + row.SmallInt) * i);
         }
@@ -189,7 +189,8 @@ public class SqlCommandTests
         long idx = 0;
         await foreach (var row in _sut.SimpleEntity
             .Where(entity => entity.Id == 1)
-            .Select(entity => new { Id = (long)entity.Id }))
+            .Select(entity => new { Id = (long)entity.Id })
+            .ToAsyncEnumerable())
         {
             idx++;
             row.Id.Should().Be(1);
@@ -202,7 +203,8 @@ public class SqlCommandTests
         long idx = 0;
         await foreach (var row in _sut.SimpleEntity
             .Where(entity => entity.Id != 1)
-            .Select(entity => new { Id = (long)entity.Id }))
+            .Select(entity => new { Id = (long)entity.Id })
+            .ToAsyncEnumerable())
         {
             idx++;
         }
@@ -214,7 +216,8 @@ public class SqlCommandTests
         long idx = 0;
         await foreach (var row in _sut.SimpleEntity
             .Where(entity => entity.Id > 1)
-            .Select(entity => new { Id = (long)entity.Id }))
+            .Select(entity => new { Id = (long)entity.Id })
+            .ToAsyncEnumerable())
         {
             idx++;
         }
@@ -226,7 +229,8 @@ public class SqlCommandTests
         long idx = 0;
         await foreach (var row in _sut.SimpleEntity
             .Where(entity => entity.Id >= 9)
-            .Select(entity => new { Id = (long)entity.Id }))
+            .Select(entity => new { Id = (long)entity.Id })
+            .ToAsyncEnumerable())
         {
             idx++;
         }
@@ -269,7 +273,8 @@ public class SqlCommandTests
     {
         await foreach (var row in _sut.ComplexEntity
             .Where(entity => entity.String == str)
-            .Select(entity => new { entity.Id, entity.String }))
+            .Select(entity => new { entity.Id, entity.String })
+            .ToAsyncEnumerable())
         {
             row.String.Should().Be(str);
 
@@ -315,7 +320,7 @@ public class SqlCommandTests
     public async Task SelectEntityAsClass_ShouldReturnData()
     {
         long idx = 0;
-        await foreach (var row in _sut.SimpleEntityAsClass)
+        await foreach (var row in _sut.SimpleEntityAsClass.ToAsyncEnumerable())
         {
             idx++;
             idx.Should().Be(row.Id);
@@ -326,7 +331,7 @@ public class SqlCommandTests
     public async Task SelectSubQueryWhere_ShouldReturnData()
     {
         var idx = 0;
-        await foreach (var row in _sut.From(_sut.SimpleEntity.Where(it => it.Id > 8)).Select(it => new { it.Id }))
+        await foreach (var row in _sut.From(_sut.SimpleEntity.Where(it => it.Id > 8)).Select(it => new { it.Id }).ToAsyncEnumerable())
         {
             idx++;
             _logger.LogInformation("Id = {id}", row.Id);
@@ -396,7 +401,7 @@ public class SqlCommandTests
     [Fact]
     public async Task SelectAny_ShouldReturnTrue()
     {
-        var r = await _sut.ComplexEntity.Where(it => it.Boolean == true).Select(it => it).AnyAsync();
+        var r = await _sut.ComplexEntity.Where(it => it.Boolean == true).AnyAsync();
 
         r.Should().BeTrue();
     }
@@ -404,7 +409,7 @@ public class SqlCommandTests
     public async Task SelectAsterisk_ShouldReturnTrue()
     {
         long idx = 0;
-        await foreach (var row in _sut.SimpleEntityAsClass.Select(it => it))
+        await foreach (var row in _sut.SimpleEntityAsClass.ToAsyncEnumerable())
         {
             idx++;
             idx.Should().Be(row.Id);

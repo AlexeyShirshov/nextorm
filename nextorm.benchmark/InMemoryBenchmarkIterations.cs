@@ -38,7 +38,7 @@ public class InMemoryBenchmarkIteration
     [Benchmark()]
     public void NextormPreparedSync()
     {
-        foreach (var row in _provider.AsEnumerable(_cmd))
+        foreach (var row in _provider.GetEnumerable(_cmd))
         {
         }
     }
@@ -52,14 +52,14 @@ public class InMemoryBenchmarkIteration
     [Benchmark()]
     public async Task NextormCached()
     {
-        foreach (var row in await _ctx.SimpleEntity.Select(entity => new { entity.Id }).AsEnumerableAsync())
+        foreach (var row in await _ctx.SimpleEntity.Select(entity => new { entity.Id }).ToEnumerableAsync())
         {
         }
     }
     [Benchmark(Baseline = true)]
     public void NextormCachedSync()
     {
-        foreach (var row in _ctx.SimpleEntity.Select(entity => new { entity.Id }).AsEnumerable())
+        foreach (var row in _ctx.SimpleEntity.Select(entity => new { entity.Id }).ToEnumerable())
         {
         }
     }

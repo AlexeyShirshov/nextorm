@@ -71,7 +71,7 @@ public class InMemoryTests
         var query = _sut.SimpleEntity.Select(it => new Tuple<int, int>(it.Id, it.Id + 10));
         //_sut.DataProvider.Compile(query, false, true, CancellationToken.None);
         // When
-        await foreach (var item in query)
+        await foreach (var item in query.ToAsyncEnumerable())
         {
             _logger.LogInformation("Value is {id}", item.Item2);
         }

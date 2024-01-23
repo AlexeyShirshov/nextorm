@@ -42,6 +42,7 @@ public class DbContext : IDataContext
         }
 
         LogSensitiveData = optionsBuilder.ShouldLogSensitiveData;
+        // CacheExpressions = optionsBuilder.CacheExpressions;
     }
     #region Properties
     protected internal bool LogSensitiveData { get; set; }
@@ -57,6 +58,8 @@ public class DbContext : IDataContext
     private static Dictionary<QueryPlan, IDbCommandHolder> QueryPlanCache => _queryPlanCache ??= [];
     public Dictionary<string, object> Properties => _properties;
     public Lazy<QueryCommand<bool>>? AnyCommand { get; set; }
+    // public bool CacheExpressions { get; set; }
+
     public Entity From(string table) => new(this, table) { Logger = CommandLogger };
     #endregion
     public event EventHandler? Disposed;
@@ -482,14 +485,16 @@ public class DbContext : IDataContext
                 sqlBuilder.Append(" from ").Append(fromStr);
             }
 
-            // if (cmd.Joins.Any())
-            // {
-            foreach (var join in cmd.Joins)
+            if (cmd.Joins is not null)
             {
-                var joinSql = MakeJoin(join, cmd, @params, paramMode);
-                if (!paramMode) sqlBuilder!.Append(joinSql);
+                for (var idx = 0; idx < cmd.Joins.Length; idx++)
+                {
+                    var join = cmd.Joins[idx];
+
+                    var joinSql = MakeJoin(join, cmd, @params, paramMode);
+                    if (!paramMode) sqlBuilder!.Append(joinSql);
+                }
             }
-            //}
 
             if (cmd.PreparedCondition is not null)
             {
@@ -756,7 +761,7 @@ public class DbContext : IDataContext
     {
         if (srcType != typeof(TableAlias))
         {
-            if (queryCommand.Joins.Count > 0 && srcType.IsAssignableTo(typeof(IProjection)))
+            if (queryCommand.Joins?.Length > 0 && srcType.IsAssignableTo(typeof(IProjection)))
             {
                 var prop_t1 = srcType.GetProperty("t1") ?? throw new BuildSqlCommandException($"Projection {srcType} must have t1 property");
 
@@ -1377,6 +1382,11 @@ public class DbContext : IDataContext
         true => "count(distinct ",
         _ => "count("
     };
+
+    public void PurgeQueryCache()
+    {
+        QueryPlanCache.Clear();
+    }
     // class EmptyEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerator<TResult>
     // {
     //     public TResult Current => default;

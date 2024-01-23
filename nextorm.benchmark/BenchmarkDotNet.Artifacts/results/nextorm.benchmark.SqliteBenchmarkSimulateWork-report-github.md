@@ -9,13 +9,13 @@ Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical 
 Job=.NET 8.0  Runtime=.NET 8.0  
 
 ```
-| Method                              | Mean       | Median     | Ratio | Gen0      | Allocated | Alloc Ratio |
-|------------------------------------ |-----------:|-----------:|------:|----------:|----------:|------------:|
-| Nextorm_Prepared_StreamAsync        |   6.087 ms |   6.193 ms |  0.04 | 1382.8125 |   6.21 MB |        1.00 |
-| Dapper_AsyncStream                  |  30.005 ms |  29.783 ms |  0.20 | 3125.0000 |  14.08 MB |        2.27 |
-| Nextorm_Cached_AsyncStream          |  53.687 ms |  53.793 ms |  0.35 | 7000.0000 |  31.51 MB |        5.07 |
-| Nextorm_Prepared_ToListAsync        | 152.192 ms | 151.314 ms |  1.00 | 1250.0000 |   6.21 MB |        1.00 |
-| Nextorm_PreparedForLoop_ToListAsync | 153.249 ms | 151.664 ms |  1.01 | 1250.0000 |   6.23 MB |        1.00 |
-| Dapper_Async                        | 206.064 ms | 205.767 ms |  1.36 | 3000.0000 |  14.09 MB |        2.27 |
-| EFCore_Compiled_ToListAsync         | 246.402 ms | 244.861 ms |  1.63 | 4000.0000 |  20.41 MB |        3.29 |
-| Nextorm_Cached_ToList               | 271.234 ms | 268.467 ms |  1.80 | 7000.0000 |  32.23 MB |        5.19 |
+| Method                              | Mean       | Ratio | Gen0      | Allocated | Alloc Ratio |
+|------------------------------------ |-----------:|------:|----------:|----------:|------------:|
+| Nextorm_Prepared_StreamAsync        |   6.555 ms |  0.04 | 1382.8125 |   6.21 MB |        1.00 |
+| Dapper_AsyncStream                  |  29.994 ms |  0.19 | 3125.0000 |  14.08 MB |        2.27 |
+| Nextorm_Cached_AsyncStream          |  51.988 ms |  0.34 | 6500.0000 |   30.9 MB |        4.97 |
+| Nextorm_PreparedForLoop_ToListAsync | 155.749 ms |  1.00 | 1250.0000 |   6.23 MB |        1.00 |
+| Nextorm_Prepared_ToListAsync        | 155.894 ms |  1.00 | 1250.0000 |   6.21 MB |        1.00 |
+| Nextorm_Cached_ToList               | 237.881 ms |  1.53 | 6000.0000 |  30.56 MB |        4.92 |
+| Dapper_Async                        | 239.227 ms |  1.53 | 3000.0000 |  14.09 MB |        2.27 |
+| EFCore_Compiled_ToListAsync         | 241.896 ms |  1.55 | 4000.0000 |  20.41 MB |        3.29 |

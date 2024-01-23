@@ -16,7 +16,7 @@ public class InMemoryJoinTests
         var query = _sut.SimpleEntity.Join(_sut.SimpleEntity, (t1, t2) => t1.Id == t2.Id + 1).Select(p => new { FirstId = p.t1.Id, SecondId = p.t2.Id });
 
         var idx = 0;
-        await foreach (var row in query)
+        await foreach (var row in query.ToAsyncEnumerable())
         {
             idx++;
             row.FirstId.Should().Be(row.SecondId + 1);
@@ -33,7 +33,7 @@ public class InMemoryJoinTests
             .Select(p => new { FirstId = p.t1.Id, SecondId = p.t2.Id, ThirdId = p.t3.Id });
 
         var idx = 0;
-        await foreach (var row in query)
+        await foreach (var row in query.ToAsyncEnumerable())
         {
             idx++;
             row.FirstId.Should().Be(row.SecondId + 1);

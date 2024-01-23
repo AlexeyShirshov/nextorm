@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>nextorm.benchmark.BenchmarkQueryCommand-20240123-195119</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.13.10, Windows 11 (10.0.22621.3007/22H2/2022Update/SunValley2)
+Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical cores
+.NET SDK 8.0.101
+  [Host]   : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX2
+  .NET 8.0 : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX2
+</code></pre>
+<pre><code>Job=.NET 8.0  Runtime=.NET 8.0  
+</code></pre>
+
+<table>
+<thead><tr><th>Method        </th><th>Iterations</th><th>Mean</th><th>Error</th><th>StdDev</th><th>Gen0</th><th>Gen1</th><th>Allocated</th>
+</tr>
+</thead><tbody><tr><td>DontCacheExpressions</td><td>1</td><td>7.439 &mu;s</td><td>0.1445 &mu;s</td><td>0.2073 &mu;s</td><td>1.2207</td><td>-</td><td>5.81 KB</td>
+</tr><tr><td>DontCacheExpressions</td><td>2</td><td>14.842 &mu;s</td><td>0.2931 &mu;s</td><td>0.5055 &mu;s</td><td>2.4414</td><td>-</td><td>11.59 KB</td>
+</tr><tr><td>DontCacheExpressions</td><td>3</td><td>22.016 &mu;s</td><td>0.4121 &mu;s</td><td>0.4232 &mu;s</td><td>3.6621</td><td>-</td><td>17.37 KB</td>
+</tr><tr><td>DontCacheExpressions</td><td>5</td><td>36.127 &mu;s</td><td>0.7055 &mu;s</td><td>0.8399 &mu;s</td><td>6.1035</td><td>-</td><td>28.93 KB</td>
+</tr><tr><td>CacheExpressions</td><td>1</td><td>96.232 &mu;s</td><td>1.9218 &mu;s</td><td>2.2132 &mu;s</td><td>2.1973</td><td>1.9531</td><td>10.92 KB</td>
+</tr><tr><td>CacheExpressions</td><td>2</td><td>106.085 &mu;s</td><td>2.0952 &mu;s</td><td>2.7243 &mu;s</td><td>3.4180</td><td>3.1738</td><td>16.7 KB</td>
+</tr><tr><td>CacheExpressions</td><td>3</td><td>113.380 &mu;s</td><td>2.0344 &mu;s</td><td>1.9029 &mu;s</td><td>4.8828</td><td>0.4883</td><td>22.48 KB</td>
+</tr><tr><td>CacheExpressions</td><td>5</td><td>131.104 &mu;s</td><td>2.3987 &mu;s</td><td>2.2438 &mu;s</td><td>7.3242</td><td>0.4883</td><td>34.04 KB</td>
+</tr></tbody></table>
+</body>
+</html>

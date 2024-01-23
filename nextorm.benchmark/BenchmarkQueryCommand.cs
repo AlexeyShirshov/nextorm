@@ -9,6 +9,7 @@ namespace nextorm.benchmark;
 
 [SimpleJob(RuntimeMoniker.Net80)]
 [MemoryDiagnoser]
+[Config(typeof(NextormConfig))]
 public class BenchmarkQueryCommand
 {
     private readonly TestDataRepository _ctx;
@@ -18,59 +19,45 @@ public class BenchmarkQueryCommand
     // private readonly SqlDataProvider.QueryPlan _plan2;
     private readonly ExpressionEqualityComparer _eq;
     private readonly ExpressionPlanEqualityComparer _eqPlan;
+    private readonly TestDataRepository _nonCacheCtx;
+    [Params(1, 2, 3, 5)]
+    public int Iterations { get; set; } = 1;
 
     public BenchmarkQueryCommand()
     {
-        var builder = new DbContextBuilder();
-        builder.UseSqlite(Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db"));
+        var filepath = Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db");
+
+        var builder = new DbContextBuilder
+        {
+            //  CacheExpressions = false
+        };
+        builder.UseSqlite(filepath);
+        _nonCacheCtx = new TestDataRepository(builder.CreateDbContext());
+
+        builder = new DbContextBuilder
+        {
+            // CacheExpressions = true
+        };
+        builder.UseSqlite(filepath);
         _ctx = new TestDataRepository(builder.CreateDbContext());
-
-        _provider = (DbContext)_ctx.DbContext;
-
-        var p = 10;
-        _cmd = _ctx.SimpleEntity.Where(it => it.Id == p).Select(entity => new { entity.Id });
-        _cmd.PrepareCommand(CancellationToken.None);
-
-        // _plan = new SqlDataProvider.QueryPlan(_cmd);
-        // _plan2 = new SqlDataProvider.QueryPlan(_cmd);
-
-        _eq = ExpressionEqualityComparer.Instance;
-        _eqPlan = new ExpressionPlanEqualityComparer(null);
     }
-    // [Benchmark(Baseline = true)]
-    // public void WhereEqualityComparer()
-    // {
-    //     _eq.GetHashCode(_cmd.Condition);
-    //     _eq.Equals(_cmd.Condition, _cmd.Condition);
-    // }
-    // [Benchmark()]
-    // public void WherePlanEqualityComparer()
-    // {
-    //     _eqPlan.GetHashCode(_cmd.Condition);
-    //     _eqPlan.Equals(_cmd.Condition, _cmd.Condition);
-    // }
-    // [Benchmark()]
-    // public void SelectEqualityComparer()
-    // {
-    //     _eq.GetHashCode(_cmd.SelectExpression);
-    //     _eq.Equals(_cmd.SelectExpression, _cmd.SelectExpression);
-    // }
-    // [Benchmark()]
-    // public void SelectPlanEqualityComparer()
-    // {
-    //     _eqPlan.GetHashCode(_cmd.SelectExpression);
-    //     _eqPlan.Equals(_cmd.SelectExpression, _cmd.SelectExpression);
-    // }
     [Benchmark()]
-    public void StandardEqualityComparer()
+    public void CacheExpressions()
     {
-        _cmd.GetHashCode();
-        _cmd.Equals(_cmd);
+        _ctx.DbContext.ExpressionsCache.Clear();
+        Workload(_ctx);
     }
-    // [Benchmark()]
-    // public void PlanEqualityComparer()
-    // {
-    //     _plan.GetHashCode();
-    //     _plan.Equals(_plan2);
-    // }
+    [Benchmark()]
+    public void DontCacheExpressions()
+    {
+        Workload(_nonCacheCtx);
+    }
+    void Workload(TestDataRepository repo)
+    {
+        for (int i = 0; i < Iterations; i++)
+        {
+            var cmd = repo.LargeEntity.Where(it => it.Id == i).Select(it => new { it.Id, it.Str, it.Dt });
+            cmd.ToEnumerable();
+        }
+    }
 }

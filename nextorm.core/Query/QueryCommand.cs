@@ -12,7 +12,7 @@ namespace nextorm.core;
 public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
 {
     private List<QueryCommand>? _referencedQueries;
-    private readonly List<JoinExpression> _joins;
+    private readonly JoinExpression[]? _joins;
     protected SelectExpression[]? _selectList;
     private object _customData;
     // private int _columnsHash;
@@ -21,7 +21,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     // private int _whereHash;
     protected FromExpression? _from;
     protected IDataContext _dataContext;
-    protected readonly LambdaExpression _exp;
+    protected readonly LambdaExpression? _exp;
     protected readonly LambdaExpression? _condition;
     protected readonly LambdaExpression? _groupExp;
     protected readonly LambdaExpression? _having;
@@ -53,13 +53,18 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
 
     //protected ArrayList _params = new();
     public QueryCommand(IDataContext dataProvider, LambdaExpression exp, LambdaExpression? condition, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having)
-        : this(dataProvider, exp, condition, new(), paging, sorting, group, having)
+        : this(dataProvider, exp, null, condition, null, paging, sorting, group, having)
     {
     }
-    protected QueryCommand(IDataContext dataProvider, LambdaExpression exp, LambdaExpression? condition, List<JoinExpression> joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having)
+    public QueryCommand(IDataContext dataProvider, Type srcType, LambdaExpression? condition, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having)
+        : this(dataProvider, null, srcType, condition, null, paging, sorting, group, having)
+    {
+    }
+    protected QueryCommand(IDataContext dataProvider, LambdaExpression? exp, Type? srcType, LambdaExpression? condition, JoinExpression[]? joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having)
     {
         _dataContext = dataProvider;
         _exp = exp;
+        _srcType = srcType;
         _condition = condition;
         //_payloadMgr = payloadMgr;
         _joins = joins;
@@ -68,7 +73,6 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         _groupExp = group;
         _having = having;
     }
-    public LambdaExpression SelectExpression => _exp;
     public ILogger? Logger { get; set; }
     public FromExpression? From { get => _from; set => _from = value; }
     public SelectExpression[]? SelectList => _selectList;
@@ -88,7 +92,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         get => _isPrepared;
     }
     //public Expression? Condition => _condition;
-    public List<JoinExpression> Joins => _joins;
+    public JoinExpression[]? Joins => _joins;
     public bool Cache
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -170,217 +174,224 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         var columnsPlanHash = 7;
         if (selectList is null && !IgnoreColumns)
         {
-            if (_exp is null)
-                throw new PrepareException("Lambda expression must exists");
-
-            if (_exp.Body is NewExpression ctor)
+            if (_exp is not null)
             {
-                //if (!CacheList || !_dataProvider.SelectListExpessionCache.TryGetValue(ctor, out selectList))
-                //{
-                //var selList = new List<SelectExpression>();
-                var args = ctor.Arguments;
-                var argsCount = args.Count;
 
-                selectList = new SelectExpression[argsCount];
-
-                var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataContext, this, cancellationToken);
-                for (var idx = 0; idx < argsCount; idx++)
+                if (_exp.Body is NewExpression ctor)
                 {
-                    if (cancellationToken.IsCancellationRequested)
-                        return (selectList, columnsPlanHash);
+                    //if (!CacheList || !_dataProvider.SelectListExpessionCache.TryGetValue(ctor, out selectList))
+                    //{
+                    //var selList = new List<SelectExpression>();
+                    var args = ctor.Arguments;
+                    var argsCount = args.Count;
 
-                    SelectExpression selExp;
-                    var arg = args[idx];
-                    // if (arg is MemberExpression me)
-                    // {
-                    //     selExp = new SelectExpression(me.Type)
-                    //     {
-                    //         Index = idx,
-                    //         PropertyName = me.Member.Name!,
-                    //         Expression = arg
-                    //     };
-                    // }
-                    // else
-                    // {
-                    var ctorParam = ctor.Constructor!.GetParameters()[idx];
+                    selectList = new SelectExpression[argsCount];
 
-                    selExp = new SelectExpression(ctorParam.ParameterType, _dataContext.ExpressionsCache, this)
+                    var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataContext, this, cancellationToken);
+                    for (var idx = 0; idx < argsCount; idx++)
                     {
-                        Index = idx,
-                        PropertyName = ctorParam.Name!,
-                        Expression = innerQueryVisitor.Visit(arg)
-                    };
-                    //}
-                    // selExp.HashCode = selExp.GetHashCode();
-                    selExp.PlanHashCode = GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
-                    selectList[idx] = selExp;
+                        if (cancellationToken.IsCancellationRequested)
+                            return (selectList, columnsPlanHash);
 
-                    if (!_dontCache && !noHash) unchecked
+                        SelectExpression selExp;
+                        var arg = args[idx];
+                        // if (arg is MemberExpression me)
+                        // {
+                        //     selExp = new SelectExpression(me.Type)
+                        //     {
+                        //         Index = idx,
+                        //         PropertyName = me.Member.Name!,
+                        //         Expression = arg
+                        //     };
+                        // }
+                        // else
+                        // {
+                        var ctorParam = ctor.Constructor!.GetParameters()[idx];
+
+                        selExp = new SelectExpression(ctorParam.ParameterType, _dataContext.ExpressionsCache, this)
                         {
-                            //columnsHash = columnsHash * 13 + selExp.HashCode;
+                            Index = idx,
+                            PropertyName = ctorParam.Name!,
+                            Expression = innerQueryVisitor.Visit(arg)
+                        };
+                        //}
+                        // selExp.HashCode = selExp.GetHashCode();
+                        selExp.PlanHashCode = GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
+                        selectList[idx] = selExp;
 
-                            //comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
-                            columnsPlanHash = columnsPlanHash * 13 + selExp.PlanHashCode;
-                        }
-                }
+                        if (!_dontCache && !noHash) unchecked
+                            {
+                                //columnsHash = columnsHash * 13 + selExp.HashCode;
 
-                if (selectList.Length == 0)
-                    throw new PrepareException("Select must return new anonymous type with at least one property");
-
-                // selectList = selList.ToArray();
-                // if (CacheList)
-                //     _dataProvider.SelectListExpessionCache[ctor] = selectList;
-                //}
-                // else if (!_dontCache && !noHash)
-                // {
-                //     for (int i = 0; i < selectList.Count; i++) unchecked
-                //         {
-                //             var selExp = selectList[i];
-
-                //             columnsHash = columnsHash * 13 + selExp.HashCode;
-                //             //comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
-                //             columnsPlanHash = columnsPlanHash * 13 + selExp.PlanHashCode;
-                //         }
-                // }
-            }
-            else if (_exp.Body.Type.IsPrimitive || _exp.Body.Type == typeof(string) || (_exp.Body.Type.IsGenericType && _exp.Body.Type.GetGenericTypeDefinition() == typeof(Nullable<>)))
-            {
-                // var selList = new List<SelectExpression>();
-
-                OneColumn = true;
-                var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataContext, this, cancellationToken);
-                var selectExp = innerQueryVisitor.Visit(_exp);
-                // if (_dataProvider.NeedMapping)
-                // {
-
-                // }
-                // else
-                //{
-                var selExp = new SelectExpression(_exp.Body.Type, _dataContext.ExpressionsCache, this)
-                {
-                    //Index = 0,
-                    Expression = selectExp,
-                    //ReferencedQueries = innerQueryVisitor.ReferencedQueries
-                };
-                // selExp.HashCode = selExp.GetHashCode();
-                selExp.PlanHashCode = GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
-                // selList.Add(selExp);
-
-                if (!_dontCache && !noHash) unchecked
-                    {
-                        //columnsHash = columnsHash * 13 + selExp.HashCode;
-                        //comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
-                        columnsPlanHash = columnsPlanHash * 13 + selExp.PlanHashCode;
+                                //comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
+                                columnsPlanHash = columnsPlanHash * 13 + selExp.PlanHashCode;
+                            }
                     }
 
-                selectList = [selExp];
-            }
-            else if (_exp.Body is MemberInitExpression init)
-            {
-                // var selList = new List<SelectExpression>();
-                var bindings = init.Bindings;
-                var bindingsCount = bindings.Count;
+                    if (selectList.Length == 0)
+                        throw new PrepareException("Select must return new anonymous type with at least one property");
 
-                selectList = new SelectExpression[bindingsCount];
-
-                var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataContext, this, cancellationToken);
-                for (var idx = 0; idx < bindingsCount; idx++)
-                {
-                    if (cancellationToken.IsCancellationRequested)
-                        return (selectList, columnsPlanHash);
-
-                    var binding = bindings[idx] as MemberAssignment;
-
-                    var selExp = new SelectExpression((binding.Member as PropertyInfo).PropertyType, _dataContext.ExpressionsCache, this)
-                    {
-                        Index = idx,
-                        PropertyName = binding.Member.Name!,
-                        Expression = innerQueryVisitor.Visit(binding.Expression)
-                    };
+                    // selectList = selList.ToArray();
+                    // if (CacheList)
+                    //     _dataProvider.SelectListExpessionCache[ctor] = selectList;
                     //}
-                    // selExp.HashCode = selExp.GetHashCode();
-                    selExp.PlanHashCode = GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
-                    // selList.Add(selExp);
-                    selectList[idx] = selExp;
+                    // else if (!_dontCache && !noHash)
+                    // {
+                    //     for (int i = 0; i < selectList.Count; i++) unchecked
+                    //         {
+                    //             var selExp = selectList[i];
 
-                    if (!_dontCache && !noHash) unchecked
-                        {
-                            //columnsHash = columnsHash * 13 + selExp.HashCode;
-
-                            //comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
-                            columnsPlanHash = columnsPlanHash * 13 + selExp.PlanHashCode;
-                        }
+                    //             columnsHash = columnsHash * 13 + selExp.HashCode;
+                    //             //comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
+                    //             columnsPlanHash = columnsPlanHash * 13 + selExp.PlanHashCode;
+                    //         }
+                    // }
                 }
-
-                if (selectList.Length == 0)
-                    throw new PrepareException("Select must return new anonymous type with at least one property");
-
-                // selectList = selList.ToArray();
-            }
-            else if (_dataContext.NeedMapping)
-            {
-                if (/*!CacheList || */!_dataContext.SelectListCache.TryGetValue(srcType!, out selectList))
+                else if (_exp.Body.Type.IsPrimitive || _exp.Body.Type == typeof(string) || (_exp.Body.Type.IsGenericType && _exp.Body.Type.GetGenericTypeDefinition() == typeof(Nullable<>)))
                 {
                     // var selList = new List<SelectExpression>();
 
-                    var p = Expression.Parameter(srcType!);
+                    OneColumn = true;
+                    var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataContext, this, cancellationToken);
+                    var selectExp = innerQueryVisitor.Visit(_exp);
+                    // if (_dataProvider.NeedMapping)
+                    // {
 
-                    if (_dataContext.Metadata.TryGetValue(srcType!, out var entityMeta))
+                    // }
+                    // else
+                    //{
+                    var selExp = new SelectExpression(_exp.Body.Type, _dataContext.ExpressionsCache, this)
                     {
-                        var props = entityMeta.Properties;
-                        var propsCount = props.Count;
+                        //Index = 0,
+                        Expression = selectExp,
+                        //ReferencedQueries = innerQueryVisitor.ReferencedQueries
+                    };
+                    // selExp.HashCode = selExp.GetHashCode();
+                    selExp.PlanHashCode = GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
+                    // selList.Add(selExp);
 
-                        selectList = new SelectExpression[propsCount];
-
-                        for (int idx = 0; idx < propsCount; idx++)
+                    if (!_dontCache && !noHash) unchecked
                         {
-                            if (cancellationToken.IsCancellationRequested)
-                                return (selectList, columnsPlanHash);
-
-                            var prop = props[idx];
-
-                            var pi = prop.PropertyInfo;
-
-                            Expression exp = Expression.Lambda(Expression.Property(p, pi), p);
-
-                            var selExp = new SelectExpression(pi.PropertyType, _dataContext.ExpressionsCache, this)
-                            {
-                                Index = idx,
-                                PropertyName = pi.Name,
-                                Expression = exp,
-                                PropertyInfo = pi
-                            };
-
-                            // selExp.HashCode = selExp.GetHashCode();
-                            selExp.PlanHashCode = GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
-                            // selList.Add(selExp);
-                            selectList[idx] = selExp;
-
-                            if (!_dontCache && !noHash) unchecked
-                                {
-                                    //columnsHash = columnsHash * 13 + selExp.HashCode;
-                                    //comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
-                                    columnsPlanHash = columnsPlanHash * 13 + selExp.PlanHashCode;
-                                }
-                        }
-                    }
-
-                    if (!(selectList?.Length > 0))
-                        throw new PrepareException("Select must return new anonymous type");
-
-                    // selectList = selList.ToArray();
-                    _dataContext.SelectListCache[srcType!] = selectList;
-                }
-                else if (!_dontCache && !noHash)
-                {
-                    for (int i = 0; i < selectList.Length; i++) unchecked
-                        {
-                            var selExp = selectList[i];
-
                             //columnsHash = columnsHash * 13 + selExp.HashCode;
                             //comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
                             columnsPlanHash = columnsPlanHash * 13 + selExp.PlanHashCode;
                         }
+
+                    selectList = [selExp];
+                }
+                else if (_exp.Body is MemberInitExpression init)
+                {
+                    // var selList = new List<SelectExpression>();
+                    var bindings = init.Bindings;
+                    var bindingsCount = bindings.Count;
+
+                    selectList = new SelectExpression[bindingsCount];
+
+                    var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataContext, this, cancellationToken);
+                    for (var idx = 0; idx < bindingsCount; idx++)
+                    {
+                        if (cancellationToken.IsCancellationRequested)
+                            return (selectList, columnsPlanHash);
+
+                        var binding = bindings[idx] as MemberAssignment;
+
+                        var selExp = new SelectExpression((binding.Member as PropertyInfo).PropertyType, _dataContext.ExpressionsCache, this)
+                        {
+                            Index = idx,
+                            PropertyName = binding.Member.Name!,
+                            Expression = innerQueryVisitor.Visit(binding.Expression)
+                        };
+                        //}
+                        // selExp.HashCode = selExp.GetHashCode();
+                        selExp.PlanHashCode = GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
+                        // selList.Add(selExp);
+                        selectList[idx] = selExp;
+
+                        if (!_dontCache && !noHash) unchecked
+                            {
+                                //columnsHash = columnsHash * 13 + selExp.HashCode;
+
+                                //comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
+                                columnsPlanHash = columnsPlanHash * 13 + selExp.PlanHashCode;
+                            }
+                    }
+
+                    if (selectList.Length == 0)
+                        throw new PrepareException("Select must return new anonymous type with at least one property");
+
+                    // selectList = selList.ToArray();
+                }
+            }
+            else
+            {
+                if (srcType is null)
+                    throw new PrepareException("Lambda expression or source type must exists");
+
+                if (_dataContext.NeedMapping)
+                {
+                    if (/*!CacheList || */!_dataContext.SelectListCache.TryGetValue(srcType, out selectList))
+                    {
+                        // var selList = new List<SelectExpression>();
+
+                        var p = Expression.Parameter(srcType);
+
+                        if (_dataContext.Metadata.TryGetValue(srcType, out var entityMeta))
+                        {
+                            var props = entityMeta.Properties;
+                            var propsCount = props.Count;
+
+                            selectList = new SelectExpression[propsCount];
+
+                            for (int idx = 0; idx < propsCount; idx++)
+                            {
+                                if (cancellationToken.IsCancellationRequested)
+                                    return (selectList, columnsPlanHash);
+
+                                var prop = props[idx];
+
+                                var pi = prop.PropertyInfo;
+
+                                Expression exp = Expression.Lambda(Expression.Property(p, pi), p);
+
+                                var selExp = new SelectExpression(pi.PropertyType, _dataContext.ExpressionsCache, this)
+                                {
+                                    Index = idx,
+                                    PropertyName = pi.Name,
+                                    Expression = exp,
+                                    PropertyInfo = pi
+                                };
+
+                                // selExp.HashCode = selExp.GetHashCode();
+                                selExp.PlanHashCode = GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
+                                // selList.Add(selExp);
+                                selectList[idx] = selExp;
+
+                                if (!_dontCache && !noHash) unchecked
+                                    {
+                                        //columnsHash = columnsHash * 13 + selExp.HashCode;
+                                        //comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
+                                        columnsPlanHash = columnsPlanHash * 13 + selExp.PlanHashCode;
+                                    }
+                            }
+                        }
+
+                        if (!(selectList?.Length > 0))
+                            throw new PrepareException("Select must return new anonymous type");
+
+                        // selectList = selList.ToArray();
+                        _dataContext.SelectListCache[srcType] = selectList;
+                    }
+                    else if (!_dontCache && !noHash)
+                    {
+                        for (int i = 0; i < selectList.Length; i++) unchecked
+                            {
+                                var selExp = selectList[i];
+
+                                //columnsHash = columnsHash * 13 + selExp.HashCode;
+                                //comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
+                                columnsPlanHash = columnsPlanHash * 13 + selExp.PlanHashCode;
+                            }
+                    }
                 }
             }
             // else
@@ -392,12 +403,14 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     private int PrepareJoin(bool noHash, CancellationToken cancellationToken)
     {
         var joinPlanHash = 7;
-        if (Joins.Count != 0)
+        if (_joins is not null)
         {
             if (_from is not null && string.IsNullOrEmpty(_from.TableAlias)) _from.TableAlias = "t1";
 
-            foreach (var join in Joins)
+            for (var idx = 0; idx < _joins.Length; idx++)
             {
+                var join = _joins[idx];
+
                 if (!(join.Query?._isPrepared ?? true))
                     join.Query!.PrepareCommand(noHash, cancellationToken);
 
@@ -627,7 +640,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
 
     protected virtual QueryCommand CreateSelf()
     {
-        return new QueryCommand(_dataContext, _exp, _condition, Joins, Paging, _sorting, _groupExp, _having);
+        return new QueryCommand(_dataContext, _exp, _srcType, _condition, Joins, Paging, _sorting, _groupExp, _having);
     }
     public QueryCommand Clone()
     {
@@ -648,13 +661,18 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     public SortingExpressionPlanEqualityComparer GetSortingExpressionPlanEqualityComparer() => _sortingExpressionPlanComparer ??= new SortingExpressionPlanEqualityComparer(this);
 }
 
-public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
+public class QueryCommand<TResult> : QueryCommand//, IAsyncEnumerable<TResult>
 {
-    public QueryCommand(IDataContext dataProvider, LambdaExpression exp, LambdaExpression? condition, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having) : base(dataProvider, exp, condition, paging, sorting, group, having)
+    public QueryCommand(IDataContext dataProvider, LambdaExpression exp, LambdaExpression? condition, JoinExpression[]? joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having)
+        : this(dataProvider, exp, null, condition, joins, paging, sorting, group, having)
     {
     }
-    protected QueryCommand(IDataContext dataProvider, LambdaExpression exp, LambdaExpression? condition, List<JoinExpression> joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having)
-        : base(dataProvider, exp, condition, joins, paging, sorting, group, having)
+    public QueryCommand(IDataContext dataProvider, Type srcType, LambdaExpression? condition, JoinExpression[]? joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having)
+        : this(dataProvider, null, srcType, condition, joins, paging, sorting, group, having)
+    {
+    }
+    protected QueryCommand(IDataContext dataProvider, LambdaExpression? exp, Type? srcType, LambdaExpression? condition, JoinExpression[]? joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having)
+        : base(dataProvider, exp, srcType, condition, joins, paging, sorting, group, having)
     {
 
     }
@@ -678,12 +696,12 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
     {
         return _dataContext.GetPreparedQueryCommand(this, !nonStreamUsing, false, cancellationToken);
     }
-    public IAsyncEnumerator<TResult> GetAsyncEnumerator(CancellationToken cancellationToken = default)
-    {
-        var preparedCommand = _dataContext.GetPreparedQueryCommand(this, true, true, cancellationToken);
+    // public IAsyncEnumerator<TResult> GetAsyncEnumerator(CancellationToken cancellationToken = default)
+    // {
+    //     var preparedCommand = _dataContext.GetPreparedQueryCommand(this, true, true, cancellationToken);
 
-        return _dataContext.CreateAsyncEnumerator<TResult>(preparedCommand, null, cancellationToken);
-    }
+    //     return _dataContext.CreateAsyncEnumerator<TResult>(preparedCommand, null, cancellationToken);
+    // }
     public IAsyncEnumerable<TResult> Pipeline(params object[] @params) => Pipeline(CancellationToken.None, @params);
 #pragma warning disable CS8425 // Async-iterator member has one or more parameters of type 'CancellationToken' but none of them is decorated with the 'EnumeratorCancellation' attribute, so the cancellation token parameter from the generated 'IAsyncEnumerable<>.GetAsyncEnumerator' will be unconsumed
     public async IAsyncEnumerable<TResult> Pipeline(CancellationToken cancellationToken, params object[] @params)
@@ -699,7 +717,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         {
             try
             {
-                foreach (var item in AsEnumerable(@params))
+                foreach (var item in ToEnumerable(@params))
                 {
                     if (cancellationToken.IsCancellationRequested)
                         break;
@@ -720,22 +738,24 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         await t.ConfigureAwait(false);
     }
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public IAsyncEnumerable<TResult> AsAsyncEnumerable(params object[] @params) => _dataContext.AsAsyncEnumerable<TResult>(_dataContext.GetPreparedQueryCommand(this, true, true, CancellationToken.None), CancellationToken.None, @params);
+    public IAsyncEnumerable<TResult> ToAsyncEnumerable(params object[] @params) => _dataContext.GetAsyncEnumerable<TResult>(_dataContext.GetPreparedQueryCommand(this, true, true, CancellationToken.None), CancellationToken.None, @params);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public IAsyncEnumerable<TResult> AsAsyncEnumerable(CancellationToken cancellationToken, params object[] @params) => _dataContext.AsAsyncEnumerable<TResult>(_dataContext.GetPreparedQueryCommand(this, true, true, cancellationToken), cancellationToken, @params);
+    public IAsyncEnumerable<TResult> ToAsyncEnumerable(CancellationToken cancellationToken, params object[] @params) => _dataContext.GetAsyncEnumerable<TResult>(_dataContext.GetPreparedQueryCommand(this, true, true, cancellationToken), cancellationToken, @params);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public IEnumerable<TResult> AsEnumerable(params object[] @params) => _dataContext.AsEnumerable(_dataContext.GetPreparedQueryCommand(this, true, true, CancellationToken.None), @params);
+    public IEnumerable<TResult> ToEnumerable(params object[] @params) => _dataContext.GetEnumerable(_dataContext.GetPreparedQueryCommand(this, true, true, CancellationToken.None), @params);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Task<IEnumerable<TResult>> AsEnumerableAsync(params object[] @params) => _dataContext.AsEnumerableAsync<TResult>(_dataContext.GetPreparedQueryCommand(this, true, true, CancellationToken.None), CancellationToken.None, @params);
+    public Task<IEnumerable<TResult>> ToEnumerableAsync(params object[] @params) => _dataContext.GetEnumerableAsync<TResult>(_dataContext.GetPreparedQueryCommand(this, true, true, CancellationToken.None), CancellationToken.None, @params);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Task<IEnumerable<TResult>> AsEnumerableAsync(CancellationToken cancellationToken, params object[] @params) => _dataContext.AsEnumerableAsync<TResult>(_dataContext.GetPreparedQueryCommand(this, true, true, cancellationToken), cancellationToken, @params);
+    public Task<IEnumerable<TResult>> ToEnumerableAsync(CancellationToken cancellationToken, params object[] @params) => _dataContext.GetEnumerableAsync<TResult>(_dataContext.GetPreparedQueryCommand(this, true, true, cancellationToken), cancellationToken, @params);
     public List<TResult> ToList(params object[] @params)
     {
         var preparedCommand = _dataContext.GetPreparedQueryCommand(this, false, true, CancellationToken.None);
 
         return _dataContext.ToList<TResult>(preparedCommand, @params);
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<List<TResult>> ToListAsync(params object[] @params) => _dataContext.ToListAsync(_dataContext.GetPreparedQueryCommand(this, false, true, CancellationToken.None), @params, CancellationToken.None);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<List<TResult>> ToListAsync(CancellationToken cancellationToken, params object[] @params) => _dataContext.ToListAsync(_dataContext.GetPreparedQueryCommand(this, false, true, cancellationToken), @params, cancellationToken);
     public bool Any(params object[] @params)
     {
@@ -761,6 +781,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
             IgnoreColumns = oldIgnoreColumns;
         }
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<bool> AnyAsync(params object[] @params) => AnyAsync(CancellationToken.None, @params);
     public async Task<bool> AnyAsync(CancellationToken cancellationToken, params object[] @params)
     {
@@ -816,6 +837,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
             Paging.Limit = oldLim;
         }
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<TResult> FirstAsync(params object[] @params) => FirstAsync(CancellationToken.None, @params);
     public Task<TResult> FirstAsync(CancellationToken cancellationToken, params object[] @params)
     {
@@ -855,6 +877,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
             Paging.Limit = oldLim;
         }
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<TResult?> FirstOrDefaultAsync(params object[] @params) => FirstOrDefaultAsync(CancellationToken.None, @params);
     public Task<TResult?> FirstOrDefaultAsync(CancellationToken cancellationToken, params object[] @params)
     {
@@ -893,6 +916,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
             Paging.Limit = oldLim;
         }
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<TResult> SingleAsync(params object[] @params) => SingleAsync(CancellationToken.None, @params);
     public Task<TResult> SingleAsync(CancellationToken cancellationToken, params object[] @params)
     {
@@ -930,6 +954,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
             Paging.Limit = oldLim;
         }
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<TResult?> SingleOrDefaultAsync(params object[] @params) => SingleOrDefaultAsync(CancellationToken.None, @params);
     public Task<TResult?> SingleOrDefaultAsync(CancellationToken cancellationToken, params object[] @params)
     {
@@ -951,18 +976,20 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
     }
     protected override QueryCommand CreateSelf()
     {
-        return new QueryCommand<TResult>(_dataContext, _exp, _condition, Joins, Paging, _sorting, _groupExp, _having);
+        return new QueryCommand<TResult>(_dataContext, _exp, _srcType, _condition, Joins, Paging, _sorting, _groupExp, _having);
     }
     public QueryCommand<TResult> OrderBy(int columnIndex, OrderDirection direction)
     {
         if (columnIndex < 1) throw new ArgumentException("Column index must be greater than zero", nameof(columnIndex));
-        var cmd = new QueryCommand<TResult>(_dataContext, _exp, _condition, Joins, Paging, _sorting is null
+        var cmd = new QueryCommand<TResult>(_dataContext, _exp, _srcType, _condition, Joins, Paging, _sorting is null
             ? [new Sorting(columnIndex) { Direction = direction }]
             : [.. _sorting, new Sorting(columnIndex) { Direction = direction }], _groupExp, _having);
         CopyTo(cmd);
         return cmd;
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public QueryCommand<TResult> OrderBy(int columnIndex) => OrderBy(columnIndex, OrderDirection.Asc);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public QueryCommand<TResult> OrderByDescending(int columnIndex) => OrderBy(columnIndex, OrderDirection.Desc);
     // public QueryCommand<TResult> WithParams(params object[] @params)
     // {

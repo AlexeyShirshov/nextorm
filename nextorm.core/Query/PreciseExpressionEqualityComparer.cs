@@ -124,7 +124,7 @@ public sealed class PreciseExpressionEqualityComparer : IEqualityComparer<Expres
                 case MemberExpression memberExpression:
                     if (memberExpression.Expression is not null && memberExpression.Expression.Has<ConstantExpression>(out var ce))
                     {
-                        var key = new ExpressionKey(memberExpression, _cache, _queryProvider);
+                        var key = new ExpressionKey(memberExpression, _queryProvider);
                         if (!_cache.TryGetValue(key, out var del))
                         {
                             var p = Expression.Parameter(typeof(object));
@@ -475,7 +475,7 @@ public sealed class PreciseExpressionEqualityComparer : IEqualityComparer<Expres
             if (a.Expression is not null && a.Expression.Has<ConstantExpression>(out var ceA)
                 && b.Expression is not null && b.Expression.Has<ConstantExpression>(out var ceB))
             {
-                var (keyA, keyB) = (new ExpressionKey(a, _equalityComparer._cache, _equalityComparer._queryProvider), new ExpressionKey(b, _equalityComparer._cache, _equalityComparer._queryProvider));
+                var (keyA, keyB) = (new ExpressionKey(a, _equalityComparer._queryProvider), new ExpressionKey(b, _equalityComparer._queryProvider));
                 if (_equalityComparer._cache.TryGetValue(keyA, out var delA) && _equalityComparer._cache.TryGetValue(keyB, out var delB))
                 {
                     return Equals(((Func<object?, object>)delA)(ceA!.Value), ((Func<object?, object>)delB)(ceB!.Value));

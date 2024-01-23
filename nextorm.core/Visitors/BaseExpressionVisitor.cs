@@ -130,7 +130,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                         _ => throw new NotImplementedException()
                     });
 
-                var keyCmd = new ExpressionKey(exp, _dataProvider.ExpressionsCache, _queryProvider);
+                var keyCmd = new ExpressionKey(exp, _queryProvider);
                 if (!_dataProvider.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
                 {
                     object? paramValue;
@@ -208,7 +208,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 
                 if (constRepl.Params.Count > 0)
                 {
-                    var keyCmd = new ExpressionKey(cmdExp, _dataProvider.ExpressionsCache, _queryProvider);
+                    var keyCmd = new ExpressionKey(cmdExp, _queryProvider);
                     if (!_dataProvider.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
                     {
                         var d = Expression.Lambda(body, constRepl.Params.Select(it => it.Item1)).Compile();
@@ -356,7 +356,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         else if (!node.Has<ParameterExpression>())
         {
             object? value = null;
-            var keyCmd = new ExpressionKey(node, _dataProvider.ExpressionsCache, _queryProvider);
+            var keyCmd = new ExpressionKey(node, _queryProvider);
             if (!_dataProvider.ExpressionsCache.TryGetValue(keyCmd, out var d))
             {
                 var del = Expression.Lambda<Func<object>>(node).Compile();
@@ -396,7 +396,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         {
             //if (exp.Has<ConstantExpression>(out var ce))
             //{
-            var key = new ExpressionKey(exp, _dataProvider.ExpressionsCache, _queryProvider);
+            var key = new ExpressionKey(exp, _queryProvider);
             if (!_dataProvider.ExpressionsCache.TryGetValue(key, out var del))
             {
                 //if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Select expression miss");
@@ -611,7 +611,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 return node;
             }
 
-            var key = new ExpressionKey(node, _dataProvider.ExpressionsCache, _queryProvider);
+            var key = new ExpressionKey(node, _queryProvider);
             if (!_dataProvider.ExpressionsCache.TryGetValue(key, out var del))
             {
                 var body = Expression.Convert(node, typeof(object));
@@ -642,19 +642,27 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             if (!visitor.Has1 && visitor.Has2)
             {
                 //var ce = visitor.Target2!;
-                var key = new ExpressionKey(node, _dataProvider.ExpressionsCache, _queryProvider);
-                if (!_dataProvider.ExpressionsCache.TryGetValue(key, out var del))
+                ExpressionKey? key = null;
+                Delegate? del = null;
+                // if (_dataProvider.CacheExpressions)
+                // {
+                key = new ExpressionKey(node, _queryProvider);
+                _dataProvider.ExpressionsCache.TryGetValue(key, out del);
+                // }
+
+                if (del is null)
                 {
                     var p = Expression.Parameter(typeof(object));
                     var replace = new ReplaceConstantVisitor(Expression.Convert(p, visitor.Target2!.Type));
                     var body = Expression.Convert(replace.Visit(node), typeof(object));
                     del = Expression.Lambda<Func<object?, object>>(body, p).Compile();
 
-                    _dataProvider.ExpressionsCache[key] = del;
+                    if (key is not null)
+                        _dataProvider.ExpressionsCache[key] = del;
 
                     if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false)
                     {
-                        _dataProvider.Logger.LogTrace("Expression cache miss on visit where. hascode: {hash}, value: {value}", key.GetHashCode(), ((Func<object?, object>)del)(visitor.Target2.Value));
+                        _dataProvider.Logger.LogTrace("Expression cache miss on visit where. hashcode: {hash}, value: {value}", key.GetHashCode(), ((Func<object?, object>)del)(visitor.Target2.Value));
                     }
                     else if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Expression cache miss on visit where");
                 }
