@@ -58,7 +58,7 @@ public interface IDataContext : IAsyncDisposable, IDisposable
             }
         }
     }
-    public IEnumerable<TResult> GetEnumerable<TResult>(IPreparedQueryCommand<TResult> preparedCommand, params object[] @params)
+    public IEnumerable<TResult> GetEnumerable<TResult>(IPreparedQueryCommand<TResult> preparedCommand, params object[]? @params)
     {
         using var enumerator = CreateEnumerator(preparedCommand, @params);
         while (enumerator.MoveNext())
@@ -91,7 +91,14 @@ public interface IDataContext : IAsyncDisposable, IDisposable
     IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, CancellationToken cancellationToken);
     IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken);
     IEnumerator<TResult> CreateEnumerator<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params);
-    // Task<IEnumerator<TResult>> CreateEnumeratorAsync<TResult>(IPreparedQueryCommand preparedQueryCommand, object[]? @params, CancellationToken cancellationToken);
+    public async Task<IEnumerator<TResult>> CreateEnumeratorAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
+    {
+        var enumerator = CreateAsyncEnumerator(preparedQueryCommand, @params, cancellationToken);
+
+        await ((IAsyncInit<TResult>)enumerator).InitReaderAsync(@params, cancellationToken);
+
+        return (IEnumerator<TResult>)enumerator;
+    }
     Task<List<TResult>> ToListAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<List<TResult>> ToListAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, params object[]? @params) => ToListAsync(preparedQueryCommand, @params, CancellationToken.None);

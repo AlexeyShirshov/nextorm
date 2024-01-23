@@ -696,12 +696,22 @@ public class QueryCommand<TResult> : QueryCommand//, IAsyncEnumerable<TResult>
     {
         return _dataContext.GetPreparedQueryCommand(this, !nonStreamUsing, false, cancellationToken);
     }
-    // public IAsyncEnumerator<TResult> GetAsyncEnumerator(CancellationToken cancellationToken = default)
-    // {
-    //     var preparedCommand = _dataContext.GetPreparedQueryCommand(this, true, true, cancellationToken);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public IAsyncEnumerator<TResult> CreateAsyncEnumerator(params object[]? @params) => CreateAsyncEnumerator(CancellationToken.None, @params);
+    public IAsyncEnumerator<TResult> CreateAsyncEnumerator(CancellationToken cancellationToken, params object[]? @params)
+    {
+        var preparedCommand = _dataContext.GetPreparedQueryCommand(this, true, true, cancellationToken);
 
-    //     return _dataContext.CreateAsyncEnumerator<TResult>(preparedCommand, null, cancellationToken);
-    // }
+        return _dataContext.CreateAsyncEnumerator<TResult>(preparedCommand, @params, cancellationToken);
+    }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Task<IEnumerator<TResult>> CreateEnumeratorAsync(params object[]? @params) => CreateEnumeratorAsync(CancellationToken.None, @params);
+    public Task<IEnumerator<TResult>> CreateEnumeratorAsync(CancellationToken cancellationToken, params object[]? @params)
+    {
+        var preparedCommand = _dataContext.GetPreparedQueryCommand(this, true, true, cancellationToken);
+
+        return _dataContext.CreateEnumeratorAsync<TResult>(preparedCommand, @params, cancellationToken);
+    }
     public IAsyncEnumerable<TResult> Pipeline(params object[] @params) => Pipeline(CancellationToken.None, @params);
 #pragma warning disable CS8425 // Async-iterator member has one or more parameters of type 'CancellationToken' but none of them is decorated with the 'EnumeratorCancellation' attribute, so the cancellation token parameter from the generated 'IAsyncEnumerable<>.GetAsyncEnumerator' will be unconsumed
     public async IAsyncEnumerable<TResult> Pipeline(CancellationToken cancellationToken, params object[] @params)
