@@ -743,10 +743,6 @@ public class QueryCommand<TResult> : QueryCommand//, IAsyncEnumerable<TResult>
     public IAsyncEnumerable<TResult> ToAsyncEnumerable(CancellationToken cancellationToken, params object[] @params) => _dataContext.GetAsyncEnumerable<TResult>(_dataContext.GetPreparedQueryCommand(this, true, true, cancellationToken), cancellationToken, @params);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IEnumerable<TResult> ToEnumerable(params object[] @params) => _dataContext.GetEnumerable(_dataContext.GetPreparedQueryCommand(this, true, true, CancellationToken.None), @params);
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Task<IEnumerable<TResult>> ToEnumerableAsync(params object[] @params) => _dataContext.GetEnumerableAsync<TResult>(_dataContext.GetPreparedQueryCommand(this, true, true, CancellationToken.None), CancellationToken.None, @params);
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Task<IEnumerable<TResult>> ToEnumerableAsync(CancellationToken cancellationToken, params object[] @params) => _dataContext.GetEnumerableAsync<TResult>(_dataContext.GetPreparedQueryCommand(this, true, true, cancellationToken), cancellationToken, @params);
     public List<TResult> ToList(params object[] @params)
     {
         var preparedCommand = _dataContext.GetPreparedQueryCommand(this, false, true, CancellationToken.None);

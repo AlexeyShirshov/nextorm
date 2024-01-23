@@ -71,17 +71,6 @@ public class SqliteBenchmarkWhere
             }
         }
     }
-    [Benchmark(Baseline = true)]
-    //[BenchmarkCategory("Stream")]
-    public async Task Nextorm_Prepared_StreamAsync()
-    {
-        for (var i = 0; i < Iterations; i++)
-        {
-            foreach (var row in await _cmd.ToEnumerableAsync(_db, i))
-            {
-            }
-        }
-    }
     [Benchmark()]
     //[BenchmarkCategory("Buffered")]
     public async Task Nextorm_Prepared_ToListAsync()
@@ -124,13 +113,13 @@ public class SqliteBenchmarkWhere
     // }
     [Benchmark()]
     //[BenchmarkCategory("Stream")]
-    public async Task Nextorm_Cached_StreamAsync()
+    public async Task Nextorm_Cached_AsyncStream()
     {
         for (var i = 0; i < Iterations; i++)
         {
             var p = i;
             var cmd = _ctx.SimpleEntity.Where(it => it.Id == p).Select(entity => new { entity.Id });
-            foreach (var row in await cmd.ToEnumerableAsync())
+            await foreach (var row in cmd.ToAsyncEnumerable())
             {
             }
         }

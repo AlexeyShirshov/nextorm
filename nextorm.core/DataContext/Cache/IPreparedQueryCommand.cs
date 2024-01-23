@@ -6,32 +6,11 @@ public interface IPreparedQueryCommand<TResult>
 {
     bool IsScalar { get; }
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Task<IEnumerable<TResult>> ToEnumerableAsync(IDataContext dataContext, params object[] @params) => dataContext.GetEnumerableAsync<TResult>(this, CancellationToken.None, @params);
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public async Task<IEnumerable<TResult>> ToEnumerableAsync(IDataContext dataContext, CancellationToken cancellationToken, params object[] @params)
-    {
-        var enumerator = CreateAsyncEnumerator(dataContext, @params, cancellationToken);
-
-        if (enumerator is IAsyncInit<TResult> rr)
-        {
-            await rr.InitReaderAsync(@params, cancellationToken);
-            return new InternalEnumerable<TResult>(rr);
-        }
-
-        if (enumerator is IEnumerable<TResult> ee)
-            return ee;
-
-        throw new NotImplementedException();
-    }
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IAsyncEnumerable<TResult> ToAsyncEnumerable(IDataContext dataContext, params object[] @params) => dataContext.GetAsyncEnumerable<TResult>(this, CancellationToken.None, @params);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IAsyncEnumerable<TResult> ToAsyncEnumerable(IDataContext dataContext, CancellationToken cancellationToken, params object[] @params)
     {
         var asyncEnumerator = CreateAsyncEnumerator(dataContext, @params, cancellationToken);
-
-        if (asyncEnumerator is IAsyncEnumerable<TResult> asyncEnumerable)
-            return asyncEnumerable;
 
         return Iterate();
 
@@ -45,7 +24,7 @@ public interface IPreparedQueryCommand<TResult>
         }
     }
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public IEnumerable<TResult> ToEnumerable(IDataContext dataContext, params object[] @params) => (IEnumerable<TResult>)CreateEnumerator(dataContext, @params);
+    public IEnumerable<TResult> ToEnumerable(IDataContext dataContext, params object[] @params) => dataContext.GetEnumerable(this, @params);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IAsyncEnumerator<TResult> CreateAsyncEnumerator(IDataContext dataContext, object[]? @params, CancellationToken cancellationToken) => dataContext.CreateAsyncEnumerator(this, @params, cancellationToken);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

@@ -6,7 +6,7 @@ using System.Text;
 using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
-public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IAsyncEnumerable<TResult>, IEnumerable<TResult>, IAsyncInit<TResult>
+public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IAsyncInit<TResult>
 {
     //private readonly QueryCommand<TResult> _cmd;
     private DbContext? _dbContext;
@@ -223,20 +223,20 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IAsyncEnu
         GC.SuppressFinalize(this);
     }
 
-    public IEnumerator<TResult> GetEnumerator()
-    {
-        return this;
-    }
+    // public IEnumerator<TResult> GetEnumerator()
+    // {
+    //     return this;
+    // }
 
-    IEnumerator IEnumerable.GetEnumerator()
-    {
-        return this;
-    }
+    // IEnumerator IEnumerable.GetEnumerator()
+    // {
+    //     return this;
+    // }
 
-    public IAsyncEnumerator<TResult> GetAsyncEnumerator(CancellationToken cancellationToken = default)
-    {
-        return this;
-    }
+    // public IAsyncEnumerator<TResult> GetAsyncEnumerator(CancellationToken cancellationToken = default)
+    // {
+    //     return this;
+    // }
 }
 
 internal interface IAsyncInit<out TResult> : IEnumerator<TResult>

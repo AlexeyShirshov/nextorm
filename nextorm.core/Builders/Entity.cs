@@ -154,10 +154,6 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IAsyncEnumerable<TEntity> ToAsyncEnumerable(CancellationToken cancellationToken, params object[] @params) => ToCommand().ToAsyncEnumerable(cancellationToken, @params);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Task<IEnumerable<TEntity>> ToEnumerableAsync(params object[] @params) => ToEnumerableAsync(CancellationToken.None, @params);
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Task<IEnumerable<TEntity>> ToEnumerableAsync(CancellationToken cancellationToken, params object[] @params) => ToCommand().ToEnumerableAsync(cancellationToken, @params);
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IEnumerable<TEntity> ToEnumerable(params object[] @params) => ToCommand().ToEnumerable(@params);
     public EntityP2<TEntity, TJoinEntity> Join<TJoinEntity>(Entity<TJoinEntity> _, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
     {

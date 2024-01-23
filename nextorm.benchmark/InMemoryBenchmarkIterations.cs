@@ -52,7 +52,7 @@ public class InMemoryBenchmarkIteration
     [Benchmark()]
     public async Task NextormCached()
     {
-        foreach (var row in await _ctx.SimpleEntity.Select(entity => new { entity.Id }).ToEnumerableAsync())
+        await foreach (var row in _ctx.SimpleEntity.Select(entity => new { entity.Id }).ToAsyncEnumerable())
         {
         }
     }

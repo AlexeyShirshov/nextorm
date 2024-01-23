@@ -42,30 +42,10 @@ public interface IDataContext : IAsyncDisposable, IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Any(IPreparedQueryCommand<bool> preparedQueryCommand, params object[]? @params) => ExecuteScalar<bool>(preparedQueryCommand, @params, true);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Task<IEnumerable<TResult>> GetEnumerableAsync<TResult>(IPreparedQueryCommand<TResult> preparedCommand, params object[] @params) => GetEnumerableAsync<TResult>(preparedCommand, CancellationToken.None, @params);
-    public async Task<IEnumerable<TResult>> GetEnumerableAsync<TResult>(IPreparedQueryCommand<TResult> preparedCommand, CancellationToken cancellationToken, params object[] @params)
-    {
-        var enumerator = CreateAsyncEnumerator<TResult>(preparedCommand, @params, cancellationToken);
-
-        if (enumerator is IAsyncInit<TResult> rr)
-        {
-            await rr.InitReaderAsync(@params, cancellationToken);
-            return new InternalEnumerable<TResult>(rr);
-        }
-
-        if (enumerator is IEnumerable<TResult> ee)
-            return ee;
-
-        throw new NotImplementedException();
-    }
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IAsyncEnumerable<TResult> GetAsyncEnumerable<TResult>(IPreparedQueryCommand<TResult> preparedCommand, params object[] @params) => GetAsyncEnumerable<TResult>(preparedCommand, CancellationToken.None, @params);
     public IAsyncEnumerable<TResult> GetAsyncEnumerable<TResult>(IPreparedQueryCommand<TResult> preparedCommand, CancellationToken cancellationToken, params object[] @params)
     {
         var asyncEnumerator = CreateAsyncEnumerator<TResult>(preparedCommand, @params, cancellationToken);
-
-        if (asyncEnumerator is IAsyncEnumerable<TResult> asyncEnumerable)
-            return asyncEnumerable;
 
         return Iterate();
 
@@ -78,8 +58,12 @@ public interface IDataContext : IAsyncDisposable, IDisposable
             }
         }
     }
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public IEnumerable<TResult> GetEnumerable<TResult>(IPreparedQueryCommand<TResult> preparedCommand, params object[] @params) => (IEnumerable<TResult>)CreateEnumerator<TResult>(preparedCommand, @params);
+    public IEnumerable<TResult> GetEnumerable<TResult>(IPreparedQueryCommand<TResult> preparedCommand, params object[] @params)
+    {
+        using var enumerator = CreateEnumerator(preparedCommand, @params);
+        while (enumerator.MoveNext())
+            yield return enumerator.Current;
+    }
     void EnsureConnectionOpen();
     Task EnsureConnectionOpenAsync();
     void ResetPreparation(QueryCommand queryCommand);

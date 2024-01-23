@@ -80,9 +80,9 @@ public class SqliteBenchmarkSimulateWork
     //     }
     // }
     [Benchmark()]
-    public async Task Nextorm_Prepared_StreamAsync()
+    public async Task Nextorm_Prepared_AsyncStream()
     {
-        foreach (var row in await _cmd.ToEnumerableAsync(_db))
+        await foreach (var row in _cmd.ToAsyncEnumerable(_db))
         {
             for (var i = 0; i < SmallIterations; i++)
             {

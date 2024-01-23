@@ -82,9 +82,9 @@ public class SqliteBenchmarkLargeIteration
     // }
     [Benchmark()]
     //[BenchmarkCategory("Stream")]
-    public async Task Nextorm_Prepared_StreamAsync()
+    public async Task Nextorm_Prepared_AsyncStream()
     {
-        foreach (var row in await _cmdExec.ToEnumerableAsync(_db))
+        await foreach (var row in _cmdExec.ToAsyncEnumerable(_db))
         {
         }
     }
@@ -105,9 +105,9 @@ public class SqliteBenchmarkLargeIteration
     // }
     [Benchmark()]
     //[BenchmarkCategory("Stream")]
-    public async Task Nextorm_Cached_StreamAsync()
+    public async Task Nextorm_Cached_AsyncStream()
     {
-        foreach (var row in await _ctx.LargeEntity.Select(entity => new { entity.Id, entity.Str, entity.Dt }).ToEnumerableAsync())
+        await foreach (var row in _ctx.LargeEntity.Select(entity => new { entity.Id, entity.Str, entity.Dt }).ToAsyncEnumerable())
         {
         }
     }
