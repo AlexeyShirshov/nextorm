@@ -5,7 +5,7 @@ using System.Reflection;
 namespace nextorm.core;
 
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE1006:Naming Styles", Justification = "<Pending>")]
-public sealed class SelectExpression : IEquatable<SelectExpression>
+public sealed class SelectExpression //: IEquatable<SelectExpression>
 {
     private readonly Type _realType;
     //private readonly bool _nullable;
@@ -17,9 +17,9 @@ public sealed class SelectExpression : IEquatable<SelectExpression>
     internal PropertyInfo? PropertyInfo { get; set; }
     // public List<QueryCommand>? ReferencedQueries { get; set; }
     //private readonly IDictionary<ExpressionKey, Delegate> _expCache;
-    private readonly IQueryProvider _queryProvider;
+    // private readonly IQueryProvider _queryProvider;
 
-    public SelectExpression(Type propertyType, IQueryProvider queryProvider)
+    public SelectExpression(Type propertyType)
     {
         PropertyType = propertyType;
         var nullable = PropertyType.IsGenericType && PropertyType.GetGenericTypeDefinition() == typeof(Nullable<>);
@@ -34,7 +34,7 @@ public sealed class SelectExpression : IEquatable<SelectExpression>
             _realType = PropertyType;
         }
         //_expCache = expCache;
-        _queryProvider = queryProvider;
+        // _queryProvider = queryProvider;
     }
     //public readonly bool IsEmpty => _realType is null;
     private readonly static MethodInfo GetInt32MI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetInt32))!;
@@ -102,59 +102,59 @@ public sealed class SelectExpression : IEquatable<SelectExpression>
         else
             throw new NotSupportedException($"Property '{PropertyName}' with index ({Index}) has type {_realType} which is not supported");
     }
-    public override int GetHashCode()
-    {
-        unchecked
-        {
-            var hash = new HashCode();
+    // public override int GetHashCode()
+    // {
+    //     unchecked
+    //     {
+    //         var hash = new HashCode();
 
-            hash.Add(Index);
+    //         hash.Add(Index);
 
-            hash.Add(PropertyType);
+    //         hash.Add(PropertyType);
 
-            hash.Add(PropertyName);
+    //         hash.Add(PropertyName);
 
-            hash.Add(Expression, _queryProvider.GetPreciseExpressionEqualityComparer());
+    //         hash.Add(Expression, _queryProvider.GetPreciseExpressionEqualityComparer());
 
-            // if (ReferencedQueries is not null)
-            //     foreach (var cmd in ReferencedQueries)
-            //         hash.Add(cmd);
+    //         // if (ReferencedQueries is not null)
+    //         //     foreach (var cmd in ReferencedQueries)
+    //         //         hash.Add(cmd);
 
-            return hash.ToHashCode();
-        }
-    }
-    public override bool Equals(object? obj)
-    {
-        // if (obj is null) return false;
-        // return Equals((SelectExpression)obj);
-        return Equals(obj as SelectExpression);
-    }
-    public bool Equals(SelectExpression? exp)
-    {
-        if (exp is null) return false;
+    //         return hash.ToHashCode();
+    //     }
+    // }
+    // public override bool Equals(object? obj)
+    // {
+    //     // if (obj is null) return false;
+    //     // return Equals((SelectExpression)obj);
+    //     return Equals(obj as SelectExpression);
+    // }
+    // public bool Equals(SelectExpression? exp)
+    // {
+    //     if (exp is null) return false;
 
-        if (Index != exp.Index) return false;
+    //     if (Index != exp.Index) return false;
 
-        if (PropertyType != exp.PropertyType) return false;
+    //     if (PropertyType != exp.PropertyType) return false;
 
-        if (PropertyName != exp.PropertyName) return false;
+    //     if (PropertyName != exp.PropertyName) return false;
 
-        if (!_queryProvider.GetPreciseExpressionEqualityComparer().Equals(Expression, exp.Expression))
-            return false;
+    //     if (!_queryProvider.GetPreciseExpressionEqualityComparer().Equals(Expression, exp.Expression))
+    //         return false;
 
-        // if (ReferencedQueries is null && exp.ReferencedQueries is not null) return false;
-        // if (ReferencedQueries is not null && exp.ReferencedQueries is null) return false;
+    //     // if (ReferencedQueries is null && exp.ReferencedQueries is not null) return false;
+    //     // if (ReferencedQueries is not null && exp.ReferencedQueries is null) return false;
 
-        // if (ReferencedQueries is not null && exp.ReferencedQueries is not null)
-        // {
-        //     if (ReferencedQueries.Count != exp.ReferencedQueries.Count) return false;
+    //     // if (ReferencedQueries is not null && exp.ReferencedQueries is not null)
+    //     // {
+    //     //     if (ReferencedQueries.Count != exp.ReferencedQueries.Count) return false;
 
-        //     for (int i = 0; i < ReferencedQueries.Count; i++)
-        //     {
-        //         if (!ReferencedQueries[i].Equals(exp.ReferencedQueries[i])) return false;
-        //     }
-        // }
+    //     //     for (int i = 0; i < ReferencedQueries.Count; i++)
+    //     //     {
+    //     //         if (!ReferencedQueries[i].Equals(exp.ReferencedQueries[i])) return false;
+    //     //     }
+    //     // }
 
-        return true;
-    }
+    //     return true;
+    // }
 }

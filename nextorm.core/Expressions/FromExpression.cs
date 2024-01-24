@@ -1,8 +1,9 @@
+using System.Runtime.CompilerServices;
 using OneOf;
 
 namespace nextorm.core;
 
-public class FromExpression
+public sealed class FromExpression
 {
      public FromExpression(string table)
      {
@@ -10,31 +11,44 @@ public class FromExpression
      }
      public FromExpression(QueryCommand subQuery)
      {
-          Table = subQuery;
+          SubQuery = subQuery;
      }
-     public OneOf<string, QueryCommand> Table { get; set; }
-     public string? TableAlias { get; set; }
-     public override int GetHashCode()
+     //public OneOf<string, QueryCommand> Table { get; }
+     internal string? TableAlias;
+     public readonly string? Table;
+     public QueryCommand? SubQuery
      {
-          unchecked
-          {
-               var hash = new HashCode();
-
-               hash.Add(TableAlias);
-
-               hash.Add(Table.GetHashCode());
-
-               return hash.ToHashCode();
-          }
+          [MethodImpl(MethodImplOptions.AggressiveInlining)]
+          get;
      }
-     public override bool Equals(object? obj)
-     {
-          return Equals(obj as FromExpression);
-     }
-     public bool Equals(FromExpression? obj)
-     {
-          if (obj is null) return false;
 
-          return TableAlias == obj.TableAlias && Table.Equals(obj.Table);
+     // public override int GetHashCode()
+     // {
+     //      unchecked
+     //      {
+     //           var hash = new HashCode();
+
+     //           hash.Add(TableAlias);
+
+     //           hash.Add(Table.GetHashCode());
+
+     //           return hash.ToHashCode();
+     //      }
+     // }
+     // public override bool Equals(object? obj)
+     // {
+     //      return Equals(obj as FromExpression);
+     // }
+     // public bool Equals(FromExpression? obj)
+     // {
+     //      if (obj is null) return false;
+
+     //      return TableAlias == obj.TableAlias && Table.Equals(obj.Table);
+     // }
+     internal FromExpression? CloneForCache()
+     {
+          if (!string.IsNullOrEmpty(Table)) return this;
+
+          return new FromExpression(SubQuery!.CloneForCache()) { TableAlias = TableAlias };
      }
 }

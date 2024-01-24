@@ -24,7 +24,7 @@ public class DbContext : IDataContext
     private DbConnection? _conn;
     protected bool _connWasCreatedByMe;
     private bool _disposed;
-    private bool _connOpen;
+    internal bool _connOpen;
     private readonly bool _logParams;
     public DbContext(DbContextBuilder optionsBuilder)
     {
@@ -42,12 +42,12 @@ public class DbContext : IDataContext
         // CacheExpressions = optionsBuilder.CacheExpressions;
     }
     #region Properties
-    protected internal bool LogSensitiveData { get; set; }
+    protected internal readonly bool LogSensitiveData;
     public virtual string ConcatStringOperator => "+";
     public virtual string EmptyString => "''";
     public ILogger? Logger { get; }
     public ILogger? CommandLogger { get; }
-    public ILogger? ResultSetEnumeratorLogger { get; }
+    internal readonly ILogger? ResultSetEnumeratorLogger;
     public bool NeedMapping => true;
     private static Dictionary<QueryPlan, IDbCommandHolder> QueryPlanCache => _queryPlanCache ??= [];
     public Dictionary<string, object> Properties => _properties;
@@ -137,7 +137,12 @@ public class DbContext : IDataContext
         throw new NotImplementedException(type.ToString());
     }
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private List<Param> ExtractParams(QueryCommand queryCommand) => MakeSelect(queryCommand, true).Item2;
+    private List<Param> ExtractParams(QueryCommand queryCommand)
+    {
+        var @params = new List<Param>();
+        MakeSelect(queryCommand, true, @params);
+        return @params;
+    }
     private void LogParams(DbCommand sqlCommand)
     {
         Logger!.LogDebug("Executing query: {sql}", sqlCommand.CommandText);
@@ -272,7 +277,7 @@ public class DbContext : IDataContext
                 Logger.LogDebug("Query plan cache miss with hash: {hash}", queryPlan!.GetHashCode());
 
             var (sql, @params) = ext is null
-                ? MakeSelect(queryCommand, false)
+                ? MakeSelectInternal()
                 : (ext.ManualSql, ext.MakeParams?.Invoke());
 
             // var (sql, @params) = MakeSelect(queryCommand, true);
@@ -285,11 +290,11 @@ public class DbContext : IDataContext
                 ? null
                 : GetMap(queryCommand)();
 
-            var noParams = @params.Count == 0;
+            var noParams = !(@params?.Count > 0);
 
             var dbCommand = CreateCommand(sql!);
             if (!noParams)
-                dbCommand.Parameters.AddRange(@params.Select(it => CreateParam(it.Name, it.Value)).ToArray());
+                dbCommand.Parameters.AddRange(@params!.Select(it => CreateParam(it.Name, it.Value)).ToArray());
 
             // dbCommand.Connection = GetConnection();
 
@@ -395,6 +400,11 @@ public class DbContext : IDataContext
 
             return compiledQuery;
         }
+        (string?, List<Param>) MakeSelectInternal()
+        {
+            var @params = new List<Param>();
+            return (MakeSelect(queryCommand, false, @params), @params);
+        }
     }
     // public DatabaseCompiledQuery<TResult> GetCompiledQuery<TResult>(QueryCommand<TResult> cmd)
     // {
@@ -416,11 +426,13 @@ public class DbContext : IDataContext
     {
         throw new NotImplementedException();
     }
-    public virtual (string?, List<Param>) MakeSelect(QueryCommand cmd, bool paramMode)
+    public virtual string? MakeSelect(QueryCommand cmd, bool paramMode, List<Param> @params)
     {
 #if DEBUG
         if (!cmd.IsPrepared)
             throw new InvalidOperationException("Command not prepared");
+
+        ArgumentNullException.ThrowIfNull(@params);
 
         if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Making sql with param mode {mode}", paramMode);
 #endif
@@ -434,7 +446,6 @@ public class DbContext : IDataContext
 
         var sqlBuilder = paramMode ? null : _sbPool.Get();
 
-        var @params = new List<Param>();
         var pageApplied = false;
 
         if (!paramMode) sqlBuilder!.Append("select ");
@@ -531,6 +542,22 @@ public class DbContext : IDataContext
                 }
             }
 
+            if (cmd.UnionQuery is not null)
+            {
+                if (!paramMode)
+                {
+                    sqlBuilder!.AppendLine().Append(cmd.UnionType switch
+                    {
+                        UnionType.Distinct => " union ",
+                        UnionType.All => " union all ",
+                        _ => throw new NotSupportedException(cmd.UnionType.ToString("G"))
+                    }).AppendLine();
+                }
+
+                var sql = MakeSelect(cmd.UnionQuery, paramMode, @params);
+                if (!paramMode) sqlBuilder!.Append(sql);
+            }
+
             if (cmd.Sorting is not null)
             {
                 if (!paramMode) sqlBuilder!.AppendLine().Append(" order by ");
@@ -588,7 +615,7 @@ public class DbContext : IDataContext
         if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Generated sql with param mode {mode}: {sql}", paramMode, r);
 #endif
 
-        return (r, @params);
+        return r;
     }
 
     protected virtual bool MakeTop(int limit, out string? topStmt)
@@ -633,8 +660,8 @@ public class DbContext : IDataContext
             if (visitor.JoinType.IsAnonymous())
             {
                 //fromExp = GetFrom(join.Query.EntityType);
-                var (sql, p) = MakeSelect(join.Query!, paramMode);
-                @params.AddRange(p);
+                var sql = MakeSelect(join.Query!, paramMode, @params);
+
                 if (!paramMode)
                 {
                     sqlBuilder!.Append('(').Append(sql).Append(") ");
@@ -728,21 +755,18 @@ public class DbContext : IDataContext
 
     public virtual string MakeFrom(FromExpression from, List<Param> @params, bool paramMode)
     {
-        ArgumentNullException.ThrowIfNull(from);
+        // ArgumentNullException.ThrowIfNull(from);
 
-        return from.Table.Match(
-            tableName => tableName + (string.IsNullOrEmpty(from.TableAlias) ? string.Empty : MakeTableAlias(from.TableAlias)),
-            cmd =>
-            {
-                if (!cmd.IsPrepared) throw new BuildSqlCommandException("Inner query is not prepared");
-                var (sql, p) = MakeSelect(cmd, paramMode);
-                @params.AddRange(p);
+        if (!string.IsNullOrEmpty(from.Table))
+            return from.Table + (string.IsNullOrEmpty(from.TableAlias) ? string.Empty : MakeTableAlias(from.TableAlias));
 
-                if (paramMode) return string.Empty;
+        var cmd = from.SubQuery!;
+        if (!cmd.IsPrepared) throw new BuildSqlCommandException("Inner query is not prepared");
+        var sql = MakeSelect(cmd, paramMode, @params);
 
-                return "(" + sql + ")" + (string.IsNullOrEmpty(from.TableAlias) ? string.Empty : MakeTableAlias(from.TableAlias));
-            }
-        );
+        if (paramMode) return string.Empty;
+
+        return "(" + sql + ")" + (string.IsNullOrEmpty(from.TableAlias) ? string.Empty : MakeTableAlias(from.TableAlias));
     }
     public virtual string MakeTableAlias(string tableAlias)
     {
@@ -1099,7 +1123,7 @@ public class DbContext : IDataContext
 
             if (queryCommand.OneColumn)
             {
-                var vis = new ReplaceMemberVisitor(queryCommand.EntityType!, queryCommand, param);
+                var vis = new ReplaceMemberVisitor(queryCommand.EntityType!, param);
                 var body = vis.Visit(((LambdaExpression)queryCommand.SelectList![0].Expression).Body);
                 lambda = Expression.Lambda<Func<IDataRecord, TResult>>(body, param);
             }

@@ -96,10 +96,10 @@ public partial class InMemoryContext : IDataContext
     {
         if (queryCommand.From is not null)
         {
-            if (queryCommand.From.Table.IsT0)
+            if (!string.IsNullOrEmpty(queryCommand.From.Table))
                 throw new DataContextException("Cannot use table as source for in-memory provider");
 
-            var subQuery = queryCommand.From.Table.AsT1;
+            var subQuery = queryCommand.From.SubQuery!;
             var subQueryType = subQuery.GetType();
             if (!subQueryType.IsGenericType)
                 throw new DataContextException("Cannot use table as source for in-memory provider");

@@ -8,7 +8,7 @@ public interface IDataContext : IAsyncDisposable, IDisposable
 {
     ILogger? Logger { get; }
     ILogger? CommandLogger { get; }
-    ILogger? ResultSetEnumeratorLogger { get; }
+    // ILogger? ResultSetEnumeratorLogger { get; }
     bool NeedMapping { get; }
     public Dictionary<string, object> Properties { get; }
     public Lazy<QueryCommand<bool>>? AnyCommand { get; set; }
@@ -50,7 +50,7 @@ public interface IDataContext : IAsyncDisposable, IDisposable
         {
             await using (asyncEnumerator)
             {
-                while (await asyncEnumerator.MoveNextAsync().ConfigureAwait(false))
+                while (await asyncEnumerator.MoveNextAsync())
                     yield return asyncEnumerator.Current;
             }
         }

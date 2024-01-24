@@ -13,14 +13,21 @@ public sealed class QueryPlan(QueryCommand cmd, string? sql)
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Minor Bug", "S2328:\"GetHashCode\" should not reference mutable fields", Justification = "<Pending>")]
     public override int GetHashCode()
     {
-        if (!_hashPlan.HasValue) unchecked
+        if (!_hashPlan.HasValue)
+        {
+            if (_sql != null)
             {
-                var hash = new HashCode();
-                hash.Add(QueryCommand, _comparer);
-                hash.Add(_sql);
-                _hashPlan = hash.ToHashCode();
+                unchecked
+                {
+                    var hash = new HashCode();
+                    hash.Add(QueryCommand, _comparer);
+                    hash.Add(_sql);
+                    _hashPlan = hash.ToHashCode();
+                }
             }
-
+            else
+                _hashPlan = _comparer.GetHashCode(QueryCommand);
+        }
         return _hashPlan.Value;
     }
     public override bool Equals(object? obj)
@@ -40,9 +47,17 @@ public sealed class QueryPlan(QueryCommand cmd, string? sql)
         Debug.Assert(_comparer == newCmd.GetQueryPlanEqualityComparer(), "QueryPlanEqualityComparer must be equals, if not see QueryCommand.CopyTo function");
         Debug.Assert(GetHashCode() == new HashCode().Map(hash =>
         {
-            hash.Add(newCmd, _comparer);
-            hash.Add(_sql);
-            return hash.ToHashCode();
+            if (_sql != null)
+            {
+                unchecked
+                {
+                    hash.Add(newCmd, _comparer);
+                    hash.Add(_sql);
+                    return hash.ToHashCode();
+                }
+            }
+            else
+                return _comparer.GetHashCode(QueryCommand);
         }), "Hash must be equals, if not see QueryCommand.CopyTo function");
         Debug.Assert(_comparer.Equals(newCmd, QueryCommand), "QueryCommands must be equals, if not see QueryCommand.CopyTo function");
         QueryCommand = newCmd;

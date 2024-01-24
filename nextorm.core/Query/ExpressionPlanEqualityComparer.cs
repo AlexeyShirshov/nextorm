@@ -337,8 +337,31 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
     }
 
     /// <inheritdoc />
-    public bool Equals(Expression? x, Expression? y)
-        => new ExpressionComparer().Compare(x, y);
+    public bool Equals(Expression? left, Expression? right)
+    {
+        if (left == right)
+        {
+            return true;
+        }
+
+        if (left == null
+            || right == null)
+        {
+            return false;
+        }
+
+        if (left.NodeType != right.NodeType)
+        {
+            return false;
+        }
+
+        if (left.Type != right.Type)
+        {
+            return false;
+        }
+
+        return new ExpressionComparer().Compare2(left, right);
+    }
 
     private struct ExpressionComparer
     {
@@ -367,6 +390,11 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
                 return false;
             }
 
+            return Compare2(left, right);
+        }
+
+        internal bool Compare2(Expression? left, Expression? right)
+        {
             return left switch
             {
                 BinaryExpression leftBinary => CompareBinary(leftBinary, (BinaryExpression)right),

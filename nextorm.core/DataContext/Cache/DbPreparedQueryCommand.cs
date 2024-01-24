@@ -38,14 +38,15 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
 
         if (@params is not null)
         {
+            var pLength = @params.Length;
             if (ParamMap is null)
             {
-                ParamMap = new int[@params.Length];
-                for (var i = 0; i < @params.Length; i++) ParamMap[i] = -1;
+                ParamMap = new int[pLength];
+                for (var i = 0; i < pLength; i++) ParamMap[i] = -1;
             }
-            Debug.Assert(@params.Length == ParamMap.Length, "Arrays must be equal size", "{0} and {1} found", @params.Length, ParamMap.Length);
+            Debug.Assert(pLength == ParamMap.Length, "Arrays must be equal size", "{0} and {1} found", pLength, ParamMap.Length);
 
-            for (var i = 0; i < @params.Length; i++)
+            for (var i = 0; i < pLength; i++)
             {
                 var idx = ParamMap[i];
 

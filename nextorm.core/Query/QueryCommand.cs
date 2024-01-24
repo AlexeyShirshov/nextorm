@@ -11,6 +11,8 @@ namespace nextorm.core;
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Minor Code Smell", "S3897:Classes that provide \"Equals(<T>)\" should implement \"IEquatable<T>\"", Justification = "<Pending>")]
 public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
 {
+    private QueryCommand _union;
+    private UnionType _unionType;
     private List<QueryCommand>? _referencedQueries;
     private readonly JoinExpression[]? _joins;
     protected SelectExpression[]? _selectList;
@@ -102,7 +104,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         set => _dontCache = !value;
     }
     //public bool CacheList { get; set; }
-    internal QueryCommand? FromQuery => From?.Table.AsT1;
+    internal QueryCommand? FromQuery => From?.SubQuery;
     internal bool OneColumn { get; set; }
     internal bool IgnoreColumns { get; set; }
     public IReadOnlyList<QueryCommand> ReferencedQueries => _referencedQueries!;
@@ -111,10 +113,13 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     public IDataContext? DataContext { get => _dataContext; set => _dataContext = value; }
     public LambdaExpression? GroupBy { get => _groupExp; }
     public LambdaExpression? Having { get => _having; }
+    public QueryCommand? UnionQuery { get => _union; }
+    public UnionType UnionType { get => _unionType; }
     public virtual void ResetPreparation()
     {
         _isPrepared = false;
         _selectList = null;
+        _groupingList = null;
         _from = null;
         PreparedCondition = null;
         // _hash = null;
@@ -130,8 +135,8 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
 #endif
         OneColumn = false;
 
-        if (_from is not null && _from.Table.IsT1 && !_from.Table.AsT1._isPrepared)
-            _from.Table.AsT1.PrepareCommand(prepareMapOnly, cancellationToken);
+        if (_from?.SubQuery is not null && !_from.SubQuery._isPrepared)
+            _from.SubQuery.PrepareCommand(prepareMapOnly, cancellationToken);
 
         var srcType = _srcType;
         if (srcType is null)
@@ -148,6 +153,8 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         var wherePlanHash = PrepareWhere(prepareMapOnly, cancellationToken);
         var (groupingList, groupingPlanHash) = PrepareGrouping(prepareMapOnly, cancellationToken);
         var sortingPlanHash = PrepareSorting(prepareMapOnly, cancellationToken);
+
+        _union?.PrepareCommand(prepareMapOnly, cancellationToken);
 
         _isPrepared = true;
         _selectList = selectList ?? [];
@@ -211,7 +218,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
                         // {
                         var ctorParam = ctor.Constructor!.GetParameters()[idx];
 
-                        selExp = new SelectExpression(ctorParam.ParameterType, this)
+                        selExp = new SelectExpression(ctorParam.ParameterType)
                         {
                             Index = idx,
                             PropertyName = ctorParam.Name!,
@@ -264,7 +271,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
                     // }
                     // else
                     //{
-                    var selExp = new SelectExpression(_exp.Body.Type, this)
+                    var selExp = new SelectExpression(_exp.Body.Type)
                     {
                         //Index = 0,
                         Expression = selectExp,
@@ -299,7 +306,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
 
                         var binding = bindings[idx] as MemberAssignment;
 
-                        var selExp = new SelectExpression((binding.Member as PropertyInfo).PropertyType, this)
+                        var selExp = new SelectExpression((binding.Member as PropertyInfo).PropertyType)
                         {
                             Index = idx,
                             PropertyName = binding.Member.Name!,
@@ -357,7 +364,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
 
                                 Expression exp = Expression.Lambda(Expression.Property(p, pi), p);
 
-                                var selExp = new SelectExpression(pi.PropertyType, this)
+                                var selExp = new SelectExpression(pi.PropertyType)
                                 {
                                     Index = idx,
                                     PropertyName = pi.Name,
@@ -521,7 +528,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
                     var arg = args[idx];
                     var ctorParam = ctor.Constructor!.GetParameters()[idx];
 
-                    var selExp = new SelectExpression(ctorParam.ParameterType, this)
+                    var selExp = new SelectExpression(ctorParam.ParameterType)
                     {
                         Index = idx,
                         PropertyName = ctorParam.Name!,
@@ -556,8 +563,8 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     {
         if (string.IsNullOrEmpty(alias))
         {
-            if (_from?.Table.IsT1 ?? false)
-                return _from!.Table.AsT1;
+            if (_from?.SubQuery is not null)
+                return _from.SubQuery;
 
             return null;
         }
@@ -600,7 +607,6 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         dst._groupingList = _groupingList;
         // dst._joinHash = _joinHash;
         // dst._sortingHash = _sortingHash;
-        dst._from = _from;
         dst._isPrepared = _isPrepared;
         dst._srcType = _srcType;
         dst._dontCache = _dontCache;
@@ -622,23 +628,48 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         dst._selectExpressionPlanComparer = _selectExpressionPlanComparer;
         dst._joinExpressionPlanComparer = _joinExpressionPlanComparer;
         dst._sortingExpressionPlanComparer = _sortingExpressionPlanComparer;
+        dst._unionType = _unionType;
 
         if (copyAll)
         {
             dst._customData = _customData;
             dst._referencedQueries = _referencedQueries;
             dst._paramIdx = _paramIdx;
+            dst._union = _union;
+            dst._from = _from;
+            dst.Logger = Logger;
+        }
+        else
+        {
+            if (_from is not null)
+                dst._from = _from.CloneForCache();
+            if (_union is not null)
+                dst._union = _union.CloneForCache();
         }
     }
 
     protected virtual QueryCommand CreateSelf()
     {
-        return new QueryCommand(_dataContext, _exp, _srcType, _condition, Joins, Paging, _sorting, _groupExp, _having);
+        return new QueryCommand(_dataContext, _exp, _srcType, _condition, _joins, Paging, _sorting, _groupExp, _having);
     }
     protected virtual QueryCommand CreateSelfForClone()
     {
-        return new QueryCommand(null, null, _srcType, null, Joins, Paging, _sorting, null, _having);
+        return new QueryCommand(null, null, _srcType, null, CloneForCache(_joins), Paging, _sorting, null, _having);
     }
+
+    protected static JoinExpression[]? CloneForCache(JoinExpression[]? joins)
+    {
+        if (joins is null) return null;
+
+        var newJoins = new JoinExpression[joins.Length];
+        for (var idx = 0; idx < joins.Length; idx++)
+        {
+            newJoins[idx] = joins[idx].CloneForCache();
+        }
+
+        return newJoins;
+    }
+
     public QueryCommand CloneForCache()
     {
         var cmd = CreateSelfForClone();
@@ -662,6 +693,19 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     public JoinExpressionPlanEqualityComparer GetJoinExpressionPlanEqualityComparer() => _joinExpressionPlanComparer ??= new JoinExpressionPlanEqualityComparer(this);
     public PreciseExpressionEqualityComparer GetPreciseExpressionEqualityComparer() => _preciseExpressionComparer ??= new PreciseExpressionEqualityComparer(this);
     public SortingExpressionPlanEqualityComparer GetSortingExpressionPlanEqualityComparer() => _sortingExpressionPlanComparer ??= new SortingExpressionPlanEqualityComparer(this);
+
+    protected void SetUnion(QueryCommand queryCommand, UnionType unionType)
+    {
+        if (_union is null)
+        {
+            _union = queryCommand;
+            _unionType = unionType;
+        }
+        else
+        {
+            _union.SetUnion(queryCommand, unionType);
+        }
+    }
 }
 
 public class QueryCommand<TResult> : QueryCommand//, IAsyncEnumerable<TResult>
@@ -989,7 +1033,7 @@ public class QueryCommand<TResult> : QueryCommand//, IAsyncEnumerable<TResult>
     }
     protected override QueryCommand CreateSelfForClone()
     {
-        return new QueryCommand<TResult>(null, null, _srcType, null, Joins, Paging, _sorting, null, _having);
+        return new QueryCommand<TResult>(null, null, _srcType, null, CloneForCache(Joins), Paging, _sorting, null, _having);
     }
     public QueryCommand<TResult> OrderBy(int columnIndex, OrderDirection direction)
     {
@@ -997,46 +1041,28 @@ public class QueryCommand<TResult> : QueryCommand//, IAsyncEnumerable<TResult>
 
         var cmd = new QueryCommand<TResult>(_dataContext, _exp, _srcType, _condition, Joins, Paging, _sorting is null
             ? [new Sorting(columnIndex) { Direction = direction }]
-            : [.. _sorting, new Sorting(columnIndex) { Direction = direction }], _groupExp, _having)
-        {
-            Logger = Logger
-        };
+            : [.. _sorting, new Sorting(columnIndex) { Direction = direction }], _groupExp, _having);
 
         CopyTo(cmd, true);
-
+        cmd.ResetPreparation();
         return cmd;
     }
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public QueryCommand<TResult> OrderBy(int columnIndex) => OrderBy(columnIndex, OrderDirection.Asc);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public QueryCommand<TResult> OrderByDescending(int columnIndex) => OrderBy(columnIndex, OrderDirection.Desc);
-    // public QueryCommand<TResult> WithParams(params object[] @params)
-    // {
-    //     QueryCommand<TResult> cmd;
-
-    //     if (CacheEntry?.CompiledQuery is IReplaceParam rp)
-    //     {
-    //         rp.ReplaceParams(@params, _dataProvider);
-    //         cmd = this;
-    //     }
-    //     else
-    //     {
-    //         cmd = new QueryCommand<TResult>(_dataProvider, _exp, _condition, _payloadMgr, Joins);
-    //         CopyTo(cmd);
-    //         cmd._params.AddRange(@params);
-    //     }
-
-    //     return cmd;
-    // }
-    // protected override void CopyTo(QueryCommand dst)
-    // {
-    //     CopyTo(dst as QueryCommand<TResult>);
-    // }
-    // protected void CopyTo(QueryCommand<TResult>? dst)
-    // {
-    //     if (dst is not null)
-    //     {
-    //         dst.CacheEntry = CacheEntry;
-    //     }
-    // }
+    public QueryCommand<TResult> Union<T>(QueryCommand<T> queryCommand)
+    {
+        var cmd = (QueryCommand<TResult>)Clone();
+        cmd.ResetPreparation();
+        cmd.SetUnion(queryCommand, UnionType.Distinct);
+        return cmd;
+    }
+    public QueryCommand<TResult> UnionAll<T>(QueryCommand<T> queryCommand)
+    {
+        var cmd = (QueryCommand<TResult>)Clone();
+        cmd.ResetPreparation();
+        cmd.SetUnion(queryCommand, UnionType.All);
+        return cmd;
+    }
 }

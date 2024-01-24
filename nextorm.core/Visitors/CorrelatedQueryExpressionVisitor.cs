@@ -17,7 +17,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
     private static readonly MethodInfo AnyMIGeneric = typeof(CorrelatedQueryExpressionVisitor).GetMethod(nameof(Any), BindingFlags.NonPublic | BindingFlags.Instance)!;
     //private static MethodInfo ToCommandMI = typeof(Entity<>).GetMethod("ToCommand", BindingFlags.Public | BindingFlags.Instance)!;
     private static readonly MethodInfo ConcatMI = typeof(string).GetMethods(BindingFlags.Public | BindingFlags.Static).First(it => it.Name == nameof(string.Concat) && it.GetParameters().Length == 2);
-    private static readonly PropertyInfo ReferencedQuieriesPI = typeof(IQueryProvider).GetProperty(nameof(IQueryProvider.ReferencedQueries), BindingFlags.Public | BindingFlags.Instance)!;
+    private static readonly PropertyInfo ReferencedQueriesPI = typeof(IQueryProvider).GetProperty(nameof(IQueryProvider.ReferencedQueries), BindingFlags.Public | BindingFlags.Instance)!;
     private static readonly PropertyInfo ItemPI = typeof(IReadOnlyList<QueryCommand>).GetProperty("Item")!;
     private static readonly PropertyInfo SQLPI = typeof(NORM).GetProperty(nameof(NORM.SQL))!;
     //private ParameterExpression? _p;
@@ -104,7 +104,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                         Expression.Call(node.Object, node.Method,
                             Expression.Convert(
                                 Expression.Property(
-                                    Expression.Property(p, ReferencedQuieriesPI)
+                                    Expression.Property(p, ReferencedQueriesPI)
                                     , ItemPI
                                     , Expression.Constant(idx)
                                 )
@@ -141,7 +141,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                             propExp,
                             Expression.Convert(
                                 Expression.Property(
-                                    Expression.Property(p, ReferencedQuieriesPI)
+                                    Expression.Property(p, ReferencedQueriesPI)
                                     , ItemPI
                                     , Expression.Constant(idx)
                                 )
@@ -226,7 +226,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
     {
         QueryCommand cmd;
         var predVisitor = new PredicateExpressionVisitor<int>((exp, storeValue) => exp is IndexExpression idxExp
-            && idxExp.Object is MemberExpression propExp && propExp.Member == ReferencedQuieriesPI && propExp.Expression is ParameterExpression && exp.Type.IsAssignableTo(typeof(IQueryProvider))
+            && idxExp.Object is MemberExpression propExp && propExp.Member == ReferencedQueriesPI && propExp.Expression is ParameterExpression && exp.Type.IsAssignableTo(typeof(IQueryProvider))
             && idxExp.Arguments is [ConstantExpression c] && c.Value is int idx && storeValue(idx)
         );
         predVisitor.Visit(exp);
@@ -306,12 +306,12 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             {
                 lambda = Expression.Lambda(
                     Expression.Call(Expression.Property(null, SQLPI), NORM.NORM_SQL.ExistsMI,
-                        Expression.Property(Expression.Property(p, ReferencedQuieriesPI), ItemPI, Expression.Constant(idx))
+                        Expression.Property(Expression.Property(p, ReferencedQueriesPI), ItemPI, Expression.Constant(idx))
                     ), p
                 );
             }
             else
-                lambda = Expression.Lambda(Expression.Property(Expression.Property(p, ReferencedQuieriesPI), ItemPI, Expression.Constant(idx)), p);
+                lambda = Expression.Lambda(Expression.Property(Expression.Property(p, ReferencedQueriesPI), ItemPI, Expression.Constant(idx)), p);
 
             return lambda;
         }
@@ -356,6 +356,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         //     }
         // }
 
+        //TODO: optimize
         if (leftNode.Type == rightNode.Type && leftNode.Type == typeof(string) && node.NodeType == ExpressionType.Add)
         {
             return Expression.Call(ConcatMI, leftNode, rightNode);

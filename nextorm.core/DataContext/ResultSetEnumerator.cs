@@ -51,18 +51,19 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IAsyncIni
         }
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync()
     {
         GC.SuppressFinalize(this);
 
         if (_reader is not null)
         {
-            if (_logDebug) _logger!.LogDebug("Disposing data reader");
-            await _reader.DisposeAsync().ConfigureAwait(false);
-
+            var r = _reader;
             _reader = null;
+            _conn = null;
+            if (_logDebug) _logger!.LogDebug("Disposing data reader");
+            return r.DisposeAsync();
         }
-
+        return ValueTask.CompletedTask;
         //_compiledQuery.DbCommand.Connection = null;
         // if (_conn is not null)
         // {
@@ -82,7 +83,7 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IAsyncIni
 #if DEBUG
         if (_logger?.IsEnabled(LogLevel.Trace) ?? false) _logger.LogTrace("Move next");
 #endif
-        return await _reader!.ReadAsync(_cancellationToken).ConfigureAwait(false);
+        return await _reader!.ReadAsync(_cancellationToken);
     }
     public bool MoveNext()
     {
@@ -106,15 +107,20 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IAsyncIni
         if (_conn is null) throw new InvalidOperationException("Connection is empty");
         if (_dbContext is null) throw new InvalidOperationException("DbContext is empty");
 #endif
-        var sqlCommand = CreateCommand(@params);
 
-        if (_conn.State == ConnectionState.Closed)
+        if (!_dbContext._connOpen)
         {
-            if (_logDebug) _logger!.LogDebug("Opening connection");
-            _conn.Open();
+            if (_conn.State == ConnectionState.Closed)
+            {
+                if (_logDebug) _logger!.LogDebug("Opening connection");
+                _conn.Open();
+            }
+            _dbContext._connOpen = true;
         }
 
-        LogCommand(sqlCommand);
+        var sqlCommand = _compiledQuery.GetDbCommand(@params, _dbContext!, _conn!);
+
+        if (_logDebug) LogCommand(sqlCommand);
 
         _reader = sqlCommand.ExecuteReader(_compiledQuery.Behavior);
     }
@@ -125,64 +131,62 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IAsyncIni
         if (_conn is null) throw new InvalidOperationException("Connection is empty");
         if (_dbContext is null) throw new InvalidOperationException("DbContext is empty");
 #endif
-        var sqlCommand = CreateCommand(@params);
 
-        if (_conn.State == ConnectionState.Closed)
+        if (!_dbContext._connOpen)
         {
-            if (_logDebug) _logger!.LogDebug("Opening connection");
-            await _conn.OpenAsync(cancellationToken).ConfigureAwait(false);
+            if (_conn.State == ConnectionState.Closed)
+            {
+                if (_logDebug) _logger!.LogDebug("Opening connection");
+                await _conn.OpenAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            _dbContext._connOpen = true;
         }
 
-        LogCommand(sqlCommand);
+        var sqlCommand = _compiledQuery.GetDbCommand(@params, _dbContext!, _conn!);
+
+        if (_logDebug) LogCommand(sqlCommand);
 
         _reader = await sqlCommand.ExecuteReaderAsync(_compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
     }
-    private DbCommand CreateCommand(object[]? @params)
-    {
-        return _compiledQuery.GetDbCommand(@params, _dbContext!, _conn!);
-    }
     private void LogCommand(DbCommand sqlCommand)
     {
-        if (_logDebug)
-        {
-            var sb = new StringBuilder();
-            sb.AppendLine("Executing query: {sql}");
+        var sb = new StringBuilder();
+        sb.AppendLine("Executing query: {sql}");
 
-            //_logger.LogDebug("Executing query: {sql}", sqlCommand.CommandText);
+        //_logger.LogDebug("Executing query: {sql}", sqlCommand.CommandText);
 
-            var ps = new ArrayList
+        var ps = new ArrayList
             {
                 sqlCommand.CommandText
             };
 
-            if (_logSensitiveData)
+        if (_logSensitiveData)
+        {
+            var idx = 0;
+            foreach (DbParameter p in sqlCommand.Parameters)
             {
-                var idx = 0;
-                foreach (DbParameter p in sqlCommand.Parameters)
-                {
-                    sb.AppendLine($"param {{name_{idx}}} = {{value_{idx}}}");
-                    ps.Add(p.ParameterName);
-                    ps.Add(p.Value);
-                    idx++;
-                    //_logger.LogDebug("param {name} is {value}", p.ParameterName, p.Value);
-                }
+                sb.AppendLine($"param {{name_{idx}}} = {{value_{idx}}}");
+                ps.Add(p.ParameterName);
+                ps.Add(p.Value);
+                idx++;
+                //_logger.LogDebug("param {name} is {value}", p.ParameterName, p.Value);
             }
-            else if (sqlCommand.Parameters?.Count > 0)
-            {
-                _logger!.LogDebug(sb.ToString(), sqlCommand.CommandText);
-                _logger!.LogDebug("Use {method} to see param values", nameof(_logSensitiveData));
-                return;
-            }
-
-            if (_logSensitiveData)
-            {
-                sb.Length -= Environment.NewLine.Length;
-                _logger!.LogDebug(sb.ToString(), ps.ToArray());
-            }
-            else
-                _logger!.LogDebug(sb.ToString(), sqlCommand.CommandText);
-
         }
+        else if (sqlCommand.Parameters?.Count > 0)
+        {
+            _logger!.LogDebug(sb.ToString(), sqlCommand.CommandText);
+            _logger!.LogDebug("Use {method} to see param values", nameof(_logSensitiveData));
+            return;
+        }
+
+        if (_logSensitiveData)
+        {
+            sb.Length -= Environment.NewLine.Length;
+            _logger!.LogDebug(sb.ToString(), ps.ToArray());
+        }
+        else
+            _logger!.LogDebug(sb.ToString(), sqlCommand.CommandText);
     }
     public void Reset()
     {

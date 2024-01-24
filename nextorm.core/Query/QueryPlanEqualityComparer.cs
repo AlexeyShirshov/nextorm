@@ -3,7 +3,7 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace nextorm.core;
 
-public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand>
+public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 {
     // private readonly IDictionary<ExpressionKey, Delegate> _cache;
     // private readonly ILogger? _logger;
@@ -34,13 +34,15 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand>
         if (x == y) return true;
         if (x is null || y is null) return false;
 
-        if (!_fromComparer.Equals(x.From, y.From)) return false;
-
         if (x.EntityType != y.EntityType) return false;
 
         if (x.ResultType != y.ResultType) return false;
 
         if (x.Paging.Limit != y.Paging.Limit || x.Paging.Offset != y.Paging.Offset) return false;
+
+        if (x.UnionType != y.UnionType) return false;
+
+        if (!_fromComparer.Equals(x.From, y.From)) return false;
 
         if (!_selectComparer.Equals(x.SelectList, y.SelectList)) return false;
 
@@ -54,10 +56,12 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand>
 
         if (!_expComparer.Equals(x.Having, y.Having)) return false;
 
+        if (!Equals(x.UnionQuery, y.UnionQuery)) return false;
+
         return true;
     }
 
-    public int GetHashCode([DisallowNull] QueryCommand obj)
+    public int GetHashCode(QueryCommand? obj)
     {
         if (obj is null)
             return 0;
@@ -69,6 +73,7 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand>
         unchecked
         {
             HashCode hash = new();
+
             if (obj.From is not null)
                 hash.Add(_fromComparer.GetHashCode(obj.From));
 
@@ -89,6 +94,12 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand>
             hash.Add(obj.Paging.Offset);
 
             hash.Add(obj.GroupingPlanHash);
+
+            if (obj.UnionQuery is not null)
+            {
+                hash.Add(obj.UnionQuery, this);
+                hash.Add(obj.UnionType);
+            }
 
             return hash.ToHashCode();
         }

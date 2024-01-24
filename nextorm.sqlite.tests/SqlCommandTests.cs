@@ -725,4 +725,32 @@ public class SqlCommandTests
 
         r.Id.Should().Be(1);
     }
+    [Fact]
+    public void UnionScalar_ShouldWork()
+    {
+        var cnt = _sut.From(_sut.SimpleEntity.Select(it => it.Id).Union(_sut.ComplexEntity.Select(it => (int)it.Id))).Count();
+
+        cnt.Should().Be(10);
+
+        var cmd = _sut.SimpleEntity.Select(it => it.Id).UnionAll(_sut.ComplexEntity.Select(it => (int)it.Id));
+
+        cnt = _sut.From(cmd).Count();
+
+        cnt.Should().Be(13);
+
+        cnt = _sut.From(cmd.UnionAll(_sut.ComplexEntity.Select(it => it.Int))).Count();
+
+        cnt.Should().Be(16);
+    }
+    [Fact]
+    public void UnionEntity_ShouldWork()
+    {
+        var cnt = _sut.From(_sut.SimpleEntity.Select(it => new { it.Id }).Union(_sut.ComplexEntity.Select(it => new { it.Id }))).Count();
+
+        cnt.Should().Be(10);
+
+        cnt = _sut.From(_sut.SimpleEntity.Select(it => new { it.Id }).UnionAll(_sut.ComplexEntity.Select(it => new { it.Id }))).Count();
+
+        cnt.Should().Be(13);
+    }
 }

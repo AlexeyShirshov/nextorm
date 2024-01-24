@@ -183,8 +183,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                     innerQuery = (QueryCommand)((Func<object?, object>)dCmd)(paramValue);
                 }
 
-                var (sql, p) = _dataProvider.MakeSelect(innerQuery, _paramMode);
-                _params.AddRange(p);
+                var sql = _dataProvider.MakeSelect(innerQuery, _paramMode, _params);
 
                 if (!_paramMode)
                 {
@@ -229,8 +228,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 else
                     throw new InvalidOperationException();
 
-                var (sql, p) = _dataProvider.MakeSelect(innerQuery, _paramMode);
-                _params.AddRange(p);
+                var sql = _dataProvider.MakeSelect(innerQuery, _paramMode, _params);
 
                 if (!_paramMode)
                 {
@@ -428,8 +426,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             }
             _needAliasForColumn = true;
             var innerQuery = _queryProvider.ReferencedQueries[idx];
-            var (sql, p) = _dataProvider.MakeSelect(innerQuery, _paramMode);
-            _params.AddRange(p);
+            var sql = _dataProvider.MakeSelect(innerQuery, _paramMode, _params);
 
             if (!_paramMode)
             {
