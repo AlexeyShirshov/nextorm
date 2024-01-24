@@ -46,46 +46,13 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand>
 
         if (!_expComparer.Equals(x.PreparedCondition, y.PreparedCondition)) return false;
 
-        // if (x.SelectList is null && y.SelectList is not null) return false;
-        // if (x.SelectList is not null && y.SelectList is null) return false;
-
-        // if (x.SelectList is not null && y.SelectList is not null)
-        // {
-        //     if (x.SelectList.Count != y.SelectList.Count) return false;
-
-        //     for (int i = 0; i < x.SelectList.Count; i++)
-        //     {
-        //         if (!_queryProvider.GetSelectExpressionPlanEqualityComparer().Equals(x.SelectList[i], y.SelectList[i])) return false;
-        //     }
-        // }
-
         if (!_joinComparer.Equals(x.Joins, y.Joins)) return false;
-        // if (x.Joins is null && y.Joins is not null) return false;
-        // if (x.Joins is not null && y.Joins is null) return false;
-
-        // if (x.Joins is not null && y.Joins is not null)
-        // {
-        //     if (x.Joins.Count != y.Joins.Count) return false;
-
-        //     for (int i = 0; i < x.Joins.Count; i++)
-        //     {
-        //         if (!_queryProvider.GetJoinExpressionPlanEqualityComparer().Equals(x.Joins[i], y.Joins[i])) return false;
-        //     }
-        // }
 
         if (!_sortComparer.ValueEquals(x.Sorting, y.Sorting)) return false;
-        // if (x.Sorting is null && y.Sorting is not null) return false;
-        // if (x.Sorting is not null && y.Sorting is null) return false;
 
-        // if (x.Sorting is not null && y.Sorting is not null)
-        // {
-        //     if (x.Sorting.Count != y.Sorting.Count) return false;
+        if (!_selectComparer.Equals(x.GroupingList, y.GroupingList)) return false;
 
-        //     for (int i = 0; i < x.Sorting.Count; i++)
-        //     {
-        //         if (!_queryProvider.GetSortingExpressionPlanEqualityComparer().Equals(x.Sorting[i], y.Sorting[i])) return false;
-        //     }
-        // }
+        if (!_expComparer.Equals(x.Having, y.Having)) return false;
 
         return true;
     }
@@ -120,6 +87,8 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand>
 
             hash.Add(obj.Paging.Limit);
             hash.Add(obj.Paging.Offset);
+
+            hash.Add(obj.GroupingPlanHash);
 
             return hash.ToHashCode();
         }

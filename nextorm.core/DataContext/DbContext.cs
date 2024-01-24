@@ -15,10 +15,7 @@ public class DbContext : IDataContext
 {
     internal readonly static string[] _params = ["norm_p0", "norm_p1", "norm_p2", "norm_p3", "norm_p4"];
     private readonly static MethodInfo IsDBNullMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.IsDBNull))!;
-    private readonly static ConcurrentDictionary<Type, IEntityMeta> _metadata = new();
-    private readonly static ConcurrentDictionary<Type, SelectExpression[]> _selectListCache = new();
     //private readonly static ConcurrentDictionary<Expression, List<SelectExpression>> _selectListExpCache = new(ExpressionEqualityComparer.Instance);
-    private readonly static ExpressionCache<Delegate> _expCache = new();
     internal protected readonly static ObjectPool<StringBuilder> _sbPool = new DefaultObjectPoolProvider().Create(new StringBuilderPooledObjectPolicy());
     //private static readonly AsyncLocal<Dictionary<QueryPlan, IDbCommandHolder>> _queryPlanCache = new() { Value = [] };    
     [ThreadStatic]
@@ -52,9 +49,6 @@ public class DbContext : IDataContext
     public ILogger? CommandLogger { get; }
     public ILogger? ResultSetEnumeratorLogger { get; }
     public bool NeedMapping => true;
-    public IDictionary<ExpressionKey, Delegate> ExpressionsCache => _expCache;
-    public IDictionary<Type, IEntityMeta> Metadata => _metadata;
-    public IDictionary<Type, SelectExpression[]> SelectListCache => _selectListCache;
     private static Dictionary<QueryPlan, IDbCommandHolder> QueryPlanCache => _queryPlanCache ??= [];
     public Dictionary<string, object> Properties => _properties;
     public Lazy<QueryCommand<bool>>? AnyCommand { get; set; }
@@ -502,16 +496,39 @@ public class DbContext : IDataContext
                 if (!paramMode) sqlBuilder!.AppendLine().Append(" where ").Append(whereSql);
             }
 
-            if (cmd.GroupBy is not null)
+            if (cmd.GroupingList?.Length > 0)
             {
-                throw new NotImplementedException();
-                // var whereSql = MakeSelect(entityType, cmd, cmd.GroupBy, 0, null, @params, paramMode);
-                // if (!paramMode) sqlBuilder!.AppendLine().Append(" group by ").Append(whereSql);
-            }
+                if (!paramMode) sqlBuilder!.AppendLine().Append(" group by ");
 
-            if (cmd.Having is not null)
-            {
-                throw new NotImplementedException();
+                var groupingListCount = cmd.GroupingList.Length;
+                for (var i = 0; i < groupingListCount; i++)
+                {
+                    var item = cmd.GroupingList[i];
+                    var (needAliasForColumn, column) = MakeColumn(item.Expression!, entityType, cmd, false, @params, paramMode);
+
+                    if (!paramMode)
+                    {
+                        sqlBuilder!.Append(column);
+
+                        if (needAliasForColumn)
+                        {
+                            sqlBuilder.Append(MakeColumnAlias(item.PropertyName));
+                        }
+
+                        sqlBuilder.Append(", ");
+                    }
+                }
+
+                if (!paramMode)
+                {
+                    sqlBuilder!.Length -= 2;
+                }
+
+                if (cmd.Having is not null)
+                {
+                    var havingSql = MakeWhere(entityType, cmd, cmd.Having, 0, null, @params, paramMode);
+                    if (!paramMode) sqlBuilder!.AppendLine().Append(" having ").Append(havingSql);
+                }
             }
 
             if (cmd.Sorting is not null)
@@ -780,7 +797,7 @@ public class DbContext : IDataContext
 
     private FromExpression GetFrom(Type t)
     {
-        if (_metadata.TryGetValue(t, out var entity) && !string.IsNullOrEmpty(entity.TableName))
+        if (DataContextCache.Metadata.TryGetValue(t, out var entity) && !string.IsNullOrEmpty(entity.TableName))
             return new FromExpression(entity.TableName);
 
         return new FromExpression(GetTableName(t));
@@ -1082,7 +1099,7 @@ public class DbContext : IDataContext
 
             if (queryCommand.OneColumn)
             {
-                var vis = new ReplaceMemberVisitor(queryCommand.EntityType!, this, queryCommand, param);
+                var vis = new ReplaceMemberVisitor(queryCommand.EntityType!, queryCommand, param);
                 var body = vis.Visit(((LambdaExpression)queryCommand.SelectList![0].Expression).Body);
                 lambda = Expression.Lambda<Func<IDataRecord, TResult>>(body, param);
             }

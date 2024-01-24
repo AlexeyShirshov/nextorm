@@ -156,7 +156,7 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
 
                                 if (_logger?.IsEnabled(LogLevel.Trace) ?? false)
                                 {
-                                    _logger.LogTrace("Expression cache miss on gethashcode. hascode: {hash}, value: {value}", key.GetHashCode(), del(ce.Value));
+                                    _logger.LogTrace("Expression cache miss on gethashcode. hashcode: {hash}, value: {value}", key.GetHashCode(), del(ce.Value));
                                 }
                                 else if (_logger?.IsEnabled(LogLevel.Debug) ?? false) _logger.LogDebug("Expression cache miss on gethashcode");
                             }

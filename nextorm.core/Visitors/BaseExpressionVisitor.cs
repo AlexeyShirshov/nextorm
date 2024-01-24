@@ -131,7 +131,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                     });
 
                 var keyCmd = new ExpressionKey(exp, _queryProvider);
-                if (!_dataProvider.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
+                if (!DataContextCache.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
                 {
                     object? paramValue;
                     Expression body;
@@ -155,12 +155,12 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                         throw new InvalidOperationException();
 
                     var d = Expression.Lambda<Func<object?, object>>(body, pExp).Compile();
-                    _dataProvider.ExpressionsCache[keyCmd] = d;
+                    DataContextCache.ExpressionsCache[keyCmd] = d;
                     innerQuery = (QueryCommand)d(paramValue);
 
                     if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false)
                     {
-                        _dataProvider.Logger.LogTrace("Expression cache miss on visit exists. hascode: {hash}, value: {value}", keyCmd.GetHashCode(), d(paramValue));
+                        _dataProvider.Logger.LogTrace("Expression cache miss on visit exists. hashcode: {hash}, value: {value}", keyCmd.GetHashCode(), d(paramValue));
                     }
                     else if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Expression cache miss on visit exists");
                 }
@@ -209,11 +209,11 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 if (constRepl.Params.Count > 0)
                 {
                     var keyCmd = new ExpressionKey(cmdExp, _queryProvider);
-                    if (!_dataProvider.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
+                    if (!DataContextCache.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
                     {
                         var d = Expression.Lambda(body, constRepl.Params.Select(it => it.Item1)).Compile();
 
-                        _dataProvider.ExpressionsCache[keyCmd] = d;
+                        DataContextCache.ExpressionsCache[keyCmd] = d;
                         innerQuery = (QueryCommand)d.DynamicInvoke(constRepl.Params.Select(it => it.Item2).ToArray())!;
 
                         if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false)
@@ -357,15 +357,15 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         {
             object? value = null;
             var keyCmd = new ExpressionKey(node, _queryProvider);
-            if (!_dataProvider.ExpressionsCache.TryGetValue(keyCmd, out var d))
+            if (!DataContextCache.ExpressionsCache.TryGetValue(keyCmd, out var d))
             {
                 var del = Expression.Lambda<Func<object>>(node).Compile();
-                _dataProvider.ExpressionsCache[keyCmd] = del;
+                DataContextCache.ExpressionsCache[keyCmd] = del;
                 value = del();
 
                 if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false)
                 {
-                    _dataProvider.Logger.LogTrace("Expression cache miss on visit method call. hascode: {hash}, value: {value}", keyCmd.GetHashCode(), del());
+                    _dataProvider.Logger.LogTrace("Expression cache miss on visit method call. hashcode: {hash}, value: {value}", keyCmd.GetHashCode(), del());
                 }
                 else if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Expression cache miss on visit method call");
             }
@@ -397,18 +397,18 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             //if (exp.Has<ConstantExpression>(out var ce))
             //{
             var key = new ExpressionKey(exp, _queryProvider);
-            if (!_dataProvider.ExpressionsCache.TryGetValue(key, out var del))
+            if (!DataContextCache.ExpressionsCache.TryGetValue(key, out var del))
             {
                 //if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Select expression miss");
                 //var p = Expression.Parameter(ce!.Type);
                 //var rv = new ReplaceConstantExpressionVisitor(p);
                 //var body = rv.Visit(exp);
                 del = Expression.Lambda<Func<string>>(exp).Compile();
-                _dataProvider.ExpressionsCache[key] = del;
+                DataContextCache.ExpressionsCache[key] = del;
 
                 if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false)
                 {
-                    _dataProvider.Logger.LogTrace("Select expression miss. hascode: {hash}, value: {value}", key.GetHashCode(), ((Func<string>)del)());
+                    _dataProvider.Logger.LogTrace("Select expression miss. hashcode: {hash}, value: {value}", key.GetHashCode(), ((Func<string>)del)());
                 }
                 else if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Select expression miss");
             }
@@ -612,16 +612,16 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             }
 
             var key = new ExpressionKey(node, _queryProvider);
-            if (!_dataProvider.ExpressionsCache.TryGetValue(key, out var del))
+            if (!DataContextCache.ExpressionsCache.TryGetValue(key, out var del))
             {
                 var body = Expression.Convert(node, typeof(object));
                 del = Expression.Lambda<Func<object>>(body).Compile();
 
-                _dataProvider.ExpressionsCache[key] = del;
+                DataContextCache.ExpressionsCache[key] = del;
 
                 if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false)
                 {
-                    _dataProvider.Logger.LogTrace("Expression cache miss on visit where. hascode: {hash}, value: {value}", key.GetHashCode(), ((Func<object>)del)());
+                    _dataProvider.Logger.LogTrace("Expression cache miss on visit where. hashcode: {hash}, value: {value}", key.GetHashCode(), ((Func<object>)del)());
                 }
                 else if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Expression cache miss on visit where");
             }
@@ -647,7 +647,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 // if (_dataProvider.CacheExpressions)
                 // {
                 key = new ExpressionKey(node, _queryProvider);
-                _dataProvider.ExpressionsCache.TryGetValue(key, out del);
+                DataContextCache.ExpressionsCache.TryGetValue(key, out del);
                 // }
 
                 if (del is null)
@@ -658,7 +658,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                     del = Expression.Lambda<Func<object?, object>>(body, p).Compile();
 
                     if (key is not null)
-                        _dataProvider.ExpressionsCache[key] = del;
+                        DataContextCache.ExpressionsCache[key] = del;
 
                     if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false)
                     {
@@ -843,6 +843,8 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                     _builder!.Append(" ~ "); break;
                 case ExpressionType.NotEqual:
                     _builder!.Append(" != "); break;
+                case ExpressionType.Equal:
+                    _builder!.Append(" = "); break;
                 case ExpressionType.Or:
                     _builder!.Append(" | "); break;
                 case ExpressionType.OrElse:

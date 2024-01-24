@@ -44,7 +44,7 @@ public class BenchmarkQueryCommand
     [Benchmark()]
     public void CacheExpressions()
     {
-        _ctx.DbContext.ExpressionsCache.Clear();
+        DataContextCache.ExpressionsCache.Clear();
         Workload(_ctx);
     }
     [Benchmark()]

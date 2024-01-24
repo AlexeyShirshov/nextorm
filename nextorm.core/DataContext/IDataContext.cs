@@ -10,18 +10,15 @@ public interface IDataContext : IAsyncDisposable, IDisposable
     ILogger? CommandLogger { get; }
     ILogger? ResultSetEnumeratorLogger { get; }
     bool NeedMapping { get; }
-    IDictionary<ExpressionKey, Delegate> ExpressionsCache { get; }
-    IDictionary<Type, IEntityMeta> Metadata { get; }
-    IDictionary<Type, SelectExpression[]> SelectListCache { get; }
     public Dictionary<string, object> Properties { get; }
     public Lazy<QueryCommand<bool>>? AnyCommand { get; set; }
     public Entity<T> Create<T>(Action<EntityBuilder<T>>? configEntity = null)
     {
-        if (!Metadata.ContainsKey(typeof(T)))
+        if (!DataContextCache.Metadata.ContainsKey(typeof(T)))
         {
             var eb = new EntityBuilder<T>();
             configEntity?.Invoke(eb);
-            Metadata[typeof(T)] = eb.Build();
+            DataContextCache.Metadata[typeof(T)] = eb.Build();
         }
         return new(this) { Logger = CommandLogger };
     }

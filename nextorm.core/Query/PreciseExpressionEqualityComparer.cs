@@ -7,7 +7,6 @@ namespace nextorm.core;
 
 public sealed class PreciseExpressionEqualityComparer : IEqualityComparer<Expression?>
 {
-    private readonly IDictionary<ExpressionKey, Delegate> _cache;
     private readonly IQueryProvider _queryProvider;
     private readonly ILogger? _logger;
 
@@ -15,13 +14,12 @@ public sealed class PreciseExpressionEqualityComparer : IEqualityComparer<Expres
     //     : this(new ExpressionCache<Delegate>())
     // {
     // }
-    public PreciseExpressionEqualityComparer(IDictionary<ExpressionKey, Delegate>? cache, IQueryProvider queryProvider)
-        : this(cache, queryProvider, null)
+    public PreciseExpressionEqualityComparer(IQueryProvider queryProvider)
+        : this(queryProvider, null)
     {
     }
-    public PreciseExpressionEqualityComparer(IDictionary<ExpressionKey, Delegate>? cache, IQueryProvider queryProvider, ILogger? logger)
+    public PreciseExpressionEqualityComparer(IQueryProvider queryProvider, ILogger? logger)
     {
-        _cache = cache ?? new ExpressionCache<Delegate>();
         _queryProvider = queryProvider;
         _logger = logger;
     }
@@ -125,14 +123,14 @@ public sealed class PreciseExpressionEqualityComparer : IEqualityComparer<Expres
                     if (memberExpression.Expression is not null && memberExpression.Expression.Has<ConstantExpression>(out var ce))
                     {
                         var key = new ExpressionKey(memberExpression, _queryProvider);
-                        if (!_cache.TryGetValue(key, out var del))
+                        if (!DataContextCache.ExpressionsCache.TryGetValue(key, out var del))
                         {
                             var p = Expression.Parameter(typeof(object));
                             var replace = new ReplaceConstantVisitor(Expression.Convert(p, ce!.Type));
                             var body = Expression.Convert(replace.Visit(memberExpression), typeof(object));
                             del = Expression.Lambda<Func<object?, object>>(body, p).Compile();
                             //value = 1;
-                            _cache[key] = del;
+                            DataContextCache.ExpressionsCache[key] = del;
 
                             if (_logger?.IsEnabled(LogLevel.Trace) ?? false)
                             {
@@ -476,7 +474,7 @@ public sealed class PreciseExpressionEqualityComparer : IEqualityComparer<Expres
                 && b.Expression is not null && b.Expression.Has<ConstantExpression>(out var ceB))
             {
                 var (keyA, keyB) = (new ExpressionKey(a, _equalityComparer._queryProvider), new ExpressionKey(b, _equalityComparer._queryProvider));
-                if (_equalityComparer._cache.TryGetValue(keyA, out var delA) && _equalityComparer._cache.TryGetValue(keyB, out var delB))
+                if (DataContextCache.ExpressionsCache.TryGetValue(keyA, out var delA) && DataContextCache.ExpressionsCache.TryGetValue(keyB, out var delB))
                 {
                     return Equals(((Func<object?, object>)delA)(ceA!.Value), ((Func<object?, object>)delB)(ceB!.Value));
                 }
@@ -494,8 +492,8 @@ public sealed class PreciseExpressionEqualityComparer : IEqualityComparer<Expres
                     var bodyB = Expression.Convert(replaceB.Visit(a), typeof(object));
                     delB = Expression.Lambda<Func<object?, object>>(bodyB, pB).Compile();
 
-                    _equalityComparer._cache[keyA] = delA;
-                    _equalityComparer._cache[keyB] = delB;
+                    DataContextCache.ExpressionsCache[keyA] = delA;
+                    DataContextCache.ExpressionsCache[keyB] = delB;
 
                     return Equals(((Func<object?, object>)delA)(ceA.Value), ((Func<object?, object>)delB)(ceB.Value));
                 }

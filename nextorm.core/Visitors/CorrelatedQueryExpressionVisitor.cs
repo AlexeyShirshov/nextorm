@@ -78,10 +78,10 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 
                     Func<QueryCommand, bool> del;
                     var key = new ExpressionKey(lambda, _queryProvider);
-                    if (!_dataProvider.ExpressionsCache.TryGetValue(key, out var dLambda))
+                    if (!DataContextCache.ExpressionsCache.TryGetValue(key, out var dLambda))
                     {
                         var d = lambda.Compile();
-                        _dataProvider.ExpressionsCache[key] = d;
+                        DataContextCache.ExpressionsCache[key] = d;
                         del = d;
                     }
                     else
@@ -162,17 +162,17 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             QueryCommand cmd;
 
             var keyCmd = new ExpressionKey(node.Object, _queryProvider);
-            if (!_dataProvider.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
+            if (!DataContextCache.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
             {
                 //var d = Expression.Lambda<Func<QueryCommand>>(Expression.Call(node.Object, ToCommandMI)).Compile();
                 var d = Expression.Lambda<Func<QueryCommand>>(Expression.Convert(node.Object, typeof(QueryCommand))).Compile();
 
-                _dataProvider.ExpressionsCache[keyCmd] = d;
+                DataContextCache.ExpressionsCache[keyCmd] = d;
                 cmd = d();
 
                 if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false)
                 {
-                    _dataProvider.Logger.LogTrace("Subquery expression miss. hascode: {hash}, value: {value}", keyCmd.GetHashCode(), d());
+                    _dataProvider.Logger.LogTrace("Subquery expression miss. hashcode: {hash}, value: {value}", keyCmd.GetHashCode(), d());
                 }
                 else if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Subquery expression miss");
             }
@@ -195,7 +195,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                 QueryCommand cmd;
 
                 var keyCmd = new ExpressionKey(node.Object, _queryProvider);
-                if (!_dataProvider.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
+                if (!DataContextCache.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
                 {
                     var p = Expression.Parameter(typeof(object));
                     var replace = new ReplaceConstantVisitor(Expression.Convert(p, tv.Target2!.Type));
@@ -203,12 +203,12 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 
                     var d = Expression.Lambda<Func<object?, QueryCommand>>(body, p).Compile();
 
-                    _dataProvider.ExpressionsCache[keyCmd] = d;
+                    DataContextCache.ExpressionsCache[keyCmd] = d;
                     cmd = d(tv.Target2!.Value);
 
                     if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false)
                     {
-                        _dataProvider.Logger.LogTrace("Subquery expression miss. hascode: {hash}, value: {value}", keyCmd.GetHashCode(), d(tv.Target2!.Value));
+                        _dataProvider.Logger.LogTrace("Subquery expression miss. hashcode: {hash}, value: {value}", keyCmd.GetHashCode(), d(tv.Target2!.Value));
                     }
                     else if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Subquery expression miss");
                 }
@@ -243,11 +243,11 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             if (constRepl.Params.Count > 0)
             {
                 var keyCmd = new ExpressionKey(exp, _queryProvider);
-                if (!_dataProvider.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
+                if (!DataContextCache.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
                 {
                     var d = Expression.Lambda(body, constRepl.Params.Select(it => it.Item1)).Compile();
 
-                    _dataProvider.ExpressionsCache[keyCmd] = d;
+                    DataContextCache.ExpressionsCache[keyCmd] = d;
                     cmd = (QueryCommand)d.DynamicInvoke(constRepl.Params.Select(it => it.Item2).ToArray())!;
 
                     if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false)

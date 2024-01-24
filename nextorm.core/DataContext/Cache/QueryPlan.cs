@@ -36,7 +36,7 @@ public sealed class QueryPlan(QueryCommand cmd, string? sql)
 
     public QueryPlan GetCacheVersion()
     {
-        var newCmd = QueryCommand.Clone();
+        var newCmd = QueryCommand.CloneForCache();
         Debug.Assert(_comparer == newCmd.GetQueryPlanEqualityComparer(), "QueryPlanEqualityComparer must be equals, if not see QueryCommand.CopyTo function");
         Debug.Assert(GetHashCode() == new HashCode().Map(hash =>
         {

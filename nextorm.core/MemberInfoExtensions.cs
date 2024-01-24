@@ -5,7 +5,7 @@ public static class MemberInfoExtensions
 {
     public static string GetPropertyColumnName(this MemberInfo mi, IDataContext dataProvider)
     {
-        if (mi is PropertyInfo pi && dataProvider.Metadata.TryGetValue(mi.DeclaringType!, pi, out var prop))
+        if (mi is PropertyInfo pi && DataContextCache.Metadata.TryGetValue(mi.DeclaringType!, pi, out var prop))
         {
             return prop!.ColumnName;
         }

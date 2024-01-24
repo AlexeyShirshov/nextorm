@@ -7,7 +7,7 @@ public class PreciseExpressionEqualityComparerTests
 
     public PreciseExpressionEqualityComparerTests()
     {
-        _sut = new PreciseExpressionEqualityComparer(null, new QueryProvider());
+        _sut = new PreciseExpressionEqualityComparer(new QueryProvider());
 
     }
     [Fact]
@@ -68,7 +68,7 @@ class QueryProvider : IQueryProvider
 
     public JoinExpressionPlanEqualityComparer GetJoinExpressionPlanEqualityComparer() => new(this);
 
-    public PreciseExpressionEqualityComparer GetPreciseExpressionEqualityComparer() => new(null, this);
+    public PreciseExpressionEqualityComparer GetPreciseExpressionEqualityComparer() => new(this);
 
     public QueryPlanEqualityComparer GetQueryPlanEqualityComparer() => new(this);
 

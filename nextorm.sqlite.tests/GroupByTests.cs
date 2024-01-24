@@ -37,7 +37,7 @@ public class GroupByTests(TestDataRepository sut)
     [Fact]
     public void TestGroup_WhereAndHaving()
     {
-        var r = _sut.ComplexEntity.Where(e => e.Int == null).GroupBy(e => new { e.Int }).Having(e => NORM.SQL.count() > 1).Select(e => new { e.Int, count = NORM.SQL.count() }).ToList();
+        var r = _sut.ComplexEntity.Where(e => e.Int != null).GroupBy(e => new { e.Int }).Having(e => NORM.SQL.count() > 1).Select(e => new { e.Int, count = NORM.SQL.count() }).ToList();
 
         r.Should().NotBeNullOrEmpty();
 

@@ -136,6 +136,8 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         dst.Paging = Paging;
         dst._condition = _condition;
         dst._sorting = _sorting;
+        dst._group = _group;
+        dst._having = _having;
     }
     protected virtual object CloneImp()
     {

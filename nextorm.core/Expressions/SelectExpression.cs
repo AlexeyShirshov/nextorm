@@ -5,7 +5,7 @@ using System.Reflection;
 namespace nextorm.core;
 
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE1006:Naming Styles", Justification = "<Pending>")]
-public class SelectExpression
+public sealed class SelectExpression : IEquatable<SelectExpression>
 {
     private readonly Type _realType;
     //private readonly bool _nullable;
@@ -19,7 +19,7 @@ public class SelectExpression
     //private readonly IDictionary<ExpressionKey, Delegate> _expCache;
     private readonly IQueryProvider _queryProvider;
 
-    public SelectExpression(Type propertyType, IDictionary<ExpressionKey, Delegate> expCache, IQueryProvider queryProvider)
+    public SelectExpression(Type propertyType, IQueryProvider queryProvider)
     {
         PropertyType = propertyType;
         var nullable = PropertyType.IsGenericType && PropertyType.GetGenericTypeDefinition() == typeof(Nullable<>);
