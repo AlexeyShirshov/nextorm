@@ -117,8 +117,7 @@ public class SqliteBenchmarkWhere
     {
         for (var i = 0; i < Iterations; i++)
         {
-            var p = i;
-            var cmd = _ctx.SimpleEntity.Where(it => it.Id == p).Select(entity => new { entity.Id });
+            var cmd = _ctx.SimpleEntity.Where(it => it.Id == i).Select(entity => new { entity.Id });
             await foreach (var row in cmd.ToAsyncEnumerable())
             {
             }
@@ -130,8 +129,7 @@ public class SqliteBenchmarkWhere
     {
         for (var i = 0; i < Iterations; i++)
         {
-            var p = i;
-            var cmd = _ctx.SimpleEntity.Where(it => it.Id == p).Select(entity => new { entity.Id });
+            var cmd = _ctx.SimpleEntity.Where(it => it.Id == i).Select(entity => new { entity.Id });
             foreach (var row in await cmd.ToListAsync())
             {
             }
@@ -144,11 +142,23 @@ public class SqliteBenchmarkWhere
         var cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new { entity.Id }).Prepare();
         for (var i = 0; i < Iterations; i++)
         {
-            foreach (var row in await _db.ToListAsync(cmd, i))
+            foreach (var row in await cmd.ToListAsync(_db, i))
             {
             }
         }
     }
+    // [Benchmark()]
+    // //[BenchmarkCategory("Stream")]
+    // public async Task Nextorm_CachedParams_ToListAsync()
+    // {
+    //     for (var i = 0; i < Iterations; i++)
+    //     {
+    //         var cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new { entity.Id });
+    //         foreach (var row in await cmd.ToListAsync(i))
+    //         {
+    //         }
+    //     }
+    // }
     [Benchmark]
     //[BenchmarkCategory("Buffered")]
     public async Task EFCore_ToListAsync()
@@ -167,8 +177,7 @@ public class SqliteBenchmarkWhere
     {
         for (var i = 0; i < Iterations; i++)
         {
-            var p = i;
-            await foreach (var row in _efCtx.SimpleEntities.Where(it => it.Id == p).Select(entity => new { entity.Id }).AsAsyncEnumerable())
+            await foreach (var row in _efCtx.SimpleEntities.Where(it => it.Id == i).Select(entity => new { entity.Id }).AsAsyncEnumerable())
             {
             }
         }

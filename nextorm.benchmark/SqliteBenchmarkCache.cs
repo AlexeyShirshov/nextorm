@@ -19,7 +19,7 @@ public class SqliteBenchmarkCache
     private readonly TestDataRepository _repo;
     private readonly EFDataContext _efCtx;
 
-    [Params(1, 2, 3, 4, 5, 10, 15)]
+    [Params(1, 2, 3, 4, 5, 10, 15, 20)]
     public int Iterations { get; set; } = 1;
     public SqliteBenchmarkCache(bool withLogging = false)
     {
@@ -58,16 +58,16 @@ public class SqliteBenchmarkCache
             _repo.LargeEntity.Where(it => it.Id == i).Select(it => new { it.Id, it.Str, it.Dt }).ToList();
         }
     }
-    [Benchmark()]
-    public void NextormNonCached()
-    {
-        for (int i = 0; i < Iterations; i++)
-        {
-            var cmd = _repo.LargeEntity.Where(it => it.Id == i).Select(it => new { it.Id, it.Str, it.Dt });
-            cmd.Cache = false;
-            cmd.ToList();
-        }
-    }
+    // [Benchmark()]
+    // public void NextormNonCached()
+    // {
+    //     for (int i = 0; i < Iterations; i++)
+    //     {
+    //         var cmd = _repo.LargeEntity.Where(it => it.Id == i).Select(it => new { it.Id, it.Str, it.Dt });
+    //         cmd.Cache = false;
+    //         cmd.ToList();
+    //     }
+    // }
     [Benchmark()]
     public void NextormPrepared()
     {

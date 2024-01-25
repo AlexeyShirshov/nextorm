@@ -36,7 +36,7 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         _query = query;
     }
     #region Properties
-    internal ILogger? Logger { get; set; }
+    internal ILogger? Logger { get; init; }
     internal QueryCommand? Query { get => _query; set => _query = value; }
     internal IDataContext DataProvider => _dataProvider;
     internal Expression<Func<TEntity, bool>>? Condition { get => _condition; set => _condition = value; }
@@ -51,8 +51,7 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 
     public QueryCommand<TResult> Select<TResult>(Expression<Func<TEntity, TResult>> exp)
     {
-        var cmd = _dataProvider.CreateCommand<TResult>(exp, _condition, _joins?.ToArray(), Paging, _sorting?.ToArray(), _group, _having);
-        cmd.Logger = Logger;
+        var cmd = _dataProvider.CreateCommand<TResult>(exp, _condition, _joins?.ToArray(), Paging, _sorting?.ToArray(), _group, _having, Logger);
 
         if (_query is not null)
             cmd.From = new FromExpression(_query);
@@ -64,8 +63,7 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     }
     public QueryCommand<TEntity> ToCommand()
     {
-        var cmd = _dataProvider.CreateCommand<TEntity>(typeof(TEntity), _condition, _joins?.ToArray(), Paging, _sorting?.ToArray(), _group, _having);
-        cmd.Logger = Logger;
+        var cmd = _dataProvider.CreateCommand<TEntity>(typeof(TEntity), _condition, _joins?.ToArray(), Paging, _sorting?.ToArray(), _group, _having, Logger);
 
         if (_query is not null)
             cmd.From = new FromExpression(_query);
@@ -204,7 +202,7 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     public QueryCommand<bool> AnyCommand()
     {
         var cmd = ToCommand();
-        var queryCommand = _dataProvider.CreateCommand<bool>((TableAlias _) => NORM.SQL.exists(cmd), null, null, default, null, null, null);
+        var queryCommand = _dataProvider.CreateCommand<bool>((TableAlias _) => NORM.SQL.exists(cmd), null, null, default, null, null, null, Logger);
         queryCommand.SingleRow = true;
         cmd.IgnoreColumns = true;
         return queryCommand;
@@ -307,7 +305,7 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             anyCommand = new Lazy<QueryCommand<bool>>(() =>
             {
                 created = true;
-                var queryCommand = dataProvider.CreateCommand<bool>((TableAlias _) => NORM.SQL.exists(cmd), null, null, default, null, null, null);
+                var queryCommand = dataProvider.CreateCommand<bool>((TableAlias _) => NORM.SQL.exists(cmd), null, null, default, null, null, null, cmd.Logger);
                 queryCommand.SingleRow = true;
                 queryCommand.PrepareCommand(false, CancellationToken.None);
                 return queryCommand;
@@ -512,7 +510,7 @@ public class Entity : ICloneable
     public QueryCommand<TResult> Select<TResult>(Expression<Func<TableAlias, TResult>> exp)
     {
         //if (string.IsNullOrEmpty(_table)) throw new InvalidOperationException("Table must be specified");
-        var cmd = new QueryCommand<TResult>(_dataProvider, exp, _condition, _joins?.ToArray(), default, _sorting?.ToArray(), _group, _having) { Logger = Logger };
+        var cmd = new QueryCommand<TResult>(_dataProvider, exp, _condition, _joins?.ToArray(), default, _sorting?.ToArray(), _group, _having, Logger);
 
         if (!string.IsNullOrEmpty(_table))
             cmd.From = new FromExpression(_table);

@@ -8,7 +8,8 @@ Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical 
 
 
 ```
-| Method         | Mean     | Error     | StdDev    | Allocated |
-|--------------- |---------:|----------:|----------:|----------:|
-| SystemHashCode | 7.153 μs | 0.1061 μs | 0.0993 μs |         - |
-| CustomHashCode | 6.992 μs | 0.0400 μs | 0.0355 μs |         - |
+| Method         | Mean      | Error     | StdDev    | Allocated |
+|--------------- |----------:|----------:|----------:|----------:|
+| Explicit       | 17.448 ns | 0.2307 ns | 0.2045 ns |         - |
+| Boxing         | 18.392 ns | 0.1798 ns | 0.1594 ns |         - |
+| PatternMathing |  2.352 ns | 0.0670 ns | 0.0627 ns |         - |

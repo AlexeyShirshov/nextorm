@@ -337,34 +337,39 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
     }
     protected override Expression VisitBinary(BinaryExpression node)
     {
-        var leftNode = Visit(node.Left);
-        var rightNode = Visit(node.Right);
+        Expression? leftNode = null;
+        Expression? rightNode = null;
 
-        // if (rightNode is LambdaExpression lambda && lambda.Body.Type.IsAssignableTo(typeof(QueryCommand)))
-        // {
-        //     if (leftNode is LambdaExpression lambdaLeft && lambdaLeft.Body.Type.IsAssignableTo(typeof(QueryCommand)))
-        //     {
-        //         return Expression.MakeBinary(node.NodeType, leftNode, rightNode);
-        //     }
-        //     return Expression.MakeBinary(node.NodeType, Expression.Convert(leftNode, typeof(object)), rightNode);
-        // }
-        // else
-        // {
-        //     if (leftNode is LambdaExpression lambdaLeft && lambdaLeft.Body.Type.IsAssignableTo(typeof(QueryCommand)))
-        //     {
-        //         return Expression.MakeBinary(node.NodeType, leftNode, Expression.Convert(rightNode, typeof(object)));
-        //     }
-        // }
-
-        //TODO: optimize
-        if (leftNode.Type == rightNode.Type && leftNode.Type == typeof(string) && node.NodeType == ExpressionType.Add)
+        if (node.Left.Type == node.Right.Type && node.Left.Type == typeof(string) && node.NodeType == ExpressionType.Add)
         {
+            leftNode = Visit(node.Left);
+            rightNode = Visit(node.Right);
             return Expression.Call(ConcatMI, leftNode, rightNode);
         }
-        else if (!leftNode.Type.Similar(rightNode.Type))
-            return Expression.MakeBinary(node.NodeType, Expression.Convert(leftNode, typeof(object)), rightNode);
+        // else if (!node.Left.Type.Similar(node.Right.Type))
+        // {
+        //     leftNode = Visit(node.Left);
+        //     rightNode = Visit(node.Right);
+        //     return Expression.MakeBinary(node.NodeType, Expression.Convert(leftNode, typeof(object)), rightNode);
+        // }
 
-        return Expression.MakeBinary(node.NodeType, leftNode, rightNode);
+        if (node.NodeType == ExpressionType.Equal || node.NodeType == ExpressionType.NotEqual)
+        {
+            if (node.Left.NeedToConvert())
+            {
+                leftNode = Visit(node.Left);
+            }
+
+            if (node.Right.NeedToConvert())
+            {
+                rightNode = Visit(node.Right);
+            }
+
+            if (leftNode is not null || rightNode is not null)
+                return Expression.MakeBinary(node.NodeType, Expression.Convert(leftNode ?? node.Left, typeof(object)), rightNode ?? node.Right);
+        }
+
+        return base.VisitBinary(node);
     }
     protected override Expression VisitUnary(UnaryExpression node)
     {

@@ -397,6 +397,10 @@ public class SqlCommandTests
         var r = await _sut.ComplexEntity.Where(it => it.Boolean == true).AnyAsync();
 
         r.Should().BeTrue();
+
+        r = await _sut.ComplexEntity.Where(it => it.Id == 100).AnyAsync();
+
+        r.Should().BeFalse();
     }
     [Fact]
     public async Task SelectAny_ShouldReturnTrue()
@@ -429,6 +433,14 @@ public class SqlCommandTests
         var r = await _sut.ComplexEntity.Select(it => new { it.Id, exists = NORM.SQL.exists(_sut.SimpleEntity) }).ToListAsync();
 
         r.Should().NotBeEmpty();
+
+        r.Select(it => it.exists).All(it => it).Should().BeTrue();
+
+        r = await _sut.ComplexEntity.Select(it => new { it.Id, exists = NORM.SQL.exists(_sut.SimpleEntity.Where(it => it.Id == 100)) }).ToListAsync();
+
+        r.Should().NotBeEmpty();
+
+        r.Select(it => it.exists).All(it => it).Should().BeFalse();
     }
     [Fact]
     public async Task SelectExists_ShouldReturnTrue()

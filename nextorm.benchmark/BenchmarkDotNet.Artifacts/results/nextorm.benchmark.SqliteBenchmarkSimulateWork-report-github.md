@@ -11,11 +11,11 @@ Job=.NET 8.0  Runtime=.NET 8.0
 ```
 | Method                              | Mean       | Ratio | Gen0      | Allocated | Alloc Ratio |
 |------------------------------------ |-----------:|------:|----------:|----------:|------------:|
-| Nextorm_Prepared_StreamAsync        |   6.555 ms |  0.04 | 1382.8125 |   6.21 MB |        1.00 |
-| Dapper_AsyncStream                  |  29.994 ms |  0.19 | 3125.0000 |  14.08 MB |        2.27 |
-| Nextorm_Cached_AsyncStream          |  51.988 ms |  0.34 | 6500.0000 |   30.9 MB |        4.97 |
-| Nextorm_PreparedForLoop_ToListAsync | 155.749 ms |  1.00 | 1250.0000 |   6.23 MB |        1.00 |
-| Nextorm_Prepared_ToListAsync        | 155.894 ms |  1.00 | 1250.0000 |   6.21 MB |        1.00 |
-| Nextorm_Cached_ToList               | 237.881 ms |  1.53 | 6000.0000 |  30.56 MB |        4.92 |
-| Dapper_Async                        | 239.227 ms |  1.53 | 3000.0000 |  14.09 MB |        2.27 |
-| EFCore_Compiled_ToListAsync         | 241.896 ms |  1.55 | 4000.0000 |  20.41 MB |        3.29 |
+| Nextorm_Prepared_AsyncStream        |   6.158 ms |  0.04 | 1382.8125 |   6.21 MB |        1.00 |
+| Dapper_AsyncStream                  |  29.917 ms |  0.19 | 3125.0000 |  14.08 MB |        2.27 |
+| Nextorm_Cached_AsyncStream          |  52.894 ms |  0.34 | 6500.0000 |  29.57 MB |        4.76 |
+| Nextorm_PreparedForLoop_ToListAsync | 156.235 ms |  1.00 | 1250.0000 |   6.23 MB |        1.00 |
+| Nextorm_Prepared_ToListAsync        | 156.316 ms |  1.00 | 1250.0000 |   6.21 MB |        1.00 |
+| Dapper_Async                        | 209.758 ms |  1.34 | 3000.0000 |  14.09 MB |        2.27 |
+| Nextorm_Cached_ToList               | 240.995 ms |  1.54 | 6000.0000 |  29.23 MB |        4.70 |
+| EFCore_Compiled_ToListAsync         | 245.202 ms |  1.57 | 4000.0000 |  20.41 MB |        3.29 |

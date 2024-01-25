@@ -22,13 +22,15 @@ public interface IDataContext : IAsyncDisposable, IDisposable
         }
         return new(this) { Logger = CommandLogger };
     }
-    public QueryCommand<T> CreateCommand<T>(LambdaExpression exp, LambdaExpression? condition, JoinExpression[]? joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public QueryCommand<T> CreateCommand<T>(LambdaExpression exp, LambdaExpression? condition, JoinExpression[]? joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having, ILogger? logger)
     {
-        return new QueryCommand<T>(this, exp, condition, joins, paging, sorting, group, having);
+        return new QueryCommand<T>(this, exp, condition, joins, paging, sorting, group, having, logger);
     }
-    public QueryCommand<T> CreateCommand<T>(Type srcType, LambdaExpression? condition, JoinExpression[]? joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public QueryCommand<T> CreateCommand<T>(Type srcType, LambdaExpression? condition, JoinExpression[]? joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having, ILogger? logger)
     {
-        return new QueryCommand<T>(this, srcType, condition, joins, paging, sorting, group, having);
+        return new QueryCommand<T>(this, srcType, condition, joins, paging, sorting, group, having, logger);
     }
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<bool> AnyAsync(IPreparedQueryCommand<bool> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken) => ExecuteScalar<bool>(preparedQueryCommand, @params, true, cancellationToken);

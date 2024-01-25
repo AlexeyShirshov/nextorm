@@ -20,6 +20,12 @@ public static class ExpressionExtensions
         param = visitor.Target;
         return visitor.Has;
     }
+    public static bool NeedToConvert(this Expression exp)
+    {
+        var visitor = new TestSpecialMethodCallVisitor();
+        visitor.Visit(exp);
+        return visitor.Result;
+    }
 }
 public class TypeExpressionVisitor<T> : ExpressionVisitor
     where T : Expression

@@ -41,6 +41,9 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     internal int WherePlanHash;
     internal int GroupingPlanHash;
     internal int ResultPlanHash;
+    internal int FromPlanHash;
+    internal int UnionPlanHash;
+    internal int ReferencedQueriesPlanHash;
     internal Type? ResultType;
     private int _paramIdx;
     public Paging Paging;
@@ -56,15 +59,15 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     protected readonly Sorting[]? _sorting;
 
     //protected ArrayList _params = new();
-    public QueryCommand(IDataContext? dataProvider, LambdaExpression exp, LambdaExpression? condition, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having)
-        : this(dataProvider, exp, null, condition, null, paging, sorting, group, having)
+    public QueryCommand(IDataContext? dataProvider, LambdaExpression exp, LambdaExpression? condition, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having, ILogger? logger)
+        : this(dataProvider, exp, null, condition, null, paging, sorting, group, having, logger)
     {
     }
-    public QueryCommand(IDataContext? dataProvider, Type srcType, LambdaExpression? condition, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having)
-        : this(dataProvider, null, srcType, condition, null, paging, sorting, group, having)
+    public QueryCommand(IDataContext? dataProvider, Type srcType, LambdaExpression? condition, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having, ILogger? logger)
+        : this(dataProvider, null, srcType, condition, null, paging, sorting, group, having, logger)
     {
     }
-    protected QueryCommand(IDataContext? dataProvider, LambdaExpression? exp, Type? srcType, LambdaExpression? condition, JoinExpression[]? joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having)
+    protected QueryCommand(IDataContext? dataProvider, LambdaExpression? exp, Type? srcType, LambdaExpression? condition, JoinExpression[]? joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having, ILogger? logger)
     {
         _dataContext = dataProvider;
         _exp = exp;
@@ -75,8 +78,9 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         _sorting = sorting;
         _groupExp = group;
         _having = having;
+        Logger = logger;
     }
-    public ILogger? Logger { get; set; }
+    public ILogger? Logger { get; }
     public FromExpression? From { get => _from; set => _from = value; }
     public SelectExpression[]? SelectList => _selectList;
     public SelectExpression[]? GroupingList => _groupingList;
@@ -127,7 +131,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         _dataContext?.ResetPreparation(this);
     }
     public void PrepareCommand(CancellationToken cancellationToken) => PrepareCommand(false, cancellationToken);
-    public virtual void PrepareCommand(bool prepareMapOnly, CancellationToken cancellationToken)
+    public virtual void PrepareCommand(bool dontCalculateHash, CancellationToken cancellationToken)
     {
         if (_dataContext is null) throw new InvalidOperationException("Cannot prepare command in cache");
 #if DEBUG
@@ -136,7 +140,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         OneColumn = false;
 
         if (_from?.SubQuery is not null && !_from.SubQuery._isPrepared)
-            _from.SubQuery.PrepareCommand(prepareMapOnly, cancellationToken);
+            _from.SubQuery.PrepareCommand(dontCalculateHash, cancellationToken);
 
         var srcType = _srcType;
         if (srcType is null)
@@ -148,13 +152,13 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         }
 
         FromExpression? from = _from ?? _dataContext.GetFrom(srcType, this);
-        var joinPlanHash = PrepareJoin(prepareMapOnly, cancellationToken);
-        var (selectList, columnsPlanHash) = PrepareColumns(prepareMapOnly, srcType, cancellationToken);
-        var wherePlanHash = PrepareWhere(prepareMapOnly, cancellationToken);
-        var (groupingList, groupingPlanHash) = PrepareGrouping(prepareMapOnly, cancellationToken);
-        var sortingPlanHash = PrepareSorting(prepareMapOnly, cancellationToken);
+        var joinPlanHash = PrepareJoin(dontCalculateHash, cancellationToken);
+        var (selectList, columnsPlanHash) = PrepareColumns(dontCalculateHash, srcType, cancellationToken);
+        var wherePlanHash = PrepareWhere(dontCalculateHash, cancellationToken);
+        var (groupingList, groupingPlanHash) = PrepareGrouping(dontCalculateHash, cancellationToken);
+        var sortingPlanHash = PrepareSorting(dontCalculateHash, cancellationToken);
 
-        _union?.PrepareCommand(prepareMapOnly, cancellationToken);
+        _union?.PrepareCommand(dontCalculateHash, cancellationToken);
 
         _isPrepared = true;
         _selectList = selectList ?? [];
@@ -165,24 +169,43 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         // _sortingHash = sortingHash;
         // _whereHash = whereHash;
 
-        ColumnsPlanHash = columnsPlanHash;
-        JoinPlanHash = joinPlanHash;
-        SortingPlanHash = sortingPlanHash;
-        WherePlanHash = wherePlanHash;
-        GroupingPlanHash = groupingPlanHash;
-        //_payloadMgr = new FastPayloadManager(cache ? new Dictionary<Type, object?>() : null);
+        ColumnsPlanHash = columnsPlanHash == 7 ? 0 : columnsPlanHash;
+        JoinPlanHash = joinPlanHash == 7 ? 0 : joinPlanHash;
+        SortingPlanHash = sortingPlanHash == 7 ? 0 : sortingPlanHash;
+        WherePlanHash = wherePlanHash == 7 ? 0 : wherePlanHash;
+        GroupingPlanHash = groupingPlanHash == 7 ? 0 : groupingPlanHash;
+        FromPlanHash = dontCalculateHash ? 0 : GetFromExpressionPlanEqualityComparer().GetHashCode(_from);
 
-        // string capitalize(string str)
-        // {
-        //     return string.Concat(new ReadOnlySpan<char>(Char.ToUpper(str[0])), str.AsSpan()[1..]);
-        // }
+        if (!dontCalculateHash && _union is not null)
+        {
+            HashCode hash = new();
+            unchecked
+            {
+                hash.Add(_union, GetQueryPlanEqualityComparer());
+                hash.Add((int)_unionType);
+                UnionPlanHash = hash.ToHashCode();
+            }
+        }
+
+        if (!dontCalculateHash && _referencedQueries?.Count > 0)
+        {
+            HashCode hash = new();
+            unchecked
+            {
+                foreach (var item in _referencedQueries)
+                {
+                    hash.Add(item, GetQueryPlanEqualityComparer());
+                }
+                ReferencedQueriesPlanHash = hash.ToHashCode();
+            }
+        }
     }
 
     private (SelectExpression[]?, int) PrepareColumns(bool noHash, Type? srcType, CancellationToken cancellationToken)
     {
         //SelectExpressionPlanEqualityComparer? comparer = null;
         var selectList = _selectList;
-        var columnsPlanHash = 7;
+        int columnsPlanHash = 7;
         if (selectList is null && !IgnoreColumns)
         {
             if (_exp is not null)
@@ -413,7 +436,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     }
     private int PrepareJoin(bool noHash, CancellationToken cancellationToken)
     {
-        var joinPlanHash = 7;
+        int joinPlanHash = 7;
         if (_joins is not null)
         {
             if (_from is not null && string.IsNullOrEmpty(_from.TableAlias)) _from.TableAlias = "t1";
@@ -438,7 +461,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     }
     private int PrepareSorting(bool noHash, CancellationToken cancellationToken)
     {
-        var sortingPlanHash = 7;
+        int sortingPlanHash = 7;
         if (_sorting is not null)
         {
             var sortingSpan = _sorting.AsSpan();
@@ -486,7 +509,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     }
     private int PrepareWhere(bool noHash, CancellationToken cancellationToken)
     {
-        var wherePlanHash = 7;
+        int wherePlanHash = 7;
         if (_condition is not null)
         {
             var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataContext!, this, cancellationToken);
@@ -507,7 +530,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     private (SelectExpression[]?, int) PrepareGrouping(bool noHash, CancellationToken cancellationToken)
     {
         var groupingList = _groupingList;
-        var groupingPlanHash = 7;
+        int groupingPlanHash = 7;
         if (_groupExp is not null && groupingList is null)
         {
             if (_groupExp.Body is NewExpression ctor)
@@ -580,18 +603,28 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     {
         return string.Format("p{0}", _paramIdx++);
     }
-    public void ReplaceCommand(QueryCommand cmd, int idx)
+    internal void ReplaceCommand(QueryCommand cmd, int idx)
     {
+#if DEBUG
         if (_dataContext != cmd._dataContext)
             throw new InvalidOperationException("Different data context");
 
-        _referencedQueries![idx] = cmd;
-        var comparer = GetSelectExpressionPlanEqualityComparer();
-        ColumnsPlanHash = 7 * 13 + comparer.GetHashCode(_selectList![0]);
+        if (_referencedQueries is null) throw new InvalidOperationException("Referenced queries must be initialized");
+#endif
+
+        _referencedQueries[idx] = cmd;
+        // var comparer = GetSelectExpressionPlanEqualityComparer();
+        // _selectList[0].PlanHashCode = comparer.GetHashCode(_selectList[0]);
+        // ColumnsPlanHash = 7 * 13 + _selectList[0].PlanHashCode;
     }
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0028:Simplify collection initialization", Justification = "<Pending>")]
-    public int AddCommand(QueryCommand cmd)
+    int IQueryProvider.AddCommand(QueryCommand cmd)
     {
+#if DEBUG
+        if (_isPrepared) throw new InvalidOperationException("QueryCommand prepared");
+
+        if (!cmd.IsPrepared) throw new InvalidOperationException("QueryCommand must be prepared");
+#endif
         // if (_dataProvider != cmd._dataProvider)
         //     throw new InvalidOperationException("Different data context");
 
@@ -637,7 +670,6 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
             dst._paramIdx = _paramIdx;
             dst._union = _union;
             dst._from = _from;
-            dst.Logger = Logger;
         }
         else
         {
@@ -645,16 +677,21 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
                 dst._from = _from.CloneForCache();
             if (_union is not null)
                 dst._union = _union.CloneForCache();
+
+            if (_referencedQueries?.Count > 0)
+            {
+                dst._referencedQueries = _referencedQueries.Select(it => it.CloneForCache()).ToList();
+            }
         }
     }
 
     protected virtual QueryCommand CreateSelf()
     {
-        return new QueryCommand(_dataContext, _exp, _srcType, _condition, _joins, Paging, _sorting, _groupExp, _having);
+        return new QueryCommand(_dataContext, _exp, _srcType, _condition, _joins, Paging, _sorting, _groupExp, _having, Logger);
     }
     protected virtual QueryCommand CreateSelfForClone()
     {
-        return new QueryCommand(null, null, _srcType, null, CloneForCache(_joins), Paging, _sorting, null, _having);
+        return new QueryCommand(null, null, _srcType, null, CloneForCache(_joins), Paging, _sorting, null, _having, Logger);
     }
 
     protected static JoinExpression[]? CloneForCache(JoinExpression[]? joins)
@@ -710,16 +747,16 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
 
 public class QueryCommand<TResult> : QueryCommand//, IAsyncEnumerable<TResult>
 {
-    public QueryCommand(IDataContext? dataProvider, LambdaExpression exp, LambdaExpression? condition, JoinExpression[]? joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having)
-        : this(dataProvider, exp, null, condition, joins, paging, sorting, group, having)
+    public QueryCommand(IDataContext? dataProvider, LambdaExpression exp, LambdaExpression? condition, JoinExpression[]? joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having, ILogger? logger)
+        : this(dataProvider, exp, null, condition, joins, paging, sorting, group, having, logger)
     {
     }
-    public QueryCommand(IDataContext? dataProvider, Type srcType, LambdaExpression? condition, JoinExpression[]? joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having)
-        : this(dataProvider, null, srcType, condition, joins, paging, sorting, group, having)
+    public QueryCommand(IDataContext? dataProvider, Type srcType, LambdaExpression? condition, JoinExpression[]? joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having, ILogger? logger)
+        : this(dataProvider, null, srcType, condition, joins, paging, sorting, group, having, logger)
     {
     }
-    protected QueryCommand(IDataContext? dataProvider, LambdaExpression? exp, Type? srcType, LambdaExpression? condition, JoinExpression[]? joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having)
-        : base(dataProvider, exp, srcType, condition, joins, paging, sorting, group, having)
+    protected QueryCommand(IDataContext? dataProvider, LambdaExpression? exp, Type? srcType, LambdaExpression? condition, JoinExpression[]? joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having, ILogger? logger)
+        : base(dataProvider, exp, srcType, condition, joins, paging, sorting, group, having, logger)
     {
 
     }
@@ -1029,11 +1066,11 @@ public class QueryCommand<TResult> : QueryCommand//, IAsyncEnumerable<TResult>
     }
     protected override QueryCommand CreateSelf()
     {
-        return new QueryCommand<TResult>(_dataContext, _exp, _srcType, _condition, Joins, Paging, _sorting, _groupExp, _having);
+        return new QueryCommand<TResult>(_dataContext, _exp, _srcType, _condition, Joins, Paging, _sorting, _groupExp, _having, Logger);
     }
     protected override QueryCommand CreateSelfForClone()
     {
-        return new QueryCommand<TResult>(null, null, _srcType, null, CloneForCache(Joins), Paging, _sorting, null, _having);
+        return new QueryCommand<TResult>(null, null, _srcType, null, CloneForCache(Joins), Paging, _sorting, null, _having, Logger);
     }
     public QueryCommand<TResult> OrderBy(int columnIndex, OrderDirection direction)
     {
@@ -1041,7 +1078,7 @@ public class QueryCommand<TResult> : QueryCommand//, IAsyncEnumerable<TResult>
 
         var cmd = new QueryCommand<TResult>(_dataContext, _exp, _srcType, _condition, Joins, Paging, _sorting is null
             ? [new Sorting(columnIndex) { Direction = direction }]
-            : [.. _sorting, new Sorting(columnIndex) { Direction = direction }], _groupExp, _having);
+            : [.. _sorting, new Sorting(columnIndex) { Direction = direction }], _groupExp, _having, Logger);
 
         CopyTo(cmd, true);
         cmd.ResetPreparation();

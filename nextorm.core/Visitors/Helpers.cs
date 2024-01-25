@@ -1,3 +1,5 @@
+namespace nextorm.core;
+
 public static class Helpers
 {
     public static string ToShortString(this Guid guid)

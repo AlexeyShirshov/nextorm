@@ -58,6 +58,8 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
         if (!Equals(x.UnionQuery, y.UnionQuery)) return false;
 
+        if (!IEqualityComparerExtensions.Equals(this, x.ReferencedQueries, y.ReferencedQueries)) return false;
+
         return true;
     }
 
@@ -74,32 +76,38 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
         {
             HashCode hash = new();
 
-            if (obj.From is not null)
-                hash.Add(_fromComparer.GetHashCode(obj.From));
+            if (obj.FromPlanHash != 0)
+                hash.Add(obj.FromPlanHash);
 
             if (obj.EntityType is not null)
                 hash.Add(obj.EntityType);
 
-            hash.Add(obj.ResultPlanHash);
+            if (obj.ResultPlanHash != 0)
+                hash.Add(obj.ResultPlanHash);
 
-            hash.Add(obj.WherePlanHash);
+            if (obj.WherePlanHash != 0)
+                hash.Add(obj.WherePlanHash);
 
-            hash.Add(obj.ColumnsPlanHash);
+            if (obj.ColumnsPlanHash != 0)
+                hash.Add(obj.ColumnsPlanHash);
 
-            hash.Add(obj.JoinPlanHash);
+            if (obj.JoinPlanHash != 0)
+                hash.Add(obj.JoinPlanHash);
 
-            hash.Add(obj.SortingPlanHash);
+            if (obj.SortingPlanHash != 0)
+                hash.Add(obj.SortingPlanHash);
 
             hash.Add(obj.Paging.Limit);
             hash.Add(obj.Paging.Offset);
 
-            hash.Add(obj.GroupingPlanHash);
+            if (obj.GroupingPlanHash != 0)
+                hash.Add(obj.GroupingPlanHash);
 
-            if (obj.UnionQuery is not null)
-            {
-                hash.Add(obj.UnionQuery, this);
-                hash.Add(obj.UnionType);
-            }
+            if (obj.UnionPlanHash != 0)
+                hash.Add(obj.UnionPlanHash);
+
+            if (obj.ReferencedQueriesPlanHash != 0)
+                hash.Add(obj.ReferencedQueriesPlanHash);
 
             return hash.ToHashCode();
         }
