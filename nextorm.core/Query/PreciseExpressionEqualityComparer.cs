@@ -5,7 +5,7 @@ using System.Reflection;
 
 namespace nextorm.core;
 
-public sealed class PreciseExpressionEqualityComparer : IEqualityComparer<Expression?>
+public sealed class PreciseExpressionEqualityComparerDELETE : IEqualityComparer<Expression?>
 {
     private readonly IQueryProvider _queryProvider;
     private readonly ILogger? _logger;
@@ -14,11 +14,11 @@ public sealed class PreciseExpressionEqualityComparer : IEqualityComparer<Expres
     //     : this(new ExpressionCache<Delegate>())
     // {
     // }
-    public PreciseExpressionEqualityComparer(IQueryProvider queryProvider)
+    public PreciseExpressionEqualityComparerDELETE(IQueryProvider queryProvider)
         : this(queryProvider, null)
     {
     }
-    public PreciseExpressionEqualityComparer(IQueryProvider queryProvider, ILogger? logger)
+    public PreciseExpressionEqualityComparerDELETE(IQueryProvider queryProvider, ILogger? logger)
     {
         _queryProvider = queryProvider;
         _logger = logger;
@@ -166,11 +166,12 @@ public sealed class PreciseExpressionEqualityComparer : IEqualityComparer<Expres
                     AddListToHash(newExpression.Arguments);
                     hash.Add(newExpression.Constructor);
 
-                    if (newExpression.Members != null)
+                    var members = newExpression.Members;
+                    if (members is not null)
                     {
-                        for (var i = 0; i < newExpression.Members.Count; i++)
+                        for (var (i, cnt) = (0, members.Count); i < cnt; i++)
                         {
-                            hash.Add(newExpression.Members[i]);
+                            hash.Add(members[i]);
                         }
                     }
 
@@ -190,9 +191,10 @@ public sealed class PreciseExpressionEqualityComparer : IEqualityComparer<Expres
                     hash.Add(switchExpression.SwitchValue, this);
                     AddExpressionToHashIfNotNull(switchExpression.DefaultBody);
                     AddToHashIfNotNull(switchExpression.Comparison);
-                    for (var i = 0; i < switchExpression.Cases.Count; i++)
+                    var cases = switchExpression.Cases;
+                    for (var (i, cnt) = (0, cases.Count); i < cnt; i++)
                     {
-                        var @case = switchExpression.Cases[i];
+                        var @case = cases[i];
                         hash.Add(@case.Body, this);
                         AddListToHash(@case.TestValues);
                     }
@@ -203,11 +205,12 @@ public sealed class PreciseExpressionEqualityComparer : IEqualityComparer<Expres
                     hash.Add(tryExpression.Body, this);
                     AddExpressionToHashIfNotNull(tryExpression.Fault);
                     AddExpressionToHashIfNotNull(tryExpression.Finally);
-                    if (tryExpression.Handlers != null)
+                    var handlers = tryExpression.Handlers;
+                    if (handlers is not null)
                     {
-                        for (var i = 0; i < tryExpression.Handlers.Count; i++)
+                        for (var (i, cnt) = (0, handlers.Count); i < cnt; i++)
                         {
-                            var handler = tryExpression.Handlers[i];
+                            var handler = handlers[i];
                             hash.Add(handler.Body, this);
                             AddExpressionToHashIfNotNull(handler.Variable);
                             AddExpressionToHashIfNotNull(handler.Filter);
@@ -258,7 +261,7 @@ public sealed class PreciseExpressionEqualityComparer : IEqualityComparer<Expres
             void AddListToHash<T>(IReadOnlyList<T> expressions)
                 where T : Expression
             {
-                for (var i = 0; i < expressions.Count; i++)
+                for (var (i, cnt) = (0, expressions.Count); i < cnt; i++)
                 {
                     hash.Add(expressions[i], this);
                 }
@@ -266,7 +269,7 @@ public sealed class PreciseExpressionEqualityComparer : IEqualityComparer<Expres
 
             void AddInitializersToHash(IReadOnlyList<ElementInit> initializers)
             {
-                for (var i = 0; i < initializers.Count; i++)
+                for (var (i, cnt) = (0, initializers.Count); i < cnt; i++)
                 {
                     AddListToHash(initializers[i].Arguments);
                     hash.Add(initializers[i].AddMethod);
@@ -275,7 +278,7 @@ public sealed class PreciseExpressionEqualityComparer : IEqualityComparer<Expres
 
             void AddMemberBindingsToHash(IReadOnlyList<MemberBinding> memberBindings)
             {
-                for (var i = 0; i < memberBindings.Count; i++)
+                for (var (i, cnt) = (0, memberBindings.Count); i < cnt; i++)
                 {
                     var memberBinding = memberBindings[i];
 
@@ -302,14 +305,37 @@ public sealed class PreciseExpressionEqualityComparer : IEqualityComparer<Expres
     }
 
     /// <inheritdoc />
-    public bool Equals(Expression? x, Expression? y)
-        => new ExpressionComparer(this).Compare(x, y);
+    public bool Equals(Expression? left, Expression? right)
+    {
+        if (left == right)
+        {
+            return true;
+        }
+
+        if (left == null
+            || right == null)
+        {
+            return false;
+        }
+
+        if (left.NodeType != right.NodeType)
+        {
+            return false;
+        }
+
+        if (left.Type != right.Type)
+        {
+            return false;
+        }
+
+        return new ExpressionComparer().Compare2(left, right);
+    }
 
     private struct ExpressionComparer
     {
         private Dictionary<ParameterExpression, ParameterExpression>? _parameterScope;
-        private readonly PreciseExpressionEqualityComparer _equalityComparer;
-        public ExpressionComparer(PreciseExpressionEqualityComparer _EqualityComparer)
+        private readonly PreciseExpressionEqualityComparerDELETE _equalityComparer;
+        public ExpressionComparer(PreciseExpressionEqualityComparerDELETE _EqualityComparer)
         {
             _equalityComparer = _EqualityComparer;
         }
@@ -337,32 +363,37 @@ public sealed class PreciseExpressionEqualityComparer : IEqualityComparer<Expres
                 return false;
             }
 
+            return Compare2(left, right);
+        }
+
+        internal bool Compare2(Expression? left, Expression? right)
+        {
             return left switch
             {
-                BinaryExpression leftBinary => CompareBinary(leftBinary, (BinaryExpression)right),
-                BlockExpression leftBlock => CompareBlock(leftBlock, (BlockExpression)right),
-                ConditionalExpression leftConditional => CompareConditional(leftConditional, (ConditionalExpression)right),
-                ConstantExpression leftConstant => CompareConstant(leftConstant, (ConstantExpression)right),
+                BinaryExpression leftBinary => CompareBinary(leftBinary, (BinaryExpression)right!),
+                BlockExpression leftBlock => CompareBlock(leftBlock, (BlockExpression)right!),
+                ConditionalExpression leftConditional => CompareConditional(leftConditional, (ConditionalExpression)right!),
+                ConstantExpression leftConstant => CompareConstant(leftConstant, (ConstantExpression)right!),
                 DefaultExpression => true, // Intentionally empty. No additional members
-                GotoExpression leftGoto => CompareGoto(leftGoto, (GotoExpression)right),
-                IndexExpression leftIndex => CompareIndex(leftIndex, (IndexExpression)right),
-                InvocationExpression leftInvocation => CompareInvocation(leftInvocation, (InvocationExpression)right),
-                LabelExpression leftLabel => CompareLabel(leftLabel, (LabelExpression)right),
-                LambdaExpression leftLambda => CompareLambda(leftLambda, (LambdaExpression)right),
-                ListInitExpression leftListInit => CompareListInit(leftListInit, (ListInitExpression)right),
-                LoopExpression leftLoop => CompareLoop(leftLoop, (LoopExpression)right),
-                MemberExpression leftMember => CompareMember(leftMember, (MemberExpression)right),
-                MemberInitExpression leftMemberInit => CompareMemberInit(leftMemberInit, (MemberInitExpression)right),
-                MethodCallExpression leftMethodCall => CompareMethodCall(leftMethodCall, (MethodCallExpression)right),
-                NewArrayExpression leftNewArray => CompareNewArray(leftNewArray, (NewArrayExpression)right),
-                NewExpression leftNew => CompareNew(leftNew, (NewExpression)right),
-                ParameterExpression leftParameter => CompareParameter(leftParameter, (ParameterExpression)right),
+                GotoExpression leftGoto => CompareGoto(leftGoto, (GotoExpression)right!),
+                IndexExpression leftIndex => CompareIndex(leftIndex, (IndexExpression)right!),
+                InvocationExpression leftInvocation => CompareInvocation(leftInvocation, (InvocationExpression)right!),
+                LabelExpression leftLabel => CompareLabel(leftLabel, (LabelExpression)right!),
+                LambdaExpression leftLambda => CompareLambda(leftLambda, (LambdaExpression)right!),
+                ListInitExpression leftListInit => CompareListInit(leftListInit, (ListInitExpression)right!),
+                LoopExpression leftLoop => CompareLoop(leftLoop, (LoopExpression)right!),
+                MemberExpression leftMember => CompareMember(leftMember, (MemberExpression)right!),
+                MemberInitExpression leftMemberInit => CompareMemberInit(leftMemberInit, (MemberInitExpression)right!),
+                MethodCallExpression leftMethodCall => CompareMethodCall(leftMethodCall, (MethodCallExpression)right!),
+                NewArrayExpression leftNewArray => CompareNewArray(leftNewArray, (NewArrayExpression)right!),
+                NewExpression leftNew => CompareNew(leftNew, (NewExpression)right!),
+                ParameterExpression leftParameter => CompareParameter(leftParameter, (ParameterExpression)right!),
                 RuntimeVariablesExpression leftRuntimeVariables => CompareRuntimeVariables(
-                    leftRuntimeVariables, (RuntimeVariablesExpression)right),
-                SwitchExpression leftSwitch => CompareSwitch(leftSwitch, (SwitchExpression)right),
-                TryExpression leftTry => CompareTry(leftTry, (TryExpression)right),
-                TypeBinaryExpression leftTypeBinary => CompareTypeBinary(leftTypeBinary, (TypeBinaryExpression)right),
-                UnaryExpression leftUnary => CompareUnary(leftUnary, (UnaryExpression)right),
+                    leftRuntimeVariables, (RuntimeVariablesExpression)right!),
+                SwitchExpression leftSwitch => CompareSwitch(leftSwitch, (SwitchExpression)right!),
+                TryExpression leftTry => CompareTry(leftTry, (TryExpression)right!),
+                TypeBinaryExpression leftTypeBinary => CompareTypeBinary(leftTypeBinary, (TypeBinaryExpression)right!),
+                UnaryExpression leftUnary => CompareUnary(leftUnary, (UnaryExpression)right!),
 
                 _ => left.NodeType == ExpressionType.Extension
                     ? left.Equals(right)

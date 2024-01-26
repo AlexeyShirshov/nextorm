@@ -490,11 +490,12 @@ public class DbContext : IDataContext
                 sqlBuilder.Append(" from ").Append(fromStr);
             }
 
-            if (cmd.Joins is not null)
+            var joins = cmd.Joins;
+            if (joins is not null)
             {
-                for (var idx = 0; idx < cmd.Joins.Length; idx++)
+                for (var (idx, cnt) = (0, joins.Length); idx < cnt; idx++)
                 {
-                    var join = cmd.Joins[idx];
+                    var join = joins[idx];
 
                     var joinSql = MakeJoin(join, cmd, @params, paramMode);
                     if (!paramMode) sqlBuilder!.Append(joinSql);
@@ -507,14 +508,15 @@ public class DbContext : IDataContext
                 if (!paramMode) sqlBuilder!.AppendLine().Append(" where ").Append(whereSql);
             }
 
-            if (cmd.GroupingList?.Length > 0)
+            var grouping = cmd.GroupingList;
+            if (grouping?.Length > 0)
             {
                 if (!paramMode) sqlBuilder!.AppendLine().Append(" group by ");
 
-                var groupingListCount = cmd.GroupingList.Length;
+                var groupingListCount = grouping.Length;
                 for (var i = 0; i < groupingListCount; i++)
                 {
-                    var item = cmd.GroupingList[i];
+                    var item = grouping[i];
                     var (needAliasForColumn, column) = MakeColumn(item.Expression!, entityType, cmd, false, @params, paramMode);
 
                     if (!paramMode)
@@ -558,12 +560,14 @@ public class DbContext : IDataContext
                 if (!paramMode) sqlBuilder!.Append(sql);
             }
 
-            if (cmd.Sorting is not null)
+            var sortingList = cmd.Sorting;
+            if (sortingList is not null)
             {
                 if (!paramMode) sqlBuilder!.AppendLine().Append(" order by ");
 
-                foreach (var sorting in cmd.Sorting)
+                for (var (i, cnt) = (0, sortingList.Length); i < cnt; i++)
                 {
+                    var sorting = sortingList[i];
                     if (sorting.PreparedExpression is not null)
                     {
                         var sortingSql = MakeSort(entityType, cmd, sorting.PreparedExpression, 0, null, @params, paramMode);

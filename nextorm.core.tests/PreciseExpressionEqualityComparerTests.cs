@@ -3,11 +3,11 @@ using System.Linq.Expressions;
 namespace nextorm.core.tests;
 public class PreciseExpressionEqualityComparerTests
 {
-    private readonly PreciseExpressionEqualityComparer _sut;
+    private readonly PreciseExpressionEqualityComparerDELETE _sut;
 
     public PreciseExpressionEqualityComparerTests()
     {
-        _sut = new PreciseExpressionEqualityComparer(new QueryProvider());
+        _sut = new PreciseExpressionEqualityComparerDELETE(new QueryProvider());
 
     }
     [Fact]
@@ -68,7 +68,7 @@ class QueryProvider : IQueryProvider
 
     public JoinExpressionPlanEqualityComparer GetJoinExpressionPlanEqualityComparer() => new(this);
 
-    public PreciseExpressionEqualityComparer GetPreciseExpressionEqualityComparer() => new(this);
+    // public PreciseExpressionEqualityComparer GetPreciseExpressionEqualityComparer() => new(this);
 
     public QueryPlanEqualityComparer GetQueryPlanEqualityComparer() => new(this);
 

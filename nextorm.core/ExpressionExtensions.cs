@@ -95,8 +95,9 @@ public class ReplaceConstantsExpressionVisitor : ExpressionVisitor
     {
         if (_replaceParams is not null)
         {
-            foreach (var param in _replaceParams)
+            for (var (i, cnt) = (0, _replaceParams.Length); i < cnt; i++)
             {
+                var param = _replaceParams[i];
                 if (param.GetType() == node.Type || param.GetType().IsAssignableFrom(node.Type) || param.GetType().IsAssignableTo(node.Type))
                 {
                     _params.Add((node, param));

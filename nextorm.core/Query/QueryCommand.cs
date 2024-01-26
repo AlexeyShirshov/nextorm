@@ -53,7 +53,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     private SelectExpressionPlanEqualityComparer? _selectExpressionPlanComparer;
     private FromExpressionPlanEqualityComparer? _fromExpressionPlanComparer;
     private JoinExpressionPlanEqualityComparer? _joinExpressionPlanComparer;
-    private PreciseExpressionEqualityComparer? _preciseExpressionComparer;
+    // private PreciseExpressionEqualityComparer? _preciseExpressionComparer;
     private SortingExpressionPlanEqualityComparer? _sortingExpressionPlanComparer;
     private SelectExpression[]? _groupingList;
     protected readonly Sorting[]? _sorting;
@@ -99,7 +99,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _isPrepared;
     }
-    //public Expression? Condition => _condition;
+    public Expression? Condition => _condition;
     public JoinExpression[]? Joins => _joins;
     public bool Cache
     {
@@ -192,8 +192,9 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
             HashCode hash = new();
             unchecked
             {
-                foreach (var item in _referencedQueries)
+                for (var (i, cnt) = (0, _referencedQueries.Count); i < cnt; i++)
                 {
+                    var item = _referencedQueries[i];
                     hash.Add(item, GetQueryPlanEqualityComparer());
                 }
                 ReferencedQueriesPlanHash = hash.ToHashCode();
@@ -417,7 +418,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
                     }
                     else if (!_dontCache && !noHash)
                     {
-                        for (int i = 0; i < selectList.Length; i++) unchecked
+                        for (var (i, cnt) = (0, selectList.Length); i < cnt; i++) unchecked
                             {
                                 var selExp = selectList[i];
 
@@ -441,7 +442,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         {
             if (_from is not null && string.IsNullOrEmpty(_from.TableAlias)) _from.TableAlias = "t1";
 
-            for (var idx = 0; idx < _joins.Length; idx++)
+            for (var (idx, cnt) = (0, _joins.Length); idx < cnt; idx++)
             {
                 var join = _joins[idx];
 
@@ -467,7 +468,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
             var sortingSpan = _sorting.AsSpan();
             var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataContext!, this, cancellationToken);
 
-            for (var i = 0; i < _sorting.Length; i++)
+            for (var (i, cnt) = (0, _sorting.Length); i < cnt; i++)
             {
                 if (cancellationToken.IsCancellationRequested)
                     break;
@@ -698,8 +699,9 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     {
         if (joins is null) return null;
 
-        var newJoins = new JoinExpression[joins.Length];
-        for (var idx = 0; idx < joins.Length; idx++)
+        var cnt = joins.Length;
+        var newJoins = new JoinExpression[cnt];
+        for (var idx = 0; idx < cnt; idx++)
         {
             newJoins[idx] = joins[idx].CloneForCache();
         }
@@ -728,7 +730,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     public SelectExpressionPlanEqualityComparer GetSelectExpressionPlanEqualityComparer() => _selectExpressionPlanComparer ??= new SelectExpressionPlanEqualityComparer(this);
     public FromExpressionPlanEqualityComparer GetFromExpressionPlanEqualityComparer() => _fromExpressionPlanComparer ??= new FromExpressionPlanEqualityComparer(this);
     public JoinExpressionPlanEqualityComparer GetJoinExpressionPlanEqualityComparer() => _joinExpressionPlanComparer ??= new JoinExpressionPlanEqualityComparer(this);
-    public PreciseExpressionEqualityComparer GetPreciseExpressionEqualityComparer() => _preciseExpressionComparer ??= new PreciseExpressionEqualityComparer(this);
+    // public PreciseExpressionEqualityComparer GetPreciseExpressionEqualityComparer() => _preciseExpressionComparer ??= new PreciseExpressionEqualityComparer(this);
     public SortingExpressionPlanEqualityComparer GetSortingExpressionPlanEqualityComparer() => _sortingExpressionPlanComparer ??= new SortingExpressionPlanEqualityComparer(this);
 
     protected void SetUnion(QueryCommand queryCommand, UnionType unionType)

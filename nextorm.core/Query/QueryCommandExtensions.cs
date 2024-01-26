@@ -22,8 +22,10 @@ public static class QueryCommandExtensions
                 if (@params is not null)
                 {
                     var t = @params.GetType();
-                    foreach (var prop in t.GetProperties(BindingFlags.Instance | BindingFlags.Public))
+                    var props = t.GetProperties(BindingFlags.Instance | BindingFlags.Public);
+                    for (var (i, cnt) = (0, props.Length); i < cnt; i++)
                     {
+                        var prop = props[i];
                         ps.Add(new Param(prop.Name, prop.GetValue(@params)));
                     }
                 }

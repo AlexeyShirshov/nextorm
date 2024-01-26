@@ -244,10 +244,12 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             {
                 if (!_paramMode) _builder!.Append(_dataProvider.MakeCount(node.Method.Name.EndsWith("distinct"), node.Method.Name.Contains("big")));
 
-                if (node.Arguments is [NewArrayExpression args] && args.Expressions is not [])//ReadOnlyCollection<Expression> args
+                if (node.Arguments is [NewArrayExpression newArray] && newArray.Expressions is not [])//ReadOnlyCollection<Expression> args
                 {
-                    foreach (var argExp in args.Expressions)
+                    var items = newArray.Expressions;
+                    for (var (i, cnt) = (0, items.Count); i < cnt; i++)
                     {
+                        var argExp = items[i];
                         using var visitor = new BaseExpressionVisitor(_entityType, _dataProvider, _tableProvider, 0, null, _paramProvider, _queryProvider, _dontNeedAlias, _paramMode);
                         visitor.Visit(argExp);
                         _params.AddRange(visitor.Params);
@@ -265,8 +267,10 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             {
                 if (!_paramMode) _builder!.Append(node.Method.Name).Append('(');
 
-                foreach (var argExp in node.Arguments)
+                var args = node.Arguments;
+                for (var (i, cnt) = (0, args.Count); i < cnt; i++)
                 {
+                    var argExp = args[i];
                     using var visitor = new BaseExpressionVisitor(_entityType, _dataProvider, _tableProvider, 0, null, _paramProvider, _queryProvider, _dontNeedAlias, _paramMode);
                     visitor.Visit(argExp);
                     _params.AddRange(visitor.Params);
@@ -302,8 +306,10 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                         _builder!.Append("distinct ");
                 }
 
-                foreach (var argExp in node.Arguments)
+                var args = node.Arguments;
+                for (var (i, cnt) = (0, args.Count); i < cnt; i++)
                 {
+                    var argExp = args[i];
                     using var visitor = new BaseExpressionVisitor(_entityType, _dataProvider, _tableProvider, 0, null, _paramProvider, _queryProvider, _dontNeedAlias, _paramMode);
                     visitor.Visit(argExp);
                     _params.AddRange(visitor.Params);
@@ -334,8 +340,10 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                     if (!_paramMode)
                         _builder!.Append('(');
 
-                    foreach (var arg in node.Arguments)
+                    var args = node.Arguments;
+                    for (var (i, cnt) = (0, args.Count); i < cnt; i++)
                     {
+                        var arg = args[i];
                         Visit(arg);
                         _builder!.Append(_dataProvider.ConcatStringOperator);
                     }

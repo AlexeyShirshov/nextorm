@@ -10,5 +10,5 @@ public interface IQueryProvider
     FromExpressionPlanEqualityComparer GetFromExpressionPlanEqualityComparer();
     JoinExpressionPlanEqualityComparer GetJoinExpressionPlanEqualityComparer();
     SortingExpressionPlanEqualityComparer GetSortingExpressionPlanEqualityComparer();
-    PreciseExpressionEqualityComparer GetPreciseExpressionEqualityComparer();
+    // PreciseExpressionEqualityComparer GetPreciseExpressionEqualityComparer();
 }

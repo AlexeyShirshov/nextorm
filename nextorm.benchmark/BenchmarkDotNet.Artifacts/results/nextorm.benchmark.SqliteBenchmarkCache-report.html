@@ -2,7 +2,7 @@
 <html lang='en'>
 <head>
 <meta charset='utf-8' />
-<title>nextorm.benchmark.SqliteBenchmarkCache-20240125-190452</title>
+<title>nextorm.benchmark.SqliteBenchmarkCache-20240126-195930</title>
 
 <style type="text/css">
 	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
@@ -17,42 +17,38 @@ BenchmarkDotNet v0.13.10, Windows 11 (10.0.22621.3007/22H2/2022Update/SunValley2
 Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical cores
 .NET SDK 8.0.101
   [Host]     : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX2
-  Job-STRUFF : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX2
+  Job-CLZGZP : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX2
 </code></pre>
 <pre><code>Runtime=.NET 8.0  IterationCount=20  
 </code></pre>
 
 <table>
-<thead><tr><th>Method    </th><th>Iterations</th><th>Mean</th><th>Error</th><th>StdDev</th>
+<thead><tr><th>Method   </th><th>Iterations</th><th>Mean</th><th>Error</th><th>StdDev</th>
 </tr>
-</thead><tbody><tr><td>Dapper</td><td>1</td><td>246.2 &mu;s</td><td>7.14 &mu;s</td><td>8.22 &mu;s</td>
-</tr><tr><td>NextormNonCached</td><td>1</td><td>307.6 &mu;s</td><td>8.55 &mu;s</td><td>9.50 &mu;s</td>
-</tr><tr><td>NextormCached</td><td>1</td><td>316.6 &mu;s</td><td>12.75 &mu;s</td><td>14.68 &mu;s</td>
-</tr><tr><td>NextormPrepared</td><td>1</td><td>319.5 &mu;s</td><td>7.84 &mu;s</td><td>9.03 &mu;s</td>
-</tr><tr><td>NextormPrepared</td><td>2</td><td>358.1 &mu;s</td><td>8.92 &mu;s</td><td>9.91 &mu;s</td>
-</tr><tr><td>NextormCached</td><td>2</td><td>382.7 &mu;s</td><td>12.56 &mu;s</td><td>13.44 &mu;s</td>
-</tr><tr><td>NextormPrepared</td><td>3</td><td>392.1 &mu;s</td><td>9.44 &mu;s</td><td>10.88 &mu;s</td>
-</tr><tr><td>NextormPrepared</td><td>4</td><td>426.0 &mu;s</td><td>10.40 &mu;s</td><td>11.97 &mu;s</td>
-</tr><tr><td>NextormCached</td><td>3</td><td>451.1 &mu;s</td><td>14.46 &mu;s</td><td>15.48 &mu;s</td>
-</tr><tr><td>NextormPrepared</td><td>5</td><td>455.1 &mu;s</td><td>13.45 &mu;s</td><td>14.94 &mu;s</td>
-</tr><tr><td>NextormCached</td><td>4</td><td>512.3 &mu;s</td><td>13.92 &mu;s</td><td>16.03 &mu;s</td>
-</tr><tr><td>NextormCached</td><td>5</td><td>563.0 &mu;s</td><td>12.56 &mu;s</td><td>14.47 &mu;s</td>
-</tr><tr><td>NextormPrepared</td><td>10</td><td>629.6 &mu;s</td><td>13.08 &mu;s</td><td>15.06 &mu;s</td>
-</tr><tr><td>NextormNonCached</td><td>2</td><td>631.6 &mu;s</td><td>17.06 &mu;s</td><td>18.96 &mu;s</td>
-</tr><tr><td>Dapper</td><td>2</td><td>730.8 &mu;s</td><td>17.68 &mu;s</td><td>19.66 &mu;s</td>
-</tr><tr><td>NextormPrepared</td><td>15</td><td>783.9 &mu;s</td><td>18.39 &mu;s</td><td>21.18 &mu;s</td>
-</tr><tr><td>Dapper</td><td>3</td><td>799.0 &mu;s</td><td>18.81 &mu;s</td><td>21.67 &mu;s</td>
-</tr><tr><td>Dapper</td><td>4</td><td>851.1 &mu;s</td><td>24.57 &mu;s</td><td>26.29 &mu;s</td>
-</tr><tr><td>NextormCached</td><td>10</td><td>863.7 &mu;s</td><td>27.15 &mu;s</td><td>31.26 &mu;s</td>
-</tr><tr><td>Dapper</td><td>5</td><td>888.8 &mu;s</td><td>24.21 &mu;s</td><td>27.88 &mu;s</td>
-</tr><tr><td>NextormNonCached</td><td>3</td><td>956.1 &mu;s</td><td>16.72 &mu;s</td><td>19.26 &mu;s</td>
-</tr><tr><td>NextormCached</td><td>15</td><td>1,134.4 &mu;s</td><td>28.32 &mu;s</td><td>32.62 &mu;s</td>
-</tr><tr><td>Dapper</td><td>10</td><td>1,174.3 &mu;s</td><td>32.12 &mu;s</td><td>36.98 &mu;s</td>
-</tr><tr><td>NextormNonCached</td><td>4</td><td>1,278.1 &mu;s</td><td>47.49 &mu;s</td><td>50.81 &mu;s</td>
-</tr><tr><td>Dapper</td><td>15</td><td>1,396.2 &mu;s</td><td>39.54 &mu;s</td><td>45.54 &mu;s</td>
-</tr><tr><td>NextormNonCached</td><td>5</td><td>1,599.2 &mu;s</td><td>53.09 &mu;s</td><td>61.14 &mu;s</td>
-</tr><tr><td>NextormNonCached</td><td>10</td><td>3,180.3 &mu;s</td><td>95.77 &mu;s</td><td>110.29 &mu;s</td>
-</tr><tr><td>NextormNonCached</td><td>15</td><td>4,826.1 &mu;s</td><td>149.01 &mu;s</td><td>171.60 &mu;s</td>
+</thead><tbody><tr><td>Dapper</td><td>1</td><td>251.9 &mu;s</td><td>4.55 &mu;s</td><td>5.24 &mu;s</td>
+</tr><tr><td>NextormCached</td><td>1</td><td>319.1 &mu;s</td><td>7.78 &mu;s</td><td>8.64 &mu;s</td>
+</tr><tr><td>NextormPrepared</td><td>1</td><td>324.9 &mu;s</td><td>7.04 &mu;s</td><td>8.11 &mu;s</td>
+</tr><tr><td>NextormPrepared</td><td>2</td><td>358.3 &mu;s</td><td>8.17 &mu;s</td><td>8.39 &mu;s</td>
+</tr><tr><td>NextormCached</td><td>2</td><td>388.7 &mu;s</td><td>10.73 &mu;s</td><td>12.35 &mu;s</td>
+</tr><tr><td>NextormPrepared</td><td>3</td><td>398.9 &mu;s</td><td>10.95 &mu;s</td><td>12.61 &mu;s</td>
+</tr><tr><td>NextormPrepared</td><td>4</td><td>434.2 &mu;s</td><td>11.95 &mu;s</td><td>13.76 &mu;s</td>
+</tr><tr><td>NextormCached</td><td>3</td><td>452.7 &mu;s</td><td>12.29 &mu;s</td><td>14.15 &mu;s</td>
+</tr><tr><td>NextormPrepared</td><td>5</td><td>496.5 &mu;s</td><td>34.99 &mu;s</td><td>40.30 &mu;s</td>
+</tr><tr><td>NextormCached</td><td>4</td><td>515.8 &mu;s</td><td>18.52 &mu;s</td><td>20.59 &mu;s</td>
+</tr><tr><td>NextormCached</td><td>5</td><td>565.0 &mu;s</td><td>21.65 &mu;s</td><td>24.06 &mu;s</td>
+</tr><tr><td>NextormPrepared</td><td>10</td><td>633.2 &mu;s</td><td>17.98 &mu;s</td><td>20.71 &mu;s</td>
+</tr><tr><td>Dapper</td><td>2</td><td>738.1 &mu;s</td><td>15.68 &mu;s</td><td>17.43 &mu;s</td>
+</tr><tr><td>NextormPrepared</td><td>15</td><td>793.5 &mu;s</td><td>25.52 &mu;s</td><td>28.37 &mu;s</td>
+</tr><tr><td>Dapper</td><td>3</td><td>806.3 &mu;s</td><td>13.95 &mu;s</td><td>14.33 &mu;s</td>
+</tr><tr><td>NextormCached</td><td>10</td><td>849.2 &mu;s</td><td>25.00 &mu;s</td><td>28.79 &mu;s</td>
+</tr><tr><td>Dapper</td><td>4</td><td>851.6 &mu;s</td><td>23.45 &mu;s</td><td>26.06 &mu;s</td>
+</tr><tr><td>NextormPrepared</td><td>20</td><td>940.5 &mu;s</td><td>28.28 &mu;s</td><td>31.44 &mu;s</td>
+</tr><tr><td>Dapper</td><td>5</td><td>945.8 &mu;s</td><td>36.74 &mu;s</td><td>42.31 &mu;s</td>
+</tr><tr><td>NextormCached</td><td>15</td><td>1,150.4 &mu;s</td><td>40.45 &mu;s</td><td>44.96 &mu;s</td>
+</tr><tr><td>Dapper</td><td>10</td><td>1,155.2 &mu;s</td><td>27.60 &mu;s</td><td>31.78 &mu;s</td>
+</tr><tr><td>NextormCached</td><td>20</td><td>1,407.7 &mu;s</td><td>48.26 &mu;s</td><td>55.58 &mu;s</td>
+</tr><tr><td>Dapper</td><td>15</td><td>1,418.2 &mu;s</td><td>33.96 &mu;s</td><td>39.11 &mu;s</td>
+</tr><tr><td>Dapper</td><td>20</td><td>1,664.7 &mu;s</td><td>45.32 &mu;s</td><td>52.19 &mu;s</td>
 </tr></tbody></table>
 </body>
 </html>

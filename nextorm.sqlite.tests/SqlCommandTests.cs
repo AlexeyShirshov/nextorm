@@ -441,6 +441,12 @@ public class SqlCommandTests
         r.Should().NotBeEmpty();
 
         r.Select(it => it.exists).All(it => it).Should().BeFalse();
+
+        r = await _sut.ComplexEntity.Select(it => new { it.Id, exists = NORM.SQL.exists(_sut.SimpleEntity) }).ToListAsync();
+
+        r.Should().NotBeEmpty();
+
+        r.Select(it => it.exists).All(it => it).Should().BeTrue();
     }
     [Fact]
     public async Task SelectExists_ShouldReturnTrue()

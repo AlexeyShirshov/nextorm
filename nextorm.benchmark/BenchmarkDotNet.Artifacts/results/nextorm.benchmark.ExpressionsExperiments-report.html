@@ -2,7 +2,7 @@
 <html lang='en'>
 <head>
 <meta charset='utf-8' />
-<title>nextorm.benchmark.ExpressionsExperiments-20240125-195934</title>
+<title>nextorm.benchmark.ExpressionsExperiments-20240126-163627</title>
 
 <style type="text/css">
 	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
@@ -16,17 +16,16 @@
 BenchmarkDotNet v0.13.10, Windows 11 (10.0.22621.3007/22H2/2022Update/SunValley2)
 Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical cores
 .NET SDK 8.0.101
-  [Host]     : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX2
-  DefaultJob : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX2
+  [Host] : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX2
 </code></pre>
-<pre><code></code></pre>
+<pre><code>Toolchain=InProcessNoEmitToolchain  
+</code></pre>
 
 <table>
-<thead><tr><th>Method  </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Allocated</th>
+<thead><tr><th>Method             </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Gen0</th><th>Allocated</th>
 </tr>
-</thead><tbody><tr><td>Explicit</td><td>17.448 ns</td><td>0.2307 ns</td><td>0.2045 ns</td><td>-</td>
-</tr><tr><td>Boxing</td><td>18.392 ns</td><td>0.1798 ns</td><td>0.1594 ns</td><td>-</td>
-</tr><tr><td>PatternMathing</td><td>2.352 ns</td><td>0.0670 ns</td><td>0.0627 ns</td><td>-</td>
+</thead><tbody><tr><td>ExpressionVisitor</td><td>42.13 ns</td><td>0.337 ns</td><td>0.315 ns</td><td>0.0051</td><td>24 B</td>
+</tr><tr><td>ReadonlyExpressionVisitor</td><td>43.51 ns</td><td>0.233 ns</td><td>0.182 ns</td><td>0.0051</td><td>24 B</td>
 </tr></tbody></table>
 </body>
 </html>

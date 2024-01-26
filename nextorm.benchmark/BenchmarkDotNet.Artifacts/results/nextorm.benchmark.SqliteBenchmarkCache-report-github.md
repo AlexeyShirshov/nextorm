@@ -4,38 +4,34 @@ BenchmarkDotNet v0.13.10, Windows 11 (10.0.22621.3007/22H2/2022Update/SunValley2
 Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical cores
 .NET SDK 8.0.101
   [Host]     : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX2
-  Job-STRUFF : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX2
+  Job-CLZGZP : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX2
 
 Runtime=.NET 8.0  IterationCount=20  
 
 ```
-| Method           | Iterations | Mean       | Error     | StdDev    |
-|----------------- |----------- |-----------:|----------:|----------:|
-| Dapper           | 1          |   246.2 μs |   7.14 μs |   8.22 μs |
-| NextormNonCached | 1          |   307.6 μs |   8.55 μs |   9.50 μs |
-| NextormCached    | 1          |   316.6 μs |  12.75 μs |  14.68 μs |
-| NextormPrepared  | 1          |   319.5 μs |   7.84 μs |   9.03 μs |
-| NextormPrepared  | 2          |   358.1 μs |   8.92 μs |   9.91 μs |
-| NextormCached    | 2          |   382.7 μs |  12.56 μs |  13.44 μs |
-| NextormPrepared  | 3          |   392.1 μs |   9.44 μs |  10.88 μs |
-| NextormPrepared  | 4          |   426.0 μs |  10.40 μs |  11.97 μs |
-| NextormCached    | 3          |   451.1 μs |  14.46 μs |  15.48 μs |
-| NextormPrepared  | 5          |   455.1 μs |  13.45 μs |  14.94 μs |
-| NextormCached    | 4          |   512.3 μs |  13.92 μs |  16.03 μs |
-| NextormCached    | 5          |   563.0 μs |  12.56 μs |  14.47 μs |
-| NextormPrepared  | 10         |   629.6 μs |  13.08 μs |  15.06 μs |
-| NextormNonCached | 2          |   631.6 μs |  17.06 μs |  18.96 μs |
-| Dapper           | 2          |   730.8 μs |  17.68 μs |  19.66 μs |
-| NextormPrepared  | 15         |   783.9 μs |  18.39 μs |  21.18 μs |
-| Dapper           | 3          |   799.0 μs |  18.81 μs |  21.67 μs |
-| Dapper           | 4          |   851.1 μs |  24.57 μs |  26.29 μs |
-| NextormCached    | 10         |   863.7 μs |  27.15 μs |  31.26 μs |
-| Dapper           | 5          |   888.8 μs |  24.21 μs |  27.88 μs |
-| NextormNonCached | 3          |   956.1 μs |  16.72 μs |  19.26 μs |
-| NextormCached    | 15         | 1,134.4 μs |  28.32 μs |  32.62 μs |
-| Dapper           | 10         | 1,174.3 μs |  32.12 μs |  36.98 μs |
-| NextormNonCached | 4          | 1,278.1 μs |  47.49 μs |  50.81 μs |
-| Dapper           | 15         | 1,396.2 μs |  39.54 μs |  45.54 μs |
-| NextormNonCached | 5          | 1,599.2 μs |  53.09 μs |  61.14 μs |
-| NextormNonCached | 10         | 3,180.3 μs |  95.77 μs | 110.29 μs |
-| NextormNonCached | 15         | 4,826.1 μs | 149.01 μs | 171.60 μs |
+| Method          | Iterations | Mean       | Error    | StdDev   |
+|---------------- |----------- |-----------:|---------:|---------:|
+| Dapper          | 1          |   251.9 μs |  4.55 μs |  5.24 μs |
+| NextormCached   | 1          |   319.1 μs |  7.78 μs |  8.64 μs |
+| NextormPrepared | 1          |   324.9 μs |  7.04 μs |  8.11 μs |
+| NextormPrepared | 2          |   358.3 μs |  8.17 μs |  8.39 μs |
+| NextormCached   | 2          |   388.7 μs | 10.73 μs | 12.35 μs |
+| NextormPrepared | 3          |   398.9 μs | 10.95 μs | 12.61 μs |
+| NextormPrepared | 4          |   434.2 μs | 11.95 μs | 13.76 μs |
+| NextormCached   | 3          |   452.7 μs | 12.29 μs | 14.15 μs |
+| NextormPrepared | 5          |   496.5 μs | 34.99 μs | 40.30 μs |
+| NextormCached   | 4          |   515.8 μs | 18.52 μs | 20.59 μs |
+| NextormCached   | 5          |   565.0 μs | 21.65 μs | 24.06 μs |
+| NextormPrepared | 10         |   633.2 μs | 17.98 μs | 20.71 μs |
+| Dapper          | 2          |   738.1 μs | 15.68 μs | 17.43 μs |
+| NextormPrepared | 15         |   793.5 μs | 25.52 μs | 28.37 μs |
+| Dapper          | 3          |   806.3 μs | 13.95 μs | 14.33 μs |
+| NextormCached   | 10         |   849.2 μs | 25.00 μs | 28.79 μs |
+| Dapper          | 4          |   851.6 μs | 23.45 μs | 26.06 μs |
+| NextormPrepared | 20         |   940.5 μs | 28.28 μs | 31.44 μs |
+| Dapper          | 5          |   945.8 μs | 36.74 μs | 42.31 μs |
+| NextormCached   | 15         | 1,150.4 μs | 40.45 μs | 44.96 μs |
+| Dapper          | 10         | 1,155.2 μs | 27.60 μs | 31.78 μs |
+| NextormCached   | 20         | 1,407.7 μs | 48.26 μs | 55.58 μs |
+| Dapper          | 15         | 1,418.2 μs | 33.96 μs | 39.11 μs |
+| Dapper          | 20         | 1,664.7 μs | 45.32 μs | 52.19 μs |
