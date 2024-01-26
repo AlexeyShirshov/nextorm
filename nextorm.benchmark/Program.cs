@@ -14,15 +14,15 @@ using nextorm.benchmark;
 // BenchmarkRunner.Run<SqliteBenchmarkAny>();
 // BenchmarkRunner.Run<SqliteBenchmarkFirst>();
 // BenchmarkRunner.Run<SqliteBenchmarkSingle>();
-BenchmarkRunner.Run<SqliteBenchmarkCache>();
+// BenchmarkRunner.Run<SqliteBenchmarkCache>();
 // BenchmarkRunner.Run<SqliteBenchmarkJoin>();
 
 // runner.QueryCommandPlanEqualityComparer();
-// var runner = new BenchmarkQueryCommand();
+var runner = new SqliteBenchmarkWhere(true);
 // await runner.NextormPreparedToList();
 // while (true)
-// for (var i = 0; i < 1000; i++)
-//     runner.ExpressionPlanEqualityComparer2();
+for (var i = 0; i < 100; i++)
+    await runner.Nextorm_Cached_AsyncStream();
 
 //await runner.FillLargeTable();
 // Console.WriteLine("Press any key to exit");

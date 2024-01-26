@@ -16,11 +16,7 @@ public sealed class FromExpression
      //public OneOf<string, QueryCommand> Table { get; }
      internal string? TableAlias;
      public readonly string? Table;
-     public QueryCommand? SubQuery
-     {
-          [MethodImpl(MethodImplOptions.AggressiveInlining)]
-          get;
-     }
+     public readonly QueryCommand? SubQuery;
 
      // public override int GetHashCode()
      // {
