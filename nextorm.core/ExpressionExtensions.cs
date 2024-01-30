@@ -79,17 +79,29 @@ public class TwoTypeExpressionVisitor<T1, T2> : ExpressionVisitor
 }
 public class ReplaceConstantsExpressionVisitor : ExpressionVisitor
 {
-    private readonly List<(ParameterExpression, object)> _params = new();
+    private readonly List<(ParameterExpression, object?)> _params = new();
     private readonly object[]? _replaceParams;
+    private readonly IEnumerable<ParameterExpression>? _outerParams;
 
-    public List<(ParameterExpression, object)> Params => _params;
     public ReplaceConstantsExpressionVisitor(params object[]? @params)
     {
         _replaceParams = @params;
     }
+    public ReplaceConstantsExpressionVisitor(IEnumerable<ParameterExpression>? @params)
+    {
+        _outerParams = @params;
+    }
+    public List<(ParameterExpression, object?)> Params => _params;
+
+    public bool HasOuterParams { get; internal set; }
+
     protected override Expression VisitConstant(ConstantExpression node)
     {
+        // if (node.Type.IsScalar())
+        // {
         return GetConstantParameter(node);
+        //}
+        //return node;
     }
     protected override Expression VisitParameter(ParameterExpression node)
     {
@@ -105,6 +117,10 @@ public class ReplaceConstantsExpressionVisitor : ExpressionVisitor
                 }
             }
         }
+
+        if (!HasOuterParams && _outerParams?.Count() > 0)
+            HasOuterParams = _outerParams.Contains(node);
+
         return base.VisitParameter(node);
     }
     private ParameterExpression GetConstantParameter(ConstantExpression node)
