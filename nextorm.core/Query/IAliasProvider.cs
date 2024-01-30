@@ -4,5 +4,7 @@ namespace nextorm.core;
 
 public interface IAliasProvider
 {
-    string FindAlias(ParameterExpression param);
+    string? FindAlias(ISourceProvider sourceProvider);
+    string GetNextAlias(FromExpression from);
+    string GetNextAlias(QueryCommand queryCommand);
 }

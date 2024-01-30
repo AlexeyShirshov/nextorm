@@ -57,7 +57,14 @@ class QueryProvider : IQueryProvider
 {
     public IReadOnlyList<QueryCommand> ReferencedQueries => throw new NotImplementedException();
 
+    public IReadOnlyList<Expression>? OuterReferences => throw new NotImplementedException();
+
     public int AddCommand(QueryCommand cmd)
+    {
+        throw new NotImplementedException();
+    }
+
+    public int AddOuterReference(Expression node)
     {
         throw new NotImplementedException();
     }

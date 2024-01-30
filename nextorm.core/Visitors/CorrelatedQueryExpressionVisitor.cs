@@ -68,9 +68,9 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             )
                 && node.Arguments is [Expression exp] && exp.Type.IsAssignableTo(typeof(QueryCommand)))
             {
-                QueryCommand? cmd = GetQueryCommand(exp);
+                var oldRefCnt = _queryProvider.OuterReferences?.Count ?? 0;
 
-                if (cmd is null) return node;
+                QueryCommand cmd = GetQueryCommand(exp);
 
                 if (!_forPrepare)
                 {
@@ -95,8 +95,15 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                 }
                 else
                 {
+                    if (node.Method.Name == nameof(NORM.NORM_SQL.exists))
+                        cmd.IgnoreColumns = true;
+
                     if (!cmd.IsPrepared)
-                        cmd.PrepareCommand(false, _cancellationToken);
+                    {
+                        var shouldAliasFrom = (_queryProvider.OuterReferences?.Count ?? 0) > oldRefCnt;
+
+                        cmd.PrepareCommand(false, shouldAliasFrom, _cancellationToken);
+                    }
 
                     var idx = _queryProvider!.AddCommand(cmd);
 
@@ -226,7 +233,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         return base.VisitMethodCall(node);
     }
 
-    private QueryCommand? GetQueryCommand(Expression exp)
+    private QueryCommand GetQueryCommand(Expression exp)
     {
         QueryCommand cmd;
         var predVisitor = new PredicateExpressionVisitor<int>((exp, storeValue) => exp is IndexExpression idxExp
@@ -241,10 +248,10 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         }
         else
         {
-            var constRepl = new ReplaceConstantsExpressionVisitor(_outerParams);
+            var constRepl = new ReplaceConstantsExpressionVisitor(_outerParams, _queryProvider);
             var body = constRepl.Visit(exp);
 
-            if (constRepl.Params.Count > 0 && !constRepl.HasOuterParams)
+            if (constRepl.Params.Count > 0)
             {
                 var keyCmd = new ExpressionKey(exp, _queryProvider);
                 if (!DataContextCache.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
@@ -266,10 +273,9 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                 }
                 else
                     cmd = (QueryCommand)dCmd.DynamicInvoke(constRepl.Params.Select(it => it.Item2).ToArray())!;
-
             }
             else
-                return null;
+                throw new InvalidOperationException();
         }
 
         return cmd;
@@ -283,7 +289,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         }
         else
         {
-            cmd = cmd.Clone();
+            //cmd = cmd.Clone();
 
             if (node.Method.Name.StartsWith("First"))
             {

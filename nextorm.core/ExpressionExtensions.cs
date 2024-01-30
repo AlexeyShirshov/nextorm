@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
+using System.Reflection;
 
 namespace nextorm.core;
 
@@ -82,18 +83,20 @@ public class ReplaceConstantsExpressionVisitor : ExpressionVisitor
     private readonly List<(ParameterExpression, object?)> _params = new();
     private readonly object[]? _replaceParams;
     private readonly IEnumerable<ParameterExpression>? _outerParams;
+    private readonly IQueryProvider? _queryProvider;
 
     public ReplaceConstantsExpressionVisitor(params object[]? @params)
     {
         _replaceParams = @params;
     }
-    public ReplaceConstantsExpressionVisitor(IEnumerable<ParameterExpression>? @params)
+    public ReplaceConstantsExpressionVisitor(IEnumerable<ParameterExpression>? @params, IQueryProvider queryProvider)
     {
         _outerParams = @params;
+        _queryProvider = queryProvider;
     }
     public List<(ParameterExpression, object?)> Params => _params;
 
-    public bool HasOuterParams { get; internal set; }
+    // public bool HasOuterParams { get; internal set; }
 
     protected override Expression VisitConstant(ConstantExpression node)
     {
@@ -118,9 +121,6 @@ public class ReplaceConstantsExpressionVisitor : ExpressionVisitor
             }
         }
 
-        if (!HasOuterParams && _outerParams?.Count() > 0)
-            HasOuterParams = _outerParams.Contains(node);
-
         return base.VisitParameter(node);
     }
     private ParameterExpression GetConstantParameter(ConstantExpression node)
@@ -128,6 +128,21 @@ public class ReplaceConstantsExpressionVisitor : ExpressionVisitor
         var p = Expression.Parameter(node.Type);
         _params.Add((p, node.Value));
         return p;
+    }
+    protected override Expression VisitMember(MemberExpression node)
+    {
+        if (node.NodeType == ExpressionType.MemberAccess && node.Expression is ParameterExpression param
+            && _outerParams?.Count() > 0 && _outerParams.Contains(param))
+        {
+            var idx = _queryProvider!.AddOuterReference(node);
+            return Expression.Property(Expression.New(GetOuterRefMarkerCI(node.Type), Expression.Constant(idx)), "Ref");
+        }
+
+        return base.VisitMember(node);
+    }
+    public static ConstructorInfo GetOuterRefMarkerCI(Type type)
+    {
+        return typeof(OuterRefMarker<>).MakeGenericType(type).GetConstructor([typeof(int)])!;
     }
 }
 public class PredicateExpressionVisitor<T>(Func<Expression?, Func<T, bool>, bool> predicate) : ExpressionVisitor

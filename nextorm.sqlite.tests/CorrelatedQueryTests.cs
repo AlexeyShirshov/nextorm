@@ -10,7 +10,9 @@ public class CorrelatedQueryTests(TestDataRepository sut)
     [Fact]
     public void TestWhere()
     {
-        var r = _sut.SimpleEntity.Where(s => NORM.SQL.exists(_sut.ComplexEntity.Where(c => c.Id == s.Id))).ToList();
+        var r = _sut.SimpleEntity.Where(s => NORM.SQL.exists(_sut.ComplexEntity.Where(c => c.Id == s.Id)))
+            .Select(it => it.Id)
+            .ToList();
 
         r.Should().NotBeNullOrEmpty();
 

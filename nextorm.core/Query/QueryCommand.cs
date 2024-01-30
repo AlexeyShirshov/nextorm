@@ -14,6 +14,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     private QueryCommand _union;
     private UnionType _unionType;
     private List<QueryCommand>? _referencedQueries;
+    private List<Expression>? _outerRefs;
     private readonly JoinExpression[]? _joins;
     protected SelectExpression[]? _selectList;
     private object? _customData;
@@ -119,6 +120,8 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     public LambdaExpression? Having { get => _having; }
     public QueryCommand? UnionQuery { get => _union; }
     public UnionType UnionType { get => _unionType; }
+    public IReadOnlyList<Expression>? OuterReferences => _outerRefs;
+
     public virtual void ResetPreparation()
     {
         _isPrepared = false;
@@ -131,7 +134,8 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         _dataContext?.ResetPreparation(this);
     }
     public void PrepareCommand(CancellationToken cancellationToken) => PrepareCommand(false, cancellationToken);
-    public virtual void PrepareCommand(bool dontCalculateHash, CancellationToken cancellationToken)
+    public void PrepareCommand(bool dontCalculateHash, CancellationToken cancellationToken) => PrepareCommand(dontCalculateHash, false, cancellationToken);
+    public virtual void PrepareCommand(bool dontCalculateHash, bool shouldAliasFrom, CancellationToken cancellationToken)
     {
         if (_dataContext is null) throw new InvalidOperationException("Cannot prepare command in cache");
 #if DEBUG
@@ -155,6 +159,10 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         var joinPlanHash = PrepareJoin(dontCalculateHash, cancellationToken);
         var (selectList, columnsPlanHash) = PrepareColumns(dontCalculateHash, srcType, cancellationToken);
         var wherePlanHash = PrepareWhere(dontCalculateHash, cancellationToken);
+
+        // if (from is not null && string.IsNullOrEmpty(from.TableAlias) && (shouldAliasFrom || _outerRefs?.Count > 0))
+        //     from.TableAlias = "t1";
+
         var (groupingList, groupingPlanHash) = PrepareGrouping(dontCalculateHash, cancellationToken);
         var sortingPlanHash = PrepareSorting(dontCalculateHash, cancellationToken);
 
@@ -174,30 +182,36 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         SortingPlanHash = sortingPlanHash == 7 ? 0 : sortingPlanHash;
         WherePlanHash = wherePlanHash == 7 ? 0 : wherePlanHash;
         GroupingPlanHash = groupingPlanHash == 7 ? 0 : groupingPlanHash;
-        FromPlanHash = dontCalculateHash ? 0 : GetFromExpressionPlanEqualityComparer().GetHashCode(_from);
+        FromPlanHash = dontCalculateHash ? 0 : GetFromExpressionPlanEqualityComparer().GetHashCode(from);
 
         if (!dontCalculateHash && _union is not null)
         {
-            HashCode hash = new();
             unchecked
             {
-                hash.Add(_union, GetQueryPlanEqualityComparer());
-                hash.Add((int)_unionType);
-                UnionPlanHash = hash.ToHashCode();
+                var h = 7 * 13 + ((int)_unionType);
+                h = h * 13 + GetQueryPlanEqualityComparer().GetHashCode();
+                UnionPlanHash = h;
             }
         }
 
-        if (!dontCalculateHash && _referencedQueries?.Count > 0)
+        if (!dontCalculateHash)
         {
-            HashCode hash = new();
-            unchecked
+            if (_referencedQueries?.Count == 1)
             {
-                for (var (i, cnt) = (0, _referencedQueries.Count); i < cnt; i++)
+                ReferencedQueriesPlanHash = GetQueryPlanEqualityComparer().GetHashCode();
+            }
+            else if (_referencedQueries?.Count > 1)
+            {
+                HashCode hash = new();
+                unchecked
                 {
-                    var item = _referencedQueries[i];
-                    hash.Add(item, GetQueryPlanEqualityComparer());
+                    for (var (i, cnt) = (0, _referencedQueries.Count); i < cnt; i++)
+                    {
+                        var item = _referencedQueries[i];
+                        hash.Add(item, GetQueryPlanEqualityComparer());
+                    }
+                    ReferencedQueriesPlanHash = hash.ToHashCode();
                 }
-                ReferencedQueriesPlanHash = hash.ToHashCode();
             }
         }
     }
@@ -213,7 +227,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
             {
                 if (_exp.Body is NewExpression ctor)
                 {
-                    //if (!CacheList || !_dataProvider.SelectListExpessionCache.TryGetValue(ctor, out selectList))
+                    //if (!CacheList || !_dataProvider.SelectListExpressionCache.TryGetValue(ctor, out selectList))
                     //{
                     //var selList = new List<SelectExpression>();
                     var args = ctor.Arguments;
@@ -268,7 +282,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
 
                     // selectList = selList.ToArray();
                     // if (CacheList)
-                    //     _dataProvider.SelectListExpessionCache[ctor] = selectList;
+                    //     _dataProvider.SelectListExpressionCache[ctor] = selectList;
                     //}
                     // else if (!_dontCache && !noHash)
                     // {
@@ -440,7 +454,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         int joinPlanHash = 7;
         if (_joins is not null)
         {
-            if (_from is not null && string.IsNullOrEmpty(_from.TableAlias)) _from.TableAlias = "t1";
+            // if (_from is not null && string.IsNullOrEmpty(_from.TableAlias)) _from.TableAlias = "t1";
 
             for (var (idx, cnt) = (0, _joins.Length); idx < cnt; idx++)
             {
@@ -502,7 +516,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
                         }
                 }
                 else
-                    throw new InvalidOperationException("Expression on column index numst be specified");
+                    throw new InvalidOperationException("Expression on column index must be specified");
             }
         }
 
@@ -536,7 +550,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         {
             if (_groupExp.Body is NewExpression ctor)
             {
-                //if (!CacheList || !_dataProvider.SelectListExpessionCache.TryGetValue(ctor, out selectList))
+                //if (!CacheList || !_dataProvider.SelectListExpressionCache.TryGetValue(ctor, out selectList))
                 //{
                 //var selList = new List<SelectExpression>();
                 var args = ctor.Arguments;
@@ -745,6 +759,17 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
             _union.SetUnion(queryCommand, unionType);
         }
     }
+
+    public int AddOuterReference(Expression node)
+    {
+        var outerRefs = _outerRefs ??= [];
+
+        var idx = outerRefs.Count;
+
+        outerRefs.Add(node);
+
+        return idx;
+    }
 }
 
 public class QueryCommand<TResult> : QueryCommand//, IAsyncEnumerable<TResult>
@@ -762,10 +787,10 @@ public class QueryCommand<TResult> : QueryCommand//, IAsyncEnumerable<TResult>
     {
 
     }
-    public override void PrepareCommand(bool prepareMapOnly, CancellationToken cancellationToken)
+    public override void PrepareCommand(bool dontCalculateHash, bool shouldAliasFrom, CancellationToken cancellationToken)
     {
-        base.PrepareCommand(prepareMapOnly, cancellationToken);
-        if (!prepareMapOnly)
+        base.PrepareCommand(dontCalculateHash, shouldAliasFrom, cancellationToken);
+        if (!dontCalculateHash)
         {
             ResultPlanHash = typeof(TResult).GetHashCode();
         }

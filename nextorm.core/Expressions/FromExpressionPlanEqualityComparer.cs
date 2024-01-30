@@ -35,7 +35,7 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
         if (x == y) return true;
         if (x is null || y is null) return false;
 
-        if (x.TableAlias != y.TableAlias) return false;
+        // if (x.TableAlias != y.TableAlias) return false;
         if (!string.IsNullOrEmpty(x.Table) && x.Table == y.Table) return true;
 
         return _equalityComparer.Value.Equals(x.SubQuery, y.SubQuery);
@@ -45,7 +45,7 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
     {
         if (obj is null) return 0;
 
-        if (obj.TableAlias is not null)
+        /*if (obj.TableAlias is not null)
         {
             unchecked
             {
@@ -60,7 +60,8 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
                 return hash.ToHashCode();
             }
         }
-        else if (!string.IsNullOrEmpty(obj.Table))
+        else */
+        if (!string.IsNullOrEmpty(obj.Table))
             return obj.Table.GetHashCode();
         else
             return _equalityComparer.Value.GetHashCode(obj.SubQuery!);

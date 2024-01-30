@@ -14,7 +14,7 @@ public sealed class FromExpression
           SubQuery = subQuery;
      }
      //public OneOf<string, QueryCommand> Table { get; }
-     internal string? TableAlias;
+     internal string? TableAliasDELETE;
      public readonly string? Table;
      public readonly QueryCommand? SubQuery;
 
@@ -45,6 +45,6 @@ public sealed class FromExpression
      {
           if (!string.IsNullOrEmpty(Table)) return this;
 
-          return new FromExpression(SubQuery!.CloneForCache()) { TableAlias = TableAlias };
+          return new FromExpression(SubQuery!.CloneForCache());// { TableAlias = TableAlias };
      }
 }

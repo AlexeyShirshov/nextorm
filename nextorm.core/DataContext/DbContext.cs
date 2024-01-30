@@ -140,7 +140,7 @@ public class DbContext : IDataContext
     private List<Param> ExtractParams(QueryCommand queryCommand)
     {
         var @params = new List<Param>();
-        MakeSelect(queryCommand, true, @params);
+        MakeSelect(queryCommand, true, @params, queryCommand, null);
         return @params;
     }
     private void LogParams(DbCommand sqlCommand)
@@ -403,7 +403,8 @@ public class DbContext : IDataContext
         (string?, List<Param>) MakeSelectInternal()
         {
             var @params = new List<Param>();
-            return (MakeSelect(queryCommand, false, @params), @params);
+            var aliasProvider = new DefaultAliasProvider();
+            return (MakeSelect(queryCommand, false, @params, queryCommand, aliasProvider), @params);
         }
     }
     // public DatabaseCompiledQuery<TResult> GetCompiledQuery<TResult>(QueryCommand<TResult> cmd)
@@ -426,7 +427,9 @@ public class DbContext : IDataContext
     {
         throw new NotImplementedException();
     }
-    public virtual string? MakeSelect(QueryCommand cmd, bool paramMode, List<Param> @params)
+    public string? MakeSelect(QueryCommand cmd, bool paramMode, List<Param> @params, IQueryContext queryContext, IAliasProvider? aliasProvider)
+        => MakeSelect(cmd, paramMode, @params, queryContext, queryContext, queryContext, aliasProvider);
+    public virtual string? MakeSelect(QueryCommand cmd, bool paramMode, List<Param> @params, ISourceProvider sourceProvider, IQueryProvider queryProvider, IParamProvider paramProvider, IAliasProvider? aliasProvider)
     {
 #if DEBUG
         if (!cmd.IsPrepared)
@@ -465,7 +468,7 @@ public class DbContext : IDataContext
             for (var i = 0; i < selectListCount; i++)
             {
                 var item = selectList[i];
-                var (needAliasForColumn, column) = MakeColumn(item.Expression!, entityType, cmd, false, @params, paramMode);
+                var (needAliasForColumn, column) = MakeColumn(item.Expression!, entityType, sourceProvider, false, paramProvider, queryProvider, aliasProvider, @params, paramMode);
 
                 if (!paramMode)
                 {
@@ -483,28 +486,30 @@ public class DbContext : IDataContext
 
         if (from is not null)
         {
-            var fromStr = MakeFrom(from, @params, paramMode);
+            var joins = cmd.Joins;
+            var hasJoins = joins?.Length > 0;
+            var needAlias = hasJoins || queryProvider.OuterReferences?.Count > 0;
+            var fromStr = MakeFrom(from, needAlias, @params, paramMode, sourceProvider, queryProvider, paramProvider, aliasProvider);
             if (!paramMode)
             {
                 sqlBuilder!.Length -= 2;
                 sqlBuilder.Append(" from ").Append(fromStr);
             }
 
-            var joins = cmd.Joins;
-            if (joins is not null)
+            if (hasJoins)
             {
-                for (var (idx, cnt) = (0, joins.Length); idx < cnt; idx++)
+                for (var (idx, cnt) = (0, joins!.Length); idx < cnt; idx++)
                 {
                     var join = joins[idx];
 
-                    var joinSql = MakeJoin(join, cmd, @params, paramMode);
+                    var joinSql = MakeJoin(join, cmd.EntityType!, @params, paramMode, sourceProvider, queryProvider, paramProvider, aliasProvider);
                     if (!paramMode) sqlBuilder!.Append(joinSql);
                 }
             }
 
             if (cmd.PreparedCondition is not null)
             {
-                var whereSql = MakeWhere(entityType, cmd, cmd.PreparedCondition, 0, null, @params, paramMode);
+                var whereSql = MakeWhere(entityType, sourceProvider, queryProvider, paramProvider, cmd.PreparedCondition, 0, aliasProvider, @params, paramMode);
                 if (!paramMode) sqlBuilder!.AppendLine().Append(" where ").Append(whereSql);
             }
 
@@ -517,7 +522,7 @@ public class DbContext : IDataContext
                 for (var i = 0; i < groupingListCount; i++)
                 {
                     var item = grouping[i];
-                    var (needAliasForColumn, column) = MakeColumn(item.Expression!, entityType, cmd, false, @params, paramMode);
+                    var (needAliasForColumn, column) = MakeColumn(item.Expression!, entityType, sourceProvider, false, paramProvider, queryProvider, aliasProvider, @params, paramMode);
 
                     if (!paramMode)
                     {
@@ -539,7 +544,7 @@ public class DbContext : IDataContext
 
                 if (cmd.Having is not null)
                 {
-                    var havingSql = MakeWhere(entityType, cmd, cmd.Having, 0, null, @params, paramMode);
+                    var havingSql = MakeWhere(entityType, sourceProvider, queryProvider, paramProvider, cmd.Having, 0, aliasProvider, @params, paramMode);
                     if (!paramMode) sqlBuilder!.AppendLine().Append(" having ").Append(havingSql);
                 }
             }
@@ -556,7 +561,7 @@ public class DbContext : IDataContext
                     }).AppendLine();
                 }
 
-                var sql = MakeSelect(cmd.UnionQuery, paramMode, @params);
+                var sql = MakeSelect(cmd.UnionQuery, paramMode, @params, sourceProvider, queryProvider, paramProvider, new DefaultAliasProvider());
                 if (!paramMode) sqlBuilder!.Append(sql);
             }
 
@@ -570,7 +575,7 @@ public class DbContext : IDataContext
                     var sorting = sortingList[i];
                     if (sorting.PreparedExpression is not null)
                     {
-                        var sortingSql = MakeSort(entityType, cmd, sorting.PreparedExpression, 0, null, @params, paramMode);
+                        var sortingSql = MakeSort(entityType, sourceProvider, sorting.PreparedExpression, 0, aliasProvider, paramProvider, queryProvider, @params, paramMode);
                         if (!paramMode)
                         {
                             sqlBuilder!.Append(sortingSql);
@@ -635,7 +640,7 @@ public class DbContext : IDataContext
         throw new NotImplementedException();
     }
 
-    private string? MakeJoin(JoinExpression join, QueryCommand cmd, List<Param> @params, bool paramMode)
+    private string? MakeJoin(JoinExpression join, Type entityType, List<Param> @params, bool paramMode, ISourceProvider sourceProvider, IQueryProvider queryProvider, IParamProvider paramProvider, IAliasProvider? aliasProvider)
     {
         var sqlBuilder = paramMode ? null : _sbPool.Get();
 
@@ -664,22 +669,22 @@ public class DbContext : IDataContext
             if (visitor.JoinType.IsAnonymous())
             {
                 //fromExp = GetFrom(join.Query.EntityType);
-                var sql = MakeSelect(join.Query!, paramMode, @params);
+                var sql = MakeSelect(join.Query!, paramMode, @params, sourceProvider, queryProvider, paramProvider, aliasProvider);
 
                 if (!paramMode)
                 {
                     sqlBuilder!.Append('(').Append(sql).Append(") ");
-                    sqlBuilder.Append(GetAliasFromProjection(cmd, visitor.JoinType, 1));
+                    sqlBuilder.Append(aliasProvider.GetNextAlias(join.Query!));
                 }
             }
             else
             {
                 fromExp = GetFrom(visitor.JoinType);
 
-                if (!paramMode)
-                    fromExp.TableAlias = GetAliasFromProjection(cmd, visitor.JoinType, dim);
+                // if (!paramMode)
+                //     fromExp.TableAlias = GetAliasFromProjection(entityType, visitor.JoinType, dim);
 
-                var fromSql = MakeFrom(fromExp, @params, paramMode);
+                var fromSql = MakeFrom(fromExp, true, @params, paramMode, sourceProvider, queryProvider, paramProvider, aliasProvider);
                 if (!paramMode)
                 {
                     sqlBuilder!.Append(fromSql);
@@ -687,9 +692,7 @@ public class DbContext : IDataContext
             }
         }
 
-        var whereSql = MakeWhere(cmd.EntityType!, cmd, visitor.JoinCondition!, dim, dim == 1
-                        ? new ExpressionAliasProvider(join.JoinCondition)
-                        : new ProjectionAliasProvider(dim, cmd.EntityType!), @params, paramMode);
+        var whereSql = MakeWhere(entityType, sourceProvider, queryProvider, paramProvider, visitor.JoinCondition!, dim, aliasProvider, @params, paramMode);
 
         if (!paramMode)
         {
@@ -709,21 +712,21 @@ public class DbContext : IDataContext
 
         return r;
     }
-    private static string GetAliasFromProjection(QueryCommand cmd, Type declaringType, int from)
+    private static string GetAliasFromProjection(Type entityType, Type declaringType, int from)
     {
         int idx = 0;
-        foreach (var prop in cmd.EntityType!.GetProperties(BindingFlags.Instance | BindingFlags.Public))
+        foreach (var prop in entityType.GetProperties(BindingFlags.Instance | BindingFlags.Public))
         {
             if (++idx > from && prop.PropertyType == declaringType)
                 return prop.Name;
         }
 
-        throw new BuildSqlCommandException($"Cannot find alias of type {declaringType} in {cmd.EntityType}");
+        throw new BuildSqlCommandException($"Cannot find alias of type {declaringType} in {entityType}");
     }
-    private string MakeWhere(Type entityType, IQueryContext queryContext, Expression condition, int dim, IAliasProvider? aliasProvider, List<Param> @params, bool paramMode)
+    private string MakeWhere(Type entityType, ISourceProvider sourceProvider, IQueryProvider queryProvider, IParamProvider paramProvider, Expression condition, int dim, IAliasProvider? aliasProvider, List<Param> @params, bool paramMode)
     {
         // if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Where expression: {exp}", condition);
-        using var visitor = new WhereExpressionVisitor(entityType, this, queryContext, dim, aliasProvider, queryContext, queryContext, paramMode);
+        using var visitor = new WhereExpressionVisitor(entityType, this, sourceProvider, dim, aliasProvider, paramProvider, queryProvider, paramMode);
         visitor.Visit(condition);
         @params.AddRange(visitor.Params);
 
@@ -744,11 +747,11 @@ public class DbContext : IDataContext
 
         return visitor.ToString();
     }
-    public (bool NeedAliasForColumn, string Column) MakeColumn(Expression selectExp, Type entityType, IQueryContext queryContext, bool dontNeedAlias, List<Param> @params, bool paramMode)
-        => MakeColumn(selectExp, entityType, queryContext, dontNeedAlias, queryContext, queryContext, @params, paramMode);
-    public (bool NeedAliasForColumn, string Column) MakeColumn(Expression selectExp, Type entityType, ISourceProvider tableProvider, bool dontNeedAlias, IParamProvider paramProvider, IQueryProvider queryProvider, List<Param> @params, bool paramMode)
+    public (bool NeedAliasForColumn, string Column) MakeColumn(Expression selectExp, Type entityType, IQueryContext queryContext, IAliasProvider? aliasProvider, bool dontNeedAlias, List<Param> @params, bool paramMode)
+        => MakeColumn(selectExp, entityType, queryContext, dontNeedAlias, queryContext, queryContext, aliasProvider, @params, paramMode);
+    public (bool NeedAliasForColumn, string Column) MakeColumn(Expression selectExp, Type entityType, ISourceProvider tableProvider, bool dontNeedAlias, IParamProvider paramProvider, IQueryProvider queryProvider, IAliasProvider? aliasProvider, List<Param> @params, bool paramMode)
     {
-        using var visitor = new BaseExpressionVisitor(entityType, this, tableProvider, 0, null, paramProvider, queryProvider, dontNeedAlias, paramMode);
+        using var visitor = new BaseExpressionVisitor(entityType, this, tableProvider, 0, aliasProvider, paramProvider, queryProvider, dontNeedAlias, paramMode);
         visitor.Visit(selectExp);
         @params.AddRange(visitor.Params);
 
@@ -756,21 +759,48 @@ public class DbContext : IDataContext
 
         return (visitor.NeedAliasForColumn, visitor.ToString());
     }
-
-    public virtual string MakeFrom(FromExpression from, List<Param> @params, bool paramMode)
+    public string MakeFrom(FromExpression from, bool needAlias, List<Param> @params, bool paramMode, IQueryContext queryContext, IAliasProvider aliasProvider)
+        => MakeFrom(from, needAlias, @params, paramMode, queryContext, queryContext, queryContext, aliasProvider);
+    public virtual string MakeFrom(FromExpression from, bool needAlias, List<Param> @params, bool paramMode, ISourceProvider sourceProvider, IQueryProvider queryProvider, IParamProvider paramProvider, IAliasProvider? aliasProvider)
     {
-        // ArgumentNullException.ThrowIfNull(from);
+        if (!paramMode && !string.IsNullOrEmpty(from.Table))
+        {
+            var sqlBuilder = _sbPool.Get();
+            sqlBuilder.Append(from.Table);
 
-        if (!string.IsNullOrEmpty(from.Table))
-            return from.Table + (string.IsNullOrEmpty(from.TableAlias) ? string.Empty : MakeTableAlias(from.TableAlias));
+            if (needAlias)
+            {
+                sqlBuilder.Append(MakeTableAlias(aliasProvider!.GetNextAlias(from)));
+            }
+            var r = sqlBuilder.ToString();
+            _sbPool.Return(sqlBuilder);
+            return r;
+        }
+        else
+        {
+            var cmd = from.SubQuery;
 
-        var cmd = from.SubQuery!;
-        if (!cmd.IsPrepared) throw new BuildSqlCommandException("Inner query is not prepared");
-        var sql = MakeSelect(cmd, paramMode, @params);
+            if (cmd is not null)
+            {
+#if DEBUG
+                if (!cmd.IsPrepared) throw new BuildSqlCommandException("Inner query is not prepared");
+#endif
+                var sql = MakeSelect(cmd, paramMode, @params, sourceProvider, queryProvider, paramProvider, aliasProvider);
 
-        if (paramMode) return string.Empty;
+                if (paramMode) return string.Empty;
 
-        return "(" + sql + ")" + (string.IsNullOrEmpty(from.TableAlias) ? string.Empty : MakeTableAlias(from.TableAlias));
+                var sqlBuilder = _sbPool.Get();
+                sqlBuilder.Append('(').Append(sql).Append(')');
+                if (needAlias)
+                {
+                    sqlBuilder.Append(MakeTableAlias(aliasProvider!.GetNextAlias(from)));
+                }
+                var r = sqlBuilder.ToString();
+                _sbPool.Return(sqlBuilder);
+                return r;
+            }
+        }
+        return string.Empty;
     }
     public virtual string MakeTableAlias(string tableAlias)
     {
@@ -812,7 +842,7 @@ public class DbContext : IDataContext
 
                 var f = GetFrom(prop_t1.PropertyType);
 
-                f.TableAlias = "t1";
+                // f.TableAlias = "t1";
 
                 return f;
             }

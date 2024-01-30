@@ -38,6 +38,15 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     public List<Param> Params => _params;
     public ISourceProvider SourceProvider => _tableProvider;
     public string? ColumnName => _colName;
+    private Stack<(ISourceProvider, ReadOnlyCollection<ParameterExpression>)> _scope = [];
+    protected override Expression VisitLambda<T>(Expression<T> node)
+    {
+        using var _ = new AutoCleanup(
+            () => _scope.Push((_tableProvider, node.Parameters)),
+            () => _scope.Pop()
+            );
+        return base.VisitLambda(node);
+    }
     protected override Expression VisitMethodCall(MethodCallExpression node)
     {
         if (node.Object?.Type == typeof(TableAlias))
@@ -183,7 +192,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                     innerQuery = (QueryCommand)((Func<object?, object>)dCmd)(paramValue);
                 }
 
-                var sql = _dataProvider.MakeSelect(innerQuery, _paramMode, _params);
+                var sql = _dataProvider.MakeSelect(innerQuery, _paramMode, _params, _tableProvider, _queryProvider, _paramProvider, _aliasProvider);
 
                 if (!_paramMode)
                 {
@@ -228,7 +237,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 else
                     throw new InvalidOperationException();
 
-                var sql = _dataProvider.MakeSelect(innerQuery, _paramMode, _params);
+                var sql = _dataProvider.MakeSelect(innerQuery, _paramMode, _params, _tableProvider, _queryProvider, _paramProvider, _aliasProvider);
 
                 if (!_paramMode)
                 {
@@ -391,10 +400,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         {
             throw new NotImplementedException();
         }
-        else
-        {
 
-        }
 
         return base.VisitMethodCall(node);
 
@@ -434,7 +440,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             }
             _needAliasForColumn = true;
             var innerQuery = _queryProvider.ReferencedQueries[idx];
-            var sql = _dataProvider.MakeSelect(innerQuery, _paramMode, _params);
+            var sql = _dataProvider.MakeSelect(innerQuery, _paramMode, _params, _tableProvider, _queryProvider, _paramProvider, _aliasProvider);
 
             if (!_paramMode)
             {
@@ -446,14 +452,14 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 
         return base.VisitIndex(node);
     }
-    protected override Expression VisitLambda<T>(Expression<T> node)
-    {
-        if (typeof(T).IsAssignableTo(typeof(QueryCommand)))
-        {
+    // protected override Expression VisitLambda<T>(Expression<T> node)
+    // {
+    //     if (typeof(T).IsAssignableTo(typeof(QueryCommand)))
+    //     {
 
-        }
-        return base.VisitLambda(node);
-    }
+    //     }
+    //     return base.VisitLambda(node);
+    // }
     protected override Expression VisitConstant(ConstantExpression node)
     {
         if (!_paramMode)
@@ -536,7 +542,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                     if (innerCol is null)
                         throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
 
-                    var col = _dataProvider.MakeColumn(innerCol.Expression!, innerQuery.EntityType!, innerQuery, false, innerQuery, innerQuery, _params, _paramMode);
+                    var col = _dataProvider.MakeColumn(innerCol.Expression!, innerQuery.EntityType!, innerQuery, false, innerQuery, innerQuery, _aliasProvider, _params, _paramMode);
                     if (!_paramMode)
                     {
                         if (col.NeedAliasForColumn)
@@ -638,6 +644,34 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 
             return node;
         }
+        else if (node.Expression is NewExpression n && n.Type.IsGenericType && n.Type.GetGenericTypeDefinition() == typeof(OuterRefMarker<>) && n.Arguments is [ConstantExpression cexp] && cexp.Value is int idx)
+        {
+            var memberAccessExp = (MemberExpression)_queryProvider.OuterReferences![idx];
+            string? tableAliasForColumn = null;
+
+            if (memberAccessExp!.Type!.TryGetProjectionDimension(out _))
+            {
+                var aliasVisitor = new AliasFromProjectionVisitor();
+                aliasVisitor.Visit(node.Expression);
+                tableAliasForColumn = aliasVisitor.Alias;
+            }
+            else
+                tableAliasForColumn = GetAliasFromParam((ParameterExpression)memberAccessExp.Expression);
+
+            if (!_paramMode)
+                _builder!.Append(tableAliasForColumn).Append('.');
+
+            if (!_paramMode)
+            {
+                var colName = memberAccessExp.Member.GetPropertyColumnName(_dataProvider);
+                if (!string.IsNullOrEmpty(colName))
+                {
+                    _builder!.Append(colName);
+                    _colName = colName;
+                    return node;
+                }
+            }
+        }
         else
         {
             var visitor = new TwoTypeExpressionVisitor<ParameterExpression, ConstantExpression>();
@@ -728,7 +762,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                     if (innerCol is null)
                         throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
 
-                    var col = _dataProvider.MakeColumn(innerCol.Expression!, innerQuery.EntityType!, innerQuery, hasTableAliasForColumn, innerQuery, innerQuery, _params, _paramMode);
+                    var col = _dataProvider.MakeColumn(innerCol.Expression!, innerQuery.EntityType!, innerQuery, hasTableAliasForColumn, innerQuery, innerQuery, _aliasProvider, _params, _paramMode);
 
                     if (!_paramMode)
                     {
@@ -756,21 +790,15 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 
         return base.VisitMember(node);
     }
-    private string? GetAliasFromParam(ParameterExpression param)
-    {
-        return _aliasProvider?.FindAlias(param);
-    }
-    // private string GetAliasFromProjection(Type declaringType)
-    // {
-    //     var idx = 0;
-    //     foreach (var prop in _entityType.GetProperties(BindingFlags.Instance | BindingFlags.Public))
-    //     {
-    //         if (++idx > _dim && prop.PropertyType == declaringType)
-    //             return prop.Name;
-    //     }
 
-    //     throw new BuildSqlCommandException($"Cannot find alias of type {declaringType} in {_entityType}");
-    // }
+    private string? GetAliasFromParam(ParameterExpression lambdaParameter)
+    {
+        var tp = _scope.FirstOrDefault(it => it.Item2.Contains(lambdaParameter));
+        if (tp.Item1 is not null)
+            return _aliasProvider!.FindAlias(tp.Item1) ?? throw new InvalidOperationException();
+
+        throw new InvalidOperationException();
+    }
 
     protected override Expression VisitBinary(BinaryExpression node)
     {
@@ -906,5 +934,20 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
         Dispose(disposing: true);
         GC.SuppressFinalize(this);
+    }
+}
+
+public readonly ref struct AutoCleanup
+{
+    private readonly Action _onComplete;
+
+    public AutoCleanup(Action onStart, Action onComplete)
+    {
+        onStart?.Invoke();
+        _onComplete = onComplete;
+    }
+    public void Dispose()
+    {
+        _onComplete?.Invoke();
     }
 }
