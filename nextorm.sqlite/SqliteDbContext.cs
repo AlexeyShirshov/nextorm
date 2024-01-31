@@ -71,7 +71,7 @@ public class SqliteDbContext : DbContext
     {
         return new SQLiteParameter(name, value);
     }
-    protected override void MakePage(Paging paging, StringBuilder sqlBuilder)
+    public override void MakePage(Paging paging, StringBuilder sqlBuilder)
     {
         // var sb = _sbPool.Get();
         // try

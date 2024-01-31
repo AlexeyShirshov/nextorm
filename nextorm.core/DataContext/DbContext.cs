@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.ObjectPool;
 using System.Collections.Concurrent;
+using System.Collections.ObjectModel;
 using System.Data;
 using System.Data.Common;
 using System.Diagnostics;
@@ -143,6 +144,13 @@ public class DbContext : IDataContext
         MakeSelect(queryCommand, true, @params, queryCommand, null);
         return @params;
     }
+
+    private string? MakeSelect(QueryCommand queryCommand, bool paramMode, List<Param> @params, IQueryContext queryContext, IAliasProvider? aliasProvider)
+    {
+        var sqlBuilder = new SqlBuilder(this, paramMode, @params, queryContext, queryContext, queryContext, aliasProvider, [], Logger);
+        return sqlBuilder.MakeSelect(queryCommand);
+    }
+
     private void LogParams(DbCommand sqlCommand)
     {
         Logger!.LogDebug("Executing query: {sql}", sqlCommand.CommandText);
@@ -427,291 +435,20 @@ public class DbContext : IDataContext
     {
         throw new NotImplementedException();
     }
-    public string? MakeSelect(QueryCommand cmd, bool paramMode, List<Param> @params, IQueryContext queryContext, IAliasProvider? aliasProvider)
-        => MakeSelect(cmd, paramMode, @params, queryContext, queryContext, queryContext, aliasProvider);
-    public virtual string? MakeSelect(QueryCommand cmd, bool paramMode, List<Param> @params, ISourceProvider sourceProvider, IQueryProvider queryProvider, IParamProvider paramProvider, IAliasProvider? aliasProvider)
-    {
-#if DEBUG
-        if (!cmd.IsPrepared)
-            throw new InvalidOperationException("Command not prepared");
 
-        ArgumentNullException.ThrowIfNull(@params);
-
-        if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Making sql with param mode {mode}", paramMode);
-#endif
-        //ArgumentNullException.ThrowIfNull(cmd.SelectList);
-        //ArgumentNullException.ThrowIfNull(cmd.From);
-        ArgumentNullException.ThrowIfNull(cmd.EntityType);
-
-        var selectList = cmd.SelectList;
-        var from = cmd.From;
-        var entityType = cmd.EntityType;
-
-        var sqlBuilder = paramMode ? null : _sbPool.Get();
-
-        var pageApplied = false;
-
-        if (!paramMode) sqlBuilder!.Append("select ");
-        if (cmd.IgnoreColumns || selectList is null)
-        {
-            if (!paramMode) sqlBuilder!.Append("*, ");
-        }
-        else
-        {
-            if (!paramMode && cmd.Paging.IsTop && MakeTop(cmd.Paging.Limit, out var topStmt))
-            {
-                sqlBuilder!.Append(topStmt).Append(' ');
-                pageApplied = true;
-            }
-
-            var selectListCount = selectList.Length;
-            for (var i = 0; i < selectListCount; i++)
-            {
-                var item = selectList[i];
-                var (needAliasForColumn, column) = MakeColumn(item.Expression!, entityType, sourceProvider, false, paramProvider, queryProvider, aliasProvider, @params, paramMode);
-
-                if (!paramMode)
-                {
-                    sqlBuilder!.Append(column);
-
-                    if (needAliasForColumn)
-                    {
-                        sqlBuilder.Append(MakeColumnAlias(item.PropertyName));
-                    }
-
-                    sqlBuilder.Append(", ");
-                }
-            }
-        }
-
-        if (from is not null)
-        {
-            var joins = cmd.Joins;
-            var hasJoins = joins?.Length > 0;
-            var needAlias = hasJoins || queryProvider.OuterReferences?.Count > 0;
-            var fromStr = MakeFrom(from, needAlias, @params, paramMode, sourceProvider, queryProvider, paramProvider, aliasProvider);
-            if (!paramMode)
-            {
-                sqlBuilder!.Length -= 2;
-                sqlBuilder.Append(" from ").Append(fromStr);
-            }
-
-            if (hasJoins)
-            {
-                for (var (idx, cnt) = (0, joins!.Length); idx < cnt; idx++)
-                {
-                    var join = joins[idx];
-
-                    var joinSql = MakeJoin(join, cmd.EntityType!, @params, paramMode, sourceProvider, queryProvider, paramProvider, aliasProvider);
-                    if (!paramMode) sqlBuilder!.Append(joinSql);
-                }
-            }
-
-            if (cmd.PreparedCondition is not null)
-            {
-                var whereSql = MakeWhere(entityType, sourceProvider, queryProvider, paramProvider, cmd.PreparedCondition, 0, aliasProvider, @params, paramMode);
-                if (!paramMode) sqlBuilder!.AppendLine().Append(" where ").Append(whereSql);
-            }
-
-            var grouping = cmd.GroupingList;
-            if (grouping?.Length > 0)
-            {
-                if (!paramMode) sqlBuilder!.AppendLine().Append(" group by ");
-
-                var groupingListCount = grouping.Length;
-                for (var i = 0; i < groupingListCount; i++)
-                {
-                    var item = grouping[i];
-                    var (needAliasForColumn, column) = MakeColumn(item.Expression!, entityType, sourceProvider, false, paramProvider, queryProvider, aliasProvider, @params, paramMode);
-
-                    if (!paramMode)
-                    {
-                        sqlBuilder!.Append(column);
-
-                        if (needAliasForColumn)
-                        {
-                            sqlBuilder.Append(MakeColumnAlias(item.PropertyName));
-                        }
-
-                        sqlBuilder.Append(", ");
-                    }
-                }
-
-                if (!paramMode)
-                {
-                    sqlBuilder!.Length -= 2;
-                }
-
-                if (cmd.Having is not null)
-                {
-                    var havingSql = MakeWhere(entityType, sourceProvider, queryProvider, paramProvider, cmd.Having, 0, aliasProvider, @params, paramMode);
-                    if (!paramMode) sqlBuilder!.AppendLine().Append(" having ").Append(havingSql);
-                }
-            }
-
-            if (cmd.UnionQuery is not null)
-            {
-                if (!paramMode)
-                {
-                    sqlBuilder!.AppendLine().Append(cmd.UnionType switch
-                    {
-                        UnionType.Distinct => " union ",
-                        UnionType.All => " union all ",
-                        _ => throw new NotSupportedException(cmd.UnionType.ToString("G"))
-                    }).AppendLine();
-                }
-
-                var sql = MakeSelect(cmd.UnionQuery, paramMode, @params, sourceProvider, queryProvider, paramProvider, new DefaultAliasProvider());
-                if (!paramMode) sqlBuilder!.Append(sql);
-            }
-
-            var sortingList = cmd.Sorting;
-            if (sortingList is not null)
-            {
-                if (!paramMode) sqlBuilder!.AppendLine().Append(" order by ");
-
-                for (var (i, cnt) = (0, sortingList.Length); i < cnt; i++)
-                {
-                    var sorting = sortingList[i];
-                    if (sorting.PreparedExpression is not null)
-                    {
-                        var sortingSql = MakeSort(entityType, sourceProvider, sorting.PreparedExpression, 0, aliasProvider, paramProvider, queryProvider, @params, paramMode);
-                        if (!paramMode)
-                        {
-                            sqlBuilder!.Append(sortingSql);
-                            if (sorting.Direction == OrderDirection.Desc)
-                                sqlBuilder.Append(" desc");
-
-                            sqlBuilder.Append(", ");
-                        }
-                    }
-                    else if (!paramMode && sorting.ColumnIndex.HasValue)
-                    {
-                        sqlBuilder!.Append(sorting.ColumnIndex);
-                        if (sorting.Direction == OrderDirection.Desc)
-                            sqlBuilder.Append(" desc");
-
-                        sqlBuilder.Append(", ");
-                    }
-                }
-
-                if (!paramMode) sqlBuilder!.Length -= 2;
-            }
-            else if (!pageApplied && RequireSorting(cmd) && !paramMode)
-            {
-                sqlBuilder!.AppendLine().Append(" order by ").Append(EmptySorting());
-            }
-
-            if (!pageApplied && !paramMode && !cmd.Paging.IsEmpty)
-            {
-                sqlBuilder!.AppendLine();
-                MakePage(cmd.Paging, sqlBuilder);
-            }
-        }
-        else if (!paramMode && sqlBuilder!.Length > 0)
-            sqlBuilder.Length -= 2;
-
-
-        string? r = null;
-        if (!paramMode)
-        {
-            r = sqlBuilder!.ToString();
-
-            _sbPool.Return(sqlBuilder);
-        }
-
-#if DEBUG
-        if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Generated sql with param mode {mode}: {sql}", paramMode, r);
-#endif
-
-        return r;
-    }
-
-    protected virtual bool MakeTop(int limit, out string? topStmt)
+    public virtual bool MakeTop(int limit, out string? topStmt)
     {
         topStmt = null;
         return false;
     }
 
-    protected virtual string EmptySorting() => throw new NotImplementedException();
-    protected virtual bool RequireSorting(QueryCommand queryCommand) => false;
-    protected virtual void MakePage(Paging paging, StringBuilder sqlBuilder)
+    public virtual string EmptySorting() => throw new NotImplementedException();
+    public virtual bool RequireSorting(QueryCommand queryCommand) => false;
+    public virtual void MakePage(Paging paging, StringBuilder sqlBuilder)
     {
         throw new NotImplementedException();
     }
 
-    private string? MakeJoin(JoinExpression join, Type entityType, List<Param> @params, bool paramMode, ISourceProvider sourceProvider, IQueryProvider queryProvider, IParamProvider paramProvider, IAliasProvider? aliasProvider)
-    {
-        var sqlBuilder = paramMode ? null : _sbPool.Get();
-
-        if (!paramMode)
-        {
-            switch (join.JoinType)
-            {
-                case JoinType.Inner:
-                    sqlBuilder!.Append(" join ");
-                    break;
-                default:
-                    throw new NotImplementedException(join.JoinType.ToString());
-            }
-        }
-
-        var visitor = new JoinExpressionVisitor();
-        visitor.Visit(join.JoinCondition);
-
-        var dim = 1;
-        if (join.JoinCondition.Parameters[0].Type.TryGetProjectionDimension(out var joinDim))
-            dim = joinDim;
-
-        FromExpression fromExp;
-        if (visitor.JoinType is not null)
-        {
-            if (visitor.JoinType.IsAnonymous())
-            {
-                //fromExp = GetFrom(join.Query.EntityType);
-                var sql = MakeSelect(join.Query!, paramMode, @params, sourceProvider, queryProvider, paramProvider, aliasProvider);
-
-                if (!paramMode)
-                {
-                    sqlBuilder!.Append('(').Append(sql).Append(") ");
-                    sqlBuilder.Append(aliasProvider.GetNextAlias(join.Query!));
-                }
-            }
-            else
-            {
-                fromExp = GetFrom(visitor.JoinType);
-
-                // if (!paramMode)
-                //     fromExp.TableAlias = GetAliasFromProjection(entityType, visitor.JoinType, dim);
-
-                var fromSql = MakeFrom(fromExp, true, @params, paramMode, sourceProvider, queryProvider, paramProvider, aliasProvider);
-                if (!paramMode)
-                {
-                    sqlBuilder!.Append(fromSql);
-                }
-            }
-        }
-
-        var whereSql = MakeWhere(entityType, sourceProvider, queryProvider, paramProvider, visitor.JoinCondition!, dim, aliasProvider, @params, paramMode);
-
-        if (!paramMode)
-        {
-            sqlBuilder!.Append(" on ");
-
-            sqlBuilder.Append(whereSql);
-        }
-
-        string? r = null;
-
-        if (!paramMode)
-        {
-            r = sqlBuilder!.ToString();
-
-            _sbPool.Return(sqlBuilder);
-        }
-
-        return r;
-    }
     private static string GetAliasFromProjection(Type entityType, Type declaringType, int from)
     {
         int idx = 0;
@@ -722,85 +459,6 @@ public class DbContext : IDataContext
         }
 
         throw new BuildSqlCommandException($"Cannot find alias of type {declaringType} in {entityType}");
-    }
-    private string MakeWhere(Type entityType, ISourceProvider sourceProvider, IQueryProvider queryProvider, IParamProvider paramProvider, Expression condition, int dim, IAliasProvider? aliasProvider, List<Param> @params, bool paramMode)
-    {
-        // if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Where expression: {exp}", condition);
-        using var visitor = new WhereExpressionVisitor(entityType, this, sourceProvider, dim, aliasProvider, paramProvider, queryProvider, paramMode);
-        visitor.Visit(condition);
-        @params.AddRange(visitor.Params);
-
-        if (paramMode) return string.Empty;
-
-        return visitor.ToString();
-    }
-    private string MakeSort(Type entityType, IQueryContext queryContext, Expression sorting, int dim, IAliasProvider? aliasProvider, List<Param> @params, bool paramMode)
-        => MakeSort(entityType, queryContext, sorting, dim, aliasProvider, queryContext, queryContext, @params, paramMode);
-    private string MakeSort(Type entityType, ISourceProvider tableSource, Expression sorting, int dim, IAliasProvider? aliasProvider, IParamProvider paramProvider, IQueryProvider queryProvider, List<Param> @params, bool paramMode)
-    {
-        // if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Where expression: {exp}", condition);
-        using var visitor = new BaseExpressionVisitor(entityType, this, tableSource, dim, aliasProvider, paramProvider, queryProvider, true, paramMode);
-        visitor.Visit(sorting);
-        @params.AddRange(visitor.Params);
-
-        if (paramMode) return string.Empty;
-
-        return visitor.ToString();
-    }
-    public (bool NeedAliasForColumn, string Column) MakeColumn(Expression selectExp, Type entityType, IQueryContext queryContext, IAliasProvider? aliasProvider, bool dontNeedAlias, List<Param> @params, bool paramMode)
-        => MakeColumn(selectExp, entityType, queryContext, dontNeedAlias, queryContext, queryContext, aliasProvider, @params, paramMode);
-    public (bool NeedAliasForColumn, string Column) MakeColumn(Expression selectExp, Type entityType, ISourceProvider tableProvider, bool dontNeedAlias, IParamProvider paramProvider, IQueryProvider queryProvider, IAliasProvider? aliasProvider, List<Param> @params, bool paramMode)
-    {
-        using var visitor = new BaseExpressionVisitor(entityType, this, tableProvider, 0, aliasProvider, paramProvider, queryProvider, dontNeedAlias, paramMode);
-        visitor.Visit(selectExp);
-        @params.AddRange(visitor.Params);
-
-        if (paramMode) return (false, string.Empty);
-
-        return (visitor.NeedAliasForColumn, visitor.ToString());
-    }
-    public string MakeFrom(FromExpression from, bool needAlias, List<Param> @params, bool paramMode, IQueryContext queryContext, IAliasProvider aliasProvider)
-        => MakeFrom(from, needAlias, @params, paramMode, queryContext, queryContext, queryContext, aliasProvider);
-    public virtual string MakeFrom(FromExpression from, bool needAlias, List<Param> @params, bool paramMode, ISourceProvider sourceProvider, IQueryProvider queryProvider, IParamProvider paramProvider, IAliasProvider? aliasProvider)
-    {
-        if (!paramMode && !string.IsNullOrEmpty(from.Table))
-        {
-            var sqlBuilder = _sbPool.Get();
-            sqlBuilder.Append(from.Table);
-
-            if (needAlias)
-            {
-                sqlBuilder.Append(MakeTableAlias(aliasProvider!.GetNextAlias(from)));
-            }
-            var r = sqlBuilder.ToString();
-            _sbPool.Return(sqlBuilder);
-            return r;
-        }
-        else
-        {
-            var cmd = from.SubQuery;
-
-            if (cmd is not null)
-            {
-#if DEBUG
-                if (!cmd.IsPrepared) throw new BuildSqlCommandException("Inner query is not prepared");
-#endif
-                var sql = MakeSelect(cmd, paramMode, @params, sourceProvider, queryProvider, paramProvider, aliasProvider);
-
-                if (paramMode) return string.Empty;
-
-                var sqlBuilder = _sbPool.Get();
-                sqlBuilder.Append('(').Append(sql).Append(')');
-                if (needAlias)
-                {
-                    sqlBuilder.Append(MakeTableAlias(aliasProvider!.GetNextAlias(from)));
-                }
-                var r = sqlBuilder.ToString();
-                _sbPool.Return(sqlBuilder);
-                return r;
-            }
-        }
-        return string.Empty;
     }
     public virtual string MakeTableAlias(string tableAlias)
     {
@@ -831,6 +489,13 @@ public class DbContext : IDataContext
     {
         //_clearCache = true;
     }
+    public FromExpression GetFrom(Type t)
+    {
+        if (DataContextCache.Metadata.TryGetValue(t, out var entity) && !string.IsNullOrEmpty(entity.TableName))
+            return new FromExpression(entity.TableName);
+
+        return new FromExpression(GetTableName(t));
+    }
 
     public FromExpression? GetFrom(Type srcType, QueryCommand queryCommand)
     {
@@ -853,13 +518,6 @@ public class DbContext : IDataContext
             return null;
     }
 
-    private FromExpression GetFrom(Type t)
-    {
-        if (DataContextCache.Metadata.TryGetValue(t, out var entity) && !string.IsNullOrEmpty(entity.TableName))
-            return new FromExpression(entity.TableName);
-
-        return new FromExpression(GetTableName(t));
-    }
     public static Expression MapColumn(SelectExpression column, Expression param)
     {
         if (column.Nullable)

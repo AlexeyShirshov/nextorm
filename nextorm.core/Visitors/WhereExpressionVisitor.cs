@@ -1,9 +1,11 @@
+using System.Collections.ObjectModel;
 using System.Linq.Expressions;
+using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
 
-public class WhereExpressionVisitor(Type entityType, DbContext dataProvider, ISourceProvider tableSource, int dim, IAliasProvider? aliasProvider, IParamProvider paramProvider, IQueryProvider queryProvider, bool paramMode)
-    : BaseExpressionVisitor(entityType, dataProvider, tableSource, dim, aliasProvider, paramProvider, queryProvider, false, paramMode)
+public class WhereExpressionVisitor(Type entityType, DbContext dataProvider, ISourceProvider tableSource, int dim, IAliasProvider? aliasProvider, IParamProvider paramProvider, IQueryProvider queryProvider, bool paramMode, Stack<(ISourceProvider, ReadOnlyCollection<ParameterExpression>)> paramScope, List<Param> @params, ILogger logger)
+    : BaseExpressionVisitor(entityType, dataProvider, tableSource, dim, aliasProvider, paramProvider, queryProvider, false, paramMode, paramScope, @params, logger)
 {
     protected override Expression VisitBinary(BinaryExpression node)
     {
@@ -11,11 +13,9 @@ public class WhereExpressionVisitor(Type entityType, DbContext dataProvider, ISo
         {
             using var leftVisitor = Clone();
             leftVisitor.Visit(node.Left);
-            Params.AddRange(leftVisitor.Params);
 
             using var rightVisitor = Clone();
             rightVisitor.Visit(node.Right);
-            Params.AddRange(rightVisitor.Params);
 
             var left = leftVisitor.ToString();
             var right = rightVisitor.ToString();

@@ -11,7 +11,8 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     private readonly ISourceProvider _tableProvider;
     private readonly int _dim;
     protected readonly StringBuilder? _builder;
-    private readonly List<Param> _params = new();
+    private readonly List<Param> _params;
+    private readonly ILogger _logger;
     private bool _needAliasForColumn;
     private string? _colName;
     private readonly IAliasProvider? _aliasProvider;
@@ -20,8 +21,9 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     private readonly bool _dontNeedAlias;
     protected readonly bool _paramMode;
     private bool _disposedValue;
+    private readonly Stack<(ISourceProvider, ReadOnlyCollection<ParameterExpression>)> _scope;
 
-    public BaseExpressionVisitor(Type entityType, DbContext dataProvider, ISourceProvider tableProvider, int dim, IAliasProvider? aliasProvider, IParamProvider paramProvider, IQueryProvider queryProvider, bool dontNeedAlias, bool paramMode)
+    public BaseExpressionVisitor(Type entityType, DbContext dataProvider, ISourceProvider tableProvider, int dim, IAliasProvider? aliasProvider, IParamProvider paramProvider, IQueryProvider queryProvider, bool dontNeedAlias, bool paramMode, Stack<(ISourceProvider, ReadOnlyCollection<ParameterExpression>)> paramScope, List<Param> @params, ILogger logger)
     {
         _entityType = entityType;
         _dataProvider = dataProvider;
@@ -33,19 +35,24 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         _dontNeedAlias = dontNeedAlias;
         _paramMode = paramMode;
         _builder = paramMode ? null : DbContext._sbPool.Get();
+        _scope = paramScope;
+        _params = @params;
+        _logger = logger;
     }
     public bool NeedAliasForColumn => _needAliasForColumn;
-    public List<Param> Params => _params;
     public ISourceProvider SourceProvider => _tableProvider;
     public string? ColumnName => _colName;
-    private Stack<(ISourceProvider, ReadOnlyCollection<ParameterExpression>)> _scope = [];
     protected override Expression VisitLambda<T>(Expression<T> node)
     {
-        using var _ = new AutoCleanup(
-            () => _scope.Push((_tableProvider, node.Parameters)),
-            () => _scope.Pop()
-            );
-        return base.VisitLambda(node);
+        _scope.Push((_tableProvider, node.Parameters));
+        try
+        {
+            return base.VisitLambda(node);
+        }
+        finally
+        {
+            _scope.Pop();
+        }
     }
     protected override Expression VisitMethodCall(MethodCallExpression node)
     {
@@ -192,7 +199,8 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                     innerQuery = (QueryCommand)((Func<object?, object>)dCmd)(paramValue);
                 }
 
-                var sql = _dataProvider.MakeSelect(innerQuery, _paramMode, _params, _tableProvider, _queryProvider, _paramProvider, _aliasProvider);
+                var sqlBuilder = new SqlBuilder(_dataProvider, _paramMode, _params, _tableProvider, _queryProvider, _paramProvider, _aliasProvider, _scope, _logger);
+                var sql = sqlBuilder.MakeSelect(innerQuery);
 
                 if (!_paramMode)
                 {
@@ -237,7 +245,8 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 else
                     throw new InvalidOperationException();
 
-                var sql = _dataProvider.MakeSelect(innerQuery, _paramMode, _params, _tableProvider, _queryProvider, _paramProvider, _aliasProvider);
+                var sqlBuilder = new SqlBuilder(_dataProvider, _paramMode, _params, _tableProvider, _queryProvider, _paramProvider, _aliasProvider, _scope, _logger);
+                var sql = sqlBuilder.MakeSelect(innerQuery);
 
                 if (!_paramMode)
                 {
@@ -259,9 +268,8 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                     for (var (i, cnt) = (0, items.Count); i < cnt; i++)
                     {
                         var argExp = items[i];
-                        using var visitor = new BaseExpressionVisitor(_entityType, _dataProvider, _tableProvider, 0, null, _paramProvider, _queryProvider, _dontNeedAlias, _paramMode);
+                        using var visitor = new BaseExpressionVisitor(_entityType, _dataProvider, _tableProvider, 0, _aliasProvider, _paramProvider, _queryProvider, _dontNeedAlias, _paramMode, _scope, _params, _logger);
                         visitor.Visit(argExp);
-                        _params.AddRange(visitor.Params);
                         if (!_paramMode) _builder!.Append(visitor.ToString()).Append(", ");
                     }
                     if (!_paramMode) _builder!.Length -= 2;
@@ -280,9 +288,8 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 for (var (i, cnt) = (0, args.Count); i < cnt; i++)
                 {
                     var argExp = args[i];
-                    using var visitor = new BaseExpressionVisitor(_entityType, _dataProvider, _tableProvider, 0, null, _paramProvider, _queryProvider, _dontNeedAlias, _paramMode);
+                    using var visitor = new BaseExpressionVisitor(_entityType, _dataProvider, _tableProvider, 0, null, _paramProvider, _queryProvider, _dontNeedAlias, _paramMode, _scope, _params, _logger);
                     visitor.Visit(argExp);
-                    _params.AddRange(visitor.Params);
                     if (!_paramMode) _builder!.Append(visitor.ToString()).Append(", ");
                 }
 
@@ -319,9 +326,8 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 for (var (i, cnt) = (0, args.Count); i < cnt; i++)
                 {
                     var argExp = args[i];
-                    using var visitor = new BaseExpressionVisitor(_entityType, _dataProvider, _tableProvider, 0, null, _paramProvider, _queryProvider, _dontNeedAlias, _paramMode);
+                    using var visitor = new BaseExpressionVisitor(_entityType, _dataProvider, _tableProvider, 0, null, _paramProvider, _queryProvider, _dontNeedAlias, _paramMode, _scope, _params, _logger);
                     visitor.Visit(argExp);
-                    _params.AddRange(visitor.Params);
                     if (!_paramMode) _builder!.Append(visitor.ToString()).Append(", ");
                 }
 
@@ -440,7 +446,8 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             }
             _needAliasForColumn = true;
             var innerQuery = _queryProvider.ReferencedQueries[idx];
-            var sql = _dataProvider.MakeSelect(innerQuery, _paramMode, _params, _tableProvider, _queryProvider, _paramProvider, _aliasProvider);
+            var sqlBuilder = new SqlBuilder(_dataProvider, _paramMode, _params, _tableProvider, _queryProvider, _paramProvider, _aliasProvider, _scope, _logger);
+            var sql = sqlBuilder.MakeSelect(innerQuery);
 
             if (!_paramMode)
             {
@@ -542,7 +549,8 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                     if (innerCol is null)
                         throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
 
-                    var col = _dataProvider.MakeColumn(innerCol.Expression!, innerQuery.EntityType!, innerQuery, false, innerQuery, innerQuery, _aliasProvider, _params, _paramMode);
+                    var sqlBuilder = new SqlBuilder(_dataProvider, _paramMode, _params, _tableProvider, _queryProvider, _paramProvider, _aliasProvider, _scope, _logger);
+                    var col = sqlBuilder.MakeColumn(innerCol.Expression!, innerQuery.EntityType!, false);
                     if (!_paramMode)
                     {
                         if (col.NeedAliasForColumn)
@@ -762,7 +770,8 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                     if (innerCol is null)
                         throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
 
-                    var col = _dataProvider.MakeColumn(innerCol.Expression!, innerQuery.EntityType!, innerQuery, hasTableAliasForColumn, innerQuery, innerQuery, _aliasProvider, _params, _paramMode);
+                    var sqlBuilder = new SqlBuilder(_dataProvider, _paramMode, _params, _tableProvider, _queryProvider, _paramProvider, _aliasProvider, _scope, _logger);
+                    var col = sqlBuilder.MakeColumn(innerCol.Expression!, innerQuery.EntityType!, hasTableAliasForColumn);
 
                     if (!_paramMode)
                     {
@@ -811,11 +820,9 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 {
                     using var leftVisitor = Clone();
                     leftVisitor.Visit(node.Left);
-                    Params.AddRange(leftVisitor.Params);
 
                     using var rightVisitor = Clone();
                     rightVisitor.Visit(node.Right);
-                    Params.AddRange(rightVisitor.Params);
 
                     _builder!.Append(_dataProvider.MakeCoalesce(
                         leftVisitor.ToString(),
@@ -914,7 +921,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     {
         if (_paramMode) throw new NotSupportedException("Cannot clone in param mode");
 
-        return new BaseExpressionVisitor(_entityType, _dataProvider, _tableProvider, _dim, _aliasProvider, _paramProvider, _queryProvider, _dontNeedAlias, _paramMode);
+        return new BaseExpressionVisitor(_entityType, _dataProvider, _tableProvider, _dim, _aliasProvider, _paramProvider, _queryProvider, _dontNeedAlias, _paramMode, _scope, _params, _logger);
     }
 
     protected virtual void Dispose(bool disposing)

@@ -1,5 +1,6 @@
-namespace nextorm.core;
+using System.Reflection;
 
+namespace nextorm.core;
 public class TableAlias
 {
     public int Int(string _) => 0;
@@ -24,5 +25,16 @@ public class TableAlias
     public byte? NullableByte(string _) => 0;
     public bool? NullableBoolean(string _) => false;
     public Guid? NullableGuid(string _) => System.Guid.Empty;
-    public object Column(string _)=>string.Empty;
+    public object Column(string _) => string.Empty;
+
+    public TableColumn this[string __]
+    {
+        get => default!;
+        set => _ = value;
+    }
+}
+
+public class TableColumn
+{
+    public int AsInt { get; }
 }

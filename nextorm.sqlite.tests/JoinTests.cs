@@ -129,6 +129,24 @@ public class JoinTests
 
         idx.Should().BeGreaterThan(0);
     }
+    [Fact]
+    public void TestJoinsTables()
+    {
+        var r = _sut.From("simple_entity").Join(_sut.From("complex_entity"), (s, c) => s["id"] == c["id"]).Select(p => p.t1["id"].AsInt).ToList();
+
+        r.Should().NotBeNullOrEmpty();
+
+        r.Count.Should().Be(3);
+    }
+    [Fact]
+    public void TestJoinTableWithEntity()
+    {
+        var r = _sut.From("simple_entity").Join(_sut.ComplexEntity, (s, c) => s["id"].AsInt == c.Id).Select(p => p.t1["id"].AsInt).ToList();
+
+        r.Should().NotBeNullOrEmpty();
+
+        r.Count.Should().Be(3);
+    }
 }
 
 public class cls

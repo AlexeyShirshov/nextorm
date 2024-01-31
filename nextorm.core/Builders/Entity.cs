@@ -163,7 +163,7 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             query = ToCommand();
         }
 
-        var cb = new EntityP2<TEntity, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition)) { Logger = Logger, _query = query/*, PayloadManager = PayloadManager*/, BaseBuilder = this };
+        var cb = new EntityP2<TEntity, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition)) { Logger = Logger, _query = query };
         return cb;
     }
     public EntityP2<TEntity, TJoinEntity> Join<TJoinEntity>(QueryCommand<TJoinEntity> query, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
@@ -174,7 +174,7 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             queryBase = ToCommand();
         }
 
-        var cb = new EntityP2<TEntity, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition) { Query = query }) { Logger = Logger, _query = queryBase/*, PayloadManager = PayloadManager*/, BaseBuilder = this };
+        var cb = new EntityP2<TEntity, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition) { Query = query }) { Logger = Logger, _query = queryBase };
         return cb;
     }
     public Entity<TEntity> GroupBy<TResult>(Expression<Func<TEntity, TResult>> exp)
@@ -501,6 +501,7 @@ public class Entity : ICloneable
     private LambdaExpression? _group;
     private Expression<Func<TableAlias, bool>>? _having;
     protected List<JoinExpression>? _joins;
+    private QueryCommand? _query;
     public Entity(IDataContext dataProvider) : this(dataProvider, null) { }
     public Entity(IDataContext dataProvider, string? table)
     {
@@ -552,5 +553,26 @@ public class Entity : ICloneable
             b._condition = condition;
 
         return b;
+    }
+    public EntityP2<TableAlias, TableAlias> Join(Entity _, Expression<Func<TableAlias, TableAlias, bool>> joinCondition)
+    {
+        QueryCommand? query = null;
+        if (_condition is not null || _query is not null)
+        {
+            query = _query;
+        }
+        var cb = new EntityP2<TableAlias, TableAlias>(_dataProvider, new JoinExpression(joinCondition)) { Logger = Logger, Query = query };
+        return cb;
+    }
+    public EntityP2<TableAlias, TJoinEntity> Join<TJoinEntity>(Entity<TJoinEntity> _, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition)
+    {
+        QueryCommand? query = null;
+        if (_condition is not null || _query is not null)
+        {
+            query = _query;
+        }
+
+        var cb = new EntityP2<TableAlias, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition)) { Logger = Logger, Query = query };
+        return cb;
     }
 }
