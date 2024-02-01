@@ -19,7 +19,7 @@ public struct ValueList<T>
     {
         _curIdx = 0;
     }
-    public readonly int Length => _curIdx;
+    public readonly int Count => _curIdx;
     public void Add(T item)
     {
         if (_curIdx == MaxLength)
@@ -33,12 +33,22 @@ public struct ValueList<T>
             _buffer[_curIdx++] = item;
         }
     }
-    public readonly T Get(int idx)
+    public T this[int idx]
     {
-        if (_curIdx < MaxLength)
-            return _buffer[idx];
+        get
+        {
+            if (_curIdx < MaxLength)
+                return _buffer[idx];
 
-        return _arr![idx];
+            return _arr![idx];
+        }
+        set
+        {
+            if (_curIdx < MaxLength)
+                _buffer[idx] = value;
+            else
+                _arr![idx]=value;
+        }
     }
 }
 #endif

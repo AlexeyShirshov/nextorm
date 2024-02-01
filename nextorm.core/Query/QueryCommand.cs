@@ -46,7 +46,6 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     internal int UnionPlanHash;
     internal int ReferencedQueriesPlanHash;
     internal Type? ResultType;
-    private int _paramIdx;
     public Paging Paging;
     internal Expression? PreparedCondition;
     private QueryPlanEqualityComparer? _queryPlanComparer;
@@ -597,27 +596,22 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
 
         return (groupingList, groupingPlanHash);
     }
-    public QueryCommand? FindSourceFromAlias(string? alias)
-    {
-        if (string.IsNullOrEmpty(alias))
-        {
-            if (_from?.SubQuery is not null)
-                return _from.SubQuery;
+    // public QueryCommand? FindSourceFromAlias(string? alias)
+    // {
+    //     if (string.IsNullOrEmpty(alias))
+    //     {
+    //         if (_from?.SubQuery is not null)
+    //             return _from.SubQuery;
 
-            return null;
-        }
+    //         return null;
+    //     }
 
-        if (!(_joins?.Length > 0)) throw new InvalidOperationException("There is no joins");
+    //     if (!(_joins?.Length > 0)) throw new InvalidOperationException("There is no joins");
 
-        var idx = int.Parse(alias[1..]);
-        if (idx <= 1) return null;
-        return _joins[idx - 2].Query;
-    }
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public string GetParamName()
-    {
-        return string.Format("p{0}", _paramIdx++);
-    }
+    //     var idx = int.Parse(alias[1..]);
+    //     if (idx <= 1) return null;
+    //     return _joins[idx - 2].Query;
+    // }
     internal void ReplaceCommand(QueryCommand cmd, int idx)
     {
 #if DEBUG
@@ -682,7 +676,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         {
             dst._customData = _customData;
             dst._referencedQueries = _referencedQueries;
-            dst._paramIdx = _paramIdx;
+            // dst._paramIdx = _paramIdx;
             dst._union = _union;
             dst._from = _from;
         }

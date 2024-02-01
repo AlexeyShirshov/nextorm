@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Diagnostics;
 using System.Linq.Expressions;
 
 namespace nextorm.core;
@@ -6,35 +7,32 @@ namespace nextorm.core;
 public class DefaultAliasProvider : IAliasProvider
 {
 #if NET8_0_OR_GREATER
-    private ValueList<(string alias, object sourceProvider)> _valueArrayList;
+    private ValueList<(string alias, object sourceProvider)> _valueList;
 #else
-    private readonly ArrayList _valueArrayList = [];
+    private readonly List<(string alias, object sourceProvider)> _valueList = [];
 #endif
-    public string? FindAlias(ISourceProvider sourceProvider)
+    public string? FindAlias(int idx)
     {
-        for (var (i, cnt) = (0, _valueArrayList.Length); i < cnt; i++)
-        {
-            var item = _valueArrayList.Get(i);
-            if (item.sourceProvider == sourceProvider)
-                return item.alias;
-        }
-        return null;
+#if DEBUG
+        Debug.Assert(idx <= _valueList.Count);
+#endif
+        return "t" + (idx + 1);
     }
     public string GetNextAlias(FromExpression from)
     {
-        var idx = _valueArrayList.Length;
+        var idx = _valueList.Count;
         idx++;
         var alias = "t" + idx;
-        _valueArrayList.Add((alias, from));
+        _valueList.Add((alias, from));
         return alias;
     }
 
     public string GetNextAlias(QueryCommand queryCommand)
     {
-        var idx = _valueArrayList.Length;
+        var idx = _valueList.Count;
         idx++;
         var alias = "t" + idx;
-        _valueArrayList.Add((alias, queryCommand));
+        _valueList.Add((alias, queryCommand));
         return alias;
     }
 }

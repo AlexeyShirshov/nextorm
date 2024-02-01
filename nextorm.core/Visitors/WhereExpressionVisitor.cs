@@ -4,8 +4,8 @@ using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
 
-public class WhereExpressionVisitor(Type entityType, DbContext dataProvider, ISourceProvider tableSource, int dim, IAliasProvider? aliasProvider, IParamProvider paramProvider, IQueryProvider queryProvider, bool paramMode, Stack<(ISourceProvider, ReadOnlyCollection<ParameterExpression>)> paramScope, List<Param> @params, ILogger logger)
-    : BaseExpressionVisitor(entityType, dataProvider, tableSource, dim, aliasProvider, paramProvider, queryProvider, false, paramMode, paramScope, @params, logger)
+public class WhereExpressionVisitor(Type entityType, DbContext dataProvider, IColumnsProvider tableSource, int dim, IAliasProvider? aliasProvider, IParamProvider paramProvider, IQueryProvider queryProvider, bool paramMode, List<Param> @params, ILogger logger)
+    : BaseExpressionVisitor(entityType, dataProvider, tableSource, dim, aliasProvider, paramProvider, queryProvider, false, paramMode, @params, logger)
 {
     protected override Expression VisitBinary(BinaryExpression node)
     {

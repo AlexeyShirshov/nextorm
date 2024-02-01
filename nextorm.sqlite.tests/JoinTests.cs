@@ -132,7 +132,7 @@ public class JoinTests
     [Fact]
     public void TestJoinsTables()
     {
-        var r = _sut.From("simple_entity").Join(_sut.From("complex_entity"), (s, c) => s["id"] == c["id"]).Select(p => p.t1["id"].AsInt).ToList();
+        var r = _sut.From("simple_entity").Join(_sut.From("complex_entity"), (s, c) => s["id"] == c["id"]).Select(p => new { Id = p.t1["id"].AsInt, Str = p.t2["someString"] }).ToList();
 
         r.Should().NotBeNullOrEmpty();
 
@@ -141,7 +141,7 @@ public class JoinTests
     [Fact]
     public void TestJoinTableWithEntity()
     {
-        var r = _sut.From("simple_entity").Join(_sut.ComplexEntity, (s, c) => s["id"].AsInt == c.Id).Select(p => p.t1["id"].AsInt).ToList();
+        var r = _sut.From("simple_entity").Join(_sut.ComplexEntity, (s, c) => s["id"].AsInt == c.Id).Select(p => new { Id = p.t1["id"].AsInt, Str = p.t2.String }).ToList();
 
         r.Should().NotBeNullOrEmpty();
 

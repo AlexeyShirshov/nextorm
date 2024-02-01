@@ -8,7 +8,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 {
     private readonly Type _entityType;
     private readonly DbContext _dataProvider;
-    private readonly ISourceProvider _tableProvider;
+    private readonly IColumnsProvider _columnsProvider;
     private readonly int _dim;
     protected readonly StringBuilder? _builder;
     private readonly List<Param> _params;
@@ -21,13 +21,13 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     private readonly bool _dontNeedAlias;
     protected readonly bool _paramMode;
     private bool _disposedValue;
-    private readonly Stack<(ISourceProvider, ReadOnlyCollection<ParameterExpression>)> _scope;
+    //private readonly Stack<(IColumnsProvider, ReadOnlyCollection<ParameterExpression>)> _scope;
 
-    public BaseExpressionVisitor(Type entityType, DbContext dataProvider, ISourceProvider tableProvider, int dim, IAliasProvider? aliasProvider, IParamProvider paramProvider, IQueryProvider queryProvider, bool dontNeedAlias, bool paramMode, Stack<(ISourceProvider, ReadOnlyCollection<ParameterExpression>)> paramScope, List<Param> @params, ILogger logger)
+    public BaseExpressionVisitor(Type entityType, DbContext dataProvider, IColumnsProvider columnsProvider, int dim, IAliasProvider? aliasProvider, IParamProvider paramProvider, IQueryProvider queryProvider, bool dontNeedAlias, bool paramMode, List<Param> @params, ILogger logger)
     {
         _entityType = entityType;
         _dataProvider = dataProvider;
-        _tableProvider = tableProvider;
+        _columnsProvider = columnsProvider;
         _dim = dim;
         _aliasProvider = aliasProvider;
         _paramProvider = paramProvider;
@@ -35,25 +35,25 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         _dontNeedAlias = dontNeedAlias;
         _paramMode = paramMode;
         _builder = paramMode ? null : DbContext._sbPool.Get();
-        _scope = paramScope;
+        // _scope = paramScope;
         _params = @params;
         _logger = logger;
     }
     public bool NeedAliasForColumn => _needAliasForColumn;
-    public ISourceProvider SourceProvider => _tableProvider;
+    public IColumnsProvider SourceProvider => _columnsProvider;
     public string? ColumnName => _colName;
-    protected override Expression VisitLambda<T>(Expression<T> node)
-    {
-        _scope.Push((_tableProvider, node.Parameters));
-        try
-        {
-            return base.VisitLambda(node);
-        }
-        finally
-        {
-            _scope.Pop();
-        }
-    }
+    // protected override Expression VisitLambda<T>(Expression<T> node)
+    // {
+    //     _scope.Push((_tableProvider, node.Parameters));
+    //     try
+    //     {
+    //         return base.VisitLambda(node);
+    //     }
+    //     finally
+    //     {
+    //         _scope.Pop();
+    //     }
+    // }
     protected override Expression VisitMethodCall(MethodCallExpression node)
     {
         if (node.Object?.Type == typeof(TableAlias))
@@ -199,7 +199,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                     innerQuery = (QueryCommand)((Func<object?, object>)dCmd)(paramValue);
                 }
 
-                var sqlBuilder = new SqlBuilder(_dataProvider, _paramMode, _params, _tableProvider, _queryProvider, _paramProvider, _aliasProvider, _scope, _logger);
+                var sqlBuilder = new SqlBuilder(_dataProvider, _paramMode, _params, _columnsProvider, _queryProvider, _paramProvider, _aliasProvider, _logger);
                 var sql = sqlBuilder.MakeSelect(innerQuery);
 
                 if (!_paramMode)
@@ -245,7 +245,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 else
                     throw new InvalidOperationException();
 
-                var sqlBuilder = new SqlBuilder(_dataProvider, _paramMode, _params, _tableProvider, _queryProvider, _paramProvider, _aliasProvider, _scope, _logger);
+                var sqlBuilder = new SqlBuilder(_dataProvider, _paramMode, _params, _columnsProvider, _queryProvider, _paramProvider, _aliasProvider, _logger);
                 var sql = sqlBuilder.MakeSelect(innerQuery);
 
                 if (!_paramMode)
@@ -268,7 +268,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                     for (var (i, cnt) = (0, items.Count); i < cnt; i++)
                     {
                         var argExp = items[i];
-                        using var visitor = new BaseExpressionVisitor(_entityType, _dataProvider, _tableProvider, 0, _aliasProvider, _paramProvider, _queryProvider, _dontNeedAlias, _paramMode, _scope, _params, _logger);
+                        using var visitor = new BaseExpressionVisitor(_entityType, _dataProvider, _columnsProvider, 0, _aliasProvider, _paramProvider, _queryProvider, _dontNeedAlias, _paramMode, _params, _logger);
                         visitor.Visit(argExp);
                         if (!_paramMode) _builder!.Append(visitor.ToString()).Append(", ");
                     }
@@ -288,7 +288,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 for (var (i, cnt) = (0, args.Count); i < cnt; i++)
                 {
                     var argExp = args[i];
-                    using var visitor = new BaseExpressionVisitor(_entityType, _dataProvider, _tableProvider, 0, null, _paramProvider, _queryProvider, _dontNeedAlias, _paramMode, _scope, _params, _logger);
+                    using var visitor = new BaseExpressionVisitor(_entityType, _dataProvider, _columnsProvider, 0, null, _paramProvider, _queryProvider, _dontNeedAlias, _paramMode, _params, _logger);
                     visitor.Visit(argExp);
                     if (!_paramMode) _builder!.Append(visitor.ToString()).Append(", ");
                 }
@@ -326,7 +326,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 for (var (i, cnt) = (0, args.Count); i < cnt; i++)
                 {
                     var argExp = args[i];
-                    using var visitor = new BaseExpressionVisitor(_entityType, _dataProvider, _tableProvider, 0, null, _paramProvider, _queryProvider, _dontNeedAlias, _paramMode, _scope, _params, _logger);
+                    using var visitor = new BaseExpressionVisitor(_entityType, _dataProvider, _columnsProvider, 0, null, _paramProvider, _queryProvider, _dontNeedAlias, _paramMode, _params, _logger);
                     visitor.Visit(argExp);
                     if (!_paramMode) _builder!.Append(visitor.ToString()).Append(", ");
                 }
@@ -446,7 +446,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             }
             _needAliasForColumn = true;
             var innerQuery = _queryProvider.ReferencedQueries[idx];
-            var sqlBuilder = new SqlBuilder(_dataProvider, _paramMode, _params, _tableProvider, _queryProvider, _paramProvider, _aliasProvider, _scope, _logger);
+            var sqlBuilder = new SqlBuilder(_dataProvider, _paramMode, _params, _columnsProvider, _queryProvider, _paramProvider, _aliasProvider, _logger);
             var sql = sqlBuilder.MakeSelect(innerQuery);
 
             if (!_paramMode)
@@ -542,14 +542,14 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                     // }
                 }
 
-                var innerQuery = _tableProvider.FindSourceFromAlias(null);
+                var innerQuery = _columnsProvider.FindQueryCommand(_entityType);
                 if (innerQuery is not null)
                 {
                     var innerCol = innerQuery.SelectList!.SingleOrDefault(col => col.PropertyName == node.Member.Name);
                     if (innerCol is null)
                         throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
 
-                    var sqlBuilder = new SqlBuilder(_dataProvider, _paramMode, _params, _tableProvider, _queryProvider, _paramProvider, _aliasProvider, _scope, _logger);
+                    var sqlBuilder = new SqlBuilder(_dataProvider, _paramMode, _params, _columnsProvider, _queryProvider, _paramProvider, _aliasProvider, _logger);
                     var col = sqlBuilder.MakeColumn(innerCol.Expression!, innerQuery.EntityType!, false);
                     if (!_paramMode)
                     {
@@ -561,62 +561,6 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                             //_colName = col.Name;
                         }
                     }
-                }
-                else if (!_paramMode)
-                {
-                    if (_dataProvider.NeedMapping)
-                    {
-                        var colName = node.Member.GetPropertyColumnName(_dataProvider);
-                        if (!string.IsNullOrEmpty(colName))
-                        {
-                            _builder!.Append(colName);
-                            _colName = colName;
-                            return node;
-                        }
-                        // var props = _entityType.GetProperties(BindingFlags.FlattenHierarchy | BindingFlags.Public | BindingFlags.Instance).Where(prop => prop.CanWrite).ToArray();
-                        // for (int idx = 0; idx < props.Length; idx++)
-                        // {
-                        //     // if (cancellationToken.IsCancellationRequested)
-                        //     //     return;
-
-                        //     var prop = props[idx];
-                        //     if (prop is null) continue;
-                        //     var colAttr = prop.GetCustomAttribute<ColumnAttribute>(true);
-                        //     if (colAttr is not null)
-                        //     {
-                        //         _builder!.Append(colAttr.Name);
-                        //         _colName = colAttr.Name;
-                        //         return node;
-                        //     }
-                        //     else
-                        //     {
-                        //         foreach (var interf in _entityType.GetInterfaces())
-                        //         {
-                        //             // if (cancellationToken.IsCancellationRequested)
-                        //             //     return;
-
-                        //             var intMap = _entityType.GetInterfaceMap(interf);
-
-                        //             var implIdx = Array.IndexOf(intMap.TargetMethods, prop!.GetMethod);
-                        //             if (implIdx >= 0)
-                        //             {
-                        //                 var intMethod = intMap.InterfaceMethods[implIdx];
-
-                        //                 var intProp = interf.GetProperties().FirstOrDefault(prop => prop.GetMethod == intMethod);
-                        //                 colAttr = intProp?.GetCustomAttribute<ColumnAttribute>(true);
-                        //                 if (colAttr is not null)
-                        //                 {
-                        //                     _builder!.Append(colAttr.Name);
-                        //                     _colName = colAttr.Name;
-                        //                     return node;
-                        //                 }
-                        //             }
-                        //         }
-                        //     }
-                        // }
-                    }
-                    else
-                        throw new NotImplementedException(node.Member.Name);
                 }
             }
         }
@@ -763,14 +707,14 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                     // }
                 }
 
-                var innerQuery = _tableProvider.FindSourceFromAlias(tableAliasForColumn);
+                var innerQuery = _columnsProvider.FindQueryCommand(node.Expression.Type);
                 if (innerQuery is not null)
                 {
                     var innerCol = innerQuery.SelectList!.SingleOrDefault(col => col.PropertyName == node.Member.Name);
                     if (innerCol is null)
                         throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
 
-                    var sqlBuilder = new SqlBuilder(_dataProvider, _paramMode, _params, _tableProvider, _queryProvider, _paramProvider, _aliasProvider, _scope, _logger);
+                    var sqlBuilder = new SqlBuilder(_dataProvider, _paramMode, _params, _columnsProvider, _queryProvider, _paramProvider, _aliasProvider, _logger);
                     var col = sqlBuilder.MakeColumn(innerCol.Expression!, innerQuery.EntityType!, hasTableAliasForColumn);
 
                     if (!_paramMode)
@@ -802,11 +746,9 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 
     private string? GetAliasFromParam(ParameterExpression lambdaParameter)
     {
-        var tp = _scope.FirstOrDefault(it => it.Item2.Contains(lambdaParameter));
-        if (tp.Item1 is not null)
-            return _aliasProvider!.FindAlias(tp.Item1) ?? throw new InvalidOperationException();
+        var idx = _columnsProvider!.FindAlias(lambdaParameter.Type) ?? throw new InvalidOperationException();
 
-        throw new InvalidOperationException();
+        return _aliasProvider!.FindAlias(idx);
     }
 
     protected override Expression VisitBinary(BinaryExpression node)
@@ -921,7 +863,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     {
         if (_paramMode) throw new NotSupportedException("Cannot clone in param mode");
 
-        return new BaseExpressionVisitor(_entityType, _dataProvider, _tableProvider, _dim, _aliasProvider, _paramProvider, _queryProvider, _dontNeedAlias, _paramMode, _scope, _params, _logger);
+        return new BaseExpressionVisitor(_entityType, _dataProvider, _columnsProvider, _dim, _aliasProvider, _paramProvider, _queryProvider, _dontNeedAlias, _paramMode, _params, _logger);
     }
 
     protected virtual void Dispose(bool disposing)

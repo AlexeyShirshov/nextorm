@@ -147,7 +147,7 @@ public class DbContext : IDataContext
 
     private string? MakeSelect(QueryCommand queryCommand, bool paramMode, List<Param> @params, IQueryContext queryContext, IAliasProvider? aliasProvider)
     {
-        var sqlBuilder = new SqlBuilder(this, paramMode, @params, queryContext, queryContext, queryContext, aliasProvider, [], Logger);
+        var sqlBuilder = new SqlBuilder(this, paramMode, @params, new DefaultColumnsProvider(), queryContext, new DefaultParamProvider(), aliasProvider, Logger);
         return sqlBuilder.MakeSelect(queryCommand);
     }
 
