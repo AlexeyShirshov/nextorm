@@ -608,7 +608,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 tableAliasForColumn = aliasVisitor.Alias;
             }
             else
-                tableAliasForColumn = GetAliasFromParam((ParameterExpression)memberAccessExp.Expression);
+                tableAliasForColumn = GetAliasFromParam((ParameterExpression)memberAccessExp.Expression, false);
 
             if (!_paramMode)
                 _builder!.Append(tableAliasForColumn).Append('.');
@@ -681,7 +681,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                         tableAliasForColumn = aliasVisitor.Alias;
                     }
                     else
-                        tableAliasForColumn = GetAliasFromParam(lambdaParameter);
+                        tableAliasForColumn = GetAliasFromParam(lambdaParameter, false);
 
                     if (!_paramMode)
                         _builder!.Append(tableAliasForColumn).Append('.');
@@ -744,9 +744,9 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         return base.VisitMember(node);
     }
 
-    private string? GetAliasFromParam(ParameterExpression lambdaParameter)
+    private string? GetAliasFromParam(ParameterExpression lambdaParameter, bool fromProjection)
     {
-        var idx = _columnsProvider!.FindAlias(lambdaParameter.Type) ?? throw new InvalidOperationException();
+        var idx = _columnsProvider!.FindAlias(lambdaParameter.Type, fromProjection) ?? throw new InvalidOperationException();
 
         return _aliasProvider!.FindAlias(idx);
     }

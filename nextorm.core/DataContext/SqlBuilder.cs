@@ -265,7 +265,7 @@ public struct SqlBuilder
                 //fromExp = GetFrom(join.Query.EntityType);
                 var sql = MakeSelect(join.Query!);
 
-                _columnsProvider.Add(join.Query!);
+                _columnsProvider.Add(join.Query!, true);
 
                 if (!_paramMode)
                 {
@@ -349,10 +349,10 @@ public struct SqlBuilder
                 if (hasJoins)
                 {
                     Debug.Assert(typeof(IProjection).IsAssignableFrom(entityType));
-                    _columnsProvider.Add(entityType!.GetGenericArguments()[0]);
+                    _columnsProvider.Add(entityType!.GetGenericArguments()[0], true);
                 }
                 else
-                    _columnsProvider.Add(entityType!);
+                    _columnsProvider.Add(entityType!, false);
 
                 sqlBuilder.Append(_dbContext.MakeTableAlias(_aliasProvider!.GetNextAlias(from)));
             }
@@ -373,7 +373,7 @@ public struct SqlBuilder
 
                 if (_paramMode) return string.Empty;
 
-                _columnsProvider.Add(cmd);
+                _columnsProvider.Add(cmd, hasJoins);
 
                 var sqlBuilder = _sbPool.Get();
                 sqlBuilder.Append('(').Append(sql).Append(')');
