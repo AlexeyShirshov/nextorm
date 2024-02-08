@@ -66,7 +66,7 @@ public interface IDataContext : IAsyncDisposable, IDisposable
     void EnsureConnectionOpen();
     Task EnsureConnectionOpenAsync();
     void ResetPreparation(QueryCommand queryCommand);
-    FromExpression? GetFrom(Type srcType, QueryCommand queryCommand);
+    FromExpression? GetFrom(Type srcType, QueryCommand? queryCommand);
     /// <summary>
     /// 
     /// </summary>

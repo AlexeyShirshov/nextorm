@@ -5,7 +5,6 @@ namespace nextorm.core;
 public class EntityP2<T1, T2> : Entity<Projection<T1, T2>>
 {
     public JoinExpression JoinCondition { get; set; }
-    // public Entity<T1>? BaseBuilder { get; init; }
     public EntityP2(IDataContext dataProvider, JoinExpression join) : base(dataProvider)
     {
         JoinCondition = join;
@@ -16,9 +15,9 @@ public class EntityP2<T1, T2> : Entity<Projection<T1, T2>>
         if (Condition is not null)
             throw new NotImplementedException();
 
-        var cb = new EntityP3<T1, T2, T3>(DataProvider) { Logger = Logger, Query = Query };
+        var cb = new EntityP3<T1, T2, T3>(DataProvider) { Logger = Logger, Query = Query, Table = Table };
         cb.Joins!.Add(JoinCondition);
-        cb.Joins!.Add(new JoinExpression(joinCondition));
+        cb.Joins!.Add(new JoinExpression(joinCondition) { From = _dataProvider.GetFrom(typeof(T3), null)! });
         return cb;
     }
     // protected override void OnCommandCreated<TResult>(QueryCommand<TResult> cmd)

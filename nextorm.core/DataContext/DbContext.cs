@@ -462,14 +462,14 @@ public class DbContext : IDataContext
     }
     public virtual string MakeTableAlias(string tableAlias)
     {
-        return " as " + tableAlias;
+        return " as " + Escape(tableAlias);
     }
     public virtual string MakeColumnAlias(string? colAlias)
     {
         if (string.IsNullOrEmpty(colAlias))
             return string.Empty;
 
-        return " as " + colAlias;
+        return " as " + Escape(colAlias);
     }
     internal string GetColumnName(MemberInfo member)
     {
@@ -480,7 +480,7 @@ public class DbContext : IDataContext
     {
         return $"isnull({v1},{v2})";
     }
-
+    public virtual string Escape(string keyword) => "'" + keyword + "'";
     public virtual string MakeParam(string name)
     {
         throw new NotImplementedException(name);
@@ -497,11 +497,11 @@ public class DbContext : IDataContext
         return new FromExpression(GetTableName(t));
     }
 
-    public FromExpression? GetFrom(Type srcType, QueryCommand queryCommand)
+    public FromExpression? GetFrom(Type srcType, QueryCommand? queryCommand)
     {
         if (srcType != typeof(TableAlias))
         {
-            if (queryCommand.Joins?.Length > 0 && srcType.IsAssignableTo(typeof(IProjection)))
+            if (queryCommand?.Joins?.Length > 0 && srcType.IsAssignableTo(typeof(IProjection)))
             {
                 var prop_t1 = srcType.GetProperty("t1") ?? throw new BuildSqlCommandException($"Projection {srcType} must have t1 property");
 

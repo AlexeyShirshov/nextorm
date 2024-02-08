@@ -54,11 +54,12 @@ public struct SqlBuilder
 
         var pageApplied = !_paramMode && !(cmd.IgnoreColumns || selectList is null) && cmd.Paging.IsTop && _dbContext.MakeTop(cmd.Paging.Limit, out topStmt);
 
+        var joins = cmd.Joins;
+        var hasJoins = joins?.Length > 0;
+        var needAlias = hasJoins || _queryProvider.OuterReferences?.Count > 0;
+
         if (from is not null)
         {
-            var joins = cmd.Joins;
-            var hasJoins = joins?.Length > 0;
-            var needAlias = hasJoins || _queryProvider.OuterReferences?.Count > 0;
             var fromStr = MakeFrom(from, needAlias, entityType, hasJoins);
             if (!_paramMode)
             {
@@ -91,7 +92,7 @@ public struct SqlBuilder
                 for (var i = 0; i < groupingListCount; i++)
                 {
                     var item = grouping[i];
-                    var (needAliasForColumn, column) = MakeColumn(item.Expression!, entityType, false);
+                    var (needAliasForColumn, column) = MakeColumn(item, entityType, false);
 
                     if (!_paramMode)
                     {
@@ -200,7 +201,7 @@ public struct SqlBuilder
             for (var i = 0; i < selectListCount; i++)
             {
                 var item = selectList[i];
-                var (needAliasForColumn, column) = MakeColumn(item.Expression!, entityType, false);
+                var (needAliasForColumn, column) = MakeColumn(item, entityType, !needAlias);
 
                 if (!_paramMode)
                 {
@@ -250,51 +251,69 @@ public struct SqlBuilder
             }
         }
 
-        var visitor = new JoinExpressionVisitor();
-        visitor.Visit(join.JoinCondition);
+        // var visitor = new JoinExpressionVisitor();
+        // visitor.Visit(join.JoinCondition);
 
-        var dim = 1;
-        if (join.JoinCondition.Parameters[0].Type.TryGetProjectionDimension(out var joinDim))
-            dim = joinDim;
+        var scopedAdded = join.JoinCondition.Parameters.Count > join.JoinCondition.Parameters.Select(it => it.Type).Distinct().Count();
+        if (scopedAdded)
+            _columnsProvider.PushScope(join.JoinCondition.Parameters);
 
-        FromExpression fromExp;
-        if (visitor.JoinType is not null)
+        try
         {
-            if (visitor.JoinType.IsAnonymous())
+            var dim = 1;
+            if (join.JoinCondition.Parameters[0].Type.TryGetProjectionDimension(out var joinDim))
+                dim = joinDim;
+
+            // FromExpression fromExp;
+            // if (visitor.JoinType is not null)
+            // {
+            //     if (visitor.JoinType.IsAnonymous())
+            //     {
+            //         //fromExp = GetFrom(join.Query.EntityType);
+            //         var sql = MakeSelect(join.Query!);
+
+            //         _columnsProvider.Add(join.Query!, false);
+
+            //         if (!_paramMode)
+            //         {
+            //             sqlBuilder!.Append('(').Append(sql).Append(") ");
+            //             sqlBuilder.Append(_aliasProvider.GetNextAlias(join.Query!));
+            //         }
+            //     }
+            //     else
+            //     {
+            //         fromExp = _dbContext.GetFrom(visitor.JoinType);
+
+            //         // if (!_paramMode)
+            //         //     fromExp.TableAlias = GetAliasFromProjection(entityType, visitor.JoinType, dim);
+
+            //         var fromSql = MakeFrom(fromExp, true, visitor.JoinType, false);
+            //         if (!_paramMode)
+            //         {
+            //             sqlBuilder!.Append(fromSql);
+            //         }
+            //     }
+            // }
+
+            var fromSql = MakeFrom(join.From, true, join.JoinCondition.Parameters[1].Type, false);
+            if (!_paramMode)
             {
-                //fromExp = GetFrom(join.Query.EntityType);
-                var sql = MakeSelect(join.Query!);
-
-                _columnsProvider.Add(join.Query!, true);
-
-                if (!_paramMode)
-                {
-                    sqlBuilder!.Append('(').Append(sql).Append(") ");
-                    sqlBuilder.Append(_aliasProvider.GetNextAlias(join.Query!));
-                }
+                sqlBuilder!.Append(fromSql);
             }
-            else
+
+            var whereSql = MakeWhere(entityType, join.JoinCondition.Body, dim);
+
+            if (!_paramMode)
             {
-                fromExp = _dbContext.GetFrom(visitor.JoinType);
+                sqlBuilder!.Append(" on ");
 
-                // if (!_paramMode)
-                //     fromExp.TableAlias = GetAliasFromProjection(entityType, visitor.JoinType, dim);
-
-                var fromSql = MakeFrom(fromExp, true, visitor.JoinType, false);
-                if (!_paramMode)
-                {
-                    sqlBuilder!.Append(fromSql);
-                }
+                sqlBuilder.Append(whereSql);
             }
         }
-
-        var whereSql = MakeWhere(entityType, visitor.JoinCondition!, dim);
-
-        if (!_paramMode)
+        finally
         {
-            sqlBuilder!.Append(" on ");
-
-            sqlBuilder.Append(whereSql);
+            if (scopedAdded)
+                _columnsProvider.PopScope();
         }
 
         string? r = null;
@@ -328,10 +347,10 @@ public struct SqlBuilder
 
         return visitor.ToString();
     }
-    public (bool NeedAliasForColumn, string Column) MakeColumn(Expression selectExp, Type entityType, bool dontNeedAlias)
+    public (bool NeedAliasForColumn, string Column) MakeColumn(SelectExpression selExp, Type entityType, bool dontNeedAlias)
     {
         using var visitor = new BaseExpressionVisitor(entityType, _dbContext, _columnsProvider, 0, _aliasProvider, _paramProvider, _queryProvider, dontNeedAlias, _paramMode, _params, Logger);
-        visitor.Visit(selectExp);
+        visitor.Visit(selExp.Expression);
 
         if (_paramMode) return (false, string.Empty);
 
@@ -349,7 +368,7 @@ public struct SqlBuilder
                 if (hasJoins)
                 {
                     Debug.Assert(typeof(IProjection).IsAssignableFrom(entityType));
-                    _columnsProvider.Add(entityType!.GetGenericArguments()[0], true);
+                    _columnsProvider.Add(entityType!.GetGenericArguments()[0], false);
                 }
                 else
                     _columnsProvider.Add(entityType!, false);
@@ -373,7 +392,7 @@ public struct SqlBuilder
 
                 if (_paramMode) return string.Empty;
 
-                _columnsProvider.Add(cmd, hasJoins);
+                _columnsProvider.Add(cmd, false);
 
                 var sqlBuilder = _sbPool.Get();
                 sqlBuilder.Append('(').Append(sql).Append(')');

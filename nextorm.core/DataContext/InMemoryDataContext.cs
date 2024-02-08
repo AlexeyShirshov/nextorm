@@ -94,12 +94,12 @@ public partial class InMemoryContext : IDataContext
     }
     protected Func<QueryCommand<TResult>, InMemoryCacheEntry<TResult>, object[]?, CancellationToken, IAsyncEnumerator<TResult>> CreateEnumeratorDelegate<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
     {
-        if (queryCommand.From is not null)
+        if (queryCommand.From?.SubQuery is not null)
         {
             if (!string.IsNullOrEmpty(queryCommand.From.Table))
                 throw new DataContextException("Cannot use table as source for in-memory provider");
 
-            var subQuery = queryCommand.From.SubQuery!;
+            var subQuery = queryCommand.From.SubQuery;
             var subQueryType = subQuery.GetType();
             if (!subQueryType.IsGenericType)
                 throw new DataContextException("Cannot use table as source for in-memory provider");
@@ -431,7 +431,7 @@ public partial class InMemoryContext : IDataContext
     }
     public FromExpression? GetFrom(Type srcType, QueryCommand queryCommand)
     {
-        return null;
+        return new FromExpression(srcType);
     }
 
     public Expression MapColumn(SelectExpression column, Expression param)

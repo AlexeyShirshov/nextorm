@@ -133,17 +133,13 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         _dataContext?.ResetPreparation(this);
     }
     public void PrepareCommand(CancellationToken cancellationToken) => PrepareCommand(false, cancellationToken);
-    public void PrepareCommand(bool dontCalculateHash, CancellationToken cancellationToken) => PrepareCommand(dontCalculateHash, false, cancellationToken);
-    public virtual void PrepareCommand(bool dontCalculateHash, bool shouldAliasFrom, CancellationToken cancellationToken)
+    public virtual void PrepareCommand(bool dontCalculateHash, CancellationToken cancellationToken)
     {
         if (_dataContext is null) throw new InvalidOperationException("Cannot prepare command in cache");
 #if DEBUG
         if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Preparing command");
 #endif
         OneColumn = false;
-
-        if (_from?.SubQuery is not null && !_from.SubQuery._isPrepared)
-            _from.SubQuery.PrepareCommand(dontCalculateHash, cancellationToken);
 
         var srcType = _srcType;
         if (srcType is null)
@@ -155,6 +151,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         }
 
         FromExpression? from = _from ?? _dataContext.GetFrom(srcType, this);
+        QueryCommand.PrepareFrom(from, dontCalculateHash, cancellationToken);
         var joinPlanHash = PrepareJoin(dontCalculateHash, cancellationToken);
         var (selectList, columnsPlanHash) = PrepareColumns(dontCalculateHash, srcType, cancellationToken);
         var wherePlanHash = PrepareWhere(dontCalculateHash, cancellationToken);
@@ -214,7 +211,11 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
             }
         }
     }
-
+    private static void PrepareFrom(FromExpression? from, bool dontCalculateHash, CancellationToken cancellationToken)
+    {
+        if (from?.SubQuery is not null && !from.SubQuery._isPrepared)
+            from.SubQuery.PrepareCommand(dontCalculateHash, cancellationToken);
+    }
     private (SelectExpression[]?, int) PrepareColumns(bool noHash, Type? srcType, CancellationToken cancellationToken)
     {
         //SelectExpressionPlanEqualityComparer? comparer = null;
@@ -459,8 +460,9 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
             {
                 var join = _joins[idx];
 
-                if (!(join.Query?._isPrepared ?? true))
-                    join.Query!.PrepareCommand(noHash, cancellationToken);
+                PrepareFrom(join.From, noHash, cancellationToken);
+                // if (!(join.Query?._isPrepared ?? true))
+                //     join.Query!.PrepareCommand(noHash, cancellationToken);
 
                 if (!_dontCache && !noHash) unchecked
                     {
@@ -781,9 +783,9 @@ public class QueryCommand<TResult> : QueryCommand//, IAsyncEnumerable<TResult>
     {
 
     }
-    public override void PrepareCommand(bool dontCalculateHash, bool shouldAliasFrom, CancellationToken cancellationToken)
+    public override void PrepareCommand(bool dontCalculateHash, CancellationToken cancellationToken)
     {
-        base.PrepareCommand(dontCalculateHash, shouldAliasFrom, cancellationToken);
+        base.PrepareCommand(dontCalculateHash, cancellationToken);
         if (!dontCalculateHash)
         {
             ResultPlanHash = typeof(TResult).GetHashCode();

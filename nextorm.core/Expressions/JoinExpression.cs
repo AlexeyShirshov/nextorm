@@ -16,13 +16,14 @@ public class JoinExpression(LambdaExpression joinCondition, JoinType joinType = 
 {
     public JoinType JoinType { get; } = joinType;
     public LambdaExpression JoinCondition { get; } = joinCondition;
-    public QueryCommand? Query { get; init; }
-
+    public required FromExpression From { get; init; }
     internal JoinExpression CloneForCache()
     {
-        if (Query is null) return this;
+        var newFrom = From.CloneForCache();
 
-        return new JoinExpression(JoinCondition, JoinType) { Query = Query.CloneForCache() };
+        if (newFrom == From) return this;
+
+        return new JoinExpression(JoinCondition, JoinType) { From = From };
     }
     // public override int GetHashCode()
     // {

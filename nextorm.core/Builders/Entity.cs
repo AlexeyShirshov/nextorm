@@ -18,13 +18,14 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     // private const string AnyCommandProperty = "nextorm.core.AnyCommand";
     #region Fields
     //private IPayloadManager _payloadMgr = new FastPayloadManager(new Dictionary<Type, object?>());
-    private readonly IDataContext _dataProvider;
+    protected readonly IDataContext _dataProvider;
     private QueryCommand? _query;
     private Expression<Func<TEntity, bool>>? _condition;
     private LambdaExpression? _group;
     private Expression<Func<TEntity, bool>>? _having;
     private List<Sorting>? _sorting;
     protected List<JoinExpression>? _joins;
+    private string? _table;
     #endregion
     public Entity(IDataContext dataProvider)
     {
@@ -35,6 +36,11 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         _dataProvider = dataProvider;
         _query = query;
     }
+    public Entity(IDataContext dataProvider, string table)
+    {
+        _dataProvider = dataProvider;
+        _table = table;
+    }
     #region Properties
     internal ILogger? Logger { get; init; }
     internal QueryCommand? Query { get => _query; set => _query = value; }
@@ -43,7 +49,7 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     public List<Sorting>? Sorting { get => _sorting; set => _sorting = value; }
     public List<JoinExpression>? Joins { get => _joins; set => _joins = value; }
     public Paging Paging;
-
+    internal string? Table { get => _table; set => _table = value; }
     //internal IPayloadManager PayloadManager { get => _payloadMgr; init => _payloadMgr = value; }
     //public delegate void CommandCreatedHandler<T>(Entity<T> sender, QueryCommand queryCommand);
     //public event CommandCreatedHandler<TEntity>? CommandCreatedEvent;
@@ -55,7 +61,8 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 
         if (_query is not null)
             cmd.From = new FromExpression(_query);
-
+        else if (!string.IsNullOrEmpty(_table))
+            cmd.From = new FromExpression(_table);
         // OnCommandCreated(cmd);
         //RaiseCommandCreated(cmd);
 
@@ -67,6 +74,8 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 
         if (_query is not null)
             cmd.From = new FromExpression(_query);
+        else if (!string.IsNullOrEmpty(_table))
+            cmd.From = new FromExpression(_table);
 
         // OnCommandCreated(cmd);
         //RaiseCommandCreated(cmd);
@@ -136,6 +145,7 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         dst._sorting = _sorting;
         dst._group = _group;
         dst._having = _having;
+        dst._table = _table;
     }
     protected virtual object CloneImp()
     {
@@ -163,7 +173,7 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             query = ToCommand();
         }
 
-        var cb = new EntityP2<TEntity, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition)) { Logger = Logger, _query = query };
+        var cb = new EntityP2<TEntity, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition) { From = _dataProvider.GetFrom(typeof(TJoinEntity), null)! }) { Logger = Logger, _query = query };
         return cb;
     }
     public EntityP2<TEntity, TJoinEntity> Join<TJoinEntity>(QueryCommand<TJoinEntity> query, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
@@ -174,7 +184,7 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             queryBase = ToCommand();
         }
 
-        var cb = new EntityP2<TEntity, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition) { Query = query }) { Logger = Logger, _query = queryBase };
+        var cb = new EntityP2<TEntity, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition) { From = new FromExpression(query) }) { Logger = Logger, _query = queryBase };
         return cb;
     }
     public Entity<TEntity> GroupBy<TResult>(Expression<Func<TEntity, TResult>> exp)
@@ -554,25 +564,14 @@ public class Entity : ICloneable
 
         return b;
     }
-    public EntityP2<TableAlias, TableAlias> Join(Entity _, Expression<Func<TableAlias, TableAlias, bool>> joinCondition)
+    public EntityP2<TableAlias, TableAlias> Join(Entity from, Expression<Func<TableAlias, TableAlias, bool>> joinCondition)
     {
-        QueryCommand? query = null;
-        if (_condition is not null || _query is not null)
-        {
-            query = _query;
-        }
-        var cb = new EntityP2<TableAlias, TableAlias>(_dataProvider, new JoinExpression(joinCondition)) { Logger = Logger, Query = query };
+        var cb = new EntityP2<TableAlias, TableAlias>(_dataProvider, new JoinExpression(joinCondition) { From = new FromExpression(from._table!) }) { Logger = Logger, Query = _query, Table = _table };
         return cb;
     }
     public EntityP2<TableAlias, TJoinEntity> Join<TJoinEntity>(Entity<TJoinEntity> _, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition)
     {
-        QueryCommand? query = null;
-        if (_condition is not null || _query is not null)
-        {
-            query = _query;
-        }
-
-        var cb = new EntityP2<TableAlias, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition)) { Logger = Logger, Query = query };
+        var cb = new EntityP2<TableAlias, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition) { From = _dataProvider.GetFrom(typeof(TJoinEntity), null)! }) { Logger = Logger, Query = _query, Table = _table };
         return cb;
     }
 }

@@ -37,4 +37,6 @@ public class TableAlias
 public class TableColumn
 {
     public int AsInt { get; }
+    public string AsString { get; }
+    public string? AsNullableString { get; }
 }

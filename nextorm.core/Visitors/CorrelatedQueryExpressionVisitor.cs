@@ -100,9 +100,9 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 
                     if (!cmd.IsPrepared)
                     {
-                        var shouldAliasFrom = (_queryProvider.OuterReferences?.Count ?? 0) > oldRefCnt;
+                        // var shouldAliasFrom = (_queryProvider.OuterReferences?.Count ?? 0) > oldRefCnt;
 
-                        cmd.PrepareCommand(false, shouldAliasFrom, _cancellationToken);
+                        cmd.PrepareCommand(false, _cancellationToken);
                     }
 
                     var idx = _queryProvider!.AddCommand(cmd);

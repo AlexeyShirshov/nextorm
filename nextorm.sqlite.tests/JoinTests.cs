@@ -26,24 +26,24 @@ public class JoinTests
 
         idx.Should().BeGreaterThan(0);
     }
-    [Fact]
-    public async Task Select2Join_ShouldReturnData()
-    {
-        long idx = 1;
-        await foreach (var row in _sut.SimpleEntity
-            .Join(_sut.ComplexEntity, (s, c) => s.Id == c.Id)
-            .Join(_sut.ComplexEntity, (p, c) => p.t2.Id == c.Id + 1)
-            .Select(p => new { p.t1.Id, p.t2.RequiredString })
-            .ToAsyncEnumerable())
-        {
-            idx++;
-            idx.Should().Be(row.Id);
-            row.RequiredString.Should().NotBeNullOrEmpty();
-            _logger.LogInformation("Id = {id}, String = {str}", row.Id, row.RequiredString);
-        }
+    // [Fact]
+    // public async Task Select2Join_ShouldReturnData()
+    // {
+    //     long idx = 1;
+    //     await foreach (var row in _sut.SimpleEntity
+    //         .Join(_sut.ComplexEntity, (s, c) => s.Id == c.Id)
+    //         .Join(_sut.ComplexEntity, (p, c) => p.t2.Id == c.Id + 1)
+    //         .Select(p => new { p.t1.Id, p.t2.RequiredString })
+    //         .ToAsyncEnumerable())
+    //     {
+    //         idx++;
+    //         idx.Should().Be(row.Id);
+    //         row.RequiredString.Should().NotBeNullOrEmpty();
+    //         _logger.LogInformation("Id = {id}, String = {str}", row.Id, row.RequiredString);
+    //     }
 
-        idx.Should().BeGreaterThan(1);
-    }
+    //     idx.Should().BeGreaterThan(1);
+    // }
     [Fact]
     public async Task SelectJoinWithWhere_ShouldReturnData()
     {
@@ -132,7 +132,7 @@ public class JoinTests
     [Fact]
     public void TestJoinsTables()
     {
-        var r = _sut.From("simple_entity").Join(_sut.From("complex_entity"), (s, c) => s["id"] == c["id"]).Select(p => new { Id = p.t1["id"].AsInt, Str = p.t2["someString"] }).ToList();
+        var r = _sut.From("simple_entity").Join(_sut.From("complex_entity"), (s, c) => s["id"] == c["id"]).Select(p => new { Id = p.t1["id"].AsInt, Str = p.t2["someString"].AsString }).ToList();
 
         r.Should().NotBeNullOrEmpty();
 

@@ -37,7 +37,7 @@ public sealed class JoinExpressionPlanEqualityComparer : IEqualityComparer<JoinE
         if (!_queryProvider.GetExpressionPlanEqualityComparer().Equals(x.JoinCondition, y.JoinCondition)) return false;
 
         //_cmdComparer ??= new QueryPlanEqualityComparer(_cache, _queryProvider);
-        if (!_queryProvider.GetQueryPlanEqualityComparer().Equals(x.Query, y.Query)) return false;
+        if (!_queryProvider.GetFromExpressionPlanEqualityComparer().Equals(x.From, y.From)) return false;
 
         return true;
     }
@@ -51,14 +51,9 @@ public sealed class JoinExpressionPlanEqualityComparer : IEqualityComparer<JoinE
 
             hash.Add(obj.JoinType);
 
-            //_expComparer ??= new ExpressionPlanEqualityComparer(_cache, _queryProvider);
             hash.Add(obj.JoinCondition, _queryProvider.GetExpressionPlanEqualityComparer());
 
-            if (obj.Query is not null)
-            {
-                //_cmdComparer ??= new QueryPlanEqualityComparer(_cache, _queryProvider);
-                hash.Add(obj.Query, _queryProvider.GetQueryPlanEqualityComparer());
-            }
+            hash.Add(obj.From, _queryProvider.GetFromExpressionPlanEqualityComparer());
 
             return hash.ToHashCode();
         }

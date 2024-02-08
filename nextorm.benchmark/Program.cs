@@ -18,11 +18,11 @@ using nextorm.benchmark;
 // BenchmarkRunner.Run<SqliteBenchmarkJoin>();
 
 // runner.QueryCommandPlanEqualityComparer();
-var runner = new SqliteBenchmarkWhere(true);
+var runner = new SqliteBenchmarkWhere();
 // await runner.NextormPreparedToList();
 // while (true)
 for (var i = 0; i < 100; i++)
-    await runner.Nextorm_Cached_AsyncStream();
+    await runner.Nextorm_Cached_ToListAsync();
 
 //await runner.FillLargeTable();
 // Console.WriteLine("Press any key to exit");
