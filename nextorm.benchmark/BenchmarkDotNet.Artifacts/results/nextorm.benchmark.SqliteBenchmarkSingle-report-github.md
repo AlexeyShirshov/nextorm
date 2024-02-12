@@ -1,23 +1,18 @@
 ```
 
-BenchmarkDotNet v0.13.10, Windows 11 (10.0.22621.2861/22H2/2022Update/SunValley2)
+BenchmarkDotNet v0.13.10, Windows 11 (10.0.22621.3007/22H2/2022Update/SunValley2)
 Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical cores
-.NET SDK 8.0.100
-  [Host]   : .NET 8.0.0 (8.0.23.53103), X64 RyuJIT AVX2
-  .NET 8.0 : .NET 8.0.0 (8.0.23.53103), X64 RyuJIT AVX2
+.NET SDK 8.0.101
+  [Host]   : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX2
+  .NET 8.0 : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX2
 
 Job=.NET 8.0  Runtime=.NET 8.0  
 
 ```
-| Method                         | Mean     | Error    | StdDev   | Ratio | RatioSD | Gen0   | Gen1   | Allocated | Alloc Ratio |
-|------------------------------- |---------:|---------:|---------:|------:|--------:|-------:|-------:|----------:|------------:|
-| NextormSingleCompiled          | 31.52 μs | 0.610 μs | 0.627 μs |  1.00 |    0.00 | 0.2441 |      - |   1.23 KB |        1.00 |
-| NextormSingleOrDefaultCompiled | 36.65 μs | 0.529 μs | 0.495 μs |  1.16 |    0.02 | 0.2441 |      - |   1.23 KB |        1.00 |
-| DapperSingle                   | 38.91 μs | 0.665 μs | 0.622 μs |  1.23 |    0.03 | 0.1831 |      - |   1.05 KB |        0.85 |
-| DapperSingleOrDefault          | 39.60 μs | 0.615 μs | 0.576 μs |  1.25 |    0.03 | 0.2441 |      - |   1.15 KB |        0.94 |
-| NextormSingleCached            | 41.70 μs | 0.834 μs | 1.054 μs |  1.33 |    0.04 | 0.8545 |      - |   4.41 KB |        3.59 |
-| NextormSingleOrDefaultCached   | 42.40 μs | 0.834 μs | 1.142 μs |  1.33 |    0.04 | 0.8545 |      - |   4.41 KB |        3.59 |
-| EFCoreSingleCompiled           | 51.40 μs | 0.468 μs | 0.415 μs |  1.63 |    0.03 | 1.0376 | 0.3052 |   4.97 KB |        4.05 |
-| EFCoreSingleOrDefaultCompiled  | 51.99 μs | 0.464 μs | 0.434 μs |  1.65 |    0.04 | 1.0376 | 0.3052 |   4.97 KB |        4.05 |
-| EFCoreSingle                   | 82.47 μs | 1.463 μs | 1.368 μs |  2.61 |    0.07 | 2.1973 | 0.4883 |   10.3 KB |        8.40 |
-| EFCoreSingleOrDefault          | 82.55 μs | 1.618 μs | 2.103 μs |  2.63 |    0.07 | 2.1973 | 0.4883 |   10.3 KB |        8.40 |
+| Method                           | Mean     | Error    | StdDev   | Ratio | RatioSD | Gen0    | Gen1   | Allocated | Alloc Ratio |
+|--------------------------------- |---------:|---------:|---------:|------:|--------:|--------:|-------:|----------:|------------:|
+| Nextorm_Prepared_SingleOrDefault | 329.1 μs |  6.24 μs |  5.83 μs |  1.00 |    0.00 |  2.4414 |      - |  12.81 KB |        1.00 |
+| Nextorm_Cached_SingleOrDefault   | 445.5 μs |  8.80 μs | 12.33 μs |  1.36 |    0.04 |  9.7656 |      - |  49.02 KB |        3.83 |
+| Dapper_SingleOrDefault           | 481.8 μs |  9.53 μs | 13.04 μs |  1.46 |    0.05 |  2.9297 |      - |  16.87 KB |        1.32 |
+| EFCore_Compiled_SingleOrDefault  | 576.0 μs | 11.29 μs | 11.09 μs |  1.75 |    0.05 | 11.7188 | 3.9063 |  54.34 KB |        4.24 |
+| EFCore_SingleOrDefault           | 942.5 μs | 18.45 μs | 21.25 μs |  2.86 |    0.07 | 23.4375 | 5.8594 | 108.12 KB |        8.44 |

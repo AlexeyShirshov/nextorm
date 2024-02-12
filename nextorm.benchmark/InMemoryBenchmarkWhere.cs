@@ -10,8 +10,10 @@ public class InMemoryBenchmarkWhere
 {
     const int Iterations = 100;
     private readonly InMemoryDataRepository _ctx;
-    private readonly QueryCommand<Tuple<int>> _cmd;
+    private readonly IPreparedQueryCommand<Tuple<int>> _cmd;
     private readonly IEnumerable<SimpleEntity> _data;
+    private readonly IDataContext _provider;
+
     public InMemoryBenchmarkWhere()
     {
         var data = new List<SimpleEntity>(10_000);
@@ -19,18 +21,18 @@ public class InMemoryBenchmarkWhere
             data.Add(new SimpleEntity { Id = i });
         _data = data;
 
-        var provider = new InMemoryContext();
-        _ctx = new InMemoryDataRepository(provider);
+        _provider = new InMemoryContext();
+        _ctx = new InMemoryDataRepository(_provider);
         _ctx.SimpleEntity.WithData(_data);
 
-        _cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new Tuple<int>(entity.Id)).Compile(false);
+        _cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new Tuple<int>(entity.Id)).Prepare(false);
     }
     [Benchmark(Baseline = true)]
-    public void NextormCompiledParam()
+    public void NextormPreparedParam()
     {
         for (var i = 0; i < Iterations; i++)
         {
-            foreach (var row in _cmd.AsEnumerable(i))
+            foreach (var row in _provider.GetEnumerable(_cmd, i))
             {
             }
         }
@@ -48,7 +50,7 @@ public class InMemoryBenchmarkWhere
         var cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new { entity.Id });
         for (var i = 0; i < Iterations; i++)
         {
-            foreach (var row in cmd.AsEnumerable(i))
+            foreach (var row in cmd.ToEnumerable(i))
             {
             }
         }
@@ -60,7 +62,7 @@ public class InMemoryBenchmarkWhere
         {
             var p = i;
             var cmd = _ctx.SimpleEntity.Where(it => it.Id == p).Select(entity => new { entity.Id });
-            foreach (var row in cmd.AsEnumerable())
+            foreach (var row in cmd.ToEnumerable())
             {
             }
         }

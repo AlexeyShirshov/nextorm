@@ -44,10 +44,10 @@ public class SqlServerDbContext : DbContext
     public string ConnectionString => string.IsNullOrEmpty(_connectionString)
         ? _connection!.ConnectionString
         : _connectionString!;
-    public override DbCommand CreateCommand(string sql)
-    {
-        return new SqlCommand(sql) { CommandType = System.Data.CommandType.Text };
-    }
+    // public override DbCommand CreateCommand(string sql)
+    // {
+    //     return new SqlCommand(sql) { CommandType = System.Data.CommandType.Text };
+    // }
     public override DbParameter CreateParam(string name, object? value)
     {
         return new SqlParameter(name, value);
@@ -56,22 +56,22 @@ public class SqlServerDbContext : DbContext
     {
         return $"@{name}";
     }
-    protected override void MakePage(Paging paging, StringBuilder sqlBuilder)
+    public override void MakePage(Paging paging, StringBuilder sqlBuilder)
     {
         sqlBuilder.Append("offset ").Append(paging.Offset).Append(" rows");
 
         if (paging.Limit > 0)
             sqlBuilder.AppendLine().Append("fetch next ").Append(paging.Limit).Append(" rows only");
     }
-    protected override bool RequireSorting(QueryCommand queryCommand)
+    public override bool RequireSorting(QueryCommand queryCommand)
     {
         return !queryCommand.Paging.IsEmpty;
     }
-    protected override string EmptySorting()
+    public override string EmptySorting()
     {
         return "(select null as anyorder)";
     }
-    protected override bool MakeTop(int limit, out string? topStmt)
+    public override bool MakeTop(int limit, out string? topStmt)
     {
         topStmt = string.Format("top({0})", limit);
         return true;

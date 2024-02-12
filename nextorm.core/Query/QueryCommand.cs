@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using System.Collections;
 using System.Linq.Expressions;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading.Channels;
@@ -10,19 +11,25 @@ namespace nextorm.core;
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Minor Code Smell", "S3897:Classes that provide \"Equals(<T>)\" should implement \"IEquatable<T>\"", Justification = "<Pending>")]
 public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
 {
+    private QueryCommand _union;
+    private UnionType _unionType;
     private List<QueryCommand>? _referencedQueries;
-    private readonly List<JoinExpression> _joins;
-    protected List<SelectExpression>? _selectList;
-    private int _columnsHash;
-    private int _joinHash;
-    private int _sortingHash;
-    private int _whereHash;
+    private List<Expression>? _outerRefs;
+    private readonly JoinExpression[]? _joins;
+    protected SelectExpression[]? _selectList;
+    private object? _customData;
+    // private int _columnsHash;
+    // private int _joinHash;
+    // private int _sortingHash;
+    // private int _whereHash;
     protected FromExpression? _from;
-    protected IDataContext _dataProvider;
-    protected readonly LambdaExpression _exp;
-    protected readonly Expression? _condition;
+    protected IDataContext? _dataContext;
+    protected readonly LambdaExpression? _exp;
+    protected readonly LambdaExpression? _condition;
+    protected readonly LambdaExpression? _groupExp;
+    protected readonly LambdaExpression? _having;
     protected bool _isPrepared;
-    protected int? _hash;
+    // protected int? _hash;
     // #if PLAN_CACHE
     //     internal int? _hashPlan;
     // #endif
@@ -33,9 +40,12 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     internal int JoinPlanHash;
     internal int SortingPlanHash;
     internal int WherePlanHash;
+    internal int GroupingPlanHash;
     internal int ResultPlanHash;
+    internal int FromPlanHash;
+    internal int UnionPlanHash;
+    internal int ReferencedQueriesPlanHash;
     internal Type? ResultType;
-    private int _paramIdx;
     public Paging Paging;
     internal Expression? PreparedCondition;
     private QueryPlanEqualityComparer? _queryPlanComparer;
@@ -43,73 +53,93 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     private SelectExpressionPlanEqualityComparer? _selectExpressionPlanComparer;
     private FromExpressionPlanEqualityComparer? _fromExpressionPlanComparer;
     private JoinExpressionPlanEqualityComparer? _joinExpressionPlanComparer;
-    private PreciseExpressionEqualityComparer? _preciseExpressionComparer;
+    // private PreciseExpressionEqualityComparer? _preciseExpressionComparer;
     private SortingExpressionPlanEqualityComparer? _sortingExpressionPlanComparer;
-    protected readonly List<Sorting>? _sorting;
+    private SelectExpression[]? _groupingList;
+    protected readonly Sorting[]? _sorting;
 
     //protected ArrayList _params = new();
-    public QueryCommand(IDataContext dataProvider, LambdaExpression exp, Expression? condition, Paging paging, List<Sorting>? sorting)
-        : this(dataProvider, exp, condition/*, new FastPayloadManager(new Dictionary<Type, object?>())*/, new(), paging, sorting)
+    public QueryCommand(IDataContext? dataProvider, LambdaExpression exp, LambdaExpression? condition, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having, ILogger? logger)
+        : this(dataProvider, exp, null, condition, null, paging, sorting, group, having, logger)
     {
     }
-    protected QueryCommand(IDataContext dataProvider, LambdaExpression exp, Expression? condition/*, IPayloadManager payloadMgr*/, List<JoinExpression> joins, Paging paging, List<Sorting>? sorting)
+    public QueryCommand(IDataContext? dataProvider, Type srcType, LambdaExpression? condition, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having, ILogger? logger)
+        : this(dataProvider, null, srcType, condition, null, paging, sorting, group, having, logger)
     {
-        _dataProvider = dataProvider;
+    }
+    protected QueryCommand(IDataContext? dataProvider, LambdaExpression? exp, Type? srcType, LambdaExpression? condition, JoinExpression[]? joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having, ILogger? logger)
+    {
+        _dataContext = dataProvider;
         _exp = exp;
+        _srcType = srcType;
         _condition = condition;
-        //_payloadMgr = payloadMgr;
         _joins = joins;
         Paging = paging;
         _sorting = sorting;
+        _groupExp = group;
+        _having = having;
+        Logger = logger;
     }
-    public Expression SelectExpression => _exp;
-    public ILogger? Logger { get; set; }
+    public ILogger? Logger { get; }
     public FromExpression? From { get => _from; set => _from = value; }
-    public List<SelectExpression>? SelectList => _selectList;
+    public SelectExpression[]? SelectList => _selectList;
+    public SelectExpression[]? GroupingList => _groupingList;
     public Type? EntityType => _srcType;
-    public IDataContext DataProvider
+    // public IDataContext DataProvider
+    // {
+    //     get => _dataProvider;
+    //     set
+    //     {
+    //         ResetPreparation();
+    //         _dataProvider = value;
+    //     }
+    // }    
+    public bool IsPrepared
     {
-        get => _dataProvider;
-        set
-        {
-            ResetPreparation();
-            _dataProvider = value;
-        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => _isPrepared;
     }
-    public bool IsPrepared => _isPrepared;
-    //public Expression? Condition => _condition;
-    public List<JoinExpression> Joins => _joins;
+    public Expression? Condition => _condition;
+    public JoinExpression[]? Joins => _joins;
     public bool Cache
     {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => !_dontCache;
         set => _dontCache = !value;
     }
     //public bool CacheList { get; set; }
-    internal QueryCommand? FromQuery => From?.Table.AsT1;
+    internal QueryCommand? FromQuery => From?.SubQuery;
     internal bool OneColumn { get; set; }
     internal bool IgnoreColumns { get; set; }
     public IReadOnlyList<QueryCommand> ReferencedQueries => _referencedQueries!;
-    public List<Sorting>? Sorting => _sorting;
+    public Sorting[]? Sorting => _sorting;
+    public object? CustomData { get => _customData; set => _customData = value; }
+    public IDataContext? DataContext { get => _dataContext; set => _dataContext = value; }
+    public LambdaExpression? GroupBy { get => _groupExp; }
+    public LambdaExpression? Having { get => _having; }
+    public QueryCommand? UnionQuery { get => _union; }
+    public UnionType UnionType { get => _unionType; }
+    public IReadOnlyList<Expression>? OuterReferences => _outerRefs;
+
     public virtual void ResetPreparation()
     {
         _isPrepared = false;
         _selectList = null;
-        _srcType = null;
+        _groupingList = null;
         _from = null;
-        _hash = null;
+        PreparedCondition = null;
+        // _hash = null;
 
-        _dataProvider.ResetPreparation(this);
+        _dataContext?.ResetPreparation(this);
     }
     public void PrepareCommand(CancellationToken cancellationToken) => PrepareCommand(false, cancellationToken);
-    public virtual void PrepareCommand(bool prepareMapOnly, CancellationToken cancellationToken)
+    public virtual void PrepareCommand(bool dontCalculateHash, CancellationToken cancellationToken)
     {
+        if (_dataContext is null) throw new InvalidOperationException("Cannot prepare command in cache");
 #if DEBUG
         if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Preparing command");
 #endif
         OneColumn = false;
-
-        if (_from is not null && _from.Table.IsT1 && !_from.Table.AsT1._isPrepared)
-            _from.Table.AsT1.PrepareCommand(prepareMapOnly, cancellationToken);
 
         var srcType = _srcType;
         if (srcType is null)
@@ -120,464 +150,492 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
             srcType = _exp.Parameters[0].Type;
         }
 
-        FromExpression? from = _from ?? _dataProvider.GetFrom(srcType, this);
-        var (joinHash, joinPlanHash) = PrepareJoin(prepareMapOnly, cancellationToken);
-        var (selectList, columnsHash, columnsPlanHash) = PrepareColumns(prepareMapOnly, srcType, cancellationToken);
-        var (whereHash, wherePlanHash) = PrepareWhere(prepareMapOnly, cancellationToken);
-        var (sortingHash, sortingPlanHash) = PrepareSorting(prepareMapOnly, cancellationToken);
+        FromExpression? from = _from ?? _dataContext.GetFrom(srcType, this);
+        QueryCommand.PrepareFrom(from, dontCalculateHash, cancellationToken);
+        var joinPlanHash = PrepareJoin(dontCalculateHash, cancellationToken);
+        var (selectList, columnsPlanHash) = PrepareColumns(dontCalculateHash, srcType, cancellationToken);
+        var wherePlanHash = PrepareWhere(dontCalculateHash, cancellationToken);
+
+        // if (from is not null && string.IsNullOrEmpty(from.TableAlias) && (shouldAliasFrom || _outerRefs?.Count > 0))
+        //     from.TableAlias = "t1";
+
+        var (groupingList, groupingPlanHash) = PrepareGrouping(dontCalculateHash, cancellationToken);
+        var sortingPlanHash = PrepareSorting(dontCalculateHash, cancellationToken);
+
+        _union?.PrepareCommand(dontCalculateHash, cancellationToken);
 
         _isPrepared = true;
         _selectList = selectList ?? [];
-        _columnsHash = columnsHash;
+        _groupingList = groupingList ?? [];
         _srcType = srcType;
         _from = from;
-        _joinHash = joinHash;
-        _sortingHash = sortingHash;
-        _whereHash = whereHash;
+        // _joinHash = joinHash;
+        // _sortingHash = sortingHash;
+        // _whereHash = whereHash;
 
-        ColumnsPlanHash = columnsPlanHash;
-        JoinPlanHash = joinPlanHash;
-        SortingPlanHash = sortingPlanHash;
-        WherePlanHash = wherePlanHash;
-        //_payloadMgr = new FastPayloadManager(cache ? new Dictionary<Type, object?>() : null);
+        ColumnsPlanHash = columnsPlanHash == 7 ? 0 : columnsPlanHash;
+        JoinPlanHash = joinPlanHash == 7 ? 0 : joinPlanHash;
+        SortingPlanHash = sortingPlanHash == 7 ? 0 : sortingPlanHash;
+        WherePlanHash = wherePlanHash == 7 ? 0 : wherePlanHash;
+        GroupingPlanHash = groupingPlanHash == 7 ? 0 : groupingPlanHash;
+        FromPlanHash = dontCalculateHash ? 0 : GetFromExpressionPlanEqualityComparer().GetHashCode(from);
 
-        // string capitalize(string str)
-        // {
-        //     return string.Concat(new ReadOnlySpan<char>(Char.ToUpper(str[0])), str.AsSpan()[1..]);
-        // }
+        if (!dontCalculateHash && _union is not null)
+        {
+            unchecked
+            {
+                var h = 7 * 13 + ((int)_unionType);
+                h = h * 13 + GetQueryPlanEqualityComparer().GetHashCode();
+                UnionPlanHash = h;
+            }
+        }
+
+        if (!dontCalculateHash)
+        {
+            if (_referencedQueries?.Count == 1)
+            {
+                ReferencedQueriesPlanHash = GetQueryPlanEqualityComparer().GetHashCode();
+            }
+            else if (_referencedQueries?.Count > 1)
+            {
+                HashCode hash = new();
+                unchecked
+                {
+                    for (var (i, cnt) = (0, _referencedQueries.Count); i < cnt; i++)
+                    {
+                        var item = _referencedQueries[i];
+                        hash.Add(item, GetQueryPlanEqualityComparer());
+                    }
+                    ReferencedQueriesPlanHash = hash.ToHashCode();
+                }
+            }
+        }
     }
-
-    private (List<SelectExpression>?, int, int) PrepareColumns(bool noHash, Type? srcType, CancellationToken cancellationToken)
+    private static void PrepareFrom(FromExpression? from, bool dontCalculateHash, CancellationToken cancellationToken)
+    {
+        if (from?.SubQuery is not null && !from.SubQuery._isPrepared)
+            from.SubQuery.PrepareCommand(dontCalculateHash, cancellationToken);
+    }
+    private (SelectExpression[]?, int) PrepareColumns(bool noHash, Type? srcType, CancellationToken cancellationToken)
     {
         //SelectExpressionPlanEqualityComparer? comparer = null;
         var selectList = _selectList;
-        var columnsHash = 7;
-        var columnsPlanHash = 7;
+        int columnsPlanHash = 7;
         if (selectList is null && !IgnoreColumns)
         {
-            if (_exp is null)
-                throw new PrepareException("Lambda expression must exists");
-
-            if (_exp.Body is NewExpression ctor)
+            if (_exp is not null)
             {
-                //if (!CacheList || !_dataProvider.SelectListExpessionCache.TryGetValue(ctor, out selectList))
-                //{
-                selectList = new List<SelectExpression>();
-
-                var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataProvider, this, cancellationToken);
-                for (var idx = 0; idx < ctor.Arguments.Count; idx++)
+                if (_exp.Body is NewExpression ctor)
                 {
-                    if (cancellationToken.IsCancellationRequested)
-                        return (selectList, columnsHash, columnsPlanHash);
+                    //if (!CacheList || !_dataProvider.SelectListExpressionCache.TryGetValue(ctor, out selectList))
+                    //{
+                    //var selList = new List<SelectExpression>();
+                    var args = ctor.Arguments;
+                    var argsCount = args.Count;
 
-                    SelectExpression selExp;
-                    var arg = ctor.Arguments[idx];
-                    // if (arg is MemberExpression me)
+                    selectList = new SelectExpression[argsCount];
+
+                    var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataContext!, this, cancellationToken);
+                    for (var idx = 0; idx < argsCount; idx++)
+                    {
+                        if (cancellationToken.IsCancellationRequested)
+                            return (selectList, columnsPlanHash);
+
+                        SelectExpression selExp;
+                        var arg = args[idx];
+                        // if (arg is MemberExpression me)
+                        // {
+                        //     selExp = new SelectExpression(me.Type)
+                        //     {
+                        //         Index = idx,
+                        //         PropertyName = me.Member.Name!,
+                        //         Expression = arg
+                        //     };
+                        // }
+                        // else
+                        // {
+                        var ctorParam = ctor.Constructor!.GetParameters()[idx];
+
+                        selExp = new SelectExpression(ctorParam.ParameterType)
+                        {
+                            Index = idx,
+                            PropertyName = ctorParam.Name!,
+                            Expression = innerQueryVisitor.Visit(arg)
+                        };
+                        //}
+                        // selExp.HashCode = selExp.GetHashCode();
+                        if (!_dontCache && !noHash)
+                            selExp.PlanHashCode = GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
+                        selectList[idx] = selExp;
+
+                        if (!_dontCache && !noHash) unchecked
+                            {
+                                //columnsHash = columnsHash * 13 + selExp.HashCode;
+
+                                //comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
+                                columnsPlanHash = columnsPlanHash * 13 + selExp.PlanHashCode;
+                            }
+                    }
+
+                    // if (selectList.Length == 0)
+                    //     throw new PrepareException("Select must return new anonymous type with at least one property");
+
+                    // selectList = selList.ToArray();
+                    // if (CacheList)
+                    //     _dataProvider.SelectListExpressionCache[ctor] = selectList;
+                    //}
+                    // else if (!_dontCache && !noHash)
                     // {
-                    //     selExp = new SelectExpression(me.Type)
-                    //     {
-                    //         Index = idx,
-                    //         PropertyName = me.Member.Name!,
-                    //         Expression = arg
-                    //     };
+                    //     for (int i = 0; i < selectList.Count; i++) unchecked
+                    //         {
+                    //             var selExp = selectList[i];
+
+                    //             columnsHash = columnsHash * 13 + selExp.HashCode;
+                    //             //comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
+                    //             columnsPlanHash = columnsPlanHash * 13 + selExp.PlanHashCode;
+                    //         }
+                    // }
+                }
+                else if (_exp.Body.Type.IsPrimitive || _exp.Body.Type == typeof(string) || (_exp.Body.Type.IsGenericType && _exp.Body.Type.GetGenericTypeDefinition() == typeof(Nullable<>)))
+                {
+                    // var selList = new List<SelectExpression>();
+
+                    OneColumn = true;
+                    var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataContext!, this, cancellationToken);
+                    var selectExp = innerQueryVisitor.Visit(_exp);
+                    // if (_dataProvider.NeedMapping)
+                    // {
+
                     // }
                     // else
-                    // {
-                    var ctorParam = ctor.Constructor!.GetParameters()[idx];
-
-                    selExp = new SelectExpression(ctorParam.ParameterType, _dataProvider.ExpressionsCache, this)
+                    //{
+                    var selExp = new SelectExpression(_exp.Body.Type)
                     {
-                        Index = idx,
-                        PropertyName = ctorParam.Name!,
-                        Expression = innerQueryVisitor.Visit(arg)
+                        //Index = 0,
+                        Expression = selectExp,
+                        //ReferencedQueries = innerQueryVisitor.ReferencedQueries
                     };
-                    //}
-                    selExp.HashCode = selExp.GetHashCode();
-                    selExp.PlanHashCode = GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
-                    selectList.Add(selExp);
+                    if (!_dontCache && !noHash)
+                        selExp.PlanHashCode = GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
+                    // selList.Add(selExp);
 
                     if (!_dontCache && !noHash) unchecked
                         {
-                            columnsHash = columnsHash * 13 + selExp.HashCode;
-
+                            //columnsHash = columnsHash * 13 + selExp.HashCode;
                             //comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
                             columnsPlanHash = columnsPlanHash * 13 + selExp.PlanHashCode;
                         }
+
+                    selectList = [selExp];
                 }
-
-                if (selectList.Count == 0)
-                    throw new PrepareException("Select must return new anonymous type with at least one property");
-
-                // if (CacheList)
-                //     _dataProvider.SelectListExpessionCache[ctor] = selectList;
-                //}
-                // else if (!_dontCache && !noHash)
-                // {
-                //     for (int i = 0; i < selectList.Count; i++) unchecked
-                //         {
-                //             var selExp = selectList[i];
-
-                //             columnsHash = columnsHash * 13 + selExp.HashCode;
-                //             //comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
-                //             columnsPlanHash = columnsPlanHash * 13 + selExp.PlanHashCode;
-                //         }
-                // }
-            }
-            else if (_exp.Body.Type.IsPrimitive || _exp.Body.Type == typeof(string) || (_exp.Body.Type.IsGenericType && _exp.Body.Type.GetGenericTypeDefinition() == typeof(Nullable<>)))
-            {
-                selectList = new List<SelectExpression>();
-
-                OneColumn = true;
-                var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataProvider, this, cancellationToken);
-                var selectExp = innerQueryVisitor.Visit(_exp);
-                // if (_dataProvider.NeedMapping)
-                // {
-
-                // }
-                // else
-                //{
-                var selExp = new SelectExpression(_exp.Body.Type, _dataProvider.ExpressionsCache, this)
+                else if (_exp.Body is MemberInitExpression init)
                 {
-                    //Index = 0,
-                    Expression = selectExp,
-                    //ReferencedQueries = innerQueryVisitor.ReferencedQueries
-                };
-                selExp.HashCode = selExp.GetHashCode();
-                selExp.PlanHashCode = GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
-                selectList.Add(selExp);
+                    // var selList = new List<SelectExpression>();
+                    var bindings = init.Bindings;
+                    var bindingsCount = bindings.Count;
 
-                if (!_dontCache && !noHash) unchecked
+                    selectList = new SelectExpression[bindingsCount];
+
+                    var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataContext!, this, cancellationToken);
+                    for (var idx = 0; idx < bindingsCount; idx++)
                     {
+                        if (cancellationToken.IsCancellationRequested)
+                            return (selectList, columnsPlanHash);
 
-                        columnsHash = columnsHash * 13 + selExp.HashCode;
-                        //comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
-                        columnsPlanHash = columnsPlanHash * 13 + selExp.PlanHashCode;
-                    }
-                // }
-            }
-            else if (_dataProvider.NeedMapping)
-            {
-                if (/*!CacheList || */!_dataProvider.SelectListCache.TryGetValue(srcType!, out selectList))
-                {
-                    selectList = new List<SelectExpression>();
+                        var binding = bindings[idx] as MemberAssignment;
 
-                    var p = Expression.Parameter(srcType!);
-
-                    if (_dataProvider.Metadata.TryGetValue(srcType!, out var entityMeta))
-                    {
-                        for (int idx = 0; idx < entityMeta.Properties.Count; idx++)
+                        var selExp = new SelectExpression((binding.Member as PropertyInfo).PropertyType)
                         {
-                            var prop = entityMeta.Properties[idx];
-
-                            var pi = prop.PropertyInfo;
-
-                            if (cancellationToken.IsCancellationRequested)
-                                return (selectList, columnsHash, columnsPlanHash);
-
-                            Expression exp = Expression.Lambda(Expression.Property(p, pi), p);
-
-                            var selExp = new SelectExpression(pi.PropertyType, _dataProvider.ExpressionsCache, this)
-                            {
-                                Index = idx,
-                                PropertyName = pi.Name,
-                                Expression = exp,
-                                PropertyInfo = pi
-                            };
-
-                            selExp.HashCode = selExp.GetHashCode();
+                            Index = idx,
+                            PropertyName = binding.Member.Name!,
+                            Expression = innerQueryVisitor.Visit(binding.Expression)
+                        };
+                        //}
+                        if (!_dontCache && !noHash)
                             selExp.PlanHashCode = GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
-                            selectList.Add(selExp);
+                        // selList.Add(selExp);
+                        selectList[idx] = selExp;
 
-                            if (!_dontCache && !noHash) unchecked
-                                {
-                                    columnsHash = columnsHash * 13 + selExp.HashCode;
-                                    //comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
-                                    columnsPlanHash = columnsPlanHash * 13 + selExp.PlanHashCode;
-                                }
-                        }
+                        if (!_dontCache && !noHash) unchecked
+                            {
+                                //columnsHash = columnsHash * 13 + selExp.HashCode;
+
+                                //comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
+                                columnsPlanHash = columnsPlanHash * 13 + selExp.PlanHashCode;
+                            }
                     }
 
-                    if (selectList.Count == 0)
-                        throw new PrepareException("Select must return new anonymous type");
+                    // if (selectList.Length == 0)
+                    //     throw new PrepareException("Select must return new anonymous type with at least one property");
 
-                    //if (CacheList)
-                    _dataProvider.SelectListCache[srcType!] = selectList;
+                    // selectList = selList.ToArray();
                 }
-                else if (!_dontCache && !noHash)
-                {
-                    for (int i = 0; i < selectList.Count; i++) unchecked
-                        {
-                            var selExp = selectList[i];
+            }
+            else
+            {
+                if (srcType is null)
+                    throw new PrepareException("Lambda expression or source type must exists");
 
-                            columnsHash = columnsHash * 13 + selExp.HashCode;
-                            //comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
-                            columnsPlanHash = columnsPlanHash * 13 + selExp.PlanHashCode;
+                if (_dataContext!.NeedMapping)
+                {
+                    if (/*!CacheList || */!DataContextCache.SelectListCache.TryGetValue(srcType, out selectList))
+                    {
+                        // var selList = new List<SelectExpression>();
+
+                        var p = Expression.Parameter(srcType);
+
+                        if (DataContextCache.Metadata.TryGetValue(srcType, out var entityMeta))
+                        {
+                            var props = entityMeta.Properties;
+                            var propsCount = props.Count;
+
+                            selectList = new SelectExpression[propsCount];
+
+                            for (int idx = 0; idx < propsCount; idx++)
+                            {
+                                if (cancellationToken.IsCancellationRequested)
+                                    return (selectList, columnsPlanHash);
+
+                                var prop = props[idx];
+
+                                var pi = prop.PropertyInfo;
+
+                                Expression exp = Expression.Lambda(Expression.Property(p, pi), p);
+
+                                var selExp = new SelectExpression(pi.PropertyType)
+                                {
+                                    Index = idx,
+                                    PropertyName = pi.Name,
+                                    Expression = exp,
+                                    PropertyInfo = pi
+                                };
+
+                                if (!_dontCache && !noHash)
+                                    selExp.PlanHashCode = GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
+                                // selList.Add(selExp);
+                                selectList[idx] = selExp;
+
+                                if (!_dontCache && !noHash) unchecked
+                                    {
+                                        //columnsHash = columnsHash * 13 + selExp.HashCode;
+                                        //comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
+                                        columnsPlanHash = columnsPlanHash * 13 + selExp.PlanHashCode;
+                                    }
+                            }
                         }
+
+                        if (!(selectList?.Length > 0))
+                            throw new PrepareException("Select must return new anonymous type");
+
+                        // selectList = selList.ToArray();
+                        DataContextCache.SelectListCache[srcType] = selectList;
+                    }
+                    else if (!_dontCache && !noHash)
+                    {
+                        for (var (i, cnt) = (0, selectList.Length); i < cnt; i++) unchecked
+                            {
+                                var selExp = selectList[i];
+
+                                //columnsHash = columnsHash * 13 + selExp.HashCode;
+                                //comparer ??= new SelectExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
+                                columnsPlanHash = columnsPlanHash * 13 + selExp.PlanHashCode;
+                            }
+                    }
                 }
             }
             // else
             //     throw new NotImplementedException();
         }
 
-        return (selectList, columnsHash, columnsPlanHash);
+        return (selectList, columnsPlanHash);
     }
-    private (int, int) PrepareJoin(bool noHash, CancellationToken cancellationToken)
+    private int PrepareJoin(bool noHash, CancellationToken cancellationToken)
     {
-        //JoinExpressionPlanEqualityComparer? comparer = null;
-        var joinHash = 7;
-        var joinPlanHash = 7;
-        if (Joins.Count != 0)
+        int joinPlanHash = 7;
+        if (_joins is not null)
         {
-            if (_from is not null && string.IsNullOrEmpty(_from.TableAlias)) _from.TableAlias = "t1";
+            // if (_from is not null && string.IsNullOrEmpty(_from.TableAlias)) _from.TableAlias = "t1";
 
-            foreach (var join in Joins)
+            for (var (idx, cnt) = (0, _joins.Length); idx < cnt; idx++)
             {
-                if (!(join.Query?._isPrepared ?? true))
-                    join.Query!.PrepareCommand(noHash, cancellationToken);
+                var join = _joins[idx];
+
+                PrepareFrom(join.From, noHash, cancellationToken);
+                // if (!(join.Query?._isPrepared ?? true))
+                //     join.Query!.PrepareCommand(noHash, cancellationToken);
 
                 if (!_dontCache && !noHash) unchecked
                     {
                         //comparer ??= new JoinExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this);
-                        joinHash = joinHash * 13 + join.GetHashCode();
+                        //joinHash = joinHash * 13 + join.GetHashCode();
                         joinPlanHash = joinPlanHash * 13 + GetJoinExpressionPlanEqualityComparer().GetHashCode(join);
                     }
             }
         }
 
-        return (joinHash, joinPlanHash);
+        return joinPlanHash;
     }
-    private (int, int) PrepareSorting(bool noHash, CancellationToken cancellationToken)
+    private int PrepareSorting(bool noHash, CancellationToken cancellationToken)
     {
-        //PreciseExpressionEqualityComparer? comp = null;
-        //ExpressionPlanEqualityComparer? compPlan = null;
-
-        var sortingHash = 7;
-        var sortingPlanHash = 7;
+        int sortingPlanHash = 7;
         if (_sorting is not null)
         {
-            var sortingSpan = CollectionsMarshal.AsSpan(_sorting);
-            for (var i = 0; i < _sorting.Count; i++)
+            var sortingSpan = _sorting.AsSpan();
+            var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataContext!, this, cancellationToken);
+
+            for (var (i, cnt) = (0, _sorting.Length); i < cnt; i++)
             {
                 if (cancellationToken.IsCancellationRequested)
                     break;
 
                 ref var sort = ref sortingSpan[i];
 
-                var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataProvider, this, cancellationToken);
-                sort.PreparedExpression = innerQueryVisitor.Visit(sort.SortExpression);
+                if (sort.SortExpression is not null)
+                {
+                    sort.PreparedExpression = innerQueryVisitor.Visit(sort.SortExpression);
 
-                if (!_dontCache && !noHash) unchecked
-                    {
-                        sortingHash = sortingHash * 13 + (int)sort.Direction;
-                        //comp ??= new PreciseExpressionEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger);
-                        sortingHash = sortingHash * 13 + GetPreciseExpressionEqualityComparer().GetHashCode(sort.PreparedExpression);
+                    if (!_dontCache && !noHash) unchecked
+                        {
+                            // sortingHash = sortingHash * 13 + (int)sort.Direction;
+                            // //comp ??= new PreciseExpressionEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger);
+                            // sortingHash = sortingHash * 13 + GetPreciseExpressionEqualityComparer().GetHashCode(sort.PreparedExpression);
 
-                        //compPlan ??= new ExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger);
-                        sortingPlanHash = sortingPlanHash * 13 + GetSortingExpressionPlanEqualityComparer().GetHashCodeRef(in sort);
-                    }
+                            //compPlan ??= new ExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger);
+                            sortingPlanHash = sortingPlanHash * 13 + GetSortingExpressionPlanEqualityComparer().GetHashCodeRef(in sort);
+                        }
+                }
+                else if (sort.ColumnIndex.HasValue)
+                {
+                    if (!_dontCache && !noHash) unchecked
+                        {
+                            // sortingHash = sortingHash * 13 + (int)sort.Direction;
+                            // //comp ??= new PreciseExpressionEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger);
+                            // sortingHash = sortingHash * 13 + GetPreciseExpressionEqualityComparer().GetHashCode(sort.PreparedExpression);
+
+                            //compPlan ??= new ExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger);
+                            sortingPlanHash = sortingPlanHash * 13 + sort.ColumnIndex.Value;
+                        }
+                }
+                else
+                    throw new InvalidOperationException("Expression on column index must be specified");
             }
         }
 
-        return (sortingHash, sortingPlanHash);
+        return sortingPlanHash;
     }
-    private (int, int) PrepareWhere(bool noHash, CancellationToken cancellationToken)
+    private int PrepareWhere(bool noHash, CancellationToken cancellationToken)
     {
-        //PreciseExpressionEqualityComparer? comp = null;
-        //ExpressionPlanEqualityComparer? compPlan = null;
-
-        var whereHash = 7;
-        var wherePlanHash = 7;
+        int wherePlanHash = 7;
         if (_condition is not null)
         {
-            var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataProvider, this, cancellationToken);
+            var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataContext!, this, cancellationToken);
             PreparedCondition = innerQueryVisitor.Visit(_condition);
 
             if (!_dontCache && !noHash) unchecked
                 {
                     //comp ??= new PreciseExpressionEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger);
-                    whereHash = whereHash * 13 + GetPreciseExpressionEqualityComparer().GetHashCode(PreparedCondition);
+                    //whereHash = whereHash * 13 + GetPreciseExpressionEqualityComparer().GetHashCode(PreparedCondition);
 
                     //compPlan ??= new ExpressionPlanEqualityComparer(_dataProvider.ExpressionsCache, this, _dataProvider.Logger);
                     wherePlanHash = wherePlanHash * 13 + GetExpressionPlanEqualityComparer().GetHashCode(PreparedCondition);
                 }
         }
 
-        return (whereHash, wherePlanHash);
+        return wherePlanHash;
     }
-    // public bool RemovePayload<T>() where T : class, IPayload
-    // {
-    //     return _payloadMgr.RemovePayload<T>();
-    // }
-
-    // public bool TryGetPayload<T>(out T? payload) where T : class, IPayload
-    // {
-    //     return _payloadMgr.TryGetPayload<T>(out payload);
-    // }
-
-    // public bool TryGetNotNullPayload<T>(out T? payload) where T : class, IPayload
-    // {
-    //     return _payloadMgr.TryGetNotNullPayload<T>(out payload);
-    // }
-
-    // public T GetNotNullOrAddPayload<T>(Func<T> factory) where T : class, IPayload
-    // {
-    //     return _payloadMgr.GetNotNullOrAddPayload<T>(factory);
-    // }
-
-    // public T? GetOrAddPayload<T>(Func<T?> factory) where T : class, IPayload
-    // {
-    //     return _payloadMgr.GetOrAddPayload<T>(factory);
-    // }
-
-    // public T? AddOrUpdatePayload<T>(Func<T?> factory, Func<T?, T?>? update = null) where T : class, IPayload
-    // {
-    //     return _payloadMgr.AddOrUpdatePayload<T>(factory, update);
-    // }
-    // public void AddOrUpdatePayload<T>(T? payload) where T : class, IPayload
-    // {
-    //     _payloadMgr.AddOrUpdatePayload<T>(payload);
-    // }
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Minor Bug", "S2328:\"GetHashCode\" should not reference mutable fields", Justification = "<Pending>")]
-    public override int GetHashCode()
+    private (SelectExpression[]?, int) PrepareGrouping(bool noHash, CancellationToken cancellationToken)
     {
-        if (_hash.HasValue)
-            return _hash.Value;
-
-        if (!_isPrepared)
-            PrepareCommand(false, CancellationToken.None);
-
-        unchecked
+        var groupingList = _groupingList;
+        int groupingPlanHash = 7;
+        if (_groupExp is not null && groupingList is null)
         {
-            HashCode hash = new();
-            if (_from is not null)
-                hash.Add(_from);
-
-            if (_srcType is not null)
-                hash.Add(_srcType);
-
-            hash.Add(_whereHash);
-
-            hash.Add(_columnsHash);
-
-            hash.Add(_joinHash);
-
-            hash.Add(_sortingHash);
-
-            hash.Add(Paging.Limit);
-            hash.Add(Paging.Offset);
-
-            _hash = hash.ToHashCode();
-
-            //Console.WriteLine(_hash);
-
-            return _hash.Value;
-        }
-    }
-    public override bool Equals(object? obj)
-    {
-        return Equals(obj as QueryCommand);
-    }
-    public bool Equals(QueryCommand? cmd)
-    {
-        if (cmd is null) return false;
-
-        if (!_isPrepared)
-            PrepareCommand(false, CancellationToken.None);
-
-        // if (_params is null && cmd._params is not null) return false;
-        // if (_params is not null && cmd._params is null) return false;
-
-        // if (_params is not null && cmd._params is not null)
-        // {
-        //     if (_params.Count != cmd._params.Count) return false;
-
-        //     for (int i = 0; i < _params.Count; i++)
-        //     {
-        //         if (!Equals(_params[i], cmd._params[i])) return false;
-        //     }
-        // }
-
-        if (!Equals(_from, cmd._from)) return false;
-
-        if (_srcType != cmd._srcType) return false;
-
-        if (Paging.Limit != cmd.Paging.Limit || Paging.Offset != cmd.Paging.Offset) return false;
-
-        if (!GetPreciseExpressionEqualityComparer().Equals(PreparedCondition, cmd.PreparedCondition)) return false;
-
-        if (_selectList is null && cmd._selectList is not null) return false;
-        if (_selectList is not null && cmd._selectList is null) return false;
-
-        if (_selectList is not null && cmd._selectList is not null)
-        {
-            if (_selectList.Count != cmd._selectList.Count) return false;
-
-            for (int i = 0; i < _selectList.Count; i++)
+            if (_groupExp.Body is NewExpression ctor)
             {
-                if (!_selectList[i].Equals(cmd._selectList[i])) return false;
+                //if (!CacheList || !_dataProvider.SelectListExpressionCache.TryGetValue(ctor, out selectList))
+                //{
+                //var selList = new List<SelectExpression>();
+                var args = ctor.Arguments;
+                var argsCount = args.Count;
+
+                groupingList = new SelectExpression[argsCount];
+
+                for (var idx = 0; idx < argsCount; idx++)
+                {
+                    if (cancellationToken.IsCancellationRequested)
+                        return (groupingList, groupingPlanHash);
+
+                    var arg = args[idx];
+                    var ctorParam = ctor.Constructor!.GetParameters()[idx];
+
+                    var selExp = new SelectExpression(ctorParam.ParameterType)
+                    {
+                        Index = idx,
+                        PropertyName = ctorParam.Name!,
+                        Expression = arg
+                    };
+                    //}
+                    if (!noHash)
+                        selExp.PlanHashCode = GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
+                    groupingList[idx] = selExp;
+
+                    if (!_dontCache && !noHash) unchecked
+                        {
+                            groupingPlanHash = groupingPlanHash * 13 + selExp.PlanHashCode;
+                        }
+                }
             }
+            else
+                throw new InvalidOperationException("Only new expression is supported");
         }
 
-        if (Joins is null && cmd.Joins is not null) return false;
-        if (Joins is not null && cmd.Joins is null) return false;
-
-        if (Joins is not null && cmd.Joins is not null)
+        if (_having is not null)
         {
-            if (Joins.Count != cmd.Joins.Count) return false;
-
-            for (int i = 0; i < Joins.Count; i++)
-            {
-                if (!Joins[i].Equals(cmd.Joins[i])) return false;
-            }
+            if (!_dontCache && !noHash) unchecked
+                {
+                    groupingPlanHash = groupingPlanHash * 13 + GetExpressionPlanEqualityComparer().GetHashCode(_having);
+                }
         }
 
-        if (Sorting is null && cmd.Sorting is not null) return false;
-        if (Sorting is not null && cmd.Sorting is null) return false;
-
-        if (Sorting is not null && cmd.Sorting is not null)
-        {
-            if (Sorting.Count != cmd.Sorting.Count) return false;
-            var comp = GetPreciseExpressionEqualityComparer();
-
-            for (int i = 0; i < Sorting.Count; i++)
-            {
-                if (Sorting[i].Direction != cmd.Sorting[i].Direction) return false;
-
-                if (!comp.Equals(Sorting[i].PreparedExpression, cmd.Sorting[i].PreparedExpression)) return false;
-            }
-        }
-
-        return true;
+        return (groupingList, groupingPlanHash);
     }
-    public QueryCommand? FindSourceFromAlias(string? alias)
-    {
-        if (string.IsNullOrEmpty(alias))
-        {
-            if (_from?.Table.IsT1 ?? false)
-                return _from!.Table.AsT1;
+    // public QueryCommand? FindSourceFromAlias(string? alias)
+    // {
+    //     if (string.IsNullOrEmpty(alias))
+    //     {
+    //         if (_from?.SubQuery is not null)
+    //             return _from.SubQuery;
 
-            return null;
-        }
+    //         return null;
+    //     }
 
-        var idx = int.Parse(alias[1..]);
-        return Joins[idx - 2].Query;
-    }
-    public string GetParamName()
+    //     if (!(_joins?.Length > 0)) throw new InvalidOperationException("There is no joins");
+
+    //     var idx = int.Parse(alias[1..]);
+    //     if (idx <= 1) return null;
+    //     return _joins[idx - 2].Query;
+    // }
+    internal void ReplaceCommand(QueryCommand cmd, int idx)
     {
-        return string.Format("p{0}", _paramIdx++);
-    }
-    public void ReplaceCommand(QueryCommand cmd, int idx)
-    {
-        if (_dataProvider != cmd._dataProvider)
+#if DEBUG
+        if (_dataContext != cmd._dataContext)
             throw new InvalidOperationException("Different data context");
 
-        _referencedQueries![idx] = cmd;
-        var comparer = GetSelectExpressionPlanEqualityComparer();
-        ColumnsPlanHash = 7 * 13 + comparer.GetHashCode(_selectList![0]);
+        if (_referencedQueries is null) throw new InvalidOperationException("Referenced queries must be initialized");
+#endif
+
+        _referencedQueries[idx] = cmd;
+        // var comparer = GetSelectExpressionPlanEqualityComparer();
+        // _selectList[0].PlanHashCode = comparer.GetHashCode(_selectList[0]);
+        // ColumnsPlanHash = 7 * 13 + _selectList[0].PlanHashCode;
     }
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0028:Simplify collection initialization", Justification = "<Pending>")]
-    public int AddCommand(QueryCommand cmd)
+    int IQueryProvider.AddCommand(QueryCommand cmd)
     {
+#if DEBUG
+        if (_isPrepared) throw new InvalidOperationException("QueryCommand prepared");
+
+        if (!cmd.IsPrepared) throw new InvalidOperationException("QueryCommand must be prepared");
+#endif
         // if (_dataProvider != cmd._dataProvider)
         //     throw new InvalidOperationException("Different data context");
 
@@ -587,29 +645,85 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
         return idx;
     }
 
-    protected virtual void CopyTo(QueryCommand dst)
+    protected virtual void CopyTo(QueryCommand dst, bool copyAll)
     {
         dst._selectList = _selectList;
-        dst._columnsHash = _columnsHash;
-        dst._joinHash = _joinHash;
-        dst._sortingHash = _sortingHash;
-        dst._from = _from;
+        dst._groupingList = _groupingList;
+        // dst._joinHash = _joinHash;
+        // dst._sortingHash = _sortingHash;
         dst._isPrepared = _isPrepared;
         dst._srcType = _srcType;
         dst._dontCache = _dontCache;
-        dst._hash = _hash;
+        // dst._hash = _hash;
         dst.ColumnsPlanHash = ColumnsPlanHash;
         dst.JoinPlanHash = JoinPlanHash;
         dst.WherePlanHash = WherePlanHash;
         dst.SortingPlanHash = SortingPlanHash;
         dst.PreparedCondition = PreparedCondition;
         dst.ResultPlanHash = ResultPlanHash;
+        dst.GroupingPlanHash = GroupingPlanHash;
+
         dst.ResultType = ResultType;
+        dst.Paging = Paging;
+
+        dst._queryPlanComparer = _queryPlanComparer;
+        dst._fromExpressionPlanComparer = _fromExpressionPlanComparer;
+        dst._expressionPlanComparer = _expressionPlanComparer;
+        dst._selectExpressionPlanComparer = _selectExpressionPlanComparer;
+        dst._joinExpressionPlanComparer = _joinExpressionPlanComparer;
+        dst._sortingExpressionPlanComparer = _sortingExpressionPlanComparer;
+        dst._unionType = _unionType;
+
+        if (copyAll)
+        {
+            dst._customData = _customData;
+            dst._referencedQueries = _referencedQueries;
+            // dst._paramIdx = _paramIdx;
+            dst._union = _union;
+            dst._from = _from;
+        }
+        else
+        {
+            if (_from is not null)
+                dst._from = _from.CloneForCache();
+            if (_union is not null)
+                dst._union = _union.CloneForCache();
+
+            if (_referencedQueries?.Count > 0)
+            {
+                dst._referencedQueries = _referencedQueries.Select(it => it.CloneForCache()).ToList();
+            }
+        }
     }
 
     protected virtual QueryCommand CreateSelf()
     {
-        return new QueryCommand(_dataProvider, _exp, _condition, Joins, Paging, _sorting);
+        return new QueryCommand(_dataContext, _exp, _srcType, _condition, _joins, Paging, _sorting, _groupExp, _having, Logger);
+    }
+    protected virtual QueryCommand CreateSelfForClone()
+    {
+        return new QueryCommand(null, null, _srcType, null, CloneForCache(_joins), Paging, _sorting, null, _having, Logger);
+    }
+
+    protected static JoinExpression[]? CloneForCache(JoinExpression[]? joins)
+    {
+        if (joins is null) return null;
+
+        var cnt = joins.Length;
+        var newJoins = new JoinExpression[cnt];
+        for (var idx = 0; idx < cnt; idx++)
+        {
+            newJoins[idx] = joins[idx].CloneForCache();
+        }
+
+        return newJoins;
+    }
+
+    public QueryCommand CloneForCache()
+    {
+        var cmd = CreateSelfForClone();
+        CopyTo(cmd, false);
+        return cmd;
     }
     public QueryCommand Clone()
     {
@@ -618,75 +732,92 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     object ICloneable.Clone()
     {
         var cmd = CreateSelf();
-        CopyTo(cmd);
+        CopyTo(cmd, true);
         return cmd;
     }
-
     public QueryPlanEqualityComparer GetQueryPlanEqualityComparer() => _queryPlanComparer ??= new QueryPlanEqualityComparer(this);
-
     public ExpressionPlanEqualityComparer GetExpressionPlanEqualityComparer() => _expressionPlanComparer ??= new ExpressionPlanEqualityComparer(this);
-
     public SelectExpressionPlanEqualityComparer GetSelectExpressionPlanEqualityComparer() => _selectExpressionPlanComparer ??= new SelectExpressionPlanEqualityComparer(this);
-
     public FromExpressionPlanEqualityComparer GetFromExpressionPlanEqualityComparer() => _fromExpressionPlanComparer ??= new FromExpressionPlanEqualityComparer(this);
-
     public JoinExpressionPlanEqualityComparer GetJoinExpressionPlanEqualityComparer() => _joinExpressionPlanComparer ??= new JoinExpressionPlanEqualityComparer(this);
-
-    public PreciseExpressionEqualityComparer GetPreciseExpressionEqualityComparer() => _preciseExpressionComparer ??= new PreciseExpressionEqualityComparer(_dataProvider.ExpressionsCache, this);
+    // public PreciseExpressionEqualityComparer GetPreciseExpressionEqualityComparer() => _preciseExpressionComparer ??= new PreciseExpressionEqualityComparer(this);
     public SortingExpressionPlanEqualityComparer GetSortingExpressionPlanEqualityComparer() => _sortingExpressionPlanComparer ??= new SortingExpressionPlanEqualityComparer(this);
+
+    protected void SetUnion(QueryCommand queryCommand, UnionType unionType)
+    {
+        if (_union is null)
+        {
+            _union = queryCommand;
+            _unionType = unionType;
+        }
+        else
+        {
+            _union.SetUnion(queryCommand, unionType);
+        }
+    }
+
+    public int AddOuterReference(Expression node)
+    {
+        var outerRefs = _outerRefs ??= [];
+
+        var idx = outerRefs.Count;
+
+        outerRefs.Add(node);
+
+        return idx;
+    }
 }
 
-public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
+public class QueryCommand<TResult> : QueryCommand//, IAsyncEnumerable<TResult>
 {
-    internal object? _compiledQuery;
-    //private readonly IPayloadManager _payloadMap = new FastPayloadManager(new Dictionary<Type, object?>());
-    public QueryCommand(IDataContext dataProvider, LambdaExpression exp, Expression? condition, Paging paging, List<Sorting>? sorting) : base(dataProvider, exp, condition, paging, sorting)
+    public QueryCommand(IDataContext? dataProvider, LambdaExpression exp, LambdaExpression? condition, JoinExpression[]? joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having, ILogger? logger)
+        : this(dataProvider, exp, null, condition, joins, paging, sorting, group, having, logger)
     {
     }
-    protected QueryCommand(IDataContext dataProvider, LambdaExpression exp, Expression? condition/*, IPayloadManager payloadMgr*/, List<JoinExpression> joins, Paging paging, List<Sorting>? sorting)
-        : base(dataProvider, exp, condition/*, payloadMgr*/, joins, paging, sorting)
+    public QueryCommand(IDataContext? dataProvider, Type srcType, LambdaExpression? condition, JoinExpression[]? joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having, ILogger? logger)
+        : this(dataProvider, null, srcType, condition, joins, paging, sorting, group, having, logger)
+    {
+    }
+    protected QueryCommand(IDataContext? dataProvider, LambdaExpression? exp, Type? srcType, LambdaExpression? condition, JoinExpression[]? joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having, ILogger? logger)
+        : base(dataProvider, exp, srcType, condition, joins, paging, sorting, group, having, logger)
     {
 
     }
-    public override void PrepareCommand(bool prepareMapOnly, CancellationToken cancellationToken)
+    public override void PrepareCommand(bool dontCalculateHash, CancellationToken cancellationToken)
     {
-        base.PrepareCommand(prepareMapOnly, cancellationToken);
-        ResultPlanHash = typeof(TResult).GetHashCode();
+        base.PrepareCommand(dontCalculateHash, cancellationToken);
+        if (!dontCalculateHash)
+        {
+            ResultPlanHash = typeof(TResult).GetHashCode();
+        }
         ResultType = typeof(TResult);
     }
-    //internal CompiledQuery<TResult>? Compiled => CacheEntry?.CompiledQuery as CompiledQuery<TResult>;
-    public CompiledQuery<TResult, TRecord>? GetCompiledQuery<TRecord>() => _compiledQuery as CompiledQuery<TResult, TRecord>;
     public bool SingleRow { get; set; }
-    public QueryCommand<TResult> FromSql(string sql, CancellationToken cancellationToken = default) => Compile(sql, null, true, true, cancellationToken);
-    public QueryCommand<TResult> FromSql(string sql, object? @params, CancellationToken cancellationToken = default) => Compile(sql, @params, true, true, cancellationToken);
-    public QueryCommand<TResult> Compile(string sql, CancellationToken cancellationToken = default) => Compile(sql, null, true, cancellationToken);
-    public QueryCommand<TResult> Compile(string sql, object? @params, CancellationToken cancellationToken = default) => Compile(sql, @params, true, cancellationToken);
-    public QueryCommand<TResult> Compile(string sql, bool nonStreamUsing, CancellationToken cancellationToken = default) => Compile(sql, null, nonStreamUsing, cancellationToken);
-    public QueryCommand<TResult> Compile(string sql, object? @params, bool nonStreamUsing, CancellationToken cancellationToken = default) => Compile(sql, @params, nonStreamUsing, true, cancellationToken);
-    public QueryCommand<TResult> Compile(string sql, object? @params, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken = default)
-    {
-        _dataProvider.Compile(sql, @params, this, nonStreamUsing, storeInCache, cancellationToken);
-
-        return this;
-    }
     /// <summary>
     /// 
     /// </summary>
     /// <param name="nonStreamUsing">true, if optimized for buffered or scalar value results; false for non-buffered (stream) using, when result is IEnumerable or IAsyncEnumerable</param>
     /// <param name="cancellationToken"></param>
     /// <returns></returns>
-    public QueryCommand<TResult> Compile(bool nonStreamUsing = true, CancellationToken cancellationToken = default)
+    public IPreparedQueryCommand<TResult> Prepare(bool nonStreamUsing = true, CancellationToken cancellationToken = default)
     {
-        _dataProvider.Compile(this, nonStreamUsing, false, cancellationToken);
-
-        return this;
+        return _dataContext!.GetPreparedQueryCommand(this, !nonStreamUsing, false, cancellationToken);
     }
-    public IAsyncEnumerator<TResult> GetAsyncEnumerator(CancellationToken cancellationToken = default)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public IAsyncEnumerator<TResult> CreateAsyncEnumerator(params object[]? @params) => CreateAsyncEnumerator(CancellationToken.None, @params);
+    public IAsyncEnumerator<TResult> CreateAsyncEnumerator(CancellationToken cancellationToken, params object[]? @params)
     {
-        if (!_isPrepared)
-            PrepareCommand(false, cancellationToken);
+        var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, true, true, cancellationToken);
 
-        return DataProvider.CreateAsyncEnumerator(this, null, cancellationToken);
+        return _dataContext.CreateAsyncEnumerator<TResult>(preparedCommand, @params, cancellationToken);
+    }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Task<IEnumerator<TResult>> CreateEnumeratorAsync(params object[]? @params) => CreateEnumeratorAsync(CancellationToken.None, @params);
+    public Task<IEnumerator<TResult>> CreateEnumeratorAsync(CancellationToken cancellationToken, params object[]? @params)
+    {
+        var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, true, true, cancellationToken);
+
+        return _dataContext.CreateEnumeratorAsync<TResult>(preparedCommand, @params, cancellationToken);
     }
     public IAsyncEnumerable<TResult> Pipeline(params object[] @params) => Pipeline(CancellationToken.None, @params);
 #pragma warning disable CS8425 // Async-iterator member has one or more parameters of type 'CancellationToken' but none of them is decorated with the 'EnumeratorCancellation' attribute, so the cancellation token parameter from the generated 'IAsyncEnumerable<>.GetAsyncEnumerator' will be unconsumed
@@ -703,7 +834,7 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
         {
             try
             {
-                foreach (var item in AsEnumerable(@params))
+                foreach (var item in ToEnumerable(@params))
                 {
                     if (cancellationToken.IsCancellationRequested)
                         break;
@@ -723,70 +854,22 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
 
         await t.ConfigureAwait(false);
     }
-    public IAsyncEnumerable<TResult> AsAsyncEnumerable(params object[] @params) => AsAsyncEnumerable(CancellationToken.None, @params);
-    public IAsyncEnumerable<TResult> AsAsyncEnumerable(CancellationToken cancellationToken, params object[] @params)
-    {
-        if (!_isPrepared)
-            PrepareCommand(false, cancellationToken);
-
-        var asyncEnumerator = _dataProvider.CreateAsyncEnumerator(this, @params, cancellationToken);
-
-        if (asyncEnumerator is IAsyncEnumerable<TResult> asyncEnumerable)
-            return asyncEnumerable;
-
-        return Iterate();
-
-        async IAsyncEnumerable<TResult> Iterate()
-        {
-            await using (asyncEnumerator)
-            {
-                while (await asyncEnumerator.MoveNextAsync().ConfigureAwait(false))
-                    yield return asyncEnumerator.Current;
-            }
-        }
-    }
-    public IEnumerable<TResult> AsEnumerable(params object[] @params)
-    {
-        if (!_isPrepared)
-            PrepareCommand(false, CancellationToken.None);
-
-        return (IEnumerable<TResult>)_dataProvider.CreateEnumerator(this, @params);
-    }
-    public Task<IEnumerable<TResult>> AsEnumerableAsync(params object[] @params) => AsEnumerableAsync(CancellationToken.None, @params);
-    public async Task<IEnumerable<TResult>> AsEnumerableAsync(CancellationToken cancellationToken, params object[] @params)
-    {
-        if (!_isPrepared)
-            PrepareCommand(false, cancellationToken);
-
-        // return Array.Empty<TResult>();
-        var enumerator = _dataProvider.CreateAsyncEnumerator(this, @params, cancellationToken);
-
-        if (enumerator is IAsyncInit<TResult> rr)
-        {
-            await rr.InitReaderAsync(@params, cancellationToken);
-            return new InternalEnumerable(rr);
-        }
-
-        if (enumerator is IEnumerable<TResult> ee)
-            return ee;
-
-        throw new NotImplementedException();
-    }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public IAsyncEnumerable<TResult> ToAsyncEnumerable(params object[] @params) => _dataContext!.GetAsyncEnumerable<TResult>(_dataContext.GetPreparedQueryCommand(this, true, true, CancellationToken.None), CancellationToken.None, @params);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public IAsyncEnumerable<TResult> ToAsyncEnumerable(CancellationToken cancellationToken, params object[] @params) => _dataContext!.GetAsyncEnumerable<TResult>(_dataContext.GetPreparedQueryCommand(this, true, true, cancellationToken), cancellationToken, @params);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public IEnumerable<TResult> ToEnumerable(params object[] @params) => _dataContext!.GetEnumerable(_dataContext.GetPreparedQueryCommand(this, true, true, CancellationToken.None), @params);
     public List<TResult> ToList(params object[] @params)
     {
-        if (!_isPrepared)
-            PrepareCommand(false, CancellationToken.None);
+        var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, CancellationToken.None);
 
-        return _dataProvider.ToList(this, @params);
+        return _dataContext.ToList<TResult>(preparedCommand, @params);
     }
-    public Task<List<TResult>> ToListAsync(params object[] @params) => ToListAsync(CancellationToken.None, @params);
-    public async Task<List<TResult>> ToListAsync(CancellationToken cancellationToken, params object[] @params)
-    {
-        if (!_isPrepared)
-            PrepareCommand(false, cancellationToken);
-
-        return await _dataProvider.ToListAsync(this, @params, cancellationToken).ConfigureAwait(false);
-    }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Task<List<TResult>> ToListAsync(params object[] @params) => _dataContext!.ToListAsync(_dataContext.GetPreparedQueryCommand(this, false, true, CancellationToken.None), @params, CancellationToken.None);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Task<List<TResult>> ToListAsync(CancellationToken cancellationToken, params object[] @params) => _dataContext!.ToListAsync(_dataContext.GetPreparedQueryCommand(this, false, true, cancellationToken), @params, cancellationToken);
     public bool Any(params object[] @params)
     {
         bool oldIgnoreColumns = IgnoreColumns;
@@ -800,16 +883,18 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
                     PrepareCommand(false, CancellationToken.None);
                 }
 
-                queryCommand = Entity<TResult>.GetAnyCommand(_dataProvider, this);
+                queryCommand = Entity<TResult>.GetAnyCommand(_dataContext!, this);
             }
 
-            return _dataProvider.ExecuteScalar(queryCommand, @params, true);
+            var preparedCommand = _dataContext!.GetPreparedQueryCommand(queryCommand, false, true, CancellationToken.None);
+            return _dataContext.ExecuteScalar<bool>(preparedCommand, @params, true);
         }
         finally
         {
             IgnoreColumns = oldIgnoreColumns;
         }
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<bool> AnyAsync(params object[] @params) => AnyAsync(CancellationToken.None, @params);
     public async Task<bool> AnyAsync(CancellationToken cancellationToken, params object[] @params)
     {
@@ -824,16 +909,28 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
                     PrepareCommand(false, cancellationToken);
                 }
 
-                queryCommand = Entity<TResult>.GetAnyCommand(_dataProvider, this);
+                queryCommand = Entity<TResult>.GetAnyCommand(_dataContext!, this);
             }
 
-            return await _dataProvider.ExecuteScalar(queryCommand, @params, true, cancellationToken).ConfigureAwait(false);
+            var preparedCommand = _dataContext!.GetPreparedQueryCommand(queryCommand, false, true, cancellationToken);
+            return await _dataContext.ExecuteScalar<bool>(preparedCommand, @params, true, cancellationToken).ConfigureAwait(false);
         }
         finally
         {
             IgnoreColumns = oldIgnoreColumns;
         }
     }
+    public TResult? ExecuteScalar(params object[] @params)
+    {
+        var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, CancellationToken.None);
+        return _dataContext.ExecuteScalar<TResult>(preparedCommand, @params, false);
+    }
+    public Task<TResult?> ExecuteScalarAsync(CancellationToken cancellationToken, params object[] @params)
+    {
+        var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, cancellationToken);
+        return _dataContext.ExecuteScalar<TResult>(preparedCommand, @params, false, cancellationToken);
+    }
+
     public TResult First(params object[] @params)
     {
         int oldLim = Paging.Limit;
@@ -845,14 +942,15 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
                 Paging.Limit = 1;
                 PrepareCommand(false, CancellationToken.None);
             }
-
-            return _dataProvider.First(this, @params);
+            var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, CancellationToken.None);
+            return _dataContext.First<TResult>(preparedCommand, @params);
         }
         finally
         {
             Paging.Limit = oldLim;
         }
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<TResult> FirstAsync(params object[] @params) => FirstAsync(CancellationToken.None, @params);
     public Task<TResult> FirstAsync(CancellationToken cancellationToken, params object[] @params)
     {
@@ -865,8 +963,8 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
                 Paging.Limit = 1;
                 PrepareCommand(false, cancellationToken);
             }
-
-            return _dataProvider.FirstAsync(this, @params, cancellationToken);
+            var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, cancellationToken);
+            return _dataContext.FirstAsync<TResult>(preparedCommand, @params, cancellationToken);
         }
         finally
         {
@@ -884,14 +982,15 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
                 Paging.Limit = 1;
                 PrepareCommand(false, CancellationToken.None);
             }
-
-            return _dataProvider.FirstOrDefault(this, @params);
+            var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, CancellationToken.None);
+            return _dataContext.FirstOrDefault<TResult>(preparedCommand, @params);
         }
         finally
         {
             Paging.Limit = oldLim;
         }
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<TResult?> FirstOrDefaultAsync(params object[] @params) => FirstOrDefaultAsync(CancellationToken.None, @params);
     public Task<TResult?> FirstOrDefaultAsync(CancellationToken cancellationToken, params object[] @params)
     {
@@ -904,8 +1003,8 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
                 Paging.Limit = 1;
                 PrepareCommand(false, cancellationToken);
             }
-
-            return _dataProvider.FirstOrDefaultAsync(this, @params, cancellationToken);
+            var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, cancellationToken);
+            return _dataContext.FirstOrDefaultAsync<TResult>(preparedCommand, @params, cancellationToken);
         }
         finally
         {
@@ -922,14 +1021,15 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
                 Paging.Limit = 2;
                 PrepareCommand(false, CancellationToken.None);
             }
-
-            return _dataProvider.Single(this, @params);
+            var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, CancellationToken.None);
+            return _dataContext.Single<TResult>(preparedCommand, @params);
         }
         finally
         {
             Paging.Limit = oldLim;
         }
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<TResult> SingleAsync(params object[] @params) => SingleAsync(CancellationToken.None, @params);
     public Task<TResult> SingleAsync(CancellationToken cancellationToken, params object[] @params)
     {
@@ -941,8 +1041,8 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
                 Paging.Limit = 2;
                 PrepareCommand(false, cancellationToken);
             }
-
-            return _dataProvider.SingleAsync(this, @params, cancellationToken);
+            var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, cancellationToken);
+            return _dataContext.SingleAsync<TResult>(preparedCommand, @params, cancellationToken);
         }
         finally
         {
@@ -959,14 +1059,15 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
                 Paging.Limit = 2;
                 PrepareCommand(false, CancellationToken.None);
             }
-
-            return _dataProvider.SingleOrDefault(this, @params);
+            var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, CancellationToken.None);
+            return _dataContext.SingleOrDefault<TResult>(preparedCommand, @params);
         }
         finally
         {
             Paging.Limit = oldLim;
         }
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<TResult?> SingleOrDefaultAsync(params object[] @params) => SingleOrDefaultAsync(CancellationToken.None, @params);
     public Task<TResult?> SingleOrDefaultAsync(CancellationToken cancellationToken, params object[] @params)
     {
@@ -978,8 +1079,8 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
                 Paging.Limit = 2;
                 PrepareCommand(false, cancellationToken);
             }
-
-            return _dataProvider.SingleOrDefaultAsync(this, @params, cancellationToken);
+            var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, cancellationToken);
+            return _dataContext.SingleOrDefaultAsync<TResult>(preparedCommand, @params, cancellationToken);
         }
         finally
         {
@@ -988,45 +1089,40 @@ public class QueryCommand<TResult> : QueryCommand, IAsyncEnumerable<TResult>
     }
     protected override QueryCommand CreateSelf()
     {
-        return new QueryCommand<TResult>(_dataProvider, _exp, _condition, Joins, Paging, _sorting);
+        return new QueryCommand<TResult>(_dataContext, _exp, _srcType, _condition, Joins, Paging, _sorting, _groupExp, _having, Logger);
     }
-    // public QueryCommand<TResult> WithParams(params object[] @params)
-    // {
-    //     QueryCommand<TResult> cmd;
-
-    //     if (CacheEntry?.CompiledQuery is IReplaceParam rp)
-    //     {
-    //         rp.ReplaceParams(@params, _dataProvider);
-    //         cmd = this;
-    //     }
-    //     else
-    //     {
-    //         cmd = new QueryCommand<TResult>(_dataProvider, _exp, _condition, _payloadMgr, Joins);
-    //         CopyTo(cmd);
-    //         cmd._params.AddRange(@params);
-    //     }
-
-    //     return cmd;
-    // }
-    // protected override void CopyTo(QueryCommand dst)
-    // {
-    //     CopyTo(dst as QueryCommand<TResult>);
-    // }
-    // protected void CopyTo(QueryCommand<TResult>? dst)
-    // {
-    //     if (dst is not null)
-    //     {
-    //         dst.CacheEntry = CacheEntry;
-    //     }
-    // }
-    class InternalEnumerable : IEnumerable<TResult>
+    protected override QueryCommand CreateSelfForClone()
     {
-        private readonly IEnumerator<TResult> _enumerator;
-        public InternalEnumerable(IEnumerator<TResult> enumerator)
-        {
-            _enumerator = enumerator;
-        }
-        IEnumerator<TResult> IEnumerable<TResult>.GetEnumerator() => _enumerator;
-        IEnumerator IEnumerable.GetEnumerator() => _enumerator;
+        return new QueryCommand<TResult>(null, null, _srcType, null, CloneForCache(Joins), Paging, _sorting, null, _having, Logger);
+    }
+    public QueryCommand<TResult> OrderBy(int columnIndex, OrderDirection direction)
+    {
+        if (columnIndex < 1) throw new ArgumentException("Column index must be greater than zero", nameof(columnIndex));
+
+        var cmd = new QueryCommand<TResult>(_dataContext, _exp, _srcType, _condition, Joins, Paging, _sorting is null
+            ? [new Sorting(columnIndex) { Direction = direction }]
+            : [.. _sorting, new Sorting(columnIndex) { Direction = direction }], _groupExp, _having, Logger);
+
+        CopyTo(cmd, true);
+        cmd.ResetPreparation();
+        return cmd;
+    }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public QueryCommand<TResult> OrderBy(int columnIndex) => OrderBy(columnIndex, OrderDirection.Asc);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public QueryCommand<TResult> OrderByDescending(int columnIndex) => OrderBy(columnIndex, OrderDirection.Desc);
+    public QueryCommand<TResult> Union<T>(QueryCommand<T> queryCommand)
+    {
+        var cmd = (QueryCommand<TResult>)Clone();
+        cmd.ResetPreparation();
+        cmd.SetUnion(queryCommand, UnionType.Distinct);
+        return cmd;
+    }
+    public QueryCommand<TResult> UnionAll<T>(QueryCommand<T> queryCommand)
+    {
+        var cmd = (QueryCommand<TResult>)Clone();
+        cmd.ResetPreparation();
+        cmd.SetUnion(queryCommand, UnionType.All);
+        return cmd;
     }
 }

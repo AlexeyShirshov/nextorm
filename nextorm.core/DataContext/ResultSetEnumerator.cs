@@ -6,27 +6,25 @@ using System.Text;
 using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
-public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IAsyncEnumerable<TResult>, IEnumerable<TResult>, IAsyncInit<TResult>
+public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IAsyncInit<TResult>
 {
     //private readonly QueryCommand<TResult> _cmd;
-    private readonly DbContext _dataProvider;
-    private readonly DbCompiledQuery<TResult> _compiledQuery;
+    private DbContext? _dbContext;
+    private readonly DbPreparedQueryCommand<TResult> _compiledQuery;
     private CancellationToken _cancellationToken;
     private object[]? _params;
     private readonly Func<IDataRecord, TResult>? _map;
-    // private List<Param>? _params;
+    private ILogger? _logger;
+    private bool _logDebug;
+    private bool _logSensitiveData;
     private DbDataReader? _reader;
     private DbConnection? _conn;
     private bool _disposed;
-    public ResultSetEnumerator(DbContext dataProvider, DbCompiledQuery<TResult> compiledQuery)
+    public ResultSetEnumerator(DbPreparedQueryCommand<TResult> compiledQuery)
     {
         //_cmd = cmd;
-        _dataProvider = dataProvider;
         _compiledQuery = compiledQuery;
         _map = compiledQuery.MapDelegate;
-
-        // if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Getting connection");
-        //_conn = _dataProvider.GetConnection();
     }
     public TResult Current
     {
@@ -37,22 +35,39 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IAsyncEnu
         }
     }
     object? IEnumerator.Current => _map!(_reader!);
-    public async ValueTask DisposeAsync()
+
+    public DbContext? DbContext
+    {
+        get => _dbContext;
+        set
+        {
+            _dbContext = value;
+            if (value is not null)
+            {
+                _logger = value.ResultSetEnumeratorLogger;
+                _logDebug = _logger?.IsEnabled(LogLevel.Debug) ?? false;
+                _logSensitiveData = value.LogSensitiveData;
+            }
+        }
+    }
+
+    public ValueTask DisposeAsync()
     {
         GC.SuppressFinalize(this);
 
         if (_reader is not null)
         {
-            if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Disposing data reader");
-            await _reader.DisposeAsync().ConfigureAwait(false);
-
+            var r = _reader;
             _reader = null;
+            _conn = null;
+            if (_logDebug) _logger!.LogDebug("Disposing data reader");
+            return r.DisposeAsync();
         }
-
+        return ValueTask.CompletedTask;
         //_compiledQuery.DbCommand.Connection = null;
         // if (_conn is not null)
         // {
-        //     if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Disposing connection");
+        //     if (_logDebug) _logger.LogDebug("Disposing connection");
         //     await _conn.DisposeAsync();
         // }
     }
@@ -66,39 +81,46 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IAsyncEnu
     {
         if (_reader is null) await InitReaderAsync(_params, _cancellationToken).ConfigureAwait(false);
 #if DEBUG
-        if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false) _dataProvider.Logger.LogTrace("Move next");
+        if (_logger?.IsEnabled(LogLevel.Trace) ?? false) _logger.LogTrace("Move next");
 #endif
-        return await _reader!.ReadAsync(_cancellationToken).ConfigureAwait(false);
+        return await _reader!.ReadAsync(_cancellationToken);
     }
     public bool MoveNext()
     {
         if (_reader is null) InitReader(_params);
 #if DEBUG
-        if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false) _dataProvider.Logger.LogTrace("Move next");
+        if (_logger?.IsEnabled(LogLevel.Trace) ?? false) _logger.LogTrace("Move next");
 #endif
         return _reader!.Read();
     }
-    public void InitEnumerator(object[]? @params, CancellationToken cancellationToken)
+    public void InitEnumerator(DbContext dbContext, object[]? @params, CancellationToken cancellationToken)
     {
         _cancellationToken = cancellationToken;
         _params = @params;
-        _conn = _dataProvider.GetConnection();
+        DbContext = dbContext;
+        _conn = dbContext.GetConnection();
     }
     public void InitReader(object[]? @params)
     {
         if (_reader is not null) return;
 #if DEBUG
         if (_conn is null) throw new InvalidOperationException("Connection is empty");
+        if (_dbContext is null) throw new InvalidOperationException("DbContext is empty");
 #endif
-        var sqlCommand = CreateCommand(@params);
 
-        if (_conn.State == ConnectionState.Closed)
+        if (!_dbContext._connOpen)
         {
-            if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Opening connection");
-            _conn.Open();
+            if (_conn.State == ConnectionState.Closed)
+            {
+                if (_logDebug) _logger!.LogDebug("Opening connection");
+                _conn.Open();
+            }
+            _dbContext._connOpen = true;
         }
 
-        LogCommand(sqlCommand);
+        var sqlCommand = _compiledQuery.GetDbCommand(@params, _dbContext!, _conn!);
+
+        if (_logDebug) LogCommand(sqlCommand);
 
         _reader = sqlCommand.ExecuteReader(_compiledQuery.Behavior);
     }
@@ -107,73 +129,70 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IAsyncEnu
         if (_reader is not null) return;
 #if DEBUG
         if (_conn is null) throw new InvalidOperationException("Connection is empty");
+        if (_dbContext is null) throw new InvalidOperationException("DbContext is empty");
 #endif
-        var sqlCommand = CreateCommand(@params);
 
-        if (_conn.State == ConnectionState.Closed)
+        if (!_dbContext._connOpen)
         {
-            if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Opening connection");
-            await _conn.OpenAsync(cancellationToken).ConfigureAwait(false);
+            if (_conn.State == ConnectionState.Closed)
+            {
+                if (_logDebug) _logger!.LogDebug("Opening connection");
+                await _conn.OpenAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            _dbContext._connOpen = true;
         }
 
-        LogCommand(sqlCommand);
+        var sqlCommand = _compiledQuery.GetDbCommand(@params, _dbContext!, _conn!);
+
+        if (_logDebug) LogCommand(sqlCommand);
 
         _reader = await sqlCommand.ExecuteReaderAsync(_compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
     }
-    private DbCommand CreateCommand(object[]? @params)
-    {
-        _compiledQuery.PrepareDbCommand(@params, _dataProvider, _conn!);
-
-        return _compiledQuery.DbCommand;
-    }
     private void LogCommand(DbCommand sqlCommand)
     {
-        if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false)
-        {
-            var sb = new StringBuilder();
-            sb.AppendLine("Executing query: {sql}");
+        var sb = new StringBuilder();
+        sb.AppendLine("Executing query: {sql}");
 
-            //_dataProvider.Logger.LogDebug("Executing query: {sql}", sqlCommand.CommandText);
+        //_logger.LogDebug("Executing query: {sql}", sqlCommand.CommandText);
 
-            var ps = new ArrayList
+        var ps = new ArrayList
             {
                 sqlCommand.CommandText
             };
 
-            if (_dataProvider.LogSensitiveData)
+        if (_logSensitiveData)
+        {
+            var idx = 0;
+            foreach (DbParameter p in sqlCommand.Parameters)
             {
-                var idx = 0;
-                foreach (DbParameter p in sqlCommand.Parameters)
-                {
-                    sb.AppendLine($"param {{name_{idx}}} = {{value_{idx}}}");
-                    ps.Add(p.ParameterName);
-                    ps.Add(p.Value);
-                    idx++;
-                    //_dataProvider.Logger.LogDebug("param {name} is {value}", p.ParameterName, p.Value);
-                }
+                sb.AppendLine($"param {{name_{idx}}} = {{value_{idx}}}");
+                ps.Add(p.ParameterName);
+                ps.Add(p.Value);
+                idx++;
+                //_logger.LogDebug("param {name} is {value}", p.ParameterName, p.Value);
             }
-            else if (sqlCommand.Parameters?.Count > 0)
-            {
-                _dataProvider.Logger.LogDebug(sb.ToString(), sqlCommand.CommandText);
-                _dataProvider.Logger.LogDebug("Use {method} to see param values", nameof(_dataProvider.LogSensitiveData));
-                return;
-            }
-
-            if (_dataProvider.LogSensitiveData)
-            {
-                sb.Length -= Environment.NewLine.Length;
-                _dataProvider.Logger.LogDebug(sb.ToString(), ps.ToArray());
-            }
-            else
-                _dataProvider.Logger.LogDebug(sb.ToString(), sqlCommand.CommandText);
-
         }
+        else if (sqlCommand.Parameters?.Count > 0)
+        {
+            _logger!.LogDebug(sb.ToString(), sqlCommand.CommandText);
+            _logger!.LogDebug("Use {method} to see param values", nameof(_logSensitiveData));
+            return;
+        }
+
+        if (_logSensitiveData)
+        {
+            sb.Length -= Environment.NewLine.Length;
+            _logger!.LogDebug(sb.ToString(), ps.ToArray());
+        }
+        else
+            _logger!.LogDebug(sb.ToString(), sqlCommand.CommandText);
     }
     public void Reset()
     {
         if (_reader is not null)
         {
-            if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Disposing data reader");
+            if (_logDebug) _logger!.LogDebug("Disposing data reader");
             _reader.Dispose();
 
             _reader = null;
@@ -208,20 +227,20 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IAsyncEnu
         GC.SuppressFinalize(this);
     }
 
-    public IEnumerator<TResult> GetEnumerator()
-    {
-        return this;
-    }
+    // public IEnumerator<TResult> GetEnumerator()
+    // {
+    //     return this;
+    // }
 
-    IEnumerator IEnumerable.GetEnumerator()
-    {
-        return this;
-    }
+    // IEnumerator IEnumerable.GetEnumerator()
+    // {
+    //     return this;
+    // }
 
-    public IAsyncEnumerator<TResult> GetAsyncEnumerator(CancellationToken cancellationToken = default)
-    {
-        return this;
-    }
+    // public IAsyncEnumerator<TResult> GetAsyncEnumerator(CancellationToken cancellationToken = default)
+    // {
+    //     return this;
+    // }
 }
 
 internal interface IAsyncInit<out TResult> : IEnumerator<TResult>

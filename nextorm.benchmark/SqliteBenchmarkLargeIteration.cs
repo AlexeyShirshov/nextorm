@@ -5,8 +5,6 @@ using Microsoft.Data.Sqlite;
 using Dapper;
 using Microsoft.Extensions.Logging;
 using System.Data;
-
-using TupleLargeEntity = System.Tuple<long, string?, System.DateTime?>;
 using System.Linq.Expressions;
 using System.Data.Common;
 using System.Runtime.InteropServices;
@@ -24,13 +22,14 @@ namespace nextorm.benchmark;
 [Config(typeof(NextormConfig))]
 public class SqliteBenchmarkLargeIteration
 {
+    private readonly IDataContext _db;
     private readonly TestDataRepository _ctx;
-    private readonly QueryCommand<TupleLargeEntity> _cmdExec;
-    private readonly QueryCommand<LargeEntity> _cmdToList;
+    private readonly IPreparedQueryCommand<LargeEntity> _cmdExec;
+    private readonly IPreparedQueryCommand<LargeEntity> _cmdToList;
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
     private readonly SqliteCommand _adoCmd;
-    private readonly Func<EFDataContext, IAsyncEnumerable<LargeEntity>> _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.LargeEntities);
+    private readonly Func<EFDataContext, IAsyncEnumerable<LargeEntity>> _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.LargeEntities.Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }));
     private readonly ILoggerFactory? _logFactory;
     public SqliteBenchmarkLargeIteration(bool withLogging = false)
     {
@@ -42,12 +41,13 @@ public class SqliteBenchmarkLargeIteration
             builder.UseLoggerFactory(_logFactory);
             builder.LogSensitiveData(true);
         }
-        _ctx = new TestDataRepository(builder.CreateDbContext());
-        _ctx.DbContext.EnsureConnectionOpen();
+        _db = builder.CreateDbContext();
+        _ctx = new TestDataRepository(_db);
+        _db.EnsureConnectionOpen();
 
-        _cmdExec = _ctx.LargeEntity.Select(entity => new TupleLargeEntity(entity.Id, entity.Str, entity.Dt)).Compile(false);
+        _cmdExec = _ctx.LargeEntity.Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }).Prepare(false);
 
-        _cmdToList = _ctx.LargeEntity.Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }).Compile(true);
+        _cmdToList = _ctx.LargeEntity.Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }).Prepare();
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(@$"Filename={Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db")}");
@@ -74,7 +74,7 @@ public class SqliteBenchmarkLargeIteration
     //         await _conn.ExecuteAsync("insert into large_table(someString,dt) values(@str,@dt)", new {str=Guid.NewGuid().ToString(),dt=DateTime.Now.AddDays(r.Next(-10,10))});
     // }
     // [Benchmark()]
-    // public async Task NextormCompiledAsync()
+    // public async Task NextormPreparedAsync()
     // {
     //     await foreach (var row in _cmd)
     //     {
@@ -82,17 +82,17 @@ public class SqliteBenchmarkLargeIteration
     // }
     [Benchmark()]
     //[BenchmarkCategory("Stream")]
-    public async Task NextormCompiled()
+    public async Task Nextorm_Prepared_AsyncStream()
     {
-        foreach (var row in await _cmdExec.AsEnumerableAsync())
+        await foreach (var row in _cmdExec.ToAsyncEnumerable(_db))
         {
         }
     }
     [Benchmark()]
     //[BenchmarkCategory("Buffered")]
-    public async Task NextormCompiledToList()
+    public async Task Nextorm_Prepared_ToListAsync()
     {
-        foreach (var row in await _cmdToList.ToListAsync())
+        foreach (var row in await _cmdToList.ToListAsync(_db))
         {
         }
     }
@@ -105,9 +105,9 @@ public class SqliteBenchmarkLargeIteration
     // }
     [Benchmark()]
     //[BenchmarkCategory("Stream")]
-    public async Task NextormCached()
+    public async Task Nextorm_Cached_AsyncStream()
     {
-        foreach (var row in await _ctx.LargeEntity.Select(entity => new { entity.Id, entity.Str, entity.Dt }).AsEnumerableAsync())
+        await foreach (var row in _ctx.LargeEntity.Select(entity => new { entity.Id, entity.Str, entity.Dt }).ToAsyncEnumerable())
         {
         }
     }
@@ -120,7 +120,7 @@ public class SqliteBenchmarkLargeIteration
     // }
     [Benchmark()]
     //[BenchmarkCategory("Buffered")]
-    public async Task NextormCachedToList()
+    public async Task Nextorm_Cached_ToListAsync()
     {
         foreach (var row in await _ctx.LargeEntity.Select(entity => new { entity.Id, entity.Str, entity.Dt }).ToListAsync())
         {
@@ -135,7 +135,7 @@ public class SqliteBenchmarkLargeIteration
     // }
     [Benchmark]
     //[BenchmarkCategory("Buffered")]
-    public async Task EFCore()
+    public async Task EFCore_ToListAsync()
     {
         foreach (var row in await _efCtx.LargeEntities.Select(entity => new { entity.Id, entity.Str, entity.Dt }).ToListAsync())
         {
@@ -143,7 +143,7 @@ public class SqliteBenchmarkLargeIteration
     }
     [Benchmark]
     //[BenchmarkCategory("Stream")]
-    public async Task EFCoreStream()
+    public async Task EFCore_AsyncStream()
     {
         await foreach (var row in _efCtx.LargeEntities.Select(entity => new { entity.Id, entity.Str, entity.Dt }).AsAsyncEnumerable())
         {
@@ -151,15 +151,15 @@ public class SqliteBenchmarkLargeIteration
     }
     [Benchmark]
     //[BenchmarkCategory("Stream")]
-    public async Task EFCoreCompiled()
+    public async Task EFCore_Compiled_AsyncStream()
     {
-        await foreach (var row in _efCompiled(_efCtx).Select(entity => new TupleLargeEntity(entity.Id, entity.Str, entity.Dt)))
+        await foreach (var row in _efCompiled(_efCtx))
         {
         }
     }
     [Benchmark]
     //[BenchmarkCategory("Buffered")]
-    public async Task Dapper()
+    public async Task Dapper_Async()
     {
         foreach (var row in await _conn.QueryAsync<LargeEntity>("select id, someString as str, dt from large_table"))
         {
@@ -167,7 +167,7 @@ public class SqliteBenchmarkLargeIteration
     }
     [Benchmark]
     //[BenchmarkCategory("Stream")]
-    public async Task DapperUnbuffered()
+    public async Task Dapper_AsyncStream()
     {
         await foreach (var row in _conn.QueryUnbufferedAsync<LargeEntity>("select id, someString as str, dt from large_table"))
         {
@@ -213,7 +213,7 @@ public class SqliteBenchmarkLargeIteration
         using var reader = await _adoCmd.ExecuteReaderAsync(CommandBehavior.SingleResult);
         var l = new List<LargeEntity>();
         //var buf = new object[3];
-        var cq = _cmdToList.GetCompiledQuery();
+        var cq = _cmdToList as DbPreparedQueryCommand<LargeEntity>;
         while (reader.Read())
         {
             var o = cq!.MapDelegate!(reader);
@@ -423,25 +423,25 @@ public class SqliteBenchmarkLargeIteration
     //     {
     //     }
     // }
-    public async Task NextormInfiniteLoop()
-    {
-        while (true)
-        {
-            var s = Guid.NewGuid().ToString();
+    // public async Task NextormInfiniteLoop()
+    // {
+    //     while (true)
+    //     {
+    //         var s = Guid.NewGuid().ToString();
 
-            foreach (var row in await _ctx.LargeEntity.Where(it => it.Str == s).Select(entity => new { entity.Id, entity.Str, entity.Dt }).ToListAsync())
-            {
-            }
-        }
-    }
-    public async Task EFCoreInfiniteLoop()
-    {
-        while (true)
-        {
-            var s = Guid.NewGuid().ToString();
-            foreach (var row in await _efCtx.LargeEntities.Where(it => it.Str == s).Select(entity => new { entity.Id, entity.Str, entity.Dt }).ToListAsync())
-            {
-            }
-        }
-    }
+    //         foreach (var row in await _ctx.LargeEntity.Where(it => it.Str == s).Select(entity => new { entity.Id, entity.Str, entity.Dt }).ToListAsync())
+    //         {
+    //         }
+    //     }
+    // }
+    // public async Task EFCoreInfiniteLoop()
+    // {
+    //     while (true)
+    //     {
+    //         var s = Guid.NewGuid().ToString();
+    //         foreach (var row in await _efCtx.LargeEntities.Where(it => it.Str == s).Select(entity => new { entity.Id, entity.Str, entity.Dt }).ToListAsync())
+    //         {
+    //         }
+    //     }
+    // }
 }

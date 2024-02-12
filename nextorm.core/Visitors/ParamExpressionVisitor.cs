@@ -2,34 +2,19 @@
 using System.Linq.Expressions;
 namespace nextorm.core;
 
-public class ParamExpressionVisitor : ExpressionVisitor
+public class TestSpecialMethodCallVisitor : ExpressionVisitor
 {
-    private readonly object[] _params;
-
-    public ParamExpressionVisitor(object[] @params)
-    {
-        _params = @params;
-    }
+    public bool Result { get; internal set; }
 
     protected override Expression VisitMethodCall(MethodCallExpression node)
     {
-        if (node.Method.DeclaringType == typeof(NORM) /*&& _tableProvider is IParamProvider paramProvider*/)
+        if (
+               (node.Object?.Type == typeof(NORM.NORM_SQL))
+            || (node.Object?.Type.IsAssignableTo(typeof(QueryCommand)) ?? false)
+            )
         {
-            var paramIdx = node switch
-            {
-                {
-                    Method.Name: nameof(NORM.Param),
-                    Arguments: [ConstantExpression constExp]
-                } => constExp.Value is int i ? i : -1,
-                _ => -1
-            };
-
-            if (paramIdx >= 0)
-            {
-                return Expression.Constant(_params[paramIdx]);
-            }
-            else
-                throw new NotSupportedException(node.Method.Name);
+            Result = true;
+            return node;
         }
         return base.VisitMethodCall(node);
     }

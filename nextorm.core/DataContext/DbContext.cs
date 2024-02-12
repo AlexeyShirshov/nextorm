@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.ObjectPool;
 using System.Collections.Concurrent;
+using System.Collections.ObjectModel;
 using System.Data;
 using System.Data.Common;
 using System.Diagnostics;
@@ -9,25 +10,23 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text;
 
-
 namespace nextorm.core;
 
 public class DbContext : IDataContext
 {
     internal readonly static string[] _params = ["norm_p0", "norm_p1", "norm_p2", "norm_p3", "norm_p4"];
     private readonly static MethodInfo IsDBNullMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.IsDBNull))!;
-    private readonly static ConcurrentDictionary<Type, IEntityMeta> _metadata = new();
-    private readonly static ConcurrentDictionary<Type, List<SelectExpression>> _selectListCache = new();
     //private readonly static ConcurrentDictionary<Expression, List<SelectExpression>> _selectListExpCache = new(ExpressionEqualityComparer.Instance);
-    private readonly static ExpressionCache<Delegate> _expCache = new();
     internal protected readonly static ObjectPool<StringBuilder> _sbPool = new DefaultObjectPoolProvider().Create(new StringBuilderPooledObjectPolicy());
-    //    private readonly IDictionary<QueryCommand, SqlCacheEntry> _queryCache = new Dictionary<QueryCommand, SqlCacheEntry>();
-    private readonly static ConcurrentDictionary<QueryPlan, IDbCommandHolder> _queryPlanCache = new();
+    //private static readonly AsyncLocal<Dictionary<QueryPlan, IDbCommandHolder>> _queryPlanCache = new() { Value = [] };    
+    [ThreadStatic]
+    private static Dictionary<QueryPlan, IDbCommandHolder>? _queryPlanCache;
+    private readonly Dictionary<string, object> _properties = [];
     private DbConnection? _conn;
     protected bool _connWasCreatedByMe;
     private bool _disposed;
-    private bool _connOpen;
-    private readonly Action<DbCommand>? _logParams;
+    internal bool _connOpen;
+    private readonly bool _logParams;
     public DbContext(DbContextBuilder optionsBuilder)
     {
         ArgumentNullException.ThrowIfNull(optionsBuilder);
@@ -36,24 +35,28 @@ public class DbContext : IDataContext
         {
             Logger = optionsBuilder.LoggerFactory.CreateLogger(GetType());
             CommandLogger = optionsBuilder.LoggerFactory.CreateLogger(typeof(QueryCommand));
-            if (Logger.IsEnabled(LogLevel.Debug))
-                _logParams = LogParams;
+            ResultSetEnumeratorLogger = optionsBuilder.LoggerFactory.CreateLogger("nextorm.core.ResultSetEnumerator");
+            _logParams = Logger.IsEnabled(LogLevel.Debug);
         }
 
         LogSensitiveData = optionsBuilder.ShouldLogSensitiveData;
+        // CacheExpressions = optionsBuilder.CacheExpressions;
     }
-    //private DbCommand? _cmd;
-    protected internal bool LogSensitiveData { get; set; }
+    #region Properties
+    protected internal readonly bool LogSensitiveData;
     public virtual string ConcatStringOperator => "+";
-    public ILogger? Logger { get; set; }
-    public bool NeedMapping => true;
-    public IDictionary<ExpressionKey, Delegate> ExpressionsCache => _expCache;
     public virtual string EmptyString => "''";
-    public IDictionary<Type, IEntityMeta> Metadata => _metadata;
-    public IDictionary<Type, List<SelectExpression>> SelectListCache => _selectListCache;
-    //public IDictionary<Expression, List<SelectExpression>> SelectListExpressionCache => _selectListExpCache;
-    public ILogger? CommandLogger { get; set; }
+    public ILogger? Logger { get; }
+    public ILogger? CommandLogger { get; }
+    internal readonly ILogger? ResultSetEnumeratorLogger;
+    public bool NeedMapping => true;
+    private static Dictionary<QueryPlan, IDbCommandHolder> QueryPlanCache => _queryPlanCache ??= [];
+    public Dictionary<string, object> Properties => _properties;
+    public Lazy<QueryCommand<bool>>? AnyCommand { get; set; }
+    // public bool CacheExpressions { get; set; }
+
     public Entity From(string table) => new(this, table) { Logger = CommandLogger };
+    #endregion
     public event EventHandler? Disposed;
     public void EnsureConnectionOpen()
     {
@@ -101,9 +104,9 @@ public class DbContext : IDataContext
             conn.Disposed -= ConnDisposed;
             conn.StateChange -= OnStateChanged;
 
-            foreach (var cached in _queryPlanCache.Values)
+            foreach (var cached in QueryPlanCache.Values)
             {
-                cached.ResetConnection(conn);
+                cached.ResetConnection(conn, this);
             }
         }
     }
@@ -123,9 +126,11 @@ public class DbContext : IDataContext
     //     _cmd.CommandText=string.Empty;
     //     _cmd.Parameters.Clear();
     // }
-    public virtual DbCommand CreateCommand(string sql)
+    public DbCommand CreateCommand(string sql)
     {
-        throw new NotImplementedException();
+        var cmd = GetConnection().CreateCommand();
+        cmd.CommandText = sql;
+        return cmd;
     }
 
     public virtual string GetTableName(Type type)
@@ -133,30 +138,37 @@ public class DbContext : IDataContext
         throw new NotImplementedException(type.ToString());
     }
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private List<Param> ExtractParams(QueryCommand queryCommand) => MakeSelect(queryCommand, true).Item2;
+    private List<Param> ExtractParams(QueryCommand queryCommand)
+    {
+        var @params = new List<Param>();
+        MakeSelect(queryCommand, true, @params, queryCommand, null);
+        return @params;
+    }
+
+    private string? MakeSelect(QueryCommand queryCommand, bool paramMode, List<Param> @params, IQueryContext queryContext, IAliasProvider? aliasProvider)
+    {
+        var sqlBuilder = new SqlBuilder(this, paramMode, @params, new DefaultColumnsProvider(), queryContext, new DefaultParamProvider(), aliasProvider, Logger);
+        return sqlBuilder.MakeSelect(queryCommand);
+    }
+
     private void LogParams(DbCommand sqlCommand)
     {
-        if (Logger?.IsEnabled(LogLevel.Debug) ?? false)
-        {
-            Logger.LogDebug("Executing query: {sql}", sqlCommand.CommandText);
+        Logger!.LogDebug("Executing query: {sql}", sqlCommand.CommandText);
 
-            if (LogSensitiveData)
+        if (LogSensitiveData)
+        {
+            foreach (DbParameter p in sqlCommand.Parameters)
             {
-                foreach (DbParameter p in sqlCommand.Parameters)
-                {
-                    Logger.LogDebug("param {name} is {value}", p.ParameterName, p.Value);
-                }
-            }
-            else if (sqlCommand.Parameters?.Count > 0)
-            {
-                Logger.LogDebug("Use {method} to see param values", nameof(LogSensitiveData));
+                Logger!.LogDebug("param {name} is {value}", p.ParameterName, p.Value);
             }
         }
+        else if (sqlCommand.Parameters?.Count > 0)
+        {
+            Logger!.LogDebug("Use {method} to see param values", nameof(LogSensitiveData));
+        }
     }
-    private DbCompiledQuery<TResult> GetCompiledQuery<TResult>(QueryCommand<TResult> queryCommand, object[]? @params)
+    private DbCommand GetDbCommand<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, object[]? @params)
     {
-        var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, false, true);
-
         // #if DEBUG
         //         if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Getting connection");
         // #endif
@@ -174,16 +186,16 @@ public class DbContext : IDataContext
             _connOpen = true;
         }
 
-        compiledQuery.PrepareDbCommand(@params, this, conn);
+        var cmd = compiledQuery.GetDbCommand(@params, this, conn);
 
-        _logParams?.Invoke(compiledQuery.DbCommand);
+        if (_logParams) LogParams(cmd);
 
-        return compiledQuery;
+        return cmd;
     }
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Bug", "S2583:Conditionally executed code should be reachable", Justification = "<Pending>")]
-    private async ValueTask<DbCompiledQuery<TResult>> GetCompiledQuery<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
+    private async ValueTask<DbCommand> GetDbCommand<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, object[]? @params, CancellationToken cancellationToken)
     {
-        var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, false, true);
+        //var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, false, true);
 
         // #if DEBUG
         //         if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Getting connection");
@@ -202,12 +214,12 @@ public class DbContext : IDataContext
             _connOpen = true;
         }
 
-        compiledQuery.PrepareDbCommand(@params, this, conn);
+        var cmd = compiledQuery.GetDbCommand(@params, this, conn);
         // var sqlCommand = compiledQuery.DbCommand;
         // sqlCommand.Connection = conn;
-        _logParams?.Invoke(compiledQuery.DbCommand);
+        if (_logParams) LogParams(cmd);
 
-        return compiledQuery;
+        return cmd;
     }
     // private DbCompiledQuery<TResult> GetCompiledQuery<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, out DbConnection conn, out DbCommand sqlCommand)
     // {
@@ -252,15 +264,19 @@ public class DbContext : IDataContext
     //     return compiledQuery;
     // }
 
-    private DbCompiledQuery<TResult> CreateCompiledQuery<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, Func<(string, List<Param>)>? makeSelect = null)
+    public IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, CancellationToken cancellationToken)
     {
         QueryPlan? queryPlan = null;
         IDbCommandHolder? planCache = null;
 
+        if (!queryCommand.IsPrepared) queryCommand.PrepareCommand(!storeInCache, cancellationToken);
+
+        var ext = queryCommand.CustomData as DbQueryCommandExtension;
+
         if (queryCommand.Cache && storeInCache)
         {
-            queryPlan = new QueryPlan(queryCommand);
-            _queryPlanCache.TryGetValue(queryPlan, out planCache);
+            queryPlan = new QueryPlan(queryCommand, ext?.ManualSql);
+            QueryPlanCache.TryGetValue(queryPlan, out planCache);
         }
 
         if (planCache is null)
@@ -268,9 +284,9 @@ public class DbContext : IDataContext
             if ((Logger?.IsEnabled(LogLevel.Debug) ?? false) && storeInCache && queryCommand.Cache)
                 Logger.LogDebug("Query plan cache miss with hash: {hash}", queryPlan!.GetHashCode());
 
-            var (sql, @params) = makeSelect == null
-                ? MakeSelect(queryCommand, false)
-                : makeSelect();
+            var (sql, @params) = ext is null
+                ? MakeSelectInternal()
+                : (ext.ManualSql, ext.MakeParams?.Invoke());
 
             // var (sql, @params) = MakeSelect(queryCommand, true);
             // var cacheEntryX = new SqlCacheEntry(null) { Enumerator = new EmptyEnumerator<TResult>() };
@@ -282,30 +298,28 @@ public class DbContext : IDataContext
                 ? null
                 : GetMap(queryCommand)();
 
-            var noParams = @params.Count == 0;
+            var noParams = !(@params?.Count > 0);
 
             var dbCommand = CreateCommand(sql!);
             if (!noParams)
-                dbCommand.Parameters.AddRange(@params.Select(it => CreateParam(it.Name, it.Value)).ToArray());
+                dbCommand.Parameters.AddRange(@params!.Select(it => CreateParam(it.Name, it.Value)).ToArray());
 
-            dbCommand.Connection = GetConnection();
+            // dbCommand.Connection = GetConnection();
 
             //dbCommand.Prepare();
             //return new SqlCacheEntry(null) { Enumerator = new EmptyEnumerator<TResult>() };
 
-            var compiledQuery = new DbCompiledQuery<TResult>(dbCommand, map, queryCommand.SingleRow);
+            var compiledQuery = new DbPreparedQueryCommand<TResult>(dbCommand, map, queryCommand.SingleRow, queryCommand.OneColumn, ext is null ? sql! : null, noParams);
 
             if (createEnumerator)
             {
-                var enumerator = new ResultSetEnumerator<TResult>(this, compiledQuery!);
+                var enumerator = new ResultSetEnumerator<TResult>(compiledQuery!);
                 compiledQuery.Enumerator = enumerator;
             }
 
             if (storeInCache && queryCommand.Cache)
             {
-                var compiledPlan = new DbCompiledPlan<TResult>(makeSelect is null ? sql! : null, map, noParams);
-                _queryPlanCache[queryPlan!.GetCacheVersion()] = compiledPlan;
-                compiledPlan.QueryTemplate = compiledQuery;
+                QueryPlanCache[queryPlan!.GetCacheVersion()] = compiledQuery;
             }
 
             return compiledQuery;
@@ -316,79 +330,89 @@ public class DbContext : IDataContext
             if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Query plan cache hit");
 #endif
 
-            var plan = (DbCompiledPlan<TResult>)planCache;
-            // var dbCommand = plan.GetCommand(plan.NoParams
-            //     ? Array.Empty<Param>()
-            //     : ExtractParams(queryCommand), this);
+            var compiledQuery = (DbPreparedQueryCommand<TResult>)planCache;
 
-            var compiledQuery = plan.QueryTemplate;
-
-            if (makeSelect is not null || string.IsNullOrEmpty(plan.SqlStmt))
+            if (queryCommand.CustomData is DbQueryCommandExtension)
             {
-                var (sql, @params) = makeSelect == null
-                    ? MakeSelect(queryCommand, false)
-                    : makeSelect();
+                Debug.Assert(string.IsNullOrEmpty(compiledQuery.SqlStmt), "SqlStmt must be null");
 
-                var dbCommand = compiledQuery?.DbCommand;
-                if (dbCommand is not null)
-                {
-                    dbCommand.CommandText = sql;
-                    if (@params?.Count > 0)
-                    {
-                        for (int i = 0; i < @params.Count; i++)
-                        {
-                            dbCommand.Parameters[i].Value = @params[i].Value;
-                            Debug.Assert(dbCommand.Parameters[i].ParameterName == @params[i].Name, $"ParameterName {dbCommand.Parameters[i].ParameterName} not equals {@params[i].Name}");
-                        }
-                    }
-                }
-                else
-                {
-                    dbCommand = CreateCommand(sql!);
+                // var (sql, @params) = (manualSql, makeParams());
 
-                    if (@params?.Count > 0)
-                        dbCommand.Parameters.AddRange(@params.Select(it => CreateParam(it.Name, it.Value)).ToArray());
-                }
+                // var dbCommand = compiledQuery?.DbCommand;
+                // if (dbCommand is not null && dbCommand.CommandText == sql && compiledQuery!.DbCommandParams.Count == @params?.Count)
+                // {
+                //     // TODO: thread safety!
+                //     for (int i = 0; i < @params.Count; i++)
+                //     {
+                //         dbCommand.Parameters[i].Value = @params[i].Value;
+                //         Debug.Assert(dbCommand.Parameters[i].ParameterName == @params[i].Name, $"ParameterName {dbCommand.Parameters[i].ParameterName} not equals {@params[i].Name}");
+                //     }
+                // }
+                // else
+                // {
+                //     dbCommand = CreateCommand(sql!);
 
-                compiledQuery ??= new DbCompiledQuery<TResult>(dbCommand, plan.MapDelegate, queryCommand.SingleRow);
+                //     if (@params?.Count > 0)
+                //         dbCommand.Parameters.AddRange(@params.Select(it => CreateParam(it.Name, it.Value)).ToArray());
+
+                //     compiledQuery = new DbCompiledQuery<TResult>(dbCommand, plan.MapDelegate, queryCommand.SingleRow);
+                // }
+            }
+            else if (string.IsNullOrEmpty(compiledQuery.SqlStmt))
+            {
+                Debug.Fail("SqlStmt must be not null");
+                // var (sql, @params) = MakeSelect(queryCommand, false);
+
+                // var dbCommand = CreateCommand(sql!);
+
+                // if (@params?.Count > 0)
+                //     dbCommand.Parameters.AddRange(@params.Select(it => CreateParam(it.Name, it.Value)).ToArray());
+
+                // compiledQuery = new DbCompiledQuery<TResult>(dbCommand, plan.MapDelegate, queryCommand.SingleRow);
             }
             else
             {
-                if (!plan.NoParams || compiledQuery?.DbCommand is null)
+                if (!compiledQuery.NoParams/* || compiledQuery.DbCommand is null*/)
                 {
-                    var dbCommand = compiledQuery?.DbCommand ?? CreateCommand(plan.SqlStmt);
+                    var dbCommandParams = compiledQuery.DbCommandParams;// ?? CreateCommand(compiledQuery.SqlStmt);
 
-                    if (!plan.NoParams)
+                    // if (!compiledQuery.NoParams)
+                    // {
+                    // if (compiledQuery?.DbCommand is not null)
+                    //     dbCommand.Parameters.Clear();
+
+                    // dbCommand.Parameters.AddRange(ExtractParams(queryCommand).Select(it => CreateParam(it.Name, it.Value)).ToArray());
+                    var pp = ExtractParams(queryCommand);
+                    for (int i = 0; i < pp.Count; i++)
                     {
-                        // if (compiledQuery?.DbCommand is not null)
-                        //     dbCommand.Parameters.Clear();
-
-                        // dbCommand.Parameters.AddRange(ExtractParams(queryCommand).Select(it => CreateParam(it.Name, it.Value)).ToArray());
-                        var pp = ExtractParams(queryCommand);
-                        for (int i = 0; i < pp.Count; i++)
-                        {
-                            dbCommand.Parameters[i].Value = pp[i].Value;
-                            Debug.Assert(dbCommand.Parameters[i].ParameterName == pp[i].Name, $"ParameterName {dbCommand.Parameters[i].ParameterName} not equals {pp[i].Name}");
-                        }
+                        dbCommandParams[i].Value = pp[i].Value;
+                        Debug.Assert(dbCommandParams[i].ParameterName == pp[i].Name, $"ParameterName {dbCommandParams[i].ParameterName} not equals {pp[i].Name}");
                     }
+                    //}
 
-                    compiledQuery ??= new DbCompiledQuery<TResult>(dbCommand, plan.MapDelegate, queryCommand.SingleRow);
+                    //compiledQuery ??= new DbCompiledQuery<TResult>(dbCommand, plan.MapDelegate, queryCommand.SingleRow);
                 }
             }
 
-            if (plan.QueryTemplate is null)
-            {
-                if (createEnumerator)
-                {
-                    var enumerator = new ResultSetEnumerator<TResult>(this, compiledQuery!);
-                    compiledQuery.Enumerator = enumerator;
-                }
+            // if (plan.CompiledQuery is null)
+            // {
+            //     if (createEnumerator)
+            //     {
+            //         var enumerator = new ResultSetEnumerator<TResult>(compiledQuery!);
+            //         compiledQuery.Enumerator = enumerator;
+            //     }
 
-                plan.QueryTemplate = compiledQuery;
+            //     plan.CompiledQuery = compiledQuery;
 
-            }
+            // }
 
             return compiledQuery;
+        }
+        (string?, List<Param>) MakeSelectInternal()
+        {
+            var @params = new List<Param>();
+            var aliasProvider = new DefaultAliasProvider();
+            return (MakeSelect(queryCommand, false, @params, queryCommand, aliasProvider), @params);
         }
     }
     // public DatabaseCompiledQuery<TResult> GetCompiledQuery<TResult>(QueryCommand<TResult> cmd)
@@ -411,294 +435,41 @@ public class DbContext : IDataContext
     {
         throw new NotImplementedException();
     }
-    public virtual (string?, List<Param>) MakeSelect(QueryCommand cmd, bool paramMode)
-    {
-#if DEBUG
-        if (!cmd.IsPrepared)
-            throw new InvalidOperationException("Command not prepared");
 
-        if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Making sql with param mode {mode}", paramMode);
-#endif
-        //ArgumentNullException.ThrowIfNull(cmd.SelectList);
-        //ArgumentNullException.ThrowIfNull(cmd.From);
-        ArgumentNullException.ThrowIfNull(cmd.EntityType);
-
-        var selectList = cmd.SelectList;
-        var from = cmd.From;
-        var entityType = cmd.EntityType;
-
-        var sqlBuilder = paramMode ? null : _sbPool.Get();
-
-        var @params = new List<Param>();
-        var pageApplyed = false;
-
-        if (!paramMode) sqlBuilder!.Append("select ");
-        if (cmd.IgnoreColumns || selectList is null)
-        {
-            if (!paramMode) sqlBuilder!.Append("*, ");
-        }
-        else
-        {
-            if (!paramMode && cmd.Paging.IsTop && MakeTop(cmd.Paging.Limit, out var topStmt))
-            {
-                sqlBuilder!.Append(topStmt).Append(' ');
-                pageApplyed = true;
-            }
-
-            foreach (var item in selectList)
-            {
-                var (needAliasForColumn, column) = MakeColumn(item, entityType, cmd, false, @params, paramMode);
-
-                if (!paramMode)
-                {
-                    sqlBuilder!.Append(column);
-
-                    if (needAliasForColumn)
-                    {
-                        sqlBuilder.Append(MakeColumnAlias(item.PropertyName));
-                    }
-
-                    sqlBuilder.Append(", ");
-                }
-            }
-        }
-
-        if (from is not null)
-        {
-            var fromStr = MakeFrom(from, @params, paramMode);
-            if (!paramMode)
-            {
-                sqlBuilder!.Length -= 2;
-                sqlBuilder.Append(" from ").Append(fromStr);
-            }
-
-            // if (cmd.Joins.Any())
-            // {
-            foreach (var join in cmd.Joins)
-            {
-                var joinSql = MakeJoin(join, cmd, @params, paramMode);
-                if (!paramMode) sqlBuilder!.Append(joinSql);
-            }
-            //}
-
-            if (cmd.PreparedCondition is not null)
-            {
-                var whereSql = MakeWhere(entityType, cmd, cmd.PreparedCondition, 0, null, @params, paramMode);
-                if (!paramMode) sqlBuilder!.AppendLine().Append(" where ").Append(whereSql);
-            }
-
-            if (cmd.Sorting is not null)
-            {
-                if (!paramMode) sqlBuilder!.AppendLine().Append(" order by ");
-
-                foreach (var sorting in cmd.Sorting)
-                {
-                    var sortingSql = MakeSort(entityType, cmd, sorting.PreparedExpression!, 0, null, @params, paramMode);
-                    if (!paramMode)
-                    {
-                        sqlBuilder!.Append(sortingSql);
-                        if (sorting.Direction == OrderDirection.Desc)
-                            sqlBuilder.Append(" desc");
-
-                        sqlBuilder.Append(", ");
-                    }
-                }
-
-                if (!paramMode) sqlBuilder!.Length -= 2;
-            }
-            else if (!pageApplyed && RequireSorting(cmd) && !paramMode)
-            {
-                sqlBuilder!.AppendLine().Append(" order by ").Append(EmptySorting());
-            }
-
-            if (!pageApplyed && !paramMode && !cmd.Paging.IsEmpty)
-            {
-                sqlBuilder!.AppendLine();
-                MakePage(cmd.Paging, sqlBuilder);
-            }
-        }
-        else if (!paramMode && sqlBuilder!.Length > 0)
-            sqlBuilder.Length -= 2;
-
-
-        string? r = null;
-        if (!paramMode)
-        {
-            r = sqlBuilder!.ToString();
-
-            _sbPool.Return(sqlBuilder);
-        }
-
-#if DEBUG
-        if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Generated sql with param mode {mode}: {sql}", paramMode, r);
-#endif
-
-        return (r, @params);
-    }
-
-    protected virtual bool MakeTop(int limit, out string? topStmt)
+    public virtual bool MakeTop(int limit, out string? topStmt)
     {
         topStmt = null;
         return false;
     }
 
-    protected virtual string EmptySorting() => throw new NotImplementedException();
-    protected virtual bool RequireSorting(QueryCommand queryCommand) => false;
-    protected virtual void MakePage(Paging paging, StringBuilder sqlBuilder)
+    public virtual string EmptySorting() => throw new NotImplementedException();
+    public virtual bool RequireSorting(QueryCommand queryCommand) => false;
+    public virtual void MakePage(Paging paging, StringBuilder sqlBuilder)
     {
         throw new NotImplementedException();
     }
 
-    private string? MakeJoin(JoinExpression join, QueryCommand cmd, List<Param> @params, bool paramMode)
-    {
-        var sqlBuilder = paramMode ? null : _sbPool.Get();
-
-        if (!paramMode)
-        {
-            switch (join.JoinType)
-            {
-                case JoinType.Inner:
-                    sqlBuilder!.Append(" join ");
-                    break;
-                default:
-                    throw new NotImplementedException(join.JoinType.ToString());
-            }
-        }
-
-        var visitor = new JoinExpressionVisitor();
-        visitor.Visit(join.JoinCondition);
-
-        var dim = 1;
-        if (join.JoinCondition.Parameters[0].Type.TryGetProjectionDimension(out var joinDim))
-            dim = joinDim;
-
-        FromExpression fromExp;
-        if (visitor.JoinType is not null)
-        {
-            if (visitor.JoinType.IsAnonymous())
-            {
-                //fromExp = GetFrom(join.Query.EntityType);
-                var (sql, p) = MakeSelect(join.Query!, paramMode);
-                @params.AddRange(p);
-                if (!paramMode)
-                {
-                    sqlBuilder!.Append('(').Append(sql).Append(") ");
-                    sqlBuilder.Append(GetAliasFromProjection(cmd, visitor.JoinType, 1));
-                }
-            }
-            else
-            {
-                fromExp = GetFrom(visitor.JoinType);
-
-                if (!paramMode)
-                    fromExp.TableAlias = GetAliasFromProjection(cmd, visitor.JoinType, dim);
-
-                var fromSql = MakeFrom(fromExp, @params, paramMode);
-                if (!paramMode)
-                {
-                    sqlBuilder!.Append(fromSql);
-                }
-            }
-        }
-
-        var whereSql = MakeWhere(cmd.EntityType!, cmd, visitor.JoinCondition!, dim, dim == 1
-                        ? new ExpressionAliasProvider(join.JoinCondition)
-                        : new ProjectionAliasProvider(dim, cmd.EntityType!), @params, paramMode);
-
-        if (!paramMode)
-        {
-            sqlBuilder!.Append(" on ");
-
-            sqlBuilder.Append(whereSql);
-        }
-
-        string? r = null;
-
-        if (!paramMode)
-        {
-            r = sqlBuilder!.ToString();
-
-            _sbPool.Return(sqlBuilder);
-        }
-
-        return r;
-    }
-    private static string GetAliasFromProjection(QueryCommand cmd, Type declaringType, int from)
+    private static string GetAliasFromProjection(Type entityType, Type declaringType, int from)
     {
         int idx = 0;
-        foreach (var prop in cmd.EntityType!.GetProperties(BindingFlags.Instance | BindingFlags.Public))
+        foreach (var prop in entityType.GetProperties(BindingFlags.Instance | BindingFlags.Public))
         {
             if (++idx > from && prop.PropertyType == declaringType)
                 return prop.Name;
         }
 
-        throw new BuildSqlCommandException($"Cannot find alias of type {declaringType} in {cmd.EntityType}");
-    }
-    private string MakeWhere(Type entityType, IQueryContext queryContext, Expression condition, int dim, IAliasProvider? aliasProvider, List<Param> @params, bool paramMode)
-    {
-        // if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Where expression: {exp}", condition);
-        using var visitor = new WhereExpressionVisitor(entityType, this, queryContext, dim, aliasProvider, queryContext, queryContext, paramMode);
-        visitor.Visit(condition);
-        @params.AddRange(visitor.Params);
-
-        if (paramMode) return string.Empty;
-
-        return visitor.ToString();
-    }
-    private string MakeSort(Type entityType, IQueryContext queryContext, Expression sorting, int dim, IAliasProvider? aliasProvider, List<Param> @params, bool paramMode)
-        => MakeSort(entityType, queryContext, sorting, dim, aliasProvider, queryContext, queryContext, @params, paramMode);
-    private string MakeSort(Type entityType, ISourceProvider tableSource, Expression sorting, int dim, IAliasProvider? aliasProvider, IParamProvider paramProvider, IQueryProvider queryProvider, List<Param> @params, bool paramMode)
-    {
-        // if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Where expression: {exp}", condition);
-        using var visitor = new BaseExpressionVisitor(entityType, this, tableSource, dim, aliasProvider, paramProvider, queryProvider, true, paramMode);
-        visitor.Visit(sorting);
-        @params.AddRange(visitor.Params);
-
-        if (paramMode) return string.Empty;
-
-        return visitor.ToString();
-    }
-    public (bool NeedAliasForColumn, string Column) MakeColumn(SelectExpression selectExp, Type entityType, IQueryContext queryContext, bool dontNeedAlias, List<Param> @params, bool paramMode)
-        => MakeColumn(selectExp, entityType, queryContext, dontNeedAlias, queryContext, queryContext, @params, paramMode);
-    public (bool NeedAliasForColumn, string Column) MakeColumn(SelectExpression selectExp, Type entityType, ISourceProvider tableProvider, bool dontNeedAlias, IParamProvider paramProvider, IQueryProvider queryProvider, List<Param> @params, bool paramMode)
-    {
-        using var visitor = new BaseExpressionVisitor(entityType, this, tableProvider, 0, null, paramProvider, queryProvider, dontNeedAlias, paramMode);
-        visitor.Visit(selectExp.Expression);
-        @params.AddRange(visitor.Params);
-
-        if (paramMode) return (false, string.Empty);
-
-        return (visitor.NeedAliasForColumn, visitor.ToString());
-    }
-
-    public virtual string MakeFrom(FromExpression from, List<Param> @params, bool paramMode)
-    {
-        ArgumentNullException.ThrowIfNull(from);
-
-        return from.Table.Match(
-            tableName => tableName + (string.IsNullOrEmpty(from.TableAlias) ? string.Empty : MakeTableAlias(from.TableAlias)),
-            cmd =>
-            {
-                if (!cmd.IsPrepared) throw new BuildSqlCommandException("Inner query is not prepared");
-                var (sql, p) = MakeSelect(cmd, paramMode);
-                @params.AddRange(p);
-
-                if (paramMode) return string.Empty;
-
-                return "(" + sql + ")" + (string.IsNullOrEmpty(from.TableAlias) ? string.Empty : MakeTableAlias(from.TableAlias));
-            }
-        );
+        throw new BuildSqlCommandException($"Cannot find alias of type {declaringType} in {entityType}");
     }
     public virtual string MakeTableAlias(string tableAlias)
     {
-        return " as " + tableAlias;
+        return " as " + Escape(tableAlias);
     }
     public virtual string MakeColumnAlias(string? colAlias)
     {
         if (string.IsNullOrEmpty(colAlias))
             return string.Empty;
 
-        return " as " + colAlias;
+        return " as " + Escape(colAlias);
     }
     internal string GetColumnName(MemberInfo member)
     {
@@ -709,7 +480,7 @@ public class DbContext : IDataContext
     {
         return $"isnull({v1},{v2})";
     }
-
+    public virtual string Escape(string keyword) => "'" + keyword + "'";
     public virtual string MakeParam(string name)
     {
         throw new NotImplementedException(name);
@@ -718,18 +489,25 @@ public class DbContext : IDataContext
     {
         //_clearCache = true;
     }
+    public FromExpression GetFrom(Type t)
+    {
+        if (DataContextCache.Metadata.TryGetValue(t, out var entity) && !string.IsNullOrEmpty(entity.TableName))
+            return new FromExpression(entity.TableName);
 
-    public FromExpression? GetFrom(Type srcType, QueryCommand queryCommand)
+        return new FromExpression(GetTableName(t));
+    }
+
+    public FromExpression? GetFrom(Type srcType, QueryCommand? queryCommand)
     {
         if (srcType != typeof(TableAlias))
         {
-            if (queryCommand.Joins.Count > 0 && srcType.IsAssignableTo(typeof(IProjection)))
+            if (queryCommand?.Joins?.Length > 0 && srcType.IsAssignableTo(typeof(IProjection)))
             {
                 var prop_t1 = srcType.GetProperty("t1") ?? throw new BuildSqlCommandException($"Projection {srcType} must have t1 property");
 
                 var f = GetFrom(prop_t1.PropertyType);
 
-                f.TableAlias = "t1";
+                // f.TableAlias = "t1";
 
                 return f;
             }
@@ -740,40 +518,6 @@ public class DbContext : IDataContext
             return null;
     }
 
-    private FromExpression GetFrom(Type t)
-    {
-        // var sqlTableAttr = t.GetCustomAttribute<SqlTableAttribute>(true);
-
-        // if (sqlTableAttr is not null)
-        //     return new FromExpression(sqlTableAttr.Name);
-        // else
-        // {
-        //     var tableAttr = t.GetCustomAttribute<TableAttribute>(true);
-
-        //     if (tableAttr is not null)
-        //         return new FromExpression(tableAttr.Name);
-        // }
-
-        // foreach (var interf in t.GetInterfaces())
-        // {
-        //     sqlTableAttr = interf.GetCustomAttribute<SqlTableAttribute>(true);
-
-        //     if (sqlTableAttr is not null)
-        //         return new FromExpression(sqlTableAttr.Name);
-        //     else
-        //     {
-        //         var tableAttr = interf.GetCustomAttribute<TableAttribute>(true);
-
-        //         if (tableAttr is not null)
-        //             return new FromExpression(tableAttr.Name);
-        //     }
-        // }
-
-        if (_metadata.TryGetValue(t, out var entity) && !string.IsNullOrEmpty(entity.TableName))
-            return new FromExpression(entity.TableName);
-
-        return new FromExpression(GetTableName(t));
-    }
     public static Expression MapColumn(SelectExpression column, Expression param)
     {
         if (column.Nullable)
@@ -795,30 +539,32 @@ public class DbContext : IDataContext
     {
         return v ? "1" : "0";
     }
-    public void Compile<TResult>(string sql, object? @params, QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken)
-    {
-        if (!queryCommand.IsPrepared)
-            queryCommand.PrepareCommand(!storeInCache, cancellationToken);
+    // public IPreparedQueryCommand<TResult> PrepareFromSql<TResult>(string sql, object? @params, QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken)
+    // {
+    //     // if (!queryCommand.IsPrepared)
+    //     //     queryCommand.PrepareCommand(!storeInCache, cancellationToken);
 
-        List<Param> ps = new();
-        if (@params is not null)
-        {
-            var t = @params.GetType();
-            foreach (var prop in t.GetProperties(BindingFlags.Instance | BindingFlags.Public))
-            {
-                ps.Add(new Param(prop.Name, prop.GetValue(@params)));
-            }
-        }
+    //     return GetPreparedQueryCommand(queryCommand, !nonStreamUsing, storeInCache, cancellationToken, sql, () =>
+    //     {
+    //         List<Param> ps = new();
+    //         if (@params is not null)
+    //         {
+    //             var t = @params.GetType();
+    //             foreach (var prop in t.GetProperties(BindingFlags.Instance | BindingFlags.Public))
+    //             {
+    //                 ps.Add(new Param(prop.Name, prop.GetValue(@params)));
+    //             }
+    //         }
+    //         return ps;
+    //     });
+    // }
+    // public void Compile<TResult>(QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken)
+    // {
+    //     if (!queryCommand.IsPrepared)
+    //         queryCommand.PrepareCommand(!storeInCache, cancellationToken);
 
-        queryCommand._compiledQuery = CreateCompiledQuery(queryCommand, !nonStreamUsing, storeInCache, () => (sql, ps));
-    }
-    public void Compile<TResult>(QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken)
-    {
-        if (!queryCommand.IsPrepared)
-            queryCommand.PrepareCommand(!storeInCache, cancellationToken);
-
-        queryCommand._compiledQuery = CreateCompiledQuery(queryCommand, !nonStreamUsing, storeInCache);
-    }
+    //     queryCommand._compiledQuery = GetPreparedQueryCommand(queryCommand, !nonStreamUsing, storeInCache);
+    // }
     protected virtual void Dispose(bool disposing)
     {
         if (!_disposed)
@@ -854,9 +600,9 @@ public class DbContext : IDataContext
 
             if (_connWasCreatedByMe)
             {
-                foreach (var cached in _queryPlanCache.Values)
+                foreach (var cached in QueryPlanCache.Values)
                 {
-                    cached.ResetConnection(_conn);
+                    cached.ResetConnection(_conn, this);
                 }
 
                 if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Dispose connection");
@@ -867,14 +613,17 @@ public class DbContext : IDataContext
         Disposed?.Invoke(this, EventArgs.Empty);
     }
 
-    public IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
+    public IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
     {
         //ArgumentNullException.ThrowIfNull(queryCommand);
 
-        var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, true, true);
-        var sqlEnumerator = compiledQuery.Enumerator!;
-        sqlEnumerator.InitEnumerator(@params, cancellationToken);
-        return sqlEnumerator;
+        if (preparedQueryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
+        {
+            var sqlEnumerator = compiledQuery.Enumerator!;
+            sqlEnumerator.InitEnumerator(this, @params, cancellationToken);
+            return sqlEnumerator;
+        }
+        throw new NotSupportedException(preparedQueryCommand.GetType().Name);
     }
     // public async Task<IEnumerator<TResult>> CreateEnumeratorAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
     // {
@@ -886,48 +635,52 @@ public class DbContext : IDataContext
     //     await sqlEnumerator.InitReaderAsync(@params, cancellationToken).ConfigureAwait(false);
     //     return sqlEnumerator;
     // }
-    public async Task<List<TResult>> ToListAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
+    public async Task<List<TResult>> ToListAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
     {
         ////ArgumentNullException.ThrowIfNull(queryCommand);
 
-        // var (reader, compiledQuery) = await ExecuteReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
-        var compiledQuery = await GetCompiledQuery(queryCommand, @params, cancellationToken).ConfigureAwait(false);
-        var sqlCommand = compiledQuery.DbCommand;
-        var reader = await sqlCommand.ExecuteReaderAsync(compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
-        using (reader)
+        if (preparedQueryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
         {
-            var l = new List<TResult>(compiledQuery.LastRowCount);
-            var mapper = compiledQuery.MapDelegate!;
-            while (reader.Read())
+            var sqlCommand = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
+            //var sqlCommand = compiledQuery.DbCommand;
+            var reader = await sqlCommand.ExecuteReaderAsync(compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
+            using (reader)
             {
-                l.Add(mapper(reader));
-                //l.Add(default);
-            }
+                var l = new List<TResult>(compiledQuery.LastRowCount);
+                var mapper = compiledQuery.MapDelegate!;
+                while (reader.Read())
+                {
+                    l.Add(mapper(reader));
+                    //l.Add(default);
+                }
 
-            compiledQuery.LastRowCount = l.Count;
-            return l;
+                compiledQuery.LastRowCount = l.Count;
+                return l;
+            }
         }
+        throw new NotSupportedException(preparedQueryCommand.GetType().Name);
     }
-    public List<TResult> ToList<TResult>(QueryCommand<TResult> queryCommand, object[]? @params)
+    public List<TResult> ToList<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params)
     {
-        ////ArgumentNullException.ThrowIfNull(queryCommand);
-
-        // var (reader, compiledQuery) = CreateReader(queryCommand, @params);
-        var compiledQuery = GetCompiledQuery(queryCommand, @params);
-        var sqlCommand = compiledQuery.DbCommand;
-        var reader = sqlCommand.ExecuteReader(compiledQuery.Behavior);
-        using (reader)
+        if (preparedQueryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
         {
-            var l = new List<TResult>(compiledQuery.LastRowCount);
-            var mapper = compiledQuery.MapDelegate!;
-            while (reader.Read())
+            var sqlCommand = GetDbCommand(compiledQuery, @params);
+            //var sqlCommand = compiledQuery.DbCommand;
+            var reader = sqlCommand.ExecuteReader(compiledQuery.Behavior);
+            using (reader)
             {
-                l.Add(mapper(reader));
-            }
+                var l = new List<TResult>(compiledQuery.LastRowCount);
+                var mapper = compiledQuery.MapDelegate!;
+                while (reader.Read())
+                {
+                    l.Add(mapper(reader));
+                }
 
-            compiledQuery.LastRowCount = l.Count;
-            return l;
+                compiledQuery.LastRowCount = l.Count;
+                return l;
+            }
         }
+        throw new NotSupportedException(preparedQueryCommand.GetType().Name);
     }
     // private (DbDataReader, DbCompiledQuery<TResult>) CreateReader<TResult>(QueryCommand<TResult> queryCommand, object[]? @params)
     // {
@@ -945,67 +698,69 @@ public class DbContext : IDataContext
 
     //     return (sqlCommand.ExecuteReader(compiledQuery.Behavior), compiledQuery);
     // }
-    public TResult? ExecuteScalar<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, bool throwIfNull)
+    public TResult? ExecuteScalar<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, bool throwIfNull)
     {
-        //ArgumentNullException.ThrowIfNull(queryCommand);
-
-        // GetCompiledQuery(queryCommand, @params, out var conn, out var sqlCommand);
-        var compiledQuery = GetCompiledQuery(queryCommand, @params);
-        var sqlCommand = compiledQuery.DbCommand;
-
-        //if (conn.State == ConnectionState.Closed)
-        // if (!_connOpen)
-        // {
-        //     if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Opening connection");
-        //     conn.Open();
-        //     _connOpen = true;
-        // }
-
-        // _logParams?.Invoke(sqlCommand);
-
-        var r = sqlCommand.ExecuteScalar();
-
-        if (r is TResult res) return res;
-        if (r is null or DBNull)
+        if (preparedQueryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
         {
-            if (throwIfNull) throw new InvalidOperationException();
-            return default;
-        }
+            var sqlCommand = GetDbCommand(compiledQuery, @params);
+            //var sqlCommand = compiledQuery.DbCommand;
 
-        var type = typeof(TResult);
-        return (TResult)Convert.ChangeType(r, type);
+            //if (conn.State == ConnectionState.Closed)
+            // if (!_connOpen)
+            // {
+            //     if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Opening connection");
+            //     conn.Open();
+            //     _connOpen = true;
+            // }
+
+            // _logParams?.Invoke(sqlCommand);
+
+            var r = sqlCommand.ExecuteScalar();
+
+            if (r is TResult res) return res;
+            if (r is null or DBNull)
+            {
+                if (throwIfNull) throw new InvalidOperationException();
+                return default;
+            }
+
+            var type = typeof(TResult);
+            return (TResult)Convert.ChangeType(r, type);
+        }
+        throw new NotSupportedException(preparedQueryCommand.GetType().Name);
     }
-    public async Task<TResult?> ExecuteScalar<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, bool throwIfNull, CancellationToken cancellationToken)
+    public async Task<TResult?> ExecuteScalar<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, bool throwIfNull, CancellationToken cancellationToken)
     {
         CheckDisposed();
-        //ArgumentNullException.ThrowIfNull(queryCommand);
-
-        // GetCompiledQuery(queryCommand, @params, out var conn, out var sqlCommand);
-        var compiledQuery = await GetCompiledQuery(queryCommand, @params, cancellationToken);
-        var sqlCommand = compiledQuery.DbCommand;
-
-        //if (conn.State == ConnectionState.Closed)
-        // if (!_connOpen)
-        // {
-        //     if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Opening connection");
-        //     await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
-        //     _connOpen = true;
-        // }
-
-        // _logParams?.Invoke(sqlCommand);
-
-        var r = await sqlCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
-
-        // var r = true;
-        if (r is TResult res) return res;
-        if (r is null or DBNull)
+        if (preparedQueryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
         {
-            if (throwIfNull) throw new InvalidOperationException();
-            return default;
-        }
+            var sqlCommand = await GetDbCommand(compiledQuery, @params, cancellationToken);
+            //var sqlCommand = compiledQuery.DbCommand;
 
-        var type = typeof(TResult);
-        return (TResult)Convert.ChangeType(r, type);
+            //if (conn.State == ConnectionState.Closed)
+            // if (!_connOpen)
+            // {
+            //     if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Opening connection");
+            //     await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
+            //     _connOpen = true;
+            // }
+
+            // _logParams?.Invoke(sqlCommand);
+
+            var r = await sqlCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+
+            // var r = true;
+            if (r is TResult res) return res;
+            if (r is null or DBNull)
+            {
+                if (throwIfNull) throw new InvalidOperationException();
+                return default;
+            }
+
+            var type = typeof(TResult);
+            return (TResult)Convert.ChangeType(r, type);
+        }
+        throw new NotSupportedException(preparedQueryCommand.GetType().Name);
     }
     [Conditional("DEBUG")]
     private void CheckDisposed()
@@ -1029,17 +784,17 @@ public class DbContext : IDataContext
 
     //     return (await sqlCommand.ExecuteReaderAsync(compiledQuery.Behavior, cancellationToken).ConfigureAwait(false), compiledQuery);
     // }
-    public IEnumerator<TResult> CreateEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[]? @params)
+    public IEnumerator<TResult> CreateEnumerator<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params)
     {
-        //ArgumentNullException.ThrowIfNull(queryCommand);
+        if (preparedQueryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
+        {
+            var sqlEnumerator = compiledQuery.Enumerator!;
+            sqlEnumerator.InitEnumerator(this, @params, CancellationToken.None);
+            sqlEnumerator.InitReader(@params);
 
-        var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, true, true);
-
-        var sqlEnumerator = compiledQuery.Enumerator!;
-        sqlEnumerator.InitEnumerator(@params, CancellationToken.None);
-        sqlEnumerator.InitReader(@params);
-
-        return sqlEnumerator;
+            return sqlEnumerator;
+        }
+        throw new NotSupportedException(preparedQueryCommand.GetType().Name);
     }
     public Func<Func<IDataRecord, TResult>> GetMap<TResult>(QueryCommand<TResult> queryCommand)
     {
@@ -1060,7 +815,7 @@ public class DbContext : IDataContext
 
             if (queryCommand.OneColumn)
             {
-                var vis = new ReplaceMemberVisitor(queryCommand.EntityType!, this, queryCommand, param);
+                var vis = new ReplaceMemberVisitor(queryCommand.EntityType!, param);
                 var body = vis.Visit(((LambdaExpression)queryCommand.SelectList![0].Expression).Body);
                 lambda = Expression.Lambda<Func<IDataRecord, TResult>>(body, param);
             }
@@ -1068,7 +823,7 @@ public class DbContext : IDataContext
             {
                 var ctorInfo = resultType.GetConstructors().OrderByDescending(it => it.GetParameters().Length).FirstOrDefault() ?? throw new PrepareException($"Cannot get ctor from {resultType}");
 
-                if (ctorInfo.GetParameters().Length == queryCommand.SelectList!.Count)
+                if (ctorInfo.GetParameters().Length == queryCommand.SelectList!.Length)
                 {
                     var newParams = queryCommand.SelectList!.Select(column => DbContext.MapColumn(column, param)).ToArray();
                     var ctor = Expression.New(ctorInfo, newParams);
@@ -1122,233 +877,249 @@ public class DbContext : IDataContext
         //     }
     }
 
-    public TResult First<TResult>(QueryCommand<TResult> queryCommand, object[] @params)
+    public TResult First<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params)
     {
         //ArgumentNullException.ThrowIfNull(queryCommand);
 
-        if (queryCommand.OneColumn)
+        if (preparedQueryCommand.IsScalar)
         {
-            return ExecuteScalar(queryCommand, @params, true)!;
+            return ExecuteScalar<TResult>(preparedQueryCommand, @params, true)!;
         }
         else
         {
-            // var (reader, compiledQuery) = CreateReader(queryCommand, @params);
-            var compiledQuery = GetCompiledQuery(queryCommand, @params);
-            var sqlCommand = compiledQuery.DbCommand;
+            if (preparedQueryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
+            {
+                var sqlCommand = GetDbCommand(compiledQuery, @params);
+                //var sqlCommand = compiledQuery.DbCommand;
+                var reader = sqlCommand.ExecuteReader(compiledQuery.Behavior);
+                var mapper = compiledQuery.MapDelegate!;
+                using (reader)
+                {
+                    if (reader.Read())
+                    {
+                        return mapper(reader);
+                    }
+
+                    throw new InvalidOperationException();
+                }
+            }
+            throw new NotSupportedException(preparedQueryCommand.GetType().Name);
+        }
+    }
+
+    public async Task<TResult> FirstAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
+    {
+        //ArgumentNullException.ThrowIfNull(queryCommand);
+
+        if (preparedQueryCommand.IsScalar)
+        {
+            return (await ExecuteScalar<TResult>(preparedQueryCommand, @params, true, cancellationToken))!;
+        }
+        else
+        {
+            if (preparedQueryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
+            {
+                var sqlCommand = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
+                //var sqlCommand = compiledQuery.DbCommand;
+                var reader = await sqlCommand.ExecuteReaderAsync(compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
+                var mapper = compiledQuery.MapDelegate!;
+                using (reader)
+                {
+                    if (reader.Read())
+                    {
+                        return mapper(reader);
+                    }
+
+                    throw new InvalidOperationException();
+                }
+            }
+            throw new NotSupportedException(preparedQueryCommand.GetType().Name);
+        }
+    }
+    public TResult? FirstOrDefault<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params)
+    {
+        if (preparedQueryCommand.IsScalar)
+        {
+            return ExecuteScalar<TResult>(preparedQueryCommand, @params, false);
+        }
+        else
+        {
+            if (preparedQueryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
+            {
+                var sqlCommand = GetDbCommand(compiledQuery, @params);
+                //var sqlCommand = compiledQuery.DbCommand;
+                var reader = sqlCommand.ExecuteReader(compiledQuery.Behavior);
+                var mapper = compiledQuery.MapDelegate!;
+                //var (reader, compiledQuery) = CreateReader(queryCommand, @params);
+                using (reader)
+                {
+                    if (reader.Read())
+                    {
+                        return mapper(reader);
+                    }
+
+                    return default;
+                }
+            }
+            throw new NotSupportedException(preparedQueryCommand.GetType().Name);
+        }
+    }
+
+    public async Task<TResult?> FirstOrDefaultAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
+    {
+        //ArgumentNullException.ThrowIfNull(queryCommand);
+
+        if (preparedQueryCommand.IsScalar)
+        {
+            return await ExecuteScalar<TResult>(preparedQueryCommand, @params, false, cancellationToken);
+        }
+        else
+        {
+            if (preparedQueryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
+            {
+                var sqlCommand = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
+                //var sqlCommand = compiledQuery.DbCommand;
+                var reader = await sqlCommand.ExecuteReaderAsync(compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
+                var mapper = compiledQuery.MapDelegate!;
+                using (reader)
+                {
+                    if (reader.Read())
+                    {
+                        return mapper(reader);
+                    }
+
+                    return default;
+                }
+            }
+            throw new NotSupportedException(preparedQueryCommand.GetType().Name);
+        }
+    }
+
+    public TResult Single<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params)
+    {
+        if (preparedQueryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
+        {
+            var sqlCommand = GetDbCommand(compiledQuery, @params);
+            //var sqlCommand = compiledQuery.DbCommand;
             var reader = sqlCommand.ExecuteReader(compiledQuery.Behavior);
-            var mapper = compiledQuery.MapDelegate!;
             using (reader)
             {
-                if (reader.Read())
+                TResult r = default!;
+                var hasResult = false;
+                var mapper = compiledQuery.MapDelegate!;
+                while (reader.Read())
                 {
-                    return mapper(reader);
+                    if (hasResult)
+                        throw new InvalidOperationException();
+
+                    r = mapper(reader);
+                    hasResult = true;
                 }
 
-                throw new InvalidOperationException();
+                if (!hasResult)
+                    throw new InvalidOperationException();
+
+                return r!;
             }
         }
+        throw new NotSupportedException(preparedQueryCommand.GetType().Name);
     }
 
-    public async Task<TResult> FirstAsync<TResult>(QueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
+    public async Task<TResult> SingleAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
     {
-        //ArgumentNullException.ThrowIfNull(queryCommand);
-
-        if (queryCommand.OneColumn)
+        if (preparedQueryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
         {
-            return (await ExecuteScalar(queryCommand, @params, true, cancellationToken))!;
-        }
-        else
-        {
-            // var (reader, compiledQuery) = await ExecuteReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
-            var compiledQuery = await GetCompiledQuery(queryCommand, @params, cancellationToken).ConfigureAwait(false);
-            var sqlCommand = compiledQuery.DbCommand;
+            var sqlCommand = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
+            //var sqlCommand = compiledQuery.DbCommand;
             var reader = await sqlCommand.ExecuteReaderAsync(compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
-            var mapper = compiledQuery.MapDelegate!;
             using (reader)
             {
-                if (reader.Read())
+                TResult r = default!;
+                var hasResult = false;
+                var mapper = compiledQuery.MapDelegate!;
+                while (reader.Read())
                 {
-                    return mapper(reader);
+                    if (hasResult)
+                        throw new InvalidOperationException();
+
+                    r = mapper(reader);
+                    hasResult = true;
                 }
 
-                throw new InvalidOperationException();
+                if (!hasResult)
+                    throw new InvalidOperationException();
+
+                return r!;
             }
         }
+        throw new NotSupportedException(preparedQueryCommand.GetType().Name);
     }
-    public TResult? FirstOrDefault<TResult>(QueryCommand<TResult> queryCommand, object[] @params)
+
+    public TResult? SingleOrDefault<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params)
     {
-        //ArgumentNullException.ThrowIfNull(queryCommand);
-
-        if (queryCommand.OneColumn)
+        if (preparedQueryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
         {
-            return ExecuteScalar(queryCommand, @params, false);
-        }
-        else
-        {
-            // if (!_connOpen)
-            // {
-            //     if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Opening connection");
-            //     conn.Open();
-            //     _connOpen = true;
-            // }
-
-            //_logParams?.Invoke(sqlCommand);
-            //Logger?.LogInformation(compiledQuery.Behavior.ToString("g"));
-            var compiledQuery = GetCompiledQuery(queryCommand, @params);
-            var sqlCommand = compiledQuery.DbCommand;
+            var sqlCommand = GetDbCommand(compiledQuery, @params);
+            //var sqlCommand = compiledQuery.DbCommand;
             var reader = sqlCommand.ExecuteReader(compiledQuery.Behavior);
-            var mapper = compiledQuery.MapDelegate!;
-            //var (reader, compiledQuery) = CreateReader(queryCommand, @params);
+
             using (reader)
             {
-                if (reader.Read())
+                TResult? r = default;
+                var hasResult = false;
+                var mapper = compiledQuery.MapDelegate!;
+                while (reader.Read())
                 {
-                    return mapper(reader);
+                    if (hasResult)
+                        throw new InvalidOperationException();
+
+                    r = mapper(reader);
+                    hasResult = true;
                 }
 
-                return default;
+                return r;
             }
         }
+        throw new NotSupportedException(preparedQueryCommand.GetType().Name);
     }
 
-    public async Task<TResult?> FirstOrDefaultAsync<TResult>(QueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
+    public async Task<TResult?> SingleOrDefaultAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
     {
-        //ArgumentNullException.ThrowIfNull(queryCommand);
-
-        if (queryCommand.OneColumn)
+        if (preparedQueryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
         {
-            return await ExecuteScalar(queryCommand, @params, false, cancellationToken);
-        }
-        else
-        {
-            //var (reader, compiledQuery) = await ExecuteReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
-            var compiledQuery = await GetCompiledQuery(queryCommand, @params, cancellationToken).ConfigureAwait(false);
-            var sqlCommand = compiledQuery.DbCommand;
+            var sqlCommand = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
+            //var sqlCommand = compiledQuery.DbCommand;
             var reader = await sqlCommand.ExecuteReaderAsync(compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
-            var mapper = compiledQuery.MapDelegate!;
             using (reader)
             {
-                if (reader.Read())
+                TResult? r = default;
+                var hasResult = false;
+                var mapper = compiledQuery.MapDelegate!;
+                while (reader.Read())
                 {
-                    return mapper(reader);
+                    if (hasResult)
+                        throw new InvalidOperationException();
+
+                    r = mapper(reader);
+                    hasResult = true;
                 }
 
-                return default;
+                return r;
             }
         }
+        throw new NotSupportedException(preparedQueryCommand.GetType().Name);
     }
 
-    public TResult Single<TResult>(QueryCommand<TResult> queryCommand, object[] @params)
+    public virtual string MakeCount(bool distinct, bool big) => distinct switch
     {
-        //ArgumentNullException.ThrowIfNull(queryCommand);
+        true => "count(distinct ",
+        _ => "count("
+    };
 
-        // var (reader, compiledQuery) = CreateReader(queryCommand, @params);
-        var compiledQuery = GetCompiledQuery(queryCommand, @params);
-        var sqlCommand = compiledQuery.DbCommand;
-        var reader = sqlCommand.ExecuteReader(compiledQuery.Behavior);
-        using (reader)
-        {
-            TResult r = default!;
-            var hasResult = false;
-            var mapper = compiledQuery.MapDelegate!;
-            while (reader.Read())
-            {
-                if (hasResult)
-                    throw new InvalidOperationException();
-
-                r = mapper(reader);
-                hasResult = true;
-            }
-
-            if (!hasResult)
-                throw new InvalidOperationException();
-
-            return r!;
-        }
-    }
-
-    public async Task<TResult> SingleAsync<TResult>(QueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
+    public void PurgeQueryCache()
     {
-        //ArgumentNullException.ThrowIfNull(queryCommand);
-
-        // var (reader, compiledQuery) = await ExecuteReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
-        var compiledQuery = await GetCompiledQuery(queryCommand, @params, cancellationToken).ConfigureAwait(false);
-        var sqlCommand = compiledQuery.DbCommand;
-        var reader = await sqlCommand.ExecuteReaderAsync(compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
-        using (reader)
-        {
-            TResult r = default!;
-            var hasResult = false;
-            var mapper = compiledQuery.MapDelegate!;
-            while (reader.Read())
-            {
-                if (hasResult)
-                    throw new InvalidOperationException();
-
-                r = mapper(reader);
-                hasResult = true;
-            }
-
-            if (!hasResult)
-                throw new InvalidOperationException();
-
-            return r!;
-        }
+        QueryPlanCache.Clear();
     }
-
-    public TResult? SingleOrDefault<TResult>(QueryCommand<TResult> queryCommand, object[] @params)
-    {
-        //ArgumentNullException.ThrowIfNull(queryCommand);
-
-        // var (reader, compiledQuery) = CreateReader(queryCommand, @params);
-        var compiledQuery = GetCompiledQuery(queryCommand, @params);
-        var sqlCommand = compiledQuery.DbCommand;
-        var reader = sqlCommand.ExecuteReader(compiledQuery.Behavior);
-
-        using (reader)
-        {
-            TResult? r = default;
-            var hasResult = false;
-            var mapper = compiledQuery.MapDelegate!;
-            while (reader.Read())
-            {
-                if (hasResult)
-                    throw new InvalidOperationException();
-
-                r = mapper(reader);
-                hasResult = true;
-            }
-
-            return r;
-        }
-    }
-
-    public async Task<TResult?> SingleOrDefaultAsync<TResult>(QueryCommand<TResult> queryCommand, object[] @params, CancellationToken cancellationToken)
-    {
-        //ArgumentNullException.ThrowIfNull(queryCommand);
-
-        // var (reader, compiledQuery) = await ExecuteReader(queryCommand, @params, cancellationToken).ConfigureAwait(false);
-        var compiledQuery = await GetCompiledQuery(queryCommand, @params, cancellationToken).ConfigureAwait(false);
-        var sqlCommand = compiledQuery.DbCommand;
-        var reader = await sqlCommand.ExecuteReaderAsync(compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
-        using (reader)
-        {
-            TResult? r = default;
-            var hasResult = false;
-            var mapper = compiledQuery.MapDelegate!;
-            while (reader.Read())
-            {
-                if (hasResult)
-                    throw new InvalidOperationException();
-
-                r = mapper(reader);
-                hasResult = true;
-            }
-
-            return r;
-        }
-    }
-
     // class EmptyEnumerator<TResult> : IAsyncEnumerator<TResult>, IEnumerator<TResult>
     // {
     //     public TResult Current => default;

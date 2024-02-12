@@ -46,4 +46,13 @@ public static class TypeExtensions
 
         return false;
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsScalar(this Type type)
+    {
+        return Type.GetTypeCode(type) switch
+        {
+            TypeCode.Object => false,
+            _ => true
+        };
+    }
 }

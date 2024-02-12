@@ -15,12 +15,13 @@ namespace nextorm.benchmark;
 [Config(typeof(NextormConfig))]
 public class SqliteBenchmarkSingle
 {
+    private readonly IDataContext _db;
     private readonly TestDataRepository _ctx;
-    private readonly QueryCommand<int> _cmd;
+    private readonly IPreparedQueryCommand<int> _cmd;
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
-    private readonly Func<EFDataContext, Task<int>> _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.SimpleEntities.Where(it => it.Id == 1).Select(it => it.Id).Single());
-    private readonly Func<EFDataContext, Task<int>> _efCompiledSingleOrDefault = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.SimpleEntities.Where(it => it.Id == 1).Select(it => it.Id).SingleOrDefault());
+    // private readonly Func<EFDataContext, Task<int>> _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.SimpleEntities.Where(it => it.Id == 1).Select(it => it.Id).Single());
+    private readonly Func<EFDataContext, int, Task<int>> _efCompiledSingleOrDefault = EF.CompileAsyncQuery((EFDataContext ctx, int i) => ctx.SimpleEntities.Where(it => it.Id == i).Select(it => it.Id).SingleOrDefault());
     // private readonly Func<EFDataContext, int, Task<int>> _efCompiledFilterParam = EF.CompileAsyncQuery((EFDataContext ctx, int id) => ctx.SimpleEntities.Where(it => it.Id > id).Select(it => it.Id).Single());
     private readonly ILoggerFactory? _logFactory;
     public SqliteBenchmarkSingle(bool withLogging = false)
@@ -33,10 +34,11 @@ public class SqliteBenchmarkSingle
             builder.UseLoggerFactory(_logFactory);
             builder.LogSensitiveData(true);
         }
-        _ctx = new TestDataRepository(builder.CreateDbContext());
-        _ctx.DbContext.EnsureConnectionOpen();
+        _db = builder.CreateDbContext();
+        _ctx = new TestDataRepository(_db);
+        _db.EnsureConnectionOpen();
 
-        _cmd = _ctx.SimpleEntity.Where(it => it.Id == 1).SingleOrSingleOrDefaultCommand(it => it.Id).Compile(true);
+        _cmd = _ctx.SimpleEntity.Where(it => it.Id == 1).SingleOrSingleOrDefaultCommand(it => it.Id).Prepare();
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(@$"Filename={Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db")}");
@@ -53,114 +55,33 @@ public class SqliteBenchmarkSingle
         _conn.Open();
     }
     [Benchmark(Baseline = true)]
-    public async Task NextormSingleCompiled()
+    public async Task Nextorm_Prepared_SingleOrDefault()
     {
-        await _cmd.SingleAsync();
+        for (int i = 0; i < 10; i++)
+            await _cmd.SingleOrDefaultAsync(_db, i);
     }
     [Benchmark()]
-    public async Task NextormSingleOrDefaultCompiled()
+    public async Task Nextorm_Cached_SingleOrDefault()
     {
-        await _cmd.SingleOrDefaultAsync();
-    }
-    [Benchmark()]
-    public async Task NextormSingleCached()
-    {
-        await _ctx.SimpleEntity.Where(it => it.Id == 1).Select(it => it.Id).SingleAsync();
-    }
-    [Benchmark()]
-    public async Task NextormSingleOrDefaultCached()
-    {
-        await _ctx.SimpleEntity.Where(it => it.Id == 1).Select(it => it.Id).SingleOrDefaultAsync();
+        for (int i = 0; i < 10; i++)
+            await _ctx.SimpleEntity.Where(it => it.Id == i).Select(it => it.Id).SingleOrDefaultAsync();
     }
     [Benchmark]
-    public async Task EFCoreSingle()
+    public async Task EFCore_SingleOrDefault()
     {
-        await _efCtx.SimpleEntities.Where(it => it.Id == 1).Select(it => it.Id).SingleAsync();
+        for (int i = 0; i < 10; i++)
+            await _efCtx.SimpleEntities.Where(it => it.Id == i).Select(it => it.Id).SingleOrDefaultAsync();
     }
     [Benchmark]
-    public async Task EFCoreSingleOrDefault()
+    public async Task EFCore_Compiled_SingleOrDefault()
     {
-        await _efCtx.SimpleEntities.Where(it => it.Id == 1).Select(it => it.Id).SingleOrDefaultAsync();
+        for (int i = 0; i < 10; i++)
+            await _efCompiledSingleOrDefault(_efCtx, i);
     }
     [Benchmark]
-    public async Task EFCoreSingleCompiled()
+    public async Task Dapper_SingleOrDefault()
     {
-        await _efCompiled(_efCtx);
+        for (int i = 0; i < 10; i++)
+            await _conn.QuerySingleOrDefaultAsync<int?>("select id from simple_entity where id = @id", new { id = i });
     }
-    [Benchmark]
-    public async Task EFCoreSingleOrDefaultCompiled()
-    {
-        await _efCompiledSingleOrDefault(_efCtx);
-    }
-    [Benchmark]
-    public async Task DapperSingle()
-    {
-        await _conn.QuerySingleAsync<int>("select id from simple_entity where id = 1");
-    }
-    [Benchmark]
-    public async Task DapperSingleOrDefault()
-    {
-        await _conn.QuerySingleOrDefaultAsync<int?>("select id from simple_entity where id = 1");
-    }
-    // [Benchmark()]
-    // [BenchmarkCategory("Filter")]
-    // public async Task NextormFilterCompiled()
-    // {
-    //     await _cmdFilter.AnyAsync();
-    // }
-    // [Benchmark()]
-    // [BenchmarkCategory("Filter")]
-    // public async Task NextormFilterCached()
-    // {
-    //     await _ctx.SimpleEntity.Where(it => it.Id > 5).AnyAsync();
-    // }
-    // [Benchmark]
-    // [BenchmarkCategory("Filter")]
-    // public async Task EFCoreFilter()
-    // {
-    //     await _efCtx.SimpleEntities.Where(it => it.Id > 5).AnyAsync();
-    // }
-    // [Benchmark]
-    // [BenchmarkCategory("Filter")]
-    // public async Task EFCoreFilterCompiled()
-    // {
-    //     await _efCompiledFilter(_efCtx);
-    // }
-    // [Benchmark]
-    // [BenchmarkCategory("Filter")]
-    // public async Task DapperFilter()
-    // {
-    //     await _conn.ExecuteScalarAsync<bool>("select exists(select id from simple_entity where id > 5)");
-    // }
-    // [Benchmark()]
-    // [BenchmarkCategory("FilterParam")]
-    // public async Task NextormFilterParamCompiled()
-    // {
-    //     await _cmdFilterParam.AnyAsync(5);
-    // }
-    // [Benchmark()]
-    // [BenchmarkCategory("FilterParam")]
-    // public async Task NextormFilterParamCached()
-    // {
-    //     await _ctx.SimpleEntity.Where(it => it.Id > NORM.Param<int>(0)).AnyAsync(5);
-    // }
-    // [Benchmark]
-    // [BenchmarkCategory("FilterParam")]
-    // public async Task EFCoreFilterParam()
-    // {
-    //     var id = 5;
-    //     await _efCtx.SimpleEntities.Where(it => it.Id > id).AnyAsync();
-    // }
-    // [Benchmark]
-    // [BenchmarkCategory("FilterParam")]
-    // public async Task EFCoreFilterParamCompiled()
-    // {
-    //     await _efCompiledFilterParam(_efCtx, 5);
-    // }
-    // [Benchmark]
-    // [BenchmarkCategory("FilterParam")]
-    // public async Task DapperFilterParam()
-    // {
-    //     await _conn.ExecuteScalarAsync<bool>("select exists(select id from simple_entity where id > @id)", new { id = 5 });
-    // }
 }

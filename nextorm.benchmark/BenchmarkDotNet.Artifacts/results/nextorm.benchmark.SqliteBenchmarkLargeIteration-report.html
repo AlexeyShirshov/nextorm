@@ -2,7 +2,7 @@
 <html lang='en'>
 <head>
 <meta charset='utf-8' />
-<title>nextorm.benchmark.SqliteBenchmarkLargeIteration-20240108-190628</title>
+<title>nextorm.benchmark.SqliteBenchmarkLargeIteration-20240125-191913</title>
 
 <style type="text/css">
 	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
@@ -13,29 +13,29 @@
 </head>
 <body>
 <pre><code>
-BenchmarkDotNet v0.13.10, Windows 11 (10.0.22621.2861/22H2/2022Update/SunValley2)
+BenchmarkDotNet v0.13.10, Windows 11 (10.0.22621.3007/22H2/2022Update/SunValley2)
 Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical cores
-.NET SDK 8.0.100
-  [Host]   : .NET 8.0.0 (8.0.23.53103), X64 RyuJIT AVX2
-  .NET 8.0 : .NET 8.0.0 (8.0.23.53103), X64 RyuJIT AVX2
+.NET SDK 8.0.101
+  [Host]   : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX2
+  .NET 8.0 : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX2
 </code></pre>
 <pre><code>Job=.NET 8.0  Runtime=.NET 8.0  
 </code></pre>
 
 <table>
-<thead><tr><th>Method         </th><th>Mean</th><th>Gen0</th><th>Gen1</th><th>Gen2</th><th>Allocated</th>
+<thead><tr><th>Method                </th><th>Mean</th><th>Gen0</th><th>Gen1</th><th>Gen2</th><th>Allocated</th>
 </tr>
-</thead><tbody><tr><td>NextormCached</td><td>9.986 ms</td><td>468.7500</td><td>-</td><td>-</td><td>2.14 MB</td>
-</tr><tr><td>NextormCompiled</td><td>10.060 ms</td><td>468.7500</td><td>-</td><td>-</td><td>2.14 MB</td>
-</tr><tr><td>AdoTupleToList</td><td>10.213 ms</td><td>421.8750</td><td>281.2500</td><td>281.2500</td><td>2.68 MB</td>
-</tr><tr><td>NextormCompiledToList</td><td>10.332 ms</td><td>375.0000</td><td>296.8750</td><td>-</td><td>2.21 MB</td>
-</tr><tr><td>NextormCachedToList</td><td>10.426 ms</td><td>390.6250</td><td>296.8750</td><td>-</td><td>2.22 MB</td>
-</tr><tr><td>DapperUnbuffered</td><td>10.798 ms</td><td>578.1250</td><td>-</td><td>-</td><td>2.59 MB</td>
-</tr><tr><td>EFCoreStream</td><td>11.241 ms</td><td>875.0000</td><td>-</td><td>-</td><td>3.98 MB</td>
-</tr><tr><td>AdoWithDelegate</td><td>12.187 ms</td><td>375.0000</td><td>265.6250</td><td>125.0000</td><td>2.39 MB</td>
-</tr><tr><td>EFCoreCompiled</td><td>12.858 ms</td><td>968.7500</td><td>-</td><td>-</td><td>4.43 MB</td>
-</tr><tr><td>Dapper</td><td>13.789 ms</td><td>453.1250</td><td>265.6250</td><td>125.0000</td><td>2.84 MB</td>
-</tr><tr><td>EFCore</td><td>16.230 ms</td><td>750.0000</td><td>375.0000</td><td>125.0000</td><td>4.23 MB</td>
+</thead><tbody><tr><td>Nextorm_Cached_ToListAsync</td><td>10.24 ms</td><td>390.6250</td><td>296.8750</td><td>-</td><td>2.22 MB</td>
+</tr><tr><td>Nextorm_Prepared_ToListAsync</td><td>10.33 ms</td><td>390.6250</td><td>328.1250</td><td>-</td><td>2.21 MB</td>
+</tr><tr><td>AdoTupleToList</td><td>10.39 ms</td><td>421.8750</td><td>281.2500</td><td>281.2500</td><td>2.68 MB</td>
+</tr><tr><td>Nextorm_Cached_AsyncStream</td><td>10.47 ms</td><td>468.7500</td><td>-</td><td>-</td><td>2.14 MB</td>
+</tr><tr><td>Nextorm_Prepared_AsyncStream</td><td>10.55 ms</td><td>468.7500</td><td>-</td><td>-</td><td>2.14 MB</td>
+</tr><tr><td>Dapper_AsyncStream</td><td>11.04 ms</td><td>578.1250</td><td>-</td><td>-</td><td>2.59 MB</td>
+</tr><tr><td>EFCore_Compiled_AsyncStream</td><td>11.65 ms</td><td>875.0000</td><td>-</td><td>-</td><td>3.97 MB</td>
+</tr><tr><td>EFCore_AsyncStream</td><td>11.70 ms</td><td>875.0000</td><td>-</td><td>-</td><td>3.98 MB</td>
+</tr><tr><td>AdoWithDelegate</td><td>12.44 ms</td><td>375.0000</td><td>265.6250</td><td>125.0000</td><td>2.39 MB</td>
+</tr><tr><td>Dapper_Async</td><td>13.81 ms</td><td>453.1250</td><td>265.6250</td><td>125.0000</td><td>2.84 MB</td>
+</tr><tr><td>EFCore_ToListAsync</td><td>15.92 ms</td><td>656.2500</td><td>312.5000</td><td>125.0000</td><td>4.23 MB</td>
 </tr></tbody></table>
 </body>
 </html>

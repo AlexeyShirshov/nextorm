@@ -14,7 +14,7 @@ public class AliasFromProjectionVisitor : ExpressionVisitor
 
     protected override Expression VisitMember(MemberExpression node)
     {
-        if (node.Expression!.Type!.TryGetProjectionDimension(out var _))
+        if (node.Expression!.Type!.TryGetProjectionDimension(out _))
         {
             _alias = node.Member.Name;
             return node;

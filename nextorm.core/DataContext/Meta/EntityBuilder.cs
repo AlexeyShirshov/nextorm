@@ -33,7 +33,7 @@ public class EntityBuilder<T>
         var entityType = typeof(T);
 
         var props = entityType.GetProperties(BindingFlags.FlattenHierarchy | BindingFlags.Public | BindingFlags.Instance).Where(prop => prop.CanWrite).ToArray();
-        for (int idx = 0; idx < props.Length; idx++)
+        for (var (idx, cnt) = (0, props.Length); idx < cnt; idx++)
         {
             var prop = props[idx];
             if (prop is null) continue;

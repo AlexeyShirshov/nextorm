@@ -1,10 +1,12 @@
 using System.Diagnostics.CodeAnalysis;
 namespace nextorm.core;
 
-public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromExpression>
+public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromExpression?>
 {
     //private readonly IDictionary<ExpressionKey, Delegate> _cache;
-    private readonly IQueryProvider _queryProvider;
+    // private readonly IQueryProvider _queryProvider;
+    private readonly Lazy<QueryPlanEqualityComparer> _equalityComparer;
+
     //private readonly ILogger? _logger;
     //private readonly ExpressionPlanEqualityComparer _expComparer;
     //private QueryPlanEqualityComparer? _cmdComparer;
@@ -17,7 +19,7 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
     //        : this(cache, queryProvider, null)
     {
         //_cache = cache ?? new ExpressionCache<Delegate>();
-        _queryProvider = queryProvider;
+        _equalityComparer = new Lazy<QueryPlanEqualityComparer>(queryProvider.GetQueryPlanEqualityComparer);
     }
     // public FromExpressionPlanEqualityComparer(IDictionary<ExpressionKey, Delegate>? cache, IQueryProvider queryProvider, ILogger? logger)
     // {
@@ -33,35 +35,35 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
         if (x == y) return true;
         if (x is null || y is null) return false;
 
-        return x.TableAlias == y.TableAlias && x.Table.IsT0 == y.Table.IsT0 && x.Table.Match(
-                tbl => tbl == y.Table.AsT0,
-                cmd =>
-                {
-                    //_cmdComparer ??= new QueryPlanEqualityComparer(_cache, _queryProvider);
-                    return _queryProvider.GetQueryPlanEqualityComparer().Equals(cmd, y.Table.AsT1);
-                });
+        // if (x.TableAlias != y.TableAlias) return false;
+        if (!string.IsNullOrEmpty(x.Table) && x.Table == y.Table) return true;
+
+        return _equalityComparer.Value.Equals(x.SubQuery, y.SubQuery);
     }
 
-    public int GetHashCode([DisallowNull] FromExpression obj)
+    public int GetHashCode(FromExpression? obj)
     {
         if (obj is null) return 0;
 
-        unchecked
+        /*if (obj.TableAlias is not null)
         {
-            var hash = new HashCode();
+            unchecked
+            {
+                var hash = new HashCode();
+                hash.Add(obj.TableAlias);
 
-            hash.Add(obj.TableAlias);
+                if (!string.IsNullOrEmpty(obj.Table))
+                    hash.Add(obj.Table);
+                else
+                    hash.Add(obj.SubQuery, _equalityComparer.Value);
 
-            obj.Table.Switch(
-                 tbl => hash.Add(tbl),
-                 cmd =>
-                 {
-                     //_cmdComparer ??= new QueryPlanEqualityComparer(_cache, _queryProvider);
-                     hash.Add(cmd, _queryProvider.GetQueryPlanEqualityComparer());
-                 }
-            );
-
-            return hash.ToHashCode();
+                return hash.ToHashCode();
+            }
         }
+        else */
+        if (!string.IsNullOrEmpty(obj.Table))
+            return obj.Table.GetHashCode();
+        else
+            return _equalityComparer.Value.GetHashCode(obj.SubQuery!);
     }
 }

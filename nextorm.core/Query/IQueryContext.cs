@@ -1,6 +1,6 @@
 namespace nextorm.core;
 
-public interface IQueryContext : ISourceProvider, IQueryProvider, IParamProvider
+public interface IQueryContext : IQueryProvider
 {
 
 }

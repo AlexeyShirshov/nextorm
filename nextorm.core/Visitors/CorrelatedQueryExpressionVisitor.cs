@@ -16,11 +16,12 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
     //private readonly List<QueryCommand>? _refs;
     private static readonly MethodInfo AnyMIGeneric = typeof(CorrelatedQueryExpressionVisitor).GetMethod(nameof(Any), BindingFlags.NonPublic | BindingFlags.Instance)!;
     //private static MethodInfo ToCommandMI = typeof(Entity<>).GetMethod("ToCommand", BindingFlags.Public | BindingFlags.Instance)!;
-    private static readonly MethodInfo ExistsMI = typeof(NORM.NORM_SQL).GetMethod(nameof(NORM.NORM_SQL.exists), BindingFlags.Public | BindingFlags.Instance)!;
     private static readonly MethodInfo ConcatMI = typeof(string).GetMethods(BindingFlags.Public | BindingFlags.Static).First(it => it.Name == nameof(string.Concat) && it.GetParameters().Length == 2);
-    private static readonly PropertyInfo ReferencedQuieriesPI = typeof(IQueryProvider).GetProperty(nameof(IQueryProvider.ReferencedQueries), BindingFlags.Public | BindingFlags.Instance)!;
+    private static readonly PropertyInfo ReferencedQueriesPI = typeof(IQueryProvider).GetProperty(nameof(IQueryProvider.ReferencedQueries), BindingFlags.Public | BindingFlags.Instance)!;
     private static readonly PropertyInfo ItemPI = typeof(IReadOnlyList<QueryCommand>).GetProperty("Item")!;
     private static readonly PropertyInfo SQLPI = typeof(NORM).GetProperty(nameof(NORM.SQL))!;
+    private Stack<ParameterExpression>? _outerParams;
+
     //private ParameterExpression? _p;
 
     public CorrelatedQueryExpressionVisitor(IDataContext dataProvider, IQueryProvider queryProvider, CancellationToken cancellationToken)
@@ -67,6 +68,8 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             )
                 && node.Arguments is [Expression exp] && exp.Type.IsAssignableTo(typeof(QueryCommand)))
             {
+                var oldRefCnt = _queryProvider.OuterReferences?.Count ?? 0;
+
                 QueryCommand cmd = GetQueryCommand(exp);
 
                 if (!_forPrepare)
@@ -78,11 +81,11 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                     var lambda = Expression.Lambda<Func<QueryCommand, bool>>(body, p1);
 
                     Func<QueryCommand, bool> del;
-                    var key = new ExpressionKey(lambda, _dataProvider.ExpressionsCache, _queryProvider);
-                    if (!_dataProvider.ExpressionsCache.TryGetValue(key, out var dLambda))
+                    var key = new ExpressionKey(lambda, _queryProvider);
+                    if (!DataContextCache.ExpressionsCache.TryGetValue(key, out var dLambda))
                     {
                         var d = lambda.Compile();
-                        _dataProvider.ExpressionsCache[key] = d;
+                        DataContextCache.ExpressionsCache[key] = d;
                         del = d;
                     }
                     else
@@ -92,8 +95,15 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                 }
                 else
                 {
+                    if (node.Method.Name == nameof(NORM.NORM_SQL.exists))
+                        cmd.IgnoreColumns = true;
+
                     if (!cmd.IsPrepared)
+                    {
+                        // var shouldAliasFrom = (_queryProvider.OuterReferences?.Count ?? 0) > oldRefCnt;
+
                         cmd.PrepareCommand(false, _cancellationToken);
+                    }
 
                     var idx = _queryProvider!.AddCommand(cmd);
 
@@ -105,7 +115,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                         Expression.Call(node.Object, node.Method,
                             Expression.Convert(
                                 Expression.Property(
-                                    Expression.Property(p, ReferencedQuieriesPI)
+                                    Expression.Property(p, ReferencedQueriesPI)
                                     , ItemPI
                                     , Expression.Constant(idx)
                                 )
@@ -142,7 +152,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                             propExp,
                             Expression.Convert(
                                 Expression.Property(
-                                    Expression.Property(p, ReferencedQuieriesPI)
+                                    Expression.Property(p, ReferencedQueriesPI)
                                     , ItemPI
                                     , Expression.Constant(idx)
                                 )
@@ -155,24 +165,25 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                     return lambda;
                 }
             }
-            throw new NotImplementedException();
+
+            return node;
         }
         else if (node.Object is not null && node.Object.Type.IsGenericType && node.Object.Type.GetGenericTypeDefinition().IsAssignableTo(typeof(Entity<>)))
         {
             QueryCommand cmd;
 
-            var keyCmd = new ExpressionKey(node.Object, _dataProvider.ExpressionsCache, _queryProvider);
-            if (!_dataProvider.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
+            var keyCmd = new ExpressionKey(node.Object, _queryProvider);
+            if (!DataContextCache.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
             {
                 //var d = Expression.Lambda<Func<QueryCommand>>(Expression.Call(node.Object, ToCommandMI)).Compile();
                 var d = Expression.Lambda<Func<QueryCommand>>(Expression.Convert(node.Object, typeof(QueryCommand))).Compile();
 
-                _dataProvider.ExpressionsCache[keyCmd] = d;
+                DataContextCache.ExpressionsCache[keyCmd] = d;
                 cmd = d();
 
                 if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false)
                 {
-                    _dataProvider.Logger.LogTrace("Subquery expression miss. hascode: {hash}, value: {value}", keyCmd.GetHashCode(), d());
+                    _dataProvider.Logger.LogTrace("Subquery expression miss. hashcode: {hash}, value: {value}", keyCmd.GetHashCode(), d());
                 }
                 else if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Subquery expression miss");
             }
@@ -194,8 +205,8 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             {
                 QueryCommand cmd;
 
-                var keyCmd = new ExpressionKey(node.Object, _dataProvider.ExpressionsCache, _queryProvider);
-                if (!_dataProvider.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
+                var keyCmd = new ExpressionKey(node.Object, _queryProvider);
+                if (!DataContextCache.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
                 {
                     var p = Expression.Parameter(typeof(object));
                     var replace = new ReplaceConstantVisitor(Expression.Convert(p, tv.Target2!.Type));
@@ -203,12 +214,12 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 
                     var d = Expression.Lambda<Func<object?, QueryCommand>>(body, p).Compile();
 
-                    _dataProvider.ExpressionsCache[keyCmd] = d;
+                    DataContextCache.ExpressionsCache[keyCmd] = d;
                     cmd = d(tv.Target2!.Value);
 
                     if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false)
                     {
-                        _dataProvider.Logger.LogTrace("Subquery expression miss. hascode: {hash}, value: {value}", keyCmd.GetHashCode(), d(tv.Target2!.Value));
+                        _dataProvider.Logger.LogTrace("Subquery expression miss. hashcode: {hash}, value: {value}", keyCmd.GetHashCode(), d(tv.Target2!.Value));
                     }
                     else if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Subquery expression miss");
                 }
@@ -226,7 +237,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
     {
         QueryCommand cmd;
         var predVisitor = new PredicateExpressionVisitor<int>((exp, storeValue) => exp is IndexExpression idxExp
-            && idxExp.Object is MemberExpression propExp && propExp.Member == ReferencedQuieriesPI && propExp.Expression is ParameterExpression && exp.Type.IsAssignableTo(typeof(IQueryProvider))
+            && idxExp.Object is MemberExpression propExp && propExp.Member == ReferencedQueriesPI && propExp.Expression is ParameterExpression && exp.Type.IsAssignableTo(typeof(IQueryProvider))
             && idxExp.Arguments is [ConstantExpression c] && c.Value is int idx && storeValue(idx)
         );
         predVisitor.Visit(exp);
@@ -237,17 +248,21 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         }
         else
         {
-            var constRepl = new ReplaceConstantsExpressionVisitor();
+            var constRepl = new ReplaceConstantsExpressionVisitor(_outerParams, _queryProvider);
             var body = constRepl.Visit(exp);
 
             if (constRepl.Params.Count > 0)
             {
-                var keyCmd = new ExpressionKey(exp, _dataProvider.ExpressionsCache, _queryProvider);
-                if (!_dataProvider.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
+                var keyCmd = new ExpressionKey(exp, _queryProvider);
+                if (!DataContextCache.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
                 {
-                    var d = Expression.Lambda(body, constRepl.Params.Select(it => it.Item1)).Compile();
+                    var pp = constRepl.Params.Select(it => it.Item1);
+                    // if (_outerParams is not null)
+                    //     pp = pp.Concat(_outerParams);
 
-                    _dataProvider.ExpressionsCache[keyCmd] = d;
+                    var d = Expression.Lambda(body, pp).Compile();
+
+                    DataContextCache.ExpressionsCache[keyCmd] = d;
                     cmd = (QueryCommand)d.DynamicInvoke(constRepl.Params.Select(it => it.Item2).ToArray())!;
 
                     if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false)
@@ -258,7 +273,6 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                 }
                 else
                     cmd = (QueryCommand)dCmd.DynamicInvoke(constRepl.Params.Select(it => it.Item2).ToArray())!;
-
             }
             else
                 throw new InvalidOperationException();
@@ -275,7 +289,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         }
         else
         {
-            cmd = cmd.Clone();
+            //cmd = cmd.Clone();
 
             if (node.Method.Name.StartsWith("First"))
             {
@@ -305,13 +319,13 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             if (node.Method.Name.StartsWith("Any"))
             {
                 lambda = Expression.Lambda(
-                    Expression.Call(Expression.Property(null, SQLPI), ExistsMI,
-                        Expression.Property(Expression.Property(p, ReferencedQuieriesPI), ItemPI, Expression.Constant(idx))
+                    Expression.Call(Expression.Property(null, SQLPI), NORM.NORM_SQL.ExistsMI,
+                        Expression.Property(Expression.Property(p, ReferencedQueriesPI), ItemPI, Expression.Constant(idx))
                     ), p
                 );
             }
             else
-                lambda = Expression.Lambda(Expression.Property(Expression.Property(p, ReferencedQuieriesPI), ItemPI, Expression.Constant(idx)), p);
+                lambda = Expression.Lambda(Expression.Property(Expression.Property(p, ReferencedQueriesPI), ItemPI, Expression.Constant(idx)), p);
 
             return lambda;
         }
@@ -329,7 +343,16 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             }
             else if (lambdaExpression.Body is MethodCallExpression mc && mc.Object?.Type == typeof(NORM.NORM_SQL))
             {
-                return Expression.Lambda(Visit(lambdaExpression.Body), exp);
+                _outerParams ??= [];
+                _outerParams.Push(exp);
+                try
+                {
+                    return Expression.Lambda(Visit(lambdaExpression.Body), exp);
+                }
+                finally
+                {
+                    _outerParams.Pop();
+                }
             }
         }
 
@@ -337,33 +360,39 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
     }
     protected override Expression VisitBinary(BinaryExpression node)
     {
-        var leftNode = Visit(node.Left);
-        var rightNode = Visit(node.Right);
+        Expression? leftNode = null;
+        Expression? rightNode = null;
 
-        // if (rightNode is LambdaExpression lambda && lambda.Body.Type.IsAssignableTo(typeof(QueryCommand)))
-        // {
-        //     if (leftNode is LambdaExpression lambdaLeft && lambdaLeft.Body.Type.IsAssignableTo(typeof(QueryCommand)))
-        //     {
-        //         return Expression.MakeBinary(node.NodeType, leftNode, rightNode);
-        //     }
-        //     return Expression.MakeBinary(node.NodeType, Expression.Convert(leftNode, typeof(object)), rightNode);
-        // }
-        // else
-        // {
-        //     if (leftNode is LambdaExpression lambdaLeft && lambdaLeft.Body.Type.IsAssignableTo(typeof(QueryCommand)))
-        //     {
-        //         return Expression.MakeBinary(node.NodeType, leftNode, Expression.Convert(rightNode, typeof(object)));
-        //     }
-        // }
-
-        if (leftNode.Type == rightNode.Type && leftNode.Type == typeof(string) && node.NodeType == ExpressionType.Add)
+        if (node.Left.Type == node.Right.Type && node.Left.Type == typeof(string) && node.NodeType == ExpressionType.Add)
         {
+            leftNode = Visit(node.Left);
+            rightNode = Visit(node.Right);
             return Expression.Call(ConcatMI, leftNode, rightNode);
         }
-        else if (!leftNode.Type.Similar(rightNode.Type))
-            return Expression.MakeBinary(node.NodeType, Expression.Convert(leftNode, typeof(object)), rightNode);
+        // else if (!node.Left.Type.Similar(node.Right.Type))
+        // {
+        //     leftNode = Visit(node.Left);
+        //     rightNode = Visit(node.Right);
+        //     return Expression.MakeBinary(node.NodeType, Expression.Convert(leftNode, typeof(object)), rightNode);
+        // }
 
-        return Expression.MakeBinary(node.NodeType, leftNode, rightNode);
+        if (node.NodeType == ExpressionType.Equal || node.NodeType == ExpressionType.NotEqual)
+        {
+            if (node.Left.NeedToConvert())
+            {
+                leftNode = Visit(node.Left);
+            }
+
+            if (node.Right.NeedToConvert())
+            {
+                rightNode = Visit(node.Right);
+            }
+
+            if (leftNode is not null || rightNode is not null)
+                return Expression.MakeBinary(node.NodeType, Expression.Convert(leftNode ?? node.Left, typeof(object)), rightNode ?? node.Right);
+        }
+
+        return base.VisitBinary(node);
     }
     protected override Expression VisitUnary(UnaryExpression node)
     {
@@ -380,7 +409,8 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
     }
     bool Any<TResult>(QueryCommand cmd)
     {
-        var ee = (IEnumerable<TResult>)_dataProvider.CreateEnumerator((QueryCommand<TResult>)cmd, null);
+        var preparedCommand = _dataProvider.GetPreparedQueryCommand((QueryCommand<TResult>)cmd, false, true, CancellationToken.None);
+        var ee = (IEnumerable<TResult>)_dataProvider.CreateEnumerator<TResult>(preparedCommand, null);
         return ee.Any();
     }
 }

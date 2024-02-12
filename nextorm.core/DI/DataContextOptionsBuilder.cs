@@ -12,7 +12,8 @@ public class DbContextBuilder
     public bool ShouldLogSensitiveData => _logSensitiveData;
     //internal IDataProvider? DataProvider => _dataProvider;
     internal ILoggerFactory? LoggerFactory => _loggerFactory;
-    public bool CacheQueryCommand { get; set; } = true;
+    // public bool CacheQueryCommand { get; set; } = true;
+    // public bool CacheExpressions { get; set; } = true;
     public Func<DbContextBuilder, IDataContext>? Factory { get => _factory; set => _factory = value; }
 
     //public Dictionary<string, object> Property => _props;

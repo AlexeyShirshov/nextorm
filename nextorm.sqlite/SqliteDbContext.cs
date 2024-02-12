@@ -49,10 +49,10 @@ public class SqliteDbContext : DbContext
         ((SQLiteConnection)sender).Disposed -= ConnDisposed;
     }
 #endif
-    public override DbCommand CreateCommand(string sql)
-    {
-        return new SQLiteCommand(sql);
-    }
+    // public override DbCommand CreateCommand(string sql)
+    // {
+    //     return new SQLiteCommand(sql);
+    // }
     public override string ConcatStringOperator => "||";
 
     public string ConnectionString => string.IsNullOrEmpty(_connectionString)
@@ -71,7 +71,7 @@ public class SqliteDbContext : DbContext
     {
         return new SQLiteParameter(name, value);
     }
-    protected override void MakePage(Paging paging, StringBuilder sqlBuilder)
+    public override void MakePage(Paging paging, StringBuilder sqlBuilder)
     {
         // var sb = _sbPool.Get();
         // try
@@ -90,4 +90,11 @@ public class SqliteDbContext : DbContext
         //     _sbPool.Return(sb);
         // }
     }
+    public override string MakeCount(bool distinct, bool big)
+    {
+        if (big) throw new NotSupportedException("count big is not supported");
+
+        return base.MakeCount(distinct, false);
+    }
+
 }

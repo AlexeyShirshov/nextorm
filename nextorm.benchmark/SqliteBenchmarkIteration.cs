@@ -15,10 +15,11 @@ namespace nextorm.benchmark;
 [Config(typeof(NextormConfig))]
 public class SqliteBenchmarkIteration
 {
+    private readonly IDataContext _db;
     private readonly TestDataRepository _ctx;
-    private readonly QueryCommand<SimpleEntity> _cmd;
-    private readonly QueryCommand<SimpleEntity> _cmdToList;
-    private readonly QueryCommand<SimpleEntity> _cmdManualToList;
+    private readonly IPreparedQueryCommand<SimpleEntity> _cmd;
+    private readonly IPreparedQueryCommand<SimpleEntity> _cmdToList;
+    private readonly IPreparedQueryCommand<SimpleEntity> _cmdManualToList;
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
     private readonly Func<EFDataContext, IAsyncEnumerable<SimpleEntity>> _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.SimpleEntities);
@@ -33,14 +34,15 @@ public class SqliteBenchmarkIteration
             builder.UseLoggerFactory(_logFactory);
             builder.LogSensitiveData(true);
         }
-        _ctx = new TestDataRepository(builder.CreateDbContext());
-        _ctx.DbContext.EnsureConnectionOpen();
+        _db = builder.CreateDbContext();
+        _ctx = new TestDataRepository(_db);
+        _db.EnsureConnectionOpen();
 
-        _cmd = _ctx.SimpleEntity.ToCommand().Compile(false);
+        _cmd = _ctx.SimpleEntity.Prepare(false);
 
-        _cmdToList = _ctx.SimpleEntity.ToCommand().Compile(true);
+        _cmdToList = _ctx.SimpleEntity.Prepare();
 
-        _cmdManualToList = _ctx.SimpleEntity.ToCommand().Compile("select id from simple_entity", true);
+        _cmdManualToList = _ctx.SimpleEntity.PrepareFromSql("select id from simple_entity");
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(@$"Filename={Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db")}");
@@ -57,33 +59,33 @@ public class SqliteBenchmarkIteration
         _conn.Open();
     }
     [Benchmark()]
-    public async Task NextormCompiledStream()
+    public async Task Nextorm_Prepared_AsyncStream()
     {
-        await foreach (var row in _cmd)
+        await foreach (var row in _cmd.ToAsyncEnumerable(_db))
         {
         }
     }
     // [Benchmark(Baseline = true)]
-    // public async Task NextormCompiled()
+    // public async Task NextormPrepared()
     // {
     //     foreach (var row in await _cmd.Exec())
     //     {
     //     }
     // }
     [Benchmark()]
-    public async Task NextormCompiledToList()
+    public async Task Nextorm_Prepared_ToListAsync()
     {
-        foreach (var row in await _cmdToList.ToListAsync())
+        foreach (var row in await _cmdToList.ToListAsync(_db))
         {
         }
     }
-    // [Benchmark()]
-    // public async Task NextormCompiledManualToList()
-    // {
-    //     foreach (var row in await _cmdManualToList.ToListAsync())
-    //     {
-    //     }
-    // }
+    [Benchmark()]
+    public async Task Nextorm_PreparedManualSql_ToListAsync()
+    {
+        foreach (var row in await _cmdManualToList.ToListAsync(_db))
+        {
+        }
+    }
     // [Benchmark()]
     // public async Task NextormCached()
     // {
@@ -92,27 +94,27 @@ public class SqliteBenchmarkIteration
     //     }
     // }
     [Benchmark()]
-    public async Task NextormCachedToList()
+    public async Task Nextorm_Cached_ToListAsync()
     {
         foreach (var row in await _ctx.SimpleEntity.ToListAsync())
         {
         }
     }
-    // [Benchmark()]
-    // public async Task NextormManualSQLCachedToList()
-    // {
-    //     var cmd = _ctx.SimpleEntity.Select(entity => new { entity.Id }).FromSql("select id from simple_entity");
-    //     foreach (var row in await cmd.ToListAsync())
-    //     {
-    //     }
-    // }
-    [Benchmark]
-    public async Task EFCore()
+    [Benchmark()]
+    public async Task Nextorm_CachedManualSql_ToListAsync()
     {
-        foreach (var row in await _efCtx.SimpleEntities.ToListAsync())
+        var cmd = _ctx.SimpleEntity.WithSql("select id from simple_entity");
+        foreach (var row in await cmd.ToListAsync())
         {
         }
     }
+    // [Benchmark]
+    // public async Task EFCore()
+    // {
+    //     foreach (var row in await _efCtx.SimpleEntities.ToListAsync())
+    //     {
+    //     }
+    // }
     // [Benchmark]
     // public async Task EFCoreAny()
     // {
@@ -126,21 +128,21 @@ public class SqliteBenchmarkIteration
     //     }
     // }
     [Benchmark]
-    public async Task EFCoreCompiled()
+    public async Task EFCore_Compiled_ToListAsync()
     {
         foreach (var row in await _efCompiled(_efCtx).ToListAsync())
         {
         }
     }
     [Benchmark]
-    public async Task DapperUnbuffered()
+    public async Task Dapper_AsyncStream()
     {
         await foreach (var row in _conn.QueryUnbufferedAsync<SimpleEntity>("select id from simple_entity"))
         {
         }
     }
     [Benchmark]
-    public async Task Dapper()
+    public async Task DapperAsync()
     {
         foreach (var row in await _conn.QueryAsync<SimpleEntity>("select id from simple_entity"))
         {

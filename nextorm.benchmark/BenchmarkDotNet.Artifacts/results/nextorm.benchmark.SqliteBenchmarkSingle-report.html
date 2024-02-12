@@ -2,7 +2,7 @@
 <html lang='en'>
 <head>
 <meta charset='utf-8' />
-<title>nextorm.benchmark.SqliteBenchmarkSingle-20240108-213845</title>
+<title>nextorm.benchmark.SqliteBenchmarkSingle-20240212-105532</title>
 
 <style type="text/css">
 	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
@@ -13,28 +13,23 @@
 </head>
 <body>
 <pre><code>
-BenchmarkDotNet v0.13.10, Windows 11 (10.0.22621.2861/22H2/2022Update/SunValley2)
+BenchmarkDotNet v0.13.10, Windows 11 (10.0.22621.3007/22H2/2022Update/SunValley2)
 Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical cores
-.NET SDK 8.0.100
-  [Host]   : .NET 8.0.0 (8.0.23.53103), X64 RyuJIT AVX2
-  .NET 8.0 : .NET 8.0.0 (8.0.23.53103), X64 RyuJIT AVX2
+.NET SDK 8.0.101
+  [Host]   : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX2
+  .NET 8.0 : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX2
 </code></pre>
 <pre><code>Job=.NET 8.0  Runtime=.NET 8.0  
 </code></pre>
 
 <table>
-<thead><tr><th>Method                  </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Ratio</th><th>RatioSD</th><th>Gen0</th><th>Gen1</th><th>Allocated</th><th>Alloc Ratio</th>
+<thead><tr><th>Method                    </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Ratio</th><th>RatioSD</th><th>Gen0</th><th>Gen1</th><th>Allocated</th><th>Alloc Ratio</th>
 </tr>
-</thead><tbody><tr><td>NextormSingleCompiled</td><td>31.52 &mu;s</td><td>0.610 &mu;s</td><td>0.627 &mu;s</td><td>1.00</td><td>0.00</td><td>0.2441</td><td>-</td><td>1.23 KB</td><td>1.00</td>
-</tr><tr><td>NextormSingleOrDefaultCompiled</td><td>36.65 &mu;s</td><td>0.529 &mu;s</td><td>0.495 &mu;s</td><td>1.16</td><td>0.02</td><td>0.2441</td><td>-</td><td>1.23 KB</td><td>1.00</td>
-</tr><tr><td>DapperSingle</td><td>38.91 &mu;s</td><td>0.665 &mu;s</td><td>0.622 &mu;s</td><td>1.23</td><td>0.03</td><td>0.1831</td><td>-</td><td>1.05 KB</td><td>0.85</td>
-</tr><tr><td>DapperSingleOrDefault</td><td>39.60 &mu;s</td><td>0.615 &mu;s</td><td>0.576 &mu;s</td><td>1.25</td><td>0.03</td><td>0.2441</td><td>-</td><td>1.15 KB</td><td>0.94</td>
-</tr><tr><td>NextormSingleCached</td><td>41.70 &mu;s</td><td>0.834 &mu;s</td><td>1.054 &mu;s</td><td>1.33</td><td>0.04</td><td>0.8545</td><td>-</td><td>4.41 KB</td><td>3.59</td>
-</tr><tr><td>NextormSingleOrDefaultCached</td><td>42.40 &mu;s</td><td>0.834 &mu;s</td><td>1.142 &mu;s</td><td>1.33</td><td>0.04</td><td>0.8545</td><td>-</td><td>4.41 KB</td><td>3.59</td>
-</tr><tr><td>EFCoreSingleCompiled</td><td>51.40 &mu;s</td><td>0.468 &mu;s</td><td>0.415 &mu;s</td><td>1.63</td><td>0.03</td><td>1.0376</td><td>0.3052</td><td>4.97 KB</td><td>4.05</td>
-</tr><tr><td>EFCoreSingleOrDefaultCompiled</td><td>51.99 &mu;s</td><td>0.464 &mu;s</td><td>0.434 &mu;s</td><td>1.65</td><td>0.04</td><td>1.0376</td><td>0.3052</td><td>4.97 KB</td><td>4.05</td>
-</tr><tr><td>EFCoreSingle</td><td>82.47 &mu;s</td><td>1.463 &mu;s</td><td>1.368 &mu;s</td><td>2.61</td><td>0.07</td><td>2.1973</td><td>0.4883</td><td>10.3 KB</td><td>8.40</td>
-</tr><tr><td>EFCoreSingleOrDefault</td><td>82.55 &mu;s</td><td>1.618 &mu;s</td><td>2.103 &mu;s</td><td>2.63</td><td>0.07</td><td>2.1973</td><td>0.4883</td><td>10.3 KB</td><td>8.40</td>
+</thead><tbody><tr><td>Nextorm_Prepared_SingleOrDefault</td><td>329.1 &mu;s</td><td>6.24 &mu;s</td><td>5.83 &mu;s</td><td>1.00</td><td>0.00</td><td>2.4414</td><td>-</td><td>12.81 KB</td><td>1.00</td>
+</tr><tr><td>Nextorm_Cached_SingleOrDefault</td><td>445.5 &mu;s</td><td>8.80 &mu;s</td><td>12.33 &mu;s</td><td>1.36</td><td>0.04</td><td>9.7656</td><td>-</td><td>49.02 KB</td><td>3.83</td>
+</tr><tr><td>Dapper_SingleOrDefault</td><td>481.8 &mu;s</td><td>9.53 &mu;s</td><td>13.04 &mu;s</td><td>1.46</td><td>0.05</td><td>2.9297</td><td>-</td><td>16.87 KB</td><td>1.32</td>
+</tr><tr><td>EFCore_Compiled_SingleOrDefault</td><td>576.0 &mu;s</td><td>11.29 &mu;s</td><td>11.09 &mu;s</td><td>1.75</td><td>0.05</td><td>11.7188</td><td>3.9063</td><td>54.34 KB</td><td>4.24</td>
+</tr><tr><td>EFCore_SingleOrDefault</td><td>942.5 &mu;s</td><td>18.45 &mu;s</td><td>21.25 &mu;s</td><td>2.86</td><td>0.07</td><td>23.4375</td><td>5.8594</td><td>108.12 KB</td><td>8.44</td>
 </tr></tbody></table>
 </body>
 </html>
