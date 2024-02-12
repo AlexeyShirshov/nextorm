@@ -13,16 +13,16 @@ using nextorm.benchmark;
 // BenchmarkRunner.Run<SqliteBenchmarkMakeSelect>();
 // BenchmarkRunner.Run<SqliteBenchmarkAny>();
 // BenchmarkRunner.Run<SqliteBenchmarkFirst>();
-// BenchmarkRunner.Run<SqliteBenchmarkSingle>();
+BenchmarkRunner.Run<SqliteBenchmarkSingle>();
 // BenchmarkRunner.Run<SqliteBenchmarkCache>();
 // BenchmarkRunner.Run<SqliteBenchmarkJoin>();
 
 // runner.QueryCommandPlanEqualityComparer();
-var runner = new SqliteBenchmarkWhere();
+// var runner = new SqliteBenchmarkSimulateWork();
 // await runner.NextormPreparedToList();
 // while (true)
-for (var i = 0; i < 100; i++)
-    await runner.Nextorm_Cached_ToListAsync();
+// for (var i = 0; i < 20; i++)
+//     runner.Nextorm_Cached_ToList();
 
 //await runner.FillLargeTable();
 // Console.WriteLine("Press any key to exit");

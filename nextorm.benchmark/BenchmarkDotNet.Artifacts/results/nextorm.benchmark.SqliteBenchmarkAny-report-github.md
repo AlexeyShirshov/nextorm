@@ -11,8 +11,8 @@ Job=.NET 8.0  Runtime=.NET 8.0
 ```
 | Method           | Mean     | Error     | StdDev    | Gen0     | Gen1    | Allocated |
 |----------------- |---------:|----------:|----------:|---------:|--------:|----------:|
-| Nextorm_Prepared | 3.126 ms | 0.0320 ms | 0.0300 ms |  27.3438 |       - | 128.91 KB |
-| Nextorm_Cached   | 4.124 ms | 0.0528 ms | 0.0468 ms |  78.1250 |       - | 378.17 KB |
-| Dapper           | 4.601 ms | 0.0821 ms | 0.0768 ms |  31.2500 |       - |  146.1 KB |
-| EFCore_Compiled  | 5.496 ms | 0.0820 ms | 0.0767 ms | 117.1875 | 39.0625 |  546.1 KB |
-| EFCore           | 8.119 ms | 0.1343 ms | 0.1256 ms | 187.5000 | 31.2500 | 904.78 KB |
+| Nextorm_Prepared | 3.150 ms | 0.0423 ms | 0.0396 ms |  27.3438 |       - | 128.91 KB |
+| Dapper           | 4.078 ms | 0.0757 ms | 0.0708 ms |  31.2500 |       - |  146.1 KB |
+| Nextorm_Cached   | 4.176 ms | 0.0806 ms | 0.0791 ms |  78.1250 |       - | 396.92 KB |
+| EFCore_Compiled  | 5.580 ms | 0.0869 ms | 0.0813 ms | 117.1875 | 39.0625 |  546.1 KB |
+| EFCore           | 8.324 ms | 0.1629 ms | 0.1876 ms | 187.5000 | 31.2500 | 904.77 KB |
