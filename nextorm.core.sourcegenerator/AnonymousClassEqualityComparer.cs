@@ -3,16 +3,9 @@
 namespace nextorm.core.sourcegenerator;
 
 [Generator]
-public class AnonymousClassEqualityComparer : ISourceGenerator
+public class AnonymousClassEqualityComparer : IIncrementalGenerator
 {
-    public void Execute(GeneratorExecutionContext context)
+    public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        //context.Compilation.SyntaxTrees.
-
-    }
-
-    public void Initialize(GeneratorInitializationContext context)
-    {
-
     }
 }

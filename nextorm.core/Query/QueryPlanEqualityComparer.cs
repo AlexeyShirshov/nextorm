@@ -38,6 +38,8 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
         if (x.ResultType != y.ResultType) return false;
 
+        if (x.SingleRow != y.SingleRow) return false;
+
         if (x.Paging.Limit != y.Paging.Limit || x.Paging.Offset != y.Paging.Offset) return false;
 
         if (x.UnionType != y.UnionType) return false;
@@ -84,6 +86,8 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
             if (obj.ResultPlanHash != 0)
                 hash.Add(obj.ResultPlanHash);
+
+            hash.Add(obj.SingleRow);
 
             if (obj.WherePlanHash != 0)
                 hash.Add(obj.WherePlanHash);

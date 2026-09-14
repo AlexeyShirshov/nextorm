@@ -110,6 +110,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
     //public bool CacheList { get; set; }
     internal QueryCommand? FromQuery => From?.SubQuery;
     internal bool OneColumn { get; set; }
+    public bool SingleRow { get; set; }
     internal bool IgnoreColumns { get; set; }
     public IReadOnlyList<QueryCommand> ReferencedQueries => _referencedQueries!;
     public Sorting[]? Sorting => _sorting;
@@ -665,6 +666,7 @@ public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
 
         dst.ResultType = ResultType;
         dst.Paging = Paging;
+        dst.SingleRow = SingleRow;
 
         dst._queryPlanComparer = _queryPlanComparer;
         dst._fromExpressionPlanComparer = _fromExpressionPlanComparer;
@@ -792,7 +794,6 @@ public class QueryCommand<TResult> : QueryCommand//, IAsyncEnumerable<TResult>
         }
         ResultType = typeof(TResult);
     }
-    public bool SingleRow { get; set; }
     /// <summary>
     /// 
     /// </summary>
