@@ -11,7 +11,6 @@ using nextorm.core;
 namespace nextorm.benchmark;
 
 //[SimpleJob(RuntimeMoniker.Net70, baseline: true)]
-[SimpleJob(RuntimeMoniker.Net10_0)]
 [GroupBenchmarksBy(BenchmarkDotNet.Configs.BenchmarkLogicalGroupRule.ByJob, BenchmarkDotNet.Configs.BenchmarkLogicalGroupRule.ByCategory)]
 [HideColumns(Column.Job, Column.RatioSD, Column.Error, Column.StdDev)]
 [MemoryDiagnoser]
@@ -27,10 +26,11 @@ public class SqliteBenchmarkWhere
     private readonly SqliteConnection _conn;
     private readonly Func<EFDataContext, int, IAsyncEnumerable<SimpleEntity>> _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx, int i) => ctx.SimpleEntities.Where(it => it.Id == i));
     private readonly ILoggerFactory? _logFactory;
+    public SqliteBenchmarkWhere() : this(false) { }
     public SqliteBenchmarkWhere(bool withLogging = false)
     {
         var builder = new DbContextBuilder();
-        var filepath = Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db");
+        var filepath = BenchDb.FilePath;
         builder.UseSqlite(filepath);
         if (withLogging)
         {

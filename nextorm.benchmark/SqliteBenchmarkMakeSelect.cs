@@ -7,7 +7,7 @@ using DbContext = nextorm.core.DbContext;
 
 namespace nextorm.benchmark;
 
-[SimpleJob(RuntimeMoniker.Net10_0)]
+[Config(typeof(NextormConfig))]
 [MemoryDiagnoser]
 public class SqliteBenchmarkMakeSelect
 {
@@ -18,7 +18,7 @@ public class SqliteBenchmarkMakeSelect
     public SqliteBenchmarkMakeSelect()
     {
         var builder = new DbContextBuilder();
-        builder.UseSqlite(Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db"));
+        builder.UseSqlite(BenchDb.FilePath);
         _ctx = new TestDataRepository(builder.CreateDbContext());
 
         _provider = (DbContext)_ctx.DbContext;

@@ -8,19 +8,28 @@ using System.Runtime.CompilerServices;
 
 namespace nextorm.core;
 
-public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
+public class ExpressionPlanEqualityComparerDELETE : IEqualityComparer<Expression?>
 {
     private readonly static ConcurrentDictionary<QueryCommandKey, Func<object?, QueryCommand>> _cmdCache = new();
-    private readonly Visitor _visitor;
+    //private readonly IDictionary<ExpressionKey, Delegate> _cache;
+    private readonly IQueryProvider _queryProvider;
+    private readonly ILogger? _logger;
 
-    public ExpressionPlanEqualityComparer(IQueryProvider queryProvider)
+    // public PreciseExpressionEqualityComparer()
+    //     : this(new ExpressionCache<Delegate>())
+    // {
+    // }
+    public ExpressionPlanEqualityComparerDELETE(IQueryProvider queryProvider)
         : this(queryProvider, null)
     {
     }
-    public ExpressionPlanEqualityComparer(IQueryProvider queryProvider, ILogger? logger)
+    public ExpressionPlanEqualityComparerDELETE(IQueryProvider queryProvider, ILogger? logger)
     {
-        _visitor = new Visitor(logger, queryProvider);
+        //_cache = cache ?? new ExpressionCache<Delegate>();
+        _queryProvider = queryProvider;
+        _logger = logger;
     }
+    /// <inheritdoc />
     public int GetHashCode(Expression obj)
     {
         if (obj == null)
@@ -30,10 +39,299 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
 
         unchecked
         {
-            _visitor._hash = new();
-            _visitor.Visit(obj);
+            var hash = new HashCode();
+            hash.Add(obj.NodeType);
+            hash.Add(obj.Type);
 
-            return _visitor._hash.ToHashCode();
+            switch (obj)
+            {
+                case BinaryExpression binaryExpression:
+                    hash.Add(binaryExpression.Left, this);
+                    hash.Add(binaryExpression.Right, this);
+                    AddExpressionToHashIfNotNull(binaryExpression.Conversion);
+                    AddToHashIfNotNull(binaryExpression.Method);
+
+                    break;
+
+                case BlockExpression blockExpression:
+                    AddListToHash(blockExpression.Variables);
+                    AddListToHash(blockExpression.Expressions);
+                    break;
+
+                case ConditionalExpression conditionalExpression:
+                    hash.Add(conditionalExpression.Test, this);
+                    hash.Add(conditionalExpression.IfTrue, this);
+                    hash.Add(conditionalExpression.IfFalse, this);
+                    break;
+
+                case ConstantExpression constantExpression:
+                    //hash.Add(constantExpression.Type);
+                    switch (constantExpression.Value)
+                    {
+                        case IQueryable:
+                        case null:
+                            break;
+
+                        case IStructuralEquatable structuralEquatable:
+                            hash.Add(structuralEquatable.GetHashCode(StructuralComparisons.StructuralEqualityComparer));
+                            break;
+
+                        default:
+                            hash.Add(constantExpression.Value);
+                            break;
+                    }
+
+                    break;
+
+                case DefaultExpression:
+                    // Intentionally empty. No additional members
+                    break;
+
+                case GotoExpression gotoExpression:
+                    hash.Add(gotoExpression.Value, this);
+                    hash.Add(gotoExpression.Kind);
+                    hash.Add(gotoExpression.Target);
+                    break;
+
+                case IndexExpression indexExpression:
+                    if (indexExpression.Type.IsAssignableTo(typeof(QueryCommand)) && indexExpression.Arguments is [ConstantExpression cex] && cex.Value is int idx)
+                    {
+                        var cmd = _queryProvider.ReferencedQueries[idx];
+                        hash.Add(cmd, _queryProvider.GetQueryPlanEqualityComparer());
+                    }
+                    else
+                    {
+                        hash.Add(indexExpression.Object, this);
+                        AddListToHash(indexExpression.Arguments);
+                        hash.Add(indexExpression.Indexer);
+                    }
+
+                    break;
+
+                case InvocationExpression invocationExpression:
+                    hash.Add(invocationExpression.Expression, this);
+                    AddListToHash(invocationExpression.Arguments);
+                    break;
+
+                case LabelExpression labelExpression:
+                    AddExpressionToHashIfNotNull(labelExpression.DefaultValue);
+                    hash.Add(labelExpression.Target);
+                    break;
+
+                case LambdaExpression lambdaExpression:
+                    hash.Add(lambdaExpression.Body, this);
+                    AddListToHash(lambdaExpression.Parameters);
+                    hash.Add(lambdaExpression.ReturnType);
+                    break;
+
+                case ListInitExpression listInitExpression:
+                    hash.Add(listInitExpression.NewExpression, this);
+                    AddInitializersToHash(listInitExpression.Initializers);
+                    break;
+
+                case LoopExpression loopExpression:
+                    hash.Add(loopExpression.Body, this);
+                    AddToHashIfNotNull(loopExpression.BreakLabel);
+                    AddToHashIfNotNull(loopExpression.ContinueLabel);
+                    break;
+
+                case MemberExpression memberExpression:
+                    if (memberExpression.Expression is ConstantExpression ce)
+                    {
+                        if (typeof(QueryCommand).IsAssignableFrom(memberExpression.Type))
+                        {
+                            var key = new QueryCommandKey(ce.Type, memberExpression.Member.Name);
+                            if (!_cmdCache.TryGetValue(key, out var del))
+                            {
+                                var p = Expression.Parameter(typeof(object));
+                                var replace = new ReplaceConstantVisitor(Expression.Convert(p, ce!.Type));
+                                var body = replace.Visit(memberExpression);
+                                del = Expression.Lambda<Func<object?, QueryCommand>>(body, p).Compile();
+                                //value = 1;
+                                _cmdCache[key] = del;
+
+                                if (_logger?.IsEnabled(LogLevel.Trace) ?? false)
+                                {
+                                    _logger.LogTrace("Expression cache miss on gethashcode. hashcode: {hash}, value: {value}", key.GetHashCode(), del(ce.Value));
+                                }
+                                else if (_logger?.IsEnabled(LogLevel.Debug) ?? false) _logger.LogDebug("Expression cache miss on gethashcode");
+                            }
+
+                            var cmd = del(ce!.Value);
+
+                            hash.Add(cmd, _queryProvider.GetQueryPlanEqualityComparer());
+
+                            // var cmd = Expression.Lambda<Func<QueryCommand>>(memberExpression).Compile()();
+                            // hash.Add(cmd, new QueryPlanEqualityComparer(_cache));
+                        }
+                        else
+                        {
+                            hash.Add(ce.Type);
+                            hash.Add(memberExpression.Type);
+                            hash.Add(memberExpression.Member.Name);
+                        }
+                    }
+                    else
+                    {
+                        hash.Add(memberExpression.Expression, this);
+                        hash.Add(memberExpression.Member);
+                    }
+
+                    break;
+
+                case MemberInitExpression memberInitExpression:
+                    hash.Add(memberInitExpression.NewExpression, this);
+                    AddMemberBindingsToHash(memberInitExpression.Bindings);
+                    break;
+
+                case MethodCallExpression methodCallExpression:
+                    hash.Add(methodCallExpression.Object, this);
+                    AddListToHash(methodCallExpression.Arguments);
+                    hash.Add(methodCallExpression.Method);
+                    break;
+
+                case NewArrayExpression newArrayExpression:
+                    AddListToHash(newArrayExpression.Expressions);
+                    break;
+
+                case NewExpression newExpression:
+                    AddListToHash(newExpression.Arguments);
+                    hash.Add(newExpression.Constructor);
+
+                    var members = newExpression.Members;
+                    if (members is not null)
+                    {
+                        for (var (i, cnt) = (0, members.Count); i < cnt; i++)
+                        {
+                            hash.Add(members[i]);
+                        }
+                    }
+
+                    break;
+
+                case ParameterExpression parameterExpression:
+                    //AddToHashIfNotNull(parameterExpression.Name);
+                    hash.Add(parameterExpression.Type);
+                    break;
+
+                case RuntimeVariablesExpression runtimeVariablesExpression:
+                    AddListToHash(runtimeVariablesExpression.Variables);
+                    break;
+
+                case SwitchExpression switchExpression:
+                    hash.Add(switchExpression.SwitchValue, this);
+                    AddExpressionToHashIfNotNull(switchExpression.DefaultBody);
+                    AddToHashIfNotNull(switchExpression.Comparison);
+                    var cases = switchExpression.Cases;
+                    for (var (i, cnt) = (0, cases.Count); i < cnt; i++)
+                    {
+                        var @case = cases[i];
+                        hash.Add(@case.Body, this);
+                        AddListToHash(@case.TestValues);
+                    }
+
+                    break;
+
+                case TryExpression tryExpression:
+                    hash.Add(tryExpression.Body, this);
+                    AddExpressionToHashIfNotNull(tryExpression.Fault);
+                    AddExpressionToHashIfNotNull(tryExpression.Finally);
+                    var handlers = tryExpression.Handlers;
+                    if (handlers is not null)
+                    {
+                        for (var (i, cnt) = (0, handlers.Count); i < cnt; i++)
+                        {
+                            var handler = handlers[i];
+                            hash.Add(handler.Body, this);
+                            AddExpressionToHashIfNotNull(handler.Variable);
+                            AddExpressionToHashIfNotNull(handler.Filter);
+                            hash.Add(handler.Test);
+                        }
+                    }
+
+                    break;
+
+                case TypeBinaryExpression typeBinaryExpression:
+                    hash.Add(typeBinaryExpression.Expression, this);
+                    hash.Add(typeBinaryExpression.TypeOperand);
+                    break;
+
+                case UnaryExpression unaryExpression:
+                    hash.Add(unaryExpression.Operand, this);
+                    AddToHashIfNotNull(unaryExpression.Method);
+                    break;
+
+                default:
+                    if (obj.NodeType == ExpressionType.Extension)
+                    {
+                        hash.Add(obj);
+                        break;
+                    }
+
+                    throw new NotSupportedException(obj.NodeType.ToString());
+            }
+
+            return hash.ToHashCode();
+
+            void AddToHashIfNotNull(object? t)
+            {
+                if (t is not null)
+                {
+                    hash.Add(t);
+                }
+            }
+
+            void AddExpressionToHashIfNotNull(Expression? t)
+            {
+                if (t is not null)
+                {
+                    hash.Add(t, this);
+                }
+            }
+
+            void AddListToHash<T>(IReadOnlyList<T> expressions)
+                where T : Expression
+            {
+                for (var (i, cnt) = (0, expressions.Count); i < cnt; i++)
+                {
+                    hash.Add(expressions[i], this);
+                }
+            }
+
+            void AddInitializersToHash(IReadOnlyList<ElementInit> initializers)
+            {
+                for (var (i, cnt) = (0, initializers.Count); i < cnt; i++)
+                {
+                    AddListToHash(initializers[i].Arguments);
+                    hash.Add(initializers[i].AddMethod);
+                }
+            }
+
+            void AddMemberBindingsToHash(IReadOnlyList<MemberBinding> memberBindings)
+            {
+                for (var (i, cnt) = (0, memberBindings.Count); i < cnt; i++)
+                {
+                    var memberBinding = memberBindings[i];
+
+                    hash.Add(memberBinding.Member);
+                    hash.Add(memberBinding.BindingType);
+
+                    switch (memberBinding)
+                    {
+                        case MemberAssignment memberAssignment:
+                            hash.Add(memberAssignment.Expression, this);
+                            break;
+
+                        case MemberListBinding memberListBinding:
+                            AddInitializersToHash(memberListBinding.Initializers);
+                            break;
+
+                        case MemberMemberBinding memberMemberBinding:
+                            AddMemberBindingsToHash(memberMemberBinding.Bindings);
+                            break;
+                    }
+                }
+            }
         }
     }
 
@@ -525,340 +823,4 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
             return _type == obj._type && _name == obj._name;
         }
     }
-    private sealed class Visitor(ILogger? logger, IQueryProvider queryProvider) : ExpressionVisitor
-    {
-        private readonly ILogger? _logger = logger;
-        private readonly IQueryProvider _queryProvider = queryProvider;
-        internal HashCode _hash;
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private void VisitBase(Expression? node)
-        {
-            _hash.Add(node?.NodeType);
-            _hash.Add(node?.Type);
-        }
-        protected override Expression VisitBinary(BinaryExpression node)
-        {
-            VisitBase(node);
-            Visit(node.Left);
-            Visit(node.Right);
-            AddExpressionToHashIfNotNull(node.Conversion);
-            AddToHashIfNotNull(node.Method);
-            return node;
-        }
-        protected override Expression VisitBlock(BlockExpression node)
-        {
-            VisitBase(node);
-            AddListToHash(node.Variables);
-            AddListToHash(node.Expressions);
-            return node;
-        }
-        protected override Expression VisitConditional(ConditionalExpression node)
-        {
-            VisitBase(node);
-            Visit(node.Test);
-            Visit(node.IfTrue);
-            Visit(node.IfFalse);
-
-            return node;
-        }
-        protected override Expression VisitConstant(ConstantExpression node)
-        {
-            VisitBase(node);
-            switch (node.Value)
-            {
-                case IQueryable:
-                case null:
-                    break;
-
-                case IStructuralEquatable structuralEquatable:
-                    _hash.Add(structuralEquatable.GetHashCode(StructuralComparisons.StructuralEqualityComparer));
-                    break;
-
-                default:
-                    _hash.Add(node.Value);
-                    break;
-            }
-
-            return node;
-        }
-        protected override Expression VisitGoto(GotoExpression node)
-        {
-            VisitBase(node);
-            Visit(node.Value);
-            _hash.Add(node.Kind);
-            _hash.Add(node.Target);
-            return node;
-        }
-        protected override Expression VisitIndex(IndexExpression node)
-        {
-            VisitBase(node);
-            if (node.Type.IsAssignableTo(typeof(QueryCommand)) && node.Arguments is [ConstantExpression cex] && cex.Value is int idx)
-            {
-                var cmd = _queryProvider.ReferencedQueries[idx];
-                _hash.Add(cmd, _queryProvider.GetQueryPlanEqualityComparer());
-            }
-            else
-            {
-                Visit(node.Object);
-                AddListToHash(node.Arguments);
-                _hash.Add(node.Indexer);
-            }
-
-            return node;
-        }
-        protected override Expression VisitInvocation(InvocationExpression node)
-        {
-            VisitBase(node);
-            Visit(node.Expression);
-            AddListToHash(node.Arguments);
-            return node;
-        }
-        protected override Expression VisitLabel(LabelExpression node)
-        {
-            VisitBase(node);
-            AddExpressionToHashIfNotNull(node.DefaultValue);
-            _hash.Add(node.Target);
-            return node;
-        }
-        protected override Expression VisitLambda<T>(Expression<T> node)
-        {
-            VisitBase(node);
-            Visit(node.Body);
-            AddListToHash(node.Parameters);
-            _hash.Add(node.ReturnType);
-            return node;
-        }
-        protected override Expression VisitListInit(ListInitExpression node)
-        {
-            VisitBase(node);
-            Visit(node.NewExpression);
-            AddInitializersToHash(node.Initializers);
-            return node;
-        }
-        protected override Expression VisitLoop(LoopExpression node)
-        {
-            VisitBase(node);
-            Visit(node.Body);
-            AddToHashIfNotNull(node.BreakLabel);
-            AddToHashIfNotNull(node.ContinueLabel);
-            return node;
-        }
-        protected override Expression VisitMember(MemberExpression node)
-        {
-            VisitBase(node);
-            if (node.Expression is ConstantExpression ce)
-            {
-                if (typeof(QueryCommand).IsAssignableFrom(node.Type))
-                {
-                    var key = new QueryCommandKey(ce.Type, node.Member.Name);
-                    if (!_cmdCache.TryGetValue(key, out var del))
-                    {
-                        var p = Expression.Parameter(typeof(object));
-                        var replace = new ReplaceConstantVisitor(Expression.Convert(p, ce!.Type));
-                        var body = replace.Visit(node);
-                        del = Expression.Lambda<Func<object?, QueryCommand>>(body, p).Compile();
-                        //value = 1;
-                        _cmdCache[key] = del;
-
-                        if (_logger?.IsEnabled(LogLevel.Trace) ?? false)
-                        {
-                            _logger.LogTrace("Expression cache miss on gethashcode. hashcode: {hash}, value: {value}", key.GetHashCode(), del(ce.Value));
-                        }
-                        else if (_logger?.IsEnabled(LogLevel.Debug) ?? false) _logger.LogDebug("Expression cache miss on gethashcode");
-                    }
-
-                    var cmd = del(ce!.Value);
-
-                    _hash.Add(cmd, _queryProvider.GetQueryPlanEqualityComparer());
-
-                    // var cmd = Expression.Lambda<Func<QueryCommand>>(memberExpression).Compile()();
-                    // hash.Add(cmd, new QueryPlanEqualityComparer(_cache));
-                }
-                else
-                {
-                    _hash.Add(ce.Type);
-                    _hash.Add(node.Type);
-                    _hash.Add(node.Member.Name);
-                }
-            }
-            else
-            {
-                Visit(node.Expression);
-                _hash.Add(node.Member);
-            }
-            return node;
-        }
-        protected override Expression VisitMemberInit(MemberInitExpression node)
-        {
-            VisitBase(node);
-            Visit(node.NewExpression);
-            AddMemberBindingsToHash(node.Bindings);
-
-            return node;
-        }
-        protected override Expression VisitMethodCall(MethodCallExpression node)
-        {
-            VisitBase(node);
-            Visit(node.Object);
-            AddListToHash(node.Arguments);
-            _hash.Add(node.Method);
-
-            return node;
-        }
-        protected override Expression VisitNewArray(NewArrayExpression node)
-        {
-            VisitBase(node);
-            AddListToHash(node.Expressions);
-            return node;
-        }
-        protected override Expression VisitNew(NewExpression node)
-        {
-            VisitBase(node);
-            AddListToHash(node.Arguments);
-            _hash.Add(node.Constructor);
-
-            var members = node.Members;
-            if (members is not null)
-            {
-                for (var (i, cnt) = (0, members.Count); i < cnt; i++)
-                {
-                    _hash.Add(members[i]);
-                }
-            }
-
-            return node;
-        }
-        protected override Expression VisitParameter(ParameterExpression node)
-        {
-            VisitBase(node);
-            _hash.Add(node.Type);
-            return node;
-        }
-        protected override Expression VisitRuntimeVariables(RuntimeVariablesExpression node)
-        {
-            VisitBase(node);
-            AddListToHash(node.Variables);
-            return node;
-        }
-        protected override Expression VisitSwitch(SwitchExpression node)
-        {
-            VisitBase(node);
-            Visit(node.SwitchValue);
-            AddExpressionToHashIfNotNull(node.DefaultBody);
-            AddToHashIfNotNull(node.Comparison);
-            var cases = node.Cases;
-            for (var (i, cnt) = (0, cases.Count); i < cnt; i++)
-            {
-                var @case = cases[i];
-                Visit(@case.Body);
-                AddListToHash(@case.TestValues);
-            }
-
-            return node;
-        }
-        protected override Expression VisitTry(TryExpression node)
-        {
-            VisitBase(node);
-            Visit(node.Body);
-            AddExpressionToHashIfNotNull(node.Fault);
-            AddExpressionToHashIfNotNull(node.Finally);
-            var handlers = node.Handlers;
-            if (handlers is not null)
-            {
-                for (var (i, cnt) = (0, handlers.Count); i < cnt; i++)
-                {
-                    var handler = handlers[i];
-                    Visit(handler.Body);
-                    AddExpressionToHashIfNotNull(handler.Variable);
-                    AddExpressionToHashIfNotNull(handler.Filter);
-                    _hash.Add(handler.Test);
-                }
-            }
-
-            return node;
-        }
-        protected override Expression VisitTypeBinary(TypeBinaryExpression node)
-        {
-            VisitBase(node);
-            Visit(node.Expression);
-            _hash.Add(node.TypeOperand);
-
-            return node;
-        }
-        protected override Expression VisitUnary(UnaryExpression node)
-        {
-            VisitBase(node);
-            Visit(node.Operand);
-            AddToHashIfNotNull(node.Method);
-
-            return node;
-        }
-        protected override Expression VisitExtension(Expression node)
-        {
-            VisitBase(node);
-            Visit(node);
-            return node;
-        }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        void AddToHashIfNotNull(object? t)
-        {
-            if (t is not null)
-            {
-                _hash.Add(t);
-            }
-        }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        void AddExpressionToHashIfNotNull(Expression? t)
-        {
-            if (t is not null)
-            {
-                Visit(t);
-            }
-        }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        void AddListToHash<T>(IReadOnlyList<T> expressions)
-                    where T : Expression
-        {
-            for (var (i, cnt) = (0, expressions.Count); i < cnt; i++)
-            {
-                Visit(expressions[i]);
-            }
-        }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        void AddInitializersToHash(IReadOnlyList<ElementInit> initializers)
-        {
-            for (var (i, cnt) = (0, initializers.Count); i < cnt; i++)
-            {
-                AddListToHash(initializers[i].Arguments);
-                _hash.Add(initializers[i].AddMethod);
-            }
-        }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        void AddMemberBindingsToHash(IReadOnlyList<MemberBinding> memberBindings)
-        {
-            for (var (i, cnt) = (0, memberBindings.Count); i < cnt; i++)
-            {
-                var memberBinding = memberBindings[i];
-
-                _hash.Add(memberBinding.Member);
-                _hash.Add(memberBinding.BindingType);
-
-                switch (memberBinding)
-                {
-                    case MemberAssignment memberAssignment:
-                        Visit(memberAssignment.Expression);
-                        break;
-
-                    case MemberListBinding memberListBinding:
-                        AddInitializersToHash(memberListBinding.Initializers);
-                        break;
-
-                    case MemberMemberBinding memberMemberBinding:
-                        AddMemberBindingsToHash(memberMemberBinding.Bindings);
-                        break;
-                }
-            }
-        }
-    }
 }
-

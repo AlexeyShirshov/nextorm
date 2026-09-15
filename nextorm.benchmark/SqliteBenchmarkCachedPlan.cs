@@ -6,7 +6,6 @@ using nextorm.core;
 
 namespace nextorm.benchmark;
 
-[SimpleJob(RuntimeMoniker.Net10_0)]
 [HideColumns(Column.Job, Column.Runtime, Column.RatioSD, Column.Error, Column.StdDev)]
 [MemoryDiagnoser]
 [Config(typeof(NextormConfig))]
@@ -16,10 +15,11 @@ public class SqliteBenchmarkCachedPlan
     private readonly IDataContext _db;
     private readonly TestDataRepository _repo;
     private readonly IPreparedQueryCommand<int> _prepared;
+    private readonly QueryCommand<int> _rePrepareCmd;
 
     public SqliteBenchmarkCachedPlan()
     {
-        var filepath = Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db");
+        var filepath = BenchDb.FilePath;
         var builder = new DbContextBuilder();
         builder.UseSqlite(filepath);
         _db = builder.CreateDbContext();
@@ -31,9 +31,12 @@ public class SqliteBenchmarkCachedPlan
             .Select(it => it.Id)
             .Prepare();
 
+        _rePrepareCmd = _repo.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(it => it.Id);
+
         // Warm both plan caches so the measured loops only exercise the cached path.
         _ = _repo.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(it => it.Id).ToList(0);
         _ = _repo.SimpleEntity.Where(it => it.Id == 5).Select(it => it.Id).ToList();
+        _ = _db.GetPreparedQueryCommand(_rePrepareCmd, false, true, CancellationToken.None);
     }
 
     // DB-bound baseline: prepared command, no plan lookup and no parameter re-extraction.
@@ -116,6 +119,32 @@ public class SqliteBenchmarkCachedPlan
                 .Where(p => p.t2.Id == NORM.Param<int>(0))
                 .Select(p => new LargeEntity { Id = p.t1.Id, Dt = p.t1.Dt, Str = p.t1.Str });
             r = _db.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None);
+        }
+        return r!;
+    }
+
+    // No DB: only constructs the QueryCommand (Entity.Clone + Where + Select), no prepare/lookup.
+    // Use it to split the cached-path overhead into construction vs preparation.
+    [Benchmark]
+    public QueryCommand<int> Construct_Only()
+    {
+        QueryCommand<int>? r = null;
+        for (var i = 0; i < Iterations; i++)
+            r = _repo.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(it => it.Id);
+        return r!;
+    }
+
+    // No DB: forces PrepareCommand + plan lookup on every iteration (ResetPreparation), reusing one
+    // already-built QueryCommand. This is the ceiling that #5 could remove (prepare + lookup),
+    // with query construction excluded.
+    [Benchmark]
+    public IPreparedQueryCommand<int> RePrepare_PlanOnly_Param()
+    {
+        IPreparedQueryCommand<int>? r = null;
+        for (var i = 0; i < Iterations; i++)
+        {
+            _rePrepareCmd.ResetPreparation();
+            r = _db.GetPreparedQueryCommand(_rePrepareCmd, false, true, CancellationToken.None);
         }
         return r!;
     }

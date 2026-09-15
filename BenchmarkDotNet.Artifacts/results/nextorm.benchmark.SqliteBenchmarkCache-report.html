@@ -2,7 +2,7 @@
 <html lang='en'>
 <head>
 <meta charset='utf-8' />
-<title>nextorm.benchmark.SqliteBenchmarkCache-20260914-232047</title>
+<title>nextorm.benchmark.SqliteBenchmarkCache-20260915-122257</title>
 
 <style type="text/css">
 	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
@@ -16,36 +16,36 @@
 BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.3 LTS (Jammy Jellyfish)
 AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 16 logical and 8 physical cores
 .NET SDK 10.0.401
-  [Host]     : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
-  Job-UVQKOB : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+  [Host] : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
 </code></pre>
-<pre><code>Runtime=.NET 10.0  IterationCount=20  
+<pre><code>Job=ShortRun  Toolchain=InProcessEmitToolchain  IterationCount=3  
+LaunchCount=1  WarmupCount=3  
 </code></pre>
 
 <table>
 <thead><tr><th>Method   </th><th>Iterations</th><th>Mean</th><th>Error</th><th>StdDev</th>
 </tr>
-</thead><tbody><tr><td>Dapper</td><td>1</td><td>1.188 ms</td><td>0.0439 ms</td><td>0.0505 ms</td>
-</tr><tr><td>NextormPrepared</td><td>1</td><td>1.232 ms</td><td>0.0079 ms</td><td>0.0091 ms</td>
-</tr><tr><td>NextormCached</td><td>1</td><td>1.265 ms</td><td>0.0326 ms</td><td>0.0335 ms</td>
-</tr><tr><td>NextormCached</td><td>3</td><td>3.195 ms</td><td>0.0165 ms</td><td>0.0177 ms</td>
-</tr><tr><td>NextormPrepared</td><td>3</td><td>3.316 ms</td><td>0.1683 ms</td><td>0.1870 ms</td>
-</tr><tr><td>Dapper</td><td>3</td><td>3.571 ms</td><td>0.0172 ms</td><td>0.0191 ms</td>
-</tr><tr><td>NextormPrepared</td><td>5</td><td>4.871 ms</td><td>0.0648 ms</td><td>0.0747 ms</td>
-</tr><tr><td>NextormCached</td><td>5</td><td>5.100 ms</td><td>0.0974 ms</td><td>0.1082 ms</td>
-</tr><tr><td>Dapper</td><td>5</td><td>5.639 ms</td><td>0.0569 ms</td><td>0.0655 ms</td>
-</tr><tr><td>NextormPrepared</td><td>10</td><td>9.811 ms</td><td>0.3895 ms</td><td>0.4486 ms</td>
-</tr><tr><td>NextormCached</td><td>10</td><td>9.868 ms</td><td>0.0926 ms</td><td>0.1067 ms</td>
-</tr><tr><td>Dapper</td><td>10</td><td>10.199 ms</td><td>0.0777 ms</td><td>0.0763 ms</td>
-</tr><tr><td>NextormPrepared</td><td>15</td><td>13.700 ms</td><td>0.0530 ms</td><td>0.0589 ms</td>
-</tr><tr><td>NextormCached</td><td>15</td><td>14.554 ms</td><td>0.2801 ms</td><td>0.3225 ms</td>
-</tr><tr><td>Dapper</td><td>15</td><td>14.723 ms</td><td>0.0444 ms</td><td>0.0456 ms</td>
-</tr><tr><td>NextormCached</td><td>20</td><td>19.170 ms</td><td>0.0721 ms</td><td>0.0708 ms</td>
-</tr><tr><td>NextormPrepared</td><td>20</td><td>19.616 ms</td><td>0.5235 ms</td><td>0.6028 ms</td>
-</tr><tr><td>Dapper</td><td>20</td><td>19.648 ms</td><td>0.2046 ms</td><td>0.2356 ms</td>
-</tr><tr><td>NextormPrepared</td><td>30</td><td>26.737 ms</td><td>0.2239 ms</td><td>0.2396 ms</td>
-</tr><tr><td>Dapper</td><td>30</td><td>28.503 ms</td><td>0.9988 ms</td><td>1.1502 ms</td>
-</tr><tr><td>NextormCached</td><td>30</td><td>29.353 ms</td><td>1.0452 ms</td><td>1.2036 ms</td>
+</thead><tbody><tr><td>Dapper</td><td>1</td><td>228.1 &mu;s</td><td>4.46 &mu;s</td><td>0.24 &mu;s</td>
+</tr><tr><td>NextormCached</td><td>1</td><td>268.6 &mu;s</td><td>19.30 &mu;s</td><td>1.06 &mu;s</td>
+</tr><tr><td>NextormPrepared</td><td>1</td><td>271.4 &mu;s</td><td>21.09 &mu;s</td><td>1.16 &mu;s</td>
+</tr><tr><td>NextormPrepared</td><td>3</td><td>293.7 &mu;s</td><td>33.23 &mu;s</td><td>1.82 &mu;s</td>
+</tr><tr><td>NextormPrepared</td><td>5</td><td>315.6 &mu;s</td><td>6.62 &mu;s</td><td>0.36 &mu;s</td>
+</tr><tr><td>NextormCached</td><td>3</td><td>336.3 &mu;s</td><td>50.19 &mu;s</td><td>2.75 &mu;s</td>
+</tr><tr><td>NextormPrepared</td><td>10</td><td>375.6 &mu;s</td><td>74.04 &mu;s</td><td>4.06 &mu;s</td>
+</tr><tr><td>NextormCached</td><td>5</td><td>386.6 &mu;s</td><td>54.61 &mu;s</td><td>2.99 &mu;s</td>
+</tr><tr><td>NextormPrepared</td><td>15</td><td>412.4 &mu;s</td><td>23.10 &mu;s</td><td>1.27 &mu;s</td>
+</tr><tr><td>NextormPrepared</td><td>20</td><td>445.9 &mu;s</td><td>50.07 &mu;s</td><td>2.74 &mu;s</td>
+</tr><tr><td>NextormCached</td><td>10</td><td>510.5 &mu;s</td><td>180.55 &mu;s</td><td>9.90 &mu;s</td>
+</tr><tr><td>NextormPrepared</td><td>30</td><td>539.4 &mu;s</td><td>69.71 &mu;s</td><td>3.82 &mu;s</td>
+</tr><tr><td>NextormCached</td><td>15</td><td>651.4 &mu;s</td><td>128.48 &mu;s</td><td>7.04 &mu;s</td>
+</tr><tr><td>Dapper</td><td>3</td><td>707.5 &mu;s</td><td>42.54 &mu;s</td><td>2.33 &mu;s</td>
+</tr><tr><td>Dapper</td><td>5</td><td>740.0 &mu;s</td><td>101.92 &mu;s</td><td>5.59 &mu;s</td>
+</tr><tr><td>NextormCached</td><td>20</td><td>747.1 &mu;s</td><td>203.87 &mu;s</td><td>11.17 &mu;s</td>
+</tr><tr><td>Dapper</td><td>10</td><td>869.6 &mu;s</td><td>76.61 &mu;s</td><td>4.20 &mu;s</td>
+</tr><tr><td>Dapper</td><td>15</td><td>991.2 &mu;s</td><td>463.74 &mu;s</td><td>25.42 &mu;s</td>
+</tr><tr><td>NextormCached</td><td>30</td><td>1,003.9 &mu;s</td><td>255.82 &mu;s</td><td>14.02 &mu;s</td>
+</tr><tr><td>Dapper</td><td>20</td><td>1,052.7 &mu;s</td><td>197.35 &mu;s</td><td>10.82 &mu;s</td>
+</tr><tr><td>Dapper</td><td>30</td><td>1,301.0 &mu;s</td><td>896.83 &mu;s</td><td>49.16 &mu;s</td>
 </tr></tbody></table>
 </body>
 </html>

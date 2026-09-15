@@ -10,7 +10,6 @@ using nextorm.core;
 namespace nextorm.benchmark;
 
 //[SimpleJob(RuntimeMoniker.Net70, baseline: true)]
-[SimpleJob(RuntimeMoniker.Net10_0)]
 [MemoryDiagnoser]
 [Config(typeof(NextormConfig))]
 public class SqliteBenchmarkSingle
@@ -24,10 +23,11 @@ public class SqliteBenchmarkSingle
     private readonly Func<EFDataContext, int, Task<int>> _efCompiledSingleOrDefault = EF.CompileAsyncQuery((EFDataContext ctx, int i) => ctx.SimpleEntities.Where(it => it.Id == i).Select(it => it.Id).SingleOrDefault());
     // private readonly Func<EFDataContext, int, Task<int>> _efCompiledFilterParam = EF.CompileAsyncQuery((EFDataContext ctx, int id) => ctx.SimpleEntities.Where(it => it.Id > id).Select(it => it.Id).Single());
     private readonly ILoggerFactory? _logFactory;
+    public SqliteBenchmarkSingle() : this(false) { }
     public SqliteBenchmarkSingle(bool withLogging = false)
     {
         var builder = new DbContextBuilder();
-        builder.UseSqlite(Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db"));
+        builder.UseSqlite(BenchDb.FilePath);
         if (withLogging)
         {
             _logFactory = LoggerFactory.Create(config => config.AddConsole().SetMinimumLevel(LogLevel.Trace));
@@ -41,7 +41,7 @@ public class SqliteBenchmarkSingle
         _cmd = _ctx.SimpleEntity.Where(it => it.Id == 1).SingleOrSingleOrDefaultCommand(it => it.Id).Prepare();
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
-        efBuilder.UseSqlite(@$"Filename={Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db")}");
+        efBuilder.UseSqlite(@$"Filename={BenchDb.FilePath}");
         efBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
         if (withLogging)
         {

@@ -10,7 +10,6 @@ using nextorm.core;
 namespace nextorm.benchmark;
 
 //[SimpleJob(RuntimeMoniker.Net70, baseline: true)]
-[SimpleJob(RuntimeMoniker.Net10_0)]
 [MemoryDiagnoser]
 [Config(typeof(NextormConfig))]
 public class SqliteBenchmarkAny
@@ -27,6 +26,7 @@ public class SqliteBenchmarkAny
     // private readonly Func<EFDataContext, Task<bool>> _efCompiledFilter = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.SimpleEntities.Where(it => it.Id > 5).Any());
     // private readonly Func<EFDataContext, int, Task<bool>> _efCompiledFilterParam = EF.CompileAsyncQuery((EFDataContext ctx, int id) => ctx.SimpleEntities.Where(it => it.Id > id).Any());
     //private ILoggerFactory? _logFactory;
+    public SqliteBenchmarkAny() : this(false) { }
     public SqliteBenchmarkAny(bool withLogging = false)
     {
         SetupNext(withLogging);
@@ -56,7 +56,7 @@ public class SqliteBenchmarkAny
 
     private static string GetDatabasePath()
     {
-        return Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db");
+        return BenchDb.FilePath;
     }
 
     private void SetupDapper()

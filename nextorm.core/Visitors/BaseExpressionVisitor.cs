@@ -736,13 +736,13 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 var hasTableAliasForColumn = false;
                 string? tableAliasForColumn = null;
 
-                if (!_dontNeedAlias && lambdaParameter is not null)
+                // Aliases are only needed to emit SQL text. In parameter-extraction mode (_paramMode)
+                // nothing is appended, and _columnsProvider is not populated by MakeFrom/MakeJoin in
+                // that mode, so resolving the alias would fail for join queries.
+                if (!_paramMode && !_dontNeedAlias && lambdaParameter is not null)
                 {
                     if (lambdaParameter.Type!.IsAssignableTo(typeof(IProjection)))
                     {
-                        // var aliasVisitor = new AliasFromProjectionVisitor();
-                        // aliasVisitor.Visit(node.Expression);
-                        // tableAliasForColumn = aliasVisitor.Alias;
                         var args = lambdaParameter.Type.GetGenericArguments();
                         int? paramIdx = null;
                         if (args.Count() > args.Distinct().Count())
@@ -755,8 +755,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                     else
                         tableAliasForColumn = GetAliasFromParam(lambdaParameter, false);
 
-                    if (!_paramMode)
-                        _builder!.Append(tableAliasForColumn).Append('.');
+                    _builder!.Append(tableAliasForColumn).Append('.');
 
                     hasTableAliasForColumn = true;
                 }

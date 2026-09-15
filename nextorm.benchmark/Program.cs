@@ -13,10 +13,10 @@ using nextorm.benchmark;
 // BenchmarkRunner.Run<SqliteBenchmarkMakeSelect>();
 // BenchmarkRunner.Run<SqliteBenchmarkAny>();
 // BenchmarkRunner.Run<SqliteBenchmarkFirst>();
-BenchmarkRunner.Run<SqliteBenchmarkSingle>();
+// BenchmarkRunner.Run<SqliteBenchmarkSingle>();
 // BenchmarkRunner.Run<SqliteBenchmarkCache>();
 // BenchmarkRunner.Run<SqliteBenchmarkJoin>();
-// BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);
+BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);
 
 // runner.QueryCommandPlanEqualityComparer();
 // var runner = new SqliteBenchmarkSimulateWork();

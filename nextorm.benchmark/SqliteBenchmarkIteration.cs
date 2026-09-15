@@ -10,7 +10,6 @@ using nextorm.core;
 namespace nextorm.benchmark;
 
 //[SimpleJob(RuntimeMoniker.Net70, baseline: true)]
-[SimpleJob(RuntimeMoniker.Net10_0)]
 [MemoryDiagnoser]
 [Config(typeof(NextormConfig))]
 public class SqliteBenchmarkIteration
@@ -24,10 +23,11 @@ public class SqliteBenchmarkIteration
     private readonly SqliteConnection _conn;
     private readonly Func<EFDataContext, IAsyncEnumerable<SimpleEntity>> _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.SimpleEntities);
     private readonly ILoggerFactory? _logFactory;
+    public SqliteBenchmarkIteration() : this(false) { }
     public SqliteBenchmarkIteration(bool withLogging = false)
     {
         var builder = new DbContextBuilder();
-        builder.UseSqlite(Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db"));
+        builder.UseSqlite(BenchDb.FilePath);
         if (withLogging)
         {
             _logFactory = LoggerFactory.Create(config => config.AddConsole().SetMinimumLevel(LogLevel.Debug));
@@ -45,7 +45,7 @@ public class SqliteBenchmarkIteration
         _cmdManualToList = _ctx.SimpleEntity.PrepareFromSql("select id from simple_entity");
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
-        efBuilder.UseSqlite(@$"Filename={Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db")}");
+        efBuilder.UseSqlite(@$"Filename={BenchDb.FilePath}");
         efBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
         if (withLogging)
         {

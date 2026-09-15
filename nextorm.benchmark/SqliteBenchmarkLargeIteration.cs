@@ -15,7 +15,6 @@ using nextorm.core;
 
 namespace nextorm.benchmark;
 
-[SimpleJob(RuntimeMoniker.Net10_0)]
 [GroupBenchmarksBy(BenchmarkLogicalGroupRule.ByJob, BenchmarkLogicalGroupRule.ByCategory)]
 [HideColumns(Column.Runtime, Column.RatioSD, Column.Error, Column.StdDev)]
 [MemoryDiagnoser]
@@ -31,10 +30,11 @@ public class SqliteBenchmarkLargeIteration
     private readonly SqliteCommand _adoCmd;
     private readonly Func<EFDataContext, IAsyncEnumerable<LargeEntity>> _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.LargeEntities.Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }));
     private readonly ILoggerFactory? _logFactory;
+    public SqliteBenchmarkLargeIteration() : this(false) { }
     public SqliteBenchmarkLargeIteration(bool withLogging = false)
     {
         var builder = new DbContextBuilder();
-        builder.UseSqlite(Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db"));
+        builder.UseSqlite(BenchDb.FilePath);
         if (withLogging)
         {
             _logFactory = LoggerFactory.Create(config => config.AddConsole().SetMinimumLevel(LogLevel.Debug));
@@ -50,7 +50,7 @@ public class SqliteBenchmarkLargeIteration
         _cmdToList = _ctx.LargeEntity.Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }).Prepare();
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
-        efBuilder.UseSqlite(@$"Filename={Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db")}");
+        efBuilder.UseSqlite(@$"Filename={BenchDb.FilePath}");
         efBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
         if (withLogging)
         {

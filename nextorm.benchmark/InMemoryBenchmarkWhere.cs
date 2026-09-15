@@ -4,7 +4,7 @@ using nextorm.core;
 
 namespace nextorm.benchmark;
 
-[SimpleJob(RuntimeMoniker.Net10_0)]
+[Config(typeof(NextormConfig))]
 [MemoryDiagnoser]
 public class InMemoryBenchmarkWhere
 {

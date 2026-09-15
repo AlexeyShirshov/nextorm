@@ -10,7 +10,6 @@ using nextorm.core;
 
 namespace nextorm.benchmark;
 
-[SimpleJob(RuntimeMoniker.Net10_0)]
 [GroupBenchmarksBy(BenchmarkDotNet.Configs.BenchmarkLogicalGroupRule.ByJob, BenchmarkDotNet.Configs.BenchmarkLogicalGroupRule.ByCategory)]
 [HideColumns(Column.Job, Column.Runtime, Column.RatioSD, Column.Error, Column.StdDev)]
 [MemoryDiagnoser]
@@ -31,10 +30,11 @@ public class SqliteBenchmarkSimulateWork
     private readonly Func<EFDataContext, IAsyncEnumerable<LargeEntity>> _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.LargeEntities.Where(it => it.Id < LargeListSize));
     private readonly Func<EFDataContext, long, int, Task<SimpleEntity?>> _efInnerCompiled = EF.CompileAsyncQuery((EFDataContext ctx, long id, int i) => ctx.SimpleEntities.Where(it => (it.Id - i) == id).FirstOrDefault());
     private readonly ILoggerFactory? _logFactory;
+    public SqliteBenchmarkSimulateWork() : this(false) { }
     public SqliteBenchmarkSimulateWork(bool withLogging = false)
     {
         var builder = new DbContextBuilder();
-        var filepath = Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db");
+        var filepath = BenchDb.FilePath;
         _conn = new SQLiteConnection($"Data Source='{filepath}'");
         _conn.Open();
 

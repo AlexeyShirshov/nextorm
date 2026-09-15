@@ -10,7 +10,6 @@ using nextorm.core;
 namespace nextorm.benchmark;
 
 //[SimpleJob(RuntimeMoniker.Net70, baseline: true)]
-[SimpleJob(RuntimeMoniker.Net10_0, iterationCount: 20)]
 [Config(typeof(NextormConfig))]
 public class SqliteBenchmarkCache
 {
@@ -21,9 +20,10 @@ public class SqliteBenchmarkCache
 
     [Params(1, 3, 5, 10, 15, 20, 30)]
     public int Iterations { get; set; } = 1;
+    public SqliteBenchmarkCache() : this(false) { }
     public SqliteBenchmarkCache(bool withLogging = false)
     {
-        var filepath = Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db");
+        var filepath = BenchDb.FilePath;
         _conn = new SQLiteConnection($"Data Source='{filepath}'");
         var builder = new DbContextBuilder();
         builder.UseSqlite(_conn);

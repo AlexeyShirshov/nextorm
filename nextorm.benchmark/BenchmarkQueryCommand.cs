@@ -2,12 +2,12 @@ using BenchmarkDotNet.Attributes;
 using nextorm.sqlite;
 using Microsoft.EntityFrameworkCore;
 using BenchmarkDotNet.Jobs;
+using System.Linq.Expressions;
 using nextorm.core;
 using DbContext = nextorm.core.DbContext;
 
 namespace nextorm.benchmark;
 
-[SimpleJob(RuntimeMoniker.Net10_0)]
 [MemoryDiagnoser]
 [Config(typeof(NextormConfig))]
 public class BenchmarkQueryCommand
@@ -17,8 +17,8 @@ public class BenchmarkQueryCommand
     private readonly QueryCommand _cmd;
     // private readonly SqlDataProvider.QueryPlan _plan;
     // private readonly SqlDataProvider.QueryPlan _plan2;
-    private readonly ExpressionEqualityComparerDELETE _eq;
-    private readonly ExpressionPlanEqualityComparer _eqPlan;
+    private readonly ExpressionPlanEqualityComparer _planComparer;
+    private readonly Expression _condition;
     private readonly TestDataRepository _nonCacheCtx;
     // [Params(1, 2, 3, 5)]
     // public int Iterations { get; set; } = 1;
@@ -26,7 +26,7 @@ public class BenchmarkQueryCommand
 
     public BenchmarkQueryCommand()
     {
-        var filepath = Path.Combine(Directory.GetCurrentDirectory(), "data", "test.db");
+        var filepath = BenchDb.FilePath;
 
         var builder = new DbContextBuilder
         {
@@ -43,6 +43,9 @@ public class BenchmarkQueryCommand
         _ctx = new TestDataRepository(builder.CreateDbContext());
 
         Command = _ctx.LargeEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(it => new LargeEntity { Id = it.Id, Str = it.Str, Dt = it.Dt });
+
+        _condition = Command.Condition!;
+        _planComparer = new ExpressionPlanEqualityComparer(Command);
     }
     // [Benchmark()]
     // public void CacheExpressions()
@@ -63,17 +66,9 @@ public class BenchmarkQueryCommand
     //         cmd.ToEnumerable();
     //     }
     // }
+    // Comparer is created once (as in production, it is cached per QueryCommand), so this
+    // measures pure GetHashCode traversal without construction overhead.
     [Benchmark]
-    public void ExpressionPlanEqualityComparer()
-    {
-        var comparer = new ExpressionPlanEqualityComparerDELETE(Command);
-        comparer.GetHashCode(Command.Condition!);
-    }
-    [Benchmark]
-    public void ExpressionPlanEqualityComparer2()
-    {
-        var comparer = new ExpressionPlanEqualityComparer(Command);
-        comparer.GetHashCode(Command.Condition!);
-    }
+    public int ExpressionPlanEqualityComparer() => _planComparer.GetHashCode(_condition);
 
 }

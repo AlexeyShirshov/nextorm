@@ -2,7 +2,7 @@
 <html lang='en'>
 <head>
 <meta charset='utf-8' />
-<title>nextorm.benchmark.SqliteBenchmarkJoin-20260914-233109</title>
+<title>nextorm.benchmark.SqliteBenchmarkJoin-20260915-130244</title>
 
 <style type="text/css">
 	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
@@ -16,20 +16,20 @@
 BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.3 LTS (Jammy Jellyfish)
 AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 16 logical and 8 physical cores
 .NET SDK 10.0.401
-  [Host]    : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
-  .NET 10.0 : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+  [Host] : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
 </code></pre>
-<pre><code>Job=.NET 10.0  Runtime=.NET 10.0  
+<pre><code>Job=ShortRun  Toolchain=InProcessEmitToolchain  IterationCount=3  
+LaunchCount=1  WarmupCount=3  
 </code></pre>
 
 <table>
-<thead><tr><th>Method    </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Gen0</th><th>Allocated</th>
+<thead><tr><th>Method    </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Gen0</th><th>Gen1</th><th>Allocated</th>
 </tr>
-</thead><tbody><tr><td>Nextorm_Cached</td><td>NA</td><td>NA</td><td>NA</td><td>NA</td><td>NA</td>
-</tr><tr><td>Nextorm_Prepared</td><td>9.137 ms</td><td>0.0895 ms</td><td>0.0837 ms</td><td>-</td><td>9.26 KB</td>
-</tr><tr><td>EFCore_Compiled</td><td>9.914 ms</td><td>0.0982 ms</td><td>0.0918 ms</td><td>-</td><td>120.7 KB</td>
-</tr><tr><td>Dapper</td><td>10.057 ms</td><td>0.1759 ms</td><td>0.2161 ms</td><td>-</td><td>21.45 KB</td>
-</tr><tr><td>EFCore</td><td>10.632 ms</td><td>0.1297 ms</td><td>0.1012 ms</td><td>15.6250</td><td>178.67 KB</td>
+</thead><tbody><tr><td>Nextorm_Prepared</td><td>105.5 &mu;s</td><td>8.20 &mu;s</td><td>0.45 &mu;s</td><td>1.0986</td><td>-</td><td>9.26 KB</td>
+</tr><tr><td>Dapper</td><td>193.0 &mu;s</td><td>20.08 &mu;s</td><td>1.10 &mu;s</td><td>2.4414</td><td>-</td><td>21.45 KB</td>
+</tr><tr><td>Nextorm_Cached</td><td>262.9 &mu;s</td><td>58.13 &mu;s</td><td>3.19 &mu;s</td><td>10.7422</td><td>-</td><td>89.21 KB</td>
+</tr><tr><td>EFCore_Compiled</td><td>496.9 &mu;s</td><td>48.33 &mu;s</td><td>2.65 &mu;s</td><td>14.6484</td><td>6.8359</td><td>120.71 KB</td>
+</tr><tr><td>EFCore</td><td>836.4 &mu;s</td><td>109.22 &mu;s</td><td>5.99 &mu;s</td><td>21.4844</td><td>6.8359</td><td>178.68 KB</td>
 </tr></tbody></table>
 </body>
 </html>

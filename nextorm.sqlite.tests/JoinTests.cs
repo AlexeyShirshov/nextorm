@@ -147,6 +147,26 @@ public class JoinTests
 
         r.Count.Should().Be(3);
     }
+    // Regression: a cached join query with a parameter is re-prepared on cache-hit to re-extract the
+    // captured value. In parameter-extraction mode the columns provider is not populated, so resolving
+    // table aliases used to throw InvalidOperationException on the second execution.
+    [Fact]
+    public void SelectJoinWithCapturedParam_RepeatedExecution_ShouldReturnData()
+    {
+        for (var i = 1; i <= 3; i++)
+        {
+            var id = i;
+            var rows = _sut.SimpleEntity
+                .Join(_sut.ComplexEntity, (s, c) => s.Id == c.Id)
+                .Where(p => p.t2.Id == id)
+                .Select(p => new { p.t1.Id, p.t2.RequiredString })
+                .ToList();
+
+            rows.Should().OnlyContain(r => r.Id == id);
+            foreach (var row in rows)
+                row.RequiredString.Should().NotBeNullOrEmpty();
+        }
+    }
 }
 
 public class cls

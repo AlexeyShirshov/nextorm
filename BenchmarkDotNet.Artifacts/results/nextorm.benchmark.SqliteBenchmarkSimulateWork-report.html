@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>nextorm.benchmark.SqliteBenchmarkSimulateWork-20260915-114536</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.3 LTS (Jammy Jellyfish)
+AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 16 logical and 8 physical cores
+.NET SDK 10.0.401
+  [Host] : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+</code></pre>
+<pre><code>Job=ShortRun  Runtime=.NET 10.0  Toolchain=InProcessEmitToolchain  
+IterationCount=3  LaunchCount=1  WarmupCount=3  
+</code></pre>
+
+<table>
+<thead><tr><th>Method                       </th><th>Mean</th><th>Ratio</th><th>Gen0</th><th>Gen1</th><th>Allocated</th><th>Alloc Ratio</th>
+</tr>
+</thead><tbody><tr><td>Nextorm_Prepared_AsyncStream</td><td>5.404 ms</td><td>0.13</td><td>257.8125</td><td>-</td><td>2.06 MB</td><td>1.00</td>
+</tr><tr><td>Dapper_AsyncStream</td><td>27.811 ms</td><td>0.65</td><td>906.2500</td><td>-</td><td>7.45 MB</td><td>3.62</td>
+</tr><tr><td>Nextorm_Cached_AsyncStream</td><td>42.707 ms</td><td>1.00</td><td>3333.3333</td><td>-</td><td>26.98 MB</td><td>13.09</td>
+</tr><tr><td>Nextorm_Prepared_ToListAsync</td><td>42.719 ms</td><td>1.00</td><td>250.0000</td><td>-</td><td>2.06 MB</td><td>1.00</td>
+</tr><tr><td>Nextorm_PreparedForLoop_ToListAsync</td><td>43.333 ms</td><td>1.01</td><td>250.0000</td><td>-</td><td>2.08 MB</td><td>1.01</td>
+</tr><tr><td>Dapper_Async</td><td>70.220 ms</td><td>1.64</td><td>875.0000</td><td>125.0000</td><td>7.46 MB</td><td>3.62</td>
+</tr><tr><td>Nextorm_Cached_ToList</td><td>88.305 ms</td><td>2.07</td><td>3333.3333</td><td>166.6667</td><td>26.63 MB</td><td>12.92</td>
+</tr><tr><td>EFCore_Compiled_ToListAsync</td><td>119.711 ms</td><td>2.80</td><td>1600.0000</td><td>200.0000</td><td>13.89 MB</td><td>6.74</td>
+</tr></tbody></table>
+</body>
+</html>
