@@ -1,18 +1,18 @@
 ```
 
-BenchmarkDotNet v0.13.10, Windows 11 (10.0.22621.3007/22H2/2022Update/SunValley2)
-Intel Core i5-9600KF CPU 3.70GHz (Coffee Lake), 1 CPU, 6 logical and 6 physical cores
-.NET SDK 8.0.101
-  [Host]   : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX2
-  .NET 8.0 : .NET 8.0.1 (8.0.123.58001), X64 RyuJIT AVX2
+BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.3 LTS (Jammy Jellyfish)
+AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 16 logical and 8 physical cores
+.NET SDK 10.0.401
+  [Host]    : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+  .NET 10.0 : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
 
-Job=.NET 8.0  Runtime=.NET 8.0  
+Job=.NET 10.0  Runtime=.NET 10.0  
 
 ```
-| Method                           | Mean     | Error    | StdDev   | Ratio | RatioSD | Gen0    | Gen1   | Allocated | Alloc Ratio |
-|--------------------------------- |---------:|---------:|---------:|------:|--------:|--------:|-------:|----------:|------------:|
-| Nextorm_Prepared_SingleOrDefault | 329.1 μs |  6.24 μs |  5.83 μs |  1.00 |    0.00 |  2.4414 |      - |  12.81 KB |        1.00 |
-| Nextorm_Cached_SingleOrDefault   | 445.5 μs |  8.80 μs | 12.33 μs |  1.36 |    0.04 |  9.7656 |      - |  49.02 KB |        3.83 |
-| Dapper_SingleOrDefault           | 481.8 μs |  9.53 μs | 13.04 μs |  1.46 |    0.05 |  2.9297 |      - |  16.87 KB |        1.32 |
-| EFCore_Compiled_SingleOrDefault  | 576.0 μs | 11.29 μs | 11.09 μs |  1.75 |    0.05 | 11.7188 | 3.9063 |  54.34 KB |        4.24 |
-| EFCore_SingleOrDefault           | 942.5 μs | 18.45 μs | 21.25 μs |  2.86 |    0.07 | 23.4375 | 5.8594 | 108.12 KB |        8.44 |
+| Method                           | Mean     | Error     | StdDev    | Ratio | RatioSD | Gen0    | Allocated | Alloc Ratio |
+|--------------------------------- |---------:|----------:|----------:|------:|--------:|--------:|----------:|------------:|
+| Nextorm_Prepared_SingleOrDefault | 8.649 ms | 0.1726 ms | 0.4426 ms |  1.00 |    0.07 |       - |    4.3 KB |        1.00 |
+| Dapper_SingleOrDefault           | 9.045 ms | 0.1797 ms | 0.4201 ms |  1.05 |    0.07 |       - |   16.4 KB |        3.82 |
+| EFCore_Compiled_SingleOrDefault  | 9.245 ms | 0.1392 ms | 0.1162 ms |  1.07 |    0.06 |       - |   79.8 KB |       18.57 |
+| Nextorm_Cached_SingleOrDefault   | 9.305 ms | 0.1796 ms | 0.3668 ms |  1.08 |    0.07 |       - |  40.58 KB |        9.44 |
+| EFCore_SingleOrDefault           | 9.832 ms | 0.1830 ms | 0.1429 ms |  1.14 |    0.06 | 15.6250 | 149.05 KB |       34.69 |

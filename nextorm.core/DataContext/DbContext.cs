@@ -145,6 +145,11 @@ public class DbContext : IDataContext
         return @params;
     }
 
+    // NORM.Param placeholders carry no value - the runtime values are applied by
+    // DbPreparedQueryCommand.GetDbCommand. Only computed parameters (captured variables,
+    // closures) need to be re-extracted on every cached execution.
+    private static bool IsRuntimeParam(string name) => name.StartsWith("norm_p", StringComparison.Ordinal) && int.TryParse(name.AsSpan(6), out _);
+
     private string? MakeSelect(QueryCommand queryCommand, bool paramMode, List<Param> @params, IQueryContext queryContext, IAliasProvider? aliasProvider)
     {
         var sqlBuilder = new SqlBuilder(this, paramMode, @params, new DefaultColumnsProvider(), queryContext, new DefaultParamProvider(), aliasProvider, Logger);
@@ -299,6 +304,7 @@ public class DbContext : IDataContext
                 : GetMap(queryCommand)();
 
             var noParams = !(@params?.Count > 0);
+            var needsParamRefresh = !noParams && @params!.Any(it => !IsRuntimeParam(it.Name));
 
             var dbCommand = CreateCommand(sql!);
             if (!noParams)
@@ -309,7 +315,7 @@ public class DbContext : IDataContext
             //dbCommand.Prepare();
             //return new SqlCacheEntry(null) { Enumerator = new EmptyEnumerator<TResult>() };
 
-            var compiledQuery = new DbPreparedQueryCommand<TResult>(dbCommand, map, queryCommand.SingleRow, queryCommand.OneColumn, ext is null ? sql! : null, noParams);
+            var compiledQuery = new DbPreparedQueryCommand<TResult>(dbCommand, map, queryCommand.SingleRow, queryCommand.OneColumn, ext is null ? sql! : null, noParams, needsParamRefresh);
 
             if (createEnumerator)
             {
@@ -372,7 +378,7 @@ public class DbContext : IDataContext
             }
             else
             {
-                if (!compiledQuery.NoParams/* || compiledQuery.DbCommand is null*/)
+                if (!compiledQuery.NoParams && compiledQuery.NeedsParamRefresh/* || compiledQuery.DbCommand is null*/)
                 {
                     var dbCommandParams = compiledQuery.DbCommandParams;// ?? CreateCommand(compiledQuery.SqlStmt);
 

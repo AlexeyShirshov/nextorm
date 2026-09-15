@@ -10,7 +10,7 @@ using nextorm.core;
 namespace nextorm.benchmark;
 
 //[SimpleJob(RuntimeMoniker.Net70, baseline: true)]
-[SimpleJob(RuntimeMoniker.Net80, iterationCount: 20)]
+[SimpleJob(RuntimeMoniker.Net10_0, iterationCount: 20)]
 [Config(typeof(NextormConfig))]
 public class SqliteBenchmarkCache
 {

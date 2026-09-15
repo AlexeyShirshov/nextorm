@@ -7,7 +7,7 @@ using DbContext = nextorm.core.DbContext;
 
 namespace nextorm.benchmark;
 
-[SimpleJob(RuntimeMoniker.Net80)]
+[SimpleJob(RuntimeMoniker.Net10_0)]
 [MemoryDiagnoser]
 public class SqliteBenchmarkMakeSelect
 {

@@ -5,7 +5,7 @@ using nextorm.core;
 namespace nextorm.benchmark;
 
 [MemoryDiagnoser]
-[SimpleJob(RuntimeMoniker.Net80)]
+[SimpleJob(RuntimeMoniker.Net10_0)]
 public class InMemoryBenchmarkIteration
 {
     private readonly InMemoryDataRepository _ctx;

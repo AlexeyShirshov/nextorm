@@ -16,7 +16,8 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
     public int[]? ParamMap;
     public readonly string? SqlStmt;
     public readonly bool NoParams;
-    public DbPreparedQueryCommand(DbCommand dbCommand, Func<IDataRecord, TResult>? mapDelegate, bool singleRow, bool scalar, string? sql, bool noParams)
+    public readonly bool NeedsParamRefresh;
+    public DbPreparedQueryCommand(DbCommand dbCommand, Func<IDataRecord, TResult>? mapDelegate, bool singleRow, bool scalar, string? sql, bool noParams, bool needsParamRefresh)
         : base(mapDelegate, scalar)
     {
         DbCommand = dbCommand;
@@ -27,6 +28,7 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
 
         SqlStmt = sql;
         NoParams = noParams;
+        NeedsParamRefresh = needsParamRefresh;
     }
     // private readonly string CommandText;
     //public DbParameterCollection DbCommandParams;

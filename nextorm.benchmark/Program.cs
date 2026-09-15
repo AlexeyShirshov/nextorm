@@ -16,6 +16,7 @@ using nextorm.benchmark;
 BenchmarkRunner.Run<SqliteBenchmarkSingle>();
 // BenchmarkRunner.Run<SqliteBenchmarkCache>();
 // BenchmarkRunner.Run<SqliteBenchmarkJoin>();
+// BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);
 
 // runner.QueryCommandPlanEqualityComparer();
 // var runner = new SqliteBenchmarkSimulateWork();
