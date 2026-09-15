@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>nextorm.benchmark.SqliteBenchmarkLargeIteration-20260914-224550</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.3 LTS (Jammy Jellyfish)
+AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 16 logical and 8 physical cores
+.NET SDK 10.0.401
+  [Host]    : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+  .NET 10.0 : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+</code></pre>
+<pre><code>Job=.NET 10.0  Runtime=.NET 10.0  
+</code></pre>
+
+<table>
+<thead><tr><th>Method                </th><th>Mean</th><th>Median</th><th>Gen0</th><th>Gen1</th><th>Gen2</th><th>Allocated</th>
+</tr>
+</thead><tbody><tr><td>AdoTupleToList</td><td>9.399 ms</td><td>9.384 ms</td><td>281.2500</td><td>281.2500</td><td>281.2500</td><td>2.68 MB</td>
+</tr><tr><td>Dapper_AsyncStream</td><td>9.488 ms</td><td>9.463 ms</td><td>312.5000</td><td>-</td><td>-</td><td>2.59 MB</td>
+</tr><tr><td>EFCore_Compiled_AsyncStream</td><td>10.185 ms</td><td>10.025 ms</td><td>484.3750</td><td>-</td><td>-</td><td>3.97 MB</td>
+</tr><tr><td>AdoWithDelegate</td><td>10.428 ms</td><td>10.423 ms</td><td>312.5000</td><td>265.6250</td><td>109.3750</td><td>2.39 MB</td>
+</tr><tr><td>EFCore_AsyncStream</td><td>10.624 ms</td><td>10.549 ms</td><td>484.3750</td><td>-</td><td>-</td><td>3.98 MB</td>
+</tr><tr><td>Nextorm_Cached_ToListAsync</td><td>11.292 ms</td><td>11.273 ms</td><td>265.6250</td><td>203.1250</td><td>-</td><td>2.22 MB</td>
+</tr><tr><td>Nextorm_Prepared_ToListAsync</td><td>11.300 ms</td><td>11.276 ms</td><td>265.6250</td><td>203.1250</td><td>-</td><td>2.21 MB</td>
+</tr><tr><td>Nextorm_Cached_AsyncStream</td><td>11.608 ms</td><td>11.601 ms</td><td>265.6250</td><td>-</td><td>-</td><td>2.14 MB</td>
+</tr><tr><td>Nextorm_Prepared_AsyncStream</td><td>11.649 ms</td><td>11.657 ms</td><td>265.6250</td><td>-</td><td>-</td><td>2.14 MB</td>
+</tr><tr><td>Dapper_Async</td><td>12.427 ms</td><td>12.369 ms</td><td>375.0000</td><td>250.0000</td><td>93.7500</td><td>2.84 MB</td>
+</tr><tr><td>EFCore_ToListAsync</td><td>13.656 ms</td><td>13.626 ms</td><td>531.2500</td><td>281.2500</td><td>93.7500</td><td>4.23 MB</td>
+</tr></tbody></table>
+</body>
+</html>
