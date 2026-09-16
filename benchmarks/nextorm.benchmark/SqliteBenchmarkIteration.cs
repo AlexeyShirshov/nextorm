@@ -37,7 +37,7 @@ public class SqliteBenchmarkIteration
         }
         _db = builder.CreateDbContext();
         _ctx = new TestDataRepository(_db);
-        _db.EnsureConnectionOpen();
+        ((IConnectionManager)_db).EnsureConnectionOpen();
 
         _cmd = _ctx.SimpleEntity.Prepare(false);
 

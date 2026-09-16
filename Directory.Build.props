@@ -20,4 +20,12 @@
     <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
   </PropertyGroup>
 
+  <!--
+    Warnings are errors in every project, in every configuration. Nullable and analyzer
+    warnings must be fixed or explicitly suppressed via NoWarn, never left to rot.
+  -->
+  <PropertyGroup>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
 </Project>

@@ -53,6 +53,15 @@ To add specific database provider use the following:
 
 In-memory provider is built-in in core library.
 
+## Query reuse
+
+There are two independent ways to avoid re-building a query plan on every execution: the implicit plan
+cache (used automatically by `Entity`/`QueryCommand` terminals) and explicit `Prepare()` returning an
+`IPreparedQueryCommand<TResult>`.
+
+They differ in cost, lifetime and thread-safety rules. Which one to use, what each one costs per call and
+its limitations: **[Prepared vs Cached](prepared-vs-cached.md)**.
+
 ## Releases
 
 ### 1.0.1-alpha

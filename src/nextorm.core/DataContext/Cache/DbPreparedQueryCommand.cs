@@ -4,7 +4,6 @@ using System.Diagnostics;
 
 namespace nextorm.core;
 
-[System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S3881:\"IDisposable\" should be implemented correctly", Justification = "<Pending>")]
 public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResult, IDataRecord>, IDbCommandHolder
 {
     public readonly CommandBehavior Behavior = 0;
@@ -17,8 +16,8 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
     public readonly string? SqlStmt;
     public readonly bool NoParams;
     public readonly bool NeedsParamRefresh;
-    public DbPreparedQueryCommand(DbCommand dbCommand, Func<IDataRecord, TResult>? mapDelegate, bool singleRow, bool scalar, string? sql, bool noParams, bool needsParamRefresh)
-        : base(mapDelegate, scalar)
+    public DbPreparedQueryCommand(DbCommand dbCommand, Func<IDataRecord, TResult>? mapDelegate, bool singleRow, string? sql, bool noParams, bool needsParamRefresh)
+        : base(mapDelegate)
     {
         DbCommand = dbCommand;
         DbCommandConnection = dbCommand.Connection;
@@ -34,11 +33,14 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
     //public DbParameterCollection DbCommandParams;
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Bug", "S2583:Conditionally executed code should be reachable", Justification = "<Pending>")]
     public DbCommand GetDbCommand(object[]? @params, DbContext dataContext, DbConnection conn)
+        => GetDbCommand(@params is null ? ReadOnlySpan<object?>.Empty : @params, dataContext, conn);
+
+    public DbCommand GetDbCommand(ReadOnlySpan<object?> @params, DbContext dataContext, DbConnection conn)
     {
         var cmd = DbCommand;
         var parameters = DbCommandParams;//cmd.Parameters;
 
-        if (@params is not null)
+        if (!@params.IsEmpty)
         {
             var pLength = @params.Length;
             if (ParamMap is null)
@@ -55,10 +57,9 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
                 string? paramName = null;
                 if (idx < 0)
                 {
-                    paramName = i < 5 ? DbContext._params[i] : string.Format("norm_p{0}", i);
-                    // parameters[0].Value = @params[i];
-                    //sqlCommand.Parameters[paramName].Value = @params[i];
-                    //var added = false;
+                    paramName = DbContext.GetParamName(i);
+                    // parameters.IndexOf is a provider-side linear scan, but ParamMap caches the
+                    // result below, so it runs at most once per parameter per compiled command.
                     idx = parameters.IndexOf(paramName);
 
                     if (idx >= 0)

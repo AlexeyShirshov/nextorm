@@ -7,14 +7,23 @@ public class ExpressionCache<T> : ConcurrentDictionary<ExpressionKey, T>
 
 }
 
-public sealed class ExpressionKey(Expression exp, IQueryProvider queryProvider) : IEquatable<ExpressionKey>
+public sealed class ExpressionKey : IEquatable<ExpressionKey>
 {
-    private readonly Expression _exp = exp;
-    private readonly ExpressionPlanEqualityComparer _equalityComparer = queryProvider.GetExpressionPlanEqualityComparer();
-    private int? _hash;
+    private readonly Expression _exp;
+    private readonly ExpressionPlanEqualityComparer _equalityComparer;
+    // Both inputs are readonly, so the hash is stable for the lifetime of the key.
+    // Computing it once up front avoids caching it in a mutable field (S2328 false
+    // positive) and any lazy-initialization race when the key is shared.
+    private readonly int _hash;
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Minor Bug", "S2328:\"GetHashCode\" should not reference mutable fields", Justification = "<Pending>")]
-    public override int GetHashCode() => _hash ??= _equalityComparer.GetHashCode(_exp);
+    public ExpressionKey(Expression exp, IQueryProvider queryProvider)
+    {
+        _exp = exp;
+        _equalityComparer = queryProvider.GetExpressionPlanEqualityComparer();
+        _hash = _equalityComparer.GetHashCode(_exp);
+    }
+
+    public override int GetHashCode() => _hash;
     public override bool Equals(object? obj)
     {
         return Equals(obj as ExpressionKey);

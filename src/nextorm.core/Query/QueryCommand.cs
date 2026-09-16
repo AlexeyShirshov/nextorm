@@ -4,12 +4,12 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Threading.Channels;
+using System.Threading;
 
 namespace nextorm.core;
 
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Minor Code Smell", "S3897:Classes that provide \"Equals(<T>)\" should implement \"IEquatable<T>\"", Justification = "<Pending>")]
-public class QueryCommand : IQueryContext, ICloneable
+public class QueryCommand : IQueryProvider, ICloneable
 {
     private QueryCommand? _union;
     private UnionType _unionType;
@@ -236,7 +236,7 @@ public class QueryCommand : IQueryContext, ICloneable
 
                     selectList = new SelectExpression[argsCount];
 
-                    var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataContext!, this, cancellationToken);
+                    var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataContext!, this, cancellationToken, _dataContext!.Logger);
                     for (var idx = 0; idx < argsCount; idx++)
                     {
                         if (cancellationToken.IsCancellationRequested)
@@ -302,7 +302,7 @@ public class QueryCommand : IQueryContext, ICloneable
                     // var selList = new List<SelectExpression>();
 
                     OneColumn = true;
-                    var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataContext!, this, cancellationToken);
+                    var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataContext!, this, cancellationToken, _dataContext!.Logger);
                     var selectExp = innerQueryVisitor.Visit(_exp);
                     // if (_dataProvider.NeedMapping)
                     // {
@@ -337,7 +337,7 @@ public class QueryCommand : IQueryContext, ICloneable
 
                     selectList = new SelectExpression[bindingsCount];
 
-                    var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataContext!, this, cancellationToken);
+                    var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataContext!, this, cancellationToken, _dataContext!.Logger);
                     for (var idx = 0; idx < bindingsCount; idx++)
                     {
                         if (cancellationToken.IsCancellationRequested)
@@ -482,7 +482,7 @@ public class QueryCommand : IQueryContext, ICloneable
         if (_sorting is not null)
         {
             var sortingSpan = _sorting.AsSpan();
-            var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataContext!, this, cancellationToken);
+            var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataContext!, this, cancellationToken, _dataContext!.Logger);
 
             for (var (i, cnt) = (0, _sorting.Length); i < cnt; i++)
             {
@@ -529,7 +529,7 @@ public class QueryCommand : IQueryContext, ICloneable
         int wherePlanHash = 7;
         if (_condition is not null)
         {
-            var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataContext!, this, cancellationToken);
+            var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(_dataContext!, this, cancellationToken, _dataContext!.Logger);
             PreparedCondition = innerQueryVisitor.Visit(_condition);
 
             if (!_dontCache && !noHash) unchecked
@@ -620,9 +620,9 @@ public class QueryCommand : IQueryContext, ICloneable
 #if DEBUG
         if (_dataContext != cmd._dataContext)
             throw new InvalidOperationException("Different data context");
+#endif
 
         if (_referencedQueries is null) throw new InvalidOperationException("Referenced queries must be initialized");
-#endif
 
         _referencedQueries[idx] = cmd;
         // var comparer = GetSelectExpressionPlanEqualityComparer();
@@ -663,6 +663,13 @@ public class QueryCommand : IQueryContext, ICloneable
         dst.PreparedCondition = PreparedCondition;
         dst.ResultPlanHash = ResultPlanHash;
         dst.GroupingPlanHash = GroupingPlanHash;
+        // From/Union/ReferencedQueries hashes must travel with the clone too: QueryPlanEqualityComparer
+        // .GetHashCode() reads them, and QueryPlan.Equals() considers the cloned members equal, so the
+        // Equals => same-hash contract would otherwise be violated and a cached plan key could not be
+        // found by a freshly built, logically equal plan.
+        dst.FromPlanHash = FromPlanHash;
+        dst.UnionPlanHash = UnionPlanHash;
+        dst.ReferencedQueriesPlanHash = ReferencedQueriesPlanHash;
 
         dst.ResultType = ResultType;
         dst.Paging = Paging;
@@ -770,7 +777,7 @@ public class QueryCommand : IQueryContext, ICloneable
     }
 }
 
-public class QueryCommand<TResult> : QueryCommand//, IAsyncEnumerable<TResult>
+public sealed class QueryCommand<TResult> : QueryCommand//, IAsyncEnumerable<TResult>
 {
     public QueryCommand(IDataContext? dataProvider, LambdaExpression exp, LambdaExpression? condition, JoinExpression[]? joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having, ILogger? logger)
         : this(dataProvider, exp, null, condition, joins, paging, sorting, group, having, logger)
@@ -780,7 +787,7 @@ public class QueryCommand<TResult> : QueryCommand//, IAsyncEnumerable<TResult>
         : this(dataProvider, null, srcType, condition, joins, paging, sorting, group, having, logger)
     {
     }
-    protected QueryCommand(IDataContext? dataProvider, LambdaExpression? exp, Type? srcType, LambdaExpression? condition, JoinExpression[]? joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having, ILogger? logger)
+    private QueryCommand(IDataContext? dataProvider, LambdaExpression? exp, Type? srcType, LambdaExpression? condition, JoinExpression[]? joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having, ILogger? logger)
         : base(dataProvider, exp, srcType, condition, joins, paging, sorting, group, having, logger)
     {
 
@@ -821,39 +828,23 @@ public class QueryCommand<TResult> : QueryCommand//, IAsyncEnumerable<TResult>
         return _dataContext.CreateEnumeratorAsync<TResult>(preparedCommand, @params, cancellationToken);
     }
     public IAsyncEnumerable<TResult> Pipeline(params object[] @params) => Pipeline(CancellationToken.None, @params);
-#pragma warning disable CS8425 // Async-iterator member has one or more parameters of type 'CancellationToken' but none of them is decorated with the 'EnumeratorCancellation' attribute, so the cancellation token parameter from the generated 'IAsyncEnumerable<>.GetAsyncEnumerator' will be unconsumed
-    public async IAsyncEnumerable<TResult> Pipeline(CancellationToken cancellationToken, params object[] @params)
-#pragma warning restore CS8425 // Async-iterator member has one or more parameters of type 'CancellationToken' but none of them is decorated with the 'EnumeratorCancellation' attribute, so the cancellation token parameter from the generated 'IAsyncEnumerable<>.GetAsyncEnumerator' will be unconsumed
+    /// <summary>
+    /// Streams the result set asynchronously. The previous implementation ran the synchronous
+    /// <see cref="ToEnumerable"/> on a thread-pool thread and pushed every row through an
+    /// unbounded <c>Channel</c>: it blocked a pool thread for the whole result set, buffered the
+    /// entire result in memory when the consumer was slower, and observed cancellation only
+    /// between rows. Driving the async enumerator directly keeps the same semantics without the
+    /// extra thread and without the unbounded buffer.
+    /// </summary>
+    public async IAsyncEnumerable<TResult> Pipeline(
+        [EnumeratorCancellation] CancellationToken cancellationToken,
+        params object[] @params)
     {
-        var bus = Channel.CreateUnbounded<TResult>(new UnboundedChannelOptions
-        {
-            SingleWriter = true,
-            SingleReader = true
-        });
+        var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, true, true, cancellationToken);
 
-        var t = Task.Run(async () =>
-        {
-            try
-            {
-                foreach (var item in ToEnumerable(@params))
-                {
-                    if (cancellationToken.IsCancellationRequested)
-                        break;
-
-                    await bus.Writer.WriteAsync(item, cancellationToken).ConfigureAwait(false);
-                }
-            }
-            finally
-            {
-                bus.Writer.Complete();
-            }
-        }, cancellationToken);
-
-        // return bus.Reader.ReadAllAsync(cancellationToken);
-        while (await bus.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
-            yield return await bus.Reader.ReadAsync(cancellationToken).ConfigureAwait(false);
-
-        await t.ConfigureAwait(false);
+        await using var enumerator = _dataContext.CreateAsyncEnumerator<TResult>(preparedCommand, @params, cancellationToken);
+        while (await enumerator.MoveNextAsync().ConfigureAwait(false))
+            yield return enumerator.Current;
     }
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IAsyncEnumerable<TResult> ToAsyncEnumerable(params object[] @params) => _dataContext!.GetAsyncEnumerable<TResult>(_dataContext.GetPreparedQueryCommand(this, true, true, CancellationToken.None), CancellationToken.None, @params);
@@ -861,7 +852,7 @@ public class QueryCommand<TResult> : QueryCommand//, IAsyncEnumerable<TResult>
     public IAsyncEnumerable<TResult> ToAsyncEnumerable(CancellationToken cancellationToken, params object[] @params) => _dataContext!.GetAsyncEnumerable<TResult>(_dataContext.GetPreparedQueryCommand(this, true, true, cancellationToken), cancellationToken, @params);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IEnumerable<TResult> ToEnumerable(params object[] @params) => _dataContext!.GetEnumerable(_dataContext.GetPreparedQueryCommand(this, true, true, CancellationToken.None), @params);
-    public List<TResult> ToList(params object[] @params)
+    public List<TResult> ToList(params ReadOnlySpan<object?> @params)
     {
         var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, CancellationToken.None);
 
@@ -871,7 +862,8 @@ public class QueryCommand<TResult> : QueryCommand//, IAsyncEnumerable<TResult>
     public Task<List<TResult>> ToListAsync(params object[] @params) => _dataContext!.ToListAsync(_dataContext.GetPreparedQueryCommand(this, false, true, CancellationToken.None), @params, CancellationToken.None);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<List<TResult>> ToListAsync(CancellationToken cancellationToken, params object[] @params) => _dataContext!.ToListAsync(_dataContext.GetPreparedQueryCommand(this, false, true, cancellationToken), @params, cancellationToken);
-    public bool Any(params object[] @params)
+    public bool Any() => Any(ReadOnlySpan<object?>.Empty);
+    public bool Any(params ReadOnlySpan<object?> @params)
     {
         if (this is not QueryCommand<bool> queryCommand || !queryCommand.SingleRow)
         {
@@ -907,7 +899,7 @@ public class QueryCommand<TResult> : QueryCommand//, IAsyncEnumerable<TResult>
         var preparedCommand = _dataContext!.GetPreparedQueryCommand(queryCommand, false, true, cancellationToken);
         return await _dataContext.ExecuteScalar<bool>(preparedCommand, @params, true, cancellationToken).ConfigureAwait(false);
     }
-    public TResult? ExecuteScalar(params object[] @params)
+    public TResult? ExecuteScalar(params ReadOnlySpan<object?> @params)
     {
         var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, CancellationToken.None);
         return _dataContext.ExecuteScalar<TResult>(preparedCommand, @params, false);
@@ -918,7 +910,8 @@ public class QueryCommand<TResult> : QueryCommand//, IAsyncEnumerable<TResult>
         return _dataContext.ExecuteScalar<TResult>(preparedCommand, @params, false, cancellationToken);
     }
 
-    public TResult First(params object[] @params)
+    public TResult First() => First(ReadOnlySpan<object?>.Empty);
+    public TResult First(params ReadOnlySpan<object?> @params)
     {
         // Keep the single-row shape on the command. Restoring Paging.Limit would change the cached
         // plan key (QueryPlanEqualityComparer includes Limit/SingleRow) and force a full re-prepare
@@ -945,7 +938,8 @@ public class QueryCommand<TResult> : QueryCommand//, IAsyncEnumerable<TResult>
         var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, cancellationToken);
         return _dataContext.FirstAsync<TResult>(preparedCommand, @params, cancellationToken);
     }
-    public TResult? FirstOrDefault(params object[] @params)
+    public TResult? FirstOrDefault() => FirstOrDefault(ReadOnlySpan<object?>.Empty);
+    public TResult? FirstOrDefault(params ReadOnlySpan<object?> @params)
     {
         if (Paging.Limit != 1 || !_isPrepared)
         {
@@ -969,7 +963,8 @@ public class QueryCommand<TResult> : QueryCommand//, IAsyncEnumerable<TResult>
         var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, cancellationToken);
         return _dataContext.FirstOrDefaultAsync<TResult>(preparedCommand, @params, cancellationToken);
     }
-    public TResult Single(params object[] @params)
+    public TResult Single() => Single(ReadOnlySpan<object?>.Empty);
+    public TResult Single(params ReadOnlySpan<object?> @params)
     {
         if (Paging.Limit != 2 || !_isPrepared)
         {
@@ -991,7 +986,8 @@ public class QueryCommand<TResult> : QueryCommand//, IAsyncEnumerable<TResult>
         var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, cancellationToken);
         return _dataContext.SingleAsync<TResult>(preparedCommand, @params, cancellationToken);
     }
-    public TResult? SingleOrDefault(params object[] @params)
+    public TResult? SingleOrDefault() => SingleOrDefault(ReadOnlySpan<object?>.Empty);
+    public TResult? SingleOrDefault(params ReadOnlySpan<object?> @params)
     {
         if (Paging.Limit != 2 || !_isPrepared)
         {

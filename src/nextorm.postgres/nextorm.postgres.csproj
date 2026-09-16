@@ -4,7 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <LangVersion>12.0</LangVersion>
+    <LangVersion>latest</LangVersion>
     <PackageId>nextorm.postgres</PackageId>
     <Title>Nextorm PostgreSQL provider</Title>
     <Version>1.0.1-alpha</Version>

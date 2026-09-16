@@ -39,7 +39,7 @@ public class SqliteBenchmarkFirst
         }
         _db = builder.CreateDbContext();
         _ctx = new TestDataRepository(_db);
-        _db.EnsureConnectionOpen();
+        ((IConnectionManager)_db).EnsureConnectionOpen();
 
         _cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).FirstOrFirstOrDefaultCommand(it => it.Id).Prepare();
         _cmdEntPrepared = _ctx.LargeEntity.Where(it => it.Id == NORM.Param<int>(0)).FirstOrFirstOrDefaultCommand().Prepare();

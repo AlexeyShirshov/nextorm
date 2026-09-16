@@ -40,7 +40,7 @@ public class SqliteBenchmarkJoin
         }
         _db = builder.CreateDbContext();
         _ctx = new TestDataRepository(_db);
-        _db.EnsureConnectionOpen();
+        ((IConnectionManager)_db).EnsureConnectionOpen();
 
         _cmdEntPrepared = _ctx.LargeEntity
             .Join(_ctx.SimpleEntity, (t1, t2) => t1.Id == t2.Id)

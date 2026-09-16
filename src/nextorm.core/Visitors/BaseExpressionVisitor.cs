@@ -155,7 +155,9 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 
             if (paramIdx >= 0)
             {
-                var paramName = string.Format("norm_p{0}", paramIdx);
+                // Reuse the cached norm_pN table instead of string.Format (same names, no boxing
+                // and no composite-formatting pass on the SQL-build path).
+                var paramName = DbContext.GetParamName(paramIdx);
                 _params.Add(new Param(paramName, null));
                 if (!_paramMode)
                     _builder!.Append(_dataProvider.MakeParam(paramName));
@@ -299,7 +301,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 || node.Method.Name == nameof(NORM.NORM_SQL.count_big)
                 || node.Method.Name == nameof(NORM.NORM_SQL.count_big_distinct))
             {
-                if (!_paramMode) _builder!.Append(_dataProvider.MakeCount(node.Method.Name.EndsWith("distinct"), node.Method.Name.Contains("big")));
+                if (!_paramMode) _builder!.Append(_dataProvider.MakeCount(node.Method.Name.EndsWith("distinct", StringComparison.Ordinal), node.Method.Name.Contains("big", StringComparison.Ordinal)));
 
                 if (node.Arguments is [NewArrayExpression newArray])//ReadOnlyCollection<Expression> args
                 {
@@ -366,7 +368,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 if (!_paramMode)
                 {
                     _builder!.Append(_dataProvider.MakeAggregate(node.Method.Name.Replace("_distinct", string.Empty))).Append('(');
-                    if (node.Method.Name.EndsWith("distinct"))
+                    if (node.Method.Name.EndsWith("distinct", StringComparison.Ordinal))
                         _builder!.Append("distinct ");
                 }
 
@@ -777,7 +779,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                     {
                         var args = lambdaParameter.Type.GetGenericArguments();
                         int? paramIdx = null;
-                        if (args.Count() > args.Distinct().Count())
+                        if (args.Length > args.Distinct().Count())
                         {
                             var propExp = (MemberExpression)node.Expression!;
                             paramIdx = int.Parse(propExp.Member.Name[1..]) - 1;

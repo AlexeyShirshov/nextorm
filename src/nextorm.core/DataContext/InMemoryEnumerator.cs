@@ -3,7 +3,7 @@ using System.Runtime.CompilerServices;
 
 namespace nextorm.core;
 
-public class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TResult>, IEnumerator<TResult>, IEnumeratorInit<TEntity>, IEnumerable<TResult>
+public sealed class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TResult>, IEnumerator<TResult>, IEnumeratorInit<TEntity>, IEnumerable<TResult>
 {
     private readonly Func<TEntity, TResult>? _map;
     private readonly Func<object[]?, Func<TEntity, bool>>? _conditionFactory;

@@ -6,7 +6,7 @@ using System.Text;
 using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
-public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IAsyncInit<TResult>
+public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IAsyncInit<TResult>
 {
     //private readonly QueryCommand<TResult> _cmd;
     private DbContext? _dbContext;
@@ -78,15 +78,45 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IAsyncIni
     //     _params = (List<Param>)data;
     // }
 
-    public async ValueTask<bool> MoveNextAsync()
+    public ValueTask<bool> MoveNextAsync()
     {
-        if (_reader is null) await InitReaderAsync(_params, _cancellationToken).ConfigureAwait(false);
+        var reader = _reader;
+        if (reader is null)
+            return InitReaderAndMoveNextAsync();
+
 #if DEBUG
         if (_logger?.IsEnabled(LogLevel.Trace) ?? false) _logger.LogTrace("Move next");
 #endif
-        if (await _reader!.ReadAsync(_cancellationToken).ConfigureAwait(false))
+        // Buffered providers (sqlite, Npgsql non-sequential) complete ReadAsync synchronously.
+        // Staying on this side of the await keeps the per-row path free of the async state
+        // machine and of the Task await machinery entirely.
+        var task = reader.ReadAsync(_cancellationToken);
+        if (task.IsCompletedSuccessfully)
+            return new ValueTask<bool>(ReadSync(reader, task.Result));
+
+        return AwaitAndReadAsync(task, reader);
+    }
+    private async ValueTask<bool> InitReaderAndMoveNextAsync()
+    {
+        await InitReaderAsync(_params, _cancellationToken).ConfigureAwait(false);
+        return await MoveNextAsync().ConfigureAwait(false);
+    }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private bool ReadSync(DbDataReader reader, bool hasRow)
+    {
+        if (hasRow)
         {
-            _current = _map!(_reader);
+            _current = _map!(reader);
+            return true;
+        }
+
+        return false;
+    }
+    private async ValueTask<bool> AwaitAndReadAsync(Task<bool> task, DbDataReader reader)
+    {
+        if (await task.ConfigureAwait(false))
+        {
+            _current = _map!(reader);
             return true;
         }
 
@@ -116,10 +146,8 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IAsyncIni
     public void InitReader(object[]? @params)
     {
         if (_reader is not null) return;
-#if DEBUG
         if (_conn is null) throw new InvalidOperationException("Connection is empty");
         if (_dbContext is null) throw new InvalidOperationException("DbContext is empty");
-#endif
 
         if (!_dbContext._connOpen)
         {
@@ -140,10 +168,8 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IAsyncIni
     public async Task InitReaderAsync(object[]? @params, CancellationToken cancellationToken)
     {
         if (_reader is not null) return;
-#if DEBUG
         if (_conn is null) throw new InvalidOperationException("Connection is empty");
         if (_dbContext is null) throw new InvalidOperationException("DbContext is empty");
-#endif
 
         if (!_dbContext._connOpen)
         {
@@ -164,42 +190,41 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IAsyncIni
     }
     private void LogCommand(DbCommand sqlCommand)
     {
-        var sb = new StringBuilder();
-        sb.AppendLine("Executing query: {sql}");
-
-        //_logger.LogDebug("Executing query: {sql}", sqlCommand.CommandText);
-
-        var ps = new ArrayList
-            {
-                sqlCommand.CommandText
-            };
-
-        if (_logSensitiveData)
+        if (!_logSensitiveData)
         {
-            var idx = 0;
-            foreach (DbParameter p in sqlCommand.Parameters)
-            {
-                sb.AppendLine($"param {{name_{idx}}} = {{value_{idx}}}");
-                ps.Add(p.ParameterName);
-                ps.Add(p.Value);
-                idx++;
-                //_logger.LogDebug("param {name} is {value}", p.ParameterName, p.Value);
-            }
-        }
-        else if (sqlCommand.Parameters?.Count > 0)
-        {
-            _logger!.LogDebug(sb.ToString(), sqlCommand.CommandText);
-            _logger!.LogDebug("Use {method} to see param values", nameof(_logSensitiveData));
+            // No message buffer needed: the SQL is already a string and is logged as-is.
+            _logger!.LogDebug("Executing query: {sql}" + Environment.NewLine, sqlCommand.CommandText);
+
+            if (sqlCommand.Parameters?.Count > 0)
+                _logger!.LogDebug("Use {method} to see param values", nameof(_logSensitiveData));
+
             return;
         }
 
-        if (_logSensitiveData)
+        var sb = DbContext._sbPool.Get();
+        try
         {
+            sb.Append("Executing query: {sql}").AppendLine();
+
+            var parameterCount = sqlCommand.Parameters?.Count ?? 0;
+            var ps = new object?[1 + parameterCount * 2];
+            ps[0] = sqlCommand.CommandText;
+
+            for (var i = 0; i < parameterCount; i++)
+            {
+                var p = sqlCommand.Parameters![i];
+                sb.Append("param {name_").Append(i).Append("} = {value_").Append(i).Append('}').AppendLine();
+                ps[1 + i * 2] = p.ParameterName;
+                ps[2 + i * 2] = p.Value;
+            }
+
             sb.Length -= Environment.NewLine.Length;
-            _logger!.LogDebug(sb.ToString(), ps.ToArray());
+            _logger!.LogDebug(sb.ToString(), ps);
         }
-        else
-            _logger!.LogDebug(sb.ToString(), sqlCommand.CommandText);
+        finally
+        {
+            DbContext._sbPool.Return(sb);
+        }
     }
     public void Reset()
     {
@@ -213,7 +238,7 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IAsyncIni
         }
     }
 
-    protected virtual void Dispose(bool disposing)
+    private void Dispose(bool disposing)
     {
         Reset();
 

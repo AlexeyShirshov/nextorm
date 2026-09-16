@@ -163,7 +163,7 @@ public class SqlServerDbContext : DbContext
     }
     public override bool MakeTop(int limit, out string? topStmt)
     {
-        topStmt = string.Format("top({0})", limit);
+        topStmt = $"top({limit})";
         return true;
     }
 }

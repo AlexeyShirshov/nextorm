@@ -6,7 +6,7 @@ using nextorm.core;
 
 namespace nextorm.benchmark;
 
-[HideColumns(Column.Job, Column.Runtime, Column.RatioSD, Column.Error, Column.StdDev)]
+[HideColumns(Column.Job, Column.Runtime, Column.RatioSD)]
 [MemoryDiagnoser]
 [Config(typeof(NextormConfig))]
 public class SqliteBenchmarkCachedPlan
@@ -24,7 +24,7 @@ public class SqliteBenchmarkCachedPlan
         builder.UseSqlite(filepath);
         _db = builder.CreateDbContext();
         _repo = new TestDataRepository(_db);
-        _db.EnsureConnectionOpen();
+        ((IConnectionManager)_db).EnsureConnectionOpen();
 
         _prepared = _repo.SimpleEntity
             .Where(it => it.Id == NORM.Param<int>(0))
@@ -147,5 +147,37 @@ public class SqliteBenchmarkCachedPlan
             r = _db.GetPreparedQueryCommand(_rePrepareCmd, false, true, CancellationToken.None);
         }
         return r!;
+    }
+
+    // M12: same shape as Cached_PlanOnly_Param, but with the plan cache disabled on the command.
+    // Cache = false makes PrepareCommand skip every '*PlanHash' computation (QueryCommand.cs: `!_dontCache`)
+    // and skips the plan lookup, so this arm is [construct + prepare-without-hash + cache-miss work].
+    // Delta vs Cached_PlanOnly_Param = (hashing + lookup) - (SQL build + CreateCommand + params).
+    [Benchmark]
+    public IPreparedQueryCommand<int> M12_NoCache_PlanOnly_Param()
+    {
+        IPreparedQueryCommand<int>? r = null;
+        for (var i = 0; i < Iterations; i++)
+        {
+            var cmd = _repo.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(it => it.Id);
+            cmd.Cache = false;
+            r = _db.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None);
+        }
+        return r!;
+    }
+
+    // M12: DB-bound end-to-end with the plan cache disabled for the command (the "no cache" product path).
+    [Benchmark]
+    public int M12_NoCache_ToList()
+    {
+        var sum = 0;
+        for (var i = 0; i < Iterations; i++)
+        {
+            var cmd = _repo.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(it => it.Id);
+            cmd.Cache = false;
+            foreach (var row in cmd.ToList(i))
+                sum += row;
+        }
+        return sum;
     }
 }

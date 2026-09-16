@@ -2,7 +2,7 @@
 <html lang='en'>
 <head>
 <meta charset='utf-8' />
-<title>nextorm.benchmark.SqliteBenchmarkCachedPlan-20260916-002249</title>
+<title>nextorm.benchmark.SqliteBenchmarkCachedPlan-20260916-213654</title>
 
 <style type="text/css">
 	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
@@ -16,23 +16,25 @@
 BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)
 AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 16 logical and 8 physical cores
 .NET SDK 10.0.401
-  [Host] : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+  [Host]     : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+  DefaultJob : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
 </code></pre>
-<pre><code>Job=ShortRun  Runtime=.NET 10.0  Toolchain=InProcessEmitToolchain  
-IterationCount=3  LaunchCount=1  WarmupCount=3  
+<pre><code>Job=DefaultJob  Runtime=.NET 10.0  
 </code></pre>
 
 <table>
-<thead><tr><th>Method            </th><th>Mean   </th><th>Ratio</th><th>Gen0</th><th>Gen1</th><th>Allocated</th><th>Alloc Ratio</th>
+<thead><tr><th>Method              </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Median</th><th>Ratio</th><th>Gen0</th><th>Gen1</th><th>Allocated</th><th>Alloc Ratio</th>
 </tr>
-</thead><tbody><tr><td>RePrepare_PlanOnly_Param</td><td>94.83 &mu;s</td><td>0.001</td><td>4.7607</td><td>-</td><td>39.84 KB</td><td>1.18</td>
-</tr><tr><td>Construct_Only</td><td>115.24 &mu;s</td><td>0.001</td><td>20.5078</td><td>-</td><td>167.97 KB</td><td>4.97</td>
-</tr><tr><td>Cached_PlanOnly_NoParam</td><td>318.22 &mu;s</td><td>0.003</td><td>32.7148</td><td>-</td><td>268.75 KB</td><td>7.95</td>
-</tr><tr><td>Cached_PlanOnly_Param</td><td>390.98 &mu;s</td><td>0.004</td><td>37.1094</td><td>-</td><td>303.13 KB</td><td>8.97</td>
-</tr><tr><td>Build_Sql</td><td>7,775.17 &mu;s</td><td>0.076</td><td>109.3750</td><td>101.5625</td><td>948.35 KB</td><td>28.07</td>
-</tr><tr><td>Build_Sql_Join</td><td>27,818.45 &mu;s</td><td>0.271</td><td>218.7500</td><td>187.5000</td><td>1964.88 KB</td><td>58.15</td>
-</tr><tr><td>Prepared_ToList</td><td>102,943.03 &mu;s</td><td>1.002</td><td>-</td><td>-</td><td>33.79 KB</td><td>1.00</td>
-</tr><tr><td>Cached_ToList</td><td>106,025.61 &mu;s</td><td>1.032</td><td>-</td><td>-</td><td>338.22 KB</td><td>10.01</td>
+</thead><tbody><tr><td>Construct_Only</td><td>112.0 &mu;s</td><td>2.22 &mu;s</td><td>2.88 &mu;s</td><td>111.6 &mu;s</td><td>0.09</td><td>20.5078</td><td>-</td><td>167.97 KB</td><td>2.21</td>
+</tr><tr><td>RePrepare_PlanOnly_Param</td><td>163.3 &mu;s</td><td>3.21 &mu;s</td><td>3.69 &mu;s</td><td>162.7 &mu;s</td><td>0.14</td><td>9.5215</td><td>-</td><td>78.13 KB</td><td>1.03</td>
+</tr><tr><td>Cached_PlanOnly_NoParam</td><td>276.5 &mu;s</td><td>5.31 &mu;s</td><td>13.51 &mu;s</td><td>276.5 &mu;s</td><td>0.23</td><td>31.2500</td><td>-</td><td>265.63 KB</td><td>3.49</td>
+</tr><tr><td>Cached_PlanOnly_Param</td><td>356.4 &mu;s</td><td>7.03 &mu;s</td><td>10.08 &mu;s</td><td>355.6 &mu;s</td><td>0.30</td><td>35.1563</td><td>-</td><td>300.01 KB</td><td>3.94</td>
+</tr><tr><td>Build_Sql</td><td>509.2 &mu;s</td><td>10.18 &mu;s</td><td>23.78 &mu;s</td><td>507.4 &mu;s</td><td>0.43</td><td>54.6875</td><td>50.7813</td><td>453.92 KB</td><td>5.96</td>
+</tr><tr><td>M12_NoCache_PlanOnly_Param</td><td>535.6 &mu;s</td><td>18.47 &mu;s</td><td>53.57 &mu;s</td><td>523.3 &mu;s</td><td>0.45</td><td>54.6875</td><td>52.7344</td><td>455.48 KB</td><td>5.98</td>
+</tr><tr><td>Prepared_ToList</td><td>1,193.7 &mu;s</td><td>23.12 &mu;s</td><td>22.71 &mu;s</td><td>1,199.8 &mu;s</td><td>1.00</td><td>7.8125</td><td>-</td><td>76.13 KB</td><td>1.00</td>
+</tr><tr><td>Build_Sql_Join</td><td>1,424.5 &mu;s</td><td>28.06 &mu;s</td><td>46.11 &mu;s</td><td>1,425.8 &mu;s</td><td>1.19</td><td>140.6250</td><td>85.9375</td><td>1152.42 KB</td><td>15.14</td>
+</tr><tr><td>Cached_ToList</td><td>1,755.5 &mu;s</td><td>35.07 &mu;s</td><td>95.42 &mu;s</td><td>1,733.9 &mu;s</td><td>1.47</td><td>39.0625</td><td>-</td><td>376.14 KB</td><td>4.94</td>
+</tr><tr><td>M12_NoCache_ToList</td><td>4,205.7 &mu;s</td><td>153.31 &mu;s</td><td>449.63 &mu;s</td><td>4,031.8 &mu;s</td><td>3.52</td><td>62.5000</td><td>46.8750</td><td>548.84 KB</td><td>7.21</td>
 </tr></tbody></table>
 </body>
 </html>

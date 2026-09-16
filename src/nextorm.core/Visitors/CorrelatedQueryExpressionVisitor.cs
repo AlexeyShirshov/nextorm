@@ -9,7 +9,8 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 {
     private readonly CancellationToken _cancellationToken;
     private readonly bool _forPrepare = false;
-    private readonly IDataContext _dataProvider;
+    private readonly IQueryMaterializer _dataProvider;
+    private readonly ILogger? _logger;
     private readonly IQueryProvider _queryProvider;
     private readonly Type? _entityType;
 
@@ -24,18 +25,20 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 
     //private ParameterExpression? _p;
 
-    public CorrelatedQueryExpressionVisitor(IDataContext dataProvider, IQueryProvider queryProvider, CancellationToken cancellationToken)
+    public CorrelatedQueryExpressionVisitor(IQueryMaterializer dataProvider, IQueryProvider queryProvider, CancellationToken cancellationToken, ILogger? logger)
     {
         _dataProvider = dataProvider;
+        _logger = logger;
         _cancellationToken = cancellationToken;
         _forPrepare = true;
         _queryProvider = queryProvider;
         //_refs = new();
     }
 
-    public CorrelatedQueryExpressionVisitor(IDataContext dataProvider, IQueryProvider queryProvider, Type entityType)
+    public CorrelatedQueryExpressionVisitor(IQueryMaterializer dataProvider, IQueryProvider queryProvider, Type entityType, ILogger? logger)
     {
         _dataProvider = dataProvider;
+        _logger = logger;
         _queryProvider = queryProvider;
         _entityType = entityType;
         _forPrepare = false;
@@ -181,11 +184,11 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                 DataContextCache.ExpressionsCache[keyCmd] = d;
                 cmd = d();
 
-                if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false)
+                if (_logger?.IsEnabled(LogLevel.Trace) ?? false)
                 {
-                    _dataProvider.Logger.LogTrace("Subquery expression miss. hashcode: {hash}, value: {value}", keyCmd.GetHashCode(), d());
+                    _logger.LogTrace("Subquery expression miss. hashcode: {hash}, value: {value}", keyCmd.GetHashCode(), d());
                 }
-                else if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Subquery expression miss");
+                else if (_logger?.IsEnabled(LogLevel.Debug) ?? false) _logger.LogDebug("Subquery expression miss");
             }
             else
                 cmd = ((Func<QueryCommand>)dCmd)();
@@ -217,11 +220,11 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                     DataContextCache.ExpressionsCache[keyCmd] = d;
                     cmd = d(tv.Target2!.Value);
 
-                    if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false)
+                    if (_logger?.IsEnabled(LogLevel.Trace) ?? false)
                     {
-                        _dataProvider.Logger.LogTrace("Subquery expression miss. hashcode: {hash}, value: {value}", keyCmd.GetHashCode(), d(tv.Target2!.Value));
+                        _logger.LogTrace("Subquery expression miss. hashcode: {hash}, value: {value}", keyCmd.GetHashCode(), d(tv.Target2!.Value));
                     }
-                    else if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Subquery expression miss");
+                    else if (_logger?.IsEnabled(LogLevel.Debug) ?? false) _logger.LogDebug("Subquery expression miss");
                 }
                 else
                     cmd = ((Func<object?, QueryCommand>)dCmd)(tv.Target2!.Value);
@@ -265,11 +268,11 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                     DataContextCache.ExpressionsCache[keyCmd] = d;
                     cmd = (QueryCommand)d.DynamicInvoke(constRepl.Params.Select(it => it.Item2).ToArray())!;
 
-                    if (_dataProvider.Logger?.IsEnabled(LogLevel.Trace) ?? false)
+                    if (_logger?.IsEnabled(LogLevel.Trace) ?? false)
                     {
-                        _dataProvider.Logger.LogTrace("Subquery expression miss: {exp}", exp);
+                        _logger.LogTrace("Subquery expression miss: {exp}", exp);
                     }
-                    else if (_dataProvider.Logger?.IsEnabled(LogLevel.Debug) ?? false) _dataProvider.Logger.LogDebug("Subquery expression miss");
+                    else if (_logger?.IsEnabled(LogLevel.Debug) ?? false) _logger.LogDebug("Subquery expression miss");
                 }
                 else
                     cmd = (QueryCommand)dCmd.DynamicInvoke(constRepl.Params.Select(it => it.Item2).ToArray())!;
@@ -291,15 +294,15 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         {
             //cmd = cmd.Clone();
 
-            if (node.Method.Name.StartsWith("First"))
+            if (node.Method.Name.StartsWith("First", StringComparison.Ordinal))
             {
                 cmd.Paging.Limit = 1;
             }
-            else if (node.Method.Name.StartsWith("Single"))
+            else if (node.Method.Name.StartsWith("Single", StringComparison.Ordinal))
             {
                 cmd.Paging.Limit = 1;
             }
-            else if (node.Method.Name.StartsWith("Any"))
+            else if (node.Method.Name.StartsWith("Any", StringComparison.Ordinal))
             {
                 //cmd.Paging.Limit = 1;
                 cmd.IgnoreColumns = true;
@@ -316,7 +319,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             var p = Expression.Parameter(typeof(IQueryProvider));
             LambdaExpression lambda;
 
-            if (node.Method.Name.StartsWith("Any"))
+            if (node.Method.Name.StartsWith("Any", StringComparison.Ordinal))
             {
                 lambda = Expression.Lambda(
                     Expression.Call(Expression.Property(null, SQLPI), NORM.NORM_SQL.ExistsMI,

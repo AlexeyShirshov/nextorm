@@ -84,12 +84,38 @@ public class InMemoryTests
         for (var i = 0; i < data.Length; i++)
             data[i] = new SimpleEntity { Id = i };
 
+        var ids = new List<int>();
         await foreach (var row in _sut.SimpleEntity
             .WithData(data)
             .Select(it => new { it.Id }).Pipeline())
         {
-            _logger.LogInformation("Get {id}", row.Id);
+            ids.Add(row.Id);
         }
+
+        ids.Should().HaveCount(100);
+        ids.Should().BeEquivalentTo(Enumerable.Range(0, 100));
+    }
+    [Fact]
+    public async Task TestFetch_PipelineStopsOnCancellation()
+    {
+        SimpleEntity[] data = new SimpleEntity[100];
+        for (var i = 0; i < data.Length; i++)
+            data[i] = new SimpleEntity { Id = i };
+
+        using var cts = new CancellationTokenSource();
+        var seen = 0;
+
+        await foreach (var row in _sut.SimpleEntity
+            .WithData(data)
+            .Select(it => new { it.Id }).Pipeline(cts.Token))
+        {
+            seen++;
+            if (seen == 10) cts.Cancel();
+        }
+
+        // The enumerator observes the token before every row, so iteration must stop at the
+        // row after which cancellation was requested instead of draining all 100 rows.
+        seen.Should().Be(10);
     }
     // [Fact]
     // public void TestQueryCache()
@@ -129,6 +155,33 @@ public class InMemoryTests
 
         planEC.GetHashCode(q1).Should().NotBe(planEC.GetHashCode(q2));
         planEC.Equals(q1, q2).Should().BeFalse();
+    }
+    [Fact]
+    public void QueryPlan_HashMustStayStableAcrossGetCacheVersion()
+    {
+        // Given
+        var q = _sut.SimpleEntity.Where(it => it.Id == 1).Select(it => new { it.Id });
+        q.PrepareCommand(CancellationToken.None);
+
+        var plan = new QueryPlan(q, null);
+        var hashBefore = plan.GetHashCode();
+
+        // When: GetCacheVersion() replaces QueryCommand/_comparer with an equal clone
+        var cached = plan.GetCacheVersion();
+
+        // Then: identity (and therefore the hash) must not change, because the plan is a
+        // dictionary key and a key's hash must never change once it has been inserted.
+        cached.Should().BeSameAs(plan);
+        plan.GetHashCode().Should().Be(hashBefore);
+
+        // A freshly built, logically equal plan must still find it.
+        var lookup = new QueryPlan(q, null);
+        lookup.Equals(plan).Should().BeTrue();
+        lookup.GetHashCode().Should().Be(plan.GetHashCode());
+
+        var cache = new Dictionary<QueryPlan, object> { [cached] = 42 };
+        cache.TryGetValue(lookup, out var found).Should().BeTrue();
+        found.Should().Be(42);
     }
     [Fact]
     public void SelectPrimitive_ShouldReturnData()

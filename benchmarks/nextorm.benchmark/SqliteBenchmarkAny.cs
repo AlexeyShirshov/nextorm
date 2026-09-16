@@ -54,7 +54,7 @@ public class SqliteBenchmarkAny
 
         _cmd = _ctx.SimpleEntity.Where(e => e.Id == NORM.Param<int>(0)).AnyCommand().Prepare(true);
 
-        _db.EnsureConnectionOpen();
+        ((IConnectionManager)_db).EnsureConnectionOpen();
     }
 
     private static string GetDatabasePath()

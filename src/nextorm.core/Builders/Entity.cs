@@ -215,7 +215,9 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         cmd.IgnoreColumns = true;
         return queryCommand;
     }
-    public bool Any(params object[] @params)
+    public bool Any() => AnyCore(ReadOnlySpan<object?>.Empty);
+    public bool Any(params ReadOnlySpan<object?> @params) => AnyCore(@params);
+    private bool AnyCore(ReadOnlySpan<object?> @params)
     {
         var cmd = ToCommand();
         cmd.IgnoreColumns = true;
@@ -223,7 +225,7 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         var preparedCommand = _dataProvider.GetPreparedQueryCommand(queryCommand, false, true, CancellationToken.None);
         return _dataProvider.ExecuteScalar<bool>(preparedCommand, @params, true);
     }
-    public List<TEntity> ToList(params object[] @params)
+    public List<TEntity> ToList(params ReadOnlySpan<object?> @params)
     {
         return ToCommand().ToList(@params);
     }
@@ -233,7 +235,8 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     {
         return ToCommand().ToListAsync(cancellationToken, @params);
     }
-    public TEntity First(params object[] @params)
+    public TEntity First() => First(ReadOnlySpan<object?>.Empty);
+    public TEntity First(params ReadOnlySpan<object?> @params)
     {
         return ToCommand().First(@params);
     }
@@ -261,7 +264,8 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         return cmd;
 #pragma warning restore CS8619 // Nullability of reference types in value doesn't match target type.
     }
-    public TEntity? FirstOrDefault(params object[] @params)
+    public TEntity? FirstOrDefault() => FirstOrDefault(ReadOnlySpan<object?>.Empty);
+    public TEntity? FirstOrDefault(params ReadOnlySpan<object?> @params)
     {
         return ToCommand().FirstOrDefault(@params);
     }
@@ -271,7 +275,8 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     {
         return ToCommand().FirstOrDefaultAsync(cancellationToken, @params);
     }
-    public TEntity Single(params object[] @params)
+    public TEntity Single() => Single(ReadOnlySpan<object?>.Empty);
+    public TEntity Single(params ReadOnlySpan<object?> @params)
     {
         return ToCommand().Single(@params);
     }
@@ -295,7 +300,8 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         cmd.Paging.Limit = 2;
         return cmd;
     }
-    public TEntity? SingleOrDefault(params object[] @params)
+    public TEntity? SingleOrDefault() => SingleOrDefault(ReadOnlySpan<object?>.Empty);
+    public TEntity? SingleOrDefault(params ReadOnlySpan<object?> @params)
     {
         return ToCommand().SingleOrDefault(@params);
     }
@@ -371,7 +377,9 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     public Entity<TEntity> OrderByDescending(int columnIdx) => OrderBy(columnIdx, OrderDirection.Desc);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IPreparedQueryCommand<TEntity> Prepare(bool nonStreamUsing = true, CancellationToken cancellationToken = default) => ToCommand().Prepare(nonStreamUsing, cancellationToken);
-    public int Count(params object[] @params)
+    public int Count() => CountCore(ReadOnlySpan<object?>.Empty);
+    public int Count(params ReadOnlySpan<object?> @params) => CountCore(@params);
+    private int CountCore(ReadOnlySpan<object?> @params)
     {
         var cmd = Select(e => NORM.SQL.count());
         cmd.SingleRow = true;
@@ -385,7 +393,9 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         cmd.SingleRow = true;
         return cmd.ExecuteScalarAsync(cancellationToken, @params);
     }
-    public TResult? Min<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params)
+    public TResult? Min<TResult>(Expression<Func<TEntity, TResult>> exp) => MinCore(exp, ReadOnlySpan<object?>.Empty);
+    public TResult? Min<TResult>(Expression<Func<TEntity, TResult>> exp, params ReadOnlySpan<object?> @params) => MinCore(exp, @params);
+    private TResult? MinCore<TResult>(Expression<Func<TEntity, TResult>> exp, ReadOnlySpan<object?> @params)
     {
         var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.MinMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
         cmd.SingleRow = true;
@@ -399,7 +409,9 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         cmd.SingleRow = true;
         return cmd.ExecuteScalarAsync(cancellationToken, @params);
     }
-    public TResult? Max<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params)
+    public TResult? Max<TResult>(Expression<Func<TEntity, TResult>> exp) => MaxCore(exp, ReadOnlySpan<object?>.Empty);
+    public TResult? Max<TResult>(Expression<Func<TEntity, TResult>> exp, params ReadOnlySpan<object?> @params) => MaxCore(exp, @params);
+    private TResult? MaxCore<TResult>(Expression<Func<TEntity, TResult>> exp, ReadOnlySpan<object?> @params)
     {
         var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.MaxMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
         cmd.SingleRow = true;
@@ -413,7 +425,9 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         cmd.SingleRow = true;
         return cmd.ExecuteScalarAsync(cancellationToken, @params);
     }
-    public TResult? Avg<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params)
+    public TResult? Avg<TResult>(Expression<Func<TEntity, TResult>> exp) => AvgCore(exp, ReadOnlySpan<object?>.Empty);
+    public TResult? Avg<TResult>(Expression<Func<TEntity, TResult>> exp, params ReadOnlySpan<object?> @params) => AvgCore(exp, @params);
+    private TResult? AvgCore<TResult>(Expression<Func<TEntity, TResult>> exp, ReadOnlySpan<object?> @params)
     {
         var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.AvgMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
         cmd.SingleRow = true;
@@ -427,7 +441,9 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         cmd.SingleRow = true;
         return cmd.ExecuteScalarAsync(cancellationToken, @params);
     }
-    public TResult? Sum<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params)
+    public TResult? Sum<TResult>(Expression<Func<TEntity, TResult>> exp) => SumCore(exp, ReadOnlySpan<object?>.Empty);
+    public TResult? Sum<TResult>(Expression<Func<TEntity, TResult>> exp, params ReadOnlySpan<object?> @params) => SumCore(exp, @params);
+    private TResult? SumCore<TResult>(Expression<Func<TEntity, TResult>> exp, ReadOnlySpan<object?> @params)
     {
         var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.SumMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
         cmd.SingleRow = true;
@@ -441,7 +457,9 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         cmd.SingleRow = true;
         return cmd.ExecuteScalarAsync(cancellationToken, @params);
     }
-    public TResult? Stdev<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params)
+    public TResult? Stdev<TResult>(Expression<Func<TEntity, TResult>> exp) => StdevCore(exp, ReadOnlySpan<object?>.Empty);
+    public TResult? Stdev<TResult>(Expression<Func<TEntity, TResult>> exp, params ReadOnlySpan<object?> @params) => StdevCore(exp, @params);
+    private TResult? StdevCore<TResult>(Expression<Func<TEntity, TResult>> exp, ReadOnlySpan<object?> @params)
     {
         var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.StdevMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
         cmd.SingleRow = true;
@@ -455,7 +473,9 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         cmd.SingleRow = true;
         return cmd.ExecuteScalarAsync(cancellationToken, @params);
     }
-    public TResult? Stdevp<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params)
+    public TResult? Stdevp<TResult>(Expression<Func<TEntity, TResult>> exp) => StdevpCore(exp, ReadOnlySpan<object?>.Empty);
+    public TResult? Stdevp<TResult>(Expression<Func<TEntity, TResult>> exp, params ReadOnlySpan<object?> @params) => StdevpCore(exp, @params);
+    private TResult? StdevpCore<TResult>(Expression<Func<TEntity, TResult>> exp, ReadOnlySpan<object?> @params)
     {
         var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.StdevpMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
         cmd.SingleRow = true;
@@ -469,7 +489,9 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         cmd.SingleRow = true;
         return cmd.ExecuteScalarAsync(cancellationToken, @params);
     }
-    public TResult? Var<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params)
+    public TResult? Var<TResult>(Expression<Func<TEntity, TResult>> exp) => VarCore(exp, ReadOnlySpan<object?>.Empty);
+    public TResult? Var<TResult>(Expression<Func<TEntity, TResult>> exp, params ReadOnlySpan<object?> @params) => VarCore(exp, @params);
+    private TResult? VarCore<TResult>(Expression<Func<TEntity, TResult>> exp, ReadOnlySpan<object?> @params)
     {
         var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.VarMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
         cmd.SingleRow = true;
@@ -483,7 +505,9 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         cmd.SingleRow = true;
         return cmd.ExecuteScalarAsync(cancellationToken, @params);
     }
-    public TResult? Varp<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params)
+    public TResult? Varp<TResult>(Expression<Func<TEntity, TResult>> exp) => VarpCore(exp, ReadOnlySpan<object?>.Empty);
+    public TResult? Varp<TResult>(Expression<Func<TEntity, TResult>> exp, params ReadOnlySpan<object?> @params) => VarpCore(exp, @params);
+    private TResult? VarpCore<TResult>(Expression<Func<TEntity, TResult>> exp, ReadOnlySpan<object?> @params)
     {
         var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.VarpMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
         cmd.SingleRow = true;

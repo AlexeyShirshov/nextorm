@@ -28,4 +28,29 @@ public class ExpressionPlanEqualityComparerTests
 
         h2.Should().Be(_sut2.GetHashCode(exp2));
     }
+    [Fact]
+    public void GetHashCode_ShouldBeThreadSafe()
+    {
+        var sut = new ExpressionPlanEqualityComparer(new QueryProvider());
+        var param = Expression.Parameter(typeof(int), "i");
+        var expressions = Enumerable.Range(0, 8)
+            .Select(i => (Expression)Expression.Lambda<Func<int, int>>(
+                Expression.Add(param, Expression.Constant(i)), param))
+            .ToArray();
+
+        var expected = expressions.Select(sut.GetHashCode).ToArray();
+        var mismatches = 0;
+
+        Parallel.For(0, 50_000, i =>
+        {
+            var idx = i % expressions.Length;
+            if (sut.GetHashCode(expressions[idx]) != expected[idx])
+                Interlocked.Increment(ref mismatches);
+        });
+
+        // With a single visitor accumulating one HashCode, concurrent calls interleaved their
+        // writes and returned hashes that didn't match the single-threaded result. One visitor
+        // per (thread, comparer) makes the result deterministic.
+        mismatches.Should().Be(0);
+    }
 }

@@ -7,16 +7,16 @@ public static class TypeExtensions
 {
     public static bool IsAnonymous(this Type type) => type.IsSealed
         && type.IsGenericType
-        && type.Attributes.HasFlag(TypeAttributes.NotPublic)
+        && (type.Attributes & TypeAttributes.NotPublic) != 0
         && Attribute.IsDefined(type, typeof(CompilerGeneratedAttribute), false)
-        && type.Name.StartsWith("<>f__AnonymousType");
+        && type.Name.StartsWith("<>f__AnonymousType", StringComparison.Ordinal);
     public static bool IsClosure(this Type type) => type.IsSealed
-        && type.Attributes.HasFlag(TypeAttributes.NotPublic)
+        && (type.Attributes & TypeAttributes.NotPublic) != 0
         && Attribute.IsDefined(type, typeof(CompilerGeneratedAttribute), false)
-        && type.Name.StartsWith("<>c__DisplayClass");
+        && type.Name.StartsWith("<>c__DisplayClass", StringComparison.Ordinal);
     public static bool IsTuple(this Type type) => type.IsGenericType
-        && type.Attributes.HasFlag(TypeAttributes.NotPublic)
-        && type.Name.StartsWith("Tuple`");
+        && (type.Attributes & TypeAttributes.NotPublic) != 0
+        && type.Name.StartsWith("Tuple`", StringComparison.Ordinal);
 
     public static bool TryGetProjectionDimension(this Type type, out int dim)
     {

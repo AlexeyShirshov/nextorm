@@ -11,7 +11,17 @@ namespace nextorm.core;
 public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
 {
     private readonly static ConcurrentDictionary<QueryCommandKey, Func<object?, QueryCommand>> _cmdCache = new();
-    private readonly Visitor _visitor;
+
+    // The visitor accumulates the HashCode being built, so one instance cannot serve two threads
+    // at once: comparers are cached on QueryCommand instances (including the shared AnyCommand),
+    // and two threads hashing different expressions would interleave writes into the same HashCode
+    // and return a hash that does not match Equals. One visitor per (thread, comparer) keeps the
+    // zero-allocation design while making GetHashCode thread-safe.
+    [ThreadStatic] private static Visitor? _tlsVisitor;
+    [ThreadStatic] private static ExpressionPlanEqualityComparer? _tlsVisitorOwner;
+
+    private readonly ILogger? _logger;
+    private readonly IQueryProvider _queryProvider;
 
     public ExpressionPlanEqualityComparer(IQueryProvider queryProvider)
         : this(queryProvider, null)
@@ -19,7 +29,8 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
     }
     public ExpressionPlanEqualityComparer(IQueryProvider queryProvider, ILogger? logger)
     {
-        _visitor = new Visitor(logger, queryProvider);
+        _queryProvider = queryProvider;
+        _logger = logger;
     }
     public int GetHashCode(Expression obj)
     {
@@ -28,12 +39,20 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
             return 0;
         }
 
+        var visitor = _tlsVisitor;
+        if (visitor is null || !ReferenceEquals(_tlsVisitorOwner, this))
+        {
+            visitor = new Visitor(_logger, _queryProvider);
+            _tlsVisitor = visitor;
+            _tlsVisitorOwner = this;
+        }
+
         unchecked
         {
-            _visitor._hash = new();
-            _visitor.Visit(obj);
+            visitor._hash = new();
+            visitor.Visit(obj);
 
-            return _visitor._hash.ToHashCode();
+            return visitor._hash.ToHashCode();
         }
     }
 
@@ -201,7 +220,15 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
 
                 if (!_parameterScope.TryAdd(p1, p2))
                 {
-                    throw new InvalidOperationException(p1.Name);
+                    // The same ParameterExpression instance is already in scope, i.e. a nested
+                    // lambda reused an outer parameter, so the two trees cannot line up. Report
+                    // "not equal" (which costs a cache miss) instead of throwing.
+                    for (var j = 0; j < i; j++)
+                    {
+                        _parameterScope.Remove(a.Parameters[j]);
+                    }
+
+                    return false;
                 }
             }
 
@@ -491,31 +518,31 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
     {
         private readonly Type _type;
         private readonly string _name;
-        private int? _hash;
+        // _type/_name are readonly, so the hash is stable; compute it once up front
+        // instead of caching it in a mutable field (S2328 false positive).
+        private readonly int _hash;
 
         public QueryCommandKey(Type type, string name)
         {
             _type = type;
             _name = name;
+            _hash = ComputeHash(_type, _name);
         }
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("Minor Bug", "S2328:\"GetHashCode\" should not reference mutable fields", Justification = "<Pending>")]
-        public override int GetHashCode()
-        {
-            if (_hash.HasValue)
-                return _hash.Value;
 
+        private static int ComputeHash(Type type, string name)
+        {
             unchecked
             {
                 HashCode hash = new();
 
-                hash.Add(_type);
-                hash.Add(_name);
+                hash.Add(type);
+                hash.Add(name);
 
-                _hash = hash.ToHashCode();
-
-                return _hash.Value;
+                return hash.ToHashCode();
             }
         }
+
+        public override int GetHashCode() => _hash;
         public override bool Equals(object? obj)
         {
             return Equals(obj as QueryCommandKey);

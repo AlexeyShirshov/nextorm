@@ -48,7 +48,7 @@ public class SqliteBenchmarkSimulateWork
         }
         _db = builder.CreateDbContext();
         _ctx = new TestDataRepository(_db);
-        _ctx.DbContext.EnsureConnectionOpen();
+        ((IConnectionManager)_ctx.DbContext).EnsureConnectionOpen();
 
         _cmd = _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }).Prepare(false);
 

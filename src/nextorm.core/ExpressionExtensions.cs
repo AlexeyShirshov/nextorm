@@ -132,7 +132,7 @@ public class ReplaceConstantsExpressionVisitor : ExpressionVisitor
     protected override Expression VisitMember(MemberExpression node)
     {
         if (node.NodeType == ExpressionType.MemberAccess && node.Expression is ParameterExpression param
-            && _outerParams?.Count() > 0 && _outerParams.Contains(param))
+            && _outerParams is not null && _outerParams.Contains(param))
         {
             var idx = _queryProvider!.AddOuterReference(node);
             return Expression.Property(Expression.New(GetOuterRefMarkerCI(node.Type), Expression.Constant(idx)), "Ref");

@@ -3,37 +3,48 @@ using System.Diagnostics;
 namespace nextorm.core;
 
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Minor Code Smell", "S3897:Classes that provide \"Equals(<T>)\" should implement \"IEquatable<T>\"", Justification = "<Pending>")]
-public sealed class QueryPlan(QueryCommand cmd, string? sql)
+public sealed class QueryPlan
 {
-    public QueryCommand QueryCommand = cmd;
-    private readonly string? _sql = sql;
-    private QueryPlanEqualityComparer _comparer = cmd.GetQueryPlanEqualityComparer();
-    private int? _hashPlan;
+    public QueryCommand QueryCommand;
+    private readonly string? _sql;
+    private QueryPlanEqualityComparer _comparer;
+    // QueryPlan is used as a dictionary key (DbContext.QueryPlanCache, InMemoryDataContext._cmdIdx).
+    // The hash is captured from the state at construction and then frozen: GetCacheVersion() swaps
+    // QueryCommand/_comparer for an equal clone (see QueryCommand.CloneForCache), so plan identity —
+    // and therefore the hash — must not change. Keeping it in a readonly field makes GetHashCode
+    // stable even after GetCacheVersion() mutates the plan, which a dictionary key requires.
+    private readonly int _hashPlan;
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Minor Bug", "S2328:\"GetHashCode\" should not reference mutable fields", Justification = "<Pending>")]
-    public override int GetHashCode()
+    public QueryPlan(QueryCommand cmd, string? sql)
     {
-        if (!_hashPlan.HasValue)
-        {
-            if (_sql != null)
-            {
-                unchecked
-                {
-                    var hash = new HashCode();
-                    hash.Add(QueryCommand, _comparer);
-                    hash.Add(_sql);
-                    _hashPlan = hash.ToHashCode();
-                }
-            }
-            else
-                _hashPlan = _comparer.GetHashCode(QueryCommand);
-        }
-        return _hashPlan.Value;
+        QueryCommand = cmd;
+        _sql = sql;
+        _comparer = cmd.GetQueryPlanEqualityComparer();
+        _hashPlan = ComputeHash(cmd, sql, _comparer);
     }
+
+    private static int ComputeHash(QueryCommand cmd, string? sql, QueryPlanEqualityComparer comparer)
+    {
+        if (sql is not null)
+        {
+            unchecked
+            {
+                var hash = new HashCode();
+                hash.Add(cmd, comparer);
+                hash.Add(sql);
+                return hash.ToHashCode();
+            }
+        }
+        return comparer.GetHashCode(cmd);
+    }
+
+    public override int GetHashCode() => _hashPlan;
+
     public override bool Equals(object? obj)
     {
         return Equals(obj as QueryPlan);
     }
+
     public bool Equals(QueryPlan? obj)
     {
         if (obj is null) return false;
@@ -45,20 +56,7 @@ public sealed class QueryPlan(QueryCommand cmd, string? sql)
     {
         var newCmd = QueryCommand.CloneForCache();
         Debug.Assert(_comparer == newCmd.GetQueryPlanEqualityComparer(), "QueryPlanEqualityComparer must be equals, if not see QueryCommand.CopyTo function");
-        Debug.Assert(GetHashCode() == new HashCode().Map(hash =>
-        {
-            if (_sql != null)
-            {
-                unchecked
-                {
-                    hash.Add(newCmd, _comparer);
-                    hash.Add(_sql);
-                    return hash.ToHashCode();
-                }
-            }
-            else
-                return _comparer.GetHashCode(QueryCommand);
-        }), "Hash must be equals, if not see QueryCommand.CopyTo function");
+        Debug.Assert(_hashPlan == ComputeHash(newCmd, _sql, _comparer), "Hash must be equals, if not see QueryCommand.CopyTo function");
         Debug.Assert(_comparer.Equals(newCmd, QueryCommand), "QueryCommands must be equals, if not see QueryCommand.CopyTo function");
         QueryCommand = newCmd;
         _comparer = newCmd.GetQueryPlanEqualityComparer();
