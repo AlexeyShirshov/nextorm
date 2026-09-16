@@ -1,5 +1,6 @@
 ﻿using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Jobs;
+using Microsoft.EntityFrameworkCore;
 using nextorm.core;
 
 namespace nextorm.benchmark;
@@ -13,6 +14,11 @@ public class InMemoryBenchmarkWhere
     private readonly IPreparedQueryCommand<Tuple<int>> _cmd;
     private readonly IEnumerable<SimpleEntity> _data;
     private readonly IDataContext _provider;
+    private EFInMemoryDataContext? _efCtx;
+    private Func<EFInMemoryDataContext, int, IEnumerable<int>>? _efCompiled;
+
+    // Consumed by every benchmark to keep the JIT from eliminating the (otherwise unused) work.
+    private long _sink;
 
     public InMemoryBenchmarkWhere()
     {
@@ -27,54 +33,47 @@ public class InMemoryBenchmarkWhere
 
         _cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new Tuple<int>(entity.Id)).Prepare(false);
     }
+
+    private EFInMemoryDataContext EfContext => _efCtx ??= EfInMemory.Create(10_000);
+
     [Benchmark(Baseline = true)]
     public void NextormPreparedParam()
     {
+        var acc = 0L;
         for (var i = 0; i < Iterations; i++)
         {
             foreach (var row in _provider.GetEnumerable(_cmd, i))
             {
+                acc += row.Item1;
             }
         }
-    }
-    // [Benchmark()]
-    // public async Task NextormToListCached()
-    // {
-    //     foreach (var row in await _cmd.ToListAsync())
-    //     {
-    //     }
-    // }
-    [Benchmark()]
-    public void NextormCachedParam()
-    {
-        var cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new { entity.Id });
-        for (var i = 0; i < Iterations; i++)
-        {
-            foreach (var row in cmd.ToEnumerable(i))
-            {
-            }
-        }
-    }
-    [Benchmark()]
-    public void NextormCached()
-    {
-        for (var i = 0; i < Iterations; i++)
-        {
-            var p = i;
-            var cmd = _ctx.SimpleEntity.Where(it => it.Id == p).Select(entity => new { entity.Id });
-            foreach (var row in cmd.ToEnumerable())
-            {
-            }
-        }
+        _sink = acc;
     }
     [Benchmark]
     public void Linq()
     {
+        var acc = 0L;
         for (var i = 0; i < Iterations; i++)
         {
             foreach (var row in _data.Where(it => it.Id == i).Select(entity => new { entity.Id }))
             {
+                acc += row.Id;
             }
         }
+        _sink = acc;
+    }
+    [Benchmark]
+    public void EFCoreInMemory_Compiled()
+    {
+        _efCompiled ??= EF.CompileQuery((EFInMemoryDataContext ctx, int id) => ctx.SimpleEntities.Where(it => it.Id == id).Select(it => it.Id));
+        var acc = 0L;
+        for (var i = 0; i < Iterations; i++)
+        {
+            foreach (var row in _efCompiled(EfContext, i))
+            {
+                acc += row;
+            }
+        }
+        _sink = acc;
     }
 }

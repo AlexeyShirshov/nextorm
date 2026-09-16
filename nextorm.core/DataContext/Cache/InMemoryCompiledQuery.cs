@@ -8,26 +8,22 @@ public class InMemoryCompiledQuery<TResult, TEntity> : PreparedQueryCommand<TRes
 #else
     public readonly Func<TEntity, bool>? Condition;
 #endif
-    public InMemoryCompiledQuery(Func<Func<TEntity, TResult>> func, Func<TEntity, object[]?, bool>? condition)
+
+    /// <summary>
+    /// Builds a strongly typed predicate from the current parameter values (resolved once per query).
+    /// Avoids indexing/boxing <c>object[]</c> on every enumerated row.
+    /// </summary>
+    public readonly Func<object[]?, Func<TEntity, bool>>? ConditionFactory;
+
+    /// <summary>Strongly typed predicate for parameterless conditions.</summary>
+    public readonly Func<TEntity, bool>? ConditionDirect;
+
+    public InMemoryCompiledQuery(Func<Func<TEntity, TResult>> func, Func<TEntity, object[]?, bool>? condition,
+        Func<object[]?, Func<TEntity, bool>>? conditionFactory = null, Func<TEntity, bool>? conditionDirect = null)
         : base(func, false)
     {
         Condition = condition;
-        // #if PARAM_CONDITION
-        //         if (condition is not null)
-        //         {
-        //             var p = Expression.Parameter(typeof(object[]));
-        //             var replaceParam = new ParamExpressionVisitor2(p);
-        //             var lambda = (LambdaExpression)replaceParam.Visit(condition)!;
-        //             // if (replaceParam.Converted)
-        //             // {
-        //             var @params = new List<ParameterExpression>(lambda.Parameters) { p };
-        //             Condition = Expression.Lambda<Func<TEntity, object[]?, bool>>(lambda.Body, @params).Compile();
-        //             // }
-        //             // else
-        //             //     Condition = condition?.Compile();
-        //         }
-        // #else
-        //         Condition = condition?.Compile();
-        // #endif
+        ConditionFactory = conditionFactory;
+        ConditionDirect = conditionDirect;
     }
 }

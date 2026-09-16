@@ -8,40 +8,58 @@ AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 16 logical and 8 physica
 
 
 ```
-| Method           | Iterations | Mean         | Error      | StdDev     |
-|----------------- |----------- |-------------:|-----------:|-----------:|
-| NextormPrepared  | 1          |     8.953 μs |  0.0342 μs |  0.0303 μs |
-| Linq2Db_Compiled | 1          |    14.765 μs |  0.0639 μs |  0.0598 μs |
-| Linq2Db          | 1          |    27.999 μs |  0.3208 μs |  0.3000 μs |
-| NextormPrepared  | 3          |    29.167 μs |  0.0670 μs |  0.0627 μs |
-| Linq2Db_Compiled | 3          |    49.046 μs |  0.3507 μs |  0.3281 μs |
-| NextormPrepared  | 5          |    50.375 μs |  0.3261 μs |  0.3051 μs |
-| Linq2Db_Compiled | 5          |    83.897 μs |  0.6792 μs |  0.6354 μs |
-| Linq2Db          | 3          |    95.992 μs |  0.4738 μs |  0.3956 μs |
-| NextormPrepared  | 10         |   100.392 μs |  0.3702 μs |  0.3463 μs |
-| NextormPrepared  | 15         |   152.222 μs |  0.6557 μs |  0.6133 μs |
-| Linq2Db          | 5          |   156.730 μs |  1.3281 μs |  1.1773 μs |
-| Linq2Db_Compiled | 10         |   171.108 μs |  1.0591 μs |  0.9907 μs |
-| NextormPrepared  | 20         |   204.293 μs |  0.6765 μs |  0.6328 μs |
-| Dapper           | 1          |   236.499 μs |  3.3815 μs |  3.1631 μs |
-| Linq2Db_Compiled | 15         |   255.918 μs |  1.8649 μs |  1.6532 μs |
-| NextormCached    | 1          |   264.941 μs |  3.2518 μs |  3.0418 μs |
-| NextormPrepared  | 30         |   305.427 μs |  2.8892 μs |  2.4127 μs |
-| NextormCached    | 3          |   318.031 μs |  3.0432 μs |  2.8466 μs |
-| Linq2Db          | 10         |   319.676 μs |  1.6710 μs |  1.3046 μs |
-| Linq2Db_Compiled | 20         |   345.987 μs |  5.3612 μs |  4.4769 μs |
-| NextormCached    | 5          |   364.041 μs |  3.5237 μs |  3.2961 μs |
-| NextormCached    | 10         |   471.220 μs |  2.5741 μs |  2.2819 μs |
-| Linq2Db          | 15         |   477.992 μs |  4.8767 μs |  4.5617 μs |
-| Linq2Db_Compiled | 30         |   514.823 μs |  2.0576 μs |  1.9247 μs |
-| NextormCached    | 15         |   593.096 μs |  5.1539 μs |  4.8210 μs |
-| Linq2Db          | 20         |   672.549 μs |  3.2149 μs |  2.6846 μs |
-| NextormCached    | 20         |   700.814 μs |  8.5527 μs |  7.5818 μs |
-| Dapper           | 3          |   711.189 μs |  5.7799 μs |  5.4065 μs |
-| Dapper           | 5          |   744.157 μs |  5.4839 μs |  4.8613 μs |
-| Dapper           | 10         |   814.778 μs |  4.1034 μs |  3.6375 μs |
-| NextormCached    | 30         |   906.086 μs | 15.6221 μs | 14.6129 μs |
-| Dapper           | 15         |   915.075 μs | 10.7658 μs | 10.0703 μs |
-| Linq2Db          | 30         |   967.865 μs | 12.8830 μs | 12.0508 μs |
-| Dapper           | 20         |   995.216 μs |  4.8313 μs |  4.5192 μs |
-| Dapper           | 30         | 1,186.104 μs |  7.6458 μs |  6.7778 μs |
+| Method           | Iterations | Mean          | Error       | StdDev        | Median        |
+|----------------- |----------- |--------------:|------------:|--------------:|--------------:|
+| Linq2Db_Compiled | 10         |            NA |          NA |            NA |            NA |
+| NextormCached    | 15         |            NA |          NA |            NA |            NA |
+| NextormPrepared  | 15         |            NA |          NA |            NA |            NA |
+| Dapper           | 15         |            NA |          NA |            NA |            NA |
+| Linq2Db          | 15         |            NA |          NA |            NA |            NA |
+| Linq2Db_Compiled | 15         |            NA |          NA |            NA |            NA |
+| NextormCached    | 20         |            NA |          NA |            NA |            NA |
+| NextormPrepared  | 20         |            NA |          NA |            NA |            NA |
+| Dapper           | 20         |            NA |          NA |            NA |            NA |
+| Linq2Db          | 20         |            NA |          NA |            NA |            NA |
+| Linq2Db_Compiled | 20         |            NA |          NA |            NA |            NA |
+| NextormCached    | 30         |            NA |          NA |            NA |            NA |
+| NextormPrepared  | 30         |            NA |          NA |            NA |            NA |
+| Dapper           | 30         |            NA |          NA |            NA |            NA |
+| Linq2Db          | 30         |            NA |          NA |            NA |            NA |
+| Linq2Db_Compiled | 30         |            NA |          NA |            NA |            NA |
+| NextormPrepared  | 1          |      9.205 μs |   0.1381 μs |     0.1224 μs |      9.257 μs |
+| Linq2Db_Compiled | 1          |     15.634 μs |   0.2701 μs |     0.2653 μs |     15.625 μs |
+| NextormPrepared  | 3          |     29.685 μs |   0.3402 μs |     0.3016 μs |     29.615 μs |
+| Linq2Db          | 1          |     32.780 μs |   0.6472 μs |     1.5000 μs |     32.947 μs |
+| NextormCached    | 1          |     37.187 μs |   0.7390 μs |     0.7258 μs |     36.899 μs |
+| Linq2Db_Compiled | 3          |     78.603 μs |   1.5536 μs |     2.7615 μs |     77.870 μs |
+| NextormCached    | 3          |     88.652 μs |   1.7372 μs |     2.0681 μs |     88.382 μs |
+| NextormCached    | 5          |    100.216 μs |   2.5010 μs |     7.2954 μs |     97.463 μs |
+| Linq2Db          | 3          |    129.892 μs |   2.5550 μs |     5.0433 μs |    128.036 μs |
+| Dapper           | 1          |    246.584 μs |   4.7508 μs |     6.1774 μs |    244.441 μs |
+| Dapper           | 3          |    712.860 μs |  13.2080 μs |    10.3119 μs |    710.599 μs |
+| NextormPrepared  | 5          |  1,799.623 μs |  35.9852 μs |    75.9051 μs |  1,768.272 μs |
+| NextormPrepared  | 10         |  2,926.125 μs |  39.9907 μs |    33.3940 μs |  2,929.928 μs |
+| Dapper           | 5          |  3,934.959 μs | 144.4604 μs |   402.6978 μs |  3,830.013 μs |
+| NextormCached    | 10         |  4,819.554 μs |  66.8981 μs |    59.3034 μs |  4,810.226 μs |
+| Linq2Db_Compiled | 5          |  4,893.581 μs |  97.2796 μs |   108.1260 μs |  4,866.251 μs |
+| Linq2Db          | 5          |  5,484.123 μs | 357.8577 μs | 1,032.5014 μs |  4,985.813 μs |
+| Linq2Db          | 10         | 47,512.537 μs | 944.0922 μs |   927.2248 μs | 47,348.178 μs |
+| Dapper           | 10         | 51,291.684 μs | 741.1337 μs |   618.8802 μs | 51,236.588 μs |
+
+Benchmarks with issues:
+  SqliteBenchmarkCache.Linq2Db_Compiled: DefaultJob [Iterations=10]
+  SqliteBenchmarkCache.NextormCached: DefaultJob [Iterations=15]
+  SqliteBenchmarkCache.NextormPrepared: DefaultJob [Iterations=15]
+  SqliteBenchmarkCache.Dapper: DefaultJob [Iterations=15]
+  SqliteBenchmarkCache.Linq2Db: DefaultJob [Iterations=15]
+  SqliteBenchmarkCache.Linq2Db_Compiled: DefaultJob [Iterations=15]
+  SqliteBenchmarkCache.NextormCached: DefaultJob [Iterations=20]
+  SqliteBenchmarkCache.NextormPrepared: DefaultJob [Iterations=20]
+  SqliteBenchmarkCache.Dapper: DefaultJob [Iterations=20]
+  SqliteBenchmarkCache.Linq2Db: DefaultJob [Iterations=20]
+  SqliteBenchmarkCache.Linq2Db_Compiled: DefaultJob [Iterations=20]
+  SqliteBenchmarkCache.NextormCached: DefaultJob [Iterations=30]
+  SqliteBenchmarkCache.NextormPrepared: DefaultJob [Iterations=30]
+  SqliteBenchmarkCache.Dapper: DefaultJob [Iterations=30]
+  SqliteBenchmarkCache.Linq2Db: DefaultJob [Iterations=30]
+  SqliteBenchmarkCache.Linq2Db_Compiled: DefaultJob [Iterations=30]

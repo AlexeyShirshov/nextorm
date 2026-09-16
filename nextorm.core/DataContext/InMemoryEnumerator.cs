@@ -1,4 +1,3 @@
-#define PARAM_CONDITION
 using System.Collections;
 using System.Runtime.CompilerServices;
 
@@ -6,18 +5,21 @@ namespace nextorm.core;
 
 public class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TResult>, IEnumerator<TResult>, IEnumeratorInit<TEntity>, IEnumerable<TResult>
 {
-    //private readonly CompiledQuery<TResult> _cmd;
     private readonly Func<TEntity, TResult>? _map;
-    private IEnumerator<TEntity>? _data;
-#if PARAM_CONDITION
-    private object[]? _params;
-    private readonly Func<TEntity, object[]?, bool>? _condition;
-#else
-    private Func<TEntity, bool>? _condition;
-#endif
+    private readonly Func<object[]?, Func<TEntity, bool>>? _conditionFactory;
+    private readonly Func<TEntity, bool>? _conditionDirect;
+    private readonly Func<TEntity, object[]?, bool>? _conditionRaw;
     private readonly CancellationToken _cancellationToken;
 
-    //private readonly bool _noMap;
+    private Func<TEntity, bool>? _condition;
+    private object[]? _conditionRawParams;
+
+    // Fast paths for the common in-memory sources; falls back to IEnumerator<TEntity> otherwise.
+    private List<TEntity>? _list;
+    private TEntity[]? _array;
+    private IEnumerator<TEntity>? _enumerator;
+    private int _idx;
+    private TEntity _current = default!;
 
     public InMemoryEnumerator(InMemoryCompiledQuery<TResult, TEntity> cmd, CancellationToken cancellationToken)
     {
@@ -27,34 +29,50 @@ public class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TResult>, I
             ? null
             : cmd.MapDelegate;
 
-        _condition = cmd.Condition;
+        _conditionFactory = cmd.ConditionFactory;
+        _conditionDirect = cmd.ConditionDirect;
+        _conditionRaw = cmd.Condition;
         _cancellationToken = cancellationToken;
+    }
 
-        //_noMap = ;
-    }
-#if PARAM_CONDITION
     public void Init(IEnumerable<TEntity> data, object[]? @params)
-#else
-    public void Init(IEnumerable<TEntity> data, Func<TEntity, bool>? condition)
-#endif
     {
-        _data = data.GetEnumerator();
-#if PARAM_CONDITION
-        _params = @params;
-#else
-        _condition = condition;
-#endif
+        _idx = -1;
+        switch (data)
+        {
+            case List<TEntity> list:
+                _list = list;
+                _array = null;
+                _enumerator = null;
+                break;
+            case TEntity[] array:
+                _array = array;
+                _list = null;
+                _enumerator = null;
+                break;
+            default:
+                _list = null;
+                _array = null;
+                _enumerator = data.GetEnumerator();
+                break;
+        }
+
+        if (_conditionFactory is not null && @params is not null)
+        {
+            _condition = _conditionFactory(@params);
+            _conditionRawParams = null;
+        }
+        else
+        {
+            _condition = _conditionDirect;
+            _conditionRawParams = _conditionRaw is null ? null : @params;
+        }
     }
+
     public TResult Current
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get
-        {
-            if (_map is null) return (TResult)(object)_data!.Current!;
-
-            return _map(_data!.Current!);
-            // return default;
-        }
+        get => _map is null ? (TResult)(object)_current! : _map(_current!);
     }
 
     object? IEnumerator.Current => Current;
@@ -70,40 +88,108 @@ public class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TResult>, I
         if (_cancellationToken.IsCancellationRequested)
             return ValueTask.FromResult(false);
 
-        next:
-        var r = _data!.MoveNext();
-
-        if (r && _condition is not null
-#if PARAM_CONDITION
-            && !_condition(_data.Current, _params)
-#else
-            && !_condition(_data.Current)
-#endif
-        )
-        {
-            goto next;
-        }
-
-        return ValueTask.FromResult(r);
+        // In-memory data is synchronous (async sources go through InMemoryEnumeratorAdapter).
+        return ValueTask.FromResult(MoveNext());
     }
 
     public bool MoveNext()
     {
-    next:
-        var r = _data!.MoveNext();
-
-        if (r && _condition is not null
-#if PARAM_CONDITION
-            && !_condition(_data.Current, _params)
-#else
-            && !_condition(_data.Current)
-#endif
-        )
+        if (_list is not null)
         {
-            goto next;
+            var list = _list;
+            var condition = _condition;
+            var i = _idx;
+
+            if (condition is null)
+            {
+                if (++i >= list.Count) return false;
+                _idx = i;
+                _current = list[i];
+                return true;
+            }
+
+            while (++i < list.Count)
+            {
+                var entity = list[i];
+                if (condition(entity))
+                {
+                    _idx = i;
+                    _current = entity;
+                    return true;
+                }
+            }
+
+            _idx = i;
+            return false;
         }
 
-        return r;
+        if (_array is not null)
+        {
+            var array = _array;
+            var condition = _condition;
+            var i = _idx;
+
+            if (condition is null)
+            {
+                if (++i >= array.Length) return false;
+                _idx = i;
+                _current = array[i];
+                return true;
+            }
+
+            while (++i < array.Length)
+            {
+                var entity = array[i];
+                if (condition(entity))
+                {
+                    _idx = i;
+                    _current = entity;
+                    return true;
+                }
+            }
+
+            _idx = i;
+            return false;
+        }
+
+        var enumerator = _enumerator!;
+
+        if (_condition is null)
+        {
+            if (_conditionRaw is null)
+            {
+                if (!enumerator.MoveNext()) return false;
+                _current = enumerator.Current;
+                return true;
+            }
+
+            var raw = _conditionRaw;
+            var rawParams = _conditionRawParams;
+            while (enumerator.MoveNext())
+            {
+                var entity = enumerator.Current;
+                if (raw(entity, rawParams))
+                {
+                    _current = entity;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        var typedCondition = _condition;
+        while (enumerator.MoveNext())
+        {
+            var entity = enumerator.Current;
+            if (typedCondition(entity))
+            {
+                _current = entity;
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public void Reset()
@@ -122,9 +208,5 @@ public class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TResult>, I
 
 internal interface IEnumeratorInit<in TEntity>
 {
-#if PARAM_CONDITION
     void Init(IEnumerable<TEntity> data, object[]? @params);
-#else
-    void Init(IEnumerable<TEntity> data, Func<TEntity, bool>? condition);
-#endif
 }

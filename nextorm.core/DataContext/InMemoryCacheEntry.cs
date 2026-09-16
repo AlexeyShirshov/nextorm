@@ -15,5 +15,10 @@ public sealed class InMemoryCacheEntry<TResult> : IPreparedQueryCommand<TResult>
     public bool IsScalar => throw new NotImplementedException();
     public object? Data;
     public IAsyncEnumerator<TResult>? Enumerator;
+    /// <summary>
+    /// Cached per-call resolver: re-initialises the (already compiled) enumerator with new parameter
+    /// values, skipping the per-call data resolution / joins / sorting checks. Built on first use.
+    /// </summary>
+    public Func<object[]?, IAsyncEnumerator<TResult>>? Resolver;
     public int LastRowCount;
 }

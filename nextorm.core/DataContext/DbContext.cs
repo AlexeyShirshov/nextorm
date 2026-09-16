@@ -301,7 +301,7 @@ public class DbContext : IDataContext
 
             Func<IDataRecord, TResult>? map = queryCommand.SingleRow && queryCommand.OneColumn
                 ? null
-                : GetMap(queryCommand)();
+                : GetMapCached(queryCommand, sql);
 
             var noParams = !(@params?.Count > 0);
             var needsParamRefresh = !noParams && @params!.Any(it => !IsRuntimeParam(it.Name));
@@ -839,6 +839,44 @@ public class DbContext : IDataContext
         }
         throw new NotSupportedException(preparedQueryCommand.GetType().Name);
     }
+    /// <summary>
+    /// Builds a cheap cache key from the generated SQL plus a column signature. SQL is already
+    /// available at the call site, so this is far cheaper than hashing the expression tree.
+    /// </summary>
+    private static MapperCacheKey BuildMapperKey<TResult>(QueryCommand<TResult> queryCommand, string? sql)
+    {
+        var signature = 7;
+        var selectList = queryCommand.SelectList;
+        if (selectList is not null)
+        {
+            unchecked
+            {
+                signature = signature * 31 + (queryCommand.EntityType?.GetHashCode() ?? 0);
+                for (var i = 0; i < selectList.Length; i++)
+                {
+                    var column = selectList[i];
+                    signature = signature * 31 + column.Index;
+                    signature = signature * 31 + (column.PropertyType?.GetHashCode() ?? 0);
+                    signature = signature * 31 + (column.Nullable ? 1 : 0);
+                    signature = signature * 31 + (column.PropertyName?.GetHashCode() ?? 0);
+                }
+            }
+        }
+
+        return new MapperCacheKey(typeof(TResult), sql ?? string.Empty, signature, queryCommand.OneColumn);
+    }
+
+    private Func<IDataRecord, TResult> GetMapCached<TResult>(QueryCommand<TResult> queryCommand, string? sql)
+    {
+        var key = BuildMapperKey(queryCommand, sql);
+        if (MapperCache.TryGet(key, out var cached))
+            return (Func<IDataRecord, TResult>)cached;
+
+        var map = GetMap(queryCommand)();
+        MapperCache.Add(key, map);
+        return map;
+    }
+
     public Func<Func<IDataRecord, TResult>> GetMap<TResult>(QueryCommand<TResult> queryCommand)
     {
 #if DEBUG
