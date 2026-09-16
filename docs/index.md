@@ -11,7 +11,7 @@ Nextorm uses protocol-level libraries (for example, SqlClient for Microsoft SQL 
 
 ## Status
 
-The current status (1.0.1-alpha) is a prof of concept.
+The current status (1.0.2-alpha) is a prof of concept.
 
 ## Roadmap
 
@@ -53,6 +53,14 @@ To add specific database provider use the following:
 In-memory provider is built-in in core library.
 
 ## Releases
+
+### 1.0.2-alpha
+
+- [Aggregates (count, min, max, avg, sum, stdev, var)](https://github.com/AlexeyShirshov/nextorm/issues/12)
+- [Grouping (GROUP BY / HAVING)](https://github.com/AlexeyShirshov/nextorm/issues/13)
+- [Union](https://github.com/AlexeyShirshov/nextorm/issues/18)
+- [Correlated subqueries](https://github.com/AlexeyShirshov/nextorm/issues/35)
+- [Custom ExpressionVisitor](https://github.com/AlexeyShirshov/nextorm/issues/45)
 
 ### 1.0.1-alpha
 
