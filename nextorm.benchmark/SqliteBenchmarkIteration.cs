@@ -22,6 +22,7 @@ public class SqliteBenchmarkIteration
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
     private readonly Func<EFDataContext, IAsyncEnumerable<SimpleEntity>> _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.SimpleEntities);
+    private readonly Linq2DbDataRepository _linq2Db;
     private readonly ILoggerFactory? _logFactory;
     public SqliteBenchmarkIteration() : this(false) { }
     public SqliteBenchmarkIteration(bool withLogging = false)
@@ -57,6 +58,8 @@ public class SqliteBenchmarkIteration
 
         _conn = new SqliteConnection(((SqliteDbContext)_ctx.DbContext).ConnectionString);
         _conn.Open();
+
+        _linq2Db = new Linq2DbDataRepository();
     }
     [Benchmark()]
     public async Task Nextorm_Prepared_AsyncStream()
@@ -145,6 +148,20 @@ public class SqliteBenchmarkIteration
     public async Task DapperAsync()
     {
         foreach (var row in await _conn.QueryAsync<SimpleEntity>("select id from simple_entity"))
+        {
+        }
+    }
+    [Benchmark]
+    public async Task Linq2Db_ToListAsync()
+    {
+        foreach (var row in await _linq2Db.ToListSimpleAsync())
+        {
+        }
+    }
+    [Benchmark]
+    public async Task Linq2Db_AsyncStream()
+    {
+        await foreach (var row in _linq2Db.StreamSimpleAsync())
         {
         }
     }

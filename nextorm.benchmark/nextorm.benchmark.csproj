@@ -10,6 +10,8 @@
   <ItemGroup>
     <PackageReference Include="BenchmarkDotNet" />
     <PackageReference Include="Dapper" />
+    <PackageReference Include="linq2db" />
+    <PackageReference Include="linq2db.SQLite" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
     <PackageReference Include="Microsoft.Extensions.Logging.Console" />
     <PackageReference Include="System.Linq.Async" />

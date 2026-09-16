@@ -25,6 +25,7 @@ public class SqliteBenchmarkWhere
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
     private readonly Func<EFDataContext, int, IAsyncEnumerable<SimpleEntity>> _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx, int i) => ctx.SimpleEntities.Where(it => it.Id == i));
+    private readonly Linq2DbDataRepository _linq2Db;
     private readonly ILoggerFactory? _logFactory;
     public SqliteBenchmarkWhere() : this(false) { }
     public SqliteBenchmarkWhere(bool withLogging = false)
@@ -59,6 +60,8 @@ public class SqliteBenchmarkWhere
 
         _conn = new SqliteConnection(((SqliteDbContext)_ctx.DbContext).ConnectionString);
         _conn.Open();
+
+        _linq2Db = new Linq2DbDataRepository();
     }
     [Benchmark()]
     //[BenchmarkCategory("Stream")]
@@ -208,6 +211,22 @@ public class SqliteBenchmarkWhere
     {
         for (var i = 0; i < Iterations; i++)
             await foreach (var row in _conn.QueryUnbufferedAsync<SimpleEntity>("select id from simple_entity where id=@id", new { id = i }))
+            {
+            }
+    }
+    [Benchmark]
+    public async Task Linq2Db_ToListAsync()
+    {
+        for (var i = 0; i < Iterations; i++)
+            foreach (var row in await _linq2Db.WhereIdsToListAsync(i))
+            {
+            }
+    }
+    [Benchmark]
+    public async Task Linq2Db_AsyncStream()
+    {
+        for (var i = 0; i < Iterations; i++)
+            await foreach (var row in _linq2Db.WhereIdsStreamAsync(i))
             {
             }
     }

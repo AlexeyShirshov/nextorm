@@ -1,7 +1,7 @@
 ﻿using BenchmarkDotNet.Attributes;
 using nextorm.sqlite;
 using Microsoft.EntityFrameworkCore;
-using System.Data.SQLite;
+using Microsoft.Data.Sqlite;
 using Dapper;
 using Microsoft.Extensions.Logging;
 using BenchmarkDotNet.Jobs;
@@ -13,10 +13,12 @@ namespace nextorm.benchmark;
 [Config(typeof(NextormConfig))]
 public class SqliteBenchmarkCache
 {
-    private readonly SQLiteConnection _conn;
+    private readonly SqliteConnection _conn;
     private readonly ILoggerFactory? _logFactory;
     private readonly TestDataRepository _repo;
     private readonly EFDataContext _efCtx;
+    private readonly Linq2DbDataRepository _linq2Db;
+    private readonly IPreparedQueryCommand<LargeEntity> _nextormPreparedCmd;
 
     [Params(1, 3, 5, 10, 15, 20, 30)]
     public int Iterations { get; set; } = 1;
@@ -24,7 +26,7 @@ public class SqliteBenchmarkCache
     public SqliteBenchmarkCache(bool withLogging = false)
     {
         var filepath = BenchDb.FilePath;
-        _conn = new SQLiteConnection($"Data Source='{filepath}'");
+        _conn = new SqliteConnection($"Data Source='{filepath}'");
         var builder = new DbContextBuilder();
         builder.UseSqlite(_conn);
         if (withLogging)
@@ -37,6 +39,12 @@ public class SqliteBenchmarkCache
         var db = builder.CreateDbContext();
         _repo = new TestDataRepository(db);
 
+        // Prepared once (real usage); the benchmark must not re-compile the plan per invocation.
+        _nextormPreparedCmd = _repo.LargeEntity
+            .Where(it => it.Id == NORM.Param<int>(0))
+            .Select(it => new LargeEntity { Id = it.Id, Str = it.Str, Dt = it.Dt })
+            .Prepare();
+
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(_conn);
         efBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
@@ -46,6 +54,8 @@ public class SqliteBenchmarkCache
             efBuilder.EnableSensitiveDataLogging(true);
         }
         _efCtx = new EFDataContext(efBuilder.Options);
+
+        _linq2Db = new Linq2DbDataRepository();
 
         _conn.Open();
     }
@@ -71,10 +81,9 @@ public class SqliteBenchmarkCache
     [Benchmark()]
     public void NextormPrepared()
     {
-        var cmd = _repo.LargeEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(it => new LargeEntity { Id = it.Id, Str = it.Str, Dt = it.Dt }).Prepare();
         for (int i = 0; i < Iterations; i++)
         {
-            cmd.ToList(_repo.DbContext);
+            _nextormPreparedCmd.ToList(_repo.DbContext, i);
         }
     }
     // [Benchmark()]
@@ -93,6 +102,22 @@ public class SqliteBenchmarkCache
         for (int i = 0; i < Iterations; i++)
         {
             _conn.Query<LargeEntity>("select id, someString as str, dt from large_table where id=@id", new { id = i });
+        }
+    }
+    [Benchmark()]
+    public void Linq2Db()
+    {
+        for (int i = 0; i < Iterations; i++)
+        {
+            _linq2Db.LargeByIdToList(i);
+        }
+    }
+    [Benchmark()]
+    public void Linq2Db_Compiled()
+    {
+        for (int i = 0; i < Iterations; i++)
+        {
+            _linq2Db.LargeByIdCompiled(i);
         }
     }
 }

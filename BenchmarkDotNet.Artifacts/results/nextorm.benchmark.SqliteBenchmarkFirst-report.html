@@ -2,7 +2,7 @@
 <html lang='en'>
 <head>
 <meta charset='utf-8' />
-<title>nextorm.benchmark.SqliteBenchmarkFirst-20260915-123452</title>
+<title>nextorm.benchmark.SqliteBenchmarkFirst-20260916-102119</title>
 
 <style type="text/css">
 	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
@@ -13,27 +13,28 @@
 </head>
 <body>
 <pre><code>
-BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.3 LTS (Jammy Jellyfish)
+BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)
 AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 16 logical and 8 physical cores
 .NET SDK 10.0.401
-  [Host] : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+  [Host]     : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+  DefaultJob : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
 </code></pre>
-<pre><code>Job=ShortRun  Toolchain=InProcessEmitToolchain  IterationCount=3  
-LaunchCount=1  WarmupCount=3  
-</code></pre>
+<pre><code></code></pre>
 
 <table>
 <thead><tr><th>Method                                 </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Gen0</th><th>Gen1</th><th>Allocated</th>
 </tr>
-</thead><tbody><tr><td>Nextorm_Prepared_Scalar_FirstOrDefault</td><td>87.70 &mu;s</td><td>6.125 &mu;s</td><td>0.336 &mu;s</td><td>0.4883</td><td>-</td><td>4.52 KB</td>
-</tr><tr><td>Nextorm_Prepared_Entity_FirstOrDefault</td><td>100.49 &mu;s</td><td>8.661 &mu;s</td><td>0.475 &mu;s</td><td>0.9766</td><td>-</td><td>8.54 KB</td>
-</tr><tr><td>Nextorm_PreparedForLoop_Entity_FirstOrDefault</td><td>135.25 &mu;s</td><td>31.454 &mu;s</td><td>1.724 &mu;s</td><td>2.9297</td><td>-</td><td>24.66 KB</td>
-</tr><tr><td>Dapper_Scalar_FirstOrDefault</td><td>139.09 &mu;s</td><td>11.030 &mu;s</td><td>0.605 &mu;s</td><td>1.9531</td><td>-</td><td>16.48 KB</td>
-</tr><tr><td>Nextorm_Cached_Scalar_FirstOrDefault</td><td>146.20 &mu;s</td><td>42.287 &mu;s</td><td>2.318 &mu;s</td><td>4.8828</td><td>-</td><td>40.79 KB</td>
-</tr><tr><td>Dapper_Entity_FirstOrDefault</td><td>156.34 &mu;s</td><td>12.211 &mu;s</td><td>0.669 &mu;s</td><td>2.1973</td><td>-</td><td>19.24 KB</td>
-</tr><tr><td>Nextorm_Cached_Entity_FirstOrDefault</td><td>165.57 &mu;s</td><td>70.287 &mu;s</td><td>3.853 &mu;s</td><td>5.1270</td><td>-</td><td>43.17 KB</td>
-</tr><tr><td>EFCore_Compiled_Scalar_FirstOrDefault</td><td>338.88 &mu;s</td><td>66.693 &mu;s</td><td>3.656 &mu;s</td><td>9.7656</td><td>4.8828</td><td>79.81 KB</td>
-</tr><tr><td>EFCore_Compiled_Entity_FirstOrDefault</td><td>380.47 &mu;s</td><td>46.084 &mu;s</td><td>2.526 &mu;s</td><td>9.7656</td><td>4.8828</td><td>83.2 KB</td>
+</thead><tbody><tr><td>Nextorm_Prepared_Scalar_FirstOrDefault</td><td>92.74 &mu;s</td><td>0.731 &mu;s</td><td>0.684 &mu;s</td><td>0.9766</td><td>-</td><td>8.56 KB</td>
+</tr><tr><td>Nextorm_Prepared_Entity_FirstOrDefault</td><td>103.15 &mu;s</td><td>0.664 &mu;s</td><td>0.621 &mu;s</td><td>1.3428</td><td>-</td><td>11.59 KB</td>
+</tr><tr><td>Nextorm_PreparedForLoop_Entity_FirstOrDefault</td><td>132.05 &mu;s</td><td>2.230 &mu;s</td><td>2.086 &mu;s</td><td>2.9297</td><td>-</td><td>27.81 KB</td>
+</tr><tr><td>Nextorm_Cached_Scalar_FirstOrDefault</td><td>138.15 &mu;s</td><td>1.067 &mu;s</td><td>0.891 &mu;s</td><td>5.3711</td><td>-</td><td>44.37 KB</td>
+</tr><tr><td>Dapper_Scalar_FirstOrDefault</td><td>145.83 &mu;s</td><td>1.057 &mu;s</td><td>0.989 &mu;s</td><td>1.9531</td><td>-</td><td>16.48 KB</td>
+</tr><tr><td>Nextorm_Cached_Entity_FirstOrDefault</td><td>155.81 &mu;s</td><td>1.716 &mu;s</td><td>1.433 &mu;s</td><td>4.8828</td><td>-</td><td>45.75 KB</td>
+</tr><tr><td>Dapper_Entity_FirstOrDefault</td><td>161.98 &mu;s</td><td>1.284 &mu;s</td><td>1.201 &mu;s</td><td>2.1973</td><td>-</td><td>19.24 KB</td>
+</tr><tr><td>EFCore_Compiled_Scalar_FirstOrDefault</td><td>348.44 &mu;s</td><td>5.069 &mu;s</td><td>4.742 &mu;s</td><td>9.7656</td><td>4.8828</td><td>80.4 KB</td>
+</tr><tr><td>EFCore_Compiled_Entity_FirstOrDefault</td><td>388.22 &mu;s</td><td>3.121 &mu;s</td><td>2.606 &mu;s</td><td>10.2539</td><td>4.8828</td><td>83.79 KB</td>
+</tr><tr><td>Linq2Db_Entity_FirstOrDefault</td><td>606.78 &mu;s</td><td>8.111 &mu;s</td><td>7.587 &mu;s</td><td>23.4375</td><td>-</td><td>220.81 KB</td>
+</tr><tr><td>Linq2Db_Scalar_FirstOrDefault</td><td>607.75 &mu;s</td><td>10.838 &mu;s</td><td>10.138 &mu;s</td><td>23.4375</td><td>-</td><td>221.01 KB</td>
 </tr></tbody></table>
 </body>
 </html>

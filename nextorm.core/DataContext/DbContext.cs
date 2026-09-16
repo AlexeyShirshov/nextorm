@@ -213,7 +213,7 @@ public class DbContext : IDataContext
             if (conn.State == ConnectionState.Closed)
             {
                 if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Opening connection");
-                await conn.OpenAsync(cancellationToken);
+                await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
             }
 
             _connOpen = true;
@@ -391,7 +391,8 @@ public class DbContext : IDataContext
                     var pp = ExtractParams(queryCommand);
                     for (int i = 0; i < pp.Count; i++)
                     {
-                        dbCommandParams[i].Value = pp[i].Value;
+                        // Normalize null to DBNull for providers that reject null parameter values.
+                        dbCommandParams[i].Value = pp[i].Value ?? DBNull.Value;
                         Debug.Assert(dbCommandParams[i].ParameterName == pp[i].Name, $"ParameterName {dbCommandParams[i].ParameterName} not equals {pp[i].Name}");
                     }
                     //}
@@ -526,19 +527,24 @@ public class DbContext : IDataContext
 
     public static Expression MapColumn(SelectExpression column, Expression param)
     {
+        // Typed getters only (no GetValue/boxing); ordinals are baked in as constants.
+        var getter = Expression.Call(param, column.GetDataRecordMethod(), Expression.Constant(column.Index));
+
         if (column.Nullable)
         {
+            // The getter returns the underlying type (long for long?, string for string).
+            // Only nullable value types need a Convert; reference types are already exact.
+            Expression value = getter.Type == column.PropertyType
+                ? getter
+                : Expression.Convert(getter, column.PropertyType);
+
             return Expression.Condition(
                 Expression.Call(param, IsDBNullMI, Expression.Constant(column.Index)),
                 Expression.Constant(null, column.PropertyType),
-                Expression.Convert(
-                    Expression.Call(param, column.GetDataRecordMethod(), Expression.Constant(column.Index)),
-                    column.PropertyType
-                )
-            );
+                value);
         }
 
-        return Expression.Call(param, column.GetDataRecordMethod(), Expression.Constant(column.Index));
+        return getter;
     }
 
     public virtual string MakeBool(bool v)
@@ -704,6 +710,39 @@ public class DbContext : IDataContext
 
     //     return (sqlCommand.ExecuteReader(compiledQuery.Behavior), compiledQuery);
     // }
+    /// <summary>
+    /// Converts a raw scalar value to <typeparamref name="TResult"/>. SQLite has no bool type
+    /// (comparisons/EXISTS come back as INTEGER/<see cref="long"/>), so typed fast paths are used
+    /// to avoid boxing and <see cref="IConvertible"/> dispatch for the common scalar types.
+    /// </summary>
+    private static TResult ConvertScalar<TResult>(object value)
+    {
+        var type = typeof(TResult);
+
+        if (type == typeof(bool))
+        {
+            var v = Convert.ToBoolean(value);
+            return Unsafe.As<bool, TResult>(ref v);
+        }
+        if (type == typeof(int))
+        {
+            var v = Convert.ToInt32(value);
+            return Unsafe.As<int, TResult>(ref v);
+        }
+        if (type == typeof(long))
+        {
+            var v = Convert.ToInt64(value);
+            return Unsafe.As<long, TResult>(ref v);
+        }
+        if (type == typeof(double))
+        {
+            var v = Convert.ToDouble(value);
+            return Unsafe.As<double, TResult>(ref v);
+        }
+
+        return (TResult)Convert.ChangeType(value, type);
+    }
+
     public TResult? ExecuteScalar<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, bool throwIfNull)
     {
         if (preparedQueryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
@@ -730,8 +769,7 @@ public class DbContext : IDataContext
                 return default;
             }
 
-            var type = typeof(TResult);
-            return (TResult)Convert.ChangeType(r, type);
+            return ConvertScalar<TResult>(r);
         }
         throw new NotSupportedException(preparedQueryCommand.GetType().Name);
     }
@@ -740,7 +778,7 @@ public class DbContext : IDataContext
         CheckDisposed();
         if (preparedQueryCommand is DbPreparedQueryCommand<TResult> compiledQuery)
         {
-            var sqlCommand = await GetDbCommand(compiledQuery, @params, cancellationToken);
+            var sqlCommand = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
             //var sqlCommand = compiledQuery.DbCommand;
 
             //if (conn.State == ConnectionState.Closed)
@@ -763,8 +801,7 @@ public class DbContext : IDataContext
                 return default;
             }
 
-            var type = typeof(TResult);
-            return (TResult)Convert.ChangeType(r, type);
+            return ConvertScalar<TResult>(r);
         }
         throw new NotSupportedException(preparedQueryCommand.GetType().Name);
     }

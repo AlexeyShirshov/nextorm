@@ -1,7 +1,7 @@
 ﻿using BenchmarkDotNet.Attributes;
 using nextorm.sqlite;
 using Microsoft.EntityFrameworkCore;
-using System.Data.SQLite;
+using Microsoft.Data.Sqlite;
 using Dapper;
 using Microsoft.Extensions.Logging;
 using BenchmarkDotNet.Jobs;
@@ -25,17 +25,18 @@ public class SqliteBenchmarkSimulateWork
     private readonly IPreparedQueryCommand<LargeEntity> _cmd;
     private readonly IPreparedQueryCommand<LargeEntity> _cmdToList;
     private readonly EFDataContext _efCtx;
-    private readonly SQLiteConnection _conn;
+    private readonly SqliteConnection _conn;
     private readonly IPreparedQueryCommand<SimpleEntity?> _cmdInner;
     private readonly Func<EFDataContext, IAsyncEnumerable<LargeEntity>> _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.LargeEntities.Where(it => it.Id < LargeListSize));
     private readonly Func<EFDataContext, long, int, Task<SimpleEntity?>> _efInnerCompiled = EF.CompileAsyncQuery((EFDataContext ctx, long id, int i) => ctx.SimpleEntities.Where(it => (it.Id - i) == id).FirstOrDefault());
+    private readonly Linq2DbDataRepository _linq2Db;
     private readonly ILoggerFactory? _logFactory;
     public SqliteBenchmarkSimulateWork() : this(false) { }
     public SqliteBenchmarkSimulateWork(bool withLogging = false)
     {
         var builder = new DbContextBuilder();
         var filepath = BenchDb.FilePath;
-        _conn = new SQLiteConnection($"Data Source='{filepath}'");
+        _conn = new SqliteConnection($"Data Source='{filepath}'");
         _conn.Open();
 
         builder.UseSqlite(_conn);
@@ -65,6 +66,8 @@ public class SqliteBenchmarkSimulateWork
         }
 
         _efCtx = new EFDataContext(efBuilder.Options);
+
+        _linq2Db = new Linq2DbDataRepository();
     }
     // [Benchmark()]
     // public async Task NextormPreparedAsync()
@@ -222,6 +225,17 @@ public class SqliteBenchmarkSimulateWork
                 var p = i;
                 await _conn.QueryFirstOrDefaultAsync<SimpleEntity>("select id from simple_entity where id=@id+@p", new { id = row.Id, p });
                 // var s = (await _conn.QueryAsync<SimpleEntity>("select id from simple_entity where id=@id+@p", new { id = row.Id, p })).FirstOrDefault();
+            }
+        }
+    }
+    [Benchmark()]
+    public async Task Linq2Db_ToListAsync()
+    {
+        foreach (var row in await _linq2Db.LargeLessThanToListAsync(LargeListSize))
+        {
+            for (var i = 0; i < SmallIterations; i++)
+            {
+                await _linq2Db.InnerFirstAsync(row.Id, i);
             }
         }
     }

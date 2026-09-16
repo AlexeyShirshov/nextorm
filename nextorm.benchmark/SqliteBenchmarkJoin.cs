@@ -23,6 +23,7 @@ public class SqliteBenchmarkJoin
     //private readonly Func<EFDataContext, int i, Task<int>> _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.SimpleEntities.Where(it => it.Id == i).Select(it => it.Id).First());
     private readonly Func<EFDataContext, int, IAsyncEnumerable<LargeEntity>> _efLargeCompiled = EF.CompileAsyncQuery((EFDataContext ctx, int i) => ctx.LargeEntities
         .Join(ctx.SimpleEntities, it => it.Id, it => it.Id, (l, s) => new LargeEntity { Id = l.Id, Dt = l.Dt, Str = l.Str }));
+    private readonly Linq2DbDataRepository _linq2Db;
     // private readonly Func<EFDataContext, int, Task<int>> _efCompiledFirstOrDefault = EF.CompileAsyncQuery((EFDataContext ctx, int i) => ctx.SimpleEntities.Where(it => it.Id == i).Select(it => it.Id).FirstOrDefault());
     // private readonly Func<EFDataContext, int, Task<int>> _efCompiledFilterParam = EF.CompileAsyncQuery((EFDataContext ctx, int id) => ctx.SimpleEntities.Where(it => it.Id > id).Select(it => it.Id).First());
     private readonly ILoggerFactory? _logFactory;
@@ -59,6 +60,8 @@ public class SqliteBenchmarkJoin
 
         _conn = new SqliteConnection(((SqliteDbContext)_ctx.DbContext).ConnectionString);
         _conn.Open();
+
+        _linq2Db = new Linq2DbDataRepository();
     }
     // [Benchmark(Baseline = true)]
     // public async Task NextormFirstCompiled()
@@ -100,5 +103,11 @@ public class SqliteBenchmarkJoin
     {
         for (int i = 0; i < 10; i++)
             await _conn.QueryAsync<LargeEntity>("select t1.id, someString as str, dt from large_table t1 join simple_entity t2 on t1.id = t2.id where t2.id = @id limit 1", new { id = i });
+    }
+    [Benchmark]
+    public async Task Linq2Db()
+    {
+        for (int i = 0; i < 10; i++)
+            await _linq2Db.JoinAsync(i);
     }
 }

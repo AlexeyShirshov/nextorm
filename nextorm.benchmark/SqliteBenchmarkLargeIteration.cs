@@ -29,6 +29,7 @@ public class SqliteBenchmarkLargeIteration
     private readonly SqliteConnection _conn;
     private readonly SqliteCommand _adoCmd;
     private readonly Func<EFDataContext, IAsyncEnumerable<LargeEntity>> _efCompiled = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.LargeEntities.Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }));
+    private readonly Linq2DbDataRepository _linq2Db;
     private readonly ILoggerFactory? _logFactory;
     public SqliteBenchmarkLargeIteration() : this(false) { }
     public SqliteBenchmarkLargeIteration(bool withLogging = false)
@@ -65,6 +66,8 @@ public class SqliteBenchmarkLargeIteration
 
         _adoCmd = _conn.CreateCommand();
         _adoCmd.CommandText = "select id, someString, dt from large_table";
+
+        _linq2Db = new Linq2DbDataRepository();
     }
     // public async Task FillLargeTable()
     // {
@@ -170,6 +173,22 @@ public class SqliteBenchmarkLargeIteration
     public async Task Dapper_AsyncStream()
     {
         await foreach (var row in _conn.QueryUnbufferedAsync<LargeEntity>("select id, someString as str, dt from large_table"))
+        {
+        }
+    }
+    [Benchmark]
+    //[BenchmarkCategory("Buffered")]
+    public async Task Linq2Db_ToListAsync()
+    {
+        foreach (var row in await _linq2Db.LargeToListAsync())
+        {
+        }
+    }
+    [Benchmark]
+    //[BenchmarkCategory("Stream")]
+    public async Task Linq2Db_AsyncStream()
+    {
+        await foreach (var row in _linq2Db.LargeStreamAsync())
         {
         }
     }

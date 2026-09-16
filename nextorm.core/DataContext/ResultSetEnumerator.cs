@@ -20,21 +20,22 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IAsyncIni
     private DbDataReader? _reader;
     private DbConnection? _conn;
     private bool _disposed;
+    private TResult _current = default!;
     public ResultSetEnumerator(DbPreparedQueryCommand<TResult> compiledQuery)
     {
         //_cmd = cmd;
         _compiledQuery = compiledQuery;
         _map = compiledQuery.MapDelegate;
     }
+    // The row is materialized in MoveNext/MoveNextAsync, so Current is a plain field read.
+    // This keeps mapping out of the async-iterator's `yield return enumerator.Current` path
+    // and out of the interface dispatch that can't be inlined.
     public TResult Current
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get
-        {
-            return _map!(_reader!);
-        }
+        get => _current;
     }
-    object? IEnumerator.Current => _map!(_reader!);
+    object? IEnumerator.Current => _current;
 
     public DbContext? DbContext
     {
@@ -83,7 +84,13 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IAsyncIni
 #if DEBUG
         if (_logger?.IsEnabled(LogLevel.Trace) ?? false) _logger.LogTrace("Move next");
 #endif
-        return await _reader!.ReadAsync(_cancellationToken);
+        if (await _reader!.ReadAsync(_cancellationToken).ConfigureAwait(false))
+        {
+            _current = _map!(_reader);
+            return true;
+        }
+
+        return false;
     }
     public bool MoveNext()
     {
@@ -91,7 +98,13 @@ public class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IAsyncIni
 #if DEBUG
         if (_logger?.IsEnabled(LogLevel.Trace) ?? false) _logger.LogTrace("Move next");
 #endif
-        return _reader!.Read();
+        if (_reader!.Read())
+        {
+            _current = _map!(_reader);
+            return true;
+        }
+
+        return false;
     }
     public void InitEnumerator(DbContext dbContext, object[]? @params, CancellationToken cancellationToken)
     {

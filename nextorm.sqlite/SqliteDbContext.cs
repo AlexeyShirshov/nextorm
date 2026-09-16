@@ -1,5 +1,5 @@
 using System.Data.Common;
-using System.Data.SQLite;
+using Microsoft.Data.Sqlite;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using nextorm.core;
@@ -33,25 +33,18 @@ public class SqliteDbContext : DbContext
         if (_connection is not null)
         {
             _connWasCreatedByMe = false;
+            if (_connection is SqliteConnection providedConnection)
+                SQLiteFunctions.Register(providedConnection);
             return _connection;
         }
 
-        var conn = new SQLiteConnection(_connectionString);
-#if DEBUG
-        conn.Disposed += ConnDisposed;
-#endif
+        var conn = new SqliteConnection(_connectionString);
+        SQLiteFunctions.Register(conn);
         return conn;
     }
-#if DEBUG
-    private void ConnDisposed(object? sender, EventArgs e)
-    {
-        if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Connection disposed");
-        ((SQLiteConnection)sender).Disposed -= ConnDisposed;
-    }
-#endif
     // public override DbCommand CreateCommand(string sql)
     // {
-    //     return new SQLiteCommand(sql);
+    //     return new SqliteCommand(sql);
     // }
     public override string ConcatStringOperator => "||";
 
@@ -69,7 +62,9 @@ public class SqliteDbContext : DbContext
     }
     public override DbParameter CreateParam(string name, object? value)
     {
-        return new SQLiteParameter(name, value);
+        // Microsoft.Data.Sqlite throws "Value must be set." when a parameter holds null,
+        // so unset/null values must be passed as DBNull.
+        return new SqliteParameter(name, value ?? DBNull.Value);
     }
     public override void MakePage(Paging paging, StringBuilder sqlBuilder)
     {

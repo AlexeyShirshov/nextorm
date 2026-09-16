@@ -23,6 +23,7 @@ public class SqliteBenchmarkAny
     private EFDataContext _efCtx;
     private SqliteConnection _conn;
     private Func<EFDataContext, int, Task<bool>> _efCompiled;
+    private Linq2DbDataRepository _linq2Db;
     // private readonly Func<EFDataContext, Task<bool>> _efCompiledFilter = EF.CompileAsyncQuery((EFDataContext ctx) => ctx.SimpleEntities.Where(it => it.Id > 5).Any());
     // private readonly Func<EFDataContext, int, Task<bool>> _efCompiledFilterParam = EF.CompileAsyncQuery((EFDataContext ctx, int id) => ctx.SimpleEntities.Where(it => it.Id > id).Any());
     //private ILoggerFactory? _logFactory;
@@ -34,6 +35,8 @@ public class SqliteBenchmarkAny
         SetupEF(withLogging);
 
         SetupDapper();
+
+        _linq2Db = new Linq2DbDataRepository();
     }
 
     private void SetupNext(bool withLogging)
@@ -140,6 +143,12 @@ public class SqliteBenchmarkAny
     {
         for (var i = 0; i < Iterations; i++)
             await _conn.ExecuteScalarAsync<bool>("select exists(select id from simple_entity where id = @id)", new { id = i });
+    }
+    [Benchmark]
+    public async Task Linq2Db()
+    {
+        for (var i = 0; i < Iterations; i++)
+            await _linq2Db.AnyAsync(i);
     }
     // [Benchmark()]
     // [BenchmarkCategory("Filter")]

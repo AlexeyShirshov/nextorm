@@ -873,53 +873,39 @@ public class QueryCommand<TResult> : QueryCommand//, IAsyncEnumerable<TResult>
     public Task<List<TResult>> ToListAsync(CancellationToken cancellationToken, params object[] @params) => _dataContext!.ToListAsync(_dataContext.GetPreparedQueryCommand(this, false, true, cancellationToken), @params, cancellationToken);
     public bool Any(params object[] @params)
     {
-        bool oldIgnoreColumns = IgnoreColumns;
-        try
+        if (this is not QueryCommand<bool> queryCommand || !queryCommand.SingleRow)
         {
-            if (this is not QueryCommand<bool> queryCommand || !queryCommand.SingleRow)
+            // Keep IgnoreColumns set: restoring it would change ColumnsPlanHash and force a full
+            // re-prepare on every call, even though the cached plan is already built.
+            if (!_isPrepared || !IgnoreColumns)
             {
-                if (!IgnoreColumns || !_isPrepared)
-                {
-                    IgnoreColumns = true;
-                    PrepareCommand(false, CancellationToken.None);
-                }
-
-                queryCommand = Entity<TResult>.GetAnyCommand(_dataContext!, this);
+                IgnoreColumns = true;
+                PrepareCommand(false, CancellationToken.None);
             }
 
-            var preparedCommand = _dataContext!.GetPreparedQueryCommand(queryCommand, false, true, CancellationToken.None);
-            return _dataContext.ExecuteScalar<bool>(preparedCommand, @params, true);
+            queryCommand = Entity<TResult>.GetAnyCommand(_dataContext!, this);
         }
-        finally
-        {
-            IgnoreColumns = oldIgnoreColumns;
-        }
+
+        var preparedCommand = _dataContext!.GetPreparedQueryCommand(queryCommand, false, true, CancellationToken.None);
+        return _dataContext.ExecuteScalar<bool>(preparedCommand, @params, true);
     }
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<bool> AnyAsync(params object[] @params) => AnyAsync(CancellationToken.None, @params);
     public async Task<bool> AnyAsync(CancellationToken cancellationToken, params object[] @params)
     {
-        bool oldIgnoreColumns = IgnoreColumns;
-        try
+        if (this is not QueryCommand<bool> queryCommand || !queryCommand.SingleRow)
         {
-            if (this is not QueryCommand<bool> queryCommand || !queryCommand.SingleRow)
+            if (!_isPrepared || !IgnoreColumns)
             {
-                if (!IgnoreColumns || !_isPrepared)
-                {
-                    IgnoreColumns = true;
-                    PrepareCommand(false, cancellationToken);
-                }
-
-                queryCommand = Entity<TResult>.GetAnyCommand(_dataContext!, this);
+                IgnoreColumns = true;
+                PrepareCommand(false, cancellationToken);
             }
 
-            var preparedCommand = _dataContext!.GetPreparedQueryCommand(queryCommand, false, true, cancellationToken);
-            return await _dataContext.ExecuteScalar<bool>(preparedCommand, @params, true, cancellationToken).ConfigureAwait(false);
+            queryCommand = Entity<TResult>.GetAnyCommand(_dataContext!, this);
         }
-        finally
-        {
-            IgnoreColumns = oldIgnoreColumns;
-        }
+
+        var preparedCommand = _dataContext!.GetPreparedQueryCommand(queryCommand, false, true, cancellationToken);
+        return await _dataContext.ExecuteScalar<bool>(preparedCommand, @params, true, cancellationToken).ConfigureAwait(false);
     }
     public TResult? ExecuteScalar(params object[] @params)
     {
@@ -934,159 +920,98 @@ public class QueryCommand<TResult> : QueryCommand//, IAsyncEnumerable<TResult>
 
     public TResult First(params object[] @params)
     {
-        int oldLim = Paging.Limit;
-        try
+        // Keep the single-row shape on the command. Restoring Paging.Limit would change the cached
+        // plan key (QueryPlanEqualityComparer includes Limit/SingleRow) and force a full re-prepare
+        // (SQL + hashes) on every call.
+        if (Paging.Limit != 1 || !_isPrepared)
         {
-            if (Paging.Limit != 1 || !_isPrepared)
-            {
-                SingleRow = true;
-                Paging.Limit = 1;
-                PrepareCommand(false, CancellationToken.None);
-            }
-            var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, CancellationToken.None);
-            return _dataContext.First<TResult>(preparedCommand, @params);
+            SingleRow = true;
+            Paging.Limit = 1;
+            PrepareCommand(false, CancellationToken.None);
         }
-        finally
-        {
-            Paging.Limit = oldLim;
-        }
+        var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, CancellationToken.None);
+        return _dataContext.First<TResult>(preparedCommand, @params);
     }
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<TResult> FirstAsync(params object[] @params) => FirstAsync(CancellationToken.None, @params);
     public Task<TResult> FirstAsync(CancellationToken cancellationToken, params object[] @params)
     {
-        int oldLim = Paging.Limit;
-        try
+        if (Paging.Limit != 1 || !_isPrepared)
         {
-            if (Paging.Limit != 1 || !_isPrepared)
-            {
-                SingleRow = true;
-                Paging.Limit = 1;
-                PrepareCommand(false, cancellationToken);
-            }
-            var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, cancellationToken);
-            return _dataContext.FirstAsync<TResult>(preparedCommand, @params, cancellationToken);
+            SingleRow = true;
+            Paging.Limit = 1;
+            PrepareCommand(false, cancellationToken);
         }
-        finally
-        {
-            Paging.Limit = oldLim;
-        }
+        var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, cancellationToken);
+        return _dataContext.FirstAsync<TResult>(preparedCommand, @params, cancellationToken);
     }
     public TResult? FirstOrDefault(params object[] @params)
     {
-        int oldLim = Paging.Limit;
-        try
+        if (Paging.Limit != 1 || !_isPrepared)
         {
-            if (Paging.Limit != 1 || !_isPrepared)
-            {
-                SingleRow = true;
-                Paging.Limit = 1;
-                PrepareCommand(false, CancellationToken.None);
-            }
-            var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, CancellationToken.None);
-            return _dataContext.FirstOrDefault<TResult>(preparedCommand, @params);
+            SingleRow = true;
+            Paging.Limit = 1;
+            PrepareCommand(false, CancellationToken.None);
         }
-        finally
-        {
-            Paging.Limit = oldLim;
-        }
+        var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, CancellationToken.None);
+        return _dataContext.FirstOrDefault<TResult>(preparedCommand, @params);
     }
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<TResult?> FirstOrDefaultAsync(params object[] @params) => FirstOrDefaultAsync(CancellationToken.None, @params);
     public Task<TResult?> FirstOrDefaultAsync(CancellationToken cancellationToken, params object[] @params)
     {
-        int oldLim = Paging.Limit;
-        try
+        if (Paging.Limit != 1 || !_isPrepared)
         {
-            if (Paging.Limit != 1 || !_isPrepared)
-            {
-                SingleRow = true;
-                Paging.Limit = 1;
-                PrepareCommand(false, cancellationToken);
-            }
-            var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, cancellationToken);
-            return _dataContext.FirstOrDefaultAsync<TResult>(preparedCommand, @params, cancellationToken);
+            SingleRow = true;
+            Paging.Limit = 1;
+            PrepareCommand(false, cancellationToken);
         }
-        finally
-        {
-            Paging.Limit = oldLim;
-        }
+        var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, cancellationToken);
+        return _dataContext.FirstOrDefaultAsync<TResult>(preparedCommand, @params, cancellationToken);
     }
     public TResult Single(params object[] @params)
     {
-        int oldLim = Paging.Limit;
-        try
+        if (Paging.Limit != 2 || !_isPrepared)
         {
-            if (Paging.Limit != 2 || !_isPrepared)
-            {
-                Paging.Limit = 2;
-                PrepareCommand(false, CancellationToken.None);
-            }
-            var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, CancellationToken.None);
-            return _dataContext.Single<TResult>(preparedCommand, @params);
+            Paging.Limit = 2;
+            PrepareCommand(false, CancellationToken.None);
         }
-        finally
-        {
-            Paging.Limit = oldLim;
-        }
+        var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, CancellationToken.None);
+        return _dataContext.Single<TResult>(preparedCommand, @params);
     }
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<TResult> SingleAsync(params object[] @params) => SingleAsync(CancellationToken.None, @params);
     public Task<TResult> SingleAsync(CancellationToken cancellationToken, params object[] @params)
     {
-        int oldLim = Paging.Limit;
-        try
+        if (Paging.Limit != 2 || !_isPrepared)
         {
-            if (Paging.Limit != 2 || !_isPrepared)
-            {
-                Paging.Limit = 2;
-                PrepareCommand(false, cancellationToken);
-            }
-            var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, cancellationToken);
-            return _dataContext.SingleAsync<TResult>(preparedCommand, @params, cancellationToken);
+            Paging.Limit = 2;
+            PrepareCommand(false, cancellationToken);
         }
-        finally
-        {
-            Paging.Limit = oldLim;
-        }
+        var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, cancellationToken);
+        return _dataContext.SingleAsync<TResult>(preparedCommand, @params, cancellationToken);
     }
     public TResult? SingleOrDefault(params object[] @params)
     {
-        int oldLim = Paging.Limit;
-        try
+        if (Paging.Limit != 2 || !_isPrepared)
         {
-            if (Paging.Limit != 2 || !_isPrepared)
-            {
-                Paging.Limit = 2;
-                PrepareCommand(false, CancellationToken.None);
-            }
-            var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, CancellationToken.None);
-            return _dataContext.SingleOrDefault<TResult>(preparedCommand, @params);
+            Paging.Limit = 2;
+            PrepareCommand(false, CancellationToken.None);
         }
-        finally
-        {
-            Paging.Limit = oldLim;
-        }
+        var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, CancellationToken.None);
+        return _dataContext.SingleOrDefault<TResult>(preparedCommand, @params);
     }
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<TResult?> SingleOrDefaultAsync(params object[] @params) => SingleOrDefaultAsync(CancellationToken.None, @params);
     public Task<TResult?> SingleOrDefaultAsync(CancellationToken cancellationToken, params object[] @params)
     {
-        int oldLim = Paging.Limit;
-        try
+        if (Paging.Limit != 2 || !_isPrepared)
         {
-            if (Paging.Limit != 2 || !_isPrepared)
-            {
-                Paging.Limit = 2;
-                PrepareCommand(false, cancellationToken);
-            }
-            var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, cancellationToken);
-            return _dataContext.SingleOrDefaultAsync<TResult>(preparedCommand, @params, cancellationToken);
+            Paging.Limit = 2;
+            PrepareCommand(false, cancellationToken);
         }
-        finally
-        {
-            Paging.Limit = oldLim;
-        }
+        var preparedCommand = _dataContext!.GetPreparedQueryCommand(this, false, true, cancellationToken);
+        return _dataContext.SingleOrDefaultAsync<TResult>(preparedCommand, @params, cancellationToken);
     }
     protected override QueryCommand CreateSelf()
     {

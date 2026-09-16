@@ -1,51 +1,57 @@
-using System.Data.SQLite;
+using System.Globalization;
+using System.Runtime.CompilerServices;
+using Microsoft.Data.Sqlite;
 
 namespace nextorm.sqlite;
 
-[SQLiteFunction(Name = "stdev", Arguments = 1, FuncType = FunctionType.Aggregate)]
-public class StdevFunction : SQLiteFunction
+/// <summary>
+/// Registers the custom SQLite aggregate functions (stdev/stdevp) on a connection.
+/// Microsoft.Data.Sqlite has no attribute-based auto-registration (unlike System.Data.SQLite),
+/// so functions are attached explicitly and only once per connection.
+/// </summary>
+internal static class SQLiteFunctions
 {
-    public override void Step(object[] args, int stepNumber, ref object? contextData)
-    {
-        if (args[0] is null or DBNull) return;
+    private static readonly ConditionalWeakTable<SqliteConnection, object> _registered = new();
 
-        var value = Convert.ToDouble(args[0]);
-        var acc = contextData as double[] ?? new double[3];
-        acc[0] += 1;
-        acc[1] += value;
-        acc[2] += value * value;
-        contextData = acc;
+    public static void Register(SqliteConnection connection)
+    {
+        if (_registered.TryGetValue(connection, out _)) return;
+        _registered.Add(connection, new object());
+
+        connection.CreateAggregate<object?, StdevAccumulator, double?>("stdev", default,
+            static (acc, value) => StdevAccumulator.Step(acc, value),
+            static acc => acc.Final(population: false));
+
+        connection.CreateAggregate<object?, StdevAccumulator, double?>("stdevp", default,
+            static (acc, value) => StdevAccumulator.Step(acc, value),
+            static acc => acc.Final(population: true));
     }
 
-    public override object? Final(object? contextData)
+    private struct StdevAccumulator
     {
-        if (contextData is not double[] acc || acc[0] < 2) return null;
+        public double Count;
+        public double Sum;
+        public double SumSq;
 
-        var variance = (acc[2] - acc[1] * acc[1] / acc[0]) / (acc[0] - 1);
-        return Math.Sqrt(variance);
-    }
-}
+        public static StdevAccumulator Step(StdevAccumulator acc, object? value)
+        {
+            if (value is null or DBNull) return acc;
 
-[SQLiteFunction(Name = "stdevp", Arguments = 1, FuncType = FunctionType.Aggregate)]
-public class StdevpFunction : SQLiteFunction
-{
-    public override void Step(object[] args, int stepNumber, ref object? contextData)
-    {
-        if (args[0] is null or DBNull) return;
+            var v = Convert.ToDouble(value, CultureInfo.InvariantCulture);
+            return new StdevAccumulator
+            {
+                Count = acc.Count + 1,
+                Sum = acc.Sum + v,
+                SumSq = acc.SumSq + v * v
+            };
+        }
 
-        var value = Convert.ToDouble(args[0]);
-        var acc = contextData as double[] ?? new double[3];
-        acc[0] += 1;
-        acc[1] += value;
-        acc[2] += value * value;
-        contextData = acc;
-    }
+        public readonly double? Final(bool population)
+        {
+            if (Count < (population ? 1 : 2)) return null;
 
-    public override object? Final(object? contextData)
-    {
-        if (contextData is not double[] acc || acc[0] < 1) return null;
-
-        var variance = (acc[2] - acc[1] * acc[1] / acc[0]) / acc[0];
-        return Math.Sqrt(variance);
+            var variance = (SumSq - Sum * Sum / Count) / (population ? Count : Count - 1);
+            return Math.Sqrt(variance);
+        }
     }
 }

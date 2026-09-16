@@ -326,7 +326,7 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         var queryCommand = anyCommand.Value;
         if (!created)
         {
-            cmd.PrepareCommand(false, CancellationToken.None);
+            if (!cmd.IsPrepared) cmd.PrepareCommand(false, CancellationToken.None);
             queryCommand.ReplaceCommand(cmd, 0);
         }
 

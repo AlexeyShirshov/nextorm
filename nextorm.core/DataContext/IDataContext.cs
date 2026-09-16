@@ -46,16 +46,7 @@ public interface IDataContext : IAsyncDisposable, IDisposable
     {
         var asyncEnumerator = CreateAsyncEnumerator<TResult>(preparedCommand, @params, cancellationToken);
 
-        return Iterate();
-
-        async IAsyncEnumerable<TResult> Iterate()
-        {
-            await using (asyncEnumerator)
-            {
-                while (await asyncEnumerator.MoveNextAsync())
-                    yield return asyncEnumerator.Current;
-            }
-        }
+        return new ResultSetAsyncEnumerable<TResult>(asyncEnumerator);
     }
     public IEnumerable<TResult> GetEnumerable<TResult>(IPreparedQueryCommand<TResult> preparedCommand, params object[]? @params)
     {
@@ -94,7 +85,7 @@ public interface IDataContext : IAsyncDisposable, IDisposable
     {
         var enumerator = CreateAsyncEnumerator(preparedQueryCommand, @params, cancellationToken);
 
-        await ((IAsyncInit<TResult>)enumerator).InitReaderAsync(@params, cancellationToken);
+        await ((IAsyncInit<TResult>)enumerator).InitReaderAsync(@params, cancellationToken).ConfigureAwait(false);
 
         return (IEnumerator<TResult>)enumerator;
     }

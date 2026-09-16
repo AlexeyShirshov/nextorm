@@ -69,7 +69,10 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
 
                 if (idx >= 0)
                 {
-                    if (parameters[idx].Value != @params[i])
+                    // Normalize null to DBNull so providers that reject null parameter values
+                    // (Microsoft.Data.Sqlite) work and the equality check stays stable.
+                    var newValue = @params[i] ?? DBNull.Value;
+                    if (parameters[idx].Value != newValue)
                     {
                         // if (cmd == DbCommand)
                         // {
@@ -78,7 +81,7 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
                         // foreach (var p in parameters) cmd.Parameters.Add(p);
                         // parameters = cmd.Parameters;
                         //}
-                        parameters[idx].Value = @params[i];
+                        parameters[idx].Value = newValue;
                     }
                 }
                 else

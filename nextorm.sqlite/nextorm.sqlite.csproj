@@ -27,8 +27,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" />
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
-    <PackageReference Include="System.Data.SQLite" />
   </ItemGroup>
 
   <ItemGroup>

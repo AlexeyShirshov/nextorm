@@ -1,4 +1,4 @@
-using System.Data.SQLite;
+using Microsoft.Data.Sqlite;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using nextorm.core;
@@ -660,7 +660,7 @@ public class SqlCommandTests
             r.Count.Should().Be(3);
         };
 
-        await test.Should().ThrowAsync<SQLiteException>();
+        await test.Should().ThrowAsync<SqliteException>();
     }
     [Fact]
     public async Task WhereAllSubQuery_ShouldReturnData()
@@ -673,7 +673,7 @@ public class SqlCommandTests
             r.Count.Should().Be(3);
         };
 
-        await test.Should().ThrowAsync<SQLiteException>();
+        await test.Should().ThrowAsync<SqliteException>();
     }
     [Fact]
     public async Task ManualSql_ShouldWork()

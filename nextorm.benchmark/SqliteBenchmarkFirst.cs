@@ -24,6 +24,7 @@ public class SqliteBenchmarkFirst
     private readonly Func<EFDataContext, int, Task<LargeEntity>> _efLargeCompiled = EF.CompileAsyncQuery((EFDataContext ctx, int i) => ctx.LargeEntities.FirstOrDefault(it => it.Id == i));
     private readonly Func<EFDataContext, int, Task<int>> _efCompiledFirstOrDefault = EF.CompileAsyncQuery((EFDataContext ctx, int i) => ctx.SimpleEntities.Where(it => it.Id == i).Select(it => it.Id).FirstOrDefault());
     // private readonly Func<EFDataContext, int, Task<int>> _efCompiledFilterParam = EF.CompileAsyncQuery((EFDataContext ctx, int id) => ctx.SimpleEntities.Where(it => it.Id > id).Select(it => it.Id).First());
+    private readonly Linq2DbDataRepository _linq2Db;
     private readonly ILoggerFactory? _logFactory;
     public SqliteBenchmarkFirst() : this(false) { }
     public SqliteBenchmarkFirst(bool withLogging = false)
@@ -56,6 +57,8 @@ public class SqliteBenchmarkFirst
 
         _conn = new SqliteConnection(((SqliteDbContext)_ctx.DbContext).ConnectionString);
         _conn.Open();
+
+        _linq2Db = new Linq2DbDataRepository();
     }
     // [Benchmark(Baseline = true)]
     // public async Task NextormFirstCompiled()
@@ -136,5 +139,17 @@ public class SqliteBenchmarkFirst
     {
         for (int i = 0; i < 10; i++)
             await _conn.QueryFirstOrDefaultAsync<int?>("select id from simple_entity where id = @id limit 1", new { id = i });
+    }
+    [Benchmark]
+    public async Task Linq2Db_Entity_FirstOrDefault()
+    {
+        for (int i = 0; i < 10; i++)
+            await _linq2Db.FirstLargeAsync(i);
+    }
+    [Benchmark]
+    public async Task Linq2Db_Scalar_FirstOrDefault()
+    {
+        for (int i = 0; i < 10; i++)
+            await _linq2Db.FirstScalarAsync(i);
     }
 }

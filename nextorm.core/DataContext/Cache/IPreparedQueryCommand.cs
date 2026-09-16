@@ -12,16 +12,7 @@ public interface IPreparedQueryCommand<TResult>
     {
         var asyncEnumerator = CreateAsyncEnumerator(dataContext, cancellationToken, @params);
 
-        return Iterate();
-
-        async IAsyncEnumerable<TResult> Iterate()
-        {
-            await using (asyncEnumerator)
-            {
-                while (await asyncEnumerator.MoveNextAsync().ConfigureAwait(false))
-                    yield return asyncEnumerator.Current;
-            }
-        }
+        return new ResultSetAsyncEnumerable<TResult>(asyncEnumerator);
     }
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IEnumerable<TResult> ToEnumerable(IDataContext dataContext, params object[]? @params) => dataContext.GetEnumerable(this, @params);
