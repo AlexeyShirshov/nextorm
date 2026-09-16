@@ -2,7 +2,7 @@
 <html lang='en'>
 <head>
 <meta charset='utf-8' />
-<title>nextorm.benchmark.InMemoryBenchmarkIteration-20260914-224003</title>
+<title>nextorm.benchmark.InMemoryBenchmarkIteration-20260916-130003</title>
 
 <style type="text/css">
 	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
@@ -13,23 +13,23 @@
 </head>
 <body>
 <pre><code>
-BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.3 LTS (Jammy Jellyfish)
+BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)
 AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 16 logical and 8 physical cores
 .NET SDK 10.0.401
-  [Host] : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+  [Host]     : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+  DefaultJob : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
 </code></pre>
-<pre><code>Job=.NET 10.0  Runtime=.NET 10.0  
-</code></pre>
+<pre><code></code></pre>
 
 <table>
-<thead><tr><th>Method             </th><th>Mean</th><th>Error</th><th>Ratio</th><th>RatioSD</th><th>Alloc Ratio</th>
+<thead><tr><th>Method                  </th><th>Mean </th><th>Error</th><th>StdDev</th><th>Ratio</th><th>RatioSD</th><th>Gen0</th><th>Gen1</th><th>Allocated</th><th>Alloc Ratio</th>
 </tr>
-</thead><tbody><tr><td>NextormPreparedSync</td><td>NA</td><td>NA</td><td>?</td><td>?</td><td>?</td>
-</tr><tr><td>NextormPreparedSyncToList</td><td>NA</td><td>NA</td><td>?</td><td>?</td><td>?</td>
-</tr><tr><td>NextormCached</td><td>NA</td><td>NA</td><td>?</td><td>?</td><td>?</td>
-</tr><tr><td>NextormCachedSync</td><td>NA</td><td>NA</td><td>?</td><td>?</td><td>?</td>
-</tr><tr><td>Linq</td><td>NA</td><td>NA</td><td>?</td><td>?</td><td>?</td>
-</tr><tr><td>LinqToList</td><td>NA</td><td>NA</td><td>?</td><td>?</td><td>?</td>
+</thead><tbody><tr><td>Linq</td><td>75.33 &mu;s</td><td>1.483 &mu;s</td><td>2.351 &mu;s</td><td>0.75</td><td>0.03</td><td>28.6865</td><td>-</td><td>234.45 KB</td><td>1.00</td>
+</tr><tr><td>LinqToList</td><td>95.39 &mu;s</td><td>1.882 &mu;s</td><td>2.638 &mu;s</td><td>0.95</td><td>0.03</td><td>38.2080</td><td>25.3906</td><td>312.59 KB</td><td>1.33</td>
+</tr><tr><td>NextormPreparedSync</td><td>99.91 &mu;s</td><td>1.557 &mu;s</td><td>1.457 &mu;s</td><td>1.00</td><td>0.02</td><td>28.6865</td><td>-</td><td>234.38 KB</td><td>1.00</td>
+</tr><tr><td>NextormPreparedSyncToList</td><td>137.49 &mu;s</td><td>1.715 &mu;s</td><td>1.520 &mu;s</td><td>1.38</td><td>0.02</td><td>38.0859</td><td>22.7051</td><td>312.55 KB</td><td>1.33</td>
+</tr><tr><td>EFCoreInMemory_Compiled</td><td>1,467.34 &mu;s</td><td>27.461 &mu;s</td><td>50.901 &mu;s</td><td>14.69</td><td>0.55</td><td>419.9219</td><td>208.9844</td><td>3439.24 KB</td><td>14.67</td>
+</tr><tr><td>EFCoreInMemory_Compiled_ToList</td><td>1,575.88 &mu;s</td><td>29.371 &mu;s</td><td>26.037 &mu;s</td><td>15.78</td><td>0.34</td><td>435.5469</td><td>208.9844</td><td>3567.56 KB</td><td>15.22</td>
 </tr></tbody></table>
 </body>
 </html>

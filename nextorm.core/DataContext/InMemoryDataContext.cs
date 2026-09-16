@@ -1,5 +1,6 @@
 #define PARAM_CONDITION
 using Microsoft.Extensions.Logging;
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -17,6 +18,8 @@ public partial class InMemoryContext : IDataContext
     private readonly static ConcurrentDictionary<Type, SelectExpression[]> _selectListCache = new();
     //private readonly static ConcurrentDictionary<Expression, List<SelectExpression>> _selectListExpCache = new(ExpressionEqualityComparer.Instance);
     private readonly IDictionary<ExpressionKey, Delegate> _expCache = new ExpressionCache<Delegate>();
+    private readonly IDictionary<ExpressionKey, Delegate> _conditionFactoryCache = new ExpressionCache<Delegate>();
+    private readonly IDictionary<ExpressionKey, Delegate> _conditionDirectCache = new ExpressionCache<Delegate>();
     private readonly IDictionary<Type, object?> _data = new Dictionary<Type, object?>();
     private bool _disposedValue;
     private readonly Dictionary<QueryPlan, object> _cmdIdx = [];
@@ -85,7 +88,7 @@ public partial class InMemoryContext : IDataContext
 
             planCache = ce;
 
-            if (queryCommand.Cache)
+            if (storeInCache && queryCommand.Cache)
                 _cmdIdx[queryPlan!.GetCacheVersion()] = planCache;
 
         }
@@ -158,6 +161,9 @@ public partial class InMemoryContext : IDataContext
     }
     private IAsyncEnumerator<TResult> CreateEnumerator<TResult, TEntity>(QueryCommand<TResult> queryCommand, InMemoryCacheEntry<TResult> cacheEntry, object[] @params, CancellationToken cancellationToken)
     {
+        if (cacheEntry.Resolver is not null)
+            return cacheEntry.Resolver(@params);
+
         object? v = null;
 
         IEnumerable<TEntity>? data = cacheEntry.Data as IEnumerable<TEntity>;
@@ -295,6 +301,12 @@ public partial class InMemoryContext : IDataContext
                 enumerator.Init(data, GetCondition<TEntity>(queryCommand.Condition, @params));
 #endif
             }
+
+            // The compiled plan does not change between calls, so cache a resolver that only
+            // re-initialises the enumerator with new parameter values.
+            var resolvedEnumerator = enumerator;
+            var resolvedData = data;
+            cacheEntry.Resolver = p => { resolvedEnumerator.Init(resolvedData, p); return resolvedEnumerator; };
 
             return enumerator;
         }
@@ -515,6 +527,9 @@ public partial class InMemoryContext : IDataContext
     private PreparedQueryCommand<TResult, TEntity> CreateCompiledQuery<TResult, TEntity>(QueryCommand<TResult> query)
     {
         Func<TEntity, object[]?, bool>? conditionDelegate = null;
+        Func<object[]?, Func<TEntity, bool>>? conditionFactory = null;
+        Func<TEntity, bool>? conditionDirect = null;
+
         if (query.PreparedCondition is Expression<Func<TEntity, bool>> condition)
         {
             var key = new ExpressionKey(condition, query);
@@ -530,8 +545,64 @@ public partial class InMemoryContext : IDataContext
             }
             else
                 conditionDelegate = (Func<TEntity, object[]?, bool>?)d;
+
+            (conditionFactory, conditionDirect) = GetConditionPredicates(query, condition);
         }
-        return new InMemoryCompiledQuery<TResult, TEntity>(GetMap<TResult, TEntity>(query), conditionDelegate);
+        return new InMemoryCompiledQuery<TResult, TEntity>(GetMap<TResult, TEntity>(query), conditionDelegate, conditionFactory, conditionDirect);
+    }
+
+    /// <summary>
+    /// Returns a strongly typed predicate (or a factory that builds one from the current parameters)
+    /// so the enumerator does not index/box an <c>object[]</c> on every row.
+    /// </summary>
+    private (Func<object[]?, Func<TEntity, bool>>? Factory, Func<TEntity, bool>? Direct) GetConditionPredicates<TResult, TEntity>(QueryCommand<TResult> query, Expression<Func<TEntity, bool>> condition)
+    {
+        var key = new ExpressionKey(condition, query);
+        if (_conditionFactoryCache.TryGetValue(key, out var f))
+            return ((Func<object[]?, Func<TEntity, bool>>)f, null);
+        if (_conditionDirectCache.TryGetValue(key, out var d))
+            return (null, (Func<TEntity, bool>)d);
+
+        var collector = new ParamCollectorVisitor();
+        collector.Visit(condition.Body);
+        var ps = collector.Parameters;
+
+        if (ps.Count == 0)
+        {
+            var direct = condition.Compile();
+            _conditionDirectCache[key] = direct;
+            return (null, direct);
+        }
+
+        var factory = BuildConditionFactory(condition, ps);
+        _conditionFactoryCache[key] = factory;
+        return (factory, null);
+    }
+
+    /// <summary>
+    /// Compiles <c>(object[] p) =&gt; { var p0 = (T0)p[0]; ...; return (TEntity e) =&gt; &lt;body&gt;; }</c>.
+    /// Parameters are unpacked once per query; the returned predicate is fully typed.
+    /// </summary>
+    private static Func<object[]?, Func<TEntity, bool>> BuildConditionFactory<TEntity>(Expression<Func<TEntity, bool>> condition, SortedDictionary<int, Type> ps)
+    {
+        var p = Expression.Parameter(typeof(object[]), "p");
+        var locals = new Dictionary<int, ParameterExpression>();
+        var variables = new List<ParameterExpression>();
+        var body = new List<Expression>();
+
+        foreach (var (idx, type) in ps)
+        {
+            var v = Expression.Variable(type, "p" + idx);
+            locals[idx] = v;
+            variables.Add(v);
+            body.Add(Expression.Assign(v, Expression.Convert(Expression.ArrayIndex(p, Expression.Constant(idx)), type)));
+        }
+
+        var entity = condition.Parameters[0];
+        var newBody = new ParamLocalSubstitutionVisitor(locals).Visit(condition.Body)!;
+        body.Add(Expression.Lambda<Func<TEntity, bool>>(newBody, entity));
+
+        return Expression.Lambda<Func<object[]?, Func<TEntity, bool>>>(Expression.Block(variables, body), p).Compile();
     }
 
     // public Task<IEnumerator<TResult>> CreateEnumeratorAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
@@ -618,6 +689,25 @@ public partial class InMemoryContext : IDataContext
     {
         return (IEnumerator<TResult>)CreateAsyncEnumerator<TResult>(preparedQueryCommand, @params, CancellationToken.None);
     }
+
+    /// <summary>
+    /// In-memory override: returns the enumerator directly (it is already <see cref="IEnumerable{T}"/>),
+    /// avoiding the compiler-generated <c>yield</c> state machine used by the default interface method.
+    /// </summary>
+    public IEnumerable<TResult> GetEnumerable<TResult>(IPreparedQueryCommand<TResult> preparedCommand, params object[]? @params)
+    {
+        var enumerator = CreateEnumerator(preparedCommand, @params);
+        if (enumerator is IEnumerable<TResult> enumerable)
+            return enumerable;
+
+        return new EnumeratorEnumerable<TResult>(enumerator);
+    }
+
+    private sealed class EnumeratorEnumerable<TResult>(IEnumerator<TResult> enumerator) : IEnumerable<TResult>
+    {
+        public IEnumerator<TResult> GetEnumerator() => enumerator;
+        IEnumerator IEnumerable.GetEnumerator() => enumerator;
+    }
     protected IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
     {
         var cacheEntry = GetCacheEntry(queryCommand, cancellationToken);
@@ -639,16 +729,18 @@ public partial class InMemoryContext : IDataContext
             await using var ee = cacheEntry.CreateEnumerator(cacheEntry.QueryCommand, cacheEntry, @params, CancellationToken.None)!;
             var l = new List<TResult>(cacheEntry.LastRowCount);
 
+            var offset = cacheEntry.QueryCommand.Paging.Offset;
+            var limit = cacheEntry.QueryCommand.Paging.Limit;
             var (rowCnt, absRowCnt) = (0, 0);
 
             while (await ee.MoveNextAsync())
             {
-                if (cacheEntry.QueryCommand.Paging.Offset > 0 && absRowCnt++ < cacheEntry.QueryCommand.Paging.Offset)
+                if (offset > 0 && absRowCnt++ < offset)
                     continue;
 
                 l.Add(ee.Current);
 
-                if (cacheEntry.QueryCommand.Paging.Limit > 0 && ++rowCnt >= cacheEntry.QueryCommand.Paging.Limit)
+                if (limit > 0 && ++rowCnt >= limit)
                     break;
             }
 
@@ -665,16 +757,18 @@ public partial class InMemoryContext : IDataContext
             using var ee = (IEnumerator<TResult>)cacheEntry.CreateEnumerator(cacheEntry.QueryCommand, cacheEntry, @params, CancellationToken.None)!;
             var l = new List<TResult>(cacheEntry.LastRowCount);
 
+            var offset = cacheEntry.QueryCommand.Paging.Offset;
+            var limit = cacheEntry.QueryCommand.Paging.Limit;
             var (rowCnt, absRowCnt) = (0, 0);
 
             while (ee.MoveNext())
             {
-                if (cacheEntry.QueryCommand.Paging.Offset > 0 && absRowCnt++ < cacheEntry.QueryCommand.Paging.Offset)
+                if (offset > 0 && absRowCnt++ < offset)
                     continue;
 
                 l.Add(ee.Current);
 
-                if (cacheEntry.QueryCommand.Paging.Limit > 0 && ++rowCnt >= cacheEntry.QueryCommand.Paging.Limit)
+                if (limit > 0 && ++rowCnt >= limit)
                     break;
             }
 

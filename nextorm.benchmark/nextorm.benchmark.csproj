@@ -13,6 +13,7 @@
     <PackageReference Include="linq2db" />
     <PackageReference Include="linq2db.SQLite" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" />
     <PackageReference Include="Microsoft.Extensions.Logging.Console" />
     <PackageReference Include="System.Linq.Async" />
   </ItemGroup>

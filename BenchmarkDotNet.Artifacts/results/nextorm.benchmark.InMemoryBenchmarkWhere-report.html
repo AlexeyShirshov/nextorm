@@ -2,7 +2,7 @@
 <html lang='en'>
 <head>
 <meta charset='utf-8' />
-<title>nextorm.benchmark.InMemoryBenchmarkWhere-20260914-224025</title>
+<title>nextorm.benchmark.InMemoryBenchmarkWhere-20260916-130242</title>
 
 <style type="text/css">
 	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
@@ -13,21 +13,20 @@
 </head>
 <body>
 <pre><code>
-BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.3 LTS (Jammy Jellyfish)
+BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)
 AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 16 logical and 8 physical cores
 .NET SDK 10.0.401
-  [Host] : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+  [Host]     : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+  DefaultJob : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
 </code></pre>
-<pre><code>Job=.NET 10.0  Runtime=.NET 10.0  
-</code></pre>
+<pre><code></code></pre>
 
 <table>
-<thead><tr><th>Method        </th><th>Mean</th><th>Error</th><th>Ratio</th><th>RatioSD</th><th>Alloc Ratio</th>
+<thead><tr><th>Method           </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Ratio</th><th>RatioSD</th><th>Gen0</th><th>Gen1</th><th>Allocated</th><th>Alloc Ratio</th>
 </tr>
-</thead><tbody><tr><td>NextormPreparedParam</td><td>NA</td><td>NA</td><td>?</td><td>?</td><td>?</td>
-</tr><tr><td>NextormCachedParam</td><td>NA</td><td>NA</td><td>?</td><td>?</td><td>?</td>
-</tr><tr><td>NextormCached</td><td>NA</td><td>NA</td><td>?</td><td>?</td><td>?</td>
-</tr><tr><td>Linq</td><td>NA</td><td>NA</td><td>?</td><td>?</td><td>?</td>
+</thead><tbody><tr><td>NextormPreparedParam</td><td>2.514 ms</td><td>0.0188 ms</td><td>0.0157 ms</td><td>1.00</td><td>0.01</td><td>-</td><td>-</td><td>22.66 KB</td><td>1.00</td>
+</tr><tr><td>Linq</td><td>2.835 ms</td><td>0.0536 ms</td><td>0.0501 ms</td><td>1.13</td><td>0.02</td><td>-</td><td>-</td><td>17.28 KB</td><td>0.76</td>
+</tr><tr><td>EFCoreInMemory_Compiled</td><td>48.938 ms</td><td>0.9504 ms</td><td>1.0169 ms</td><td>19.46</td><td>0.41</td><td>5727.2727</td><td>2272.7273</td><td>47121.09 KB</td><td>2,079.83</td>
 </tr></tbody></table>
 </body>
 </html>

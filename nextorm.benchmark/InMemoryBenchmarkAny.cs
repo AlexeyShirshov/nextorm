@@ -1,5 +1,6 @@
 ﻿using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Jobs;
+using Microsoft.EntityFrameworkCore;
 using nextorm.core;
 
 namespace nextorm.benchmark;
@@ -10,8 +11,13 @@ public class InMemoryBenchmarkAny
 {
     private readonly InMemoryDataRepository _ctx;
     private readonly IPreparedQueryCommand<bool> _cmd;
-    private readonly IPreparedQueryCommand<bool> _cmdToList;
     private readonly IEnumerable<SimpleEntity> _data;
+    private EFInMemoryDataContext? _efCtx;
+    private Func<EFInMemoryDataContext, bool>? _efCompiled;
+
+    // Consumed by every benchmark to keep the JIT from eliminating the (otherwise unused) work.
+    private int _sink;
+
     public InMemoryBenchmarkAny()
     {
         var data = new List<SimpleEntity>(10_000);
@@ -24,21 +30,24 @@ public class InMemoryBenchmarkAny
         _ctx.SimpleEntity.WithData(_data);
 
         _cmd = _ctx.SimpleEntity.AnyCommand().Prepare(true);
-        // _cmdToList = _ctx.SimpleEntity.Select(entity => new Tuple<int>(entity.Id)).Compile(true);
     }
+
+    private EFInMemoryDataContext EfContext => _efCtx ??= EfInMemory.Create(10_000);
+
     [Benchmark()]
     public void NextormPrepared()
     {
-        _ctx.DataProvider.Any(_cmd, null);
-    }
-    [Benchmark()]
-    public void NextormCached()
-    {
-        _ctx.SimpleEntity.Any();
+        _sink += _ctx.DataProvider.Any(_cmd, null) ? 1 : 0;
     }
     [Benchmark]
     public void Linq()
     {
-        _data.Any();
+        _sink += _data.Any() ? 1 : 0;
+    }
+    [Benchmark]
+    public void EFCoreInMemory_Compiled()
+    {
+        _efCompiled ??= EF.CompileQuery((EFInMemoryDataContext ctx) => ctx.SimpleEntities.Any());
+        _sink += _efCompiled(EfContext) ? 1 : 0;
     }
 }
