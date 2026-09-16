@@ -10,6 +10,7 @@
 ## Методика
 - `ShortRun` + `InProcessEmitToolchain` (быстрый режим) и `Job.Default` (полный режим, out-of-process).
 - Полный режим включается переменной окружения `NEXTORM_BENCH_FULL=1`, путь к БД — `NEXTORM_BENCH_DB=<abs path>`.
+- Отчёты BenchmarkDotNet складываются в `benchmarks/BenchmarkDotNet.Artifacts` (путь задан в `NextormConfig`, поэтому не зависит от рабочего каталога запуска).
 - В полном режиме прогонялись: `Any`, `First`, `LargeIteration`, `Cache`, `Where`, `Join`, `Single`.
 - Оговорка: nextorm использует System.Data.SQLite, конкуренты — Microsoft.Data.Sqlite, поэтому часть разницы обусловлена ADO-провайдером, а не ORM.
 

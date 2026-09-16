@@ -259,9 +259,6 @@ public struct SqlBuilder
                 }
             }
 
-            // var visitor = new JoinExpressionVisitor();
-            // visitor.Visit(join.JoinCondition);
-
             var scopedAdded = join.JoinCondition.Parameters.Count > join.JoinCondition.Parameters.Select(it => it.Type).Distinct().Count();
             if (scopedAdded)
                 _columnsProvider.PushScope(join.JoinCondition.Parameters);

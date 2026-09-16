@@ -1031,19 +1031,3 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         GC.SuppressFinalize(this);
     }
 }
-
-[System.Diagnostics.CodeAnalysis.ExcludeFromCodeCoverage]
-public readonly ref struct AutoCleanup
-{
-    private readonly Action _onComplete;
-
-    public AutoCleanup(Action onStart, Action onComplete)
-    {
-        onStart?.Invoke();
-        _onComplete = onComplete;
-    }
-    public void Dispose()
-    {
-        _onComplete?.Invoke();
-    }
-}

@@ -17,7 +17,6 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 {
     // private const string AnyCommandProperty = "nextorm.core.AnyCommand";
     #region Fields
-    //private IPayloadManager _payloadMgr = new FastPayloadManager(new Dictionary<Type, object?>());
     protected readonly IDataContext _dataProvider;
     private QueryCommand? _query;
     private Expression<Func<TEntity, bool>>? _condition;
@@ -50,7 +49,6 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     public List<JoinExpression>? Joins { get => _joins; set => _joins = value; }
     public Paging Paging;
     internal string? Table { get => _table; set => _table = value; }
-    //internal IPayloadManager PayloadManager { get => _payloadMgr; init => _payloadMgr = value; }
     //public delegate void CommandCreatedHandler<T>(Entity<T> sender, QueryCommand queryCommand);
     //public event CommandCreatedHandler<TEntity>? CommandCreatedEvent;
     #endregion

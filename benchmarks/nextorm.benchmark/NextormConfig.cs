@@ -12,6 +12,8 @@ internal class NextormConfig : ManualConfig
 {
     public NextormConfig()
     {
+        ArtifactsPath = BenchmarkArtifacts.Path;
+
         AddColumn(CategoriesColumn.Default);
         Orderer = new DefaultOrderer(SummaryOrderPolicy.FastestToSlowest);
 

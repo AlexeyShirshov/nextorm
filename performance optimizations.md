@@ -6,7 +6,7 @@
 ## Бенчмарк
 
 Файл: `benchmarks/nextorm.benchmark/SqliteBenchmarkCachedPlan.cs`
-Отчёт: `BenchmarkDotNet.Artifacts/results/nextorm.benchmark.SqliteBenchmarkCachedPlan-report-github.md`
+Отчёт: `benchmarks/BenchmarkDotNet.Artifacts/results/nextorm.benchmark.SqliteBenchmarkCachedPlan-report-github.md`
 
 Запуск:
 

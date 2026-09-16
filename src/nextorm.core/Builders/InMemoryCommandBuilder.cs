@@ -48,15 +48,4 @@ public static class InMemoryCommandBuilderExtensions
 
         return builder;
     }
-    // private static void OnCommandCreated<TEntity>(CommandBuilder<TEntity> sender, QueryCommand queryCommand)
-    // {
-    //     if (sender.PayloadManager.TryGetPayload<InMemoryDataPayload<TEntity>>(out var payload))
-    //         queryCommand.AddOrUpdatePayload(payload);
-
-    //     if (sender.PayloadManager.TryGetPayload<InMemoryAsyncDataPayload<TEntity>>(out var asyncPayload))
-    //         queryCommand.AddOrUpdatePayload(asyncPayload);
-    // }
 }
-
-// public record InMemoryDataPayload<T>(IEnumerable<T>? Data) : IPayload;
-// public record InMemoryAsyncDataPayload<T>(IAsyncEnumerable<T>? Data) : IPayload;

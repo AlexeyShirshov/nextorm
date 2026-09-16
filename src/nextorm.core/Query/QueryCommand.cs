@@ -9,7 +9,7 @@ using System.Threading.Channels;
 namespace nextorm.core;
 
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Minor Code Smell", "S3897:Classes that provide \"Equals(<T>)\" should implement \"IEquatable<T>\"", Justification = "<Pending>")]
-public class QueryCommand : /*IPayloadManager,*/ IQueryContext, ICloneable
+public class QueryCommand : IQueryContext, ICloneable
 {
     private QueryCommand? _union;
     private UnionType _unionType;
