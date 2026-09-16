@@ -1,7 +1,7 @@
 # nextorm vs Dapper / EF Core / linq2db — отчёт по бенчмаркам
 
 Машина: AMD Ryzen 7 5800HS, 16 логических / 8 физических ядер, Linux (WSL2), .NET 10.0.12, BenchmarkDotNet 0.15.8.
-БД: `nextorm.benchmark/data/test.db` (SQLite; `simple_entity` ~10k строк, `large_table` ~10k строк).
+БД: `benchmarks/nextorm.benchmark/data/test.db` (SQLite; `simple_entity` ~10k строк, `large_table` ~10k строк).
 
 > **ВАЖНО (методика).** Все прогоны итераций 1–2 выполнялись с БД на `/mnt/c/...` (файловая система WSL↔Windows), где ~0.9 мс **на запрос** тратится на файловый ввод-вывод — это в ~100 раз больше реальной стоимости запроса и полностью маскирует различия ORM. Актуальные и корректные результаты — в разделе **«Итерация 3»**, где БД лежит в tmpfs (`/tmp/nextorm-bench/test.db`), как и задумано в `BenchDb.Resolve()`.
 
@@ -69,18 +69,18 @@
 4. Добавить `ConfigureAwait(false)` в async-путь.
 
 ## Ссылки на код
-- `nextorm.core/DataContext/ResultSetEnumerator.cs` — потоковое чтение/маппинг.
-- `nextorm.core/DataContext/IDataContext.cs` — `GetAsyncEnumerable`.
-- `nextorm.core/DataContext/DbContext.cs` — `GetMap`, `MapColumn`, `GetDbCommand`, `FirstOrDefaultAsync`.
-- `nextorm.core/Query/QueryCommand.cs` — `PrepareCommand`, `First/FirstOrDefault/Single`.
-- `nextorm.sqlite/SqliteDbContext.cs`, `nextorm.sqlite/SQLiteFunctions.cs` — провайдер.
+- `src/nextorm.core/DataContext/ResultSetEnumerator.cs` — потоковое чтение/маппинг.
+- `src/nextorm.core/DataContext/IDataContext.cs` — `GetAsyncEnumerable`.
+- `src/nextorm.core/DataContext/DbContext.cs` — `GetMap`, `MapColumn`, `GetDbCommand`, `FirstOrDefaultAsync`.
+- `src/nextorm.core/Query/QueryCommand.cs` — `PrepareCommand`, `First/FirstOrDefault/Single`.
+- `src/nextorm.sqlite/SqliteDbContext.cs`, `src/nextorm.sqlite/SQLiteFunctions.cs` — провайдер.
 
 ## Воспроизведение
 ```bash
 # полный прогон одного класса
 NEXTORM_BENCH_FULL=1 \
-NEXTORM_BENCH_DB=$PWD/nextorm.benchmark/data/test.db \
-dotnet run -c Release --project nextorm.benchmark -- --filter "*SqliteBenchmarkFirst.*"
+NEXTORM_BENCH_DB=$PWD/benchmarks/nextorm.benchmark/data/test.db \
+dotnet run -c Release --project benchmarks/nextorm.benchmark -- --filter "*SqliteBenchmarkFirst.*"
 ```
 
 ---
@@ -99,7 +99,7 @@ dotnet run -c Release --project nextorm.benchmark -- --filter "*SqliteBenchmarkF
 - **2.3** — `ResultSetEnumerator` маппит строку внутри `MoveNext/MoveNextAsync`, `Current` — чтение поля; добавлен рукописный `ResultSetAsyncEnumerable<TResult>` вместо компиляторного async-iterator (убран per-row state machine и лишний диспатч).
 - **2.4** — `ConfigureAwait(false)` в `ResultSetEnumerator.MoveNextAsync`, `IDataContext.CreateEnumeratorAsync`.
 
-Проверки: `nextorm.sqlite.tests` 102/102, `nextorm.core.tests` 35/35 — зелёные.
+Проверки: `test/nextorm.integration.tests` 102/102, `test/nextorm.core.tests` 35/35 — зелёные.
 
 ## Результаты (полный режим, after)
 
@@ -161,7 +161,7 @@ dotnet run -c Release --project nextorm.benchmark -- --filter "*SqliteBenchmarkF
 - **`ExecuteScalar<TResult>`**: добавлен быстрый типизированный путь `ConvertScalar<TResult>` для `bool/int/long/double` (через `Unsafe.As`) — SQLite отдаёт `EXISTS`/сравнения как `long`, раньше шёл `Convert.ChangeType` (боксинг + `IConvertible`).
 - **`Any`/`AnyAsync`**: больше не откатывают `IgnoreColumns` и не пере-подготавливаются при повторном вызове; `GetAnyCommand` не готовит `cmd` повторно, если он уже подготовлен.
 
-Тесты: `nextorm.sqlite.tests` 102/102, `nextorm.core.tests` 35/35.
+Тесты: `test/nextorm.integration.tests` 102/102, `test/nextorm.core.tests` 35/35.
 
 ## Результаты (полный режим, tmpfs)
 
@@ -301,7 +301,7 @@ Nextorm — первые 4 места; entity теперь быстрее Dapper
 Вывод: почти всё — `Expression.Compile()`. Ключ не обязан быть выражением: SQL уже сгенерирован к моменту `GetMap`, поэтому ключ по SQL стоит ~0.1 µs. Так же делает linq2db: материализаторы кэшируются в статическом `MemoryCache<QueryKey, Delegate>`, где `QueryKey` включает **SQL text + TargetType + DbReaderType + ConfigId** (а дерево выражения используется только для кэша самих запросов).
 
 ## Реализация
-- Новый `nextorm.core/DataContext/MapperCache.cs`: статический `ConcurrentDictionary<MapperCacheKey, Delegate>`, ключ `(ResultType, Sql, ColumnsSignature, OneColumn)`, лимит 4096 записей (при переполнении новые формы не кэшируются — без утечки).
+- Новый `src/nextorm.core/DataContext/MapperCache.cs`: статический `ConcurrentDictionary<MapperCacheKey, Delegate>`, ключ `(ResultType, Sql, ColumnsSignature, OneColumn)`, лимит 4096 записей (при переполнении новые формы не кэшируются — без утечки).
 - `DbContext.GetMapCached(queryCommand, sql)` — используется в `GetPreparedQueryCommand`; при промахе строит маппер через `GetMap` и кладёт в кэш. Публичный `GetMap` не изменён.
 - Маппер провайдеро- и контекст-независим (работает только с `IDataRecord`), поэтому кэш общий для всех `DbContext` и переживает `PurgeQueryCache`.
 - Тесты: 102/102 и 35/35 зелёные.
@@ -362,7 +362,7 @@ ShortRun / InProcess, tmpfs, изолированная копия. Разбро
 
 Что было исправлено по пути:
 - **Блокирующий баг `InMemoryContext`.** `GetPreparedQueryCommand` падал с `NullReferenceException`, если `queryCommand.Cache == true`, а `storeInCache == false` (путь `QueryCommand.Prepare`): `queryPlan` не создавался, но использовался через `queryPlan!`. Теперь запись в кэш планов идёт под тем же условием `storeInCache && queryCommand.Cache`, что и в `DbContext`. До фикса **все** in-memory бенчмарки возвращали `NA`.
-- В `nextorm.benchmark` добавлены пакет `Microsoft.EntityFrameworkCore.InMemory` и контекст `EFInMemoryDataContext` (`nextorm.benchmark/EfInMemory.cs`).
+- В `nextorm.benchmark` добавлены пакет `Microsoft.EntityFrameworkCore.InMemory` и контекст `EFInMemoryDataContext` (`benchmarks/nextorm.benchmark/EfInMemory.cs`).
 
 ## Что оптимизировано в in-memory провайдере
 
@@ -376,7 +376,7 @@ ShortRun / InProcess, tmpfs, изолированная копия. Разбро
 6. **R6. `Any`/scalar** идут через тот же резолвер — лишняя аллокация enumerator'а ушла (`Any` теперь 0 B).
 7. **R7. `ToList`/`ToListAsync`**: `Offset`/`Limit` вынесены в локальные переменные (без повторного чтения `Paging` на строку).
 
-Тесты после изменений: `nextorm.core.tests` 35/35, `nextorm.sqlite.tests` 102/102.
+Тесты после изменений: `test/nextorm.core.tests` 35/35, `test/nextorm.integration.tests` 102/102.
 
 ## До/после (полный режим, изолированный прогон)
 
@@ -423,10 +423,10 @@ ShortRun / InProcess, tmpfs, изолированная копия. Разбро
 - **Чистый LINQ** — базовая линия без ORM-обвязки; после оптимизаций на точечных выборках nextorm его обгоняет.
 - **nextorm InMemory (Prepared)** после R1–R7: 1.33–1.83× на обходе, **0.89× на выборках** (быстрее LINQ), ~8.7× на одиночном `Any()` при **нулевых аллокациях**. Основной выигрыш дали индексный fast-path (R1) и типизированный предикат (R2); `Where` ускорился вдвое.
 - **EF Core InMemory (Compiled)** — самый медленный и самый аллокационно тяжёлый во всех трёх классах: ~19.5–20.9× на обходе, ~17.3× на выборках и ~112 600× на `Any()`. Это ожидаемо: InMemory-провайдер EF — полноценный ORM-конвейер (модель, кэш запросов, материализация, change tracker), а не словарь «ключ → значение», и предназначен для тестов, а не для производительности.
-- Реализованы пункты R1–R7; регрессий нет: `nextorm.core.tests` 35/35, `nextorm.sqlite.tests` 102/102.
+- Реализованы пункты R1–R7; регрессий нет: `test/nextorm.core.tests` 35/35, `test/nextorm.integration.tests` 102/102.
 
 ## Воспроизведение
 ```bash
-NEXTORM_BENCH_FULL=1 dotnet run -c Release --project nextorm.benchmark -- --filter "*InMemoryBenchmark*"
+NEXTORM_BENCH_FULL=1 dotnet run -c Release --project benchmarks/nextorm.benchmark -- --filter "*InMemoryBenchmark*"
 ```
-Классы: `InMemoryBenchmarkAny`, `InMemoryBenchmarkIteration`, `InMemoryBenchmarkWhere`; EF-контекст — `nextorm.benchmark/EfInMemory.cs`.
+Классы: `InMemoryBenchmarkAny`, `InMemoryBenchmarkIteration`, `InMemoryBenchmarkWhere`; EF-контекст — `benchmarks/nextorm.benchmark/EfInMemory.cs`.

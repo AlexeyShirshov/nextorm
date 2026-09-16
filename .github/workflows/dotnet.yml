@@ -12,6 +12,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v4
@@ -23,5 +24,31 @@ jobs:
         run: dotnet restore
       - name: Build
         run: dotnet build --no-restore
-      - name: Test
-        run: dotnet test --no-build --verbosity normal
+      - name: Restore local tools
+        run: dotnet tool restore
+      - name: Test with coverage
+        run: |
+          mkdir -p coverage
+          dotnet tool run dotnet-coverage collect -s coverage.settings.xml -f cobertura -o coverage/coverage.cobertura.xml "dotnet test --no-build --verbosity normal"
+      - name: Coverage report
+        run: |
+          dotnet tool run reportgenerator \
+            -reports:coverage/coverage.cobertura.xml \
+            -targetdir:coverage/report \
+            -reporttypes:"Html;TextSummary;Cobertura" \
+            -riskhotspotassemblyfilters:"+nextorm.*"
+      - name: Enforce line coverage threshold
+        run: |
+          LINE=$(grep -oP 'Line coverage: \K[0-9.]+' coverage/report/Summary.txt)
+          echo "Line coverage: ${LINE}% (threshold: 60%)"
+          if awk -v c="$LINE" 'BEGIN { exit (c + 0 < 60) }'; then
+            echo "Coverage OK"
+          else
+            echo "::error::Line coverage ${LINE}% is below the 60% threshold"
+            exit 1
+          fi
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/

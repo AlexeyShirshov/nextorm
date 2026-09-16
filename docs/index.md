@@ -49,6 +49,7 @@ To add specific database provider use the following:
 
 - `dotnet add package nextorm.sqlserver`
 - `dotnet add package nextorm.sqlite`
+- `dotnet add package nextorm.postgres`
 
 In-memory provider is built-in in core library.
 

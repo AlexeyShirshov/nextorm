@@ -5,13 +5,13 @@
 
 ## Бенчмарк
 
-Файл: `nextorm.benchmark/SqliteBenchmarkCachedPlan.cs`
+Файл: `benchmarks/nextorm.benchmark/SqliteBenchmarkCachedPlan.cs`
 Отчёт: `BenchmarkDotNet.Artifacts/results/nextorm.benchmark.SqliteBenchmarkCachedPlan-report-github.md`
 
 Запуск:
 
 ```
-dotnet run -c Release --project nextorm.benchmark -- \
+dotnet run -c Release --project benchmarks/nextorm.benchmark -- \
   --filter "*SqliteBenchmarkCachedPlan*" --warmupCount 3 --iterationCount 5
 ```
 
@@ -43,16 +43,16 @@ dotnet run -c Release --project nextorm.benchmark -- \
 
 ## Что уже соответствует скиллу
 
-- `_sbPool` через `ObjectPool<StringBuilder>` — `nextorm.core/DataContext/SqlBuilder.cs:12`, `nextorm.core/DataContext/DbContext.cs:20`.
-- `ValueList<T>` / `ValueList3<T>` на inline-массивах — `nextorm.core/DataContext/ValueList.cs:11`, `nextorm.core/Query/DefaultColumnsProvider.cs:10`.
-- `ExpressionKey` кэширует хэш в `_hash` — `nextorm.core/ExpressionCache.cs:14,17`.
-- Бенчмарки уже с `[MemoryDiagnoser]` (напр. `nextorm.benchmark/SqliteBenchmarkWhere.cs:17`).
+- `_sbPool` через `ObjectPool<StringBuilder>` — `src/nextorm.core/DataContext/SqlBuilder.cs:12`, `src/nextorm.core/DataContext/DbContext.cs:20`.
+- `ValueList<T>` / `ValueList3<T>` на inline-массивах — `src/nextorm.core/DataContext/ValueList.cs:11`, `src/nextorm.core/Query/DefaultColumnsProvider.cs:10`.
+- `ExpressionKey` кэширует хэш в `_hash` — `src/nextorm.core/ExpressionCache.cs:14,17`.
+- Бенчмарки уже с `[MemoryDiagnoser]` (напр. `benchmarks/nextorm.benchmark/SqliteBenchmarkWhere.cs:17`).
 
 ## Находки (по убыванию значимости)
 
 ### 1. Полная пересборка параметров на каждом выполнении кэшированного запроса
 
-`nextorm.core/DataContext/DbContext.cs:385` вызывает `ExtractParams` → `MakeSelect(paramMode: true)`
+`src/nextorm.core/DataContext/DbContext.cs:385` вызывает `ExtractParams` → `MakeSelect(paramMode: true)`
 (`DbContext.cs:141-152`) на каждом исполнении. Внутри заново аллоцируются `List<Param>`,
 `DefaultColumnsProvider`, `DefaultAliasProvider`, `DefaultParamProvider` и прогоняются все visitor'ы —
 только чтобы достать значения. Замерено: ≈1.1 KB/вып.
@@ -66,13 +66,13 @@ dotnet run -c Release --project nextorm.benchmark -- \
 
 Изменённые файлы:
 
-- `nextorm.core/DataContext/Cache/DbPreparedQueryCommand.cs` — поле `NeedsParamRefresh` + параметр ctor.
-- `nextorm.core/DataContext/DbContext.cs` — вычисление флага, условие на cache-hit, `IsRuntimeParam`.
+- `src/nextorm.core/DataContext/Cache/DbPreparedQueryCommand.cs` — поле `NeedsParamRefresh` + параметр ctor.
+- `src/nextorm.core/DataContext/DbContext.cs` — вычисление флага, условие на cache-hit, `IsRuntimeParam`.
 
 ### 2. Аллокации строк в alias-провайдере
 
-`nextorm.core/DataContext/DefaultAliasProvider.cs:19,25,33` — `"t" + idx`. `FindAlias` дергается на каждый
-alias в `nextorm.core/Visitors/BaseExpressionVisitor.cs:596,795,828,834`. Набор ограничен (`t1..tN`) →
+`src/nextorm.core/DataContext/DefaultAliasProvider.cs:19,25,33` — `"t" + idx`. `FindAlias` дергается на каждый
+alias в `src/nextorm.core/Visitors/BaseExpressionVisitor.cs:596,795,828,834`. Набор ограничен (`t1..tN`) →
 кэшировать в `string[]` / использовать `string.Create` (таблица string-building в скилле).
 
 **Проверено, откачено.** Реализовал кэш алиасов и замерил через `Build_Sql` / `Build_Sql_Join`
@@ -82,7 +82,7 @@ alias в `nextorm.core/Visitors/BaseExpressionVisitor.cs:596,795,828,834`. На�
 
 ### 3. ObjectPool без try/finally
 
-`nextorm.core/DataContext/SqlBuilder.cs` — `MakeJoin`, `MakeFrom`, `MakeSelect`:
+`src/nextorm.core/DataContext/SqlBuilder.cs` — `MakeJoin`, `MakeFrom`, `MakeSelect`:
 `_sbPool.Get()` → `ToString()` → `Return` без `try/finally`. Если visitor/`Append` бросит — буфер не
 вернётся, пул голодает (гоча #4 скилла).
 
@@ -214,14 +214,14 @@ HEAD (без правок):
 
 Сделано:
 
-- `nextorm.benchmark/NextormConfig.cs` — job вынесен централизованно: по умолчанию `Job.ShortRun`
+- `benchmarks/nextorm.benchmark/NextormConfig.cs` — job вынесен централизованно: по умолчанию `Job.ShortRun`
   (warmup 3 / iterations 3) + `InProcessEmitToolchain` (без build/launch на кейс); `NEXTORM_BENCH_FULL=1`
   включает полный out-of-process `Job.Default`.
-- `nextorm.benchmark/Program.cs` — включён `BenchmarkSwitcher...Run(args)` (фильтры и `--list` работают).
+- `benchmarks/nextorm.benchmark/Program.cs` — включён `BenchmarkSwitcher...Run(args)` (фильтры и `--list` работают).
 - Убраны `[SimpleJob]` из всех классов (иначе job'ы дублировались), `[Config(typeof(NextormConfig))]`
   добавлен где отсутствовал.
 - Добавлены parameterless-конструкторы классам с `(bool withLogging = false)` — требование `InProcessEmit`.
-- `nextorm.benchmark/BenchDb.cs` — путь к БД: `NEXTORM_BENCH_DB` → `/tmp/nextorm-bench/test.db` →
+- `benchmarks/nextorm.benchmark/BenchDb.cs` — путь к БД: `NEXTORM_BENCH_DB` → `/tmp/nextorm-bench/test.db` →
   fallback `data/test.db`. Все SQLite-классы переведены на него.
 - БД скопирована в WSL: `/tmp/nextorm-bench/test.db`.
 
@@ -231,10 +231,10 @@ HEAD (без правок):
 Использование:
 
 ```bash
-./nextorm.benchmark/bin/linux/Release/net10.0/nextorm.benchmark --list flat
-./nextorm.benchmark/bin/linux/Release/net10.0/nextorm.benchmark --filter "*SqliteBenchmarkSingle*"
-NEXTORM_BENCH_FULL=1 ./nextorm.benchmark/bin/linux/Release/net10.0/nextorm.benchmark --filter "*SqliteBenchmarkWhere*"
-NEXTORM_BENCH_DB=/path/test.db ./nextorm.benchmark/bin/linux/Release/net10.0/nextorm.benchmark --filter ...
+./benchmarks/nextorm.benchmark/bin/linux/Release/net10.0/nextorm.benchmark --list flat
+./benchmarks/nextorm.benchmark/bin/linux/Release/net10.0/nextorm.benchmark --filter "*SqliteBenchmarkSingle*"
+NEXTORM_BENCH_FULL=1 ./benchmarks/nextorm.benchmark/bin/linux/Release/net10.0/nextorm.benchmark --filter "*SqliteBenchmarkWhere*"
+NEXTORM_BENCH_DB=/path/test.db ./benchmarks/nextorm.benchmark/bin/linux/Release/net10.0/nextorm.benchmark --filter ...
 ```
 
 Побочный эффект: на нативном ФС картина совпала с коммитнутым отчётом —
@@ -265,10 +265,10 @@ NEXTORM_BENCH_DB=/path/test.db ./nextorm.benchmark/bin/linux/Release/net10.0/nex
 
 Сделано:
 
-- Legacy-сравнители перенесены из production-сборки в `nextorm.core.tests` (**2344 строки**):
+- Legacy-сравнители перенесены из production-сборки в `test/nextorm.core.tests` (**2344 строки**):
   `ExpressionPlanEqualityComparerDELETE` (826), `PreciseExpressionEqualityComparerDELETE` (797),
   `ExpressionEqualityComparerDELETE` (721).
-- `nextorm.core/Query/ExpressionPlanEqualityComparer.cs`: 1681 → 864 строк (только активный класс).
+- `src/nextorm.core/Query/ExpressionPlanEqualityComparer.cs`: 1681 → 864 строк (только активный класс).
 - Бенчмарк `BenchmarkQueryCommand` исправлен: сравнитель создаётся один раз, легаси-арм убран.
 
 Проверки: core/benchmark/sqlite build — успешно; 35 core + 101 sqlite тестов — зелёные.
