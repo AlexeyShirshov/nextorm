@@ -29,4 +29,6 @@ public interface IComplexEntity
     string? String { get; set; }
     [Column("b")]
     bool? Boolean { get; set; }
+    [Column("dt")]
+    DateTime? Datetime { get; set; }
 }

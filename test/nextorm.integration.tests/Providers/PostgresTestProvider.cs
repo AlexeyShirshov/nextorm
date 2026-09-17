@@ -22,6 +22,17 @@ internal sealed class PostgresTestProvider : ITestProvider
 
     public bool SupportsFractionalAverage => true;
 
+    // PostgreSQL implements INTERSECT ALL / EXCEPT ALL.
+    public bool SupportsIntersectExceptAll => true;
+
+    // PostgreSQL implements var/variance and varp/var_pop.
+    public bool SupportsVarianceAggregates => true;
+
+    // The shared TVF test targets SQLite's json_each; PostgreSQL would need its own json_each
+    // (jsonb/json return types differ), so it is skipped for now.
+    public bool SupportsTableValuedFunctions => false;
+    public string TableValuedFunctionSkipReason => "The shared table-valued function test uses SQLite's json_each; no portable equivalent is configured for PostgreSQL.";
+
     public string SkipReason => PostgresContainer.Failure ?? "PostgreSQL is not available.";
 
     public IDataContext CreateContext() =>
