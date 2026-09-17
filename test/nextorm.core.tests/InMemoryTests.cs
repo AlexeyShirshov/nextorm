@@ -16,6 +16,31 @@ public class InMemoryTests
         _sut.SimpleEntity.WithData(new[] { new SimpleEntity { Id = 1 }, new SimpleEntity { Id = 2 } });
     }
     [Fact]
+    public void TestDistinct()
+    {
+        _sut.SimpleEntity.WithData(new[]
+        {
+            new SimpleEntity { Id = 1 },
+            new SimpleEntity { Id = 1 },
+            new SimpleEntity { Id = 2 },
+        });
+
+        var r = _sut.SimpleEntity.Select(it => new { it.Id }).Distinct().ToList();
+
+        r.Should().HaveCount(2);
+        r.Should().Contain(x => x.Id == 1);
+        r.Should().Contain(x => x.Id == 2);
+    }
+    [Fact]
+    public void TestDistinct_ReferenceTypeWithoutValueEquality_ShouldThrow()
+    {
+        // SimpleEntity is a plain reference type without an Equals/GetHashCode override, so the
+        // in-memory provider cannot reproduce SQL's value-based DISTINCT and must reject it.
+        var act = () => _sut.SimpleEntity.Distinct().ToList();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*DISTINCT*");
+    }
+    [Fact]
     public async Task TestWhere()
     {
         var r = await _sut.SimpleEntity.Where(it => it.Id == 1).Select(it => new { it.Id }).SingleOrDefaultAsync();
@@ -337,5 +362,24 @@ public class InMemoryTests
         // When
         r.Id.Should().Be(2);
         // Then
+    }
+
+    private static class Tvf
+    {
+        [SqlTableFunction("simple_tvf")]
+        public static IQueryable<SimpleEntity> SimpleTvf() => throw new NotSupportedException();
+    }
+
+    [Fact]
+    public void TableFunction_ShouldThrowClearNotSupported()
+    {
+        // The in-memory provider cannot evaluate a database table-valued function, so it must fail
+        // loudly instead of silently returning an empty (or otherwise wrong) result set.
+        var act = () => _sut.DataProvider
+            .FromTableFunction(() => Tvf.SimpleTvf())
+            .Select(it => new { it.Id })
+            .ToList();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*in-memory*");
     }
 }

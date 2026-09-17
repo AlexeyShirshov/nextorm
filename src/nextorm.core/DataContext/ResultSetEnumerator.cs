@@ -4,6 +4,7 @@ using System.Data.Common;
 using System.Runtime.CompilerServices;
 using System.Text;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.ObjectPool;
 
 namespace nextorm.core;
 public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IAsyncInit<TResult>
@@ -14,18 +15,23 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
     private CancellationToken _cancellationToken;
     private object[]? _params;
     private readonly Func<IDataRecord, TResult>? _map;
+    private readonly ObjectPool<StringBuilder> _sbPool;
     private ILogger? _logger;
     private bool _logDebug;
     private bool _logSensitiveData;
     private DbDataReader? _reader;
+    // Not owned by this enumerator: _conn comes from DbContext.GetConnection() and is disposed
+    // by the context (DbContext.DisposeStaff). Disposing it here would close a connection that is
+    // still in use, so it is only cleared (Reset/DisposeAsync).
     private DbConnection? _conn;
     private bool _disposed;
     private TResult _current = default!;
-    public ResultSetEnumerator(DbPreparedQueryCommand<TResult> compiledQuery)
+    public ResultSetEnumerator(DbPreparedQueryCommand<TResult> compiledQuery, ObjectPool<StringBuilder>? sbPool = null)
     {
         //_cmd = cmd;
         _compiledQuery = compiledQuery;
         _map = compiledQuery.MapDelegate;
+        _sbPool = sbPool ?? StringBuilderPool.Shared;
     }
     // The row is materialized in MoveNext/MoveNextAsync, so Current is a plain field read.
     // This keeps mapping out of the async-iterator's `yield return enumerator.Current` path
@@ -201,7 +207,7 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
             return;
         }
 
-        var sb = DbContext._sbPool.Get();
+        var sb = _sbPool.Get();
         try
         {
             sb.Append("Executing query: {sql}").AppendLine();
@@ -223,7 +229,7 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
         }
         finally
         {
-            DbContext._sbPool.Return(sb);
+            _sbPool.Return(sb);
         }
     }
     public void Reset()

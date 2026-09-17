@@ -6,6 +6,10 @@ namespace nextorm.core;
 
 public class DefaultAliasProvider : IAliasProvider
 {
+    // Alias names are deterministic ("t1", "t2", ...); caching them removes a fresh string (and a
+    // boxed-index concat) from every alias lookup, of which a joined query does several per build.
+    private static readonly ParamNameCache _aliasNames = new("t");
+
 #if NET8_0_OR_GREATER
     private ValueList<(string alias, object sourceProvider)> _valueList;
 #else
@@ -16,13 +20,13 @@ public class DefaultAliasProvider : IAliasProvider
 #if DEBUG
         Debug.Assert(idx <= _valueList.Count);
 #endif
-        return "t" + (idx + 1);
+        return _aliasNames.Get(idx + 1);
     }
     public string GetNextAlias(FromExpression from)
     {
         var idx = _valueList.Count;
         idx++;
-        var alias = "t" + idx;
+        var alias = _aliasNames.Get(idx);
         _valueList.Add((alias, from));
         return alias;
     }
@@ -31,7 +35,7 @@ public class DefaultAliasProvider : IAliasProvider
     {
         var idx = _valueList.Count;
         idx++;
-        var alias = "t" + idx;
+        var alias = _aliasNames.Get(idx);
         _valueList.Add((alias, queryCommand));
         return alias;
     }

@@ -19,6 +19,24 @@ public static class DataContextExtensions
     public static QueryCommand<T> CreateCommand<T>(this IDataContext dataContext, Type srcType, LambdaExpression? condition, JoinExpression[]? joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having, ILogger? logger)
         => new(dataContext, srcType, condition, joins, paging, sorting, group, having, logger);
 
+    public static QueryCommand<T> CreateCommand<T>(this IDataContext dataContext, LambdaExpression exp, LambdaExpression? condition, JoinExpression[]? joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having, ILogger? logger, bool isDistinct)
+    {
+        var cmd = new QueryCommand<T>(dataContext, exp, condition, joins, paging, sorting, group, having, logger)
+        {
+            IsDistinct = isDistinct
+        };
+        return cmd;
+    }
+
+    public static QueryCommand<T> CreateCommand<T>(this IDataContext dataContext, Type srcType, LambdaExpression? condition, JoinExpression[]? joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having, ILogger? logger, bool isDistinct)
+    {
+        var cmd = new QueryCommand<T>(dataContext, srcType, condition, joins, paging, sorting, group, having, logger)
+        {
+            IsDistinct = isDistinct
+        };
+        return cmd;
+    }
+
     public static Entity<T> Create<T>(this IDataContext dataContext, Action<EntityBuilder<T>>? configEntity = null)
     {
         if (!DataContextCache.Metadata.ContainsKey(typeof(T)))
@@ -70,6 +88,14 @@ public static class DataContextExtensions
     public static Task<TResult?> SingleOrDefaultAsync<TResult>(this IDataContext dataContext, IPreparedQueryCommand<TResult> preparedQueryCommand, params object[]? @params)
         => dataContext.SingleOrDefaultAsync(preparedQueryCommand, @params, CancellationToken.None);
 
+    /// <summary>
+    /// Starts a query against a raw table (or CTE) name. Needed when the context is used through
+    /// <see cref="IDataContext"/> and therefore has no concrete <c>From(string)</c> instance method.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Entity From(this IDataContext dataContext, string table)
+        => new(dataContext, table) { Logger = dataContext.CommandLogger };
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Entity<TResult> From<TResult>(this IDataContext dataContext, QueryCommand<TResult> query)
         => new(dataContext, query) { Logger = dataContext.CommandLogger };
@@ -77,4 +103,31 @@ public static class DataContextExtensions
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Entity<TResult> From<TResult>(this IDataContext dataContext, Entity<TResult> builder)
         => new(dataContext, builder) { Logger = dataContext.CommandLogger };
+
+    /// <summary>
+    /// Starts a query from a table-valued function. <paramref name="call"/> must be a call to a static
+    /// method annotated with <see cref="SqlTableFunctionAttribute"/> (or declared in an annotated
+    /// type); its arguments are rendered as the function arguments and are parameterised like any
+    /// other expression. The function must already exist in the target database - nextorm only emits
+    /// the call.
+    /// <para>
+    /// Example: <c>ctx.FromTableFunction(() =&gt; Db.MyTvf(1, "x")).Select(r =&gt; new { r.Id })</c>.
+    /// </para>
+    /// </summary>
+    public static Entity<T> FromTableFunction<T>(this IDataContext dataContext, Expression<Func<IQueryable<T>>> call)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+        ArgumentNullException.ThrowIfNull(call);
+
+        var body = call.Body;
+        if (body is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } unary)
+            body = unary.Operand;
+
+        if (body is not MethodCallExpression methodCall)
+            throw new ArgumentException("The expression must be a call to a method mapped with [SqlTableFunction].", nameof(call));
+
+        var entity = dataContext.Create<T>();
+        entity.SourceFrom = new FromExpression(TableFunctionExpression.Create(methodCall));
+        return entity;
+    }
 }

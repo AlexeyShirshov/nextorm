@@ -4,7 +4,7 @@ using System.Reflection;
 
 namespace nextorm.core;
 
-[System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE1006:Naming Styles", Justification = "<Pending>")]
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE1006:Naming Styles", Justification = "Static readonly reflection-metadata fields (GetInt32MI, ...) are intentionally PascalCase as immutable lookup tables; IDE1006 is a suggestion and is not enforced by the build.")]
 public sealed class SelectExpression //: IEquatable<SelectExpression>
 {
     private readonly Type _realType;

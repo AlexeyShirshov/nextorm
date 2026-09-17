@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using System.Collections.Concurrent;
 using System.Linq.Expressions;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 
 namespace nextorm.core;
@@ -12,7 +13,6 @@ namespace nextorm.core;
 //     }
 //     protected static readonly IDictionary<IDataContext, Lazy<QueryCommand<bool>>> _anyCommandCache = new ConcurrentDictionary<IDataContext, Lazy<QueryCommand<bool>>>();
 // }
-[System.Diagnostics.CodeAnalysis.SuppressMessage("Minor Code Smell", "S2292:Trivial properties should be auto-implemented", Justification = "<Pending>")]
 public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 {
     // private const string AnyCommandProperty = "nextorm.core.AnyCommand";
@@ -25,6 +25,7 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     private List<Sorting>? _sorting;
     protected List<JoinExpression>? _joins;
     private string? _table;
+    private FromExpression? _from;
     #endregion
     public Entity(IDataContext dataProvider)
     {
@@ -48,19 +49,33 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     public List<Sorting>? Sorting { get => _sorting; set => _sorting = value; }
     public List<JoinExpression>? Joins { get => _joins; set => _joins = value; }
     public Paging Paging;
+    internal bool IsDistinct { get; set; }
     internal string? Table { get => _table; set => _table = value; }
+    /// <summary>
+    /// Explicit FROM source, used for table-valued functions (and any other source that is neither a
+    /// raw table name nor a derived <see cref="QueryCommand"/>). Propagated through the join builders
+    /// so a TVF can be used as the base of a joined query.
+    /// </summary>
+    internal FromExpression? SourceFrom { get => _from; set => _from = value; }
+    /// <summary>CTE declarations that must be attached to commands this builder creates.</summary>
+    internal IReadOnlyList<CteDefinition>? Ctes { get; set; }
     //public delegate void CommandCreatedHandler<T>(Entity<T> sender, QueryCommand queryCommand);
     //public event CommandCreatedHandler<TEntity>? CommandCreatedEvent;
     #endregion
 
     public QueryCommand<TResult> Select<TResult>(Expression<Func<TEntity, TResult>> exp)
     {
-        var cmd = _dataProvider.CreateCommand<TResult>(exp, _condition, _joins?.ToArray(), Paging, _sorting?.ToArray(), _group, _having, Logger);
+        var cmd = _dataProvider.CreateCommand<TResult>(exp, _condition, _joins?.ToArray(), Paging, _sorting?.ToArray(), _group, _having, Logger, IsDistinct);
 
         if (_query is not null)
             cmd.From = new FromExpression(_query);
+        else if (_from is not null)
+            cmd.From = _from;
         else if (!string.IsNullOrEmpty(_table))
             cmd.From = new FromExpression(_table);
+
+        if (Ctes is not null)
+            cmd.Ctes = Ctes;
         // OnCommandCreated(cmd);
         //RaiseCommandCreated(cmd);
 
@@ -68,12 +83,17 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     }
     public QueryCommand<TEntity> ToCommand()
     {
-        var cmd = _dataProvider.CreateCommand<TEntity>(typeof(TEntity), _condition, _joins?.ToArray(), Paging, _sorting?.ToArray(), _group, _having, Logger);
+        var cmd = _dataProvider.CreateCommand<TEntity>(typeof(TEntity), _condition, _joins?.ToArray(), Paging, _sorting?.ToArray(), _group, _having, Logger, IsDistinct);
 
         if (_query is not null)
             cmd.From = new FromExpression(_query);
+        else if (_from is not null)
+            cmd.From = _from;
         else if (!string.IsNullOrEmpty(_table))
             cmd.From = new FromExpression(_table);
+
+        if (Ctes is not null)
+            cmd.Ctes = Ctes;
 
         // OnCommandCreated(cmd);
         //RaiseCommandCreated(cmd);
@@ -98,6 +118,12 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         else
             b._condition = condition;
 
+        return b;
+    }
+    public Entity<TEntity> Distinct()
+    {
+        var b = Clone();
+        b.IsDistinct = true;
         return b;
     }
     public Entity<TEntity> Limit(int limit)
@@ -144,6 +170,9 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         dst._group = _group;
         dst._having = _having;
         dst._table = _table;
+        dst._from = _from;
+        dst.IsDistinct = IsDistinct;
+        dst.Ctes = Ctes;
     }
     protected virtual object CloneImp()
     {
@@ -164,6 +193,16 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IEnumerable<TEntity> ToEnumerable(params object[] @params) => ToCommand().ToEnumerable(@params);
     public EntityP2<TEntity, TJoinEntity> Join<TJoinEntity>(Entity<TJoinEntity> _, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
+        => JoinCore(_, JoinType.Inner, joinCondition);
+    public EntityP2<TEntity, TJoinEntity> LeftJoin<TJoinEntity>(Entity<TJoinEntity> _, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
+        => JoinCore(_, JoinType.Left, joinCondition);
+    public EntityP2<TEntity, TJoinEntity> RightJoin<TJoinEntity>(Entity<TJoinEntity> _, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
+        => JoinCore(_, JoinType.Right, joinCondition);
+    public EntityP2<TEntity, TJoinEntity> FullJoin<TJoinEntity>(Entity<TJoinEntity> _, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
+        => JoinCore(_, JoinType.Full, joinCondition);
+    public EntityP2<TEntity, TJoinEntity> CrossJoin<TJoinEntity>(Entity<TJoinEntity> _)
+        => JoinCore(_, JoinType.Cross, null);
+    private EntityP2<TEntity, TJoinEntity> JoinCore<TJoinEntity>(Entity<TJoinEntity> _, JoinType joinType, LambdaExpression? joinCondition)
     {
         QueryCommand? query = null;
         if (_condition is not null || _query is not null)
@@ -171,10 +210,23 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             query = ToCommand();
         }
 
-        var cb = new EntityP2<TEntity, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition) { From = _dataProvider.GetFrom(typeof(TJoinEntity), null)! }) { Logger = Logger, _query = query };
+        // A TVF (or other explicit source) on either side is carried as a FromExpression: the right
+        // side keeps the joined entity's own source, the left side keeps the one propagated below.
+        var cb = new EntityP2<TEntity, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition, joinType) { From = _.SourceFrom ?? _dataProvider.GetFrom(typeof(TJoinEntity), null)!, EntityType = joinCondition is null ? typeof(TJoinEntity) : null }) { Logger = Logger, _query = query, IsDistinct = IsDistinct, Ctes = Ctes };
+        cb.SourceFrom = SourceFrom;
         return cb;
     }
     public EntityP2<TEntity, TJoinEntity> Join<TJoinEntity>(QueryCommand<TJoinEntity> query, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
+        => JoinCore(query, JoinType.Inner, joinCondition);
+    public EntityP2<TEntity, TJoinEntity> LeftJoin<TJoinEntity>(QueryCommand<TJoinEntity> query, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
+        => JoinCore(query, JoinType.Left, joinCondition);
+    public EntityP2<TEntity, TJoinEntity> RightJoin<TJoinEntity>(QueryCommand<TJoinEntity> query, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
+        => JoinCore(query, JoinType.Right, joinCondition);
+    public EntityP2<TEntity, TJoinEntity> FullJoin<TJoinEntity>(QueryCommand<TJoinEntity> query, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
+        => JoinCore(query, JoinType.Full, joinCondition);
+    public EntityP2<TEntity, TJoinEntity> CrossJoin<TJoinEntity>(QueryCommand<TJoinEntity> query)
+        => JoinCore(query, JoinType.Cross, null);
+    private EntityP2<TEntity, TJoinEntity> JoinCore<TJoinEntity>(QueryCommand<TJoinEntity> query, JoinType joinType, LambdaExpression? joinCondition)
     {
         QueryCommand? queryBase = null;
         if (_condition is not null || _query is not null)
@@ -182,7 +234,8 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             queryBase = ToCommand();
         }
 
-        var cb = new EntityP2<TEntity, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition) { From = new FromExpression(query) }) { Logger = Logger, _query = queryBase };
+        var cb = new EntityP2<TEntity, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition, joinType) { From = new FromExpression(query), EntityType = joinCondition is null ? typeof(TJoinEntity) : null }) { Logger = Logger, _query = queryBase, IsDistinct = IsDistinct, Ctes = Ctes };
+        cb.SourceFrom = SourceFrom;
         return cb;
     }
     public Entity<TEntity> GroupBy<TResult>(Expression<Func<TEntity, TResult>> exp)
@@ -215,7 +268,9 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         cmd.IgnoreColumns = true;
         return queryCommand;
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Any() => AnyCore(ReadOnlySpan<object?>.Empty);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Any(params ReadOnlySpan<object?> @params) => AnyCore(@params);
     private bool AnyCore(ReadOnlySpan<object?> @params)
     {
@@ -225,6 +280,7 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         var preparedCommand = _dataProvider.GetPreparedQueryCommand(queryCommand, false, true, CancellationToken.None);
         return _dataProvider.ExecuteScalar<bool>(preparedCommand, @params, true);
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public List<TEntity> ToList(params ReadOnlySpan<object?> @params)
     {
         return ToCommand().ToList(@params);
@@ -235,6 +291,7 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     {
         return ToCommand().ToListAsync(cancellationToken, @params);
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public TEntity First() => First(ReadOnlySpan<object?>.Empty);
     public TEntity First(params ReadOnlySpan<object?> @params)
     {
@@ -264,6 +321,7 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         return cmd;
 #pragma warning restore CS8619 // Nullability of reference types in value doesn't match target type.
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public TEntity? FirstOrDefault() => FirstOrDefault(ReadOnlySpan<object?>.Empty);
     public TEntity? FirstOrDefault(params ReadOnlySpan<object?> @params)
     {
@@ -275,6 +333,7 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     {
         return ToCommand().FirstOrDefaultAsync(cancellationToken, @params);
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public TEntity Single() => Single(ReadOnlySpan<object?>.Empty);
     public TEntity Single(params ReadOnlySpan<object?> @params)
     {
@@ -300,6 +359,7 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         cmd.Paging.Limit = 2;
         return cmd;
     }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public TEntity? SingleOrDefault() => SingleOrDefault(ReadOnlySpan<object?>.Empty);
     public TEntity? SingleOrDefault(params ReadOnlySpan<object?> @params)
     {
@@ -377,7 +437,9 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     public Entity<TEntity> OrderByDescending(int columnIdx) => OrderBy(columnIdx, OrderDirection.Desc);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public IPreparedQueryCommand<TEntity> Prepare(bool nonStreamUsing = true, CancellationToken cancellationToken = default) => ToCommand().Prepare(nonStreamUsing, cancellationToken);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int Count() => CountCore(ReadOnlySpan<object?>.Empty);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public int Count(params ReadOnlySpan<object?> @params) => CountCore(@params);
     private int CountCore(ReadOnlySpan<object?> @params)
     {
@@ -393,131 +455,74 @@ public class Entity<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         cmd.SingleRow = true;
         return cmd.ExecuteScalarAsync(cancellationToken, @params);
     }
-    public TResult? Min<TResult>(Expression<Func<TEntity, TResult>> exp) => MinCore(exp, ReadOnlySpan<object?>.Empty);
-    public TResult? Min<TResult>(Expression<Func<TEntity, TResult>> exp, params ReadOnlySpan<object?> @params) => MinCore(exp, @params);
-    private TResult? MinCore<TResult>(Expression<Func<TEntity, TResult>> exp, ReadOnlySpan<object?> @params)
-    {
-        var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.MinMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
-        cmd.SingleRow = true;
-        return cmd.ExecuteScalar(@params);
-    }
+    // The eight aggregate families differ only in the NORM_SQL method they wrap, so every public
+    // member is a one-line forwarder and the body lives once in AggregateCore/AggregateAsyncCore.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public TResult? Min<TResult>(Expression<Func<TEntity, TResult>> exp) => AggregateCore(NORM.NORM_SQL.MinMI, exp, ReadOnlySpan<object?>.Empty);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public TResult? Min<TResult>(Expression<Func<TEntity, TResult>> exp, params ReadOnlySpan<object?> @params) => AggregateCore(NORM.NORM_SQL.MinMI, exp, @params);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<TResult?> MinAsync<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params) => MinAsync(exp, CancellationToken.None, @params);
-    public Task<TResult?> MinAsync<TResult>(Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params)
-    {
-        var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.MinMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
-        cmd.SingleRow = true;
-        return cmd.ExecuteScalarAsync(cancellationToken, @params);
-    }
-    public TResult? Max<TResult>(Expression<Func<TEntity, TResult>> exp) => MaxCore(exp, ReadOnlySpan<object?>.Empty);
-    public TResult? Max<TResult>(Expression<Func<TEntity, TResult>> exp, params ReadOnlySpan<object?> @params) => MaxCore(exp, @params);
-    private TResult? MaxCore<TResult>(Expression<Func<TEntity, TResult>> exp, ReadOnlySpan<object?> @params)
-    {
-        var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.MaxMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
-        cmd.SingleRow = true;
-        return cmd.ExecuteScalar(@params);
-    }
+    public Task<TResult?> MinAsync<TResult>(Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params) => AggregateAsyncCore(NORM.NORM_SQL.MinMI, exp, cancellationToken, @params);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public TResult? Max<TResult>(Expression<Func<TEntity, TResult>> exp) => AggregateCore(NORM.NORM_SQL.MaxMI, exp, ReadOnlySpan<object?>.Empty);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public TResult? Max<TResult>(Expression<Func<TEntity, TResult>> exp, params ReadOnlySpan<object?> @params) => AggregateCore(NORM.NORM_SQL.MaxMI, exp, @params);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<TResult?> MaxAsync<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params) => MaxAsync(exp, CancellationToken.None, @params);
-    public Task<TResult?> MaxAsync<TResult>(Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params)
-    {
-        var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.MaxMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
-        cmd.SingleRow = true;
-        return cmd.ExecuteScalarAsync(cancellationToken, @params);
-    }
-    public TResult? Avg<TResult>(Expression<Func<TEntity, TResult>> exp) => AvgCore(exp, ReadOnlySpan<object?>.Empty);
-    public TResult? Avg<TResult>(Expression<Func<TEntity, TResult>> exp, params ReadOnlySpan<object?> @params) => AvgCore(exp, @params);
-    private TResult? AvgCore<TResult>(Expression<Func<TEntity, TResult>> exp, ReadOnlySpan<object?> @params)
-    {
-        var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.AvgMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
-        cmd.SingleRow = true;
-        return cmd.ExecuteScalar(@params);
-    }
+    public Task<TResult?> MaxAsync<TResult>(Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params) => AggregateAsyncCore(NORM.NORM_SQL.MaxMI, exp, cancellationToken, @params);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public TResult? Avg<TResult>(Expression<Func<TEntity, TResult>> exp) => AggregateCore(NORM.NORM_SQL.AvgMI, exp, ReadOnlySpan<object?>.Empty);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public TResult? Avg<TResult>(Expression<Func<TEntity, TResult>> exp, params ReadOnlySpan<object?> @params) => AggregateCore(NORM.NORM_SQL.AvgMI, exp, @params);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<TResult?> AvgAsync<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params) => AvgAsync(exp, CancellationToken.None, @params);
-    public Task<TResult?> AvgAsync<TResult>(Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params)
-    {
-        var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.AvgMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
-        cmd.SingleRow = true;
-        return cmd.ExecuteScalarAsync(cancellationToken, @params);
-    }
-    public TResult? Sum<TResult>(Expression<Func<TEntity, TResult>> exp) => SumCore(exp, ReadOnlySpan<object?>.Empty);
-    public TResult? Sum<TResult>(Expression<Func<TEntity, TResult>> exp, params ReadOnlySpan<object?> @params) => SumCore(exp, @params);
-    private TResult? SumCore<TResult>(Expression<Func<TEntity, TResult>> exp, ReadOnlySpan<object?> @params)
-    {
-        var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.SumMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
-        cmd.SingleRow = true;
-        return cmd.ExecuteScalar(@params);
-    }
+    public Task<TResult?> AvgAsync<TResult>(Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params) => AggregateAsyncCore(NORM.NORM_SQL.AvgMI, exp, cancellationToken, @params);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public TResult? Sum<TResult>(Expression<Func<TEntity, TResult>> exp) => AggregateCore(NORM.NORM_SQL.SumMI, exp, ReadOnlySpan<object?>.Empty);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public TResult? Sum<TResult>(Expression<Func<TEntity, TResult>> exp, params ReadOnlySpan<object?> @params) => AggregateCore(NORM.NORM_SQL.SumMI, exp, @params);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<TResult?> SumAsync<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params) => SumAsync(exp, CancellationToken.None, @params);
-    public Task<TResult?> SumAsync<TResult>(Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params)
-    {
-        var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.SumMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
-        cmd.SingleRow = true;
-        return cmd.ExecuteScalarAsync(cancellationToken, @params);
-    }
-    public TResult? Stdev<TResult>(Expression<Func<TEntity, TResult>> exp) => StdevCore(exp, ReadOnlySpan<object?>.Empty);
-    public TResult? Stdev<TResult>(Expression<Func<TEntity, TResult>> exp, params ReadOnlySpan<object?> @params) => StdevCore(exp, @params);
-    private TResult? StdevCore<TResult>(Expression<Func<TEntity, TResult>> exp, ReadOnlySpan<object?> @params)
-    {
-        var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.StdevMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
-        cmd.SingleRow = true;
-        return cmd.ExecuteScalar(@params);
-    }
+    public Task<TResult?> SumAsync<TResult>(Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params) => AggregateAsyncCore(NORM.NORM_SQL.SumMI, exp, cancellationToken, @params);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public TResult? Stdev<TResult>(Expression<Func<TEntity, TResult>> exp) => AggregateCore(NORM.NORM_SQL.StdevMI, exp, ReadOnlySpan<object?>.Empty);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public TResult? Stdev<TResult>(Expression<Func<TEntity, TResult>> exp, params ReadOnlySpan<object?> @params) => AggregateCore(NORM.NORM_SQL.StdevMI, exp, @params);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<TResult?> StdevAsync<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params) => StdevAsync(exp, CancellationToken.None, @params);
-    public Task<TResult?> StdevAsync<TResult>(Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params)
-    {
-        var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.StdevMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
-        cmd.SingleRow = true;
-        return cmd.ExecuteScalarAsync(cancellationToken, @params);
-    }
-    public TResult? Stdevp<TResult>(Expression<Func<TEntity, TResult>> exp) => StdevpCore(exp, ReadOnlySpan<object?>.Empty);
-    public TResult? Stdevp<TResult>(Expression<Func<TEntity, TResult>> exp, params ReadOnlySpan<object?> @params) => StdevpCore(exp, @params);
-    private TResult? StdevpCore<TResult>(Expression<Func<TEntity, TResult>> exp, ReadOnlySpan<object?> @params)
-    {
-        var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.StdevpMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
-        cmd.SingleRow = true;
-        return cmd.ExecuteScalar(@params);
-    }
+    public Task<TResult?> StdevAsync<TResult>(Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params) => AggregateAsyncCore(NORM.NORM_SQL.StdevMI, exp, cancellationToken, @params);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public TResult? Stdevp<TResult>(Expression<Func<TEntity, TResult>> exp) => AggregateCore(NORM.NORM_SQL.StdevpMI, exp, ReadOnlySpan<object?>.Empty);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public TResult? Stdevp<TResult>(Expression<Func<TEntity, TResult>> exp, params ReadOnlySpan<object?> @params) => AggregateCore(NORM.NORM_SQL.StdevpMI, exp, @params);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<TResult?> StdevpAsync<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params) => StdevpAsync(exp, CancellationToken.None, @params);
-    public Task<TResult?> StdevpAsync<TResult>(Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params)
-    {
-        var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.StdevpMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
-        cmd.SingleRow = true;
-        return cmd.ExecuteScalarAsync(cancellationToken, @params);
-    }
-    public TResult? Var<TResult>(Expression<Func<TEntity, TResult>> exp) => VarCore(exp, ReadOnlySpan<object?>.Empty);
-    public TResult? Var<TResult>(Expression<Func<TEntity, TResult>> exp, params ReadOnlySpan<object?> @params) => VarCore(exp, @params);
-    private TResult? VarCore<TResult>(Expression<Func<TEntity, TResult>> exp, ReadOnlySpan<object?> @params)
-    {
-        var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.VarMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
-        cmd.SingleRow = true;
-        return cmd.ExecuteScalar(@params);
-    }
+    public Task<TResult?> StdevpAsync<TResult>(Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params) => AggregateAsyncCore(NORM.NORM_SQL.StdevpMI, exp, cancellationToken, @params);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public TResult? Var<TResult>(Expression<Func<TEntity, TResult>> exp) => AggregateCore(NORM.NORM_SQL.VarMI, exp, ReadOnlySpan<object?>.Empty);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public TResult? Var<TResult>(Expression<Func<TEntity, TResult>> exp, params ReadOnlySpan<object?> @params) => AggregateCore(NORM.NORM_SQL.VarMI, exp, @params);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<TResult?> VarAsync<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params) => VarAsync(exp, CancellationToken.None, @params);
-    public Task<TResult?> VarAsync<TResult>(Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params)
+    public Task<TResult?> VarAsync<TResult>(Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params) => AggregateAsyncCore(NORM.NORM_SQL.VarMI, exp, cancellationToken, @params);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public TResult? Varp<TResult>(Expression<Func<TEntity, TResult>> exp) => AggregateCore(NORM.NORM_SQL.VarpMI, exp, ReadOnlySpan<object?>.Empty);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public TResult? Varp<TResult>(Expression<Func<TEntity, TResult>> exp, params ReadOnlySpan<object?> @params) => AggregateCore(NORM.NORM_SQL.VarpMI, exp, @params);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Task<TResult?> VarpAsync<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params) => VarpAsync(exp, CancellationToken.None, @params);
+    public Task<TResult?> VarpAsync<TResult>(Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params) => AggregateAsyncCore(NORM.NORM_SQL.VarpMI, exp, cancellationToken, @params);
+
+    private TResult? AggregateCore<TResult>(MethodInfo sqlMethod, Expression<Func<TEntity, TResult>> exp, ReadOnlySpan<object?> @params)
     {
-        var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.VarMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
-        cmd.SingleRow = true;
-        return cmd.ExecuteScalarAsync(cancellationToken, @params);
-    }
-    public TResult? Varp<TResult>(Expression<Func<TEntity, TResult>> exp) => VarpCore(exp, ReadOnlySpan<object?>.Empty);
-    public TResult? Varp<TResult>(Expression<Func<TEntity, TResult>> exp, params ReadOnlySpan<object?> @params) => VarpCore(exp, @params);
-    private TResult? VarpCore<TResult>(Expression<Func<TEntity, TResult>> exp, ReadOnlySpan<object?> @params)
-    {
-        var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.VarpMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
+        var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, sqlMethod.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
         cmd.SingleRow = true;
         return cmd.ExecuteScalar(@params);
     }
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Task<TResult?> VarpAsync<TResult>(Expression<Func<TEntity, TResult>> exp, params object[] @params) => VarpAsync(exp, CancellationToken.None, @params);
-    public Task<TResult?> VarpAsync<TResult>(Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, params object[] @params)
+    private Task<TResult?> AggregateAsyncCore<TResult>(MethodInfo sqlMethod, Expression<Func<TEntity, TResult>> exp, CancellationToken cancellationToken, object[] @params)
     {
-        var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, NORM.NORM_SQL.VarpMI.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
+        var cmd = Select(Expression.Lambda<Func<TEntity, TResult>>(Expression.Call(NORM.NORM_SQL.SQLExpression, sqlMethod.MakeGenericMethod(typeof(TResult)), exp.Body), exp.Parameters));
         cmd.SingleRow = true;
         return cmd.ExecuteScalarAsync(cancellationToken, @params);
     }
@@ -531,6 +536,8 @@ public class Entity : ICloneable
     private Expression<Func<TableAlias, bool>>? _condition;
     private List<Sorting>? _sorting;
     protected List<JoinExpression>? _joins;
+    /// <summary>CTE declarations that must be attached to commands this builder creates.</summary>
+    internal IReadOnlyList<CteDefinition>? Ctes { get; set; }
     public Entity(IDataContext dataProvider) : this(dataProvider, null) { }
     public Entity(IDataContext dataProvider, string? table)
     {
@@ -544,6 +551,9 @@ public class Entity : ICloneable
 
         if (!string.IsNullOrEmpty(_table))
             cmd.From = new FromExpression(_table);
+
+        if (Ctes is not null)
+            cmd.Ctes = Ctes;
 
         return cmd;
     }
@@ -559,6 +569,7 @@ public class Entity : ICloneable
     {
         dst._condition = _condition;
         dst._sorting = _sorting;
+        dst.Ctes = Ctes;
     }
     protected virtual object CloneImp()
     {
@@ -584,13 +595,33 @@ public class Entity : ICloneable
         return b;
     }
     public EntityP2<TableAlias, TableAlias> Join(Entity from, Expression<Func<TableAlias, TableAlias, bool>> joinCondition)
+        => JoinCore(from, JoinType.Inner, joinCondition);
+    public EntityP2<TableAlias, TableAlias> LeftJoin(Entity from, Expression<Func<TableAlias, TableAlias, bool>> joinCondition)
+        => JoinCore(from, JoinType.Left, joinCondition);
+    public EntityP2<TableAlias, TableAlias> RightJoin(Entity from, Expression<Func<TableAlias, TableAlias, bool>> joinCondition)
+        => JoinCore(from, JoinType.Right, joinCondition);
+    public EntityP2<TableAlias, TableAlias> FullJoin(Entity from, Expression<Func<TableAlias, TableAlias, bool>> joinCondition)
+        => JoinCore(from, JoinType.Full, joinCondition);
+    public EntityP2<TableAlias, TableAlias> CrossJoin(Entity from)
+        => JoinCore(from, JoinType.Cross, null);
+    private EntityP2<TableAlias, TableAlias> JoinCore(Entity from, JoinType joinType, LambdaExpression? joinCondition)
     {
-        var cb = new EntityP2<TableAlias, TableAlias>(_dataProvider, new JoinExpression(joinCondition) { From = new FromExpression(from._table!) }) { Logger = Logger, Table = _table };
+        var cb = new EntityP2<TableAlias, TableAlias>(_dataProvider, new JoinExpression(joinCondition, joinType) { From = new FromExpression(from._table!), EntityType = joinCondition is null ? typeof(TableAlias) : null }) { Logger = Logger, Table = _table, Ctes = Ctes };
         return cb;
     }
     public EntityP2<TableAlias, TJoinEntity> Join<TJoinEntity>(Entity<TJoinEntity> _, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition)
+        => JoinCore(_, JoinType.Inner, joinCondition);
+    public EntityP2<TableAlias, TJoinEntity> LeftJoin<TJoinEntity>(Entity<TJoinEntity> _, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition)
+        => JoinCore(_, JoinType.Left, joinCondition);
+    public EntityP2<TableAlias, TJoinEntity> RightJoin<TJoinEntity>(Entity<TJoinEntity> _, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition)
+        => JoinCore(_, JoinType.Right, joinCondition);
+    public EntityP2<TableAlias, TJoinEntity> FullJoin<TJoinEntity>(Entity<TJoinEntity> _, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition)
+        => JoinCore(_, JoinType.Full, joinCondition);
+    public EntityP2<TableAlias, TJoinEntity> CrossJoin<TJoinEntity>(Entity<TJoinEntity> _)
+        => JoinCore(_, JoinType.Cross, null);
+    private EntityP2<TableAlias, TJoinEntity> JoinCore<TJoinEntity>(Entity<TJoinEntity> _, JoinType joinType, LambdaExpression? joinCondition)
     {
-        var cb = new EntityP2<TableAlias, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition) { From = _dataProvider.GetFrom(typeof(TJoinEntity), null)! }) { Logger = Logger, Table = _table };
+        var cb = new EntityP2<TableAlias, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition, joinType) { From = _dataProvider.GetFrom(typeof(TJoinEntity), null)!, EntityType = joinCondition is null ? typeof(TJoinEntity) : null }) { Logger = Logger, Table = _table, Ctes = Ctes };
         return cb;
     }
 }

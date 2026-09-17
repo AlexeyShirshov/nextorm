@@ -3,25 +3,23 @@ using System.Diagnostics;
 using System.Linq.Expressions;
 using System.Text;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.ObjectPool;
 
 namespace nextorm.core;
 
 public struct SqlBuilder
 {
-    private readonly static ObjectPool<StringBuilder> _sbPool = new DefaultObjectPoolProvider().Create(new StringBuilderPooledObjectPolicy());
-    private readonly DbContext _dbContext;
+    private readonly ISqlDialect _dialect;
     private readonly IColumnsProvider _columnsProvider;
     private readonly IAliasProvider? _aliasProvider;
     private readonly IParamProvider _paramProvider;
     private readonly IQueryProvider _queryProvider;
     private readonly List<Param> _params;
     private readonly bool _paramMode;
-    public SqlBuilder(DbContext dbContext, bool paramMode, List<Param> @params, IColumnsProvider columnsProvider, IQueryProvider queryProvider, IParamProvider paramProvider, IAliasProvider? aliasProvider, ILogger? logger)
+    public SqlBuilder(ISqlDialect dialect, bool paramMode, List<Param> @params, IColumnsProvider columnsProvider, IQueryProvider queryProvider, IParamProvider paramProvider, IAliasProvider? aliasProvider, ILogger? logger)
     {
         ArgumentNullException.ThrowIfNull(@params);
 
-        _dbContext = dbContext;
+        _dialect = dialect;
         _paramMode = paramMode;
         _params = @params;
         _columnsProvider = columnsProvider;
@@ -47,14 +45,22 @@ public struct SqlBuilder
 
         var selectList = cmd.SelectList;
         var from = cmd.From;
+        var ctes = cmd.Ctes;
 
-        var sqlBuilder = _paramMode ? null : _sbPool.Get();
-        var selectBuilder = _paramMode ? null : _sbPool.Get();
+        var sqlBuilder = _paramMode ? null : StringBuilderPool.Shared.Get();
+        var selectBuilder = _paramMode ? null : StringBuilderPool.Shared.Get();
         string? topStmt = null;
+        string? withClause = null;
+        string? maxRecursionStmt = null;
 
         try
         {
-            var pageApplied = !_paramMode && !(cmd.IgnoreColumns || selectList is null) && cmd.Paging.IsTop && _dbContext.MakeTop(cmd.Paging.Limit, out topStmt);
+            // CTEs are rendered (or, in parameter mode, only walked for parameters) before the outer
+            // statement so both SQL and parameter passes see the CTE parameters first and in the same order.
+            if (ctes is { Count: > 0 })
+                withClause = MakeWithClause(ctes, out maxRecursionStmt);
+
+            var pageApplied = !_paramMode && !(cmd.IgnoreColumns || selectList is null) && cmd.Paging.IsTop && _dialect.MakeTop(cmd.Paging.Limit, out topStmt);
 
             var joins = cmd.Joins;
             var hasJoins = joins?.Length > 0;
@@ -81,8 +87,8 @@ public struct SqlBuilder
 
                 if (cmd.PreparedCondition is not null)
                 {
-                    var whereSql = MakeWhere(entityType, cmd.PreparedCondition, 0);
-                    if (!_paramMode) sqlBuilder!.AppendLine().Append(" where ").Append(whereSql);
+                    if (!_paramMode) sqlBuilder!.AppendLine().Append(" where ");
+                    MakeWhere(sqlBuilder, entityType, cmd.PreparedCondition, 0);
                 }
 
                 var grouping = cmd.GroupingList;
@@ -102,7 +108,7 @@ public struct SqlBuilder
 
                             if (needAliasForColumn)
                             {
-                                sqlBuilder.Append(_dbContext.MakeColumnAlias(item.PropertyName));
+                                sqlBuilder.Append(_dialect.MakeColumnAlias(item.PropertyName));
                             }
 
                             sqlBuilder.Append(", ");
@@ -116,24 +122,31 @@ public struct SqlBuilder
 
                     if (cmd.Having is not null)
                     {
-                        var havingSql = MakeWhere(entityType, cmd.Having, 0);
-                        if (!_paramMode) sqlBuilder!.AppendLine().Append(" having ").Append(havingSql);
+                        if (!_paramMode) sqlBuilder!.AppendLine().Append(" having ");
+                        MakeWhere(sqlBuilder, entityType, cmd.Having, 0);
                     }
                 }
 
                 if (cmd.UnionQuery is not null)
                 {
+                    if (cmd.UnionType is UnionType.IntersectAll or UnionType.ExceptAll && !_dialect.SupportsIntersectExceptAll)
+                        throw new NotSupportedException($"The {cmd.UnionType} set operation is not supported by this SQL dialect");
+
                     if (!_paramMode)
                     {
                         sqlBuilder!.AppendLine().Append(cmd.UnionType switch
                         {
                             UnionType.Distinct => " union ",
                             UnionType.All => " union all ",
+                            UnionType.Intersect => " intersect ",
+                            UnionType.IntersectAll => " intersect all ",
+                            UnionType.Except => " except ",
+                            UnionType.ExceptAll => " except all ",
                             _ => throw new NotSupportedException(cmd.UnionType.ToString("G"))
                         }).AppendLine();
                     }
 
-                    var builder = new SqlBuilder(_dbContext, _paramMode, _params, _columnsProvider, _queryProvider, _paramProvider, new DefaultAliasProvider(), Logger);
+                    var builder = new SqlBuilder(_dialect, _paramMode, _params, _columnsProvider, _queryProvider, _paramProvider, new DefaultAliasProvider(), Logger);
                     var sql = builder.MakeSelect(cmd.UnionQuery);
                     if (!_paramMode) sqlBuilder!.Append(sql);
                 }
@@ -170,22 +183,30 @@ public struct SqlBuilder
 
                     if (!_paramMode) sqlBuilder!.Length -= 2;
                 }
-                else if (!pageApplied && _dbContext.RequireSorting(cmd) && !_paramMode)
+                else if (!pageApplied && !_paramMode && _dialect.GetPagingOrderBy(cmd) is { } pagingOrderBy)
                 {
-                    sqlBuilder!.AppendLine().Append(" order by ").Append(_dbContext.EmptySorting());
+                    sqlBuilder!.AppendLine().Append(" order by ").Append(pagingOrderBy);
                 }
 
                 if (!pageApplied && !_paramMode && !cmd.Paging.IsEmpty)
                 {
                     sqlBuilder!.AppendLine();
-                    _dbContext.MakePage(cmd.Paging, sqlBuilder);
+                    _dialect.MakePage(cmd.Paging, sqlBuilder);
                 }
             }
             else if (!_paramMode && sqlBuilder!.Length > 0)
                 sqlBuilder.Length -= 2;
 
 
-            if (!_paramMode) selectBuilder!.Append("select ");
+            if (!_paramMode)
+            {
+                selectBuilder!.Append("select ");
+
+                // SQL Server renders the limit as TOP(n); DISTINCT has to precede it
+                // ("select distinct top(n) ..."), so the flag is emitted before the select-list branch.
+                if (cmd.IsDistinct)
+                    selectBuilder.Append("distinct ");
+            }
             if (cmd.IgnoreColumns || selectList is null)
             {
                 if (!_paramMode) selectBuilder!.Append("*, ");
@@ -209,7 +230,7 @@ public struct SqlBuilder
 
                         if (needAliasForColumn)
                         {
-                            selectBuilder.Append(_dbContext.MakeColumnAlias(item.PropertyName));
+                            selectBuilder.Append(_dialect.MakeColumnAlias(item.PropertyName));
                         }
 
                         selectBuilder.Append(", ");
@@ -217,14 +238,22 @@ public struct SqlBuilder
                 }
             }
 
+
             string? r = null;
             if (!_paramMode)
             {
                 selectBuilder!.Length -= 2;
                 sqlBuilder!.Insert(0, selectBuilder!.ToString());
 
+                if (withClause is not null)
+                    sqlBuilder!.Insert(0, withClause);
+
+                if (maxRecursionStmt is not null)
+                    sqlBuilder!.Append(' ').Append(maxRecursionStmt);
+
                 r = sqlBuilder!.ToString();
             }
+
 
 #if DEBUG
             if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Generated sql with param mode {mode}: {sql}", _paramMode, r);
@@ -235,38 +264,137 @@ public struct SqlBuilder
         finally
         {
             if (selectBuilder is not null)
-                _sbPool.Return(selectBuilder);
+                StringBuilderPool.Shared.Return(selectBuilder);
 
             if (sqlBuilder is not null)
-                _sbPool.Return(sqlBuilder);
+                StringBuilderPool.Shared.Return(sqlBuilder);
+        }
+    }
+    /// <summary>
+    /// Renders the <c>with [recursive] name as (&lt;select&gt;), ...</c> prefix for <paramref name="ctes"/>.
+    /// In parameter mode nothing is rendered but every CTE query is still walked so its parameters are
+    /// collected in the same order as the SQL pass. <paramref name="maxRecursionStmt"/> receives the
+    /// dialect's recursion option (if any), which the caller appends after the statement.
+    /// </summary>
+    private string? MakeWithClause(IReadOnlyList<CteDefinition> ctes, out string? maxRecursionStmt)
+    {
+        maxRecursionStmt = null;
+
+        var anyRecursive = false;
+        int? maxRecursion = null;
+
+        for (var (i, cnt) = (0, ctes.Count); i < cnt; i++)
+        {
+            var cte = ctes[i];
+            if (cte.Recursive) anyRecursive = true;
+            if (maxRecursion is null && cte.MaxRecursion is int value) maxRecursion = value;
+        }
+
+        if (maxRecursion is int depth)
+            maxRecursionStmt = _dialect.MakeMaxRecursion(depth);
+
+        if (_paramMode)
+        {
+            for (var (i, cnt) = (0, ctes.Count); i < cnt; i++)
+            {
+                var cte = ctes[i];
+                var walker = new SqlBuilder(_dialect, true, _params, new DefaultColumnsProvider(), cte.Query, _paramProvider, null, Logger);
+                walker.MakeSelect(cte.Query);
+            }
+
+            return null;
+        }
+
+        var withBuilder = StringBuilderPool.Shared.Get();
+        try
+        {
+            withBuilder.Append(_dialect.MakeWith(anyRecursive));
+
+            for (var (i, cnt) = (0, ctes.Count); i < cnt; i++)
+            {
+                var cte = ctes[i];
+
+                if (i > 0)
+                    withBuilder.Append(", ");
+
+                withBuilder.Append(cte.Name).Append(" as (");
+
+                // Each CTE is rendered in isolation: a fresh columns provider keeps the outer source
+                // list untouched, and a fresh alias provider makes alias numbering self-contained
+                // (mirroring how UNION branches are rendered).
+                var builder = new SqlBuilder(_dialect, false, _params, new DefaultColumnsProvider(), cte.Query, _paramProvider, new DefaultAliasProvider(), Logger);
+                withBuilder.Append(builder.MakeSelect(cte.Query));
+
+                withBuilder.Append(')');
+            }
+
+            withBuilder.Append(' ');
+            return withBuilder.ToString();
+        }
+        finally
+        {
+            StringBuilderPool.Shared.Return(withBuilder);
         }
     }
     public string? MakeJoin(JoinExpression join, Type entityType)
     {
-        var sqlBuilder = _paramMode ? null : _sbPool.Get();
+        if (join.JoinType is JoinType.Right or JoinType.Full && !_dialect.SupportsRightFullJoin)
+            throw new NotSupportedException($"The {join.JoinType} join is not supported by this SQL dialect");
+
+        var sqlBuilder = _paramMode ? null : StringBuilderPool.Shared.Get();
 
         try
         {
             if (!_paramMode)
             {
-                switch (join.JoinType)
+                sqlBuilder!.Append(join.JoinType switch
                 {
-                    case JoinType.Inner:
-                        sqlBuilder!.Append(" join ");
-                        break;
-                    default:
-                        throw new NotImplementedException(join.JoinType.ToString());
-                }
+                    JoinType.Inner => " join ",
+                    JoinType.Left => " left join ",
+                    JoinType.Right => " right join ",
+                    JoinType.Full => " full join ",
+                    JoinType.Cross => " cross join ",
+                    JoinType.FullCross => " cross join ",
+                    _ => throw new NotSupportedException(join.JoinType.ToString())
+                });
             }
 
-            var scopedAdded = join.JoinCondition.Parameters.Count > join.JoinCondition.Parameters.Select(it => it.Type).Distinct().Count();
+            var joinCondition = join.JoinCondition;
+
+            if (joinCondition is null)
+            {
+                var fromSql = MakeFrom(join.From, true, join.EntityType ?? join.From.SourceType, false);
+                if (!_paramMode)
+                {
+                    sqlBuilder!.Append(fromSql);
+                }
+
+                return _paramMode ? null : sqlBuilder!.ToString();
+            }
+
+            // A scope is pushed only when the condition's parameters contain a repeated type. Doing
+            // this with a double loop avoids the Select/Distinct LINQ allocations on every build.
+            var joinParameters = joinCondition.Parameters;
+            var scopedAdded = false;
+            for (var i = 1; i < joinParameters.Count && !scopedAdded; i++)
+            {
+                var type = joinParameters[i].Type;
+                for (var j = 0; j < i; j++)
+                {
+                    if (joinParameters[j].Type == type)
+                    {
+                        scopedAdded = true;
+                        break;
+                    }
+                }
+            }
             if (scopedAdded)
-                _columnsProvider.PushScope(join.JoinCondition.Parameters);
+                _columnsProvider.PushScope(joinCondition.Parameters);
 
             try
             {
                 var dim = 1;
-                if (join.JoinCondition.Parameters[0].Type.TryGetProjectionDimension(out var joinDim))
+                if (joinCondition.Parameters[0].Type.TryGetProjectionDimension(out var joinDim))
                     dim = joinDim;
 
                 // FromExpression fromExp;
@@ -287,7 +415,7 @@ public struct SqlBuilder
                 //     }
                 //     else
                 //     {
-                //         fromExp = _dbContext.GetFrom(visitor.JoinType);
+                //         fromExp = _dialect.GetFrom(visitor.JoinType);
 
                 //         // if (!_paramMode)
                 //         //     fromExp.TableAlias = GetAliasFromProjection(entityType, visitor.JoinType, dim);
@@ -300,20 +428,14 @@ public struct SqlBuilder
                 //     }
                 // }
 
-                var fromSql = MakeFrom(join.From, true, join.JoinCondition.Parameters[1].Type, false);
+                var fromSql = MakeFrom(join.From, true, joinCondition.Parameters[1].Type, false);
                 if (!_paramMode)
                 {
                     sqlBuilder!.Append(fromSql);
                 }
 
-                var whereSql = MakeWhere(entityType, join.JoinCondition.Body, dim);
-
-                if (!_paramMode)
-                {
-                    sqlBuilder!.Append(" on ");
-
-                    sqlBuilder.Append(whereSql);
-                }
+                if (!_paramMode) sqlBuilder!.Append(" on ");
+                MakeWhere(sqlBuilder, entityType, joinCondition.Body, dim);
             }
             finally
             {
@@ -326,23 +448,25 @@ public struct SqlBuilder
         finally
         {
             if (sqlBuilder is not null)
-                _sbPool.Return(sqlBuilder);
+                StringBuilderPool.Shared.Return(sqlBuilder);
         }
     }
-    private string MakeWhere(Type entityType, Expression condition, int dim)
+    private void MakeWhere(StringBuilder? target, Type entityType, Expression condition, int dim)
     {
         // if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Where expression: {exp}", condition);
-        using var visitor = new WhereExpressionVisitor(entityType, _dbContext, _columnsProvider, dim, _aliasProvider, _paramProvider, _queryProvider, _paramMode, _params, Logger);
+        using var visitor = new WhereExpressionVisitor(entityType, _dialect, _columnsProvider, dim, _aliasProvider, _paramProvider, _queryProvider, _paramMode, _params, Logger);
         visitor.Visit(condition);
 
-        if (_paramMode) return string.Empty;
+        // In parameter mode nothing is emitted (the walk still collects parameters); otherwise the
+        // rendered clause is appended straight into the caller's builder, avoiding a temp string.
+        if (_paramMode || target is null) return;
 
-        return visitor.ToString();
+        visitor.WriteTo(target);
     }
     private string MakeSort(Type entityType, Expression sorting, int dim)
     {
         // if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Where expression: {exp}", condition);
-        using var visitor = new BaseExpressionVisitor(entityType, _dbContext, _columnsProvider, dim, _aliasProvider, _paramProvider, _queryProvider, true, _paramMode, _params, Logger);
+        using var visitor = new BaseExpressionVisitor(entityType, _dialect, _columnsProvider, dim, _aliasProvider, _paramProvider, _queryProvider, true, _paramMode, _params, Logger);
         visitor.Visit(sorting);
 
         if (_paramMode) return string.Empty;
@@ -351,7 +475,7 @@ public struct SqlBuilder
     }
     public (bool NeedAliasForColumn, string Column) MakeColumn(SelectExpression selExp, Type entityType, bool dontNeedAlias, bool renameAware = false)
     {
-        using var visitor = new BaseExpressionVisitor(entityType, _dbContext, _columnsProvider, 0, _aliasProvider, _paramProvider, _queryProvider, dontNeedAlias, _paramMode, _params, Logger);
+        using var visitor = new BaseExpressionVisitor(entityType, _dialect, _columnsProvider, 0, _aliasProvider, _paramProvider, _queryProvider, dontNeedAlias, _paramMode, _params, Logger);
         visitor.Visit(selExp.Expression);
 
         if (_paramMode) return (false, string.Empty);
@@ -371,9 +495,12 @@ public struct SqlBuilder
     }
     public string MakeFrom(FromExpression from, bool needAlias, Type? entityType, bool hasJoins)
     {
+        if (from.TableFunction is not null)
+            return MakeTableFunction(from, needAlias, entityType, hasJoins);
+
         if (!_paramMode && !string.IsNullOrEmpty(from.Table))
         {
-            var sqlBuilder = _sbPool.Get();
+            var sqlBuilder = StringBuilderPool.Shared.Get();
             try
             {
                 sqlBuilder.Append(from.Table);
@@ -388,14 +515,14 @@ public struct SqlBuilder
                     else
                         _columnsProvider.Add(entityType!, false);
 
-                    sqlBuilder.Append(_dbContext.MakeTableAlias(_aliasProvider!.GetNextAlias(from)));
+                    sqlBuilder.Append(_dialect.MakeTableAlias(_aliasProvider!.GetNextAlias(from)));
                 }
 
                 return sqlBuilder.ToString();
             }
             finally
             {
-                _sbPool.Return(sqlBuilder);
+                StringBuilderPool.Shared.Return(sqlBuilder);
             }
         }
         else
@@ -413,23 +540,84 @@ public struct SqlBuilder
 
                 _columnsProvider.Add(cmd, false);
 
-                var sqlBuilder = _sbPool.Get();
+                var sqlBuilder = StringBuilderPool.Shared.Get();
                 try
                 {
                     sqlBuilder.Append('(').Append(sql).Append(')');
-                    if (needAlias || _dbContext.RequireSubqueryAlias)
+                    if (needAlias || _dialect.RequireSubqueryAlias)
                     {
-                        sqlBuilder.Append(_dbContext.MakeTableAlias(_aliasProvider!.GetNextAlias(from)));
+                        sqlBuilder.Append(_dialect.MakeTableAlias(_aliasProvider!.GetNextAlias(from)));
                     }
 
                     return sqlBuilder.ToString();
                 }
                 finally
                 {
-                    _sbPool.Return(sqlBuilder);
+                    StringBuilderPool.Shared.Return(sqlBuilder);
                 }
             }
         }
         return string.Empty;
+    }
+
+    /// <summary>
+    /// Renders a table-valued function call (<c>[schema.]name(arg1, arg2, ...)</c>) as a FROM source.
+    /// The arguments go through the regular expression visitor, so captured values become parameters
+    /// exactly like everywhere else; the parameter pass walks them (in the same order) without
+    /// emitting text. The function is aliased like a derived table when a join or the dialect requires
+    /// it (<see cref="ISqlDialect.RequireSubqueryAlias"/>).
+    /// </summary>
+    private string MakeTableFunction(FromExpression from, bool needAlias, Type? entityType, bool hasJoins)
+    {
+        var function = from.TableFunction!;
+        var arguments = function.Arguments;
+
+        if (_paramMode)
+        {
+            for (var (i, cnt) = (0, arguments.Count); i < cnt; i++)
+            {
+                using var visitor = new BaseExpressionVisitor(entityType ?? typeof(object), _dialect, _columnsProvider, 0, _aliasProvider, _paramProvider, _queryProvider, true, true, _params, Logger);
+                visitor.Visit(arguments[i]);
+            }
+
+            return string.Empty;
+        }
+
+        var sqlBuilder = StringBuilderPool.Shared.Get();
+        try
+        {
+            sqlBuilder.Append(_dialect.MakeFunction(function.Name, function.Schema)).Append('(');
+
+            for (var (i, cnt) = (0, arguments.Count); i < cnt; i++)
+            {
+                if (i > 0)
+                    sqlBuilder.Append(", ");
+
+                using var visitor = new BaseExpressionVisitor(entityType ?? typeof(object), _dialect, _columnsProvider, 0, _aliasProvider, _paramProvider, _queryProvider, true, false, _params, Logger);
+                visitor.Visit(arguments[i]);
+                sqlBuilder.Append(visitor.ToString());
+            }
+
+            sqlBuilder.Append(')');
+
+            if (needAlias || _dialect.RequireSubqueryAlias)
+            {
+                if (hasJoins)
+                {
+                    Debug.Assert(typeof(IProjection).IsAssignableFrom(entityType));
+                    _columnsProvider.Add(entityType!.GetGenericArguments()[0], false);
+                }
+                else if (entityType is not null)
+                    _columnsProvider.Add(entityType, false);
+
+                sqlBuilder.Append(_dialect.MakeTableAlias(_aliasProvider!.GetNextAlias(from)));
+            }
+
+            return sqlBuilder.ToString();
+        }
+        finally
+        {
+            StringBuilderPool.Shared.Return(sqlBuilder);
+        }
     }
 }

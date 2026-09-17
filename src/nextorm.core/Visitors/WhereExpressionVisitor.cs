@@ -4,8 +4,8 @@ using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
 
-public class WhereExpressionVisitor(Type entityType, DbContext dataProvider, IColumnsProvider tableSource, int dim, IAliasProvider? aliasProvider, IParamProvider paramProvider, IQueryProvider queryProvider, bool paramMode, List<Param> @params, ILogger? logger)
-    : BaseExpressionVisitor(entityType, dataProvider, tableSource, dim, aliasProvider, paramProvider, queryProvider, false, paramMode, @params, logger)
+public class WhereExpressionVisitor(Type entityType, ISqlDialect dialect, IColumnsProvider tableSource, int dim, IAliasProvider? aliasProvider, IParamProvider paramProvider, IQueryProvider queryProvider, bool paramMode, List<Param> @params, ILogger? logger)
+    : BaseExpressionVisitor(entityType, dialect, tableSource, dim, aliasProvider, paramProvider, queryProvider, false, paramMode, @params, logger)
 {
     /// <summary>
     /// A where clause is a condition context: providers whose dialect cannot use a boolean value
@@ -17,6 +17,18 @@ public class WhereExpressionVisitor(Type entityType, DbContext dataProvider, ICo
     {
         if (!_paramMode && node.Type == typeof(bool) && (node.NodeType == ExpressionType.Equal || node.NodeType == ExpressionType.NotEqual))
         {
+            // Fast path: when neither operand is a null literal the null-aware "is"/"is not"
+            // rewriting cannot apply, so both sides can be rendered straight into this builder.
+            // That avoids two cloned visitors (and their intermediate strings) per comparison,
+            // which is the shape of every join condition and most WHERE predicates.
+            if (node.Left is not ConstantExpression { Value: null } && node.Right is not ConstantExpression { Value: null })
+            {
+                Visit(node.Left);
+                _builder!.Append(node.NodeType == ExpressionType.Equal ? " = " : " != ");
+                Visit(node.Right);
+                return node;
+            }
+
             using var leftVisitor = Clone();
             leftVisitor.Visit(node.Left);
 

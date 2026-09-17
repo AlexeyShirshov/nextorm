@@ -40,6 +40,8 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
         if (x.SingleRow != y.SingleRow) return false;
 
+        if (x.IsDistinct != y.IsDistinct) return false;
+
         if (x.Paging.Limit != y.Paging.Limit || x.Paging.Offset != y.Paging.Offset) return false;
 
         if (x.UnionType != y.UnionType) return false;
@@ -49,6 +51,11 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
         if (!_selectComparer.Equals(x.SelectList, y.SelectList)) return false;
 
         if (!_expComparer.Equals(x.PreparedCondition, y.PreparedCondition)) return false;
+
+        // The condition expression alone cannot distinguish captured collections of different lengths
+        // (the closure access is shape independent), so the evaluated value-list shape is compared
+        // explicitly to keep a shorter/longer list from reusing a stale plan.
+        if (x.InValuesShapeHash != y.InValuesShapeHash) return false;
 
         if (!_joinComparer.Equals(x.Joins, y.Joins)) return false;
 
@@ -60,7 +67,29 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
         if (!Equals(x.UnionQuery, y.UnionQuery)) return false;
 
+        if (!CteDefinitionsEqual(x.Ctes, y.Ctes)) return false;
+
         if (!IEqualityComparerExtensions.Equals(this, x.ReferencedQueries, y.ReferencedQueries)) return false;
+
+        return true;
+    }
+
+    private bool CteDefinitionsEqual(IReadOnlyList<CteDefinition>? x, IReadOnlyList<CteDefinition>? y)
+    {
+        if (ReferenceEquals(x, y)) return true;
+        if (x is null || y is null) return false;
+        if (x.Count != y.Count) return false;
+
+        for (var (i, cnt) = (0, x.Count); i < cnt; i++)
+        {
+            var a = x[i];
+            var b = y[i];
+
+            if (a.Name != b.Name) return false;
+            if (a.Recursive != b.Recursive) return false;
+            if (a.MaxRecursion != b.MaxRecursion) return false;
+            if (!Equals(a.Query, b.Query)) return false;
+        }
 
         return true;
     }
@@ -89,8 +118,12 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
             hash.Add(obj.SingleRow);
 
+            hash.Add(obj.IsDistinct);
+
             if (obj.WherePlanHash != 0)
                 hash.Add(obj.WherePlanHash);
+
+            hash.Add(obj.InValuesShapeHash);
 
             if (obj.ColumnsPlanHash != 0)
                 hash.Add(obj.ColumnsPlanHash);
@@ -112,6 +145,9 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
             if (obj.ReferencedQueriesPlanHash != 0)
                 hash.Add(obj.ReferencedQueriesPlanHash);
+
+            if (obj.CtesPlanHash != 0)
+                hash.Add(obj.CtesPlanHash);
 
             return hash.ToHashCode();
         }

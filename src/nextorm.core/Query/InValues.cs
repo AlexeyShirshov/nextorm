@@ -1,0 +1,226 @@
+using System.Collections;
+using System.Linq.Expressions;
+
+namespace nextorm.core;
+
+/// <summary>
+/// The evaluated (and partitioned) values of one <c>in</c>/<c>Contains</c> node: the non-null values
+/// in source order plus whether the source also contained a null.
+/// </summary>
+internal readonly struct InValuesPartition
+{
+    public readonly List<object?> NonNull;
+    public readonly bool HasNull;
+
+    public InValuesPartition(List<object?> nonNull, bool hasNull)
+    {
+        NonNull = nonNull;
+        HasNull = hasNull;
+    }
+}
+
+/// <summary>
+/// Shared, build-time handling of value-list membership tests.
+/// <para>
+/// The SQL text and parameter layout of an <c>in</c> predicate depend on the number of values and on
+/// whether the collection contains a null, but a captured collection contributes none of that to the
+/// expression-tree plan key (the closure member access is shape independent). <see cref="ComputeShapeHash"/>
+/// walks the prepared condition, evaluates every value list once, and folds that shape into
+/// <see cref="QueryCommand.InValuesShapeHash"/> so the plan cache key distinguishes different lengths.
+/// The evaluated partitions are handed to the renderer so the collection is not read twice during a
+/// single build.
+/// </para>
+/// </summary>
+internal static class InValues
+{
+    /// <summary>
+    /// Matches a value-list <c>NORM.SQL.@in(column, collection)</c> (the subquery overload is excluded)
+    /// or an <c>Enumerable.Contains</c> / <c>MemoryExtensions.Contains</c> / instance
+    /// <c>Contains</c> on a non-string collection.
+    /// </summary>
+    public static bool TryGetArguments(MethodCallExpression node, out Expression columnExp, out Expression valuesExp, out Type elementType)
+    {
+        columnExp = null!;
+        valuesExp = null!;
+        elementType = null!;
+
+        if (node.Method.DeclaringType == typeof(NORM.NORM_SQL)
+            && node.Method.Name == nameof(NORM.NORM_SQL.@in))
+        {
+            if (node.Arguments is not [Expression inColumn, Expression inValues]
+                || inValues.Type.IsAssignableTo(typeof(QueryCommand)))
+                return false;
+
+            columnExp = inColumn;
+            valuesExp = inValues;
+            elementType = node.Method.GetGenericArguments()[0];
+            return true;
+        }
+
+        return TryGetContainsArguments(node, out columnExp, out valuesExp, out elementType);
+    }
+
+    private static bool TryGetContainsArguments(MethodCallExpression node, out Expression columnExp, out Expression valuesExp, out Type elementType)
+    {
+        columnExp = null!;
+        valuesExp = null!;
+        elementType = null!;
+
+        if (node.Method.Name != nameof(Enumerable.Contains))
+            return false;
+
+        // string.Contains is handled by the string translator; an instance Contains on string with a
+        // char argument would otherwise look like a collection membership test.
+        if (node.Object?.Type == typeof(string))
+            return false;
+
+        if (node.Object is not null)
+        {
+            if (node.Arguments.Count != 1)
+                return false;
+
+            elementType = node.Method.GetParameters()[0].ParameterType;
+            if (!TryGetEnumerableElementType(node.Object.Type, out var collectionElementType)
+                || collectionElementType != elementType)
+                return false;
+
+            columnExp = node.Arguments[0];
+            valuesExp = node.Object;
+        }
+        else
+        {
+            // Arrays bind to the span overload (MemoryExtensions.Contains) on modern runtimes and to
+            // Enumerable.Contains otherwise; both are the same membership test here.
+            var declaringType = node.Method.DeclaringType;
+            if (declaringType != typeof(Enumerable) && declaringType != typeof(MemoryExtensions)
+                || node.Arguments.Count != 2)
+                return false;
+
+            var genericArgs = node.Method.GetGenericArguments();
+            if (genericArgs.Length != 1)
+                return false;
+
+            elementType = genericArgs[0];
+            valuesExp = UnwrapSpanConversion(node.Arguments[0]);
+            columnExp = node.Arguments[1];
+        }
+
+        // Only a captured collection can be materialised at translation time.
+        if (valuesExp.Has<ParameterExpression>())
+            return false;
+
+        // Without a parameter on the value side the whole call is a constant and is folded elsewhere.
+        if (!columnExp.Has<ParameterExpression>())
+            return false;
+
+        return true;
+    }
+
+    public static InValuesPartition EvaluatePartition(Expression valuesExp, IQueryProvider queryProvider)
+        => Partition(InValuesEvaluator.Evaluate(valuesExp, queryProvider));
+
+    public static InValuesPartition Partition(object? value)
+    {
+        List<object?> nonNull;
+        var hasNull = false;
+
+        if (value is IEnumerable enumerable)
+        {
+            // One list instead of the previous value-list + partition pair; pre-sized when the source
+            // exposes its count so the common array/list case does not grow the backing array.
+            nonNull = value is ICollection collection ? new List<object?>(collection.Count) : [];
+            foreach (var item in enumerable)
+            {
+                if (item is null)
+                    hasNull = true;
+                else
+                    nonNull.Add(item);
+            }
+        }
+        else if (value is not null)
+        {
+            nonNull = [value];
+        }
+        else
+        {
+            nonNull = [];
+        }
+
+        return new InValuesPartition(nonNull, hasNull);
+    }
+
+    /// <summary>
+    /// Evaluates every value-list node of <paramref name="condition"/> and returns a hash of their
+    /// shapes, or <c>0</c> when the condition has none. The evaluated partitions are stored on
+    /// <paramref name="command"/> for the renderer to reuse.
+    /// </summary>
+    public static int ComputeShapeHash(Expression condition, QueryCommand command, out Dictionary<Expression, InValuesPartition>? partitions)
+    {
+        var visitor = new ShapeVisitor(command);
+        visitor.Visit(condition);
+        partitions = visitor.Partitions;
+        return visitor.HasMatch ? visitor.Hash : 0;
+    }
+
+    private sealed class ShapeVisitor(QueryCommand command) : ExpressionVisitor
+    {
+        private HashCode _hash = new();
+        public Dictionary<Expression, InValuesPartition>? Partitions { get; private set; }
+        public bool HasMatch { get; private set; }
+        public int Hash => _hash.ToHashCode();
+
+        protected override Expression VisitMethodCall(MethodCallExpression node)
+        {
+            if (TryGetArguments(node, out _, out var valuesExp, out _))
+            {
+                var partition = EvaluatePartition(valuesExp, command);
+                Partitions ??= new Dictionary<Expression, InValuesPartition>(ReferenceEqualityComparer.Instance);
+                Partitions[valuesExp] = partition;
+                _hash.Add(partition.NonNull.Count);
+                _hash.Add(partition.HasNull);
+                HasMatch = true;
+            }
+
+            return base.VisitMethodCall(node);
+        }
+    }
+
+    private static bool TryGetEnumerableElementType(Type type, out Type elementType)
+    {
+        if (type.IsArray)
+        {
+            elementType = type.GetElementType()!;
+            return true;
+        }
+
+        if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(IEnumerable<>))
+        {
+            elementType = type.GetGenericArguments()[0];
+            return true;
+        }
+
+        foreach (var interfaceType in type.GetInterfaces())
+        {
+            if (interfaceType.IsGenericType && interfaceType.GetGenericTypeDefinition() == typeof(IEnumerable<>))
+            {
+                elementType = interfaceType.GetGenericArguments()[0];
+                return true;
+            }
+        }
+
+        elementType = null!;
+        return false;
+    }
+
+    private static Expression UnwrapSpanConversion(Expression expression)
+    {
+        // MemoryExtensions.Contains takes a ReadOnlySpan<T>, so an array argument is wrapped in a
+        // Convert or an op_Implicit call; the underlying collection is what has to be materialised.
+        return expression switch
+        {
+            UnaryExpression { NodeType: ExpressionType.Convert } unary => unary.Operand,
+            MethodCallExpression { Method.Name: "op_Implicit", Arguments.Count: 1 } opImplicit => opImplicit.Arguments[0],
+            _ => expression
+        };
+    }
+}

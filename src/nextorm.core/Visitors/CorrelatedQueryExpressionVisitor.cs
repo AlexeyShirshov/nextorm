@@ -3,8 +3,8 @@ using System.Linq.Expressions;
 using System.Reflection;
 namespace nextorm.core;
 
-[System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE1006:Naming Styles", Justification = "<Pending>")]
-[System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S3011:Reflection should not be used to increase accessibility of classes, methods, or fields", Justification = "<Pending>")]
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE1006:Naming Styles", Justification = "Static readonly reflection-metadata fields (AnyMIGeneric, ConcatMI, ...) are intentionally PascalCase as immutable lookup tables; IDE1006 is a suggestion and is not enforced by the build.")]
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S3011:Reflection should not be used to increase accessibility of classes, methods, or fields", Justification = "Reflection is required to bind the private Any/Concat members into expression trees; there is no public API alternative, and the lookups are static and confined to this visitor.")]
 public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 {
     private readonly CancellationToken _cancellationToken;

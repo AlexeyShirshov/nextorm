@@ -1,5 +1,6 @@
 using BenchmarkDotNet.Attributes;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 namespace nextorm.benchmark;
 
@@ -145,6 +146,66 @@ public class MicroOptimizationsBenchmark
         var last = false;
         for (var i = 0; i < RowCount; i++) last = ReadRowNew().GetAwaiter().GetResult();
         return last;
+    }
+
+    // ---- M12: [AggressiveInlining] on a forwarder vs on a leaf with a small loop -------
+    // A one-line forwarder is already inlined by the JIT, so the attribute should be a no-op
+    // there. A leaf that contains a small loop is where it actually changes the decision: the
+    // JIT declines loops by default, the attribute overrides that. Both pairs are semantically
+    // identical within the pair, so the delta is the attribute and nothing else.
+
+    private static int Leaf(int x) => x + 1;
+    private static int ForwarderNoAttribute(int x) => Leaf(x);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int ForwarderWithAttribute(int x) => Leaf(x);
+
+    private static int LoopLeafNoAttribute(int x)
+    {
+        var count = 0;
+        for (var i = 0; i < 4; i++)
+            if ((x & (1 << i)) != 0) count++;
+        return count;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int LoopLeafWithAttribute(int x)
+    {
+        var count = 0;
+        for (var i = 0; i < 4; i++)
+            if ((x & (1 << i)) != 0) count++;
+        return count;
+    }
+
+    [Benchmark]
+    public int M12_Forwarder_NoAttribute()
+    {
+        var sum = 0;
+        for (var i = 0; i < 1000; i++) sum += ForwarderNoAttribute(i);
+        return sum;
+    }
+
+    [Benchmark]
+    public int M12_Forwarder_AggressiveInlining()
+    {
+        var sum = 0;
+        for (var i = 0; i < 1000; i++) sum += ForwarderWithAttribute(i);
+        return sum;
+    }
+
+    [Benchmark]
+    public int M12_LoopLeaf_NoAttribute()
+    {
+        var sum = 0;
+        for (var i = 0; i < 1000; i++) sum += LoopLeafNoAttribute(i);
+        return sum;
+    }
+
+    [Benchmark]
+    public int M12_LoopLeaf_AggressiveInlining()
+    {
+        var sum = 0;
+        for (var i = 0; i < 1000; i++) sum += LoopLeafWithAttribute(i);
+        return sum;
     }
 }
 

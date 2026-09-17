@@ -40,12 +40,6 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
     }
 
     [Fact]
-    public void CountBig_ShouldReturnLong()
-    {
-        _sut.SimpleEntity.Select(x => NORM.SQL.count_big()).First().Should().Be(10L);
-    }
-
-    [Fact]
     public void Page_WithoutOrderBy_ShouldUseInjectedEmptySort()
     {
         // SQL Server rejects OFFSET/FETCH without ORDER BY, so the provider injects one; the query

@@ -1,11 +1,11 @@
 # Аудит запахов кода — nextorm
 
-**Дата:** 16.09.2026
+**Дата:** 16.09.2026 (повторный аудит после коммита `9641660` «mass refactoring»)
 **Область анализа:** `src/` (основной), дополнительно `test/` и `benchmarks/`
 **Метод:** read-only аудит по каталогу `skill:dotnet-csharp-code-smells`
-**Статус:** Находки 2 (`IDisposable`), 3 (LINQ на горячем пути) и 5 (хэш-ключи кэша) — **исправлены**. Находки 1 и 4 — открыты.
+**Статус:** Находки 1 (подавления), 2 (`IDisposable`), 3 (LINQ) и 5 (хэш-ключи) — **обработаны**. Открыта только Находка 4 (god-классы).
 
-> Рабочая копия редактируется параллельно, поэтому номера строк приведены на момент проверки и могут сдвигаться.
+> Номера строк приведены на момент повторной проверки (HEAD `9641660`); дерево на момент аудита чистое.
 
 ---
 
@@ -13,40 +13,60 @@
 
 | Категория навыка | Статус |
 |---|---|
-| 1. Управление ресурсами (`IDisposable`) | ⚠️ Находка 2 исправлена |
-| 2. Подавление предупреждений | 🔴 Открыто: 10 `SuppressMessage` с `<Pending>` + 1 `#pragma` без `restore` |
-| 3. Антипаттерны LINQ | ✅ Находка 3 исправлена |
+| 1. Управление ресурсами (`IDisposable`) | ✅ Находка 2 исправлена; 1 минорное наблюдение |
+| 2. Подавление предупреждений | ✅ 5 `SuppressMessage` с обоснованием (0 `<Pending>`), все `#pragma` с `restore` |
+| 3. Антипаттерны LINQ | ✅ Чисто |
 | 4. Работа с событиями | ✅ Чисто |
-| 5. Запахи проектирования | ⚠️ Открыто: 6 классов > 500 строк |
+| 5. Запахи проектирования | ⚠️ Открыто: 4 класса > 500 строк + длинные списки параметров |
 | 6. Обработка исключений | ✅ Чисто |
 | 7. Хэш-ключи кэша (S2328) | ✅ Находка 5 исправлена |
 
 ---
 
-## 🔴 Находка 1 — Подавления предупреждений (открыта)
+## 🔎 Повторный аудит (HEAD `9641660` «mass refactoring»)
 
-В `Directory.Build.props` задано `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>`, поэтому каждое подавление «несущее»: оно либо маскирует реальную проблему, либо закрепляет осознанное отклонение — но в обоих случаях должно быть обосновано.
+Прогон по всем пунктам заново, на чистом дереве (все прежние правки закоммичены):
 
-### `[SuppressMessage]` — 10 шт., все с `Justification = "<Pending>"`
+| Пункт | Результат |
+|---|---|
+| 1. `IDisposable` | ✅ Фиксы Находки 2 держатся (`DbContext.DisposeAsync`, `InMemoryDataContext.DisposeAsync` идут через `Dispose()`). Минорное наблюдение — `ResultSetEnumerator.DisposeAsync` (см. ниже). |
+| 2. Подавления | 🔴 На момент прогона: 10 `SuppressMessage` с `<Pending>`; **устранено следом** — см. Находку 1. |
+| 3. LINQ | ✅ Чисто: остались только законные `Distinct().Count()` (`SqlBuilder.cs:262`, `BaseExpressionVisitor.cs:782`) и необходимый `.ToList()` (`QueryCommand.cs:703`). |
+| 4. События | ✅ Чисто: единственное событие — `DbContext.Disposed`; подписки `StateChange`/`Disposed` снимаются симметрично. |
+| 5. Проектирование | ⚠️ 4 god-класса + конструкторы с 6+ параметрами: `BaseExpressionVisitor` (11), `QueryCommand` (10), `WhereExpressionVisitor` (10), `SqlBuilder` (8), `DbPreparedQueryCommand` (6). |
+| 6. Исключения | ✅ Чисто: в `src/` нет ни одного `catch`; `async void` и `throw ex;` отсутствуют. |
+| Хэш-ключи (Находка 5) | ✅ `S2328` в коде — 0, правки держатся; регрессионный тест проходит. |
 
-| Файл:строка | Правило | Комментарий |
+Сборка: `dotnet build nextorm.sln -c Debug` — **0 warnings, 0 errors**. Тесты ядра — **90/90 passed**.
+
+---
+
+## ✅ Находка 1 — Подавления предупреждений (ОБРАБОТАНО)
+
+В `Directory.Build.props` задано `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>`, поэтому каждое подавление «несущее». Итог разбора: **`<Pending>` не осталось ни одного** — 6 подавлений снято, 5 оставшихся имеют конкретное обоснование.
+
+### Снято (6)
+
+| Было | Что сделано |
+|---|---|
+| `Expressions/HashCode.cs:10` — `#pragma warning disable CA1066` без `restore` | Директива удалена целиком: `HashCode` не переопределяет `Equals`, и CA1066 при `AnalysisLevel=latest-all` не срабатывает (проверено сборкой). |
+| `DataContext/Cache/QueryPlan.cs:5` — S3897 | Класс реализует `IEquatable<QueryPlan>` (метод `Equals(QueryPlan?)` уже был). |
+| `Query/ExpressionPlanEqualityComparer.cs:516` — S3897 | `QueryCommandKey` реализует `IEquatable<QueryCommandKey>`. |
+| `Query/QueryCommand.cs:11` — S3897 | Удалено как неприменимое: `QueryCommand` не определяет ни `Equals`, ни `GetHashCode`. |
+| `Query/QueryCommand.cs:632` — IDE0028 | Код приведён к `_referencedQueries ??= [];`; подавление не нужно. |
+| `Builders/Entity.cs:15` — S2292 | Снято как избыточное: в `.editorconfig` уже стоит `dotnet_diagnostic.S2292.severity = silent`, а `SonarAnalyzer.CSharp` не подключён — правило не может сработать. |
+
+### Оставлено с обоснованием (5)
+
+| Файл:строка | Правило | Обоснование |
 |---|---|---|
-| `Builders/Entity.cs:15` | S2292 | Trivial properties should be auto-implemented |
-| `DataContext/Cache/DbPreparedQueryCommand.cs:34` | S2583 | Conditionally executed code should be reachable |
-| `DataContext/Cache/QueryPlan.cs:5` | S3897 | Equals без `IEquatable<T>` |
-| `DataContext/DbContext.cs:226` | S2583 | Conditionally executed code should be reachable |
-| `Expressions/SelectExpression.cs:7` | IDE1006 | Naming Styles |
-| `Query/ExpressionPlanEqualityComparer.cs:516` | S3897 | Equals без `IEquatable<T>` |
-| `Query/QueryCommand.cs:11` | S3897 | Equals без `IEquatable<T>` |
-| `Query/QueryCommand.cs:632` | IDE0028 | Simplify collection initialization |
-| `Visitors/CorrelatedQueryExpressionVisitor.cs:6` | IDE1006 | Naming Styles |
-| `Visitors/CorrelatedQueryExpressionVisitor.cs:7` | S3011 | Reflection increases accessibility |
+| `DataContext/Cache/DbPreparedQueryCommand.cs:34` | S2583 | Обе ветки достижимы: `@params` может быть `null`; анализатор не моделирует преобразование в `ReadOnlySpan`. |
+| `DataContext/DbContext.cs:226` | S2583 | Состояние пула соединений заранее неизвестно — проверка `ConnectionState.Closed` достижима с обеих сторон. |
+| `Expressions/SelectExpression.cs:7` | IDE1006 | `GetInt32MI` и подобные — намеренный PascalCase для immutable-таблиц рефлексии; правило лишь suggestion. |
+| `Visitors/CorrelatedQueryExpressionVisitor.cs:6` | IDE1006 | То же для `AnyMIGeneric`, `ConcatMI` и др. |
+| `Visitors/CorrelatedQueryExpressionVisitor.cs:7` | S3011 | Рефлексия нужна, чтобы привязать приватные `Any`/`Concat` в деревья выражений; публичной альтернативы нет. |
 
-Три подавления `S2328` (`QueryPlan.cs:13`, `ExpressionCache.cs:16`, `ExpressionPlanEqualityComparer.cs:528`) сняты в рамках Находки 5: хэш теперь вычисляется один раз из `readonly`-состояния.
-
-Правила `S2583` (недостижимый код) и `S3011` (рефлексия) относятся к корректности, а не к стилю, и потому наиболее ценны для переоценки.
-
-### `#pragma warning disable` — 5 шт., 4 с `restore`, 1 без
+### `#pragma warning disable` — 4 шт., все с `restore`
 
 | Файл:строка | Правило | `restore` |
 |---|---|---|
@@ -54,19 +74,58 @@
 | `Builders/Entity.cs:263` | CS8619 | ✅ `:265` |
 | `Builders/Entity.cs:293` | CS8619 | ✅ `:295` |
 | `Query/ExpressionPlanEqualityComparer.cs:408` | IDE0066 | ✅ `:410` |
-| **`Expressions/HashCode.cs:10`** | **CA1066** | ❌ **отсутствует** |
 
-`HashCode.cs:10` — `#pragma warning disable CA1066` без парного `restore`, то есть правило подавлено до конца файла (438 строк). Это ровно тот «blanket suppression», который запрещён разделом 2 навыка.
+«Blanket suppression» `HashCode.cs:10` больше нет: остались только парные `disable`/`restore` на несколько строк.
 
-### Первопричина и влияние
+### Как проверялось
 
-Технический долг по анализаторам, отложенный шаблонной заглушкой `"<Pending>"`. Переоценить такие подавления невозможно: неясно, что именно проверялось и актуален ли отказ. Дополнительно: `SonarAnalyzer.CSharp` **не подключён** ни в одном `.csproj`/`Directory.Packages.props`, поэтому эти `SuppressMessage` сегодня носят чисто документационный характер и сборку не гейтят.
+`SonarAnalyzer.CSharp` не подключён, поэтому S-правила недоступны; IDE/CA-правила проверены прогоном сборки с повышенным уровнем (без правки файлов — только свойства MSBuild):
 
-### Рекомендация
+```
+dotnet build src/nextorm.core/nextorm.core.csproj -t:Rebuild \
+  -p:TreatWarningsAsErrors=false -p:EnforceCodeStyleInBuild=true -p:AnalysisLevel=latest-all
+```
 
-1. Для каждого `SuppressMessage` — либо устранить проблему, либо заменить `<Pending>` конкретным обоснованием.
-2. `HashCode.cs:10` — либо добавить `#pragma warning restore CA1066`, либо сделать тип `IEquatable<T>` (или точечно подавить только нужную конструкцию).
-3. В идеале — подключить анализатор пакетно и включить правила (например, `AnalysisLevel=latest-all`), чтобы подавления стали реально проверяемыми.
+Результат: `CA1066`, `IDE1006`, `IDE0028` не срабатывают вовсе; `S2292` в `.editorconfig` уже помечен `silent`, а `S2292`/`S2583`/`S3011`/`S3897` — правила Sonar. Прогон также выявил `CA2213`/`CA1508`/`CA1816` — они разобраны отдельным разделом ниже.
+
+### Проверка
+
+- `dotnet build nextorm.sln -c Debug` — **0 warnings, 0 errors**.
+- Тесты ядра — **90/90 passed**.
+- Итог: `SuppressMessage` — 5 (все с обоснованием), `<Pending>` — 0; `#pragma disable` — 4, все с `restore`.
+
+---
+
+## ✅ Дополнительно — CA2213 и CA1508 (найдены прогоном анализаторов)
+
+Оба правила не входят в набор по умолчанию (видны только при `AnalysisLevel=latest-all`), но указывали на реальные вещи.
+
+### CA1508 «недостижимое условие» — исправлено (3/3)
+
+| Место | Что было | Что сделано |
+|---|---|---|
+| `Query/ExpressionPlanEqualityComparer.cs:145` | В `Compare2` ветка `_ => left is null ? right is null : ...`, хотя `left` уже гарантированно не `null` вызывающими (`Equals`/`Compare` проверяют раньше) | `Compare2(Expression? left, Expression? right)` → `Compare2(Expression left, Expression right)`; мёртвая проверка удалена. |
+| `Visitors/BaseExpressionVisitor.cs:702` | `node.Expression?.Type == typeof(TableColumn)` — после `else if (node.Expression is null)` выражение не может быть `null` | `node.Expression.Type`. |
+| `Visitors/BaseExpressionVisitor.cs:749` | `if (key is not null)` — `key` присваивается безусловно | `ExpressionKey? key = null; key = new ...` → `var key = new ...`; проверка и `key!` убраны. |
+
+После правок: `CA1508` в `src/` — **0**.
+
+### CA2213 «disposable-поле не освобождается» — 1 реальный, 1 ложный
+
+- **Реальный:** `DataContext/InMemoryEnumerator.cs` — поле `_enumerator` (`IEnumerator<TEntity>`, создаётся для произвольных `IEnumerable`-источников в `Init`) **не освобождалось**: `Dispose()`/`DisposeAsync()` только вызывали `GC.SuppressFinalize`. Исправлено: `Dispose()` вызывает `_enumerator?.Dispose()` и обнуляет поле, `DisposeAsync()` идёт через `Dispose()` (попутно снимает прежнее наблюдение «no-op dispose» из Находки 2).
+- **Ложное (по владению):** `DataContext/ResultSetEnumerator.cs` — поле `_conn` берётся из `DbContext.GetConnection()` (`:144`) и освобождается самим контекстом (`DbContext.DisposeStaff`); `Dispose()` в перечислителе закрыл бы соединение, всё ещё используемое контекстом. Поле задокументировано как невладеемое и только обнуляется.
+
+После правок: `CA2213` в `src/` — 1, и это `_conn` с обоснованием по владению.
+
+### CA1816 — оставлено как ложное
+
+`DbContext.DisposeAsync`/`InMemoryDataContext.DisposeAsync` идут через `Dispose()`, который вызывает `GC.SuppressFinalize(this)`; анализатор не видит вызов через индирекцию. Функционально инвариант соблюдён.
+
+### Проверка
+
+- `dotnet build nextorm.sln -c Debug` — **0 warnings, 0 errors**.
+- Тесты ядра — **90/90 passed**.
+- Повторный прогон `AnalysisLevel=latest-all`: `CA1508` — 0, `CA2213` — 1 (`_conn`, by design).
 
 ---
 
@@ -103,7 +162,11 @@
 ### Проверка
 
 - `dotnet build src/nextorm.core/nextorm.core.csproj` — **0 warnings, 0 errors**.
-- Тесты ядра (xUnit v3, запуск сборки напрямую) — **83/83 passed, 0 failed**.
+- Тесты ядра (xUnit v3, запуск сборки напрямую) — **83/83 passed, 0 failed** (на момент правки).
+
+### Остаточное наблюдение (повторный аудит)
+
+`DataContext/ResultSetEnumerator.cs:55` — `DisposeAsync()` не идёт через `Dispose(bool)` и не выставляет `_disposed`: он асинхронно освобождает `_reader` и зануляет `_reader`/`_conn`. Идемпотентность сохраняется (повторный вызов видит `_reader == null`), а `_disposed` читается только внутри `Dispose(bool)` (`:245`), поэтому функционального дефекта нет — это несогласованность стиля, а не баг. Если захочется единообразия: `DisposeAsync()` → `await DisposeAsyncCore()` + общий `_disposed`-guard.
 
 ---
 
@@ -134,20 +197,59 @@
 
 ---
 
-## ⚠️ Находка 4 — God-классы (открыта)
+## ⚠️ Находка 4 — God-классы (открыта, 4 шт.)
 
-Выше порога раздела 5 навыка (>500 строк):
+Порог раздела 5 навыка — >500 строк на **класс** (не на файл). Замер на текущем рабочем дереве (после серии правок):
 
-| Файл | Строк |
-|---|---|
-| `DataContext/DbContext.cs` | 1322 |
-| `Query/QueryCommand.cs` | 1043 |
-| `Visitors/BaseExpressionVisitor.cs` | 1035 |
-| `DataContext/InMemoryDataContext.cs` | 1002 |
-| `Query/ExpressionPlanEqualityComparer.cs` | 893 |
-| `Builders/Entity.cs` | 596 |
+| Класс | Файл:строка объявления | Строк класса |
+|---|---|---:|
+| `BaseExpressionVisitor` | `Visitors/BaseExpressionVisitor.cs:10` | ~2212 |
+| `InMemoryContext` (`partial`) | `DataContext/InMemoryDataContext.cs:10` | ~1088 |
+| `DbContext` | `DataContext/DbContext.cs:13` | ~1070 |
+| `SqlBuilder` (**`struct`**) | `DataContext/SqlBuilder.cs:8` | ~601 |
 
-Для движка запросов часть этого ожидаема, но масштаб стоит держать под контролем и извлекать связные классы по SRP.
+`QueryCommand` из списка выбыл — см. «Сделано» ниже.
+
+Динамика с прошлого замера: `BaseExpressionVisitor` 1026 → **2221** строк (+1264 к коммиту `9641660`, +34 метода — `VisitConditional`/`VisitSwitch`, `VisitNot`/`VisitOnesComplement`/`VisitUnaryOperator`, `TranslateInValues`, `BuildLikePattern`, `VisitToString` и др.); `InMemoryDataContext` 983 → 1097; `DbContext` 1247 → **1082** (уменьшился). **`SqlBuilder` стал новым кандидатом** (был < 500, теперь 608) — и это `struct`, что усугубляет: копирование по значению большого изменяемого типа.
+
+### Сделано: `QueryCommand` разбит на partial + вынесен `QueryPreparer`
+
+**Вариант A (организационный, поведение не менялось).** Было — один файл 1192 строки; стало 6 файлов (один содержит вложенный тип):
+
+| Файл | Строк | Ответственность |
+|---|---:|---|
+| `Query/QueryCommand.cs` | 201 | модель: состояние, свойства, ctor, `ResetPreparation`, tree-ops (`ReplaceCommand`/`AddCommand`/`SetOperation`/`AddOuterReference`) |
+| `Query/QueryCommand.Prepare.cs` | 13 | точки входа `PrepareCommand` (тонкая делегация в `QueryPreparer`) |
+| `Query/QueryCommand.Plan.cs` | 19 | forwarder `RefreshInValuesShape` + 6 фабрик plan-компараторов |
+| `Query/QueryCommand.Clone.cs` | 112 | `CopyTo`/`CreateSelf`/`CreateSelfForClone`/`CloneForCache`/`Clone` |
+| `Query/QueryCommand.QueryPreparer.cs` | 471 | `QueryPreparer` — конвейер подготовки (Вариант B) |
+| `Query/QueryCommand.TResult.cs` | 314 | generic-фасад исполнения (`QueryCommand<TResult>`) |
+
+**Вариант B (SRP).** Конвейер подготовки вынесен из `QueryCommand` в отдельный вложенный тип `QueryCommand.QueryPreparer` (`internal static`): `Prepare`, `RefreshInValuesShape`, `PrepareFrom`/`Ctes`/`Columns`/`Join`/`Sorting`/`Where`/`Grouping`. `PrepareCommand` теперь только делегирует:
+
+```csharp
+public virtual void PrepareCommand(bool dontCalculateHash, CancellationToken cancellationToken)
+    => QueryPreparer.Prepare(this, dontCalculateHash, cancellationToken);
+```
+
+Размеры типов: `QueryCommand` **~775 → 345** строк (4 partial-файла, без вложенного типа), `QueryPreparer` — **~450** строк. Оба ниже порога 500, поэтому `QueryCommand` больше не god-класс. `QueryCommand<TResult>` — 314 строк отдельным файлом.
+
+Почему nested, а не top-level: конвейер читает и пишет `private`/`protected` состояние команды (`_exp`, `_condition`, `PreparedCondition`, `_whereBasePlanHash`, per-part хэши, `InValues*`, ...). Top-level helper заставил бы `protected`-поля (`_exp`, `_condition`, `_groupExp`, `_having`, `_sorting`, `_isPrepared`, `_srcType`, `_selectList`, `_from`, `_dataContext`) стать `internal`, что ломает внешние наследники `QueryCommand`. Вложенный тип сохраняет доступ, не расширяя API. Оговорка: при подсчёте «строк класса» вложенный тип могут включить в `QueryCommand` (тогда ~795) — если это неприемлемо, следующий шаг — промоушен `QueryPreparer` в top-level с осознанным расширением доступа.
+
+Поведение не менялось: `PrepareCommand` остаётся `virtual` и единственной публичной точкой входа, рекурсивные подготовки (`_union`, `from.SubQuery`, CTE-запросы) по-прежнему идут через виртуальный `PrepareCommand`, поэтому override в `QueryCommand<TResult>` (`ResultPlanHash`/`ResultType`) работает как раньше. Хэш-арифметика, порядок вызовов, sentinel `7`, `unchecked`-блоки и проверки отмены перенесены дословно.
+
+Одновременно удалён мёртвый закомментированный код: **147 → 14** строк построчных `//` (минус 133 строки; ещё +4 строки обоснования добавил параллельный фикс union-хэша, см. Находку 5). Остались только пояснительные комментарии-обоснования (инвариант хэшей клона, владение CTE-клонами в кэше, `IgnoreColumns`/`Paging.Limit` и plan key, форма in-values) и XML-доки. Удалены, в частности, `_columnsHash`/`_joinHash`/`_sortingHash`/`_whereHash`, блок `PLAN_CACHE`, закомментированный `DataProvider`, `_preciseExpressionComparer`, `//public bool CacheList`, мёртвый `FindSourceFromAlias` и десятки `// selList.Add(...)`/`columnsHash = ...`. Заодно устранён «повисший» XML-doc `RefreshInValuesShape`, который при первом сплите оказался приклеен к `PrepareGrouping`.
+
+Границы partial-класса: `QueryCommand` объявлен `partial` в 4 файлах, `QueryCommand<TResult>` — `sealed partial` в пятом. Публичный API не менялся; внешних наследников `QueryCommand` в репозитории нет.
+
+### Исключения (по решению автора)
+
+| Класс | Строк класса | Почему исключён |
+|---|---|---|
+| `ExpressionPlanEqualityComparer` | ~880 | Размер — следствие полноты дерева `Expression`, а не смешения ответственностей: один `Compare*`-метод на тип узла. Декомпозиция выигрыша не даёт. |
+| `Entity<TEntity>` | ~490 | По пересчёту на класс — **ниже порога**: >500 давал файл из-за второго типа `Entity` (~97 строк). Формально исключать больше нечего. |
+
+Для движка запросов часть размера ожидаема, но оставшиеся 4 класса стоит держать под контролем и извлекать связные классы по SRP. Наибольший риск — `BaseExpressionVisitor`: он растёт быстрее всех (каждая новая SQL-возможность идёт в один класс) и уже в ~4.4× выше порога.
 
 ---
 
@@ -176,27 +278,28 @@
 ### Проверка
 
 - `dotnet build nextorm.sln -c Debug` — **0 warnings, 0 errors**.
-- Тесты ядра (xUnit v3) — **85/85 passed, 0 failed** (три падавших — подзапросные формы).
+- Тесты ядра (xUnit v3) — **85/85 passed** на момент правки; повторный аудит (90 тестов) — **90/90 passed** (три падавших тогда — подзапросные формы).
 
 ---
 
 ## Чистые категории
 
-- **4. Работа с событиями** — событий в `src/` не найдено (кроме корректно реализованного `Disposed` в `DbContext`).
-- **6. Обработка исключений** — нет `throw ex;` (CA2200), нет пустых и общих `catch` в `src/`, нет `async void`. Два `catch (Exception)` в тестовых контейнерах (`test/nextorm.integration.tests/Providers/SqlServerContainer.cs:89`, `PostgresContainer.cs:89`) — законный перехват с сохранением сообщения, не запах.
+- **4. Работа с событиями** — единственное событие `DbContext.Disposed` (`:83`); подписки `_conn.StateChange`/`_conn.Disposed` снимаются при dispose. Утечек нет.
+- **6. Обработка исключений** — в `src/` нет ни одного `catch` (проверено повторно), значит нет пустых/общих обработчиков, log-and-swallow и `throw ex;` (CA2200); `async void` отсутствует. Два `catch (Exception)` в тестовых контейнерах (`test/nextorm.integration.tests/Providers/SqlServerContainer.cs:89`, `PostgresContainer.cs:89`) — законный перехват с сохранением сообщения, не запах.
 
 ---
 
 ## Примечания
 
-- `SonarAnalyzer.CSharp` в репозитории не подключён, поэтому идентификаторы правил `S####` в `SuppressMessage` не проверяются сборкой.
-- Рабочая копия редактировалась параллельно (незакоммиченные изменения и посторонние файлы вроде `solid-review.md`); номера строк в отчёте актуальны на 16.09.2026.
-- Правки по Находкам 2, 3 и 5 не закоммичены — по `AGENTS.md` коммит только по явному запросу.
+- `SonarAnalyzer.CSharp` в репозитории не подключён, поэтому идентификаторы правил `S####` в `SuppressMessage` не проверяются сборкой. `Directory.Build.props` задаёт только `TreatWarningsAsErrors=true` (без `AnalysisLevel=latest-all`), так что CA-правила навыка сборкой не гейтятся.
+- На момент повторного аудита дерево чистое: правки по Находкам 2, 3 и 5 вошли в коммит `9641660`.
+- Повторно в рамках этого отчёта коммитов не делалось — по `AGENTS.md` коммит только по явному запросу.
 
 ## Следующие шаги (предложение)
 
-1. Находка 1: заменить `<Pending>` на обоснования или снять подавления (осталось 10); закрыть `CA1066` в `HashCode.cs`.
-2. Находка 4: при случае декомпозировать god-классы по SRP.
+1. Находка 4: `QueryCommand` закрыт по размеру — partial-разбивка (Вариант A) + вынос конвейера в `QueryPreparer` (Вариант B): 775 → 345 строк, `QueryPreparer` ~450. Осталось решить, промоутить ли `QueryPreparer` в top-level тип (потребует расширения `protected`-доступа), и по желанию — `PlanComparerSet` (D) и хэши в `PlanHashes` (C, рискованно — ключ кэша).
+2. Декомпозировать по SRP остальные god-классы (в первую очередь `BaseExpressionVisitor` — ~2212 строк).
+3. `CA2213` (`_conn` — ложное по владению) и `CA1816` (ложное из-за индирекции) закрывать не требуется; см. раздел «Дополнительно».
 
 ## Ссылки
 

@@ -2,8 +2,7 @@ using System.Diagnostics;
 
 namespace nextorm.core;
 
-[System.Diagnostics.CodeAnalysis.SuppressMessage("Minor Code Smell", "S3897:Classes that provide \"Equals(<T>)\" should implement \"IEquatable<T>\"", Justification = "<Pending>")]
-public sealed class QueryPlan
+public sealed class QueryPlan : IEquatable<QueryPlan>
 {
     public QueryCommand QueryCommand;
     private readonly string? _sql;

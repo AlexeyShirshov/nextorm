@@ -6,8 +6,6 @@ using System.Security.Cryptography;
 
 namespace nextorm.core;
 
-
-#pragma warning disable CA1066 // Implement IEquatable when overriding Object.Equals
 // xxHash32 is used for the hash code.
 // https://github.com/Cyan4973/xxHash
 

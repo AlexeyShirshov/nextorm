@@ -139,4 +139,67 @@ public abstract partial class CommonTestSuite
                 row.RequiredString.Should().NotBeNullOrEmpty();
         }
     }
+
+    [Fact]
+    public void LeftJoin_ShouldReturnUnmatchedRowsWithNullRight()
+    {
+        var rows = _sut.SimpleEntity
+            .LeftJoin(_sut.ComplexEntity, (s, c) => s.Id == c.Id)
+            .Select(p => new { LeftId = p.t1.Id, RightString = p.t2.RequiredString })
+            .ToList();
+
+        rows.Should().HaveCount(10);
+        rows.Count(r => r.RightString is null).Should().Be(7);
+        rows.Count(r => r.RightString is not null).Should().Be(3);
+    }
+
+    [Fact]
+    public void RightJoin_ShouldReturnUnmatchedRowsWithNullLeft()
+    {
+        var rows = _sut.ComplexEntity
+            .RightJoin(_sut.SimpleEntity, (c, s) => c.Id == s.Id)
+            .Select(p => new { LeftString = p.t1.RequiredString, RightId = p.t2.Id })
+            .ToList();
+
+        rows.Should().HaveCount(10);
+        rows.Count(r => r.LeftString is null).Should().Be(7);
+        rows.Count(r => r.LeftString is not null).Should().Be(3);
+    }
+
+    [Fact]
+    public void FullJoin_ShouldReturnBothSides()
+    {
+        var rows = _sut.SimpleEntity
+            .FullJoin(_sut.ComplexEntity, (s, c) => s.Id == c.Id)
+            .Select(p => new { LeftId = p.t1.Id, RightString = p.t2.RequiredString })
+            .ToList();
+
+        rows.Should().HaveCount(10);
+        rows.Count(r => r.RightString is null).Should().Be(7);
+    }
+
+    [Fact]
+    public void CrossJoin_ShouldReturnCartesianProduct()
+    {
+        var count = _sut.SimpleEntity.CrossJoin(_sut.ComplexEntity).Count();
+
+        count.Should().Be(30);
+    }
+
+    [Fact]
+    public void Join4Tables_ShouldReturnProjectedValues()
+    {
+        var rows = _sut.SimpleEntity
+            .Join(_sut.ComplexEntity, (s, c) => s.Id == c.Id)
+            .Join(_sut.SimpleEntity, (p, s) => p.t2.Id == s.Id)
+            .Join(_sut.ComplexEntity, (p, c) => p.t3.Id == c.Id)
+            .Select(p => new { A = p.t1.Id, B = p.t2.RequiredString, C = p.t3.Id, D = p.t4.RequiredString })
+            .ToList();
+
+        // simple_entity has ids 1..10 and complex_entity 1..3, so the chain matches ids 1..3.
+        rows.Should().HaveCount(3);
+        rows.Should().OnlyContain(r => r.A == r.C);
+        rows.Should().OnlyContain(r => r.B == r.D);
+        rows.Should().OnlyContain(r => !string.IsNullOrEmpty(r.B));
+    }
 }

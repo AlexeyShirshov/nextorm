@@ -113,7 +113,7 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
             return Compare2(left, right);
         }
 
-        internal bool Compare2(Expression? left, Expression? right)
+        internal bool Compare2(Expression left, Expression right)
         {
             return left switch
             {
@@ -142,11 +142,9 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
                 TypeBinaryExpression leftTypeBinary => CompareTypeBinary(leftTypeBinary, (TypeBinaryExpression)right!),
                 UnaryExpression leftUnary => CompareUnary(leftUnary, (UnaryExpression)right!),
 
-                _ => left is null
-                    ? right is null
-                    : left.NodeType == ExpressionType.Extension
-                        ? left.Equals(right)
-                        : throw new InvalidOperationException(left.NodeType.ToString())
+                _ => left.NodeType == ExpressionType.Extension
+                    ? left.Equals(right)
+                    : throw new InvalidOperationException(left.NodeType.ToString())
             };
         }
 
@@ -513,8 +511,7 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
                 && Compare(a.Variable, b.Variable);
     }
 
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Minor Code Smell", "S3897:Classes that provide \"Equals(<T>)\" should implement \"IEquatable<T>\"", Justification = "<Pending>")]
-    private sealed class QueryCommandKey
+    private sealed class QueryCommandKey : IEquatable<QueryCommandKey>
     {
         private readonly Type _type;
         private readonly string _name;

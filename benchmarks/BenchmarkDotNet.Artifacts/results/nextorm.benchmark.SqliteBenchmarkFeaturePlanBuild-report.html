@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>nextorm.benchmark.SqliteBenchmarkFeaturePlanBuild-20260917-173609</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)
+AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 16 logical and 8 physical cores
+.NET SDK 10.0.401
+  [Host] : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+</code></pre>
+<pre><code>Job=ShortRun  Runtime=.NET 10.0  Toolchain=InProcessEmitToolchain  
+IterationCount=3  LaunchCount=1  WarmupCount=3  
+</code></pre>
+
+<table>
+<thead><tr><th>Method                  </th><th>Mean</th><th>Ratio</th><th>Gen0</th><th>Gen1</th><th>Allocated</th><th>Alloc Ratio</th>
+</tr>
+</thead><tbody><tr><td>Build_Distinct</td><td>272.8 &mu;s</td><td>0.83</td><td>33.2031</td><td>32.7148</td><td>272.66 KB</td><td>0.76</td>
+</tr><tr><td>Build_Baseline_SimpleSelect</td><td>330.4 &mu;s</td><td>1.00</td><td>42.9688</td><td>41.0156</td><td>359.38 KB</td><td>1.00</td>
+</tr><tr><td>Build_Case</td><td>344.1 &mu;s</td><td>1.04</td><td>40.0391</td><td>39.5508</td><td>327.35 KB</td><td>0.91</td>
+</tr><tr><td>Build_StringFn_Contains</td><td>382.1 &mu;s</td><td>1.16</td><td>53.7109</td><td>53.2227</td><td>441.02 KB</td><td>1.23</td>
+</tr><tr><td>Build_StringFn_ToUpper</td><td>402.5 &mu;s</td><td>1.22</td><td>53.2227</td><td>52.7344</td><td>437.9 KB</td><td>1.22</td>
+</tr><tr><td>Build_Except</td><td>440.0 &mu;s</td><td>1.33</td><td>65.4297</td><td>64.9414</td><td>537.33 KB</td><td>1.50</td>
+</tr><tr><td>Build_Intersect</td><td>446.7 &mu;s</td><td>1.35</td><td>65.4297</td><td>64.9414</td><td>538.11 KB</td><td>1.50</td>
+</tr><tr><td>Build_Tvf</td><td>456.6 &mu;s</td><td>1.38</td><td>38.5742</td><td>38.0859</td><td>318.75 KB</td><td>0.89</td>
+</tr><tr><td>Build_Unary_Not</td><td>458.9 &mu;s</td><td>1.39</td><td>51.7578</td><td>51.2695</td><td>424.62 KB</td><td>1.18</td>
+</tr><tr><td>Build_Udf</td><td>592.0 &mu;s</td><td>1.79</td><td>56.6406</td><td>55.6641</td><td>468.63 KB</td><td>1.30</td>
+</tr><tr><td>Build_In_AtIn_Captured</td><td>671.0 &mu;s</td><td>2.03</td><td>75.1953</td><td>74.2188</td><td>617.6 KB</td><td>1.72</td>
+</tr><tr><td>Build_LeftJoin</td><td>671.7 &mu;s</td><td>2.03</td><td>76.1719</td><td>75.1953</td><td>624.26 KB</td><td>1.74</td>
+</tr><tr><td>Build_In_ListContains_Captured</td><td>751.0 &mu;s</td><td>2.27</td><td>71.2891</td><td>70.3125</td><td>584.78 KB</td><td>1.63</td>
+</tr><tr><td>Build_In_AtIn_Inline</td><td>756.3 &mu;s</td><td>2.29</td><td>78.1250</td><td>77.1484</td><td>641.04 KB</td><td>1.78</td>
+</tr><tr><td>Build_In_ListContains_Inline</td><td>774.6 &mu;s</td><td>2.34</td><td>74.2188</td><td>73.2422</td><td>608.22 KB</td><td>1.69</td>
+</tr><tr><td>Build_Window_SumOver</td><td>887.4 &mu;s</td><td>2.69</td><td>69.3359</td><td>68.3594</td><td>569.57 KB</td><td>1.58</td>
+</tr><tr><td>Build_Window_RowNumber</td><td>921.0 &mu;s</td><td>2.79</td><td>70.3125</td><td>69.3359</td><td>580.52 KB</td><td>1.62</td>
+</tr><tr><td>Build_RecursiveCte</td><td>1,055.6 &mu;s</td><td>3.19</td><td>140.6250</td><td>50.7813</td><td>1157.85 KB</td><td>3.22</td>
+</tr><tr><td>Build_Join4</td><td>1,312.3 &mu;s</td><td>3.97</td><td>152.3438</td><td>150.3906</td><td>1248.57 KB</td><td>3.47</td>
+</tr><tr><td>Build_Cte</td><td>1,635.6 &mu;s</td><td>4.95</td><td>150.3906</td><td>54.6875</td><td>1233.7 KB</td><td>3.43</td>
+</tr></tbody></table>
+</body>
+</html>

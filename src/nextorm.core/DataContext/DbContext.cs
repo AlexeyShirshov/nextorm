@@ -1,41 +1,18 @@
 ﻿using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.ObjectPool;
 using System.Collections.Concurrent;
 using System.Collections.ObjectModel;
 using System.Data;
 using System.Data.Common;
 using System.Diagnostics;
-using System.Globalization;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
-using System.Text;
 
 namespace nextorm.core;
 
-public class DbContext : IDataContext, IConnectionManager
+public abstract class DbContext : IDataContext, IConnectionManager
 {
-    // norm_p0..norm_pN: names handed both to the SQL builder and to DbCommand.Parameters.
-    // Grown on demand instead of string.Format("norm_p{0}", i), which boxes the index and goes
-    // through the composite-formatting path on every parameter.
-    private static string[] _paramNames = ["norm_p0", "norm_p1", "norm_p2", "norm_p3", "norm_p4"];
-
-    internal static string GetParamName(int index)
-    {
-        var names = _paramNames;
-        if ((uint)index < (uint)names.Length) return names[index];
-
-        // Racy growth is fine: every thread writes an equivalent array.
-        var grown = new string[index + 1];
-        Array.Copy(names, grown, names.Length);
-        for (var i = names.Length; i < grown.Length; i++)
-            grown[i] = string.Concat("norm_p", i.ToString(CultureInfo.InvariantCulture));
-        _paramNames = grown;
-        return grown[index];
-    }
-    protected readonly static MethodInfo IsDBNullMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.IsDBNull))!;
     //private readonly static ConcurrentDictionary<Expression, List<SelectExpression>> _selectListExpCache = new(ExpressionEqualityComparer.Instance);
-    internal protected readonly static ObjectPool<StringBuilder> _sbPool = new DefaultObjectPoolProvider().Create(new StringBuilderPooledObjectPolicy());
     //private static readonly AsyncLocal<Dictionary<QueryPlan, IDbCommandHolder>> _queryPlanCache = new() { Value = [] };    
     [ThreadStatic]
     private static Dictionary<QueryPlanCacheKey, IDbCommandHolder>? _queryPlanCache;
@@ -50,9 +27,21 @@ public class DbContext : IDataContext, IConnectionManager
     private bool _disposed;
     internal bool _connOpen;
     private readonly bool _logParams;
+    // Connection source supplied by the provider: either a connection string (the context owns and
+    // disposes the connection it creates from it) or an already-built connection (the caller owns it).
+    private readonly string? _connectionString;
+    private readonly DbConnection? _providedConnection;
     public DbContext(DbContextBuilder optionsBuilder)
+        : this(null, null, optionsBuilder)
+    {
+    }
+
+    protected DbContext(string? connectionString, DbConnection? providedConnection, DbContextBuilder optionsBuilder)
     {
         ArgumentNullException.ThrowIfNull(optionsBuilder);
+
+        _connectionString = connectionString;
+        _providedConnection = providedConnection;
 
         if (optionsBuilder.LoggerFactory is not null)
         {
@@ -67,8 +56,11 @@ public class DbContext : IDataContext, IConnectionManager
     }
     #region Properties
     protected internal readonly bool LogSensitiveData;
-    public virtual string ConcatStringOperator => "+";
-    public virtual string EmptyString => "''";
+    /// <summary>
+    /// SQL dialect used to render queries. Supplied by the provider; SQL generation depends on this
+    /// interface rather than on the context itself.
+    /// </summary>
+    public abstract ISqlDialect Dialect { get; }
     public ILogger? Logger { get; }
     public ILogger? CommandLogger { get; }
     internal readonly ILogger? ResultSetEnumeratorLogger;
@@ -133,10 +125,50 @@ public class DbContext : IDataContext, IConnectionManager
             }
         }
     }
+    /// <summary>
+    /// Resolves the connection to use, creating it on first access. The shared skeleton — logging,
+    /// the caller-supplied connection, event wiring and ownership tracking — lives here; a provider
+    /// only supplies the concrete connection via <see cref="CreateDbConnection"/> and, if it needs to,
+    /// initialises it in <see cref="OnConnectionCreated"/>.
+    /// </summary>
     public virtual DbConnection CreateConnection()
     {
-        throw new NotImplementedException();
+        if (Logger?.IsEnabled(LogLevel.Debug) ?? false)
+        {
+            if (LogSensitiveData)
+                Logger.LogDebug("Creating connection with {connStr}", _connectionString);
+            else
+                Logger.LogDebug("Creating connection");
+        }
+
+        if (_providedConnection is not null)
+        {
+            // Caller-owned: the context must not dispose it at shutdown.
+            _connWasCreatedByMe = false;
+            OnConnectionCreated(_providedConnection);
+            return _providedConnection;
+        }
+
+        var conn = CreateDbConnection(_connectionString);
+        OnConnectionCreated(conn);
+        return conn;
     }
+
+    /// <summary>Creates the provider-specific connection. Called only when no connection was supplied.</summary>
+    protected abstract DbConnection CreateDbConnection(string? connectionString);
+
+    /// <summary>
+    /// Called for every connection the context starts using (created or supplied) so a provider can
+    /// run provider-specific setup, e.g. registering custom functions.
+    /// </summary>
+    protected virtual void OnConnectionCreated(DbConnection connection)
+    {
+    }
+
+    /// <summary>The connection string of the supplied connection, or the one the context was built with.</summary>
+    public string ConnectionString => string.IsNullOrEmpty(_connectionString)
+        ? _providedConnection!.ConnectionString
+        : _connectionString!;
     // public DbCommand GetCommand(string sql)
     // {
     //     if (_cmd is null)
@@ -156,10 +188,6 @@ public class DbContext : IDataContext, IConnectionManager
         return cmd;
     }
 
-    public virtual string GetTableName(Type type)
-    {
-        throw new NotImplementedException(type.ToString());
-    }
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private List<Param> ExtractParams(QueryCommand queryCommand)
     {
@@ -171,11 +199,12 @@ public class DbContext : IDataContext, IConnectionManager
     // NORM.Param placeholders carry no value - the runtime values are applied by
     // DbPreparedQueryCommand.GetDbCommand. Only computed parameters (captured variables,
     // closures) need to be re-extracted on every cached execution.
-    private static bool IsRuntimeParam(string name) => name.StartsWith("norm_p", StringComparison.Ordinal) && int.TryParse(name.AsSpan(6), out _);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static bool IsRuntimeParam(string name) => NormParam.IsName(name);
 
     private string? MakeSelect(QueryCommand queryCommand, bool paramMode, List<Param> @params, IQueryProvider queryProvider, IAliasProvider? aliasProvider)
     {
-        var sqlBuilder = new SqlBuilder(this, paramMode, @params, new DefaultColumnsProvider(), queryProvider, new DefaultParamProvider(), aliasProvider, Logger!);
+        var sqlBuilder = new SqlBuilder(Dialect, paramMode, @params, new DefaultColumnsProvider(), queryProvider, new DefaultParamProvider(), aliasProvider, Logger!);
         return sqlBuilder.MakeSelect(queryCommand);
     }
 
@@ -223,7 +252,7 @@ public class DbContext : IDataContext, IConnectionManager
 
         return cmd;
     }
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Bug", "S2583:Conditionally executed code should be reachable", Justification = "<Pending>")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Bug", "S2583:Conditionally executed code should be reachable", Justification = "A pooled connection may be open or closed depending on prior use, so the connection-state check is reachable on both sides; the analyzer cannot assume state across the pool.")]
     private async ValueTask<DbCommand> GetDbCommand<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, object[]? @params, CancellationToken cancellationToken)
     {
         //var compiledQuery = queryCommand._compiledQuery as DbCompiledQuery<TResult> ?? CreateCompiledQuery(queryCommand, false, true);
@@ -301,6 +330,7 @@ public class DbContext : IDataContext, IConnectionManager
         IDbCommandHolder? planCache = null;
 
         if (!queryCommand.IsPrepared) queryCommand.PrepareCommand(!storeInCache, cancellationToken);
+        else queryCommand.RefreshInValuesShape();
 
         var ext = queryCommand.CustomData as DbQueryCommandExtension;
 
@@ -477,23 +507,7 @@ public class DbContext : IDataContext, IConnectionManager
 
     //     return (DatabaseCompiledQuery<TResult>)cacheEntry.CompiledQuery;
     // }
-    public virtual DbParameter CreateParam(string name, object? value)
-    {
-        throw new NotImplementedException();
-    }
-
-    public virtual bool MakeTop(int limit, out string? topStmt)
-    {
-        topStmt = null;
-        return false;
-    }
-
-    public virtual string EmptySorting() => throw new NotImplementedException();
-    public virtual bool RequireSorting(QueryCommand queryCommand) => false;
-    public virtual void MakePage(Paging paging, StringBuilder sqlBuilder)
-    {
-        throw new NotImplementedException();
-    }
+    public abstract DbParameter CreateParam(string name, object? value);
 
     private static string GetAliasFromProjection(Type entityType, Type declaringType, int from)
     {
@@ -506,85 +520,37 @@ public class DbContext : IDataContext, IConnectionManager
 
         throw new BuildSqlCommandException($"Cannot find alias of type {declaringType} in {entityType}");
     }
-    public virtual string MakeTableAlias(string tableAlias)
-    {
-        return " as " + Escape(tableAlias);
-    }
-    public virtual string MakeColumnAlias(string? colAlias)
-    {
-        if (string.IsNullOrEmpty(colAlias))
-            return string.Empty;
-
-        return " as " + Escape(colAlias);
-    }
-    internal string GetColumnName(MemberInfo member)
-    {
-        throw new NotImplementedException(member.Name);
-    }
-
-    public virtual string MakeCoalesce(string v1, string v2)
-    {
-        return $"isnull({v1},{v2})";
-    }
-    public virtual string Escape(string keyword) => "'" + keyword + "'";
-    /// <summary>
-    /// Quotes a column alias when it is referenced from an outer query. Providers that emit quoted
-    /// aliases (so they survive as case-sensitive identifiers) must quote the reference accordingly.
-    /// </summary>
-    public virtual string MakeColumnReference(string name) => name;
-    /// <summary>
-    /// True for providers that require a derived table (subquery in FROM) to have an alias.
-    /// </summary>
-    public virtual bool RequireSubqueryAlias => false;
-    /// <summary>
-    /// Maps an aggregate function name to the provider specific one, e.g. stdev -> stddev.
-    /// </summary>
-    public virtual string MakeAggregate(string name) => name;
-    /// <summary>
-    /// SQL type name used when a CLR conversion has to be rendered as a database cast.
-    /// </summary>
-    public virtual string MakeTypeName(Type type) => type switch
-    {
-        _ when type == typeof(byte) => "smallint",
-        _ when type == typeof(short) => "smallint",
-        _ when type == typeof(int) => "integer",
-        _ when type == typeof(long) => "bigint",
-        _ when type == typeof(float) => "real",
-        _ when type == typeof(double) => "double precision",
-        _ when type == typeof(decimal) => "numeric",
-        _ => type.Name
-    };
-    /// <summary>
-    /// Renders a subquery predicate (exists/any/all). <paramref name="asPredicate"/> is true when
-    /// the expression is used as a condition (WHERE/HAVING) rather than as a projected value; a
-    /// dialect without a boolean type (SQL Server) has to render the two forms differently.
-    /// </summary>
-    public virtual string MakeSubqueryPredicate(string keyword, string query, bool asPredicate) => $"{keyword}({query})";
-    /// <summary>
-    /// Coalesce over boolean operands. Dialects without a boolean type usable as a predicate
-    /// (SQL Server) return an expression that is valid both as a value and as a condition.
-    /// </summary>
-    public virtual string MakeBoolCoalesce(string v1, string v2) => MakeCoalesce(v1, v2);
     /// <summary>
     /// Maps a projected column to a reader accessor. Providers whose reader does not widen CLR
     /// types (SqlClient throws when a typed getter does not match the field type, for example an
     /// int column projected as long) can override this to read the value and convert it.
     /// </summary>
-    public virtual Expression MapColumnExpression(SelectExpression column, Expression param) => MapColumn(column, param);
-    public virtual string MakeParam(string name)
-    {
-        throw new NotImplementedException(name);
-    }
+    public virtual Expression MapColumnExpression(SelectExpression column, Expression param) => RowMapperFactory.MapColumn(column, param);
     public void ResetPreparation(QueryCommand queryCommand)
     {
         //_clearCache = true;
     }
+    // A table source is immutable, so one instance can be shared by every query (and cached plan)
+    // that selects from the entity. This removes a small allocation and a metadata lookup per join.
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, FromExpression> _fromCache = new();
+
     public FromExpression GetFrom(Type t)
     {
-        if (DataContextCache.Metadata.TryGetValue(t, out var entity) && !string.IsNullOrEmpty(entity.TableName))
-            return new FromExpression(entity.TableName);
+        if (_fromCache.TryGetValue(t, out var cached))
+            return cached;
 
-        return new FromExpression(GetTableName(t));
+        if (DataContextCache.Metadata.TryGetValue(t, out var entity) && !string.IsNullOrEmpty(entity.TableName))
+        {
+            var from = new FromExpression(entity.TableName);
+            _fromCache.TryAdd(t, from);
+            return from;
+        }
+
+        // Table names come from the entity metadata, registered the first time the entity is
+        // materialized (Create<T>()/Entity<T>). Reaching this point means the type was never
+        // registered, so a table name cannot be produced.
+        throw new BuildSqlCommandException(
+            $"Table name is not registered for type {t}. Materialize the entity first (for example with {nameof(DataContextExtensions.Create)}<{t.Name}>()) so its metadata is registered.");
     }
 
     public FromExpression? GetFrom(Type srcType, QueryCommand? queryCommand)
@@ -608,32 +574,6 @@ public class DbContext : IDataContext, IConnectionManager
             return null;
     }
 
-    public static Expression MapColumn(SelectExpression column, Expression param)
-    {
-        // Typed getters only (no GetValue/boxing); ordinals are baked in as constants.
-        var getter = Expression.Call(param, column.GetDataRecordMethod(), Expression.Constant(column.Index));
-
-        if (column.Nullable)
-        {
-            // The getter returns the underlying type (long for long?, string for string).
-            // Only nullable value types need a Convert; reference types are already exact.
-            Expression value = getter.Type == column.PropertyType
-                ? getter
-                : Expression.Convert(getter, column.PropertyType);
-
-            return Expression.Condition(
-                Expression.Call(param, IsDBNullMI, Expression.Constant(column.Index)),
-                Expression.Constant(null, column.PropertyType),
-                value);
-        }
-
-        return getter;
-    }
-
-    public virtual string MakeBool(bool v)
-    {
-        return v ? "1" : "0";
-    }
     // public IPreparedQueryCommand<TResult> PrepareFromSql<TResult>(string sql, object? @params, QueryCommand<TResult> queryCommand, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken)
     // {
     //     // if (!queryCommand.IsPrepared)
@@ -929,93 +869,9 @@ public class DbContext : IDataContext, IConnectionManager
 
         return sqlEnumerator;
     }
-    /// <summary>
-    /// Builds a cheap cache key from the generated SQL plus a column signature. SQL is already
-    /// available at the call site, so this is far cheaper than hashing the expression tree.
-    /// </summary>
-    private MapperCacheKey BuildMapperKey<TResult>(QueryCommand<TResult> queryCommand, string? sql)
-    {
-        var signature = 7;
-        var selectList = queryCommand.SelectList;
-        if (selectList is not null)
-        {
-            unchecked
-            {
-                signature = signature * 31 + (queryCommand.EntityType?.GetHashCode() ?? 0);
-                for (var i = 0; i < selectList.Length; i++)
-                {
-                    var column = selectList[i];
-                    signature = signature * 31 + column.Index;
-                    signature = signature * 31 + (column.PropertyType?.GetHashCode() ?? 0);
-                    signature = signature * 31 + (column.Nullable ? 1 : 0);
-                    signature = signature * 31 + (column.PropertyName?.GetHashCode() ?? 0);
-                }
-            }
-        }
-
-        return new MapperCacheKey(GetType(), typeof(TResult), sql ?? string.Empty, signature, queryCommand.OneColumn);
-    }
-
     private Func<IDataRecord, TResult> GetMapCached<TResult>(QueryCommand<TResult> queryCommand, string? sql)
     {
-        var key = BuildMapperKey(queryCommand, sql);
-        if (MapperCache.TryGet(key, out var cached))
-            return (Func<IDataRecord, TResult>)cached;
-
-        var map = GetMap(queryCommand)();
-        MapperCache.Add(key, map);
-        return map;
-    }
-
-    public Func<Func<IDataRecord, TResult>> GetMap<TResult>(QueryCommand<TResult> queryCommand)
-    {
-#if DEBUG
-        if (!queryCommand.IsPrepared)
-            throw new InvalidOperationException("Command not prepared");
-#endif
-        // var key = new ExpressionKey(_exp);
-        // if (!(_dataProvider as SqlDataProvider).MapCache.TryGetValue(key, out var del))
-        // {
-        //     if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Map delegate cache miss for: {exp}", _exp);
-        var resultType = typeof(TResult);
-
-        return () =>
-        {
-            var param = Expression.Parameter(typeof(IDataRecord));
-            Expression<Func<IDataRecord, TResult>> lambda;
-
-            if (queryCommand.OneColumn)
-            {
-                var vis = new ReplaceMemberVisitor(queryCommand.EntityType!, param, this);
-                var body = vis.Visit(((LambdaExpression)queryCommand.SelectList![0].Expression!).Body);
-                lambda = Expression.Lambda<Func<IDataRecord, TResult>>(body, param);
-            }
-            else
-            {
-                var body = RowMaterializerBuilder.Build(
-                    resultType,
-                    param,
-                    queryCommand.SelectList!,
-                    ignoreColumns: false,
-                    column => MapColumnExpression(column, param));
-
-                lambda = Expression.Lambda<Func<IDataRecord, TResult>>(body, param);
-            }
-
-            if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Get instance of {type} as: {exp}", resultType, lambda);
-
-            // var key = new ExpressionKey(lambda, _expCache, queryCommand);
-            // if (!_expCache.TryGetValue(key, out var d))
-            // {
-            //     d = lambda.Compile();
-            //     _expCache[key] = d;
-            // }
-            var d = lambda.Compile();
-            return (Func<IDataRecord, TResult>)d;
-        };
-
-        //         (_dataProvider as SqlDataProvider).MapCache[key] = del;
-        //     }
+        return RowMapperFactory.GetOrBuild(queryCommand, sql, GetType(), Logger, MapColumnExpression);
     }
 
     public TResult First<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, ReadOnlySpan<object?> @params)
@@ -1199,12 +1055,6 @@ public class DbContext : IDataContext, IConnectionManager
             return r;
         }
     }
-
-    public virtual string MakeCount(bool distinct, bool big) => distinct switch
-    {
-        true => "count(distinct ",
-        _ => "count("
-    };
 
     public void PurgeQueryCache()
     {

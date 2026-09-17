@@ -1,3 +1,5 @@
+using System.Data.Common;
+
 namespace nextorm.core;
 
 /// <summary>
@@ -7,6 +9,8 @@ namespace nextorm.core;
 /// </summary>
 public interface IConnectionManager
 {
+    /// <summary>Returns the connection in use, creating it on first access.</summary>
+    DbConnection GetConnection();
     void EnsureConnectionOpen();
     Task EnsureConnectionOpenAsync();
 }

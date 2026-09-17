@@ -12,10 +12,16 @@ public enum JoinType
     FullCross = 5
 }
 
-public class JoinExpression(LambdaExpression joinCondition, JoinType joinType = JoinType.Inner)
+public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType = JoinType.Inner)
 {
     public JoinType JoinType { get; } = joinType;
-    public LambdaExpression JoinCondition { get; } = joinCondition;
+    public LambdaExpression? JoinCondition { get; } = joinCondition;
+    /// <summary>
+    /// Joined source type. Only needed when <see cref="JoinCondition"/> is absent (a cross join has no
+    /// condition parameter to read the right-hand type from), so the alias of the joined table can be
+    /// resolved during SQL generation and in the in-memory provider.
+    /// </summary>
+    public Type? EntityType { get; init; }
     public required FromExpression From { get; init; }
     internal JoinExpression CloneForCache()
     {
@@ -23,7 +29,7 @@ public class JoinExpression(LambdaExpression joinCondition, JoinType joinType = 
 
         if (newFrom == From) return this;
 
-        return new JoinExpression(JoinCondition, JoinType) { From = From };
+        return new JoinExpression(JoinCondition, JoinType) { From = From, EntityType = EntityType };
     }
     // public override int GetHashCode()
     // {

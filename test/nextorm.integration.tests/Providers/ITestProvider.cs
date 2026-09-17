@@ -21,6 +21,28 @@ public interface ITestProvider
     /// </summary>
     bool SupportsFractionalAverage { get; }
 
+    /// <summary>
+    /// True when the provider implements <c>INTERSECT ALL</c> / <c>EXCEPT ALL</c>. PostgreSQL does;
+    /// SQL Server has neither and SQLite has no <c>* ALL</c> variant of either operation.
+    /// </summary>
+    bool SupportsIntersectExceptAll { get; }
+
+    /// <summary>
+    /// True when the provider implements the sample and population variance aggregates
+    /// (<c>var</c> / <c>varp</c>). PostgreSQL and SQL Server have them built in; SQLite provides
+    /// them through the custom aggregates registered in <c>SQLiteFunctions</c>.
+    /// </summary>
+    bool SupportsVarianceAggregates { get; }
+
+    /// <summary>
+    /// True when the provider can execute the portable table-valued function used by the shared TVF
+    /// tests. Only SQLite's bundled <c>json_each</c> is used, so providers without it skip.
+    /// </summary>
+    bool SupportsTableValuedFunctions { get; }
+
+    /// <summary>Reason reported when <see cref="SupportsTableValuedFunctions"/> is false.</summary>
+    string TableValuedFunctionSkipReason { get; }
+
     void EnsureSeeded();
 
     IDataContext CreateContext();

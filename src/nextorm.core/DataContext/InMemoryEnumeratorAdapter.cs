@@ -6,6 +6,7 @@ public class InMemoryEnumeratorAdapter<TResult, TEntity> : IAsyncEnumerator<TRes
     //private readonly CompiledQuery<TResult> _cmd;
     private readonly Func<TEntity, TResult> _map;
     private readonly IAsyncEnumerator<TEntity> _inner;
+    private readonly HashSet<TResult>? _seen;
 #if PARAM_CONDITION
     private readonly Func<TEntity, object[]?, bool>? _condition;
 #else
@@ -13,10 +14,18 @@ public class InMemoryEnumeratorAdapter<TResult, TEntity> : IAsyncEnumerator<TRes
 #endif
 
     public InMemoryEnumeratorAdapter(InMemoryCompiledQuery<TResult, TEntity> cmd, IAsyncEnumerator<TEntity> inner)
+        : this(cmd, inner, false)
+    {
+    }
+
+    public InMemoryEnumeratorAdapter(InMemoryCompiledQuery<TResult, TEntity> cmd, IAsyncEnumerator<TEntity> inner, bool distinct)
     {
         _map = cmd.MapDelegate!;
         _inner = inner;
         _condition = cmd.Condition;
+
+        if (distinct)
+            _seen = new HashSet<TResult>(InMemoryDistinct.GetComparer<TResult>());
     }
 
     public TResult Current => _map(_inner.Current!);
@@ -43,6 +52,12 @@ public class InMemoryEnumeratorAdapter<TResult, TEntity> : IAsyncEnumerator<TRes
             goto next;
         }
 
-        return r;
+        if (!r)
+            return false;
+
+        if (_seen is not null && !_seen.Add(Current))
+            goto next;
+
+        return true;
     }
 }

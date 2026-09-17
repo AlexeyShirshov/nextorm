@@ -11,10 +11,19 @@ public sealed class FromExpression
      {
           SubQuery = subQuery;
      }
+     public FromExpression(TableFunctionExpression tableFunction)
+     {
+          TableFunction = tableFunction;
+     }
      //public OneOf<string, QueryCommand> Table { get; }
      public readonly string? Table;
      public readonly QueryCommand? SubQuery;
      public readonly Type? SourceType;
+     /// <summary>
+     /// Set when the source is a table-valued function. Mutually exclusive with <see cref="Table"/>
+     /// and <see cref="SubQuery"/>.
+     /// </summary>
+     public readonly TableFunctionExpression? TableFunction;
 
      // public override int GetHashCode()
      // {
@@ -41,7 +50,9 @@ public sealed class FromExpression
      // }
      internal FromExpression? CloneForCache()
      {
-          if (!string.IsNullOrEmpty(Table) || SourceType is not null) return this;
+          // A table function's call expression is immutable and never mutated during preparation,
+          // so it can be shared with the cached plan (like Table/SourceType) instead of cloned.
+          if (!string.IsNullOrEmpty(Table) || SourceType is not null || TableFunction is not null) return this;
 
           return new FromExpression(SubQuery!.CloneForCache());// { TableAlias = TableAlias };
      }

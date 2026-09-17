@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Reflection;
 using System.Runtime.CompilerServices;
 
 namespace nextorm.core;
@@ -20,8 +21,14 @@ public sealed class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TRes
     private IEnumerator<TEntity>? _enumerator;
     private int _idx;
     private TEntity _current = default!;
+    private HashSet<TResult>? _seen;
 
     public InMemoryEnumerator(InMemoryCompiledQuery<TResult, TEntity> cmd, CancellationToken cancellationToken)
+        : this(cmd, cancellationToken, false)
+    {
+    }
+
+    public InMemoryEnumerator(InMemoryCompiledQuery<TResult, TEntity> cmd, CancellationToken cancellationToken, bool distinct)
     {
         ArgumentNullException.ThrowIfNull(cmd);
 
@@ -33,11 +40,15 @@ public sealed class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TRes
         _conditionDirect = cmd.ConditionDirect;
         _conditionRaw = cmd.Condition;
         _cancellationToken = cancellationToken;
+
+        if (distinct)
+            _seen = new HashSet<TResult>(InMemoryDistinct.GetComparer<TResult>());
     }
 
     public void Init(IEnumerable<TEntity> data, object[]? @params)
     {
         _idx = -1;
+        _seen?.Clear();
         switch (data)
         {
             case List<TEntity> list:
@@ -79,7 +90,8 @@ public sealed class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TRes
 
     public ValueTask DisposeAsync()
     {
-        GC.SuppressFinalize(this);
+        // Route through Dispose() so the inner enumerator is released exactly once.
+        Dispose();
         return ValueTask.CompletedTask;
     }
 
@@ -93,6 +105,22 @@ public sealed class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TRes
     }
 
     public bool MoveNext()
+    {
+        if (_seen is null)
+            return MoveNextCore();
+
+        // DISTINCT is applied after the WHERE condition and the projection, matching SQL: the
+        // predicate is evaluated by MoveNextCore, the projected value is produced by Current.
+        while (MoveNextCore())
+        {
+            if (_seen.Add(Current))
+                return true;
+        }
+
+        return false;
+    }
+
+    private bool MoveNextCore()
     {
         if (_list is not null)
         {
@@ -198,12 +226,43 @@ public sealed class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TRes
 
     public void Dispose()
     {
+        // The fallback enumerator (created for arbitrary IEnumerable<TEntity> sources) is
+        // IDisposable; without this it would leak for iterator/streaming sources.
+        _enumerator?.Dispose();
+        _enumerator = null;
         GC.SuppressFinalize(this);
     }
 
     public IEnumerator<TResult> GetEnumerator() => this;
 
     IEnumerator IEnumerable.GetEnumerator() => this;
+}
+
+/// <summary>
+/// Resolves the equality comparer used to de-duplicate a <c>SELECT DISTINCT</c> result in the
+/// in-memory provider. Anonymous types, tuples, records and value types all expose structural
+/// equality, so the default comparer matches the SQL notion of a duplicate. A reference type
+/// without a value-equality override (and interfaces) cannot be compared by value, so DISTINCT is
+/// rejected instead of silently returning rows SQL would have collapsed.
+/// </summary>
+internal static class InMemoryDistinct
+{
+    public static IEqualityComparer<T> GetComparer<T>()
+    {
+        var type = typeof(T);
+
+        if (type.IsScalar() || type.IsValueType || type.IsAnonymous() || HasValueEquality(type))
+            return EqualityComparer<T>.Default;
+
+        throw new NotSupportedException(
+            $"DISTINCT is not supported by the in-memory provider for projection type '{type.Name}' because it does not implement value equality. Project an anonymous type or a value type, or override Equals/GetHashCode.");
+    }
+
+    private static bool HasValueEquality(Type type)
+    {
+        var equals = type.GetMethod(nameof(object.Equals), BindingFlags.Public | BindingFlags.Instance, null, [typeof(object)], null);
+        return equals is not null && equals.DeclaringType == type;
+    }
 }
 
 internal interface IEnumeratorInit<in TEntity>

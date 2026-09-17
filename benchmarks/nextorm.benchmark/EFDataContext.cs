@@ -8,4 +8,5 @@ class EFDataContext : Microsoft.EntityFrameworkCore.DbContext
     }
     public DbSet<SimpleEntity> SimpleEntities { get; set; }
     public DbSet<LargeEntity> LargeEntities { get; set; }
+    public DbSet<ComplexEntity> ComplexEntities { get; set; }
 }

@@ -1,7 +1,6 @@
 #define PARAM_CONDITION
 using Microsoft.Extensions.Logging;
 using System.Collections;
-using System.Collections.Concurrent;
 using System.Linq.Expressions;
 using System.Reflection;
 
@@ -14,10 +13,20 @@ public partial class InMemoryContext : IDataContext
     private readonly static MethodInfo miCreateEnumerator = typeof(InMemoryContext).GetMethod(nameof(CreateEnumerator), BindingFlags.NonPublic | BindingFlags.Instance)!;
     private readonly static MethodInfo miLoopJoin = typeof(InMemoryContext).GetMethod(nameof(LoopJoin), BindingFlags.NonPublic | BindingFlags.Instance)!;
     private readonly static MethodInfo miCreateCompiledQuery = typeof(InMemoryContext).GetMethod(nameof(CreateCompiledQuery), BindingFlags.NonPublic | BindingFlags.Instance)!;
-    private readonly static IDictionary<Type, IEntityMeta> _metadata = new ConcurrentDictionary<Type, IEntityMeta>();
-    private readonly static ConcurrentDictionary<Type, SelectExpression[]> _selectListCache = new();
-    //private readonly static ConcurrentDictionary<Expression, List<SelectExpression>> _selectListExpCache = new(ExpressionEqualityComparer.Instance);
+    // Entity metadata and select lists are provider-independent and process-wide, so the in-memory
+    // provider shares them with the SQL contexts through DataContextCache instead of keeping a
+    // second set of static dictionaries. The duplicates that used to live here were dead: nothing
+    // ever wrote to them and nothing ever read them (see Metadata / SelectListCache below, which
+    // now delegate).
+    //
+    // Compiled delegates, on the other hand, are deliberately per-instance: the expressions cached
+    // below embed Expression.Constant(this) (see GetPreparedQueryCommand and
+    // BuildCreateEnumeratorDelegate), so a delegate compiled by one context calls back into that
+    // same context. Sharing them process-wide would hand the wrong instance to the caller. Only the
+    // metadata/select-list caches may be global.
     private readonly IDictionary<ExpressionKey, Delegate> _expCache = new ExpressionCache<Delegate>();
+    // In-memory-specific: typed condition predicates (factory / direct). They have no SQL
+    // counterpart, so they are not duplicates of any DataContextCache entry.
     private readonly IDictionary<ExpressionKey, Delegate> _conditionFactoryCache = new ExpressionCache<Delegate>();
     private readonly IDictionary<ExpressionKey, Delegate> _conditionDirectCache = new ExpressionCache<Delegate>();
     private readonly IDictionary<Type, object?> _data = new Dictionary<Type, object?>();
@@ -35,10 +44,22 @@ public partial class InMemoryContext : IDataContext
     public ILogger? Logger { get; }
     public bool NeedMapping => false;
     public IDictionary<Type, object?> Data => _data;
+    /// <summary>
+    /// Per-instance compiled-delegate cache. Deliberately <b>not</b> shared, unlike
+    /// <see cref="Metadata"/> and <see cref="SelectListCache"/>: its entries capture the context
+    /// instance they were compiled for (see the field comment on <c>_expCache</c>).
+    /// </summary>
     public IDictionary<ExpressionKey, Delegate> ExpressionsCache => _expCache;
-    public IDictionary<Type, IEntityMeta> Metadata => _metadata;
-    public IDictionary<Type, SelectExpression[]> SelectListCache => _selectListCache;
-    //public IDictionary<Expression, List<SelectExpression>> SelectListExpressionCache => _selectListExpCache;
+
+    /// <summary>
+    /// Provider-independent entity metadata, shared process-wide with the SQL contexts through
+    /// <see cref="DataContextCache"/>. Kept as a member for API compatibility; there is a single
+    /// source of truth.
+    /// </summary>
+    public IDictionary<Type, IEntityMeta> Metadata => DataContextCache.Metadata;
+
+    /// <inheritdoc cref="Metadata"/>
+    public IDictionary<Type, SelectExpression[]> SelectListCache => DataContextCache.SelectListCache;
     public ILogger? CommandLogger { get; }
     public ILogger? ResultSetEnumeratorLogger { get; }
     public Dictionary<string, object> Properties => _properties;
@@ -55,6 +76,7 @@ public partial class InMemoryContext : IDataContext
         IPreparedQueryCommand<TResult>? planCache = null;
 
         if (!queryCommand.IsPrepared) queryCommand.PrepareCommand(false, cancellationToken);
+        else queryCommand.RefreshInValuesShape();
 
         if (queryCommand.Cache && storeInCache)
         {
@@ -95,6 +117,9 @@ public partial class InMemoryContext : IDataContext
     }
     protected CreateEnumeratorDelegate<TResult> BuildCreateEnumeratorDelegate<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
     {
+        if (queryCommand.From?.TableFunction is not null)
+            throw new NotSupportedException("Table-valued function sources are not supported by the in-memory provider.");
+
         if (queryCommand.From?.SubQuery is not null)
         {
             if (!string.IsNullOrEmpty(queryCommand.From.Table))
@@ -205,47 +230,39 @@ public partial class InMemoryContext : IDataContext
                 {
                     var join = queryCommand.Joins[idx];
 
-                    firstType ??= join.JoinCondition.Parameters[0].Type;
-                    var secondType = join.JoinCondition.Parameters[1].Type;
+                    firstType ??= join.JoinCondition?.Parameters[0].Type ?? typeof(TEntity).GetGenericArguments()[0];
+                    var secondType = join.JoinCondition?.Parameters[1].Type ?? join.EntityType
+                        ?? throw new NotSupportedException($"A {join.JoinType} join requires a join condition or an entity type");
 
-                    switch (join.JoinType)
+                    var prjType = CreateProjectionType(firstType, secondType, dim);
+
+                    var @this = Expression.Constant(this);
+                    var p1 = Expression.Parameter(typeof(QueryCommand));
+                    var p2 = Expression.Parameter(typeof(object));
+                    var p3 = Expression.Parameter(typeof(JoinExpression));
+                    var p4 = Expression.Parameter(typeof(int));
+                    var callExp = Expression.Call(@this, miLoopJoin.MakeGenericMethod(firstType, secondType, prjType),
+                        p1,
+                        Expression.Convert(p2, typeof(IEnumerable<>).MakeGenericType(firstType)),
+                        p3,
+                        p4
+                    );
+                    var key = new ExpressionKey(callExp, queryCommand);
+                    if (!_expCache.TryGetValue(key, out var del))
                     {
-                        case JoinType.Inner:
-                            {
-                                var prjType = CreateProjectionType(firstType, secondType, dim);
-
-                                var @this = Expression.Constant(this);
-                                var p1 = Expression.Parameter(typeof(QueryCommand));
-                                var p2 = Expression.Parameter(typeof(object));
-                                var p3 = Expression.Parameter(typeof(JoinExpression));
-                                var p4 = Expression.Parameter(typeof(int));
-                                var callExp = Expression.Call(@this, miLoopJoin.MakeGenericMethod(firstType, secondType, prjType),
-                                    p1,
-                                    Expression.Convert(p2, typeof(IEnumerable<>).MakeGenericType(firstType)),
-                                    p3,
-                                    p4
-                                );
-                                var key = new ExpressionKey(callExp, queryCommand);
-                                if (!_expCache.TryGetValue(key, out var del))
-                                {
-                                    var d = Expression.Lambda<Func<QueryCommand, object?, JoinExpression, int, object>>(callExp,
-                                        p1,
-                                        p2,
-                                        p3,
-                                        p4
-                                    ).Compile();
-                                    _expCache[key] = d;
-                                    del = d;
-                                }
-
-                                joinResult = ((Func<QueryCommand, object?, JoinExpression, int, object>)del)(queryCommand, joinResult, join, dim);
-
-                                firstType = prjType;
-                                break;
-                            }
-                        default:
-                            throw new NotSupportedException(join.JoinType.ToString());
+                        var d = Expression.Lambda<Func<QueryCommand, object?, JoinExpression, int, object>>(callExp,
+                            p1,
+                            p2,
+                            p3,
+                            p4
+                        ).Compile();
+                        _expCache[key] = d;
+                        del = d;
                     }
+
+                    joinResult = ((Func<QueryCommand, object?, JoinExpression, int, object>)del)(queryCommand, joinResult, join, dim);
+
+                    firstType = prjType;
 
                     dim++;
                 }
@@ -283,7 +300,7 @@ public partial class InMemoryContext : IDataContext
                     cacheEntry.CompiledQuery = compiledQuery;
                 }
 
-                enumerator = new InMemoryEnumerator<TResult, TEntity>(compiledQuery, cancellationToken);
+                enumerator = new InMemoryEnumerator<TResult, TEntity>(compiledQuery, cancellationToken, queryCommand.IsDistinct);
 #if PARAM_CONDITION
                 enumerator.Init(data!, @params);
 #else
@@ -331,6 +348,9 @@ public partial class InMemoryContext : IDataContext
 #endif
     IEnumerable<TResult> LoopJoin<TLeft, TRight, TResult>(QueryCommand queryCommand, IEnumerable<TLeft>? leftData, JoinExpression join, int dim)
     {
+        if (join.From.TableFunction is not null)
+            throw new NotSupportedException("Table-valued function sources are not supported by the in-memory provider.");
+
         if (leftData is null)
         {
             //var dataPayload = queryCommand.GetNotNullOrAddPayload(() => new InMemoryDataPayload<TLeft>(Array.Empty<TLeft>().AsEnumerable()));
@@ -350,22 +370,127 @@ public partial class InMemoryContext : IDataContext
 
         var res = new List<TResult>();
 
-        foreach (var item in leftData)
+        switch (join.JoinType)
         {
-            foreach (var itemInner in joinPayload)
-            {
-                var d = ((Expression<Func<TLeft, TRight, bool>>)join.JoinCondition).Compile();
-                var r = d(item, itemInner)!;
-
-                if (r)
+            case JoinType.Cross:
+            case JoinType.FullCross:
+                foreach (var item in leftData)
                 {
-                    res.Add((TResult)CreateProjection(item, itemInner, dim));
+                    foreach (var itemInner in joinPayload)
+                    {
+                        res.Add((TResult)CreateProjection(item, itemInner, dim));
+                    }
                 }
-            }
+                break;
+
+            case JoinType.Inner:
+                {
+                    var condition = CompileJoinCondition<TLeft, TRight>(join);
+
+                    foreach (var item in leftData)
+                    {
+                        foreach (var itemInner in joinPayload)
+                        {
+                            if (condition(item, itemInner))
+                            {
+                                res.Add((TResult)CreateProjection(item, itemInner, dim));
+                            }
+                        }
+                    }
+                }
+                break;
+
+            case JoinType.Left:
+                {
+                    var condition = CompileJoinCondition<TLeft, TRight>(join);
+
+                    foreach (var item in leftData)
+                    {
+                        var matched = false;
+                        foreach (var itemInner in joinPayload)
+                        {
+                            if (condition(item, itemInner))
+                            {
+                                matched = true;
+                                res.Add((TResult)CreateProjection(item, itemInner, dim));
+                            }
+                        }
+
+                        if (!matched)
+                            res.Add((TResult)CreateProjection(item, default(TRight)!, dim));
+                    }
+                }
+                break;
+
+            case JoinType.Right:
+                {
+                    var condition = CompileJoinCondition<TLeft, TRight>(join);
+
+                    foreach (var itemInner in joinPayload)
+                    {
+                        var matched = false;
+                        foreach (var item in leftData)
+                        {
+                            if (condition(item, itemInner))
+                            {
+                                matched = true;
+                                res.Add((TResult)CreateProjection(item, itemInner, dim));
+                            }
+                        }
+
+                        if (!matched)
+                            res.Add((TResult)CreateProjection(default(TLeft)!, itemInner, dim));
+                    }
+                }
+                break;
+
+            case JoinType.Full:
+                {
+                    var condition = CompileJoinCondition<TLeft, TRight>(join);
+
+                    foreach (var item in leftData)
+                    {
+                        var matched = false;
+                        foreach (var itemInner in joinPayload)
+                        {
+                            if (condition(item, itemInner))
+                            {
+                                matched = true;
+                                res.Add((TResult)CreateProjection(item, itemInner, dim));
+                            }
+                        }
+
+                        if (!matched)
+                            res.Add((TResult)CreateProjection(item, default(TRight)!, dim));
+                    }
+
+                    foreach (var itemInner in joinPayload)
+                    {
+                        var matched = false;
+                        foreach (var item in leftData)
+                        {
+                            if (condition(item, itemInner))
+                            {
+                                matched = true;
+                                break;
+                            }
+                        }
+
+                        if (!matched)
+                            res.Add((TResult)CreateProjection(default(TLeft)!, itemInner, dim));
+                    }
+                }
+                break;
+
+            default:
+                throw new NotSupportedException(join.JoinType.ToString());
         }
 
         return res;
     }
+
+    private static Func<TLeft, TRight, bool> CompileJoinCondition<TLeft, TRight>(JoinExpression join)
+        => ((Expression<Func<TLeft, TRight, bool>>)join.JoinCondition!).Compile();
     static Type CreateProjectionType(Type firstType, Type secondType, int dim)
     {
         var typeName = $"nextorm.core.Projection`{dim}";
@@ -382,7 +507,7 @@ public partial class InMemoryContext : IDataContext
     static IProjection CreateProjection<TLeft, TRight>(TLeft left, TRight right, int dim)
     {
         if (dim == 2) return new Projection<TLeft, TRight> { t1 = left, t2 = right };
-        if (dim >= 3 && left is IProjection proj)
+        if (left is IExtendableProjection proj)
         {
             return proj.Extend(right);
             // var (types, values) = ExtractTypesFromProjection(left);
@@ -408,8 +533,19 @@ public partial class InMemoryContext : IDataContext
 
             // return lambda.Compile().DynamicInvoke()!;
         }
+        if (left is null && dim >= 3)
+        {
+            // A RIGHT/FULL join matched no accumulated row on this side: the whole left-hand
+            // projection is absent, so materialize a projection whose earlier items keep their
+            // defaults and whose last item is the joined entity. Reflection is only paid on this
+            // (unmatched) path.
+            var prjType = CreateProjectionType(typeof(TLeft), typeof(TRight), dim);
+            var projection = (IProjection)Activator.CreateInstance(prjType)!;
+            prjType.GetProperty("t" + dim)!.SetValue(projection, right);
+            return projection;
+        }
 
-        throw new NotSupportedException(dim.ToString());
+        throw new NotSupportedException($"Joins of dimension {dim} are not supported");
 
         // static (List<Type>, List<object?>) ExtractTypesFromProjection(TLeft projection)
         // {
@@ -437,7 +573,7 @@ public partial class InMemoryContext : IDataContext
             cacheEntry.CompiledQuery = compiledQuery;
         }
 
-        return new InMemoryEnumeratorAdapter<TResult, TEntity>(compiledQuery, enumerator);
+        return new InMemoryEnumeratorAdapter<TResult, TEntity>(compiledQuery, enumerator, queryCommand.IsDistinct);
     }
     public FromExpression? GetFrom(Type srcType, QueryCommand? queryCommand)
     {

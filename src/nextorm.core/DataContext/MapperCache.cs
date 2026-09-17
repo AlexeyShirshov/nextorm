@@ -1,4 +1,5 @@
 ﻿using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 
 namespace nextorm.core;
 
@@ -29,6 +30,7 @@ internal static class MapperCache
 
     private static readonly ConcurrentDictionary<MapperCacheKey, Delegate> _cache = new();
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool TryGet(MapperCacheKey key, out Delegate map) => _cache.TryGetValue(key, out map!);
 
     public static void Add(MapperCacheKey key, Delegate map)

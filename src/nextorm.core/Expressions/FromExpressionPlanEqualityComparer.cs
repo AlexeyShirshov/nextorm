@@ -6,6 +6,10 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
     //private readonly IDictionary<ExpressionKey, Delegate> _cache;
     // private readonly IQueryProvider _queryProvider;
     private readonly Lazy<QueryPlanEqualityComparer> _equalityComparer;
+    // Table-function calls are compared/hashed structurally, with the same closure-aware comparer the
+    // WHERE/SELECT expressions use, so two equivalent calls built from different closure instances
+    // still share a cached plan while different arguments produce different plans.
+    private readonly ExpressionPlanEqualityComparer _expComparer;
 
     //private readonly ILogger? _logger;
     //private readonly ExpressionPlanEqualityComparer _expComparer;
@@ -20,6 +24,7 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
     {
         //_cache = cache ?? new ExpressionCache<Delegate>();
         _equalityComparer = new Lazy<QueryPlanEqualityComparer>(queryProvider.GetQueryPlanEqualityComparer);
+        _expComparer = queryProvider.GetExpressionPlanEqualityComparer();
     }
     // public FromExpressionPlanEqualityComparer(IDictionary<ExpressionKey, Delegate>? cache, IQueryProvider queryProvider, ILogger? logger)
     // {
@@ -38,12 +43,18 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
         // if (x.TableAlias != y.TableAlias) return false;
         if (!string.IsNullOrEmpty(x.Table) && x.Table == y.Table) return true;
 
+        if (x.TableFunction is not null || y.TableFunction is not null)
+            return _expComparer.Equals(x.TableFunction?.Call, y.TableFunction?.Call);
+
         return _equalityComparer.Value.Equals(x.SubQuery, y.SubQuery);
     }
 
     public int GetHashCode(FromExpression? obj)
     {
         if (obj is null) return 0;
+
+        if (obj.TableFunction is not null)
+            return _expComparer.GetHashCode(obj.TableFunction.Call);
 
         /*if (obj.TableAlias is not null)
         {

@@ -31,7 +31,7 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
     }
     // private readonly string CommandText;
     //public DbParameterCollection DbCommandParams;
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Bug", "S2583:Conditionally executed code should be reachable", Justification = "<Pending>")]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Bug", "S2583:Conditionally executed code should be reachable", Justification = "Both branches are reachable: @params may be null at any call site, so the ReadOnlySpan conversion is not dead code; the analyzer cannot model the span conversion.")]
     public DbCommand GetDbCommand(object[]? @params, DbContext dataContext, DbConnection conn)
         => GetDbCommand(@params is null ? ReadOnlySpan<object?>.Empty : @params, dataContext, conn);
 
@@ -57,7 +57,7 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
                 string? paramName = null;
                 if (idx < 0)
                 {
-                    paramName = DbContext.GetParamName(i);
+                    paramName = NormParam.GetName(i);
                     // parameters.IndexOf is a provider-side linear scan, but ParamMap caches the
                     // result below, so it runs at most once per parameter per compiled command.
                     idx = parameters.IndexOf(paramName);

@@ -431,3 +431,215 @@ ShortRun / InProcess, tmpfs, изолированная копия. Разбро
 NEXTORM_BENCH_FULL=1 dotnet run -c Release --project benchmarks/nextorm.benchmark -- --filter "*InMemoryBenchmark*"
 ```
 Классы: `InMemoryBenchmarkAny`, `InMemoryBenchmarkIteration`, `InMemoryBenchmarkWhere`; EF-контекст — `benchmarks/nextorm.benchmark/EfInMemory.cs`.
+
+---
+
+# Итерация 5 — проверка после извлечения `ISqlDialect` (регрессий нет)
+
+## Что проверялось
+Рефакторинг SOLID (F1/F5/F6) вынес рендеринг диалекта из `DbContext` в `ISqlDialect` + `SqlDialectBase`, реализации `SqliteDialect`/`PostgresDialect`/`SqlServerDialect`; `DbContext` стал `abstract` (владеет только `Dialect`, `CreateConnection`, `CreateParam`); `SqlBuilder`, `BaseExpressionVisitor`, `WhereExpressionVisitor` зависят от `ISqlDialect`/`ILogger?`, а не от `DbContext`; пара `RequireSorting`+`EmptySorting` сведена в один `GetPagingOrderBy` (возврат `null` вместо броска). Это горячий путь генерации SQL, поэтому изменение проверено бенчмарками.
+
+Ожидание: правка должна быть **нейтральной** — тот же SQL, те же аллокации, время в пределах шума.
+
+## Методика
+- **BASE** — HEAD `9641660` (диалектные методы внутри `DbContext`, `SqlBuilder(DbContext, ...)`), снят через `git archive` в `/tmp/opencode/nextorm-base`. **NEW** — рабочее дерево с `ISqlDialect`.
+- Обе версии собраны `-c Release`, прогнаны на одной машине (AMD Ryzen 7 5800HS, WSL2, .NET 10.0.12, BenchmarkDotNet 0.15.8) на одной и той же БД в tmpfs (`/tmp/nextorm-bench/test.db`).
+- Прогоны **строго последовательно** — параллельные BDN-прогоны в этом репозитории конфликтуют за генерируемый проект.
+- Класс `SqliteBenchmarkCachedPlan` выбран прицельно: это единственный набор, где `Build_Sql`/`Build_Sql_Join` изолированно измеряют генерацию SQL (visitor + alias resolution, `storeInCache:false`) — ровно изменённый код. Там же кэш плана (`Cached_PlanOnly_*`, `RePrepare_*`, `M12_*`) и end-to-end путь в БД (`Prepared_ToList`, `Cached_ToList`, `M12_NoCache_ToList`).
+- Режим `Job.Default` (out-of-process) + `MemoryDiagnoser`.
+
+## Полный прогон (mean, `Job.Default`)
+
+| Метод | BASE | NEW | Δ |
+|---|---:|---:|---:|
+| Construct_Only | 125.8 µs | 110.1 µs | −12% |
+| RePrepare_PlanOnly_Param | 147.0 µs | 144.0 µs | −2% |
+| Cached_PlanOnly_NoParam | 302.5 µs | 260.2 µs | −14% |
+| Cached_PlanOnly_Param | 346.7 µs | 357.7 µs | +3% |
+| **Build_Sql** | 472.8 µs | 499.1 µs | **+6%** |
+| M12_NoCache_PlanOnly_Param | 564.7 µs | 504.5 µs | −11% |
+| Prepared_ToList | 1 101.4 µs | 989.1 µs | −10% |
+| **Build_Sql_Join** | 1 376.3 µs | 1 190.2 µs | **−13%** |
+| Cached_ToList | 1 716.5 µs | 1 587.9 µs | −8% |
+| M12_NoCache_ToList | 3 594.1 µs | 3 453.2 µs | −4% |
+
+**Аллокации побайтово идентичны** — набор выполняемой работы не изменился:
+
+| Метод | BASE | NEW |
+|---|---:|---:|
+| Construct_Only | 167.97 KB | 167.97 KB |
+| Cached_PlanOnly_Param | 301.57 KB | 301.57 KB |
+| Build_Sql | 441.42 KB | 441.42 KB |
+| Build_Sql_Join | 1 150.07 KB | 1 143.04 KB |
+| Prepared_ToList | 76.13 KB | 76.13 KB |
+| Cached_ToList | 377.7 KB | 377.7 KB |
+
+## `Build_Sql` — интерлив A/B/A/B
+Знак разницы в полном прогоне противоречив: `Build_Sql` +6%, но `Build_Sql_Join` −13%; при этом `Construct_Only` (код, который не трогали) «ускорился» на 12%. Это признак дрейфа машины, поэтому сделано 4 чередующихся прогона на самом чувствительном `Build_Sql`:
+
+| Прогон | Mean |
+|---|---:|
+| NEW #1 | 551.8 µs |
+| BASE #1 | 517.1 µs |
+| NEW #2 | 598.9 µs |
+| BASE #2 | 533.2 µs |
+| BASE #3 | 588.0 µs |
+| NEW #3 | 519.9 µs |
+| BASE #4 | 459.8 µs |
+| NEW #4 | 433.5 µs |
+
+- NEW: среднее **526.0 µs**, медиана 535.9 µs
+- BASE: среднее **524.5 µs**, медиана 525.2 µs
+- Δ средних: **+0.3%**
+
+Разброс внутри одного и того же кода — 433–599 µs (**±19%**), то есть в разы больше разницы средних. Эффект от замены class-virtual на interface-dispatch неотличим от шума WSL2.
+
+## Вывод
+- **Регрессий нет.** SQL-генерация нейтральна по аллокациям (побайтово) и по времени (в пределах шума ±19%).
+- Корректность подтверждена тестами: SQL-тесты SQLite/PostgreSQL/SQL Server и интеграционные — зелёные; SQL-вывод не менялся.
+- Ограничение: бенчмарки есть только для SQLite-пути; рендеринг PostgreSQL/SQL Server проверен тестами, но не бенчмарками (PG/MSSQL-классов в сьюте нет).
+
+## Воспроизведение
+```bash
+# BASE: снимок HEAD
+mkdir -p /tmp/nextorm-base && git archive HEAD | tar -x -C /tmp/nextorm-base
+
+# NEW (рабочее дерево) и BASE — по очереди, не параллельно
+NEXTORM_BENCH_FULL=1 dotnet run -c Release --project benchmarks/nextorm.benchmark -- --filter "*SqliteBenchmarkCachedPlan*"
+
+# интерлив на Build_Sql (повторить N раз, чередуя каталоги)
+NEXTORM_BENCH_FULL=1 dotnet run -c Release --project benchmarks/nextorm.benchmark -- --filter "*SqliteBenchmarkCachedPlan.Build_Sql*"
+```
+
+---
+
+# Итерация 6 — новые SQL-возможности и оптимизация реальных проигрышей
+
+## Что добавлено (функциональность)
+
+Реализованы и покрыты тестами SQL-возможности, которых раньше не было:
+
+- все виды JOIN — `LEFT`/`RIGHT`/`FULL`/`CROSS` (SQL-генерация, fluent API, in-memory, диалекты);
+- арность join до 8 таблиц (`Projection<T1..T8>`, `EntityP2..P8`);
+- `CASE WHEN` / тернарный оператор / `switch`;
+- строковые, математические и date/time функции + `LIKE`;
+- `IN` по списку/массиву и `Contains` (плюс `NORM.SQL.@in`);
+- логический `!` и унарные операторы (`-`, `+`, `~`);
+- `SELECT DISTINCT`;
+- `INTERSECT` / `EXCEPT` (и `ALL`-варианты там, где поддерживает провайдер);
+- CTE (`WITH`) и рекурсивные CTE;
+- оконные функции (`row_number`/`rank`/`dense_rank`/`ntile`/`lag`/`lead`/`first_value`/`last_value`/агрегаты `OVER`, фреймы `ROWS`/`RANGE`);
+- пользовательские scalar-valued функции (`[SqlFunction]`);
+- table-valued функции (`[SqlTableFunction]`).
+
+Навигационные свойства/связи и DML (INSERT/UPDATE/DELETE) в область работ не входили и не реализовывались.
+
+Покрытие тестами после добавления: **81.9%** строк (при цели CI 75%).
+
+## Методика честного сравнения
+
+- **Категория A (prepared / compiled):** `Nextorm_*` через `Prepare()` ⟷ EF Core `EF.CompileAsyncQuery` ⟷ linq2db `CompiledQuery.Compile` ⟷ Dapper (raw SQL). Это симметричное сравнение «скомпилировано против скомпилировано».
+- **Категория B (warm cached):** `Nextorm_*` через неявный кэш плана (fluent-запрос с константой) ⟷ обычные (не compiled) EF Core / linq2db ⟷ Dapper.
+- БД — tmpfs `/tmp/nextorm-bench/test.db`, режим `Job.ShortRun` + `InProcessEmitToolchain`, прогоны строго последовательно (параллельные BDN-прогоны в этом репозитории конфликтуют за генерируемый проект).
+- Новые классы: `SqliteBenchmarkFeatures`, `SqliteBenchmarkFeaturesFair`, `SqliteBenchmarkFeaturesFairCached`, `SqliteBenchmarkFeaturePlanBuild`, `SqliteBenchmarkFeaturePlanCache`.
+
+## Категория A — prepared против compiled/raw (итог)
+
+Финальный прогон на tmpfs; mean **на один запрос** (метод выполняет 10 итераций). nextorm prepared
+**выигрывает на всех новых фичах**:
+
+| Фича | Nextorm prepared | Лучший конкурент | Nextorm ÷ конкурент |
+|---|---:|---:|---:|
+| String `ToUpper` | 9.80 µs | Dapper 16.15 | 0.61× |
+| UDF (`[SqlFunction]` upper) | 10.05 µs | Dapper 16.30 | 0.62× |
+| `CASE WHEN` | 10.51 µs | Dapper 15.36 | 0.68× |
+| `INTERSECT` | 11.46 µs | Dapper 17.04 | 0.67× |
+| `EXCEPT` | 11.59 µs | Dapper 20.73 | 0.56× |
+| String `Contains`/LIKE | 11.66 µs | linq2db_Compiled 17.92 | 0.65× |
+| `LEFT JOIN` | 12.76 µs | Dapper 21.44 | 0.60× |
+| `DISTINCT` | 12.91 µs | linq2db_Compiled 19.36 | 0.67× |
+| Recursive CTE | 13.13 µs | Dapper 26.50 | 0.50× |
+| `Join4` (4 таблицы) | 13.33 µs | linq2db_Compiled 25.08 | 0.53× |
+| IN-list (`@in`/`Contains`) | 13.44–13.84 µs | Dapper 24.01 | 0.57× |
+| Window `row_number()` | 16.09 µs | Dapper 35.68 | 0.45× |
+| Window `sum() over()` | 16.33 µs | Dapper 34.01 | 0.48× |
+| CTE | 16.64 µs | linq2db_Compiled 23.31 | 0.71× |
+
+Аллокации nextorm в разы ниже (например, `EXCEPT` 6.7 KB против 88 KB у EF_Compiled, `Join4` 9.8 KB против 85 KB).
+
+## Категория B — warm cached: после оптимизаций
+
+Именно здесь были реальные проигрыши: prepared-путь быстрый, а неявный кэш на каждый вызов
+перестраивал план/хеш. Финальный прогон на tmpfs, mean **на один запрос** (метод — 10 итераций):
+
+| Фича (warm) | Nextorm cached | Лучший конкурент | Nextorm ÷ конкурент |
+|---|---:|---:|---:|
+| `CASE WHEN` | 13.04 µs | Dapper 15.15 | 0.86× |
+| `DISTINCT` | 15.54 µs | Dapper 18.73 | 0.83× |
+| String `ToUpper` | 15.44 µs | Dapper 14.93 | 1.03× |
+| String `Contains`/LIKE | 15.17 µs | Dapper 20.39 | 0.74× |
+| UDF | 15.51 µs | Dapper 15.36 | 1.01× |
+| `INTERSECT` | 16.83 µs | Dapper 18.40 | 0.91× |
+| `EXCEPT` | 18.17 µs | Dapper 19.03 | 0.96× |
+| `LEFT JOIN` | 23.16 µs | Dapper 25.05 | 0.92× |
+| CTE | 27.32 µs | Dapper 21.85 | 1.25× |
+| IN `@in`/`Contains` captured | 29.69–30.27 µs | Dapper 20.83 | ~1.44× |
+| IN `@in`/`Contains` inline | 32.18–32.76 µs | Dapper 20.83 | ~1.56× |
+| `Join4` (4 таблицы) | 34.29 µs | Dapper 29.32 | 1.17× |
+| Window `row_number()` / `sum() over()` | 35.13–35.89 µs | Dapper 32.95 | ~1.07× |
+| Recursive CTE | 37.73 µs | Dapper 30.81 | 1.22× |
+
+После оптимизаций nextorm в warm-пути **выигрывает** у Dapper на `CASE`, `DISTINCT`, `INTERSECT`,
+`EXCEPT`, `LEFT JOIN`, `Contains` (0.74–0.96×); идёт вровень на `ToUpper`/`UDF`/окнах; и остаётся в
+пределах 1.17–1.56× на CTE / recursive CTE / `Join4` / IN-list — при этом всё равно заметно быстрее
+обычных (не compiled) linq2db и EF Core.
+
+До оптимизаций именно warm-путь терял: IN-list — 7–8× Dapper, `INTERSECT`/`EXCEPT` — 2.9–3.4×,
+recursive CTE — 3.5× (по замерам предыдущих прогонов; методики отличались, поэтому сравнимы
+относительные позиции, а не абсолютные значения).
+
+## Plan-build — холодное построение SQL (µs на вызов, 100 итераций)
+
+| Фича | до | после |
+|---|---:|---:|
+| Baseline простой SELECT | 5.1 | ~4.1 |
+| IN `@in` captured | 74.4 | **6.7** |
+| IN `@in` inline | 121.8 | **~7** |
+| IN `list.Contains` captured/inline | 73.0 / 121.9 | **~7** |
+| Join4 (4 таблицы) | 21.6 | **13.1** |
+| LEFT JOIN | 9.3 | **6.7** |
+| CTE | 17.2 | ~16 |
+| Recursive CTE | 10.9 | ~9.5 |
+
+## Что именно оптимизировали
+
+1. **IN-list (`@in` / `Contains`)** — главный проигрыш (7–8× Dapper в warm-пути).
+   - Причина: `GetInValues` вызывал `Expression.Lambda<Func<object>>(...).Compile()` **на каждое построение/исполнение**.
+   - Исправление: новый `InValuesEvaluator` кэширует скомпилированный экстрактор по форме выражения (closure-константа заменяется параметром, поэтому разные экземпляры одной формы переиспользуют делегат, но читают актуальные значения); форма списка (число non-null + наличие null) сворачивается в `WherePlanHash`, а значения обновляются существующим механизмом `NeedsParamRefresh`; `RefreshInValuesShape()` переоценивает форму перед исполнением, поэтому выросший/переприсвоенный список не переиспользует устаревший план.
+   - Результат: plan-build 74–122 µs → ~7 µs; warm 161–184 µs → 71–79 µs.
+2. **INTERSECT / EXCEPT / recursive CTE** — потеря 2.9–3.5×.
+   - Причина (баг): в `PrepareCommand` вызов `GetQueryPlanEqualityComparer().GetHashCode()` без аргумента связывался с `object.GetHashCode()`, то есть хешировал **identity компаратора**, а не под-команду. `_queryPlanComparer` создаётся лениво на команду, поэтому `UnionPlanHash` (и, через тело-union, `CtesPlanHash` у рекурсивного CTE) менялись на каждом построении — кэш плана никогда не попадал.
+   - Исправление: хешировать саму под-команду (`_union`, `_referencedQueries[0]`).
+   - Результат: INTERSECT/EXCEPT ускорились в ~8× (теперь даже быстрее Dapper), recursive CTE — в ~7×.
+3. **Join builder** — снижена стоимость холодного построения (LEFT JOIN 9.3→6.7 µs, 4-table join 21.6→13.1 µs) без изменения SQL.
+4. Ранее (Итерация 4) — SQL-ключевой кэш маппера, который убрал основную часть холодного построения плана.
+
+## Вывод
+
+- В симметричном сравнении «prepared vs compiled» nextorm побеждает **все** новые SQL-возможности (UDF, который в промежуточном прогоне был на уровне шума, в финальном прогоне на tmpfs у nextorm быстрее остальных).
+- Все реальные проигрыши находились в warm-пути и были вызваны не исполнением/маппингом, а построением и ключеванием плана; они устранены: IN-list, `INTERSECT`/`EXCEPT`, recursive CTE.
+- После оптимизаций warm-путь новых фич: nextorm выигрывает у Dapper на большинстве фич (0.74–0.96×) и остаётся в пределах ~1.0–1.6× на CTE / recursive CTE / Join4 / IN-list, а prepared-путь стабильно первый.
+
+## Воспроизведение
+
+```bash
+cd benchmarks/nextorm.benchmark && dotnet build -c Release
+
+# честное сравнение
+dotnet run -c Release --no-build -- --filter "*SqliteBenchmarkFeaturesFair.*"
+dotnet run -c Release --no-build -- --filter "*SqliteBenchmarkFeaturesFairCached*"
+
+# холодное построение SQL по фичам
+dotnet run -c Release --no-build -- --filter "*SqliteBenchmarkFeaturePlanBuild*"
+dotnet run -c Release --no-build -- --filter "*SqliteBenchmarkFeaturePlanCache*"
+```

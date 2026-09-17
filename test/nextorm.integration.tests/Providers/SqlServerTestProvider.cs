@@ -23,6 +23,17 @@ internal sealed class SqlServerTestProvider : ITestProvider
     // T-SQL evaluates AVG over an integer column as an integer, so 5.5 becomes 5.
     public bool SupportsFractionalAverage => false;
 
+    // SQL Server has no INTERSECT ALL / EXCEPT ALL.
+    public bool SupportsIntersectExceptAll => false;
+
+    // SQL Server implements VAR and VARP natively.
+    public bool SupportsVarianceAggregates => true;
+
+    // The shared TVF test targets SQLite's json_each. SQL Server's OPENJSON is applied with CROSS
+    // APPLY rather than used as a FROM table-valued function, so the test is skipped there.
+    public bool SupportsTableValuedFunctions => false;
+    public string TableValuedFunctionSkipReason => "The shared table-valued function test uses SQLite's json_each; SQL Server exposes row-returning JSON through CROSS APPLY OPENJSON instead.";
+
     public string SkipReason => SqlServerContainer.Failure ?? "SQL Server is not available.";
 
     public IDataContext CreateContext() =>

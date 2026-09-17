@@ -20,6 +20,13 @@ internal sealed class SqliteTestProvider : ITestProvider
     public string Name => "sqlite";
     public bool IsAvailable => true;
     public bool SupportsFractionalAverage => true;
+    // SQLite has no INTERSECT ALL / EXCEPT ALL.
+    public bool SupportsIntersectExceptAll => false;
+    // SQLite gets all four aggregates from the custom implementations in SQLiteFunctions.
+    public bool SupportsVarianceAggregates => true;
+    // The bundled SQLite has JSON1 enabled, so json_each(...) is available as a row-returning function.
+    public bool SupportsTableValuedFunctions => true;
+    public string TableValuedFunctionSkipReason => string.Empty;
     public string SkipReason => string.Empty;
 
     public IDataContext CreateContext() =>
