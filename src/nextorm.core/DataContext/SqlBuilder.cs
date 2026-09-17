@@ -455,7 +455,7 @@ public struct SqlBuilder
     {
         // if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Where expression: {exp}", condition);
         using var visitor = new WhereExpressionVisitor(entityType, _dialect, _columnsProvider, dim, _aliasProvider, _paramProvider, _queryProvider, _paramMode, _params, Logger);
-        visitor.Visit(condition);
+        visitor.VisitCondition(condition);
 
         // In parameter mode nothing is emitted (the walk still collects parameters); otherwise the
         // rendered clause is appended straight into the caller's builder, avoiding a temp string.

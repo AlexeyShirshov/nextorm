@@ -72,6 +72,8 @@ public abstract class SqlDialectBase : ISqlDialect
         $"replace({value}, {oldValue}, {newValue})";
     // Dialects with a boolean type can use the predicate unchanged as a scalar.
     public virtual string MakeBooleanPredicate(string predicate, bool asPredicate) => predicate;
+    // Dialects with a boolean type can use a boolean value unchanged as a predicate.
+    public virtual string MakeBooleanValuePredicate(string value) => value;
     public virtual string MakeDatePart(string part, string value) => $"extract({part} from {value})";
     public virtual string MakeNow(bool utc) => utc ? "now() at time zone 'utc'" : "now()";
     public virtual string MakeMathFunction(string name, IReadOnlyList<string> args) =>

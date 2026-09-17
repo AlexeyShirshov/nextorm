@@ -215,6 +215,27 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void BooleanValueInWhere_ShouldBeComparedWithOne()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.Create<IComplexEntity>();
+
+        // A bare bit column is a value, not a predicate, so T-SQL needs the comparison with 1.
+        SqlOf(ctx, e.Where(x => x.Boolean!.Value).Select(x => new { x.Id }))
+            .Should().Contain("where (b) = 1");
+    }
+
+    [Fact]
+    public void BooleanValueAsLogicalOperand_ShouldBeComparedWithOne()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.Create<IComplexEntity>();
+
+        SqlOf(ctx, e.Where(x => x.Boolean!.Value && x.Id > 1L).Select(x => new { x.Id }))
+            .Should().Contain("((b) = 1 and (id > 1))");
+    }
+
+    [Fact]
     public void StringConcat_ShouldUsePlusOperator()
     {
         using var ctx = SqlServerTestContext.Create();
@@ -765,8 +786,9 @@ public class SqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
         var e = ctx.Create<IComplexEntity>();
 
+        // A bit column is a value, not a predicate, so it has to be compared with 1 before NOT.
         SqlOf(ctx, e.Where(x => !x.Boolean!.Value).Select(x => new { x.Id }))
-            .Should().Contain("where not (b)");
+            .Should().Contain("where not ((b) = 1)");
     }
 
     [Fact]
@@ -775,9 +797,10 @@ public class SqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
         var e = ctx.Create<IComplexEntity>();
 
-        // T-SQL has no boolean scalar, so a projected NOT has to become a bit through a CASE.
+        // T-SQL has no boolean scalar, so a projected NOT has to become a bit through a CASE, and
+        // the bit column has to be compared with 1 before it can be used as the CASE test.
         SqlOf(ctx, e.Select(x => !x.Boolean!.Value))
-            .Should().Contain("cast(case when not (b) then 1 else 0 end as bit)");
+            .Should().Contain("cast(case when not ((b) = 1) then 1 else 0 end as bit)");
     }
 
     [Fact]
@@ -805,7 +828,7 @@ public class SqlGenerationTests
         var e = ctx.Create<IComplexEntity>();
 
         SqlOf(ctx, e.Where(x => !(x.Boolean!.Value && x.Id > 1L)).Select(x => new { x.Id }))
-            .Should().Contain("not ((b and (id > 1)))");
+            .Should().Contain("not (((b) = 1 and (id > 1)))");
     }
 
     [Fact]
@@ -815,7 +838,7 @@ public class SqlGenerationTests
         var e = ctx.Create<IComplexEntity>();
 
         SqlOf(ctx, e.Where(x => !(x.Boolean!.Value || x.Id > 1L)).Select(x => new { x.Id }))
-            .Should().Contain("not ((b or (id > 1)))");
+            .Should().Contain("not (((b) = 1 or (id > 1)))");
     }
 
     public sealed class CteNumberRow

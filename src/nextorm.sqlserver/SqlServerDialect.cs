@@ -66,6 +66,13 @@ public sealed class SqlServerDialect : SqlDialectBase
             : $"cast(case when {predicate} then 1 else 0 end as bit)";
     }
 
+    public override string MakeBooleanValuePredicate(string value)
+    {
+        // A bit value is not a valid predicate in T-SQL, so it has to be compared with its true
+        // literal before it can be used in a condition context (WHERE, CASE test, AND/OR, NOT).
+        return $"({value}) = 1";
+    }
+
     public override string MakeSubqueryPredicate(string keyword, string query, bool asPredicate)
     {
         // SQL Server has no boolean type: EXISTS/ANY/ALL are valid only as a predicate, while a

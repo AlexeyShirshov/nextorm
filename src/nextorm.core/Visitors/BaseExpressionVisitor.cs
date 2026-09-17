@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
@@ -1416,7 +1417,9 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 if (t == typeof(bool))
                     _builder!.Append(_dialect.MakeBool((bool)v));
                 else
-                    _builder!.Append(v.ToString());
+                    // SQL literals must not depend on the current culture (ru-RU would render 0.2
+                    // as 0,2, which changes the statement).
+                    _builder!.Append(Convert.ToString(v, CultureInfo.InvariantCulture));
             }
             else
                 return false;
@@ -1848,13 +1851,82 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     /// </summary>
     private string RenderPredicate(Expression expression)
     {
+        // A bare boolean value (a bit column, a CASE, a method call) is not a predicate on a dialect
+        // without a boolean type, so it is rendered as a value and the dialect turns it into one.
+        if (!_paramMode && IsBoolean(expression.Type) && !IsPredicate(expression))
+        {
+            using var valueVisitor = Clone();
+            valueVisitor.Visit(expression);
+
+            return _dialect.MakeBooleanValuePredicate(valueVisitor.ToString());
+        }
+
         using var visitor = new WhereExpressionVisitor(_entityType, _dialect, _columnsProvider, _dim, _aliasProvider, _paramProvider, _queryProvider, _paramMode, _params, _logger);
         visitor.Visit(expression);
 
         return visitor.ToString();
     }
+    /// <summary>
+    /// Renders a boolean expression that is used as a condition (a logical operand such as the left
+    /// and right side of <c>&amp;&amp;</c>/<c>||</c>). A value that is not itself a predicate is
+    /// turned into one by the dialect, so a bare boolean value stays valid on providers without a
+    /// boolean type.
+    /// </summary>
+    private void AppendCondition(Expression expression)
+    {
+        if (!_paramMode && IsBoolean(expression.Type) && !IsPredicate(expression))
+        {
+            using var valueVisitor = Clone();
+            valueVisitor.Visit(expression);
+            _builder!.Append(_dialect.MakeBooleanValuePredicate(valueVisitor.ToString()));
+            return;
+        }
+
+        Visit(expression);
+    }
+    /// <summary>
+    /// Renders a whole condition (WHERE/HAVING/JOIN ON) into this visitor's builder. A condition
+    /// that is a bare boolean value is turned into a predicate by the dialect.
+    /// </summary>
+    internal void VisitCondition(Expression condition)
+    {
+        // The root condition arrives as a lambda; the parameter is resolved by the member visitor,
+        // so the body can be rendered directly (with the value-to-predicate conversion applied).
+        if (condition is LambdaExpression lambda)
+            condition = lambda.Body;
+
+        AppendCondition(condition);
+    }
     /// <summary>True for a value whose SQL rendering has to be a boolean scalar.</summary>
     private static bool IsBoolean(Type type) => type == typeof(bool) || type == typeof(bool?);
+
+    /// <summary>
+    /// True when the expression already renders as a predicate. Comparison/logical operators,
+    /// boolean CASE/COALESCE and the recognised predicate methods produce a condition directly;
+    /// anything else (a column, a constant, an arithmetic result) is a boolean value that the
+    /// dialect has to convert to a predicate where a condition is required.
+    /// </summary>
+    private static bool IsPredicate(Expression expression) => expression.NodeType switch
+    {
+        ExpressionType.Equal or ExpressionType.NotEqual
+            or ExpressionType.LessThan or ExpressionType.LessThanOrEqual
+            or ExpressionType.GreaterThan or ExpressionType.GreaterThanOrEqual
+            or ExpressionType.AndAlso or ExpressionType.OrElse
+            or ExpressionType.Not or ExpressionType.Coalesce
+            or ExpressionType.Conditional or ExpressionType.Switch => true,
+        ExpressionType.Call => IsPredicateCall((MethodCallExpression)expression),
+        _ => false
+    };
+
+    /// <summary>True for the method calls that the visitor renders as a predicate (LIKE/IN/EXISTS).</summary>
+    private static bool IsPredicateCall(MethodCallExpression call)
+    {
+        if (call.Method.DeclaringType == typeof(string))
+            return call.Method.Name is nameof(string.Contains) or nameof(string.StartsWith)
+                or nameof(string.EndsWith) or nameof(string.IsNullOrEmpty);
+
+        return call.Method.Name is "exists" or "any" or "all" or "Contains";
+    }
     protected override Expression VisitConditional(ConditionalExpression node)
     {
         // A CASE is a computed column and has to be aliased when it appears in a select list.
@@ -2011,6 +2083,19 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                     return node;
                 }
                 break;
+        }
+
+        // A logical AND/OR is a condition, so each operand is rendered as a predicate. On a dialect
+        // without a boolean type a bare boolean value (e.g. a bit column) has to be turned into a
+        // predicate first, otherwise the emitted <c>and</c>/<c>or</c> is rejected (SQL Server).
+        if (!_paramMode && node.NodeType is ExpressionType.AndAlso or ExpressionType.OrElse)
+        {
+            _builder!.Append('(');
+            AppendCondition(node.Left);
+            _builder!.Append(node.NodeType == ExpressionType.AndAlso ? " and " : " or ");
+            AppendCondition(node.Right);
+            _builder!.Append(')');
+            return node;
         }
 
         if (!_paramMode)

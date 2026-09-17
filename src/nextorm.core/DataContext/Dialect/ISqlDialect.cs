@@ -100,6 +100,12 @@ public interface ISqlDialect
     /// as a bit scalar when it is used as a value instead of as a condition.
     /// </summary>
     string MakeBooleanPredicate(string predicate, bool asPredicate);
+    /// <summary>
+    /// Renders a boolean value as a predicate. Dialects with a boolean type return the value
+    /// unchanged; a dialect without one (SQL Server) has to compare it with its true literal, so
+    /// that a bare boolean value (e.g. a bit column) can be used as a condition.
+    /// </summary>
+    string MakeBooleanValuePredicate(string value);
     /// <summary>Renders a date/time part extraction (<c>year</c>, <c>month</c>, <c>day</c>, <c>hour</c>, ...).</summary>
     string MakeDatePart(string part, string value);
     /// <summary>Renders the current local or UTC date/time.</summary>
