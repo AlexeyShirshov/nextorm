@@ -34,6 +34,7 @@ public class ParamsAllocationBenchmark
     private readonly IPreparedQueryCommand<bool> _cmd2;
     private readonly DbPreparedQueryCommand<bool> _dbCmd;
     private readonly DbConnection _conn;
+    private readonly Func<string, object?, DbParameter> _createParam;
     private readonly object[] _args1 = new object[1];
     private readonly object[] _args2 = new object[2];
 
@@ -71,6 +72,9 @@ public class ParamsAllocationBenchmark
 
         ((IConnectionManager)_db).EnsureConnectionOpen();
         _conn = _dbCtx.GetConnection();
+        // Bound once, mirroring production: GetDbCommand now takes parameter creation as a
+        // delegate rather than the context, so the arms below must not allocate one per call.
+        _createParam = _dbCtx.CreateParam;
         _dbCmd = (DbPreparedQueryCommand<bool>)_cmd1;
     }
 
@@ -159,7 +163,7 @@ public class ParamsAllocationBenchmark
     public void GetDbCommand_1Arg_Params()
     {
         for (var i = 0; i < Iterations; i++)
-            _sink += _dbCmd.GetDbCommand(new object[] { i }, _dbCtx, _conn).Parameters.Count;
+            _sink += _dbCmd.GetDbCommand(new object[] { i }, _createParam, _conn).Parameters.Count;
     }
 
     [Benchmark]
@@ -169,7 +173,7 @@ public class ParamsAllocationBenchmark
         for (var i = 0; i < Iterations; i++)
         {
             args[0] = i;
-            _sink += _dbCmd.GetDbCommand(args, _dbCtx, _conn).Parameters.Count;
+            _sink += _dbCmd.GetDbCommand(args, _createParam, _conn).Parameters.Count;
         }
     }
 

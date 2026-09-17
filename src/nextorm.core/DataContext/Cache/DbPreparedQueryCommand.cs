@@ -32,10 +32,10 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
     // private readonly string CommandText;
     //public DbParameterCollection DbCommandParams;
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Bug", "S2583:Conditionally executed code should be reachable", Justification = "Both branches are reachable: @params may be null at any call site, so the ReadOnlySpan conversion is not dead code; the analyzer cannot model the span conversion.")]
-    public DbCommand GetDbCommand(object[]? @params, DbContext dataContext, DbConnection conn)
-        => GetDbCommand(@params is null ? ReadOnlySpan<object?>.Empty : @params, dataContext, conn);
+    public DbCommand GetDbCommand(object[]? @params, Func<string, object?, DbParameter> createParam, DbConnection conn)
+        => GetDbCommand(@params is null ? ReadOnlySpan<object?>.Empty : @params, createParam, conn);
 
-    public DbCommand GetDbCommand(ReadOnlySpan<object?> @params, DbContext dataContext, DbConnection conn)
+    public DbCommand GetDbCommand(ReadOnlySpan<object?> @params, Func<string, object?, DbParameter> createParam, DbConnection conn)
     {
         var cmd = DbCommand;
         var parameters = DbCommandParams;//cmd.Parameters;
@@ -96,7 +96,7 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
                     // }
 
                     ParamMap[i] = parameters.Count;
-                    parameters.Add(dataContext.CreateParam(paramName!, @params[i]));
+                    parameters.Add(createParam(paramName!, @params[i]));
                 }
             }
         }
@@ -114,8 +114,7 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
         if (DbCommand?.Connection == conn)
             DbCommand.Connection = null;
 
-        if (Enumerator?.DbContext == dbContext)
-            Enumerator.DbContext = null;
+        Enumerator?.DetachFrom(dbContext);
 
         DbCommandConnection = null;
     }

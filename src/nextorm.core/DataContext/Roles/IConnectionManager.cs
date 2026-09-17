@@ -12,5 +12,9 @@ public interface IConnectionManager
     /// <summary>Returns the connection in use, creating it on first access.</summary>
     DbConnection GetConnection();
     void EnsureConnectionOpen();
-    Task EnsureConnectionOpenAsync();
+    /// <summary>
+    /// Opens the connection if it is closed. The token is honoured while opening, so a caller that
+    /// starts reading a result set can still cancel a slow connection open.
+    /// </summary>
+    Task EnsureConnectionOpenAsync(CancellationToken cancellationToken = default);
 }

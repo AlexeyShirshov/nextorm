@@ -608,8 +608,8 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 
     /// <summary>
     /// Translates a window function into <c>func(...) over (partition by ... order by ... frame)</c>.
-    /// The function is modelled as a call to <see cref="NORM.WindowFunction{T}.Over"/> whose target is
-    /// the <see cref="NORM.NORM_SQL"/> function call (<c>row_number</c>, <c>lag</c>, <c>sum_over</c>,
+    /// The function is modelled as a call to the <c>Over</c> method on <see cref="NORM.WindowFunction{T}"/> whose
+    /// target is the <see cref="NORM.NORM_SQL"/> function call (<c>row_number</c>, <c>lag</c>, <c>sum_over</c>,
     /// ...); the partition/order keys are nested lambdas that close over the outer query parameter, so
     /// they are rendered with this visitor's own context (the same <see cref="Clone"/>-free path the
     /// rest of the select list uses).

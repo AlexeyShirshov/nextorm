@@ -1,0 +1,62 @@
+{
+  "metadata": [
+    {
+      "src": [
+        {
+          "src": "../src",
+          "files": [
+            "nextorm.core/nextorm.core.csproj",
+            "nextorm.sqlite/nextorm.sqlite.csproj",
+            "nextorm.sqlserver/nextorm.sqlserver.csproj",
+            "nextorm.postgres/nextorm.postgres.csproj"
+          ]
+        }
+      ],
+      "dest": "api",
+      "memberLayout": "samePage",
+      "namespaceLayout": "flattened"
+    }
+  ],
+  "build": {
+    "content": [
+      {
+        "files": [
+          "**/*.md",
+          "**/*.yml"
+        ],
+        "exclude": [
+          "obj/**",
+          "bin/**",
+          "_site/**",
+          "_template.md",
+          "documentation-plan.md",
+          "README.md",
+          "docfx.json"
+        ]
+      }
+    ],
+    "resource": [
+      {
+        "files": [
+          "**/*.png",
+          "**/*.jpg",
+          "**/*.jpeg",
+          "**/*.gif",
+          "**/*.svg"
+        ]
+      }
+    ],
+    "dest": "_site",
+    "globalMetadata": {
+      "_appTitle": "Nextorm",
+      "_appName": "Nextorm",
+      "_appFooter": "Nextorm - high performance ORM",
+      "_enableSearch": true,
+      "_disableContribution": false
+    },
+    "markdownEngineName": "markdig",
+    "sitemap": {
+      "baseUrl": "https://alexeyshirshov.github.io/nextorm"
+    }
+  }
+}

@@ -43,8 +43,7 @@ public static class NORM
         /// <summary>
         /// Completes the window function with multiple ordered keys. Use this when a mixed
         /// <c>asc</c>/<c>desc</c> ordering or more than one order key is required; partition keys for
-        /// this shape are supplied through the array overload (see
-        /// <see cref="Over(Expression{Func{object?}}[]?, WindowOrder[]?, WindowFrame?)"/>).
+        /// this shape are supplied through the array overload (see the <c>Over</c> overload below).
         /// </summary>
         public T Over(WindowOrder[] orderBy, WindowFrame? frame = null) => default!;
 

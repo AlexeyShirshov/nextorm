@@ -1,5 +1,7 @@
 using System.Linq.Expressions;
 
+namespace nextorm.core;
+
 public class ReplaceParameterVisitor : ExpressionVisitor
 {
     private readonly Expression _parameter;

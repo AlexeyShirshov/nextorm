@@ -53,7 +53,14 @@ public abstract class DbContext : IDataContext, IConnectionManager
 
         LogSensitiveData = optionsBuilder.ShouldLogSensitiveData;
         // CacheExpressions = optionsBuilder.CacheExpressions;
+
+        // Bound once: parameter creation is handed to the execution path as a delegate instead of
+        // passing the context itself, so the command/enumerator layer no longer depends on the
+        // concrete DbContext (F6). Binding the abstract method keeps the provider override on the
+        // dispatch path, and a field avoids allocating a delegate per command.
+        _createParam = CreateParam;
     }
+    private readonly Func<string, object?, DbParameter> _createParam;
     #region Properties
     protected internal readonly bool LogSensitiveData;
     /// <summary>
@@ -85,13 +92,13 @@ public abstract class DbContext : IDataContext, IConnectionManager
 
         _connOpen = true;
     }
-    public async Task EnsureConnectionOpenAsync()
+    public async Task EnsureConnectionOpenAsync(CancellationToken cancellationToken = default)
     {
         var conn = GetConnection();
         if (conn.State == ConnectionState.Closed)
         {
             if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Opening connection");
-            await conn.OpenAsync();
+            await conn.OpenAsync(cancellationToken);
         }
 
         _connOpen = true;
@@ -233,20 +240,11 @@ public abstract class DbContext : IDataContext, IConnectionManager
         //         if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Getting connection");
         // #endif
 
+        // The open-connection block used to be duplicated here; the role now owns it.
+        EnsureConnectionOpen();
         var conn = GetConnection();
 
-        if (!_connOpen)
-        {
-            if (conn.State == ConnectionState.Closed)
-            {
-                if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Opening connection");
-                conn.Open();
-            }
-
-            _connOpen = true;
-        }
-
-        var cmd = compiledQuery.GetDbCommand(@params, this, conn);
+        var cmd = compiledQuery.GetDbCommand(@params, _createParam, conn);
 
         if (_logParams) LogParams(cmd);
 
@@ -261,20 +259,10 @@ public abstract class DbContext : IDataContext, IConnectionManager
         //         if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Getting connection");
         // #endif
 
+        await EnsureConnectionOpenAsync(cancellationToken).ConfigureAwait(false);
         var conn = GetConnection();
 
-        if (!_connOpen)
-        {
-            if (conn.State == ConnectionState.Closed)
-            {
-                if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Opening connection");
-                await conn.OpenAsync(cancellationToken).ConfigureAwait(false);
-            }
-
-            _connOpen = true;
-        }
-
-        var cmd = compiledQuery.GetDbCommand(@params, this, conn);
+        var cmd = compiledQuery.GetDbCommand(@params, _createParam, conn);
         // var sqlCommand = compiledQuery.DbCommand;
         // sqlCommand.Connection = conn;
         if (_logParams) LogParams(cmd);
@@ -394,7 +382,7 @@ public abstract class DbContext : IDataContext, IConnectionManager
 
             if (createEnumerator)
             {
-                var enumerator = new ResultSetEnumerator<TResult>(compiledQuery!);
+                var enumerator = CreateResultSetEnumerator(compiledQuery!);
                 compiledQuery.Enumerator = enumerator;
             }
 
@@ -480,7 +468,7 @@ public abstract class DbContext : IDataContext, IConnectionManager
             // by a streaming one, so the enumerator has to be created on demand. The plan cache is
             // [ThreadStatic], so this entry is only ever touched by the current thread.
             if (createEnumerator && compiledQuery.Enumerator is null)
-                compiledQuery.Enumerator = new ResultSetEnumerator<TResult>(compiledQuery);
+                compiledQuery.Enumerator = CreateResultSetEnumerator(compiledQuery);
 
             return compiledQuery;
         }
@@ -671,12 +659,24 @@ public abstract class DbContext : IDataContext, IConnectionManager
                + "which is optimised for buffered and scalar results. Use Prepare(nonStreamUsing: false) "
                + "to stream (ToAsyncEnumerable/ToEnumerable/CreateEnumerator).");
 
+    /// <summary>
+    /// Creates the streaming enumerator and applies the context's logging configuration to it. The
+    /// enumerator receives the logger directly rather than pulling it from the context through a
+    /// property, which is what kept the enumerator tied to the concrete <c>DbContext</c>.
+    /// </summary>
+    private ResultSetEnumerator<TResult> CreateResultSetEnumerator<TResult>(DbPreparedQueryCommand<TResult> compiledQuery)
+    {
+        var enumerator = new ResultSetEnumerator<TResult>(compiledQuery);
+        enumerator.InitEnvironment(ResultSetEnumeratorLogger, LogSensitiveData);
+        return enumerator;
+    }
+
     public IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
     {
         var compiledQuery = AsDbCommand(preparedQueryCommand);
 
         var sqlEnumerator = RequireEnumerator(compiledQuery);
-        sqlEnumerator.InitEnumerator(this, @params, cancellationToken);
+        sqlEnumerator.InitEnumerator(this, _createParam, @params, cancellationToken);
         return sqlEnumerator;
     }
     // public async Task<IEnumerator<TResult>> CreateEnumeratorAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
@@ -864,7 +864,7 @@ public abstract class DbContext : IDataContext, IConnectionManager
         var compiledQuery = AsDbCommand(preparedQueryCommand);
 
         var sqlEnumerator = RequireEnumerator(compiledQuery);
-        sqlEnumerator.InitEnumerator(this, @params, CancellationToken.None);
+        sqlEnumerator.InitEnumerator(this, _createParam, @params, CancellationToken.None);
         sqlEnumerator.InitReader(@params);
 
         return sqlEnumerator;

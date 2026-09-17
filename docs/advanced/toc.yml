@@ -1,0 +1,8 @@
+- name: Limitations and out-of-scope features
+  href: limitations.md
+- name: API quick reference
+  href: api-reference.md
+- name: "Prepared vs cached: reusing a query"
+  href: ../prepared-vs-cached.md
+- name: SQL capabilities gap analysis
+  href: ../sql-capabilities-gap-analysis.md

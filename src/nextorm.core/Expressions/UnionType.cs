@@ -1,7 +1,7 @@
 namespace nextorm.core;
 
 /// <summary>
-/// The kind of set operation joining two queries. <see cref="None = 0"/> and the original
+/// The kind of set operation joining two queries. <c>None = 0</c> and the original
 /// <see cref="Distinct"/>/<see cref="All"/> values keep their numeric assignment so existing
 /// serialized values and plan hashes stay stable; the INTERSECT/EXCEPT members are appended.
 /// </summary>

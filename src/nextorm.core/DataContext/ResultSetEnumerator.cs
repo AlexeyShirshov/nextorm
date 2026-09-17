@@ -10,7 +10,11 @@ namespace nextorm.core;
 public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IAsyncInit<TResult>
 {
     //private readonly QueryCommand<TResult> _cmd;
-    private DbContext? _dbContext;
+    // Execution host: the connection lifecycle comes from the role, parameter creation from a
+    // delegate. Neither is the concrete DbContext, so the enumerator no longer depends on the
+    // context type (F6). The delegate is handed over once per enumeration, not built per call.
+    private IConnectionManager? _connectionManager;
+    private Func<string, object?, DbParameter>? _createParam;
     private readonly DbPreparedQueryCommand<TResult> _compiledQuery;
     private CancellationToken _cancellationToken;
     private object[]? _params;
@@ -20,9 +24,9 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
     private bool _logDebug;
     private bool _logSensitiveData;
     private DbDataReader? _reader;
-    // Not owned by this enumerator: _conn comes from DbContext.GetConnection() and is disposed
-    // by the context (DbContext.DisposeStaff). Disposing it here would close a connection that is
-    // still in use, so it is only cleared (Reset/DisposeAsync).
+    // Not owned by this enumerator: _conn comes from IConnectionManager.GetConnection() and is
+    // disposed by the context (DbContext.DisposeStaff). Disposing it here would close a connection
+    // that is still in use, so it is only cleared (Reset/DisposeAsync).
     private DbConnection? _conn;
     private bool _disposed;
     private TResult _current = default!;
@@ -43,19 +47,25 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
     }
     object? IEnumerator.Current => _current;
 
-    public DbContext? DbContext
+    /// <summary>
+    /// Applies the logging configuration the context used to push through a <c>DbContext</c>
+    /// property setter. Called once, right after construction.
+    /// </summary>
+    internal void InitEnvironment(ILogger? logger, bool logSensitiveData)
     {
-        get => _dbContext;
-        set
-        {
-            _dbContext = value;
-            if (value is not null)
-            {
-                _logger = value.ResultSetEnumeratorLogger;
-                _logDebug = _logger?.IsEnabled(LogLevel.Debug) ?? false;
-                _logSensitiveData = value.LogSensitiveData;
-            }
-        }
+        _logger = logger;
+        _logDebug = logger?.IsEnabled(LogLevel.Debug) ?? false;
+        _logSensitiveData = logSensitiveData;
+    }
+
+    /// <summary>
+    /// Clears the connection-manager reference when it points at the given context, so a command
+    /// that outlives its context (the plan cache) cannot use a disposed one.
+    /// </summary>
+    internal void DetachFrom(IDataContext context)
+    {
+        if (ReferenceEquals(_connectionManager, context))
+            _connectionManager = null;
     }
 
     public ValueTask DisposeAsync()
@@ -142,30 +152,25 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
 
         return false;
     }
-    public void InitEnumerator(DbContext dbContext, object[]? @params, CancellationToken cancellationToken)
+    internal void InitEnumerator(IConnectionManager connectionManager, Func<string, object?, DbParameter> createParam, object[]? @params, CancellationToken cancellationToken)
     {
         _cancellationToken = cancellationToken;
         _params = @params;
-        DbContext = dbContext;
-        _conn = dbContext.GetConnection();
+        _connectionManager = connectionManager;
+        _createParam = createParam;
+        _conn = connectionManager.GetConnection();
     }
     public void InitReader(object[]? @params)
     {
         if (_reader is not null) return;
         if (_conn is null) throw new InvalidOperationException("Connection is empty");
-        if (_dbContext is null) throw new InvalidOperationException("DbContext is empty");
+        if (_connectionManager is null) throw new InvalidOperationException("Connection manager is empty");
 
-        if (!_dbContext._connOpen)
-        {
-            if (_conn.State == ConnectionState.Closed)
-            {
-                if (_logDebug) _logger!.LogDebug("Opening connection");
-                _conn.Open();
-            }
-            _dbContext._connOpen = true;
-        }
+        // The role owns "make sure the connection is open". This block used to be a copy of
+        // DbContext.EnsureConnectionOpen that also wrote the context's internal _connOpen field.
+        _connectionManager.EnsureConnectionOpen();
 
-        var sqlCommand = _compiledQuery.GetDbCommand(@params, _dbContext!, _conn!);
+        var sqlCommand = _compiledQuery.GetDbCommand(@params, _createParam!, _conn);
 
         if (_logDebug) LogCommand(sqlCommand);
 
@@ -175,20 +180,11 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
     {
         if (_reader is not null) return;
         if (_conn is null) throw new InvalidOperationException("Connection is empty");
-        if (_dbContext is null) throw new InvalidOperationException("DbContext is empty");
+        if (_connectionManager is null) throw new InvalidOperationException("Connection manager is empty");
 
-        if (!_dbContext._connOpen)
-        {
-            if (_conn.State == ConnectionState.Closed)
-            {
-                if (_logDebug) _logger!.LogDebug("Opening connection");
-                await _conn.OpenAsync(cancellationToken).ConfigureAwait(false);
-            }
+        await _connectionManager.EnsureConnectionOpenAsync(cancellationToken).ConfigureAwait(false);
 
-            _dbContext._connOpen = true;
-        }
-
-        var sqlCommand = _compiledQuery.GetDbCommand(@params, _dbContext!, _conn!);
+        var sqlCommand = _compiledQuery.GetDbCommand(@params, _createParam!, _conn);
 
         if (_logDebug) LogCommand(sqlCommand);
 

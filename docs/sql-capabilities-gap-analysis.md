@@ -2,7 +2,7 @@
 
 This document compares the SQL-query-building surface of nextorm with EF Core and linq2db, lists what
 nextorm supports today, and enumerates the gaps. It is the reference for the implementation workstreams
-tracked in [Implementation plan](#implementation-plan).
+tracked in [Implementation plan](#5-implementation-plan).
 
 The analysis is based on the current `1.0.3-alpha` tree: `SqlBuilder`, `QueryCommand`,
 `BaseExpressionVisitor`, `CorrelatedQueryExpressionVisitor`, the join builders, the `ISqlDialect`
@@ -29,7 +29,7 @@ contract and the provider dialects, plus the integration tests under `test/nexto
 > | 14 | DML (`INSERT`/`UPDATE`/`DELETE`) | **Out of scope** |
 >
 > Test coverage after the work is 81.9% line (CI threshold 75%). Benchmarks and the performance
-> optimizations that followed are documented in [Iteration 6 of `benchmark-report.md`](../benchmark-report.md):
+> optimizations that followed are documented in [Iteration 6 of `benchmark-report.md`](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmark-report.md):
 > prepared nextorm wins every new feature against compiled EF Core/linq2db/Dapper, and the warm-path
 > losses on IN-list (7–8×), `INTERSECT`/`EXCEPT` (~8×) and recursive CTE (~7×) were eliminated.
 >

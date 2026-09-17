@@ -5,3 +5,9 @@ bin
 TestResults
 coverage
 *.log
+
+# DocFX output
+docs/_site/
+docs/api/
+docs/xrefmap.yml
+docs/obj/

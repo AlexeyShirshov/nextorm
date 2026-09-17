@@ -27,7 +27,7 @@ DRY. Код не изменялся. Ссылки на находки — в ф�
 | [F2](#f2-idatacontext--fat-interface-isp-высокая) | `IDataContext` — ~60 членов на все роли | ISP | **Высокая** | ✅ Реализовано |
 | [F3](#f3-протекающий-контракт-и-дублирование-guard-проверок-lspdry-средняя) | 27 guard-проверок `is …` + `NotSupportedException`; контракт протекает | LSP/DRY | Средняя | Частично |
 | [F5](#f5-notimplementedexceptionnotsupportedexception-как-базовое-поведение-lsp-средняя) | `NotImplementedException`/`NotSupportedException` как контракт базы | LSP | Средняя | ✅ Реализовано |
-| [F6](#f6-зависимость-от-конкретного-dbcontext-dip-средняя) | SQL-билдер и визиторы зависят от конкретного `DbContext` | DIP | Средняя | ⚠️ Частично |
+| [F6](#f6-зависимость-от-конкретного-dbcontext-dip-средняя) | SQL-билдер и визиторы зависят от конкретного `DbContext` | DIP | Средняя | ✅ Реализовано |
 | [F7](#f7-пустой-алиас--перегруженный-iqueryprovider-ispyagni-низкая) | `IQueryContext` — пустой алиас; `IQueryProvider` перегружен хешированием плана | ISP/YAGNI | Низкая | Маркер удалён; ISP отложен |
 | [F8](#f8-di-регистрации-дублирование-и-двойной-инстанс-drydip-средняя) | 6 дублирующихся DI-оверлоадов + двойная регистрация | DRY/DIP | Средняя | ✅ Реализовано |
 | [F9](#f9-baseexpressionvisitor--god-class--switch-на-именах-srpocp-средняя) | `BaseExpressionVisitor` — 1035 строк, switch на 20 имён | SRP/OCP | Средняя | Открыто |
@@ -48,7 +48,7 @@ DRY. Код не изменялся. Ссылки на находки — в ф�
 | F2 | `IDataContext.cs` 122 → **25** строк: пустой композит 4 ролей; `EnsureConnectionOpen` остался только у `DbContext` (`:76,88`) и в `IConnectionManager` | ✅ подтверждено |
 | F3 | guard'ов `is I…` в `DbContext` — **0**, `NotSupportedException` — **0**; на месте единые `AsDbCommand` (`DbContext.cs:657`) и `AsInMemoryCommand` (`InMemoryDataContext.cs:832`) | Частично — осталась контрактная часть (публичный `ToList(IPreparedQueryCommand<TResult>)`) |
 | F5 | `NotImplementedException` в `DbContext` — **1**, и тот внутри закомментированного блока (`:1076`) | ✅ подтверждено |
-| F6 | `SqlBuilder`, `WhereExpressionVisitor`, `BaseExpressionVisitor` — **0** обращений к `DbContext`; единый `StringBuilderPool.Shared`; `NormParam` вместо `DbContext.GetParamName`. **`ResultSetEnumerator` по-прежнему зависит от конкретного `DbContext`** (поле `:13`, свойство `:46`, `InitEnumerator(DbContext)` `:145`, внутреннее `_connOpen` `:158,165,180,188`): от статического пула тип отвязан, от класса — нет | ⚠️ частично подтверждено |
+| F6 | `SqlBuilder`, `WhereExpressionVisitor`, `BaseExpressionVisitor` — **0** обращений к `DbContext`; единый `StringBuilderPool.Shared`; `NormParam` вместо `DbContext.GetParamName`. Остаток (**исполнение**) закрыт: `ResultSetEnumerator` и `DbPreparedQueryCommand` больше не зависят от конкретного `DbContext` (роль `IConnectionManager` + делегат `CreateParam`), `InitEnumerator` стал `internal`, блок открытия соединения (жил 4 раза) сведён к `EnsureConnectionOpen(Async)`; в этих двух файлах `DbContext` — только в комментариях | ✅ подтверждено |
 | F7 | `Query/IQueryContext.cs` удалён; упоминаний в `src`/`test` нет | ✅ подтверждено |
 | F8 | приватные `RegisterContextFactory` / `RegisterContextType` (`DI/ServiceCollectionExtensions.cs:73,103`) | ✅ подтверждено |
 | F9 | `BaseExpressionVisitor` **2128** строк (на предыдущую сверку — 2223); 6 `NotImplementedException` (не изменилось); switch по `nameof(TableAlias.*)` на месте (`:123+`); `TryTranslateFunction` (`:541`) и `ISqlDialect.Make*` на месте | Открыто — размер немного сократился, часть OCP-долга ушла в диалект |
@@ -302,7 +302,7 @@ SQL-конвейер. Вторая половина остатка — ось м
   (`DataContext/Cache/DbPreparedQueryCommand.cs:60`). `DbContext.GetParamName` удалён, приватный
   `IsRuntimeParam` делегирует в `NormParam.IsName` (`DbContext.cs:203`).
 
-**Не закрыто.** `ResultSetEnumerator` по-прежнему зависит от конкретного `DbContext`: поле
+**Было не закрыто (диагноз до правки).** `ResultSetEnumerator` держал конкретный `DbContext`: поле
 `_dbContext` (`ResultSetEnumerator.cs:13`), публичное свойство `DbContext` (`:46`),
 `InitEnumerator(DbContext, …)` (`:145`, вызовы — `DbContext.cs:679,867`) и чтение/запись
 внутреннего флага `_connOpen` (`:158,165,180,188`). Публичное свойство `DbContext` (`:46`) при
@@ -328,14 +328,39 @@ SQL-конвейер. Вторая половина остатка — ось м
 энумераторе блок стоит под внешним `if (!_connOpen)`, а `EnsureConnectionOpen` проверяет состояние
 соединения всегда (и выставляет `_connOpen = true` безусловно).
 
-**Реальный шов развязки (два шага).** (1) `CreateParam` передавать в `GetDbCommand` делегатом
-`Func<string, object?, DbParameter>` — по тому же принципу, по которому в оси маппинга сознательно
-не стал вводиться `IColumnMapper` (см. F1, ось маппинга): один потребитель, одна операция.
-(2) В `ResultSetEnumerator` вызывать `EnsureConnectionOpen(Async)` вместо обращения к `_connOpen`.
-После этого `InitEnumerator` сужается до `IConnectionManager` + делегат, и конкретный `DbContext`
-уходит из исполнения целиком. Цена: логирование открытия переедет на `Logger` контекста (сейчас
-энумератор логирует своим `_logger`/`_logDebug`), а `EnsureConnectionOpen` добавляет проверку
-`conn.State` на каждый вызов — чтение enum, несущественно.
+**✅ Закрыто (реализовано).** Шов оказался ровно тем, что был намечен выше.
+
+- **`CreateParam` — делегатом.** `DbPreparedQueryCommand.GetDbCommand` принимает
+  `Func<string, object?, DbParameter>` вместо `DbContext`; вызов по-прежнему один — `:99`.
+  `DbContext` связывает абстрактный метод в поле один раз (`_createParam = CreateParam` в
+  конструкторе), поэтому провайдерский override остаётся на пути диспетчеризации, а делегат не
+  аллоцируется на команду.
+- **`ResultSetEnumerator` — на роль.** Поле `_dbContext` заменено на `IConnectionManager` +
+  делегат создания параметров; публичное свойство `DbContext` удалено; дублированный блок
+  открытия соединения убран в пользу `EnsureConnectionOpen(Async)`; `ResetConnection` дёргает
+  `DetachFrom(IDataContext)`. Логирование (`ResultSetEnumeratorLogger`, `LogSensitiveData`)
+  передаётся один раз через `InitEnvironment`, а не вытягивается из контекста свойством.
+- **`InitEnumerator` стал `internal`** — вызывается только из `DbContext` (`:677,865`), публичной
+  поверхностью быть не обязан.
+- **Токен отмены сохранён:** `IConnectionManager.EnsureConnectionOpenAsync` получил
+  `CancellationToken cancellationToken = default` (роль реализует только `DbContext`), иначе
+  отмена при открытии соединения потерялась бы.
+- **Дедупликация:** блок открытия соединения жил **4 раза** — `DbContext.GetDbCommand<TResult>`
+  (span и async) и `ResultSetEnumerator.InitReader`/`InitReaderAsync`. Осталось одно выражение —
+  `EnsureConnectionOpen(Async)`; оба хелпера `DbContext` теперь тоже зовут его.
+
+Проверено по коду: `DbContext` в `ResultSetEnumerator.cs` и `DbPreparedQueryCommand.cs` — **0**
+вхождений в коде (остались только упоминания в комментариях). В `src` конкретный `DbContext`
+теперь фигурирует лишь в самом типе, DI-слое, провайдерских подклассах и комментариях.
+
+Замер (`ParamsAllocationBenchmark`, fast/ShortRun, до/после): аллокации **идентичны** —
+`GetDbCommand_1Arg_ReusedArray` 2.34 KB, `_Params` 5.47 KB, `Nextorm_Any_1Arg_Params` 85.16 KB,
+`_2Arg_ReusedArray` 117.2 KB; тайминги в пределах шума. То есть рефакторинг перф-нейтрален.
+Интеграционный набор: **561, Failed 0, Skipped 16**.
+
+Цена (осознанная): «Opening connection» теперь логирует `Logger` контекста, а не
+`ResultSetEnumeratorLogger`; `EnsureConnectionOpen` проверяет `conn.State` на каждом вызове
+(чтение enum).
 
 **Ревалидация после параллельной работы** (CTE, `Distinct`, `JoinType`, IN-транслятор,
 string/math-функции, `Not`). SQL-генерация осталась чистой: `DbContext` не упоминается ни в одном
@@ -605,8 +630,8 @@ generator отклонён по YAGNI (build-time машинерия ради 8 
 4. **P2** — F9. F11 ✅ **реализовано** (единый `DataContextCache` + задокументированный scope).
    F7: пустой алиас удалён, ISP-часть `IQueryProvider` отложена по YAGNI (см. F7 — триггеры).
 5. **Реализовано:** F4, F3, F2, F8, F5, F10, **F11** (+ ось диалекта F1) — см. «Статус
-   реализации». **F6 — частично:** статическая связка (`_sbPool`, `GetParamName`) снята, но
-   `ResultSetEnumerator` держит конкретный `DbContext` — см. F6, «Не закрыто».
+   реализации». **F6 — закрыт:** снята и статическая связка (`_sbPool`, `GetParamName`), и
+   зависимость исполнения от конкретного `DbContext` — см. F6, «✅ Закрыто».
 
 ## Оговорка для performance-работ
 
@@ -733,18 +758,20 @@ generator отклонён по YAGNI (build-time машинерия ради 8 
     `RequireSorting`+`EmptySorting` сведена в один `ISqlDialect.GetPagingOrderBy(QueryCommand)`,
     возвращающий `null`, когда сортировка не нужна (SQL Server — константный
     `(select null as anyorder)`), — капабилити выражено возвращаемым значением, а не броском.
-  - **F6 закрыт в части билдера/визиторов:** `SqlBuilder` принимает `ISqlDialect` (было
+  - **F6 закрыт:** `SqlBuilder` принимает `ISqlDialect` (было
     `DbContext`), `BaseExpressionVisitor`/`WhereExpressionVisitor` — `ISqlDialect` + `ILogger?`,
     `DbContext.MakeSelect` строит builder из `Dialect`. Побочно убран мёртвый параметр
     `IDataContext` у `MemberInfoExtensions.GetPropertyColumnName` (метод читает статический
-    кэш метаданных и параметр игнорировал). **Остаток:** `ResultSetEnumerator` держит
-    конкретный `DbContext` — см. F6, «Не закрыто».
+    кэш метаданных и параметр игнорировал). **Остаток (исполнение) закрыт позже:**
+    `ResultSetEnumerator`/`DbPreparedQueryCommand` переведены на `IConnectionManager` + делегат
+    `CreateParam` — см. F6, «✅ Закрыто».
   - Тесты: `ctx.Escape(...)`/`ctx.RequireSubqueryAlias` переведены на `ctx.Dialect.*`
     (5 мест). Ни один SQL-тест не менялся по существу — значит вывод диалектов идентичен.
   - Проверка: build 0/0; core 90, sqlite 24, postgres 16, sqlserver 19; integration 309
     (Failed 0); `f4check` — OK. SQL-тесты диалектов (`SqlGenerationTests`) — зелёные во всех
     трёх провайдерах, что и есть главное доказательство неизменности рендеринга.
-  - Осталось по F1: только разгрузка исполнения (роли уже есть из F2).
+  - Осталось по F1: SRP-разбиение самой 1095-строчной реализации (`DbContext` — и композит ролей,
+    и диалект, и конвейер); DIP-часть исполнения закрыта вместе с F6.
 - **F1 (ось соединения) — реализовано; сознательное отклонение от исходной формулировки F1.**
   В F1 значился `IConnectionFactory` (`CreateConnection`/`CreateParam`). Разбор показал, что
   (1) `CreateParam` — не connection-ось (он в одной компании с `MakeParam`/`GetParamName`) и
@@ -842,6 +869,16 @@ generator отклонён по YAGNI (build-time машинерия ради 8 
     Добавленные 25 атрибутов в `Entity.cs` — **консистентность конвенции, не ускорение**.
   - Побочно: существующий `M10` (sealed vs unsealed) не измеряет девиртуализацию — оба плеча берут
     экземпляр из `static readonly` конкретного поля, и JIT девиртуализирует оба.
+- **F6 (остаток — исполнение) — реализовано (DIP/DRY).** `DbPreparedQueryCommand.GetDbCommand`
+  принимает `Func<string, object?, DbParameter>` вместо `DbContext` (вся зависимость была в одном
+  вызове `CreateParam`); `ResultSetEnumerator` переведён на `IConnectionManager` + делегат,
+  `_dbContext`/публичное свойство `DbContext`/reach-in в internal-поле `_connOpen` убраны,
+  `InitEnumerator` стал `internal`. Блок открытия соединения жил **4 раза** — осталось одно
+  выражение `EnsureConnectionOpen(Async)`, включая оба хелпера `DbContext`. Токен отмены сохранён:
+  `IConnectionManager.EnsureConnectionOpenAsync(CancellationToken = default)`.
+  - Проверка: build 0/0 (Debug и Release); core 111, sqlite 144, postgres 90, sqlserver 116;
+    integration **561, Failed 0, Skipped 16**; бенчмарк `ParamsAllocationBenchmark` —
+    аллокации до/после **идентичны**, тайминги в пределах шума (перф-нейтрально).
 
 ---
 

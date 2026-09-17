@@ -9,7 +9,7 @@ public partial class QueryCommand
     /// <summary>
     /// The build pipeline of a <see cref="QueryCommand"/>: turns the configured expression tree into the
     /// prepared pieces (<c>from</c>, joins, columns, <c>where</c>, grouping, sorting, CTEs and set
-    /// operations) plus the per-part plan hashes that describe them. <see cref="PrepareCommand"/> is the
+    /// operations) plus the per-part plan hashes that describe them. <see cref="PrepareCommand(CancellationToken)"/> is the
     /// only public entry point; everything here is an implementation detail of the command.
     /// </summary>
     /// <remarks>
