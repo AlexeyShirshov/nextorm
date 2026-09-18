@@ -106,6 +106,18 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void ScalarDateTimeProjection_ShouldPrepareWithoutMaterializerError()
+    {
+        // A bare (non-anonymous) DateTime projection must take the single-column path; before the fix
+        // it fell into RowMaterializerBuilder, which tried to construct DateTime with no arguments.
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Where(x => x.Id == 1).Select(x => x.Datetime!.Value.AddMonths(2)))
+            .Should().Contain("addMonths(dt, 2)");
+    }
+
+    [Fact]
     public void StringAgg_ShouldUseArrayStringConcatGroupArray()
     {
         using var ctx = ClickHouseTestContext.Create();
@@ -210,5 +222,15 @@ public class SqlGenerationTests
             .GroupByCube(x => new { x.Int, x.Boolean })
             .Select(x => new { x.Int, x.Boolean }))
             .Should().Contain("group by nullableint, b with cube");
+    }
+
+    [Fact]
+    public void DateFromParts_ShouldEmitMakeDate()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { D = NORM.SQL.date_from_parts(2023, 1, 31) }))
+            .Should().Contain("makeDate(2023, 1, 31)");
     }
 }

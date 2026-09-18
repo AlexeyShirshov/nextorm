@@ -19,6 +19,7 @@ internal sealed class SqliteTestProvider : ITestProvider
 
     public string Name => "sqlite";
     public bool IsAvailable => true;
+    public bool SupportsFullJoin => true;
     public bool SupportsFractionalAverage => true;
     // SQLite has no INTERSECT ALL / EXCEPT ALL.
     public bool SupportsIntersectExceptAll => false;
@@ -64,7 +65,7 @@ internal sealed class SqliteTestProvider : ITestProvider
             id integer primary key,
             nullableint int null,
             somestring varchar(100),
-            tinyint tinyint not null,
+            tinyval tinyint not null,
             small smallint null,
             r real,
             d double,
@@ -74,7 +75,7 @@ internal sealed class SqliteTestProvider : ITestProvider
             b boolean,
             requiredstring text not null
         );
-        insert into complex_entity (id, nullableint, somestring, tinyint, small, r, d, m, dt, onlydate, b, requiredstring) values
+        insert into complex_entity (id, nullableint, somestring, tinyval, small, r, d, m, dt, onlydate, b, requiredstring) values
             (1, null, 'dadfasd', 2, 3, 4, 5, 6, '2023-01-01 10:00:00', '2023-01-01', 1, 'sdf'),
             (2, 1, 'xxx', 2, 3, 4, 5, 6, '2023-01-01 00:00:00', '2023-01-01', 0, 'asdfgoi'),
             (3, 1, null, 2, 3, null, 5, 6, '2023-01-01 00:00:00', '2023-01-01', 0, '34mfs');

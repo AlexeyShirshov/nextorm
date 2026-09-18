@@ -169,6 +169,8 @@ public abstract partial class CommonTestSuite
     [Fact]
     public void FullJoin_ShouldReturnBothSides()
     {
+        Assert.SkipUnless(Provider.SupportsFullJoin, "This provider does not support FULL JOIN.");
+
         var rows = _sut.SimpleEntity
             .FullJoin(_sut.ComplexEntity, (s, c) => s.Id == c.Id)
             .Select(p => new { LeftId = p.t1.Id, RightString = p.t2.RequiredString })

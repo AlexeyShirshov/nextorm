@@ -15,6 +15,12 @@ public interface ITestProvider
     string SkipReason { get; }
 
     /// <summary>
+    /// True when the provider implements <c>FULL JOIN</c>. MySQL/MariaDB have a right join but no
+    /// full join, so the shared full-join test is skipped there.
+    /// </summary>
+    bool SupportsFullJoin { get; }
+
+    /// <summary>
     /// True when AVG over an integer column keeps the fractional result. PostgreSQL and SQLite
     /// return a fractional value, while a SQL Server integer AVG is itself an integer, so the
     /// shared assertion does not apply there.

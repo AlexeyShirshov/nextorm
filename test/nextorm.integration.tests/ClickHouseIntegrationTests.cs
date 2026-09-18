@@ -45,14 +45,12 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     [Fact]
     public void DateTimeAddMonths_ShouldShiftDate()
     {
-        // Wrapped in an anonymous type: a bare computed DateTime projection currently trips the
-        // row materializer (unrelated to ClickHouse), while the column itself is what matters here.
         var r = _sut.ComplexEntity
             .Where(x => x.Id == 1)
-            .Select(x => new { Shifted = x.Datetime!.Value.AddMonths(2) })
+            .Select(x => x.Datetime!.Value.AddMonths(2))
             .First();
 
-        r.Shifted.Should().Be(new DateTime(2023, 3, 1, 10, 0, 0));
+        r.Should().Be(new DateTime(2023, 3, 1, 10, 0, 0));
     }
 
     [Fact]

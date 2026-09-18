@@ -220,7 +220,13 @@ public partial class QueryCommand
 
 
                     }
-                    else if (cmd._exp.Body.Type.IsPrimitive || cmd._exp.Body.Type == typeof(string) || cmd._exp.Body.Type == typeof(byte[]) || (cmd._exp.Body.Type.IsGenericType && cmd._exp.Body.Type.GetGenericTypeDefinition() == typeof(Nullable<>)))
+                    else if (cmd._exp.Body.Type.IsPrimitive
+                        || cmd._exp.Body.Type == typeof(string)
+                        || cmd._exp.Body.Type == typeof(byte[])
+                        || cmd._exp.Body.Type == typeof(DateTime)
+                        || cmd._exp.Body.Type == typeof(decimal)
+                        || cmd._exp.Body.Type == typeof(Guid)
+                        || (cmd._exp.Body.Type.IsGenericType && cmd._exp.Body.Type.GetGenericTypeDefinition() == typeof(Nullable<>)))
                     {
 
                         cmd.OneColumn = true;

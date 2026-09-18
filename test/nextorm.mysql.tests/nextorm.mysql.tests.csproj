@@ -9,14 +9,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Pinned to the last open-source (Apache-2.0) release; 8.x switched to the commercial Xceed license. -->
     <PackageReference Include="FluentAssertions" />
-    <PackageReference Include="Microsoft.Data.Sqlite" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
-    <PackageReference Include="System.Linq.Async" />
-    <PackageReference Include="Testcontainers.ClickHouse" />
-    <PackageReference Include="Testcontainers.MsSql" />
-    <PackageReference Include="Testcontainers.MySql" />
-    <PackageReference Include="Testcontainers.PostgreSql" />
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -30,11 +25,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\nextorm.core\nextorm.core.csproj" />
-    <ProjectReference Include="..\..\src\nextorm.sqlite\nextorm.sqlite.csproj" />
-    <ProjectReference Include="..\..\src\nextorm.postgres\nextorm.postgres.csproj" />
-    <ProjectReference Include="..\..\src\nextorm.sqlserver\nextorm.sqlserver.csproj" />
     <ProjectReference Include="..\..\src\nextorm.mysql\nextorm.mysql.csproj" />
-    <ProjectReference Include="..\..\src\nextorm.clickhouse\nextorm.clickhouse.csproj" />
   </ItemGroup>
 
 </Project>
