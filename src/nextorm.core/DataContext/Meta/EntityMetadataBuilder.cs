@@ -4,7 +4,11 @@ using System.Reflection;
 
 namespace nextorm.core;
 
-public class EntityBuilder<T>
+/// <summary>
+/// Fluent builder, passed to <c>From&lt;T&gt;(...)</c>, that declares the table name and column
+/// mappings of an entity type.
+/// </summary>
+public class EntityMetadataBuilder<T>
 {
     private readonly IList<EntityPropertyBuilder<T>> _props = new List<EntityPropertyBuilder<T>>();
     private string? _tableName;
@@ -114,7 +118,7 @@ public class EntityBuilder<T>
         _props.Add(pb);
         return pb;
     }
-    public EntityBuilder<T> Table(string tableName)
+    public EntityMetadataBuilder<T> Table(string tableName)
     {
         _tableName = tableName;
         return this;

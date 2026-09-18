@@ -6,9 +6,16 @@ using System.Security.Cryptography;
 
 namespace nextorm.core;
 
-// xxHash32 is used for the hash code.
-// https://github.com/Cyan4973/xxHash
-
+/// <summary>
+/// Incremental hash builder implementing xxHash32, used internally to compute expression and query
+/// plan hashes.
+/// </summary>
+/// <remarks>
+/// This type intentionally shadows <see cref="System.HashCode"/> inside the <c>nextorm.core</c>
+/// namespace. It is an implementation detail rather than a supported public contract: consumer code
+/// should use <see cref="System.HashCode"/> instead. See <c>API-NAMING-REVIEW.md</c> finding P0-1.
+/// Algorithm reference: https://github.com/Cyan4973/xxHash
+/// </remarks>
 public struct HashCode
 {
     private static readonly uint s_seed = GenerateGlobalSeed();

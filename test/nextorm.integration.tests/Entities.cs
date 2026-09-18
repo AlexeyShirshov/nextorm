@@ -49,3 +49,13 @@ public interface IComplexEntity
     [Column("requiredstring")]
     string RequiredString { get; set; }
 }
+
+[SqlTable("binary_entity")]
+public class BinaryEntity
+{
+    [Key]
+    [Column("id")]
+    public int Id { get; set; }
+    [Column("data")]
+    public byte[]? Data { get; set; }
+}

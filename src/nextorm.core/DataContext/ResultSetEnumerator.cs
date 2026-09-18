@@ -167,7 +167,7 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
         if (_connectionManager is null) throw new InvalidOperationException("Connection manager is empty");
 
         // The role owns "make sure the connection is open". This block used to be a copy of
-        // DbContext.EnsureConnectionOpen that also wrote the context's internal _connOpen field.
+        // DbContext.EnsureConnectionOpen.
         _connectionManager.EnsureConnectionOpen();
 
         var sqlCommand = _compiledQuery.GetDbCommand(@params, _createParam!, _conn);

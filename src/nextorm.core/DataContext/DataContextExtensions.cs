@@ -37,11 +37,16 @@ public static class DataContextExtensions
         return cmd;
     }
 
-    public static Entity<T> Create<T>(this IDataContext dataContext, Action<EntityBuilder<T>>? configEntity = null)
+    /// <summary>
+    /// Starts a query over the mapping of <typeparamref name="T"/> and returns its fluent builder.
+    /// The type's metadata is resolved lazily and cached per process; <paramref name="configEntity"/>
+    /// therefore runs only on the first call for <typeparamref name="T"/>.
+    /// </summary>
+    public static EntityBuilder<T> From<T>(this IDataContext dataContext, Action<EntityMetadataBuilder<T>>? configEntity = null)
     {
         if (!DataContextCache.Metadata.ContainsKey(typeof(T)))
         {
-            var eb = new EntityBuilder<T>();
+            var eb = new EntityMetadataBuilder<T>();
             configEntity?.Invoke(eb);
             DataContextCache.Metadata[typeof(T)] = eb.Build();
         }
@@ -93,15 +98,15 @@ public static class DataContextExtensions
     /// <see cref="IDataContext"/> and therefore has no concrete <c>From(string)</c> instance method.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Entity From(this IDataContext dataContext, string table)
+    public static EntityBuilder From(this IDataContext dataContext, string table)
         => new(dataContext, table) { Logger = dataContext.CommandLogger };
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Entity<TResult> From<TResult>(this IDataContext dataContext, QueryCommand<TResult> query)
+    public static EntityBuilder<TResult> From<TResult>(this IDataContext dataContext, QueryCommand<TResult> query)
         => new(dataContext, query) { Logger = dataContext.CommandLogger };
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Entity<TResult> From<TResult>(this IDataContext dataContext, Entity<TResult> builder)
+    public static EntityBuilder<TResult> From<TResult>(this IDataContext dataContext, EntityBuilder<TResult> builder)
         => new(dataContext, builder) { Logger = dataContext.CommandLogger };
 
     /// <summary>
@@ -114,7 +119,7 @@ public static class DataContextExtensions
     /// Example: <c>ctx.FromTableFunction(() =&gt; Db.MyTvf(1, "x")).Select(r =&gt; new { r.Id })</c>.
     /// </para>
     /// </summary>
-    public static Entity<T> FromTableFunction<T>(this IDataContext dataContext, Expression<Func<IQueryable<T>>> call)
+    public static EntityBuilder<T> FromTableFunction<T>(this IDataContext dataContext, Expression<Func<IQueryable<T>>> call)
     {
         ArgumentNullException.ThrowIfNull(dataContext);
         ArgumentNullException.ThrowIfNull(call);
@@ -126,7 +131,7 @@ public static class DataContextExtensions
         if (body is not MethodCallExpression methodCall)
             throw new ArgumentException("The expression must be a call to a method mapped with [SqlTableFunction].", nameof(call));
 
-        var entity = dataContext.Create<T>();
+        var entity = dataContext.From<T>();
         entity.SourceFrom = new FromExpression(TableFunctionExpression.Create(methodCall));
         return entity;
     }

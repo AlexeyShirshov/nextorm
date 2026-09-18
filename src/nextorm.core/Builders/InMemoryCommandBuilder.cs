@@ -30,7 +30,7 @@ namespace nextorm.core;
 
 public static class InMemoryCommandBuilderExtensions
 {
-    public static Entity<TEntity> WithData<TEntity>(this Entity<TEntity> builder, IEnumerable<TEntity>? data)
+    public static EntityBuilder<TEntity> WithData<TEntity>(this EntityBuilder<TEntity> builder, IEnumerable<TEntity>? data)
     {
         if (builder.DataProvider is InMemoryContext inMemoryProvider)
         {
@@ -39,7 +39,7 @@ public static class InMemoryCommandBuilderExtensions
 
         return builder;
     }
-    public static Entity<TEntity> WithAsyncData<TEntity>(this Entity<TEntity> builder, IAsyncEnumerable<TEntity>? data)
+    public static EntityBuilder<TEntity> WithAsyncData<TEntity>(this EntityBuilder<TEntity> builder, IAsyncEnumerable<TEntity>? data)
     {
         if (builder.DataProvider is InMemoryContext inMemoryProvider)
         {

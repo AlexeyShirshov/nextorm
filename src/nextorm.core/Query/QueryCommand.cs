@@ -10,6 +10,7 @@ public partial class QueryCommand : IQueryProvider, ICloneable
     private QueryCommand? _union;
     private UnionType _unionType;
     private IReadOnlyList<CteDefinition>? _ctes;
+    private IReadOnlyList<string>? _hints;
     private List<QueryCommand>? _referencedQueries;
     private List<Expression>? _outerRefs;
     private readonly JoinExpression[]? _joins;
@@ -34,6 +35,11 @@ public partial class QueryCommand : IQueryProvider, ICloneable
     internal int UnionPlanHash;
     internal int ReferencedQueriesPlanHash;
     internal int CtesPlanHash;
+    /// <summary>
+    /// Hash of <see cref="Hints"/>. It is part of the plan key so two otherwise identical commands
+    /// with different hints do not share a cached plan (and therefore the wrong SQL).
+    /// </summary>
+    internal int HintsPlanHash;
     internal Type? ResultType;
     public Paging Paging;
     internal Expression? PreparedCondition;
@@ -100,6 +106,11 @@ public partial class QueryCommand : IQueryProvider, ICloneable
         get => _isPrepared;
     }
     public Expression? Condition => _condition;
+    /// <summary>
+    /// The original projection lambda. Exposed internally so the in-memory grouped path can rewrite
+    /// aggregate calls in the projection body; SQL providers use <see cref="SelectList"/> instead.
+    /// </summary>
+    internal LambdaExpression? ProjectionExpression => _exp;
     public JoinExpression[]? Joins => _joins;
     public bool Cache
     {
@@ -127,7 +138,36 @@ public partial class QueryCommand : IQueryProvider, ICloneable
     /// participates in the plan cache key.
     /// </summary>
     public IReadOnlyList<CteDefinition>? Ctes { get => _ctes; internal set => _ctes = value; }
+    /// <summary>
+    /// Statement-level query hints attached to this command (for example SQL Server <c>RECOMPILE</c>),
+    /// or <c>null</c> when the command has none. How they are rendered is provider specific; a dialect
+    /// that does not implement query hints rejects a command that carries them.
+    /// </summary>
+    public IReadOnlyList<string>? Hints { get => _hints; internal set => _hints = value; }
+    /// <summary>Appends <paramref name="hints"/> to the command's hint list, ignoring null/blank entries.</summary>
+    internal void AddHints(string[]? hints)
+    {
+        if (hints is null || hints.Length == 0) return;
+
+        var list = _hints is null ? new List<string>(hints.Length) : new List<string>(_hints);
+
+        for (var i = 0; i < hints.Length; i++)
+        {
+            var hint = hints[i];
+            if (!string.IsNullOrWhiteSpace(hint))
+                list.Add(hint);
+        }
+
+        if (list.Count > 0)
+            _hints = list;
+    }
     public LambdaExpression? GroupBy { get => _groupExp; }
+    /// <summary>
+    /// The super-aggregate modifier applied to the grouping list (<c>ROLLUP</c>/<c>CUBE</c>), or
+    /// <see cref="GroupingType.None"/> for a plain <c>GROUP BY</c>. Only meaningful when a grouping
+    /// list is present.
+    /// </summary>
+    public GroupingType GroupingType { get; internal set; }
     public LambdaExpression? Having { get => _having; }
     public QueryCommand? UnionQuery { get => _union; }
     public UnionType UnionType { get => _unionType; }
@@ -185,6 +225,13 @@ public partial class QueryCommand : IQueryProvider, ICloneable
         {
             _union.SetOperation(queryCommand, unionType);
         }
+    }
+
+    /// <summary>Drops the set operation so the first operand can be executed on its own.</summary>
+    internal void ClearUnion()
+    {
+        _union = null;
+        _unionType = UnionType.None;
     }
 
     public int AddOuterReference(Expression node)

@@ -1,6 +1,9 @@
+using System.Text.Json;
 using FluentAssertions;
 using nextorm.core;
 using nextorm.postgres;
+using Npgsql;
+using NpgsqlTypes;
 
 namespace nextorm.postgres.tests;
 
@@ -46,10 +49,61 @@ public class PostgresDialectTests
     }
 
     [Fact]
+    public void ApplyHooks_ShouldUseLateralJoin()
+    {
+        Dialect.SupportsApply.Should().BeTrue();
+        Dialect.MakeApply(JoinType.CrossApply, "src").Should().Be(" cross join lateral src");
+        Dialect.MakeApply(JoinType.OuterApply, "src").Should().Be(" left join lateral src on true");
+    }
+
+    [Fact]
     public void CapabilityFlags_ShouldMatchPostgres()
     {
         Dialect.RequireSubqueryAlias.Should().BeTrue();
         Dialect.SupportsRightFullJoin.Should().BeTrue();
         Dialect.SupportsIntersectExceptAll.Should().BeTrue();
+        Dialect.SupportsApply.Should().BeTrue();
+        Dialect.SupportsQueryHints.Should().BeFalse();
+        Dialect.SupportsArrays.Should().BeTrue();
+        Dialect.SupportsJson.Should().BeTrue();
+        Dialect.SupportsFilter.Should().BeTrue();
+        Dialect.SupportsGreatestLeast.Should().BeTrue();
+        Dialect.SupportsDateTrunc.Should().BeTrue();
+        Dialect.SupportsDateArithmetic.Should().BeTrue();
+        Dialect.SupportsStringArrayAggregates.Should().BeTrue();
+    }
+
+    [Fact]
+    public void BuiltinFunctionHooks_ShouldUsePostgresForms()
+    {
+        Dialect.MakeNullIf("x", "y").Should().Be("nullif(x, y)");
+        Dialect.MakeGreatest(["a", "b"]).Should().Be("greatest(a, b)");
+        Dialect.MakeLeast(["a", "b"]).Should().Be("least(a, b)");
+        Dialect.MakeDateTrunc("month", "x").Should().Be("date_trunc('month', x)");
+        Dialect.MakeDateAdd("day", "n", "x").Should().Be("x + (n * interval '1 day')");
+        Dialect.MakeEndOfMonth("x").Should().Be("(date_trunc('month', x) + interval '1 month - 1 day')");
+        Dialect.MakeStringAgg("x", "','").Should().Be("string_agg(x, ',')");
+        Dialect.MakeArrayAgg("x").Should().Be("array_agg(x)");
+    }
+
+    [Fact]
+    public void CreateParam_JsonDocument_ShouldBindAsJsonb()
+    {
+        using var ctx = PostgresTestContext.CreatePostgres();
+        using var document = JsonDocument.Parse("{\"a\":1}");
+
+        var parameter = (NpgsqlParameter)ctx.CreateParam("p", document);
+
+        parameter.NpgsqlDbType.Should().Be(NpgsqlDbType.Jsonb);
+    }
+
+    [Fact]
+    public void CreateParam_PlainString_ShouldStayText()
+    {
+        using var ctx = PostgresTestContext.CreatePostgres();
+
+        var parameter = (NpgsqlParameter)ctx.CreateParam("p", "{\"a\":1}");
+
+        parameter.NpgsqlDbType.Should().NotBe(NpgsqlDbType.Jsonb);
     }
 }

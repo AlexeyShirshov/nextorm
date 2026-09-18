@@ -4,6 +4,9 @@ using System.Diagnostics;
 
 namespace nextorm.core;
 
+/// <summary>
+/// Prepared query command backed by an ADO.NET <see cref="System.Data.IDataRecord"/> reader.
+/// </summary>
 public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResult, IDataRecord>, IDbCommandHolder
 {
     public readonly CommandBehavior Behavior = 0;

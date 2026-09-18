@@ -42,6 +42,8 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
         if (x.IsDistinct != y.IsDistinct) return false;
 
+        if (x.GroupingType != y.GroupingType) return false;
+
         if (x.Paging.Limit != y.Paging.Limit || x.Paging.Offset != y.Paging.Offset) return false;
 
         if (x.UnionType != y.UnionType) return false;
@@ -69,7 +71,23 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
         if (!CteDefinitionsEqual(x.Ctes, y.Ctes)) return false;
 
+        if (!StringListsEqual(x.Hints, y.Hints)) return false;
+
         if (!IEqualityComparerExtensions.Equals(this, x.ReferencedQueries, y.ReferencedQueries)) return false;
+
+        return true;
+    }
+
+    private static bool StringListsEqual(IReadOnlyList<string>? x, IReadOnlyList<string>? y)
+    {
+        if (ReferenceEquals(x, y)) return true;
+        if (x is null || y is null) return false;
+        if (x.Count != y.Count) return false;
+
+        for (var (i, cnt) = (0, x.Count); i < cnt; i++)
+        {
+            if (!string.Equals(x[i], y[i], StringComparison.Ordinal)) return false;
+        }
 
         return true;
     }
@@ -120,6 +138,9 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
             hash.Add(obj.IsDistinct);
 
+            if (obj.GroupingType != GroupingType.None)
+                hash.Add(obj.GroupingType);
+
             if (obj.WherePlanHash != 0)
                 hash.Add(obj.WherePlanHash);
 
@@ -148,6 +169,9 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
             if (obj.CtesPlanHash != 0)
                 hash.Add(obj.CtesPlanHash);
+
+            if (obj.HintsPlanHash != 0)
+                hash.Add(obj.HintsPlanHash);
 
             return hash.ToHashCode();
         }

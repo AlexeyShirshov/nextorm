@@ -2,6 +2,13 @@
 using System.Linq.Expressions;
 namespace nextorm.core;
 
+/// <summary>
+/// Detects calls to a small set of special methods while translating a predicate.
+/// </summary>
+/// <remarks>
+/// Carries a <c>Test</c> prefix despite being production code; consider renaming and making it
+/// <c>internal</c>. See <c>API-NAMING-REVIEW.md</c> finding P1-15.
+/// </remarks>
 public class TestSpecialMethodCallVisitor : ExpressionVisitor
 {
     public bool Result { get; internal set; }
@@ -20,6 +27,13 @@ public class TestSpecialMethodCallVisitor : ExpressionVisitor
     }
 }
 
+/// <summary>
+/// Binds the parameters of an expression while a command is built.
+/// </summary>
+/// <remarks>
+/// The trailing <c>2</c> in the name should be replaced by a descriptive name; see
+/// <c>API-NAMING-REVIEW.md</c> finding P1-13.
+/// </remarks>
 public class ParamExpressionVisitor2 : ExpressionVisitor
 {
     private readonly ParameterExpression _p;

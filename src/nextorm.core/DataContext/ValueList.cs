@@ -3,11 +3,25 @@ using System.Collections;
 namespace nextorm.core;
 
 #if NET8_0_OR_GREATER
+/// <summary>
+/// Fixed-capacity buffer for up to ten values, kept on the stack to avoid allocations while reading
+/// a row.
+/// </summary>
+/// <remarks>
+/// Internal allocation helper; the magic number in the name is not meaningful to consumers. Prefer
+/// <c>internal</c>. See <c>API-NAMING-REVIEW.md</c> finding P1-16.
+/// </remarks>
 [System.Runtime.CompilerServices.InlineArray(10)]
 public struct Buffer10<T>
 {
     private T _;
 }
+/// <summary>
+/// Append-only list of values used while materializing a row without allocating.
+/// </summary>
+/// <remarks>
+/// Internal allocation helper; prefer <c>internal</c>. See <c>API-NAMING-REVIEW.md</c> finding P1-16.
+/// </remarks>
 public struct ValueList<T>
 {
     private const int MaxLength = 10;
@@ -70,11 +84,19 @@ public struct ValueList<T>
         }
     }
 }
+/// <summary>
+/// Fixed-capacity buffer for up to three values, kept on the stack.
+/// </summary>
+/// <remarks>Internal allocation helper; prefer <c>internal</c>. See <c>API-NAMING-REVIEW.md</c> finding P1-16.</remarks>
 [System.Runtime.CompilerServices.InlineArray(3)]
 public struct Buffer3<T>
 {
     private T _;
 }
+/// <summary>
+/// Value list optimized for up to three items.
+/// </summary>
+/// <remarks>Internal allocation helper; the name is inconsistent with <see cref="ValueList{T}"/>. See <c>API-NAMING-REVIEW.md</c> finding P1-16.</remarks>
 public struct ValueList3<T>
 {
     private const int MaxLength = 3;
@@ -138,6 +160,9 @@ public struct ValueList3<T>
     }
 }
 #else
+/// <summary>
+/// Helpers used by the internal value lists.
+/// </summary>
 public static class ListExtensions
 {
     public static void Pop<T>(this List<T> list)=>list.RemoveAt(list.Count - 1);

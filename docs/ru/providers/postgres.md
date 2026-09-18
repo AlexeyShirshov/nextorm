@@ -20,6 +20,26 @@
 - производные таблицы и табличные функции должны иметь псевдонимы (`RequireSubqueryAlias` равно `true`, и его
   следствием является то, что псевдоним выдаётся всегда);
 - `INTERSECT ALL` / `EXCEPT ALL` поддерживаются (`SupportsIntersectExceptAll` равно `true`);
+- массивы поддерживаются (`SupportsArrays` равно `true`): параметры-массивы с квантификаторами
+  `any`/`all` и функции для массивов;
+- JSON/JSONB поддерживается (`SupportsJson` равно `true`): агрегаты `json_agg`/`jsonb_agg`, функции
+  построения/доступа и операторы `->`/`->>`/`@>`/`?`, а параметры `JsonDocument`/`JsonElement`/`JsonNode`
+  привязываются как `jsonb`;
+- `greatest`/`least` и предложение `FILTER (WHERE ...)` у агрегатов включены (`SupportsGreatestLeast` и
+  `SupportsFilter` равны `true`);
+- `date_trunc` включён (`SupportsDateTrunc` равно `true`);
+- арифметика дат включена (`SupportsDateArithmetic` равно `true`): `NORM.SQL.date_add`/`end_of_month`
+  и методы `DateTime.Add*` отрисовывают интервальную арифметику PostgreSQL
+  (`x + (n * interval '1 day')`, `date_trunc('month', x) + interval '1 month - 1 day'`);
+- агрегаты `string_agg`/`array_agg` включены (`SupportsStringArrayAggregates` равно `true`);
+- расширенная библиотека скалярных функций включена (`SupportsExtendedScalarFunctions` равно `true`):
+  дополнительные математические (`asin`, `cbrt`, `degrees`, `pi`, `mod`, ...), строковые (`split_part`,
+  `lpad`, `initcap`, ...), POSIX-регулярные выражения (`regexp_replace`, `regexp_like`, ...), дата/время
+  (`age`, `make_date`, `to_char`, `extract`, ...) и `num_nulls`/`num_nonnulls`;
+- логические, битовые, статистические и упорядоченные агрегаты включены (`SupportsBooleanAggregates`,
+  `SupportsBitAggregates`, `SupportsStatisticalAggregates` и `SupportsOrderedAggregates` равны `true`):
+  `bool_and`/`bool_or`/`every`, `bit_and`/`bit_or`/`bit_xor`, `corr`/`covar_*`/`regr_*` и
+  `percentile_cont`/`percentile_disc`/`mode` с `WITHIN GROUP`;
 - имена агрегатов переотображаются: `stdev`→`stddev`, `stdevp`→`stddev_pop`, `var`→`variance`,
   `varp`→`var_pop`;
 - `Math.Log` отображается на `ln(...)` (в PostgreSQL `log()` — это логарифм по основанию 10);
@@ -56,8 +76,8 @@ using IDataContext ctx = new PostgresDbContext("Host=localhost;Database=app;..."
 ## Разбиение на страницы
 
 ```csharp
-ctx.Create<ISimpleEntity>().Page(5, 10).Select(x => x.Id);   // limit 5 offset 10
-ctx.Create<ISimpleEntity>().Offset(10).Select(x => x.Id);    // offset 10
+ctx.From<ISimpleEntity>().Page(5, 10).Select(x => x.Id);   // limit 5 offset 10
+ctx.From<ISimpleEntity>().Offset(10).Select(x => x.Id);    // offset 10
 ```
 
 ```sql
@@ -71,7 +91,7 @@ select id from simple_entity offset 10
 ## Coalesce, части даты и агрегаты
 
 ```csharp
-var query = ctx.Create<IComplexEntity>()
+var query = ctx.From<IComplexEntity>()
     .Select(x => new
     {
         Fallback = x.String ?? "",
@@ -85,12 +105,80 @@ from complex_entity
 ```
 
 ```csharp
-var stdev = ctx.Create<IComplexEntity>().Select(x => NORM.SQL.stdev((double)x.Id));  // stddev(...)
-var varp  = ctx.Create<IComplexEntity>().Select(x => NORM.SQL.varp((double)x.Id));   // var_pop(...)
+var stdev = ctx.From<IComplexEntity>().Select(x => NORM.SQL.stdev((double)x.Id));  // stddev(...)
+var varp  = ctx.From<IComplexEntity>().Select(x => NORM.SQL.varp((double)x.Id));   // var_pop(...)
 ```
 
 `count` и `count_big` оба отрисовывают `count(*)`, потому что `count` в PostgreSQL уже возвращает 64-битное
 целое.
+
+## Массивы
+
+PostgreSQL — единственный поддерживаемый провайдер с нативными массивами. Массив передаётся одним
+параметром, поэтому `column = any(@array)` работает и с runtime-параметром, и с захваченным массивом,
+а SQL не зависит от количества элементов:
+
+```csharp
+var ids = new long[] { 1, 2, 3 };
+
+ctx.From<IComplexEntity>().Where(e => NORM.SQL.any(e.Id, ids));      // (id = any(@p0))
+ctx.From<IComplexEntity>().Where(e => e.Id == NORM.SQL.any(ids));    // id = any(@p0)
+ctx.From<IComplexEntity>().Where(e => e.Id == NORM.SQL.any(NORM.Param<long[]>(0))); // id = any(@norm_p0)
+```
+
+```sql
+select id from complex_entity where (id = any(@p0))
+```
+
+Функции для массивов (`cardinality`, `array_length`, `array_position`, ...) и операторы `@>`/`&&`
+описаны в разделе [Скалярные функции](../guide/11-scalar-functions.md#массивы-postgresql). Остальные
+провайдеры отклоняют их с `NotSupportedException`.
+
+## JSON и JSONB
+
+PostgreSQL — единственный поддерживаемый провайдер с `json`/`jsonb`. Параметр `JsonDocument`,
+`JsonElement` или `JsonNode` привязывается как `jsonb`, поэтому операторы доступа и функции работают
+напрямую:
+
+```csharp
+using System.Text.Json;
+
+var document = JsonDocument.Parse("""{"name":"Alice","tags":["a","b"]}""");
+
+using var ctx = new PostgresDbContext(connectionString, new DbContextBuilder());
+ctx.From<IComplexEntity>()
+    .Where(e => NORM.SQL.json_get_text(NORM.Param<JsonDocument>(0), "name") == "Alice")
+    .Select(e => e.Id)
+    .ToList(document);
+
+ctx.From<IComplexEntity>()
+    .Select(e => NORM.SQL.jsonb_agg(e.String));   // jsonb_agg(somestring)
+```
+
+Обычная строка с JSON привязывается как `text`; для разбора используйте `NORM.SQL.json_cast(value)`.
+Полная поверхность (`json_agg`, `jsonb_build_object`, `->`, `->>`, `#>`, `@>`, `?`, `?|`, `?&`, ...)
+описана в разделе [Скалярные функции](../guide/11-scalar-functions.md#json-и-jsonb-postgresql).
+Остальные провайдеры отклоняют её с `NotSupportedException`.
+
+## Дополнительная поверхность функций
+
+PostgreSQL также включает `greatest`/`least`, `date_trunc`, агрегаты `string_agg`/`array_agg`, предложение
+`FILTER (WHERE ...)` у агрегатов и встроенные табличные функции `generate_series`/`unnest`:
+
+```csharp
+ctx.From<IComplexEntity>()
+    .GroupBy(e => new { e.Int })
+    .Select(e => new
+    {
+        e.Int,
+        Names = NORM.SQL.string_agg(e.String, ","),
+        Big = NORM.SQL.count(() => e.Id > 10L)
+    });   // string_agg(somestring, ',') ... count(*) filter (where (id > 10))
+```
+
+Они описаны в разделе
+[Скалярные функции](../guide/11-scalar-functions.md#строковые-и-массивные-агрегаты-postgresql). SQLite
+также принимает предложение `FILTER`; остальные функции доступны только в PostgreSQL.
 
 ## Операции над множествами `*ALL` и порядок null
 
@@ -105,7 +193,7 @@ PostgreSQL рассматривает `NULL` как наибольшее зна�
 набор тестов избегает зависимости от этого; тест провайдера фиксирует это явно.
 
 ```csharp
-var r = ctx.Create<IComplexEntity>()
+var r = ctx.From<IComplexEntity>()
     .OrderByDescending(it => it.Int)
     .Select(it => new { it.Id })
     .ToList();
@@ -135,6 +223,12 @@ join complex_entity as "t2" on t1.id = t2.id
 | Квотирование идентификаторов | двойные кавычки (`as "t1"`) |
 | Псевдоним производной таблицы / TVF | требуется |
 | `*ALL` | поддерживается |
+| Массивы | поддерживаются (`any(@array)`, `cardinality`, ...) |
+| JSON/JSONB | поддерживается (`json_agg`, `->`, ...; параметры `JsonDocument` привязываются как `jsonb`) |
+| `greatest` / `least` / `date_trunc` | поддерживаются |
+| `date_add` / `end_of_month` / `DateTime.Add*` | интервальная арифметика (`x + (n * interval '1 day')`) |
+| `string_agg` / `array_agg` / `filter` у агрегатов | поддерживаются |
+| Табличные функции | `generate_series(...)`, `unnest(...)` |
 | Рекурсивный CTE | `with recursive` (без опции max-recursion) |
 | `stdev` / `stdevp` | `stddev` / `stddev_pop` |
 | `var` / `varp` | `variance` / `var_pop` |

@@ -50,6 +50,7 @@ public partial class QueryCommand
 
             cmd._union?.PrepareCommand(dontCalculateHash, cancellationToken);
             PrepareCtes(cmd, dontCalculateHash, cancellationToken);
+            PrepareHints(cmd, dontCalculateHash);
 
             cmd._isPrepared = true;
             cmd._selectList = selectList ?? [];
@@ -154,6 +155,26 @@ public partial class QueryCommand
             }
         }
 
+        /// <summary>
+        /// Folds the statement-level query hints into the plan key. Hints change the emitted SQL, so a
+        /// command with hints must not share a cached plan with an otherwise identical command without
+        /// them (or with different ones).
+        /// </summary>
+        private static void PrepareHints(QueryCommand cmd, bool noHash)
+        {
+            if (cmd._hints is not { Count: > 0 } hints) return;
+            if (cmd._dontCache || noHash) return;
+
+            HashCode hash = new();
+            unchecked
+            {
+                for (var (i, cnt) = (0, hints.Count); i < cnt; i++)
+                    hash.Add(hints[i]);
+
+                cmd.HintsPlanHash = hash.ToHashCode();
+            }
+        }
+
         private static (SelectExpression[]?, int) PrepareColumns(QueryCommand cmd, bool noHash, Type? srcType, CancellationToken cancellationToken)
         {
             var selectList = cmd._selectList;
@@ -199,7 +220,7 @@ public partial class QueryCommand
 
 
                     }
-                    else if (cmd._exp.Body.Type.IsPrimitive || cmd._exp.Body.Type == typeof(string) || (cmd._exp.Body.Type.IsGenericType && cmd._exp.Body.Type.GetGenericTypeDefinition() == typeof(Nullable<>)))
+                    else if (cmd._exp.Body.Type.IsPrimitive || cmd._exp.Body.Type == typeof(string) || cmd._exp.Body.Type == typeof(byte[]) || (cmd._exp.Body.Type.IsGenericType && cmd._exp.Body.Type.GetGenericTypeDefinition() == typeof(Nullable<>)))
                     {
 
                         cmd.OneColumn = true;

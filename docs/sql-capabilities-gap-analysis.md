@@ -27,6 +27,8 @@ contract and the provider dialects, plus the integration tests under `test/nexto
 > | 12 | Table-valued functions (`[SqlTableFunction]`) | **Done** |
 > | 13 | Navigation properties / relationships | **Out of scope** |
 > | 14 | DML (`INSERT`/`UPDATE`/`DELETE`) | **Out of scope** |
+> | 15 | `APPLY` / `LATERAL` (`CrossApply`/`OuterApply`) | **Partial** — SQL Server `CROSS/OUTER APPLY`, PostgreSQL/MySQL/MariaDB `LATERAL`; the applied source cannot be correlated yet (no public outer-reference API for a `FROM` subquery) |
+> | 16 | Statement-level query hints (`Hint(...)`) | **Done on SQL Server** (`OPTION (...)`); other dialects reject hints with `NotSupportedException` |
 >
 > Test coverage after the work is 81.9% line (CI threshold 75%). Benchmarks and the performance
 > optimizations that followed are documented in [Iteration 6 of `benchmark-report.md`](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmark-report.md):
@@ -36,7 +38,8 @@ contract and the provider dialects, plus the integration tests under `test/nexto
 > Consequently the matrix in section 2 and the gap list in section 4 describe the **pre-implementation**
 > state — a few nextorm entries are now stale (notably join arity is 8, and `LEFT`/`RIGHT`/`FULL`/`CROSS`,
 > `CASE WHEN`, string/math functions, `IN`-lists, `DISTINCT`, `INTERSECT`/`EXCEPT`, CTEs, window
-> functions and UDF/TVF support all exist).
+> functions and UDF/TVF support all exist; `APPLY`/`LATERAL` exists for non-correlated sources; and
+> SQL Server statement-level query hints exist).
 
 ---
 
@@ -71,8 +74,9 @@ Legend: **yes** = first-class support; **partial** = supported with limits; **no
 | RIGHT JOIN | no (workaround) | yes | **no** | defined in `JoinType` (`JoinExpression.cs:5`) but never emitted |
 | FULL JOIN | no (workaround) | yes | **no** | same as above |
 | CROSS JOIN | yes (`SelectMany`) | yes | **no** | same as above |
-| APPLY / LATERAL | partial | yes | **no** | absent from builder, parser and dialects |
-| JOIN to a derived table (subquery) | yes | yes | **yes** | `Entity.cs:176`, `SqlBuilder.MakeFrom:403` |
+| APPLY / LATERAL | partial | yes | **partial** — non-correlated only | `CrossApply`/`OuterApply`, `JoinType.CrossApply/OuterApply`, `ISqlDialect.SupportsApply`/`MakeApply`; correlation not expressible (no public outer-reference API for a `FROM` subquery) |
+| Query hints | yes | yes (provider specific) | **partial** — SQL Server only | `QueryCommand<TResult>.Hint`, `ISqlDialect.SupportsQueryHints`/`RenderQueryHints` |
+| JOIN to a derived table (subquery) | yes | yes | **yes** | `EntityBuilder.cs:176`, `SqlBuilder.MakeFrom:403` |
 | More than two joined tables | unlimited | unlimited | **partial — max 3** | `Projection.cs:24,40`; `EntityP3` has no `Join` |
 | Subquery in `FROM` | yes | yes | **yes** | `SqlBuilder.cs:372`, `FromExpression.cs:10` |
 | Scalar subquery in `SELECT`/`WHERE`/`ORDER BY` | yes | yes | **yes** (non-correlated) | `CommonTestSuite.SqlCommand.cs:612-660` |
@@ -80,12 +84,12 @@ Legend: **yes** = first-class support; **partial** = supported with limits; **no
 | `IN` (subquery) | yes | yes | **yes** | `NORM.cs:34`, `BaseExpressionVisitor.cs:253` |
 | `IN` (list/array/`Contains`) | yes | yes | **no** | `@in` only accepts a `QueryCommand` |
 | `EXISTS` / `ANY` / `ALL` | yes | yes | **yes** | `NORM.cs:33-36`, `BaseExpressionVisitor.cs:172-251` |
-| `WHERE` (and/or/not, comparisons) | yes | yes | **partial** — logical `!` not translated | `Entity.Where:88`; `VisitUnary` handles numeric casts only |
-| `GROUP BY` | yes | yes | **yes** | `Entity.GroupBy:187`, `SqlBuilder.cs:88` |
-| `HAVING` | yes | yes | **yes** | `Entity.Having:195`, `SqlBuilder.cs:117` |
+| `WHERE` (and/or/not, comparisons) | yes | yes | **partial** — logical `!` not translated | `EntityBuilder.Where:88`; `VisitUnary` handles numeric casts only |
+| `GROUP BY` | yes | yes | **yes** | `EntityBuilder.GroupBy:187`, `SqlBuilder.cs:88` |
+| `HAVING` | yes | yes | **yes** | `EntityBuilder.Having:195`, `SqlBuilder.cs:117` |
 | Aggregates (`count`/`min`/`max`/`avg`/`sum`/`stdev`/`var`, distinct) | yes | yes | **yes** | `NORM.cs:37-54`, `BaseExpressionVisitor.cs:299-391` |
 | `SELECT DISTINCT` | yes | yes | **no** | no API; only `count_distinct` |
-| `ORDER BY` (expression/ordinal, asc/desc, multiple) | yes | yes | **yes** | `Entity.cs:349-376`, `SqlBuilder.cs:141` |
+| `ORDER BY` (expression/ordinal, asc/desc, multiple) | yes | yes | **yes** | `EntityBuilder.cs:349-376`, `SqlBuilder.cs:141` |
 | `LIMIT`/`OFFSET`/`TOP` | yes | yes | **yes** | dialect `MakePage`/`MakeTop` |
 | `UNION` / `UNION ALL` | yes | yes | **yes** | `QueryCommand.cs:1034-1047`, `SqlBuilder.cs:124` |
 | `INTERSECT` / `EXCEPT` | yes | yes | **no** | absent |
@@ -121,6 +125,10 @@ These are fully implemented and covered by SQL-generation or integration tests:
 * **Paging** — dialect-specific `TOP`, `LIMIT`/`OFFSET` and `OFFSET ... FETCH`, including the SQL Server
   requirement to inject an `ORDER BY`.
 * **`UNION` / `UNION ALL`**.
+* **Provider-specific scalar/aggregate functions** gated by capability flags — for example ClickHouse
+  `dateTrunc`, `addDays`/.../`toLastDayOfMonth`, `arrayStringConcat(groupArray(...))`,
+  `groupBitAnd`/`groupBitOr`/`groupBitXor`, `corr`/`covarPop`/`covarSamp`, `argMin`/`argMax` and the
+  `-If` combinators (`count_if`/`sum_if`/`avg_if`/`min_if`/`max_if`).
 * **Subqueries** in `FROM`, scalar subqueries in `SELECT`/`WHERE`/`ORDER BY`, and correlated
   `EXISTS`/`IN`/`ANY`/`ALL`.
 * **Derived-table joins** (`Join(QueryCommand<T>)`).
@@ -133,7 +141,7 @@ These are fully implemented and covered by SQL-generation or integration tests:
 1. **Only `INNER JOIN` is emitted.** `JoinType` already declares `Left`, `Right`, `Full`, `Cross` and
    `FullCross` (`JoinExpression.cs:5-13`), but `SqlBuilder.MakeJoin` throws `NotImplementedException` for
    everything except `Inner` (`SqlBuilder.cs:252-259`), and the fluent API always creates an inner join
-   (`Entity.cs:165,176,585,590`). The in-memory provider has the same limitation
+   (`EntityBuilder.cs:165,176,585,590`). The in-memory provider has the same limitation
    (`InMemoryDataContext.cs:213/247`). This is the largest gap.
 2. **No `APPLY`/`LATERAL`**, and no `RIGHT`/`FULL`/`CROSS` join surface — a direct consequence of (1).
 3. **No `SELECT DISTINCT`, `INTERSECT`, `EXCEPT`, CTEs or window functions.**
@@ -160,24 +168,24 @@ These are fully implemented and covered by SQL-generation or integration tests:
 
 Each workstream is independent enough to be implemented on its own branch/PR. Dependencies are noted; a
 workstream must not be started before its dependencies land, and workstreams that touch the same files
-(`SqlBuilder.cs`, `BaseExpressionVisitor.cs`, `ISqlDialect`/`SqlDialectBase`, `Entity.cs`) must not be
+(`SqlBuilder.cs`, `BaseExpressionVisitor.cs`, `ISqlDialect`/`SqlDialectBase`, `EntityBuilder.cs`) must not be
 developed in parallel on the same working tree.
 
 | # | Workstream | Primary files | Depends on | Verification |
 |---|---|---|---|---|
-| 1 | Join types: `LEFT`/`RIGHT`/`FULL`/`CROSS` (+ fluent API, in-memory, dialects) | `SqlBuilder.cs`, `JoinExpression.cs`, `Entity.cs`, `JoinCommandBuilder.cs`, `Projection.cs`, `InMemoryDataContext.cs`, dialects | — | `CommonTestSuite.Join.cs`, `SqlGenerationTests.cs` |
-| 2 | Join arity > 3 (open-ended projection) | `Projection.cs`, `JoinCommandBuilder.cs`, `Entity.cs`, `SqlBuilder.cs` | 1 | join tests, SQL-generation tests |
+| 1 | Join types: `LEFT`/`RIGHT`/`FULL`/`CROSS` (+ fluent API, in-memory, dialects) | `SqlBuilder.cs`, `JoinExpression.cs`, `EntityBuilder.cs`, `JoinCommandBuilder.cs`, `Projection.cs`, `InMemoryDataContext.cs`, dialects | — | `CommonTestSuite.Join.cs`, `SqlGenerationTests.cs` |
+| 2 | Join arity > 3 (open-ended projection) | `Projection.cs`, `JoinCommandBuilder.cs`, `EntityBuilder.cs`, `SqlBuilder.cs` | 1 | join tests, SQL-generation tests |
 | 3 | `CASE WHEN` / ternary / `switch` | `BaseExpressionVisitor.cs`, `ISqlDialect.cs`, `SqlDialectBase.cs`, dialects | — | new SQL-generation tests |
 | 4 | String, math and date scalar functions + `LIKE` | `BaseExpressionVisitor.cs`, `ISqlDialect.cs`, `SqlDialectBase.cs`, dialects | 3 (shares the function dispatch) | new SQL-generation tests per provider |
 | 5 | `IN` over a list/array | `NORM.cs`, `BaseExpressionVisitor.cs`, dialects | — | new integration tests |
 | 6 | Logical `!` and unary operators | `BaseExpressionVisitor.cs`, `WhereExpressionVisitor.cs` | 3 | new SQL-generation tests |
-| 7 | `SELECT DISTINCT` | `QueryCommand.cs`, `SqlBuilder.cs`, `Entity.cs` | — | integration tests |
+| 7 | `SELECT DISTINCT` | `QueryCommand.cs`, `SqlBuilder.cs`, `EntityBuilder.cs` | — | integration tests |
 | 8 | `INTERSECT` / `EXCEPT` | `QueryCommand.cs`, `UnionType.cs`, `SqlBuilder.cs` | 7 | integration tests |
 | 9 | CTEs (`WITH`, recursive) | `QueryCommand.cs`, `SqlBuilder.cs`, new builder API | 8 | integration tests |
 | 10 | Window functions (`OVER`, ranking, framed) | `NORM.cs`, `BaseExpressionVisitor.cs`, dialects | 3, 4 | new integration tests |
 | 11 | User-defined scalar-valued functions | `NORM.cs`, `ISqlDialect.cs`, `BaseExpressionVisitor.cs` | 3, 4 | new tests |
 | 12 | Table-valued functions | new builder + `ISqlDialect.cs`, `SqlBuilder.cs` | 1 | new tests |
-| 13 | Navigation properties / relationships | metadata (`Meta/`), `Entity.cs`, `SqlBuilder.cs` | 1 | new tests |
+| 13 | Navigation properties / relationships | metadata (`Meta/`), `EntityBuilder.cs`, `SqlBuilder.cs` | 1 | new tests |
 | 14 | DML (`INSERT`/`UPDATE`/`DELETE`) | new subsystem + provider `DbCommand` layer | — | new integration tests |
 
 ### Cross-cutting requirements
@@ -204,7 +212,17 @@ dotnet build nextorm.sln
 dotnet test test/nextorm.sqlite.tests
 dotnet test test/nextorm.sqlserver.tests
 dotnet test test/nextorm.postgres.tests
+dotnet test test/nextorm.mysql.tests
+dotnet test test/nextorm.mariadb.tests
+dotnet test test/nextorm.clickhouse.tests
 
 # Integration tests (SQLite runs locally; SQL Server/PostgreSQL need Docker/Testcontainers).
 dotnet test test/nextorm.integration.tests
 ```
+
+---
+
+## See also
+
+- [nextorm vs linq2db: functionality comparison](linq2db-comparison.md) — a focused side-by-side of the
+  two libraries, including the `APPLY`/`LATERAL` and query-hint status.

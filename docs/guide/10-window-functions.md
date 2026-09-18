@@ -71,7 +71,7 @@ The aggregate variants carry an `_over` suffix so they do not clash with the sca
 ## Row number over a partition
 
 ```csharp
-var rows = dataContext.Create<IComplexEntity>()
+var rows = dataContext.From<IComplexEntity>()
     .Select(e => new
     {
         e.Id,
@@ -93,7 +93,7 @@ The seeded `complex_entity` has a singleton `nullableint` partition (`id` 1) and
 `rank()` leaves a gap after a tie, `dense_rank()` does not. Both use the `WindowOrder` overload here:
 
 ```csharp
-var rows = dataContext.Create<IComplexEntity>()
+var rows = dataContext.From<IComplexEntity>()
     .Select(e => new
     {
         e.Id,
@@ -111,7 +111,7 @@ A descending key is written with `NORM.SQL.desc`. When several keys (or a mix of
 use the `WindowOrder[]` overload; partitions are supplied through the array overload:
 
 ```csharp
-var rows = dataContext.Create<IComplexEntity>()
+var rows = dataContext.From<IComplexEntity>()
     .Select(e => new
     {
         e.Id,
@@ -132,7 +132,7 @@ select id, row_number() over (partition by nullableint order by id desc) as 'r' 
 boundary; a `null` value in an existing row is returned unchanged:
 
 ```csharp
-var rows = dataContext.Create<IComplexEntity>()
+var rows = dataContext.From<IComplexEntity>()
     .Select(e => new
     {
         e.Id,
@@ -149,7 +149,7 @@ select id, lag(id, 1, 0) over (order by id) as 'prev', lead(nullableint, 2, 0) o
 ## Windowed aggregates
 
 ```csharp
-var rows = dataContext.Create<IComplexEntity>()
+var rows = dataContext.From<IComplexEntity>()
     .Select(e => new
     {
         e.Id,
@@ -187,7 +187,7 @@ units and `NORM.WindowFrameBound` has the boundaries:
 A framed running aggregate and a sliding window:
 
 ```csharp
-var rows = dataContext.Create<IComplexEntity>()
+var rows = dataContext.From<IComplexEntity>()
     .Select(e => new
     {
         e.Id,

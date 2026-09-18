@@ -26,11 +26,14 @@ public partial class QueryCommand
         dst.UnionPlanHash = UnionPlanHash;
         dst.ReferencedQueriesPlanHash = ReferencedQueriesPlanHash;
         dst.CtesPlanHash = CtesPlanHash;
+        dst.HintsPlanHash = HintsPlanHash;
+        dst._hints = _hints;
 
         dst.ResultType = ResultType;
         dst.Paging = Paging;
         dst.SingleRow = SingleRow;
         dst.IsDistinct = IsDistinct;
+        dst.GroupingType = GroupingType;
 
         dst._queryPlanComparer = _queryPlanComparer;
         dst._fromExpressionPlanComparer = _fromExpressionPlanComparer;

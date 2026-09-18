@@ -4,6 +4,9 @@ using System.Reflection;
 
 namespace nextorm.core;
 
+/// <summary>
+/// Helpers for rewriting and inspecting expression trees.
+/// </summary>
 public static class ExpressionExtensions
 {
     public static bool Has<T>(this Expression exp)
@@ -28,6 +31,10 @@ public static class ExpressionExtensions
         return visitor.Result;
     }
 }
+/// <summary>
+/// Expression visitor that operates on a single entity type.
+/// </summary>
+/// <typeparam name="T">The entity type the visitor expects at the leaves.</typeparam>
 public class TypeExpressionVisitor<T> : ExpressionVisitor
     where T : Expression
 {
@@ -48,6 +55,15 @@ public class TypeExpressionVisitor<T> : ExpressionVisitor
         return base.Visit(node);
     }
 }
+/// <summary>
+/// Expression visitor that operates over two entity types (used when translating join conditions).
+/// </summary>
+/// <typeparam name="T1">The first entity type.</typeparam>
+/// <typeparam name="T2">The second entity type.</typeparam>
+/// <remarks>
+/// The <c>Two</c> prefix is inconsistent with the arity style used elsewhere; see
+/// <c>API-NAMING-REVIEW.md</c> finding P1-14.
+/// </remarks>
 public class TwoTypeExpressionVisitor<T1, T2> : ExpressionVisitor
     where T1 : Expression
     where T2 : Expression
@@ -78,6 +94,14 @@ public class TwoTypeExpressionVisitor<T1, T2> : ExpressionVisitor
         return base.Visit(node);
     }
 }
+/// <summary>
+/// Replaces captured constant values with query parameters.
+/// </summary>
+/// <remarks>
+/// The plural <c>Constants</c> here is inconsistent with the singular
+/// <see cref="ReplaceConstantVisitor"/> in <c>Visitors/ReplaceExpressionVisitor.cs</c>; see
+/// <c>API-NAMING-REVIEW.md</c> finding P1-14.
+/// </remarks>
 public class ReplaceConstantsExpressionVisitor : ExpressionVisitor
 {
     private readonly List<(ParameterExpression, object?)> _params = new();
@@ -145,6 +169,11 @@ public class ReplaceConstantsExpressionVisitor : ExpressionVisitor
         return typeof(OuterRefMarker<>).MakeGenericType(type).GetConstructor([typeof(int)])!;
     }
 }
+/// <summary>
+/// Expression visitor whose traversal is driven by a caller-supplied predicate.
+/// </summary>
+/// <typeparam name="T">The entity type the predicate is evaluated against.</typeparam>
+/// <param name="predicate">Receives the current node and a compiled predicate for <typeparamref name="T"/>.</param>
 public class PredicateExpressionVisitor<T>(Func<Expression?, Func<T, bool>, bool> predicate) : ExpressionVisitor
 {
     private readonly Func<Expression?, Func<T, bool>, bool> _predicate = predicate;

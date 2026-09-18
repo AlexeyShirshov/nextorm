@@ -78,5 +78,8 @@ internal sealed class SqliteTestProvider : ITestProvider
             (1, null, 'dadfasd', 2, 3, 4, 5, 6, '2023-01-01 10:00:00', '2023-01-01', 1, 'sdf'),
             (2, 1, 'xxx', 2, 3, 4, 5, 6, '2023-01-01 00:00:00', '2023-01-01', 0, 'asdfgoi'),
             (3, 1, null, 2, 3, null, 5, 6, '2023-01-01 00:00:00', '2023-01-01', 0, '34mfs');
+
+        create table binary_entity (id integer primary key, data blob);
+        insert into binary_entity (id, data) values (1, X'01020304'), (2, null);
         """;
 }

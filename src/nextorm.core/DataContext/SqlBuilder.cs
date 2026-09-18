@@ -6,6 +6,13 @@ using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
 
+/// <summary>
+/// Builds SQL text and collects parameters for one command using the active dialect and providers.
+/// </summary>
+/// <remarks>
+/// This is an implementation detail (note the nine-parameter constructor). Prefer making it
+/// <c>internal</c> before it is frozen as public API. See <c>API-NAMING-REVIEW.md</c> finding P1-18.
+/// </remarks>
 public struct SqlBuilder
 {
     private readonly ISqlDialect _dialect;
@@ -94,9 +101,15 @@ public struct SqlBuilder
                 var grouping = cmd.GroupingList;
                 if (grouping?.Length > 0)
                 {
-                    if (!_paramMode) sqlBuilder!.AppendLine().Append(" group by ");
+                    if (cmd.GroupingType == GroupingType.Rollup && !_dialect.SupportsRollup)
+                        throw new NotSupportedException("The ROLLUP grouping modifier is not supported by this SQL dialect");
+
+                    if (cmd.GroupingType == GroupingType.Cube && !_dialect.SupportsCube)
+                        throw new NotSupportedException("The CUBE grouping modifier is not supported by this SQL dialect");
 
                     var groupingListCount = grouping.Length;
+                    var columns = _paramMode ? null : new string[groupingListCount];
+
                     for (var i = 0; i < groupingListCount; i++)
                     {
                         var item = grouping[i];
@@ -104,20 +117,16 @@ public struct SqlBuilder
 
                         if (!_paramMode)
                         {
-                            sqlBuilder!.Append(column);
-
-                            if (needAliasForColumn)
-                            {
-                                sqlBuilder.Append(_dialect.MakeColumnAlias(item.PropertyName));
-                            }
-
-                            sqlBuilder.Append(", ");
+                            columns![i] = needAliasForColumn
+                                ? column + _dialect.MakeColumnAlias(item.PropertyName)
+                                : column;
                         }
                     }
 
                     if (!_paramMode)
                     {
-                        sqlBuilder!.Length -= 2;
+                        sqlBuilder!.AppendLine().Append(" group by ")
+                            .Append(_dialect.MakeGrouping(string.Join(", ", columns!), cmd.GroupingType));
                     }
 
                     if (cmd.Having is not null)
@@ -248,10 +257,24 @@ public struct SqlBuilder
                 if (withClause is not null)
                     sqlBuilder!.Insert(0, withClause);
 
-                if (maxRecursionStmt is not null)
-                    sqlBuilder!.Append(' ').Append(maxRecursionStmt);
+                var hints = cmd.Hints;
+                if (hints is { Count: > 0 })
+                {
+                    if (!_dialect.SupportsQueryHints)
+                        throw new NotSupportedException("Query hints are not supported by this SQL dialect");
 
-                r = sqlBuilder!.ToString();
+                    // The dialect owns the final placement. It also receives the CTE maxrecursion
+                    // option so a dialect that must coalesce it into one trailing OPTION clause
+                    // (SQL Server) can do so instead of the caller appending a second clause.
+                    r = _dialect.RenderQueryHints(sqlBuilder!.ToString(), hints, maxRecursionStmt);
+                }
+                else
+                {
+                    if (maxRecursionStmt is not null)
+                        sqlBuilder!.Append(' ').Append(maxRecursionStmt);
+
+                    r = sqlBuilder!.ToString();
+                }
             }
 
 
@@ -340,6 +363,9 @@ public struct SqlBuilder
     {
         if (join.JoinType is JoinType.Right or JoinType.Full && !_dialect.SupportsRightFullJoin)
             throw new NotSupportedException($"The {join.JoinType} join is not supported by this SQL dialect");
+
+        if (join.JoinType is JoinType.CrossApply or JoinType.OuterApply)
+            return MakeApplyJoin(join);
 
         var sqlBuilder = _paramMode ? null : StringBuilderPool.Shared.Get();
 
@@ -451,6 +477,22 @@ public struct SqlBuilder
                 StringBuilderPool.Shared.Return(sqlBuilder);
         }
     }
+    /// <summary>
+    /// Renders a <c>CROSS APPLY</c>/<c>OUTER APPLY</c> (or lateral) source. Unlike a regular join
+    /// there is no <c>ON</c> condition: the clause is produced entirely by the dialect. The source is
+    /// still rendered through <see cref="MakeFrom"/> so a derived table/table-valued function is
+    /// parenthesised and aliased, and in parameter mode it is walked for captured parameters.
+    /// </summary>
+    private string? MakeApplyJoin(JoinExpression join)
+    {
+        if (!_dialect.SupportsApply)
+            throw new NotSupportedException($"The {join.JoinType} join is not supported by this SQL dialect");
+
+        var source = MakeFrom(join.From, true, join.EntityType ?? join.From.SourceType, false);
+
+        return _paramMode ? null : _dialect.MakeApply(join.JoinType, source);
+    }
+
     private void MakeWhere(StringBuilder? target, Type entityType, Expression condition, int dim)
     {
         // if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Where expression: {exp}", condition);
@@ -466,7 +508,7 @@ public struct SqlBuilder
     private string MakeSort(Type entityType, Expression sorting, int dim)
     {
         // if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Where expression: {exp}", condition);
-        using var visitor = new BaseExpressionVisitor(entityType, _dialect, _columnsProvider, dim, _aliasProvider, _paramProvider, _queryProvider, true, _paramMode, _params, Logger);
+        using var visitor = new BaseExpressionVisitor(new VisitorOptions(entityType, _dialect, _columnsProvider, dim, _aliasProvider, _paramProvider, _queryProvider, true, _paramMode, _params, Logger));
         visitor.Visit(sorting);
 
         if (_paramMode) return string.Empty;
@@ -475,7 +517,7 @@ public struct SqlBuilder
     }
     public (bool NeedAliasForColumn, string Column) MakeColumn(SelectExpression selExp, Type entityType, bool dontNeedAlias, bool renameAware = false)
     {
-        using var visitor = new BaseExpressionVisitor(entityType, _dialect, _columnsProvider, 0, _aliasProvider, _paramProvider, _queryProvider, dontNeedAlias, _paramMode, _params, Logger);
+        using var visitor = new BaseExpressionVisitor(new VisitorOptions(entityType, _dialect, _columnsProvider, 0, _aliasProvider, _paramProvider, _queryProvider, dontNeedAlias, _paramMode, _params, Logger));
         visitor.Visit(selExp.Expression);
 
         if (_paramMode) return (false, string.Empty);
@@ -495,6 +537,9 @@ public struct SqlBuilder
     }
     public string MakeFrom(FromExpression from, bool needAlias, Type? entityType, bool hasJoins)
     {
+        if (from.LinqSource is not null)
+            throw new NotSupportedException("SelectMany/GroupJoin sources are not supported by the SQL providers; they are only available on the in-memory provider.");
+
         if (from.TableFunction is not null)
             return MakeTableFunction(from, needAlias, entityType, hasJoins);
 
@@ -576,7 +621,7 @@ public struct SqlBuilder
         {
             for (var (i, cnt) = (0, arguments.Count); i < cnt; i++)
             {
-                using var visitor = new BaseExpressionVisitor(entityType ?? typeof(object), _dialect, _columnsProvider, 0, _aliasProvider, _paramProvider, _queryProvider, true, true, _params, Logger);
+                using var visitor = new BaseExpressionVisitor(new VisitorOptions(entityType ?? typeof(object), _dialect, _columnsProvider, 0, _aliasProvider, _paramProvider, _queryProvider, true, true, _params, Logger));
                 visitor.Visit(arguments[i]);
             }
 
@@ -593,7 +638,7 @@ public struct SqlBuilder
                 if (i > 0)
                     sqlBuilder.Append(", ");
 
-                using var visitor = new BaseExpressionVisitor(entityType ?? typeof(object), _dialect, _columnsProvider, 0, _aliasProvider, _paramProvider, _queryProvider, true, false, _params, Logger);
+                using var visitor = new BaseExpressionVisitor(new VisitorOptions(entityType ?? typeof(object), _dialect, _columnsProvider, 0, _aliasProvider, _paramProvider, _queryProvider, true, false, _params, Logger));
                 visitor.Visit(arguments[i]);
                 sqlBuilder.Append(visitor.ToString());
             }

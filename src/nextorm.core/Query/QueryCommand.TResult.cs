@@ -90,6 +90,43 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     public Task<List<TResult>> ToListAsync(params object[] @params) => _dataContext!.ToListAsync(_dataContext.GetPreparedQueryCommand(this, false, true, CancellationToken.None), @params, CancellationToken.None);
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Task<List<TResult>> ToListAsync(CancellationToken cancellationToken, params object[] @params) => _dataContext!.ToListAsync(_dataContext.GetPreparedQueryCommand(this, false, true, cancellationToken), @params, cancellationToken);
+    public TResult[] ToArray(params ReadOnlySpan<object?> @params) => ToList(@params).ToArray();
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Task<TResult[]> ToArrayAsync(params object[] @params) => ToArrayAsync(CancellationToken.None, @params);
+    public async Task<TResult[]> ToArrayAsync(CancellationToken cancellationToken, params object[] @params)
+        => (await ToListAsync(cancellationToken, @params).ConfigureAwait(false)).ToArray();
+    public HashSet<TResult> ToHashSet(params ReadOnlySpan<object?> @params) => new(ToList(@params));
+    public HashSet<TResult> ToHashSet(IEqualityComparer<TResult>? comparer, params ReadOnlySpan<object?> @params) => new(ToList(@params), comparer);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Task<HashSet<TResult>> ToHashSetAsync(params object[] @params) => ToHashSetAsync(CancellationToken.None, @params);
+    public async Task<HashSet<TResult>> ToHashSetAsync(CancellationToken cancellationToken, params object[] @params)
+        => new(await ToListAsync(cancellationToken, @params).ConfigureAwait(false));
+    public async Task<HashSet<TResult>> ToHashSetAsync(IEqualityComparer<TResult>? comparer, CancellationToken cancellationToken, params object[] @params)
+        => new(await ToListAsync(cancellationToken, @params).ConfigureAwait(false), comparer);
+    public Dictionary<TKey, TResult> ToDictionary<TKey>(Func<TResult, TKey> keySelector, params ReadOnlySpan<object?> @params) where TKey : notnull
+        => ToDictionary(keySelector, null, @params);
+    public Dictionary<TKey, TResult> ToDictionary<TKey>(Func<TResult, TKey> keySelector, IEqualityComparer<TKey>? comparer, params ReadOnlySpan<object?> @params) where TKey : notnull
+    {
+        var list = ToList(@params);
+        var dict = new Dictionary<TKey, TResult>(list.Count, comparer);
+        foreach (var item in list)
+            dict.Add(keySelector(item), item);
+        return dict;
+    }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Task<Dictionary<TKey, TResult>> ToDictionaryAsync<TKey>(Func<TResult, TKey> keySelector, params object[] @params) where TKey : notnull
+        => ToDictionaryAsync(keySelector, CancellationToken.None, @params);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Task<Dictionary<TKey, TResult>> ToDictionaryAsync<TKey>(Func<TResult, TKey> keySelector, CancellationToken cancellationToken, params object[] @params) where TKey : notnull
+        => ToDictionaryAsync(keySelector, null, cancellationToken, @params);
+    public async Task<Dictionary<TKey, TResult>> ToDictionaryAsync<TKey>(Func<TResult, TKey> keySelector, IEqualityComparer<TKey>? comparer, CancellationToken cancellationToken, params object[] @params) where TKey : notnull
+    {
+        var list = await ToListAsync(cancellationToken, @params).ConfigureAwait(false);
+        var dict = new Dictionary<TKey, TResult>(list.Count, comparer);
+        foreach (var item in list)
+            dict.Add(keySelector(item), item);
+        return dict;
+    }
     public bool Any() => Any(ReadOnlySpan<object?>.Empty);
     public bool Any(params ReadOnlySpan<object?> @params)
     {
@@ -103,7 +140,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
                 PrepareCommand(false, CancellationToken.None);
             }
 
-            queryCommand = Entity<TResult>.GetAnyCommand(_dataContext!, this);
+            queryCommand = EntityBuilder<TResult>.GetAnyCommand(_dataContext!, this);
         }
 
         var preparedCommand = _dataContext!.GetPreparedQueryCommand(queryCommand, false, true, CancellationToken.None);
@@ -121,7 +158,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
                 PrepareCommand(false, cancellationToken);
             }
 
-            queryCommand = Entity<TResult>.GetAnyCommand(_dataContext!, this);
+            queryCommand = EntityBuilder<TResult>.GetAnyCommand(_dataContext!, this);
         }
 
         var preparedCommand = _dataContext!.GetPreparedQueryCommand(queryCommand, false, true, cancellationToken);
@@ -245,6 +282,43 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     {
         return new QueryCommand<TResult>(null, null, _srcType, null, CloneForCache(Joins), Paging, _sorting, null, _having, Logger);
     }
+    /// <summary>
+    /// Builds the command that returns the last row of the ordered query by reversing every
+    /// <c>ORDER BY</c> direction and reusing the <c>First</c> path. A query without <c>ORDER BY</c>
+    /// has no defined last row, so it is rejected rather than returning an arbitrary one.
+    /// </summary>
+    private QueryCommand<TResult> ForLast()
+    {
+        if (_sorting is null || _sorting.Length == 0)
+            throw new InvalidOperationException("Last/LastOrDefault requires an ORDER BY; the source order is not defined without one.");
+
+        var reversed = new Sorting[_sorting.Length];
+        for (var i = 0; i < _sorting.Length; i++)
+        {
+            var sorting = _sorting[i];
+            var flipped = sorting.ColumnIndex is int columnIndex
+                ? new Sorting(columnIndex)
+                : new Sorting(sorting.SortExpression!);
+            flipped.Direction = sorting.Direction == OrderDirection.Asc ? OrderDirection.Desc : OrderDirection.Asc;
+            flipped.PreparedExpression = sorting.PreparedExpression;
+            reversed[i] = flipped;
+        }
+
+        var cmd = new QueryCommand<TResult>(_dataContext, _exp, _srcType, _condition, Joins, Paging, reversed, _groupExp, _having, Logger);
+        CopyTo(cmd, true);
+        cmd.ResetPreparation();
+        return cmd;
+    }
+    public TResult Last() => Last(ReadOnlySpan<object?>.Empty);
+    public TResult Last(params ReadOnlySpan<object?> @params) => ForLast().First(@params);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Task<TResult> LastAsync(params object[] @params) => LastAsync(CancellationToken.None, @params);
+    public Task<TResult> LastAsync(CancellationToken cancellationToken, params object[] @params) => ForLast().FirstAsync(cancellationToken, @params);
+    public TResult? LastOrDefault() => LastOrDefault(ReadOnlySpan<object?>.Empty);
+    public TResult? LastOrDefault(params ReadOnlySpan<object?> @params) => ForLast().FirstOrDefault(@params);
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Task<TResult?> LastOrDefaultAsync(params object[] @params) => LastOrDefaultAsync(CancellationToken.None, @params);
+    public Task<TResult?> LastOrDefaultAsync(CancellationToken cancellationToken, params object[] @params) => ForLast().FirstOrDefaultAsync(cancellationToken, @params);
     public QueryCommand<TResult> OrderBy(int columnIndex, OrderDirection direction)
     {
         if (columnIndex < 1) throw new ArgumentException("Column index must be greater than zero", nameof(columnIndex));
@@ -266,6 +340,19 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
         var cmd = (QueryCommand<TResult>)Clone();
         cmd.ResetPreparation();
         cmd.IsDistinct = true;
+        return cmd;
+    }
+    /// <summary>
+    /// Returns a new command carrying statement-level query hints, for example SQL Server
+    /// <c>"recompile"</c> (rendered as <c>OPTION (recompile)</c>). Repeated calls accumulate hints.
+    /// A dialect that does not support query hints rejects a command that carries them when its SQL
+    /// is built.
+    /// </summary>
+    public QueryCommand<TResult> Hint(params string[] hints)
+    {
+        var cmd = (QueryCommand<TResult>)Clone();
+        cmd.ResetPreparation();
+        cmd.AddHints(hints);
         return cmd;
     }
     public QueryCommand<TResult> Union<T>(QueryCommand<T> queryCommand)
@@ -308,6 +395,18 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
         var cmd = (QueryCommand<TResult>)Clone();
         cmd.ResetPreparation();
         cmd.SetOperation(queryCommand, UnionType.ExceptAll);
+        return cmd;
+    }
+
+    /// <summary>
+    /// Clone of this command with the set operation removed, so the first operand of a
+    /// <c>UNION</c>/<c>INTERSECT</c>/<c>EXCEPT</c> can be executed independently.
+    /// </summary>
+    internal QueryCommand<TResult> CloneWithoutUnion()
+    {
+        var cmd = (QueryCommand<TResult>)Clone();
+        cmd.ClearUnion();
+        cmd.ResetPreparation();
         return cmd;
     }
 

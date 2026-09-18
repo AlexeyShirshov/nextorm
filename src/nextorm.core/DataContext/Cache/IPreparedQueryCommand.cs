@@ -2,6 +2,9 @@ using System.Runtime.CompilerServices;
 
 namespace nextorm.core;
 
+/// <summary>
+/// A query that has been compiled once and can be executed repeatedly.
+/// </summary>
 public interface IPreparedQueryCommand<TResult>
 {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

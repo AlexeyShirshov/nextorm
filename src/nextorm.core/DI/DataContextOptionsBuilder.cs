@@ -2,6 +2,14 @@ using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
 
+/// <summary>
+/// Configures and creates an <see cref="IDataContext"/>.
+/// </summary>
+/// <remarks>
+/// The <c>DbContext</c> prefix is inconsistent with the rest of the library, which otherwise uses
+/// <c>DataContext</c> (for example <c>DataContextOptionsBuilderExtensions</c>). Recommended name:
+/// <c>DataContextBuilder</c>. See <c>API-NAMING-REVIEW.md</c> finding P2-22.
+/// </remarks>
 public class DbContextBuilder
 {
     //private readonly Dictionary<string, object> _props = new();

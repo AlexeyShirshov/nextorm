@@ -71,7 +71,7 @@ public sealed class WindowFunction<T>
 ## Номер строки по секции
 
 ```csharp
-var rows = dataContext.Create<IComplexEntity>()
+var rows = dataContext.From<IComplexEntity>()
     .Select(e => new
     {
         e.Id,
@@ -94,7 +94,7 @@ select id, row_number() over (partition by nullableint order by id) as 'rn' from
 `WindowOrder`:
 
 ```csharp
-var rows = dataContext.Create<IComplexEntity>()
+var rows = dataContext.From<IComplexEntity>()
     .Select(e => new
     {
         e.Id,
@@ -112,7 +112,7 @@ select id, rank() over (order by id) as 'r', dense_rank() over (order by id) as 
 используйте перегрузку `WindowOrder[]`; секции передаются через перегрузку с массивом:
 
 ```csharp
-var rows = dataContext.Create<IComplexEntity>()
+var rows = dataContext.From<IComplexEntity>()
     .Select(e => new
     {
         e.Id,
@@ -134,7 +134,7 @@ select id, row_number() over (partition by nullableint order by id desc) as 'r' 
 изменений:
 
 ```csharp
-var rows = dataContext.Create<IComplexEntity>()
+var rows = dataContext.From<IComplexEntity>()
     .Select(e => new
     {
         e.Id,
@@ -151,7 +151,7 @@ select id, lag(id, 1, 0) over (order by id) as 'prev', lead(nullableint, 2, 0) o
 ## Оконные агрегаты
 
 ```csharp
-var rows = dataContext.Create<IComplexEntity>()
+var rows = dataContext.From<IComplexEntity>()
     .Select(e => new
     {
         e.Id,
@@ -189,7 +189,7 @@ select id, sum(id) over (partition by nullableint) as 'total', count(*) over (pa
 Агрегат с накопительной рамкой и скользящее окно:
 
 ```csharp
-var rows = dataContext.Create<IComplexEntity>()
+var rows = dataContext.From<IComplexEntity>()
     .Select(e => new
     {
         e.Id,

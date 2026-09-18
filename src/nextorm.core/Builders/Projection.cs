@@ -25,6 +25,13 @@ public interface IExtendableProjection : IProjection
     IProjection Extend<T>(T newItem);
 }
 
+/// <summary>
+/// Accumulated result of a two-table join; items are exposed as <c>t1</c> and <c>t2</c>.
+/// </summary>
+/// <remarks>
+/// The public members use lower-case names (<c>t1</c>, <c>t2</c>) which violates PascalCase; the
+/// recommended surface is <c>T1</c>, <c>T2</c>. See <c>API-NAMING-REVIEW.md</c> finding P0-7.
+/// </remarks>
 public class Projection<T1, T2> : IExtendableProjection
 {
     public T1 t1 { get; init; } = default!;
@@ -41,6 +48,9 @@ public class Projection<T1, T2> : IExtendableProjection
     }
 }
 
+/// <summary>
+/// Accumulated result of a three-table join; items are exposed as <c>t1</c>..<c>t3</c>.
+/// </summary>
 public class Projection<T1, T2, T3> : IExtendableProjection
 {
     public T1 t1 { get; init; } = default!;
@@ -59,6 +69,9 @@ public class Projection<T1, T2, T3> : IExtendableProjection
     }
 }
 
+/// <summary>
+/// Accumulated result of a four-table join; items are exposed as <c>t1</c>..<c>t4</c>.
+/// </summary>
 public class Projection<T1, T2, T3, T4> : IExtendableProjection
 {
     public T1 t1 { get; init; } = default!;
@@ -79,6 +92,9 @@ public class Projection<T1, T2, T3, T4> : IExtendableProjection
     }
 }
 
+/// <summary>
+/// Accumulated result of a five-table join; items are exposed as <c>t1</c>..<c>t5</c>.
+/// </summary>
 public class Projection<T1, T2, T3, T4, T5> : IExtendableProjection
 {
     public T1 t1 { get; init; } = default!;
@@ -101,6 +117,9 @@ public class Projection<T1, T2, T3, T4, T5> : IExtendableProjection
     }
 }
 
+/// <summary>
+/// Accumulated result of a six-table join; items are exposed as <c>t1</c>..<c>t6</c>.
+/// </summary>
 public class Projection<T1, T2, T3, T4, T5, T6> : IExtendableProjection
 {
     public T1 t1 { get; init; } = default!;
@@ -125,6 +144,9 @@ public class Projection<T1, T2, T3, T4, T5, T6> : IExtendableProjection
     }
 }
 
+/// <summary>
+/// Accumulated result of a seven-table join; items are exposed as <c>t1</c>..<c>t7</c>.
+/// </summary>
 public class Projection<T1, T2, T3, T4, T5, T6, T7> : IExtendableProjection
 {
     public T1 t1 { get; init; } = default!;
@@ -156,6 +178,11 @@ public class Projection<T1, T2, T3, T4, T5, T6, T7> : IExtendableProjection
 /// <see cref="IExtendableProjection"/>, so no ninth item can be absorbed; combining that with
 /// <c>EntityP8&lt;T1..T8&gt;</c> (which exposes no further join methods) makes exceeding the
 /// limit a compile-time error.
+/// </summary>
+/// <summary>
+/// Accumulated result of the maximum supported eight-table join; items are exposed as
+/// <c>t1</c>..<c>t8</c>. This projection deliberately does not implement
+/// <see cref="IExtendableProjection"/>.
 /// </summary>
 public class Projection<T1, T2, T3, T4, T5, T6, T7, T8> : IProjection
 {

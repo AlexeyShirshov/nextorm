@@ -2,6 +2,9 @@ using System.Linq.Expressions;
 
 namespace nextorm.core;
 
+/// <summary>
+/// Derives column aliases from a projection expression.
+/// </summary>
 public class AliasFromProjectionVisitor : ExpressionVisitor
 {
     private string? _alias;

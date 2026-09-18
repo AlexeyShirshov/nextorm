@@ -3,6 +3,9 @@ using System.Linq.Expressions;
 using System.Reflection;
 namespace nextorm.core;
 
+/// <summary>
+/// Collects the outer references of a correlated subquery.
+/// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE1006:Naming Styles", Justification = "Static readonly reflection-metadata fields (AnyMIGeneric, ConcatMI, ...) are intentionally PascalCase as immutable lookup tables; IDE1006 is a suggestion and is not enforced by the build.")]
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Major Code Smell", "S3011:Reflection should not be used to increase accessibility of classes, methods, or fields", Justification = "Reflection is required to bind the private Any/Concat members into expression trees; there is no public API alternative, and the lookups are static and confined to this visitor.")]
 public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
@@ -16,7 +19,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 
     //private readonly List<QueryCommand>? _refs;
     private static readonly MethodInfo AnyMIGeneric = typeof(CorrelatedQueryExpressionVisitor).GetMethod(nameof(Any), BindingFlags.NonPublic | BindingFlags.Instance)!;
-    //private static MethodInfo ToCommandMI = typeof(Entity<>).GetMethod("ToCommand", BindingFlags.Public | BindingFlags.Instance)!;
+    //private static MethodInfo ToCommandMI = typeof(EntityBuilder<>).GetMethod("ToCommand", BindingFlags.Public | BindingFlags.Instance)!;
     private static readonly MethodInfo ConcatMI = typeof(string).GetMethods(BindingFlags.Public | BindingFlags.Static).First(it => it.Name == nameof(string.Concat) && it.GetParameters().Length == 2);
     private static readonly PropertyInfo ReferencedQueriesPI = typeof(IQueryProvider).GetProperty(nameof(IQueryProvider.ReferencedQueries), BindingFlags.Public | BindingFlags.Instance)!;
     private static readonly PropertyInfo ItemPI = typeof(IReadOnlyList<QueryCommand>).GetProperty("Item")!;
@@ -171,7 +174,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 
             return node;
         }
-        else if (node.Object is not null && node.Object.Type.IsGenericType && node.Object.Type.GetGenericTypeDefinition().IsAssignableTo(typeof(Entity<>)))
+        else if (node.Object is not null && node.Object.Type.IsGenericType && node.Object.Type.GetGenericTypeDefinition().IsAssignableTo(typeof(EntityBuilder<>)))
         {
             QueryCommand cmd;
 
@@ -392,7 +395,13 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             }
 
             if (leftNode is not null || rightNode is not null)
-                return Expression.MakeBinary(node.NodeType, Expression.Convert(leftNode ?? node.Left, typeof(object)), rightNode ?? node.Right);
+            {
+                // Both operands have to be boxed: a value-typed operand (for example the scalar
+                // returned by an array any/all or an aggregate) has no == operator against object.
+                return Expression.MakeBinary(node.NodeType,
+                    Expression.Convert(leftNode ?? node.Left, typeof(object)),
+                    Expression.Convert(rightNode ?? node.Right, typeof(object)));
+            }
         }
 
         return base.VisitBinary(node);

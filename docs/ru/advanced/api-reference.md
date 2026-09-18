@@ -33,10 +33,10 @@
 
 | Тип | Описание | Источник |
 |---|---|---|
-| `Entity<TEntity>` | Fluent, неизменяемый построитель запросов для отображённого типа сущности. | `src/nextorm.core/Builders/Entity.cs` |
-| `Entity` | Fluent-построитель для источника псевдонима/таблицы без типа сущности (режим `TableAlias`). | `src/nextorm.core/Builders/Entity.cs` |
+| `EntityBuilder<TEntity>` | Fluent, неизменяемый построитель запросов для отображённого типа сущности. | `src/nextorm.core/Builders/EntityBuilder.cs` |
+| `EntityBuilder` | Fluent-построитель для источника псевдонима/таблицы без типа сущности (режим `TableAlias`). | `src/nextorm.core/Builders/EntityBuilder.cs` |
 | `EntityP2<T1,T2>` … `EntityP8<T1..T8>` | Накопительные построители соединений; арность от 2 до 8. | `src/nextorm.core/Builders/Joins/JoinCommandBuilder.cs` |
-| `EntityBuilder<T>` | Fluent-конфигурация метаданных сущности, используемая `IDataContext.Create<T>(...)`. | `src/nextorm.core/DataContext/Meta/EntityBuilder.cs` |
+| `EntityMetadataBuilder<T>` | Fluent-конфигурация метаданных сущности, используемая `IDataContext.From<T>(...)`. | `src/nextorm.core/DataContext/Meta/EntityMetadataBuilder.cs` |
 | `Projection<T1,T2>` … `Projection<T1..T8>` | Форма результата соединённого запроса; предоставляет `t1`…`t8`. | `src/nextorm.core/Builders/Projection.cs` |
 | `IProjection` / `IExtendableProjection` | Маркеры для накопленных проекций соединений (арность 8 не расширяема). | `src/nextorm.core/Builders/Projection.cs` |
 | `CteQuery` | Fluent-область, собирающая объявления `WITH`. | `src/nextorm.core/Builders/CteQuery.cs` |
@@ -49,14 +49,14 @@
 | Тип | Описание | Источник |
 |---|---|---|
 | `QueryCommand` | Необобщённая команда запроса, хранящая план/состояние, общие для всех результатов. | `src/nextorm.core/Query/QueryCommand.cs` |
-| `QueryCommand<TResult>` | Типизированная команда запроса с терминалами (`ToList`, `First`, `Union`, `Distinct`, `Prepare`, …). | `src/nextorm.core/Query/QueryCommand.TResult.cs` |
+| `QueryCommand<TResult>` | Типизированная команда запроса с терминалами (`ToList`, `First`, `Union`, `Distinct`, `Hint`, `Prepare`, …). | `src/nextorm.core/Query/QueryCommand.TResult.cs` |
 | `IPreparedQueryCommand<TResult>` | Подготовленная команда; её члены по умолчанию выполняют её против переданного `IDataContext`. | `src/nextorm.core/DataContext/Cache/IPreparedQueryCommand.cs` |
 | `NORM` | Статическая точка входа: `NORM.SQL` и `NORM.Param<T>(idx)`. | `src/nextorm.core/Query/NORM.cs` |
-| `NORM_SQL` | Поверхность SQL-функций: `exists`, `like`, `@in`, `any`/`all`, агрегаты, оконные функции. | `src/nextorm.core/Query/NORM.cs` |
+| `NORM_SQL` | Поверхность SQL-функций: `exists`, `like`, `@in`, `any`/`all` (подзапрос и массив), агрегаты (включая агрегаты с `FILTER` и `string_agg`/`array_agg`), оконные функции, `nullif`/`greatest`/`least`/`date_trunc`/`date_add`/`end_of_month`, функции массивов и JSON/JSONB PostgreSQL, текстовые JSON-функции SQL Server (`json_value`/`json_query`/`json_modify`), а также табличные функции `generate_series`/`unnest`/`string_split`. | `src/nextorm.core/Query/NORM.cs` |
 | `NORM.WindowFunction<T>` | Незавершённый вызов окна; завершите его с помощью `Over(...)`. | `src/nextorm.core/Query/NORM.cs` |
 | `NORM.WindowOrder` | Упорядоченный ключ окна плюс `OrderDirection`. | `src/nextorm.core/Query/NORM.cs` |
 | `NORM.WindowFrame`, `WindowFrameBound`, `WindowFrameType`, `WindowFrameBoundKind` | Спецификация фрейма `ROWS`/`RANGE` и его границы. | `src/nextorm.core/Query/NORM.cs` |
-| `DataContextExtensions` | Независимые от провайдера помощники: `Create<T>`, `From`, `FromTableFunction`, терминалы подготовленных команд. | `src/nextorm.core/DataContext/DataContextExtensions.cs` |
+| `DataContextExtensions` | Независимые от провайдера помощники: `From<T>`, `From`, `FromTableFunction`, терминалы подготовленных команд. | `src/nextorm.core/DataContext/DataContextExtensions.cs` |
 | `IDataContextExtensions` | Точки входа CTE `With` / `WithRecursive`. | `src/nextorm.core/DataContext/IDataContextExtensions.cs` |
 
 ### Атрибуты отображения
@@ -72,7 +72,7 @@
 | Тип | Описание | Источник |
 |---|---|---|
 | `OrderDirection` | `Asc` / `Desc`. | `src/nextorm.core/Expressions/OrderDirection.cs` |
-| `JoinType` | `Inner`, `Left`, `Right`, `Full`, `Cross`, `FullCross`. | `src/nextorm.core/Expressions/JoinExpression.cs` |
+| `JoinType` | `Inner`, `Left`, `Right`, `Full`, `Cross`, `FullCross`, `CrossApply`, `OuterApply`. | `src/nextorm.core/Expressions/JoinExpression.cs` |
 | `JoinExpression` | Одно соединение: условие, тип и присоединяемый источник. | `src/nextorm.core/Expressions/JoinExpression.cs` |
 | `FromExpression` / `SelectExpression` | Источник FROM и метаданные проецируемого столбца. | `src/nextorm.core/Expressions/FromExpression.cs`, `src/nextorm.core/Expressions/SelectExpression.cs` |
 | `UnionType` | `None`, `Distinct`, `All`, `Intersect`, `IntersectAll`, `Except`, `ExceptAll`. | `src/nextorm.core/Expressions/UnionType.cs` |
@@ -108,15 +108,43 @@
 | `SqlServerDialect` | Синглтон `ISqlDialect` для SQL Server (`SqlServerDialect.Instance`). | `src/nextorm.sqlserver/SqlServerDialect.cs` |
 | `DataContextOptionsBuilderExtensions` | `UseSqlServer(string connectionString)` и `UseSqlServer(DbConnection)`. | `src/nextorm.sqlserver/DI/DataContextOptionsBuilderExtensions.cs` |
 
+## Пространство имён `nextorm.mysql`
+
+| Тип | Описание | Источник |
+|---|---|---|
+| `MySqlDbContext` | `DbContext` поверх `MySqlConnector`. | `src/nextorm.mysql/MySqlDbContext.cs` |
+| `MySqlDialect` | Синглтон `ISqlDialect` для MySQL (`MySqlDialect.Instance`); не `sealed`, чтобы MariaDB мог наследоваться. | `src/nextorm.mysql/MySqlDialect.cs` |
+| `DataContextOptionsBuilderExtensions` | `UseMySql(string connectionString)` и `UseMySql(DbConnection)`. | `src/nextorm.mysql/DI/DataContextOptionsBuilderExtensions.cs` |
+
+## Пространство имён `nextorm.mariadb`
+
+| Тип | Описание | Источник |
+|---|---|---|
+| `MariaDbContext` | `DbContext` поверх `MySqlConnector`, наследуется от `MySqlDbContext`. | `src/nextorm.mariadb/MariaDbContext.cs` |
+| `MariaDbDialect` | Синглтон `ISqlDialect` для MariaDB (`MariaDbDialect.Instance`); отрисовка MySQL плюс `INTERSECT ALL`/`EXCEPT ALL`. | `src/nextorm.mariadb/MariaDbDialect.cs` |
+| `DataContextOptionsBuilderExtensions` | `UseMariaDb(string connectionString)` и `UseMariaDb(DbConnection)`. | `src/nextorm.mariadb/DI/DataContextOptionsBuilderExtensions.cs` |
+
+## Пространство имён `nextorm.clickhouse`
+
+| Тип | Описание | Источник |
+|---|---|---|
+| `ClickHouseDbContext` | `DbContext` поверх официального ADO.NET-провайдера `ClickHouse.Driver`. | `src/nextorm.clickhouse/ClickHouseDbContext.cs` |
+| `ClickHouseDialect` | Синглтон `ISqlDialect` для ClickHouse (`ClickHouseDialect.Instance`). | `src/nextorm.clickhouse/ClickHouseDialect.cs` |
+| `DataContextOptionsBuilderExtensions` | `UseClickHouse(string connectionString)` и `UseClickHouse(DbConnection)`. | `src/nextorm.clickhouse/DI/DataContextOptionsBuilderExtensions.cs` |
+
 ## См. также
 
 - [Provider overview](../providers/overview.md)
 - [SQLite](../providers/sqlite.md)
 - [SQL Server](../providers/sqlserver.md)
 - [PostgreSQL](../providers/postgres.md)
+- [MySQL](../providers/mysql.md)
+- [MariaDB](../providers/mariadb.md)
+- [ClickHouse](../providers/clickhouse.md)
 - [In-memory](../providers/in-memory.md)
 
 ---
 
 Source: `src/nextorm.core/**`, `src/nextorm.sqlite/**`, `src/nextorm.postgres/**`,
-`src/nextorm.sqlserver/**` (XML doc comments are the authoritative API documentation).
+`src/nextorm.sqlserver/**`, `src/nextorm.mysql/**`, `src/nextorm.mariadb/**`,
+`src/nextorm.clickhouse/**` (XML doc comments are the authoritative API documentation).

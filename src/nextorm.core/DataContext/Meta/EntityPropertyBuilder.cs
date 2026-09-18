@@ -3,6 +3,10 @@ using System.Reflection;
 
 namespace nextorm.core;
 
+/// <summary>
+/// Fluent builder for a single property mapping, returned by
+/// <see cref="EntityMetadataBuilder{T}.Property(System.Linq.Expressions.Expression{System.Func{T, object}})"/>.
+/// </summary>
 public class EntityPropertyBuilder<T>
 {
     private readonly Expression<Func<T, object>> _propertySelector;

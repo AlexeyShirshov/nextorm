@@ -1,6 +1,9 @@
 #define PARAM_CONDITION
 namespace nextorm.core;
 
+/// <summary>
+/// Compiled query over an in-memory entity set.
+/// </summary>
 public sealed class InMemoryCompiledQuery<TResult, TEntity> : PreparedQueryCommand<TResult, TEntity>
 {
 #if PARAM_CONDITION

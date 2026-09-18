@@ -15,6 +15,10 @@ public sealed class FromExpression
      {
           TableFunction = tableFunction;
      }
+     internal FromExpression(LinqSourceExpression linqSource)
+     {
+          LinqSource = linqSource;
+     }
      //public OneOf<string, QueryCommand> Table { get; }
      public readonly string? Table;
      public readonly QueryCommand? SubQuery;
@@ -24,6 +28,12 @@ public sealed class FromExpression
      /// and <see cref="SubQuery"/>.
      /// </summary>
      public readonly TableFunctionExpression? TableFunction;
+     /// <summary>
+     /// Set when the source is produced by <c>SelectMany</c>/<c>GroupJoin</c>. In-memory only: the SQL
+     /// providers reject it. Mutually exclusive with <see cref="Table"/>, <see cref="SubQuery"/> and
+     /// <see cref="TableFunction"/>.
+     /// </summary>
+     internal readonly LinqSourceExpression? LinqSource;
 
      // public override int GetHashCode()
      // {
@@ -52,7 +62,7 @@ public sealed class FromExpression
      {
           // A table function's call expression is immutable and never mutated during preparation,
           // so it can be shared with the cached plan (like Table/SourceType) instead of cloned.
-          if (!string.IsNullOrEmpty(Table) || SourceType is not null || TableFunction is not null) return this;
+          if (!string.IsNullOrEmpty(Table) || SourceType is not null || TableFunction is not null || LinqSource is not null) return this;
 
           return new FromExpression(SubQuery!.CloneForCache());// { TableAlias = TableAlias };
      }

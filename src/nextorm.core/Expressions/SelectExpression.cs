@@ -48,6 +48,7 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
     private readonly static MethodInfo GetInt16MI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetInt16))!;
     private readonly static MethodInfo GetByteMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetByte))!;
     private readonly static MethodInfo GetGuidMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetGuid))!;
+    private readonly static MethodInfo GetValueMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetValue))!;
     // internal int HashCode;
     internal int PlanHashCode;
 
@@ -98,6 +99,12 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
         else if (_realType == typeof(Guid))
         {
             return GetGuidMI;
+        }
+        else if (_realType == typeof(byte[]))
+        {
+            // Binary columns (bytea/varbinary/blob) have no typed reader getter; read the value
+            // through GetValue and let the caller cast it to byte[].
+            return GetValueMI;
         }
         else
             throw new NotSupportedException($"Property '{PropertyName}' with index ({Index}) has type {_realType} which is not supported");

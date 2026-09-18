@@ -1,4 +1,7 @@
 namespace nextorm.core;
+/// <summary>
+/// Base class for prepared (compiled) query commands.
+/// </summary>
 public class PreparedQueryCommand<TResult, TRecord> : IPreparedQueryCommand<TResult>
 {
     public readonly Func<TRecord, TResult>? MapDelegate;

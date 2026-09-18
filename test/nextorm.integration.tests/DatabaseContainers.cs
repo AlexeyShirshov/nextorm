@@ -23,5 +23,6 @@ internal sealed class DatabaseContainers : IAsyncLifetime
     {
         await PostgresContainer.DisposeContainerAsync().ConfigureAwait(false);
         await SqlServerContainer.DisposeContainerAsync().ConfigureAwait(false);
+        await ClickHouseContainer.DisposeContainerAsync().ConfigureAwait(false);
     }
 }

@@ -1,6 +1,10 @@
 using System.Linq.Expressions;
 using System.Reflection;
 namespace nextorm.core;
+/// <summary>
+/// Expression visitor that resolves the <see cref="System.Reflection.MemberInfo"/> referenced by a
+/// member expression.
+/// </summary>
 public class MemberExpressionVisitor : ExpressionVisitor
 {
     private MemberInfo? _mi;

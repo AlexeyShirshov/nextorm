@@ -23,7 +23,7 @@ public sealed class SqlTableFunctionAttribute : Attribute
 ```
 
 ```csharp
-public static Entity<T> FromTableFunction<T>(this IDataContext dataContext,
+public static EntityBuilder<T> FromTableFunction<T>(this IDataContext dataContext,
     Expression<Func<IQueryable<T>>> call);
 ```
 
@@ -32,7 +32,7 @@ anything else throws `ArgumentException`. The call is translated to `[schema.]na
 with the arguments rendered through the regular expression visitor, so **captured values become
 parameters**. nextorm only emits the call - the function must already exist in the target database.
 
-The returned `Entity<T>` is an ordinary query source, so `Where`, `OrderBy`, `GroupBy`, `Join`,
+The returned `EntityBuilder<T>` is an ordinary query source, so `Where`, `OrderBy`, `GroupBy`, `Join`,
 `Select`, paging and terminals all work over it.
 
 ## Declaring the mapping
@@ -128,7 +128,7 @@ A TVF is a normal source, so it can be joined to a table and read through the `t
 ```csharp
 var rows = dataContext
     .FromTableFunction(() => Tvf.AllRows())
-    .Join(dataContext.Create<IComplexEntity>(), (r, c) => r.Id == c.Id)
+    .Join(dataContext.From<IComplexEntity>(), (r, c) => r.Id == c.Id)
     .Select(p => new { p.t1.Value, p.t2.String })
     .ToList();
 ```
@@ -156,6 +156,47 @@ var rows = dataContext
     .ToList();
 // (1, 2), (2, 1)
 ```
+
+## Built-in table functions
+
+A few common table-valued functions are pre-declared with `[SqlTableFunction]`, so no user-defined
+wrapper is needed.
+
+`NORM.SQL.generate_series` and `NORM.SQL.unnest` are PostgreSQL (they return `NORM.IGenerateSeriesRow`
+with the `generate_series` column and `NORM.IUnnestRow<T>` with the `unnest` column):
+
+```csharp
+var numbers = dataContext
+    .FromTableFunction(() => NORM.SQL.generate_series(1L, 3L))
+    .Select(r => r.Value)
+    .ToList();
+
+var elements = dataContext
+    .FromTableFunction(() => NORM.SQL.unnest(NORM.Param<long[]>(0)))
+    .Select(r => r.Value)
+    .ToList(new long[] { 1, 2, 3 });
+```
+
+`NORM.SQL.string_split` is SQL Server 2016+ and returns `NORM.IStringSplitRow` (the single `value`
+column). The fragments are not guaranteed to be ordered, so add an `order by` when the input order
+matters:
+
+```csharp
+var csv = "a,b,c";
+var separator = ",";
+
+var fragments = dataContext
+    .FromTableFunction(() => NORM.SQL.string_split(csv, separator))
+    .Select(r => r.Value)
+    .ToList();
+```
+
+```sql
+select value from string_split(@csv, @separator) as [t1]
+```
+
+The mapped function must exist in the database — nextorm only emits the call, it does not create the
+function — so use the helper only on the provider that defines it.
 
 ## Provider differences
 

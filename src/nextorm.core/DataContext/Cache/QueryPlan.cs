@@ -2,6 +2,9 @@ using System.Diagnostics;
 
 namespace nextorm.core;
 
+/// <summary>
+/// Canonical, hashable description of a query, used as the key of the plan cache.
+/// </summary>
 public sealed class QueryPlan : IEquatable<QueryPlan>
 {
     public QueryCommand QueryCommand;

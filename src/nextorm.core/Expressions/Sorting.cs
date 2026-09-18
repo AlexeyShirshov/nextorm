@@ -1,5 +1,13 @@
 using System.Linq.Expressions;
 namespace nextorm.core;
+
+/// <summary>
+/// A single <c>ORDER BY</c> key: an expression or a resolved column index together with its direction.
+/// </summary>
+/// <remarks>
+/// Exposes public mutable fields (<see cref="Direction"/>, <see cref="PreparedExpression"/>); prefer
+/// validated properties. See <c>API-NAMING-REVIEW.md</c> finding P2-19.
+/// </remarks>
 public struct Sorting
 {
     private readonly Expression? _expression;

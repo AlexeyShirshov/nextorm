@@ -2,6 +2,9 @@ using System.Linq.Expressions;
 
 namespace nextorm.core;
 
+/// <summary>
+/// Replaces the query parameters referenced inside an expression.
+/// </summary>
 public class ReplaceParameterVisitor : ExpressionVisitor
 {
     private readonly Expression _parameter;
@@ -18,6 +21,13 @@ public class ReplaceParameterVisitor : ExpressionVisitor
         return base.VisitParameter(node);
     }
 }
+/// <summary>
+/// Replaces constant nodes inside an expression.
+/// </summary>
+/// <remarks>
+/// The singular name is inconsistent with <see cref="ReplaceConstantsExpressionVisitor"/> in
+/// <c>ExpressionExtensions.cs</c>; see <c>API-NAMING-REVIEW.md</c> finding P1-14.
+/// </remarks>
 public class ReplaceConstantVisitor : ExpressionVisitor
 {
     private readonly Expression _parameter;

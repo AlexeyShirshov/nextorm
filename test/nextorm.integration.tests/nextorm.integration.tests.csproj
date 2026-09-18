@@ -13,6 +13,7 @@
     <PackageReference Include="Microsoft.Data.Sqlite" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="System.Linq.Async" />
+    <PackageReference Include="Testcontainers.ClickHouse" />
     <PackageReference Include="Testcontainers.MsSql" />
     <PackageReference Include="Testcontainers.PostgreSql" />
     <PackageReference Include="xunit.v3" />
@@ -31,6 +32,7 @@
     <ProjectReference Include="..\..\src\nextorm.sqlite\nextorm.sqlite.csproj" />
     <ProjectReference Include="..\..\src\nextorm.postgres\nextorm.postgres.csproj" />
     <ProjectReference Include="..\..\src\nextorm.sqlserver\nextorm.sqlserver.csproj" />
+    <ProjectReference Include="..\..\src\nextorm.clickhouse\nextorm.clickhouse.csproj" />
   </ItemGroup>
 
 </Project>

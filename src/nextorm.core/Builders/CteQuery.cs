@@ -67,10 +67,10 @@ public sealed class CteQuery
         => new(_dataContext, Append(new CteDefinition(name, query, true, maxRecursion)));
 
     /// <summary>Starts a query whose source is the CTE declared as <paramref name="cteName"/>.</summary>
-    public Entity From(string cteName) => new(_dataContext, cteName) { Ctes = _ctes, Logger = _dataContext.CommandLogger };
+    public EntityBuilder From(string cteName) => new(_dataContext, cteName) { Ctes = _ctes, Logger = _dataContext.CommandLogger };
 
     /// <summary>Starts a query whose source is <paramref name="cte"/>.</summary>
-    public Entity From(CteDefinition cte) => From(cte.Name);
+    public EntityBuilder From(CteDefinition cte) => From(cte.Name);
 
     private IReadOnlyList<CteDefinition> Append(CteDefinition cte)
     {

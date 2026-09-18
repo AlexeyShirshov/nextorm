@@ -29,4 +29,26 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
         r[0].Id.Should().Be(1);
     }
+
+    [Fact]
+    public void DateAdd_ShouldShiftDate()
+    {
+        var r = _sut.ComplexEntity
+            .Where(x => x.Id == 1)
+            .Select(x => NORM.SQL.date_add("day", 1, x.Datetime))
+            .First();
+
+        r.Should().Be(new DateTime(2023, 1, 2, 10, 0, 0));
+    }
+
+    [Fact]
+    public void EndOfMonth_ShouldReturnLastDay()
+    {
+        var r = _sut.ComplexEntity
+            .Where(x => x.Id == 1)
+            .Select(x => NORM.SQL.end_of_month(x.Datetime))
+            .First();
+
+        r.Should().Be(new DateTime(2023, 1, 31));
+    }
 }

@@ -43,6 +43,12 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
         // if (x.TableAlias != y.TableAlias) return false;
         if (!string.IsNullOrEmpty(x.Table) && x.Table == y.Table) return true;
 
+        // A SelectMany/GroupJoin source is a computed node whose selectors are delegates over the
+        // outer row; compare by identity so an unrelated node never shares a cached plan. (The
+        // compiled selectors have their own closure-aware cache in the in-memory provider.)
+        if (x.LinqSource is not null || y.LinqSource is not null)
+            return ReferenceEquals(x.LinqSource, y.LinqSource);
+
         if (x.TableFunction is not null || y.TableFunction is not null)
             return _expComparer.Equals(x.TableFunction?.Call, y.TableFunction?.Call);
 
@@ -52,6 +58,9 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
     public int GetHashCode(FromExpression? obj)
     {
         if (obj is null) return 0;
+
+        if (obj.LinqSource is not null)
+            return System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj.LinqSource);
 
         if (obj.TableFunction is not null)
             return _expComparer.GetHashCode(obj.TableFunction.Call);

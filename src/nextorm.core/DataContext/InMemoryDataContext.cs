@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using System.Collections;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 namespace nextorm.core;
 
@@ -13,6 +14,8 @@ public partial class InMemoryContext : IDataContext
     private readonly static MethodInfo miCreateEnumerator = typeof(InMemoryContext).GetMethod(nameof(CreateEnumerator), BindingFlags.NonPublic | BindingFlags.Instance)!;
     private readonly static MethodInfo miLoopJoin = typeof(InMemoryContext).GetMethod(nameof(LoopJoin), BindingFlags.NonPublic | BindingFlags.Instance)!;
     private readonly static MethodInfo miCreateCompiledQuery = typeof(InMemoryContext).GetMethod(nameof(CreateCompiledQuery), BindingFlags.NonPublic | BindingFlags.Instance)!;
+    private readonly static MethodInfo miApplySelectMany = typeof(InMemoryContext).GetMethod(nameof(ApplySelectMany), BindingFlags.NonPublic | BindingFlags.Instance)!;
+    private readonly static MethodInfo miApplyGroupJoin = typeof(InMemoryContext).GetMethod(nameof(ApplyGroupJoin), BindingFlags.NonPublic | BindingFlags.Instance)!;
     // Entity metadata and select lists are provider-independent and process-wide, so the in-memory
     // provider shares them with the SQL contexts through DataContextCache instead of keeping a
     // second set of static dictionaries. The duplicates that used to live here were dead: nothing
@@ -29,6 +32,14 @@ public partial class InMemoryContext : IDataContext
     // counterpart, so they are not duplicates of any DataContextCache entry.
     private readonly IDictionary<ExpressionKey, Delegate> _conditionFactoryCache = new ExpressionCache<Delegate>();
     private readonly IDictionary<ExpressionKey, Delegate> _conditionDirectCache = new ExpressionCache<Delegate>();
+    // Compiled aggregate value selectors: an aggregate command is executed repeatedly (for example in
+    // a loop), so the (typed, unboxed) selector is compiled once per expression/command pair.
+    private readonly IDictionary<ExpressionKey, Delegate> _aggregateSelectorCache = new ExpressionCache<Delegate>();
+    // Compiled ORDER BY key selectors, for the same reason: ordered execution must not recompile.
+    private readonly IDictionary<ExpressionKey, Delegate> _sortingSelectorCache = new ExpressionCache<Delegate>();
+    // Compiled SelectMany/GroupJoin selectors. Without this, Expression.Compile runs on every call and
+    // dominates the operator cost (it is far more expensive than evaluating the flatten itself).
+    private readonly IDictionary<ExpressionKey, Delegate> _linqSelectorCache = new ExpressionCache<Delegate>();
     private readonly IDictionary<Type, object?> _data = new Dictionary<Type, object?>();
     private bool _disposedValue;
     private readonly Dictionary<QueryPlan, object> _cmdIdx = [];
@@ -120,6 +131,9 @@ public partial class InMemoryContext : IDataContext
         if (queryCommand.From?.TableFunction is not null)
             throw new NotSupportedException("Table-valued function sources are not supported by the in-memory provider.");
 
+        if (queryCommand.From?.LinqSource is { } linqSource)
+            return BuildLinqSourceDelegate<TResult>(linqSource);
+
         if (queryCommand.From?.SubQuery is not null)
         {
             if (!string.IsNullOrEmpty(queryCommand.From.Table))
@@ -182,8 +196,172 @@ public partial class InMemoryContext : IDataContext
             return factory;
         }
     }
+    private CreateEnumeratorDelegate<TResult> BuildLinqSourceDelegate<TResult>(LinqSourceExpression source)
+    {
+        // SelectMany/GroupJoin produce an IAsyncEnumerator<ResultType> from the outer (and, for
+        // GroupJoin, inner) command. The downstream pipeline (WHERE/map/DISTINCT) is then exactly the
+        // same as for a subquery source, so it is reused through CreateEnumeratorAdapter.
+        var resultType = source.ResultType;
+        var apply = source.IsGroupJoin
+            ? miApplyGroupJoin.MakeGenericMethod(source.OuterType, source.InnerType!, source.KeyType!, resultType)
+            : miApplySelectMany.MakeGenericMethod(source.OuterType, source.CollectionType!, resultType);
+        var createAdapter = miCreateEnumeratorAdapter.MakeGenericMethod(typeof(TResult), resultType);
+
+        return (queryCommand, cacheEntry, @params, cancellationToken) =>
+        {
+            var flattened = apply.Invoke(this, [source, @params, cancellationToken])!;
+            return (IAsyncEnumerator<TResult>)createAdapter.Invoke(this, [queryCommand, cacheEntry, flattened])!;
+        };
+    }
+
+    /// <summary>
+    /// Applies <c>SelectMany</c> over the prepared outer command: for every outer row the collection
+    /// selector is evaluated and each element is yielded (optionally projected with the result
+    /// selector). The result is buffered so the enumerator supports both sync and async terminals.
+    /// </summary>
+    private IAsyncEnumerator<TResult> ApplySelectMany<TOuter, TCollection, TResult>(LinqSourceExpression source, object[]? @params, CancellationToken cancellationToken)
+    {
+        var outer = CreateAsyncEnumerator((QueryCommand<TOuter>)source.OuterCommand, @params, cancellationToken);
+        var collectionSelector = GetCompiledLinqSelector<Func<TOuter, IEnumerable<TCollection>>>(source.CollectionSelector!, source.OuterCommand);
+        var resultSelector = source.ResultSelector is null
+            ? null
+            : GetCompiledLinqSelector<Func<TOuter, TCollection, TResult>>(source.ResultSelector, source.OuterCommand);
+
+        var rows = new List<TResult>();
+        Enumerate(outer, current =>
+        {
+            foreach (var item in collectionSelector(current))
+                rows.Add(resultSelector is null ? (TResult)(object)item! : resultSelector(current, item));
+        });
+
+        return new InMemoryListEnumerator<TResult>(rows, false);
+    }
+
+    /// <summary>
+    /// Applies <c>GroupJoin</c>: the inner command is materialised once into a key lookup, the outer
+    /// rows are read and each is projected with the matching inner rows (empty for no match). The
+    /// lookup keeps the operator O(outer + inner) rather than O(outer × inner).
+    /// </summary>
+    private IAsyncEnumerator<TResult> ApplyGroupJoin<TOuter, TInner, TKey, TResult>(LinqSourceExpression source, object[]? @params, CancellationToken cancellationToken)
+    {
+        var outerKeySelector = GetCompiledLinqSelector<Func<TOuter, TKey>>(source.OuterKeySelector!, source.OuterCommand);
+        var innerKeySelector = GetCompiledLinqSelector<Func<TInner, TKey>>(source.InnerKeySelector!, source.InnerCommand!);
+        var resultSelector = GetCompiledLinqSelector<Func<TOuter, IEnumerable<TInner>, TResult>>(source.ResultSelector!, source.OuterCommand);
+
+        var innerRows = new List<TInner>();
+        Materialize(CreateAsyncEnumerator((QueryCommand<TInner>)source.InnerCommand!, @params, cancellationToken), innerRows);
+
+        // Null keys cannot be dictionary keys; they are collected separately (a null outer key matches
+        // only null inner keys, mirroring EqualityComparer<TKey>.Default used by LINQ's GroupJoin).
+        // CS8714: TKey is unconstrained, but null keys never reach the dictionary.
+#pragma warning disable CS8714
+        var lookup = new Dictionary<TKey, List<TInner>>();
+#pragma warning restore CS8714
+        List<TInner>? nullKeys = null;
+        foreach (var row in innerRows)
+        {
+            var key = innerKeySelector(row);
+            if (key is null)
+            {
+                (nullKeys ??= []).Add(row);
+                continue;
+            }
+
+            if (!lookup.TryGetValue(key, out var list))
+                lookup[key] = list = [];
+            list.Add(row);
+        }
+
+        var outer = CreateAsyncEnumerator((QueryCommand<TOuter>)source.OuterCommand, @params, cancellationToken);
+        var rows = new List<TResult>();
+        Enumerate(outer, current =>
+        {
+            var key = outerKeySelector(current);
+            List<TInner>? group;
+            if (key is null)
+                group = nullKeys;
+            else if (!lookup.TryGetValue(key, out group))
+                group = null;
+
+            rows.Add(resultSelector(current, group ?? (IEnumerable<TInner>)Array.Empty<TInner>()));
+        });
+
+        return new InMemoryListEnumerator<TResult>(rows, false);
+    }
+
+    /// <summary>
+    /// Compiles a <c>SelectMany</c>/<c>GroupJoin</c> selector once and caches it by the expression's
+    /// structural (closure-aware) key. Expression compilation is orders of magnitude more expensive
+    /// than the per-row work, so the operator must not recompile on every call.
+    /// </summary>
+    private TDelegate GetCompiledLinqSelector<TDelegate>(LambdaExpression selector, QueryCommand queryCommand) where TDelegate : Delegate
+    {
+        var key = new ExpressionKey(selector, queryCommand);
+        if (_linqSelectorCache.TryGetValue(key, out var cached))
+            return (TDelegate)cached;
+
+        var compiled = (TDelegate)selector.Compile();
+        _linqSelectorCache[key] = compiled;
+        return compiled;
+    }
+
+    /// <summary>
+    /// Streams an enumerator through <paramref name="body"/>. Prefers the synchronous view when the
+    /// source provides one; an async-only source is drained by blocking, matching
+    /// <see cref="Materialize{T}"/>.
+    /// </summary>
+    private static void Enumerate<T>(IAsyncEnumerator<T> enumerator, Action<T> body)
+    {
+        try
+        {
+            if (enumerator is IEnumerator<T> sync)
+            {
+                while (sync.MoveNext())
+                    body(sync.Current);
+            }
+            else
+            {
+                while (enumerator.MoveNextAsync().GetAwaiter().GetResult())
+                    body(enumerator.Current);
+            }
+        }
+        finally
+        {
+            enumerator.DisposeAsync().GetAwaiter().GetResult();
+        }
+    }
+
+    /// <summary>
+    /// Buffers an enumerator. Prefers the synchronous view when the source provides one (buffered
+    /// in-memory rows do) so no thread is blocked; an async-only source is drained by blocking, which
+    /// matches the provider's other buffered operators (grouping, set operations).
+    /// </summary>
+    private static void Materialize<T>(IAsyncEnumerator<T> enumerator, List<T> rows)
+    {
+        try
+        {
+            if (enumerator is IEnumerator<T> sync)
+            {
+                while (sync.MoveNext())
+                    rows.Add(sync.Current);
+            }
+            else
+            {
+                while (enumerator.MoveNextAsync().GetAwaiter().GetResult())
+                    rows.Add(enumerator.Current);
+            }
+        }
+        finally
+        {
+            enumerator.DisposeAsync().GetAwaiter().GetResult();
+        }
+    }
+
     private IAsyncEnumerator<TResult> CreateEnumerator<TResult, TEntity>(QueryCommand<TResult> queryCommand, InMemoryPreparedQueryCommand<TResult> cacheEntry, object[] @params, CancellationToken cancellationToken)
     {
+        if (queryCommand.UnionQuery is not null)
+            return CreateSetOperationEnumerator(queryCommand, @params, cancellationToken);
+
         if (cacheEntry.Resolver is not null)
             return cacheEntry.Resolver(@params);
 
@@ -201,21 +379,19 @@ public partial class InMemoryContext : IDataContext
             asyncData = av;
         }
 
+        cacheEntry.Data = asyncData;
+        if (TryGetAggregate(queryCommand, out var asyncAggregateName, out _, out _))
+            throw new NotSupportedException($"Aggregate '{asyncAggregateName}' over an async source is not supported by the in-memory provider.");
+        if (queryCommand.GroupBy is not null)
+            throw new NotSupportedException("GroupBy over an async source is not supported by the in-memory provider.");
         if (queryCommand.Sorting is not null)
         {
-            throw new NotImplementedException();
-            // IOrderedEnumerable<TEntity>? intData = null;
-            // foreach (var sorting in queryCommand.Sorting)
-            // {
-            //     var del = ((Expression<Func<TEntity, object>>)sorting.Expression).Compile();
-            //     if (sorting.Direction == OrderDirection.Asc)
-            //         intData = asyncData.OrderBy(del);
-            //     else
-            //         intData = (intData ?? data).OrderByDescending(del);
-            // }
-            // data = intData;
+            // An async source cannot be sorted lazily without buffering; wrap it in an iterator that
+            // materialises once and then serves the ordered rows. The raw source is cached above so a
+            // repeat call does not wrap an already-wrapped sequence.
+            var ordered = OrderAsyncEnumerable(asyncData, queryCommand, cancellationToken);
+            return CreateEnumeratorAdapter(queryCommand, cacheEntry, ordered.GetAsyncEnumerator(cancellationToken));
         }
-        cacheEntry.Data = asyncData;
         return CreateEnumeratorAdapter(queryCommand, cacheEntry, asyncData.GetAsyncEnumerator(cancellationToken));
 
     next:
@@ -277,20 +453,37 @@ public partial class InMemoryContext : IDataContext
                 data = ev;
             }
 
+            if (queryCommand.GroupBy is not null)
+                return CreateGroupedEnumerator<TResult, TEntity>(queryCommand, cacheEntry, data!, @params);
+
             if (queryCommand.Sorting is not null)
             {
-                IOrderedEnumerable<TEntity>? intData = null;
-                foreach (var sorting in queryCommand.Sorting)
-                {
-                    var del = ((Expression<Func<TEntity, object>>)sorting.PreparedExpression!).Compile();
-                    if (sorting.Direction == OrderDirection.Asc)
-                        intData = (intData ?? data).OrderBy(del);
-                    else
-                        intData = (intData ?? data).OrderByDescending(del);
-                }
-                data = intData;
+                data = ApplyOrdering(data, queryCommand);
             }
             cacheEntry.Data = data;
+
+            if (TryGetAggregate(queryCommand, out var aggregateName, out var aggregateParam, out var aggregateBody))
+            {
+                if (cacheEntry.CompiledQuery is not InMemoryCompiledQuery<TResult, TEntity> aggregateCompiled)
+                {
+                    aggregateCompiled = (InMemoryCompiledQuery<TResult, TEntity>)CreateCompiledQuery<TResult, TEntity>(queryCommand);
+                    cacheEntry.CompiledQuery = aggregateCompiled;
+                }
+
+                // Aggregates must see the same filtered rows as the mapped path: apply WHERE before
+                // folding, otherwise Count/Sum/... would include rows the query excludes.
+                var aggregatePredicate = aggregateCompiled.ConditionDirect;
+                if (aggregateCompiled.ConditionFactory is not null && @params is not null)
+                    aggregatePredicate = aggregateCompiled.ConditionFactory(@params);
+
+                var aggregateSource = aggregatePredicate is null ? data! : data!.Where(aggregatePredicate);
+
+                var aggregateValueType = aggregateBody?.Type ?? typeof(object);
+                var aggregateSelector = GetAggregateSelector<TEntity>(aggregateBody, aggregateParam, aggregateValueType, queryCommand);
+                var aggregateValue = InMemoryAggregates.Compute(aggregateSource, aggregateName!, aggregateSelector, typeof(TEntity), typeof(TResult), aggregateValueType);
+
+                return new InMemoryScalarEnumerator<TResult>((TResult)aggregateValue!);
+            }
 
             if (cacheEntry.Enumerator is not InMemoryEnumerator<TResult, TEntity> enumerator)
             {
@@ -325,6 +518,366 @@ public partial class InMemoryContext : IDataContext
 
             return enumerator;
         }
+    }
+
+    private Delegate? GetAggregateSelector<TEntity>(Expression? selectorBody, ParameterExpression? parameter, Type valueType, QueryCommand queryCommand)
+    {
+        if (selectorBody is null || parameter is null) return null;
+
+        var key = new ExpressionKey(selectorBody, queryCommand);
+        if (_aggregateSelectorCache.TryGetValue(key, out var cached))
+            return cached;
+
+        var compiled = InMemoryAggregates.CompileSelector<TEntity>(selectorBody, parameter, valueType);
+        _aggregateSelectorCache[key] = compiled;
+        return compiled;
+    }
+
+    /// <summary>
+    /// Detects an aggregate projection (<c>NORM.SQL.min/max/sum/avg/count/...</c>) in a single-column
+    /// select list, so the enumerator can compute the value over the whole source instead of mapping
+    /// every row through the (CLR no-op) aggregate method.
+    /// </summary>
+    private static bool TryGetAggregate(QueryCommand queryCommand, out string? name, out ParameterExpression? parameter, out Expression? selectorBody)
+    {
+        name = null;
+        parameter = null;
+        selectorBody = null;
+
+        if (queryCommand.SelectList is not [var column]) return false;
+        if (column.Expression is not LambdaExpression lambda) return false;
+        if (lambda.Body is not MethodCallExpression call) return false;
+        if (call.Method.DeclaringType != typeof(NORM.NORM_SQL)) return false;
+        if (!InMemoryAggregates.IsAggregate(call.Method.Name)) return false;
+
+        name = call.Method.Name;
+        parameter = lambda.Parameters.Count > 0 ? lambda.Parameters[0] : null;
+
+        if (call.Arguments.Count > 0)
+        {
+            switch (call.Arguments[0])
+            {
+                // count() is emitted as a single empty-array argument for the params array.
+                case NewArrayExpression { Expressions.Count: 0 }:
+                    break;
+                case NewArrayExpression { Expressions.Count: 1 } array:
+                    selectorBody = array.Expressions[0];
+                    break;
+                case NewArrayExpression:
+                    throw new NotSupportedException($"Aggregate '{name}' over multiple properties is not supported by the in-memory provider.");
+                default:
+                    selectorBody = call.Arguments[0];
+                    break;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Evaluates a <c>GROUP BY</c> query in process: the source is filtered, grouped by the key
+    /// selector, and for each group the <c>HAVING</c> predicate and the projection are evaluated with
+    /// aggregate calls folded to per-group constants. ORDER BY is applied to the projected rows,
+    /// matching SQL where grouping precedes ordering.
+    /// </summary>
+    private IAsyncEnumerator<TResult> CreateGroupedEnumerator<TResult, TEntity>(
+        QueryCommand<TResult> queryCommand,
+        InMemoryPreparedQueryCommand<TResult> cacheEntry,
+        IEnumerable<TEntity> data,
+        object[]? @params)
+    {
+        if (queryCommand.ProjectionExpression is not LambdaExpression projection)
+            throw new NotSupportedException("GroupBy requires a projection in the in-memory provider.");
+
+        if (queryCommand.GroupingType != GroupingType.None)
+            throw new NotSupportedException("The ROLLUP/CUBE grouping modifiers are not supported by the in-memory provider.");
+
+        if (cacheEntry.CompiledQuery is not InMemoryCompiledQuery<TResult, TEntity> compiled)
+        {
+            compiled = (InMemoryCompiledQuery<TResult, TEntity>)CreateCompiledQuery<TResult, TEntity>(queryCommand);
+            cacheEntry.CompiledQuery = compiled;
+        }
+
+        Func<TEntity, bool>? predicate = compiled.ConditionDirect;
+        if (compiled.ConditionFactory is not null && @params is not null)
+            predicate = compiled.ConditionFactory(@params);
+
+        var source = predicate is null ? data : data.Where(predicate);
+
+        var entityParam = (ParameterExpression)projection.Parameters[0];
+        var keySelectorBody = Expression.Convert(queryCommand.GroupBy!.Body, typeof(object));
+        var keySelector = Expression.Lambda<Func<TEntity, object?>>(keySelectorBody, (ParameterExpression)queryCommand.GroupBy.Parameters[0]).Compile();
+
+        // Grouping by value: anonymous types and records expose structural equality. A linear scan
+        // keeps null keys working without a null-hostile dictionary key.
+        var keys = new List<object?>();
+        var groups = new List<List<TEntity>>();
+        foreach (var row in source)
+        {
+            var key = keySelector(row);
+            var found = false;
+            for (var i = 0; i < keys.Count; i++)
+            {
+                if (Equals(keys[i], key))
+                {
+                    groups[i].Add(row);
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found)
+            {
+                keys.Add(key);
+                groups.Add([row]);
+            }
+        }
+
+        var results = new List<TResult>(groups.Count);
+        foreach (var group in groups)
+        {
+            if (queryCommand.Having is not null)
+            {
+                var havingParam = (ParameterExpression)queryCommand.Having.Parameters[0];
+                var havingBody = new InMemoryGroupAggregateVisitor<TEntity>(group, havingParam).Visit(queryCommand.Having.Body);
+                var having = Expression.Lambda<Func<TEntity, bool>>(havingBody, havingParam).Compile();
+                if (!having(group[0])) continue;
+            }
+
+            var projectionBody = new InMemoryGroupAggregateVisitor<TEntity>(group, entityParam).Visit(projection.Body);
+            var map = Expression.Lambda<Func<TEntity, TResult>>(projectionBody, entityParam).Compile();
+            results.Add(map(group[0]));
+        }
+
+        if (queryCommand.Sorting is not null)
+            results = ApplyProjectedOrdering(results, queryCommand);
+
+        return new InMemoryListEnumerator<TResult>(results, queryCommand.IsDistinct);
+    }
+
+    /// <summary>
+    /// Orders projected rows by the select-list column index, as SQL does for an <c>ORDER BY</c> on a
+    /// grouped query. Expression-based ordering is not supported on grouped in-memory results.
+    /// </summary>
+    private static List<TResult> ApplyProjectedOrdering<TResult>(List<TResult> results, QueryCommand queryCommand)
+    {
+        if (queryCommand.SelectList is null)
+            throw new NotSupportedException("Grouped ordering requires a select list in the in-memory provider.");
+
+        IOrderedEnumerable<TResult>? ordered = null;
+        foreach (var sorting in queryCommand.Sorting!)
+        {
+            if (sorting.ColumnIndex is not int columnIndex)
+                throw new NotSupportedException("Grouped ordering by expression is not supported by the in-memory provider; order by column index instead.");
+
+            var propertyName = queryCommand.SelectList[columnIndex - 1].PropertyName
+                ?? throw new NotSupportedException($"{nameof(Sorting)} column {columnIndex} has no name in the in-memory provider.");
+            var property = typeof(TResult).GetProperty(propertyName)
+                ?? throw new NotSupportedException($"Grouped result type '{typeof(TResult).Name}' has no property '{propertyName}'.");
+
+            object? Key(TResult row) => property.GetValue(row);
+
+            ordered = sorting.Direction == OrderDirection.Asc
+                ? (ordered is null ? results.OrderBy(Key) : ordered.ThenBy(Key))
+                : (ordered is null ? results.OrderByDescending(Key) : ordered.ThenByDescending(Key));
+        }
+
+        return ordered?.ToList() ?? results;
+    }
+
+    /// <summary>
+    /// Evaluates a set operation (<c>UNION</c>/<c>UNION ALL</c>/<c>INTERSECT</c>/<c>INTERSECT ALL</c>/
+    /// <c>EXCEPT</c>/<c>EXCEPT ALL</c>): both operands are materialised and combined with SQL value
+    /// semantics, then the whole result is ordered/paged.
+    /// </summary>
+    private IAsyncEnumerator<TResult> CreateSetOperationEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
+    {
+        var left = MaterializeBuffered(queryCommand.CloneWithoutUnion(), @params, cancellationToken);
+
+        if (queryCommand.UnionQuery is not QueryCommand<TResult> rightQuery)
+            throw new NotSupportedException("Set operations between different result types are not supported by the in-memory provider.");
+
+        var right = MaterializeBuffered(rightQuery, @params, cancellationToken);
+
+        var combined = CombineSet(left, right, queryCommand.UnionType);
+
+        if (queryCommand.Sorting is not null)
+            combined = ApplyProjectedOrdering(combined, queryCommand);
+
+        return new InMemoryListEnumerator<TResult>(combined, false);
+    }
+
+    /// <summary>
+    /// Fully materialises a command. Set operations are buffered, so an async source cannot be combined
+    /// and is rejected instead of silently producing a wrong result.
+    /// </summary>
+    private List<TResult> MaterializeBuffered<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
+    {
+        var prepared = (InMemoryPreparedQueryCommand<TResult>)GetPreparedQueryCommand(queryCommand, false, true, cancellationToken);
+        var enumerator = prepared.CreateEnumerator(prepared.QueryCommand, prepared, @params, cancellationToken);
+
+        if (enumerator is not IEnumerator<TResult> sync)
+        {
+            if (enumerator is IAsyncDisposable disposable)
+                disposable.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            throw new NotSupportedException("Set operations over an async source are not supported by the in-memory provider.");
+        }
+
+        var list = new List<TResult>();
+        try
+        {
+            while (sync.MoveNext()) list.Add(sync.Current);
+        }
+        finally
+        {
+            (sync as IDisposable)?.Dispose();
+        }
+
+        return list;
+    }
+
+    private static List<TResult> CombineSet<TResult>(List<TResult> left, List<TResult> right, UnionType type)
+    {
+        var comparer = InMemoryDistinct.GetComparer<TResult>();
+        switch (type)
+        {
+            case UnionType.All:
+            {
+                var all = new List<TResult>(left.Count + right.Count);
+                all.AddRange(left);
+                all.AddRange(right);
+                return all;
+            }
+            case UnionType.Distinct:
+            {
+                var seen = new HashSet<TResult>(comparer);
+                var result = new List<TResult>();
+                foreach (var item in left)
+                    if (seen.Add(item)) result.Add(item);
+                foreach (var item in right)
+                    if (seen.Add(item)) result.Add(item);
+                return result;
+            }
+            case UnionType.Intersect:
+            {
+                var rightSet = new HashSet<TResult>(right, comparer);
+                var seen = new HashSet<TResult>(comparer);
+                var result = new List<TResult>();
+                foreach (var item in left)
+                    if (rightSet.Contains(item) && seen.Add(item)) result.Add(item);
+                return result;
+            }
+            case UnionType.IntersectAll:
+            {
+                var counts = CountValues(right, comparer);
+                var result = new List<TResult>();
+                foreach (var item in left)
+                {
+                    var idx = FindValue(counts, item, comparer);
+                    if (idx < 0 || counts[idx].Count == 0) continue;
+                    counts[idx] = (counts[idx].Value, counts[idx].Count - 1);
+                    result.Add(item);
+                }
+
+                return result;
+            }
+            case UnionType.Except:
+            {
+                var rightSet = new HashSet<TResult>(right, comparer);
+                var seen = new HashSet<TResult>(comparer);
+                var result = new List<TResult>();
+                foreach (var item in left)
+                    if (!rightSet.Contains(item) && seen.Add(item)) result.Add(item);
+                return result;
+            }
+            case UnionType.ExceptAll:
+            {
+                var counts = CountValues(right, comparer);
+                var result = new List<TResult>();
+                foreach (var item in left)
+                {
+                    var idx = FindValue(counts, item, comparer);
+                    if (idx >= 0 && counts[idx].Count > 0)
+                        counts[idx] = (counts[idx].Value, counts[idx].Count - 1);
+                    else
+                        result.Add(item);
+                }
+
+                return result;
+            }
+            default:
+                throw new NotSupportedException(type.ToString("G"));
+        }
+    }
+
+    private static List<(TResult Value, int Count)> CountValues<TResult>(List<TResult> values, IEqualityComparer<TResult> comparer)
+    {
+        var counts = new List<(TResult Value, int Count)>();
+        foreach (var item in values)
+        {
+            var idx = FindValue(counts, item, comparer);
+            if (idx < 0) counts.Add((item, 1));
+            else counts[idx] = (counts[idx].Value, counts[idx].Count + 1);
+        }
+
+        return counts;
+    }
+
+    private static int FindValue<TResult>(List<(TResult Value, int Count)> counts, TResult item, IEqualityComparer<TResult> comparer)
+    {
+        for (var i = 0; i < counts.Count; i++)
+            if (comparer.Equals(counts[i].Value, item))
+                return i;
+        return -1;
+    }
+
+    /// <summary>Applies the query's <c>ORDER BY</c> to a buffered source using the compiled key selectors.</summary>
+    private IEnumerable<TEntity> ApplyOrdering<TEntity>(IEnumerable<TEntity> data, QueryCommand queryCommand)
+    {
+        IOrderedEnumerable<TEntity>? intData = null;
+        foreach (var sorting in queryCommand.Sorting!)
+        {
+            var del = GetSortingSelector<TEntity>(sorting, queryCommand);
+            if (sorting.Direction == OrderDirection.Asc)
+                intData = (intData ?? data).OrderBy(del);
+            else
+                intData = (intData ?? data).OrderByDescending(del);
+        }
+        return intData ?? data;
+    }
+
+    /// <summary>
+    /// Compiles (once per expression/command pair) the ordering key selector. Without the cache an
+    /// ordered query recompiled its selector on every execution, which dominated <c>Last</c>/ordered
+    /// iteration.
+    /// </summary>
+    private Func<TEntity, object> GetSortingSelector<TEntity>(Sorting sorting, QueryCommand queryCommand)
+    {
+        var expression = (Expression<Func<TEntity, object>>)sorting.PreparedExpression!;
+        var key = new ExpressionKey(expression, queryCommand);
+        if (_sortingSelectorCache.TryGetValue(key, out var cached))
+            return (Func<TEntity, object>)cached;
+
+        var compiled = expression.Compile();
+        _sortingSelectorCache[key] = compiled;
+        return compiled;
+    }
+
+    /// <summary>
+    /// Orders an async source by buffering it: ordering needs the whole set before the first row can
+    /// be yielded, and an <see cref="IAsyncEnumerable{T}"/> cannot be re-sorted lazily.
+    /// </summary>
+    private async IAsyncEnumerable<TEntity> OrderAsyncEnumerable<TEntity>(
+        IAsyncEnumerable<TEntity> source,
+        QueryCommand queryCommand,
+        [EnumeratorCancellation] CancellationToken cancellationToken)
+    {
+        var data = new List<TEntity>();
+        await foreach (var item in source.WithCancellation(cancellationToken).ConfigureAwait(false))
+            data.Add(item);
+
+        foreach (var item in ApplyOrdering(data, queryCommand))
+            yield return item;
     }
 #if !PARAM_CONDITION
     private Func<TEntity, bool>? GetCondition<TEntity>(Expression? condition, object[] @params)
@@ -560,7 +1113,7 @@ public partial class InMemoryContext : IDataContext
         //     return (types, values);
         // }
     }
-    private InMemoryEnumeratorAdapter<TResult, TEntity> CreateEnumeratorAdapter<TResult, TEntity>(QueryCommand<TResult> queryCommand, InMemoryPreparedQueryCommand<TResult> cacheEntry, IAsyncEnumerator<TEntity> enumerator)
+    private IAsyncEnumerator<TResult> CreateEnumeratorAdapter<TResult, TEntity>(QueryCommand<TResult> queryCommand, InMemoryPreparedQueryCommand<TResult> cacheEntry, IAsyncEnumerator<TEntity> enumerator)
     {
         if (queryCommand.Joins?.Length > 0 && typeof(TEntity).IsAssignableTo(typeof(IProjection)))
         {
@@ -571,6 +1124,33 @@ public partial class InMemoryContext : IDataContext
         {
             compiledQuery = (InMemoryCompiledQuery<TResult, TEntity>)CreateCompiledQuery<TResult, TEntity>(queryCommand);
             cacheEntry.CompiledQuery = compiledQuery;
+        }
+
+        // An aggregate over a subquery (for example ctx.From(cmd).Count()) is not a per-row map: fold
+        // the buffered subquery rows instead. Only a buffered subquery can be folded synchronously.
+        if (TryGetAggregate(queryCommand, out var aggregateName, out var aggregateParam, out var aggregateBody))
+        {
+            if (enumerator is not IEnumerator<TEntity> sync)
+                throw new NotSupportedException($"Aggregate '{aggregateName}' over an async subquery is not supported by the in-memory provider.");
+
+            var rows = new List<TEntity>();
+            try
+            {
+                while (sync.MoveNext()) rows.Add(sync.Current);
+            }
+            finally
+            {
+                (sync as IDisposable)?.Dispose();
+            }
+
+            if (compiledQuery.ConditionDirect is not null)
+                rows = rows.Where(compiledQuery.ConditionDirect).ToList();
+
+            var aggregateValueType = aggregateBody?.Type ?? typeof(object);
+            var aggregateSelector = GetAggregateSelector<TEntity>(aggregateBody, aggregateParam, aggregateValueType, queryCommand);
+            var aggregateValue = InMemoryAggregates.Compute(rows, aggregateName!, aggregateSelector, typeof(TEntity), typeof(TResult), aggregateValueType);
+
+            return new InMemoryScalarEnumerator<TResult>((TResult)aggregateValue!);
         }
 
         return new InMemoryEnumeratorAdapter<TResult, TEntity>(compiledQuery, enumerator, queryCommand.IsDistinct);
@@ -758,6 +1338,13 @@ public partial class InMemoryContext : IDataContext
         // {
         //     if (Logger?.IsEnabled(LogLevel.Information) ?? false) Logger.LogInformation("Map delegate cache miss for: {exp}", _exp);
         var resultType = typeof(TResult);
+
+        // An entity-sourced command (for example ctx.From(scalarSubquery) or From<Entity>()) materialises
+        // the source rows as-is: the in-memory data is already TResult, so no row materializer is needed.
+        // Without this, scalar sources (int, ...) would fail in RowMaterializerBuilder, which expects a
+        // constructor.
+        if (resultType == typeof(TEntity))
+            return static () => static (TEntity e) => (TResult)(object)e!;
 
         return () =>
         {

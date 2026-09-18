@@ -26,8 +26,39 @@ public sealed class PostgresDialect : SqlDialectBase
 
     public override bool RequireSubqueryAlias => true;
 
+    // PostgreSQL spells the APPLY surface as CROSS JOIN LATERAL / LEFT JOIN LATERAL ... ON true,
+    // which is exactly the SqlDialectBase default.
+    public override bool SupportsApply => true;
+
     // PostgreSQL is the only supported provider that implements INTERSECT ALL / EXCEPT ALL.
     public override bool SupportsIntersectExceptAll => true;
+
+    // PostgreSQL renders the ANSI GROUP BY ROLLUP (...)/CUBE (...) form.
+    public override bool SupportsRollup => true;
+    public override bool SupportsCube => true;
+
+    // PostgreSQL has native array types and the any/all quantifiers over arrays.
+    public override bool SupportsArrays => true;
+
+    // PostgreSQL has native json/jsonb types and the associated functions/operators.
+    public override bool SupportsJson => true;
+
+    // PostgreSQL accepts the FILTER (WHERE ...) aggregate clause, greatest/least, date_trunc and the
+    // string_agg/array_agg aggregate surface.
+    public override bool SupportsFilter => true;
+    public override bool SupportsGreatestLeast => true;
+    public override bool SupportsDateTrunc => true;
+    public override bool SupportsDateArithmetic => true;
+    public override bool SupportsStringArrayAggregates => true;
+
+    // PostgreSQL is the reference provider for the extended scalar function library and the
+    // bool/bit/statistical/ordered-set aggregate surface.
+    public override bool SupportsExtendedScalarFunctions => true;
+    public override bool SupportsBooleanAggregates => true;
+    public override bool SupportsBitAggregates => true;
+    public override bool SupportsStatisticalAggregates => true;
+    public override bool SupportsRegressionAggregates => true;
+    public override bool SupportsOrderedAggregates => true;
 
     public override string MakeAggregate(string name) => name switch
     {

@@ -375,4 +375,17 @@ public abstract partial class CommonTestSuite
 
         r.Should().Be(40);
     }
+
+    [Fact]
+    public void Last_ShouldReturnLastOrderedRow()
+    {
+        // simple_entity ids are 1..10; Last reverses the ORDER BY and reuses First.
+        _sut.SimpleEntity.OrderBy(e => e.Id).Select(e => e.Id).Last().Should().Be(10);
+    }
+
+    [Fact]
+    public void LastOrDefault_OnDescending_ShouldReturnFirstRow()
+    {
+        _sut.SimpleEntity.OrderByDescending(e => e.Id).Select(e => e.Id).LastOrDefault().Should().Be(1);
+    }
 }

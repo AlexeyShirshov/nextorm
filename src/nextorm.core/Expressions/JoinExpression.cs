@@ -9,7 +9,17 @@ public enum JoinType
     Right = 2,
     Full = 3,
     Cross = 4,
-    FullCross = 5
+    FullCross = 5,
+    /// <summary>
+    /// <c>CROSS APPLY</c> / <c>CROSS JOIN LATERAL</c>: the right-hand source is evaluated per
+    /// left-hand row and has no <c>ON</c> condition.
+    /// </summary>
+    CrossApply = 6,
+    /// <summary>
+    /// <c>OUTER APPLY</c> / <c>LEFT JOIN LATERAL ... ON true</c>: like <see cref="CrossApply"/> but
+    /// left-hand rows with an empty right-hand source are preserved with nulls.
+    /// </summary>
+    OuterApply = 7
 }
 
 public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType = JoinType.Inner)

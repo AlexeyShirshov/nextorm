@@ -1,6 +1,21 @@
 namespace nextorm.core;
+
+/// <summary>
+/// Assorted extension helpers: conditional capture and in-place transformation.
+/// </summary>
+/// <remarks>
+/// The name is a grab-bag and the containing file is misspelled (<c>BasicHelpders.cs</c>). The
+/// <see cref="Var{T}(T, Func{T, bool}, out T)"/> helper follows the try-pattern but is not named
+/// <c>Try*</c>. Consider splitting these helpers by purpose and renaming them.
+/// See <c>API-NAMING-REVIEW.md</c> finding P0-8.
+/// </remarks>
 public static class BasicHelpers
 {
+    /// <summary>
+    /// Captures <paramref name="item"/> into <paramref name="variable"/> when
+    /// <paramref name="condition"/> holds, and returns whether it did. Follows the try-pattern but is
+    /// not named <c>TryVar</c>.
+    /// </summary>
     public static bool Var<T>(this T item, Func<T, bool> condition, out T? variable)
     {
         variable = default;

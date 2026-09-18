@@ -60,6 +60,7 @@ internal sealed class PostgresTestProvider : ITestProvider
     private const string SeedSql =
         """
         drop table if exists complex_entity;
+        drop table if exists binary_entity;
         drop table if exists simple_entity;
 
         create table simple_entity (id integer primary key);
@@ -84,5 +85,14 @@ internal sealed class PostgresTestProvider : ITestProvider
             (1, null, 'dadfasd', 2, 3, 4, 5, 6, timestamp '2023-01-01 10:00:00', date '2023-01-01', true, 'sdf'),
             (2, 1, 'xxx', 2, 3, 4, 5, 6, timestamp '2023-01-01 00:00:00', date '2023-01-01', false, 'asdfgoi'),
             (3, 1, null, 2, 3, null, 5, 6, timestamp '2023-01-01 00:00:00', date '2023-01-01', false, '34mfs');
+
+        create table binary_entity
+        (
+            id integer primary key,
+            data bytea
+        );
+        insert into binary_entity (id, data) values
+            (1, decode('01020304', 'hex')),
+            (2, null);
         """;
 }

@@ -23,7 +23,7 @@ public sealed class SqlTableFunctionAttribute : Attribute
 ```
 
 ```csharp
-public static Entity<T> FromTableFunction<T>(this IDataContext dataContext,
+public static EntityBuilder<T> FromTableFunction<T>(this IDataContext dataContext,
     Expression<Func<IQueryable<T>>> call);
 ```
 
@@ -32,7 +32,7 @@ public static Entity<T> FromTableFunction<T>(this IDataContext dataContext,
 аргументы рендерятся через обычный посетитель выражений, поэтому **захваченные значения становятся
 параметрами**. nextorm только генерирует вызов — функция уже должна существовать в целевой базе данных.
 
-Возвращаемый `Entity<T>` — обычный источник запроса, поэтому `Where`, `OrderBy`, `GroupBy`, `Join`,
+Возвращаемый `EntityBuilder<T>` — обычный источник запроса, поэтому `Where`, `OrderBy`, `GroupBy`, `Join`,
 `Select`, разбиение на страницы и терминалы работают с ним.
 
 ## Объявление сопоставления
@@ -128,7 +128,7 @@ TVF — обычный источник, поэтому его можно объ
 ```csharp
 var rows = dataContext
     .FromTableFunction(() => Tvf.AllRows())
-    .Join(dataContext.Create<IComplexEntity>(), (r, c) => r.Id == c.Id)
+    .Join(dataContext.From<IComplexEntity>(), (r, c) => r.Id == c.Id)
     .Select(p => new { p.t1.Value, p.t2.String })
     .ToList();
 ```
@@ -156,6 +156,47 @@ var rows = dataContext
     .ToList();
 // (1, 2), (2, 1)
 ```
+
+## Встроенные табличные функции
+
+Несколько распространённых табличных функций уже объявлены с `[SqlTableFunction]`, поэтому
+пользовательская обёртка не нужна.
+
+`NORM.SQL.generate_series` и `NORM.SQL.unnest` — из PostgreSQL (возвращают `NORM.IGenerateSeriesRow`
+с колонкой `generate_series` и `NORM.IUnnestRow<T>` с колонкой `unnest`):
+
+```csharp
+var numbers = dataContext
+    .FromTableFunction(() => NORM.SQL.generate_series(1L, 3L))
+    .Select(r => r.Value)
+    .ToList();
+
+var elements = dataContext
+    .FromTableFunction(() => NORM.SQL.unnest(NORM.Param<long[]>(0)))
+    .Select(r => r.Value)
+    .ToList(new long[] { 1, 2, 3 });
+```
+
+`NORM.SQL.string_split` — из SQL Server 2016+ и возвращает `NORM.IStringSplitRow` (единственная колонка
+`value`). Порядок фрагментов не гарантируется, поэтому добавляйте `order by`, если важен порядок входной
+строки:
+
+```csharp
+var csv = "a,b,c";
+var separator = ",";
+
+var fragments = dataContext
+    .FromTableFunction(() => NORM.SQL.string_split(csv, separator))
+    .Select(r => r.Value)
+    .ToList();
+```
+
+```sql
+select value from string_split(@csv, @separator) as [t1]
+```
+
+Сопоставленная функция должна существовать в базе — nextorm только генерирует вызов, он её не создаёт, —
+поэтому используйте хелпер только на провайдере, где она определена.
 
 ## Различия между провайдерами
 

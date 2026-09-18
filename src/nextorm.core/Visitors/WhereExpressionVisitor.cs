@@ -4,8 +4,11 @@ using Microsoft.Extensions.Logging;
 
 namespace nextorm.core;
 
+/// <summary>
+/// Translates a predicate expression into a SQL <c>WHERE</c> clause.
+/// </summary>
 public class WhereExpressionVisitor(Type entityType, ISqlDialect dialect, IColumnsProvider tableSource, int dim, IAliasProvider? aliasProvider, IParamProvider paramProvider, IQueryProvider queryProvider, bool paramMode, List<Param> @params, ILogger? logger)
-    : BaseExpressionVisitor(entityType, dialect, tableSource, dim, aliasProvider, paramProvider, queryProvider, false, paramMode, @params, logger)
+    : BaseExpressionVisitor(new VisitorOptions(entityType, dialect, tableSource, dim, aliasProvider, paramProvider, queryProvider, false, paramMode, @params, logger))
 {
     /// <summary>
     /// A where clause is a condition context: providers whose dialect cannot use a boolean value

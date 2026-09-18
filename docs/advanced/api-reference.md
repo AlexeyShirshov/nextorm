@@ -33,10 +33,10 @@ package adds a context, a dialect and a `DbContextBuilder` extension class in it
 
 | Type | Description | Source |
 |---|---|---|
-| `Entity<TEntity>` | Fluent, immutable query builder for a mapped entity type. | `src/nextorm.core/Builders/Entity.cs` |
-| `Entity` | Fluent builder for an alias/table source that has no entity type (`TableAlias` mode). | `src/nextorm.core/Builders/Entity.cs` |
+| `EntityBuilder<TEntity>` | Fluent, immutable query builder for a mapped entity type. | `src/nextorm.core/Builders/EntityBuilder.cs` |
+| `EntityBuilder` | Fluent builder for an alias/table source that has no entity type (`TableAlias` mode). | `src/nextorm.core/Builders/EntityBuilder.cs` |
 | `EntityP2<T1,T2>` … `EntityP8<T1..T8>` | Accumulated join builders; arity 2 through 8. | `src/nextorm.core/Builders/Joins/JoinCommandBuilder.cs` |
-| `EntityBuilder<T>` | Fluent entity-metadata configuration used by `IDataContext.Create<T>(...)`. | `src/nextorm.core/DataContext/Meta/EntityBuilder.cs` |
+| `EntityMetadataBuilder<T>` | Fluent entity-metadata configuration used by `IDataContext.From<T>(...)`. | `src/nextorm.core/DataContext/Meta/EntityMetadataBuilder.cs` |
 | `Projection<T1,T2>` … `Projection<T1..T8>` | Result shape of a joined query; exposes `t1`…`t8`. | `src/nextorm.core/Builders/Projection.cs` |
 | `IProjection` / `IExtendableProjection` | Markers for accumulated join projections (arity 8 is not extendable). | `src/nextorm.core/Builders/Projection.cs` |
 | `CteQuery` | Fluent scope collecting `WITH` declarations. | `src/nextorm.core/Builders/CteQuery.cs` |
@@ -49,14 +49,14 @@ package adds a context, a dialect and a `DbContextBuilder` extension class in it
 | Type | Description | Source |
 |---|---|---|
 | `QueryCommand` | Non-generic query command holding the plan/state shared by all results. | `src/nextorm.core/Query/QueryCommand.cs` |
-| `QueryCommand<TResult>` | Typed query command with terminals (`ToList`, `First`, `Union`, `Distinct`, `Prepare`, …). | `src/nextorm.core/Query/QueryCommand.TResult.cs` |
+| `QueryCommand<TResult>` | Typed query command with terminals (`ToList`, `First`, `Union`, `Distinct`, `Hint`, `Prepare`, …). | `src/nextorm.core/Query/QueryCommand.TResult.cs` |
 | `IPreparedQueryCommand<TResult>` | Prepared command; its default members execute it against a supplied `IDataContext`. | `src/nextorm.core/DataContext/Cache/IPreparedQueryCommand.cs` |
 | `NORM` | Static entry point: `NORM.SQL` and `NORM.Param<T>(idx)`. | `src/nextorm.core/Query/NORM.cs` |
-| `NORM_SQL` | SQL function surface: `exists`, `like`, `@in`, `any`/`all`, aggregates, window functions. | `src/nextorm.core/Query/NORM.cs` |
+| `NORM_SQL` | SQL function surface: `exists`, `like`, `@in`, `any`/`all` (subquery and array), aggregates (including filtered aggregates and `string_agg`/`array_agg`), window functions, `nullif`/`greatest`/`least`/`date_trunc`/`date_add`/`end_of_month`, PostgreSQL array and JSON/JSONB functions, the SQL Server text-JSON functions (`json_value`/`json_query`/`json_modify`), and the `generate_series`/`unnest`/`string_split` table functions. | `src/nextorm.core/Query/NORM.cs` |
 | `NORM.WindowFunction<T>` | Unfinished window call; complete it with `Over(...)`. | `src/nextorm.core/Query/NORM.cs` |
 | `NORM.WindowOrder` | An ordered window key plus `OrderDirection`. | `src/nextorm.core/Query/NORM.cs` |
 | `NORM.WindowFrame`, `WindowFrameBound`, `WindowFrameType`, `WindowFrameBoundKind` | `ROWS`/`RANGE` frame specification and its boundaries. | `src/nextorm.core/Query/NORM.cs` |
-| `DataContextExtensions` | Provider-independent helpers: `Create<T>`, `From`, `FromTableFunction`, prepared-command terminals. | `src/nextorm.core/DataContext/DataContextExtensions.cs` |
+| `DataContextExtensions` | Provider-independent helpers: `From<T>`, `From`, `FromTableFunction`, prepared-command terminals. | `src/nextorm.core/DataContext/DataContextExtensions.cs` |
 | `IDataContextExtensions` | CTE entry points `With` / `WithRecursive`. | `src/nextorm.core/DataContext/IDataContextExtensions.cs` |
 
 ### Mapping attributes
@@ -72,7 +72,7 @@ package adds a context, a dialect and a `DbContextBuilder` extension class in it
 | Type | Description | Source |
 |---|---|---|
 | `OrderDirection` | `Asc` / `Desc`. | `src/nextorm.core/Expressions/OrderDirection.cs` |
-| `JoinType` | `Inner`, `Left`, `Right`, `Full`, `Cross`, `FullCross`. | `src/nextorm.core/Expressions/JoinExpression.cs` |
+| `JoinType` | `Inner`, `Left`, `Right`, `Full`, `Cross`, `FullCross`, `CrossApply`, `OuterApply`. | `src/nextorm.core/Expressions/JoinExpression.cs` |
 | `JoinExpression` | A single join: condition, type and joined source. | `src/nextorm.core/Expressions/JoinExpression.cs` |
 | `FromExpression` / `SelectExpression` | FROM source and projected column metadata. | `src/nextorm.core/Expressions/FromExpression.cs`, `src/nextorm.core/Expressions/SelectExpression.cs` |
 | `UnionType` | `None`, `Distinct`, `All`, `Intersect`, `IntersectAll`, `Except`, `ExceptAll`. | `src/nextorm.core/Expressions/UnionType.cs` |
@@ -108,15 +108,43 @@ package adds a context, a dialect and a `DbContextBuilder` extension class in it
 | `SqlServerDialect` | SQL Server `ISqlDialect` singleton (`SqlServerDialect.Instance`). | `src/nextorm.sqlserver/SqlServerDialect.cs` |
 | `DataContextOptionsBuilderExtensions` | `UseSqlServer(string connectionString)` and `UseSqlServer(DbConnection)`. | `src/nextorm.sqlserver/DI/DataContextOptionsBuilderExtensions.cs` |
 
+## Namespace `nextorm.mysql`
+
+| Type | Description | Source |
+|---|---|---|
+| `MySqlDbContext` | `DbContext` over `MySqlConnector`. | `src/nextorm.mysql/MySqlDbContext.cs` |
+| `MySqlDialect` | MySQL `ISqlDialect` singleton (`MySqlDialect.Instance`); non-sealed so MariaDB can derive from it. | `src/nextorm.mysql/MySqlDialect.cs` |
+| `DataContextOptionsBuilderExtensions` | `UseMySql(string connectionString)` and `UseMySql(DbConnection)`. | `src/nextorm.mysql/DI/DataContextOptionsBuilderExtensions.cs` |
+
+## Namespace `nextorm.mariadb`
+
+| Type | Description | Source |
+|---|---|---|
+| `MariaDbContext` | `DbContext` over `MySqlConnector`, deriving from `MySqlDbContext`. | `src/nextorm.mariadb/MariaDbContext.cs` |
+| `MariaDbDialect` | MariaDB `ISqlDialect` singleton (`MariaDbDialect.Instance`); MySQL rendering plus `INTERSECT ALL`/`EXCEPT ALL`. | `src/nextorm.mariadb/MariaDbDialect.cs` |
+| `DataContextOptionsBuilderExtensions` | `UseMariaDb(string connectionString)` and `UseMariaDb(DbConnection)`. | `src/nextorm.mariadb/DI/DataContextOptionsBuilderExtensions.cs` |
+
+## Namespace `nextorm.clickhouse`
+
+| Type | Description | Source |
+|---|---|---|
+| `ClickHouseDbContext` | `DbContext` over the official `ClickHouse.Driver` ADO.NET provider. | `src/nextorm.clickhouse/ClickHouseDbContext.cs` |
+| `ClickHouseDialect` | ClickHouse `ISqlDialect` singleton (`ClickHouseDialect.Instance`). | `src/nextorm.clickhouse/ClickHouseDialect.cs` |
+| `DataContextOptionsBuilderExtensions` | `UseClickHouse(string connectionString)` and `UseClickHouse(DbConnection)`. | `src/nextorm.clickhouse/DI/DataContextOptionsBuilderExtensions.cs` |
+
 ## See also
 
 - [Provider overview](../providers/overview.md)
 - [SQLite](../providers/sqlite.md)
 - [SQL Server](../providers/sqlserver.md)
 - [PostgreSQL](../providers/postgres.md)
+- [MySQL](../providers/mysql.md)
+- [MariaDB](../providers/mariadb.md)
+- [ClickHouse](../providers/clickhouse.md)
 - [In-memory](../providers/in-memory.md)
 
 ---
 
 Source: `src/nextorm.core/**`, `src/nextorm.sqlite/**`, `src/nextorm.postgres/**`,
-`src/nextorm.sqlserver/**` (XML doc comments are the authoritative API documentation).
+`src/nextorm.sqlserver/**`, `src/nextorm.mysql/**`, `src/nextorm.mariadb/**`,
+`src/nextorm.clickhouse/**` (XML doc comments are the authoritative API documentation).
