@@ -184,6 +184,13 @@ public interface ISqlDialect
     /// </summary>
     bool SupportsOrderedAggregates { get; }
     /// <summary>
+    /// True when passing <see cref="System.Data.CommandBehavior.SingleRow"/> to the ADO.NET provider is
+    /// safe. The ClickHouse driver translates that hint into an extra <c>LIMIT 1</c> appended to the
+    /// statement, which conflicts with the <c>limit</c> the dialect already renders for a single-row
+    /// query, so ClickHouse opts out. The default is <c>true</c>.
+    /// </summary>
+    bool SupportsCommandBehaviorSingleRow { get; }
+    /// <summary>
     /// Applies the statement-level <paramref name="hints"/> to an already-rendered <paramref name="sql"/>
     /// statement. <paramref name="maxRecursionOption"/> is the trailing option produced by
     /// <see cref="MakeMaxRecursion"/> (or <c>null</c>); a dialect that must coalesce it into a single

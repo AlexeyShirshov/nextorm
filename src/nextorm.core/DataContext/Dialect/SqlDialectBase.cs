@@ -39,6 +39,7 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual bool SupportsArgMinMax => false;
     public virtual bool SupportsIfAggregates => false;
     public virtual bool SupportsOrderedAggregates => false;
+    public virtual bool SupportsCommandBehaviorSingleRow => true;
 
     public abstract string MakeParam(string name);
     public abstract void MakePage(Paging paging, StringBuilder sqlBuilder);

@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
+    <PackageVersion Include="ClickHouse.Driver" Version="1.4.0" />
     <PackageVersion Include="coverlet.collector" Version="10.0.1" />
     <PackageVersion Include="Dapper" Version="2.1.86" />
     <PackageVersion Include="FluentAssertions" Version="[7.2.2]" />
@@ -26,6 +27,7 @@
     <PackageVersion Include="OneOf" Version="3.0.271" />
     <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
     <PackageVersion Include="System.Linq.Async" Version="7.0.1" />
+    <PackageVersion Include="Testcontainers.ClickHouse" Version="4.15.0" />
     <PackageVersion Include="Testcontainers.MsSql" Version="4.15.0" />
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.15.0" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0" />

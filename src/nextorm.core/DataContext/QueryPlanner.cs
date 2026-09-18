@@ -122,7 +122,12 @@ internal sealed class QueryPlanner : IQueryPlanner
                 }
             }
 
-            var compiledQuery = new DbPreparedQueryCommand<TResult>(dbCommand, map, queryCommand.SingleRow, ext is null ? sql! : null, noParams, needsParamRefresh);
+            // Some drivers (ClickHouse) turn CommandBehavior.SingleRow into an extra LIMIT 1. The
+            // dialect already renders a limit for a single-row command, so the hint must be dropped
+            // there to avoid a duplicated clause.
+            var singleRow = queryCommand.SingleRow && _dialect().SupportsCommandBehaviorSingleRow;
+
+            var compiledQuery = new DbPreparedQueryCommand<TResult>(dbCommand, map, singleRow, ext is null ? sql! : null, noParams, needsParamRefresh);
 
             if (createEnumerator)
             {
