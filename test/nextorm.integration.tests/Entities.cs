@@ -29,7 +29,7 @@ public interface IComplexEntity
     [MaxLength(100)]
     [Column("somestring")]
     string? String { get; set; }
-    [Column("tinyint")]
+    [Column("tinyval")]
     byte TinyInt { get; set; }
     [Column("small")]
     short? SmallInt { get; set; }

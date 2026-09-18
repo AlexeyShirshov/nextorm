@@ -20,6 +20,8 @@ internal sealed class PostgresTestProvider : ITestProvider
 
     public bool IsAvailable => PostgresContainer.IsAvailable;
 
+    public bool SupportsFullJoin => true;
+
     public bool SupportsFractionalAverage => true;
 
     // PostgreSQL implements INTERSECT ALL / EXCEPT ALL.
@@ -71,7 +73,7 @@ internal sealed class PostgresTestProvider : ITestProvider
             id bigint primary key,
             nullableint integer,
             somestring varchar(100),
-            tinyint smallint not null,
+            tinyval smallint not null,
             small smallint,
             r real,
             d double precision,
@@ -81,7 +83,7 @@ internal sealed class PostgresTestProvider : ITestProvider
             b boolean,
             requiredstring text not null
         );
-        insert into complex_entity (id, nullableint, somestring, tinyint, small, r, d, m, dt, onlydate, b, requiredstring) values
+        insert into complex_entity (id, nullableint, somestring, tinyval, small, r, d, m, dt, onlydate, b, requiredstring) values
             (1, null, 'dadfasd', 2, 3, 4, 5, 6, timestamp '2023-01-01 10:00:00', date '2023-01-01', true, 'sdf'),
             (2, 1, 'xxx', 2, 3, 4, 5, 6, timestamp '2023-01-01 00:00:00', date '2023-01-01', false, 'asdfgoi'),
             (3, 1, null, 2, 3, null, 5, 6, timestamp '2023-01-01 00:00:00', date '2023-01-01', false, '34mfs');

@@ -20,6 +20,8 @@ internal sealed class SqlServerTestProvider : ITestProvider
 
     public bool IsAvailable => SqlServerContainer.IsAvailable;
 
+    public bool SupportsFullJoin => true;
+
     // T-SQL evaluates AVG over an integer column as an integer, so 5.5 becomes 5.
     public bool SupportsFractionalAverage => false;
 
@@ -75,7 +77,7 @@ internal sealed class SqlServerTestProvider : ITestProvider
             id bigint not null primary key,
             nullableint int null,
             somestring varchar(100) null,
-            tinyint tinyint not null,
+            tinyval tinyint not null,
             small smallint null,
             r real null,
             d float null,
@@ -86,7 +88,7 @@ internal sealed class SqlServerTestProvider : ITestProvider
             requiredstring varchar(100) not null
         );
 
-        insert into complex_entity (id, nullableint, somestring, tinyint, small, r, d, m, dt, onlydate, b, requiredstring) values
+        insert into complex_entity (id, nullableint, somestring, tinyval, small, r, d, m, dt, onlydate, b, requiredstring) values
             (1, null, 'dadfasd', 2, 3, 4, 5, 6, '2023-01-01T10:00:00', '2023-01-01', 1, 'sdf'),
             (2, 1, 'xxx', 2, 3, 4, 5, 6, '2023-01-01T00:00:00', '2023-01-01', 0, 'asdfgoi'),
             (3, 1, null, 2, 3, null, 5, 6, '2023-01-01T00:00:00', '2023-01-01', 0, '34mfs');

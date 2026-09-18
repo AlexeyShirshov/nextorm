@@ -671,7 +671,7 @@ public abstract partial class CommonTestSuite
     public async Task ManualSql_ShouldWork()
     {
         // Given
-        var cmd = _sut.SimpleEntity.Select(it => it.Id).PrepareFromSql("select id from simple_entity --this is custom sql", TestContext.Current.CancellationToken);
+        var cmd = _sut.SimpleEntity.Select(it => it.Id).PrepareFromSql("select id from simple_entity -- this is custom sql", TestContext.Current.CancellationToken);
         // When
         var r = await _sut.DataProvider.ToListAsync(cmd);
 

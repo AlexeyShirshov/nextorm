@@ -20,6 +20,8 @@ internal sealed class ClickHouseTestProvider : ITestProvider
 
     public bool IsAvailable => ClickHouseContainer.IsAvailable;
 
+    public bool SupportsFullJoin => true;
+
     // ClickHouse AVG returns Float64 even over an integer column, so the fractional result is kept.
     public bool SupportsFractionalAverage => true;
 
@@ -79,7 +81,7 @@ internal sealed class ClickHouseTestProvider : ITestProvider
             id Int64,
             nullableint Nullable(Int32),
             somestring Nullable(String),
-            tinyint UInt8,
+            tinyval UInt8,
             small Nullable(Int16),
             r Nullable(Float32),
             d Nullable(Float64),
@@ -91,7 +93,7 @@ internal sealed class ClickHouseTestProvider : ITestProvider
         ) engine = Memory
         """,
         """
-        insert into complex_entity (id, nullableint, somestring, tinyint, small, r, d, m, dt, onlydate, b, requiredstring) values
+        insert into complex_entity (id, nullableint, somestring, tinyval, small, r, d, m, dt, onlydate, b, requiredstring) values
             (1, null, 'dadfasd', 2, 3, 4, 5, 6, '2023-01-01 10:00:00', '2023-01-01', true, 'sdf'),
             (2, 1, 'xxx', 2, 3, 4, 5, 6, '2023-01-01 00:00:00', '2023-01-01', false, 'asdfgoi'),
             (3, 1, null, 2, 3, null, 5, 6, '2023-01-01 00:00:00', '2023-01-01', false, '34mfs')
