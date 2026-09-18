@@ -38,13 +38,13 @@ services.AddNextOrmContext<InMemoryContext>();
 using nextorm.core;
 
 using var ctx = new InMemoryContext();
-ctx.Create<SimpleEntity>().WithData(new[]
+ctx.From<SimpleEntity>().WithData(new[]
 {
     new SimpleEntity { Id = 1 },
     new SimpleEntity { Id = 2 },
 });
 
-var ids = ctx.Create<SimpleEntity>()
+var ids = ctx.From<SimpleEntity>()
     .Where(it => it.Id == 1)
     .Select(it => new { it.Id })
     .SingleOrDefault();
@@ -57,7 +57,7 @@ var ids = ctx.Create<SimpleEntity>()
 а `WithAsyncData` — `IAsyncEnumerable<T>`. Оба являются пустыми операциями для других провайдеров.
 
 ```csharp
-ctx.Create<SimpleEntity>().WithAsyncData(GetRows());
+ctx.From<SimpleEntity>().WithAsyncData(GetRows());
 
 static async IAsyncEnumerable<SimpleEntity> GetRows()
 {
@@ -74,18 +74,26 @@ static async IAsyncEnumerable<SimpleEntity> GetRows()
 | Возможность | Подтверждение |
 |---|---|
 | Проекция: анонимная, примитив/скаляр, `Tuple` | `InMemoryTests.SelectPrimitive_ShouldReturnData`, `TestTuples` |
-| `Where`, включая `==` по nullable и захваченным значениям | `InMemoryTests.TestWhere` |
+| `Where`, включая `==` по nullable и захваченным значениям | `InMemoryTests.TestWhere`, `Contains_ShouldFilterData` |
 | Подзапрос, используемый как источник `FROM` (`ctx.From(subQuery)`) | `InMemoryTests.TestWhere_Subquery` |
 | Буферизованные и асинхронные источники (`WithData` / `WithAsyncData`) | `InMemoryTests.TestAsync` |
 | Потоковая передача с `Pipeline`, с соблюдением отмены | `InMemoryTests.TestFetch`, `TestFetch_PipelineStopsOnCancellation` |
 | `Limit` / `Offset` / `First` / `Single` и их формы `OrDefault` | `InMemoryTests.Top_ShouldLimitData`, `First_ShouldReturnFirst`, `Single_ShouldReturnSingle` |
-| `OrderBy` / `OrderByDescending` (буферизованные источники) | `InMemoryTests.OrderBy_ShouldSortData` |
+| `OrderBy` / `OrderByDescending`, включая асинхронные источники | `InMemoryTests.OrderBy_ShouldSortData`, `OrderByOverAsyncSource_ShouldSortData` |
+| Материализаторы `ToArray` / `ToHashSet` / `ToDictionary` (и async) | `InMemoryTests.ToArray_ShouldReturnData`, `ToHashSet_ShouldReturnData`, `ToDictionary_ShouldReturnData` |
 | `Any` и проецируемый `exists` | `InMemoryTests.SelectAny_ShouldReturnData`, `Any` |
 | `Distinct` по проекциям с равенством по значению | `InMemoryTests.TestDistinct` |
 | Соединения: inner, left, right, full, cross, цепочкой до 8 таблиц | `InMemoryJoinTests.TestJoin`, `TestLeftJoin`, `TestRightJoinChained`, `TestFullJoinChained`, `TestCrossJoin8Tables_ShouldCloneAndMaterializeAtEveryArity` |
+| Агрегаты `Count`/`Sum`/`Min`/`Max`/`Avg`/`Stdev`/`Var` (буферизованные источники) | `InMemoryTests.Count_ShouldReturnRowCount`, `Sum_ShouldReturnSum`, `MinMax_ShouldReturnBounds`, `Avg_ShouldReturnAverage` |
+| `GroupBy` / `Having` с агрегатами по группам (буферизованные источники) | `InMemoryTests.GroupBy_ShouldAggregatePerGroup`, `GroupBy_Having_ShouldFilterGroups`, `GroupBy_Avg_ShouldAggregatePerGroup`, `GroupBy_OrderByColumn_ShouldSortGroups` |
+| Set-операции `UNION` / `UNION ALL` / `INTERSECT` / `INTERSECT ALL` / `EXCEPT` / `EXCEPT ALL` | `InMemoryTests.Union_ShouldRemoveDuplicates`, `UnionAll_ShouldKeepDuplicates`, `Intersect_ShouldReturnOnlyCommonRows`, `Except_ShouldReturnOnlyLeftRows`, `SetOperations_WhenChained_ShouldApplyLeftToRight` |
+| `Last` / `LastOrDefault` по упорядоченному запросу (обратный `ORDER BY`) | `InMemoryTests.Last_ShouldReturnLastOrderedRow`, `LastOrDefault_ShouldReturnLastOrderedRow` |
+| Буферизованный подзапрос-источник (`ctx.From(cmd)`) с синхронной материализацией и агрегатами | `InMemoryTests.SubquerySource_SyncToList_ShouldReturnRows`, `SubquerySource_Count_ShouldReturnRowCount`, `SetOperation_AsSubquery_Count_ShouldReturnRowCount` |
+| `SelectMany` (разворот, коррелированный) и `GroupJoin` (сгруппированные строки внутренней стороны) | `InMemorySelectManyTests.SelectMany_Correlated_ShouldFlattenPerRow`, `GroupJoin_ShouldGroupInnerRows` |
 
-Провайдер in-memory разделяет тот же fluent-API `Entity<T>`, что и SQL-провайдеры, поэтому один и тот же объект запроса
-работает с обоими.
+Провайдер in-memory разделяет тот же fluent-API `EntityBuilder<T>`, что и SQL-провайдеры, поэтому один и тот же объект запроса
+работает с обоими — **кроме** `SelectMany`/`GroupJoin`: они доступны только в in-memory, а на SQL-провайдере
+сразу бросают `NotSupportedException` (см. [Ограничения](../advanced/limitations.md)).
 
 ## Не поддерживается
 
@@ -107,13 +115,20 @@ static async IAsyncEnumerable<SimpleEntity> GetRows()
   `Equals`/`GetHashCode`. Спроецируйте анонимный тип или тип-значение, либо переопределите равенство.
 
   ```csharp
-  ctx.Create<SimpleEntity>().Distinct().ToList();
+  ctx.From<SimpleEntity>().Distinct().ToList();
   // NotSupportedException: "DISTINCT is not supported by the in-memory provider for projection type ..."
   ```
 
 - **Raw SQL** (`PrepareFromSql`) не реализован (`NotImplementedException`).
-- **Упорядочивание по источнику `IAsyncEnumerable`** не реализовано; упорядочивание применяется для буферизованных
-  источников `IEnumerable`.
+- **Агрегаты или `GroupBy` по источнику `IAsyncEnumerable`** бросают `NotSupportedException`; и то, и другое
+  вычисляется для буферизованных источников `IEnumerable`.
+- **Агрегаты с фильтром** (`NORM.SQL.count(e => filter)` и перегрузки `(value, filter)`) и
+  **упорядочивание групп по выражению** бросают `NotSupportedException`; упорядочивайте группы по индексу колонки.
+- **Set-операции по источнику `IAsyncEnumerable`** бросают `NotSupportedException`; операнды буферизуются.
+- **`Last`/`LastOrDefault` без `ORDER BY`** бросают `InvalidOperationException`: у запроса без
+  упорядочивания нет определённой последней строки.
+- **Агрегаты по асинхронному подзапросу-источнику** бросают `NotSupportedException`; буферизованные
+  подзапросы сворачиваются.
 
 ## Различия провайдеров
 
@@ -126,6 +141,7 @@ static async IAsyncEnumerable<SimpleEntity> GetRows()
 | Источники TVF | `NotSupportedException` |
 | Raw SQL | `NotImplementedException` |
 | `Distinct` по типам без равенства по значению | `NotSupportedException` |
+| `SelectMany` / `GroupJoin` | поддерживаются (эти операторы доступны только в in-memory) |
 
 ## См. также
 

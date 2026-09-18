@@ -10,6 +10,98 @@ public sealed class SqliteDialect : SqlDialectBase
 
     public override string ConcatStringOperator => "||";
 
+    // SQLite 3.30+ accepts the FILTER (WHERE ...) aggregate clause.
+    public override bool SupportsFilter => true;
+
+    // SQLite 3.33+ accepts the ANSI GROUP BY ROLLUP (...)/CUBE (...) form.
+    public override bool SupportsRollup => true;
+    public override bool SupportsCube => true;
+    public override bool SupportsGroupingSets => true;
+
+    // SQLite aggregates strings through group_concat (there is no array_agg).
+    public override bool SupportsStringAgg => true;
+
+    public override string MakeStringAgg(string value, string delimiter) =>
+        $"group_concat({value}, {delimiter})";
+
+    // instr() is the one-based position primitive; SQLite has no reverse(), so string.LastIndexOf is
+    // not available (the base throws a clear message).
+    protected override string MakeStringPosition(string value, string substring) =>
+        $"instr({value}, {substring})";
+
+    // There is no repeat(); a run of the (single-character) value is produced by replacing every '00'
+    // of a zero blob's hex representation, whose length in bytes is its character count.
+    public override string MakeRepeat(string value, string count) =>
+        $"replace(hex(zeroblob({count})), '00', {value})";
+
+    // SQLite has no dateadd/datediff; it adjusts a date through a modifier string and measures
+    // differences in seconds (or months for calendar parts).
+    public override bool SupportsDateArithmetic => true;
+
+    public override string MakeDateAdd(string field, string amount, string value)
+    {
+        // The modifier number carries its own sign, so the amount expression is concatenated into
+        // the modifier string; there is no millisecond/month-quarter unit, so those fold.
+        var (unit, factor, subSecond) = field switch
+        {
+            "microseconds" => ("seconds", 1_000_000, true),
+            "milliseconds" => ("seconds", 1_000, true),
+            "second" => ("seconds", 1, false),
+            "minute" => ("minutes", 1, false),
+            "hour" => ("hours", 1, false),
+            "day" => ("days", 1, false),
+            "week" => ("days", 7, false),
+            "month" => ("months", 1, false),
+            "quarter" => ("months", 3, false),
+            "year" => ("years", 1, false),
+            "decade" => ("years", 10, false),
+            "century" => ("years", 100, false),
+            "millennium" => ("years", 1000, false),
+            _ => throw new NotSupportedException($"SQLite date_add does not support the '{field}' field.")
+        };
+
+        var scaled = subSecond
+            ? $"({amount}) / {factor}.0"
+            : factor == 1 ? amount : $"({amount}) * {factor}";
+
+        var modifier = $"({scaled}) || ' {unit}'";
+
+        // A sub-second shift goes through strftime to keep the fractional seconds.
+        return subSecond
+            ? $"strftime('%Y-%m-%d %H:%M:%f', {value}, {modifier})"
+            : $"datetime({value}, {modifier})";
+    }
+
+    public override string MakeDateDiff(string field, string start, string end)
+    {
+        var seconds = $"(strftime('%s', {end}) - strftime('%s', {start}))";
+
+        return field switch
+        {
+            "microseconds" => $"({seconds} * 1000000)",
+            "milliseconds" => $"({seconds} * 1000)",
+            "second" => seconds,
+            "minute" => $"({seconds} / 60)",
+            "hour" => $"({seconds} / 3600)",
+            "day" => $"({seconds} / 86400)",
+            "week" => $"({seconds} / 604800)",
+            "month" => MonthsDiff(start, end),
+            "quarter" => $"({MonthsDiff(start, end)} / 3)",
+            "year" => $"({MonthsDiff(start, end)} / 12)",
+            _ => throw new NotSupportedException($"SQLite date_diff does not support the '{field}' field.")
+        };
+    }
+
+    private static string MonthsDiff(string start, string end) =>
+        $"((cast(strftime('%Y', {end}) as integer) * 12 + cast(strftime('%m', {end}) as integer)) - "
+        + $"(cast(strftime('%Y', {start}) as integer) * 12 + cast(strftime('%m', {start}) as integer)))";
+
+    public override string MakeEndOfMonth(string value) =>
+        $"date({value}, 'start of month', '+1 month', '-1 day')";
+
+    public override string MakeDateFromParts(string year, string month, string day) =>
+        $"date(printf('%04d-%02d-%02d', {year}, {month}, {day}))";
+
     public override string MakeCoalesce(string v1, string v2) => $"ifnull({v1}, {v2})";
 
     public override string MakeParam(string name) => $"${name}";

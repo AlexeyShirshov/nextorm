@@ -8,16 +8,16 @@
 
 nextorm exposes two entry points for `SELECT DISTINCT`:
 
-* `Entity<TEntity>.Distinct()` — sets the flag on the builder, before `Select`:
+* `EntityBuilder<TEntity>.Distinct()` — sets the flag on the builder, before `Select`:
 
   ```csharp
-  dataContext.Create<IComplexEntity>().Distinct().Select(x => new { x.Int })
+  dataContext.From<IComplexEntity>().Distinct().Select(x => new { x.Int })
   ```
 
 * `QueryCommand<TResult>.Distinct()` — sets the flag on an already projected command:
 
   ```csharp
-  dataContext.Create<IComplexEntity>().Select(x => new { x.Int }).Distinct()
+  dataContext.From<IComplexEntity>().Select(x => new { x.Int }).Distinct()
   ```
 
 Both produce the same SQL. `DISTINCT` applies to the whole select list, so the duplicates that are
@@ -27,12 +27,12 @@ removed are duplicates of the projected tuple, not of a single column.
 
 ```csharp
 // complex_entity stores nullableint values null, 1, 1 so DISTINCT must collapse the two 1s.
-var rows = dataContext.Create<IComplexEntity>()
+var rows = dataContext.From<IComplexEntity>()
     .Select(e => new { e.Int })
     .Distinct()
     .ToList();
 
-var same = dataContext.Create<IComplexEntity>()
+var same = dataContext.From<IComplexEntity>()
     .Distinct()
     .Select(e => new { e.Int })
     .ToList();
@@ -48,8 +48,8 @@ A projected join can contain duplicate rows; `Distinct` collapses them:
 
 ```csharp
 // complex_entity booleans are true, false, false, so the projected join has duplicate rows.
-var rows = dataContext.Create<ISimpleEntity>()
-    .Join(dataContext.Create<IComplexEntity>(), (s, c) => s.Id == c.Id)
+var rows = dataContext.From<ISimpleEntity>()
+    .Join(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
     .Select(p => new { p.t2.Boolean })
     .Distinct()
     .ToList();
@@ -63,13 +63,13 @@ A cross join produces the full Cartesian product, which `Distinct` then reduces 
 values of the projected column:
 
 ```csharp
-var all = dataContext.Create<ISimpleEntity>()
-    .CrossJoin(dataContext.Create<IComplexEntity>())
+var all = dataContext.From<ISimpleEntity>()
+    .CrossJoin(dataContext.From<IComplexEntity>())
     .Select(p => new { p.t2.Id })
     .ToList(); // 30 rows
 
-var distinct = dataContext.Create<ISimpleEntity>()
-    .CrossJoin(dataContext.Create<IComplexEntity>())
+var distinct = dataContext.From<ISimpleEntity>()
+    .CrossJoin(dataContext.From<IComplexEntity>())
     .Select(p => new { p.t2.Id })
     .Distinct()
     .ToList(); // 3 rows
@@ -85,12 +85,12 @@ Paging is applied to the distinct result. The `Limit`/`Page` call is placed befo
 double-checked shape (`Distinct` then `Limit`) is governed by the provider's keyword order:
 
 ```csharp
-var distinct = dataContext.Create<IComplexEntity>()
+var distinct = dataContext.From<IComplexEntity>()
     .Select(e => new { e.Boolean })
     .Distinct()
     .ToList(); // 2 rows
 
-var firstPage = dataContext.Create<IComplexEntity>()
+var firstPage = dataContext.From<IComplexEntity>()
     .Limit(1)
     .Select(e => new { e.Boolean })
     .Distinct()
@@ -117,9 +117,9 @@ On SQL Server, `select top(1) distinct ...` is invalid T-SQL, so the dialect emi
 branch it is attached to:
 
 ```csharp
-var cmd = dataContext.Create<IComplexEntity>().Select(it => it.Int)
+var cmd = dataContext.From<IComplexEntity>().Select(it => it.Int)
     .Distinct()
-    .Union(dataContext.Create<IComplexEntity>().Select(it => it.Int));
+    .Union(dataContext.From<IComplexEntity>().Select(it => it.Int));
 
 var count = dataContext.From(cmd).Count(); // 2
 ```
@@ -135,9 +135,9 @@ With `UnionAll` the branches are concatenated without an extra deduplication, so
 distinct but the right one is not:
 
 ```csharp
-var cmd = dataContext.Create<IComplexEntity>().Select(it => it.Int)
+var cmd = dataContext.From<IComplexEntity>().Select(it => it.Int)
     .Distinct()
-    .UnionAll(dataContext.Create<IComplexEntity>().Select(it => it.Int));
+    .UnionAll(dataContext.From<IComplexEntity>().Select(it => it.Int));
 
 var count = dataContext.From(cmd).Count();
 // Left branch is distinct ({null, 1}); UNION ALL keeps the right branch ({null, 1, 1}) => 5 rows.

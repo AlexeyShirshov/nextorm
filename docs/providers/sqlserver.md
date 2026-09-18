@@ -59,10 +59,10 @@ using IDataContext ctx = new SqlServerDbContext("Server=localhost;Database=app;.
 ## Paging: `TOP` and `OFFSET … FETCH`
 
 ```csharp
-ctx.Create<ISimpleEntity>().Limit(5).Select(x => x.Id);
+ctx.From<ISimpleEntity>().Limit(5).Select(x => x.Id);
 // select top(5) id from simple_entity
 
-ctx.Create<ISimpleEntity>().Page(5, 10).Select(x => x.Id);
+ctx.From<ISimpleEntity>().Page(5, 10).Select(x => x.Id);
 // select id from simple_entity order by (select null as anyorder)
 // offset 10 rows
 // fetch next 5 rows only
@@ -73,20 +73,41 @@ injects the constant sort `(select null as anyorder)` (`GetPagingOrderBy`). An o
 `offset m rows` and no `fetch`. When the query already has an `ORDER BY`, nothing is injected.
 
 ```csharp
-ctx.Create<ISimpleEntity>().Offset(10).OrderBy(x => x.Id).Select(x => x.Id);
+ctx.From<ISimpleEntity>().Offset(10).OrderBy(x => x.Id).Select(x => x.Id);
 // ... order by id offset 10 rows
 ```
 
 ## Aggregates and scalar functions
 
 ```csharp
-var count = ctx.Create<IComplexEntity>().Select(x => NORM.SQL.count_big());        // count_big(*)
-var std   = ctx.Create<IComplexEntity>().Select(x => NORM.SQL.stdev((double)x.Id)); // stdev(...)
+var count = ctx.From<IComplexEntity>().Select(x => NORM.SQL.count_big());        // count_big(*)
+var std   = ctx.From<IComplexEntity>().Select(x => NORM.SQL.stdev((double)x.Id)); // stdev(...)
 ```
 
 `count_big` / `count_big_distinct` render `count_big(...)`; plain `count`/`count_distinct` render
 `count(...)`. `stdev`, `stdevp`, `var` and `varp` keep their names (SQL Server provides them natively).
 `Math.Round`, `Math.Truncate`, `len`, `datepart`, `getdate` and `isnull` are all emitted as shown above.
+
+SQL Server 2022+ also opts into `greatest`/`least` (standard syntax) and `NORM.SQL.date_trunc`, which
+renders `datetrunc(part, value)` with the plural ANSI parts folded to the singular T-SQL spellings
+(`milliseconds` → `millisecond`); `decade`/`century`/`millennium` throw. Date arithmetic is native:
+`NORM.SQL.date_add(field, amount, value)` renders `dateadd(field, amount, value)` (with
+`decade`/`century`/`millennium` folded onto a scaled `year` add), `NORM.SQL.date_diff(field, start, end)`
+renders `datediff(field, start, end)`, `NORM.SQL.date_from_parts(year, month, day)` renders
+`datefromparts(year, month, day)` and `NORM.SQL.end_of_month(value)` renders `eomonth(value)`.
+SQL Server 2017+ opts into `NORM.SQL.string_agg` →
+`string_agg(value, delimiter)`. There is no array type, so `array_agg` still throws
+(`SupportsArrayAgg` is `false`). SQL Server 2016+ also opts into the JSON-as-text functions
+(`SupportsTextJson`): `NORM.MS_SQL.json_value`, `NORM.MS_SQL.json_query`, `NORM.MS_SQL.json_modify` and
+`NORM.MS_SQL.isjson` render their T-SQL names over a text column, using a JSONPath string (`'$.name'`);
+the PostgreSQL `json`/`jsonb` surface still throws. The full-text predicates `NORM.SQL.contains` and
+`NORM.SQL.freetext` (`SupportsFullText`) render as T-SQL `contains(...)`/`freetext(...)` and require a
+full-text index on the column. Table hints (`SupportsTableHints`) render as `WITH (hint, ...)` after the
+primary table name: `ctx.From<IComplexEntity>().WithTableHint("nolock")` emits
+`from complex_entity with (nolock)`. `QueryCommand.ForJson(...)` (`SupportsForJson`) appends a trailing
+`FOR JSON PATH`/`FOR JSON AUTO` clause (with optional `ROOT('...')` and `INCLUDE_NULL_VALUES`), and
+`QueryCommand.ForXml(...)` (`SupportsForXml`) a `FOR XML RAW/AUTO/EXPLICIT/PATH` one (with optional row
+element, `ROOT('...')` and `ELEMENTS`).
 
 ## Recursive CTEs and `maxRecursion`
 
@@ -151,6 +172,15 @@ join complex_entity as [t2] on t1.id = t2.id
 | `*ALL` | not supported (throws) |
 | Recursive CTE | `with` + `option (maxrecursion n)` |
 | Aggregate names | `stdev`/`var` native; `count_big` available |
+| `greatest` / `least` | supported (SQL Server 2022+) |
+| `date_trunc` | `datetrunc(part, value)` (SQL Server 2022+) |
+| `date_add` / `date_diff` / `date_from_parts` / `end_of_month` | `dateadd(field, amount, value)` / `datediff(field, start, end)` / `datefromparts(y, m, d)` / `eomonth(value)` |
+| `string_agg` / `array_agg` | `string_agg` supported (SQL Server 2017+); `array_agg` not supported (throws) |
+| Text JSON | `json_value` / `json_query` / `json_modify` (SQL Server 2016+) |
+| Full-text predicates | `contains(...)` / `freetext(...)` (column must be full-text indexed) |
+| Table hints | `with (hint, ...)` after the primary table (`WithTableHint`) |
+| JSON output | trailing `for json path` / `for json auto` (`ForJson`) |
+| XML output | trailing `for xml raw/auto/explicit/path` (`ForXml`) |
 | `AVG` over an integer column | truncated to an integer |
 | `ORDER BY … DESC` null placement | nulls sort last by default |
 

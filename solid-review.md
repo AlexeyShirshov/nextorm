@@ -31,7 +31,7 @@ DRY. Код не изменялся. Ссылки на находки — в ф�
 | [F7](#f7-пустой-алиас--перегруженный-iqueryprovider-ispyagni-низкая) | `IQueryContext` — пустой алиас; `IQueryProvider` перегружен хешированием плана | ISP/YAGNI | Низкая | Маркер удалён; ISP отложен |
 | [F8](#f8-di-регистрации-дублирование-и-двойной-инстанс-drydip-средняя) | 6 дублирующихся DI-оверлоадов + двойная регистрация | DRY/DIP | Средняя | ✅ Реализовано |
 | [F9](#f9-baseexpressionvisitor--god-class--switch-на-именах-srpocp-средняя) | `BaseExpressionVisitor` — 1035 строк, switch на 20 имён | SRP/OCP | Средняя | Открыто |
-| [F10](#f10-дублирование-агрегатов-в-entitytentity-dry-низкая) | `Entity<TEntity>`: 40 членов, 8 семейств агрегатов отличаются только `MethodInfo` | DRY | Низкая | ✅ Реализовано |
+| [F10](#f10-дублирование-агрегатов-в-entitybuildertentity-dry-низкая) | `EntityBuilder<TEntity>`: 40 членов, 8 семейств агрегатов отличаются только `MethodInfo` | DRY | Низкая | ✅ Реализовано |
 | [F11](#f11-параллельные-реализации-кэшей-dry-низко-средняя) | Параллельные реализации кэшей (static vs instance) | DRY | Низко-средняя | ✅ Реализовано |
 
 ---
@@ -44,7 +44,7 @@ DRY. Код не изменялся. Ссылки на находки — в ф�
 | # | Что проверено в коде | Вердикт |
 |---|---|---|
 | F4 | `RowMaterializerBuilder.Build` вызывается из `InMemoryDataContext` (`:775`) и `RowMapperFactory` (`:88`) | ✅ подтверждено |
-| F1 | `DbContext.cs` 1357 → 1104 на момент работы; текущее дерево — **1095** строк; вынесены диалект (`ISqlDialect`), маппинг (`RowMapperFactory`), соединение (база + `IConnectionManager`) | Частично — осталась разгрузка исполнения |
+| F1 | `DbContext.cs` 1357 → 1104 на момент работы; сейчас **397** строк; вынесены диалект (`ISqlDialect`), маппинг (`RowMapperFactory`), **соединение** (`DbConnectionManager`), **исполнение** (`QueryExecutor`) и **планирование** (`QueryPlanner` + `QueryPlanStore`); удалены мёртвые `_connOpen`, `GetAliasFromProjection` и `CreateConnection` (public, никем не использовался) | Частично — осталась ось окружения/кэша |
 | F2 | `IDataContext.cs` 122 → **25** строк: пустой композит 4 ролей; `EnsureConnectionOpen` остался только у `DbContext` (`:76,88`) и в `IConnectionManager` | ✅ подтверждено |
 | F3 | guard'ов `is I…` в `DbContext` — **0**, `NotSupportedException` — **0**; на месте единые `AsDbCommand` (`DbContext.cs:657`) и `AsInMemoryCommand` (`InMemoryDataContext.cs:832`) | Частично — осталась контрактная часть (публичный `ToList(IPreparedQueryCommand<TResult>)`) |
 | F5 | `NotImplementedException` в `DbContext` — **1**, и тот внутри закомментированного блока (`:1076`) | ✅ подтверждено |
@@ -52,7 +52,7 @@ DRY. Код не изменялся. Ссылки на находки — в ф�
 | F7 | `Query/IQueryContext.cs` удалён; упоминаний в `src`/`test` нет | ✅ подтверждено |
 | F8 | приватные `RegisterContextFactory` / `RegisterContextType` (`DI/ServiceCollectionExtensions.cs:73,103`) | ✅ подтверждено |
 | F9 | `BaseExpressionVisitor` **2128** строк (на предыдущую сверку — 2223); 6 `NotImplementedException` (не изменилось); switch по `nameof(TableAlias.*)` на месте (`:123+`); `TryTranslateFunction` (`:541`) и `ISqlDialect.Make*` на месте | Открыто — размер немного сократился, часть OCP-долга ушла в диалект |
-| F10 | `Entity.cs` 674 → 602 на момент работы; текущее дерево — **627** (рабочая копия добавила ~25 строк); 8 приватных `XCore` + 8 async-тел → **2** (`AggregateCore`/`AggregateAsyncCore`), 32 публичных члена не изменены; `var`/`varp` зарегистрированы в SQLite | ✅ подтверждено |
+| F10 | `EntityBuilder.cs` 674 → 602 на момент работы; текущее дерево — **627** (рабочая копия добавила ~25 строк); 8 приватных `XCore` + 8 async-тел → **2** (`AggregateCore`/`AggregateAsyncCore`), 32 публичных члена не изменены; `var`/`varp` зарегистрированы в SQLite | ✅ подтверждено |
 | F11 | `DataContextCache` — единственный источник (`Metadata`/`SelectListCache`/`ExpressionsCache`/`InValuesCache`); дубли-статики `_metadata`/`_selectListCache` у `InMemoryContext` **удалены**, свойства делегируют (`InMemoryDataContext.cs:59,62`); `_expCache` оставлен инстансным **осознанно** (захват `this`); scope всех кэшей задокументирован; дубли `_sbPool` и роста имён **устранены** (F6) | ✅ подтверждено |
 
 **Прогон (повторная сверка).** build 0/0; core **111**, sqlite **144** — Failed 0 (xUnit v3
@@ -149,10 +149,50 @@ else
   Expression>`, а клиент, ради которого именованный интерфейс имел смысл
   (`ReplaceMemberVisitor`), оказался мёртвым кодом и удалён. `ConvertScalar` оставлен — это
   скалярная конверсия для `ExecuteScalar`, а не маппинг строк.
-- **Осталось.** Только разгрузка исполнения — роли для неё уже есть из F2
-  (`IQueryExecutor`/`IQueryMaterializer`).
+- **Сделано — ось исполнения (шаг 1).** Терминалы (`ToList/First/Single/ExecuteScalar`
+  × sync/async), их `GetDbCommand`-обвязка, `ConvertScalar`, `CheckDisposed` и
+  `CreateEnumerator(Async)` вынесены в `QueryExecutor` (`DataContext/QueryExecutor.cs`) —
+  `internal sealed`, реализует `IQueryExecutor` + `IRowReaderFactory`. Зависимости приходят в
+  конструктор (`IConnectionManager`, делегат `CreateParam`, логгер, флаг `logParams`,
+  `logSensitiveData`, `Func<bool> isDisposed`), конкретного контекста он не видит.
+  `DbContext` оставляет тонкие делегаты — публичная поверхность не изменилась. Попутно:
+  `CreateResultSetEnumerator` **оставлен** на `DbContext`, потому что его использует
+  **планировщик** (`:376`, `:462`), а не исполнитель (чуть не уехал по ошибке).
+- **Сделано — мёртвое состояние.** `internal bool _connOpen` после F6 писался и не читался
+  нигде; вместе с ним удалены `OnStateChanged` и подписки на `conn.StateChange` (обработчик
+  существовал только ради этого поля).
+- **Сделано — ось планировщика (шаг 2).** `QueryPlanner` (`internal sealed`, `IQueryPlanner`,
+  `DataContext/QueryPlanner.cs`) забрал `GetPreparedQueryCommand` (183 стр.), `MakeSelect`,
+  `ExtractParams`, `IsRuntimeParam`, `GetMapCached`, `ResetPreparation` и оба `GetFrom`
+  (+ `_fromCache`). Store планов вынесен в отдельный `QueryPlanStore` (thread-static), который
+  теперь делят планировщик, сброс соединения (`ConnDisposed`/`DisposeStaff`) и `PurgeQueryCache`.
+  Провайдерские хуки (`Dialect`, `MapColumnExpression`, `CreateParam`, `CreateCommand`) переданы
+  делегатами и вызываются **лениво** — вызов виртуального/абстрактного члена из базового
+  конструктора выполнил бы код наследника до его конструктора. Удалён мёртвый
+  `GetAliasFromProjection` (существовал только как определение); `ResetPreparation` сведён к
+  делегату (был пустой no-op). `DbContext` 1036 → **473** строки (**−57%** от исходных 1095).
+- **Сделано — ось соединения (шаг 3).** `DbConnectionManager` (`internal sealed`,
+  `IConnectionManager`, `DataContext/DbConnectionManager.cs`) забрал состояние и алгоритм соединения:
+  ленивое создание, владение (`_conn`/`_connWasCreatedByMe`), открытие, `ConnDisposed`, teardown.
+  Провайдерские хуки **остались на контексте** — `CreateDbConnection` (abstract) и
+  `OnConnectionCreated` (virtual) передаются менеджеру делегатами, контракт подклассов не изменён.
+  Сам контекст уходит в менеджер только как роль `IDataContext` (нужна для
+  `IDbCommandHolder.ResetConnection(conn, IDataContext)`). `DisposeStaff` схлопнулся в
+  `_connectionManager.DisposeConnection()` + событие `Disposed`. `DbContext` 473 → **397** строк.
+  Публичная поверхность сохранена: `GetConnection`, `EnsureConnectionOpen(Async)`, `ConnectionString`
+  (используется тестом), `CreateCommand` — тонкие делегаты. **Изменение поверхности:**
+  `public virtual DbConnection CreateConnection()` удалён (никем не переопределялся и не вызывался
+  извне; точка расширения провайдера — `CreateDbConnection`/`OnConnectionCreated`, как и
+  задокументировано).
+- **Осталось.** Ось окружения/кэша (логгеры, `Properties`, `NeedMapping` + `AnyCommand`) — последний
+  крупный остаток `DbContext`.
 - **Риск.** SQL-рендеринг на горячем пути: перед дальнейшим дроблением зафиксировать
-  benchmark-базу (`performance-findings.md`).
+  benchmark-базу (`performance-findings.md`). **Отдельно про измерения:** быстрый режим
+  (`Job.ShortRun` + InProcess — дефолт) на этом дереве даёт разброс **до ±30% на одном и том
+  же коде** (два прогона подряд: `Cached_PlanOnly_Param` 528.9 vs 378.1 µs, `Cached_ToList`
+  1577 vs 2074 µs), поэтому выводы о регрессах меньше ~30% по нему делать нельзя. Надёжный
+  `NEXTORM_BENCH_FULL=1` (`Job.Default`) сейчас **не собирается**: `ValueList.cs` даёт CS1587
+  (XML-комментарий не на том языковом элементе).
 
 ---
 
@@ -245,7 +285,7 @@ generic по контексту (`IPreparedQueryCommand<TContext, TResult>`). Д
 - `Projection<T1,T2>.Extend` работал, а `Projection<T1,T2,T3>.Extend` бросал при одном
   контракте `IProjection`; **`Extend` вынесен в `IExtendableProjection`**;
 - `EntityP2.Join` бросает при `Condition is not null`
-  (`Builders/Joins/JoinCommandBuilder.cs:25-26`), хотя базовый `Entity<TEntity>.Join` —
+  (`Builders/Joins/JoinCommandBuilder.cs:25-26`), хотя базовый `EntityBuilder<TEntity>.Join` —
   нет (нюанс: это `new`-hiding, а не override).
 
 **Первопричина.** Опциональные хуки с «throwing default»; подтипы усиливают
@@ -365,7 +405,7 @@ SQL-конвейер. Вторая половина остатка — ось м
 **Ревалидация после параллельной работы** (CTE, `Distinct`, `JoinType`, IN-транслятор,
 string/math-функции, `Not`). SQL-генерация осталась чистой: `DbContext` не упоминается ни в одном
 из ключевых файлов — `SqlBuilder`, `BaseExpressionVisitor`, `WhereExpressionVisitor`, `CteQuery`,
-`InValuesEvaluator`, `QueryCommand.Prepare`, `SelectExpression`, `Entity`, `JoinCommandBuilder` —
+`InValuesEvaluator`, `QueryCommand.Prepare`, `SelectExpression`, `EntityBuilder`, `JoinCommandBuilder` —
 **0** вхождений в каждом. Новый `CteQuery` зависит от `IDataContext` (абстракция), а не от класса,
 т.е. регресса F6 параллельная работа не внесла.
 
@@ -462,9 +502,9 @@ switch по `nameof(TableAlias.Long/Int/Boolean/...)` теперь в pattern-ф
 
 ---
 
-## F10. Дублирование агрегатов в `Entity<TEntity>` (DRY, Низкая)
+## F10. Дублирование агрегатов в `EntityBuilder<TEntity>` (DRY, Низкая)
 
-**Доказательство.** `Builders/Entity.cs:448-575` — Min/Max/Avg/Sum/Stdev/Stdevp/Var/Varp.
+**Доказательство.** `Builders/EntityBuilder.cs:448-575` — Min/Max/Avg/Sum/Stdev/Stdevp/Var/Varp.
 Каждое семейство — 5 членов (`X(exp)`, `X(exp, params ReadOnlySpan<object?>)`, приватный
 `XCore`, `XAsync(exp, params object[])`, `XAsync(exp, CancellationToken, params object[])`),
 итого **40 членов**. Все 8 sync-тел и 8 async-тел отличаются **только** `MethodInfo`
@@ -488,7 +528,7 @@ exp.Body)` + `cmd.SingleRow = true` + `ExecuteScalar(...)` — побайтов�
 (`=> AggregateCore(NORM.NORM_SQL.MinMI, exp, @params)`), атрибуты
 `[MethodImpl(AggressiveInlining)]` на async-обёртках сохранены как были. **Публичные сигнатуры
 не изменены ни в одной из 40 перегрузок** — это внутренняя чистка, а не правка API. Итог:
-`Builders/Entity.cs` 674 → **602** строки (−72), приватных ядер 8 → 2, копий формулы —
+`Builders/EntityBuilder.cs` 674 → **602** строки (−72), приватных ядер 8 → 2, копий формулы —
 16 → 1, копий `SingleRow`/`ExecuteScalar` — 16 → 2. Стоимость на вызов не изменилась:
 `MakeGenericMethod` и построение дерева выражений как доминировали, так и доминируют;
 передача `MethodInfo` параметром вместо обращения к static-полю — одна загрузка поля.
@@ -523,7 +563,7 @@ exp.Body)` + `cmd.SingleRow = true` + `ExecuteScalar(...)` — побайтов�
 midpoint-to-even), а не усекает: `Stdevp` = 2.8722813232690143 → 3 (усечение дало бы 2).
 
 **Остаточный пробел (закрыт).** SQLite регистрировал только `stdev`/`stdevp`, поэтому
-`Entity.Var`/`Varp`/`VarAsync`/`VarpAsync` падали с «no such function». В
+`EntityBuilder.Var`/`Varp`/`VarAsync`/`VarpAsync` падали с «no such function». В
 `src/nextorm.sqlite/SQLiteFunctions.cs` добавлены агрегаты `var`/`varp`: аккумулятор (он уже нёс
 `Count`/`Sum`/`SumSq`) переименован в `VarianceAccumulator`, а его `Final` разделён на
 `FinalVariance` — она возвращает **дисперсию**, `stdev`/`stdevp` берут от неё `Math.Sqrt`,
@@ -614,8 +654,8 @@ generator отклонён по YAGNI (build-time машинерия ради 8 
   галочки».
 - `DefaultParamProvider`/`GetParamName` — осознанная оптимизация (без `string.Format`),
   не нарушение.
-- `First`/`FirstOrDefault`/`Single`/`SingleOrDefault` в `Entity<TEntity>`
-  (`Builders/Entity.cs:295-372`) — форвардинг на разные методы `QueryCommand`; общей логики
+- `First`/`FirstOrDefault`/`Single`/`SingleOrDefault` в `EntityBuilder<TEntity>`
+  (`Builders/EntityBuilder.cs:295-372`) — форвардинг на разные методы `QueryCommand`; общей логики
   нет, схлопывание невозможно без потери типизации. Не путать с F10, где логика
   действительно продублирована.
 
@@ -695,7 +735,7 @@ generator отклонён по YAGNI (build-time машинерия ради 8 
     оптимизированный `GetEnumerable` (без `yield`-машины).
   - `CorrelatedQueryExpressionVisitor` сужен до `IQueryMaterializer` + отдельный
     `ILogger?` вместо `IDataContext` (единственный коллаборатор, которому хватает роли).
-  - Потребители, которым реально нужен конвейер (`Entity`, `QueryCommand`, DI,
+  - Потребители, которым реально нужен конвейер (`EntityBuilder`, `QueryCommand`, DI,
     `DataContextOptionsBuilder.Factory`), по-прежнему принимают `IDataContext` — это
     осознанно: они используют 4 роли сразу, сужение до одной было бы фиктивным.
   - Бенчмарки и `PlanCacheTests` переведены на явный `((IConnectionManager)ctx).EnsureConnectionOpen()`.
@@ -770,26 +810,55 @@ generator отклонён по YAGNI (build-time машинерия ради 8 
   - Проверка: build 0/0; core 90, sqlite 24, postgres 16, sqlserver 19; integration 309
     (Failed 0); `f4check` — OK. SQL-тесты диалектов (`SqlGenerationTests`) — зелёные во всех
     трёх провайдерах, что и есть главное доказательство неизменности рендеринга.
-  - Осталось по F1: SRP-разбиение самой 1095-строчной реализации (`DbContext` — и композит ролей,
-    и диалект, и конвейер); DIP-часть исполнения закрыта вместе с F6.
+  - **F1 — сдвинулся (шаги 2–3: оси планирования и соединения).** Шаг 2: `QueryPlanner`
+    (`internal sealed`, `IQueryPlanner`) забрал `GetPreparedQueryCommand` (183 стр.), `MakeSelect`,
+    `ExtractParams`, `IsRuntimeParam`, `GetMapCached`, `ResetPreparation` и оба `GetFrom`; store
+    планов вынесен в `QueryPlanStore` (thread-static, общий с `ConnDisposed`/`DisposeStaff`/
+    `PurgeQueryCache`); удалён мёртвый `GetAliasFromProjection`. Шаг 3: `DbConnectionManager`
+    (`internal sealed`, `IConnectionManager`) забрал состояние и алгоритм соединения, провайдерские
+    хуки `CreateDbConnection`/`OnConnectionCreated` остались на контексте и переданы делегатами;
+    удалён `public virtual CreateConnection()` (никем не переопределялся и не вызывался извне).
+    Провайдерские хуки во всех случаях передаются делегатами и вызываются **лениво** — иначе
+    базовый конструктор звал бы override наследника. `DbContext` 1036 → **473** → **397** строк.
+    Осталось по F1: ось окружения/кэша.
+  - Замер шагов 1–3: build 0/0; core 111, sqlite 149, postgres 115, sqlserver 124; integration
+    **561, Failed 0, Skipped 16** (зелёные после каждого шага).
+  - **Методика замеров (важная поправка).** `Job.Default` (`NEXTORM_BENCH_FULL=1`) даёт узкий CI
+    *внутри* прогона (StdErr 0.4–4%), но **между** прогонами на неизменном коде разброс до **19%**:
+    три полных прогона `SqliteBenchmarkCachedPlan` подряд дали `Cached_PlanOnly_Param`
+    336.5 / 348.4 / 391.6 µs, `RePrepare_PlanOnly_Param` 142.0 / 140.7 / 167.3 µs,
+    `Cached_ToList` 1450.6 / 1358.1 / 1506.2 µs. Вывод: CI прогона нельзя использовать как меру
+    воспроизводимости; значимыми считать только изменения заметно выше ~20%, либо сравнивать
+    медианы нескольких прогонов. Разовый скачок аллокаций в `Cached_PlanOnly_Param`
+    (311.73 → 325.79 KB) во втором прогоне **не воспроизвёлся** (снова 311.73 KB) — это была
+    аномалия, не следствие правки.
+  - **Перф шагов 2–3 — в пределах этого разброса.** Систематического сдвига нет: в одном прогоне
+    подряд идущие строки улучшались на 2–13% (от правки невозможно), в другом — ухудшались на
+    8–19%; при этом аллокация `Cached_PlanOnly_Param` вернулась к базовым 311.73 KB.
+    Structural cost — несколько вызовов делегатов на построение плана / обращение к соединению
+    (не на строку).
+  - **Условие чистого замера:** заморозить дерево (коммит) и сравнивать медианы нескольких полных
+    прогонов. Пока в одном рабочем дереве смешаны ось диалекта, три новых провайдера, правки
+    `QueryCommand`/`SqlBuilder` и шаги 1–3, любой A/B не интерпретируем.
 - **F1 (ось соединения) — реализовано; сознательное отклонение от исходной формулировки F1.**
   В F1 значился `IConnectionFactory` (`CreateConnection`/`CreateParam`). Разбор показал, что
   (1) `CreateParam` — не connection-ось (он в одной компании с `MakeParam`/`GetParamName`) и
   (2) три провайдера содержали почти дословную копию `CreateConnection`/`ConnectionString`, а
   единственный потребитель «фабрики» — сам `DbContext`. То есть это DRY-дефект, а не
   отсутствующий шов, и заведение интерфейса дало бы концепцию без точки подстановки. Поэтому:
-  - `DbContext` владеет `_connectionString`/`_providedConnection`/`ConnectionString` и общим
+  - тогда `DbContext` владел `_connectionString`/`_providedConnection`/`ConnectionString` и общим
     скелетом `CreateConnection()` (логирование, short-circuit на внешнее соединение, привязка
-    событий, учёт владения);
+    событий, учёт владения) — **позже это целиком ушло в `DbConnectionManager` (шаг 3)**;
   - провайдер реализует `protected abstract DbConnection CreateDbConnection(string?)` и, при
     необходимости, `protected virtual void OnConnectionCreated(DbConnection)`; у SQLite это
     `SQLiteFunctions.Register`, который, как и раньше, вызывается и для внешнего соединения;
+    **после шага 3 это единственные две точки расширения соединения** — они остались на контексте,
+    а менеджер получает их делегатами;
   - `_connWasCreatedByMe` выставляет база — устранена инверсия «база зависит от побочного
-    эффекта в коде наследника»; мёртвая развилка `if (!_connWasCreatedByMe)` после
-    `= true` исчезла;
-  - `CreateConnection` из `abstract` стал `virtual` с рабочим телом (ещё одно обязательство
-    контракта снято, в духе F5); `CreateParam` остался `abstract` — это реально варьирующаяся
-    фабрика ADO-параметра, реализованная всеми провайдерами;
+    эффекта в коде наследника» (после шага 3 флаг живёт в `DbConnectionManager`);
+  - `CreateConnection` из `abstract` стал `virtual` с рабочим телом, а на шаге 3 удалён вовсе
+    (никем не переопределялся и не вызывался извне); `CreateParam` остался `abstract` — это
+    реально варьирующаяся фабрика ADO-параметра, реализованная всеми провайдерами;
   - `IConnectionManager` получил `GetConnection()`: роль соединения стала осмысленной
     (`EnsureConnectionOpen` + доступ к соединению), а не только «открой его»;
   - сохранён `protected DbContext(DbContextBuilder)` — наследники, вызывавшие
@@ -837,11 +906,11 @@ generator отклонён по YAGNI (build-time машинерия ради 8 
   номера в `DbContext.cs` после ~1019 и в `InMemoryDataContext.cs` после ~636, поэтому
   ссылки в F1/F5 на диапазоны `DbContext` правее ~1019 могут отличаться на величину
   вырезанного блока.
-- **F10 — реализовано (DRY).** Все 16 тел агрегатов `Entity<TEntity>` сведены к двум приватным
+- **F10 — реализовано (DRY).** Все 16 тел агрегатов `EntityBuilder<TEntity>` сведены к двум приватным
   ядрам: `AggregateCore<TResult>` (sync) и `AggregateAsyncCore<TResult>` (async). Оба принимают
   `MethodInfo` (`NORM.NORM_SQL.MinMI`/`MaxMI`/`AvgMI`/`SumMI`/`StdevMI`/`StdevpMI`/`VarMI`/`VarpMI`) —
   это единственное, чем отличались 8 семейств. Публичные сигнатуры не тронуты ни в одной из 40
-  перегрузок, `[MethodImpl(AggressiveInlining)]` на async-обёртках сохранены. `Entity.cs`
+  перегрузок, `[MethodImpl(AggressiveInlining)]` на async-обёртках сохранены. `EntityBuilder.cs`
   674 → 602 строки, приватных ядер 8 → 2.
   - Заодно закрыт остаточный пробел SQLite: в `SQLiteFunctions` зарегистрированы `var`/`varp`,
     аккумулятор переименован в `VarianceAccumulator`, его `Final` разделён на `FinalVariance`
@@ -858,15 +927,15 @@ generator отклонён по YAGNI (build-time машинерия ради 8 
     Failed 0; `f4check` ALL OK.
 - **`[MethodImpl(AggressiveInlining)]` — выравнивание конвенции + измерение (перф-работа, не
   SOLID).** Устранено расхождение, помеченное в F10: атрибут стоял только на async-обёртках
-  `Entity<TEntity>`, но не на sync. Добавлено 27 атрибутов (99 → 126): 16 sync-обёрток агрегатов и
-  8 форвардеров в `Entity.cs`, `MapperCache.TryGet`, `DbContext.IsRuntimeParam`.
+  `EntityBuilder<TEntity>`, но не на sync. Добавлено 27 атрибутов (99 → 126): 16 sync-обёрток агрегатов и
+  8 форвардеров в `EntityBuilder.cs`, `MapperCache.TryGet`, `DbContext.IsRuntimeParam`.
   - **Измерено** (`MicroOptimizationsBenchmark.M12`, fast/ShortRun): на чистых форвардерах атрибут
     **не даёт ничего** (678.7 ns против 698.6 ns — внутри шума, StdDev 40–58 ns): JIT инлайнит их и
     так. На leaf-методе с циклом (`for` ×4 + ветвление) — **−20.5%** (2447.0 → 1944.4 ns), т.е.
     атрибут работает именно там, где JIT отказывается инлайнить сам.
   - **Вывод:** достижимого выигрыша от атрибута в этом коде нет — построчная работа сидит внутри
     `Expression.Compile()`-делегата (атрибуты до него не достают), а циклы по колонкам уже инлайн.
-    Добавленные 25 атрибутов в `Entity.cs` — **консистентность конвенции, не ускорение**.
+    Добавленные 25 атрибутов в `EntityBuilder.cs` — **консистентность конвенции, не ускорение**.
   - Побочно: существующий `M10` (sealed vs unsealed) не измеряет девиртуализацию — оба плеча берут
     экземпляр из `static readonly` конкретного поля, и JIT девиртуализирует оба.
 - **F6 (остаток — исполнение) — реализовано (DIP/DRY).** `DbPreparedQueryCommand.GetDbCommand`

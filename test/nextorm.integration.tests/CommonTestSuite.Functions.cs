@@ -73,6 +73,73 @@ public abstract partial class CommonTestSuite
     }
 
     [Fact]
+    public void IndexOf_ShouldReturnZeroBasedPosition()
+    {
+        // "dadfasd": the first 'a' is at index 1, the next one at or after index 2 is at index 4.
+        _sut.ComplexEntity
+            .Where(e => e.Id == 1)
+            .Select(e => e.String!.IndexOf("a"))
+            .First()
+            .Should().Be(1);
+
+        _sut.ComplexEntity
+            .Where(e => e.Id == 1)
+            .Select(e => e.String!.IndexOf("a", 2))
+            .First()
+            .Should().Be(4);
+    }
+
+    [Fact]
+    public void PadLeftRight_ShouldPadValue()
+    {
+        // row 2 is "xxx", so both pads only appear when the target length is greater.
+        _sut.ComplexEntity
+            .Where(e => e.Id == 2)
+            .Select(e => e.String!.PadLeft(5, '0'))
+            .First()
+            .Should().Be("00xxx");
+
+        _sut.ComplexEntity
+            .Where(e => e.Id == 2)
+            .Select(e => e.String!.PadRight(5, '.'))
+            .First()
+            .Should().Be("xxx..");
+    }
+
+    [Fact]
+    public void RemoveAndInsert_ShouldSpliceValue()
+    {
+        // "dadfasd" with three characters removed from the front, the tail removed, then a splice at 3.
+        _sut.ComplexEntity
+            .Where(e => e.Id == 1)
+            .Select(e => e.String!.Remove(0, 3))
+            .First()
+            .Should().Be("fasd");
+
+        _sut.ComplexEntity
+            .Where(e => e.Id == 1)
+            .Select(e => e.String!.Remove(4))
+            .First()
+            .Should().Be("dadf");
+
+        _sut.ComplexEntity
+            .Where(e => e.Id == 1)
+            .Select(e => e.String!.Insert(3, "-"))
+            .First()
+            .Should().Be("dad-fasd");
+    }
+
+    [Fact]
+    public void NewString_ShouldRepeatCharacter()
+    {
+        _sut.ComplexEntity
+            .Where(e => e.Id == 1)
+            .Select(e => new string('*', 4))
+            .First()
+            .Should().Be("****");
+    }
+
+    [Fact]
     public void MathAbs_ShouldReturnAbsoluteValue()
     {
         var values = _sut.ComplexEntity

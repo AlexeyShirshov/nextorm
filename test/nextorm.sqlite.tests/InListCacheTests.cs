@@ -19,16 +19,16 @@ public class InListCacheTests
 {
     private static readonly long[] CapturedValues = { 1, 3, 10 };
 
-    private static QueryCommand<long> InlineAtInA(Entity<IComplexEntity> e)
+    private static QueryCommand<long> InlineAtInA(EntityBuilder<IComplexEntity> e)
         => e.Where(c => NORM.SQL.@in(c.Id, new long[] { 1, 3, 10 })).Select(c => c.Id);
 
-    private static QueryCommand<long> InlineAtInB(Entity<IComplexEntity> e)
+    private static QueryCommand<long> InlineAtInB(EntityBuilder<IComplexEntity> e)
         => e.Where(c => NORM.SQL.@in(c.Id, new long[] { 1, 3, 10 })).Select(c => c.Id);
 
-    private static QueryCommand<long> CapturedAtIn(Entity<IComplexEntity> e)
+    private static QueryCommand<long> CapturedAtIn(EntityBuilder<IComplexEntity> e)
         => e.Where(c => NORM.SQL.@in(c.Id, CapturedValues)).Select(c => c.Id);
 
-    private static QueryCommand<long> CapturedAtInB(Entity<IComplexEntity> e)
+    private static QueryCommand<long> CapturedAtInB(EntityBuilder<IComplexEntity> e)
         => e.Where(c => NORM.SQL.@in(c.Id, CapturedValues)).Select(c => c.Id);
 
     private static Expression GetAtInValues(QueryCommand cmd)
@@ -42,7 +42,7 @@ public class InListCacheTests
     {
         using var ctx = SqliteTestContext.Create();
         ctx.PurgeQueryCache();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         // Before the shape fold a captured collection disabled the plan cache entirely; now the
         // evaluated length/null shape is part of the key, so two same-shape builds share one plan.
@@ -57,7 +57,7 @@ public class InListCacheTests
     {
         using var ctx = SqliteTestContext.Create();
         ctx.PurgeQueryCache();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         var first = ctx.GetPreparedQueryCommand(InlineAtInA(e), false, true, CancellationToken.None);
         var second = ctx.GetPreparedQueryCommand(InlineAtInB(e), false, true, CancellationToken.None);
@@ -70,7 +70,7 @@ public class InListCacheTests
     public void In_CapturedCollection_SameShape_ShouldReuseCompiledAccessor()
     {
         using var ctx = SqliteTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         var cmd1 = CapturedAtIn(e);
         ctx.GetPreparedQueryCommand(cmd1, false, false, CancellationToken.None);
@@ -92,7 +92,7 @@ public class InListCacheTests
     public void In_CapturedArray_ReassignedBetweenBuilds_ShouldReadCurrentValues()
     {
         using var ctx = SqliteTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         var values = new long[] { 1 };
         var first = (DbPreparedQueryCommand<long>)ctx.GetPreparedQueryCommand(
@@ -117,7 +117,7 @@ public class InListCacheTests
     public void In_CapturedList_GrownBetweenBuilds_ShouldReadCurrentValues()
     {
         using var ctx = SqliteTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         var values = new List<long> { 1 };
         var first = (DbPreparedQueryCommand<long>)ctx.GetPreparedQueryCommand(

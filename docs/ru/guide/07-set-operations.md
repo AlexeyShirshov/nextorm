@@ -36,11 +36,11 @@
 ## Union и UnionAll
 
 ```csharp
-var distinct = dataContext.Create<ISimpleEntity>().Select(it => it.Id)
-    .Union(dataContext.Create<ISimpleEntity>().Select(it => it.Id));
+var distinct = dataContext.From<ISimpleEntity>().Select(it => it.Id)
+    .Union(dataContext.From<ISimpleEntity>().Select(it => it.Id));
 
-var all = dataContext.Create<ISimpleEntity>().Select(it => it.Id)
-    .UnionAll(dataContext.Create<ISimpleEntity>().Select(it => it.Id));
+var all = dataContext.From<ISimpleEntity>().Select(it => it.Id)
+    .UnionAll(dataContext.From<ISimpleEntity>().Select(it => it.Id));
 ```
 
 ```sql
@@ -62,22 +62,22 @@ select id from simple_entity
 
 ```csharp
 var distinctCount = dataContext.From(
-    dataContext.Create<ISimpleEntity>().Select(it => it.Id)
-        .Union(dataContext.Create<IComplexEntity>().Select(it => (int)it.Id))).Count(); // 10
+    dataContext.From<ISimpleEntity>().Select(it => it.Id)
+        .Union(dataContext.From<IComplexEntity>().Select(it => (int)it.Id))).Count(); // 10
 
 var allCount = dataContext.From(
-    dataContext.Create<ISimpleEntity>().Select(it => it.Id)
-        .UnionAll(dataContext.Create<IComplexEntity>().Select(it => (int)it.Id))).Count(); // 13
+    dataContext.From<ISimpleEntity>().Select(it => it.Id)
+        .UnionAll(dataContext.From<IComplexEntity>().Select(it => (int)it.Id))).Count(); // 13
 ```
 
 ## Intersect и Except
 
 ```csharp
-var common = dataContext.Create<ISimpleEntity>().Select(it => it.Id)
-    .Intersect(dataContext.Create<ISimpleEntity>().Select(it => it.Id));
+var common = dataContext.From<ISimpleEntity>().Select(it => it.Id)
+    .Intersect(dataContext.From<ISimpleEntity>().Select(it => it.Id));
 
-var onlyLeft = dataContext.Create<ISimpleEntity>().Select(it => it.Id)
-    .Except(dataContext.Create<ISimpleEntity>().Select(it => it.Id));
+var onlyLeft = dataContext.From<ISimpleEntity>().Select(it => it.Id)
+    .Except(dataContext.From<ISimpleEntity>().Select(it => it.Id));
 ```
 
 ```sql
@@ -99,9 +99,9 @@ select id from simple_entity
 
 ```csharp
 // (simple EXCEPT complex) INTERSECT simple = {4..10} INTERSECT {1..10} = {4..10}.
-var cmd = dataContext.Create<ISimpleEntity>().Select(it => it.Id)
-    .Except(dataContext.Create<IComplexEntity>().Select(it => (int)it.Id))
-    .Intersect(dataContext.Create<ISimpleEntity>().Select(it => it.Id));
+var cmd = dataContext.From<ISimpleEntity>().Select(it => it.Id)
+    .Except(dataContext.From<IComplexEntity>().Select(it => (int)it.Id))
+    .Intersect(dataContext.From<ISimpleEntity>().Select(it => it.Id));
 
 var count = dataContext.From(cmd).Count(); // 7
 ```
@@ -109,8 +109,8 @@ var count = dataContext.From(cmd).Count(); // 7
 ## IntersectAll и ExceptAll
 
 ```csharp
-var cmd = dataContext.Create<ISimpleEntity>().Select(it => it.Id)
-    .IntersectAll(dataContext.Create<IComplexEntity>().Select(it => (int)it.Id));
+var cmd = dataContext.From<ISimpleEntity>().Select(it => it.Id)
+    .IntersectAll(dataContext.From<IComplexEntity>().Select(it => (int)it.Id));
 
 dataContext.From(cmd).Count();
 ```
@@ -123,8 +123,8 @@ select id from simple_entity
 ```
 
 ```csharp
-var cmd = dataContext.Create<ISimpleEntity>().Select(it => it.Id)
-    .ExceptAll(dataContext.Create<IComplexEntity>().Select(it => (int)it.Id));
+var cmd = dataContext.From<ISimpleEntity>().Select(it => it.Id)
+    .ExceptAll(dataContext.From<IComplexEntity>().Select(it => (int)it.Id));
 
 dataContext.From(cmd).Count();
 ```
@@ -138,9 +138,9 @@ dialect"`).
 Операция над множествами возвращает запрос, поэтому вы делаете запрос к нему через `From`:
 
 ```csharp
-var cmd = dataContext.Create<IComplexEntity>().Select(it => it.Int)
+var cmd = dataContext.From<IComplexEntity>().Select(it => it.Int)
     .Distinct()
-    .Union(dataContext.Create<IComplexEntity>().Select(it => it.Int));
+    .Union(dataContext.From<IComplexEntity>().Select(it => it.Int));
 
 var count = dataContext.From(cmd).Count(); // 2
 ```
@@ -149,8 +149,8 @@ var count = dataContext.From(cmd).Count(); // 2
 
 ```csharp
 var count = dataContext.From(
-    dataContext.Create<ISimpleEntity>().Select(it => new { it.Id })
-        .Union(dataContext.Create<IComplexEntity>().Select(it => new { it.Id })))
+    dataContext.From<ISimpleEntity>().Select(it => new { it.Id })
+        .Union(dataContext.From<IComplexEntity>().Select(it => new { it.Id })))
     .Count();
 ```
 

@@ -1,21 +1,23 @@
 # Соединения
 
-> Объединяйте строки из двух или более сущностей, производных запросов или необработанных таблиц с помощью `Join`, `LeftJoin`, `RightJoin`, `FullJoin` и `CrossJoin`.
+> Объединяйте строки из двух или более сущностей, производных запросов или необработанных таблиц с помощью `Join`, `LeftJoin`, `RightJoin`, `FullJoin`, `CrossJoin`, `CrossApply` и `OuterApply`.
 
 **Предварительные требования:** [Сущности и метаданные](../getting-started/03-entities-and-metadata.md) · [Запросы и проекции](01-querying-and-projections.md) · [Фильтрация (WHERE)](02-filtering-where.md)
 
 ## Обзор
 
-Каждый `Entity<T>` предоставляет пять методов соединения: `Join` (inner), `LeftJoin`, `RightJoin`,
-`FullJoin` и `CrossJoin`. Условие соединения — это выражение над двумя сторонами, которое
-генерируется как предложение `ON` соединения, именно там, где построитель может его
-транслировать. `CrossJoin` не принимает условие и генерирует `cross join`.
+Каждый `EntityBuilder<T>` предоставляет семь методов соединения: `Join` (inner), `LeftJoin`, `RightJoin`,
+`FullJoin`, `CrossJoin`, `CrossApply` и `OuterApply`. Условие соединения — это выражение над двумя
+сторонами, которое генерируется как предложение `ON` соединения, именно там, где построитель может его
+транслировать. `CrossJoin`, `CrossApply` и `OuterApply` не принимают условие; первый генерирует
+`cross join`, а последние два — форму lateral/apply конкретного провайдера (см.
+[APPLY и LATERAL](#apply-и-lateral)).
 
 Правая сторона может быть:
 
-* другой типизированной сущностью, `Entity<TJoinEntity>`;
+* другой типизированной сущностью, `EntityBuilder<TJoinEntity>`;
 * `QueryCommand<TJoinEntity>` — подзапрос, который отображается как производная таблица;
-* необработанной таблицей, `Entity`, созданной через `DataContext.From("table")`, столбцы которой
+* необработанной таблицей, `EntityBuilder`, созданной через `DataContext.From("table")`, столбцы которой
   читаются через индексатор `TableAlias` (`t["id"]`).
 
 Прежде чем перейти к примерам, важно понять две вещи:
@@ -36,8 +38,8 @@
 ## Внутреннее соединение
 
 ```csharp
-var rows = await dataContext.Create<ISimpleEntity>()
-    .Join(dataContext.Create<IComplexEntity>(), (s, c) => s.Id == c.Id)
+var rows = await dataContext.From<ISimpleEntity>()
+    .Join(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
     .Select(p => new { p.t1.Id, p.t2.RequiredString })
     .ToListAsync();
 ```
@@ -52,8 +54,8 @@ select t1.id, t2.requiredstring from simple_entity as 't1' join complex_entity a
 `WHERE` после соединения применяется к накопленной проекции и может ссылаться на любую сторону:
 
 ```csharp
-var rows = await dataContext.Create<ISimpleEntity>()
-    .Join(dataContext.Create<IComplexEntity>(), (s, c) => s.Id == c.Id)
+var rows = await dataContext.From<ISimpleEntity>()
+    .Join(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
     .Where(p => p.t2.Boolean ?? false)
     .Select(p => new { p.t1.Id, p.t2.RequiredString })
     .ToListAsync();
@@ -63,9 +65,9 @@ var rows = await dataContext.Create<ISimpleEntity>()
 два варианта эквивалентны, но для внешних соединений они различаются:
 
 ```csharp
-var rows = await dataContext.Create<ISimpleEntity>()
+var rows = await dataContext.From<ISimpleEntity>()
     .Where(it => it.Id > 2)
-    .Join(dataContext.Create<IComplexEntity>(), (s, c) => s.Id == c.Id)
+    .Join(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
     .Where(p => p.t2.RequiredString == "34mfs")
     .Select(p => new { p.t1.Id, p.t2.RequiredString })
     .ToListAsync();
@@ -77,8 +79,8 @@ var rows = await dataContext.Create<ISimpleEntity>()
 совпадения нет; `RightJoin` и `FullJoin` ведут себя симметрично.
 
 ```csharp
-var rows = dataContext.Create<ISimpleEntity>()
-    .LeftJoin(dataContext.Create<IComplexEntity>(), (s, c) => s.Id == c.Id)
+var rows = dataContext.From<ISimpleEntity>()
+    .LeftJoin(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
     .Select(p => new { LeftId = p.t1.Id, RightString = p.t2.RequiredString })
     .ToList();
 ```
@@ -90,13 +92,13 @@ select t1.id as 'LeftId', t2.requiredstring as 'RightString' from simple_entity 
 `RightJoin` и `FullJoin` генерируются в той же форме:
 
 ```csharp
-var right = dataContext.Create<IComplexEntity>()
-    .RightJoin(dataContext.Create<ISimpleEntity>(), (c, s) => c.Id == s.Id)
+var right = dataContext.From<IComplexEntity>()
+    .RightJoin(dataContext.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
     .Select(p => new { LeftString = p.t1.RequiredString, RightId = p.t2.Id })
     .ToList();
 
-var full = dataContext.Create<ISimpleEntity>()
-    .FullJoin(dataContext.Create<IComplexEntity>(), (s, c) => s.Id == c.Id)
+var full = dataContext.From<ISimpleEntity>()
+    .FullJoin(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
     .Select(p => new { LeftId = p.t1.Id, RightString = p.t2.RequiredString })
     .ToList();
 ```
@@ -109,12 +111,64 @@ var full = dataContext.Create<ISimpleEntity>()
 `CrossJoin` не принимает условие и порождает декартово произведение:
 
 ```csharp
-var count = dataContext.Create<ISimpleEntity>().CrossJoin(dataContext.Create<IComplexEntity>()).Count();
+var count = dataContext.From<ISimpleEntity>().CrossJoin(dataContext.From<IComplexEntity>()).Count();
 ```
 
 ```sql
 select count(*) from simple_entity as 't1' cross join complex_entity as 't2'
 ```
+
+## APPLY и LATERAL
+
+`CrossApply` и `OuterApply` генерируют форму lateral-источника конкретного провайдера. Правая сторона —
+это тот же набор источников, что принимает обычное соединение: типизированная сущность, производная
+таблица `QueryCommand<T>`, необработанная таблица или табличная функция, — но без условия `ON`:
+
+* `CrossApply` оставляет только те строки левой стороны, для которых применяемый источник возвращает
+  хотя бы одну строку (SQL Server `CROSS APPLY`, PostgreSQL/MySQL/MariaDB `CROSS JOIN LATERAL`);
+* `OuterApply` дополнительно сохраняет строки левой стороны с пустым применяемым источником, заполняя
+  правую сторону значением `NULL` (SQL Server `OUTER APPLY`, PostgreSQL/MySQL/MariaDB
+  `LEFT JOIN LATERAL ... ON true`).
+
+```csharp
+var rows = await dataContext.From<ISimpleEntity>()
+    .CrossApply(dataContext.From<IComplexEntity>())
+    .Select(p => new { p.t1.Id, p.t2.RequiredString })
+    .ToListAsync();
+```
+
+```sql
+-- SQL Server
+select t1.id, t2.somestring from simple_entity as [t1] cross apply complex_entity as [t2]
+-- PostgreSQL / MySQL / MariaDB
+select t1.id, t2.somestring from simple_entity as t1 cross join lateral complex_entity as t2
+```
+
+`OUTER APPLY` по производной таблице:
+
+```csharp
+var subQuery = dataContext.From<IComplexEntity>()
+    .Where(c => c.Id > 1)
+    .Select(c => new { c.Id, c.RequiredString });
+
+var rows = dataContext.From<ISimpleEntity>()
+    .OuterApply(subQuery)
+    .Select(p => new { p.t1.Id, p.t2.RequiredString })
+    .ToList();
+```
+
+```sql
+-- SQL Server
+... from simple_entity as [t1] outer apply (select id, somestring from complex_entity where ...) as [t2]
+-- PostgreSQL / MySQL / MariaDB
+... from simple_entity as t1 left join lateral (select ...) as t2 on true
+```
+
+> **Корреляция пока не выражается.** Применяемый источник не может ссылаться на столбцы строки левой
+> стороны, потому что нет публичного API, позволяющего описать ссылку на внешнюю строку внутри
+> подзапроса в `FROM`. До его появления `CrossApply`/`OuterApply` эквивалентны `CROSS JOIN`/`LEFT JOIN`
+> по некоррелированному источнику и отклоняются диалектами без lateral-источника
+> (`SupportsApply == false`).
 
 ## Соединение с подзапросом
 
@@ -122,11 +176,11 @@ select count(*) from simple_entity as 't1' cross join complex_entity as 't2'
 производная таблица (псевдоним необязателен в SQLite и обязателен в SQL Server и PostgreSQL):
 
 ```csharp
-var subQuery = dataContext.Create<IComplexEntity>()
+var subQuery = dataContext.From<IComplexEntity>()
     .Where(it => it.Id == 3)
     .Select(it => new { it.Id, it.RequiredString, it.Boolean });
 
-var rows = await dataContext.Create<ISimpleEntity>()
+var rows = await dataContext.From<ISimpleEntity>()
     .Join(subQuery, (s, c) => s.Id == c.Id)
     .Select(p => new { p.t1.Id, p.t2.RequiredString })
     .ToListAsync();
@@ -134,7 +188,7 @@ var rows = await dataContext.Create<ISimpleEntity>()
 
 ## Соединение с необработанной таблицей
 
-`From("table")` создаёт неуниверсальную `Entity`, столбцы которой доступны через `TableAlias`. Левую
+`From("table")` создаёт неуниверсальную `EntityBuilder`, столбцы которой доступны через `TableAlias`. Левую
 и правую стороны можно свободно смешивать с типизированными сущностями:
 
 ```csharp
@@ -146,7 +200,7 @@ var rows = dataContext
 
 var mixed = dataContext
     .From("simple_entity")
-    .Join(dataContext.Create<IComplexEntity>(), (s, c) => s["id"].AsInt == c.Id)
+    .Join(dataContext.From<IComplexEntity>(), (s, c) => s["id"].AsInt == c.Id)
     .Select(p => new { Id = p.t1["id"].AsInt, Str = p.t2.String })
     .ToList();
 ```
@@ -157,10 +211,10 @@ var mixed = dataContext
 проекцию и новую сущность:
 
 ```csharp
-var rows = dataContext.Create<ISimpleEntity>()
-    .Join(dataContext.Create<IComplexEntity>(), (s, c) => s.Id == c.Id)          // EntityP2<SimpleEntity, ComplexEntity>
-    .Join(dataContext.Create<ISimpleEntity>(), (p, s) => p.t2.Id == s.Id)        // EntityP3<...>
-    .Join(dataContext.Create<IComplexEntity>(), (p, c) => p.t3.Id == c.Id)       // EntityP4<...>
+var rows = dataContext.From<ISimpleEntity>()
+    .Join(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)          // EntityP2<SimpleEntity, ComplexEntity>
+    .Join(dataContext.From<ISimpleEntity>(), (p, s) => p.t2.Id == s.Id)        // EntityP3<...>
+    .Join(dataContext.From<IComplexEntity>(), (p, c) => p.t3.Id == c.Id)       // EntityP4<...>
     .Select(p => new { A = p.t1.Id, B = p.t2.RequiredString, C = p.t3.Id, D = p.t4.RequiredString })
     .ToList();
 ```
@@ -175,10 +229,10 @@ select t1.id as 'A', t2.requiredstring as 'B', t3.id as 'C', t4.requiredstring a
 ```csharp
 var e = new[]
 {
-    dataContext.Create<ISimpleEntity>(), dataContext.Create<ISimpleEntity>(),
-    dataContext.Create<ISimpleEntity>(), dataContext.Create<ISimpleEntity>(),
-    dataContext.Create<ISimpleEntity>(), dataContext.Create<ISimpleEntity>(),
-    dataContext.Create<ISimpleEntity>(), dataContext.Create<ISimpleEntity>(),
+    dataContext.From<ISimpleEntity>(), dataContext.From<ISimpleEntity>(),
+    dataContext.From<ISimpleEntity>(), dataContext.From<ISimpleEntity>(),
+    dataContext.From<ISimpleEntity>(), dataContext.From<ISimpleEntity>(),
+    dataContext.From<ISimpleEntity>(), dataContext.From<ISimpleEntity>(),
 };
 
 var sql = e[0]
@@ -202,8 +256,8 @@ var sql = e[0]
 for (var i = 1; i <= 3; i++)
 {
     var id = i;
-    var rows = dataContext.Create<ISimpleEntity>()
-        .Join(dataContext.Create<IComplexEntity>(), (s, c) => s.Id == c.Id)
+    var rows = dataContext.From<ISimpleEntity>()
+        .Join(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
         .Where(p => p.t2.Id == id)
         .Select(p => new { p.t1.Id, p.t2.RequiredString })
         .ToList();
@@ -212,26 +266,34 @@ for (var i = 1; i <= 3; i++)
 
 ## Различия между провайдерами
 
-| Провайдер | Псевдонимы соединений | Псевдоним производной таблицы | Внешние соединения |
-|---|---|---|---|
-| SQLite | `as 't1'` | необязателен | поддержаны left/right/full |
-| SQL Server | `as [t1]` | обязателен | поддержаны left/right/full |
-| PostgreSQL | `as "t1"` | обязателен | поддержаны left/right/full |
-| In-memory | неприменимо (выполнение через делегаты) | неприменимо | поддержаны inner/left/right/full/cross; источники в виде табличных функций — нет |
+| Провайдер | Псевдонимы соединений | Псевдоним производной таблицы | Внешние соединения | APPLY / LATERAL |
+|---|---|---|---|---|
+| SQLite | `as 't1'` | необязателен | поддержаны left/right/full | не поддерживается (`NotSupportedException`) |
+| SQL Server | `as [t1]` | обязателен | поддержаны left/right/full | `CROSS APPLY` / `OUTER APPLY` |
+| PostgreSQL | `as "t1"` | обязателен | поддержаны left/right/full | `CROSS JOIN LATERAL` / `LEFT JOIN LATERAL ... ON true` |
+| MySQL / MariaDB | `as \`t1\`` | обязателен | поддержаны left/right/full | `CROSS JOIN LATERAL` / `LEFT JOIN LATERAL ... ON true` |
+| ClickHouse | `as \`t1\`` | обязателен | поддержаны left/right/full | не поддерживается (`NotSupportedException`) |
+| In-memory | неприменимо (выполнение через делегаты) | неприменимо | поддержаны inner/left/right/full/cross; APPLY и источники в виде табличных функций — нет | не поддерживается |
 
 Провайдер in-memory компилирует условие соединения в делегат и выполняет цикл, поэтому он не
 генерирует SQL; он поддерживает соединения `Inner`, `Left`, `Right`, `Full` и `Cross` (см.
-`test/nextorm.core.tests/InMemoryJoinTests.cs`). Соединения через `EntityP2..P8` разрешаются на этапе
-построения запроса у каждого провайдера.
+`test/nextorm.core.tests/InMemoryJoinTests.cs`). `CrossApply`/`OuterApply` существуют только для SQL и
+выбрасывают `NotSupportedException` в провайдере in-memory, как и остальные неподдерживаемые типы
+соединений. Соединения через `EntityP2..P8` разрешаются на этапе построения запроса у каждого
+провайдера.
 
 ## См. также
 
 - [Подзапросы](06-subqueries.md) - присоединённый `QueryCommand<T>` — это производная таблица.
 - [Группировка и агрегаты](04-grouping-and-aggregates.md) - агрегат по соединению.
+- [Хинты запросов](17-query-hints.md) - хинты уровня инструкции, например SQL Server `OPTION (RECOMPILE)`.
 - [Запросы и проекции](01-querying-and-projections.md)
 
 ---
 
 Source: `test/nextorm.integration.tests/CommonTestSuite.Join.cs:9`,
 `test/nextorm.core.tests/InMemoryJoinTests.cs:14`,
-`test/nextorm.sqlite.tests/SqlGenerationTests.cs:268` (and the other provider `SqlGenerationTests.cs`).
+`test/nextorm.sqlite.tests/SqlGenerationTests.cs:320`,
+`test/nextorm.sqlserver.tests/SqlGenerationTests.cs:379`,
+`test/nextorm.postgres.tests/SqlGenerationTests.cs:312`
+(and the other provider `SqlGenerationTests.cs`).

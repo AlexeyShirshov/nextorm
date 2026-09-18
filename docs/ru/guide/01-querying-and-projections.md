@@ -6,7 +6,7 @@
 
 ## Обзор
 
-`dataContext.Create<TEntity>()` возвращает `Entity<TEntity>`. Каждый запрос начинается с
+`dataContext.From<TEntity>()` возвращает `EntityBuilder<TEntity>`. Каждый запрос начинается с
 проецирования этой сущности с помощью `Select`:
 
 ```csharp
@@ -32,7 +32,7 @@ public QueryCommand<TResult> Select<TResult>(Expression<Func<TEntity, TResult>> 
 ## Анонимный тип
 
 ```csharp
-var rows = await dataContext.Create<SimpleEntity>()
+var rows = await dataContext.From<SimpleEntity>()
     .Select(entity => new { entity.Id })
     .ToListAsync();
 ```
@@ -48,7 +48,7 @@ select id from simple_entity
 Член может вычисляться из других колонок или констант:
 
 ```csharp
-var rows = await dataContext.Create<SimpleEntity>()
+var rows = await dataContext.From<SimpleEntity>()
     .Select(entity => new { Id = entity.Id + 1 })
     .ToListAsync();
 ```
@@ -62,7 +62,7 @@ select (id + 1) as 'Id' from simple_entity
 запроса:
 
 ```csharp
-var rows = await dataContext.Create<ComplexEntity>()
+var rows = await dataContext.From<ComplexEntity>()
     .Select(it => new { it.Id, Calc = it.Id + 1 })
     .ToListAsync();
 ```
@@ -75,7 +75,7 @@ select id, (id + 1) as 'Calc' from complex_entity
 SQL Server):
 
 ```csharp
-var rows = await dataContext.Create<ComplexEntity>()
+var rows = await dataContext.From<ComplexEntity>()
     .Select(it => new { it.Id, Display = it.String + "/" + it.RequiredString })
     .ToListAsync();
 ```
@@ -95,7 +95,7 @@ public class SimpleEntityDto(int id)
     public int Id { get; } = id;
 }
 
-var rows = await dataContext.Create<SimpleEntity>()
+var rows = await dataContext.From<SimpleEntity>()
     .Select(entity => new SimpleEntityDto(entity.Id))
     .ToListAsync();
 ```
@@ -140,7 +140,7 @@ select id from simple_entity
 Вместо конструктора проекция может использовать инициализатор объекта:
 
 ```csharp
-var rows = await dataContext.Create<SimpleEntity>()
+var rows = await dataContext.From<SimpleEntity>()
     .Select(it => new SimpleEntity { Id = it.Id })
     .ToListAsync();
 ```
@@ -154,7 +154,7 @@ select id from simple_entity
 `Select` может возвращать одно значение вместо объекта строки:
 
 ```csharp
-var ids = await dataContext.Create<SimpleEntity>()
+var ids = await dataContext.From<SimpleEntity>()
     .Where(it => it.Id < 5)
     .Select(it => it.Id)
     .ToListAsync();
@@ -167,7 +167,7 @@ select id from simple_entity where (id < 5)
 Логический член работает так же:
 
 ```csharp
-var flags = await dataContext.Create<ComplexEntity>()
+var flags = await dataContext.From<ComplexEntity>()
     .Where(it => it.Boolean == true)
     .Select(it => it.Boolean)
     .ToListAsync();
@@ -184,7 +184,7 @@ select b from complex_entity where b = 1
 спроецировать снова:
 
 ```csharp
-var inner = dataContext.Create<ComplexEntity>()
+var inner = dataContext.From<ComplexEntity>()
     .Select(it => new { it.Id, Calc = it.String + it.String });
 
 var rows = await dataContext.From(inner)
@@ -209,7 +209,7 @@ select id, Calc from (select id, (somestring + somestring) as [Calc] from comple
 `From(query)` также оборачивает отфильтрованный запрос, что соответствует подзапросу в SQL `FROM`:
 
 ```csharp
-var inner = dataContext.Create<SimpleEntity>()
+var inner = dataContext.From<SimpleEntity>()
     .Where(it => it.Id > 8)
     .Select(it => new { it.Id });
 
@@ -222,6 +222,46 @@ var rows = await dataContext.From(inner)
 -- SQLite
 select id from (select id from simple_entity where (id > 8))
 ```
+
+## JSON-вывод (SQL Server)
+
+`QueryCommand<TResult>.ForJson(...)` добавляет предложение SQL Server `FOR JSON`, поэтому база
+возвращает один JSON-документ вместо строк (`ISqlDialect.SupportsForJson`). Проекция должна быть
+одним скаляром/колонкой, потому что набор результатов сворачивается в одну JSON-колонку:
+
+```csharp
+var json = dataContext.From<IComplexEntity>()
+    .Select(e => new { e.Id, e.String })
+    .ForJson(ForJsonMode.Path, root: "items", includeNullValues: true)
+    .First();
+```
+
+```sql
+select id, somestring from complex_entity for json path, root('items'), include_null_values
+```
+
+`ForJsonMode.Path` строит документ по псевдонимам проекции, `ForJsonMode.Auto` — по структуре
+таблицы. Предложение ставится после `ORDER BY` и перед завершающим `OPTION (...)`. Остальные
+провайдеры выбрасывают `NotSupportedException`.
+
+## XML-вывод (SQL Server)
+
+`QueryCommand<TResult>.ForXml(...)` — XML-аналог (`ISqlDialect.SupportsForXml`); поддерживаются
+`RAW`, `AUTO`, `EXPLICIT` и `PATH`, с необязательным именем элемента строки, обёрткой `ROOT('...')` и
+флагом `ELEMENTS`:
+
+```csharp
+var xml = dataContext.From<IComplexEntity>()
+    .Select(e => new { e.Id })
+    .ForXml(ForXmlMode.Raw, elementName: "row", root: "items", elements: true)
+    .First();
+```
+
+```sql
+select id from complex_entity for xml raw('row'), root('items'), elements
+```
+
+`FOR JSON` и `FOR XML` взаимно исключают друг друга; их сочетание выбрасывает `NotSupportedException`.
 
 ## Различия провайдеров
 

@@ -49,10 +49,10 @@
 | Тип | Описание | Источник |
 |---|---|---|
 | `QueryCommand` | Необобщённая команда запроса, хранящая план/состояние, общие для всех результатов. | `src/nextorm.core/Query/QueryCommand.cs` |
-| `QueryCommand<TResult>` | Типизированная команда запроса с терминалами (`ToList`, `First`, `Union`, `Distinct`, `Hint`, `Prepare`, …). | `src/nextorm.core/Query/QueryCommand.TResult.cs` |
+| `QueryCommand<TResult>` | Типизированная команда запроса с терминалами (`ToList`, `First`, `Union`, `Distinct`, `Hint`, `ForJson`, `ForXml`, `WithTableHint`, `Prepare`, …). | `src/nextorm.core/Query/QueryCommand.TResult.cs` |
 | `IPreparedQueryCommand<TResult>` | Подготовленная команда; её члены по умолчанию выполняют её против переданного `IDataContext`. | `src/nextorm.core/DataContext/Cache/IPreparedQueryCommand.cs` |
 | `NORM` | Статическая точка входа: `NORM.SQL` и `NORM.Param<T>(idx)`. | `src/nextorm.core/Query/NORM.cs` |
-| `NORM_SQL` | Поверхность SQL-функций: `exists`, `like`, `@in`, `any`/`all` (подзапрос и массив), агрегаты (включая агрегаты с `FILTER` и `string_agg`/`array_agg`), оконные функции, `nullif`/`greatest`/`least`/`date_trunc`/`date_add`/`end_of_month`, функции массивов и JSON/JSONB PostgreSQL, текстовые JSON-функции SQL Server (`json_value`/`json_query`/`json_modify`), а также табличные функции `generate_series`/`unnest`/`string_split`. | `src/nextorm.core/Query/NORM.cs` |
+| `NORM_SQL` | Поверхность SQL-функций: `exists`, `like`, `@in`, `any`/`all` (подзапрос и массив), агрегаты (включая агрегаты с `FILTER` и `string_agg`/`array_agg`), оконные функции, `nullif`/`greatest`/`least`/`date_trunc`/`date_add`/`date_diff`/`date_from_parts`/`end_of_month`, функции массивов и JSON/JSONB PostgreSQL, текстовые JSON-функции SQL Server (`json_value`/`json_query`/`json_modify`/`isjson`) и предикаты полнотекстового поиска (`contains`/`freetext`), а также табличные функции `generate_series`/`unnest`/`string_split`/`openjson`. | `src/nextorm.core/Query/NORM.cs` |
 | `NORM.WindowFunction<T>` | Незавершённый вызов окна; завершите его с помощью `Over(...)`. | `src/nextorm.core/Query/NORM.cs` |
 | `NORM.WindowOrder` | Упорядоченный ключ окна плюс `OrderDirection`. | `src/nextorm.core/Query/NORM.cs` |
 | `NORM.WindowFrame`, `WindowFrameBound`, `WindowFrameType`, `WindowFrameBoundKind` | Спецификация фрейма `ROWS`/`RANGE` и его границы. | `src/nextorm.core/Query/NORM.cs` |

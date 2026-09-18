@@ -52,7 +52,7 @@ private static class Udf
     public static int? Coalesce(int? value, int? fallback) => throw new NotSupportedException();
 }
 
-var value = dataContext.Create<IComplexEntity>()
+var value = dataContext.From<IComplexEntity>()
     .Where(e => e.Id == 2)
     .Select(e => Udf.ToUpper(e.String!))
     .First();
@@ -79,7 +79,7 @@ private static class Udf
     public static long WithSchema(long value) => throw new NotSupportedException();
 }
 
-var value = dataContext.Create<IComplexEntity>()
+var value = dataContext.From<IComplexEntity>()
     .Select(e => new { V = Udf.WithSchema(e.Id) })
     .First();
 ```
@@ -100,7 +100,7 @@ private static class ImplicitUdf
     public static string Lower(string value) => throw new NotSupportedException();
 }
 
-var value = dataContext.Create<IComplexEntity>()
+var value = dataContext.From<IComplexEntity>()
     .Select(e => new { V = ImplicitUdf.Lower(e.String!) })
     .First();
 ```
@@ -116,7 +116,7 @@ select Lower(somestring) as 'V' from complex_entity
 ```csharp
 var start = 1;
 
-var prepared = dataContext.Create<IComplexEntity>()
+var prepared = dataContext.From<IComplexEntity>()
     .Select(e => new { V = Udf.Slice(e.String!, start) })
     .Prepare();
 ```

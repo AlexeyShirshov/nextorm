@@ -12,8 +12,10 @@ NextORM is split into a small, driver-free core package and one package per rela
   dependency-injection helpers, the plan cache **and the in-memory provider** (`InMemoryContext`). It
   references `Microsoft.Extensions.DependencyInjection`, `Microsoft.Extensions.Logging`,
   `Microsoft.Extensions.ObjectPool` and `OneOf`, but no database driver.
-* `nextorm.sqlite`, `nextorm.sqlserver` and `nextorm.postgres` each add one concrete context
-  (`SqliteDbContext`, `SqlServerDbContext`, `PostgresDbContext`) and a `Use…` registration extension.
+* `nextorm.sqlite`, `nextorm.sqlserver`, `nextorm.postgres`, `nextorm.mysql`, `nextorm.mariadb` and
+  `nextorm.clickhouse` each add one concrete context
+  (`SqliteDbContext`, `SqlServerDbContext`, `PostgresDbContext`, `MySqlDbContext`, `MariaDbContext`,
+  `ClickHouseDbContext`) and a `Use…` registration extension.
   The provider packages depend on `nextorm` transitively.
 
 All current releases are prereleases (`1.0.1-alpha` line), so every install command must opt in to
@@ -31,6 +33,9 @@ Then add exactly one provider package for the database you target:
 dotnet add package nextorm.sqlite --prerelease
 dotnet add package nextorm.sqlserver --prerelease
 dotnet add package nextorm.postgres --prerelease
+dotnet add package nextorm.mysql --prerelease
+dotnet add package nextorm.mariadb --prerelease
+dotnet add package nextorm.clickhouse --prerelease
 ```
 
 The Package Manager Console equivalent:
@@ -48,6 +53,9 @@ Install-Package nextorm.sqlite -Prerelease
 | SQLite | `nextorm.sqlite` | `SqliteDbContext`, `UseSqlite` | `Microsoft.Data.Sqlite` |
 | SQL Server | `nextorm.sqlserver` | `SqlServerDbContext`, `UseSqlServer` | `Microsoft.Data.SqlClient` |
 | PostgreSQL | `nextorm.postgres` | `PostgresDbContext`, `UsePostgres` | `Npgsql` |
+| MySQL | `nextorm.mysql` | `MySqlDbContext`, `UseMySql` | `MySqlConnector` |
+| MariaDB | `nextorm.mariadb` | `MariaDbContext`, `UseMariaDb` | `MySqlConnector` |
+| ClickHouse | `nextorm.clickhouse` | `ClickHouseDbContext`, `UseClickHouse` | `ClickHouse.Driver` |
 
 The in-memory provider lives in the core package, so it is available without installing a provider.
 

@@ -71,6 +71,19 @@ public class PostgresDialectTests
         Dialect.SupportsDateTrunc.Should().BeTrue();
         Dialect.SupportsDateArithmetic.Should().BeTrue();
         Dialect.SupportsStringArrayAggregates.Should().BeTrue();
+        Dialect.SupportsFullText.Should().BeTrue();
+        Dialect.SupportsTableFunction("generate_series").Should().BeTrue();
+        Dialect.SupportsTableFunction("unnest").Should().BeTrue();
+        Dialect.SupportsTableFunction("string_split").Should().BeFalse();
+    }
+
+    [Fact]
+    public void FullTextHooks_ShouldUseTsvectorMatch()
+    {
+        Dialect.MakeFullText("contains", "c", "@p")
+            .Should().Be("to_tsvector(c) @@ plainto_tsquery(@p)");
+        Dialect.MakeFullText("freetext", "c", "@p")
+            .Should().Be("to_tsvector(c) @@ websearch_to_tsquery(@p)");
     }
 
     [Fact]
@@ -81,7 +94,9 @@ public class PostgresDialectTests
         Dialect.MakeLeast(["a", "b"]).Should().Be("least(a, b)");
         Dialect.MakeDateTrunc("month", "x").Should().Be("date_trunc('month', x)");
         Dialect.MakeDateAdd("day", "n", "x").Should().Be("x + (n * interval '1 day')");
+        Dialect.MakeDateDiff("day", "a", "b").Should().Be("(cast(b as date) - cast(a as date))");
         Dialect.MakeEndOfMonth("x").Should().Be("(date_trunc('month', x) + interval '1 month - 1 day')");
+        Dialect.MakeDateFromParts("y", "m", "d").Should().Be("make_date(y, m, d)");
         Dialect.MakeStringAgg("x", "','").Should().Be("string_agg(x, ',')");
         Dialect.MakeArrayAgg("x").Should().Be("array_agg(x)");
     }

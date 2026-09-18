@@ -75,7 +75,7 @@ public struct SqlBuilder
 
             if (from is not null)
             {
-                var fromStr = MakeFrom(from, needAlias, entityType, hasJoins);
+                var fromStr = MakeFrom(from, needAlias, entityType, hasJoins, cmd.TableHints);
                 if (!_paramMode)
                 {
                     sqlBuilder!.Append(" from ").Append(fromStr);
@@ -107,6 +107,9 @@ public struct SqlBuilder
                     if (cmd.GroupingType == GroupingType.Cube && !_dialect.SupportsCube)
                         throw new NotSupportedException("The CUBE grouping modifier is not supported by this SQL dialect");
 
+                    if (cmd.GroupingType == GroupingType.GroupingSets && !_dialect.SupportsGroupingSets)
+                        throw new NotSupportedException("The GROUPING SETS modifier is not supported by this SQL dialect");
+
                     var groupingListCount = grouping.Length;
                     var columns = _paramMode ? null : new string[groupingListCount];
 
@@ -125,8 +128,35 @@ public struct SqlBuilder
 
                     if (!_paramMode)
                     {
-                        sqlBuilder!.AppendLine().Append(" group by ")
-                            .Append(_dialect.MakeGrouping(string.Join(", ", columns!), cmd.GroupingType));
+                        sqlBuilder!.AppendLine().Append(" group by ");
+
+                        if (cmd.GroupingType == GroupingType.GroupingSets)
+                        {
+                            var sets = cmd.GroupingSets
+                                ?? throw new BuildSqlCommandException("GROUPING SETS requires at least one set.");
+
+                            var rendered = new string[sets.Count];
+                            for (var s = 0; s < sets.Count; s++)
+                            {
+                                var set = sets[s];
+                                var parts = new string[set.Length];
+                                for (var i = 0; i < set.Length; i++)
+                                {
+                                    if (set[i] < 0 || set[i] >= groupingListCount)
+                                        throw new BuildSqlCommandException($"Grouping set index {set[i]} is out of range 0..{groupingListCount - 1}.");
+
+                                    parts[i] = columns![set[i]];
+                                }
+
+                                rendered[s] = "(" + string.Join(", ", parts) + ")";
+                            }
+
+                            sqlBuilder.Append(_dialect.MakeGroupingSets(rendered));
+                        }
+                        else
+                        {
+                            sqlBuilder.Append(_dialect.MakeGrouping(string.Join(", ", columns!), cmd.GroupingType));
+                        }
                     }
 
                     if (cmd.Having is not null)
@@ -257,6 +287,26 @@ public struct SqlBuilder
                 if (withClause is not null)
                     sqlBuilder!.Insert(0, withClause);
 
+                // FOR JSON / FOR XML come after ORDER BY but before the trailing OPTION clause.
+                if (cmd.ForJsonClause is not null && cmd.ForXmlClause is not null)
+                    throw new NotSupportedException("FOR JSON and FOR XML cannot be combined.");
+
+                if (cmd.ForJsonClause is { } forJson)
+                {
+                    if (!_dialect.SupportsForJson)
+                        throw new NotSupportedException("FOR JSON is not supported by this SQL dialect");
+
+                    sqlBuilder!.Append(' ').Append(_dialect.MakeForJson(forJson));
+                }
+
+                if (cmd.ForXmlClause is { } forXml)
+                {
+                    if (!_dialect.SupportsForXml)
+                        throw new NotSupportedException("FOR XML is not supported by this SQL dialect");
+
+                    sqlBuilder!.Append(' ').Append(_dialect.MakeForXml(forXml));
+                }
+
                 var hints = cmd.Hints;
                 if (hints is { Count: > 0 })
                 {
@@ -361,7 +411,8 @@ public struct SqlBuilder
     }
     public string? MakeJoin(JoinExpression join, Type entityType)
     {
-        if (join.JoinType is JoinType.Right or JoinType.Full && !_dialect.SupportsRightFullJoin)
+        if (join.JoinType is JoinType.Right && !_dialect.SupportsRightFullJoin
+            || join.JoinType is JoinType.Full && (!_dialect.SupportsRightFullJoin || !_dialect.SupportsFullJoin))
             throw new NotSupportedException($"The {join.JoinType} join is not supported by this SQL dialect");
 
         if (join.JoinType is JoinType.CrossApply or JoinType.OuterApply)
@@ -535,7 +586,7 @@ public struct SqlBuilder
 
         return (needAliasForColumn, visitor.ToString());
     }
-    public string MakeFrom(FromExpression from, bool needAlias, Type? entityType, bool hasJoins)
+    public string MakeFrom(FromExpression from, bool needAlias, Type? entityType, bool hasJoins, IReadOnlyList<string>? tableHints = null)
     {
         if (from.LinqSource is not null)
             throw new NotSupportedException("SelectMany/GroupJoin sources are not supported by the SQL providers; they are only available on the in-memory provider.");
@@ -545,10 +596,17 @@ public struct SqlBuilder
 
         if (!_paramMode && !string.IsNullOrEmpty(from.Table))
         {
+            if (tableHints is { Count: > 0 } && !_dialect.SupportsTableHints)
+                throw new NotSupportedException("Table hints are not supported by this SQL dialect");
+
             var sqlBuilder = StringBuilderPool.Shared.Get();
             try
             {
                 sqlBuilder.Append(from.Table);
+
+                // SQL Server places table hints after the table name and before its alias.
+                if (tableHints is { Count: > 0 })
+                    sqlBuilder.Append(_dialect.MakeTableHints(tableHints));
 
                 if (needAlias)
                 {
@@ -616,6 +674,11 @@ public struct SqlBuilder
     {
         var function = from.TableFunction!;
         var arguments = function.Arguments;
+
+        // The built-in NORM.SQL table functions are provider-specific; user-defined [SqlTableFunction]
+        // functions are emitted verbatim and are the caller's responsibility.
+        if (typeof(NORM.NORM_SQL).IsAssignableFrom(function.Call.Method.DeclaringType) && !_dialect.SupportsTableFunction(function.Name))
+            throw new NotSupportedException($"The table function '{function.Name}' is not supported by this provider.");
 
         if (_paramMode)
         {

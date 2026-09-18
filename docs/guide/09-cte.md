@@ -35,7 +35,7 @@ after the statement.
 ## Non-recursive CTE
 
 ```csharp
-var recent = dataContext.Create<IComplexEntity>()
+var recent = dataContext.From<IComplexEntity>()
     .Where(c => c.Id > 1)
     .Select(c => new { c.Id });
 
@@ -57,7 +57,7 @@ Each `With` appends to the previous scope, so a later CTE can be defined in term
 The declarations are rendered in declaration order:
 
 ```csharp
-var first = dataContext.Create<IComplexEntity>()
+var first = dataContext.From<IComplexEntity>()
     .Where(x => x.Id > 1)
     .Select(x => new { x.Id });
 
@@ -98,7 +98,7 @@ public sealed class CteNumberRow
     public int n { get; set; }
 }
 
-var anchor = dataContext.Create<ISimpleEntity>()
+var anchor = dataContext.From<ISimpleEntity>()
     .Where(s => s.Id == 1)
     .Select(s => new CteNumberRow { n = s.Id });
 
@@ -148,7 +148,7 @@ parameter-extraction pass walks the `with` clause, not only the outer statement:
 var threshold = 1L;
 
 var prepared = dataContext
-    .With("recent", dataContext.Create<IComplexEntity>()
+    .With("recent", dataContext.From<IComplexEntity>()
         .Where(x => x.Id > threshold)
         .Select(x => new { x.Id }))
     .From("recent")

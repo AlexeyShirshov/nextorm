@@ -69,7 +69,19 @@ internal static class PredicateTranslator
     }
 
     /// <summary>Translates the integer ones-complement operator (<c>~</c>).</summary>
-    private static Expression VisitOnesComplement(BaseExpressionVisitor visitor, UnaryExpression node) => VisitUnaryOperator(visitor, node, "~");
+    private static Expression VisitOnesComplement(BaseExpressionVisitor visitor, UnaryExpression node)
+    {
+        if (visitor.IsParamMode)
+        {
+            visitor.Visit(node.Operand);
+            return node;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        visitor.Builder!.Append(visitor.Dialect.MakeOnesComplement(visitor.VisitToString(node.Operand)));
+
+        return node;
+    }
 
     /// <summary>
     /// Translates a unary arithmetic/bitwise operator. The operand is parenthesised so that the

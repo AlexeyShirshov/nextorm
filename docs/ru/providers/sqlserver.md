@@ -59,10 +59,10 @@ using IDataContext ctx = new SqlServerDbContext("Server=localhost;Database=app;.
 ## Разбиение на страницы: `TOP` и `OFFSET … FETCH`
 
 ```csharp
-ctx.Create<ISimpleEntity>().Limit(5).Select(x => x.Id);
+ctx.From<ISimpleEntity>().Limit(5).Select(x => x.Id);
 // select top(5) id from simple_entity
 
-ctx.Create<ISimpleEntity>().Page(5, 10).Select(x => x.Id);
+ctx.From<ISimpleEntity>().Page(5, 10).Select(x => x.Id);
 // select id from simple_entity order by (select null as anyorder)
 // offset 10 rows
 // fetch next 5 rows only
@@ -73,20 +73,43 @@ SQL Server отклоняет `OFFSET`/`FETCH` без `ORDER BY`, поэтому
 `offset m rows` и без `fetch`. Когда у запроса уже есть `ORDER BY`, ничего не внедряется.
 
 ```csharp
-ctx.Create<ISimpleEntity>().Offset(10).OrderBy(x => x.Id).Select(x => x.Id);
+ctx.From<ISimpleEntity>().Offset(10).OrderBy(x => x.Id).Select(x => x.Id);
 // ... order by id offset 10 rows
 ```
 
 ## Агрегаты и скалярные функции
 
 ```csharp
-var count = ctx.Create<IComplexEntity>().Select(x => NORM.SQL.count_big());        // count_big(*)
-var std   = ctx.Create<IComplexEntity>().Select(x => NORM.SQL.stdev((double)x.Id)); // stdev(...)
+var count = ctx.From<IComplexEntity>().Select(x => NORM.SQL.count_big());        // count_big(*)
+var std   = ctx.From<IComplexEntity>().Select(x => NORM.SQL.stdev((double)x.Id)); // stdev(...)
 ```
 
 `count_big` / `count_big_distinct` отрисовывают `count_big(...)`; обычные `count`/`count_distinct` отрисовывают
 `count(...)`. `stdev`, `stdevp`, `var` и `varp` сохраняют свои имена (SQL Server предоставляет их нативно).
 `Math.Round`, `Math.Truncate`, `len`, `datepart`, `getdate` и `isnull` все выдаются, как показано выше.
+
+SQL Server 2022+ также включает `greatest`/`least` (стандартный синтаксис) и `NORM.SQL.date_trunc`,
+который отрисовывает `datetrunc(part, value)`, сворачивая множественные ANSI-части в единственные
+T-SQL-написания (`milliseconds` → `millisecond`); `decade`/`century`/`millennium` выбрасывают исключение.
+Арифметика дат нативная: `NORM.SQL.date_add(field, amount, value)` отрисовывает
+`dateadd(field, amount, value)` (а `decade`/`century`/`millennium` сворачиваются в масштабированное
+прибавление `year`), `NORM.SQL.date_diff(field, start, end)` — `datediff(field, start, end)`,
+`NORM.SQL.date_from_parts(year, month, day)` — `datefromparts(year, month, day)`,
+`NORM.SQL.end_of_month(value)` — `eomonth(value)`. SQL Server 2017+ включает
+`NORM.SQL.string_agg` → `string_agg(value, delimiter)`. Типа-массива нет, поэтому `array_agg`
+по-прежнему выбрасывает исключение (`SupportsArrayAgg` равно `false`). SQL Server 2016+ также
+включает текстовые JSON-функции (`SupportsTextJson`): `NORM.MS_SQL.json_value`, `NORM.MS_SQL.json_query`,
+`NORM.MS_SQL.json_modify` и `NORM.MS_SQL.isjson` отрисовывают свои T-SQL-имена над текстовой колонкой,
+используя строку JSONPath (`'$.name'`); поверхность `json`/`jsonb` из PostgreSQL по-прежнему
+выбрасывает исключение.
+Предикаты полнотекстового поиска `NORM.SQL.contains` и `NORM.SQL.freetext` (`SupportsFullText`)
+отрисовываются как T-SQL `contains(...)`/`freetext(...)` и требуют полнотекстового индекса на колонке.
+Табличные хинты (`SupportsTableHints`) отрисовываются как `WITH (hint, ...)` после имени основной
+таблицы: `ctx.From<IComplexEntity>().WithTableHint("nolock")` даёт `from complex_entity with (nolock)`.
+`QueryCommand.ForJson(...)` (`SupportsForJson`) добавляет завершающее предложение
+`FOR JSON PATH`/`FOR JSON AUTO` (с необязательными `ROOT('...')` и `INCLUDE_NULL_VALUES`), а
+`QueryCommand.ForXml(...)` (`SupportsForXml`) — `FOR XML RAW/AUTO/EXPLICIT/PATH` (с необязательными
+именем элемента строки, `ROOT('...')` и `ELEMENTS`).
 
 ## Рекурсивные CTE и `maxRecursion`
 
@@ -151,6 +174,15 @@ join complex_entity as [t2] on t1.id = t2.id
 | `*ALL` | не поддерживается (бросает исключение) |
 | Рекурсивный CTE | `with` + `option (maxrecursion n)` |
 | Имена агрегатов | `stdev`/`var` нативные; доступен `count_big` |
+| `greatest` / `least` | поддерживаются (SQL Server 2022+) |
+| `date_trunc` | `datetrunc(part, value)` (SQL Server 2022+) |
+| `date_add` / `date_diff` / `date_from_parts` / `end_of_month` | `dateadd(field, amount, value)` / `datediff(field, start, end)` / `datefromparts(y, m, d)` / `eomonth(value)` |
+| `string_agg` / `array_agg` | `string_agg` поддерживается (SQL Server 2017+); `array_agg` — нет (бросает исключение) |
+| Текстовый JSON | `json_value` / `json_query` / `json_modify` (SQL Server 2016+) |
+| Предикаты полнотекстового поиска | `contains(...)` / `freetext(...)` (колонка должна быть полнотекстово проиндексирована) |
+| Табличные хинты | `with (hint, ...)` после основной таблицы (`WithTableHint`) |
+| JSON-вывод | завершающие `for json path` / `for json auto` (`ForJson`) |
+| XML-вывод | завершающие `for xml raw/auto/explicit/path` (`ForXml`) |
 | `AVG` по целочисленному столбцу | усекается до целого |
 | Размещение null при `ORDER BY … DESC` | null сортируются последними по умолчанию |
 

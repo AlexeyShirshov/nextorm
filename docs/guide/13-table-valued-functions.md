@@ -162,22 +162,22 @@ var rows = dataContext
 A few common table-valued functions are pre-declared with `[SqlTableFunction]`, so no user-defined
 wrapper is needed.
 
-`NORM.SQL.generate_series` and `NORM.SQL.unnest` are PostgreSQL (they return `NORM.IGenerateSeriesRow`
+`NORM.PG_SQL.generate_series` and `NORM.PG_SQL.unnest` are PostgreSQL (they return `NORM.IGenerateSeriesRow`
 with the `generate_series` column and `NORM.IUnnestRow<T>` with the `unnest` column):
 
 ```csharp
 var numbers = dataContext
-    .FromTableFunction(() => NORM.SQL.generate_series(1L, 3L))
+    .FromTableFunction(() => NORM.PG_SQL.generate_series(1L, 3L))
     .Select(r => r.Value)
     .ToList();
 
 var elements = dataContext
-    .FromTableFunction(() => NORM.SQL.unnest(NORM.Param<long[]>(0)))
+    .FromTableFunction(() => NORM.PG_SQL.unnest(NORM.Param<long[]>(0)))
     .Select(r => r.Value)
     .ToList(new long[] { 1, 2, 3 });
 ```
 
-`NORM.SQL.string_split` is SQL Server 2016+ and returns `NORM.IStringSplitRow` (the single `value`
+`NORM.MS_SQL.string_split` is SQL Server 2016+ and returns `NORM.IStringSplitRow` (the single `value`
 column). The fragments are not guaranteed to be ordered, so add an `order by` when the input order
 matters:
 
@@ -186,7 +186,7 @@ var csv = "a,b,c";
 var separator = ",";
 
 var fragments = dataContext
-    .FromTableFunction(() => NORM.SQL.string_split(csv, separator))
+    .FromTableFunction(() => NORM.MS_SQL.string_split(csv, separator))
     .Select(r => r.Value)
     .ToList();
 ```
@@ -195,8 +195,29 @@ var fragments = dataContext
 select value from string_split(@csv, @separator) as [t1]
 ```
 
+`NORM.MS_SQL.openjson` is SQL Server 2016+ and returns `NORM.IOpenJsonRow` (`key`/`value`/`type`). The
+default schema yields the properties of a JSON object or the elements of a JSON array; for a typed
+projection declare your own `[SqlTableFunction("openjson")]` wrapper whose row shape matches the
+`WITH (...)` clause:
+
+```csharp
+var json = """{"a":1,"b":2}""";
+
+var entries = dataContext
+    .FromTableFunction(() => NORM.MS_SQL.openjson(json))
+    .Select(r => new { r.Key, r.Value, r.Type })
+    .ToList();
+```
+
+```sql
+select [key] as [Key], value, type from openjson(@json) as [t1]
+```
+
 The mapped function must exist in the database — nextorm only emits the call, it does not create the
-function — so use the helper only on the provider that defines it.
+function — so use the helper only on the provider that defines it. The built-in helpers are gated by
+`ISqlDialect.SupportsTableFunction`: PostgreSQL enables `generate_series`/`unnest`, SQL Server enables
+`string_split`/`openjson`, and any other provider rejects them with `NotSupportedException` (a
+user-defined `[SqlTableFunction]` is never gated).
 
 ## Provider differences
 

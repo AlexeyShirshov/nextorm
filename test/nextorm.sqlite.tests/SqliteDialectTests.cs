@@ -52,5 +52,31 @@ public class SqliteDialectTests
         Dialect.RequireSubqueryAlias.Should().BeFalse();
         Dialect.SupportsRightFullJoin.Should().BeTrue();
         Dialect.SupportsIntersectExceptAll.Should().BeFalse();
+        Dialect.SupportsApply.Should().BeFalse();
+        Dialect.SupportsQueryHints.Should().BeFalse();
+        Dialect.SupportsDateArithmetic.Should().BeTrue();
+        Dialect.SupportsStringAgg.Should().BeTrue();
+    }
+
+    [Fact]
+    public void DateHooks_ShouldUseSqliteModifiers()
+    {
+        Dialect.MakeDateAdd("day", "n", "x").Should().Be("datetime(x, (n) || ' days')");
+        Dialect.MakeDateAdd("milliseconds", "n", "x")
+            .Should().Be("strftime('%Y-%m-%d %H:%M:%f', x, ((n) / 1000.0) || ' seconds')");
+        Dialect.MakeDateAdd("quarter", "n", "x")
+            .Should().Be("datetime(x, ((n) * 3) || ' months')");
+        Dialect.MakeDateDiff("month", "a", "b")
+            .Should().Be("((cast(strftime('%Y', b) as integer) * 12 + cast(strftime('%m', b) as integer)) - (cast(strftime('%Y', a) as integer) * 12 + cast(strftime('%m', a) as integer)))");
+        Dialect.MakeEndOfMonth("x").Should().Be("date(x, 'start of month', '+1 month', '-1 day')");
+        Dialect.MakeDateFromParts("y", "m", "d").Should().Be("date(printf('%04d-%02d-%02d', y, m, d))");
+        Dialect.MakeStringAgg("x", "','").Should().Be("group_concat(x, ',')");
+    }
+
+    [Fact]
+    public void BuiltInTableFunctions_ShouldBeGated()
+    {
+        Dialect.SupportsTableFunction("generate_series").Should().BeFalse();
+        Dialect.SupportsTableFunction("string_split").Should().BeFalse();
     }
 }

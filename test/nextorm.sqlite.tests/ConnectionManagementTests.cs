@@ -128,6 +128,6 @@ public class ConnectionManagementTests
 
         using var ctx = WithConnection(supplied);
 
-        ctx.Create<ISimpleEntity>().Select(x => x.Id).ToList().Should().Equal(42);
+        ctx.From<ISimpleEntity>().Select(x => x.Id).ToList().Should().Equal(42);
     }
 }

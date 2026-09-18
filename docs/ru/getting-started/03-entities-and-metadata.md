@@ -9,13 +9,13 @@
 Прежде чем строить SQL, NextORM нужно знать три вещи: таблицу, на которую отображается тип, столбец, на который отображается каждое свойство, и то, как создавать материализованные строки. Метаданные объявляются одним из трёх способов:
 
 1. **Атрибуты** на интерфейсе или классе (`[SqlTable]`, `[Column]`, при необходимости `[Table]`).
-2. **Fluent-построитель**, передаваемый в `Create<T>(cfg => …)`.
+2. **Fluent-построитель**, передаваемый в `From<T>(cfg => …)`.
 3. **Полное отсутствие метаданных** - начните с имени таблицы через `From("table")` и читайте столбцы через
    `TableAlias` (`tbl.Int("id")`, `tbl.String("name")`, …).
 
-Метаданные разрешаются лениво и кэшируются **на уровне процесса** в `DataContextCache.Metadata` по типу при первом запросе типа через `Create<T>()`. Из-за этого кэша:
+Метаданные разрешаются лениво и кэшируются **на уровне процесса** в `DataContextCache.Metadata` по типу при первом запросе типа через `From<T>()`. Из-за этого кэша:
 
-* делегат конфигурации, переданный в `Create<T>(…)`, выполняется только при первом вызове для этого типа в
+* делегат конфигурации, переданный в `From<T>(…)`, выполняется только при первом вызове для этого типа в
   процессе;
 * последующие вызовы для того же типа используют уже построенный `IEntityMeta` и игнорируют новый делегат;
 * in-memory- и SQL-контексты используют одни и те же метаданные (in-memory-контекст предоставляет их как
@@ -54,6 +54,9 @@ select id from simple_entity
   какой столбец является первичным ключом. NextORM не читает его для генерации запросов (генерации DDL и
   отслеживания изменений нет), но он сохраняет сущность корректной для внешних инструментов работы со схемой
   и является общепринятым выбором.
+* **Бинарные столбцы** - свойство `byte[]` отображается на бинарный столбец (`bytea` в PostgreSQL,
+  `varbinary`/`image` в SQL Server, `blob` в SQLite). `byte[]` можно также проецировать напрямую
+  (`Select(x => x.Data)`) и сравнивать с параметром `byte[]` через `NORM.Param<byte[]>(0)`.
 
 ### Интерфейс плюс класс
 
@@ -74,14 +77,14 @@ public class SimpleEntity : ISimpleEntity
 }
 ```
 
-`EntityBuilder` читает отображение из интерфейса: он определяет имя таблицы по реализуемым интерфейсам и для каждого записываемого свойства ищет совпадающее свойство интерфейса, чтобы найти `[Column]`. Тогда и `dataContext.Create<ISimpleEntity>()`, и `dataContext.Create<SimpleEntity>()` дают один и тот же SQL. Класс с атрибутами непосредственно на нём работает так же, без необходимости в интерфейсе.
+`EntityMetadataBuilder` читает отображение из интерфейса: он определяет имя таблицы по реализуемым интерфейсам и для каждого записываемого свойства ищет совпадающее свойство интерфейса, чтобы найти `[Column]`. Тогда и `dataContext.From<ISimpleEntity>()`, и `dataContext.From<SimpleEntity>()` дают один и тот же SQL. Класс с атрибутами непосредственно на нём работает так же, без необходимости в интерфейсе.
 
 ## Fluent-регистрация
 
-Вместо атрибутов передайте делегат конфигурации в `Create<T>()`. `EntityBuilder<T>` предоставляет `Table(string)` и `Property(Expression<Func<T, object>>)`; возвращаемый `EntityPropertyBuilder<T>` предоставляет `HasColumnName(string)`.
+Вместо атрибутов передайте делегат конфигурации в `From<T>()`. `EntityMetadataBuilder<T>` предоставляет `Table(string)` и `Property(Expression<Func<T, object>>)`; возвращаемый `EntityPropertyBuilder<T>` предоставляет `HasColumnName(string)`.
 
 ```csharp
-dataContext.Create<SimpleEntity>(cfg => cfg
+dataContext.From<SimpleEntity>(cfg => cfg
     .Table("simple_entity")
     .Property(x => x.Id)
     .HasColumnName("id"));
@@ -96,7 +99,7 @@ public class Product
     public string? Name { get; set; }
 }
 
-dataContext.Create<Product>(cfg =>
+dataContext.From<Product>(cfg =>
 {
     cfg.Table("products");
     cfg.Property(x => x.Id).HasColumnName("id");
@@ -104,7 +107,7 @@ dataContext.Create<Product>(cfg =>
 });
 ```
 
-Правила fluent-пути (`EntityBuilder<T>.Build`):
+Правила fluent-пути (`EntityMetadataBuilder<T>.Build`):
 
 * если `Table(...)` опущен, имя таблицы автоматически строится из атрибутов, а затем из имени типа;
 * если настроено хотя бы одно `Property(...)`, отображаются **только** эти свойства - автоматически
@@ -144,9 +147,10 @@ select id from simple_entity
 | `Byte(string)` | `byte` | `NullableByte(string)` | `byte?` |
 | `Boolean(string)` | `bool` | `NullableBoolean(string)` | `bool?` |
 | `Guid(string)` | `Guid` | `NullableGuid(string)` | `Guid?` |
+| `Bytes(string)` | `byte[]` | `NullableBytes(string)` | `byte[]?` |
 | `Column(string)` | `object` | | |
 
-`TableAlias` также имеет индексатор `this[string]`, возвращающий `TableColumn` с типизированными аксессорами `AsInt`, `AsString` и `AsNullableString` - это полезно, когда один и тот же псевдоним столбца упоминается в запросе с соединением/CTE:
+`TableAlias` также имеет индексатор `this[string]`, возвращающий `TableColumn` с типизированными аксессорами `AsInt`, `AsString`, `AsNullableString`, `AsBytes` и `AsNullableBytes` - это полезно, когда один и тот же псевдоним столбца упоминается в запросе с соединением/CTE:
 
 ```csharp
 var query = dataContext.From("complex_entity")
@@ -179,7 +183,7 @@ var query = dataContext.From("complex_entity")
 Source: `test/nextorm.integration.tests/Entities.cs:7`;
 `test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:37`;
 `test/nextorm.sqlite.tests/MetadataRegistrationTests.cs:18`;
-`src/nextorm.core/DataContext/Meta/EntityBuilder.cs:111`;
+`src/nextorm.core/DataContext/Meta/EntityMetadataBuilder.cs:111`;
 `src/nextorm.core/DataContext/Meta/EntityPropertyBuilder.cs:16`;
 `src/nextorm.core/DataContext/DataContextCache.cs:20`;
 `test/nextorm.sqlite.tests/SqlGenerationTests.cs:116`.

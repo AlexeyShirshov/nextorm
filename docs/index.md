@@ -27,6 +27,7 @@
 - [Raw SQL](guide/14-raw-sql.md)
 - [Query reuse: cache vs Prepare](guide/15-query-reuse.md)
 - [Connections and logging](guide/16-connections-and-logging.md)
+- [Query hints](guide/17-query-hints.md)
 
 ### Providers
 
@@ -42,6 +43,7 @@
 - [API reference](advanced/api-reference.md)
 - [Prepared vs cached: reusing a query](prepared-vs-cached.md)
 - [SQL capabilities gap analysis](sql-capabilities-gap-analysis.md)
+- [nextorm vs linq2db: functionality comparison](linq2db-comparison.md)
 
 ### Русская документация
 
@@ -102,13 +104,16 @@ To add specific database provider use the following:
 - `dotnet add package nextorm.sqlserver`
 - `dotnet add package nextorm.sqlite`
 - `dotnet add package nextorm.postgres`
+- `dotnet add package nextorm.mysql`
+- `dotnet add package nextorm.mariadb`
+- `dotnet add package nextorm.clickhouse`
 
 In-memory provider is built-in in core library.
 
 ## Query reuse
 
 There are two independent ways to avoid re-building a query plan on every execution: the implicit plan
-cache (used automatically by `Entity`/`QueryCommand` terminals) and explicit `Prepare()` returning an
+cache (used automatically by `EntityBuilder`/`QueryCommand` terminals) and explicit `Prepare()` returning an
 `IPreparedQueryCommand<TResult>`.
 
 They differ in cost, lifetime and thread-safety rules. Which one to use, what each one costs per call and

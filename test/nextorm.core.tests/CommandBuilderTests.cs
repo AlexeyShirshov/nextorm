@@ -4,9 +4,9 @@ namespace nextorm.core.tests;
 
 public class CommandBuilderTests
 {
-    private readonly Entity<ISimpleEntity> _builder;
+    private readonly EntityBuilder<ISimpleEntity> _builder;
 
-    public CommandBuilderTests(Entity<ISimpleEntity> builder)
+    public CommandBuilderTests(EntityBuilder<ISimpleEntity> builder)
     {
         _builder = builder;
     }

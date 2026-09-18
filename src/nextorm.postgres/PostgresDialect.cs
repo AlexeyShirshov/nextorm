@@ -36,9 +36,13 @@ public sealed class PostgresDialect : SqlDialectBase
     // PostgreSQL renders the ANSI GROUP BY ROLLUP (...)/CUBE (...) form.
     public override bool SupportsRollup => true;
     public override bool SupportsCube => true;
+    public override bool SupportsGroupingSets => true;
 
     // PostgreSQL has native array types and the any/all quantifiers over arrays.
     public override bool SupportsArrays => true;
+
+    public override bool SupportsTableFunction(string name) =>
+        name is "generate_series" or "unnest";
 
     // PostgreSQL has native json/jsonb types and the associated functions/operators.
     public override bool SupportsJson => true;
@@ -50,6 +54,15 @@ public sealed class PostgresDialect : SqlDialectBase
     public override bool SupportsDateTrunc => true;
     public override bool SupportsDateArithmetic => true;
     public override bool SupportsStringArrayAggregates => true;
+
+    // PostgreSQL full-text search matches a tsvector against a tsquery; contains/freetext differ in
+    // how the search string is parsed (plain terms vs. web-search syntax).
+    public override bool SupportsFullText => true;
+
+    public override string MakeFullText(string functionName, string column, string search) =>
+        functionName == "freetext"
+            ? $"to_tsvector({column}) @@ websearch_to_tsquery({search})"
+            : $"to_tsvector({column}) @@ plainto_tsquery({search})";
 
     // PostgreSQL is the reference provider for the extended scalar function library and the
     // bool/bit/statistical/ordered-set aggregate surface.
@@ -74,6 +87,18 @@ public sealed class PostgresDialect : SqlDialectBase
         name == "log" && args.Count == 1
             ? $"ln({args[0]})"
             : base.MakeMathFunction(name, args);
+
+    protected override string MakeStringPosition(string value, string substring) =>
+        $"strpos({value}, {substring})";
+
+    public override string MakeRepeat(string value, string count) => $"repeat({value}, {count})";
+
+    protected override string MakeStringReverse(string value) => $"reverse({value})";
+
+    public override string MakeStuff(string value, string start, string? count, string newValue) =>
+        count is null
+            ? MakeSubstring(value, "0", start)
+            : $"overlay({value} placing {newValue} from {start} + 1 for {count})";
 
     public override void MakePage(Paging paging, StringBuilder sqlBuilder)
     {

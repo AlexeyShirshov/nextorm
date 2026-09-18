@@ -21,10 +21,10 @@ public static IPreparedQueryCommand<TResult> PrepareFromSql<TResult>(this QueryC
 public static IPreparedQueryCommand<TResult> PrepareFromSql<TResult>(this QueryCommand<TResult> queryCommand, string sql, object? @params, bool nonStreamUsing, CancellationToken cancellationToken = default);
 public static IPreparedQueryCommand<TResult> PrepareFromSql<TResult>(this QueryCommand<TResult> queryCommand, string sql, object? @params, bool nonStreamUsing, bool storeInCache, CancellationToken cancellationToken = default);
 
-// Entity<TResult> convenience overloads
-public static QueryCommand<TResult> WithSql<TResult>(this Entity<TResult> entity, string sql);
-public static QueryCommand<TResult> WithSql<TResult>(this Entity<TResult> entity, string sql, object? @params);
-public static IPreparedQueryCommand<TResult> PrepareFromSql<TResult>(this Entity<TResult> entity, string sql);
+// EntityBuilder<TResult> convenience overloads
+public static QueryCommand<TResult> WithSql<TResult>(this EntityBuilder<TResult> entity, string sql);
+public static QueryCommand<TResult> WithSql<TResult>(this EntityBuilder<TResult> entity, string sql, object? @params);
+public static IPreparedQueryCommand<TResult> PrepareFromSql<TResult>(this EntityBuilder<TResult> entity, string sql);
 ```
 
 * `WithSql` возвращает `QueryCommand<TResult>`, который вы выполняете обычными терминалами
@@ -46,7 +46,7 @@ Microsoft.Data.Sqlite также принимает `@name`, хотя генер
 ## `WithSql`
 
 ```csharp
-var ids = await dataContext.Create<ISimpleEntity>()
+var ids = await dataContext.From<ISimpleEntity>()
     .Select(it => it.Id)
     .WithSql("select id from simple_entity --this is custom sql")
     .ToListAsync();
@@ -60,7 +60,7 @@ select id from simple_entity --this is custom sql
 Необработанная инструкция с именованными параметрами:
 
 ```csharp
-var rows = await dataContext.Create<SimpleEntity>()
+var rows = await dataContext.From<SimpleEntity>()
     .Select(it => new SimpleEntity { Id = it.Id })
     .WithSql("select id from simple_entity where id = @id", new { id = 1 })
     .ToListAsync();
@@ -77,7 +77,7 @@ select id from simple_entity where id = @id
 во время выполнения точно так же, как для `Prepare(...)`:
 
 ```csharp
-var prepared = dataContext.Create<ISimpleEntity>()
+var prepared = dataContext.From<ISimpleEntity>()
     .Select(it => it.Id)
     .PrepareFromSql("select id from simple_entity", cancellationToken);
 
@@ -87,7 +87,7 @@ var ids = await dataContext.ToListAsync(prepared);
 Параметр из объекта params плюс параметр времени выполнения (`@norm_p0`), переданный в терминал:
 
 ```csharp
-var prepared = dataContext.Create<SimpleEntity>()
+var prepared = dataContext.From<SimpleEntity>()
     .Select(it => new SimpleEntity { Id = it.Id })
     .PrepareFromSql("select id from simple_entity where id = @id+@norm_p0", new { id = 1 }, cancellationToken);
 
@@ -101,19 +101,19 @@ var entity = await dataContext.FirstAsync(prepared, 1);
 
 ```csharp
 // scalar
-var ids = await dataContext.Create<ISimpleEntity>()
+var ids = await dataContext.From<ISimpleEntity>()
     .Select(it => it.Id)
     .WithSql("select id from simple_entity")
     .ToListAsync();
 
 // entity member-init
-var entities = await dataContext.Create<SimpleEntity>()
+var entities = await dataContext.From<SimpleEntity>()
     .Select(it => new SimpleEntity { Id = it.Id })
     .WithSql("select id from simple_entity")
     .ToListAsync();
 
 // DTO
-var dtos = await dataContext.Create<SimpleEntity>()
+var dtos = await dataContext.From<SimpleEntity>()
     .Select(it => new IdDto { Id = it.Id })
     .WithSql("select id from simple_entity")
     .ToListAsync();

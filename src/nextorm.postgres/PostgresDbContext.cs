@@ -31,7 +31,7 @@ public class PostgresDbContext : DbContext
 
         // A JSON document/element/node is bound as jsonb so that the json/jsonb operators and
         // functions accept it without an explicit cast. A plain string is left as text and can be
-        // parsed on demand with NORM.SQL.json_cast(...).
+        // parsed on demand with NORM.PG_SQL.json_cast(...).
         if (value is JsonDocument or JsonElement or JsonNode)
             parameter.NpgsqlDbType = NpgsqlDbType.Jsonb;
 

@@ -27,6 +27,7 @@
 - [Сырой SQL](guide/14-raw-sql.md)
 - [Переиспользование запросов: кэш и Prepare](guide/15-query-reuse.md)
 - [Подключения и логирование](guide/16-connections-and-logging.md)
+- [Хинты запросов](guide/17-query-hints.md)
 
 ### Провайдеры
 
@@ -42,6 +43,7 @@
 - [Краткий справочник API](advanced/api-reference.md)
 - [Prepared vs cached: переиспользование запроса](../prepared-vs-cached.md)
 - [Анализ пробелов в SQL](../sql-capabilities-gap-analysis.md)
+- [nextorm vs linq2db: сравнение функционала](linq2db-comparison.md)
 
 ### Введение
 

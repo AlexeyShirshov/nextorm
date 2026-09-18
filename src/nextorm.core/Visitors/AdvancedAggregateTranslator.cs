@@ -25,23 +25,23 @@ internal static class AdvancedAggregateTranslator
     {
         switch (node.Method.Name)
         {
-            case nameof(NORM.NORM_SQL.bool_and) when node.Arguments.Count == 1:
+            case nameof(NORM.PG.bool_and) when node.Arguments.Count == 1:
                 EmitSimple(visitor, node, "bool_and", () => visitor.Dialect.SupportsBooleanAggregates, "bool_and/bool_or/every");
                 return true;
-            case nameof(NORM.NORM_SQL.bool_or) when node.Arguments.Count == 1:
+            case nameof(NORM.PG.bool_or) when node.Arguments.Count == 1:
                 EmitSimple(visitor, node, "bool_or", () => visitor.Dialect.SupportsBooleanAggregates, "bool_and/bool_or/every");
                 return true;
-            case nameof(NORM.NORM_SQL.every) when node.Arguments.Count == 1:
+            case nameof(NORM.PG.every) when node.Arguments.Count == 1:
                 EmitSimple(visitor, node, "every", () => visitor.Dialect.SupportsBooleanAggregates, "bool_and/bool_or/every");
                 return true;
 
-            case nameof(NORM.NORM_SQL.bit_and) when node.Arguments.Count == 1:
+            case nameof(NORM.PG.bit_and) when node.Arguments.Count == 1:
                 EmitSimple(visitor, node, "bit_and", () => visitor.Dialect.SupportsBitAggregates, "bit_and/bit_or/bit_xor");
                 return true;
-            case nameof(NORM.NORM_SQL.bit_or) when node.Arguments.Count == 1:
+            case nameof(NORM.PG.bit_or) when node.Arguments.Count == 1:
                 EmitSimple(visitor, node, "bit_or", () => visitor.Dialect.SupportsBitAggregates, "bit_and/bit_or/bit_xor");
                 return true;
-            case nameof(NORM.NORM_SQL.bit_xor) when node.Arguments.Count == 1:
+            case nameof(NORM.PG.bit_xor) when node.Arguments.Count == 1:
                 EmitSimple(visitor, node, "bit_xor", () => visitor.Dialect.SupportsBitAggregates, "bit_and/bit_or/bit_xor");
                 return true;
 
@@ -54,55 +54,55 @@ internal static class AdvancedAggregateTranslator
             case nameof(NORM.NORM_SQL.covar_samp) when node.Arguments.Count == 2:
                 EmitBinary(visitor, node, "covar_samp", () => visitor.Dialect.SupportsStatisticalAggregates, "statistical (corr/covar)");
                 return true;
-            case nameof(NORM.NORM_SQL.regr_slope) when node.Arguments.Count == 2:
+            case nameof(NORM.PG.regr_slope) when node.Arguments.Count == 2:
                 EmitBinary(visitor, node, "regr_slope", () => visitor.Dialect.SupportsRegressionAggregates, "regr_*");
                 return true;
-            case nameof(NORM.NORM_SQL.regr_intercept) when node.Arguments.Count == 2:
+            case nameof(NORM.PG.regr_intercept) when node.Arguments.Count == 2:
                 EmitBinary(visitor, node, "regr_intercept", () => visitor.Dialect.SupportsRegressionAggregates, "regr_*");
                 return true;
-            case nameof(NORM.NORM_SQL.regr_r2) when node.Arguments.Count == 2:
+            case nameof(NORM.PG.regr_r2) when node.Arguments.Count == 2:
                 EmitBinary(visitor, node, "regr_r2", () => visitor.Dialect.SupportsRegressionAggregates, "regr_*");
                 return true;
-            case nameof(NORM.NORM_SQL.regr_count) when node.Arguments.Count == 2:
+            case nameof(NORM.PG.regr_count) when node.Arguments.Count == 2:
                 EmitBinary(visitor, node, "regr_count", () => visitor.Dialect.SupportsRegressionAggregates, "regr_*");
                 return true;
-            case nameof(NORM.NORM_SQL.regr_avgx) when node.Arguments.Count == 2:
+            case nameof(NORM.PG.regr_avgx) when node.Arguments.Count == 2:
                 EmitBinary(visitor, node, "regr_avgx", () => visitor.Dialect.SupportsRegressionAggregates, "regr_*");
                 return true;
-            case nameof(NORM.NORM_SQL.regr_avgy) when node.Arguments.Count == 2:
+            case nameof(NORM.PG.regr_avgy) when node.Arguments.Count == 2:
                 EmitBinary(visitor, node, "regr_avgy", () => visitor.Dialect.SupportsRegressionAggregates, "regr_*");
                 return true;
 
-            case nameof(NORM.NORM_SQL.arg_min) when node.Arguments.Count == 2:
+            case nameof(NORM.CLK.arg_min) when node.Arguments.Count == 2:
                 EmitBinary(visitor, node, "arg_min", () => visitor.Dialect.SupportsArgMinMax, "argMin/argMax");
                 return true;
-            case nameof(NORM.NORM_SQL.arg_max) when node.Arguments.Count == 2:
+            case nameof(NORM.CLK.arg_max) when node.Arguments.Count == 2:
                 EmitBinary(visitor, node, "arg_max", () => visitor.Dialect.SupportsArgMinMax, "argMin/argMax");
                 return true;
 
-            case nameof(NORM.NORM_SQL.percentile_cont) when node.Arguments.Count == 2:
+            case nameof(NORM.PG.percentile_cont) when node.Arguments.Count == 2:
                 EmitOrdered(visitor, node, hasFraction: true);
                 return true;
-            case nameof(NORM.NORM_SQL.percentile_disc) when node.Arguments.Count == 2:
+            case nameof(NORM.PG.percentile_disc) when node.Arguments.Count == 2:
                 EmitOrdered(visitor, node, hasFraction: true);
                 return true;
-            case nameof(NORM.NORM_SQL.mode) when node.Arguments.Count == 1:
+            case nameof(NORM.PG.mode) when node.Arguments.Count == 1:
                 EmitOrdered(visitor, node, hasFraction: false);
                 return true;
 
-            case nameof(NORM.NORM_SQL.count_if) when node.Arguments.Count == 1:
+            case nameof(NORM.CLK.count_if) when node.Arguments.Count == 1:
                 EmitIfAggregate(visitor, node, "count_if", valueArgument: null);
                 return true;
-            case nameof(NORM.NORM_SQL.sum_if) when node.Arguments.Count == 2:
+            case nameof(NORM.CLK.sum_if) when node.Arguments.Count == 2:
                 EmitIfAggregate(visitor, node, "sum_if", node.Arguments[0]);
                 return true;
-            case nameof(NORM.NORM_SQL.avg_if) when node.Arguments.Count == 2:
+            case nameof(NORM.CLK.avg_if) when node.Arguments.Count == 2:
                 EmitIfAggregate(visitor, node, "avg_if", node.Arguments[0]);
                 return true;
-            case nameof(NORM.NORM_SQL.min_if) when node.Arguments.Count == 2:
+            case nameof(NORM.CLK.min_if) when node.Arguments.Count == 2:
                 EmitIfAggregate(visitor, node, "min_if", node.Arguments[0]);
                 return true;
-            case nameof(NORM.NORM_SQL.max_if) when node.Arguments.Count == 2:
+            case nameof(NORM.CLK.max_if) when node.Arguments.Count == 2:
                 EmitIfAggregate(visitor, node, "max_if", node.Arguments[0]);
                 return true;
 

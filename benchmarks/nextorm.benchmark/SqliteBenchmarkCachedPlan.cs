@@ -123,7 +123,7 @@ public class SqliteBenchmarkCachedPlan
         return r!;
     }
 
-    // No DB: only constructs the QueryCommand (Entity.Clone + Where + Select), no prepare/lookup.
+    // No DB: only constructs the QueryCommand (EntityBuilder.Clone + Where + Select), no prepare/lookup.
     // Use it to split the cached-path overhead into construction vs preparation.
     [Benchmark]
     public QueryCommand<int> Construct_Only()

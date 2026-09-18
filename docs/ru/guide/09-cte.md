@@ -35,7 +35,7 @@ public static CteQuery WithRecursive(this IDataContext dataContext, string name,
 ## Нерекурсивный CTE
 
 ```csharp
-var recent = dataContext.Create<IComplexEntity>()
+var recent = dataContext.From<IComplexEntity>()
     .Where(c => c.Id > 1)
     .Select(c => new { c.Id });
 
@@ -57,7 +57,7 @@ with recent as (select id from complex_entity where (id > 1)) select id from rec
 через более ранний. Объявления рендерятся в порядке объявления:
 
 ```csharp
-var first = dataContext.Create<IComplexEntity>()
+var first = dataContext.From<IComplexEntity>()
     .Where(x => x.Id > 1)
     .Select(x => new { x.Id });
 
@@ -98,7 +98,7 @@ public sealed class CteNumberRow
     public int n { get; set; }
 }
 
-var anchor = dataContext.Create<ISimpleEntity>()
+var anchor = dataContext.From<ISimpleEntity>()
     .Where(s => s.Id == 1)
     .Select(s => new CteNumberRow { n = s.Id });
 
@@ -148,7 +148,7 @@ with nums as (select id as [n] from simple_entity where (id = 1) union all selec
 var threshold = 1L;
 
 var prepared = dataContext
-    .With("recent", dataContext.Create<IComplexEntity>()
+    .With("recent", dataContext.From<IComplexEntity>()
         .Where(x => x.Id > threshold)
         .Select(x => new { x.Id }))
     .From("recent")

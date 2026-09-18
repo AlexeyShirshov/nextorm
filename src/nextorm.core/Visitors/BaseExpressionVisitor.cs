@@ -293,6 +293,37 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         return visitor.ToString();
     }
 
+    protected override Expression VisitNew(NewExpression node)
+    {
+        // new string(char, int) repeats a single character; SQL has no char literal, so the character
+        // must be a compile-time constant and is rendered as a one-character string.
+        if (node.Type == typeof(string)
+            && node.Constructor is { } constructor
+            && constructor.GetParameters() is [var charParam, var countParam]
+            && charParam.ParameterType == typeof(char)
+            && countParam.ParameterType == typeof(int)
+            && node.Arguments is [var charArg, var countArg])
+        {
+            if (!SqlLiteral.TryGetConstantString(charArg, out var character))
+                throw new NotSupportedException("The new string(char, n) character must be a constant.");
+
+            if (_paramMode)
+            {
+                Visit(charArg);
+                Visit(countArg);
+                return node;
+            }
+
+            _needAliasForColumn = true;
+            _builder!.Append(_dialect.MakeRepeat(
+                SqlLiteral.ToSqlStringLiteral(character),
+                VisitToString(countArg)));
+            return node;
+        }
+
+        return base.VisitNew(node);
+    }
+
     protected override Expression VisitIndex(IndexExpression node)
         => MemberTranslator.VisitIndex(this, node) ?? base.VisitIndex(node);
     // protected override Expression VisitLambda<T>(Expression<T> node)

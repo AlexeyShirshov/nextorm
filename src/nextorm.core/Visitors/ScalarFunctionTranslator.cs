@@ -165,6 +165,18 @@ internal static class ScalarFunctionTranslator
                     return TryTranslateSubstring(visitor, node);
                 case nameof(string.Replace):
                     return TryTranslateReplace(visitor, node);
+                case nameof(string.Remove):
+                    return TryTranslateRemove(visitor, node);
+                case nameof(string.Insert):
+                    return TryTranslateInsert(visitor, node);
+                case nameof(string.IndexOf):
+                    return TryTranslateIndexOf(visitor, node);
+                case nameof(string.LastIndexOf):
+                    return TryTranslateLastIndexOf(visitor, node);
+                case nameof(string.PadLeft):
+                    return TryTranslatePad(visitor, node, left: true);
+                case nameof(string.PadRight):
+                    return TryTranslatePad(visitor, node, left: false);
                 case nameof(string.Contains):
                     return TryTranslateStringLike(visitor, node, LikePosition.Contains);
                 case nameof(string.StartsWith):
@@ -180,7 +192,37 @@ internal static class ScalarFunctionTranslator
         if (node.Object is null && methodName == nameof(string.IsNullOrEmpty))
             return TryTranslateIsNullOrEmpty(visitor, node);
 
+        if (node.Object is null && methodName == nameof(string.Join))
+            return TryTranslateJoin(visitor, node);
+
         return false;
+    }
+
+    /// <summary>
+    /// Translates <c>string.Join(separator, string[])</c> to the provider's array-to-string
+    /// function (<c>array_to_string</c>) on a provider with native arrays (PostgreSQL). A call whose
+    /// array is entirely constant is left to the constant-folding path instead.
+    /// </summary>
+    private static bool TryTranslateJoin(BaseExpressionVisitor visitor, MethodCallExpression node)
+    {
+        var args = node.Arguments;
+        if (args.Count != 2 || args[0].Type != typeof(string))
+            return false;
+
+        var valuesType = args[1].Type;
+        if (!valuesType.IsArray || valuesType.GetElementType() != typeof(string))
+            return false;
+
+        // A constant-only join is folded to a parameter, exactly as before this translation existed.
+        if (!node.Has<ParameterExpression>())
+            return false;
+
+        if (!visitor.Dialect.SupportsArrays)
+            throw new NotSupportedException("string.Join over an array requires a provider with native arrays (PostgreSQL).");
+
+        // PostgreSQL orders the arguments as array_to_string(array, separator).
+        SqlOperandTranslator.EmitFunction(visitor, "array_to_string", [args[1], args[0]]);
+        return true;
     }
 
     private static bool EmitStringFunction(BaseExpressionVisitor visitor, Expression operand, Func<string, string> render)
@@ -248,6 +290,144 @@ internal static class ScalarFunctionTranslator
         return true;
     }
 
+    private static bool TryTranslateRemove(BaseExpressionVisitor visitor, MethodCallExpression node)
+    {
+        var args = node.Arguments;
+        if (node.Object is null || args.Count is < 1 or > 2)
+            return false;
+
+        // Only the (int) and (int, int) overloads map to a splice; there is no Range form on Remove.
+        if (args[0].Type != typeof(int) || (args.Count == 2 && args[1].Type != typeof(int)))
+            return false;
+
+        if (visitor.IsParamMode)
+        {
+            visitor.Visit(node.Object);
+            for (var i = 0; i < args.Count; i++) visitor.Visit(args[i]);
+            return true;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        var value = visitor.VisitToString(node.Object);
+        var start = visitor.VisitToString(args[0]);
+        var count = args.Count == 2 ? visitor.VisitToString(args[1]) : null;
+        visitor.Builder!.Append(visitor.Dialect.MakeStuff(value, start, count, visitor.Dialect.EmptyString));
+        return true;
+    }
+
+    private static bool TryTranslateInsert(BaseExpressionVisitor visitor, MethodCallExpression node)
+    {
+        var args = node.Arguments;
+        if (node.Object is null || args.Count != 2)
+            return false;
+
+        if (args[0].Type != typeof(int) || args[1].Type != typeof(string))
+            return false;
+
+        if (visitor.IsParamMode)
+        {
+            visitor.Visit(node.Object);
+            visitor.Visit(args[0]);
+            visitor.Visit(args[1]);
+            return true;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        var value = visitor.VisitToString(node.Object);
+        var start = visitor.VisitToString(args[0]);
+        var text = visitor.VisitToString(args[1]);
+        // A zero replacement length inserts the text at start instead of removing anything.
+        visitor.Builder!.Append(visitor.Dialect.MakeStuff(value, start, count: "0", text));
+        return true;
+    }
+
+    private static bool TryTranslateIndexOf(BaseExpressionVisitor visitor, MethodCallExpression node)
+    {
+        var args = node.Arguments;
+        if (node.Object is null || args.Count is < 1 or > 2)
+            return false;
+
+        // IndexOf(string) and IndexOf(string, int); the char and StringComparison overloads have no
+        // portable SQL form.
+        if (args[0].Type != typeof(string) || (args.Count == 2 && args[1].Type != typeof(int)))
+            return false;
+
+        if (visitor.IsParamMode)
+        {
+            visitor.Visit(node.Object);
+            visitor.Visit(args[0]);
+            if (args.Count == 2) visitor.Visit(args[1]);
+            return true;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        var value = visitor.VisitToString(node.Object);
+        var substring = visitor.VisitToString(args[0]);
+        var start = args.Count == 2 ? visitor.VisitToString(args[1]) : null;
+        visitor.Builder!.Append(visitor.Dialect.MakeStringIndexOf(value, substring, start));
+        return true;
+    }
+
+    private static bool TryTranslateLastIndexOf(BaseExpressionVisitor visitor, MethodCallExpression node)
+    {
+        var args = node.Arguments;
+        if (node.Object is null || args.Count != 1 || args[0].Type != typeof(string))
+            return false;
+
+        if (visitor.IsParamMode)
+        {
+            visitor.Visit(node.Object);
+            visitor.Visit(args[0]);
+            return true;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        var value = visitor.VisitToString(node.Object);
+        var substring = visitor.VisitToString(args[0]);
+        visitor.Builder!.Append(visitor.Dialect.MakeStringLastIndexOf(value, substring));
+        return true;
+    }
+
+    private static bool TryTranslatePad(BaseExpressionVisitor visitor, MethodCallExpression node, bool left)
+    {
+        var args = node.Arguments;
+        if (node.Object is null || args.Count is < 1 or > 2)
+            return false;
+
+        if (args[0].Type != typeof(int))
+            return false;
+
+        // SQL has no char type, so the padding character has to be a compile-time constant that can be
+        // rendered as a one-character string literal.
+        string pad;
+        if (args.Count == 2)
+        {
+            if (!SqlLiteral.TryGetConstantString(args[1], out var padValue))
+                throw new NotSupportedException("The string.PadLeft/PadRight padding character must be a constant.");
+
+            pad = SqlLiteral.ToSqlStringLiteral(padValue);
+        }
+        else
+        {
+            pad = SqlLiteral.ToSqlStringLiteral(" ");
+        }
+
+        if (visitor.IsParamMode)
+        {
+            visitor.Visit(node.Object);
+            for (var i = 0; i < args.Count; i++) visitor.Visit(args[i]);
+            return true;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        visitor.Builder!.Append(visitor.Dialect.MakePad(
+            visitor.VisitToString(node.Object),
+            visitor.VisitToString(args[0]),
+            pad,
+            left));
+        return true;
+    }
+
     private static bool TryTranslateStringLike(BaseExpressionVisitor visitor, MethodCallExpression node, LikePosition position)
     {
         var args = node.Arguments;
@@ -265,7 +445,7 @@ internal static class ScalarFunctionTranslator
         var value = visitor.VisitToString(node.Object);
         var pattern = BuildLikePattern(visitor, args[0], position, out var escaped);
         var predicate = escaped
-            ? $"{value} like {pattern} escape '\\'"
+            ? $"{value} like {pattern}{visitor.Dialect.MakeLikeEscape("\\")}"
             : $"{value} like {pattern}";
         visitor.Builder!.Append(visitor.Dialect.MakeBooleanPredicate(predicate, visitor.IsPredicateContext));
         return true;
@@ -293,7 +473,7 @@ internal static class ScalarFunctionTranslator
             if (!SqlLiteral.TryGetConstantString(args[2], out var escapeChar))
                 throw new NotSupportedException("The NORM.SQL.like escape character must be a constant string or char.");
 
-            escapeClause = $" escape {SqlLiteral.ToSqlStringLiteral(escapeChar)}";
+            escapeClause = visitor.Dialect.MakeLikeEscape(escapeChar);
         }
 
         visitor.Builder!.Append(visitor.Dialect.MakeBooleanPredicate($"{value} like {pattern}{escapeClause}", visitor.IsPredicateContext));

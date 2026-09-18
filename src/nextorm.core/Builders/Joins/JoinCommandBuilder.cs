@@ -37,7 +37,7 @@ public class EntityP2<T1, T2> : EntityBuilder<Projection<T1, T2>>
         if (Condition is not null)
             throw new NotImplementedException();
 
-        var cb = new EntityP3<T1, T2, T3>(DataProvider) { Logger = Logger, Query = Query, Table = Table, SourceFrom = SourceFrom, IsDistinct = IsDistinct, GroupingType = GroupingType, Ctes = Ctes };
+        var cb = new EntityP3<T1, T2, T3>(DataProvider) { Logger = Logger, Query = Query, Table = Table, SourceFrom = SourceFrom, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, TableHints = TableHints, Ctes = Ctes };
         cb.Joins!.Add(JoinCondition);
         cb.Joins!.Add(new JoinExpression(joinCondition, joinType) { From = _dataProvider.GetFrom(typeof(T3), null)!, EntityType = joinCondition is null ? typeof(T3) : null });
         return cb;
@@ -89,7 +89,7 @@ public class EntityP3<T1, T2, T3> : EntityBuilder<Projection<T1, T2, T3>>
         => JoinCore(_, JoinType.OuterApply, null);
     private EntityP4<T1, T2, T3, T4> JoinCore<T4>(EntityBuilder<T4> _, JoinType joinType, LambdaExpression? joinCondition)
     {
-        var cb = new EntityP4<T1, T2, T3, T4>(DataProvider) { Logger = Logger, Query = Query, Table = Table, SourceFrom = SourceFrom, IsDistinct = IsDistinct, GroupingType = GroupingType, Ctes = Ctes };
+        var cb = new EntityP4<T1, T2, T3, T4>(DataProvider) { Logger = Logger, Query = Query, Table = Table, SourceFrom = SourceFrom, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, TableHints = TableHints, Ctes = Ctes };
         if (Joins is not null) cb.Joins!.AddRange(Joins);
         cb.Joins!.Add(new JoinExpression(joinCondition, joinType) { From = _dataProvider.GetFrom(typeof(T4), null)!, EntityType = joinCondition is null ? typeof(T4) : null });
         return cb;
@@ -129,7 +129,7 @@ public class EntityP4<T1, T2, T3, T4> : EntityBuilder<Projection<T1, T2, T3, T4>
         => JoinCore(_, JoinType.OuterApply, null);
     private EntityP5<T1, T2, T3, T4, T5> JoinCore<T5>(EntityBuilder<T5> _, JoinType joinType, LambdaExpression? joinCondition)
     {
-        var cb = new EntityP5<T1, T2, T3, T4, T5>(DataProvider) { Logger = Logger, Query = Query, Table = Table, SourceFrom = SourceFrom, IsDistinct = IsDistinct, GroupingType = GroupingType, Ctes = Ctes };
+        var cb = new EntityP5<T1, T2, T3, T4, T5>(DataProvider) { Logger = Logger, Query = Query, Table = Table, SourceFrom = SourceFrom, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, TableHints = TableHints, Ctes = Ctes };
         if (Joins is not null) cb.Joins!.AddRange(Joins);
         cb.Joins!.Add(new JoinExpression(joinCondition, joinType) { From = _dataProvider.GetFrom(typeof(T5), null)!, EntityType = joinCondition is null ? typeof(T5) : null });
         return cb;
@@ -169,7 +169,7 @@ public class EntityP5<T1, T2, T3, T4, T5> : EntityBuilder<Projection<T1, T2, T3,
         => JoinCore(_, JoinType.OuterApply, null);
     private EntityP6<T1, T2, T3, T4, T5, T6> JoinCore<T6>(EntityBuilder<T6> _, JoinType joinType, LambdaExpression? joinCondition)
     {
-        var cb = new EntityP6<T1, T2, T3, T4, T5, T6>(DataProvider) { Logger = Logger, Query = Query, Table = Table, SourceFrom = SourceFrom, IsDistinct = IsDistinct, GroupingType = GroupingType, Ctes = Ctes };
+        var cb = new EntityP6<T1, T2, T3, T4, T5, T6>(DataProvider) { Logger = Logger, Query = Query, Table = Table, SourceFrom = SourceFrom, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, TableHints = TableHints, Ctes = Ctes };
         if (Joins is not null) cb.Joins!.AddRange(Joins);
         cb.Joins!.Add(new JoinExpression(joinCondition, joinType) { From = _dataProvider.GetFrom(typeof(T6), null)!, EntityType = joinCondition is null ? typeof(T6) : null });
         return cb;
@@ -209,7 +209,7 @@ public class EntityP6<T1, T2, T3, T4, T5, T6> : EntityBuilder<Projection<T1, T2,
         => JoinCore(_, JoinType.OuterApply, null);
     private EntityP7<T1, T2, T3, T4, T5, T6, T7> JoinCore<T7>(EntityBuilder<T7> _, JoinType joinType, LambdaExpression? joinCondition)
     {
-        var cb = new EntityP7<T1, T2, T3, T4, T5, T6, T7>(DataProvider) { Logger = Logger, Query = Query, Table = Table, SourceFrom = SourceFrom, IsDistinct = IsDistinct, GroupingType = GroupingType, Ctes = Ctes };
+        var cb = new EntityP7<T1, T2, T3, T4, T5, T6, T7>(DataProvider) { Logger = Logger, Query = Query, Table = Table, SourceFrom = SourceFrom, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, TableHints = TableHints, Ctes = Ctes };
         if (Joins is not null) cb.Joins!.AddRange(Joins);
         cb.Joins!.Add(new JoinExpression(joinCondition, joinType) { From = _dataProvider.GetFrom(typeof(T7), null)!, EntityType = joinCondition is null ? typeof(T7) : null });
         return cb;
@@ -249,7 +249,7 @@ public class EntityP7<T1, T2, T3, T4, T5, T6, T7> : EntityBuilder<Projection<T1,
         => JoinCore(_, JoinType.OuterApply, null);
     private EntityP8<T1, T2, T3, T4, T5, T6, T7, T8> JoinCore<T8>(EntityBuilder<T8> _, JoinType joinType, LambdaExpression? joinCondition)
     {
-        var cb = new EntityP8<T1, T2, T3, T4, T5, T6, T7, T8>(DataProvider) { Logger = Logger, Query = Query, Table = Table, SourceFrom = SourceFrom, IsDistinct = IsDistinct, GroupingType = GroupingType, Ctes = Ctes };
+        var cb = new EntityP8<T1, T2, T3, T4, T5, T6, T7, T8>(DataProvider) { Logger = Logger, Query = Query, Table = Table, SourceFrom = SourceFrom, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, TableHints = TableHints, Ctes = Ctes };
         if (Joins is not null) cb.Joins!.AddRange(Joins);
         cb.Joins!.Add(new JoinExpression(joinCondition, joinType) { From = _dataProvider.GetFrom(typeof(T8), null)!, EntityType = joinCondition is null ? typeof(T8) : null });
         return cb;

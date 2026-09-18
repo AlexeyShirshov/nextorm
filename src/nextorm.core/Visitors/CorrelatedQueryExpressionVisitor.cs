@@ -347,7 +347,9 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             {
                 return Expression.Lambda(Visit(lambdaExpression.Body), Expression.Parameter(_entityType!));
             }
-            else if (lambdaExpression.Body is MethodCallExpression mc && mc.Object?.Type == typeof(NORM.NORM_SQL))
+            else if (lambdaExpression.Body is MethodCallExpression mc
+                && mc.Object?.Type is { } objectType
+                && typeof(NORM.NORM_SQL).IsAssignableFrom(objectType))
             {
                 _outerParams ??= [];
                 _outerParams.Push(exp);

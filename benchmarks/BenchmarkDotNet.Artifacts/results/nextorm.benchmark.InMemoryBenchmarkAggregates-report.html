@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>nextorm.benchmark.InMemoryBenchmarkAggregates-20260917-235044</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)
+AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 16 logical and 8 physical cores
+.NET SDK 10.0.401
+  [Host] : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+</code></pre>
+<pre><code>Job=ShortRun  Toolchain=InProcessEmitToolchain  IterationCount=3  
+LaunchCount=1  WarmupCount=3  Categories=InMemoryNew  
+</code></pre>
+
+<table>
+<thead><tr><th>Method         </th><th>Mean     </th><th>Error     </th><th>StdDev </th><th>Ratio</th><th>RatioSD</th><th>Gen0</th><th>Gen1</th><th>Allocated</th><th>Alloc Ratio</th>
+</tr>
+</thead><tbody><tr><td>Linq_Count</td><td>187.8 ns</td><td>8.51 ns</td><td>0.47 ns</td><td>0.000</td><td>0.00</td><td>-</td><td>-</td><td>-</td><td>0.00</td>
+</tr><tr><td>Nextorm_Count</td><td>2,156,012.2 ns</td><td>350,728.19 ns</td><td>19,224.60 ns</td><td>1.000</td><td>0.01</td><td>31.2500</td><td>-</td><td>268000 B</td><td>1.00</td>
+</tr><tr><td>Linq_Sum</td><td>2,405,036.3 ns</td><td>201,538.53 ns</td><td>11,047.01 ns</td><td>1.116</td><td>0.01</td><td>-</td><td>-</td><td>4020 B</td><td>0.01</td>
+</tr><tr><td>Linq_MinMax</td><td>4,714,360.0 ns</td><td>74,123.80 ns</td><td>4,062.98 ns</td><td>2.187</td><td>0.02</td><td>-</td><td>-</td><td>8039 B</td><td>0.03</td>
+</tr><tr><td>Nextorm_Sum</td><td>5,539,534.4 ns</td><td>368,917.47 ns</td><td>20,221.61 ns</td><td>2.569</td><td>0.02</td><td>31.2500</td><td>-</td><td>320839 B</td><td>1.20</td>
+</tr><tr><td>Nextorm_MinMax</td><td>11,252,641.9 ns</td><td>1,523,749.83 ns</td><td>83,521.87 ns</td><td>5.219</td><td>0.05</td><td>62.5000</td><td>-</td><td>641678 B</td><td>2.39</td>
+</tr><tr><td>EFCoreInMemory_Count</td><td>31,729,729.6 ns</td><td>17,856,880.05 ns</td><td>978,795.85 ns</td><td>14.718</td><td>0.41</td><td>5750.0000</td><td>1875.0000</td><td>48362111 B</td><td>180.46</td>
+</tr><tr><td>EFCoreInMemory_Sum</td><td>37,285,920.9 ns</td><td>2,917,432.92 ns</td><td>159,914.34 ns</td><td>17.295</td><td>0.15</td><td>5714.2857</td><td>1928.5714</td><td>48457727 B</td><td>180.81</td>
+</tr><tr><td>EFCoreInMemory_MinMax</td><td>78,644,166.4 ns</td><td>10,050,344.79 ns</td><td>550,893.31 ns</td><td>36.479</td><td>0.36</td><td>11428.5714</td><td>3857.1429</td><td>96918654 B</td><td>361.64</td>
+</tr></tbody></table>
+</body>
+</html>

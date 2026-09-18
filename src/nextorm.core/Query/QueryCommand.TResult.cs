@@ -355,6 +355,31 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
         cmd.AddHints(hints);
         return cmd;
     }
+    /// <summary>
+    /// Appends a SQL Server <c>FOR JSON</c> clause to the statement, so the result set is returned as a
+    /// single JSON document (<c>FOR JSON PATH</c> by default). A dialect that does not support it
+    /// rejects the command when its SQL is built. The projection should be a single string column (or
+    /// a scalar projection) because the database returns one JSON column.
+    /// </summary>
+    public QueryCommand<TResult> ForJson(ForJsonMode mode = ForJsonMode.Path, string? root = null, bool includeNullValues = false)
+    {
+        var cmd = (QueryCommand<TResult>)Clone();
+        cmd.ResetPreparation();
+        cmd.ForJsonClause = new ForJsonClause(mode, root, includeNullValues);
+        return cmd;
+    }
+    /// <summary>
+    /// Appends a SQL Server <c>FOR XML</c> clause to the statement, so the result set is returned as a
+    /// single XML document (<c>FOR XML PATH</c> by default). A dialect that does not support it rejects
+    /// the command when its SQL is built, and combining it with <see cref="ForJson"/> throws.
+    /// </summary>
+    public QueryCommand<TResult> ForXml(ForXmlMode mode = ForXmlMode.Path, string? elementName = null, string? root = null, bool elements = false)
+    {
+        var cmd = (QueryCommand<TResult>)Clone();
+        cmd.ResetPreparation();
+        cmd.ForXmlClause = new ForXmlClause(mode, elementName, root, elements);
+        return cmd;
+    }
     public QueryCommand<TResult> Union<T>(QueryCommand<T> queryCommand)
     {
         var cmd = (QueryCommand<TResult>)Clone();

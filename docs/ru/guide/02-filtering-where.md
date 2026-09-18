@@ -6,12 +6,12 @@
 
 ## Обзор
 
-`Where` принимает логическое выражение и возвращает новый `Entity<TEntity>`; как и любой метод
+`Where` принимает логическое выражение и возвращает новый `EntityBuilder<TEntity>`; как и любой метод
 построителя, он неизменяемый, поэтому исходный объект не меняется. Повторный вызов `Where` объединяет
 предикаты с помощью `and`:
 
 ```csharp
-public Entity<TEntity> Where(Expression<Func<TEntity, bool>> condition)
+public EntityBuilder<TEntity> Where(Expression<Func<TEntity, bool>> condition)
 ```
 
 Лямбда транслируется в предложение `WHERE`, и ничего не выполняется, пока не вызван терминальный метод,
@@ -37,7 +37,7 @@ public Entity<TEntity> Where(Expression<Func<TEntity, bool>> condition)
 | `x.Id <= 1` | `(id <= 1)` | `<=` |
 
 ```csharp
-var rows = await dataContext.Create<SimpleEntity>()
+var rows = await dataContext.From<SimpleEntity>()
     .Where(x => x.Id >= 9)
     .Select(x => new { x.Id })
     .ToListAsync();
@@ -52,7 +52,7 @@ select id from simple_entity where (id >= 9)
 Сравнение колонки с `null` генерирует `is null` / `is not null` вместо `=` / `!=`:
 
 ```csharp
-var rows = await dataContext.Create<ComplexEntity>()
+var rows = await dataContext.From<ComplexEntity>()
     .Where(x => x.String == null)
     .Select(x => new { x.Id })
     .ToListAsync();
@@ -71,7 +71,7 @@ select id from complex_entity where somestring is null
 `&&` и `||` отображаются на `and` и `or` и заключаются в скобки как группа:
 
 ```csharp
-var rows = await dataContext.Create<ComplexEntity>()
+var rows = await dataContext.From<ComplexEntity>()
     .Where(x => x.Boolean == true && x.Id > 1)
     .Select(x => new { x.Id })
     .ToListAsync();
@@ -89,7 +89,7 @@ select id from complex_entity where (b = 1 and (id > 1))
 `!` отображается на `not (...)` и инвертирует весь операнд:
 
 ```csharp
-var ids = await dataContext.Create<ComplexEntity>()
+var ids = await dataContext.From<ComplexEntity>()
     .Where(x => !x.Boolean!.Value)
     .Select(x => x.Id)
     .ToListAsync();
@@ -138,7 +138,7 @@ select id from simple_entity where (id + 2) = 1
 | `x.Id ^ 1` | - | XOR **не поддерживается** и выбрасывает `NotSupportedException` |
 
 ```csharp
-var rows = await dataContext.Create<SimpleEntity>()
+var rows = await dataContext.From<SimpleEntity>()
     .Where(x => (x.Id & 1) == 1)
     .Select(x => new { x.Id })
     .ToListAsync();
@@ -156,7 +156,7 @@ select id from simple_entity where (id & 1) = 1
 `??` превращается в функцию coalesce провайдера:
 
 ```csharp
-var rows = await dataContext.Create<ComplexEntity>()
+var rows = await dataContext.From<ComplexEntity>()
     .Select(x => new { x.Id, V = x.String ?? "" })
     .ToListAsync();
 ```
@@ -172,7 +172,7 @@ var rows = await dataContext.Create<ComplexEntity>()
 Тернарный оператор превращается в ANSI `CASE WHEN`:
 
 ```csharp
-var rows = await dataContext.Create<ComplexEntity>()
+var rows = await dataContext.From<ComplexEntity>()
     .Select(x => new { x.Id, Size = x.Id > 1 ? "big" : "small" })
     .ToListAsync();
 ```
@@ -184,7 +184,7 @@ select id, case when (id > 1) then 'big' else 'small' end as 'Size' from complex
 Условное выражение может появляться внутри предиката:
 
 ```csharp
-var count = await dataContext.Create<ComplexEntity>()
+var count = await dataContext.From<ComplexEntity>()
     .Where(x => (x.Int == null ? 0 : x.Int) == 1)
     .CountAsync();
 ```
@@ -196,7 +196,7 @@ select count(*) from complex_entity where case when nullableint is null then 0 e
 Выражение C# `switch` по константным шаблонам превращается в поисковый `CASE`:
 
 ```csharp
-var rows = await dataContext.Create<ComplexEntity>()
+var rows = await dataContext.From<ComplexEntity>()
     .Select(e => new { e.Id, Label = e.Id switch { 1 => "one", 2 => "two", _ => "other" } })
     .ToListAsync();
 ```
@@ -215,7 +215,7 @@ switch, в котором сравнение является вызовом м�
 
 ```csharp
 var threshold = 5L;
-var rows = await dataContext.Create<ComplexEntity>()
+var rows = await dataContext.From<ComplexEntity>()
     .Where(x => x.Id > threshold)
     .Select(x => new { x.Id })
     .ToListAsync();
@@ -232,7 +232,7 @@ var rows = await dataContext.Create<ComplexEntity>()
 многократно:
 
 ```csharp
-var rows = await dataContext.Create<SimpleEntity>()
+var rows = await dataContext.From<SimpleEntity>()
     .Where(x => x.Id == NORM.Param<int>(0))
     .Select(x => new { x.Id })
     .ToListAsync(42);
@@ -253,7 +253,7 @@ select id from simple_entity where id = $norm_p0
 
 ```csharp
 var values = new long[] { 1, 3, 10 };
-var ids = await dataContext.Create<ComplexEntity>()
+var ids = await dataContext.From<ComplexEntity>()
     .Where(e => NORM.SQL.@in(e.Id, values))
     .Select(e => e.Id)
     .ToListAsync();
@@ -268,7 +268,7 @@ select id from complex_entity where id in ($p0, $p1, $p2)
 
 ```csharp
 var values = new List<long> { 1, 3 };
-var ids = await dataContext.Create<ComplexEntity>()
+var ids = await dataContext.From<ComplexEntity>()
     .Where(e => values.Contains(e.Id))
     .Select(e => e.Id)
     .ToListAsync();
@@ -308,10 +308,23 @@ select id from complex_entity where id in ($p0, $p1)
 | `NORM.SQL.exists(query)` | `exists(<query>)` |
 | `x.Id == NORM.SQL.any(query)` | `id = any(<query>)` |
 | `x.Id == NORM.SQL.all(query)` | `id = all(<query>)` |
+| `NORM.PG_SQL.any(x, array)` | `x = any(@array)` (PostgreSQL) |
+| `x == NORM.PG_SQL.any(array)` | `x = any(@array)` (PostgreSQL) |
+| `NORM.SQL.contains(x.String, "foo")` | `contains(somestring, 'foo')` (SQL Server) |
+| `NORM.SQL.freetext(x.String, "foo")` | `freetext(somestring, 'foo')` (SQL Server) |
+
+`NORM.SQL.contains`/`NORM.SQL.freetext` — предикаты полнотекстового поиска
+(`ISqlDialect.SupportsFullText`, отрисовываются через `ISqlDialect.MakeFullText`); колонка должна быть
+полнотекстово проиндексирована. SQL Server отрисовывает `contains`/`freetext` (при проецировании
+материализуются в `bit`), PostgreSQL — `to_tsvector(col) @@ plainto_tsquery(search)` (или
+`websearch_to_tsquery` для `freetext`), MySQL/MariaDB — `match(col) against(search in boolean mode) > 0`
+(режим natural language для `freetext`).
 
 Для захваченного шаблона подстановочные знаки конкатенируются вокруг параметра во время построения,
 например `somestring like '%' || $needle || '%'` в SQLite. `any` и `all` не поддерживаются движком
-SQLite и завершаются ошибкой при выполнении оператора.
+SQLite и завершаются ошибкой при выполнении оператора. Для **массива** они требуют PostgreSQL, где
+массив целиком привязывается как один параметр; см.
+[Массивы](11-scalar-functions.md#массивы-postgresql).
 
 ## Отображение функций и операторов
 
@@ -332,6 +345,7 @@ SQLite и завершаются ошибкой при выполнении оп
 | `switch` | поисковый `case when ... then ... end` |
 | `NORM.SQL.@in` / `Contains` | `in (...)` |
 | `NORM.SQL.like` / `Contains` / `StartsWith` / `EndsWith` | `like` |
+| `NORM.SQL.contains` / `NORM.SQL.freetext` | `contains` / `freetext` (SQL Server); сопоставление `@@` (PostgreSQL); `match ... against` (MySQL/MariaDB) |
 
 ## Различия провайдеров
 

@@ -10,10 +10,10 @@ A NextORM query always has four parts:
 
 1. an **entity** (a class or an interface) whose properties map to columns;
 2. a **context** (`IDataContext`) built from a connection or a connection string;
-3. a **query** built with `Create<T>()`, `Select`, `Where`, and so on;
+3. a **query** built with `From<T>()`, `Select`, `Where`, and so on;
 4. a **terminal** such as `ToList()`, `First()`, `Any()` or `ToAsyncEnumerable()` that executes it.
 
-`Create<T>()` also registers `T`'s metadata the first time it is seen. The context is disposable: a
+`From<T>()` also registers `T`'s metadata the first time it is seen. The context is disposable: a
 context created from a connection string owns and closes the connection, while a context created from a
 supplied `DbConnection` leaves that connection open.
 
@@ -43,7 +43,7 @@ using (var setup = connection.CreateCommand())
 var builder = new DbContextBuilder().UseSqlite(connection);
 using var dataContext = builder.CreateDbContext();
 
-await foreach (var row in dataContext.Create<ISimpleEntity>()
+await foreach (var row in dataContext.From<ISimpleEntity>()
                                    .Select(entity => new { Id = (long)entity.Id })
                                    .ToAsyncEnumerable())
 {

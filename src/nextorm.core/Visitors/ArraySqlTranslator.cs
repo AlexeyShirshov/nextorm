@@ -92,70 +92,70 @@ internal static class ArraySqlTranslator
 
         switch (node.Method.Name)
         {
-            case nameof(NORM.NORM_SQL.cardinality) when args.Count == 1:
+            case nameof(NORM.PG.cardinality) when args.Count == 1:
                 EmitFunction(visitor, "cardinality", args);
                 return true;
-            case nameof(NORM.NORM_SQL.array_length) when args.Count == 2:
+            case nameof(NORM.PG.array_length) when args.Count == 2:
                 EmitFunction(visitor, "array_length", args);
                 return true;
-            case nameof(NORM.NORM_SQL.array_ndims) when args.Count == 1:
+            case nameof(NORM.PG.array_ndims) when args.Count == 1:
                 EmitFunction(visitor, "array_ndims", args);
                 return true;
-            case nameof(NORM.NORM_SQL.array_lower) when args.Count == 2:
+            case nameof(NORM.PG.array_lower) when args.Count == 2:
                 EmitFunction(visitor, "array_lower", args);
                 return true;
-            case nameof(NORM.NORM_SQL.array_upper) when args.Count == 2:
+            case nameof(NORM.PG.array_upper) when args.Count == 2:
                 EmitFunction(visitor, "array_upper", args);
                 return true;
-            case nameof(NORM.NORM_SQL.array_position) when args.Count == 2:
+            case nameof(NORM.PG.array_position) when args.Count == 2:
                 EmitFunction(visitor, "array_position", args);
                 return true;
-            case nameof(NORM.NORM_SQL.array_to_string) when args.Count == 2:
+            case nameof(NORM.PG.array_to_string) when args.Count == 2:
                 EmitFunction(visitor, "array_to_string", args);
                 return true;
-            case nameof(NORM.NORM_SQL.array_append) when args.Count == 2:
+            case nameof(NORM.PG.array_append) when args.Count == 2:
                 EmitFunction(visitor, "array_append", args);
                 return true;
-            case nameof(NORM.NORM_SQL.array_prepend) when args.Count == 2:
+            case nameof(NORM.PG.array_prepend) when args.Count == 2:
                 EmitFunction(visitor, "array_prepend", args);
                 return true;
-            case nameof(NORM.NORM_SQL.array_cat) when args.Count == 2:
+            case nameof(NORM.PG.array_cat) when args.Count == 2:
                 EmitFunction(visitor, "array_cat", args);
                 return true;
-            case nameof(NORM.NORM_SQL.array_remove) when args.Count == 2:
+            case nameof(NORM.PG.array_remove) when args.Count == 2:
                 EmitFunction(visitor, "array_remove", args);
                 return true;
-            case nameof(NORM.NORM_SQL.array_replace) when args.Count == 3:
+            case nameof(NORM.PG.array_replace) when args.Count == 3:
                 EmitFunction(visitor, "array_replace", args);
                 return true;
-            case nameof(NORM.NORM_SQL.array_fill) when args.Count == 2:
+            case nameof(NORM.PG.array_fill) when args.Count == 2:
                 EmitFunction(visitor, "array_fill", args);
                 return true;
-            case nameof(NORM.NORM_SQL.array_dims) when args.Count == 1:
+            case nameof(NORM.PG.array_dims) when args.Count == 1:
                 EmitFunction(visitor, "array_dims", args);
                 return true;
-            case nameof(NORM.NORM_SQL.array_positions) when args.Count == 2:
+            case nameof(NORM.PG.array_positions) when args.Count == 2:
                 EmitFunction(visitor, "array_positions", args);
                 return true;
-            case nameof(NORM.NORM_SQL.array_reverse) when args.Count == 1:
+            case nameof(NORM.PG.array_reverse) when args.Count == 1:
                 EmitFunction(visitor, "array_reverse", args);
                 return true;
-            case nameof(NORM.NORM_SQL.array_sort) when args.Count == 1:
+            case nameof(NORM.PG.array_sort) when args.Count == 1:
                 EmitFunction(visitor, "array_sort", args);
                 return true;
-            case nameof(NORM.NORM_SQL.string_to_array) when args.Count == 2:
+            case nameof(NORM.PG.string_to_array) when args.Count == 2:
                 EmitFunction(visitor, "string_to_array", args);
                 return true;
-            case nameof(NORM.NORM_SQL.array_contains) when args.Count == 2:
+            case nameof(NORM.PG.array_contains) when args.Count == 2:
                 EmitOperator(visitor, "@>", args[0], args[1]);
                 return true;
-            case nameof(NORM.NORM_SQL.array_contained_by) when args.Count == 2:
+            case nameof(NORM.PG.array_contained_by) when args.Count == 2:
                 EmitOperator(visitor, "<@", args[0], args[1]);
                 return true;
-            case nameof(NORM.NORM_SQL.array_overlaps) when args.Count == 2:
+            case nameof(NORM.PG.array_overlaps) when args.Count == 2:
                 EmitOperator(visitor, "&&", args[0], args[1]);
                 return true;
-            case nameof(NORM.NORM_SQL.array_concat) when args.Count == 2:
+            case nameof(NORM.PG.array_concat) when args.Count == 2:
                 EmitOperator(visitor, "||", args[0], args[1]);
                 return true;
             default:

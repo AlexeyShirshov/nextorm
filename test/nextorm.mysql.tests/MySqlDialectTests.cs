@@ -81,6 +81,25 @@ public class MySqlDialectTests
         Dialect.SupportsApply.Should().BeTrue();
         Dialect.SupportsQueryHints.Should().BeFalse();
         Dialect.SupportsCube.Should().BeFalse();
+        Dialect.SupportsDateArithmetic.Should().BeTrue();
+        Dialect.SupportsStringAgg.Should().BeTrue();
+        Dialect.SupportsFullText.Should().BeTrue();
+    }
+
+    [Fact]
+    public void DateAndFullTextHooks_ShouldUseMySqlForms()
+    {
+        Dialect.MakeDateAdd("day", "n", "x").Should().Be("date_add(x, interval n day)");
+        Dialect.MakeDateAdd("milliseconds", "n", "x").Should().Be("date_add(x, interval (n) * 1000 microsecond)");
+        Dialect.MakeDateDiff("milliseconds", "a", "b")
+            .Should().Be("cast((timestampdiff(microsecond, a, b) / 1000) as signed)");
+        Dialect.MakeEndOfMonth("x").Should().Be("last_day(x)");
+        Dialect.MakeDateFromParts("y", "m", "d")
+            .Should().Be("str_to_date(concat_ws('-', y, m, d), '%Y-%m-%d')");
+        Dialect.MakeStringAgg("x", "','").Should().Be("group_concat(x separator ',')");
+        Dialect.MakeFullText("contains", "c", "@p")
+            .Should().Be("(match(c) against(@p in boolean mode) > 0)");
+        Dialect.MakeFullText("freetext", "c", "@p").Should().Be("(match(c) against(@p) > 0)");
     }
 
     [Fact]

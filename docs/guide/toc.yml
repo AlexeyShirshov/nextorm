@@ -30,3 +30,5 @@
   href: 15-query-reuse.md
 - name: Connections and logging
   href: 16-connections-and-logging.md
+- name: Query hints
+  href: 17-query-hints.md

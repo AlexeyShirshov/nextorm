@@ -46,6 +46,8 @@
       href: guide/15-query-reuse.md
     - name: Подключения и логирование
       href: guide/16-connections-and-logging.md
+    - name: Хинты запросов
+      href: guide/17-query-hints.md
 - name: Провайдеры
   items:
     - name: Обзор провайдеров
@@ -56,6 +58,12 @@
       href: providers/sqlserver.md
     - name: PostgreSQL
       href: providers/postgres.md
+    - name: MySQL
+      href: providers/mysql.md
+    - name: MariaDB
+      href: providers/mariadb.md
+    - name: ClickHouse
+      href: providers/clickhouse.md
     - name: In-memory
       href: providers/in-memory.md
 - name: Продвинутое
@@ -68,3 +76,5 @@
       href: ../prepared-vs-cached.md
     - name: Анализ пробелов в SQL
       href: ../sql-capabilities-gap-analysis.md
+    - name: nextorm vs linq2db
+      href: ../linq2db-comparison.md

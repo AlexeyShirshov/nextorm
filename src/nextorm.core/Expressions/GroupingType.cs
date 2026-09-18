@@ -11,5 +11,7 @@ public enum GroupingType
     /// <summary><c>GROUP BY ROLLUP (...)</c>: every prefix of the grouping list plus the grand total.</summary>
     Rollup = 1,
     /// <summary><c>GROUP BY CUBE (...)</c>: every combination of the grouping list.</summary>
-    Cube = 2
+    Cube = 2,
+    /// <summary><c>GROUP BY GROUPING SETS (...)</c>: an explicit list of column subsets.</summary>
+    GroupingSets = 3
 }

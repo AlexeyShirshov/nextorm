@@ -18,46 +18,38 @@ internal static class ExtendedScalarFunctionTranslator
 {
     private static readonly HashSet<string> MathFunctions = new(StringComparer.Ordinal)
     {
-        nameof(NORM.NORM_SQL.asin), nameof(NORM.NORM_SQL.acos), nameof(NORM.NORM_SQL.atan),
-        nameof(NORM.NORM_SQL.atan2), nameof(NORM.NORM_SQL.cbrt), nameof(NORM.NORM_SQL.sinh),
-        nameof(NORM.NORM_SQL.cosh), nameof(NORM.NORM_SQL.tanh), nameof(NORM.NORM_SQL.asinh),
-        nameof(NORM.NORM_SQL.acosh), nameof(NORM.NORM_SQL.atanh), nameof(NORM.NORM_SQL.degrees),
-        nameof(NORM.NORM_SQL.radians), nameof(NORM.NORM_SQL.pi), nameof(NORM.NORM_SQL.random),
-        nameof(NORM.NORM_SQL.log), nameof(NORM.NORM_SQL.mod), nameof(NORM.NORM_SQL.gcd),
-        nameof(NORM.NORM_SQL.lcm), nameof(NORM.NORM_SQL.factorial), nameof(NORM.NORM_SQL.width_bucket)
+        nameof(NORM.PG.asin), nameof(NORM.PG.acos), nameof(NORM.PG.atan),
+        nameof(NORM.PG.atan2), nameof(NORM.PG.cbrt), nameof(NORM.PG.sinh),
+        nameof(NORM.PG.cosh), nameof(NORM.PG.tanh), nameof(NORM.PG.asinh),
+        nameof(NORM.PG.acosh), nameof(NORM.PG.atanh), nameof(NORM.PG.degrees),
+        nameof(NORM.PG.radians), nameof(NORM.PG.pi), nameof(NORM.PG.random),
+        nameof(NORM.PG.log), nameof(NORM.PG.mod), nameof(NORM.PG.gcd),
+        nameof(NORM.PG.lcm), nameof(NORM.PG.factorial), nameof(NORM.PG.width_bucket)
     };
 
     private static readonly HashSet<string> DirectFunctions = new(StringComparer.Ordinal)
     {
-        nameof(NORM.NORM_SQL.split_part), nameof(NORM.NORM_SQL.strpos), nameof(NORM.NORM_SQL.left),
-        nameof(NORM.NORM_SQL.right), nameof(NORM.NORM_SQL.lpad), nameof(NORM.NORM_SQL.rpad),
-        nameof(NORM.NORM_SQL.repeat), nameof(NORM.NORM_SQL.reverse), nameof(NORM.NORM_SQL.initcap),
-        nameof(NORM.NORM_SQL.translate), nameof(NORM.NORM_SQL.overlay), nameof(NORM.NORM_SQL.md5),
-        nameof(NORM.NORM_SQL.regexp_replace), nameof(NORM.NORM_SQL.regexp_like),
-        nameof(NORM.NORM_SQL.regexp_split_to_array), nameof(NORM.NORM_SQL.regexp_count),
-        nameof(NORM.NORM_SQL.regexp_instr), nameof(NORM.NORM_SQL.age), nameof(NORM.NORM_SQL.date_bin),
-        nameof(NORM.NORM_SQL.make_date), nameof(NORM.NORM_SQL.make_interval), nameof(NORM.NORM_SQL.justify_days),
-        nameof(NORM.NORM_SQL.justify_hours), nameof(NORM.NORM_SQL.to_char), nameof(NORM.NORM_SQL.to_date),
-        nameof(NORM.NORM_SQL.to_number), nameof(NORM.NORM_SQL.to_timestamp), nameof(NORM.NORM_SQL.timezone)
+        nameof(NORM.PG.split_part), nameof(NORM.PG.strpos), nameof(NORM.PG.left),
+        nameof(NORM.PG.right), nameof(NORM.PG.lpad), nameof(NORM.PG.rpad),
+        nameof(NORM.PG.repeat), nameof(NORM.PG.reverse), nameof(NORM.PG.initcap),
+        nameof(NORM.PG.translate), nameof(NORM.PG.overlay), nameof(NORM.PG.md5),
+        nameof(NORM.PG.regexp_replace), nameof(NORM.PG.regexp_like),
+        nameof(NORM.PG.regexp_split_to_array), nameof(NORM.PG.regexp_count),
+        nameof(NORM.PG.regexp_instr), nameof(NORM.PG.make_interval), nameof(NORM.PG.justify_days),
+        nameof(NORM.PG.justify_hours), nameof(NORM.PG.to_char), nameof(NORM.PG.to_date),
+        nameof(NORM.PG.to_number), nameof(NORM.PG.to_timestamp), nameof(NORM.PG.timezone)
     };
 
     private static readonly HashSet<string> KeywordFunctions = new(StringComparer.Ordinal)
     {
-        nameof(NORM.NORM_SQL.current_date), nameof(NORM.NORM_SQL.current_time),
-        nameof(NORM.NORM_SQL.localtime), nameof(NORM.NORM_SQL.localtimestamp)
+        nameof(NORM.PG.current_date), nameof(NORM.PG.current_time),
+        nameof(NORM.PG.localtime), nameof(NORM.PG.localtimestamp)
     };
 
     private static readonly HashSet<string> VariadicFunctions = new(StringComparer.Ordinal)
     {
-        nameof(NORM.NORM_SQL.concat_ws), nameof(NORM.NORM_SQL.format),
-        nameof(NORM.NORM_SQL.num_nulls), nameof(NORM.NORM_SQL.num_nonnulls)
-    };
-
-    private static readonly HashSet<string> ExtractFields = new(StringComparer.Ordinal)
-    {
-        "microseconds", "milliseconds", "second", "minute", "hour", "day", "week", "month",
-        "quarter", "year", "decade", "century", "millennium", "epoch", "dow", "isodow", "doy",
-        "isoyear", "timezone", "timezone_hour", "timezone_minute"
+        nameof(NORM.PG.concat_ws), nameof(NORM.PG.format),
+        nameof(NORM.PG.num_nulls), nameof(NORM.PG.num_nonnulls)
     };
 
     /// <summary>Translates an extended scalar call; returns <c>false</c> when it is not one of them.</summary>
@@ -87,15 +79,8 @@ internal static class ExtendedScalarFunctionTranslator
         if (VariadicFunctions.Contains(name))
         {
             RequireExtended(visitor);
-            var leading = name is nameof(NORM.NORM_SQL.concat_ws) or nameof(NORM.NORM_SQL.format) ? 1 : 0;
+            var leading = name is nameof(NORM.PG.concat_ws) or nameof(NORM.PG.format) ? 1 : 0;
             SqlOperandTranslator.EmitFunction(visitor, name, FlattenVariadic(node.Arguments, leading));
-            return true;
-        }
-
-        if (name == nameof(NORM.NORM_SQL.extract))
-        {
-            RequireExtended(visitor);
-            EmitExtract(visitor, node.Arguments);
             return true;
         }
 
@@ -125,29 +110,6 @@ internal static class ExtendedScalarFunctionTranslator
             sqlArgs[i] = visitor.VisitToString(args[i]);
 
         visitor.Builder!.Append(visitor.Dialect.MakeMathFunction(name, sqlArgs));
-    }
-
-    /// <summary><c>extract(field from value)</c> with a validated constant field name.</summary>
-    private static void EmitExtract(BaseExpressionVisitor visitor, IReadOnlyList<Expression> args)
-    {
-        if (args.Count != 2)
-            throw new NotSupportedException("extract requires a field name and a value.");
-
-        if (!SqlLiteral.TryGetConstantString(args[0], out var field))
-            throw new NotSupportedException("The extract field must be a constant string.");
-
-        field = field.ToLowerInvariant();
-        if (!ExtractFields.Contains(field))
-            throw new NotSupportedException($"'{field}' is not a valid extract field.");
-
-        if (visitor.IsParamMode)
-        {
-            visitor.Visit(args[1]);
-            return;
-        }
-
-        visitor.NeedAliasForColumn = true;
-        visitor.Builder!.Append(visitor.Dialect.MakeDatePart(field, visitor.VisitToString(args[1])));
     }
 
     /// <summary>

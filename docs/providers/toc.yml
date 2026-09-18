@@ -6,5 +6,11 @@
   href: sqlserver.md
 - name: PostgreSQL
   href: postgres.md
+- name: MySQL
+  href: mysql.md
+- name: MariaDB
+  href: mariadb.md
+- name: ClickHouse
+  href: clickhouse.md
 - name: In-memory
   href: in-memory.md

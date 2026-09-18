@@ -26,7 +26,7 @@ public class SqlGenerationTests
     public void SelectDistinct_ShouldEmitDistinct()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>();
 
         SqlOf(ctx, e.Distinct().Select(x => new { x.Id })).Should().Be("select distinct id from simple_entity");
     }
@@ -35,7 +35,7 @@ public class SqlGenerationTests
     public void SelectDistinctWithLimit_ShouldEmitDistinctBeforeTop()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>();
 
         // SQL Server requires the DISTINCT keyword before TOP; "select top(5) distinct" is invalid.
         var sql = SqlOf(ctx, e.Distinct().Limit(5).Select(x => x.Id));
@@ -48,7 +48,7 @@ public class SqlGenerationTests
     public void SelectDistinctWithUnionAll_ShouldKeepDistinctInLeftBranch()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>();
 
         var cmd = e.Select(x => x.Id).Distinct().UnionAll(e.Select(x => x.Id));
         var sql = SqlOf(ctx, cmd);
@@ -62,7 +62,7 @@ public class SqlGenerationTests
     public void Union_ShouldEmitUnion()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>();
 
         SqlOf(ctx, e.Select(x => x.Id).Union(e.Select(x => x.Id)))
             .Should().Be("select id from simple_entity\n union \nselect id from simple_entity");
@@ -72,7 +72,7 @@ public class SqlGenerationTests
     public void UnionAll_ShouldEmitUnionAll()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>();
 
         SqlOf(ctx, e.Select(x => x.Id).UnionAll(e.Select(x => x.Id)))
             .Should().Be("select id from simple_entity\n union all \nselect id from simple_entity");
@@ -82,7 +82,7 @@ public class SqlGenerationTests
     public void Intersect_ShouldEmitIntersect()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>();
 
         SqlOf(ctx, e.Select(x => x.Id).Intersect(e.Select(x => x.Id)))
             .Should().Be("select id from simple_entity\n intersect \nselect id from simple_entity");
@@ -92,7 +92,7 @@ public class SqlGenerationTests
     public void Except_ShouldEmitExcept()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>();
 
         SqlOf(ctx, e.Select(x => x.Id).Except(e.Select(x => x.Id)))
             .Should().Be("select id from simple_entity\n except \nselect id from simple_entity");
@@ -102,7 +102,7 @@ public class SqlGenerationTests
     public void IntersectAll_ShouldThrowBecauseSqlServerHasNoIntersectAll()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>();
 
         var act = () => SqlOf(ctx, e.Select(x => x.Id).IntersectAll(e.Select(x => x.Id)));
 
@@ -113,7 +113,7 @@ public class SqlGenerationTests
     public void ExceptAll_ShouldThrowBecauseSqlServerHasNoExceptAll()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>();
 
         var act = () => SqlOf(ctx, e.Select(x => x.Id).ExceptAll(e.Select(x => x.Id)));
 
@@ -124,7 +124,7 @@ public class SqlGenerationTests
     public void SelectBasic_ShouldProducePlainSelect()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>();
 
         SqlOf(ctx, e.Select(x => new { x.Id })).Should().Be("select id from simple_entity");
     }
@@ -133,7 +133,7 @@ public class SqlGenerationTests
     public void Parameter_ShouldUseAtPrefix()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>();
 
         var command = Prepare(ctx, e.Where(x => x.Id == NORM.Param<int>(0)).Select(x => new { x.Id }));
 
@@ -146,7 +146,7 @@ public class SqlGenerationTests
     public void Limit_ShouldUseTop()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>();
 
         var sql = SqlOf(ctx, e.Limit(5).Select(x => x.Id));
 
@@ -160,7 +160,7 @@ public class SqlGenerationTests
     public void Paging_WithLimitAndOffset_ShouldUseOffsetFetch()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>();
 
         var sql = SqlOf(ctx, e.Page(5, 10).Select(x => x.Id));
 
@@ -173,7 +173,7 @@ public class SqlGenerationTests
     public void Paging_WithOffsetOnly_ShouldNotEmitFetch()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>();
 
         var sql = SqlOf(ctx, e.Offset(10).Select(x => x.Id));
 
@@ -185,7 +185,7 @@ public class SqlGenerationTests
     public void Paging_WithOrderBy_ShouldNotInjectEmptySorting()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>();
 
         var sql = SqlOf(ctx, e.Offset(10).OrderBy(x => x.Id).Select(x => x.Id));
 
@@ -197,7 +197,7 @@ public class SqlGenerationTests
     public void OrderByWithoutPaging_ShouldNotInjectEmptySorting()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>();
 
         var sql = SqlOf(ctx, e.Select(x => x.Id));
 
@@ -209,7 +209,7 @@ public class SqlGenerationTests
     public void BooleanLiteral_ShouldUseOne()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Where(x => x.Boolean == true).Select(x => x.Boolean)).Should().Contain("= 1");
     }
@@ -218,7 +218,7 @@ public class SqlGenerationTests
     public void BooleanValueInWhere_ShouldBeComparedWithOne()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         // A bare bit column is a value, not a predicate, so T-SQL needs the comparison with 1.
         SqlOf(ctx, e.Where(x => x.Boolean!.Value).Select(x => new { x.Id }))
@@ -229,7 +229,7 @@ public class SqlGenerationTests
     public void BooleanValueAsLogicalOperand_ShouldBeComparedWithOne()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Where(x => x.Boolean!.Value && x.Id > 1L).Select(x => new { x.Id }))
             .Should().Contain("((b) = 1 and (id > 1))");
@@ -239,7 +239,7 @@ public class SqlGenerationTests
     public void StringConcat_ShouldUsePlusOperator()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         var sql = SqlOf(ctx, e.Select(x => new { V = x.String + "/" + x.String }));
 
@@ -252,7 +252,7 @@ public class SqlGenerationTests
     public void Coalesce_ShouldUseIsNullFunction()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { V = x.String ?? "" })).Should().Contain("isnull(");
     }
@@ -261,7 +261,7 @@ public class SqlGenerationTests
     public void Count_ShouldUseCountStar()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => NORM.SQL.count())).Should().Contain("count(*)");
     }
@@ -270,7 +270,7 @@ public class SqlGenerationTests
     public void CountBig_ShouldUseCountBigFunction()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => NORM.SQL.count_big())).Should().Contain("count_big(*)");
     }
@@ -279,7 +279,7 @@ public class SqlGenerationTests
     public void Aggregate_ShouldKeepProviderSpecificName()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         // SQL Server natively has stdev/var; no remapping is needed.
         SqlOf(ctx, e.Select(x => NORM.SQL.stdev((double)x.Id))).Should().Contain("stdev(");
@@ -289,7 +289,7 @@ public class SqlGenerationTests
     public void ComputedColumn_ShouldBeAliasedWithBrackets()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         var sql = SqlOf(ctx, e.Select(x => new { x.Id, Calc = x.Id + 1 }));
 
@@ -301,7 +301,7 @@ public class SqlGenerationTests
     public void NestedCalculatedColumn_ShouldReferenceInnerAlias()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         var nested = e.Select(x => new { x.Id, Calc = x.String + x.String });
         var sql = SqlOf(ctx, ctx.From(nested).Select(t => new { t.Id, t.Calc }));
@@ -314,7 +314,7 @@ public class SqlGenerationTests
     public void Subquery_ShouldAlwaysHaveAlias()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         var nested = e.Select(x => new { x.Id });
         var sql = SqlOf(ctx, ctx.From(nested).Select(t => new { t.Id }));
@@ -328,8 +328,8 @@ public class SqlGenerationTests
     public void Join_ShouldQuoteTableAliases()
     {
         using var ctx = SqlServerTestContext.Create();
-        var simple = ctx.Create<ISimpleEntity>();
-        var complex = ctx.Create<IComplexEntity>();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
 
         var sql = SqlOf(ctx, simple.Join(complex, (s, c) => s.Id == c.Id).Select(p => new { p.t1.Id, p.t2.String }));
 
@@ -341,8 +341,8 @@ public class SqlGenerationTests
     public void LeftJoin_ShouldEmitLeftJoinWithOn()
     {
         using var ctx = SqlServerTestContext.Create();
-        var simple = ctx.Create<ISimpleEntity>();
-        var complex = ctx.Create<IComplexEntity>();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
 
         var sql = SqlOf(ctx, simple.LeftJoin(complex, (s, c) => s.Id == c.Id).Select(p => new { p.t1.Id, p.t2.String }));
 
@@ -354,8 +354,8 @@ public class SqlGenerationTests
     public void RightJoin_ShouldEmitRightJoinWithOn()
     {
         using var ctx = SqlServerTestContext.Create();
-        var simple = ctx.Create<ISimpleEntity>();
-        var complex = ctx.Create<IComplexEntity>();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
 
         var sql = SqlOf(ctx, simple.RightJoin(complex, (s, c) => s.Id == c.Id).Select(p => new { p.t1.Id, p.t2.String }));
 
@@ -367,8 +367,8 @@ public class SqlGenerationTests
     public void FullJoin_ShouldEmitFullJoinWithOn()
     {
         using var ctx = SqlServerTestContext.Create();
-        var simple = ctx.Create<ISimpleEntity>();
-        var complex = ctx.Create<IComplexEntity>();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
 
         var sql = SqlOf(ctx, simple.FullJoin(complex, (s, c) => s.Id == c.Id).Select(p => new { p.t1.Id, p.t2.String }));
 
@@ -380,13 +380,141 @@ public class SqlGenerationTests
     public void CrossJoin_ShouldEmitCrossJoinWithoutOn()
     {
         using var ctx = SqlServerTestContext.Create();
-        var simple = ctx.Create<ISimpleEntity>();
-        var complex = ctx.Create<IComplexEntity>();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
 
         var sql = SqlOf(ctx, simple.CrossJoin(complex).Select(p => new { p.t1.Id, p.t2.String }));
 
         sql.Should().Contain(" cross join complex_entity");
         sql.Should().NotContain(" on ");
+    }
+
+    [Fact]
+    public void CrossApply_ShouldEmitCrossApplyWithoutOn()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, simple.CrossApply(complex).Select(p => new { p.t1.Id, p.t2.String }));
+
+        sql.Should().Contain(" cross apply complex_entity as [t2]");
+        sql.Should().NotContain(" on ");
+    }
+
+    [Fact]
+    public void OuterApply_ShouldEmitOuterApplyWithoutOn()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, simple.OuterApply(complex).Select(p => new { p.t1.Id, p.t2.String }));
+
+        sql.Should().Contain(" outer apply complex_entity as [t2]");
+        sql.Should().NotContain(" on ");
+    }
+
+    [Fact]
+    public void CrossApply_ToSubquery_ShouldEmitDerivedTable()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var subQuery = ctx.From<IComplexEntity>().Where(c => c.Id > 1).Select(c => new { c.Id, c.String });
+
+        var sql = SqlOf(ctx, simple.CrossApply(subQuery).Select(p => new { p.t1.Id, p.t2.String }));
+
+        sql.Should().Contain("cross apply (select id, somestring as [String] from complex_entity");
+        sql.Should().Contain(") as [t2]");
+    }
+
+    [Fact]
+    public void QueryHint_ShouldEmitOptionClause()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new { x.Id }).Hint("recompile"));
+
+        sql.Should().EndWith(" option (recompile)");
+    }
+
+    [Fact]
+    public void ForJson_ShouldEmitClause()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.Select(x => new { x.Id }).ForJson())
+            .Should().EndWith("for json path");
+
+        SqlOf(ctx, e.Select(x => new { x.Id }).ForJson(ForJsonMode.Auto, "root", includeNullValues: true))
+            .Should().EndWith("for json auto, root('root'), include_null_values");
+    }
+
+    [Fact]
+    public void ForJson_WithHint_ShouldPlaceOptionAfterJson()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.Select(x => new { x.Id }).ForJson().Hint("recompile"))
+            .Should().EndWith("for json path option (recompile)");
+    }
+
+    [Fact]
+    public void ForXml_ShouldEmitClause()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.Select(x => new { x.Id }).ForXml())
+            .Should().EndWith("for xml path");
+
+        SqlOf(ctx, e.Select(x => new { x.Id }).ForXml(ForXmlMode.Raw, "row", "root", elements: true))
+            .Should().EndWith("for xml raw('row'), root('root'), elements");
+    }
+
+    [Fact]
+    public void ForXmlAndForJson_ShouldThrow()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new { x.Id }).ForJson().ForXml());
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*cannot be combined*");
+    }
+
+    [Fact]
+    public void QueryHint_WithRecursiveCte_ShouldMergeIntoOneOptionClause()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var anchor = e.Where(s => s.Id == 1).Select(s => new CteNumberRow { n = s.Id });
+        var step = ctx.From("nums").Where(t => t["n"].AsInt < 5).Select(t => new CteNumberRow { n = t["n"].AsInt + 1 });
+        var body = anchor.UnionAll(step);
+
+        var sql = SqlOf(ctx, ctx.WithRecursive("nums", body, 100).From("nums").Select(t => new CteNumberRow { n = t["n"].AsInt }).Hint("recompile"));
+
+        sql.Should().EndWith("option (maxrecursion 100, recompile)");
+        sql.Should().NotContain("option (maxrecursion 100) option");
+    }
+
+    [Fact]
+    public void QueryHint_ShouldNotReuseThePlanOfAnUnhintedCommand()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var plain = ctx.From<ISimpleEntity>().Select(x => x.Id);
+        var hinted = plain.Hint("recompile");
+
+        var plainSql = ((DbPreparedQueryCommand<int>)ctx.GetPreparedQueryCommand(plain, false, true, CancellationToken.None)).DbCommand.CommandText;
+        var hintedSql = ((DbPreparedQueryCommand<int>)ctx.GetPreparedQueryCommand(hinted, false, true, CancellationToken.None)).DbCommand.CommandText;
+
+        plainSql.Should().NotContain("option (recompile)");
+        hintedSql.Should().Contain("option (recompile)");
     }
 
     [Fact]
@@ -409,7 +537,7 @@ public class SqlGenerationTests
     public void Conditional_ShouldEmitCaseWhen()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         var sql = SqlOf(ctx, e.Select(x => new { V = x.Id > 1 ? "big" : "small" }));
 
@@ -421,7 +549,7 @@ public class SqlGenerationTests
     public void NestedConditional_ShouldEmitNestedCaseWhen()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         var sql = SqlOf(ctx, e.Select(x => new { V = x.Boolean == true ? (x.Int == null ? "a" : "b") : "c" }));
 
@@ -432,7 +560,7 @@ public class SqlGenerationTests
     public void Conditional_InWhere_ShouldEmitCaseWhen()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         var sql = SqlOf(ctx, e.Where(x => (x.Int == null ? 0 : x.Int) == 1).Select(x => new { x.Id }));
 
@@ -443,7 +571,7 @@ public class SqlGenerationTests
     public void ConditionalBoolean_ShouldCastToBit()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         // SQL Server has no boolean type, so a boolean-valued CASE is materialised as a bit scalar.
         var sql = SqlOf(ctx, e.Select(x => new { V = x.Id > 1 ? true : false }));
@@ -455,7 +583,7 @@ public class SqlGenerationTests
     public void ConditionalBoolean_InWhere_ShouldCompareWithOne()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         // A bit scalar is not a predicate, so a condition context adds "= 1".
         var sql = SqlOf(ctx, e.Where(x => x.Id > 1 ? true : false).Select(x => x.Id));
@@ -467,7 +595,7 @@ public class SqlGenerationTests
     public void Switch_ShouldEmitSearchedCase()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         var sql = SqlOf(ctx, e.Select(SwitchOfId("other", (1L, "one"), (2L, "two"))));
 
@@ -478,7 +606,7 @@ public class SqlGenerationTests
     public void StringToUpper_ShouldUseUpperFunction()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { V = x.String!.ToUpper() })).Should().Contain("upper(somestring)");
     }
@@ -487,7 +615,7 @@ public class SqlGenerationTests
     public void SqlFunction_OverColumn_ShouldEmitMappedFunction()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { V = Udf.ToUpper(x.String!) }))
             .Should().Be("select upper(somestring) as [V] from complex_entity");
@@ -497,7 +625,7 @@ public class SqlGenerationTests
     public void SqlFunction_WithCapturedArgument_ShouldEmitParameter()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
         var start = 1;
 
         var command = Prepare(ctx, e.Select(x => new { V = Udf.Slice(x.String!, start) }));
@@ -511,7 +639,7 @@ public class SqlGenerationTests
     public void SqlFunction_WithSchema_ShouldQualifyName()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { V = Udf.WithSchema(x.Id) }))
             .Should().Be("select dbo.my_fn(id) as [V] from complex_entity");
@@ -533,7 +661,7 @@ public class SqlGenerationTests
     public void Contains_ShouldUseLikeWithWildcards()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Where(x => x.String!.Contains("df")).Select(x => new { x.Id }))
             .Should().Contain("somestring like '%df%'");
@@ -543,7 +671,7 @@ public class SqlGenerationTests
     public void Contains_WhenProjected_ShouldMaterialiseAsBit()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         // T-SQL has no boolean scalar, so a projected LIKE has to become a bit through a CASE.
         SqlOf(ctx, e.Select(x => new { V = x.String!.Contains("df") }))
@@ -551,10 +679,49 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void FullTextPredicates_ShouldEmitFunctions()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Where(x => NORM.SQL.contains(x.String, "foo")).Select(x => new { x.Id }))
+            .Should().Contain("where contains(somestring, 'foo')");
+
+        SqlOf(ctx, e.Where(x => NORM.SQL.freetext(x.String, "foo")).Select(x => new { x.Id }))
+            .Should().Contain("where freetext(somestring, 'foo')");
+    }
+
+    [Fact]
+    public void IsJson_ShouldEmitPredicateAndBitValue()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // ISJSON returns int, so a WHERE context compares it with 1 ...
+        SqlOf(ctx, e.Where(x => NORM.MS_SQL.isjson(x.String)).Select(x => new { x.Id }))
+            .Should().Contain("where (isjson(somestring)) = 1");
+
+        // ... and a projection materialises it as a bit.
+        SqlOf(ctx, e.Select(x => new { V = NORM.MS_SQL.isjson(x.String) }))
+            .Should().Contain("cast(isjson(somestring) as bit) as [V]");
+    }
+
+    [Fact]
+    public void FullTextPredicate_WhenProjected_ShouldMaterialiseAsBit()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // T-SQL has no boolean scalar, so a projected CONTAINS has to become a bit through a CASE.
+        SqlOf(ctx, e.Select(x => new { V = NORM.SQL.contains(x.String, "foo") }))
+            .Should().Contain("cast(case when contains(somestring, 'foo') then 1 else 0 end as bit)");
+    }
+
+    [Fact]
     public void Substring_ShouldUseOneBasedOffsetWithLengthFunction()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { V = x.String!.Substring(1) }))
             .Should().Contain("substring(somestring, 1 + 1, len(somestring) - (1))");
@@ -564,7 +731,7 @@ public class SqlGenerationTests
     public void StringLength_ShouldUseLenFunction()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { V = x.String!.Length })).Should().Contain("len(somestring)");
     }
@@ -573,7 +740,7 @@ public class SqlGenerationTests
     public void Trim_ShouldUseTrimFunctions()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { V = x.String!.Trim() })).Should().Contain("trim(somestring)");
         SqlOf(ctx, e.Select(x => new { V = x.String!.TrimStart() })).Should().Contain("ltrim(somestring)");
@@ -584,7 +751,7 @@ public class SqlGenerationTests
     public void Replace_ShouldUseReplaceFunction()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { V = x.String!.Replace("a", "b") }))
             .Should().Contain("replace(somestring, 'a', 'b')");
@@ -594,7 +761,7 @@ public class SqlGenerationTests
     public void StringIsNullOrEmpty_ShouldEmitNullCheck()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Where(x => string.IsNullOrEmpty(x.String)).Select(x => new { x.Id }))
             .Should().Contain("(somestring is null or somestring = '')");
@@ -604,7 +771,7 @@ public class SqlGenerationTests
     public void Like_WithEscapeChar_ShouldEmitEscapeClause()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Where(x => NORM.SQL.like(x.String, "%a!%", "!")).Select(x => new { x.Id }))
             .Should().Contain("somestring like '%a!%' escape '!'");
@@ -614,7 +781,7 @@ public class SqlGenerationTests
     public void MathAbs_ShouldUseAbsFunction()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { V = Math.Abs(x.Id - 5) })).Should().Contain("abs((id - 5))");
     }
@@ -623,7 +790,7 @@ public class SqlGenerationTests
     public void MathRound_ShouldSupplyDefaultLength()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         // T-SQL's round() requires the length argument.
         SqlOf(ctx, e.Select(x => new { V = Math.Round(x.Id / 2.0 + 0.2) }))
@@ -634,7 +801,7 @@ public class SqlGenerationTests
     public void MathTruncate_ShouldUseThreeArgumentRound()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         // T-SQL has no trunc; round(number, 0, 1) truncates.
         SqlOf(ctx, e.Select(x => new { V = Math.Truncate(x.Id + 0.0) }))
@@ -645,7 +812,7 @@ public class SqlGenerationTests
     public void MathLog_ShouldUseNaturalLogarithm()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { V = Math.Log(x.Id + 1.0) })).Should().Contain("log(");
     }
@@ -654,7 +821,7 @@ public class SqlGenerationTests
     public void DateTimeNow_ShouldUseGetDateFunctions()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { N = DateTime.Now })).Should().Contain("getdate()");
         SqlOf(ctx, e.Select(x => new { N = DateTime.UtcNow })).Should().Contain("getutcdate()");
@@ -664,7 +831,7 @@ public class SqlGenerationTests
     public void DateTimePart_ShouldUseDatepartFunction()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { Y = x.Datetime!.Value.Year })).Should().Contain("datepart(year, dt)");
         SqlOf(ctx, e.Select(x => new { D = x.Datetime!.Value.Day })).Should().Contain("datepart(day, dt)");
@@ -674,7 +841,7 @@ public class SqlGenerationTests
     public void InValues_ShouldRenderInPredicateWithParameters()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
         var values = new long[] { 1, 2, 3 };
 
         var command = Prepare(ctx, e.Where(x => NORM.SQL.@in(x.Id, values)).Select(x => new { x.Id }));
@@ -688,7 +855,7 @@ public class SqlGenerationTests
     public void InValues_InlineParams_ShouldBecomeParameters()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         var command = Prepare(ctx, e.Where(x => NORM.SQL.@in(x.Id, 1L, 2L)).Select(x => new { x.Id }));
 
@@ -701,7 +868,7 @@ public class SqlGenerationTests
     public void InValues_Empty_ShouldRenderAlwaysFalse()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
         var values = Array.Empty<long>();
 
         var command = Prepare(ctx, e.Where(x => NORM.SQL.@in(x.Id, values)).Select(x => new { x.Id }));
@@ -714,7 +881,7 @@ public class SqlGenerationTests
     public void InValues_SingleElement_ShouldRenderInPredicate()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
         var values = new long[] { 2 };
 
         var command = Prepare(ctx, e.Where(x => NORM.SQL.@in(x.Id, values)).Select(x => new { x.Id }));
@@ -728,7 +895,7 @@ public class SqlGenerationTests
     public void InValues_WithNull_ShouldAddNullBranch()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
         var values = new int?[] { 1, null };
 
         var command = Prepare(ctx, e.Where(x => NORM.SQL.@in(x.Int, values)).Select(x => new { x.Id }));
@@ -742,7 +909,7 @@ public class SqlGenerationTests
     public void InValues_AllNull_ShouldRenderIsNull()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
         var values = new int?[] { null };
 
         var command = Prepare(ctx, e.Where(x => NORM.SQL.@in(x.Int, values)).Select(x => new { x.Id }));
@@ -756,7 +923,7 @@ public class SqlGenerationTests
     public void Contains_CapturedList_ShouldRenderInPredicate()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
         var values = new List<long> { 1, 2 };
 
         var command = Prepare(ctx, e.Where(x => values.Contains(x.Id)).Select(x => new { x.Id }));
@@ -770,7 +937,7 @@ public class SqlGenerationTests
     public void Contains_CapturedArray_ShouldRenderInPredicate()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
         var values = new long[] { 1, 2 };
 
         var command = Prepare(ctx, e.Where(x => values.Contains(x.Id)).Select(x => new { x.Id }));
@@ -784,7 +951,7 @@ public class SqlGenerationTests
     public void LogicalNot_InWhere_ShouldEmitNotPredicate()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         // A bit column is a value, not a predicate, so it has to be compared with 1 before NOT.
         SqlOf(ctx, e.Where(x => !x.Boolean!.Value).Select(x => new { x.Id }))
@@ -795,7 +962,7 @@ public class SqlGenerationTests
     public void LogicalNot_WhenProjected_ShouldMaterialiseAsBit()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         // T-SQL has no boolean scalar, so a projected NOT has to become a bit through a CASE, and
         // the bit column has to be compared with 1 before it can be used as the CASE test.
@@ -807,7 +974,7 @@ public class SqlGenerationTests
     public void Negate_ShouldParenthesiseOperand()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>();
 
         SqlOf(ctx, e.Select(x => -x.Id)).Should().Contain("-(id)");
     }
@@ -816,7 +983,7 @@ public class SqlGenerationTests
     public void OnesComplement_ShouldEmitTilde()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>();
 
         SqlOf(ctx, e.Select(x => ~x.Id)).Should().Contain("~(id)");
     }
@@ -825,7 +992,7 @@ public class SqlGenerationTests
     public void LogicalNot_OfAnd_ShouldNegateWholePredicate()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Where(x => !(x.Boolean!.Value && x.Id > 1L)).Select(x => new { x.Id }))
             .Should().Contain("not (((b) = 1 and (id > 1)))");
@@ -835,7 +1002,7 @@ public class SqlGenerationTests
     public void LogicalNot_OfOr_ShouldNegateWholePredicate()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Where(x => !(x.Boolean!.Value || x.Id > 1L)).Select(x => new { x.Id }))
             .Should().Contain("not (((b) = 1 or (id > 1)))");
@@ -850,7 +1017,7 @@ public class SqlGenerationTests
     public void Cte_NonRecursive_ShouldEmitWithClause()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         var cte = e.Where(x => x.Id > 1).Select(x => new { x.Id });
         var sql = SqlOf(ctx, ctx.With("recent", cte).From("recent").Select(t => new { id = t["id"].AsInt }));
@@ -864,7 +1031,7 @@ public class SqlGenerationTests
     public void Cte_TwoChained_ShouldEmitBothWithClauses()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         var first = e.Where(x => x.Id > 1).Select(x => new { x.Id });
         var second = ctx.From("first").Select(t => new { id = t["id"].AsInt });
@@ -879,7 +1046,7 @@ public class SqlGenerationTests
     public void Cte_Recursive_ShouldOmitRecursiveKeywordButSupportMaxRecursion()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>();
 
         var anchor = e.Where(s => s.Id == 1).Select(s => new CteNumberRow { n = s.Id });
         var step = ctx.From("nums").Where(t => t["n"].AsInt < 5).Select(t => new CteNumberRow { n = t["n"].AsInt + 1 });
@@ -898,7 +1065,7 @@ public class SqlGenerationTests
     public void RowNumber_ShouldEmitOverWithPartitionAndOrder()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         var sql = SqlOf(ctx, e.Select(x => new
         {
@@ -913,7 +1080,7 @@ public class SqlGenerationTests
     public void RankAndDenseRank_ShouldEmitOverWithOrder()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         var sql = SqlOf(ctx, e.Select(x => new
         {
@@ -929,7 +1096,7 @@ public class SqlGenerationTests
     public void WindowOrderByDescending_ShouldEmitDesc()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         var sql = SqlOf(ctx, e.Select(x => new
         {
@@ -946,7 +1113,7 @@ public class SqlGenerationTests
     public void LagAndLead_ShouldEmitOffsetAndDefault()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         var sql = SqlOf(ctx, e.Select(x => new
         {
@@ -962,7 +1129,7 @@ public class SqlGenerationTests
     public void WindowAggregate_ShouldEmitOverPartition()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         var sql = SqlOf(ctx, e.Select(x => new
         {
@@ -978,7 +1145,7 @@ public class SqlGenerationTests
     public void WindowFrame_ShouldEmitRowsBetween()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         var sql = SqlOf(ctx, e.Select(x => new
         {
@@ -998,7 +1165,7 @@ public class SqlGenerationTests
     public void NtileAndFirstLastValue_ShouldEmitOver()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         var sql = SqlOf(ctx, e.Select(x => new
         {
@@ -1015,7 +1182,7 @@ public class SqlGenerationTests
     public void WindowFrame_FullBoundaries_ShouldEmitRowsAndRange()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         var sql = SqlOf(ctx, e.Select(x => new
         {
@@ -1036,7 +1203,7 @@ public class SqlGenerationTests
     public void WindowFunction_WithoutOver_ShouldThrow()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.Create<IComplexEntity>();
+        var e = ctx.From<IComplexEntity>();
 
         var act = () => SqlOf(ctx, e.Select(x => new { x.Id, rn = NORM.SQL.row_number() }));
 
@@ -1103,7 +1270,7 @@ public class SqlGenerationTests
     public void TableFunction_JoinedToTable_ShouldAliasBothSources()
     {
         using var ctx = SqlServerTestContext.Create();
-        var complex = ctx.Create<IComplexEntity>();
+        var complex = ctx.From<IComplexEntity>();
 
         var sql = SqlOf(ctx, ctx
             .FromTableFunction(() => Tvf.AllRows())
@@ -1117,13 +1284,331 @@ public class SqlGenerationTests
     public void TableFunction_AsJoinedSource_ShouldAliasBothSources()
     {
         using var ctx = SqlServerTestContext.Create();
-        var simple = ctx.Create<ISimpleEntity>();
+        var simple = ctx.From<ISimpleEntity>();
 
         var sql = SqlOf(ctx, simple
             .Join(ctx.FromTableFunction(() => Tvf.AllRows()), (s, r) => r.Id == s.Id)
             .Select(p => new { p.t1.Id, p.t2.Value }));
 
         sql.Should().Be("select t1.id, t2.value from simple_entity as [t1] join all_rows() as [t2] on t2.id = cast(t1.id as bigint)");
+    }
+
+    [Fact]
+    public void StringSplit_TableFunction_ShouldEmitFunction()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var csv = "a,b,c";
+        var separator = ",";
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => NORM.MS_SQL.string_split(csv, separator))
+            .Select(r => new { r.Value }));
+
+        Normalize(command.DbCommand.CommandText).Should().Be("select value from string_split(@csv, @separator) as [t1]");
+        command.DbCommandParams.Cast<DbParameter>().Select(p => p.ParameterName)
+            .Should().Equal("csv", "separator");
+    }
+
+    [Fact]
+    public void OpenJson_TableFunction_ShouldEmitFunction()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var json = "{\"a\":1}";
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => NORM.MS_SQL.openjson(json))
+            .Select(r => new { r.Key, r.Value, r.Type }));
+
+        Normalize(command.DbCommand.CommandText).Should()
+            .Be("select [key] as [Key], value, type from openjson(@json) as [t1]");
+        command.DbCommandParams.Cast<DbParameter>().Select(p => p.ParameterName)
+            .Should().Equal("json");
+    }
+
+    [Fact]
+    public void TableHint_ShouldEmitWithClause()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        SqlOf(ctx, ctx.From<IComplexEntity>().WithTableHint("nolock").Select(x => new { x.Id }))
+            .Should().Be("select id from complex_entity with (nolock)");
+
+        SqlOf(ctx, ctx.From<IComplexEntity>().WithTableHint("nolock", "index(ix_id)").Select(x => new { x.Id }))
+            .Should().Be("select id from complex_entity with (nolock, index(ix_id))");
+    }
+
+    [Fact]
+    public void TableHint_WithJoin_ShouldPlaceHintBeforeAlias()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>().WithTableHint("nolock");
+        var complex = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, simple.Join(complex, (s, c) => s.Id == c.Id).Select(p => new { p.t1.Id }));
+
+        sql.Should().Contain("from simple_entity with (nolock) as [t1] join complex_entity as [t2]");
+    }
+
+    [Fact]
+    public void NullIf_ShouldEmitNullIf()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // nullif is ANSI and therefore not capability-gated.
+        SqlOf(ctx, e.Select(x => new { V = NORM.SQL.nullif(x.Id, 0L) }))
+            .Should().Contain("nullif(id, 0)");
+    }
+
+    [Fact]
+    public void GreatestLeast_ShouldEmitFunctions()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            G = NORM.SQL.greatest(x.Id, x.Id),
+            L = NORM.SQL.least(x.Id, x.Id)
+        }));
+
+        sql.Should().Contain("greatest(id, id) as [G]");
+        sql.Should().Contain("least(id, id) as [L]");
+    }
+
+    [Fact]
+    public void StringAgg_ShouldEmitAggregate()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => NORM.SQL.string_agg(x.String, ",")))
+            .Should().Contain("string_agg(somestring, ',')");
+    }
+
+    [Fact]
+    public void TextJsonFunctions_ShouldEmitFunctions()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Id = NORM.MS_SQL.json_value(x.String, "$.id"),
+            Name = NORM.MS_SQL.json_query(x.String, "$.name"),
+            Updated = NORM.MS_SQL.json_modify(x.String, "$.id", "1")
+        }));
+
+        sql.Should().Contain("json_value(somestring, '$.id') as [Id]");
+        sql.Should().Contain("json_query(somestring, '$.name') as [Name]");
+        sql.Should().Contain("json_modify(somestring, '$.id', '1') as [Updated]");
+    }
+
+    [Fact]
+    public void ArrayAgg_ShouldThrowBecauseSqlServerHasNoArrayType()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e
+            .GroupBy(x => new { x.Int })
+            .Having(x => NORM.PG_SQL.array_agg(x.Id) != null)
+            .Select(x => new { x.Int }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*string_agg/array_agg*");
+    }
+
+    [Fact]
+    public void DateTrunc_ShouldEmitDatetruncFunction()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { M = NORM.SQL.date_trunc("month", x.Datetime) }))
+            .Should().Contain("datetrunc(month, dt) as [M]");
+
+        // ANSI plural parts are folded onto the singular T-SQL spellings.
+        SqlOf(ctx, e.Select(x => new { M = NORM.SQL.date_trunc("milliseconds", x.Datetime) }))
+            .Should().Contain("datetrunc(millisecond, dt)");
+    }
+
+    [Fact]
+    public void DateTruncWithUnsupportedField_ShouldThrow()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new { V = NORM.SQL.date_trunc("century", x.Datetime) }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*century*");
+    }
+
+    [Fact]
+    public void GroupByRollup_ShouldEmitRollup()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e
+            .GroupByRollup(x => new { x.Int, x.Boolean })
+            .Select(x => new { x.Int, x.Boolean }))
+            .Should().Contain("group by rollup (nullableint, b)");
+    }
+
+    [Fact]
+    public void GroupByCube_ShouldEmitCube()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e
+            .GroupByCube(x => new { x.Int, x.Boolean })
+            .Select(x => new { x.Int, x.Boolean }))
+            .Should().Contain("group by cube (nullableint, b)");
+    }
+
+    [Fact]
+    public void GroupByGroupingSets_ShouldEmitGroupingSets()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e
+            .GroupByGroupingSets(x => new { x.Int, x.Boolean },
+                new[] { 0, 1 },
+                new[] { 0 },
+                Array.Empty<int>())
+            .Select(x => new { x.Int, x.Boolean }))
+            .Should().Contain("group by grouping sets ((nullableint, b), (nullableint), ())");
+    }
+
+    [Fact]
+    public void DateAdd_ShouldEmitDateaddFunction()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { D = NORM.SQL.date_add("day", 1, x.Datetime) }))
+            .Should().Contain("dateadd(day, 1, dt) as [D]");
+
+        // ANSI plural parts are folded onto the singular T-SQL spellings.
+        SqlOf(ctx, e.Select(x => new { D = NORM.SQL.date_add("milliseconds", 5, x.Datetime) }))
+            .Should().Contain("dateadd(millisecond, 5, dt)");
+    }
+
+    [Fact]
+    public void DateAdd_WithDecadePart_ShouldScaleToYears()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // T-SQL dateadd has no decade part, so the amount is scaled on a year add.
+        SqlOf(ctx, e.Select(x => new { D = NORM.SQL.date_add("decade", 2, x.Datetime) }))
+            .Should().Contain("dateadd(year, (2) * 10, dt)");
+    }
+
+    [Fact]
+    public void EndOfMonth_ShouldEmitEomonth()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { E = NORM.SQL.end_of_month(x.Datetime) }))
+            .Should().Contain("eomonth(dt) as [E]");
+    }
+
+    [Fact]
+    public void DateDiff_ShouldEmitDatediffFunction()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { D = NORM.SQL.date_diff("day", x.Datetime, x.Datetime) }))
+            .Should().Contain("datediff(day, dt, dt) as [D]");
+
+        // ANSI plural parts are folded onto the singular T-SQL spellings.
+        SqlOf(ctx, e.Select(x => new { D = NORM.SQL.date_diff("milliseconds", x.Datetime, x.Datetime) }))
+            .Should().Contain("datediff(millisecond, dt, dt)");
+    }
+
+    [Fact]
+    public void DateFromParts_ShouldEmitDatefromparts()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { D = NORM.SQL.date_from_parts(2023, 1, 31) }))
+            .Should().Contain("datefromparts(2023, 1, 31) as [D]");
+    }
+
+    [Fact]
+    public void DateTimeAddMethods_ShouldEmitDateaddFunction()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { D = x.Datetime!.Value.AddDays(7) }))
+            .Should().Contain("dateadd(day, 7, dt) as [D]");
+
+        SqlOf(ctx, e.Select(x => new { M = x.Datetime!.Value.AddMonths(2) }))
+            .Should().Contain("dateadd(month, 2, dt) as [M]");
+
+        // AddMilliseconds maps to the singular T-SQL millisecond part.
+        SqlOf(ctx, e.Select(x => new { S = x.Datetime!.Value.AddMilliseconds(500) }))
+            .Should().Contain("dateadd(millisecond, 500, dt) as [S]");
+    }
+
+    [Fact]
+    public void FilteredAggregate_ShouldThrowBecauseSqlServerHasNoFilterClause()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => NORM.SQL.count(() => x.Id > 1L)));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*FILTER*");
+    }
+
+    [Fact]
+    public void IndexOfLastIndexOf_ShouldUseCharIndex()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = x.String!.IndexOf("b") }))
+            .Should().Contain("case when (charindex('b', somestring)) = 0 then -1 else (charindex('b', somestring)) - 1 end");
+        SqlOf(ctx, e.Select(x => new { V = x.String!.IndexOf("b", 1) }))
+            .Should().Contain("case when (charindex('b', somestring, 1 + 1)) = 0 then -1 else (charindex('b', somestring, 1 + 1)) - 1 end");
+        SqlOf(ctx, e.Select(x => new { V = x.String!.LastIndexOf("b") }))
+            .Should().Contain("case when (charindex(reverse('b'), reverse(somestring))) = 0 then -1 else len(somestring) - (charindex(reverse('b'), reverse(somestring))) - len('b') + 1 end");
+    }
+
+    [Fact]
+    public void PadLeftRight_ShouldUseReplicate()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = x.String!.PadLeft(5, '0') }))
+            .Should().Contain("case when len(somestring) >= (5) then somestring else replicate('0', (5) - len(somestring))+somestring end");
+        SqlOf(ctx, e.Select(x => new { V = x.String!.PadRight(5) }))
+            .Should().Contain("case when len(somestring) >= (5) then somestring else somestring+replicate(' ', (5) - len(somestring)) end");
+    }
+
+    [Fact]
+    public void RemoveInsertAndNewString_ShouldUseStuffAndReplicate()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = x.String!.Remove(2) }))
+            .Should().Contain("substring(somestring, 1, 2)");
+        SqlOf(ctx, e.Select(x => new { V = x.String!.Remove(2, 1) }))
+            .Should().Contain("stuff(somestring, 2 + 1, 1, '')");
+        SqlOf(ctx, e.Select(x => new { V = x.String!.Insert(2, "x") }))
+            .Should().Contain("stuff(somestring, 2 + 1, 0, 'x')");
+        SqlOf(ctx, e.Select(x => new { V = new string('*', 4) }))
+            .Should().Contain("replicate('*', 4)");
     }
 
     private static Expression<Func<IComplexEntity, string>> SwitchOfId(string @default, params (long Test, string Result)[] cases)

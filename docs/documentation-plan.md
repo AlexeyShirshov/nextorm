@@ -144,14 +144,14 @@ land there directly. Client-side search is enabled (`_enableSearch`).
 |---|---|---|---|---|
 | `getting-started/01-installation.md` | new | NuGet packages (`nextorm`, `nextorm.sqlite`, `nextorm.sqlserver`, `nextorm.postgres`), target framework, in-memory built-in | `docs/index.md` | - |
 | `getting-started/02-quickstart.md` | new | Define an entity, create a context, run a query, get a list | `CommonTestSuite.SqlCommand.cs:9`, `:20`; `Providers/SqliteTestProvider.cs` | - |
-| `getting-started/03-entities-and-metadata.md` | new | `[SqlTable]`/`[Column]`/`[Key]`, interface + class mapping, no-entity `TableAlias` mode, `From("table")`, fluent `EntityBuilder` (`Table`, `Property().HasColumnType`/`HasColumnName`) | `Entities.cs`; `MetadataRegistrationTests.cs:18`; `DataContext/Meta/EntityBuilder.cs` | `CommonTestSuite.SqlCommand.cs:37` |
+| `getting-started/03-entities-and-metadata.md` | new | `[SqlTable]`/`[Column]`/`[Key]`, interface + class mapping, no-entity `TableAlias` mode, `From("table")`, fluent `EntityMetadataBuilder` (`Table`, `Property().HasColumnType`/`HasColumnName`) | `Entities.cs`; `MetadataRegistrationTests.cs:18`; `DataContext/Meta/EntityMetadataBuilder.cs` | `CommonTestSuite.SqlCommand.cs:37` |
 | `getting-started/04-dependency-injection.md` | new | `AddNextOrmContext` (generic / options / keyed), scoped context, `DbContextBuilder.UseSqlite/UseSqlServer/UsePostgres`, `UseLoggerFactory`, `LogSensitiveData` | `DependencyInjectionTests.cs:13-71` | - |
 
 ### Guide
 
 | Page | Status | Content | Example source (tests) | SQL-generation evidence |
 |---|---|---|---|---|
-| `guide/01-querying-and-projections.md` | new | `Entity.Select`: anonymous type, DTO, record, tuple, member-init, primitive/scalar, nested and calculated columns | `CommonTestSuite.SqlCommand.cs:9,20,26,75-186,353,368,728` | `SqlGenerationTests` ComputedColumn/NestedCalculatedColumn |
+| `guide/01-querying-and-projections.md` | new | `EntityBuilder.Select`: anonymous type, DTO, record, tuple, member-init, primitive/scalar, nested and calculated columns | `CommonTestSuite.SqlCommand.cs:9,20,26,75-186,353,368,728` | `SqlGenerationTests` ComputedColumn/NestedCalculatedColumn |
 | `guide/02-filtering-where.md` | new | `Where`, `==`/`!=`/`>`/`>=`/`<`/`<=`, null (`IS NULL`), `and`/`or`, `!`, arithmetic, bitwise, shifts, `??` (COALESCE), `?:`/`switch` (CASE WHEN), captured parameters, `NORM.Param`, `in`/`Contains` (incl. nulls, captured list/array mutation) | `CommonTestSuite.SqlCommand.cs:187-306`; `CommonTestSuite.Conditional.cs:9-42`; `CommonTestSuite.Unary.cs:8-44`; `CommonTestSuite.In.cs:9-122` | `SqlGenerationTests` Conditional/Switch/LogicalNot/InValues/Contains |
 | `guide/03-joins.md` | new | Inner / left / right / full / cross joins, join to entity / table / subquery, arity 2..8 via `EntityP2..P8` + `Projection<T1..T8>`, projected values | `CommonTestSuite.Join.cs:9-190`; `InMemoryJoinTests.cs:14-162` | `SqlGenerationTests` Join/LeftJoin/RightJoin/FullJoin/CrossJoin/Join4..8 |
 | `guide/04-grouping-and-aggregates.md` | new | `GroupBy`, `Having`, `count`/`count_big`/`count_distinct`, `min`/`max`/`avg`/`sum`, `stdev`/`stdevp`/`var`/`varp` + `_distinct`, grouping with where/having/limit/sort | `CommonTestSuite.GroupBy.cs:9-70`; `CommonTestSuite.Aggregates.cs:9-372` | `SqlGenerationTests` Count/CountBig/Aggregate |
@@ -183,7 +183,7 @@ land there directly. Client-side search is enabled (`_enableSearch`).
 | Page | Status | Content | Example source |
 |---|---|---|---|
 | `advanced/limitations.md` | new | Out-of-scope: DML, navigation properties, `APPLY`/`LATERAL`, provider-specific set ops, general correlated scalar projection; based on the gap analysis | `docs/sql-capabilities-gap-analysis.md` |
-| `advanced/api-reference.md` | new | Curated index of public types (`IDataContext`, `Entity<T>`, `Entity`, `QueryCommand<T>`, `NORM`, attributes) with links to source; XML docs already rich | `src/nextorm.core/**` |
+| `advanced/api-reference.md` | new | Curated index of public types (`IDataContext`, `EntityBuilder<T>`, `EntityBuilder`, `QueryCommand<T>`, `NORM`, attributes) with links to source; XML docs already rich | `src/nextorm.core/**` |
 
 ## 7. Bilingual strategy
 

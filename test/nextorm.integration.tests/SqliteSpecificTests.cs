@@ -50,4 +50,69 @@ public sealed class SqliteSpecificTests : ProviderTestSuite
         r[1].Id.Should().Be(3);
         r[2].Id.Should().Be(2);
     }
+
+    [Fact]
+    public void DateAdd_ShouldShiftDate()
+    {
+        var r = _sut.ComplexEntity
+            .Where(x => x.Id == 1)
+            .Select(x => NORM.SQL.date_add("day", 1, x.Datetime))
+            .First();
+
+        r.Should().Be(new DateTime(2023, 1, 2, 10, 0, 0));
+    }
+
+    [Fact]
+    public void DateDiff_ShouldCountDayBoundaries()
+    {
+        var r = _sut.ComplexEntity
+            .Where(x => x.Id == 1)
+            .Select(x => NORM.SQL.date_diff("day", x.Datetime, NORM.SQL.date_add("day", 3, x.Datetime)))
+            .First();
+
+        r.Should().Be(3);
+    }
+
+    [Fact]
+    public void EndOfMonth_ShouldReturnLastDay()
+    {
+        var r = _sut.ComplexEntity
+            .Where(x => x.Id == 1)
+            .Select(x => NORM.SQL.end_of_month(x.Datetime))
+            .First();
+
+        r.Should().Be(new DateTime(2023, 1, 31));
+    }
+
+    [Fact]
+    public void StringAgg_ShouldConcatenateGroupValues()
+    {
+        var r = _sut.ComplexEntity
+            .Where(x => x.String != null)
+            .Select(x => NORM.SQL.string_agg(x.String, ","))
+            .First();
+
+        r.Should().NotBeNull();
+        r.Should().Contain("dadfasd").And.Contain("xxx");
+    }
+
+    [Fact]
+    public void DateProjection_ShouldMaterialiseColumns()
+    {
+        // Exercises the row mapper (not the scalar path): SQLite returns datetime() as TEXT and the
+        // diff as INTEGER, so both have to land in the DateTime?/int? projection members.
+        var r = _sut.ComplexEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Added = NORM.SQL.date_add("day", 1, x.Datetime),
+                Days = NORM.SQL.date_diff("day", x.Datetime, NORM.SQL.date_add("day", 3, x.Datetime)),
+                Last = NORM.SQL.end_of_month(x.Datetime)
+            })
+            .First();
+
+        r.Added.Should().Be(new DateTime(2023, 1, 2, 10, 0, 0));
+        r.Days.Should().Be(3);
+        r.Last.Should().Be(new DateTime(2023, 1, 31));
+    }
 }

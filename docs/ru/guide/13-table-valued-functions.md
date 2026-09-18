@@ -162,22 +162,22 @@ var rows = dataContext
 Несколько распространённых табличных функций уже объявлены с `[SqlTableFunction]`, поэтому
 пользовательская обёртка не нужна.
 
-`NORM.SQL.generate_series` и `NORM.SQL.unnest` — из PostgreSQL (возвращают `NORM.IGenerateSeriesRow`
+`NORM.PG_SQL.generate_series` и `NORM.PG_SQL.unnest` — из PostgreSQL (возвращают `NORM.IGenerateSeriesRow`
 с колонкой `generate_series` и `NORM.IUnnestRow<T>` с колонкой `unnest`):
 
 ```csharp
 var numbers = dataContext
-    .FromTableFunction(() => NORM.SQL.generate_series(1L, 3L))
+    .FromTableFunction(() => NORM.PG_SQL.generate_series(1L, 3L))
     .Select(r => r.Value)
     .ToList();
 
 var elements = dataContext
-    .FromTableFunction(() => NORM.SQL.unnest(NORM.Param<long[]>(0)))
+    .FromTableFunction(() => NORM.PG_SQL.unnest(NORM.Param<long[]>(0)))
     .Select(r => r.Value)
     .ToList(new long[] { 1, 2, 3 });
 ```
 
-`NORM.SQL.string_split` — из SQL Server 2016+ и возвращает `NORM.IStringSplitRow` (единственная колонка
+`NORM.MS_SQL.string_split` — из SQL Server 2016+ и возвращает `NORM.IStringSplitRow` (единственная колонка
 `value`). Порядок фрагментов не гарантируется, поэтому добавляйте `order by`, если важен порядок входной
 строки:
 
@@ -186,7 +186,7 @@ var csv = "a,b,c";
 var separator = ",";
 
 var fragments = dataContext
-    .FromTableFunction(() => NORM.SQL.string_split(csv, separator))
+    .FromTableFunction(() => NORM.MS_SQL.string_split(csv, separator))
     .Select(r => r.Value)
     .ToList();
 ```
@@ -195,8 +195,29 @@ var fragments = dataContext
 select value from string_split(@csv, @separator) as [t1]
 ```
 
+`NORM.MS_SQL.openjson` — из SQL Server 2016+ и возвращает `NORM.IOpenJsonRow` (`key`/`value`/`type`).
+Схема по умолчанию даёт свойства JSON-объекта или элементы JSON-массива; для типизированной проекции
+объявите свой `[SqlTableFunction("openjson")]`-хелпер, чья форма строки соответствует предложению
+`WITH (...)`:
+
+```csharp
+var json = """{"a":1,"b":2}""";
+
+var entries = dataContext
+    .FromTableFunction(() => NORM.MS_SQL.openjson(json))
+    .Select(r => new { r.Key, r.Value, r.Type })
+    .ToList();
+```
+
+```sql
+select [key] as [Key], value, type from openjson(@json) as [t1]
+```
+
 Сопоставленная функция должна существовать в базе — nextorm только генерирует вызов, он её не создаёт, —
-поэтому используйте хелпер только на провайдере, где она определена.
+поэтому используйте хелпер только на провайдере, где она определена. Встроенные хелперы гейтятся
+`ISqlDialect.SupportsTableFunction`: PostgreSQL разрешает `generate_series`/`unnest`, SQL Server —
+`string_split`/`openjson`, а любой другой провайдер отклоняет их с `NotSupportedException`
+(пользовательская `[SqlTableFunction]` не гейтится).
 
 ## Различия между провайдерами
 

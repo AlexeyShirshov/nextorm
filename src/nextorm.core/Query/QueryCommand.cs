@@ -161,6 +161,22 @@ public partial class QueryCommand : IQueryProvider, ICloneable
         if (list.Count > 0)
             _hints = list;
     }
+    /// <summary>
+    /// Table-level hints attached to the command's physical <c>FROM</c> table (for example SQL Server
+    /// <c>nolock</c>), or <c>null</c> when there are none. How they are rendered is provider specific;
+    /// a dialect that does not implement table hints rejects a command that carries them.
+    /// </summary>
+    public IReadOnlyList<string>? TableHints { get; internal set; }
+    /// <summary>
+    /// The trailing <c>FOR JSON</c> clause (SQL Server), or <c>null</c> when the result set is returned
+    /// as rows. A dialect that does not implement it rejects a command that carries it.
+    /// </summary>
+    public ForJsonClause? ForJsonClause { get; internal set; }
+    /// <summary>
+    /// The trailing <c>FOR XML</c> clause (SQL Server), or <c>null</c> when the result set is returned
+    /// as rows. Mutually exclusive with <see cref="ForJsonClause"/>.
+    /// </summary>
+    public ForXmlClause? ForXmlClause { get; internal set; }
     public LambdaExpression? GroupBy { get => _groupExp; }
     /// <summary>
     /// The super-aggregate modifier applied to the grouping list (<c>ROLLUP</c>/<c>CUBE</c>), or
@@ -168,6 +184,12 @@ public partial class QueryCommand : IQueryProvider, ICloneable
     /// list is present.
     /// </summary>
     public GroupingType GroupingType { get; internal set; }
+    /// <summary>
+    /// The explicit grouping sets (0-based indices into the grouping list) used when
+    /// <see cref="GroupingType"/> is <see cref="nextorm.core.GroupingType.GroupingSets"/>, or
+    /// <c>null</c> otherwise. An empty set yields the grand total.
+    /// </summary>
+    public IReadOnlyList<int[]>? GroupingSets { get; internal set; }
     public LambdaExpression? Having { get => _having; }
     public QueryCommand? UnionQuery { get => _union; }
     public UnionType UnionType { get => _unionType; }

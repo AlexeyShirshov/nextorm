@@ -21,10 +21,17 @@ public interface ISqlDialect
     /// <summary>True for providers that require a derived table (subquery in FROM) to have an alias.</summary>
     bool RequireSubqueryAlias { get; }
     /// <summary>
-    /// True when the provider can render <c>right join</c> and <c>full join</c>. SQLite before 3.39
-    /// cannot; this is expressed as a capability instead of being special-cased in the SQL builder.
+    /// True when the provider can render <c>right join</c>. A full join additionally requires
+    /// <see cref="SupportsFullJoin"/>; they are separate because MySQL/MariaDB have one but not the
+    /// other. SQLite before 3.39 cannot render either; this is expressed as a capability instead of
+    /// being special-cased in the SQL builder.
     /// </summary>
     bool SupportsRightFullJoin { get; }
+    /// <summary>
+    /// True when the provider can render <c>full join</c>. MySQL/MariaDB implement <c>right join</c>
+    /// but not <c>full join</c>, so the two capabilities are separate.
+    /// </summary>
+    bool SupportsFullJoin { get; }
     /// <summary>
     /// True when the provider can render <c>CROSS APPLY</c>/<c>OUTER APPLY</c> or their lateral
     /// equivalent (<c>CROSS JOIN LATERAL</c> / <c>LEFT JOIN LATERAL ... ON true</c>). SQLite has no
@@ -57,6 +64,11 @@ public interface ISqlDialect
     /// </summary>
     bool SupportsCube { get; }
     /// <summary>
+    /// True when the provider can render an explicit <c>GROUP BY GROUPING SETS (...)</c> list. The safe
+    /// default is <c>false</c>; MySQL/MariaDB have no grouping sets, so they leave it off.
+    /// </summary>
+    bool SupportsGroupingSets { get; }
+    /// <summary>
     /// Renders a grouping list with the given super-aggregate <paramref name="groupingType"/> over the
     /// already-rendered, comma-separated <paramref name="columns"/>. The default is the ANSI
     /// <c>rollup (columns)</c>/<c>cube (columns)</c> form; a provider that spells it
@@ -64,11 +76,32 @@ public interface ISqlDialect
     /// </summary>
     string MakeGrouping(string columns, GroupingType groupingType);
     /// <summary>
+    /// Renders <c>GROUPING SETS (...)</c> over the already-rendered, parenthesised
+    /// <paramref name="groupingSets"/> (each entry is a returned <c>(a, b)</c>/<c>()</c> string).
+    /// </summary>
+    string MakeGroupingSets(IReadOnlyList<string> groupingSets);
+    /// <summary>
     /// True when the provider can render statement-level query hints (see <see cref="QueryCommand.Hints"/>).
     /// The safe default is <c>false</c>; a command that carries hints is rejected by the SQL builder
     /// on a dialect that does not opt in.
     /// </summary>
     bool SupportsQueryHints { get; }
+    /// <summary>
+    /// True when the provider can render table-level hints on a physical <c>FROM</c> source
+    /// (<c>WITH (...)</c>). The safe default is <c>false</c>; a command that carries table hints is
+    /// rejected by the SQL builder on a dialect that does not opt in.
+    /// </summary>
+    bool SupportsTableHints { get; }
+    /// <summary>
+    /// True when the provider can render a trailing <c>FOR JSON</c> clause (SQL Server). The safe
+    /// default is <c>false</c>; a command that carries one is rejected on a dialect that does not opt in.
+    /// </summary>
+    bool SupportsForJson { get; }
+    /// <summary>
+    /// True when the provider can render a trailing <c>FOR XML</c> clause (SQL Server). The safe
+    /// default is <c>false</c>.
+    /// </summary>
+    bool SupportsForXml { get; }
     /// <summary>
     /// True when the provider has an array type and can render the array surface: array-typed
     /// parameters used with the <c>any</c>/<c>all</c> quantifiers (<c>column = any(@array)</c>) and the
@@ -88,6 +121,11 @@ public interface ISqlDialect
     /// text column rather than a native type. The safe default is <c>false</c>; SQL Server opts in.
     /// </summary>
     bool SupportsTextJson { get; }
+    /// <summary>
+    /// True when the provider can render the full-text predicates <c>contains</c> and <c>freetext</c>
+    /// (<see cref="NORM.NORM_SQL.contains{T}"/>). The safe default is <c>false</c>; SQL Server opts in.
+    /// </summary>
+    bool SupportsFullText { get; }
     /// <summary>
     /// True when the provider can attach an aggregate filter (<c>FILTER (WHERE ...)</c>). The safe
     /// default is <c>false</c>; the standard clause is rendered by the expression translators and is
@@ -203,6 +241,45 @@ public interface ISqlDialect
     string RenderQueryHints(string sql, IReadOnlyList<string> hints, string? maxRecursionOption);
 
     /// <summary>
+    /// Renders the table-level hint clause appended to a physical table name, or an empty string when
+    /// the dialect has no table hints. Only called when <see cref="SupportsTableHints"/> is <c>true</c>
+    /// and <paramref name="hints"/> is non-empty.
+    /// </summary>
+    string MakeTableHints(IReadOnlyList<string> hints);
+
+    /// <summary>
+    /// Renders the trailing <c>FOR JSON</c> clause for <paramref name="clause"/>. Only called when
+    /// <see cref="SupportsForJson"/> is <c>true</c>.
+    /// </summary>
+    string MakeForJson(ForJsonClause clause);
+
+    /// <summary>
+    /// Renders the trailing <c>FOR XML</c> clause for <paramref name="clause"/>. Only called when
+    /// <see cref="SupportsForXml"/> is <c>true</c>.
+    /// </summary>
+    string MakeForXml(ForXmlClause clause);
+
+    /// <summary>
+    /// Renders the full-text predicate <paramref name="functionName"/> (<c>contains</c>/<c>freetext</c>)
+    /// over the already-rendered <paramref name="column"/> and <paramref name="search"/> operands. Only
+    /// called when <see cref="SupportsFullText"/> is <c>true</c>.
+    /// </summary>
+    string MakeFullText(string functionName, string column, string search);
+
+    /// <summary>
+    /// Renders the text-JSON validity test over the already-rendered <paramref name="value"/>. When
+    /// <paramref name="asPredicate"/> is <c>true</c> the result is a boolean predicate, otherwise a
+    /// value expression. Only called when <see cref="SupportsTextJson"/> is <c>true</c>.
+    /// </summary>
+    string MakeIsJson(string value, bool asPredicate);
+
+    /// <summary>
+    /// Maps a text-JSON function name (<c>json_value</c>/<c>json_query</c>/<c>json_modify</c>) to the
+    /// provider's spelling. Only called when <see cref="SupportsTextJson"/> is <c>true</c>.
+    /// </summary>
+    string MakeTextJsonFunction(string name);
+
+    /// <summary>
     /// Renders the opening keyword of a common table expression list (<c>with</c>). Dialects that
     /// support and require the <c>recursive</c> modifier for recursive CTEs (SQLite, PostgreSQL)
     /// emit <c>with recursive</c>; SQL Server declares a recursive CTE with <c>with</c> alone, so the
@@ -272,6 +349,52 @@ public interface ISqlDialect
     /// <summary>Renders a string replace.</summary>
     string MakeReplace(string value, string oldValue, string newValue);
     /// <summary>
+    /// Renders <paramref name="value"/> repeated <paramref name="count"/> times. The primitive behind
+    /// the <c>new string(char, n)</c> translation and <see cref="MakePad"/>.
+    /// </summary>
+    string MakeRepeat(string value, string count);
+    /// <summary>
+    /// Renders a left/right pad of <paramref name="value"/> to <paramref name="length"/> with the
+    /// single-character literal <paramref name="pad"/>. Matches <see cref="string.PadLeft(int)"/>:
+    /// a value that is already at least <paramref name="length"/> long is returned unchanged (the
+    /// SQL <c>lpad</c>/<c>rpad</c> family truncates, so the length is guarded).
+    /// </summary>
+    string MakePad(string value, string length, string pad, bool left);
+    /// <summary>
+    /// Renders the zero-based index of the first occurrence of <paramref name="substring"/> in
+    /// <paramref name="value"/>, or <c>-1</c> when it is absent, matching
+    /// <see cref="string.IndexOf(string)"/>. <paramref name="start"/>, when not null, is the
+    /// already-rendered zero-based index the search starts at.
+    /// </summary>
+    string MakeStringIndexOf(string value, string substring, string? start);
+    /// <summary>
+    /// Renders the zero-based index of the last occurrence of <paramref name="substring"/> in
+    /// <paramref name="value"/>, or <c>-1</c> when it is absent, matching
+    /// <see cref="string.LastIndexOf(string)"/>. A provider without a character-wise reversal fails
+    /// with a clear message.
+    /// </summary>
+    string MakeStringLastIndexOf(string value, string substring);
+    /// <summary>
+    /// Renders <see cref="string.Remove(int)"/>/<see cref="string.Remove(int, int)"/> and
+    /// <see cref="string.Insert(int, string)"/> as one <c>stuff</c>/<c>overlay</c>-style expression over
+    /// the already-rendered zero-based <paramref name="start"/>. A <paramref name="count"/> of null
+    /// removes through the end; <paramref name="newValue"/> is spliced in at start otherwise (the
+    /// <c>Insert</c> translation passes the string <c>"0"</c> so nothing is removed).
+    /// </summary>
+    string MakeStuff(string value, string start, string? count, string newValue);
+    /// <summary>
+    /// Renders the <c>escape</c> clause of a LIKE predicate for <paramref name="escapeChar"/>. The
+    /// literal form differs per provider (MySQL requires a doubled backslash to escape the string
+    /// delimiter), so the escaping is delegated to the dialect.
+    /// </summary>
+    string MakeLikeEscape(string escapeChar);
+    /// <summary>
+    /// Renders the integer ones-complement (<c>~</c>) over the already-rendered <paramref name="operand"/>.
+    /// MySQL's <c>~</c> yields an unsigned 64-bit result, so a dialect whose integer complement must
+    /// stay signed overrides this.
+    /// </summary>
+    string MakeOnesComplement(string operand);
+    /// <summary>
     /// Renders a boolean-valued predicate. Dialects without a boolean type (SQL Server) materialise it
     /// as a bit scalar when it is used as a value instead of as a condition.
     /// </summary>
@@ -301,8 +424,24 @@ public interface ISqlDialect
     /// arguments; <paramref name="field"/> is a validated date-part name.
     /// </summary>
     string MakeDateAdd(string field, string amount, string value);
+    /// <summary>
+    /// Renders the difference between two already-rendered timestamps in <paramref name="field"/> units;
+    /// <paramref name="field"/> is a validated date-part name.
+    /// </summary>
+    string MakeDateDiff(string field, string start, string end);
     /// <summary>Renders the last day of the month of the already-rendered <paramref name="value"/>.</summary>
     string MakeEndOfMonth(string value);
+    /// <summary>
+    /// Renders a date built from its already-rendered <paramref name="year"/>/<paramref name="month"/>/
+    /// <paramref name="day"/> parts.
+    /// </summary>
+    string MakeDateFromParts(string year, string month, string day);
+    /// <summary>True when the provider accepts <paramref name="field"/> as a <c>date_trunc</c> part.</summary>
+    bool SupportsDateTruncField(string field);
+    /// <summary>True when the provider accepts <paramref name="field"/> as a <c>date_add</c> part.</summary>
+    bool SupportsDateAddField(string field);
+    /// <summary>True when the provider accepts <paramref name="field"/> as a <c>date_diff</c> part.</summary>
+    bool SupportsDateDiffField(string field);
     /// <summary>Renders the <c>string_agg(value, delimiter)</c> aggregate over the already-rendered arguments.</summary>
     string MakeStringAgg(string value, string delimiter);
     /// <summary>Renders the <c>array_agg(value)</c> aggregate over the already-rendered argument.</summary>
@@ -320,6 +459,14 @@ public interface ISqlDialect
     /// </summary>
     string MakeFunction(string name, string? schema)
         => string.IsNullOrEmpty(schema) ? name : $"{schema}.{name}";
+    /// <summary>
+    /// True when the provider supports the built-in table-valued function
+    /// <paramref name="name"/> declared in <see cref="NORM.NORM_SQL"/> (for example
+    /// <c>generate_series</c>, <c>unnest</c>, <c>string_split</c>, <c>openjson</c>). User-defined
+    /// <see cref="SqlTableFunctionAttribute"/> functions are not gated by this and are emitted
+    /// verbatim on every provider.
+    /// </summary>
+    bool SupportsTableFunction(string name);
     /// <summary>
     /// Renders the opening fragment of a count aggregate. <paramref name="big"/> requests a 64-bit
     /// count; dialects where <c>count</c> already returns a 64-bit integer ignore the flag.

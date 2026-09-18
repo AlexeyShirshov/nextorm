@@ -8,16 +8,16 @@
 
 nextorm предоставляет две точки входа для `SELECT DISTINCT`:
 
-* `Entity<TEntity>.Distinct()` — устанавливает флаг в построителе, до `Select`:
+* `EntityBuilder<TEntity>.Distinct()` — устанавливает флаг в построителе, до `Select`:
 
   ```csharp
-  dataContext.Create<IComplexEntity>().Distinct().Select(x => new { x.Int })
+  dataContext.From<IComplexEntity>().Distinct().Select(x => new { x.Int })
   ```
 
 * `QueryCommand<TResult>.Distinct()` — устанавливает флаг в уже спроецированном запросе:
 
   ```csharp
-  dataContext.Create<IComplexEntity>().Select(x => new { x.Int }).Distinct()
+  dataContext.From<IComplexEntity>().Select(x => new { x.Int }).Distinct()
   ```
 
 Оба варианта дают один и тот же SQL. `DISTINCT` применяется ко всему списку выборки, поэтому
@@ -27,12 +27,12 @@ nextorm предоставляет две точки входа для `SELECT D
 
 ```csharp
 // complex_entity stores nullableint values null, 1, 1 so DISTINCT must collapse the two 1s.
-var rows = dataContext.Create<IComplexEntity>()
+var rows = dataContext.From<IComplexEntity>()
     .Select(e => new { e.Int })
     .Distinct()
     .ToList();
 
-var same = dataContext.Create<IComplexEntity>()
+var same = dataContext.From<IComplexEntity>()
     .Distinct()
     .Select(e => new { e.Int })
     .ToList();
@@ -48,8 +48,8 @@ select distinct nullableint as 'Int' from complex_entity
 
 ```csharp
 // complex_entity booleans are true, false, false, so the projected join has duplicate rows.
-var rows = dataContext.Create<ISimpleEntity>()
-    .Join(dataContext.Create<IComplexEntity>(), (s, c) => s.Id == c.Id)
+var rows = dataContext.From<ISimpleEntity>()
+    .Join(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
     .Select(p => new { p.t2.Boolean })
     .Distinct()
     .ToList();
@@ -63,13 +63,13 @@ select distinct t2.b as 'Boolean' from simple_entity as 't1' join complex_entity
 различным значениям проецируемого столбца:
 
 ```csharp
-var all = dataContext.Create<ISimpleEntity>()
-    .CrossJoin(dataContext.Create<IComplexEntity>())
+var all = dataContext.From<ISimpleEntity>()
+    .CrossJoin(dataContext.From<IComplexEntity>())
     .Select(p => new { p.t2.Id })
     .ToList(); // 30 rows
 
-var distinct = dataContext.Create<ISimpleEntity>()
-    .CrossJoin(dataContext.Create<IComplexEntity>())
+var distinct = dataContext.From<ISimpleEntity>()
+    .CrossJoin(dataContext.From<IComplexEntity>())
     .Select(p => new { p.t2.Id })
     .Distinct()
     .ToList(); // 3 rows
@@ -85,12 +85,12 @@ select distinct t2.id from simple_entity as 't1' cross join complex_entity as 't
 а проверенная форма (`Distinct`, затем `Limit`) определяется порядком ключевых слов провайдера:
 
 ```csharp
-var distinct = dataContext.Create<IComplexEntity>()
+var distinct = dataContext.From<IComplexEntity>()
     .Select(e => new { e.Boolean })
     .Distinct()
     .ToList(); // 2 rows
 
-var firstPage = dataContext.Create<IComplexEntity>()
+var firstPage = dataContext.From<IComplexEntity>()
     .Limit(1)
     .Select(e => new { e.Boolean })
     .Distinct()
@@ -117,9 +117,9 @@ select distinct top(1) b as 'Boolean' from complex_entity
 только в той ветви, к которой привязан:
 
 ```csharp
-var cmd = dataContext.Create<IComplexEntity>().Select(it => it.Int)
+var cmd = dataContext.From<IComplexEntity>().Select(it => it.Int)
     .Distinct()
-    .Union(dataContext.Create<IComplexEntity>().Select(it => it.Int));
+    .Union(dataContext.From<IComplexEntity>().Select(it => it.Int));
 
 var count = dataContext.From(cmd).Count(); // 2
 ```
@@ -135,9 +135,9 @@ select nullableint from complex_entity
 содержит distinct, а правая — нет:
 
 ```csharp
-var cmd = dataContext.Create<IComplexEntity>().Select(it => it.Int)
+var cmd = dataContext.From<IComplexEntity>().Select(it => it.Int)
     .Distinct()
-    .UnionAll(dataContext.Create<IComplexEntity>().Select(it => it.Int));
+    .UnionAll(dataContext.From<IComplexEntity>().Select(it => it.Int));
 
 var count = dataContext.From(cmd).Count();
 // Left branch is distinct ({null, 1}); UNION ALL keeps the right branch ({null, 1, 1}) => 5 rows.

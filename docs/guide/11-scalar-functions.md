@@ -21,6 +21,13 @@ Two rules apply throughout:
 The built-in translations are attempted **before** any [`[SqlFunction]`](12-user-defined-functions.md)
 mapping, so a user-defined attribute cannot change the behaviour of `string`/`Math`/`DateTime` members.
 
+Cross-provider helpers live on `NORM.SQL`. Functions that only one provider supports are grouped
+under a provider-specific surface: `NORM.PG_SQL` (PostgreSQL: native arrays, native JSON, the extended
+scalar library, the PostgreSQL-only aggregates and the `generate_series`/`unnest` table functions),
+`NORM.MS_SQL` (SQL Server: the JSON-as-text functions and `string_split`/`openjson`) and
+`NORM.CLK_SQL` (ClickHouse: `arg_min`/`arg_max` and the `-If` combinator). Calling one of them on a
+provider that does not opt in throws `NotSupportedException`.
+
 ## String functions
 
 ```csharp
@@ -49,6 +56,17 @@ var rows = dataContext.From<IComplexEntity>()
 | `s.Substring(start)` | `substring(s, start + 1, length(s) - (start))` | The remaining length is derived. `Substring(Range)` is not supported. |
 | `s.Length` | `length(s)` / `len(s)` | `len` on SQL Server. |
 | `s.Replace(a, b)` | `replace(s, a, b)` | |
+| `s.Remove(start, count)` | splice removing `count` characters | `stuff` on SQL Server, `insert` on MySQL/MariaDB, `overlay` on PostgreSQL, `substring` splicing elsewhere. |
+| `s.Remove(start)` | splice removing everything from `start` | |
+| `s.Insert(start, text)` | splice inserting `text` at `start` | |
+| `s.IndexOf(x)` | zero-based position, or `-1` | `charindex`/`instr`/`strpos`/`position`. SQL is one-based and returns `0` when absent; both are adjusted. |
+| `s.IndexOf(x, start)` | zero-based position at or after `start` | |
+| `s.LastIndexOf(x)` | zero-based last position, or `-1` | Needs a character-wise reversal; not supported on SQLite. |
+| `s.PadLeft(width[, c])` | left pad to `width`, never truncating | `replicate`/`repeat`; the SQL `lpad` family truncates, so a length guard is emitted. |
+| `s.PadRight(width[, c])` | right pad to `width`, never truncating | |
+| `new string(c, n)` | `replicate(c, n)` / `repeat(c, n)` | `c` must be a constant. |
+| `s.Split(x)` | `string_to_array(s, x)` | PostgreSQL only; used as an array operand. |
+| `string.Join(sep, s.Split(x))` | `array_to_string(string_to_array(s, x), sep)` | PostgreSQL only; requires native arrays. |
 | `s.Contains(x)` | `s like '%x%'` | Constant `x` is escaped. |
 | `s.StartsWith(x)` | `s like 'x%'` | |
 | `s.EndsWith(x)` | `s like '%x'` | |
@@ -91,36 +109,40 @@ select id from complex_entity where somestring like '%'||$needle||'%'
 
 ## String and regular-expression extensions (PostgreSQL)
 
-Besides the portable `string` methods above, `NORM.SQL` exposes the common PostgreSQL string functions
+Besides the portable `string` methods above, `NORM.PG_SQL` exposes the common PostgreSQL string functions
 and the POSIX regular-expression functions. They are part of the extended scalar library
 (`ISqlDialect.SupportsExtendedScalarFunctions`, PostgreSQL only):
 
+> Prefer the portable built-in forms where they exist, because they render on every provider while the
+> `NORM.PG_SQL` forms below are PostgreSQL only: `s.Substring(0, n)` / `s.Substring(s.Length - n)` instead
+> of `left`/`right`, and `s.PadLeft(n, c)` / `s.PadRight(n, c)` instead of `lpad`/`rpad`.
+
 | C# | SQL |
 |---|---|
-| `NORM.SQL.split_part(s, delim, n)` | `split_part(s, delim, n)` |
-| `NORM.SQL.strpos(s, sub)` | `strpos(s, sub)` |
-| `NORM.SQL.left(s, n)` / `NORM.SQL.right(s, n)` | `left(s, n)` / `right(s, n)` |
-| `NORM.SQL.lpad(s, n, fill)` / `NORM.SQL.rpad(s, n, fill)` | `lpad(s, n, fill)` / `rpad(s, n, fill)` |
-| `NORM.SQL.repeat(s, n)` | `repeat(s, n)` |
-| `NORM.SQL.reverse(s)` | `reverse(s)` |
-| `NORM.SQL.initcap(s)` | `initcap(s)` |
-| `NORM.SQL.translate(s, from, to)` | `translate(s, from, to)` |
-| `NORM.SQL.overlay(s, placing, from, count)` | `overlay(s, placing, from, count)` |
-| `NORM.SQL.concat_ws(sep, ...)` | `concat_ws(sep, ...)` |
-| `NORM.SQL.format(fmt, ...)` | `format(fmt, ...)` |
-| `NORM.SQL.md5(s)` | `md5(s)` |
-| `NORM.SQL.regexp_replace(s, pattern, replacement[, flags])` | `regexp_replace(...)` |
-| `NORM.SQL.regexp_like(s, pattern[, flags])` | `regexp_like(...)` |
-| `NORM.SQL.regexp_split_to_array(s, pattern)` | `regexp_split_to_array(s, pattern)` |
-| `NORM.SQL.regexp_count(s, pattern)` | `regexp_count(s, pattern)` |
-| `NORM.SQL.regexp_instr(s, pattern)` | `regexp_instr(s, pattern)` |
+| `NORM.PG_SQL.split_part(s, delim, n)` | `split_part(s, delim, n)` |
+| `NORM.PG_SQL.strpos(s, sub)` | `strpos(s, sub)` |
+| `NORM.PG_SQL.left(s, n)` / `NORM.PG_SQL.right(s, n)` | `left(s, n)` / `right(s, n)` |
+| `NORM.PG_SQL.lpad(s, n, fill)` / `NORM.PG_SQL.rpad(s, n, fill)` | `lpad(s, n, fill)` / `rpad(s, n, fill)` |
+| `NORM.PG_SQL.repeat(s, n)` | `repeat(s, n)` |
+| `NORM.PG_SQL.reverse(s)` | `reverse(s)` |
+| `NORM.PG_SQL.initcap(s)` | `initcap(s)` |
+| `NORM.PG_SQL.translate(s, from, to)` | `translate(s, from, to)` |
+| `NORM.PG_SQL.overlay(s, placing, from, count)` | `overlay(s, placing, from, count)` |
+| `NORM.PG_SQL.concat_ws(sep, ...)` | `concat_ws(sep, ...)` |
+| `NORM.PG_SQL.format(fmt, ...)` | `format(fmt, ...)` |
+| `NORM.PG_SQL.md5(s)` | `md5(s)` |
+| `NORM.PG_SQL.regexp_replace(s, pattern, replacement[, flags])` | `regexp_replace(...)` |
+| `NORM.PG_SQL.regexp_like(s, pattern[, flags])` | `regexp_like(...)` |
+| `NORM.PG_SQL.regexp_split_to_array(s, pattern)` | `regexp_split_to_array(s, pattern)` |
+| `NORM.PG_SQL.regexp_count(s, pattern)` | `regexp_count(s, pattern)` |
+| `NORM.PG_SQL.regexp_instr(s, pattern)` | `regexp_instr(s, pattern)` |
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
     .Select(e => new
     {
-        Part = NORM.SQL.split_part(e.String, ",", 1),
-        LooksLikeA = NORM.SQL.regexp_like(e.String, "^a")
+        Part = NORM.PG_SQL.split_part(e.String, ",", 1),
+        LooksLikeA = NORM.PG_SQL.regexp_like(e.String, "^a")
     })
     .ToList();
 ```
@@ -153,17 +175,17 @@ The remaining math functions are part of the extended scalar library
 
 | C# | SQL |
 |---|---|
-| `NORM.SQL.asin(x)` / `acos(x)` / `atan(x)` | `asin(x)` / `acos(x)` / `atan(x)` |
-| `NORM.SQL.atan2(y, x)` | `atan2(y, x)` |
-| `NORM.SQL.cbrt(x)` | `cbrt(x)` |
-| `NORM.SQL.sinh(x)` / `cosh(x)` / `tanh(x)` | `sinh(x)` / `cosh(x)` / `tanh(x)` |
-| `NORM.SQL.asinh(x)` / `acosh(x)` / `atanh(x)` | `asinh(x)` / `acosh(x)` / `atanh(x)` |
-| `NORM.SQL.degrees(x)` / `NORM.SQL.radians(x)` | `degrees(x)` / `radians(x)` |
-| `NORM.SQL.pi()` / `NORM.SQL.random()` | `pi()` / `random()` |
-| `NORM.SQL.log(base, x)` | `log(base, x)` |
-| `NORM.SQL.mod(a, b)` / `gcd(a, b)` / `lcm(a, b)` | `mod(a, b)` / `gcd(a, b)` / `lcm(a, b)` |
-| `NORM.SQL.factorial(n)` | `factorial(n)` |
-| `NORM.SQL.width_bucket(x, low, high, count)` | `width_bucket(x, low, high, count)` |
+| `NORM.PG_SQL.asin(x)` / `acos(x)` / `atan(x)` | `asin(x)` / `acos(x)` / `atan(x)` |
+| `NORM.PG_SQL.atan2(y, x)` | `atan2(y, x)` |
+| `NORM.PG_SQL.cbrt(x)` | `cbrt(x)` |
+| `NORM.PG_SQL.sinh(x)` / `cosh(x)` / `tanh(x)` | `sinh(x)` / `cosh(x)` / `tanh(x)` |
+| `NORM.PG_SQL.asinh(x)` / `acosh(x)` / `atanh(x)` | `asinh(x)` / `acosh(x)` / `atanh(x)` |
+| `NORM.PG_SQL.degrees(x)` / `NORM.PG_SQL.radians(x)` | `degrees(x)` / `radians(x)` |
+| `NORM.PG_SQL.pi()` / `NORM.PG_SQL.random()` | `pi()` / `random()` |
+| `NORM.PG_SQL.log(base, x)` | `log(base, x)` |
+| `NORM.PG_SQL.mod(a, b)` / `gcd(a, b)` / `lcm(a, b)` | `mod(a, b)` / `gcd(a, b)` / `lcm(a, b)` |
+| `NORM.PG_SQL.factorial(n)` | `factorial(n)` |
+| `NORM.PG_SQL.width_bucket(x, low, high, count)` | `width_bucket(x, low, high, count)` |
 
 ## Date and time
 
@@ -201,22 +223,18 @@ PostgreSQL only):
 
 | C# | SQL |
 |---|---|
-| `NORM.SQL.age(a, b)` | `age(a, b)` |
-| `NORM.SQL.date_bin(stride, source, origin)` | `date_bin(stride, source, origin)` |
-| `NORM.SQL.make_date(year, month, day)` | `make_date(year, month, day)` |
-| `NORM.SQL.make_interval(y, mo, d, h, mi, s)` | `make_interval(y, mo, d, h, mi, s)` |
-| `NORM.SQL.justify_days(interval)` / `justify_hours(interval)` | `justify_days(interval)` / `justify_hours(interval)` |
-| `NORM.SQL.to_char(value, format)` | `to_char(value, format)` |
-| `NORM.SQL.to_date(text, format)` | `to_date(text, format)` |
-| `NORM.SQL.to_number(text, format)` | `to_number(text, format)` |
-| `NORM.SQL.to_timestamp(epoch)` / `to_timestamp(text, format)` | `to_timestamp(...)` |
-| `NORM.SQL.timezone(zone, value)` | `timezone(zone, value)` |
-| `NORM.SQL.extract(field, value)` | `extract(field from value)` |
-| `NORM.SQL.current_date()` / `current_time()` / `localtime()` / `localtimestamp()` | the same key words |
+| `NORM.PG_SQL.make_interval(y, mo, d, h, mi, s)` | `make_interval(y, mo, d, h, mi, s)` |
+| `NORM.PG_SQL.justify_days(interval)` / `justify_hours(interval)` | `justify_days(interval)` / `justify_hours(interval)` |
+| `NORM.PG_SQL.to_char(value, format)` | `to_char(value, format)` |
+| `NORM.PG_SQL.to_date(text, format)` | `to_date(text, format)` |
+| `NORM.PG_SQL.to_number(text, format)` | `to_number(text, format)` |
+| `NORM.PG_SQL.to_timestamp(epoch)` / `to_timestamp(text, format)` | `to_timestamp(...)` |
+| `NORM.PG_SQL.timezone(zone, value)` | `timezone(zone, value)` |
+| `NORM.PG_SQL.current_date()` / `current_time()` / `localtime()` / `localtimestamp()` | the same key words |
 
-`NORM.SQL.extract` validates the field name and accepts the PostgreSQL-specific parts in addition to
-the standard ones: `quarter`, `week`, `epoch`, `dow`, `isodow`, `doy`, `isoyear`, `timezone`,
-`timezone_hour`, `timezone_minute`.
+Date construction and arithmetic use the portable surface instead: `date_from_parts`, `date_add`,
+`date_diff`, `date_trunc` and the `DateTime` members (see [Date arithmetic](#date-arithmetic) below).
+`make_date`, `age`, `date_bin` and `extract` are no longer exposed separately.
 
 ## COALESCE (`??`) and CAST
 
@@ -267,19 +285,19 @@ elements and the plan stays cacheable. An array can be a runtime parameter (`NOR
 captured local/field or an inline `new[]`. Only a dialect that opts in with `ISqlDialect.SupportsArrays`
 (PostgreSQL) can render the array surface; every other provider throws `NotSupportedException`.
 
-`NORM.SQL.any` / `NORM.SQL.all` accept an array, either as a complete predicate (`column = any(@array)`)
+`NORM.PG_SQL.any` / `NORM.PG_SQL.all` accept an array, either as a complete predicate (`column = any(@array)`)
 or as the right-hand side of a comparison:
 
 ```csharp
 var ids = new long[] { 1, 2, 3 };
 
 var rows = dataContext.From<IComplexEntity>()
-    .Where(e => NORM.SQL.any(e.Id, ids))     // (id = any(@p0))
+    .Where(e => NORM.PG_SQL.any(e.Id, ids))     // (id = any(@p0))
     .Select(e => new { e.Id })
     .ToList();
 
 var same = dataContext.From<IComplexEntity>()
-    .Where(e => e.Id == NORM.SQL.any(ids))   // id = any(@p0)
+    .Where(e => e.Id == NORM.PG_SQL.any(ids))   // id = any(@p0)
     .Select(e => new { e.Id })
     .ToList();
 ```
@@ -293,7 +311,7 @@ the query is prepared:
 
 ```csharp
 var prepared = dataContext.From<IComplexEntity>()
-    .Where(e => e.Id == NORM.SQL.any(NORM.Param<long[]>(0)))
+    .Where(e => e.Id == NORM.PG_SQL.any(NORM.Param<long[]>(0)))
     .Select(e => new { e.Id })
     .Prepare();
 
@@ -308,28 +326,28 @@ The array functions and operators map to their PostgreSQL names:
 
 | C# | SQL |
 |---|---|
-| `NORM.SQL.cardinality(a)` | `cardinality(a)` |
-| `NORM.SQL.array_length(a, dim)` | `array_length(a, dim)` |
-| `NORM.SQL.array_ndims(a)` | `array_ndims(a)` |
-| `NORM.SQL.array_lower(a, dim)` | `array_lower(a, dim)` |
-| `NORM.SQL.array_upper(a, dim)` | `array_upper(a, dim)` |
-| `NORM.SQL.array_position(a, element)` | `array_position(a, element)` |
-| `NORM.SQL.array_contains(a, b)` | `a @> b` |
-| `NORM.SQL.array_contained_by(a, b)` | `a <@ b` |
-| `NORM.SQL.array_overlaps(a, b)` | `a && b` |
-| `NORM.SQL.array_concat(a, b)` | `a \|\| b` |
-| `NORM.SQL.array_cat(a, b)` | `array_cat(a, b)` |
-| `NORM.SQL.array_append(a, element)` | `array_append(a, element)` |
-| `NORM.SQL.array_prepend(element, a)` | `array_prepend(element, a)` |
-| `NORM.SQL.array_remove(a, element)` | `array_remove(a, element)` |
-| `NORM.SQL.array_replace(a, from, to)` | `array_replace(a, from, to)` |
-| `NORM.SQL.array_fill(value, dims)` | `array_fill(value, dims)` |
-| `NORM.SQL.array_dims(a)` | `array_dims(a)` |
-| `NORM.SQL.array_positions(a, element)` | `array_positions(a, element)` |
-| `NORM.SQL.array_reverse(a)` | `array_reverse(a)` |
-| `NORM.SQL.array_sort(a)` | `array_sort(a)` |
-| `NORM.SQL.array_to_string(a, delimiter)` | `array_to_string(a, delimiter)` |
-| `NORM.SQL.string_to_array(s, delimiter)` | `string_to_array(s, delimiter)` |
+| `NORM.PG_SQL.cardinality(a)` | `cardinality(a)` |
+| `NORM.PG_SQL.array_length(a, dim)` | `array_length(a, dim)` |
+| `NORM.PG_SQL.array_ndims(a)` | `array_ndims(a)` |
+| `NORM.PG_SQL.array_lower(a, dim)` | `array_lower(a, dim)` |
+| `NORM.PG_SQL.array_upper(a, dim)` | `array_upper(a, dim)` |
+| `NORM.PG_SQL.array_position(a, element)` | `array_position(a, element)` |
+| `NORM.PG_SQL.array_contains(a, b)` | `a @> b` |
+| `NORM.PG_SQL.array_contained_by(a, b)` | `a <@ b` |
+| `NORM.PG_SQL.array_overlaps(a, b)` | `a && b` |
+| `NORM.PG_SQL.array_concat(a, b)` | `a \|\| b` |
+| `NORM.PG_SQL.array_cat(a, b)` | `array_cat(a, b)` |
+| `NORM.PG_SQL.array_append(a, element)` | `array_append(a, element)` |
+| `NORM.PG_SQL.array_prepend(element, a)` | `array_prepend(element, a)` |
+| `NORM.PG_SQL.array_remove(a, element)` | `array_remove(a, element)` |
+| `NORM.PG_SQL.array_replace(a, from, to)` | `array_replace(a, from, to)` |
+| `NORM.PG_SQL.array_fill(value, dims)` | `array_fill(value, dims)` |
+| `NORM.PG_SQL.array_dims(a)` | `array_dims(a)` |
+| `NORM.PG_SQL.array_positions(a, element)` | `array_positions(a, element)` |
+| `NORM.PG_SQL.array_reverse(a)` | `array_reverse(a)` |
+| `NORM.PG_SQL.array_sort(a)` | `array_sort(a)` |
+| `NORM.PG_SQL.array_to_string(a, delimiter)` | `array_to_string(a, delimiter)` |
+| `NORM.PG_SQL.string_to_array(s, delimiter)` | `string_to_array(s, delimiter)` |
 
 > The functions that return an array (`array_append`, `array_cat`, `array_reverse`, `string_to_array`,
 > ...) are meant to be used inside a query (a predicate, `having` or a nested expression); the row reader
@@ -337,8 +355,8 @@ The array functions and operators map to their PostgreSQL names:
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
-    .Where(e => NORM.SQL.array_length(NORM.Param<long[]>(0), 1) == 3)
-    .Select(e => new { N = NORM.SQL.cardinality(NORM.Param<long[]>(1)) })
+    .Where(e => NORM.PG_SQL.array_length(NORM.Param<long[]>(0), 1) == 3)
+    .Select(e => new { N = NORM.PG_SQL.cardinality(NORM.Param<long[]>(1)) })
     .ToList();
 ```
 
@@ -351,7 +369,7 @@ select cardinality(@norm_p1) as "N" from complex_entity where array_length(@norm
 PostgreSQL is the only supported provider with `json`/`jsonb` types. A JSON operand is expected to be a
 `json`/`jsonb` expression: a mapped column, another JSON function, or a parameter whose runtime value is
 a `JsonDocument`, `JsonElement` or `JsonNode` (Npgsql binds those as `jsonb`). A plain JSON string is
-bound as `text` and can be parsed explicitly with `NORM.SQL.json_cast(value)` (`cast(value as jsonb)`).
+bound as `text` and can be parsed explicitly with `NORM.PG_SQL.json_cast(value)` (`cast(value as jsonb)`).
 
 ```csharp
 using System.Text.Json;
@@ -359,7 +377,7 @@ using System.Text.Json;
 var document = JsonDocument.Parse("""{"name":"Alice","tags":["a","b"]}""");
 
 var rows = dataContext.From<IComplexEntity>()
-    .Where(e => NORM.SQL.json_get_text(NORM.Param<JsonDocument>(0), "name") == "Alice")
+    .Where(e => NORM.PG_SQL.json_get_text(NORM.Param<JsonDocument>(0), "name") == "Alice")
     .Select(e => new { e.Id })
     .ToList(document);
 ```
@@ -372,11 +390,11 @@ The aggregates collapse a result set into a single JSON document:
 
 ```csharp
 var json = dataContext.From<IComplexEntity>()
-    .Select(e => NORM.SQL.jsonb_agg(e.String))
+    .Select(e => NORM.PG_SQL.jsonb_agg(e.String))
     .First();
 
 var person = dataContext.From<IComplexEntity>()
-    .Select(e => NORM.SQL.jsonb_build_object("id", e.Id, "name", e.String))
+    .Select(e => NORM.PG_SQL.jsonb_build_object("id", e.Id, "name", e.String))
     .First();
 ```
 
@@ -387,36 +405,36 @@ select jsonb_build_object('id', id, 'name', somestring) from complex_entity
 
 | C# | SQL |
 |---|---|
-| `NORM.SQL.json_agg(x)` / `jsonb_agg(x)` | `json_agg(x)` / `jsonb_agg(x)` |
-| `NORM.SQL.json_object_agg(k, v)` / `jsonb_object_agg(k, v)` | `json_object_agg(k, v)` / `jsonb_object_agg(k, v)` |
-| `NORM.SQL.json_build_object("a", x, ...)` | `json_build_object('a', x, ...)` |
-| `NORM.SQL.jsonb_build_object("a", x, ...)` | `jsonb_build_object('a', x, ...)` |
-| `NORM.SQL.json_build_array(x, y)` / `jsonb_build_array(x, y)` | `json_build_array(x, y)` / `jsonb_build_array(x, y)` |
-| `NORM.SQL.to_json(x)` / `to_jsonb(x)` | `to_json(x)` / `to_jsonb(x)` |
-| `NORM.SQL.json_cast(x)` | `cast(x as jsonb)` |
-| `NORM.SQL.json_get(json, "key")` / `json_get(json, 0)` | `json -> key` / `json -> 0` |
-| `NORM.SQL.json_get_text(json, "key")` / `json_get_text(json, 0)` | `json ->> key` / `json ->> 0` |
-| `NORM.SQL.json_get_path(json, path)` / `json_get_path_text(json, path)` | `json #> path` / `json #>> path` |
-| `NORM.SQL.json_contains(a, b)` | `a @> b` |
-| `NORM.SQL.json_exists(json, "key")` | `json ? 'key'` |
-| `NORM.SQL.json_exists_any(json, keys)` / `json_exists_all(json, keys)` | `json ?\| keys` / `json ?& keys` |
-| `NORM.SQL.json_array_length(json)` / `jsonb_array_length(json)` | `json_array_length(json)` / `jsonb_array_length(json)` |
-| `NORM.SQL.json_typeof(json)` / `jsonb_typeof(json)` | `json_typeof(json)` / `jsonb_typeof(json)` |
-| `NORM.SQL.jsonb_set(json, path, value[, create])` | `jsonb_set(...)` |
-| `NORM.SQL.jsonb_insert(json, path, value[, after])` | `jsonb_insert(...)` |
-| `NORM.SQL.jsonb_strip_nulls(json)` | `jsonb_strip_nulls(json)` |
-| `NORM.SQL.jsonb_pretty(json)` | `jsonb_pretty(json)` |
-| `NORM.SQL.jsonb_delete(json, "key")` / `jsonb_delete(json, 0)` | `json - 'key'` / `json - 0` |
-| `NORM.SQL.json_concat(a, b)` | `a \|\| b` |
-| `NORM.SQL.row_to_json(row)` | `row_to_json(row)` |
-| `NORM.SQL.array_to_json(array)` | `array_to_json(array)` |
-| `NORM.SQL.jsonb_path_exists(json, path)` | `jsonb_path_exists(json, cast(path as jsonpath))` |
-| `NORM.SQL.jsonb_path_match(json, path)` | `jsonb_path_match(json, cast(path as jsonpath))` |
-| `NORM.SQL.jsonb_path_query_first(json, path)` | `jsonb_path_query_first(json, cast(path as jsonpath))` |
-| `NORM.SQL.jsonb_path_query_array(json, path)` | `jsonb_path_query_array(json, cast(path as jsonpath))` |
+| `NORM.PG_SQL.json_agg(x)` / `jsonb_agg(x)` | `json_agg(x)` / `jsonb_agg(x)` |
+| `NORM.PG_SQL.json_object_agg(k, v)` / `jsonb_object_agg(k, v)` | `json_object_agg(k, v)` / `jsonb_object_agg(k, v)` |
+| `NORM.PG_SQL.json_build_object("a", x, ...)` | `json_build_object('a', x, ...)` |
+| `NORM.PG_SQL.jsonb_build_object("a", x, ...)` | `jsonb_build_object('a', x, ...)` |
+| `NORM.PG_SQL.json_build_array(x, y)` / `jsonb_build_array(x, y)` | `json_build_array(x, y)` / `jsonb_build_array(x, y)` |
+| `NORM.PG_SQL.to_json(x)` / `to_jsonb(x)` | `to_json(x)` / `to_jsonb(x)` |
+| `NORM.PG_SQL.json_cast(x)` | `cast(x as jsonb)` |
+| `NORM.PG_SQL.json_get(json, "key")` / `json_get(json, 0)` | `json -> key` / `json -> 0` |
+| `NORM.PG_SQL.json_get_text(json, "key")` / `json_get_text(json, 0)` | `json ->> key` / `json ->> 0` |
+| `NORM.PG_SQL.json_get_path(json, path)` / `json_get_path_text(json, path)` | `json #> path` / `json #>> path` |
+| `NORM.PG_SQL.json_contains(a, b)` | `a @> b` |
+| `NORM.PG_SQL.json_exists(json, "key")` | `json ? 'key'` |
+| `NORM.PG_SQL.json_exists_any(json, keys)` / `json_exists_all(json, keys)` | `json ?\| keys` / `json ?& keys` |
+| `NORM.PG_SQL.json_array_length(json)` / `jsonb_array_length(json)` | `json_array_length(json)` / `jsonb_array_length(json)` |
+| `NORM.PG_SQL.json_typeof(json)` / `jsonb_typeof(json)` | `json_typeof(json)` / `jsonb_typeof(json)` |
+| `NORM.PG_SQL.jsonb_set(json, path, value[, create])` | `jsonb_set(...)` |
+| `NORM.PG_SQL.jsonb_insert(json, path, value[, after])` | `jsonb_insert(...)` |
+| `NORM.PG_SQL.jsonb_strip_nulls(json)` | `jsonb_strip_nulls(json)` |
+| `NORM.PG_SQL.jsonb_pretty(json)` | `jsonb_pretty(json)` |
+| `NORM.PG_SQL.jsonb_delete(json, "key")` / `jsonb_delete(json, 0)` | `json - 'key'` / `json - 0` |
+| `NORM.PG_SQL.json_concat(a, b)` | `a \|\| b` |
+| `NORM.PG_SQL.row_to_json(row)` | `row_to_json(row)` |
+| `NORM.PG_SQL.array_to_json(array)` | `array_to_json(array)` |
+| `NORM.PG_SQL.jsonb_path_exists(json, path)` | `jsonb_path_exists(json, cast(path as jsonpath))` |
+| `NORM.PG_SQL.jsonb_path_match(json, path)` | `jsonb_path_match(json, cast(path as jsonpath))` |
+| `NORM.PG_SQL.jsonb_path_query_first(json, path)` | `jsonb_path_query_first(json, cast(path as jsonpath))` |
+| `NORM.PG_SQL.jsonb_path_query_array(json, path)` | `jsonb_path_query_array(json, cast(path as jsonpath))` |
 
 A `path`/`keys` operand is a `string[]` and is bound as a **single array parameter** (see
-[Arrays](#arrays-postgresql)), so `NORM.SQL.json_get_path(json, new[] { "a", "b" })` renders
+[Arrays](#arrays-postgresql)), so `NORM.PG_SQL.json_get_path(json, new[] { "a", "b" })` renders
 `json #> @p0`. The JSONPath functions take the path as a plain string and render it as
 `cast(<path> as jsonpath)`.
 
@@ -430,9 +448,9 @@ a scalar while `json_query` returns an object/array fragment:
 var rows = dataContext.From<IComplexEntity>()
     .Select(e => new
     {
-        Id = NORM.SQL.json_value(e.String, "$.id"),
-        Name = NORM.SQL.json_query(e.String, "$.name"),
-        Updated = NORM.SQL.json_modify(e.String, "$.id", "1")
+        Id = NORM.MS_SQL.json_value(e.String, "$.id"),
+        Name = NORM.MS_SQL.json_query(e.String, "$.name"),
+        Updated = NORM.MS_SQL.json_modify(e.String, "$.id", "1")
     })
     .ToList();
 ```
@@ -443,9 +461,14 @@ select json_value(somestring, '$.id') as [Id], json_query(somestring, '$.name') 
 
 | C# | SQL |
 |---|---|
-| `NORM.SQL.json_value(json, path)` | `json_value(json, path)` |
-| `NORM.SQL.json_query(json, path)` | `json_query(json, path)` |
-| `NORM.SQL.json_modify(json, path, value)` | `json_modify(json, path, value)` |
+| `NORM.MS_SQL.json_value(json, path)` | `json_value(json, path)` |
+| `NORM.MS_SQL.json_query(json, path)` | `json_query(json, path)` |
+| `NORM.MS_SQL.json_modify(json, path, value)` | `json_modify(json, path, value)` |
+| `NORM.MS_SQL.isjson(value)` | `isjson(value)` |
+
+`NORM.MS_SQL.isjson` returns a boolean: in a predicate it renders `(isjson(x)) = 1` (T-SQL `ISJSON`
+returns an `int`) and as a projected value it is cast to `bit`. `isjson` is also used directly in a
+`WHERE` (`Where(e => NORM.MS_SQL.isjson(e.String))`).
 
 ## Conditional helpers
 
@@ -472,8 +495,8 @@ select nullif(nullableint, 0) as "NoZero", greatest(id, 10) as "Hi", least(id, 1
 | `NORM.SQL.nullif(a, b)` | `nullif(a, b)` |
 | `NORM.SQL.greatest(a, b, ...)` | `greatest(a, b, ...)` |
 | `NORM.SQL.least(a, b, ...)` | `least(a, b, ...)` |
-| `NORM.SQL.num_nulls(a, b, ...)` | `num_nulls(a, b, ...)` |
-| `NORM.SQL.num_nonnulls(a, b, ...)` | `num_nonnulls(a, b, ...)` |
+| `NORM.PG_SQL.num_nulls(a, b, ...)` | `num_nulls(a, b, ...)` |
+| `NORM.PG_SQL.num_nonnulls(a, b, ...)` | `num_nonnulls(a, b, ...)` |
 
 `num_nulls`/`num_nonnulls` are part of the extended scalar library
 (`ISqlDialect.SupportsExtendedScalarFunctions`).
@@ -500,16 +523,22 @@ select date_trunc('month', dt) as "Month" from complex_entity
 select dateTrunc('month', dt) as `Month` from complex_entity
 ```
 
-## Date arithmetic (PostgreSQL, SQL Server, ClickHouse)
+## Date arithmetic
 
 `NORM.SQL.date_add(field, amount, value)` adds a number of units to a date/time and
 `NORM.SQL.end_of_month(value)` returns the last day of its month (`ISqlDialect.SupportsDateArithmetic`;
-PostgreSQL, SQL Server and ClickHouse opt in). The field must be a constant string from the same set as
-`date_trunc`. SQL Server renders `dateadd(field, amount, value)` and `eomonth(value)`, folding
+PostgreSQL, SQL Server, ClickHouse, MySQL/MariaDB and SQLite opt in). The field must be a constant
+string; the provider validates which parts it accepts (`ISqlDialect.SupportsDateAddField` and friends).
+SQL Server renders `dateadd(field, amount, value)` and `eomonth(value)`, folding
 `decade`/`century`/`millennium` onto a scaled `year` add; PostgreSQL renders interval arithmetic;
 ClickHouse renders the dedicated `addDays`/`addMonths`/…/`addSeconds` functions (folding the three
-large parts onto a scaled `addYears`) and `toLastDayOfMonth(value)`. `DateTime.AddDays`/`AddMonths`/…
-inside a projection or predicate go through the same hook:
+large parts onto a scaled `addYears`) and `toLastDayOfMonth(value)`; MySQL/MariaDB render
+`date_add(value, interval n unit)` and `last_day(value)`; SQLite adjusts through a `datetime`/`strftime`
+modifier string. `NORM.SQL.date_diff(field, start, end)` returns the number of `<field>` boundaries
+between two timestamps (SQL Server `datediff`, ClickHouse `dateDiff`, MySQL/MariaDB `timestampdiff`);
+the PostgreSQL and SQLite fallbacks count date parts as boundaries and time parts as whole units.
+`NORM.SQL.date_from_parts(year, month, day)` builds a date. `DateTime.AddDays`/`AddMonths`/… inside a
+projection or predicate go through the same hook:
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -528,21 +557,28 @@ select dateadd(day, 1, dt) as [NextDay], eomonth(dt) as [MonthEnd] from complex_
 select dt + (1 * interval '1 day') as "NextDay", (date_trunc('month', dt) + interval '1 month - 1 day') as "MonthEnd" from complex_entity
 -- ClickHouse
 select addDays(dt, 1) as `NextDay`, toLastDayOfMonth(dt) as `MonthEnd` from complex_entity
+-- MySQL/MariaDB
+select date_add(dt, interval 1 day) as `NextDay`, last_day(dt) as `MonthEnd` from complex_entity
+-- SQLite
+select datetime(dt, (1) || ' days') as 'NextDay', date(dt, 'start of month', '+1 month', '-1 day') as 'MonthEnd' from complex_entity
 ```
 
-| C# | SQL Server | PostgreSQL | ClickHouse |
-|---|---|---|---|
-| `NORM.SQL.date_add("day", n, x)` | `dateadd(day, n, x)` | `x + (n * interval '1 day')` | `addDays(x, n)` |
-| `NORM.SQL.date_add("decade", n, x)` | `dateadd(year, (n) * 10, x)` | `x + (n * interval '10 years')` | `addYears(x, (n) * 10)` |
-| `NORM.SQL.end_of_month(x)` | `eomonth(x)` | `date_trunc('month', x) + interval '1 month - 1 day'` | `toLastDayOfMonth(x)` |
-| `x.AddDays(7)` | `dateadd(day, 7, x)` | `x + (7 * interval '1 day')` | `addDays(x, 7)` |
-| `x.AddMonths(2)` | `dateadd(month, 2, x)` | `x + (2 * interval '1 month')` | `addMonths(x, 2)` |
+| C# | SQL Server | PostgreSQL | ClickHouse | MySQL/MariaDB | SQLite |
+|---|---|---|---|---|---|
+| `NORM.SQL.date_add("day", n, x)` | `dateadd(day, n, x)` | `x + (n * interval '1 day')` | `addDays(x, n)` | `date_add(x, interval n day)` | `datetime(x, (n) \|\| ' days')` |
+| `NORM.SQL.date_add("decade", n, x)` | `dateadd(year, (n) * 10, x)` | `x + (n * interval '10 years')` | `addYears(x, (n) * 10)` | `date_add(x, interval (n) * 10 year)` | `datetime(x, ((n) * 10) \|\| ' years')` |
+| `NORM.SQL.end_of_month(x)` | `eomonth(x)` | `date_trunc('month', x) + interval '1 month - 1 day'` | `toLastDayOfMonth(x)` | `last_day(x)` | `date(x, 'start of month', '+1 month', '-1 day')` |
+| `NORM.SQL.date_diff("day", a, b)` | `datediff(day, a, b)` | `cast(b as date) - cast(a as date)` | `dateDiff('day', a, b)` | `timestampdiff(day, a, b)` | `(strftime('%s', b) - strftime('%s', a)) / 86400` |
+| `NORM.SQL.date_from_parts(y, m, d)` | `datefromparts(y, m, d)` | `make_date(y, m, d)` | `makeDate(y, m, d)` | `str_to_date(concat_ws('-', y, m, d), '%Y-%m-%d')` | `date(printf('%04d-%02d-%02d', y, m, d))` |
+| `x.AddDays(7)` | `dateadd(day, 7, x)` | `x + (7 * interval '1 day')` | `addDays(x, 7)` | `date_add(x, interval 7 day)` | `datetime(x, (7) \|\| ' days')` |
+| `x.AddMonths(2)` | `dateadd(month, 2, x)` | `x + (2 * interval '1 month')` | `addMonths(x, 2)` | `date_add(x, interval 2 month)` | `datetime(x, (2) \|\| ' months')` |
 
-## String and array aggregates (PostgreSQL, SQL Server, ClickHouse)
+## String and array aggregates
 
-`NORM.SQL.string_agg` is available on PostgreSQL, SQL Server 2017+ and ClickHouse
+`NORM.SQL.string_agg` is available on PostgreSQL, SQL Server 2017+, ClickHouse, MySQL/MariaDB and SQLite
 (`ISqlDialect.SupportsStringAgg`, which defaults to the umbrella `SupportsStringArrayAggregates`);
-ClickHouse renders it as `arrayStringConcat(groupArray(x), delimiter)`. `NORM.SQL.array_agg`
+ClickHouse renders it as `arrayStringConcat(groupArray(x), delimiter)`, MySQL/MariaDB as
+`group_concat(x separator delimiter)` and SQLite as `group_concat(x, delimiter)`. `NORM.PG_SQL.array_agg`
 (`ISqlDialect.SupportsArrayAgg`) requires an array type and is therefore PostgreSQL-only. An `array_agg`
 result is an array column:
 
@@ -557,12 +593,16 @@ var names = dataContext.From<IComplexEntity>()
 select string_agg(somestring, ',') from complex_entity
 -- ClickHouse
 select arrayStringConcat(groupArray(somestring), ',') from complex_entity
+-- MySQL/MariaDB
+select group_concat(somestring separator ',') from complex_entity
+-- SQLite
+select group_concat(somestring, ',') from complex_entity
 ```
 
 | C# | SQL | Providers |
 |---|---|---|
-| `NORM.SQL.string_agg(x, delimiter)` | `string_agg(x, delimiter)` / `arrayStringConcat(groupArray(x), delimiter)` | PostgreSQL, SQL Server, ClickHouse |
-| `NORM.SQL.array_agg(x)` | `array_agg(x)` | PostgreSQL |
+| `NORM.SQL.string_agg(x, delimiter)` | `string_agg(x, delimiter)` / `arrayStringConcat(groupArray(x), delimiter)` / `group_concat(x separator delimiter)` / `group_concat(x, delimiter)` | PostgreSQL, SQL Server, ClickHouse, MySQL/MariaDB, SQLite |
+| `NORM.PG_SQL.array_agg(x)` | `array_agg(x)` | PostgreSQL |
 
 ## Aggregate FILTER
 
@@ -590,17 +630,17 @@ from complex_entity group by nullableint
 
 ## Set-returning helpers (PostgreSQL)
 
-`NORM.SQL.generate_series` and `NORM.SQL.unnest` are pre-declared
+`NORM.PG_SQL.generate_series` and `NORM.PG_SQL.unnest` are pre-declared
 [`[SqlTableFunction]`](13-table-valued-functions.md) sources, so no user-defined wrapper is needed:
 
 ```csharp
 var numbers = dataContext
-    .FromTableFunction(() => NORM.SQL.generate_series(1L, 3L))
+    .FromTableFunction(() => NORM.PG_SQL.generate_series(1L, 3L))
     .Select(r => r.Value)
     .ToList();
 
 var elements = dataContext
-    .FromTableFunction(() => NORM.SQL.unnest(NORM.Param<long[]>(0)))
+    .FromTableFunction(() => NORM.PG_SQL.unnest(NORM.Param<long[]>(0)))
     .Select(r => r.Value)
     .ToList(new long[] { 1, 2, 3 });
 ```
@@ -630,18 +670,18 @@ var elements = dataContext
 | Boolean predicate as a value | unchanged | `cast(case when ... then 1 else 0 end as bit)` | unchanged |
 | Arrays (`any`/`all`, array functions) | `NotSupportedException` | `NotSupportedException` | `any(@array)`, `cardinality(...)`, ... |
 | JSON/JSONB (`json_agg`, `->`, ...) | `NotSupportedException` | `NotSupportedException` | supported |
-| Text JSON (`json_value`, `json_query`, `json_modify`) | `NotSupportedException` | `json_value(...)`, ... | `NotSupportedException` |
+| Text JSON (`json_value`, `json_query`, `json_modify`, `isjson`) | `NotSupportedException` | `json_value(...)`, ..., `isjson(...)` | `NotSupportedException` |
 | `nullif` | supported | supported | supported |
 | `greatest` / `least` | `NotSupportedException` | supported (2022+) | supported |
 | `date_trunc` | `NotSupportedException` | `datetrunc(...)` (2022+) | supported |
-| `date_add` / `end_of_month` | `NotSupportedException` | `dateadd(...)` / `eomonth(...)` | interval arithmetic / `date_trunc` |
-| `string_agg` / `array_agg` | `NotSupportedException` | `string_agg` (2017+); `array_agg` throws | supported |
+| `date_add` / `end_of_month` / `date_diff` / `date_from_parts` | `datetime(x, n \|\| ' days')` / `date(x, 'start of month', ...)` / `strftime` difference / `date(printf(...))` | `dateadd(...)` / `eomonth(...)` / `datediff(...)` / `datefromparts(...)` | interval arithmetic / `date_trunc` / date-part difference / `make_date` |
+| `string_agg` / `array_agg` | `group_concat(x, delimiter)` (no `array_agg`) | `string_agg` (2017+); `array_agg` throws | supported |
 | Aggregate `filter (where ...)` | `filter (where ...)` | `NotSupportedException` | `filter (where ...)` |
-| Extended scalar library (`asin`, `split_part`, `regexp_*`, `to_char`, `extract`, ...) | `NotSupportedException` | `NotSupportedException` | supported |
+| Extended scalar library (`asin`, `split_part`, `regexp_*`, `to_char`, ...) | `NotSupportedException` | `NotSupportedException` | supported |
 | Boolean/bitwise/statistical aggregates | `NotSupportedException` | `NotSupportedException` | supported |
 | Ordered-set aggregates (`percentile_cont`, ...) | `NotSupportedException` | `NotSupportedException` | `within group (order by ...)` |
 | JSONPath (`jsonb_path_*`) | `NotSupportedException` | `NotSupportedException` | `cast(path as jsonpath)` |
-| Table functions (`generate_series`, `unnest`) | — | — | `generate_series(...)`, `unnest(...)` |
+| Built-in table functions | `NotSupportedException` | `string_split(...)`, `openjson(...)` | `generate_series(...)`, `unnest(...)` |
 
 The in-memory provider does not render SQL: it compiles and evaluates the expression against in-memory
 rows, so the .NET method itself runs. The SQL matrix above applies to the SQLite, SQL Server and
@@ -664,7 +704,7 @@ These throw `NotSupportedException` rather than emitting SQL with different sema
 * `Math.Log(value, base)` - the two-argument form has a provider-specific argument order, so it is left
   unsupported (`SqlGenerationTests.MathLogWithBase_ShouldThrowClearException`,
   `test/nextorm.sqlite.tests/SqlGenerationTests.cs:985`). The PostgreSQL two-argument form is available
-  as `NORM.SQL.log(base, x)` in the extended scalar library instead.
+  as `NORM.PG_SQL.log(base, x)` in the extended scalar library instead.
 * `Math.Round` overloads that take a `MidpointRounding` (more than two arguments) - not portable.
 * `string.Substring(Range)` - no SQL equivalent.
 

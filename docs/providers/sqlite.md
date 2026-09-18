@@ -67,7 +67,7 @@ The four share one `VarianceAccumulator`; a flavour returns `null` when there ar
 already named `stdev`/`var`, SQLite performs no aggregate name remapping.
 
 ```csharp
-var stddev = ctx.Create<IComplexEntity>()
+var stddev = ctx.From<IComplexEntity>()
     .Select(x => NORM.SQL.stdev((double)x.Id))
     .First();
 ```
@@ -79,7 +79,7 @@ select stdev(cast(id as double precision)) from complex_entity
 ## Date parts, coalesce and `LIKE`
 
 ```csharp
-var query = ctx.Create<IComplexEntity>()
+var query = ctx.From<IComplexEntity>()
     .Select(x => new
     {
         Year = x.Datetime!.Value.Year,
@@ -99,8 +99,8 @@ appropriate wildcards.
 ## Paging
 
 ```csharp
-ctx.Create<IComplexEntity>().Page(5, 10).Select(x => x.Id);   // limit 5 offset 10
-ctx.Create<IComplexEntity>().Offset(10).Select(x => x.Id);    // limit -1 offset 10
+ctx.From<IComplexEntity>().Page(5, 10).Select(x => x.Id);   // limit 5 offset 10
+ctx.From<IComplexEntity>().Offset(10).Select(x => x.Id);    // limit -1 offset 10
 ```
 
 ```sql
@@ -118,8 +118,8 @@ during translation.
 
 ```csharp
 // Throws Microsoft.Data.Sqlite.SqliteException when executed.
-await ctx.Create<ISimpleEntity>()
-    .Where(it => it.Id == NORM.SQL.any(ctx.Create<IComplexEntity>().Select(c => c.Id)))
+await ctx.From<ISimpleEntity>()
+    .Where(it => it.Id == NORM.SQL.any(ctx.From<IComplexEntity>().Select(c => c.Id)))
     .Select(it => it.Id)
     .ToListAsync();
 ```

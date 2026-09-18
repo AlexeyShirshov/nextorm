@@ -83,9 +83,9 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
         var r = _sut.SimpleEntity
             .Select(x => new
             {
-                And = NORM.SQL.bit_and(x.Id),
-                Or = NORM.SQL.bit_or(x.Id),
-                Xor = NORM.SQL.bit_xor(x.Id)
+                And = NORM.PG_SQL.bit_and(x.Id),
+                Or = NORM.PG_SQL.bit_or(x.Id),
+                Xor = NORM.PG_SQL.bit_xor(x.Id)
             })
             .First();
 
@@ -129,8 +129,8 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
         var r = _sut.ComplexEntity
             .Select(x => new
             {
-                Min = NORM.SQL.arg_min(x.RequiredString, x.Id),
-                Max = NORM.SQL.arg_max(x.RequiredString, x.Id)
+                Min = NORM.CLK_SQL.arg_min(x.RequiredString, x.Id),
+                Max = NORM.CLK_SQL.arg_max(x.RequiredString, x.Id)
             })
             .First();
 
@@ -142,7 +142,7 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     public void CountIf_ShouldReturnCount()
     {
         _sut.SimpleEntity
-            .Select(x => NORM.SQL.count_if(() => x.Id <= 2))
+            .Select(x => NORM.CLK_SQL.count_if(() => x.Id <= 2))
             .First()
             .Should().Be(2);
     }
@@ -155,10 +155,10 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
         var r = _sut.SimpleEntity
             .Select(x => new
             {
-                Sum = NORM.SQL.sum_if((long)x.Id, () => x.Id <= 2),
-                Avg = NORM.SQL.avg_if((double)x.Id, () => x.Id <= 2),
-                Min = NORM.SQL.min_if((long)x.Id, () => x.Id <= 2),
-                Max = NORM.SQL.max_if((long)x.Id, () => x.Id <= 2)
+                Sum = NORM.CLK_SQL.sum_if((long)x.Id, () => x.Id <= 2),
+                Avg = NORM.CLK_SQL.avg_if((double)x.Id, () => x.Id <= 2),
+                Min = NORM.CLK_SQL.min_if((long)x.Id, () => x.Id <= 2),
+                Max = NORM.CLK_SQL.max_if((long)x.Id, () => x.Id <= 2)
             })
             .First();
 

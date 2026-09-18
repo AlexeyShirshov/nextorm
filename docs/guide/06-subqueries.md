@@ -6,7 +6,7 @@
 
 ## Overview
 
-Any `QueryCommand<T>` — the object you get back from `Entity<T>.Select(...)` — can be embedded in
+Any `QueryCommand<T>` — the object you get back from `EntityBuilder<T>.Select(...)` — can be embedded in
 another query in four ways:
 
 * as a **derived table** in `FROM`, through `DataContext.From(query)`;
@@ -25,11 +25,11 @@ fails with a `SqliteException` at execution time.
 
 ## Subquery as a FROM source
 
-`From` accepts a prepared `QueryCommand<T>` (or an `Entity<T>`) and produces a builder over its
+`From` accepts a prepared `QueryCommand<T>` (or an `EntityBuilder<T>`) and produces a builder over its
 columns:
 
 ```csharp
-var nested = dataContext.Create<IComplexEntity>().Select(x => new { x.Id });
+var nested = dataContext.From<IComplexEntity>().Select(x => new { x.Id });
 var rows = dataContext.From(nested).Select(t => new { t.Id }).ToList();
 ```
 
@@ -47,7 +47,7 @@ A derived table can itself be projected, filtered and joined like any source. A 
 renamed in the inner projection is referenced by its projected name from the outside:
 
 ```csharp
-var nested = dataContext.Create<IComplexEntity>().Select(x => new { x.Id, Calc = x.String + x.String });
+var nested = dataContext.From<IComplexEntity>().Select(x => new { x.Id, Calc = x.String + x.String });
 var rows = dataContext.From(nested).Select(t => new { t.Id, t.Calc }).ToList();
 ```
 
@@ -58,8 +58,8 @@ projection embeds the inner query as a scalar column. The scalar projection is a
 outer property name:
 
 ```csharp
-var rows = await dataContext.Create<IComplexEntity>()
-    .Select(it => new { it.Id, sid = dataContext.Create<ISimpleEntity>().Where(it => it.Id == 1).Select(it => it.Id).First() })
+var rows = await dataContext.From<IComplexEntity>()
+    .Select(it => new { it.Id, sid = dataContext.From<ISimpleEntity>().Where(it => it.Id == 1).Select(it => it.Id).First() })
     .ToListAsync();
 ```
 
@@ -70,8 +70,8 @@ select id, (select id from simple_entity where (id = 1) limit 1) as 'sid' from c
 The inner query can also be sorted:
 
 ```csharp
-var rows = await dataContext.Create<IComplexEntity>()
-    .Select(it => new { it.Id, sid = dataContext.Create<ISimpleEntity>().OrderByDescending(it => it.Id).Select(it => it.Id).First() })
+var rows = await dataContext.From<IComplexEntity>()
+    .Select(it => new { it.Id, sid = dataContext.From<ISimpleEntity>().OrderByDescending(it => it.Id).Select(it => it.Id).First() })
     .ToListAsync();
 ```
 
@@ -80,8 +80,8 @@ var rows = await dataContext.Create<IComplexEntity>()
 The same single-row terminal used in a predicate becomes a scalar subquery on the right-hand side:
 
 ```csharp
-var row = await dataContext.Create<IComplexEntity>()
-    .Where(it => it.Id == dataContext.Create<ISimpleEntity>().OrderBy(it => it.Id).Select(it => it.Id).First())
+var row = await dataContext.From<IComplexEntity>()
+    .Where(it => it.Id == dataContext.From<ISimpleEntity>().OrderBy(it => it.Id).Select(it => it.Id).First())
     .Select(it => new { it.Id })
     .FirstOrDefaultAsync();
 ```
@@ -92,8 +92,8 @@ An `ORDER BY` key may be an expression containing a scalar subquery. The first `
 subquery, the second breaks ties:
 
 ```csharp
-var rows = dataContext.Create<IComplexEntity>()
-    .OrderBy(_ => dataContext.Create<ISimpleEntity>().Where(it => it.Id == 1).Select(it => it.Id).First())
+var rows = dataContext.From<IComplexEntity>()
+    .OrderBy(_ => dataContext.From<ISimpleEntity>().Where(it => it.Id == 1).Select(it => it.Id).First())
     .OrderBy(it => it.Id)
     .Select(it => new { it.Id })
     .ToList();
@@ -106,8 +106,8 @@ subquery that references the outer parameter is correlated; nextorm emits the ou
 inner predicate:
 
 ```csharp
-var rows = dataContext.Create<ISimpleEntity>()
-    .Where(s => NORM.SQL.exists(dataContext.Create<IComplexEntity>().Where(c => c.Id == s.Id)))
+var rows = dataContext.From<ISimpleEntity>()
+    .Where(s => NORM.SQL.exists(dataContext.From<IComplexEntity>().Where(c => c.Id == s.Id)))
     .Select(it => it.Id)
     .ToList();
 ```
@@ -116,11 +116,11 @@ var rows = dataContext.Create<ISimpleEntity>()
 select t1.id from simple_entity as 't1' where exists(select * from complex_entity where (id = cast(t1.id as bigint)))
 ```
 
-An `Entity<T>` can also be passed directly to `exists` when only its existence matters:
+An `EntityBuilder<T>` can also be passed directly to `exists` when only its existence matters:
 
 ```csharp
-var all = await dataContext.Create<IComplexEntity>().Select(it => new { it.Id, exists = NORM.SQL.exists(dataContext.Create<ISimpleEntity>()) }).ToListAsync();
-var none = await dataContext.Create<IComplexEntity>().Select(it => new { it.Id, exists = NORM.SQL.exists(dataContext.Create<ISimpleEntity>().Where(it => it.Id == 100)) }).ToListAsync();
+var all = await dataContext.From<IComplexEntity>().Select(it => new { it.Id, exists = NORM.SQL.exists(dataContext.From<ISimpleEntity>()) }).ToListAsync();
+var none = await dataContext.From<IComplexEntity>().Select(it => new { it.Id, exists = NORM.SQL.exists(dataContext.From<ISimpleEntity>().Where(it => it.Id == 100)) }).ToListAsync();
 ```
 
 ## IN with a subquery
@@ -128,8 +128,8 @@ var none = await dataContext.Create<IComplexEntity>().Select(it => new { it.Id, 
 `NORM.SQL.@in(column, query)` emits `IN (SELECT ...)`:
 
 ```csharp
-var row = await dataContext.Create<IComplexEntity>()
-    .Where(it => NORM.SQL.@in((int)it.Id, dataContext.Create<ISimpleEntity>().Where(it => it.Id == 2).Select(it => it.Id)))
+var row = await dataContext.From<IComplexEntity>()
+    .Where(it => NORM.SQL.@in((int)it.Id, dataContext.From<ISimpleEntity>().Where(it => it.Id == 2).Select(it => it.Id)))
     .Select(it => it.Id)
     .FirstOrDefaultAsync();
 ```
@@ -147,8 +147,8 @@ The same method also accepts an `IEnumerable<T>` or a `params T[]` of literal va
 column:
 
 ```csharp
-var rows = await dataContext.Create<ISimpleEntity>()
-    .Where(it => it.Id == NORM.SQL.any(dataContext.Create<IComplexEntity>().Select(it => it.Id)))
+var rows = await dataContext.From<ISimpleEntity>()
+    .Where(it => it.Id == NORM.SQL.any(dataContext.From<IComplexEntity>().Select(it => it.Id)))
     .Select(it => it.Id)
     .ToListAsync();
 ```

@@ -19,7 +19,7 @@ public class Startup
             builder.AddConsole();
         });
 
-        services.AddScoped<Entity<ISimpleEntity>>();
+        services.AddScoped<EntityBuilder<ISimpleEntity>>();
 
         services.AddNextOrmContext<InMemoryContext>();
 

@@ -28,6 +28,96 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <summary>A SQL Server derived table (subquery in FROM) must have an alias.</summary>
     public override bool RequireSubqueryAlias => true;
 
+    /// <summary>SQL Server spells a lateral source as <c>CROSS APPLY</c>/<c>OUTER APPLY</c>.</summary>
+    public override bool SupportsApply => true;
+
+    /// <summary>SQL Server supports <c>GROUP BY ROLLUP (...)</c> and <c>GROUP BY CUBE (...)</c>.</summary>
+    public override bool SupportsRollup => true;
+
+    public override bool SupportsCube => true;
+    public override bool SupportsGroupingSets => true;
+
+    /// <summary>SQL Server 2016+ renders the JSON-as-text functions (<c>json_value</c>, ...) over nvarchar.</summary>
+    public override bool SupportsTextJson => true;
+
+    /// <summary>T-SQL <c>isjson</c> returns an <c>int</c>: <c>1</c>/<c>0</c>, so a value context casts it to <c>bit</c>.</summary>
+    public override string MakeIsJson(string value, bool asPredicate) =>
+        asPredicate ? $"(isjson({value})) = 1" : $"cast(isjson({value}) as bit)";
+
+    /// <summary>SQL Server renders the full-text predicates <c>contains</c>/<c>freetext</c>.</summary>
+    public override bool SupportsFullText => true;
+
+    public override string MakeFullText(string functionName, string column, string search) =>
+        $"{functionName}({column}, {search})";
+
+    public override bool SupportsTableFunction(string name) =>
+        name is "string_split" or "openjson";
+
+    /// <summary>SQL Server renders table hints as <c>with (hint, ...)</c> after the table name.</summary>
+    public override bool SupportsTableHints => true;
+
+    public override string MakeTableHints(IReadOnlyList<string> hints) => $" with ({string.Join(", ", hints)})";
+
+    /// <summary>SQL Server renders the result set as JSON through a trailing <c>FOR JSON</c> clause.</summary>
+    public override bool SupportsForJson => true;
+
+    public override string MakeForJson(ForJsonClause clause)
+    {
+        var sqlBuilder = new StringBuilder("for json ");
+        sqlBuilder.Append(clause.Mode == ForJsonMode.Auto ? "auto" : "path");
+
+        if (!string.IsNullOrEmpty(clause.Root))
+            sqlBuilder.Append(", root('").Append(clause.Root.Replace("'", "''")).Append("')");
+
+        if (clause.IncludeNullValues)
+            sqlBuilder.Append(", include_null_values");
+
+        return sqlBuilder.ToString();
+    }
+
+    /// <summary>SQL Server renders the result set as XML through a trailing <c>FOR XML</c> clause.</summary>
+    public override bool SupportsForXml => true;
+
+    public override string MakeForXml(ForXmlClause clause)
+    {
+        var sqlBuilder = new StringBuilder("for xml ");
+        sqlBuilder.Append(clause.Mode switch
+        {
+            ForXmlMode.Raw => "raw",
+            ForXmlMode.Auto => "auto",
+            ForXmlMode.Explicit => "explicit",
+            _ => "path"
+        });
+
+        if (!string.IsNullOrEmpty(clause.ElementName))
+            sqlBuilder.Append("('").Append(clause.ElementName.Replace("'", "''")).Append("')");
+
+        if (!string.IsNullOrEmpty(clause.Root))
+            sqlBuilder.Append(", root('").Append(clause.Root.Replace("'", "''")).Append("')");
+
+        if (clause.Elements)
+            sqlBuilder.Append(", elements");
+
+        return sqlBuilder.ToString();
+    }
+
+    /// <summary>
+    /// SQL Server 2022 introduced <c>greatest()</c>/<c>least()</c> with the standard syntax, so the
+    /// base rendering applies. The functions are unavailable on older servers, but the dialect cannot
+    /// detect the server version at SQL-generation time.
+    /// </summary>
+    public override bool SupportsGreatestLeast => true;
+
+    /// <summary>SQL Server 2017 introduced <c>string_agg</c>; it has no array type, so <c>array_agg</c> stays unavailable.</summary>
+    public override bool SupportsStringAgg => true;
+
+    public override string MakeApply(JoinType applyType, string source) => applyType switch
+    {
+        JoinType.CrossApply => $" cross apply {source}",
+        JoinType.OuterApply => $" outer apply {source}",
+        _ => base.MakeApply(applyType, source)
+    };
+
     public override string MakeTypeName(Type type) => type switch
     {
         _ when type == typeof(byte) => "tinyint",
@@ -43,8 +133,90 @@ public sealed class SqlServerDialect : SqlDialectBase
     // SQL Server has no length(); its equivalent is len().
     public override string MakeStringLength(string value) => $"len({value})";
 
+    protected override string MakeStringPosition(string value, string substring) =>
+        $"charindex({substring}, {value})";
+
+    protected override string MakeStringPosition(string value, string substring, string start) =>
+        $"charindex({substring}, {value}, {start} + 1)";
+
+    public override string MakeRepeat(string value, string count) => $"replicate({value}, {count})";
+
+    protected override string MakeStringReverse(string value) => $"reverse({value})";
+
+    public override string MakeStuff(string value, string start, string? count, string newValue) =>
+        count is null
+            ? $"substring({value}, 1, {start})"
+            : $"stuff({value}, {start} + 1, {count}, {newValue})";
+
     // SQL Server extracts date parts through datepart(part, value).
     public override string MakeDatePart(string part, string value) => $"datepart({part}, {value})";
+
+    /// <summary>
+    /// SQL Server 2022 introduced <c>datetrunc(datepart, date)</c>. It takes an unquoted part name and
+    /// uses singular spellings (the ANSI/PostgreSQL <c>microseconds</c>/<c>milliseconds</c> are mapped);
+    /// <c>decade</c>/<c>century</c>/<c>millennium</c> have no T-SQL equivalent.
+    /// </summary>
+    public override bool SupportsDateTrunc => true;
+
+    public override bool SupportsDateTruncField(string field) =>
+        field is not ("decade" or "century" or "millennium") && base.SupportsDateTruncField(field);
+
+    public override string MakeDateTrunc(string field, string value)
+    {
+        var part = field switch
+        {
+            "microseconds" => "microsecond",
+            "milliseconds" => "millisecond",
+            "decade" or "century" or "millennium" =>
+                throw new NotSupportedException($"SQL Server datetrunc does not support the '{field}' field."),
+            _ => field
+        };
+
+        return $"datetrunc({part}, {value})";
+    }
+
+    /// <summary>
+    /// SQL Server has no interval arithmetic; addition is exposed through <c>dateadd</c> and the last
+    /// day of the month through <c>eomonth</c>.
+    /// </summary>
+    public override bool SupportsDateArithmetic => true;
+
+    public override string MakeDateAdd(string field, string amount, string value)
+    {
+        // T-SQL dateadd has no decade/century/millennium parts (datepart has them, dateadd does not),
+        // so they are folded into a scaled year add; plural ANSI parts map to the singular T-SQL names.
+        var (part, factor) = field switch
+        {
+            "microseconds" => ("microsecond", 1),
+            "milliseconds" => ("millisecond", 1),
+            "decade" => ("year", 10),
+            "century" => ("year", 100),
+            "millennium" => ("year", 1000),
+            _ => (field, 1)
+        };
+
+        var scaled = factor == 1 ? amount : $"({amount}) * {factor}";
+
+        return $"dateadd({part}, {scaled}, {value})";
+    }
+
+    public override string MakeDateDiff(string field, string start, string end)
+    {
+        // T-SQL datediff uses the singular part names; plural ANSI parts map onto them.
+        var part = field switch
+        {
+            "microseconds" => "microsecond",
+            "milliseconds" => "millisecond",
+            _ => field
+        };
+
+        return $"datediff({part}, {start}, {end})";
+    }
+
+    public override string MakeEndOfMonth(string value) => $"eomonth({value})";
+
+    public override string MakeDateFromParts(string year, string month, string day) =>
+        $"datefromparts({year}, {month}, {day})";
 
     public override string MakeNow(bool utc) => utc ? "getutcdate()" : "getdate()";
 
@@ -85,6 +257,9 @@ public sealed class SqlServerDialect : SqlDialectBase
 
         return base.MakeSubqueryPredicate(keyword, query, asPredicate);
     }
+
+    // T-SQL has both isnull and coalesce; isnull is kept as the historical rendering.
+    public override string MakeCoalesce(string v1, string v2) => $"isnull({v1},{v2})";
 
     public override string MakeBoolCoalesce(string v1, string v2)
     {
@@ -140,4 +315,23 @@ public sealed class SqlServerDialect : SqlDialectBase
     // MAXRECURSION overrides the 100-level default. The option is appended at the end of the
     // statement; the builder supplies the depth requested by the CTE declaration.
     public override string? MakeMaxRecursion(int maxRecursion) => $"option (maxrecursion {maxRecursion})";
+
+    /// <summary>SQL Server renders statement-level hints as a trailing <c>OPTION (...)</c> clause.</summary>
+    public override bool SupportsQueryHints => true;
+
+    public override string RenderQueryHints(string sql, IReadOnlyList<string> hints, string? maxRecursionOption)
+    {
+        // T-SQL allows only one OPTION clause per statement. When the query also declared a CTE
+        // maxrecursion option, fold it into the same clause instead of emitting a second one. The
+        // option text is produced by MakeMaxRecursion, so extracting its body stays local to this
+        // dialect and the caller does not append it separately.
+        if (maxRecursionOption is not null)
+        {
+            var open = maxRecursionOption.IndexOf('(');
+            var body = maxRecursionOption[(open + 1)..^1];
+            return $"{sql} option ({body}, {string.Join(", ", hints)})";
+        }
+
+        return $"{sql} option ({string.Join(", ", hints)})";
+    }
 }

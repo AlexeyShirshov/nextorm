@@ -8,7 +8,7 @@ public class CteQueryTests
     public void WithRecursive_ShouldAppendRecursiveDefinitionAndKeepDeclarations()
     {
         using var ctx = new InMemoryContext();
-        var e = ctx.Create<SimpleEntity>();
+        var e = ctx.From<SimpleEntity>();
         var query = e.Where(x => x.Id > 0).Select(x => new { x.Id });
 
         var cte = ctx.With("recent", query);

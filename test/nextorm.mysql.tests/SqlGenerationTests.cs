@@ -135,4 +135,85 @@ public class SqlGenerationTests
 
         act.Should().Throw<NotSupportedException>().WithMessage("*GROUPING SETS*");
     }
+
+    [Fact]
+    public void StringAgg_ShouldUseGroupConcat()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => NORM.SQL.string_agg(x.String, ",")))
+            .Should().Contain("group_concat(somestring separator ',')");
+    }
+
+    [Fact]
+    public void FullTextPredicates_ShouldUseMatchAgainst()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Where(x => NORM.SQL.contains(x.String, "foo")).Select(x => new { x.Id }))
+            .Should().Contain("where (match(somestring) against('foo' in boolean mode) > 0)");
+
+        SqlOf(ctx, e.Where(x => NORM.SQL.freetext(x.String, "foo")).Select(x => new { x.Id }))
+            .Should().Contain("where (match(somestring) against('foo') > 0)");
+    }
+
+    [Fact]
+    public void DateArithmetic_ShouldUseDateAddTimestampDiffAndLastDay()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = NORM.SQL.date_add("day", 1, x.Datetime) }))
+            .Should().Contain("date_add(dt, interval 1 day)");
+
+        SqlOf(ctx, e.Select(x => new { V = NORM.SQL.date_diff("day", x.Datetime, x.Datetime) }))
+            .Should().Contain("timestampdiff(day, dt, dt)");
+
+        SqlOf(ctx, e.Select(x => new { V = NORM.SQL.end_of_month(x.Datetime) }))
+            .Should().Contain("last_day(dt)");
+    }
+
+    [Fact]
+    public void IndexOfLastIndexOf_ShouldUseInstrAndLocate()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = x.String!.IndexOf("b") }))
+            .Should().Contain("case when (instr(somestring, 'b')) = 0 then -1 else (instr(somestring, 'b')) - 1 end");
+        SqlOf(ctx, e.Select(x => new { V = x.String!.IndexOf("b", 1) }))
+            .Should().Contain("case when (locate('b', somestring, 1 + 1)) = 0 then -1 else (locate('b', somestring, 1 + 1)) - 1 end");
+        SqlOf(ctx, e.Select(x => new { V = x.String!.LastIndexOf("b") }))
+            .Should().Contain("case when (instr(reverse(somestring), reverse('b'))) = 0 then -1 else char_length(somestring) - (instr(reverse(somestring), reverse('b'))) - char_length('b') + 1 end");
+    }
+
+    [Fact]
+    public void PadLeftRight_ShouldUseRepeat()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = x.String!.PadLeft(5, '0') }))
+            .Should().Contain("case when char_length(somestring) >= (5) then somestring else concat(repeat('0', (5) - char_length(somestring)), somestring) end");
+        SqlOf(ctx, e.Select(x => new { V = x.String!.PadRight(5) }))
+            .Should().Contain("case when char_length(somestring) >= (5) then somestring else concat(somestring, repeat(' ', (5) - char_length(somestring))) end");
+    }
+
+    [Fact]
+    public void RemoveInsertAndNewString_ShouldUseInsertAndRepeat()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = x.String!.Remove(2) }))
+            .Should().Contain("substring(somestring, 1, 2)");
+        SqlOf(ctx, e.Select(x => new { V = x.String!.Remove(2, 1) }))
+            .Should().Contain("insert(somestring, 2 + 1, 1, '')");
+        SqlOf(ctx, e.Select(x => new { V = x.String!.Insert(2, "x") }))
+            .Should().Contain("insert(somestring, 2 + 1, 0, 'x')");
+        SqlOf(ctx, e.Select(x => new { V = new string('*', 4) }))
+            .Should().Contain("repeat('*', 4)");
+    }
 }

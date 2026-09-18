@@ -43,8 +43,8 @@ collections-and-linq / io-and-serialization).
 
 | ID | Статус | Severity | Категория | Суть | Файлы |
 |---|---|---|---|---|---|
-| M1 | ♻️ переоткрыто → **M12** | 🟡 Moderate | allocations, GC | уточнено: SQL на cache-hit **не** пересобирается; стоимость builder-API до lookup. Вывод верен **механически**, но экономика кэша не проверялась — см. M12 | `Entity.cs`, `DbContext.cs:280-340`, `QueryPlan.cs` |
-| **M2** | ✅ сделано (sync) | 🟡 Moderate | allocations | `params object[]` → `M()` + `M(params ReadOnlySpan<object?>)`; async/streaming — массив by design | `Entity.cs`, `IDataContext.cs`, `IPreparedQueryCommand.cs`, `QueryCommand.cs` |
+| M1 | ♻️ переоткрыто → **M12** | 🟡 Moderate | allocations, GC | уточнено: SQL на cache-hit **не** пересобирается; стоимость builder-API до lookup. Вывод верен **механически**, но экономика кэша не проверялась — см. M12 | `EntityBuilder.cs`, `DbContext.cs:280-340`, `QueryPlan.cs` |
+| **M2** | ✅ сделано (sync) | 🟡 Moderate | allocations | `params object[]` → `M()` + `M(params ReadOnlySpan<object?>)`; async/streaming — массив by design | `EntityBuilder.cs`, `IDataContext.cs`, `IPreparedQueryCommand.cs`, `QueryCommand.cs` |
 | M3 | ✅ сделано | 🟡 Moderate | async, CPU | `MoveNextAsync` без async state machine: sync fast-path при уже завершённом `ReadAsync`; **690 → 108 ns / 100 строк** | `ResultSetEnumerator.cs:81-94` |
 | M4 | ✅ сделано | 🟡 Moderate | async, CPU, memory | `Pipeline` без `Task.Run` + `Channel`: прямое `IAsyncEnumerable` + `[EnumeratorCancellation]`; нет unbounded-буфера и занятого pool-потока | `QueryCommand.cs:823-857` |
 | M5 | ✅ сделано | 🟡 Moderate | CPU | fast-path `ConvertScalar` вместо `IConvertible`-диспетчеризации (не боксинг — эффект в шуме) | `DbContext.cs` |
@@ -102,7 +102,7 @@ M12 — переоткрытие M1: механизм кэша корректе�
    Async/streaming остаются на `params object[]` — там оптимизировать нечего.
 2. **Expression trees — жёсткое ограничение компилятора.** Любой вызов с `params`-коллекцией
    внутри `Expression<>`-ламбды отвергается: `CS8640` (ref struct в дереве) + `CS9226` (expanded
-   форма не-массива) — **даже с нулём аргументов** (проверено на `net10.0`). Поэтому `Entity.Any()/
+   форма не-массива) — **даже с нулём аргументов** (проверено на `net10.0`). Поэтому `EntityBuilder.Any()/
    First()/Single()`, которые тесты используют как подзапросы в лямбдах, не могут быть
    `params ReadOnlySpan<object?>`.
 3. **Обходной путь.** Рядом с `params ReadOnlySpan<object?>` добавляется **точный overload без
@@ -122,7 +122,7 @@ M12 — переоткрытие M1: механизм кэша корректе�
 которые кладут значения в `stackalloc object?[n]` и зовут новый span-core:
 
 ```csharp
-// Entity<TEntity>.Any — было: public bool Any(params object[] @params) { ... }
+// EntityBuilder<TEntity>.Any — было: public bool Any(params object[] @params) { ... }
 public bool Any(params object[] @params) => AnyCore(@params);
 public bool Any() => AnyCore(ReadOnlySpan<object?>.Empty);
 public bool Any(object? p0)
@@ -168,7 +168,7 @@ public TResult? ExecuteScalar<TResult>(IPreparedQueryCommand<TResult> preparedQu
 
 **Фаза 3 — async/streaming.**
 Span неприменим. Массив там неизбежен (сохраняется в enumerator). Ограничиться:
-- убрать двойное копирование: проверить, что `Entity`/`QueryCommand`/`IPreparedQueryCommand`
+- убрать двойное копирование: проверить, что `EntityBuilder`/`QueryCommand`/`IPreparedQueryCommand`
   не создают второй массив при пробросе одного и того же `@params`;
 - `[MethodImpl(AggressiveInlining)]` на проброс уже стоит.
 
@@ -176,7 +176,7 @@ Span неприменим. Массив там неизбежен (сохран�
 
 | Слой | Файл | Что |
 |---|---|---|
-| Builder | `src/nextorm.core/Builders/Entity.cs` | overload'ы 0/1/2 + `*Core(ReadOnlySpan<object?>)` для sync-методов |
+| Builder | `src/nextorm.core/Builders/EntityBuilder.cs` | overload'ы 0/1/2 + `*Core(ReadOnlySpan<object?>)` для sync-методов |
 | Query | `src/nextorm.core/Query/QueryCommand.cs:864-1010` | то же для sync-терминалов |
 | Prepared | `src/nextorm.core/DataContext/Cache/IPreparedQueryCommand.cs` | overload'ы `(dataContext, p0)` / `(dataContext, p0, p1)` |
 | Context iface | `src/nextorm.core/DataContext/IDataContext.cs` | default `ExecuteScalar(…, ReadOnlySpan<object?>, …)` |
@@ -230,11 +230,11 @@ Span неприменим. Массив там неизбежен (сохран�
 массив не аллоцирует (компилятор использует inline-массив): замерено 48 B/вызов против 88 B у
 `params object?[]` — разница только боксы.
 
-Покрытие: `Entity.Any`, `Entity.Count`, `Entity.Min/Max/Avg/Sum/Stdev/Stdevp/Var/Varp`
+Покрытие: `EntityBuilder.Any`, `EntityBuilder.Count`, `EntityBuilder.Min/Max/Avg/Sum/Stdev/Stdevp/Var/Varp`
 (+ `QueryCommand.ExecuteScalar` span). Стриминговые/row sync (`ToList`, `First`, `Single`,
 `ToEnumerable`) пока остаются на `params object[]` — массив/энumerator там неизбежен; отдельный шаг.
 
-Изменённые файлы: `Builders/Entity.cs`, `Query/QueryCommand.cs`, `DataContext/IDataContext.cs`,
+Изменённые файлы: `Builders/EntityBuilder.cs`, `Query/QueryCommand.cs`, `DataContext/IDataContext.cs`,
 `DataContext/DbContext.cs`, `DataContext/InMemoryDataContext.cs`,
 `DataContext/Cache/DbPreparedQueryCommand.cs`.
 
@@ -292,7 +292,7 @@ dotnet build nextorm.sln -c Release
 `QueryPlanEqualityComparer.GetHashCode` использует уже посчитанные `From/Where/Columns/Join/Sorting/
 GroupingPlanHash`, а не повторный обход дерева.
 
-**Что происходит на каждом вызове `Entity.Any(...)` (даже при cache-hit):**
+**Что происходит на каждом вызове `EntityBuilder.Any(...)` (даже при cache-hit):**
 1. `Where(lambda)` — комбинирует предикат в новый expression tree.
 2. `ToCommand()` — новый `QueryCommand` + `_joins?.ToArray()` / `_sorting?.ToArray()`.
 3. `GetAnyCommand` → `cmd.PrepareCommand(...)`: свежая команда не prepared, поэтому идёт полный
@@ -313,7 +313,7 @@ GroupingPlanHash`, а не повторный обход дерева.
 команду и посчитать её хэш — ровно поэтому и существует `Prepare()`/`IPreparedQueryCommand`
 (0.87 KB вместо 2.76 KB). Цена builder-API ≈ 1.9 KB/вызов — по замыслу. Реальные (небольшие) рычаги:
 - документация/API: `Prepare()` как рекомендованный путь повторного выполнения;
-- мемоизация prepared-команды на экземпляре `Entity` (если инстанс не мутируют после сборки) —
+- мемоизация prepared-команды на экземпляре `EntityBuilder` (если инстанс не мутируют после сборки) —
   повторные вызовы на том же `q` → ~0.87 KB; требует проверки мутабельности `Paging`;
 - убрать per-call аллокации `QueryPlan`/`QueryPlanCacheKey` (хэшировать `*PlanHash`-поля напрямую) —
   сотни байт, но трогает дизайн ключа кэша.
@@ -457,7 +457,7 @@ M8 убирает 64 B на имя параметра, но `ParamMap` кэши�
 
 **M10 — sealing.** `sealed` добавлен к `ResultSetEnumerator<TResult>`, `InMemoryEnumerator<TResult,TEntity>`,
 `InMemoryCompiledQuery<TResult,TEntity>`, `QueryCommand<TResult>` (наследников нет). Нельзя:
-`Entity<TEntity>` (наследуют `EntityP2/P3`) и `PreparedQueryCommand` (наследуют `DbPreparedQueryCommand`/
+`EntityBuilder<TEntity>` (наследуют `EntityP2/P3`) и `PreparedQueryCommand` (наследуют `DbPreparedQueryCommand`/
 `InMemoryCompiledQuery`). Попутно понадобилось: `ResultSetEnumerator.Dispose(bool)` `protected virtual` →
 `private`, protected-ctor `QueryCommand<TResult>` → `private` (иначе CS0628 под warnings-as-errors).
 
@@ -505,7 +505,7 @@ map-cache miss, по разу на форму запроса на поток), �
 
 | Arm | на вызов | Alloc/вызов | Gen1/вызов | Что изолирует |
 |---|---:|---:|---:|---|
-| `Construct_Only` | 1.12 µs | 1.68 KB | — | только builder: `Entity.Clone` + `Where` + `Select` |
+| `Construct_Only` | 1.12 µs | 1.68 KB | — | только builder: `EntityBuilder.Clone` + `Where` + `Select` |
 | `RePrepare_PlanOnly_Param` | **1.63 µs** | 0.78 KB | — | prepare + hash + lookup без построения команды |
 | `Cached_PlanOnly_NoParam` | 2.77 µs | 2.66 KB | — | cache-hit без параметров |
 | `Cached_PlanOnly_Param` | 3.56 µs | 3.00 KB | — | cache-hit + `ExtractParams` (Δ = 0.79 µs) |
@@ -561,7 +561,7 @@ map-cache miss, по разу на форму запроса на поток), �
    `Construct_Only` (1.12 µs) и/или обход для хэша (1.63 µs). Реалистичный минимум — API вида
    «скомпилировать один раз, выполнять много» поверх уже существующего `IPreparedQueryCommand`,
    чтобы пользователь не собирал дерево на каждый вызов. Мемоизация хэша по *экземпляру*
-   выражения не поможет: `Entity.Where()` каждый раз строит новое дерево.
+   выражения не поможет: `EntityBuilder.Where()` каждый раз строит новое дерево.
 4. **Убрать per-call `QueryPlan`/`QueryPlanCacheKey`** — по декомпозиции это ~2% (сам объект
    ~50 B из 3.00 KB/call); **не приоритет**. Оставляю как отмеченную мелочь, а не как задачу.
 

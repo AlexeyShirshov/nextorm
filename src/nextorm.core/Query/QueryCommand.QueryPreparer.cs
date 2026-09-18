@@ -175,6 +175,20 @@ public partial class QueryCommand
             }
         }
 
+        /// <summary>
+        /// True for the types a projection maps to a single column. A <see cref="NewExpression"/> whose
+        /// result is one of these (for example <c>new string('*', 4)</c>) is a scalar, not a composite
+        /// (anonymous-type) projection, and must not be expanded into constructor arguments.
+        /// </summary>
+        private static bool IsSingleColumnType(Type type) =>
+            type.IsPrimitive
+            || type == typeof(string)
+            || type == typeof(byte[])
+            || type == typeof(DateTime)
+            || type == typeof(decimal)
+            || type == typeof(Guid)
+            || (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>));
+
         private static (SelectExpression[]?, int) PrepareColumns(QueryCommand cmd, bool noHash, Type? srcType, CancellationToken cancellationToken)
         {
             var selectList = cmd._selectList;
@@ -183,7 +197,7 @@ public partial class QueryCommand
             {
                 if (cmd._exp is not null)
                 {
-                    if (cmd._exp.Body is NewExpression ctor)
+                    if (cmd._exp.Body is NewExpression ctor && !IsSingleColumnType(ctor.Type))
                     {
                         var args = ctor.Arguments;
                         var argsCount = args.Count;
@@ -220,13 +234,7 @@ public partial class QueryCommand
 
 
                     }
-                    else if (cmd._exp.Body.Type.IsPrimitive
-                        || cmd._exp.Body.Type == typeof(string)
-                        || cmd._exp.Body.Type == typeof(byte[])
-                        || cmd._exp.Body.Type == typeof(DateTime)
-                        || cmd._exp.Body.Type == typeof(decimal)
-                        || cmd._exp.Body.Type == typeof(Guid)
-                        || (cmd._exp.Body.Type.IsGenericType && cmd._exp.Body.Type.GetGenericTypeDefinition() == typeof(Nullable<>)))
+                    else if (IsSingleColumnType(cmd._exp.Body.Type))
                     {
 
                         cmd.OneColumn = true;
@@ -449,7 +457,7 @@ public partial class QueryCommand
             int groupingPlanHash = 7;
             if (cmd._groupExp is not null && groupingList is null)
             {
-                if (cmd._groupExp.Body is NewExpression ctor)
+                if (cmd._groupExp.Body is NewExpression ctor && !IsSingleColumnType(ctor.Type))
                 {
                     var args = ctor.Arguments;
                     var argsCount = args.Count;

@@ -67,7 +67,7 @@ using IDataContext ctx = new SqliteDbContext("Data Source=app.db", new DbContext
 уже названы `stdev`/`var`, SQLite не выполняет переименование агрегатов.
 
 ```csharp
-var stddev = ctx.Create<IComplexEntity>()
+var stddev = ctx.From<IComplexEntity>()
     .Select(x => NORM.SQL.stdev((double)x.Id))
     .First();
 ```
@@ -79,7 +79,7 @@ select stdev(cast(id as double precision)) from complex_entity
 ## Части даты, coalesce и `LIKE`
 
 ```csharp
-var query = ctx.Create<IComplexEntity>()
+var query = ctx.From<IComplexEntity>()
     .Select(x => new
     {
         Year = x.Datetime!.Value.Year,
@@ -99,8 +99,8 @@ from complex_entity
 ## Разбиение на страницы
 
 ```csharp
-ctx.Create<IComplexEntity>().Page(5, 10).Select(x => x.Id);   // limit 5 offset 10
-ctx.Create<IComplexEntity>().Offset(10).Select(x => x.Id);    // limit -1 offset 10
+ctx.From<IComplexEntity>().Page(5, 10).Select(x => x.Id);   // limit 5 offset 10
+ctx.From<IComplexEntity>().Offset(10).Select(x => x.Id);    // limit -1 offset 10
 ```
 
 ```sql
@@ -118,8 +118,8 @@ SQL, и база данных отклоняет их во время выпол
 
 ```csharp
 // Throws Microsoft.Data.Sqlite.SqliteException when executed.
-await ctx.Create<ISimpleEntity>()
-    .Where(it => it.Id == NORM.SQL.any(ctx.Create<IComplexEntity>().Select(c => c.Id)))
+await ctx.From<ISimpleEntity>()
+    .Where(it => it.Id == NORM.SQL.any(ctx.From<IComplexEntity>().Select(c => c.Id)))
     .Select(it => it.Id)
     .ToListAsync();
 ```

@@ -11,7 +11,7 @@ namespace nextorm.core;
 /// A JSON operand is expected to be a <c>json</c>/<c>jsonb</c> expression: a mapped column, another
 /// JSON function or a parameter whose runtime value is a <c>JsonDocument</c>/<c>JsonElement</c>/
 /// <c>JsonNode</c> (Npgsql binds those as <c>jsonb</c>). A text parameter can be parsed explicitly
-/// with <see cref="NORM.NORM_SQL.json_cast"/>. A path/keys operand is bound as a single array
+/// with <see cref="NORM.PG.json_cast"/>. A path/keys operand is bound as a single array
 /// parameter through <see cref="SqlOperandTranslator"/>.
 /// </para>
 /// <para>
@@ -32,119 +32,119 @@ internal static class JsonSqlTranslator
         switch (node.Method.Name)
         {
             // Aggregates: turn rows into a JSON array / object.
-            case nameof(NORM.NORM_SQL.json_agg) when args.Count == 1:
+            case nameof(NORM.PG.json_agg) when args.Count == 1:
                 EmitFunction(visitor, "json_agg", args);
                 return true;
-            case nameof(NORM.NORM_SQL.jsonb_agg) when args.Count == 1:
+            case nameof(NORM.PG.jsonb_agg) when args.Count == 1:
                 EmitFunction(visitor, "jsonb_agg", args);
                 return true;
-            case nameof(NORM.NORM_SQL.json_object_agg) when args.Count == 2:
+            case nameof(NORM.PG.json_object_agg) when args.Count == 2:
                 EmitFunction(visitor, "json_object_agg", args);
                 return true;
-            case nameof(NORM.NORM_SQL.jsonb_object_agg) when args.Count == 2:
+            case nameof(NORM.PG.jsonb_object_agg) when args.Count == 2:
                 EmitFunction(visitor, "jsonb_object_agg", args);
                 return true;
 
             // Construction and conversion.
-            case nameof(NORM.NORM_SQL.json_build_object):
+            case nameof(NORM.PG.json_build_object):
                 EmitVariadic(visitor, "json_build_object", args);
                 return true;
-            case nameof(NORM.NORM_SQL.jsonb_build_object):
+            case nameof(NORM.PG.jsonb_build_object):
                 EmitVariadic(visitor, "jsonb_build_object", args);
                 return true;
-            case nameof(NORM.NORM_SQL.json_build_array):
+            case nameof(NORM.PG.json_build_array):
                 EmitVariadic(visitor, "json_build_array", args);
                 return true;
-            case nameof(NORM.NORM_SQL.jsonb_build_array):
+            case nameof(NORM.PG.jsonb_build_array):
                 EmitVariadic(visitor, "jsonb_build_array", args);
                 return true;
-            case nameof(NORM.NORM_SQL.to_json) when args.Count == 1:
+            case nameof(NORM.PG.to_json) when args.Count == 1:
                 EmitFunction(visitor, "to_json", args);
                 return true;
-            case nameof(NORM.NORM_SQL.to_jsonb) when args.Count == 1:
+            case nameof(NORM.PG.to_jsonb) when args.Count == 1:
                 EmitFunction(visitor, "to_jsonb", args);
                 return true;
-            case nameof(NORM.NORM_SQL.json_cast) when args.Count == 1:
+            case nameof(NORM.PG.json_cast) when args.Count == 1:
                 EmitCast(visitor, args[0]);
                 return true;
 
             // Access operators: -> ->> #> #>>.
-            case nameof(NORM.NORM_SQL.json_get) when args.Count == 2:
+            case nameof(NORM.PG.json_get) when args.Count == 2:
                 EmitOperator(visitor, "->", args[0], args[1]);
                 return true;
-            case nameof(NORM.NORM_SQL.json_get_text) when args.Count == 2:
+            case nameof(NORM.PG.json_get_text) when args.Count == 2:
                 EmitOperator(visitor, "->>", args[0], args[1]);
                 return true;
-            case nameof(NORM.NORM_SQL.json_get_path) when args.Count == 2:
+            case nameof(NORM.PG.json_get_path) when args.Count == 2:
                 EmitOperator(visitor, "#>", args[0], args[1]);
                 return true;
-            case nameof(NORM.NORM_SQL.json_get_path_text) when args.Count == 2:
+            case nameof(NORM.PG.json_get_path_text) when args.Count == 2:
                 EmitOperator(visitor, "#>>", args[0], args[1]);
                 return true;
 
             // Containment/existence predicates: @> ? ?| ?&.
-            case nameof(NORM.NORM_SQL.json_contains) when args.Count == 2:
+            case nameof(NORM.PG.json_contains) when args.Count == 2:
                 EmitOperator(visitor, "@>", args[0], args[1]);
                 return true;
-            case nameof(NORM.NORM_SQL.json_exists) when args.Count == 2:
+            case nameof(NORM.PG.json_exists) when args.Count == 2:
                 EmitOperator(visitor, "?", args[0], args[1]);
                 return true;
-            case nameof(NORM.NORM_SQL.json_exists_any) when args.Count == 2:
+            case nameof(NORM.PG.json_exists_any) when args.Count == 2:
                 EmitOperator(visitor, "?|", args[0], args[1]);
                 return true;
-            case nameof(NORM.NORM_SQL.json_exists_all) when args.Count == 2:
+            case nameof(NORM.PG.json_exists_all) when args.Count == 2:
                 EmitOperator(visitor, "?&", args[0], args[1]);
                 return true;
 
             // Introspection.
-            case nameof(NORM.NORM_SQL.json_array_length) when args.Count == 1:
+            case nameof(NORM.PG.json_array_length) when args.Count == 1:
                 EmitFunction(visitor, "json_array_length", args);
                 return true;
-            case nameof(NORM.NORM_SQL.jsonb_array_length) when args.Count == 1:
+            case nameof(NORM.PG.jsonb_array_length) when args.Count == 1:
                 EmitFunction(visitor, "jsonb_array_length", args);
                 return true;
-            case nameof(NORM.NORM_SQL.json_typeof) when args.Count == 1:
+            case nameof(NORM.PG.json_typeof) when args.Count == 1:
                 EmitFunction(visitor, "json_typeof", args);
                 return true;
-            case nameof(NORM.NORM_SQL.jsonb_typeof) when args.Count == 1:
+            case nameof(NORM.PG.jsonb_typeof) when args.Count == 1:
                 EmitFunction(visitor, "jsonb_typeof", args);
                 return true;
-            case nameof(NORM.NORM_SQL.jsonb_set) when args.Count is 3 or 4:
+            case nameof(NORM.PG.jsonb_set) when args.Count is 3 or 4:
                 EmitFunction(visitor, "jsonb_set", args);
                 return true;
-            case nameof(NORM.NORM_SQL.jsonb_insert) when args.Count is 3 or 4:
+            case nameof(NORM.PG.jsonb_insert) when args.Count is 3 or 4:
                 EmitFunction(visitor, "jsonb_insert", args);
                 return true;
-            case nameof(NORM.NORM_SQL.jsonb_strip_nulls) when args.Count == 1:
+            case nameof(NORM.PG.jsonb_strip_nulls) when args.Count == 1:
                 EmitFunction(visitor, "jsonb_strip_nulls", args);
                 return true;
-            case nameof(NORM.NORM_SQL.jsonb_pretty) when args.Count == 1:
+            case nameof(NORM.PG.jsonb_pretty) when args.Count == 1:
                 EmitFunction(visitor, "jsonb_pretty", args);
                 return true;
-            case nameof(NORM.NORM_SQL.jsonb_delete) when args.Count == 2:
+            case nameof(NORM.PG.jsonb_delete) when args.Count == 2:
                 EmitOperator(visitor, "-", args[0], args[1]);
                 return true;
-            case nameof(NORM.NORM_SQL.row_to_json) when args.Count == 1:
+            case nameof(NORM.PG.row_to_json) when args.Count == 1:
                 EmitFunction(visitor, "row_to_json", args);
                 return true;
-            case nameof(NORM.NORM_SQL.array_to_json) when args.Count == 1:
+            case nameof(NORM.PG.array_to_json) when args.Count == 1:
                 EmitFunction(visitor, "array_to_json", args);
                 return true;
-            case nameof(NORM.NORM_SQL.json_concat) when args.Count == 2:
+            case nameof(NORM.PG.json_concat) when args.Count == 2:
                 EmitOperator(visitor, "||", args[0], args[1]);
                 return true;
 
             // JSONPath: the path operand has to be rendered as jsonpath.
-            case nameof(NORM.NORM_SQL.jsonb_path_exists) when args.Count == 2:
+            case nameof(NORM.PG.jsonb_path_exists) when args.Count == 2:
                 EmitJsonPathFunction(visitor, "jsonb_path_exists", args);
                 return true;
-            case nameof(NORM.NORM_SQL.jsonb_path_match) when args.Count == 2:
+            case nameof(NORM.PG.jsonb_path_match) when args.Count == 2:
                 EmitJsonPathFunction(visitor, "jsonb_path_match", args);
                 return true;
-            case nameof(NORM.NORM_SQL.jsonb_path_query_first) when args.Count == 2:
+            case nameof(NORM.PG.jsonb_path_query_first) when args.Count == 2:
                 EmitJsonPathFunction(visitor, "jsonb_path_query_first", args);
                 return true;
-            case nameof(NORM.NORM_SQL.jsonb_path_query_array) when args.Count == 2:
+            case nameof(NORM.PG.jsonb_path_query_array) when args.Count == 2:
                 EmitJsonPathFunction(visitor, "jsonb_path_query_array", args);
                 return true;
 

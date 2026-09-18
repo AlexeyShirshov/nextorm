@@ -16,7 +16,7 @@ public class TestSpecialMethodCallVisitor : ExpressionVisitor
     protected override Expression VisitMethodCall(MethodCallExpression node)
     {
         if (
-               (node.Object?.Type == typeof(NORM.NORM_SQL))
+               (node.Object?.Type is { } objectType && typeof(NORM.NORM_SQL).IsAssignableFrom(objectType))
             || (node.Object?.Type.IsAssignableTo(typeof(QueryCommand)) ?? false)
             )
         {

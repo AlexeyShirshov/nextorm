@@ -4,6 +4,7 @@
 **Область анализа:** `src/` (основной), дополнительно `test/` и `benchmarks/`
 **Метод:** read-only аудит по каталогу `skill:dotnet-csharp-code-smells`
 **Статус:** Находки 1 (подавления), 2 (`IDisposable`), 3 (LINQ) и 5 (хэш-ключи) — **обработаны**. Открыта только Находка 4 (god-классы).
+**План по крупнейшему god-классу:** [plan-baseexpressionvisitor.md](plan-baseexpressionvisitor.md)
 
 > Номера строк приведены на момент повторной проверки (HEAD `9641660`); дерево на момент аудита чистое.
 
@@ -17,7 +18,7 @@
 | 2. Подавление предупреждений | ✅ 5 `SuppressMessage` с обоснованием (0 `<Pending>`), все `#pragma` с `restore` |
 | 3. Антипаттерны LINQ | ✅ Чисто |
 | 4. Работа с событиями | ✅ Чисто |
-| 5. Запахи проектирования | ⚠️ Открыто: 4 класса > 500 строк + длинные списки параметров |
+| 5. Запахи проектирования | ⚠️ Открыто: 3 класса > 500 строк + длинные списки параметров |
 | 6. Обработка исключений | ✅ Чисто |
 | 7. Хэш-ключи кэша (S2328) | ✅ Находка 5 исправлена |
 
@@ -33,7 +34,7 @@
 | 2. Подавления | 🔴 На момент прогона: 10 `SuppressMessage` с `<Pending>`; **устранено следом** — см. Находку 1. |
 | 3. LINQ | ✅ Чисто: остались только законные `Distinct().Count()` (`SqlBuilder.cs:262`, `BaseExpressionVisitor.cs:782`) и необходимый `.ToList()` (`QueryCommand.cs:703`). |
 | 4. События | ✅ Чисто: единственное событие — `DbContext.Disposed`; подписки `StateChange`/`Disposed` снимаются симметрично. |
-| 5. Проектирование | ⚠️ 4 god-класса + конструкторы с 6+ параметрами: `BaseExpressionVisitor` (11), `QueryCommand` (10), `WhereExpressionVisitor` (10), `SqlBuilder` (8), `DbPreparedQueryCommand` (6). |
+| 5. Проектирование | ⚠️ 3 god-класса; длинные списки параметров: `QueryCommand` (10), `WhereExpressionVisitor` (10), `SqlBuilder` (8), `DbPreparedQueryCommand` (6). У `BaseExpressionVisitor` предпочтительный ctor теперь принимает `VisitorOptions` (1 параметр); 12-параметровый overload оставлен для бинарной совместимости (extend-only). |
 | 6. Исключения | ✅ Чисто: в `src/` нет ни одного `catch`; `async void` и `throw ex;` отсутствуют. |
 | Хэш-ключи (Находка 5) | ✅ `S2328` в коде — 0, правки держатся; регрессионный тест проходит. |
 
@@ -54,7 +55,7 @@
 | `Query/ExpressionPlanEqualityComparer.cs:516` — S3897 | `QueryCommandKey` реализует `IEquatable<QueryCommandKey>`. |
 | `Query/QueryCommand.cs:11` — S3897 | Удалено как неприменимое: `QueryCommand` не определяет ни `Equals`, ни `GetHashCode`. |
 | `Query/QueryCommand.cs:632` — IDE0028 | Код приведён к `_referencedQueries ??= [];`; подавление не нужно. |
-| `Builders/Entity.cs:15` — S2292 | Снято как избыточное: в `.editorconfig` уже стоит `dotnet_diagnostic.S2292.severity = silent`, а `SonarAnalyzer.CSharp` не подключён — правило не может сработать. |
+| `Builders/EntityBuilder.cs:15` — S2292 | Снято как избыточное: в `.editorconfig` уже стоит `dotnet_diagnostic.S2292.severity = silent`, а `SonarAnalyzer.CSharp` не подключён — правило не может сработать. |
 
 ### Оставлено с обоснованием (5)
 
@@ -70,9 +71,9 @@
 
 | Файл:строка | Правило | `restore` |
 |---|---|---|
-| `Builders/Entity.cs:254` | CS8619 | ✅ `:256` |
-| `Builders/Entity.cs:263` | CS8619 | ✅ `:265` |
-| `Builders/Entity.cs:293` | CS8619 | ✅ `:295` |
+| `Builders/EntityBuilder.cs:254` | CS8619 | ✅ `:256` |
+| `Builders/EntityBuilder.cs:263` | CS8619 | ✅ `:265` |
+| `Builders/EntityBuilder.cs:293` | CS8619 | ✅ `:295` |
 | `Query/ExpressionPlanEqualityComparer.cs:408` | IDE0066 | ✅ `:410` |
 
 «Blanket suppression» `HashCode.cs:10` больше нет: остались только парные `disable`/`restore` на несколько строк.
@@ -197,18 +198,19 @@ dotnet build src/nextorm.core/nextorm.core.csproj -t:Rebuild \
 
 ---
 
-## ⚠️ Находка 4 — God-классы (открыта, 4 шт.)
+## ⚠️ Находка 4 — God-классы (открыта, 3 шт.)
+
+> План декомпозиции `BaseExpressionVisitor` (фазы, инварианты, риски): [plan-baseexpressionvisitor.md](plan-baseexpressionvisitor.md)
 
 Порог раздела 5 навыка — >500 строк на **класс** (не на файл). Замер на текущем рабочем дереве (после серии правок):
 
 | Класс | Файл:строка объявления | Строк класса |
 |---|---|---:|
-| `BaseExpressionVisitor` | `Visitors/BaseExpressionVisitor.cs:10` | ~2212 |
 | `InMemoryContext` (`partial`) | `DataContext/InMemoryDataContext.cs:10` | ~1088 |
 | `DbContext` | `DataContext/DbContext.cs:13` | ~1070 |
 | `SqlBuilder` (**`struct`**) | `DataContext/SqlBuilder.cs:8` | ~601 |
 
-`QueryCommand` из списка выбыл — см. «Сделано» ниже.
+`QueryCommand` и `BaseExpressionVisitor` из списка выбыли — см. «Сделано» ниже.
 
 Динамика с прошлого замера: `BaseExpressionVisitor` 1026 → **2221** строк (+1264 к коммиту `9641660`, +34 метода — `VisitConditional`/`VisitSwitch`, `VisitNot`/`VisitOnesComplement`/`VisitUnaryOperator`, `TranslateInValues`, `BuildLikePattern`, `VisitToString` и др.); `InMemoryDataContext` 983 → 1097; `DbContext` 1247 → **1082** (уменьшился). **`SqlBuilder` стал новым кандидатом** (был < 500, теперь 608) — и это `struct`, что усугубляет: копирование по значению большого изменяемого типа.
 
@@ -242,14 +244,39 @@ public virtual void PrepareCommand(bool dontCalculateHash, CancellationToken can
 
 Границы partial-класса: `QueryCommand` объявлен `partial` в 4 файлах, `QueryCommand<TResult>` — `sealed partial` в пятом. Публичный API не менялся; внешних наследников `QueryCommand` в репозитории нет.
 
+### Сделано: `BaseExpressionVisitor` декомпозирован (фазы 1–9 [плана](plan-baseexpressionvisitor.md))
+
+Было — один класс **2213** строк, 13 методов >30 строк (крупнейший `VisitMethodCall` — 461), конструктор на 12 параметров. Стало — оболочка **404** строк + 10 связных типов:
+
+| Тип | Строк | Ответственность |
+|---|---:|---|
+| `Visitors/BaseExpressionVisitor.cs` | 389 | поля/ctor/свойства, `AsPredicate`, тонкие override-делегаторы, `Clone`/`Dispose`/`ToString`/`WriteTo` |
+| `Visitors/MemberTranslator.cs` | 422 | `VisitMember`/`VisitIndex`: колонки, проекции `tN`, `Value`, `Length`, части `DateTime`, замыкания, ссылки на подзапросы |
+| `Visitors/PredicateTranslator.cs` | 400 | логика/сравнения/CASE/switch + value→predicate; `VisitBinary` остаётся override-делегатором (важно для `WhereExpressionVisitor`) |
+| `Visitors/ScalarFunctionTranslator.cs` | 384 | string/`Math`/`NORM.SQL.like`, `string.Concat`, `SqlFunctionAttribute` |
+| `Visitors/NormSqlTranslator.cs` | 301 | `NORM.Param` и `NORM.NORM_SQL`: агрегаты, `EXISTS`/`ANY`/`ALL`, `IN`-подзапросы |
+| `Visitors/WindowFunctionTranslator.cs` | 154 | `Over(...)` и кадр окна |
+| `Visitors/WindowSql.cs` | 147 | чистые хелперы оконных функций |
+| `Visitors/InValuesTranslator.cs` | 107 | `in (v1, ...)` / `Contains` |
+| `Visitors/TypeFacts.cs` | 58 | `IsBoolean`/`IsPredicate`/`TryGetNumericConversion` |
+| `Visitors/SqlLiteral.cs` | 42 | кавычки и экранирование LIKE |
+| `Visitors/AliasResolver.cs` | 23 | резолв алиаса таблицы |
+| `Visitors/VisitorOptions.cs` | 28 | параметр-объект: все construction-time коллабораторы визитора; `with`-варианты для дочерних визиторов |
+
+Взаимодействие — через `internal`-поверхность визитора (14 геттеров, 2 внутренних сеттера, 3 метода плюс `Options`); публичный и `protected` API не менялись, `WhereExpressionVisitor` и точки вызова `VisitCondition`/`WriteTo`/`NeedAliasForColumn`/`ColumnName` не затронуты. Конструктор сгруппирован в `VisitorOptions` (см. фазу 9); длинная перегрузка оставлена только ради совместимости.
+
+Ограничение проверяемости: статические трансляторы не могут вызвать `base.Visit*`, поэтому `VisitUnary`/`VisitMember`/`VisitIndex` возвращают `Expression?` (`null` = «не обработано»), а делегатор делает `?? base.VisitXxx(node)`. Поведение идентично прежнему.
+
+Перенос пофазно верифицирован нормализованным diff'ом против снимка baseline: **ни одной потерянной строки логики** (фазы 2–8: 0 расхождений, кроме явно перечисленных переименований локальных и чужой параллельной правки `MakeConcat`); сборка 0/0; тесты core 111, sqlite 144, sqlserver 116, postgres 90, mariadb 6 — зелёные.
+
 ### Исключения (по решению автора)
 
 | Класс | Строк класса | Почему исключён |
 |---|---|---|
 | `ExpressionPlanEqualityComparer` | ~880 | Размер — следствие полноты дерева `Expression`, а не смешения ответственностей: один `Compare*`-метод на тип узла. Декомпозиция выигрыша не даёт. |
-| `Entity<TEntity>` | ~490 | По пересчёту на класс — **ниже порога**: >500 давал файл из-за второго типа `Entity` (~97 строк). Формально исключать больше нечего. |
+| `EntityBuilder<TEntity>` | ~490 | По пересчёту на класс — **ниже порога**: >500 давал файл из-за второго типа `EntityBuilder` (~97 строк). Формально исключать больше нечего. |
 
-Для движка запросов часть размера ожидаема, но оставшиеся 4 класса стоит держать под контролем и извлекать связные классы по SRP. Наибольший риск — `BaseExpressionVisitor`: он растёт быстрее всех (каждая новая SQL-возможность идёт в один класс) и уже в ~4.4× выше порога.
+Для движка запросов часть размера ожидаема, но оставшиеся 3 класса стоит держать под контролем и извлекать связные классы по SRP. Наибольший риск теперь — `InMemoryContext`/`DbContext` (дублирующиеся обязанности data-контекста); `SqlBuilder` — это `struct` ~601 строка, что усугубляет копирование по значению.
 
 ---
 
@@ -298,7 +325,7 @@ public virtual void PrepareCommand(bool dontCalculateHash, CancellationToken can
 ## Следующие шаги (предложение)
 
 1. Находка 4: `QueryCommand` закрыт по размеру — partial-разбивка (Вариант A) + вынос конвейера в `QueryPreparer` (Вариант B): 775 → 345 строк, `QueryPreparer` ~450. Осталось решить, промоутить ли `QueryPreparer` в top-level тип (потребует расширения `protected`-доступа), и по желанию — `PlanComparerSet` (D) и хэши в `PlanHashes` (C, рискованно — ключ кэша).
-2. Декомпозировать по SRP остальные god-классы (в первую очередь `BaseExpressionVisitor` — ~2212 строк).
+2. Декомпозировать по SRP остальные god-классы (в первую очередь `BaseExpressionVisitor` — ~2213 строк; пошаговый план: [plan-baseexpressionvisitor.md](plan-baseexpressionvisitor.md)).
 3. `CA2213` (`_conn` — ложное по владению) и `CA1816` (ложное из-за индирекции) закрывать не требуется; см. раздел «Дополнительно».
 
 ## Ссылки

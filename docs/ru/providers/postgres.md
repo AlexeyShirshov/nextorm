@@ -32,10 +32,13 @@
   и методы `DateTime.Add*` отрисовывают интервальную арифметику PostgreSQL
   (`x + (n * interval '1 day')`, `date_trunc('month', x) + interval '1 month - 1 day'`);
 - агрегаты `string_agg`/`array_agg` включены (`SupportsStringArrayAggregates` равно `true`);
+- полнотекстовый поиск включён (`SupportsFullText` равно `true`): `NORM.SQL.contains` отрисовывает
+  `to_tsvector(col) @@ plainto_tsquery(search)`, а `freetext` — `websearch_to_tsquery(search)`;
 - расширенная библиотека скалярных функций включена (`SupportsExtendedScalarFunctions` равно `true`):
   дополнительные математические (`asin`, `cbrt`, `degrees`, `pi`, `mod`, ...), строковые (`split_part`,
   `lpad`, `initcap`, ...), POSIX-регулярные выражения (`regexp_replace`, `regexp_like`, ...), дата/время
-  (`age`, `make_date`, `to_char`, `extract`, ...) и `num_nulls`/`num_nonnulls`;
+  (`make_interval`, `justify_days`, `justify_hours`, `to_char`, `to_date`, ...) и
+  `num_nulls`/`num_nonnulls`;
 - логические, битовые, статистические и упорядоченные агрегаты включены (`SupportsBooleanAggregates`,
   `SupportsBitAggregates`, `SupportsStatisticalAggregates` и `SupportsOrderedAggregates` равны `true`):
   `bool_and`/`bool_or`/`every`, `bit_and`/`bit_or`/`bit_xor`, `corr`/`covar_*`/`regr_*` и
@@ -114,16 +117,17 @@ var varp  = ctx.From<IComplexEntity>().Select(x => NORM.SQL.varp((double)x.Id));
 
 ## Массивы
 
-PostgreSQL — единственный поддерживаемый провайдер с нативными массивами. Массив передаётся одним
+PostgreSQL — единственный поддерживаемый провайдер с нативными массивами, и array-поверхность
+находится в `NORM.PG_SQL` (`NORM.SQL` остаётся кросс-провайдерным). Массив передаётся одним
 параметром, поэтому `column = any(@array)` работает и с runtime-параметром, и с захваченным массивом,
 а SQL не зависит от количества элементов:
 
 ```csharp
 var ids = new long[] { 1, 2, 3 };
 
-ctx.From<IComplexEntity>().Where(e => NORM.SQL.any(e.Id, ids));      // (id = any(@p0))
-ctx.From<IComplexEntity>().Where(e => e.Id == NORM.SQL.any(ids));    // id = any(@p0)
-ctx.From<IComplexEntity>().Where(e => e.Id == NORM.SQL.any(NORM.Param<long[]>(0))); // id = any(@norm_p0)
+ctx.From<IComplexEntity>().Where(e => NORM.PG_SQL.any(e.Id, ids));      // (id = any(@p0))
+ctx.From<IComplexEntity>().Where(e => e.Id == NORM.PG_SQL.any(ids));    // id = any(@p0)
+ctx.From<IComplexEntity>().Where(e => e.Id == NORM.PG_SQL.any(NORM.Param<long[]>(0))); // id = any(@norm_p0)
 ```
 
 ```sql
@@ -147,15 +151,15 @@ var document = JsonDocument.Parse("""{"name":"Alice","tags":["a","b"]}""");
 
 using var ctx = new PostgresDbContext(connectionString, new DbContextBuilder());
 ctx.From<IComplexEntity>()
-    .Where(e => NORM.SQL.json_get_text(NORM.Param<JsonDocument>(0), "name") == "Alice")
+    .Where(e => NORM.PG_SQL.json_get_text(NORM.Param<JsonDocument>(0), "name") == "Alice")
     .Select(e => e.Id)
     .ToList(document);
 
 ctx.From<IComplexEntity>()
-    .Select(e => NORM.SQL.jsonb_agg(e.String));   // jsonb_agg(somestring)
+    .Select(e => NORM.PG_SQL.jsonb_agg(e.String));   // jsonb_agg(somestring)
 ```
 
-Обычная строка с JSON привязывается как `text`; для разбора используйте `NORM.SQL.json_cast(value)`.
+Обычная строка с JSON привязывается как `text`; для разбора используйте `NORM.PG_SQL.json_cast(value)`.
 Полная поверхность (`json_agg`, `jsonb_build_object`, `->`, `->>`, `#>`, `@>`, `?`, `?|`, `?&`, ...)
 описана в разделе [Скалярные функции](../guide/11-scalar-functions.md#json-и-jsonb-postgresql).
 Остальные провайдеры отклоняют её с `NotSupportedException`.

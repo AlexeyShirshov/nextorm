@@ -57,6 +57,10 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     internal bool IsDistinct { get; set; }
     /// <summary>Super-aggregate modifier applied to the grouping list (<c>ROLLUP</c>/<c>CUBE</c>).</summary>
     internal GroupingType GroupingType { get; set; }
+    /// <summary>Explicit grouping-set indices used when <see cref="GroupingType"/> is <c>GroupingSets</c>.</summary>
+    internal IReadOnlyList<int[]>? GroupingSets { get; set; }
+    /// <summary>Table-level hints applied to the primary physical table (for example SQL Server <c>nolock</c>).</summary>
+    internal IReadOnlyList<string>? TableHints { get; set; }
     internal string? Table { get => _table; set => _table = value; }
     /// <summary>
     /// Explicit FROM source, used for table-valued functions (and any other source that is neither a
@@ -85,6 +89,8 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             cmd.Ctes = Ctes;
 
         cmd.GroupingType = GroupingType;
+        cmd.TableHints = TableHints;
+        cmd.GroupingSets = GroupingSets;
         // OnCommandCreated(cmd);
         //RaiseCommandCreated(cmd);
 
@@ -105,6 +111,8 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             cmd.Ctes = Ctes;
 
         cmd.GroupingType = GroupingType;
+        cmd.TableHints = TableHints;
+        cmd.GroupingSets = GroupingSets;
 
         // OnCommandCreated(cmd);
         //RaiseCommandCreated(cmd);
@@ -184,6 +192,8 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         dst._from = _from;
         dst.IsDistinct = IsDistinct;
         dst.GroupingType = GroupingType;
+        dst.GroupingSets = GroupingSets;
+        dst.TableHints = TableHints;
         dst.Ctes = Ctes;
     }
     protected virtual object CloneImp()
@@ -335,7 +345,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 
         // A TVF (or other explicit source) on either side is carried as a FromExpression: the right
         // side keeps the joined entity's own source, the left side keeps the one propagated below.
-        var cb = new EntityP2<TEntity, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition, joinType) { From = _.SourceFrom ?? _dataProvider.GetFrom(typeof(TJoinEntity), null)!, EntityType = joinCondition is null ? typeof(TJoinEntity) : null }) { Logger = Logger, _query = query, IsDistinct = IsDistinct, GroupingType = GroupingType, Ctes = Ctes };
+        var cb = new EntityP2<TEntity, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition, joinType) { From = _.SourceFrom ?? _dataProvider.GetFrom(typeof(TJoinEntity), null)!, EntityType = joinCondition is null ? typeof(TJoinEntity) : null }) { Logger = Logger, _query = query, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, TableHints = TableHints, Ctes = Ctes };
         cb.SourceFrom = SourceFrom;
         return cb;
     }
@@ -366,7 +376,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             queryBase = ToCommand();
         }
 
-        var cb = new EntityP2<TEntity, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition, joinType) { From = new FromExpression(query), EntityType = joinCondition is null ? typeof(TJoinEntity) : null }) { Logger = Logger, _query = queryBase, IsDistinct = IsDistinct, GroupingType = GroupingType, Ctes = Ctes };
+        var cb = new EntityP2<TEntity, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition, joinType) { From = new FromExpression(query), EntityType = joinCondition is null ? typeof(TJoinEntity) : null }) { Logger = Logger, _query = queryBase, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, TableHints = TableHints, Ctes = Ctes };
         cb.SourceFrom = SourceFrom;
         return cb;
     }
@@ -401,6 +411,40 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 
         b._group = exp;
         b.GroupingType = GroupingType.Cube;
+
+        return b;
+    }
+    /// <summary>
+    /// Groups by an explicit list of grouping sets, e.g. <c>GROUP BY GROUPING SETS ((a, b), (a), ())</c>.
+    /// <paramref name="exp"/> declares the full grouping list (an anonymous type / DTO) and each entry of
+    /// <paramref name="sets"/> is a set of 0-based indices into that list; an empty set produces the
+    /// grand total. Requires a dialect that supports it (see
+    /// <see cref="ISqlDialect.SupportsGroupingSets"/>).
+    /// </summary>
+    public EntityBuilder<TEntity> GroupByGroupingSets<TResult>(Expression<Func<TEntity, TResult>> exp, params int[][] sets)
+    {
+        var b = Clone();
+
+        b._group = exp;
+        b.GroupingType = GroupingType.GroupingSets;
+        b.GroupingSets = sets is { Length: > 0 } ? sets : null;
+
+        return b;
+    }
+    /// <summary>
+    /// Attaches table-level hints to the primary physical table, for example
+    /// <c>From&lt;IComplexEntity&gt;().WithTableHint("nolock")</c> which renders
+    /// <c>from complex_entity with (nolock)</c>. Requires a dialect that supports table hints (see
+    /// <see cref="ISqlDialect.SupportsTableHints"/>); the hints are rendered verbatim, so only use
+    /// trusted values.
+    /// </summary>
+    public EntityBuilder<TEntity> WithTableHint(params string[] hints)
+    {
+        var b = Clone();
+
+        b.TableHints = hints is { Length: > 0 }
+            ? hints.Where(h => !string.IsNullOrWhiteSpace(h)).ToArray()
+            : null;
 
         return b;
     }

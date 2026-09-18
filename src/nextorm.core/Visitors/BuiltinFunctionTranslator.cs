@@ -17,18 +17,6 @@ namespace nextorm.core;
 /// </summary>
 internal static class BuiltinFunctionTranslator
 {
-    private static readonly HashSet<string> DateTruncFields = new(StringComparer.Ordinal)
-    {
-        "microseconds", "milliseconds", "second", "minute", "hour",
-        "day", "week", "month", "quarter", "year", "decade", "century", "millennium"
-    };
-
-    private static readonly HashSet<string> DateAddFields = new(StringComparer.Ordinal)
-    {
-        "microseconds", "milliseconds", "second", "minute", "hour",
-        "day", "week", "month", "quarter", "year", "decade", "century", "millennium"
-    };
-
     /// <summary>Translates a built-in call; returns <c>false</c> when the call is not one of them.</summary>
     internal static bool TryTranslate(BaseExpressionVisitor visitor, MethodCallExpression node)
     {
@@ -49,13 +37,25 @@ internal static class BuiltinFunctionTranslator
             case nameof(NORM.NORM_SQL.date_add) when node.Arguments.Count == 3:
                 EmitDateAdd(visitor, node.Arguments);
                 return true;
+            case nameof(NORM.NORM_SQL.date_diff) when node.Arguments.Count == 3:
+                EmitDateDiff(visitor, node.Arguments);
+                return true;
             case nameof(NORM.NORM_SQL.end_of_month) when node.Arguments.Count == 1:
                 EmitEndOfMonth(visitor, node.Arguments);
+                return true;
+            case nameof(NORM.NORM_SQL.date_from_parts) when node.Arguments.Count == 3:
+                EmitDateFromParts(visitor, node.Arguments);
+                return true;
+            case nameof(NORM.NORM_SQL.contains) when node.Arguments.Count == 2:
+                EmitFullText(visitor, node, "contains");
+                return true;
+            case nameof(NORM.NORM_SQL.freetext) when node.Arguments.Count == 2:
+                EmitFullText(visitor, node, "freetext");
                 return true;
             case nameof(NORM.NORM_SQL.string_agg) when node.Arguments.Count is 2 or 3:
                 EmitStringAgg(visitor, node.Arguments);
                 return true;
-            case nameof(NORM.NORM_SQL.array_agg) when node.Arguments.Count is 1 or 2:
+            case nameof(NORM.PG.array_agg) when node.Arguments.Count is 1 or 2:
                 EmitArrayAgg(visitor, node.Arguments);
                 return true;
             default:
@@ -114,8 +114,8 @@ internal static class BuiltinFunctionTranslator
             throw new NotSupportedException("The date_trunc field must be a constant string.");
 
         field = field.ToLowerInvariant();
-        if (!DateTruncFields.Contains(field))
-            throw new NotSupportedException($"'{field}' is not a valid date_trunc field.");
+        if (!visitor.Dialect.SupportsDateTruncField(field))
+            throw new NotSupportedException($"'{field}' is not a supported date_trunc field for this provider.");
 
         if (visitor.IsParamMode)
         {
@@ -137,8 +137,8 @@ internal static class BuiltinFunctionTranslator
             throw new NotSupportedException("The date_add field must be a constant string.");
 
         field = field.ToLowerInvariant();
-        if (!DateAddFields.Contains(field))
-            throw new NotSupportedException($"'{field}' is not a valid date_add field.");
+        if (!visitor.Dialect.SupportsDateAddField(field))
+            throw new NotSupportedException($"'{field}' is not a supported date_add field for this provider.");
 
         if (visitor.IsParamMode)
         {
@@ -149,6 +149,33 @@ internal static class BuiltinFunctionTranslator
 
         visitor.NeedAliasForColumn = true;
         visitor.Builder!.Append(visitor.Dialect.MakeDateAdd(
+            field,
+            visitor.VisitToString(args[1]),
+            visitor.VisitToString(args[2])));
+    }
+
+    /// <summary><c>date_diff(field, start, end)</c> with a validated constant date-part name.</summary>
+    private static void EmitDateDiff(BaseExpressionVisitor visitor, IReadOnlyList<Expression> args)
+    {
+        if (!visitor.Dialect.SupportsDateArithmetic)
+            throw new NotSupportedException("The date arithmetic functions are not supported by this provider.");
+
+        if (!SqlLiteral.TryGetConstantString(args[0], out var field))
+            throw new NotSupportedException("The date_diff field must be a constant string.");
+
+        field = field.ToLowerInvariant();
+        if (!visitor.Dialect.SupportsDateDiffField(field))
+            throw new NotSupportedException($"'{field}' is not a supported date_diff field for this provider.");
+
+        if (visitor.IsParamMode)
+        {
+            visitor.Visit(args[1]);
+            visitor.Visit(args[2]);
+            return;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        visitor.Builder!.Append(visitor.Dialect.MakeDateDiff(
             field,
             visitor.VisitToString(args[1]),
             visitor.VisitToString(args[2])));
@@ -168,6 +195,54 @@ internal static class BuiltinFunctionTranslator
 
         visitor.NeedAliasForColumn = true;
         visitor.Builder!.Append(visitor.Dialect.MakeEndOfMonth(visitor.VisitToString(args[0])));
+    }
+
+    /// <summary><c>date_from_parts(year, month, day)</c>.</summary>
+    private static void EmitDateFromParts(BaseExpressionVisitor visitor, IReadOnlyList<Expression> args)
+    {
+        if (!visitor.Dialect.SupportsDateArithmetic)
+            throw new NotSupportedException("The date arithmetic functions are not supported by this provider.");
+
+        if (visitor.IsParamMode)
+        {
+            visitor.Visit(args[0]);
+            visitor.Visit(args[1]);
+            visitor.Visit(args[2]);
+            return;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        visitor.Builder!.Append(visitor.Dialect.MakeDateFromParts(
+            visitor.VisitToString(args[0]),
+            visitor.VisitToString(args[1]),
+            visitor.VisitToString(args[2])));
+    }
+
+    /// <summary>
+    /// <c>contains(column, search)</c>/<c>freetext(column, search)</c>. The predicate is a T-SQL
+    /// condition; when it is projected as a value the dialect materialises it as a bit scalar.
+    /// </summary>
+    private static void EmitFullText(BaseExpressionVisitor visitor, MethodCallExpression node, string name)
+    {
+        if (!visitor.Dialect.SupportsFullText)
+            throw new NotSupportedException("The full-text predicates (contains/freetext) are not supported by this provider.");
+
+        var args = node.Arguments;
+
+        if (visitor.IsParamMode)
+        {
+            visitor.Visit(args[0]);
+            visitor.Visit(args[1]);
+            return;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        var column = visitor.VisitToString(args[0]);
+        var search = visitor.VisitToString(args[1]);
+
+        visitor.Builder!.Append(visitor.Dialect.MakeBooleanPredicate(
+            visitor.Dialect.MakeFullText(name, column, search),
+            visitor.IsPredicateContext));
     }
 
     private static void EmitStringAgg(BaseExpressionVisitor visitor, IReadOnlyList<Expression> args)

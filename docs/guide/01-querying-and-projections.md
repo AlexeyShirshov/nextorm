@@ -6,7 +6,7 @@
 
 ## Overview
 
-`dataContext.Create<TEntity>()` returns an `Entity<TEntity>`. Every query starts by projecting that
+`dataContext.From<TEntity>()` returns an `EntityBuilder<TEntity>`. Every query starts by projecting that
 entity with `Select`:
 
 ```csharp
@@ -32,7 +32,7 @@ Rules that apply to every projection:
 ## Anonymous type
 
 ```csharp
-var rows = await dataContext.Create<SimpleEntity>()
+var rows = await dataContext.From<SimpleEntity>()
     .Select(entity => new { entity.Id })
     .ToListAsync();
 ```
@@ -48,7 +48,7 @@ select id from simple_entity
 A member can be computed from other columns or constants:
 
 ```csharp
-var rows = await dataContext.Create<SimpleEntity>()
+var rows = await dataContext.From<SimpleEntity>()
     .Select(entity => new { Id = entity.Id + 1 })
     .ToListAsync();
 ```
@@ -61,7 +61,7 @@ The arithmetic expression is parenthesised and, because it is not a plain column
 the projected member name. Naming the member keeps the alias stable for an enclosing query:
 
 ```csharp
-var rows = await dataContext.Create<ComplexEntity>()
+var rows = await dataContext.From<ComplexEntity>()
     .Select(it => new { it.Id, Calc = it.Id + 1 })
     .ToListAsync();
 ```
@@ -74,7 +74,7 @@ String members concatenate with the provider's concat operator (`||` on SQLite a
 SQL Server):
 
 ```csharp
-var rows = await dataContext.Create<ComplexEntity>()
+var rows = await dataContext.From<ComplexEntity>()
     .Select(it => new { it.Id, Display = it.String + "/" + it.RequiredString })
     .ToListAsync();
 ```
@@ -94,7 +94,7 @@ public class SimpleEntityDto(int id)
     public int Id { get; } = id;
 }
 
-var rows = await dataContext.Create<SimpleEntity>()
+var rows = await dataContext.From<SimpleEntity>()
     .Select(entity => new SimpleEntityDto(entity.Id))
     .ToListAsync();
 ```
@@ -139,7 +139,7 @@ select id from simple_entity
 Instead of a constructor, a projection can use an object initialiser:
 
 ```csharp
-var rows = await dataContext.Create<SimpleEntity>()
+var rows = await dataContext.From<SimpleEntity>()
     .Select(it => new SimpleEntity { Id = it.Id })
     .ToListAsync();
 ```
@@ -153,7 +153,7 @@ select id from simple_entity
 `Select` can return a single value instead of a row object:
 
 ```csharp
-var ids = await dataContext.Create<SimpleEntity>()
+var ids = await dataContext.From<SimpleEntity>()
     .Where(it => it.Id < 5)
     .Select(it => it.Id)
     .ToListAsync();
@@ -166,7 +166,7 @@ select id from simple_entity where (id < 5)
 A boolean member works the same way:
 
 ```csharp
-var flags = await dataContext.Create<ComplexEntity>()
+var flags = await dataContext.From<ComplexEntity>()
     .Where(it => it.Boolean == true)
     .Select(it => it.Boolean)
     .ToListAsync();
@@ -183,7 +183,7 @@ A `QueryCommand<TResult>` can itself be used as the source of another query with
 projected again:
 
 ```csharp
-var inner = dataContext.Create<ComplexEntity>()
+var inner = dataContext.From<ComplexEntity>()
     .Select(it => new { it.Id, Calc = it.String + it.String });
 
 var rows = await dataContext.From(inner)
@@ -208,7 +208,7 @@ select id, Calc from (select id, (somestring + somestring) as [Calc] from comple
 `From(query)` also wraps a filtered query, which is the SQL `FROM` equivalent of a subquery:
 
 ```csharp
-var inner = dataContext.Create<SimpleEntity>()
+var inner = dataContext.From<SimpleEntity>()
     .Where(it => it.Id > 8)
     .Select(it => new { it.Id });
 
@@ -221,6 +221,46 @@ var rows = await dataContext.From(inner)
 -- SQLite
 select id from (select id from simple_entity where (id > 8))
 ```
+
+## JSON output (SQL Server)
+
+`QueryCommand<TResult>.ForJson(...)` appends a SQL Server `FOR JSON` clause, so the database returns a
+single JSON document instead of rows (`ISqlDialect.SupportsForJson`). The projection should be a single
+scalar/column because the result set collapses to one JSON column:
+
+```csharp
+var json = dataContext.From<IComplexEntity>()
+    .Select(e => new { e.Id, e.String })
+    .ForJson(ForJsonMode.Path, root: "items", includeNullValues: true)
+    .First();
+```
+
+```sql
+select id, somestring from complex_entity for json path, root('items'), include_null_values
+```
+
+`ForJsonMode.Path` shapes the document from the projection aliases, `ForJsonMode.Auto` from the table
+structure. The clause is placed after `ORDER BY` and before a trailing `OPTION (...)`. Other providers
+throw `NotSupportedException`.
+
+## XML output (SQL Server)
+
+`QueryCommand<TResult>.ForXml(...)` is the XML counterpart (`ISqlDialect.SupportsForXml`); it supports
+`RAW`, `AUTO`, `EXPLICIT` and `PATH`, with an optional row element name, a `ROOT('...')` wrapper and the
+`ELEMENTS` flag:
+
+```csharp
+var xml = dataContext.From<IComplexEntity>()
+    .Select(e => new { e.Id })
+    .ForXml(ForXmlMode.Raw, elementName: "row", root: "items", elements: true)
+    .First();
+```
+
+```sql
+select id from complex_entity for xml raw('row'), root('items'), elements
+```
+
+`FOR JSON` and `FOR XML` are mutually exclusive; combining them throws `NotSupportedException`.
 
 ## Provider differences
 

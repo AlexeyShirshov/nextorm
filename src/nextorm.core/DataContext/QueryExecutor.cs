@@ -173,8 +173,16 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     private static TResult ConvertScalar<TResult>(object value)
     {
         // Already the wanted runtime type (bool/int/long/double/decimal/string/...): unbox, no
-        // IConvertible dispatch.
+        // IConvertible dispatch. A boxed underlying value also satisfies `is T?`.
         if (value is TResult result) return result;
+
+        // A nullable projection (TResult = T?) is converted through its underlying type:
+        // Convert.ChangeType does not understand Nullable<T>, and the typed fast paths below compare
+        // against the non-nullable type. Boxing the underlying value is a valid unboxing to T?.
+        // This is what lets a provider's wider/native type map onto a nullable projection, e.g.
+        // MySQL timestampdiff BIGINT -> int? or SQLite datetime TEXT -> DateTime?.
+        if (Nullable.GetUnderlyingType(typeof(TResult)) is { } underlyingType)
+            return (TResult)Convert.ChangeType(value, underlyingType)!;
 
         var type = typeof(TResult);
 

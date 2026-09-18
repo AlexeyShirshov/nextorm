@@ -135,9 +135,9 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, e.Select(x => new
         {
-            A = NORM.SQL.bit_and(x.Id),
-            O = NORM.SQL.bit_or(x.Id),
-            X = NORM.SQL.bit_xor(x.Id)
+            A = NORM.PG_SQL.bit_and(x.Id),
+            O = NORM.PG_SQL.bit_or(x.Id),
+            X = NORM.PG_SQL.bit_xor(x.Id)
         }));
 
         sql.Should().Contain("groupBitAnd(id)");
@@ -169,7 +169,7 @@ public class SqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        Action act = () => SqlOf(ctx, e.Select(x => new { R = NORM.SQL.regr_slope(x.Id, x.Id) }));
+        Action act = () => SqlOf(ctx, e.Select(x => new { R = NORM.PG_SQL.regr_slope(x.Id, x.Id) }));
 
         act.Should().Throw<NotSupportedException>();
     }
@@ -182,8 +182,8 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, e.Select(x => new
         {
-            Min = NORM.SQL.arg_min(x.String, x.Datetime),
-            Max = NORM.SQL.arg_max(x.String, x.Datetime)
+            Min = NORM.CLK_SQL.arg_min(x.String, x.Datetime),
+            Max = NORM.CLK_SQL.arg_max(x.String, x.Datetime)
         }));
 
         sql.Should().Contain("argMin(somestring, dt)");
@@ -198,11 +198,11 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, e.Select(x => new
         {
-            C = NORM.SQL.count_if(() => x.Id > 0L),
-            S = NORM.SQL.sum_if(x.Id, () => x.Id > 0L),
-            A = NORM.SQL.avg_if(x.Id, () => x.Id > 0L),
-            Mi = NORM.SQL.min_if(x.Id, () => x.Id > 0L),
-            Ma = NORM.SQL.max_if(x.Id, () => x.Id > 0L)
+            C = NORM.CLK_SQL.count_if(() => x.Id > 0L),
+            S = NORM.CLK_SQL.sum_if(x.Id, () => x.Id > 0L),
+            A = NORM.CLK_SQL.avg_if(x.Id, () => x.Id > 0L),
+            Mi = NORM.CLK_SQL.min_if(x.Id, () => x.Id > 0L),
+            Ma = NORM.CLK_SQL.max_if(x.Id, () => x.Id > 0L)
         }));
 
         sql.Should().Contain("countIf((id > 0))");
@@ -232,5 +232,43 @@ public class SqlGenerationTests
 
         SqlOf(ctx, e.Select(x => new { D = NORM.SQL.date_from_parts(2023, 1, 31) }))
             .Should().Contain("makeDate(2023, 1, 31)");
+    }
+
+    [Fact]
+    public void IndexOfLastIndexOf_ShouldUsePositionUTF8()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = x.String!.IndexOf("b") }))
+            .Should().Contain("case when (positionUTF8(somestring, 'b')) = 0 then -1 else (positionUTF8(somestring, 'b')) - 1 end");
+        SqlOf(ctx, e.Select(x => new { V = x.String!.IndexOf("b", 1) }))
+            .Should().Contain("case when (positionUTF8(somestring, 'b', 1 + 1)) = 0 then -1 else (positionUTF8(somestring, 'b', 1 + 1)) - 1 end");
+        SqlOf(ctx, e.Select(x => new { V = x.String!.LastIndexOf("b") }))
+            .Should().Contain("case when (positionUTF8(reverseUTF8(somestring), reverseUTF8('b'))) = 0 then -1 else lengthUTF8(somestring) - (positionUTF8(reverseUTF8(somestring), reverseUTF8('b'))) - lengthUTF8('b') + 1 end");
+    }
+
+    [Fact]
+    public void PadLeftRightAndNewString_ShouldUseRepeat()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = x.String!.PadRight(5, '0') }))
+            .Should().Contain("case when lengthUTF8(somestring) >= (5) then somestring else concat(somestring, repeat('0', (5) - lengthUTF8(somestring))) end");
+        SqlOf(ctx, e.Select(x => new { V = new string('*', 4) }))
+            .Should().Contain("repeat('*', 4)");
+    }
+
+    [Fact]
+    public void RemoveInsert_ShouldSpliceWithSubstring()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = x.String!.Remove(2, 1) }))
+            .Should().Contain("concat(substring(somestring, 0 + 1, 2), '', substring(somestring, (2) + (1) + 1, lengthUTF8(somestring) - ((2) + (1))))");
+        SqlOf(ctx, e.Select(x => new { V = x.String!.Insert(2, "x") }))
+            .Should().Contain("concat(substring(somestring, 0 + 1, 2), 'x', substring(somestring, 2 + 1, lengthUTF8(somestring) - (2)))");
     }
 }

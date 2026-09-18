@@ -6,3 +6,5 @@
   href: ../prepared-vs-cached.md
 - name: SQL capabilities gap analysis
   href: ../sql-capabilities-gap-analysis.md
+- name: nextorm vs linq2db
+  href: ../linq2db-comparison.md

@@ -9,10 +9,10 @@
 Ordering and paging are applied to the command before it executes, so they become part of the
 generated statement rather than a client-side operation:
 
-* `Entity<TEntity>` exposes `OrderBy(Expression<Func<TEntity, object?>>, OrderDirection)`,
+* `EntityBuilder<TEntity>` exposes `OrderBy(Expression<Func<TEntity, object?>>, OrderDirection)`,
   `OrderBy(expr)`, `OrderByDescending(expr)` and the ordinal overloads `OrderBy(int)`,
   `OrderBy(int, OrderDirection)`, `OrderByDescending(int)`.
-* `Entity<TEntity>` also exposes `Limit(int)`, `Offset(int)` and `Page(int limit, int offset)`.
+* `EntityBuilder<TEntity>` also exposes `Limit(int)`, `Offset(int)` and `Page(int limit, int offset)`.
 * After `Select`, the returned `QueryCommand<TResult>` has the ordinal overloads only:
   `OrderBy(int columnIndex, OrderDirection direction)`, `OrderBy(int)` and `OrderByDescending(int)`.
 
@@ -23,7 +23,7 @@ command.
 ## Ordering by expression
 
 ```csharp
-var last = await dataContext.Create<SimpleEntity>()
+var last = await dataContext.From<SimpleEntity>()
     .OrderByDescending(it => it.Id)
     .Select(it => it.Id)
     .FirstAsync();
@@ -37,7 +37,7 @@ select id from simple_entity order by id desc limit 1
 Ascending is the default and is not written explicitly:
 
 ```csharp
-var rows = await dataContext.Create<ComplexEntity>()
+var rows = await dataContext.From<ComplexEntity>()
     .OrderBy(it => it.Int)
     .OrderByDescending(it => it.Id)
     .Select(it => new { it.Id })
@@ -56,7 +56,7 @@ After a projection, the sort key can be the ordinal of a select-list column (1-b
 usual way to order by a computed column without repeating the expression:
 
 ```csharp
-var last = await dataContext.Create<SimpleEntity>()
+var last = await dataContext.From<SimpleEntity>()
     .Select(it => it.Id)
     .OrderByDescending(1)
     .First();
@@ -83,7 +83,7 @@ default:
 | In-memory | nulls first | nulls last |
 
 ```csharp
-var rows = await dataContext.Create<ComplexEntity>()
+var rows = await dataContext.From<ComplexEntity>()
     .OrderByDescending(it => it.Int)
     .Select(it => new { it.Id })
     .ToListAsync();
@@ -97,7 +97,7 @@ rely on a cross-provider null order in shared queries.
 `Limit(int)` caps the number of rows and `Offset(int)` skips rows before the result:
 
 ```csharp
-var page = await dataContext.Create<SimpleEntity>()
+var page = await dataContext.From<SimpleEntity>()
     .Offset(1)
     .Select(it => it.Id)
     .FirstAsync();
@@ -118,7 +118,7 @@ SQL Server; see below). A plain `Limit(5).Select(it => it.Id)` produces
 `Page(limit, offset)` sets both bounds in one call:
 
 ```csharp
-var page = await dataContext.Create<SimpleEntity>()
+var page = await dataContext.From<SimpleEntity>()
     .Page(5, 10)
     .Select(it => it.Id)
     .ToListAsync();
@@ -156,7 +156,7 @@ The single-row terminals are available in synchronous and asynchronous forms:
 | `SingleOrDefault()` / `SingleOrDefaultAsync()` | the only row, or `default` if empty; throws if more than one |
 
 ```csharp
-var first = await dataContext.Create<SimpleEntity>()
+var first = await dataContext.From<SimpleEntity>()
     .OrderBy(it => it.Id)
     .Select(it => it.Id)
     .FirstAsync();
@@ -168,7 +168,7 @@ select id from simple_entity order by id limit 1
 ```
 
 ```csharp
-var only = await dataContext.Create<SimpleEntity>()
+var only = await dataContext.From<SimpleEntity>()
     .Where(it => it.Id == 2)
     .Select(it => it.Id)
     .SingleAsync();
@@ -190,11 +190,11 @@ whether or not the query already had a `Limit`/`Offset`.
 
 ## Any
 
-`Any()` and `AnyAsync()` are available on both `Entity<TEntity>` and `QueryCommand<TResult>`. They
+`Any()` and `AnyAsync()` are available on both `EntityBuilder<TEntity>` and `QueryCommand<TResult>`. They
 emit an `exists(...)` predicate and read a single boolean:
 
 ```csharp
-var exists = await dataContext.Create<SimpleEntity>()
+var exists = await dataContext.From<SimpleEntity>()
     .Where(it => it.Id == 100)
     .AnyAsync();
 ```

@@ -3,7 +3,7 @@ using System.Linq.Expressions;
 namespace nextorm.core;
 
 /// <summary>
-/// Translates the JSON-as-text surface of <see cref="NORM.NORM_SQL"/> (<c>json_value</c>,
+/// Translates the SQL Server JSON-as-text surface of <see cref="NORM.MS"/> (<c>json_value</c>,
 /// <c>json_query</c>, <c>json_modify</c>), where JSON is stored in a plain text column rather than a
 /// native JSON type. Only a dialect that opts in with <see cref="ISqlDialect.SupportsTextJson"/>
 /// (SQL Server) may use these constructs; every other provider rejects them with a clear message.
@@ -20,26 +20,52 @@ internal static class TextJsonSqlTranslator
 
         switch (node.Method.Name)
         {
-            case nameof(NORM.NORM_SQL.json_value) when args.Count == 2:
+            case nameof(NORM.MS.json_value) when args.Count == 2:
                 EmitFunction(visitor, "json_value", args);
                 return true;
-            case nameof(NORM.NORM_SQL.json_query) when args.Count == 2:
+            case nameof(NORM.MS.json_query) when args.Count == 2:
                 EmitFunction(visitor, "json_query", args);
                 return true;
-            case nameof(NORM.NORM_SQL.json_modify) when args.Count == 3:
+            case nameof(NORM.MS.json_modify) when args.Count == 3:
                 EmitFunction(visitor, "json_modify", args);
+                return true;
+            case nameof(NORM.MS.isjson) when args.Count == 1:
+                EmitIsJson(visitor, args);
                 return true;
             default:
                 return false;
         }
     }
 
+    /// <summary>
+    /// <c>isjson(value)</c>. T-SQL's <c>ISJSON</c> returns an <c>int</c>, so a predicate context compares
+    /// it with 1 and a value context casts it to <c>bit</c> (the only provider that opts into
+    /// <see cref="ISqlDialect.SupportsTextJson"/> is SQL Server).
+    /// </summary>
+    private static void EmitIsJson(BaseExpressionVisitor visitor, IReadOnlyList<Expression> args)
+    {
+        if (!visitor.Dialect.SupportsTextJson)
+            throw new NotSupportedException(
+                "The text JSON functions (json_value/json_query/json_modify/isjson) are not supported by this provider.");
+
+        if (visitor.IsParamMode)
+        {
+            visitor.Visit(args[0]);
+            return;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        var value = visitor.VisitToString(args[0]);
+
+        visitor.Builder!.Append(visitor.Dialect.MakeIsJson(value, visitor.IsPredicateContext));
+    }
+
     private static void EmitFunction(BaseExpressionVisitor visitor, string sqlName, IReadOnlyList<Expression> args)
     {
         if (!visitor.Dialect.SupportsTextJson)
             throw new NotSupportedException(
-                "The text JSON functions (json_value/json_query/json_modify) are not supported by this provider.");
+                "The text JSON functions (json_value/json_query/json_modify/isjson) are not supported by this provider.");
 
-        SqlOperandTranslator.EmitFunction(visitor, sqlName, args);
+        SqlOperandTranslator.EmitFunction(visitor, visitor.Dialect.MakeTextJsonFunction(sqlName), args);
     }
 }

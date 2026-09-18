@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>nextorm.benchmark.InMemoryBenchmarkGroupBy-20260917-235145</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)
+AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 16 logical and 8 physical cores
+.NET SDK 10.0.401
+  [Host] : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+</code></pre>
+<pre><code>Job=ShortRun  Toolchain=InProcessEmitToolchain  IterationCount=3  
+LaunchCount=1  WarmupCount=3  Categories=InMemoryNew  
+</code></pre>
+
+<table>
+<thead><tr><th>Method               </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Ratio</th><th>RatioSD</th><th>Gen0</th><th>Gen1</th><th>Allocated</th><th>Alloc Ratio</th>
+</tr>
+</thead><tbody><tr><td>Linq_GroupByCount</td><td>12.61 ms</td><td>1.740 ms</td><td>0.095 ms</td><td>0.22</td><td>0.00</td><td>3125.0000</td><td>1031.2500</td><td>25.11 MB</td><td>0.50</td>
+</tr><tr><td>Nextorm_GroupByCount</td><td>58.35 ms</td><td>3.306 ms</td><td>0.181 ms</td><td>1.00</td><td>0.00</td><td>6222.2222</td><td>2000.0000</td><td>49.88 MB</td><td>1.00</td>
+</tr><tr><td>EFCoreInMemory_GroupByCount</td><td>116.42 ms</td><td>33.353 ms</td><td>1.828 ms</td><td>2.00</td><td>0.03</td><td>22200.0000</td><td>13000.0000</td><td>178.63 MB</td><td>3.58</td>
+</tr></tbody></table>
+</body>
+</html>

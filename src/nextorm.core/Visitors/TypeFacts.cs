@@ -30,14 +30,16 @@ internal static class TypeFacts
         _ => false
     };
 
-    /// <summary>True for the method calls that the visitor renders as a predicate (LIKE/IN/EXISTS).</summary>
+    /// <summary>True for the method calls that the visitor renders as a predicate (LIKE/IN/EXISTS/full-text).</summary>
     internal static bool IsPredicateCall(MethodCallExpression call)
     {
         if (call.Method.DeclaringType == typeof(string))
             return call.Method.Name is nameof(string.Contains) or nameof(string.StartsWith)
                 or nameof(string.EndsWith) or nameof(string.IsNullOrEmpty);
 
-        return call.Method.Name is "exists" or "any" or "all" or "Contains";
+        return call.Method.Name is "exists" or "any" or "all" or "Contains"
+            or nameof(NORM.NORM_SQL.contains) or nameof(NORM.NORM_SQL.freetext)
+            or nameof(NORM.MS.isjson);
     }
 
     /// <summary>

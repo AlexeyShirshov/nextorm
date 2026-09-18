@@ -24,7 +24,8 @@ internal static class NormSqlTranslator
             return true;
         }
 
-        if (node.Method.DeclaringType == typeof(NORM.NORM_SQL))
+        // PG_SQL derives from NORM_SQL, so IsAssignableFrom covers both surfaces.
+        if (typeof(NORM.NORM_SQL).IsAssignableFrom(node.Method.DeclaringType))
         {
             TranslateNormSql(visitor, node);
             return true;

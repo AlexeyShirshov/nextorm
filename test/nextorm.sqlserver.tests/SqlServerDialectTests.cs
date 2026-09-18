@@ -99,10 +99,145 @@ public class SqlServerDialectTests
     }
 
     [Fact]
+    public void ApplyHooks_ShouldUseCrossAndOuterApply()
+    {
+        Dialect.SupportsApply.Should().BeTrue();
+        Dialect.MakeApply(JoinType.CrossApply, "src").Should().Be(" cross apply src");
+        Dialect.MakeApply(JoinType.OuterApply, "src").Should().Be(" outer apply src");
+    }
+
+    [Fact]
+    public void ForJsonHooks_ShouldRenderClause()
+    {
+        Dialect.SupportsForJson.Should().BeTrue();
+        Dialect.MakeForJson(new ForJsonClause(ForJsonMode.Path)).Should().Be("for json path");
+        Dialect.MakeForJson(new ForJsonClause(ForJsonMode.Auto)).Should().Be("for json auto");
+        Dialect.MakeForJson(new ForJsonClause(ForJsonMode.Path, "r", true))
+            .Should().Be("for json path, root('r'), include_null_values");
+    }
+
+    [Fact]
+    public void BuiltInTableFunctions_ShouldBeGated()
+    {
+        Dialect.SupportsTableFunction("string_split").Should().BeTrue();
+        Dialect.SupportsTableFunction("openjson").Should().BeTrue();
+        Dialect.SupportsTableFunction("generate_series").Should().BeFalse();
+    }
+
+    [Fact]
+    public void FullTextHooks_ShouldRenderPredicates()
+    {
+        Dialect.SupportsFullText.Should().BeTrue();
+        Dialect.MakeFullText("contains", "c", "@p").Should().Be("contains(c, @p)");
+        Dialect.MakeFullText("freetext", "c", "@p").Should().Be("freetext(c, @p)");
+    }
+
+    [Fact]
+    public void IsJsonHooks_ShouldRenderPredicateAndValue()
+    {
+        Dialect.SupportsTextJson.Should().BeTrue();
+        Dialect.MakeIsJson("@p", asPredicate: true).Should().Be("(isjson(@p)) = 1");
+        Dialect.MakeIsJson("@p", asPredicate: false).Should().Be("cast(isjson(@p) as bit)");
+    }
+
+    [Fact]
+    public void ForXmlHooks_ShouldRenderClause()
+    {
+        Dialect.SupportsForXml.Should().BeTrue();
+        Dialect.MakeForXml(new ForXmlClause(ForXmlMode.Path)).Should().Be("for xml path");
+        Dialect.MakeForXml(new ForXmlClause(ForXmlMode.Raw, "row", "root", true))
+            .Should().Be("for xml raw('row'), root('root'), elements");
+        Dialect.MakeForXml(new ForXmlClause(ForXmlMode.Auto, Root: "r")).Should().Be("for xml auto, root('r')");
+    }
+
+    [Fact]
+    public void TableHintHooks_ShouldUseWithClause()
+    {
+        Dialect.SupportsTableHints.Should().BeTrue();
+        Dialect.MakeTableHints(["nolock"]).Should().Be(" with (nolock)");
+        Dialect.MakeTableHints(["nolock", "index(ix)"]).Should().Be(" with (nolock, index(ix))");
+    }
+
+    [Fact]
+    public void QueryHintHooks_ShouldUseOptionClause()
+    {
+        Dialect.SupportsQueryHints.Should().BeTrue();
+        Dialect.RenderQueryHints("select 1", ["recompile"], null).Should().Be("select 1 option (recompile)");
+        Dialect.RenderQueryHints("select 1", ["recompile"], "option (maxrecursion 100)")
+            .Should().Be("select 1 option (maxrecursion 100, recompile)");
+    }
+
+    [Fact]
+    public void GreatestLeast_ShouldUseStandardSyntax()
+    {
+        Dialect.SupportsGreatestLeast.Should().BeTrue();
+        Dialect.MakeGreatest(["a", "b"]).Should().Be("greatest(a, b)");
+        Dialect.MakeLeast(["a", "b"]).Should().Be("least(a, b)");
+    }
+
+    [Fact]
+    public void DateTrunc_ShouldMapPluralPartsAndRejectUnsupportedOnes()
+    {
+        Dialect.SupportsDateTrunc.Should().BeTrue();
+        Dialect.MakeDateTrunc("month", "d").Should().Be("datetrunc(month, d)");
+        Dialect.MakeDateTrunc("milliseconds", "d").Should().Be("datetrunc(millisecond, d)");
+        Dialect.MakeDateTrunc("microseconds", "d").Should().Be("datetrunc(microsecond, d)");
+
+        var act = () => Dialect.MakeDateTrunc("century", "d");
+        act.Should().Throw<NotSupportedException>().WithMessage("*century*");
+    }
+
+    [Fact]
+    public void StringAgg_ShouldBeEnabledWithoutArrayAgg()
+    {
+        Dialect.SupportsStringAgg.Should().BeTrue();
+        Dialect.SupportsArrayAgg.Should().BeFalse();
+        Dialect.MakeStringAgg("x", "','").Should().Be("string_agg(x, ',')");
+    }
+
+    [Fact]
+    public void GroupingModifiers_ShouldUseAnsiForm()
+    {
+        Dialect.SupportsRollup.Should().BeTrue();
+        Dialect.SupportsCube.Should().BeTrue();
+        Dialect.MakeGrouping("a, b", GroupingType.Rollup).Should().Be("rollup (a, b)");
+        Dialect.MakeGrouping("a, b", GroupingType.Cube).Should().Be("cube (a, b)");
+        Dialect.MakeGrouping("a, b", GroupingType.None).Should().Be("a, b");
+        Dialect.SupportsGroupingSets.Should().BeTrue();
+        Dialect.MakeGroupingSets(["(a, b)", "(a)", "()"]).Should().Be("grouping sets ((a, b), (a), ())");
+    }
+
+    [Fact]
+    public void DateArithmetic_ShouldUseDateaddAndEomonth()
+    {
+        Dialect.SupportsDateArithmetic.Should().BeTrue();
+        Dialect.MakeDateAdd("day", "n", "d").Should().Be("dateadd(day, n, d)");
+        Dialect.MakeDateAdd("milliseconds", "n", "d").Should().Be("dateadd(millisecond, n, d)");
+        Dialect.MakeDateAdd("century", "n", "d").Should().Be("dateadd(year, (n) * 100, d)");
+        Dialect.MakeDateDiff("day", "a", "b").Should().Be("datediff(day, a, b)");
+        Dialect.MakeDateDiff("milliseconds", "a", "b").Should().Be("datediff(millisecond, a, b)");
+        Dialect.MakeEndOfMonth("d").Should().Be("eomonth(d)");
+        Dialect.MakeDateFromParts("y", "m", "d").Should().Be("datefromparts(y, m, d)");
+    }
+
+    [Fact]
     public void CapabilityFlags_ShouldMatchSqlServer()
     {
         Dialect.RequireSubqueryAlias.Should().BeTrue();
         Dialect.SupportsRightFullJoin.Should().BeTrue();
         Dialect.SupportsIntersectExceptAll.Should().BeFalse();
+        Dialect.SupportsApply.Should().BeTrue();
+        Dialect.SupportsQueryHints.Should().BeTrue();
+        Dialect.SupportsGreatestLeast.Should().BeTrue();
+        Dialect.SupportsDateTrunc.Should().BeTrue();
+        Dialect.SupportsDateArithmetic.Should().BeTrue();
+        Dialect.SupportsStringAgg.Should().BeTrue();
+        Dialect.SupportsRollup.Should().BeTrue();
+        Dialect.SupportsCube.Should().BeTrue();
+        Dialect.SupportsTextJson.Should().BeTrue();
+        Dialect.SupportsFullText.Should().BeTrue();
+        Dialect.SupportsTableHints.Should().BeTrue();
+        Dialect.SupportsForJson.Should().BeTrue();
+        Dialect.SupportsForXml.Should().BeTrue();
     }
 }

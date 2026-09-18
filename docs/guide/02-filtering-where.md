@@ -6,11 +6,11 @@
 
 ## Overview
 
-`Where` takes a boolean expression and returns a new `Entity<TEntity>`; like every builder method it
+`Where` takes a boolean expression and returns a new `EntityBuilder<TEntity>`; like every builder method it
 is immutable, so the original is unchanged. Repeating `Where` combines the predicates with `and`:
 
 ```csharp
-public Entity<TEntity> Where(Expression<Func<TEntity, bool>> condition)
+public EntityBuilder<TEntity> Where(Expression<Func<TEntity, bool>> condition)
 ```
 
 The lambda is translated into the `WHERE` clause and nothing is executed until a terminal such as
@@ -35,7 +35,7 @@ Two kinds of values reach the database differently:
 | `x.Id <= 1` | `(id <= 1)` | `<=` |
 
 ```csharp
-var rows = await dataContext.Create<SimpleEntity>()
+var rows = await dataContext.From<SimpleEntity>()
     .Where(x => x.Id >= 9)
     .Select(x => new { x.Id })
     .ToListAsync();
@@ -50,7 +50,7 @@ select id from simple_entity where (id >= 9)
 Comparing a column with `null` renders `is null` / `is not null` instead of `=` / `!=`:
 
 ```csharp
-var rows = await dataContext.Create<ComplexEntity>()
+var rows = await dataContext.From<ComplexEntity>()
     .Where(x => x.String == null)
     .Select(x => new { x.Id })
     .ToListAsync();
@@ -69,7 +69,7 @@ merely expected to hold `null`.
 `&&` and `||` map to `and` and `or` and are parenthesised as a group:
 
 ```csharp
-var rows = await dataContext.Create<ComplexEntity>()
+var rows = await dataContext.From<ComplexEntity>()
     .Where(x => x.Boolean == true && x.Id > 1)
     .Select(x => new { x.Id })
     .ToListAsync();
@@ -87,7 +87,7 @@ On PostgreSQL the boolean literal is `true` (`b = true`); on SQLite and SQL Serv
 `!` maps to `not (...)` and negates the whole operand:
 
 ```csharp
-var ids = await dataContext.Create<ComplexEntity>()
+var ids = await dataContext.From<ComplexEntity>()
     .Where(x => !x.Boolean!.Value)
     .Select(x => x.Id)
     .ToListAsync();
@@ -135,7 +135,7 @@ Unary minus is `-(x)` and the ones-complement is `~(x)`. Integral bitwise operat
 | `x.Id ^ 1` | - | XOR is **not supported** and throws `NotSupportedException` |
 
 ```csharp
-var rows = await dataContext.Create<SimpleEntity>()
+var rows = await dataContext.From<SimpleEntity>()
     .Where(x => (x.Id & 1) == 1)
     .Select(x => new { x.Id })
     .ToListAsync();
@@ -153,7 +153,7 @@ select id from simple_entity where (id & 1) = 1
 `??` becomes the provider's coalesce function:
 
 ```csharp
-var rows = await dataContext.Create<ComplexEntity>()
+var rows = await dataContext.From<ComplexEntity>()
     .Select(x => new { x.Id, V = x.String ?? "" })
     .ToListAsync();
 ```
@@ -169,7 +169,7 @@ var rows = await dataContext.Create<ComplexEntity>()
 The ternary operator becomes an ANSI `CASE WHEN`:
 
 ```csharp
-var rows = await dataContext.Create<ComplexEntity>()
+var rows = await dataContext.From<ComplexEntity>()
     .Select(x => new { x.Id, Size = x.Id > 1 ? "big" : "small" })
     .ToListAsync();
 ```
@@ -181,7 +181,7 @@ select id, case when (id > 1) then 'big' else 'small' end as 'Size' from complex
 A conditional can appear inside a predicate:
 
 ```csharp
-var count = await dataContext.Create<ComplexEntity>()
+var count = await dataContext.From<ComplexEntity>()
     .Where(x => (x.Int == null ? 0 : x.Int) == 1)
     .CountAsync();
 ```
@@ -193,7 +193,7 @@ select count(*) from complex_entity where case when nullableint is null then 0 e
 A C# `switch` expression over constant patterns becomes a searched `CASE`:
 
 ```csharp
-var rows = await dataContext.Create<ComplexEntity>()
+var rows = await dataContext.From<ComplexEntity>()
     .Select(e => new { e.Id, Label = e.Id switch { 1 => "one", 2 => "two", _ => "other" } })
     .ToListAsync();
 ```
@@ -211,7 +211,7 @@ A captured local is extracted as a named command parameter:
 
 ```csharp
 var threshold = 5L;
-var rows = await dataContext.Create<ComplexEntity>()
+var rows = await dataContext.From<ComplexEntity>()
     .Where(x => x.Id > threshold)
     .Select(x => new { x.Id })
     .ToListAsync();
@@ -227,7 +227,7 @@ var rows = await dataContext.Create<ComplexEntity>()
 useful when the same query shape is prepared or cached and executed repeatedly:
 
 ```csharp
-var rows = await dataContext.Create<SimpleEntity>()
+var rows = await dataContext.From<SimpleEntity>()
     .Where(x => x.Id == NORM.Param<int>(0))
     .Select(x => new { x.Id })
     .ToListAsync(42);
@@ -247,7 +247,7 @@ See [Query reuse: cache vs Prepare](15-query-reuse.md) for the lifetime rules.
 
 ```csharp
 var values = new long[] { 1, 3, 10 };
-var ids = await dataContext.Create<ComplexEntity>()
+var ids = await dataContext.From<ComplexEntity>()
     .Where(e => NORM.SQL.@in(e.Id, values))
     .Select(e => e.Id)
     .ToListAsync();
@@ -262,7 +262,7 @@ select id from complex_entity where id in ($p0, $p1, $p2)
 
 ```csharp
 var values = new List<long> { 1, 3 };
-var ids = await dataContext.Create<ComplexEntity>()
+var ids = await dataContext.From<ComplexEntity>()
     .Where(e => values.Contains(e.Id))
     .Select(e => e.Id)
     .ToListAsync();
@@ -302,10 +302,21 @@ helpers:
 | `NORM.SQL.exists(query)` | `exists(<query>)` |
 | `x.Id == NORM.SQL.any(query)` | `id = any(<query>)` |
 | `x.Id == NORM.SQL.all(query)` | `id = all(<query>)` |
+| `NORM.PG_SQL.any(x, array)` | `x = any(@array)` (PostgreSQL) |
+| `x == NORM.PG_SQL.any(array)` | `x = any(@array)` (PostgreSQL) |
+| `NORM.SQL.contains(x.String, "foo")` | `contains(somestring, 'foo')` (SQL Server) |
+| `NORM.SQL.freetext(x.String, "foo")` | `freetext(somestring, 'foo')` (SQL Server) |
+
+`NORM.SQL.contains`/`NORM.SQL.freetext` are full-text predicates (`ISqlDialect.SupportsFullText`,
+rendered by `ISqlDialect.MakeFullText`); the column must be full-text indexed. SQL Server renders
+`contains`/`freetext` (materialised as a `bit` when projected), PostgreSQL
+`to_tsvector(col) @@ plainto_tsquery(search)` (or `websearch_to_tsquery` for `freetext`), and
+MySQL/MariaDB `match(col) against(search in boolean mode) > 0` (natural-language mode for `freetext`).
 
 For a captured pattern the wildcards are concatenated around the parameter at build time, for example
 `somestring like '%' || $needle || '%'` on SQLite. `any` and `all` are not supported by the SQLite
-engine and fail when the statement runs.
+engine and fail when the statement runs. Over an **array** they require PostgreSQL, where the whole
+array is bound as one parameter; see [Arrays](11-scalar-functions.md#arrays-postgresql).
 
 ## Function and operator mapping
 
@@ -326,6 +337,7 @@ engine and fail when the statement runs.
 | `switch` | searched `case when ... then ... end` |
 | `NORM.SQL.@in` / `Contains` | `in (...)` |
 | `NORM.SQL.like` / `Contains` / `StartsWith` / `EndsWith` | `like` |
+| `NORM.SQL.contains` / `NORM.SQL.freetext` | `contains` / `freetext` (SQL Server); `@@` match (PostgreSQL); `match ... against` (MySQL/MariaDB) |
 
 ## Provider differences
 

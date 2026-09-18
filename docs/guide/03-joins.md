@@ -1,21 +1,22 @@
 # Joins
 
-> Combine rows from two or more entities, derived queries or raw tables with `Join`, `LeftJoin`, `RightJoin`, `FullJoin` and `CrossJoin`.
+> Combine rows from two or more entities, derived queries or raw tables with `Join`, `LeftJoin`, `RightJoin`, `FullJoin`, `CrossJoin`, `CrossApply` and `OuterApply`.
 
 **Prerequisites:** [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Querying and projections](01-querying-and-projections.md) · [Filtering (WHERE)](02-filtering-where.md)
 
 ## Overview
 
-Every `Entity<T>` exposes five join methods: `Join` (inner), `LeftJoin`, `RightJoin`, `FullJoin` and
-`CrossJoin`. A join condition is an expression over the two sides and is emitted as the `ON` clause
-of the join, exactly where the builder can translate it. `CrossJoin` takes no condition and emits
-`cross join`.
+Every `EntityBuilder<T>` exposes seven join methods: `Join` (inner), `LeftJoin`, `RightJoin`, `FullJoin`,
+`CrossJoin`, `CrossApply` and `OuterApply`. A join condition is an expression over the two sides and is
+emitted as the `ON` clause of the join, exactly where the builder can translate it. `CrossJoin`,
+`CrossApply` and `OuterApply` take no condition; the first emits `cross join`, the latter two emit the
+provider's lateral/apply form (see [APPLY and LATERAL](#apply-and-lateral)).
 
 The right-hand side can be:
 
-* another typed entity, `Entity<TJoinEntity>`;
+* another typed entity, `EntityBuilder<TJoinEntity>`;
 * a `QueryCommand<TJoinEntity>` — a subquery that is rendered as a derived table;
-* a raw table, `Entity` created through `DataContext.From("table")`, whose columns are read through
+* a raw table, `EntityBuilder` created through `DataContext.From("table")`, whose columns are read through
   the `TableAlias` indexer (`t["id"]`).
 
 Two things are important before looking at the examples:
@@ -36,8 +37,8 @@ The generated SQL references each table under a positional alias: `t1` for the b
 ## Inner join
 
 ```csharp
-var rows = await dataContext.Create<ISimpleEntity>()
-    .Join(dataContext.Create<IComplexEntity>(), (s, c) => s.Id == c.Id)
+var rows = await dataContext.From<ISimpleEntity>()
+    .Join(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
     .Select(p => new { p.t1.Id, p.t2.RequiredString })
     .ToListAsync();
 ```
@@ -52,8 +53,8 @@ select t1.id, t2.requiredstring from simple_entity as 't1' join complex_entity a
 A `WHERE` after the join is applied to the accumulated projection and can reference either side:
 
 ```csharp
-var rows = await dataContext.Create<ISimpleEntity>()
-    .Join(dataContext.Create<IComplexEntity>(), (s, c) => s.Id == c.Id)
+var rows = await dataContext.From<ISimpleEntity>()
+    .Join(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
     .Where(p => p.t2.Boolean ?? false)
     .Select(p => new { p.t1.Id, p.t2.RequiredString })
     .ToListAsync();
@@ -63,9 +64,9 @@ A `Where` placed before the join filters the left side first; the two are equiva
 but differ for outer joins:
 
 ```csharp
-var rows = await dataContext.Create<ISimpleEntity>()
+var rows = await dataContext.From<ISimpleEntity>()
     .Where(it => it.Id > 2)
-    .Join(dataContext.Create<IComplexEntity>(), (s, c) => s.Id == c.Id)
+    .Join(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
     .Where(p => p.t2.RequiredString == "34mfs")
     .Select(p => new { p.t1.Id, p.t2.RequiredString })
     .ToListAsync();
@@ -77,8 +78,8 @@ var rows = await dataContext.Create<ISimpleEntity>()
 match; `RightJoin` and `FullJoin` behave symmetrically.
 
 ```csharp
-var rows = dataContext.Create<ISimpleEntity>()
-    .LeftJoin(dataContext.Create<IComplexEntity>(), (s, c) => s.Id == c.Id)
+var rows = dataContext.From<ISimpleEntity>()
+    .LeftJoin(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
     .Select(p => new { LeftId = p.t1.Id, RightString = p.t2.RequiredString })
     .ToList();
 ```
@@ -90,13 +91,13 @@ select t1.id as 'LeftId', t2.requiredstring as 'RightString' from simple_entity 
 `RightJoin` and `FullJoin` are emitted with the same shape:
 
 ```csharp
-var right = dataContext.Create<IComplexEntity>()
-    .RightJoin(dataContext.Create<ISimpleEntity>(), (c, s) => c.Id == s.Id)
+var right = dataContext.From<IComplexEntity>()
+    .RightJoin(dataContext.From<ISimpleEntity>(), (c, s) => c.Id == s.Id)
     .Select(p => new { LeftString = p.t1.RequiredString, RightId = p.t2.Id })
     .ToList();
 
-var full = dataContext.Create<ISimpleEntity>()
-    .FullJoin(dataContext.Create<IComplexEntity>(), (s, c) => s.Id == c.Id)
+var full = dataContext.From<ISimpleEntity>()
+    .FullJoin(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
     .Select(p => new { LeftId = p.t1.Id, RightString = p.t2.RequiredString })
     .ToList();
 ```
@@ -109,12 +110,62 @@ var full = dataContext.Create<ISimpleEntity>()
 `CrossJoin` takes no condition and produces the Cartesian product:
 
 ```csharp
-var count = dataContext.Create<ISimpleEntity>().CrossJoin(dataContext.Create<IComplexEntity>()).Count();
+var count = dataContext.From<ISimpleEntity>().CrossJoin(dataContext.From<IComplexEntity>()).Count();
 ```
 
 ```sql
 select count(*) from simple_entity as 't1' cross join complex_entity as 't2'
 ```
+
+## APPLY and LATERAL
+
+`CrossApply` and `OuterApply` render the provider's lateral-source form. The right-hand side is the same
+set of sources that a regular join accepts — a typed entity, a `QueryCommand<T>` derived table, a raw
+table or a table-valued function — but there is no `ON` condition:
+
+* `CrossApply` keeps only the left-hand rows for which the applied source returns at least one row
+  (SQL Server `CROSS APPLY`, PostgreSQL/MySQL/MariaDB `CROSS JOIN LATERAL`);
+* `OuterApply` also keeps left-hand rows whose applied source is empty, filling the right side with
+  `NULL` (SQL Server `OUTER APPLY`, PostgreSQL/MySQL/MariaDB `LEFT JOIN LATERAL ... ON true`).
+
+```csharp
+var rows = await dataContext.From<ISimpleEntity>()
+    .CrossApply(dataContext.From<IComplexEntity>())
+    .Select(p => new { p.t1.Id, p.t2.RequiredString })
+    .ToListAsync();
+```
+
+```sql
+-- SQL Server
+select t1.id, t2.somestring from simple_entity as [t1] cross apply complex_entity as [t2]
+-- PostgreSQL / MySQL / MariaDB
+select t1.id, t2.somestring from simple_entity as t1 cross join lateral complex_entity as t2
+```
+
+An `OUTER APPLY` over a derived table:
+
+```csharp
+var subQuery = dataContext.From<IComplexEntity>()
+    .Where(c => c.Id > 1)
+    .Select(c => new { c.Id, c.RequiredString });
+
+var rows = dataContext.From<ISimpleEntity>()
+    .OuterApply(subQuery)
+    .Select(p => new { p.t1.Id, p.t2.RequiredString })
+    .ToList();
+```
+
+```sql
+-- SQL Server
+... from simple_entity as [t1] outer apply (select id, somestring from complex_entity where ...) as [t2]
+-- PostgreSQL / MySQL / MariaDB
+... from simple_entity as t1 left join lateral (select ...) as t2 on true
+```
+
+> **Correlation is not expressible yet.** The applied source cannot reference columns of the left-hand
+> row, because there is no public API to author an outer-row reference inside a `FROM` subquery. Until
+> that lands, `CrossApply`/`OuterApply` are equivalent to a `CROSS JOIN`/`LEFT JOIN` over a non-correlated
+> source and are rejected by dialects without a lateral source (`SupportsApply == false`).
 
 ## Joining a subquery
 
@@ -122,11 +173,11 @@ A `QueryCommand<T>` can be joined directly. It is wrapped in parentheses and ali
 table (the alias is optional on SQLite and required on SQL Server and PostgreSQL):
 
 ```csharp
-var subQuery = dataContext.Create<IComplexEntity>()
+var subQuery = dataContext.From<IComplexEntity>()
     .Where(it => it.Id == 3)
     .Select(it => new { it.Id, it.RequiredString, it.Boolean });
 
-var rows = await dataContext.Create<ISimpleEntity>()
+var rows = await dataContext.From<ISimpleEntity>()
     .Join(subQuery, (s, c) => s.Id == c.Id)
     .Select(p => new { p.t1.Id, p.t2.RequiredString })
     .ToListAsync();
@@ -134,7 +185,7 @@ var rows = await dataContext.Create<ISimpleEntity>()
 
 ## Joining a raw table
 
-`From("table")` starts a non-generic `Entity` whose columns are accessed through `TableAlias`. The
+`From("table")` starts a non-generic `EntityBuilder` whose columns are accessed through `TableAlias`. The
 left and right sides can be mixed freely with typed entities:
 
 ```csharp
@@ -146,7 +197,7 @@ var rows = dataContext
 
 var mixed = dataContext
     .From("simple_entity")
-    .Join(dataContext.Create<IComplexEntity>(), (s, c) => s["id"].AsInt == c.Id)
+    .Join(dataContext.From<IComplexEntity>(), (s, c) => s["id"].AsInt == c.Id)
     .Select(p => new { Id = p.t1["id"].AsInt, Str = p.t2.String })
     .ToList();
 ```
@@ -157,10 +208,10 @@ Each chained call adds one table. The condition receives the projection accumula
 new entity:
 
 ```csharp
-var rows = dataContext.Create<ISimpleEntity>()
-    .Join(dataContext.Create<IComplexEntity>(), (s, c) => s.Id == c.Id)          // EntityP2<SimpleEntity, ComplexEntity>
-    .Join(dataContext.Create<ISimpleEntity>(), (p, s) => p.t2.Id == s.Id)        // EntityP3<...>
-    .Join(dataContext.Create<IComplexEntity>(), (p, c) => p.t3.Id == c.Id)       // EntityP4<...>
+var rows = dataContext.From<ISimpleEntity>()
+    .Join(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)          // EntityP2<SimpleEntity, ComplexEntity>
+    .Join(dataContext.From<ISimpleEntity>(), (p, s) => p.t2.Id == s.Id)        // EntityP3<...>
+    .Join(dataContext.From<IComplexEntity>(), (p, c) => p.t3.Id == c.Id)       // EntityP4<...>
     .Select(p => new { A = p.t1.Id, B = p.t2.RequiredString, C = p.t3.Id, D = p.t4.RequiredString })
     .ToList();
 ```
@@ -175,10 +226,10 @@ The same pattern reaches `EntityP5` through `EntityP8`. At eight tables the proj
 ```csharp
 var e = new[]
 {
-    dataContext.Create<ISimpleEntity>(), dataContext.Create<ISimpleEntity>(),
-    dataContext.Create<ISimpleEntity>(), dataContext.Create<ISimpleEntity>(),
-    dataContext.Create<ISimpleEntity>(), dataContext.Create<ISimpleEntity>(),
-    dataContext.Create<ISimpleEntity>(), dataContext.Create<ISimpleEntity>(),
+    dataContext.From<ISimpleEntity>(), dataContext.From<ISimpleEntity>(),
+    dataContext.From<ISimpleEntity>(), dataContext.From<ISimpleEntity>(),
+    dataContext.From<ISimpleEntity>(), dataContext.From<ISimpleEntity>(),
+    dataContext.From<ISimpleEntity>(), dataContext.From<ISimpleEntity>(),
 };
 
 var sql = e[0]
@@ -202,8 +253,8 @@ including on an implicit plan-cache hit:
 for (var i = 1; i <= 3; i++)
 {
     var id = i;
-    var rows = dataContext.Create<ISimpleEntity>()
-        .Join(dataContext.Create<IComplexEntity>(), (s, c) => s.Id == c.Id)
+    var rows = dataContext.From<ISimpleEntity>()
+        .Join(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
         .Where(p => p.t2.Id == id)
         .Select(p => new { p.t1.Id, p.t2.RequiredString })
         .ToList();
@@ -212,26 +263,33 @@ for (var i = 1; i <= 3; i++)
 
 ## Provider differences
 
-| Provider | Join aliases | Derived-table alias | Outer joins |
-|---|---|---|---|
-| SQLite | `as 't1'` | optional | left/right/full supported |
-| SQL Server | `as [t1]` | required | left/right/full supported |
-| PostgreSQL | `as "t1"` | required | left/right/full supported |
-| In-memory | not applicable (delegate execution) | not applicable | inner/left/right/full/cross supported; table-valued function sources are not |
+| Provider | Join aliases | Derived-table alias | Outer joins | APPLY / LATERAL |
+|---|---|---|---|---|
+| SQLite | `as 't1'` | optional | left/right/full supported | not supported (`NotSupportedException`) |
+| SQL Server | `as [t1]` | required | left/right/full supported | `CROSS APPLY` / `OUTER APPLY` |
+| PostgreSQL | `as "t1"` | required | left/right/full supported | `CROSS JOIN LATERAL` / `LEFT JOIN LATERAL ... ON true` |
+| MySQL / MariaDB | `as \`t1\`` | required | left/right/full supported | `CROSS JOIN LATERAL` / `LEFT JOIN LATERAL ... ON true` |
+| ClickHouse | `as \`t1\`` | required | left/right/full supported | not supported (`NotSupportedException`) |
+| In-memory | not applicable (delegate execution) | not applicable | inner/left/right/full/cross supported; APPLY and table-valued function sources are not | not supported |
 
 The in-memory provider compiles the join condition to a delegate and loops, so it does not emit SQL;
 it supports `Inner`, `Left`, `Right`, `Full` and `Cross` joins (see
-`test/nextorm.core.tests/InMemoryJoinTests.cs`). Joins through `EntityP2..P8` are resolved at query
-build time on every provider.
+`test/nextorm.core.tests/InMemoryJoinTests.cs`). `CrossApply`/`OuterApply` are SQL-only and throw
+`NotSupportedException` on the in-memory provider, like the other unsupported join types. Joins through
+`EntityP2..P8` are resolved at query build time on every provider.
 
 ## See also
 
 - [Subqueries](06-subqueries.md) - a joined `QueryCommand<T>` is a derived table.
 - [Grouping and aggregates](04-grouping-and-aggregates.md) - aggregate over a join.
+- [Query hints](17-query-hints.md) - statement-level hints such as SQL Server `OPTION (RECOMPILE)`.
 - [Querying and projections](01-querying-and-projections.md)
 
 ---
 
 Source: `test/nextorm.integration.tests/CommonTestSuite.Join.cs:9`,
 `test/nextorm.core.tests/InMemoryJoinTests.cs:14`,
-`test/nextorm.sqlite.tests/SqlGenerationTests.cs:268` (and the other provider `SqlGenerationTests.cs`).
+`test/nextorm.sqlite.tests/SqlGenerationTests.cs:320`,
+`test/nextorm.sqlserver.tests/SqlGenerationTests.cs:379`,
+`test/nextorm.postgres.tests/SqlGenerationTests.cs:312`
+(and the other provider `SqlGenerationTests.cs`).

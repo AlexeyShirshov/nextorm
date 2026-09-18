@@ -36,7 +36,7 @@ dotnet run -c Release --project benchmarks/nextorm.benchmark -- \
 - Кэшированный путь аллоцирует в ~12 раз больше подготовленного: +3.79 KB на выполнение.
 - `Cached_ToList − Prepared_ToList` по памяти (~379 KB) ≈ `Cached_PlanOnly_Param` — значит БД-часть сокращается, оверхед чистый.
 - `ExtractParams` ≈ 1.1 KB/вып. (дельта `Param − NoParam`: 378.9 − 268.8 KB).
-- Остальные ~2.7 KB/вып. — построение `Entity`/`QueryCommand` + планирование/поиск в кэше (есть и в NoParam-варианте).
+- Остальные ~2.7 KB/вып. — построение `EntityBuilder`/`QueryCommand` + планирование/поиск в кэше (есть и в NoParam-варианте).
 - По времени оверхед ~40 µs из ~1000 µs на запрос (≈4%), по GC — доминирует.
 
 Примечание: замеры шумные (MinIterationTime); для точных цифр поднять `Iterations` и/или считать через `--invocationCount`.
@@ -116,7 +116,7 @@ struct↔class их не трогает.
 
 | Arm | Allocated/100 | На 1 выполнение |
 |---|---:|---:|
-| `Construct_Only` (`Entity.Clone` + `Where` + `Select`, вкл. построение expression tree) | 167.97 KB | ~1.68 KB |
+| `Construct_Only` (`EntityBuilder.Clone` + `Where` + `Select`, вкл. построение expression tree) | 167.97 KB | ~1.68 KB |
 | `RePrepare_PlanOnly_Param` (`PrepareCommand` + plan lookup при стабильной команде) | 39.84 KB | ~0.40 KB |
 | `Cached_PlanOnly_NoParam` | 268.76 KB | ~2.69 KB |
 | `Cached_PlanOnly_Param` | 303.13 KB | ~3.03 KB |
@@ -125,7 +125,7 @@ struct↔class их не трогает.
 
 Разложение кэшированного оверхеда (~3.03 KB/вып.):
 
-- **Конструирование запроса ~1.68 KB (≈55%)** — `Entity.Clone` + `Where` + `Select`. Большая часть —
+- **Конструирование запроса ~1.68 KB (≈55%)** — `EntityBuilder.Clone` + `Where` + `Select`. Большая часть —
   построение expression tree: лямбды `it => ...` внутри цикла компилируются в `Expression` заново на
   каждом вызове. Это следствие паттерна использования API, а не внутренностей ORM.
 - **`PrepareCommand` + plan lookup ~1.0 KB (≈33%)** — то, что мог бы убрать #5 (нижняя оценка из
@@ -137,7 +137,7 @@ struct↔class их не трогает.
 риске ROI плохой.
 
 **Реальный рычаг** — не внутренний plan-кэш, а паттерн использования: переиспользовать `.Prepare()` /
-`IPreparedQueryCommand` либо кэшировать `Entity`/`QueryCommand` вместо пересборки в цикле. Это видно и в
+`IPreparedQueryCommand` либо кэшировать `EntityBuilder`/`QueryCommand` вместо пересборки в цикле. Это видно и в
 `SqliteBenchmarkSingle`: cached 40.58 KB против prepared 4.3 KB.
 
 ## Стабильный baseline (warmup 5, iteration 20)
@@ -287,8 +287,8 @@ In-process ShortRun, БД `/tmp/nextorm-bench/test.db`.
 | Where Cached_ToList (rebuild) | 1417.0 µs / 441 KB | 1330.9 µs / 204 KB | поражение |
 | Single Prepared | 86.75 µs / 4.3 KB | 135.49 µs / 16.4 KB | победа |
 | Single Cached | 137.5 µs / 40.6 KB | 135.5 µs / 16.4 KB | вровень |
-| First Prepared Scalar/Entity | 87.7 / 100.5 µs | 139.1 / 156.3 µs | победа |
-| First Cached Scalar/Entity | 146.2 / 165.6 µs / 40–43 KB | 139.1 / 156.3 µs / 16–19 KB | поражение |
+| First Prepared Scalar/EntityBuilder | 87.7 / 100.5 µs | 139.1 / 156.3 µs | победа |
+| First Cached Scalar/EntityBuilder | 146.2 / 165.6 µs / 40–43 KB | 139.1 / 156.3 µs / 16–19 KB | поражение |
 | Join Prepared | 105.5 µs / 9 KB | 193.0 µs / 21 KB | победа |
 | Join Cached | 262.9 µs / 89 KB | 193.0 µs / 21 KB | поражение |
 | Any Prepared | 866.1 µs / 41 KB | 1330.8 µs / 139 KB | победа |
@@ -301,7 +301,7 @@ In-process ShortRun, БД `/tmp/nextorm-bench/test.db`.
 
 Причины:
 
-1. **Cached-путь** — `ctx.Entity.Where(...).Select(...)` пересобирает `Entity`/`QueryCommand`, строит
+1. **Cached-путь** — `ctx.EntityBuilder.Where(...).Select(...)` пересобирает `EntityBuilder`/`QueryCommand`, строит
    expression tree, гоняет `PrepareCommand` + plan lookup + `ExtractParams` (~3 KB, ~1–3 µs на вызов).
    Dapper берёт готовый SQL + POCO и переиспользует кэш SQL/маппера. Отсюда проигрыш по времени
    (Where/First/Single/SimulateWork) и по аллокациям (2–2.5×).

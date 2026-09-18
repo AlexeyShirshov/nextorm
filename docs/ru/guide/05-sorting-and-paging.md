@@ -9,10 +9,10 @@
 Упорядочивание и постраничная выборка применяются к команде до её выполнения, поэтому они становятся
 частью генерируемого оператора, а не клиентской операцией:
 
-* `Entity<TEntity>` предоставляет `OrderBy(Expression<Func<TEntity, object?>>, OrderDirection)`,
+* `EntityBuilder<TEntity>` предоставляет `OrderBy(Expression<Func<TEntity, object?>>, OrderDirection)`,
   `OrderBy(expr)`, `OrderByDescending(expr)` и перегрузки с порядковым номером `OrderBy(int)`,
   `OrderBy(int, OrderDirection)`, `OrderByDescending(int)`.
-* `Entity<TEntity>` также предоставляет `Limit(int)`, `Offset(int)` и `Page(int limit, int offset)`.
+* `EntityBuilder<TEntity>` также предоставляет `Limit(int)`, `Offset(int)` и `Page(int limit, int offset)`.
 * После `Select` возвращаемый `QueryCommand<TResult>` имеет только перегрузки с порядковым номером:
   `OrderBy(int columnIndex, OrderDirection direction)`, `OrderBy(int)` и `OrderByDescending(int)`.
 
@@ -23,7 +23,7 @@
 ## Упорядочивание по выражению
 
 ```csharp
-var last = await dataContext.Create<SimpleEntity>()
+var last = await dataContext.From<SimpleEntity>()
     .OrderByDescending(it => it.Id)
     .Select(it => it.Id)
     .FirstAsync();
@@ -37,7 +37,7 @@ select id from simple_entity order by id desc limit 1
 По возрастанию - значение по умолчанию, и оно явно не записывается:
 
 ```csharp
-var rows = await dataContext.Create<ComplexEntity>()
+var rows = await dataContext.From<ComplexEntity>()
     .OrderBy(it => it.Int)
     .OrderByDescending(it => it.Id)
     .Select(it => new { it.Id })
@@ -56,7 +56,7 @@ select id from complex_entity order by nullableint, id desc
 обычный способ упорядочить по вычисляемой колонке без повторения выражения:
 
 ```csharp
-var last = await dataContext.Create<SimpleEntity>()
+var last = await dataContext.From<SimpleEntity>()
     .Select(it => it.Id)
     .OrderByDescending(1)
     .First();
@@ -83,7 +83,7 @@ nextorm не генерирует `NULLS FIRST` / `NULLS LAST`; размещен
 | In-memory | nulls first | nulls last |
 
 ```csharp
-var rows = await dataContext.Create<ComplexEntity>()
+var rows = await dataContext.From<ComplexEntity>()
     .OrderByDescending(it => it.Int)
     .Select(it => new { it.Id })
     .ToListAsync();
@@ -97,7 +97,7 @@ var rows = await dataContext.Create<ComplexEntity>()
 `Limit(int)` ограничивает число строк, а `Offset(int)` пропускает строки перед результатом:
 
 ```csharp
-var page = await dataContext.Create<SimpleEntity>()
+var page = await dataContext.From<SimpleEntity>()
     .Offset(1)
     .Select(it => it.Id)
     .FirstAsync();
@@ -118,7 +118,7 @@ PostgreSQL, `top(1)` в SQL Server; см. ниже). Обычный `Limit(5).Se
 `Page(limit, offset)` задаёт обе границы одним вызовом:
 
 ```csharp
-var page = await dataContext.Create<SimpleEntity>()
+var page = await dataContext.From<SimpleEntity>()
     .Page(5, 10)
     .Select(it => it.Id)
     .ToListAsync();
@@ -157,7 +157,7 @@ SQL Server отклоняет `OFFSET ... FETCH` без `ORDER BY`, поэтом
 | `SingleOrDefault()` / `SingleOrDefaultAsync()` | единственная строка или `default`, если пуста; выбрасывает, если больше одной |
 
 ```csharp
-var first = await dataContext.Create<SimpleEntity>()
+var first = await dataContext.From<SimpleEntity>()
     .OrderBy(it => it.Id)
     .Select(it => it.Id)
     .FirstAsync();
@@ -169,7 +169,7 @@ select id from simple_entity order by id limit 1
 ```
 
 ```csharp
-var only = await dataContext.Create<SimpleEntity>()
+var only = await dataContext.From<SimpleEntity>()
     .Where(it => it.Id == 2)
     .Select(it => it.Id)
     .SingleAsync();
@@ -192,11 +192,11 @@ select id from simple_entity where id = 2 limit 2
 
 ## Any
 
-`Any()` и `AnyAsync()` доступны как в `Entity<TEntity>`, так и в `QueryCommand<TResult>`. Они
+`Any()` и `AnyAsync()` доступны как в `EntityBuilder<TEntity>`, так и в `QueryCommand<TResult>`. Они
 генерируют предикат `exists(...)` и читают одно логическое значение:
 
 ```csharp
-var exists = await dataContext.Create<SimpleEntity>()
+var exists = await dataContext.From<SimpleEntity>()
     .Where(it => it.Id == 100)
     .AnyAsync();
 ```

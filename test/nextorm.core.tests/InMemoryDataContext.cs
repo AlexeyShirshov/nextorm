@@ -6,10 +6,10 @@ public class InMemoryRepository
 
     public InMemoryRepository(IDataContext dataProvider)
     {
-        SimpleEntity = dataProvider.Create<SimpleEntity>();
+        SimpleEntity = dataProvider.From<SimpleEntity>();
         _dataProvider = dataProvider;
     }
     public IDataContext DataProvider => _dataProvider;
-    public Entity<SimpleEntity> SimpleEntity { get; set; }
+    public EntityBuilder<SimpleEntity> SimpleEntity { get; set; }
 
 }

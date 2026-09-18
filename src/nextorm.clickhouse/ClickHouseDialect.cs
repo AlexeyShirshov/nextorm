@@ -29,6 +29,9 @@ public sealed class ClickHouseDialect : SqlDialectBase
     public override bool SupportsDateTrunc => true;
     public override bool SupportsDateArithmetic => true;
 
+    public override bool SupportsDateTruncField(string field) =>
+        field is not ("decade" or "century" or "millennium") && base.SupportsDateTruncField(field);
+
     // string_agg is rendered as arrayStringConcat(groupArray(value), delimiter). ClickHouse has no
     // array type usable by the row reader, so array_agg stays unavailable.
     public override bool SupportsStringAgg => true;
@@ -47,6 +50,7 @@ public sealed class ClickHouseDialect : SqlDialectBase
     // ClickHouse spells the super-aggregate as a trailing modifier (GROUP BY a, b WITH ROLLUP/CUBE).
     public override bool SupportsRollup => true;
     public override bool SupportsCube => true;
+    public override bool SupportsGroupingSets => true;
 
     public override string MakeGrouping(string columns, GroupingType groupingType) => groupingType switch
     {
@@ -68,6 +72,17 @@ public sealed class ClickHouseDialect : SqlDialectBase
 
     // length() counts bytes in ClickHouse; lengthUTF8() counts characters, matching string.Length.
     public override string MakeStringLength(string value) => $"lengthUTF8({value})";
+
+    // position() works in bytes; positionUTF8() works in characters, matching string.IndexOf.
+    protected override string MakeStringPosition(string value, string substring) =>
+        $"positionUTF8({value}, {substring})";
+
+    protected override string MakeStringPosition(string value, string substring, string start) =>
+        $"positionUTF8({value}, {substring}, {start} + 1)";
+
+    public override string MakeRepeat(string value, string count) => $"repeat({value}, {count})";
+
+    protected override string MakeStringReverse(string value) => $"reverseUTF8({value})";
 
     public override string MakeTrim(string value, StringTrimKind kind) => kind switch
     {
@@ -147,7 +162,23 @@ public sealed class ClickHouseDialect : SqlDialectBase
         return $"{function}({value}, {scaled})";
     }
 
+    /// <summary>ClickHouse computes date differences through <c>dateDiff(unit, start, end)</c>.</summary>
+    public override string MakeDateDiff(string field, string start, string end)
+    {
+        var unit = field switch
+        {
+            "milliseconds" => "millisecond",
+            "microseconds" => "microsecond",
+            _ => field
+        };
+
+        return $"dateDiff('{unit}', {start}, {end})";
+    }
+
     public override string MakeEndOfMonth(string value) => $"toLastDayOfMonth({value})";
+
+    public override string MakeDateFromParts(string year, string month, string day) =>
+        $"makeDate({year}, {month}, {day})";
 
     public override string MakeStringAgg(string value, string delimiter) =>
         $"arrayStringConcat(groupArray({value}), {delimiter})";

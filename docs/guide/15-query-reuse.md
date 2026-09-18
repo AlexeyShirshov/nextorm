@@ -15,7 +15,7 @@ The two are easy to confuse because they look alike from the outside. They diffe
 
 | | Implicit plan cache | Explicit `Prepare()` |
 |---|---|---|
-| Entry point | any terminal on `Entity` / `QueryCommand<TResult>` (`ToList`, `ToListAsync`, `ToAsyncEnumerable`, ...) | `QueryCommand<TResult>.Prepare()` / `Entity<T>.Prepare()` |
+| Entry point | any terminal on `EntityBuilder` / `QueryCommand<TResult>` (`ToList`, `ToListAsync`, `ToAsyncEnumerable`, ...) | `QueryCommand<TResult>.Prepare()` / `EntityBuilder<T>.Prepare()` |
 | Lookup key | structural hash of the query shape | none - you hold the returned command |
 | Lifetime | until `PurgeQueryCache()` or process exit | as long as you keep the reference |
 | Scope | **per thread**, shared by every `IDataContext` on that thread | the instance you keep |
@@ -57,7 +57,7 @@ The `params object[]` (or `ReadOnlySpan<object?>`) accepted by the terminals car
 ```csharp
 using var ctx = new SqliteDbContext("Data Source=app.db", new DbContextBuilder());
 
-var rows = await ctx.Create<ISimpleEntity>()
+var rows = await ctx.From<ISimpleEntity>()
     .Select(x => x.Id)
     .ToListAsync();
 ```
@@ -73,7 +73,7 @@ for (var i = 0; i < 2; i++)
 {
     var entityId = i;
 
-    var row = await ctx.Create<ISimpleEntity>()
+    var row = await ctx.From<ISimpleEntity>()
         .Where(entity => entity.Id == entityId)
         .Select(entity => new { Id = (long)entity.Id })
         .FirstOrDefaultAsync();
@@ -84,7 +84,7 @@ Both iterations reuse the same cache entry.
 
 ## Explicit `Prepare()`
 
-`Prepare()` is declared on both `QueryCommand<TResult>` and `Entity<T>` and returns `IPreparedQueryCommand<TResult>`:
+`Prepare()` is declared on both `QueryCommand<TResult>` and `EntityBuilder<T>` and returns `IPreparedQueryCommand<TResult>`:
 
 ```csharp
 public IPreparedQueryCommand<TResult> Prepare(bool nonStreamUsing = true, CancellationToken cancellationToken = default)
@@ -93,7 +93,7 @@ public IPreparedQueryCommand<TResult> Prepare(bool nonStreamUsing = true, Cancel
 The default (`nonStreamUsing: true`) is optimised for buffered and scalar results. The returned command is not bound to the context that created it: every terminal takes the `IDataContext` as its first argument, so the same prepared command can be executed against another context of the same provider.
 
 ```csharp
-var prepared = ctx.Create<ISimpleEntity>()
+var prepared = ctx.From<ISimpleEntity>()
     .Select(x => x.Id)
     .Prepare();
 
@@ -112,7 +112,7 @@ int first2 = await ctx.FirstAsync(prepared);
 The same command can be re-executed with different runtime parameter values:
 
 ```csharp
-var byId = ctx.Create<ISimpleEntity>()
+var byId = ctx.From<ISimpleEntity>()
     .Where(x => x.Id == NORM.Param<int>(0))
     .Select(x => x.Id)
     .Prepare();
@@ -127,11 +127,11 @@ A prepared command created with the default owns no `ResultSetEnumerator`. Buffe
 
 ```csharp
 // Buffered default: no enumerator is created.
-var buffered = ctx.Create<ISimpleEntity>().Select(x => x.Id).Prepare();
+var buffered = ctx.From<ISimpleEntity>().Select(x => x.Id).Prepare();
 buffered.ToList(ctx); // fine
 
 // Streaming: the only way to get a streamable prepared command.
-var streaming = ctx.Create<ISimpleEntity>()
+var streaming = ctx.From<ISimpleEntity>()
     .Select(x => x.Id)
     .Prepare(nonStreamUsing: false);
 
@@ -150,11 +150,11 @@ await foreach (var id in streaming.ToAsyncEnumerable(ctx))
 ```csharp
 ctx.PurgeQueryCache();
 
-var prepared = ctx.Create<ISimpleEntity>().Select(x => x.Id).Prepare();
+var prepared = ctx.From<ISimpleEntity>().Select(x => x.Id).Prepare();
 prepared.ToList(ctx); // executes, but adds no plan-cache entry
 
 // A later implicit terminal builds its own plan.
-var implicitRows = ctx.Create<ISimpleEntity>().Select(x => x.Id).ToList();
+var implicitRows = ctx.From<ISimpleEntity>().Select(x => x.Id).ToList();
 ```
 
 ## Plan-cache scope and purging
@@ -191,14 +191,14 @@ An `in` list or a `Contains` call over a captured collection is translated to a 
 var values = new long[] { 1 };
 
 var first = ctx.GetPreparedQueryCommand(
-    ctx.Create<IComplexEntity>().Where(c => NORM.SQL.@in(c.Id, values)).Select(c => c.Id),
+    ctx.From<IComplexEntity>().Where(c => NORM.SQL.@in(c.Id, values)).Select(c => c.Id),
     createEnumerator: false, storeInCache: true, CancellationToken.None);
 // one parameter: p0
 
 values = new long[] { 2, 3 };
 
 var second = ctx.GetPreparedQueryCommand(
-    ctx.Create<IComplexEntity>().Where(c => NORM.SQL.@in(c.Id, values)).Select(c => c.Id),
+    ctx.From<IComplexEntity>().Where(c => NORM.SQL.@in(c.Id, values)).Select(c => c.Id),
     createEnumerator: false, storeInCache: true, CancellationToken.None);
 // two parameters: p0, p1
 ```

@@ -64,7 +64,7 @@ using (var setup = supplied.CreateCommand())
 }
 
 using var ctx = new SqliteDbContext(supplied, new DbContextBuilder());
-var rows = ctx.Create<ISimpleEntity>().Select(x => x.Id).ToList(); // [42]
+var rows = ctx.From<ISimpleEntity>().Select(x => x.Id).ToList(); // [42]
 ```
 
 ## Disposal rules
@@ -137,7 +137,7 @@ Three loggers are created from the factory:
 | Member | Category | Purpose |
 |---|---|---|
 | `Logger` | the context type (for example `nextorm.sqlite.SqliteDbContext`) | connection and command messages. Exposed on `IContextEnvironment`. |
-| `CommandLogger` | the `QueryCommand` type | attached to the commands built by `Create<T>()` / `From(...)`. Exposed on `IContextEnvironment`. |
+| `CommandLogger` | the `QueryCommand` type | attached to the commands built by `From<T>()` / `From(...)`. Exposed on `IContextEnvironment`. |
 | `ResultSetEnumeratorLogger` | `nextorm.core.ResultSetEnumerator` | streaming lifecycle messages (`Trace` on `MoveNext`, `Debug` when opening the connection or disposing the reader). Internal. |
 
 ### `LogSensitiveData`

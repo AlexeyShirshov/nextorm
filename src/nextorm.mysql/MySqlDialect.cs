@@ -28,6 +28,78 @@ public class MySqlDialect : SqlDialectBase
     // MySQL/MariaDB render greatest(...)/least(...) (NULL when any argument is NULL).
     public override bool SupportsGreatestLeast => true;
 
+    // MySQL/MariaDB full-text search matches against a FULLTEXT index; contains uses boolean mode,
+    // freetext natural-language mode. The relevance score is turned into a boolean.
+    public override bool SupportsFullText => true;
+
+    public override string MakeFullText(string functionName, string column, string search) =>
+        functionName == "contains"
+            ? $"(match({column}) against({search} in boolean mode) > 0)"
+            : $"(match({column}) against({search}) > 0)";
+
+    // MySQL/MariaDB aggregate strings through group_concat (there is no array_agg).
+    public override bool SupportsStringAgg => true;
+
+    public override string MakeStringAgg(string value, string delimiter) =>
+        $"group_concat({value} separator {delimiter})";
+
+    // MySQL/MariaDB express interval arithmetic through date_add/date_sub and timestampdiff.
+    public override bool SupportsDateArithmetic => true;
+
+    public override string MakeDateAdd(string field, string amount, string value)
+    {
+        // There is no millisecond unit, so it is expressed in microseconds; decade/century/millennium
+        // have no unit either and fold onto a scaled year.
+        var (unit, factor) = field switch
+        {
+            "microseconds" => ("microsecond", 1),
+            "milliseconds" => ("microsecond", 1000),
+            "second" => ("second", 1),
+            "minute" => ("minute", 1),
+            "hour" => ("hour", 1),
+            "day" => ("day", 1),
+            "week" => ("week", 1),
+            "month" => ("month", 1),
+            "quarter" => ("quarter", 1),
+            "year" => ("year", 1),
+            "decade" => ("year", 10),
+            "century" => ("year", 100),
+            "millennium" => ("year", 1000),
+            _ => throw new NotSupportedException($"MySQL date_add does not support the '{field}' field.")
+        };
+
+        var scaled = factor == 1 ? amount : $"({amount}) * {factor}";
+
+        return $"date_add({value}, interval {scaled} {unit})";
+    }
+
+    public override string MakeDateDiff(string field, string start, string end)
+    {
+        var (unit, factor) = field switch
+        {
+            "microseconds" => ("microsecond", 1),
+            "milliseconds" => ("microsecond", 1000),
+            "second" => ("second", 1),
+            "minute" => ("minute", 1),
+            "hour" => ("hour", 1),
+            "day" => ("day", 1),
+            "week" => ("week", 1),
+            "month" => ("month", 1),
+            "quarter" => ("quarter", 1),
+            "year" => ("year", 1),
+            _ => throw new NotSupportedException($"MySQL date_diff does not support the '{field}' field.")
+        };
+
+        var diff = $"timestampdiff({unit}, {start}, {end})";
+
+        return factor == 1 ? diff : $"cast(({diff} / {factor}) as signed)";
+    }
+
+    public override string MakeEndOfMonth(string value) => $"last_day({value})";
+
+    public override string MakeDateFromParts(string year, string month, string day) =>
+        $"str_to_date(concat_ws('-', {year}, {month}, {day}), '%Y-%m-%d')";
+
     // MySQL/MariaDB spell the super-aggregate as a trailing modifier (GROUP BY a, b WITH ROLLUP) and
     // have no CUBE.
     public override bool SupportsRollup => true;
@@ -70,6 +142,21 @@ public class MySqlDialect : SqlDialectBase
 
     // length() counts bytes in MySQL; char_length() counts characters, matching string.Length.
     public override string MakeStringLength(string value) => $"char_length({value})";
+
+    protected override string MakeStringPosition(string value, string substring) =>
+        $"instr({value}, {substring})";
+
+    protected override string MakeStringPosition(string value, string substring, string start) =>
+        $"locate({substring}, {value}, {start} + 1)";
+
+    public override string MakeRepeat(string value, string count) => $"repeat({value}, {count})";
+
+    protected override string MakeStringReverse(string value) => $"reverse({value})";
+
+    public override string MakeStuff(string value, string start, string? count, string newValue) =>
+        count is null
+            ? $"substring({value}, 1, {start})"
+            : $"insert({value}, {start} + 1, {count}, {newValue})";
 
     // now() is the session time zone; utc_timestamp() is UTC regardless of it.
     public override string MakeNow(bool utc) => utc ? "utc_timestamp()" : "now()";

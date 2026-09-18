@@ -6,7 +6,7 @@ but they have different cost, different lifetime and different safety rules.
 
 | | Implicit plan cache | Explicit `Prepare()` |
 |---|---|---|
-| Entry point | any terminal method on `Entity` / `QueryCommand` (`ToList`, `First`, `ToListAsync`, `ToAsyncEnumerable`, ...) | `Entity.Prepare(...)` / `QueryCommand.Prepare(...)` |
+| Entry point | any terminal method on `EntityBuilder` / `QueryCommand` (`ToList`, `First`, `ToListAsync`, `ToAsyncEnumerable`, ...) | `EntityBuilder.Prepare(...)` / `QueryCommand.Prepare(...)` |
 | Lookup key | structural hash of the query shape (`QueryPlanEqualityComparer` over the `*PlanHash` fields) | none — you hold the returned `IPreparedQueryCommand<TResult>` |
 | Lifetime | process/thread, until `PurgeQueryCache()` | as long as you keep the reference |
 | Scope | **per thread**, shared by every `IDataContext` on that thread | the instance you keep |
@@ -52,7 +52,7 @@ Even on a hit the public API has to *identify* the plan, so every call pays:
 
 | Step | Cost/call | Share |
 |---|---:|---:|
-| Build the command: `Entity.Clone` + `Where` + `Select` (fresh expression tree) | 1.12 µs | 31% |
+| Build the command: `EntityBuilder.Clone` + `Where` + `Select` (fresh expression tree) | 1.12 µs | 31% |
 | `PrepareCommand` (walks every clause **and** computes all `*PlanHash`) + cache lookup | 1.63 µs | 46% |
 | `ExtractParams` (runtime parameter values) | 0.79 µs | 22% |
 | **Total (cache-hit, before touching the database)** | **3.56 µs** | |

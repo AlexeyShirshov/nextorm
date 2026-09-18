@@ -34,6 +34,10 @@ public partial class QueryCommand
         dst.SingleRow = SingleRow;
         dst.IsDistinct = IsDistinct;
         dst.GroupingType = GroupingType;
+        dst.GroupingSets = GroupingSets;
+        dst.TableHints = TableHints;
+        dst.ForJsonClause = ForJsonClause;
+        dst.ForXmlClause = ForXmlClause;
 
         dst._queryPlanComparer = _queryPlanComparer;
         dst._fromExpressionPlanComparer = _fromExpressionPlanComparer;

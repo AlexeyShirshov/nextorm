@@ -38,13 +38,13 @@ services.AddNextOrmContext<InMemoryContext>();
 using nextorm.core;
 
 using var ctx = new InMemoryContext();
-ctx.Create<SimpleEntity>().WithData(new[]
+ctx.From<SimpleEntity>().WithData(new[]
 {
     new SimpleEntity { Id = 1 },
     new SimpleEntity { Id = 2 },
 });
 
-var ids = ctx.Create<SimpleEntity>()
+var ids = ctx.From<SimpleEntity>()
     .Where(it => it.Id == 1)
     .Select(it => new { it.Id })
     .SingleOrDefault();
@@ -57,7 +57,7 @@ collection to the context's `Data` dictionary keyed by entity type; `WithData` t
 and `WithAsyncData` an `IAsyncEnumerable<T>`. Both are no-ops for other providers.
 
 ```csharp
-ctx.Create<SimpleEntity>().WithAsyncData(GetRows());
+ctx.From<SimpleEntity>().WithAsyncData(GetRows());
 
 static async IAsyncEnumerable<SimpleEntity> GetRows()
 {
@@ -74,18 +74,26 @@ Covered by `InMemoryTests` and `InMemoryJoinTests`:
 | Feature | Evidence |
 |---|---|
 | Projection: anonymous, primitive/scalar, `Tuple` | `InMemoryTests.SelectPrimitive_ShouldReturnData`, `TestTuples` |
-| `Where`, including `==` on nullable and captured values | `InMemoryTests.TestWhere` |
+| `Where`, including `==` on nullable and captured values | `InMemoryTests.TestWhere`, `Contains_ShouldFilterData` |
 | Subquery used as a `FROM` source (`ctx.From(subQuery)`) | `InMemoryTests.TestWhere_Subquery` |
 | Buffered and async sources (`WithData` / `WithAsyncData`) | `InMemoryTests.TestAsync` |
 | Streaming with `Pipeline`, observing cancellation | `InMemoryTests.TestFetch`, `TestFetch_PipelineStopsOnCancellation` |
 | `Limit` / `Offset` / `First` / `Single` and their `OrDefault` forms | `InMemoryTests.Top_ShouldLimitData`, `First_ShouldReturnFirst`, `Single_ShouldReturnSingle` |
-| `OrderBy` / `OrderByDescending` (buffered sources) | `InMemoryTests.OrderBy_ShouldSortData` |
+| `OrderBy` / `OrderByDescending`, including async sources | `InMemoryTests.OrderBy_ShouldSortData`, `OrderByOverAsyncSource_ShouldSortData` |
+| Materializers `ToArray` / `ToHashSet` / `ToDictionary` (and async) | `InMemoryTests.ToArray_ShouldReturnData`, `ToHashSet_ShouldReturnData`, `ToDictionary_ShouldReturnData` |
 | `Any` and projected `exists` | `InMemoryTests.SelectAny_ShouldReturnData`, `Any` |
 | `Distinct` over value-equality projections | `InMemoryTests.TestDistinct` |
 | Joins: inner, left, right, full, cross, chained to 8 tables | `InMemoryJoinTests.TestJoin`, `TestLeftJoin`, `TestRightJoinChained`, `TestFullJoinChained`, `TestCrossJoin8Tables_ShouldCloneAndMaterializeAtEveryArity` |
+| Aggregates `Count`/`Sum`/`Min`/`Max`/`Avg`/`Stdev`/`Var` (buffered sources) | `InMemoryTests.Count_ShouldReturnRowCount`, `Sum_ShouldReturnSum`, `MinMax_ShouldReturnBounds`, `Avg_ShouldReturnAverage` |
+| `GroupBy` / `Having` with per-group aggregates (buffered sources) | `InMemoryTests.GroupBy_ShouldAggregatePerGroup`, `GroupBy_Having_ShouldFilterGroups`, `GroupBy_Avg_ShouldAggregatePerGroup`, `GroupBy_OrderByColumn_ShouldSortGroups` |
+| Set operations `UNION` / `UNION ALL` / `INTERSECT` / `INTERSECT ALL` / `EXCEPT` / `EXCEPT ALL` | `InMemoryTests.Union_ShouldRemoveDuplicates`, `UnionAll_ShouldKeepDuplicates`, `Intersect_ShouldReturnOnlyCommonRows`, `Except_ShouldReturnOnlyLeftRows`, `SetOperations_WhenChained_ShouldApplyLeftToRight` |
+| `Last` / `LastOrDefault` over an ordered query (reversed `ORDER BY`) | `InMemoryTests.Last_ShouldReturnLastOrderedRow`, `LastOrDefault_ShouldReturnLastOrderedRow` |
+| Buffered subquery source (`ctx.From(cmd)`) with sync materialization and aggregates | `InMemoryTests.SubquerySource_SyncToList_ShouldReturnRows`, `SubquerySource_Count_ShouldReturnRowCount`, `SetOperation_AsSubquery_Count_ShouldReturnRowCount` |
+| `SelectMany` (flatten, correlated) and `GroupJoin` (grouped inner rows) | `InMemorySelectManyTests.SelectMany_Correlated_ShouldFlattenPerRow`, `GroupJoin_ShouldGroupInnerRows` |
 
-The in-memory provider shares the same `Entity<T>` fluent API as the SQL providers, so the same query
-object works against both.
+The in-memory provider shares the same `EntityBuilder<T>` fluent API as the SQL providers, so the same query
+object works against both — **except** `SelectMany`/`GroupJoin`, which are in-memory only: on a SQL provider
+they throw `NotSupportedException` immediately (see [Limitations](../advanced/limitations.md)).
 
 ## Unsupported
 
@@ -107,13 +115,21 @@ The provider fails loudly instead of returning wrong results:
   `Equals`/`GetHashCode` override. Project an anonymous type or a value type, or override equality.
 
   ```csharp
-  ctx.Create<SimpleEntity>().Distinct().ToList();
+  ctx.From<SimpleEntity>().Distinct().ToList();
   // NotSupportedException: "DISTINCT is not supported by the in-memory provider for projection type ..."
   ```
 
 - **Raw SQL** (`PrepareFromSql`) is not implemented (`NotImplementedException`).
-- **Ordering over an `IAsyncEnumerable` source** is not implemented; ordering is applied for buffered
-  `IEnumerable` sources.
+- **Aggregates or `GroupBy` over an `IAsyncEnumerable` source** throw `NotSupportedException`; both are
+  computed for buffered `IEnumerable` sources.
+- **Filtered aggregates** (`NORM.SQL.count(e => filter)` and the `(value, filter)` overloads) and
+  **grouped ordering by expression** throw `NotSupportedException`; order groups by column index instead.
+- **Set operations over an `IAsyncEnumerable` source** throw `NotSupportedException`; operands are
+  buffered.
+- **`Last`/`LastOrDefault` without `ORDER BY`** throw `InvalidOperationException`: a query without
+  ordering has no defined last row.
+- **Aggregates over an async subquery source** throw `NotSupportedException`; buffered subquery sources
+  are folded.
 
 ## Provider differences
 
@@ -126,6 +142,7 @@ The provider fails loudly instead of returning wrong results:
 | TVF sources | `NotSupportedException` |
 | Raw SQL | `NotImplementedException` |
 | `Distinct` on non-value-equality types | `NotSupportedException` |
+| `SelectMany` / `GroupJoin` | supported (these operators are in-memory only) |
 
 ## See also
 
@@ -140,5 +157,6 @@ The provider fails loudly instead of returning wrong results:
 
 Source: `test/nextorm.core.tests/InMemoryTests.cs:28,46,55,212,226,244,349,374`,
 `test/nextorm.core.tests/InMemoryJoinTests.cs:14,47,64,107,145,162`,
+`test/nextorm.core.tests/InMemorySelectManyTests.cs`,
 `src/nextorm.core/DataContext/InMemoryDataContext.cs`,
 `src/nextorm.core/Builders/InMemoryCommandBuilder.cs`.

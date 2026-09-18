@@ -55,11 +55,11 @@ public class PlanCacheTests
 
             // Buffered terminal: GetPreparedQueryCommand(createEnumerator: false) caches the plan
             // without a ResultSetEnumerator.
-            ctx.Create<ISimpleEntity>().Select(x => x.Id).ToList().Should().Equal(42);
+            ctx.From<ISimpleEntity>().Select(x => x.Id).ToList().Should().Equal(42);
 
             // Streaming terminal on the same shape: the cache hit must create the enumerator on demand.
             var act = async () => await DrainAsync(
-                ctx.Create<ISimpleEntity>().Select(x => x.Id).ToAsyncEnumerable(TestContext.Current.CancellationToken),
+                ctx.From<ISimpleEntity>().Select(x => x.Id).ToAsyncEnumerable(TestContext.Current.CancellationToken),
                 TestContext.Current.CancellationToken);
 
             await act.Should().NotThrowAsync();
@@ -83,10 +83,10 @@ public class PlanCacheTests
         {
             ctx.PurgeQueryCache();
 
-            ctx.Create<ISimpleEntity>().Select(x => x.Id).ToList().Should().Equal(42);
+            ctx.From<ISimpleEntity>().Select(x => x.Id).ToList().Should().Equal(42);
 
             // ToEnumerable -> GetPreparedQueryCommand(createEnumerator: true) -> CreateEnumerator.
-            ctx.Create<ISimpleEntity>().Select(x => x.Id).ToEnumerable().Should().Equal(42);
+            ctx.From<ISimpleEntity>().Select(x => x.Id).ToEnumerable().Should().Equal(42);
         }
         finally
         {
@@ -104,7 +104,7 @@ public class PlanCacheTests
             ctx.PurgeQueryCache();
 
             // Prepare(nonStreamUsing: false) is the only way to get a streamable prepared command.
-            var prepared = ctx.Create<ISimpleEntity>().Select(x => x.Id)
+            var prepared = ctx.From<ISimpleEntity>().Select(x => x.Id)
                 .Prepare(nonStreamUsing: false, TestContext.Current.CancellationToken);
 
             var rows = await DrainAsync(
@@ -129,7 +129,7 @@ public class PlanCacheTests
             ctx.PurgeQueryCache();
 
             // Prepare() defaults to nonStreamUsing: true (buffered/scalar only).
-            var prepared = ctx.Create<ISimpleEntity>().Select(x => x.Id)
+            var prepared = ctx.From<ISimpleEntity>().Select(x => x.Id)
                 .Prepare(cancellationToken: TestContext.Current.CancellationToken);
 
             prepared.ToList(ctx).Should().Equal(42);
@@ -156,7 +156,7 @@ public class PlanCacheTests
         {
             ctx.PurgeQueryCache();
 
-            var prepared = ctx.Create<ISimpleEntity>().Select(x => x.Id)
+            var prepared = ctx.From<ISimpleEntity>().Select(x => x.Id)
                 .Prepare(cancellationToken: TestContext.Current.CancellationToken);
 
             // Buffered terminals are fine with the very same command.
@@ -201,7 +201,7 @@ public class PlanCacheTests
                 var captured = threshold;
 
                 var rows = ctx
-                    .With("c", ctx.Create<ISimpleEntity>().Where(x => x.Id > captured).Select(x => new { x.Id }))
+                    .With("c", ctx.From<ISimpleEntity>().Where(x => x.Id > captured).Select(x => new { x.Id }))
                     .From("c")
                     .Select(x => new { id = x["id"].AsInt })
                     .ToList();
@@ -232,13 +232,13 @@ public class PlanCacheTests
             ctx.PurgeQueryCache();
 
             var matching = ctx
-                .With("c", ctx.Create<ISimpleEntity>().Where(x => x.Id > 0).Select(x => new { x.Id }))
+                .With("c", ctx.From<ISimpleEntity>().Where(x => x.Id > 0).Select(x => new { x.Id }))
                 .From("c")
                 .Select(x => new { id = x["id"].AsInt })
                 .ToList();
 
             var empty = ctx
-                .With("c", ctx.Create<ISimpleEntity>().Where(x => x.Id > 1000).Select(x => new { x.Id }))
+                .With("c", ctx.From<ISimpleEntity>().Where(x => x.Id > 1000).Select(x => new { x.Id }))
                 .From("c")
                 .Select(x => new { id = x["id"].AsInt })
                 .ToList();
@@ -262,12 +262,12 @@ public class PlanCacheTests
             ctx.PurgeQueryCache();
 
             // Prepare() passes storeInCache: false, so it must not add an entry to the plan cache.
-            var prepared = ctx.Create<ISimpleEntity>().Select(x => x.Id)
+            var prepared = ctx.From<ISimpleEntity>().Select(x => x.Id)
                 .Prepare(cancellationToken: TestContext.Current.CancellationToken);
             prepared.ToList(ctx).Should().Equal(42);
 
             var first = prepared.ToList(ctx);
-            var second = ctx.Create<ISimpleEntity>().Select(x => x.Id).ToList();
+            var second = ctx.From<ISimpleEntity>().Select(x => x.Id).ToList();
 
             first.Should().Equal(second);
             second.Should().Equal(42);
@@ -296,15 +296,15 @@ public class PlanCacheTests
 
             static IPreparedQueryCommand<int> PrepareIntersect(IDataContext ctx)
             {
-                var cmd = ctx.Create<ISimpleEntity>().Select(s => s.Id)
-                    .Intersect(ctx.Create<IComplexEntity>().Select(c => (int)c.Id));
+                var cmd = ctx.From<ISimpleEntity>().Select(s => s.Id)
+                    .Intersect(ctx.From<IComplexEntity>().Select(c => (int)c.Id));
                 return ctx.GetPreparedQueryCommand(cmd, false, true, TestContext.Current.CancellationToken);
             }
 
             static IPreparedQueryCommand<int> PrepareExcept(IDataContext ctx)
             {
-                var cmd = ctx.Create<ISimpleEntity>().Select(s => s.Id)
-                    .Except(ctx.Create<IComplexEntity>().Select(c => (int)c.Id));
+                var cmd = ctx.From<ISimpleEntity>().Select(s => s.Id)
+                    .Except(ctx.From<IComplexEntity>().Select(c => (int)c.Id));
                 return ctx.GetPreparedQueryCommand(cmd, false, true, TestContext.Current.CancellationToken);
             }
 
@@ -349,7 +349,7 @@ public class PlanCacheTests
 
             static IPreparedQueryCommand<int> Prepare(IDataContext ctx)
             {
-                var anchor = ctx.Create<ISimpleEntity>().Where(s => s.Id == 42).Select(s => new CteNumberRow { n = s.Id });
+                var anchor = ctx.From<ISimpleEntity>().Where(s => s.Id == 42).Select(s => new CteNumberRow { n = s.Id });
                 var step = ctx.From("nums").Where(t => t["n"].AsInt < 45).Select(t => new CteNumberRow { n = t["n"].AsInt + 1 });
                 var cmd = ctx.WithRecursive("nums", anchor.UnionAll(step)).From("nums").Select(t => t["n"].AsInt);
                 return ctx.GetPreparedQueryCommand(cmd, false, true, TestContext.Current.CancellationToken);

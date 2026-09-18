@@ -745,7 +745,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var command = Prepare(ctx, e.Where(x => x.Id == NORM.SQL.any(NORM.Param<long[]>(0))).Select(x => new { x.Id }));
+        var command = Prepare(ctx, e.Where(x => x.Id == NORM.PG_SQL.any(NORM.Param<long[]>(0))).Select(x => new { x.Id }));
 
         Normalize(command.DbCommand.CommandText).Should().Contain("id = any(@norm_p0)");
         command.DbCommandParams.Cast<DbParameter>().Should().ContainSingle()
@@ -759,7 +759,7 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
         var values = new long[] { 1, 2, 3 };
 
-        var command = Prepare(ctx, e.Where(x => NORM.SQL.any(x.Id, values)).Select(x => new { x.Id }));
+        var command = Prepare(ctx, e.Where(x => NORM.PG_SQL.any(x.Id, values)).Select(x => new { x.Id }));
 
         Normalize(command.DbCommand.CommandText).Should().Contain("id = any(@p0)");
         Normalize(command.DbCommand.CommandText).Should().NotContain(" in (");
@@ -774,7 +774,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var command = Prepare(ctx, e.Where(x => x.Id == NORM.SQL.all(NORM.Param<long[]>(0))).Select(x => new { x.Id }));
+        var command = Prepare(ctx, e.Where(x => x.Id == NORM.PG_SQL.all(NORM.Param<long[]>(0))).Select(x => new { x.Id }));
 
         Normalize(command.DbCommand.CommandText).Should().Contain("id = all(@norm_p0)");
         command.DbCommandParams.Cast<DbParameter>().Should().ContainSingle()
@@ -787,7 +787,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var command = Prepare(ctx, e.Where(x => x.Id == NORM.SQL.any(new long[] { 1, 2, 3 })).Select(x => new { x.Id }));
+        var command = Prepare(ctx, e.Where(x => x.Id == NORM.PG_SQL.any(new long[] { 1, 2, 3 })).Select(x => new { x.Id }));
 
         Normalize(command.DbCommand.CommandText).Should().Contain("id = any(@p0)");
         command.DbCommandParams.Cast<DbParameter>().Should().ContainSingle();
@@ -799,7 +799,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        SqlOf(ctx, e.Select(x => new { N = NORM.SQL.cardinality(NORM.Param<long[]>(0)) }))
+        SqlOf(ctx, e.Select(x => new { N = NORM.PG_SQL.cardinality(NORM.Param<long[]>(0)) }))
             .Should().Contain("cardinality(@norm_p0)");
     }
 
@@ -810,8 +810,8 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         var command = Prepare(ctx, e
-            .Where(x => NORM.SQL.array_length(NORM.Param<long[]>(0), 1) == 3)
-            .Where(x => NORM.SQL.array_position(NORM.Param<long[]>(1), x.Id) == 1)
+            .Where(x => NORM.PG_SQL.array_length(NORM.Param<long[]>(0), 1) == 3)
+            .Where(x => NORM.PG_SQL.array_position(NORM.Param<long[]>(1), x.Id) == 1)
             .Select(x => new { x.Id }));
 
         var sql = Normalize(command.DbCommand.CommandText);
@@ -825,7 +825,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        SqlOf(ctx, e.Select(x => new { S = NORM.SQL.array_to_string(NORM.Param<long[]>(0), ",") }))
+        SqlOf(ctx, e.Select(x => new { S = NORM.PG_SQL.array_to_string(NORM.Param<long[]>(0), ",") }))
             .Should().Contain("array_to_string(@norm_p0, ',')");
     }
 
@@ -836,8 +836,8 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         var command = Prepare(ctx, e
-            .Where(x => NORM.SQL.array_contains(NORM.Param<long[]>(0), NORM.Param<long[]>(1)))
-            .Where(x => NORM.SQL.array_overlaps(NORM.Param<long[]>(2), NORM.Param<long[]>(3)))
+            .Where(x => NORM.PG_SQL.array_contains(NORM.Param<long[]>(0), NORM.Param<long[]>(1)))
+            .Where(x => NORM.PG_SQL.array_overlaps(NORM.Param<long[]>(2), NORM.Param<long[]>(3)))
             .Select(x => new { x.Id }));
 
         var sql = Normalize(command.DbCommand.CommandText);
@@ -851,8 +851,8 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        SqlOf(ctx, e.Select(x => NORM.SQL.json_agg(x.String))).Should().Contain("json_agg(somestring)");
-        SqlOf(ctx, e.Select(x => NORM.SQL.jsonb_agg(x.String))).Should().Contain("jsonb_agg(somestring)");
+        SqlOf(ctx, e.Select(x => NORM.PG_SQL.json_agg(x.String))).Should().Contain("json_agg(somestring)");
+        SqlOf(ctx, e.Select(x => NORM.PG_SQL.jsonb_agg(x.String))).Should().Contain("jsonb_agg(somestring)");
     }
 
     [Fact]
@@ -861,7 +861,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        SqlOf(ctx, e.Select(x => NORM.SQL.jsonb_object_agg(x.Id, x.String)))
+        SqlOf(ctx, e.Select(x => NORM.PG_SQL.jsonb_object_agg(x.Id, x.String)))
             .Should().Contain("jsonb_object_agg(id, somestring)");
     }
 
@@ -871,7 +871,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        SqlOf(ctx, e.Select(x => new { V = NORM.SQL.json_build_object("id", x.Id, "s", x.String) }))
+        SqlOf(ctx, e.Select(x => new { V = NORM.PG_SQL.json_build_object("id", x.Id, "s", x.String) }))
             .Should().Contain("json_build_object('id', id, 's', somestring) as \"V\"");
     }
 
@@ -881,7 +881,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        SqlOf(ctx, e.Select(x => new { V = NORM.SQL.to_jsonb(x.Id) })).Should().Contain("to_jsonb(id)");
+        SqlOf(ctx, e.Select(x => new { V = NORM.PG_SQL.to_jsonb(x.Id) })).Should().Contain("to_jsonb(id)");
     }
 
     [Fact]
@@ -891,7 +891,7 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         var command = Prepare(ctx, e
-            .Where(x => NORM.SQL.json_get(NORM.Param<JsonDocument>(0), "name") == "x")
+            .Where(x => NORM.PG_SQL.json_get(NORM.Param<JsonDocument>(0), "name") == "x")
             .Select(x => new { x.Id }));
 
         Normalize(command.DbCommand.CommandText).Should().Contain("@norm_p0 -> 'name'");
@@ -906,7 +906,7 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         var command = Prepare(ctx, e
-            .Where(x => NORM.SQL.json_get_text(NORM.Param<JsonDocument>(0), 0) == "x")
+            .Where(x => NORM.PG_SQL.json_get_text(NORM.Param<JsonDocument>(0), 0) == "x")
             .Select(x => new { x.Id }));
 
         Normalize(command.DbCommand.CommandText).Should().Contain("@norm_p0 ->> 0");
@@ -920,7 +920,7 @@ public class SqlGenerationTests
         var path = new[] { "a", "b" };
 
         var command = Prepare(ctx, e
-            .Where(x => NORM.SQL.json_get_path(NORM.Param<JsonDocument>(0), path) == "x")
+            .Where(x => NORM.PG_SQL.json_get_path(NORM.Param<JsonDocument>(0), path) == "x")
             .Select(x => new { x.Id }));
 
         Normalize(command.DbCommand.CommandText).Should().Contain("@norm_p0 #> @p0");
@@ -934,10 +934,10 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         var command = Prepare(ctx, e
-            .Where(x => NORM.SQL.json_contains(NORM.Param<JsonDocument>(0), NORM.Param<JsonDocument>(1)))
-            .Where(x => NORM.SQL.json_exists(NORM.Param<JsonDocument>(2), "key"))
-            .Where(x => NORM.SQL.json_exists_any(NORM.Param<JsonDocument>(3), new[] { "a", "b" }))
-            .Where(x => NORM.SQL.json_exists_all(NORM.Param<JsonDocument>(4), new[] { "a", "b" }))
+            .Where(x => NORM.PG_SQL.json_contains(NORM.Param<JsonDocument>(0), NORM.Param<JsonDocument>(1)))
+            .Where(x => NORM.PG_SQL.json_exists(NORM.Param<JsonDocument>(2), "key"))
+            .Where(x => NORM.PG_SQL.json_exists_any(NORM.Param<JsonDocument>(3), new[] { "a", "b" }))
+            .Where(x => NORM.PG_SQL.json_exists_all(NORM.Param<JsonDocument>(4), new[] { "a", "b" }))
             .Select(x => new { x.Id }));
 
         var sql = Normalize(command.DbCommand.CommandText);
@@ -954,7 +954,7 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         var command = Prepare(ctx, e
-            .Where(x => NORM.SQL.json_exists(NORM.SQL.json_cast(NORM.Param<string>(0)), "key"))
+            .Where(x => NORM.PG_SQL.json_exists(NORM.PG_SQL.json_cast(NORM.Param<string>(0)), "key"))
             .Select(x => new { x.Id }));
 
         Normalize(command.DbCommand.CommandText).Should().Contain("cast(@norm_p0 as jsonb) ? 'key'");
@@ -968,8 +968,8 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, e.Select(x => new
         {
-            L = NORM.SQL.json_array_length(NORM.Param<JsonDocument>(0)),
-            T = NORM.SQL.json_typeof(NORM.Param<JsonDocument>(1))
+            L = NORM.PG_SQL.json_array_length(NORM.Param<JsonDocument>(0)),
+            T = NORM.PG_SQL.json_typeof(NORM.Param<JsonDocument>(1))
         }));
 
         sql.Should().Contain("json_array_length(@norm_p0)");
@@ -1030,6 +1030,29 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void DateDiff_ShouldEmitDatePartDifference()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { D = NORM.SQL.date_diff("day", x.Datetime, x.Datetime) }))
+            .Should().Contain("(cast(dt as date) - cast(dt as date)) as \"D\"");
+
+        SqlOf(ctx, e.Select(x => new { D = NORM.SQL.date_diff("month", x.Datetime, x.Datetime) }))
+            .Should().Contain("(extract(year from dt) * 12 + extract(month from dt)) - (extract(year from dt) * 12 + extract(month from dt))");
+    }
+
+    [Fact]
+    public void DateFromParts_ShouldEmitMakeDate()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { D = NORM.SQL.date_from_parts(2023, 1, 31) }))
+            .Should().Contain("make_date(2023, 1, 31) as \"D\"");
+    }
+
+    [Fact]
     public void DateTimeAddMethods_ShouldEmitIntervalExpressions()
     {
         using var ctx = PostgresTestContext.Create();
@@ -1057,7 +1080,7 @@ public class SqlGenerationTests
         // generated SQL through a predicate instead of a projection.
         SqlOf(ctx, e
             .GroupBy(x => new { x.Int })
-            .Having(x => NORM.SQL.array_agg(x.Id) != null)
+            .Having(x => NORM.PG_SQL.array_agg(x.Id) != null)
             .Select(x => new { x.Int }))
             .Should().Contain("array_agg(id)");
     }
@@ -1098,7 +1121,7 @@ public class SqlGenerationTests
         var stop = 3L;
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => NORM.SQL.generate_series(start, stop))
+            .FromTableFunction(() => NORM.PG_SQL.generate_series(start, stop))
             .Select(r => new { r.Value }));
 
         Normalize(command.DbCommand.CommandText)
@@ -1111,11 +1134,23 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
 
         var command = Prepare(ctx, ctx
-            .FromTableFunction(() => NORM.SQL.unnest(NORM.Param<long[]>(0)))
+            .FromTableFunction(() => NORM.PG_SQL.unnest(NORM.Param<long[]>(0)))
             .Select(r => new { r.Value }));
 
         Normalize(command.DbCommand.CommandText)
             .Should().Be("select unnest as \"Value\" from unnest(@norm_p0) as \"t1\"");
+    }
+
+    [Fact]
+    public void BuiltInTableFunction_UnsupportedByProvider_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var csv = "a,b";
+
+        var act = () => SqlOf(ctx, ctx.FromTableFunction(() => NORM.MS_SQL.string_split(csv, ","))
+            .Select(r => new { r.Value }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*string_split*");
     }
 
     [Fact]
@@ -1472,9 +1507,9 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, e.Select(x => new
         {
-            A = NORM.SQL.bool_and(x.Boolean),
-            B = NORM.SQL.bool_or(x.Boolean),
-            C = NORM.SQL.every(x.Boolean)
+            A = NORM.PG_SQL.bool_and(x.Boolean),
+            B = NORM.PG_SQL.bool_or(x.Boolean),
+            C = NORM.PG_SQL.every(x.Boolean)
         }));
 
         sql.Should().Contain("bool_and(b)");
@@ -1490,9 +1525,9 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, e.Select(x => new
         {
-            A = NORM.SQL.bit_and(x.Id),
-            B = NORM.SQL.bit_or(x.Id),
-            C = NORM.SQL.bit_xor(x.Id)
+            A = NORM.PG_SQL.bit_and(x.Id),
+            B = NORM.PG_SQL.bit_or(x.Id),
+            C = NORM.PG_SQL.bit_xor(x.Id)
         }));
 
         sql.Should().Contain("bit_and(id)");
@@ -1511,12 +1546,12 @@ public class SqlGenerationTests
             A = NORM.SQL.corr(x.Id, x.Id),
             B = NORM.SQL.covar_pop(x.Id, x.Id),
             C = NORM.SQL.covar_samp(x.Id, x.Id),
-            D = NORM.SQL.regr_slope(x.Id, x.Id),
-            E = NORM.SQL.regr_intercept(x.Id, x.Id),
-            F = NORM.SQL.regr_r2(x.Id, x.Id),
-            G = NORM.SQL.regr_count(x.Id, x.Id),
-            H = NORM.SQL.regr_avgx(x.Id, x.Id),
-            I = NORM.SQL.regr_avgy(x.Id, x.Id)
+            D = NORM.PG_SQL.regr_slope(x.Id, x.Id),
+            E = NORM.PG_SQL.regr_intercept(x.Id, x.Id),
+            F = NORM.PG_SQL.regr_r2(x.Id, x.Id),
+            G = NORM.PG_SQL.regr_count(x.Id, x.Id),
+            H = NORM.PG_SQL.regr_avgx(x.Id, x.Id),
+            I = NORM.PG_SQL.regr_avgy(x.Id, x.Id)
         }));
 
         sql.Should().Contain("corr(id, id)");
@@ -1538,9 +1573,9 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, e.Select(x => new
         {
-            A = NORM.SQL.percentile_cont(0.5, () => x.Id),
-            B = NORM.SQL.percentile_disc(0.5, () => x.Id),
-            C = NORM.SQL.mode(() => x.String)
+            A = NORM.PG_SQL.percentile_cont(0.5, () => x.Id),
+            B = NORM.PG_SQL.percentile_disc(0.5, () => x.Id),
+            C = NORM.PG_SQL.mode(() => x.String)
         }));
 
         sql.Should().Contain("percentile_cont(0.5) within group (order by id)");
@@ -1556,18 +1591,18 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, e.Select(x => new
         {
-            A = NORM.SQL.asin(x.Int),
-            B = NORM.SQL.atan2(x.Int, x.Int),
-            C = NORM.SQL.cbrt(x.Int),
-            D = NORM.SQL.sinh(x.Int),
-            E = NORM.SQL.degrees(x.Int),
-            F = NORM.SQL.pi(),
-            G = NORM.SQL.random(),
-            H = NORM.SQL.mod(x.Id, 2L),
-            I = NORM.SQL.gcd(x.Id, 2L),
-            J = NORM.SQL.lcm(x.Id, 2L),
-            K = NORM.SQL.factorial(x.Id),
-            L = NORM.SQL.width_bucket(x.Int, 0.0, 10.0, 5)
+            A = NORM.PG_SQL.asin(x.Int),
+            B = NORM.PG_SQL.atan2(x.Int, x.Int),
+            C = NORM.PG_SQL.cbrt(x.Int),
+            D = NORM.PG_SQL.sinh(x.Int),
+            E = NORM.PG_SQL.degrees(x.Int),
+            F = NORM.PG_SQL.pi(),
+            G = NORM.PG_SQL.random(),
+            H = NORM.PG_SQL.mod(x.Id, 2L),
+            I = NORM.PG_SQL.gcd(x.Id, 2L),
+            J = NORM.PG_SQL.lcm(x.Id, 2L),
+            K = NORM.PG_SQL.factorial(x.Id),
+            L = NORM.PG_SQL.width_bucket(x.Int, 0.0, 10.0, 5)
         }));
 
         sql.Should().Contain("asin(");
@@ -1590,7 +1625,7 @@ public class SqlGenerationTests
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        SqlOf(ctx, e.Select(x => new { V = NORM.SQL.log(2.0, x.Int) }))
+        SqlOf(ctx, e.Select(x => new { V = NORM.PG_SQL.log(2.0, x.Int) }))
             .Should().Contain("log(2, cast(nullableint as double precision))");
     }
 
@@ -1602,20 +1637,20 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, e.Select(x => new
         {
-            A = NORM.SQL.split_part(x.String, ",", 1),
-            B = NORM.SQL.strpos(x.String, "a"),
-            C = NORM.SQL.left(x.String, 2),
-            D = NORM.SQL.right(x.String, 2),
-            E = NORM.SQL.lpad(x.String, 5, "0"),
-            F = NORM.SQL.rpad(x.String, 5, "0"),
-            G = NORM.SQL.repeat(x.String, 3),
-            H = NORM.SQL.reverse(x.String),
-            I = NORM.SQL.initcap(x.String),
-            J = NORM.SQL.translate(x.String, "a", "b"),
-            K = NORM.SQL.overlay(x.String, "XX", 2, 2),
-            L = NORM.SQL.concat_ws(",", x.String, x.Id),
-            M = NORM.SQL.format("%s", x.String),
-            N = NORM.SQL.md5(x.String)
+            A = NORM.PG_SQL.split_part(x.String, ",", 1),
+            B = NORM.PG_SQL.strpos(x.String, "a"),
+            C = NORM.PG_SQL.left(x.String, 2),
+            D = NORM.PG_SQL.right(x.String, 2),
+            E = NORM.PG_SQL.lpad(x.String, 5, "0"),
+            F = NORM.PG_SQL.rpad(x.String, 5, "0"),
+            G = NORM.PG_SQL.repeat(x.String, 3),
+            H = NORM.PG_SQL.reverse(x.String),
+            I = NORM.PG_SQL.initcap(x.String),
+            J = NORM.PG_SQL.translate(x.String, "a", "b"),
+            K = NORM.PG_SQL.overlay(x.String, "XX", 2, 2),
+            L = NORM.PG_SQL.concat_ws(",", x.String, x.Id),
+            M = NORM.PG_SQL.format("%s", x.String),
+            N = NORM.PG_SQL.md5(x.String)
         }));
 
         sql.Should().Contain("split_part(somestring, ',', 1)");
@@ -1641,13 +1676,13 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         var sql = SqlOf(ctx, e
-            .Where(x => NORM.SQL.regexp_split_to_array(x.String, ",") != null)
+            .Where(x => NORM.PG_SQL.regexp_split_to_array(x.String, ",") != null)
             .Select(x => new
             {
-                A = NORM.SQL.regexp_replace(x.String, "a", "b"),
-                B = NORM.SQL.regexp_like(x.String, "^a"),
-                D = NORM.SQL.regexp_count(x.String, "a"),
-                E = NORM.SQL.regexp_instr(x.String, "a")
+                A = NORM.PG_SQL.regexp_replace(x.String, "a", "b"),
+                B = NORM.PG_SQL.regexp_like(x.String, "^a"),
+                D = NORM.PG_SQL.regexp_count(x.String, "a"),
+                E = NORM.PG_SQL.regexp_instr(x.String, "a")
             }));
 
         sql.Should().Contain("regexp_replace(somestring, 'a', 'b')");
@@ -1664,32 +1699,26 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         var sql = SqlOf(ctx, e
-            .Where(x => NORM.SQL.age(x.Datetime, x.Datetime) != null)
-            .Where(x => NORM.SQL.justify_days(NORM.Param<TimeSpan>(0)) != null)
-            .Where(x => NORM.SQL.current_time() != null)
-            .Where(x => NORM.SQL.localtime() != null)
+            .Where(x => NORM.PG_SQL.justify_days(NORM.Param<TimeSpan>(0)) != null)
+            .Where(x => NORM.PG_SQL.current_time() != null)
+            .Where(x => NORM.PG_SQL.localtime() != null)
             .Select(x => new
             {
-                B = NORM.SQL.make_date(2020, 1, 1),
-                D = NORM.SQL.to_char(x.Datetime, "YYYY"),
-                E = NORM.SQL.to_date("2020-01-01", "YYYY-MM-DD"),
-                F = NORM.SQL.to_number("1", "999"),
-                G = NORM.SQL.to_timestamp(0.0),
-                H = NORM.SQL.timezone("UTC", x.Datetime),
-                I = NORM.SQL.extract("quarter", x.Datetime),
-                J = NORM.SQL.current_date(),
-                M = NORM.SQL.localtimestamp()
+                D = NORM.PG_SQL.to_char(x.Datetime, "YYYY"),
+                E = NORM.PG_SQL.to_date("2020-01-01", "YYYY-MM-DD"),
+                F = NORM.PG_SQL.to_number("1", "999"),
+                G = NORM.PG_SQL.to_timestamp(0.0),
+                H = NORM.PG_SQL.timezone("UTC", x.Datetime),
+                J = NORM.PG_SQL.current_date(),
+                M = NORM.PG_SQL.localtimestamp()
             }));
 
-        sql.Should().Contain("age(dt, dt)");
-        sql.Should().Contain("make_date(2020, 1, 1)");
         sql.Should().Contain("justify_days(@norm_p0)");
         sql.Should().Contain("to_char(dt, 'YYYY')");
         sql.Should().Contain("to_date('2020-01-01', 'YYYY-MM-DD')");
         sql.Should().Contain("to_number('1', '999')");
         sql.Should().Contain("to_timestamp(0)");
         sql.Should().Contain("timezone('UTC', dt)");
-        sql.Should().Contain("extract(quarter from dt)");
         sql.Should().Contain("current_date");
         sql.Should().Contain("current_time");
         sql.Should().Contain("localtime");
@@ -1697,21 +1726,17 @@ public class SqlGenerationTests
     }
 
     [Fact]
-    public void MakeIntervalAndDateBin_ShouldEmit()
+    public void MakeIntervalAndJustify_ShouldEmit()
     {
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
         var sql = SqlOf(ctx, e
-            .Where(x => NORM.SQL.make_interval(0, 1, 2, 3, 4, 5.0) != null)
-            .Where(x => NORM.SQL.justify_hours(NORM.Param<TimeSpan>(1)) != null)
-            .Select(x => new
-            {
-                B = NORM.SQL.date_bin(NORM.Param<TimeSpan>(0), x.Datetime, x.Datetime)
-            }));
+            .Where(x => NORM.PG_SQL.make_interval(0, 1, 2, 3, 4, 5.0) != null)
+            .Where(x => NORM.PG_SQL.justify_hours(NORM.Param<TimeSpan>(1)) != null)
+            .Select(x => new { x.Id }));
 
         sql.Should().Contain("make_interval(0, 1, 2, 3, 4, 5)");
-        sql.Should().Contain("date_bin(@norm_p0, dt, dt)");
         sql.Should().Contain("justify_hours(@norm_p1)");
     }
 
@@ -1723,8 +1748,8 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, e.Select(x => new
         {
-            A = NORM.SQL.num_nulls(x.Int, x.String),
-            B = NORM.SQL.num_nonnulls(x.Int)
+            A = NORM.PG_SQL.num_nulls(x.Int, x.String),
+            B = NORM.PG_SQL.num_nonnulls(x.Int)
         }));
 
         sql.Should().Contain("num_nulls(nullableint, somestring)");
@@ -1738,19 +1763,19 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         var sql = SqlOf(ctx, e
-            .Where(x => NORM.SQL.array_append(NORM.Param<long[]>(0), x.Id) != null)
-            .Where(x => NORM.SQL.array_prepend(x.Id, NORM.Param<long[]>(1)) != null)
-            .Where(x => NORM.SQL.array_cat(NORM.Param<long[]>(2), NORM.Param<long[]>(3)) != null)
-            .Where(x => NORM.SQL.array_remove(NORM.Param<long[]>(4), x.Id) != null)
-            .Where(x => NORM.SQL.array_replace(NORM.Param<long[]>(5), x.Id, x.Id) != null)
-            .Where(x => NORM.SQL.array_fill(x.Id, 2, 3) != null)
-            .Where(x => NORM.SQL.array_positions(NORM.Param<long[]>(7), x.Id) != null)
-            .Where(x => NORM.SQL.array_reverse(NORM.Param<long[]>(8)) != null)
-            .Where(x => NORM.SQL.array_sort(NORM.Param<long[]>(9)) != null)
-            .Where(x => NORM.SQL.string_to_array(x.String, ",") != null)
+            .Where(x => NORM.PG_SQL.array_append(NORM.Param<long[]>(0), x.Id) != null)
+            .Where(x => NORM.PG_SQL.array_prepend(x.Id, NORM.Param<long[]>(1)) != null)
+            .Where(x => NORM.PG_SQL.array_cat(NORM.Param<long[]>(2), NORM.Param<long[]>(3)) != null)
+            .Where(x => NORM.PG_SQL.array_remove(NORM.Param<long[]>(4), x.Id) != null)
+            .Where(x => NORM.PG_SQL.array_replace(NORM.Param<long[]>(5), x.Id, x.Id) != null)
+            .Where(x => NORM.PG_SQL.array_fill(x.Id, 2, 3) != null)
+            .Where(x => NORM.PG_SQL.array_positions(NORM.Param<long[]>(7), x.Id) != null)
+            .Where(x => NORM.PG_SQL.array_reverse(NORM.Param<long[]>(8)) != null)
+            .Where(x => NORM.PG_SQL.array_sort(NORM.Param<long[]>(9)) != null)
+            .Where(x => NORM.PG_SQL.string_to_array(x.String, ",") != null)
             .Select(x => new
             {
-                G = NORM.SQL.array_dims(NORM.Param<long[]>(6))
+                G = NORM.PG_SQL.array_dims(NORM.Param<long[]>(6))
             }));
 
         sql.Should().Contain("array_append(@norm_p0, id)");
@@ -1767,14 +1792,28 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void StringJoinAndSplit_ShouldUseArrayToStringAndStringToArray()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = string.Join(",", x.String!.Split(',')) }))
+            .Should().Contain("array_to_string(string_to_array(somestring, ','), ',')");
+
+        // A Split result is an array operand for the other array functions too.
+        SqlOf(ctx, e.Select(x => new { V = NORM.PG_SQL.array_position(x.String!.Split(','), "a") }))
+            .Should().Contain("array_position(string_to_array(somestring, ','), 'a')");
+    }
+
+    [Fact]
     public void ArrayOperators_ShouldEmit()
     {
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
         var sql = SqlOf(ctx, e
-            .Where(x => NORM.SQL.array_contained_by(NORM.Param<long[]>(0), NORM.Param<long[]>(1)))
-            .Where(x => NORM.SQL.array_concat(NORM.Param<long[]>(2), NORM.Param<long[]>(3)) != null)
+            .Where(x => NORM.PG_SQL.array_contained_by(NORM.Param<long[]>(0), NORM.Param<long[]>(1)))
+            .Where(x => NORM.PG_SQL.array_concat(NORM.Param<long[]>(2), NORM.Param<long[]>(3)) != null)
             .Select(x => new { x.Id }));
 
         sql.Should().Contain("(@norm_p0 <@ @norm_p1)");
@@ -1789,15 +1828,15 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, e.Select(x => new
         {
-            A = NORM.SQL.jsonb_set(NORM.Param<JsonDocument>(0), new[] { "a" }, 1),
-            B = NORM.SQL.jsonb_insert(NORM.Param<JsonDocument>(1), new[] { "a" }, 1, true),
-            C = NORM.SQL.jsonb_strip_nulls(NORM.Param<JsonDocument>(2)),
-            D = NORM.SQL.jsonb_pretty(NORM.Param<JsonDocument>(3)),
-            E = NORM.SQL.jsonb_delete(NORM.Param<JsonDocument>(4), "a"),
-            F = NORM.SQL.jsonb_delete(NORM.Param<JsonDocument>(5), 0),
-            G = NORM.SQL.row_to_json(NORM.Param<object>(6)),
-            H = NORM.SQL.array_to_json(NORM.Param<long[]>(7)),
-            I = NORM.SQL.json_concat(NORM.Param<JsonDocument>(8), NORM.Param<JsonDocument>(9))
+            A = NORM.PG_SQL.jsonb_set(NORM.Param<JsonDocument>(0), new[] { "a" }, 1),
+            B = NORM.PG_SQL.jsonb_insert(NORM.Param<JsonDocument>(1), new[] { "a" }, 1, true),
+            C = NORM.PG_SQL.jsonb_strip_nulls(NORM.Param<JsonDocument>(2)),
+            D = NORM.PG_SQL.jsonb_pretty(NORM.Param<JsonDocument>(3)),
+            E = NORM.PG_SQL.jsonb_delete(NORM.Param<JsonDocument>(4), "a"),
+            F = NORM.PG_SQL.jsonb_delete(NORM.Param<JsonDocument>(5), 0),
+            G = NORM.PG_SQL.row_to_json(NORM.Param<object>(6)),
+            H = NORM.PG_SQL.array_to_json(NORM.Param<long[]>(7)),
+            I = NORM.PG_SQL.json_concat(NORM.Param<JsonDocument>(8), NORM.Param<JsonDocument>(9))
         }));
 
         sql.Should().Contain("jsonb_set(@norm_p0, @");
@@ -1819,16 +1858,71 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, e.Select(x => new
         {
-            A = NORM.SQL.jsonb_path_exists(NORM.Param<JsonDocument>(0), "$.a"),
-            B = NORM.SQL.jsonb_path_match(NORM.Param<JsonDocument>(1), "$.a == 1"),
-            C = NORM.SQL.jsonb_path_query_first(NORM.Param<JsonDocument>(2), "$.a"),
-            D = NORM.SQL.jsonb_path_query_array(NORM.Param<JsonDocument>(3), "$.a")
+            A = NORM.PG_SQL.jsonb_path_exists(NORM.Param<JsonDocument>(0), "$.a"),
+            B = NORM.PG_SQL.jsonb_path_match(NORM.Param<JsonDocument>(1), "$.a == 1"),
+            C = NORM.PG_SQL.jsonb_path_query_first(NORM.Param<JsonDocument>(2), "$.a"),
+            D = NORM.PG_SQL.jsonb_path_query_array(NORM.Param<JsonDocument>(3), "$.a")
         }));
 
         sql.Should().Contain("jsonb_path_exists(@norm_p0, cast('$.a' as jsonpath))");
         sql.Should().Contain("jsonb_path_match(@norm_p1, cast('$.a == 1' as jsonpath))");
         sql.Should().Contain("jsonb_path_query_first(@norm_p2, cast('$.a' as jsonpath))");
         sql.Should().Contain("jsonb_path_query_array(@norm_p3, cast('$.a' as jsonpath))");
+    }
+
+    [Fact]
+    public void FullTextPredicates_ShouldUseTsvectorMatch()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Where(x => NORM.SQL.contains(x.String, "foo")).Select(x => new { x.Id }))
+            .Should().Contain("where to_tsvector(somestring) @@ plainto_tsquery('foo')");
+
+        SqlOf(ctx, e.Where(x => NORM.SQL.freetext(x.String, "foo")).Select(x => new { x.Id }))
+            .Should().Contain("where to_tsvector(somestring) @@ websearch_to_tsquery('foo')");
+    }
+
+    [Fact]
+    public void IndexOfLastIndexOf_ShouldUseStrpos()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = x.String!.IndexOf("b") }))
+            .Should().Contain("case when (strpos(somestring, 'b')) = 0 then -1 else (strpos(somestring, 'b')) - 1 end");
+        SqlOf(ctx, e.Select(x => new { V = x.String!.IndexOf("b", 1) }))
+            .Should().Contain("strpos(substring(somestring, 1 + 1, length(somestring) - (1)), 'b')");
+        SqlOf(ctx, e.Select(x => new { V = x.String!.LastIndexOf("b") }))
+            .Should().Contain("case when (strpos(reverse(somestring), reverse('b'))) = 0 then -1 else length(somestring) - (strpos(reverse(somestring), reverse('b'))) - length('b') + 1 end");
+    }
+
+    [Fact]
+    public void PadLeftRight_ShouldUseRepeat()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = x.String!.PadLeft(5, '0') }))
+            .Should().Contain("case when length(somestring) >= (5) then somestring else repeat('0', (5) - length(somestring))||somestring end");
+        SqlOf(ctx, e.Select(x => new { V = x.String!.PadRight(5) }))
+            .Should().Contain("case when length(somestring) >= (5) then somestring else somestring||repeat(' ', (5) - length(somestring)) end");
+    }
+
+    [Fact]
+    public void RemoveInsertAndNewString_ShouldUseOverlayAndRepeat()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = x.String!.Remove(2) }))
+            .Should().Contain("substring(somestring, 0 + 1, 2)");
+        SqlOf(ctx, e.Select(x => new { V = x.String!.Remove(2, 1) }))
+            .Should().Contain("overlay(somestring placing '' from 2 + 1 for 1)");
+        SqlOf(ctx, e.Select(x => new { V = x.String!.Insert(2, "x") }))
+            .Should().Contain("overlay(somestring placing 'x' from 2 + 1 for 0)");
+        SqlOf(ctx, e.Select(x => new { V = new string('*', 4) }))
+            .Should().Contain("repeat('*', 4)");
     }
 
     private static Expression<Func<IComplexEntity, string>> SwitchOfId(string @default, params (long Test, string Result)[] cases)

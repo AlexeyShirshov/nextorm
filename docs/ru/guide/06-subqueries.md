@@ -6,7 +6,7 @@
 
 ## Обзор
 
-Любой `QueryCommand<T>` — объект, который возвращает `Entity<T>.Select(...)`, — можно встроить в
+Любой `QueryCommand<T>` — объект, который возвращает `EntityBuilder<T>.Select(...)`, — можно встроить в
 другой запрос четырьмя способами:
 
 * как **производную таблицу** в `FROM`, через `DataContext.From(query)`;
@@ -25,11 +25,11 @@
 
 ## Подзапрос как источник FROM
 
-`From` принимает подготовленный `QueryCommand<T>` (или `Entity<T>`) и создаёт построитель по его
+`From` принимает подготовленный `QueryCommand<T>` (или `EntityBuilder<T>`) и создаёт построитель по его
 столбцам:
 
 ```csharp
-var nested = dataContext.Create<IComplexEntity>().Select(x => new { x.Id });
+var nested = dataContext.From<IComplexEntity>().Select(x => new { x.Id });
 var rows = dataContext.From(nested).Select(t => new { t.Id }).ToList();
 ```
 
@@ -48,7 +48,7 @@ select id from (select id from complex_entity) as [t1]
 имени:
 
 ```csharp
-var nested = dataContext.Create<IComplexEntity>().Select(x => new { x.Id, Calc = x.String + x.String });
+var nested = dataContext.From<IComplexEntity>().Select(x => new { x.Id, Calc = x.String + x.String });
 var rows = dataContext.From(nested).Select(t => new { t.Id, t.Calc }).ToList();
 ```
 
@@ -59,8 +59,8 @@ var rows = dataContext.From(nested).Select(t => new { t.Id, t.Calc }).ToList();
 псевдоним по имени внешнего свойства:
 
 ```csharp
-var rows = await dataContext.Create<IComplexEntity>()
-    .Select(it => new { it.Id, sid = dataContext.Create<ISimpleEntity>().Where(it => it.Id == 1).Select(it => it.Id).First() })
+var rows = await dataContext.From<IComplexEntity>()
+    .Select(it => new { it.Id, sid = dataContext.From<ISimpleEntity>().Where(it => it.Id == 1).Select(it => it.Id).First() })
     .ToListAsync();
 ```
 
@@ -71,8 +71,8 @@ select id, (select id from simple_entity where (id = 1) limit 1) as 'sid' from c
 Внутренний запрос также можно отсортировать:
 
 ```csharp
-var rows = await dataContext.Create<IComplexEntity>()
-    .Select(it => new { it.Id, sid = dataContext.Create<ISimpleEntity>().OrderByDescending(it => it.Id).Select(it => it.Id).First() })
+var rows = await dataContext.From<IComplexEntity>()
+    .Select(it => new { it.Id, sid = dataContext.From<ISimpleEntity>().OrderByDescending(it => it.Id).Select(it => it.Id).First() })
     .ToListAsync();
 ```
 
@@ -82,8 +82,8 @@ var rows = await dataContext.Create<IComplexEntity>()
 правой части:
 
 ```csharp
-var row = await dataContext.Create<IComplexEntity>()
-    .Where(it => it.Id == dataContext.Create<ISimpleEntity>().OrderBy(it => it.Id).Select(it => it.Id).First())
+var row = await dataContext.From<IComplexEntity>()
+    .Where(it => it.Id == dataContext.From<ISimpleEntity>().OrderBy(it => it.Id).Select(it => it.Id).First())
     .Select(it => new { it.Id })
     .FirstOrDefaultAsync();
 ```
@@ -94,8 +94,8 @@ var row = await dataContext.Create<IComplexEntity>()
 подзапрос, второй разрешает равенство:
 
 ```csharp
-var rows = dataContext.Create<IComplexEntity>()
-    .OrderBy(_ => dataContext.Create<ISimpleEntity>().Where(it => it.Id == 1).Select(it => it.Id).First())
+var rows = dataContext.From<IComplexEntity>()
+    .OrderBy(_ => dataContext.From<ISimpleEntity>().Where(it => it.Id == 1).Select(it => it.Id).First())
     .OrderBy(it => it.Id)
     .Select(it => new { it.Id })
     .ToList();
@@ -108,8 +108,8 @@ var rows = dataContext.Create<IComplexEntity>()
 псевдоним внутри внутреннего предиката:
 
 ```csharp
-var rows = dataContext.Create<ISimpleEntity>()
-    .Where(s => NORM.SQL.exists(dataContext.Create<IComplexEntity>().Where(c => c.Id == s.Id)))
+var rows = dataContext.From<ISimpleEntity>()
+    .Where(s => NORM.SQL.exists(dataContext.From<IComplexEntity>().Where(c => c.Id == s.Id)))
     .Select(it => it.Id)
     .ToList();
 ```
@@ -118,11 +118,11 @@ var rows = dataContext.Create<ISimpleEntity>()
 select t1.id from simple_entity as 't1' where exists(select * from complex_entity where (id = cast(t1.id as bigint)))
 ```
 
-`Entity<T>` также можно передать напрямую в `exists`, когда важно лишь её существование:
+`EntityBuilder<T>` также можно передать напрямую в `exists`, когда важно лишь её существование:
 
 ```csharp
-var all = await dataContext.Create<IComplexEntity>().Select(it => new { it.Id, exists = NORM.SQL.exists(dataContext.Create<ISimpleEntity>()) }).ToListAsync();
-var none = await dataContext.Create<IComplexEntity>().Select(it => new { it.Id, exists = NORM.SQL.exists(dataContext.Create<ISimpleEntity>().Where(it => it.Id == 100)) }).ToListAsync();
+var all = await dataContext.From<IComplexEntity>().Select(it => new { it.Id, exists = NORM.SQL.exists(dataContext.From<ISimpleEntity>()) }).ToListAsync();
+var none = await dataContext.From<IComplexEntity>().Select(it => new { it.Id, exists = NORM.SQL.exists(dataContext.From<ISimpleEntity>().Where(it => it.Id == 100)) }).ToListAsync();
 ```
 
 ## IN с подзапросом
@@ -130,8 +130,8 @@ var none = await dataContext.Create<IComplexEntity>().Select(it => new { it.Id, 
 `NORM.SQL.@in(column, query)` генерирует `IN (SELECT ...)`:
 
 ```csharp
-var row = await dataContext.Create<IComplexEntity>()
-    .Where(it => NORM.SQL.@in((int)it.Id, dataContext.Create<ISimpleEntity>().Where(it => it.Id == 2).Select(it => it.Id)))
+var row = await dataContext.From<IComplexEntity>()
+    .Where(it => NORM.SQL.@in((int)it.Id, dataContext.From<ISimpleEntity>().Where(it => it.Id == 2).Select(it => it.Id)))
     .Select(it => it.Id)
     .FirstOrDefaultAsync();
 ```
@@ -149,8 +149,8 @@ select id from complex_entity where (cast(id as integer) in (select id from simp
 столбцом:
 
 ```csharp
-var rows = await dataContext.Create<ISimpleEntity>()
-    .Where(it => it.Id == NORM.SQL.any(dataContext.Create<IComplexEntity>().Select(it => it.Id)))
+var rows = await dataContext.From<ISimpleEntity>()
+    .Where(it => it.Id == NORM.SQL.any(dataContext.From<IComplexEntity>().Select(it => it.Id)))
     .Select(it => it.Id)
     .ToListAsync();
 ```

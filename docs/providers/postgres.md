@@ -32,10 +32,13 @@
   and the `DateTime.Add*` methods render PostgreSQL interval arithmetic
   (`x + (n * interval '1 day')`, `date_trunc('month', x) + interval '1 month - 1 day'`);
 - the `string_agg`/`array_agg` aggregates are enabled (`SupportsStringArrayAggregates` is `true`);
+- full-text search is enabled (`SupportsFullText` is `true`): `NORM.SQL.contains` renders
+  `to_tsvector(col) @@ plainto_tsquery(search)` and `freetext` `websearch_to_tsquery(search)`;
 - the extended scalar function library is enabled (`SupportsExtendedScalarFunctions` is `true`):
   additional math (`asin`, `cbrt`, `degrees`, `pi`, `mod`, ...), string (`split_part`, `lpad`,
   `initcap`, ...), POSIX regular expression (`regexp_replace`, `regexp_like`, ...), date/time
-  (`age`, `make_date`, `to_char`, `extract`, ...) and `num_nulls`/`num_nonnulls`;
+  (`make_interval`, `justify_days`, `justify_hours`, `to_char`, `to_date`, ...) and
+  `num_nulls`/`num_nonnulls`;
 - the boolean, bitwise, statistical and ordered-set aggregates are enabled
   (`SupportsBooleanAggregates`, `SupportsBitAggregates`, `SupportsStatisticalAggregates` and
   `SupportsOrderedAggregates` are `true`): `bool_and`/`bool_or`/`every`, `bit_and`/`bit_or`/`bit_xor`,
@@ -114,16 +117,17 @@ integer.
 
 ## Arrays
 
-PostgreSQL is the only supported provider with native arrays. An array operand is passed as a single
-parameter, so `column = any(@array)` works with a runtime parameter or a captured array, and the SQL
-does not depend on the number of elements:
+PostgreSQL is the only supported provider with native arrays, and the array surface lives on
+`NORM.PG_SQL` (`NORM.SQL` stays cross-provider). An array operand is passed as a single parameter, so
+`column = any(@array)` works with a runtime parameter or a captured array, and the SQL does not depend
+on the number of elements:
 
 ```csharp
 var ids = new long[] { 1, 2, 3 };
 
-ctx.From<IComplexEntity>().Where(e => NORM.SQL.any(e.Id, ids));      // (id = any(@p0))
-ctx.From<IComplexEntity>().Where(e => e.Id == NORM.SQL.any(ids));    // id = any(@p0)
-ctx.From<IComplexEntity>().Where(e => e.Id == NORM.SQL.any(NORM.Param<long[]>(0))); // id = any(@norm_p0)
+ctx.From<IComplexEntity>().Where(e => NORM.PG_SQL.any(e.Id, ids));      // (id = any(@p0))
+ctx.From<IComplexEntity>().Where(e => e.Id == NORM.PG_SQL.any(ids));    // id = any(@p0)
+ctx.From<IComplexEntity>().Where(e => e.Id == NORM.PG_SQL.any(NORM.Param<long[]>(0))); // id = any(@norm_p0)
 ```
 
 ```sql
@@ -146,15 +150,15 @@ var document = JsonDocument.Parse("""{"name":"Alice","tags":["a","b"]}""");
 
 using var ctx = new PostgresDbContext(connectionString, new DbContextBuilder());
 ctx.From<IComplexEntity>()
-    .Where(e => NORM.SQL.json_get_text(NORM.Param<JsonDocument>(0), "name") == "Alice")
+    .Where(e => NORM.PG_SQL.json_get_text(NORM.Param<JsonDocument>(0), "name") == "Alice")
     .Select(e => e.Id)
     .ToList(document);
 
 ctx.From<IComplexEntity>()
-    .Select(e => NORM.SQL.jsonb_agg(e.String));   // jsonb_agg(somestring)
+    .Select(e => NORM.PG_SQL.jsonb_agg(e.String));   // jsonb_agg(somestring)
 ```
 
-A plain JSON string is bound as `text`; use `NORM.SQL.json_cast(value)` to parse it as `jsonb`. The full
+A plain JSON string is bound as `text`; use `NORM.PG_SQL.json_cast(value)` to parse it as `jsonb`. The full
 surface (`json_agg`, `jsonb_build_object`, `->`, `->>`, `#>`, `@>`, `?`, `?|`, `?&`, ...) is documented
 in [Scalar functions](../guide/11-scalar-functions.md#json-and-jsonb-postgresql). Other providers
 reject it with `NotSupportedException`.

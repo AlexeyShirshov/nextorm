@@ -54,12 +54,90 @@ internal static class SqlOperandTranslator
             return;
         }
 
+        // string.Split(...) is an array operand produced by SQL (string_to_array), not a captured
+        // array, so it is rendered instead of being materialised as a single parameter.
+        if (arrayExp is MethodCallExpression { Object: { } splitObject } splitCall
+            && splitCall.Method.DeclaringType == typeof(string)
+            && splitCall.Method.Name == nameof(string.Split)
+            && TryGetSplitSeparator(splitCall, out var splitSeparator))
+        {
+            AppendSplitOperand(visitor, splitObject, splitSeparator);
+            return;
+        }
+
         var value = InValuesEvaluator.Evaluate(arrayExp, visitor.QueryProvider);
         var name = visitor.ParamProvider.GetParamName();
         visitor.Params.Add(new Param(name, value));
 
         if (!visitor.IsParamMode)
             visitor.Builder!.Append(visitor.Dialect.MakeParam(name));
+    }
+
+    /// <summary>
+    /// Reads the single separator of a supported <c>string.Split</c> overload. The
+    /// <c>StringSplitOptions</c> argument, when present, must be the default <c>None</c>; the
+    /// multi-separator and <c>RemoveEmptyEntries</c>/<c>TrimEntries</c> forms have no portable SQL.
+    /// </summary>
+    private static bool TryGetSplitSeparator(MethodCallExpression call, out Expression separator)
+    {
+        separator = null!;
+
+        var args = call.Arguments;
+        if (args.Count is < 1 or > 2)
+            return false;
+
+        if (args.Count == 2
+            && args[1] is ConstantExpression { Value: StringSplitOptions options }
+            && options != StringSplitOptions.None)
+            return false;
+
+        var candidate = args[0];
+        if (candidate is NewArrayExpression { Expressions: [var element] })
+            candidate = element;
+
+        if (candidate.Type != typeof(char) && candidate.Type != typeof(string))
+            return false;
+
+        separator = candidate;
+        return true;
+    }
+
+    /// <summary>
+    /// Renders a <c>string.Split(separator)</c> array operand as <c>string_to_array(value, separator)</c>.
+    /// Requires a provider with native arrays (PostgreSQL); only the single-separator overloads map.
+    /// </summary>
+    private static void AppendSplitOperand(BaseExpressionVisitor visitor, Expression valueExp, Expression separatorArg)
+    {
+        if (!visitor.Dialect.SupportsArrays)
+            throw new NotSupportedException("string.Split as an array operand requires a provider with native arrays (PostgreSQL).");
+
+        if (separatorArg.Type != typeof(char) && separatorArg.Type != typeof(string))
+            throw new NotSupportedException("This string.Split overload is not supported; only a single char/string separator maps to SQL.");
+
+        if (visitor.IsParamMode)
+        {
+            visitor.Visit(valueExp);
+            visitor.Visit(separatorArg);
+            return;
+        }
+
+        // Render the value before the separator so the parameter-extraction order matches.
+        visitor.NeedAliasForColumn = true;
+        var value = visitor.VisitToString(valueExp);
+        string separator;
+        if (separatorArg.Type == typeof(char))
+        {
+            if (!SqlLiteral.TryGetConstantString(separatorArg, out var separatorChar))
+                throw new NotSupportedException("The string.Split separator character must be a constant.");
+
+            separator = SqlLiteral.ToSqlStringLiteral(separatorChar);
+        }
+        else
+        {
+            separator = visitor.VisitToString(separatorArg);
+        }
+
+        visitor.Builder!.Append("string_to_array(").Append(value).Append(", ").Append(separator).Append(')');
     }
 
     /// <summary>Renders <c>name(arg, ...)</c> over the given arguments.</summary>

@@ -49,10 +49,13 @@ package adds a context, a dialect and a `DbContextBuilder` extension class in it
 | Type | Description | Source |
 |---|---|---|
 | `QueryCommand` | Non-generic query command holding the plan/state shared by all results. | `src/nextorm.core/Query/QueryCommand.cs` |
-| `QueryCommand<TResult>` | Typed query command with terminals (`ToList`, `First`, `Union`, `Distinct`, `Hint`, `Prepare`, …). | `src/nextorm.core/Query/QueryCommand.TResult.cs` |
+| `QueryCommand<TResult>` | Typed query command with terminals (`ToList`, `First`, `Union`, `Distinct`, `Hint`, `ForJson`, `ForXml`, `WithTableHint`, `Prepare`, …). | `src/nextorm.core/Query/QueryCommand.TResult.cs` |
 | `IPreparedQueryCommand<TResult>` | Prepared command; its default members execute it against a supplied `IDataContext`. | `src/nextorm.core/DataContext/Cache/IPreparedQueryCommand.cs` |
-| `NORM` | Static entry point: `NORM.SQL` and `NORM.Param<T>(idx)`. | `src/nextorm.core/Query/NORM.cs` |
-| `NORM_SQL` | SQL function surface: `exists`, `like`, `@in`, `any`/`all` (subquery and array), aggregates (including filtered aggregates and `string_agg`/`array_agg`), window functions, `nullif`/`greatest`/`least`/`date_trunc`/`date_add`/`end_of_month`, PostgreSQL array and JSON/JSONB functions, the SQL Server text-JSON functions (`json_value`/`json_query`/`json_modify`), and the `generate_series`/`unnest`/`string_split` table functions. | `src/nextorm.core/Query/NORM.cs` |
+| `NORM` | Static entry point: `NORM.SQL`, `NORM.PG_SQL`, `NORM.MS_SQL`, `NORM.CLK_SQL` and `NORM.Param<T>(idx)`. | `src/nextorm.core/Query/NORM.cs` |
+| `NORM_SQL` | Cross-provider SQL function surface: `exists`, `like`, `@in`, `any`/`all` (subquery), aggregates (including filtered aggregates and `string_agg`), window functions, `nullif`/`greatest`/`least`/`date_trunc`/`date_add`/`date_diff`/`date_from_parts`/`end_of_month` and full-text predicates (`contains`/`freetext`). | `src/nextorm.core/Query/NORM.cs` |
+| `NORM.PG_SQL` (`PG`) | PostgreSQL-only surface: arrays (`any`/`all`, `cardinality`, `array_*`, `string_to_array`), native JSON/JSONB, the extended scalar library (`asin`, `split_part`, `lpad`, `regexp_*`, `to_char`, …), the PostgreSQL-only aggregates (`bool_*`, `bit_*`, `regr_*`, `percentile_*`, `mode`, `array_agg`) and the `generate_series`/`unnest` table functions. | `src/nextorm.core/Query/NORM.PG.cs` |
+| `NORM.MS_SQL` (`MS`) | SQL Server-only surface: the JSON-as-text functions (`json_value`/`json_query`/`json_modify`/`isjson`) and the `string_split`/`openjson` table functions. | `src/nextorm.core/Query/NORM.MS.cs` |
+| `NORM.CLK_SQL` (`CLK`) | ClickHouse-only surface: the `arg_min`/`arg_max` aggregates and the `-If` combinator (`count_if`/`sum_if`/`avg_if`/`min_if`/`max_if`). | `src/nextorm.core/Query/NORM.CLK.cs` |
 | `NORM.WindowFunction<T>` | Unfinished window call; complete it with `Over(...)`. | `src/nextorm.core/Query/NORM.cs` |
 | `NORM.WindowOrder` | An ordered window key plus `OrderDirection`. | `src/nextorm.core/Query/NORM.cs` |
 | `NORM.WindowFrame`, `WindowFrameBound`, `WindowFrameType`, `WindowFrameBoundKind` | `ROWS`/`RANGE` frame specification and its boundaries. | `src/nextorm.core/Query/NORM.cs` |

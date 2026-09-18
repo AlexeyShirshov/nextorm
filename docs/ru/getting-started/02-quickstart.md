@@ -10,10 +10,10 @@
 
 1. **сущность** (класс или интерфейс), свойства которой отображаются на столбцы;
 2. **контекст** (`IDataContext`), созданный из подключения или строки подключения;
-3. **запрос**, построенный с помощью `Create<T>()`, `Select`, `Where` и так далее;
+3. **запрос**, построенный с помощью `From<T>()`, `Select`, `Where` и так далее;
 4. **терминальный метод**, такой как `ToList()`, `First()`, `Any()` или `ToAsyncEnumerable()`, который его выполняет.
 
-`Create<T>()` также регистрирует метаданные `T` при первом обращении. Контекст поддерживает освобождение: контекст, созданный из строки подключения, владеет подключением и закрывает его, тогда как контекст, созданный из переданного `DbConnection`, оставляет это подключение открытым.
+`From<T>()` также регистрирует метаданные `T` при первом обращении. Контекст поддерживает освобождение: контекст, созданный из строки подключения, владеет подключением и закрывает его, тогда как контекст, созданный из переданного `DbConnection`, оставляет это подключение открытым.
 
 ## Полная минимальная программа
 
@@ -40,7 +40,7 @@ using (var setup = connection.CreateCommand())
 var builder = new DbContextBuilder().UseSqlite(connection);
 using var dataContext = builder.CreateDbContext();
 
-await foreach (var row in dataContext.Create<ISimpleEntity>()
+await foreach (var row in dataContext.From<ISimpleEntity>()
                                    .Select(entity => new { Id = (long)entity.Id })
                                    .ToAsyncEnumerable())
 {

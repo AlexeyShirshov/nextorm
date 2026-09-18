@@ -10,14 +10,14 @@ NextORM needs to know three things before it can build SQL: the table a type map
 property maps to, and how to create materialised rows. Metadata is declared in one of three ways:
 
 1. **Attributes** on an interface or on a class (`[SqlTable]`, `[Column]`, optionally `[Table]`).
-2. A **fluent builder** passed to `Create<T>(cfg => …)`.
+2. A **fluent builder** passed to `From<T>(cfg => …)`.
 3. **No metadata at all** - start from a raw table name with `From("table")` and read columns through a
    `TableAlias` (`tbl.Int("id")`, `tbl.String("name")`, …).
 
 Metadata is resolved lazily and cached **process-wide** in `DataContextCache.Metadata`, keyed by type,
-the first time a type is queried through `Create<T>()`. Because of that cache:
+the first time a type is queried through `From<T>()`. Because of that cache:
 
-* the config delegate passed to `Create<T>(…)` runs only on the first call for that type in the
+* the config delegate passed to `From<T>(…)` runs only on the first call for that type in the
   process;
 * later calls for the same type reuse the already-built `IEntityMeta` and ignore a new delegate;
 * the in-memory and SQL contexts share the same metadata (the in-memory context exposes it as
@@ -59,6 +59,9 @@ select id from simple_entity
   column is the primary key. NextORM does not read it for query generation (there is no DDL generation
   and no change tracking), but it keeps the entity valid for upstream schema tooling and is the
   conventional choice.
+* **Binary columns** - a `byte[]` property maps to a binary column (`bytea` on PostgreSQL,
+  `varbinary`/`image` on SQL Server, `blob` on SQLite). A `byte[]` can also be projected directly
+  (`Select(x => x.Data)`) and compared against a `byte[]` parameter of `NORM.Param<byte[]>(0)`.
 
 ### Interface plus class
 
@@ -79,19 +82,19 @@ public class SimpleEntity : ISimpleEntity
 }
 ```
 
-`EntityBuilder` reads the mapping from the interface: it resolves the table name from the implemented
+`EntityMetadataBuilder` reads the mapping from the interface: it resolves the table name from the implemented
 interfaces and, for each writable property, looks up the matching interface property to find `[Column]`.
-Both `dataContext.Create<ISimpleEntity>()` and `dataContext.Create<SimpleEntity>()` then produce the same
+Both `dataContext.From<ISimpleEntity>()` and `dataContext.From<SimpleEntity>()` then produce the same
 SQL. A class with attributes directly on it works the same way, with no interface required.
 
 ## Fluent registration
 
-Instead of attributes, pass a configuration delegate to `Create<T>()`. `EntityBuilder<T>` exposes
+Instead of attributes, pass a configuration delegate to `From<T>()`. `EntityMetadataBuilder<T>` exposes
 `Table(string)` and `Property(Expression<Func<T, object>>)`; the returned `EntityPropertyBuilder<T>`
 exposes `HasColumnName(string)`.
 
 ```csharp
-dataContext.Create<SimpleEntity>(cfg => cfg
+dataContext.From<SimpleEntity>(cfg => cfg
     .Table("simple_entity")
     .Property(x => x.Id)
     .HasColumnName("id"));
@@ -106,7 +109,7 @@ public class Product
     public string? Name { get; set; }
 }
 
-dataContext.Create<Product>(cfg =>
+dataContext.From<Product>(cfg =>
 {
     cfg.Table("products");
     cfg.Property(x => x.Id).HasColumnName("id");
@@ -114,7 +117,7 @@ dataContext.Create<Product>(cfg =>
 });
 ```
 
-Rules for the fluent path (`EntityBuilder<T>.Build`):
+Rules for the fluent path (`EntityMetadataBuilder<T>.Build`):
 
 * if `Table(...)` is omitted, the table name is auto-built from attributes and then the type name;
 * if at least one `Property(...)` is configured, **only** those properties are mapped - auto-discovered
@@ -154,11 +157,12 @@ select id from simple_entity
 | `Byte(string)` | `byte` | `NullableByte(string)` | `byte?` |
 | `Boolean(string)` | `bool` | `NullableBoolean(string)` | `bool?` |
 | `Guid(string)` | `Guid` | `NullableGuid(string)` | `Guid?` |
+| `Bytes(string)` | `byte[]` | `NullableBytes(string)` | `byte[]?` |
 | `Column(string)` | `object` | | |
 
 `TableAlias` also has an indexer, `this[string]`, returning a `TableColumn` with the typed
-`AsInt`, `AsString` and `AsNullableString` accessors - useful when the same column alias is referenced
-from a joined/CTE query:
+`AsInt`, `AsString`, `AsNullableString`, `AsBytes` and `AsNullableBytes` accessors - useful when the
+same column alias is referenced from a joined/CTE query:
 
 ```csharp
 var query = dataContext.From("complex_entity")
@@ -196,7 +200,7 @@ exactly for every provider.
 Source: `test/nextorm.integration.tests/Entities.cs:7`;
 `test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:37`;
 `test/nextorm.sqlite.tests/MetadataRegistrationTests.cs:18`;
-`src/nextorm.core/DataContext/Meta/EntityBuilder.cs:111`;
+`src/nextorm.core/DataContext/Meta/EntityMetadataBuilder.cs:111`;
 `src/nextorm.core/DataContext/Meta/EntityPropertyBuilder.cs:16`;
 `src/nextorm.core/DataContext/DataContextCache.cs:20`;
 `test/nextorm.sqlite.tests/SqlGenerationTests.cs:116`.

@@ -137,6 +137,29 @@ select nullableint as 'Int', b as 'Boolean', count(*) from complex_entity group 
 `ROLLUP` доступен на всех SQL-провайдерах; `CUBE` недоступен в MySQL/MariaDB. Провайдер in-memory не
 поддерживает ни один из модификаторов и выбрасывает `NotSupportedException`.
 
+## GROUPING SETS
+
+`GroupByGroupingSets(...)` группирует по явному списку подмножеств. Первый аргумент объявляет полный
+список колонок, а каждый следующий — набор 0-based индексов колонок; пустой набор — общий итог:
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .GroupByGroupingSets(e => new { e.Int, e.Boolean },
+        new[] { 0, 1 },
+        new[] { 0 },
+        Array.Empty<int>())
+    .Select(e => new { e.Int, e.Boolean, count = NORM.SQL.count() })
+    .ToList();
+```
+
+```sql
+select nullableint as 'Int', b as 'Boolean', count(*) from complex_entity group by grouping sets ((nullableint, b), (nullableint), ())
+```
+
+Grouping sets доступны в SQL Server, PostgreSQL, SQLite и ClickHouse
+(`ISqlDialect.SupportsGroupingSets`); MySQL/MariaDB и провайдер in-memory выбрасывают
+`NotSupportedException`. Индекс вне диапазона выбрасывает `BuildSqlCommandException`.
+
 ## Агрегаты без группировки
 
 Агрегат по всей таблице — это проекция без `GroupBy`:
@@ -256,27 +279,28 @@ var variance = dataContext.From<ISimpleEntity>().Select(x => NORM.SQL.varp((doub
 ## Логические, битовые, статистические и упорядоченные агрегаты
 
 Помимо `count`/`min`/`max`/`sum`/`avg`/`stdev`/`var`, `NORM.SQL` предоставляет несколько семейств
-агрегатов. Каждое семейство включается своим флагом диалекта; PostgreSQL и ClickHouse включают разные
-подмножества.
+агрегатов, а провайдерно-специфичные находятся в `NORM.PG_SQL` (логические, битовые, регрессионные и
+упорядоченные) и `NORM.CLK_SQL` (`arg_min`/`arg_max` и комбинатор `-If`). Каждое семейство включается
+своим флагом диалекта; PostgreSQL и ClickHouse включают разные подмножества.
 
 | Семейство | C# | SQL | Флаг | Провайдеры |
 |---|---|---|---|---|
-| Логические | `NORM.SQL.bool_and(x)`, `bool_or(x)`, `every(x)` | `bool_and(x)`, ... | `SupportsBooleanAggregates` | PostgreSQL |
-| Битовые | `NORM.SQL.bit_and(x)`, `bit_or(x)`, `bit_xor(x)` | `bit_and(x)` … / `groupBitAnd(x)` … | `SupportsBitAggregates` | PostgreSQL, ClickHouse |
+| Логические | `NORM.PG_SQL.bool_and(x)`, `bool_or(x)`, `every(x)` | `bool_and(x)`, ... | `SupportsBooleanAggregates` | PostgreSQL |
+| Битовые | `NORM.PG_SQL.bit_and(x)`, `bit_or(x)`, `bit_xor(x)` | `bit_and(x)` … / `groupBitAnd(x)` … | `SupportsBitAggregates` | PostgreSQL, ClickHouse |
 | Статистические | `NORM.SQL.corr(y, x)`, `covar_pop(y, x)`, `covar_samp(y, x)` | `corr(y, x)`, ... / `covarPop(y, x)`, ... | `SupportsStatisticalAggregates` | PostgreSQL, ClickHouse |
-| Регрессия | `NORM.SQL.regr_slope(y, x)`, `regr_intercept(y, x)`, `regr_r2(y, x)`, `regr_count(y, x)`, `regr_avgx(y, x)`, `regr_avgy(y, x)` | `regr_slope(y, x)`, ... | `SupportsRegressionAggregates` | PostgreSQL |
-| ArgMin/ArgMax | `NORM.SQL.arg_min(value, by)`, `arg_max(value, by)` | `argMin(value, by)`, `argMax(value, by)` | `SupportsArgMinMax` | ClickHouse |
-| С фильтром (`-If`) | `NORM.SQL.count_if(() => p)`, `sum_if(x, () => p)`, `avg_if(x, () => p)`, `min_if(x, () => p)`, `max_if(x, () => p)` | `countIf(p)`, `sumIf(x, p)`, ... | `SupportsIfAggregates` | ClickHouse |
-| Упорядоченные | `NORM.SQL.percentile_cont(fraction, () => x)`, `percentile_disc(fraction, () => x)`, `mode(() => x)` | `percentile_cont(f) within group (order by x)`, ... | `SupportsOrderedAggregates` | PostgreSQL |
+| Регрессия | `NORM.PG_SQL.regr_slope(y, x)`, `regr_intercept(y, x)`, `regr_r2(y, x)`, `regr_count(y, x)`, `regr_avgx(y, x)`, `regr_avgy(y, x)` | `regr_slope(y, x)`, ... | `SupportsRegressionAggregates` | PostgreSQL |
+| ArgMin/ArgMax | `NORM.CLK_SQL.arg_min(value, by)`, `arg_max(value, by)` | `argMin(value, by)`, `argMax(value, by)` | `SupportsArgMinMax` | ClickHouse |
+| С фильтром (`-If`) | `NORM.CLK_SQL.count_if(() => p)`, `sum_if(x, () => p)`, `avg_if(x, () => p)`, `min_if(x, () => p)`, `max_if(x, () => p)` | `countIf(p)`, `sumIf(x, p)`, ... | `SupportsIfAggregates` | ClickHouse |
+| Упорядоченные | `NORM.PG_SQL.percentile_cont(fraction, () => x)`, `percentile_disc(fraction, () => x)`, `mode(() => x)` | `percentile_cont(f) within group (order by x)`, ... | `SupportsOrderedAggregates` | PostgreSQL |
 
 ```csharp
 var stats = dataContext.From<IComplexEntity>()
     .Select(e => new
     {
-        AllTrue = NORM.SQL.bool_and(e.Boolean),
-        Xor = NORM.SQL.bit_xor(e.Id),
+        AllTrue = NORM.PG_SQL.bool_and(e.Boolean),
+        Xor = NORM.PG_SQL.bit_xor(e.Id),
         Correlation = NORM.SQL.corr(e.Id, e.Int),
-        Median = NORM.SQL.percentile_cont(0.5, () => e.Id)
+        Median = NORM.PG_SQL.percentile_cont(0.5, () => e.Id)
     })
     .First();
 ```
@@ -293,11 +317,11 @@ select bool_and(b), bit_xor(id), corr(id, nullableint), percentile_cont(0.5) wit
 var rows = dataContext.From<IComplexEntity>()
     .Select(e => new
     {
-        Bits = NORM.SQL.bit_and(e.Id),
+        Bits = NORM.PG_SQL.bit_and(e.Id),
         Cov = NORM.SQL.covar_pop(e.Id, e.Int),
-        FirstByMax = NORM.SQL.arg_max(e.String, e.Id),
-        Positives = NORM.SQL.count_if(() => e.Id > 0L),
-        PositiveSum = NORM.SQL.sum_if(e.Id, () => e.Id > 0L)
+        FirstByMax = NORM.CLK_SQL.arg_max(e.String, e.Id),
+        Positives = NORM.CLK_SQL.count_if(() => e.Id > 0L),
+        PositiveSum = NORM.CLK_SQL.sum_if(e.Id, () => e.Id > 0L)
     })
     .First();
 ```
@@ -335,7 +359,7 @@ from complex_entity group by nullableint
 ```
 
 В ClickHouse аналог фильтрованного агрегата — комбинатор `-If` (`countIf`, `sumIf`, `avgIf`, `minIf`,
-`maxIf`), доступный как `NORM.SQL.count_if`/`sum_if`/`avg_if`/`min_if`/`max_if` (`SupportsIfAggregates`).
+`maxIf`), доступный как `NORM.CLK_SQL.count_if`/`sum_if`/`avg_if`/`min_if`/`max_if` (`SupportsIfAggregates`).
 ClickHouse не принимает ANSI-предложение `filter (where ...)`, поэтому обобщённый API фильтрованных
 агрегатов там отклоняется.
 
@@ -360,6 +384,8 @@ SQLite различаются в порядке `NULL` (PostgreSQL — перв�
 `GROUP BY ROLLUP (...)`/`CUBE (...)` генерируется в ANSI-форме в SQL Server, PostgreSQL и SQLite, а в
 виде хвостового `... WITH ROLLUP`/`WITH CUBE` — в MySQL/MariaDB и ClickHouse. В MySQL/MariaDB нет
 `CUBE`, поэтому `GroupByCube` там бросает исключение; провайдер in-memory отклоняет оба модификатора.
+`GROUP BY GROUPING SETS (...)` доступен в SQL Server, PostgreSQL, SQLite и ClickHouse, но не в
+MySQL/MariaDB и не в провайдере in-memory.
 
 ## См. также
 

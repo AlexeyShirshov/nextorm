@@ -44,6 +44,14 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
         if (x.GroupingType != y.GroupingType) return false;
 
+        if (!GroupingSetsEqual(x.GroupingSets, y.GroupingSets)) return false;
+
+        if (!StringListsEqual(x.TableHints, y.TableHints)) return false;
+
+        if (x.ForJsonClause != y.ForJsonClause) return false;
+
+        if (x.ForXmlClause != y.ForXmlClause) return false;
+
         if (x.Paging.Limit != y.Paging.Limit || x.Paging.Offset != y.Paging.Offset) return false;
 
         if (x.UnionType != y.UnionType) return false;
@@ -87,6 +95,27 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
         for (var (i, cnt) = (0, x.Count); i < cnt; i++)
         {
             if (!string.Equals(x[i], y[i], StringComparison.Ordinal)) return false;
+        }
+
+        return true;
+    }
+
+    private static bool GroupingSetsEqual(IReadOnlyList<int[]>? x, IReadOnlyList<int[]>? y)
+    {
+        if (ReferenceEquals(x, y)) return true;
+        if (x is null || y is null) return false;
+        if (x.Count != y.Count) return false;
+
+        for (var (s, cnt) = (0, x.Count); s < cnt; s++)
+        {
+            var a = x[s];
+            var b = y[s];
+            if (a.Length != b.Length) return false;
+
+            for (var i = 0; i < a.Length; i++)
+            {
+                if (a[i] != b[i]) return false;
+            }
         }
 
         return true;
@@ -140,6 +169,26 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
             if (obj.GroupingType != GroupingType.None)
                 hash.Add(obj.GroupingType);
+
+            if (obj.GroupingSets is { Count: > 0 })
+            {
+                foreach (var set in obj.GroupingSets)
+                {
+                    hash.Add(set.Length);
+                    foreach (var index in set)
+                        hash.Add(index);
+                }
+            }
+
+            if (obj.TableHints is { Count: > 0 })
+                foreach (var hint in obj.TableHints)
+                    hash.Add(hint);
+
+            if (obj.ForJsonClause is { } forJson)
+                hash.Add(forJson);
+
+            if (obj.ForXmlClause is { } forXml)
+                hash.Add(forXml);
 
             if (obj.WherePlanHash != 0)
                 hash.Add(obj.WherePlanHash);

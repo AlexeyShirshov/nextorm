@@ -245,7 +245,7 @@ Nextorm — первые 4 места; entity теперь быстрее Dapper
 - **Категория B (кешированные/обычные):** `Nextorm_*Cached*` ⟷ `EFCore_*` (без `_Compiled`) ⟷ `Linq2Db` (без `_Compiled`).
 
 Оговорки по классификации:
-- `Nextorm_PreparedForLoop_*` фактически использует кешированный API (`Entity.FirstOrDefaultAsync/ToListAsync`) внутри измеряемого метода, поэтому отнесён к категории B, несмотря на имя.
+- `Nextorm_PreparedForLoop_*` фактически использует кешированный API (`EntityBuilder.FirstOrDefaultAsync/ToListAsync`) внутри измеряемого метода, поэтому отнесён к категории B, несмотря на имя.
 - В `Cache` `NextormCached`/`Dapper` намеренно очищают кэш плана каждый invocation, а `Linq2Db` — нет; это делает сравнение B в этом классе не симметричным (холодный vs тёплый кэш).
 - `AdoTupleToList`/`AdoWithDelegate` (LargeIteration) — сырой ADO.NET, вне категорий (базовая линия).
 
@@ -354,7 +354,7 @@ ShortRun / InProcess, tmpfs, изолированная копия. Разбро
 
 Участники:
 - **Чистый LINQ** — `List<SimpleEntity>`.
-- **nextorm InMemory** — `InMemoryContext` + `Entity<SimpleEntity>.WithData(...)`, только `*.Prepare(...)`.
+- **nextorm InMemory** — `InMemoryContext` + `EntityBuilder<SimpleEntity>.WithData(...)`, только `*.Prepare(...)`.
 - **EF Core InMemory** — `Microsoft.EntityFrameworkCore.InMemory` 10.0.12, `EFInMemoryDataContext` (`ValueGeneratedNever` для `id`, `NoTracking`), только `EF.CompileQuery(...)`.
 
 > **linq2db не участвует.** У linq2db нет in-memory провайдера для объектов (в его документации прямо есть «No way to work with in-memory database» именно в этом смысле). Единственная опция — SQLite `Data Source=:memory:`, но это настоящий реляционный движок в RAM, а не in-memory контекст над объектами; эмулировать его и сравнивать с object-store участниками некорректно, поэтому он исключён.
@@ -409,7 +409,7 @@ ShortRun / InProcess, tmpfs, изолированная копия. Разбро
 | EFCoreInMemory_Compiled | 1 467.34 µs | 3.44 MB | 19.5× |
 | EFCoreInMemory_Compiled_ToList | 1 575.88 µs | 3.57 MB | 20.9× |
 
-На полном обходе nextorm InMemory (prepared) держится в пределах 1.33–1.83× от LINQ (разница — обёртка `Entity<T>`/enumerator), EF InMemory (compiled) — в ~19.5–20.9× медленнее и аллоцирует в ~15 раз больше (3.4–3.6 МБ на проход).
+На полном обходе nextorm InMemory (prepared) держится в пределах 1.33–1.83× от LINQ (разница — обёртка `EntityBuilder<T>`/enumerator), EF InMemory (compiled) — в ~19.5–20.9× медленнее и аллоцирует в ~15 раз больше (3.4–3.6 МБ на проход).
 
 ## Where — 100 запросов `Id == i`, `i = 0..99`
 | Метод | Mean | на запрос | Allocated | vs LINQ |
@@ -643,3 +643,129 @@ dotnet run -c Release --no-build -- --filter "*SqliteBenchmarkFeaturesFairCached
 dotnet run -c Release --no-build -- --filter "*SqliteBenchmarkFeaturePlanBuild*"
 dotnet run -c Release --no-build -- --filter "*SqliteBenchmarkFeaturePlanCache*"
 ```
+
+## In-memory: новый функционал (агрегаты, GroupBy, set-операции, материализаторы)
+
+Добавлены бенчмарки для функционала, реализованного в in-memory провайдере:
+`InMemoryBenchmarkAggregates`, `InMemoryBenchmarkGroupBy`, `InMemoryBenchmarkSetOperations`,
+`InMemoryBenchmarkMaterializers`. Сравнение — с голым LINQ и EF Core InMemory (`UseInMemoryDatabase`),
+10 000 строк, 100 итераций на замер, режим `ShortRun` + `InProcessEmitToolchain`
+(тот же `NextormConfig`, что и остальные in-memory замеры). Запуск:
+`dotnet run -c Release -- --anyCategories InMemoryNew`.
+
+### Агрегаты (`Count`/`Sum`/`Min`+`Max`, 100× по 10k строк)
+
+| Method | Mean | Ratio | Allocated |
+|---|---:|---:|---:|
+| Linq_Count | 187.8 ns | 0.000 | — |
+| **Nextorm_Count** | 2.156 ms | 1.000 | 268 KB |
+| Linq_Sum | 2.405 ms | 1.116 | 4.0 KB |
+| Linq_MinMax | 4.714 ms | 2.187 | 8.0 KB |
+| Nextorm_Sum | 5.540 ms | 2.569 | 321 KB |
+| Nextorm_MinMax | 11.253 ms | 5.219 | 642 KB |
+| EFCoreInMemory_Count | 31.73 ms | 14.718 | 48.4 MB |
+| EFCoreInMemory_Sum | 37.29 ms | 17.295 | 48.5 MB |
+| EFCoreInMemory_MinMax | 78.64 ms | 36.479 | 96.9 MB |
+
+`Linq_Count` — O(1) (`Enumerable.Count` видит `ICollection<T>`), поэтому не сопоставим. По существу:
+Nextorm быстрее EF Core InMemory в 14–36 раз; отстаёт от LINQ в 2.6× (`Sum`) и 5.2× (`Min`+`Max`).
+Отставание — это подготовка команды на каждый вызов агрегата (LINQ не строит запрос), а не сам свёртке:
+после оптимизации свёртка типизирована (без боксинга на строку) и аллокации `Sum` упали с ~59 MB до 0.32 MB.
+
+### GroupBy + per-group count (100×)
+
+| Method | Mean | Ratio | Allocated |
+|---|---:|---:|---:|
+| **Linq_GroupByCount** | 12.61 ms | 0.22 | 25.11 MB |
+| **Nextorm_GroupByCount** | 58.35 ms | 1.00 | 49.88 MB |
+| EFCoreInMemory_GroupByCount | 116.42 ms | 2.00 | 178.63 MB |
+
+Nextorm в 2.0× быстрее EF InMemory; LINQ быстрее Nextorm в 4.6×. Основная стоимость — материализация
+групп и компиляция селектора агрегата на каждую группу/вызов.
+
+### Set-операции (`INTERSECT`/`EXCEPT`/`UNION`, 100×)
+
+| Method | Mean | Ratio | Allocated |
+|---|---:|---:|---:|
+| Linq_Intersect | 11.00 ms | 0.29 | 8.94 MB |
+| Linq_Except | 15.60 ms | 0.41 | 27.49 MB |
+| Linq_Union | 24.88 ms | 0.65 | 51.4 MB |
+| Nextorm_Intersect | 35.04 ms | 0.91 | 61.1 MB |
+| **Nextorm_Except** | 38.42 ms | 1.00 | 61.1 MB |
+| Nextorm_Union | 49.37 ms | 1.29 | 87.09 MB |
+| EFCoreInMemory_Intersect | 226.18 ms | 5.89 | 362.53 MB |
+| EFCoreInMemory_Except | 558.31 ms | 14.53 | 396.65 MB |
+| EFCoreInMemory_Union | 638.48 ms | 16.62 | 521.05 MB |
+
+Nextorm быстрее EF InMemory в 4.6–16.6× и медленнее LINQ в 1.5–3× (оба операнда материализуются
+и объединяются с equality-политикой `DISTINCT`).
+
+### Материализаторы и `Last` (100×)
+
+| Method | Mean | Ratio | Allocated |
+|---|---:|---:|---:|
+| Linq_ToArray | 767.3 µs | 0.11 | 3.92 MB |
+| Linq_Last | 2.745 ms | 0.39 | 12.5 KB |
+| **Nextorm_ToArray** | 7.125 ms | 1.00 | 7.99 MB |
+| Linq_ToDictionary | 12.43 ms | 1.74 | 19.78 MB |
+| Nextorm_ToDictionary | 17.64 ms | 2.48 | 23.85 MB |
+| EFCoreInMemory_Last | 40.55 ms | 5.69 | 47.47 MB |
+| EFCoreInMemory_ToArray | 173.81 ms | 24.40 | 348.16 MB |
+| Nextorm_Last | 197.71 ms | 27.75 | 43.26 MB |
+| EFCoreInMemory_ToDictionary | 229.35 ms | 32.19 | 379.34 MB |
+
+`ToArray`/`ToDictionary` — в пределах 2.5× от LINQ и до 32× быстрее EF.
+
+### Найденные проблемы (зафиксированы, не блокируют)
+
+1. **`Last`/упорядоченные in-memory запросы медленные** (198 ms против 2.7 ms у LINQ). Причина —
+   `ApplyOrdering` (`InMemoryDataContext`) строит `Func<TEntity, object>` (боксинг ключа на каждую
+   строку) и вызывает `OrderBy` через `Comparer<object>`, а каждый вызов `Last()` заново готовит
+   команду. Селектор сортировки теперь кэшируется (`_sortingSelectorCache`), но типизированный ключ
+   (без бокса) — следующий шаг. Это унаследованная стоимость сортировки, не новый функционал.
+2. **Агрегаты пересобирают команду на каждый вызов**: `EntityBuilder.Sum/Min/...` не имеют
+   prepared-варианта, поэтому в цикле платят за подготовку. Селектор и predicate кэшируются, бокс
+   убран; остаётся стоимость команды.
+3. **GroupBy** компилирует селектор агрегата на каждую группу и вызов — можно кэшировать по паре
+   (выражение, группа) для повторяющихся прогонов.
+
+## In-memory: `SelectMany` / `GroupJoin` (100× по 10k строк)
+
+Класс `InMemoryBenchmarkSelectMany` (категория `InMemoryNew`). `Nextorm_*_Prepared` — запрос построен
+один раз и переиспользуется (срабатывает кэш плана), `Nextorm_*` — запрос пересобирается каждую
+итерацию, как в остальных `InMemory*`-бенчмарках.
+
+| Method | Mean | Ratio | Allocated |
+|---|---:|---:|---:|
+| Linq_SelectMany | 14.63 ms | 0.13 | 38.15 MB |
+| EFCoreInMemory_GroupJoin | 30.84 ms | 0.28 | 46.72 MB |
+| Linq_GroupJoin | 35.86 ms | 0.33 | 44.93 MB |
+| **Nextorm_SelectMany_Prepared** | 57.53 ms | 0.53 | 70.88 MB |
+| **Nextorm_SelectMany** | 108.87 ms | 1.00 | 151.99 MB |
+| Nextorm_GroupJoin_Prepared | 122.78 ms | 1.13 | 98.77 MB |
+| Nextorm_GroupJoin | 450.57 ms | 4.14 | 215.65 MB |
+
+(`Ratio` — относительно `Nextorm_SelectMany`; `ShortRun`+in-process, N=3, разброс местами ±20–30%, поэтому
+`Nextorm_GroupJoin` без подготовки — оценка сверху. `EFCoreInMemory_SelectMany` не попал в таблицу: EF Core
+InMemory не транслирует `Enumerable.Range` внутри `SelectMany` и бросает `InvalidOperationException`.)
+
+**Что сделано по перформансу:**
+- Селекторы (`collectionSelector`, `resultSelector`, key-селекторы) компилируются один раз и кэшируются
+  (`_linqSelectorCache`, ключ — структурный `ExpressionKey`). До этого `Expression.Compile` выполнялся на
+  каждом вызове и доминировал: `SelectMany` 163 → 109 ms, `GroupJoin` 357 → 302 ms (per-call).
+- `GroupJoin` строит `Dictionary<TKey, List<TInner>>` — O(outer + inner) вместо O(outer × inner).
+- Outer-строки больше не материализуются в промежуточный список (стриминг через `Enumerate`), аллокации
+  `SelectMany` упали 202 → 152 MB, prepared 96 → 71 MB.
+
+**Вывод:** на prepared-запросах `SelectMany` в ~3.9× медленнее LINQ, `GroupJoin` — в ~3.4× (вровень с EF
+InMemory по execution). Пересборка команды на каждый вызов добавляет примерно столько же (у `GroupJoin` —
+двойная подготовка outer+inner). Это уровень остальных in-memory операторов (агрегаты 2.6–5.2×, GroupBy 4.6×
+от LINQ); in-memory предназначен для тестов, а не для продакшн-нагрузки.
+
+**Остаточные точки роста (не блокируют):**
+1. Двойная буферизация: `ApplySelectMany`/`ApplyGroupJoin` строят `List<TResult>` → `InMemoryListEnumerator`
+   → `InMemoryEnumeratorAdapter` → финальный `ToList`. Стриминг с dual sync/async-энумератором убрал бы копии.
+2. `BuildLinqSourceDelegate` использует рефлексию (`MakeGenericMethod` + `Invoke`) на каждый вызов.
+3. Кэш плана не переиспользуется при пересборке запроса: узел `LinqSourceExpression` сравнивается по ссылке.
+   Структурное сравнение пробовалось — выигрыша не дало (доминирует `PrepareCommand`), откатано ради простоты.
+

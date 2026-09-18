@@ -64,7 +64,7 @@ using (var setup = supplied.CreateCommand())
 }
 
 using var ctx = new SqliteDbContext(supplied, new DbContextBuilder());
-var rows = ctx.Create<ISimpleEntity>().Select(x => x.Id).ToList(); // [42]
+var rows = ctx.From<ISimpleEntity>().Select(x => x.Id).ToList(); // [42]
 ```
 
 ## Правила освобождения
@@ -137,7 +137,7 @@ using var ctx = builder.CreateDbContext();
 | Член | Категория | Назначение |
 |---|---|---|
 | `Logger` | тип контекста (например, `nextorm.sqlite.SqliteDbContext`) | сообщения о соединении и командах. Доступен на `IContextEnvironment`. |
-| `CommandLogger` | тип `QueryCommand` | привязывается к командам, построенным `Create<T>()` / `From(...)`. Доступен на `IContextEnvironment`. |
+| `CommandLogger` | тип `QueryCommand` | привязывается к командам, построенным `From<T>()` / `From(...)`. Доступен на `IContextEnvironment`. |
 | `ResultSetEnumeratorLogger` | `nextorm.core.ResultSetEnumerator` | сообщения жизненного цикла потоковой передачи (`Trace` при `MoveNext`, `Debug` при открытии соединения или освобождении читателя). Внутренний. |
 
 ### `LogSensitiveData`
