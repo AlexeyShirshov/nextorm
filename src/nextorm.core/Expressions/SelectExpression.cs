@@ -114,6 +114,12 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
             // through GetValue and let the caller cast it to byte[].
             return GetValueMI;
         }
+        else if (_realType == typeof(string[]))
+        {
+            // PostgreSQL text[] columns (for example regexp_matches) have no typed reader getter;
+            // read the value through GetValue and let the caller cast it to string[].
+            return GetValueMI;
+        }
         else
             throw new NotSupportedException($"Property '{PropertyName}' with index ({Index}) has type {_realType} which is not supported");
     }

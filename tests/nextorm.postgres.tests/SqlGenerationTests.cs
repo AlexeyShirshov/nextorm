@@ -1206,7 +1206,7 @@ public class SqlGenerationTests
             .Select(r => new { r.Value }));
 
         Normalize(command.DbCommand.CommandText)
-            .Should().Be("select generate_series as \"Value\" from generate_series(@start, @stop) as \"t1\"");
+            .Should().Be("select generate_series as \"Value\" from (select generate_series from generate_series(@start, @stop)) as \"t1\"");
     }
 
     [Fact]
@@ -1219,7 +1219,132 @@ public class SqlGenerationTests
             .Select(r => new { r.Value }));
 
         Normalize(command.DbCommand.CommandText)
-            .Should().Be("select unnest as \"Value\" from unnest(@norm_p0) as \"t1\"");
+            .Should().Be("select unnest as \"Value\" from (select unnest from unnest(@norm_p0)) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_RegexpMatches_ShouldEmitCall()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var source = "a1b2";
+        var pattern = "\\d";
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.Postgres.regexp_matches(source, pattern))
+            .Select(r => new { r.Matches }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select regexp_matches as \"Matches\" from (select regexp_matches from regexp_matches(@source, @pattern)) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_RegexpSplitToTable_ShouldEmitCall()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var source = "a,b";
+        var pattern = ",";
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.Postgres.regexp_split_to_table(source, pattern))
+            .Select(r => new { r.Value }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select regexp_split_to_table as \"Value\" from (select regexp_split_to_table from regexp_split_to_table(@source, @pattern)) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_JsonbArrayElements_ShouldEmitCall()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_array_elements(SqlFunctions.Parameter<JsonDocument>(0)))
+            .Select(r => new { r.Value }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select value from jsonb_array_elements(@norm_p0) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_JsonbArrayElementsText_ShouldEmitCall()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_array_elements_text(SqlFunctions.Parameter<JsonDocument>(0)))
+            .Select(r => new { r.Value }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select value from jsonb_array_elements_text(@norm_p0) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_JsonbEach_ShouldEmitCall()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_each(SqlFunctions.Parameter<JsonDocument>(0)))
+            .Select(r => new { r.Key, r.Value }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select key, value from jsonb_each(@norm_p0) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_JsonbEachText_ShouldEmitCall()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_each_text(SqlFunctions.Parameter<JsonDocument>(0)))
+            .Select(r => new { r.Key, r.Value }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select key, value from jsonb_each_text(@norm_p0) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_JsonbObjectKeys_ShouldEmitCall()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_object_keys(SqlFunctions.Parameter<JsonDocument>(0)))
+            .Select(r => new { r.Key }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select jsonb_object_keys as \"Key\" from (select jsonb_object_keys from jsonb_object_keys(@norm_p0)) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_JsonbPathQuery_ShouldCastPathAndEmitCall()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var path = "$.a";
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_path_query(
+                SqlFunctions.Parameter<JsonDocument>(0),
+                SqlFunctions.Postgres.jsonpath(path)))
+            .Select(r => new { r.Value }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select jsonb_path_query as \"Value\" from (select jsonb_path_query from jsonb_path_query(@norm_p0, cast(@path as jsonpath))) as \"t1\"");
+    }
+
+    [Fact]
+    public void TableFunction_TsStat_ShouldEmitCall()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var query = "select to_tsvector('a b')";
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.Postgres.ts_stat(query))
+            .Select(r => new { r.Word, r.Ndoc, r.Nentry }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select word, ndoc, nentry from ts_stat(@query) as \"t1\"");
     }
 
     [Fact]

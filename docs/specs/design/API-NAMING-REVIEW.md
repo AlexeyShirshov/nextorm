@@ -1551,6 +1551,47 @@ NextORM.Core.SqlFunctions.IGenerateRandomRow.Value.get -> double
 NextORM.Core.SqlFunctions.IGenerateRandomRow.Value.set -> void
 NextORM.Core.SqlFunctions.IGenerateRandomRow.Name.get -> string?
 NextORM.Core.SqlFunctions.IGenerateRandomRow.Name.set -> void
+# --- продолжение RD2: PostgreSQL наборные функции (20.09.2026) ---
+NextORM.Core.SqlFunctions.IRegexpMatchesRow
+NextORM.Core.SqlFunctions.IRegexpMatchesRow.Matches.get -> string![]!
+NextORM.Core.SqlFunctions.IRegexpMatchesRow.Matches.set -> void
+NextORM.Core.SqlFunctions.IRegexpSplitToTableRow
+NextORM.Core.SqlFunctions.IRegexpSplitToTableRow.Value.get -> string?
+NextORM.Core.SqlFunctions.IRegexpSplitToTableRow.Value.set -> void
+NextORM.Core.SqlFunctions.IJsonArrayElementsRow
+NextORM.Core.SqlFunctions.IJsonArrayElementsRow.Value.get -> string?
+NextORM.Core.SqlFunctions.IJsonArrayElementsRow.Value.set -> void
+NextORM.Core.SqlFunctions.IJsonbEachRow
+NextORM.Core.SqlFunctions.IJsonbEachRow.Key.get -> string?
+NextORM.Core.SqlFunctions.IJsonbEachRow.Key.set -> void
+NextORM.Core.SqlFunctions.IJsonbEachRow.Value.get -> string?
+NextORM.Core.SqlFunctions.IJsonbEachRow.Value.set -> void
+NextORM.Core.SqlFunctions.IJsonObjectKeysRow
+NextORM.Core.SqlFunctions.IJsonObjectKeysRow.Key.get -> string?
+NextORM.Core.SqlFunctions.IJsonObjectKeysRow.Key.set -> void
+NextORM.Core.SqlFunctions.IJsonPathQueryRow
+NextORM.Core.SqlFunctions.IJsonPathQueryRow.Value.get -> string?
+NextORM.Core.SqlFunctions.IJsonPathQueryRow.Value.set -> void
+NextORM.Core.SqlFunctions.ITsStatRow
+NextORM.Core.SqlFunctions.ITsStatRow.Word.get -> string?
+NextORM.Core.SqlFunctions.ITsStatRow.Word.set -> void
+NextORM.Core.SqlFunctions.ITsStatRow.Ndoc.get -> int?
+NextORM.Core.SqlFunctions.ITsStatRow.Ndoc.set -> void
+NextORM.Core.SqlFunctions.ITsStatRow.Nentry.get -> int?
+NextORM.Core.SqlFunctions.ITsStatRow.Nentry.set -> void
+NextORM.Core.PostgresFunctions.regexp_matches(string? source, string? pattern) -> System.Linq.IQueryable<NextORM.Core.SqlFunctions.IRegexpMatchesRow!>!
+NextORM.Core.PostgresFunctions.regexp_matches(string? source, string? pattern, string? flags) -> System.Linq.IQueryable<NextORM.Core.SqlFunctions.IRegexpMatchesRow!>!
+NextORM.Core.PostgresFunctions.regexp_split_to_table(string? source, string? pattern) -> System.Linq.IQueryable<NextORM.Core.SqlFunctions.IRegexpSplitToTableRow!>!
+NextORM.Core.PostgresFunctions.regexp_split_to_table(string? source, string? pattern, string? flags) -> System.Linq.IQueryable<NextORM.Core.SqlFunctions.IRegexpSplitToTableRow!>!
+NextORM.Core.PostgresFunctions.jsonb_array_elements(object? json) -> System.Linq.IQueryable<NextORM.Core.SqlFunctions.IJsonArrayElementsRow!>!
+NextORM.Core.PostgresFunctions.jsonb_array_elements_text(object? json) -> System.Linq.IQueryable<NextORM.Core.SqlFunctions.IJsonArrayElementsRow!>!
+NextORM.Core.PostgresFunctions.jsonb_each(object? json) -> System.Linq.IQueryable<NextORM.Core.SqlFunctions.IJsonbEachRow!>!
+NextORM.Core.PostgresFunctions.jsonb_each_text(object? json) -> System.Linq.IQueryable<NextORM.Core.SqlFunctions.IJsonbEachRow!>!
+NextORM.Core.PostgresFunctions.jsonb_object_keys(object? json) -> System.Linq.IQueryable<NextORM.Core.SqlFunctions.IJsonObjectKeysRow!>!
+NextORM.Core.PostgresFunctions.jsonb_path_query(object? json, string? path) -> System.Linq.IQueryable<NextORM.Core.SqlFunctions.IJsonPathQueryRow!>!
+NextORM.Core.PostgresFunctions.ts_stat(string? query) -> System.Linq.IQueryable<NextORM.Core.SqlFunctions.ITsStatRow!>!
+NextORM.Core.PostgresFunctions.jsonpath(string? path) -> string?
+NextORM.Postgres.PostgresDialect.WrapTableFunction(string! name, string! call) -> string!
 ```
 
 `MakeDatePart` у mysql/sqlite/sqlserver/clickhouse уже существовал (сигнатура не менялась) — в заморозку
@@ -1600,6 +1641,55 @@ Build Release — **0 warnings / 0 errors** (этот проход); `rg --files
 - **`MakeDateConversion`/`MakeStringSplit` — capability-hook, не понижение видимости.** Имена зеркалят уже принятые `MakeDatePart`/`MakeArrayFunction`; гейт `Supports*` стоит в трансляторе до рендера (`DateConversionSqlTranslator.cs:100-105`, `StringFunctionTranslator.cs:342`).
 
 **Проверка:** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors** (этот проход); в диффе `src`+`tests` новых `#pragma`/`SuppressMessage`/`NoWarn` — **0**; `rg --files -g 'PublicAPI*.txt'` — пусто (подтверждает RD2/OJW1). Тесты в этом проходе не перезапускались (только build).
+
+### PostgreSQL наборные функции через `[SqlTableFunction]` (точечный аудит 20.09.2026)
+
+Область: `Query/SqlFunctions.cs` (7 row-интерфейсов: `IRegexpMatchesRow`, `IRegexpSplitToTableRow`,
+`IJsonArrayElementsRow`, `IJsonbEachRow`, `IJsonObjectKeysRow`, `IJsonPathQueryRow`, `ITsStatRow`),
+`Query/SqlFunctions.Postgres.cs` (11 методов-`[SqlTableFunction]` + скалярный `jsonpath`),
+`src/nextorm.postgres/PostgresDialect.cs` (`SupportsTableFunction` — новые имена,
+`WrapTableFunction` — новый override), `Expressions/SelectExpression.cs` (ветка `string[]`),
+`Visitors/JsonSqlTranslator.cs` (ветка `jsonpath`, internal). `SqlDialectBase.SupportsTableFunction`
+не менялся (base уже `false`); новых `Supports*`/`Make*`-флагов нет — используется строковый гейт по
+имени. Build Release — **0/0**; `rg --files -g 'PublicAPI*.txt'` — пусто.
+
+**Итог: новых P0/P1 нет; единственная P2 — уже открытая RD2 (PG-подписи дописаны в её блок
+Шага 5), OJW1/RD2-CH — без изменений.**
+
+| # | Ур. | Файл:строка | Проблема | Рекомендация |
+|---|-----|-------------|----------|--------------|
+| RD2 (PG-setof) | P2 | `Query/SqlFunctions.cs`; `Query/SqlFunctions.Postgres.cs`; `src/nextorm.postgres/PostgresDialect.cs` | Поверхность не трекается (`PublicApiAnalyzers` не подключён, Шаг 5 открыт). **Продолжение RD2, не новая находка.** Новых абстрактных членов `ISqlDialect` нет → source-разрыва для внешних реализаторов нет; `WrapTableFunction` — `virtual` override, разрыва не создаёт | Подписи внесены в блок Шага 5 (RD2); при заморозке трекать в `PublicAPI.Unshipped.txt` |
+
+ℹ️ **Наблюдения (фикс не требуется):**
+- **Именование — конвенции соблюдены, P0/P1 нет.** Методы зеркалят SQL-токены (`regexp_matches`,
+  `jsonb_array_elements_text`, `ts_stat`) — принятое DSL-исключение (как `generate_series`/`to_*`);
+  `jsonpath` назван по типу `jsonpath`. `I…Row` — как `IGenerateSeriesRow`/`IStringSplitRow`.
+  BCL-конфликтов нет.
+- **`WrapTableFunction` — исправление существующего бага, не новое поведение.** PostgreSQL заменяет
+  единственную колонку скалярной наборной функции на псевдоним в `FROM`, а nextorm всегда алиасит
+  производный источник (`RequireSubqueryAlias`), поэтому `generate_series`/`unnest` уже были
+  неработоспособны на реальном PostgreSQL (интеграционного теста не было). Обёртка
+  `(select <name> from <call>)` восстанавливает имя колонки; функции с явной колонкой не оборачиваются.
+  Подтверждено реальными интеграционными тестами.
+- **`string[]` в row reader — точечно, не общая материализация массивов.** Ветка в
+  `SelectExpression.GetDataRecordMethod` (`GetValueMI`) добавлена по образцу `byte[]`; она нужна
+  только для `regexp_matches` (`text[]`) и не включает заблокированный пункт триажа «row reader
+  `Array(T)`/`Tuple`» (общая типизированная материализация массивов по-прежнему не реализована).
+- **`jsonpath` — не инъекция SQL.** Рендерится `cast(expr as jsonpath)` через `SqlOperandTranslator`,
+  как уже делает `EmitJsonPathFunction` для `jsonb_path_query_first`; аргумент параметризуется
+  штатно.
+- **XML-doc coverage полная.** `<summary>` есть у 7 row-интерфейсов, 11 методов-`[SqlTableFunction]`,
+  `jsonpath`, override `WrapTableFunction`; свойства row-интерфейсов — без индивидуальных `<summary>`,
+  как у соседних (`IGenerateSeriesRow`, `INumbersRow`). Приложение A (45) без изменений; `CS1591`
+  по-прежнему в `<NoWarn>` 7 `.csproj`.
+
+**Проверка:** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**; unit (Debug): core
+**166/166**, postgres **218/218**, sqlite **221/221**, sqlserver **198/198**, mysql **53/53**,
+mariadb **20/20**, clickhouse **155/155**; контейнерная интеграция (Podman socket) —
+`PostgresSpecificTests` **18/18**, `PostgresIntegrationTests` (общий набор) **211/211, 6 skipped**
+(TVF-набор пропускается для PostgreSQL). Rejection — `PostgresTableFunctions_ShouldThrowBecauseOnlyPostgresHasThem`
+в sqlite/sqlserver/mysql/mariadb/clickhouse. EN+RU `docs/guide/13-table-valued-functions.md`,
+`docs/guide/provider-specific/postgresql.md`, `docs/providers/postgres.md` синхронны.
 
 ## 3. Находки
 

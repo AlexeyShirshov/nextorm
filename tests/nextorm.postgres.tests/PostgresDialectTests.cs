@@ -131,6 +131,15 @@ public class PostgresDialectTests
         Dialect.SupportsCryptoFunctions.Should().BeTrue();
         Dialect.SupportsTableFunction("generate_series").Should().BeTrue();
         Dialect.SupportsTableFunction("unnest").Should().BeTrue();
+        Dialect.SupportsTableFunction("regexp_matches").Should().BeTrue();
+        Dialect.SupportsTableFunction("regexp_split_to_table").Should().BeTrue();
+        Dialect.SupportsTableFunction("jsonb_array_elements").Should().BeTrue();
+        Dialect.SupportsTableFunction("jsonb_array_elements_text").Should().BeTrue();
+        Dialect.SupportsTableFunction("jsonb_each").Should().BeTrue();
+        Dialect.SupportsTableFunction("jsonb_each_text").Should().BeTrue();
+        Dialect.SupportsTableFunction("jsonb_object_keys").Should().BeTrue();
+        Dialect.SupportsTableFunction("jsonb_path_query").Should().BeTrue();
+        Dialect.SupportsTableFunction("ts_stat").Should().BeTrue();
         Dialect.SupportsTableFunction("string_split").Should().BeFalse();
         Dialect.SupportsAnyValueAggregate.Should().BeFalse();
         Dialect.SupportsPercentileWindow.Should().BeFalse();

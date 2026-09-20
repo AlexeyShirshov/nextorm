@@ -62,7 +62,12 @@
 ## Строки и регулярные выражения
 
 - [x] `regexp_replace`, `regexp_split_to_array`, `regexp_like`, `regexp_count`, `regexp_instr`
-      (остались возвращающие набор `regexp_matches` и `regexp_split_to_table`)
+- [x] Возвращающие набор `regexp_matches` и `regexp_split_to_table` — `PostgresFunctions.regexp_matches`/
+      `regexp_split_to_table` (перегрузки с `flags`) как `[SqlTableFunction]`; `regexp_matches` отдаёт
+      `text[]` (`IRegexpMatchesRow.Matches`, row reader получил ветку `string[]`). Тесты:
+      `SqlGenerationTests.TableFunction_RegexpMatches/RegexpSplitToTable_ShouldEmitCall`,
+      `PostgresSpecificTests.RegexpMatches/RegexpSplitToTable_*` (реальный PostgreSQL), rejection —
+      `PostgresTableFunctions_ShouldThrowBecauseOnlyPostgresHasThem` во всех остальных провайдерах.
 - [x] `split_part`, `strpos`/`position`, `left`, `right`, `lpad`, `rpad`, `repeat`, `reverse`,
       `initcap`, `translate`, `overlay`
 - [x] `concat_ws`, `format`, `startswith`
@@ -119,10 +124,15 @@
 ## JSON/JSONB (дополнить)
 
 - [x] JSONPath: `jsonb_path_query_array`/`jsonb_path_query_first`, `jsonb_path_exists`, `jsonb_path_match`
-      (остался возвращающий набор `jsonb_path_query`)
+- [x] Возвращающий набор `jsonb_path_query` — `PostgresFunctions.jsonb_path_query(json, path)` как
+      `[SqlTableFunction]`; path передаётся через новый скалярный хелпер `PostgresFunctions.jsonpath`
+      (`cast(path as jsonpath)`). Row-shape `IJsonPathQueryRow`.
 - [x] Мутация/утилиты: `jsonb_set`, `jsonb_insert`, `jsonb_strip_nulls`, `jsonb_pretty`, `jsonb_delete`
-- [ ] Разворачивание в строки: `jsonb_array_elements(_text)`, `jsonb_each(_text)`, `jsonb_object_keys`,
-      `jsonb_to_record(set)`, `json_populate_record`
+- [x] Разворачивание в строки: `jsonb_array_elements(_text)`, `jsonb_each(_text)`, `jsonb_object_keys` —
+      `PostgresFunctions.jsonb_array_elements`/`jsonb_array_elements_text`/`jsonb_each`/`jsonb_each_text`/
+      `jsonb_object_keys` как `[SqlTableFunction]` (row-shape `IJsonArrayElementsRow`, `IJsonbEachRow`,
+      `IJsonObjectKeysRow`); `jsonb_to_record`/`json_populate_record` остаются вне области (динамическая
+      схема записи).
 - [x] `row_to_json`, `array_to_json`, оператор `||`, оператор `-`
 
 ## Оконные функции и фреймы
@@ -139,11 +149,16 @@
 
 - [x] `generate_series`
 - [x] `unnest`
-- [ ] `jsonb_array_elements`
-- [ ] `regexp_split_to_table`
-- [ ] `ts_stat`
+- [x] `jsonb_array_elements` / `jsonb_array_elements_text`
+- [x] `regexp_split_to_table`
+- [x] `jsonb_each` / `jsonb_each_text`, `jsonb_object_keys`, `jsonb_path_query`, `ts_stat`,
+      `regexp_matches` — вся группа наборных функций из `todo_phase2.md` (PostgreSQL-only,
+      гейт `SupportsTableFunction`). Диалект оборачивает функции, чья единственная колонка
+      называется как функция, в одноколоночный подзапрос (`WrapTableFunction`), т.к. PostgreSQL
+      переименовывает её в псевдоним nextorm. Тесты — `SqlGenerationTests.TableFunction_*`,
+      `PostgresSpecificTests.*` (реальный PostgreSQL), rejection в остальных провайдерах.
 
-(есть механизм `[SqlTableFunction]` + `FromTableFunction`, но встроенных нет)
+(механизм `[SqlTableFunction]` + `FromTableFunction`; встроенные функции заведены)
 
 ## PostgreSQL-специфичные конструкции
 

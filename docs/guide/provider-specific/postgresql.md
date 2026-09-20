@@ -130,15 +130,35 @@ See [Distinct](../08-distinct.md).
 
 ## Set-returning functions
 
-`unnest(...)` is exposed as a table-valued function through
-[`FromTableFunction`](xref:NextORM.Core.EntityBuilder`1).
+PostgreSQL's set-returning functions are exposed as table-valued functions through
+[`FromTableFunction`](xref:NextORM.Core.EntityBuilder`1):
+
+| `SqlFunctions.Postgres.*` | SQL output columns | Row shape |
+| --- | --- | --- |
+| `generate_series(start, stop[, step])` | `generate_series` | `IGenerateSeriesRow` |
+| `unnest(array)` | `unnest` | `IUnnestRow<T>` |
+| `regexp_matches(source, pattern[, flags])` | `regexp_matches text[]` | `IRegexpMatchesRow` |
+| `regexp_split_to_table(source, pattern[, flags])` | `regexp_split_to_table` | `IRegexpSplitToTableRow` |
+| `jsonb_array_elements(json)` / `jsonb_array_elements_text(json)` | `value` | `IJsonArrayElementsRow` |
+| `jsonb_each(json)` / `jsonb_each_text(json)` | `key`, `value` | `IJsonbEachRow` |
+| `jsonb_object_keys(json)` | `jsonb_object_keys` | `IJsonObjectKeysRow` |
+| `jsonb_path_query(json, jsonpath)` | `jsonb_path_query` | `IJsonPathQueryRow` |
+| `ts_stat(query)` | `word`, `ndoc`, `nentry` | `ITsStatRow` |
+
+A JSONPath operand is passed as text through `SqlFunctions.Postgres.jsonpath(path)`, which renders
+`cast(path as jsonpath)`.
+
+PostgreSQL replaces the only column name of a scalar-returning function with the alias nextorm always
+adds to a derived source, so the dialect wraps those calls in a one-column subquery
+(`from (select generate_series from generate_series(...)) as "t1"`); the functions with an explicit
+output column (`value`, `key`/`value`, `word`/`ndoc`/`nentry`) are emitted unchanged.
 
 See [Table-valued functions](../13-table-valued-functions.md).
 
 ## Not yet supported
 
-`jsonb_array_elements`/`jsonb_each` as table functions are tracked in the backlog and not part of the
-current surface. See [Limitations and out-of-scope features](../../advanced/limitations.md).
+`jsonb_to_record`/`json_populate_record` need a dynamic record schema and are not part of the current
+surface. See [Limitations and out-of-scope features](../../advanced/limitations.md).
 
 ## See also
 

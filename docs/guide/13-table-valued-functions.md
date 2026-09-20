@@ -202,6 +202,48 @@ var elements = dataContext
     .ToList(new long[] { 1, 2, 3 });
 ```
 
+PostgreSQL also ships the regexp, JSON and text-search set-returning functions:
+
+| `SqlFunctions.Postgres.*` | SQL output columns | Row shape |
+| --- | --- | --- |
+| `regexp_matches(source, pattern[, flags])` | `regexp_matches text[]` | `IRegexpMatchesRow` (`.Matches`) |
+| `regexp_split_to_table(source, pattern[, flags])` | `regexp_split_to_table` | `IRegexpSplitToTableRow` (`.Value`) |
+| `jsonb_array_elements(json)` / `jsonb_array_elements_text(json)` | `value` | `IJsonArrayElementsRow` (`.Value`) |
+| `jsonb_each(json)` / `jsonb_each_text(json)` | `key`, `value` | `IJsonbEachRow` (`.Key`, `.Value`) |
+| `jsonb_object_keys(json)` | `jsonb_object_keys` | `IJsonObjectKeysRow` (`.Key`) |
+| `jsonb_path_query(json, jsonpath)` | `jsonb_path_query` | `IJsonPathQueryRow` (`.Value`) |
+| `ts_stat(query)` | `word`, `ndoc`, `nentry` | `ITsStatRow` (`.Word`, `.Ndoc`, `.Nentry`) |
+
+```csharp
+var json = JsonDocument.Parse("""{"a":1,"b":2}""");
+
+var entries = dataContext
+    .FromTableFunction(() => SqlFunctions.Postgres.jsonb_each_text(json))
+    .Select(r => new { r.Key, r.Value })
+    .ToList();
+// ("a", "1"), ("b", "2")
+```
+
+A JSONPath operand is passed as text through `SqlFunctions.Postgres.jsonpath(path)`, which renders
+`cast(path as jsonpath)`:
+
+```csharp
+var json = JsonDocument.Parse("""{"a":[1,2]}""");
+var path = "$.a[*]";
+
+var values = dataContext
+    .FromTableFunction(() => SqlFunctions.Postgres.jsonb_path_query(json, SqlFunctions.Postgres.jsonpath(path)))
+    .Select(r => r.Value)
+    .ToList();
+// "1", "2"
+```
+
+PostgreSQL renames the only column of a scalar set-returning function (`generate_series`, `unnest`,
+`regexp_matches`, `regexp_split_to_table`, `jsonb_object_keys`, `jsonb_path_query`) to the alias nextorm
+adds to a derived source, so the dialect wraps those calls in a one-column subquery
+(`select generate_series from generate_series(...)`); the functions with an explicit output column
+(`value`, `key`/`value`, `word`/`ndoc`/`nentry`) are emitted unchanged.
+
 `SqlFunctions.SqlServer.string_split` is SQL Server 2016+ and returns [`SqlFunctions.IStringSplitRow`](xref:NextORM.Core.SqlFunctions.IStringSplitRow) (the single `value`
 column). The fragments are not guaranteed to be ordered, so add an `order by` when the input order
 matters:
@@ -322,7 +364,9 @@ limit 3
 
 The mapped function must exist in the database — nextorm only emits the call, it does not create the
 function — so use the helper only on the provider that defines it. The built-in helpers are gated by
-[`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect): PostgreSQL enables `generate_series`/`unnest`, SQL Server enables
+[`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect): PostgreSQL enables `generate_series`, `unnest`,
+`regexp_matches`, `regexp_split_to_table`, `jsonb_array_elements(_text)`, `jsonb_each(_text)`,
+`jsonb_object_keys`, `jsonb_path_query` and `ts_stat`; SQL Server enables
 `string_split`/`openjson`, ClickHouse enables `numbers`/`numbers_mt` and `zeros`/`zeros_mt`, and any
 other provider rejects them with `NotSupportedException` (a user-defined `[SqlTableFunction]` is never
 gated).

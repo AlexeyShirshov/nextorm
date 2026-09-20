@@ -45,7 +45,26 @@ public sealed class PostgresDialect : SqlDialectBase
     public override bool SupportsArrays => true;
 
     public override bool SupportsTableFunction(string name) =>
-        name is "generate_series" or "unnest";
+        name is "generate_series" or "unnest"
+            or "regexp_matches" or "regexp_split_to_table"
+            or "jsonb_array_elements" or "jsonb_array_elements_text"
+            or "jsonb_each" or "jsonb_each_text" or "jsonb_object_keys"
+            or "jsonb_path_query" or "ts_stat";
+
+    /// <summary>
+    /// PostgreSQL names the only output column of a scalar set-returning function after the function,
+    /// but aliasing the function in <c>FROM</c> renames that column to the alias. nextorm always
+    /// aliases a derived source (<see cref="RequireSubqueryAlias"/>), so those functions are wrapped
+    /// in a one-column subquery that restores the function-named column
+    /// (<c>select generate_series from generate_series(...)</c>). Functions with an explicit output
+    /// column (<c>value</c>, <c>key</c>/<c>value</c>, <c>word</c>/<c>ndoc</c>/<c>nentry</c>) keep
+    /// their names and are emitted unchanged.
+    /// </summary>
+    public override string WrapTableFunction(string name, string call) =>
+        name is "generate_series" or "unnest" or "regexp_matches" or "regexp_split_to_table"
+            or "jsonb_object_keys" or "jsonb_path_query"
+            ? $"(select {name} from {call})"
+            : call;
 
     // PostgreSQL has native json/jsonb types and the associated functions/operators.
     public override bool SupportsJson => true;

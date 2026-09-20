@@ -202,6 +202,48 @@ var elements = dataContext
     .ToList(new long[] { 1, 2, 3 });
 ```
 
+PostgreSQL также предоставляет наборные функции для regexp, JSON и полнотекстового поиска:
+
+| `SqlFunctions.Postgres.*` | Колонки SQL | Row-shape |
+| --- | --- | --- |
+| `regexp_matches(source, pattern[, flags])` | `regexp_matches text[]` | `IRegexpMatchesRow` (`.Matches`) |
+| `regexp_split_to_table(source, pattern[, flags])` | `regexp_split_to_table` | `IRegexpSplitToTableRow` (`.Value`) |
+| `jsonb_array_elements(json)` / `jsonb_array_elements_text(json)` | `value` | `IJsonArrayElementsRow` (`.Value`) |
+| `jsonb_each(json)` / `jsonb_each_text(json)` | `key`, `value` | `IJsonbEachRow` (`.Key`, `.Value`) |
+| `jsonb_object_keys(json)` | `jsonb_object_keys` | `IJsonObjectKeysRow` (`.Key`) |
+| `jsonb_path_query(json, jsonpath)` | `jsonb_path_query` | `IJsonPathQueryRow` (`.Value`) |
+| `ts_stat(query)` | `word`, `ndoc`, `nentry` | `ITsStatRow` (`.Word`, `.Ndoc`, `.Nentry`) |
+
+```csharp
+var json = JsonDocument.Parse("""{"a":1,"b":2}""");
+
+var entries = dataContext
+    .FromTableFunction(() => SqlFunctions.Postgres.jsonb_each_text(json))
+    .Select(r => new { r.Key, r.Value })
+    .ToList();
+// ("a", "1"), ("b", "2")
+```
+
+JSONPath-аргумент передаётся текстом через `SqlFunctions.Postgres.jsonpath(path)`, что рендерится как
+`cast(path as jsonpath)`:
+
+```csharp
+var json = JsonDocument.Parse("""{"a":[1,2]}""");
+var path = "$.a[*]";
+
+var values = dataContext
+    .FromTableFunction(() => SqlFunctions.Postgres.jsonb_path_query(json, SqlFunctions.Postgres.jsonpath(path)))
+    .Select(r => r.Value)
+    .ToList();
+// "1", "2"
+```
+
+PostgreSQL переименовывает единственную колонку скалярной наборной функции (`generate_series`, `unnest`,
+`regexp_matches`, `regexp_split_to_table`, `jsonb_object_keys`, `jsonb_path_query`) в псевдоним, который
+nextorm добавляет производному источнику, поэтому диалект оборачивает такие вызовы в подзапрос с одной
+колонкой (`select generate_series from generate_series(...)`); функции с явной колонкой (`value`,
+`key`/`value`, `word`/`ndoc`/`nentry`) эмитятся без обёртки.
+
 `SqlFunctions.SqlServer.string_split` — из SQL Server 2016+ и возвращает [`SqlFunctions.IStringSplitRow`](xref:NextORM.Core.SqlFunctions.IStringSplitRow) (единственная колонка
 `value`). Порядок фрагментов не гарантируется, поэтому добавляйте `order by`, если важен порядок входной
 строки:
@@ -322,7 +364,9 @@ limit 3
 
 Сопоставленная функция должна существовать в базе — nextorm только генерирует вызов, он её не создаёт, —
 поэтому используйте хелпер только на провайдере, где она определена. Встроенные хелперы гейтятся
-[`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect): PostgreSQL разрешает `generate_series`/`unnest`, SQL Server —
+[`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect): PostgreSQL разрешает `generate_series`, `unnest`,
+`regexp_matches`, `regexp_split_to_table`, `jsonb_array_elements(_text)`, `jsonb_each(_text)`,
+`jsonb_object_keys`, `jsonb_path_query` и `ts_stat`; SQL Server —
 `string_split`/`openjson`, ClickHouse — `numbers`/`numbers_mt`, `zeros`/`zeros_mt` и `generateRandom`, а любой другой
 провайдер отклоняет их с `NotSupportedException` (пользовательская `[SqlTableFunction]` не гейтится).
 

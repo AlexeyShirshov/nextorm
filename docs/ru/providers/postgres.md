@@ -181,8 +181,9 @@ ctx.From<IComplexEntity>()
 
 PostgreSQL также включает `greatest`/`least`, `date_trunc`, агрегаты `string_agg`/`array_agg`, предложение
 `FILTER (WHERE ...)` у агрегатов, переносимый `iif` (рендерится как `case when ... then ... else ... end`),
-оконные функции `percent_rank`/`cume_dist`/`nth_value` и встроенные табличные функции
-`generate_series`/`unnest`:
+оконные функции `percent_rank`/`cume_dist`/`nth_value` и встроенные наборные табличные функции
+`generate_series`, `unnest`, `regexp_matches`, `regexp_split_to_table`, `jsonb_array_elements(_text)`,
+`jsonb_each(_text)`, `jsonb_object_keys`, `jsonb_path_query` и `ts_stat`:
 
 ```csharp
 ctx.From<IComplexEntity>()
@@ -250,7 +251,7 @@ join complex_entity as "t2" on t1.id = t2.id
 | `date_add` / `end_of_month` / `DateTime.Add*` | интервальная арифметика (`x + (n * interval '1 day')`) |
 | `string_agg` / `array_agg` / `filter` у агрегатов | поддерживаются |
 | Session/info-функции | `current_user`, `session_user`, `current_schema`, `current_database()`, `version()` |
-| Табличные функции | `generate_series(...)`, `unnest(...)` |
+| Табличные функции | `generate_series`, `unnest`, `regexp_matches`, `regexp_split_to_table`, `jsonb_array_elements(_text)`, `jsonb_each(_text)`, `jsonb_object_keys`, `jsonb_path_query`, `ts_stat` |
 | Рекурсивный CTE | `with recursive` (без опции max-recursion) |
 | `stdev` / `stdevp` | `stddev` / `stddev_pop` |
 | `var` / `varp` | `variance` / `var_pop` |

@@ -152,6 +152,9 @@ internal static class JsonSqlTranslator
             case nameof(PostgresFunctions.jsonb_path_query_array) when args.Count == 2:
                 EmitJsonPathFunction(visitor, "jsonb_path_query_array", args);
                 return true;
+            case nameof(PostgresFunctions.jsonpath) when args.Count == 1:
+                EmitJsonPathCast(visitor, args[0]);
+                return true;
 
             default:
                 return false;
@@ -223,6 +226,27 @@ internal static class JsonSqlTranslator
 
         if (!visitor.IsParamMode)
             visitor.Builder!.Append(" as jsonb)");
+    }
+
+    /// <summary>
+    /// Casts an argument to <c>jsonpath</c> (<c>cast(expr as jsonpath)</c>) for
+    /// <see cref="PostgresFunctions.jsonpath"/> so that a text parameter or column is accepted where
+    /// PostgreSQL expects a <c>jsonpath</c>.
+    /// </summary>
+    private static void EmitJsonPathCast(BaseExpressionVisitor visitor, Expression argument)
+    {
+        RequireJsonSupport(visitor);
+
+        if (!visitor.IsParamMode)
+        {
+            visitor.NeedAliasForColumn = true;
+            visitor.Builder!.Append("cast(");
+        }
+
+        SqlOperandTranslator.AppendArgument(visitor, argument);
+
+        if (!visitor.IsParamMode)
+            visitor.Builder!.Append(" as jsonpath)");
     }
 
     private static void RequireJsonSupport(BaseExpressionVisitor visitor)

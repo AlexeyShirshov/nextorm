@@ -1,6 +1,7 @@
 using FluentAssertions;
 using NextORM.Core;
 using Npgsql;
+using System.Text.Json;
 
 namespace NextORM.Integration.Tests;
 
@@ -159,5 +160,104 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
             .Select(e => string.Join("-", e.String!.Split('a')))
             .First()
             .Should().Be("d-df-sd");
+    }
+
+    [Fact]
+    public void RegexpMatches_ShouldReturnCapturedGroups()
+    {
+        var source = "a1b2";
+        var pattern = "\\d";
+        var flags = "g";
+
+        var groups = _sut.DataProvider
+            .FromTableFunction(() => SqlFunctions.Postgres.regexp_matches(source, pattern, flags))
+            .Select(r => new { r.Matches })
+            .ToList();
+
+        groups.Should().HaveCount(2);
+        groups.Select(g => g.Matches.Single()).Should().Equal("1", "2");
+    }
+
+    [Fact]
+    public void RegexpSplitToTable_ShouldReturnFragments()
+    {
+        var source = "a,b,c";
+        var pattern = ",";
+
+        var fragments = _sut.DataProvider
+            .FromTableFunction(() => SqlFunctions.Postgres.regexp_split_to_table(source, pattern))
+            .Select(r => r.Value)
+            .ToList();
+
+        fragments.Should().Equal("a", "b", "c");
+    }
+
+    [Fact]
+    public void JsonbArrayElementsText_ShouldReturnElements()
+    {
+        using var json = JsonDocument.Parse("[1,2,3]");
+
+        var values = _sut.DataProvider
+            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_array_elements_text(json))
+            .Select(r => r.Value)
+            .ToList();
+
+        values.Should().Equal("1", "2", "3");
+    }
+
+    [Fact]
+    public void JsonbEachText_ShouldReturnEntries()
+    {
+        using var json = JsonDocument.Parse("""{"a":1,"b":2}""");
+
+        var rows = _sut.DataProvider
+            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_each_text(json))
+            .OrderBy(r => r.Key)
+            .Select(r => new { r.Key, r.Value })
+            .ToList();
+
+        rows.Select(r => (r.Key, r.Value)).Should().Equal(("a", "1"), ("b", "2"));
+    }
+
+    [Fact]
+    public void JsonbObjectKeys_ShouldReturnKeys()
+    {
+        using var json = JsonDocument.Parse("""{"a":1,"b":2}""");
+
+        var keys = _sut.DataProvider
+            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_object_keys(json))
+            .OrderBy(r => r.Key)
+            .Select(r => r.Key)
+            .ToList();
+
+        keys.Should().Equal("a", "b");
+    }
+
+    [Fact]
+    public void JsonbPathQuery_ShouldReturnMatches()
+    {
+        using var json = JsonDocument.Parse("""{"a":[1,2]}""");
+        var path = "$.a[*]";
+
+        var values = _sut.DataProvider
+            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_path_query(json, SqlFunctions.Postgres.jsonpath(path)))
+            .Select(r => r.Value)
+            .ToList();
+
+        values.Should().Equal("1", "2");
+    }
+
+    [Fact]
+    public void TsStat_ShouldReturnLexemeStatistics()
+    {
+        var query = "select to_tsvector('cat dog cat')";
+
+        var stats = _sut.DataProvider
+            .FromTableFunction(() => SqlFunctions.Postgres.ts_stat(query))
+            .OrderBy(r => r.Word)
+            .Select(r => new { r.Word, r.Ndoc, r.Nentry })
+            .ToList();
+
+        stats.Select(s => (s.Word, s.Ndoc, s.Nentry)).Should().Equal(("cat", 1, 2), ("dog", 1, 1));
     }
 }
