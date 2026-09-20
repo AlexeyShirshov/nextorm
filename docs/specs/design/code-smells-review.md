@@ -1978,9 +1978,10 @@ clickhouse **139/139** (0 failed / 0 skipped). Соотношение подав
 `SqlOperandTranslator.EmitFunction` (`:193-211`): param-режим → `NeedAliasForColumn` → `Append(name)`
 + цикл `VisitToString`. Отличие намеренное и обосновано (`:163-166`): `byte[]`-аргумент через
 `AppendArgument` попал бы в `AppendArrayOperand`, и колонка-`bytea` была бы связана как параметр
-вместо ссылки на колонку. Но это уже **16** циклов `for (var (i, cnt) = (0, args.Count))` в **7**
-файлах `Visitors/`; порог «пятого семейства» из наблюдения `DictionarySqlTranslator` перейдён, а
-`EmitJsonPathFunction` (Находка 15) — тот же класс дублирования.
+вместо ссылки на колонку. Но это уже **18** циклов `for (var (i, cnt) = (0, args.Count))` в **8**
+файлах `Visitors/` (было 16/7 в аудите `todo-pg`; +2 — `DateConversionSqlTranslator.cs:86,94`,
+слияние `todo-ch`, см. сводный аудит ниже); порог «пятого семейства» из наблюдения
+`DictionarySqlTranslator` перейдён, а `EmitJsonPathFunction` (Находка 15) — тот же класс дублирования.
 
 - **Стало:** добавить в `SqlOperandTranslator.EmitFunction` режим «аргумент-массив рендерить как
   значение» (флаг/делегат рендера), `EmitCrypto` свести к проверке `SupportsCryptoFunctions` + вызову;
@@ -2005,7 +2006,9 @@ clickhouse **139/139** (0 failed / 0 skipped). Соотношение подав
 - **MySQL/MariaDB `epoch` зависит от сессии.** `unix_timestamp(value)` трактует `datetime` в
   сессионной временной зоне (`MySqlDialect.cs:201`).
 - **ClickHouse `epoch` — целые секунды.** `toUnixTimestamp` возвращает секунды, `toFloat64` дробь не
-  восстанавливает (`ClickHouseDialect.cs:343`), тогда как PG/SQLite/MySQL/SQL Server её сохраняют.
+  восстанавливает (`ClickHouseDialect.cs:387` — ссылка актуализирована 20.09.2026, было `:343`),
+  тогда как PG/SQLite/MySQL/SQL Server её сохраняют. На реальном ClickHouse в сводном аудите
+  20.09.2026 не перепроверялось (контейнер не поднимался).
 - **Слишком мягкий допуск интеграционного теста.** `Extract_ShouldReturnNormalisedDateParts`
   сравнивает `Epoch` через `BeApproximately(..., 86400.0)` (сутки) — сдвиг на часы тест не поймает
   (`tests/nextorm.integration.tests/CommonTestSuite.Functions.cs`).
@@ -2026,6 +2029,58 @@ clickhouse **139/139** (0 failed / 0 skipped). Соотношение подав
 Интеграционные на Podman-сокете (5 новых тестов × провайдеры) — **11/11 passed, 0 skipped**.
 Соотношение подавлений не изменилось: 5 оправданных `SuppressMessage` + 5 парных `#pragma`,
 неоправданных — **0/10**.
+
+## 🔎 Сводный аудит — слияние `todo-pg`/`todo-mssql`/`todo-ch` в `1.0.3-alpha` (20.09.2026)
+
+Область (только дельта трёх merge'ей; база `d4ede0e`, HEAD `c8e8686`): `ClickHouseDialect.MakeDatePart`/
+`MakeDateConversion`/`SupportsDatePart`/`WrapTableFunction`, `ClickHouseFunctions` (24 `to_*`-метода +
+`generate_random()`/`generate_random(long)`) и `SqlFunctions.IGenerateRandomRow`,
+`Visitors/DateConversionSqlTranslator.cs` (новый), `StringFunctionTranslator.TryTranslateSplit`,
+`SqlSourceRenderer.MakeTableFunction` (`WithClause`), `SqlDialectBase`/`ISqlDialect` (новые члены).
+Build Release — **0 warnings / 0 errors** (прогнано в этом проходе).
+
+| Категория навыка | Результат |
+|---|---|
+| 2. Подавления | ✅ В диффе `d4ede0e..HEAD` (`src`+`tests`) новых `#pragma`/`SuppressMessage`/`NoWarn` — **0**. База прежняя: `SuppressMessage` — **5** (все с `Justification`), `#pragma disable` — **5** (все с парным `restore`); неоправданных — **0/10**. `CS1591` остаётся в `<NoWarn>` 7 библиотечных `.csproj` (принято, Шаг 5 открыт). |
+| Слоп-паттерны (slopwatch локально не установлен; скан вручную) | ✅ `Skip=`/`Thread.Sleep`/пустых `catch`/инлайновых `Version`/`VersionOverride` — **0**; `Task.Delay` — 2 прежние `Task.Delay(0)` (`tests/nextorm.core.tests/InMemoryTests.cs`), не задержки. |
+| 1/3/4/6. `IDisposable`, LINQ, события, исключения | ✅ Новых disposable-полей/`using`, LINQ, подписок и `catch` нет; новые `throw` — `NotSupportedException` без `catch` (`StringFunctionTranslator.cs:330-349`, `DateConversionSqlTranslator.cs:103`). |
+| 5. Проектирование | ℹ️ **Находка 30 актуализирована** (+2 цикла `DateConversionSqlTranslator`); `WithClause`-ветка — 3 строки без дубля; `MakeMathFunction` 3-арг. — прежнее обоснованное ℹ️; `DateConversionSqlTranslator` — седьмой семейный диспетчер (см. ниже, новой находки не заводится). |
+| 7. Хэш-ключи | ✅ `MakeDateConversion`/`DateConversionSqlTranslator` — чистый рендер, план-ключ не трогают; `ClickHouseDialect.MakeDatePart` — детерминированный `switch` без mutable state. |
+
+### ℹ️ Наблюдения (фикс не требуется)
+
+- **Слияние `MakeDatePart` (PG+CH) когерентно — проверено вручную.** `dow` = `toInt32(toDayOfWeek(x) % 7)`:
+  `toDayOfWeek` — ISO 1..7 (Mon..Sun), `% 7` даёт `0`=Sunday..`6`=Saturday, что совпадает с
+  `extract(dow)` у PG/SQLite/MySQL/SQL Server; `isodow` = `toInt32(toDayOfWeek(x))` = 1..7 (Mon..Sun)
+  совпадает с `extract(isodow)`; `week` = `toInt32(toISOWeek(x))` = ISO 8601; `year/quarter/month/day/
+  doy/hour/minute/second` — `toXxx` с `toInt32` (нативные UInt8/UInt16); `epoch` — `toFloat64`. Кросс-провайдерные
+  наборы `SupportsDatePart` сходятся: PG/CH добавляют `dow`/`isodow`/`epoch`, `week` уже в базовом
+  `DatePartFields` (`SqlDialectBase.cs:421-425`). Дублей веток от merge нет.
+- **`to_day_of_week` через `MakeDateConversion` — корректен и намеренно не равен `extract('dow')`.**
+  `ClickHouseDialect.cs:497,517`: `toInt32(toDayOfWeek(x))` = нативные ISO 1..7; XML-док метода
+  «Monday is 1, Sunday is 7» (`SqlFunctions.ClickHouse.cs:306`) совпадает. Нормализованный `0..6` — только
+  у `extract`/`date_part` (`MakeDatePart`). Асимметрия документирована в обоих местах, поэтому не находка.
+- **`DateConversionSqlTranslator` — седьмой почти-дубликат семейного диспетчера** (после
+  `TextJson`/`JsonExtract`/`Uuid`/`SessionInfo`/...; ср. наблюдение в аудите UUID). Структура `TryTranslate`
+  → `RequireSupport` → param-mode guard → `Builder.Append` повторяет уже принятый паттерн; это **тот же
+  класс**, что Находки 15/30, и отдельная находка не заводится. `EmitPart`/`EmitConversion`
+  (`:64-98`) добавляют 2 цикла `(0, args.Count)` (см. Находку 30).
+- **`WrapTableFunction`/`generateRandom` режет `call` по строке.** `ClickHouseDialect.cs:278-284`:
+  `call["generateRandom(".Length..^1]` завязан на verbatim-рендер `MakeFunction` (базовый, имя не квотируется).
+  Сегодня корректно и даёт валидный `generateRandom('id UInt64, value Float64, name String'[, seed])`; хрупко
+  только при будущем переопределении `MakeFunction` в ClickHouse. ℹ️, фикс не требуется.
+- **`WithClause` + `WrapTableFunction` — порядок безопасен сегодня.** `SqlSourceRenderer.cs:328-329`
+  дописывает ` with (...)` уже поверх wrapped-call; для встроенных CH TVF `WithClause` не задан, а SQL Server
+  `openjson` обёртки не имеет (`WrapTableFunction` — no-op), поэтому комбинация «обёртка + WITH» недостижима.
+  Край: пользовательская `[SqlTableFunction]` с именем `generateRandom` и `WithClause` дала бы
+  `(select ...) with (...)` — невалидно; ср. ранее отмеченный край «обёртка по имени» в аудите `numbers`.
+- **EOL нового файла.** Индекс нормализован в LF коммитом `746836a`; `DateConversionSqlTranslator.cs` —
+  `i/lf`/`w/crlf` (autocrlf), новой EOL-находки нет. Находки 20/22/29 относятся к состоянию до `746836a`.
+
+**Проверка:** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**; в диффе `src`+`tests`
+`#pragma warning disable`/`SuppressMessage`/`NoWarn`/`Skip=`/`Task.Delay`/`Thread.Sleep`/пустые `catch` — **0**;
+`rg -c "for \(var \(i, cnt\) = \(0, args\.Count\)"` — **18** в **8** файлах; `git ls-files --eol` новых файлов —
+`i/lf`. Тесты в этом проходе не перезапускались (только build).
 
 ## Примечания
 

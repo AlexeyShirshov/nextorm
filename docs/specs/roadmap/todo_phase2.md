@@ -10,11 +10,11 @@
 
 | Пункт | Объём | Что нужно | Источник |
 | --- | --- | --- | --- |
-| `round(double precision, int)` | простое | диалектный хук (`MakeMathFunction`): PostgreSQL определяет только `round(numeric, int)`, поэтому первый аргумент оборачивается в `(...)::numeric` | `todo_postgres.md:68` |
-| Публичный `EXTRACT`/`date_part` (`quarter`, `week`, `epoch`, `dow`, `isodow`) | простое | метод-обёртка `SqlFunctions.Sql.extract(part, value)` (и/или свойства `DateTime.DayOfWeek`); `MakeDatePart`/`MakeDateDiff` уже есть | `todo_postgres.md:46–49` |
-| `setseed(float)` | простое | скалярный PostgreSQL-метод (рядом с `random()`) | `todo_postgres.md:65` |
-| `array_shuffle` / `array_sample` | простое | скалярные array-функции | `todo_postgres.md:78` |
-| `digest` / `sha256` (pgcrypto) | простое | скалярные; нужен `Supports*`-гейт — требует расширения `pgcrypto` | `todo_postgres.md:55` |
+| `round(double precision, int)` | готово | диалектный хук `MakeMathFunction(...3 арг.)`: PostgreSQL оборачивает первый `double`/`float`-аргумент в `(...)::numeric`; см. `WIP_round.md` | `todo_postgres.md:95` |
+| Публичный `EXTRACT`/`date_part` (`quarter`, `week`, `epoch`, `dow`, `isodow`) | готово | `SqlFunctions.Sql.extract(part, value)` (`int?`) + `date_part("epoch", value)` (`double?`), флаг `SupportsDatePart`; `MakeDatePart`/`MakeDateDiff` уже есть; см. `WIP_date_part.md` | `todo_postgres.md:47` |
+| `setseed(float)` | готово | скалярный `PostgresFunctions.setseed` под `SupportsRandomSeed` (PG-only); см. `WIP_setseed.md` | `todo_postgres.md:87` |
+| `array_shuffle` / `array_sample` | готово | скалярные `PostgresFunctions.array_shuffle`/`array_sample` (PG16+) под `SupportsArrays`; см. `WIP_array_shuffle.md` | `todo_postgres.md:110` |
+| `digest` / `sha256` (pgcrypto) | готово | `PostgresFunctions.digest`/`sha256` под `SupportsCryptoFunctions`; `digest` требует расширения `pgcrypto`; см. `WIP_digest.md` | `todo_postgres.md:70` |
 | Наборные функции через `[SqlTableFunction]`: `regexp_matches`, `regexp_split_to_table`, `jsonb_array_elements`(`_text`), `jsonb_each`(`_text`), `jsonb_object_keys`, `jsonb_path_query`, `ts_stat` | среднее | механизм `[SqlTableFunction]` + `FromTableFunction` уже есть; для `jsonb_each`/`ts_stat` нужен row-тип на 2–4 колонки | `todo_postgres.md:51,86,88,106–108` |
 | Именованные окна (`WINDOW w AS (...)`), режим фрейма `GROUPS`, исключения фрейма (`EXCLUDE`) | сложное | расширение модели окон/фреймов | `todo_postgres.md:100` |
 
@@ -34,7 +34,7 @@
 | Пункт | Объём | Что нужно | Источник |
 | --- | --- | --- | --- |
 | Функции приведения и частей даты: `toDate`/`toDateTime`/`toDate32`, `toYear`/`toQuarter`/`toMonth`/`toDayOfMonth`/`toDayOfWeek`/`toHour`/…, `toStartOf*`, `toMonday`, `toYYYYMM`/`toYYYYMMDD`, `toUnixTimestamp` | готово | методы `ClickHouseFunctions` + `SupportsDateConversionFunctions` + `MakeDateConversion`/`MakeDatePart`; модель запроса не меняется (см. `todo_clickhouse.md:72`) | `todo_clickhouse.md:70` |
-| `string.Split` → `splitByChar` | простое | ветка в строковом маппинге | `todo_clickhouse.md:230` |
+| `string.Split` → `splitByChar` | готово | флаг `SupportsStringSplit` + хук `MakeStringSplit`; один символ-разделитель, многоместные/`StringSplitOptions` отклоняются | `todo_clickhouse.md:230` |
 | Скалярные array-функции: `range`, `arrayEnumerate`, `arrayCumSum`, `arraySlice`, `arrayPushBack` | среднее | скалярные формы; проекция самого массива упирается в row reader | `todo_clickhouse.md:230` |
 | Продвинутые агрегаты: `windowFunnel`, `retention`, `sequenceMatch` | среднее/сложное | аккуратная типизация (DateTime/условия) | `todo_clickhouse.md:161` |
 | Прочие табличные функции: `generateRandom` | готово | через `WrapTableFunction` с фиксированной структурой и row-типом `IGenerateRandomRow` (см. `todo_clickhouse.md:355`); остальные — см. «заблокировано» | `todo_clickhouse.md:328` |

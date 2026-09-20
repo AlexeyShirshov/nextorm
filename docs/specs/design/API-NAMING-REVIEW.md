@@ -1472,7 +1472,10 @@ postgres **198/198**, sqlserver **191/191**, mariadb **16/16**, sqlite **211/211
 `docs/advanced/api-reference.md` (+RU) добавлены `extract`/`date_part`, `array_shuffle`/`array_sample`,
 `digest`/`sha256`, `setseed`. RD5 закрыта: у `date_part` добавлен `<remarks>` со ссылкой на `extract`.
 RD2 остаётся открытой — `PublicAPI.Unshipped.txt` не заведён (Шаг 5 вне рамок этого пункта), подписи
-для заморозки ниже сохранены.
+для заморозки ниже сохранены. Слияние `todo-ch` добавляет к RD2 ClickHouse-часть поверхности
+(24 `to_*`, `generate_random` ×2, `IGenerateRandomRow`, 4 члена `ISqlDialect`/`SqlDialectBase` и 4
+переопределения в `ClickHouseDialect`); её подписи дописаны в тот же блок ниже (`# --- продолжение RD2`),
+отдельная находка не заводится — см. раздел «Слияние `todo-ch`…» после OJW1.
 
 **Шаг 5 — точные подписи для `PublicAPI.Unshipped.txt` (RD2)** (формат Roslyn PublicAPI, `#nullable enable`):
 
@@ -1502,6 +1505,52 @@ NextORM.Core.PostgresFunctions.setseed(double? seed) -> double?
 NextORM.Core.PostgresFunctions.digest(string? data, string? type) -> byte[]?
 NextORM.Core.PostgresFunctions.digest(byte[]? data, string? type) -> byte[]?
 NextORM.Core.PostgresFunctions.sha256(byte[]? data) -> byte[]?
+# --- продолжение RD2: ClickHouse-поверхность слияния todo-ch (20.09.2026) ---
+NextORM.Core.ISqlDialect.SupportsDateConversionFunctions.get -> bool
+NextORM.Core.ISqlDialect.SupportsStringSplit.get -> bool
+NextORM.Core.ISqlDialect.MakeDateConversion(string! name, System.Collections.Generic.IReadOnlyList<string!>! args) -> string!
+NextORM.Core.ISqlDialect.MakeStringSplit(string! separator, string! value) -> string!
+NextORM.Core.SqlDialectBase.SupportsDateConversionFunctions.get -> bool
+NextORM.Core.SqlDialectBase.SupportsStringSplit.get -> bool
+NextORM.Core.SqlDialectBase.MakeDateConversion(string! name, System.Collections.Generic.IReadOnlyList<string!>! args) -> string!
+NextORM.Core.SqlDialectBase.MakeStringSplit(string! separator, string! value) -> string!
+NextORM.ClickHouse.ClickHouseDialect.SupportsDateConversionFunctions.get -> bool
+NextORM.ClickHouse.ClickHouseDialect.SupportsStringSplit.get -> bool
+NextORM.ClickHouse.ClickHouseDialect.MakeDateConversion(string! name, System.Collections.Generic.IReadOnlyList<string!>! args) -> string!
+NextORM.ClickHouse.ClickHouseDialect.MakeStringSplit(string! separator, string! value) -> string!
+NextORM.Core.ClickHouseFunctions.to_date<T>(T? value) -> System.DateTime?
+NextORM.Core.ClickHouseFunctions.to_date_time<T>(T? value) -> System.DateTime?
+NextORM.Core.ClickHouseFunctions.to_date32<T>(T? value) -> System.DateTime?
+NextORM.Core.ClickHouseFunctions.to_year<T>(T? value) -> int?
+NextORM.Core.ClickHouseFunctions.to_quarter<T>(T? value) -> int?
+NextORM.Core.ClickHouseFunctions.to_month<T>(T? value) -> int?
+NextORM.Core.ClickHouseFunctions.to_day_of_month<T>(T? value) -> int?
+NextORM.Core.ClickHouseFunctions.to_day_of_week<T>(T? value) -> int?
+NextORM.Core.ClickHouseFunctions.to_day_of_year<T>(T? value) -> int?
+NextORM.Core.ClickHouseFunctions.to_hour<T>(T? value) -> int?
+NextORM.Core.ClickHouseFunctions.to_minute<T>(T? value) -> int?
+NextORM.Core.ClickHouseFunctions.to_second<T>(T? value) -> int?
+NextORM.Core.ClickHouseFunctions.to_start_of_year<T>(T? value) -> System.DateTime?
+NextORM.Core.ClickHouseFunctions.to_start_of_quarter<T>(T? value) -> System.DateTime?
+NextORM.Core.ClickHouseFunctions.to_start_of_month<T>(T? value) -> System.DateTime?
+NextORM.Core.ClickHouseFunctions.to_start_of_week<T>(T? value) -> System.DateTime?
+NextORM.Core.ClickHouseFunctions.to_start_of_day<T>(T? value) -> System.DateTime?
+NextORM.Core.ClickHouseFunctions.to_start_of_hour<T>(T? value) -> System.DateTime?
+NextORM.Core.ClickHouseFunctions.to_start_of_minute<T>(T? value) -> System.DateTime?
+NextORM.Core.ClickHouseFunctions.to_start_of_second<T>(T? value) -> System.DateTime?
+NextORM.Core.ClickHouseFunctions.to_monday<T>(T? value) -> System.DateTime?
+NextORM.Core.ClickHouseFunctions.to_yyyymm<T>(T? value) -> int?
+NextORM.Core.ClickHouseFunctions.to_yyyymmdd<T>(T? value) -> int?
+NextORM.Core.ClickHouseFunctions.to_unix_timestamp<T>(T? value) -> long?
+NextORM.Core.ClickHouseFunctions.generate_random() -> System.Linq.IQueryable<NextORM.Core.SqlFunctions.IGenerateRandomRow!>!
+NextORM.Core.ClickHouseFunctions.generate_random(long seed) -> System.Linq.IQueryable<NextORM.Core.SqlFunctions.IGenerateRandomRow!>!
+NextORM.Core.SqlFunctions.IGenerateRandomRow
+NextORM.Core.SqlFunctions.IGenerateRandomRow.Id.get -> long
+NextORM.Core.SqlFunctions.IGenerateRandomRow.Id.set -> void
+NextORM.Core.SqlFunctions.IGenerateRandomRow.Value.get -> double
+NextORM.Core.SqlFunctions.IGenerateRandomRow.Value.set -> void
+NextORM.Core.SqlFunctions.IGenerateRandomRow.Name.get -> string?
+NextORM.Core.SqlFunctions.IGenerateRandomRow.Name.set -> void
 ```
 
 `MakeDatePart` у mysql/sqlite/sqlserver/clickhouse уже существовал (сигнатура не менялась) — в заморозку
@@ -1526,6 +1575,31 @@ sqlserver **195/195**, mysql **52/52**, mariadb **19/19**, sqlite **220/220**, c
 - **Обратная совместимость.** Старый публичный конструктор `TableFunctionExpression(string, string?, MethodCallExpression)` сохранён и делегирует новому; изменения существующей сигнатуры нет.
 
 **Проверка:** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**; `dotnet test tests/nextorm.sqlserver.tests -c Debug` — **194/194**; `DOCKER_HOST=… dotnet run --project tests/nextorm.integration.tests -c Debug -- -noColor -method nextorm.integration.tests.SqlServerSpecificTests.OpenJson_WithTypedSchema_ShouldReturnTypedColumns` — **1/1**; `rg --files -g 'PublicAPI*.txt'` — пусто (подтверждает OJW1); EN+RU `docs/guide/13-table-valued-functions.md`, `docs/providers/sqlserver.md` синхронны.
+
+### Слияние `todo-ch`: ClickHouse date conversion + `string.Split` (точечный аудит 20.09.2026)
+
+Область: `Query/SqlFunctions.ClickHouse.cs` (24 `to_*`-метода, `generate_random()`/`generate_random(long)`,
+`SqlFunctions.IGenerateRandomRow`), `src/nextorm.clickhouse/ClickHouseDialect.cs`
+(`MakeDatePart`/`SupportsDatePart`/`MakeDateConversion`/`SupportsDateConversionFunctions`/
+`SupportsStringSplit`/`MakeStringSplit`/`WrapTableFunction`), `ISqlDialect`/`SqlDialectBase`
+(те же новые члены), `Visitors/DateConversionSqlTranslator.cs` (internal, внешней поверхности не даёт).
+Build Release — **0 warnings / 0 errors** (этот проход); `rg --files -g 'PublicAPI*.txt'` — пусто.
+
+**Итог: новых P0/P1 нет; единственная P2 — уже открытая RD2 (ClickHouse-подписи дописаны в её блок
+Шага 5), OJW1 — без изменений.**
+
+| # | Ур. | Файл:строка | Проблема | Рекомендация |
+|---|-----|-------------|----------|--------------|
+| RD2 (CH-часть) | P2 | `ISqlDialect.cs:149-150,228,738,765`; `SqlDialectBase.cs:35,47,494,527`; `ClickHouseDialect.cs:41,47,106,490`; `Query/SqlFunctions.ClickHouse.cs:230-239,286-358`; `Query/SqlFunctions.cs:134` | CH-часть поверхности не трекается (`PublicApiAnalyzers` не подключён, Шаг 5 открыт). **Продолжение RD2, не новая находка.** `SupportsStringSplit`/`SupportsDateConversionFunctions` — абстрактные члены `ISqlDialect` ⇒ source-breaking для внешних реализаторов (как `SupportsRandomSeed`/`SupportsCryptoFunctions`); `MakeDateConversion`/`MakeStringSplit` — DIM в интерфейсе и `virtual` в базе, разрыва не создают | Подписи внесены в блок Шага 5 (RD2); при заморозке трекать в `PublicAPI.Unshipped.txt` |
+
+ℹ️ **Наблюдения (фикс не требуется):**
+- **`MakeDatePart` — слияние PG+CH когерентно (проверено).** `dow` = `toInt32(toDayOfWeek(x) % 7)` даёт `0`=Sunday..`6`=Saturday, как `extract(dow)` у остальных; `isodow` = `toInt32(toDayOfWeek(x))` = ISO 1..7; `week` = `toISOWeek` (ISO 8601; `week` уже в базовом `DatePartFields`, `SqlDialectBase.cs:421-425`); остальные части — `toXxx` с `toInt32`; `epoch` — `toFloat64(toUnixTimestamp(...))`. `SupportsDatePart` CH добавляет `dow`/`isodow`/`epoch` поверх базы — наборы провайдеров согласованы.
+- **`to_day_of_week` и `extract('dow')` расходятся намеренно.** `MakeDateConversion("to_day_of_week")` = `toInt32(toDayOfWeek(x))` (CH-нативные 1..7, Mon..Sun), что совпадает с XML-доком метода (`SqlFunctions.ClickHouse.cs:306`); нормализованный `0..6` — только у `extract`/`date_part`. Оба поведения задокументированы, поэтому это не P2-несогласованность.
+- **XML-doc coverage полная.** `<summary>` есть у всех 24 `to_*`, обоих `generate_random`, `IGenerateRandomRow`, `SupportsStringSplit`/`SupportsDateConversionFunctions`/`MakeDateConversion`/`MakeStringSplit` в `ISqlDialect` и `SqlDialectBase`, у четырёх CH-переопределений и `SqlTableFunctionAttribute.WithClause`. Свойства `IGenerateRandomRow.Id/Value/Name` — без индивидуальных `<summary>`, как у соседних row-интерфейсов (`IZerosRow`, `INumbersRow`); Приложение A (45) без изменений. `CS1591` по-прежнему в `<NoWarn>` 7 `.csproj`.
+- **`IGenerateRandomRow`/`generate_random` — нейминг конвенциям соответствует.** `I…Row` — как `IZerosRow`/`INumbersRow`/`IGenerateSeriesRow`; snake_case `to_*`/`generate_random` — принятое DSL-исключение для SQL-зеркал. BCL-конфликтов нет.
+- **`MakeDateConversion`/`MakeStringSplit` — capability-hook, не понижение видимости.** Имена зеркалят уже принятые `MakeDatePart`/`MakeArrayFunction`; гейт `Supports*` стоит в трансляторе до рендера (`DateConversionSqlTranslator.cs:100-105`, `StringFunctionTranslator.cs:342`).
+
+**Проверка:** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors** (этот проход); в диффе `src`+`tests` новых `#pragma`/`SuppressMessage`/`NoWarn` — **0**; `rg --files -g 'PublicAPI*.txt'` — пусто (подтверждает RD2/OJW1). Тесты в этом проходе не перезапускались (только build).
 
 ## 3. Находки
 

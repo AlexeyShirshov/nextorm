@@ -351,8 +351,10 @@ public static partial class SqlFunctions
 
         /// <summary>
         /// <c>date_part(part, value)</c>: the numeric <paramref name="part"/> of a date/time.
-        /// Currently supports <c>epoch</c> (the number of seconds since 1970-01-01 00:00:00, including
-        /// any fraction). The part must be a constant string. Use <see cref="extract"/> for the
+        /// Currently supports <c>epoch</c> (the number of seconds since 1970-01-01 00:00:00). Providers
+        /// whose native timestamp type carries sub-second precision include the fraction; ClickHouse's
+        /// <c>DateTime</c> is second-precision, so there the value is a whole number of seconds. The
+        /// part must be a constant string. Use <see cref="extract"/> for the
         /// integer parts. Requires a provider that supports the part (see
         /// <see cref="ISqlDialect.SupportsDatePart(string)"/>).
         /// </summary>
