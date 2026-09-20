@@ -10,10 +10,18 @@ namespace NextORM.Core;
 /// </summary>
 public sealed class TableFunctionExpression
 {
+    /// <summary>Creates a table-function source without a trailing <c>WITH</c> clause.</summary>
     public TableFunctionExpression(string name, string? schema, MethodCallExpression call)
+        : this(name, schema, null, call)
+    {
+    }
+
+    /// <summary>Creates a table-function source, optionally with a trailing <c>WITH (...)</c> clause body.</summary>
+    public TableFunctionExpression(string name, string? schema, string? withClause, MethodCallExpression call)
     {
         Name = name;
         Schema = schema;
+        WithClause = withClause;
         Call = call;
     }
 
@@ -22,6 +30,12 @@ public sealed class TableFunctionExpression
 
     /// <summary>Optional schema/owner prefix, rendered as <c>schema.name</c>.</summary>
     public string? Schema { get; }
+
+    /// <summary>
+    /// Optional trailing <c>WITH (...)</c> clause body (from
+    /// <see cref="SqlTableFunctionAttribute.WithClause"/>), appended verbatim after the call.
+    /// </summary>
+    public string? WithClause { get; }
 
     /// <summary>The CLR method call the FROM source was created from; its arguments are the TVF arguments.</summary>
     public MethodCallExpression Call { get; }
@@ -45,6 +59,6 @@ public sealed class TableFunctionExpression
 
         var name = string.IsNullOrEmpty(attribute.Name) ? method.Name : attribute.Name;
 
-        return new TableFunctionExpression(name, attribute.Schema, call);
+        return new TableFunctionExpression(name, attribute.Schema, attribute.WithClause, call);
     }
 }

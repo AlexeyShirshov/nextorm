@@ -17,8 +17,9 @@ public sealed class SqlTableFunctionAttribute : Attribute
 {
     public SqlTableFunctionAttribute();
     public SqlTableFunctionAttribute(string name);
-    public string? Name { get; set; }     // defaults to the CLR method name
-    public string? Schema { get; set; }   // optional schema/owner prefix
+    public string? Name { get; set; }       // defaults to the CLR method name
+    public string? Schema { get; set; }     // optional schema/owner prefix
+    public string? WithClause { get; set; } // optional trailing WITH (...) body
 }
 ```
 
@@ -220,9 +221,7 @@ select value from string_split(@csv, @separator) as [t1]
 ```
 
 `SqlFunctions.SqlServer.openjson` — из SQL Server 2016+ и возвращает [`SqlFunctions.IOpenJsonRow`](xref:NextORM.Core.SqlFunctions.IOpenJsonRow) (`key`/`value`/`type`).
-Схема по умолчанию даёт свойства JSON-объекта или элементы JSON-массива; для типизированной проекции
-объявите свой `[SqlTableFunction("openjson")]`-хелпер, чья форма строки соответствует предложению
-`WITH (...)`:
+Схема по умолчанию даёт свойства JSON-объекта или элементы JSON-массива:
 
 ```csharp
 var json = """{"a":1,"b":2}""";
@@ -235,6 +234,34 @@ var entries = dataContext
 
 ```sql
 select [key] as [Key], value, type from openjson(@json) as [t1]
+```
+
+Для **типизированной схемы** (`OPENJSON ... WITH (...)`) объявите свой хелпер, чья форма строки
+соответствует схеме, и задайте [`WithClause`](xref:NextORM.Core.SqlTableFunctionAttribute.WithClause); тело предложения эмитится дословно после вызова:
+
+```csharp
+public interface IOpenJsonTypedRow
+{
+    [Column("name")]
+    string? Name { get; set; }
+    [Column("age")]
+    int Age { get; set; }
+}
+
+private static class OpenJsonTvf
+{
+    [SqlTableFunction("openjson", WithClause = "name nvarchar(50) '$.name', age int '$.age'")]
+    public static IQueryable<IOpenJsonTypedRow> Typed(string json) => throw new NotSupportedException();
+}
+
+var person = dataContext
+    .FromTableFunction(() => OpenJsonTvf.Typed("""{"name":"Ada","age":36}"""))
+    .Select(r => new { r.Name, r.Age })
+    .First();
+```
+
+```sql
+select name, age from openjson(@json) with (name nvarchar(50) '$.name', age int '$.age') as [t1]
 ```
 
 `SqlFunctions.ClickHouse.numbers`/`numbers_mt` — табличные функции ClickHouse, возвращающие

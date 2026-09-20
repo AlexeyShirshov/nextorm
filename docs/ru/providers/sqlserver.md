@@ -109,7 +109,8 @@ SQL Server 2017+ включает
 включает текстовые JSON-функции ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)): `SqlFunctions.SqlServer.json_value`, `SqlFunctions.SqlServer.json_query`,
 `SqlFunctions.SqlServer.json_modify` и `SqlFunctions.SqlServer.isjson` отрисовывают свои T-SQL-имена над текстовой колонкой,
 используя строку JSONPath (`'$.name'`); поверхность `json`/`jsonb` из PostgreSQL по-прежнему
-выбрасывает исключение.
+выбрасывает исключение. Типизированный набор строк `OPENJSON ... WITH (...)` объявляется через
+`[SqlTableFunction("openjson", WithClause = "...")]` (см. гайд по табличным функциям).
 Предикаты полнотекстового поиска `SqlFunctions.Sql.contains` и `SqlFunctions.Sql.freetext` ([`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText))
 отрисовываются как T-SQL `contains(...)`/`freetext(...)` и требуют полнотекстового индекса на колонке.
 `SqlFunctions.Sql.iif(condition, whenTrue, whenFalse)` отрисовывает `iif(...)`

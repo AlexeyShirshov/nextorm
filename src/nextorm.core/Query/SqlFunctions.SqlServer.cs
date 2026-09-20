@@ -53,8 +53,9 @@ namespace NextORM.Core;
         /// <see cref="SqlFunctions.IOpenJsonRow.Type"/>. Use through
         /// <see cref="DataContextExtensions.FromTableFunction{T}(IDataContext, Expression{Func{IQueryable{T}}})"/>.
         /// The default schema yields the properties of a JSON object or the elements of a JSON array;
-        /// for a typed projection create a <c>[SqlTableFunction("openjson")]</c> wrapper whose row shape
-        /// matches the <c>WITH (...)</c> clause instead.
+        /// for a typed projection declare a <c>[SqlTableFunction("openjson")]</c> wrapper whose row
+        /// shape matches the <see cref="SqlTableFunctionAttribute.WithClause"/> schema (for example
+        /// <c>WithClause = "name nvarchar(50) '$.name'"</c>).
         /// </summary>
         [SqlTableFunction("openjson")]
         public IQueryable<SqlFunctions.IOpenJsonRow> openjson(string? json) => throw new NotSupportedException();

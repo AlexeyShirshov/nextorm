@@ -1323,6 +1323,14 @@ public class SqlGenerationTests
         string? Value { get; set; }
     }
 
+    public interface IOpenJsonTypedRow
+    {
+        [Column("name")]
+        string? Name { get; set; }
+        [Column("age")]
+        int Age { get; set; }
+    }
+
     private static class Tvf
     {
         [SqlTableFunction("all_rows")]
@@ -1333,6 +1341,9 @@ public class SqlGenerationTests
 
         [SqlTableFunction("rows_between", Schema = "app")]
         public static IQueryable<ITvfRow> Between(long lo, long hi) => throw new NotSupportedException();
+
+        [SqlTableFunction("openjson", WithClause = "name nvarchar(50) '$.name', age int '$.age'")]
+        public static IQueryable<IOpenJsonTypedRow> OpenJsonTyped(string json) => throw new NotSupportedException();
     }
 
     [Fact]
@@ -1426,6 +1437,22 @@ public class SqlGenerationTests
 
         Normalize(command.DbCommand.CommandText).Should()
             .Be("select [key] as [Key], value, type from openjson(@json) as [t1]");
+        command.DbCommandParams.Cast<DbParameter>().Select(p => p.ParameterName)
+            .Should().Equal("json");
+    }
+
+    [Fact]
+    public void OpenJsonWith_ShouldAppendWithClause()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var json = "{\"name\":\"a\",\"age\":1}";
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => Tvf.OpenJsonTyped(json))
+            .Select(r => new { r.Name, r.Age }));
+
+        Normalize(command.DbCommand.CommandText).Should()
+            .Contain("from openjson(@json) with (name nvarchar(50) '$.name', age int '$.age') as [t1]");
         command.DbCommandParams.Cast<DbParameter>().Select(p => p.ParameterName)
             .Should().Equal("json");
     }

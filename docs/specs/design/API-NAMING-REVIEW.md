@@ -1426,6 +1426,21 @@ sqlserver **185/185**, mysql **49/49**, mariadb **14/14**, sqlite **209/209**, c
 -g 'PublicAPI*.txt'` — пусто (QM8); unit (Release, `--no-build`, этот проход): core **166/166**,
 postgres **198/198**, sqlserver **191/191**, mariadb **16/16**, sqlite **211/211**, clickhouse **139/139**.
 
+### SQL Server `OPENJSON ... WITH` через `SqlTableFunctionAttribute.WithClause` (точечный аудит 20.09.2026)
+
+Область: `SqlTableFunctionAttribute.WithClause` (`src/nextorm.core/SqlTableFunctionAttribute.cs:34`), `TableFunctionExpression.WithClause` и перегрузка конструктора (`Expressions/TableFunctionExpression.cs:20-46`), `SqlSourceRenderer.MakeTableFunction` (`DataContext/SqlSourceRenderer.cs:320-330`), док `SqlServerFunctions.openjson` (`Query/SqlFunctions.SqlServer.cs:50-60`). Тесты: `SqlGenerationTests.OpenJsonWith_ShouldAppendWithClause`, `SqlServerSpecificTests.OpenJson_WithTypedSchema_ShouldReturnTypedColumns`. Build Release — **0/0**; sqlserver unit **194/194**; контейнерная интеграция (реальный SQL Server через Testcontainers) — **1/1**. XML-`<summary>` есть у `WithClause` (свойство атрибута и свойство выражения) и обоих конструкторов; новых публичных **типов** нет → Приложение A (45) без изменений; Шаг 5 открыт.
+
+| # | Ур. | Файл:строка | Проблема | Рекомендация |
+|---|-----|-------------|----------|--------------|
+| OJW1 | P2 | `SqlTableFunctionAttribute.cs:34`; `Expressions/TableFunctionExpression.cs:20,46` | Новые публичные члены (`SqlTableFunctionAttribute.WithClause`, `TableFunctionExpression.WithClause` + перегрузка ctor) не отслеживаются: `PublicAPI.*.txt` нет, `PublicApiAnalyzers` не подключён. Шаг 5 открыт | Внести их в `PublicAPI.Unshipped.txt` при заморозке (ср. TF1/Z1/CNT1) |
+
+ℹ️ **Наблюдения (фикс не требуется):**
+- **Именование — конвенции соблюдены, P0/P1 нет.** `WithClause` — PascalCase-существительное, зеркалит SQL `WITH (...)`; BCL-конфликтов нет.
+- **`WithClause` — декларация формы, не инъекция SQL.** Значение эмитится дословно, как provider-нативный `[SqlFunction]`; это то же DSL-исключение для SQL-зеркал, что уже принято в реестре.
+- **Обратная совместимость.** Старый публичный конструктор `TableFunctionExpression(string, string?, MethodCallExpression)` сохранён и делегирует новому; изменения существующей сигнатуры нет.
+
+**Проверка:** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**; `dotnet test tests/nextorm.sqlserver.tests -c Debug` — **194/194**; `DOCKER_HOST=… dotnet run --project tests/nextorm.integration.tests -c Debug -- -noColor -method nextorm.integration.tests.SqlServerSpecificTests.OpenJson_WithTypedSchema_ShouldReturnTypedColumns` — **1/1**; `rg --files -g 'PublicAPI*.txt'` — пусто (подтверждает OJW1); EN+RU `docs/guide/13-table-valued-functions.md`, `docs/providers/sqlserver.md` синхронны.
+
 ## 3. Находки
 
 ### Статус находок (актуализация 18.09.2026)

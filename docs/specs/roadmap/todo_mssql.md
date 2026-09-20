@@ -111,8 +111,13 @@
       `TextJsonSqlTranslator` (`SupportsTextJson`). `isjson` рендерит диалект — `ISqlDialect.MakeIsJson`
       (в предикате `(isjson(x)) = 1`, в проекции `cast(... as bit)` для SQL Server).
 - [x] **`OPENJSON`** — `SqlFunctions.SqlServer.openjson(json)` + `SqlFunctions.IOpenJsonRow` (`key`/`value`/`type`),
-      схема по умолчанию (без `WITH`), через `FromTableFunction`. Осталось: типизированная
-      схема `WITH (...)` (пользовательский `[SqlTableFunction]`-враппер уже покрывает этот случай).
+      схема по умолчанию (без `WITH`), через `FromTableFunction`. Типизированная схема `WITH (...)`
+      закрыта: у `[SqlTableFunction]` появилось свойство `WithClause`
+      (`SqlTableFunctionAttribute.WithClause`), которое эмитится как ` with (...)` после вызова
+      (`SqlSourceRenderer.MakeTableFunction`). Тесты:
+      `SqlGenerationTests.OpenJsonWith_ShouldAppendWithClause`,
+      `SqlServerSpecificTests.OpenJson_WithTypedSchema_ShouldReturnTypedColumns`; гайд —
+      `docs/guide/13-table-valued-functions.md`; разбор — `WIP_openjson_with.md`.
 - [x] **Полнотекстовый поиск**: предикаты `SqlFunctions.Sql.contains` / `SqlFunctions.Sql.freetext`
       (`SupportsFullText`, SQL Server) через `BuiltinFunctionTranslator` (`MakeBooleanPredicate`
       материализует проекцию в `bit`). SQL рендерит диалект — `ISqlDialect.MakeFullText` (ядро больше

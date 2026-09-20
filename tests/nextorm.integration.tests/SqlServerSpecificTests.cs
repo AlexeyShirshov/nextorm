@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations.Schema;
 using FluentAssertions;
 using NextORM.Core;
 
@@ -129,6 +130,34 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
             .ToArray();
 
         keys.Should().Equal("a", "b");
+    }
+
+    public interface IOpenJsonTypedRow
+    {
+        [Column("name")]
+        string? Name { get; set; }
+        [Column("age")]
+        int Age { get; set; }
+    }
+
+    private static class OpenJsonTvf
+    {
+        [SqlTableFunction("openjson", WithClause = "name nvarchar(50) '$.name', age int '$.age'")]
+        public static IQueryable<IOpenJsonTypedRow> Typed(string json) => throw new NotSupportedException();
+    }
+
+    [Fact]
+    public void OpenJson_WithTypedSchema_ShouldReturnTypedColumns()
+    {
+        var json = """{"name":"Ada","age":36}""";
+
+        var row = _sut.DataProvider
+            .FromTableFunction(() => OpenJsonTvf.Typed(json))
+            .Select(r => new { r.Name, r.Age })
+            .First();
+
+        row.Name.Should().Be("Ada");
+        row.Age.Should().Be(36);
     }
 
     [Fact]

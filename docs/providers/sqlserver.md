@@ -107,7 +107,8 @@ SQL Server 2017+ opts into `SqlFunctions.Sql.string_agg` →
 ([`SupportsArrayAgg`](xref:NextORM.Core.ISqlDialect.SupportsArrayAgg) is `false`). SQL Server 2016+ also opts into the JSON-as-text functions
 ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)): `SqlFunctions.SqlServer.json_value`, `SqlFunctions.SqlServer.json_query`, `SqlFunctions.SqlServer.json_modify` and
 `SqlFunctions.SqlServer.isjson` render their T-SQL names over a text column, using a JSONPath string (`'$.name'`);
-the PostgreSQL `json`/`jsonb` surface still throws. The full-text predicates `SqlFunctions.Sql.contains` and
+the PostgreSQL `json`/`jsonb` surface still throws. A typed `OPENJSON ... WITH (...)` rowset is declared with a
+`[SqlTableFunction("openjson", WithClause = "...")]` wrapper (see the table-valued-functions guide). The full-text predicates `SqlFunctions.Sql.contains` and
 `SqlFunctions.Sql.freetext` ([`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText)) render as T-SQL `contains(...)`/`freetext(...)` and require a
 full-text index on the column. `SqlFunctions.Sql.iif(condition, whenTrue, whenFalse)` renders `iif(...)`
 ([`SupportsIif`](xref:NextORM.Core.ISqlDialect.SupportsIif), spelled through [`MakeIif`](xref:NextORM.Core.ISqlDialect.MakeIif)) and
