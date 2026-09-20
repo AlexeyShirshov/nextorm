@@ -2419,6 +2419,22 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void ClickHouseSequenceAggregates_UnsupportedByProvider_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var funnel = () => SqlOf(ctx, e.Select(x => new { F = SqlFunctions.ClickHouse.window_funnel(10, x.Id, x.Id >= 1, x.Id >= 5) }));
+        funnel.Should().Throw<NotSupportedException>().WithMessage("*windowFunnel*");
+
+        var match = () => SqlOf(ctx, e.Select(x => new { M = SqlFunctions.ClickHouse.sequence_match("(?1)(?2)", x.Id, x.Id >= 1, x.Id >= 5) }));
+        match.Should().Throw<NotSupportedException>().WithMessage("*windowFunnel*");
+
+        var retention = () => SqlOf(ctx, e.Select(x => new { M = SqlFunctions.ClickHouse.retention(x.Id >= 1, x.Id >= 5) }));
+        retention.Should().Throw<NotSupportedException>().WithMessage("*windowFunnel*");
+    }
+
+    [Fact]
     public void ArrayJoinClause_UnsupportedByProvider_ShouldThrow()
     {
         using var ctx = PostgresTestContext.Create();

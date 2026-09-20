@@ -129,6 +129,16 @@ internal static class AdvancedAggregateTranslator
                 EmitSimple(visitor, node, "any_last", () => visitor.Dialect.SupportsAnyAggregates, "anyLast");
                 return true;
 
+            case nameof(ClickHouseFunctions.window_funnel) when node.Arguments.Count == 3:
+                EmitSequenceAggregate(visitor, "window_funnel", [node.Arguments[0]], node.Arguments[1], node.Arguments[2]);
+                return true;
+            case nameof(ClickHouseFunctions.sequence_match) when node.Arguments.Count == 3:
+                EmitSequenceAggregate(visitor, "sequence_match", [node.Arguments[0]], node.Arguments[1], node.Arguments[2]);
+                return true;
+            case nameof(ClickHouseFunctions.retention) when node.Arguments.Count == 1:
+                EmitSequenceAggregate(visitor, "retention", [], timestamp: null, node.Arguments[0]);
+                return true;
+
             case nameof(ClickHouseFunctions.quantile) when node.Arguments.Count == 2:
                 EmitQuantile(visitor, node, "quantile");
                 return true;
@@ -296,6 +306,62 @@ internal static class AdvancedAggregateTranslator
             builder.Length = aggregateStart;
             builder.Append(visitor.Dialect.WrapCount(rendered, big: false));
         }
+    }
+
+    /// <summary>
+    /// Renders a ClickHouse sequence/funnel aggregate
+    /// (<c>windowFunnel(window)(timestamp, conds...)</c>, <c>sequenceMatch(pattern)(timestamp, conds...)</c>,
+    /// <c>retention(conds...)</c>) through <see cref="ISqlDialect.MakeSequenceAggregate"/>, gated by
+    /// <see cref="ISqlDialect.SupportsSequenceAggregates"/>. The conditions are an inline
+    /// <c>new[]</c> of boolean expressions, so each element is rendered separately.
+    /// </summary>
+    private static void EmitSequenceAggregate(
+        BaseExpressionVisitor visitor,
+        string name,
+        IReadOnlyList<Expression> parameters,
+        Expression? timestamp,
+        Expression conditions)
+    {
+        if (!visitor.Dialect.SupportsSequenceAggregates)
+            throw new NotSupportedException("The windowFunnel/retention/sequenceMatch aggregates are not supported by this provider.");
+
+        if (conditions is not NewArrayExpression { NodeType: ExpressionType.NewArrayInit } conditionArray)
+            throw new NotSupportedException("The windowFunnel/retention/sequenceMatch conditions must be inline expressions, not a captured array.");
+
+        if (visitor.IsParamMode)
+        {
+            for (var (i, cnt) = (0, parameters.Count); i < cnt; i++)
+                visitor.Visit(parameters[i]);
+
+            if (timestamp is not null)
+                visitor.Visit(timestamp);
+
+            for (var (i, cnt) = (0, conditionArray.Expressions.Count); i < cnt; i++)
+                visitor.Visit(conditionArray.Expressions[i]);
+
+            return;
+        }
+
+        visitor.NeedAliasForColumn = true;
+
+        string? renderedParameters = null;
+        if (parameters.Count > 0)
+        {
+            var parts = new List<string>(parameters.Count);
+            for (var (i, cnt) = (0, parameters.Count); i < cnt; i++)
+                parts.Add(visitor.VisitToString(parameters[i]));
+
+            renderedParameters = string.Join(", ", parts);
+        }
+
+        var arguments = new List<string>(conditionArray.Expressions.Count + 1);
+        if (timestamp is not null)
+            arguments.Add(visitor.VisitToString(timestamp));
+
+        for (var (i, cnt) = (0, conditionArray.Expressions.Count); i < cnt; i++)
+            arguments.Add(visitor.VisitToString(conditionArray.Expressions[i]));
+
+        visitor.Builder!.Append(visitor.Dialect.MakeSequenceAggregate(name, renderedParameters, string.Join(", ", arguments)));
     }
 
     /// <summary>

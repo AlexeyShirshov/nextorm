@@ -114,6 +114,23 @@ internal sealed class ClickHouseTestProvider : ITestProvider
             (1, ['a', 'b', 'c'], [3, 1, 2]),
             (2, ['b'], [10, 20]),
             (3, [], [])
+        """,
+
+        "drop table if exists event_entity",
+        """
+        create table event_entity
+        (
+            id Int32,
+            ts DateTime,
+            event Int32
+        ) engine = Memory
+        """,
+        """
+        insert into event_entity (id, ts, event) values
+            (1, '2023-01-01 00:00:00', 1),
+            (2, '2023-01-01 00:01:00', 2),
+            (3, '2023-01-01 00:02:00', 3),
+            (4, '2023-01-01 00:03:00', 2)
         """
     ];
 }

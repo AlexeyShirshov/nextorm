@@ -105,6 +105,16 @@ public abstract class SqlDialectBase : ISqlDialect
 
     /// <summary>Defaults to <c>false</c>; MySQL/MariaDB and ClickHouse opt into the arbitrary-value aggregate.</summary>
     public virtual bool SupportsAnyValueAggregate => false;
+
+    /// <summary>Defaults to <c>false</c>; ClickHouse opts into the <c>windowFunnel</c>/<c>retention</c>/<c>sequenceMatch</c> aggregates.</summary>
+    public virtual bool SupportsSequenceAggregates => false;
+
+    /// <summary>
+    /// Defaults to a clear failure; only a dialect that opted into <see cref="SupportsSequenceAggregates"/>
+    /// overrides this because the native spelling and the result cast differ per provider.
+    /// </summary>
+    public virtual string MakeSequenceAggregate(string name, string? parameters, string arguments) =>
+        throw new NotSupportedException($"The {name} aggregate is not supported by this provider.");
     /// <summary>Defaults to <c>false</c>; ClickHouse opts into the string-JSON <c>JSONExtract*</c> family.</summary>
     public virtual bool SupportsJsonExtract => false;
 

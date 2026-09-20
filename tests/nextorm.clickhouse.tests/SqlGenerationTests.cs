@@ -520,6 +520,48 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void WindowFunnel_ShouldUseDoubleParenthesesAndCast()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            F = SqlFunctions.ClickHouse.window_funnel(3600, x.Datetime, x.Id <= 2, x.Id <= 5)
+        }));
+
+        sql.Should().Contain("toInt32(windowFunnel(3600)(dt, (id <= 2), (id <= 5)))");
+    }
+
+    [Fact]
+    public void SequenceMatch_ShouldUseDoubleParenthesesAndCast()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            M = SqlFunctions.ClickHouse.sequence_match("(?1)(?2)", x.Datetime, x.Id <= 1, x.Id <= 2)
+        }));
+
+        sql.Should().Contain("toInt32(sequenceMatch('(?1)(?2)')(dt, (id <= 1), (id <= 2)))");
+    }
+
+    [Fact]
+    public void Retention_ShouldRenderConditionMaskNestedInLength()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            N = SqlFunctions.ClickHouse.length(SqlFunctions.ClickHouse.retention(x.Id <= 2, x.Id <= 5))
+        }));
+
+        sql.Should().Contain("toInt64(length(retention((id <= 2), (id <= 5))))");
+    }
+
+    [Fact]
     public void AnyValueAggregate_ShouldUseClickHouseAny()
     {
         using var ctx = ClickHouseTestContext.Create();

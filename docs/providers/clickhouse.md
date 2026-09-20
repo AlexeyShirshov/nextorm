@@ -47,7 +47,10 @@ and returns [`Instance`](xref:NextORM.ClickHouse.ClickHouseDialect.Instance) fro
   parameterised quantile aggregates `quantile(level)(value)`/`quantileExact`/`quantileTiming` and
   `median` wrapped in `toFloat64(...)` (so every variant materialises as a CLR `double`); the
   arbitrary-value aggregate `any_agg` as `any` (cross-provider: `ANY_VALUE(x)` on MySQL) and the
-  last-row aggregate `any_last` as `anyLast`;
+  last-row aggregate `any_last` as `anyLast`; the sequence/funnel aggregates
+  `window_funnel`/`sequence_match`/`retention` as `windowFunnel`/`sequenceMatch`/`retention`
+  (`windowFunnel`/`sequenceMatch` are wrapped in `toInt32(...)`; `retention` returns `Array(UInt8)`, so
+  it is usable only nested inside another array function);
 - the string-JSON extractors `json_extract_string`/`json_extract_int`/`json_extract_float`/
   `json_extract_bool`/`json_extract_raw`/`json_has`/`json_type` as `JSONExtractString`/`JSONExtractInt`/
   `JSONExtractFloat`/`JSONExtractBool`/`JSONExtractRaw`/`JSONHas`/`JSONType`, `json_length` as

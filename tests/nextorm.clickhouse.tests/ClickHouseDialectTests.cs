@@ -106,6 +106,19 @@ public class ClickHouseDialectTests
     }
 
     [Fact]
+    public void MakeSequenceAggregate_ShouldMapProviderNames()
+    {
+        Dialect.SupportsSequenceAggregates.Should().BeTrue();
+
+        Dialect.MakeSequenceAggregate("window_funnel", "3600", "dt, id <= 2")
+            .Should().Be("toInt32(windowFunnel(3600)(dt, id <= 2))");
+        Dialect.MakeSequenceAggregate("sequence_match", "'(?1)(?2)'", "dt, id <= 1")
+            .Should().Be("toInt32(sequenceMatch('(?1)(?2)')(dt, id <= 1))");
+        Dialect.MakeSequenceAggregate("retention", null, "id <= 2, id <= 5")
+            .Should().Be("retention(id <= 2, id <= 5)");
+    }
+
+    [Fact]
     public void WrapCount_ShouldCastToClrInteger()
     {
         Dialect.WrapsCountResult.Should().BeTrue();

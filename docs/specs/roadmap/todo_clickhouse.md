@@ -175,8 +175,17 @@
 - [x] **`groupBitAnd` / `groupBitOr` / `groupBitXor`** — реализовано маппингом `bit_and`/`bit_or`/
       `bit_xor` → `groupBitAnd`/`groupBitOr`/`groupBitXor` в `ClickHouseDialect.MakeAggregate` под
       флагом `SupportsBitAggregates`; отдельные методы не нужны.
-- [ ] **`windowFunnel` / `retention` / `sequenceMatch`** — «продвинутые» агрегаты; рендерятся как
-      обычные функции с несколькими аргументами, но требуют аккуратной типизации (DateTime/условия).
+- [x] **`windowFunnel` / `retention` / `sequenceMatch`** — реализованы методы
+      `ClickHouseFunctions.window_funnel`/`sequence_match`/`retention` (условия — встроенные `bool`-
+      выражения), флаг `SupportsSequenceAggregates`, хук `ISqlDialect.MakeSequenceAggregate`;
+      `windowFunnel`/`sequenceMatch` рендерятся с двойными скобками и приводятся через `toInt32(...)`
+      (нативные `Integer`/`UInt8` не материализуются), `retention` возвращает `Array(UInt8)` и
+      применим только вложенно. Тесты: `SqlGenerationTests.WindowFunnel_*`/`SequenceMatch_*`/
+      `Retention_*`, `ClickHouseDialectTests.MakeSequenceAggregate_ShouldMapProviderNames`,
+      `Postgres…ClickHouseSequenceAggregates_UnsupportedByProvider_ShouldThrow`,
+      `ClickHouseIntegrationTests.WindowFunnel_ShouldCountConsecutiveConditions`/
+      `SequenceMatch_ShouldMatchPattern`/`Retention_ShouldReturnConditionMask` (реальный ClickHouse);
+      см. `WIP_clickhouse_sequence_aggregates.md`.
 - [ ] **`runningAccumulate`** — higher-order агрегат; сложнее (принимает состояние агрегата).
 - [ ] **`multiIf` (многоветвевный `if`)** — нет LINQ-поверхности; нужен метод (напр.
       `ClickHouseFunctions.multi_if`) и трансляция ветвления. Иначе demo-`session_depth` (бакеты

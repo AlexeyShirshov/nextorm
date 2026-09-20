@@ -1642,6 +1642,49 @@ P0/P1 по именам нет.
 `ArrayScalarFunctions_ShouldReturnValues`; `rg --files -g 'PublicAPI*.txt'` — пусто (подтверждает ASF1);
 Приложение A (45) без изменений.
 
+### ClickHouse агрегаты последовательностей `windowFunnel`/`retention`/`sequenceMatch` (точечный аудит 20.09.2026)
+
+Публичная поверхность аддитивна; переименований нет. Новые/изменённые члены:
+
+- `ISqlDialect.SupportsSequenceAggregates` (`DataContext/Dialect/ISqlDialect.cs:416`, abstract; default
+  `false` — `SqlDialectBase.cs:110`; override ClickHouse — `src/nextorm.clickhouse/ClickHouseDialect.cs:245`);
+- `ISqlDialect.MakeSequenceAggregate(string, string?, string) -> string` (`ISqlDialect.cs:425`, **default
+  interface method**, бросает `NotSupportedException`); `SqlDialectBase.cs:116` (`virtual`, бросает);
+  override ClickHouse — `ClickHouseDialect.cs:254` (`windowFunnel`/`sequenceMatch`/`retention`, `toInt32`);
+- `ClickHouseFunctions.window_funnel<TTime>(long, TTime?, params bool[]) -> int`
+  (`Query/SqlFunctions.ClickHouse.cs:102`), `sequence_match<TTime>(string?, TTime?, params bool[]) -> int`
+  (`:111`), `retention(params bool[]) -> int[]` (`:121`);
+- транслятор — `Visitors/AdvancedAggregateTranslator.cs` (internal, внешней поверхности не даёт).
+
+**CS1591/XML-doc.** XML-`<summary>` присутствует у трёх методов, флага и хука
+(интерфейс+база+ClickHouse); новых публичных **типов** нет → Приложение A (45) без изменений. Именование
+— snake_case DSL зеркалит SQL (`window_funnel`/`sequence_match`/`retention`), `Supports*`/`Make*` — как
+у соседних семейств; P0/P1 по именам нет.
+
+| # | Ур. | Место | Проблема | Рекомендация |
+|---|-----|-------|----------|--------------|
+| SQ1 | P2 | `ISqlDialect.cs:416,425`; `SqlDialectBase.cs:110,116`; `ClickHouseDialect.cs:245,254`; `Query/SqlFunctions.ClickHouse.cs:102,111,121`; `PublicAPI.*.txt` отсутствуют | Новые члены публичной поверхности не трекаются (`PublicApiAnalyzers` не подключён, Шаг 5 открыт). **Продолжение AR1/RD2, не новая находка.** `SupportsSequenceAggregates` — абстрактный член `ISqlDialect` ⇒ source-breaking для внешних реализаторов (в репозитории реализует только `SqlDialectBase`); `MakeSequenceAggregate` — DIM в интерфейсе и `virtual` в базе, разрыва не создаёт | При заморозке внести: `SupportsSequenceAggregates`, `MakeSequenceAggregate(string, string?, string)`, override'ы `SqlDialectBase`/`ClickHouseDialect` и три метода `ClickHouseFunctions` (ср. AR1/AJ1/ASF1) |
+
+ℹ️ **Наблюдения (фикс не требуется):**
+- **Двойные скобки — параметрическая форма, как `quantile`.** `windowFunnel(window)(timestamp, conds...)`
+  и `sequenceMatch(pattern)(timestamp, conds...)` рендерятся через `MakeSequenceAggregate` с
+  `parameters != null`; `retention` — одинарные скобки (`parameters == null`). Отдельный флаг под каждый
+  агрегат не нужен: три члена — одно семейство, невыразимое ни у одного другого провайдера.
+- **`params bool[]` и вложенность условий.** Условия передаются встроенными выражениями; захваченный
+  массив отвергается (`NotSupportedException`), т.к. его элементы невыразимы как SQL-предикаты.
+  `retention` возвращает `Array(UInt8)`, поэтому материализуется только вложенно
+  (`length`/`arrayStringConcat`), что согласовано с отсутствующим row reader массивов.
+- **`IEventEntity` — тестовая сущность интеграционных тестов** (`tests/nextorm.integration.tests/ClickHouseIntegrationTests.cs`),
+  публичной поверхности пакета не касается; Приложение A не затрагивает.
+
+**Проверка:** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors** (этот проход);
+`dotnet test tests/nextorm.clickhouse.tests -c Debug` — **163/163**;
+`dotnet test tests/nextorm.postgres.tests -c Debug` — **211/211**;
+`ClickHouseIntegrationTests` (Testcontainers) — **48/48**, включая
+`WindowFunnel_ShouldCountConsecutiveConditions`/`SequenceMatch_ShouldMatchPattern`/
+`Retention_ShouldReturnConditionMask`; `rg --files -g 'PublicAPI*.txt'` — пусто (подтверждает SQ1);
+Приложение A (45) без изменений.
+
 ## 3. Находки
 
 ### Статус находок (актуализация 18.09.2026)

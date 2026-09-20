@@ -149,6 +149,7 @@ select id from simple_entity where global in (@p0, @p1)
 * агрегаты числа уникальных `uniq`/`uniq_exact`/`uniq_combined`/`uniq_hll12` (`toInt64`);
 * параметрические `quantile(level)(value)`/`quantile_exact`/`quantile_timing` и `median` (`toFloat64`);
 * агрегат последнего произвольного значения `any_last` (`anyLast`);
+* агрегаты последовательностей/воронки `window_funnel`/`sequence_match`/`retention` (`windowFunnel`/`sequenceMatch` с `toInt32(...)`; `retention` возвращает массив, применим только вложенно);
 * комбинаторы `-If`: `count_if`/`sum_if`/`avg_if`/`min_if`/`max_if`;
 * `arg_min`/`arg_max`.
 

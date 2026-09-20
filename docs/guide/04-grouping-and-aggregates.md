@@ -400,7 +400,8 @@ Beyond `count`/`min`/`max`/`sum`/`avg`/`stdev`/`var`, [`Sql`](xref:NextORM.Core.
 with the provider-only ones on [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) (boolean, bitwise, regression and ordered-set) and
 [`ClickHouse`](xref:NextORM.Core.SqlFunctions.ClickHouse) (`arg_min`/`arg_max`, the distinct-count
 `uniq`/`uniq_exact`/`uniq_combined`/`uniq_hll12`, the parameterised quantile family
-`quantile`/`quantile_exact`/`quantile_timing`/`median` and the `-If` combinator). Each family is gated by
+`quantile`/`quantile_exact`/`quantile_timing`/`median`, the `-If` combinator and the sequence/funnel
+`window_funnel`/`sequence_match`/`retention`). Each family is gated by
 its own dialect capability; PostgreSQL and ClickHouse opt into different subsets.
 
 | Family | C# | SQL | Capability | Providers |
@@ -415,6 +416,7 @@ its own dialect capability; PostgreSQL and ClickHouse opt into different subsets
 | Arbitrary value | `SqlFunctions.Sql.any_agg(x)` | `ANY_VALUE(x)` / `any(x)` | [`SupportsAnyValueAggregate`](xref:NextORM.Core.ISqlDialect.SupportsAnyValueAggregate) | MySQL, ClickHouse |
 | Last row | `SqlFunctions.ClickHouse.any_last(x)` | `anyLast(x)` | [`SupportsAnyAggregates`](xref:NextORM.Core.ISqlDialect.SupportsAnyAggregates) | ClickHouse |
 | Filtered (`-If`) | `SqlFunctions.ClickHouse.count_if(() => p)`, `sum_if(x, () => p)`, `avg_if(x, () => p)`, `min_if(x, () => p)`, `max_if(x, () => p)` | `countIf(p)`, `sumIf(x, p)`, ... | [`SupportsIfAggregates`](xref:NextORM.Core.ISqlDialect.SupportsIfAggregates) | ClickHouse |
+| Sequence / funnel | `SqlFunctions.ClickHouse.window_funnel(window, ts, c1, c2)` , `sequence_match(pattern, ts, c1, c2)`, `retention(c1, c2)` | `toInt32(windowFunnel(window)(ts, c1, c2))`, `toInt32(sequenceMatch(pattern)(ts, c1, c2))`, `retention(c1, c2)` | [`SupportsSequenceAggregates`](xref:NextORM.Core.ISqlDialect.SupportsSequenceAggregates) | ClickHouse |
 | Ordered-set | `SqlFunctions.Postgres.percentile_cont(fraction, () => x)`, `percentile_disc(fraction, () => x)`, `mode(() => x)` | `percentile_cont(f) within group (order by x)`, ... | [`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates) | PostgreSQL |
 
 MariaDB does **not** support `any_agg`: it has no `ANY_VALUE` in 10.4–12.x (the SQL-2023 `T626` feature
@@ -462,6 +464,32 @@ select groupBitAnd(id), covarPop(id, nullableint), argMax(somestring, id), count
 The ordered-set aggregates take the ordering key as a quoted lambda that closes over the query
 parameter; the key becomes `order by <key>`. Calling one on a provider without the capability throws
 `NotSupportedException`.
+
+The ClickHouse sequence/funnel aggregates take the conditions as inline boolean expressions (the
+`timestamp` column first). `window_funnel` returns the longest consecutive chain in a sliding window,
+`sequence_match` returns `1`/`0` for the pattern; both materialise as a CLR `int` (the dialect casts
+the native unsigned result with `toInt32(...)`). `retention` returns a `UInt8` mask as an array, which
+the row reader cannot materialise yet, so it can only be used inside another array function:
+
+```csharp
+var funnel = dataContext.From<IEventEntity>()
+    .Select(e => new
+    {
+        Level = SqlFunctions.ClickHouse.window_funnel(600, e.Timestamp, e.Event == 1, e.Event == 2),
+        Matched = SqlFunctions.ClickHouse.sequence_match("(?1).*(?2)", e.Timestamp, e.Event == 1, e.Event == 2),
+        Mask = SqlFunctions.ClickHouse.array_string_concat(
+            SqlFunctions.ClickHouse.retention(e.Event == 1, e.Event == 2), ",")
+    })
+    .First();
+```
+
+```sql
+-- ClickHouse
+select toInt32(windowFunnel(600)(ts, (event = 1), (event = 2))) as `Level`,
+       toInt32(sequenceMatch('(?1).*(?2)')(ts, (event = 1), (event = 2))) as `Matched`,
+       arrayStringConcat(retention((event = 1), (event = 2)), ',') as `Mask`
+from event_entity
+```
 
 ## Filtered aggregates (FILTER)
 

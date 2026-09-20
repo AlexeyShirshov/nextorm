@@ -6,7 +6,8 @@ namespace NextORM.Core;
 /// ClickHouse-only SQL surface: the <c>argMin</c>/<c>argMax</c> aggregates, the distinct-count
 /// <c>uniq</c>/<c>uniqExact</c>/<c>uniqCombined</c>/<c>uniqHLL12</c> aggregates, the parameterised
 /// <c>quantile(level)(value)</c> family with <c>median</c>, the <c>anyLast</c> row-picking
-/// aggregate, the string-JSON <c>JSONExtract*</c>/<c>JSONHas</c> and <c>visitParamExtract*</c> families
+/// aggregate, the sequence/funnel aggregates <c>windowFunnel</c>/<c>retention</c>/<c>sequenceMatch</c>,
+/// the string-JSON <c>JSONExtract*</c>/<c>JSONHas</c> and <c>visitParamExtract*</c> families
 /// plus the JSONPath <c>json_value</c>/<c>json_query</c>/<c>json_exists</c> scalars,
 /// the dictionary functions, the <c>-If</c> aggregate combinator, the distributed <c>global_in</c>
 /// predicate, the <c>numbers</c>/<c>numbers_mt</c> and <c>zeros</c>/<c>zeros_mt</c> table functions
@@ -90,6 +91,34 @@ namespace NextORM.Core;
         /// <see cref="CommonFunctions.any_agg{T}"/>.
         /// </summary>
         public T? any_last<T>(T? value) => default!;
+
+        /// <summary>
+        /// <c>windowFunnel(window)(timestamp, cond1, cond2, ...)</c>: the maximum number of consecutive
+        /// conditions satisfied within the sliding <paramref name="window"/> (in units of
+        /// <paramref name="timestamp"/>). Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SupportsSequenceAggregates"/>; ClickHouse). The conditions must be
+        /// inline expressions; a captured condition array is rejected.
+        /// </summary>
+        public int window_funnel<TTime>(long window, TTime? timestamp, params bool[] conditions) => default!;
+
+        /// <summary>
+        /// <c>sequenceMatch(pattern)(timestamp, cond1, cond2, ...)</c>: <c>1</c> when the event chain
+        /// matches the <paramref name="pattern"/> (for example <c>"(?1).*(?2)"</c>), otherwise <c>0</c>.
+        /// Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SupportsSequenceAggregates"/>; ClickHouse). The conditions must be
+        /// inline expressions.
+        /// </summary>
+        public int sequence_match<TTime>(string? pattern, TTime? timestamp, params bool[] conditions) => default!;
+
+        /// <summary>
+        /// <c>retention(cond1, cond2, ...)</c>: the 1/0 condition mask (the first condition, then the
+        /// first-and-second, and so on). Returns an array, so it can only be used as the operand of
+        /// another array function (for example <see cref="length{T}(T[])"/> or
+        /// <see cref="array_string_concat{T}(T[], string?)"/>). Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SupportsSequenceAggregates"/>; ClickHouse). The conditions must be
+        /// inline expressions.
+        /// </summary>
+        public int[] retention(params bool[] conditions) => default!;
 
         /// <summary>
         /// <c>JSONExtractString(json, path)</c>: the string at <paramref name="path"/>. JSON is stored in

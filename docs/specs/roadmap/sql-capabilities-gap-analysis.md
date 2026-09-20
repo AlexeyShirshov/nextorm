@@ -165,7 +165,8 @@ These are fully implemented and covered by SQL-generation or integration tests:
   `groupBitAnd`/`groupBitOr`/`groupBitXor`, `corr`/`covarPop`/`covarSamp`, `argMin`/`argMax`, the
   `uniq`/`uniqExact` distinct counts (the exact `uniqExact` overlaps the portable
   `count_distinct`/`count_big_distinct`, and SQL Server 2019+ `APPROX_COUNT_DISTINCT` is the
-  approximate-distinct analog), the parameterised `quantile(level)(value)`/`median` family and the
+  approximate-distinct analog), the parameterised `quantile(level)(value)`/`median` family, the
+  sequence/funnel `windowFunnel`/`sequenceMatch`/`retention` and the
   last-row `anyLast`, plus the cross-provider arbitrary-value `any_agg` (`ANY_VALUE` on MySQL, `any` on
   ClickHouse; MariaDB and SQL Server gated off) and the window percentiles
   `percentile_cont`/`percentile_disc` on SQL Server/MariaDB.
