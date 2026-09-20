@@ -88,6 +88,13 @@ public sealed class ClickHouseDialect : SqlDialectBase
     public override bool SupportsDateTrunc => true;
     public override bool SupportsDateArithmetic => true;
 
+    /// <summary>
+    /// ClickHouse exposes the native date conversion/truncation surface (<c>toDate</c>/<c>toDateTime</c>/
+    /// <c>toDate32</c>, the <c>toYear</c>/... part accessors, <c>toStartOf*</c>, <c>toMonday</c>,
+    /// <c>toYYYYMM</c>/<c>toYYYYMMDD</c>, <c>toUnixTimestamp</c>).
+    /// </summary>
+    public override bool SupportsDateConversionFunctions => true;
+
     public override bool SupportsDateTruncField(string field) =>
         field is not ("decade" or "century" or "millennium") && base.SupportsDateTruncField(field);
 
@@ -331,9 +338,22 @@ public sealed class ClickHouseDialect : SqlDialectBase
     // now() uses the server time zone; the optional argument selects a zone.
     public override string MakeNow(bool utc) => utc ? "now('UTC')" : "now()";
 
-    // ClickHouse spells the day-of-year part as toDayOfYear().
+    // ClickHouse spells the day-of-year part as toDayOfYear(). The to* accessors return UInt8/UInt16,
+    // which the row reader cannot read through GetInt32, so they are cast to Int32.
     public override string MakeDatePart(string part, string value) =>
-        part == "doy" ? $"toDayOfYear({value})" : base.MakeDatePart(part, value);
+        part switch
+        {
+            "year" => $"toInt32(toYear({value}))",
+            "quarter" => $"toInt32(toQuarter({value}))",
+            "month" => $"toInt32(toMonth({value}))",
+            "day" => $"toInt32(toDayOfMonth({value}))",
+            "dow" => $"toInt32(toDayOfWeek({value}))",
+            "doy" => $"toInt32(toDayOfYear({value}))",
+            "hour" => $"toInt32(toHour({value}))",
+            "minute" => $"toInt32(toMinute({value}))",
+            "second" => $"toInt32(toSecond({value}))",
+            _ => base.MakeDatePart(part, value)
+        };
 
     public override string MakeAggregate(string name) => name switch
     {
@@ -424,6 +444,43 @@ public sealed class ClickHouseDialect : SqlDialectBase
     }
 
     public override string MakeEndOfMonth(string value) => $"toLastDayOfMonth({value})";
+
+    /// <summary>
+    /// ClickHouse spells the conversion/truncation surface in camel case; <c>toYYYYMM</c>/<c>toYYYYMMDD</c>
+    /// return <c>UInt32</c> and <c>toUnixTimestamp</c> <c>UInt32</c>/<c>Int64</c>, so they are cast to the
+    /// CLR integer the methods declare.
+    /// </summary>
+    public override string MakeDateConversion(string name, IReadOnlyList<string> args)
+    {
+        var function = name switch
+        {
+            "to_date" => "toDate",
+            "to_date_time" => "toDateTime",
+            "to_date32" => "toDate32",
+            "to_start_of_year" => "toStartOfYear",
+            "to_start_of_quarter" => "toStartOfQuarter",
+            "to_start_of_month" => "toStartOfMonth",
+            "to_start_of_week" => "toStartOfWeek",
+            "to_start_of_day" => "toStartOfDay",
+            "to_start_of_hour" => "toStartOfHour",
+            "to_start_of_minute" => "toStartOfMinute",
+            "to_start_of_second" => "toStartOfSecond",
+            "to_monday" => "toMonday",
+            "to_yyyymm" => "toYYYYMM",
+            "to_yyyymmdd" => "toYYYYMMDD",
+            "to_unix_timestamp" => "toUnixTimestamp",
+            _ => name
+        };
+
+        var call = $"{function}({string.Join(", ", args)})";
+
+        return name switch
+        {
+            "to_yyyymm" or "to_yyyymmdd" => $"toInt32({call})",
+            "to_unix_timestamp" => $"toInt64({call})",
+            _ => call
+        };
+    }
 
     public override string MakeDateFromParts(string year, string month, string day) =>
         $"makeDate({year}, {month}, {day})";

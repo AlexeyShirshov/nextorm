@@ -112,7 +112,87 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { DOY = x.Datetime!.Value.DayOfYear }))
-            .Should().Contain("toDayOfYear(dt)");
+            .Should().Contain("toInt32(toDayOfYear(dt))");
+    }
+
+    [Fact]
+    public void DateTimeParts_ShouldUseToAccessors()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Y = x.Datetime!.Value.Year,
+            M = x.Datetime!.Value.Month,
+            D = x.Datetime!.Value.Day,
+            H = x.Datetime!.Value.Hour
+        }));
+
+        sql.Should().Contain("toInt32(toYear(dt))");
+        sql.Should().Contain("toInt32(toMonth(dt))");
+        sql.Should().Contain("toInt32(toDayOfMonth(dt))");
+        sql.Should().Contain("toInt32(toHour(dt))");
+    }
+
+    [Fact]
+    public void DateConversionFunctions_ShouldUseClickHouseNames()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            D = SqlFunctions.ClickHouse.to_date(x.Datetime),
+            DT = SqlFunctions.ClickHouse.to_date_time(x.String),
+            D32 = SqlFunctions.ClickHouse.to_date32(x.String),
+            Y = SqlFunctions.ClickHouse.to_year(x.Datetime),
+            Q = SqlFunctions.ClickHouse.to_quarter(x.Datetime),
+            M = SqlFunctions.ClickHouse.to_month(x.Datetime),
+            DOM = SqlFunctions.ClickHouse.to_day_of_month(x.Datetime),
+            DOW = SqlFunctions.ClickHouse.to_day_of_week(x.Datetime),
+            DOY = SqlFunctions.ClickHouse.to_day_of_year(x.Datetime),
+            H = SqlFunctions.ClickHouse.to_hour(x.Datetime),
+            Mi = SqlFunctions.ClickHouse.to_minute(x.Datetime),
+            S = SqlFunctions.ClickHouse.to_second(x.Datetime),
+            SY = SqlFunctions.ClickHouse.to_start_of_year(x.Datetime),
+            SQ = SqlFunctions.ClickHouse.to_start_of_quarter(x.Datetime),
+            SM = SqlFunctions.ClickHouse.to_start_of_month(x.Datetime),
+            SW = SqlFunctions.ClickHouse.to_start_of_week(x.Datetime),
+            SD = SqlFunctions.ClickHouse.to_start_of_day(x.Datetime),
+            SH = SqlFunctions.ClickHouse.to_start_of_hour(x.Datetime),
+            SMin = SqlFunctions.ClickHouse.to_start_of_minute(x.Datetime),
+            SSec = SqlFunctions.ClickHouse.to_start_of_second(x.Datetime),
+            Mon = SqlFunctions.ClickHouse.to_monday(x.Datetime),
+            YM = SqlFunctions.ClickHouse.to_yyyymm(x.Datetime),
+            YMD = SqlFunctions.ClickHouse.to_yyyymmdd(x.Datetime),
+            U = SqlFunctions.ClickHouse.to_unix_timestamp(x.Datetime)
+        }));
+
+        sql.Should().Contain("toDate(dt)");
+        sql.Should().Contain("toDateTime(somestring)");
+        sql.Should().Contain("toDate32(somestring)");
+        sql.Should().Contain("toYear(dt)");
+        sql.Should().Contain("toQuarter(dt)");
+        sql.Should().Contain("toMonth(dt)");
+        sql.Should().Contain("toDayOfMonth(dt)");
+        sql.Should().Contain("toDayOfWeek(dt)");
+        sql.Should().Contain("toDayOfYear(dt)");
+        sql.Should().Contain("toHour(dt)");
+        sql.Should().Contain("toMinute(dt)");
+        sql.Should().Contain("toSecond(dt)");
+        sql.Should().Contain("toStartOfYear(dt)");
+        sql.Should().Contain("toStartOfQuarter(dt)");
+        sql.Should().Contain("toStartOfMonth(dt)");
+        sql.Should().Contain("toStartOfWeek(dt)");
+        sql.Should().Contain("toStartOfDay(dt)");
+        sql.Should().Contain("toStartOfHour(dt)");
+        sql.Should().Contain("toStartOfMinute(dt)");
+        sql.Should().Contain("toStartOfSecond(dt)");
+        sql.Should().Contain("toMonday(dt)");
+        sql.Should().Contain("toInt32(toYYYYMM(dt))");
+        sql.Should().Contain("toInt32(toYYYYMMDD(dt))");
+        sql.Should().Contain("toInt64(toUnixTimestamp(dt))");
     }
 
     [Fact]

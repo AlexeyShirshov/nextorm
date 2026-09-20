@@ -37,6 +37,7 @@ public sealed class DialectCapabilityContractTests
         { nameof(ISqlDialect.SupportsSessionInfoFunctions), nameof(ISqlDialect.MakeSessionInfoFunction) },
         { nameof(ISqlDialect.SupportsUuidGenerators), nameof(ISqlDialect.MakeUuidGenerator) },
         { nameof(ISqlDialect.SupportsLimitBy), nameof(ISqlDialect.MakeLimitBy) },
+        { nameof(ISqlDialect.SupportsDateConversionFunctions), nameof(ISqlDialect.MakeDateConversion) },
     };
 
     [Theory]

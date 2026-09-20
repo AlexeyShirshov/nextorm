@@ -721,6 +721,35 @@ select datetime(dt, (1) || ' days') as 'NextDay', date(dt, 'start of month', '+1
 | `x.AddDays(7)` | `dateadd(day, 7, x)` | `x + (7 * interval '1 day')` | `addDays(x, 7)` | `date_add(x, interval 7 day)` | `datetime(x, (7) \|\| ' days')` |
 | `x.AddMonths(2)` | `dateadd(month, 2, x)` | `x + (2 * interval '1 month')` | `addMonths(x, 2)` | `date_add(x, interval 2 month)` | `datetime(x, (2) \|\| ' months')` |
 
+## Приведение и части даты (ClickHouse)
+
+ClickHouse предоставляет свои `to*`-функции даты/времени через `SqlFunctions.ClickHouse`
+([`SupportsDateConversionFunctions`](xref:NextORM.Core.ISqlDialect.SupportsDateConversionFunctions); только ClickHouse).
+`to_date`/`to_date_time`/`to_date32` приводят к `Date`/`DateTime`/`Date32`;
+`to_year`/`to_quarter`/`to_month`/`to_day_of_month`/`to_day_of_week`/`to_day_of_year`/`to_hour`/
+`to_minute`/`to_second` возвращают части даты (`toDayOfWeek` — понедельник 1 … воскресенье 7);
+`to_start_of_year`/`_quarter`/`_month`/`_week`/`_day`/`_hour`/`_minute`/`_second` усекают до начала
+периода, а `to_monday` возвращает ISO-понедельник недели (`toStartOfWeek` начинает неделю с
+воскресенья); `to_yyyymm`/`to_yyyymmdd` упаковывают дату в целое, `to_unix_timestamp` возвращает
+секунды Unix. Проекции `DateTime.Year`/`Month`/`Day`/`Hour`/… в ClickHouse используют те же
+`to`-аксессоры. Аксессоры, возвращающие целое, а также `toYYYYMM`/`toYYYYMMDD`/`toUnixTimestamp`
+оборачиваются в `toInt32`/`toInt64`, чтобы построитель строк мог их прочитать. На любом другом
+провайдере вся поверхность бросает `NotSupportedException`.
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        Year = SqlFunctions.ClickHouse.to_year(e.Datetime),
+        MonthStart = SqlFunctions.ClickHouse.to_start_of_month(e.Datetime)
+    })
+    .ToList();
+```
+
+```sql
+select toInt32(toYear(dt)) as `Year`, toStartOfMonth(dt) as `MonthStart` from complex_entity
+```
+
 ## Строковые и массивные агрегаты
 
 `SqlFunctions.Sql.string_agg` доступен в PostgreSQL, SQL Server 2017+, ClickHouse, MySQL/MariaDB и SQLite

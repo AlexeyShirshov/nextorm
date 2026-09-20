@@ -69,13 +69,21 @@
       `MakeDateAdd` рендерит выделенные `addYears`/`addQuarters`/…/`addSeconds` (три крупные части
       сворачиваются в масштабированный `addYears`), `MakeEndOfMonth` → `toLastDayOfMonth(value)`.
       Тесты: `SqlGenerationTests.DateAdd_*`, `DateTimeAddMethods_*`, `EndOfMonth_*`.
-- [ ] **Функции приведения и частей даты** — `toDate`/`toDateTime`/`toDate32`, `toYear`/`toQuarter`/
+- [x] **Функции приведения и частей даты** — `toDate`/`toDateTime`/`toDate32`, `toYear`/`toQuarter`/
       `toMonth`/`toDayOfMonth`/`toDayOfWeek`/`toHour`/…, `toStartOf{Year,Quarter,Month,Week,Day,Hour,…}`,
-      `toMonday`, `toYYYYMM`/`toYYYYMMDD`, `toUnixTimestamp`. Портируемого маппинга сейчас нет: в
-      demo-запросе `clickhouse_retention.sql` `toMonday(...)` приходится писать через `WithSql`, а
-      `toYYYYMM` фигурирует в DDL `PARTITION BY`. Малые правки (методы `ClickHouseFunctions` + флаг +
-      ветки `MakeDate*`, модель запроса не меняется) — уровень 1. `toLastDayOfMonth` уже закрыт
-      через `end_of_month` (см. выше).
+      `toMonday`, `toYYYYMM`/`toYYYYMMDD`, `toUnixTimestamp`. Методы `ClickHouseFunctions.to_date`/
+      `to_date_time`/`to_date32`, `to_year`/`to_quarter`/`to_month`/`to_day_of_month`/`to_day_of_week`/
+      `to_day_of_year`/`to_hour`/`to_minute`/`to_second`, `to_start_of_*`, `to_monday`, `to_yyyymm`/
+      `to_yyyymmdd`, `to_unix_timestamp`; флаг `SupportsDateConversionFunctions`; хук
+      `ISqlDialect.MakeDateConversion` для конверсий/начал периодов, а части переиспользуют
+      существующий `MakeDatePart` (расширен до `to*`-аксессоров). Целочисленные результаты
+      оборачиваются в `toInt32`/`toInt64` (нативные `UInt8`/`UInt16`/`UInt32` не читаются построителем
+      строк). `toLastDayOfMonth`/`dateTrunc` остаются на `end_of_month`/`date_trunc`.
+      Тесты: `SqlGenerationTests.DateConversionFunctions_ShouldUseClickHouseNames`/`DateTimeParts_ShouldUseToAccessors`,
+      `ClickHouseDialectTests.MakeDateConversion_ShouldMapToClickHouseNames`/`DateAndStringHooks_*`,
+      `Postgres…DateConversionFunctions_ShouldThrowBecausePostgresHasNoClickHouseDateSurface`,
+      `ClickHouseIntegrationTests.DateConversionFunctions_ShouldReturnDateParts` (реальный ClickHouse);
+      `WIP_clickhouse_date_functions.md`.
 - [x] **`string_agg`** — `SupportsStringAgg => true` + `MakeStringAgg` →
       `arrayStringConcat(groupArray(x), delim)`. Отличие семантики (порядок/`NULL`) задокументировано.
 - [x] **`bit_and` / `bit_or` / `bit_xor`** → `groupBitAnd`/`groupBitOr`/`groupBitXor` через

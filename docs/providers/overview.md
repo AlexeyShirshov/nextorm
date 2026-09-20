@@ -55,6 +55,7 @@ change.
 | `var` / `varp` | `var` / `varp` (custom) | `var` / `varp` (native) | `variance` / `var_pop` | `var_samp` / `var_pop` | `var_samp` / `var_pop` | `varSamp` / `varPop` | not applicable |
 | `date_trunc` | throws | `datetrunc(...)` (2022+) | supported | throws | throws | `dateTrunc(...)` | throws |
 | Date arithmetic (`date_add`, `date_diff`, `end_of_month`, `date_from_parts`, `DateTime.Add*`) | `datetime(x, n \|\| ' days')` / `date(...)` / `strftime` difference | supported | supported | supported | supported | `addDays(...)` … / `toLastDayOfMonth(...)` | throws |
+| Date conversion / parts (`SqlFunctions.ClickHouse.to_*`) | throws | throws | throws | throws | throws | `toDate`/`toDateTime`/`toDate32`, `toYear`/…, `toStartOf*`, `toMonday`, `toYYYYMM`/`toYYYYMMDD`, `toUnixTimestamp` | throws |
 | `string_agg` | `group_concat(x, delimiter)` | supported (2017+) | supported | `group_concat(x separator delimiter)` | `group_concat(x separator delimiter)` | `arrayStringConcat(groupArray(...), ...)` | throws |
 | Full-text `contains` / `freetext` | throws | `contains` / `freetext` | `to_tsvector(...) @@ ...tsquery(...)` | `match(...) against(...)` | `match(...) against(...)` | throws | throws |
 | Bit / statistical / `-If` aggregates | throws | throws | supported | throws | throws | `groupBit*`, `corr`/`covarPop`, `countIf`/… | throws |

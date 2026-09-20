@@ -212,6 +212,14 @@ public interface ISqlDialect
     /// </summary>
     bool SupportsDateArithmetic { get; }
     /// <summary>
+    /// True when the provider can render the ClickHouse-style date conversion surface of
+    /// <see cref="ClickHouseFunctions"/> (<c>toDate</c>/<c>toDateTime</c>/<c>toDate32</c>, the
+    /// <c>toYear</c>/... part accessors, <c>toStartOf*</c>, <c>toMonday</c>, <c>toYYYYMM</c>/
+    /// <c>toYYYYMMDD</c> and <c>toUnixTimestamp</c>). The safe default is <c>false</c>; only
+    /// ClickHouse opts in today. The part accessors render through <see cref="MakeDatePart"/>.
+    /// </summary>
+    bool SupportsDateConversionFunctions { get; }
+    /// <summary>
     /// True when the provider can render the <c>string_agg</c>/<c>array_agg</c> aggregate surface.
     /// The safe default is <c>false</c>; only PostgreSQL opts in today.
     /// <para>
@@ -678,6 +686,15 @@ public interface ISqlDialect
     /// <paramref name="day"/> parts.
     /// </summary>
     string MakeDateFromParts(string year, string month, string day);
+    /// <summary>
+    /// Renders a ClickHouse-style date conversion/truncation function over the already-rendered
+    /// arguments (<see cref="ClickHouseFunctions"/>). <paramref name="name"/> is the snake-case method
+    /// name (<c>to_date</c>, <c>to_start_of_month</c>, <c>to_monday</c>, <c>to_yyyymm</c>,
+    /// <c>to_unix_timestamp</c>, ...); only called when <see cref="SupportsDateConversionFunctions"/>
+    /// is <c>true</c>. The part accessors (<c>toYear</c>/...) use <see cref="MakeDatePart"/> instead.
+    /// </summary>
+    string MakeDateConversion(string name, IReadOnlyList<string> args) =>
+        throw new NotSupportedException("The date conversion functions (toDate/toDateTime/toStartOf*/toYYYYMM/toUnixTimestamp) are not supported by this provider.");
     /// <summary>True when the provider accepts <paramref name="field"/> as a <c>date_trunc</c> part.</summary>
     bool SupportsDateTruncField(string field);
     /// <summary>True when the provider accepts <paramref name="field"/> as a <c>date_add</c> part.</summary>

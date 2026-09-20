@@ -33,7 +33,7 @@
 
 | Пункт | Объём | Что нужно | Источник |
 | --- | --- | --- | --- |
-| Функции приведения и частей даты: `toDate`/`toDateTime`/`toDate32`, `toYear`/`toQuarter`/`toMonth`/`toDayOfMonth`/`toDayOfWeek`/`toHour`/…, `toStartOf*`, `toMonday`, `toYYYYMM`/`toYYYYMMDD`, `toUnixTimestamp` | простое/среднее | методы `ClickHouseFunctions` + флаг + ветки `MakeDate*`; модель запроса не меняется | `todo_clickhouse.md:70` |
+| Функции приведения и частей даты: `toDate`/`toDateTime`/`toDate32`, `toYear`/`toQuarter`/`toMonth`/`toDayOfMonth`/`toDayOfWeek`/`toHour`/…, `toStartOf*`, `toMonday`, `toYYYYMM`/`toYYYYMMDD`, `toUnixTimestamp` | готово | методы `ClickHouseFunctions` + `SupportsDateConversionFunctions` + `MakeDateConversion`/`MakeDatePart`; модель запроса не меняется (см. `todo_clickhouse.md:72`) | `todo_clickhouse.md:70` |
 | `string.Split` → `splitByChar` | простое | ветка в строковом маппинге | `todo_clickhouse.md:230` |
 | Скалярные array-функции: `range`, `arrayEnumerate`, `arrayCumSum`, `arraySlice`, `arrayPushBack` | среднее | скалярные формы; проекция самого массива упирается в row reader | `todo_clickhouse.md:230` |
 | Продвинутые агрегаты: `windowFunnel`, `retention`, `sequenceMatch` | среднее/сложное | аккуратная типизация (DateTime/условия) | `todo_clickhouse.md:161` |

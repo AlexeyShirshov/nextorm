@@ -43,6 +43,7 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual bool SupportsPercentileWindow => false;
     public virtual bool SupportsDateTrunc => false;
     public virtual bool SupportsDateArithmetic => false;
+    public virtual bool SupportsDateConversionFunctions => false;
     public virtual bool SupportsStringArrayAggregates => false;
     // The umbrella flag seeds the individual capabilities; a dialect opts out of one of them by
     // overriding it (SQL Server has string_agg but no array_agg).
@@ -461,6 +462,12 @@ public abstract class SqlDialectBase : ISqlDialect
         $"(date_trunc('month', {value}) + interval '1 month - 1 day')";
     public virtual string MakeDateFromParts(string year, string month, string day) =>
         $"make_date({year}, {month}, {day})";
+    /// <summary>
+    /// Renders the ClickHouse-style date conversion surface; the base dialect cannot express it, so an
+    /// opting-in provider must override this (see <see cref="SupportsDateConversionFunctions"/>).
+    /// </summary>
+    public virtual string MakeDateConversion(string name, IReadOnlyList<string> args) =>
+        throw new NotSupportedException("The date conversion functions (toDate/toDateTime/toStartOf*/toYYYYMM/toUnixTimestamp) are not supported by this provider.");
 
     // Known date-part names. A dialect whose function rejects some of them (SQL Server/ClickHouse
     // datetrunc have no decade/century/millennium) overrides the matching predicate.

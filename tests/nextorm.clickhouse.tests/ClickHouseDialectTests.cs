@@ -203,9 +203,28 @@ public class ClickHouseDialectTests
         Dialect.MakeDateAdd("day", "2", "dt").Should().Be("addDays(dt, 2)");
         Dialect.MakeDateAdd("decade", "2", "dt").Should().Be("addYears(dt, (2) * 10)");
         Dialect.MakeEndOfMonth("dt").Should().Be("toLastDayOfMonth(dt)");
-        Dialect.MakeDatePart("year", "dt").Should().Be("extract(year from dt)");
-        Dialect.MakeDatePart("doy", "dt").Should().Be("toDayOfYear(dt)");
+        Dialect.MakeDatePart("year", "dt").Should().Be("toInt32(toYear(dt))");
+        Dialect.MakeDatePart("month", "dt").Should().Be("toInt32(toMonth(dt))");
+        Dialect.MakeDatePart("dow", "dt").Should().Be("toInt32(toDayOfWeek(dt))");
+        Dialect.MakeDatePart("doy", "dt").Should().Be("toInt32(toDayOfYear(dt))");
         Dialect.MakeStringAgg("somestring", "','").Should().Be("arrayStringConcat(groupArray(somestring), ',')");
+    }
+
+    [Fact]
+    public void MakeDateConversion_ShouldMapToClickHouseNames()
+    {
+        Dialect.SupportsDateConversionFunctions.Should().BeTrue();
+
+        Dialect.MakeDateConversion("to_date", ["s"]).Should().Be("toDate(s)");
+        Dialect.MakeDateConversion("to_date_time", ["s"]).Should().Be("toDateTime(s)");
+        Dialect.MakeDateConversion("to_date32", ["s"]).Should().Be("toDate32(s)");
+        Dialect.MakeDateConversion("to_start_of_year", ["dt"]).Should().Be("toStartOfYear(dt)");
+        Dialect.MakeDateConversion("to_start_of_month", ["dt"]).Should().Be("toStartOfMonth(dt)");
+        Dialect.MakeDateConversion("to_start_of_week", ["dt"]).Should().Be("toStartOfWeek(dt)");
+        Dialect.MakeDateConversion("to_monday", ["dt"]).Should().Be("toMonday(dt)");
+        Dialect.MakeDateConversion("to_yyyymm", ["dt"]).Should().Be("toInt32(toYYYYMM(dt))");
+        Dialect.MakeDateConversion("to_yyyymmdd", ["dt"]).Should().Be("toInt32(toYYYYMMDD(dt))");
+        Dialect.MakeDateConversion("to_unix_timestamp", ["dt"]).Should().Be("toInt64(toUnixTimestamp(dt))");
     }
 
     [Theory]
@@ -257,6 +276,7 @@ public class ClickHouseDialectTests
         Dialect.SupportsQueryHints.Should().BeFalse();
         Dialect.SupportsDateTrunc.Should().BeTrue();
         Dialect.SupportsDateArithmetic.Should().BeTrue();
+        Dialect.SupportsDateConversionFunctions.Should().BeTrue();
         Dialect.SupportsStringAgg.Should().BeTrue();
         Dialect.SupportsArrayAgg.Should().BeFalse();
         Dialect.SupportsBitAggregates.Should().BeTrue();
