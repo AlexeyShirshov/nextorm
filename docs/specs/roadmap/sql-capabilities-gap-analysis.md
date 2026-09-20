@@ -128,7 +128,7 @@ functions), `SqlFunctions.SqlServer` (JSON-as-text on SQL Server and MySQL/Maria
 | JSON scalar functions (`json_value`/`json_query`/`json_modify`, `isjson`) | yes | yes | **yes on SQL Server and MySQL/MariaDB** | `SupportsTextJson`, `MakeTextJsonFunction`, `MakeIsJson` |
 | String JSON (`JSONExtract*`, `JSONHas`, `JSONLength`, `JSONType`, `visitParamExtract*`, JSONPath `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS`) | no | no | **yes on ClickHouse** — `json_extract_string` is the same scalar-string extractor as the portable `json_value` (no separate surface needed), the typed `JSONExtractInt`/`Float`/`Bool`/`Raw` are ClickHouse-only, and the JSONPath scalars share the same gate | `SupportsJsonExtract`, `MakeJsonExtract`, `JsonExtractSqlTranslator` |
 | Dictionary functions (`dictGet`, `dictGetOrDefault`, `dictHas`) | no | no | **yes on ClickHouse** | `SupportsDictionaries`, `MakeDictionaryFunction`, `DictionarySqlTranslator` |
-| Array functions (`cardinality`/`array_*`/`@>`/`&&`; ClickHouse `length`, `has`, `indexOf`, `hasAny`/`hasAll`, `arrayStringConcat`, `splitByChar`, `arraySort`/`arrayReverse`/`arrayDistinct`, `arrayJoin`) | yes (`PostgresFunctions`, parameter arrays) | no | **yes on PostgreSQL and ClickHouse** — ClickHouse operates on `Array(T)` columns, `arrayJoin` expands one row per element and the `[LEFT] ARRAY JOIN` clause (+ element binding via `ArrayJoinElement`/`ArrayJoinProjection<TEntity, TElement>.Element`) is supported; higher-order functions and the array row reader are not implemented | `SupportsArrayFunctions`/`SupportsArrayJoin`/`SupportsArrayJoinClause`, `MakeArrayFunction`/`MakeArrayJoin`, `ArraySqlTranslator`, `ArrayJoinKind`, `ClickHouseFunctions` |
+| Array functions (`cardinality`/`array_*`/`@>`/`&&`/`array_shuffle`/`array_sample` (PG16+); ClickHouse `length`, `has`, `indexOf`, `hasAny`/`hasAll`, `arrayStringConcat`, `splitByChar`, `arraySort`/`arrayReverse`/`arrayDistinct`, `arrayJoin`) | yes (`PostgresFunctions`, parameter arrays) | no | **yes on PostgreSQL and ClickHouse** — ClickHouse operates on `Array(T)` columns, `arrayJoin` expands one row per element and the `[LEFT] ARRAY JOIN` clause (+ element binding via `ArrayJoinElement`/`ArrayJoinProjection<TEntity, TElement>.Element`) is supported; higher-order functions and the array row reader are not implemented | `SupportsArrayFunctions`/`SupportsArrayJoin`/`SupportsArrayJoinClause`, `MakeArrayFunction`/`MakeArrayJoin`, `ArraySqlTranslator`, `ArrayJoinKind`, `ClickHouseFunctions` |
 | Conditional functions (`iif`, `choose`) | no | no | **yes** — portable `iif` (native `iif` on SQL Server/SQLite, `if` on MySQL/MariaDB/ClickHouse, `case when` on PostgreSQL); `choose` is SQL Server-only (C# `?:` renders the portable `case`) | `CommonFunctions.iif`, `SqlServerFunctions.choose`, `SupportsIif`/`MakeIif`, `SupportsChoose`, `BuiltinFunctionTranslator` |
 | `FOR JSON` / `FOR XML` | partial | yes (provider) | **yes on SQL Server** | `QueryCommand.ForJson/ForXml`, `SupportsForJson`/`SupportsForXml` |
 | `GREATEST` / `LEAST` | yes | partial | **yes** on SQL Server, PostgreSQL, MySQL/MariaDB, SQLite and ClickHouse (NULL handling is provider-specific: PostgreSQL, SQL Server 2022+ and ClickHouse 24.12+ ignore NULL arguments, while MySQL/MariaDB and SQLite return NULL when any argument is NULL) | `SupportsGreatestLeast`/`MakeGreatest`/`MakeLeast` |
@@ -179,7 +179,13 @@ These are fully implemented and covered by SQL-generation or integration tests:
   `JSONExtract*`/`JSONHas`/`JSONLength`/`JSONType`/`visitParamExtract*` family and the dictionary functions
   on ClickHouse.
 * **Date arithmetic** — `date_add`/`date_diff`/`date_trunc`/`end_of_month`/`date_from_parts` plus the
-  `DateTime.Add*` methods, each provider emitting its native form.
+  `DateTime.Add*` methods, each provider emitting its native form. Arbitrary parts are exposed as
+  `SqlFunctions.Sql.extract(part, value)` (`quarter`/`week` ISO/`dow`/`isodow`, validated by
+  `SupportsDatePart`) and the numeric `SqlFunctions.Sql.date_part("epoch", value)`.
+* **Crypto hashes** — `SqlFunctions.Postgres.md5`, `digest(data, type)` (requires the `pgcrypto`
+  extension) and `sha256(bytes)`, gated by `SupportsCryptoFunctions` (PostgreSQL only; SQL
+  Server/MySQL/ClickHouse expose native SHA-256 under different names/return types, so a
+  cross-provider hash surface is a separate follow-up).
 * **Built-in table-valued functions** — `generate_series`/`unnest` (PostgreSQL),
   `string_split`/`openjson` (SQL Server) — with a `SupportsTableFunction` gate so an unsupported provider
   throws instead of emitting invalid SQL.

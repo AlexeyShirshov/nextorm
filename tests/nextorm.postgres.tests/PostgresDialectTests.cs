@@ -64,12 +64,35 @@ public class PostgresDialectTests
         Dialect.MakeStringLength("x").Should().Be("length(x)");
         Dialect.MakeMathFunction("log", ["x"]).Should().Be("ln(x)");
         Dialect.MakeMathFunction("round", ["x", "2"]).Should().Be("round(x, 2)");
+        Dialect.MakeMathFunction("round", ["x", "2"], [typeof(double)]).Should().Be("round((x)::numeric, 2)");
+        Dialect.MakeMathFunction("round", ["x", "2"], [typeof(double?)]).Should().Be("round((x)::numeric, 2)");
+        Dialect.MakeMathFunction("round", ["x", "2"], [typeof(float)]).Should().Be("round((x)::numeric, 2)");
+        Dialect.MakeMathFunction("round", ["x", "2"], [typeof(decimal)]).Should().Be("round(x, 2)");
+        Dialect.MakeMathFunction("log", ["x"], [typeof(double)]).Should().Be("ln(x)");
         Dialect.MakeFunction("fn", "app").Should().Be("app.fn");
         Dialect.MakeFunction("fn", null).Should().Be("fn");
         Dialect.MakeBoolCoalesce("a", "b").Should().Be("coalesce(a, b)");
         Dialect.MakeBool(true).Should().Be("true");
         Dialect.MakeBool(false).Should().Be("false");
         Dialect.ConcatStringOperator.Should().Be("||");
+    }
+
+    [Fact]
+    public void DatePartHooks_ShouldSupportExtendedParts()
+    {
+        Dialect.SupportsDatePart("year").Should().BeTrue();
+        Dialect.SupportsDatePart("quarter").Should().BeTrue();
+        Dialect.SupportsDatePart("week").Should().BeTrue();
+        Dialect.SupportsDatePart("dow").Should().BeTrue();
+        Dialect.SupportsDatePart("isodow").Should().BeTrue();
+        Dialect.SupportsDatePart("epoch").Should().BeTrue();
+        Dialect.SupportsDatePart("nonsense").Should().BeFalse();
+
+        Dialect.MakeDatePart("quarter", "dt").Should().Be("extract(quarter from dt)");
+        Dialect.MakeDatePart("week", "dt").Should().Be("extract(week from dt)");
+        Dialect.MakeDatePart("dow", "dt").Should().Be("extract(dow from dt)");
+        Dialect.MakeDatePart("isodow", "dt").Should().Be("extract(isodow from dt)");
+        Dialect.MakeDatePart("epoch", "dt").Should().Be("cast(extract(epoch from dt) as double precision)");
     }
 
     [Fact]
@@ -104,6 +127,8 @@ public class PostgresDialectTests
         Dialect.SupportsDateArithmetic.Should().BeTrue();
         Dialect.SupportsStringArrayAggregates.Should().BeTrue();
         Dialect.SupportsFullText.Should().BeTrue();
+        Dialect.SupportsRandomSeed.Should().BeTrue();
+        Dialect.SupportsCryptoFunctions.Should().BeTrue();
         Dialect.SupportsTableFunction("generate_series").Should().BeTrue();
         Dialect.SupportsTableFunction("unnest").Should().BeTrue();
         Dialect.SupportsTableFunction("string_split").Should().BeFalse();

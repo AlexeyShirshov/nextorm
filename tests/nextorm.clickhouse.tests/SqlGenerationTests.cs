@@ -116,6 +116,59 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void Extract_ShouldUseClickHouseDatePartForms()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { Q = SqlFunctions.Sql.extract("quarter", x.Datetime) }))
+            .Should().Contain("toQuarter(dt)");
+        SqlOf(ctx, e.Select(x => new { W = SqlFunctions.Sql.extract("week", x.Datetime) }))
+            .Should().Contain("toISOWeek(dt)");
+        SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.extract("dow", x.Datetime) }))
+            .Should().Contain("(toDayOfWeek(dt) % 7)");
+        SqlOf(ctx, e.Select(x => new { I = SqlFunctions.Sql.extract("isodow", x.Datetime) }))
+            .Should().Contain("toDayOfWeek(dt)");
+        SqlOf(ctx, e.Select(x => new { E = SqlFunctions.Sql.date_part("epoch", x.Datetime) }))
+            .Should().Contain("toFloat64(toUnixTimestamp(dt))");
+    }
+
+    [Fact]
+    public void SetSeed_ShouldThrowBecauseClickHouseHasNoStandaloneSeed()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new { S = SqlFunctions.Postgres.setseed(0.5) }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*setseed*");
+    }
+
+    [Fact]
+    public void CryptoHash_ShouldThrowBecauseOnlyPostgresHasIt()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new { H = SqlFunctions.Postgres.digest("abc", "sha256") }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*digest/sha256*");
+    }
+
+    [Fact]
+    public void ArrayShuffle_ShouldThrowBecausePostgresArraySurfaceIsGated()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e
+            .Where(x => SqlFunctions.Postgres.array_shuffle(SqlFunctions.Parameter<long[]>(0)) != null)
+            .Select(x => new { x.Id }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*Arrays are not supported*");
+    }
+
+    [Fact]
     public void PercentRankCumeDist_ShouldEmitOverWithOrder()
     {
         using var ctx = ClickHouseTestContext.Create();

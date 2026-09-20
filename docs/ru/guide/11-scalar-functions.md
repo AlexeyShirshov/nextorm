@@ -139,6 +139,8 @@ PostgreSQL и функции POSIX-регулярных выражений. Он
 | `SqlFunctions.Postgres.concat_ws(sep, ...)` | `concat_ws(sep, ...)` |
 | `SqlFunctions.Postgres.format(fmt, ...)` | `format(fmt, ...)` |
 | `SqlFunctions.Postgres.md5(s)` | `md5(s)` |
+| `SqlFunctions.Postgres.digest(s\|bytes, type)` | `digest(data, type)` (требует расширения `pgcrypto`) |
+| `SqlFunctions.Postgres.sha256(bytes)` | `sha256(bytes)` |
 | `SqlFunctions.Postgres.regexp_replace(s, pattern, replacement[, flags])` | `regexp_replace(...)` |
 | `SqlFunctions.Postgres.regexp_like(s, pattern[, flags])` | `regexp_like(...)` |
 | `SqlFunctions.Postgres.regexp_split_to_array(s, pattern)` | `regexp_split_to_array(s, pattern)` |
@@ -161,7 +163,7 @@ var rows = dataContext.From<IComplexEntity>()
 |---|---|---|
 | `Math.Abs(x)` | `abs(x)` | |
 | `Math.Round(x)` | `round(x)` / `round(x, 0)` | SQL Server требует аргумент длины. |
-| `Math.Round(x, digits)` | `round(x, digits)` | |
+| `Math.Round(x, digits)` | `round(x, digits)` | PostgreSQL приводит первый аргумент `double`/`float` к `numeric` (`round((x)::numeric, digits)`), так как в нём нет `round(double precision, integer)`. |
 | `Math.Truncate(x)` | `trunc(x)` / `round(x, 0, 1)` | В SQL Server нет `trunc`. |
 | `Math.Log(x)` | натуральный логарифм: `ln(x)` (SQLite, PostgreSQL) / `log(x)` (SQL Server) | Только одноаргументная форма. |
 
@@ -205,6 +207,11 @@ select abs((id - 5)) from complex_entity
 | `SqlFunctions.Postgres.factorial(n)` | `factorial(n)` |
 | `SqlFunctions.Postgres.width_bucket(x, low, high, count)` | `width_bucket(x, low, high, count)` |
 
+`SqlFunctions.Postgres.setseed(seed)` рендерит `setseed(seed)` и гейтится отдельно
+[`SupportsRandomSeed`](xref:NextORM.Core.ISqlDialect.SupportsRandomSeed) (только PostgreSQL). Функция
+PostgreSQL возвращает `void`, поэтому проецируемое значение всегда `null`, а вызов делается ради
+побочного эффекта (последующие `random()` в сессии становятся воспроизводимыми).
+
 ## Дата и время
 
 `DateTime.Now` и `DateTime.UtcNow` рендерятся как SQL-выражения, а не вычисляются как параметр. `.Year`,
@@ -240,6 +247,26 @@ select cast(strftime('%Y', dt) as integer) as 'Year', cast(strftime('%m', dt) as
 Важная деталь для SQLite: `strftime` возвращает текст, поэтому результат оборачивается в
 `cast(... as integer)`, чтобы материализоваться как свойство CLR `int`.
 
+### Извлечение произвольных частей даты
+
+`SqlFunctions.Sql.extract(part, value)` возвращает целочисленную часть даты для `year`, `quarter`,
+`month`, `week` (ISO 8601), `day`, `doy`, `dow` (0=воскресенье..6=суббота), `isodow`
+(1=понедельник..7=воскресенье), `hour`, `minute` и `second`. `SqlFunctions.Sql.date_part(part, value)`
+возвращает числовую часть `epoch` (секунды с 1970-01-01, включая дробную часть). Обе принимают
+константное имя части и рендерят нативную форму каждого провайдера, поэтому результат одинаков везде:
+
+| Провайдер | `extract("quarter", dt)` | `extract("week", dt)` | `extract("dow", dt)` | `date_part("epoch", dt)` |
+|---|---|---|---|---|
+| PostgreSQL | `extract(quarter from dt)` | `extract(week from dt)` | `extract(dow from dt)` | `cast(extract(epoch from dt) as double precision)` |
+| SQL Server | `datepart(quarter, dt)` | `datepart(isowk, dt)` | `(datepart(weekday, dt) + @@datefirst - 1) % 7` | `cast(datediff_big(millisecond, '19700101', dt) as float) / 1000.0` |
+| MySQL/MariaDB | `quarter(dt)` | `weekofyear(dt)` | `(dayofweek(dt) - 1)` | `cast(unix_timestamp(dt) as double)` |
+| SQLite | `cast((cast(strftime('%m', dt) as integer) + 2) / 3 as integer)` | ISO-неделя через `strftime('%j', date(dt, '-3 days', 'weekday 4'))` | `cast(strftime('%w', dt) as integer)` | `((julianday(dt) - 2440587.5) * 86400.0)` |
+| ClickHouse | `toQuarter(dt)` | `toISOWeek(dt)` | `(toDayOfWeek(dt) % 7)` | `toFloat64(toUnixTimestamp(dt))` |
+
+`DateTime.DayOfWeek` не транслируется как свойство (его аналог `datepart(weekday)` зависит от
+сессионного `DATEFIRST`); для нормализованного значения используйте `extract("dow", value)` или
+`extract("isodow", value)`.
+
 ### Расширенные дата и время PostgreSQL
 
 Эти функции входят в расширенную библиотеку скалярных функций
@@ -259,7 +286,7 @@ select cast(strftime('%Y', dt) as integer) as 'Year', cast(strftime('%m', dt) as
 
 Для построения дат и арифметики используется переносимый набор: `date_from_parts`, `date_add`,
 `date_diff`, `date_trunc` и члены `DateTime` (см. [Арифметику дат](#арифметика-дат) ниже).
-`make_date`, `age`, `date_bin` и `extract` больше не предоставляются отдельно.
+`make_date`, `age` и `date_bin` больше не предоставляются отдельно.
 
 ### Информация о сессии и сервере
 
@@ -405,6 +432,8 @@ select id from complex_entity where id = any(@norm_p0)
 | `SqlFunctions.Postgres.array_positions(a, element)` | `array_positions(a, element)` |
 | `SqlFunctions.Postgres.array_reverse(a)` | `array_reverse(a)` |
 | `SqlFunctions.Postgres.array_sort(a)` | `array_sort(a)` |
+| `SqlFunctions.Postgres.array_shuffle(a)` | `array_shuffle(a)` (PostgreSQL 16+) |
+| `SqlFunctions.Postgres.array_sample(a, n)` | `array_sample(a, n)` (PostgreSQL 16+) |
 | `SqlFunctions.Postgres.array_to_string(a, delimiter)` | `array_to_string(a, delimiter)` |
 | `SqlFunctions.Postgres.string_to_array(s, delimiter)` | `string_to_array(s, delimiter)` |
 

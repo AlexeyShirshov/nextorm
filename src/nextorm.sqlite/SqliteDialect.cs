@@ -144,8 +144,10 @@ public sealed class SqliteDialect : SqlDialectBase
     // SQLite has no now(); datetime('now') is UTC and is used for both local and UTC requests.
     public override string MakeNow(bool utc) => "datetime('now')";
 
-    // SQLite extracts date parts through strftime; the result is cast back to an integer so that it
-    // materialises like the C# DateTime.Year/Month/... int properties.
+    /// <summary>
+    /// SQLite extracts date parts through <c>strftime</c>; the result is cast back to an integer so
+    /// that it materialises like the C# <c>DateTime.Year</c>/<c>Month</c>/... int properties.
+    /// </summary>
     public override string MakeDatePart(string part, string value) => part switch
     {
         "year" => $"cast(strftime('%Y', {value}) as integer)",
@@ -155,8 +157,18 @@ public sealed class SqliteDialect : SqlDialectBase
         "minute" => $"cast(strftime('%M', {value}) as integer)",
         "second" => $"cast(strftime('%S', {value}) as integer)",
         "doy" => $"cast(strftime('%j', {value}) as integer)",
+        "quarter" => $"cast((cast(strftime('%m', {value}) as integer) + 2) / 3 as integer)",
+        // ISO week via the Thursday of the ISO week; %W has a week-0 and is not ISO 8601.
+        "week" => $"cast((cast(strftime('%j', date({value}, '-3 days', 'weekday 4')) as integer) + 6) / 7 as integer)",
+        "dow" => $"cast(strftime('%w', {value}) as integer)",
+        "isodow" => $"((cast(strftime('%w', {value}) as integer) + 6) % 7 + 1)",
+        "epoch" => $"((julianday({value}) - 2440587.5) * 86400.0)",
         _ => base.MakeDatePart(part, value)
     };
+
+    /// <summary>SQLite additionally accepts the ISO week, the normalised weekdays and epoch.</summary>
+    public override bool SupportsDatePart(string part) =>
+        part is "dow" or "isodow" or "epoch" || base.SupportsDatePart(part);
 
     // SQLite's log() is base 10; the natural logarithm (Math.Log) is ln().
     public override string MakeMathFunction(string name, IReadOnlyList<string> args) =>

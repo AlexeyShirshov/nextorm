@@ -331,9 +331,25 @@ public sealed class ClickHouseDialect : SqlDialectBase
     // now() uses the server time zone; the optional argument selects a zone.
     public override string MakeNow(bool utc) => utc ? "now('UTC')" : "now()";
 
-    // ClickHouse spells the day-of-year part as toDayOfYear().
-    public override string MakeDatePart(string part, string value) =>
-        part == "doy" ? $"toDayOfYear({value})" : base.MakeDatePart(part, value);
+    /// <summary>
+    /// ClickHouse spells the day-of-year part as <c>toDayOfYear()</c> and the other non-ANSI parts
+    /// through the <c>toXxx</c> family. <c>toDayOfWeek</c> is ISO (1=Monday..7=Sunday), so
+    /// <c>dow = toDayOfWeek % 7</c>.
+    /// </summary>
+    public override string MakeDatePart(string part, string value) => part switch
+    {
+        "doy" => $"toDayOfYear({value})",
+        "quarter" => $"toQuarter({value})",
+        "week" => $"toISOWeek({value})",
+        "dow" => $"(toDayOfWeek({value}) % 7)",
+        "isodow" => $"toDayOfWeek({value})",
+        "epoch" => $"toFloat64(toUnixTimestamp({value}))",
+        _ => base.MakeDatePart(part, value)
+    };
+
+    /// <summary>ClickHouse additionally accepts the ISO week, the normalised weekdays and epoch.</summary>
+    public override bool SupportsDatePart(string part) =>
+        part is "dow" or "isodow" or "epoch" || base.SupportsDatePart(part);
 
     public override string MakeAggregate(string name) => name switch
     {

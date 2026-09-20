@@ -71,6 +71,14 @@ public sealed class PostgresDialect : SqlDialectBase
     public override bool SupportsDateArithmetic => true;
     public override bool SupportsStringArrayAggregates => true;
 
+    /// <summary>PostgreSQL renders every date part through <c>extract</c>, including the ISO week and dow forms.</summary>
+    public override bool SupportsDatePart(string part) =>
+        part is "dow" or "isodow" or "epoch" || base.SupportsDatePart(part);
+
+    /// <summary>PostgreSQL's <c>extract(epoch ...)</c> returns numeric, so it is cast to double precision.</summary>
+    public override string MakeDatePart(string part, string value) =>
+        part == "epoch" ? $"cast(extract(epoch from {value}) as double precision)" : base.MakeDatePart(part, value);
+
     // PostgreSQL full-text search matches a tsvector against a tsquery; contains/freetext differ in
     // how the search string is parsed (plain terms vs. web-search syntax).
     public override bool SupportsFullText => true;
@@ -106,6 +114,12 @@ public sealed class PostgresDialect : SqlDialectBase
     // PostgreSQL is the reference provider for the extended scalar function library and the
     // bool/bit/statistical/ordered-set aggregate surface.
     public override bool SupportsExtendedScalarFunctions => true;
+
+    /// <summary>PostgreSQL has the standalone session random seed <c>setseed</c>.</summary>
+    public override bool SupportsRandomSeed => true;
+
+    /// <summary>PostgreSQL renders the <c>digest</c> (pgcrypto) and <c>sha256</c> (core) hash functions.</summary>
+    public override bool SupportsCryptoFunctions => true;
 
     /// <summary>PostgreSQL is the only provider with the native <c>tsvector</c>/<c>tsquery</c> text-search surface.</summary>
     public override bool SupportsTextSearchFunctions => true;
@@ -160,6 +174,21 @@ public sealed class PostgresDialect : SqlDialectBase
         name == "log" && args.Count == 1
             ? $"ln({args[0]})"
             : base.MakeMathFunction(name, args);
+
+    /// <summary>
+    /// PostgreSQL's two-argument <c>round</c> only accepts <c>numeric</c>, so a double precision/real
+    /// first argument is cast; decimal/integer already resolve to <c>round(numeric, integer)</c>.
+    /// </summary>
+    public override string MakeMathFunction(string name, IReadOnlyList<string> args, IReadOnlyList<Type> argTypes) =>
+        name == "round" && args.Count == 2 && IsFloatingPoint(argTypes[0])
+            ? $"round(({args[0]})::numeric, {args[1]})"
+            : base.MakeMathFunction(name, args, argTypes);
+
+    private static bool IsFloatingPoint(Type type)
+    {
+        var underlying = Nullable.GetUnderlyingType(type) ?? type;
+        return underlying == typeof(double) || underlying == typeof(float);
+    }
 
     protected override string MakeStringPosition(string value, string substring) =>
         $"strpos({value}, {substring})";

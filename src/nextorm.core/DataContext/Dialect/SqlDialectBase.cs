@@ -49,6 +49,10 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual bool SupportsStringAgg => SupportsStringArrayAggregates;
     public virtual bool SupportsArrayAgg => SupportsStringArrayAggregates;
     public virtual bool SupportsExtendedScalarFunctions => false;
+    /// <summary>Only PostgreSQL has a standalone session random seed (<c>setseed</c>).</summary>
+    public virtual bool SupportsRandomSeed => false;
+    /// <summary>Only PostgreSQL has the <c>digest</c>/<c>sha256</c> hash surface.</summary>
+    public virtual bool SupportsCryptoFunctions => false;
 
     /// <summary>Defaults to <c>false</c>; PostgreSQL opts into the native text-search scalar surface.</summary>
     public virtual bool SupportsTextSearchFunctions => false;
@@ -409,9 +413,29 @@ public abstract class SqlDialectBase : ISqlDialect
     // Dialects with a boolean type can use a boolean value unchanged as a predicate.
     public virtual string MakeBooleanValuePredicate(string value) => value;
     public virtual string MakeDatePart(string part, string value) => $"extract({part} from {value})";
+
+    // ANSI date parts the generic extract() can render. A dialect whose native spelling differs for a
+    // part overrides MakeDatePart and extends this set (quarter/week/dow/isodow/epoch) as needed.
+    private static readonly HashSet<string> DatePartFields = new(StringComparer.Ordinal)
+    {
+        "year", "quarter", "month", "week", "day", "doy",
+        "hour", "minute", "second"
+    };
+    /// <summary>
+    /// True for the ANSI date parts the generic <c>extract</c> can render; a dialect whose native
+    /// spelling differs for a part extends this set (quarter/week/dow/isodow/epoch) as needed.
+    /// </summary>
+    public virtual bool SupportsDatePart(string part) => DatePartFields.Contains(part);
     public virtual string MakeNow(bool utc) => utc ? "now() at time zone 'utc'" : "now()";
     public virtual string MakeMathFunction(string name, IReadOnlyList<string> args) =>
         $"{name}({string.Join(", ", args)})";
+    /// <summary>
+    /// Renders a math function call, receiving the static CLR argument types for dialects whose native
+    /// function has a narrower overload set than ANSI. The default ignores the types and delegates to
+    /// <see cref="MakeMathFunction(string, IReadOnlyList{string})"/>.
+    /// </summary>
+    public virtual string MakeMathFunction(string name, IReadOnlyList<string> args, IReadOnlyList<Type> argTypes) =>
+        MakeMathFunction(name, args);
 
     // ANSI/portable defaults. Only reached for the functions their capability flag opts into, so a
     // dialect that does not support one never renders it (the translator rejects the call first).

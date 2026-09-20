@@ -134,6 +134,8 @@ and the POSIX regular-expression functions. They are part of the extended scalar
 | `SqlFunctions.Postgres.concat_ws(sep, ...)` | `concat_ws(sep, ...)` |
 | `SqlFunctions.Postgres.format(fmt, ...)` | `format(fmt, ...)` |
 | `SqlFunctions.Postgres.md5(s)` | `md5(s)` |
+| `SqlFunctions.Postgres.digest(s\|bytes, type)` | `digest(data, type)` (requires the `pgcrypto` extension) |
+| `SqlFunctions.Postgres.sha256(bytes)` | `sha256(bytes)` |
 | `SqlFunctions.Postgres.regexp_replace(s, pattern, replacement[, flags])` | `regexp_replace(...)` |
 | `SqlFunctions.Postgres.regexp_like(s, pattern[, flags])` | `regexp_like(...)` |
 | `SqlFunctions.Postgres.regexp_split_to_array(s, pattern)` | `regexp_split_to_array(s, pattern)` |
@@ -156,7 +158,7 @@ var rows = dataContext.From<IComplexEntity>()
 |---|---|---|
 | `Math.Abs(x)` | `abs(x)` | |
 | `Math.Round(x)` | `round(x)` / `round(x, 0)` | SQL Server supplies the required length argument. |
-| `Math.Round(x, digits)` | `round(x, digits)` | |
+| `Math.Round(x, digits)` | `round(x, digits)` | PostgreSQL casts a `double`/`float` first argument to `numeric` (`round((x)::numeric, digits)`), because it has no `round(double precision, integer)`. |
 | `Math.Truncate(x)` | `trunc(x)` / `round(x, 0, 1)` | SQL Server has no `trunc`. |
 | `Math.Log(x)` | natural logarithm: `ln(x)` (SQLite, PostgreSQL) / `log(x)` (SQL Server) | Single-argument form only. |
 
@@ -200,6 +202,11 @@ The remaining math functions are part of the extended scalar library
 | `SqlFunctions.Postgres.factorial(n)` | `factorial(n)` |
 | `SqlFunctions.Postgres.width_bucket(x, low, high, count)` | `width_bucket(x, low, high, count)` |
 
+`SqlFunctions.Postgres.setseed(seed)` renders `setseed(seed)` and is gated separately by
+[`SupportsRandomSeed`](xref:NextORM.Core.ISqlDialect.SupportsRandomSeed) (PostgreSQL only). The
+PostgreSQL function returns `void`, so a projected value is always `null` and the call is made for its
+side effect (subsequent `random()` calls in the session become reproducible).
+
 ## Date and time
 
 `DateTime.Now` and `DateTime.UtcNow` are rendered as SQL expressions instead of being evaluated as a
@@ -235,6 +242,25 @@ Output:
 An important detail for SQLite: `strftime` returns text, so the result is wrapped in
 `cast(... as integer)` to materialise like the `int` CLR property.
 
+### Extracting arbitrary date parts
+
+`SqlFunctions.Sql.extract(part, value)` returns the integer date part for `year`, `quarter`, `month`,
+`week` (ISO 8601), `day`, `doy`, `dow` (0=Sunday..6=Saturday), `isodow` (1=Monday..7=Sunday), `hour`,
+`minute` and `second`. `SqlFunctions.Sql.date_part(part, value)` returns the numeric `epoch` (seconds
+since 1970-01-01, including any fraction). Both take a constant part name and render each provider's
+native form, so the result is the same on every provider:
+
+| Provider | `extract("quarter", dt)` | `extract("week", dt)` | `extract("dow", dt)` | `date_part("epoch", dt)` |
+|---|---|---|---|---|
+| PostgreSQL | `extract(quarter from dt)` | `extract(week from dt)` | `extract(dow from dt)` | `cast(extract(epoch from dt) as double precision)` |
+| SQL Server | `datepart(quarter, dt)` | `datepart(isowk, dt)` | `(datepart(weekday, dt) + @@datefirst - 1) % 7` | `cast(datediff_big(millisecond, '19700101', dt) as float) / 1000.0` |
+| MySQL/MariaDB | `quarter(dt)` | `weekofyear(dt)` | `(dayofweek(dt) - 1)` | `cast(unix_timestamp(dt) as double)` |
+| SQLite | `cast((cast(strftime('%m', dt) as integer) + 2) / 3 as integer)` | ISO week via `strftime('%j', date(dt, '-3 days', 'weekday 4'))` | `cast(strftime('%w', dt) as integer)` | `((julianday(dt) - 2440587.5) * 86400.0)` |
+| ClickHouse | `toQuarter(dt)` | `toISOWeek(dt)` | `(toDayOfWeek(dt) % 7)` | `toFloat64(toUnixTimestamp(dt))` |
+
+`DateTime.DayOfWeek` is not translated as a property (its `datepart(weekday)` equivalent depends on the
+session `DATEFIRST`); use `extract("dow", value)` or `extract("isodow", value)` for a normalised value.
+
 ### PostgreSQL extended date and time
 
 These are part of the extended scalar library ([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions),
@@ -254,7 +280,7 @@ PostgreSQL only):
 
 Date construction and arithmetic use the portable surface instead: `date_from_parts`, `date_add`,
 `date_diff`, `date_trunc` and the `DateTime` members (see [Date arithmetic](#date-arithmetic) below).
-`make_date`, `age`, `date_bin` and `extract` are no longer exposed separately.
+`make_date`, `age` and `date_bin` are no longer exposed separately.
 
 ### Session and server information
 
@@ -398,6 +424,8 @@ The array functions and operators map to their PostgreSQL names:
 | `SqlFunctions.Postgres.array_positions(a, element)` | `array_positions(a, element)` |
 | `SqlFunctions.Postgres.array_reverse(a)` | `array_reverse(a)` |
 | `SqlFunctions.Postgres.array_sort(a)` | `array_sort(a)` |
+| `SqlFunctions.Postgres.array_shuffle(a)` | `array_shuffle(a)` (PostgreSQL 16+) |
+| `SqlFunctions.Postgres.array_sample(a, n)` | `array_sample(a, n)` (PostgreSQL 16+) |
 | `SqlFunctions.Postgres.array_to_string(a, delimiter)` | `array_to_string(a, delimiter)` |
 | `SqlFunctions.Postgres.string_to_array(s, delimiter)` | `string_to_array(s, delimiter)` |
 

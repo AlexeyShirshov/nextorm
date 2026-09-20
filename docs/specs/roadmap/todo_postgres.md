@@ -44,7 +44,18 @@
 - [x] `to_char`, `to_date`, `to_number`, `to_timestamp`
 - [x] Интервальная арифметика: `SqlFunctions.Sql.date_add`/`end_of_month` и `DateTime.Add*` (интервальная арифметика `+ interval` в PostgreSQL, `dateadd` в SQL Server, `addXxx` в ClickHouse); `AT TIME ZONE` / `timezone()` — функция `SqlFunctions.Sql.timezone`
 - [x] Части даты через свойства `DateTime`: `Year`, `Month`, `Day`, `Hour`, `Minute`, `Second`, `DayOfYear` (`doy`) — `MemberTranslator` → `MakeDatePart`
-- [ ] **Публичный `EXTRACT`/`date_part`** — `quarter`, `week`, `epoch`, `dow`, `isodow` и `DateTime.DayOfWeek` недоступны: `MakeDatePart` вызывается только для перечисленных выше свойств, отдельного `SqlFunctions.Sql.extract(part, value)` в API нет (в `todo_postgres.md` он ранее упоминался как готовый — это было неверно). В demo-запросе `business_occupancy_matrix.sql` `EXTRACT(ISODOW FROM scheduled_departure)` заменён на `date_diff('day', date_trunc('week', d), d) + 1`, а `EXTRACT(EPOCH FROM a - b)` в `aircraft_delay_chains.sql` — на `date_diff('seconds', a, b)`. Нужны метод `extract`/`date_part` (и/или свойства `DateTime.DayOfWeek`) с ветками диалектов; `MakeDatePart`/`MakeDateDiff` уже есть.
+- [x] **Публичный `EXTRACT`/`date_part`** — добавлены `SqlFunctions.Sql.extract(part, value)` (`int?`;
+      `year`/`quarter`/`month`/`week`/`day`/`doy`/`dow`/`isodow`/`hour`/`minute`/`second`) и
+      `SqlFunctions.Sql.date_part(part, value)` (`double?`; `epoch`) на `CommonFunctions` с общим
+      диалектным хуком `MakeDatePart` и новым гейтом `SupportsDatePart(part)`. Семантика нормализована:
+      `week` — ISO 8601, `dow` — 0=Sunday..6=Saturday, `isodow` — 1=Monday..7=Sunday. Реализованы все
+      шесть SQL-провайдеров (PostgreSQL `extract`, SQL Server `datepart(isowk)`/`@@datefirst`,
+      MySQL/MariaDB `quarter`/`weekofyear`/`dayofweek`/`weekday`/`unix_timestamp`, SQLite `strftime`+
+      ISO-неделя через четверг, ClickHouse `toQuarter`/`toISOWeek`/`toDayOfWeek`). `DateTime.DayOfWeek`
+      по-прежнему не маппится — нормализованный `dow` доступен через `extract`. Тесты:
+      `SqlGenerationTests.Extract_ShouldUsePostgresDatePartForms` (PG) и одноимённые в SQL
+      Server/MySQL/MariaDB/SQLite/ClickHouse, `PostgresDialectTests.DatePartHooks_ShouldSupportExtendedParts`,
+      `CommonTestSuite.Functions.Extract_ShouldReturnNormalisedDateParts` (реальные PG/SQL Server/MySQL/SQLite).
 - [x] `current_date`, `current_time`, `localtime`, `localtimestamp`
 - [x] `generate_series` (табличная функция, см. ниже)
 
@@ -55,7 +66,15 @@
 - [x] `split_part`, `strpos`/`position`, `left`, `right`, `lpad`, `rpad`, `repeat`, `reverse`,
       `initcap`, `translate`, `overlay`
 - [x] `concat_ws`, `format`, `startswith`
-- [x] `md5` (остались `digest`/`sha256` из pgcrypto)
+- [x] `md5`
+- [x] `digest` / `sha256` — `PostgresFunctions.digest(string|byte[], type)` (расширение `pgcrypto`) и
+      `PostgresFunctions.sha256(byte[])` (ядро PostgreSQL) под флагом `SupportsCryptoFunctions`
+      (base `false`, PostgreSQL `true`). Хеширование остаётся PostgreSQL-only поверхностью (как `md5`):
+      у SQL Server/MySQL/ClickHouse есть `HASHBYTES`/`SHA2`/`SHA256`, но с другим типом результата и
+      без алгоритм-диспетчера. Тесты: `SqlGenerationTests.CryptoHash_ShouldEmit`,
+      `PostgresDialectTests.CapabilityFlags_ShouldMatchPostgres`, rejection
+      `CryptoHash_ShouldThrowBecauseOnlyPostgresHasIt` (все остальные провайдеры),
+      `PostgresSpecificTests.CryptoHash_ShouldReturnSha256` (реальный PostgreSQL + pgcrypto).
 
 ## Условные / generic
 
@@ -65,20 +84,34 @@
 ## Математика
 
 - [x] `asin`/`acos`/`atan`/`atan2`, `cbrt`, гиперболические (`sinh`/`cosh`/`tanh`, `asinh`/`acosh`/`atanh`)
-- [x] `degrees`, `radians`, `pi()`, `random()` (остался `setseed`)
+- [x] `degrees`, `radians`, `pi()`, `random()`; `setseed(float)` — `PostgresFunctions.setseed` под
+      отдельным флагом `SupportsRandomSeed` (base `false`, PostgreSQL `true`); PostgreSQL-функция
+      возвращает `void`, проекция всегда `null`. Тесты: `SqlGenerationTests.SetSeed_ShouldEmit`,
+      `PostgresDialectTests.CapabilityFlags_ShouldMatchPostgres`,
+      `PostgresSpecificTests.SetSeed_ShouldReturnNullBecausePostgresReturnsVoid`; rejection —
+      `SetSeed_ShouldThrow…` во всех остальных провайдерах.
 - [x] `log(base, x)` (через `SqlFunctions.Sql.log`; 2-аргументный `Math.Log` по-прежнему намеренно не поддержан), `mod()`, `gcd`/`lcm`,
       `factorial`, `width_bucket`
-- [ ] **`round(double precision, int)`** — `Math.Round(x, n)` транслируется в `round(x, n)` для всех
+- [x] **`round(double precision, int)`** — `Math.Round(x, n)` транслируется в `round(x, n)` для всех
       диалектов (`MathFunctionTranslator`), но PostgreSQL определяет только `round(numeric, int)`;
       над `double precision` сервер бросает `function round(double precision, integer) does not exist`.
-      Сейчас обходится приведением на стороне LINQ — `Math.Round((decimal)x, n)`. Нужен диалектный хук
-      (PostgreSQL оборачивает первый аргумент в `(...)::numeric`, когда он не `numeric`), иначе
-      ошибка всплывает только на исполнении. Уровень: простое (хук `MakeMathFunction`).
+      Добавлен аддитивный хук `ISqlDialect.MakeMathFunction(name, args, argTypes)` (база делегирует в
+      2-аргументную форму); `PostgresDialect` оборачивает первый аргумент в `(...)::numeric`, когда он
+      `double`/`float` (с `Nullable<>`). Остальные провайдеры выводят `round(x, n)` без изменений; гейт
+      не нужен — 2-аргументный `round` есть у всех. Тесты:
+      `SqlGenerationTests.MathRoundWithDigits_ShouldCastDoublePrecisionToNumeric`/
+      `..._ShouldNotCastNumeric`, `PostgresDialectTests.ScalarFunctionHooks_ShouldUsePostgresForms`,
+      `CommonTestSuite.Functions.MathRoundWithDigits_ShouldRoundValue` (реальный PostgreSQL).
 
 ## Массивы (дополнить)
 
 - [x] `array_append`, `array_prepend`, `array_cat`, `array_remove`, `array_replace`, `array_fill`
-- [x] `array_dims`, `array_positions`, `array_reverse`, `array_sort` (остались `array_shuffle`/`array_sample`)
+- [x] `array_dims`, `array_positions`, `array_reverse`, `array_sort`
+- [x] `array_shuffle` / `array_sample` (PostgreSQL 16+) — `PostgresFunctions.array_shuffle`/
+      `array_sample` через `ArraySqlTranslator` (гейт `SupportsArrays`). Тесты:
+      `SqlGenerationTests.ArrayShuffleSample_ShouldEmit`, rejection
+      `ArrayShuffle_ShouldThrowBecausePostgresArraySurfaceIsGated` (SQLite/ClickHouse),
+      `PostgresSpecificTests.ArrayShuffleSample_ShouldExecute` (реальный PostgreSQL, `PrepareFromSql`).
 - [x] `string_to_array`; `array_agg` и `unnest` — готовы
 - [x] Операторы `<@`, `||` (конкатенация массивов) — `array_contained_by`, `array_concat`;
       `=`/`<>` работают через обычное сравнение

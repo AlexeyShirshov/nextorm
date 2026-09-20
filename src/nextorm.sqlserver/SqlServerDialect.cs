@@ -175,9 +175,24 @@ public sealed class SqlServerDialect : SqlDialectBase
             ? $"substring({value}, 1, {start})"
             : $"stuff({value}, {start} + 1, {count}, {newValue})";
 
-    // SQL Server extracts date parts through datepart(part, value); T-SQL spells day-of-year as dayofyear.
-    public override string MakeDatePart(string part, string value) =>
-        part == "doy" ? $"datepart(dayofyear, {value})" : $"datepart({part}, {value})";
+    /// <summary>
+    /// SQL Server extracts date parts through <c>datepart(part, value)</c>; T-SQL spells day-of-year
+    /// as <c>dayofyear</c>. The ISO week is <c>isowk</c>; dow/isodow are normalised against the
+    /// session DATEFIRST through <c>datepart(weekday)</c> and <c>@@datefirst</c>.
+    /// </summary>
+    public override string MakeDatePart(string part, string value) => part switch
+    {
+        "doy" => $"datepart(dayofyear, {value})",
+        "week" => $"datepart(isowk, {value})",
+        "dow" => $"((datepart(weekday, {value}) + @@datefirst - 1) % 7)",
+        "isodow" => $"(((datepart(weekday, {value}) + @@datefirst - 2) % 7) + 1)",
+        "epoch" => $"cast(datediff_big(millisecond, '19700101', {value}) as float) / 1000.0",
+        _ => $"datepart({part}, {value})"
+    };
+
+    /// <summary>SQL Server additionally accepts the normalised weekday and epoch date parts.</summary>
+    public override bool SupportsDatePart(string part) =>
+        part is "dow" or "isodow" or "epoch" || base.SupportsDatePart(part);
 
     /// <summary>
     /// SQL Server 2022 introduced <c>datetrunc(datepart, date)</c>. It takes an unquoted part name and

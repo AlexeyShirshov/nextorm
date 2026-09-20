@@ -52,8 +52,15 @@
 - aggregate names are remapped: `stdev`→`stddev`, `stdevp`→`stddev_pop`, `var`→`variance`,
   `varp`→`var_pop`;
 - `Math.Log` maps to `ln(...)` (PostgreSQL's `log()` is base 10);
+- `Math.Round(x, digits)` casts a `double`/`float` first argument to `numeric`
+  (`round((x)::numeric, digits)`): PostgreSQL has no `round(double precision, integer)`;
+- `SqlFunctions.Postgres.setseed(seed)` renders `setseed(seed)` (gated by
+  [`SupportsRandomSeed`](xref:NextORM.Core.ISqlDialect.SupportsRandomSeed)); PostgreSQL's `setseed`
+  returns `void`, so a projected value is always `null`;
 - `DateTime.Now` renders `now()`, `DateTime.UtcNow` renders `now() at time zone 'utc'`;
-- date parts render as `extract(part from value)`;
+- date parts render as `extract(part from value)`; `SqlFunctions.Sql.extract(part, value)` covers
+  `quarter`/`week` (ISO)/`dow`/`isodow` and `SqlFunctions.Sql.date_part("epoch", value)` renders
+  `cast(extract(epoch from value) as double precision)`;
 - paging is `limit n` / `limit n offset m`; an offset-only query emits `offset m` alone.
 
 ## Registering the provider

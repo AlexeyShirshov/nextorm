@@ -241,6 +241,21 @@ public interface ISqlDialect
     /// </summary>
     bool SupportsExtendedScalarFunctions { get; }
     /// <summary>
+    /// True when the provider can set the seed of its session random generator as a separate side
+    /// effect (<see cref="PostgresFunctions.setseed(double?)"/>). The safe default is <c>false</c>;
+    /// only PostgreSQL has a standalone <c>setseed</c> (MySQL/MariaDB and SQL Server combine seeding
+    /// with the value-returning <c>RAND</c>).
+    /// </summary>
+    bool SupportsRandomSeed { get; }
+    /// <summary>
+    /// True when the provider can render the cryptographic hash functions
+    /// (<see cref="PostgresFunctions.digest(string?, string?)"/> and
+    /// <see cref="PostgresFunctions.sha256(byte[])"/>). The safe default is <c>false</c>; only
+    /// PostgreSQL opts in. <c>digest</c> additionally requires the <c>pgcrypto</c> extension to be
+    /// installed on the server; <c>sha256</c> is a core binary-string function.
+    /// </summary>
+    bool SupportsCryptoFunctions { get; }
+    /// <summary>
     /// True when the provider can render the native text-search scalar surface of
     /// <see cref="PostgresFunctions"/> (<c>to_tsvector</c>, <c>to_tsquery</c>, <c>plainto_tsquery</c>,
     /// <c>phraseto_tsquery</c>, <c>websearch_to_tsquery</c>, <c>ts_rank</c>, <c>ts_headline</c> and the
@@ -638,10 +653,30 @@ public interface ISqlDialect
     string MakeBooleanValuePredicate(string value);
     /// <summary>Renders a date/time part extraction (<c>year</c>, <c>month</c>, <c>day</c>, <c>hour</c>, ...).</summary>
     string MakeDatePart(string part, string value);
+    /// <summary>
+    /// True when the provider accepts <paramref name="part"/> as an <c>extract</c>/<c>date_part</c>
+    /// date part. The ANSI parts are accepted by default; a dialect adds the parts it can express
+    /// natively (<c>quarter</c>, <c>week</c>, <c>dow</c>, <c>isodow</c>, <c>epoch</c>) by overriding
+    /// this together with <see cref="MakeDatePart"/>.
+    /// </summary>
+    bool SupportsDatePart(string part);
     /// <summary>Renders the current local or UTC date/time.</summary>
     string MakeNow(bool utc);
     /// <summary>Renders a math function call with the given already-rendered arguments.</summary>
     string MakeMathFunction(string name, IReadOnlyList<string> args);
+    /// <summary>
+    /// Renders a math function call together with the static CLR types of the arguments. A dialect
+    /// whose native function has a more specific overload set than ANSI uses the types to pick the
+    /// right form (PostgreSQL's two-argument <c>round</c> only accepts <c>numeric</c>, so a
+    /// <see cref="double"/>/<see cref="float"/> argument has to be cast). The default ignores the
+    /// types and delegates to <see cref="MakeMathFunction(string, IReadOnlyList{string})"/>.
+    /// </summary>
+    /// <remarks>
+    /// Declared as a default interface method so that existing external <see cref="ISqlDialect"/>
+    /// implementations that do not render SQL themselves keep compiling.
+    /// </remarks>
+    string MakeMathFunction(string name, IReadOnlyList<string> args, IReadOnlyList<Type> argTypes) =>
+        MakeMathFunction(name, args);
     /// <summary>Renders <c>nullif(value, other)</c>. ANSI and portable, so every dialect accepts it.</summary>
     string MakeNullIf(string value, string other);
     /// <summary>Renders <c>greatest(...)</c> over the already-rendered arguments.</summary>

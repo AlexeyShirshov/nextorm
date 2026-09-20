@@ -619,6 +619,27 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void MathRoundWithDigits_ShouldCastDoublePrecisionToNumeric()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // PostgreSQL has no round(double precision, integer), so the first argument is cast.
+        SqlOf(ctx, e.Select(x => new { V = Math.Round(x.Id / 2.0 + 0.2, 2) }))
+            .Should().Contain("round((((cast(id as double precision) / 2) + 0.2))::numeric, 2)");
+    }
+
+    [Fact]
+    public void MathRoundWithDigits_ShouldNotCastNumeric()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = Math.Round(1.25m, 1) }))
+            .Should().Contain("round(1.25, 1)").And.NotContain("::numeric");
+    }
+
+    [Fact]
     public void MathLog_ShouldUseNaturalLogarithm()
     {
         using var ctx = PostgresTestContext.Create();
@@ -656,6 +677,37 @@ public class SqlGenerationTests
         SqlOf(ctx, e.Select(x => new { Y = x.Datetime!.Value.Year })).Should().Contain("extract(year from dt)");
         SqlOf(ctx, e.Select(x => new { D = x.Datetime!.Value.Day })).Should().Contain("extract(day from dt)");
         SqlOf(ctx, e.Select(x => new { DOY = x.Datetime!.Value.DayOfYear })).Should().Contain("extract(doy from dt)");
+    }
+
+    [Fact]
+    public void Extract_ShouldUsePostgresDatePartForms()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { Q = SqlFunctions.Sql.extract("quarter", x.Datetime) }))
+            .Should().Contain("extract(quarter from dt)");
+        SqlOf(ctx, e.Select(x => new { W = SqlFunctions.Sql.extract("week", x.Datetime) }))
+            .Should().Contain("extract(week from dt)");
+        SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.extract("dow", x.Datetime) }))
+            .Should().Contain("extract(dow from dt)");
+        SqlOf(ctx, e.Select(x => new { I = SqlFunctions.Sql.extract("isodow", x.Datetime) }))
+            .Should().Contain("extract(isodow from dt)");
+        SqlOf(ctx, e.Select(x => new { E = SqlFunctions.Sql.date_part("epoch", x.Datetime) }))
+            .Should().Contain("cast(extract(epoch from dt) as double precision)");
+    }
+
+    [Fact]
+    public void DatePart_UnsupportedSurface_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var extractEpoch = () => SqlOf(ctx, e.Select(x => new { E = SqlFunctions.Sql.extract("epoch", x.Datetime) }));
+        extractEpoch.Should().Throw<NotSupportedException>();
+
+        var datePartYear = () => SqlOf(ctx, e.Select(x => new { Y = SqlFunctions.Sql.date_part("year", x.Datetime) }));
+        datePartYear.Should().Throw<NotSupportedException>();
     }
 
     [Fact]
@@ -1926,6 +1978,34 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void SetSeed_ShouldEmit()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { S = SqlFunctions.Postgres.setseed(0.5) }))
+            .Should().Contain("setseed(0.5)");
+    }
+
+    [Fact]
+    public void CryptoHash_ShouldEmit()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            A = SqlFunctions.Postgres.digest("abc", "sha256"),
+            B = SqlFunctions.Postgres.digest(SqlFunctions.Parameter<byte[]>(0), "sha1"),
+            C = SqlFunctions.Postgres.sha256(SqlFunctions.Parameter<byte[]>(1))
+        }));
+
+        sql.Should().Contain("digest('abc', 'sha256')");
+        sql.Should().Contain("digest(@norm_p0, 'sha1')");
+        sql.Should().Contain("sha256(@norm_p1)");
+    }
+
+    [Fact]
     public void ExtendedLogFunction_ShouldEmitTwoArgumentLog()
     {
         using var ctx = PostgresTestContext.Create();
@@ -2095,6 +2175,21 @@ public class SqlGenerationTests
         sql.Should().Contain("array_reverse(@norm_p8)");
         sql.Should().Contain("array_sort(@norm_p9)");
         sql.Should().Contain("string_to_array(somestring, ',')");
+    }
+
+    [Fact]
+    public void ArrayShuffleSample_ShouldEmit()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e
+            .Where(x => SqlFunctions.Postgres.array_shuffle(SqlFunctions.Parameter<long[]>(0)) != null)
+            .Where(x => SqlFunctions.Postgres.array_sample(SqlFunctions.Parameter<long[]>(1), 3) != null)
+            .Select(x => new { x.Id }));
+
+        sql.Should().Contain("array_shuffle(@norm_p0)");
+        sql.Should().Contain("array_sample(@norm_p1, 3)");
     }
 
     [Fact]

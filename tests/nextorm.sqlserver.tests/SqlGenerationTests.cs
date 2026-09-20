@@ -914,6 +914,46 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void Extract_ShouldUseSqlServerDatePartForms()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { Q = SqlFunctions.Sql.extract("quarter", x.Datetime) }))
+            .Should().Contain("datepart(quarter, dt)");
+        SqlOf(ctx, e.Select(x => new { W = SqlFunctions.Sql.extract("week", x.Datetime) }))
+            .Should().Contain("datepart(isowk, dt)");
+        SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.extract("dow", x.Datetime) }))
+            .Should().Contain("(datepart(weekday, dt) + @@datefirst - 1) % 7");
+        SqlOf(ctx, e.Select(x => new { I = SqlFunctions.Sql.extract("isodow", x.Datetime) }))
+            .Should().Contain("(datepart(weekday, dt) + @@datefirst - 2) % 7) + 1");
+        SqlOf(ctx, e.Select(x => new { E = SqlFunctions.Sql.date_part("epoch", x.Datetime) }))
+            .Should().Contain("cast(datediff_big(millisecond, '19700101', dt) as float) / 1000.0");
+    }
+
+    [Fact]
+    public void SetSeed_ShouldThrowBecauseSqlServerHasNoStandaloneSeed()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new { S = SqlFunctions.Postgres.setseed(0.5) }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*setseed*");
+    }
+
+    [Fact]
+    public void CryptoHash_ShouldThrowBecauseOnlyPostgresHasIt()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new { H = SqlFunctions.Postgres.digest("abc", "sha256") }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*digest/sha256*");
+    }
+
+    [Fact]
     public void InValues_ShouldRenderInPredicateWithParameters()
     {
         using var ctx = SqlServerTestContext.Create();

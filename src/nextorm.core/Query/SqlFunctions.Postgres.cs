@@ -87,6 +87,12 @@ namespace NextORM.Core;
         /// <summary>Sorts the elements of <paramref name="array"/>.</summary>
         public T[] array_sort<T>(T[] array) => default!;
 
+        /// <summary>Returns a randomly shuffled copy of <paramref name="array"/> (<c>array_shuffle</c>, PostgreSQL 16+).</summary>
+        public T[] array_shuffle<T>(T[] array) => default!;
+
+        /// <summary>Returns <paramref name="n"/> randomly selected elements of <paramref name="array"/> (<c>array_sample</c>, PostgreSQL 16+).</summary>
+        public T[] array_sample<T>(T[] array, int n) => default!;
+
         /// <summary><c>array &lt;@ other</c>: true when every element of <paramref name="array"/> is contained in <paramref name="other"/>.</summary>
         public bool array_contained_by<T>(T[] array, T[] other) => default!;
 
@@ -275,6 +281,15 @@ namespace NextORM.Core;
         /// <summary>A pseudo-random value in the range 0.0 &lt;= x &lt; 1.0.</summary>
         public double? random() => default!;
 
+        /// <summary>
+        /// Sets the seed for subsequent <see cref="random"/> calls in the session (<c>setseed</c>).
+        /// Requires a provider that supports it (see <see cref="ISqlDialect.SupportsRandomSeed"/>;
+        /// PostgreSQL only). PostgreSQL's <c>setseed</c> returns <c>void</c>, so the projected value is
+        /// always <c>null</c>; the call is made for its side effect.
+        /// </summary>
+        /// <returns>Always <c>null</c>, because PostgreSQL's <c>setseed</c> returns <c>void</c>.</returns>
+        public double? setseed(double? seed) => default!;
+
         /// <summary>The logarithm of <paramref name="x"/> to the given base (two-argument <c>log</c>).</summary>
         public double? log(double? baseValue, double? x) => default!;
 
@@ -334,6 +349,30 @@ namespace NextORM.Core;
 
         /// <summary>The MD5 hash of <paramref name="value"/> as a hexadecimal string.</summary>
         public string? md5(string? value) => default!;
+
+        /// <summary>
+        /// The binary hash of <paramref name="data"/> using the algorithm named by
+        /// <paramref name="type"/> (<c>md5</c>, <c>sha1</c>, <c>sha224</c>, <c>sha256</c>,
+        /// <c>sha384</c>, <c>sha512</c>). Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SupportsCryptoFunctions"/>; PostgreSQL) and the <c>pgcrypto</c>
+        /// extension installed on the server.
+        /// </summary>
+        public byte[]? digest(string? data, string? type) => default!;
+
+        /// <summary>
+        /// The binary hash of the <paramref name="data"/> bytes using the algorithm named by
+        /// <paramref name="type"/>. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SupportsCryptoFunctions"/>; PostgreSQL) and the <c>pgcrypto</c>
+        /// extension installed on the server.
+        /// </summary>
+        public byte[]? digest(byte[]? data, string? type) => default!;
+
+        /// <summary>
+        /// The SHA-256 hash of <paramref name="data"/> as a <c>bytea</c> (<c>sha256</c>). Requires a
+        /// provider that supports it (see <see cref="ISqlDialect.SupportsCryptoFunctions"/>;
+        /// PostgreSQL, where this is a core binary-string function).
+        /// </summary>
+        public byte[]? sha256(byte[]? data) => default!;
 
         /// <summary>Replaces the matches of a POSIX regular expression.</summary>
         public string? regexp_replace(string? value, string? pattern, string? replacement) => default!;
