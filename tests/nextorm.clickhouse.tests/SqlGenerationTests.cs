@@ -1239,6 +1239,70 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void ArrayRange_ShouldRenderRange()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            A = SqlFunctions.ClickHouse.length(SqlFunctions.ClickHouse.range(5)),
+            B = SqlFunctions.ClickHouse.length(SqlFunctions.ClickHouse.range(1, 5)),
+            C = SqlFunctions.ClickHouse.length(SqlFunctions.ClickHouse.range(1, 5, 2))
+        }));
+
+        sql.Should().Contain("toInt64(length(range(5)))");
+        sql.Should().Contain("toInt64(length(range(1, 5)))");
+        sql.Should().Contain("toInt64(length(range(1, 5, 2)))");
+    }
+
+    [Fact]
+    public void ArrayEnumerate_ShouldRenderArrayEnumerate()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        SqlOf(ctx, e.Select(x => new { N = SqlFunctions.ClickHouse.length(SqlFunctions.ClickHouse.array_enumerate(x.Nums)) }))
+            .Should().Contain("toInt64(length(arrayEnumerate(nums)))");
+    }
+
+    [Fact]
+    public void ArrayCumSum_ShouldRenderArrayCumSum()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        SqlOf(ctx, e.Select(x => new { S = SqlFunctions.ClickHouse.array_string_concat(SqlFunctions.ClickHouse.array_cum_sum(x.Nums), ",") }))
+            .Should().Contain("arrayStringConcat(arrayCumSum(nums), ',')");
+    }
+
+    [Fact]
+    public void ArraySlice_ShouldRenderArraySlice()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            A = SqlFunctions.ClickHouse.array_string_concat(SqlFunctions.ClickHouse.array_slice(x.Nums, 1), ","),
+            B = SqlFunctions.ClickHouse.array_string_concat(SqlFunctions.ClickHouse.array_slice(x.Nums, 1, 2), ",")
+        }));
+
+        sql.Should().Contain("arrayStringConcat(arraySlice(nums, 1), ',')");
+        sql.Should().Contain("arrayStringConcat(arraySlice(nums, 1, 2), ',')");
+    }
+
+    [Fact]
+    public void ArrayPushBack_ShouldRenderArrayPushBack()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        SqlOf(ctx, e.Select(x => new { S = SqlFunctions.ClickHouse.array_string_concat(SqlFunctions.ClickHouse.array_push_back(x.Nums, 4L), ",") }))
+            .Should().Contain("arrayStringConcat(arrayPushBack(nums, 4), ',')");
+    }
+
+    [Fact]
     public void ArrayJoin_ShouldRenderArrayJoin()
     {
         using var ctx = ClickHouseTestContext.Create();

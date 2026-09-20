@@ -1601,6 +1601,47 @@ Build Release — **0 warnings / 0 errors** (этот проход); `rg --files
 
 **Проверка:** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors** (этот проход); в диффе `src`+`tests` новых `#pragma`/`SuppressMessage`/`NoWarn` — **0**; `rg --files -g 'PublicAPI*.txt'` — пусто (подтверждает RD2/OJW1). Тесты в этом проходе не перезапускались (только build).
 
+### ClickHouse скалярные array-функции `range`/`arrayEnumerate`/`arrayCumSum`/`arraySlice`/`arrayPushBack` (точечный аудит 20.09.2026)
+
+Публичная поверхность аддитивна; переименований нет. Новые члены:
+
+- `ClickHouseFunctions.range(long) -> long[]` (`Query/SqlFunctions.ClickHouse.cs:289`),
+  `range(long, long) -> long[]` (`:292`), `range(long, long, long) -> long[]` (`:295`),
+  `array_enumerate<T>(T[]) -> long[]` (`:301`), `array_cum_sum<T>(T[]) -> T[]` (`:307`),
+  `array_slice<T>(T[], long) -> T[]` (`:314`), `array_slice<T>(T[], long, long) -> T[]` (`:317`),
+  `array_push_back<T>(T[], T) -> T[]` (`:323`).
+- Транслятор — `Visitors/ArraySqlTranslator.cs:230-245` (internal, внешней поверхности не даёт);
+  новых флагов/хуков нет — переиспользуется `ISqlDialect.SupportsArrayFunctions`/`MakeArrayFunction`.
+
+**CS1591/XML-doc.** XML-`<summary>` присутствует у всех 8 новых методов (с оговоркой «возвращает
+массив ⇒ только вложенно»); новых публичных типов нет → Приложение A (45) без изменений. Именование —
+конвенции соблюдены (snake_case DSL — SQL-зеркало, `T[]`-аргументы как у соседних array-методов),
+P0/P1 по именам нет.
+
+| # | Ур. | Место | Проблема | Рекомендация |
+|---|-----|-------|----------|--------------|
+| ASF1 | P2 | `Query/SqlFunctions.ClickHouse.cs:289-323`; `PublicAPI.*.txt` отсутствуют | 8 новых членов публичной поверхности не трекаются (`PublicApiAnalyzers` не подключён, Шаг 5 открыт). **Продолжение AR1, не новая находка.** Новых abstract-членов `ISqlDialect` нет, разрыва для внешних реализаторов не создаётся | При заморозке внести восемь методов `ClickHouseFunctions.range`/`array_enumerate`/`array_cum_sum`/`array_slice`/`array_push_back` в `PublicAPI.Unshipped.txt` (ср. AR1/AJ1/AJ8) |
+
+ℹ️ **Наблюдения (фикс не требуется):**
+- **Гейт переиспользован осознанно.** `range`/`arrayEnumerate`/`arrayCumSum`/`arraySlice`/`arrayPushBack` —
+  то же семейство «array-функции над нативным `Array(T)`», что и уже реализованные `length`/`has`/…,
+  поэтому новый `Supports*`-флаг не вводится: диалект без `SupportsArrayFunctions` бросает
+  `NotSupportedException` (`ArraySqlTranslator.RequireArrayFunctions`). Отдельный флаг под каждый член
+  был бы зонтиком без доказательства невыразимости.
+- **`MakeArrayFunction` не расширяется.** Новые функции возвращают массив, и их результирующий тип
+  определяется внешней функцией (`length`/`arrayStringConcat`), поэтому оборачивать их в `toInt64`
+  нельзя; CH-каст остаётся только у `length`/`indexOf`.
+- **`range` не промоутится в `PostgresFunctions`.** У PostgreSQL нет array-возвращающего `range`
+  (`generate_series` — set-returning и уже покрыт TVF), `array_append` — отдельная PG-функция с другим
+  именем; см. матрицу в `WIP_clickhouse_array_scalar_functions.md`.
+
+**Проверка:** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors** (этот проход);
+`dotnet test tests/nextorm.clickhouse.tests -c Debug` — **159/159**;
+`Postgres…ClickHouseArrayScalarFunctions_UnsupportedByProvider_ShouldThrow` — **1/1**;
+`ClickHouseIntegrationTests` (Testcontainers) — **45/45**, включая
+`ArrayScalarFunctions_ShouldReturnValues`; `rg --files -g 'PublicAPI*.txt'` — пусто (подтверждает ASF1);
+Приложение A (45) без изменений.
+
 ## 3. Находки
 
 ### Статус находок (актуализация 18.09.2026)

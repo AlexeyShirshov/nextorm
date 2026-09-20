@@ -35,7 +35,7 @@
 | --- | --- | --- | --- |
 | Функции приведения и частей даты: `toDate`/`toDateTime`/`toDate32`, `toYear`/`toQuarter`/`toMonth`/`toDayOfMonth`/`toDayOfWeek`/`toHour`/…, `toStartOf*`, `toMonday`, `toYYYYMM`/`toYYYYMMDD`, `toUnixTimestamp` | готово | методы `ClickHouseFunctions` + `SupportsDateConversionFunctions` + `MakeDateConversion`/`MakeDatePart`; модель запроса не меняется (см. `todo_clickhouse.md:72`) | `todo_clickhouse.md:70` |
 | `string.Split` → `splitByChar` | готово | флаг `SupportsStringSplit` + хук `MakeStringSplit`; один символ-разделитель, многоместные/`StringSplitOptions` отклоняются | `todo_clickhouse.md:230` |
-| Скалярные array-функции: `range`, `arrayEnumerate`, `arrayCumSum`, `arraySlice`, `arrayPushBack` | среднее | скалярные формы; проекция самого массива упирается в row reader | `todo_clickhouse.md:230` |
+| Скалярные array-функции: `range`, `arrayEnumerate`, `arrayCumSum`, `arraySlice`, `arrayPushBack` | готово | скалярные формы через `ClickHouseFunctions` + `ArraySqlTranslator` (гейт `SupportsArrayFunctions`); проекция самого массива по-прежнему упирается в row reader, функции применимы вложенно; см. `WIP_clickhouse_array_scalar_functions.md` | `todo_clickhouse.md:230` |
 | Продвинутые агрегаты: `windowFunnel`, `retention`, `sequenceMatch` | среднее/сложное | аккуратная типизация (DateTime/условия) | `todo_clickhouse.md:161` |
 | Прочие табличные функции: `generateRandom` | готово | через `WrapTableFunction` с фиксированной структурой и row-типом `IGenerateRandomRow` (см. `todo_clickhouse.md:355`); остальные — см. «заблокировано» | `todo_clickhouse.md:328` |
 

@@ -227,6 +227,21 @@ internal static class ArraySqlTranslator
             case nameof(ClickHouseFunctions.array_distinct) when args.Count == 1:
                 sqlName = "arrayDistinct";
                 break;
+            case nameof(ClickHouseFunctions.range) when args.Count is 1 or 2 or 3:
+                sqlName = "range";
+                break;
+            case nameof(ClickHouseFunctions.array_enumerate) when args.Count == 1:
+                sqlName = "arrayEnumerate";
+                break;
+            case nameof(ClickHouseFunctions.array_cum_sum) when args.Count == 1:
+                sqlName = "arrayCumSum";
+                break;
+            case nameof(ClickHouseFunctions.array_slice) when args.Count is 2 or 3:
+                sqlName = "arraySlice";
+                break;
+            case nameof(ClickHouseFunctions.array_push_back) when args.Count == 2:
+                sqlName = "arrayPushBack";
+                break;
             default:
                 return false;
         }

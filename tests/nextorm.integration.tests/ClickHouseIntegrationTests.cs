@@ -594,6 +594,31 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     }
 
     [Fact]
+    public void ArrayScalarFunctions_ShouldReturnValues()
+    {
+        // The five functions return arrays, which the row reader cannot materialise yet, so each is
+        // wrapped in a scalar-returning array function (length/arrayStringConcat) inside the query.
+        // array_entity id = 1 has nums = [3, 1, 2].
+        var r = _sut.ArrayEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                R = SqlFunctions.ClickHouse.length(SqlFunctions.ClickHouse.range(1, 5)),
+                E = SqlFunctions.ClickHouse.length(SqlFunctions.ClickHouse.array_enumerate(x.Nums)),
+                C = SqlFunctions.ClickHouse.array_string_concat(SqlFunctions.ClickHouse.array_cum_sum(x.Nums), ","),
+                S = SqlFunctions.ClickHouse.array_string_concat(SqlFunctions.ClickHouse.array_slice(x.Nums, 1, 2), ","),
+                P = SqlFunctions.ClickHouse.array_string_concat(SqlFunctions.ClickHouse.array_push_back(x.Nums, 4), ",")
+            })
+            .First();
+
+        r.R.Should().Be(4);
+        r.E.Should().Be(3);
+        r.C.Should().Be("3,4,6");
+        r.S.Should().Be("3,1");
+        r.P.Should().Be("3,1,2,4");
+    }
+
+    [Fact]
     public void ArrayJoinClause_ShouldExpandRowsAndDropEmptyArrays()
     {
         var ids = _sut.ArrayEntity

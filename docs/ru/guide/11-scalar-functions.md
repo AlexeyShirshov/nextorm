@@ -502,12 +502,19 @@ select cardinality(@norm_p1) as "N" from complex_entity where array_length(@norm
 | `SqlFunctions.ClickHouse.array_sort(a)` | `arraySort(a)` |
 | `SqlFunctions.ClickHouse.array_reverse(a)` | `arrayReverse(a)` |
 | `SqlFunctions.ClickHouse.array_distinct(a)` | `arrayDistinct(a)` |
+| `SqlFunctions.ClickHouse.range(start, end)` | `range(start, end)` |
+| `SqlFunctions.ClickHouse.array_enumerate(a)` | `arrayEnumerate(a)` |
+| `SqlFunctions.ClickHouse.array_cum_sum(a)` | `arrayCumSum(a)` |
+| `SqlFunctions.ClickHouse.array_slice(a, offset, length)` | `arraySlice(a, offset, length)` |
+| `SqlFunctions.ClickHouse.array_push_back(a, element)` | `arrayPushBack(a, element)` |
 | `SqlFunctions.ClickHouse.array_join(a)` | `arrayJoin(a)` |
 
 > `length`/`indexOf` нативно возвращают `UInt64`, поэтому диалект оборачивает их в `toInt64(...)`.
-> Функции, возвращающие массив (`split_by_char`, `array_sort`, `array_reverse`, `array_distinct`),
-> можно использовать только как операнд другой array-функции; прямое проецирование такой функции
-> падает на этапе подготовки.
+> Функции, возвращающие массив (`split_by_char`, `array_sort`, `array_reverse`, `array_distinct`,
+> `range`, `array_enumerate`, `array_cum_sum`, `array_slice`, `array_push_back`), можно использовать
+> только как операнд другой array-функции (например, `length(...)` или `array_string_concat(...)`);
+> прямое проецирование такой функции падает на этапе подготовки, так как row reader пока не умеет
+> материализовать `Array(T)`.
 
 CLR-метод `string.Split` рендерится как `splitByChar(separator, value)` (гейт
 [`SupportsStringSplit`](xref:NextORM.Core.ISqlDialect.SupportsStringSplit)); поддерживается только

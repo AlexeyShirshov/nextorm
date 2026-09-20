@@ -254,11 +254,18 @@
       `LeftArrayJoinElement_ShouldKeepEmptyArrayWithDefaultElement`.
       **Осталось:** higher-order (`arrayMap`/`arrayFilter`/`arrayExists`/`arrayAll`/`arrayCount`,
       `arrayFirst*`);       привязка элемента для нескольких массивов/join'ов (сейчас один источник без
-      `join`); row reader `Array(T)`/`Tuple` (`groupArray`/`topK`/`quantiles`/`JSONExtractArrayRaw`);
-      `range`/`arrayEnumerate`/`arrayCumSum`/`arraySlice`/
-      `arrayPushBack`/`arraysZip`. Маппинг `string.Split` на `splitByChar` реализован
-      (`SupportsStringSplit` + `MakeStringSplit`; тесты `SqlGenerationTests.Split_*`,
-      `ClickHouseIntegrationTests.Split_ShouldCountParts`; см. `WIP_clickhouse_string_split.md`).
+     `join`); row reader `Array(T)`/`Tuple` (`groupArray`/`topK`/`quantiles`/`JSONExtractArrayRaw`);
+     `arraysZip`. Маппинг `string.Split` на `splitByChar` реализован
+     (`SupportsStringSplit` + `MakeStringSplit`; тесты `SqlGenerationTests.Split_*`,
+     `ClickHouseIntegrationTests.Split_ShouldCountParts`; см. `WIP_clickhouse_string_split.md`).
+     **Скалярные array-функции `range`/`arrayEnumerate`/`arrayCumSum`/`arraySlice`/`arrayPushBack`
+     реализованы** (`ClickHouseFunctions` + `ArraySqlTranslator`, тот же гейт
+     `SupportsArrayFunctions`; проекция массива по-прежнему упирается в row reader, поэтому функции
+     применимы вложенно — `length(range(...))`, `arrayStringConcat(arrayCumSum(...), ',')`).
+     Тесты: `SqlGenerationTests.ArrayRange_*`/`ArrayEnumerate_*`/`ArrayCumSum_*`/`ArraySlice_*`/
+     `ArrayPushBack_*`, `Postgres…ClickHouseArrayScalarFunctions_UnsupportedByProvider_ShouldThrow`,
+     `ClickHouseIntegrationTests.ArrayScalarFunctions_ShouldReturnValues`; см.
+     `WIP_clickhouse_array_scalar_functions.md`.
 - [~] **JSON-тип ClickHouse** — JSONPath-скаляры по строковому JSON `JSON_VALUE`/`JSON_QUERY`/
       `JSON_EXISTS` реализованы: `ClickHouseFunctions.json_value`/`json_query`/`json_exists` (тот же гейт
       `SupportsJsonExtract`, имена маппит `MakeJsonExtract`); `TextJsonSqlTranslator` и
