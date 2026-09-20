@@ -366,6 +366,16 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     }
 
     [Fact]
+    public void Split_ShouldCountParts()
+    {
+        var count = _sut.SimpleEntity
+            .Select(x => SqlFunctions.ClickHouse.length("a,b,c".Split(',')))
+            .First();
+
+        count.Should().Be(3);
+    }
+
+    [Fact]
     public void BitAggregates_ShouldMatchBitwiseOperations()
     {
         // simple_entity ids are 1..10: AND is 0, OR is 15 and XOR is 11.

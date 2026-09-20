@@ -38,6 +38,7 @@ public sealed class DialectCapabilityContractTests
         { nameof(ISqlDialect.SupportsUuidGenerators), nameof(ISqlDialect.MakeUuidGenerator) },
         { nameof(ISqlDialect.SupportsLimitBy), nameof(ISqlDialect.MakeLimitBy) },
         { nameof(ISqlDialect.SupportsDateConversionFunctions), nameof(ISqlDialect.MakeDateConversion) },
+        { nameof(ISqlDialect.SupportsStringSplit), nameof(ISqlDialect.MakeStringSplit) },
     };
 
     [Theory]

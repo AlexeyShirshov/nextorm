@@ -37,6 +37,16 @@ public sealed class ClickHouseDialect : SqlDialectBase
     /// <summary>ClickHouse implements <c>arrayJoin(array)</c>, which expands one row per element.</summary>
     public override bool SupportsArrayJoin => true;
 
+    /// <summary>ClickHouse renders <c>string.Split</c> as <c>splitByChar(separator, value)</c>.</summary>
+    public override bool SupportsStringSplit => true;
+
+    /// <summary>
+    /// ClickHouse's <c>splitByChar</c> takes a one-character separator; multi-character separators
+    /// (ClickHouse's <c>splitByString</c>) are not exposed.
+    /// </summary>
+    public override string MakeStringSplit(string separator, string value) =>
+        $"splitByChar({separator}, {value})";
+
     /// <summary>
     /// <c>length</c> and <c>indexOf</c> return <c>UInt64</c> natively; cast them to <c>Int64</c> so the
     /// row reader can materialise the declared CLR integer.

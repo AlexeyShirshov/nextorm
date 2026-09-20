@@ -142,6 +142,13 @@ public interface ISqlDialect
     /// </summary>
     bool SupportsArrayFunctions { get; }
     /// <summary>
+    /// True when the provider can render the CLR <c>string.Split</c> call as a scalar array via
+    /// <see cref="MakeStringSplit"/> (<c>splitByChar(separator, value)</c>). The safe default is
+    /// <c>false</c>; only ClickHouse opts in today. PostgreSQL handles <c>string.Split</c> as an array
+    /// operand through its own <c>string_to_array</c> path instead.
+    /// </summary>
+    bool SupportsStringSplit { get; }
+    /// <summary>
     /// True when the provider can render <c>arrayJoin(array)</c>, which expands one row per array
     /// element. The safe default is <c>false</c>; only ClickHouse opts in today. See
     /// <see cref="ClickHouseFunctions.array_join{T}(T[])"/>.
@@ -713,6 +720,15 @@ public interface ISqlDialect
     /// integer.
     /// </summary>
     string MakeArrayFunction(string name, string call) => call;
+    /// <summary>
+    /// Renders the CLR <c>string.Split</c> call as a scalar array over the already-rendered
+    /// <paramref name="separator"/> (a one-character SQL string literal) and <paramref name="value"/>
+    /// (<c>splitByChar(separator, value)</c> on ClickHouse). Only called when
+    /// <see cref="SupportsStringSplit"/> is <c>true</c>; a provider that cannot express a scalar
+    /// <c>string.Split</c> never renders it.
+    /// </summary>
+    string MakeStringSplit(string separator, string value) =>
+        throw new NotSupportedException("string.Split is not supported by this provider.");
     /// <summary>
     /// Renders an ordered-set aggregate as <c>&lt;aggregate&gt; within group (order by &lt;orderBy&gt;)</c>.
     /// <paramref name="aggregate"/> is the already-rendered call (for example <c>percentile_cont(0.5)</c>)

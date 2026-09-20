@@ -450,6 +450,18 @@ select cardinality(@norm_p1) as "N" from complex_entity where array_length(@norm
 > можно использовать только как операнд другой array-функции; прямое проецирование такой функции
 > падает на этапе подготовки.
 
+CLR-метод `string.Split` рендерится как `splitByChar(separator, value)` (гейт
+[`SupportsStringSplit`](xref:NextORM.Core.ISqlDialect.SupportsStringSplit)); поддерживается только
+одноразрядный разделитель (многосимвольный `splitByString` не выставлен), результат — `string[]`,
+пригодный только внутри другой array-функции; overload с `count`, несколько разделителей и
+`StringSplitOptions`, отличный от `None`, бросают `NotSupportedException`:
+
+```csharp
+var parts = dataContext.From<IComplexEntity>()
+    .Select(e => SqlFunctions.ClickHouse.length(e.String!.Split(',')))
+    .First();
+```
+
 ```csharp
 var tags = dataContext.From<IArrayEntity>()
     .Where(e => e.Id == 1)

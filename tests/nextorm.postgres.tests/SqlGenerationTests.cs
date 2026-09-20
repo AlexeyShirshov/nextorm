@@ -1445,6 +1445,17 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void Split_UnsupportedByProvider_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new { V = x.String!.Split(',') }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*string.Split*");
+    }
+
+    [Fact]
     public void SessionInfoFunctions_ShouldUsePostgresNames()
     {
         using var ctx = PostgresTestContext.Create();

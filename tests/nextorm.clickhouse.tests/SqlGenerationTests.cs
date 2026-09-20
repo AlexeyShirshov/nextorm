@@ -1087,6 +1087,58 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void Split_CharSeparator_ShouldUseSplitByChar()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { N = SqlFunctions.ClickHouse.length(x.String!.Split(',')) }))
+            .Should().Contain("toInt64(length(splitByChar(',', somestring)))");
+    }
+
+    [Fact]
+    public void Split_StringSeparator_ShouldUseSplitByChar()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { N = SqlFunctions.ClickHouse.length(x.String!.Split(",")) }))
+            .Should().Contain("toInt64(length(splitByChar(',', somestring)))");
+    }
+
+    [Fact]
+    public void Split_CharArraySeparator_ShouldUseSplitByChar()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { N = SqlFunctions.ClickHouse.length(x.String!.Split(new[] { '|' })) }))
+            .Should().Contain("toInt64(length(splitByChar('|', somestring)))");
+    }
+
+    [Fact]
+    public void Split_MultiCharSeparator_ShouldThrow()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new { N = SqlFunctions.ClickHouse.length(x.String!.Split("::")) }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*one-character separator*");
+    }
+
+    [Fact]
+    public void Split_RemoveEmptyEntries_ShouldThrow()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new { N = SqlFunctions.ClickHouse.length(x.String!.Split(',', StringSplitOptions.RemoveEmptyEntries)) }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*StringSplitOptions*");
+    }
+
+    [Fact]
     public void ArraySortReverseDistinct_ShouldRender()
     {
         using var ctx = ClickHouseTestContext.Create();

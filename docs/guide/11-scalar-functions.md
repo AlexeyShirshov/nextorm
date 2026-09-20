@@ -441,6 +441,18 @@ result can be projected like a scalar column.
 > that return an array (`split_by_char`, `array_sort`, `array_reverse`, `array_distinct`) can only be used
 > as the operand of another array function; projecting one directly throws at preparation time.
 
+The CLR `string.Split` is rendered as `splitByChar(separator, value)` (gated by
+[`SupportsStringSplit`](xref:NextORM.Core.ISqlDialect.SupportsStringSplit)); only a single-character
+separator is supported (the multi-character `splitByString` is not exposed), the result is a `string[]`
+usable only inside another array function, and the `count` overload, multiple separators and
+`StringSplitOptions` other than `None` throw `NotSupportedException`:
+
+```csharp
+var parts = dataContext.From<IComplexEntity>()
+    .Select(e => SqlFunctions.ClickHouse.length(e.String!.Split(',')))
+    .First();
+```
+
 ```csharp
 var tags = dataContext.From<IArrayEntity>()
     .Where(e => e.Id == 1)

@@ -41,6 +41,13 @@ public class ClickHouseDialectTests
     {
         Dialect.SupportsArrayFunctions.Should().BeTrue();
         Dialect.SupportsArrayJoin.Should().BeTrue();
+        Dialect.SupportsStringSplit.Should().BeTrue();
+    }
+
+    [Fact]
+    public void MakeStringSplit_ShouldRenderSplitByChar()
+    {
+        Dialect.MakeStringSplit("','", "somestring").Should().Be("splitByChar(',', somestring)");
     }
 
     [Fact]
@@ -279,6 +286,7 @@ public class ClickHouseDialectTests
         Dialect.SupportsDateConversionFunctions.Should().BeTrue();
         Dialect.SupportsStringAgg.Should().BeTrue();
         Dialect.SupportsArrayAgg.Should().BeFalse();
+        Dialect.SupportsStringSplit.Should().BeTrue();
         Dialect.SupportsBitAggregates.Should().BeTrue();
         Dialect.SupportsStatisticalAggregates.Should().BeTrue();
         Dialect.SupportsRegressionAggregates.Should().BeFalse();

@@ -61,6 +61,8 @@ internal static class StringFunctionTranslator
                     return TryTranslateStringLike(visitor, node, LikePosition.StartsWith);
                 case nameof(string.EndsWith):
                     return TryTranslateStringLike(visitor, node, LikePosition.EndsWith);
+                case nameof(string.Split):
+                    return TryTranslateSplit(visitor, node);
             }
 
             return false;
@@ -303,6 +305,59 @@ internal static class StringFunctionTranslator
             visitor.VisitToString(args[0]),
             pad,
             left));
+        return true;
+    }
+
+    /// <summary>
+    /// Translates a <c>string.Split</c> call whose separator is a single character or a
+    /// one-character constant string into the provider's scalar array-split form
+    /// (<c>splitByChar(separator, value)</c> on ClickHouse). The result is a <c>string[]</c>, so it can
+    /// only be used as the operand of another array function; the count overload, multiple
+    /// separators, a multi-character separator and <c>StringSplitOptions</c> other than
+    /// <c>None</c> are rejected.
+    /// </summary>
+    private static bool TryTranslateSplit(BaseExpressionVisitor visitor, MethodCallExpression node)
+    {
+        var args = node.Arguments;
+        if (node.Object is null || args.Count is < 1 or > 2)
+            throw new NotSupportedException("This string.Split overload is not supported; only a single-separator overload maps to SQL.");
+
+        if (args.Count == 2
+            && args[1] is ConstantExpression { Value: StringSplitOptions options }
+            && options != StringSplitOptions.None)
+            throw new NotSupportedException("string.Split with StringSplitOptions other than None is not supported.");
+
+        if (args.Count == 2 && args[1] is not ConstantExpression { Value: StringSplitOptions })
+            throw new NotSupportedException("This string.Split overload is not supported; only a single-separator overload maps to SQL.");
+
+        var candidate = args[0];
+        if (candidate is NewArrayExpression { Expressions: [var single] })
+            candidate = single;
+        else if (candidate is NewArrayExpression)
+            throw new NotSupportedException("string.Split with multiple separators is not supported.");
+
+        if (candidate.Type != typeof(char) && candidate.Type != typeof(string))
+            throw new NotSupportedException("This string.Split overload is not supported; only a single char/string separator maps to SQL.");
+
+        if (!visitor.Dialect.SupportsStringSplit)
+            throw new NotSupportedException("string.Split is not supported by this provider.");
+
+        if (!SqlLiteral.TryGetConstantString(candidate, out var separator))
+            throw new NotSupportedException("The string.Split separator must be a constant character or single-character string.");
+
+        if (separator.Length != 1)
+            throw new NotSupportedException("string.Split requires a one-character separator; multi-character separators are not supported.");
+
+        if (visitor.IsParamMode)
+        {
+            visitor.Visit(node.Object);
+            return true;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        visitor.Builder!.Append(visitor.Dialect.MakeStringSplit(
+            SqlLiteral.ToSqlStringLiteral(separator),
+            visitor.VisitToString(node.Object)));
         return true;
     }
 

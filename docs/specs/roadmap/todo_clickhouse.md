@@ -255,8 +255,10 @@
       **Осталось:** higher-order (`arrayMap`/`arrayFilter`/`arrayExists`/`arrayAll`/`arrayCount`,
       `arrayFirst*`);       привязка элемента для нескольких массивов/join'ов (сейчас один источник без
       `join`); row reader `Array(T)`/`Tuple` (`groupArray`/`topK`/`quantiles`/`JSONExtractArrayRaw`);
-      маппинг `string.Split` на `splitByChar`; `range`/`arrayEnumerate`/`arrayCumSum`/`arraySlice`/
-      `arrayPushBack`/`arraysZip`.
+      `range`/`arrayEnumerate`/`arrayCumSum`/`arraySlice`/
+      `arrayPushBack`/`arraysZip`. Маппинг `string.Split` на `splitByChar` реализован
+      (`SupportsStringSplit` + `MakeStringSplit`; тесты `SqlGenerationTests.Split_*`,
+      `ClickHouseIntegrationTests.Split_ShouldCountParts`; см. `WIP_clickhouse_string_split.md`).
 - [~] **JSON-тип ClickHouse** — JSONPath-скаляры по строковому JSON `JSON_VALUE`/`JSON_QUERY`/
       `JSON_EXISTS` реализованы: `ClickHouseFunctions.json_value`/`json_query`/`json_exists` (тот же гейт
       `SupportsJsonExtract`, имена маппит `MakeJsonExtract`); `TextJsonSqlTranslator` и
