@@ -55,7 +55,9 @@
 - `Math.Round(x, digits)` casts a `double`/`float` first argument to `numeric`
   (`round((x)::numeric, digits)`): PostgreSQL has no `round(double precision, integer)`;
 - `DateTime.Now` renders `now()`, `DateTime.UtcNow` renders `now() at time zone 'utc'`;
-- date parts render as `extract(part from value)`;
+- date parts render as `extract(part from value)`; `SqlFunctions.Sql.extract(part, value)` covers
+  `quarter`/`week` (ISO)/`dow`/`isodow` and `SqlFunctions.Sql.date_part("epoch", value)` renders
+  `cast(extract(epoch from value) as double precision)`;
 - paging is `limit n` / `limit n offset m`; an offset-only query emits `offset m` alone.
 
 ## Registering the provider

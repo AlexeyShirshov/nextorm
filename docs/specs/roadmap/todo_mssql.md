@@ -80,9 +80,11 @@
       (реальный SQL Server).
 - [x] **Расширенные части `DATEPART`**: `DateTime.DayOfYear` добавлен (внутренняя часть `doy`): PostgreSQL
       `extract(doy ...)`, SQL Server `datepart(dayofyear, ...)`, MySQL `dayofyear(...)`, SQLite
-      `cast(strftime('%j', ...) as integer)`, ClickHouse `toDayOfYear(...)`. Публичного
-      `SqlFunctions.Sql.extract` нет — удалён как дубль. `DateTime.DayOfWeek` намеренно не маппится:
-      наивный `datepart(weekday)` зависит от `DATEFIRST`; нормализованный маппинг — отдельная задача.
+      `cast(strftime('%j', ...) as integer)`, ClickHouse `toDayOfYear(...)`. Публичный
+      `SqlFunctions.Sql.extract(part, value)` добавлен повторно (см. `todo_postgres.md:47`): `quarter`,
+      `week` (ISO), `dow`/`isodow` нормализованы в том числе для SQL Server через `datepart(weekday)` +
+      `@@datefirst`/`datepart(isowk)`; `DateTime.DayOfWeek` по-прежнему не маппится, вместо него —
+      `extract("dow", value)`.
 
 ## Среднее (новая площадь API, но модель запроса уже есть) — закрыто
 

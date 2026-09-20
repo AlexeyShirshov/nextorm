@@ -44,7 +44,18 @@
 - [x] `to_char`, `to_date`, `to_number`, `to_timestamp`
 - [x] Интервальная арифметика: `SqlFunctions.Sql.date_add`/`end_of_month` и `DateTime.Add*` (интервальная арифметика `+ interval` в PostgreSQL, `dateadd` в SQL Server, `addXxx` в ClickHouse); `AT TIME ZONE` / `timezone()` — функция `SqlFunctions.Sql.timezone`
 - [x] Части даты через свойства `DateTime`: `Year`, `Month`, `Day`, `Hour`, `Minute`, `Second`, `DayOfYear` (`doy`) — `MemberTranslator` → `MakeDatePart`
-- [ ] **Публичный `EXTRACT`/`date_part`** — `quarter`, `week`, `epoch`, `dow`, `isodow` и `DateTime.DayOfWeek` недоступны: `MakeDatePart` вызывается только для перечисленных выше свойств, отдельного `SqlFunctions.Sql.extract(part, value)` в API нет (в `todo_postgres.md` он ранее упоминался как готовый — это было неверно). В demo-запросе `business_occupancy_matrix.sql` `EXTRACT(ISODOW FROM scheduled_departure)` заменён на `date_diff('day', date_trunc('week', d), d) + 1`, а `EXTRACT(EPOCH FROM a - b)` в `aircraft_delay_chains.sql` — на `date_diff('seconds', a, b)`. Нужны метод `extract`/`date_part` (и/или свойства `DateTime.DayOfWeek`) с ветками диалектов; `MakeDatePart`/`MakeDateDiff` уже есть.
+- [x] **Публичный `EXTRACT`/`date_part`** — добавлены `SqlFunctions.Sql.extract(part, value)` (`int?`;
+      `year`/`quarter`/`month`/`week`/`day`/`doy`/`dow`/`isodow`/`hour`/`minute`/`second`) и
+      `SqlFunctions.Sql.date_part(part, value)` (`double?`; `epoch`) на `CommonFunctions` с общим
+      диалектным хуком `MakeDatePart` и новым гейтом `SupportsDatePart(part)`. Семантика нормализована:
+      `week` — ISO 8601, `dow` — 0=Sunday..6=Saturday, `isodow` — 1=Monday..7=Sunday. Реализованы все
+      шесть SQL-провайдеров (PostgreSQL `extract`, SQL Server `datepart(isowk)`/`@@datefirst`,
+      MySQL/MariaDB `quarter`/`weekofyear`/`dayofweek`/`weekday`/`unix_timestamp`, SQLite `strftime`+
+      ISO-неделя через четверг, ClickHouse `toQuarter`/`toISOWeek`/`toDayOfWeek`). `DateTime.DayOfWeek`
+      по-прежнему не маппится — нормализованный `dow` доступен через `extract`. Тесты:
+      `SqlGenerationTests.Extract_ShouldUsePostgresDatePartForms` (PG) и одноимённые в SQL
+      Server/MySQL/MariaDB/SQLite/ClickHouse, `PostgresDialectTests.DatePartHooks_ShouldSupportExtendedParts`,
+      `CommonTestSuite.Functions.Extract_ShouldReturnNormalisedDateParts` (реальные PG/SQL Server/MySQL/SQLite).
 - [x] `current_date`, `current_time`, `localtime`, `localtimestamp`
 - [x] `generate_series` (табличная функция, см. ниже)
 

@@ -56,6 +56,12 @@ internal static class BuiltinFunctionTranslator
             case nameof(CommonFunctions.date_from_parts) when node.Arguments.Count == 3:
                 EmitDateFromParts(visitor, node.Arguments);
                 return true;
+            case nameof(CommonFunctions.extract) when node.Arguments.Count == 2:
+                EmitDatePart(visitor, node.Arguments, numeric: false);
+                return true;
+            case nameof(CommonFunctions.date_part) when node.Arguments.Count == 2:
+                EmitDatePart(visitor, node.Arguments, numeric: true);
+                return true;
             case nameof(CommonFunctions.contains) when node.Arguments.Count == 2:
                 EmitFullText(visitor, node, "contains");
                 return true;
@@ -269,6 +275,36 @@ internal static class BuiltinFunctionTranslator
             visitor.VisitToString(args[0]),
             visitor.VisitToString(args[1]),
             visitor.VisitToString(args[2])));
+    }
+
+    /// <summary>
+    /// <c>extract(part, value)</c>/<c>date_part(part, value)</c> with a validated constant date part.
+    /// <paramref name="numeric"/> selects the double-valued surface (currently only <c>epoch</c>);
+    /// the integer surface rejects <c>epoch</c> and the numeric surface rejects every integer part.
+    /// </summary>
+    private static void EmitDatePart(BaseExpressionVisitor visitor, IReadOnlyList<Expression> args, bool numeric)
+    {
+        if (!SqlLiteral.TryGetConstantString(args[0], out var part))
+            throw new NotSupportedException("The date part must be a constant string.");
+
+        part = part.ToLowerInvariant();
+
+        if (numeric && part != "epoch")
+            throw new NotSupportedException($"date_part only provides the numeric 'epoch' part; use extract for the '{part}' part.");
+        if (!numeric && part == "epoch")
+            throw new NotSupportedException("'epoch' is a numeric date part; use date_part.");
+
+        if (!visitor.Dialect.SupportsDatePart(part))
+            throw new NotSupportedException($"'{part}' is not a supported date part for this provider.");
+
+        if (visitor.IsParamMode)
+        {
+            visitor.Visit(args[1]);
+            return;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        visitor.Builder!.Append(visitor.Dialect.MakeDatePart(part, visitor.VisitToString(args[1])));
     }
 
     /// <summary>

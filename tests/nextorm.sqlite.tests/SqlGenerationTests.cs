@@ -1076,6 +1076,24 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void Extract_ShouldUseSqliteDatePartForms()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { Q = SqlFunctions.Sql.extract("quarter", x.Datetime) }))
+            .Should().Contain("cast((cast(strftime('%m', dt) as integer) + 2) / 3 as integer)");
+        SqlOf(ctx, e.Select(x => new { W = SqlFunctions.Sql.extract("week", x.Datetime) }))
+            .Should().Contain("cast((cast(strftime('%j', date(dt, '-3 days', 'weekday 4')) as integer) + 6) / 7 as integer)");
+        SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.extract("dow", x.Datetime) }))
+            .Should().Contain("cast(strftime('%w', dt) as integer)");
+        SqlOf(ctx, e.Select(x => new { I = SqlFunctions.Sql.extract("isodow", x.Datetime) }))
+            .Should().Contain("(cast(strftime('%w', dt) as integer) + 6) % 7 + 1");
+        SqlOf(ctx, e.Select(x => new { E = SqlFunctions.Sql.date_part("epoch", x.Datetime) }))
+            .Should().Contain("((julianday(dt) - 2440587.5) * 86400.0)");
+    }
+
+    [Fact]
     public void IsNullOrWhiteSpace_ShouldThrowClearException()
     {
         using var ctx = SqliteTestContext.Create();

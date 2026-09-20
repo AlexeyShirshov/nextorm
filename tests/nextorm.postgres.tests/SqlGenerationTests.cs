@@ -680,6 +680,37 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void Extract_ShouldUsePostgresDatePartForms()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { Q = SqlFunctions.Sql.extract("quarter", x.Datetime) }))
+            .Should().Contain("extract(quarter from dt)");
+        SqlOf(ctx, e.Select(x => new { W = SqlFunctions.Sql.extract("week", x.Datetime) }))
+            .Should().Contain("extract(week from dt)");
+        SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.extract("dow", x.Datetime) }))
+            .Should().Contain("extract(dow from dt)");
+        SqlOf(ctx, e.Select(x => new { I = SqlFunctions.Sql.extract("isodow", x.Datetime) }))
+            .Should().Contain("extract(isodow from dt)");
+        SqlOf(ctx, e.Select(x => new { E = SqlFunctions.Sql.date_part("epoch", x.Datetime) }))
+            .Should().Contain("cast(extract(epoch from dt) as double precision)");
+    }
+
+    [Fact]
+    public void DatePart_UnsupportedSurface_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var extractEpoch = () => SqlOf(ctx, e.Select(x => new { E = SqlFunctions.Sql.extract("epoch", x.Datetime) }));
+        extractEpoch.Should().Throw<NotSupportedException>();
+
+        var datePartYear = () => SqlOf(ctx, e.Select(x => new { Y = SqlFunctions.Sql.date_part("year", x.Datetime) }));
+        datePartYear.Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
     public void InValues_ShouldRenderInPredicateWithParameters()
     {
         using var ctx = PostgresTestContext.Create();

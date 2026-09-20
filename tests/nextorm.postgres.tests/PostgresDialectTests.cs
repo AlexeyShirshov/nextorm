@@ -78,6 +78,24 @@ public class PostgresDialectTests
     }
 
     [Fact]
+    public void DatePartHooks_ShouldSupportExtendedParts()
+    {
+        Dialect.SupportsDatePart("year").Should().BeTrue();
+        Dialect.SupportsDatePart("quarter").Should().BeTrue();
+        Dialect.SupportsDatePart("week").Should().BeTrue();
+        Dialect.SupportsDatePart("dow").Should().BeTrue();
+        Dialect.SupportsDatePart("isodow").Should().BeTrue();
+        Dialect.SupportsDatePart("epoch").Should().BeTrue();
+        Dialect.SupportsDatePart("nonsense").Should().BeFalse();
+
+        Dialect.MakeDatePart("quarter", "dt").Should().Be("extract(quarter from dt)");
+        Dialect.MakeDatePart("week", "dt").Should().Be("extract(week from dt)");
+        Dialect.MakeDatePart("dow", "dt").Should().Be("extract(dow from dt)");
+        Dialect.MakeDatePart("isodow", "dt").Should().Be("extract(isodow from dt)");
+        Dialect.MakeDatePart("epoch", "dt").Should().Be("cast(extract(epoch from dt) as double precision)");
+    }
+
+    [Fact]
     public void CteHooks_ShouldUseRecursiveKeywordAndNoMaxRecursion()
     {
         Dialect.MakeWith(true).Should().Be("with recursive ");

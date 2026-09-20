@@ -189,9 +189,22 @@ public class MySqlDialect : SqlDialectBase
 
     public override string MakeParam(string name) => $"@{name}";
 
-    // MySQL has dayofyear(); the generic extract() spelling is avoided for this part.
-    public override string MakeDatePart(string part, string value) =>
-        part == "doy" ? $"dayofyear({value})" : base.MakeDatePart(part, value);
+    // MySQL has dayofyear()/quarter()/weekofyear(); the generic extract() spelling is avoided for
+    // these parts. weekofyear is ISO 8601 (EXTRACT(WEEK ...) depends on default_week_format).
+    public override string MakeDatePart(string part, string value) => part switch
+    {
+        "doy" => $"dayofyear({value})",
+        "quarter" => $"quarter({value})",
+        "week" => $"weekofyear({value})",
+        "dow" => $"(dayofweek({value}) - 1)",
+        "isodow" => $"(weekday({value}) + 1)",
+        "epoch" => $"cast(unix_timestamp({value}) as double)",
+        _ => base.MakeDatePart(part, value)
+    };
+
+    /// <summary>MySQL/MariaDB additionally accept the normalised weekday and epoch date parts.</summary>
+    public override bool SupportsDatePart(string part) =>
+        part is "dow" or "isodow" or "epoch" || base.SupportsDatePart(part);
 
     public override string MakeCoalesce(string v1, string v2) => $"coalesce({v1}, {v2})";
 

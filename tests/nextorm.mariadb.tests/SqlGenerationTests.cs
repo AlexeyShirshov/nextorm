@@ -84,6 +84,24 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void Extract_ShouldUseMariaDbDatePartForms()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { Q = SqlFunctions.Sql.extract("quarter", x.Datetime) }))
+            .Should().Contain("quarter(dt)");
+        SqlOf(ctx, e.Select(x => new { W = SqlFunctions.Sql.extract("week", x.Datetime) }))
+            .Should().Contain("weekofyear(dt)");
+        SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.extract("dow", x.Datetime) }))
+            .Should().Contain("(dayofweek(dt) - 1)");
+        SqlOf(ctx, e.Select(x => new { I = SqlFunctions.Sql.extract("isodow", x.Datetime) }))
+            .Should().Contain("(weekday(dt) + 1)");
+        SqlOf(ctx, e.Select(x => new { E = SqlFunctions.Sql.date_part("epoch", x.Datetime) }))
+            .Should().Contain("cast(unix_timestamp(dt) as double)");
+    }
+
+    [Fact]
     public void NthValue_ShouldEmitOverWithOrder()
     {
         using var ctx = MariaDbTestContext.Create();

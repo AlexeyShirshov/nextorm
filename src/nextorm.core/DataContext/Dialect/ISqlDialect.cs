@@ -638,6 +638,13 @@ public interface ISqlDialect
     string MakeBooleanValuePredicate(string value);
     /// <summary>Renders a date/time part extraction (<c>year</c>, <c>month</c>, <c>day</c>, <c>hour</c>, ...).</summary>
     string MakeDatePart(string part, string value);
+    /// <summary>
+    /// True when the provider accepts <paramref name="part"/> as an <c>extract</c>/<c>date_part</c>
+    /// date part. The ANSI parts are accepted by default; a dialect adds the parts it can express
+    /// natively (<c>quarter</c>, <c>week</c>, <c>dow</c>, <c>isodow</c>, <c>epoch</c>) by overriding
+    /// this together with <see cref="MakeDatePart"/>.
+    /// </summary>
+    bool SupportsDatePart(string part);
     /// <summary>Renders the current local or UTC date/time.</summary>
     string MakeNow(bool utc);
     /// <summary>Renders a math function call with the given already-rendered arguments.</summary>

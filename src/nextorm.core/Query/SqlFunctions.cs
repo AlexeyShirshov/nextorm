@@ -323,6 +323,25 @@ public static partial class SqlFunctions
         public DateTime? date_from_parts(int year, int month, int day) => default!;
 
         /// <summary>
+        /// <c>extract(part, value)</c>: the integer <paramref name="part"/> of a date/time. Supports
+        /// <c>year</c>, <c>quarter</c>, <c>month</c>, <c>week</c> (ISO 8601), <c>day</c>, <c>doy</c>,
+        /// <c>dow</c> (0=Sunday..6=Saturday), <c>isodow</c> (1=Monday..7=Sunday), <c>hour</c>,
+        /// <c>minute</c> and <c>second</c>. The part must be a constant string. Use
+        /// <see cref="date_part"/> for <c>epoch</c>. Requires a provider that supports the part (see
+        /// <see cref="ISqlDialect.SupportsDatePart(string)"/>).
+        /// </summary>
+        public int? extract(string part, DateTime? value) => default!;
+
+        /// <summary>
+        /// <c>date_part(part, value)</c>: the numeric <paramref name="part"/> of a date/time.
+        /// Currently supports <c>epoch</c> (the number of seconds since 1970-01-01 00:00:00, including
+        /// any fraction). The part must be a constant string. Use <see cref="extract"/> for the
+        /// integer parts. Requires a provider that supports the part (see
+        /// <see cref="ISqlDialect.SupportsDatePart(string)"/>).
+        /// </summary>
+        public double? date_part(string part, DateTime? value) => default!;
+
+        /// <summary>
         /// <c>string_agg(value, delimiter)</c>: concatenates the values of a group. Requires a provider
         /// that supports it (see <see cref="ISqlDialect.SupportsStringArrayAggregates"/>).
         /// </summary>

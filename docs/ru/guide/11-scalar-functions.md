@@ -240,6 +240,26 @@ select cast(strftime('%Y', dt) as integer) as 'Year', cast(strftime('%m', dt) as
 Важная деталь для SQLite: `strftime` возвращает текст, поэтому результат оборачивается в
 `cast(... as integer)`, чтобы материализоваться как свойство CLR `int`.
 
+### Извлечение произвольных частей даты
+
+`SqlFunctions.Sql.extract(part, value)` возвращает целочисленную часть даты для `year`, `quarter`,
+`month`, `week` (ISO 8601), `day`, `doy`, `dow` (0=воскресенье..6=суббота), `isodow`
+(1=понедельник..7=воскресенье), `hour`, `minute` и `second`. `SqlFunctions.Sql.date_part(part, value)`
+возвращает числовую часть `epoch` (секунды с 1970-01-01, включая дробную часть). Обе принимают
+константное имя части и рендерят нативную форму каждого провайдера, поэтому результат одинаков везде:
+
+| Провайдер | `extract("quarter", dt)` | `extract("week", dt)` | `extract("dow", dt)` | `date_part("epoch", dt)` |
+|---|---|---|---|---|
+| PostgreSQL | `extract(quarter from dt)` | `extract(week from dt)` | `extract(dow from dt)` | `cast(extract(epoch from dt) as double precision)` |
+| SQL Server | `datepart(quarter, dt)` | `datepart(isowk, dt)` | `(datepart(weekday, dt) + @@datefirst - 1) % 7` | `cast(datediff_big(millisecond, '19700101', dt) as float) / 1000.0` |
+| MySQL/MariaDB | `quarter(dt)` | `weekofyear(dt)` | `(dayofweek(dt) - 1)` | `cast(unix_timestamp(dt) as double)` |
+| SQLite | `cast((cast(strftime('%m', dt) as integer) + 2) / 3 as integer)` | ISO-неделя через `strftime('%j', date(dt, '-3 days', 'weekday 4'))` | `cast(strftime('%w', dt) as integer)` | `((julianday(dt) - 2440587.5) * 86400.0)` |
+| ClickHouse | `toQuarter(dt)` | `toISOWeek(dt)` | `(toDayOfWeek(dt) % 7)` | `toFloat64(toUnixTimestamp(dt))` |
+
+`DateTime.DayOfWeek` не транслируется как свойство (его аналог `datepart(weekday)` зависит от
+сессионного `DATEFIRST`); для нормализованного значения используйте `extract("dow", value)` или
+`extract("isodow", value)`.
+
 ### Расширенные дата и время PostgreSQL
 
 Эти функции входят в расширенную библиотеку скалярных функций
@@ -259,7 +279,7 @@ select cast(strftime('%Y', dt) as integer) as 'Year', cast(strftime('%m', dt) as
 
 Для построения дат и арифметики используется переносимый набор: `date_from_parts`, `date_add`,
 `date_diff`, `date_trunc` и члены `DateTime` (см. [Арифметику дат](#арифметика-дат) ниже).
-`make_date`, `age`, `date_bin` и `extract` больше не предоставляются отдельно.
+`make_date`, `age` и `date_bin` больше не предоставляются отдельно.
 
 ### Информация о сессии и сервере
 

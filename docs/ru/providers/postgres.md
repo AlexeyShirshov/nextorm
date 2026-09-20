@@ -55,7 +55,9 @@
 - `Math.Round(x, digits)` приводит первый аргумент `double`/`float` к `numeric`
   (`round((x)::numeric, digits)`): в PostgreSQL нет `round(double precision, integer)`;
 - `DateTime.Now` отрисовывает `now()`, `DateTime.UtcNow` отрисовывает `now() at time zone 'utc'`;
-- части даты отрисовываются как `extract(part from value)`;
+- части даты отрисовываются как `extract(part from value)`; `SqlFunctions.Sql.extract(part, value)`
+  покрывает `quarter`/`week` (ISO)/`dow`/`isodow`, а `SqlFunctions.Sql.date_part("epoch", value)`
+  рендерит `cast(extract(epoch from value) as double precision)`;
 - разбиение на страницы — `limit n` / `limit n offset m`; запрос только с offset выдаёт только `offset m`.
 
 ## Регистрация провайдера

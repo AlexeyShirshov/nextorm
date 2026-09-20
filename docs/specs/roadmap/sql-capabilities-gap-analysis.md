@@ -179,7 +179,9 @@ These are fully implemented and covered by SQL-generation or integration tests:
   `JSONExtract*`/`JSONHas`/`JSONLength`/`JSONType`/`visitParamExtract*` family and the dictionary functions
   on ClickHouse.
 * **Date arithmetic** — `date_add`/`date_diff`/`date_trunc`/`end_of_month`/`date_from_parts` plus the
-  `DateTime.Add*` methods, each provider emitting its native form.
+  `DateTime.Add*` methods, each provider emitting its native form. Arbitrary parts are exposed as
+  `SqlFunctions.Sql.extract(part, value)` (`quarter`/`week` ISO/`dow`/`isodow`, validated by
+  `SupportsDatePart`) and the numeric `SqlFunctions.Sql.date_part("epoch", value)`.
 * **Built-in table-valued functions** — `generate_series`/`unnest` (PostgreSQL),
   `string_split`/`openjson` (SQL Server) — with a `SupportsTableFunction` gate so an unsupported provider
   throws instead of emitting invalid SQL.

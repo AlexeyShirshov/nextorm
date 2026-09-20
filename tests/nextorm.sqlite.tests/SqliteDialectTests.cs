@@ -5,8 +5,8 @@ using NextORM.Sqlite;
 namespace NextORM.Sqlite.Tests;
 
 /// <summary>
-/// Direct assertions on the SQLite dialect hooks. The date-part cases (minute/second and the ANSI
-/// fallback) and the capability flags are not exercised by the existing query-level tests.
+/// Direct assertions on the SQLite dialect hooks. The date-part cases and the capability flags are
+/// not exercised by the existing query-level tests.
 /// </summary>
 public class SqliteDialectTests
 {
@@ -20,10 +20,26 @@ public class SqliteDialectTests
     [InlineData("minute", "cast(strftime('%M', dt) as integer)")]
     [InlineData("second", "cast(strftime('%S', dt) as integer)")]
     [InlineData("doy", "cast(strftime('%j', dt) as integer)")]
-    [InlineData("week", "extract(week from dt)")]
-    public void MakeDatePart_ShouldUseStrftimeAndFallBackToAnsi(string part, string expected)
+    [InlineData("quarter", "cast((cast(strftime('%m', dt) as integer) + 2) / 3 as integer)")]
+    [InlineData("week", "cast((cast(strftime('%j', date(dt, '-3 days', 'weekday 4')) as integer) + 6) / 7 as integer)")]
+    [InlineData("dow", "cast(strftime('%w', dt) as integer)")]
+    [InlineData("isodow", "((cast(strftime('%w', dt) as integer) + 6) % 7 + 1)")]
+    [InlineData("epoch", "((julianday(dt) - 2440587.5) * 86400.0)")]
+    public void MakeDatePart_ShouldUseStrftimeForm(string part, string expected)
     {
         Dialect.MakeDatePart(part, "dt").Should().Be(expected);
+    }
+
+    [Fact]
+    public void SupportsDatePart_ShouldCoverTheExtendedParts()
+    {
+        Dialect.SupportsDatePart("year").Should().BeTrue();
+        Dialect.SupportsDatePart("quarter").Should().BeTrue();
+        Dialect.SupportsDatePart("week").Should().BeTrue();
+        Dialect.SupportsDatePart("dow").Should().BeTrue();
+        Dialect.SupportsDatePart("isodow").Should().BeTrue();
+        Dialect.SupportsDatePart("epoch").Should().BeTrue();
+        Dialect.SupportsDatePart("nonsense").Should().BeFalse();
     }
 
     [Fact]

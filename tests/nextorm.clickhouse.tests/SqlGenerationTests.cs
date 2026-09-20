@@ -116,6 +116,24 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void Extract_ShouldUseClickHouseDatePartForms()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { Q = SqlFunctions.Sql.extract("quarter", x.Datetime) }))
+            .Should().Contain("toQuarter(dt)");
+        SqlOf(ctx, e.Select(x => new { W = SqlFunctions.Sql.extract("week", x.Datetime) }))
+            .Should().Contain("toISOWeek(dt)");
+        SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.extract("dow", x.Datetime) }))
+            .Should().Contain("(toDayOfWeek(dt) % 7)");
+        SqlOf(ctx, e.Select(x => new { I = SqlFunctions.Sql.extract("isodow", x.Datetime) }))
+            .Should().Contain("toDayOfWeek(dt)");
+        SqlOf(ctx, e.Select(x => new { E = SqlFunctions.Sql.date_part("epoch", x.Datetime) }))
+            .Should().Contain("toFloat64(toUnixTimestamp(dt))");
+    }
+
+    [Fact]
     public void PercentRankCumeDist_ShouldEmitOverWithOrder()
     {
         using var ctx = ClickHouseTestContext.Create();

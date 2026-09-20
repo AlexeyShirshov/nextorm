@@ -409,6 +409,15 @@ public abstract class SqlDialectBase : ISqlDialect
     // Dialects with a boolean type can use a boolean value unchanged as a predicate.
     public virtual string MakeBooleanValuePredicate(string value) => value;
     public virtual string MakeDatePart(string part, string value) => $"extract({part} from {value})";
+
+    // ANSI date parts the generic extract() can render. A dialect whose native spelling differs for a
+    // part overrides MakeDatePart and extends this set (quarter/week/dow/isodow/epoch) as needed.
+    private static readonly HashSet<string> DatePartFields = new(StringComparer.Ordinal)
+    {
+        "year", "quarter", "month", "week", "day", "doy",
+        "hour", "minute", "second"
+    };
+    public virtual bool SupportsDatePart(string part) => DatePartFields.Contains(part);
     public virtual string MakeNow(bool utc) => utc ? "now() at time zone 'utc'" : "now()";
     public virtual string MakeMathFunction(string name, IReadOnlyList<string> args) =>
         $"{name}({string.Join(", ", args)})";

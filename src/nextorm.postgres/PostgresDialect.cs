@@ -71,6 +71,14 @@ public sealed class PostgresDialect : SqlDialectBase
     public override bool SupportsDateArithmetic => true;
     public override bool SupportsStringArrayAggregates => true;
 
+    /// <summary>PostgreSQL renders every date part through <c>extract</c>, including the ISO week and dow forms.</summary>
+    public override bool SupportsDatePart(string part) =>
+        part is "dow" or "isodow" or "epoch" || base.SupportsDatePart(part);
+
+    /// <summary>PostgreSQL's <c>extract(epoch ...)</c> returns numeric, so it is cast to double precision.</summary>
+    public override string MakeDatePart(string part, string value) =>
+        part == "epoch" ? $"cast(extract(epoch from {value}) as double precision)" : base.MakeDatePart(part, value);
+
     // PostgreSQL full-text search matches a tsvector against a tsquery; contains/freetext differ in
     // how the search string is parsed (plain terms vs. web-search syntax).
     public override bool SupportsFullText => true;
