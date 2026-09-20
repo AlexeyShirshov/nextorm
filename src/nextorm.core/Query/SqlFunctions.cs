@@ -79,6 +79,85 @@ public static partial class SqlFunctions
     }
 
     /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.regexp_matches(string?, string?)"/>: the single
+    /// <c>regexp_matches</c> column is a <c>text[]</c> holding the captured groups (the whole match when
+    /// there are no groups). PostgreSQL returns <c>setof text[]</c>.
+    /// </summary>
+    public interface IRegexpMatchesRow
+    {
+        [Column("regexp_matches")]
+        string[] Matches { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.regexp_split_to_table(string?, string?)"/>: the
+    /// single <c>regexp_split_to_table</c> column holds one fragment.
+    /// </summary>
+    public interface IRegexpSplitToTableRow
+    {
+        [Column("regexp_split_to_table")]
+        string? Value { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.jsonb_array_elements(object?)"/> and
+    /// <see cref="PostgresFunctions.jsonb_array_elements_text(object?)"/>: the single <c>value</c> column
+    /// holds one array element (a jsonb document rendered as text, or plain text).
+    /// </summary>
+    public interface IJsonArrayElementsRow
+    {
+        [Column("value")]
+        string? Value { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.jsonb_each(object?)"/> and
+    /// <see cref="PostgresFunctions.jsonb_each_text(object?)"/>: the <c>key</c>/<c>value</c> columns of
+    /// one object property (the value is a jsonb document rendered as text, or plain text).
+    /// </summary>
+    public interface IJsonbEachRow
+    {
+        [Column("key")]
+        string? Key { get; set; }
+        [Column("value")]
+        string? Value { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.jsonb_object_keys(object?)"/>: the single
+    /// <c>jsonb_object_keys</c> column holds one top-level object key.
+    /// </summary>
+    public interface IJsonObjectKeysRow
+    {
+        [Column("jsonb_object_keys")]
+        string? Key { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.jsonb_path_query(object?, string?)"/>: the single
+    /// <c>jsonb_path_query</c> column holds one JSONPath match (a jsonb document rendered as text).
+    /// </summary>
+    public interface IJsonPathQueryRow
+    {
+        [Column("jsonb_path_query")]
+        string? Value { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="PostgresFunctions.ts_stat(string?)"/>: one statistic for a lexeme
+    /// (<c>word</c>, document count <c>ndoc</c>, total occurrences <c>nentry</c>).
+    /// </summary>
+    public interface ITsStatRow
+    {
+        [Column("word")]
+        string? Word { get; set; }
+        [Column("ndoc")]
+        int? Ndoc { get; set; }
+        [Column("nentry")]
+        int? Nentry { get; set; }
+    }
+
+    /// <summary>
     /// Row shape produced by <see cref="SqlServerFunctions.string_split(string?, string?)"/>: a single column
     /// named <c>value</c> holding one fragment (SQL Server <c>string_split</c>).
     /// </summary>

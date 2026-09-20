@@ -132,14 +132,34 @@ select distinct on (somestring) id, somestring from complex_entity order by some
 
 ## Функции, возвращающие наборы
 
-`unnest(...)` доступна как табличная функция через
-[`FromTableFunction`](xref:NextORM.Core.EntityBuilder`1).
+Функции PostgreSQL, возвращающие набор, доступны как табличные функции через
+[`FromTableFunction`](xref:NextORM.Core.EntityBuilder`1):
+
+| `SqlFunctions.Postgres.*` | Колонки SQL | Row-shape |
+| --- | --- | --- |
+| `generate_series(start, stop[, step])` | `generate_series` | `IGenerateSeriesRow` |
+| `unnest(array)` | `unnest` | `IUnnestRow<T>` |
+| `regexp_matches(source, pattern[, flags])` | `regexp_matches text[]` | `IRegexpMatchesRow` |
+| `regexp_split_to_table(source, pattern[, flags])` | `regexp_split_to_table` | `IRegexpSplitToTableRow` |
+| `jsonb_array_elements(json)` / `jsonb_array_elements_text(json)` | `value` | `IJsonArrayElementsRow` |
+| `jsonb_each(json)` / `jsonb_each_text(json)` | `key`, `value` | `IJsonbEachRow` |
+| `jsonb_object_keys(json)` | `jsonb_object_keys` | `IJsonObjectKeysRow` |
+| `jsonb_path_query(json, jsonpath)` | `jsonb_path_query` | `IJsonPathQueryRow` |
+| `ts_stat(query)` | `word`, `ndoc`, `nentry` | `ITsStatRow` |
+
+JSONPath-аргумент передаётся текстом через `SqlFunctions.Postgres.jsonpath(path)`, что рендерится как
+`cast(path as jsonpath)`.
+
+PostgreSQL заменяет единственную колонку скалярной наборной функции на псевдоним, который nextorm
+всегда добавляет производному источнику, поэтому диалект оборачивает такие вызовы в подзапрос с одной
+колонкой (`from (select generate_series from generate_series(...)) as "t1"`); функции с явной колонкой
+(`value`, `key`/`value`, `word`/`ndoc`/`nentry`) эмитятся без обёртки.
 
 См. [Табличные функции](../13-table-valued-functions.md).
 
 ## Пока не поддерживается
 
-`jsonb_array_elements`/`jsonb_each` как табличные функции значатся в бэклоге и не входят в текущую
+`jsonb_to_record`/`json_populate_record` требуют динамической схемы записи и не входят в текущую
 поверхность. См. [Ограничения и возможности вне области охвата](../../advanced/limitations.md).
 
 ## См. также

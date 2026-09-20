@@ -15,7 +15,7 @@
 | `setseed(float)` | готово | скалярный `PostgresFunctions.setseed` под `SupportsRandomSeed` (PG-only); см. `WIP_setseed.md` | `todo_postgres.md:87` |
 | `array_shuffle` / `array_sample` | готово | скалярные `PostgresFunctions.array_shuffle`/`array_sample` (PG16+) под `SupportsArrays`; см. `WIP_array_shuffle.md` | `todo_postgres.md:110` |
 | `digest` / `sha256` (pgcrypto) | готово | `PostgresFunctions.digest`/`sha256` под `SupportsCryptoFunctions`; `digest` требует расширения `pgcrypto`; см. `WIP_digest.md` | `todo_postgres.md:70` |
-| Наборные функции через `[SqlTableFunction]`: `regexp_matches`, `regexp_split_to_table`, `jsonb_array_elements`(`_text`), `jsonb_each`(`_text`), `jsonb_object_keys`, `jsonb_path_query`, `ts_stat` | среднее | механизм `[SqlTableFunction]` + `FromTableFunction` уже есть; для `jsonb_each`/`ts_stat` нужен row-тип на 2–4 колонки | `todo_postgres.md:51,86,88,106–108` |
+| Наборные функции через `[SqlTableFunction]`: `regexp_matches`, `regexp_split_to_table`, `jsonb_array_elements`(`_text`), `jsonb_each`(`_text`), `jsonb_object_keys`, `jsonb_path_query`, `ts_stat` | готово | встроенные `PostgresFunctions`-методы + row-shape `IRegexpMatchesRow`/`IJsonbEachRow`/`ITsStatRow` и др.; `regexp_matches` отдаёт `text[]` (row reader `string[]`), `jsonb_path_query` использует `PostgresFunctions.jsonpath`; диалект оборачивает функции с колонкой-как-функция в подзапрос (`WrapTableFunction`); см. `WIP_pg_setof_functions.md` | `todo_postgres.md:51,86,88,106–108` |
 | Именованные окна (`WINDOW w AS (...)`), режим фрейма `GROUPS`, исключения фрейма (`EXCLUDE`) | сложное | расширение модели окон/фреймов | `todo_postgres.md:100` |
 
 ## SQL Server — не заблокировано

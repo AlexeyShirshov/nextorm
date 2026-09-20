@@ -186,9 +186,10 @@ These are fully implemented and covered by SQL-generation or integration tests:
   extension) and `sha256(bytes)`, gated by `SupportsCryptoFunctions` (PostgreSQL only; SQL
   Server/MySQL/ClickHouse expose native SHA-256 under different names/return types, so a
   cross-provider hash surface is a separate follow-up).
-* **Built-in table-valued functions** — `generate_series`/`unnest` (PostgreSQL),
-  `string_split`/`openjson` (SQL Server) — with a `SupportsTableFunction` gate so an unsupported provider
-  throws instead of emitting invalid SQL.
+* **Built-in table-valued functions** — `generate_series`/`unnest` plus the PostgreSQL set-returning
+  functions `regexp_matches`, `regexp_split_to_table`, `jsonb_array_elements(_text)`, `jsonb_each(_text)`,
+  `jsonb_object_keys`, `jsonb_path_query` and `ts_stat`; `string_split`/`openjson` (SQL Server) — with a
+  `SupportsTableFunction` gate so an unsupported provider throws instead of emitting invalid SQL.
 * **Raw SQL** for a whole query (`PrepareFromSql` / `WithSql`) with named parameters.
 
 ---
@@ -208,14 +209,16 @@ These are fully implemented and covered by SQL-generation or integration tests:
 3. **Raw SQL is not composable.** `WithSql` replaces the whole query, so raw SQL cannot be used as a
    `FROM` source, joined, or further filtered; EF Core (`FromSql`) and linq2db both allow this.
 4. **The pre-declared table-function set is small.** `SqlFunctions.Sql` ships the built-ins, each gated by
-   `ISqlDialect.SupportsTableFunction`: `generate_series`/`unnest` (PostgreSQL),
-   `string_split`/`openjson` (SQL Server) and `numbers`/`numbers_mt`/`zeros`/`zeros_mt`/`generateRandom`
-   (ClickHouse). MySQL/MariaDB and SQLite expose none of them, so
-   there a user must declare their own `[SqlTableFunction]` wrapper (user wrappers are never gated), while
-   EF Core and linq2db surface many more provider TVFs out of the box. Not mapped: `CONTAINSTABLE`/
-   `FREETEXTTABLE` with ranking and MySQL `JSON_TABLE`; SQL Server `OPENJSON ... WITH` typed schemas
-   are expressible through `SqlTableFunctionAttribute.WithClause` (emitted as `with (...)` after the
-   call).
+   `ISqlDialect.SupportsTableFunction`: `generate_series`, `unnest`, `regexp_matches`,
+   `regexp_split_to_table`, `jsonb_array_elements(_text)`, `jsonb_each(_text)`, `jsonb_object_keys`,
+   `jsonb_path_query` and `ts_stat` (PostgreSQL), `string_split`/`openjson` (SQL Server) and
+   `numbers`/`numbers_mt`/`zeros`/`zeros_mt`/`generateRandom` (ClickHouse). MySQL/MariaDB and SQLite
+   expose none of them, so there a user must declare their own `[SqlTableFunction]` wrapper (user
+   wrappers are never gated), while EF Core and linq2db surface many more provider TVFs out of the box.
+   Not mapped: `CONTAINSTABLE`/`FREETEXTTABLE` with ranking, MySQL `JSON_TABLE` and PostgreSQL
+   `jsonb_to_record`/`json_populate_record` (dynamic record schema); SQL Server `OPENJSON ... WITH`
+   typed schemas are expressible through `SqlTableFunctionAttribute.WithClause` (emitted as `with (...)`
+   after the call).
 5. **Full-text search has no ranking/score.** `contains`/`freetext` render boolean predicates; there is no
    `ts_rank`/`CONTAINSTABLE` score projection.
 6. **Column identifiers are emitted unquoted.** Outside projection aliases and inner-query columns, nextorm

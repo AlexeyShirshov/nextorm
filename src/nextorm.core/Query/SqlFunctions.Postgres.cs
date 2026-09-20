@@ -228,6 +228,14 @@ namespace NextORM.Core;
         public string? jsonb_path_query_array(object? json, string? path) => default!;
 
         /// <summary>
+        /// Casts <paramref name="path"/> to the PostgreSQL <c>jsonpath</c> type
+        /// (<c>cast(path as jsonpath)</c>). Use it for the path operand of the JSONPath functions and
+        /// the <see cref="jsonb_path_query(object?, string?)"/> table function, because a text
+        /// parameter is not implicitly coerced to <c>jsonpath</c>.
+        /// </summary>
+        public string? jsonpath(string? path) => default!;
+
+        /// <summary>
         /// <c>array_agg(value)</c>: aggregates the values of a group into an array. Requires a provider
         /// that supports it (see <see cref="ISqlDialect.SupportsStringArrayAggregates"/>).
         /// </summary>
@@ -556,4 +564,71 @@ namespace NextORM.Core;
         /// </summary>
         [SqlTableFunction("unnest")]
         public IQueryable<SqlFunctions.IUnnestRow<T>> unnest<T>(T[] array) => throw new NotSupportedException();
+
+        /// <summary>
+        /// <c>regexp_matches(source, pattern)</c> as a FROM source: one row per match, the
+        /// <c>regexp_matches</c> column is the <c>text[]</c> array of captured groups (see
+        /// <see cref="SqlFunctions.IRegexpMatchesRow"/>).
+        /// </summary>
+        [SqlTableFunction("regexp_matches")]
+        public IQueryable<SqlFunctions.IRegexpMatchesRow> regexp_matches(string? source, string? pattern) => throw new NotSupportedException();
+
+        /// <summary><c>regexp_matches(source, pattern, flags)</c> as a FROM source, with the <c>g</c>/<c>i</c>/... flags.</summary>
+        [SqlTableFunction("regexp_matches")]
+        public IQueryable<SqlFunctions.IRegexpMatchesRow> regexp_matches(string? source, string? pattern, string? flags) => throw new NotSupportedException();
+
+        /// <summary>
+        /// <c>regexp_split_to_table(source, pattern)</c> as a FROM source: one row per fragment (see
+        /// <see cref="SqlFunctions.IRegexpSplitToTableRow"/>).
+        /// </summary>
+        [SqlTableFunction("regexp_split_to_table")]
+        public IQueryable<SqlFunctions.IRegexpSplitToTableRow> regexp_split_to_table(string? source, string? pattern) => throw new NotSupportedException();
+
+        /// <summary><c>regexp_split_to_table(source, pattern, flags)</c> as a FROM source.</summary>
+        [SqlTableFunction("regexp_split_to_table")]
+        public IQueryable<SqlFunctions.IRegexpSplitToTableRow> regexp_split_to_table(string? source, string? pattern, string? flags) => throw new NotSupportedException();
+
+        /// <summary>
+        /// <c>jsonb_array_elements(json)</c> as a FROM source: one row per array element, the
+        /// <c>value</c> column is the element as a jsonb document (see
+        /// <see cref="SqlFunctions.IJsonArrayElementsRow"/>).
+        /// </summary>
+        [SqlTableFunction("jsonb_array_elements")]
+        public IQueryable<SqlFunctions.IJsonArrayElementsRow> jsonb_array_elements(object? json) => throw new NotSupportedException();
+
+        /// <summary><c>jsonb_array_elements_text(json)</c> as a FROM source: one row per array element, the <c>value</c> column is text.</summary>
+        [SqlTableFunction("jsonb_array_elements_text")]
+        public IQueryable<SqlFunctions.IJsonArrayElementsRow> jsonb_array_elements_text(object? json) => throw new NotSupportedException();
+
+        /// <summary>
+        /// <c>jsonb_each(json)</c> as a FROM source: one row per top-level object property, the
+        /// <c>key</c>/<c>value</c> columns are text/jsonb (see <see cref="SqlFunctions.IJsonbEachRow"/>).
+        /// </summary>
+        [SqlTableFunction("jsonb_each")]
+        public IQueryable<SqlFunctions.IJsonbEachRow> jsonb_each(object? json) => throw new NotSupportedException();
+
+        /// <summary><c>jsonb_each_text(json)</c> as a FROM source: one row per property, <c>key</c>/<c>value</c> are text.</summary>
+        [SqlTableFunction("jsonb_each_text")]
+        public IQueryable<SqlFunctions.IJsonbEachRow> jsonb_each_text(object? json) => throw new NotSupportedException();
+
+        /// <summary>
+        /// <c>jsonb_object_keys(json)</c> as a FROM source: one row per top-level object key (see
+        /// <see cref="SqlFunctions.IJsonObjectKeysRow"/>).
+        /// </summary>
+        [SqlTableFunction("jsonb_object_keys")]
+        public IQueryable<SqlFunctions.IJsonObjectKeysRow> jsonb_object_keys(object? json) => throw new NotSupportedException();
+
+        /// <summary>
+        /// <c>jsonb_path_query(json, path)</c> as a FROM source: one row per JSONPath match. Cast a text
+        /// path with <see cref="jsonpath(string?)"/> (<see cref="SqlFunctions.IJsonPathQueryRow"/>).
+        /// </summary>
+        [SqlTableFunction("jsonb_path_query")]
+        public IQueryable<SqlFunctions.IJsonPathQueryRow> jsonb_path_query(object? json, string? path) => throw new NotSupportedException();
+
+        /// <summary>
+        /// <c>ts_stat(query)</c> as a FROM source: one row per lexeme of a <c>tsvector</c> query, the
+        /// <c>word</c>/<c>ndoc</c>/<c>nentry</c> columns (see <see cref="SqlFunctions.ITsStatRow"/>).
+        /// </summary>
+        [SqlTableFunction("ts_stat")]
+        public IQueryable<SqlFunctions.ITsStatRow> ts_stat(string? query) => throw new NotSupportedException();
     }

@@ -180,8 +180,10 @@ reject it with `NotSupportedException`.
 
 PostgreSQL also opts into `greatest`/`least`, `date_trunc`, the `string_agg`/`array_agg` aggregates, the
 aggregate `FILTER (WHERE ...)` clause, the portable `iif` (rendered `case when ... then ... else ... end`),
-the `percent_rank`/`cume_dist`/`nth_value` window functions and the built-in `generate_series`/`unnest`
-table functions:
+the `percent_rank`/`cume_dist`/`nth_value` window functions and the built-in set-returning table
+functions `generate_series`, `unnest`, `regexp_matches`, `regexp_split_to_table`,
+`jsonb_array_elements(_text)`, `jsonb_each(_text)`, `jsonb_object_keys`, `jsonb_path_query` and
+`ts_stat`:
 
 ```csharp
 ctx.From<IComplexEntity>()
@@ -249,7 +251,7 @@ join complex_entity as "t2" on t1.id = t2.id
 | `date_add` / `end_of_month` / `DateTime.Add*` | interval arithmetic (`x + (n * interval '1 day')`) |
 | `string_agg` / `array_agg` / aggregate `filter` | supported |
 | Session/info functions | `current_user`, `session_user`, `current_schema`, `current_database()`, `version()` |
-| Table functions | `generate_series(...)`, `unnest(...)` |
+| Table functions | `generate_series`, `unnest`, `regexp_matches`, `regexp_split_to_table`, `jsonb_array_elements(_text)`, `jsonb_each(_text)`, `jsonb_object_keys`, `jsonb_path_query`, `ts_stat` |
 | Recursive CTE | `with recursive` (no max-recursion option) |
 | `stdev` / `stdevp` | `stddev` / `stddev_pop` |
 | `var` / `varp` | `variance` / `var_pop` |
