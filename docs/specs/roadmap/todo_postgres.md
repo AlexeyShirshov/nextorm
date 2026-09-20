@@ -76,7 +76,12 @@
 ## Математика
 
 - [x] `asin`/`acos`/`atan`/`atan2`, `cbrt`, гиперболические (`sinh`/`cosh`/`tanh`, `asinh`/`acosh`/`atanh`)
-- [x] `degrees`, `radians`, `pi()`, `random()` (остался `setseed`)
+- [x] `degrees`, `radians`, `pi()`, `random()`; `setseed(float)` — `PostgresFunctions.setseed` под
+      отдельным флагом `SupportsRandomSeed` (base `false`, PostgreSQL `true`); PostgreSQL-функция
+      возвращает `void`, проекция всегда `null`. Тесты: `SqlGenerationTests.SetSeed_ShouldEmit`,
+      `PostgresDialectTests.CapabilityFlags_ShouldMatchPostgres`,
+      `PostgresSpecificTests.SetSeed_ShouldReturnNullBecausePostgresReturnsVoid`; rejection —
+      `SetSeed_ShouldThrow…` во всех остальных провайдерах.
 - [x] `log(base, x)` (через `SqlFunctions.Sql.log`; 2-аргументный `Math.Log` по-прежнему намеренно не поддержан), `mod()`, `gcd`/`lcm`,
       `factorial`, `width_bucket`
 - [x] **`round(double precision, int)`** — `Math.Round(x, n)` транслируется в `round(x, n)` для всех

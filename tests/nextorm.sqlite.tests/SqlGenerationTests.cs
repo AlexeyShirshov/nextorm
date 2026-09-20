@@ -1094,6 +1094,17 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void SetSeed_ShouldThrowBecauseSqliteHasNoSeed()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new { S = SqlFunctions.Postgres.setseed(0.5) }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*setseed*");
+    }
+
+    [Fact]
     public void IsNullOrWhiteSpace_ShouldThrowClearException()
     {
         using var ctx = SqliteTestContext.Create();

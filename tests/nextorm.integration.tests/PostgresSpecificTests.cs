@@ -89,6 +89,16 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    public void SetSeed_ShouldReturnNullBecausePostgresReturnsVoid()
+    {
+        var value = _sut.SimpleEntity
+            .Select(x => SqlFunctions.Postgres.setseed(0.5))
+            .FirstOrDefault();
+
+        value.Should().BeNull();
+    }
+
+    [Fact]
     public void LastIndexOf_ShouldReturnZeroBasedLastPosition()
     {
         // "dadfasd" has its last 'd' at index 6.

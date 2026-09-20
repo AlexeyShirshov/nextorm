@@ -932,6 +932,17 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void SetSeed_ShouldThrowBecauseSqlServerHasNoStandaloneSeed()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new { S = SqlFunctions.Postgres.setseed(0.5) }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*setseed*");
+    }
+
+    [Fact]
     public void InValues_ShouldRenderInPredicateWithParameters()
     {
         using var ctx = SqlServerTestContext.Create();

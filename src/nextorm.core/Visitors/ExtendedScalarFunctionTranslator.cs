@@ -120,6 +120,15 @@ internal static class ExtendedScalarFunctionTranslator
             return true;
         }
 
+        if (name == nameof(PostgresFunctions.setseed))
+        {
+            if (!visitor.Dialect.SupportsRandomSeed)
+                throw new NotSupportedException("The random seed function (setseed) requires PostgreSQL.");
+
+            SqlOperandTranslator.EmitFunction(visitor, "setseed", node.Arguments);
+            return true;
+        }
+
         return false;
     }
 

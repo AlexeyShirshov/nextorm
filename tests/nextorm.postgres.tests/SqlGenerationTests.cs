@@ -1978,6 +1978,16 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void SetSeed_ShouldEmit()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { S = SqlFunctions.Postgres.setseed(0.5) }))
+            .Should().Contain("setseed(0.5)");
+    }
+
+    [Fact]
     public void ExtendedLogFunction_ShouldEmitTwoArgumentLog()
     {
         using var ctx = PostgresTestContext.Create();

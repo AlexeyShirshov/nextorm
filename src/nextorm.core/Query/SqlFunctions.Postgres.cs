@@ -275,6 +275,14 @@ namespace NextORM.Core;
         /// <summary>A pseudo-random value in the range 0.0 &lt;= x &lt; 1.0.</summary>
         public double? random() => default!;
 
+        /// <summary>
+        /// Sets the seed for subsequent <see cref="random"/> calls in the session (<c>setseed</c>).
+        /// Requires a provider that supports it (see <see cref="ISqlDialect.SupportsRandomSeed"/>;
+        /// PostgreSQL only). PostgreSQL's <c>setseed</c> returns <c>void</c>, so the projected value is
+        /// always <c>null</c>; the call is made for its side effect.
+        /// </summary>
+        public double? setseed(double? seed) => default!;
+
         /// <summary>The logarithm of <paramref name="x"/> to the given base (two-argument <c>log</c>).</summary>
         public double? log(double? baseValue, double? x) => default!;
 

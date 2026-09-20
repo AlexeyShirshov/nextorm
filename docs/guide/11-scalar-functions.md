@@ -200,6 +200,11 @@ The remaining math functions are part of the extended scalar library
 | `SqlFunctions.Postgres.factorial(n)` | `factorial(n)` |
 | `SqlFunctions.Postgres.width_bucket(x, low, high, count)` | `width_bucket(x, low, high, count)` |
 
+`SqlFunctions.Postgres.setseed(seed)` renders `setseed(seed)` and is gated separately by
+[`SupportsRandomSeed`](xref:NextORM.Core.ISqlDialect.SupportsRandomSeed) (PostgreSQL only). The
+PostgreSQL function returns `void`, so a projected value is always `null` and the call is made for its
+side effect (subsequent `random()` calls in the session become reproducible).
+
 ## Date and time
 
 `DateTime.Now` and `DateTime.UtcNow` are rendered as SQL expressions instead of being evaluated as a

@@ -127,6 +127,7 @@ public class PostgresDialectTests
         Dialect.SupportsDateArithmetic.Should().BeTrue();
         Dialect.SupportsStringArrayAggregates.Should().BeTrue();
         Dialect.SupportsFullText.Should().BeTrue();
+        Dialect.SupportsRandomSeed.Should().BeTrue();
         Dialect.SupportsTableFunction("generate_series").Should().BeTrue();
         Dialect.SupportsTableFunction("unnest").Should().BeTrue();
         Dialect.SupportsTableFunction("string_split").Should().BeFalse();

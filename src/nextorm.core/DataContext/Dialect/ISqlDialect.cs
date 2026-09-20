@@ -241,6 +241,13 @@ public interface ISqlDialect
     /// </summary>
     bool SupportsExtendedScalarFunctions { get; }
     /// <summary>
+    /// True when the provider can set the seed of its session random generator as a separate side
+    /// effect (<see cref="PostgresFunctions.setseed(double?)"/>). The safe default is <c>false</c>;
+    /// only PostgreSQL has a standalone <c>setseed</c> (MySQL/MariaDB and SQL Server combine seeding
+    /// with the value-returning <c>RAND</c>).
+    /// </summary>
+    bool SupportsRandomSeed { get; }
+    /// <summary>
     /// True when the provider can render the native text-search scalar surface of
     /// <see cref="PostgresFunctions"/> (<c>to_tsvector</c>, <c>to_tsquery</c>, <c>plainto_tsquery</c>,
     /// <c>phraseto_tsquery</c>, <c>websearch_to_tsquery</c>, <c>ts_rank</c>, <c>ts_headline</c> and the

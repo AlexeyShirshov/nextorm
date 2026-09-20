@@ -115,6 +115,9 @@ public sealed class PostgresDialect : SqlDialectBase
     // bool/bit/statistical/ordered-set aggregate surface.
     public override bool SupportsExtendedScalarFunctions => true;
 
+    /// <summary>PostgreSQL has the standalone session random seed <c>setseed</c>.</summary>
+    public override bool SupportsRandomSeed => true;
+
     /// <summary>PostgreSQL is the only provider with the native <c>tsvector</c>/<c>tsquery</c> text-search surface.</summary>
     public override bool SupportsTextSearchFunctions => true;
 

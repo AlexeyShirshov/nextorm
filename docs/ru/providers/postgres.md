@@ -54,6 +54,9 @@
 - `Math.Log` отображается на `ln(...)` (в PostgreSQL `log()` — это логарифм по основанию 10);
 - `Math.Round(x, digits)` приводит первый аргумент `double`/`float` к `numeric`
   (`round((x)::numeric, digits)`): в PostgreSQL нет `round(double precision, integer)`;
+- `SqlFunctions.Postgres.setseed(seed)` рендерит `setseed(seed)` (гейт
+  [`SupportsRandomSeed`](xref:NextORM.Core.ISqlDialect.SupportsRandomSeed)); `setseed` в PostgreSQL
+  возвращает `void`, поэтому проецируемое значение всегда `null`;
 - `DateTime.Now` отрисовывает `now()`, `DateTime.UtcNow` отрисовывает `now() at time zone 'utc'`;
 - части даты отрисовываются как `extract(part from value)`; `SqlFunctions.Sql.extract(part, value)`
   покрывает `quarter`/`week` (ISO)/`dow`/`isodow`, а `SqlFunctions.Sql.date_part("epoch", value)`

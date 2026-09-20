@@ -205,6 +205,11 @@ select abs((id - 5)) from complex_entity
 | `SqlFunctions.Postgres.factorial(n)` | `factorial(n)` |
 | `SqlFunctions.Postgres.width_bucket(x, low, high, count)` | `width_bucket(x, low, high, count)` |
 
+`SqlFunctions.Postgres.setseed(seed)` рендерит `setseed(seed)` и гейтится отдельно
+[`SupportsRandomSeed`](xref:NextORM.Core.ISqlDialect.SupportsRandomSeed) (только PostgreSQL). Функция
+PostgreSQL возвращает `void`, поэтому проецируемое значение всегда `null`, а вызов делается ради
+побочного эффекта (последующие `random()` в сессии становятся воспроизводимыми).
+
 ## Дата и время
 
 `DateTime.Now` и `DateTime.UtcNow` рендерятся как SQL-выражения, а не вычисляются как параметр. `.Year`,
