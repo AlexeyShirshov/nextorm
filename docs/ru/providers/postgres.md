@@ -52,6 +52,8 @@
 - имена агрегатов переотображаются: `stdev`→`stddev`, `stdevp`→`stddev_pop`, `var`→`variance`,
   `varp`→`var_pop`;
 - `Math.Log` отображается на `ln(...)` (в PostgreSQL `log()` — это логарифм по основанию 10);
+- `Math.Round(x, digits)` приводит первый аргумент `double`/`float` к `numeric`
+  (`round((x)::numeric, digits)`): в PostgreSQL нет `round(double precision, integer)`;
 - `DateTime.Now` отрисовывает `now()`, `DateTime.UtcNow` отрисовывает `now() at time zone 'utc'`;
 - части даты отрисовываются как `extract(part from value)`;
 - разбиение на страницы — `limit n` / `limit n offset m`; запрос только с offset выдаёт только `offset m`.

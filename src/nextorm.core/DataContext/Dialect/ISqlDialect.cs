@@ -642,6 +642,19 @@ public interface ISqlDialect
     string MakeNow(bool utc);
     /// <summary>Renders a math function call with the given already-rendered arguments.</summary>
     string MakeMathFunction(string name, IReadOnlyList<string> args);
+    /// <summary>
+    /// Renders a math function call together with the static CLR types of the arguments. A dialect
+    /// whose native function has a more specific overload set than ANSI uses the types to pick the
+    /// right form (PostgreSQL's two-argument <c>round</c> only accepts <c>numeric</c>, so a
+    /// <see cref="double"/>/<see cref="float"/> argument has to be cast). The default ignores the
+    /// types and delegates to <see cref="MakeMathFunction(string, IReadOnlyList{string})"/>.
+    /// </summary>
+    /// <remarks>
+    /// Declared as a default interface method so that existing external <see cref="ISqlDialect"/>
+    /// implementations that do not render SQL themselves keep compiling.
+    /// </remarks>
+    string MakeMathFunction(string name, IReadOnlyList<string> args, IReadOnlyList<Type> argTypes) =>
+        MakeMathFunction(name, args);
     /// <summary>Renders <c>nullif(value, other)</c>. ANSI and portable, so every dialect accepts it.</summary>
     string MakeNullIf(string value, string other);
     /// <summary>Renders <c>greatest(...)</c> over the already-rendered arguments.</summary>

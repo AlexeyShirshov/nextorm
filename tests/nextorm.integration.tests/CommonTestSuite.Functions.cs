@@ -162,6 +162,17 @@ public abstract partial class CommonTestSuite
     }
 
     [Fact]
+    public void MathRoundWithDigits_ShouldRoundValue()
+    {
+        var values = _sut.ComplexEntity
+            .Select(e => Math.Round(e.Id / 2.0 + 0.24, 1))
+            .ToList();
+
+        // 0.74, 1.24 and 1.74 round to 0.7, 1.2 and 1.7.
+        values.OrderBy(x => x).Should().Equal(0.7, 1.2, 1.7);
+    }
+
+    [Fact]
     public void DateTimeYearMonthDay_ShouldReturnDateParts()
     {
         var value = _sut.ComplexEntity

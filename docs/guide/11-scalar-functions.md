@@ -156,7 +156,7 @@ var rows = dataContext.From<IComplexEntity>()
 |---|---|---|
 | `Math.Abs(x)` | `abs(x)` | |
 | `Math.Round(x)` | `round(x)` / `round(x, 0)` | SQL Server supplies the required length argument. |
-| `Math.Round(x, digits)` | `round(x, digits)` | |
+| `Math.Round(x, digits)` | `round(x, digits)` | PostgreSQL casts a `double`/`float` first argument to `numeric` (`round((x)::numeric, digits)`), because it has no `round(double precision, integer)`. |
 | `Math.Truncate(x)` | `trunc(x)` / `round(x, 0, 1)` | SQL Server has no `trunc`. |
 | `Math.Log(x)` | natural logarithm: `ln(x)` (SQLite, PostgreSQL) / `log(x)` (SQL Server) | Single-argument form only. |
 

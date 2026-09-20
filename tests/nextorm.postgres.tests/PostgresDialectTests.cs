@@ -64,6 +64,11 @@ public class PostgresDialectTests
         Dialect.MakeStringLength("x").Should().Be("length(x)");
         Dialect.MakeMathFunction("log", ["x"]).Should().Be("ln(x)");
         Dialect.MakeMathFunction("round", ["x", "2"]).Should().Be("round(x, 2)");
+        Dialect.MakeMathFunction("round", ["x", "2"], [typeof(double)]).Should().Be("round((x)::numeric, 2)");
+        Dialect.MakeMathFunction("round", ["x", "2"], [typeof(double?)]).Should().Be("round((x)::numeric, 2)");
+        Dialect.MakeMathFunction("round", ["x", "2"], [typeof(float)]).Should().Be("round((x)::numeric, 2)");
+        Dialect.MakeMathFunction("round", ["x", "2"], [typeof(decimal)]).Should().Be("round(x, 2)");
+        Dialect.MakeMathFunction("log", ["x"], [typeof(double)]).Should().Be("ln(x)");
         Dialect.MakeFunction("fn", "app").Should().Be("app.fn");
         Dialect.MakeFunction("fn", null).Should().Be("fn");
         Dialect.MakeBoolCoalesce("a", "b").Should().Be("coalesce(a, b)");

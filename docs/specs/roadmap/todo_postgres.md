@@ -68,12 +68,16 @@
 - [x] `degrees`, `radians`, `pi()`, `random()` (остался `setseed`)
 - [x] `log(base, x)` (через `SqlFunctions.Sql.log`; 2-аргументный `Math.Log` по-прежнему намеренно не поддержан), `mod()`, `gcd`/`lcm`,
       `factorial`, `width_bucket`
-- [ ] **`round(double precision, int)`** — `Math.Round(x, n)` транслируется в `round(x, n)` для всех
+- [x] **`round(double precision, int)`** — `Math.Round(x, n)` транслируется в `round(x, n)` для всех
       диалектов (`MathFunctionTranslator`), но PostgreSQL определяет только `round(numeric, int)`;
       над `double precision` сервер бросает `function round(double precision, integer) does not exist`.
-      Сейчас обходится приведением на стороне LINQ — `Math.Round((decimal)x, n)`. Нужен диалектный хук
-      (PostgreSQL оборачивает первый аргумент в `(...)::numeric`, когда он не `numeric`), иначе
-      ошибка всплывает только на исполнении. Уровень: простое (хук `MakeMathFunction`).
+      Добавлен аддитивный хук `ISqlDialect.MakeMathFunction(name, args, argTypes)` (база делегирует в
+      2-аргументную форму); `PostgresDialect` оборачивает первый аргумент в `(...)::numeric`, когда он
+      `double`/`float` (с `Nullable<>`). Остальные провайдеры выводят `round(x, n)` без изменений; гейт
+      не нужен — 2-аргументный `round` есть у всех. Тесты:
+      `SqlGenerationTests.MathRoundWithDigits_ShouldCastDoublePrecisionToNumeric`/
+      `..._ShouldNotCastNumeric`, `PostgresDialectTests.ScalarFunctionHooks_ShouldUsePostgresForms`,
+      `CommonTestSuite.Functions.MathRoundWithDigits_ShouldRoundValue` (реальный PostgreSQL).
 
 ## Массивы (дополнить)
 

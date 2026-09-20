@@ -48,10 +48,14 @@ internal static class MathFunctionTranslator
 
         visitor.NeedAliasForColumn = true;
         var sqlArgs = new string[args.Count];
+        var argTypes = new Type[args.Count];
         for (var i = 0; i < args.Count; i++)
+        {
             sqlArgs[i] = visitor.VisitToString(args[i]);
+            argTypes[i] = args[i].Type;
+        }
 
-        visitor.Builder!.Append(visitor.Dialect.MakeMathFunction(name, sqlArgs));
+        visitor.Builder!.Append(visitor.Dialect.MakeMathFunction(name, sqlArgs, argTypes));
         return true;
     }
 }

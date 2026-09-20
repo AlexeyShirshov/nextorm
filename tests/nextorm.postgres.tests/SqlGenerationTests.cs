@@ -619,6 +619,27 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void MathRoundWithDigits_ShouldCastDoublePrecisionToNumeric()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // PostgreSQL has no round(double precision, integer), so the first argument is cast.
+        SqlOf(ctx, e.Select(x => new { V = Math.Round(x.Id / 2.0 + 0.2, 2) }))
+            .Should().Contain("round((((cast(id as double precision) / 2) + 0.2))::numeric, 2)");
+    }
+
+    [Fact]
+    public void MathRoundWithDigits_ShouldNotCastNumeric()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = Math.Round(1.25m, 1) }))
+            .Should().Contain("round(1.25, 1)").And.NotContain("::numeric");
+    }
+
+    [Fact]
     public void MathLog_ShouldUseNaturalLogarithm()
     {
         using var ctx = PostgresTestContext.Create();

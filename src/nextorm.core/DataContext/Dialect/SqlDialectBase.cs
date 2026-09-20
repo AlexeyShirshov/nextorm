@@ -412,6 +412,13 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual string MakeNow(bool utc) => utc ? "now() at time zone 'utc'" : "now()";
     public virtual string MakeMathFunction(string name, IReadOnlyList<string> args) =>
         $"{name}({string.Join(", ", args)})";
+    /// <summary>
+    /// Renders a math function call, receiving the static CLR argument types for dialects whose native
+    /// function has a narrower overload set than ANSI. The default ignores the types and delegates to
+    /// <see cref="MakeMathFunction(string, IReadOnlyList{string})"/>.
+    /// </summary>
+    public virtual string MakeMathFunction(string name, IReadOnlyList<string> args, IReadOnlyList<Type> argTypes) =>
+        MakeMathFunction(name, args);
 
     // ANSI/portable defaults. Only reached for the functions their capability flag opts into, so a
     // dialect that does not support one never renders it (the translator rejects the call first).

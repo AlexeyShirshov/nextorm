@@ -52,6 +52,8 @@
 - aggregate names are remapped: `stdev`→`stddev`, `stdevp`→`stddev_pop`, `var`→`variance`,
   `varp`→`var_pop`;
 - `Math.Log` maps to `ln(...)` (PostgreSQL's `log()` is base 10);
+- `Math.Round(x, digits)` casts a `double`/`float` first argument to `numeric`
+  (`round((x)::numeric, digits)`): PostgreSQL has no `round(double precision, integer)`;
 - `DateTime.Now` renders `now()`, `DateTime.UtcNow` renders `now() at time zone 'utc'`;
 - date parts render as `extract(part from value)`;
 - paging is `limit n` / `limit n offset m`; an offset-only query emits `offset m` alone.
