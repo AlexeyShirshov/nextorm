@@ -151,6 +151,22 @@ from complex_entity as 't1'
 The outer query qualifies only the referenced member; the inner query keeps its own columns and
 aliases. [`FirstOrDefault`](xref:NextORM.Core.EntityBuilder`1)/[`SingleOrDefault`](xref:NextORM.Core.EntityBuilder`1) yield `NULL` when no inner row matches.
 
+The referenced member may also come from a join projection: `p.Item1.Id` resolves the table alias
+from the projection item's position and the column from its mapping, so a subquery can correlate to
+any of the joined sources:
+
+```csharp
+var rows = await dataContext.From<ISimpleEntity>()
+    .Join(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+    .Select(p => new { p.Item1.Id, cid = dataContext.From<IComplexEntity>().Where(c => c.Id == p.Item1.Id).Select(c => c.Id).First() })
+    .ToListAsync();
+```
+
+```sql
+select t1.id, (select top(1) t3.id from complex_entity as [t3]
+ where t3.id = cast(t1.id as bigint)) as [cid] from simple_entity as [t1] join complex_entity as [t2] on cast(t1.id as bigint) = t2.id
+```
+
 Two limits apply:
 
 * a subquery nested inside another correlated subquery (correlation depth greater than one) throws

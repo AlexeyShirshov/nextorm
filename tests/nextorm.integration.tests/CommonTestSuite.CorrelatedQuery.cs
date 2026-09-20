@@ -196,6 +196,43 @@ public abstract partial class CommonTestSuite
     }
 
     /// <summary>
+    /// A correlated subquery may reference a column of a join-projection item (<c>p.Item1.Id</c>);
+    /// the projection item then supplies the alias for the inner predicate. Resolving the member
+    /// through the item position must work per row on every SQL provider.
+    /// </summary>
+    [Fact]
+    public void CorrelatedScalarOnJoinProjection_ShouldEvaluatePerRow()
+    {
+        var r = _sut.SimpleEntity
+            .Join(_sut.ComplexEntity, (s, c) => s.Id == c.Id)
+            .Select(p => new
+            {
+                p.Item1.Id,
+                cid = _sut.ComplexEntity.Where(c => c.Id == p.Item1.Id).Select(c => (long?)c.Id).FirstOrDefault()
+            })
+            .ToList();
+
+        r.Should().NotBeEmpty();
+        r.Should().OnlyContain(row => row.cid == row.Id);
+    }
+
+    [Fact]
+    public void CorrelatedExistsOnJoinProjection_ShouldEvaluatePerRow()
+    {
+        var r = _sut.SimpleEntity
+            .Join(_sut.ComplexEntity, (s, c) => s.Id == c.Id)
+            .Select(p => new
+            {
+                p.Item1.Id,
+                has = SqlFunctions.Sql.exists(_sut.ComplexEntity.Where(c => c.Id == p.Item1.Id))
+            })
+            .ToList();
+
+        r.Should().NotBeEmpty();
+        r.Should().OnlyContain(row => row.has);
+    }
+
+    /// <summary>
     /// Two correlated subqueries over the same entity type must each use their own table alias.
     /// Before the source scope was introduced the second subquery resolved its column to the first
     /// subquery's alias, which is out of scope and fails on a real database.

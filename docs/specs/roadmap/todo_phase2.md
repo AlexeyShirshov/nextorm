@@ -23,7 +23,7 @@
 | Пункт | Объём | Что нужно | Источник |
 | --- | --- | --- | --- |
 | `FORMAT(value, formatString)` (дата/число) | закрыто | Явная фиксация «только через `[SqlFunction]`»: языки шаблонов (.NET / PG / `%`) несовместимы. См. `todo_mssql.md` (пункт `[x]`) и `WIP_format_date.md` | `todo_mssql.md:62` |
-| Общий коррелированный скалярный подзапрос в проекции | среднее/сложное | публичный API поверх уже существующего механизма `OuterRefMarker` | `todo_mssql.md:222` |
+| Общий коррелированный скалярный подзапрос в проекции | готово | механизм `OuterRefMarker` уже есть; публичный API не потребовался (терминалы `QueryCommand<T>`), закрыт остаток — ссылка на член join-проекции (`p.Item1.Id`); см. `WIP_correlated_scalar_projection.md` | `todo_mssql.md:244` |
 | `PIVOT` / `UNPIVOT` | сложное | новая конструкция модели запроса: агрегатная спецификация, список значений, переименование колонок; `SqlBuilder`/`EntityBuilder`/диалекты | `todo_mssql.md:229` |
 | XML-тип и методы (`.value`, `.query`, `.nodes`, `.exist`) | сложное | постфиксный вызов метода на колонке, отдельный синтаксис | `todo_mssql.md:238` |
 | `OPENJSON ... WITH` (типизированная схема) | закрыто | `SqlTableFunctionAttribute.WithClause` → `openjson(...) with (...)`. См. `todo_mssql.md` (пункт `[x]`) и `WIP_openjson_with.md` | `todo_mssql.md:108` |

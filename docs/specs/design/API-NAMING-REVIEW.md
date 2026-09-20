@@ -1691,6 +1691,40 @@ mariadb **20/20**, clickhouse **155/155**; контейнерная интегр
 в sqlite/sqlserver/mysql/mariadb/clickhouse. EN+RU `docs/guide/13-table-valued-functions.md`,
 `docs/guide/provider-specific/postgresql.md`, `docs/providers/postgres.md` синхронны.
 
+### Коррелированный скаляр в проекции: ссылка на член join-проекции (точечный аудит 20.09.2026)
+
+Область: `Visitors/MemberTranslator.VisitMember` + новый `private static`
+`MemberTranslator.TryTranslateProjectionOuterReference` (`src/nextorm.core/Visitors/MemberTranslator.cs`).
+Изменение **внутреннее** (`MemberTranslator` — `internal`), публичный API не затронут: новые члены —
+`private`, новых публичных типов/методов/свойств нет. Build Release — **0 warnings / 0 errors**
+(этот проход); `rg --files -g 'PublicAPI*.txt'` — пусто (Шаг 5 открыт).
+
+**Итог: публичных P0/P1/P2 нет.**
+
+| # | Ур. | Файл:строка | Проблема | Рекомендация |
+|---|-----|-------------|----------|--------------|
+| — | — | — | Новых публичных членов нет; внутренний метод `TryTranslateProjectionOuterReference` не требует трекинга `PublicAPI.*` | — |
+
+ℹ️ **Наблюдения (фикс не требуется):**
+- **Публичная поверхность не расширялась.** Корреляция по-прежнему выражается существующими
+  терминалами `QueryCommand<T>` и `SqlFunctions.Sql.exists/@in/any/all`; отдельный `OuterRef*`-API
+  сознательно не вводился (`plan-correlated-subqueries.md` §2 «Не-цели»). Дублирование поверхности
+  запрещено границами скилла, поэтому «публичный API поверх `OuterRefMarker`» не добавлялся.
+- **Именование — конвенции соблюдены.** `TryTranslateProjectionOuterReference` — private,
+  `Try…`-префикс как у соседних `TryTranslate`; XML-`<summary>` присутствует.
+- **Гейт провайдеров не нужен.** Коррелированный скалярный подзапрос — ANSI; ограничение относится к
+  in-memory, который уже бросает `NotSupportedException` (`InMemoryQueryBuilder`). Новый
+  `Supports*`-флаг не вводился намеренно (нет невыразимого провайдера).
+- **`AliasFromProjectionVisitor` — переиспользован, не продублирован.** Алиас элемента `ItemN`
+  берётся тем же visitor'ом, что и в существующей ветке `OuterRefMarker`.
+
+**Проверка:** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**; SQL-gen: core
+**166/166**, sqlite **222/222**, sqlserver **198/198**, postgres **209/209**, mysql **52/52**,
+mariadb **19/19**, clickhouse **154/154**; интеграция (Podman socket): SQL Server
+`-class …SqlServerIntegrationTests -method "*Correlated*"` — **14/14**, Postgres/MySQL по **2/2**,
+SQLite `-method "*OnJoinProjection*"` — **2/2**; в диффе `src`+`tests` новых
+`#pragma`/`SuppressMessage`/`NoWarn` — **0**; `rg --files -g 'PublicAPI*.txt'` — пусто.
+
 ## 3. Находки
 
 ### Статус находок (актуализация 18.09.2026)
