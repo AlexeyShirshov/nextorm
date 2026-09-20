@@ -98,7 +98,12 @@
 ## Массивы (дополнить)
 
 - [x] `array_append`, `array_prepend`, `array_cat`, `array_remove`, `array_replace`, `array_fill`
-- [x] `array_dims`, `array_positions`, `array_reverse`, `array_sort` (остались `array_shuffle`/`array_sample`)
+- [x] `array_dims`, `array_positions`, `array_reverse`, `array_sort`
+- [x] `array_shuffle` / `array_sample` (PostgreSQL 16+) — `PostgresFunctions.array_shuffle`/
+      `array_sample` через `ArraySqlTranslator` (гейт `SupportsArrays`). Тесты:
+      `SqlGenerationTests.ArrayShuffleSample_ShouldEmit`, rejection
+      `ArrayShuffle_ShouldThrowBecausePostgresArraySurfaceIsGated` (SQLite/ClickHouse),
+      `PostgresSpecificTests.ArrayShuffleSample_ShouldExecute` (реальный PostgreSQL, `PrepareFromSql`).
 - [x] `string_to_array`; `array_agg` и `unnest` — готовы
 - [x] Операторы `<@`, `||` (конкатенация массивов) — `array_contained_by`, `array_concat`;
       `=`/`<>` работают через обычное сравнение

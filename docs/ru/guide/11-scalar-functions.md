@@ -430,6 +430,8 @@ select id from complex_entity where id = any(@norm_p0)
 | `SqlFunctions.Postgres.array_positions(a, element)` | `array_positions(a, element)` |
 | `SqlFunctions.Postgres.array_reverse(a)` | `array_reverse(a)` |
 | `SqlFunctions.Postgres.array_sort(a)` | `array_sort(a)` |
+| `SqlFunctions.Postgres.array_shuffle(a)` | `array_shuffle(a)` (PostgreSQL 16+) |
+| `SqlFunctions.Postgres.array_sample(a, n)` | `array_sample(a, n)` (PostgreSQL 16+) |
 | `SqlFunctions.Postgres.array_to_string(a, delimiter)` | `array_to_string(a, delimiter)` |
 | `SqlFunctions.Postgres.string_to_array(s, delimiter)` | `string_to_array(s, delimiter)` |
 

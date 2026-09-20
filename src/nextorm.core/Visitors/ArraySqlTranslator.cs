@@ -149,6 +149,12 @@ internal static class ArraySqlTranslator
             case nameof(PostgresFunctions.array_sort) when args.Count == 1:
                 EmitFunction(visitor, "array_sort", args);
                 return true;
+            case nameof(PostgresFunctions.array_shuffle) when args.Count == 1:
+                EmitFunction(visitor, "array_shuffle", args);
+                return true;
+            case nameof(PostgresFunctions.array_sample) when args.Count == 2:
+                EmitFunction(visitor, "array_sample", args);
+                return true;
             case nameof(PostgresFunctions.string_to_array) when args.Count == 2:
                 EmitFunction(visitor, "string_to_array", args);
                 return true;

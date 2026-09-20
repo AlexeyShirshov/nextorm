@@ -2160,6 +2160,21 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void ArrayShuffleSample_ShouldEmit()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e
+            .Where(x => SqlFunctions.Postgres.array_shuffle(SqlFunctions.Parameter<long[]>(0)) != null)
+            .Where(x => SqlFunctions.Postgres.array_sample(SqlFunctions.Parameter<long[]>(1), 3) != null)
+            .Select(x => new { x.Id }));
+
+        sql.Should().Contain("array_shuffle(@norm_p0)");
+        sql.Should().Contain("array_sample(@norm_p1, 3)");
+    }
+
+    [Fact]
     public void StringJoinAndSplit_ShouldUseArrayToStringAndStringToArray()
     {
         using var ctx = PostgresTestContext.Create();

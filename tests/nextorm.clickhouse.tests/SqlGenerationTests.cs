@@ -145,6 +145,19 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void ArrayShuffle_ShouldThrowBecausePostgresArraySurfaceIsGated()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e
+            .Where(x => SqlFunctions.Postgres.array_shuffle(SqlFunctions.Parameter<long[]>(0)) != null)
+            .Select(x => new { x.Id }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*Arrays are not supported*");
+    }
+
+    [Fact]
     public void PercentRankCumeDist_ShouldEmitOverWithOrder()
     {
         using var ctx = ClickHouseTestContext.Create();

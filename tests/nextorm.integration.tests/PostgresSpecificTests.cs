@@ -99,6 +99,21 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    public async Task ArrayShuffleSample_ShouldExecute()
+    {
+        var cmd = _sut.SimpleEntity
+            .Select(x => x.Id)
+            .PrepareFromSql(
+                "select id from simple_entity where array_length(array_shuffle(array[1,2,3,4]), 1) = 4 "
+                + "and array_length(array_sample(array[1,2,3,4], 2), 1) = 2",
+                TestContext.Current.CancellationToken);
+
+        var ids = await _sut.DataProvider.ToListAsync(cmd);
+
+        ids.Should().NotBeEmpty();
+    }
+
+    [Fact]
     public void LastIndexOf_ShouldReturnZeroBasedLastPosition()
     {
         // "dadfasd" has its last 'd' at index 6.

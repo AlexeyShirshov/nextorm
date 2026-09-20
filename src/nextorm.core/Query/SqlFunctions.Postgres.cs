@@ -87,6 +87,12 @@ namespace NextORM.Core;
         /// <summary>Sorts the elements of <paramref name="array"/>.</summary>
         public T[] array_sort<T>(T[] array) => default!;
 
+        /// <summary>Returns a randomly shuffled copy of <paramref name="array"/> (<c>array_shuffle</c>, PostgreSQL 16+).</summary>
+        public T[] array_shuffle<T>(T[] array) => default!;
+
+        /// <summary>Returns <paramref name="n"/> randomly selected elements of <paramref name="array"/> (<c>array_sample</c>, PostgreSQL 16+).</summary>
+        public T[] array_sample<T>(T[] array, int n) => default!;
+
         /// <summary><c>array &lt;@ other</c>: true when every element of <paramref name="array"/> is contained in <paramref name="other"/>.</summary>
         public bool array_contained_by<T>(T[] array, T[] other) => default!;
 
