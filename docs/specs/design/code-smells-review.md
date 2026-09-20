@@ -1957,6 +1957,76 @@ clickhouse **139/139** (0 failed / 0 skipped). Соотношение подав
 `SuppressMessage` + 5 парных `#pragma`, неоправданных — **0/10**. Контейнерные интеграционные тесты
 не перезапускались.
 
+## 🔎 Точечный аудит — PostgreSQL `round(double,n)`, `extract`/`date_part`, `setseed`, `digest`/`sha256`, `array_shuffle`/`array_sample` (20.09.2026)
+
+Область: 5 коммитов ветки `todo-pg` (`5367081`…`496ded7`) — `Query/SqlFunctions{,.Postgres}.cs`,
+`DataContext/Dialect/{ISqlDialect,SqlDialectBase}.cs`,
+`Visitors/{MathFunctionTranslator,BuiltinFunctionTranslator,ExtendedScalarFunctionTranslator,ArraySqlTranslator}.cs`,
+диалекты Postgres/MySql/Sqlite/SqlServer/ClickHouse, unit- и интеграционные тесты. Build Release — **0/0**.
+
+| Категория навыка | Результат |
+|---|---|
+| 2. Подавления | ✅ В диффе `#pragma`/`SuppressMessage`/`NoWarn` — **0**. База прежняя: `SuppressMessage` — **5** (все с `Justification`), `#pragma disable` — **5** (все с парным `restore`); неоправданных — **0/10**. |
+| Слоп-паттерны (slopwatch локальным tool'ом не установлен; скан вручную) | ✅ `Skip=` — 0; `Task.Delay` — 2, обе прежние `Task.Delay(0)` (`tests/nextorm.core.tests/InMemoryTests.cs:115,404`); `Thread.Sleep`/пустых `catch` — 0; инлайновых `Version`/`VersionOverride` — 0. |
+| 1/3/4/6. `IDisposable`, LINQ, события, исключения | ✅ Новых disposable-полей/`using`, `.Count()`/`.Any()`/LINQ, подписок и `catch` нет; новые `throw` — `NotSupportedException` (`BuiltinFunctionTranslator.cs:288,293,295,298`; `ExtendedScalarFunctionTranslator.cs:126,135`), без `catch`. |
+| 5. Проектирование | 🟡 **Находка 30** — `EmitCrypto` дублирует emit-цикл (ниже); ℹ️ ниже — дубль `MakeMathFunction` (DIM+база) и лишняя аллокация `Type[]`. |
+| 7. Хэш-ключи | ✅ Новый код не трогает `GetHashCode`/план-ключ; `DatePartFields` — `static readonly HashSet` с `StringComparer.Ordinal` (`SqlDialectBase.cs:419-423`), на горячем пути не вызывается. |
+
+### 🟡 Находка 30 — `EmitCrypto` — очередная копия семейства emit-циклов (ОТКРЫТА, P2)
+
+`ExtendedScalarFunctionTranslator.EmitCrypto` (`:168-189`) построчно повторяет структуру
+`SqlOperandTranslator.EmitFunction` (`:193-211`): param-режим → `NeedAliasForColumn` → `Append(name)`
++ цикл `VisitToString`. Отличие намеренное и обосновано (`:163-166`): `byte[]`-аргумент через
+`AppendArgument` попал бы в `AppendArrayOperand`, и колонка-`bytea` была бы связана как параметр
+вместо ссылки на колонку. Но это уже **16** циклов `for (var (i, cnt) = (0, args.Count))` в **7**
+файлах `Visitors/`; порог «пятого семейства» из наблюдения `DictionarySqlTranslator` перейдён, а
+`EmitJsonPathFunction` (Находка 15) — тот же класс дублирования.
+
+- **Стало:** добавить в `SqlOperandTranslator.EmitFunction` режим «аргумент-массив рендерить как
+  значение» (флаг/делегат рендера), `EmitCrypto` свести к проверке `SupportsCryptoFunctions` + вызову;
+  SQL и текст исключений не меняются.
+- **Проверка:** build 0/0; `CryptoHash_ShouldEmit` (postgres), `CryptoHash_ShouldThrowBecauseOnlyPostgresHasIt`
+  (mysql/mariadb/sqlite/sqlserver/clickhouse), интеграционный `CryptoHash_ShouldReturnSha256`.
+- **Статус (todo-pg):** оставлена открытой (P2). Исправление требует режима «аргумент-массив рендерить
+  как значение» в общем `SqlOperandTranslator.EmitFunction`, что выходит за рамки пяти пунктов;
+  различие в `EmitCrypto` намеренное (`byte[]`-аргумент) и потому не удаляется без этого режима.
+
+### ℹ️ Наблюдения (фикс не требуется)
+
+- **`MakeMathFunction` 3-арг. задвоен осознанно.** DIM `ISqlDialect.cs:678-679` + `SqlDialectBase.cs:433-434`
+  (тело-делегат к 2-арг.). Это **не мёртвый** член (в отличие от P2-кандидата `MakeTextJsonFunction(string)`):
+  без `virtual` в базе `PostgresDialect.cs:180-183` не смог бы переопределить DIM, а DIM защищает
+  внешних реализаторов `ISqlDialect`. Обе записи войдут в заморозку (`API-NAMING-REVIEW.md`, RD2).
+- **Лишняя аллокация `Type[]`.** `MathFunctionTranslator.TryTranslate:50-56` теперь всегда строит
+  `new Type[args.Count]`, хотя типы читает только PG-`round`; аллокация на холодном пути построения
+  плана (не на выполнении) — импакт мал.
+- **SQL Server `epoch` теряет доли миллисекунды.** `datediff_big(millisecond, '19700101', value)`
+  считает границы в мс — для `datetime2` дробная часть усекается (`SqlServerDialect.cs:187`).
+- **MySQL/MariaDB `epoch` зависит от сессии.** `unix_timestamp(value)` трактует `datetime` в
+  сессионной временной зоне (`MySqlDialect.cs:201`).
+- **ClickHouse `epoch` — целые секунды.** `toUnixTimestamp` возвращает секунды, `toFloat64` дробь не
+  восстанавливает (`ClickHouseDialect.cs:343`), тогда как PG/SQLite/MySQL/SQL Server её сохраняют.
+- **Слишком мягкий допуск интеграционного теста.** `Extract_ShouldReturnNormalisedDateParts`
+  сравнивает `Epoch` через `BeApproximately(..., 86400.0)` (сутки) — сдвиг на часы тест не поймает
+  (`tests/nextorm.integration.tests/CommonTestSuite.Functions.cs`).
+- **LF-концевиков нет.** Дифф не добавляет ни одного `.cs`-файла (все `M`), Находки 20/22/29 не
+  расширяются.
+- **`DatePartFields` — ANSI-подмножество.** Базовый `HashSet` (`SqlDialectBase.cs:419-423`) содержит
+  `year`/`quarter`/`month`/`week`/`day`/`doy`/`hour`/`minute`/`second`, но не `dow`/`isodow`/`epoch`
+  (их добавляют все 5 диалектов). Внешний реализатор `ISqlDialect`, переопределивший `SupportsDatePart`
+  без `MakeDatePart`, получит `extract(dow from …)` — риск того же класса, что закрывал IF5, вне
+  репозитория.
+- **`DialectCapabilityContractTests.ThrowingRenderers` не расширен — корректно:** новые флаги гейтят
+  вызовы в трансляторах, а `MakeDatePart`/`MakeMathFunction` имеют не-падающие дефолты; паритет
+  `SupportsDatePart` ⇒ ветка `MakeDatePart` покрыт SQL-тестами диалектов.
+
+**Проверка:** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**; unit (Release,
+`--no-build`, этот проход): core **166/166**, postgres **206/206**, sqlserver **195/195**, mysql
+**52/52**, mariadb **19/19**, sqlite **220/220**, clickhouse **143/143** (0 failed / 0 skipped).
+Интеграционные на Podman-сокете (5 новых тестов × провайдеры) — **11/11 passed, 0 skipped**.
+Соотношение подавлений не изменилось: 5 оправданных `SuppressMessage` + 5 парных `#pragma`,
+неоправданных — **0/10**.
+
 ## Примечания
 
 - `SonarAnalyzer.CSharp` не подключён, поэтому правила `S####` (в т.ч. в 5 `SuppressMessage` из `src/`) сборкой не проверяются. При этом `.editorconfig` глушит 7 правил (`S125`, `S108`, `S3060`, `S1104`, `S3604`, `S2292` — `silent`; плюс `CA2254`), т.е. часть записей **инертна**: без пакета Sonar они не могут сработать (мёртвые настройки). `Directory.Build.props` задаёт только `TreatWarningsAsErrors=true` (без `AnalysisLevel=latest-all`), так что CA-правила навыка (включая `CA1508`/`CA2213`/`CA1816`) сборкой не гейтятся.

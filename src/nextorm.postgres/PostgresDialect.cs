@@ -175,8 +175,10 @@ public sealed class PostgresDialect : SqlDialectBase
             ? $"ln({args[0]})"
             : base.MakeMathFunction(name, args);
 
-    // PostgreSQL's two-argument round() only accepts numeric, so a double precision/real first
-    // argument has to be cast; decimal/integer already resolve to round(numeric, integer).
+    /// <summary>
+    /// PostgreSQL's two-argument <c>round</c> only accepts <c>numeric</c>, so a double precision/real
+    /// first argument is cast; decimal/integer already resolve to <c>round(numeric, integer)</c>.
+    /// </summary>
     public override string MakeMathFunction(string name, IReadOnlyList<string> args, IReadOnlyList<Type> argTypes) =>
         name == "round" && args.Count == 2 && IsFloatingPoint(argTypes[0])
             ? $"round(({args[0]})::numeric, {args[1]})"

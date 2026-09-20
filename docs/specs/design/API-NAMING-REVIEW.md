@@ -1426,6 +1426,93 @@ sqlserver **185/185**, mysql **49/49**, mariadb **14/14**, sqlite **209/209**, c
 -g 'PublicAPI*.txt'` — пусто (QM8); unit (Release, `--no-build`, этот проход): core **166/166**,
 postgres **198/198**, sqlserver **191/191**, mariadb **16/16**, sqlite **211/211**, clickhouse **139/139**.
 
+### PostgreSQL `round`/`extract`/`date_part`/`setseed`/`digest`+`sha256`/`array_shuffle`+`array_sample` (точечный аудит 20.09.2026)
+
+Публичная поверхность **аддитивна**: переименований нет, новых public-типов нет (Приложение A — 45 без
+изменений; счётчик типов §2 не растёт). Новые члены:
+
+- `CommonFunctions.extract(string part, DateTime? value) -> int?` (`Query/SqlFunctions.cs:333`),
+  `CommonFunctions.date_part(string part, DateTime? value) -> double?` (`:342`) — `<summary>` есть,
+  `<param>`/`<returns>` нет (стиль файла);
+- `PostgresFunctions.array_shuffle<T>(T[] array) -> T[]` (`Query/SqlFunctions.Postgres.cs:91`),
+  `array_sample<T>(T[] array, int n) -> T[]` (`:94`), `setseed(double? seed) -> double?` (`:290`),
+  `digest(string? data, string? type) -> byte[]?` (`:359`), `digest(byte[]? data, string? type) -> byte[]?`
+  (`:367`), `sha256(byte[]? data) -> byte[]?` (`:374`) — `<summary>` у всех;
+- `ISqlDialect.SupportsRandomSeed` (`DataContext/Dialect/ISqlDialect.cs:249`), `SupportsCryptoFunctions`
+  (`:257`), `SupportsDatePart(string)` (`:662`) — **абстрактные** (source-breaking для внешних
+  реализаторов); `MakeMathFunction(string, IReadOnlyList<string>, IReadOnlyList<Type>)` (`:678`) — **DIM**;
+- `SqlDialectBase.SupportsRandomSeed` (`:53`), `SupportsCryptoFunctions` (`:55`), `SupportsDatePart`
+  (`:424`), `MakeMathFunction` 3-арг. (`:433`);
+- override'ы: `PostgresDialect.SupportsDatePart` (`:75`), `MakeDatePart` (`:79`, новый override),
+  `SupportsRandomSeed` (`:119`), `SupportsCryptoFunctions` (`:122`), `MakeMathFunction` 3-арг. (`:180`);
+  `MySqlDialect` (`:194,206`), `SqliteDialect` (`:149,168`), `SqlServerDialect` (`:181,192`),
+  `ClickHouseDialect` (`:336,348`) — `SupportsDatePart` у всех пяти, `MakeDatePart` изменён у четырёх.
+
+**Контракты.** Корректны: `extract`→`int?` (целые части), `date_part`→`double?` (только `epoch`),
+`digest`/`sha256`→`byte[]?` (PG `bytea`), `array_shuffle`/`array_sample`→`T[]`. Отмечено:
+`setseed`→`double?` при PG `void` — контракт «всегда `null`» описан в `<summary>`, но `<returns>` нет;
+`digest(null, "sha256")` неоднозначен между `string?`/`byte[]?` на стороне вызова (транслятор
+диспетчеризует по имени и рендерит одинаково — рантайм-эффекта нет). `date_part` намеренно принимает
+только `epoch` (числовой аналог integer-`extract`); 3-арг. `MakeMathFunction` — **не** мёртвый дубль
+`MakeTextJsonFunction(string)`: DIM снимает source-breaking, `virtual` в базе нужен для override
+`PostgresDialect`. FQN списка заморозки сверены с XML-документацией собранной сборки
+(`M:NextORM.Core.CommonFunctions.extract`, `M:NextORM.Core.PostgresFunctions.array_shuffle`).
+
+| # | Ур. | Место | Проблема | Рекомендация |
+|---|-----|-------|----------|--------------|
+| RD1 | P2 | `PostgresDialect.cs:180-183`, `SqlDialectBase.cs:424` | Новые публичные члены без XML-`<summary>`: override `PostgresDialect.MakeMathFunction(string, IReadOnlyList<string>, IReadOnlyList<Type>)` задокументирован `//`, `SqlDialectBase.SupportsDatePart(string)` — без доки; четыре изменённых `MakeDatePart`-override'а (mysql/sqlite/sqlserver/clickhouse) тоже `//`. `NoWarn=CS1591` во всех 7 библиотечных `.csproj` скрывает пропуск (ср. N2/U5/Q4/A2) | Добавить `<summary>` при закрытии Шага 5 |
+| RD2 | P2 | `ISqlDialect.cs:249,257,662`; `SqlDialectBase.cs:53,55,424,433`; `PostgresDialect.cs:75,79,119,122,180`; `MySqlDialect.cs:194,206`; `SqliteDialect.cs:149,168`; `SqlServerDialect.cs:181,192`; `ClickHouseDialect.cs:336,348` | Новые/изменённые члены не трекаются (`PublicApiAnalyzers` не подключён, Шаг 5 открыт). `SupportsRandomSeed`/`SupportsCryptoFunctions`/`SupportsDatePart` — абстрактные: source-breaking для внешних реализаторов `ISqlDialect` (в репозитории реализует только `SqlDialectBase`); `MakeMathFunction` 3-арг. — DIM, разрыва не создаёт | Внести в `PublicAPI.Unshipped.txt` при заморозке (полный список ниже; ср. C/U4/Q3/A3/J1/D1/UG2/S1) |
+| RD3 | P2 | `Query/SqlFunctions.Postgres.cs:285-290`; `Query/SqlFunctions.cs:333,342`; `Query/SqlFunctions.Postgres.cs:359,367` | `setseed` возвращает `double?` при PG-`void` — `<summary>` описывает «always null», но `<returns>`/`<remarks>` нет; `digest(null, "sha256")` неоднозначен между перегрузками | Дописать `<returns>` у `setseed`; неоднозначность перегрузок оставить (SQL одинаков) |
+| RD4 | P2 | `docs/advanced/api-reference.md:59` + `docs/ru/advanced/api-reference.md:59` | Строка `CommonFunctions` перечисляет `date_trunc`/`date_add`/`date_diff`/`date_from_parts`/`end_of_month`, но не новые `extract`/`date_part` (EN и RU синхронно). Гайд `docs/guide/11-scalar-functions.md` (+RU) и `docs/providers/postgres.md` (+RU) обновлены — расхождения класса QM5 нет | Дополнить перечисление `extract`/`date_part` в обеих ветках |
+| RD5 | P2 | `Query/SqlFunctions.cs:342`; `BuiltinFunctionTranslator.cs:292-293` | `date_part` отклоняет все части, кроме `epoch`, тогда как в PostgreSQL `date_part('year', x)` — валидный double-аналог `extract`. Сужение описано в XML, но расходится с PG-ожиданием | Оставить нормализованную форму и явнее сослаться на `extract` в XML/прозе либо расширить `date_part` до числовых частей |
+
+**Обновление (todo-pg, аудит применён).** RD1 закрыта: `<summary>` добавлены `SqlDialectBase.SupportsDatePart`,
+`PostgresDialect.MakeMathFunction(...3-арг.)` и четырём `MakeDatePart`-override'ам
+(mysql/sqlite/sqlserver/clickhouse). RD3 закрыта: у `setseed` появился `<returns>`. RD4 закрыта: в
+`docs/advanced/api-reference.md` (+RU) добавлены `extract`/`date_part`, `array_shuffle`/`array_sample`,
+`digest`/`sha256`, `setseed`. RD5 закрыта: у `date_part` добавлен `<remarks>` со ссылкой на `extract`.
+RD2 остаётся открытой — `PublicAPI.Unshipped.txt` не заведён (Шаг 5 вне рамок этого пункта), подписи
+для заморозки ниже сохранены.
+
+**Шаг 5 — точные подписи для `PublicAPI.Unshipped.txt` (RD2)** (формат Roslyn PublicAPI, `#nullable enable`):
+
+```text
+NextORM.Core.ISqlDialect.SupportsRandomSeed.get -> bool
+NextORM.Core.ISqlDialect.SupportsCryptoFunctions.get -> bool
+NextORM.Core.ISqlDialect.SupportsDatePart(string! part) -> bool
+NextORM.Core.ISqlDialect.MakeMathFunction(string! name, System.Collections.Generic.IReadOnlyList<string!>! args, System.Collections.Generic.IReadOnlyList<System.Type!>! argTypes) -> string!
+NextORM.Core.SqlDialectBase.SupportsRandomSeed.get -> bool
+NextORM.Core.SqlDialectBase.SupportsCryptoFunctions.get -> bool
+NextORM.Core.SqlDialectBase.SupportsDatePart(string! part) -> bool
+NextORM.Core.SqlDialectBase.MakeMathFunction(string! name, System.Collections.Generic.IReadOnlyList<string!>! args, System.Collections.Generic.IReadOnlyList<System.Type!>! argTypes) -> string!
+NextORM.Postgres.PostgresDialect.SupportsRandomSeed.get -> bool
+NextORM.Postgres.PostgresDialect.SupportsCryptoFunctions.get -> bool
+NextORM.Postgres.PostgresDialect.SupportsDatePart(string! part) -> bool
+NextORM.Postgres.PostgresDialect.MakeDatePart(string! part, string! value) -> string!
+NextORM.Postgres.PostgresDialect.MakeMathFunction(string! name, System.Collections.Generic.IReadOnlyList<string!>! args, System.Collections.Generic.IReadOnlyList<System.Type!>! argTypes) -> string!
+NextORM.MySql.MySqlDialect.SupportsDatePart(string! part) -> bool
+NextORM.Sqlite.SqliteDialect.SupportsDatePart(string! part) -> bool
+NextORM.SqlServer.SqlServerDialect.SupportsDatePart(string! part) -> bool
+NextORM.ClickHouse.ClickHouseDialect.SupportsDatePart(string! part) -> bool
+NextORM.Core.CommonFunctions.extract(string! part, System.DateTime? value) -> int?
+NextORM.Core.CommonFunctions.date_part(string! part, System.DateTime? value) -> double?
+NextORM.Core.PostgresFunctions.array_shuffle<T>(T[]! array) -> T[]!
+NextORM.Core.PostgresFunctions.array_sample<T>(T[]! array, int n) -> T[]!
+NextORM.Core.PostgresFunctions.setseed(double? seed) -> double?
+NextORM.Core.PostgresFunctions.digest(string? data, string? type) -> byte[]?
+NextORM.Core.PostgresFunctions.digest(byte[]? data, string? type) -> byte[]?
+NextORM.Core.PostgresFunctions.sha256(byte[]? data) -> byte[]?
+```
+
+`MakeDatePart` у mysql/sqlite/sqlserver/clickhouse уже существовал (сигнатура не менялась) — в заморозку
+не входит, как и удалений (RS0017) в этом изменении нет.
+
+**Проверка:** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**; `find -name
+'PublicAPI*.txt'` — пусто (подтверждает RD2); `<summary>` присутствует у всех новых членов, кроме
+перечисленных в RD1; unit (Release, `--no-build`, этот проход): core **166/166**, postgres **206/206**,
+sqlserver **195/195**, mysql **52/52**, mariadb **19/19**, sqlite **220/220**, clickhouse **143/143**;
+интеграционные (Podman socket) — **11/11 passed, 0 skipped**.
+
 ## 3. Находки
 
 ### Статус находок (актуализация 18.09.2026)

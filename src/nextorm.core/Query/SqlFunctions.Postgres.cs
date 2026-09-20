@@ -287,6 +287,7 @@ namespace NextORM.Core;
         /// PostgreSQL only). PostgreSQL's <c>setseed</c> returns <c>void</c>, so the projected value is
         /// always <c>null</c>; the call is made for its side effect.
         /// </summary>
+        /// <returns>Always <c>null</c>, because PostgreSQL's <c>setseed</c> returns <c>void</c>.</returns>
         public double? setseed(double? seed) => default!;
 
         /// <summary>The logarithm of <paramref name="x"/> to the given base (two-argument <c>log</c>).</summary>

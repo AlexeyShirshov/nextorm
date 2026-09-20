@@ -339,6 +339,11 @@ public static partial class SqlFunctions
         /// integer parts. Requires a provider that supports the part (see
         /// <see cref="ISqlDialect.SupportsDatePart(string)"/>).
         /// </summary>
+        /// <remarks>
+        /// This is not PostgreSQL's general <c>date_part</c> synonym: only the numeric-valued part
+        /// <c>epoch</c> is provided here, while the integer parts (including PostgreSQL's
+        /// <c>date_part('year', x)</c>) go through <see cref="extract"/>.
+        /// </remarks>
         public double? date_part(string part, DateTime? value) => default!;
 
         /// <summary>

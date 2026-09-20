@@ -331,8 +331,11 @@ public sealed class ClickHouseDialect : SqlDialectBase
     // now() uses the server time zone; the optional argument selects a zone.
     public override string MakeNow(bool utc) => utc ? "now('UTC')" : "now()";
 
-    // ClickHouse spells the day-of-year part as toDayOfYear() and the other non-ANSI parts through
-    // the toXxx family. toDayOfWeek is ISO (1=Monday..7=Sunday), so dow = toDayOfWeek % 7.
+    /// <summary>
+    /// ClickHouse spells the day-of-year part as <c>toDayOfYear()</c> and the other non-ANSI parts
+    /// through the <c>toXxx</c> family. <c>toDayOfWeek</c> is ISO (1=Monday..7=Sunday), so
+    /// <c>dow = toDayOfWeek % 7</c>.
+    /// </summary>
     public override string MakeDatePart(string part, string value) => part switch
     {
         "doy" => $"toDayOfYear({value})",

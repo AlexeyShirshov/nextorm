@@ -175,9 +175,11 @@ public sealed class SqlServerDialect : SqlDialectBase
             ? $"substring({value}, 1, {start})"
             : $"stuff({value}, {start} + 1, {count}, {newValue})";
 
-    // SQL Server extracts date parts through datepart(part, value); T-SQL spells day-of-year as dayofyear.
-    // The ISO week is isowk; dow/isodow are normalised against the session DATEFIRST through
-    // datepart(weekday) and @@datefirst.
+    /// <summary>
+    /// SQL Server extracts date parts through <c>datepart(part, value)</c>; T-SQL spells day-of-year
+    /// as <c>dayofyear</c>. The ISO week is <c>isowk</c>; dow/isodow are normalised against the
+    /// session DATEFIRST through <c>datepart(weekday)</c> and <c>@@datefirst</c>.
+    /// </summary>
     public override string MakeDatePart(string part, string value) => part switch
     {
         "doy" => $"datepart(dayofyear, {value})",

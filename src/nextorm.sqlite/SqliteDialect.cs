@@ -144,8 +144,10 @@ public sealed class SqliteDialect : SqlDialectBase
     // SQLite has no now(); datetime('now') is UTC and is used for both local and UTC requests.
     public override string MakeNow(bool utc) => "datetime('now')";
 
-    // SQLite extracts date parts through strftime; the result is cast back to an integer so that it
-    // materialises like the C# DateTime.Year/Month/... int properties.
+    /// <summary>
+    /// SQLite extracts date parts through <c>strftime</c>; the result is cast back to an integer so
+    /// that it materialises like the C# <c>DateTime.Year</c>/<c>Month</c>/... int properties.
+    /// </summary>
     public override string MakeDatePart(string part, string value) => part switch
     {
         "year" => $"cast(strftime('%Y', {value}) as integer)",

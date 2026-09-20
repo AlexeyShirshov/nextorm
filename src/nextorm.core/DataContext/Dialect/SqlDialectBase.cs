@@ -421,6 +421,10 @@ public abstract class SqlDialectBase : ISqlDialect
         "year", "quarter", "month", "week", "day", "doy",
         "hour", "minute", "second"
     };
+    /// <summary>
+    /// True for the ANSI date parts the generic <c>extract</c> can render; a dialect whose native
+    /// spelling differs for a part extends this set (quarter/week/dow/isodow/epoch) as needed.
+    /// </summary>
     public virtual bool SupportsDatePart(string part) => DatePartFields.Contains(part);
     public virtual string MakeNow(bool utc) => utc ? "now() at time zone 'utc'" : "now()";
     public virtual string MakeMathFunction(string name, IReadOnlyList<string> args) =>

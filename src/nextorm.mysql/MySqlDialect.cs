@@ -189,8 +189,11 @@ public class MySqlDialect : SqlDialectBase
 
     public override string MakeParam(string name) => $"@{name}";
 
-    // MySQL has dayofyear()/quarter()/weekofyear(); the generic extract() spelling is avoided for
-    // these parts. weekofyear is ISO 8601 (EXTRACT(WEEK ...) depends on default_week_format).
+    /// <summary>
+    /// MySQL has <c>dayofyear()</c>/<c>quarter()</c>/<c>weekofyear()</c>; the generic <c>extract()</c>
+    /// spelling is avoided for these parts. <c>weekofyear</c> is ISO 8601 (<c>EXTRACT(WEEK ...)</c>
+    /// depends on <c>default_week_format</c>).
+    /// </summary>
     public override string MakeDatePart(string part, string value) => part switch
     {
         "doy" => $"dayofyear({value})",
