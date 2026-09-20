@@ -118,6 +118,9 @@ public sealed class PostgresDialect : SqlDialectBase
     /// <summary>PostgreSQL has the standalone session random seed <c>setseed</c>.</summary>
     public override bool SupportsRandomSeed => true;
 
+    /// <summary>PostgreSQL renders the <c>digest</c> (pgcrypto) and <c>sha256</c> (core) hash functions.</summary>
+    public override bool SupportsCryptoFunctions => true;
+
     /// <summary>PostgreSQL is the only provider with the native <c>tsvector</c>/<c>tsquery</c> text-search surface.</summary>
     public override bool SupportsTextSearchFunctions => true;
 

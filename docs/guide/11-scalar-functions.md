@@ -134,6 +134,8 @@ and the POSIX regular-expression functions. They are part of the extended scalar
 | `SqlFunctions.Postgres.concat_ws(sep, ...)` | `concat_ws(sep, ...)` |
 | `SqlFunctions.Postgres.format(fmt, ...)` | `format(fmt, ...)` |
 | `SqlFunctions.Postgres.md5(s)` | `md5(s)` |
+| `SqlFunctions.Postgres.digest(s\|bytes, type)` | `digest(data, type)` (requires the `pgcrypto` extension) |
+| `SqlFunctions.Postgres.sha256(bytes)` | `sha256(bytes)` |
 | `SqlFunctions.Postgres.regexp_replace(s, pattern, replacement[, flags])` | `regexp_replace(...)` |
 | `SqlFunctions.Postgres.regexp_like(s, pattern[, flags])` | `regexp_like(...)` |
 | `SqlFunctions.Postgres.regexp_split_to_array(s, pattern)` | `regexp_split_to_array(s, pattern)` |

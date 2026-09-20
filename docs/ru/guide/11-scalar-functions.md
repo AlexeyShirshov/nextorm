@@ -139,6 +139,8 @@ PostgreSQL и функции POSIX-регулярных выражений. Он
 | `SqlFunctions.Postgres.concat_ws(sep, ...)` | `concat_ws(sep, ...)` |
 | `SqlFunctions.Postgres.format(fmt, ...)` | `format(fmt, ...)` |
 | `SqlFunctions.Postgres.md5(s)` | `md5(s)` |
+| `SqlFunctions.Postgres.digest(s\|bytes, type)` | `digest(data, type)` (требует расширения `pgcrypto`) |
+| `SqlFunctions.Postgres.sha256(bytes)` | `sha256(bytes)` |
 | `SqlFunctions.Postgres.regexp_replace(s, pattern, replacement[, flags])` | `regexp_replace(...)` |
 | `SqlFunctions.Postgres.regexp_like(s, pattern[, flags])` | `regexp_like(...)` |
 | `SqlFunctions.Postgres.regexp_split_to_array(s, pattern)` | `regexp_split_to_array(s, pattern)` |

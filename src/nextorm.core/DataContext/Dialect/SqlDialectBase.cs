@@ -51,6 +51,8 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual bool SupportsExtendedScalarFunctions => false;
     /// <summary>Only PostgreSQL has a standalone session random seed (<c>setseed</c>).</summary>
     public virtual bool SupportsRandomSeed => false;
+    /// <summary>Only PostgreSQL has the <c>digest</c>/<c>sha256</c> hash surface.</summary>
+    public virtual bool SupportsCryptoFunctions => false;
 
     /// <summary>Defaults to <c>false</c>; PostgreSQL opts into the native text-search scalar surface.</summary>
     public virtual bool SupportsTextSearchFunctions => false;

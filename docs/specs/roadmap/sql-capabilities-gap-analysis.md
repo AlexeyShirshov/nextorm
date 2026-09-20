@@ -182,6 +182,10 @@ These are fully implemented and covered by SQL-generation or integration tests:
   `DateTime.Add*` methods, each provider emitting its native form. Arbitrary parts are exposed as
   `SqlFunctions.Sql.extract(part, value)` (`quarter`/`week` ISO/`dow`/`isodow`, validated by
   `SupportsDatePart`) and the numeric `SqlFunctions.Sql.date_part("epoch", value)`.
+* **Crypto hashes** — `SqlFunctions.Postgres.md5`, `digest(data, type)` (requires the `pgcrypto`
+  extension) and `sha256(bytes)`, gated by `SupportsCryptoFunctions` (PostgreSQL only; SQL
+  Server/MySQL/ClickHouse expose native SHA-256 under different names/return types, so a
+  cross-provider hash surface is a separate follow-up).
 * **Built-in table-valued functions** — `generate_series`/`unnest` (PostgreSQL),
   `string_split`/`openjson` (SQL Server) — with a `SupportsTableFunction` gate so an unsupported provider
   throws instead of emitting invalid SQL.

@@ -113,6 +113,17 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void CryptoHash_ShouldThrowBecauseOnlyPostgresHasIt()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new { H = SqlFunctions.Postgres.digest("abc", "sha256") }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*digest/sha256*");
+    }
+
+    [Fact]
     public void NthValue_ShouldEmitOverWithOrder()
     {
         using var ctx = MariaDbTestContext.Create();

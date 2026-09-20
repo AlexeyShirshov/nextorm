@@ -1988,6 +1988,24 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void CryptoHash_ShouldEmit()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            A = SqlFunctions.Postgres.digest("abc", "sha256"),
+            B = SqlFunctions.Postgres.digest(SqlFunctions.Parameter<byte[]>(0), "sha1"),
+            C = SqlFunctions.Postgres.sha256(SqlFunctions.Parameter<byte[]>(1))
+        }));
+
+        sql.Should().Contain("digest('abc', 'sha256')");
+        sql.Should().Contain("digest(@norm_p0, 'sha1')");
+        sql.Should().Contain("sha256(@norm_p1)");
+    }
+
+    [Fact]
     public void ExtendedLogFunction_ShouldEmitTwoArgumentLog()
     {
         using var ctx = PostgresTestContext.Create();

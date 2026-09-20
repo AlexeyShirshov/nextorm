@@ -66,7 +66,15 @@
 - [x] `split_part`, `strpos`/`position`, `left`, `right`, `lpad`, `rpad`, `repeat`, `reverse`,
       `initcap`, `translate`, `overlay`
 - [x] `concat_ws`, `format`, `startswith`
-- [x] `md5` (остались `digest`/`sha256` из pgcrypto)
+- [x] `md5`
+- [x] `digest` / `sha256` — `PostgresFunctions.digest(string|byte[], type)` (расширение `pgcrypto`) и
+      `PostgresFunctions.sha256(byte[])` (ядро PostgreSQL) под флагом `SupportsCryptoFunctions`
+      (base `false`, PostgreSQL `true`). Хеширование остаётся PostgreSQL-only поверхностью (как `md5`):
+      у SQL Server/MySQL/ClickHouse есть `HASHBYTES`/`SHA2`/`SHA256`, но с другим типом результата и
+      без алгоритм-диспетчера. Тесты: `SqlGenerationTests.CryptoHash_ShouldEmit`,
+      `PostgresDialectTests.CapabilityFlags_ShouldMatchPostgres`, rejection
+      `CryptoHash_ShouldThrowBecauseOnlyPostgresHasIt` (все остальные провайдеры),
+      `PostgresSpecificTests.CryptoHash_ShouldReturnSha256` (реальный PostgreSQL + pgcrypto).
 
 ## Условные / generic
 

@@ -349,6 +349,30 @@ namespace NextORM.Core;
         /// <summary>The MD5 hash of <paramref name="value"/> as a hexadecimal string.</summary>
         public string? md5(string? value) => default!;
 
+        /// <summary>
+        /// The binary hash of <paramref name="data"/> using the algorithm named by
+        /// <paramref name="type"/> (<c>md5</c>, <c>sha1</c>, <c>sha224</c>, <c>sha256</c>,
+        /// <c>sha384</c>, <c>sha512</c>). Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SupportsCryptoFunctions"/>; PostgreSQL) and the <c>pgcrypto</c>
+        /// extension installed on the server.
+        /// </summary>
+        public byte[]? digest(string? data, string? type) => default!;
+
+        /// <summary>
+        /// The binary hash of the <paramref name="data"/> bytes using the algorithm named by
+        /// <paramref name="type"/>. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SupportsCryptoFunctions"/>; PostgreSQL) and the <c>pgcrypto</c>
+        /// extension installed on the server.
+        /// </summary>
+        public byte[]? digest(byte[]? data, string? type) => default!;
+
+        /// <summary>
+        /// The SHA-256 hash of <paramref name="data"/> as a <c>bytea</c> (<c>sha256</c>). Requires a
+        /// provider that supports it (see <see cref="ISqlDialect.SupportsCryptoFunctions"/>;
+        /// PostgreSQL, where this is a core binary-string function).
+        /// </summary>
+        public byte[]? sha256(byte[]? data) => default!;
+
         /// <summary>Replaces the matches of a POSIX regular expression.</summary>
         public string? regexp_replace(string? value, string? pattern, string? replacement) => default!;
 

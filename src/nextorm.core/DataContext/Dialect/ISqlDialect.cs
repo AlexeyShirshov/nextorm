@@ -248,6 +248,14 @@ public interface ISqlDialect
     /// </summary>
     bool SupportsRandomSeed { get; }
     /// <summary>
+    /// True when the provider can render the cryptographic hash functions
+    /// (<see cref="PostgresFunctions.digest(string?, string?)"/> and
+    /// <see cref="PostgresFunctions.sha256(byte[])"/>). The safe default is <c>false</c>; only
+    /// PostgreSQL opts in. <c>digest</c> additionally requires the <c>pgcrypto</c> extension to be
+    /// installed on the server; <c>sha256</c> is a core binary-string function.
+    /// </summary>
+    bool SupportsCryptoFunctions { get; }
+    /// <summary>
     /// True when the provider can render the native text-search scalar surface of
     /// <see cref="PostgresFunctions"/> (<c>to_tsvector</c>, <c>to_tsquery</c>, <c>plainto_tsquery</c>,
     /// <c>phraseto_tsquery</c>, <c>websearch_to_tsquery</c>, <c>ts_rank</c>, <c>ts_headline</c> and the

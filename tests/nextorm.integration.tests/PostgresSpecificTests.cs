@@ -1,5 +1,6 @@
 using FluentAssertions;
 using NextORM.Core;
+using Npgsql;
 
 namespace NextORM.Integration.Tests;
 
@@ -111,6 +112,31 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         var ids = await _sut.DataProvider.ToListAsync(cmd);
 
         ids.Should().NotBeEmpty();
+    }
+
+    [Fact]
+    public async Task CryptoHash_ShouldReturnSha256()
+    {
+        await using (var connection = new NpgsqlConnection(PostgresContainer.ConnectionString))
+        {
+            await connection.OpenAsync(TestContext.Current.CancellationToken);
+            await using var command = new NpgsqlCommand("create extension if not exists pgcrypto", connection);
+            await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        var expected = Convert.FromHexString("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+
+        var hashes = _sut.SimpleEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                A = SqlFunctions.Postgres.digest("abc", "sha256"),
+                B = SqlFunctions.Postgres.sha256(SqlFunctions.Parameter<byte[]>(0))
+            })
+            .First(new byte[] { 0x61, 0x62, 0x63 });
+
+        hashes.A.Should().Equal(expected);
+        hashes.B.Should().Equal(expected);
     }
 
     [Fact]

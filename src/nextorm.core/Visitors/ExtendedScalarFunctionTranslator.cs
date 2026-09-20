@@ -129,6 +129,15 @@ internal static class ExtendedScalarFunctionTranslator
             return true;
         }
 
+        if (name is nameof(PostgresFunctions.digest) or nameof(PostgresFunctions.sha256))
+        {
+            if (!visitor.Dialect.SupportsCryptoFunctions)
+                throw new NotSupportedException("The cryptographic hash functions (digest/sha256) require PostgreSQL.");
+
+            EmitCrypto(visitor, name, node.Arguments);
+            return true;
+        }
+
         return false;
     }
 
@@ -149,6 +158,34 @@ internal static class ExtendedScalarFunctionTranslator
         visitor.NeedAliasForColumn = true;
         visitor.Builder!.Append("cast(pg_typeof(").Append(visitor.VisitToString(args[0]))
             .Append(") as ").Append(visitor.Dialect.MakeTypeName(typeof(string))).Append(')');
+    }
+
+    /// <summary>
+    /// Renders <c>digest(data, type)</c>/<c>sha256(data)</c>. The arguments are rendered directly
+    /// rather than through <see cref="SqlOperandTranslator.EmitFunction"/> because a <c>byte[]</c>
+    /// argument would otherwise be taken for an array operand and materialised as a single parameter.
+    /// </summary>
+    private static void EmitCrypto(BaseExpressionVisitor visitor, string name, IReadOnlyList<Expression> args)
+    {
+        if (visitor.IsParamMode)
+        {
+            for (var (i, cnt) = (0, args.Count); i < cnt; i++)
+                visitor.Visit(args[i]);
+
+            return;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        var builder = visitor.Builder!;
+        builder.Append(name).Append('(');
+
+        for (var (i, cnt) = (0, args.Count); i < cnt; i++)
+        {
+            if (i > 0) builder.Append(", ");
+            builder.Append(visitor.VisitToString(args[i]));
+        }
+
+        builder.Append(')');
     }
 
     private static void EmitMath(BaseExpressionVisitor visitor, string name, IReadOnlyList<Expression> args)
