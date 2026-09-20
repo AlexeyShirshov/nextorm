@@ -1828,6 +1828,29 @@ public class SqlGenerationTests
         sql.Should().Contain("from complex_entity as [t1]");
     }
 
+    /// <summary>
+    /// The outer reference may target a join-projection item (<c>p.Item1.Id</c>); the projection item
+    /// then supplies the alias for the inner predicate instead of a plain entity parameter.
+    /// </summary>
+    [Fact]
+    public void CorrelatedScalarOnJoinProjection_ShouldReferenceOuterAlias()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var outer = ctx.From<IComplexEntity>().Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id);
+        var inner = ctx.From<ISimpleEntity>();
+
+        var sql = SqlOf(ctx, outer.Select(p => new
+        {
+            p.Item1.Id,
+            sid = inner.Where(s => s.Id == p.Item1.Id).Select(s => s.Id).First()
+        }));
+
+        sql.Should().Contain("(select top(1)");
+        sql.Should().Contain("= t1.id");
+        sql.Should().Contain("from complex_entity as [t1]");
+        sql.Should().Contain("join simple_entity as [t2]");
+    }
+
     [Fact]
     public void TableSample_ShouldEmitPercent()
     {

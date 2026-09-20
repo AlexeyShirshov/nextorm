@@ -364,4 +364,15 @@ Scratch-файлы удалены; в фазе 0 эти сценарии ста�
    команде. Регрессионные тесты: `CorrelatedSiblingSubqueriesOfSameType_ShouldUseTheirOwnAlias`,
    `CorrelatedSiblingExistsOfSameType_ShouldUseTheirOwnAlias` (SQL-gen) и
    `CorrelatedSiblingSubqueriesOfSameType_ShouldEvaluatePerRow` (интеграционный, все провайдеры).
+7. **Внешняя ссылка на член join-проекции (`p.Item1.Id`) — ЗАКРЫТО.** Риск из фазы 2 (п.4): дерево
+   после `ReplaceConstantsExpressionVisitor` содержит `OuterRefMarker<T>(idx).Ref.Member`, который
+   проваливался в ветку closure-константы и вычислял неинициализированный `Ref`
+   (`NullReferenceException`). Добавлен `MemberTranslator.TryTranslateProjectionOuterReference`:
+   сохранённое внешнее выражение (`p.Item1`) даёт позицию элемента → псевдоним таблицы
+   (`AliasFromProjectionVisitor`), а член (`Id`) — имя столбца. SQL-gen:
+   `CorrelatedQueryTests.CorrelatedScalarOnJoinProjection_ShouldReferenceOuterAlias`,
+   `CorrelatedExistsOnJoinProjection_ShouldReferenceTheSecondItemAlias`,
+   `SqlGenerationTests.CorrelatedScalarOnJoinProjection_ShouldReferenceOuterAlias`;
+   интеграция: `CorrelatedScalarOnJoinProjection_ShouldEvaluatePerRow`,
+   `CorrelatedExistsOnJoinProjection_ShouldEvaluatePerRow`. Разбор — `WIP_correlated_scalar_projection.md`.
 

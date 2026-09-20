@@ -38,7 +38,7 @@ contract and the provider dialects, plus the integration tests under `tests/next
 > | 23 | Date arithmetic (`date_add`/`date_diff`/`date_trunc`/`end_of_month`/`date_from_parts`, `DateTime.Add*`) | **Done** across SQL Server, PostgreSQL, MySQL/MariaDB, SQLite and ClickHouse; the accepted fields differ per provider and are validated by `SupportsDateTruncField`/`SupportsDateAddField`/`SupportsDateDiffField`. The ClickHouse-native conversion/part surface (`toDate`/`toDateTime`/`toDate32`, `toYear`/..., `toStartOf*`, `toMonday`, `toYYYYMM`/`toYYYYMMDD`, `toUnixTimestamp`) is exposed through `SqlFunctions.ClickHouse` under `SupportsDateConversionFunctions` |
 > | 24 | Table hints (`with (nolock)`, ...) | **Done on SQL Server** (`WithTableHint`); other dialects throw |
 > | 25 | Extended scalar + session/info functions (`make_interval`, `justify_*`, `to_*`, `timezone`, `gen_random_uuid`/`uuidv7`, `pg_typeof`; `current_user`/`session_user`/`current_schema`/`current_database`/`version`) | Extended scalar + `pg_typeof`: **Done on PostgreSQL** (`SupportsExtendedScalarFunctions`). Session/info: **Done** cross-provider — all five on PostgreSQL/SQL Server/MySQL/MariaDB, `current_user`/`current_database`/`version` on ClickHouse and `version` on SQLite (`SupportsSessionInfoFunctions` + per-name `SupportsSessionInfoFunction`). UUID generators: **Done** cross-provider — `gen_random_uuid`/`uuidv7` on PostgreSQL/MariaDB/ClickHouse, `gen_random_uuid` (`newid()`) also on SQL Server, gated off on MySQL (v1 only) and SQLite (`SupportsUuidGenerators` + per-name `SupportsUuidGenerator`) |
-> | 26 | Correlated scalar subqueries (and correlated `EXISTS`/`IN`/`ANY`/`ALL` in `SELECT`/`WHERE`/`ORDER BY`) | **Done on SQL providers, one level**; nesting depth > 1 and the in-memory provider throw `NotSupportedException` (see `plan-correlated-subqueries.md`) |
+> | 26 | Correlated scalar subqueries (and correlated `EXISTS`/`IN`/`ANY`/`ALL` in `SELECT`/`WHERE`/`ORDER BY`) | **Done on SQL providers, one level** (join-projection outer references included); nesting depth > 1 and the in-memory provider throw `NotSupportedException` (see `plan-correlated-subqueries.md`) |
 >
 > Test coverage after the work is **83.6% line** (CI threshold 75%); the full integration suite is
 > 803 tests / 0 failed / 23 capability-based skips. Benchmarks and the performance optimizations that
@@ -96,7 +96,7 @@ functions), `SqlFunctions.SqlServer` (JSON-as-text on SQL Server and MySQL/Maria
 | More than two joined tables | unlimited | unlimited | **yes — up to 8** | `Projection<T1..T8>`, `JoinedEntityBuilder<T1..T8>` |
 | Subquery in `FROM` | yes | yes | **yes** | `SqlBuilder.MakeFrom`, `FromExpression` |
 | Scalar subquery in `SELECT`/`WHERE`/`ORDER BY` | yes | yes | **yes** — correlated and non-correlated | `CommonTestSuite.CorrelatedQuery.cs`, `CorrelatedQueryTests.cs` |
-| Correlated subquery | yes | yes | **yes (one level)** — scalar subqueries and `EXISTS`/`IN`/`ANY`/`ALL` in `SELECT`/`WHERE`/`ORDER BY`; deeper nesting and the in-memory provider throw `NotSupportedException` | `CorrelatedQueryExpressionVisitor.cs` |
+| Correlated subquery | yes | yes | **yes (one level)** — scalar subqueries and `EXISTS`/`IN`/`ANY`/`ALL` in `SELECT`/`WHERE`/`ORDER BY`, including outer references to a join-projection item (`p.Item1.Id`); deeper nesting and the in-memory provider throw `NotSupportedException` | `CorrelatedQueryExpressionVisitor.cs`, `MemberTranslator.TryTranslateProjectionOuterReference` |
 | `IN` (subquery) | yes | yes | **yes** — plus the ClickHouse distributed `GLOBAL IN` (`global_in`, `SupportsGlobalPredicates`) | `SqlFunctions.@in`, `SqlFunctions.ClickHouse.global_in`, `BaseExpressionVisitor` |
 | `IN` (list/array/`Contains`) | yes | yes | **yes** | `SqlFunctions.@in`, `Contains` |
 | `EXISTS` / `ANY` / `ALL` | yes | yes | **yes** | `SqlFunctions.exists/any/all` |
@@ -196,8 +196,9 @@ These are fully implemented and covered by SQL-generation or integration tests:
 ## 4. Remaining gaps, in order of significance
 
 1. **Correlated subqueries deeper than one level.** One level of correlation now works for scalar
-   subqueries and `EXISTS`/`IN`/`ANY`/`ALL` in `SELECT`/`WHERE`/`ORDER BY`, but a subquery nested
-   inside another correlated subquery (and any correlated subquery on the in-memory provider) throws
+   subqueries and `EXISTS`/`IN`/`ANY`/`ALL` in `SELECT`/`WHERE`/`ORDER BY`, including references to a
+   column of a join-projection item (`p.Item1.Id`); but a subquery nested inside another correlated
+   subquery (and any correlated subquery on the in-memory provider) throws
    `NotSupportedException`. Supporting it requires threading the referenced-query/outer-reference
    scope chain through rendering (see the `plan-correlated-subqueries.md` follow-up). Aggregate
    terminals (`Count()`/`Sum(...)`) as a subquery projection are likewise rejected in favour of the

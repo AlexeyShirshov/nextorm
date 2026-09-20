@@ -100,6 +100,51 @@ public class CorrelatedQueryTests
             + "limit 1)");
     }
 
+    /// <summary>
+    /// A correlated subquery may reference a column of a join-projection item
+    /// (<c>p.Item1.Id</c>). The marker wraps the projection item, not a plain entity parameter, so
+    /// the member has to be resolved through the item's position; before this was handled the
+    /// translation evaluated the marker's unset <c>Ref</c> and threw.
+    /// </summary>
+    [Fact]
+    public void CorrelatedScalarOnJoinProjection_ShouldReferenceOuterAlias()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var outer = ctx.From<IComplexEntity>().Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id);
+        var inner = ctx.From<IPairInnerEntity>();
+
+        var sql = SqlOf(ctx, outer.Select(p => new
+        {
+            p.Item1.Id,
+            x = inner.Where(i => i.Id == p.Item1.Id).Select(i => i.Id).First()
+        }));
+
+        sql.Should().Be("select t1.id, (select t3.id from pair_inner as 't3'\n"
+            + " where cast(t3.id as bigint) = t1.id\n"
+            + "limit 1) as 'x' from complex_entity as 't1' join simple_entity as 't2' on t1.id = cast(t2.id as bigint)");
+    }
+
+    /// <summary>
+    /// The projection position of the referenced item selects the table alias: an outer reference to
+    /// the second join item must render the second source's alias, not the first one.
+    /// </summary>
+    [Fact]
+    public void CorrelatedExistsOnJoinProjection_ShouldReferenceTheSecondItemAlias()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var outer = ctx.From<IComplexEntity>().Join(ctx.From<ISimpleEntity>(), (c, s) => c.Id == s.Id);
+        var inner = ctx.From<IPairInnerEntity>();
+
+        var sql = SqlOf(ctx, outer.Select(p => new
+        {
+            p.Item1.Id,
+            has = SqlFunctions.Sql.exists(inner.Where(i => i.Id == p.Item2.Id))
+        }));
+
+        sql.Should().Contain("t3.id = t2.id");
+        sql.Should().Contain("from pair_inner as 't3'");
+    }
+
     [Fact]
     public void CorrelatedExistsInSelect_ShouldReferenceOuterAlias()
     {

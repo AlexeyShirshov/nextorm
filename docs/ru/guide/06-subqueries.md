@@ -153,6 +153,22 @@ from complex_entity as 't1'
 Внешний запрос квалифицирует только упомянутый член; внутренний запрос сохраняет свои столбцы и
 псевдонимы. [`FirstOrDefault`](xref:NextORM.Core.EntityBuilder`1)/[`SingleOrDefault`](xref:NextORM.Core.EntityBuilder`1) дают `NULL`, когда во внутреннем запросе нет строк.
 
+Упомянутый член может также приходить из join-проекции: `p.Item1.Id` определяет псевдоним таблицы
+по позиции элемента проекции, а столбец — по его разметке, поэтому подзапрос может коррелировать с
+любым из соединённых источников:
+
+```csharp
+var rows = await dataContext.From<ISimpleEntity>()
+    .Join(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+    .Select(p => new { p.Item1.Id, cid = dataContext.From<IComplexEntity>().Where(c => c.Id == p.Item1.Id).Select(c => c.Id).First() })
+    .ToListAsync();
+```
+
+```sql
+select t1.id, (select top(1) t3.id from complex_entity as [t3]
+ where t3.id = cast(t1.id as bigint)) as [cid] from simple_entity as [t1] join complex_entity as [t2] on cast(t1.id as bigint) = t2.id
+```
+
 Действуют два ограничения:
 
 * подзапрос, вложенный в другой коррелированный подзапрос (глубина корреляции больше одной),

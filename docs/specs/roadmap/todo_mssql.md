@@ -241,8 +241,16 @@
       CTE-API `With(name, query).From(name)`. При этом производный запрос-источник с
       `Where`/`OrderBy`/`GroupBy`/`Select` и join, где производный запрос — присоединяемая сторона,
       работают; нужен только первичный `FROM`.
-- [ ] **Общий коррелированный скалярный подзапрос в проекции** — механизм `OuterRefMarker` уже
-      существует, нужно довести до публичного API (`limitations.md:22`).
+- [x] **Общий коррелированный скалярный подзапрос в проекции** — механизм `OuterRefMarker` уже
+      существует; публичный API не потребовался (синтаксис выражают терминалы `QueryCommand<T>` и
+      `SqlFunctions.Sql.exists/@in/any/all` — см. `plan-correlated-subqueries.md` §2). Закрыт
+      остаток — ссылка на член join-проекции (`p.Item1.Id`): `MemberTranslator` разворачивает
+      `OuterRefMarker<T>(idx).Ref.Member` через позицию элемента проекции
+      (`TryTranslateProjectionOuterReference`). SQL-gen:
+      `CorrelatedQueryTests.CorrelatedScalarOnJoinProjection_ShouldReferenceOuterAlias`,
+      `SqlGenerationTests.CorrelatedScalarOnJoinProjection_ShouldReferenceOuterAlias` (SQL Server);
+      интеграция: `CommonTestSuite.CorrelatedQuery.CorrelatedScalarOnJoinProjection_ShouldEvaluatePerRow`,
+      `CorrelatedExistsOnJoinProjection_ShouldEvaluatePerRow`. Разбор — `WIP_correlated_scalar_projection.md`.
 - [ ] **`CONTAINSTABLE` / `FREETEXTTABLE`** — TVF с колонкой `RANK`; первый аргумент — имя
       таблицы/колонки, а не выражение, поэтому плохо ложится на TVF-модель `[SqlTableFunction]`.
       **Блокер:** ссылка на базовую таблицу по имени внутри `FROM`-источника требует механизма

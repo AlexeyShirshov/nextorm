@@ -240,6 +240,10 @@ internal static class MemberTranslator
                 }
             }
         }
+        else if (TryTranslateProjectionOuterReference(visitor, node))
+        {
+            return node;
+        }
         else if (node.Expression.Type == typeof(TableColumn))
         {
             if (!visitor.IsParamMode && node.Expression is MethodCallExpression mce && mce.Arguments is [ConstantExpression arg] && arg.Value is string column)
@@ -415,6 +419,52 @@ internal static class MemberTranslator
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Translates a column of a join-projection outer reference
+    /// (<c>OuterRefMarker&lt;T&gt;(idx).Ref.Member</c>) into <c>alias.column</c>. The marker's
+    /// <c>Ref</c> is only written when a row is materialized, so it cannot be evaluated while SQL is
+    /// built; the accessed member supplies the column and the enclosing projection item (stored as the
+    /// outer reference, for example <c>p.Item1</c>) supplies the table alias. The plain, non-projection
+    /// outer reference is handled by the <see cref="System.Linq.Expressions.ExpressionType.New"/>
+    /// branch above.
+    /// </summary>
+    private static bool TryTranslateProjectionOuterReference(BaseExpressionVisitor visitor, MemberExpression node)
+    {
+        if (node.Expression is not MemberExpression
+            {
+                Member.Name: nameof(OuterRefMarker<int>.Ref),
+                Expression: NewExpression { Type: { IsGenericType: true } markerType } marker
+            }
+            || markerType.GetGenericTypeDefinition() != typeof(OuterRefMarker<>)
+            || marker.Arguments is not [ConstantExpression { Value: int idx }])
+            return false;
+
+        var colName = node.Member.GetPropertyColumnName();
+        if (string.IsNullOrEmpty(colName))
+            return false;
+
+        if (visitor.QueryProvider.OuterReferences is not { } outerReferences
+            || idx < 0 || idx >= outerReferences.Count)
+            return false;
+
+        if (outerReferences[idx] is not MemberExpression { Expression: ParameterExpression projectionParam } stored
+            || !projectionParam.Type.TryGetProjectionDimension(out _))
+            return false;
+
+        if (!visitor.IsParamMode)
+        {
+            var aliasVisitor = new AliasFromProjectionVisitor();
+            aliasVisitor.Visit(stored);
+            if (string.IsNullOrEmpty(aliasVisitor.Alias))
+                return false;
+
+            visitor.Builder!.Append(aliasVisitor.Alias).Append('.').Append(colName);
+        }
+
+        visitor.ColumnName = colName;
+        return true;
     }
 
     internal static Expression? VisitIndex(BaseExpressionVisitor visitor, IndexExpression node)
