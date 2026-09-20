@@ -1531,6 +1531,17 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void BuiltInTableFunction_GenerateRandom_UnsupportedByProvider_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var act = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.ClickHouse.generate_random())
+            .Select(r => new { r.Id }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*generateRandom*");
+    }
+
+    [Fact]
     public void GlobalIn_UnsupportedByProvider_ShouldThrow()
     {
         using var ctx = PostgresTestContext.Create();

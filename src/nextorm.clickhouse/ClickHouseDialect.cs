@@ -256,18 +256,34 @@ public sealed class ClickHouseDialect : SqlDialectBase
     /// <summary>The super-aggregate <c>WITH TOTALS</c> is a trailing modifier after the grouping list.</summary>
     public override string MakeGroupByTotals(string grouping) => $"{grouping} with totals";
 
-    /// <summary>ClickHouse provides the <c>numbers</c>/<c>numbers_mt</c> and <c>zeros</c>/<c>zeros_mt</c> table functions.</summary>
+    /// <summary>ClickHouse provides the <c>numbers</c>/<c>numbers_mt</c>, <c>zeros</c>/<c>zeros_mt</c> and <c>generateRandom</c> table functions.</summary>
     public override bool SupportsTableFunction(string name) =>
-        name is "numbers" or "numbers_mt" or "zeros" or "zeros_mt";
+        name is "numbers" or "numbers_mt" or "zeros" or "zeros_mt" or "generateRandom";
+
+    // The fixed structure the built-in generate_random()/generate_random(seed) map to
+    // (ClickHouse's own no-argument generateRandom has a dynamic, random schema).
+    private const string GenerateRandomStructure = "'id UInt64, value Float64, name String'";
 
     /// <summary>
     /// <c>numbers</c>/<c>numbers_mt</c> expose an unsigned <c>UInt64 number</c> column, which the row
-    /// reader cannot materialise; cast it to <c>Int64</c> through a wrapping subquery.
+    /// reader cannot materialise; cast it to <c>Int64</c> through a wrapping subquery. The built-in
+    /// <c>generateRandom</c> gets its fixed structure injected here and its <c>id</c> column cast the
+    /// same way.
     /// </summary>
-    public override string WrapTableFunction(string name, string call) =>
-        name is "numbers" or "numbers_mt"
-            ? $"(select toInt64(number) as number from {call})"
-            : call;
+    public override string WrapTableFunction(string name, string call)
+    {
+        if (name is "numbers" or "numbers_mt")
+            return $"(select toInt64(number) as number from {call})";
+
+        if (name == "generateRandom")
+        {
+            var inner = call["generateRandom(".Length..^1];
+            var args = inner.Length == 0 ? GenerateRandomStructure : $"{GenerateRandomStructure}, {inner}";
+            return $"(select toInt64(id) as id, value, name from generateRandom({args}))";
+        }
+
+        return call;
+    }
 
     /// <summary>ClickHouse implements the distributed <c>GLOBAL IN</c> predicate.</summary>
     public override bool SupportsGlobalPredicates => true;

@@ -105,7 +105,7 @@ functions), `SqlFunctions.SqlServer` (JSON-as-text on SQL Server and MySQL/Maria
 | `ROLLUP` / `CUBE` / `GROUPING SETS` | yes | yes | **yes** — `ROLLUP` on SQL Server, PostgreSQL, MySQL/MariaDB, SQLite and ClickHouse; `CUBE`/`GROUPING SETS` on SQL Server, PostgreSQL, SQLite and ClickHouse; `WITH TOTALS` on ClickHouse | `GroupByRollup`/`GroupByCube`/`GroupByGroupingSets`/`WithTotals`, `SupportsRollup`/`SupportsCube`/`SupportsGroupingSets`/`SupportsGroupByWithTotals` |
 | `LIMIT n BY expr` | no | no | **ClickHouse only** — at most `n` rows per distinct key | `LimitBy`, `SupportsLimitBy`/`MakeLimitBy` |
 | `FINAL` / `SAMPLE` / `PREWHERE` / `SETTINGS` | no | no | **ClickHouse only** for `FINAL`/`PREWHERE`/`SETTINGS`; the cross-provider `TABLESAMPLE` analog is exposed separately on PostgreSQL and SQL Server (see the `DISTINCT ON`/`WITH TIES`/`TABLESAMPLE` row) | `Final`/`Sample`/`PreWhere`/`Settings`, `SupportsFinal`/`SupportsSample`/`SupportsPreWhere`/`SupportsSettings` |
-| Generated-row table functions (`numbers`/`numbers_mt`, `zeros`/`zeros_mt`) | yes (`generate_series`/`unnest`) | yes (`string_split`/`openjson`) | **ClickHouse** — generated sources; `numbers`' `UInt64` is cast to `Int64`, `zeros`' `UInt8` materialises directly | `ClickHouseFunctions.numbers`/`zeros`, `INumbersRow`/`IZerosRow`, `WrapTableFunction` |
+| Generated-row table functions (`numbers`/`numbers_mt`, `zeros`/`zeros_mt`, `generateRandom`) | yes (`generate_series`/`unnest`) | yes (`string_split`/`openjson`) | **ClickHouse** — generated sources; `numbers`' `UInt64` is cast to `Int64`, `zeros`' `UInt8` materialises directly, and `generateRandom` fixes the structure `id UInt64, value Float64, name String` (casting `id` to `Int64`) | `ClickHouseFunctions.numbers`/`zeros`/`generate_random`, `INumbersRow`/`IZerosRow`/`IGenerateRandomRow`, `WrapTableFunction` |
 | `HAVING` | yes | yes | **yes** | `EntityBuilder.Having` |
 | Aggregates (`count`/`min`/`max`/`avg`/`sum`/`stdev`/`var`, distinct) | yes | yes | **yes** — `FILTER (WHERE ...)` on PostgreSQL and SQLite; boolean aggregates on PostgreSQL; bit and statistical aggregates on PostgreSQL and ClickHouse; `regr_*` on PostgreSQL; the arbitrary-value `any_agg` on MySQL and ClickHouse (MariaDB gated off — no `ANY_VALUE` until 13.2, MDEV-10426); `arg_min`/`arg_max`, the `uniq*` distinct-count family (the exact `uniqExact` overlaps the portable `count_distinct`/`count_big_distinct`, while SQL Server 2019+ `APPROX_COUNT_DISTINCT` is the approximate-distinct analog), the parameterised `quantile*`/`median`, the row-picking `any_last` and the `-If` combinators on ClickHouse (where `count`/`count_if` are cast to `toInt32`/`toInt64` because the native result is `UInt64`); the window percentiles `percentile_cont`/`percentile_disc` on SQL Server and MariaDB | `AdvancedAggregateTranslator.cs`, `WindowFunctionTranslator.cs`, `Supports*Aggregates`, `SupportsAnyValueAggregate`, `WrapsCountResult`, `SupportsPercentileWindow` |
 | `SELECT DISTINCT` | yes | yes | **yes** | `EntityBuilder.IsDistinct` |
@@ -201,9 +201,10 @@ These are fully implemented and covered by SQL-generation or integration tests:
    primitives introduced for correlated subqueries are a step towards it.
 3. **Raw SQL is not composable.** `WithSql` replaces the whole query, so raw SQL cannot be used as a
    `FROM` source, joined, or further filtered; EF Core (`FromSql`) and linq2db both allow this.
-4. **The pre-declared table-function set is small.** `SqlFunctions.Sql` ships only four built-ins, each gated by
-   `ISqlDialect.SupportsTableFunction`: `generate_series`/`unnest` (PostgreSQL) and
-   `string_split`/`openjson` (SQL Server). MySQL/MariaDB, SQLite and ClickHouse expose none of them, so
+4. **The pre-declared table-function set is small.** `SqlFunctions.Sql` ships the built-ins, each gated by
+   `ISqlDialect.SupportsTableFunction`: `generate_series`/`unnest` (PostgreSQL),
+   `string_split`/`openjson` (SQL Server) and `numbers`/`numbers_mt`/`zeros`/`zeros_mt`/`generateRandom`
+   (ClickHouse). MySQL/MariaDB and SQLite expose none of them, so
    there a user must declare their own `[SqlTableFunction]` wrapper (user wrappers are never gated), while
    EF Core and linq2db surface many more provider TVFs out of the box. Not mapped: `CONTAINSTABLE`/
    `FREETEXTTABLE` with ranking, `OPENJSON ... WITH` typed schemas, and MySQL `JSON_TABLE`.

@@ -44,7 +44,7 @@ public static partial class SqlFunctions
     /// string-JSON <c>JSONExtract*</c>/<c>visitParamExtract*</c> family plus the JSONPath
     /// <c>json_value</c>/<c>json_query</c>/<c>json_exists</c> scalars, the dictionary functions, the
     /// <c>-If</c> combinator, the distributed <c>global_in</c> predicate and the <c>numbers</c>/<c>numbers_mt</c>
-    /// and <c>zeros</c>/<c>zeros_mt</c> table functions, the date conversion/part surface
+    /// and <c>zeros</c>/<c>zeros_mt</c> table functions (plus <c>generateRandom</c>), the date conversion/part surface
     /// (<c>toDate</c>/<c>toDateTime</c>/<c>toDate32</c>, <c>toYear</c>/..., <c>toStartOf*</c>,
     /// <c>toMonday</c>, <c>toYYYYMM</c>/<c>toYYYYMMDD</c>, <c>toUnixTimestamp</c>), as well as the array functions over array
     /// columns (<c>arrayJoin</c>, <c>length</c>, <c>has</c>, <c>indexOf</c>, <c>hasAny</c>/<c>hasAll</c>,
@@ -124,6 +124,21 @@ public static partial class SqlFunctions
     {
         [Column("zero")]
         byte Value { get; set; }
+    }
+
+    /// <summary>
+    /// Row shape produced by <see cref="ClickHouseFunctions.generate_random()"/> and
+    /// <see cref="ClickHouseFunctions.generate_random(long)"/>: the fixed structure
+    /// <c>id UInt64, value Float64, name String</c> of ClickHouse's <c>generateRandom</c>.
+    /// </summary>
+    public interface IGenerateRandomRow
+    {
+        [Column("id")]
+        long Id { get; set; }
+        [Column("value")]
+        double Value { get; set; }
+        [Column("name")]
+        string? Name { get; set; }
     }
 
 }

@@ -677,6 +677,35 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void TableFunction_GenerateRandom_ShouldEmitWrappedCall()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.ClickHouse.generate_random())
+            .Page(3, 0)
+            .Select(r => new { r.Id, r.Value, r.Name }));
+
+        Normalize(command.DbCommand.CommandText).Should().Contain(
+            "from (select toInt64(id) as id, value, name from generateRandom('id UInt64, value Float64, name String')) as `t1`");
+    }
+
+    [Fact]
+    public void TableFunction_GenerateRandomWithSeed_ShouldPassSeed()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var seed = 42L;
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.ClickHouse.generate_random(seed))
+            .Page(3, 0)
+            .Select(r => new { r.Id }));
+
+        Normalize(command.DbCommand.CommandText).Should().Contain(
+            "from generateRandom('id UInt64, value Float64, name String', @seed)");
+    }
+
+    [Fact]
     public void GlobalIn_Subquery_ShouldRenderGlobalIn()
     {
         using var ctx = ClickHouseTestContext.Create();

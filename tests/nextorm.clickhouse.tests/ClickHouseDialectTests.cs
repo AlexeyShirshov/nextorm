@@ -145,6 +145,7 @@ public class ClickHouseDialectTests
         Dialect.SupportsTableFunction("numbers_mt").Should().BeTrue();
         Dialect.SupportsTableFunction("zeros").Should().BeTrue();
         Dialect.SupportsTableFunction("zeros_mt").Should().BeTrue();
+        Dialect.SupportsTableFunction("generateRandom").Should().BeTrue();
         Dialect.SupportsTableFunction("generate_series").Should().BeFalse();
     }
 
@@ -157,6 +158,10 @@ public class ClickHouseDialectTests
             .Should().Be("(select toInt64(number) as number from numbers_mt(3))");
         Dialect.WrapTableFunction("zeros", "zeros(3)").Should().Be("zeros(3)");
         Dialect.WrapTableFunction("zeros_mt", "zeros_mt(3)").Should().Be("zeros_mt(3)");
+        Dialect.WrapTableFunction("generateRandom", "generateRandom()")
+            .Should().Be("(select toInt64(id) as id, value, name from generateRandom('id UInt64, value Float64, name String'))");
+        Dialect.WrapTableFunction("generateRandom", "generateRandom(@seed)")
+            .Should().Be("(select toInt64(id) as id, value, name from generateRandom('id UInt64, value Float64, name String', @seed))");
     }
 
     [Fact]

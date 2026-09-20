@@ -37,7 +37,7 @@
 | `string.Split` → `splitByChar` | простое | ветка в строковом маппинге | `todo_clickhouse.md:230` |
 | Скалярные array-функции: `range`, `arrayEnumerate`, `arrayCumSum`, `arraySlice`, `arrayPushBack` | среднее | скалярные формы; проекция самого массива упирается в row reader | `todo_clickhouse.md:230` |
 | Продвинутые агрегаты: `windowFunnel`, `retention`, `sequenceMatch` | среднее/сложное | аккуратная типизация (DateTime/условия) | `todo_clickhouse.md:161` |
-| Прочие табличные функции: `generateRandom` | среднее | через `WrapTableFunction` (остальные — см. «заблокировано») | `todo_clickhouse.md:328` |
+| Прочие табличные функции: `generateRandom` | готово | через `WrapTableFunction` с фиксированной структурой и row-типом `IGenerateRandomRow` (см. `todo_clickhouse.md:355`); остальные — см. «заблокировано» | `todo_clickhouse.md:328` |
 
 ## Заблокировано (справочно; в Phase 2 не берём)
 

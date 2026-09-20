@@ -9,7 +9,8 @@ namespace NextORM.Core;
 /// aggregate, the string-JSON <c>JSONExtract*</c>/<c>JSONHas</c> and <c>visitParamExtract*</c> families
 /// plus the JSONPath <c>json_value</c>/<c>json_query</c>/<c>json_exists</c> scalars,
 /// the dictionary functions, the <c>-If</c> aggregate combinator, the distributed <c>global_in</c>
-/// predicate, the <c>numbers</c>/<c>numbers_mt</c> and <c>zeros</c>/<c>zeros_mt</c> table functions,
+/// predicate, the <c>numbers</c>/<c>numbers_mt</c> and <c>zeros</c>/<c>zeros_mt</c> table functions
+/// (plus <c>generateRandom</c>),
 /// the date conversion/part surface (<c>toDate</c>/<c>toDateTime</c>/<c>toDate32</c>, the
 /// <c>toYear</c>/... accessors, <c>toStartOf*</c>, <c>toMonday</c>, <c>toYYYYMM</c>/<c>toYYYYMMDD</c>,
 /// <c>toUnixTimestamp</c>),
@@ -217,6 +218,25 @@ namespace NextORM.Core;
         /// </summary>
         [SqlTableFunction("zeros_mt")]
         public IQueryable<SqlFunctions.IZerosRow> zeros_mt(long count) => throw new NotSupportedException();
+
+        /// <summary>
+        /// <c>generateRandom(...)</c> as a FROM source; select
+        /// <see cref="SqlFunctions.IGenerateRandomRow"/>. Yields an unbounded stream of random rows with
+        /// the fixed structure <c>id UInt64, value Float64, name String</c>, so apply a page/limit.
+        /// Requires a provider that supports table functions (see
+        /// <see cref="ISqlDialect.SupportsTableFunction"/>; ClickHouse). Use through
+        /// <see cref="DataContextExtensions.FromTableFunction{T}(IDataContext, System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{T}}})"/>.
+        /// </summary>
+        [SqlTableFunction("generateRandom")]
+        public IQueryable<SqlFunctions.IGenerateRandomRow> generate_random() => throw new NotSupportedException();
+
+        /// <summary>
+        /// <c>generateRandom(structure, seed)</c> as a FROM source: as
+        /// <see cref="generate_random()"/> but with a fixed <paramref name="seed"/> so the generated
+        /// values are reproducible.
+        /// </summary>
+        [SqlTableFunction("generateRandom")]
+        public IQueryable<SqlFunctions.IGenerateRandomRow> generate_random(long seed) => throw new NotSupportedException();
 
         /// <summary>
         /// <c>arrayJoin(array)</c>: expands the array into one row per element. Requires a provider that

@@ -352,7 +352,18 @@
       `Postgres…BuiltInTableFunction_Zeros_UnsupportedByProvider_ShouldThrow`,
       `ClickHouseIntegrationTests.ZerosTableFunction_ShouldReturnThreeRows` (реальный ClickHouse).
       См. `WIP_clickhouse_table_functions_remaining.md`.
-- [ ] **Прочие табличные функции ClickHouse** — `generateRandom`, `values` (динамическая схема из
+- [x] **`generateRandom`** — row-тип `SqlFunctions.IGenerateRandomRow` (`id UInt64`, `value Float64`,
+      `name String`), методы `ClickHouseFunctions.generate_random()`/`generate_random(long seed)` +
+      `SupportsTableFunction("generateRandom")`; `WrapTableFunction` подставляет фиксированную структуру
+      (нативная схема ClickHouse — динамическая строка) и оборачивает вывод в
+      `(select toInt64(id) as id, value, name from generateRandom('id UInt64, value Float64, name String'[, seed]))`,
+      т.к. нативный `UInt64` не материализуется. Поток бесконечен — нужен `Page`/`First`.
+      Тесты: `SqlGenerationTests.TableFunction_GenerateRandom_/…WithSeed_Should…`,
+      `ClickHouseDialectTests.SupportsTableFunction_ShouldMatchClickHouse`/`WrapTableFunction_…`,
+      `Postgres…BuiltInTableFunction_GenerateRandom_UnsupportedByProvider_ShouldThrow`,
+      `ClickHouseIntegrationTests.GenerateRandomTableFunction_ShouldReturnRequestedRows` (реальный ClickHouse).
+      См. `WIP_clickhouse_generate_random.md`.
+- [ ] **Прочие табличные функции ClickHouse** — `values` (динамическая схема из
       строки — не выражается статическим `IQueryable<T>`), `url`/`s3`/`remote`/`file`/`format`/`merge`/
       `input` (нужна конфигурация сервера), `cluster`/`clusterAllReplicas` (нужен кластер),
       `system.numbers` (покрыт табличной функцией `numbers`), `system.one` (валиден только

@@ -204,6 +204,18 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     }
 
     [Fact]
+    public void GenerateRandomTableFunction_ShouldReturnRequestedRows()
+    {
+        var rows = _sut.DataProvider
+            .FromTableFunction(() => SqlFunctions.ClickHouse.generate_random())
+            .Page(3, 0)
+            .Select(r => new { r.Id, r.Value, r.Name })
+            .ToList();
+
+        rows.Should().HaveCount(3);
+    }
+
+    [Fact]
     public void GlobalIn_Subquery_ShouldFilter()
     {
         var ids = _sut.SimpleEntity

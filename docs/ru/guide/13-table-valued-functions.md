@@ -272,10 +272,31 @@ select zero as `Value` from zeros(@count) as `t1`
 В отличие от `numbers`, колонка `zero` имеет тип `UInt8`, который row reader материализует напрямую
 как `byte`, поэтому подзапрос-обёртка с приведением не нужен.
 
+`SqlFunctions.ClickHouse.generate_random`/`generate_random(seed)` — табличные функции генерации
+тестовых данных ClickHouse, возвращающие
+[`SqlFunctions.IGenerateRandomRow`](xref:NextORM.Core.SqlFunctions.IGenerateRandomRow) (`id UInt64`,
+`value Float64`, `name String`). Схема в ClickHouse задаётся строкой, а форма без аргументов даёт
+случайную схему, поэтому встроенный хелпер фиксирует структуру, а колонка `id` приводится к `Int64`
+той же подзапрос-обёрткой, что и `numbers`; поток бесконечен, поэтому добавляйте page/limit:
+
+```csharp
+var rows = dataContext
+    .FromTableFunction(() => SqlFunctions.ClickHouse.generate_random())
+    .Page(3, 0)
+    .Select(r => new { r.Id, r.Value, r.Name })
+    .ToList();
+```
+
+```sql
+select id as `Id`, value as `Value`, name as `Name`
+from (select toInt64(id) as id, value, name from generateRandom('id UInt64, value Float64, name String')) as `t1`
+limit 3
+```
+
 Сопоставленная функция должна существовать в базе — nextorm только генерирует вызов, он её не создаёт, —
 поэтому используйте хелпер только на провайдере, где она определена. Встроенные хелперы гейтятся
 [`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect): PostgreSQL разрешает `generate_series`/`unnest`, SQL Server —
-`string_split`/`openjson`, ClickHouse — `numbers`/`numbers_mt` и `zeros`/`zeros_mt`, а любой другой
+`string_split`/`openjson`, ClickHouse — `numbers`/`numbers_mt`, `zeros`/`zeros_mt` и `generateRandom`, а любой другой
 провайдер отклоняет их с `NotSupportedException` (пользовательская `[SqlTableFunction]` не гейтится).
 
 ## Различия между провайдерами
