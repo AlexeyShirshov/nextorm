@@ -325,6 +325,9 @@ internal static class SqlSourceRenderer
                 sqlBuilder.Append(wrappedCall);
             }
 
+            if (!string.IsNullOrEmpty(function.WithClause))
+                sqlBuilder.Append(" with (").Append(function.WithClause).Append(')');
+
             if (needAlias || ctx.Dialect.RequireSubqueryAlias)
             {
                 if (hasJoins)

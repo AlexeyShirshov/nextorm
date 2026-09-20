@@ -95,12 +95,20 @@ renders `datetrunc(part, value)` with the plural ANSI parts folded to the singul
 `decade`/`century`/`millennium` folded onto a scaled `year` add), `SqlFunctions.Sql.date_diff(field, start, end)`
 renders `datediff(field, start, end)`, `SqlFunctions.Sql.date_from_parts(year, month, day)` renders
 `datefromparts(year, month, day)` and `SqlFunctions.Sql.end_of_month(value)` renders `eomonth(value)`.
+
+Date and number formatting is intentionally **not** mapped to the cross-provider surface. T-SQL `FORMAT`
+takes a .NET format string (and depends on the CLR; SQL Server 2012+), while PostgreSQL `to_char` and the
+`%`-style `DATE_FORMAT`/`strftime`/`formatDateTime` of the other providers use incompatible template
+languages, so there is no portable `template` argument. Declare `[SqlFunction("format")]` for SQL Server
+formatting; the PostgreSQL equivalent is `SqlFunctions.Postgres.to_char`.
+
 SQL Server 2017+ opts into `SqlFunctions.Sql.string_agg` →
 `string_agg(value, delimiter)`. There is no array type, so `array_agg` still throws
 ([`SupportsArrayAgg`](xref:NextORM.Core.ISqlDialect.SupportsArrayAgg) is `false`). SQL Server 2016+ also opts into the JSON-as-text functions
 ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)): `SqlFunctions.SqlServer.json_value`, `SqlFunctions.SqlServer.json_query`, `SqlFunctions.SqlServer.json_modify` and
 `SqlFunctions.SqlServer.isjson` render their T-SQL names over a text column, using a JSONPath string (`'$.name'`);
-the PostgreSQL `json`/`jsonb` surface still throws. The full-text predicates `SqlFunctions.Sql.contains` and
+the PostgreSQL `json`/`jsonb` surface still throws. A typed `OPENJSON ... WITH (...)` rowset is declared with a
+`[SqlTableFunction("openjson", WithClause = "...")]` wrapper (see the table-valued-functions guide). The full-text predicates `SqlFunctions.Sql.contains` and
 `SqlFunctions.Sql.freetext` ([`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText)) render as T-SQL `contains(...)`/`freetext(...)` and require a
 full-text index on the column. `SqlFunctions.Sql.iif(condition, whenTrue, whenFalse)` renders `iif(...)`
 ([`SupportsIif`](xref:NextORM.Core.ISqlDialect.SupportsIif), spelled through [`MakeIif`](xref:NextORM.Core.ISqlDialect.MakeIif)) and

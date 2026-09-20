@@ -33,4 +33,14 @@ public sealed class SqlTableFunctionAttribute : Attribute
 
     /// <summary>Optional schema/owner prefix, rendered as <c>schema.name</c>.</summary>
     public string? Schema { get; set; }
+
+    /// <summary>
+    /// Optional trailing <c>WITH (...)</c> clause body appended to the rendered call, for table
+    /// functions that take an explicit schema definition (for example SQL Server
+    /// <c>OPENJSON(json) WITH (col type '$.path', ...)</c>). The value is emitted verbatim inside the
+    /// parentheses: <c>WithClause = "name nvarchar(50) '$.name'"</c> renders
+    /// <c>openjson(@json) with (name nvarchar(50) '$.name')</c>. The mapped row type still supplies the
+    /// CLR types used by the projection.
+    /// </summary>
+    public string? WithClause { get; set; }
 }

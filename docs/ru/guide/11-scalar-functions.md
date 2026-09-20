@@ -288,6 +288,36 @@ select cast(strftime('%Y', dt) as integer) as 'Year', cast(strftime('%m', dt) as
 `date_diff`, `date_trunc` и члены `DateTime` (см. [Арифметику дат](#арифметика-дат) ниже).
 `make_date`, `age` и `date_bin` больше не предоставляются отдельно.
 
+### Форматирование дат и чисел в строки
+
+nextorm намеренно **не** добавляет кросс-провайдерный метод `format_date`/`FORMAT`. Языки шаблонов
+несовместимы: SQL Server `FORMAT(value, format)` использует .NET-шаблоны (`'yyyy-MM-dd'`) и зависит от
+CLR (доступен с SQL Server 2012+), PostgreSQL `to_char(value, format)` — собственные PG-шаблоны
+(`'YYYY-MM-DD'`), а MySQL/MariaDB `DATE_FORMAT`, SQLite `strftime` и ClickHouse `formatDateTime` — свои
+`%`-шаблоны (они к тому же расходятся в токенах `%y`/минуты/секунды). Один аргумент `template` давал бы
+разный — и в основном неверный — SQL на каждом провайдере.
+
+Форматируйте через пользовательскую функцию нужного провайдера. На SQL Server объявите UDF `format`:
+
+```csharp
+public static class DemoUdf
+{
+    [SqlFunction("format")]
+    public static string Format(DateTime? value, string format) => throw new NotSupportedException();
+}
+```
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new { e.Id, Month = DemoUdf.Format(e.Datetime, "yyyy-MM") });
+// select id as [Id], format(dt, 'yyyy-MM') as [Month] from complex_entity
+```
+
+На PostgreSQL ту же задачу решает `SqlFunctions.Postgres.to_char(value, 'YYYY-MM')`
+([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions)).
+Провайдеры с `%`-шаблонами (`DATE_FORMAT`, `strftime`, `formatDateTime`) объявляются так же через
+`[SqlFunction]`; встроенной поверхности для них тоже нет.
+
 ### Информация о сессии и сервере
 
 `SqlFunctions.Sql.current_user()`, `session_user()`, `current_schema()`, `current_database()` и

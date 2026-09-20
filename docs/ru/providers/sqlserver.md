@@ -95,13 +95,22 @@ T-SQL-написания (`milliseconds` → `millisecond`); `decade`/`century`/
 `dateadd(field, amount, value)` (а `decade`/`century`/`millennium` сворачиваются в масштабированное
 прибавление `year`), `SqlFunctions.Sql.date_diff(field, start, end)` — `datediff(field, start, end)`,
 `SqlFunctions.Sql.date_from_parts(year, month, day)` — `datefromparts(year, month, day)`,
-`SqlFunctions.Sql.end_of_month(value)` — `eomonth(value)`. SQL Server 2017+ включает
+`SqlFunctions.Sql.end_of_month(value)` — `eomonth(value)`.
+
+Форматирование дат и чисел намеренно **не** вынесено на кросс-провайдерную поверхность: T-SQL `FORMAT`
+принимает .NET-шаблон (и зависит от CLR; SQL Server 2012+), тогда как PostgreSQL `to_char` и `%`-шаблоны
+`DATE_FORMAT`/`strftime`/`formatDateTime` остальных провайдеров используют несовместимые языки шаблонов,
+поэтому переносимого аргумента `template` нет. Для форматирования на SQL Server объявляйте
+`[SqlFunction("format")]`; PG-эквивалент — `SqlFunctions.Postgres.to_char`.
+
+SQL Server 2017+ включает
 `SqlFunctions.Sql.string_agg` → `string_agg(value, delimiter)`. Типа-массива нет, поэтому `array_agg`
 по-прежнему выбрасывает исключение ([`SupportsArrayAgg`](xref:NextORM.Core.ISqlDialect.SupportsArrayAgg) равно `false`). SQL Server 2016+ также
 включает текстовые JSON-функции ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)): `SqlFunctions.SqlServer.json_value`, `SqlFunctions.SqlServer.json_query`,
 `SqlFunctions.SqlServer.json_modify` и `SqlFunctions.SqlServer.isjson` отрисовывают свои T-SQL-имена над текстовой колонкой,
 используя строку JSONPath (`'$.name'`); поверхность `json`/`jsonb` из PostgreSQL по-прежнему
-выбрасывает исключение.
+выбрасывает исключение. Типизированный набор строк `OPENJSON ... WITH (...)` объявляется через
+`[SqlTableFunction("openjson", WithClause = "...")]` (см. гайд по табличным функциям).
 Предикаты полнотекстового поиска `SqlFunctions.Sql.contains` и `SqlFunctions.Sql.freetext` ([`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText))
 отрисовываются как T-SQL `contains(...)`/`freetext(...)` и требуют полнотекстового индекса на колонке.
 `SqlFunctions.Sql.iif(condition, whenTrue, whenFalse)` отрисовывает `iif(...)`

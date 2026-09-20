@@ -61,13 +61,16 @@
       `[SqlFunction]`.
       `CONCAT_WS`/`FORMAT`/`REVERSE`/`TRANSLATE`/`OVERLAY` остаются в extended-наборе `CommonFunctions`
       (PostgreSQL).
-- [ ] **`FORMAT(value, formatString)` (дата/число)** — встроенного маппинга нет: у PostgreSQL
-      `SqlFunctions.Postgres.format(fmt, args)` — это `format()` с printf-плейсхолдерами, у SQL Server
-      `FORMAT` принимает значение и .NET-шаблон (`'yyyy-MM-dd'`). В demo-запросах (`mssql_rolling_kpi.sql`,
-      `mssql_vip_churn.sql`) пользовательский UDF `[SqlFunction("format")]` убран: LINQ-пример теперь
-      проецирует исходный `DateTime` без форматирования, а не маскирует пробел стабом. Нужен
-      кросс-провайдерный метод (например, `CommonFunctions.format_date(value, template)` с флагом и
-      хуком) либо явная фиксация: «форматирование дат — только через `[SqlFunction]`». Уровень: простое.
+- [x] **`FORMAT(value, formatString)` (дата/число)** — закрыто явной фиксацией: «форматирование дат и
+      чисел — только через `[SqlFunction]`». У PostgreSQL `SqlFunctions.Postgres.format(fmt, args)` —
+      это `format()` с printf-плейсхолдерами, у SQL Server `FORMAT` принимает значение и **.NET-шаблон**
+      (`'yyyy-MM-dd'`, требует CLR, SQL Server 2012+), а MySQL/MariaDB/SQLite/ClickHouse — `%`-шаблоны
+      (`DATE_FORMAT`/`strftime`/`formatDateTime`). Языки шаблонов несовместимы, поэтому единый
+      `format_date(value, template)` давал бы разный (и в основном неверный) SQL на разных провайдерах.
+      Правило зафиксировано в `docs/guide/11-scalar-functions.md` (раздел «Formatting dates and numbers
+      to strings», EN/RU) и `docs/providers/sqlserver.md`; поддерживаемый путь закреплён тестом
+      `SqlGenerationTests.SqlFunction_FormatDate_ShouldEmitFormatFunction` (SQL Server). Разбор —
+      `docs/specs/roadmap/WIP_format_date.md`. Уровень: простое.
 - [x] **`IIF` / `CHOOSE`** — `iif` перенесён на кросс-провайдерный `CommonFunctions.iif` (generic
       `TResult?`) с флагом `SupportsIif` и хуком `MakeIif` (нативный `iif` на SQL Server/SQLite, `if` на
       MySQL/MariaDB/ClickHouse, `case when` на PostgreSQL); `choose` остаётся SQL Server-only на
@@ -110,8 +113,13 @@
       `TextJsonSqlTranslator` (`SupportsTextJson`). `isjson` рендерит диалект — `ISqlDialect.MakeIsJson`
       (в предикате `(isjson(x)) = 1`, в проекции `cast(... as bit)` для SQL Server).
 - [x] **`OPENJSON`** — `SqlFunctions.SqlServer.openjson(json)` + `SqlFunctions.IOpenJsonRow` (`key`/`value`/`type`),
-      схема по умолчанию (без `WITH`), через `FromTableFunction`. Осталось: типизированная
-      схема `WITH (...)` (пользовательский `[SqlTableFunction]`-враппер уже покрывает этот случай).
+      схема по умолчанию (без `WITH`), через `FromTableFunction`. Типизированная схема `WITH (...)`
+      закрыта: у `[SqlTableFunction]` появилось свойство `WithClause`
+      (`SqlTableFunctionAttribute.WithClause`), которое эмитится как ` with (...)` после вызова
+      (`SqlSourceRenderer.MakeTableFunction`). Тесты:
+      `SqlGenerationTests.OpenJsonWith_ShouldAppendWithClause`,
+      `SqlServerSpecificTests.OpenJson_WithTypedSchema_ShouldReturnTypedColumns`; гайд —
+      `docs/guide/13-table-valued-functions.md`; разбор — `WIP_openjson_with.md`.
 - [x] **Полнотекстовый поиск**: предикаты `SqlFunctions.Sql.contains` / `SqlFunctions.Sql.freetext`
       (`SupportsFullText`, SQL Server) через `BuiltinFunctionTranslator` (`MakeBooleanPredicate`
       материализует проекцию в `bit`). SQL рендерит диалект — `ISqlDialect.MakeFullText` (ядро больше

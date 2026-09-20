@@ -210,9 +210,11 @@ These are fully implemented and covered by SQL-generation or integration tests:
 4. **The pre-declared table-function set is small.** `SqlFunctions.Sql` ships only four built-ins, each gated by
    `ISqlDialect.SupportsTableFunction`: `generate_series`/`unnest` (PostgreSQL) and
    `string_split`/`openjson` (SQL Server). MySQL/MariaDB, SQLite and ClickHouse expose none of them, so
-   there a user must declare their own `[SqlTableFunction]` wrapper (user wrappers are never gated), while
+   there a    user must declare their own `[SqlTableFunction]` wrapper (user wrappers are never gated), while
    EF Core and linq2db surface many more provider TVFs out of the box. Not mapped: `CONTAINSTABLE`/
-   `FREETEXTTABLE` with ranking, `OPENJSON ... WITH` typed schemas, and MySQL `JSON_TABLE`.
+   `FREETEXTTABLE` with ranking and MySQL `JSON_TABLE`; SQL Server `OPENJSON ... WITH` typed schemas
+   are expressible through `SqlTableFunctionAttribute.WithClause` (emitted as `with (...)` after the
+   call).
 5. **Full-text search has no ranking/score.** `contains`/`freetext` render boolean predicates; there is no
    `ts_rank`/`CONTAINSTABLE` score projection.
 6. **Column identifiers are emitted unquoted.** Outside projection aliases and inner-query columns, nextorm
@@ -226,7 +228,10 @@ These are fully implemented and covered by SQL-generation or integration tests:
    `decade`/`century`/`millennium` for `date_trunc`), `CUBE`/`GROUPING SETS` and `FULL JOIN` are missing
    on MySQL/MariaDB, `GREATEST`/`LEAST` has provider-specific NULL semantics, and several features
    (`FOR JSON`/`FOR XML`, table hints, query hints) exist on a subset of providers. These are documented
-   in `docs/providers/*.md` rather than unified.
+   in `docs/providers/*.md` rather than unified. Date/number formatting is deliberately left to
+   provider-specific `[SqlFunction]` UDFs because the `.NET` (`FORMAT`), PostgreSQL (`to_char`) and `%`
+   (`DATE_FORMAT`/`strftime`/`formatDateTime`) template languages are incompatible — a single portable
+   `template` argument cannot exist (see `WIP_format_date.md`).
  8. **No `PIVOT`/`UNPIVOT`, temporal tables or XML-data-type methods** (`.value`/`.query`/`.nodes`/`.exist`).
  9. **No DML and no navigation properties / relationship metadata** — by design for a read-only,
     no-change-tracking mapper, but still a functional gap versus both references.
