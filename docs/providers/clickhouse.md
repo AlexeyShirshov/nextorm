@@ -47,7 +47,10 @@ and returns [`Instance`](xref:NextORM.ClickHouse.ClickHouseDialect.Instance) fro
   parameterised quantile aggregates `quantile(level)(value)`/`quantileExact`/`quantileTiming` and
   `median` wrapped in `toFloat64(...)` (so every variant materialises as a CLR `double`); the
   arbitrary-value aggregate `any_agg` as `any` (cross-provider: `ANY_VALUE(x)` on MySQL) and the
-  last-row aggregate `any_last` as `anyLast`;
+  last-row aggregate `any_last` as `anyLast`; the sequence/funnel aggregates
+  `window_funnel`/`sequence_match`/`retention` as `windowFunnel`/`sequenceMatch`/`retention`
+  (`windowFunnel`/`sequenceMatch` are wrapped in `toInt32(...)`; `retention` returns `Array(UInt8)`, so
+  it is usable only nested inside another array function);
 - the string-JSON extractors `json_extract_string`/`json_extract_int`/`json_extract_float`/
   `json_extract_bool`/`json_extract_raw`/`json_has`/`json_type` as `JSONExtractString`/`JSONExtractInt`/
   `JSONExtractFloat`/`JSONExtractBool`/`JSONExtractRaw`/`JSONHas`/`JSONType`, `json_length` as
@@ -162,7 +165,7 @@ select concat('id:', id) as `Label` from simple_entity
 | `LIMIT n BY expr` | `limit [offset, ]n by col1, col2` (before the final `LIMIT`) |
 | Query modifiers | `final`, `sample r [offset o]`, `prewhere`, `settings k = v` (`FINAL`/`PREWHERE` need a supporting table engine) |
 | Table functions | `numbers`/`numbers_mt` (the `UInt64 number` column is cast to `Int64`), `zeros`/`zeros_mt` (`zero UInt8`), `generateRandom` (the built-in `generate_random()`/`generate_random(seed)` fix the structure `id UInt64, value Float64, name String` and cast `id` to `Int64`) |
-| Array functions | over `Array(T)` columns: `length`, `has`, `indexOf`, `hasAny`, `hasAll`, `arrayStringConcat`, `splitByChar`, `arraySort`, `arrayReverse`, `arrayDistinct`; the CLR `string.Split` renders as `splitByChar(separator, value)` under [`SupportsStringSplit`](xref:NextORM.Core.ISqlDialect.SupportsStringSplit) (one-character separator only); `arrayJoin(array)` expands one row per element, and `EntityBuilder.ArrayJoin`/`LeftArrayJoin` render the `[left ]array join expr, ...` clause. `EntityBuilder.ArrayJoinElement`/`LeftArrayJoinElement` additionally bind the expanded element to `ArrayJoinProjection<TEntity, TElement>.Element` (with the original entity at `.Item1`); the clause expression is aliased and `p.Element` references that alias (see [`ClickHouseFunctions`](xref:NextORM.Core.ClickHouseFunctions), [`ArrayJoinKind`](xref:NextORM.Core.ArrayJoinKind), [`ArrayJoinProjection`](xref:NextORM.Core.ArrayJoinProjection`2)) |
+| Array functions | over `Array(T)` columns/expressions: `length`, `has`, `indexOf`, `hasAny`, `hasAll`, `arrayStringConcat`, `splitByChar`, `arraySort`, `arrayReverse`, `arrayDistinct`, `range`, `arrayEnumerate`, `arrayCumSum`, `arraySlice`, `arrayPushBack`; the CLR `string.Split` renders as `splitByChar(separator, value)` under [`SupportsStringSplit`](xref:NextORM.Core.ISqlDialect.SupportsStringSplit) (one-character separator only); `arrayJoin(array)` expands one row per element, and `EntityBuilder.ArrayJoin`/`LeftArrayJoin` render the `[left ]array join expr, ...` clause. `EntityBuilder.ArrayJoinElement`/`LeftArrayJoinElement` additionally bind the expanded element to `ArrayJoinProjection<TEntity, TElement>.Element` (with the original entity at `.Item1`); the clause expression is aliased and `p.Element` references that alias (see [`ClickHouseFunctions`](xref:NextORM.Core.ClickHouseFunctions), [`ArrayJoinKind`](xref:NextORM.Core.ArrayJoinKind), [`ArrayJoinProjection`](xref:NextORM.Core.ArrayJoinProjection`2)) |
 | Native JSON / extended scalars | not supported (PostgreSQL-only) |
 
 ## Notes and limitations

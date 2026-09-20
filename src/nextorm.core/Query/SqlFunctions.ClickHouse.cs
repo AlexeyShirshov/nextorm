@@ -6,7 +6,8 @@ namespace NextORM.Core;
 /// ClickHouse-only SQL surface: the <c>argMin</c>/<c>argMax</c> aggregates, the distinct-count
 /// <c>uniq</c>/<c>uniqExact</c>/<c>uniqCombined</c>/<c>uniqHLL12</c> aggregates, the parameterised
 /// <c>quantile(level)(value)</c> family with <c>median</c>, the <c>anyLast</c> row-picking
-/// aggregate, the string-JSON <c>JSONExtract*</c>/<c>JSONHas</c> and <c>visitParamExtract*</c> families
+/// aggregate, the sequence/funnel aggregates <c>windowFunnel</c>/<c>retention</c>/<c>sequenceMatch</c>,
+/// the string-JSON <c>JSONExtract*</c>/<c>JSONHas</c> and <c>visitParamExtract*</c> families
 /// plus the JSONPath <c>json_value</c>/<c>json_query</c>/<c>json_exists</c> scalars,
 /// the dictionary functions, the <c>-If</c> aggregate combinator, the distributed <c>global_in</c>
 /// predicate, the <c>numbers</c>/<c>numbers_mt</c> and <c>zeros</c>/<c>zeros_mt</c> table functions
@@ -14,9 +15,10 @@ namespace NextORM.Core;
 /// the date conversion/part surface (<c>toDate</c>/<c>toDateTime</c>/<c>toDate32</c>, the
 /// <c>toYear</c>/... accessors, <c>toStartOf*</c>, <c>toMonday</c>, <c>toYYYYMM</c>/<c>toYYYYMMDD</c>,
 /// <c>toUnixTimestamp</c>),
-/// and the array functions over array columns (<c>arrayJoin</c>, <c>length</c>, <c>has</c>,
-/// <c>indexOf</c>, <c>hasAny</c>/<c>hasAll</c>, <c>arrayStringConcat</c>, <c>splitByChar</c>,
-/// <c>arraySort</c>, <c>arrayReverse</c>, <c>arrayDistinct</c>).
+/// and the array functions over array columns and expressions (<c>arrayJoin</c>, <c>length</c>,
+/// <c>has</c>, <c>indexOf</c>, <c>hasAny</c>/<c>hasAll</c>, <c>arrayStringConcat</c>,
+/// <c>splitByChar</c>, <c>arraySort</c>, <c>arrayReverse</c>, <c>arrayDistinct</c>, <c>range</c>,
+/// <c>arrayEnumerate</c>, <c>arrayCumSum</c>, <c>arraySlice</c>, <c>arrayPushBack</c>).
 /// Exposed through <see cref="SqlFunctions.ClickHouse"/>; every member is gated by a capability flag
 /// and rejected by providers that do not opt in.
 /// </summary>
@@ -89,6 +91,34 @@ namespace NextORM.Core;
         /// <see cref="CommonFunctions.any_agg{T}"/>.
         /// </summary>
         public T? any_last<T>(T? value) => default!;
+
+        /// <summary>
+        /// <c>windowFunnel(window)(timestamp, cond1, cond2, ...)</c>: the maximum number of consecutive
+        /// conditions satisfied within the sliding <paramref name="window"/> (in units of
+        /// <paramref name="timestamp"/>). Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SupportsSequenceAggregates"/>; ClickHouse). The conditions must be
+        /// inline expressions; a captured condition array is rejected.
+        /// </summary>
+        public int window_funnel<TTime>(long window, TTime? timestamp, params bool[] conditions) => default!;
+
+        /// <summary>
+        /// <c>sequenceMatch(pattern)(timestamp, cond1, cond2, ...)</c>: <c>1</c> when the event chain
+        /// matches the <paramref name="pattern"/> (for example <c>"(?1).*(?2)"</c>), otherwise <c>0</c>.
+        /// Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SupportsSequenceAggregates"/>; ClickHouse). The conditions must be
+        /// inline expressions.
+        /// </summary>
+        public int sequence_match<TTime>(string? pattern, TTime? timestamp, params bool[] conditions) => default!;
+
+        /// <summary>
+        /// <c>retention(cond1, cond2, ...)</c>: the 1/0 condition mask (the first condition, then the
+        /// first-and-second, and so on). Returns an array, so it can only be used as the operand of
+        /// another array function (for example <see cref="length{T}(T[])"/> or
+        /// <see cref="array_string_concat{T}(T[], string?)"/>). Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SupportsSequenceAggregates"/>; ClickHouse). The conditions must be
+        /// inline expressions.
+        /// </summary>
+        public int[] retention(params bool[] conditions) => default!;
 
         /// <summary>
         /// <c>JSONExtractString(json, path)</c>: the string at <paramref name="path"/>. JSON is stored in
@@ -277,6 +307,49 @@ namespace NextORM.Core;
 
         /// <summary><c>arrayDistinct(array)</c>: the distinct elements. Returns an array, so it can only be used as the operand of another array function.</summary>
         public T[] array_distinct<T>(T[] array) => default!;
+
+        /// <summary>
+        /// <c>range(end)</c>: the integers from <c>0</c> up to (but excluding) <paramref name="end"/>.
+        /// Returns an array, so it can only be used as the operand of another array function (for
+        /// example <see cref="length{T}(T[])"/> or <see cref="array_string_concat{T}(T[], string?)"/>).
+        /// Requires a provider that supports array functions (see
+        /// <see cref="ISqlDialect.SupportsArrayFunctions"/>; ClickHouse).
+        /// </summary>
+        public long[] range(long end) => default!;
+
+        /// <summary><c>range(start, end)</c>: the integers in <c>[start, end)</c>. Returns an array, so it can only be used nested.</summary>
+        public long[] range(long start, long end) => default!;
+
+        /// <summary><c>range(start, end, step)</c>: the integers in <c>[start, end)</c> with the given step. Returns an array, so it can only be used nested.</summary>
+        public long[] range(long start, long end, long step) => default!;
+
+        /// <summary>
+        /// <c>arrayEnumerate(array)</c>: the one-based positions <c>[1, 2, ..., length(array)]</c>.
+        /// Returns an array, so it can only be used as the operand of another array function.
+        /// </summary>
+        public long[] array_enumerate<T>(T[] array) => default!;
+
+        /// <summary>
+        /// <c>arrayCumSum(array)</c>: the running sums of the elements. Returns an array, so it can
+        /// only be used as the operand of another array function.
+        /// </summary>
+        public T[] array_cum_sum<T>(T[] array) => default!;
+
+        /// <summary>
+        /// <c>arraySlice(array, offset)</c>: the elements from the one-based <paramref name="offset"/>
+        /// to the end (a negative offset counts from the end). Returns an array, so it can only be used
+        /// as the operand of another array function.
+        /// </summary>
+        public T[] array_slice<T>(T[] array, long offset) => default!;
+
+        /// <summary><c>arraySlice(array, offset, length)</c>: as <see cref="array_slice{T}(T[], long)"/> but limited to <paramref name="length"/> elements.</summary>
+        public T[] array_slice<T>(T[] array, long offset, long length) => default!;
+
+        /// <summary>
+        /// <c>arrayPushBack(array, element)</c>: the array with <paramref name="element"/> appended.
+        /// Returns an array, so it can only be used as the operand of another array function.
+        /// </summary>
+        public T[] array_push_back<T>(T[] array, T element) => default!;
 
         /// <summary>
         /// <c>toDate(value)</c>: converts a string or date/time value to a <c>Date</c>. Requires a

@@ -403,7 +403,8 @@ var variance = dataContext.From<ISimpleEntity>().Select(x => SqlFunctions.Sql.va
 агрегатов, а провайдерно-специфичные находятся в [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) (логические, битовые, регрессионные и
 упорядоченные) и [`ClickHouse`](xref:NextORM.Core.SqlFunctions.ClickHouse) (`arg_min`/`arg_max`, агрегаты числа уникальных
 `uniq`/`uniq_exact`/`uniq_combined`/`uniq_hll12`, параметрическое семейство квантилей
-`quantile`/`quantile_exact`/`quantile_timing`/`median` и комбинатор `-If`). Каждое семейство включается
+`quantile`/`quantile_exact`/`quantile_timing`/`median`, комбинатор `-If` и агрегаты
+последовательностей/воронки `window_funnel`/`sequence_match`/`retention`). Каждое семейство включается
 своим флагом диалекта; PostgreSQL и ClickHouse включают разные подмножества.
 
 | Семейство | C# | SQL | Флаг | Провайдеры |
@@ -418,6 +419,7 @@ var variance = dataContext.From<ISimpleEntity>().Select(x => SqlFunctions.Sql.va
 | Произвольное значение | `SqlFunctions.Sql.any_agg(x)` | `ANY_VALUE(x)` / `any(x)` | [`SupportsAnyValueAggregate`](xref:NextORM.Core.ISqlDialect.SupportsAnyValueAggregate) | MySQL, ClickHouse |
 | Последняя строка | `SqlFunctions.ClickHouse.any_last(x)` | `anyLast(x)` | [`SupportsAnyAggregates`](xref:NextORM.Core.ISqlDialect.SupportsAnyAggregates) | ClickHouse |
 | С фильтром (`-If`) | `SqlFunctions.ClickHouse.count_if(() => p)`, `sum_if(x, () => p)`, `avg_if(x, () => p)`, `min_if(x, () => p)`, `max_if(x, () => p)` | `countIf(p)`, `sumIf(x, p)`, ... | [`SupportsIfAggregates`](xref:NextORM.Core.ISqlDialect.SupportsIfAggregates) | ClickHouse |
+| Последовательности / воронка | `SqlFunctions.ClickHouse.window_funnel(window, ts, c1, c2)`, `sequence_match(pattern, ts, c1, c2)`, `retention(c1, c2)` | `toInt32(windowFunnel(window)(ts, c1, c2))`, `toInt32(sequenceMatch(pattern)(ts, c1, c2))`, `retention(c1, c2)` | [`SupportsSequenceAggregates`](xref:NextORM.Core.ISqlDialect.SupportsSequenceAggregates) | ClickHouse |
 | Упорядоченные | `SqlFunctions.Postgres.percentile_cont(fraction, () => x)`, `percentile_disc(fraction, () => x)`, `mode(() => x)` | `percentile_cont(f) within group (order by x)`, ... | [`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates) | PostgreSQL |
 
 MariaDB **не** поддерживает `any_agg`: в 10.4–12.x нет `ANY_VALUE` (возможность SQL-2023 `T626` всё ещё
@@ -464,6 +466,33 @@ select groupBitAnd(id), covarPop(id, nullableint), argMax(somestring, id), count
 Упорядоченные агрегаты принимают ключ сортировки как цитируемую лямбду, которая замыкается на параметр
 запроса; ключ становится `order by <key>`. Вызов такого агрегата у провайдера без соответствующей
 возможности бросает `NotSupportedException`.
+
+Агрегаты ClickHouse для последовательностей/воронки принимают условия как встроенные булевы выражения
+(столбец `timestamp` — первым). `window_funnel` возвращает длину наибольшей последовательной цепочки в
+скользящем окне, `sequence_match` — `1`/`0` для паттерна; оба материализуются как CLR `int` (диалект
+приводит нативный беззнаковый результат через `toInt32(...)`). `retention` возвращает маску `UInt8`
+как массив, который row reader пока не умеет материализовать, поэтому применим только внутри другой
+array-функции:
+
+```csharp
+var funnel = dataContext.From<IEventEntity>()
+    .Select(e => new
+    {
+        Level = SqlFunctions.ClickHouse.window_funnel(600, e.Timestamp, e.Event == 1, e.Event == 2),
+        Matched = SqlFunctions.ClickHouse.sequence_match("(?1).*(?2)", e.Timestamp, e.Event == 1, e.Event == 2),
+        Mask = SqlFunctions.ClickHouse.array_string_concat(
+            SqlFunctions.ClickHouse.retention(e.Event == 1, e.Event == 2), ",")
+    })
+    .First();
+```
+
+```sql
+-- ClickHouse
+select toInt32(windowFunnel(600)(ts, (event = 1), (event = 2))) as `Level`,
+       toInt32(sequenceMatch('(?1).*(?2)')(ts, (event = 1), (event = 2))) as `Matched`,
+       arrayStringConcat(retention((event = 1), (event = 2)), ',') as `Mask`
+from event_entity
+```
 
 ## Агрегаты с FILTER
 

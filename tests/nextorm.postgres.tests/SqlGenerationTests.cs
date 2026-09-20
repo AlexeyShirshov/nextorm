@@ -2528,6 +2528,38 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void ClickHouseArrayScalarFunctions_UnsupportedByProvider_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        var range = () => SqlOf(ctx, e.Select(x => new { N = SqlFunctions.ClickHouse.length(SqlFunctions.ClickHouse.range(1, 5)) }));
+        range.Should().Throw<NotSupportedException>().WithMessage("*array functions*");
+
+        var slice = () => SqlOf(ctx, e.Select(x => new { S = SqlFunctions.ClickHouse.array_string_concat(SqlFunctions.ClickHouse.array_slice(x.Tags, 1), ",") }));
+        slice.Should().Throw<NotSupportedException>().WithMessage("*array functions*");
+
+        var push = () => SqlOf(ctx, e.Select(x => new { S = SqlFunctions.ClickHouse.array_string_concat(SqlFunctions.ClickHouse.array_push_back(x.Tags, "z"), ",") }));
+        push.Should().Throw<NotSupportedException>().WithMessage("*array functions*");
+    }
+
+    [Fact]
+    public void ClickHouseSequenceAggregates_UnsupportedByProvider_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var funnel = () => SqlOf(ctx, e.Select(x => new { F = SqlFunctions.ClickHouse.window_funnel(10, x.Id, x.Id >= 1, x.Id >= 5) }));
+        funnel.Should().Throw<NotSupportedException>().WithMessage("*windowFunnel*");
+
+        var match = () => SqlOf(ctx, e.Select(x => new { M = SqlFunctions.ClickHouse.sequence_match("(?1)(?2)", x.Id, x.Id >= 1, x.Id >= 5) }));
+        match.Should().Throw<NotSupportedException>().WithMessage("*windowFunnel*");
+
+        var retention = () => SqlOf(ctx, e.Select(x => new { M = SqlFunctions.ClickHouse.retention(x.Id >= 1, x.Id >= 5) }));
+        retention.Should().Throw<NotSupportedException>().WithMessage("*windowFunnel*");
+    }
+
+    [Fact]
     public void ArrayJoinClause_UnsupportedByProvider_ShouldThrow()
     {
         using var ctx = PostgresTestContext.Create();

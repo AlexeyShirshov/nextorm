@@ -149,6 +149,7 @@ select id from simple_entity where global in (@p0, @p1)
 * агрегаты числа уникальных `uniq`/`uniq_exact`/`uniq_combined`/`uniq_hll12` (`toInt64`);
 * параметрические `quantile(level)(value)`/`quantile_exact`/`quantile_timing` и `median` (`toFloat64`);
 * агрегат последнего произвольного значения `any_last` (`anyLast`);
+* агрегаты последовательностей/воронки `window_funnel`/`sequence_match`/`retention` (`windowFunnel`/`sequenceMatch` с `toInt32(...)`; `retention` возвращает массив, применим только вложенно);
 * комбинаторы `-If`: `count_if`/`sum_if`/`avg_if`/`min_if`/`max_if`;
 * `arg_min`/`arg_max`.
 
@@ -166,7 +167,8 @@ MySQL и MariaDB) и `corr`/`covar*` — документированы на т�
 * словарные функции `dict_get`/`dict_get_or_default`/`dict_has` (нужен настроенный
   `CREATE DICTIONARY`);
 * функции массивов `length`/`has`/`index_of`/`has_any`/`has_all`/`array_string_concat`/
-  `split_by_char`/`array_sort`/`array_reverse`/`array_distinct`.
+  `split_by_char`/`array_sort`/`array_reverse`/`array_distinct`/`range`/`array_enumerate`/
+  `array_cum_sum`/`array_slice`/`array_push_back`.
 
 См. [Скалярные функции](../11-scalar-functions.md) и [Поддержка JSON](../18-json.md)
 ([`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract)/[`SupportsDictionaries`](xref:NextORM.Core.ISqlDialect.SupportsDictionaries)).

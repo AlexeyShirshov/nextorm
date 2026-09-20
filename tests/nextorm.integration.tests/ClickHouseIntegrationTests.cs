@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using FluentAssertions;
 using NextORM.Core;
 
@@ -459,6 +461,52 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     }
 
     [Fact]
+    public void WindowFunnel_ShouldCountConsecutiveConditions()
+    {
+        // event_entity rows are (1: event 1 @ 00:00, 2: event 2 @ 00:01, 3: event 3 @ 00:02,
+        // 4: event 2 @ 00:03). The 600s window contains the whole 1 -> 2 -> 3 chain, so the level is 3.
+        var events = _sut.DataProvider.From<IEventEntity>();
+
+        var level = events
+            .Select(x => SqlFunctions.ClickHouse.window_funnel(600, x.Timestamp, x.Event == 1, x.Event == 2, x.Event == 3))
+            .First();
+
+        level.Should().Be(3);
+    }
+
+    [Fact]
+    public void SequenceMatch_ShouldMatchPattern()
+    {
+        var events = _sut.DataProvider.From<IEventEntity>();
+
+        events
+            .Select(x => SqlFunctions.ClickHouse.sequence_match("(?1)(?2)(?3)", x.Timestamp, x.Event == 1, x.Event == 2, x.Event == 3))
+            .First()
+            .Should().Be(1);
+
+        // Reversing the order cannot match: cond2 must occur after cond1.
+        events
+            .Select(x => SqlFunctions.ClickHouse.sequence_match("(?1)(?2)(?3)", x.Timestamp, x.Event == 3, x.Event == 2, x.Event == 1))
+            .First()
+            .Should().Be(0);
+    }
+
+    [Fact]
+    public void Retention_ShouldReturnConditionMask()
+    {
+        // retention is anchored on the first condition: result[1] = any(event == 1) = 1;
+        // result[2] = anchor && any(event == 5) = 0; result[3] = anchor && any(event == 3) = 1.
+        var events = _sut.DataProvider.From<IEventEntity>();
+
+        var mask = events
+            .Select(x => SqlFunctions.ClickHouse.array_string_concat(
+                SqlFunctions.ClickHouse.retention(x.Event == 1, x.Event == 5, x.Event == 3), ","))
+            .First();
+
+        mask.Should().Be("1,0,1");
+    }
+
+    [Fact]
     public void IfAggregates_ShouldFilterBeforeAggregating()
     {
         // The arguments are cast to the ClickHouse result types (Int64 for the integer sum/min/max,
@@ -594,6 +642,31 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     }
 
     [Fact]
+    public void ArrayScalarFunctions_ShouldReturnValues()
+    {
+        // The five functions return arrays, which the row reader cannot materialise yet, so each is
+        // wrapped in a scalar-returning array function (length/arrayStringConcat) inside the query.
+        // array_entity id = 1 has nums = [3, 1, 2].
+        var r = _sut.ArrayEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                R = SqlFunctions.ClickHouse.length(SqlFunctions.ClickHouse.range(1, 5)),
+                E = SqlFunctions.ClickHouse.length(SqlFunctions.ClickHouse.array_enumerate(x.Nums)),
+                C = SqlFunctions.ClickHouse.array_string_concat(SqlFunctions.ClickHouse.array_cum_sum(x.Nums), ","),
+                S = SqlFunctions.ClickHouse.array_string_concat(SqlFunctions.ClickHouse.array_slice(x.Nums, 1, 2), ","),
+                P = SqlFunctions.ClickHouse.array_string_concat(SqlFunctions.ClickHouse.array_push_back(x.Nums, 4), ",")
+            })
+            .First();
+
+        r.R.Should().Be(4);
+        r.E.Should().Be(3);
+        r.C.Should().Be("3,4,6");
+        r.S.Should().Be("3,1");
+        r.P.Should().Be("3,1,2,4");
+    }
+
+    [Fact]
     public void ArrayJoinClause_ShouldExpandRowsAndDropEmptyArrays()
     {
         var ids = _sut.ArrayEntity
@@ -655,4 +728,16 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
         rows.Should().ContainSingle();
         rows[0].Tag.Should().BeNullOrEmpty();
     }
+}
+
+[SqlTable("event_entity")]
+public interface IEventEntity
+{
+    [Key]
+    [Column("id")]
+    int Id { get; set; }
+    [Column("ts")]
+    DateTime Timestamp { get; set; }
+    [Column("event")]
+    int Event { get; set; }
 }

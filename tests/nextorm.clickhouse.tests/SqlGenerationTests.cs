@@ -541,6 +541,48 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void WindowFunnel_ShouldUseDoubleParenthesesAndCast()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            F = SqlFunctions.ClickHouse.window_funnel(3600, x.Datetime, x.Id <= 2, x.Id <= 5)
+        }));
+
+        sql.Should().Contain("toInt32(windowFunnel(3600)(dt, (id <= 2), (id <= 5)))");
+    }
+
+    [Fact]
+    public void SequenceMatch_ShouldUseDoubleParenthesesAndCast()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            M = SqlFunctions.ClickHouse.sequence_match("(?1)(?2)", x.Datetime, x.Id <= 1, x.Id <= 2)
+        }));
+
+        sql.Should().Contain("toInt32(sequenceMatch('(?1)(?2)')(dt, (id <= 1), (id <= 2)))");
+    }
+
+    [Fact]
+    public void Retention_ShouldRenderConditionMaskNestedInLength()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            N = SqlFunctions.ClickHouse.length(SqlFunctions.ClickHouse.retention(x.Id <= 2, x.Id <= 5))
+        }));
+
+        sql.Should().Contain("toInt64(length(retention((id <= 2), (id <= 5))))");
+    }
+
+    [Fact]
     public void AnyValueAggregate_ShouldUseClickHouseAny()
     {
         using var ctx = ClickHouseTestContext.Create();
@@ -1257,6 +1299,70 @@ public class SqlGenerationTests
         sql.Should().Contain("toInt64(length(arraySort(nums)))");
         sql.Should().Contain("toInt64(length(arrayReverse(nums)))");
         sql.Should().Contain("toInt64(length(arrayDistinct(nums)))");
+    }
+
+    [Fact]
+    public void ArrayRange_ShouldRenderRange()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            A = SqlFunctions.ClickHouse.length(SqlFunctions.ClickHouse.range(5)),
+            B = SqlFunctions.ClickHouse.length(SqlFunctions.ClickHouse.range(1, 5)),
+            C = SqlFunctions.ClickHouse.length(SqlFunctions.ClickHouse.range(1, 5, 2))
+        }));
+
+        sql.Should().Contain("toInt64(length(range(5)))");
+        sql.Should().Contain("toInt64(length(range(1, 5)))");
+        sql.Should().Contain("toInt64(length(range(1, 5, 2)))");
+    }
+
+    [Fact]
+    public void ArrayEnumerate_ShouldRenderArrayEnumerate()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        SqlOf(ctx, e.Select(x => new { N = SqlFunctions.ClickHouse.length(SqlFunctions.ClickHouse.array_enumerate(x.Nums)) }))
+            .Should().Contain("toInt64(length(arrayEnumerate(nums)))");
+    }
+
+    [Fact]
+    public void ArrayCumSum_ShouldRenderArrayCumSum()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        SqlOf(ctx, e.Select(x => new { S = SqlFunctions.ClickHouse.array_string_concat(SqlFunctions.ClickHouse.array_cum_sum(x.Nums), ",") }))
+            .Should().Contain("arrayStringConcat(arrayCumSum(nums), ',')");
+    }
+
+    [Fact]
+    public void ArraySlice_ShouldRenderArraySlice()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            A = SqlFunctions.ClickHouse.array_string_concat(SqlFunctions.ClickHouse.array_slice(x.Nums, 1), ","),
+            B = SqlFunctions.ClickHouse.array_string_concat(SqlFunctions.ClickHouse.array_slice(x.Nums, 1, 2), ",")
+        }));
+
+        sql.Should().Contain("arrayStringConcat(arraySlice(nums, 1), ',')");
+        sql.Should().Contain("arrayStringConcat(arraySlice(nums, 1, 2), ',')");
+    }
+
+    [Fact]
+    public void ArrayPushBack_ShouldRenderArrayPushBack()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        SqlOf(ctx, e.Select(x => new { S = SqlFunctions.ClickHouse.array_string_concat(SqlFunctions.ClickHouse.array_push_back(x.Nums, 4L), ",") }))
+            .Should().Contain("arrayStringConcat(arrayPushBack(nums, 4), ',')");
     }
 
     [Fact]

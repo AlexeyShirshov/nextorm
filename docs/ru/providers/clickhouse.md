@@ -47,7 +47,10 @@ ADO.NET-провайдер `ClickHouse.Driver`. Он создаёт `ClickHouseC
   вариантов и `toInt64(...)` для 64-битных; параметрические агрегаты квантилей `quantile(level)(value)`/`quantileExact`/
   `quantileTiming` и `median`, обёрнутые в `toFloat64(...)` (чтобы любой вариант материализовался как
   `double`); агрегат произвольного значения `any_agg` — как `any` (кросс-провайдерно: `ANY_VALUE(x)` в
-  MySQL), а агрегат последней строки `any_last` — как `anyLast`; извлекающие функции
+  MySQL), а агрегат последней строки `any_last` — как `anyLast`; агрегаты последовательностей/воронки
+  `window_funnel`/`sequence_match`/`retention` — как `windowFunnel`/`sequenceMatch`/`retention`
+  (`windowFunnel`/`sequenceMatch` обёрнуты в `toInt32(...)`; `retention` возвращает `Array(UInt8)`,
+  поэтому применим только вложенно внутри другой array-функции); извлекающие функции
   строкового JSON `json_extract_string`/`json_extract_int`/`json_extract_float`/`json_extract_bool`/
   `json_extract_raw`/`json_has`/`json_type` — как `JSONExtractString`/`JSONExtractInt`/`JSONExtractFloat`/
   `JSONExtractBool`/`JSONExtractRaw`/`JSONHas`/`JSONType`, `json_length` — как
@@ -163,7 +166,7 @@ select concat('id:', id) as `Label` from simple_entity
 | `LIMIT n BY expr` | `limit [offset, ]n by col1, col2` (перед финальным `LIMIT`) |
 | Модификаторы запроса | `final`, `sample r [offset o]`, `prewhere`, `settings k = v` (`FINAL`/`PREWHERE` требуют поддерживающего движка таблицы) |
 | Табличные функции | `numbers`/`numbers_mt` (колонка `UInt64 number` приводится к `Int64`), `zeros`/`zeros_mt` (`zero UInt8`), `generateRandom` (встроенные `generate_random()`/`generate_random(seed)` фиксируют структуру `id UInt64, value Float64, name String` и приводят `id` к `Int64`) |
-| Функции массивов | над колонками `Array(T)`: `length`, `has`, `indexOf`, `hasAny`, `hasAll`, `arrayStringConcat`, `splitByChar`, `arraySort`, `arrayReverse`, `arrayDistinct`; CLR-метод `string.Split` рендерится как `splitByChar(separator, value)` под [`SupportsStringSplit`](xref:NextORM.Core.ISqlDialect.SupportsStringSplit) (только одноразрядный разделитель); `arrayJoin(array)` разворачивает по строке на элемент, а `EntityBuilder.ArrayJoin`/`LeftArrayJoin` рендерят клаузу `[left ]array join expr, ...`. `EntityBuilder.ArrayJoinElement`/`LeftArrayJoinElement` дополнительно привязывают вырожденный элемент к `ArrayJoinProjection<TEntity, TElement>.Element` (исходная сущность — в `.Item1`); выражение клаузы получает алиас, и `p.Element` ссылается на него (см. [`ClickHouseFunctions`](xref:NextORM.Core.ClickHouseFunctions), [`ArrayJoinKind`](xref:NextORM.Core.ArrayJoinKind), [`ArrayJoinProjection`](xref:NextORM.Core.ArrayJoinProjection`2)) |
+| Функции массивов | над колонками/выражениями `Array(T)`: `length`, `has`, `indexOf`, `hasAny`, `hasAll`, `arrayStringConcat`, `splitByChar`, `arraySort`, `arrayReverse`, `arrayDistinct`, `range`, `arrayEnumerate`, `arrayCumSum`, `arraySlice`, `arrayPushBack`; CLR-метод `string.Split` рендерится как `splitByChar(separator, value)` под [`SupportsStringSplit`](xref:NextORM.Core.ISqlDialect.SupportsStringSplit) (только одноразрядный разделитель); `arrayJoin(array)` разворачивает по строке на элемент, а `EntityBuilder.ArrayJoin`/`LeftArrayJoin` рендерят клаузу `[left ]array join expr, ...`. `EntityBuilder.ArrayJoinElement`/`LeftArrayJoinElement` дополнительно привязывают вырожденный элемент к `ArrayJoinProjection<TEntity, TElement>.Element` (исходная сущность — в `.Item1`); выражение клаузы получает алиас, и `p.Element` ссылается на него (см. [`ClickHouseFunctions`](xref:NextORM.Core.ClickHouseFunctions), [`ArrayJoinKind`](xref:NextORM.Core.ArrayJoinKind), [`ArrayJoinProjection`](xref:NextORM.Core.ArrayJoinProjection`2)) |
 | Нативный JSON / расширенные скаляры | не поддерживаются (только PostgreSQL) |
 
 ## Замечания и ограничения

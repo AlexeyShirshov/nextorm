@@ -494,11 +494,18 @@ result can be projected like a scalar column.
 | `SqlFunctions.ClickHouse.array_sort(a)` | `arraySort(a)` |
 | `SqlFunctions.ClickHouse.array_reverse(a)` | `arrayReverse(a)` |
 | `SqlFunctions.ClickHouse.array_distinct(a)` | `arrayDistinct(a)` |
+| `SqlFunctions.ClickHouse.range(start, end)` | `range(start, end)` |
+| `SqlFunctions.ClickHouse.array_enumerate(a)` | `arrayEnumerate(a)` |
+| `SqlFunctions.ClickHouse.array_cum_sum(a)` | `arrayCumSum(a)` |
+| `SqlFunctions.ClickHouse.array_slice(a, offset, length)` | `arraySlice(a, offset, length)` |
+| `SqlFunctions.ClickHouse.array_push_back(a, element)` | `arrayPushBack(a, element)` |
 | `SqlFunctions.ClickHouse.array_join(a)` | `arrayJoin(a)` |
 
 > `length`/`indexOf` return `UInt64` natively, so the dialect casts them with `toInt64(...)`. Functions
-> that return an array (`split_by_char`, `array_sort`, `array_reverse`, `array_distinct`) can only be used
-> as the operand of another array function; projecting one directly throws at preparation time.
+> that return an array (`split_by_char`, `array_sort`, `array_reverse`, `array_distinct`, `range`,
+> `array_enumerate`, `array_cum_sum`, `array_slice`, `array_push_back`) can only be used as the operand
+> of another array function (for example `length(...)` or `array_string_concat(...)`); projecting one
+> directly throws at preparation time because the row reader cannot materialise `Array(T)` yet.
 
 The CLR `string.Split` is rendered as `splitByChar(separator, value)` (gated by
 [`SupportsStringSplit`](xref:NextORM.Core.ISqlDialect.SupportsStringSplit)); only a single-character

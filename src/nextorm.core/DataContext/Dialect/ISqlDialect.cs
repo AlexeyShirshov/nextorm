@@ -408,6 +408,24 @@ public interface ISqlDialect
     bool SupportsAnyValueAggregate { get; }
 
     /// <summary>
+    /// True when the provider can render the ClickHouse sequence/funnel aggregates
+    /// <c>windowFunnel</c>, <c>retention</c> and <c>sequenceMatch</c>
+    /// (<c>ClickHouseFunctions.window_funnel</c>/<c>retention</c>/<c>sequence_match</c>). The safe
+    /// default is <c>false</c>; ClickHouse opts in today.
+    /// </summary>
+    bool SupportsSequenceAggregates { get; }
+    /// <summary>
+    /// Renders a sequence/funnel aggregate over the already-rendered
+    /// <paramref name="parameters"/> (the contents of the first parenthesis pair, or <c>null</c> for the
+    /// single-pair form) and <paramref name="arguments"/> (the second pair). Only called when
+    /// <see cref="SupportsSequenceAggregates"/> is <c>true</c>. The default throws; ClickHouse maps the
+    /// snake_case <paramref name="name"/> to its native spelling and casts the unsigned
+    /// <c>windowFunnel</c>/<c>sequenceMatch</c> results to <c>Int32</c>.
+    /// </summary>
+    string MakeSequenceAggregate(string name, string? parameters, string arguments) =>
+        throw new NotSupportedException($"The {name} aggregate is not supported by this provider.");
+
+    /// <summary>
     /// True when the provider can render the string-JSON functions over JSON stored in a text column:
     /// the <c>JSONExtract*</c>/<c>JSONHas</c> and <c>visitParamExtract*</c> families
     /// (<c>ClickHouseFunctions.json_extract_*</c>/<c>visit_param_extract_*</c>) and the JSONPath scalars

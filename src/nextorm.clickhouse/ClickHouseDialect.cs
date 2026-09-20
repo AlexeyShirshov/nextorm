@@ -241,6 +241,33 @@ public sealed class ClickHouseDialect : SqlDialectBase
     /// <summary>ClickHouse's <c>median</c> is <c>quantile(0.5)</c>; cast it so it materialises as a CLR double.</summary>
     public override string MakeMedian(string value) => $"toFloat64(median({value}))";
 
+    /// <summary>ClickHouse implements the <c>windowFunnel</c>/<c>retention</c>/<c>sequenceMatch</c> aggregates.</summary>
+    public override bool SupportsSequenceAggregates => true;
+
+    /// <summary>
+    /// ClickHouse spells the sequence/funnel aggregates in camel case and renders the parameterised
+    /// forms with double parentheses (<c>windowFunnel(window)(timestamp, ...)</c>). <c>windowFunnel</c>
+    /// and <c>sequenceMatch</c> return an unsigned integer, which the row reader cannot materialise as
+    /// the declared CLR <see cref="int"/>, so they are cast with <c>toInt32(...)</c>; <c>retention</c>
+    /// returns <c>Array(UInt8)</c> and stays uncast (usable only nested).
+    /// </summary>
+    public override string MakeSequenceAggregate(string name, string? parameters, string arguments)
+    {
+        var function = name switch
+        {
+            "window_funnel" => "windowFunnel",
+            "sequence_match" => "sequenceMatch",
+            "retention" => "retention",
+            _ => name
+        };
+
+        var call = parameters is null
+            ? $"{function}({arguments})"
+            : $"{function}({parameters})({arguments})";
+
+        return name is "window_funnel" or "sequence_match" ? $"toInt32({call})" : call;
+    }
+
     // The ClickHouse driver turns CommandBehavior.SingleRow into a trailing LIMIT 1, which would
     // duplicate the limit the dialect already renders for single-row commands.
     public override bool SupportsCommandBehaviorSingleRow => false;

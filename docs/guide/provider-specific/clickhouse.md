@@ -147,6 +147,7 @@ and are rejected by every other dialect. Some return types the row reader cannot
 * distinct-count aggregates `uniq`/`uniq_exact`/`uniq_combined`/`uniq_hll12` (`toInt64`);
 * parameterised `quantile(level)(value)`/`quantile_exact`/`quantile_timing` and `median` (`toFloat64`);
 * the last-row arbitrary-value aggregate `any_last` (`anyLast`);
+* the sequence/funnel aggregates `window_funnel`/`sequence_match`/`retention` (`windowFunnel`/`sequenceMatch` with `toInt32(...)`; `retention` returns an array, usable only nested);
 * the `-If` combinators `count_if`/`sum_if`/`avg_if`/`min_if`/`max_if`;
 * `arg_min`/`arg_max`.
 
@@ -162,7 +163,8 @@ See [Grouping and aggregates](../04-grouping-and-aggregates.md).
 * JSONPath scalars `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (over string JSON);
 * dictionary lookups `dict_get`/`dict_get_or_default`/`dict_has` (need a configured `CREATE DICTIONARY`);
 * array functions `length`/`has`/`index_of`/`has_any`/`has_all`/`array_string_concat`/`split_by_char`/
-  `array_sort`/`array_reverse`/`array_distinct`.
+  `array_sort`/`array_reverse`/`array_distinct`/`range`/`array_enumerate`/`array_cum_sum`/`array_slice`/
+  `array_push_back`.
 
 See [Scalar functions](../11-scalar-functions.md) and [JSON support](../18-json.md)
 ([`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract)/[`SupportsDictionaries`](xref:NextORM.Core.ISqlDialect.SupportsDictionaries)).
