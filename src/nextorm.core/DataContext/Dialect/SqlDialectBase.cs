@@ -32,6 +32,7 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual bool SupportsArrays => false;
     public virtual bool SupportsArrayFunctions => false;
     public virtual bool SupportsArrayJoin => false;
+    public virtual bool SupportsStringSplit => false;
     public virtual bool SupportsJson => false;
     public virtual bool SupportsTextJson => false;
     public virtual bool SupportsFullText => false;
@@ -43,6 +44,7 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual bool SupportsPercentileWindow => false;
     public virtual bool SupportsDateTrunc => false;
     public virtual bool SupportsDateArithmetic => false;
+    public virtual bool SupportsDateConversionFunctions => false;
     public virtual bool SupportsStringArrayAggregates => false;
     // The umbrella flag seeds the individual capabilities; a dialect opts out of one of them by
     // overriding it (SQL Server has string_agg but no array_agg).
@@ -485,6 +487,12 @@ public abstract class SqlDialectBase : ISqlDialect
         $"(date_trunc('month', {value}) + interval '1 month - 1 day')";
     public virtual string MakeDateFromParts(string year, string month, string day) =>
         $"make_date({year}, {month}, {day})";
+    /// <summary>
+    /// Renders the ClickHouse-style date conversion surface; the base dialect cannot express it, so an
+    /// opting-in provider must override this (see <see cref="SupportsDateConversionFunctions"/>).
+    /// </summary>
+    public virtual string MakeDateConversion(string name, IReadOnlyList<string> args) =>
+        throw new NotSupportedException("The date conversion functions (toDate/toDateTime/toStartOf*/toYYYYMM/toUnixTimestamp) are not supported by this provider.");
 
     // Known date-part names. A dialect whose function rejects some of them (SQL Server/ClickHouse
     // datetrunc have no decade/century/millennium) overrides the matching predicate.
@@ -512,6 +520,12 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual string MakeStringAgg(string value, string delimiter) => $"string_agg({value}, {delimiter})";
     public virtual string MakeArrayAgg(string value) => $"array_agg({value})";
     public virtual string MakeArrayFunction(string name, string call) => call;
+    /// <summary>
+    /// Renders the CLR <c>string.Split</c> call as a scalar array; the base dialect cannot express it,
+    /// so an opting-in provider must override this (see <see cref="SupportsStringSplit"/>).
+    /// </summary>
+    public virtual string MakeStringSplit(string separator, string value) =>
+        throw new NotSupportedException("string.Split is not supported by this provider.");
     public virtual string MakeWithinGroup(string aggregate, string orderBy) => $"{aggregate} within group (order by {orderBy})";
 
     // A user-defined function name is emitted verbatim by default; a dialect that quotes or remaps

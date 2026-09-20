@@ -69,13 +69,21 @@
       `MakeDateAdd` рендерит выделенные `addYears`/`addQuarters`/…/`addSeconds` (три крупные части
       сворачиваются в масштабированный `addYears`), `MakeEndOfMonth` → `toLastDayOfMonth(value)`.
       Тесты: `SqlGenerationTests.DateAdd_*`, `DateTimeAddMethods_*`, `EndOfMonth_*`.
-- [ ] **Функции приведения и частей даты** — `toDate`/`toDateTime`/`toDate32`, `toYear`/`toQuarter`/
+- [x] **Функции приведения и частей даты** — `toDate`/`toDateTime`/`toDate32`, `toYear`/`toQuarter`/
       `toMonth`/`toDayOfMonth`/`toDayOfWeek`/`toHour`/…, `toStartOf{Year,Quarter,Month,Week,Day,Hour,…}`,
-      `toMonday`, `toYYYYMM`/`toYYYYMMDD`, `toUnixTimestamp`. Портируемого маппинга сейчас нет: в
-      demo-запросе `clickhouse_retention.sql` `toMonday(...)` приходится писать через `WithSql`, а
-      `toYYYYMM` фигурирует в DDL `PARTITION BY`. Малые правки (методы `ClickHouseFunctions` + флаг +
-      ветки `MakeDate*`, модель запроса не меняется) — уровень 1. `toLastDayOfMonth` уже закрыт
-      через `end_of_month` (см. выше).
+      `toMonday`, `toYYYYMM`/`toYYYYMMDD`, `toUnixTimestamp`. Методы `ClickHouseFunctions.to_date`/
+      `to_date_time`/`to_date32`, `to_year`/`to_quarter`/`to_month`/`to_day_of_month`/`to_day_of_week`/
+      `to_day_of_year`/`to_hour`/`to_minute`/`to_second`, `to_start_of_*`, `to_monday`, `to_yyyymm`/
+      `to_yyyymmdd`, `to_unix_timestamp`; флаг `SupportsDateConversionFunctions`; хук
+      `ISqlDialect.MakeDateConversion` для конверсий/начал периодов, а части переиспользуют
+      существующий `MakeDatePart` (расширен до `to*`-аксессоров). Целочисленные результаты
+      оборачиваются в `toInt32`/`toInt64` (нативные `UInt8`/`UInt16`/`UInt32` не читаются построителем
+      строк). `toLastDayOfMonth`/`dateTrunc` остаются на `end_of_month`/`date_trunc`.
+      Тесты: `SqlGenerationTests.DateConversionFunctions_ShouldUseClickHouseNames`/`DateTimeParts_ShouldUseToAccessors`,
+      `ClickHouseDialectTests.MakeDateConversion_ShouldMapToClickHouseNames`/`DateAndStringHooks_*`,
+      `Postgres…DateConversionFunctions_ShouldThrowBecausePostgresHasNoClickHouseDateSurface`,
+      `ClickHouseIntegrationTests.DateConversionFunctions_ShouldReturnDateParts` (реальный ClickHouse);
+      `WIP_clickhouse_date_functions.md`.
 - [x] **`string_agg`** — `SupportsStringAgg => true` + `MakeStringAgg` →
       `arrayStringConcat(groupArray(x), delim)`. Отличие семантики (порядок/`NULL`) задокументировано.
 - [x] **`bit_and` / `bit_or` / `bit_xor`** → `groupBitAnd`/`groupBitOr`/`groupBitXor` через
@@ -247,8 +255,10 @@
       **Осталось:** higher-order (`arrayMap`/`arrayFilter`/`arrayExists`/`arrayAll`/`arrayCount`,
       `arrayFirst*`);       привязка элемента для нескольких массивов/join'ов (сейчас один источник без
       `join`); row reader `Array(T)`/`Tuple` (`groupArray`/`topK`/`quantiles`/`JSONExtractArrayRaw`);
-      маппинг `string.Split` на `splitByChar`; `range`/`arrayEnumerate`/`arrayCumSum`/`arraySlice`/
-      `arrayPushBack`/`arraysZip`.
+      `range`/`arrayEnumerate`/`arrayCumSum`/`arraySlice`/
+      `arrayPushBack`/`arraysZip`. Маппинг `string.Split` на `splitByChar` реализован
+      (`SupportsStringSplit` + `MakeStringSplit`; тесты `SqlGenerationTests.Split_*`,
+      `ClickHouseIntegrationTests.Split_ShouldCountParts`; см. `WIP_clickhouse_string_split.md`).
 - [~] **JSON-тип ClickHouse** — JSONPath-скаляры по строковому JSON `JSON_VALUE`/`JSON_QUERY`/
       `JSON_EXISTS` реализованы: `ClickHouseFunctions.json_value`/`json_query`/`json_exists` (тот же гейт
       `SupportsJsonExtract`, имена маппит `MakeJsonExtract`); `TextJsonSqlTranslator` и
@@ -342,7 +352,18 @@
       `Postgres…BuiltInTableFunction_Zeros_UnsupportedByProvider_ShouldThrow`,
       `ClickHouseIntegrationTests.ZerosTableFunction_ShouldReturnThreeRows` (реальный ClickHouse).
       См. `WIP_clickhouse_table_functions_remaining.md`.
-- [ ] **Прочие табличные функции ClickHouse** — `generateRandom`, `values` (динамическая схема из
+- [x] **`generateRandom`** — row-тип `SqlFunctions.IGenerateRandomRow` (`id UInt64`, `value Float64`,
+      `name String`), методы `ClickHouseFunctions.generate_random()`/`generate_random(long seed)` +
+      `SupportsTableFunction("generateRandom")`; `WrapTableFunction` подставляет фиксированную структуру
+      (нативная схема ClickHouse — динамическая строка) и оборачивает вывод в
+      `(select toInt64(id) as id, value, name from generateRandom('id UInt64, value Float64, name String'[, seed]))`,
+      т.к. нативный `UInt64` не материализуется. Поток бесконечен — нужен `Page`/`First`.
+      Тесты: `SqlGenerationTests.TableFunction_GenerateRandom_/…WithSeed_Should…`,
+      `ClickHouseDialectTests.SupportsTableFunction_ShouldMatchClickHouse`/`WrapTableFunction_…`,
+      `Postgres…BuiltInTableFunction_GenerateRandom_UnsupportedByProvider_ShouldThrow`,
+      `ClickHouseIntegrationTests.GenerateRandomTableFunction_ShouldReturnRequestedRows` (реальный ClickHouse).
+      См. `WIP_clickhouse_generate_random.md`.
+- [ ] **Прочие табличные функции ClickHouse** — `values` (динамическая схема из
       строки — не выражается статическим `IQueryable<T>`), `url`/`s3`/`remote`/`file`/`format`/`merge`/
       `input` (нужна конфигурация сервера), `cluster`/`clusterAllReplicas` (нужен кластер),
       `system.numbers` (покрыт табличной функцией `numbers`), `system.one` (валиден только

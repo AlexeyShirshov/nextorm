@@ -15,6 +15,9 @@
 - Never run `git push`; the user pushes manually.
 - Do not create commits unless explicitly asked.
 
+## Async naming
+- Use the `Async` suffix only when a method has a synchronous twin. If an async method is the only one (no sync counterpart exists), do not add the `Async` suffix.
+
 ## Line endings
 - CRLF throughout (`core.autocrlf=true`). Preserve CRLF when writing/editing; never leave LF-only or mixed.
 - Normalize after edits: `perl -pi -e 's/\r?\n/\r\n/g' <file>`.

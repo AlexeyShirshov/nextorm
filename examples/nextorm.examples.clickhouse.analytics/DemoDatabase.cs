@@ -33,7 +33,7 @@ public sealed class DemoDatabase : IAsyncDisposable
 
     public string ConnectionString { get; }
 
-    public static async Task<DemoDatabase> StartAsync(string? explicitConnectionString, CancellationToken ct)
+    public static async Task<DemoDatabase> Start(string? explicitConnectionString, CancellationToken ct)
     {
         var external = explicitConnectionString
             ?? Environment.GetEnvironmentVariable(ConnectionVariable)
@@ -45,7 +45,7 @@ public sealed class DemoDatabase : IAsyncDisposable
             return new DemoDatabase(external, null);
         }
 
-        var dataset = await EnsureDatasetAsync(ct).ConfigureAwait(false);
+        var dataset = await EnsureDataset(ct).ConfigureAwait(false);
 
         var container = new ClickHouseBuilder(DefaultImage)
             .WithEnvironment("TZ", "UTC")
@@ -56,7 +56,7 @@ public sealed class DemoDatabase : IAsyncDisposable
         await container.StartAsync(ct).ConfigureAwait(false);
 
         var connectionString = container.GetConnectionString();
-        await CreateSchemaAsync(connectionString, ct).ConfigureAwait(false);
+        await CreateSchema(connectionString, ct).ConfigureAwait(false);
 
         Console.WriteLine($"[analytics] loading {Path.GetFileName(dataset)} (large, this takes several minutes) ...");
         var result = await container.ExecAsync(
@@ -69,7 +69,7 @@ public sealed class DemoDatabase : IAsyncDisposable
         return new DemoDatabase(connectionString, container);
     }
 
-    private static async Task<string> EnsureDatasetAsync(CancellationToken ct)
+    private static async Task<string> EnsureDataset(CancellationToken ct)
     {
         Directory.CreateDirectory(CacheDirectory);
         var target = Path.Combine(CacheDirectory, DatasetFile);
@@ -94,7 +94,7 @@ public sealed class DemoDatabase : IAsyncDisposable
         return target;
     }
 
-    private static async Task CreateSchemaAsync(string connectionString, CancellationToken ct)
+    private static async Task CreateSchema(string connectionString, CancellationToken ct)
     {
         await using var connection = new ClickHouseConnection(connectionString);
         await connection.OpenAsync(ct).ConfigureAwait(false);

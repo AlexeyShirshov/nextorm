@@ -24,6 +24,16 @@ and returns [`Instance`](xref:NextORM.ClickHouse.ClickHouseDialect.Instance) fro
   `decade`/`century`/`millennium` throw), and `date_add`/`DateTime.Add*` as the dedicated
   `addYears`/`addQuarters`/…/`addSeconds` functions (`decade`/`century`/`millennium` fold onto a scaled
   `addYears`), `end_of_month` as `toLastDayOfMonth(x)`;
+- the date conversion/part surface `SqlFunctions.ClickHouse.to_*` (gated by
+  [`SupportsDateConversionFunctions`](xref:NextORM.Core.ISqlDialect.SupportsDateConversionFunctions)):
+  `to_date`/`to_date_time`/`to_date32` as `toDate`/`toDateTime`/`toDate32`, the `to_year`/`to_quarter`/
+  `to_month`/`to_day_of_month`/`to_day_of_week`/`to_day_of_year`/`to_hour`/`to_minute`/`to_second`
+  accessors (and the `DateTime.Year`/`Month`/… projections) as `toYear`/`toQuarter`/… wrapped in
+  `toInt32(...)` (the native `UInt8`/`UInt16` cannot be read back otherwise), `to_start_of_*` as
+  `toStartOfYear`/`toStartOfQuarter`/`toStartOfMonth`/`toStartOfWeek`/`toStartOfDay`/`toStartOfHour`/
+  `toStartOfMinute`/`toStartOfSecond`, `to_monday` as `toMonday` (ISO Monday, whereas `toStartOfWeek`
+  starts on Sunday), `to_yyyymm`/`to_yyyymmdd` as `toInt32(toYYYYMM(...))`/`toInt32(toYYYYMMDD(...))`
+  and `to_unix_timestamp` as `toInt64(toUnixTimestamp(...))`;
 - `string_agg(x, delimiter)` as `arrayStringConcat(groupArray(x), delimiter)`;
 - `bit_and`/`bit_or`/`bit_xor` as `groupBitAnd`/`groupBitOr`/`groupBitXor`, `covar_pop`/`covar_samp` as
   `covarPop`/`covarSamp`, `corr` as `corr`, `arg_min`/`arg_max` as `argMin`/`argMax`, and the filtered
@@ -133,6 +143,7 @@ select concat('id:', id) as `Label` from simple_entity
 | Recursive CTE | not supported (the `recursive` modifier is omitted) |
 | `date_trunc` | `dateTrunc('field', x)` |
 | Date arithmetic | `addDays(x, n)` … `addYears(x, (n) * 10)`; `toLastDayOfMonth(x)` |
+| Date conversion / parts | `toDate`/`toDateTime`/`toDate32`, `toYear`/… (as `toInt32(...)`), `toStartOf*`, `toMonday`, `toInt32(toYYYYMM(...))`/`toInt32(toYYYYMMDD(...))`, `toInt64(toUnixTimestamp(...))` |
 | `string_agg` | `arrayStringConcat(groupArray(x), delimiter)` (no `array_agg`) |
 | Bit / statistical aggregates | `groupBitAnd`/`groupBitOr`/`groupBitXor`; `corr`/`covarPop`/`covarSamp` |
 | Regression aggregates | not supported (`regr_*` is PostgreSQL-only) |
@@ -150,8 +161,8 @@ select concat('id:', id) as `Label` from simple_entity
 | `GROUP BY ... WITH TOTALS` | `with totals` (the extra totals row is not surfaced by `ClickHouse.Driver`) |
 | `LIMIT n BY expr` | `limit [offset, ]n by col1, col2` (before the final `LIMIT`) |
 | Query modifiers | `final`, `sample r [offset o]`, `prewhere`, `settings k = v` (`FINAL`/`PREWHERE` need a supporting table engine) |
-| Table functions | `numbers`/`numbers_mt` (the `UInt64 number` column is cast to `Int64`), `zeros`/`zeros_mt` (`zero UInt8`) |
-| Array functions | over `Array(T)` columns: `length`, `has`, `indexOf`, `hasAny`, `hasAll`, `arrayStringConcat`, `splitByChar`, `arraySort`, `arrayReverse`, `arrayDistinct`; `arrayJoin(array)` expands one row per element, and `EntityBuilder.ArrayJoin`/`LeftArrayJoin` render the `[left ]array join expr, ...` clause. `EntityBuilder.ArrayJoinElement`/`LeftArrayJoinElement` additionally bind the expanded element to `ArrayJoinProjection<TEntity, TElement>.Element` (with the original entity at `.Item1`); the clause expression is aliased and `p.Element` references that alias (see [`ClickHouseFunctions`](xref:NextORM.Core.ClickHouseFunctions), [`ArrayJoinKind`](xref:NextORM.Core.ArrayJoinKind), [`ArrayJoinProjection`](xref:NextORM.Core.ArrayJoinProjection`2)) |
+| Table functions | `numbers`/`numbers_mt` (the `UInt64 number` column is cast to `Int64`), `zeros`/`zeros_mt` (`zero UInt8`), `generateRandom` (the built-in `generate_random()`/`generate_random(seed)` fix the structure `id UInt64, value Float64, name String` and cast `id` to `Int64`) |
+| Array functions | over `Array(T)` columns: `length`, `has`, `indexOf`, `hasAny`, `hasAll`, `arrayStringConcat`, `splitByChar`, `arraySort`, `arrayReverse`, `arrayDistinct`; the CLR `string.Split` renders as `splitByChar(separator, value)` under [`SupportsStringSplit`](xref:NextORM.Core.ISqlDialect.SupportsStringSplit) (one-character separator only); `arrayJoin(array)` expands one row per element, and `EntityBuilder.ArrayJoin`/`LeftArrayJoin` render the `[left ]array join expr, ...` clause. `EntityBuilder.ArrayJoinElement`/`LeftArrayJoinElement` additionally bind the expanded element to `ArrayJoinProjection<TEntity, TElement>.Element` (with the original entity at `.Item1`); the clause expression is aliased and `p.Element` references that alias (see [`ClickHouseFunctions`](xref:NextORM.Core.ClickHouseFunctions), [`ArrayJoinKind`](xref:NextORM.Core.ArrayJoinKind), [`ArrayJoinProjection`](xref:NextORM.Core.ArrayJoinProjection`2)) |
 | Native JSON / extended scalars | not supported (PostgreSQL-only) |
 
 ## Notes and limitations

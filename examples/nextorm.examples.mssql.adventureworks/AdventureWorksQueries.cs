@@ -11,7 +11,7 @@ namespace NextORM.Examples.SqlServer.AdventureWorks;
 public static class AdventureWorksQueries
 {
     // 1. mssql_vip_churn.sql
-    public static async Task VipChurnAsync(IDataContext ctx, CancellationToken ct)
+    public static async Task VipChurn(IDataContext ctx, CancellationToken ct)
     {
         // CTE CustomerOrders; the manager join stays in the outer SELECT.
         var customerOrders = ctx.From<ISalesOrderHeader>()
@@ -67,7 +67,7 @@ public static class AdventureWorksQueries
     }
 
     // 2. mssql_rolling_kpi.sql
-    public static async Task RollingKpiAsync(IDataContext ctx, CancellationToken ct)
+    public static async Task RollingKpi(IDataContext ctx, CancellationToken ct)
     {
         var monthly = ctx.From<ISalesOrderHeader>()
             .Join(ctx.From<ISalesTerritory>(), (soh, st) => soh.TerritoryId == st.TerritoryId)
@@ -106,7 +106,7 @@ public static class AdventureWorksQueries
     }
 
     // 3. mssql_supply_chain.sql
-    public static async Task SupplyChainAsync(IDataContext ctx, CancellationToken ct)
+    public static async Task SupplyChain(IDataContext ctx, CancellationToken ct)
     {
         // CTE SupplierDelays
         var supplierDelays = ctx.From<IPurchaseOrderDetail>()
@@ -154,7 +154,7 @@ public static class AdventureWorksQueries
     }
 
     // 4. mssql_product_abc_xyz.sql
-    public static async Task ProductAbcXyzAsync(IDataContext ctx, CancellationToken ct)
+    public static async Task ProductAbcXyz(IDataContext ctx, CancellationToken ct)
     {
         var quarterly = ctx.From<ISalesOrderDetail>()
             .Join(ctx.From<ISalesOrderHeader>(), (sod, soh) => sod.SalesOrderId == soh.SalesOrderId)
@@ -216,7 +216,7 @@ public static class AdventureWorksQueries
     }
 
     // 5. mssql_quarterly_pivot.sql (native PIVOT replaced by conditional SUM(CASE ...))
-    public static async Task QuarterlyPivotAsync(IDataContext ctx, CancellationToken ct)
+    public static async Task QuarterlyPivot(IDataContext ctx, CancellationToken ct)
     {
         var margins = ctx.From<ISalesOrderDetail>()
             .Join(ctx.From<ISalesOrderHeader>(), (sod, soh) => sod.SalesOrderId == soh.SalesOrderId)
@@ -247,7 +247,7 @@ public static class AdventureWorksQueries
     }
 
     // 6. top_products_by_category (course: ROW_NUMBER() top-N per group)
-    public static async Task TopProductsByCategoryAsync(IDataContext ctx, CancellationToken ct)
+    public static async Task TopProductsByCategory(IDataContext ctx, CancellationToken ct)
     {
         var productRevenue = ctx.From<ISalesOrderDetail>()
             .Join(ctx.From<ISalesOrderHeader>(), (sod, soh) => sod.SalesOrderId == soh.SalesOrderId)
@@ -291,7 +291,7 @@ public static class AdventureWorksQueries
     }
 
     // 7. territory_yoy (course: LAG for year-over-year growth)
-    public static async Task TerritoryYearOverYearAsync(IDataContext ctx, CancellationToken ct)
+    public static async Task TerritoryYearOverYear(IDataContext ctx, CancellationToken ct)
     {
         var yearly = ctx.From<ISalesOrderHeader>()
             .Join(ctx.From<ISalesTerritory>(), (soh, st) => soh.TerritoryId == st.TerritoryId)
@@ -331,7 +331,7 @@ public static class AdventureWorksQueries
     }
 
     // 8. customer_rfm (course: NTILE() RFM segmentation)
-    public static async Task CustomerRfmAsync(IDataContext ctx, CancellationToken ct)
+    public static async Task CustomerRfm(IDataContext ctx, CancellationToken ct)
     {
         var rfm = ctx.From<ISalesOrderHeader>()
             .Join(ctx.From<ICustomer>(), (soh, c) => soh.CustomerId == c.CustomerId)
@@ -378,7 +378,7 @@ public static class AdventureWorksQueries
     }
 
     // 9. quota_attainment (course: per-entity target vs actual)
-    public static async Task QuotaAttainmentAsync(IDataContext ctx, CancellationToken ct)
+    public static async Task QuotaAttainment(IDataContext ctx, CancellationToken ct)
     {
         var rows = await ctx.From<ISalesPerson>()
             .Join(ctx.From<IPerson>(), (sp, per) => sp.BusinessEntityId == per.BusinessEntityId)
@@ -397,7 +397,7 @@ public static class AdventureWorksQueries
     }
 
     // 10. territory_growth_mom (course: month-over-month % change)
-    public static async Task TerritoryGrowthMonthOverMonthAsync(IDataContext ctx, CancellationToken ct)
+    public static async Task TerritoryGrowthMonthOverMonth(IDataContext ctx, CancellationToken ct)
     {
         var monthly = ctx.From<ISalesOrderHeader>()
             .Join(ctx.From<ISalesTerritory>(), (soh, st) => soh.TerritoryId == st.TerritoryId)
@@ -437,7 +437,7 @@ public static class AdventureWorksQueries
     }
 
     // 11. customer_pareto (course: ABC / Pareto 80-20 concentration)
-    public static async Task CustomerParetoAsync(IDataContext ctx, CancellationToken ct)
+    public static async Task CustomerPareto(IDataContext ctx, CancellationToken ct)
     {
         var customerRevenue = ctx.From<ISalesOrderHeader>()
             .GroupBy(soh => new { soh.CustomerId })

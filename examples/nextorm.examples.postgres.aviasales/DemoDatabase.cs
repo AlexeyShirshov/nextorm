@@ -33,7 +33,7 @@ public sealed class DemoDatabase : IAsyncDisposable
 
     public string ConnectionString { get; }
 
-    public static async Task<DemoDatabase> StartAsync(string? explicitConnectionString, CancellationToken ct)
+    public static async Task<DemoDatabase> Start(string? explicitConnectionString, CancellationToken ct)
     {
         var external = explicitConnectionString
             ?? Environment.GetEnvironmentVariable(ConnectionVariable)
@@ -45,7 +45,7 @@ public sealed class DemoDatabase : IAsyncDisposable
             return new DemoDatabase(external, null);
         }
 
-        var dump = await EnsureDumpAsync(ct).ConfigureAwait(false);
+        var dump = await EnsureDump(ct).ConfigureAwait(false);
 
         // The official dump starts with a plain "DROP DATABASE demo;" and is meant to be replayed
         // with psql's default ON_ERROR_STOP off, so it cannot be used as a /docker-entrypoint-initdb.d
@@ -71,11 +71,11 @@ public sealed class DemoDatabase : IAsyncDisposable
             CommandTimeout = 600
         }.ConnectionString;
 
-        await WaitForDemoAsync(connectionString, ct).ConfigureAwait(false);
+        await WaitForDemo(connectionString, ct).ConfigureAwait(false);
         return new DemoDatabase(connectionString, container);
     }
 
-    private static async Task<string> EnsureDumpAsync(CancellationToken ct)
+    private static async Task<string> EnsureDump(CancellationToken ct)
     {
         Directory.CreateDirectory(CacheDirectory);
         var target = Path.Combine(CacheDirectory, DumpFile);
@@ -100,7 +100,7 @@ public sealed class DemoDatabase : IAsyncDisposable
         return target;
     }
 
-    private static async Task WaitForDemoAsync(string connectionString, CancellationToken ct)
+    private static async Task WaitForDemo(string connectionString, CancellationToken ct)
     {
         var deadline = DateTime.UtcNow.AddMinutes(30);
         while (true)

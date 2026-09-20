@@ -509,6 +509,18 @@ select cardinality(@norm_p1) as "N" from complex_entity where array_length(@norm
 > можно использовать только как операнд другой array-функции; прямое проецирование такой функции
 > падает на этапе подготовки.
 
+CLR-метод `string.Split` рендерится как `splitByChar(separator, value)` (гейт
+[`SupportsStringSplit`](xref:NextORM.Core.ISqlDialect.SupportsStringSplit)); поддерживается только
+одноразрядный разделитель (многосимвольный `splitByString` не выставлен), результат — `string[]`,
+пригодный только внутри другой array-функции; overload с `count`, несколько разделителей и
+`StringSplitOptions`, отличный от `None`, бросают `NotSupportedException`:
+
+```csharp
+var parts = dataContext.From<IComplexEntity>()
+    .Select(e => SqlFunctions.ClickHouse.length(e.String!.Split(',')))
+    .First();
+```
+
 ```csharp
 var tags = dataContext.From<IArrayEntity>()
     .Where(e => e.Id == 1)
@@ -779,6 +791,35 @@ select datetime(dt, (1) || ' days') as 'NextDay', date(dt, 'start of month', '+1
 | `SqlFunctions.Sql.date_from_parts(y, m, d)` | `datefromparts(y, m, d)` | `make_date(y, m, d)` | `makeDate(y, m, d)` | `str_to_date(concat_ws('-', y, m, d), '%Y-%m-%d')` | `date(printf('%04d-%02d-%02d', y, m, d))` |
 | `x.AddDays(7)` | `dateadd(day, 7, x)` | `x + (7 * interval '1 day')` | `addDays(x, 7)` | `date_add(x, interval 7 day)` | `datetime(x, (7) \|\| ' days')` |
 | `x.AddMonths(2)` | `dateadd(month, 2, x)` | `x + (2 * interval '1 month')` | `addMonths(x, 2)` | `date_add(x, interval 2 month)` | `datetime(x, (2) \|\| ' months')` |
+
+## Приведение и части даты (ClickHouse)
+
+ClickHouse предоставляет свои `to*`-функции даты/времени через `SqlFunctions.ClickHouse`
+([`SupportsDateConversionFunctions`](xref:NextORM.Core.ISqlDialect.SupportsDateConversionFunctions); только ClickHouse).
+`to_date`/`to_date_time`/`to_date32` приводят к `Date`/`DateTime`/`Date32`;
+`to_year`/`to_quarter`/`to_month`/`to_day_of_month`/`to_day_of_week`/`to_day_of_year`/`to_hour`/
+`to_minute`/`to_second` возвращают части даты (`toDayOfWeek` — понедельник 1 … воскресенье 7);
+`to_start_of_year`/`_quarter`/`_month`/`_week`/`_day`/`_hour`/`_minute`/`_second` усекают до начала
+периода, а `to_monday` возвращает ISO-понедельник недели (`toStartOfWeek` начинает неделю с
+воскресенья); `to_yyyymm`/`to_yyyymmdd` упаковывают дату в целое, `to_unix_timestamp` возвращает
+секунды Unix. Проекции `DateTime.Year`/`Month`/`Day`/`Hour`/… в ClickHouse используют те же
+`to`-аксессоры. Аксессоры, возвращающие целое, а также `toYYYYMM`/`toYYYYMMDD`/`toUnixTimestamp`
+оборачиваются в `toInt32`/`toInt64`, чтобы построитель строк мог их прочитать. На любом другом
+провайдере вся поверхность бросает `NotSupportedException`.
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        Year = SqlFunctions.ClickHouse.to_year(e.Datetime),
+        MonthStart = SqlFunctions.ClickHouse.to_start_of_month(e.Datetime)
+    })
+    .ToList();
+```
+
+```sql
+select toInt32(toYear(dt)) as `Year`, toStartOfMonth(dt) as `MonthStart` from complex_entity
+```
 
 ## Строковые и массивные агрегаты
 

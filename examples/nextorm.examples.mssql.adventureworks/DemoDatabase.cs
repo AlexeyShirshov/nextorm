@@ -35,7 +35,7 @@ public sealed class DemoDatabase : IAsyncDisposable
 
     public string ConnectionString { get; }
 
-    public static async Task<DemoDatabase> StartAsync(string? explicitConnectionString, CancellationToken ct)
+    public static async Task<DemoDatabase> Start(string? explicitConnectionString, CancellationToken ct)
     {
         var external = explicitConnectionString
             ?? Environment.GetEnvironmentVariable(ConnectionVariable)
@@ -47,7 +47,7 @@ public sealed class DemoDatabase : IAsyncDisposable
             return new DemoDatabase(external, null);
         }
 
-        var backup = await EnsureBackupAsync(ct).ConfigureAwait(false);
+        var backup = await EnsureBackup(ct).ConfigureAwait(false);
         var container = new MsSqlBuilder(DefaultImage).Build();
 
         Console.WriteLine($"[adventureworks] starting {DefaultImage} ...");
@@ -55,18 +55,18 @@ public sealed class DemoDatabase : IAsyncDisposable
 
         var password = new SqlConnectionStringBuilder(container.GetConnectionString()).Password;
         await container.CopyAsync(backup, "/tmp/", ct: ct).ConfigureAwait(false);
-        await RestoreAsync(container, password, ct).ConfigureAwait(false);
+        await Restore(container, password, ct).ConfigureAwait(false);
 
         var connectionString = new SqlConnectionStringBuilder(container.GetConnectionString())
         {
             InitialCatalog = DatabaseName
         }.ConnectionString;
 
-        await WaitForReadyAsync(connectionString, ct).ConfigureAwait(false);
+        await WaitForReady(connectionString, ct).ConfigureAwait(false);
         return new DemoDatabase(connectionString, container);
     }
 
-    private static async Task<string> EnsureBackupAsync(CancellationToken ct)
+    private static async Task<string> EnsureBackup(CancellationToken ct)
     {
         Directory.CreateDirectory(CacheDirectory);
         var target = Path.Combine(CacheDirectory, BackupFile);
@@ -91,7 +91,7 @@ public sealed class DemoDatabase : IAsyncDisposable
         return target;
     }
 
-    private static async Task RestoreAsync(MsSqlContainer container, string password, CancellationToken ct)
+    private static async Task Restore(MsSqlContainer container, string password, CancellationToken ct)
     {
         Console.WriteLine("[adventureworks] restoring the database (this takes several minutes) ...");
 
@@ -108,7 +108,7 @@ public sealed class DemoDatabase : IAsyncDisposable
             throw new InvalidOperationException($"AdventureWorks restore failed (exit {result.ExitCode}).{Environment.NewLine}{result.Stdout}{result.Stderr}");
     }
 
-    private static async Task WaitForReadyAsync(string connectionString, CancellationToken ct)
+    private static async Task WaitForReady(string connectionString, CancellationToken ct)
     {
         var deadline = DateTime.UtcNow.AddMinutes(10);
         while (true)

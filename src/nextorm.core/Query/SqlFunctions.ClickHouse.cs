@@ -9,7 +9,11 @@ namespace NextORM.Core;
 /// aggregate, the string-JSON <c>JSONExtract*</c>/<c>JSONHas</c> and <c>visitParamExtract*</c> families
 /// plus the JSONPath <c>json_value</c>/<c>json_query</c>/<c>json_exists</c> scalars,
 /// the dictionary functions, the <c>-If</c> aggregate combinator, the distributed <c>global_in</c>
-/// predicate, the <c>numbers</c>/<c>numbers_mt</c> and <c>zeros</c>/<c>zeros_mt</c> table functions,
+/// predicate, the <c>numbers</c>/<c>numbers_mt</c> and <c>zeros</c>/<c>zeros_mt</c> table functions
+/// (plus <c>generateRandom</c>),
+/// the date conversion/part surface (<c>toDate</c>/<c>toDateTime</c>/<c>toDate32</c>, the
+/// <c>toYear</c>/... accessors, <c>toStartOf*</c>, <c>toMonday</c>, <c>toYYYYMM</c>/<c>toYYYYMMDD</c>,
+/// <c>toUnixTimestamp</c>),
 /// and the array functions over array columns (<c>arrayJoin</c>, <c>length</c>, <c>has</c>,
 /// <c>indexOf</c>, <c>hasAny</c>/<c>hasAll</c>, <c>arrayStringConcat</c>, <c>splitByChar</c>,
 /// <c>arraySort</c>, <c>arrayReverse</c>, <c>arrayDistinct</c>).
@@ -216,6 +220,25 @@ namespace NextORM.Core;
         public IQueryable<SqlFunctions.IZerosRow> zeros_mt(long count) => throw new NotSupportedException();
 
         /// <summary>
+        /// <c>generateRandom(...)</c> as a FROM source; select
+        /// <see cref="SqlFunctions.IGenerateRandomRow"/>. Yields an unbounded stream of random rows with
+        /// the fixed structure <c>id UInt64, value Float64, name String</c>, so apply a page/limit.
+        /// Requires a provider that supports table functions (see
+        /// <see cref="ISqlDialect.SupportsTableFunction"/>; ClickHouse). Use through
+        /// <see cref="DataContextExtensions.FromTableFunction{T}(IDataContext, System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{T}}})"/>.
+        /// </summary>
+        [SqlTableFunction("generateRandom")]
+        public IQueryable<SqlFunctions.IGenerateRandomRow> generate_random() => throw new NotSupportedException();
+
+        /// <summary>
+        /// <c>generateRandom(structure, seed)</c> as a FROM source: as
+        /// <see cref="generate_random()"/> but with a fixed <paramref name="seed"/> so the generated
+        /// values are reproducible.
+        /// </summary>
+        [SqlTableFunction("generateRandom")]
+        public IQueryable<SqlFunctions.IGenerateRandomRow> generate_random(long seed) => throw new NotSupportedException();
+
+        /// <summary>
         /// <c>arrayJoin(array)</c>: expands the array into one row per element. Requires a provider that
         /// supports it (see <see cref="ISqlDialect.SupportsArrayJoin"/>; ClickHouse). The expanded value
         /// can be projected and filtered like a scalar column.
@@ -254,4 +277,83 @@ namespace NextORM.Core;
 
         /// <summary><c>arrayDistinct(array)</c>: the distinct elements. Returns an array, so it can only be used as the operand of another array function.</summary>
         public T[] array_distinct<T>(T[] array) => default!;
+
+        /// <summary>
+        /// <c>toDate(value)</c>: converts a string or date/time value to a <c>Date</c>. Requires a
+        /// provider that supports the date conversion surface (see
+        /// <see cref="ISqlDialect.SupportsDateConversionFunctions"/>; ClickHouse).
+        /// </summary>
+        public DateTime? to_date<T>(T? value) => default!;
+
+        /// <summary><c>toDateTime(value)</c>: converts a string or date value to a <c>DateTime</c>.</summary>
+        public DateTime? to_date_time<T>(T? value) => default!;
+
+        /// <summary><c>toDate32(value)</c>: converts a value to ClickHouse's extended-range <c>Date32</c>.</summary>
+        public DateTime? to_date32<T>(T? value) => default!;
+
+        /// <summary><c>toYear(value)</c>: the year part.</summary>
+        public int to_year<T>(T? value) => default!;
+
+        /// <summary><c>toQuarter(value)</c>: the quarter (1..4).</summary>
+        public int to_quarter<T>(T? value) => default!;
+
+        /// <summary><c>toMonth(value)</c>: the month (1..12).</summary>
+        public int to_month<T>(T? value) => default!;
+
+        /// <summary><c>toDayOfMonth(value)</c>: the day of the month (1..31).</summary>
+        public int to_day_of_month<T>(T? value) => default!;
+
+        /// <summary><c>toDayOfWeek(value)</c>: the day of the week (Monday is 1, Sunday is 7).</summary>
+        public int to_day_of_week<T>(T? value) => default!;
+
+        /// <summary><c>toDayOfYear(value)</c>: the day of the year (1..366).</summary>
+        public int to_day_of_year<T>(T? value) => default!;
+
+        /// <summary><c>toHour(value)</c>: the hour (0..23).</summary>
+        public int to_hour<T>(T? value) => default!;
+
+        /// <summary><c>toMinute(value)</c>: the minute (0..59).</summary>
+        public int to_minute<T>(T? value) => default!;
+
+        /// <summary><c>toSecond(value)</c>: the second (0..59).</summary>
+        public int to_second<T>(T? value) => default!;
+
+        /// <summary><c>toStartOfYear(value)</c>: the first day of the year at 00:00:00.</summary>
+        public DateTime? to_start_of_year<T>(T? value) => default!;
+
+        /// <summary><c>toStartOfQuarter(value)</c>: the first day of the quarter at 00:00:00.</summary>
+        public DateTime? to_start_of_quarter<T>(T? value) => default!;
+
+        /// <summary><c>toStartOfMonth(value)</c>: the first day of the month at 00:00:00.</summary>
+        public DateTime? to_start_of_month<T>(T? value) => default!;
+
+        /// <summary>
+        /// <c>toStartOfWeek(value)</c>: the start of the week at 00:00:00. ClickHouse starts the week on
+        /// Sunday by default (unlike ISO weeks); use <see cref="to_monday{T}"/> for the Monday start.
+        /// </summary>
+        public DateTime? to_start_of_week<T>(T? value) => default!;
+
+        /// <summary><c>toStartOfDay(value)</c>: midnight of the day.</summary>
+        public DateTime? to_start_of_day<T>(T? value) => default!;
+
+        /// <summary><c>toStartOfHour(value)</c>: the start of the hour.</summary>
+        public DateTime? to_start_of_hour<T>(T? value) => default!;
+
+        /// <summary><c>toStartOfMinute(value)</c>: the start of the minute.</summary>
+        public DateTime? to_start_of_minute<T>(T? value) => default!;
+
+        /// <summary><c>toStartOfSecond(value)</c>: the start of the second.</summary>
+        public DateTime? to_start_of_second<T>(T? value) => default!;
+
+        /// <summary><c>toMonday(value)</c>: the Monday of the ISO week at 00:00:00.</summary>
+        public DateTime? to_monday<T>(T? value) => default!;
+
+        /// <summary><c>toYYYYMM(value)</c>: the year and month packed as a <c>YYYYMM</c> integer.</summary>
+        public int to_yyyymm<T>(T? value) => default!;
+
+        /// <summary><c>toYYYYMMDD(value)</c>: the date packed as a <c>YYYYMMDD</c> integer.</summary>
+        public int to_yyyymmdd<T>(T? value) => default!;
+
+        /// <summary><c>toUnixTimestamp(value)</c>: the Unix timestamp in seconds.</summary>
+        public long to_unix_timestamp<T>(T? value) => default!;
     }

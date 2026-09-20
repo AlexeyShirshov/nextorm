@@ -3,21 +3,21 @@ using NextORM.Core;
 using NextORM.Examples.ClickHouse.Analytics;
 
 var connectionString = ParseConnectionString(args);
-await using var database = await DemoDatabase.StartAsync(connectionString, CancellationToken.None);
+await using var database = await DemoDatabase.Start(connectionString, CancellationToken.None);
 
 await using var ctx = new ClickHouseDataContext(database.ConnectionString, new DataContextBuilder());
 
-await ClickHouseQueries.ArrayAnalyticsAsync(ctx, CancellationToken.None);
-await ClickHouseQueries.FunnelAsync(ctx, CancellationToken.None);
-await ClickHouseQueries.IncrementalAsync(ctx, CancellationToken.None);
-await ClickHouseQueries.RetentionAsync(ctx, CancellationToken.None);
-await ClickHouseQueries.SessionsAsync(ctx, CancellationToken.None);
-await ClickHouseQueries.DailyTrafficAsync(ctx, CancellationToken.None);
-await ClickHouseQueries.TopLandingPagesAsync(ctx, CancellationToken.None);
-await ClickHouseQueries.DeviceSplitAsync(ctx, CancellationToken.None);
-await ClickHouseQueries.TopReferrersAsync(ctx, CancellationToken.None);
-await ClickHouseQueries.SessionDepthAsync(ctx, CancellationToken.None);
-await ClickHouseQueries.RollingActivityAsync(ctx, CancellationToken.None);
+await ClickHouseQueries.ArrayAnalytics(ctx, CancellationToken.None);
+await ClickHouseQueries.Funnel(ctx, CancellationToken.None);
+await ClickHouseQueries.Incremental(ctx, CancellationToken.None);
+await ClickHouseQueries.Retention(ctx, CancellationToken.None);
+await ClickHouseQueries.Sessions(ctx, CancellationToken.None);
+await ClickHouseQueries.DailyTraffic(ctx, CancellationToken.None);
+await ClickHouseQueries.TopLandingPages(ctx, CancellationToken.None);
+await ClickHouseQueries.DeviceSplit(ctx, CancellationToken.None);
+await ClickHouseQueries.TopReferrers(ctx, CancellationToken.None);
+await ClickHouseQueries.SessionDepth(ctx, CancellationToken.None);
+await ClickHouseQueries.RollingActivity(ctx, CancellationToken.None);
 
 static string? ParseConnectionString(string[] args)
 {

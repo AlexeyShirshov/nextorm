@@ -12,7 +12,7 @@ namespace NextORM.Examples.Postgres.Aviasales;
 public static class AviasalesQueries
 {
     // 1. aircraft_delay_chains.sql — WITH flight_delays AS (...) ... JOIN airplanes_data
-    public static async Task AircraftDelayChainsAsync(IDataContext ctx, CancellationToken ct)
+    public static async Task AircraftDelayChains(IDataContext ctx, CancellationToken ct)
     {
         // CTE flight_delays (delay_minutes + LAG over the same partition).
         var flightDelays = ctx.From<ITimetable>()
@@ -50,7 +50,7 @@ public static class AviasalesQueries
     }
 
     // 2. business_occupancy_matrix.sql — WITH flight_business_capacity + flight_occupancy, then joins
-    public static async Task BusinessOccupancyMatrixAsync(IDataContext ctx, CancellationToken ct)
+    public static async Task BusinessOccupancyMatrix(IDataContext ctx, CancellationToken ct)
     {
         // CTE flight_business_capacity: COUNT(*) over the business seats per airplane.
         var capacity = ctx.From<ISeat>()
@@ -108,7 +108,7 @@ public static class AviasalesQueries
     }
 
     // 3. passenger_noshow_analysis.sql — WITH passenger_flight_history + passenger_stats
-    public static async Task PassengerNoShowAnalysisAsync(IDataContext ctx, CancellationToken ct)
+    public static async Task PassengerNoShowAnalysis(IDataContext ctx, CancellationToken ct)
     {
         // CTE passenger_flight_history: carries the is_noshow flag exactly as the original.
         var history = ctx.From<ITicket>()
@@ -149,7 +149,7 @@ public static class AviasalesQueries
     }
 
     // 4. rolling_revenue_metrics.sql — WITH daily_revenue, then SUM/AVG windows
-    public static async Task RollingRevenueMetricsAsync(IDataContext ctx, CancellationToken ct)
+    public static async Task RollingRevenueMetrics(IDataContext ctx, CancellationToken ct)
     {
         // CTE daily_revenue.
         var daily = ctx.From<IBooking>()
@@ -181,7 +181,7 @@ public static class AviasalesQueries
     }
 
     // 5. route_network_abc_xyz.sql
-    public static async Task RouteNetworkAbcXyzAsync(IDataContext ctx, CancellationToken ct)
+    public static async Task RouteNetworkAbcXyz(IDataContext ctx, CancellationToken ct)
     {
         var monthly = ctx.From<ITimetable>()
             .Join(ctx.From<IAirportData>(), (f, dep) => f.DepartureAirport == dep.AirportCode)
@@ -246,7 +246,7 @@ public static class AviasalesQueries
     }
 
     // 6. top_routes_by_city (course: "top-N per group" with RANK)
-    public static async Task TopRoutesByCityAsync(IDataContext ctx, CancellationToken ct)
+    public static async Task TopRoutesByCity(IDataContext ctx, CancellationToken ct)
     {
         var routeRevenue = ctx.From<ITimetable>()
             .Join(ctx.From<ISegment>(), (f, tf) => f.FlightId == tf.FlightId)
@@ -297,7 +297,7 @@ public static class AviasalesQueries
     }
 
     // 7. airport_otp (course: conditional aggregation / FILTER)
-    public static async Task AirportOnTimePerformanceAsync(IDataContext ctx, CancellationToken ct)
+    public static async Task AirportOnTimePerformance(IDataContext ctx, CancellationToken ct)
     {
         var flights = ctx.From<ITimetable>()
             .Join(ctx.From<IAirportData>(), (f, dep) => f.DepartureAirport == dep.AirportCode)
@@ -343,7 +343,7 @@ public static class AviasalesQueries
     }
 
     // 8. delay_percentiles_by_model (course: percentile_disc ... WITHIN GROUP)
-    public static async Task DelayPercentilesByModelAsync(IDataContext ctx, CancellationToken ct)
+    public static async Task DelayPercentilesByModel(IDataContext ctx, CancellationToken ct)
     {
         var stats = ctx.From<ITimetable>()
             .Join(ctx.From<IAirplaneData>(), (f, a) => f.AirplaneCode == a.AirplaneCode)
@@ -368,7 +368,7 @@ public static class AviasalesQueries
     }
 
     // 9. frequent_flyers (course: string_agg / group_concat)
-    public static async Task FrequentFlyersAsync(IDataContext ctx, CancellationToken ct)
+    public static async Task FrequentFlyers(IDataContext ctx, CancellationToken ct)
     {
         var rows = await ctx.From<ITicket>()
             .Join(ctx.From<ISegment>(), (t, tf) => t.TicketNo == tf.TicketNo)
@@ -396,7 +396,7 @@ public static class AviasalesQueries
     }
 
     // 10. passenger_growth_mom (course: LAG over a monthly aggregate)
-    public static async Task PassengerGrowthAsync(IDataContext ctx, CancellationToken ct)
+    public static async Task PassengerGrowth(IDataContext ctx, CancellationToken ct)
     {
         var monthly = ctx.From<ITimetable>()
             .Join(ctx.From<ISegment>(), (f, tf) => f.FlightId == tf.FlightId)
@@ -437,7 +437,7 @@ public static class AviasalesQueries
     }
 
     // 11. cancellation_by_route (course: conditional count + rate, TOP N)
-    public static async Task CancellationByRouteAsync(IDataContext ctx, CancellationToken ct)
+    public static async Task CancellationByRoute(IDataContext ctx, CancellationToken ct)
     {
         var perRoute = ctx.From<ITimetable>()
             .Join(ctx.From<IAirportData>(), (f, dep) => f.DepartureAirport == dep.AirportCode)

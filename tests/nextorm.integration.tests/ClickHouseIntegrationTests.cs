@@ -204,6 +204,18 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     }
 
     [Fact]
+    public void GenerateRandomTableFunction_ShouldReturnRequestedRows()
+    {
+        var rows = _sut.DataProvider
+            .FromTableFunction(() => SqlFunctions.ClickHouse.generate_random())
+            .Page(3, 0)
+            .Select(r => new { r.Id, r.Value, r.Name })
+            .ToList();
+
+        rows.Should().HaveCount(3);
+    }
+
+    [Fact]
     public void GlobalIn_Subquery_ShouldFilter()
     {
         var ids = _sut.SimpleEntity
@@ -323,6 +335,56 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
 
         r.Should().NotBeNull();
         r.Should().Contain("dadfasd").And.Contain("xxx");
+    }
+
+    [Fact]
+    public void DateConversionFunctions_ShouldReturnDateParts()
+    {
+        var r = _sut.ComplexEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Y = SqlFunctions.ClickHouse.to_year(x.Datetime),
+                Q = SqlFunctions.ClickHouse.to_quarter(x.Datetime),
+                M = SqlFunctions.ClickHouse.to_month(x.Datetime),
+                D = SqlFunctions.ClickHouse.to_day_of_month(x.Datetime),
+                DOW = SqlFunctions.ClickHouse.to_day_of_week(x.Datetime),
+                DOY = SqlFunctions.ClickHouse.to_day_of_year(x.Datetime),
+                H = SqlFunctions.ClickHouse.to_hour(x.Datetime),
+                Start = SqlFunctions.ClickHouse.to_start_of_month(x.Datetime),
+                Monday = SqlFunctions.ClickHouse.to_monday(x.Datetime),
+                YM = SqlFunctions.ClickHouse.to_yyyymm(x.Datetime),
+                YMD = SqlFunctions.ClickHouse.to_yyyymmdd(x.Datetime),
+                U = SqlFunctions.ClickHouse.to_unix_timestamp(x.Datetime),
+                Dt = SqlFunctions.ClickHouse.to_date(x.Datetime),
+                Dt32 = SqlFunctions.ClickHouse.to_date32(x.Datetime)
+            })
+            .First();
+
+        r.Y.Should().Be(2023);
+        r.Q.Should().Be(1);
+        r.M.Should().Be(1);
+        r.D.Should().Be(1);
+        r.DOW.Should().Be(7);
+        r.DOY.Should().Be(1);
+        r.H.Should().Be(10);
+        r.Start.Should().Be(new DateTime(2023, 1, 1));
+        r.Monday.Should().Be(new DateTime(2022, 12, 26));
+        r.YM.Should().Be(202301);
+        r.YMD.Should().Be(20230101);
+        r.U.Should().BeGreaterThan(0);
+        r.Dt.Should().Be(new DateTime(2023, 1, 1));
+        r.Dt32.Should().Be(new DateTime(2023, 1, 1));
+    }
+
+    [Fact]
+    public void Split_ShouldCountParts()
+    {
+        var count = _sut.SimpleEntity
+            .Select(x => SqlFunctions.ClickHouse.length("a,b,c".Split(',')))
+            .First();
+
+        count.Should().Be(3);
     }
 
     [Fact]

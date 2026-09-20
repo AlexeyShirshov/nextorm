@@ -37,6 +37,16 @@ public sealed class ClickHouseDialect : SqlDialectBase
     /// <summary>ClickHouse implements <c>arrayJoin(array)</c>, which expands one row per element.</summary>
     public override bool SupportsArrayJoin => true;
 
+    /// <summary>ClickHouse renders <c>string.Split</c> as <c>splitByChar(separator, value)</c>.</summary>
+    public override bool SupportsStringSplit => true;
+
+    /// <summary>
+    /// ClickHouse's <c>splitByChar</c> takes a one-character separator; multi-character separators
+    /// (ClickHouse's <c>splitByString</c>) are not exposed.
+    /// </summary>
+    public override string MakeStringSplit(string separator, string value) =>
+        $"splitByChar({separator}, {value})";
+
     /// <summary>
     /// <c>length</c> and <c>indexOf</c> return <c>UInt64</c> natively; cast them to <c>Int64</c> so the
     /// row reader can materialise the declared CLR integer.
@@ -87,6 +97,13 @@ public sealed class ClickHouseDialect : SqlDialectBase
     // toLastDayOfMonth(date).
     public override bool SupportsDateTrunc => true;
     public override bool SupportsDateArithmetic => true;
+
+    /// <summary>
+    /// ClickHouse exposes the native date conversion/truncation surface (<c>toDate</c>/<c>toDateTime</c>/
+    /// <c>toDate32</c>, the <c>toYear</c>/... part accessors, <c>toStartOf*</c>, <c>toMonday</c>,
+    /// <c>toYYYYMM</c>/<c>toYYYYMMDD</c>, <c>toUnixTimestamp</c>).
+    /// </summary>
+    public override bool SupportsDateConversionFunctions => true;
 
     public override bool SupportsDateTruncField(string field) =>
         field is not ("decade" or "century" or "millennium") && base.SupportsDateTruncField(field);
@@ -239,18 +256,34 @@ public sealed class ClickHouseDialect : SqlDialectBase
     /// <summary>The super-aggregate <c>WITH TOTALS</c> is a trailing modifier after the grouping list.</summary>
     public override string MakeGroupByTotals(string grouping) => $"{grouping} with totals";
 
-    /// <summary>ClickHouse provides the <c>numbers</c>/<c>numbers_mt</c> and <c>zeros</c>/<c>zeros_mt</c> table functions.</summary>
+    /// <summary>ClickHouse provides the <c>numbers</c>/<c>numbers_mt</c>, <c>zeros</c>/<c>zeros_mt</c> and <c>generateRandom</c> table functions.</summary>
     public override bool SupportsTableFunction(string name) =>
-        name is "numbers" or "numbers_mt" or "zeros" or "zeros_mt";
+        name is "numbers" or "numbers_mt" or "zeros" or "zeros_mt" or "generateRandom";
+
+    // The fixed structure the built-in generate_random()/generate_random(seed) map to
+    // (ClickHouse's own no-argument generateRandom has a dynamic, random schema).
+    private const string GenerateRandomStructure = "'id UInt64, value Float64, name String'";
 
     /// <summary>
     /// <c>numbers</c>/<c>numbers_mt</c> expose an unsigned <c>UInt64 number</c> column, which the row
-    /// reader cannot materialise; cast it to <c>Int64</c> through a wrapping subquery.
+    /// reader cannot materialise; cast it to <c>Int64</c> through a wrapping subquery. The built-in
+    /// <c>generateRandom</c> gets its fixed structure injected here and its <c>id</c> column cast the
+    /// same way.
     /// </summary>
-    public override string WrapTableFunction(string name, string call) =>
-        name is "numbers" or "numbers_mt"
-            ? $"(select toInt64(number) as number from {call})"
-            : call;
+    public override string WrapTableFunction(string name, string call)
+    {
+        if (name is "numbers" or "numbers_mt")
+            return $"(select toInt64(number) as number from {call})";
+
+        if (name == "generateRandom")
+        {
+            var inner = call["generateRandom(".Length..^1];
+            var args = inner.Length == 0 ? GenerateRandomStructure : $"{GenerateRandomStructure}, {inner}";
+            return $"(select toInt64(id) as id, value, name from generateRandom({args}))";
+        }
+
+        return call;
+    }
 
     /// <summary>ClickHouse implements the distributed <c>GLOBAL IN</c> predicate.</summary>
     public override bool SupportsGlobalPredicates => true;
@@ -332,22 +365,30 @@ public sealed class ClickHouseDialect : SqlDialectBase
     public override string MakeNow(bool utc) => utc ? "now('UTC')" : "now()";
 
     /// <summary>
-    /// ClickHouse spells the day-of-year part as <c>toDayOfYear()</c> and the other non-ANSI parts
-    /// through the <c>toXxx</c> family. <c>toDayOfWeek</c> is ISO (1=Monday..7=Sunday), so
-    /// <c>dow = toDayOfWeek % 7</c>.
+    /// ClickHouse spells the date parts through the <c>toXxx</c> family; the accessors return
+    /// UInt8/UInt16, which the row reader cannot read through GetInt32, so they are cast. The
+    /// normalised parts follow the cross-provider <c>extract</c> contract: <c>week</c> is ISO 8601,
+    /// <c>dow</c> is 0=Sunday..6=Saturday (native <c>toDayOfWeek</c> is ISO 1..7, hence <c>% 7</c>) and
+    /// <c>isodow</c> is 1=Monday..7=Sunday.
     /// </summary>
     public override string MakeDatePart(string part, string value) => part switch
     {
-        "doy" => $"toDayOfYear({value})",
-        "quarter" => $"toQuarter({value})",
-        "week" => $"toISOWeek({value})",
-        "dow" => $"(toDayOfWeek({value}) % 7)",
-        "isodow" => $"toDayOfWeek({value})",
+        "year" => $"toInt32(toYear({value}))",
+        "quarter" => $"toInt32(toQuarter({value}))",
+        "month" => $"toInt32(toMonth({value}))",
+        "day" => $"toInt32(toDayOfMonth({value}))",
+        "dow" => $"toInt32(toDayOfWeek({value}) % 7)",
+        "isodow" => $"toInt32(toDayOfWeek({value}))",
+        "doy" => $"toInt32(toDayOfYear({value}))",
+        "week" => $"toInt32(toISOWeek({value}))",
+        "hour" => $"toInt32(toHour({value}))",
+        "minute" => $"toInt32(toMinute({value}))",
+        "second" => $"toInt32(toSecond({value}))",
         "epoch" => $"toFloat64(toUnixTimestamp({value}))",
         _ => base.MakeDatePart(part, value)
     };
 
-    /// <summary>ClickHouse additionally accepts the ISO week, the normalised weekdays and epoch.</summary>
+    /// <summary>ClickHouse additionally accepts the normalised weekdays and epoch.</summary>
     public override bool SupportsDatePart(string part) =>
         part is "dow" or "isodow" or "epoch" || base.SupportsDatePart(part);
 
@@ -440,6 +481,44 @@ public sealed class ClickHouseDialect : SqlDialectBase
     }
 
     public override string MakeEndOfMonth(string value) => $"toLastDayOfMonth({value})";
+
+    /// <summary>
+    /// ClickHouse spells the conversion/truncation surface in camel case; <c>toYYYYMM</c>/<c>toYYYYMMDD</c>
+    /// return <c>UInt32</c> and <c>toUnixTimestamp</c> <c>UInt32</c>/<c>Int64</c>, so they are cast to the
+    /// CLR integer the methods declare.
+    /// </summary>
+    public override string MakeDateConversion(string name, IReadOnlyList<string> args)
+    {
+        var function = name switch
+        {
+            "to_date" => "toDate",
+            "to_date_time" => "toDateTime",
+            "to_date32" => "toDate32",
+            "to_day_of_week" => "toDayOfWeek",
+            "to_start_of_year" => "toStartOfYear",
+            "to_start_of_quarter" => "toStartOfQuarter",
+            "to_start_of_month" => "toStartOfMonth",
+            "to_start_of_week" => "toStartOfWeek",
+            "to_start_of_day" => "toStartOfDay",
+            "to_start_of_hour" => "toStartOfHour",
+            "to_start_of_minute" => "toStartOfMinute",
+            "to_start_of_second" => "toStartOfSecond",
+            "to_monday" => "toMonday",
+            "to_yyyymm" => "toYYYYMM",
+            "to_yyyymmdd" => "toYYYYMMDD",
+            "to_unix_timestamp" => "toUnixTimestamp",
+            _ => name
+        };
+
+        var call = $"{function}({string.Join(", ", args)})";
+
+        return name switch
+        {
+            "to_day_of_week" or "to_yyyymm" or "to_yyyymmdd" => $"toInt32({call})",
+            "to_unix_timestamp" => $"toInt64({call})",
+            _ => call
+        };
+    }
 
     public override string MakeDateFromParts(string year, string month, string day) =>
         $"makeDate({year}, {month}, {day})";

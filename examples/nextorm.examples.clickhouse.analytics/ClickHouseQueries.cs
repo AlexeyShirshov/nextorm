@@ -31,7 +31,7 @@ public static class ClickHouseQueries
         [Column("occurrence")] public ulong Occurrence { get; set; }
     }
 
-    public static async Task ArrayAnalyticsAsync(IDataContext ctx, CancellationToken ct)
+    public static async Task ArrayAnalytics(IDataContext ctx, CancellationToken ct)
     {
         var rows = await ctx.From<IHit>()
             .Select(h => new WordFrequencyRow { CleanWords = Array.Empty<string>(), Occurrence = 0 })
@@ -65,7 +65,7 @@ public static class ClickHouseQueries
         [Column("conversion_count")] public ulong ConversionCount { get; set; }
     }
 
-    public static async Task FunnelAsync(IDataContext ctx, CancellationToken ct)
+    public static async Task Funnel(IDataContext ctx, CancellationToken ct)
     {
         var rows = await ctx.From<IHit>()
             .Select(h => new FunnelRow { Level = 0, ConversionCount = 0 })
@@ -92,7 +92,7 @@ public static class ClickHouseQueries
         [Column("Точное кол-во уникальных посетителей")] public ulong UniqueUsers { get; set; }
     }
 
-    public static async Task IncrementalAsync(IDataContext ctx, CancellationToken ct)
+    public static async Task Incremental(IDataContext ctx, CancellationToken ct)
     {
         var rows = await ctx.From<IDailyUniqueUsers>()
             .Select(d => new DailyUniqueRow { EventDate = d.EventDate, UniqueUsers = 0 })
@@ -142,7 +142,7 @@ public static class ClickHouseQueries
         [Column("Матрица удержания")] public string Matrix { get; set; } = "";
     }
 
-    public static async Task RetentionAsync(IDataContext ctx, CancellationToken ct)
+    public static async Task Retention(IDataContext ctx, CancellationToken ct)
     {
         var rows = await ctx.From<IHit>()
             .Select(h => new RetentionMatrixRow { CohortWeek = h.EventDate, CohortSize = 0, Matrix = "" })
@@ -153,7 +153,7 @@ public static class ClickHouseQueries
     }
 
     // 5. clickhouse_sessions.sql (lagInFrame -> lag, runningAccumulate -> cumulative sum_over)
-    public static async Task SessionsAsync(IDataContext ctx, CancellationToken ct)
+    public static async Task Sessions(IDataContext ctx, CancellationToken ct)
     {
         var sessions = ctx.From<IHit>()
             .Select(h => new
@@ -207,7 +207,7 @@ public static class ClickHouseQueries
     }
 
     // 6. daily_traffic (course: GROUP BY date + uniq, fully LINQ)
-    public static async Task DailyTrafficAsync(IDataContext ctx, CancellationToken ct)
+    public static async Task DailyTraffic(IDataContext ctx, CancellationToken ct)
     {
         var rows = await ctx.From<IHit>()
             .Where(h => h.EventDate >= new DateTime(2014, 3, 17) && h.EventDate <= new DateTime(2014, 3, 23))
@@ -244,7 +244,7 @@ public static class ClickHouseQueries
         [Column("users")] public ulong Users { get; set; }
     }
 
-    public static async Task TopLandingPagesAsync(IDataContext ctx, CancellationToken ct)
+    public static async Task TopLandingPages(IDataContext ctx, CancellationToken ct)
     {
         var rows = await ctx.From<IHit>()
             .Select(h => new LandingPageRow { Url = "", Hits = 0, Users = 0 })
@@ -277,7 +277,7 @@ public static class ClickHouseQueries
         [Column("bounce_share")] public double BounceShare { get; set; }
     }
 
-    public static async Task DeviceSplitAsync(IDataContext ctx, CancellationToken ct)
+    public static async Task DeviceSplit(IDataContext ctx, CancellationToken ct)
     {
         var rows = await ctx.From<IHit>()
             .Select(h => new DeviceSplitRow { Device = "", Hits = 0, Users = 0, SearchShare = 0, BounceShare = 0 })
@@ -307,7 +307,7 @@ public static class ClickHouseQueries
         [Column("users")] public ulong Users { get; set; }
     }
 
-    public static async Task TopReferrersAsync(IDataContext ctx, CancellationToken ct)
+    public static async Task TopReferrers(IDataContext ctx, CancellationToken ct)
     {
         var rows = await ctx.From<IHit>()
             .Select(h => new ReferrerRow { Referrer = "", Hits = 0, Users = 0 })
@@ -350,7 +350,7 @@ public static class ClickHouseQueries
         [Column("sessions")] public ulong Sessions { get; set; }
     }
 
-    public static async Task SessionDepthAsync(IDataContext ctx, CancellationToken ct)
+    public static async Task SessionDepth(IDataContext ctx, CancellationToken ct)
     {
         var rows = await ctx.From<IHit>()
             .Select(h => new SessionDepthRow { Bucket = "", Sessions = 0 })
@@ -361,7 +361,7 @@ public static class ClickHouseQueries
     }
 
     // 11. rolling_activity (course: window over an aggregate, fully LINQ)
-    public static async Task RollingActivityAsync(IDataContext ctx, CancellationToken ct)
+    public static async Task RollingActivity(IDataContext ctx, CancellationToken ct)
     {
         var daily = ctx.From<IHit>()
             .Where(h => h.EventDate >= new DateTime(2014, 3, 17) && h.EventDate <= new DateTime(2014, 3, 23))

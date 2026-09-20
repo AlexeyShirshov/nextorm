@@ -1473,6 +1473,41 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void DateConversionFunctions_ShouldThrowBecausePostgresHasNoClickHouseDateSurface()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        Action[] acts =
+        [
+            () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.to_date(x.String) })),
+            () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.to_date_time(x.String) })),
+            () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.to_date32(x.String) })),
+            () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.to_year(x.Datetime) })),
+            () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.to_day_of_week(x.Datetime) })),
+            () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.to_start_of_month(x.Datetime) })),
+            () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.to_monday(x.Datetime) })),
+            () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.to_yyyymm(x.Datetime) })),
+            () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.to_yyyymmdd(x.Datetime) })),
+            () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.to_unix_timestamp(x.Datetime) }))
+        ];
+
+        foreach (var act in acts)
+            act.Should().Throw<NotSupportedException>().WithMessage("*not supported by this provider*");
+    }
+
+    [Fact]
+    public void Split_UnsupportedByProvider_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new { V = x.String!.Split(',') }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*string.Split*");
+    }
+
+    [Fact]
     public void SessionInfoFunctions_ShouldUsePostgresNames()
     {
         using var ctx = PostgresTestContext.Create();
@@ -1545,6 +1580,17 @@ public class SqlGenerationTests
             .Select(r => new { r.Value }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*zeros*");
+    }
+
+    [Fact]
+    public void BuiltInTableFunction_GenerateRandom_UnsupportedByProvider_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var act = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.ClickHouse.generate_random())
+            .Select(r => new { r.Id }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*generateRandom*");
     }
 
     [Fact]

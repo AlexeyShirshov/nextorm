@@ -500,6 +500,18 @@ result can be projected like a scalar column.
 > that return an array (`split_by_char`, `array_sort`, `array_reverse`, `array_distinct`) can only be used
 > as the operand of another array function; projecting one directly throws at preparation time.
 
+The CLR `string.Split` is rendered as `splitByChar(separator, value)` (gated by
+[`SupportsStringSplit`](xref:NextORM.Core.ISqlDialect.SupportsStringSplit)); only a single-character
+separator is supported (the multi-character `splitByString` is not exposed), the result is a `string[]`
+usable only inside another array function, and the `count` overload, multiple separators and
+`StringSplitOptions` other than `None` throw `NotSupportedException`:
+
+```csharp
+var parts = dataContext.From<IComplexEntity>()
+    .Select(e => SqlFunctions.ClickHouse.length(e.String!.Split(',')))
+    .First();
+```
+
 ```csharp
 var tags = dataContext.From<IArrayEntity>()
     .Where(e => e.Id == 1)
@@ -769,6 +781,35 @@ select datetime(dt, (1) || ' days') as 'NextDay', date(dt, 'start of month', '+1
 | `SqlFunctions.Sql.date_from_parts(y, m, d)` | `datefromparts(y, m, d)` | `make_date(y, m, d)` | `makeDate(y, m, d)` | `str_to_date(concat_ws('-', y, m, d), '%Y-%m-%d')` | `date(printf('%04d-%02d-%02d', y, m, d))` |
 | `x.AddDays(7)` | `dateadd(day, 7, x)` | `x + (7 * interval '1 day')` | `addDays(x, 7)` | `date_add(x, interval 7 day)` | `datetime(x, (7) \|\| ' days')` |
 | `x.AddMonths(2)` | `dateadd(month, 2, x)` | `x + (2 * interval '1 month')` | `addMonths(x, 2)` | `date_add(x, interval 2 month)` | `datetime(x, (2) \|\| ' months')` |
+
+## Date conversion and parts (ClickHouse)
+
+ClickHouse exposes its `to*` date/time functions through `SqlFunctions.ClickHouse`
+([`SupportsDateConversionFunctions`](xref:NextORM.Core.ISqlDialect.SupportsDateConversionFunctions); ClickHouse only).
+`to_date`/`to_date_time`/`to_date32` convert to `Date`/`DateTime`/`Date32`;
+`to_year`/`to_quarter`/`to_month`/`to_day_of_month`/`to_day_of_week`/`to_day_of_year`/`to_hour`/
+`to_minute`/`to_second` return the date parts (`toDayOfWeek` is Monday 1 … Sunday 7);
+`to_start_of_year`/`_quarter`/`_month`/`_week`/`_day`/`_hour`/`_minute`/`_second` truncate to the
+start of the period, and `to_monday` returns the ISO Monday of the week (`toStartOfWeek` starts on
+Sunday instead); `to_yyyymm`/`to_yyyymmdd` pack the date as an integer and `to_unix_timestamp` returns
+Unix seconds. The `DateTime.Year`/`Month`/`Day`/`Hour`/... projections on ClickHouse use the same
+`to`-accessors. The integer-returning accessors and `toYYYYMM`/`toYYYYMMDD`/`toUnixTimestamp` are
+wrapped in `toInt32`/`toInt64` so the row reader can materialise them. On any other provider the whole
+surface throws `NotSupportedException`.
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        Year = SqlFunctions.ClickHouse.to_year(e.Datetime),
+        MonthStart = SqlFunctions.ClickHouse.to_start_of_month(e.Datetime)
+    })
+    .ToList();
+```
+
+```sql
+select toInt32(toYear(dt)) as `Year`, toStartOfMonth(dt) as `MonthStart` from complex_entity
+```
 
 ## String and array aggregates
 

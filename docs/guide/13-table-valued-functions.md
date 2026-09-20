@@ -299,6 +299,27 @@ select zero as `Value` from zeros(@count) as `t1`
 Unlike `numbers`, the `zero` column is `UInt8`, which the row reader materialises directly as `byte`,
 so no cast wrapper is needed.
 
+`SqlFunctions.ClickHouse.generate_random`/`generate_random(seed)` are the ClickHouse test-data table
+functions returning [`SqlFunctions.IGenerateRandomRow`](xref:NextORM.Core.SqlFunctions.IGenerateRandomRow)
+(`id UInt64`, `value Float64`, `name String`). ClickHouse's own schema is a string argument and its
+no-argument form has a random schema, so the built-in helper fixes the structure and its `id` column is
+cast to `Int64` through the same wrapping subquery as `numbers`; the stream is unbounded, so chain a
+page/limit:
+
+```csharp
+var rows = dataContext
+    .FromTableFunction(() => SqlFunctions.ClickHouse.generate_random())
+    .Page(3, 0)
+    .Select(r => new { r.Id, r.Value, r.Name })
+    .ToList();
+```
+
+```sql
+select id as `Id`, value as `Value`, name as `Name`
+from (select toInt64(id) as id, value, name from generateRandom('id UInt64, value Float64, name String')) as `t1`
+limit 3
+```
+
 The mapped function must exist in the database — nextorm only emits the call, it does not create the
 function — so use the helper only on the provider that defines it. The built-in helpers are gated by
 [`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect): PostgreSQL enables `generate_series`/`unnest`, SQL Server enables

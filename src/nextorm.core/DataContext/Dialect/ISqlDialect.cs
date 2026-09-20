@@ -142,6 +142,13 @@ public interface ISqlDialect
     /// </summary>
     bool SupportsArrayFunctions { get; }
     /// <summary>
+    /// True when the provider can render the CLR <c>string.Split</c> call as a scalar array via
+    /// <see cref="MakeStringSplit"/> (<c>splitByChar(separator, value)</c>). The safe default is
+    /// <c>false</c>; only ClickHouse opts in today. PostgreSQL handles <c>string.Split</c> as an array
+    /// operand through its own <c>string_to_array</c> path instead.
+    /// </summary>
+    bool SupportsStringSplit { get; }
+    /// <summary>
     /// True when the provider can render <c>arrayJoin(array)</c>, which expands one row per array
     /// element. The safe default is <c>false</c>; only ClickHouse opts in today. See
     /// <see cref="ClickHouseFunctions.array_join{T}(T[])"/>.
@@ -211,6 +218,14 @@ public interface ISqlDialect
     /// SQL Server and ClickHouse opt in today.
     /// </summary>
     bool SupportsDateArithmetic { get; }
+    /// <summary>
+    /// True when the provider can render the ClickHouse-style date conversion surface of
+    /// <see cref="ClickHouseFunctions"/> (<c>toDate</c>/<c>toDateTime</c>/<c>toDate32</c>, the
+    /// <c>toYear</c>/... part accessors, <c>toStartOf*</c>, <c>toMonday</c>, <c>toYYYYMM</c>/
+    /// <c>toYYYYMMDD</c> and <c>toUnixTimestamp</c>). The safe default is <c>false</c>; only
+    /// ClickHouse opts in today. The part accessors render through <see cref="MakeDatePart"/>.
+    /// </summary>
+    bool SupportsDateConversionFunctions { get; }
     /// <summary>
     /// True when the provider can render the <c>string_agg</c>/<c>array_agg</c> aggregate surface.
     /// The safe default is <c>false</c>; only PostgreSQL opts in today.
@@ -713,6 +728,15 @@ public interface ISqlDialect
     /// <paramref name="day"/> parts.
     /// </summary>
     string MakeDateFromParts(string year, string month, string day);
+    /// <summary>
+    /// Renders a ClickHouse-style date conversion/truncation function over the already-rendered
+    /// arguments (<see cref="ClickHouseFunctions"/>). <paramref name="name"/> is the snake-case method
+    /// name (<c>to_date</c>, <c>to_start_of_month</c>, <c>to_monday</c>, <c>to_yyyymm</c>,
+    /// <c>to_unix_timestamp</c>, ...); only called when <see cref="SupportsDateConversionFunctions"/>
+    /// is <c>true</c>. The part accessors (<c>toYear</c>/...) use <see cref="MakeDatePart"/> instead.
+    /// </summary>
+    string MakeDateConversion(string name, IReadOnlyList<string> args) =>
+        throw new NotSupportedException("The date conversion functions (toDate/toDateTime/toStartOf*/toYYYYMM/toUnixTimestamp) are not supported by this provider.");
     /// <summary>True when the provider accepts <paramref name="field"/> as a <c>date_trunc</c> part.</summary>
     bool SupportsDateTruncField(string field);
     /// <summary>True when the provider accepts <paramref name="field"/> as a <c>date_add</c> part.</summary>
@@ -731,6 +755,15 @@ public interface ISqlDialect
     /// integer.
     /// </summary>
     string MakeArrayFunction(string name, string call) => call;
+    /// <summary>
+    /// Renders the CLR <c>string.Split</c> call as a scalar array over the already-rendered
+    /// <paramref name="separator"/> (a one-character SQL string literal) and <paramref name="value"/>
+    /// (<c>splitByChar(separator, value)</c> on ClickHouse). Only called when
+    /// <see cref="SupportsStringSplit"/> is <c>true</c>; a provider that cannot express a scalar
+    /// <c>string.Split</c> never renders it.
+    /// </summary>
+    string MakeStringSplit(string separator, string value) =>
+        throw new NotSupportedException("string.Split is not supported by this provider.");
     /// <summary>
     /// Renders an ordered-set aggregate as <c>&lt;aggregate&gt; within group (order by &lt;orderBy&gt;)</c>.
     /// <paramref name="aggregate"/> is the already-rendered call (for example <c>percentile_cont(0.5)</c>)

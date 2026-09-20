@@ -112,7 +112,87 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => new { DOY = x.Datetime!.Value.DayOfYear }))
-            .Should().Contain("toDayOfYear(dt)");
+            .Should().Contain("toInt32(toDayOfYear(dt))");
+    }
+
+    [Fact]
+    public void DateTimeParts_ShouldUseToAccessors()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Y = x.Datetime!.Value.Year,
+            M = x.Datetime!.Value.Month,
+            D = x.Datetime!.Value.Day,
+            H = x.Datetime!.Value.Hour
+        }));
+
+        sql.Should().Contain("toInt32(toYear(dt))");
+        sql.Should().Contain("toInt32(toMonth(dt))");
+        sql.Should().Contain("toInt32(toDayOfMonth(dt))");
+        sql.Should().Contain("toInt32(toHour(dt))");
+    }
+
+    [Fact]
+    public void DateConversionFunctions_ShouldUseClickHouseNames()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            D = SqlFunctions.ClickHouse.to_date(x.Datetime),
+            DT = SqlFunctions.ClickHouse.to_date_time(x.String),
+            D32 = SqlFunctions.ClickHouse.to_date32(x.String),
+            Y = SqlFunctions.ClickHouse.to_year(x.Datetime),
+            Q = SqlFunctions.ClickHouse.to_quarter(x.Datetime),
+            M = SqlFunctions.ClickHouse.to_month(x.Datetime),
+            DOM = SqlFunctions.ClickHouse.to_day_of_month(x.Datetime),
+            DOW = SqlFunctions.ClickHouse.to_day_of_week(x.Datetime),
+            DOY = SqlFunctions.ClickHouse.to_day_of_year(x.Datetime),
+            H = SqlFunctions.ClickHouse.to_hour(x.Datetime),
+            Mi = SqlFunctions.ClickHouse.to_minute(x.Datetime),
+            S = SqlFunctions.ClickHouse.to_second(x.Datetime),
+            SY = SqlFunctions.ClickHouse.to_start_of_year(x.Datetime),
+            SQ = SqlFunctions.ClickHouse.to_start_of_quarter(x.Datetime),
+            SM = SqlFunctions.ClickHouse.to_start_of_month(x.Datetime),
+            SW = SqlFunctions.ClickHouse.to_start_of_week(x.Datetime),
+            SD = SqlFunctions.ClickHouse.to_start_of_day(x.Datetime),
+            SH = SqlFunctions.ClickHouse.to_start_of_hour(x.Datetime),
+            SMin = SqlFunctions.ClickHouse.to_start_of_minute(x.Datetime),
+            SSec = SqlFunctions.ClickHouse.to_start_of_second(x.Datetime),
+            Mon = SqlFunctions.ClickHouse.to_monday(x.Datetime),
+            YM = SqlFunctions.ClickHouse.to_yyyymm(x.Datetime),
+            YMD = SqlFunctions.ClickHouse.to_yyyymmdd(x.Datetime),
+            U = SqlFunctions.ClickHouse.to_unix_timestamp(x.Datetime)
+        }));
+
+        sql.Should().Contain("toDate(dt)");
+        sql.Should().Contain("toDateTime(somestring)");
+        sql.Should().Contain("toDate32(somestring)");
+        sql.Should().Contain("toYear(dt)");
+        sql.Should().Contain("toQuarter(dt)");
+        sql.Should().Contain("toMonth(dt)");
+        sql.Should().Contain("toDayOfMonth(dt)");
+        sql.Should().Contain("toDayOfWeek(dt)");
+        sql.Should().Contain("toDayOfYear(dt)");
+        sql.Should().Contain("toHour(dt)");
+        sql.Should().Contain("toMinute(dt)");
+        sql.Should().Contain("toSecond(dt)");
+        sql.Should().Contain("toStartOfYear(dt)");
+        sql.Should().Contain("toStartOfQuarter(dt)");
+        sql.Should().Contain("toStartOfMonth(dt)");
+        sql.Should().Contain("toStartOfWeek(dt)");
+        sql.Should().Contain("toStartOfDay(dt)");
+        sql.Should().Contain("toStartOfHour(dt)");
+        sql.Should().Contain("toStartOfMinute(dt)");
+        sql.Should().Contain("toStartOfSecond(dt)");
+        sql.Should().Contain("toMonday(dt)");
+        sql.Should().Contain("toInt32(toYYYYMM(dt))");
+        sql.Should().Contain("toInt32(toYYYYMMDD(dt))");
+        sql.Should().Contain("toInt64(toUnixTimestamp(dt))");
     }
 
     [Fact]
@@ -650,6 +730,35 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void TableFunction_GenerateRandom_ShouldEmitWrappedCall()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.ClickHouse.generate_random())
+            .Page(3, 0)
+            .Select(r => new { r.Id, r.Value, r.Name }));
+
+        Normalize(command.DbCommand.CommandText).Should().Contain(
+            "from (select toInt64(id) as id, value, name from generateRandom('id UInt64, value Float64, name String')) as `t1`");
+    }
+
+    [Fact]
+    public void TableFunction_GenerateRandomWithSeed_ShouldPassSeed()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var seed = 42L;
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.ClickHouse.generate_random(seed))
+            .Page(3, 0)
+            .Select(r => new { r.Id }));
+
+        Normalize(command.DbCommand.CommandText).Should().Contain(
+            "from generateRandom('id UInt64, value Float64, name String', @seed)");
+    }
+
+    [Fact]
     public void GlobalIn_Subquery_ShouldRenderGlobalIn()
     {
         using var ctx = ClickHouseTestContext.Create();
@@ -1057,6 +1166,58 @@ public class SqlGenerationTests
 
         SqlOf(ctx, e.Select(x => new { N = SqlFunctions.ClickHouse.length(SqlFunctions.ClickHouse.split_by_char(",", x.String)) }))
             .Should().Contain("toInt64(length(splitByChar(',', somestring)))");
+    }
+
+    [Fact]
+    public void Split_CharSeparator_ShouldUseSplitByChar()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { N = SqlFunctions.ClickHouse.length(x.String!.Split(',')) }))
+            .Should().Contain("toInt64(length(splitByChar(',', somestring)))");
+    }
+
+    [Fact]
+    public void Split_StringSeparator_ShouldUseSplitByChar()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { N = SqlFunctions.ClickHouse.length(x.String!.Split(",")) }))
+            .Should().Contain("toInt64(length(splitByChar(',', somestring)))");
+    }
+
+    [Fact]
+    public void Split_CharArraySeparator_ShouldUseSplitByChar()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { N = SqlFunctions.ClickHouse.length(x.String!.Split(new[] { '|' })) }))
+            .Should().Contain("toInt64(length(splitByChar('|', somestring)))");
+    }
+
+    [Fact]
+    public void Split_MultiCharSeparator_ShouldThrow()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new { N = SqlFunctions.ClickHouse.length(x.String!.Split("::")) }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*one-character separator*");
+    }
+
+    [Fact]
+    public void Split_RemoveEmptyEntries_ShouldThrow()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new { N = SqlFunctions.ClickHouse.length(x.String!.Split(',', StringSplitOptions.RemoveEmptyEntries)) }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*StringSplitOptions*");
     }
 
     [Fact]

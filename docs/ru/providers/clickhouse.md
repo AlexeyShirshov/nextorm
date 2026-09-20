@@ -24,6 +24,17 @@ ADO.NET-провайдер `ClickHouse.Driver`. Он создаёт `ClickHouseC
   в единственные; `decade`/`century`/`millennium` бросают исключение), а `date_add`/`DateTime.Add*` —
   как выделенные функции `addYears`/`addQuarters`/…/`addSeconds` (`decade`/`century`/`millennium`
   сворачиваются в масштабированный `addYears`), `end_of_month` — как `toLastDayOfMonth(x)`;
+- поверхность приведения/частей даты `SqlFunctions.ClickHouse.to_*` (гейт
+  [`SupportsDateConversionFunctions`](xref:NextORM.Core.ISqlDialect.SupportsDateConversionFunctions)):
+  `to_date`/`to_date_time`/`to_date32` — как `toDate`/`toDateTime`/`toDate32`; аксессоры `to_year`/
+  `to_quarter`/`to_month`/`to_day_of_month`/`to_day_of_week`/`to_day_of_year`/`to_hour`/`to_minute`/
+  `to_second` (а также проекции `DateTime.Year`/`Month`/…) — как `toYear`/`toQuarter`/…, обёрнутые в
+  `toInt32(...)` (нативные `UInt8`/`UInt16` иначе не читаются построителем строк); `to_start_of_*` —
+  как `toStartOfYear`/`toStartOfQuarter`/`toStartOfMonth`/`toStartOfWeek`/`toStartOfDay`/
+  `toStartOfHour`/`toStartOfMinute`/`toStartOfSecond`; `to_monday` — как `toMonday` (ISO-понедельник,
+  тогда как `toStartOfWeek` начинает неделю с воскресенья); `to_yyyymm`/`to_yyyymmdd` — как
+  `toInt32(toYYYYMM(...))`/`toInt32(toYYYYMMDD(...))`; `to_unix_timestamp` — как
+  `toInt64(toUnixTimestamp(...))`;
 - `string_agg(x, delimiter)` как `arrayStringConcat(groupArray(x), delimiter)`;
 - `bit_and`/`bit_or`/`bit_xor` как `groupBitAnd`/`groupBitOr`/`groupBitXor`, `covar_pop`/`covar_samp`
   как `covarPop`/`covarSamp`, `corr` как `corr`, `arg_min`/`arg_max` как `argMin`/`argMax`, а
@@ -133,6 +144,7 @@ select concat('id:', id) as `Label` from simple_entity
 | Рекурсивный CTE | не поддерживается (модификатор `recursive` опускается) |
 | `date_trunc` | `dateTrunc('field', x)` |
 | Арифметика дат | `addDays(x, n)` … `addYears(x, (n) * 10)`; `toLastDayOfMonth(x)` |
+| Приведение / части даты | `toDate`/`toDateTime`/`toDate32`, `toYear`/… (как `toInt32(...)`), `toStartOf*`, `toMonday`, `toInt32(toYYYYMM(...))`/`toInt32(toYYYYMMDD(...))`, `toInt64(toUnixTimestamp(...))` |
 | `string_agg` | `arrayStringConcat(groupArray(x), delimiter)` (без `array_agg`) |
 | Битовые / статистические агрегаты | `groupBitAnd`/`groupBitOr`/`groupBitXor`; `corr`/`covarPop`/`covarSamp` |
 | Агрегаты регрессии | не поддерживаются (`regr_*` — только PostgreSQL) |
@@ -150,8 +162,8 @@ select concat('id:', id) as `Label` from simple_entity
 | `GROUP BY ... WITH TOTALS` | `with totals` (отдельная строка итогов не отдаётся `ClickHouse.Driver`) |
 | `LIMIT n BY expr` | `limit [offset, ]n by col1, col2` (перед финальным `LIMIT`) |
 | Модификаторы запроса | `final`, `sample r [offset o]`, `prewhere`, `settings k = v` (`FINAL`/`PREWHERE` требуют поддерживающего движка таблицы) |
-| Табличные функции | `numbers`/`numbers_mt` (колонка `UInt64 number` приводится к `Int64`), `zeros`/`zeros_mt` (`zero UInt8`) |
-| Функции массивов | над колонками `Array(T)`: `length`, `has`, `indexOf`, `hasAny`, `hasAll`, `arrayStringConcat`, `splitByChar`, `arraySort`, `arrayReverse`, `arrayDistinct`; `arrayJoin(array)` разворачивает по строке на элемент, а `EntityBuilder.ArrayJoin`/`LeftArrayJoin` рендерят клаузу `[left ]array join expr, ...`. `EntityBuilder.ArrayJoinElement`/`LeftArrayJoinElement` дополнительно привязывают вырожденный элемент к `ArrayJoinProjection<TEntity, TElement>.Element` (исходная сущность — в `.Item1`); выражение клаузы получает алиас, и `p.Element` ссылается на него (см. [`ClickHouseFunctions`](xref:NextORM.Core.ClickHouseFunctions), [`ArrayJoinKind`](xref:NextORM.Core.ArrayJoinKind), [`ArrayJoinProjection`](xref:NextORM.Core.ArrayJoinProjection`2)) |
+| Табличные функции | `numbers`/`numbers_mt` (колонка `UInt64 number` приводится к `Int64`), `zeros`/`zeros_mt` (`zero UInt8`), `generateRandom` (встроенные `generate_random()`/`generate_random(seed)` фиксируют структуру `id UInt64, value Float64, name String` и приводят `id` к `Int64`) |
+| Функции массивов | над колонками `Array(T)`: `length`, `has`, `indexOf`, `hasAny`, `hasAll`, `arrayStringConcat`, `splitByChar`, `arraySort`, `arrayReverse`, `arrayDistinct`; CLR-метод `string.Split` рендерится как `splitByChar(separator, value)` под [`SupportsStringSplit`](xref:NextORM.Core.ISqlDialect.SupportsStringSplit) (только одноразрядный разделитель); `arrayJoin(array)` разворачивает по строке на элемент, а `EntityBuilder.ArrayJoin`/`LeftArrayJoin` рендерят клаузу `[left ]array join expr, ...`. `EntityBuilder.ArrayJoinElement`/`LeftArrayJoinElement` дополнительно привязывают вырожденный элемент к `ArrayJoinProjection<TEntity, TElement>.Element` (исходная сущность — в `.Item1`); выражение клаузы получает алиас, и `p.Element` ссылается на него (см. [`ClickHouseFunctions`](xref:NextORM.Core.ClickHouseFunctions), [`ArrayJoinKind`](xref:NextORM.Core.ArrayJoinKind), [`ArrayJoinProjection`](xref:NextORM.Core.ArrayJoinProjection`2)) |
 | Нативный JSON / расширенные скаляры | не поддерживаются (только PostgreSQL) |
 
 ## Замечания и ограничения

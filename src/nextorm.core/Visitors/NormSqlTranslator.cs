@@ -367,6 +367,9 @@ internal static class NormSqlTranslator
         if (AdvancedAggregateTranslator.TryTranslate(visitor, node))
             return;
 
+        if (DateConversionSqlTranslator.TryTranslate(visitor, node))
+            return;
+
         if (ExtendedScalarFunctionTranslator.TryTranslate(visitor, node))
             return;
 
