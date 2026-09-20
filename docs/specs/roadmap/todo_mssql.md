@@ -61,13 +61,16 @@
       `[SqlFunction]`.
       `CONCAT_WS`/`FORMAT`/`REVERSE`/`TRANSLATE`/`OVERLAY` остаются в extended-наборе `CommonFunctions`
       (PostgreSQL).
-- [ ] **`FORMAT(value, formatString)` (дата/число)** — встроенного маппинга нет: у PostgreSQL
-      `SqlFunctions.Postgres.format(fmt, args)` — это `format()` с printf-плейсхолдерами, у SQL Server
-      `FORMAT` принимает значение и .NET-шаблон (`'yyyy-MM-dd'`). В demo-запросах (`mssql_rolling_kpi.sql`,
-      `mssql_vip_churn.sql`) пользовательский UDF `[SqlFunction("format")]` убран: LINQ-пример теперь
-      проецирует исходный `DateTime` без форматирования, а не маскирует пробел стабом. Нужен
-      кросс-провайдерный метод (например, `CommonFunctions.format_date(value, template)` с флагом и
-      хуком) либо явная фиксация: «форматирование дат — только через `[SqlFunction]`». Уровень: простое.
+- [x] **`FORMAT(value, formatString)` (дата/число)** — закрыто явной фиксацией: «форматирование дат и
+      чисел — только через `[SqlFunction]`». У PostgreSQL `SqlFunctions.Postgres.format(fmt, args)` —
+      это `format()` с printf-плейсхолдерами, у SQL Server `FORMAT` принимает значение и **.NET-шаблон**
+      (`'yyyy-MM-dd'`, требует CLR, SQL Server 2012+), а MySQL/MariaDB/SQLite/ClickHouse — `%`-шаблоны
+      (`DATE_FORMAT`/`strftime`/`formatDateTime`). Языки шаблонов несовместимы, поэтому единый
+      `format_date(value, template)` давал бы разный (и в основном неверный) SQL на разных провайдерах.
+      Правило зафиксировано в `docs/guide/11-scalar-functions.md` (раздел «Formatting dates and numbers
+      to strings», EN/RU) и `docs/providers/sqlserver.md`; поддерживаемый путь закреплён тестом
+      `SqlGenerationTests.SqlFunction_FormatDate_ShouldEmitFormatFunction` (SQL Server). Разбор —
+      `docs/specs/roadmap/WIP_format_date.md`. Уровень: простое.
 - [x] **`IIF` / `CHOOSE`** — `iif` перенесён на кросс-провайдерный `CommonFunctions.iif` (generic
       `TResult?`) с флагом `SupportsIif` и хуком `MakeIif` (нативный `iif` на SQL Server/SQLite, `if` на
       MySQL/MariaDB/ClickHouse, `case when` на PostgreSQL); `choose` остаётся SQL Server-only на

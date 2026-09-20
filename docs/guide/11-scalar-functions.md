@@ -256,6 +256,37 @@ Date construction and arithmetic use the portable surface instead: `date_from_pa
 `date_diff`, `date_trunc` and the `DateTime` members (see [Date arithmetic](#date-arithmetic) below).
 `make_date`, `age`, `date_bin` and `extract` are no longer exposed separately.
 
+### Formatting dates and numbers to strings
+
+nextorm deliberately does **not** add a cross-provider `format_date`/`FORMAT` method. The template
+languages are mutually incompatible: SQL Server `FORMAT(value, format)` follows the .NET custom format
+strings (`'yyyy-MM-dd'`) and depends on the CLR (available on SQL Server 2012+), PostgreSQL
+`to_char(value, format)` follows its own PG patterns (`'YYYY-MM-DD'`), and MySQL/MariaDB `DATE_FORMAT`,
+SQLite `strftime` and ClickHouse `formatDateTime` each use their own `%`-patterns (they also disagree on
+`%y`/minute/second tokens). A single `template` argument would therefore silently produce different —
+and mostly wrong — SQL on each provider.
+
+Format through a provider-specific user-defined function instead. On SQL Server declare a `format` UDF:
+
+```csharp
+public static class DemoUdf
+{
+    [SqlFunction("format")]
+    public static string Format(DateTime? value, string format) => throw new NotSupportedException();
+}
+```
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new { e.Id, Month = DemoUdf.Format(e.Datetime, "yyyy-MM") });
+// select id as [Id], format(dt, 'yyyy-MM') as [Month] from complex_entity
+```
+
+On PostgreSQL the same job is done by `SqlFunctions.Postgres.to_char(value, 'YYYY-MM')`
+([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions)).
+The `%`-style providers (`DATE_FORMAT`, `strftime`, `formatDateTime`) are declared the same way through
+`[SqlFunction]`; there is no built-in surface for them either.
+
 ### Session and server information
 
 `SqlFunctions.Sql.current_user()`, `session_user()`, `current_schema()`, `current_database()` and

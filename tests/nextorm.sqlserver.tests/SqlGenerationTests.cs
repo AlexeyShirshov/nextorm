@@ -720,6 +720,16 @@ public class SqlGenerationTests
             .Should().Be("select dbo.my_fn(id) as [V] from complex_entity");
     }
 
+    [Fact]
+    public void SqlFunction_FormatDate_ShouldEmitFormatFunction()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { M = Udf.FormatDate(x.Datetime, "yyyy-MM") }))
+            .Should().Be("select format(dt, 'yyyy-MM') as [M] from complex_entity");
+    }
+
     private static class Udf
     {
         [SqlFunction("upper")]
@@ -730,6 +740,9 @@ public class SqlGenerationTests
 
         [SqlFunction("my_fn", Schema = "dbo")]
         public static long WithSchema(long value) => throw new NotSupportedException();
+
+        [SqlFunction("format")]
+        public static string FormatDate(DateTime? value, string format) => throw new NotSupportedException();
     }
 
     [Fact]
