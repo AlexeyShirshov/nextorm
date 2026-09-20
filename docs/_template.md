@@ -31,6 +31,9 @@ the examples.
 | SQLite | |
 | SQL Server | |
 | PostgreSQL | |
+| MySQL | |
+| MariaDB | |
+| ClickHouse | |
 | In-memory | |
 
 ## See also
@@ -39,5 +42,5 @@ the examples.
 
 ---
 
-Source: `test/nextorm.integration.tests/CommonTestSuite.<Area>.cs:<line>`,
-`test/nextorm.sqlite.tests/SqlGenerationTests.cs:<line>`.
+Source: `tests/nextorm.integration.tests/CommonTestSuite.<Area>.cs:<line>`,
+`tests/nextorm.sqlite.tests/SqlGenerationTests.cs:<line>`.

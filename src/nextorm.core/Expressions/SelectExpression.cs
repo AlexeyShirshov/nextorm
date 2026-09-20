@@ -2,7 +2,7 @@ using System.Data;
 using System.Linq.Expressions;
 using System.Reflection;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE1006:Naming Styles", Justification = "Static readonly reflection-metadata fields (GetInt32MI, ...) are intentionally PascalCase as immutable lookup tables; IDE1006 is a suggestion and is not enforced by the build.")]
 public sealed class SelectExpression //: IEquatable<SelectExpression>
@@ -15,9 +15,17 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
     public Expression? Expression { get; set; }
     public Type PropertyType { get; set; }
     internal PropertyInfo? PropertyInfo { get; set; }
+
+    /// <summary>
+    /// True when a SQL NULL in this column means "no row" (the projection came from a
+    /// <c>*OrDefault</c> scalar terminal) and the column is a non-nullable value type, so the reader
+    /// must substitute <c>default</c> instead of throwing. Set while the projection is prepared;
+    /// read by the provider's column mapper.
+    /// </summary>
+    public bool DefaultOnNull { get; internal set; }
     // public List<QueryCommand>? ReferencedQueries { get; set; }
     //private readonly IDictionary<ExpressionKey, Delegate> _expCache;
-    // private readonly IQueryProvider _queryProvider;
+    // private readonly IQueryRegistry _queryProvider;
 
     public SelectExpression(Type propertyType)
     {
@@ -49,7 +57,7 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
     private readonly static MethodInfo GetByteMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetByte))!;
     private readonly static MethodInfo GetGuidMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetGuid))!;
     private readonly static MethodInfo GetValueMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetValue))!;
-    // internal int HashCode;
+    // internal int XxHash32;
     internal int PlanHashCode;
 
     public MethodInfo GetDataRecordMethod()
@@ -113,7 +121,7 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
     // {
     //     unchecked
     //     {
-    //         var hash = new HashCode();
+    //         var hash = new XxHash32();
 
     //         hash.Add(Index);
 

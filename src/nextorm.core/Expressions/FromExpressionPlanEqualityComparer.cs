@@ -1,10 +1,10 @@
 using System.Diagnostics.CodeAnalysis;
-namespace nextorm.core;
+namespace NextORM.Core;
 
 public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromExpression?>
 {
     //private readonly IDictionary<ExpressionKey, Delegate> _cache;
-    // private readonly IQueryProvider _queryProvider;
+    // private readonly IQueryRegistry _queryProvider;
     private readonly Lazy<QueryPlanEqualityComparer> _equalityComparer;
     // Table-function calls are compared/hashed structurally, with the same closure-aware comparer the
     // WHERE/SELECT expressions use, so two equivalent calls built from different closure instances
@@ -19,14 +19,14 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
     //     : this(new ExpressionCache<Delegate>())
     // {
     // }
-    public FromExpressionPlanEqualityComparer(IQueryProvider queryProvider)
+    public FromExpressionPlanEqualityComparer(IQueryRegistry queryProvider)
     //        : this(cache, queryProvider, null)
     {
         //_cache = cache ?? new ExpressionCache<Delegate>();
         _equalityComparer = new Lazy<QueryPlanEqualityComparer>(queryProvider.GetQueryPlanEqualityComparer);
         _expComparer = queryProvider.GetExpressionPlanEqualityComparer();
     }
-    // public FromExpressionPlanEqualityComparer(IDictionary<ExpressionKey, Delegate>? cache, IQueryProvider queryProvider, ILogger? logger)
+    // public FromExpressionPlanEqualityComparer(IDictionary<ExpressionKey, Delegate>? cache, IQueryRegistry queryProvider, ILogger? logger)
     // {
     //     _cache = cache ?? new ExpressionCache<Delegate>();
     //     _queryProvider = queryProvider;
@@ -69,7 +69,7 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
         {
             unchecked
             {
-                var hash = new HashCode();
+                var hash = new XxHash32();
                 hash.Add(obj.TableAlias);
 
                 if (!string.IsNullOrEmpty(obj.Table))

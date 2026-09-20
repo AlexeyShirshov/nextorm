@@ -1,11 +1,11 @@
 using System.Collections.Concurrent;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Caches the per-position occurrence of a projection item's type, keyed by the projection type.
 /// <para>
-/// Resolving the alias of a projection member (<c>p.t3</c>) needs to know which occurrence of that
+/// Resolving the alias of a projection member (<c>p.Item3</c>) needs to know which occurrence of that
 /// entity type the member means when the same type is joined more than once (for example
 /// <c>SimpleEntity, ComplexEntity, SimpleEntity, ComplexEntity</c>). That is a pure function of the
 /// projection type's generic arguments and the member position, so it is computed once per projection
@@ -21,7 +21,7 @@ internal static class ProjectionAliasCache
     /// <summary>
     /// Returns the occurrence index (among earlier items sharing the position's type) to use as the
     /// <c>paramIdx</c> when resolving the alias, or <c>null</c> when the projection has no repeated
-    /// types. <paramref name="position"/> is the zero-based projection member index (t1 = 0).
+    /// types. <paramref name="position"/> is the zero-based projection member index (Item1 = 0).
     /// </summary>
     public static int? GetOccurrence(Type projectionType, int position)
     {

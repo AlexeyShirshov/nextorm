@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// A query that has been compiled once and can be executed repeatedly.

@@ -1,6 +1,6 @@
 using System.Collections;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 #if NET8_0_OR_GREATER
 /// <summary>
@@ -8,11 +8,11 @@ namespace nextorm.core;
 /// a row.
 /// </summary>
 /// <remarks>
-/// Internal allocation helper; the magic number in the name is not meaningful to consumers. Prefer
-/// <c>internal</c>. See <c>API-NAMING-REVIEW.md</c> finding P1-16.
+/// Internal allocation helper; the magic number in the name is not meaningful to consumers.
+/// See <c>docs/specs/design/API-NAMING-REVIEW.md</c> finding P1-16.
 /// </remarks>
 [System.Runtime.CompilerServices.InlineArray(10)]
-public struct Buffer10<T>
+internal struct Buffer10<T>
 {
     private T _;
 }
@@ -20,9 +20,9 @@ public struct Buffer10<T>
 /// Append-only list of values used while materializing a row without allocating.
 /// </summary>
 /// <remarks>
-/// Internal allocation helper; prefer <c>internal</c>. See <c>API-NAMING-REVIEW.md</c> finding P1-16.
+/// Internal allocation helper. See <c>docs/specs/design/API-NAMING-REVIEW.md</c> finding P1-16.
 /// </remarks>
-public struct ValueList<T>
+internal struct ValueList<T>
 {
     private const int MaxLength = 10;
     private int _curIdx;
@@ -87,17 +87,17 @@ public struct ValueList<T>
 /// <summary>
 /// Fixed-capacity buffer for up to three values, kept on the stack.
 /// </summary>
-/// <remarks>Internal allocation helper; prefer <c>internal</c>. See <c>API-NAMING-REVIEW.md</c> finding P1-16.</remarks>
+/// <remarks>Internal allocation helper. See <c>docs/specs/design/API-NAMING-REVIEW.md</c> finding P1-16.</remarks>
 [System.Runtime.CompilerServices.InlineArray(3)]
-public struct Buffer3<T>
+internal struct Buffer3<T>
 {
     private T _;
 }
 /// <summary>
 /// Value list optimized for up to three items.
 /// </summary>
-/// <remarks>Internal allocation helper; the name is inconsistent with <see cref="ValueList{T}"/>. See <c>API-NAMING-REVIEW.md</c> finding P1-16.</remarks>
-public struct ValueList3<T>
+/// <remarks>Internal allocation helper; the name is inconsistent with <see cref="ValueList{T}"/>. See <c>docs/specs/design/API-NAMING-REVIEW.md</c> finding P1-16.</remarks>
+internal struct ValueList3<T>
 {
     private const int MaxLength = 3;
     private int _curIdx;

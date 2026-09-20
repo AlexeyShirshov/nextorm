@@ -6,17 +6,17 @@
 
 ## Overview
 
-`MySqlDbContext` (`src/nextorm.mysql/MySqlDbContext.cs`) wraps `MySqlConnector`. It creates a
-`MySqlConnection` from the connection string and returns `MySqlDialect.Instance` from its `Dialect`
-property. `MySqlDialect` (`src/nextorm.mysql/MySqlDialect.cs`) is the dialect:
+[`MySqlDataContext`](xref:NextORM.MySql.MySqlDataContext) (`src/nextorm.mysql/MySqlDataContext.cs`) wraps `MySqlConnector`. It creates a
+`MySqlConnection` from the connection string and returns [`Instance`](xref:NextORM.MySql.MySqlDialect.Instance) from its `Dialect`
+property. [`MySqlDialect`](xref:NextORM.MySql.MySqlDialect) (`src/nextorm.mysql/MySqlDialect.cs`) is the dialect:
 
 - parameter placeholder `@name`;
 - identifiers and aliases are quoted with backticks;
 - string concatenation uses the `concat(a, b, ...)` function — MySQL's infix `||` is a logical OR
   unless the `PIPES_AS_CONCAT` SQL mode is set, so the dialect never emits it;
-- `MakeCoalesce` renders `coalesce(a, b)`;
-- `MakeStringLength` renders `char_length(x)` (MySQL's `length()` counts bytes);
-- `MakeNow` renders `now()` for local time and `utc_timestamp()` for UTC;
+- [`MakeCoalesce`](xref:NextORM.Core.ISqlDialect) renders `coalesce(a, b)`;
+- [`MakeStringLength`](xref:NextORM.Core.ISqlDialect) renders `char_length(x)` (MySQL's `length()` counts bytes);
+- [`MakeNow`](xref:NextORM.Core.ISqlDialect) renders `now()` for local time and `utc_timestamp()` for UTC;
 - `stdev`/`stdevp`/`var`/`varp` map to `stddev_samp`/`stddev_pop`/`var_samp`/`var_pop` (`stddev` and
   `variance` are the *population* synonyms in MySQL);
 - a CLR conversion is rendered with a MySQL `CAST` target (`signed`/`unsigned` for the integer types,
@@ -26,36 +26,43 @@ property. `MySqlDialect` (`src/nextorm.mysql/MySqlDialect.cs`) is the dialect:
 - the `ESCAPE` character of a `LIKE` predicate is written as `'\\'`, since MySQL also treats the
   backslash as a string-literal escape;
 - paging is `limit n` / `limit n offset m`; an offset without a limit becomes
-  `limit 18446744073709551615 offset m`, because MySQL only accepts `offset` together with `limit`.
+  `limit 18446744073709551615 offset m`, because MySQL only accepts `offset` together with `limit`;
+- the session/information family ([`SupportsSessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SupportsSessionInfoFunctions)) renders
+  `SqlFunctions.Sql.current_user`/`session_user`/`current_database`/`version` as `current_user()`/`session_user()`/
+  `database()`/`version()` and `current_schema` as `schema()`;
+- the arbitrary-value aggregate [`SqlFunctions.Sql.any_agg`](xref:NextORM.Core.CommonFunctions.any_agg``1) renders as
+  `ANY_VALUE(x)` ([`SupportsAnyValueAggregate`](xref:NextORM.Core.ISqlDialect.SupportsAnyValueAggregate), MySQL 5.7+);
+- the portable conditional [`SqlFunctions.Sql.iif`](xref:NextORM.Core.CommonFunctions.iif``1) renders as
+  `if(condition, a, b)` ([`SupportsIif`](xref:NextORM.Core.ISqlDialect.SupportsIif), [`MakeIif`](xref:NextORM.Core.ISqlDialect.MakeIif)).
 
 ## Registering the provider
 
-Two overloads are available on `DbContextBuilder`
-(`src/nextorm.mysql/DI/DataContextOptionsBuilderExtensions.cs`):
+Two overloads are available on [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder)
+(`src/nextorm.mysql/DI/MySqlDataContextOptionsBuilderExtensions.cs`):
 
 ```csharp
-using nextorm.core;
-using nextorm.mysql;
+using NextORM.Core;
+using NextORM.MySql;
 
 // From a connection string.
-var builder = new DbContextBuilder()
+var builder = new DataContextBuilder()
     .UseMySql("Server=localhost;Port=3306;Database=app;User ID=app;Password=secret");
 
 // From an existing, caller-owned connection.
 using var connection = new MySqlConnector.MySqlConnection("Server=localhost;Database=app");
-var byConnection = new DbContextBuilder().UseMySql(connection);
+var byConnection = new DataContextBuilder().UseMySql(connection);
 
-using var ctx = builder.CreateDbContext();   // IDataContext
+using var ctx = builder.CreateDataContext();   // IDataContext
 ```
 
 You can also construct the context directly (this is what the provider tests do):
 
 ```csharp
-using nextorm.core;
-using nextorm.mysql;
+using NextORM.Core;
+using NextORM.MySql;
 
-using IDataContext ctx = new MySqlDbContext(
-    "Server=localhost;Database=app;User ID=app;Password=secret", new DbContextBuilder());
+using IDataContext ctx = new MySqlDataContext(
+    "Server=localhost;Database=app;User ID=app;Password=secret", new DataContextBuilder());
 ```
 
 ## String concatenation
@@ -88,6 +95,11 @@ ctx.From<ISimpleEntity>().Offset(10).Select(x => x.Id);    // limit 184467440737
 | TVF alias | required |
 | `FULL JOIN` | not supported (right join is) |
 | `*ALL` | not supported (MySQL 8.0.31 has `INTERSECT`/`EXCEPT`, but not the `ALL` variants) |
+| Text JSON | `json_value`/`json_query`/`json_modify`/`isjson` (over `JSON_EXTRACT`/`JSON_UNQUOTE`/`JSON_SET`/`JSON_VALID`) |
+| Session/info functions | `current_user()`, `session_user()`, `schema()`, `database()`, `version()` |
+| Arbitrary-value aggregate | `ANY_VALUE(x)` |
+| Conditional function | `iif(cond, a, b)` → `if(cond, a, b)` |
+| Window percentiles | not supported (`PERCENTILE_CONT` is MariaDB-only) |
 
 MySQL 8.0.31 and later support `INTERSECT`/`EXCEPT`; the dialect rejects the `*ALL` variants with a
 `NotSupportedException`, matching the engine.
@@ -102,6 +114,6 @@ MySQL 8.0.31 and later support `INTERSECT`/`EXCEPT`; the dialect rejects the `*A
 
 ---
 
-Source: `src/nextorm.mysql/MySqlDialect.cs`, `src/nextorm.mysql/MySqlDbContext.cs`,
-`src/nextorm.mysql/DI/DataContextOptionsBuilderExtensions.cs`,
-`test/nextorm.mysql.tests/MySqlDialectTests.cs`, `test/nextorm.mysql.tests/SqlGenerationTests.cs`.
+Source: `src/nextorm.mysql/MySqlDialect.cs`, `src/nextorm.mysql/MySqlDataContext.cs`,
+`src/nextorm.mysql/DI/MySqlDataContextOptionsBuilderExtensions.cs`,
+`tests/nextorm.mysql.tests/MySqlDialectTests.cs`, `tests/nextorm.mysql.tests/SqlGenerationTests.cs`.

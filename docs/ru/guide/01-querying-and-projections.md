@@ -1,21 +1,21 @@
 # Запросы и проекции
 
-> Формируйте результат запроса с помощью `Select`: одна колонка, анонимный тип, DTO или запись (record), кортеж, инициализатор членов, вложенная сущность или вычисляемая колонка.
+> Формируйте результат запроса с помощью [`Select`](xref:NextORM.Core.EntityBuilder`1): одна колонка, анонимный тип, DTO или запись (record), кортеж, инициализатор членов, вложенная сущность или вычисляемая колонка.
 
 **Предварительные требования:** [Быстрый старт](../getting-started/02-quickstart.md) · [Сущности и метаданные](../getting-started/03-entities-and-metadata.md)
 
 ## Обзор
 
-`dataContext.From<TEntity>()` возвращает `EntityBuilder<TEntity>`. Каждый запрос начинается с
-проецирования этой сущности с помощью `Select`:
+`dataContext.From<TEntity>()` возвращает [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1). Каждый запрос начинается с
+проецирования этой сущности с помощью [`Select`](xref:NextORM.Core.EntityBuilder`1):
 
 ```csharp
 public QueryCommand<TResult> Select<TResult>(Expression<Func<TEntity, TResult>> exp)
 ```
 
 Лямбда не выполняется - она транслируется в список `SELECT` генерируемого оператора.
-`Select` возвращает `QueryCommand<TResult>`; терминальный метод (`ToListAsync`, `FirstAsync`,
-`ToAsyncEnumerable`, `AnyAsync`, ...) выполняет его. См. [Сортировку и постраничную выборку](05-sorting-and-paging.md)
+[`Select`](xref:NextORM.Core.EntityBuilder`1) возвращает [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1); терминальный метод ([`ToListAsync`](xref:NextORM.Core.EntityBuilder`1), [`FirstAsync`](xref:NextORM.Core.EntityBuilder`1),
+[`ToAsyncEnumerable`](xref:NextORM.Core.EntityBuilder`1), [`AnyAsync`](xref:NextORM.Core.EntityBuilder`1), ...) выполняет его. См. [Сортировку и постраничную выборку](05-sorting-and-paging.md)
 для терминальных методов и их асинхронных форм.
 
 Правила, применимые к любой проекции:
@@ -29,6 +29,10 @@ public QueryCommand<TResult> Select<TResult>(Expression<Func<TEntity, TResult>> 
 * В in-memory провайдере SQL не существует; то же самое выражение компилируется и выполняется над
   набором данных в памяти.
 
+Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных
+тестов: `simple_entity` содержит идентификаторы `1`-`10`, а `complex_entity` — три строки
+(`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
+
 ## Анонимный тип
 
 ```csharp
@@ -40,6 +44,21 @@ var rows = await dataContext.From<SimpleEntity>()
 ```sql
 select id from simple_entity
 ```
+
+Вывод:
+
+| Id |
+|----|
+| 1 |
+| 2 |
+| 3 |
+| 4 |
+| 5 |
+| 6 |
+| 7 |
+| 8 |
+| 9 |
+| 10 |
 
 `entity.Id` отображается на колонку `id` таблицы `simple_entity`, поэтому псевдоним не генерируется.
 
@@ -56,6 +75,21 @@ var rows = await dataContext.From<SimpleEntity>()
 ```sql
 select (id + 1) as 'Id' from simple_entity
 ```
+
+Вывод:
+
+| Id |
+|----|
+| 2 |
+| 3 |
+| 4 |
+| 5 |
+| 6 |
+| 7 |
+| 8 |
+| 9 |
+| 10 |
+| 11 |
 
 Арифметическое выражение заключается в скобки и, поскольку оно не является обычной колонкой, получает
 псевдоним с именем проецируемого члена. Именование члена делает псевдоним стабильным для объемлющего
@@ -85,6 +119,14 @@ var rows = await dataContext.From<ComplexEntity>()
 select id, ((somestring || '/') || requiredstring) as 'Display' from complex_entity
 ```
 
+Вывод:
+
+| Id | Display |
+|----|---------|
+| 1 | dadfasd/sdf |
+| 2 | xxx/asdfgoi |
+| 3 | null |
+
 ## DTO
 
 Неанонимный тип проецируется через свой конструктор:
@@ -104,6 +146,21 @@ var rows = await dataContext.From<SimpleEntity>()
 select id from simple_entity
 ```
 
+Вывод:
+
+| Id |
+|----|
+| 1 |
+| 2 |
+| 3 |
+| 4 |
+| 5 |
+| 6 |
+| 7 |
+| 8 |
+| 9 |
+| 10 |
+
 ## Запись (record)
 
 Позиционные записи также проецируются через свой конструктор:
@@ -112,7 +169,7 @@ select id from simple_entity
 public record SimpleEntityRecord(long Id);
 
 var rows = await dataContext.From("simple_entity")
-    .Select(tbl => new SimpleEntityRecord(tbl.Long("id")))
+    .Select(tbl => new SimpleEntityRecord(tbl.GetInt64("id")))
     .ToListAsync();
 ```
 
@@ -120,20 +177,50 @@ var rows = await dataContext.From("simple_entity")
 select id from simple_entity
 ```
 
-`tbl.Long("id")` уже имеет тип члена записи, поэтому преобразование не добавляется. Когда проецируемый
+Вывод:
+
+| Id |
+|----|
+| 1 |
+| 2 |
+| 3 |
+| 4 |
+| 5 |
+| 6 |
+| 7 |
+| 8 |
+| 9 |
+| 10 |
+
+`tbl.GetInt64("id")` уже имеет тип члена записи, поэтому преобразование не добавляется. Когда проецируемый
 тип шире или уже исходной колонки, nextorm отображает преобразование как `cast(...)`.
 
 ## Кортеж
 
 ```csharp
 var rows = await dataContext.From("simple_entity")
-    .Select(tbl => new Tuple<long>(tbl.Long("id")))
+    .Select(tbl => new Tuple<long>(tbl.GetInt64("id")))
     .ToListAsync();
 ```
 
 ```sql
 select id from simple_entity
 ```
+
+Вывод:
+
+| Item1 |
+|-------|
+| 1 |
+| 2 |
+| 3 |
+| 4 |
+| 5 |
+| 6 |
+| 7 |
+| 8 |
+| 9 |
+| 10 |
 
 ## Инициализатор членов
 
@@ -149,9 +236,24 @@ var rows = await dataContext.From<SimpleEntity>()
 select id from simple_entity
 ```
 
+Вывод:
+
+| Id |
+|----|
+| 1 |
+| 2 |
+| 3 |
+| 4 |
+| 5 |
+| 6 |
+| 7 |
+| 8 |
+| 9 |
+| 10 |
+
 ## Примитивная и скалярная проекция
 
-`Select` может возвращать одно значение вместо объекта строки:
+[`Select`](xref:NextORM.Core.EntityBuilder`1) может возвращать одно значение вместо объекта строки:
 
 ```csharp
 var ids = await dataContext.From<SimpleEntity>()
@@ -163,6 +265,15 @@ var ids = await dataContext.From<SimpleEntity>()
 ```sql
 select id from simple_entity where (id < 5)
 ```
+
+Вывод:
+
+| Id |
+|----|
+| 1 |
+| 2 |
+| 3 |
+| 4 |
 
 Логический член работает так же:
 
@@ -177,9 +288,15 @@ var flags = await dataContext.From<ComplexEntity>()
 select b from complex_entity where b = 1
 ```
 
+Вывод:
+
+| Boolean |
+|---------|
+| true |
+
 ## Вложенная сущность и вычисляемые колонки поверх проекции
 
-`QueryCommand<TResult>` сам может использоваться как источник другого запроса с помощью
+[`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) сам может использоваться как источник другого запроса с помощью
 `dataContext.From(query)`, поэтому внутреннюю проекцию (включая вычисляемые колонки) можно прочитать и
 спроецировать снова:
 
@@ -223,10 +340,39 @@ var rows = await dataContext.From(inner)
 select id from (select id from simple_entity where (id > 8))
 ```
 
+Вывод:
+
+| Id |
+|----|
+| 9 |
+| 10 |
+
+## Табличная функция в качестве источника
+
+`dataContext.FromTableFunction(() => ...)` использует табличную функцию как источник `FROM`. Встроенные
+помощники покрывают распространённые функции, возвращающие набор; `SqlFunctions.Postgres.unnest`
+разворачивает массив PostgreSQL в одну строку на элемент:
+
+```csharp
+var elements = dataContext
+    .FromTableFunction(() => SqlFunctions.Postgres.unnest(SqlFunctions.Parameter<long[]>(0)))
+    .Select(r => r.Value)
+    .ToList(new long[] { 1, 2, 3 });
+```
+
+```sql
+select unnest as "Value" from unnest(@norm_p0) as "t1"
+```
+
+`SqlFunctions.Postgres.generate_series(start, stop)` аналогично генерирует числовую последовательность.
+Встроенные помощники включаются провайдером ([`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect)), а
+пользовательская функция объявляется через `[SqlTableFunction]`; см.
+[Табличные функции](13-table-valued-functions.md).
+
 ## JSON-вывод (SQL Server)
 
-`QueryCommand<TResult>.ForJson(...)` добавляет предложение SQL Server `FOR JSON`, поэтому база
-возвращает один JSON-документ вместо строк (`ISqlDialect.SupportsForJson`). Проекция должна быть
+[`ForJson`](xref:NextORM.Core.QueryCommand`1) добавляет предложение SQL Server `FOR JSON`, поэтому база
+возвращает один JSON-документ вместо строк ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson)). Проекция должна быть
 одним скаляром/колонкой, потому что набор результатов сворачивается в одну JSON-колонку:
 
 ```csharp
@@ -240,13 +386,13 @@ var json = dataContext.From<IComplexEntity>()
 select id, somestring from complex_entity for json path, root('items'), include_null_values
 ```
 
-`ForJsonMode.Path` строит документ по псевдонимам проекции, `ForJsonMode.Auto` — по структуре
+[`Path`](xref:NextORM.Core.ForJsonMode.Path) строит документ по псевдонимам проекции, [`Auto`](xref:NextORM.Core.ForJsonMode.Auto) — по структуре
 таблицы. Предложение ставится после `ORDER BY` и перед завершающим `OPTION (...)`. Остальные
 провайдеры выбрасывают `NotSupportedException`.
 
 ## XML-вывод (SQL Server)
 
-`QueryCommand<TResult>.ForXml(...)` — XML-аналог (`ISqlDialect.SupportsForXml`); поддерживаются
+[`ForXml`](xref:NextORM.Core.QueryCommand`1) — XML-аналог ([`SupportsForXml`](xref:NextORM.Core.ISqlDialect.SupportsForXml)); поддерживаются
 `RAW`, `AUTO`, `EXPLICIT` и `PATH`, с необязательным именем элемента строки, обёрткой `ROOT('...')` и
 флагом `ELEMENTS`:
 
@@ -270,37 +416,43 @@ select id from complex_entity for xml raw('row'), root('items'), elements
 | SQLite | Псевдонимы колонок заключаются в одинарные кавычки (`as 'Calc'`); производные таблицы не требуют псевдонима. |
 | SQL Server | Псевдонимы колонок заключаются в квадратные скобки (`as [Calc]`); каждая производная таблица должна иметь псевдоним (`as [t1]`). Конкатенация строк использует `+`. |
 | PostgreSQL | Псевдонимы колонок заключаются в двойные кавычки (`as "Calc"`); производные таблицы должны иметь псевдоним (`as "t1"`). |
+| MySQL | Псевдонимы колонок заключаются в обратные кавычки (`` as `Calc` ``); производные таблицы должны иметь псевдоним (`` as `t1` ``). Конкатенация строк использует `concat(a, b)`. |
+| MariaDB | То же, что MySQL: обратные кавычки для псевдонимов, обязательный псевдоним производной таблицы и конкатенация через `concat(a, b)`. |
+| ClickHouse | Псевдонимы колонок заключаются в обратные кавычки (`` as `Calc` ``); производные таблицы должны иметь псевдоним (`` as `t1` ``). Конкатенация строк использует `concat(a, b)`. |
 | In-memory | SQL не генерируется; делегаты проекции компилируются и выполняются над объектами в памяти. |
 
 ## См. также
 
 * [Фильтрация (WHERE)](02-filtering-where.md)
 * [Сортировка и постраничная выборка](05-sorting-and-paging.md)
+* [Табличные функции](13-table-valued-functions.md)
 * [Сущности и метаданные](../getting-started/03-entities-and-metadata.md)
 * [Обзор провайдеров](../providers/overview.md)
 
 ---
 
-Source: `test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:9`,
-`test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:20`,
-`test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:26`,
-`test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:45`,
-`test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:75`,
-`test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:94`,
-`test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:103`,
-`test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:112`,
-`test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:122`,
-`test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:352`,
-`test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:367`,
-`test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:382`,
-`test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:727`;
-`test/nextorm.integration.tests/TestModels.cs:3`;
-`test/nextorm.integration.tests/TestModels.cs:12`;
-generated SQL: `test/nextorm.sqlite.tests/SqlGenerationTests.cs:111`,
-`test/nextorm.sqlite.tests/SqlGenerationTests.cs:217`,
-`test/nextorm.sqlite.tests/SqlGenerationTests.cs:242`,
-`test/nextorm.sqlite.tests/SqlGenerationTests.cs:255`,
-`test/nextorm.sqlserver.tests/SqlGenerationTests.cs:268`,
-`test/nextorm.sqlserver.tests/SqlGenerationTests.cs:293`,
-`test/nextorm.postgres.tests/SqlGenerationTests.cs:223`,
-`test/nextorm.postgres.tests/SqlGenerationTests.cs:248`.
+Source: `tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:9`,
+`tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:20`,
+`tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:26`,
+`tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:45`,
+`tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:75`,
+`tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:94`,
+`tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:103`,
+`tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:112`,
+`tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:122`,
+`tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:352`,
+`tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:367`,
+`tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:382`,
+`tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:727`;
+`tests/nextorm.integration.tests/TestModels.cs:3`;
+`tests/nextorm.integration.tests/TestModels.cs:12`;
+generated SQL: `tests/nextorm.sqlite.tests/SqlGenerationTests.cs:111`,
+`tests/nextorm.sqlite.tests/SqlGenerationTests.cs:217`,
+`tests/nextorm.sqlite.tests/SqlGenerationTests.cs:242`,
+`tests/nextorm.sqlite.tests/SqlGenerationTests.cs:255`,
+`tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:268`,
+`tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:293`,
+`tests/nextorm.postgres.tests/SqlGenerationTests.cs:223`,
+`tests/nextorm.postgres.tests/SqlGenerationTests.cs:248`,
+`tests/nextorm.postgres.tests/SqlGenerationTests.cs:1117`,
+`tests/nextorm.postgres.tests/SqlGenerationTests.cs:1132`.

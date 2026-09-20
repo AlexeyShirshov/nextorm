@@ -9,22 +9,22 @@
 Запрос NextORM всегда состоит из четырёх частей:
 
 1. **сущность** (класс или интерфейс), свойства которой отображаются на столбцы;
-2. **контекст** (`IDataContext`), созданный из подключения или строки подключения;
-3. **запрос**, построенный с помощью `From<T>()`, `Select`, `Where` и так далее;
-4. **терминальный метод**, такой как `ToList()`, `First()`, `Any()` или `ToAsyncEnumerable()`, который его выполняет.
+2. **контекст** ([`IDataContext`](xref:NextORM.Core.IDataContext)), созданный из подключения или строки подключения;
+3. **запрос**, построенный с помощью [`From`](xref:NextORM.Core.DataContextExtensions), [`Select`](xref:NextORM.Core.EntityBuilder`1), [`Where`](xref:NextORM.Core.EntityBuilder`1) и так далее;
+4. **терминальный метод**, такой как [`ToList`](xref:NextORM.Core.EntityBuilder`1), [`First`](xref:NextORM.Core.EntityBuilder`1), [`Any`](xref:NextORM.Core.EntityBuilder`1) или [`ToAsyncEnumerable`](xref:NextORM.Core.EntityBuilder`1), который его выполняет.
 
-`From<T>()` также регистрирует метаданные `T` при первом обращении. Контекст поддерживает освобождение: контекст, созданный из строки подключения, владеет подключением и закрывает его, тогда как контекст, созданный из переданного `DbConnection`, оставляет это подключение открытым.
+[`From`](xref:NextORM.Core.DataContextExtensions) также регистрирует метаданные `T` при первом обращении. Контекст поддерживает освобождение: контекст, созданный из строки подключения, владеет подключением и закрывает его, тогда как контекст, созданный из переданного `DbConnection`, оставляет это подключение открытым.
 
 ## Полная минимальная программа
 
-Следующая программа самодостаточна. Она создаёт базу данных SQLite в памяти, наполняет одну таблицу, строит контекст с помощью `UseSqlite` и возвращает строки как анонимный тип.
+Следующая программа самодостаточна. Она создаёт базу данных SQLite в памяти, наполняет одну таблицу, строит контекст с помощью [`UseSqlite`](xref:NextORM.Sqlite.SqliteDataContextOptionsBuilderExtensions) и возвращает строки как анонимный тип.
 
 ```csharp
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.Data.Sqlite;
-using nextorm.core;
-using nextorm.sqlite;
+using NextORM.Core;
+using NextORM.Sqlite;
 
 var connection = new SqliteConnection("Data Source=:memory:");
 connection.Open();
@@ -37,8 +37,8 @@ using (var setup = connection.CreateCommand())
     setup.ExecuteNonQuery();
 }
 
-var builder = new DbContextBuilder().UseSqlite(connection);
-using var dataContext = builder.CreateDbContext();
+var builder = new DataContextBuilder().UseSqlite(connection);
+using var dataContext = builder.CreateDataContext();
 
 await foreach (var row in dataContext.From<ISimpleEntity>()
                                    .Select(entity => new { Id = (long)entity.Id })
@@ -74,11 +74,11 @@ select id from simple_entity
 
 ## Использование строки подключения
 
-`UseSqlite` также принимает путь к файлу (или фрагмент строки подключения SQLite), и тогда контекст создаёт подключение и владеет им:
+[`UseSqlite`](xref:NextORM.Sqlite.SqliteDataContextOptionsBuilderExtensions) также принимает путь к файлу (или фрагмент строки подключения SQLite), и тогда контекст создаёт подключение и владеет им:
 
 ```csharp
-var builder = new DbContextBuilder().UseSqlite("app.db");
-using var dataContext = builder.CreateDbContext();
+var builder = new DataContextBuilder().UseSqlite("app.db");
+using var dataContext = builder.CreateDataContext();
 ```
 
 > **Примечание:** в сборках `DEBUG` `UseSqlite(string filepath)` выбрасывает `ArgumentException`, когда файл
@@ -88,31 +88,31 @@ using var dataContext = builder.CreateDbContext();
 
 ## Чтение данных
 
-В запросе выше используется `ToAsyncEnumerable()`. Другие распространённые терминальные методы:
+В запросе выше используется [`ToAsyncEnumerable`](xref:NextORM.Core.EntityBuilder`1). Другие распространённые терминальные методы:
 
 | Терминал | Результат |
 |---|---|
-| `ToList()` / `ToListAsync()` | `List<TResult>` |
-| `First()` / `FirstAsync()` | первая строка; выбрасывает исключение, если последовательность пуста |
-| `FirstOrDefault()` / `FirstOrDefaultAsync()` | первая строка или `default` |
-| `Single()` / `SingleOrDefault()` (и `…Async`) | ровно одна строка (или `default`) |
-| `Any()` / `AnyAsync()` | `bool` |
-| `Count()` / `CountAsync()` | `int` |
+| [`ToList`](xref:NextORM.Core.EntityBuilder`1) / [`ToListAsync`](xref:NextORM.Core.EntityBuilder`1) | `List<TResult>` |
+| [`First`](xref:NextORM.Core.EntityBuilder`1) / [`FirstAsync`](xref:NextORM.Core.EntityBuilder`1) | первая строка; выбрасывает исключение, если последовательность пуста |
+| [`FirstOrDefault`](xref:NextORM.Core.EntityBuilder`1) / [`FirstOrDefaultAsync`](xref:NextORM.Core.EntityBuilder`1) | первая строка или `default` |
+| [`Single`](xref:NextORM.Core.EntityBuilder`1) / [`SingleOrDefault`](xref:NextORM.Core.EntityBuilder`1) (и `…Async`) | ровно одна строка (или `default`) |
+| [`Any`](xref:NextORM.Core.EntityBuilder`1) / [`AnyAsync`](xref:NextORM.Core.EntityBuilder`1) | `bool` |
+| [`Count`](xref:NextORM.Core.EntityBuilder`1) / [`CountAsync`](xref:NextORM.Core.EntityBuilder`1) | `int` |
 
 Каждый терминальный метод имеет синхронную и асинхронную форму; в коде приложения предпочитайте асинхронную форму.
 
 ## См. также
 
 * [Сущности и метаданные](03-entities-and-metadata.md) - атрибуты, отображение интерфейс/класс,
-  режим `TableAlias` без сущностей и fluent-конфигурация.
+  режим [`TableAlias`](xref:NextORM.Core.TableAlias) без сущностей и fluent-конфигурация.
 * [Внедрение зависимостей](04-dependency-injection.md) - зарегистрируйте контекст вместо его ручного
   создания.
 
 ---
 
-Source: `test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:9`,
-`test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:20`,
-`test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:37`;
-`test/nextorm.integration.tests/Providers/SqliteTestProvider.cs:32`;
-`test/nextorm.sqlite.tests/ConnectionManagementTests.cs:115`;
-generated SQL: `test/nextorm.sqlite.tests/SqlGenerationTests.cs:111`.
+Source: `tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:9`,
+`tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:20`,
+`tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:37`;
+`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs:32`;
+`tests/nextorm.sqlite.tests/ConnectionManagementTests.cs:115`;
+generated SQL: `tests/nextorm.sqlite.tests/SqlGenerationTests.cs:111`.

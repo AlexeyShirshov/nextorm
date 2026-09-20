@@ -1,4 +1,4 @@
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// A super-aggregate modifier applied to a <c>GROUP BY</c> list. <c>None = 0</c> keeps the default so

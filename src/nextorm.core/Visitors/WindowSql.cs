@@ -1,30 +1,35 @@
 using System.Linq.Expressions;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
-/// Pure helpers for translating <see cref="NORM.WindowFunction{T}"/> calls: the function-name map,
+/// Pure helpers for translating <see cref="WindowFunction{T}"/> calls: the function-name map,
 /// parsing of the partition/order lambdas, the <c>Over</c>-overload argument mapping and the SQL
 /// rendering of a window frame. Free of visitor state.
 /// </summary>
 internal static class WindowSql
 {
-    /// <summary>Maps the <see cref="NORM.NORM_SQL"/> method name to the SQL window function name.</summary>
+    /// <summary>Maps the <see cref="CommonFunctions"/> method name to the SQL window function name.</summary>
     internal static string? MapWindowFunctionName(string methodName) => methodName switch
     {
-        nameof(NORM.NORM_SQL.row_number) => "row_number",
-        nameof(NORM.NORM_SQL.rank) => "rank",
-        nameof(NORM.NORM_SQL.dense_rank) => "dense_rank",
-        nameof(NORM.NORM_SQL.ntile) => "ntile",
-        nameof(NORM.NORM_SQL.lag) => "lag",
-        nameof(NORM.NORM_SQL.lead) => "lead",
-        nameof(NORM.NORM_SQL.first_value) => "first_value",
-        nameof(NORM.NORM_SQL.last_value) => "last_value",
-        nameof(NORM.NORM_SQL.sum_over) => "sum",
-        nameof(NORM.NORM_SQL.avg_over) => "avg",
-        nameof(NORM.NORM_SQL.min_over) => "min",
-        nameof(NORM.NORM_SQL.max_over) => "max",
-        nameof(NORM.NORM_SQL.count_over) => "count",
+        nameof(CommonFunctions.row_number) => "row_number",
+        nameof(CommonFunctions.rank) => "rank",
+        nameof(CommonFunctions.dense_rank) => "dense_rank",
+        nameof(CommonFunctions.ntile) => "ntile",
+        nameof(CommonFunctions.lag) => "lag",
+        nameof(CommonFunctions.lead) => "lead",
+        nameof(CommonFunctions.first_value) => "first_value",
+        nameof(CommonFunctions.last_value) => "last_value",
+        nameof(CommonFunctions.nth_value) => "nth_value",
+        nameof(CommonFunctions.percent_rank) => "percent_rank",
+        nameof(CommonFunctions.cume_dist) => "cume_dist",
+        nameof(CommonFunctions.percentile_cont) => "percentile_cont",
+        nameof(CommonFunctions.percentile_disc) => "percentile_disc",
+        nameof(CommonFunctions.sum_over) => "sum",
+        nameof(CommonFunctions.avg_over) => "avg",
+        nameof(CommonFunctions.min_over) => "min",
+        nameof(CommonFunctions.max_over) => "max",
+        nameof(CommonFunctions.count_over) => "count",
         _ => null
     };
 
@@ -70,14 +75,14 @@ internal static class WindowSql
 
     private static void AddWindowOrder(Expression expression, List<(Expression, OrderDirection)> result)
     {
-        // A WindowOrder (NORM.SQL.asc/desc) carries an explicit direction; a bare lambda is ascending.
+        // A WindowOrder (SqlFunctions.Sql.asc/desc) carries an explicit direction; a bare lambda is ascending.
         if (expression is MethodCallExpression call
-            && call.Method.DeclaringType == typeof(NORM.NORM_SQL)
-            && call.Method.Name is nameof(NORM.NORM_SQL.asc) or nameof(NORM.NORM_SQL.desc))
+            && call.Method.DeclaringType == typeof(CommonFunctions)
+            && call.Method.Name is nameof(CommonFunctions.asc) or nameof(CommonFunctions.desc))
         {
             if (UnwrapWindowLambda(call.Arguments[0]) is { } body)
             {
-                var direction = call.Method.Name == nameof(NORM.NORM_SQL.desc) ? OrderDirection.Desc : OrderDirection.Asc;
+                var direction = call.Method.Name == nameof(CommonFunctions.desc) ? OrderDirection.Desc : OrderDirection.Asc;
                 result.Add((body, direction));
             }
 
@@ -125,23 +130,23 @@ internal static class WindowSql
         if (index < parameters.Length && parameters[index].Name == "orderBy")
             orderArgument = args[index++];
 
-        if (index < parameters.Length && parameters[index].ParameterType == typeof(NORM.WindowFrame))
+        if (index < parameters.Length && parameters[index].ParameterType == typeof(WindowFrame))
             frameArgument = args[index];
     }
 
-    internal static string RenderWindowFrame(NORM.WindowFrame frame)
+    internal static string RenderWindowFrame(WindowFrame frame)
     {
-        var unit = frame.Type == NORM.WindowFrameType.Rows ? "rows" : "range";
+        var unit = frame.Type == WindowFrameType.Rows ? "rows" : "range";
         return $"{unit} between {RenderWindowFrameBound(frame.Start)} and {RenderWindowFrameBound(frame.End)}";
     }
 
-    private static string RenderWindowFrameBound(NORM.WindowFrameBound bound) => bound.Kind switch
+    private static string RenderWindowFrameBound(WindowFrameBound bound) => bound.Kind switch
     {
-        NORM.WindowFrameBoundKind.UnboundedPreceding => "unbounded preceding",
-        NORM.WindowFrameBoundKind.Preceding => $"{bound.Offset} preceding",
-        NORM.WindowFrameBoundKind.CurrentRow => "current row",
-        NORM.WindowFrameBoundKind.Following => $"{bound.Offset} following",
-        NORM.WindowFrameBoundKind.UnboundedFollowing => "unbounded following",
+        WindowFrameBoundKind.UnboundedPreceding => "unbounded preceding",
+        WindowFrameBoundKind.Preceding => $"{bound.Offset} preceding",
+        WindowFrameBoundKind.CurrentRow => "current row",
+        WindowFrameBoundKind.Following => $"{bound.Offset} following",
+        WindowFrameBoundKind.UnboundedFollowing => "unbounded following",
         _ => throw new NotSupportedException(bound.Kind.ToString())
     };
 }

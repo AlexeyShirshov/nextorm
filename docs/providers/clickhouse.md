@@ -6,11 +6,11 @@
 
 ## Overview
 
-`ClickHouseDbContext` (`src/nextorm.clickhouse/ClickHouseDbContext.cs`) wraps the official
+[`ClickHouseDataContext`](xref:NextORM.ClickHouse.ClickHouseDataContext) (`src/nextorm.clickhouse/ClickHouseDataContext.cs`) wraps the official
 `ClickHouse.Driver` ADO.NET provider. It creates a `ClickHouseConnection` from the connection string
-and returns `ClickHouseDialect.Instance` from its `Dialect` property.
+and returns [`Instance`](xref:NextORM.ClickHouse.ClickHouseDialect.Instance) from its `Dialect` property.
 
-`ClickHouseDialect` (`src/nextorm.clickhouse/ClickHouseDialect.cs`) renders:
+[`ClickHouseDialect`](xref:NextORM.ClickHouse.ClickHouseDialect) (`src/nextorm.clickhouse/ClickHouseDialect.cs`) renders:
 
 - parameter placeholder `@name`; the driver rewrites these to ClickHouse's native
   `{name:Type}` form and infers the type from the .NET value;
@@ -28,36 +28,84 @@ and returns `ClickHouseDialect.Instance` from its `Dialect` property.
 - `bit_and`/`bit_or`/`bit_xor` as `groupBitAnd`/`groupBitOr`/`groupBitXor`, `covar_pop`/`covar_samp` as
   `covarPop`/`covarSamp`, `corr` as `corr`, `arg_min`/`arg_max` as `argMin`/`argMax`, and the filtered
   aggregates `count_if`/`sum_if`/`avg_if`/`min_if`/`max_if` as the `-If` combinators
-  `countIf`/`sumIf`/`avgIf`/`minIf`/`maxIf`;
+  `countIf`/`sumIf`/`avgIf`/`minIf`/`maxIf`; the distinct-count aggregates
+  `uniq`/`uniq_exact`/`uniq_combined`/`uniq_hll12` as `uniq`/`uniqExact`/`uniqCombined`/`uniqHLL12` wrapped
+  in `toInt64(...)` (the native `UInt64` is cast so the row reader can materialise a CLR integer); the
+  count aggregates (`count`/`count_distinct`/`count_if`, and `count_big`/`count_big_distinct`) are cast
+  the same way — to `toInt32(...)` for the `int`-returning variants and `toInt64(...)` for the 64-bit
+  ones; the
+  parameterised quantile aggregates `quantile(level)(value)`/`quantileExact`/`quantileTiming` and
+  `median` wrapped in `toFloat64(...)` (so every variant materialises as a CLR `double`); the
+  arbitrary-value aggregate `any_agg` as `any` (cross-provider: `ANY_VALUE(x)` on MySQL) and the
+  last-row aggregate `any_last` as `anyLast`;
+- the string-JSON extractors `json_extract_string`/`json_extract_int`/`json_extract_float`/
+  `json_extract_bool`/`json_extract_raw`/`json_has`/`json_type` as `JSONExtractString`/`JSONExtractInt`/
+  `JSONExtractFloat`/`JSONExtractBool`/`JSONExtractRaw`/`JSONHas`/`JSONType`, `json_length` as
+  `toInt64(JSONLength(...))`, and the flat-JSON fast path `visit_param_extract_string`/`_int`/`_float`/
+  `_bool`/`_raw` as `visitParamExtractString`/`visitParamExtractInt`/`visitParamExtractFloat`/
+  `visitParamExtractBool`/`visitParamExtractRaw`; the JSONPath scalars `json_value`/`json_query`/
+  `json_exists` as `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (same [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract) gate);
+  the dictionary functions `dict_get`/`dict_get_or_default`/
+  `dict_has` as `dictGet`/`dictGetOrDefault`/`dictHas`;
+- the super-aggregate `GROUP BY ... WITH TOTALS` modifier ([`SupportsGroupByWithTotals`](xref:NextORM.Core.ISqlDialect.SupportsGroupByWithTotals))
+  via `EntityBuilder.WithTotals()`;
 - ClickHouse type names in casts (`Int32`, `Int64`, `Float64`, `Decimal(38, 10)`, …);
 - `limit n` / `limit n offset m` paging; an offset without a limit becomes
-  `limit 18446744073709551615 offset m`, because ClickHouse only accepts `offset` together with `limit`.
+  `limit 18446744073709551615 offset m`, because ClickHouse only accepts `offset` together with `limit`;
+- `LIMIT n BY expr` ([`SupportsLimitBy`](xref:NextORM.Core.ISqlDialect.SupportsLimitBy)) via
+  `EntityBuilder.LimitBy(...)`: at most `n` rows per distinct key, emitted after `ORDER BY` and before the
+  final `LIMIT`;
+- the `numbers`/`numbers_mt` table functions via `SqlFunctions.ClickHouse.numbers(...)` (the `UInt64`
+  `number` column is cast to `Int64` through a wrapping subquery so the row reader can materialise it)
+  and the `zeros`/`zeros_mt` row-count table functions via `SqlFunctions.ClickHouse.zeros(...)`
+  (`IZerosRow`, the `zero UInt8` column materialises directly as `byte`);
+- the query modifiers `FINAL`/`SAMPLE`/`PREWHERE`/`SETTINGS` via `Final()`, `Sample(ratio[, offset])`,
+  `PreWhere(predicate)` and `Settings(("key", "value"), ...)`
+  ([`SupportsFinal`](xref:NextORM.Core.ISqlDialect.SupportsFinal)/[`SupportsSample`](xref:NextORM.Core.ISqlDialect.SupportsSample)/[`SupportsPreWhere`](xref:NextORM.Core.ISqlDialect.SupportsPreWhere)/[`SupportsSettings`](xref:NextORM.Core.ISqlDialect.SupportsSettings));
+  `FINAL`/`PREWHERE` need a table engine that supports them (the `Memory` engine rejects both);
+- the portable conditional `iif` as `if(condition, a, b)` ([`SupportsIif`](xref:NextORM.Core.ISqlDialect.SupportsIif),
+  [`MakeIif`](xref:NextORM.Core.ISqlDialect.MakeIif)), and the `percent_rank()`/`cume_dist()` and
+  `nth_value(expr, n)` window functions ([`SupportsPercentRankCumeDist`](xref:NextORM.Core.ISqlDialect.SupportsPercentRankCumeDist),
+  [`SupportsNthValue`](xref:NextORM.Core.ISqlDialect.SupportsNthValue));
+- the distributed `GLOBAL IN` predicate via
+  [`SqlFunctions.ClickHouse.global_in`](xref:NextORM.Core.ClickHouseFunctions) (over a subquery or a
+  value list, [`SupportsGlobalPredicates`](xref:NextORM.Core.ISqlDialect.SupportsGlobalPredicates));
+  negate with C# `!` for `GLOBAL NOT IN`;
+- the join strictness/kind modifiers `ANY`/`ALL`/`ASOF` via
+  [`EntityBuilder.WithStrictness`](xref:NextORM.Core.EntityBuilder`1) right after a join
+  ([`SupportsJoinStrictness`](xref:NextORM.Core.ISqlDialect.SupportsJoinStrictness),
+  [`MakeJoinKeyword`](xref:NextORM.Core.ISqlDialect.MakeJoinKeyword), enum `JoinStrictness`).
+  `LEFT ANY JOIN` keeps a single right-hand row per left-hand row, `ALL` keeps every match and
+  `ASOF` needs one equi-join column plus a final inequality. `SEMI`/`ANTI`/`PASTE` are not supported.
+  The `GLOBAL` variant (resolved once and broadcast for distributed queries) is set with
+  [`EntityBuilder.Global`](xref:NextORM.Core.EntityBuilder`1) and combines with strictness
+  (`global left any join`, [`SupportsGlobalJoin`](xref:NextORM.Core.ISqlDialect.SupportsGlobalJoin)).
 
 ClickHouse has no recursive CTE support, so the dialect declares every CTE with plain `with`.
 
 ## Registering the provider
 
-Two overloads are available on `DbContextBuilder`
-(`src/nextorm.clickhouse/DI/DataContextOptionsBuilderExtensions.cs`):
+Two overloads are available on [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder)
+(`src/nextorm.clickhouse/DI/ClickHouseDataContextOptionsBuilderExtensions.cs`):
 
 ```csharp
-using nextorm.core;
-using nextorm.clickhouse;
+using NextORM.Core;
+using NextORM.ClickHouse;
 
-var builder = new DbContextBuilder()
+var builder = new DataContextBuilder()
     .UseClickHouse("Host=localhost;Port=8123;Username=default;Password=secret;Database=app");
 
-using var ctx = builder.CreateDbContext();   // IDataContext
+using var ctx = builder.CreateDataContext();   // IDataContext
 ```
 
 You can also construct the context directly:
 
 ```csharp
-using nextorm.core;
-using nextorm.clickhouse;
+using NextORM.Core;
+using NextORM.ClickHouse;
 
-using IDataContext ctx = new ClickHouseDbContext(
-    "Host=localhost;Username=default;Database=app", new DbContextBuilder());
+using IDataContext ctx = new ClickHouseDataContext(
+    "Host=localhost;Username=default;Database=app", new DataContextBuilder());
 ```
 
 ## String concatenation
@@ -91,10 +139,26 @@ select concat('id:', id) as `Label` from simple_entity
 | Boolean aggregates | not supported (`bool_and`/`bool_or`/`every` are PostgreSQL-only) |
 | Filtered aggregate | `countIf`/`sumIf`/`avgIf`/`minIf`/`maxIf` (no ANSI `filter (where ...)`) |
 | ArgMin / ArgMax | `argMin`/`argMax` |
-| Arrays / JSON / extended scalars | not supported (PostgreSQL-only) |
+| quantile / median | `quantile(0.5)(x)`, `quantileExact(0.9)(x)`, `quantileTiming(0.5)(x)`, `median(x)` (as `toFloat64(...)`) |
+| any_agg (arbitrary value) | `any(x)` (cross-provider; `ANY_VALUE(x)` on MySQL) |
+| any_last (last row) | `anyLast(x)` |
+| Conditional function | `iif(cond, a, b)` → `if(cond, a, b)` |
+| Window functions | `percent_rank()`, `cume_dist()`, `nth_value(expr, n)` supported |
+| String JSON | `JSONExtractString`, `JSONExtractInt`, `JSONExtractFloat`, `JSONExtractBool`, `JSONExtractRaw`, `JSONHas`, `toInt64(JSONLength(...))`, `JSONType`, `visitParamExtract*`, `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (JSONPath) |
+| Dictionaries | `dictGet`, `dictGetOrDefault`, `dictHas` (needs a configured `CREATE DICTIONARY`) |
+| Session/info functions | `currentUser()`, `currentDatabase()`, `version()` (`session_user`/`current_schema` are not available) |
+| `GROUP BY ... WITH TOTALS` | `with totals` (the extra totals row is not surfaced by `ClickHouse.Driver`) |
+| `LIMIT n BY expr` | `limit [offset, ]n by col1, col2` (before the final `LIMIT`) |
+| Query modifiers | `final`, `sample r [offset o]`, `prewhere`, `settings k = v` (`FINAL`/`PREWHERE` need a supporting table engine) |
+| Table functions | `numbers`/`numbers_mt` (the `UInt64 number` column is cast to `Int64`), `zeros`/`zeros_mt` (`zero UInt8`) |
+| Array functions | over `Array(T)` columns: `length`, `has`, `indexOf`, `hasAny`, `hasAll`, `arrayStringConcat`, `splitByChar`, `arraySort`, `arrayReverse`, `arrayDistinct`; `arrayJoin(array)` expands one row per element, and `EntityBuilder.ArrayJoin`/`LeftArrayJoin` render the `[left ]array join expr, ...` clause. `EntityBuilder.ArrayJoinElement`/`LeftArrayJoinElement` additionally bind the expanded element to `ArrayJoinProjection<TEntity, TElement>.Element` (with the original entity at `.Item1`); the clause expression is aliased and `p.Element` references that alias (see [`ClickHouseFunctions`](xref:NextORM.Core.ClickHouseFunctions), [`ArrayJoinKind`](xref:NextORM.Core.ArrayJoinKind), [`ArrayJoinProjection`](xref:NextORM.Core.ArrayJoinProjection`2)) |
+| Native JSON / extended scalars | not supported (PostgreSQL-only) |
 
 ## Notes and limitations
 
+- `GROUP BY ... WITH TOTALS` renders correctly, but the official `ClickHouse.Driver` returns the totals
+  row in a separate response block it does not expose through `IDataReader`, so only the group rows are
+  materialised. Use it if your driver surfaces totals; nextorm itself only emits the modifier.
 - ClickHouse parameters are sent as HTTP query parameters. Bulk inserts should use the driver's binary
   insert API rather than parameterized `INSERT` statements, which is outside the query builder.
 - Null parameter values cannot have their ClickHouse type inferred from the CLR value alone. When a
@@ -111,6 +175,6 @@ select concat('id:', id) as `Label` from simple_entity
 
 ---
 
-Source: `src/nextorm.clickhouse/ClickHouseDialect.cs`, `src/nextorm.clickhouse/ClickHouseDbContext.cs`,
-`src/nextorm.clickhouse/DI/DataContextOptionsBuilderExtensions.cs`,
-`test/nextorm.clickhouse.tests/ClickHouseDialectTests.cs`, `test/nextorm.clickhouse.tests/SqlGenerationTests.cs`.
+Source: `src/nextorm.clickhouse/ClickHouseDialect.cs`, `src/nextorm.clickhouse/ClickHouseDataContext.cs`,
+`src/nextorm.clickhouse/DI/ClickHouseDataContextOptionsBuilderExtensions.cs`,
+`tests/nextorm.clickhouse.tests/ClickHouseDialectTests.cs`, `tests/nextorm.clickhouse.tests/SqlGenerationTests.cs`.

@@ -1,4 +1,4 @@
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>How SQL Server shapes the result set when it is rendered as JSON.</summary>
 public enum ForJsonMode

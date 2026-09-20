@@ -1,14 +1,14 @@
 ﻿using BenchmarkDotNet.Attributes;
-using nextorm.sqlite;
+using NextORM.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Data.Sqlite;
 using Dapper;
 using Microsoft.Extensions.Logging;
 using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Columns;
-using nextorm.core;
+using NextORM.Core;
 
-namespace nextorm.benchmark;
+namespace NextORM.Benchmark;
 
 //[SimpleJob(RuntimeMoniker.Net70, baseline: true)]
 [GroupBenchmarksBy(BenchmarkDotNet.Configs.BenchmarkLogicalGroupRule.ByJob, BenchmarkDotNet.Configs.BenchmarkLogicalGroupRule.ByCategory)]
@@ -30,7 +30,7 @@ public class SqliteBenchmarkWhere
     public SqliteBenchmarkWhere() : this(false) { }
     public SqliteBenchmarkWhere(bool withLogging = false)
     {
-        var builder = new DbContextBuilder();
+        var builder = new DataContextBuilder();
         var filepath = BenchDb.FilePath;
         builder.UseSqlite(filepath);
         if (withLogging)
@@ -39,13 +39,13 @@ public class SqliteBenchmarkWhere
             builder.UseLoggerFactory(_logFactory);
             builder.LogSensitiveData(true);
         }
-        _db = builder.CreateDbContext();
+        _db = builder.CreateDataContext();
         _ctx = new TestDataRepository(_db);
         ((IConnectionManager)_db).EnsureConnectionOpen();
 
-        _cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Prepare(false);
+        _cmd = _ctx.SimpleEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0)).Prepare(false);
 
-        _cmdToList = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Prepare();
+        _cmdToList = _ctx.SimpleEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0)).Prepare();
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(@$"Filename={filepath}");
@@ -58,7 +58,7 @@ public class SqliteBenchmarkWhere
 
         _efCtx = new EFDataContext(efBuilder.Options);
 
-        _conn = new SqliteConnection(((SqliteDbContext)_ctx.DbContext).ConnectionString);
+        _conn = new SqliteConnection(((SqliteDataContext)_ctx.DataContext).ConnectionString);
         _conn.Open();
 
         _linq2Db = new Linq2DbDataRepository();
@@ -106,7 +106,7 @@ public class SqliteBenchmarkWhere
     // //[BenchmarkCategory("Stream")]
     // public async Task NextormCachedParamStream()
     // {
-    //     var cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new { entity.Id }).Prepare(false);
+    //     var cmd = _ctx.SimpleEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0)).Select(entity => new { entity.Id }).Prepare(false);
     //     for (var i = 0; i < Iterations; i++)
     //     {
     //         foreach (var row in await _db.AsEnumerableAsync(cmd, i))
@@ -142,7 +142,7 @@ public class SqliteBenchmarkWhere
     //[BenchmarkCategory("Buffered")]
     public async Task Nextorm_CachedForLoop_ToListAsync()
     {
-        var cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new { entity.Id }).Prepare();
+        var cmd = _ctx.SimpleEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0)).Select(entity => new { entity.Id }).Prepare();
         for (var i = 0; i < Iterations; i++)
         {
             foreach (var row in await cmd.ToListAsync(_db, i))
@@ -156,7 +156,7 @@ public class SqliteBenchmarkWhere
     // {
     //     for (var i = 0; i < Iterations; i++)
     //     {
-    //         var cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(entity => new { entity.Id });
+    //         var cmd = _ctx.SimpleEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0)).Select(entity => new { entity.Id });
     //         foreach (var row in await cmd.ToListAsync(i))
     //         {
     //         }

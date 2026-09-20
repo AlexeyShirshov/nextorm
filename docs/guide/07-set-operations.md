@@ -1,12 +1,12 @@
 # Set operations
 
-> Combine two result sets with `Union`, `UnionAll`, `Intersect`, `IntersectAll`, `Except` and `ExceptAll`, and chain them left to right.
+> Combine two result sets with [`Union`](xref:NextORM.Core.QueryCommand`1), [`UnionAll`](xref:NextORM.Core.QueryCommand`1), [`Intersect`](xref:NextORM.Core.QueryCommand`1), [`IntersectAll`](xref:NextORM.Core.QueryCommand`1), [`Except`](xref:NextORM.Core.QueryCommand`1) and [`ExceptAll`](xref:NextORM.Core.QueryCommand`1), and chain them left to right.
 
 **Prerequisites:** [Querying and projections](01-querying-and-projections.md) · [Subqueries](06-subqueries.md) · [SELECT DISTINCT](08-distinct.md)
 
 ## Overview
 
-Every `QueryCommand<TResult>` exposes six set-operation methods that take another command and return
+Every [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) exposes six set-operation methods that take another command and return
 a new command:
 
 | Method | SQL keyword | Keeps duplicates |
@@ -22,7 +22,7 @@ The right-hand command may project a different element type: the method is gener
 side (`Union<T>(QueryCommand<T>)`), so `SimpleEntity.Select(it => it.Id).Union(ComplexEntity.Select(it => (int)it.Id))`
 is valid as long as the shapes line up.
 
-The result is itself a `QueryCommand`, so it can be executed through `From(result)` or have another
+The result is itself a [`QueryCommand`](xref:NextORM.Core.QueryCommand), so it can be executed through `From(result)` or have another
 set operation chained onto it. **Chaining applies left to right**: each new operation combines the
 accumulated left side with the next command, and standard operator precedence applies within the
 chain (`(A except B) intersect C`, not `A except (B intersect C)`).
@@ -55,7 +55,7 @@ select id from simple_entity
 
 The two sides may also be different entities as long as the element types line up. In the
 integration suite `SimpleEntity` (ids `1..10`) is unioned with `ComplexEntity` (ids `1..3`) cast to
-`int`, so the deduplicated union has 10 rows and the `UnionAll` of the same pair has 13:
+`int`, so the deduplicated union has 10 rows and the [`UnionAll`](xref:NextORM.Core.QueryCommand`1) of the same pair has 13:
 
 ```csharp
 var distinctCount = dataContext.From(
@@ -132,7 +132,7 @@ not supported by this SQL dialect"`).
 
 ## Querying a set-operation result
 
-A set operation returns a command, so you query it through `From`:
+A set operation returns a command, so you query it through [`From`](xref:NextORM.Core.DataContextExtensions):
 
 ```csharp
 var cmd = dataContext.From<IComplexEntity>().Select(it => it.Int)
@@ -158,22 +158,25 @@ var count = dataContext.From(
 | SQLite | supported | supported | **`NotSupportedException`** when prepared |
 | SQL Server | supported | supported | **`NotSupportedException`** when prepared |
 | PostgreSQL | supported | supported | supported |
+| MySQL | supported | supported (MySQL 8.0.31+) | **`NotSupportedException`** when prepared (no `ALL` variants) |
+| MariaDB | supported | supported (MariaDB 10.4+) | supported |
+| ClickHouse | supported | supported | supported |
 | In-memory | not covered by the in-memory test suite | not covered | not covered |
 
-This matches the `SupportsIntersectExceptAll` capability: PostgreSQL is the only shipped provider
-that returns `true`; SQLite and SQL Server return `false` and the SQL builder refuses to render an
-`*ALL` set operation for them.
+This matches the [`SupportsIntersectExceptAll`](xref:NextORM.Core.ISqlDialect.SupportsIntersectExceptAll) capability: PostgreSQL, MariaDB and ClickHouse are the
+shipped providers that return `true`; SQLite and SQL Server return `false` and the SQL builder refuses
+to render an `*ALL` set operation for them.
 
 ## See also
 
-- [SELECT DISTINCT](08-distinct.md) - `Distinct()` and set operations interact.
+- [SELECT DISTINCT](08-distinct.md) - [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) and set operations interact.
 - [Subqueries](06-subqueries.md) - a set-operation command can be used as a `FROM` source.
 - [Querying and projections](01-querying-and-projections.md)
 
 ---
 
-Source: `test/nextorm.integration.tests/CommonTestSuite.SetOperations.cs:8`,
-`test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:743,761`,
-`test/nextorm.sqlite.tests/SqlGenerationTests.cs:49,69,89`,
-`test/nextorm.sqlserver.tests/SqlGenerationTests.cs:62,102`,
-`test/nextorm.postgres.tests/SqlGenerationTests.cs:48,88`.
+Source: `tests/nextorm.integration.tests/CommonTestSuite.SetOperations.cs:8`,
+`tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:743,761`,
+`tests/nextorm.sqlite.tests/SqlGenerationTests.cs:49,69,89`,
+`tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:62,102`,
+`tests/nextorm.postgres.tests/SqlGenerationTests.cs:48,88`.

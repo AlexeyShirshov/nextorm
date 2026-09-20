@@ -1,4 +1,4 @@
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Builds and resets the execution plan behind a query command.

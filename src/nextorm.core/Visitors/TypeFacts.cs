@@ -1,6 +1,6 @@
 using System.Linq.Expressions;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Static classification helpers for expressions and CLR types used by the visitors: whether an
@@ -38,8 +38,8 @@ internal static class TypeFacts
                 or nameof(string.EndsWith) or nameof(string.IsNullOrEmpty);
 
         return call.Method.Name is "exists" or "any" or "all" or "Contains"
-            or nameof(NORM.NORM_SQL.contains) or nameof(NORM.NORM_SQL.freetext)
-            or nameof(NORM.MS.isjson);
+            or nameof(CommonFunctions.contains) or nameof(CommonFunctions.freetext)
+            or nameof(SqlServerFunctions.isjson);
     }
 
     /// <summary>

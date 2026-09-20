@@ -3,16 +3,16 @@ using System.Linq.Expressions;
 using System.Reflection;
 using BenchmarkDotNet.Attributes;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using nextorm.core;
+using NextORM.Core;
 
-namespace nextorm.benchmark;
+namespace NextORM.Benchmark;
 
 [MemoryDiagnoser]
 public class ExpressionsExperiments
 {
     const int Iterations = 10;
 
-    public Expression ExpressionToVisit { get; private set; } = (SimpleEntity it) => new { it.Id, exists = NORM.SQL.exists(default(QueryCommand)!) };
+    public Expression ExpressionToVisit { get; private set; } = (SimpleEntity it) => new { it.Id, exists = SqlFunctions.Sql.exists(default(QueryCommand)!) };
 
     public ExpressionsExperiments()
     {
@@ -134,7 +134,7 @@ public class ExpressionsExperiments
     // [Benchmark]
     // public void SystemHashCode()
     // {
-    //     var hc = new HashCode();
+    //     var hc = new XxHash32();
     //     for (int i = 0; i < 100; i++)
     //     {
     //         hc.Add(i);
@@ -145,7 +145,7 @@ public class ExpressionsExperiments
     // [Benchmark]
     // public void CustomHashCode()
     // {
-    //     var hc = new core.HashCode();
+    //     var hc = new core.XxHash32();
     //     for (int i = 0; i < 100; i++)
     //     {
     //         hc.Add(i);
@@ -173,7 +173,7 @@ public class ExpressionsExperiments
 
     //     protected override Expression VisitMethodCall(MethodCallExpression node)
     //     {
-    //         if ((node.Object?.Type == typeof(NORM.NORM_SQL))
+    //         if ((node.Object?.Type == typeof(CommonFunctions))
     //         || (node.Object?.Type.IsAssignableTo(typeof(QueryCommand)) ?? false))
     //         {
     //             Result = true;
@@ -188,7 +188,7 @@ public class ExpressionsExperiments
 
     //     protected override Expression VisitMethodCall(MethodCallExpression node)
     //     {
-    //         if ((node.Object?.Type == typeof(NORM.NORM_SQL))
+    //         if ((node.Object?.Type == typeof(CommonFunctions))
     //         || (node.Object?.Type.IsAssignableTo(typeof(QueryCommand)) ?? false))
     //         {
     //             Result = true;

@@ -1,15 +1,15 @@
 # Табличные функции
 
-> Запрашивайте табличную функцию базы данных как источник `FROM` с помощью `FromTableFunction` и
+> Запрашивайте табличную функцию базы данных как источник `FROM` с помощью [`FromTableFunction`](xref:NextORM.Core.DataContextExtensions) и
 > сопоставляйте её строки как любую другую сущность.
 
 **Предварительные требования:** [Сущности и метаданные](../getting-started/03-entities-and-metadata.md) · [Соединения](03-joins.md) · [Группировка и агрегаты](04-grouping-and-aggregates.md)
 
 ## Обзор
 
-`SqlTableFunctionAttribute` сопоставляет статический метод-заглушку табличной функции базы данных. Метод
+[`SqlTableFunctionAttribute`](xref:NextORM.Core.SqlTableFunctionAttribute) сопоставляет статический метод-заглушку табличной функции базы данных. Метод
 должен возвращать `IQueryable<T>` (где `T` описывает форму строки) и упоминается только внутри выражения,
-переданного в `FromTableFunction`:
+переданного в [`FromTableFunction`](xref:NextORM.Core.DataContextExtensions):
 
 ```csharp
 [AttributeUsage(AttributeTargets.Method | AttributeTargets.Class)]
@@ -32,8 +32,8 @@ public static EntityBuilder<T> FromTableFunction<T>(this IDataContext dataContex
 аргументы рендерятся через обычный посетитель выражений, поэтому **захваченные значения становятся
 параметрами**. nextorm только генерирует вызов — функция уже должна существовать в целевой базе данных.
 
-Возвращаемый `EntityBuilder<T>` — обычный источник запроса, поэтому `Where`, `OrderBy`, `GroupBy`, `Join`,
-`Select`, разбиение на страницы и терминалы работают с ним.
+Возвращаемый `EntityBuilder<T>` — обычный источник запроса, поэтому [`Where`](xref:NextORM.Core.EntityBuilder`1), [`OrderBy`](xref:NextORM.Core.EntityBuilder`1), [`GroupBy`](xref:NextORM.Core.EntityBuilder`1), [`Join`](xref:NextORM.Core.EntityBuilder`1),
+[`Select`](xref:NextORM.Core.EntityBuilder`1), разбиение на страницы и терминалы работают с ним.
 
 ## Объявление сопоставления
 
@@ -89,6 +89,16 @@ select value from json_each('[1,2,3]')
 select value from json_each('[1,2,3]') as [t1]
 ```
 
+Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
+
+Вывод:
+
+| Value |
+|-------|
+| 1     |
+| 2     |
+| 3     |
+
 ## Аргументы становятся параметрами
 
 ```csharp
@@ -129,7 +139,7 @@ TVF — обычный источник, поэтому его можно объ
 var rows = dataContext
     .FromTableFunction(() => Tvf.AllRows())
     .Join(dataContext.From<IComplexEntity>(), (r, c) => r.Id == c.Id)
-    .Select(p => new { p.t1.Value, p.t2.String })
+    .Select(p => new { p.Item1.Value, p.Item2.String })
     .ToList();
 ```
 
@@ -152,32 +162,46 @@ var values = dataContext
 var rows = dataContext
     .FromTableFunction(() => Tvf.JsonEach("[1,1,2]"))
     .GroupBy(r => new { r.Value })
-    .Select(g => new { g.Value, Cnt = NORM.SQL.count() })
+    .Select(g => new { g.Value, Cnt = SqlFunctions.Sql.count() })
     .ToList();
 // (1, 2), (2, 1)
 ```
+
+Вывод:
+
+| Value |
+|-------|
+| 3     |
+| 2     |
+
+Вывод:
+
+| Value | Cnt |
+|-------|-----|
+| 1     | 2   |
+| 2     | 1   |
 
 ## Встроенные табличные функции
 
 Несколько распространённых табличных функций уже объявлены с `[SqlTableFunction]`, поэтому
 пользовательская обёртка не нужна.
 
-`NORM.PG_SQL.generate_series` и `NORM.PG_SQL.unnest` — из PostgreSQL (возвращают `NORM.IGenerateSeriesRow`
-с колонкой `generate_series` и `NORM.IUnnestRow<T>` с колонкой `unnest`):
+`SqlFunctions.Postgres.generate_series` и `SqlFunctions.Postgres.unnest` — из PostgreSQL (возвращают [`SqlFunctions.IGenerateSeriesRow`](xref:NextORM.Core.SqlFunctions.IGenerateSeriesRow)
+с колонкой `generate_series` и [`SqlFunctions.IUnnestRow<T>`](xref:NextORM.Core.SqlFunctions.IUnnestRow`1) с колонкой `unnest`):
 
 ```csharp
 var numbers = dataContext
-    .FromTableFunction(() => NORM.PG_SQL.generate_series(1L, 3L))
+    .FromTableFunction(() => SqlFunctions.Postgres.generate_series(1L, 3L))
     .Select(r => r.Value)
     .ToList();
 
 var elements = dataContext
-    .FromTableFunction(() => NORM.PG_SQL.unnest(NORM.Param<long[]>(0)))
+    .FromTableFunction(() => SqlFunctions.Postgres.unnest(SqlFunctions.Parameter<long[]>(0)))
     .Select(r => r.Value)
     .ToList(new long[] { 1, 2, 3 });
 ```
 
-`NORM.MS_SQL.string_split` — из SQL Server 2016+ и возвращает `NORM.IStringSplitRow` (единственная колонка
+`SqlFunctions.SqlServer.string_split` — из SQL Server 2016+ и возвращает [`SqlFunctions.IStringSplitRow`](xref:NextORM.Core.SqlFunctions.IStringSplitRow) (единственная колонка
 `value`). Порядок фрагментов не гарантируется, поэтому добавляйте `order by`, если важен порядок входной
 строки:
 
@@ -186,7 +210,7 @@ var csv = "a,b,c";
 var separator = ",";
 
 var fragments = dataContext
-    .FromTableFunction(() => NORM.MS_SQL.string_split(csv, separator))
+    .FromTableFunction(() => SqlFunctions.SqlServer.string_split(csv, separator))
     .Select(r => r.Value)
     .ToList();
 ```
@@ -195,7 +219,7 @@ var fragments = dataContext
 select value from string_split(@csv, @separator) as [t1]
 ```
 
-`NORM.MS_SQL.openjson` — из SQL Server 2016+ и возвращает `NORM.IOpenJsonRow` (`key`/`value`/`type`).
+`SqlFunctions.SqlServer.openjson` — из SQL Server 2016+ и возвращает [`SqlFunctions.IOpenJsonRow`](xref:NextORM.Core.SqlFunctions.IOpenJsonRow) (`key`/`value`/`type`).
 Схема по умолчанию даёт свойства JSON-объекта или элементы JSON-массива; для типизированной проекции
 объявите свой `[SqlTableFunction("openjson")]`-хелпер, чья форма строки соответствует предложению
 `WITH (...)`:
@@ -204,7 +228,7 @@ select value from string_split(@csv, @separator) as [t1]
 var json = """{"a":1,"b":2}""";
 
 var entries = dataContext
-    .FromTableFunction(() => NORM.MS_SQL.openjson(json))
+    .FromTableFunction(() => SqlFunctions.SqlServer.openjson(json))
     .Select(r => new { r.Key, r.Value, r.Type })
     .ToList();
 ```
@@ -213,11 +237,46 @@ var entries = dataContext
 select [key] as [Key], value, type from openjson(@json) as [t1]
 ```
 
+`SqlFunctions.ClickHouse.numbers`/`numbers_mt` — табличные функции ClickHouse, возвращающие
+[`SqlFunctions.INumbersRow`](xref:NextORM.Core.SqlFunctions.INumbersRow) (единственная колонка `number`). `numbers(count)` даёт
+последовательные целые с нуля, `numbers(start, stop[, step])` — произвольный диапазон:
+
+```csharp
+var rows = dataContext
+    .FromTableFunction(() => SqlFunctions.ClickHouse.numbers(3))
+    .Select(r => new { r.Value })
+    .ToList();
+```
+
+```sql
+select number as `Value` from (select toInt64(number) as number from numbers(@count)) as `t1`
+```
+
+Колонка `number` имеет тип `UInt64`, который не материализуется row reader'ом, поэтому диалект
+оборачивает вызов в подзапрос с приведением (`toInt64(number) as number`).
+
+`SqlFunctions.ClickHouse.zeros`/`zeros_mt` — табличные функции ClickHouse, генерирующие строки и
+возвращающие [`SqlFunctions.IZerosRow`](xref:NextORM.Core.SqlFunctions.IZerosRow) (единственная колонка `zero UInt8`):
+
+```csharp
+var rows = dataContext
+    .FromTableFunction(() => SqlFunctions.ClickHouse.zeros(3))
+    .Select(r => new { r.Value })
+    .ToList();
+```
+
+```sql
+select zero as `Value` from zeros(@count) as `t1`
+```
+
+В отличие от `numbers`, колонка `zero` имеет тип `UInt8`, который row reader материализует напрямую
+как `byte`, поэтому подзапрос-обёртка с приведением не нужен.
+
 Сопоставленная функция должна существовать в базе — nextorm только генерирует вызов, он её не создаёт, —
 поэтому используйте хелпер только на провайдере, где она определена. Встроенные хелперы гейтятся
-`ISqlDialect.SupportsTableFunction`: PostgreSQL разрешает `generate_series`/`unnest`, SQL Server —
-`string_split`/`openjson`, а любой другой провайдер отклоняет их с `NotSupportedException`
-(пользовательская `[SqlTableFunction]` не гейтится).
+[`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect): PostgreSQL разрешает `generate_series`/`unnest`, SQL Server —
+`string_split`/`openjson`, ClickHouse — `numbers`/`numbers_mt` и `zeros`/`zeros_mt`, а любой другой
+провайдер отклоняет их с `NotSupportedException` (пользовательская `[SqlTableFunction]` не гейтится).
 
 ## Различия между провайдерами
 
@@ -226,6 +285,9 @@ select [key] as [Key], value, type from openjson(@json) as [t1]
 | SQLite | Вызов функции генерируется без псевдонима для простого источника; псевдоним всё равно генерируется, когда источник объединяется. |
 | SQL Server | Производный источник получает псевдоним (`as [t1]`). |
 | PostgreSQL | Псевдоним обязателен и генерируется всегда (`as "t1"`). |
+| MySQL | Производный источник получает псевдоним (`` as `t1` ``). |
+| MariaDB | Производный источник получает псевдоним (`` as `t1` ``). |
+| ClickHouse | Производный источник получает псевдоним (`` as `t1` ``). |
 | In-memory | Источники табличных функций **не поддерживаются** (`NotSupportedException`: "Table-valued function sources are not supported by the in-memory provider."). |
 
 > Интеграционные тесты используют встроенную в SQLite `json_each`, поэтому общий набор тестов выполняет
@@ -242,8 +304,8 @@ select [key] as [Key], value, type from openjson(@json) as [t1]
 ---
 
 Source: `src/nextorm.core/SqlTableFunctionAttribute.cs:17`, `src/nextorm.core/DataContext/DataContextExtensions.cs:117`, `src/nextorm.core/DataContext/InMemoryDataContext.cs:121`;
-`test/nextorm.integration.tests/CommonTestSuite.Tvf.cs:34`, `:47`, `:61`, `:76`;
-`test/nextorm.core.tests/SqlTableFunctionAttributeTests.cs:8`;
-generated SQL: `test/nextorm.sqlite.tests/SqlGenerationTests.cs:1453`, `:1462`, `:1475`, `:1489`, `:1503`;
-`test/nextorm.sqlserver.tests/SqlGenerationTests.cs:1044`, `:1066`, `:1080`, `:1094`;
-`test/nextorm.postgres.tests/SqlGenerationTests.cs:976`, `:998`, `:1012`, `:1026`.
+`tests/nextorm.integration.tests/CommonTestSuite.Tvf.cs:34`, `:47`, `:61`, `:76`;
+`tests/nextorm.core.tests/SqlTableFunctionAttributeTests.cs:8`;
+generated SQL: `tests/nextorm.sqlite.tests/SqlGenerationTests.cs:1453`, `:1462`, `:1475`, `:1489`, `:1503`;
+`tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:1044`, `:1066`, `:1080`, `:1094`;
+`tests/nextorm.postgres.tests/SqlGenerationTests.cs:976`, `:998`, `:1012`, `:1026`.

@@ -1,14 +1,14 @@
 ﻿using BenchmarkDotNet.Attributes;
-using nextorm.sqlite;
+using NextORM.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Data.Sqlite;
 using Dapper;
 using Microsoft.Extensions.Logging;
 using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Columns;
-using nextorm.core;
+using NextORM.Core;
 
-namespace nextorm.benchmark;
+namespace NextORM.Benchmark;
 
 [GroupBenchmarksBy(BenchmarkDotNet.Configs.BenchmarkLogicalGroupRule.ByJob, BenchmarkDotNet.Configs.BenchmarkLogicalGroupRule.ByCategory)]
 [HideColumns(Column.Job, Column.Runtime, Column.RatioSD, Column.Error, Column.StdDev)]
@@ -34,7 +34,7 @@ public class SqliteBenchmarkSimulateWork
     public SqliteBenchmarkSimulateWork() : this(false) { }
     public SqliteBenchmarkSimulateWork(bool withLogging = false)
     {
-        var builder = new DbContextBuilder();
+        var builder = new DataContextBuilder();
         var filepath = BenchDb.FilePath;
         _conn = new SqliteConnection($"Data Source='{filepath}'");
         _conn.Open();
@@ -46,15 +46,15 @@ public class SqliteBenchmarkSimulateWork
             builder.UseLoggerFactory(_logFactory);
             builder.LogSensitiveData(true);
         }
-        _db = builder.CreateDbContext();
+        _db = builder.CreateDataContext();
         _ctx = new TestDataRepository(_db);
-        ((IConnectionManager)_ctx.DbContext).EnsureConnectionOpen();
+        ((IConnectionManager)_ctx.DataContext).EnsureConnectionOpen();
 
         _cmd = _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }).Prepare(false);
 
         _cmdToList = _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new LargeEntity { Id = entity.Id, Str = entity.Str, Dt = entity.Dt }).Prepare(true);
 
-        _cmdInner = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0) + NORM.Param<int>(1)).FirstOrFirstOrDefaultCommand().Prepare(true);
+        _cmdInner = _ctx.SimpleEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0) + SqlFunctions.Parameter<int>(1)).FirstOrFirstOrDefaultCommand().Prepare(true);
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(_conn);
@@ -156,7 +156,7 @@ public class SqliteBenchmarkSimulateWork
     [Benchmark()]
     public async Task Nextorm_PreparedForLoop_ToListAsync()
     {
-        var cmdInner = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0) + NORM.Param<int>(1)).FirstOrFirstOrDefaultCommand(entity => new { entity.Id }).Prepare();
+        var cmdInner = _ctx.SimpleEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0) + SqlFunctions.Parameter<int>(1)).FirstOrFirstOrDefaultCommand(entity => new { entity.Id }).Prepare();
         foreach (var row in await _ctx.LargeEntity.Where(it => it.Id < LargeListSize).Select(entity => new { entity.Id, entity.Str, entity.Dt }).ToListAsync())
         {
             for (var i = 0; i < SmallIterations; i++)

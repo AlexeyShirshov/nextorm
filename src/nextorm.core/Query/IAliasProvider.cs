@@ -1,6 +1,6 @@
 using System.Linq.Expressions;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 public interface IAliasProvider
 {

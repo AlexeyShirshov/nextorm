@@ -1,4 +1,4 @@
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Executes a prepared query command and materializes its result.

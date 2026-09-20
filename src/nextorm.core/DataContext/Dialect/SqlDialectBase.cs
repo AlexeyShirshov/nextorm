@@ -1,18 +1,21 @@
+using System.Globalization;
 using System.Text;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Default implementations of the dialect contract. Only the parts that genuinely differ between
 /// dialects are abstract (<see cref="MakeParam"/>, <see cref="MakePage"/>); everything else has a
-/// working generic-SQL default, so a dialect overrides just what is different. Because every member is
-/// either abstract or has a real body, a dialect can never inherit a placeholder that throws at runtime.
+/// working generic-SQL default, so a dialect overrides just what is different. A capability flag and
+/// its emitter are always overridden together, so a base emitter that throws is only reachable when a
+/// dialect reports the capability as supported without supplying its own implementation.
 /// </summary>
 public abstract class SqlDialectBase : ISqlDialect
 {
     public virtual string ConcatStringOperator => "+";
     public virtual string EmptyString => "''";
     public virtual bool RequireSubqueryAlias => false;
+    public virtual bool EnforcesScalarSubqueryCardinality => true;
     public virtual bool SupportsRightFullJoin => true;
     public virtual bool SupportsFullJoin => true;
     public virtual bool SupportsIntersectExceptAll => false;
@@ -20,16 +23,24 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual bool SupportsCube => false;
     public virtual bool SupportsGroupingSets => false;
     public virtual bool SupportsApply => false;
+    public virtual bool SupportsJoinStrictness => false;
+    public virtual bool SupportsGlobalJoin => false;
     public virtual bool SupportsQueryHints => false;
     public virtual bool SupportsTableHints => false;
     public virtual bool SupportsForJson => false;
     public virtual bool SupportsForXml => false;
     public virtual bool SupportsArrays => false;
+    public virtual bool SupportsArrayFunctions => false;
+    public virtual bool SupportsArrayJoin => false;
     public virtual bool SupportsJson => false;
     public virtual bool SupportsTextJson => false;
     public virtual bool SupportsFullText => false;
     public virtual bool SupportsFilter => false;
     public virtual bool SupportsGreatestLeast => false;
+    public virtual bool SupportsPercentRankCumeDist => false;
+    public virtual bool SupportsNthValue => false;
+    /// <summary>Defaults to <c>false</c>; SQL Server and MariaDB opt into the window percentile functions.</summary>
+    public virtual bool SupportsPercentileWindow => false;
     public virtual bool SupportsDateTrunc => false;
     public virtual bool SupportsDateArithmetic => false;
     public virtual bool SupportsStringArrayAggregates => false;
@@ -38,14 +49,186 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual bool SupportsStringAgg => SupportsStringArrayAggregates;
     public virtual bool SupportsArrayAgg => SupportsStringArrayAggregates;
     public virtual bool SupportsExtendedScalarFunctions => false;
+
+    /// <summary>Defaults to <c>false</c>; PostgreSQL opts into the native text-search scalar surface.</summary>
+    public virtual bool SupportsTextSearchFunctions => false;
+    /// <summary>
+    /// Defaults to <c>false</c>; a provider opts into the session/information family, and the individual
+    /// function is checked separately because ClickHouse/SQLite can express only part of it.
+    /// </summary>
+    public virtual bool SupportsSessionInfoFunctions => false;
+    /// <summary>Defaults to <c>false</c>; a dialect that opted into the family overrides this per name.</summary>
+    public virtual bool SupportsSessionInfoFunction(string name) => false;
+    /// <summary>
+    /// Defaults to a clear failure; every dialect that opted into the family overrides this because the
+    /// keyword/function spelling differs per provider.
+    /// </summary>
+    public virtual string MakeSessionInfoFunction(string name) =>
+        throw new NotSupportedException($"The {name} session information function is not supported by this provider.");
+    /// <summary>
+    /// Defaults to <c>false</c>; a provider opts into the UUID generator family, and the individual
+    /// generator is checked separately because SQL Server/ClickHouse/MariaDB can express only part of it.
+    /// </summary>
+    public virtual bool SupportsUuidGenerators => false;
+    /// <summary>Defaults to <c>false</c>; a dialect that opted into the family overrides this per name.</summary>
+    public virtual bool SupportsUuidGenerator(string name) => false;
+    /// <summary>
+    /// Defaults to a clear failure; every dialect that opted into the family overrides this because the
+    /// native spelling differs per provider.
+    /// </summary>
+    public virtual string MakeUuidGenerator(string name) =>
+        throw new NotSupportedException($"The {name} UUID generator function is not supported by this provider.");
     public virtual bool SupportsBooleanAggregates => false;
     public virtual bool SupportsBitAggregates => false;
     public virtual bool SupportsStatisticalAggregates => false;
     public virtual bool SupportsRegressionAggregates => false;
     public virtual bool SupportsArgMinMax => false;
     public virtual bool SupportsIfAggregates => false;
+    public virtual bool SupportsUniqAggregates => false;
+
+    public virtual string MakeUniqAggregate(string name, string argument) =>
+        $"{MakeAggregate(name)}({argument})";
+    public virtual bool SupportsQuantileAggregates => false;
+
+    public virtual string MakeQuantile(string name, string level, string value) =>
+        $"{MakeAggregate(name)}({level})({value})";
+    public virtual string MakeMedian(string value) =>
+        $"{MakeAggregate("median")}({value})";
+    /// <summary>Defaults to <c>false</c>; ClickHouse opts into the <c>any</c>/<c>anyLast</c> aggregates.</summary>
+    public virtual bool SupportsAnyAggregates => false;
+
+    /// <summary>Defaults to <c>false</c>; MySQL/MariaDB and ClickHouse opt into the arbitrary-value aggregate.</summary>
+    public virtual bool SupportsAnyValueAggregate => false;
+    /// <summary>Defaults to <c>false</c>; ClickHouse opts into the string-JSON <c>JSONExtract*</c> family.</summary>
+    public virtual bool SupportsJsonExtract => false;
+
+    /// <summary>Renders <c>name(args)</c>; ClickHouse maps the snake_case name to its native spelling and casts unsigned results.</summary>
+    public virtual string MakeJsonExtract(string name, IReadOnlyList<string> args) =>
+        $"{name}({string.Join(", ", args)})";
+    /// <summary>Defaults to <c>false</c>; ClickHouse opts into the <c>GROUP BY ... WITH TOTALS</c> modifier.</summary>
+    public virtual bool SupportsGroupByWithTotals => false;
+
+    /// <summary>Returns the grouping clause unchanged; ClickHouse appends <c> with totals</c>.</summary>
+    public virtual string MakeGroupByTotals(string grouping) => grouping;
+    /// <summary>Defaults to <c>false</c>; every SQL provider opts into the portable <c>iif</c> conditional function.</summary>
+    public virtual bool SupportsIif => false;
+    /// <summary>Defaults to <c>false</c>; only SQL Server opts into the <c>choose</c> conditional function.</summary>
+    public virtual bool SupportsChoose => false;
+    /// <summary>Defaults to <c>false</c>; ClickHouse opts into the dictionary functions.</summary>
+    public virtual bool SupportsDictionaries => false;
+
+    /// <summary>Renders <c>name(args)</c>; ClickHouse maps the snake_case name to its camel-case spelling.</summary>
+    public virtual string MakeDictionaryFunction(string name, IReadOnlyList<string> args) =>
+        $"{name}({string.Join(", ", args)})";
     public virtual bool SupportsOrderedAggregates => false;
     public virtual bool SupportsCommandBehaviorSingleRow => true;
+
+    /// <summary>Defaults to <c>false</c>; ClickHouse opts into <c>LIMIT n BY expr</c>.</summary>
+    public virtual bool SupportsLimitBy => false;
+
+    /// <summary>Defaults to <c>false</c>; PostgreSQL opts into <c>DISTINCT ON</c>.</summary>
+    public virtual bool SupportsDistinctOn => false;
+
+    /// <summary>
+    /// Defaults to a clear failure; only reached through a dialect that set <see cref="SupportsDistinctOn"/>.
+    /// </summary>
+    public virtual string MakeDistinctOn(IReadOnlyList<string> columns) =>
+        throw new NotSupportedException("DISTINCT ON is not supported by this SQL dialect");
+
+    /// <summary>
+    /// Wraps the rendered table-function call, or returns it unchanged. ClickHouse uses it to cast the
+    /// unsigned <c>numbers</c> column to a type the row reader supports.
+    /// </summary>
+    public virtual string WrapTableFunction(string name, string call) => call;
+
+    /// <summary>Defaults to <c>false</c>; ClickHouse opts into the <c>FINAL</c> modifier.</summary>
+    public virtual bool SupportsFinal => false;
+
+    /// <summary>Renders the <c>FINAL</c> modifier; ClickHouse places it right after the table.</summary>
+    public virtual string MakeFinal() => " final";
+
+    /// <summary>Defaults to <c>false</c>; ClickHouse opts into the <c>SAMPLE</c> modifier.</summary>
+    public virtual bool SupportsSample => false;
+
+    /// <summary>Renders the <c>SAMPLE ratio [OFFSET offset]</c> modifier.</summary>
+    public virtual string MakeSample(double ratio, double offset)
+    {
+        var text = " sample " + ratio.ToString(CultureInfo.InvariantCulture);
+        return offset > 0
+            ? text + " offset " + offset.ToString(CultureInfo.InvariantCulture)
+            : text;
+    }
+
+    /// <summary>Defaults to <c>false</c>; PostgreSQL and SQL Server opt into <c>TABLESAMPLE</c>.</summary>
+    public virtual bool SupportsTableSample => false;
+
+    /// <summary>
+    /// Defaults to <c>false</c>; only reached through a dialect that set
+    /// <see cref="SupportsTableSample"/>.
+    /// </summary>
+    public virtual bool SupportsTableSampleMethod(TableSampleMethod method) => false;
+
+    /// <summary>
+    /// Defaults to a clear failure; only reached through a dialect that set
+    /// <see cref="SupportsTableSample"/>.
+    /// </summary>
+    public virtual string MakeTableSample(TableSampleMethod method, double percent, double? seed) =>
+        throw new NotSupportedException("TABLESAMPLE is not supported by this SQL dialect");
+
+    /// <summary>Defaults to <c>false</c>; SQL Server and MariaDB opt into <c>FOR SYSTEM_TIME</c>.</summary>
+    public virtual bool SupportsTemporalTable => false;
+
+    /// <summary>
+    /// Defaults to <c>false</c>; a dialect that set <see cref="SupportsTemporalTable"/> names the kinds
+    /// it accepts (MariaDB has no <c>CONTAINED IN</c>).
+    /// </summary>
+    public virtual bool SupportsTemporalKind(TemporalKind kind) => false;
+
+    /// <summary>
+    /// Renders the SQL:2011 <c>FOR SYSTEM_TIME</c> clause (shared by SQL Server and MariaDB). Only
+    /// reached through a dialect that set <see cref="SupportsTemporalTable"/>.
+    /// </summary>
+    public virtual string MakeTemporalTable(TemporalClause clause)
+    {
+        static string Literal(DateTime value) =>
+            "'" + value.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture) + "'";
+
+        return clause.Kind switch
+        {
+            TemporalKind.AsOf => " for system_time as of " + Literal(clause.From),
+            TemporalKind.Between => " for system_time between " + Literal(clause.From) + " and " + Literal(clause.To),
+            TemporalKind.FromTo => " for system_time from " + Literal(clause.From) + " to " + Literal(clause.To),
+            TemporalKind.ContainedIn => " for system_time contained in (" + Literal(clause.From) + ", " + Literal(clause.To) + ")",
+            TemporalKind.All => " for system_time all",
+            _ => throw new NotSupportedException($"Unknown temporal kind {clause.Kind}.")
+        };
+    }
+
+    /// <summary>Defaults to <c>false</c>; ClickHouse opts into the <c>PREWHERE</c> clause.</summary>
+    public virtual bool SupportsPreWhere => false;
+
+    /// <summary>Defaults to <c>false</c>; ClickHouse opts into the <c>ARRAY JOIN</c> clause.</summary>
+    public virtual bool SupportsArrayJoinClause => false;
+
+    /// <summary>
+    /// Defaults to a clear failure; only reached through a dialect that set
+    /// <see cref="SupportsArrayJoinClause"/>.
+    /// </summary>
+    public virtual string MakeArrayJoin(ArrayJoinKind kind, IReadOnlyList<string> expressions)
+        => throw new NotSupportedException("The ARRAY JOIN clause is not supported by this SQL dialect.");
+
+    /// <summary>Defaults to <c>false</c>; ClickHouse opts into the trailing <c>SETTINGS</c> clause.</summary>
+    public virtual bool SupportsSettings => false;
+
+    /// <summary>Renders the trailing <c>SETTINGS key = value, ...</c> clause.</summary>
+    public virtual string MakeSettings(IReadOnlyList<KeyValuePair<string, string>> settings)
+        => " settings " + string.Join(", ", settings.Select(static s => s.Key + " = " + s.Value));
+
+    /// <summary>
+    /// Defaults to a clear failure; only reached through a dialect that set <see cref="SupportsLimitBy"/>.
+    /// </summary>
+    public virtual void MakeLimitBy(int limit, int offset, IReadOnlyList<string> columns, StringBuilder sqlBuilder) =>
+        throw new NotSupportedException("LIMIT BY is not supported by this SQL dialect");
 
     public abstract string MakeParam(string name);
     public abstract void MakePage(Paging paging, StringBuilder sqlBuilder);
@@ -72,6 +255,28 @@ public abstract class SqlDialectBase : ISqlDialect
         JoinType.OuterApply => $" left join lateral {source} on true",
         _ => throw new ArgumentOutOfRangeException(nameof(applyType), applyType, "Not an APPLY join type")
     };
+
+    // ANSI form. The strictness/GLOBAL modifiers are ClickHouse-only; the SQL builder rejects them
+    // for a dialect that did not opt in, so only Default/false reach this body in practice.
+    public virtual string MakeJoinKeyword(JoinType joinType, JoinStrictness strictness, bool isGlobal)
+    {
+        if (isGlobal)
+            throw new NotSupportedException("The GLOBAL join modifier is not supported by this SQL dialect");
+
+        if (strictness is not JoinStrictness.Default)
+            throw new NotSupportedException($"The {strictness} join modifier is not supported by this SQL dialect");
+
+        return joinType switch
+        {
+            JoinType.Inner => " join ",
+            JoinType.Left => " left join ",
+            JoinType.Right => " right join ",
+            JoinType.Full => " full join ",
+            JoinType.Cross => " cross join ",
+            JoinType.FullCross => " cross join ",
+            _ => throw new NotSupportedException(joinType.ToString())
+        };
+    }
 
     // ANSI/SQLite/PostgreSQL form: the RECURSIVE modifier is part of the WITH keyword. SQL Server
     // overrides MakeWith to drop it, and MakeMaxRecursion to expose its depth option.
@@ -213,6 +418,12 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual string MakeNullIf(string value, string other) => $"nullif({value}, {other})";
     public virtual string MakeGreatest(IReadOnlyList<string> args) => $"greatest({string.Join(", ", args)})";
     public virtual string MakeLeast(IReadOnlyList<string> args) => $"least({string.Join(", ", args)})";
+    /// <summary>
+    /// Renders the portable <c>iif</c>. The base dialect cannot express it, so an opting-in provider
+    /// must override this; only reached when <see cref="SupportsIif"/> is <c>true</c>.
+    /// </summary>
+    public virtual string MakeIif(string condition, string whenTrue, string whenFalse) =>
+        throw new NotSupportedException("The iif conditional function is not supported by this provider.");
     public virtual string MakeDateTrunc(string field, string value) => $"date_trunc('{field}', {value})";
     // ANSI/PostgreSQL interval arithmetic; a dialect with a dedicated dateadd-style function overrides
     // this (SQL Server renders dateadd(field, amount, value)).
@@ -276,6 +487,7 @@ public abstract class SqlDialectBase : ISqlDialect
 
     public virtual string MakeStringAgg(string value, string delimiter) => $"string_agg({value}, {delimiter})";
     public virtual string MakeArrayAgg(string value) => $"array_agg({value})";
+    public virtual string MakeArrayFunction(string name, string call) => call;
     public virtual string MakeWithinGroup(string aggregate, string orderBy) => $"{aggregate} within group (order by {orderBy})";
 
     // A user-defined function name is emitted verbatim by default; a dialect that quotes or remaps
@@ -283,13 +495,22 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual string MakeFunction(string name, string? schema)
         => string.IsNullOrEmpty(schema) ? name : $"{schema}.{name}";
 
-    // Built-in NORM.SQL table functions are provider-specific; user-defined [SqlTableFunction]
+    // Built-in SqlFunctions.Sql table functions are provider-specific; user-defined [SqlTableFunction]
     // functions are emitted verbatim and never consult this.
     public virtual bool SupportsTableFunction(string name) => false;
 
     public virtual string MakeCount(bool distinct, bool big) => distinct ? "count(distinct " : "count(";
 
+    // ClickHouse's count aggregates return UInt64, which the row reader cannot materialise; a dialect
+    // that sets the flag overrides WrapCount to cast the rendered expression.
+    public virtual bool WrapsCountResult => false;
+
+    public virtual string WrapCount(string countExpression, bool big) => countExpression;
+
     public virtual string MakeSubqueryPredicate(string keyword, string query, bool asPredicate) => $"{keyword}({query})";
+
+    // ClickHouse's distributed GLOBAL IN predicate; every other dialect rejects it.
+    public virtual bool SupportsGlobalPredicates => false;
 
     // Reached only through a dialect that set SupportsQueryHints; such a dialect overrides this to
     // place the hints. The base body keeps the contract honest (no throwing placeholder) and lets a
@@ -315,11 +536,26 @@ public abstract class SqlDialectBase : ISqlDialect
 
     public virtual string MakeTextJsonFunction(string name) => name;
 
-    public virtual bool MakeTop(int limit, out string? topStmt)
+    public virtual string MakeTextJsonFunction(string name, IReadOnlyList<string> args) =>
+        $"{MakeTextJsonFunction(name)}({string.Join(", ", args)})";
+
+    public virtual bool MakeTop(int limit, bool withTies, out string? topStmt)
     {
         topStmt = null;
         return false;
     }
+
+    /// <summary>Defaults to <c>false</c>; PostgreSQL and SQL Server opt into <c>WITH TIES</c> paging.</summary>
+    public virtual bool SupportsWithTies => false;
+
+    /// <summary>Defaults to <c>false</c>; PostgreSQL, MySQL and MariaDB opt into row locking.</summary>
+    public virtual bool SupportsLocking => false;
+
+    /// <summary>
+    /// Defaults to a clear failure; only reached through a dialect that set <see cref="SupportsLocking"/>.
+    /// </summary>
+    public virtual string MakeLock(LockMode mode) =>
+        throw new NotSupportedException("Row locking is not supported by this SQL dialect");
 
     public virtual string? GetPagingOrderBy(QueryCommand queryCommand) => null;
 }

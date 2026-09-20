@@ -1,7 +1,7 @@
 using System.Linq.Expressions;
 using System.Reflection;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Fluent builder for a single property mapping, returned by
@@ -23,12 +23,12 @@ public class EntityPropertyBuilder<T>
         return this;
     }
 
-    public IPropertyMeta Build()
+    public IPropertyMetadata Build()
     {
         var miVisitor = new MemberExpressionVisitor();
         miVisitor.Visit(_propertySelector);
         var pi = (PropertyInfo)miVisitor.MemberInfo! ?? throw new InvalidOperationException($"Expression {_propertySelector} does not produce PropertyInfo");
-        var r = new PropertyMeta() { ColumnName = _columnName!, PropertyInfo = pi };
+        var r = new PropertyMetadata() { ColumnName = _columnName!, PropertyInfo = pi };
         return r;
     }
 }

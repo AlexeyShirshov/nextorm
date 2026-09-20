@@ -1,4 +1,4 @@
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// The kind of set operation joining two queries. <c>None = 0</c> and the original

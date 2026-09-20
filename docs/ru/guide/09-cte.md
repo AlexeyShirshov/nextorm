@@ -8,8 +8,8 @@
 ## Обзор
 
 CTE объявляется с помощью `With(name, query)` (нерекурсивный) или `WithRecursive(name, query, maxRecursion)`
-(рекурсивный) в `IDataContext`. Оба являются методами расширения (`IDataContextExtensions`), и оба возвращают
-область видимости `CteQuery`, которая хранит объявления, собранные на данный момент, в `CteQuery.Ctes`:
+(рекурсивный) в [`IDataContext`](xref:NextORM.Core.IDataContext). Оба являются методами расширения ([`DataContextExtensions`](xref:NextORM.Core.DataContextExtensions)), и оба возвращают
+область видимости [`CteQuery`](xref:NextORM.Core.CteQuery), которая хранит объявления, собранные на данный момент, в [`Ctes`](xref:NextORM.Core.CteQuery.Ctes):
 
 ```csharp
 public static CteQuery With(this IDataContext dataContext, string name, QueryCommand query);
@@ -18,14 +18,14 @@ public static CteQuery WithRecursive(this IDataContext dataContext, string name,
     int? maxRecursion = null);
 ```
 
-Объявления неизменяемы: каждый вызов `With`/`WithRecursive` возвращает **новую** область видимости, которая
-добавляет `CteDefinition` к предыдущим. Определение фиксирует имя, `QueryCommand`, который его создаёт, и
+Объявления неизменяемы: каждый вызов [`With`](xref:NextORM.Core.DataContextExtensions)/[`WithRecursive`](xref:NextORM.Core.DataContextExtensions) возвращает **новую** область видимости, которая
+добавляет [`CteDefinition`](xref:NextORM.Core.CteDefinition) к предыдущим. Определение фиксирует имя, [`QueryCommand`](xref:NextORM.Core.QueryCommand), который его создаёт, и
 может ли тело ссылаться на собственное имя.
 
-`CteQuery.From(string cteName)` (или `From(CteDefinition)`) начинает новый запрос, чей `from` — один из
-объявленных CTE, перенося каждое объявление в результирующую команду. Далее используется режим `TableAlias`
-без сущности для чтения столбцов CTE (`t["id"].AsInt`), и применяются обычные операторы `Where`/`Join`/
-`Select`. Рекурсивные тела ссылаются на собственное имя тем же способом
+[`From`](xref:NextORM.Core.CteQuery) (или `From(CteDefinition)`) начинает новый запрос, чей `from` — один из
+объявленных CTE, перенося каждое объявление в результирующую команду. Далее используется режим [`TableAlias`](xref:NextORM.Core.TableAlias)
+без сущности для чтения столбцов CTE (`t["id"].AsInt`), и применяются обычные операторы [`Where`](xref:NextORM.Core.EntityBuilder`1)/[`Join`](xref:NextORM.Core.EntityBuilder`1)/
+[`Select`](xref:NextORM.Core.EntityBuilder`1). Рекурсивные тела ссылаются на собственное имя тем же способом
 (`dataContext.From("nums")` внутри шагового запроса).
 
 Рендеринг: диалекты, использующие форму ANSI, выводят `with recursive`, когда любое определение рекурсивно
@@ -51,9 +51,18 @@ var rows = dataContext
 with recent as (select id from complex_entity where (id > 1)) select id from recent
 ```
 
+Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
+
+Вывод:
+
+| Id |
+|----|
+| 2 |
+| 3 |
+
 ## Цепочка объявлений
 
-Каждый `With` добавляется к предыдущей области видимости, поэтому более поздний CTE может быть определён
+Каждый [`With`](xref:NextORM.Core.DataContextExtensions) добавляется к предыдущей области видимости, поэтому более поздний CTE может быть определён
 через более ранний. Объявления рендерятся в порядке объявления:
 
 ```csharp
@@ -89,7 +98,7 @@ var rows = cte.From(cte.Ctes[0])
 ## Рекурсивный CTE: числовая последовательность
 
 Рекурсивный CTE — это `union all` **якоря** (нерекурсивного запроса) и **шага**, который читает CTE по
-имени и останавливается, когда предикат перестаёт совпадать. Вызовите `WithRecursive`, передав объединение
+имени и останавливается, когда предикат перестаёт совпадать. Вызовите [`WithRecursive`](xref:NextORM.Core.DataContextExtensions), передав объединение
 в качестве тела:
 
 ```csharp
@@ -121,6 +130,16 @@ var numbers = dataContext
 -- SQLite: `with recursive` prefix
 with recursive nums as (select id as 'n' from simple_entity where (id = 1) union all select (n + 1) as 'n' from nums where (n < 5)) select n from nums
 ```
+
+Вывод:
+
+| n |
+|---|
+| 1 |
+| 2 |
+| 3 |
+| 4 |
+| 5 |
 
 `maxRecursion` — необязательный предел глубины. Только SQL Server имеет опцию уровня инструкции для него,
 и диалект добавляет `option (maxrecursion n)` в конец инструкции; SQLite и PostgreSQL игнорируют его и
@@ -186,21 +205,24 @@ with recent as (select id from complex_entity where (id > $threshold)) select id
 | SQLite | `with` для нерекурсивных, `with recursive` для рекурсивных; опции глубины нет. |
 | SQL Server | Рекурсивные CTE объявляются только с `with` (без ключевого слова `recursive`); `maxRecursion` рендерится как `option (maxrecursion n)` в конце инструкции. |
 | PostgreSQL | `with` / `with recursive`; опции глубины нет. |
+| MySQL | `with` для нерекурсивных, `with recursive` для рекурсивных; опции глубины нет. |
+| MariaDB | `with` / `with recursive`; опции глубины нет. |
+| ClickHouse | Каждый CTE объявляется простым `with`; рекурсивные CTE не поддерживаются. |
 | In-memory | Не применимо: CTE рендерятся SQL-диалектами и не являются частью провайдера in-memory. |
 
 ## См. также
 
-* [Операции над множествами](07-set-operations.md) — `UnionAll` и другие, используются для построения рекурсивного тела.
+* [Операции над множествами](07-set-operations.md) — [`UnionAll`](xref:NextORM.Core.QueryCommand`1) и другие, используются для построения рекурсивного тела.
 * [Соединения](03-joins.md) — соединение CTE с таблицей, как в `CommonTestSuite.Cte.cs`.
 * [Необработанный SQL](14-raw-sql.md) — когда вся инструкция написана вручную.
 * [Переиспользование запросов: кэш против Prepare](15-query-reuse.md) — как кэшируются планы CTE.
 
 ---
 
-Source: `src/nextorm.core/Builders/CteQuery.cs:7`, `src/nextorm.core/DataContext/IDataContextExtensions.cs:9`;
-`test/nextorm.integration.tests/CommonTestSuite.Cte.cs:14`, `test/nextorm.integration.tests/CommonTestSuite.Cte.cs:33`;
-`test/nextorm.core.tests/CteQueryTests.cs:8`;
-`test/nextorm.sqlite.tests/PlanCacheTests.cs:190`, `test/nextorm.sqlite.tests/PlanCacheTests.cs:343`;
-generated SQL: `test/nextorm.sqlite.tests/SqlGenerationTests.cs:1188`, `:1202`, `:1216`, `:1231`, `:1248`;
-`test/nextorm.sqlserver.tests/SqlGenerationTests.cs:827`, `:856`;
-`test/nextorm.postgres.tests/SqlGenerationTests.cs:759`, `:788`.
+Source: `src/nextorm.core/Builders/CteQuery.cs:7`, `src/nextorm.core/DataContext/DataContextExtensions.cs:9`;
+`tests/nextorm.integration.tests/CommonTestSuite.Cte.cs:14`, `tests/nextorm.integration.tests/CommonTestSuite.Cte.cs:33`;
+`tests/nextorm.core.tests/CteQueryTests.cs:8`;
+`tests/nextorm.sqlite.tests/PlanCacheTests.cs:190`, `tests/nextorm.sqlite.tests/PlanCacheTests.cs:343`;
+generated SQL: `tests/nextorm.sqlite.tests/SqlGenerationTests.cs:1188`, `:1202`, `:1216`, `:1231`, `:1248`;
+`tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:827`, `:856`;
+`tests/nextorm.postgres.tests/SqlGenerationTests.cs:759`, `:788`.

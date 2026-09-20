@@ -6,12 +6,12 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Planning axis of a database-backed context: turns a <see cref="QueryCommand{TResult}"/> into a
 /// prepared command (SQL, compiled row mapper, bound parameters) and resolves table sources.
-/// Extracted out of <c>DbContext</c> so the context no longer owns the planning algorithm (SRP).
+/// Extracted out of <c>DataContext</c> so the context no longer owns the planning algorithm (SRP).
 /// Provider hooks (dialect, column-mapping policy, parameter factory) and the connection / logger /
 /// enumerator configuration arrive as constructor dependencies, so the planner never sees the
 /// concrete context (DIP).
@@ -29,41 +29,48 @@ internal sealed class QueryPlanner : IQueryPlanner
 
     internal QueryPlanner(
         Func<ISqlDialect> dialect,
-        ILogger? logger,
         Type contextType,
-        Func<SelectExpression, Expression, Expression> mapColumn,
-        Func<string, object?, DbParameter> createParam,
-        Func<string, DbCommand> createCommand,
-        ILogger? resultSetEnumeratorLogger,
-        bool logSensitiveData)
+        ProviderHooks hooks,
+        LoggingOptions logging)
     {
         _dialect = dialect;
-        _logger = logger;
+        _logger = logging.Logger;
         _contextType = contextType;
-        _mapColumn = mapColumn;
-        _createParam = createParam;
-        _createCommand = createCommand;
-        _resultSetEnumeratorLogger = resultSetEnumeratorLogger;
-        _logSensitiveData = logSensitiveData;
+        _mapColumn = hooks.MapColumn;
+        _createParam = hooks.CreateParam;
+        _createCommand = hooks.CreateCommand;
+        _resultSetEnumeratorLogger = logging.ResultSetEnumeratorLogger;
+        _logSensitiveData = logging.LogSensitiveData;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private List<Param> ExtractParams(QueryCommand queryCommand)
+    private List<Parameter> ExtractParams(QueryCommand queryCommand)
     {
-        var @params = new List<Param>();
+        var @params = new List<Parameter>();
         MakeSelect(queryCommand, true, @params, queryCommand, null);
         return @params;
     }
 
-    // NORM.Param placeholders carry no value - the runtime values are applied by
+    // SqlFunctions.Parameter placeholders carry no value - the runtime values are applied by
     // DbPreparedQueryCommand.GetDbCommand. Only computed parameters (captured variables,
     // closures) need to be re-extracted on every cached execution.
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsRuntimeParam(string name) => NormParam.IsName(name);
 
-    private string? MakeSelect(QueryCommand queryCommand, bool paramMode, List<Param> @params, IQueryProvider queryProvider, IAliasProvider? aliasProvider)
+    private string? MakeSelect(QueryCommand queryCommand, bool paramMode, List<Parameter> @params, IQueryRegistry queryProvider, IAliasProvider? aliasProvider)
     {
-        var sqlBuilder = new SqlBuilder(_dialect(), paramMode, @params, new DefaultColumnsProvider(), queryProvider, new DefaultParamProvider(), aliasProvider, _logger!);
+        var ctx = new SqlBuildContext
+        {
+            Dialect = _dialect(),
+            ParamMode = paramMode,
+            Params = @params,
+            ColumnsProvider = new DefaultColumnsProvider(),
+            QueryProvider = queryProvider,
+            ParameterProvider = new DefaultParameterProvider(),
+            AliasProvider = aliasProvider,
+            Logger = _logger!,
+        };
+        var sqlBuilder = new SqlBuilder(in ctx);
         return sqlBuilder.MakeSelect(queryCommand);
     }
 
@@ -75,7 +82,7 @@ internal sealed class QueryPlanner : IQueryPlanner
         if (!queryCommand.IsPrepared) queryCommand.PrepareCommand(!storeInCache, cancellationToken);
         else queryCommand.RefreshInValuesShape();
 
-        var ext = queryCommand.CustomData as DbQueryCommandExtension;
+        var ext = queryCommand.CustomData as RawSqlOverride;
 
         if (queryCommand.Cache && storeInCache)
         {
@@ -127,7 +134,7 @@ internal sealed class QueryPlanner : IQueryPlanner
             // there to avoid a duplicated clause.
             var singleRow = queryCommand.SingleRow && _dialect().SupportsCommandBehaviorSingleRow;
 
-            var compiledQuery = new DbPreparedQueryCommand<TResult>(dbCommand, map, singleRow, ext is null ? sql! : null, noParams, needsParamRefresh);
+            var compiledQuery = new DbPreparedQueryCommand<TResult>(dbCommand, map, new PreparedCommandOptions(singleRow, ext is null ? sql! : null, noParams, needsParamRefresh));
 
             if (createEnumerator)
             {
@@ -150,7 +157,7 @@ internal sealed class QueryPlanner : IQueryPlanner
 
             var compiledQuery = (DbPreparedQueryCommand<TResult>)planCache;
 
-            if (queryCommand.CustomData is DbQueryCommandExtension)
+            if (queryCommand.CustomData is RawSqlOverride)
             {
                 Debug.Assert(string.IsNullOrEmpty(compiledQuery.SqlStmt), "SqlStmt must be null");
             }
@@ -182,9 +189,9 @@ internal sealed class QueryPlanner : IQueryPlanner
 
             return compiledQuery;
         }
-        (string?, List<Param>) MakeSelectInternal()
+        (string?, List<Parameter>) MakeSelectInternal()
         {
-            var @params = new List<Param>();
+            var @params = new List<Parameter>();
             var aliasProvider = new DefaultAliasProvider();
             return (MakeSelect(queryCommand, false, @params, queryCommand, aliasProvider), @params);
         }
@@ -224,9 +231,9 @@ internal sealed class QueryPlanner : IQueryPlanner
         {
             if (queryCommand?.Joins?.Length > 0 && srcType.IsAssignableTo(typeof(IProjection)))
             {
-                var prop_t1 = srcType.GetProperty("t1") ?? throw new BuildSqlCommandException($"Projection {srcType} must have t1 property");
+                var propT1 = srcType.GetProperty("Item1") ?? throw new BuildSqlCommandException($"Projection {srcType} must have Item1 property");
 
-                var f = GetFrom(prop_t1.PropertyType);
+                var f = GetFrom(propT1.PropertyType);
 
                 return f;
             }
@@ -245,7 +252,7 @@ internal sealed class QueryPlanner : IQueryPlanner
     /// <summary>
     /// Creates the streaming enumerator and applies the context's logging configuration to it. The
     /// enumerator receives the logger directly rather than pulling it from the context through a
-    /// property, which is what kept the enumerator tied to the concrete <c>DbContext</c>.
+    /// property, which is what kept the enumerator tied to the concrete <c>DataContext</c>.
     /// </summary>
     private ResultSetEnumerator<TResult> CreateResultSetEnumerator<TResult>(DbPreparedQueryCommand<TResult> compiledQuery)
     {

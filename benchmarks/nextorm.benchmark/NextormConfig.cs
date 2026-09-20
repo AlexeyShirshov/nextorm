@@ -6,7 +6,7 @@ using BenchmarkDotNet.Environments;
 using BenchmarkDotNet.Toolchains.InProcess.NoEmit;
 using BenchmarkDotNet.Toolchains.InProcess.Emit;
 
-namespace nextorm.benchmark;
+namespace NextORM.Benchmark;
 
 internal class NextormConfig : ManualConfig
 {

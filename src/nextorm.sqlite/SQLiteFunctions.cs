@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Runtime.CompilerServices;
 using Microsoft.Data.Sqlite;
 
-namespace nextorm.sqlite;
+namespace NextORM.Sqlite;
 
 /// <summary>
 /// Registers the custom SQLite aggregate functions (stdev, stdevp, var, varp) on a connection.

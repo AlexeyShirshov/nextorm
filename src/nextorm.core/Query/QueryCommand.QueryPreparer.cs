@@ -2,7 +2,7 @@ using Microsoft.Extensions.Logging;
 using System.Linq.Expressions;
 using System.Reflection;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 public partial class QueryCommand
 {
@@ -33,7 +33,7 @@ public partial class QueryCommand
             if (srcType is null)
             {
                 if (cmd._exp is null)
-                    throw new PrepareException("Lambda expression for anonymous type must exists");
+                    throw new QueryPreparationException("Lambda expression for anonymous type must exists");
 
                 srcType = cmd._exp.Parameters[0].Type;
             }
@@ -43,9 +43,12 @@ public partial class QueryCommand
             var joinPlanHash = PrepareJoin(cmd, dontCalculateHash, cancellationToken);
             var (selectList, columnsPlanHash) = PrepareColumns(cmd, dontCalculateHash, srcType, cancellationToken);
             var wherePlanHash = PrepareWhere(cmd, dontCalculateHash, cancellationToken);
-
+            PreparePreWhere(cmd, dontCalculateHash, cancellationToken);
+            PrepareArrayJoin(cmd, cancellationToken);
 
             var (groupingList, groupingPlanHash) = PrepareGrouping(cmd, dontCalculateHash, cancellationToken);
+            var limitByColumns = PrepareLimitBy(cmd, cancellationToken);
+            var distinctOnColumns = PrepareDistinctOn(cmd, cancellationToken);
             var sortingPlanHash = PrepareSorting(cmd, dontCalculateHash, cancellationToken);
 
             cmd._union?.PrepareCommand(dontCalculateHash, cancellationToken);
@@ -55,6 +58,8 @@ public partial class QueryCommand
             cmd._isPrepared = true;
             cmd._selectList = selectList ?? [];
             cmd._groupingList = groupingList ?? [];
+            cmd._limitByColumns = limitByColumns ?? [];
+            cmd._distinctOnColumns = distinctOnColumns ?? [];
             cmd._srcType = srcType;
             cmd._from = from;
 
@@ -87,7 +92,7 @@ public partial class QueryCommand
                 }
                 else if (cmd._referencedQueries?.Count > 1)
                 {
-                    HashCode hash = new();
+                    XxHash32 hash = new();
                     unchecked
                     {
                         for (var (i, cnt) = (0, cmd._referencedQueries.Count); i < cnt; i++)
@@ -108,15 +113,35 @@ public partial class QueryCommand
         /// </summary>
         internal static void RefreshInValuesShape(QueryCommand cmd)
         {
-            if (!cmd.HasTopLevelInValues || !cmd.Cache || cmd.PreparedCondition is null)
+            if (!cmd.Cache || (cmd.PreparedCondition is null && cmd.PreparedPreWhere is null))
                 return;
 
-            cmd.InValuesShapeHash = InValues.ComputeShapeHash(cmd.PreparedCondition, cmd, out var partitions);
-            cmd.InValuesPartitions = partitions;
-            unchecked
+            Dictionary<Expression, InValuesPartition>? merged = null;
+
+            if (cmd.HasTopLevelInValues && cmd.PreparedCondition is not null)
             {
-                cmd.WherePlanHash = cmd._whereBasePlanHash * 13 + cmd.InValuesShapeHash;
+                cmd.InValuesShapeHash = InValues.ComputeShapeHash(cmd.PreparedCondition, cmd, out var wherePartitions);
+                merged = wherePartitions;
+                unchecked
+                {
+                    cmd.WherePlanHash = cmd._whereBasePlanHash * 13 + cmd.InValuesShapeHash;
+                }
             }
+
+            if (cmd.HasPreWhereInValues && cmd.PreparedPreWhere is not null)
+            {
+                cmd.PreWhereShapeHash = InValues.ComputeShapeHash(cmd.PreparedPreWhere, cmd, out var preWherePartitions);
+
+                if (preWherePartitions is { Count: > 0 })
+                {
+                    merged ??= new Dictionary<Expression, InValuesPartition>(ReferenceEqualityComparer.Instance);
+
+                    foreach (var (key, value) in preWherePartitions)
+                        merged[key] = value;
+                }
+            }
+
+            cmd.InValuesPartitions = merged;
         }
 
         private static void PrepareFrom(FromExpression? from, bool dontCalculateHash, CancellationToken cancellationToken)
@@ -138,7 +163,7 @@ public partial class QueryCommand
 
             if (!cmd._dontCache && !noHash)
             {
-                HashCode hash = new();
+                XxHash32 hash = new();
                 unchecked
                 {
                     for (var (i, cnt) = (0, cmd._ctes.Count); i < cnt; i++)
@@ -165,7 +190,7 @@ public partial class QueryCommand
             if (cmd._hints is not { Count: > 0 } hints) return;
             if (cmd._dontCache || noHash) return;
 
-            HashCode hash = new();
+            XxHash32 hash = new();
             unchecked
             {
                 for (var (i, cnt) = (0, hints.Count); i < cnt; i++)
@@ -205,6 +230,7 @@ public partial class QueryCommand
                         selectList = new SelectExpression[argsCount];
 
                         var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(cmd._dataContext!, cmd, cancellationToken, cmd._dataContext!.Logger);
+                        using var outerScope = innerQueryVisitor.PushOuter(cmd._exp.Parameters[0]);
                         for (var idx = 0; idx < argsCount; idx++)
                         {
                             if (cancellationToken.IsCancellationRequested)
@@ -220,6 +246,7 @@ public partial class QueryCommand
                                 PropertyName = ctorParam.Name!,
                                 Expression = innerQueryVisitor.Visit(arg)
                             };
+                            selExp.DefaultOnNull = !selExp.Nullable && CorrelatedQueryExpressionVisitor.IsOrDefaultScalar(arg);
                             if (!cmd._dontCache && !noHash)
                                 selExp.PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
                             selectList[idx] = selExp;
@@ -245,6 +272,7 @@ public partial class QueryCommand
                         {
                             Expression = selectExp,
                         };
+                        selExp.DefaultOnNull = !selExp.Nullable && CorrelatedQueryExpressionVisitor.IsOrDefaultScalar(cmd._exp.Body);
                         if (!cmd._dontCache && !noHash)
                             selExp.PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
 
@@ -263,6 +291,7 @@ public partial class QueryCommand
                         selectList = new SelectExpression[bindingsCount];
 
                         var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(cmd._dataContext!, cmd, cancellationToken, cmd._dataContext!.Logger);
+                        using var outerScope = innerQueryVisitor.PushOuter(cmd._exp.Parameters[0]);
                         for (var idx = 0; idx < bindingsCount; idx++)
                         {
                             if (cancellationToken.IsCancellationRequested)
@@ -276,6 +305,7 @@ public partial class QueryCommand
                                 PropertyName = binding.Member.Name!,
                                 Expression = innerQueryVisitor.Visit(binding.Expression)
                             };
+                            selExp.DefaultOnNull = !selExp.Nullable && CorrelatedQueryExpressionVisitor.IsOrDefaultScalar(binding.Expression);
                             if (!cmd._dontCache && !noHash)
                                 selExp.PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
                             selectList[idx] = selExp;
@@ -293,7 +323,7 @@ public partial class QueryCommand
                 else
                 {
                     if (srcType is null)
-                        throw new PrepareException("Lambda expression or source type must exists");
+                        throw new QueryPreparationException("Lambda expression or source type must exists");
 
                     if (cmd._dataContext!.NeedMapping)
                     {
@@ -340,7 +370,7 @@ public partial class QueryCommand
                             }
 
                             if (!(selectList?.Length > 0))
-                                throw new PrepareException("Select must return new anonymous type");
+                                throw new QueryPreparationException("Select must return new anonymous type");
 
                             DataContextCache.SelectListCache[srcType] = selectList;
                         }
@@ -451,6 +481,115 @@ public partial class QueryCommand
             return wherePlanHash;
         }
 
+        private static void PreparePreWhere(QueryCommand cmd, bool noHash, CancellationToken cancellationToken)
+        {
+            if (cmd._preWhere is null)
+                return;
+
+            var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(cmd._dataContext!, cmd, cancellationToken, cmd._dataContext!.Logger);
+            cmd.PreparedPreWhere = innerQueryVisitor.Visit(cmd._preWhere);
+
+            if (!cmd._dontCache && !noHash)
+            {
+                cmd.PreWhereShapeHash = InValues.ComputeShapeHash(cmd.PreparedPreWhere, cmd, out var partitions);
+                cmd.HasPreWhereInValues = partitions is not null;
+
+                if (partitions is { Count: > 0 })
+                {
+                    cmd.InValuesPartitions ??= new Dictionary<Expression, InValuesPartition>(ReferenceEqualityComparer.Instance);
+
+                    foreach (var (key, value) in partitions)
+                        cmd.InValuesPartitions[key] = value;
+                }
+            }
+        }
+
+        private static void PrepareArrayJoin(QueryCommand cmd, CancellationToken cancellationToken)
+        {
+            if (cmd._arrayJoins is not { Length: > 0 } arrayJoins)
+                return;
+
+            var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(cmd._dataContext!, cmd, cancellationToken, cmd._dataContext!.Logger);
+            var prepared = new Expression[arrayJoins.Length];
+
+            for (var (i, cnt) = (0, arrayJoins.Length); i < cnt; i++)
+                prepared[i] = innerQueryVisitor.Visit(arrayJoins[i]);
+
+            cmd._preparedArrayJoin = prepared;
+        }
+
+        private static SelectExpression[]? PrepareLimitBy(QueryCommand cmd, CancellationToken cancellationToken)
+        {
+            var columns = cmd._limitByColumns;
+
+            if (cmd.LimitBy is { } limitBy && columns is null)
+            {
+                if (limitBy.Limit <= 0)
+                    throw new QueryPreparationException("LIMIT BY requires a positive row count.");
+
+                if (limitBy.Offset < 0)
+                    throw new QueryPreparationException("LIMIT BY offset must be non-negative.");
+
+                columns = BuildKeyColumns(limitBy.Expression, "LIMIT BY", cancellationToken);
+            }
+
+            return columns;
+        }
+
+        private static SelectExpression[]? PrepareDistinctOn(QueryCommand cmd, CancellationToken cancellationToken)
+        {
+            var columns = cmd._distinctOnColumns;
+
+            if (cmd.DistinctOn is { } distinctOn && columns is null)
+                columns = BuildKeyColumns(distinctOn.Expression, "DISTINCT ON", cancellationToken);
+
+            return columns;
+        }
+
+        private static SelectExpression[] BuildKeyColumns(LambdaExpression expression, string clauseName, CancellationToken cancellationToken)
+        {
+            if (expression.Body is NewExpression ctor && !IsSingleColumnType(ctor.Type))
+            {
+                var args = ctor.Arguments;
+                var argsCount = args.Count;
+
+                if (argsCount == 0)
+                    throw new QueryPreparationException($"{clauseName} requires at least one key column.");
+
+                var columns = new SelectExpression[argsCount];
+
+                for (var idx = 0; idx < argsCount; idx++)
+                {
+                    if (cancellationToken.IsCancellationRequested)
+                        return columns;
+
+                    var ctorParam = ctor.Constructor!.GetParameters()[idx];
+
+                    columns[idx] = new SelectExpression(ctorParam.ParameterType)
+                    {
+                        Index = idx,
+                        PropertyName = ctorParam.Name!,
+                        Expression = args[idx]
+                    };
+                }
+
+                return columns;
+            }
+            else
+            {
+                var body = expression.Body;
+                return
+                [
+                    new SelectExpression(body.Type)
+                    {
+                        Index = 0,
+                        PropertyName = body is MemberExpression member ? member.Member.Name : "key",
+                        Expression = body
+                    }
+                ];
+            }
+        }
+
         private static (SelectExpression[]?, int) PrepareGrouping(QueryCommand cmd, bool noHash, CancellationToken cancellationToken)
         {
             var groupingList = cmd._groupingList;
@@ -494,6 +633,12 @@ public partial class QueryCommand
 
             if (cmd._having is not null)
             {
+                // A subquery in HAVING is not carried through the correlated-query visitor (it is only
+                // visited by the renderer), so it would emit garbage such as a raw inner-command node.
+                // Reject it explicitly instead of emitting silently invalid SQL.
+                if (ContainsSubquery(cmd._having))
+                    throw new NotSupportedException("Subqueries are not supported in HAVING; move the condition to WHERE or project it in SELECT.");
+
                 if (!cmd._dontCache && !noHash) unchecked
                     {
                         groupingPlanHash = groupingPlanHash * 13 + cmd.GetExpressionPlanEqualityComparer().GetHashCode(cmd._having);
@@ -501,6 +646,43 @@ public partial class QueryCommand
             }
 
             return (groupingList, groupingPlanHash);
+        }
+
+        /// <summary>True when the expression contains a subquery (an <see cref="EntityBuilder{T}"/> chain or a query command).</summary>
+        private static bool ContainsSubquery(Expression expression)
+        {
+            var detector = new SubqueryDetector();
+            detector.Visit(expression);
+            return detector.Found;
+        }
+
+        private sealed class SubqueryDetector : ExpressionVisitor
+        {
+            public bool Found { get; private set; }
+
+            public override Expression? Visit(Expression? node)
+                => Found || node is null ? node : base.Visit(node);
+
+            protected override Expression VisitMethodCall(MethodCallExpression node)
+            {
+                if (node.Object?.Type.IsAssignableTo(typeof(QueryCommand)) == true
+                    || node.Type.IsAssignableTo(typeof(QueryCommand)))
+                {
+                    Found = true;
+                    return node;
+                }
+
+                for (var i = 0; i < node.Arguments.Count; i++)
+                {
+                    if (node.Arguments[i].Type.IsAssignableTo(typeof(QueryCommand)))
+                    {
+                        Found = true;
+                        return node;
+                    }
+                }
+
+                return base.VisitMethodCall(node);
+            }
         }
     }
 }

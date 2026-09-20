@@ -1,7 +1,7 @@
 using System.Linq.Expressions;
 using Microsoft.Extensions.Logging;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Translates member access into SQL: mapped columns, projection items (<c>tN</c>), nullable
@@ -65,6 +65,7 @@ internal static class MemberTranslator
                 nameof(DateTime.Hour) => "hour",
                 nameof(DateTime.Minute) => "minute",
                 nameof(DateTime.Second) => "second",
+                nameof(DateTime.DayOfYear) => "doy",
                 _ => null
             };
 
@@ -89,6 +90,23 @@ internal static class MemberTranslator
     {
         if (TryTranslate(visitor, node))
             return node;
+
+        // The element of a bound ARRAY JOIN (ArrayJoinProjection<TEntity, TElement>.Element) is the
+        // value expanded by the clause; it is exposed under a generated alias, not as a physical
+        // column of the source entity.
+        if (node.Expression is ParameterExpression elementParam
+            && typeof(IArrayJoinProjection).IsAssignableFrom(elementParam.Type)
+            && node.Member.Name == ArrayJoinNames.ElementMember)
+        {
+            if (!visitor.IsParamMode)
+            {
+                visitor.Builder!.Append(ArrayJoinNames.ElementAlias);
+                visitor.NeedAliasForColumn = true;
+                visitor.ColumnName = null;
+            }
+
+            return node;
+        }
 
         if (node.Expression?.Type == visitor.EntityType)
         {
@@ -145,7 +163,7 @@ internal static class MemberTranslator
                     if (innerCol is null)
                         throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
 
-                    var sqlBuilder = new SqlBuilder(visitor.Dialect, visitor.IsParamMode, visitor.Params, visitor.ColumnsProvider, visitor.QueryProvider, visitor.ParamProvider, visitor.AliasProvider, visitor.Logger);
+                    var sqlBuilder = new SqlBuilder(visitor.Options);
                     var col = sqlBuilder.MakeColumn(innerCol, innerQuery.EntityType!, true, renameAware: true);
                     if (!visitor.IsParamMode)
                     {
@@ -188,7 +206,7 @@ internal static class MemberTranslator
                 else if (visitor.Logger?.IsEnabled(LogLevel.Debug) ?? false) visitor.Logger.LogDebug("Expression cache miss on visit where");
             }
 
-            visitor.Params.Add(new Param(node.Member.Name, ((Func<object>)del)()));
+            visitor.Params.Add(new Parameter(node.Member.Name, ((Func<object>)del)()));
 
             if (!visitor.IsParamMode)
                 visitor.Builder!.Append(visitor.Dialect.MakeParam(node.Member.Name));
@@ -209,7 +227,7 @@ internal static class MemberTranslator
                     tableAliasForColumn = aliasVisitor.Alias;
                 }
                 else
-                    tableAliasForColumn = AliasResolver.GetAliasFromParam(visitor, (ParameterExpression)memberAccessExp.Expression!, false);
+                    tableAliasForColumn = AliasResolver.GetOuterAliasFromParam(visitor, (ParameterExpression)memberAccessExp.Expression!, false);
 
                 visitor.Builder!.Append(tableAliasForColumn).Append('.');
 
@@ -263,7 +281,7 @@ internal static class MemberTranslator
 
             if (lambdaParameter is null)
             {
-                var twoTypeVisitor = new TwoTypeExpressionVisitor<ParameterExpression, ConstantExpression>();
+                var twoTypeVisitor = new TypeExpressionVisitor<ParameterExpression, ConstantExpression>();
                 twoTypeVisitor.Visit(node.Expression);
 
                 //if (node.Expression is ConstantExpression ce)
@@ -278,7 +296,7 @@ internal static class MemberTranslator
                     if (del is null)
                     {
                         var p = Expression.Parameter(typeof(object));
-                        var replace = new ReplaceConstantVisitor(Expression.Convert(p, twoTypeVisitor.Target2!.Type));
+                        var replace = new ReplaceConstantExpressionVisitor(Expression.Convert(p, twoTypeVisitor.Target2!.Type));
                         var body = Expression.Convert(replace.Visit(node), typeof(object));
                         del = Expression.Lambda<Func<object?, object>>(body, p).Compile();
 
@@ -291,7 +309,7 @@ internal static class MemberTranslator
                         else if (visitor.Logger?.IsEnabled(LogLevel.Debug) ?? false) visitor.Logger.LogDebug("Expression cache miss on visit where");
                     }
                     // var value = 1;
-                    visitor.Params.Add(new Param(node.Member.Name, ((Func<object?, object>)del)(twoTypeVisitor.Target2!.Value)));
+                    visitor.Params.Add(new Parameter(node.Member.Name, ((Func<object?, object>)del)(twoTypeVisitor.Target2!.Value)));
 
                     if (!visitor.IsParamMode)
                         visitor.Builder!.Append(visitor.Dialect.MakeParam(node.Member.Name));
@@ -310,18 +328,21 @@ internal static class MemberTranslator
                 // Aliases are only needed to emit SQL text. In parameter-extraction mode (visitor.IsParamMode)
                 // nothing is appended, and visitor.ColumnsProvider is not populated by MakeFrom/MakeJoin in
                 // that mode, so resolving the alias would fail for join queries.
-                if (!visitor.IsParamMode && !visitor.DontNeedAlias && lambdaParameter is not null)
+                if (!visitor.IsParamMode && !visitor.DontNeedAlias)
                 {
                     if (lambdaParameter.Type!.IsAssignableTo(typeof(IProjection)))
                     {
                         // When a type repeats inside the projection, the columns provider has to be
-                        // told which occurrence is meant. The member name (tN) is the 1-based position
-                        // among all projection items; the occurrence for every position of a given
-                        // projection shape is cached (it is a pure function of the generic arguments).
+                        // told which occurrence is meant. The member name ("Item1".."Item8") carries
+                        // the 1-based position among all projection items; the occurrence for every
+                        // position of a given projection shape is cached (it is a pure function of
+                        // the generic arguments).
                         var propExp = (MemberExpression)node.Expression!;
                         var name = propExp.Member.Name;
+                        var digitsStart = name.Length;
+                        while (digitsStart > 0 && char.IsAsciiDigit(name[digitsStart - 1])) digitsStart--;
                         var position = 0;
-                        for (var i = 1; i < name.Length; i++) position = position * 10 + (name[i] - '0');
+                        for (var i = digitsStart; i < name.Length; i++) position = position * 10 + (name[i] - '0');
                         position--;
                         var paramIdx = ProjectionAliasCache.GetOccurrence(lambdaParameter.Type, position);
                         tableAliasForColumn = AliasResolver.GetAliasFromParam(visitor, node.Expression!.Type, paramIdx, false);
@@ -368,7 +389,7 @@ internal static class MemberTranslator
                     if (innerCol is null)
                         throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
 
-                    var sqlBuilder = new SqlBuilder(visitor.Dialect, visitor.IsParamMode, visitor.Params, visitor.ColumnsProvider, visitor.QueryProvider, visitor.ParamProvider, visitor.AliasProvider, visitor.Logger);
+                    var sqlBuilder = new SqlBuilder(visitor.Options);
                     var col = sqlBuilder.MakeColumn(innerCol, innerQuery.EntityType!, true, renameAware: true);
 
                     if (!visitor.IsParamMode)
@@ -406,7 +427,17 @@ internal static class MemberTranslator
             }
             visitor.NeedAliasForColumn = true;
             var innerQuery = visitor.QueryProvider.ReferencedQueries[idx];
-            var sqlBuilder = new SqlBuilder(visitor.Dialect, visitor.IsParamMode, visitor.Params, visitor.ColumnsProvider, visitor.QueryProvider, visitor.ParamProvider, visitor.AliasProvider, visitor.Logger);
+
+            // Single/SingleOrDefault require at most one row. Where the engine enforces scalar-subquery
+            // cardinality the extra row is rejected by the database (the command is rendered with
+            // limit 2); where it does not (SQLite) we refuse instead of silently returning the first.
+            if (innerQuery.SingleScalar && !visitor.Dialect.EnforcesScalarSubqueryCardinality)
+                throw new NotSupportedException(
+                    $"'{visitor.Dialect.GetType().Name}' cannot enforce Single/SingleOrDefault in a scalar subquery " +
+                    "(a scalar subquery returning several rows yields the first row instead of an error); " +
+                    "use First/FirstOrDefault or move the check to the application.");
+
+            var sqlBuilder = new SqlBuilder(visitor.Options);
             var sql = sqlBuilder.MakeSelect(innerQuery);
 
                 if (!visitor.IsParamMode)

@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Process-wide caches shared by every context, SQL and in-memory alike. This is the single source
@@ -11,19 +11,19 @@ namespace nextorm.core;
 /// of a cache is never a matter of archaeology:
 /// <list type="bullet">
 /// <item><description>this class and <c>MapperCache</c> — process-wide;</description></item>
-/// <item><description><c>InMemoryContext.ExpressionsCache</c> — per context instance: its entries
+/// <item><description><c>InMemoryDataContext.ExpressionsCache</c> — per context instance: its entries
 ///   embed <c>Expression.Constant(this)</c> and therefore must not be shared;</description></item>
-/// <item><description><c>DbContext._queryPlanCache</c> — per thread, keyed by
+/// <item><description><c>DataContext._queryPlanCache</c> — per thread, keyed by
 ///   <c>QueryPlanCacheKey(ContextType, Plan)</c> so that different providers do not collide.</description></item>
 /// </list>
 /// </remarks>
 public static class DataContextCache
 {
-    private readonly static ConcurrentDictionary<Type, IEntityMeta> _metadata = new();
+    private readonly static ConcurrentDictionary<Type, IEntityMetadata> _metadata = new();
     private readonly static ConcurrentDictionary<Type, SelectExpression[]> _selectListCache = new();
     private readonly static ExpressionCache<Delegate> _expCache = new();
     private readonly static ExpressionCache<Func<object?, object?>> _inValuesCache = new();
-    public static IDictionary<Type, IEntityMeta> Metadata => _metadata;
+    public static IDictionary<Type, IEntityMetadata> Metadata => _metadata;
     public static IDictionary<Type, SelectExpression[]> SelectListCache => _selectListCache;
     public static IDictionary<ExpressionKey, Delegate> ExpressionsCache => _expCache;
     /// <summary>

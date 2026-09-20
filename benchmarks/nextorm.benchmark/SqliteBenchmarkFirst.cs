@@ -1,13 +1,13 @@
 ﻿using BenchmarkDotNet.Attributes;
-using nextorm.sqlite;
+using NextORM.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Data.Sqlite;
 using Dapper;
 using Microsoft.Extensions.Logging;
 using BenchmarkDotNet.Jobs;
-using nextorm.core;
+using NextORM.Core;
 
-namespace nextorm.benchmark;
+namespace NextORM.Benchmark;
 
 //[SimpleJob(RuntimeMoniker.Net70, baseline: true)]
 [MemoryDiagnoser]
@@ -29,7 +29,7 @@ public class SqliteBenchmarkFirst
     public SqliteBenchmarkFirst() : this(false) { }
     public SqliteBenchmarkFirst(bool withLogging = false)
     {
-        var builder = new DbContextBuilder();
+        var builder = new DataContextBuilder();
         builder.UseSqlite(BenchDb.FilePath);
         if (withLogging)
         {
@@ -37,12 +37,12 @@ public class SqliteBenchmarkFirst
             builder.UseLoggerFactory(_logFactory);
             builder.LogSensitiveData(true);
         }
-        _db = builder.CreateDbContext();
+        _db = builder.CreateDataContext();
         _ctx = new TestDataRepository(_db);
         ((IConnectionManager)_db).EnsureConnectionOpen();
 
-        _cmd = _ctx.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).FirstOrFirstOrDefaultCommand(it => it.Id).Prepare();
-        _cmdEntPrepared = _ctx.LargeEntity.Where(it => it.Id == NORM.Param<int>(0)).FirstOrFirstOrDefaultCommand().Prepare();
+        _cmd = _ctx.SimpleEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0)).FirstOrFirstOrDefaultCommand(it => it.Id).Prepare();
+        _cmdEntPrepared = _ctx.LargeEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0)).FirstOrFirstOrDefaultCommand().Prepare();
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(@$"Filename={BenchDb.FilePath}");
@@ -55,7 +55,7 @@ public class SqliteBenchmarkFirst
 
         _efCtx = new EFDataContext(efBuilder.Options);
 
-        _conn = new SqliteConnection(((SqliteDbContext)_ctx.DbContext).ConnectionString);
+        _conn = new SqliteConnection(((SqliteDataContext)_ctx.DataContext).ConnectionString);
         _conn.Open();
 
         _linq2Db = new Linq2DbDataRepository();
@@ -80,7 +80,7 @@ public class SqliteBenchmarkFirst
     [Benchmark()]
     public async Task Nextorm_PreparedForLoop_Entity_FirstOrDefault()
     {
-        var cmdEnt = _ctx.LargeEntity.Where(it => it.Id == NORM.Param<int>(0));
+        var cmdEnt = _ctx.LargeEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0));
         for (int i = 0; i < 10; i++)
             await cmdEnt.FirstOrDefaultAsync(i);
     }

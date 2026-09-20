@@ -1,5 +1,5 @@
 #define PARAM_CONDITION
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Compiled query over an in-memory entity set.

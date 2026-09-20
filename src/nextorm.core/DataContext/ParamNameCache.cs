@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Runtime.CompilerServices;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Indexed cache of parameter names of the form <c>{prefix}{index}</c>. Avoids

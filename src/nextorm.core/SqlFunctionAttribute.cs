@@ -1,4 +1,4 @@
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Maps a CLR method to a database scalar function. Apply it to a placeholder method that is only ever

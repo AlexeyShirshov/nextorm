@@ -1,13 +1,15 @@
 using System.Linq.Expressions;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Shared rendering of SQL operands for the provider-specific translator helpers
 /// (<see cref="ArraySqlTranslator"/>, <see cref="JsonSqlTranslator"/>).
 /// <para>
 /// An array operand is bound as a single parameter through <see cref="InValuesEvaluator"/> (the whole
-/// array, never expanded into a value list); every other operand is rendered by the visitor. The
+/// array, never expanded into a value list); every other operand is rendered by the visitor. For the
+/// array <em>functions</em>, <see cref="AppendArrayOrColumn"/> renders an array column or other SQL
+/// expression instead of parameterising it. The
 /// parameter-extraction pass (<see cref="BaseExpressionVisitor.IsParamMode"/>) walks the operands in
 /// the same order as the SQL pass, so the computed parameters stay aligned.
 /// </para>
@@ -39,7 +41,7 @@ internal static class SqlOperandTranslator
     }
 
     /// <summary>
-    /// Binds an array operand as one parameter. A runtime placeholder (<see cref="NORM.Param{T}(int)"/>)
+    /// Binds an array operand as one parameter. A runtime placeholder (<see cref="SqlFunctions.Parameter{T}(int)"/>)
     /// is rendered directly; any other array (a captured local/field, a constant or an inline
     /// <c>new[]</c>) is evaluated and stored as a computed parameter.
     /// </summary>
@@ -48,7 +50,7 @@ internal static class SqlOperandTranslator
         arrayExp = UnwrapConvert(arrayExp);
 
         if (arrayExp is MethodCallExpression { Method.DeclaringType: var declaring } paramCall
-            && declaring == typeof(NORM))
+            && declaring == typeof(SqlFunctions))
         {
             visitor.Visit(paramCall);
             return;
@@ -66,8 +68,8 @@ internal static class SqlOperandTranslator
         }
 
         var value = InValuesEvaluator.Evaluate(arrayExp, visitor.QueryProvider);
-        var name = visitor.ParamProvider.GetParamName();
-        visitor.Params.Add(new Param(name, value));
+        var name = visitor.ParameterProvider.GetParamName();
+        visitor.Params.Add(new Parameter(name, value));
 
         if (!visitor.IsParamMode)
             visitor.Builder!.Append(visitor.Dialect.MakeParam(name));
@@ -138,6 +140,53 @@ internal static class SqlOperandTranslator
         }
 
         visitor.Builder!.Append("string_to_array(").Append(value).Append(", ").Append(separator).Append(')');
+    }
+
+    /// <summary>
+    /// Renders an argument for an array <em>function</em>: an array column or other SQL expression is
+    /// emitted as SQL, while a captured/constant/inline array is still bound as a single parameter.
+    /// </summary>
+    internal static void AppendArrayOrColumn(BaseExpressionVisitor visitor, Expression argument)
+    {
+        if (IsArray(argument) && !IsCapturedArray(argument))
+        {
+            if (visitor.IsParamMode)
+                visitor.Visit(argument);
+            else
+                visitor.Builder!.Append(visitor.VisitToString(argument));
+
+            return;
+        }
+
+        AppendArgument(visitor, argument);
+    }
+
+    /// <summary>
+    /// True when an array expression is a captured/constant value (a closure field/local, an embedded
+    /// constant or an inline <c>new[]</c>) that should be bound as one parameter, rather than an entity
+    /// member (array column) or a SQL-producing expression that must be rendered.
+    /// </summary>
+    internal static bool IsCapturedArray(Expression expression)
+    {
+        expression = UnwrapConvert(expression);
+
+        switch (expression)
+        {
+            case ConstantExpression:
+            case NewArrayExpression:
+                return true;
+            case MethodCallExpression { Method.DeclaringType: var declaring } when declaring == typeof(SqlFunctions):
+                // SqlFunctions.Parameter<T>(idx) is a runtime placeholder, not a captured array.
+                return false;
+        }
+
+        var root = expression;
+        while (root is MemberExpression member)
+            root = member.Expression!;
+
+        // A captured local/field is a member chain rooted at the closure constant; a static field has
+        // no receiver. An entity member is rooted at the query parameter, so it is a column.
+        return root is null or ConstantExpression;
     }
 
     /// <summary>Renders <c>name(arg, ...)</c> over the given arguments.</summary>

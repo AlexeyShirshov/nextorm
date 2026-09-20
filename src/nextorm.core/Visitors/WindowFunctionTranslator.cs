@@ -1,9 +1,9 @@
 using System.Linq.Expressions;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
-/// Translates <see cref="NORM.WindowFunction{T}"/> calls into
+/// Translates <see cref="WindowFunction{T}"/> calls into
 /// <c>func(...) over (partition by ... order by ... frame)</c>. Extracted from
 /// <see cref="BaseExpressionVisitor"/>; the visitor walk, the emitted SQL and therefore the
 /// parameter numbering are unchanged. The function-name map, the partition/order parsing and the
@@ -13,8 +13,8 @@ internal static class WindowFunctionTranslator
 {
     /// <summary>
     /// Translates a window function into <c>func(...) over (partition by ... order by ... frame)</c>.
-    /// The function is modelled as a call to the <c>Over</c> method on <see cref="NORM.WindowFunction{T}"/> whose
-    /// target is the <see cref="NORM.NORM_SQL"/> function call (<c>row_number</c>, <c>lag</c>, <c>sum_over</c>,
+    /// The function is modelled as a call to the <c>Over</c> method on <see cref="WindowFunction{T}"/> whose
+    /// target is the <see cref="CommonFunctions"/> function call (<c>row_number</c>, <c>lag</c>, <c>sum_over</c>,
     /// ...); the partition/order keys are nested lambdas that close over the outer query parameter, so
     /// they are rendered with this visitor's own context (the same <see cref="BaseExpressionVisitor.Clone"/>-free path the
     /// rest of the select list uses).
@@ -29,11 +29,11 @@ internal static class WindowFunctionTranslator
         var declaringType = node.Method.DeclaringType;
         if (declaringType is null
             || !declaringType.IsGenericType
-            || declaringType.GetGenericTypeDefinition() != typeof(NORM.WindowFunction<>))
+            || declaringType.GetGenericTypeDefinition() != typeof(WindowFunction<>))
             return false;
 
         if (node.Object is not MethodCallExpression functionCall
-            || functionCall.Method.DeclaringType != typeof(NORM.NORM_SQL)
+            || functionCall.Method.DeclaringType != typeof(CommonFunctions)
             || WindowSql.MapWindowFunctionName(functionCall.Method.Name) is not { } functionName)
             return false;
 
@@ -43,6 +43,16 @@ internal static class WindowFunctionTranslator
 
         var partitions = WindowSql.ParseWindowPartitions(partitionArgument);
         var orders = WindowSql.ParseWindowOrders(orderArgument);
+
+        if (functionName is "percent_rank" or "cume_dist" && !visitor.Dialect.SupportsPercentRankCumeDist)
+            throw new NotSupportedException("The percent_rank/cume_dist window functions are not supported by this provider.");
+
+        if (functionName == "nth_value" && !visitor.Dialect.SupportsNthValue)
+            throw new NotSupportedException("The nth_value window function is not supported by this provider.");
+
+        var isPercentile = functionName is "percentile_cont" or "percentile_disc";
+        if (isPercentile && !visitor.Dialect.SupportsPercentileWindow)
+            throw new NotSupportedException("The percentile_cont/percentile_disc window functions are not supported by this provider.");
 
         if (visitor.IsParamMode)
         {
@@ -63,37 +73,49 @@ internal static class WindowFunctionTranslator
         var frame = EvaluateWindowFrame(visitor, frameArgument);
 
         visitor.NeedAliasForColumn = true;
+        var windowStart = visitor.Builder!.Length;
 
         // The aggregate functions keep their dialect mapping (e.g. stdev -> stddev) and count() keeps
         // its dialect spelling (the opening parenthesis is part of MakeCount); the ranking/value
         // functions are ANSI and shared by every provider.
         var functionArgs = functionCall.Arguments;
-        if (functionName == "count")
+        if (isPercentile)
         {
-            visitor.Builder!.Append(visitor.Dialect.MakeCount(false, false));
+            visitor.Builder!.Append(functionName).Append('(');
+            visitor.Visit(functionArgs[0]);
+            visitor.Builder!.Append(") within group (order by ");
+            visitor.Visit(functionArgs[1]);
+            visitor.Builder!.Append(") over (");
         }
         else
         {
-            visitor.Builder!.Append(functionName is "sum" or "avg" or "min" or "max"
-                ? visitor.Dialect.MakeAggregate(functionName)
-                : functionName);
-            visitor.Builder!.Append('(');
-        }
-
-        if (functionName == "count" && functionArgs.Count == 0)
-        {
-            visitor.Builder!.Append('*');
-        }
-        else
-        {
-            for (var (i, cnt) = (0, functionArgs.Count); i < cnt; i++)
+            if (functionName == "count")
             {
-                if (i > 0) visitor.Builder!.Append(", ");
-                visitor.Visit(functionArgs[i]);
+                visitor.Builder!.Append(visitor.Dialect.MakeCount(false, false));
             }
-        }
+            else
+            {
+                visitor.Builder!.Append(functionName is "sum" or "avg" or "min" or "max"
+                    ? visitor.Dialect.MakeAggregate(functionName)
+                    : functionName);
+                visitor.Builder!.Append('(');
+            }
 
-        visitor.Builder!.Append(") over (");
+            if (functionName == "count" && functionArgs.Count == 0)
+            {
+                visitor.Builder!.Append('*');
+            }
+            else
+            {
+                for (var (i, cnt) = (0, functionArgs.Count); i < cnt; i++)
+                {
+                    if (i > 0) visitor.Builder!.Append(", ");
+                    visitor.Visit(functionArgs[i]);
+                }
+            }
+
+            visitor.Builder!.Append(") over (");
+        }
 
         if (partitions.Count > 0)
         {
@@ -126,29 +148,37 @@ internal static class WindowFunctionTranslator
         }
 
         visitor.Builder!.Append(')');
+
+        if (functionName == "count" && visitor.Dialect.WrapsCountResult)
+        {
+            var rendered = visitor.Builder!.ToString(windowStart, visitor.Builder!.Length - windowStart);
+            visitor.Builder!.Length = windowStart;
+            visitor.Builder!.Append(visitor.Dialect.WrapCount(rendered, big: false));
+        }
+
         return true;
     }
 
     /// <summary>
-    /// Evaluates the <see cref="NORM.WindowFrame"/> argument. A frame is constant with respect to the
+    /// Evaluates the <see cref="WindowFrame"/> argument. A frame is constant with respect to the
     /// query (it carries only boundaries), so its expression is compiled and cached rather than
     /// rendered as SQL.
     /// </summary>
-    private static NORM.WindowFrame? EvaluateWindowFrame(BaseExpressionVisitor visitor, Expression? expression)
+    private static WindowFrame? EvaluateWindowFrame(BaseExpressionVisitor visitor, Expression? expression)
     {
         if (expression is null or ConstantExpression { Value: null })
             return null;
 
-        if (expression is ConstantExpression { Value: NORM.WindowFrame constant })
+        if (expression is ConstantExpression { Value: WindowFrame constant })
             return constant;
 
         var key = new ExpressionKey(expression, visitor.QueryProvider);
         if (!DataContextCache.ExpressionsCache.TryGetValue(key, out var del))
         {
-            del = Expression.Lambda<Func<NORM.WindowFrame>>(expression).Compile();
+            del = Expression.Lambda<Func<WindowFrame>>(expression).Compile();
             DataContextCache.ExpressionsCache[key] = del;
         }
 
-        return ((Func<NORM.WindowFrame>)del)();
+        return ((Func<WindowFrame>)del)();
     }
 }

@@ -1,4 +1,4 @@
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Narrowest contract for a component that only needs to prepare a query and read its rows

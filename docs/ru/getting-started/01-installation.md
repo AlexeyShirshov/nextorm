@@ -9,13 +9,13 @@
 NextORM разделён на небольшой основной пакет, не зависящий от драйвера, и по одному пакету на каждый реляционный провайдер:
 
 * `nextorm` (сборка `nextorm.core`) содержит построитель и компилятор запросов, метаданные сущностей,
-  вспомогательные методы внедрения зависимостей, кэш планов **и провайдер in-memory** (`InMemoryContext`). Он
+  вспомогательные методы внедрения зависимостей, кэш планов **и провайдер in-memory** ([`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext)). Он
   ссылается на `Microsoft.Extensions.DependencyInjection`, `Microsoft.Extensions.Logging`,
   `Microsoft.Extensions.ObjectPool` и `OneOf`, но не на драйвер базы данных.
 * `nextorm.sqlite`, `nextorm.sqlserver`, `nextorm.postgres`, `nextorm.mysql`, `nextorm.mariadb` и
   `nextorm.clickhouse` добавляют каждый свой конкретный контекст
-  (`SqliteDbContext`, `SqlServerDbContext`, `PostgresDbContext`, `MySqlDbContext`, `MariaDbContext`,
-  `ClickHouseDbContext`) и расширение регистрации `Use…`.
+  ([`SqliteDataContext`](xref:NextORM.Sqlite.SqliteDataContext), [`SqlServerDataContext`](xref:NextORM.SqlServer.SqlServerDataContext), [`PostgresDataContext`](xref:NextORM.Postgres.PostgresDataContext), [`MySqlDataContext`](xref:NextORM.MySql.MySqlDataContext), [`MariaDbDataContext`](xref:NextORM.MariaDb.MariaDbDataContext),
+  [`ClickHouseDataContext`](xref:NextORM.ClickHouse.ClickHouseDataContext)) и расширение регистрации `Use…`.
   Пакеты провайдеров транзитивно зависят от `nextorm`.
 
 Все текущие релизы являются пререлизами (линейка `1.0.1-alpha`), поэтому в каждой команде установки
@@ -50,12 +50,12 @@ Install-Package nextorm.sqlite -Prerelease
 | Пакет | Идентификатор пакета | Добавляет | Драйвер |
 |---|---|---|---|
 | Основной | `nextorm` | Движок запросов, метаданные, DI, провайдер in-memory | — |
-| SQLite | `nextorm.sqlite` | `SqliteDbContext`, `UseSqlite` | `Microsoft.Data.Sqlite` |
-| SQL Server | `nextorm.sqlserver` | `SqlServerDbContext`, `UseSqlServer` | `Microsoft.Data.SqlClient` |
-| PostgreSQL | `nextorm.postgres` | `PostgresDbContext`, `UsePostgres` | `Npgsql` |
-| MySQL | `nextorm.mysql` | `MySqlDbContext`, `UseMySql` | `MySqlConnector` |
-| MariaDB | `nextorm.mariadb` | `MariaDbContext`, `UseMariaDb` | `MySqlConnector` |
-| ClickHouse | `nextorm.clickhouse` | `ClickHouseDbContext`, `UseClickHouse` | `ClickHouse.Driver` |
+| SQLite | `nextorm.sqlite` | [`SqliteDataContext`](xref:NextORM.Sqlite.SqliteDataContext), [`UseSqlite`](xref:NextORM.Sqlite.SqliteDataContextOptionsBuilderExtensions) | `Microsoft.Data.Sqlite` |
+| SQL Server | `nextorm.sqlserver` | [`SqlServerDataContext`](xref:NextORM.SqlServer.SqlServerDataContext), [`UseSqlServer`](xref:NextORM.SqlServer.SqlServerDataContextOptionsBuilderExtensions) | `Microsoft.Data.SqlClient` |
+| PostgreSQL | `nextorm.postgres` | [`PostgresDataContext`](xref:NextORM.Postgres.PostgresDataContext), [`UsePostgres`](xref:NextORM.Postgres.PostgresDataContextOptionsBuilderExtensions) | `Npgsql` |
+| MySQL | `nextorm.mysql` | [`MySqlDataContext`](xref:NextORM.MySql.MySqlDataContext), [`UseMySql`](xref:NextORM.MySql.MySqlDataContextOptionsBuilderExtensions) | `MySqlConnector` |
+| MariaDB | `nextorm.mariadb` | [`MariaDbDataContext`](xref:NextORM.MariaDb.MariaDbDataContext), [`UseMariaDb`](xref:NextORM.MariaDb.MariaDbDataContextOptionsBuilderExtensions) | `MySqlConnector` |
+| ClickHouse | `nextorm.clickhouse` | [`ClickHouseDataContext`](xref:NextORM.ClickHouse.ClickHouseDataContext), [`UseClickHouse`](xref:NextORM.ClickHouse.ClickHouseDataContextOptionsBuilderExtensions) | `ClickHouse.Driver` |
 
 Провайдер in-memory находится в основном пакете, поэтому доступен без установки провайдера.
 
@@ -74,8 +74,8 @@ Install-Package nextorm.sqlite -Prerelease
 
 * [Быстрый старт](02-quickstart.md) - полная минимальная программа.
 * [Сущности и метаданные](03-entities-and-metadata.md) - атрибуты, отображение интерфейс/класс и
-  режим `TableAlias` без сущностей.
-* [Внедрение зависимостей](04-dependency-injection.md) - регистрация контекста с помощью `AddNextOrmContext`
+  режим [`TableAlias`](xref:NextORM.Core.TableAlias) без сущностей.
+* [Внедрение зависимостей](04-dependency-injection.md) - регистрация контекста с помощью [`AddNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions)
   и методы `Use…` провайдеров.
 
 ---
@@ -83,4 +83,4 @@ Install-Package nextorm.sqlite -Prerelease
 Source: `docs/index.md:91`; `src/nextorm.core/nextorm.core.csproj:4`;
 `src/nextorm.sqlite/nextorm.sqlite.csproj:7`; `src/nextorm.sqlserver/nextorm.sqlserver.csproj:16`;
 `src/nextorm.postgres/nextorm.postgres.csproj:8`;
-in-memory availability: `test/nextorm.core.tests/DependencyInjectionTests.cs:16`.
+in-memory availability: `tests/nextorm.core.tests/DependencyInjectionTests.cs:16`.

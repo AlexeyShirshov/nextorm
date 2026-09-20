@@ -8,9 +8,9 @@
 ## Обзор
 
 nextorm распознаёт фиксированный набор членов CLR и переписывает их в SQL внутри любого выражения запроса.
-Диспетчеризация находится в `BaseExpressionVisitor`: методы `string`, методы `Math`, члены `DateTime`,
-`NORM.SQL.like`, оператор `??` и числовые преобразования. Всё, что зависит от провайдера, делегируется
-`ISqlDialect`, поэтому один и тот же код C# генерирует правильную функцию на каждом провайдере.
+Диспетчеризация находится в [`BaseExpressionVisitor`](xref:NextORM.Core.BaseExpressionVisitor): методы `string`, методы `Math`, члены `DateTime`,
+`SqlFunctions.Sql.like`, оператор `??` и числовые преобразования. Всё, что зависит от провайдера, делегируется
+[`ISqlDialect`](xref:NextORM.Core.ISqlDialect), поэтому один и тот же код C# генерирует правильную функцию на каждом провайдере.
 
 Повсюду действуют два правила:
 
@@ -23,11 +23,14 @@ nextorm распознаёт фиксированный набор членов 
 [`[SqlFunction]`](12-user-defined-functions.md), поэтому пользовательский атрибут не может изменить
 поведение членов `string`/`Math`/`DateTime`.
 
-Кросс-провайдерные помощники находятся в `NORM.SQL`. Функции, которые поддерживает только один
-провайдер, сгруппированы в отдельную провайдерную поверхность: `NORM.PG_SQL` (PostgreSQL: нативные
+Кросс-провайдерные помощники находятся в `` Функции, которые поддерживает только один
+провайдер, сгруппированы в отдельную провайдерную поверхность: [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) (PostgreSQL: нативные
 массивы, нативный JSON, расширенная библиотека скалярных функций, PG-only агрегаты и табличные
-функции `generate_series`/`unnest`), `NORM.MS_SQL` (SQL Server: JSON-как-текст и
-`string_split`/`openjson`) и `NORM.CLK_SQL` (ClickHouse: `arg_min`/`arg_max` и комбинатор `-If`).
+функции `generate_series`/`unnest`), [`SqlServer`](xref:NextORM.Core.SqlFunctions.SqlServer) (SQL Server: JSON-как-текст и
+`string_split`/`openjson`) и [`ClickHouse`](xref:NextORM.Core.SqlFunctions.ClickHouse) (ClickHouse: `arg_min`/`arg_max`, комбинатор `-If`,
+семейство строкового JSON `JSONExtract*`, быстрый разбор плоского JSON `visitParamExtract*`,
+JSONPath-скаляры `json_value`/`json_query`/`json_exists` и функции
+словарей `dict_get`/`dict_get_or_default`/`dict_has`).
 Вызов любой из них на провайдере, который не opt-in, бросает `NotSupportedException`.
 
 ## Строковые функции
@@ -73,15 +76,15 @@ var rows = dataContext.From<IComplexEntity>()
 | `s.StartsWith(x)` | `s like 'x%'` | |
 | `s.EndsWith(x)` | `s like '%x'` | |
 | `string.IsNullOrEmpty(s)` | `(s is null or s = '')` | |
-| `NORM.SQL.like(s, pattern)` | `s like pattern` | Явный `LIKE`. |
-| `NORM.SQL.like(s, pattern, escape)` | `s like pattern escape escape` | |
+| `SqlFunctions.Sql.like(s, pattern)` | `s like pattern` | Явный `LIKE`. |
+| `SqlFunctions.Sql.like(s, pattern, escape)` | `s like pattern escape escape` | |
 
-`NORM.SQL.like` — это запасной вариант, когда шаблон не является простым
+`SqlFunctions.Sql.like` — это запасной вариант, когда шаблон не является простым
 `Contains`/`StartsWith`/`EndsWith`:
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
-    .Where(e => NORM.SQL.like(e.String, "%a%"))
+    .Where(e => SqlFunctions.Sql.like(e.String, "%a%"))
     .Select(e => new { e.Id })
     .ToList();
 ```
@@ -113,41 +116,41 @@ select id from complex_entity where somestring like '%'||$needle||'%'
 
 ## Расширения строк и регулярных выражений (PostgreSQL)
 
-Помимо переносимых методов `string` выше, `NORM.PG_SQL` предоставляет распространённые строковые функции
+Помимо переносимых методов `string` выше, [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) предоставляет распространённые строковые функции
 PostgreSQL и функции POSIX-регулярных выражений. Они входят в расширенную библиотеку скалярных функций
-(`ISqlDialect.SupportsExtendedScalarFunctions`, только PostgreSQL):
+([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions), только PostgreSQL):
 
 > Предпочитайте переносимые встроенные формы там, где они есть: они рендерятся всеми провайдерами, тогда
-> как формы `NORM.PG_SQL` ниже доступны только в PostgreSQL. Используйте `s.Substring(0, n)` /
+> как формы [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) ниже доступны только в PostgreSQL. Используйте `s.Substring(0, n)` /
 > `s.Substring(s.Length - n)` вместо `left`/`right` и `s.PadLeft(n, c)` / `s.PadRight(n, c)` вместо
 > `lpad`/`rpad`.
 
 | C# | SQL |
 |---|---|
-| `NORM.PG_SQL.split_part(s, delim, n)` | `split_part(s, delim, n)` |
-| `NORM.PG_SQL.strpos(s, sub)` | `strpos(s, sub)` |
-| `NORM.PG_SQL.left(s, n)` / `NORM.PG_SQL.right(s, n)` | `left(s, n)` / `right(s, n)` |
-| `NORM.PG_SQL.lpad(s, n, fill)` / `NORM.PG_SQL.rpad(s, n, fill)` | `lpad(s, n, fill)` / `rpad(s, n, fill)` |
-| `NORM.PG_SQL.repeat(s, n)` | `repeat(s, n)` |
-| `NORM.PG_SQL.reverse(s)` | `reverse(s)` |
-| `NORM.PG_SQL.initcap(s)` | `initcap(s)` |
-| `NORM.PG_SQL.translate(s, from, to)` | `translate(s, from, to)` |
-| `NORM.PG_SQL.overlay(s, placing, from, count)` | `overlay(s, placing, from, count)` |
-| `NORM.PG_SQL.concat_ws(sep, ...)` | `concat_ws(sep, ...)` |
-| `NORM.PG_SQL.format(fmt, ...)` | `format(fmt, ...)` |
-| `NORM.PG_SQL.md5(s)` | `md5(s)` |
-| `NORM.PG_SQL.regexp_replace(s, pattern, replacement[, flags])` | `regexp_replace(...)` |
-| `NORM.PG_SQL.regexp_like(s, pattern[, flags])` | `regexp_like(...)` |
-| `NORM.PG_SQL.regexp_split_to_array(s, pattern)` | `regexp_split_to_array(s, pattern)` |
-| `NORM.PG_SQL.regexp_count(s, pattern)` | `regexp_count(s, pattern)` |
-| `NORM.PG_SQL.regexp_instr(s, pattern)` | `regexp_instr(s, pattern)` |
+| `SqlFunctions.Postgres.split_part(s, delim, n)` | `split_part(s, delim, n)` |
+| `SqlFunctions.Postgres.strpos(s, sub)` | `strpos(s, sub)` |
+| `SqlFunctions.Postgres.left(s, n)` / `SqlFunctions.Postgres.right(s, n)` | `left(s, n)` / `right(s, n)` |
+| `SqlFunctions.Postgres.lpad(s, n, fill)` / `SqlFunctions.Postgres.rpad(s, n, fill)` | `lpad(s, n, fill)` / `rpad(s, n, fill)` |
+| `SqlFunctions.Postgres.repeat(s, n)` | `repeat(s, n)` |
+| `SqlFunctions.Postgres.reverse(s)` | `reverse(s)` |
+| `SqlFunctions.Postgres.initcap(s)` | `initcap(s)` |
+| `SqlFunctions.Postgres.translate(s, from, to)` | `translate(s, from, to)` |
+| `SqlFunctions.Postgres.overlay(s, placing, from, count)` | `overlay(s, placing, from, count)` |
+| `SqlFunctions.Postgres.concat_ws(sep, ...)` | `concat_ws(sep, ...)` |
+| `SqlFunctions.Postgres.format(fmt, ...)` | `format(fmt, ...)` |
+| `SqlFunctions.Postgres.md5(s)` | `md5(s)` |
+| `SqlFunctions.Postgres.regexp_replace(s, pattern, replacement[, flags])` | `regexp_replace(...)` |
+| `SqlFunctions.Postgres.regexp_like(s, pattern[, flags])` | `regexp_like(...)` |
+| `SqlFunctions.Postgres.regexp_split_to_array(s, pattern)` | `regexp_split_to_array(s, pattern)` |
+| `SqlFunctions.Postgres.regexp_count(s, pattern)` | `regexp_count(s, pattern)` |
+| `SqlFunctions.Postgres.regexp_instr(s, pattern)` | `regexp_instr(s, pattern)` |
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
     .Select(e => new
     {
-        Part = NORM.PG_SQL.split_part(e.String, ",", 1),
-        LooksLikeA = NORM.PG_SQL.regexp_like(e.String, "^a")
+        Part = SqlFunctions.Postgres.split_part(e.String, ",", 1),
+        LooksLikeA = SqlFunctions.Postgres.regexp_like(e.String, "^a")
     })
     .ToList();
 ```
@@ -173,30 +176,40 @@ var values = dataContext.From<IComplexEntity>()
 select abs((id - 5)) from complex_entity
 ```
 
+Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
+
+Вывод:
+
+| Abs |
+|-----|
+| 4   |
+| 3   |
+| 2   |
+
 ### Расширенная математика PostgreSQL
 
 Остальные математические функции входят в расширенную библиотеку скалярных функций
-(`ISqlDialect.SupportsExtendedScalarFunctions`, только PostgreSQL):
+([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions), только PostgreSQL):
 
 | C# | SQL |
 |---|---|
-| `NORM.PG_SQL.asin(x)` / `acos(x)` / `atan(x)` | `asin(x)` / `acos(x)` / `atan(x)` |
-| `NORM.PG_SQL.atan2(y, x)` | `atan2(y, x)` |
-| `NORM.PG_SQL.cbrt(x)` | `cbrt(x)` |
-| `NORM.PG_SQL.sinh(x)` / `cosh(x)` / `tanh(x)` | `sinh(x)` / `cosh(x)` / `tanh(x)` |
-| `NORM.PG_SQL.asinh(x)` / `acosh(x)` / `atanh(x)` | `asinh(x)` / `acosh(x)` / `atanh(x)` |
-| `NORM.PG_SQL.degrees(x)` / `NORM.PG_SQL.radians(x)` | `degrees(x)` / `radians(x)` |
-| `NORM.PG_SQL.pi()` / `NORM.PG_SQL.random()` | `pi()` / `random()` |
-| `NORM.PG_SQL.log(base, x)` | `log(base, x)` |
-| `NORM.PG_SQL.mod(a, b)` / `gcd(a, b)` / `lcm(a, b)` | `mod(a, b)` / `gcd(a, b)` / `lcm(a, b)` |
-| `NORM.PG_SQL.factorial(n)` | `factorial(n)` |
-| `NORM.PG_SQL.width_bucket(x, low, high, count)` | `width_bucket(x, low, high, count)` |
+| `SqlFunctions.Postgres.asin(x)` / `acos(x)` / `atan(x)` | `asin(x)` / `acos(x)` / `atan(x)` |
+| `SqlFunctions.Postgres.atan2(y, x)` | `atan2(y, x)` |
+| `SqlFunctions.Postgres.cbrt(x)` | `cbrt(x)` |
+| `SqlFunctions.Postgres.sinh(x)` / `cosh(x)` / `tanh(x)` | `sinh(x)` / `cosh(x)` / `tanh(x)` |
+| `SqlFunctions.Postgres.asinh(x)` / `acosh(x)` / `atanh(x)` | `asinh(x)` / `acosh(x)` / `atanh(x)` |
+| `SqlFunctions.Postgres.degrees(x)` / `SqlFunctions.Postgres.radians(x)` | `degrees(x)` / `radians(x)` |
+| `SqlFunctions.Postgres.pi()` / `SqlFunctions.Postgres.random()` | `pi()` / `random()` |
+| `SqlFunctions.Postgres.log(base, x)` | `log(base, x)` |
+| `SqlFunctions.Postgres.mod(a, b)` / `gcd(a, b)` / `lcm(a, b)` | `mod(a, b)` / `gcd(a, b)` / `lcm(a, b)` |
+| `SqlFunctions.Postgres.factorial(n)` | `factorial(n)` |
+| `SqlFunctions.Postgres.width_bucket(x, low, high, count)` | `width_bucket(x, low, high, count)` |
 
 ## Дата и время
 
 `DateTime.Now` и `DateTime.UtcNow` рендерятся как SQL-выражения, а не вычисляются как параметр. `.Year`,
-`.Month`, `.Day` и `.Hour` (а также `.Minute` и `.Second`) становятся извлечением части даты, специфичным
-для провайдера:
+`.Month`, `.Day`, `.DayOfYear` и `.Hour` (а также `.Minute` и `.Second`) становятся извлечением части
+даты, специфичным для провайдера:
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -218,28 +231,67 @@ select cast(strftime('%Y', dt) as integer) as 'Year', cast(strftime('%m', dt) as
 ... extract(year from dt) ... extract(month from dt) ... extract(day from dt) ...
 ```
 
+Вывод:
+
+| Year | Month | Day |
+|------|-------|-----|
+| 2023 | 1     | 1   |
+
 Важная деталь для SQLite: `strftime` возвращает текст, поэтому результат оборачивается в
 `cast(... as integer)`, чтобы материализоваться как свойство CLR `int`.
 
 ### Расширенные дата и время PostgreSQL
 
 Эти функции входят в расширенную библиотеку скалярных функций
-(`ISqlDialect.SupportsExtendedScalarFunctions`, только PostgreSQL):
+([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions), только PostgreSQL):
 
 | C# | SQL |
 |---|---|
-| `NORM.PG_SQL.make_interval(y, mo, d, h, mi, s)` | `make_interval(y, mo, d, h, mi, s)` |
-| `NORM.PG_SQL.justify_days(interval)` / `justify_hours(interval)` | `justify_days(interval)` / `justify_hours(interval)` |
-| `NORM.PG_SQL.to_char(value, format)` | `to_char(value, format)` |
-| `NORM.PG_SQL.to_date(text, format)` | `to_date(text, format)` |
-| `NORM.PG_SQL.to_number(text, format)` | `to_number(text, format)` |
-| `NORM.PG_SQL.to_timestamp(epoch)` / `to_timestamp(text, format)` | `to_timestamp(...)` |
-| `NORM.PG_SQL.timezone(zone, value)` | `timezone(zone, value)` |
-| `NORM.PG_SQL.current_date()` / `current_time()` / `localtime()` / `localtimestamp()` | те же ключевые слова |
+| `SqlFunctions.Postgres.make_interval(y, mo, d, h, mi, s)` | `make_interval(y, mo, d, h, mi, s)` |
+| `SqlFunctions.Postgres.justify_days(interval)` / `justify_hours(interval)` | `justify_days(interval)` / `justify_hours(interval)` |
+| `SqlFunctions.Postgres.to_char(value, format)` | `to_char(value, format)` |
+| `SqlFunctions.Postgres.to_date(text, format)` | `to_date(text, format)` |
+| `SqlFunctions.Postgres.to_number(text, format)` | `to_number(text, format)` |
+| `SqlFunctions.Postgres.to_timestamp(epoch)` / `to_timestamp(text, format)` | `to_timestamp(...)` |
+| `SqlFunctions.Postgres.timezone(zone, value)` | `timezone(zone, value)` |
+| `SqlFunctions.Postgres.current_date()` / `current_time()` / `localtime()` / `localtimestamp()` | те же ключевые слова |
+| `SqlFunctions.Postgres.pg_typeof(x)` | `cast(pg_typeof(x) as text)` |
 
 Для построения дат и арифметики используется переносимый набор: `date_from_parts`, `date_add`,
 `date_diff`, `date_trunc` и члены `DateTime` (см. [Арифметику дат](#арифметика-дат) ниже).
 `make_date`, `age`, `date_bin` и `extract` больше не предоставляются отдельно.
+
+### Информация о сессии и сервере
+
+`SqlFunctions.Sql.current_user()`, `session_user()`, `current_schema()`, `current_database()` и
+`version()` — кросс-провайдерные
+([`SupportsSessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SupportsSessionInfoFunctions) плюс
+пофункциональный [`SupportsSessionInfoFunction`](xref:NextORM.Core.ISqlDialect.SupportsSessionInfoFunction)):
+
+| C# | PostgreSQL | SQL Server | MySQL/MariaDB | ClickHouse | SQLite |
+|---|---|---|---|---|---|
+| `current_user()` | `current_user` | `current_user` | `current_user()` | `currentUser()` | — |
+| `session_user()` | `session_user` | `session_user` | `session_user()` | — | — |
+| `current_schema()` | `current_schema` | `schema_name()` | `schema()` | — | — |
+| `current_database()` | `current_database()` | `db_name()` | `database()` | `currentDatabase()` | — |
+| `version()` | `version()` | `@@version` | `version()` | `version()` | `sqlite_version()` |
+
+Провайдер, который не умеет функцию, выбрасывает `NotSupportedException`.
+
+### Генераторы UUID
+
+`SqlFunctions.Sql.gen_random_uuid()` (случайный v4) и `uuidv7()` — кросс-провайдерные
+([`SupportsUuidGenerators`](xref:NextORM.Core.ISqlDialect.SupportsUuidGenerators) плюс
+пофункциональный [`SupportsUuidGenerator`](xref:NextORM.Core.ISqlDialect.SupportsUuidGenerator(string))):
+
+| C# | PostgreSQL | SQL Server | MySQL | MariaDB | ClickHouse | SQLite |
+|---|---|---|---|---|---|---|
+| `gen_random_uuid()` | `gen_random_uuid()` (13+) | `newid()` | — | `UUID_v4()` | `generateUUIDv4()` | — |
+| `uuidv7()` | `uuidv7()` (18+) | — | — | `UUID_v7()` (11.7+) | `generateUUIDv7()` | — |
+
+У MySQL есть только `UUID()` (v1), у SQLite генератора UUID нет, поэтому оба отклоняют вызов. Это
+серверные генераторы, вычисляемые на каждую строку базой; `Guid.NewGuid()` — клиентское значение и
+заменой не является.
 
 ## COALESCE (`??`) и CAST
 
@@ -271,7 +323,7 @@ select coalesce(somestring, '') from complex_entity
 select (cast(id as double precision) / 2) from complex_entity
 ```
 
-Целевые типы числового приведения берутся из `ISqlDialect.MakeTypeName`:
+Целевые типы числового приведения берутся из [`MakeTypeName`](xref:NextORM.Core.ISqlDialect):
 
 | Тип CLR | SQLite / PostgreSQL | SQL Server |
 |---|---|---|
@@ -287,24 +339,24 @@ select (cast(id as double precision) / 2) from complex_entity
 
 В PostgreSQL есть встроенные типы-массивы. Массив всегда передаётся **одним параметром** (целиком), а
 не разворачивается в список значений, поэтому текст SQL не зависит от количества элементов, и план
-запроса остаётся кэшируемым. Массивом может быть runtime-параметр (`NORM.Param<T[]>(idx)`),
+запроса остаётся кэшируемым. Массивом может быть runtime-параметр ([`Parameter`](xref:NextORM.Core.SqlFunctions)),
 захваченная локальная переменная/поле или встроенный `new[]`. Поверхность массивов умеет рендерить
-только диалект, включивший `ISqlDialect.SupportsArrays` (PostgreSQL); все остальные провайдеры бросают
+только диалект, включивший [`SupportsArrays`](xref:NextORM.Core.ISqlDialect.SupportsArrays) (PostgreSQL); все остальные провайдеры бросают
 `NotSupportedException`.
 
-`NORM.PG_SQL.any` / `NORM.PG_SQL.all` принимают массив — либо как готовый предикат (`column = any(@array)`),
+`SqlFunctions.Postgres.any` / `SqlFunctions.Postgres.all` принимают массив — либо как готовый предикат (`column = any(@array)`),
 либо как правую часть сравнения:
 
 ```csharp
 var ids = new long[] { 1, 2, 3 };
 
 var rows = dataContext.From<IComplexEntity>()
-    .Where(e => NORM.PG_SQL.any(e.Id, ids))     // (id = any(@p0))
+    .Where(e => SqlFunctions.Postgres.any(e.Id, ids))     // (id = any(@p0))
     .Select(e => new { e.Id })
     .ToList();
 
 var same = dataContext.From<IComplexEntity>()
-    .Where(e => e.Id == NORM.PG_SQL.any(ids))   // id = any(@p0)
+    .Where(e => e.Id == SqlFunctions.Postgres.any(ids))   // id = any(@p0)
     .Select(e => new { e.Id })
     .ToList();
 ```
@@ -313,12 +365,12 @@ var same = dataContext.From<IComplexEntity>()
 select id from complex_entity where (id = any(@p0))
 ```
 
-Runtime-параметр-массив использует тот же механизм `NORM.Param`, поэтому массив не нужно знать в момент
+Runtime-параметр-массив использует тот же механизм [`Parameter`](xref:NextORM.Core.SqlFunctions), поэтому массив не нужно знать в момент
 подготовки запроса:
 
 ```csharp
 var prepared = dataContext.From<IComplexEntity>()
-    .Where(e => e.Id == NORM.PG_SQL.any(NORM.Param<long[]>(0)))
+    .Where(e => e.Id == SqlFunctions.Postgres.any(SqlFunctions.Parameter<long[]>(0)))
     .Select(e => new { e.Id })
     .Prepare();
 
@@ -333,28 +385,28 @@ select id from complex_entity where id = any(@norm_p0)
 
 | C# | SQL |
 |---|---|
-| `NORM.PG_SQL.cardinality(a)` | `cardinality(a)` |
-| `NORM.PG_SQL.array_length(a, dim)` | `array_length(a, dim)` |
-| `NORM.PG_SQL.array_ndims(a)` | `array_ndims(a)` |
-| `NORM.PG_SQL.array_lower(a, dim)` | `array_lower(a, dim)` |
-| `NORM.PG_SQL.array_upper(a, dim)` | `array_upper(a, dim)` |
-| `NORM.PG_SQL.array_position(a, element)` | `array_position(a, element)` |
-| `NORM.PG_SQL.array_contains(a, b)` | `a @> b` |
-| `NORM.PG_SQL.array_overlaps(a, b)` | `a && b` |
-| `NORM.PG_SQL.array_contained_by(a, b)` | `a <@ b` |
-| `NORM.PG_SQL.array_concat(a, b)` | `a \|\| b` |
-| `NORM.PG_SQL.array_cat(a, b)` | `array_cat(a, b)` |
-| `NORM.PG_SQL.array_append(a, element)` | `array_append(a, element)` |
-| `NORM.PG_SQL.array_prepend(element, a)` | `array_prepend(element, a)` |
-| `NORM.PG_SQL.array_remove(a, element)` | `array_remove(a, element)` |
-| `NORM.PG_SQL.array_replace(a, from, to)` | `array_replace(a, from, to)` |
-| `NORM.PG_SQL.array_fill(value, dims)` | `array_fill(value, dims)` |
-| `NORM.PG_SQL.array_dims(a)` | `array_dims(a)` |
-| `NORM.PG_SQL.array_positions(a, element)` | `array_positions(a, element)` |
-| `NORM.PG_SQL.array_reverse(a)` | `array_reverse(a)` |
-| `NORM.PG_SQL.array_sort(a)` | `array_sort(a)` |
-| `NORM.PG_SQL.array_to_string(a, delimiter)` | `array_to_string(a, delimiter)` |
-| `NORM.PG_SQL.string_to_array(s, delimiter)` | `string_to_array(s, delimiter)` |
+| `SqlFunctions.Postgres.cardinality(a)` | `cardinality(a)` |
+| `SqlFunctions.Postgres.array_length(a, dim)` | `array_length(a, dim)` |
+| `SqlFunctions.Postgres.array_ndims(a)` | `array_ndims(a)` |
+| `SqlFunctions.Postgres.array_lower(a, dim)` | `array_lower(a, dim)` |
+| `SqlFunctions.Postgres.array_upper(a, dim)` | `array_upper(a, dim)` |
+| `SqlFunctions.Postgres.array_position(a, element)` | `array_position(a, element)` |
+| `SqlFunctions.Postgres.array_contains(a, b)` | `a @> b` |
+| `SqlFunctions.Postgres.array_overlaps(a, b)` | `a && b` |
+| `SqlFunctions.Postgres.array_contained_by(a, b)` | `a <@ b` |
+| `SqlFunctions.Postgres.array_concat(a, b)` | `a \|\| b` |
+| `SqlFunctions.Postgres.array_cat(a, b)` | `array_cat(a, b)` |
+| `SqlFunctions.Postgres.array_append(a, element)` | `array_append(a, element)` |
+| `SqlFunctions.Postgres.array_prepend(element, a)` | `array_prepend(element, a)` |
+| `SqlFunctions.Postgres.array_remove(a, element)` | `array_remove(a, element)` |
+| `SqlFunctions.Postgres.array_replace(a, from, to)` | `array_replace(a, from, to)` |
+| `SqlFunctions.Postgres.array_fill(value, dims)` | `array_fill(value, dims)` |
+| `SqlFunctions.Postgres.array_dims(a)` | `array_dims(a)` |
+| `SqlFunctions.Postgres.array_positions(a, element)` | `array_positions(a, element)` |
+| `SqlFunctions.Postgres.array_reverse(a)` | `array_reverse(a)` |
+| `SqlFunctions.Postgres.array_sort(a)` | `array_sort(a)` |
+| `SqlFunctions.Postgres.array_to_string(a, delimiter)` | `array_to_string(a, delimiter)` |
+| `SqlFunctions.Postgres.string_to_array(s, delimiter)` | `string_to_array(s, delimiter)` |
 
 > Функции, возвращающие массив (`array_append`, `array_cat`, `array_reverse`, `string_to_array`, ...),
 > предназначены для использования внутри запроса (предикат, `having` или вложенное выражение);
@@ -363,8 +415,8 @@ select id from complex_entity where id = any(@norm_p0)
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
-    .Where(e => NORM.PG_SQL.array_length(NORM.Param<long[]>(0), 1) == 3)
-    .Select(e => new { N = NORM.PG_SQL.cardinality(NORM.Param<long[]>(1)) })
+    .Where(e => SqlFunctions.Postgres.array_length(SqlFunctions.Parameter<long[]>(0), 1) == 3)
+    .Select(e => new { N = SqlFunctions.Postgres.cardinality(SqlFunctions.Parameter<long[]>(1)) })
     .ToList();
 ```
 
@@ -372,12 +424,87 @@ var rows = dataContext.From<IComplexEntity>()
 select cardinality(@norm_p1) as "N" from complex_entity where array_length(@norm_p0, 1) = 3
 ```
 
+## Массивы (ClickHouse)
+
+В ClickHouse есть нативный тип `Array(T)`. Функции массивов работают с array-**колонками** (или
+вложенными array-выражениями) и включаются флагом `ISqlDialect.SupportsArrayFunctions`; для
+`arrayJoin` дополнительно нужен `SupportsArrayJoin`. `arrayJoin(array)` разворачивает массив в одну
+строку на элемент, поэтому его результат можно проецировать как скалярную колонку.
+
+| Функция | SQL |
+|---|---|
+| `SqlFunctions.ClickHouse.length(a)` | `length(a)` |
+| `SqlFunctions.ClickHouse.has(a, element)` | `has(a, element)` |
+| `SqlFunctions.ClickHouse.index_of(a, element)` | `indexOf(a, element)` |
+| `SqlFunctions.ClickHouse.has_any(a, b)` | `hasAny(a, b)` |
+| `SqlFunctions.ClickHouse.has_all(a, b)` | `hasAll(a, b)` |
+| `SqlFunctions.ClickHouse.array_string_concat(a, delimiter)` | `arrayStringConcat(a, delimiter)` |
+| `SqlFunctions.ClickHouse.split_by_char(separator, s)` | `splitByChar(separator, s)` |
+| `SqlFunctions.ClickHouse.array_sort(a)` | `arraySort(a)` |
+| `SqlFunctions.ClickHouse.array_reverse(a)` | `arrayReverse(a)` |
+| `SqlFunctions.ClickHouse.array_distinct(a)` | `arrayDistinct(a)` |
+| `SqlFunctions.ClickHouse.array_join(a)` | `arrayJoin(a)` |
+
+> `length`/`indexOf` нативно возвращают `UInt64`, поэтому диалект оборачивает их в `toInt64(...)`.
+> Функции, возвращающие массив (`split_by_char`, `array_sort`, `array_reverse`, `array_distinct`),
+> можно использовать только как операнд другой array-функции; прямое проецирование такой функции
+> падает на этапе подготовки.
+
+```csharp
+var tags = dataContext.From<IArrayEntity>()
+    .Where(e => e.Id == 1)
+    .Select(e => new { e.Id, Tag = SqlFunctions.ClickHouse.array_join(e.Tags) })
+    .ToList();
+```
+
+```sql
+select id, arrayJoin(tags) as `Tag` from array_entity where id = 1
+```
+
+`EntityBuilder.ArrayJoin`/`LeftArrayJoin` рендерят клаузу `[LEFT] ARRAY JOIN`, которая разворачивает
+строки до `WHERE`/`GROUP BY`; `LEFT ARRAY JOIN` сохраняет строку с пустым массивом. Вырожденный элемент
+не привязан к CLR-члену, поэтому для проецирования/фильтрации используйте скалярный `array_join` выше.
+
+```csharp
+var ids = dataContext.From<IArrayEntity>()
+    .LeftArrayJoin(e => e.Tags)
+    .Select(e => e.Id)
+    .ToList();
+```
+
+```sql
+select id from array_entity left array join tags
+```
+
+`EntityBuilder.ArrayJoinElement`/`LeftArrayJoinElement` добавляют ту же клаузу, но возвращают
+`EntityBuilder<ArrayJoinProjection<TEntity, TElement>>`, поэтому доступны и исходная сущность
+(`p.Item1`), и вырожденный элемент (`p.Element`). Выражение клаузы получает алиас, и `p.Element`
+транслируется в этот алиас:
+
+```csharp
+var rows = dataContext.From<IArrayEntity>()
+    .ArrayJoinElement(e => e.Tags)
+    .Where(p => p.Element == "b")
+    .Select(p => new { p.Item1.Id, Tag = p.Element })
+    .ToList();
+```
+
+```sql
+select id, __nextorm_aj_element as `Tag` from array_entity
+array join tags as __nextorm_aj_element
+where __nextorm_aj_element = 'b'
+```
+
+Привязка элемента поддерживается только для одного источника без join'ов; `Where`/`Having` нужно
+применять после неё (их параметр — проекция array join). Если нужны несколько массивов или join —
+используйте `ArrayJoin`/`LeftArrayJoin` со скалярным `array_join`.
+
 ## JSON и JSONB (PostgreSQL)
 
 PostgreSQL — единственный поддерживаемый провайдер с типами `json`/`jsonb`. Операнд JSON должен быть
 выражением `json`/`jsonb`: колонка, другая JSON-функция или параметр, runtime-значение которого —
 `JsonDocument`, `JsonElement` или `JsonNode` (Npgsql привязывает их как `jsonb`). Обычная строка с JSON
-привязывается как `text`; её можно разобрать явно через `NORM.PG_SQL.json_cast(value)`
+привязывается как `text`; её можно разобрать явно через `SqlFunctions.Postgres.json_cast(value)`
 (`cast(value as jsonb)`).
 
 ```csharp
@@ -386,7 +513,7 @@ using System.Text.Json;
 var document = JsonDocument.Parse("""{"name":"Alice","tags":["a","b"]}""");
 
 var rows = dataContext.From<IComplexEntity>()
-    .Where(e => NORM.PG_SQL.json_get_text(NORM.Param<JsonDocument>(0), "name") == "Alice")
+    .Where(e => SqlFunctions.Postgres.json_get_text(SqlFunctions.Parameter<JsonDocument>(0), "name") == "Alice")
     .Select(e => new { e.Id })
     .ToList(document);
 ```
@@ -399,11 +526,11 @@ select id from complex_entity where ((@norm_p0 ->> 'name') = 'Alice')
 
 ```csharp
 var json = dataContext.From<IComplexEntity>()
-    .Select(e => NORM.PG_SQL.jsonb_agg(e.String))
+    .Select(e => SqlFunctions.Postgres.jsonb_agg(e.String))
     .First();
 
 var person = dataContext.From<IComplexEntity>()
-    .Select(e => NORM.PG_SQL.jsonb_build_object("id", e.Id, "name", e.String))
+    .Select(e => SqlFunctions.Postgres.jsonb_build_object("id", e.Id, "name", e.String))
     .First();
 ```
 
@@ -414,52 +541,53 @@ select jsonb_build_object('id', id, 'name', somestring) from complex_entity
 
 | C# | SQL |
 |---|---|
-| `NORM.PG_SQL.json_agg(x)` / `jsonb_agg(x)` | `json_agg(x)` / `jsonb_agg(x)` |
-| `NORM.PG_SQL.json_object_agg(k, v)` / `jsonb_object_agg(k, v)` | `json_object_agg(k, v)` / `jsonb_object_agg(k, v)` |
-| `NORM.PG_SQL.json_build_object("a", x, ...)` | `json_build_object('a', x, ...)` |
-| `NORM.PG_SQL.jsonb_build_object("a", x, ...)` | `jsonb_build_object('a', x, ...)` |
-| `NORM.PG_SQL.json_build_array(x, y)` / `jsonb_build_array(x, y)` | `json_build_array(x, y)` / `jsonb_build_array(x, y)` |
-| `NORM.PG_SQL.to_json(x)` / `to_jsonb(x)` | `to_json(x)` / `to_jsonb(x)` |
-| `NORM.PG_SQL.json_cast(x)` | `cast(x as jsonb)` |
-| `NORM.PG_SQL.json_get(json, "key")` / `json_get(json, 0)` | `json -> key` / `json -> 0` |
-| `NORM.PG_SQL.json_get_text(json, "key")` / `json_get_text(json, 0)` | `json ->> key` / `json ->> 0` |
-| `NORM.PG_SQL.json_get_path(json, path)` / `json_get_path_text(json, path)` | `json #> path` / `json #>> path` |
-| `NORM.PG_SQL.json_contains(a, b)` | `a @> b` |
-| `NORM.PG_SQL.json_exists(json, "key")` | `json ? 'key'` |
-| `NORM.PG_SQL.json_exists_any(json, keys)` / `json_exists_all(json, keys)` | `json ?\| keys` / `json ?& keys` |
-| `NORM.PG_SQL.json_array_length(json)` / `jsonb_array_length(json)` | `json_array_length(json)` / `jsonb_array_length(json)` |
-| `NORM.PG_SQL.json_typeof(json)` / `jsonb_typeof(json)` | `json_typeof(json)` / `jsonb_typeof(json)` |
-| `NORM.PG_SQL.jsonb_set(json, path, value[, create])` | `jsonb_set(...)` |
-| `NORM.PG_SQL.jsonb_insert(json, path, value[, after])` | `jsonb_insert(...)` |
-| `NORM.PG_SQL.jsonb_strip_nulls(json)` | `jsonb_strip_nulls(json)` |
-| `NORM.PG_SQL.jsonb_pretty(json)` | `jsonb_pretty(json)` |
-| `NORM.PG_SQL.jsonb_delete(json, "key")` / `jsonb_delete(json, 0)` | `json - 'key'` / `json - 0` |
-| `NORM.PG_SQL.json_concat(a, b)` | `a \|\| b` |
-| `NORM.PG_SQL.row_to_json(row)` | `row_to_json(row)` |
-| `NORM.PG_SQL.array_to_json(array)` | `array_to_json(array)` |
-| `NORM.PG_SQL.jsonb_path_exists(json, path)` | `jsonb_path_exists(json, cast(path as jsonpath))` |
-| `NORM.PG_SQL.jsonb_path_match(json, path)` | `jsonb_path_match(json, cast(path as jsonpath))` |
-| `NORM.PG_SQL.jsonb_path_query_first(json, path)` | `jsonb_path_query_first(json, cast(path as jsonpath))` |
-| `NORM.PG_SQL.jsonb_path_query_array(json, path)` | `jsonb_path_query_array(json, cast(path as jsonpath))` |
+| `SqlFunctions.Postgres.json_agg(x)` / `jsonb_agg(x)` | `json_agg(x)` / `jsonb_agg(x)` |
+| `SqlFunctions.Postgres.json_object_agg(k, v)` / `jsonb_object_agg(k, v)` | `json_object_agg(k, v)` / `jsonb_object_agg(k, v)` |
+| `SqlFunctions.Postgres.json_build_object("a", x, ...)` | `json_build_object('a', x, ...)` |
+| `SqlFunctions.Postgres.jsonb_build_object("a", x, ...)` | `jsonb_build_object('a', x, ...)` |
+| `SqlFunctions.Postgres.json_build_array(x, y)` / `jsonb_build_array(x, y)` | `json_build_array(x, y)` / `jsonb_build_array(x, y)` |
+| `SqlFunctions.Postgres.to_json(x)` / `to_jsonb(x)` | `to_json(x)` / `to_jsonb(x)` |
+| `SqlFunctions.Postgres.json_cast(x)` | `cast(x as jsonb)` |
+| `SqlFunctions.Postgres.json_get(json, "key")` / `json_get(json, 0)` | `json -> key` / `json -> 0` |
+| `SqlFunctions.Postgres.json_get_text(json, "key")` / `json_get_text(json, 0)` | `json ->> key` / `json ->> 0` |
+| `SqlFunctions.Postgres.json_get_path(json, path)` / `json_get_path_text(json, path)` | `json #> path` / `json #>> path` |
+| `SqlFunctions.Postgres.json_contains(a, b)` | `a @> b` |
+| `SqlFunctions.Postgres.json_exists(json, "key")` | `json ? 'key'` |
+| `SqlFunctions.Postgres.json_exists_any(json, keys)` / `json_exists_all(json, keys)` | `json ?\| keys` / `json ?& keys` |
+| `SqlFunctions.Postgres.json_array_length(json)` / `jsonb_array_length(json)` | `json_array_length(json)` / `jsonb_array_length(json)` |
+| `SqlFunctions.Postgres.json_typeof(json)` / `jsonb_typeof(json)` | `json_typeof(json)` / `jsonb_typeof(json)` |
+| `SqlFunctions.Postgres.jsonb_set(json, path, value[, create])` | `jsonb_set(...)` |
+| `SqlFunctions.Postgres.jsonb_insert(json, path, value[, after])` | `jsonb_insert(...)` |
+| `SqlFunctions.Postgres.jsonb_strip_nulls(json)` | `jsonb_strip_nulls(json)` |
+| `SqlFunctions.Postgres.jsonb_pretty(json)` | `jsonb_pretty(json)` |
+| `SqlFunctions.Postgres.jsonb_delete(json, "key")` / `jsonb_delete(json, 0)` | `json - 'key'` / `json - 0` |
+| `SqlFunctions.Postgres.json_concat(a, b)` | `a \|\| b` |
+| `SqlFunctions.Postgres.row_to_json(row)` | `row_to_json(row)` |
+| `SqlFunctions.Postgres.array_to_json(array)` | `array_to_json(array)` |
+| `SqlFunctions.Postgres.jsonb_path_exists(json, path)` | `jsonb_path_exists(json, cast(path as jsonpath))` |
+| `SqlFunctions.Postgres.jsonb_path_match(json, path)` | `jsonb_path_match(json, cast(path as jsonpath))` |
+| `SqlFunctions.Postgres.jsonb_path_query_first(json, path)` | `jsonb_path_query_first(json, cast(path as jsonpath))` |
+| `SqlFunctions.Postgres.jsonb_path_query_array(json, path)` | `jsonb_path_query_array(json, cast(path as jsonpath))` |
 
 Операнд `path`/`keys` — это `string[]`, привязываемый как **один параметр-массив** (см.
-[Массивы](#массивы-postgresql)), поэтому `NORM.PG_SQL.json_get_path(json, new[] { "a", "b" })` отрисует
+[Массивы](#массивы-postgresql)), поэтому `SqlFunctions.Postgres.json_get_path(json, new[] { "a", "b" })` отрисует
 `json #> @p0`. Функции JSONPath принимают путь как обычную строку и отрисовывают его как
 `cast(<path> as jsonpath)`.
 
-## JSON как текст (SQL Server)
+## JSON как текст (SQL Server, MySQL/MariaDB)
 
 SQL Server хранит JSON в обычной колонке `nvarchar` и предоставляет текстовое подмножество функций
-(`ISqlDialect.SupportsTextJson`). Путь — это строка JSONPath (`'$.name'`); `json_value` возвращает
+([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)); MySQL/MariaDB предоставляют ту же
+поверхность через семейство `JSON_EXTRACT`/`JSON_SET`. Путь — это строка JSONPath (`'$.name'`); `json_value` возвращает
 скаляр, а `json_query` — фрагмент-объект/массив:
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
     .Select(e => new
     {
-        Id = NORM.MS_SQL.json_value(e.String, "$.id"),
-        Name = NORM.MS_SQL.json_query(e.String, "$.name"),
-        Updated = NORM.MS_SQL.json_modify(e.String, "$.id", "1")
+        Id = SqlFunctions.SqlServer.json_value(e.String, "$.id"),
+        Name = SqlFunctions.SqlServer.json_query(e.String, "$.name"),
+        Updated = SqlFunctions.SqlServer.json_modify(e.String, "$.id", "1")
     })
     .ToList();
 ```
@@ -470,27 +598,30 @@ select json_value(somestring, '$.id') as [Id], json_query(somestring, '$.name') 
 
 | C# | SQL |
 |---|---|
-| `NORM.MS_SQL.json_value(json, path)` | `json_value(json, path)` |
-| `NORM.MS_SQL.json_query(json, path)` | `json_query(json, path)` |
-| `NORM.MS_SQL.json_modify(json, path, value)` | `json_modify(json, path, value)` |
-| `NORM.MS_SQL.isjson(value)` | `isjson(value)` |
+| `SqlFunctions.SqlServer.json_value(json, path)` | `json_value(json, path)` |
+| `SqlFunctions.SqlServer.json_query(json, path)` | `json_query(json, path)` |
+| `SqlFunctions.SqlServer.json_modify(json, path, value)` | `json_modify(json, path, value)` |
+| `SqlFunctions.SqlServer.isjson(value)` | `isjson(value)` |
 
-`NORM.MS_SQL.isjson` возвращает логическое значение: в предикате он отрисовывается как `(isjson(x)) = 1`
+В MySQL/MariaDB те же вызовы рендерятся как `json_unquote(json_extract(...))`, `json_extract(...)`,
+`json_set(...)` и `json_valid(...)`.
+
+`SqlFunctions.SqlServer.isjson` возвращает логическое значение: в предикате он отрисовывается как `(isjson(x)) = 1`
 (T-SQL `ISJSON` возвращает `int`), а при проецировании как значение приводится к `bit`. `isjson`
-можно также использовать прямо в `WHERE` (`Where(e => NORM.MS_SQL.isjson(e.String))`).
+можно также использовать прямо в `WHERE` (`Where(e => SqlFunctions.SqlServer.isjson(e.String))`).
 
 ## Условные функции
 
-`NORM.SQL.nullif` — ANSI и работает на всех SQL-провайдерах; `greatest`/`least` включаются флагом
-`ISqlDialect.SupportsGreatestLeast` (его включают PostgreSQL, MySQL/MariaDB, ClickHouse и SQL Server 2022+):
+`SqlFunctions.Sql.nullif` — ANSI и работает на всех SQL-провайдерах; `greatest`/`least` включаются флагом
+[`SupportsGreatestLeast`](xref:NextORM.Core.ISqlDialect.SupportsGreatestLeast) (его включают PostgreSQL, MySQL/MariaDB, ClickHouse, SQL Server 2022+ и SQLite; SQLite рендерит `max`/`min`). Обработка NULL зависит от провайдера: PostgreSQL, SQL Server 2022+ и ClickHouse 24.12+ игнорируют NULL-аргументы и возвращают NULL, только если все аргументы NULL, тогда как MySQL/MariaDB и SQLite возвращают NULL, если хотя бы один аргумент NULL:
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
     .Select(e => new
     {
-        NoZero = NORM.SQL.nullif(e.Int, 0),
-        Hi = NORM.SQL.greatest(e.Id, 10L),
-        Lo = NORM.SQL.least(e.Id, 10L)
+        NoZero = SqlFunctions.Sql.nullif(e.Int, 0),
+        Hi = SqlFunctions.Sql.greatest(e.Id, 10L),
+        Lo = SqlFunctions.Sql.least(e.Id, 10L)
     })
     .ToList();
 ```
@@ -501,19 +632,26 @@ select nullif(nullableint, 0) as "NoZero", greatest(id, 10) as "Hi", least(id, 1
 
 | C# | SQL |
 |---|---|
-| `NORM.SQL.nullif(a, b)` | `nullif(a, b)` |
-| `NORM.SQL.greatest(a, b, ...)` | `greatest(a, b, ...)` |
-| `NORM.SQL.least(a, b, ...)` | `least(a, b, ...)` |
-| `NORM.PG_SQL.num_nulls(a, b, ...)` | `num_nulls(a, b, ...)` |
-| `NORM.PG_SQL.num_nonnulls(a, b, ...)` | `num_nonnulls(a, b, ...)` |
+| `SqlFunctions.Sql.nullif(a, b)` | `nullif(a, b)` |
+| `SqlFunctions.Sql.greatest(a, b, ...)` | `greatest(a, b, ...)` |
+| `SqlFunctions.Sql.least(a, b, ...)` | `least(a, b, ...)` |
+| `SqlFunctions.Postgres.num_nulls(a, b, ...)` | `num_nulls(a, b, ...)` |
+| `SqlFunctions.Sql.iif(condition, a, b)` | `iif(...)` (SQL Server, SQLite 3.32+), `if(...)` (MySQL/MariaDB, ClickHouse), `case when ... then ... else ... end` (PostgreSQL) |
+| `SqlFunctions.SqlServer.choose(index, a, b, ...)` | `choose(index, a, b, ...)` (SQL Server) |
+| `SqlFunctions.Postgres.num_nonnulls(a, b, ...)` | `num_nonnulls(a, b, ...)` |
 
 `num_nulls`/`num_nonnulls` входят в расширенную библиотеку скалярных функций
-(`ISqlDialect.SupportsExtendedScalarFunctions`).
+([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions)).
+`iif` переносим ([`SupportsIif`](xref:NextORM.Core.ISqlDialect.SupportsIif)), и каждый диалект задаёт своё
+нативное написание через [`MakeIif`](xref:NextORM.Core.ISqlDialect.MakeIif); `choose` остаётся только для
+SQL Server ([`SupportsChoose`](xref:NextORM.Core.ISqlDialect.SupportsChoose)). Вызов `iif` через
+специализированную поверхность `SqlFunctions.SqlServer` по-прежнему работает по наследованию.
+C#-тернарник `condition ? a : b` отдельный и всегда рендерит переносимый `case when ... end`.
 
 ## Усечение даты (PostgreSQL, SQL Server, ClickHouse)
 
-`NORM.SQL.date_trunc(field, value)` усекает отметку времени до части даты
-(`ISqlDialect.SupportsDateTrunc`; его включают PostgreSQL, SQL Server 2022+ и ClickHouse). Поле должно
+`SqlFunctions.Sql.date_trunc(field, value)` усекает отметку времени до части даты
+([`SupportsDateTrunc`](xref:NextORM.Core.ISqlDialect.SupportsDateTrunc); его включают PostgreSQL, SQL Server 2022+ и ClickHouse). Поле должно
 быть константной строкой из поддерживаемого набора. SQL Server отрисовывает `datetrunc(part, value)`,
 сворачивая множественные ANSI-части в единственные T-SQL-написания (`milliseconds` → `millisecond`)
 и отклоняя `decade`/`century`/`millennium`; ClickHouse отрисовывает `dateTrunc('part', value)` с тем
@@ -521,7 +659,7 @@ select nullif(nullableint, 0) as "NoZero", greatest(id, 10) as "Hi", least(id, 1
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
-    .Select(e => new { Month = NORM.SQL.date_trunc("month", e.Datetime) })
+    .Select(e => new { Month = SqlFunctions.Sql.date_trunc("month", e.Datetime) })
     .ToList();
 ```
 
@@ -534,28 +672,28 @@ select dateTrunc('month', dt) as `Month` from complex_entity
 
 ## Арифметика дат
 
-`NORM.SQL.date_add(field, amount, value)` прибавляет к дате/времени заданное число единиц, а
-`NORM.SQL.end_of_month(value)` возвращает последний день месяца (`ISqlDialect.SupportsDateArithmetic`;
+`SqlFunctions.Sql.date_add(field, amount, value)` прибавляет к дате/времени заданное число единиц, а
+`SqlFunctions.Sql.end_of_month(value)` возвращает последний день месяца ([`SupportsDateArithmetic`](xref:NextORM.Core.ISqlDialect.SupportsDateArithmetic);
 его включают PostgreSQL, SQL Server, ClickHouse, MySQL/MariaDB и SQLite). Поле должно быть константной
-строкой; диалект проверяет, какие части он принимает (`ISqlDialect.SupportsDateAddField` и др.).
+строкой; диалект проверяет, какие части он принимает ([`SupportsDateAddField`](xref:NextORM.Core.ISqlDialect) и др.).
 SQL Server отрисовывает `dateadd(field, amount, value)` и `eomonth(value)`, сворачивая
 `decade`/`century`/`millennium` в масштабированное прибавление `year`; PostgreSQL отрисовывает
 интервальную арифметику; ClickHouse отрисовывает выделенные функции
 `addDays`/`addMonths`/…/`addSeconds` (сворачивая три крупные части в масштабированный `addYears`) и
 `toLastDayOfMonth(value)`; MySQL/MariaDB отрисовывают `date_add(value, interval n unit)` и
 `last_day(value)`; SQLite настраивает дату через строку-модификатор `datetime`/`strftime`.
-`NORM.SQL.date_diff(field, start, end)` возвращает число границ `<field>` между двумя отметками
+`SqlFunctions.Sql.date_diff(field, start, end)` возвращает число границ `<field>` между двумя отметками
 времени (SQL Server `datediff`, ClickHouse `dateDiff`, MySQL/MariaDB `timestampdiff`); резервные
 реализации PostgreSQL и SQLite считают части даты границами, а части времени — целыми единицами.
-`NORM.SQL.date_from_parts(year, month, day)` строит дату. `DateTime.AddDays`/`AddMonths`/… внутри
+`SqlFunctions.Sql.date_from_parts(year, month, day)` строит дату. `DateTime.AddDays`/`AddMonths`/… внутри
 проекции или предиката идут через тот же хук:
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
     .Select(e => new
     {
-        NextDay = NORM.SQL.date_add("day", 1, e.Datetime),
-        MonthEnd = NORM.SQL.end_of_month(e.Datetime)
+        NextDay = SqlFunctions.Sql.date_add("day", 1, e.Datetime),
+        MonthEnd = SqlFunctions.Sql.end_of_month(e.Datetime)
     })
     .ToList();
 ```
@@ -575,27 +713,27 @@ select datetime(dt, (1) || ' days') as 'NextDay', date(dt, 'start of month', '+1
 
 | C# | SQL Server | PostgreSQL | ClickHouse | MySQL/MariaDB | SQLite |
 |---|---|---|---|---|---|
-| `NORM.SQL.date_add("day", n, x)` | `dateadd(day, n, x)` | `x + (n * interval '1 day')` | `addDays(x, n)` | `date_add(x, interval n day)` | `datetime(x, (n) \|\| ' days')` |
-| `NORM.SQL.date_add("decade", n, x)` | `dateadd(year, (n) * 10, x)` | `x + (n * interval '10 years')` | `addYears(x, (n) * 10)` | `date_add(x, interval (n) * 10 year)` | `datetime(x, ((n) * 10) \|\| ' years')` |
-| `NORM.SQL.end_of_month(x)` | `eomonth(x)` | `date_trunc('month', x) + interval '1 month - 1 day'` | `toLastDayOfMonth(x)` | `last_day(x)` | `date(x, 'start of month', '+1 month', '-1 day')` |
-| `NORM.SQL.date_diff("day", a, b)` | `datediff(day, a, b)` | `cast(b as date) - cast(a as date)` | `dateDiff('day', a, b)` | `timestampdiff(day, a, b)` | `(strftime('%s', b) - strftime('%s', a)) / 86400` |
-| `NORM.SQL.date_from_parts(y, m, d)` | `datefromparts(y, m, d)` | `make_date(y, m, d)` | `makeDate(y, m, d)` | `str_to_date(concat_ws('-', y, m, d), '%Y-%m-%d')` | `date(printf('%04d-%02d-%02d', y, m, d))` |
+| `SqlFunctions.Sql.date_add("day", n, x)` | `dateadd(day, n, x)` | `x + (n * interval '1 day')` | `addDays(x, n)` | `date_add(x, interval n day)` | `datetime(x, (n) \|\| ' days')` |
+| `SqlFunctions.Sql.date_add("decade", n, x)` | `dateadd(year, (n) * 10, x)` | `x + (n * interval '10 years')` | `addYears(x, (n) * 10)` | `date_add(x, interval (n) * 10 year)` | `datetime(x, ((n) * 10) \|\| ' years')` |
+| `SqlFunctions.Sql.end_of_month(x)` | `eomonth(x)` | `date_trunc('month', x) + interval '1 month - 1 day'` | `toLastDayOfMonth(x)` | `last_day(x)` | `date(x, 'start of month', '+1 month', '-1 day')` |
+| `SqlFunctions.Sql.date_diff("day", a, b)` | `datediff(day, a, b)` | `cast(b as date) - cast(a as date)` | `dateDiff('day', a, b)` | `timestampdiff(day, a, b)` | `(strftime('%s', b) - strftime('%s', a)) / 86400` |
+| `SqlFunctions.Sql.date_from_parts(y, m, d)` | `datefromparts(y, m, d)` | `make_date(y, m, d)` | `makeDate(y, m, d)` | `str_to_date(concat_ws('-', y, m, d), '%Y-%m-%d')` | `date(printf('%04d-%02d-%02d', y, m, d))` |
 | `x.AddDays(7)` | `dateadd(day, 7, x)` | `x + (7 * interval '1 day')` | `addDays(x, 7)` | `date_add(x, interval 7 day)` | `datetime(x, (7) \|\| ' days')` |
 | `x.AddMonths(2)` | `dateadd(month, 2, x)` | `x + (2 * interval '1 month')` | `addMonths(x, 2)` | `date_add(x, interval 2 month)` | `datetime(x, (2) \|\| ' months')` |
 
 ## Строковые и массивные агрегаты
 
-`NORM.SQL.string_agg` доступен в PostgreSQL, SQL Server 2017+, ClickHouse, MySQL/MariaDB и SQLite
-(`ISqlDialect.SupportsStringAgg`, по умолчанию берёт значение зонтичного
-`SupportsStringArrayAggregates`); в ClickHouse он рендерится как
+`SqlFunctions.Sql.string_agg` доступен в PostgreSQL, SQL Server 2017+, ClickHouse, MySQL/MariaDB и SQLite
+([`SupportsStringAgg`](xref:NextORM.Core.ISqlDialect.SupportsStringAgg), по умолчанию берёт значение зонтичного
+[`SupportsStringArrayAggregates`](xref:NextORM.Core.ISqlDialect.SupportsStringArrayAggregates)); в ClickHouse он рендерится как
 `arrayStringConcat(groupArray(x), delimiter)`, в MySQL/MariaDB — как
 `group_concat(x separator delimiter)`, в SQLite — как `group_concat(x, delimiter)`.
-`NORM.PG_SQL.array_agg` (`ISqlDialect.SupportsArrayAgg`) требует типа-массива, поэтому доступен только в
+`SqlFunctions.Postgres.array_agg` ([`SupportsArrayAgg`](xref:NextORM.Core.ISqlDialect.SupportsArrayAgg)) требует типа-массива, поэтому доступен только в
 PostgreSQL. Результат `array_agg` — колонка-массив:
 
 ```csharp
 var names = dataContext.From<IComplexEntity>()
-    .Select(e => NORM.SQL.string_agg(e.String, ","))
+    .Select(e => SqlFunctions.Sql.string_agg(e.String, ","))
     .First();
 ```
 
@@ -612,15 +750,15 @@ select group_concat(somestring, ',') from complex_entity
 
 | C# | SQL | Провайдеры |
 |---|---|---|
-| `NORM.SQL.string_agg(x, delimiter)` | `string_agg(x, delimiter)` / `arrayStringConcat(groupArray(x), delimiter)` / `group_concat(x separator delimiter)` / `group_concat(x, delimiter)` | PostgreSQL, SQL Server, ClickHouse, MySQL/MariaDB, SQLite |
-| `NORM.PG_SQL.array_agg(x)` | `array_agg(x)` | PostgreSQL |
+| `SqlFunctions.Sql.string_agg(x, delimiter)` | `string_agg(x, delimiter)` / `arrayStringConcat(groupArray(x), delimiter)` / `group_concat(x separator delimiter)` / `group_concat(x, delimiter)` | PostgreSQL, SQL Server, ClickHouse, MySQL/MariaDB, SQLite |
+| `SqlFunctions.Postgres.array_agg(x)` | `array_agg(x)` | PostgreSQL |
 
 ## Фильтр агрегатов (FILTER)
 
 `count`/`count_big`/`min`/`max`/`avg`/`sum` и строковые/массивные агрегаты принимают дополнительный
 аргумент `Expression<Func<bool>>`, который рендерит предложение `filter (where ...)`. Предикат фильтра —
 обычный предикат запроса и может ссылаться на колонки и параметры. Предложение включается флагом
-`ISqlDialect.SupportsFilter` (его включают PostgreSQL и SQLite):
+[`SupportsFilter`](xref:NextORM.Core.ISqlDialect.SupportsFilter) (его включают PostgreSQL и SQLite):
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -628,8 +766,8 @@ var rows = dataContext.From<IComplexEntity>()
     .Select(e => new
     {
         e.Int,
-        Big = NORM.SQL.count(() => e.Id > 10L),
-        Total = NORM.SQL.sum(e.Id, () => e.Boolean == true)
+        Big = SqlFunctions.Sql.count(() => e.Id > 10L),
+        Total = SqlFunctions.Sql.sum(e.Id, () => e.Boolean == true)
     })
     .ToList();
 ```
@@ -640,29 +778,29 @@ from complex_entity group by nullableint
 ```
 
 В ClickHouse аналог фильтрованного агрегата — комбинатор `-If` (`countIf`, `sumIf`, `avgIf`, `minIf`,
-`maxIf`), доступный как `NORM.CLK_SQL.count_if`/`sum_if`/`avg_if`/`min_if`/`max_if` (`SupportsIfAggregates`).
+`maxIf`), доступный как `SqlFunctions.ClickHouse.count_if`/`sum_if`/`avg_if`/`min_if`/`max_if` ([`SupportsIfAggregates`](xref:NextORM.Core.ISqlDialect.SupportsIfAggregates)).
 ClickHouse не принимает ANSI-предложение `filter (where ...)`, поэтому обобщённый API фильтрованных
 агрегатов там отклоняется.
 
 ## Функции, возвращающие наборы (PostgreSQL)
 
-`NORM.PG_SQL.generate_series` и `NORM.PG_SQL.unnest` — это предобъявленные источники
+`SqlFunctions.Postgres.generate_series` и `SqlFunctions.Postgres.unnest` — это предобъявленные источники
 [`[SqlTableFunction]`](13-table-valued-functions.md), поэтому отдельная обёртка не нужна:
 
 ```csharp
 var numbers = dataContext
-    .FromTableFunction(() => NORM.PG_SQL.generate_series(1L, 3L))
+    .FromTableFunction(() => SqlFunctions.Postgres.generate_series(1L, 3L))
     .Select(r => r.Value)
     .ToList();
 
 var elements = dataContext
-    .FromTableFunction(() => NORM.PG_SQL.unnest(NORM.Param<long[]>(0)))
+    .FromTableFunction(() => SqlFunctions.Postgres.unnest(SqlFunctions.Parameter<long[]>(0)))
     .Select(r => r.Value)
     .ToList(new long[] { 1, 2, 3 });
 ```
 
-`generate_series` проецируется на `NORM.IGenerateSeriesRow.Value`, а `unnest` — на
-`NORM.IUnnestRow<T>.Value`; обе соответствуют единственной колонке, которую возвращает функция.
+`generate_series` проецируется на [`Value`](xref:NextORM.Core.SqlFunctions.IGenerateSeriesRow.Value), а `unnest` — на
+[`Value`](xref:NextORM.Core.SqlFunctions.IUnnestRow`1.Value); обе соответствуют единственной колонке, которую возвращает функция.
 
 ## Таблица сопоставления провайдеров
 
@@ -688,14 +826,15 @@ var elements = dataContext
 | JSON/JSONB (`json_agg`, `->`, ...) | `NotSupportedException` | `NotSupportedException` | поддерживается |
 | Текстовый JSON (`json_value`, `json_query`, `json_modify`, `isjson`) | `NotSupportedException` | `json_value(...)`, ..., `isjson(...)` | `NotSupportedException` |
 | `nullif` | поддерживается | поддерживается | поддерживается |
-| `greatest` / `least` | `NotSupportedException` | поддерживается (2022+) | поддерживается |
+| `greatest` / `least` | `max(...)` / `min(...)` (один аргумент -> `(...)`) | поддерживается (2022+) | поддерживается |
+| `iif` | `iif(cond, a, b)` (3.32+) | `iif(cond, a, b)` | `case when cond then a else b end` |
 | `date_trunc` | `NotSupportedException` | `datetrunc(...)` (2022+) | поддерживается |
 | `date_add` / `end_of_month` / `date_diff` / `date_from_parts` | `datetime(x, n \|\| ' days')` / `date(x, 'start of month', ...)` / разность `strftime` / `date(printf(...))` | `dateadd(...)` / `eomonth(...)` / `datediff(...)` / `datefromparts(...)` | интервальная арифметика / `date_trunc` / разность частей даты / `make_date` |
 | `string_agg` / `array_agg` | `group_concat(x, delimiter)` (нет `array_agg`) | `string_agg` (2017+); `array_agg` бросает исключение | поддерживается |
 | `filter (where ...)` у агрегатов | `filter (where ...)` | `NotSupportedException` | `filter (where ...)` |
 | Расширенная библиотека скалярных функций (`asin`, `split_part`, `regexp_*`, `to_char`, ...) | `NotSupportedException` | `NotSupportedException` | поддерживается |
 | Логические/битовые/статистические агрегаты | `NotSupportedException` | `NotSupportedException` | поддерживается |
-| Упорядоченные агрегаты (`percentile_cont`, ...) | `NotSupportedException` | `NotSupportedException` | `within group (order by ...)` |
+| Упорядоченные агрегаты (`percentile_cont`, ...) | `NotSupportedException` | оконный `percentile_cont(f) within group (order by x) over (...)` | `within group (order by ...)` |
 | JSONPath (`jsonb_path_*`) | `NotSupportedException` | `NotSupportedException` | `cast(path as jsonpath)` |
 | Встроенные табличные функции | `NotSupportedException` | `string_split(...)`, `openjson(...)` | `generate_series(...)`, `unnest(...)` |
 
@@ -716,11 +855,11 @@ ClickHouse рендерит `dateTrunc('part', x)`, `addDays`/`addMonths`/.../`a
 
 * `string.IsNullOrWhiteSpace(x)` — бросает исключение с сообщением, упоминающим `IsNullOrWhiteSpace`
   (`SqlGenerationTests.IsNullOrWhiteSpace_ShouldThrowClearException`,
-  `test/nextorm.sqlite.tests/SqlGenerationTests.cs:974`).
+  `tests/nextorm.sqlite.tests/SqlGenerationTests.cs:974`).
 * `Math.Log(value, base)` — у двухаргументной формы порядок аргументов зависит от провайдера, поэтому она
   оставлена неподдерживаемой (`SqlGenerationTests.MathLogWithBase_ShouldThrowClearException`,
-  `test/nextorm.sqlite.tests/SqlGenerationTests.cs:985`). Двухаргументная форма PostgreSQL доступна как
-  `NORM.PG_SQL.log(base, x)` в расширенной библиотеке скалярных функций.
+  `tests/nextorm.sqlite.tests/SqlGenerationTests.cs:985`). Двухаргументная форма PostgreSQL доступна как
+  `SqlFunctions.Postgres.log(base, x)` в расширенной библиотеке скалярных функций.
 * Перегрузки `Math.Round`, принимающие `MidpointRounding` (больше двух аргументов), — не переносимы.
 * `string.Substring(Range)` — нет эквивалента в SQL.
 
@@ -735,9 +874,9 @@ ClickHouse рендерит `dateTrunc('part', x)`, `addDays`/`addMonths`/.../`a
 
 Source: `src/nextorm.core/Visitors/BaseExpressionVisitor.cs:541`, `:1157`, `:1204`, `:1752`;
 `src/nextorm.core/Visitors/BuiltinFunctionTranslator.cs`, `src/nextorm.core/Visitors/AggregateFilter.cs`;
-`src/nextorm.core/Query/NORM.cs`;
+`src/nextorm.core/Query/SqlFunctions.cs`;
 `src/nextorm.core/DataContext/Dialect/SqlDialectBase.cs:57`;
-`test/nextorm.integration.tests/CommonTestSuite.Functions.cs:8`, `:19`, `:43`, `:54`, `:65`, `:76`, `:87`, `:98`, `:117`;
-generated SQL: `test/nextorm.sqlite.tests/SqlGenerationTests.cs:695`, `:775`, `:801`, `:811`, `:832`, `:852`, `:861`, `:872`, `:882`, `:892`, `:912`, `:921`, `:931`, `:940`, `:950`, `:960`, `:974`, `:985`;
-`test/nextorm.sqlserver.tests/SqlGenerationTests.cs:457`, `:512`, `:522`, `:533`, `:543`, `:552`, `:563`, `:573`, `:583`, `:593`, `:602`, `:613`, `:624`, `:633`, `:643`;
-`test/nextorm.postgres.tests/SqlGenerationTests.cs:390`, `:445`, `:465`, `:475`, `:484`, `:495`, `:505`, `:515`, `:525`, `:534`, `:544`, `:554`, `:563`, `:573`.
+`tests/nextorm.integration.tests/CommonTestSuite.Functions.cs:8`, `:19`, `:43`, `:54`, `:65`, `:76`, `:87`, `:98`, `:117`;
+generated SQL: `tests/nextorm.sqlite.tests/SqlGenerationTests.cs:695`, `:775`, `:801`, `:811`, `:832`, `:852`, `:861`, `:872`, `:882`, `:892`, `:912`, `:921`, `:931`, `:940`, `:950`, `:960`, `:974`, `:985`;
+`tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:457`, `:512`, `:522`, `:533`, `:543`, `:552`, `:563`, `:573`, `:583`, `:593`, `:602`, `:613`, `:624`, `:633`, `:643`;
+`tests/nextorm.postgres.tests/SqlGenerationTests.cs:390`, `:445`, `:465`, `:475`, `:484`, `:495`, `:505`, `:515`, `:525`, `:534`, `:544`, `:554`, `:563`, `:573`.

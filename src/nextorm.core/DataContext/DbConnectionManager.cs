@@ -2,12 +2,12 @@ using Microsoft.Extensions.Logging;
 using System.Data;
 using System.Data.Common;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Connection axis of a database-backed context: owns the connection state machine (lazy creation,
 /// ownership tracking, opening and teardown) and implements <see cref="IConnectionManager"/>.
-/// Extracted out of <c>DbContext</c> so the context no longer owns the connection algorithm (SRP).
+/// Extracted out of <c>DataContext</c> so the context no longer owns the connection algorithm (SRP).
 /// The provider keeps its hooks (<c>CreateDbConnection</c> / <c>OnConnectionCreated</c>) on the
 /// context; this type receives them as delegates, and the context itself only as the
 /// <see cref="IDataContext"/> role it already exposes (used to reset cached plans).
@@ -27,20 +27,18 @@ internal sealed class DbConnectionManager : IConnectionManager
 
     internal DbConnectionManager(
         IDataContext owner,
-        Func<string?, DbConnection> createDbConnection,
-        Action<DbConnection> onConnectionCreated,
+        ConnectionHooks hooks,
         string? connectionString,
         DbConnection? providedConnection,
-        ILogger? logger,
-        bool logSensitiveData)
+        LoggingOptions logging)
     {
         _owner = owner;
-        _createDbConnection = createDbConnection;
-        _onConnectionCreated = onConnectionCreated;
+        _createDbConnection = hooks.CreateDbConnection;
+        _onConnectionCreated = hooks.OnConnectionCreated;
         _connectionString = connectionString;
         _providedConnection = providedConnection;
-        _logger = logger;
-        _logSensitiveData = logSensitiveData;
+        _logger = logging.Logger;
+        _logSensitiveData = logging.LogSensitiveData;
     }
 
     public void EnsureConnectionOpen()
@@ -127,20 +125,32 @@ internal sealed class DbConnectionManager : IConnectionManager
 
     /// <summary>
     /// Tears down the connection this manager created, if any. A caller-supplied connection is left
-    /// alone (the caller owns it), and cached plans are detached from the dying connection first.
+    /// alone (the caller owns it) and only unsubscribed from, and cached plans are detached from the
+    /// connection first.
     /// </summary>
     internal void DisposeConnection()
     {
-        if (_conn is not null && _connWasCreatedByMe)
-        {
-            foreach (var cached in QueryPlanStore.Values)
-            {
-                cached.ResetConnection(_conn, _owner);
-            }
+        if (_conn is null)
+            return;
 
+        foreach (var cached in QueryPlanStore.Values)
+        {
+            cached.ResetConnection(_conn, _owner);
+        }
+
+        if (_connWasCreatedByMe)
+        {
             if (_logger?.IsEnabled(LogLevel.Debug) ?? false) _logger.LogDebug("Dispose connection");
             _conn.Dispose();
-            _conn = null;
         }
+        else
+        {
+            // Caller-owned: do not dispose it, but drop the subscription so a long-lived connection
+            // does not keep this manager (and the disposed context) reachable until the caller
+            // eventually disposes the connection.
+            _conn.Disposed -= ConnDisposed;
+        }
+
+        _conn = null;
     }
 }

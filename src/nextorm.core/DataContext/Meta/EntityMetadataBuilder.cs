@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq.Expressions;
 using System.Reflection;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Fluent builder, passed to <c>From&lt;T&gt;(...)</c>, that declares the table name and column
@@ -13,26 +13,26 @@ public class EntityMetadataBuilder<T>
     private readonly IList<EntityPropertyBuilder<T>> _props = new List<EntityPropertyBuilder<T>>();
     private string? _tableName;
 
-    public IEntityMeta Build()
+    public IEntityMetadata Build()
     {
-        return new EntityMeta(string.IsNullOrEmpty(_tableName)
+        return new EntityMetadata(string.IsNullOrEmpty(_tableName)
             ? AutoBuildTableName()
             : _tableName, _props.Count == 0
                 ? AutoBuildProperties()
                 : _props.Select(pb => pb.Build()).ToArray());
     }
-    public IEntityMeta AutoBuild()
+    public IEntityMetadata AutoBuild()
     {
         var propsMeta = AutoBuildProperties();
 
         var tableName = AutoBuildTableName();
 
-        return new EntityMeta(tableName, propsMeta);
+        return new EntityMetadata(tableName, propsMeta);
     }
 
-    private static List<IPropertyMeta> AutoBuildProperties()
+    private static List<IPropertyMetadata> AutoBuildProperties()
     {
-        var propsMeta = new List<IPropertyMeta>();
+        var propsMeta = new List<IPropertyMetadata>();
 
         var entityType = typeof(T);
 
@@ -44,7 +44,7 @@ public class EntityMetadataBuilder<T>
             var colAttr = prop.GetCustomAttribute<ColumnAttribute>(true);
             if (!string.IsNullOrEmpty(colAttr?.Name))
             {
-                propsMeta.Add(new PropertyMeta { ColumnName = colAttr.Name, PropertyInfo = prop });
+                propsMeta.Add(new PropertyMetadata { ColumnName = colAttr.Name, PropertyInfo = prop });
             }
             else
             {
@@ -62,7 +62,7 @@ public class EntityMetadataBuilder<T>
                         colAttr = intProp?.GetCustomAttribute<ColumnAttribute>(true);
                         if (!string.IsNullOrEmpty(colAttr?.Name))
                         {
-                            propsMeta.Add(new PropertyMeta { ColumnName = colAttr.Name, PropertyInfo = prop });
+                            propsMeta.Add(new PropertyMetadata { ColumnName = colAttr.Name, PropertyInfo = prop });
                             added = true;
                             break;
                         }
@@ -70,7 +70,7 @@ public class EntityMetadataBuilder<T>
                 }
 
                 if (!added)
-                    propsMeta.Add(new PropertyMeta { ColumnName = prop.Name, PropertyInfo = prop });
+                    propsMeta.Add(new PropertyMetadata { ColumnName = prop.Name, PropertyInfo = prop });
             }
         }
 

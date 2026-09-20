@@ -1,46 +1,39 @@
 using System.Reflection;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 /// <summary>
 /// Column accessors for a table addressed by name instead of by a mapped entity type (the
 /// <c>From("table")</c> mode).
 /// </summary>
-/// <remarks>
-/// The members are named after CLR types (<c>Int</c>, <c>Long</c>, <c>Boolean</c>) rather than verbs,
-/// mix C# aliases with CLR names (<c>Int</c> vs <c>Boolean</c>), and each takes an unnamed
-/// <c>string _</c> parameter so named arguments are impossible. Recommended: verb-style accessors
-/// such as <c>GetInt32</c> with a meaningful parameter name.
-/// See <c>API-NAMING-REVIEW.md</c> finding P0-9.
-/// </remarks>
 public class TableAlias
 {
-    public int Int(string _) => 0;
-    public long Long(string _) => 0;
-    public short Short(string _) => 0;
-    public string String(string _) => string.Empty;
-    public float Float(string _) => 0;
-    public double Double(string _) => 0;
-    public DateTime DateTime(string _) => System.DateTime.MinValue;
-    public decimal Decimal(string _) => 0;
-    public byte Byte(string _) => 0;
-    public bool Boolean(string _) => false;
-    public Guid Guid(string _) => System.Guid.Empty;
-    public byte[] Bytes(string _) => [];
-    public int? NullableInt(string _) => 0;
-    public long? NullableLong(string _) => 0;
-    public short? NullableShort(string _) => 0;
-    public string? NullableString(string _) => string.Empty;
-    public float? NullableFloat(string _) => 0;
-    public double? NullableDouble(string _) => 0;
-    public DateTime? NullableDateTime(string _) => System.DateTime.MinValue;
-    public decimal? NullableDecimal(string _) => 0;
-    public byte? NullableByte(string _) => 0;
-    public bool? NullableBoolean(string _) => false;
-    public Guid? NullableGuid(string _) => System.Guid.Empty;
-    public byte[]? NullableBytes(string _) => null;
-    public object Column(string _) => string.Empty;
+    public int GetInt32(string columnName) => 0;
+    public long GetInt64(string columnName) => 0;
+    public short GetInt16(string columnName) => 0;
+    public string GetString(string columnName) => string.Empty;
+    public float GetSingle(string columnName) => 0;
+    public double GetDouble(string columnName) => 0;
+    public DateTime GetDateTime(string columnName) => System.DateTime.MinValue;
+    public decimal GetDecimal(string columnName) => 0;
+    public byte GetByte(string columnName) => 0;
+    public bool GetBoolean(string columnName) => false;
+    public Guid GetGuid(string columnName) => System.Guid.Empty;
+    public byte[] GetBytes(string columnName) => [];
+    public int? GetNullableInt32(string columnName) => 0;
+    public long? GetNullableInt64(string columnName) => 0;
+    public short? GetNullableInt16(string columnName) => 0;
+    public string? GetNullableString(string columnName) => string.Empty;
+    public float? GetNullableSingle(string columnName) => 0;
+    public double? GetNullableDouble(string columnName) => 0;
+    public DateTime? GetNullableDateTime(string columnName) => System.DateTime.MinValue;
+    public decimal? GetNullableDecimal(string columnName) => 0;
+    public byte? GetNullableByte(string columnName) => 0;
+    public bool? GetNullableBoolean(string columnName) => false;
+    public Guid? GetNullableGuid(string columnName) => System.Guid.Empty;
+    public byte[]? GetNullableBytes(string columnName) => null;
+    public object GetColumn(string columnName) => string.Empty;
 
-    public TableColumn this[string __]
+    public TableColumn this[string columnName]
     {
         get => default!;
         set => _ = value;

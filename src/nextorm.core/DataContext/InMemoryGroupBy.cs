@@ -2,11 +2,11 @@ using System.Collections;
 using System.Globalization;
 using System.Linq.Expressions;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Rewrites the body of a grouped projection or <c>HAVING</c> predicate by replacing every
-/// <c>NORM.SQL</c> aggregate call with a constant computed over the current group. Group-key
+/// <c>SqlFunctions.Sql</c> aggregate call with a constant computed over the current group. Group-key
 /// members are left alone: they are constant within a group, so the representative row evaluates
 /// them correctly.
 /// </summary>
@@ -23,7 +23,7 @@ internal sealed class InMemoryGroupAggregateVisitor<TEntity> : ExpressionVisitor
 
     protected override Expression VisitMethodCall(MethodCallExpression node)
     {
-        if (node.Method.DeclaringType != typeof(NORM.NORM_SQL) || !InMemoryAggregates.IsAggregate(node.Method.Name))
+        if (node.Method.DeclaringType != typeof(CommonFunctions) || !InMemoryAggregates.IsAggregate(node.Method.Name))
             return base.VisitMethodCall(node);
 
         if (node.Arguments.Count > 0 && node.Arguments[^1] is LambdaExpression { Parameters.Count: 0 })
@@ -47,7 +47,7 @@ internal sealed class InMemoryGroupAggregateVisitor<TEntity> : ExpressionVisitor
         if (selectorBody is not null)
             selector = InMemoryAggregates.CompileSelector<TEntity>(selectorBody, _entity, valueType);
 
-        var boxed = InMemoryAggregates.Compute(_group, node.Method.Name, selector, typeof(TEntity), node.Type, valueType);
+        var boxed = InMemoryAggregates.Compute(_group, node.Method.Name, selector, new AggregateTypeInfo(typeof(TEntity), node.Type, valueType));
         if (boxed is null)
             return Expression.Default(node.Type);
 

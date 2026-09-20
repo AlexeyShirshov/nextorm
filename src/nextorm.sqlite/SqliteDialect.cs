@@ -1,7 +1,7 @@
 using System.Text;
-using nextorm.core;
+using NextORM.Core;
 
-namespace nextorm.sqlite;
+namespace NextORM.Sqlite;
 
 /// <summary>SQLite dialect: <c>||</c> concatenation, <c>$name</c> parameters, <c>limit/offset</c> paging.</summary>
 public sealed class SqliteDialect : SqlDialectBase
@@ -9,6 +9,10 @@ public sealed class SqliteDialect : SqlDialectBase
     public static readonly SqliteDialect Instance = new();
 
     public override string ConcatStringOperator => "||";
+
+    // SQLite silently returns the first row of a scalar subquery that produces several rows, so
+    // Single/SingleOrDefault inside a scalar subquery cannot be enforced by the engine.
+    public override bool EnforcesScalarSubqueryCardinality => false;
 
     // SQLite 3.30+ accepts the FILTER (WHERE ...) aggregate clause.
     public override bool SupportsFilter => true;
@@ -23,6 +27,37 @@ public sealed class SqliteDialect : SqlDialectBase
 
     public override string MakeStringAgg(string value, string delimiter) =>
         $"group_concat({value}, {delimiter})";
+
+    /// <summary>SQLite exposes only the library version from the session/information family.</summary>
+    public override bool SupportsSessionInfoFunctions => true;
+
+    /// <summary>SQLite has no session/user/schema/database information; only the library version is exposed.</summary>
+    public override bool SupportsSessionInfoFunction(string name) => name is "version";
+
+    /// <summary>SQLite renders <c>version()</c> as <c>sqlite_version()</c>.</summary>
+    public override string MakeSessionInfoFunction(string name) =>
+        name == "version" ? "sqlite_version()" : base.MakeSessionInfoFunction(name);
+
+    public override bool SupportsGreatestLeast => true;
+
+    /// <summary>SQLite 3.32+ renders the portable <c>iif</c> as <c>iif(condition, whenTrue, whenFalse)</c>.</summary>
+    public override bool SupportsIif => true;
+
+    /// <summary>SQLite 3.32+ renders the portable <c>iif</c> as <c>iif(condition, whenTrue, whenFalse)</c>.</summary>
+    public override string MakeIif(string condition, string whenTrue, string whenFalse) =>
+        $"iif({condition}, {whenTrue}, {whenFalse})";
+
+    /// <summary>SQLite 3.25+ supports the ANSI <c>percent_rank</c>/<c>cume_dist</c> window functions.</summary>
+    public override bool SupportsPercentRankCumeDist => true;
+
+    /// <summary>SQLite 3.25+ supports <c>nth_value(value, n)</c> as a window function.</summary>
+    public override bool SupportsNthValue => true;
+
+    public override string MakeGreatest(IReadOnlyList<string> args) =>
+        args.Count == 1 ? $"({args[0]})" : $"max({string.Join(", ", args)})";
+
+    public override string MakeLeast(IReadOnlyList<string> args) =>
+        args.Count == 1 ? $"({args[0]})" : $"min({string.Join(", ", args)})";
 
     // instr() is the one-based position primitive; SQLite has no reverse(), so string.LastIndexOf is
     // not available (the base throws a clear message).
@@ -119,6 +154,7 @@ public sealed class SqliteDialect : SqlDialectBase
         "hour" => $"cast(strftime('%H', {value}) as integer)",
         "minute" => $"cast(strftime('%M', {value}) as integer)",
         "second" => $"cast(strftime('%S', {value}) as integer)",
+        "doy" => $"cast(strftime('%j', {value}) as integer)",
         _ => base.MakeDatePart(part, value)
     };
 

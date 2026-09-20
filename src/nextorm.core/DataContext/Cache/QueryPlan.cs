@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Canonical, hashable description of a query, used as the key of the plan cache.
@@ -10,7 +10,7 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
     public QueryCommand QueryCommand;
     private readonly string? _sql;
     private QueryPlanEqualityComparer _comparer;
-    // QueryPlan is used as a dictionary key (DbContext.QueryPlanCache, InMemoryDataContext._cmdIdx).
+    // QueryPlan is used as a dictionary key (DataContext.QueryPlanCache, InMemoryDataContext._cmdIdx).
     // The hash is captured from the state at construction and then frozen: GetCacheVersion() swaps
     // QueryCommand/_comparer for an equal clone (see QueryCommand.CloneForCache), so plan identity —
     // and therefore the hash — must not change. Keeping it in a readonly field makes GetHashCode
@@ -31,7 +31,7 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
         {
             unchecked
             {
-                var hash = new HashCode();
+                var hash = new XxHash32();
                 hash.Add(cmd, comparer);
                 hash.Add(sql);
                 return hash.ToHashCode();

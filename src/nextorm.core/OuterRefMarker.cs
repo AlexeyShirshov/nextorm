@@ -1,6 +1,6 @@
 using System.Reflection;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 public class OuterRefMarker<T>(int i)
 {

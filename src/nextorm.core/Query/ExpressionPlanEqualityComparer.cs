@@ -6,28 +6,28 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
 {
     private readonly static ConcurrentDictionary<QueryCommandKey, Func<object?, QueryCommand>> _cmdCache = new();
 
-    // The visitor accumulates the HashCode being built, so one instance cannot serve two threads
+    // The visitor accumulates the XxHash32 being built, so one instance cannot serve two threads
     // at once: comparers are cached on QueryCommand instances (including the shared AnyCommand),
-    // and two threads hashing different expressions would interleave writes into the same HashCode
+    // and two threads hashing different expressions would interleave writes into the same XxHash32
     // and return a hash that does not match Equals. One visitor per (thread, comparer) keeps the
     // zero-allocation design while making GetHashCode thread-safe.
     [ThreadStatic] private static Visitor? _tlsVisitor;
     [ThreadStatic] private static ExpressionPlanEqualityComparer? _tlsVisitorOwner;
 
     private readonly ILogger? _logger;
-    private readonly IQueryProvider _queryProvider;
+    private readonly IQueryRegistry _queryProvider;
 
-    public ExpressionPlanEqualityComparer(IQueryProvider queryProvider)
+    public ExpressionPlanEqualityComparer(IQueryRegistry queryProvider)
         : this(queryProvider, null)
     {
     }
-    public ExpressionPlanEqualityComparer(IQueryProvider queryProvider, ILogger? logger)
+    public ExpressionPlanEqualityComparer(IQueryRegistry queryProvider, ILogger? logger)
     {
         _queryProvider = queryProvider;
         _logger = logger;
@@ -530,7 +530,7 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
         {
             unchecked
             {
-                HashCode hash = new();
+                XxHash32 hash = new();
 
                 hash.Add(type);
                 hash.Add(name);
@@ -551,11 +551,11 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
             return _type == obj._type && _name == obj._name;
         }
     }
-    private sealed class Visitor(ILogger? logger, IQueryProvider queryProvider) : ExpressionVisitor
+    private sealed class Visitor(ILogger? logger, IQueryRegistry queryProvider) : ExpressionVisitor
     {
         private readonly ILogger? _logger = logger;
-        private readonly IQueryProvider _queryProvider = queryProvider;
-        internal HashCode _hash;
+        private readonly IQueryRegistry _queryProvider = queryProvider;
+        internal XxHash32 _hash;
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void VisitBase(Expression? node)
         {
@@ -680,7 +680,7 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
                     if (!_cmdCache.TryGetValue(key, out var del))
                     {
                         var p = Expression.Parameter(typeof(object));
-                        var replace = new ReplaceConstantVisitor(Expression.Convert(p, ce!.Type));
+                        var replace = new ReplaceConstantExpressionVisitor(Expression.Convert(p, ce!.Type));
                         var body = replace.Visit(node);
                         del = Expression.Lambda<Func<object?, QueryCommand>>(body, p).Compile();
                         //value = 1;

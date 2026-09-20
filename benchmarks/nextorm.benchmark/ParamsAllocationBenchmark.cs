@@ -1,10 +1,10 @@
 using BenchmarkDotNet.Attributes;
 using Microsoft.Extensions.Logging;
-using nextorm.core;
-using nextorm.sqlite;
+using NextORM.Core;
+using NextORM.Sqlite;
 using System.Data.Common;
 
-namespace nextorm.benchmark;
+namespace NextORM.Benchmark;
 
 /// <summary>
 /// M2 isolation benchmark: quantifies the per-call <c>object[]</c> allocation that
@@ -28,7 +28,7 @@ public class ParamsAllocationBenchmark
     private const int Iterations = 100;
 
     private readonly IDataContext _db;
-    private readonly DbContext _dbCtx;
+    private readonly DataContext _dbCtx;
     private readonly TestDataRepository _repo;
     private readonly IPreparedQueryCommand<bool> _cmd1;
     private readonly IPreparedQueryCommand<bool> _cmd2;
@@ -47,7 +47,7 @@ public class ParamsAllocationBenchmark
     public ParamsAllocationBenchmark() : this(false) { }
     public ParamsAllocationBenchmark(bool withLogging = false)
     {
-        var builder = new DbContextBuilder();
+        var builder = new DataContextBuilder();
         builder.UseSqlite(BenchDb.FilePath);
         if (withLogging)
         {
@@ -56,17 +56,17 @@ public class ParamsAllocationBenchmark
             builder.LogSensitiveData(true);
         }
 
-        _dbCtx = (DbContext)builder.CreateDbContext();
+        _dbCtx = (DataContext)builder.CreateDataContext();
         _db = _dbCtx;
         _repo = new TestDataRepository(_db);
 
         _cmd1 = _repo.SimpleEntity
-            .Where(e => e.Id == NORM.Param<int>(0))
+            .Where(e => e.Id == SqlFunctions.Parameter<int>(0))
             .AnyCommand()
             .Prepare(true);
 
         _cmd2 = _repo.SimpleEntity
-            .Where(e => e.Id > NORM.Param<int>(0) && e.Id < NORM.Param<int>(1))
+            .Where(e => e.Id > SqlFunctions.Parameter<int>(0) && e.Id < SqlFunctions.Parameter<int>(1))
             .AnyCommand()
             .Prepare(true);
 
@@ -83,22 +83,22 @@ public class ParamsAllocationBenchmark
 
     [Benchmark]
     public bool Nextorm_EntityAny_1Arg_Span()
-        => _repo.SimpleEntity.Where(e => e.Id == NORM.Param<int>(0)).Any(s_boxedId);
+        => _repo.SimpleEntity.Where(e => e.Id == SqlFunctions.Parameter<int>(0)).Any(s_boxedId);
 
     [Benchmark]
     public bool Nextorm_EntityAny_1Arg_Array()
-        => _repo.SimpleEntity.Where(e => e.Id == NORM.Param<int>(0)).Any(new object[] { s_boxedId });
+        => _repo.SimpleEntity.Where(e => e.Id == SqlFunctions.Parameter<int>(0)).Any(new object[] { s_boxedId });
 
     [Benchmark]
     public bool Nextorm_EntityAny_3Arg_Span()
         => _repo.SimpleEntity
-            .Where(e => e.Id > NORM.Param<int>(0) && e.Id < NORM.Param<int>(1) && e.Id != NORM.Param<int>(2))
+            .Where(e => e.Id > SqlFunctions.Parameter<int>(0) && e.Id < SqlFunctions.Parameter<int>(1) && e.Id != SqlFunctions.Parameter<int>(2))
             .Any(s_boxedId, s_boxedId, s_boxedId);
 
     [Benchmark]
     public bool Nextorm_EntityAny_3Arg_Array()
         => _repo.SimpleEntity
-            .Where(e => e.Id > NORM.Param<int>(0) && e.Id < NORM.Param<int>(1) && e.Id != NORM.Param<int>(2))
+            .Where(e => e.Id > SqlFunctions.Parameter<int>(0) && e.Id < SqlFunctions.Parameter<int>(1) && e.Id != SqlFunctions.Parameter<int>(2))
             .Any(new object[] { s_boxedId, s_boxedId, s_boxedId });
 
     // ---- Where does the builder path spend, before the plan-cache lookup? -------
@@ -106,14 +106,14 @@ public class ParamsAllocationBenchmark
     // Builder only: fresh QueryCommand + exists(subquery) wrapper. No plan build, no lookup.
     [Benchmark]
     public int EntityAnyCommand_Build()
-        => _repo.SimpleEntity.Where(e => e.Id == NORM.Param<int>(0)).AnyCommand().Paging.Limit;
+        => _repo.SimpleEntity.Where(e => e.Id == SqlFunctions.Parameter<int>(0)).AnyCommand().Paging.Limit;
 
     // Builder + full PrepareCommand (from/join/columns/where/group/sort walks + clause hashes).
     // This is what GetAnyCommand does per call on a fresh command; no SQL is built.
     [Benchmark]
     public int EntityAnyCommand_BuildAndPrepare()
     {
-        var cmd = _repo.SimpleEntity.Where(e => e.Id == NORM.Param<int>(0)).AnyCommand();
+        var cmd = _repo.SimpleEntity.Where(e => e.Id == SqlFunctions.Parameter<int>(0)).AnyCommand();
         cmd.PrepareCommand(false, CancellationToken.None);
         return cmd.Paging.Limit;
     }

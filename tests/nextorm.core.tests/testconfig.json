@@ -1,0 +1,5 @@
+{
+  "platformOptions": {
+    "resultDirectory": "tests/TestResults/nextorm.core.tests"
+  }
+}

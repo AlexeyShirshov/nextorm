@@ -34,18 +34,18 @@ jobs:
         run: dotnet tool restore
       - name: Test with coverage
         run: |
-          mkdir -p test/coverage
-          dotnet tool run dotnet-coverage collect -s coverage.settings.xml -f cobertura -o test/coverage/coverage.cobertura.xml "dotnet test --no-build --verbosity normal"
+          mkdir -p tests/coverage
+          dotnet tool run dotnet-coverage collect -s coverage.settings.xml -f cobertura -o tests/coverage/coverage.cobertura.xml "dotnet test --no-build --verbosity normal"
       - name: Coverage report
         run: |
           dotnet tool run reportgenerator \
-            -reports:test/coverage/coverage.cobertura.xml \
-            -targetdir:test/coverage/report \
+            -reports:tests/coverage/coverage.cobertura.xml \
+            -targetdir:tests/coverage/report \
             -reporttypes:"Html;TextSummary;Cobertura" \
             -riskhotspotassemblyfilters:"+nextorm.*"
       - name: Enforce line coverage threshold
         run: |
-          LINE=$(grep -oP 'Line coverage: \K[0-9.]+' test/coverage/report/Summary.txt)
+          LINE=$(grep -oP 'Line coverage: \K[0-9.]+' tests/coverage/report/Summary.txt)
           echo "Line coverage: ${LINE}% (threshold: ${MIN_LINE_COVERAGE}%)"
           if awk -v c="$LINE" -v min="$MIN_LINE_COVERAGE" 'BEGIN { exit (c + 0 < min) }'; then
             echo "Coverage OK"
@@ -58,7 +58,7 @@ jobs:
       - name: Coverage summary
         if: always()
         run: |
-          SUMMARY=test/coverage/report/Summary.txt
+          SUMMARY=tests/coverage/report/Summary.txt
 
           {
             if [ -f "$SUMMARY" ]; then
@@ -91,5 +91,5 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: coverage-report
-          path: test/coverage/
+          path: tests/coverage/
           if-no-files-found: ignore

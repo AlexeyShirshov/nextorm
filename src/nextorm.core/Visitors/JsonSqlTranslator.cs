@@ -1,9 +1,9 @@
 using System.Linq.Expressions;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
-/// Translates the PostgreSQL JSON/JSONB surface written through <see cref="NORM.NORM_SQL"/>: the
+/// Translates the PostgreSQL JSON/JSONB surface written through <see cref="CommonFunctions"/>: the
 /// <c>json_agg</c>/<c>jsonb_agg</c> aggregates, the construction and conversion functions
 /// (<c>json_build_object</c>, <c>to_jsonb</c>, ...) and the access/containment operators
 /// (<c>-&gt;</c>, <c>-&gt;&gt;</c>, <c>#&gt;</c>, <c>@&gt;</c>, <c>?</c>, ...).
@@ -11,7 +11,7 @@ namespace nextorm.core;
 /// A JSON operand is expected to be a <c>json</c>/<c>jsonb</c> expression: a mapped column, another
 /// JSON function or a parameter whose runtime value is a <c>JsonDocument</c>/<c>JsonElement</c>/
 /// <c>JsonNode</c> (Npgsql binds those as <c>jsonb</c>). A text parameter can be parsed explicitly
-/// with <see cref="NORM.PG.json_cast"/>. A path/keys operand is bound as a single array
+/// with <see cref="PostgresFunctions.json_cast"/>. A path/keys operand is bound as a single array
 /// parameter through <see cref="SqlOperandTranslator"/>.
 /// </para>
 /// <para>
@@ -27,124 +27,129 @@ internal static class JsonSqlTranslator
     /// </summary>
     internal static bool TryTranslate(BaseExpressionVisitor visitor, MethodCallExpression node)
     {
+        // The surface is PostgreSQL-only; other provider surfaces may reuse a method name (for example
+        // ClickHouseFunctions.json_exists), so match on the declaring type too.
+        if (node.Method.DeclaringType != typeof(PostgresFunctions))
+            return false;
+
         var args = node.Arguments;
 
         switch (node.Method.Name)
         {
             // Aggregates: turn rows into a JSON array / object.
-            case nameof(NORM.PG.json_agg) when args.Count == 1:
+            case nameof(PostgresFunctions.json_agg) when args.Count == 1:
                 EmitFunction(visitor, "json_agg", args);
                 return true;
-            case nameof(NORM.PG.jsonb_agg) when args.Count == 1:
+            case nameof(PostgresFunctions.jsonb_agg) when args.Count == 1:
                 EmitFunction(visitor, "jsonb_agg", args);
                 return true;
-            case nameof(NORM.PG.json_object_agg) when args.Count == 2:
+            case nameof(PostgresFunctions.json_object_agg) when args.Count == 2:
                 EmitFunction(visitor, "json_object_agg", args);
                 return true;
-            case nameof(NORM.PG.jsonb_object_agg) when args.Count == 2:
+            case nameof(PostgresFunctions.jsonb_object_agg) when args.Count == 2:
                 EmitFunction(visitor, "jsonb_object_agg", args);
                 return true;
 
             // Construction and conversion.
-            case nameof(NORM.PG.json_build_object):
+            case nameof(PostgresFunctions.json_build_object):
                 EmitVariadic(visitor, "json_build_object", args);
                 return true;
-            case nameof(NORM.PG.jsonb_build_object):
+            case nameof(PostgresFunctions.jsonb_build_object):
                 EmitVariadic(visitor, "jsonb_build_object", args);
                 return true;
-            case nameof(NORM.PG.json_build_array):
+            case nameof(PostgresFunctions.json_build_array):
                 EmitVariadic(visitor, "json_build_array", args);
                 return true;
-            case nameof(NORM.PG.jsonb_build_array):
+            case nameof(PostgresFunctions.jsonb_build_array):
                 EmitVariadic(visitor, "jsonb_build_array", args);
                 return true;
-            case nameof(NORM.PG.to_json) when args.Count == 1:
+            case nameof(PostgresFunctions.to_json) when args.Count == 1:
                 EmitFunction(visitor, "to_json", args);
                 return true;
-            case nameof(NORM.PG.to_jsonb) when args.Count == 1:
+            case nameof(PostgresFunctions.to_jsonb) when args.Count == 1:
                 EmitFunction(visitor, "to_jsonb", args);
                 return true;
-            case nameof(NORM.PG.json_cast) when args.Count == 1:
+            case nameof(PostgresFunctions.json_cast) when args.Count == 1:
                 EmitCast(visitor, args[0]);
                 return true;
 
             // Access operators: -> ->> #> #>>.
-            case nameof(NORM.PG.json_get) when args.Count == 2:
+            case nameof(PostgresFunctions.json_get) when args.Count == 2:
                 EmitOperator(visitor, "->", args[0], args[1]);
                 return true;
-            case nameof(NORM.PG.json_get_text) when args.Count == 2:
+            case nameof(PostgresFunctions.json_get_text) when args.Count == 2:
                 EmitOperator(visitor, "->>", args[0], args[1]);
                 return true;
-            case nameof(NORM.PG.json_get_path) when args.Count == 2:
+            case nameof(PostgresFunctions.json_get_path) when args.Count == 2:
                 EmitOperator(visitor, "#>", args[0], args[1]);
                 return true;
-            case nameof(NORM.PG.json_get_path_text) when args.Count == 2:
+            case nameof(PostgresFunctions.json_get_path_text) when args.Count == 2:
                 EmitOperator(visitor, "#>>", args[0], args[1]);
                 return true;
 
             // Containment/existence predicates: @> ? ?| ?&.
-            case nameof(NORM.PG.json_contains) when args.Count == 2:
+            case nameof(PostgresFunctions.json_contains) when args.Count == 2:
                 EmitOperator(visitor, "@>", args[0], args[1]);
                 return true;
-            case nameof(NORM.PG.json_exists) when args.Count == 2:
+            case nameof(PostgresFunctions.json_exists) when args.Count == 2:
                 EmitOperator(visitor, "?", args[0], args[1]);
                 return true;
-            case nameof(NORM.PG.json_exists_any) when args.Count == 2:
+            case nameof(PostgresFunctions.json_exists_any) when args.Count == 2:
                 EmitOperator(visitor, "?|", args[0], args[1]);
                 return true;
-            case nameof(NORM.PG.json_exists_all) when args.Count == 2:
+            case nameof(PostgresFunctions.json_exists_all) when args.Count == 2:
                 EmitOperator(visitor, "?&", args[0], args[1]);
                 return true;
 
             // Introspection.
-            case nameof(NORM.PG.json_array_length) when args.Count == 1:
+            case nameof(PostgresFunctions.json_array_length) when args.Count == 1:
                 EmitFunction(visitor, "json_array_length", args);
                 return true;
-            case nameof(NORM.PG.jsonb_array_length) when args.Count == 1:
+            case nameof(PostgresFunctions.jsonb_array_length) when args.Count == 1:
                 EmitFunction(visitor, "jsonb_array_length", args);
                 return true;
-            case nameof(NORM.PG.json_typeof) when args.Count == 1:
+            case nameof(PostgresFunctions.json_typeof) when args.Count == 1:
                 EmitFunction(visitor, "json_typeof", args);
                 return true;
-            case nameof(NORM.PG.jsonb_typeof) when args.Count == 1:
+            case nameof(PostgresFunctions.jsonb_typeof) when args.Count == 1:
                 EmitFunction(visitor, "jsonb_typeof", args);
                 return true;
-            case nameof(NORM.PG.jsonb_set) when args.Count is 3 or 4:
+            case nameof(PostgresFunctions.jsonb_set) when args.Count is 3 or 4:
                 EmitFunction(visitor, "jsonb_set", args);
                 return true;
-            case nameof(NORM.PG.jsonb_insert) when args.Count is 3 or 4:
+            case nameof(PostgresFunctions.jsonb_insert) when args.Count is 3 or 4:
                 EmitFunction(visitor, "jsonb_insert", args);
                 return true;
-            case nameof(NORM.PG.jsonb_strip_nulls) when args.Count == 1:
+            case nameof(PostgresFunctions.jsonb_strip_nulls) when args.Count == 1:
                 EmitFunction(visitor, "jsonb_strip_nulls", args);
                 return true;
-            case nameof(NORM.PG.jsonb_pretty) when args.Count == 1:
+            case nameof(PostgresFunctions.jsonb_pretty) when args.Count == 1:
                 EmitFunction(visitor, "jsonb_pretty", args);
                 return true;
-            case nameof(NORM.PG.jsonb_delete) when args.Count == 2:
+            case nameof(PostgresFunctions.jsonb_delete) when args.Count == 2:
                 EmitOperator(visitor, "-", args[0], args[1]);
                 return true;
-            case nameof(NORM.PG.row_to_json) when args.Count == 1:
+            case nameof(PostgresFunctions.row_to_json) when args.Count == 1:
                 EmitFunction(visitor, "row_to_json", args);
                 return true;
-            case nameof(NORM.PG.array_to_json) when args.Count == 1:
+            case nameof(PostgresFunctions.array_to_json) when args.Count == 1:
                 EmitFunction(visitor, "array_to_json", args);
                 return true;
-            case nameof(NORM.PG.json_concat) when args.Count == 2:
+            case nameof(PostgresFunctions.json_concat) when args.Count == 2:
                 EmitOperator(visitor, "||", args[0], args[1]);
                 return true;
 
             // JSONPath: the path operand has to be rendered as jsonpath.
-            case nameof(NORM.PG.jsonb_path_exists) when args.Count == 2:
+            case nameof(PostgresFunctions.jsonb_path_exists) when args.Count == 2:
                 EmitJsonPathFunction(visitor, "jsonb_path_exists", args);
                 return true;
-            case nameof(NORM.PG.jsonb_path_match) when args.Count == 2:
+            case nameof(PostgresFunctions.jsonb_path_match) when args.Count == 2:
                 EmitJsonPathFunction(visitor, "jsonb_path_match", args);
                 return true;
-            case nameof(NORM.PG.jsonb_path_query_first) when args.Count == 2:
+            case nameof(PostgresFunctions.jsonb_path_query_first) when args.Count == 2:
                 EmitJsonPathFunction(visitor, "jsonb_path_query_first", args);
                 return true;
-            case nameof(NORM.PG.jsonb_path_query_array) when args.Count == 2:
+            case nameof(PostgresFunctions.jsonb_path_query_array) when args.Count == 2:
                 EmitJsonPathFunction(visitor, "jsonb_path_query_array", args);
                 return true;
 

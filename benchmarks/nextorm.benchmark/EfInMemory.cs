@@ -1,6 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 
-namespace nextorm.benchmark;
+namespace NextORM.Benchmark;
 
 /// <summary>
 /// EF Core context backed by the InMemory provider, used for apples-to-apples comparison with the

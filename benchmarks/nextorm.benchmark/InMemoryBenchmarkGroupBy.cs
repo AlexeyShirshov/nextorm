@@ -1,7 +1,7 @@
 using BenchmarkDotNet.Attributes;
-using nextorm.core;
+using NextORM.Core;
 
-namespace nextorm.benchmark;
+namespace NextORM.Benchmark;
 
 /// <summary>
 /// <c>GROUP BY</c> plus a per-group count: nextorm in-memory grouping versus raw LINQ and the EF Core
@@ -29,7 +29,7 @@ public class InMemoryBenchmarkGroupBy
             data.Add(new SimpleEntity { Id = i });
         _data = data;
 
-        var provider = new InMemoryContext();
+        var provider = new InMemoryDataContext();
         _ctx = new InMemoryDataRepository(provider);
         _ctx.SimpleEntity.WithData(_data);
     }
@@ -44,7 +44,7 @@ public class InMemoryBenchmarkGroupBy
         {
             var rows = _ctx.SimpleEntity
                 .GroupBy(e => new { Parity = e.Id % 2 })
-                .Select(e => new { Key = e.Id % 2, Count = NORM.SQL.count() })
+                .Select(e => new { Key = e.Id % 2, Count = SqlFunctions.Sql.count() })
                 .ToList();
             acc += rows.Count;
         }

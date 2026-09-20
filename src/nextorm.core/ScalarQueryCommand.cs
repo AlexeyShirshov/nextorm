@@ -1,4 +1,4 @@
-namespace nextorm.core;
+namespace NextORM.Core;
 
 // public class ScalarQueryCommand<T> : QueryCommand<T>
 //     where T:struct

@@ -1,10 +1,10 @@
 using BenchmarkDotNet.Attributes;
-using nextorm.sqlite;
+using NextORM.Sqlite;
 using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Columns;
-using nextorm.core;
+using NextORM.Core;
 
-namespace nextorm.benchmark;
+namespace NextORM.Benchmark;
 
 [HideColumns(Column.Job, Column.Runtime, Column.RatioSD)]
 [MemoryDiagnoser]
@@ -20,21 +20,21 @@ public class SqliteBenchmarkCachedPlan
     public SqliteBenchmarkCachedPlan()
     {
         var filepath = BenchDb.FilePath;
-        var builder = new DbContextBuilder();
+        var builder = new DataContextBuilder();
         builder.UseSqlite(filepath);
-        _db = builder.CreateDbContext();
+        _db = builder.CreateDataContext();
         _repo = new TestDataRepository(_db);
         ((IConnectionManager)_db).EnsureConnectionOpen();
 
         _prepared = _repo.SimpleEntity
-            .Where(it => it.Id == NORM.Param<int>(0))
+            .Where(it => it.Id == SqlFunctions.Parameter<int>(0))
             .Select(it => it.Id)
             .Prepare();
 
-        _rePrepareCmd = _repo.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(it => it.Id);
+        _rePrepareCmd = _repo.SimpleEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0)).Select(it => it.Id);
 
         // Warm both plan caches so the measured loops only exercise the cached path.
-        _ = _repo.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(it => it.Id).ToList(0);
+        _ = _repo.SimpleEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0)).Select(it => it.Id).ToList(0);
         _ = _repo.SimpleEntity.Where(it => it.Id == 5).Select(it => it.Id).ToList();
         _ = _db.GetPreparedQueryCommand(_rePrepareCmd, false, true, CancellationToken.None);
     }
@@ -60,7 +60,7 @@ public class SqliteBenchmarkCachedPlan
         var sum = 0;
         for (var i = 0; i < Iterations; i++)
         {
-            foreach (var row in _repo.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(it => it.Id).ToList(i))
+            foreach (var row in _repo.SimpleEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0)).Select(it => it.Id).ToList(i))
                 sum += row;
         }
         return sum;
@@ -73,7 +73,7 @@ public class SqliteBenchmarkCachedPlan
         IPreparedQueryCommand<int>? r = null;
         for (var i = 0; i < Iterations; i++)
         {
-            var cmd = _repo.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(it => it.Id);
+            var cmd = _repo.SimpleEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0)).Select(it => it.Id);
             r = _db.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None);
         }
         return r!;
@@ -101,7 +101,7 @@ public class SqliteBenchmarkCachedPlan
         IPreparedQueryCommand<int>? r = null;
         for (var i = 0; i < Iterations; i++)
         {
-            var cmd = _repo.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(it => it.Id);
+            var cmd = _repo.SimpleEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0)).Select(it => it.Id);
             r = _db.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None);
         }
         return r!;
@@ -116,8 +116,8 @@ public class SqliteBenchmarkCachedPlan
         {
             var cmd = _repo.LargeEntity
                 .Join(_repo.SimpleEntity, (t1, t2) => t1.Id == t2.Id)
-                .Where(p => p.t2.Id == NORM.Param<int>(0))
-                .Select(p => new LargeEntity { Id = p.t1.Id, Dt = p.t1.Dt, Str = p.t1.Str });
+                .Where(p => p.Item2.Id == SqlFunctions.Parameter<int>(0))
+                .Select(p => new LargeEntity { Id = p.Item1.Id, Dt = p.Item1.Dt, Str = p.Item1.Str });
             r = _db.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None);
         }
         return r!;
@@ -130,7 +130,7 @@ public class SqliteBenchmarkCachedPlan
     {
         QueryCommand<int>? r = null;
         for (var i = 0; i < Iterations; i++)
-            r = _repo.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(it => it.Id);
+            r = _repo.SimpleEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0)).Select(it => it.Id);
         return r!;
     }
 
@@ -159,7 +159,7 @@ public class SqliteBenchmarkCachedPlan
         IPreparedQueryCommand<int>? r = null;
         for (var i = 0; i < Iterations; i++)
         {
-            var cmd = _repo.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(it => it.Id);
+            var cmd = _repo.SimpleEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0)).Select(it => it.Id);
             cmd.Cache = false;
             r = _db.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None);
         }
@@ -173,7 +173,7 @@ public class SqliteBenchmarkCachedPlan
         var sum = 0;
         for (var i = 0; i < Iterations; i++)
         {
-            var cmd = _repo.SimpleEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(it => it.Id);
+            var cmd = _repo.SimpleEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0)).Select(it => it.Id);
             cmd.Cache = false;
             foreach (var row in cmd.ToList(i))
                 sum += row;

@@ -1,7 +1,7 @@
 using BenchmarkDotNet.Attributes;
-using nextorm.core;
+using NextORM.Core;
 
-namespace nextorm.benchmark;
+namespace NextORM.Benchmark;
 
 /// <summary>
 /// Terminal materializers (<c>ToArray</c>, <c>ToDictionary</c>) and ordered <c>Last</c> added to the
@@ -29,7 +29,7 @@ public class InMemoryBenchmarkMaterializers
             data.Add(new SimpleEntity { Id = i });
         _data = data;
 
-        var provider = new InMemoryContext();
+        var provider = new InMemoryDataContext();
         _ctx = new InMemoryDataRepository(provider);
         _ctx.SimpleEntity.WithData(_data);
     }

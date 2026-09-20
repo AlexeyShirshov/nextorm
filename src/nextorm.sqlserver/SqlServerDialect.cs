@@ -1,7 +1,7 @@
 using System.Text;
-using nextorm.core;
+using NextORM.Core;
 
-namespace nextorm.sqlserver;
+namespace NextORM.SqlServer;
 
 /// <summary>
 /// SQL Server dialect: bracket-quoted identifiers, <c>@name</c> parameters, <c>offset/fetch</c> paging
@@ -49,6 +49,27 @@ public sealed class SqlServerDialect : SqlDialectBase
 
     public override string MakeFullText(string functionName, string column, string search) =>
         $"{functionName}({column}, {search})";
+
+    /// <summary>SQL Server supports the <c>TABLESAMPLE</c> table modifier.</summary>
+    public override bool SupportsTableSample => true;
+
+    /// <summary>SQL Server supports only the <c>SYSTEM</c> sampling method (there is no <c>BERNOULLI</c>).</summary>
+    public override bool SupportsTableSampleMethod(TableSampleMethod method) => method == TableSampleMethod.System;
+
+    /// <summary>SQL Server renders <c>tablesample (percent percent) [repeatable (seed)]</c>.</summary>
+    public override string MakeTableSample(TableSampleMethod method, double percent, double? seed)
+    {
+        var text = " tablesample (" + percent.ToString(System.Globalization.CultureInfo.InvariantCulture) + " percent)";
+        return seed is { } value
+            ? text + " repeatable (" + value.ToString(System.Globalization.CultureInfo.InvariantCulture) + ")"
+            : text;
+    }
+
+    /// <summary>SQL Server supports the <c>FOR SYSTEM_TIME</c> temporal-table clause, including <c>CONTAINED IN</c>.</summary>
+    public override bool SupportsTemporalTable => true;
+
+    /// <summary>SQL Server supports every <c>FOR SYSTEM_TIME</c> kind.</summary>
+    public override bool SupportsTemporalKind(TemporalKind kind) => true;
 
     public override bool SupportsTableFunction(string name) =>
         name is "string_split" or "openjson";
@@ -108,6 +129,12 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// </summary>
     public override bool SupportsGreatestLeast => true;
 
+    // SQL Server 2012+ supports the ANSI percent_rank()/cume_dist() window functions.
+    public override bool SupportsPercentRankCumeDist => true;
+
+    /// <summary>SQL Server renders percentiles as the <c>PERCENTILE_CONT</c>/<c>PERCENTILE_DISC</c> analytic functions (no exact ordered-set aggregate form).</summary>
+    public override bool SupportsPercentileWindow => true;
+
     /// <summary>SQL Server 2017 introduced <c>string_agg</c>; it has no array type, so <c>array_agg</c> stays unavailable.</summary>
     public override bool SupportsStringAgg => true;
 
@@ -148,8 +175,9 @@ public sealed class SqlServerDialect : SqlDialectBase
             ? $"substring({value}, 1, {start})"
             : $"stuff({value}, {start} + 1, {count}, {newValue})";
 
-    // SQL Server extracts date parts through datepart(part, value).
-    public override string MakeDatePart(string part, string value) => $"datepart({part}, {value})";
+    // SQL Server extracts date parts through datepart(part, value); T-SQL spells day-of-year as dayofyear.
+    public override string MakeDatePart(string part, string value) =>
+        part == "doy" ? $"datepart(dayofyear, {value})" : $"datepart({part}, {value})";
 
     /// <summary>
     /// SQL Server 2022 introduced <c>datetrunc(datepart, date)</c>. It takes an unquoted part name and
@@ -295,16 +323,21 @@ public sealed class SqlServerDialect : SqlDialectBase
         sqlBuilder.Append("offset ").Append(paging.Offset).Append(" rows");
 
         if (paging.Limit > 0)
-            sqlBuilder.AppendLine().Append("fetch next ").Append(paging.Limit).Append(" rows only");
+            sqlBuilder.AppendLine().Append("fetch next ").Append(paging.Limit)
+                .Append(paging.HasWithTies ? " rows with ties" : " rows only");
     }
+
+    /// <summary>SQL Server supports <c>TOP(n) WITH TIES</c> and <c>FETCH NEXT ... WITH TIES</c>.</summary>
+    public override bool SupportsWithTies => true;
 
     // SQL Server rejects OFFSET/FETCH without ORDER BY, so a constant sort has to be injected.
     public override string? GetPagingOrderBy(QueryCommand queryCommand)
         => queryCommand.Paging.IsEmpty ? null : "(select null as anyorder)";
 
-    public override bool MakeTop(int limit, out string? topStmt)
+    /// <summary>SQL Server renders the inline limit as <c>top(n)</c>, or <c>top(n) with ties</c>.</summary>
+    public override bool MakeTop(int limit, bool withTies, out string? topStmt)
     {
-        topStmt = $"top({limit})";
+        topStmt = withTies ? $"top({limit}) with ties" : $"top({limit})";
         return true;
     }
 
@@ -318,6 +351,50 @@ public sealed class SqlServerDialect : SqlDialectBase
 
     /// <summary>SQL Server renders statement-level hints as a trailing <c>OPTION (...)</c> clause.</summary>
     public override bool SupportsQueryHints => true;
+
+    /// <summary>SQL Server implements the <c>iif</c> conditional function and the <c>choose</c> value picker.</summary>
+    public override bool SupportsIif => true;
+
+    /// <summary>SQL Server is the only provider with the <c>choose</c> value-picker function.</summary>
+    public override bool SupportsChoose => true;
+
+    /// <summary>SQL Server renders the conditional as <c>iif(condition, whenTrue, whenFalse)</c>.</summary>
+    public override string MakeIif(string condition, string whenTrue, string whenFalse) =>
+        $"iif({condition}, {whenTrue}, {whenFalse})";
+
+    /// <summary>
+    /// SQL Server renders <c>current_user</c>/<c>session_user</c> as the ANSI keywords and the
+    /// database/schema/version information through <c>db_name()</c>/<c>schema_name()</c>/<c>@@version</c>.
+    /// </summary>
+    public override bool SupportsSessionInfoFunctions => true;
+
+    /// <summary>SQL Server supports all five session/information functions.</summary>
+    public override bool SupportsSessionInfoFunction(string name) =>
+        name is "current_user" or "session_user" or "current_schema" or "current_database" or "version";
+
+    /// <summary>SQL Server maps the information functions onto <c>schema_name()</c>/<c>db_name()</c>/<c>@@version</c>.</summary>
+    public override string MakeSessionInfoFunction(string name) => name switch
+    {
+        "current_user" => "current_user",
+        "session_user" => "session_user",
+        "current_schema" => "schema_name()",
+        "current_database" => "db_name()",
+        "version" => "@@version",
+        _ => base.MakeSessionInfoFunction(name)
+    };
+
+    /// <summary>SQL Server can generate a random UUID through <c>newid()</c>; it has no v7 generator.</summary>
+    public override bool SupportsUuidGenerators => true;
+
+    /// <summary>SQL Server supports only the random v4 generator (<c>newid()</c>); <c>uuidv7</c> is unavailable.</summary>
+    public override bool SupportsUuidGenerator(string name) => name is "gen_random_uuid";
+
+    /// <summary>SQL Server renders the random v4 generator as <c>newid()</c>.</summary>
+    public override string MakeUuidGenerator(string name) => name switch
+    {
+        "gen_random_uuid" => "newid()",
+        _ => base.MakeUuidGenerator(name)
+    };
 
     public override string RenderQueryHints(string sql, IReadOnlyList<string> hints, string? maxRecursionOption)
     {

@@ -1,6 +1,6 @@
 using System.Data.Common;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Owns the lifecycle of the underlying database connection.

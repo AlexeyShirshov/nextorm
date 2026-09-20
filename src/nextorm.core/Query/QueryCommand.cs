@@ -2,9 +2,9 @@ using Microsoft.Extensions.Logging;
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
-public partial class QueryCommand : IQueryProvider, ICloneable
+public partial class QueryCommand : IQueryRegistry, ICloneable
 {
 
     private QueryCommand? _union;
@@ -22,6 +22,9 @@ public partial class QueryCommand : IQueryProvider, ICloneable
     protected readonly LambdaExpression? _condition;
     protected readonly LambdaExpression? _groupExp;
     protected readonly LambdaExpression? _having;
+    protected LambdaExpression? _preWhere;
+    protected LambdaExpression[]? _arrayJoins;
+    internal Expression[]? _preparedArrayJoin;
     protected bool _isPrepared;
     protected Type? _srcType;
     private bool _dontCache;
@@ -42,6 +45,18 @@ public partial class QueryCommand : IQueryProvider, ICloneable
     internal int HintsPlanHash;
     internal Type? ResultType;
     public Paging Paging;
+    /// <summary>
+    /// True when this command is used as a correlated scalar with a <c>*OrDefault</c> terminal
+    /// (<c>FirstOrDefault</c>/<c>SingleOrDefault</c>). A SQL NULL result then means "no row" and must
+    /// materialise as <c>default</c> instead of throwing.
+    /// </summary>
+    internal bool DefaultOnEmpty;
+    /// <summary>
+    /// True when this command is used as a correlated scalar with a <c>Single</c>/<c>SingleOrDefault</c>
+    /// terminal. At most one row is allowed; the renderer may reject it on dialects whose scalar
+    /// subqueries do not enforce cardinality.
+    /// </summary>
+    internal bool SingleScalar;
     internal Expression? PreparedCondition;
     /// <summary>
     /// Hash of the value-list (<c>in</c>/<c>Contains</c>) shapes found in <see cref="PreparedCondition"/>.
@@ -72,29 +87,69 @@ public partial class QueryCommand : IQueryProvider, ICloneable
     private JoinExpressionPlanEqualityComparer? _joinExpressionPlanComparer;
     private SortingExpressionPlanEqualityComparer? _sortingExpressionPlanComparer;
     private SelectExpression[]? _groupingList;
+    private SelectExpression[]? _limitByColumns;
+    private SelectExpression[]? _distinctOnColumns;
     protected readonly Sorting[]? _sorting;
 
-    public QueryCommand(IDataContext? dataProvider, LambdaExpression exp, LambdaExpression? condition, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having, ILogger? logger)
-        : this(dataProvider, exp, null, condition, null, paging, sorting, group, having, logger)
-    {
-    }
-    public QueryCommand(IDataContext? dataProvider, Type srcType, LambdaExpression? condition, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having, ILogger? logger)
-        : this(dataProvider, null, srcType, condition, null, paging, sorting, group, having, logger)
-    {
-    }
-    protected QueryCommand(IDataContext? dataProvider, LambdaExpression? exp, Type? srcType, LambdaExpression? condition, JoinExpression[]? joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having, ILogger? logger)
+    protected QueryCommand(IDataContext? dataProvider, QueryDefinition definition)
     {
         _dataContext = dataProvider;
-        _exp = exp;
-        _srcType = srcType;
-        _condition = condition;
-        _joins = joins;
-        Paging = paging;
-        _sorting = sorting;
-        _groupExp = group;
-        _having = having;
-        Logger = logger;
+        _exp = definition.Exp;
+        _srcType = definition.SrcType;
+        _condition = definition.Condition;
+        _joins = definition.Joins;
+        Paging = definition.Paging;
+        _sorting = definition.Sorting;
+        _groupExp = definition.Group;
+        _having = definition.Having;
+        Logger = definition.Logger;
+        IsDistinct = definition.IsDistinct;
+        GroupByWithTotals = definition.GroupByWithTotals;
+        LimitBy = definition.LimitBy;
+        DistinctOn = definition.DistinctOn;
+        TableSample = definition.TableSample;
+        Temporal = definition.Temporal;
+        RowLock = definition.RowLock;
+        Final = definition.Final;
+        SampleRatio = definition.SampleRatio;
+        SampleOffset = definition.SampleOffset;
+        Settings = definition.Settings;
+        _preWhere = definition.PreWhere;
+        _arrayJoins = definition.ArrayJoins?.ToArray();
+        ArrayJoinKind = definition.ArrayJoinKind;
+        BindArrayJoinElement = definition.BindArrayJoinElement;
     }
+    /// <summary>
+    /// Snapshot of this command's shape as a <see cref="QueryDefinition"/>, used by the clone and
+    /// re-ordering paths to build a variant with <c>with</c> instead of repeating every collaborator.
+    /// </summary>
+    internal QueryDefinition Definition => new()
+    {
+        Exp = _exp,
+        SrcType = _srcType,
+        Condition = _condition,
+        Joins = _joins,
+        Paging = Paging,
+        Sorting = _sorting,
+        Group = _groupExp,
+        Having = _having,
+        Logger = Logger,
+        IsDistinct = IsDistinct,
+        GroupByWithTotals = GroupByWithTotals,
+        LimitBy = LimitBy,
+        DistinctOn = DistinctOn,
+        TableSample = TableSample,
+        Temporal = Temporal,
+        RowLock = RowLock,
+        Final = Final,
+        SampleRatio = SampleRatio,
+        SampleOffset = SampleOffset,
+        Settings = Settings,
+        PreWhere = _preWhere,
+        ArrayJoins = _arrayJoins,
+        ArrayJoinKind = ArrayJoinKind,
+        BindArrayJoinElement = BindArrayJoinElement,
+    };
     public ILogger? Logger { get; }
     public FromExpression? From { get => _from; set => _from = value; }
     public SelectExpression[]? SelectList => _selectList;
@@ -127,6 +182,69 @@ public partial class QueryCommand : IQueryProvider, ICloneable
     /// the property on the generic command type.
     /// </summary>
     public bool IsDistinct { get; internal set; }
+    /// <summary>
+    /// Whether the grouping carries the <c>WITH TOTALS</c> modifier (ClickHouse). Only meaningful when
+    /// the command has a grouping list; a dialect that does not support it rejects the command when its
+    /// SQL is built.
+    /// </summary>
+    public bool GroupByWithTotals { get; internal set; }
+    /// <summary>
+    /// The <c>LIMIT n BY expr</c> clause (ClickHouse), or <c>null</c> when the query has none. A dialect
+    /// that does not support it rejects the command when its SQL is built.
+    /// </summary>
+    internal LimitByClause? LimitBy { get; set; }
+    /// <summary>The prepared key columns of <see cref="LimitBy"/>, or <c>null</c> when there is none.</summary>
+    internal SelectExpression[]? LimitByColumns => _limitByColumns;
+    /// <summary>
+    /// The <c>DISTINCT ON (expr, ...)</c> clause (PostgreSQL), or <c>null</c> when the query has none. A
+    /// dialect that does not support it rejects the command when its SQL is built.
+    /// </summary>
+    internal DistinctOnClause? DistinctOn { get; set; }
+    /// <summary>The prepared key columns of <see cref="DistinctOn"/>, or <c>null</c> when there is none.</summary>
+    internal SelectExpression[]? DistinctOnColumns => _distinctOnColumns;
+    /// <summary>
+    /// The <c>TABLESAMPLE</c> table modifier, or <c>null</c> when the query has none. A dialect that does
+    /// not support it rejects the command when its SQL is built.
+    /// </summary>
+    internal TableSampleClause? TableSample { get; set; }
+    /// <summary>
+    /// The <c>FOR SYSTEM_TIME</c> temporal-table clause, or <c>null</c> when the query has none. A
+    /// dialect that does not support it rejects the command when its SQL is built.
+    /// </summary>
+    internal TemporalClause? Temporal { get; set; }
+    /// <summary>
+    /// The trailing <c>FOR UPDATE</c>/<c>FOR SHARE</c> row-locking clause, or <c>null</c> when the query
+    /// has none. A dialect that does not support it rejects the command when its SQL is built.
+    /// </summary>
+    internal LockClause? RowLock { get; set; }
+    /// <summary>Whether the query carries the ClickHouse <c>FINAL</c> modifier.</summary>
+    public bool Final { get; internal set; }
+    /// <summary>The ClickHouse <c>SAMPLE</c> ratio (a value in <c>[0, 1]</c>), or <c>null</c> when absent.</summary>
+    public double? SampleRatio { get; internal set; }
+    /// <summary>The ClickHouse <c>SAMPLE ... OFFSET</c> value; zero when absent.</summary>
+    public double SampleOffset { get; internal set; }
+    /// <summary>The trailing ClickHouse <c>SETTINGS</c> entries, or <c>null</c> when there are none.</summary>
+    public IReadOnlyList<KeyValuePair<string, string>>? Settings { get; internal set; }
+    /// <summary>The ClickHouse <c>PREWHERE</c> predicate, or <c>null</c> when there is none.</summary>
+    public LambdaExpression? PreWhere => _preWhere;
+    /// <summary>
+    /// The prepared ClickHouse <c>ARRAY JOIN</c> expressions, or <c>null</c> when the clause is absent.
+    /// A dialect that does not support it rejects the command when its SQL is built. Internal so the
+    /// mutable prepared array cannot be reached from outside and used to corrupt the plan-cache key.
+    /// </summary>
+    internal IReadOnlyList<Expression>? ArrayJoinExpressions => _preparedArrayJoin;
+    /// <summary>The <c>ARRAY JOIN</c> kind (plain or <c>LEFT</c>) shared by <see cref="ArrayJoinExpressions"/>.</summary>
+    public ArrayJoinKind ArrayJoinKind { get; internal set; }
+    /// <summary>
+    /// Whether the last <c>ARRAY JOIN</c> expression is aliased as the element referenced by
+    /// <see cref="ArrayJoinProjection{TEntity, TElement}.Element"/>.
+    /// </summary>
+    internal bool BindArrayJoinElement { get; set; }
+    /// <summary>The prepared <see cref="PreWhere"/> expression, or <c>null</c> when there is none.</summary>
+    internal Expression? PreparedPreWhere;    /// <summary>Shape hash of any captured value-list in <see cref="PreparedPreWhere"/>; zero when none.</summary>
+    internal int PreWhereShapeHash;
+    /// <summary>Whether <see cref="PreparedPreWhere"/> contains a top-level value-list whose shape is refreshed per run.</summary>
+    internal bool HasPreWhereInValues;
     internal bool IgnoreColumns { get; set; }
     public IReadOnlyList<QueryCommand> ReferencedQueries => _referencedQueries!;
     public Sorting[]? Sorting => _sorting;
@@ -186,7 +304,7 @@ public partial class QueryCommand : IQueryProvider, ICloneable
     public GroupingType GroupingType { get; internal set; }
     /// <summary>
     /// The explicit grouping sets (0-based indices into the grouping list) used when
-    /// <see cref="GroupingType"/> is <see cref="nextorm.core.GroupingType.GroupingSets"/>, or
+    /// <see cref="GroupingType"/> is <see cref="NextORM.Core.GroupingType.GroupingSets"/>, or
     /// <c>null</c> otherwise. An empty set yields the grand total.
     /// </summary>
     public IReadOnlyList<int[]>? GroupingSets { get; internal set; }
@@ -201,6 +319,12 @@ public partial class QueryCommand : IQueryProvider, ICloneable
         _isPrepared = false;
         _selectList = null;
         _groupingList = null;
+        _limitByColumns = null;
+        _distinctOnColumns = null;
+        PreparedPreWhere = null;
+        _preparedArrayJoin = null;
+        PreWhereShapeHash = 0;
+        HasPreWhereInValues = false;
         _from = null;
         PreparedCondition = null;
         InValuesShapeHash = 0;
@@ -222,7 +346,7 @@ public partial class QueryCommand : IQueryProvider, ICloneable
 
         _referencedQueries[idx] = cmd;
     }
-    int IQueryProvider.AddCommand(QueryCommand cmd)
+    int IQueryRegistry.AddCommand(QueryCommand cmd)
     {
 #if DEBUG
         if (_isPrepared) throw new InvalidOperationException("QueryCommand prepared");

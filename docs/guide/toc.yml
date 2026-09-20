@@ -32,3 +32,15 @@
   href: 16-connections-and-logging.md
 - name: Query hints
   href: 17-query-hints.md
+- name: JSON support across providers
+  href: 18-json.md
+- name: Provider-specific SQL
+  items:
+    - name: Overview
+      href: provider-specific/overview.md
+    - name: ClickHouse
+      href: provider-specific/clickhouse.md
+    - name: PostgreSQL
+      href: provider-specific/postgresql.md
+    - name: SQL Server
+      href: provider-specific/sqlserver.md

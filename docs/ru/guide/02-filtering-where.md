@@ -6,8 +6,8 @@
 
 ## Обзор
 
-`Where` принимает логическое выражение и возвращает новый `EntityBuilder<TEntity>`; как и любой метод
-построителя, он неизменяемый, поэтому исходный объект не меняется. Повторный вызов `Where` объединяет
+[`Where`](xref:NextORM.Core.EntityBuilder`1) принимает логическое выражение и возвращает новый [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1); как и любой метод
+построителя, он неизменяемый, поэтому исходный объект не меняется. Повторный вызов [`Where`](xref:NextORM.Core.EntityBuilder`1) объединяет
 предикаты с помощью `and`:
 
 ```csharp
@@ -15,12 +15,12 @@ public EntityBuilder<TEntity> Where(Expression<Func<TEntity, bool>> condition)
 ```
 
 Лямбда транслируется в предложение `WHERE`, и ничего не выполняется, пока не вызван терминальный метод,
-такой как `ToListAsync`. То же дерево выражений также компилирует и выполняет in-memory провайдер,
+такой как [`ToListAsync`](xref:NextORM.Core.EntityBuilder`1). То же дерево выражений также компилирует и выполняет in-memory провайдер,
 поэтому запрос, работающий с реальной базой данных, можно прогнать и в памяти.
 
 Два вида значений по-разному попадают в базу данных:
 
-* **Захваченная локальная переменная** (переменная из внешней области видимости) и `NORM.Param<T>(index)`
+* **Захваченная локальная переменная** (переменная из внешней области видимости) и [`Parameter`](xref:NextORM.Core.SqlFunctions)
   становятся параметрами команды, поэтому план может повторно использоваться при выполнениях с разными
   значениями.
 * **Литеральная константа**, записанная непосредственно в лямбде, подставляется в текст SQL как есть.
@@ -99,6 +99,15 @@ var ids = await dataContext.From<ComplexEntity>()
 select id from complex_entity where not (b)
 ```
 
+Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
+
+Вывод:
+
+| Id |
+|----|
+| 2 |
+| 3 |
+
 ```csharp
 .Where(x => !(x.Boolean!.Value && x.Id > 1L))
 ```
@@ -117,8 +126,8 @@ select id from complex_entity where not ((b and (id > 1)))
 
 ```csharp
 var rows = await dataContext.From("simple_entity")
-    .Where(tbl => tbl.Long("id") + 2 == 1)
-    .Select(tbl => new { Id = tbl.Long("id") })
+    .Where(tbl => tbl.GetInt64("id") + 2 == 1)
+    .Select(tbl => new { Id = tbl.GetInt64("id") })
     .ToListAsync();
 ```
 
@@ -209,7 +218,7 @@ switch, в котором сравнение является вызовом м�
 компилятор C# использует для некоторых строковых шаблонов), не поддерживается и выбрасывает
 `NotSupportedException`.
 
-## Захваченные параметры и `NORM.Param`
+## Захваченные параметры и [`Parameter`](xref:NextORM.Core.SqlFunctions)
 
 Захваченная локальная переменная извлекается как именованный параметр команды:
 
@@ -227,13 +236,13 @@ var rows = await dataContext.From<ComplexEntity>()
 | SQL Server | `select id from complex_entity where (id > @threshold)` |
 | PostgreSQL | `select id from complex_entity where (id > @threshold)` |
 
-`NORM.Param<T>(index)` объявляет параметр времени выполнения, значение которого передаётся терминальному
+[`Parameter`](xref:NextORM.Core.SqlFunctions) объявляет параметр времени выполнения, значение которого передаётся терминальному
 методу; это полезно, когда одна и та же форма запроса подготавливается или кэшируется и выполняется
 многократно:
 
 ```csharp
 var rows = await dataContext.From<SimpleEntity>()
-    .Where(x => x.Id == NORM.Param<int>(0))
+    .Where(x => x.Id == SqlFunctions.Parameter<int>(0))
     .Select(x => new { x.Id })
     .ToListAsync(42);
 ```
@@ -249,12 +258,12 @@ select id from simple_entity where id = $norm_p0
 
 ## `IN` и `Contains`
 
-`NORM.SQL.@in` принимает колонку плюс `QueryCommand<T>`, `IEnumerable<T>` или `params T[]`:
+`SqlFunctions.Sql.@in` принимает колонку плюс `QueryCommand<T>`, `IEnumerable<T>` или `params T[]`:
 
 ```csharp
 var values = new long[] { 1, 3, 10 };
 var ids = await dataContext.From<ComplexEntity>()
-    .Where(e => NORM.SQL.@in(e.Id, values))
+    .Where(e => SqlFunctions.Sql.@in(e.Id, values))
     .Select(e => e.Id)
     .ToListAsync();
 ```
@@ -263,6 +272,13 @@ var ids = await dataContext.From<ComplexEntity>()
 -- SQLite
 select id from complex_entity where id in ($p0, $p1, $p2)
 ```
+
+Вывод:
+
+| Id |
+|----|
+| 1 |
+| 3 |
 
 `Contains` по захваченному `List<T>` или `T[]` порождает тот же предикат `IN`:
 
@@ -278,6 +294,13 @@ var ids = await dataContext.From<ComplexEntity>()
 select id from complex_entity where id in ($p0, $p1)
 ```
 
+Вывод:
+
+| Id |
+|----|
+| 1 |
+| 3 |
+
 Особые случаи:
 
 | Случай | SQL |
@@ -289,12 +312,35 @@ select id from complex_entity where id in ($p0, $p1)
 
 Захваченный список или массив захватывается деревом выражений по ссылке, но его значения встраиваются
 в подготовленную команду. Когда коллекция изменяется или переприсваивается между выполнениями, nextorm
-обнаруживает изменившуюся форму и перестраивает команду, поэтому второй `ToList()` видит новые значения,
+обнаруживает изменившуюся форму и перестраивает команду, поэтому второй [`ToList`](xref:NextORM.Core.EntityBuilder`1) видит новые значения,
 а не устаревшие результаты.
+
+### `GLOBAL IN` (ClickHouse)
+
+Распределённый предикат ClickHouse `column GLOBAL IN (subquery | values)` доступен через
+[`SqlFunctions.ClickHouse.global_in`](xref:NextORM.Core.ClickHouseFunctions), принимающий ту же
+левую колонку и правую часть, что и [`SqlFunctions.Sql.@in`](xref:NextORM.Core.SqlFunctions):
+
+```csharp
+var values = new int[] { 1, 3 };
+var ids = dataContext.From<ComplexEntity>()
+    .Where(e => SqlFunctions.ClickHouse.global_in(e.Id, values))
+    .Select(e => e.Id)
+    .ToList();
+```
+
+```sql
+select id from complex_entity where global in (@p0, @p1)
+```
+
+Отрицание через `!` в C# даёт `GLOBAL NOT IN`. Предикат требует
+[`SupportsGlobalPredicates`](xref:NextORM.Core.ISqlDialect.SupportsGlobalPredicates) и доступен только
+в ClickHouse; остальные провайдеры и контекст in-memory выбрасывают `NotSupportedException`.
+Полный каталог — в разделе [Специфичный для провайдеров SQL](provider-specific/overview.md).
 
 ## Предикаты шаблонов и подзапросов
 
-`NORM.SQL.like`, `NORM.SQL.exists`, `NORM.SQL.any` и `NORM.SQL.all` - оставшиеся вспомогательные
+`SqlFunctions.Sql.like`, `SqlFunctions.Sql.exists`, `SqlFunctions.Sql.any` и `SqlFunctions.Sql.all` - оставшиеся вспомогательные
 предикаты:
 
 | Выражение | SQL |
@@ -303,18 +349,18 @@ select id from complex_entity where id in ($p0, $p1)
 | `x.String.StartsWith("xx")` | `somestring like 'xx%'` |
 | `x.String.EndsWith("sd")` | `somestring like '%sd'` |
 | `x.String.Contains("a%b_c")` | `somestring like '%a\%b\_c%' escape '\'` |
-| `NORM.SQL.like(x.String, "%a%")` | `somestring like '%a%'` |
-| `NORM.SQL.like(x.String, "%a!%", "!")` | `somestring like '%a!%' escape '!'` |
-| `NORM.SQL.exists(query)` | `exists(<query>)` |
-| `x.Id == NORM.SQL.any(query)` | `id = any(<query>)` |
-| `x.Id == NORM.SQL.all(query)` | `id = all(<query>)` |
-| `NORM.PG_SQL.any(x, array)` | `x = any(@array)` (PostgreSQL) |
-| `x == NORM.PG_SQL.any(array)` | `x = any(@array)` (PostgreSQL) |
-| `NORM.SQL.contains(x.String, "foo")` | `contains(somestring, 'foo')` (SQL Server) |
-| `NORM.SQL.freetext(x.String, "foo")` | `freetext(somestring, 'foo')` (SQL Server) |
+| `SqlFunctions.Sql.like(x.String, "%a%")` | `somestring like '%a%'` |
+| `SqlFunctions.Sql.like(x.String, "%a!%", "!")` | `somestring like '%a!%' escape '!'` |
+| `SqlFunctions.Sql.exists(query)` | `exists(<query>)` |
+| `x.Id == SqlFunctions.Sql.any(query)` | `id = any(<query>)` |
+| `x.Id == SqlFunctions.Sql.all(query)` | `id = all(<query>)` |
+| `SqlFunctions.Postgres.any(x, array)` | `x = any(@array)` (PostgreSQL) |
+| `x == SqlFunctions.Postgres.any(array)` | `x = any(@array)` (PostgreSQL) |
+| `SqlFunctions.Sql.contains(x.String, "foo")` | `contains(somestring, 'foo')` (SQL Server) |
+| `SqlFunctions.Sql.freetext(x.String, "foo")` | `freetext(somestring, 'foo')` (SQL Server) |
 
-`NORM.SQL.contains`/`NORM.SQL.freetext` — предикаты полнотекстового поиска
-(`ISqlDialect.SupportsFullText`, отрисовываются через `ISqlDialect.MakeFullText`); колонка должна быть
+`SqlFunctions.Sql.contains`/`SqlFunctions.Sql.freetext` — предикаты полнотекстового поиска
+([`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText), отрисовываются через [`MakeFullText`](xref:NextORM.Core.ISqlDialect)); колонка должна быть
 полнотекстово проиндексирована. SQL Server отрисовывает `contains`/`freetext` (при проецировании
 материализуются в `bit`), PostgreSQL — `to_tsvector(col) @@ plainto_tsquery(search)` (или
 `websearch_to_tsquery` для `freetext`), MySQL/MariaDB — `match(col) against(search in boolean mode) > 0`
@@ -343,9 +389,9 @@ SQLite и завершаются ошибкой при выполнении оп
 | `??` | `ifnull` (SQLite), `isnull` (SQL Server), `coalesce` (PostgreSQL) |
 | `?:` | `case when ... then ... else ... end` |
 | `switch` | поисковый `case when ... then ... end` |
-| `NORM.SQL.@in` / `Contains` | `in (...)` |
-| `NORM.SQL.like` / `Contains` / `StartsWith` / `EndsWith` | `like` |
-| `NORM.SQL.contains` / `NORM.SQL.freetext` | `contains` / `freetext` (SQL Server); сопоставление `@@` (PostgreSQL); `match ... against` (MySQL/MariaDB) |
+| `SqlFunctions.Sql.@in` / `Contains` | `in (...)` |
+| `SqlFunctions.Sql.like` / `Contains` / `StartsWith` / `EndsWith` | `like` |
+| `SqlFunctions.Sql.contains` / `SqlFunctions.Sql.freetext` | `contains` / `freetext` (SQL Server); сопоставление `@@` (PostgreSQL); `match ... against` (MySQL/MariaDB) |
 
 ## Различия провайдеров
 
@@ -354,6 +400,9 @@ SQLite и завершаются ошибкой при выполнении оп
 | SQLite | Параметры используют `$` (`$norm_p0`); `??` - это `ifnull`; логические литералы - `1` / `0`; `any` / `all` недоступны. |
 | SQL Server | Параметры используют `@`; `??` - это `isnull`; логические литералы - `1` / `0`; проецируемый логический предикат оборачивается в `cast(case ... as bit)`; сдвиги недопустимы в T-SQL. |
 | PostgreSQL | Параметры используют `@`; `??` - это `coalesce`; логические литералы - `true` / `false`; логические скаляры не требуют приведения. |
+| MySQL | Параметры используют `@`; `??` - это `coalesce`; логические литералы - `1` / `0`; `any` / `all` недоступны; побитовое дополнение целого отрисовывается как `(-(x) - 1)`. |
+| MariaDB | То же, что MySQL: параметры `@`, `coalesce`, логические `1` / `0`, `any` / `all` недоступны. |
+| ClickHouse | Параметры используют `@` (драйвер переписывает их в `{name:Type}`); `??` - это `coalesce`; логические литералы - `true` / `false`; `any` / `all` недоступны; `global_in` добавляет распределённый предикат `GLOBAL IN`. |
 | In-memory | Предикаты компилируются как делегаты .NET; префикса параметров и генерации SQL нет. |
 
 ## См. также
@@ -362,28 +411,29 @@ SQLite и завершаются ошибкой при выполнении оп
 * [Сортировка и постраничная выборка](05-sorting-and-paging.md)
 * [Скалярные функции](11-scalar-functions.md)
 * [Подзапросы](06-subqueries.md)
+* [Специфичный для провайдеров SQL](provider-specific/overview.md)
 * [Ограничения и возможности вне области охвата](../advanced/limitations.md)
 
 ---
 
-Source: `test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:187`,
-`test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:202`,
-`test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:216`,
-`test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:230`,
-`test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:244`,
-`test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:254`,
-`test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:276`,
-`test/nextorm.integration.tests/CommonTestSuite.Conditional.cs:9`,
-`test/nextorm.integration.tests/CommonTestSuite.Unary.cs:8`,
-`test/nextorm.integration.tests/CommonTestSuite.In.cs:9`,
-`test/nextorm.sqlite.tests/SqlGenerationTests.cs:602`,
-`test/nextorm.sqlite.tests/SqlGenerationTests.cs:664`,
-`test/nextorm.sqlite.tests/SqlGenerationTests.cs:775`,
-`test/nextorm.sqlite.tests/SqlGenerationTests.cs:821`,
-`test/nextorm.sqlite.tests/SqlGenerationTests.cs:997`,
-`test/nextorm.sqlite.tests/SqlGenerationTests.cs:1051`,
-`test/nextorm.sqlite.tests/SqlGenerationTests.cs:1107`,
-`test/nextorm.sqlserver.tests/SqlGenerationTests.cs:422`,
-`test/nextorm.postgres.tests/SqlGenerationTests.cs:367`,
-`src/nextorm.core/Query/NORM.cs:185`;
+Source: `tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:187`,
+`tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:202`,
+`tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:216`,
+`tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:230`,
+`tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:244`,
+`tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:254`,
+`tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:276`,
+`tests/nextorm.integration.tests/CommonTestSuite.Conditional.cs:9`,
+`tests/nextorm.integration.tests/CommonTestSuite.Unary.cs:8`,
+`tests/nextorm.integration.tests/CommonTestSuite.In.cs:9`,
+`tests/nextorm.sqlite.tests/SqlGenerationTests.cs:602`,
+`tests/nextorm.sqlite.tests/SqlGenerationTests.cs:664`,
+`tests/nextorm.sqlite.tests/SqlGenerationTests.cs:775`,
+`tests/nextorm.sqlite.tests/SqlGenerationTests.cs:821`,
+`tests/nextorm.sqlite.tests/SqlGenerationTests.cs:997`,
+`tests/nextorm.sqlite.tests/SqlGenerationTests.cs:1051`,
+`tests/nextorm.sqlite.tests/SqlGenerationTests.cs:1107`,
+`tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:422`,
+`tests/nextorm.postgres.tests/SqlGenerationTests.cs:367`,
+`src/nextorm.core/Query/SqlFunctions.cs:185`;
 `src/nextorm.core/Visitors/BaseExpressionVisitor.cs:2032`.

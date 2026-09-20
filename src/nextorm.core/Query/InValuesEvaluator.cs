@@ -1,7 +1,7 @@
 using System.Collections;
 using System.Linq.Expressions;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Evaluates the captured collection of an <c>in</c>/<c>Contains</c> predicate.
@@ -21,7 +21,7 @@ namespace nextorm.core;
 /// </summary>
 internal static class InValuesEvaluator
 {
-    public static object? Evaluate(Expression valuesExp, IQueryProvider queryProvider)
+    public static object? Evaluate(Expression valuesExp, IQueryRegistry queryProvider)
     {
         // A directly embedded constant (as opposed to a captured field/local or an inline `new[]`)
         // has no closure to parameterise on and could alias a mutable array, so it is evaluated

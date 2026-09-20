@@ -48,6 +48,18 @@
       href: guide/16-connections-and-logging.md
     - name: Хинты запросов
       href: guide/17-query-hints.md
+    - name: Поддержка JSON в разных провайдерах
+      href: guide/18-json.md
+    - name: Специфичный для провайдеров SQL
+      items:
+        - name: Обзор
+          href: guide/provider-specific/overview.md
+        - name: ClickHouse
+          href: guide/provider-specific/clickhouse.md
+        - name: PostgreSQL
+          href: guide/provider-specific/postgresql.md
+        - name: SQL Server
+          href: guide/provider-specific/sqlserver.md
 - name: Провайдеры
   items:
     - name: Обзор провайдеров
@@ -72,9 +84,3 @@
       href: advanced/limitations.md
     - name: Краткий справочник API
       href: advanced/api-reference.md
-    - name: "Prepared vs cached"
-      href: ../prepared-vs-cached.md
-    - name: Анализ пробелов в SQL
-      href: ../sql-capabilities-gap-analysis.md
-    - name: nextorm vs linq2db
-      href: ../linq2db-comparison.md

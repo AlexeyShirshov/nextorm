@@ -1,6 +1,6 @@
 # Сущности и метаданные
 
-> Отображайте типы и члены CLR на таблицы и столбцы с помощью атрибутов или fluent-построителя либо вовсе откажитесь от сущностей и адресуйте столбцы по имени через `TableAlias`.
+> Отображайте типы и члены CLR на таблицы и столбцы с помощью атрибутов или fluent-построителя либо вовсе откажитесь от сущностей и адресуйте столбцы по имени через [`TableAlias`](xref:NextORM.Core.TableAlias).
 
 **Предварительные требования:** [Установка](01-installation.md) · [Быстрый старт](02-quickstart.md).
 
@@ -11,26 +11,26 @@
 1. **Атрибуты** на интерфейсе или классе (`[SqlTable]`, `[Column]`, при необходимости `[Table]`).
 2. **Fluent-построитель**, передаваемый в `From<T>(cfg => …)`.
 3. **Полное отсутствие метаданных** - начните с имени таблицы через `From("table")` и читайте столбцы через
-   `TableAlias` (`tbl.Int("id")`, `tbl.String("name")`, …).
+   [`TableAlias`](xref:NextORM.Core.TableAlias) (`tbl.GetInt32("id")`, `tbl.GetString("name")`, …).
 
-Метаданные разрешаются лениво и кэшируются **на уровне процесса** в `DataContextCache.Metadata` по типу при первом запросе типа через `From<T>()`. Из-за этого кэша:
+Метаданные разрешаются лениво и кэшируются **на уровне процесса** в [`Metadata`](xref:NextORM.Core.DataContextCache.Metadata) по типу при первом запросе типа через [`From`](xref:NextORM.Core.DataContextExtensions). Из-за этого кэша:
 
 * делегат конфигурации, переданный в `From<T>(…)`, выполняется только при первом вызове для этого типа в
   процессе;
-* последующие вызовы для того же типа используют уже построенный `IEntityMeta` и игнорируют новый делегат;
+* последующие вызовы для того же типа используют уже построенный [`IEntityMetadata`](xref:NextORM.Core.IEntityMetadata) и игнорируют новый делегат;
 * in-memory- и SQL-контексты используют одни и те же метаданные (in-memory-контекст предоставляет их как
-  `InMemoryContext.Metadata`).
+  [`Metadata`](xref:NextORM.Core.InMemoryDataContext.Metadata)).
 
-Тип, который не был зарегистрирован, при использовании в качестве источника `FROM` выбрасывает `BuildSqlCommandException` с указанием имени типа.
+Тип, который не был зарегистрирован, при использовании в качестве источника `FROM` выбрасывает [`BuildSqlCommandException`](xref:NextORM.Core.BuildSqlCommandException) с указанием имени типа.
 
 ## Атрибуты
 
-`[SqlTable]` (в `nextorm.core`) задаёт имя таблицы; `[Column]` из `System.ComponentModel.DataAnnotations.Schema` задаёт имя столбца. `[Table]` из того же пространства имён также распознаётся как альтернатива `[SqlTable]`.
+`[SqlTable]` (в [`NextORM.Core`](xref:NextORM.Core)) задаёт имя таблицы; `[Column]` из `System.ComponentModel.DataAnnotations.Schema` задаёт имя столбца. `[Table]` из того же пространства имён также распознаётся как альтернатива `[SqlTable]`.
 
 ```csharp
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
-using nextorm.core;
+using NextORM.Core;
 
 [SqlTable("simple_entity")]
 public interface ISimpleEntity
@@ -56,7 +56,7 @@ select id from simple_entity
   и является общепринятым выбором.
 * **Бинарные столбцы** - свойство `byte[]` отображается на бинарный столбец (`bytea` в PostgreSQL,
   `varbinary`/`image` в SQL Server, `blob` в SQLite). `byte[]` можно также проецировать напрямую
-  (`Select(x => x.Data)`) и сравнивать с параметром `byte[]` через `NORM.Param<byte[]>(0)`.
+  (`Select(x => x.Data)`) и сравнивать с параметром `byte[]` через [`Parameter`](xref:NextORM.Core.SqlFunctions).
 
 ### Интерфейс плюс класс
 
@@ -81,7 +81,7 @@ public class SimpleEntity : ISimpleEntity
 
 ## Fluent-регистрация
 
-Вместо атрибутов передайте делегат конфигурации в `From<T>()`. `EntityMetadataBuilder<T>` предоставляет `Table(string)` и `Property(Expression<Func<T, object>>)`; возвращаемый `EntityPropertyBuilder<T>` предоставляет `HasColumnName(string)`.
+Вместо атрибутов передайте делегат конфигурации в [`From`](xref:NextORM.Core.DataContextExtensions). [`EntityMetadataBuilder<T>`](xref:NextORM.Core.EntityMetadataBuilder`1) предоставляет `Table(string)` и `Property(Expression<Func<T, object>>)`; возвращаемый [`EntityPropertyBuilder<T>`](xref:NextORM.Core.EntityPropertyBuilder`1) предоставляет `HasColumnName(string)`.
 
 ```csharp
 dataContext.From<SimpleEntity>(cfg => cfg
@@ -90,7 +90,7 @@ dataContext.From<SimpleEntity>(cfg => cfg
     .HasColumnName("id"));
 ```
 
-Чтобы отобразить несколько свойств, вызывайте `Property` по одному разу на член:
+Чтобы отобразить несколько свойств, вызывайте [`Property`](xref:NextORM.Core.EntityMetadataBuilder`1) по одному разу на член:
 
 ```csharp
 public class Product
@@ -107,7 +107,7 @@ dataContext.From<Product>(cfg =>
 });
 ```
 
-Правила fluent-пути (`EntityMetadataBuilder<T>.Build`):
+Правила fluent-пути ([`Build`](xref:NextORM.Core.EntityMetadataBuilder`1.Build)):
 
 * если `Table(...)` опущен, имя таблицы автоматически строится из атрибутов, а затем из имени типа;
 * если настроено хотя бы одно `Property(...)`, отображаются **только** эти свойства - автоматически
@@ -115,13 +115,13 @@ dataContext.From<Product>(cfg =>
 * если не настроено ни одного свойства, все записываемые свойства отображаются автоматически по
   имени/`[Column]`.
 
-## Сущности из необработанной таблицы: `TableAlias`
+## Сущности из необработанной таблицы: [`TableAlias`](xref:NextORM.Core.TableAlias)
 
-Чтобы выполнить запрос, не нужны ни сущность, ни метаданные. Начните с имени таблицы через `From("table")` и читайте столбцы через `TableAlias`, передаваемый в `Select`/`Where`:
+Чтобы выполнить запрос, не нужны ни сущность, ни метаданные. Начните с имени таблицы через `From("table")` и читайте столбцы через [`TableAlias`](xref:NextORM.Core.TableAlias), передаваемый в [`Select`](xref:NextORM.Core.EntityBuilder`1)/[`Where`](xref:NextORM.Core.EntityBuilder`1):
 
 ```csharp
 await foreach (var row in dataContext.From("simple_entity")
-                                     .Select(tbl => new { Id = tbl.Long("id") })
+                                     .Select(tbl => new { Id = tbl.GetInt64("id") })
                                      .ToAsyncEnumerable())
 {
     Console.WriteLine($"Id = {row.Id}");
@@ -132,25 +132,25 @@ await foreach (var row in dataContext.From("simple_entity")
 select id from simple_entity
 ```
 
-Методы-аксессоры `TableAlias` (каждый принимает имя столбца и возвращает значение CLR для этого типа):
+Методы-аксессоры [`TableAlias`](xref:NextORM.Core.TableAlias) (каждый принимает имя столбца и возвращает значение CLR для этого типа):
 
 | Метод | Возвращает | Метод | Возвращает |
 |---|---|---|---|
-| `Int(string)` | `int` | `NullableInt(string)` | `int?` |
-| `Long(string)` | `long` | `NullableLong(string)` | `long?` |
-| `Short(string)` | `short` | `NullableShort(string)` | `short?` |
-| `String(string)` | `string` | `NullableString(string)` | `string?` |
-| `Float(string)` | `float` | `NullableFloat(string)` | `float?` |
-| `Double(string)` | `double` | `NullableDouble(string)` | `double?` |
-| `DateTime(string)` | `DateTime` | `NullableDateTime(string)` | `DateTime?` |
-| `Decimal(string)` | `decimal` | `NullableDecimal(string)` | `decimal?` |
-| `Byte(string)` | `byte` | `NullableByte(string)` | `byte?` |
-| `Boolean(string)` | `bool` | `NullableBoolean(string)` | `bool?` |
-| `Guid(string)` | `Guid` | `NullableGuid(string)` | `Guid?` |
-| `Bytes(string)` | `byte[]` | `NullableBytes(string)` | `byte[]?` |
-| `Column(string)` | `object` | | |
+| `GetInt32(string)` | `int` | `GetNullableInt32(string)` | `int?` |
+| `GetInt64(string)` | `long` | `GetNullableInt64(string)` | `long?` |
+| `GetInt16(string)` | `short` | `GetNullableInt16(string)` | `short?` |
+| `GetString(string)` | `string` | `GetNullableString(string)` | `string?` |
+| `GetSingle(string)` | `float` | `GetNullableSingle(string)` | `float?` |
+| `GetDouble(string)` | `double` | `GetNullableDouble(string)` | `double?` |
+| `GetDateTime(string)` | `DateTime` | `GetNullableDateTime(string)` | `DateTime?` |
+| `GetDecimal(string)` | `decimal` | `GetNullableDecimal(string)` | `decimal?` |
+| `GetByte(string)` | `byte` | `GetNullableByte(string)` | `byte?` |
+| `GetBoolean(string)` | `bool` | `GetNullableBoolean(string)` | `bool?` |
+| `GetGuid(string)` | `Guid` | `GetNullableGuid(string)` | `Guid?` |
+| `GetBytes(string)` | `byte[]` | `GetNullableBytes(string)` | `byte[]?` |
+| `GetColumn(string)` | `object` | | |
 
-`TableAlias` также имеет индексатор `this[string]`, возвращающий `TableColumn` с типизированными аксессорами `AsInt`, `AsString`, `AsNullableString`, `AsBytes` и `AsNullableBytes` - это полезно, когда один и тот же псевдоним столбца упоминается в запросе с соединением/CTE:
+[`TableAlias`](xref:NextORM.Core.TableAlias) также имеет индексатор `this[string]`, возвращающий [`TableColumn`](xref:NextORM.Core.TableColumn) с типизированными аксессорами [`AsInt`](xref:NextORM.Core.TableColumn.AsInt), [`AsString`](xref:NextORM.Core.TableColumn.AsString), [`AsNullableString`](xref:NextORM.Core.TableColumn.AsNullableString), [`AsBytes`](xref:NextORM.Core.TableColumn.AsBytes) и [`AsNullableBytes`](xref:NextORM.Core.TableColumn.AsNullableBytes) - это полезно, когда один и тот же псевдоним столбца упоминается в запросе с соединением/CTE:
 
 ```csharp
 var query = dataContext.From("complex_entity")
@@ -158,7 +158,7 @@ var query = dataContext.From("complex_entity")
     .Select(c => new { Id = c["id"].AsInt });
 ```
 
-`From` доступен и на конкретном `DbContext` (`dataContext.From("simple_entity")`), и как расширение на `IDataContext`, поэтому работает независимо от того, используется контекст через конкретный тип или через интерфейс. Независимо от сущностей, `From` также может обернуть подзапрос (`dataContext.From(innerQuery)`) или другой построитель сущности (`dataContext.From(entity)`).
+[`From`](xref:NextORM.Core.DataContextExtensions) доступен и на конкретном [`DataContext`](xref:NextORM.Core.DataContext) (`dataContext.From("simple_entity")`), и как расширение на [`IDataContext`](xref:NextORM.Core.IDataContext), поэтому работает независимо от того, используется контекст через конкретный тип или через интерфейс. Независимо от сущностей, [`From`](xref:NextORM.Core.DataContextExtensions) также может обернуть подзапрос (`dataContext.From(innerQuery)`) или другой построитель сущности (`dataContext.From(entity)`).
 
 ## Различия провайдеров
 
@@ -169,7 +169,10 @@ var query = dataContext.From("complex_entity")
 | SQLite | Имена используются как заданы. |
 | SQL Server | Имена используются как заданы. |
 | PostgreSQL | Имена используются как заданы; незаключённый в кавычки идентификатор со смешанным регистром или зарезервированным словом всё равно сворачивается сервером, поэтому объявляйте написание из каталога. |
-| In-memory | Идентичные метаданные, общие с SQL-контекстами через `DataContextCache`. |
+| MySQL | Имена используются как заданы; при отрисовке SQL идентификаторы и псевдонимы выделяются обратными кавычками. |
+| MariaDB | Имена используются как заданы; идентификаторы и псевдонимы выделяются обратными кавычками (драйвер и диалект MySQL). |
+| ClickHouse | Имена используются как заданы; при отрисовке SQL идентификаторы и псевдонимы выделяются обратными кавычками. |
+| In-memory | Идентичные метаданные, общие с SQL-контекстами через [`DataContextCache`](xref:NextORM.Core.DataContextCache). |
 
 ## См. также
 
@@ -180,10 +183,10 @@ var query = dataContext.From("complex_entity")
 
 ---
 
-Source: `test/nextorm.integration.tests/Entities.cs:7`;
-`test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:37`;
-`test/nextorm.sqlite.tests/MetadataRegistrationTests.cs:18`;
+Source: `tests/nextorm.integration.tests/Entities.cs:7`;
+`tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:37`;
+`tests/nextorm.sqlite.tests/MetadataRegistrationTests.cs:18`;
 `src/nextorm.core/DataContext/Meta/EntityMetadataBuilder.cs:111`;
 `src/nextorm.core/DataContext/Meta/EntityPropertyBuilder.cs:16`;
 `src/nextorm.core/DataContext/DataContextCache.cs:20`;
-`test/nextorm.sqlite.tests/SqlGenerationTests.cs:116`.
+`tests/nextorm.sqlite.tests/SqlGenerationTests.cs:116`.

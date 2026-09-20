@@ -28,6 +28,7 @@
 - [Переиспользование запросов: кэш и Prepare](guide/15-query-reuse.md)
 - [Подключения и логирование](guide/16-connections-and-logging.md)
 - [Хинты запросов](guide/17-query-hints.md)
+- [Поддержка JSON в разных провайдерах](guide/18-json.md)
 
 ### Провайдеры
 
@@ -41,9 +42,9 @@
 
 - [Ограничения и что вне области](advanced/limitations.md)
 - [Краткий справочник API](advanced/api-reference.md)
-- [Prepared vs cached: переиспользование запроса](../prepared-vs-cached.md)
-- [Анализ пробелов в SQL](../sql-capabilities-gap-analysis.md)
-- [nextorm vs linq2db: сравнение функционала](linq2db-comparison.md)
+- [Prepared vs cached: переиспользование запроса](../specs/performance/prepared-vs-cached.md)
+- [Анализ пробелов в SQL](../specs/roadmap/sql-capabilities-gap-analysis.md)
+- [nextorm vs linq2db: сравнение функционала](../specs/ru/roadmap/linq2db-comparison.md)
 
 ### Введение
 

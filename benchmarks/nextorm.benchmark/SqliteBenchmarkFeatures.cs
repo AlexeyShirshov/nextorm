@@ -1,13 +1,13 @@
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Columns;
-using nextorm.core;
-using nextorm.sqlite;
+using NextORM.Core;
+using NextORM.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Data.Sqlite;
 using Dapper;
 using LinqToDB;
 
-namespace nextorm.benchmark;
+namespace NextORM.Benchmark;
 
 /// <summary>
 /// SQL-feature benchmarks: every feature introduced by the SQL-capabilities workstream is measured
@@ -23,7 +23,7 @@ public class SqliteBenchmarkFeatures
 {
     private const int Iterations = 25;
 
-    private readonly nextorm.core.IDataContext _db;
+    private readonly NextORM.Core.IDataContext _db;
     private readonly TestDataRepository _ctx;
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
@@ -48,22 +48,22 @@ public class SqliteBenchmarkFeatures
 
     public SqliteBenchmarkFeatures()
     {
-        var builder = new DbContextBuilder();
+        var builder = new DataContextBuilder();
         builder.UseSqlite(BenchDb.FilePath);
-        _db = builder.CreateDbContext();
+        _db = builder.CreateDataContext();
         _ctx = new TestDataRepository(_db);
         ((IConnectionManager)_db).EnsureConnectionOpen();
 
         _nextormLeftJoin = _ctx.SimpleEntity
             .LeftJoin(_ctx.ComplexEntity, (s, c) => (long)s.Id == c.Id)
-            .Select(p => new LeftJoinRow { Id = p.t1.Id, RightString = p.t2.RequiredString })
+            .Select(p => new LeftJoinRow { Id = p.Item1.Id, RightString = p.Item2.RequiredString })
             .Prepare();
 
         _nextormJoin4 = _ctx.SimpleEntity
             .Join(_ctx.ComplexEntity, (s, c) => (long)s.Id == c.Id)
-            .Join(_ctx.SimpleEntity, (p, s) => p.t2.Id == (long)s.Id)
-            .Join(_ctx.ComplexEntity, (p, c) => (long)p.t3.Id == c.Id)
-            .Select(p => new FourJoinRow { A = p.t1.Id, B = p.t2.RequiredString, C = p.t3.Id, D = p.t4.RequiredString })
+            .Join(_ctx.SimpleEntity, (p, s) => p.Item2.Id == (long)s.Id)
+            .Join(_ctx.ComplexEntity, (p, c) => (long)p.Item3.Id == c.Id)
+            .Select(p => new FourJoinRow { A = p.Item1.Id, B = p.Item2.RequiredString, C = p.Item3.Id, D = p.Item4.RequiredString })
             .Prepare();
 
         _nextormDistinct = _ctx.ComplexEntity.Select(c => c.Int).Distinct().Prepare();
@@ -72,26 +72,26 @@ public class SqliteBenchmarkFeatures
         _nextormContains = _ctx.ComplexEntity.Where(c => c.String!.Contains("df")).Select(c => c.Id).Prepare();
 
         var inValues = new long[] { 1, 3, 10 };
-        _nextormIn = _ctx.ComplexEntity.Where(c => NORM.SQL.@in(c.Id, inValues)).Select(c => c.Id).Prepare();
+        _nextormIn = _ctx.ComplexEntity.Where(c => SqlFunctions.Sql.@in(c.Id, inValues)).Select(c => c.Id).Prepare();
         _nextormListContains = _ctx.ComplexEntity.Where(c => inValues.Contains(c.Id)).Select(c => c.Id).Prepare();
 
         _nextormRowNumber = _ctx.ComplexEntity.Select(c => new RowNumberRow
         {
             Id = c.Id,
-            Rn = NORM.SQL.row_number().Over(partitionBy: () => c.Int, orderBy: () => c.Id)
+            Rn = SqlFunctions.Sql.row_number().Over(partitionBy: () => c.Int, orderBy: () => c.Id)
         }).Prepare();
 
         _nextormSumOver = _ctx.ComplexEntity.Select(c => new SumOverRow
         {
             Id = c.Id,
-            Total = NORM.SQL.sum_over(c.Id).Over(partitionBy: () => c.Int)
+            Total = SqlFunctions.Sql.sum_over(c.Id).Over(partitionBy: () => c.Int)
         }).Prepare();
 
         var recent = _ctx.ComplexEntity.Where(c => c.Id > 1).Select(c => new { c.Id, c.RequiredString });
         _nextormCte = _db.With("recent", recent)
             .From("recent")
             .Join(_ctx.SimpleEntity, (r, s) => r["id"].AsInt == s.Id)
-            .Select(p => new CteJoinRow { Id = p.t1["id"].AsInt, SimpleId = p.t2.Id })
+            .Select(p => new CteJoinRow { Id = p.Item1["id"].AsInt, SimpleId = p.Item2.Id })
             .Prepare();
 
         var anchor = _ctx.SimpleEntity.Where(s => s.Id == 1).Select(s => new CteNumberRow { n = s.Id });
@@ -110,7 +110,7 @@ public class SqliteBenchmarkFeatures
         efBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
         _efCtx = new EFDataContext(efBuilder.Options);
 
-        _conn = new SqliteConnection(((SqliteDbContext)_ctx.DbContext).ConnectionString);
+        _conn = new SqliteConnection(((SqliteDataContext)_ctx.DataContext).ConnectionString);
         _conn.Open();
 
         _linq2Db = new Linq2DbDataRepository();

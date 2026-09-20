@@ -1,8 +1,7 @@
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
-using Microsoft.Extensions.Logging;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Provider-independent helpers and convenience overloads for <see cref="IDataContext"/>.
@@ -11,31 +10,14 @@ namespace nextorm.core;
 /// </summary>
 public static class DataContextExtensions
 {
+    /// <summary>
+    /// Creates a typed query command from a <see cref="QueryDefinition"/>. This is the single factory
+    /// the builders use; it replaces the previous overloads that took the whole query shape as a long
+    /// parameter list.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static QueryCommand<T> CreateCommand<T>(this IDataContext dataContext, LambdaExpression exp, LambdaExpression? condition, JoinExpression[]? joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having, ILogger? logger)
-        => new(dataContext, exp, condition, joins, paging, sorting, group, having, logger);
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static QueryCommand<T> CreateCommand<T>(this IDataContext dataContext, Type srcType, LambdaExpression? condition, JoinExpression[]? joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having, ILogger? logger)
-        => new(dataContext, srcType, condition, joins, paging, sorting, group, having, logger);
-
-    public static QueryCommand<T> CreateCommand<T>(this IDataContext dataContext, LambdaExpression exp, LambdaExpression? condition, JoinExpression[]? joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having, ILogger? logger, bool isDistinct)
-    {
-        var cmd = new QueryCommand<T>(dataContext, exp, condition, joins, paging, sorting, group, having, logger)
-        {
-            IsDistinct = isDistinct
-        };
-        return cmd;
-    }
-
-    public static QueryCommand<T> CreateCommand<T>(this IDataContext dataContext, Type srcType, LambdaExpression? condition, JoinExpression[]? joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having, ILogger? logger, bool isDistinct)
-    {
-        var cmd = new QueryCommand<T>(dataContext, srcType, condition, joins, paging, sorting, group, having, logger)
-        {
-            IsDistinct = isDistinct
-        };
-        return cmd;
-    }
+    public static QueryCommand<T> CreateCommand<T>(this IDataContext dataContext, QueryDefinition definition)
+        => new(dataContext, definition);
 
     /// <summary>
     /// Starts a query over the mapping of <typeparamref name="T"/> and returns its fluent builder.
@@ -135,4 +117,15 @@ public static class DataContextExtensions
         entity.SourceFrom = new FromExpression(TableFunctionExpression.Create(methodCall));
         return entity;
     }
+
+    /// <summary>Starts a CTE scope with a single non-recursive declaration.</summary>
+    public static CteQuery With(this IDataContext dataContext, string name, QueryCommand query)
+        => new CteQuery(dataContext, [new CteDefinition(name, query)]);
+
+    /// <summary>
+    /// Starts a CTE scope with a single recursive declaration. <paramref name="maxRecursion"/>
+    /// is rendered only by dialects that expose a depth option (SQL Server).
+    /// </summary>
+    public static CteQuery WithRecursive(this IDataContext dataContext, string name, QueryCommand query, int? maxRecursion = null)
+        => new CteQuery(dataContext, [new CteDefinition(name, query, true, maxRecursion)]);
 }

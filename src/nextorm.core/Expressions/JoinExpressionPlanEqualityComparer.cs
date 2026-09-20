@@ -1,11 +1,11 @@
 using Microsoft.Extensions.Logging;
 using System.Diagnostics.CodeAnalysis;
-namespace nextorm.core;
+namespace NextORM.Core;
 
 public sealed class JoinExpressionPlanEqualityComparer : IEqualityComparer<JoinExpression>
 {
     //private readonly IDictionary<ExpressionKey, Delegate> _cache;
-    private readonly IQueryProvider _queryProvider;
+    private readonly IQueryRegistry _queryProvider;
     //private readonly ILogger? _logger;
     //private ExpressionPlanEqualityComparer? _expComparer;
     //private QueryPlanEqualityComparer? _cmdComparer;
@@ -14,11 +14,11 @@ public sealed class JoinExpressionPlanEqualityComparer : IEqualityComparer<JoinE
     //     : this(new ExpressionCache<Delegate>())
     // {
     // }
-    public JoinExpressionPlanEqualityComparer(IQueryProvider queryProvider)
+    public JoinExpressionPlanEqualityComparer(IQueryRegistry queryProvider)
         : this(queryProvider, null)
     {
     }
-    public JoinExpressionPlanEqualityComparer(IQueryProvider queryProvider, ILogger? logger)
+    public JoinExpressionPlanEqualityComparer(IQueryRegistry queryProvider, ILogger? logger)
     {
         //_cache = cache ?? new ExpressionCache<Delegate>();
         _queryProvider = queryProvider;
@@ -32,6 +32,8 @@ public sealed class JoinExpressionPlanEqualityComparer : IEqualityComparer<JoinE
         if (x is null || y is null) return false;
 
         if (x.JoinType != y.JoinType) return false;
+        if (x.Strictness != y.Strictness) return false;
+        if (x.IsGlobal != y.IsGlobal) return false;
 
         //_expComparer ??= new ExpressionPlanEqualityComparer(_cache, _queryProvider);
         if (!_queryProvider.GetExpressionPlanEqualityComparer().Equals(x.JoinCondition, y.JoinCondition)) return false;
@@ -47,9 +49,13 @@ public sealed class JoinExpressionPlanEqualityComparer : IEqualityComparer<JoinE
 
         unchecked
         {
-            var hash = new HashCode();
+            var hash = new XxHash32();
 
             hash.Add(obj.JoinType);
+
+            hash.Add(obj.Strictness);
+
+            hash.Add(obj.IsGlobal);
 
             hash.Add(obj.JoinCondition, _queryProvider.GetExpressionPlanEqualityComparer());
 

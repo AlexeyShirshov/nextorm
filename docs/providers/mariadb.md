@@ -6,38 +6,42 @@
 
 ## Overview
 
-`MariaDbContext` (`src/nextorm.mariadb/MariaDbContext.cs`) derives from `MySqlDbContext`, so it uses
+[`MariaDbDataContext`](xref:NextORM.MariaDb.MariaDbDataContext) (`src/nextorm.mariadb/MariaDbDataContext.cs`) derives from [`MySqlDataContext`](xref:NextORM.MySql.MySqlDataContext), so it uses
 the same `MySqlConnector` driver and the same connection and parameter handling. It returns
-`MariaDbDialect.Instance` from its `Dialect` property.
+[`Instance`](xref:NextORM.MariaDb.MariaDbDialect.Instance) from its `Dialect` property.
 
-`MariaDbDialect` (`src/nextorm.mariadb/MariaDbDialect.cs`) derives from `MySqlDialect` and changes one
-capability: `INTERSECT ALL` and `EXCEPT ALL` are supported by MariaDB 10.4 and later, so
-`SupportsIntersectExceptAll` is `true`. Everything else (parameters, quoting, `concat`, coalesce,
-paging, aggregate names) is inherited unchanged.
+[`MariaDbDialect`](xref:NextORM.MariaDb.MariaDbDialect) (`src/nextorm.mariadb/MariaDbDialect.cs`) derives from [`MySqlDialect`](xref:NextORM.MySql.MySqlDialect) and changes two
+capabilities: `INTERSECT ALL` and `EXCEPT ALL` are supported by MariaDB 10.4 and later, so
+[`SupportsIntersectExceptAll`](xref:NextORM.Core.ISqlDialect.SupportsIntersectExceptAll) is `true`; and MariaDB 10.3+ renders the window percentiles
+`percentile_cont`/`percentile_disc` (`... within group (order by ...) over (...)`), so
+[`SupportsPercentileWindow`](xref:NextORM.Core.ISqlDialect.SupportsPercentileWindow) is `true`. It also keeps the arbitrary-value
+aggregate `any_agg` gated **off**, because MariaDB has no `ANY_VALUE` in 10.4–12.x (the SQL-2023 `T626`
+feature is still pending, targeted for 13.2). Everything else (parameters, quoting, `concat`,
+coalesce, paging, aggregate names, the `if(...)` spelling of the portable `iif`) is inherited unchanged.
 
 ## Registering the provider
 
-Two overloads are available on `DbContextBuilder`
-(`src/nextorm.mariadb/DI/DataContextOptionsBuilderExtensions.cs`):
+Two overloads are available on [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder)
+(`src/nextorm.mariadb/DI/MariaDbDataContextOptionsBuilderExtensions.cs`):
 
 ```csharp
-using nextorm.core;
-using nextorm.mariadb;
+using NextORM.Core;
+using NextORM.MariaDb;
 
-var builder = new DbContextBuilder()
+var builder = new DataContextBuilder()
     .UseMariaDb("Server=localhost;Port=3306;Database=app;User ID=app;Password=secret");
 
-using var ctx = builder.CreateDbContext();   // IDataContext
+using var ctx = builder.CreateDataContext();   // IDataContext
 ```
 
 You can also construct the context directly:
 
 ```csharp
-using nextorm.core;
-using nextorm.mariadb;
+using NextORM.Core;
+using NextORM.MariaDb;
 
-using IDataContext ctx = new MariaDbContext(
-    "Server=localhost;Database=app;User ID=app;Password=secret", new DbContextBuilder());
+using IDataContext ctx = new MariaDbDataContext(
+    "Server=localhost;Database=app;User ID=app;Password=secret", new DataContextBuilder());
 ```
 
 ## Set operations
@@ -55,7 +59,7 @@ select id from simple_entity
 
 ## Provider differences
 
-MariaDB differs from [MySQL](mysql.md) only in the set-operation capability:
+MariaDB differs from [MySQL](mysql.md) in the set-operation capability, the window percentiles and the arbitrary-value aggregate:
 
 | Aspect | MariaDB |
 |---|---|
@@ -65,6 +69,11 @@ MariaDB differs from [MySQL](mysql.md) only in the set-operation capability:
 | Identifier quoting | backticks (`` as `t1` ``) |
 | Derived table alias | required |
 | `*ALL` | supported (MariaDB 10.4+) |
+| Text JSON | inherited from MySQL (`JSON_EXTRACT`/`JSON_SET`) |
+| Session/info functions | inherited from MySQL (`current_user()`, `session_user()`, `schema()`, `database()`, `version()`) |
+| Arbitrary-value aggregate | not supported (no `ANY_VALUE` in 10.4–12.x; pending MDEV-10426, targeted for 13.2) |
+| Conditional function | inherited from MySQL (`iif(cond, a, b)` → `if(cond, a, b)`) |
+| Window percentiles | `percentile_cont`/`percentile_disc` as `... within group (order by x) over (...)` (MariaDB 10.3+) |
 
 ## See also
 
@@ -76,6 +85,6 @@ MariaDB differs from [MySQL](mysql.md) only in the set-operation capability:
 
 ---
 
-Source: `src/nextorm.mariadb/MariaDbDialect.cs`, `src/nextorm.mariadb/MariaDbContext.cs`,
-`src/nextorm.mariadb/DI/DataContextOptionsBuilderExtensions.cs`,
-`test/nextorm.mariadb.tests/MariaDbDialectTests.cs`, `test/nextorm.mariadb.tests/SqlGenerationTests.cs`.
+Source: `src/nextorm.mariadb/MariaDbDialect.cs`, `src/nextorm.mariadb/MariaDbDataContext.cs`,
+`src/nextorm.mariadb/DI/MariaDbDataContextOptionsBuilderExtensions.cs`,
+`tests/nextorm.mariadb.tests/MariaDbDialectTests.cs`, `tests/nextorm.mariadb.tests/SqlGenerationTests.cs`.

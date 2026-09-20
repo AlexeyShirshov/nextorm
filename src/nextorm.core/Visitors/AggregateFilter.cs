@@ -1,6 +1,6 @@
 using System.Linq.Expressions;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Renders the optional <c>FILTER (WHERE ...)</c> clause of an aggregate. The filter is carried by a
@@ -42,17 +42,7 @@ internal static class AggregateFilter
     {
         var lambda = (LambdaExpression)((UnaryExpression)filterExpression).Operand;
 
-        using var filterVisitor = new WhereExpressionVisitor(
-            visitor.Options.EntityType,
-            visitor.Dialect,
-            visitor.ColumnsProvider,
-            visitor.Options.Dim,
-            visitor.AliasProvider,
-            visitor.ParamProvider,
-            visitor.QueryProvider,
-            visitor.IsParamMode,
-            visitor.Params,
-            visitor.Logger);
+        using var filterVisitor = new WhereExpressionVisitor(visitor.Options with { DontNeedAlias = false });
 
         filterVisitor.VisitCondition(lambda);
 

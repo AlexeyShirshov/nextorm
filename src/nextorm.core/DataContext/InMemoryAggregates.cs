@@ -4,10 +4,20 @@ using System.Globalization;
 using System.Linq.Expressions;
 using System.Reflection;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
-/// Evaluates the aggregate functions that <c>EntityBuilder</c> wraps in <see cref="NORM.NORM_SQL"/>
+/// The runtime type arguments an in-memory aggregate is closed over. Bundled so
+/// <see cref="InMemoryAggregates.Compute"/> takes one value instead of three trailing type
+/// parameters.
+/// </summary>
+/// <param name="EntityType">Type of the rows the aggregate folds.</param>
+/// <param name="ResultType">Type the aggregate returns to the projection.</param>
+/// <param name="ValueType">Type of the selected value the fold operates on.</param>
+internal readonly record struct AggregateTypeInfo(Type EntityType, Type ResultType, Type ValueType);
+
+/// <summary>
+/// Evaluates the aggregate functions that <c>EntityBuilder</c> wraps in <see cref="CommonFunctions"/>
 /// method calls (<c>Sum</c>, <c>Min</c>, <c>Max</c>, <c>Avg</c>, <c>Count</c>, <c>Stdev</c>,
 /// <c>Var</c>). SQL providers render those calls to SQL; the in-memory provider computes them here
 /// over the attached data instead of mapping each row through a no-op aggregate.
@@ -16,22 +26,22 @@ namespace nextorm.core;
 /// The fold is generic in the value type so a column selector does not box every row
 /// (<c>Func&lt;TEntity, int&gt;</c> instead of <c>Func&lt;TEntity, object?&gt;</c>), which keeps the
 /// in-memory aggregate close to raw LINQ. Callers resolve the closed method through
-/// <see cref="Compute(object, string, Delegate?, Type, Type, Type)"/>; the compiled selector is
+/// <see cref="Compute(object, string, Delegate?, AggregateTypeInfo)"/>; the compiled selector is
 /// cached by the caller.
 /// </remarks>
 internal static class InMemoryAggregates
 {
     private static readonly HashSet<string> AggregateNames = new(StringComparer.Ordinal)
     {
-        nameof(NORM.NORM_SQL.min),
-        nameof(NORM.NORM_SQL.max),
-        nameof(NORM.NORM_SQL.sum),
-        nameof(NORM.NORM_SQL.avg),
-        nameof(NORM.NORM_SQL.count),
-        nameof(NORM.NORM_SQL.stdev),
-        nameof(NORM.NORM_SQL.stdevp),
-        nameof(NORM.NORM_SQL.var),
-        nameof(NORM.NORM_SQL.varp),
+        nameof(CommonFunctions.min),
+        nameof(CommonFunctions.max),
+        nameof(CommonFunctions.sum),
+        nameof(CommonFunctions.avg),
+        nameof(CommonFunctions.count),
+        nameof(CommonFunctions.stdev),
+        nameof(CommonFunctions.stdevp),
+        nameof(CommonFunctions.var),
+        nameof(CommonFunctions.varp),
         "min_distinct",
         "max_distinct",
         "sum_distinct",
@@ -61,10 +71,10 @@ internal static class InMemoryAggregates
     /// Reflection entry used by the in-memory provider and the grouped-projection rewrite, which only
     /// know the selector value type at runtime.
     /// </summary>
-    public static object? Compute(object data, string name, Delegate? selector, Type entityType, Type resultType, Type valueType)
+    public static object? Compute(object data, string name, Delegate? selector, AggregateTypeInfo types)
     {
         var method = MethodCache.GetOrAdd(
-            (entityType, resultType, valueType),
+            (types.EntityType, types.ResultType, types.ValueType),
             static key => ComputeTypedMI.MakeGenericMethod(key.Entity, key.Result, key.Value));
 
         try
@@ -84,7 +94,7 @@ internal static class InMemoryAggregates
         var normalized = distinct ? name[..name.IndexOf('_')] : name;
         var resultType = Nullable.GetUnderlyingType(typeof(TResult)) ?? typeof(TResult);
 
-        if (normalized == nameof(NORM.NORM_SQL.count))
+        if (normalized == nameof(CommonFunctions.count))
         {
             long count = 0;
             if (selector is null)
@@ -112,7 +122,7 @@ internal static class InMemoryAggregates
         if (selector is null)
             throw new NotSupportedException($"Aggregate '{name}' requires a value selector in the in-memory provider.");
 
-        if (normalized is nameof(NORM.NORM_SQL.min) or nameof(NORM.NORM_SQL.max))
+        if (normalized is nameof(CommonFunctions.min) or nameof(CommonFunctions.max))
         {
             var comparer = Comparer<TValue>.Default;
             HashSet<TValue>? seen = distinct ? [] : null;
@@ -133,8 +143,8 @@ internal static class InMemoryAggregates
                 else
                 {
                     var cmp = comparer.Compare(value, best);
-                    if ((normalized == nameof(NORM.NORM_SQL.min) && cmp < 0)
-                        || (normalized == nameof(NORM.NORM_SQL.max) && cmp > 0))
+                    if ((normalized == nameof(CommonFunctions.min) && cmp < 0)
+                        || (normalized == nameof(CommonFunctions.max) && cmp > 0))
                         best = value;
                 }
             }
@@ -164,7 +174,7 @@ internal static class InMemoryAggregates
         {
             // SQL SUM over an empty set is NULL; the CLR default (0) is the closest mapping and what
             // callers of a non-nullable TResult expect. MIN/MAX/AVG/STDEV/VAR stay default.
-            return normalized == nameof(NORM.NORM_SQL.sum)
+            return normalized == nameof(CommonFunctions.sum)
                 ? (TResult)Convert.ChangeType(0d, resultType, CultureInfo.InvariantCulture)
                 : default;
         }
@@ -172,12 +182,12 @@ internal static class InMemoryAggregates
         var centre = sumSquares - (sum * sum / count2);
         var result = normalized switch
         {
-            nameof(NORM.NORM_SQL.sum) => sum,
-            nameof(NORM.NORM_SQL.avg) => sum / count2,
-            nameof(NORM.NORM_SQL.var) => count2 < 2 ? 0 : centre / (count2 - 1),
-            nameof(NORM.NORM_SQL.varp) => centre / count2,
-            nameof(NORM.NORM_SQL.stdev) => count2 < 2 ? 0 : Math.Sqrt(centre / (count2 - 1)),
-            nameof(NORM.NORM_SQL.stdevp) => Math.Sqrt(centre / count2),
+            nameof(CommonFunctions.sum) => sum,
+            nameof(CommonFunctions.avg) => sum / count2,
+            nameof(CommonFunctions.var) => count2 < 2 ? 0 : centre / (count2 - 1),
+            nameof(CommonFunctions.varp) => centre / count2,
+            nameof(CommonFunctions.stdev) => count2 < 2 ? 0 : Math.Sqrt(centre / (count2 - 1)),
+            nameof(CommonFunctions.stdevp) => Math.Sqrt(centre / count2),
             _ => throw new NotSupportedException($"Aggregate '{name}' is not supported by the in-memory provider."),
         };
 

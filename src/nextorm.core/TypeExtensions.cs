@@ -1,7 +1,7 @@
 using System.Reflection;
 using System.Runtime.CompilerServices;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 public static class TypeExtensions
 {
@@ -20,7 +20,7 @@ public static class TypeExtensions
 
     public static bool TryGetProjectionDimension(this Type type, out int dim)
     {
-        //const string m = "nextorm.core.Projection`";
+        //const string m = "NextORM.Core.Projection`";
         dim = 0;
         if (type.IsGenericType && type.IsAssignableTo(typeof(IProjection)))
         {

@@ -1,13 +1,13 @@
 ﻿using BenchmarkDotNet.Attributes;
-using nextorm.sqlite;
+using NextORM.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Data.Sqlite;
 using Dapper;
 using Microsoft.Extensions.Logging;
 using BenchmarkDotNet.Jobs;
-using nextorm.core;
+using NextORM.Core;
 
-namespace nextorm.benchmark;
+namespace NextORM.Benchmark;
 
 //[SimpleJob(RuntimeMoniker.Net70, baseline: true)]
 [Config(typeof(NextormConfig))]
@@ -27,7 +27,7 @@ public class SqliteBenchmarkCache
     {
         var filepath = BenchDb.FilePath;
         _conn = new SqliteConnection($"Data Source='{filepath}'");
-        var builder = new DbContextBuilder();
+        var builder = new DataContextBuilder();
         builder.UseSqlite(_conn);
         if (withLogging)
         {
@@ -36,12 +36,12 @@ public class SqliteBenchmarkCache
             builder.LogSensitiveData(true);
         }
 
-        var db = builder.CreateDbContext();
+        var db = builder.CreateDataContext();
         _repo = new TestDataRepository(db);
 
         // Prepared once (real usage); the benchmark must not re-compile the plan per invocation.
         _nextormPreparedCmd = _repo.LargeEntity
-            .Where(it => it.Id == NORM.Param<int>(0))
+            .Where(it => it.Id == SqlFunctions.Parameter<int>(0))
             .Select(it => new LargeEntity { Id = it.Id, Str = it.Str, Dt = it.Dt })
             .Prepare();
 
@@ -62,7 +62,7 @@ public class SqliteBenchmarkCache
     [Benchmark()]
     public void NextormCached()
     {
-        _repo.DbContext.PurgeQueryCache();
+        _repo.DataContext.PurgeQueryCache();
         for (int i = 0; i < Iterations; i++)
         {
             _repo.LargeEntity.Where(it => it.Id == i).Select(it => new { it.Id, it.Str, it.Dt }).ToList();
@@ -83,7 +83,7 @@ public class SqliteBenchmarkCache
     {
         for (int i = 0; i < Iterations; i++)
         {
-            _nextormPreparedCmd.ToList(_repo.DbContext, i);
+            _nextormPreparedCmd.ToList(_repo.DataContext, i);
         }
     }
     // [Benchmark()]

@@ -1,6 +1,6 @@
 using System.Linq.Expressions;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// SQL literal helpers shared by the expression visitors: string literal quoting and LIKE-wildcard

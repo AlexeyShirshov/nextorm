@@ -1,12 +1,12 @@
 using BenchmarkDotNet.Attributes;
-using nextorm.sqlite;
+using NextORM.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using BenchmarkDotNet.Jobs;
 using System.Linq.Expressions;
-using nextorm.core;
-using DbContext = nextorm.core.DbContext;
+using NextORM.Core;
+using DataContext = NextORM.Core.DataContext;
 
-namespace nextorm.benchmark;
+namespace NextORM.Benchmark;
 
 [MemoryDiagnoser]
 [Config(typeof(NextormConfig))]
@@ -26,21 +26,21 @@ public class BenchmarkQueryCommand
     {
         var filepath = BenchDb.FilePath;
 
-        var builder = new DbContextBuilder
+        var builder = new DataContextBuilder
         {
             //  CacheExpressions = false
         };
         builder.UseSqlite(filepath);
-        _nonCacheCtx = new TestDataRepository(builder.CreateDbContext());
+        _nonCacheCtx = new TestDataRepository(builder.CreateDataContext());
 
-        builder = new DbContextBuilder
+        builder = new DataContextBuilder
         {
             // CacheExpressions = true
         };
         builder.UseSqlite(filepath);
-        _ctx = new TestDataRepository(builder.CreateDbContext());
+        _ctx = new TestDataRepository(builder.CreateDataContext());
 
-        Command = _ctx.LargeEntity.Where(it => it.Id == NORM.Param<int>(0)).Select(it => new LargeEntity { Id = it.Id, Str = it.Str, Dt = it.Dt });
+        Command = _ctx.LargeEntity.Where(it => it.Id == SqlFunctions.Parameter<int>(0)).Select(it => new LargeEntity { Id = it.Id, Str = it.Str, Dt = it.Dt });
 
         _condition = Command.Condition!;
         _planComparer = new ExpressionPlanEqualityComparer(Command);

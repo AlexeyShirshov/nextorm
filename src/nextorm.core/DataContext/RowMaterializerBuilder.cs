@@ -1,13 +1,13 @@
 using System.Linq.Expressions;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Builds the body of a row-materializer expression that is shared by the database
-/// (<see cref="DbContext"/>) and in-memory (<see cref="InMemoryContext"/>) contexts.
+/// (<see cref="DataContext"/>) and in-memory (<see cref="InMemoryDataContext"/>) contexts.
 /// The two providers differ only in the record type they read from and in how a single
 /// column is mapped, so the "result shape -> expression tree" knowledge lives here
-/// instead of being copied into both contexts (see solid-review.md, F4).
+/// instead of being copied into both contexts (see docs/specs/design/solid-review.md, F4).
 /// </summary>
 internal static class RowMaterializerBuilder
 {
@@ -28,7 +28,7 @@ internal static class RowMaterializerBuilder
         var ctorInfo = resultType.GetConstructors()
             .OrderByDescending(it => it.GetParameters().Length)
             .FirstOrDefault()
-            ?? throw new PrepareException($"Cannot get ctor from {resultType}");
+            ?? throw new QueryPreparationException($"Cannot get ctor from {resultType}");
 
         if (ignoreColumns)
             return Expression.New(ctorInfo);

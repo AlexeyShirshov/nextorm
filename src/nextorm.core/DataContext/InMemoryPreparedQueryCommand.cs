@@ -1,5 +1,5 @@
 #define PARAM_CONDITION
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Creates (or re-initialises) the async enumerator that reads an in-memory query result.

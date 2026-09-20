@@ -2,7 +2,7 @@ using BenchmarkDotNet.Attributes;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 
-namespace nextorm.benchmark;
+namespace NextORM.Benchmark;
 
 /// <summary>
 /// Isolates the primitives changed by M5-M8. Their end-to-end effect is below the noise floor of

@@ -1,10 +1,10 @@
 using Microsoft.Extensions.Logging;
-namespace nextorm.core;
+namespace NextORM.Core;
 
 public sealed class SelectExpressionPlanEqualityComparer : IEqualityComparer<SelectExpression>
 {
     //private readonly IDictionary<ExpressionKey, Delegate> _cache;
-    private readonly IQueryProvider _queryProvider;
+    private readonly IQueryRegistry _queryProvider;
     //private readonly ILogger? _logger;
     //private ExpressionPlanEqualityComparer? _expComparer;
     //private QueryPlanEqualityComparer? _cmdComparer;
@@ -13,11 +13,11 @@ public sealed class SelectExpressionPlanEqualityComparer : IEqualityComparer<Sel
     //     : this(new ExpressionCache<Delegate>())
     // {
     // }
-    public SelectExpressionPlanEqualityComparer(IQueryProvider queryProvider)
+    public SelectExpressionPlanEqualityComparer(IQueryRegistry queryProvider)
         : this(queryProvider, null)
     {
     }
-    public SelectExpressionPlanEqualityComparer(IQueryProvider queryProvider, ILogger? logger)
+    public SelectExpressionPlanEqualityComparer(IQueryRegistry queryProvider, ILogger? logger)
     {
         //_cache = cache ?? new ExpressionCache<Delegate>();
         _queryProvider = queryProvider;
@@ -36,6 +36,8 @@ public sealed class SelectExpressionPlanEqualityComparer : IEqualityComparer<Sel
 
         if (x.PropertyName != y.PropertyName) return false;
 
+        if (x.DefaultOnNull != y.DefaultOnNull) return false;
+
         //_expComparer ??= new ExpressionPlanEqualityComparer(_cache, _queryProvider);
         if (!_queryProvider.GetExpressionPlanEqualityComparer().Equals(x.Expression, y.Expression))
             return false;
@@ -49,13 +51,15 @@ public sealed class SelectExpressionPlanEqualityComparer : IEqualityComparer<Sel
 
         unchecked
         {
-            var hash = new HashCode();
+            var hash = new XxHash32();
 
             hash.Add(obj.Index);
 
             hash.Add(obj.PropertyType);
 
             hash.Add(obj.PropertyName);
+
+            hash.Add(obj.DefaultOnNull);
 
             //_expComparer ??= new ExpressionPlanEqualityComparer(_cache, _queryProvider);
             hash.Add(obj.Expression, _queryProvider.GetExpressionPlanEqualityComparer());

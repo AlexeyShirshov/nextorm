@@ -1,4 +1,4 @@
-namespace nextorm.core;
+namespace NextORM.Core;
 
 public partial class QueryCommand
 {
@@ -28,13 +28,42 @@ public partial class QueryCommand
         dst.CtesPlanHash = CtesPlanHash;
         dst.HintsPlanHash = HintsPlanHash;
         dst._hints = _hints;
+        // Outer references participate in the plan key (QueryPlanEqualityComparer), so the cached
+        // clone must carry them; otherwise the hash captured at construction would not match the
+        // recomputed hash in QueryPlan.GetCacheVersion and the Debug.Assert would fail.
+        dst._outerRefs = _outerRefs;
 
         dst.ResultType = ResultType;
         dst.Paging = Paging;
+        // The terminal flags participate in the plan key (QueryPlanEqualityComparer), so the cached
+        // clone must carry them like the outer references; otherwise GetCacheVersion's Debug.Assert
+        // fails and a stale plan's materializer could be reused.
+        dst.DefaultOnEmpty = DefaultOnEmpty;
+        dst.SingleScalar = SingleScalar;
         dst.SingleRow = SingleRow;
         dst.IsDistinct = IsDistinct;
         dst.GroupingType = GroupingType;
         dst.GroupingSets = GroupingSets;
+        dst.GroupByWithTotals = GroupByWithTotals;
+        dst.LimitBy = LimitBy;
+        dst._limitByColumns = _limitByColumns;
+        dst.DistinctOn = DistinctOn;
+        dst._distinctOnColumns = _distinctOnColumns;
+        dst.TableSample = TableSample;
+        dst.Temporal = Temporal;
+        dst.RowLock = RowLock;
+        dst.Final = Final;
+        dst.SampleRatio = SampleRatio;
+        dst.SampleOffset = SampleOffset;
+        dst.Settings = Settings;
+        dst._preWhere = _preWhere;
+        dst._arrayJoins = _arrayJoins;
+        dst.ArrayJoinKind = ArrayJoinKind;
+        dst.BindArrayJoinElement = BindArrayJoinElement;
+        dst._preparedArrayJoin = _preparedArrayJoin;
+        dst.PreparedPreWhere = PreparedPreWhere;
+        dst.PreWhereShapeHash = PreWhereShapeHash;
+        dst.HasPreWhereInValues = HasPreWhereInValues;
         dst.TableHints = TableHints;
         dst.ForJsonClause = ForJsonClause;
         dst.ForXmlClause = ForXmlClause;
@@ -78,11 +107,11 @@ public partial class QueryCommand
 
     protected virtual QueryCommand CreateSelf()
     {
-        return new QueryCommand(_dataContext, _exp, _srcType, _condition, _joins, Paging, _sorting, _groupExp, _having, Logger);
+        return new QueryCommand(_dataContext, Definition);
     }
     protected virtual QueryCommand CreateSelfForClone()
     {
-        return new QueryCommand(null, null, _srcType, null, CloneForCache(_joins), Paging, _sorting, null, _having, Logger);
+        return new QueryCommand(null, Definition with { Exp = null, Condition = null, Joins = CloneForCache(_joins), Group = null });
     }
 
     protected static JoinExpression[]? CloneForCache(JoinExpression[]? joins)

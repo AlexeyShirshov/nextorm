@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using System.Linq.Expressions;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 public class ExpressionCache<T> : ConcurrentDictionary<ExpressionKey, T>
 {
 
@@ -16,7 +16,7 @@ public sealed class ExpressionKey : IEquatable<ExpressionKey>
     // positive) and any lazy-initialization race when the key is shared.
     private readonly int _hash;
 
-    public ExpressionKey(Expression exp, IQueryProvider queryProvider)
+    public ExpressionKey(Expression exp, IQueryRegistry queryProvider)
     {
         _exp = exp;
         _equalityComparer = queryProvider.GetExpressionPlanEqualityComparer();

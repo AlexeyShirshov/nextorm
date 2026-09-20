@@ -1,4 +1,4 @@
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Thread-local store of compiled query plans (the "plan cache"). Plans are cached per thread and

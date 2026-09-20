@@ -1,15 +1,15 @@
 using System.Linq.Expressions;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Replaces the query parameters referenced inside an expression.
 /// </summary>
-public class ReplaceParameterVisitor : ExpressionVisitor
+public class ReplaceParameterExpressionVisitor : ExpressionVisitor
 {
     private readonly Expression _parameter;
 
-    public ReplaceParameterVisitor(Expression parameter)
+    public ReplaceParameterExpressionVisitor(Expression parameter)
     {
         _parameter = parameter;
     }
@@ -25,14 +25,15 @@ public class ReplaceParameterVisitor : ExpressionVisitor
 /// Replaces constant nodes inside an expression.
 /// </summary>
 /// <remarks>
-/// The singular name is inconsistent with <see cref="ReplaceConstantsExpressionVisitor"/> in
-/// <c>ExpressionExtensions.cs</c>; see <c>API-NAMING-REVIEW.md</c> finding P1-14.
+/// Renamed from <c>ReplaceConstantVisitor</c> so the suffix is <c>ExpressionVisitor</c>; the singular
+/// <c>Constant</c> distinguishes it from <see cref="ReplaceConstantsExpressionVisitor"/> in
+/// <c>ExpressionExtensions.cs</c>. See <c>docs/specs/design/API-NAMING-REVIEW.md</c> finding P1-14.
 /// </remarks>
-public class ReplaceConstantVisitor : ExpressionVisitor
+public class ReplaceConstantExpressionVisitor : ExpressionVisitor
 {
     private readonly Expression _parameter;
 
-    public ReplaceConstantVisitor(Expression parameter)
+    public ReplaceConstantExpressionVisitor(Expression parameter)
     {
         _parameter = parameter;
     }

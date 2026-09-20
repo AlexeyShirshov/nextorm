@@ -2,21 +2,13 @@ using Microsoft.Extensions.Logging;
 using System.Linq.Expressions;
 using System.Runtime.CompilerServices;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 public sealed partial class QueryCommand<TResult> : QueryCommand
 {
 
-    public QueryCommand(IDataContext? dataProvider, LambdaExpression exp, LambdaExpression? condition, JoinExpression[]? joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having, ILogger? logger)
-        : this(dataProvider, exp, null, condition, joins, paging, sorting, group, having, logger)
-    {
-    }
-    public QueryCommand(IDataContext? dataProvider, Type srcType, LambdaExpression? condition, JoinExpression[]? joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having, ILogger? logger)
-        : this(dataProvider, null, srcType, condition, joins, paging, sorting, group, having, logger)
-    {
-    }
-    private QueryCommand(IDataContext? dataProvider, LambdaExpression? exp, Type? srcType, LambdaExpression? condition, JoinExpression[]? joins, Paging paging, Sorting[]? sorting, LambdaExpression? group, LambdaExpression? having, ILogger? logger)
-        : base(dataProvider, exp, srcType, condition, joins, paging, sorting, group, having, logger)
+    public QueryCommand(IDataContext? dataProvider, QueryDefinition definition)
+        : base(dataProvider, definition)
     {
 
     }
@@ -140,7 +132,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
                 PrepareCommand(false, CancellationToken.None);
             }
 
-            queryCommand = EntityBuilder<TResult>.GetAnyCommand(_dataContext!, this);
+            queryCommand = EntityBuilderExtensions.GetAnyCommand(_dataContext!, this);
         }
 
         var preparedCommand = _dataContext!.GetPreparedQueryCommand(queryCommand, false, true, CancellationToken.None);
@@ -158,7 +150,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
                 PrepareCommand(false, cancellationToken);
             }
 
-            queryCommand = EntityBuilder<TResult>.GetAnyCommand(_dataContext!, this);
+            queryCommand = EntityBuilderExtensions.GetAnyCommand(_dataContext!, this);
         }
 
         var preparedCommand = _dataContext!.GetPreparedQueryCommand(queryCommand, false, true, cancellationToken);
@@ -276,11 +268,11 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     }
     protected override QueryCommand CreateSelf()
     {
-        return new QueryCommand<TResult>(_dataContext, _exp, _srcType, _condition, Joins, Paging, _sorting, _groupExp, _having, Logger);
+        return new QueryCommand<TResult>(_dataContext, Definition);
     }
     protected override QueryCommand CreateSelfForClone()
     {
-        return new QueryCommand<TResult>(null, null, _srcType, null, CloneForCache(Joins), Paging, _sorting, null, _having, Logger);
+        return new QueryCommand<TResult>(null, Definition with { Exp = null, Condition = null, Joins = CloneForCache(Joins), Group = null });
     }
     /// <summary>
     /// Builds the command that returns the last row of the ordered query by reversing every
@@ -304,7 +296,7 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
             reversed[i] = flipped;
         }
 
-        var cmd = new QueryCommand<TResult>(_dataContext, _exp, _srcType, _condition, Joins, Paging, reversed, _groupExp, _having, Logger);
+        var cmd = new QueryCommand<TResult>(_dataContext, Definition with { Sorting = reversed });
         CopyTo(cmd, true);
         cmd.ResetPreparation();
         return cmd;
@@ -323,9 +315,12 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     {
         if (columnIndex < 1) throw new ArgumentException("Column index must be greater than zero", nameof(columnIndex));
 
-        var cmd = new QueryCommand<TResult>(_dataContext, _exp, _srcType, _condition, Joins, Paging, _sorting is null
-            ? [new Sorting(columnIndex) { Direction = direction }]
-            : [.. _sorting, new Sorting(columnIndex) { Direction = direction }], _groupExp, _having, Logger);
+        var cmd = new QueryCommand<TResult>(_dataContext, Definition with
+        {
+            Sorting = _sorting is null
+                ? [new Sorting(columnIndex) { Direction = direction }]
+                : [.. _sorting, new Sorting(columnIndex) { Direction = direction }],
+        });
 
         CopyTo(cmd, true);
         cmd.ResetPreparation();

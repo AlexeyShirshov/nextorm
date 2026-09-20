@@ -1,13 +1,13 @@
 ﻿using BenchmarkDotNet.Attributes;
-using nextorm.sqlite;
+using NextORM.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Data.Sqlite;
 using Dapper;
 using Microsoft.Extensions.Logging;
 using BenchmarkDotNet.Jobs;
-using nextorm.core;
+using NextORM.Core;
 
-namespace nextorm.benchmark;
+namespace NextORM.Benchmark;
 
 //[SimpleJob(RuntimeMoniker.Net70, baseline: true)]
 [MemoryDiagnoser]
@@ -41,7 +41,7 @@ public class SqliteBenchmarkAny
 
     private void SetupNext(bool withLogging)
     {
-        var builder = new DbContextBuilder();
+        var builder = new DataContextBuilder();
         builder.UseSqlite(GetDatabasePath());
         if (withLogging)
         {
@@ -49,10 +49,10 @@ public class SqliteBenchmarkAny
             builder.UseLoggerFactory(logFactory);
             builder.LogSensitiveData(true);
         }
-        _db = builder.CreateDbContext();
+        _db = builder.CreateDataContext();
         _ctx = new TestDataRepository(_db);
 
-        _cmd = _ctx.SimpleEntity.Where(e => e.Id == NORM.Param<int>(0)).AnyCommand().Prepare(true);
+        _cmd = _ctx.SimpleEntity.Where(e => e.Id == SqlFunctions.Parameter<int>(0)).AnyCommand().Prepare(true);
 
         ((IConnectionManager)_db).EnsureConnectionOpen();
     }
@@ -96,7 +96,7 @@ public class SqliteBenchmarkAny
     //     SetupNext(false);
     //     _cmd = _ctx.SimpleEntity.AnyCommand().Compile(true);
     //     // _cmdFilter = _ctx.SimpleEntity.Where(it => it.Id > 5).AnyCommand().Compile(true);
-    //     // _cmdFilterParam = _ctx.SimpleEntity.Where(it => it.Id > NORM.Param<int>(0)).AnyCommand().Compile(true);
+    //     // _cmdFilterParam = _ctx.SimpleEntity.Where(it => it.Id > SqlFunctions.Parameter<int>(0)).AnyCommand().Compile(true);
     // }
     // [GlobalSetup(Targets = new[] { nameof(EFCoreCompiled) })]
     // public void CompileEFQueries()
@@ -190,7 +190,7 @@ public class SqliteBenchmarkAny
     // [BenchmarkCategory("FilterParam")]
     // public async Task NextormFilterParamCached()
     // {
-    //     await _ctx.SimpleEntity.Where(it => it.Id > NORM.Param<int>(0)).AnyAsync(5);
+    //     await _ctx.SimpleEntity.Where(it => it.Id > SqlFunctions.Parameter<int>(0)).AnyAsync(5);
     // }
     // [Benchmark]
     // [BenchmarkCategory("FilterParam")]

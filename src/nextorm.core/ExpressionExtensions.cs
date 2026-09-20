@@ -2,7 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 using System.Reflection;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Helpers for rewriting and inspecting expression trees.
@@ -61,10 +61,10 @@ public class TypeExpressionVisitor<T> : ExpressionVisitor
 /// <typeparam name="T1">The first entity type.</typeparam>
 /// <typeparam name="T2">The second entity type.</typeparam>
 /// <remarks>
-/// The <c>Two</c> prefix is inconsistent with the arity style used elsewhere; see
-/// <c>API-NAMING-REVIEW.md</c> finding P1-14.
+/// Renamed from <c>TwoTypeExpressionVisitor</c> to use the arity style (<c>T1, T2</c>) shared by the
+/// rest of the surface. See <c>docs/specs/design/API-NAMING-REVIEW.md</c> finding P1-14.
 /// </remarks>
-public class TwoTypeExpressionVisitor<T1, T2> : ExpressionVisitor
+public class TypeExpressionVisitor<T1, T2> : ExpressionVisitor
     where T1 : Expression
     where T2 : Expression
 {
@@ -98,22 +98,22 @@ public class TwoTypeExpressionVisitor<T1, T2> : ExpressionVisitor
 /// Replaces captured constant values with query parameters.
 /// </summary>
 /// <remarks>
-/// The plural <c>Constants</c> here is inconsistent with the singular
-/// <see cref="ReplaceConstantVisitor"/> in <c>Visitors/ReplaceExpressionVisitor.cs</c>; see
-/// <c>API-NAMING-REVIEW.md</c> finding P1-14.
+/// The plural <c>Constants</c> distinguishes this full parametrisation pass from the singular
+/// <see cref="ReplaceConstantExpressionVisitor"/> in <c>Visitors/ReplaceExpressionVisitor.cs</c>.
+/// See <c>docs/specs/design/API-NAMING-REVIEW.md</c> finding P1-14.
 /// </remarks>
 public class ReplaceConstantsExpressionVisitor : ExpressionVisitor
 {
     private readonly List<(ParameterExpression, object?)> _params = new();
     private readonly object[]? _replaceParams;
     private readonly IEnumerable<ParameterExpression>? _outerParams;
-    private readonly IQueryProvider? _queryProvider;
+    private readonly IQueryRegistry? _queryProvider;
 
     public ReplaceConstantsExpressionVisitor(params object[]? @params)
     {
         _replaceParams = @params;
     }
-    public ReplaceConstantsExpressionVisitor(IEnumerable<ParameterExpression>? @params, IQueryProvider queryProvider)
+    public ReplaceConstantsExpressionVisitor(IEnumerable<ParameterExpression>? @params, IQueryRegistry queryProvider)
     {
         _outerParams = @params;
         _queryProvider = queryProvider;

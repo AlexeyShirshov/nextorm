@@ -1,8 +1,8 @@
-namespace nextorm.core;
+namespace NextORM.Core;
 
-public sealed class SortingExpressionPlanEqualityComparer(IQueryProvider queryProvider) : IEqualityComparer<Sorting>, IValueEqualityComparer<Sorting>
+public sealed class SortingExpressionPlanEqualityComparer(IQueryRegistry queryProvider) : IEqualityComparer<Sorting>, IValueEqualityComparer<Sorting>
 {
-    private readonly IQueryProvider _queryProvider = queryProvider;
+    private readonly IQueryRegistry _queryProvider = queryProvider;
 
     public bool Equals(Sorting x, Sorting y)
     {
@@ -28,7 +28,7 @@ public sealed class SortingExpressionPlanEqualityComparer(IQueryProvider queryPr
     {
         unchecked
         {
-            var hash = new HashCode();
+            var hash = new XxHash32();
 
             hash.Add(obj.Direction);
 
@@ -43,7 +43,7 @@ public sealed class SortingExpressionPlanEqualityComparer(IQueryProvider queryPr
     {
         unchecked
         {
-            var hash = new HashCode();
+            var hash = new XxHash32();
 
             hash.Add(obj.Direction);
 

@@ -6,15 +6,15 @@
 
 ## Обзор
 
-`SqlServerDbContext` (`src/nextorm.sqlserver/SqlServerDbContext.cs`) оборачивает `Microsoft.Data.SqlClient`. Он
+[`SqlServerDataContext`](xref:NextORM.SqlServer.SqlServerDataContext) (`src/nextorm.sqlserver/SqlServerDataContext.cs`) оборачивает `Microsoft.Data.SqlClient`. Он
 создаёт `SqlConnection`, передаёт значения параметров null как `DBNull` (иначе SqlClient не отправляет значение
 вообще), и переопределяет `MapColumnExpression`, чтобы читать числовые столбцы через `Convert.ChangeType`, потому что
 типизированные геттеры SqlClient строги к расширению.
 
-`SqlServerDialect` (`src/nextorm.sqlserver/SqlServerDialect.cs`) — это диалект:
+[`SqlServerDialect`](xref:NextORM.SqlServer.SqlServerDialect) (`src/nextorm.sqlserver/SqlServerDialect.cs`) — это диалект:
 
 - плейсхолдер параметра `@name`;
-- идентификаторы заключаются в квадратные скобки (`Escape` возвращает `[name]`), включая ссылки на столбцы, чтобы псевдонимы, которые
+- идентификаторы заключаются в квадратные скобки ([`Escape`](xref:NextORM.Core.ISqlDialect) возвращает `[name]`), включая ссылки на столбцы, чтобы псевдонимы, которые
   конфликтуют с ключевыми словами T-SQL, оставались пригодными;
 - отображение типов: `byte`→`tinyint`, `short`→`smallint`, `int`→`int`, `long`→`bigint`, `float`→`real`,
   `double`→`float`, `decimal`→`decimal(38, 10)`;
@@ -31,29 +31,29 @@
 
 ## Регистрация провайдера
 
-На `DbContextBuilder` доступны две перегрузки
-(`src/nextorm.sqlserver/DI/DataContextOptionsBuilderExtensions.cs`):
+На [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) доступны две перегрузки
+(`src/nextorm.sqlserver/DI/SqlServerDataContextOptionsBuilderExtensions.cs`):
 
 ```csharp
-using nextorm.core;
-using nextorm.sqlserver;
+using NextORM.Core;
+using NextORM.SqlServer;
 
-var byString = new DbContextBuilder()
+var byString = new DataContextBuilder()
     .UseSqlServer("Server=localhost;Database=app;Trusted_Connection=True;TrustServerCertificate=True");
 
 using var connection = new Microsoft.Data.SqlClient.SqlConnection("Server=localhost;Database=app;...");
-var byConnection = new DbContextBuilder().UseSqlServer(connection);
+var byConnection = new DataContextBuilder().UseSqlServer(connection);
 
-using var ctx = byString.CreateDbContext();   // IDataContext
+using var ctx = byString.CreateDataContext();   // IDataContext
 ```
 
 Напрямую:
 
 ```csharp
-using nextorm.core;
-using nextorm.sqlserver;
+using NextORM.Core;
+using NextORM.SqlServer;
 
-using IDataContext ctx = new SqlServerDbContext("Server=localhost;Database=app;...", new DbContextBuilder());
+using IDataContext ctx = new SqlServerDataContext("Server=localhost;Database=app;...", new DataContextBuilder());
 ```
 
 ## Разбиение на страницы: `TOP` и `OFFSET … FETCH`
@@ -69,7 +69,7 @@ ctx.From<ISimpleEntity>().Page(5, 10).Select(x => x.Id);
 ```
 
 SQL Server отклоняет `OFFSET`/`FETCH` без `ORDER BY`, поэтому когда у запроса с разбиением на страницы нет сортировки, диалект
-внедряет постоянную сортировку `(select null as anyorder)` (`GetPagingOrderBy`). Запрос только с offset выдаёт
+внедряет постоянную сортировку `(select null as anyorder)` ([`GetPagingOrderBy`](xref:NextORM.Core.ISqlDialect)). Запрос только с offset выдаёт
 `offset m rows` и без `fetch`. Когда у запроса уже есть `ORDER BY`, ничего не внедряется.
 
 ```csharp
@@ -80,35 +80,48 @@ ctx.From<ISimpleEntity>().Offset(10).OrderBy(x => x.Id).Select(x => x.Id);
 ## Агрегаты и скалярные функции
 
 ```csharp
-var count = ctx.From<IComplexEntity>().Select(x => NORM.SQL.count_big());        // count_big(*)
-var std   = ctx.From<IComplexEntity>().Select(x => NORM.SQL.stdev((double)x.Id)); // stdev(...)
+var count = ctx.From<IComplexEntity>().Select(x => SqlFunctions.Sql.count_big());        // count_big(*)
+var std   = ctx.From<IComplexEntity>().Select(x => SqlFunctions.Sql.stdev((double)x.Id)); // stdev(...)
 ```
 
 `count_big` / `count_big_distinct` отрисовывают `count_big(...)`; обычные `count`/`count_distinct` отрисовывают
 `count(...)`. `stdev`, `stdevp`, `var` и `varp` сохраняют свои имена (SQL Server предоставляет их нативно).
 `Math.Round`, `Math.Truncate`, `len`, `datepart`, `getdate` и `isnull` все выдаются, как показано выше.
 
-SQL Server 2022+ также включает `greatest`/`least` (стандартный синтаксис) и `NORM.SQL.date_trunc`,
+SQL Server 2022+ также включает `greatest`/`least` (стандартный синтаксис) и `SqlFunctions.Sql.date_trunc`,
 который отрисовывает `datetrunc(part, value)`, сворачивая множественные ANSI-части в единственные
 T-SQL-написания (`milliseconds` → `millisecond`); `decade`/`century`/`millennium` выбрасывают исключение.
-Арифметика дат нативная: `NORM.SQL.date_add(field, amount, value)` отрисовывает
+Арифметика дат нативная: `SqlFunctions.Sql.date_add(field, amount, value)` отрисовывает
 `dateadd(field, amount, value)` (а `decade`/`century`/`millennium` сворачиваются в масштабированное
-прибавление `year`), `NORM.SQL.date_diff(field, start, end)` — `datediff(field, start, end)`,
-`NORM.SQL.date_from_parts(year, month, day)` — `datefromparts(year, month, day)`,
-`NORM.SQL.end_of_month(value)` — `eomonth(value)`. SQL Server 2017+ включает
-`NORM.SQL.string_agg` → `string_agg(value, delimiter)`. Типа-массива нет, поэтому `array_agg`
-по-прежнему выбрасывает исключение (`SupportsArrayAgg` равно `false`). SQL Server 2016+ также
-включает текстовые JSON-функции (`SupportsTextJson`): `NORM.MS_SQL.json_value`, `NORM.MS_SQL.json_query`,
-`NORM.MS_SQL.json_modify` и `NORM.MS_SQL.isjson` отрисовывают свои T-SQL-имена над текстовой колонкой,
+прибавление `year`), `SqlFunctions.Sql.date_diff(field, start, end)` — `datediff(field, start, end)`,
+`SqlFunctions.Sql.date_from_parts(year, month, day)` — `datefromparts(year, month, day)`,
+`SqlFunctions.Sql.end_of_month(value)` — `eomonth(value)`. SQL Server 2017+ включает
+`SqlFunctions.Sql.string_agg` → `string_agg(value, delimiter)`. Типа-массива нет, поэтому `array_agg`
+по-прежнему выбрасывает исключение ([`SupportsArrayAgg`](xref:NextORM.Core.ISqlDialect.SupportsArrayAgg) равно `false`). SQL Server 2016+ также
+включает текстовые JSON-функции ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)): `SqlFunctions.SqlServer.json_value`, `SqlFunctions.SqlServer.json_query`,
+`SqlFunctions.SqlServer.json_modify` и `SqlFunctions.SqlServer.isjson` отрисовывают свои T-SQL-имена над текстовой колонкой,
 используя строку JSONPath (`'$.name'`); поверхность `json`/`jsonb` из PostgreSQL по-прежнему
 выбрасывает исключение.
-Предикаты полнотекстового поиска `NORM.SQL.contains` и `NORM.SQL.freetext` (`SupportsFullText`)
+Предикаты полнотекстового поиска `SqlFunctions.Sql.contains` и `SqlFunctions.Sql.freetext` ([`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText))
 отрисовываются как T-SQL `contains(...)`/`freetext(...)` и требуют полнотекстового индекса на колонке.
-Табличные хинты (`SupportsTableHints`) отрисовываются как `WITH (hint, ...)` после имени основной
+`SqlFunctions.Sql.iif(condition, whenTrue, whenFalse)` отрисовывает `iif(...)`
+([`SupportsIif`](xref:NextORM.Core.ISqlDialect.SupportsIif), написание через [`MakeIif`](xref:NextORM.Core.ISqlDialect.MakeIif)), а
+`SqlFunctions.SqlServer.choose(index, ...)` — `choose(...)` ([`SupportsChoose`](xref:NextORM.Core.ISqlDialect.SupportsChoose));
+специализированное написание `SqlFunctions.SqlServer.iif` по-прежнему работает по наследованию.
+Семейство session/info ([`SupportsSessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SupportsSessionInfoFunctions)) отрисовывает
+`SqlFunctions.Sql.current_user()`/`session_user()` как ключевые слова ANSI, а
+`current_schema()`/`current_database()`/`version()` — как `schema_name()`/`db_name()`/`@@version`.
+SQL Server отрисовывает оконные квантили `SqlFunctions.Sql.percentile_cont(fraction, property).Over()` и
+`percentile_disc(...)` как `percentile_cont(fraction) within group (order by property) over (...)`
+([`SupportsPercentileWindow`](xref:NextORM.Core.ISqlDialect.SupportsPercentileWindow)); точной
+упорядоченно-агрегатной формы у него нет. Агрегат произвольного значения `any_agg` (`ANY_VALUE`)
+**не** включён: T-SQL даёт `ANY_VALUE` только в SQL Server 2025 / Fabric, чего версионно-агностичный
+диалект предположить не может.
+Табличные хинты ([`SupportsTableHints`](xref:NextORM.Core.ISqlDialect.SupportsTableHints)) отрисовываются как `WITH (hint, ...)` после имени основной
 таблицы: `ctx.From<IComplexEntity>().WithTableHint("nolock")` даёт `from complex_entity with (nolock)`.
-`QueryCommand.ForJson(...)` (`SupportsForJson`) добавляет завершающее предложение
+`QueryCommand.ForJson(...)` ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson)) добавляет завершающее предложение
 `FOR JSON PATH`/`FOR JSON AUTO` (с необязательными `ROOT('...')` и `INCLUDE_NULL_VALUES`), а
-`QueryCommand.ForXml(...)` (`SupportsForXml`) — `FOR XML RAW/AUTO/EXPLICIT/PATH` (с необязательными
+`QueryCommand.ForXml(...)` ([`SupportsForXml`](xref:NextORM.Core.ISqlDialect.SupportsForXml)) — `FOR XML RAW/AUTO/EXPLICIT/PATH` (с необязательными
 именем элемента строки, `ROOT('...')` и `ELEMENTS`).
 
 ## Рекурсивные CTE и `maxRecursion`
@@ -137,8 +150,8 @@ select n from nums option (maxrecursion 100)
 
 ## Операции над множествами `*ALL`
 
-В SQL Server нет ни `INTERSECT ALL`, ни `EXCEPT ALL`. Вызов `IntersectAll` или `ExceptAll` бросает
-`NotSupportedException` из диалекта до того, как какой-либо SQL достигнет базы данных; `Intersect` и `Except`
+В SQL Server нет ни `INTERSECT ALL`, ни `EXCEPT ALL`. Вызов [`IntersectAll`](xref:NextORM.Core.QueryCommand`1) или [`ExceptAll`](xref:NextORM.Core.QueryCommand`1) бросает
+`NotSupportedException` из диалекта до того, как какой-либо SQL достигнет базы данных; [`Intersect`](xref:NextORM.Core.QueryCommand`1) и [`Except`](xref:NextORM.Core.QueryCommand`1)
 (без `ALL`) работают.
 
 ```csharp
@@ -174,15 +187,19 @@ join complex_entity as [t2] on t1.id = t2.id
 | `*ALL` | не поддерживается (бросает исключение) |
 | Рекурсивный CTE | `with` + `option (maxrecursion n)` |
 | Имена агрегатов | `stdev`/`var` нативные; доступен `count_big` |
-| `greatest` / `least` | поддерживаются (SQL Server 2022+) |
+| `greatest` / `least` | поддерживаются (SQL Server 2022+; игнорируют NULL-аргументы) |
 | `date_trunc` | `datetrunc(part, value)` (SQL Server 2022+) |
 | `date_add` / `date_diff` / `date_from_parts` / `end_of_month` | `dateadd(field, amount, value)` / `datediff(field, start, end)` / `datefromparts(y, m, d)` / `eomonth(value)` |
 | `string_agg` / `array_agg` | `string_agg` поддерживается (SQL Server 2017+); `array_agg` — нет (бросает исключение) |
 | Текстовый JSON | `json_value` / `json_query` / `json_modify` (SQL Server 2016+) |
+| Session/info-функции | `current_user`, `session_user`, `schema_name()`, `db_name()`, `@@version` |
+| Оконные квантили | `percentile_cont`/`percentile_disc` как `... within group (order by x) over (...)` (SQL Server 2012+) |
+| Агрегат произвольного значения | не поддерживается (`ANY_VALUE` только в SQL Server 2025 / Fabric) |
+| Условные функции | `iif(...)` (переносимая, [`SupportsIif`](xref:NextORM.Core.ISqlDialect.SupportsIif)) / `choose(...)` ([`SupportsChoose`](xref:NextORM.Core.ISqlDialect.SupportsChoose)) |
 | Предикаты полнотекстового поиска | `contains(...)` / `freetext(...)` (колонка должна быть полнотекстово проиндексирована) |
-| Табличные хинты | `with (hint, ...)` после основной таблицы (`WithTableHint`) |
-| JSON-вывод | завершающие `for json path` / `for json auto` (`ForJson`) |
-| XML-вывод | завершающие `for xml raw/auto/explicit/path` (`ForXml`) |
+| Табличные хинты | `with (hint, ...)` после основной таблицы ([`WithTableHint`](xref:NextORM.Core.EntityBuilder`1)) |
+| JSON-вывод | завершающие `for json path` / `for json auto` ([`ForJson`](xref:NextORM.Core.QueryCommand`1)) |
+| XML-вывод | завершающие `for xml raw/auto/explicit/path` ([`ForXml`](xref:NextORM.Core.QueryCommand`1)) |
 | `AVG` по целочисленному столбцу | усекается до целого |
 | Размещение null при `ORDER BY … DESC` | null сортируются последними по умолчанию |
 
@@ -196,8 +213,8 @@ join complex_entity as [t2] on t1.id = t2.id
 
 ---
 
-Source: `test/nextorm.sqlserver.tests/SqlServerDialectTests.cs:25,37,43,52,60,69,84,93,102`,
-`test/nextorm.sqlserver.tests/SqlGenerationTests.cs:133,146,160,185,218,231,249,268,856,1044`,
-`test/nextorm.integration.tests/SqlServerSpecificTests.cs:24,43`,
-`src/nextorm.sqlserver/SqlServerDialect.cs`, `src/nextorm.sqlserver/SqlServerDbContext.cs`,
-`src/nextorm.sqlserver/DI/DataContextOptionsBuilderExtensions.cs`.
+Source: `tests/nextorm.sqlserver.tests/SqlServerDialectTests.cs:25,37,43,52,60,69,84,93,102`,
+`tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:133,146,160,185,218,231,249,268,856,1044`,
+`tests/nextorm.integration.tests/SqlServerSpecificTests.cs:24,43`,
+`src/nextorm.sqlserver/SqlServerDialect.cs`, `src/nextorm.sqlserver/SqlServerDataContext.cs`,
+`src/nextorm.sqlserver/DI/SqlServerDataContextOptionsBuilderExtensions.cs`.

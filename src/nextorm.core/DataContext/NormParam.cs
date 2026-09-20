@@ -1,11 +1,11 @@
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
-/// Names of the runtime parameters that <c>NORM.Param(index)</c> refers to.
+/// Names of the runtime parameters that <c>SqlFunctions.Parameter(index)</c> refers to.
 /// <para>
 /// The name is a contract, not an implementation detail: it is emitted into the SQL text and
 /// then used to look the parameter up in <c>DbCommand.Parameters</c>, so the prefix must stay
-/// stable. It lives here rather than on <c>DbContext</c> so that the SQL-building collaborators
+/// stable. It lives here rather than on <c>DataContext</c> so that the SQL-building collaborators
 /// do not have to reach into the data context for it.
 /// </para>
 /// </summary>

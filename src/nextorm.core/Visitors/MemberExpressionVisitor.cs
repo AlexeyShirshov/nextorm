@@ -1,6 +1,6 @@
 using System.Linq.Expressions;
 using System.Reflection;
-namespace nextorm.core;
+namespace NextORM.Core;
 /// <summary>
 /// Expression visitor that resolves the <see cref="System.Reflection.MemberInfo"/> referenced by a
 /// member expression.

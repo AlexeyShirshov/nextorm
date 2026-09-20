@@ -1,6 +1,6 @@
 # SELECT DISTINCT
 
-> Удаляйте дубликаты строк с помощью `Distinct()` в построителе сущности или в спроецированном запросе, в том числе поверх соединений, постраничного вывода и операций над множествами.
+> Удаляйте дубликаты строк с помощью [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) в построителе сущности или в спроецированном запросе, в том числе поверх соединений, постраничного вывода и операций над множествами.
 
 **Предварительные требования:** [Запросы и проекции](01-querying-and-projections.md) · [Сортировка и постраничный вывод](05-sorting-and-paging.md) · [Операции над множествами](07-set-operations.md)
 
@@ -8,13 +8,13 @@
 
 nextorm предоставляет две точки входа для `SELECT DISTINCT`:
 
-* `EntityBuilder<TEntity>.Distinct()` — устанавливает флаг в построителе, до `Select`:
+* [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) — устанавливает флаг в построителе, до [`Select`](xref:NextORM.Core.EntityBuilder`1):
 
   ```csharp
   dataContext.From<IComplexEntity>().Distinct().Select(x => new { x.Int })
   ```
 
-* `QueryCommand<TResult>.Distinct()` — устанавливает флаг в уже спроецированном запросе:
+* [`Distinct`](xref:NextORM.Core.QueryCommand`1.Distinct) — устанавливает флаг в уже спроецированном запросе:
 
   ```csharp
   dataContext.From<IComplexEntity>().Select(x => new { x.Int }).Distinct()
@@ -42,15 +42,24 @@ var same = dataContext.From<IComplexEntity>()
 select distinct nullableint as 'Int' from complex_entity
 ```
 
+Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
+
+Вывод:
+
+| Int |
+|-----|
+| null |
+| 1 |
+
 ## Distinct поверх соединения
 
-Спроецированное соединение может содержать дублирующиеся строки; `Distinct` сворачивает их:
+Спроецированное соединение может содержать дублирующиеся строки; [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) сворачивает их:
 
 ```csharp
 // complex_entity booleans are true, false, false, so the projected join has duplicate rows.
 var rows = dataContext.From<ISimpleEntity>()
     .Join(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
-    .Select(p => new { p.t2.Boolean })
+    .Select(p => new { p.Item2.Boolean })
     .Distinct()
     .ToList();
 ```
@@ -59,18 +68,18 @@ var rows = dataContext.From<ISimpleEntity>()
 select distinct t2.b as 'Boolean' from simple_entity as 't1' join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
 ```
 
-Перекрёстное соединение порождает полное декартово произведение, которое `Distinct` затем сводит к
+Перекрёстное соединение порождает полное декартово произведение, которое [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) затем сводит к
 различным значениям проецируемого столбца:
 
 ```csharp
 var all = dataContext.From<ISimpleEntity>()
     .CrossJoin(dataContext.From<IComplexEntity>())
-    .Select(p => new { p.t2.Id })
+    .Select(p => new { p.Item2.Id })
     .ToList(); // 30 rows
 
 var distinct = dataContext.From<ISimpleEntity>()
     .CrossJoin(dataContext.From<IComplexEntity>())
-    .Select(p => new { p.t2.Id })
+    .Select(p => new { p.Item2.Id })
     .Distinct()
     .ToList(); // 3 rows
 ```
@@ -81,8 +90,8 @@ select distinct t2.id from simple_entity as 't1' cross join complex_entity as 't
 
 ## Distinct и постраничный вывод
 
-Постраничный вывод применяется к результату distinct. Вызов `Limit`/`Page` размещается до `Select`,
-а проверенная форма (`Distinct`, затем `Limit`) определяется порядком ключевых слов провайдера:
+Постраничный вывод применяется к результату distinct. Вызов [`Limit`](xref:NextORM.Core.Paging.Limit)/[`Page`](xref:NextORM.Core.EntityBuilder`1) размещается до [`Select`](xref:NextORM.Core.EntityBuilder`1),
+а проверенная форма ([`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct), затем [`Limit`](xref:NextORM.Core.Paging.Limit)) определяется порядком ключевых слов провайдера:
 
 ```csharp
 var distinct = dataContext.From<IComplexEntity>()
@@ -113,7 +122,7 @@ select distinct top(1) b as 'Boolean' from complex_entity
 
 ## Distinct и операции над множествами
 
-`Distinct` — это свойство отдельного запроса, а не всей цепочки, поэтому он устраняет дубликаты
+[`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) — это свойство отдельного запроса, а не всей цепочки, поэтому он устраняет дубликаты
 только в той ветви, к которой привязан:
 
 ```csharp
@@ -131,7 +140,7 @@ select distinct nullableint from complex_entity
 select nullableint from complex_entity
 ```
 
-При `UnionAll` ветви конкатенируются без дополнительного устранения дубликатов, поэтому левая ветвь
+При [`UnionAll`](xref:NextORM.Core.QueryCommand`1) ветви конкатенируются без дополнительного устранения дубликатов, поэтому левая ветвь
 содержит distinct, а правая — нет:
 
 ```csharp
@@ -149,6 +158,29 @@ select distinct nullableint from complex_entity
 select nullableint from complex_entity
 ```
 
+## `DISTINCT ON` (PostgreSQL)
+
+PostgreSQL дополнительно поддерживает `DISTINCT ON (expr, ...)`, который оставляет первую строку
+каждого уникального ключа согласно `ORDER BY` (ведущие выражения сортировки должны совпадать с
+ключом). Вместо `Distinct` используйте
+[`DistinctOn`](xref:NextORM.Core.EntityBuilder`1.DistinctOn); их сочетание бросает исключение,
+поскольку PostgreSQL считает их взаимоисключающими.
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .DistinctOn(e => e.String)
+    .OrderBy(e => e.String)
+    .Select(e => new { e.Id, e.String })
+    .ToList();
+```
+
+```sql
+select distinct on (somestring) id, somestring from complex_entity order by somestring
+```
+
+Ключом может быть анонимный тип для составного ключа. `DISTINCT ON` реализован только в PostgreSQL;
+остальные провайдеры отклоняют его на этапе построения SQL.
+
 ## Различия между провайдерами
 
 | Провайдер | `DISTINCT` + limit | `DISTINCT` поверх соединения |
@@ -156,17 +188,20 @@ select nullableint from complex_entity
 | SQLite | `select distinct ... limit N` | поддерживается |
 | SQL Server | `select distinct top(N) ...` (DISTINCT до TOP) | поддерживается |
 | PostgreSQL | `select distinct ... limit N` | поддерживается |
-| In-memory | дубликаты удаляются перечислителем in-memory (учитывается `IsDistinct`) | не покрыто набором тестов in-memory |
+| MySQL | `select distinct ... limit N` | поддерживается |
+| MariaDB | `select distinct ... limit N` | поддерживается |
+| ClickHouse | `select distinct ... limit N` | поддерживается |
+| In-memory | дубликаты удаляются перечислителем in-memory (учитывается [`IsDistinct`](xref:NextORM.Core.QueryCommand.IsDistinct)) | не покрыто набором тестов in-memory |
 
 ## См. также
 
-- [Операции над множествами](07-set-operations.md) - `Union` уже удаляет дубликаты; `UnionAll` — нет.
-- [Сортировка и постраничный вывод](05-sorting-and-paging.md) - `Limit`, `Offset` и `Page`.
+- [Операции над множествами](07-set-operations.md) - [`Union`](xref:NextORM.Core.QueryCommand`1) уже удаляет дубликаты; [`UnionAll`](xref:NextORM.Core.QueryCommand`1) — нет.
+- [Сортировка и постраничный вывод](05-sorting-and-paging.md) - [`Limit`](xref:NextORM.Core.Paging.Limit), [`Offset`](xref:NextORM.Core.Paging.Offset) и [`Page`](xref:NextORM.Core.EntityBuilder`1).
 - [Запросы и проекции](01-querying-and-projections.md)
 
 ---
 
-Source: `test/nextorm.integration.tests/CommonTestSuite.Distinct.cs:9`,
-`test/nextorm.sqlite.tests/SqlGenerationTests.cs:26`,
-`test/nextorm.sqlserver.tests/SqlGenerationTests.cs:26,35`,
-`test/nextorm.postgres.tests/SqlGenerationTests.cs:25`.
+Source: `tests/nextorm.integration.tests/CommonTestSuite.Distinct.cs:9`,
+`tests/nextorm.sqlite.tests/SqlGenerationTests.cs:26`,
+`tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:26,35`,
+`tests/nextorm.postgres.tests/SqlGenerationTests.cs:25`.

@@ -4,11 +4,11 @@ using System.Data.Common;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Execution axis of a database-backed context: turns a prepared command into a <see cref="DbCommand"/>,
-/// runs it and materialises the result. Extracted out of <c>DbContext</c> so the context no longer owns
+/// runs it and materialises the result. Extracted out of <c>DataContext</c> so the context no longer owns
 /// the execution algorithm (SRP). Everything it needs arrives as a constructor dependency — the
 /// connection role, the parameter factory, the logging configuration and the disposal state — so it
 /// never sees the concrete context (DIP).
@@ -25,16 +25,14 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     internal QueryExecutor(
         IConnectionManager connectionManager,
         Func<string, object?, DbParameter> createParam,
-        ILogger? logger,
-        bool logParams,
-        bool logSensitiveData,
+        LoggingOptions logging,
         Func<bool> isDisposed)
     {
         _connectionManager = connectionManager;
         _createParam = createParam;
-        _logger = logger;
-        _logParams = logParams;
-        _logSensitiveData = logSensitiveData;
+        _logger = logging.Logger;
+        _logParams = logging.LogParams;
+        _logSensitiveData = logging.LogSensitiveData;
         _isDisposed = isDisposed;
     }
 
@@ -272,7 +270,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     [Conditional("DEBUG")]
     private void CheckDisposed()
     {
-        ObjectDisposedException.ThrowIf(_isDisposed(), nameof(DbContext));
+        ObjectDisposedException.ThrowIf(_isDisposed(), nameof(DataContext));
     }
 
     public TResult First<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, ReadOnlySpan<object?> @params)

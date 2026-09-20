@@ -8,8 +8,8 @@
 ## Overview
 
 A CTE is declared with `With(name, query)` (non-recursive) or `WithRecursive(name, query, maxRecursion)`
-(recursive) on `IDataContext`. Both are extension methods (`IDataContextExtensions`) and both return a
-`CteQuery` scope that holds the declarations collected so far in `CteQuery.Ctes`:
+(recursive) on [`IDataContext`](xref:NextORM.Core.IDataContext). Both are extension methods ([`DataContextExtensions`](xref:NextORM.Core.DataContextExtensions)) and both return a
+[`CteQuery`](xref:NextORM.Core.CteQuery) scope that holds the declarations collected so far in [`Ctes`](xref:NextORM.Core.CteQuery.Ctes):
 
 ```csharp
 public static CteQuery With(this IDataContext dataContext, string name, QueryCommand query);
@@ -18,14 +18,14 @@ public static CteQuery WithRecursive(this IDataContext dataContext, string name,
     int? maxRecursion = null);
 ```
 
-Declarations are immutable: every `With`/`WithRecursive` call returns a **new** scope that appends a
-`CteDefinition` to the previous ones. A definition records the name, the `QueryCommand` that produces it
+Declarations are immutable: every [`With`](xref:NextORM.Core.DataContextExtensions)/[`WithRecursive`](xref:NextORM.Core.DataContextExtensions) call returns a **new** scope that appends a
+[`CteDefinition`](xref:NextORM.Core.CteDefinition) to the previous ones. A definition records the name, the [`QueryCommand`](xref:NextORM.Core.QueryCommand) that produces it
 and whether the body may reference its own name.
 
-`CteQuery.From(string cteName)` (or `From(CteDefinition)`) starts a new query whose `from` is one of the
+[`From`](xref:NextORM.Core.CteQuery) (or `From(CteDefinition)`) starts a new query whose `from` is one of the
 declared CTEs, carrying every declaration into the resulting command. From there the entity-free
-`TableAlias` mode is used to read the CTE columns (`t["id"].AsInt`), and the normal `Where`/`Join`/
-`Select` operators apply. Recursive bodies reference their own name the same way
+[`TableAlias`](xref:NextORM.Core.TableAlias) mode is used to read the CTE columns (`t["id"].AsInt`), and the normal [`Where`](xref:NextORM.Core.EntityBuilder`1)/[`Join`](xref:NextORM.Core.EntityBuilder`1)/
+[`Select`](xref:NextORM.Core.EntityBuilder`1) operators apply. Recursive bodies reference their own name the same way
 (`dataContext.From("nums")` inside the step query).
 
 Rendering: dialects that use the ANSI form emit `with recursive` when any definition is recursive
@@ -51,9 +51,18 @@ var rows = dataContext
 with recent as (select id from complex_entity where (id > 1)) select id from recent
 ```
 
+The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
+
+Output:
+
+| Id |
+|----|
+| 2 |
+| 3 |
+
 ## Chained declarations
 
-Each `With` appends to the previous scope, so a later CTE can be defined in terms of an earlier one.
+Each [`With`](xref:NextORM.Core.DataContextExtensions) appends to the previous scope, so a later CTE can be defined in terms of an earlier one.
 The declarations are rendered in declaration order:
 
 ```csharp
@@ -89,7 +98,7 @@ var rows = cte.From(cte.Ctes[0])
 ## Recursive CTE: a number series
 
 A recursive CTE is a `union all` of an **anchor** (a non-recursive query) and a **step** that reads the
-CTE by name and stops when the predicate no longer matches. Call `WithRecursive` with the union as the
+CTE by name and stops when the predicate no longer matches. Call [`WithRecursive`](xref:NextORM.Core.DataContextExtensions) with the union as the
 body:
 
 ```csharp
@@ -121,6 +130,16 @@ var numbers = dataContext
 -- SQLite: `with recursive` prefix
 with recursive nums as (select id as 'n' from simple_entity where (id = 1) union all select (n + 1) as 'n' from nums where (n < 5)) select n from nums
 ```
+
+Output:
+
+| n |
+|---|
+| 1 |
+| 2 |
+| 3 |
+| 4 |
+| 5 |
 
 `maxRecursion` is an optional depth limit. Only SQL Server has a statement-level option for it, and the
 dialect appends `option (maxrecursion n)` to the end of the statement; SQLite and PostgreSQL ignore it
@@ -186,21 +205,24 @@ plan cache.
 | SQLite | `with` for non-recursive, `with recursive` for recursive; no depth option. |
 | SQL Server | Recursive CTEs are declared with `with` alone (no `recursive` keyword); `maxRecursion` renders `option (maxrecursion n)` at the end of the statement. |
 | PostgreSQL | `with` / `with recursive`; no depth option. |
+| MySQL | `with` for non-recursive, `with recursive` for recursive; no depth option. |
+| MariaDB | `with` / `with recursive`; no depth option. |
+| ClickHouse | Every CTE is declared with plain `with`; recursive CTEs are not supported. |
 | In-memory | Not applicable: CTEs are rendered by the SQL dialects and are not part of the in-memory provider. |
 
 ## See also
 
-* [Set operations](07-set-operations.md) - `UnionAll` and friends, used to build a recursive body.
+* [Set operations](07-set-operations.md) - [`UnionAll`](xref:NextORM.Core.QueryCommand`1) and friends, used to build a recursive body.
 * [Joins](03-joins.md) - joining a CTE to a table, as in `CommonTestSuite.Cte.cs`.
 * [Raw SQL](14-raw-sql.md) - when the whole statement is hand-written.
 * [Query reuse: cache vs Prepare](15-query-reuse.md) - how CTE plans are cached.
 
 ---
 
-Source: `src/nextorm.core/Builders/CteQuery.cs:7`, `src/nextorm.core/DataContext/IDataContextExtensions.cs:9`;
-`test/nextorm.integration.tests/CommonTestSuite.Cte.cs:14`, `test/nextorm.integration.tests/CommonTestSuite.Cte.cs:33`;
-`test/nextorm.core.tests/CteQueryTests.cs:8`;
-`test/nextorm.sqlite.tests/PlanCacheTests.cs:190`, `test/nextorm.sqlite.tests/PlanCacheTests.cs:343`;
-generated SQL: `test/nextorm.sqlite.tests/SqlGenerationTests.cs:1188`, `:1202`, `:1216`, `:1231`, `:1248`;
-`test/nextorm.sqlserver.tests/SqlGenerationTests.cs:827`, `:856`;
-`test/nextorm.postgres.tests/SqlGenerationTests.cs:759`, `:788`.
+Source: `src/nextorm.core/Builders/CteQuery.cs:7`, `src/nextorm.core/DataContext/DataContextExtensions.cs:9`;
+`tests/nextorm.integration.tests/CommonTestSuite.Cte.cs:14`, `tests/nextorm.integration.tests/CommonTestSuite.Cte.cs:33`;
+`tests/nextorm.core.tests/CteQueryTests.cs:8`;
+`tests/nextorm.sqlite.tests/PlanCacheTests.cs:190`, `tests/nextorm.sqlite.tests/PlanCacheTests.cs:343`;
+generated SQL: `tests/nextorm.sqlite.tests/SqlGenerationTests.cs:1188`, `:1202`, `:1216`, `:1231`, `:1248`;
+`tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:827`, `:856`;
+`tests/nextorm.postgres.tests/SqlGenerationTests.cs:759`, `:788`.

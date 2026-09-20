@@ -1,4 +1,4 @@
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Creates row readers over a prepared query command and exposes them as enumerables.

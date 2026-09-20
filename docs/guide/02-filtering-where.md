@@ -6,20 +6,20 @@
 
 ## Overview
 
-`Where` takes a boolean expression and returns a new `EntityBuilder<TEntity>`; like every builder method it
-is immutable, so the original is unchanged. Repeating `Where` combines the predicates with `and`:
+[`Where`](xref:NextORM.Core.EntityBuilder`1) takes a boolean expression and returns a new [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1); like every builder method it
+is immutable, so the original is unchanged. Repeating [`Where`](xref:NextORM.Core.EntityBuilder`1) combines the predicates with `and`:
 
 ```csharp
 public EntityBuilder<TEntity> Where(Expression<Func<TEntity, bool>> condition)
 ```
 
 The lambda is translated into the `WHERE` clause and nothing is executed until a terminal such as
-`ToListAsync` is called. The same expression tree is also what the in-memory provider compiles and
+[`ToListAsync`](xref:NextORM.Core.EntityBuilder`1) is called. The same expression tree is also what the in-memory provider compiles and
 runs, so a query that works against a real database can be exercised in memory.
 
 Two kinds of values reach the database differently:
 
-* A **captured local** (a variable from the enclosing scope) and `NORM.Param<T>(index)` become command
+* A **captured local** (a variable from the enclosing scope) and [`Parameter`](xref:NextORM.Core.SqlFunctions) become command
   parameters, so the plan can be reused across executions with different values.
 * A **literal constant** written directly in the lambda is rendered inline in the SQL text.
 
@@ -97,6 +97,15 @@ var ids = await dataContext.From<ComplexEntity>()
 select id from complex_entity where not (b)
 ```
 
+The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
+
+Output:
+
+| Id |
+|----|
+| 2 |
+| 3 |
+
 ```csharp
 .Where(x => !(x.Boolean!.Value && x.Id > 1L))
 ```
@@ -115,8 +124,8 @@ Arithmetic operators are rendered verbatim and parenthesised: `+`, `-`, `*`, `/`
 
 ```csharp
 var rows = await dataContext.From("simple_entity")
-    .Where(tbl => tbl.Long("id") + 2 == 1)
-    .Select(tbl => new { Id = tbl.Long("id") })
+    .Where(tbl => tbl.GetInt64("id") + 2 == 1)
+    .Select(tbl => new { Id = tbl.GetInt64("id") })
     .ToListAsync();
 ```
 
@@ -205,7 +214,7 @@ select id, case when id = 1 then 'one' when id = 2 then 'two' else 'other' end a
 A switch whose comparison is a method call (for example a string equality overload, which the C#
 compiler uses for some string patterns) is not supported and throws `NotSupportedException`.
 
-## Captured parameters and `NORM.Param`
+## Captured parameters and [`Parameter`](xref:NextORM.Core.SqlFunctions)
 
 A captured local is extracted as a named command parameter:
 
@@ -223,12 +232,12 @@ var rows = await dataContext.From<ComplexEntity>()
 | SQL Server | `select id from complex_entity where (id > @threshold)` |
 | PostgreSQL | `select id from complex_entity where (id > @threshold)` |
 
-`NORM.Param<T>(index)` declares a runtime parameter whose value is supplied to the terminal, which is
+[`Parameter`](xref:NextORM.Core.SqlFunctions) declares a runtime parameter whose value is supplied to the terminal, which is
 useful when the same query shape is prepared or cached and executed repeatedly:
 
 ```csharp
 var rows = await dataContext.From<SimpleEntity>()
-    .Where(x => x.Id == NORM.Param<int>(0))
+    .Where(x => x.Id == SqlFunctions.Parameter<int>(0))
     .Select(x => new { x.Id })
     .ToListAsync(42);
 ```
@@ -243,12 +252,12 @@ See [Query reuse: cache vs Prepare](15-query-reuse.md) for the lifetime rules.
 
 ## `IN` and `Contains`
 
-`NORM.SQL.@in` takes a column plus a `QueryCommand<T>`, an `IEnumerable<T>` or a `params T[]`:
+`SqlFunctions.Sql.@in` takes a column plus a `QueryCommand<T>`, an `IEnumerable<T>` or a `params T[]`:
 
 ```csharp
 var values = new long[] { 1, 3, 10 };
 var ids = await dataContext.From<ComplexEntity>()
-    .Where(e => NORM.SQL.@in(e.Id, values))
+    .Where(e => SqlFunctions.Sql.@in(e.Id, values))
     .Select(e => e.Id)
     .ToListAsync();
 ```
@@ -257,6 +266,13 @@ var ids = await dataContext.From<ComplexEntity>()
 -- SQLite
 select id from complex_entity where id in ($p0, $p1, $p2)
 ```
+
+Output:
+
+| Id |
+|----|
+| 1 |
+| 3 |
 
 `Contains` on a captured `List<T>` or `T[]` produces the same `IN` predicate:
 
@@ -272,6 +288,13 @@ var ids = await dataContext.From<ComplexEntity>()
 select id from complex_entity where id in ($p0, $p1)
 ```
 
+Output:
+
+| Id |
+|----|
+| 1 |
+| 3 |
+
 Special cases:
 
 | Case | SQL |
@@ -283,12 +306,35 @@ Special cases:
 
 A captured list or array is captured by reference by the expression tree, but its values are built
 into the prepared command. When the collection is mutated or reassigned between executions, nextorm
-detects the changed shape and rebuilds the command, so a second `ToList()` sees the new values rather
+detects the changed shape and rebuilds the command, so a second [`ToList`](xref:NextORM.Core.EntityBuilder`1) sees the new values rather
 than stale results.
+
+### `GLOBAL IN` (ClickHouse)
+
+ClickHouse's distributed predicate `column GLOBAL IN (subquery | values)` is exposed through
+[`SqlFunctions.ClickHouse.global_in`](xref:NextORM.Core.ClickHouseFunctions), which takes the same
+left-hand column and right-hand side as [`SqlFunctions.Sql.@in`](xref:NextORM.Core.SqlFunctions):
+
+```csharp
+var values = new int[] { 1, 3 };
+var ids = dataContext.From<ComplexEntity>()
+    .Where(e => SqlFunctions.ClickHouse.global_in(e.Id, values))
+    .Select(e => e.Id)
+    .ToList();
+```
+
+```sql
+select id from complex_entity where global in (@p0, @p1)
+```
+
+Negate it with C# `!` to render `GLOBAL NOT IN`. The predicate requires
+[`SupportsGlobalPredicates`](xref:NextORM.Core.ISqlDialect.SupportsGlobalPredicates) and is available
+only on ClickHouse; every other provider and the in-memory context throw `NotSupportedException`.
+See [Provider-specific SQL](provider-specific/overview.md) for the full catalogue.
 
 ## Pattern and subquery predicates
 
-`NORM.SQL.like`, `NORM.SQL.exists`, `NORM.SQL.any` and `NORM.SQL.all` are the remaining predicate
+`SqlFunctions.Sql.like`, `SqlFunctions.Sql.exists`, `SqlFunctions.Sql.any` and `SqlFunctions.Sql.all` are the remaining predicate
 helpers:
 
 | Expression | SQL |
@@ -297,18 +343,18 @@ helpers:
 | `x.String.StartsWith("xx")` | `somestring like 'xx%'` |
 | `x.String.EndsWith("sd")` | `somestring like '%sd'` |
 | `x.String.Contains("a%b_c")` | `somestring like '%a\%b\_c%' escape '\'` |
-| `NORM.SQL.like(x.String, "%a%")` | `somestring like '%a%'` |
-| `NORM.SQL.like(x.String, "%a!%", "!")` | `somestring like '%a!%' escape '!'` |
-| `NORM.SQL.exists(query)` | `exists(<query>)` |
-| `x.Id == NORM.SQL.any(query)` | `id = any(<query>)` |
-| `x.Id == NORM.SQL.all(query)` | `id = all(<query>)` |
-| `NORM.PG_SQL.any(x, array)` | `x = any(@array)` (PostgreSQL) |
-| `x == NORM.PG_SQL.any(array)` | `x = any(@array)` (PostgreSQL) |
-| `NORM.SQL.contains(x.String, "foo")` | `contains(somestring, 'foo')` (SQL Server) |
-| `NORM.SQL.freetext(x.String, "foo")` | `freetext(somestring, 'foo')` (SQL Server) |
+| `SqlFunctions.Sql.like(x.String, "%a%")` | `somestring like '%a%'` |
+| `SqlFunctions.Sql.like(x.String, "%a!%", "!")` | `somestring like '%a!%' escape '!'` |
+| `SqlFunctions.Sql.exists(query)` | `exists(<query>)` |
+| `x.Id == SqlFunctions.Sql.any(query)` | `id = any(<query>)` |
+| `x.Id == SqlFunctions.Sql.all(query)` | `id = all(<query>)` |
+| `SqlFunctions.Postgres.any(x, array)` | `x = any(@array)` (PostgreSQL) |
+| `x == SqlFunctions.Postgres.any(array)` | `x = any(@array)` (PostgreSQL) |
+| `SqlFunctions.Sql.contains(x.String, "foo")` | `contains(somestring, 'foo')` (SQL Server) |
+| `SqlFunctions.Sql.freetext(x.String, "foo")` | `freetext(somestring, 'foo')` (SQL Server) |
 
-`NORM.SQL.contains`/`NORM.SQL.freetext` are full-text predicates (`ISqlDialect.SupportsFullText`,
-rendered by `ISqlDialect.MakeFullText`); the column must be full-text indexed. SQL Server renders
+`SqlFunctions.Sql.contains`/`SqlFunctions.Sql.freetext` are full-text predicates ([`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText),
+rendered by [`MakeFullText`](xref:NextORM.Core.ISqlDialect)); the column must be full-text indexed. SQL Server renders
 `contains`/`freetext` (materialised as a `bit` when projected), PostgreSQL
 `to_tsvector(col) @@ plainto_tsquery(search)` (or `websearch_to_tsquery` for `freetext`), and
 MySQL/MariaDB `match(col) against(search in boolean mode) > 0` (natural-language mode for `freetext`).
@@ -335,9 +381,9 @@ array is bound as one parameter; see [Arrays](11-scalar-functions.md#arrays-post
 | `??` | `ifnull` (SQLite), `isnull` (SQL Server), `coalesce` (PostgreSQL) |
 | `?:` | `case when ... then ... else ... end` |
 | `switch` | searched `case when ... then ... end` |
-| `NORM.SQL.@in` / `Contains` | `in (...)` |
-| `NORM.SQL.like` / `Contains` / `StartsWith` / `EndsWith` | `like` |
-| `NORM.SQL.contains` / `NORM.SQL.freetext` | `contains` / `freetext` (SQL Server); `@@` match (PostgreSQL); `match ... against` (MySQL/MariaDB) |
+| `SqlFunctions.Sql.@in` / `Contains` | `in (...)` |
+| `SqlFunctions.Sql.like` / `Contains` / `StartsWith` / `EndsWith` | `like` |
+| `SqlFunctions.Sql.contains` / `SqlFunctions.Sql.freetext` | `contains` / `freetext` (SQL Server); `@@` match (PostgreSQL); `match ... against` (MySQL/MariaDB) |
 
 ## Provider differences
 
@@ -346,6 +392,9 @@ array is bound as one parameter; see [Arrays](11-scalar-functions.md#arrays-post
 | SQLite | Parameters use `$` (`$norm_p0`); `??` is `ifnull`; boolean literals are `1` / `0`; `any` / `all` are not available. |
 | SQL Server | Parameters use `@`; `??` is `isnull`; boolean literals are `1` / `0`; a projected boolean predicate is wrapped in `cast(case ... as bit)`; shifts are not valid T-SQL. |
 | PostgreSQL | Parameters use `@`; `??` is `coalesce`; boolean literals are `true` / `false`; boolean scalars need no cast. |
+| MySQL | Parameters use `@`; `??` is `coalesce`; boolean literals are `1` / `0`; `any` / `all` are not available; the integer ones-complement renders as `(-(x) - 1)`. |
+| MariaDB | Same as MySQL: `@` parameters, `coalesce`, `1` / `0` booleans, no `any` / `all`. |
+| ClickHouse | Parameters use `@` (the driver rewrites them to `{name:Type}`); `??` is `coalesce`; boolean literals are `true` / `false`; `any` / `all` are not available; `global_in` adds the distributed `GLOBAL IN` predicate. |
 | In-memory | Predicates are compiled as .NET delegates; there is no parameter prefix or SQL rendering. |
 
 ## See also
@@ -354,28 +403,29 @@ array is bound as one parameter; see [Arrays](11-scalar-functions.md#arrays-post
 * [Sorting and paging](05-sorting-and-paging.md)
 * [Scalar functions](11-scalar-functions.md)
 * [Subqueries](06-subqueries.md)
+* [Provider-specific SQL](provider-specific/overview.md)
 * [Limitations and out-of-scope features](../advanced/limitations.md)
 
 ---
 
-Source: `test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:187`,
-`test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:202`,
-`test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:216`,
-`test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:230`,
-`test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:244`,
-`test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:254`,
-`test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:276`,
-`test/nextorm.integration.tests/CommonTestSuite.Conditional.cs:9`,
-`test/nextorm.integration.tests/CommonTestSuite.Unary.cs:8`,
-`test/nextorm.integration.tests/CommonTestSuite.In.cs:9`,
-`test/nextorm.sqlite.tests/SqlGenerationTests.cs:602`,
-`test/nextorm.sqlite.tests/SqlGenerationTests.cs:664`,
-`test/nextorm.sqlite.tests/SqlGenerationTests.cs:775`,
-`test/nextorm.sqlite.tests/SqlGenerationTests.cs:821`,
-`test/nextorm.sqlite.tests/SqlGenerationTests.cs:997`,
-`test/nextorm.sqlite.tests/SqlGenerationTests.cs:1051`,
-`test/nextorm.sqlite.tests/SqlGenerationTests.cs:1107`,
-`test/nextorm.sqlserver.tests/SqlGenerationTests.cs:422`,
-`test/nextorm.postgres.tests/SqlGenerationTests.cs:367`,
-`src/nextorm.core/Query/NORM.cs:185`;
+Source: `tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:187`,
+`tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:202`,
+`tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:216`,
+`tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:230`,
+`tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:244`,
+`tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:254`,
+`tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:276`,
+`tests/nextorm.integration.tests/CommonTestSuite.Conditional.cs:9`,
+`tests/nextorm.integration.tests/CommonTestSuite.Unary.cs:8`,
+`tests/nextorm.integration.tests/CommonTestSuite.In.cs:9`,
+`tests/nextorm.sqlite.tests/SqlGenerationTests.cs:602`,
+`tests/nextorm.sqlite.tests/SqlGenerationTests.cs:664`,
+`tests/nextorm.sqlite.tests/SqlGenerationTests.cs:775`,
+`tests/nextorm.sqlite.tests/SqlGenerationTests.cs:821`,
+`tests/nextorm.sqlite.tests/SqlGenerationTests.cs:997`,
+`tests/nextorm.sqlite.tests/SqlGenerationTests.cs:1051`,
+`tests/nextorm.sqlite.tests/SqlGenerationTests.cs:1107`,
+`tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:422`,
+`tests/nextorm.postgres.tests/SqlGenerationTests.cs:367`,
+`src/nextorm.core/Query/SqlFunctions.cs:185`;
 `src/nextorm.core/Visitors/BaseExpressionVisitor.cs:2032`.

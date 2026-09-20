@@ -1,6 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Registration helpers for nextorm contexts.
@@ -9,7 +9,7 @@ namespace nextorm.core;
 /// <list type="bullet">
 /// <item>a concrete context type is registered <b>once per scope</b>: resolving the concrete type and
 /// <see cref="IDataContext"/> yields the same instance (previously they were two separate instances);</item>
-/// <item>the options delegate is mandatory for factory-based registration — a <see cref="DbContextBuilder"/>
+/// <item>the options delegate is mandatory for factory-based registration — a <see cref="DataContextBuilder"/>
 /// without options can never produce a context, so a null delegate now fails at registration time instead of
 /// at resolution time.</item>
 /// </list>
@@ -17,7 +17,7 @@ namespace nextorm.core;
 /// </summary>
 public static class ServiceCollectionExtensions
 {
-    public static void AddNextOrmContext(this IServiceCollection services, Action<IServiceProvider, DbContextBuilder> optionsBuilder)
+    public static void AddNextOrmContext(this IServiceCollection services, Action<IServiceProvider, DataContextBuilder> optionsBuilder)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(optionsBuilder);
@@ -25,7 +25,7 @@ public static class ServiceCollectionExtensions
         services.RegisterContextFactory(null, optionsBuilder);
     }
 
-    public static void AddKeyedNextOrmContext(this IServiceCollection services, Action<IServiceProvider, DbContextBuilder> optionsBuilder, object? serviceKey)
+    public static void AddKeyedNextOrmContext(this IServiceCollection services, Action<IServiceProvider, DataContextBuilder> optionsBuilder, object? serviceKey)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(optionsBuilder);
@@ -33,7 +33,7 @@ public static class ServiceCollectionExtensions
         services.RegisterContextFactory(serviceKey, optionsBuilder);
     }
 
-    public static void AddNextOrmContext(this IServiceCollection services, Action<DbContextBuilder> optionsBuilder)
+    public static void AddNextOrmContext(this IServiceCollection services, Action<DataContextBuilder> optionsBuilder)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(optionsBuilder);
@@ -41,7 +41,7 @@ public static class ServiceCollectionExtensions
         services.RegisterContextFactory(null, (_, builder) => optionsBuilder(builder));
     }
 
-    public static void AddKeyedNextOrmContext(this IServiceCollection services, Action<DbContextBuilder> optionsBuilder, object? serviceKey)
+    public static void AddKeyedNextOrmContext(this IServiceCollection services, Action<DataContextBuilder> optionsBuilder, object? serviceKey)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(optionsBuilder);
@@ -66,33 +66,33 @@ public static class ServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Options-driven path: registers a scoped <see cref="DbContextBuilder"/> built by
+    /// Options-driven path: registers a scoped <see cref="DataContextBuilder"/> built by
     /// <paramref name="optionsBuilder"/> plus an <see cref="IDataContext"/> factory that turns it into a
     /// context.
     /// </summary>
-    private static void RegisterContextFactory(this IServiceCollection services, object? serviceKey, Action<IServiceProvider, DbContextBuilder> optionsBuilder)
+    private static void RegisterContextFactory(this IServiceCollection services, object? serviceKey, Action<IServiceProvider, DataContextBuilder> optionsBuilder)
     {
         if (serviceKey is null)
         {
             services.AddScoped(sp =>
             {
-                var builder = new DbContextBuilder();
+                var builder = new DataContextBuilder();
                 optionsBuilder(sp, builder);
                 return builder;
             });
 
-            services.AddScoped(sp => sp.GetRequiredService<DbContextBuilder>().CreateDbContext());
+            services.AddScoped(sp => sp.GetRequiredService<DataContextBuilder>().CreateDataContext());
         }
         else
         {
             services.AddKeyedScoped(serviceKey, (sp, _) =>
             {
-                var builder = new DbContextBuilder();
+                var builder = new DataContextBuilder();
                 optionsBuilder(sp, builder);
                 return builder;
             });
 
-            services.AddKeyedScoped(serviceKey, (sp, k) => sp.GetRequiredKeyedService<DbContextBuilder>(k).CreateDbContext());
+            services.AddKeyedScoped(serviceKey, (sp, k) => sp.GetRequiredKeyedService<DataContextBuilder>(k).CreateDataContext());
         }
     }
 

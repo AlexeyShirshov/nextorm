@@ -1,10 +1,10 @@
 using System.Linq.Expressions;
 using Microsoft.Extensions.Logging;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
-/// Translates the <see cref="NORM"/> helper (<c>NORM.Param</c>) and the <see cref="NORM.NORM_SQL"/>
+/// Translates the <see cref="SqlFunctions"/> helper (<c>SqlFunctions.Parameter</c>) and the <see cref="CommonFunctions"/>
 /// built-ins (aggregates, <c>EXISTS</c>/<c>ANY</c>/<c>ALL</c> and <c>IN</c> subqueries, value-list
 /// <c>IN</c>) into SQL. Extracted from <see cref="BaseExpressionVisitor.VisitMethodCall"/>; the
 /// branch order, the visitor walk and therefore the parameter numbering are unchanged.
@@ -12,20 +12,20 @@ namespace nextorm.core;
 internal static class NormSqlTranslator
 {
     /// <summary>
-    /// Returns <c>false</c> for a call whose declaring type is neither <see cref="NORM"/> nor
-    /// <see cref="NORM.NORM_SQL"/>; otherwise translates it (or throws, like the original branches)
+    /// Returns <c>false</c> for a call whose declaring type is neither <see cref="SqlFunctions"/> nor
+    /// <see cref="CommonFunctions"/>; otherwise translates it (or throws, like the original branches)
     /// and returns <c>true</c>.
     /// </summary>
     internal static bool TryTranslate(BaseExpressionVisitor visitor, MethodCallExpression node)
     {
-        if (node.Method.DeclaringType == typeof(NORM))
+        if (node.Method.DeclaringType == typeof(SqlFunctions))
         {
             TranslateNormParam(visitor, node);
             return true;
         }
 
-        // PG_SQL derives from NORM_SQL, so IsAssignableFrom covers both surfaces.
-        if (typeof(NORM.NORM_SQL).IsAssignableFrom(node.Method.DeclaringType))
+        // PG_SQL derives from CommonFunctions, so IsAssignableFrom covers both surfaces.
+        if (typeof(CommonFunctions).IsAssignableFrom(node.Method.DeclaringType))
         {
             TranslateNormSql(visitor, node);
             return true;
@@ -34,13 +34,13 @@ internal static class NormSqlTranslator
         return false;
     }
 
-    /// <summary>Emits <c>NORM.Param</c> as a named parameter; any other <see cref="NORM"/> method throws.</summary>
+    /// <summary>Emits <c>SqlFunctions.Parameter</c> as a named parameter; any other <see cref="SqlFunctions"/> method throws.</summary>
     private static void TranslateNormParam(BaseExpressionVisitor visitor, MethodCallExpression node)
     {
         var paramIdx = node switch
         {
             {
-                Method.Name: nameof(NORM.Param),
+                Method.Name: nameof(SqlFunctions.Parameter),
                 Arguments: [ConstantExpression constExp]
             } => constExp.Value is int i ? i : -1,
             _ => -1
@@ -51,7 +51,7 @@ internal static class NormSqlTranslator
             // Reuse the cached norm_pN table instead of string.Format (same names, no boxing
             // and no composite-formatting pass on the SQL-build path).
             var paramName = NormParam.GetName(paramIdx);
-            visitor.Params.Add(new Param(paramName, null));
+            visitor.Params.Add(new Parameter(paramName, null));
             if (!visitor.IsParamMode)
                 visitor.Builder!.Append(visitor.Dialect.MakeParam(paramName));
 
@@ -61,33 +61,36 @@ internal static class NormSqlTranslator
             throw new NotSupportedException(node.Method.Name);
     }
 
-    /// <summary>Emits the <see cref="NORM.NORM_SQL"/> built-ins; an unrecognised method throws.</summary>
+    /// <summary>Emits the <see cref="CommonFunctions"/> built-ins; an unrecognised method throws.</summary>
     private static void TranslateNormSql(BaseExpressionVisitor visitor, MethodCallExpression node)
     {
         // A window function is only valid once it has been given a specification; emitting the bare
-        // call would produce invalid SQL, so fail with an actionable message instead.
-        if (WindowSql.MapWindowFunctionName(node.Method.Name) is { } windowFunction)
+        // call would produce invalid SQL, so fail with an actionable message instead. The declaring-type
+        // guard keeps the PostgreSQL ordered-set aggregate percentile_cont (declared on
+        // PostgresFunctions) distinct from the CommonFunctions window percentile (same method name).
+        if (node.Method.DeclaringType == typeof(CommonFunctions)
+            && WindowSql.MapWindowFunctionName(node.Method.Name) is { } windowFunction)
             throw new NotSupportedException($"The window function {windowFunction} must be completed with Over(...).");
 
         // The array overloads of any/all (column = any(@array)); the subquery overload is handled below.
         if (ArraySqlTranslator.TryTranslateAnyAll(visitor, node))
             return;
 
-        if ((node.Method.Name == nameof(NORM.NORM_SQL.exists)
-            || node.Method.Name == nameof(NORM.NORM_SQL.all)
-            || node.Method.Name == nameof(NORM.NORM_SQL.any)
+        if ((node.Method.Name == nameof(CommonFunctions.exists)
+            || node.Method.Name == nameof(CommonFunctions.all)
+            || node.Method.Name == nameof(CommonFunctions.any)
             )
             && node.Arguments is [Expression exp] && exp.Type.IsAssignableTo(typeof(QueryCommand)))
         {
             QueryCommand innerQuery;
-            var expVisitor = new TwoTypeExpressionVisitor<ParameterExpression, ConstantExpression>();
+            var expVisitor = new TypeExpressionVisitor<ParameterExpression, ConstantExpression>();
             expVisitor.Visit(exp);
 
             var predicateKeyword = node.Method.Name switch
             {
-                nameof(NORM.NORM_SQL.exists) => "exists",
-                nameof(NORM.NORM_SQL.all) => "all",
-                nameof(NORM.NORM_SQL.any) => "any",
+                nameof(CommonFunctions.exists) => "exists",
+                nameof(CommonFunctions.all) => "all",
+                nameof(CommonFunctions.any) => "any",
                 _ => throw new NotImplementedException()
             };
 
@@ -100,7 +103,7 @@ internal static class NormSqlTranslator
                 if (expVisitor.Has1)
                 {
                     pExp = Expression.Parameter(typeof(object));
-                    var replParam = new ReplaceParameterVisitor(Expression.Convert(pExp, typeof(IQueryProvider)));
+                    var replParam = new ReplaceParameterExpressionVisitor(Expression.Convert(pExp, typeof(IQueryRegistry)));
                     body = replParam.Visit(exp);
                     paramValue = visitor.QueryProvider;
                 }
@@ -108,7 +111,7 @@ internal static class NormSqlTranslator
                 {
                     pExp = Expression.Parameter(typeof(object));
                     var ce = expVisitor.Target2;
-                    var replace = new ReplaceConstantVisitor(Expression.Convert(pExp, ce!.Type));
+                    var replace = new ReplaceConstantExpressionVisitor(Expression.Convert(pExp, ce!.Type));
                     paramValue = ce.Value;
                     body = replace.Visit(exp);
                 }
@@ -144,7 +147,7 @@ internal static class NormSqlTranslator
                 innerQuery = (QueryCommand)((Func<object?, object>)dCmd)(paramValue);
             }
 
-            var sqlBuilder = new SqlBuilder(visitor.Dialect, visitor.IsParamMode, visitor.Params, visitor.ColumnsProvider, visitor.QueryProvider, visitor.ParamProvider, visitor.AliasProvider, visitor.Logger);
+            var sqlBuilder = new SqlBuilder(visitor.Options);
             var sql = sqlBuilder.MakeSelect(innerQuery);
 
             if (!visitor.IsParamMode)
@@ -154,13 +157,18 @@ internal static class NormSqlTranslator
 
             return;
         }
-        else if (node.Method.Name == nameof(NORM.NORM_SQL.@in)
+        else if ((node.Method.Name == nameof(CommonFunctions.@in)
+            || node.Method.Name == nameof(ClickHouseFunctions.global_in))
             && node.Arguments is [Expression parExp, Expression cmdExp] && cmdExp.Type.IsAssignableTo(typeof(QueryCommand)))
         {
+            var globalIn = node.Method.Name == nameof(ClickHouseFunctions.global_in);
+            if (globalIn && !visitor.Dialect.SupportsGlobalPredicates)
+                throw new NotSupportedException("The GLOBAL IN predicate is not supported by this provider.");
+
             if (!visitor.IsParamMode)
                 visitor.Visit(parExp);
 
-            if (!visitor.IsParamMode) visitor.Builder!.Append(" in (");
+            if (!visitor.IsParamMode) visitor.Builder!.Append(globalIn ? " global in (" : " in (");
 
             var constRepl = new ReplaceConstantsExpressionVisitor(visitor.QueryProvider);
             var body = constRepl.Visit(cmdExp);
@@ -190,7 +198,7 @@ internal static class NormSqlTranslator
             else
                 throw new InvalidOperationException();
 
-            var sqlBuilder = new SqlBuilder(visitor.Dialect, visitor.IsParamMode, visitor.Params, visitor.ColumnsProvider, visitor.QueryProvider, visitor.ParamProvider, visitor.AliasProvider, visitor.Logger);
+            var sqlBuilder = new SqlBuilder(visitor.Options);
             var sql = sqlBuilder.MakeSelect(innerQuery);
 
             if (!visitor.IsParamMode)
@@ -200,17 +208,22 @@ internal static class NormSqlTranslator
 
             return;
         }
-        else if (node.Method.Name == nameof(NORM.NORM_SQL.@in)
+        else if ((node.Method.Name == nameof(CommonFunctions.@in)
+            || node.Method.Name == nameof(ClickHouseFunctions.global_in))
             && node.Arguments is [Expression inColumnExp, Expression inValuesExp]
             && !inValuesExp.Type.IsAssignableTo(typeof(QueryCommand)))
         {
-            InValuesTranslator.TranslateInValues(visitor, inColumnExp, inValuesExp, node.Method.GetGenericArguments()[0]);
+            var globalIn = node.Method.Name == nameof(ClickHouseFunctions.global_in);
+            if (globalIn && !visitor.Dialect.SupportsGlobalPredicates)
+                throw new NotSupportedException("The GLOBAL IN predicate is not supported by this provider.");
+
+            InValuesTranslator.TranslateInValues(visitor, inColumnExp, inValuesExp, node.Method.GetGenericArguments()[0], globalIn);
             return;
         }
-        else if (node.Method.Name == nameof(NORM.NORM_SQL.count)
-            || node.Method.Name == nameof(NORM.NORM_SQL.count_distinct)
-            || node.Method.Name == nameof(NORM.NORM_SQL.count_big)
-            || node.Method.Name == nameof(NORM.NORM_SQL.count_big_distinct))
+        else if (node.Method.Name == nameof(CommonFunctions.count)
+            || node.Method.Name == nameof(CommonFunctions.count_distinct)
+            || node.Method.Name == nameof(CommonFunctions.count_big)
+            || node.Method.Name == nameof(CommonFunctions.count_big_distinct))
         {
             // count(filter) is the filtered count(*); the plain count takes a params array instead.
             var countFilter = node.Arguments is [Expression filterCandidate] && AggregateFilter.IsFilterExpression(filterCandidate)
@@ -218,7 +231,14 @@ internal static class NormSqlTranslator
                 : null;
             RequireFilter(visitor, countFilter);
 
-            if (!visitor.IsParamMode) visitor.Builder!.Append(visitor.Dialect.MakeCount(node.Method.Name.EndsWith("distinct", StringComparison.Ordinal), node.Method.Name.Contains("big", StringComparison.Ordinal)));
+            // A count projected into a select list is referenced from outer queries by its property
+            // name, so it must carry an alias (the scalar aggregate translators set this too).
+            if (!visitor.IsParamMode) visitor.NeedAliasForColumn = true;
+
+            var countStart = visitor.IsParamMode ? 0 : visitor.Builder!.Length;
+            var countBig = node.Method.Name.Contains("big", StringComparison.Ordinal);
+
+            if (!visitor.IsParamMode) visitor.Builder!.Append(visitor.Dialect.MakeCount(node.Method.Name.EndsWith("distinct", StringComparison.Ordinal), countBig));
 
             if (countFilter is not null)
             {
@@ -247,24 +267,34 @@ internal static class NormSqlTranslator
             }
 
             if (!visitor.IsParamMode) visitor.Builder!.Append(')');
+
             if (countFilter is not null) AggregateFilter.Append(visitor, countFilter);
+
+            if (!visitor.IsParamMode && visitor.Dialect.WrapsCountResult)
+            {
+                var builder = visitor.Builder!;
+                var rendered = builder.ToString(countStart, builder.Length - countStart);
+                builder.Length = countStart;
+                builder.Append(visitor.Dialect.WrapCount(rendered, countBig));
+            }
 
             return;
         }
-        else if (node.Method.Name == nameof(NORM.NORM_SQL.min)
-            || node.Method.Name == nameof(NORM.NORM_SQL.max))
+        else if (node.Method.Name == nameof(CommonFunctions.min)
+            || node.Method.Name == nameof(CommonFunctions.max))
         {
             var args = node.Arguments;
             var minMaxFilter = GetTrailingFilter(args, 2);
             RequireFilter(visitor, minMaxFilter);
 
+            if (!visitor.IsParamMode) visitor.NeedAliasForColumn = true;
             if (!visitor.IsParamMode) visitor.Builder!.Append(node.Method.Name).Append('(');
 
             var last = minMaxFilter is null ? args.Count : args.Count - 1;
             for (var (i, cnt) = (0, last); i < cnt; i++)
             {
                 var argExp = args[i];
-                using var subVisitor = new BaseExpressionVisitor(visitor.Options with { Dim = 0, AliasProvider = null });
+                using var subVisitor = new BaseExpressionVisitor(visitor.Options with { Dim = 0 });
                 subVisitor.Visit(argExp);
                 if (!visitor.IsParamMode) visitor.Builder!.Append(subVisitor.ToString()).Append(", ");
             }
@@ -279,18 +309,18 @@ internal static class NormSqlTranslator
 
             return;
         }
-        else if (node.Method.Name == nameof(NORM.NORM_SQL.avg)
-            || node.Method.Name == nameof(NORM.NORM_SQL.sum)
-            || node.Method.Name == nameof(NORM.NORM_SQL.stdev)
-            || node.Method.Name == nameof(NORM.NORM_SQL.stdevp)
-            || node.Method.Name == nameof(NORM.NORM_SQL.var)
-            || node.Method.Name == nameof(NORM.NORM_SQL.varp)
-            || node.Method.Name == nameof(NORM.NORM_SQL.avg_distinct)
-            || node.Method.Name == nameof(NORM.NORM_SQL.sum_distinct)
-            || node.Method.Name == nameof(NORM.NORM_SQL.stdev_distinct)
-            || node.Method.Name == nameof(NORM.NORM_SQL.stdevp_distinct)
-            || node.Method.Name == nameof(NORM.NORM_SQL.var_distinct)
-            || node.Method.Name == nameof(NORM.NORM_SQL.varp_distinct)
+        else if (node.Method.Name == nameof(CommonFunctions.avg)
+            || node.Method.Name == nameof(CommonFunctions.sum)
+            || node.Method.Name == nameof(CommonFunctions.stdev)
+            || node.Method.Name == nameof(CommonFunctions.stdevp)
+            || node.Method.Name == nameof(CommonFunctions.var)
+            || node.Method.Name == nameof(CommonFunctions.varp)
+            || node.Method.Name == nameof(CommonFunctions.avg_distinct)
+            || node.Method.Name == nameof(CommonFunctions.sum_distinct)
+            || node.Method.Name == nameof(CommonFunctions.stdev_distinct)
+            || node.Method.Name == nameof(CommonFunctions.stdevp_distinct)
+            || node.Method.Name == nameof(CommonFunctions.var_distinct)
+            || node.Method.Name == nameof(CommonFunctions.varp_distinct)
             )
         {
             var args = node.Arguments;
@@ -299,6 +329,7 @@ internal static class NormSqlTranslator
 
             if (!visitor.IsParamMode)
             {
+                visitor.NeedAliasForColumn = true;
                 visitor.Builder!.Append(visitor.Dialect.MakeAggregate(node.Method.Name.Replace("_distinct", string.Empty))).Append('(');
                 if (node.Method.Name.EndsWith("distinct", StringComparison.Ordinal))
                     visitor.Builder!.Append("distinct ");
@@ -308,7 +339,7 @@ internal static class NormSqlTranslator
             for (var (i, cnt) = (0, last); i < cnt; i++)
             {
                 var argExp = args[i];
-                using var subVisitor = new BaseExpressionVisitor(visitor.Options with { Dim = 0, AliasProvider = null });
+                using var subVisitor = new BaseExpressionVisitor(visitor.Options with { Dim = 0 });
                 subVisitor.Visit(argExp);
                 if (!visitor.IsParamMode) visitor.Builder!.Append(subVisitor.ToString()).Append(", ");
             }
@@ -327,6 +358,12 @@ internal static class NormSqlTranslator
         if (BuiltinFunctionTranslator.TryTranslate(visitor, node))
             return;
 
+        if (SessionInfoFunctionTranslator.TryTranslate(visitor, node))
+            return;
+
+        if (UuidFunctionTranslator.TryTranslate(visitor, node))
+            return;
+
         if (AdvancedAggregateTranslator.TryTranslate(visitor, node))
             return;
 
@@ -340,6 +377,12 @@ internal static class NormSqlTranslator
             return;
 
         if (TextJsonSqlTranslator.TryTranslate(visitor, node))
+            return;
+
+        if (JsonExtractSqlTranslator.TryTranslate(visitor, node))
+            return;
+
+        if (DictionarySqlTranslator.TryTranslate(visitor, node))
             return;
 
         throw new NotImplementedException();

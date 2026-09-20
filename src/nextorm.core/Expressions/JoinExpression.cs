@@ -1,6 +1,6 @@
 using System.Linq.Expressions;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 public enum JoinType
 {
@@ -22,10 +22,40 @@ public enum JoinType
     OuterApply = 7
 }
 
+/// <summary>
+/// Optional join modifier that selects which matching right-hand row survives. Only ClickHouse
+/// understands these; every other dialect supports just <see cref="Default"/>. Rendered by
+/// <see cref="ISqlDialect.MakeJoinKeyword"/> and gated by <see cref="ISqlDialect.SupportsJoinStrictness"/>.
+/// </summary>
+public enum JoinStrictness
+{
+    /// <summary>A plain join with no modifier.</summary>
+    Default = 0,
+    /// <summary><c>ANY</c>: keep the first matching right-hand row.</summary>
+    Any = 1,
+    /// <summary><c>ALL</c>: keep every matching right-hand row.</summary>
+    All = 2,
+    /// <summary><c>ASOF</c>: join on a closest-match inequality (time-series lookup).</summary>
+    Asof = 3
+}
+
 public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType = JoinType.Inner)
 {
     public JoinType JoinType { get; } = joinType;
     public LambdaExpression? JoinCondition { get; } = joinCondition;
+    /// <summary>
+    /// Join modifier (<c>ANY</c>/<c>ALL</c>/<c>ASOF</c>). Set through the fluent
+    /// <c>WithStrictness</c> modifier, which copies the join rather than mutating it; defaults to
+    /// <see cref="JoinStrictness.Default"/>.
+    /// </summary>
+    public JoinStrictness Strictness { get; internal init; }
+    /// <summary>
+    /// Whether the join is the ClickHouse <c>GLOBAL</c> variant (the right-hand side is resolved once
+    /// and broadcast, for distributed queries). Set through the fluent <c>Global</c> modifier, which
+    /// copies the join rather than mutating it. Rendered by
+    /// <see cref="ISqlDialect.MakeJoinKeyword"/> and gated by <see cref="ISqlDialect.SupportsGlobalJoin"/>.
+    /// </summary>
+    public bool IsGlobal { get; internal init; }
     /// <summary>
     /// Joined source type. Only needed when <see cref="JoinCondition"/> is absent (a cross join has no
     /// condition parameter to read the right-hand type from), so the alias of the joined table can be
@@ -39,13 +69,13 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
 
         if (newFrom == From) return this;
 
-        return new JoinExpression(JoinCondition, JoinType) { From = From, EntityType = EntityType };
+        return new JoinExpression(JoinCondition, JoinType) { From = newFrom!, EntityType = EntityType, Strictness = Strictness, IsGlobal = IsGlobal };
     }
     // public override int GetHashCode()
     // {
     //     unchecked
     //     {
-    //         var hash = new HashCode();
+    //         var hash = new XxHash32();
 
     //         hash.Add(JoinType);
 

@@ -1,13 +1,13 @@
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Columns;
-using nextorm.core;
-using nextorm.sqlite;
+using NextORM.Core;
+using NextORM.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Data.Sqlite;
 using Dapper;
 using LinqToDB;
 
-namespace nextorm.benchmark;
+namespace NextORM.Benchmark;
 
 /// <summary>
 /// Fair Category B comparison: nextorm through the implicit plan cache (a fresh fluent command with
@@ -32,7 +32,7 @@ public class SqliteBenchmarkFeaturesFairCached
 
     private static int _verified;
 
-    private readonly nextorm.core.IDataContext _db;
+    private readonly NextORM.Core.IDataContext _db;
     private readonly TestDataRepository _ctx;
     private readonly EFDataContext _efCtx;
     private readonly SqliteConnection _conn;
@@ -42,9 +42,9 @@ public class SqliteBenchmarkFeaturesFairCached
 
     public SqliteBenchmarkFeaturesFairCached()
     {
-        var builder = new DbContextBuilder();
+        var builder = new DataContextBuilder();
         builder.UseSqlite(BenchDb.FilePath);
-        _db = builder.CreateDbContext();
+        _db = builder.CreateDataContext();
         _ctx = new TestDataRepository(_db);
         ((IConnectionManager)_db).EnsureConnectionOpen();
 
@@ -53,7 +53,7 @@ public class SqliteBenchmarkFeaturesFairCached
         efBuilder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
         _efCtx = new EFDataContext(efBuilder.Options);
 
-        _conn = new SqliteConnection(((SqliteDbContext)_ctx.DbContext).ConnectionString);
+        _conn = new SqliteConnection(((SqliteDataContext)_ctx.DataContext).ConnectionString);
         _conn.Open();
 
         _linq2Db = new Linq2DbDataRepository();
@@ -76,13 +76,13 @@ public class SqliteBenchmarkFeaturesFairCached
 
         CheckCmd("LeftJoin", _ctx.SimpleEntity
             .LeftJoin(_ctx.ComplexEntity, (s, c) => (long)s.Id == c.Id)
-            .Select(p => new LeftJoinRow { Id = p.t1.Id, RightString = p.t2.RequiredString }), 10);
+            .Select(p => new LeftJoinRow { Id = p.Item1.Id, RightString = p.Item2.RequiredString }), 10);
 
         CheckCmd("Join4", _ctx.SimpleEntity
             .Join(_ctx.ComplexEntity, (s, c) => (long)s.Id == c.Id)
-            .Join(_ctx.SimpleEntity, (p, s) => p.t2.Id == (long)s.Id)
-            .Join(_ctx.ComplexEntity, (p, c) => (long)p.t3.Id == c.Id)
-            .Select(p => new FourJoinRow { A = p.t1.Id, B = p.t2.RequiredString, C = p.t3.Id, D = p.t4.RequiredString }), 3);
+            .Join(_ctx.SimpleEntity, (p, s) => p.Item2.Id == (long)s.Id)
+            .Join(_ctx.ComplexEntity, (p, c) => (long)p.Item3.Id == c.Id)
+            .Select(p => new FourJoinRow { A = p.Item1.Id, B = p.Item2.RequiredString, C = p.Item3.Id, D = p.Item4.RequiredString }), 3);
 
         CheckCmd("Distinct", _ctx.ComplexEntity.Select(c => c.Int).Distinct(), 2);
         CheckCmd("Case", _ctx.ComplexEntity.Select(c => c.Id > 1 ? 10 : 20), 3);
@@ -94,20 +94,20 @@ public class SqliteBenchmarkFeaturesFairCached
         CheckCmd("RowNumber", _ctx.ComplexEntity.Select(c => new RowNumberRow
         {
             Id = c.Id,
-            Rn = NORM.SQL.row_number().Over(partitionBy: () => c.Int, orderBy: () => c.Id)
+            Rn = SqlFunctions.Sql.row_number().Over(partitionBy: () => c.Int, orderBy: () => c.Id)
         }), 3);
 
         CheckCmd("SumOver", _ctx.ComplexEntity.Select(c => new SumOverRow
         {
             Id = c.Id,
-            Total = NORM.SQL.sum_over(c.Id).Over(partitionBy: () => c.Int)
+            Total = SqlFunctions.Sql.sum_over(c.Id).Over(partitionBy: () => c.Int)
         }), 3);
 
         var recent = _ctx.ComplexEntity.Where(c => c.Id > 1).Select(c => new { c.Id, c.RequiredString });
         CheckCmd("Cte", _db.With("recent", recent)
             .From("recent")
             .Join(_ctx.SimpleEntity, (r, s) => r["id"].AsInt == s.Id)
-            .Select(p => new CteJoinRow { Id = p.t1["id"].AsInt, SimpleId = p.t2.Id }), 2);
+            .Select(p => new CteJoinRow { Id = p.Item1["id"].AsInt, SimpleId = p.Item2.Id }), 2);
 
         var anchor = _ctx.SimpleEntity.Where(s => s.Id == 1).Select(s => new CteNumberRow { n = s.Id });
         var step = _db.From("nums").Where(t => t["n"].AsInt < 5).Select(t => new CteNumberRow { n = t["n"].AsInt + 1 });
@@ -133,7 +133,7 @@ public class SqliteBenchmarkFeaturesFairCached
         for (var i = 0; i < Iterations; i++)
             foreach (var row in await _ctx.SimpleEntity
                 .LeftJoin(_ctx.ComplexEntity, (s, c) => (long)s.Id == c.Id)
-                .Select(p => new LeftJoinRow { Id = p.t1.Id, RightString = p.t2.RequiredString })
+                .Select(p => new LeftJoinRow { Id = p.Item1.Id, RightString = p.Item2.RequiredString })
                 .ToListAsync()) _sink++;
     }
 
@@ -176,9 +176,9 @@ public class SqliteBenchmarkFeaturesFairCached
         for (var i = 0; i < Iterations; i++)
             foreach (var row in await _ctx.SimpleEntity
                 .Join(_ctx.ComplexEntity, (s, c) => (long)s.Id == c.Id)
-                .Join(_ctx.SimpleEntity, (p, s) => p.t2.Id == (long)s.Id)
-                .Join(_ctx.ComplexEntity, (p, c) => (long)p.t3.Id == c.Id)
-                .Select(p => new FourJoinRow { A = p.t1.Id, B = p.t2.RequiredString, C = p.t3.Id, D = p.t4.RequiredString })
+                .Join(_ctx.SimpleEntity, (p, s) => p.Item2.Id == (long)s.Id)
+                .Join(_ctx.ComplexEntity, (p, c) => (long)p.Item3.Id == c.Id)
+                .Select(p => new FourJoinRow { A = p.Item1.Id, B = p.Item2.RequiredString, C = p.Item3.Id, D = p.Item4.RequiredString })
                 .ToListAsync()) _sink++;
     }
 
@@ -364,7 +364,7 @@ public class SqliteBenchmarkFeaturesFairCached
     public async Task B_Nextorm_Cached_In_AtIn_Captured()
     {
         for (var i = 0; i < Iterations; i++)
-            foreach (var row in await _ctx.ComplexEntity.Where(c => NORM.SQL.@in(c.Id, CapturedInValues)).Select(c => c.Id).ToListAsync()) _sink++;
+            foreach (var row in await _ctx.ComplexEntity.Where(c => SqlFunctions.Sql.@in(c.Id, CapturedInValues)).Select(c => c.Id).ToListAsync()) _sink++;
     }
 
     [Benchmark]
@@ -372,7 +372,7 @@ public class SqliteBenchmarkFeaturesFairCached
     public async Task B_Nextorm_Cached_In_AtIn_Inline()
     {
         for (var i = 0; i < Iterations; i++)
-            foreach (var row in await _ctx.ComplexEntity.Where(c => NORM.SQL.@in(c.Id, new long[] { 1, 3, 10 })).Select(c => c.Id).ToListAsync()) _sink++;
+            foreach (var row in await _ctx.ComplexEntity.Where(c => SqlFunctions.Sql.@in(c.Id, new long[] { 1, 3, 10 })).Select(c => c.Id).ToListAsync()) _sink++;
     }
 
     [Benchmark]
@@ -430,7 +430,7 @@ public class SqliteBenchmarkFeaturesFairCached
             foreach (var row in await _ctx.ComplexEntity.Select(c => new RowNumberRow
             {
                 Id = c.Id,
-                Rn = NORM.SQL.row_number().Over(partitionBy: () => c.Int, orderBy: () => c.Id)
+                Rn = SqlFunctions.Sql.row_number().Over(partitionBy: () => c.Int, orderBy: () => c.Id)
             }).ToListAsync()) _sink++;
     }
 
@@ -459,7 +459,7 @@ public class SqliteBenchmarkFeaturesFairCached
             foreach (var row in await _ctx.ComplexEntity.Select(c => new SumOverRow
             {
                 Id = c.Id,
-                Total = NORM.SQL.sum_over(c.Id).Over(partitionBy: () => c.Int)
+                Total = SqlFunctions.Sql.sum_over(c.Id).Over(partitionBy: () => c.Int)
             }).ToListAsync()) _sink++;
     }
 
@@ -494,7 +494,7 @@ public class SqliteBenchmarkFeaturesFairCached
             foreach (var row in await _db.With("recent", recent)
                 .From("recent")
                 .Join(_ctx.SimpleEntity, (r, s) => r["id"].AsInt == s.Id)
-                .Select(p => new CteJoinRow { Id = p.t1["id"].AsInt, SimpleId = p.t2.Id })
+                .Select(p => new CteJoinRow { Id = p.Item1["id"].AsInt, SimpleId = p.Item2.Id })
                 .ToListAsync()) _sink++;
         }
     }

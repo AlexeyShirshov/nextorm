@@ -1,14 +1,14 @@
 ﻿using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Key for the compiled row-mapper cache: provider type + result type + generated SQL text + a
 /// cheap column signature. The SQL text is already produced when <c>GetMap</c> is called (see
 /// <c>GetPreparedQueryCommand</c>), so building the key is ~0.1 us, unlike an expression-tree key
 /// that walks the whole expression. The provider is part of the key because the reader accessor
-/// depends on the provider's column mapping policy (see <c>DbContext.MapColumnExpression</c>),
+/// depends on the provider's column mapping policy (see <c>DataContext.MapColumnExpression</c>),
 /// and two providers can generate identical SQL for the same result type (for example
 /// <c>select * from t</c>).
 /// </summary>
@@ -20,7 +20,7 @@ internal readonly record struct MapperCacheKey(Type ProviderType, Type ResultTyp
 /// and Dapper (SQL-keyed mapper cache).
 ///
 /// The compiled delegate only reads from <see cref="System.Data.IDataRecord"/>, so it is safe to
-/// share across <see cref="DbContext"/> instances of the same provider, and it survives
+/// share across <see cref="DataContext"/> instances of the same provider, and it survives
 /// <c>PurgeQueryCache</c> — a cold plan rebuild therefore no longer pays <c>Expression.Compile()</c> (~285 us).
 /// </summary>
 internal static class MapperCache

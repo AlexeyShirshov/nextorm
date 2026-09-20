@@ -1,6 +1,6 @@
 # Entities and metadata
 
-> Map CLR types and members to tables and columns with attributes or a fluent builder, or skip entities entirely and address columns by name with `TableAlias`.
+> Map CLR types and members to tables and columns with attributes or a fluent builder, or skip entities entirely and address columns by name with [`TableAlias`](xref:NextORM.Core.TableAlias).
 
 **Prerequisites:** [Installation](01-installation.md) · [Quickstart](02-quickstart.md).
 
@@ -12,30 +12,30 @@ property maps to, and how to create materialised rows. Metadata is declared in o
 1. **Attributes** on an interface or on a class (`[SqlTable]`, `[Column]`, optionally `[Table]`).
 2. A **fluent builder** passed to `From<T>(cfg => …)`.
 3. **No metadata at all** - start from a raw table name with `From("table")` and read columns through a
-   `TableAlias` (`tbl.Int("id")`, `tbl.String("name")`, …).
+   [`TableAlias`](xref:NextORM.Core.TableAlias) (`tbl.GetInt32("id")`, `tbl.GetString("name")`, …).
 
-Metadata is resolved lazily and cached **process-wide** in `DataContextCache.Metadata`, keyed by type,
-the first time a type is queried through `From<T>()`. Because of that cache:
+Metadata is resolved lazily and cached **process-wide** in [`Metadata`](xref:NextORM.Core.DataContextCache.Metadata), keyed by type,
+the first time a type is queried through [`From`](xref:NextORM.Core.DataContextExtensions). Because of that cache:
 
 * the config delegate passed to `From<T>(…)` runs only on the first call for that type in the
   process;
-* later calls for the same type reuse the already-built `IEntityMeta` and ignore a new delegate;
+* later calls for the same type reuse the already-built [`IEntityMetadata`](xref:NextORM.Core.IEntityMetadata) and ignore a new delegate;
 * the in-memory and SQL contexts share the same metadata (the in-memory context exposes it as
-  `InMemoryContext.Metadata`).
+  [`Metadata`](xref:NextORM.Core.InMemoryDataContext.Metadata)).
 
-A type that was never registered throws `BuildSqlCommandException` when used as a `FROM` source, naming
+A type that was never registered throws [`BuildSqlCommandException`](xref:NextORM.Core.BuildSqlCommandException) when used as a `FROM` source, naming
 the type.
 
 ## Attributes
 
-`[SqlTable]` (in `nextorm.core`) sets the table name; `[Column]` from
+`[SqlTable]` (in [`NextORM.Core`](xref:NextORM.Core)) sets the table name; `[Column]` from
 `System.ComponentModel.DataAnnotations.Schema` sets the column name. `[Table]` from the same namespace
 is also recognised as an alternative to `[SqlTable]`.
 
 ```csharp
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
-using nextorm.core;
+using NextORM.Core;
 
 [SqlTable("simple_entity")]
 public interface ISimpleEntity
@@ -61,7 +61,7 @@ select id from simple_entity
   conventional choice.
 * **Binary columns** - a `byte[]` property maps to a binary column (`bytea` on PostgreSQL,
   `varbinary`/`image` on SQL Server, `blob` on SQLite). A `byte[]` can also be projected directly
-  (`Select(x => x.Data)`) and compared against a `byte[]` parameter of `NORM.Param<byte[]>(0)`.
+  (`Select(x => x.Data)`) and compared against a `byte[]` parameter of [`Parameter`](xref:NextORM.Core.SqlFunctions).
 
 ### Interface plus class
 
@@ -89,8 +89,8 @@ SQL. A class with attributes directly on it works the same way, with no interfac
 
 ## Fluent registration
 
-Instead of attributes, pass a configuration delegate to `From<T>()`. `EntityMetadataBuilder<T>` exposes
-`Table(string)` and `Property(Expression<Func<T, object>>)`; the returned `EntityPropertyBuilder<T>`
+Instead of attributes, pass a configuration delegate to [`From`](xref:NextORM.Core.DataContextExtensions). [`EntityMetadataBuilder<T>`](xref:NextORM.Core.EntityMetadataBuilder`1) exposes
+`Table(string)` and `Property(Expression<Func<T, object>>)`; the returned [`EntityPropertyBuilder<T>`](xref:NextORM.Core.EntityPropertyBuilder`1)
 exposes `HasColumnName(string)`.
 
 ```csharp
@@ -100,7 +100,7 @@ dataContext.From<SimpleEntity>(cfg => cfg
     .HasColumnName("id"));
 ```
 
-To map several properties, call `Property` once per member:
+To map several properties, call [`Property`](xref:NextORM.Core.EntityMetadataBuilder`1) once per member:
 
 ```csharp
 public class Product
@@ -117,21 +117,21 @@ dataContext.From<Product>(cfg =>
 });
 ```
 
-Rules for the fluent path (`EntityMetadataBuilder<T>.Build`):
+Rules for the fluent path ([`Build`](xref:NextORM.Core.EntityMetadataBuilder`1.Build)):
 
 * if `Table(...)` is omitted, the table name is auto-built from attributes and then the type name;
 * if at least one `Property(...)` is configured, **only** those properties are mapped - auto-discovered
   properties are not merged in;
 * if no property is configured, all writable properties are mapped automatically by name/`[Column]`.
 
-## Entities from a raw table: `TableAlias`
+## Entities from a raw table: [`TableAlias`](xref:NextORM.Core.TableAlias)
 
 No entity and no metadata are required to query. Start from a table name with `From("table")` and read
-columns through the `TableAlias` passed to `Select`/`Where`:
+columns through the [`TableAlias`](xref:NextORM.Core.TableAlias) passed to [`Select`](xref:NextORM.Core.EntityBuilder`1)/[`Where`](xref:NextORM.Core.EntityBuilder`1):
 
 ```csharp
 await foreach (var row in dataContext.From("simple_entity")
-                                     .Select(tbl => new { Id = tbl.Long("id") })
+                                     .Select(tbl => new { Id = tbl.GetInt64("id") })
                                      .ToAsyncEnumerable())
 {
     Console.WriteLine($"Id = {row.Id}");
@@ -142,26 +142,26 @@ await foreach (var row in dataContext.From("simple_entity")
 select id from simple_entity
 ```
 
-`TableAlias` accessor methods (each takes the column name and returns the CLR value for that type):
+[`TableAlias`](xref:NextORM.Core.TableAlias) accessor methods (each takes the column name and returns the CLR value for that type):
 
 | Method | Returns | Method | Returns |
 |---|---|---|---|
-| `Int(string)` | `int` | `NullableInt(string)` | `int?` |
-| `Long(string)` | `long` | `NullableLong(string)` | `long?` |
-| `Short(string)` | `short` | `NullableShort(string)` | `short?` |
-| `String(string)` | `string` | `NullableString(string)` | `string?` |
-| `Float(string)` | `float` | `NullableFloat(string)` | `float?` |
-| `Double(string)` | `double` | `NullableDouble(string)` | `double?` |
-| `DateTime(string)` | `DateTime` | `NullableDateTime(string)` | `DateTime?` |
-| `Decimal(string)` | `decimal` | `NullableDecimal(string)` | `decimal?` |
-| `Byte(string)` | `byte` | `NullableByte(string)` | `byte?` |
-| `Boolean(string)` | `bool` | `NullableBoolean(string)` | `bool?` |
-| `Guid(string)` | `Guid` | `NullableGuid(string)` | `Guid?` |
-| `Bytes(string)` | `byte[]` | `NullableBytes(string)` | `byte[]?` |
-| `Column(string)` | `object` | | |
+| `GetInt32(string)` | `int` | `GetNullableInt32(string)` | `int?` |
+| `GetInt64(string)` | `long` | `GetNullableInt64(string)` | `long?` |
+| `GetInt16(string)` | `short` | `GetNullableInt16(string)` | `short?` |
+| `GetString(string)` | `string` | `GetNullableString(string)` | `string?` |
+| `GetSingle(string)` | `float` | `GetNullableSingle(string)` | `float?` |
+| `GetDouble(string)` | `double` | `GetNullableDouble(string)` | `double?` |
+| `GetDateTime(string)` | `DateTime` | `GetNullableDateTime(string)` | `DateTime?` |
+| `GetDecimal(string)` | `decimal` | `GetNullableDecimal(string)` | `decimal?` |
+| `GetByte(string)` | `byte` | `GetNullableByte(string)` | `byte?` |
+| `GetBoolean(string)` | `bool` | `GetNullableBoolean(string)` | `bool?` |
+| `GetGuid(string)` | `Guid` | `GetNullableGuid(string)` | `Guid?` |
+| `GetBytes(string)` | `byte[]` | `GetNullableBytes(string)` | `byte[]?` |
+| `GetColumn(string)` | `object` | | |
 
-`TableAlias` also has an indexer, `this[string]`, returning a `TableColumn` with the typed
-`AsInt`, `AsString`, `AsNullableString`, `AsBytes` and `AsNullableBytes` accessors - useful when the
+[`TableAlias`](xref:NextORM.Core.TableAlias) also has an indexer, `this[string]`, returning a [`TableColumn`](xref:NextORM.Core.TableColumn) with the typed
+[`AsInt`](xref:NextORM.Core.TableColumn.AsInt), [`AsString`](xref:NextORM.Core.TableColumn.AsString), [`AsNullableString`](xref:NextORM.Core.TableColumn.AsNullableString), [`AsBytes`](xref:NextORM.Core.TableColumn.AsBytes) and [`AsNullableBytes`](xref:NextORM.Core.TableColumn.AsNullableBytes) accessors - useful when the
 same column alias is referenced from a joined/CTE query:
 
 ```csharp
@@ -170,9 +170,9 @@ var query = dataContext.From("complex_entity")
     .Select(c => new { Id = c["id"].AsInt });
 ```
 
-`From` is available both on the concrete `DbContext` (`dataContext.From("simple_entity")`) and as an
-extension on `IDataContext`, so it works whether the context is used through its concrete type or the
-interface. Independently of entities, `From` can also wrap a subquery
+[`From`](xref:NextORM.Core.DataContextExtensions) is available both on the concrete [`DataContext`](xref:NextORM.Core.DataContext) (`dataContext.From("simple_entity")`) and as an
+extension on [`IDataContext`](xref:NextORM.Core.IDataContext), so it works whether the context is used through its concrete type or the
+interface. Independently of entities, [`From`](xref:NextORM.Core.DataContextExtensions) can also wrap a subquery
 (`dataContext.From(innerQuery)`) or another entity builder (`dataContext.From(entity)`).
 
 ## Provider differences
@@ -186,7 +186,10 @@ exactly for every provider.
 | SQLite | Names used as given. |
 | SQL Server | Names used as given. |
 | PostgreSQL | Names used as given; an unquoted mixed-case or reserved-word identifier is still folded by the server, so declare the catalog spelling. |
-| In-memory | Identical metadata, shared with the SQL contexts through `DataContextCache`. |
+| MySQL | Names used as given; identifiers and aliases are backtick-quoted when the SQL is rendered. |
+| MariaDB | Names used as given; identifiers and aliases are backtick-quoted (the MySQL driver and dialect). |
+| ClickHouse | Names used as given; identifiers and aliases are backtick-quoted when the SQL is rendered. |
+| In-memory | Identical metadata, shared with the SQL contexts through [`DataContextCache`](xref:NextORM.Core.DataContextCache). |
 
 ## See also
 
@@ -197,10 +200,10 @@ exactly for every provider.
 
 ---
 
-Source: `test/nextorm.integration.tests/Entities.cs:7`;
-`test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:37`;
-`test/nextorm.sqlite.tests/MetadataRegistrationTests.cs:18`;
+Source: `tests/nextorm.integration.tests/Entities.cs:7`;
+`tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:37`;
+`tests/nextorm.sqlite.tests/MetadataRegistrationTests.cs:18`;
 `src/nextorm.core/DataContext/Meta/EntityMetadataBuilder.cs:111`;
 `src/nextorm.core/DataContext/Meta/EntityPropertyBuilder.cs:16`;
 `src/nextorm.core/DataContext/DataContextCache.cs:20`;
-`test/nextorm.sqlite.tests/SqlGenerationTests.cs:116`.
+`tests/nextorm.sqlite.tests/SqlGenerationTests.cs:116`.

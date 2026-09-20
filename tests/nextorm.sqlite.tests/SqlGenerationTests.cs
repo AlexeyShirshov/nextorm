@@ -1,0 +1,2037 @@
+using System.ComponentModel.DataAnnotations.Schema;
+using System.Data.Common;
+using System.Linq.Expressions;
+using FluentAssertions;
+using NextORM.Core;
+
+namespace NextORM.Sqlite.Tests;
+
+/// <summary>
+/// Verifies the SQLite specific SQL dialect. These tests never open a database connection
+/// (the in-memory connection string is never used), so they run on every build/CI.
+/// Behavioural tests against a real database live in NextORM.Integration.Tests.
+/// </summary>
+public class SqlGenerationTests
+{
+    private static string Normalize(string sql) => sql.Replace("\r\n", "\n");
+
+    private static DbPreparedQueryCommand<T> Prepare<T>(IDataContext ctx, QueryCommand<T> cmd)
+    {
+        return (DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None);
+    }
+
+    private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd) => Normalize(Prepare(ctx, cmd).DbCommand.CommandText);
+
+    [Fact]
+    public void SelectDistinct_ShouldEmitDistinct()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.Distinct().Select(x => new { x.Id })).Should().Be("select distinct id from simple_entity");
+    }
+
+    [Fact]
+    public void SelectDistinctWithUnionAll_ShouldKeepDistinctInLeftBranch()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var cmd = e.Select(x => x.Id).Distinct().UnionAll(e.Select(x => x.Id));
+        var sql = SqlOf(ctx, cmd);
+
+        sql.Should().Contain("select distinct id from simple_entity");
+        sql.Should().Contain(" union all ");
+        sql.Should().Contain("select id from simple_entity");
+    }
+
+    [Fact]
+    public void Union_ShouldEmitUnion()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.Select(x => x.Id).Union(e.Select(x => x.Id)))
+            .Should().Be("select id from simple_entity\n union \nselect id from simple_entity");
+    }
+
+    [Fact]
+    public void UnionAll_ShouldEmitUnionAll()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.Select(x => x.Id).UnionAll(e.Select(x => x.Id)))
+            .Should().Be("select id from simple_entity\n union all \nselect id from simple_entity");
+    }
+
+    [Fact]
+    public void Intersect_ShouldEmitIntersect()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.Select(x => x.Id).Intersect(e.Select(x => x.Id)))
+            .Should().Be("select id from simple_entity\n intersect \nselect id from simple_entity");
+    }
+
+    [Fact]
+    public void Except_ShouldEmitExcept()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.Select(x => x.Id).Except(e.Select(x => x.Id)))
+            .Should().Be("select id from simple_entity\n except \nselect id from simple_entity");
+    }
+
+    [Fact]
+    public void IntersectAll_ShouldThrowBecauseSqliteHasNoIntersectAll()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => x.Id).IntersectAll(e.Select(x => x.Id)));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*IntersectAll*");
+    }
+
+    [Fact]
+    public void ExceptAll_ShouldThrowBecauseSqliteHasNoExceptAll()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => x.Id).ExceptAll(e.Select(x => x.Id)));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*ExceptAll*");
+    }
+
+    [Fact]
+    public void SelectBasic_ShouldProducePlainSelect()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.Select(x => new { x.Id })).Should().Be("select id from simple_entity");
+    }
+
+    [Fact]
+    public void Parameter_ShouldUseDollarPrefix()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var command = Prepare(ctx, e.Where(x => x.Id == SqlFunctions.Parameter<int>(0)).Select(x => new { x.Id }));
+
+        Normalize(command.DbCommand.CommandText).Should().Contain("id = $norm_p0");
+        command.DbCommandParams.Cast<DbParameter>().Should().ContainSingle()
+            .Which.ParameterName.Should().Be("norm_p0");
+    }
+
+    [Fact]
+    public void Paging_WithLimitAndOffset_ShouldUseLimitOffset()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.Page(5, 10).Select(x => x.Id)).Should().EndWith("limit 5 offset 10");
+    }
+
+    [Fact]
+    public void Paging_WithOffsetOnly_ShouldEmitLimitMinusOne()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        // SQLite has no OFFSET without LIMIT, so the provider emits "limit -1".
+        SqlOf(ctx, e.Offset(10).Select(x => x.Id)).Should().EndWith("limit -1 offset 10");
+    }
+
+    [Fact]
+    public void BooleanLiteral_ShouldUseOne()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Where(x => x.Boolean == true).Select(x => x.Boolean)).Should().Contain("b = 1");
+    }
+
+    [Fact]
+    public void StringConcat_ShouldUseDoublePipe()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new { V = x.String + "/" + x.String }));
+
+        sql.Should().Contain("||");
+        sql.Should().Contain("as 'V'");
+    }
+
+    [Fact]
+    public void Coalesce_ShouldUseIfNullFunction()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new { V = x.String ?? "" }));
+
+        sql.Should().Contain("ifnull(");
+        sql.Should().NotContain("coalesce(");
+    }
+
+    [Fact]
+    public void Count_ShouldUseCountStar()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.count())).Should().Contain("count(*)");
+    }
+
+    [Fact]
+    public void CountBig_ShouldUseCountStar()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // SQLite's count() already yields a 64-bit integer, so the big request needs no special syntax.
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.count_big())).Should().Contain("count(*)");
+    }
+
+    [Fact]
+    public void Aggregate_ShouldKeepProviderSpecificName()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => SqlFunctions.Sql.stdev((double)x.Id)));
+
+        // SQLite relies on its own registered functions, so no name remapping happens.
+        sql.Should().Contain("stdev(");
+        sql.Should().NotContain("stddev(");
+    }
+
+    [Fact]
+    public void ComputedColumn_ShouldBeAliasedWithSingleQuotes()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new { x.Id, Calc = x.Id + 1 }));
+
+        sql.Should().Contain("as 'Calc'");
+        sql.Should().NotContain("as \"");
+    }
+
+    [Fact]
+    public void RenamedColumn_ShouldBeAliased()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // The underlying column is "somestring"; the projection calls it "String", so the SQL must
+        // expose it under the projected name for outer queries to find it.
+        var sql = SqlOf(ctx, e.Select(x => new { x.Id, Renamed = x.String }));
+
+        sql.Should().Contain("as 'Renamed'");
+    }
+
+    [Fact]
+    public void NestedCalculatedColumn_ShouldReferenceInnerAlias()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var nested = e.Select(x => new { x.Id, Calc = x.String + x.String });
+        var sql = SqlOf(ctx, ctx.From(nested).Select(t => new { t.Id, t.Calc }));
+
+        sql.Should().Contain("as 'Calc'");
+        sql.Should().Contain("Calc");
+    }
+
+    [Fact]
+    public void Subquery_ShouldNotRequireAlias()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var nested = e.Select(x => new { x.Id });
+        var sql = SqlOf(ctx, ctx.From(nested).Select(t => new { t.Id }));
+
+        // Unlike PostgreSQL, SQLite does not require a derived table to be aliased.
+        sql.Should().NotContain(") as '");
+    }
+
+    [Fact]
+    public void Join_ShouldQuoteTableAliases()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, simple.Join(complex, (s, c) => s.Id == c.Id).Select(p => new { p.Item1.Id, p.Item2.String }));
+
+        sql.Should().Contain("as 't1'");
+        sql.Should().Contain("as 't2'");
+    }
+
+    [Fact]
+    public void LeftJoin_ShouldEmitLeftJoinWithOn()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, simple.LeftJoin(complex, (s, c) => s.Id == c.Id).Select(p => new { p.Item1.Id, p.Item2.String }));
+
+        sql.Should().Contain(" left join complex_entity");
+        sql.Should().Contain(" on ");
+    }
+
+    [Fact]
+    public void RightJoin_ShouldEmitRightJoinWithOn()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, simple.RightJoin(complex, (s, c) => s.Id == c.Id).Select(p => new { p.Item1.Id, p.Item2.String }));
+
+        sql.Should().Contain(" right join complex_entity");
+        sql.Should().Contain(" on ");
+    }
+
+    [Fact]
+    public void FullJoin_ShouldEmitFullJoinWithOn()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, simple.FullJoin(complex, (s, c) => s.Id == c.Id).Select(p => new { p.Item1.Id, p.Item2.String }));
+
+        sql.Should().Contain(" full join complex_entity");
+        sql.Should().Contain(" on ");
+    }
+
+    [Fact]
+    public void CrossJoin_ShouldEmitCrossJoinWithoutOn()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, simple.CrossJoin(complex).Select(p => new { p.Item1.Id, p.Item2.String }));
+
+        sql.Should().Contain(" cross join complex_entity");
+        sql.Should().NotContain(" on ");
+    }
+
+    [Fact]
+    public void CrossApply_ShouldThrowBecauseSqliteHasNoLateral()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, simple.CrossApply(complex).Select(p => new { p.Item1.Id, p.Item2.String }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*CrossApply*");
+    }
+
+    [Fact]
+    public void OuterApply_ShouldThrowBecauseSqliteHasNoLateral()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, simple.OuterApply(complex).Select(p => new { p.Item1.Id, p.Item2.String }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*OuterApply*");
+    }
+
+    [Fact]
+    public void QueryHint_ShouldThrowBecauseSqliteHasNoQueryHints()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new { x.Id }).Hint("recompile"));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*Query hints*");
+    }
+
+    [Fact]
+    public void SubqueryAliasIsNotRequired()
+    {
+        using var ctx = SqliteTestContext.CreateSqlite();
+
+        ctx.Dialect.RequireSubqueryAlias.Should().BeFalse();
+    }
+
+    [Fact]
+    public void Escape_ShouldUseSingleQuotes()
+    {
+        using var ctx = SqliteTestContext.CreateSqlite();
+
+        ctx.Dialect.Escape("Some Alias").Should().Be("'Some Alias'");
+    }
+
+    [Fact]
+    public void Join4Tables_ShouldEmitFourAliasesAndThreeJoins()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var simple1 = ctx.From<ISimpleEntity>();
+        var complex1 = ctx.From<IComplexEntity>();
+        var simple2 = ctx.From<ISimpleEntity>();
+        var complex2 = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, simple1
+            .Join(complex1, (s, c) => s.Id == c.Id)
+            .Join(simple2, (p, s) => p.Item2.Id == s.Id)
+            .Join(complex2, (p, c) => p.Item3.Id == c.Id)
+            .Select(p => new { A = p.Item1.Id, B = p.Item2.Id, C = p.Item3.Id, D = p.Item4.Id }));
+
+        sql.Should().Contain("as 't1'");
+        sql.Should().Contain("as 't2'");
+        sql.Should().Contain("as 't3'");
+        sql.Should().Contain("as 't4'");
+        // Each chained join condition must reference the accumulated projection via the right alias.
+        // simple_entity.Id is int while complex_entity.Id is long, hence the widening cast.
+        sql.Should().Contain("on cast(t1.id as bigint) = t2.id");
+        sql.Should().Contain("on t2.id = cast(t3.id as bigint)");
+        sql.Should().Contain("on cast(t3.id as bigint) = t4.id");
+        // Three joins => four "join" segments when split on the keyword.
+        sql.Split("join").Should().HaveCount(4);
+    }
+
+    /// <summary>
+    /// Guards the cached projection-alias resolution: a projection whose repeated entity types appear
+    /// in a different pattern than <see cref="Join4Tables_ShouldEmitFourAliasesAndThreeJoins"/> must
+    /// still map each <c>tN</c> to the right table, and repeated builds must stay stable.
+    /// </summary>
+    [Fact]
+    public void Join4Tables_RepeatedTypesInDifferentPattern_ResolvePerShapeAndStayStable()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var simple1 = ctx.From<ISimpleEntity>();
+        var simple2 = ctx.From<ISimpleEntity>();
+        var complex1 = ctx.From<IComplexEntity>();
+        var complex2 = ctx.From<IComplexEntity>();
+
+        string Build() => SqlOf(ctx, simple1
+            .Join(simple2, (a, b) => a.Id == b.Id)
+            .Join(complex1, (p, c) => p.Item2.Id == c.Id)
+            .Join(complex2, (p, c) => p.Item3.Id == c.Id)
+            .Select(p => new { A = p.Item1.Id, B = p.Item2.Id, C = p.Item3.Id, D = p.Item4.Id }));
+
+        var first = Build();
+        var second = Build();
+
+        second.Should().Be(first);
+        second.Should().Contain("on t1.id = t2.id");
+        second.Should().Contain("on cast(t2.id as bigint) = t3.id");
+        second.Should().Contain("on t3.id = t4.id");
+    }
+
+    [Fact]
+    public void Join8Tables_ShouldEmitEightAliasesAndSevenJoins()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var simple = new[]
+        {
+            ctx.From<ISimpleEntity>(),
+            ctx.From<ISimpleEntity>(),
+            ctx.From<ISimpleEntity>(),
+            ctx.From<ISimpleEntity>(),
+        };
+        var complex = new[]
+        {
+            ctx.From<IComplexEntity>(),
+            ctx.From<IComplexEntity>(),
+            ctx.From<IComplexEntity>(),
+            ctx.From<IComplexEntity>(),
+        };
+
+        var sql = SqlOf(ctx, simple[0]
+            .Join(complex[0], (s, c) => s.Id == c.Id)
+            .Join(simple[1], (p, s) => p.Item2.Id == s.Id)
+            .Join(complex[1], (p, c) => p.Item3.Id == c.Id)
+            .Join(simple[2], (p, s) => p.Item4.Id == s.Id)
+            .Join(complex[2], (p, c) => p.Item5.Id == c.Id)
+            .Join(simple[3], (p, s) => p.Item6.Id == s.Id)
+            .Join(complex[3], (p, c) => p.Item7.Id == c.Id)
+            .Select(p => new { A = p.Item1.Id, B = p.Item2.Id, C = p.Item3.Id, D = p.Item4.Id, E = p.Item5.Id, F = p.Item6.Id, G = p.Item7.Id, H = p.Item8.Id }));
+
+        for (var i = 1; i <= 8; i++)
+            sql.Should().Contain($"as 't{i}'");
+
+        // Each chained join condition must reference the accumulated projection via the right alias.
+        // The chain alternates simple_entity (int) and complex_entity (long): the int side is cast.
+        sql.Should().Contain("on cast(t1.id as bigint) = t2.id");
+        sql.Should().Contain("on t2.id = cast(t3.id as bigint)");
+        sql.Should().Contain("on cast(t3.id as bigint) = t4.id");
+        sql.Should().Contain("on t4.id = cast(t5.id as bigint)");
+        sql.Should().Contain("on cast(t5.id as bigint) = t6.id");
+        sql.Should().Contain("on t6.id = cast(t7.id as bigint)");
+        sql.Should().Contain("on cast(t7.id as bigint) = t8.id");
+
+        // Seven joins => eight "join" segments when split on the keyword.
+        sql.Split("join").Should().HaveCount(8);
+    }
+
+    [Fact]
+    public void Join5Tables_ShouldEmitFiveAliasesAndFourJoins()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = Enumerable.Range(0, 5).Select(_ => ctx.From<ISimpleEntity>()).ToArray();
+
+        var sql = SqlOf(ctx, e[0]
+            .Join(e[1], (a, b) => a.Id == b.Id)
+            .Join(e[2], (p, c) => p.Item2.Id == c.Id)
+            .Join(e[3], (p, c) => p.Item3.Id == c.Id)
+            .Join(e[4], (p, c) => p.Item4.Id == c.Id)
+            .Select(p => new { A = p.Item1.Id, B = p.Item2.Id, C = p.Item3.Id, D = p.Item4.Id, E = p.Item5.Id }));
+
+        for (var i = 1; i <= 5; i++)
+            sql.Should().Contain($"as 't{i}'");
+
+        // Four joins => five "join" segments when split on the keyword.
+        sql.Split("join").Should().HaveCount(5);
+    }
+
+    [Fact]
+    public void Join6Tables_ShouldEmitSixAliasesAndFiveJoins()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = Enumerable.Range(0, 6).Select(_ => ctx.From<ISimpleEntity>()).ToArray();
+
+        var sql = SqlOf(ctx, e[0]
+            .Join(e[1], (a, b) => a.Id == b.Id)
+            .Join(e[2], (p, c) => p.Item2.Id == c.Id)
+            .Join(e[3], (p, c) => p.Item3.Id == c.Id)
+            .Join(e[4], (p, c) => p.Item4.Id == c.Id)
+            .Join(e[5], (p, c) => p.Item5.Id == c.Id)
+            .Select(p => new { A = p.Item1.Id, B = p.Item2.Id, C = p.Item3.Id, D = p.Item4.Id, E = p.Item5.Id, F = p.Item6.Id }));
+
+        for (var i = 1; i <= 6; i++)
+            sql.Should().Contain($"as 't{i}'");
+
+        sql.Split("join").Should().HaveCount(6);
+    }
+
+    [Fact]
+    public void Join7Tables_ShouldEmitSevenAliasesAndSixJoins()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = Enumerable.Range(0, 7).Select(_ => ctx.From<ISimpleEntity>()).ToArray();
+
+        var sql = SqlOf(ctx, e[0]
+            .Join(e[1], (a, b) => a.Id == b.Id)
+            .Join(e[2], (p, c) => p.Item2.Id == c.Id)
+            .Join(e[3], (p, c) => p.Item3.Id == c.Id)
+            .Join(e[4], (p, c) => p.Item4.Id == c.Id)
+            .Join(e[5], (p, c) => p.Item5.Id == c.Id)
+            .Join(e[6], (p, c) => p.Item6.Id == c.Id)
+            .Select(p => new { A = p.Item1.Id, B = p.Item2.Id, C = p.Item3.Id, D = p.Item4.Id, E = p.Item5.Id, F = p.Item6.Id, G = p.Item7.Id }));
+
+        for (var i = 1; i <= 7; i++)
+            sql.Should().Contain($"as 't{i}'");
+
+        sql.Split("join").Should().HaveCount(7);
+    }
+
+    [Fact]
+    public void LeftJoin8Tables_ShouldEmitLeftJoinAtEveryArity()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = Enumerable.Range(0, 8).Select(_ => ctx.From<ISimpleEntity>()).ToArray();
+
+        var sql = SqlOf(ctx, e[0]
+            .LeftJoin(e[1], (a, b) => a.Id == b.Id)
+            .LeftJoin(e[2], (p, c) => p.Item2.Id == c.Id)
+            .LeftJoin(e[3], (p, c) => p.Item3.Id == c.Id)
+            .LeftJoin(e[4], (p, c) => p.Item4.Id == c.Id)
+            .LeftJoin(e[5], (p, c) => p.Item5.Id == c.Id)
+            .LeftJoin(e[6], (p, c) => p.Item6.Id == c.Id)
+            .LeftJoin(e[7], (p, c) => p.Item7.Id == c.Id)
+            .Select(p => new { A = p.Item1.Id, B = p.Item2.Id, C = p.Item3.Id, D = p.Item4.Id, E = p.Item5.Id, F = p.Item6.Id, G = p.Item7.Id, H = p.Item8.Id }));
+
+        for (var i = 1; i <= 8; i++)
+            sql.Should().Contain($"as 't{i}'");
+
+        sql.Split("left join").Should().HaveCount(8);
+    }
+
+    [Fact]
+    public void RightJoin8Tables_ShouldEmitRightJoinAtEveryArity()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = Enumerable.Range(0, 8).Select(_ => ctx.From<ISimpleEntity>()).ToArray();
+
+        var sql = SqlOf(ctx, e[0]
+            .RightJoin(e[1], (a, b) => a.Id == b.Id)
+            .RightJoin(e[2], (p, c) => p.Item2.Id == c.Id)
+            .RightJoin(e[3], (p, c) => p.Item3.Id == c.Id)
+            .RightJoin(e[4], (p, c) => p.Item4.Id == c.Id)
+            .RightJoin(e[5], (p, c) => p.Item5.Id == c.Id)
+            .RightJoin(e[6], (p, c) => p.Item6.Id == c.Id)
+            .RightJoin(e[7], (p, c) => p.Item7.Id == c.Id)
+            .Select(p => new { A = p.Item1.Id, B = p.Item2.Id, C = p.Item3.Id, D = p.Item4.Id, E = p.Item5.Id, F = p.Item6.Id, G = p.Item7.Id, H = p.Item8.Id }));
+
+        for (var i = 1; i <= 8; i++)
+            sql.Should().Contain($"as 't{i}'");
+
+        sql.Split("right join").Should().HaveCount(8);
+    }
+
+    [Fact]
+    public void FullJoin8Tables_ShouldEmitFullJoinAtEveryArity()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = Enumerable.Range(0, 8).Select(_ => ctx.From<ISimpleEntity>()).ToArray();
+
+        var sql = SqlOf(ctx, e[0]
+            .FullJoin(e[1], (a, b) => a.Id == b.Id)
+            .FullJoin(e[2], (p, c) => p.Item2.Id == c.Id)
+            .FullJoin(e[3], (p, c) => p.Item3.Id == c.Id)
+            .FullJoin(e[4], (p, c) => p.Item4.Id == c.Id)
+            .FullJoin(e[5], (p, c) => p.Item5.Id == c.Id)
+            .FullJoin(e[6], (p, c) => p.Item6.Id == c.Id)
+            .FullJoin(e[7], (p, c) => p.Item7.Id == c.Id)
+            .Select(p => new { A = p.Item1.Id, B = p.Item2.Id, C = p.Item3.Id, D = p.Item4.Id, E = p.Item5.Id, F = p.Item6.Id, G = p.Item7.Id, H = p.Item8.Id }));
+
+        for (var i = 1; i <= 8; i++)
+            sql.Should().Contain($"as 't{i}'");
+
+        sql.Split("full join").Should().HaveCount(8);
+    }
+
+    [Fact]
+    public void CrossJoin8Tables_ShouldEmitCrossJoinAtEveryArity()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = Enumerable.Range(0, 8).Select(_ => ctx.From<ISimpleEntity>()).ToArray();
+
+        var sql = SqlOf(ctx, e[0]
+            .CrossJoin(e[1])
+            .CrossJoin(e[2])
+            .CrossJoin(e[3])
+            .CrossJoin(e[4])
+            .CrossJoin(e[5])
+            .CrossJoin(e[6])
+            .CrossJoin(e[7])
+            .Select(p => new { A = p.Item1.Id, B = p.Item2.Id, C = p.Item3.Id, D = p.Item4.Id, E = p.Item5.Id, F = p.Item6.Id, G = p.Item7.Id, H = p.Item8.Id }));
+
+        for (var i = 1; i <= 8; i++)
+            sql.Should().Contain($"as 't{i}'");
+
+        sql.Split("cross join").Should().HaveCount(8);
+        sql.Should().NotContain(" on ");
+    }
+
+    [Fact]
+    public void Conditional_ShouldEmitCaseWhen()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new { V = x.Id > 1 ? "big" : "small" }));
+
+        sql.Should().Contain("case when (id > 1) then 'big' else 'small' end");
+        sql.Should().Contain("as 'V'");
+    }
+
+    [Fact]
+    public void NestedConditional_ShouldEmitNestedCaseWhen()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new { V = x.Boolean == true ? (x.Int == null ? "a" : "b") : "c" }));
+
+        sql.Should().Contain("case when b = 1 then case when nullableint is null then 'a' else 'b' end else 'c' end");
+    }
+
+    [Fact]
+    public void Conditional_InWhere_ShouldEmitCaseWhen()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Where(x => (x.Int == null ? 0 : x.Int) == 1).Select(x => new { x.Id }));
+
+        sql.Should().Contain("case when nullableint is null then 0 else nullableint end");
+    }
+
+    [Fact]
+    public void ConditionalBoolean_ShouldEmitBooleanLiterals()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // SQLite has a boolean type usable as a value and as a predicate, so the CASE stays ANSI.
+        var sql = SqlOf(ctx, e.Select(x => new { V = x.Id > 1 ? true : false }));
+
+        sql.Should().Contain("case when (id > 1) then 1 else 0 end");
+        sql.Should().NotContain("cast(");
+    }
+
+    [Fact]
+    public void Conditional_WithCapturedValue_ShouldEmitParameter()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        var threshold = 1L;
+
+        var command = Prepare(ctx, e.Select(x => new { V = x.Id > threshold ? "big" : "small" }));
+
+        // The parameter-extraction pass has to walk the CASE test even though it emits no SQL.
+        Normalize(command.DbCommand.CommandText).Should().Contain("$threshold");
+        command.DbCommandParams.Cast<DbParameter>().Should().ContainSingle()
+            .Which.ParameterName.Should().Be("threshold");
+    }
+
+    [Fact]
+    public void Switch_ShouldEmitSearchedCase()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(SwitchOfId("other", (1L, "one"), (2L, "two"))));
+
+        sql.Should().Contain("case when id = 1 then 'one' when id = 2 then 'two' else 'other' end");
+    }
+
+    [Fact]
+    public void Switch_WithComparisonMethod_ShouldThrow()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var comparison = typeof(string).GetMethod(nameof(string.Equals), [typeof(string), typeof(string)])!;
+        var p = Expression.Parameter(typeof(IComplexEntity), "x");
+        var body = Expression.Switch(
+            Expression.Property(p, nameof(IComplexEntity.String)),
+            Expression.Constant("other"),
+            comparison,
+            Expression.SwitchCase(Expression.Constant("a"), Expression.Constant("x")));
+        var exp = Expression.Lambda<Func<IComplexEntity, string>>(body, p);
+
+        var act = () => SqlOf(ctx, e.Select(exp));
+
+        act.Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
+    public void StringToUpper_ShouldUseUpperFunction()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = x.String!.ToUpper() })).Should().Contain("upper(somestring)");
+    }
+
+    [Fact]
+    public void StringToLower_ShouldUseLowerFunction()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = x.String!.ToLower() })).Should().Contain("lower(somestring)");
+    }
+
+    [Fact]
+    public void SqlFunction_OverColumn_ShouldEmitMappedFunction()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = Udf.ToUpper(x.String!) }))
+            .Should().Be("select upper(somestring) as 'V' from complex_entity");
+    }
+
+    [Fact]
+    public void SqlFunction_WithCapturedArgument_ShouldEmitParameter()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        var start = 1;
+
+        var command = Prepare(ctx, e.Select(x => new { V = Udf.Slice(x.String!, start) }));
+
+        Normalize(command.DbCommand.CommandText).Should().Be("select substr(somestring, $start) as 'V' from complex_entity");
+        command.DbCommandParams.Cast<DbParameter>().Should().ContainSingle()
+            .Which.ParameterName.Should().Be("start");
+    }
+
+    [Fact]
+    public void SqlFunction_WithSchema_ShouldQualifyName()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = Udf.WithSchema(x.Id) }))
+            .Should().Be("select dbo.my_fn(id) as 'V' from complex_entity");
+    }
+
+    [Fact]
+    public void SqlFunction_OnDeclaringType_ShouldUseMethodName()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = ImplicitUdf.Lower(x.String!) }))
+            .Should().Be("select Lower(somestring) as 'V' from complex_entity");
+    }
+
+    private static class Udf
+    {
+        [SqlFunction("upper")]
+        public static string ToUpper(string value) => throw new NotSupportedException();
+
+        [SqlFunction("substr")]
+        public static string Slice(string value, int start) => throw new NotSupportedException();
+
+        [SqlFunction("my_fn", Schema = "dbo")]
+        public static long WithSchema(long value) => throw new NotSupportedException();
+    }
+
+    [SqlFunction]
+    private static class ImplicitUdf
+    {
+        public static string Lower(string value) => throw new NotSupportedException();
+    }
+
+    [Fact]
+    public void Contains_ShouldUseLikeWithWildcards()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Where(x => x.String!.Contains("df")).Select(x => new { x.Id }))
+            .Should().Contain("somestring like '%df%'");
+    }
+
+    [Fact]
+    public void Contains_WithCapturedValue_ShouldConcatParameterIntoPattern()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        var needle = "df";
+
+        // A runtime value cannot be escaped at translation time, so the wildcards are concatenated
+        // around the parameter. The parameter-extraction pass must still collect it.
+        var command = Prepare(ctx, e.Where(x => x.String!.Contains(needle)).Select(x => new { x.Id }));
+
+        Normalize(command.DbCommand.CommandText).Should().Contain("somestring like '%'||$needle||'%'");
+        command.DbCommandParams.Cast<DbParameter>().Should().ContainSingle()
+            .Which.ParameterName.Should().Be("needle");
+    }
+
+    [Fact]
+    public void StartsWith_ShouldUseLikePrefixPattern()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Where(x => x.String!.StartsWith("xx")).Select(x => new { x.Id }))
+            .Should().Contain("somestring like 'xx%'");
+    }
+
+    [Fact]
+    public void EndsWith_ShouldUseLikeSuffixPattern()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Where(x => x.String!.EndsWith("sd")).Select(x => new { x.Id }))
+            .Should().Contain("somestring like '%sd'");
+    }
+
+    [Fact]
+    public void Contains_WithWildcard_ShouldEscapeAndEmitEscapeClause()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // %, _ and the escape character itself are escaped so the literal is matched verbatim.
+        SqlOf(ctx, e.Where(x => x.String!.Contains("a%b_c")).Select(x => new { x.Id }))
+            .Should().Contain("somestring like '%a\\%b\\_c%' escape '\\'");
+    }
+
+    [Fact]
+    public void Substring_ShouldUseOneBasedOffset()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = x.String!.Substring(1, 2) }))
+            .Should().Contain("substring(somestring, 1 + 1, 2)");
+    }
+
+    [Fact]
+    public void Substring_WithoutLength_ShouldDeriveRemainingLength()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = x.String!.Substring(1) }))
+            .Should().Contain("substring(somestring, 1 + 1, length(somestring) - (1))");
+    }
+
+    [Fact]
+    public void StringLength_ShouldUseLengthFunction()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = x.String!.Length })).Should().Contain("length(somestring)");
+    }
+
+    [Fact]
+    public void Trim_ShouldUseTrimFunctions()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = x.String!.Trim() })).Should().Contain("trim(somestring)");
+        SqlOf(ctx, e.Select(x => new { V = x.String!.TrimStart() })).Should().Contain("ltrim(somestring)");
+        SqlOf(ctx, e.Select(x => new { V = x.String!.TrimEnd() })).Should().Contain("rtrim(somestring)");
+    }
+
+    [Fact]
+    public void Replace_ShouldUseReplaceFunction()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = x.String!.Replace("a", "b") }))
+            .Should().Contain("replace(somestring, 'a', 'b')");
+    }
+
+    [Fact]
+    public void IndexOf_ShouldUseInstr()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = x.String!.IndexOf("b") }))
+            .Should().Contain("case when (instr(somestring, 'b')) = 0 then -1 else (instr(somestring, 'b')) - 1 end");
+        SqlOf(ctx, e.Select(x => new { V = x.String!.IndexOf("b", 1) }))
+            .Should().Contain("instr(substring(somestring, 1 + 1, length(somestring) - (1)), 'b')");
+    }
+
+    [Fact]
+    public void LastIndexOf_ShouldNotBeSupported()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        FluentActions.Invoking(() => SqlOf(ctx, e.Select(x => new { V = x.String!.LastIndexOf("b") })))
+            .Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
+    public void StringJoinAndSplit_ShouldNotBeSupportedWithoutArrays()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        FluentActions.Invoking(() => SqlOf(ctx, e.Select(x => new { V = string.Join(",", x.String!.Split(',')) })))
+            .Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
+    public void PadLeftRight_ShouldUseZeroblobRepeat()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = x.String!.PadLeft(5) }))
+            .Should().Contain("case when length(somestring) >= (5) then somestring else replace(hex(zeroblob((5) - length(somestring))), '00', ' ')||somestring end");
+        SqlOf(ctx, e.Select(x => new { V = x.String!.PadRight(5, '0') }))
+            .Should().Contain("case when length(somestring) >= (5) then somestring else somestring||replace(hex(zeroblob((5) - length(somestring))), '00', '0') end");
+    }
+
+    [Fact]
+    public void RemoveAndInsert_ShouldSpliceWithSubstring()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = x.String!.Remove(2) }))
+            .Should().Contain("substring(somestring, 0 + 1, 2)");
+        SqlOf(ctx, e.Select(x => new { V = x.String!.Remove(2, 1) }))
+            .Should().Contain("substring(somestring, 0 + 1, 2)||''||substring(somestring, (2) + (1) + 1, length(somestring) - ((2) + (1)))");
+        SqlOf(ctx, e.Select(x => new { V = x.String!.Insert(2, "x") }))
+            .Should().Contain("substring(somestring, 0 + 1, 2)||'x'||substring(somestring, 2 + 1, length(somestring) - (2))");
+    }
+
+    [Fact]
+    public void NewString_ShouldUseZeroblobRepeat()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = new string('*', 4) }))
+            .Should().Contain("replace(hex(zeroblob(4)), '00', '*')");
+    }
+
+    [Fact]
+    public void StringIsNullOrEmpty_ShouldEmitNullCheck()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Where(x => string.IsNullOrEmpty(x.String)).Select(x => new { x.Id }))
+            .Should().Contain("(somestring is null or somestring = '')");
+    }
+
+    [Fact]
+    public void Like_ShouldEmitLikePredicate()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Where(x => SqlFunctions.Sql.like(x.String, "%a%")).Select(x => new { x.Id }))
+            .Should().Contain("somestring like '%a%'");
+    }
+
+    [Fact]
+    public void Like_WithEscapeChar_ShouldEmitEscapeClause()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Where(x => SqlFunctions.Sql.like(x.String, "%a!%", "!")).Select(x => new { x.Id }))
+            .Should().Contain("somestring like '%a!%' escape '!'");
+    }
+
+    [Fact]
+    public void MathAbs_ShouldUseAbsFunction()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = Math.Abs(x.Id - 5) })).Should().Contain("abs((id - 5))");
+    }
+
+    [Fact]
+    public void MathRound_ShouldUseRoundFunction()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = Math.Round(x.Id / 2.0 + 0.2) }))
+            .Should().Contain("round(((cast(id as double precision) / 2) + 0.2))");
+    }
+
+    [Fact]
+    public void MathTruncate_ShouldUseTruncFunction()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = Math.Truncate(x.Id + 0.0) })).Should().Contain("trunc(");
+    }
+
+    [Fact]
+    public void MathLog_ShouldUseNaturalLogarithm()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // SQLite's log() is base 10, so Math.Log must map to ln().
+        SqlOf(ctx, e.Select(x => new { V = Math.Log(x.Id + 1.0) })).Should().Contain("ln(");
+    }
+
+    [Fact]
+    public void DateTimeNow_ShouldUseDatetimeNow()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { N = DateTime.Now })).Should().Contain("datetime('now')");
+        SqlOf(ctx, e.Select(x => new { N = DateTime.UtcNow })).Should().Contain("datetime('now')");
+    }
+
+    [Fact]
+    public void DateTimeYearMonthDay_ShouldUseStrftime()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { Y = x.Datetime!.Value.Year }))
+            .Should().Contain("cast(strftime('%Y', dt) as integer)");
+        SqlOf(ctx, e.Select(x => new { M = x.Datetime!.Value.Month }))
+            .Should().Contain("cast(strftime('%m', dt) as integer)");
+        SqlOf(ctx, e.Select(x => new { D = x.Datetime!.Value.Day }))
+            .Should().Contain("cast(strftime('%d', dt) as integer)");
+        SqlOf(ctx, e.Select(x => new { DOY = x.Datetime!.Value.DayOfYear }))
+            .Should().Contain("cast(strftime('%j', dt) as integer)");
+    }
+
+    [Fact]
+    public void IsNullOrWhiteSpace_ShouldThrowClearException()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Where(x => string.IsNullOrWhiteSpace(x.String)).Select(x => new { x.Id }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*IsNullOrWhiteSpace*");
+    }
+
+    [Fact]
+    public void MathLogWithBase_ShouldThrowClearException()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // The two-argument Math.Log has a provider-specific argument order, so it is left unsupported.
+        var act = () => SqlOf(ctx, e.Select(x => new { V = Math.Log(x.Id + 1.0, 10) }));
+
+        act.Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
+    public void InValues_ShouldRenderInPredicateWithParameters()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        var values = new long[] { 1, 2, 3 };
+
+        var command = Prepare(ctx, e.Where(x => SqlFunctions.Sql.@in(x.Id, values)).Select(x => new { x.Id }));
+
+        Normalize(command.DbCommand.CommandText).Should().Contain("id in ($p0, $p1, $p2)");
+        command.DbCommandParams.Cast<DbParameter>().Select(p => p.ParameterName)
+            .Should().Equal("p0", "p1", "p2");
+    }
+
+    [Fact]
+    public void InValues_InlineParams_ShouldBecomeParameters()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var command = Prepare(ctx, e.Where(x => SqlFunctions.Sql.@in(x.Id, 1L, 2L)).Select(x => new { x.Id }));
+
+        Normalize(command.DbCommand.CommandText).Should().Contain("id in ($p0, $p1)");
+        command.DbCommandParams.Cast<DbParameter>().Select(p => p.ParameterName)
+            .Should().Equal("p0", "p1");
+    }
+
+    [Fact]
+    public void InValues_Empty_ShouldRenderAlwaysFalse()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        var values = Array.Empty<long>();
+
+        var command = Prepare(ctx, e.Where(x => SqlFunctions.Sql.@in(x.Id, values)).Select(x => new { x.Id }));
+
+        Normalize(command.DbCommand.CommandText).Should().Contain("1 = 0");
+        command.DbCommandParams.Cast<DbParameter>().Should().BeEmpty();
+    }
+
+    [Fact]
+    public void InValues_SingleElement_ShouldRenderInPredicate()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        var values = new long[] { 2 };
+
+        var command = Prepare(ctx, e.Where(x => SqlFunctions.Sql.@in(x.Id, values)).Select(x => new { x.Id }));
+
+        Normalize(command.DbCommand.CommandText).Should().Contain("id in ($p0)");
+        command.DbCommandParams.Cast<DbParameter>().Select(p => p.ParameterName)
+            .Should().Equal("p0");
+    }
+
+    [Fact]
+    public void InValues_WithNull_ShouldAddNullBranch()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        var values = new int?[] { 1, null };
+
+        var command = Prepare(ctx, e.Where(x => SqlFunctions.Sql.@in(x.Int, values)).Select(x => new { x.Id }));
+
+        Normalize(command.DbCommand.CommandText).Should().Contain("(nullableint in ($p0) or nullableint is null)");
+        command.DbCommandParams.Cast<DbParameter>().Select(p => p.ParameterName)
+            .Should().Equal("p0");
+    }
+
+    [Fact]
+    public void InValues_AllNull_ShouldRenderIsNull()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        var values = new int?[] { null };
+
+        var command = Prepare(ctx, e.Where(x => SqlFunctions.Sql.@in(x.Int, values)).Select(x => new { x.Id }));
+
+        Normalize(command.DbCommand.CommandText).Should().Contain("nullableint is null");
+        Normalize(command.DbCommand.CommandText).Should().NotContain(" in (");
+        command.DbCommandParams.Cast<DbParameter>().Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Contains_CapturedList_ShouldRenderInPredicate()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        var values = new List<long> { 1, 2 };
+
+        var command = Prepare(ctx, e.Where(x => values.Contains(x.Id)).Select(x => new { x.Id }));
+
+        Normalize(command.DbCommand.CommandText).Should().Contain("id in ($p0, $p1)");
+        command.DbCommandParams.Cast<DbParameter>().Select(p => p.ParameterName)
+            .Should().Equal("p0", "p1");
+    }
+
+    [Fact]
+    public void Contains_CapturedArray_ShouldRenderInPredicate()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        var values = new long[] { 1, 2 };
+
+        var command = Prepare(ctx, e.Where(x => values.Contains(x.Id)).Select(x => new { x.Id }));
+
+        Normalize(command.DbCommand.CommandText).Should().Contain("id in ($p0, $p1)");
+        command.DbCommandParams.Cast<DbParameter>().Select(p => p.ParameterName)
+            .Should().Equal("p0", "p1");
+    }
+
+    [Fact]
+    public void LogicalNot_InWhere_ShouldEmitNotPredicate()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Where(x => !x.Boolean!.Value).Select(x => new { x.Id }))
+            .Should().Contain("where not (b)");
+    }
+
+    [Fact]
+    public void LogicalNot_WhenProjected_ShouldEmitNotScalar()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // SQLite has a boolean type valid as a scalar, so no cast/CASE is added around the negation.
+        var sql = SqlOf(ctx, e.Select(x => !x.Boolean!.Value));
+
+        sql.Should().Contain("not (b)");
+        sql.Should().NotContain("cast(");
+    }
+
+    [Fact]
+    public void LogicalNot_WithCapturedValue_ShouldEmitParameter()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        var flag = true;
+
+        var command = Prepare(ctx, e.Where(x => !flag).Select(x => new { x.Id }));
+
+        // The parameter-extraction pass has to walk the operand even though it emits no SQL.
+        Normalize(command.DbCommand.CommandText).Should().Contain("not ($flag)");
+        command.DbCommandParams.Cast<DbParameter>().Should().ContainSingle()
+            .Which.ParameterName.Should().Be("flag");
+    }
+
+    [Fact]
+    public void Negate_ShouldParenthesiseOperand()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.Select(x => -x.Id)).Should().Contain("-(id)");
+    }
+
+    [Fact]
+    public void OnesComplement_ShouldEmitTilde()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.Select(x => ~x.Id)).Should().Contain("~(id)");
+    }
+
+    [Fact]
+    public void LogicalNot_OfAnd_ShouldNegateWholePredicate()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Where(x => !(x.Boolean!.Value && x.Id > 1L)).Select(x => new { x.Id }))
+            .Should().Contain("not ((b and (id > 1)))");
+    }
+
+    [Fact]
+    public void LogicalNot_OfOr_ShouldNegateWholePredicate()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Where(x => !(x.Boolean!.Value || x.Id > 1L)).Select(x => new { x.Id }))
+            .Should().Contain("not ((b or (id > 1)))");
+    }
+
+    public sealed class CteNumberRow
+    {
+        public int n { get; set; }
+    }
+
+    [Fact]
+    public void Cte_NonRecursive_ShouldEmitWithClause()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var cte = e.Where(x => x.Id > 1).Select(x => new { x.Id });
+        var sql = SqlOf(ctx, ctx.With("recent", cte).From("recent").Select(t => new { id = t["id"].AsInt }));
+
+        sql.Should().StartWith("with recent as (select id from complex_entity");
+        sql.Should().Contain("where (id > 1))");
+        sql.Should().EndWith("select id from recent");
+    }
+
+    [Fact]
+    public void Cte_FromDefinition_ShouldUseDefinitionName()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var query = e.Where(x => x.Id > 1).Select(x => new { x.Id });
+        var cte = ctx.With("recent", query);
+        var sql = SqlOf(ctx, cte.From(cte.Ctes[0]).Select(t => new { id = t["id"].AsInt }));
+
+        sql.Should().StartWith("with recent as (select id from complex_entity");
+        sql.Should().EndWith("select id from recent");
+    }
+
+    [Fact]
+    public void Cte_TwoChained_ShouldEmitBothWithClauses()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var first = e.Where(x => x.Id > 1).Select(x => new { x.Id });
+        var second = ctx.From("first").Select(t => new { id = t["id"].AsInt });
+        var sql = SqlOf(ctx, ctx.With("first", first).With("second", second).From("second").Select(t => new { id = t["id"].AsInt }));
+
+        sql.Should().StartWith("with first as (select id from complex_entity");
+        sql.Should().Contain("), second as (select id from first)");
+        sql.Should().EndWith("select id from second");
+    }
+
+    [Fact]
+    public void Cte_WithCapturedParam_ShouldExtractParam()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        var threshold = 1L;
+
+        var command = Prepare(ctx, ctx
+            .With("recent", e.Where(x => x.Id > threshold).Select(x => new { x.Id }))
+            .From("recent")
+            .Select(t => new { id = t["id"].AsInt }));
+
+        Normalize(command.DbCommand.CommandText).Should().Contain("$threshold");
+        command.DbCommandParams.Cast<DbParameter>().Select(p => p.ParameterName)
+            .Should().Equal("threshold");
+    }
+
+    [Fact]
+    public void Cte_Recursive_ShouldEmitWithRecursiveKeyword()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var anchor = e.Where(s => s.Id == 1).Select(s => new CteNumberRow { n = s.Id });
+        var step = ctx.From("nums").Where(t => t["n"].AsInt < 5).Select(t => new CteNumberRow { n = t["n"].AsInt + 1 });
+        var body = anchor.UnionAll(step);
+
+        var sql = SqlOf(ctx, ctx.WithRecursive("nums", body).From("nums").Select(t => new CteNumberRow { n = t["n"].AsInt }));
+
+        sql.Should().StartWith("with recursive nums as (");
+        sql.Should().Contain(" union all ");
+        sql.Should().Contain("select n from nums");
+        sql.Should().NotContain("maxrecursion");
+    }
+
+    [Fact]
+    public void RowNumber_ShouldEmitOverWithPartitionAndOrder()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            x.Id,
+            rn = SqlFunctions.Sql.row_number().Over(partitionBy: () => x.Int, orderBy: () => x.Id)
+        }));
+
+        sql.Should().Be("select id, row_number() over (partition by nullableint order by id) as 'rn' from complex_entity");
+    }
+
+    [Fact]
+    public void RankAndDenseRank_ShouldEmitOverWithOrder()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            x.Id,
+            r = SqlFunctions.Sql.rank().Over(SqlFunctions.Sql.asc(() => x.Id)),
+            dr = SqlFunctions.Sql.dense_rank().Over(SqlFunctions.Sql.asc(() => x.Id))
+        }));
+
+        sql.Should().Be("select id, rank() over (order by id) as 'r', dense_rank() over (order by id) as 'dr' from complex_entity");
+    }
+
+    [Fact]
+    public void PercentRankCumeDist_ShouldEmitOverWithOrder()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            x.Id,
+            pr = SqlFunctions.Sql.percent_rank().Over(SqlFunctions.Sql.asc(() => x.Id)),
+            cd = SqlFunctions.Sql.cume_dist().Over(SqlFunctions.Sql.asc(() => x.Id))
+        }));
+
+        sql.Should().Be("select id, percent_rank() over (order by id) as 'pr', cume_dist() over (order by id) as 'cd' from complex_entity");
+    }
+
+    [Fact]
+    public void Iif_ShouldUseIifFunction()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Sql.iif(x.Id > 0L, "yes", "no") }));
+
+        sql.Should().Contain("iif(");
+        sql.Should().Contain("'yes', 'no')");
+    }
+
+    [Fact]
+    public void NthValue_ShouldEmitOverWithOrder()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            x.Id,
+            V = SqlFunctions.Sql.nth_value(x.Id, 2).Over(SqlFunctions.Sql.asc(() => x.Id))
+        }));
+
+        sql.Should().Contain("nth_value(id, 2) over (order by id)");
+    }
+
+    [Fact]
+    public void WindowOrderByDescending_ShouldEmitDesc()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            x.Id,
+            r = SqlFunctions.Sql.row_number().Over(
+                partitionBy: new Expression<Func<object?>>[] { () => x.Int },
+                orderBy: new[] { SqlFunctions.Sql.desc(() => x.Id) })
+        }));
+
+        sql.Should().Be("select id, row_number() over (partition by nullableint order by id desc) as 'r' from complex_entity");
+    }
+
+    [Fact]
+    public void LagAndLead_ShouldEmitOffsetAndDefault()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            x.Id,
+            prev = SqlFunctions.Sql.lag(x.Id, 1, 0L).Over(SqlFunctions.Sql.asc(() => x.Id)),
+            next = SqlFunctions.Sql.lead(x.Int, 2, 0).Over(SqlFunctions.Sql.asc(() => x.Id))
+        }));
+
+        sql.Should().Be("select id, lag(id, 1, 0) over (order by id) as 'prev', lead(nullableint, 2, 0) over (order by id) as 'next' from complex_entity");
+    }
+
+    [Fact]
+    public void WindowAggregate_ShouldEmitOverPartition()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            x.Id,
+            total = SqlFunctions.Sql.sum_over(x.Id).Over(partitionBy: () => x.Int),
+            n = SqlFunctions.Sql.count_over().Over(partitionBy: () => x.Int)
+        }));
+
+        sql.Should().Be("select id, sum(id) over (partition by nullableint) as 'total', count(*) over (partition by nullableint) as 'n' from complex_entity");
+    }
+
+    [Fact]
+    public void WindowFrame_ShouldEmitRowsBetween()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            x.Id,
+            running = SqlFunctions.Sql.sum_over(x.Id).Over(
+                SqlFunctions.Sql.asc(() => x.Id),
+                WindowFrame.RowsUnboundedPrecedingToCurrentRow),
+            sliding = SqlFunctions.Sql.sum_over(x.Id).Over(
+                SqlFunctions.Sql.asc(() => x.Id),
+                WindowFrame.Rows(1, 1))
+        }));
+
+        sql.Should().Be("select id, sum(id) over (order by id rows between unbounded preceding and current row) as 'running', sum(id) over (order by id rows between 1 preceding and 1 following) as 'sliding' from complex_entity");
+    }
+
+    [Fact]
+    public void NtileAndFirstLastValue_ShouldEmitOver()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            x.Id,
+            bucket = SqlFunctions.Sql.ntile(2).Over(SqlFunctions.Sql.asc(() => x.Id)),
+            first = SqlFunctions.Sql.first_value(x.Int).Over(partitionBy: () => x.Int, orderBy: () => x.Id),
+            last = SqlFunctions.Sql.last_value(x.Int).Over(partitionBy: () => x.Int, orderBy: () => x.Id)
+        }));
+
+        sql.Should().Be("select id, ntile(2) over (order by id) as 'bucket', first_value(nullableint) over (partition by nullableint order by id) as 'first', last_value(nullableint) over (partition by nullableint order by id) as 'last' from complex_entity");
+    }
+
+    [Fact]
+    public void WindowMultiplePartitionsAndRangeFrame_ShouldEmitAllParts()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            x.Id,
+            v = SqlFunctions.Sql.sum_over(x.Id).Over(
+                partitionBy: new Expression<Func<object?>>[] { () => x.Int, () => x.Boolean },
+                orderBy: new[] { SqlFunctions.Sql.asc(() => x.Int), SqlFunctions.Sql.desc(() => x.Id) },
+                frame: WindowFrame.Range(WindowFrameBound.UnboundedPreceding, WindowFrameBound.CurrentRow))
+        }));
+
+        sql.Should().Be("select id, sum(id) over (partition by nullableint, b order by nullableint, id desc range between unbounded preceding and current row) as 'v' from complex_entity");
+    }
+
+    [Fact]
+    public void WindowFrame_FullBoundaries_ShouldEmitRowsAndRange()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            x.Id,
+            full = SqlFunctions.Sql.sum_over(x.Id).Over(
+                SqlFunctions.Sql.desc(() => x.Id),
+                WindowFrame.Rows(WindowFrameBound.UnboundedPreceding, WindowFrameBound.UnboundedFollowing)),
+            range = SqlFunctions.Sql.sum_over(x.Id).Over(
+                SqlFunctions.Sql.asc(() => x.Id),
+                WindowFrame.RangeUnboundedPrecedingToCurrentRow)
+        }));
+
+        sql.Should().Contain("sum(id) over (order by id desc rows between unbounded preceding and unbounded following) as 'full'");
+        sql.Should().Contain("sum(id) over (order by id range between unbounded preceding and current row) as 'range'");
+    }
+
+    [Fact]
+    public void WindowFunction_WithoutOver_ShouldThrow()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new { x.Id, rn = SqlFunctions.Sql.row_number() }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*Over*");
+    }
+
+    public interface ITvfRow
+    {
+        [Column("id")]
+        long Id { get; set; }
+        [Column("value")]
+        string? Value { get; set; }
+    }
+
+    private static class Tvf
+    {
+        [SqlTableFunction("all_rows")]
+        public static IQueryable<ITvfRow> AllRows() => throw new NotSupportedException();
+
+        [SqlTableFunction("rows_by_id")]
+        public static IQueryable<ITvfRow> ById(long id) => throw new NotSupportedException();
+
+        [SqlTableFunction("rows_between", Schema = "app")]
+        public static IQueryable<ITvfRow> Between(long lo, long hi) => throw new NotSupportedException();
+    }
+
+    [Fact]
+    public void TableFunction_NoArgs_ShouldEmitCall()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        SqlOf(ctx, ctx.FromTableFunction(() => Tvf.AllRows()).Select(r => new { r.Id }))
+            .Should().Be("select id from all_rows()");
+    }
+
+    [Fact]
+    public void BuiltInTableFunction_UnsupportedByProvider_ShouldThrow()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var start = 1L;
+        var stop = 5L;
+
+        var act = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.Postgres.generate_series(start, stop))
+            .Select(r => new { r.Value }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*generate_series*");
+    }
+
+    [Fact]
+    public void TableFunction_WithArgument_ShouldEmitParameter()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var id = 5L;
+
+        var command = Prepare(ctx, ctx.FromTableFunction(() => Tvf.ById(id)).Select(r => new { r.Id }));
+
+        Normalize(command.DbCommand.CommandText).Should().Be("select id from rows_by_id($id)");
+        command.DbCommandParams.Cast<DbParameter>().Should().ContainSingle()
+            .Which.ParameterName.Should().Be("id");
+    }
+
+    [Fact]
+    public void TableFunction_TwoArgumentsAndSchema_ShouldEmitQualifiedCall()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var lo = 1L;
+        var hi = 3L;
+
+        var command = Prepare(ctx, ctx.FromTableFunction(() => Tvf.Between(lo, hi)).Select(r => new { r.Id }));
+
+        Normalize(command.DbCommand.CommandText).Should().Be("select id from app.rows_between($lo, $hi)");
+        command.DbCommandParams.Cast<DbParameter>().Select(p => p.ParameterName)
+            .Should().Equal("lo", "hi");
+    }
+
+    [Fact]
+    public void TableFunction_JoinedToTable_ShouldAliasBothSources()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var complex = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, ctx
+            .FromTableFunction(() => Tvf.AllRows())
+            .Join(complex, (r, c) => r.Id == c.Id)
+            .Select(p => new { p.Item1.Value, p.Item2.String }));
+
+        sql.Should().Be("select t1.value, t2.somestring as 'String' from all_rows() as 't1' join complex_entity as 't2' on t1.id = t2.id");
+    }
+
+    [Fact]
+    public void TableFunction_AsJoinedSource_ShouldAliasBothSources()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+
+        var sql = SqlOf(ctx, simple
+            .Join(ctx.FromTableFunction(() => Tvf.AllRows()), (s, r) => r.Id == s.Id)
+            .Select(p => new { p.Item1.Id, p.Item2.Value }));
+
+        sql.Should().Be("select t1.id, t2.value from simple_entity as 't1' join all_rows() as 't2' on t2.id = cast(t1.id as bigint)");
+    }
+
+    [Fact]
+    public void ArrayAny_ShouldThrowBecauseSqliteHasNoArrays()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Where(x => x.Id == SqlFunctions.Postgres.any(SqlFunctions.Parameter<long[]>(0))).Select(x => new { x.Id }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*Arrays*");
+    }
+
+    [Fact]
+    public void JsonAgg_ShouldThrowBecauseSqliteHasNoJsonbSurface()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => SqlFunctions.Postgres.json_agg(x.String)));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*JSON*");
+    }
+
+    [Fact]
+    public void NullIf_ShouldEmitNullIf()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // nullif is ANSI and therefore not capability-gated.
+        SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Sql.nullif(x.Id, 0L) }))
+            .Should().Contain("nullif(id, 0)");
+    }
+
+    [Fact]
+    public void FilteredAggregate_ShouldEmitFilterClause()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // SQLite 3.30+ accepts the FILTER (WHERE ...) aggregate clause.
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.count(() => x.Id > 1L)))
+            .Should().Contain("count(*) filter (where (id > 1))");
+    }
+
+    [Fact]
+    public void GreatestLeast_ShouldEmitMaxMin()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Hi = SqlFunctions.Sql.greatest(x.Id, x.Id),
+            Lo = SqlFunctions.Sql.least(x.Id, x.Id)
+        }));
+
+        sql.Should().Contain("max(id, id)");
+        sql.Should().Contain("min(id, id)");
+    }
+
+    [Fact]
+    public void Greatest_WithSingleArgument_ShouldEmitArgument()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Sql.greatest(x.Id) }))
+            .Should().Contain("(id)");
+    }
+
+    [Fact]
+    public void DateTrunc_ShouldThrowBecauseSqliteHasNoDateTrunc()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Sql.date_trunc("month", x.Datetime) }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*date_trunc*");
+    }
+
+    [Fact]
+    public void DateAdd_ShouldUseDatetimeModifier()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Sql.date_add("day", 1, x.Datetime) }))
+            .Should().Contain("datetime(dt, (1) || ' days')");
+    }
+
+    [Fact]
+    public void DateTimeAddMethod_ShouldUseDatetimeModifier()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = x.Datetime!.Value.AddDays(1) }))
+            .Should().Contain("datetime(dt, (1) || ' days')");
+    }
+
+    [Fact]
+    public void DateDiffAndEndOfMonth_ShouldUseSqliteFunctions()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Sql.date_diff("day", x.Datetime, x.Datetime) }))
+            .Should().Contain("/ 86400");
+
+        SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Sql.end_of_month(x.Datetime) }))
+            .Should().Contain("date(dt, 'start of month', '+1 month', '-1 day')");
+    }
+
+    [Fact]
+    public void StringAgg_ShouldUseGroupConcat()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.string_agg(x.String, ",")))
+            .Should().Contain("group_concat(somestring, ',')");
+    }
+
+    [Fact]
+    public void TextJsonFunctions_ShouldThrowBecauseSqliteLacksThem()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => SqlFunctions.SqlServer.json_value(x.String, "$.id")));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*text JSON*");
+    }
+
+    [Fact]
+    public void FullTextPredicates_ShouldThrowBecauseSqliteLacksThem()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Where(x => SqlFunctions.Sql.contains(x.String, "foo")).Select(x => new { x.Id }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*full-text*");
+    }
+
+    [Fact]
+    public void TableHint_ShouldThrowBecauseSqliteHasNoTableHints()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>().WithTableHint("nolock").Select(x => new { x.Id }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*Table hints*");
+    }
+
+    [Fact]
+    public void ForJson_ShouldThrowBecauseSqliteHasNoForJson()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new { x.Id }).ForJson());
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*FOR JSON*");
+    }
+
+    [Fact]
+    public void ForXml_ShouldThrowBecauseSqliteHasNoForXml()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new { x.Id }).ForXml());
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*FOR XML*");
+    }
+
+    [Fact]
+    public void BooleanAggregates_ShouldThrowBecauseSqliteLacksThem()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.bool_and(x.Id) }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*bool_and/bool_or/every*");
+    }
+
+    [Fact]
+    public void StatisticalAggregates_ShouldThrowBecauseSqliteLacksThem()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Sql.corr(x.Id, x.Id) }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*statistical*");
+    }
+
+    [Fact]
+    public void OrderedSetAggregates_ShouldThrowBecauseSqliteLacksThem()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.percentile_cont(0.5, () => x.Id) }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*ordered-set*");
+    }
+
+    [Fact]
+    public void AnyValueAggregate_ShouldThrowBecauseSqliteLacksIt()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Sql.any_agg(x.String) }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*ANY_VALUE*");
+    }
+
+    [Fact]
+    public void ExtendedScalarFunctions_ShouldThrowBecauseSqliteLacksThem()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Postgres.asin(x.Id) }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*extended scalar*");
+    }
+
+    [Fact]
+    public void SessionInfoFunctions_ShouldThrowBecauseSqliteLacksThem()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Sql.current_user() }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*current_user*");
+    }
+
+    [Fact]
+    public void Version_ShouldUseSqliteVersion()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new { V = SqlFunctions.Sql.version() }));
+
+        sql.Should().Contain("sqlite_version()");
+    }
+
+    [Fact]
+    public void UuidGenerators_ShouldThrowBecauseSqliteLacksThem()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new { U = SqlFunctions.Sql.gen_random_uuid() }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*UUID generator*");
+    }
+
+    [Fact]
+    public void BinaryColumn_ShouldEmitBytesAccessor()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        SqlOf(ctx, ctx.From("binary_entity").Select(t => new { Payload = t.GetBytes("data") }))
+            .Should().Be("select data from binary_entity");
+    }
+
+    [Fact]
+    public void BinaryColumn_ShouldEmitAsBytesAccessor()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        SqlOf(ctx, ctx.From("binary_entity").Select(t => new { Payload = t["data"].AsBytes }))
+            .Should().Be("select data from binary_entity");
+    }
+
+    [Fact]
+    public void SelectMany_ShouldThrowNotSupportedOnSqlProvider()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var act = () => e.SelectMany(x => new[] { x.Id });
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*SelectMany*");
+    }
+
+    [Fact]
+    public void GroupJoin_ShouldThrowNotSupportedOnSqlProvider()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+        var inner = ctx.From<ISimpleEntity>();
+
+        var act = () => e.GroupJoin(inner, o => o.Id, i => i.Id, (o, g) => new { o.Id, Count = g.Count() });
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*GroupJoin*");
+    }
+
+    private static Expression<Func<IComplexEntity, string>> SwitchOfId(string @default, params (long Test, string Result)[] cases)
+    {
+        var p = Expression.Parameter(typeof(IComplexEntity), "x");
+        var switchCases = cases
+            .Select(c => Expression.SwitchCase(Expression.Constant(c.Result), Expression.Constant(c.Test)))
+            .ToArray();
+        var body = Expression.Switch(Expression.Property(p, nameof(IComplexEntity.Id)), Expression.Constant(@default), switchCases);
+
+        return Expression.Lambda<Func<IComplexEntity, string>>(body, p);
+    }
+
+    [Fact]
+    public void DistinctOn_ShouldThrowBecauseSqliteHasNoDistinctOn()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var act = () => SqlOf(ctx, e.DistinctOn(x => x.Id).Select(x => new { x.Id }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*DISTINCT ON*");
+    }
+
+    [Fact]
+    public void TableSample_ShouldThrowBecauseSqliteHasNoTableSample()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var act = () => SqlOf(ctx, e.TableSample(10).Select(x => x.Id));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*TABLESAMPLE*");
+    }
+
+    [Fact]
+    public void TextSearch_ShouldThrowBecauseSqliteHasNoTsvector()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new { Q = SqlFunctions.Postgres.to_tsquery("a") }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*text-search*");
+    }
+
+    [Fact]
+    public void ForSystemTime_ShouldThrowBecauseSqliteHasNoTemporalTables()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var act = () => SqlOf(ctx, e.ForSystemTime(TemporalClause.All()).Select(x => x.Id));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*FOR SYSTEM_TIME*");
+    }
+}

@@ -8,7 +8,10 @@
             "nextorm.core/nextorm.core.csproj",
             "nextorm.sqlite/nextorm.sqlite.csproj",
             "nextorm.sqlserver/nextorm.sqlserver.csproj",
-            "nextorm.postgres/nextorm.postgres.csproj"
+            "nextorm.postgres/nextorm.postgres.csproj",
+            "nextorm.mysql/nextorm.mysql.csproj",
+            "nextorm.mariadb/nextorm.mariadb.csproj",
+            "nextorm.clickhouse/nextorm.clickhouse.csproj"
           ]
         }
       ],
@@ -29,8 +32,8 @@
           "bin/**",
           "_site/**",
           "_template.md",
-          "documentation-plan.md",
           "README.md",
+          "specs/**",
           "docfx.json"
         ]
       }
@@ -43,6 +46,9 @@
           "**/*.jpeg",
           "**/*.gif",
           "**/*.svg"
+        ],
+        "exclude": [
+          "_site/**"
         ]
       }
     ],

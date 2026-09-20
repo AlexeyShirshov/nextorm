@@ -1,5 +1,0 @@
-{
-  "platformOptions": {
-    "resultDirectory": "test/TestResults/nextorm.sqlserver.tests"
-  }
-}

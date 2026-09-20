@@ -1,4 +1,4 @@
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Composite facade over the individual context roles, kept as the convenient entry point for

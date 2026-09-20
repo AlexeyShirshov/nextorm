@@ -1,6 +1,6 @@
-using nextorm.core;
+using NextORM.Core;
 
-namespace nextorm.benchmark;
+namespace NextORM.Benchmark;
 
 public class InMemoryDataRepository
 {

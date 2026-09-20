@@ -1,7 +1,7 @@
 using BenchmarkDotNet.Attributes;
-using nextorm.core;
+using NextORM.Core;
 
-namespace nextorm.benchmark;
+namespace NextORM.Benchmark;
 
 /// <summary>
 /// <c>SelectMany</c> (correlated flatten) and <c>GroupJoin</c> (grouped inner rows): nextorm in-memory
@@ -31,7 +31,7 @@ public class InMemoryBenchmarkSelectMany
             data.Add(new SimpleEntity { Id = i });
         _data = data;
 
-        var provider = new InMemoryContext();
+        var provider = new InMemoryDataContext();
         _ctx = new InMemoryDataRepository(provider);
         _ctx.SimpleEntity.WithData(_data);
 

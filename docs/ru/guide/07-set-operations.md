@@ -1,12 +1,12 @@
 # Операции над множествами
 
-> Объединяйте два набора результатов с помощью `Union`, `UnionAll`, `Intersect`, `IntersectAll`, `Except` и `ExceptAll` и выстраивайте их в цепочку слева направо.
+> Объединяйте два набора результатов с помощью [`Union`](xref:NextORM.Core.QueryCommand`1), [`UnionAll`](xref:NextORM.Core.QueryCommand`1), [`Intersect`](xref:NextORM.Core.QueryCommand`1), [`IntersectAll`](xref:NextORM.Core.QueryCommand`1), [`Except`](xref:NextORM.Core.QueryCommand`1) и [`ExceptAll`](xref:NextORM.Core.QueryCommand`1) и выстраивайте их в цепочку слева направо.
 
 **Предварительные требования:** [Запросы и проекции](01-querying-and-projections.md) · [Подзапросы](06-subqueries.md) · [SELECT DISTINCT](08-distinct.md)
 
 ## Обзор
 
-Каждый `QueryCommand<TResult>` предоставляет шесть методов операций над множествами, которые
+Каждый [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) предоставляет шесть методов операций над множествами, которые
 принимают другой запрос и возвращают новый запрос:
 
 | Метод | Ключевое слово SQL | Сохраняет дубликаты |
@@ -23,7 +23,7 @@
 `SimpleEntity.Select(it => it.Id).Union(ComplexEntity.Select(it => (int)it.Id))`
 допустим, пока формы совпадают.
 
-Результат сам является `QueryCommand`, поэтому его можно выполнить через `From(result)` или
+Результат сам является [`QueryCommand`](xref:NextORM.Core.QueryCommand), поэтому его можно выполнить через `From(result)` или
 применить к нему ещё одну операцию над множествами. **Цепочка применяется слева направо**: каждая
 новая операция объединяет накопленную левую сторону со следующим запросом, и внутри цепочки
 действует стандартный приоритет операторов (`(A except B) intersect C`, а не
@@ -57,7 +57,7 @@ select id from simple_entity
 
 Сторонами также могут быть разные сущности, если типы элементов совпадают. В наборе интеграционных
 тестов `SimpleEntity` (ids `1..10`) объединяется через union с `ComplexEntity` (ids `1..3`),
-приведённой к `int`, поэтому объединение с устранением дубликатов даёт 10 строк, а `UnionAll` той же
+приведённой к `int`, поэтому объединение с устранением дубликатов даёт 10 строк, а [`UnionAll`](xref:NextORM.Core.QueryCommand`1) той же
 пары — 13:
 
 ```csharp
@@ -135,7 +135,7 @@ dialect"`).
 
 ## Запрос результата операции над множествами
 
-Операция над множествами возвращает запрос, поэтому вы делаете запрос к нему через `From`:
+Операция над множествами возвращает запрос, поэтому вы делаете запрос к нему через [`From`](xref:NextORM.Core.DataContextExtensions):
 
 ```csharp
 var cmd = dataContext.From<IComplexEntity>().Select(it => it.Int)
@@ -161,22 +161,25 @@ var count = dataContext.From(
 | SQLite | поддерживается | поддерживается | **`NotSupportedException`** при подготовке |
 | SQL Server | поддерживается | поддерживается | **`NotSupportedException`** при подготовке |
 | PostgreSQL | поддерживается | поддерживается | поддерживается |
+| MySQL | поддерживается | поддерживается (MySQL 8.0.31+) | **`NotSupportedException`** при подготовке (варианты `ALL` отсутствуют) |
+| MariaDB | поддерживается | поддерживается (MariaDB 10.4+) | поддерживается |
+| ClickHouse | поддерживается | поддерживается | поддерживается |
 | In-memory | не покрыто набором тестов in-memory | не покрыто | не покрыто |
 
-Это соответствует возможности `SupportsIntersectExceptAll`: PostgreSQL — единственный поставляемый
-провайдер, возвращающий `true`; SQLite и SQL Server возвращают `false`, и построитель SQL
+Это соответствует возможности [`SupportsIntersectExceptAll`](xref:NextORM.Core.ISqlDialect.SupportsIntersectExceptAll): PostgreSQL, MariaDB и ClickHouse —
+поставляемые провайдеры, возвращающие `true`; SQLite и SQL Server возвращают `false`, и построитель SQL
 отказывается генерировать операцию над множествами `*ALL` для них.
 
 ## См. также
 
-- [SELECT DISTINCT](08-distinct.md) - `Distinct()` и операции над множествами взаимодействуют.
+- [SELECT DISTINCT](08-distinct.md) - [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) и операции над множествами взаимодействуют.
 - [Подзапросы](06-subqueries.md) - запрос операции над множествами можно использовать как источник `FROM`.
 - [Запросы и проекции](01-querying-and-projections.md)
 
 ---
 
-Source: `test/nextorm.integration.tests/CommonTestSuite.SetOperations.cs:8`,
-`test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:743,761`,
-`test/nextorm.sqlite.tests/SqlGenerationTests.cs:49,69,89`,
-`test/nextorm.sqlserver.tests/SqlGenerationTests.cs:62,102`,
-`test/nextorm.postgres.tests/SqlGenerationTests.cs:48,88`.
+Source: `tests/nextorm.integration.tests/CommonTestSuite.SetOperations.cs:8`,
+`tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:743,761`,
+`tests/nextorm.sqlite.tests/SqlGenerationTests.cs:49,69,89`,
+`tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:62,102`,
+`tests/nextorm.postgres.tests/SqlGenerationTests.cs:48,88`.

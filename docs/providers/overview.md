@@ -1,22 +1,22 @@
 # Provider overview
 
-> A provider supplies a dialect (SQL text rules) and a `DbContext` subclass (connection + parameter creation); pick the one that matches the database you already run.
+> A provider supplies a dialect (SQL text rules) and a [`DataContext`](xref:NextORM.Core.DataContext) subclass (connection + parameter creation); pick the one that matches the database you already run.
 
 **Prerequisites:** [Quickstart](../getting-started/02-quickstart.md) · [Dependency injection](../getting-started/04-dependency-injection.md)
 
 ## Overview
 
-nextorm is split into a provider-neutral core (`nextorm`, namespace `nextorm.core`) and one package per
+nextorm is split into a provider-neutral core (`nextorm`, namespace [`NextORM.Core`](xref:NextORM.Core)) and one package per
 database: `nextorm.sqlite`, `nextorm.sqlserver`, `nextorm.postgres`, `nextorm.mysql`, `nextorm.mariadb`
 and `nextorm.clickhouse`. The in-memory provider is built
 into the core package. A provider contributes two things:
 
 1. a **dialect** — a stateless object that renders everything that differs between databases (parameter
    placeholders, paging, quoting, function names, capability flags); and
-2. a **context** — a `DbContext` subclass that knows how to create a connection and parameters, and
+2. a **context** — a [`DataContext`](xref:NextORM.Core.DataContext) subclass that knows how to create a connection and parameters, and
    exposes the dialect through its `Dialect` property.
 
-SQL generation is driven entirely by `ISqlDialect` (`src/nextorm.core/DataContext/Dialect/ISqlDialect.cs`),
+SQL generation is driven entirely by [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) (`src/nextorm.core/DataContext/Dialect/ISqlDialect.cs`),
 so the SQL builder and expression visitors never contain provider names. Query semantics (projection,
 filtering, joins, grouping, set operations, CTE, window functions, scalar/UDF/TVF support) are shared;
 only the rendering differs.
@@ -31,7 +31,7 @@ only the rendering differs.
 | You already run MySQL | `nextorm.mysql` |
 | You already run MariaDB | `nextorm.mariadb` |
 | You already run ClickHouse | `nextorm.clickhouse` |
-| Unit tests that must not touch a database, plan-cache tests, query-shape tests | `InMemoryContext` (core) |
+| Unit tests that must not touch a database, plan-cache tests, query-shape tests | [`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext) (core) |
 
 Use the same query code against every provider; the provider differences below are the only things that
 change.
@@ -65,12 +65,12 @@ change.
 | `RIGHT` / `FULL` join capability | supported | supported | supported | `RIGHT` only | `RIGHT` only | supported | supported |
 
 For the feature-by-feature comparison against EF Core and linq2db, see
-[SQL capabilities gap analysis](../sql-capabilities-gap-analysis.md).
+[SQL capabilities gap analysis](../specs/roadmap/sql-capabilities-gap-analysis.md).
 
 ## How a dialect plugs in
 
-A dialect implements `ISqlDialect` or derives from `SqlDialectBase`. In `SqlDialectBase` only
-`MakeParam` and `MakePage` are abstract; every other member has a working ANSI default, so a dialect
+A dialect implements [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) or derives from [`SqlDialectBase`](xref:NextORM.Core.SqlDialectBase). In [`SqlDialectBase`](xref:NextORM.Core.SqlDialectBase) only
+[`MakeParam`](xref:NextORM.Core.ISqlDialect) and [`MakePage`](xref:NextORM.Core.ISqlDialect) are abstract; every other member has a working ANSI default, so a dialect
 overrides just what is different. Capability differences (paging requiring an `ORDER BY`, required
 subquery aliases, `INTERSECT ALL`/`EXCEPT ALL`) are expressed as properties rather than special cases in
 the SQL builder.
@@ -88,7 +88,7 @@ ISqlDialect clickHouse = ClickHouseDialect.Instance;
 A provider context returns its dialect from an overridden property:
 
 ```csharp
-public class SqliteDbContext : DbContext
+public class SqliteDataContext : DataContext
 {
     public override ISqlDialect Dialect => SqliteDialect.Instance;
     // CreateDbConnection / CreateParam are provider specific.
@@ -101,15 +101,15 @@ separate axis from SQL text.
 
 ## Registering a provider
 
-Every provider package adds `UseXxx` extension methods on `DbContextBuilder`, and every context also has a
+Every provider package adds `UseXxx` extension methods on [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder), and every context also has a
 public constructor that takes a connection string or an existing `DbConnection`:
 
 ```csharp
-using nextorm.core;
-using nextorm.sqlite;      // or nextorm.sqlserver / nextorm.postgres
+using NextORM.Core;
+using NextORM.Sqlite;      // or nextorm.sqlserver / nextorm.postgres
 
-var builder = new DbContextBuilder().UseSqlite("app.db");   // provider-specific overload
-using var ctx = builder.CreateDbContext();                   // returns IDataContext
+var builder = new DataContextBuilder().UseSqlite("app.db");   // provider-specific overload
+using var ctx = builder.CreateDataContext();                   // returns IDataContext
 ```
 
 With dependency injection:
@@ -130,12 +130,12 @@ registrations.
 - [MariaDB](mariadb.md)
 - [ClickHouse](clickhouse.md)
 - [In-memory](in-memory.md)
-- [SQL capabilities gap analysis](../sql-capabilities-gap-analysis.md)
+- [SQL capabilities gap analysis](../specs/roadmap/sql-capabilities-gap-analysis.md)
 - [Limitations and out-of-scope features](../advanced/limitations.md)
 
 ---
 
 Source: `src/nextorm.core/DataContext/Dialect/ISqlDialect.cs`, `src/nextorm.core/DataContext/Dialect/SqlDialectBase.cs`,
-`test/nextorm.sqlite.tests/SqliteDialectTests.cs`, `test/nextorm.sqlserver.tests/SqlServerDialectTests.cs`,
-`test/nextorm.postgres.tests/PostgresDialectTests.cs`, `test/nextorm.mysql.tests/MySqlDialectTests.cs`,
-`test/nextorm.mariadb.tests/MariaDbDialectTests.cs`, `test/nextorm.clickhouse.tests/ClickHouseDialectTests.cs`.
+`tests/nextorm.sqlite.tests/SqliteDialectTests.cs`, `tests/nextorm.sqlserver.tests/SqlServerDialectTests.cs`,
+`tests/nextorm.postgres.tests/PostgresDialectTests.cs`, `tests/nextorm.mysql.tests/MySqlDialectTests.cs`,
+`tests/nextorm.mariadb.tests/MariaDbDialectTests.cs`, `tests/nextorm.clickhouse.tests/ClickHouseDialectTests.cs`.

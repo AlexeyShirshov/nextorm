@@ -4,7 +4,7 @@ using LinqToDB.Data;
 using LinqToDB.DataProvider.SQLite;
 using LinqToDB.Mapping;
 
-namespace nextorm.benchmark;
+namespace NextORM.Benchmark;
 
 [Table("simple_entity")]
 public sealed class Linq2DbSimpleEntity

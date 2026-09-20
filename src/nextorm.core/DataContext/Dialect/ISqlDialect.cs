@@ -1,10 +1,10 @@
 using System.Text;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Rendering contract of a SQL dialect: everything that differs between providers when SQL text is
-/// produced. Kept separate from <see cref="DbContext"/> so that SQL generation does not depend on the
+/// produced. Kept separate from <see cref="DataContext"/> so that SQL generation does not depend on the
 /// whole execution pipeline (connection lifecycle, plan cache, materialization) — see
 /// <see cref="SqlBuilder"/> and the expression visitors, which depend on this interface only.
 /// <para>
@@ -20,6 +20,12 @@ public interface ISqlDialect
     string EmptyString { get; }
     /// <summary>True for providers that require a derived table (subquery in FROM) to have an alias.</summary>
     bool RequireSubqueryAlias { get; }
+    /// <summary>
+    /// True when a scalar subquery used as an expression raises an error if it returns more than one
+    /// row. PostgreSQL, SQL Server, MySQL, MariaDB and ClickHouse do; SQLite silently takes the first
+    /// row, so <c>Single</c>/<c>SingleOrDefault</c> cannot rely on the engine there.
+    /// </summary>
+    bool EnforcesScalarSubqueryCardinality { get; }
     /// <summary>
     /// True when the provider can render <c>right join</c>. A full join additionally requires
     /// <see cref="SupportsFullJoin"/>; they are separate because MySQL/MariaDB have one but not the
@@ -45,6 +51,24 @@ public interface ISqlDialect
     /// join emit <c>cross join lateral</c>/<c>left join lateral ... on true</c>.
     /// </summary>
     string MakeApply(JoinType applyType, string source);
+    /// <summary>
+    /// True when the provider understands the join strictness/kind modifiers in
+    /// <see cref="JoinStrictness"/> (<c>ANY</c>/<c>ALL</c>/<c>ASOF</c>). The safe default is
+    /// <c>false</c>; only ClickHouse opts in.
+    /// </summary>
+    bool SupportsJoinStrictness { get; }
+    /// <summary>
+    /// True when the provider understands the ClickHouse <c>GLOBAL</c> join modifier (the right-hand
+    /// side is resolved once and broadcast). The safe default is <c>false</c>; only ClickHouse opts in.
+    /// </summary>
+    bool SupportsGlobalJoin { get; }
+    /// <summary>
+    /// Renders the join keyword for <paramref name="joinType"/> with an optional
+    /// <see cref="JoinStrictness"/> modifier and/or the <c>GLOBAL</c> modifier. A dialect that did not
+    /// opt in with <see cref="SupportsJoinStrictness"/>/<see cref="SupportsGlobalJoin"/> is only ever
+    /// asked for <see cref="JoinStrictness.Default"/> and <c>false</c>.
+    /// </summary>
+    string MakeJoinKeyword(JoinType joinType, JoinStrictness strictness, bool isGlobal);
     /// <summary>
     /// True when the provider can render the <c>* ALL</c> variants of INTERSECT and EXCEPT
     /// (<c>intersect all</c> / <c>except all</c>). UNION ALL is not covered by this flag because it is
@@ -105,25 +129,40 @@ public interface ISqlDialect
     /// <summary>
     /// True when the provider has an array type and can render the array surface: array-typed
     /// parameters used with the <c>any</c>/<c>all</c> quantifiers (<c>column = any(@array)</c>) and the
-    /// array functions in <see cref="NORM.NORM_SQL"/>. The safe default is <c>false</c>; only
+    /// array functions in <see cref="CommonFunctions"/>. The safe default is <c>false</c>; only
     /// PostgreSQL opts in today.
     /// </summary>
     bool SupportsArrays { get; }
     /// <summary>
+    /// True when the provider has an array type and can render the array functions of
+    /// <see cref="ClickHouseFunctions"/> over array <em>columns</em> (for example <c>length</c>,
+    /// <c>has</c>, <c>indexOf</c>, <c>arrayStringConcat</c>, <c>hasAny</c>/<c>hasAll</c>,
+    /// <c>arraySort</c>, <c>arrayReverse</c>, <c>arrayDistinct</c>). The safe default is
+    /// <c>false</c>; only ClickHouse opts in today.
+    /// </summary>
+    bool SupportsArrayFunctions { get; }
+    /// <summary>
+    /// True when the provider can render <c>arrayJoin(array)</c>, which expands one row per array
+    /// element. The safe default is <c>false</c>; only ClickHouse opts in today. See
+    /// <see cref="ClickHouseFunctions.array_join{T}(T[])"/>.
+    /// </summary>
+    bool SupportsArrayJoin { get; }
+    /// <summary>
     /// True when the provider has a JSON type and can render the JSON surface: the <c>json</c>/<c>jsonb</c>
-    /// functions and the access/containment operators in <see cref="NORM.NORM_SQL"/>. The safe default is
+    /// functions and the access/containment operators in <see cref="CommonFunctions"/>. The safe default is
     /// <c>false</c>; only PostgreSQL opts in today.
     /// </summary>
     bool SupportsJson { get; }
     /// <summary>
-    /// True when the provider can render the JSON-as-text functions of <see cref="NORM.NORM_SQL"/>
-    /// (<c>json_value</c>, <c>json_query</c>, <c>json_modify</c>), where JSON is stored in a normal
-    /// text column rather than a native type. The safe default is <c>false</c>; SQL Server opts in.
+    /// True when the provider can render the JSON-as-text functions of <see cref="CommonFunctions"/>
+    /// (<c>json_value</c>, <c>json_query</c>, <c>json_modify</c>, <c>isjson</c>), where JSON is stored in
+    /// a normal text column rather than a native type. The safe default is <c>false</c>; SQL Server and
+    /// MySQL/MariaDB opt in.
     /// </summary>
     bool SupportsTextJson { get; }
     /// <summary>
     /// True when the provider can render the full-text predicates <c>contains</c> and <c>freetext</c>
-    /// (<see cref="NORM.NORM_SQL.contains{T}"/>). The safe default is <c>false</c>; SQL Server opts in.
+    /// (<see cref="CommonFunctions.contains{T}"/>). The safe default is <c>false</c>; SQL Server opts in.
     /// </summary>
     bool SupportsFullText { get; }
     /// <summary>
@@ -134,17 +173,39 @@ public interface ISqlDialect
     bool SupportsFilter { get; }
     /// <summary>
     /// True when the provider can render <c>greatest(...)</c>/<c>least(...)</c>. The safe default is
-    /// <c>false</c>; PostgreSQL, MySQL/MariaDB, ClickHouse and SQL Server 2022+ opt in, while SQLite
-    /// (where the scalar <c>max</c>/<c>min</c> propagate NULL differently) does not.
+    /// <c>false</c>; PostgreSQL, MySQL/MariaDB, ClickHouse, SQL Server 2022+ and SQLite (through the
+    /// scalar <c>max</c>/<c>min</c>) opt in.
     /// </summary>
     bool SupportsGreatestLeast { get; }
+
+    /// <summary>
+    /// True when the provider can render the window functions <c>percent_rank()</c> and <c>cume_dist()</c>.
+    /// The safe default is <c>false</c>; PostgreSQL, SQL Server, MySQL/MariaDB, SQLite and ClickHouse
+    /// opt in.
+    /// </summary>
+    bool SupportsPercentRankCumeDist { get; }
+    /// <summary>
+    /// True when the provider can render the window function <c>nth_value(value, n)</c>. The safe default
+    /// is <c>false</c>; PostgreSQL, MySQL/MariaDB, SQLite and ClickHouse opt in, while SQL Server has no
+    /// <c>NTH_VALUE</c>.
+    /// </summary>
+    bool SupportsNthValue { get; }
+    /// <summary>
+    /// True when the provider can render the window (analytic) percentile functions
+    /// <c>percentile_cont(fraction)</c>/<c>percentile_disc(fraction)</c> as
+    /// <c>name(f) within group (order by value) over (...)</c>. The safe default is <c>false</c>;
+    /// SQL Server and MariaDB opt in. PostgreSQL expresses percentiles as an ordered-set aggregate instead
+    /// (<see cref="SupportsOrderedAggregates"/>, <c>PostgresFunctions.percentile_cont</c>), and
+    /// MySQL/SQLite/ClickHouse cannot express the window form.
+    /// </summary>
+    bool SupportsPercentileWindow { get; }
     /// <summary>
     /// True when the provider can render <c>date_trunc</c> with a date part name. The safe default is
     /// <c>false</c>; PostgreSQL and SQL Server 2022+ (<c>datetrunc</c>) opt in today.
     /// </summary>
     bool SupportsDateTrunc { get; }
     /// <summary>
-    /// True when the provider can render the date arithmetic surface of <see cref="NORM.NORM_SQL"/>
+    /// True when the provider can render the date arithmetic surface of <see cref="CommonFunctions"/>
     /// (<c>date_add</c> and <c>end_of_month</c>, also used for the <c>DateTime.AddYears</c>/
     /// <c>AddMonths</c>/<c>AddDays</c>/... methods). The safe default is <c>false</c>; PostgreSQL,
     /// SQL Server and ClickHouse opt in today.
@@ -173,12 +234,60 @@ public interface ISqlDialect
     bool SupportsArrayAgg { get; }
     /// <summary>
     /// True when the provider can render the extended scalar function library
-    /// (<c>NORM.SQL</c> math/string/date/regular-expression and <c>num_nulls</c>/<c>num_nonnulls</c>
+    /// (<c>SqlFunctions.Sql</c> math/string/date/regular-expression and <c>num_nulls</c>/<c>num_nonnulls</c>
     /// helpers such as <c>asin</c>, <c>split_part</c>, <c>lpad</c>, <c>regexp_replace</c>,
     /// <c>make_date</c>, <c>to_char</c>). The safe default is <c>false</c>; only PostgreSQL opts in
     /// today.
     /// </summary>
     bool SupportsExtendedScalarFunctions { get; }
+    /// <summary>
+    /// True when the provider can render the native text-search scalar surface of
+    /// <see cref="PostgresFunctions"/> (<c>to_tsvector</c>, <c>to_tsquery</c>, <c>plainto_tsquery</c>,
+    /// <c>phraseto_tsquery</c>, <c>websearch_to_tsquery</c>, <c>ts_rank</c>, <c>ts_headline</c> and the
+    /// <c>@@</c> match operator). The safe default is <c>false</c>; only PostgreSQL opts in. The
+    /// cross-provider <c>contains</c>/<c>freetext</c> predicates are gated separately by
+    /// <see cref="SupportsFullText"/>.
+    /// </summary>
+    bool SupportsTextSearchFunctions { get; }
+    /// <summary>
+    /// True when the provider can render the session/information functions of
+    /// <see cref="CommonFunctions"/> (<c>current_user</c>, <c>session_user</c>, <c>current_schema</c>,
+    /// <c>current_database</c>, <c>version</c>). The safe default is <c>false</c>; a provider opts in
+    /// and lists the individual functions it can express through
+    /// <see cref="SupportsSessionInfoFunction(string)"/>.
+    /// </summary>
+    bool SupportsSessionInfoFunctions { get; }
+    /// <summary>
+    /// True when the provider can render the session/information function <paramref name="name"/>
+    /// (<c>current_user</c>, <c>session_user</c>, <c>current_schema</c>, <c>current_database</c> or
+    /// <c>version</c>). The safe default is <c>false</c>; only consulted when
+    /// <see cref="SupportsSessionInfoFunctions"/> is <c>true</c>.
+    /// </summary>
+    bool SupportsSessionInfoFunction(string name);
+    /// <summary>
+    /// Renders the session/information function <paramref name="name"/>. Only called when
+    /// <see cref="SupportsSessionInfoFunction(string)"/> returned <c>true</c> for it. The base
+    /// implementation fails with a clear message because the spelling differs per provider.
+    /// </summary>
+    string MakeSessionInfoFunction(string name);
+    /// <summary>
+    /// True when the provider can render the UUID generator functions of <see cref="CommonFunctions"/>
+    /// (<c>gen_random_uuid</c>, <c>uuidv7</c>). The safe default is <c>false</c>; a provider opts in and
+    /// lists the individual generators it can express through <see cref="SupportsUuidGenerator(string)"/>.
+    /// </summary>
+    bool SupportsUuidGenerators { get; }
+    /// <summary>
+    /// True when the provider can render the UUID generator <paramref name="name"/>
+    /// (<c>gen_random_uuid</c> or <c>uuidv7</c>). The safe default is <c>false</c>; only consulted when
+    /// <see cref="SupportsUuidGenerators"/> is <c>true</c>.
+    /// </summary>
+    bool SupportsUuidGenerator(string name);
+    /// <summary>
+    /// Renders the UUID generator <paramref name="name"/>. Only called when
+    /// <see cref="SupportsUuidGenerator(string)"/> returned <c>true</c> for it. The base implementation
+    /// fails with a clear message because the spelling differs per provider.
+    /// </summary>
+    string MakeUuidGenerator(string name);
     /// <summary>
     /// True when the provider can render the boolean aggregates <c>bool_and</c>, <c>bool_or</c> and
     /// <c>every</c>. The safe default is <c>false</c>; only PostgreSQL opts in today.
@@ -214,6 +323,119 @@ public interface ISqlDialect
     /// <c>FILTER (WHERE ...)</c> clause. The safe default is <c>false</c>; ClickHouse opts in today.
     /// </summary>
     bool SupportsIfAggregates { get; }
+    /// <summary>
+    /// True when the provider can render the ClickHouse distinct-count aggregates
+    /// <c>uniq</c>/<c>uniqExact</c>/<c>uniqCombined</c>/<c>uniqHLL12</c>. The safe default is
+    /// <c>false</c>; ClickHouse opts in today.
+    /// </summary>
+    bool SupportsUniqAggregates { get; }
+
+    /// <summary>
+    /// Renders a distinct-count aggregate (<c>uniq</c>/<c>uniqExact</c>/<c>uniqCombined</c>/<c>uniqHLL12</c>)
+    /// over the already-rendered <paramref name="argument"/>. Only called when
+    /// <see cref="SupportsUniqAggregates"/> is <c>true</c>. The default renders
+    /// <c>MakeAggregate(name)(argument)</c>; ClickHouse wraps it in <c>toInt64(...)</c> because the native
+    /// result is <c>UInt64</c>, which the row reader cannot materialise into a CLR integer.
+    /// </summary>
+    string MakeUniqAggregate(string name, string argument);
+    /// <summary>
+    /// True when the provider can render the parameterised quantile aggregates
+    /// <c>quantile(level)(value)</c> (ClickHouse). The safe default is <c>false</c>; ClickHouse opts in
+    /// today. The ordered-set <c>percentile_cont</c> family is a separate capability
+    /// (<see cref="SupportsOrderedAggregates"/>).
+    /// </summary>
+    bool SupportsQuantileAggregates { get; }
+
+    /// <summary>
+    /// Renders a parameterised quantile aggregate (<c>quantile(level)(value)</c>) over the already-rendered
+    /// <paramref name="level"/> and <paramref name="value"/>. Only called when
+    /// <see cref="SupportsQuantileAggregates"/> is <c>true</c>. The default renders
+    /// <c>MakeAggregate(name)(level)(value)</c>; ClickHouse wraps it in <c>toFloat64(...)</c> so every
+    /// variant materialises as a CLR <see cref="double"/>.
+    /// </summary>
+    string MakeQuantile(string name, string level, string value);
+
+    /// <summary>
+    /// Renders the <c>median</c> aggregate over the already-rendered <paramref name="value"/>. Only
+    /// called when <see cref="SupportsQuantileAggregates"/> is <c>true</c>. The default renders
+    /// <c>MakeAggregate("median")(value)</c>; ClickHouse wraps it in <c>toFloat64(...)</c> so it
+    /// materialises as a CLR <see cref="double"/> for any input type.
+    /// </summary>
+    string MakeMedian(string value);
+    /// <summary>
+    /// True when the provider can render the <c>anyLast</c> row-picking aggregate (the value of an
+    /// arbitrary last row; <c>ClickHouseFunctions.any_last</c>). The safe default is <c>false</c>;
+    /// ClickHouse opts in today. The arbitrary-value aggregate without the last-row restriction is
+    /// <see cref="SupportsAnyValueAggregate"/>.
+    /// </summary>
+    bool SupportsAnyAggregates { get; }
+
+    /// <summary>
+    /// True when the provider can render the arbitrary-value aggregate
+    /// (<c>CommonFunctions.any_agg</c>): <c>ANY_VALUE(x)</c> on MySQL/MariaDB, <c>any(x)</c>
+    /// on ClickHouse. The safe default is <c>false</c>.
+    /// </summary>
+    bool SupportsAnyValueAggregate { get; }
+
+    /// <summary>
+    /// True when the provider can render the string-JSON functions over JSON stored in a text column:
+    /// the <c>JSONExtract*</c>/<c>JSONHas</c> and <c>visitParamExtract*</c> families
+    /// (<c>ClickHouseFunctions.json_extract_*</c>/<c>visit_param_extract_*</c>) and the JSONPath scalars
+    /// <c>JSON_VALUE</c>/<c>JSON_QUERY</c>/<c>JSON_EXISTS</c>
+    /// (<c>ClickHouseFunctions.json_value</c>/<c>json_query</c>/<c>json_exists</c>). This is distinct from
+    /// the PostgreSQL JSON type (<see cref="SupportsJson"/>) and the SQL Server/MySQL text-JSON functions
+    /// (<see cref="SupportsTextJson"/>). The safe default is <c>false</c>; ClickHouse opts in today.
+    /// </summary>
+    bool SupportsJsonExtract { get; }
+    /// <summary>
+    /// Renders a ClickHouse string-JSON function over the already-rendered <paramref name="args"/>: the
+    /// <c>JSONExtract*</c>/<c>visitParamExtract*</c> family and the JSONPath scalars
+    /// (<c>JSON_VALUE</c>/<c>JSON_QUERY</c>/<c>JSON_EXISTS</c>). Only called when
+    /// <see cref="SupportsJsonExtract"/> is <c>true</c>. The default renders
+    /// <c>name(arg1, arg2, ...)</c>; ClickHouse maps the snake_case name to its native spelling and
+    /// casts the unsigned results it cannot materialise.
+    /// </summary>
+    string MakeJsonExtract(string name, IReadOnlyList<string> args);
+
+    /// <summary>
+    /// True when the provider can render the <c>GROUP BY ... WITH TOTALS</c> modifier (ClickHouse): a
+    /// grouped query that additionally returns one row with the totals over all groups. The safe default
+    /// is <c>false</c>; ClickHouse opts in today.
+    /// </summary>
+    bool SupportsGroupByWithTotals { get; }
+    /// <summary>
+    /// Appends the <c>WITH TOTALS</c> modifier to an already-rendered grouping clause. Only called when
+    /// <see cref="SupportsGroupByWithTotals"/> is <c>true</c>. The default returns
+    /// <paramref name="grouping"/> unchanged; ClickHouse appends <c> with totals</c>.
+    /// </summary>
+    string MakeGroupByTotals(string grouping);
+
+    /// <summary>
+    /// True when the provider can render the conditional <c>iif(condition, whenTrue, whenFalse)</c>
+    /// (<c>CommonFunctions.iif</c>). Every SQL provider opts in with its native spelling
+    /// (<c>iif</c>/<c>if</c>/<c>case when</c>); the safe default is <c>false</c>.
+    /// </summary>
+    bool SupportsIif { get; }
+
+    /// <summary>
+    /// True when the provider can render the SQL Server-only <c>choose(index, value, ...)</c>
+    /// (<c>SqlServerFunctions.choose</c>). The safe default is <c>false</c>; only SQL Server opts in.
+    /// </summary>
+    bool SupportsChoose { get; }
+
+    /// <summary>
+    /// True when the provider can render the ClickHouse dictionary functions
+    /// (<c>dictGet</c>/<c>dictGetOrDefault</c>/<c>dictHas</c>). The safe default is <c>false</c>;
+    /// ClickHouse opts in today.
+    /// </summary>
+    bool SupportsDictionaries { get; }
+    /// <summary>
+    /// Renders a ClickHouse dictionary function over the already-rendered <paramref name="args"/>. Only
+    /// called when <see cref="SupportsDictionaries"/> is <c>true</c>. The default renders
+    /// <c>name(arg1, arg2, ...)</c>; ClickHouse maps the snake_case name to its camel-case spelling.
+    /// </summary>
+    string MakeDictionaryFunction(string name, IReadOnlyList<string> args);
+
     /// <summary>
     /// True when the provider can render the ordered-set aggregates
     /// <c>percentile_cont</c>/<c>percentile_disc</c>/<c>mode</c> with
@@ -278,6 +500,15 @@ public interface ISqlDialect
     /// provider's spelling. Only called when <see cref="SupportsTextJson"/> is <c>true</c>.
     /// </summary>
     string MakeTextJsonFunction(string name);
+
+    /// <summary>
+    /// Renders a text-JSON function over the already-rendered <paramref name="args"/>. The default
+    /// implementation wraps <see cref="MakeTextJsonFunction(string)"/>, which is enough when the
+    /// provider's spelling is a plain function call; a provider whose form nests functions (MySQL
+    /// renders <c>json_value</c> as <c>json_unquote(json_extract(...))</c>) overrides this. Only called
+    /// when <see cref="SupportsTextJson"/> is <c>true</c>.
+    /// </summary>
+    string MakeTextJsonFunction(string name, IReadOnlyList<string> args);
 
     /// <summary>
     /// Renders the opening keyword of a common table expression list (<c>with</c>). Dialects that
@@ -417,6 +648,17 @@ public interface ISqlDialect
     string MakeGreatest(IReadOnlyList<string> args);
     /// <summary>Renders <c>least(...)</c> over the already-rendered arguments.</summary>
     string MakeLeast(IReadOnlyList<string> args);
+    /// <summary>
+    /// Renders <c>iif(condition, whenTrue, whenFalse)</c> over the already-rendered arguments. Only
+    /// called when <see cref="SupportsIif"/> is <c>true</c>; each dialect uses its native spelling.
+    /// </summary>
+    /// <remarks>
+    /// Declared as a default interface method so that existing external <see cref="ISqlDialect"/>
+    /// implementations that do not render SQL themselves keep compiling. The default body throws:
+    /// a provider that reports <see cref="SupportsIif"/> as <c>true</c> must supply its own rendering.
+    /// </remarks>
+    string MakeIif(string condition, string whenTrue, string whenFalse) =>
+        throw new NotSupportedException("The iif conditional function is not supported by this provider.");
     /// <summary>Renders <c>date_trunc(field, value)</c>; <paramref name="field"/> is a validated date-part name.</summary>
     string MakeDateTrunc(string field, string value);
     /// <summary>
@@ -447,6 +689,14 @@ public interface ISqlDialect
     /// <summary>Renders the <c>array_agg(value)</c> aggregate over the already-rendered argument.</summary>
     string MakeArrayAgg(string value);
     /// <summary>
+    /// Renders an array function call (<see cref="ClickHouseFunctions"/>) over the already-rendered
+    /// <paramref name="call"/> (for example <c>length(tags)</c>). The default returns the call
+    /// verbatim; ClickHouse wraps <c>length</c>/<c>indexOf</c> in <c>toInt64(...)</c> because their
+    /// native result is <c>UInt64</c>, which the row reader cannot materialise as the declared CLR
+    /// integer.
+    /// </summary>
+    string MakeArrayFunction(string name, string call) => call;
+    /// <summary>
     /// Renders an ordered-set aggregate as <c>&lt;aggregate&gt; within group (order by &lt;orderBy&gt;)</c>.
     /// <paramref name="aggregate"/> is the already-rendered call (for example <c>percentile_cont(0.5)</c>)
     /// and <paramref name="orderBy"/> the already-rendered key list.
@@ -461,8 +711,9 @@ public interface ISqlDialect
         => string.IsNullOrEmpty(schema) ? name : $"{schema}.{name}";
     /// <summary>
     /// True when the provider supports the built-in table-valued function
-    /// <paramref name="name"/> declared in <see cref="NORM.NORM_SQL"/> (for example
-    /// <c>generate_series</c>, <c>unnest</c>, <c>string_split</c>, <c>openjson</c>). User-defined
+    /// <paramref name="name"/> declared in <see cref="CommonFunctions"/> (for example
+    /// <c>generate_series</c>, <c>unnest</c>, <c>string_split</c>, <c>openjson</c>,
+    /// <c>numbers</c>/<c>numbers_mt</c>, <c>zeros</c>/<c>zeros_mt</c>). User-defined
     /// <see cref="SqlTableFunctionAttribute"/> functions are not gated by this and are emitted
     /// verbatim on every provider.
     /// </summary>
@@ -473,18 +724,149 @@ public interface ISqlDialect
     /// </summary>
     string MakeCount(bool distinct, bool big);
     /// <summary>
+    /// True when the provider's count aggregates return a type the row reader cannot materialise as a
+    /// CLR integer, so the rendered <c>count(...)</c>/<c>countIf(...)</c> must be wrapped. Defaults to
+    /// <c>false</c>; ClickHouse opts in because its count aggregates return <c>UInt64</c>.
+    /// </summary>
+    bool WrapsCountResult { get; }
+    /// <summary>
+    /// Wraps a fully rendered <c>count(...)</c> or <c>countIf(...)</c> expression, or returns it
+    /// unchanged. Only called when <see cref="WrapsCountResult"/> is <c>true</c>; <paramref name="big"/>
+    /// is <c>true</c> for the 64-bit variants (<c>count_big</c>/<c>count_big_distinct</c>). ClickHouse
+    /// casts the unsigned result to <c>Int32</c>/<c>Int64</c> so the row reader can materialise it into
+    /// the CLR integer the function declares.
+    /// </summary>
+    string WrapCount(string countExpression, bool big);
+    /// <summary>
     /// Renders a subquery predicate (exists/any/all). <paramref name="asPredicate"/> is true when the
     /// expression is used as a condition (WHERE/HAVING) rather than as a projected value; a dialect
     /// without a boolean type (SQL Server) has to render the two forms differently.
     /// </summary>
     string MakeSubqueryPredicate(string keyword, string query, bool asPredicate);
+    /// <summary>
+    /// True when the provider supports the distributed <c>GLOBAL IN</c> predicate
+    /// (<c>SqlFunctions.ClickHouse.global_in</c>). Defaults to <c>false</c>; ClickHouse opts in today.
+    /// </summary>
+    bool SupportsGlobalPredicates { get; }
 
     void MakePage(Paging paging, StringBuilder sqlBuilder);
+    /// <summary>
+    /// Whether the dialect supports <c>LIMIT n BY expr</c> (ClickHouse). When <c>false</c>, a command that
+    /// carries a <see cref="LimitByClause"/> is rejected when its SQL is built.
+    /// </summary>
+    bool SupportsLimitBy { get; }
+    /// <summary>
+    /// Renders a <c>LIMIT [offset,] n BY columns</c> clause. Only reached through a dialect that set
+    /// <see cref="SupportsLimitBy"/>.
+    /// </summary>
+    void MakeLimitBy(int limit, int offset, IReadOnlyList<string> columns, StringBuilder sqlBuilder);
+    /// <summary>
+    /// Whether the dialect supports <c>DISTINCT ON (expr, ...)</c> (PostgreSQL). When <c>false</c>, a
+    /// command that carries a <see cref="DistinctOnClause"/> is rejected when its SQL is built.
+    /// </summary>
+    bool SupportsDistinctOn { get; }
+    /// <summary>
+    /// Renders the <c>distinct on (columns)</c> prefix (including the trailing space) that replaces a
+    /// plain <c>distinct</c>. Only reached through a dialect that set <see cref="SupportsDistinctOn"/>.
+    /// </summary>
+    string MakeDistinctOn(IReadOnlyList<string> columns);
+    /// <summary>
+    /// Wraps the rendered table-function call, or returns it unchanged. ClickHouse uses it to cast the
+    /// unsigned <c>numbers</c> column to a type the row reader supports.
+    /// </summary>
+    string WrapTableFunction(string name, string call);
+    /// <summary>
+    /// Whether the dialect supports the <c>FINAL</c> table modifier (ClickHouse). When <c>false</c>, a
+    /// command that carries it is rejected when its SQL is built.
+    /// </summary>
+    bool SupportsFinal { get; }
+    /// <summary>Renders the <c>FINAL</c> modifier. Only reached through a dialect that set <see cref="SupportsFinal"/>.</summary>
+    string MakeFinal();
+    /// <summary>
+    /// Whether the dialect supports the <c>SAMPLE ratio [OFFSET offset]</c> table modifier (ClickHouse).
+    /// </summary>
+    bool SupportsSample { get; }
+    /// <summary>Renders the <c>SAMPLE</c> modifier. Only reached through a dialect that set <see cref="SupportsSample"/>.</summary>
+    string MakeSample(double ratio, double offset);
+    /// <summary>
+    /// Whether the dialect supports the <c>TABLESAMPLE</c> table modifier. When <c>false</c>, a command
+    /// that carries a <see cref="TableSampleClause"/> is rejected when its SQL is built.
+    /// </summary>
+    bool SupportsTableSample { get; }
+    /// <summary>
+    /// Whether the dialect supports the given <c>TABLESAMPLE</c> sampling method. PostgreSQL supports
+    /// both <c>SYSTEM</c> and <c>BERNOULLI</c>; SQL Server only <c>SYSTEM</c>. Only reached through a
+    /// dialect that set <see cref="SupportsTableSample"/>.
+    /// </summary>
+    bool SupportsTableSampleMethod(TableSampleMethod method);
+    /// <summary>
+    /// Renders the <c>TABLESAMPLE</c> modifier. Only reached through a dialect that set
+    /// <see cref="SupportsTableSample"/>.
+    /// </summary>
+    string MakeTableSample(TableSampleMethod method, double percent, double? seed);
+    /// <summary>
+    /// Whether the dialect supports the <c>FOR SYSTEM_TIME</c> temporal-table clause. When <c>false</c>,
+    /// a command that carries a <see cref="TemporalClause"/> is rejected when its SQL is built. SQL
+    /// Server and MariaDB opt in.
+    /// </summary>
+    bool SupportsTemporalTable { get; }
+    /// <summary>
+    /// Whether the dialect supports the given <c>FOR SYSTEM_TIME</c> kind. SQL Server supports every
+    /// kind; MariaDB has no <c>CONTAINED IN</c>. Only reached through a dialect that set
+    /// <see cref="SupportsTemporalTable"/>.
+    /// </summary>
+    bool SupportsTemporalKind(TemporalKind kind);
+    /// <summary>
+    /// Renders the <c>FOR SYSTEM_TIME</c> clause. The standard SQL:2011 syntax is shared by SQL Server
+    /// and MariaDB; only reached through a dialect that set <see cref="SupportsTemporalTable"/>.
+    /// </summary>
+    string MakeTemporalTable(TemporalClause clause);
+    /// <summary>
+    /// Whether the dialect supports the <c>PREWHERE</c> clause (ClickHouse). When <c>false</c>, a command
+    /// that carries one is rejected when its SQL is built.
+    /// </summary>
+    bool SupportsPreWhere { get; }
+    /// <summary>
+    /// Whether the dialect supports the <c>ARRAY JOIN</c> clause (ClickHouse), which expands one row per
+    /// array element. When <c>false</c>, a command that carries one is rejected when its SQL is built.
+    /// </summary>
+    bool SupportsArrayJoinClause { get; }
+    /// <summary>
+    /// Renders the <c>[LEFT ]ARRAY JOIN expr, ...</c> clause over the already-rendered array
+    /// <paramref name="expressions"/>. Only reached through a dialect that set
+    /// <see cref="SupportsArrayJoinClause"/>.
+    /// </summary>
+    string MakeArrayJoin(ArrayJoinKind kind, IReadOnlyList<string> expressions);
+    /// <summary>
+    /// Whether the dialect supports the trailing <c>SETTINGS</c> clause (ClickHouse). When <c>false</c>, a
+    /// command that carries settings is rejected when its SQL is built.
+    /// </summary>
+    bool SupportsSettings { get; }
+    /// <summary>Renders the trailing <c>SETTINGS</c> clause. Only reached through a dialect that set <see cref="SupportsSettings"/>.</summary>
+    string MakeSettings(IReadOnlyList<KeyValuePair<string, string>> settings);
     /// <summary>
     /// Renders a <c>TOP(n)</c>-style limit clause. Returns false when the dialect cannot express the
     /// limit inline and paging must be rendered by <see cref="MakePage"/> instead.
     /// </summary>
-    bool MakeTop(int limit, out string? topStmt);
+    /// <param name="limit">The maximum number of rows to return.</param>
+    /// <param name="withTies">Requests the <c>WITH TIES</c> variant where the dialect supports it.</param>
+    /// <param name="topStmt">The inline limit fragment, or <c>null</c> when the dialect returns false.</param>
+    /// <returns><c>true</c> when <paramref name="topStmt"/> carries the limit; otherwise <c>false</c>.</returns>
+    bool MakeTop(int limit, bool withTies, out string? topStmt);
+    /// <summary>
+    /// Whether the dialect supports a trailing <c>FOR UPDATE</c>/<c>FOR SHARE</c> row-locking clause.
+    /// When <c>false</c>, a command that carries a <see cref="LockClause"/> is rejected when its SQL is
+    /// built. PostgreSQL, MySQL and MariaDB opt in.
+    /// </summary>
+    bool SupportsLocking { get; }
+    /// <summary>Renders the trailing row-locking clause. Only reached through a dialect that set <see cref="SupportsLocking"/>.</summary>
+    string MakeLock(LockMode mode);
+    /// <summary>
+    /// Whether the dialect supports <c>WITH TIES</c> on a page request (<c>FETCH ... WITH TIES</c>,
+    /// <c>TOP(n) WITH TIES</c>). When <c>false</c>, a command whose <see cref="Paging.HasWithTies"/> is set
+    /// is rejected when its SQL is built. PostgreSQL and SQL Server opt in.
+    /// </summary>
+    bool SupportsWithTies { get; }
     /// <summary>
     /// ORDER BY that paging has to inject for dialects that reject a page clause without sorting
     /// (SQL Server), or <c>null</c> when sorting is not required. Encoding the capability as a nullable

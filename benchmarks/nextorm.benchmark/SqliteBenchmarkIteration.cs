@@ -1,13 +1,13 @@
 ﻿using BenchmarkDotNet.Attributes;
-using nextorm.sqlite;
+using NextORM.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Data.Sqlite;
 using Dapper;
 using Microsoft.Extensions.Logging;
 using BenchmarkDotNet.Jobs;
-using nextorm.core;
+using NextORM.Core;
 
-namespace nextorm.benchmark;
+namespace NextORM.Benchmark;
 
 //[SimpleJob(RuntimeMoniker.Net70, baseline: true)]
 [MemoryDiagnoser]
@@ -27,7 +27,7 @@ public class SqliteBenchmarkIteration
     public SqliteBenchmarkIteration() : this(false) { }
     public SqliteBenchmarkIteration(bool withLogging = false)
     {
-        var builder = new DbContextBuilder();
+        var builder = new DataContextBuilder();
         builder.UseSqlite(BenchDb.FilePath);
         if (withLogging)
         {
@@ -35,7 +35,7 @@ public class SqliteBenchmarkIteration
             builder.UseLoggerFactory(_logFactory);
             builder.LogSensitiveData(true);
         }
-        _db = builder.CreateDbContext();
+        _db = builder.CreateDataContext();
         _ctx = new TestDataRepository(_db);
         ((IConnectionManager)_db).EnsureConnectionOpen();
 
@@ -56,7 +56,7 @@ public class SqliteBenchmarkIteration
 
         _efCtx = new EFDataContext(efBuilder.Options);
 
-        _conn = new SqliteConnection(((SqliteDbContext)_ctx.DbContext).ConnectionString);
+        _conn = new SqliteConnection(((SqliteDataContext)_ctx.DataContext).ConnectionString);
         _conn.Open();
 
         _linq2Db = new Linq2DbDataRepository();

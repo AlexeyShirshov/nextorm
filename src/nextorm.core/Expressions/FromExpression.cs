@@ -1,4 +1,4 @@
-namespace nextorm.core;
+namespace NextORM.Core;
 
 public sealed class FromExpression
 {
@@ -39,7 +39,7 @@ public sealed class FromExpression
      // {
      //      unchecked
      //      {
-     //           var hash = new HashCode();
+     //           var hash = new XxHash32();
 
      //           hash.Add(TableAlias);
 

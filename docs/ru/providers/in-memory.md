@@ -1,25 +1,25 @@
 # Провайдер In-memory
 
-> `InMemoryContext` выполняет запросы по внутрипроцессным коллекциям CLR; используйте его для модульных тестов и тестов формы запросов/кэша планов, где запускать базу данных не нужно.
+> [`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext) выполняет запросы по внутрипроцессным коллекциям CLR; используйте его для модульных тестов и тестов формы запросов/кэша планов, где запускать базу данных не нужно.
 
 **Предварительные требования:** [Provider overview](overview.md) · [Dependency injection](../getting-started/04-dependency-injection.md)
 
 ## Обзор
 
 Провайдер in-memory встроен в `nextorm` (без дополнительного пакета) и находится в
-`src/nextorm.core/DataContext/InMemoryDataContext.cs`. Публичный тип — `InMemoryContext`, который
-напрямую реализует `IDataContext` — у него нет диалекта, нет соединения и нет SQL, и он вычисляет
+`src/nextorm.core/DataContext/InMemoryDataContext.cs`. Публичный тип — [`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext), который
+напрямую реализует [`IDataContext`](xref:NextORM.Core.IDataContext) — у него нет диалекта, нет соединения и нет SQL, и он вычисляет
 дерево выражений запроса по данным, которые вы к нему присоединяете.
 
-В отличие от SQL-провайдеров, `InMemoryContext` не требует строки подключения. Метаданные запросов и списки
-выборки являются общими для процесса с SQL-провайдерами через `DataContextCache`, тогда как скомпилированные
+В отличие от SQL-провайдеров, [`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext) не требует строки подключения. Метаданные запросов и списки
+выборки являются общими для процесса с SQL-провайдерами через [`DataContextCache`](xref:NextORM.Core.DataContextCache), тогда как скомпилированные
 делегаты привязаны к экземпляру (они захватывают контекст, для которого были скомпилированы).
 
 Используйте его, когда вы хотите:
 
-- модульные тесты для кода приложения, который зависит от `IDataContext`;
+- модульные тесты для кода приложения, который зависит от [`IDataContext`](xref:NextORM.Core.IDataContext);
 - быстрые тесты формы запросов, проекции и поведения соединений без контейнера или файла;
-- тесты неявного кэша планов (`QueryPlanEqualityComparer`, `GetCacheVersion`).
+- тесты неявного кэша планов ([`QueryPlanEqualityComparer`](xref:NextORM.Core.QueryPlanEqualityComparer), [`GetCacheVersion`](xref:NextORM.Core.QueryPlan.GetCacheVersion)).
 
 Это не SQL-движок: он не проверяет, что запрос выполнился бы на реальном провайдере, и несколько
 возможностей намеренно не поддерживаются (см. ниже).
@@ -29,15 +29,15 @@
 С внедрением зависимостей:
 
 ```csharp
-using nextorm.core;
+using NextORM.Core;
 
-services.AddNextOrmContext<InMemoryContext>();
+services.AddNextOrmContext<InMemoryDataContext>();
 ```
 
 ```csharp
-using nextorm.core;
+using NextORM.Core;
 
-using var ctx = new InMemoryContext();
+using var ctx = new InMemoryDataContext();
 ctx.From<SimpleEntity>().WithData(new[]
 {
     new SimpleEntity { Id = 1 },
@@ -52,9 +52,9 @@ var ids = ctx.From<SimpleEntity>()
 // ids.Id == 1
 ```
 
-`WithData` и `WithAsyncData` (`src/nextorm.core/Builders/InMemoryCommandBuilder.cs`) присоединяют
-коллекцию к словарю `Data` контекста с ключом по типу сущности; `WithData` принимает `IEnumerable<T>`,
-а `WithAsyncData` — `IAsyncEnumerable<T>`. Оба являются пустыми операциями для других провайдеров.
+[`WithData`](xref:NextORM.Core.EntityBuilder`1) и [`WithAsyncData`](xref:NextORM.Core.EntityBuilder`1) (`src/nextorm.core/Builders/InMemoryCommandBuilder.cs`) присоединяют
+коллекцию к словарю `Data` контекста с ключом по типу сущности; [`WithData`](xref:NextORM.Core.EntityBuilder`1) принимает `IEnumerable<T>`,
+а [`WithAsyncData`](xref:NextORM.Core.EntityBuilder`1) — `IAsyncEnumerable<T>`. Оба являются пустыми операциями для других провайдеров.
 
 ```csharp
 ctx.From<SimpleEntity>().WithAsyncData(GetRows());
@@ -74,25 +74,25 @@ static async IAsyncEnumerable<SimpleEntity> GetRows()
 | Возможность | Подтверждение |
 |---|---|
 | Проекция: анонимная, примитив/скаляр, `Tuple` | `InMemoryTests.SelectPrimitive_ShouldReturnData`, `TestTuples` |
-| `Where`, включая `==` по nullable и захваченным значениям | `InMemoryTests.TestWhere`, `Contains_ShouldFilterData` |
+| [`Where`](xref:NextORM.Core.EntityBuilder`1), включая `==` по nullable и захваченным значениям | `InMemoryTests.TestWhere`, `Contains_ShouldFilterData` |
 | Подзапрос, используемый как источник `FROM` (`ctx.From(subQuery)`) | `InMemoryTests.TestWhere_Subquery` |
-| Буферизованные и асинхронные источники (`WithData` / `WithAsyncData`) | `InMemoryTests.TestAsync` |
-| Потоковая передача с `Pipeline`, с соблюдением отмены | `InMemoryTests.TestFetch`, `TestFetch_PipelineStopsOnCancellation` |
-| `Limit` / `Offset` / `First` / `Single` и их формы `OrDefault` | `InMemoryTests.Top_ShouldLimitData`, `First_ShouldReturnFirst`, `Single_ShouldReturnSingle` |
-| `OrderBy` / `OrderByDescending`, включая асинхронные источники | `InMemoryTests.OrderBy_ShouldSortData`, `OrderByOverAsyncSource_ShouldSortData` |
-| Материализаторы `ToArray` / `ToHashSet` / `ToDictionary` (и async) | `InMemoryTests.ToArray_ShouldReturnData`, `ToHashSet_ShouldReturnData`, `ToDictionary_ShouldReturnData` |
-| `Any` и проецируемый `exists` | `InMemoryTests.SelectAny_ShouldReturnData`, `Any` |
-| `Distinct` по проекциям с равенством по значению | `InMemoryTests.TestDistinct` |
+| Буферизованные и асинхронные источники ([`WithData`](xref:NextORM.Core.EntityBuilder`1) / [`WithAsyncData`](xref:NextORM.Core.EntityBuilder`1)) | `InMemoryTests.TestAsync` |
+| Потоковая передача с [`Pipeline`](xref:NextORM.Core.QueryCommand`1), с соблюдением отмены | `InMemoryTests.TestFetch`, `TestFetch_PipelineStopsOnCancellation` |
+| [`Limit`](xref:NextORM.Core.Paging.Limit) / [`Offset`](xref:NextORM.Core.Paging.Offset) / [`First`](xref:NextORM.Core.EntityBuilder`1) / [`Single`](xref:NextORM.Core.EntityBuilder`1) и их формы `OrDefault` | `InMemoryTests.Top_ShouldLimitData`, `First_ShouldReturnFirst`, `Single_ShouldReturnSingle` |
+| [`OrderBy`](xref:NextORM.Core.EntityBuilder`1) / [`OrderByDescending`](xref:NextORM.Core.EntityBuilder`1), включая асинхронные источники | `InMemoryTests.OrderBy_ShouldSortData`, `OrderByOverAsyncSource_ShouldSortData` |
+| Материализаторы [`ToArray`](xref:NextORM.Core.EntityBuilder`1) / [`ToHashSet`](xref:NextORM.Core.EntityBuilder`1) / [`ToDictionary`](xref:NextORM.Core.EntityBuilder`1) (и async) | `InMemoryTests.ToArray_ShouldReturnData`, `ToHashSet_ShouldReturnData`, `ToDictionary_ShouldReturnData` |
+| [`Any`](xref:NextORM.Core.EntityBuilder`1) и проецируемый `exists` | `InMemoryTests.SelectAny_ShouldReturnData`, [`Any`](xref:NextORM.Core.EntityBuilder`1) |
+| [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) по проекциям с равенством по значению | `InMemoryTests.TestDistinct` |
 | Соединения: inner, left, right, full, cross, цепочкой до 8 таблиц | `InMemoryJoinTests.TestJoin`, `TestLeftJoin`, `TestRightJoinChained`, `TestFullJoinChained`, `TestCrossJoin8Tables_ShouldCloneAndMaterializeAtEveryArity` |
-| Агрегаты `Count`/`Sum`/`Min`/`Max`/`Avg`/`Stdev`/`Var` (буферизованные источники) | `InMemoryTests.Count_ShouldReturnRowCount`, `Sum_ShouldReturnSum`, `MinMax_ShouldReturnBounds`, `Avg_ShouldReturnAverage` |
-| `GroupBy` / `Having` с агрегатами по группам (буферизованные источники) | `InMemoryTests.GroupBy_ShouldAggregatePerGroup`, `GroupBy_Having_ShouldFilterGroups`, `GroupBy_Avg_ShouldAggregatePerGroup`, `GroupBy_OrderByColumn_ShouldSortGroups` |
+| Агрегаты [`Count`](xref:NextORM.Core.EntityBuilder`1)/[`Sum`](xref:NextORM.Core.EntityBuilder`1)/[`Min`](xref:NextORM.Core.EntityBuilder`1)/[`Max`](xref:NextORM.Core.EntityBuilder`1)/[`Avg`](xref:NextORM.Core.EntityBuilder`1)/[`Stdev`](xref:NextORM.Core.EntityBuilder`1)/[`Var`](xref:NextORM.Core.EntityBuilder`1) (буферизованные источники) | `InMemoryTests.Count_ShouldReturnRowCount`, `Sum_ShouldReturnSum`, `MinMax_ShouldReturnBounds`, `Avg_ShouldReturnAverage` |
+| [`GroupBy`](xref:NextORM.Core.EntityBuilder`1) / [`Having`](xref:NextORM.Core.EntityBuilder`1) с агрегатами по группам (буферизованные источники) | `InMemoryTests.GroupBy_ShouldAggregatePerGroup`, `GroupBy_Having_ShouldFilterGroups`, `GroupBy_Avg_ShouldAggregatePerGroup`, `GroupBy_OrderByColumn_ShouldSortGroups` |
 | Set-операции `UNION` / `UNION ALL` / `INTERSECT` / `INTERSECT ALL` / `EXCEPT` / `EXCEPT ALL` | `InMemoryTests.Union_ShouldRemoveDuplicates`, `UnionAll_ShouldKeepDuplicates`, `Intersect_ShouldReturnOnlyCommonRows`, `Except_ShouldReturnOnlyLeftRows`, `SetOperations_WhenChained_ShouldApplyLeftToRight` |
-| `Last` / `LastOrDefault` по упорядоченному запросу (обратный `ORDER BY`) | `InMemoryTests.Last_ShouldReturnLastOrderedRow`, `LastOrDefault_ShouldReturnLastOrderedRow` |
+| [`Last`](xref:NextORM.Core.EntityBuilder`1) / [`LastOrDefault`](xref:NextORM.Core.EntityBuilder`1) по упорядоченному запросу (обратный `ORDER BY`) | `InMemoryTests.Last_ShouldReturnLastOrderedRow`, `LastOrDefault_ShouldReturnLastOrderedRow` |
 | Буферизованный подзапрос-источник (`ctx.From(cmd)`) с синхронной материализацией и агрегатами | `InMemoryTests.SubquerySource_SyncToList_ShouldReturnRows`, `SubquerySource_Count_ShouldReturnRowCount`, `SetOperation_AsSubquery_Count_ShouldReturnRowCount` |
-| `SelectMany` (разворот, коррелированный) и `GroupJoin` (сгруппированные строки внутренней стороны) | `InMemorySelectManyTests.SelectMany_Correlated_ShouldFlattenPerRow`, `GroupJoin_ShouldGroupInnerRows` |
+| [`SelectMany`](xref:NextORM.Core.EntityBuilder`1) (разворот, коррелированный) и [`GroupJoin`](xref:NextORM.Core.EntityBuilder`1) (сгруппированные строки внутренней стороны) | `InMemorySelectManyTests.SelectMany_Correlated_ShouldFlattenPerRow`, `GroupJoin_ShouldGroupInnerRows` |
 
 Провайдер in-memory разделяет тот же fluent-API `EntityBuilder<T>`, что и SQL-провайдеры, поэтому один и тот же объект запроса
-работает с обоими — **кроме** `SelectMany`/`GroupJoin`: они доступны только в in-memory, а на SQL-провайдере
+работает с обоими — **кроме** [`SelectMany`](xref:NextORM.Core.EntityBuilder`1)/[`GroupJoin`](xref:NextORM.Core.EntityBuilder`1): они доступны только в in-memory, а на SQL-провайдере
 сразу бросают `NotSupportedException` (см. [Ограничения](../advanced/limitations.md)).
 
 ## Не поддерживается
@@ -110,7 +110,7 @@ static async IAsyncEnumerable<SimpleEntity> GetRows()
   // NotSupportedException: "... not supported by the in-memory provider."
   ```
 
-- **`Distinct` по ссылочному типу без равенства по значению** бросает `NotSupportedException` с упоминанием
+- **[`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) по ссылочному типу без равенства по значению** бросает `NotSupportedException` с упоминанием
   `DISTINCT`: SQL сравнивает по значению, что тип CLR не может воспроизвести без переопределения
   `Equals`/`GetHashCode`. Спроецируйте анонимный тип или тип-значение, либо переопределите равенство.
 
@@ -119,16 +119,20 @@ static async IAsyncEnumerable<SimpleEntity> GetRows()
   // NotSupportedException: "DISTINCT is not supported by the in-memory provider for projection type ..."
   ```
 
-- **Raw SQL** (`PrepareFromSql`) не реализован (`NotImplementedException`).
-- **Агрегаты или `GroupBy` по источнику `IAsyncEnumerable`** бросают `NotSupportedException`; и то, и другое
+- **Raw SQL** ([`PrepareFromSql`](xref:NextORM.Core.EntityBuilder`1)) не поддерживается (`NotSupportedException`).
+- **Агрегаты или [`GroupBy`](xref:NextORM.Core.EntityBuilder`1) по источнику `IAsyncEnumerable`** бросают `NotSupportedException`; и то, и другое
   вычисляется для буферизованных источников `IEnumerable`.
-- **Агрегаты с фильтром** (`NORM.SQL.count(e => filter)` и перегрузки `(value, filter)`) и
+- **Агрегаты с фильтром** (`SqlFunctions.Sql.count(e => filter)` и перегрузки `(value, filter)`) и
   **упорядочивание групп по выражению** бросают `NotSupportedException`; упорядочивайте группы по индексу колонки.
 - **Set-операции по источнику `IAsyncEnumerable`** бросают `NotSupportedException`; операнды буферизуются.
-- **`Last`/`LastOrDefault` без `ORDER BY`** бросают `InvalidOperationException`: у запроса без
+- **[`Last`](xref:NextORM.Core.EntityBuilder`1)/[`LastOrDefault`](xref:NextORM.Core.EntityBuilder`1) без `ORDER BY`** бросают `InvalidOperationException`: у запроса без
   упорядочивания нет определённой последней строки.
 - **Агрегаты по асинхронному подзапросу-источнику** бросают `NotSupportedException`; буферизованные
   подзапросы сворачиваются.
+- **Коррелированные подзапросы** (подзапрос, ссылающийся на внешнюю строку, например
+  `SqlFunctions.Sql.exists(inner.Where(i => i.Id == outer.Id))`) бросают `NotSupportedException`: у
+  провайдера нет построчной привязки внешней строки, а отбрасывание корреляции молча вернуло бы
+  неверные строки. Для коррелированных запросов используйте SQL-провайдер.
 
 ## Различия провайдеров
 
@@ -139,9 +143,10 @@ static async IAsyncEnumerable<SimpleEntity> GetRows()
 | SQL-текст | нет (дерево выражений вычисляется в процессе) |
 | Плейсхолдеры параметров | не применимо |
 | Источники TVF | `NotSupportedException` |
-| Raw SQL | `NotImplementedException` |
-| `Distinct` по типам без равенства по значению | `NotSupportedException` |
-| `SelectMany` / `GroupJoin` | поддерживаются (эти операторы доступны только в in-memory) |
+| Raw SQL | `NotSupportedException` |
+| [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) по типам без равенства по значению | `NotSupportedException` |
+| Коррелированные подзапросы | `NotSupportedException` |
+| [`SelectMany`](xref:NextORM.Core.EntityBuilder`1) / [`GroupJoin`](xref:NextORM.Core.EntityBuilder`1) | поддерживаются (эти операторы доступны только в in-memory) |
 
 ## См. также
 
@@ -154,7 +159,7 @@ static async IAsyncEnumerable<SimpleEntity> GetRows()
 
 ---
 
-Source: `test/nextorm.core.tests/InMemoryTests.cs:28,46,55,212,226,244,349,374`,
-`test/nextorm.core.tests/InMemoryJoinTests.cs:14,47,64,107,145,162`,
+Source: `tests/nextorm.core.tests/InMemoryTests.cs:28,46,55,212,226,244,349,374`,
+`tests/nextorm.core.tests/InMemoryJoinTests.cs:14,47,64,107,145,162`,
 `src/nextorm.core/DataContext/InMemoryDataContext.cs`,
 `src/nextorm.core/Builders/InMemoryCommandBuilder.cs`.

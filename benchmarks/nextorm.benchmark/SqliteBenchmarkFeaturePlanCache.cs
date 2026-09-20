@@ -1,9 +1,9 @@
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Columns;
-using nextorm.core;
-using nextorm.sqlite;
+using NextORM.Core;
+using NextORM.Sqlite;
 
-namespace nextorm.benchmark;
+namespace NextORM.Benchmark;
 
 /// <summary>
 /// Warm plan-cache probe (no DB round-trip, <c>storeInCache: true</c>). A fresh fluent command is
@@ -23,21 +23,21 @@ public class SqliteBenchmarkFeaturePlanCache
 
     private static readonly long[] CapturedInValues = { 1, 3, 10 };
 
-    private readonly nextorm.core.IDataContext _db;
+    private readonly NextORM.Core.IDataContext _db;
     private readonly TestDataRepository _ctx;
 
     public SqliteBenchmarkFeaturePlanCache()
     {
-        var builder = new DbContextBuilder();
+        var builder = new DataContextBuilder();
         builder.UseSqlite(BenchDb.FilePath);
-        _db = builder.CreateDbContext();
+        _db = builder.CreateDataContext();
         _ctx = new TestDataRepository(_db);
         ((IConnectionManager)_db).EnsureConnectionOpen();
 
         // Prime the plan caches so the measured loops see hits where hits are possible.
         _ = _db.GetPreparedQueryCommand(_ctx.ComplexEntity.Select(c => c.Int).Distinct(), false, true, CancellationToken.None);
-        _ = _db.GetPreparedQueryCommand(_ctx.ComplexEntity.Where(c => NORM.SQL.@in(c.Id, CapturedInValues)).Select(c => c.Id), false, true, CancellationToken.None);
-        _ = _db.GetPreparedQueryCommand(_ctx.ComplexEntity.Where(c => NORM.SQL.@in(c.Id, new long[] { 1, 3, 10 })).Select(c => c.Id), false, true, CancellationToken.None);
+        _ = _db.GetPreparedQueryCommand(_ctx.ComplexEntity.Where(c => SqlFunctions.Sql.@in(c.Id, CapturedInValues)).Select(c => c.Id), false, true, CancellationToken.None);
+        _ = _db.GetPreparedQueryCommand(_ctx.ComplexEntity.Where(c => SqlFunctions.Sql.@in(c.Id, new long[] { 1, 3, 10 })).Select(c => c.Id), false, true, CancellationToken.None);
         _ = _db.GetPreparedQueryCommand(_ctx.ComplexEntity.Where(c => CapturedInValues.Contains(c.Id)).Select(c => c.Id), false, true, CancellationToken.None);
         _ = _db.GetPreparedQueryCommand(_ctx.ComplexEntity.Where(c => new long[] { 1, 3, 10 }.Contains(c.Id)).Select(c => c.Id), false, true, CancellationToken.None);
     }
@@ -47,11 +47,11 @@ public class SqliteBenchmarkFeaturePlanCache
     {
         if (Interlocked.Exchange(ref _verified, 1) == 1) return;
 
-        var inlineAtIn = _ctx.ComplexEntity.Where(c => NORM.SQL.@in(c.Id, new long[] { 1, 3, 10 })).Select(c => c.Id);
+        var inlineAtIn = _ctx.ComplexEntity.Where(c => SqlFunctions.Sql.@in(c.Id, new long[] { 1, 3, 10 })).Select(c => c.Id);
         _db.GetPreparedQueryCommand(inlineAtIn, false, false, CancellationToken.None);
         var inlineContains = _ctx.ComplexEntity.Where(c => new long[] { 1, 3, 10 }.Contains(c.Id)).Select(c => c.Id);
         _db.GetPreparedQueryCommand(inlineContains, false, false, CancellationToken.None);
-        var capturedAtIn = _ctx.ComplexEntity.Where(c => NORM.SQL.@in(c.Id, CapturedInValues)).Select(c => c.Id);
+        var capturedAtIn = _ctx.ComplexEntity.Where(c => SqlFunctions.Sql.@in(c.Id, CapturedInValues)).Select(c => c.Id);
         _db.GetPreparedQueryCommand(capturedAtIn, false, false, CancellationToken.None);
 
         Console.WriteLine($"PlanCacheProbe: inline@in.Cache={inlineAtIn.Cache}, inlineListContains.Cache={inlineContains.Cache}, captured@in.Cache={capturedAtIn.Cache}");
@@ -73,7 +73,7 @@ public class SqliteBenchmarkFeaturePlanCache
     {
         IPreparedQueryCommand<long>? r = null;
         for (var i = 0; i < Iterations; i++)
-            r = _db.GetPreparedQueryCommand(_ctx.ComplexEntity.Where(c => NORM.SQL.@in(c.Id, CapturedInValues)).Select(c => c.Id), false, true, CancellationToken.None);
+            r = _db.GetPreparedQueryCommand(_ctx.ComplexEntity.Where(c => SqlFunctions.Sql.@in(c.Id, CapturedInValues)).Select(c => c.Id), false, true, CancellationToken.None);
         return r!;
     }
 
@@ -82,7 +82,7 @@ public class SqliteBenchmarkFeaturePlanCache
     {
         IPreparedQueryCommand<long>? r = null;
         for (var i = 0; i < Iterations; i++)
-            r = _db.GetPreparedQueryCommand(_ctx.ComplexEntity.Where(c => NORM.SQL.@in(c.Id, new long[] { 1, 3, 10 })).Select(c => c.Id), false, true, CancellationToken.None);
+            r = _db.GetPreparedQueryCommand(_ctx.ComplexEntity.Where(c => SqlFunctions.Sql.@in(c.Id, new long[] { 1, 3, 10 })).Select(c => c.Id), false, true, CancellationToken.None);
         return r!;
     }
 

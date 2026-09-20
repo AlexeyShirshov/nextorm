@@ -1,15 +1,19 @@
 using System.Linq.Expressions;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
-/// Translates the scalar and aggregate built-ins of <see cref="NORM.NORM_SQL"/> that are not part of
-/// the array/JSON surface: <c>nullif</c>, <c>greatest</c>/<c>least</c>, <c>date_trunc</c> and the
+/// Translates the scalar and aggregate built-ins of <see cref="CommonFunctions"/> that are not part of
+/// the array/JSON surface: <c>nullif</c>, <c>greatest</c>/<c>least</c>, the <c>iif</c>/<c>choose</c>
+/// conditionals, the <c>date_trunc</c>/<c>date_add</c>/<c>date_diff</c>/<c>end_of_month</c>/
+/// <c>date_from_parts</c> date helpers, <c>contains</c>/<c>freetext</c> and the
 /// <c>string_agg</c>/<c>array_agg</c> aggregates (including their optional
 /// <c>FILTER (WHERE ...)</c> clause).
 /// <para>
 /// Each provider-specific group is guarded by a dialect capability
-/// (<see cref="ISqlDialect.SupportsGreatestLeast"/>, <see cref="ISqlDialect.SupportsDateTrunc"/>,
+/// (<see cref="ISqlDialect.SupportsGreatestLeast"/>, <see cref="ISqlDialect.SupportsIif"/>,
+/// <see cref="ISqlDialect.SupportsChoose"/>, <see cref="ISqlDialect.SupportsDateTrunc"/>,
+/// <see cref="ISqlDialect.SupportsDateArithmetic"/>, <see cref="ISqlDialect.SupportsFullText"/>,
 /// <see cref="ISqlDialect.SupportsStringArrayAggregates"/>, <see cref="ISqlDialect.SupportsFilter"/>)
 /// so a provider that cannot express the construct fails with a clear message instead of emitting
 /// invalid SQL.
@@ -22,40 +26,46 @@ internal static class BuiltinFunctionTranslator
     {
         switch (node.Method.Name)
         {
-            case nameof(NORM.NORM_SQL.nullif) when node.Arguments.Count == 2:
+            case nameof(CommonFunctions.nullif) when node.Arguments.Count == 2:
                 EmitNullIf(visitor, node.Arguments);
                 return true;
-            case nameof(NORM.NORM_SQL.greatest):
+            case nameof(CommonFunctions.greatest):
                 EmitGreatestLeast(visitor, node, greatest: true);
                 return true;
-            case nameof(NORM.NORM_SQL.least):
+            case nameof(CommonFunctions.least):
                 EmitGreatestLeast(visitor, node, greatest: false);
                 return true;
-            case nameof(NORM.NORM_SQL.date_trunc) when node.Arguments.Count == 2:
+            case nameof(CommonFunctions.iif) when node.Arguments.Count == 3:
+                EmitIif(visitor, node.Arguments);
+                return true;
+            case nameof(SqlServerFunctions.choose) when node.Arguments.Count == 2:
+                EmitChoose(visitor, FlattenChoose(node.Arguments));
+                return true;
+            case nameof(CommonFunctions.date_trunc) when node.Arguments.Count == 2:
                 EmitDateTrunc(visitor, node.Arguments);
                 return true;
-            case nameof(NORM.NORM_SQL.date_add) when node.Arguments.Count == 3:
+            case nameof(CommonFunctions.date_add) when node.Arguments.Count == 3:
                 EmitDateAdd(visitor, node.Arguments);
                 return true;
-            case nameof(NORM.NORM_SQL.date_diff) when node.Arguments.Count == 3:
+            case nameof(CommonFunctions.date_diff) when node.Arguments.Count == 3:
                 EmitDateDiff(visitor, node.Arguments);
                 return true;
-            case nameof(NORM.NORM_SQL.end_of_month) when node.Arguments.Count == 1:
+            case nameof(CommonFunctions.end_of_month) when node.Arguments.Count == 1:
                 EmitEndOfMonth(visitor, node.Arguments);
                 return true;
-            case nameof(NORM.NORM_SQL.date_from_parts) when node.Arguments.Count == 3:
+            case nameof(CommonFunctions.date_from_parts) when node.Arguments.Count == 3:
                 EmitDateFromParts(visitor, node.Arguments);
                 return true;
-            case nameof(NORM.NORM_SQL.contains) when node.Arguments.Count == 2:
+            case nameof(CommonFunctions.contains) when node.Arguments.Count == 2:
                 EmitFullText(visitor, node, "contains");
                 return true;
-            case nameof(NORM.NORM_SQL.freetext) when node.Arguments.Count == 2:
+            case nameof(CommonFunctions.freetext) when node.Arguments.Count == 2:
                 EmitFullText(visitor, node, "freetext");
                 return true;
-            case nameof(NORM.NORM_SQL.string_agg) when node.Arguments.Count is 2 or 3:
+            case nameof(CommonFunctions.string_agg) when node.Arguments.Count is 2 or 3:
                 EmitStringAgg(visitor, node.Arguments);
                 return true;
-            case nameof(NORM.PG.array_agg) when node.Arguments.Count is 1 or 2:
+            case nameof(PostgresFunctions.array_agg) when node.Arguments.Count is 1 or 2:
                 EmitArrayAgg(visitor, node.Arguments);
                 return true;
             default:
@@ -102,6 +112,49 @@ internal static class BuiltinFunctionTranslator
             rendered[i] = visitor.VisitToString(items[i]);
 
         visitor.Builder!.Append(greatest ? visitor.Dialect.MakeGreatest(rendered) : visitor.Dialect.MakeLeast(rendered));
+    }
+
+    /// <summary>Renders the portable <c>iif</c> through the dialect's native conditional spelling.</summary>
+    private static void EmitIif(BaseExpressionVisitor visitor, IReadOnlyList<Expression> args)
+    {
+        if (!visitor.Dialect.SupportsIif)
+            throw new NotSupportedException("The iif conditional function is not supported by this provider.");
+
+        if (visitor.IsParamMode)
+        {
+            visitor.Visit(args[0]);
+            visitor.Visit(args[1]);
+            visitor.Visit(args[2]);
+            return;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        visitor.Builder!.Append(visitor.Dialect.MakeIif(
+            visitor.VisitToString(args[0]),
+            visitor.VisitToString(args[1]),
+            visitor.VisitToString(args[2])));
+    }
+
+    /// <summary>Renders the SQL Server-only <c>choose</c> conditional function (gated by <see cref="ISqlDialect.SupportsChoose"/>).</summary>
+    private static void EmitChoose(BaseExpressionVisitor visitor, IReadOnlyList<Expression> args)
+    {
+        if (!visitor.Dialect.SupportsChoose)
+            throw new NotSupportedException("The choose conditional function is not supported by this provider.");
+
+        SqlOperandTranslator.EmitFunction(visitor, "choose", args);
+    }
+
+    /// <summary>Flattens the <c>params</c> value array of <c>choose(index, values)</c> into positional arguments.</summary>
+    private static IReadOnlyList<Expression> FlattenChoose(IReadOnlyList<Expression> args)
+    {
+        if (args.Count == 2 && args[1] is NewArrayExpression { Expressions: var values })
+        {
+            var list = new List<Expression>(values.Count + 1) { args[0] };
+            list.AddRange(values);
+            return list;
+        }
+
+        return args;
     }
 
     /// <summary><c>date_trunc(field, value)</c> with a validated constant date-part name.</summary>

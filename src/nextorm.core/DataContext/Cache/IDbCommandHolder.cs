@@ -1,6 +1,6 @@
 using System.Data.Common;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 internal interface IDbCommandHolder
 {

@@ -28,6 +28,7 @@
 - [Query reuse: cache vs Prepare](guide/15-query-reuse.md)
 - [Connections and logging](guide/16-connections-and-logging.md)
 - [Query hints](guide/17-query-hints.md)
+- [JSON support across providers](guide/18-json.md)
 
 ### Providers
 
@@ -41,9 +42,9 @@
 
 - [Limitations and out-of-scope features](advanced/limitations.md)
 - [API reference](advanced/api-reference.md)
-- [Prepared vs cached: reusing a query](prepared-vs-cached.md)
-- [SQL capabilities gap analysis](sql-capabilities-gap-analysis.md)
-- [nextorm vs linq2db: functionality comparison](linq2db-comparison.md)
+- [Prepared vs cached: reusing a query](specs/performance/prepared-vs-cached.md)
+- [SQL capabilities gap analysis](specs/roadmap/sql-capabilities-gap-analysis.md)
+- [nextorm vs linq2db: functionality comparison](specs/roadmap/linq2db-comparison.md)
 
 ### Русская документация
 
@@ -113,11 +114,11 @@ In-memory provider is built-in in core library.
 ## Query reuse
 
 There are two independent ways to avoid re-building a query plan on every execution: the implicit plan
-cache (used automatically by `EntityBuilder`/`QueryCommand` terminals) and explicit `Prepare()` returning an
-`IPreparedQueryCommand<TResult>`.
+cache (used automatically by [`EntityBuilder`](xref:NextORM.Core.EntityBuilder)/[`QueryCommand`](xref:NextORM.Core.QueryCommand) terminals) and explicit [`Prepare`](xref:NextORM.Core.EntityBuilder`1) returning an
+[`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1).
 
 They differ in cost, lifetime and thread-safety rules. Which one to use, what each one costs per call and
-its limitations: **[Prepared vs Cached](prepared-vs-cached.md)**.
+its limitations: **[Prepared vs Cached](specs/performance/prepared-vs-cached.md)**.
 
 ## Releases
 

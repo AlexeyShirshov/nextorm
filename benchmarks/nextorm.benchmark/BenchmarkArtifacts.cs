@@ -1,6 +1,6 @@
 using System.IO;
 
-namespace nextorm.benchmark;
+namespace NextORM.Benchmark;
 
 /// <summary>
 /// Locates the shared artifacts folder, <c>benchmarks/BenchmarkDotNet.Artifacts</c>.
@@ -18,7 +18,7 @@ internal static class BenchmarkArtifacts
 
     private static string Resolve()
     {
-        // Walk up from the output folder (benchmarks/nextorm.benchmark/bin/<os>/<config>/<tfm>) to
+        // Walk up from the output folder (benchmarks/NextORM.Benchmark/bin/<os>/<config>/<tfm>) to
         // the repository root instead of counting '..', so the layout can change freely.
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
         {

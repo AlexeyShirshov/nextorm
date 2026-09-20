@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Ambient context state and configuration: loggers, mapping mode and the user-owned property bag.

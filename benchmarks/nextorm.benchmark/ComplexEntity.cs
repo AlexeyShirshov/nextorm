@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace nextorm.benchmark;
+namespace NextORM.Benchmark;
 
 [Table("complex_entity")]
 public sealed class ComplexEntity

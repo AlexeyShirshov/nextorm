@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 public static class IEqualityComparerExtensions
 {

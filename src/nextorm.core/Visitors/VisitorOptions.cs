@@ -2,7 +2,7 @@ using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.ObjectPool;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// The construction-time collaborators of <see cref="BaseExpressionVisitor"/> (and of the visitors
@@ -19,10 +19,10 @@ public sealed record VisitorOptions(
     IColumnsProvider ColumnsProvider,
     int Dim,
     IAliasProvider? AliasProvider,
-    IParamProvider ParamProvider,
-    IQueryProvider QueryProvider,
+    IParameterProvider ParameterProvider,
+    IQueryRegistry QueryProvider,
     bool DontNeedAlias,
     bool ParamMode,
-    List<Param> Params,
+    List<Parameter> Params,
     ILogger? Logger,
     ObjectPool<StringBuilder>? SbPool = null);

@@ -1,9 +1,9 @@
 using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Columns;
-using nextorm.core;
-using nextorm.sqlite;
+using NextORM.Core;
+using NextORM.Sqlite;
 
-namespace nextorm.benchmark;
+namespace NextORM.Benchmark;
 
 /// <summary>
 /// Cold SQL-build cost for each SQL-capabilities feature. No DB round-trip and no plan cache
@@ -32,9 +32,9 @@ public class SqliteBenchmarkFeaturePlanBuild
 
     public SqliteBenchmarkFeaturePlanBuild()
     {
-        var builder = new DbContextBuilder();
+        var builder = new DataContextBuilder();
         builder.UseSqlite(BenchDb.FilePath);
-        _db = builder.CreateDbContext();
+        _db = builder.CreateDataContext();
         _ctx = new TestDataRepository(_db);
         ((IConnectionManager)_db).EnsureConnectionOpen();
     }
@@ -85,7 +85,7 @@ public class SqliteBenchmarkFeaturePlanBuild
         for (var i = 0; i < Iterations; i++)
             r = _db.GetPreparedQueryCommand(_ctx.SimpleEntity
                 .LeftJoin(_ctx.ComplexEntity, (s, c) => (long)s.Id == c.Id)
-                .Select(p => new LeftJoinRow { Id = p.t1.Id, RightString = p.t2.RequiredString }), false, false, CancellationToken.None);
+                .Select(p => new LeftJoinRow { Id = p.Item1.Id, RightString = p.Item2.RequiredString }), false, false, CancellationToken.None);
         return r!;
     }
 
@@ -96,9 +96,9 @@ public class SqliteBenchmarkFeaturePlanBuild
         for (var i = 0; i < Iterations; i++)
             r = _db.GetPreparedQueryCommand(_ctx.SimpleEntity
                 .Join(_ctx.ComplexEntity, (s, c) => (long)s.Id == c.Id)
-                .Join(_ctx.SimpleEntity, (p, s) => p.t2.Id == (long)s.Id)
-                .Join(_ctx.ComplexEntity, (p, c) => (long)p.t3.Id == c.Id)
-                .Select(p => new FourJoinRow { A = p.t1.Id, B = p.t2.RequiredString, C = p.t3.Id, D = p.t4.RequiredString }), false, false, CancellationToken.None);
+                .Join(_ctx.SimpleEntity, (p, s) => p.Item2.Id == (long)s.Id)
+                .Join(_ctx.ComplexEntity, (p, c) => (long)p.Item3.Id == c.Id)
+                .Select(p => new FourJoinRow { A = p.Item1.Id, B = p.Item2.RequiredString, C = p.Item3.Id, D = p.Item4.RequiredString }), false, false, CancellationToken.None);
         return r!;
     }
 
@@ -143,7 +143,7 @@ public class SqliteBenchmarkFeaturePlanBuild
     {
         IPreparedQueryCommand<long>? r = null;
         for (var i = 0; i < Iterations; i++)
-            r = _db.GetPreparedQueryCommand(_ctx.ComplexEntity.Where(c => NORM.SQL.@in(c.Id, CapturedInValues)).Select(c => c.Id), false, false, CancellationToken.None);
+            r = _db.GetPreparedQueryCommand(_ctx.ComplexEntity.Where(c => SqlFunctions.Sql.@in(c.Id, CapturedInValues)).Select(c => c.Id), false, false, CancellationToken.None);
         return r!;
     }
 
@@ -152,7 +152,7 @@ public class SqliteBenchmarkFeaturePlanBuild
     {
         IPreparedQueryCommand<long>? r = null;
         for (var i = 0; i < Iterations; i++)
-            r = _db.GetPreparedQueryCommand(_ctx.ComplexEntity.Where(c => NORM.SQL.@in(c.Id, new long[] { 1, 3, 10 })).Select(c => c.Id), false, false, CancellationToken.None);
+            r = _db.GetPreparedQueryCommand(_ctx.ComplexEntity.Where(c => SqlFunctions.Sql.@in(c.Id, new long[] { 1, 3, 10 })).Select(c => c.Id), false, false, CancellationToken.None);
         return r!;
     }
 
@@ -191,7 +191,7 @@ public class SqliteBenchmarkFeaturePlanBuild
             r = _db.GetPreparedQueryCommand(_ctx.ComplexEntity.Select(c => new RowNumberRow
             {
                 Id = c.Id,
-                Rn = NORM.SQL.row_number().Over(partitionBy: () => c.Int, orderBy: () => c.Id)
+                Rn = SqlFunctions.Sql.row_number().Over(partitionBy: () => c.Int, orderBy: () => c.Id)
             }), false, false, CancellationToken.None);
         return r!;
     }
@@ -204,7 +204,7 @@ public class SqliteBenchmarkFeaturePlanBuild
             r = _db.GetPreparedQueryCommand(_ctx.ComplexEntity.Select(c => new SumOverRow
             {
                 Id = c.Id,
-                Total = NORM.SQL.sum_over(c.Id).Over(partitionBy: () => c.Int)
+                Total = SqlFunctions.Sql.sum_over(c.Id).Over(partitionBy: () => c.Int)
             }), false, false, CancellationToken.None);
         return r!;
     }
@@ -219,7 +219,7 @@ public class SqliteBenchmarkFeaturePlanBuild
             var cmd = _db.With("recent", recent)
                 .From("recent")
                 .Join(_ctx.SimpleEntity, (t, s) => t["id"].AsInt == s.Id)
-                .Select(p => new CteJoinRow { Id = p.t1["id"].AsInt, SimpleId = p.t2.Id });
+                .Select(p => new CteJoinRow { Id = p.Item1["id"].AsInt, SimpleId = p.Item2.Id });
             r = _db.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None);
         }
         return r!;

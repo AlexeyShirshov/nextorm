@@ -1,6 +1,6 @@
 using System.Linq.Expressions;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// In-memory-only <c>FROM</c> source produced by <c>SelectMany</c>/<c>GroupJoin</c>. It is not a

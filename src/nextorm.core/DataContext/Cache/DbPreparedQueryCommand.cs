@@ -2,7 +2,7 @@ using System.Data;
 using System.Data.Common;
 using System.Diagnostics;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Prepared query command backed by an ADO.NET <see cref="System.Data.IDataRecord"/> reader.
@@ -19,18 +19,18 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
     public readonly string? SqlStmt;
     public readonly bool NoParams;
     public readonly bool NeedsParamRefresh;
-    public DbPreparedQueryCommand(DbCommand dbCommand, Func<IDataRecord, TResult>? mapDelegate, bool singleRow, string? sql, bool noParams, bool needsParamRefresh)
+    public DbPreparedQueryCommand(DbCommand dbCommand, Func<IDataRecord, TResult>? mapDelegate, PreparedCommandOptions options)
         : base(mapDelegate)
     {
         DbCommand = dbCommand;
         DbCommandConnection = dbCommand.Connection;
         DbCommandParams = dbCommand.Parameters;
-        if (singleRow)
+        if (options.SingleRow)
             Behavior = CommandBehavior.SingleRow;
 
-        SqlStmt = sql;
-        NoParams = noParams;
-        NeedsParamRefresh = needsParamRefresh;
+        SqlStmt = options.Sql;
+        NoParams = options.NoParams;
+        NeedsParamRefresh = options.NeedsParamRefresh;
     }
     // private readonly string CommandText;
     //public DbParameterCollection DbCommandParams;

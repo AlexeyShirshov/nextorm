@@ -1,9 +1,9 @@
 ﻿using BenchmarkDotNet.Attributes;
 using BenchmarkDotNet.Jobs;
 using Microsoft.EntityFrameworkCore;
-using nextorm.core;
+using NextORM.Core;
 
-namespace nextorm.benchmark;
+namespace NextORM.Benchmark;
 
 [MemoryDiagnoser]
 [Config(typeof(NextormConfig))]
@@ -27,7 +27,7 @@ public class InMemoryBenchmarkIteration
             data.Add(new SimpleEntity { Id = i });
         _data = data;
 
-        _provider = new InMemoryContext();
+        _provider = new InMemoryDataContext();
         _ctx = new InMemoryDataRepository(_provider);
         _ctx.SimpleEntity.WithData(_data);
 

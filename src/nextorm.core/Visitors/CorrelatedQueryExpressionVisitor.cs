@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Logging;
 using System.Linq.Expressions;
 using System.Reflection;
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Collects the outer references of a correlated subquery.
@@ -14,21 +14,68 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
     private readonly bool _forPrepare = false;
     private readonly IQueryMaterializer _dataProvider;
     private readonly ILogger? _logger;
-    private readonly IQueryProvider _queryProvider;
+    private readonly IQueryRegistry _queryProvider;
     private readonly Type? _entityType;
 
     //private readonly List<QueryCommand>? _refs;
     private static readonly MethodInfo AnyMIGeneric = typeof(CorrelatedQueryExpressionVisitor).GetMethod(nameof(Any), BindingFlags.NonPublic | BindingFlags.Instance)!;
     //private static MethodInfo ToCommandMI = typeof(EntityBuilder<>).GetMethod("ToCommand", BindingFlags.Public | BindingFlags.Instance)!;
     private static readonly MethodInfo ConcatMI = typeof(string).GetMethods(BindingFlags.Public | BindingFlags.Static).First(it => it.Name == nameof(string.Concat) && it.GetParameters().Length == 2);
-    private static readonly PropertyInfo ReferencedQueriesPI = typeof(IQueryProvider).GetProperty(nameof(IQueryProvider.ReferencedQueries), BindingFlags.Public | BindingFlags.Instance)!;
+    private static readonly PropertyInfo ReferencedQueriesPI = typeof(IQueryRegistry).GetProperty(nameof(IQueryRegistry.ReferencedQueries), BindingFlags.Public | BindingFlags.Instance)!;
     private static readonly PropertyInfo ItemPI = typeof(IReadOnlyList<QueryCommand>).GetProperty("Item")!;
-    private static readonly PropertyInfo SQLPI = typeof(NORM).GetProperty(nameof(NORM.SQL))!;
+    private static readonly PropertyInfo SQLPI = typeof(SqlFunctions).GetProperty(nameof(SqlFunctions.Sql))!;
     private Stack<ParameterExpression>? _outerParams;
 
     //private ParameterExpression? _p;
 
-    public CorrelatedQueryExpressionVisitor(IQueryMaterializer dataProvider, IQueryProvider queryProvider, CancellationToken cancellationToken, ILogger? logger)
+    /// <summary>
+    /// Pushes <paramref name="parameter"/> as an outer parameter for the lifetime of the returned
+    /// scope. A subquery translated while the scope is active may reference the parameter's members;
+    /// they are registered as outer references of the command this visitor prepares. Used for the
+    /// positions that are visited per projection argument / sorting item rather than as a whole lambda
+    /// (the projection lambda parameter is never seen by <see cref="VisitLambda{T}"/> there).
+    /// </summary>
+    internal IDisposable PushOuter(ParameterExpression parameter)
+    {
+        (_outerParams ??= []).Push(parameter);
+        return new OuterScope(this);
+    }
+
+    private sealed class OuterScope(CorrelatedQueryExpressionVisitor owner) : IDisposable
+    {
+        private bool _disposed;
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            owner._outerParams!.Pop();
+        }
+    }
+
+    /// <summary>True when <paramref name="expression"/> references any parameter currently treated as outer.</summary>
+    private bool ReferencesOuter(Expression expression)
+    {
+        var detector = new OuterReferenceDetector(_outerParams!);
+        detector.Visit(expression);
+        return detector.Found;
+    }
+
+    private sealed class OuterReferenceDetector(IEnumerable<ParameterExpression> outer) : ExpressionVisitor
+    {
+        private readonly HashSet<ParameterExpression> _outer = [.. outer];
+        public bool Found { get; private set; }
+
+        protected override Expression VisitParameter(ParameterExpression node)
+        {
+            if (_outer.Contains(node))
+                Found = true;
+
+            return base.VisitParameter(node);
+        }
+    }
+
+    public CorrelatedQueryExpressionVisitor(IQueryMaterializer dataProvider, IQueryRegistry queryProvider, CancellationToken cancellationToken, ILogger? logger)
     {
         _dataProvider = dataProvider;
         _logger = logger;
@@ -38,7 +85,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         //_refs = new();
     }
 
-    public CorrelatedQueryExpressionVisitor(IQueryMaterializer dataProvider, IQueryProvider queryProvider, Type entityType, ILogger? logger)
+    public CorrelatedQueryExpressionVisitor(IQueryMaterializer dataProvider, IQueryRegistry queryProvider, Type entityType, ILogger? logger)
     {
         _dataProvider = dataProvider;
         _logger = logger;
@@ -66,11 +113,12 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
     //     }
     protected override Expression VisitMethodCall(MethodCallExpression node)
     {
-        if (node.Method.DeclaringType == typeof(NORM.NORM_SQL))
+        if (node.Method.DeclaringType == typeof(CommonFunctions)
+            || node.Method.DeclaringType == typeof(ClickHouseFunctions))
         {
-            if ((node.Method.Name == nameof(NORM.NORM_SQL.exists)
-                || node.Method.Name == nameof(NORM.NORM_SQL.all)
-                || node.Method.Name == nameof(NORM.NORM_SQL.any)
+            if ((node.Method.Name == nameof(CommonFunctions.exists)
+                || node.Method.Name == nameof(CommonFunctions.all)
+                || node.Method.Name == nameof(CommonFunctions.any)
             )
                 && node.Arguments is [Expression exp] && exp.Type.IsAssignableTo(typeof(QueryCommand)))
             {
@@ -101,7 +149,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                 }
                 else
                 {
-                    if (node.Method.Name == nameof(NORM.NORM_SQL.exists))
+                    if (node.Method.Name == nameof(CommonFunctions.exists))
                         cmd.IgnoreColumns = true;
 
                     if (!cmd.IsPrepared)
@@ -113,10 +161,10 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 
                     var idx = _queryProvider!.AddCommand(cmd);
 
-                    //Expression dfg = (IQueryProvider queryProvider) => NORM.SQL.exists(queryProvider.ReferencedColumns[idx]);
-                    //var replace = new ReplaceArgumentVisitor(0, (IQueryProvider queryProvider) => queryProvider.ReferencedColumns[idx]);
-                    //node.Arguments[0]=(Expression)(IQueryProvider queryProvider) => queryProvider.ReferencedColumns[idx];
-                    var p = Expression.Parameter(typeof(IQueryProvider));
+                    //Expression dfg = (IQueryRegistry queryProvider) => SqlFunctions.Sql.exists(queryProvider.ReferencedColumns[idx]);
+                    //var replace = new ReplaceArgumentVisitor(0, (IQueryRegistry queryProvider) => queryProvider.ReferencedColumns[idx]);
+                    //node.Arguments[0]=(Expression)(IQueryRegistry queryProvider) => queryProvider.ReferencedColumns[idx];
+                    var p = Expression.Parameter(typeof(IQueryRegistry));
                     var lambda = Expression.Lambda(
                         Expression.Call(node.Object, node.Method,
                             Expression.Convert(
@@ -133,7 +181,8 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                     return lambda;
                 }
             }
-            else if ((node.Method.Name == nameof(NORM.NORM_SQL.@in))
+            else if ((node.Method.Name == nameof(CommonFunctions.@in)
+                || node.Method.Name == nameof(ClickHouseFunctions.global_in))
                 && node.Arguments is [Expression propExp, Expression cmdExp] && cmdExp.Type.IsAssignableTo(typeof(QueryCommand)))
             {
                 QueryCommand cmd = GetQueryCommand(cmdExp);
@@ -149,10 +198,10 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 
                     var idx = _queryProvider!.AddCommand(cmd);
 
-                    //Expression dfg = (IQueryProvider queryProvider) => NORM.SQL.exists(queryProvider.ReferencedColumns[idx]);
-                    //var replace = new ReplaceArgumentVisitor(0, (IQueryProvider queryProvider) => queryProvider.ReferencedColumns[idx]);
-                    //node.Arguments[0]=(Expression)(IQueryProvider queryProvider) => queryProvider.ReferencedColumns[idx];
-                    var p = Expression.Parameter(typeof(IQueryProvider));
+                    //Expression dfg = (IQueryRegistry queryProvider) => SqlFunctions.Sql.exists(queryProvider.ReferencedColumns[idx]);
+                    //var replace = new ReplaceArgumentVisitor(0, (IQueryRegistry queryProvider) => queryProvider.ReferencedColumns[idx]);
+                    //node.Arguments[0]=(Expression)(IQueryRegistry queryProvider) => queryProvider.ReferencedColumns[idx];
+                    var p = Expression.Parameter(typeof(IQueryRegistry));
                     var lambda = Expression.Lambda(
                         Expression.Call(node.Object, node.Method,
                             propExp,
@@ -174,15 +223,20 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 
             return node;
         }
-        else if (node.Object is not null && node.Object.Type.IsGenericType && node.Object.Type.GetGenericTypeDefinition().IsAssignableTo(typeof(EntityBuilder<>)))
+        else if (GetEntityBuilderReceiver(node) is { } builderReceiver)
         {
+            if (IsAggregateTerminal(node.Method.Name))
+                throw new NotSupportedException(
+                    $"The aggregate terminal '{node.Method.Name}' cannot be used inside a subquery projection; " +
+                    "project the aggregate explicitly (for example SqlFunctions.Sql.count()/sum(...)) so it can be translated to SQL.");
+
             QueryCommand cmd;
 
-            var keyCmd = new ExpressionKey(node.Object, _queryProvider);
+            var keyCmd = new ExpressionKey(builderReceiver, _queryProvider);
             if (!DataContextCache.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
             {
                 //var d = Expression.Lambda<Func<QueryCommand>>(Expression.Call(node.Object, ToCommandMI)).Compile();
-                var d = Expression.Lambda<Func<QueryCommand>>(Expression.Convert(node.Object, typeof(QueryCommand))).Compile();
+                var d = Expression.Lambda<Func<QueryCommand>>(Expression.Convert(builderReceiver, typeof(QueryCommand))).Compile();
 
                 DataContextCache.ExpressionsCache[keyCmd] = d;
                 cmd = d();
@@ -200,7 +254,17 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         }
         else if (node.Object?.Type.IsAssignableTo(typeof(QueryCommand)) ?? false)
         {
-            var tv = new TwoTypeExpressionVisitor<ParameterExpression, ConstantExpression>();
+            // A correlated scalar subquery: the inner query references a member of an outer parameter.
+            // Route it through GetQueryCommand so the outer member is replaced with an OuterRefMarker
+            // and registered on this (outer) command; the existing non-correlated closure path below
+            // would leave the outer parameter free and fail at Compile().
+            if (_forPrepare && _outerParams is { Count: > 0 } && ReferencesOuter(node.Object))
+            {
+                var outerCmd = GetQueryCommand(node.Object);
+                return ReplaceQueryCommand(node, outerCmd);
+            }
+
+            var tv = new TypeExpressionVisitor<ParameterExpression, ConstantExpression>();
             tv.Visit(node.Object);
             if (tv.Has1)
             {
@@ -215,7 +279,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                 if (!DataContextCache.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
                 {
                     var p = Expression.Parameter(typeof(object));
-                    var replace = new ReplaceConstantVisitor(Expression.Convert(p, tv.Target2!.Type));
+                    var replace = new ReplaceConstantExpressionVisitor(Expression.Convert(p, tv.Target2!.Type));
                     var body = replace.Visit(node.Object);
 
                     var d = Expression.Lambda<Func<object?, QueryCommand>>(body, p).Compile();
@@ -239,11 +303,85 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         return base.VisitMethodCall(node);
     }
 
+    /// <summary>
+    /// Returns the <see cref="EntityBuilder{TEntity}"/> a method call is invoked on, whether the
+    /// terminal is still an instance method (<paramref name="node"/>.<c>Object</c>) or an extension
+    /// method (the receiver is the first argument).
+    /// </summary>
+    private static Expression? GetEntityBuilderReceiver(MethodCallExpression node) => node.Object switch
+    {
+        { Type.IsGenericType: true } instance when IsEntityBuilder(instance.Type) => instance,
+        null when node.Arguments.Count > 0 && node.Arguments[0].Type.IsGenericType && IsEntityBuilder(node.Arguments[0].Type) => node.Arguments[0],
+        _ => null
+    };
+
+    private static bool IsEntityBuilder(Type type) => type.GetGenericTypeDefinition().IsAssignableTo(typeof(EntityBuilder<>));
+
+    /// <summary>
+    /// True when <paramref name="expression"/> is a correlated scalar subquery whose terminal is a
+    /// <c>*OrDefault</c> method. The SQL is identical to the non-<c>OrDefault</c> terminal, so this is
+    /// how the projection learns that a NULL result must become <c>default</c> instead of throwing.
+    /// </summary>
+    internal static bool IsOrDefaultScalar(Expression expression)
+    {
+        while (expression is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } unary)
+            expression = unary.Operand;
+
+        return expression is MethodCallExpression call
+            && call.Method.Name.EndsWith("OrDefault", StringComparison.Ordinal)
+            && call.Object?.Type.IsAssignableTo(typeof(QueryCommand)) == true;
+    }
+
+    /// <summary>
+    /// True for the <see cref="EntityBuilder{TEntity}"/> terminal methods that execute an aggregate
+    /// immediately. They produce no translatable SQL projection, so a subquery that reaches one is
+    /// rejected instead of silently emitting a non-aggregated select.
+    /// </summary>
+    private static bool IsAggregateTerminal(string methodName) => methodName switch
+    {
+        nameof(EntityBuilderExtensions.Count) => true,
+        nameof(EntityBuilderExtensions.Min) => true,
+        nameof(EntityBuilderExtensions.Max) => true,
+        nameof(EntityBuilderExtensions.Avg) => true,
+        nameof(EntityBuilderExtensions.Sum) => true,
+        nameof(EntityBuilderExtensions.Stdev) => true,
+        nameof(EntityBuilderExtensions.Stdevp) => true,
+        nameof(EntityBuilderExtensions.Var) => true,
+        nameof(EntityBuilderExtensions.Varp) => true,
+        _ => false
+    };
+    /// <summary>True when the expression already contains an <see cref="OuterRefMarker{T}"/> from an ancestor scope.</summary>
+    private static bool ContainsOuterRefMarker(Expression expression)
+    {
+        var detector = new OuterRefMarkerDetector();
+        detector.Visit(expression);
+        return detector.Found;
+    }
+
+    private sealed class OuterRefMarkerDetector : ExpressionVisitor
+    {
+        public bool Found { get; private set; }
+
+        protected override Expression VisitNew(NewExpression node)
+        {
+            if (node.Type.IsGenericType && node.Type.GetGenericTypeDefinition() == typeof(OuterRefMarker<>))
+                Found = true;
+
+            return base.VisitNew(node);
+        }
+    }
+
     private QueryCommand GetQueryCommand(Expression exp)
     {
+        // A marker inside the subquery expression means an ancestor command already resolved an
+        // outer reference; resolving a second level here would bind the marker to the wrong command's
+        // ReferencedQueries/OuterReferences and silently emit the wrong SQL, so reject it explicitly.
+        if (ContainsOuterRefMarker(exp))
+            throw new NotSupportedException("Nested correlated subqueries deeper than one level are not supported.");
+
         QueryCommand cmd;
         var predVisitor = new PredicateExpressionVisitor<int>((exp, storeValue) => exp is IndexExpression idxExp
-            && idxExp.Object is MemberExpression propExp && propExp.Member == ReferencedQueriesPI && propExp.Expression is ParameterExpression && exp.Type.IsAssignableTo(typeof(IQueryProvider))
+            && idxExp.Object is MemberExpression propExp && propExp.Member == ReferencedQueriesPI && propExp.Expression is ParameterExpression && exp.Type.IsAssignableTo(typeof(IQueryRegistry))
             && idxExp.Arguments is [ConstantExpression c] && c.Value is int idx && storeValue(idx)
         );
         predVisitor.Visit(exp);
@@ -259,29 +397,48 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 
             if (constRepl.Params.Count > 0)
             {
-                var keyCmd = new ExpressionKey(exp, _queryProvider);
-                if (!DataContextCache.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
+                var pp = constRepl.Params.Select(it => it.Item1);
+                var args = constRepl.Params.Select(it => it.Item2).ToArray();
+
+                // A body that carries an outer reference bakes the marker index - a position in the
+                // *current* outer command's OuterReferences - into the compiled delegate. The same
+                // member can map to a different index on another command (depending on how many
+                // references that command registered first), so sharing the delegate through
+                // ExpressionsCache would resolve the marker against the wrong list (wrong SQL or an
+                // out-of-range index). Compile such bodies per outer command instead.
+                if (ContainsOuterRefMarker(body))
                 {
-                    var pp = constRepl.Params.Select(it => it.Item1);
-                    // if (_outerParams is not null)
-                    //     pp = pp.Concat(_outerParams);
-
                     var d = Expression.Lambda(body, pp).Compile();
-
-                    DataContextCache.ExpressionsCache[keyCmd] = d;
-                    cmd = (QueryCommand)d.DynamicInvoke(constRepl.Params.Select(it => it.Item2).ToArray())!;
-
-                    if (_logger?.IsEnabled(LogLevel.Trace) ?? false)
-                    {
-                        _logger.LogTrace("Subquery expression miss: {exp}", exp);
-                    }
-                    else if (_logger?.IsEnabled(LogLevel.Debug) ?? false) _logger.LogDebug("Subquery expression miss");
+                    cmd = (QueryCommand)d.DynamicInvoke(args)!;
                 }
                 else
-                    cmd = (QueryCommand)dCmd.DynamicInvoke(constRepl.Params.Select(it => it.Item2).ToArray())!;
+                {
+                    var keyCmd = new ExpressionKey(exp, _queryProvider);
+                    if (!DataContextCache.ExpressionsCache.TryGetValue(keyCmd, out var dCmd))
+                    {
+                        var d = Expression.Lambda(body, pp).Compile();
+
+                        DataContextCache.ExpressionsCache[keyCmd] = d;
+                        cmd = (QueryCommand)d.DynamicInvoke(args)!;
+
+                        if (_logger?.IsEnabled(LogLevel.Trace) ?? false)
+                        {
+                            _logger.LogTrace("Subquery expression miss: {exp}", exp);
+                        }
+                        else if (_logger?.IsEnabled(LogLevel.Debug) ?? false) _logger.LogDebug("Subquery expression miss");
+                    }
+                    else
+                        cmd = (QueryCommand)dCmd.DynamicInvoke(args)!;
+                }
             }
             else
-                throw new InvalidOperationException();
+            {
+                // No captured value at all (a fully constant/outer-referenced subquery). The outer
+                // members have already been rewritten to OuterRefMarker nodes by the visitor above, so
+                // the command can be built without closure parameters.
+                var d = Expression.Lambda<Func<QueryCommand>>(body).Compile();
+                cmd = d();
+            }
         }
 
         return cmd;
@@ -297,35 +454,43 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         {
             //cmd = cmd.Clone();
 
-            if (node.Method.Name.StartsWith("First", StringComparison.Ordinal))
+            var methodName = node.Method.Name;
+            if (methodName.StartsWith("First", StringComparison.Ordinal))
             {
                 cmd.Paging.Limit = 1;
             }
-            else if (node.Method.Name.StartsWith("Single", StringComparison.Ordinal))
+            else if (methodName.StartsWith("Single", StringComparison.Ordinal))
             {
-                cmd.Paging.Limit = 1;
+                // Single allows at most one row. Render two so a cardinality-enforcing dialect rejects
+                // the second row; the renderer rejects it up front on dialects that do not (SQLite).
+                cmd.SingleScalar = true;
+                cmd.Paging.Limit = 2;
             }
-            else if (node.Method.Name.StartsWith("Any", StringComparison.Ordinal))
+            else if (methodName.StartsWith("Any", StringComparison.Ordinal))
             {
                 //cmd.Paging.Limit = 1;
                 cmd.IgnoreColumns = true;
             }
+
+            // The terminal method is the only place that distinguishes First from FirstOrDefault (the
+            // SQL is identical), so carry it to the materializer through the command.
+            cmd.DefaultOnEmpty = methodName.EndsWith("OrDefault", StringComparison.Ordinal);
 
             if (!cmd.IsPrepared)
                 cmd.PrepareCommand(false, _cancellationToken);
 
             var idx = _queryProvider!.AddCommand(cmd);
 
-            // Expression dfg = (IQueryProvider queryProvider) => NORM.SQL.exists(queryProvider.ReferencedQueries[idx]);
-            //var replace = new ReplaceArgumentVisitor(0, (IQueryProvider queryProvider) => queryProvider.ReferencedColumns[idx]);
-            //node.Arguments[0]=(Expression)(IQueryProvider queryProvider) => queryProvider.ReferencedColumns[idx];
-            var p = Expression.Parameter(typeof(IQueryProvider));
+            // Expression dfg = (IQueryRegistry queryProvider) => SqlFunctions.Sql.exists(queryProvider.ReferencedQueries[idx]);
+            //var replace = new ReplaceArgumentVisitor(0, (IQueryRegistry queryProvider) => queryProvider.ReferencedColumns[idx]);
+            //node.Arguments[0]=(Expression)(IQueryRegistry queryProvider) => queryProvider.ReferencedColumns[idx];
+            var p = Expression.Parameter(typeof(IQueryRegistry));
             LambdaExpression lambda;
 
             if (node.Method.Name.StartsWith("Any", StringComparison.Ordinal))
             {
                 lambda = Expression.Lambda(
-                    Expression.Call(Expression.Property(null, SQLPI), NORM.NORM_SQL.ExistsMI,
+                    Expression.Call(Expression.Property(null, SQLPI), CommonFunctions.ExistsMI,
                         Expression.Property(Expression.Property(p, ReferencedQueriesPI), ItemPI, Expression.Constant(idx))
                     ), p
                 );
@@ -343,14 +508,16 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         {
             if (exp.Type == typeof(TableAlias))
                 return Visit(lambdaExpression.Body);
-            else if (!_forPrepare && typeof(IQueryProvider).IsAssignableTo(exp.Type))
+            else if (!_forPrepare && typeof(IQueryRegistry).IsAssignableTo(exp.Type))
             {
                 return Expression.Lambda(Visit(lambdaExpression.Body), Expression.Parameter(_entityType!));
             }
-            else if (lambdaExpression.Body is MethodCallExpression mc
-                && mc.Object?.Type is { } objectType
-                && typeof(NORM.NORM_SQL).IsAssignableFrom(objectType))
+            else if (_forPrepare)
             {
+                // Any entity lambda prepared by this visitor (for example the WHERE predicate)
+                // exposes its parameter as an outer parameter for any subquery nested in its body.
+                // Previously this was only done when the body was itself a SqlFunctions.Sql call, so an
+                // exists/scalar subquery combined with, say, a binary predicate could not correlate.
                 _outerParams ??= [];
                 _outerParams.Push(exp);
                 try

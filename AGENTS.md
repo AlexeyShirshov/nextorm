@@ -1,39 +1,42 @@
 # AGENTS
 
+## Build & toolchain
+- .NET 10 SDK; production and test projects target `net10.0` (the source generator targets `netstandard2.0`). `global.json` pins only the test runner (`Microsoft.Testing.Platform`), not an SDK version.
+- Central Package Management: reference packages as `<PackageReference Include="X" />` (no `Version`); add/update the version in `Directory.Packages.props`.
+- `TreatWarningsAsErrors=true` for every project and configuration — nullable and analyzer warnings fail the build. Fix them or suppress explicitly via `NoWarn`.
+- `Directory.Build.props` redirects build output into per-host-OS dirs: `bin/<linux|windows>/`, `obj/<linux|windows>/`, so WSL and Windows builds coexist. Look there for artifacts; there is no shared `obj/`.
+
+## Layout
+- `src/nextorm.core` is the engine: query builder/plan cache, expression visitors (`Visitors/`), dialects, in-memory context. Providers reference it: `nextorm.sqlite`, `nextorm.sqlserver`, `nextorm.postgres`, `nextorm.mysql`, `nextorm.clickhouse`; `nextorm.mariadb` builds on `nextorm.mysql`.
+- `src/nextorm.core.sourcegenerator` is an empty `IIncrementalGenerator` stub — in the solution but referenced by no project, so it generates nothing today.
+- `tests/nextorm.<provider>.tests` are dialect/SQL-generation tests using placeholder connection strings; they need no database. Only `tests/nextorm.integration.tests` talks to real databases, through `ProviderTestSuite` + `CommonTestSuite.*.cs` (a test added there runs against every provider; provider-only behavior belongs in `*SpecificTests.cs`).
+
 ## Git
-- **Never run `git push`.** The user pushes manually.
-- Do not create commits unless the user explicitly asks.
+- Never run `git push`; the user pushes manually.
+- Do not create commits unless explicitly asked.
 
 ## Line endings
-- The repo uses **CRLF**; `core.autocrlf=true` is set in `.git/config` (shared with Windows).
-- Always preserve CRLF when creating or editing files — never leave LF-only or mixed endings.
-- To normalize a file after editing: `perl -pi -e 's/\r?\n/\r\n/g' <file>`.
-
-## Documentation
-- **Renaming a public type or method requires updating the docs in the same change** — both the
-  English pages and the Russian mirror (`docs/**` and `docs/ru/**`), including code samples, prose,
-  source paths and the curated API reference. Grep both trees for the old name; an un-updated rename
-  is an incomplete change.
+- CRLF throughout (`core.autocrlf=true`). Preserve CRLF when writing/editing; never leave LF-only or mixed.
+- Normalize after edits: `perl -pi -e 's/\r?\n/\r\n/g' <file>`.
 
 ## Tests
-- Test projects use `xunit.v3` + Microsoft.Testing.Platform. `dotnet test` discovers 0 tests here;
-  run a project with `dotnet run --project test/<project> -c Debug -- [filters]`, e.g.
-  `... -- -class nextorm.core.tests.InMemoryTests` or `... -- -noColor`.
-- **Integration tests** (`test/nextorm.integration.tests`) start PostgreSQL, SQL Server and MySQL with
-  Testcontainers. A Podman machine is already running; point Testcontainers at its socket:
+- `dotnet test tests/<project> -c Debug` works (via the Microsoft.Testing.Platform runner in `global.json`). Focus one test with `--filter "FullyQualifiedName~InMemoryTests"`.
+- xunit v3 native filters also work: `dotnet run --project tests/<project> -c Debug -- -class nextorm.core.tests.InMemoryTests` (`-method`, `-namespace`, `-trait`).
+- `nextorm.integration.tests` starts PostgreSQL, SQL Server, MySQL and ClickHouse with Testcontainers. Point them at the running Podman machine:
   ```bash
   DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock \
-    dotnet run --project test/nextorm.integration.tests -c Debug -- -noColor
+    dotnet run --project tests/nextorm.integration.tests -c Debug -- -noColor
   ```
-  Images `postgres:17-alpine`, `mcr.microsoft.com/mssql/server:2022-latest`, `mysql:8.4` and
-  `testcontainers/ryuk` are pre-pulled. Without `DOCKER_HOST` only the SQLite suite can run.
-- Postgres/SqlServer/MySQL can also be pointed at an external server via
-  `NEXTORM_POSTGRES_CONNECTION` / `NEXTORM_SQLSERVER_CONNECTION` / `NEXTORM_MYSQL_CONNECTION` (see
-  `Providers/*Container.cs`).
+  Pre-pulled images: `postgres:17-alpine`, `mcr.microsoft.com/mssql/server:2022-latest`, `mysql:8.4`, `testcontainers/ryuk`; `clickhouse/clickhouse-server:25.8-alpine` is pulled on the first ClickHouse run (`TESTCONTAINERS_RYUK_DISABLED` is not needed). Without `DOCKER_HOST` only the SQLite integration tests run. See `.opencode/skills/running-integration-tests/SKILL.md`.
+- External databases: `NEXTORM_POSTGRES_CONNECTION`, `NEXTORM_SQLSERVER_CONNECTION`, `NEXTORM_MYSQL_CONNECTION`, `NEXTORM_CLICKHOUSE_CONNECTION` (see `tests/nextorm.integration.tests/Providers/*Container.cs`).
 
 ## Coverage
-- `coverage.settings.xml` limits the report to `nextorm.{core,sqlite,postgres,sqlserver}`.
-- CI enforces `MIN_LINE_COVERAGE=75` (`.github/workflows/dotnet.yml`). To reproduce locally, collect
-  each test project with `dotnet tool run dotnet-coverage collect` (with the `DOCKER_HOST` above),
-  merge the cobertura files, then run `reportgenerator` (see the workflow).
+- `coverage.settings.xml` includes only `nextorm.{core,sqlite,postgres,sqlserver}`.
+- CI threshold `MIN_LINE_COVERAGE=75` hard-fails only on `main`; other branches warn. Reproduce with the `dotnet-coverage collect` → `reportgenerator` steps in `.github/workflows/dotnet.yml`.
 
+## Docs
+- DocFX is a local tool: `dotnet docfx docs/docfx.json`. `docs/api/` and `docs/_site/` are generated and gitignored; article pages are hand-written.
+- Renaming a public type or method requires updating both `docs/**` and `docs/ru/**` (prose, samples, source paths, curated API reference) in the same change. Grep both trees for the old name first.
+
+## Benchmarks
+- `benchmarks/nextorm.benchmark` is a BenchmarkDotNet console app using `BenchmarkSwitcher`: `dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter *SqliteBenchmarkWhere*`.

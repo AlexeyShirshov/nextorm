@@ -1,7 +1,7 @@
 using System.Text;
-using nextorm.core;
+using NextORM.Core;
 
-namespace nextorm.postgres;
+namespace NextORM.Postgres;
 
 /// <summary>
 /// PostgreSQL dialect: <c>||</c> concatenation, <c>@name</c> parameters, double-quoted identifiers,
@@ -18,6 +18,9 @@ public sealed class PostgresDialect : SqlDialectBase
     public override string MakeCoalesce(string v1, string v2) => $"coalesce({v1}, {v2})";
 
     public override string MakeBool(bool v) => v ? "true" : "false";
+
+    /// <summary>PostgreSQL's text type is <c>text</c> (the base maps <see cref="string"/> to the CLR name).</summary>
+    public override string MakeTypeName(Type type) => type == typeof(string) ? "text" : base.MakeTypeName(type);
 
     // PostgreSQL only accepts double-quoted identifiers; single-quoted aliases are a syntax error.
     public override string Escape(string keyword) => "\"" + keyword + "\"";
@@ -51,6 +54,19 @@ public sealed class PostgresDialect : SqlDialectBase
     // string_agg/array_agg aggregate surface.
     public override bool SupportsFilter => true;
     public override bool SupportsGreatestLeast => true;
+
+    /// <summary>PostgreSQL has no <c>iif</c>/<c>if</c> function; it renders the conditional as a <c>CASE</c> expression.</summary>
+    public override bool SupportsIif => true;
+
+    /// <summary>PostgreSQL has no <c>iif</c>/<c>if</c> function; it renders the conditional as a <c>CASE</c> expression.</summary>
+    public override string MakeIif(string condition, string whenTrue, string whenFalse) =>
+        $"case when {condition} then {whenTrue} else {whenFalse} end";
+
+    /// <summary>PostgreSQL supports the ANSI <c>percent_rank</c>/<c>cume_dist</c> window functions.</summary>
+    public override bool SupportsPercentRankCumeDist => true;
+
+    /// <summary>PostgreSQL supports <c>nth_value(value, n)</c> as a window function.</summary>
+    public override bool SupportsNthValue => true;
     public override bool SupportsDateTrunc => true;
     public override bool SupportsDateArithmetic => true;
     public override bool SupportsStringArrayAggregates => true;
@@ -64,9 +80,66 @@ public sealed class PostgresDialect : SqlDialectBase
             ? $"to_tsvector({column}) @@ websearch_to_tsquery({search})"
             : $"to_tsvector({column}) @@ plainto_tsquery({search})";
 
+    /// <summary>PostgreSQL supports the <c>SELECT DISTINCT ON (expr, ...)</c> modifier.</summary>
+    public override bool SupportsDistinctOn => true;
+
+    /// <summary>PostgreSQL renders the <c>distinct on (...)</c> prefix in place of a plain <c>distinct</c>.</summary>
+    public override string MakeDistinctOn(IReadOnlyList<string> columns) =>
+        "distinct on (" + string.Join(", ", columns) + ") ";
+
+    /// <summary>PostgreSQL supports the <c>TABLESAMPLE</c> table modifier.</summary>
+    public override bool SupportsTableSample => true;
+
+    /// <summary>PostgreSQL supports both the <c>SYSTEM</c> and <c>BERNOULLI</c> sampling methods.</summary>
+    public override bool SupportsTableSampleMethod(TableSampleMethod method) => true;
+
+    /// <summary>PostgreSQL renders <c>tablesample method (percent) [repeatable (seed)]</c>.</summary>
+    public override string MakeTableSample(TableSampleMethod method, double percent, double? seed)
+    {
+        var text = " tablesample " + method.ToString().ToLowerInvariant()
+            + " (" + percent.ToString(System.Globalization.CultureInfo.InvariantCulture) + ")";
+        return seed is { } value
+            ? text + " repeatable (" + value.ToString(System.Globalization.CultureInfo.InvariantCulture) + ")"
+            : text;
+    }
+
     // PostgreSQL is the reference provider for the extended scalar function library and the
     // bool/bit/statistical/ordered-set aggregate surface.
     public override bool SupportsExtendedScalarFunctions => true;
+
+    /// <summary>PostgreSQL is the only provider with the native <c>tsvector</c>/<c>tsquery</c> text-search surface.</summary>
+    public override bool SupportsTextSearchFunctions => true;
+
+    /// <summary>PostgreSQL renders the whole session/information family.</summary>
+    public override bool SupportsSessionInfoFunctions => true;
+
+    /// <summary>PostgreSQL supports all five session/information functions.</summary>
+    public override bool SupportsSessionInfoFunction(string name) =>
+        name is "current_user" or "session_user" or "current_schema" or "current_database" or "version";
+
+    /// <summary>PostgreSQL uses the keyword forms for the current/session user and schema, and calls for the rest.</summary>
+    public override string MakeSessionInfoFunction(string name) => name switch
+    {
+        "current_user" or "session_user" or "current_schema" => name,
+        "current_database" => "current_database()",
+        "version" => "version()",
+        _ => base.MakeSessionInfoFunction(name)
+    };
+
+    /// <summary>PostgreSQL renders both UUID generators through the core functions.</summary>
+    public override bool SupportsUuidGenerators => true;
+
+    /// <summary>PostgreSQL supports the random v4 generator (<c>gen_random_uuid</c>, PG13+) and v7 (<c>uuidv7</c>, PG18+).</summary>
+    public override bool SupportsUuidGenerator(string name) => name is "gen_random_uuid" or "uuidv7";
+
+    /// <summary>PostgreSQL calls the UUID generators as functions.</summary>
+    public override string MakeUuidGenerator(string name) => name switch
+    {
+        "gen_random_uuid" => "gen_random_uuid()",
+        "uuidv7" => "uuidv7()",
+        _ => base.MakeUuidGenerator(name)
+    };
+
     public override bool SupportsBooleanAggregates => true;
     public override bool SupportsBitAggregates => true;
     public override bool SupportsStatisticalAggregates => true;
@@ -102,6 +175,16 @@ public sealed class PostgresDialect : SqlDialectBase
 
     public override void MakePage(Paging paging, StringBuilder sqlBuilder)
     {
+        // WITH TIES is only expressible through the FETCH form (LIMIT has no WITH TIES variant).
+        if (paging.HasWithTies)
+        {
+            if (paging.Offset > 0)
+                sqlBuilder.Append("offset ").Append(paging.Offset).Append(' ');
+
+            sqlBuilder.Append("fetch first ").Append(paging.Limit).Append(" rows with ties");
+            return;
+        }
+
         // PostgreSQL uses "limit N offset M"; OFFSET may appear on its own, but LIMIT must come first.
         if (paging.Limit > 0)
             sqlBuilder.Append("limit ").Append(paging.Limit);
@@ -114,4 +197,14 @@ public sealed class PostgresDialect : SqlDialectBase
             sqlBuilder.Append("offset ").Append(paging.Offset);
         }
     }
+
+    /// <summary>PostgreSQL supports <c>FETCH FIRST ... WITH TIES</c>.</summary>
+    public override bool SupportsWithTies => true;
+
+    /// <summary>PostgreSQL supports the trailing <c>FOR UPDATE</c>/<c>FOR SHARE</c> row-locking clause.</summary>
+    public override bool SupportsLocking => true;
+
+    /// <summary>PostgreSQL renders <c>for update</c>/<c>for share</c>.</summary>
+    public override string MakeLock(LockMode mode) =>
+        mode == LockMode.Share ? " for share" : " for update";
 }

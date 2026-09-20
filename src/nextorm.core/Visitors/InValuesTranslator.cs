@@ -1,11 +1,11 @@
 using System.Linq.Expressions;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Renders value-list membership tests (<c>column in (v1, ...)</c>): a captured
 /// <c>Enumerable.Contains</c>/instance <c>Contains</c>, or the value-list
-/// <see cref="NORM.NORM_SQL.@in{T}(T, IEnumerable{T})"/> overload. Extracted from
+/// <see cref="CommonFunctions.@in{T}(T, IEnumerable{T})"/> overload. Extracted from
 /// <see cref="BaseExpressionVisitor"/>; the visitor walk, the emitted SQL and the parameter order are
 /// unchanged.
 /// </summary>
@@ -14,12 +14,13 @@ internal static class InValuesTranslator
     /// <summary>
     /// Translates a captured-collection membership test (<c>Enumerable.Contains</c> or an instance
     /// <c>Contains</c>) into the same <c>in (...)</c> predicate as the value-list
-    /// <see cref="NORM.NORM_SQL.@in{T}(T, IEnumerable{T})"/> overload. Only collections that do not
+    /// <see cref="CommonFunctions.@in{T}(T, IEnumerable{T})"/> overload. Only collections that do not
     /// depend on the query parameter (captured locals/fields/constants) are translated.
     /// </summary>
     internal static bool TryTranslateCollectionContains(BaseExpressionVisitor visitor, MethodCallExpression node)
     {
-        if (!InValues.TryGetArguments(node, out var columnExp, out var valuesExp, out var elementType))
+        if (!InValues.TryGetArguments(node, out var columnExp, out var valuesExp, out var elementType, out var isGlobal)
+            || isGlobal)
             return false;
 
         TranslateInValues(visitor, columnExp, valuesExp, elementType);
@@ -30,8 +31,10 @@ internal static class InValuesTranslator
     /// Renders a value-list membership test (<c>column in (v1, ...)</c>). Values become parameters so
     /// the query stays injection safe; an empty list becomes an always-false condition and a list that
     /// can contain null keeps the C# <c>Contains</c> semantics by adding an <c>is null</c> branch.
+    /// <paramref name="global"/> renders the ClickHouse distributed <c>GLOBAL IN</c> form instead of
+    /// the plain <c>IN</c>.
     /// </summary>
-    internal static void TranslateInValues(BaseExpressionVisitor visitor, Expression columnExp, Expression valuesExp, Type elementType)
+    internal static void TranslateInValues(BaseExpressionVisitor visitor, Expression columnExp, Expression valuesExp, Type elementType, bool global = false)
     {
         // A captured collection is re-read on every execution and the number of parameters (and so
         // the SQL text) depends on its length. When the shape was folded into the plan key while
@@ -61,7 +64,7 @@ internal static class InValuesTranslator
             visitor.Visit(columnExp);
 
             for (var i = 0; i < nonNull.Count; i++)
-                visitor.Params.Add(new Param(visitor.ParamProvider.GetParamName(), nonNull[i]));
+                visitor.Params.Add(new Parameter(visitor.ParameterProvider.GetParamName(), nonNull[i]));
 
             return;
         }
@@ -81,11 +84,11 @@ internal static class InValuesTranslator
             if (nullableAware && hasNull)
                 inBuilder.Append('(');
 
-            inBuilder.Append(column).Append(" in (");
+            inBuilder.Append(column).Append(global ? " global in (" : " in (");
             for (var i = 0; i < nonNull.Count; i++)
             {
-                var paramName = visitor.ParamProvider.GetParamName();
-                visitor.Params.Add(new Param(paramName, nonNull[i]));
+                var paramName = visitor.ParameterProvider.GetParamName();
+                visitor.Params.Add(new Parameter(paramName, nonNull[i]));
 
                 if (i > 0)
                     inBuilder.Append(", ");

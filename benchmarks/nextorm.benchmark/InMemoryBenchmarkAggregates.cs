@@ -1,7 +1,7 @@
 using BenchmarkDotNet.Attributes;
-using nextorm.core;
+using NextORM.Core;
 
-namespace nextorm.benchmark;
+namespace NextORM.Benchmark;
 
 /// <summary>
 /// Aggregates over an in-memory source: nextorm <c>EntityBuilder.Count/Sum/Min/Max</c> versus raw LINQ
@@ -29,7 +29,7 @@ public class InMemoryBenchmarkAggregates
             data.Add(new SimpleEntity { Id = i });
         _data = data;
 
-        var provider = new InMemoryContext();
+        var provider = new InMemoryDataContext();
         _ctx = new InMemoryDataRepository(provider);
         _ctx.SimpleEntity.WithData(_data);
     }

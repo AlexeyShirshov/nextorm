@@ -1,4 +1,4 @@
-namespace nextorm.core;
+namespace NextORM.Core;
 /// <summary>
 /// Base class for prepared (compiled) query commands.
 /// </summary>

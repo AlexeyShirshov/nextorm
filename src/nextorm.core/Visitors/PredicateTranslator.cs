@@ -1,6 +1,6 @@
 using System.Linq.Expressions;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Renders boolean/predicate expressions into SQL: comparison, logical and bitwise operators,
@@ -120,7 +120,7 @@ internal static class PredicateTranslator
             return visitor.Dialect.MakeBooleanValuePredicate(valueVisitor.ToString());
         }
 
-        using var whereVisitor = new WhereExpressionVisitor(visitor.EntityType, visitor.Dialect, visitor.ColumnsProvider, visitor.Dim, visitor.AliasProvider, visitor.ParamProvider, visitor.QueryProvider, visitor.IsParamMode, visitor.Params, visitor.Logger);
+        using var whereVisitor = new WhereExpressionVisitor(visitor.Options with { DontNeedAlias = false });
         whereVisitor.Visit(expression);
 
         return whereVisitor.ToString();

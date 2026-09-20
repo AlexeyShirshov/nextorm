@@ -1,7 +1,7 @@
 using System.Collections;
 using System.Linq.Expressions;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// The evaluated (and partitioned) values of one <c>in</c>/<c>Contains</c> node: the non-null values
@@ -34,18 +34,22 @@ internal readonly struct InValuesPartition
 internal static class InValues
 {
     /// <summary>
-    /// Matches a value-list <c>NORM.SQL.@in(column, collection)</c> (the subquery overload is excluded)
-    /// or an <c>Enumerable.Contains</c> / <c>MemoryExtensions.Contains</c> / instance
-    /// <c>Contains</c> on a non-string collection.
+    /// Matches a value-list <c>SqlFunctions.Sql.@in(column, collection)</c> or the ClickHouse
+    /// <c>global_in</c> (the subquery overloads are excluded) or an <c>Enumerable.Contains</c> /
+    /// <c>MemoryExtensions.Contains</c> / instance <c>Contains</c> on a non-string collection.
+    /// <paramref name="isGlobal"/> is true for the <c>global_in</c> form.
     /// </summary>
-    public static bool TryGetArguments(MethodCallExpression node, out Expression columnExp, out Expression valuesExp, out Type elementType)
+    public static bool TryGetArguments(MethodCallExpression node, out Expression columnExp, out Expression valuesExp, out Type elementType, out bool isGlobal)
     {
         columnExp = null!;
         valuesExp = null!;
         elementType = null!;
+        isGlobal = false;
 
-        if (node.Method.DeclaringType == typeof(NORM.NORM_SQL)
-            && node.Method.Name == nameof(NORM.NORM_SQL.@in))
+        if ((node.Method.DeclaringType == typeof(CommonFunctions)
+                || node.Method.DeclaringType == typeof(ClickHouseFunctions))
+            && (node.Method.Name == nameof(CommonFunctions.@in)
+                || node.Method.Name == nameof(ClickHouseFunctions.global_in)))
         {
             if (node.Arguments is not [Expression inColumn, Expression inValues]
                 || inValues.Type.IsAssignableTo(typeof(QueryCommand)))
@@ -54,6 +58,7 @@ internal static class InValues
             columnExp = inColumn;
             valuesExp = inValues;
             elementType = node.Method.GetGenericArguments()[0];
+            isGlobal = node.Method.Name == nameof(ClickHouseFunctions.global_in);
             return true;
         }
 
@@ -116,7 +121,7 @@ internal static class InValues
         return true;
     }
 
-    public static InValuesPartition EvaluatePartition(Expression valuesExp, IQueryProvider queryProvider)
+    public static InValuesPartition EvaluatePartition(Expression valuesExp, IQueryRegistry queryProvider)
         => Partition(InValuesEvaluator.Evaluate(valuesExp, queryProvider));
 
     public static InValuesPartition Partition(object? value)
@@ -164,14 +169,14 @@ internal static class InValues
 
     private sealed class ShapeVisitor(QueryCommand command) : ExpressionVisitor
     {
-        private HashCode _hash = new();
+        private XxHash32 _hash = new();
         public Dictionary<Expression, InValuesPartition>? Partitions { get; private set; }
         public bool HasMatch { get; private set; }
         public int Hash => _hash.ToHashCode();
 
         protected override Expression VisitMethodCall(MethodCallExpression node)
         {
-            if (TryGetArguments(node, out _, out var valuesExp, out _))
+            if (TryGetArguments(node, out _, out var valuesExp, out _, out _))
             {
                 var partition = EvaluatePartition(valuesExp, command);
                 Partitions ??= new Dictionary<Expression, InValuesPartition>(ReferenceEqualityComparer.Instance);

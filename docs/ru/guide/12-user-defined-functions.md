@@ -7,7 +7,7 @@
 
 ## Обзор
 
-`SqlFunctionAttribute` сопоставляет метод CLR скалярной функции базы данных. Примените его к методу-заглушке
+[`SqlFunctionAttribute`](xref:NextORM.Core.SqlFunctionAttribute) сопоставляет метод CLR скалярной функции базы данных. Примените его к методу-заглушке
 или к объявляющему типу, чтобы сопоставить каждый метод этого типа по имени:
 
 ```csharp
@@ -67,6 +67,14 @@ select upper(somestring) as [V] from complex_entity
 -- PostgreSQL
 select upper(somestring) as "V" from complex_entity
 ```
+
+Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
+
+Вывод:
+
+| V   |
+|-----|
+| XXX |
 
 ## Имя и схема
 
@@ -161,6 +169,9 @@ public sealed class Formatter
 | SQLite | `[schema.]name(args)` дословно; псевдонимы в одинарных кавычках (`as 'V'`). |
 | SQL Server | `[schema.]name(args)` дословно; псевдонимы в квадратных скобках (`as [V]`). |
 | PostgreSQL | `[schema.]name(args)` дословно; псевдонимы в двойных кавычках (`as "V"`). |
+| MySQL | `[schema.]name(args)` дословно; псевдонимы в обратных кавычках (`` as `V` ``). |
+| MariaDB | `[schema.]name(args)` дословно; псевдонимы в обратных кавычках (`` as `V` ``). |
+| ClickHouse | `[schema.]name(args)` дословно; псевдонимы в обратных кавычках (`` as `V` ``). |
 | In-memory | Атрибут — это SQL-преобразование; провайдер in-memory вместо этого вычисляет метод CLR. |
 
 ## См. также
@@ -172,7 +183,7 @@ public sealed class Formatter
 ---
 
 Source: `src/nextorm.core/SqlFunctionAttribute.cs:14`, `src/nextorm.core/Visitors/BaseExpressionVisitor.cs:563`;
-`test/nextorm.integration.tests/CommonTestSuite.Udf.cs:14`, `:24`, `:36`;
-generated SQL: `test/nextorm.sqlite.tests/SqlGenerationTests.cs:713`, `:722`, `:737`, `:746`;
-`test/nextorm.sqlserver.tests/SqlGenerationTests.cs:466`, `:476`, `:490`;
-`test/nextorm.postgres.tests/SqlGenerationTests.cs:399`, `:409`, `:423`.
+`tests/nextorm.integration.tests/CommonTestSuite.Udf.cs:14`, `:24`, `:36`;
+generated SQL: `tests/nextorm.sqlite.tests/SqlGenerationTests.cs:713`, `:722`, `:737`, `:746`;
+`tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:466`, `:476`, `:490`;
+`tests/nextorm.postgres.tests/SqlGenerationTests.cs:399`, `:409`, `:423`.

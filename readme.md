@@ -8,7 +8,7 @@ NextORM is not really an ORM, because abbreviation "Object" can be removed. Ther
 
 * query compilation
 * query parametrization
-* [two ways to reuse a query — implicit plan cache and explicit `Prepare()`](docs/prepared-vs-cached.md)
+* [two ways to reuse a query — implicit plan cache and explicit `Prepare()`](docs/specs/performance/prepared-vs-cached.md)
 * [ability to write queries without any entities and metadata at all](#select-data-without-any-entity-meta-attributes-etc-pure-sql)
 
 ## Examples

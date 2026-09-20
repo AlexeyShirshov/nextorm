@@ -9,23 +9,23 @@
 Any `QueryCommand<T>` — the object you get back from `EntityBuilder<T>.Select(...)` — can be embedded in
 another query in four ways:
 
-* as a **derived table** in `FROM`, through `DataContext.From(query)`;
+* as a **derived table** in `FROM`, through [`From`](xref:NextORM.Core.DataContext);
 * as a **scalar subquery** in a projection, `WHERE` or `ORDER BY`, by calling a single-row terminal
-  such as `First()` or `Single()` inside the outer expression;
-* as a **correlated predicate** with `NORM.SQL.exists(...)`, `NORM.SQL.@in(column, query)`,
-  `NORM.SQL.any(query)` or `NORM.SQL.all(query)`.
+  such as [`First`](xref:NextORM.Core.EntityBuilder`1) or [`Single`](xref:NextORM.Core.EntityBuilder`1) inside the outer expression;
+* as a **correlated predicate** with `SqlFunctions.Sql.exists(...)`, `SqlFunctions.Sql.@in(column, query)`,
+  `SqlFunctions.Sql.any(query)` or `SqlFunctions.Sql.all(query)`.
 
 The nested command is prepared independently and rendered in parentheses. A correlated subquery may
 reference the outer query's parameter; nextorm tracks those outer references and qualifies them with
 the outer table alias.
 
-One provider limitation is worth knowing up front: `NORM.SQL.any` and `NORM.SQL.all` are valid SQL
+One provider limitation is worth knowing up front: `SqlFunctions.Sql.any` and `SqlFunctions.Sql.all` are valid SQL
 only on SQL Server and PostgreSQL. SQLite has neither operator, so the query reaches the database and
 fails with a `SqliteException` at execution time.
 
 ## Subquery as a FROM source
 
-`From` accepts a prepared `QueryCommand<T>` (or an `EntityBuilder<T>`) and produces a builder over its
+[`From`](xref:NextORM.Core.DataContextExtensions) accepts a prepared `QueryCommand<T>` (or an `EntityBuilder<T>`) and produces a builder over its
 columns:
 
 ```csharp
@@ -53,7 +53,7 @@ var rows = dataContext.From(nested).Select(t => new { t.Id, t.Calc }).ToList();
 
 ## Scalar subquery in SELECT
 
-Calling a single-row terminal (`First`, `FirstOrDefault`, `Single`, `SingleOrDefault`) inside the
+Calling a single-row terminal ([`First`](xref:NextORM.Core.EntityBuilder`1), [`FirstOrDefault`](xref:NextORM.Core.EntityBuilder`1), [`Single`](xref:NextORM.Core.EntityBuilder`1), [`SingleOrDefault`](xref:NextORM.Core.EntityBuilder`1)) inside the
 projection embeds the inner query as a scalar column. The scalar projection is aliased with the
 outer property name:
 
@@ -67,6 +67,16 @@ var rows = await dataContext.From<IComplexEntity>()
 select id, (select id from simple_entity where (id = 1) limit 1) as 'sid' from complex_entity
 ```
 
+The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
+
+Output:
+
+| Id | sid |
+|----|-----|
+| 1 | 1 |
+| 2 | 1 |
+| 3 | 1 |
+
 The inner query can also be sorted:
 
 ```csharp
@@ -74,6 +84,14 @@ var rows = await dataContext.From<IComplexEntity>()
     .Select(it => new { it.Id, sid = dataContext.From<ISimpleEntity>().OrderByDescending(it => it.Id).Select(it => it.Id).First() })
     .ToListAsync();
 ```
+
+Output:
+
+| Id | sid |
+|----|-----|
+| 1 | 10 |
+| 2 | 10 |
+| 3 | 10 |
 
 ## Scalar subquery in WHERE
 
@@ -86,9 +104,15 @@ var row = await dataContext.From<IComplexEntity>()
     .FirstOrDefaultAsync();
 ```
 
+Output:
+
+| Id |
+|----|
+| 1 |
+
 ## Scalar subquery in ORDER BY
 
-An `ORDER BY` key may be an expression containing a scalar subquery. The first `OrderBy` uses the
+An `ORDER BY` key may be an expression containing a scalar subquery. The first [`OrderBy`](xref:NextORM.Core.EntityBuilder`1) uses the
 subquery, the second breaks ties:
 
 ```csharp
@@ -99,15 +123,50 @@ var rows = dataContext.From<IComplexEntity>()
     .ToList();
 ```
 
+Output:
+
+| Id |
+|----|
+| 1 |
+| 2 |
+| 3 |
+
+## Correlated scalar subquery
+
+A scalar subquery may reference a member of the outer query; nextorm then qualifies it with the outer
+table alias. This works on every SQL provider and in every value position (projection, `WHERE`,
+`ORDER BY`):
+
+```csharp
+var rows = await dataContext.From<IComplexEntity>()
+    .Select(it => new { it.Id, sid = dataContext.From<ISimpleEntity>().Where(s => s.Id == it.Id).Select(s => s.Id).First() })
+    .ToListAsync();
+```
+
+```sql
+select t1.id, (select t2.id from simple_entity as 't2' where t2.id = t1.id limit 1) as 'sid'
+from complex_entity as 't1'
+```
+
+The outer query qualifies only the referenced member; the inner query keeps its own columns and
+aliases. [`FirstOrDefault`](xref:NextORM.Core.EntityBuilder`1)/[`SingleOrDefault`](xref:NextORM.Core.EntityBuilder`1) yield `NULL` when no inner row matches.
+
+Two limits apply:
+
+* a subquery nested inside another correlated subquery (correlation depth greater than one) throws
+  `NotSupportedException` instead of producing the wrong SQL;
+* the in-memory provider cannot bind the outer row while executing the inner query, so correlated
+  subqueries throw `NotSupportedException` there. Use a SQL provider for correlated queries.
+
 ## Correlated EXISTS
 
-`NORM.SQL.exists(query)` returns a boolean and is translated to an `exists(...)` predicate. A
+`SqlFunctions.Sql.exists(query)` returns a boolean and is translated to an `exists(...)` predicate. A
 subquery that references the outer parameter is correlated; nextorm emits the outer alias inside the
 inner predicate:
 
 ```csharp
 var rows = dataContext.From<ISimpleEntity>()
-    .Where(s => NORM.SQL.exists(dataContext.From<IComplexEntity>().Where(c => c.Id == s.Id)))
+    .Where(s => SqlFunctions.Sql.exists(dataContext.From<IComplexEntity>().Where(c => c.Id == s.Id)))
     .Select(it => it.Id)
     .ToList();
 ```
@@ -116,20 +175,28 @@ var rows = dataContext.From<ISimpleEntity>()
 select t1.id from simple_entity as 't1' where exists(select * from complex_entity where (id = cast(t1.id as bigint)))
 ```
 
+Output:
+
+| Id |
+|----|
+| 1 |
+| 2 |
+| 3 |
+
 An `EntityBuilder<T>` can also be passed directly to `exists` when only its existence matters:
 
 ```csharp
-var all = await dataContext.From<IComplexEntity>().Select(it => new { it.Id, exists = NORM.SQL.exists(dataContext.From<ISimpleEntity>()) }).ToListAsync();
-var none = await dataContext.From<IComplexEntity>().Select(it => new { it.Id, exists = NORM.SQL.exists(dataContext.From<ISimpleEntity>().Where(it => it.Id == 100)) }).ToListAsync();
+var all = await dataContext.From<IComplexEntity>().Select(it => new { it.Id, exists = SqlFunctions.Sql.exists(dataContext.From<ISimpleEntity>()) }).ToListAsync();
+var none = await dataContext.From<IComplexEntity>().Select(it => new { it.Id, exists = SqlFunctions.Sql.exists(dataContext.From<ISimpleEntity>().Where(it => it.Id == 100)) }).ToListAsync();
 ```
 
 ## IN with a subquery
 
-`NORM.SQL.@in(column, query)` emits `IN (SELECT ...)`:
+`SqlFunctions.Sql.@in(column, query)` emits `IN (SELECT ...)`:
 
 ```csharp
 var row = await dataContext.From<IComplexEntity>()
-    .Where(it => NORM.SQL.@in((int)it.Id, dataContext.From<ISimpleEntity>().Where(it => it.Id == 2).Select(it => it.Id)))
+    .Where(it => SqlFunctions.Sql.@in((int)it.Id, dataContext.From<ISimpleEntity>().Where(it => it.Id == 2).Select(it => it.Id)))
     .Select(it => it.Id)
     .FirstOrDefaultAsync();
 ```
@@ -138,17 +205,23 @@ var row = await dataContext.From<IComplexEntity>()
 select id from complex_entity where (cast(id as integer) in (select id from simple_entity where (id = 2)))
 ```
 
+Output:
+
+| Id |
+|----|
+| 2 |
+
 The same method also accepts an `IEnumerable<T>` or a `params T[]` of literal values (see
 [Filtering (WHERE)](02-filtering-where.md)); the `QueryCommand<T>` overload is the subquery form.
 
 ## ANY and ALL
 
-`NORM.SQL.any(query)` and `NORM.SQL.all(query)` produce a scalar that is compared with the outer
+`SqlFunctions.Sql.any(query)` and `SqlFunctions.Sql.all(query)` produce a scalar that is compared with the outer
 column:
 
 ```csharp
 var rows = await dataContext.From<ISimpleEntity>()
-    .Where(it => it.Id == NORM.SQL.any(dataContext.From<IComplexEntity>().Select(it => it.Id)))
+    .Where(it => it.Id == SqlFunctions.Sql.any(dataContext.From<IComplexEntity>().Select(it => it.Id)))
     .Select(it => it.Id)
     .ToListAsync();
 ```
@@ -160,20 +233,32 @@ select id from simple_entity where (cast(id as bigint) = any(select id from comp
 
 SQLite does not implement `ANY` or `ALL`; the same query is accepted by the translator but throws a
 `Microsoft.Data.Sqlite.SqliteException` when executed (covered by
-`test/nextorm.integration.tests/SqliteSpecificTests.cs:16` and `:30`).
+`tests/nextorm.integration.tests/SqliteSpecificTests.cs:16` and `:30`).
 
 ## Provider differences
 
 | Provider | Derived table alias | Scalar subquery | `any` / `all` |
 |---|---|---|---|
-| SQLite | optional | supported | **not supported** - `SqliteException` at execution |
-| SQL Server | required (`as [t1]`) | supported | supported |
-| PostgreSQL | required (`as "t1"`) | supported | supported |
-| In-memory | not applicable | not covered by the in-memory test suite | not covered |
+| SQLite | optional | supported (correlated too) | **not supported** - `SqliteException` at execution |
+| SQL Server | required (`as [t1]`) | supported (correlated too) | supported |
+| PostgreSQL | required (`as "t1"`) | supported (correlated too) | supported |
+| MySQL | required (`` as `t1` ``) | supported (correlated too) | supported |
+| MariaDB | required (`` as `t1` ``) | supported (correlated too) | supported |
+| ClickHouse | required (`` as `t1` ``) | supported (correlated too) | supported |
+| In-memory | not applicable | **not supported** - `NotSupportedException` for correlated | not covered |
 
 A subquery that references the outer query forces the outer `FROM` to be aliased (`t1`) on every
 SQL provider. On SQL Server a boolean-valued subquery predicate projected as a scalar is wrapped in
 `cast(case when ... then 1 else 0 end as bit)`, because T-SQL has no boolean scalar type.
+
+## Limitations
+
+* Nested correlation (a subquery that references an outer reference of another subquery) is rejected
+  with `NotSupportedException`; keeping it explicit avoids binding an outer marker to the wrong query.
+* Aggregate terminals ([`Count`](xref:NextORM.Core.EntityBuilder`1), `Sum(...)`, ...) cannot be used as a subquery projection because
+  they execute immediately; use `SqlFunctions.Sql.count()` (or the matching [`Sql`](xref:NextORM.Core.SqlFunctions.Sql) aggregate) or call the
+  terminal on its own. Using one inside a subquery throws `NotSupportedException`.
+* The in-memory provider rejects correlated subqueries (see above).
 
 ## See also
 
@@ -183,9 +268,10 @@ SQL provider. On SQL Server a boolean-valued subquery predicate projected as a s
 
 ---
 
-Source: `test/nextorm.integration.tests/CommonTestSuite.CorrelatedQuery.cs:9`,
-`test/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:612,623,633,643,653,663`,
-`test/nextorm.integration.tests/SqliteSpecificTests.cs:16,30`,
-`test/nextorm.sqlite.tests/SqlGenerationTests.cs:255`,
-`test/nextorm.sqlserver.tests/SqlGenerationTests.cs:293`,
-`test/nextorm.postgres.tests/SqlGenerationTests.cs:248`.
+Source: `tests/nextorm.integration.tests/CommonTestSuite.CorrelatedQuery.cs`,
+`tests/nextorm.sqlite.tests/CorrelatedQueryTests.cs`,
+`tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:612,623,633,643,653,663`,
+`tests/nextorm.integration.tests/SqliteSpecificTests.cs:16,30`,
+`tests/nextorm.sqlite.tests/SqlGenerationTests.cs:255`,
+`tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:293`,
+`tests/nextorm.postgres.tests/SqlGenerationTests.cs:248`.

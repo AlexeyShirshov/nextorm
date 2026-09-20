@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using System.Reflection;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 public static class MemberInfoExtensions
 {
     // Entity metadata is registered once per type (DataContextCache.Metadata only builds on a miss),
@@ -30,7 +30,7 @@ public static class MemberInfoExtensions
 
         return string.Empty;
     }
-    public static bool TryGetValue(this IDictionary<Type, IEntityMeta> dic, Type type, PropertyInfo pi, out IPropertyMeta? prop)
+    public static bool TryGetValue(this IDictionary<Type, IEntityMetadata> dic, Type type, PropertyInfo pi, out IPropertyMetadata? prop)
     {
         if (dic.TryGetValue(type, out var entity))
         {

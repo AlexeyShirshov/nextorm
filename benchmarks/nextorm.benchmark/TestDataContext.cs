@@ -1,6 +1,6 @@
-using nextorm.core;
+using NextORM.Core;
 
-namespace nextorm.benchmark;
+namespace NextORM.Benchmark;
 
 public class TestDataRepository
 {
@@ -17,5 +17,5 @@ public class TestDataRepository
     public EntityBuilder<LargeEntity> LargeEntity { get; set; }
     public EntityBuilder<ComplexEntity> ComplexEntity { get; set; }
 
-    public IDataContext DbContext => _dataProvider;
+    public IDataContext DataContext => _dataProvider;
 }

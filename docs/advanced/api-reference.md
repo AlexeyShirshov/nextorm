@@ -1,6 +1,6 @@
 # API reference
 
-> A curated index of nextorm's public types, grouped by namespace, with the source file that owns each one.
+> A curated index of nextorm's public types, grouped by namespace, each linked to its generated API reference.
 
 **Prerequisites:** [Quickstart](../getting-started/02-quickstart.md) · [Provider overview](../providers/overview.md)
 
@@ -8,132 +8,141 @@
 
 This is a **curated** index; the reference generated from the XML doc comments on the source types is
 published in the **API reference** section of this site (see the top navigation). Each entry below gives the
-type, a one-line description and the source path to read for the full contract.
+type, a one-line description and, through the type name itself, a link to its generated API reference page.
 
-Types are listed under their defining namespace. All of the query API is in `nextorm.core`; each provider
-package adds a context, a dialect and a `DbContextBuilder` extension class in its own namespace.
+Types are listed under their defining namespace. All of the query API is in [`NextORM.Core`](xref:NextORM.Core); each provider
+package adds a context, a dialect and a [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) extension class in its own namespace.
 
-## Namespace `nextorm.core`
+## Namespace [`NextORM.Core`](xref:NextORM.Core)
 
 ### Context and roles
 
-| Type | Description | Source |
-|---|---|---|
-| `IDataContext` | Composite facade over the context roles; the entry point consumers normally depend on. | `src/nextorm.core/DataContext/IDataContext.cs` |
-| `IQueryExecutor` | Executes a prepared command and materialises its result (terminals). | `src/nextorm.core/DataContext/Roles/IQueryExecutor.cs` |
-| `IQueryMaterializer` | Narrowest contract for planning + row reading, without terminals. | `src/nextorm.core/DataContext/Roles/IQueryMaterializer.cs` |
-| `IQueryPlanner` | Builds/resets execution plans and resolves `From` sources. | `src/nextorm.core/DataContext/Roles/IQueryPlanner.cs` |
-| `IRowReaderFactory` | Creates row readers/enumerators over a prepared command. | `src/nextorm.core/DataContext/Roles/IRowReaderFactory.cs` |
-| `IQueryCache` | Holds cached plans and the shared `Any` plan. | `src/nextorm.core/DataContext/Roles/IQueryCache.cs` |
-| `IContextEnvironment` | Ambient state: loggers, mapping mode, property bag. | `src/nextorm.core/DataContext/Roles/IContextEnvironment.cs` |
-| `IConnectionManager` | Owns the connection lifecycle (not part of `IDataContext`; the in-memory provider does not implement it). | `src/nextorm.core/DataContext/Roles/IConnectionManager.cs` |
-| `InMemoryContext` | Built-in in-memory `IDataContext` over CLR collections. | `src/nextorm.core/DataContext/InMemoryDataContext.cs` |
+| Type | Description |
+|---|---|
+| [`IDataContext`](xref:NextORM.Core.IDataContext) | Composite facade over the context roles; the entry point consumers normally depend on. |
+| [`IQueryExecutor`](xref:NextORM.Core.IQueryExecutor) | Executes a prepared command and materialises its result (terminals). |
+| [`IQueryMaterializer`](xref:NextORM.Core.IQueryMaterializer) | Narrowest contract for planning + row reading, without terminals. |
+| [`IQueryPlanner`](xref:NextORM.Core.IQueryPlanner) | Builds/resets execution plans and resolves [`From`](xref:NextORM.Core.DataContextExtensions) sources. |
+| [`IRowReaderFactory`](xref:NextORM.Core.IRowReaderFactory) | Creates row readers/enumerators over a prepared command. |
+| [`IQueryCache`](xref:NextORM.Core.IQueryCache) | Holds cached plans and the shared [`Any`](xref:NextORM.Core.EntityBuilder`1) plan. |
+| [`IContextEnvironment`](xref:NextORM.Core.IContextEnvironment) | Ambient state: loggers, mapping mode, property bag. |
+| [`IConnectionManager`](xref:NextORM.Core.IConnectionManager) | Owns the connection lifecycle (not part of [`IDataContext`](xref:NextORM.Core.IDataContext); the in-memory provider does not implement it). |
+| [`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext) | Built-in in-memory [`IDataContext`](xref:NextORM.Core.IDataContext) over CLR collections. |
 
 ### Query builders
 
-| Type | Description | Source |
-|---|---|---|
-| `EntityBuilder<TEntity>` | Fluent, immutable query builder for a mapped entity type. | `src/nextorm.core/Builders/EntityBuilder.cs` |
-| `EntityBuilder` | Fluent builder for an alias/table source that has no entity type (`TableAlias` mode). | `src/nextorm.core/Builders/EntityBuilder.cs` |
-| `EntityP2<T1,T2>` … `EntityP8<T1..T8>` | Accumulated join builders; arity 2 through 8. | `src/nextorm.core/Builders/Joins/JoinCommandBuilder.cs` |
-| `EntityMetadataBuilder<T>` | Fluent entity-metadata configuration used by `IDataContext.From<T>(...)`. | `src/nextorm.core/DataContext/Meta/EntityMetadataBuilder.cs` |
-| `Projection<T1,T2>` … `Projection<T1..T8>` | Result shape of a joined query; exposes `t1`…`t8`. | `src/nextorm.core/Builders/Projection.cs` |
-| `IProjection` / `IExtendableProjection` | Markers for accumulated join projections (arity 8 is not extendable). | `src/nextorm.core/Builders/Projection.cs` |
-| `CteQuery` | Fluent scope collecting `WITH` declarations. | `src/nextorm.core/Builders/CteQuery.cs` |
-| `CteDefinition` | One CTE: name, defining query, recursive flag and optional max recursion. | `src/nextorm.core/Builders/CteQuery.cs` |
-| `TableAlias` / `TableColumn` | Alias-mode column accessors and typed column wrapper (`AsInt`, `AsString`, …). | `src/nextorm.core/Builders/TableAlias.cs` |
-| `Paging` | `Limit` / `Offset` value used by every query builder. | `src/nextorm.core/Builders/Paging.cs` |
+| Type | Description |
+|---|---|
+| [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1) | Fluent, immutable query builder for a mapped entity type. |
+| [`EntityBuilderExtensions`](xref:NextORM.Core.EntityBuilderExtensions) | Terminal operators of [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1) ([`Any`](xref:NextORM.Core.EntityBuilder`1)/[`ToList`](xref:NextORM.Core.EntityBuilder`1)/[`First`](xref:NextORM.Core.EntityBuilder`1)/[`Single`](xref:NextORM.Core.EntityBuilder`1)/[`Last`](xref:NextORM.Core.EntityBuilder`1)/[`Count`](xref:NextORM.Core.EntityBuilder`1)/aggregates/`To*`/[`Prepare`](xref:NextORM.Core.EntityBuilder`1)) as extension methods. |
+| [`EntityBuilder`](xref:NextORM.Core.EntityBuilder) | Fluent builder for an alias/table source that has no entity type ([`TableAlias`](xref:NextORM.Core.TableAlias) mode). |
+| [`JoinedEntityBuilder<T1,T2>`](xref:NextORM.Core.JoinedEntityBuilder`2) … [`JoinedEntityBuilder<T1..T8>`](xref:NextORM.Core.JoinedEntityBuilder`8) | Accumulated join builders; arity 2 through 8. |
+| [`EntityMetadataBuilder<T>`](xref:NextORM.Core.EntityMetadataBuilder`1) | Fluent entity-metadata configuration used by `IDataContext.From<T>(...)`. |
+| [`Projection<T1,T2>`](xref:NextORM.Core.Projection`2) … [`Projection<T1..T8>`](xref:NextORM.Core.Projection`8) | Result shape of a joined query; exposes `Item1`…`` |
+| [`IProjection`](xref:NextORM.Core.IProjection) / [`IExtendableProjection`](xref:NextORM.Core.IExtendableProjection) | Markers for accumulated join projections (arity 8 is not extendable). |
+| [`CteQuery`](xref:NextORM.Core.CteQuery) | Fluent scope collecting `WITH` declarations. |
+| [`CteDefinition`](xref:NextORM.Core.CteDefinition) | One CTE: name, defining query, recursive flag and optional max recursion. |
+| [`TableAlias`](xref:NextORM.Core.TableAlias) / [`TableColumn`](xref:NextORM.Core.TableColumn) | Alias-mode column accessors ([`GetInt32`](xref:NextORM.Core.TableAlias), [`GetString`](xref:NextORM.Core.TableAlias), …) and typed column wrapper ([`AsInt`](xref:NextORM.Core.TableColumn.AsInt), [`AsString`](xref:NextORM.Core.TableColumn.AsString), …). |
+| [`Paging`](xref:NextORM.Core.Paging) | [`Limit`](xref:NextORM.Core.Paging.Limit) / [`Offset`](xref:NextORM.Core.Paging.Offset) / [`HasWithTies`](xref:NextORM.Core.Paging.HasWithTies) value used by every query builder. |
 
 ### Commands, plans and functions
 
-| Type | Description | Source |
-|---|---|---|
-| `QueryCommand` | Non-generic query command holding the plan/state shared by all results. | `src/nextorm.core/Query/QueryCommand.cs` |
-| `QueryCommand<TResult>` | Typed query command with terminals (`ToList`, `First`, `Union`, `Distinct`, `Hint`, `ForJson`, `ForXml`, `WithTableHint`, `Prepare`, …). | `src/nextorm.core/Query/QueryCommand.TResult.cs` |
-| `IPreparedQueryCommand<TResult>` | Prepared command; its default members execute it against a supplied `IDataContext`. | `src/nextorm.core/DataContext/Cache/IPreparedQueryCommand.cs` |
-| `NORM` | Static entry point: `NORM.SQL`, `NORM.PG_SQL`, `NORM.MS_SQL`, `NORM.CLK_SQL` and `NORM.Param<T>(idx)`. | `src/nextorm.core/Query/NORM.cs` |
-| `NORM_SQL` | Cross-provider SQL function surface: `exists`, `like`, `@in`, `any`/`all` (subquery), aggregates (including filtered aggregates and `string_agg`), window functions, `nullif`/`greatest`/`least`/`date_trunc`/`date_add`/`date_diff`/`date_from_parts`/`end_of_month` and full-text predicates (`contains`/`freetext`). | `src/nextorm.core/Query/NORM.cs` |
-| `NORM.PG_SQL` (`PG`) | PostgreSQL-only surface: arrays (`any`/`all`, `cardinality`, `array_*`, `string_to_array`), native JSON/JSONB, the extended scalar library (`asin`, `split_part`, `lpad`, `regexp_*`, `to_char`, …), the PostgreSQL-only aggregates (`bool_*`, `bit_*`, `regr_*`, `percentile_*`, `mode`, `array_agg`) and the `generate_series`/`unnest` table functions. | `src/nextorm.core/Query/NORM.PG.cs` |
-| `NORM.MS_SQL` (`MS`) | SQL Server-only surface: the JSON-as-text functions (`json_value`/`json_query`/`json_modify`/`isjson`) and the `string_split`/`openjson` table functions. | `src/nextorm.core/Query/NORM.MS.cs` |
-| `NORM.CLK_SQL` (`CLK`) | ClickHouse-only surface: the `arg_min`/`arg_max` aggregates and the `-If` combinator (`count_if`/`sum_if`/`avg_if`/`min_if`/`max_if`). | `src/nextorm.core/Query/NORM.CLK.cs` |
-| `NORM.WindowFunction<T>` | Unfinished window call; complete it with `Over(...)`. | `src/nextorm.core/Query/NORM.cs` |
-| `NORM.WindowOrder` | An ordered window key plus `OrderDirection`. | `src/nextorm.core/Query/NORM.cs` |
-| `NORM.WindowFrame`, `WindowFrameBound`, `WindowFrameType`, `WindowFrameBoundKind` | `ROWS`/`RANGE` frame specification and its boundaries. | `src/nextorm.core/Query/NORM.cs` |
-| `DataContextExtensions` | Provider-independent helpers: `From<T>`, `From`, `FromTableFunction`, prepared-command terminals. | `src/nextorm.core/DataContext/DataContextExtensions.cs` |
-| `IDataContextExtensions` | CTE entry points `With` / `WithRecursive`. | `src/nextorm.core/DataContext/IDataContextExtensions.cs` |
+| Type | Description |
+|---|---|
+| [`QueryCommand`](xref:NextORM.Core.QueryCommand) | Non-generic query command holding the plan/state shared by all results. |
+| [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) | Typed query command with terminals ([`ToList`](xref:NextORM.Core.EntityBuilder`1), [`First`](xref:NextORM.Core.EntityBuilder`1), [`Union`](xref:NextORM.Core.QueryCommand`1), [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct), [`Hint`](xref:NextORM.Core.QueryCommand`1), [`ForJson`](xref:NextORM.Core.QueryCommand`1), [`ForXml`](xref:NextORM.Core.QueryCommand`1), [`WithTableHint`](xref:NextORM.Core.EntityBuilder`1), [`Prepare`](xref:NextORM.Core.EntityBuilder`1), …). |
+| [`QueryDefinition`](xref:NextORM.Core.QueryDefinition) | Immutable query shape (projection/entity source, condition, joins, paging, sorting, grouping, logger) taken by the command constructors and [`CreateCommand`](xref:NextORM.Core.DataContextExtensions). |
+| [`PrepareFromSqlMode`](xref:NextORM.Core.PrepareFromSqlMode) | Flags for [`PrepareFromSql`](xref:NextORM.Core.EntityBuilder`1): `None` (buffered/scalar), [`Streaming`](xref:NextORM.Core.PrepareFromSqlMode.Streaming), `` |
+| [`PreparedCommandOptions`](xref:NextORM.Core.PreparedCommandOptions) | Non-generic setup of [`DbPreparedQueryCommand<TResult>`](xref:NextORM.Core.DbPreparedQueryCommand`1) (single row, raw SQL, no params, parameter refresh). |
+| [`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1) | Prepared command; its default members execute it against a supplied [`IDataContext`](xref:NextORM.Core.IDataContext). |
+| [`SqlFunctions`](xref:NextORM.Core.SqlFunctions) | Static entry point: [`Sql`](xref:NextORM.Core.SqlFunctions.Sql), [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres), [`SqlServer`](xref:NextORM.Core.SqlFunctions.SqlServer), [`ClickHouse`](xref:NextORM.Core.SqlFunctions.ClickHouse) and [`Parameter`](xref:NextORM.Core.SqlFunctions). |
+| [`CommonFunctions`](xref:NextORM.Core.CommonFunctions) | Cross-provider SQL function surface: `exists`, `like`, `@in`, `any`/`all` (subquery), the conditional `iif` ([`SupportsIif`](xref:NextORM.Core.ISqlDialect.SupportsIif)/[`MakeIif`](xref:NextORM.Core.ISqlDialect.MakeIif)), aggregates (including filtered aggregates, `string_agg` and the arbitrary-value `any_agg` on MySQL/ClickHouse), window functions (including `percent_rank`/`cume_dist` and `nth_value`, the latter gated by [`SupportsNthValue`](xref:NextORM.Core.ISqlDialect.SupportsNthValue), plus the window percentiles `percentile_cont`/`percentile_disc` on SQL Server/MariaDB), `nullif`/`greatest`/`least`/`date_trunc`/`date_add`/`date_diff`/`date_from_parts`/`end_of_month`, session/information functions (`current_user`/`session_user`/`current_schema`/`current_database`/`version`), the UUID generators (`gen_random_uuid`/`uuidv7`) and full-text predicates (`contains`/`freetext`). |
+| [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) | PostgreSQL-only surface: arrays (`any`/`all`, `cardinality`, `array_*`, `string_to_array`), native JSON/JSONB, the extended scalar library (`asin`, `split_part`, `lpad`, `regexp_*`, `to_char`, `pg_typeof`, …), the PostgreSQL-only aggregates (`bool_*`, `bit_*`, `regr_*`, `percentile_*`, `mode`, `array_agg`) the `generate_series`/`unnest` table functions, and the native text-search surface (`to_tsvector`/`to_tsquery`/`ts_rank`/`ts_headline`/`@@`). |
+| [`SqlServer`](xref:NextORM.Core.SqlFunctions.SqlServer) | Text-JSON surface (`json_value`/`json_query`/`json_modify`/`isjson`) for SQL Server and MySQL/MariaDB, the SQL Server-only conditional function `choose` ([`SupportsChoose`](xref:NextORM.Core.ISqlDialect.SupportsChoose)), plus the SQL Server `string_split`/`openjson` table functions. |
+| [`ClickHouse`](xref:NextORM.Core.SqlFunctions.ClickHouse) | ClickHouse-only surface: the `arg_min`/`arg_max`, `uniq`/`uniq_exact`/`uniq_combined`/`uniq_hll12`, the parameterised `quantile`/`quantile_exact`/`quantile_timing`/`median` aggregates, the row-picking `any_last` aggregate, the string-JSON `json_extract_string`/`json_extract_int`/`json_extract_float`/`json_extract_bool`/`json_extract_raw`/`json_has`/`json_length`/`json_type` family plus `visit_param_extract_string`/`_int`/`_float`/`_bool`/`_raw` and the JSONPath `json_value`/`json_query`/`json_exists`, the dictionary functions `dict_get`/`dict_get_or_default`/`dict_has`, the `-If` combinator (`count_if`/`sum_if`/`avg_if`/`min_if`/`max_if`), the distributed `global_in` predicate, the `numbers`/`numbers_mt` and `zeros`/`zeros_mt` table functions, and the array functions over `Array(T)` columns (`array_join`, `length`, `has`, `index_of`, `has_any`, `has_all`, `array_string_concat`, `split_by_char`, `array_sort`, `array_reverse`, `array_distinct`). |
+| [`WindowFunction<T>`](xref:NextORM.Core.WindowFunction`1) | Unfinished window call; complete it with `Over(...)`. |
+| [`WindowOrder`](xref:NextORM.Core.WindowOrder) | An ordered window key plus [`OrderDirection`](xref:NextORM.Core.OrderDirection). |
+| [`WindowFrame`](xref:NextORM.Core.WindowFrame), [`WindowFrameBound`](xref:NextORM.Core.WindowFrameBound), [`WindowFrameType`](xref:NextORM.Core.WindowFrameType), [`WindowFrameBoundKind`](xref:NextORM.Core.WindowFrameBoundKind) | `ROWS`/`RANGE` frame specification and its boundaries. |
+| [`DataContextExtensions`](xref:NextORM.Core.DataContextExtensions) | Provider-independent helpers: [`From`](xref:NextORM.Core.DataContextExtensions), [`From`](xref:NextORM.Core.DataContextExtensions), [`FromTableFunction`](xref:NextORM.Core.DataContextExtensions), CTE entry points ([`With`](xref:NextORM.Core.DataContextExtensions) / [`WithRecursive`](xref:NextORM.Core.DataContextExtensions)) and prepared-command terminals. |
 
 ### Mapping attributes
 
-| Type | Description | Source |
-|---|---|---|
-| `SqlTableAttribute` | Maps a class or interface to a table name (`[SqlTable("name")]`). | `src/nextorm.core/TableAttribute.cs` |
-| `SqlFunctionAttribute` | Maps a CLR method (or its declaring type) to a scalar database function; optional `Name`/`Schema`. | `src/nextorm.core/SqlFunctionAttribute.cs` |
-| `SqlTableFunctionAttribute` | Maps a static method (or its declaring type) to a table-valued function used as a `FROM` source. | `src/nextorm.core/SqlTableFunctionAttribute.cs` |
+| Type | Description |
+|---|---|
+| [`SqlTableAttribute`](xref:NextORM.Core.SqlTableAttribute) | Maps a class or interface to a table name (`[SqlTable("name")]`). |
+| [`SqlFunctionAttribute`](xref:NextORM.Core.SqlFunctionAttribute) | Maps a CLR method (or its declaring type) to a scalar database function; optional `Name`/`Schema`. |
+| [`SqlTableFunctionAttribute`](xref:NextORM.Core.SqlTableFunctionAttribute) | Maps a static method (or its declaring type) to a table-valued function used as a `FROM` source. |
 
 ### Supporting expression types
 
-| Type | Description | Source |
-|---|---|---|
-| `OrderDirection` | `Asc` / `Desc`. | `src/nextorm.core/Expressions/OrderDirection.cs` |
-| `JoinType` | `Inner`, `Left`, `Right`, `Full`, `Cross`, `FullCross`, `CrossApply`, `OuterApply`. | `src/nextorm.core/Expressions/JoinExpression.cs` |
-| `JoinExpression` | A single join: condition, type and joined source. | `src/nextorm.core/Expressions/JoinExpression.cs` |
-| `FromExpression` / `SelectExpression` | FROM source and projected column metadata. | `src/nextorm.core/Expressions/FromExpression.cs`, `src/nextorm.core/Expressions/SelectExpression.cs` |
-| `UnionType` | `None`, `Distinct`, `All`, `Intersect`, `IntersectAll`, `Except`, `ExceptAll`. | `src/nextorm.core/Expressions/UnionType.cs` |
+| Type | Description |
+|---|---|
+| [`OrderDirection`](xref:NextORM.Core.OrderDirection) | [`Asc`](xref:NextORM.Core.OrderDirection.Asc) / `` |
+| [`JoinType`](xref:NextORM.Core.JoinType) | [`Inner`](xref:NextORM.Core.JoinType.Inner), [`Left`](xref:NextORM.Core.JoinType.Left), [`Right`](xref:NextORM.Core.JoinType.Right), [`Full`](xref:NextORM.Core.JoinType.Full), [`Cross`](xref:NextORM.Core.JoinType.Cross), [`FullCross`](xref:NextORM.Core.JoinType.FullCross), [`CrossApply`](xref:NextORM.Core.EntityBuilder`1), [`OuterApply`](xref:NextORM.Core.EntityBuilder`1). |
+| [`JoinExpression`](xref:NextORM.Core.JoinExpression) | A single join: condition, type and joined source. |
+| [`JoinStrictness`](xref:NextORM.Core.JoinStrictness) | ClickHouse join modifier: [`Default`](xref:NextORM.Core.JoinStrictness.Default), [`Any`](xref:NextORM.Core.JoinStrictness.Any), [`All`](xref:NextORM.Core.JoinStrictness.All), [`Asof`](xref:NextORM.Core.JoinStrictness.Asof). Apply with [`EntityBuilder.WithStrictness`](xref:NextORM.Core.EntityBuilder`1); the ClickHouse `GLOBAL` variant uses [`EntityBuilder.Global`](xref:NextORM.Core.EntityBuilder`1). |
+| [`ArrayJoinKind`](xref:NextORM.Core.ArrayJoinKind) | ClickHouse <c>ARRAY JOIN</c> kind: [`Inner`](xref:NextORM.Core.ArrayJoinKind.Inner) via [`EntityBuilder.ArrayJoin`](xref:NextORM.Core.EntityBuilder`1) (drops empty arrays) or [`Left`](xref:NextORM.Core.ArrayJoinKind.Left) via [`EntityBuilder.LeftArrayJoin`](xref:NextORM.Core.EntityBuilder`1) (keeps them); expands one row per array element. |
+| [`ArrayJoinProjection<TEntity, TElement>`](xref:NextORM.Core.ArrayJoinProjection`2) | Projection returned by [`EntityBuilder.ArrayJoinElement`](xref:NextORM.Core.EntityBuilder`1)/[`EntityBuilder.LeftArrayJoinElement`](xref:NextORM.Core.EntityBuilder`1): [`Item1`](xref:NextORM.Core.ArrayJoinProjection`2.Item1) is the original entity, [`Element`](xref:NextORM.Core.ArrayJoinProjection`2.Element) the expanded array element. Requires a dialect with the <c>ARRAY JOIN</c> clause. |
+| [`FromExpression`](xref:NextORM.Core.FromExpression) / [`SelectExpression`](xref:NextORM.Core.SelectExpression) | FROM source and projected column metadata. |
+| [`TableSampleMethod`](xref:NextORM.Core.TableSampleMethod) | Sampling algorithm for [`EntityBuilder.TableSample`](xref:NextORM.Core.EntityBuilder`1): [`System`](xref:NextORM.Core.TableSampleMethod.System) / [`Bernoulli`](xref:NextORM.Core.TableSampleMethod.Bernoulli) (PostgreSQL only for Bernoulli). |
+| [`LockMode`](xref:NextORM.Core.LockMode) | Row-locking strength for [`EntityBuilder.ForUpdate`](xref:NextORM.Core.EntityBuilder`1)/[`EntityBuilder.ForShare`](xref:NextORM.Core.EntityBuilder`1): [`Update`](xref:NextORM.Core.LockMode.Update) / [`Share`](xref:NextORM.Core.LockMode.Share). |
+| [`TemporalKind`](xref:NextORM.Core.TemporalKind) / [`TemporalClause`](xref:NextORM.Core.TemporalClause) | `FOR SYSTEM_TIME` clause for [`EntityBuilder.ForSystemTime`](xref:NextORM.Core.EntityBuilder`1): [`AsOf`](xref:NextORM.Core.TemporalKind.AsOf)/[`Between`](xref:NextORM.Core.TemporalKind.Between)/[`FromTo`](xref:NextORM.Core.TemporalKind.FromTo)/[`ContainedIn`](xref:NextORM.Core.TemporalKind.ContainedIn)/[`All`](xref:NextORM.Core.TemporalKind.All), built with the static factory methods. |
+| [`UnionType`](xref:NextORM.Core.UnionType) | `None`, [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct), [`All`](xref:NextORM.Core.UnionType.All), [`Intersect`](xref:NextORM.Core.QueryCommand`1), [`IntersectAll`](xref:NextORM.Core.QueryCommand`1), [`Except`](xref:NextORM.Core.QueryCommand`1), [`ExceptAll`](xref:NextORM.Core.QueryCommand`1). |
 
 ### Dependency injection
 
-| Type | Description | Source |
-|---|---|---|
-| `DbContextBuilder` | Provider options builder: `UseLoggerFactory`, `LogSensitiveData`, `Factory`, `CreateDbContext`. | `src/nextorm.core/DI/DataContextOptionsBuilder.cs` |
-| `ServiceCollectionExtensions` | `AddNextOrmContext` / `AddKeyedNextOrmContext` (generic and options-driven). | `src/nextorm.core/DI/ServiceCollectionExtensions.cs` |
+| Type | Description |
+|---|---|
+| [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) | Provider options builder: [`UseLoggerFactory`](xref:NextORM.Core.DataContextBuilder), [`LogSensitiveData`](xref:NextORM.Core.DataContextBuilder), [`Factory`](xref:NextORM.Core.DataContextBuilder.Factory), `` |
+| [`ServiceCollectionExtensions`](xref:NextORM.Core.ServiceCollectionExtensions) | [`AddNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions) / [`AddKeyedNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions) (generic and options-driven). |
 
-## Namespace `nextorm.sqlite`
+## Namespace [`NextORM.Sqlite`](xref:NextORM.Sqlite)
 
-| Type | Description | Source |
-|---|---|---|
-| `SqliteDbContext` | `DbContext` over `Microsoft.Data.Sqlite`; registers the custom aggregates. | `src/nextorm.sqlite/SqliteDbContext.cs` |
-| `SqliteDialect` | SQLite `ISqlDialect` singleton (`SqliteDialect.Instance`). | `src/nextorm.sqlite/SqliteDialect.cs` |
-| `DataContextOptionsBuilderExtensions` | `UseSqlite(string filepath)` and `UseSqlite(DbConnection)`. | `src/nextorm.sqlite/DI/DataContextOptionsBuilderExtensions.cs` |
+| Type | Description |
+|---|---|
+| [`SqliteDataContext`](xref:NextORM.Sqlite.SqliteDataContext) | [`DataContext`](xref:NextORM.Core.DataContext) over `Microsoft.Data.Sqlite`; registers the custom aggregates. |
+| [`SqliteDialect`](xref:NextORM.Sqlite.SqliteDialect) | SQLite [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) singleton ([`Instance`](xref:NextORM.Sqlite.SqliteDialect.Instance)). |
+| [`SqliteDataContextOptionsBuilderExtensions`](xref:NextORM.Sqlite.SqliteDataContextOptionsBuilderExtensions) | `UseSqlite(string filepath)` and `UseSqlite(DbConnection)`. |
 
-## Namespace `nextorm.postgres`
+## Namespace [`NextORM.Postgres`](xref:NextORM.Postgres)
 
-| Type | Description | Source |
-|---|---|---|
-| `PostgresDbContext` | `DbContext` over `Npgsql`. | `src/nextorm.postgres/PostgresDbContext.cs` |
-| `PostgresDialect` | PostgreSQL `ISqlDialect` singleton (`PostgresDialect.Instance`). | `src/nextorm.postgres/PostgresDialect.cs` |
-| `DataContextOptionsBuilderExtensions` | `UsePostgres(string connectionString)` and `UsePostgres(DbConnection)`. | `src/nextorm.postgres/DI/DataContextOptionsBuilderExtensions.cs` |
+| Type | Description |
+|---|---|
+| [`PostgresDataContext`](xref:NextORM.Postgres.PostgresDataContext) | [`DataContext`](xref:NextORM.Core.DataContext) over `Npgsql`. |
+| [`PostgresDialect`](xref:NextORM.Postgres.PostgresDialect) | PostgreSQL [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) singleton ([`Instance`](xref:NextORM.Postgres.PostgresDialect.Instance)). |
+| [`PostgresDataContextOptionsBuilderExtensions`](xref:NextORM.Postgres.PostgresDataContextOptionsBuilderExtensions) | `UsePostgres(string connectionString)` and `UsePostgres(DbConnection)`. |
 
-## Namespace `nextorm.sqlserver`
+## Namespace [`NextORM.SqlServer`](xref:NextORM.SqlServer)
 
-| Type | Description | Source |
-|---|---|---|
-| `SqlServerDbContext` | `DbContext` over `Microsoft.Data.SqlClient`, with numeric column conversion. | `src/nextorm.sqlserver/SqlServerDbContext.cs` |
-| `SqlServerDialect` | SQL Server `ISqlDialect` singleton (`SqlServerDialect.Instance`). | `src/nextorm.sqlserver/SqlServerDialect.cs` |
-| `DataContextOptionsBuilderExtensions` | `UseSqlServer(string connectionString)` and `UseSqlServer(DbConnection)`. | `src/nextorm.sqlserver/DI/DataContextOptionsBuilderExtensions.cs` |
+| Type | Description |
+|---|---|
+| [`SqlServerDataContext`](xref:NextORM.SqlServer.SqlServerDataContext) | [`DataContext`](xref:NextORM.Core.DataContext) over `Microsoft.Data.SqlClient`, with numeric column conversion. |
+| [`SqlServerDialect`](xref:NextORM.SqlServer.SqlServerDialect) | SQL Server [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) singleton ([`Instance`](xref:NextORM.SqlServer.SqlServerDialect.Instance)). |
+| [`SqlServerDataContextOptionsBuilderExtensions`](xref:NextORM.SqlServer.SqlServerDataContextOptionsBuilderExtensions) | `UseSqlServer(string connectionString)` and `UseSqlServer(DbConnection)`. |
 
-## Namespace `nextorm.mysql`
+## Namespace [`NextORM.MySql`](xref:NextORM.MySql)
 
-| Type | Description | Source |
-|---|---|---|
-| `MySqlDbContext` | `DbContext` over `MySqlConnector`. | `src/nextorm.mysql/MySqlDbContext.cs` |
-| `MySqlDialect` | MySQL `ISqlDialect` singleton (`MySqlDialect.Instance`); non-sealed so MariaDB can derive from it. | `src/nextorm.mysql/MySqlDialect.cs` |
-| `DataContextOptionsBuilderExtensions` | `UseMySql(string connectionString)` and `UseMySql(DbConnection)`. | `src/nextorm.mysql/DI/DataContextOptionsBuilderExtensions.cs` |
+| Type | Description |
+|---|---|
+| [`MySqlDataContext`](xref:NextORM.MySql.MySqlDataContext) | [`DataContext`](xref:NextORM.Core.DataContext) over `MySqlConnector`. |
+| [`MySqlDialect`](xref:NextORM.MySql.MySqlDialect) | MySQL [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) singleton ([`Instance`](xref:NextORM.MySql.MySqlDialect.Instance)); non-sealed so MariaDB can derive from it. |
+| [`MySqlDataContextOptionsBuilderExtensions`](xref:NextORM.MySql.MySqlDataContextOptionsBuilderExtensions) | `UseMySql(string connectionString)` and `UseMySql(DbConnection)`. |
 
-## Namespace `nextorm.mariadb`
+## Namespace [`NextORM.MariaDb`](xref:NextORM.MariaDb)
 
-| Type | Description | Source |
-|---|---|---|
-| `MariaDbContext` | `DbContext` over `MySqlConnector`, deriving from `MySqlDbContext`. | `src/nextorm.mariadb/MariaDbContext.cs` |
-| `MariaDbDialect` | MariaDB `ISqlDialect` singleton (`MariaDbDialect.Instance`); MySQL rendering plus `INTERSECT ALL`/`EXCEPT ALL`. | `src/nextorm.mariadb/MariaDbDialect.cs` |
-| `DataContextOptionsBuilderExtensions` | `UseMariaDb(string connectionString)` and `UseMariaDb(DbConnection)`. | `src/nextorm.mariadb/DI/DataContextOptionsBuilderExtensions.cs` |
+| Type | Description |
+|---|---|
+| [`MariaDbDataContext`](xref:NextORM.MariaDb.MariaDbDataContext) | [`DataContext`](xref:NextORM.Core.DataContext) over `MySqlConnector`, deriving from [`MySqlDataContext`](xref:NextORM.MySql.MySqlDataContext). |
+| [`MariaDbDialect`](xref:NextORM.MariaDb.MariaDbDialect) | MariaDB [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) singleton ([`Instance`](xref:NextORM.MariaDb.MariaDbDialect.Instance)); MySQL rendering plus `INTERSECT ALL`/`EXCEPT ALL`. |
+| [`MariaDbDataContextOptionsBuilderExtensions`](xref:NextORM.MariaDb.MariaDbDataContextOptionsBuilderExtensions) | `UseMariaDb(string connectionString)` and `UseMariaDb(DbConnection)`. |
 
-## Namespace `nextorm.clickhouse`
+## Namespace [`NextORM.ClickHouse`](xref:NextORM.ClickHouse)
 
-| Type | Description | Source |
-|---|---|---|
-| `ClickHouseDbContext` | `DbContext` over the official `ClickHouse.Driver` ADO.NET provider. | `src/nextorm.clickhouse/ClickHouseDbContext.cs` |
-| `ClickHouseDialect` | ClickHouse `ISqlDialect` singleton (`ClickHouseDialect.Instance`). | `src/nextorm.clickhouse/ClickHouseDialect.cs` |
-| `DataContextOptionsBuilderExtensions` | `UseClickHouse(string connectionString)` and `UseClickHouse(DbConnection)`. | `src/nextorm.clickhouse/DI/DataContextOptionsBuilderExtensions.cs` |
+| Type | Description |
+|---|---|
+| [`ClickHouseDataContext`](xref:NextORM.ClickHouse.ClickHouseDataContext) | [`DataContext`](xref:NextORM.Core.DataContext) over the official `ClickHouse.Driver` ADO.NET provider. |
+| [`ClickHouseDialect`](xref:NextORM.ClickHouse.ClickHouseDialect) | ClickHouse [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) singleton ([`Instance`](xref:NextORM.ClickHouse.ClickHouseDialect.Instance)). |
+| [`ClickHouseDataContextOptionsBuilderExtensions`](xref:NextORM.ClickHouse.ClickHouseDataContextOptionsBuilderExtensions) | `UseClickHouse(string connectionString)` and `UseClickHouse(DbConnection)`. |
 
 ## See also
 

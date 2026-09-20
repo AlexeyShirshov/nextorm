@@ -1,27 +1,27 @@
 using BenchmarkDotNet.Attributes;
-using nextorm.sqlite;
+using NextORM.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using BenchmarkDotNet.Jobs;
-using nextorm.core;
-using DbContext = nextorm.core.DbContext;
+using NextORM.Core;
+using DataContext = NextORM.Core.DataContext;
 
-namespace nextorm.benchmark;
+namespace NextORM.Benchmark;
 
 [Config(typeof(NextormConfig))]
 [MemoryDiagnoser]
 public class SqliteBenchmarkMakeSelect
 {
     private readonly TestDataRepository _ctx;
-    private readonly DbContext _provider;
+    private readonly DataContext _provider;
     private readonly QueryCommand _cmd;
 
     public SqliteBenchmarkMakeSelect()
     {
-        var builder = new DbContextBuilder();
+        var builder = new DataContextBuilder();
         builder.UseSqlite(BenchDb.FilePath);
-        _ctx = new TestDataRepository(builder.CreateDbContext());
+        _ctx = new TestDataRepository(builder.CreateDataContext());
 
-        _provider = (DbContext)_ctx.DbContext;
+        _provider = (DataContext)_ctx.DataContext;
 
         var p = 10;
         _cmd = _ctx.SimpleEntity.Where(it => it.Id == p).Select(entity => new { entity.Id });

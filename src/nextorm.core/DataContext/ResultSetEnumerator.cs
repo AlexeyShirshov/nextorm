@@ -6,12 +6,12 @@ using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.ObjectPool;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IAsyncInit<TResult>
 {
     //private readonly QueryCommand<TResult> _cmd;
     // Execution host: the connection lifecycle comes from the role, parameter creation from a
-    // delegate. Neither is the concrete DbContext, so the enumerator no longer depends on the
+    // delegate. Neither is the concrete DataContext, so the enumerator no longer depends on the
     // context type (F6). The delegate is handed over once per enumeration, not built per call.
     private IConnectionManager? _connectionManager;
     private Func<string, object?, DbParameter>? _createParam;
@@ -25,7 +25,7 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
     private bool _logSensitiveData;
     private DbDataReader? _reader;
     // Not owned by this enumerator: _conn comes from IConnectionManager.GetConnection() and is
-    // disposed by the context (DbContext.DisposeStaff). Disposing it here would close a connection
+    // disposed by the context (DataContext.DisposeStaff). Disposing it here would close a connection
     // that is still in use, so it is only cleared (Reset/DisposeAsync).
     private DbConnection? _conn;
     private bool _disposed;
@@ -48,7 +48,7 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
     object? IEnumerator.Current => _current;
 
     /// <summary>
-    /// Applies the logging configuration the context used to push through a <c>DbContext</c>
+    /// Applies the logging configuration the context used to push through a <c>DataContext</c>
     /// property setter. Called once, right after construction.
     /// </summary>
     internal void InitEnvironment(ILogger? logger, bool logSensitiveData)
@@ -91,7 +91,7 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
 
     // public void Init(object data)
     // {
-    //     _params = (List<Param>)data;
+    //     _params = (List<Parameter>)data;
     // }
 
     public ValueTask<bool> MoveNextAsync()
@@ -167,7 +167,7 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
         if (_connectionManager is null) throw new InvalidOperationException("Connection manager is empty");
 
         // The role owns "make sure the connection is open". This block used to be a copy of
-        // DbContext.EnsureConnectionOpen.
+        // DataContext.EnsureConnectionOpen.
         _connectionManager.EnsureConnectionOpen();
 
         var sqlCommand = _compiledQuery.GetDbCommand(@params, _createParam!, _conn);

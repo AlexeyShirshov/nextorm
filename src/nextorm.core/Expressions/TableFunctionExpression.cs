@@ -1,7 +1,7 @@
 using System.Linq.Expressions;
 using System.Reflection;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// A table-valued function call used as a FROM source. The SQL name/schema are resolved once from

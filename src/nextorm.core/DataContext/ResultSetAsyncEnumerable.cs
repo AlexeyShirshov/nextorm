@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Hand-written async enumerable that reuses an already-created <see cref="IAsyncEnumerator{TResult}"/>.

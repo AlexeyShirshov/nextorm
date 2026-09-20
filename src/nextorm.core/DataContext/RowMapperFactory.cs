@@ -3,12 +3,12 @@ using System.Linq.Expressions;
 using System.Reflection;
 using Microsoft.Extensions.Logging;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Produces the compiled row mapper for a prepared command: builds the expression tree (via
 /// <see cref="RowMaterializerBuilder"/>), compiles it and caches it by SQL text. Extracted from
-/// <see cref="DbContext"/> (see solid-review.md, F1) because the work is provider-agnostic — the only
+/// <see cref="DataContext"/> (see docs/specs/design/solid-review.md, F1) because the work is provider-agnostic — the only
 /// provider-specific part is how a column is read, and that is supplied as the <c>mapColumn</c>
 /// delegate instead of an abstraction (there is no second consumer that would need one).
 /// </summary>
@@ -37,6 +37,16 @@ internal static class RowMapperFactory
                 Expression.Call(param, IsDBNullMI, Expression.Constant(column.Index)),
                 Expression.Constant(null, column.PropertyType),
                 value);
+        }
+
+        if (column.DefaultOnNull)
+        {
+            // A non-nullable value projection from a *OrDefault scalar terminal: SQL NULL means the
+            // subquery matched no row, so substitute default(T) instead of letting the getter throw.
+            return Expression.Condition(
+                Expression.Call(param, IsDBNullMI, Expression.Constant(column.Index)),
+                Expression.Default(column.PropertyType),
+                getter);
         }
 
         return getter;
@@ -119,6 +129,7 @@ internal static class RowMapperFactory
                     signature = signature * 31 + column.Index;
                     signature = signature * 31 + (column.PropertyType?.GetHashCode() ?? 0);
                     signature = signature * 31 + (column.Nullable ? 1 : 0);
+                    signature = signature * 31 + (column.DefaultOnNull ? 1 : 0);
                     signature = signature * 31 + (column.PropertyName?.GetHashCode() ?? 0);
                 }
             }

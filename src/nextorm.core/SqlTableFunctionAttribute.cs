@@ -1,4 +1,4 @@
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Maps a CLR method to a database table-valued function used as a FROM source. Apply it to a

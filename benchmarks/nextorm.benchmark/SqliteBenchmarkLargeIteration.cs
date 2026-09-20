@@ -1,5 +1,5 @@
 ﻿using BenchmarkDotNet.Attributes;
-using nextorm.sqlite;
+using NextORM.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Data.Sqlite;
 using Dapper;
@@ -11,9 +11,9 @@ using System.Runtime.InteropServices;
 using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Columns;
 using BenchmarkDotNet.Configs;
-using nextorm.core;
+using NextORM.Core;
 
-namespace nextorm.benchmark;
+namespace NextORM.Benchmark;
 
 [GroupBenchmarksBy(BenchmarkLogicalGroupRule.ByJob, BenchmarkLogicalGroupRule.ByCategory)]
 [HideColumns(Column.Runtime, Column.RatioSD, Column.Error, Column.StdDev)]
@@ -34,7 +34,7 @@ public class SqliteBenchmarkLargeIteration
     public SqliteBenchmarkLargeIteration() : this(false) { }
     public SqliteBenchmarkLargeIteration(bool withLogging = false)
     {
-        var builder = new DbContextBuilder();
+        var builder = new DataContextBuilder();
         builder.UseSqlite(BenchDb.FilePath);
         if (withLogging)
         {
@@ -42,7 +42,7 @@ public class SqliteBenchmarkLargeIteration
             builder.UseLoggerFactory(_logFactory);
             builder.LogSensitiveData(true);
         }
-        _db = builder.CreateDbContext();
+        _db = builder.CreateDataContext();
         _ctx = new TestDataRepository(_db);
         ((IConnectionManager)_db).EnsureConnectionOpen();
 
@@ -61,7 +61,7 @@ public class SqliteBenchmarkLargeIteration
 
         _efCtx = new EFDataContext(efBuilder.Options);
 
-        _conn = new SqliteConnection(((SqliteDbContext)_ctx.DbContext).ConnectionString);
+        _conn = new SqliteConnection(((SqliteDataContext)_ctx.DataContext).ConnectionString);
         _conn.Open();
 
         _adoCmd = _conn.CreateCommand();

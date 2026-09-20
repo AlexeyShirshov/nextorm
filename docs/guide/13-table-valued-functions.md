@@ -1,15 +1,15 @@
 # Table-valued functions
 
-> Query a database table-valued function as a `FROM` source with `FromTableFunction` and map its rows
+> Query a database table-valued function as a `FROM` source with [`FromTableFunction`](xref:NextORM.Core.DataContextExtensions) and map its rows
 > like any other entity.
 
 **Prerequisites:** [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Joins](03-joins.md) · [Grouping and aggregates](04-grouping-and-aggregates.md)
 
 ## Overview
 
-`SqlTableFunctionAttribute` maps a placeholder static method to a database table-valued function.
+[`SqlTableFunctionAttribute`](xref:NextORM.Core.SqlTableFunctionAttribute) maps a placeholder static method to a database table-valued function.
 The method must return `IQueryable<T>` (where `T` describes the row shape) and is only referenced inside
-the expression passed to `FromTableFunction`:
+the expression passed to [`FromTableFunction`](xref:NextORM.Core.DataContextExtensions):
 
 ```csharp
 [AttributeUsage(AttributeTargets.Method | AttributeTargets.Class)]
@@ -32,8 +32,8 @@ anything else throws `ArgumentException`. The call is translated to `[schema.]na
 with the arguments rendered through the regular expression visitor, so **captured values become
 parameters**. nextorm only emits the call - the function must already exist in the target database.
 
-The returned `EntityBuilder<T>` is an ordinary query source, so `Where`, `OrderBy`, `GroupBy`, `Join`,
-`Select`, paging and terminals all work over it.
+The returned `EntityBuilder<T>` is an ordinary query source, so [`Where`](xref:NextORM.Core.EntityBuilder`1), [`OrderBy`](xref:NextORM.Core.EntityBuilder`1), [`GroupBy`](xref:NextORM.Core.EntityBuilder`1), [`Join`](xref:NextORM.Core.EntityBuilder`1),
+[`Select`](xref:NextORM.Core.EntityBuilder`1), paging and terminals all work over it.
 
 ## Declaring the mapping
 
@@ -89,6 +89,16 @@ select value from json_each('[1,2,3]')
 select value from json_each('[1,2,3]') as [t1]
 ```
 
+The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
+
+Output:
+
+| Value |
+|-------|
+| 1     |
+| 2     |
+| 3     |
+
 ## Arguments become parameters
 
 ```csharp
@@ -129,7 +139,7 @@ A TVF is a normal source, so it can be joined to a table and read through the `t
 var rows = dataContext
     .FromTableFunction(() => Tvf.AllRows())
     .Join(dataContext.From<IComplexEntity>(), (r, c) => r.Id == c.Id)
-    .Select(p => new { p.t1.Value, p.t2.String })
+    .Select(p => new { p.Item1.Value, p.Item2.String })
     .ToList();
 ```
 
@@ -152,32 +162,46 @@ var values = dataContext
 var rows = dataContext
     .FromTableFunction(() => Tvf.JsonEach("[1,1,2]"))
     .GroupBy(r => new { r.Value })
-    .Select(g => new { g.Value, Cnt = NORM.SQL.count() })
+    .Select(g => new { g.Value, Cnt = SqlFunctions.Sql.count() })
     .ToList();
 // (1, 2), (2, 1)
 ```
+
+Output:
+
+| Value |
+|-------|
+| 3     |
+| 2     |
+
+Output:
+
+| Value | Cnt |
+|-------|-----|
+| 1     | 2   |
+| 2     | 1   |
 
 ## Built-in table functions
 
 A few common table-valued functions are pre-declared with `[SqlTableFunction]`, so no user-defined
 wrapper is needed.
 
-`NORM.PG_SQL.generate_series` and `NORM.PG_SQL.unnest` are PostgreSQL (they return `NORM.IGenerateSeriesRow`
-with the `generate_series` column and `NORM.IUnnestRow<T>` with the `unnest` column):
+`SqlFunctions.Postgres.generate_series` and `SqlFunctions.Postgres.unnest` are PostgreSQL (they return [`SqlFunctions.IGenerateSeriesRow`](xref:NextORM.Core.SqlFunctions.IGenerateSeriesRow)
+with the `generate_series` column and [`SqlFunctions.IUnnestRow<T>`](xref:NextORM.Core.SqlFunctions.IUnnestRow`1) with the `unnest` column):
 
 ```csharp
 var numbers = dataContext
-    .FromTableFunction(() => NORM.PG_SQL.generate_series(1L, 3L))
+    .FromTableFunction(() => SqlFunctions.Postgres.generate_series(1L, 3L))
     .Select(r => r.Value)
     .ToList();
 
 var elements = dataContext
-    .FromTableFunction(() => NORM.PG_SQL.unnest(NORM.Param<long[]>(0)))
+    .FromTableFunction(() => SqlFunctions.Postgres.unnest(SqlFunctions.Parameter<long[]>(0)))
     .Select(r => r.Value)
     .ToList(new long[] { 1, 2, 3 });
 ```
 
-`NORM.MS_SQL.string_split` is SQL Server 2016+ and returns `NORM.IStringSplitRow` (the single `value`
+`SqlFunctions.SqlServer.string_split` is SQL Server 2016+ and returns [`SqlFunctions.IStringSplitRow`](xref:NextORM.Core.SqlFunctions.IStringSplitRow) (the single `value`
 column). The fragments are not guaranteed to be ordered, so add an `order by` when the input order
 matters:
 
@@ -186,7 +210,7 @@ var csv = "a,b,c";
 var separator = ",";
 
 var fragments = dataContext
-    .FromTableFunction(() => NORM.MS_SQL.string_split(csv, separator))
+    .FromTableFunction(() => SqlFunctions.SqlServer.string_split(csv, separator))
     .Select(r => r.Value)
     .ToList();
 ```
@@ -195,7 +219,7 @@ var fragments = dataContext
 select value from string_split(@csv, @separator) as [t1]
 ```
 
-`NORM.MS_SQL.openjson` is SQL Server 2016+ and returns `NORM.IOpenJsonRow` (`key`/`value`/`type`). The
+`SqlFunctions.SqlServer.openjson` is SQL Server 2016+ and returns [`SqlFunctions.IOpenJsonRow`](xref:NextORM.Core.SqlFunctions.IOpenJsonRow) (`key`/`value`/`type`). The
 default schema yields the properties of a JSON object or the elements of a JSON array; for a typed
 projection declare your own `[SqlTableFunction("openjson")]` wrapper whose row shape matches the
 `WITH (...)` clause:
@@ -204,7 +228,7 @@ projection declare your own `[SqlTableFunction("openjson")]` wrapper whose row s
 var json = """{"a":1,"b":2}""";
 
 var entries = dataContext
-    .FromTableFunction(() => NORM.MS_SQL.openjson(json))
+    .FromTableFunction(() => SqlFunctions.SqlServer.openjson(json))
     .Select(r => new { r.Key, r.Value, r.Type })
     .ToList();
 ```
@@ -213,11 +237,47 @@ var entries = dataContext
 select [key] as [Key], value, type from openjson(@json) as [t1]
 ```
 
+`SqlFunctions.ClickHouse.numbers`/`numbers_mt` are ClickHouse table functions returning
+[`SqlFunctions.INumbersRow`](xref:NextORM.Core.SqlFunctions.INumbersRow) (the single `number` column). `numbers(count)` yields
+consecutive integers from zero, `numbers(start, stop[, step])` an arbitrary range:
+
+```csharp
+var rows = dataContext
+    .FromTableFunction(() => SqlFunctions.ClickHouse.numbers(3))
+    .Select(r => new { r.Value })
+    .ToList();
+```
+
+```sql
+select number as `Value` from (select toInt64(number) as number from numbers(@count)) as `t1`
+```
+
+The `number` column is `UInt64`, which the row reader cannot materialise, so the dialect wraps the call
+in a casting subquery (`toInt64(number) as number`).
+
+`SqlFunctions.ClickHouse.zeros`/`zeros_mt` are the ClickHouse row-count table functions returning
+[`SqlFunctions.IZerosRow`](xref:NextORM.Core.SqlFunctions.IZerosRow) (the single `zero UInt8` column):
+
+```csharp
+var rows = dataContext
+    .FromTableFunction(() => SqlFunctions.ClickHouse.zeros(3))
+    .Select(r => new { r.Value })
+    .ToList();
+```
+
+```sql
+select zero as `Value` from zeros(@count) as `t1`
+```
+
+Unlike `numbers`, the `zero` column is `UInt8`, which the row reader materialises directly as `byte`,
+so no cast wrapper is needed.
+
 The mapped function must exist in the database — nextorm only emits the call, it does not create the
 function — so use the helper only on the provider that defines it. The built-in helpers are gated by
-`ISqlDialect.SupportsTableFunction`: PostgreSQL enables `generate_series`/`unnest`, SQL Server enables
-`string_split`/`openjson`, and any other provider rejects them with `NotSupportedException` (a
-user-defined `[SqlTableFunction]` is never gated).
+[`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect): PostgreSQL enables `generate_series`/`unnest`, SQL Server enables
+`string_split`/`openjson`, ClickHouse enables `numbers`/`numbers_mt` and `zeros`/`zeros_mt`, and any
+other provider rejects them with `NotSupportedException` (a user-defined `[SqlTableFunction]` is never
+gated).
 
 ## Provider differences
 
@@ -226,6 +286,9 @@ user-defined `[SqlTableFunction]` is never gated).
 | SQLite | Function call emitted without an alias for a bare source; an alias is still emitted when the source is joined. |
 | SQL Server | The derived source gets an alias (`as [t1]`). |
 | PostgreSQL | An alias is required and always emitted (`as "t1"`). |
+| MySQL | The derived source gets an alias (`` as `t1` ``). |
+| MariaDB | The derived source gets an alias (`` as `t1` ``). |
+| ClickHouse | The derived source gets an alias (`` as `t1` ``). |
 | In-memory | Table-valued function sources are **not supported** (`NotSupportedException`: "Table-valued function sources are not supported by the in-memory provider."). |
 
 > The integration tests use SQLite's bundled `json_each`, so the shared test suite runs the TVF
@@ -242,8 +305,8 @@ user-defined `[SqlTableFunction]` is never gated).
 ---
 
 Source: `src/nextorm.core/SqlTableFunctionAttribute.cs:17`, `src/nextorm.core/DataContext/DataContextExtensions.cs:117`, `src/nextorm.core/DataContext/InMemoryDataContext.cs:121`;
-`test/nextorm.integration.tests/CommonTestSuite.Tvf.cs:34`, `:47`, `:61`, `:76`;
-`test/nextorm.core.tests/SqlTableFunctionAttributeTests.cs:8`;
-generated SQL: `test/nextorm.sqlite.tests/SqlGenerationTests.cs:1453`, `:1462`, `:1475`, `:1489`, `:1503`;
-`test/nextorm.sqlserver.tests/SqlGenerationTests.cs:1044`, `:1066`, `:1080`, `:1094`;
-`test/nextorm.postgres.tests/SqlGenerationTests.cs:976`, `:998`, `:1012`, `:1026`.
+`tests/nextorm.integration.tests/CommonTestSuite.Tvf.cs:34`, `:47`, `:61`, `:76`;
+`tests/nextorm.core.tests/SqlTableFunctionAttributeTests.cs:8`;
+generated SQL: `tests/nextorm.sqlite.tests/SqlGenerationTests.cs:1453`, `:1462`, `:1475`, `:1489`, `:1503`;
+`tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:1044`, `:1066`, `:1080`, `:1094`;
+`tests/nextorm.postgres.tests/SqlGenerationTests.cs:976`, `:998`, `:1012`, `:1026`.

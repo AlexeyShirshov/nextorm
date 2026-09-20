@@ -6,41 +6,47 @@
 
 ## Обзор
 
-`PostgresDbContext` (`src/nextorm.postgres/PostgresDbContext.cs`) оборачивает `Npgsql`. Он создаёт
+[`PostgresDataContext`](xref:NextORM.Postgres.PostgresDataContext) (`src/nextorm.postgres/PostgresDataContext.cs`) оборачивает `Npgsql`. Он создаёт
 `NpgsqlConnection` и передаёт значения параметров null как `DBNull` (Npgsql отклоняет значение параметра null).
 
-`PostgresDialect` (`src/nextorm.postgres/PostgresDialect.cs`) — это диалект:
+[`PostgresDialect`](xref:NextORM.Postgres.PostgresDialect) (`src/nextorm.postgres/PostgresDialect.cs`) — это диалект:
 
 - плейсхолдер параметра `@name`;
 - конкатенация строк с помощью `||`;
-- `MakeCoalesce` отрисовывает `coalesce(a, b)`;
+- [`MakeCoalesce`](xref:NextORM.Core.ISqlDialect) отрисовывает `coalesce(a, b)`;
 - логические литералы — `true`/`false`;
-- идентификаторы используют двойные кавычки (`Escape` возвращает `"name"`), и `MakeColumnReference` тоже квотирует имя,
+- идентификаторы используют двойные кавычки ([`Escape`](xref:NextORM.Core.ISqlDialect) возвращает `"name"`), и [`MakeColumnReference`](xref:NextORM.Core.ISqlDialect) тоже квотирует имя,
   чтобы квотированный псевдоним сохранялся, когда на него ссылаются из внешнего запроса;
-- производные таблицы и табличные функции должны иметь псевдонимы (`RequireSubqueryAlias` равно `true`, и его
+- производные таблицы и табличные функции должны иметь псевдонимы ([`RequireSubqueryAlias`](xref:NextORM.Core.ISqlDialect.RequireSubqueryAlias) равно `true`, и его
   следствием является то, что псевдоним выдаётся всегда);
-- `INTERSECT ALL` / `EXCEPT ALL` поддерживаются (`SupportsIntersectExceptAll` равно `true`);
-- массивы поддерживаются (`SupportsArrays` равно `true`): параметры-массивы с квантификаторами
+- `INTERSECT ALL` / `EXCEPT ALL` поддерживаются ([`SupportsIntersectExceptAll`](xref:NextORM.Core.ISqlDialect.SupportsIntersectExceptAll) равно `true`);
+- массивы поддерживаются ([`SupportsArrays`](xref:NextORM.Core.ISqlDialect.SupportsArrays) равно `true`): параметры-массивы с квантификаторами
   `any`/`all` и функции для массивов;
-- JSON/JSONB поддерживается (`SupportsJson` равно `true`): агрегаты `json_agg`/`jsonb_agg`, функции
+- JSON/JSONB поддерживается ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson) равно `true`): агрегаты `json_agg`/`jsonb_agg`, функции
   построения/доступа и операторы `->`/`->>`/`@>`/`?`, а параметры `JsonDocument`/`JsonElement`/`JsonNode`
   привязываются как `jsonb`;
-- `greatest`/`least` и предложение `FILTER (WHERE ...)` у агрегатов включены (`SupportsGreatestLeast` и
-  `SupportsFilter` равны `true`);
-- `date_trunc` включён (`SupportsDateTrunc` равно `true`);
-- арифметика дат включена (`SupportsDateArithmetic` равно `true`): `NORM.SQL.date_add`/`end_of_month`
+- `greatest`/`least` и предложение `FILTER (WHERE ...)` у агрегатов включены ([`SupportsGreatestLeast`](xref:NextORM.Core.ISqlDialect.SupportsGreatestLeast) и
+  [`SupportsFilter`](xref:NextORM.Core.ISqlDialect.SupportsFilter) равны `true`);
+- `date_trunc` включён ([`SupportsDateTrunc`](xref:NextORM.Core.ISqlDialect.SupportsDateTrunc) равно `true`);
+- арифметика дат включена ([`SupportsDateArithmetic`](xref:NextORM.Core.ISqlDialect.SupportsDateArithmetic) равно `true`): `SqlFunctions.Sql.date_add`/`end_of_month`
   и методы `DateTime.Add*` отрисовывают интервальную арифметику PostgreSQL
   (`x + (n * interval '1 day')`, `date_trunc('month', x) + interval '1 month - 1 day'`);
-- агрегаты `string_agg`/`array_agg` включены (`SupportsStringArrayAggregates` равно `true`);
-- полнотекстовый поиск включён (`SupportsFullText` равно `true`): `NORM.SQL.contains` отрисовывает
+- агрегаты `string_agg`/`array_agg` включены ([`SupportsStringArrayAggregates`](xref:NextORM.Core.ISqlDialect.SupportsStringArrayAggregates) равно `true`);
+- полнотекстовый поиск включён ([`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText) равно `true`): `SqlFunctions.Sql.contains` отрисовывает
   `to_tsvector(col) @@ plainto_tsquery(search)`, а `freetext` — `websearch_to_tsquery(search)`;
-- расширенная библиотека скалярных функций включена (`SupportsExtendedScalarFunctions` равно `true`):
+- расширенная библиотека скалярных функций включена ([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions) равно `true`):
   дополнительные математические (`asin`, `cbrt`, `degrees`, `pi`, `mod`, ...), строковые (`split_part`,
   `lpad`, `initcap`, ...), POSIX-регулярные выражения (`regexp_replace`, `regexp_like`, ...), дата/время
-  (`make_interval`, `justify_days`, `justify_hours`, `to_char`, `to_date`, ...) и
-  `num_nulls`/`num_nonnulls`;
-- логические, битовые, статистические и упорядоченные агрегаты включены (`SupportsBooleanAggregates`,
-  `SupportsBitAggregates`, `SupportsStatisticalAggregates` и `SupportsOrderedAggregates` равны `true`):
+  (`make_interval`, `justify_days`, `justify_hours`, `to_char`, `to_date`, ...), `num_nulls`/`num_nonnulls`
+  и помощник типа `pg_typeof`;
+- session/info-функции включены ([`SupportsSessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SupportsSessionInfoFunctions) равно `true`):
+  `SqlFunctions.Sql.current_user`/`session_user`/`current_schema` отрисовываются ключевыми словами, а
+  `current_database`/`version` — как `current_database()`/`version()`;
+- генераторы UUID включены ([`SupportsUuidGenerators`](xref:NextORM.Core.ISqlDialect.SupportsUuidGenerators) равно `true`):
+  `SqlFunctions.Sql.gen_random_uuid()` отрисовывается как `gen_random_uuid()` (PostgreSQL 13+), а
+  `uuidv7()` — как `uuidv7()` (PostgreSQL 18+);
+- логические, битовые, статистические и упорядоченные агрегаты включены ([`SupportsBooleanAggregates`](xref:NextORM.Core.ISqlDialect.SupportsBooleanAggregates),
+  [`SupportsBitAggregates`](xref:NextORM.Core.ISqlDialect.SupportsBitAggregates), [`SupportsStatisticalAggregates`](xref:NextORM.Core.ISqlDialect.SupportsStatisticalAggregates) и [`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates) равны `true`):
   `bool_and`/`bool_or`/`every`, `bit_and`/`bit_or`/`bit_xor`, `corr`/`covar_*`/`regr_*` и
   `percentile_cont`/`percentile_disc`/`mode` с `WITHIN GROUP`;
 - имена агрегатов переотображаются: `stdev`→`stddev`, `stdevp`→`stddev_pop`, `var`→`variance`,
@@ -52,28 +58,28 @@
 
 ## Регистрация провайдера
 
-На `DbContextBuilder` доступны две перегрузки
-(`src/nextorm.postgres/DI/DataContextOptionsBuilderExtensions.cs`):
+На [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) доступны две перегрузки
+(`src/nextorm.postgres/DI/PostgresDataContextOptionsBuilderExtensions.cs`):
 
 ```csharp
-using nextorm.core;
-using nextorm.postgres;
+using NextORM.Core;
+using NextORM.Postgres;
 
-var byString = new DbContextBuilder().UsePostgres("Host=localhost;Database=app;Username=app;Password=secret");
+var byString = new DataContextBuilder().UsePostgres("Host=localhost;Database=app;Username=app;Password=secret");
 
 using var connection = new Npgsql.NpgsqlConnection("Host=localhost;Database=app;...");
-var byConnection = new DbContextBuilder().UsePostgres(connection);
+var byConnection = new DataContextBuilder().UsePostgres(connection);
 
-using var ctx = byString.CreateDbContext();   // IDataContext
+using var ctx = byString.CreateDataContext();   // IDataContext
 ```
 
 Напрямую:
 
 ```csharp
-using nextorm.core;
-using nextorm.postgres;
+using NextORM.Core;
+using NextORM.Postgres;
 
-using IDataContext ctx = new PostgresDbContext("Host=localhost;Database=app;...", new DbContextBuilder());
+using IDataContext ctx = new PostgresDataContext("Host=localhost;Database=app;...", new DataContextBuilder());
 ```
 
 ## Разбиение на страницы
@@ -108,8 +114,8 @@ from complex_entity
 ```
 
 ```csharp
-var stdev = ctx.From<IComplexEntity>().Select(x => NORM.SQL.stdev((double)x.Id));  // stddev(...)
-var varp  = ctx.From<IComplexEntity>().Select(x => NORM.SQL.varp((double)x.Id));   // var_pop(...)
+var stdev = ctx.From<IComplexEntity>().Select(x => SqlFunctions.Sql.stdev((double)x.Id));  // stddev(...)
+var varp  = ctx.From<IComplexEntity>().Select(x => SqlFunctions.Sql.varp((double)x.Id));   // var_pop(...)
 ```
 
 `count` и `count_big` оба отрисовывают `count(*)`, потому что `count` в PostgreSQL уже возвращает 64-битное
@@ -118,16 +124,16 @@ var varp  = ctx.From<IComplexEntity>().Select(x => NORM.SQL.varp((double)x.Id));
 ## Массивы
 
 PostgreSQL — единственный поддерживаемый провайдер с нативными массивами, и array-поверхность
-находится в `NORM.PG_SQL` (`NORM.SQL` остаётся кросс-провайдерным). Массив передаётся одним
+находится в [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) ([`Sql`](xref:NextORM.Core.SqlFunctions.Sql) остаётся кросс-провайдерным). Массив передаётся одним
 параметром, поэтому `column = any(@array)` работает и с runtime-параметром, и с захваченным массивом,
 а SQL не зависит от количества элементов:
 
 ```csharp
 var ids = new long[] { 1, 2, 3 };
 
-ctx.From<IComplexEntity>().Where(e => NORM.PG_SQL.any(e.Id, ids));      // (id = any(@p0))
-ctx.From<IComplexEntity>().Where(e => e.Id == NORM.PG_SQL.any(ids));    // id = any(@p0)
-ctx.From<IComplexEntity>().Where(e => e.Id == NORM.PG_SQL.any(NORM.Param<long[]>(0))); // id = any(@norm_p0)
+ctx.From<IComplexEntity>().Where(e => SqlFunctions.Postgres.any(e.Id, ids));      // (id = any(@p0))
+ctx.From<IComplexEntity>().Where(e => e.Id == SqlFunctions.Postgres.any(ids));    // id = any(@p0)
+ctx.From<IComplexEntity>().Where(e => e.Id == SqlFunctions.Postgres.any(SqlFunctions.Parameter<long[]>(0))); // id = any(@norm_p0)
 ```
 
 ```sql
@@ -149,17 +155,17 @@ using System.Text.Json;
 
 var document = JsonDocument.Parse("""{"name":"Alice","tags":["a","b"]}""");
 
-using var ctx = new PostgresDbContext(connectionString, new DbContextBuilder());
+using var ctx = new PostgresDataContext(connectionString, new DataContextBuilder());
 ctx.From<IComplexEntity>()
-    .Where(e => NORM.PG_SQL.json_get_text(NORM.Param<JsonDocument>(0), "name") == "Alice")
+    .Where(e => SqlFunctions.Postgres.json_get_text(SqlFunctions.Parameter<JsonDocument>(0), "name") == "Alice")
     .Select(e => e.Id)
     .ToList(document);
 
 ctx.From<IComplexEntity>()
-    .Select(e => NORM.PG_SQL.jsonb_agg(e.String));   // jsonb_agg(somestring)
+    .Select(e => SqlFunctions.Postgres.jsonb_agg(e.String));   // jsonb_agg(somestring)
 ```
 
-Обычная строка с JSON привязывается как `text`; для разбора используйте `NORM.PG_SQL.json_cast(value)`.
+Обычная строка с JSON привязывается как `text`; для разбора используйте `SqlFunctions.Postgres.json_cast(value)`.
 Полная поверхность (`json_agg`, `jsonb_build_object`, `->`, `->>`, `#>`, `@>`, `?`, `?|`, `?&`, ...)
 описана в разделе [Скалярные функции](../guide/11-scalar-functions.md#json-и-jsonb-postgresql).
 Остальные провайдеры отклоняют её с `NotSupportedException`.
@@ -167,7 +173,9 @@ ctx.From<IComplexEntity>()
 ## Дополнительная поверхность функций
 
 PostgreSQL также включает `greatest`/`least`, `date_trunc`, агрегаты `string_agg`/`array_agg`, предложение
-`FILTER (WHERE ...)` у агрегатов и встроенные табличные функции `generate_series`/`unnest`:
+`FILTER (WHERE ...)` у агрегатов, переносимый `iif` (рендерится как `case when ... then ... else ... end`),
+оконные функции `percent_rank`/`cume_dist`/`nth_value` и встроенные табличные функции
+`generate_series`/`unnest`:
 
 ```csharp
 ctx.From<IComplexEntity>()
@@ -175,8 +183,8 @@ ctx.From<IComplexEntity>()
     .Select(e => new
     {
         e.Int,
-        Names = NORM.SQL.string_agg(e.String, ","),
-        Big = NORM.SQL.count(() => e.Id > 10L)
+        Names = SqlFunctions.Sql.string_agg(e.String, ","),
+        Big = SqlFunctions.Sql.count(() => e.Id > 10L)
     });   // string_agg(somestring, ',') ... count(*) filter (where (id > 10))
 ```
 
@@ -187,7 +195,7 @@ ctx.From<IComplexEntity>()
 ## Операции над множествами `*ALL` и порядок null
 
 PostgreSQL — единственный поддерживаемый реляционный провайдер, реализующий `INTERSECT ALL` и `EXCEPT ALL`,
-поэтому `IntersectAll`/`ExceptAll` отрисовывают свой SQL напрямую.
+поэтому [`IntersectAll`](xref:NextORM.Core.QueryCommand`1)/[`ExceptAll`](xref:NextORM.Core.QueryCommand`1) отрисовывают свой SQL напрямую.
 
 ```csharp
 var q = a.Select(x => x.Id).IntersectAll(b.Select(x => x.Id));   // ... intersect all ...
@@ -229,9 +237,12 @@ join complex_entity as "t2" on t1.id = t2.id
 | `*ALL` | поддерживается |
 | Массивы | поддерживаются (`any(@array)`, `cardinality`, ...) |
 | JSON/JSONB | поддерживается (`json_agg`, `->`, ...; параметры `JsonDocument` привязываются как `jsonb`) |
-| `greatest` / `least` / `date_trunc` | поддерживаются |
+| `greatest` / `least` / `date_trunc` | поддерживаются (`greatest`/`least` игнорируют NULL-аргументы) |
+| Условная функция | `iif(cond, a, b)` → `case when cond then a else b end` |
+| Оконные функции | `percent_rank()`, `cume_dist()`, `nth_value(expr, n)` поддерживаются |
 | `date_add` / `end_of_month` / `DateTime.Add*` | интервальная арифметика (`x + (n * interval '1 day')`) |
 | `string_agg` / `array_agg` / `filter` у агрегатов | поддерживаются |
+| Session/info-функции | `current_user`, `session_user`, `current_schema`, `current_database()`, `version()` |
 | Табличные функции | `generate_series(...)`, `unnest(...)` |
 | Рекурсивный CTE | `with recursive` (без опции max-recursion) |
 | `stdev` / `stdevp` | `stddev` / `stddev_pop` |
@@ -249,8 +260,8 @@ join complex_entity as "t2" on t1.id = t2.id
 
 ---
 
-Source: `test/nextorm.postgres.tests/PostgresDialectTests.cs:21,27,41,49`,
-`test/nextorm.postgres.tests/SqlGenerationTests.cs:117,130,139,151,160,172,199,211,223,248,788,976`,
-`test/nextorm.integration.tests/PostgresSpecificTests.cs:15,24`,
-`src/nextorm.postgres/PostgresDialect.cs`, `src/nextorm.postgres/PostgresDbContext.cs`,
-`src/nextorm.postgres/DI/DataContextOptionsBuilderExtensions.cs`.
+Source: `tests/nextorm.postgres.tests/PostgresDialectTests.cs:21,27,41,49`,
+`tests/nextorm.postgres.tests/SqlGenerationTests.cs:117,130,139,151,160,172,199,211,223,248,788,976`,
+`tests/nextorm.integration.tests/PostgresSpecificTests.cs:15,24`,
+`src/nextorm.postgres/PostgresDialect.cs`, `src/nextorm.postgres/PostgresDataContext.cs`,
+`src/nextorm.postgres/DI/PostgresDataContextOptionsBuilderExtensions.cs`.

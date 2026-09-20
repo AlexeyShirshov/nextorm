@@ -1,6 +1,6 @@
 # Обзор провайдеров
 
-> Провайдер предоставляет диалект (правила SQL-текста) и подкласс `DbContext` (создание соединения + параметров); выберите тот, который соответствует базе данных, которую вы уже используете.
+> Провайдер предоставляет диалект (правила SQL-текста) и подкласс [`DataContext`](xref:NextORM.Core.DataContext) (создание соединения + параметров); выберите тот, который соответствует базе данных, которую вы уже используете.
 
 **Предварительные требования:** [Quickstart](../getting-started/02-quickstart.md) · [Dependency injection](../getting-started/04-dependency-injection.md)
 
@@ -13,10 +13,10 @@ nextorm состоит из нейтрального к провайдеру я�
 
 1. **диалект** — объект без состояния, который отрисовывает всё, что различается между базами данных (плейсхолдеры
    параметров, разбиение на страницы, квотирование, имена функций, флаги возможностей); и
-2. **контекст** — подкласс `DbContext`, который знает, как создавать соединение и параметры, и
+2. **контекст** — подкласс [`DataContext`](xref:NextORM.Core.DataContext), который знает, как создавать соединение и параметры, и
    предоставляет диалект через своё свойство `Dialect`.
 
-Генерация SQL полностью управляется `ISqlDialect` (`src/nextorm.core/DataContext/Dialect/ISqlDialect.cs`),
+Генерация SQL полностью управляется [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) (`src/nextorm.core/DataContext/Dialect/ISqlDialect.cs`),
 поэтому построитель SQL и посетители выражений никогда не содержат имён провайдеров. Семантика запросов (проекция,
 фильтрация, соединения, группировка, операции над множествами, CTE, оконные функции, поддержка scalar/UDF/TVF) является общей;
 различается только отрисовка.
@@ -31,7 +31,7 @@ nextorm состоит из нейтрального к провайдеру я�
 | Вы уже используете MySQL | `nextorm.mysql` |
 | Вы уже используете MariaDB | `nextorm.mariadb` |
 | Вы уже используете ClickHouse | `nextorm.clickhouse` |
-| Модульные тесты, которые не должны обращаться к базе данных, тесты кэша планов, тесты формы запросов | `InMemoryContext` (ядро) |
+| Модульные тесты, которые не должны обращаться к базе данных, тесты кэша планов, тесты формы запросов | [`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext) (ядро) |
 
 Используйте один и тот же код запросов со всеми провайдерами; перечисленные ниже различия провайдеров — единственное, что
 меняется.
@@ -65,12 +65,12 @@ nextorm состоит из нейтрального к провайдеру я�
 | Возможность соединения `RIGHT` / `FULL` | поддерживается | поддерживается | поддерживается | только `RIGHT` | только `RIGHT` | поддерживается | поддерживается |
 
 Для сравнения по каждой возможности с EF Core и linq2db см.
-[SQL capabilities gap analysis](../../sql-capabilities-gap-analysis.md).
+[SQL capabilities gap analysis](../../specs/roadmap/sql-capabilities-gap-analysis.md).
 
 ## Как подключается диалект
 
-Диалект реализует `ISqlDialect` или наследуется от `SqlDialectBase`. В `SqlDialectBase` абстрактными являются только
-`MakeParam` и `MakePage`; у всех остальных членов есть рабочее значение по умолчанию ANSI, поэтому диалект
+Диалект реализует [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) или наследуется от [`SqlDialectBase`](xref:NextORM.Core.SqlDialectBase). В [`SqlDialectBase`](xref:NextORM.Core.SqlDialectBase) абстрактными являются только
+[`MakeParam`](xref:NextORM.Core.ISqlDialect) и [`MakePage`](xref:NextORM.Core.ISqlDialect); у всех остальных членов есть рабочее значение по умолчанию ANSI, поэтому диалект
 переопределяет только то, что отличается. Различия возможностей (разбиение на страницы, требующее `ORDER BY`, обязательные
 псевдонимы подзапросов, `INTERSECT ALL`/`EXCEPT ALL`) выражаются свойствами, а не особыми случаями в
 построителе SQL.
@@ -88,7 +88,7 @@ ISqlDialect clickHouse = ClickHouseDialect.Instance;
 Контекст провайдера возвращает свой диалект из переопределённого свойства:
 
 ```csharp
-public class SqliteDbContext : DbContext
+public class SqliteDataContext : DataContext
 {
     public override ISqlDialect Dialect => SqliteDialect.Instance;
     // CreateDbConnection / CreateParam are provider specific.
@@ -101,15 +101,15 @@ public class SqliteDbContext : DbContext
 
 ## Регистрация провайдера
 
-Каждый пакет провайдера добавляет методы расширения `UseXxx` на `DbContextBuilder`, и у каждого контекста также есть
+Каждый пакет провайдера добавляет методы расширения `UseXxx` на [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder), и у каждого контекста также есть
 публичный конструктор, принимающий строку подключения или существующий `DbConnection`:
 
 ```csharp
-using nextorm.core;
-using nextorm.sqlite;      // or nextorm.sqlserver / nextorm.postgres
+using NextORM.Core;
+using NextORM.Sqlite;      // or nextorm.sqlserver / nextorm.postgres
 
-var builder = new DbContextBuilder().UseSqlite("app.db");   // provider-specific overload
-using var ctx = builder.CreateDbContext();                   // returns IDataContext
+var builder = new DataContextBuilder().UseSqlite("app.db");   // provider-specific overload
+using var ctx = builder.CreateDataContext();                   // returns IDataContext
 ```
 
 С внедрением зависимостей:
@@ -130,12 +130,12 @@ services.AddNextOrmContext(builder => builder.UseSqlite("app.db"));
 - [MariaDB](mariadb.md)
 - [ClickHouse](clickhouse.md)
 - [In-memory](in-memory.md)
-- [SQL capabilities gap analysis](../../sql-capabilities-gap-analysis.md)
+- [SQL capabilities gap analysis](../../specs/roadmap/sql-capabilities-gap-analysis.md)
 - [Limitations and out-of-scope features](../advanced/limitations.md)
 
 ---
 
 Source: `src/nextorm.core/DataContext/Dialect/ISqlDialect.cs`, `src/nextorm.core/DataContext/Dialect/SqlDialectBase.cs`,
-`test/nextorm.sqlite.tests/SqliteDialectTests.cs`, `test/nextorm.sqlserver.tests/SqlServerDialectTests.cs`,
-`test/nextorm.postgres.tests/PostgresDialectTests.cs`, `test/nextorm.mysql.tests/MySqlDialectTests.cs`,
-`test/nextorm.mariadb.tests/MariaDbDialectTests.cs`, `test/nextorm.clickhouse.tests/ClickHouseDialectTests.cs`.
+`tests/nextorm.sqlite.tests/SqliteDialectTests.cs`, `tests/nextorm.sqlserver.tests/SqlServerDialectTests.cs`,
+`tests/nextorm.postgres.tests/PostgresDialectTests.cs`, `tests/nextorm.mysql.tests/MySqlDialectTests.cs`,
+`tests/nextorm.mariadb.tests/MariaDbDialectTests.cs`, `tests/nextorm.clickhouse.tests/ClickHouseDialectTests.cs`.

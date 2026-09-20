@@ -1,13 +1,13 @@
 ﻿using BenchmarkDotNet.Attributes;
-using nextorm.sqlite;
+using NextORM.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Data.Sqlite;
 using Dapper;
 using Microsoft.Extensions.Logging;
 using BenchmarkDotNet.Jobs;
-using nextorm.core;
+using NextORM.Core;
 
-namespace nextorm.benchmark;
+namespace NextORM.Benchmark;
 
 //[SimpleJob(RuntimeMoniker.Net70, baseline: true)]
 [MemoryDiagnoser]
@@ -30,7 +30,7 @@ public class SqliteBenchmarkJoin
     public SqliteBenchmarkJoin() : this(false) { }
     public SqliteBenchmarkJoin(bool withLogging = false)
     {
-        var builder = new DbContextBuilder();
+        var builder = new DataContextBuilder();
         builder.UseSqlite(BenchDb.FilePath);
         if (withLogging)
         {
@@ -38,14 +38,14 @@ public class SqliteBenchmarkJoin
             builder.UseLoggerFactory(_logFactory);
             builder.LogSensitiveData(true);
         }
-        _db = builder.CreateDbContext();
+        _db = builder.CreateDataContext();
         _ctx = new TestDataRepository(_db);
         ((IConnectionManager)_db).EnsureConnectionOpen();
 
         _cmdEntPrepared = _ctx.LargeEntity
             .Join(_ctx.SimpleEntity, (t1, t2) => t1.Id == t2.Id)
-            .Where(p => p.t2.Id == NORM.Param<int>(0))
-            .Select(p => new LargeEntity { Id = p.t1.Id, Dt = p.t1.Dt, Str = p.t1.Str }).Prepare();
+            .Where(p => p.Item2.Id == SqlFunctions.Parameter<int>(0))
+            .Select(p => new LargeEntity { Id = p.Item1.Id, Dt = p.Item1.Dt, Str = p.Item1.Str }).Prepare();
 
         var efBuilder = new DbContextOptionsBuilder<EFDataContext>();
         efBuilder.UseSqlite(@$"Filename={BenchDb.FilePath}");
@@ -58,7 +58,7 @@ public class SqliteBenchmarkJoin
 
         _efCtx = new EFDataContext(efBuilder.Options);
 
-        _conn = new SqliteConnection(((SqliteDbContext)_ctx.DbContext).ConnectionString);
+        _conn = new SqliteConnection(((SqliteDataContext)_ctx.DataContext).ConnectionString);
         _conn.Open();
 
         _linq2Db = new Linq2DbDataRepository();
@@ -78,7 +78,7 @@ public class SqliteBenchmarkJoin
     public async Task Nextorm_Cached()
     {
         for (int i = 0; i < 10; i++)
-            await _ctx.LargeEntity.Join(_ctx.SimpleEntity, (t1, t2) => t1.Id == t2.Id).Where(p => p.t2.Id == i).Select(p => new { p.t1.Id, p.t1.Dt, p.t1.Str }).ToListAsync();
+            await _ctx.LargeEntity.Join(_ctx.SimpleEntity, (t1, t2) => t1.Id == t2.Id).Where(p => p.Item2.Id == i).Select(p => new { p.Item1.Id, p.Item1.Dt, p.Item1.Str }).ToListAsync();
     }
     [Benchmark]
     public async Task EFCore_Compiled()

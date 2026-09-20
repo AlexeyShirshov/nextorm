@@ -7,7 +7,7 @@
 
 ## Overview
 
-`SqlFunctionAttribute` maps a CLR method to a database scalar function. Apply it to a placeholder
+[`SqlFunctionAttribute`](xref:NextORM.Core.SqlFunctionAttribute) maps a CLR method to a database scalar function. Apply it to a placeholder
 method, or to the declaring type to map every method of that type by name:
 
 ```csharp
@@ -66,6 +66,14 @@ select upper(somestring) as [V] from complex_entity
 -- PostgreSQL
 select upper(somestring) as "V" from complex_entity
 ```
+
+The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
+
+Output:
+
+| V   |
+|-----|
+| XXX |
 
 ## Name and schema
 
@@ -159,6 +167,9 @@ database. Only the surrounding identifier (column alias) quoting differs:
 | SQLite | `[schema.]name(args)` verbatim; aliases single-quoted (`as 'V'`). |
 | SQL Server | `[schema.]name(args)` verbatim; aliases bracket-quoted (`as [V]`). |
 | PostgreSQL | `[schema.]name(args)` verbatim; aliases double-quoted (`as "V"`). |
+| MySQL | `[schema.]name(args)` verbatim; aliases backtick-quoted (`` as `V` ``). |
+| MariaDB | `[schema.]name(args)` verbatim; aliases backtick-quoted (`` as `V` ``). |
+| ClickHouse | `[schema.]name(args)` verbatim; aliases backtick-quoted (`` as `V` ``). |
 | In-memory | The attribute is a SQL translation; the in-memory provider evaluates the CLR method instead. |
 
 ## See also
@@ -170,7 +181,7 @@ database. Only the surrounding identifier (column alias) quoting differs:
 ---
 
 Source: `src/nextorm.core/SqlFunctionAttribute.cs:14`, `src/nextorm.core/Visitors/BaseExpressionVisitor.cs:563`;
-`test/nextorm.integration.tests/CommonTestSuite.Udf.cs:14`, `:24`, `:36`;
-generated SQL: `test/nextorm.sqlite.tests/SqlGenerationTests.cs:713`, `:722`, `:737`, `:746`;
-`test/nextorm.sqlserver.tests/SqlGenerationTests.cs:466`, `:476`, `:490`;
-`test/nextorm.postgres.tests/SqlGenerationTests.cs:399`, `:409`, `:423`.
+`tests/nextorm.integration.tests/CommonTestSuite.Udf.cs:14`, `:24`, `:36`;
+generated SQL: `tests/nextorm.sqlite.tests/SqlGenerationTests.cs:713`, `:722`, `:737`, `:746`;
+`tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:466`, `:476`, `:490`;
+`tests/nextorm.postgres.tests/SqlGenerationTests.cs:399`, `:409`, `:423`.

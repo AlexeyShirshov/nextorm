@@ -1,4 +1,4 @@
-namespace nextorm.benchmark;
+namespace NextORM.Benchmark;
 
 internal static class BenchDb
 {

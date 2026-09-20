@@ -1,17 +1,15 @@
 using System.Runtime.Serialization;
 
-namespace nextorm.core;
+namespace NextORM.Core;
 
 /// <summary>
 /// Thrown when the SQL text for a command cannot be generated.
 /// </summary>
 /// <remarks>
-/// Derives directly from <see cref="Exception"/> rather than <see cref="DataContextException"/>,
-/// which prevents callers from catching a common library base.
-/// See <c>API-NAMING-REVIEW.md</c> finding P0-5.
+/// Derives from <see cref="DataContextException"/> so callers can catch a single library-wide base.
 /// </remarks>
 [Serializable]
-public class BuildSqlCommandException : Exception
+public class BuildSqlCommandException : DataContextException
 {
     public BuildSqlCommandException()
     {

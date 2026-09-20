@@ -1,7 +1,7 @@
 using BenchmarkDotNet.Attributes;
-using nextorm.core;
+using NextORM.Core;
 
-namespace nextorm.benchmark;
+namespace NextORM.Benchmark;
 
 /// <summary>
 /// Set operations (<c>UNION</c>/<c>INTERSECT</c>/<c>EXCEPT</c>) in nextorm's in-memory provider versus
@@ -29,7 +29,7 @@ public class InMemoryBenchmarkSetOperations
         for (var i = 0; i < Rows; i++)
             data.Add(new SimpleEntity { Id = i });
 
-        var provider = new InMemoryContext();
+        var provider = new InMemoryDataContext();
         _ctx = new InMemoryDataRepository(provider);
         _ctx.SimpleEntity.WithData(data);
 
