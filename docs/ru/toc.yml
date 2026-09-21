@@ -1,0 +1,86 @@
+- name: Обзор
+  href: overview.md
+- name: Постановка задачи
+  href: motivation.md
+- name: Начало работы
+  items:
+    - name: Установка
+      href: getting-started/01-installation.md
+    - name: Быстрый старт
+      href: getting-started/02-quickstart.md
+    - name: Сущности и метаданные
+      href: getting-started/03-entities-and-metadata.md
+    - name: Внедрение зависимостей
+      href: getting-started/04-dependency-injection.md
+- name: Руководство
+  items:
+    - name: Запросы и проекции
+      href: guide/01-querying-and-projections.md
+    - name: Фильтрация (WHERE)
+      href: guide/02-filtering-where.md
+    - name: Соединения (JOIN)
+      href: guide/03-joins.md
+    - name: Группировка и агрегаты
+      href: guide/04-grouping-and-aggregates.md
+    - name: Сортировка и постраничный вывод
+      href: guide/05-sorting-and-paging.md
+    - name: Подзапросы
+      href: guide/06-subqueries.md
+    - name: Операции над множествами
+      href: guide/07-set-operations.md
+    - name: SELECT DISTINCT
+      href: guide/08-distinct.md
+    - name: Обобщённые табличные выражения (CTE)
+      href: guide/09-cte.md
+    - name: Оконные функции
+      href: guide/10-window-functions.md
+    - name: Скалярные функции
+      href: guide/11-scalar-functions.md
+    - name: Пользовательские функции
+      href: guide/12-user-defined-functions.md
+    - name: Табличные функции
+      href: guide/13-table-valued-functions.md
+    - name: Сырой SQL
+      href: guide/14-raw-sql.md
+    - name: "Переиспользование запросов: кэш и Prepare"
+      href: guide/15-query-reuse.md
+    - name: Подключения и логирование
+      href: guide/16-connections-and-logging.md
+    - name: Хинты запросов
+      href: guide/17-query-hints.md
+    - name: Поддержка JSON в разных провайдерах
+      href: guide/18-json.md
+    - name: Специфичный для провайдеров SQL
+      items:
+        - name: Обзор
+          href: guide/provider-specific/overview.md
+        - name: ClickHouse
+          href: guide/provider-specific/clickhouse.md
+        - name: PostgreSQL
+          href: guide/provider-specific/postgresql.md
+        - name: SQL Server
+          href: guide/provider-specific/sqlserver.md
+- name: Провайдеры
+  items:
+    - name: Обзор провайдеров
+      href: providers/overview.md
+    - name: SQLite
+      href: providers/sqlite.md
+    - name: SQL Server
+      href: providers/sqlserver.md
+    - name: PostgreSQL
+      href: providers/postgres.md
+    - name: MySQL
+      href: providers/mysql.md
+    - name: MariaDB
+      href: providers/mariadb.md
+    - name: ClickHouse
+      href: providers/clickhouse.md
+    - name: In-memory
+      href: providers/in-memory.md
+- name: Продвинутое
+  items:
+    - name: Ограничения и что вне области
+      href: advanced/limitations.md
+    - name: Краткий справочник API
+      href: advanced/api-reference.md

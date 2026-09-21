@@ -1,0 +1,46 @@
+- name: Querying and projections
+  href: 01-querying-and-projections.md
+- name: Filtering (WHERE)
+  href: 02-filtering-where.md
+- name: Joins
+  href: 03-joins.md
+- name: Grouping and aggregates
+  href: 04-grouping-and-aggregates.md
+- name: Sorting and paging
+  href: 05-sorting-and-paging.md
+- name: Subqueries
+  href: 06-subqueries.md
+- name: Set operations
+  href: 07-set-operations.md
+- name: SELECT DISTINCT
+  href: 08-distinct.md
+- name: Common table expressions (CTE)
+  href: 09-cte.md
+- name: Window functions
+  href: 10-window-functions.md
+- name: Scalar functions
+  href: 11-scalar-functions.md
+- name: User-defined functions
+  href: 12-user-defined-functions.md
+- name: Table-valued functions
+  href: 13-table-valued-functions.md
+- name: Raw SQL
+  href: 14-raw-sql.md
+- name: "Query reuse: cache vs Prepare"
+  href: 15-query-reuse.md
+- name: Connections and logging
+  href: 16-connections-and-logging.md
+- name: Query hints
+  href: 17-query-hints.md
+- name: JSON support across providers
+  href: 18-json.md
+- name: Provider-specific SQL
+  items:
+    - name: Overview
+      href: provider-specific/overview.md
+    - name: ClickHouse
+      href: provider-specific/clickhouse.md
+    - name: PostgreSQL
+      href: provider-specific/postgresql.md
+    - name: SQL Server
+      href: provider-specific/sqlserver.md

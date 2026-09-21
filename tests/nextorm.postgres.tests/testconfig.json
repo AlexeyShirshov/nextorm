@@ -1,0 +1,5 @@
+{
+  "platformOptions": {
+    "resultDirectory": "tests/TestResults/nextorm.postgres.tests"
+  }
+}

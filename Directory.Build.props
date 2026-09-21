@@ -1,0 +1,31 @@
+<Project>
+
+  <!--
+    WSL and Windows share the same working copy, but their build outputs are not
+    compatible (absolute paths, project.assets.json, platform-specific resources).
+    Isolate obj/ and bin/ per host OS so builds from either side do not clobber
+    each other. This is imported before Microsoft.Common.props computes
+    MSBuildProjectExtensionsPath, so restore output is isolated as well.
+  -->
+  <PropertyGroup>
+    <_HostOs Condition="$([MSBuild]::IsOSPlatform('Windows'))">windows</_HostOs>
+    <_HostOs Condition="$([MSBuild]::IsOSPlatform('Linux'))">linux</_HostOs>
+    <_HostOs Condition="$([MSBuild]::IsOSPlatform('OSX'))">osx</_HostOs>
+    <_HostOs Condition="'$(_HostOs)' == ''">unknown</_HostOs>
+
+    <BaseIntermediateOutputPath>obj/$(_HostOs)/</BaseIntermediateOutputPath>
+    <BaseOutputPath>bin/$(_HostOs)/</BaseOutputPath>
+
+    <!-- Stale artifacts from the old shared obj/ layout must not be globbed as sources. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj/**;bin/**</DefaultItemExcludes>
+  </PropertyGroup>
+
+  <!--
+    Warnings are errors in every project, in every configuration. Nullable and analyzer
+    warnings must be fixed or explicitly suppressed via NoWarn, never left to rot.
+  -->
+  <PropertyGroup>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+</Project>

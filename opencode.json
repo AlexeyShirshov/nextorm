@@ -1,0 +1,12 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "AGENTS.md"
+  ],
+  "references": {
+    "specs": {
+      "path": "docs/specs",
+      "description": "nextorm internal engineering specs — refactoring plans (plan-baseexpressionvisitor.md, documentation-plan.md), design/API/code-smell reviews (design/*), provider feature backlogs and SQL capability gap analysis (roadmap/*), Russian mirrors (ru/*). Read on demand instead of preloading."
+    }
+  }
+}

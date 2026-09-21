@@ -4,37 +4,105 @@
 name: .NET
 
 on:
+  # Every push to every branch (and tag): the run is attached to the commit, so it also shows up
+  # in the "Checks" tab of any pull request - no separate pull_request trigger needed.
   push:
-    branches: ["main"]
-    tags: ["v*"]
-  pull_request:
-    branches: ["main"]
-  release:
-    types: [published]
+  # Manual (re)publish of an existing tag, e.g. `v1.0.3-alpha`.
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing tag to publish (e.g. v1.0.2-alpha)"
+        description: "Existing tag to publish (e.g. v1.0.3-alpha)"
         required: true
+
+# Cancel a superseded run when the same branch is pushed again.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      MIN_LINE_COVERAGE: 75
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
       - name: Restore dependencies
         run: dotnet restore
       - name: Build
         run: dotnet build --no-restore
-      - name: Test
-        run: dotnet test --no-build --verbosity normal
+      - name: Restore local tools
+        run: dotnet tool restore
+      - name: Test with coverage
+        run: |
+          mkdir -p tests/coverage
+          dotnet tool run dotnet-coverage collect -s coverage.settings.xml -f cobertura -o tests/coverage/coverage.cobertura.xml "dotnet test --no-build --verbosity normal"
+      - name: Coverage report
+        run: |
+          dotnet tool run reportgenerator \
+            -reports:tests/coverage/coverage.cobertura.xml \
+            -targetdir:tests/coverage/report \
+            -reporttypes:"Html;TextSummary;Cobertura" \
+            -riskhotspotassemblyfilters:"+nextorm.*"
+      - name: Enforce line coverage threshold
+        run: |
+          LINE=$(grep -oP 'Line coverage: \K[0-9.]+' tests/coverage/report/Summary.txt)
+          echo "Line coverage: ${LINE}% (threshold: ${MIN_LINE_COVERAGE}%)"
+          if awk -v c="$LINE" -v min="$MIN_LINE_COVERAGE" 'BEGIN { exit (c + 0 < min) }'; then
+            echo "Coverage OK"
+          elif [ "${GITHUB_REF}" = "refs/heads/main" ]; then
+            echo "::error::Line coverage ${LINE}% is below the ${MIN_LINE_COVERAGE}% threshold"
+            exit 1
+          else
+            echo "::warning::Line coverage ${LINE}% is below the ${MIN_LINE_COVERAGE}% threshold (hard-fails on main only)"
+          fi
+      - name: Coverage summary
+        if: always()
+        run: |
+          SUMMARY=tests/coverage/report/Summary.txt
+
+          {
+            if [ -f "$SUMMARY" ]; then
+              LINE=$(grep -oP 'Line coverage: \K[0-9.]+' "$SUMMARY")
+              BRANCH=$(grep -oP 'Branch coverage: \K[0-9.]+' "$SUMMARY")
+
+              echo "## Line coverage: ${LINE}% (threshold: ${MIN_LINE_COVERAGE}%)"
+              echo
+              echo "Branch coverage: ${BRANCH}%"
+              echo
+              if awk -v c="$LINE" -v min="$MIN_LINE_COVERAGE" 'BEGIN { exit (c + 0 < min) }'; then
+                echo "Coverage threshold: **OK**"
+              else
+                echo "Coverage threshold: **FAILED**"
+              fi
+              echo
+              echo "| Assembly | Line coverage |"
+              echo "|---|---|"
+              grep -E '^nextorm\.[a-z]+ +[0-9.]+%' "$SUMMARY" | tr -d '\r' | awk '{printf "| %s | %s |\n", $1, $NF}'
+              echo
+              echo "Full HTML report (with risk hotspots): artifact \`coverage-report\`, open \`report/index.html\`."
+            else
+              echo "## Coverage"
+              echo
+              echo "The coverage report was not produced - see the log of the previous steps."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-report
+          path: tests/coverage/
+          if-no-files-found: ignore
 
   publish:
+    # A tag push publishes to nuget.org; a manual run re-publishes an existing tag. Ordinary
+    # branch pushes only build and test.
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     needs: build
     runs-on: ubuntu-latest
@@ -43,11 +111,11 @@ jobs:
       id-token: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.inputs.tag || github.ref }}
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
       - name: Determine version
@@ -64,9 +132,17 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${{ steps.version.outputs.version }}"
-          dotnet pack nextorm.core/nextorm.core.csproj -c Release -p:Version="$VERSION" -o ./nupkgs
-          dotnet pack nextorm.sqlite/nextorm.sqlite.csproj -c Release -p:Version="$VERSION" -o ./nupkgs
-          dotnet pack nextorm.sqlserver/nextorm.sqlserver.csproj -c Release -p:Version="$VERSION" -o ./nupkgs
+          for project in \
+            src/nextorm.core/nextorm.core.csproj \
+            src/nextorm.sqlite/nextorm.sqlite.csproj \
+            src/nextorm.sqlserver/nextorm.sqlserver.csproj \
+            src/nextorm.postgres/nextorm.postgres.csproj \
+            src/nextorm.mysql/nextorm.mysql.csproj \
+            src/nextorm.mariadb/nextorm.mariadb.csproj \
+            src/nextorm.clickhouse/nextorm.clickhouse.csproj
+          do
+            dotnet pack "$project" -c Release -p:Version="$VERSION" -o ./nupkgs
+          done
       - name: NuGet login (OIDC -> temp API key)
         uses: NuGet/login@v1
         id: login

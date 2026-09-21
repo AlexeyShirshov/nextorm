@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>nextorm.benchmark.MicroOptimizationsBenchmark-20260916-203620</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)
+AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 16 logical and 8 physical cores
+.NET SDK 10.0.401
+  [Host] : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+</code></pre>
+<pre><code>Job=ShortRun  Toolchain=InProcessEmitToolchain  IterationCount=3  
+LaunchCount=1  WarmupCount=3  
+</code></pre>
+
+<table>
+<thead><tr><th>Method                   </th><th>Mean </th><th>Error</th><th>StdDev</th><th>Median</th><th>Ratio</th><th>RatioSD</th><th>Gen0</th><th>Allocated</th><th>Alloc Ratio</th>
+</tr>
+</thead><tbody><tr><td>M7_StartsWith_Ordinal</td><td>0.0049 ns</td><td>0.1560 ns</td><td>0.0086 ns</td><td>0.0000 ns</td><td>0.02</td><td>0.04</td><td>-</td><td>-</td><td>NA</td>
+</tr><tr><td>M7_EndsWith_Ordinal</td><td>0.0081 ns</td><td>0.0814 ns</td><td>0.0045 ns</td><td>0.0099 ns</td><td>0.04</td><td>0.02</td><td>-</td><td>-</td><td>NA</td>
+</tr><tr><td>M5_FastPath_LongToBool</td><td>0.2032 ns</td><td>0.7676 ns</td><td>0.0421 ns</td><td>0.2232 ns</td><td>1.03</td><td>0.30</td><td>-</td><td>-</td><td>NA</td>
+</tr><tr><td>M5_ConvertChangeType_LongToBool</td><td>0.2075 ns</td><td>1.0263 ns</td><td>0.0563 ns</td><td>0.1973 ns</td><td>1.05</td><td>0.35</td><td>-</td><td>-</td><td>NA</td>
+</tr><tr><td>M8_CachedLookup</td><td>0.2571 ns</td><td>1.5007 ns</td><td>0.0823 ns</td><td>0.2483 ns</td><td>1.30</td><td>0.47</td><td>-</td><td>-</td><td>NA</td>
+</tr><tr><td>M6_Bitwise</td><td>1.6986 ns</td><td>3.2366 ns</td><td>0.1774 ns</td><td>1.7778 ns</td><td>8.59</td><td>2.10</td><td>-</td><td>-</td><td>NA</td>
+</tr><tr><td>M11_Loop_Any</td><td>2.0109 ns</td><td>0.1890 ns</td><td>0.0104 ns</td><td>2.0070 ns</td><td>10.17</td><td>2.30</td><td>-</td><td>-</td><td>NA</td>
+</tr><tr><td>M6_HasFlag</td><td>2.2327 ns</td><td>3.8262 ns</td><td>0.2097 ns</td><td>2.2845 ns</td><td>11.29</td><td>2.72</td><td>-</td><td>-</td><td>NA</td>
+</tr><tr><td>M11_Linq_Any</td><td>2.9139 ns</td><td>2.7208 ns</td><td>0.1491 ns</td><td>2.8970 ns</td><td>14.73</td><td>3.40</td><td>-</td><td>-</td><td>NA</td>
+</tr><tr><td>M11_Loop_SelectToArray</td><td>9.1569 ns</td><td>8.7742 ns</td><td>0.4809 ns</td><td>9.0763 ns</td><td>46.30</td><td>10.69</td><td>0.0057</td><td>48 B</td><td>NA</td>
+</tr><tr><td>M7_StartsWith_Culture</td><td>14.5740 ns</td><td>5.7115 ns</td><td>0.3131 ns</td><td>14.4055 ns</td><td>73.69</td><td>16.73</td><td>-</td><td>-</td><td>NA</td>
+</tr><tr><td>M7_EndsWith_Culture</td><td>19.3139 ns</td><td>23.5603 ns</td><td>1.2914 ns</td><td>18.6645 ns</td><td>97.66</td><td>22.84</td><td>-</td><td>-</td><td>NA</td>
+</tr><tr><td>M11_Linq_SelectToArray</td><td>19.8878 ns</td><td>16.7144 ns</td><td>0.9162 ns</td><td>20.2166 ns</td><td>100.56</td><td>23.12</td><td>0.0143</td><td>120 B</td><td>NA</td>
+</tr><tr><td>M10_Sealed_InterfaceCall</td><td>41.9227 ns</td><td>19.2238 ns</td><td>1.0537 ns</td><td>41.4885 ns</td><td>211.99</td><td>48.19</td><td>-</td><td>-</td><td>NA</td>
+</tr><tr><td>M10_Unsealed_InterfaceCall</td><td>42.4037 ns</td><td>13.8548 ns</td><td>0.7594 ns</td><td>42.1520 ns</td><td>214.42</td><td>48.63</td><td>-</td><td>-</td><td>NA</td>
+</tr><tr><td>M8_StringFormat</td><td>47.4752 ns</td><td>24.0884 ns</td><td>1.3204 ns</td><td>47.4540 ns</td><td>240.06</td><td>54.63</td><td>0.0076</td><td>64 B</td><td>NA</td>
+</tr><tr><td>M3_New_FastPathPerRow</td><td>82.6255 ns</td><td>0.8998 ns</td><td>0.0493 ns</td><td>82.6505 ns</td><td>417.80</td><td>94.52</td><td>-</td><td>-</td><td>NA</td>
+</tr><tr><td>M3_Old_AwaitPerRow</td><td>479.9092 ns</td><td>15.2389 ns</td><td>0.8353 ns</td><td>480.0360 ns</td><td>2,426.70</td><td>549.00</td><td>-</td><td>-</td><td>NA</td>
+</tr></tbody></table>
+</body>
+</html>

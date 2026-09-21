@@ -1,1 +1,0 @@
-INSERT INTO simple_entity default values

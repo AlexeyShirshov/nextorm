@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>nextorm.benchmark.InMemoryBenchmarkAny-20260916-203452</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)
+AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 16 logical and 8 physical cores
+.NET SDK 10.0.401
+  [Host] : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+</code></pre>
+<pre><code>Job=ShortRun  Toolchain=InProcessEmitToolchain  IterationCount=3  
+LaunchCount=1  WarmupCount=3  
+</code></pre>
+
+<table>
+<thead><tr><th>Method           </th><th>Mean    </th><th>Error    </th><th>StdDev  </th><th>Gen0</th><th>Gen1</th><th>Allocated</th>
+</tr>
+</thead><tbody><tr><td>Linq</td><td>2.877 ns</td><td>0.9022 ns</td><td>0.0495 ns</td><td>-</td><td>-</td><td>-</td>
+</tr><tr><td>NextormPrepared</td><td>30.524 ns</td><td>51.4381 ns</td><td>2.8195 ns</td><td>-</td><td>-</td><td>-</td>
+</tr><tr><td>EFCoreInMemory_Compiled</td><td>384,633.727 ns</td><td>472,543.5822 ns</td><td>25,901.7084 ns</td><td>57.1289</td><td>22.4609</td><td>481811 B</td>
+</tr></tbody></table>
+</body>
+</html>

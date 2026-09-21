@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>NextORM.Benchmark.SqliteBenchmarkFeaturesFair-20260921-230335</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)
+AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 4 logical and 2 physical cores
+.NET SDK 10.0.401
+  [Host] : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+</code></pre>
+<pre><code>Job=ShortRun  Toolchain=InProcessEmitToolchain  IterationCount=3  
+LaunchCount=1  WarmupCount=3  
+</code></pre>
+
+<table>
+<thead><tr><th>Method                   </th><th>Categories</th><th>Mean</th><th>Gen0</th><th>Gen1</th><th>Allocated</th>
+</tr>
+</thead><tbody><tr><td>A_Nextorm_Prepared_Cte</td><td>A_Cte</td><td>98.27 &mu;s</td><td>0.8545</td><td>-</td><td>7.73 KB</td>
+</tr><tr><td>A_Linq2Db_Compiled_Cte</td><td>A_Cte</td><td>230.97 &mu;s</td><td>1.9531</td><td>-</td><td>17.73 KB</td>
+</tr><tr><td>A_Dapper_Cte</td><td>A_Cte</td><td>234.96 &mu;s</td><td>1.7090</td><td>-</td><td>15.7 KB</td>
+</tr><tr><td>A_Nextorm_Prepared_ListContains</td><td>A_InList</td><td>132.15 &mu;s</td><td>1.7090</td><td>-</td><td>15.7 KB</td>
+</tr><tr><td>A_Nextorm_Prepared_In</td><td>A_InList</td><td>135.44 &mu;s</td><td>1.7090</td><td>-</td><td>15.7 KB</td>
+</tr><tr><td>A_Dapper_In</td><td>A_InList</td><td>209.38 &mu;s</td><td>1.4648</td><td>-</td><td>12.66 KB</td>
+</tr><tr><td>A_Linq2Db_Compiled_In</td><td>A_InList</td><td>515.55 &mu;s</td><td>17.5781</td><td>-</td><td>151.1 KB</td>
+</tr><tr><td>A_EFCore_Compiled_In</td><td>A_InList</td><td>625.39 &mu;s</td><td>17.5781</td><td>5.8594</td><td>147.74 KB</td>
+</tr><tr><td>A_Nextorm_Prepared_Join4</td><td>A_Join4</td><td>140.18 &mu;s</td><td>1.2207</td><td>-</td><td>10.55 KB</td>
+</tr><tr><td>A_Linq2Db_Compiled_Join4</td><td>A_Join4</td><td>270.32 &mu;s</td><td>2.4414</td><td>-</td><td>20.7 KB</td>
+</tr><tr><td>A_Dapper_Join4</td><td>A_Join4</td><td>297.88 &mu;s</td><td>2.4414</td><td>-</td><td>20.23 KB</td>
+</tr><tr><td>A_EFCore_Compiled_Join4</td><td>A_Join4</td><td>552.66 &mu;s</td><td>9.7656</td><td>4.8828</td><td>84.93 KB</td>
+</tr><tr><td>A_Nextorm_Prepared_RecursiveCte</td><td>A_RecursiveCte</td><td>126.78 &mu;s</td><td>0.7324</td><td>-</td><td>7.34 KB</td>
+</tr><tr><td>A_Dapper_RecursiveCte</td><td>A_RecursiveCte</td><td>256.59 &mu;s</td><td>1.4648</td><td>-</td><td>15.31 KB</td>
+</tr><tr><td>A_Linq2Db_Compiled_RecursiveCte</td><td>A_RecursiveCte</td><td>273.14 &mu;s</td><td>1.9531</td><td>-</td><td>17.81 KB</td>
+</tr></tbody></table>
+</body>
+</html>

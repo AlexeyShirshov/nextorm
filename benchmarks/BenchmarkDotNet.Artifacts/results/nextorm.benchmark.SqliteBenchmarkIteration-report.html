@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>nextorm.benchmark.SqliteBenchmarkIteration-20260916-220230</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)
+AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 16 logical and 8 physical cores
+.NET SDK 10.0.401
+  [Host] : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+</code></pre>
+<pre><code>Job=ShortRun  Toolchain=InProcessEmitToolchain  IterationCount=3  
+LaunchCount=1  WarmupCount=3  
+</code></pre>
+
+<table>
+<thead><tr><th>Method                         </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Gen0</th><th>Gen1</th><th>Allocated</th>
+</tr>
+</thead><tbody><tr><td>Nextorm_Prepared_AsyncStream</td><td>11.24 &mu;s</td><td>2.065 &mu;s</td><td>0.113 &mu;s</td><td>0.0916</td><td>-</td><td>792 B</td>
+</tr><tr><td>Nextorm_Prepared_ToListAsync</td><td>11.51 &mu;s</td><td>10.483 &mu;s</td><td>0.575 &mu;s</td><td>0.1068</td><td>-</td><td>976 B</td>
+</tr><tr><td>Nextorm_PreparedManualSql_ToListAsync</td><td>11.80 &mu;s</td><td>3.879 &mu;s</td><td>0.213 &mu;s</td><td>0.1068</td><td>-</td><td>976 B</td>
+</tr><tr><td>Nextorm_Cached_ToListAsync</td><td>11.94 &mu;s</td><td>4.357 &mu;s</td><td>0.239 &mu;s</td><td>0.1831</td><td>-</td><td>1648 B</td>
+</tr><tr><td>Nextorm_CachedManualSql_ToListAsync</td><td>11.95 &mu;s</td><td>13.234 &mu;s</td><td>0.725 &mu;s</td><td>0.1984</td><td>-</td><td>1768 B</td>
+</tr><tr><td>DapperAsync</td><td>15.82 &mu;s</td><td>0.784 &mu;s</td><td>0.043 &mu;s</td><td>0.2136</td><td>-</td><td>1904 B</td>
+</tr><tr><td>Dapper_AsyncStream</td><td>16.78 &mu;s</td><td>31.370 &mu;s</td><td>1.719 &mu;s</td><td>0.2136</td><td>-</td><td>1856 B</td>
+</tr><tr><td>Linq2Db_AsyncStream</td><td>17.49 &mu;s</td><td>4.929 &mu;s</td><td>0.270 &mu;s</td><td>0.2747</td><td>-</td><td>2472 B</td>
+</tr><tr><td>Linq2Db_ToListAsync</td><td>17.88 &mu;s</td><td>13.727 &mu;s</td><td>0.752 &mu;s</td><td>0.3052</td><td>-</td><td>2792 B</td>
+</tr><tr><td>EFCore_Compiled_ToListAsync</td><td>38.00 &mu;s</td><td>9.478 &mu;s</td><td>0.520 &mu;s</td><td>1.2207</td><td>0.6104</td><td>10224 B</td>
+</tr></tbody></table>
+</body>
+</html>

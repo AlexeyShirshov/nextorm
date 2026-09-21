@@ -1,5 +1,61 @@
 # Nextorm - high performance zero-sql object-relational mapping (ORM) library
 
+## Documentation
+
+### Getting started
+
+- [Installation](getting-started/01-installation.md)
+- [Quickstart](getting-started/02-quickstart.md)
+- [Entities and metadata](getting-started/03-entities-and-metadata.md)
+- [Dependency injection](getting-started/04-dependency-injection.md)
+
+### Guide
+
+- [Querying and projections](guide/01-querying-and-projections.md)
+- [Filtering (WHERE)](guide/02-filtering-where.md)
+- [Joins](guide/03-joins.md)
+- [Grouping and aggregates](guide/04-grouping-and-aggregates.md)
+- [Sorting and paging](guide/05-sorting-and-paging.md)
+- [Subqueries](guide/06-subqueries.md)
+- [Set operations](guide/07-set-operations.md)
+- [SELECT DISTINCT](guide/08-distinct.md)
+- [Common table expressions (CTE)](guide/09-cte.md)
+- [Window functions](guide/10-window-functions.md)
+- [Scalar functions](guide/11-scalar-functions.md)
+- [User-defined functions](guide/12-user-defined-functions.md)
+- [Table-valued functions](guide/13-table-valued-functions.md)
+- [Raw SQL](guide/14-raw-sql.md)
+- [Query reuse: cache vs Prepare](guide/15-query-reuse.md)
+- [Connections and logging](guide/16-connections-and-logging.md)
+- [Query hints](guide/17-query-hints.md)
+- [JSON support across providers](guide/18-json.md)
+
+### Providers
+
+- [Provider overview](providers/overview.md)
+- [SQLite](providers/sqlite.md)
+- [SQL Server](providers/sqlserver.md)
+- [PostgreSQL](providers/postgres.md)
+- [In-memory](providers/in-memory.md)
+
+### Advanced
+
+- [Limitations and out-of-scope features](advanced/limitations.md)
+- [API reference](advanced/api-reference.md)
+- [Prepared vs cached: reusing a query](specs/performance/prepared-vs-cached.md)
+- [SQL capabilities gap analysis](specs/roadmap/sql-capabilities-gap-analysis.md)
+- [Capability matrix: nextorm vs EF Core and linq2db](specs/comparison/capability-matrix.md)
+- [nextorm vs linq2db: functionality comparison](specs/comparison/linq2db-comparison.md)
+
+### Русская документация
+
+- [Обзор](ru/overview.md)
+- [Постановка задачи](ru/motivation.md)
+- [Быстрый старт (англ.)](getting-started/02-quickstart.md)
+
+Полное руководство на английском: [Getting started](getting-started/01-installation.md) ·
+[Guide](#guide) · [Providers](#providers). Русский перевод в работе.
+
 ## Overview
 
 Nextorm perform two main functions:
@@ -11,7 +67,7 @@ Nextorm uses protocol-level libraries (for example, SqlClient for Microsoft SQL 
 
 ## Status
 
-The current status (1.0.2-alpha) is a prof of concept.
+The current status (1.0.3-alpha) is a prof of concept.
 
 ## Roadmap
 
@@ -49,10 +105,35 @@ To add specific database provider use the following:
 
 - `dotnet add package nextorm.sqlserver`
 - `dotnet add package nextorm.sqlite`
+- `dotnet add package nextorm.postgres`
+- `dotnet add package nextorm.mysql`
+- `dotnet add package nextorm.mariadb`
+- `dotnet add package nextorm.clickhouse`
 
 In-memory provider is built-in in core library.
 
+## Query reuse
+
+There are two independent ways to avoid re-building a query plan on every execution: the implicit plan
+cache (used automatically by [`EntityBuilder`](xref:NextORM.Core.EntityBuilder)/[`QueryCommand`](xref:NextORM.Core.QueryCommand) terminals) and explicit [`Prepare`](xref:NextORM.Core.EntityBuilder`1) returning an
+[`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1).
+
+They differ in cost, lifetime and thread-safety rules. Which one to use, what each one costs per call and
+its limitations: **[Prepared vs Cached](specs/performance/prepared-vs-cached.md)**.
+
 ## Releases
+
+### 1.0.3-alpha
+
+- [Table-valued functions](https://github.com/AlexeyShirshov/nextorm/issues/8)
+- [Scalar-valued functions](https://github.com/AlexeyShirshov/nextorm/issues/9)
+- [Table hints](https://github.com/AlexeyShirshov/nextorm/issues/14)
+- [Benchmark with Dapper and EF](https://github.com/AlexeyShirshov/nextorm/issues/17)
+- [Новые возможности SQL-генерации](https://github.com/AlexeyShirshov/nextorm/issues/19)
+- [PostgreSQL support](https://github.com/AlexeyShirshov/nextorm/issues/21)
+- [MySQL support](https://github.com/AlexeyShirshov/nextorm/issues/22)
+- [SQL functions](https://github.com/AlexeyShirshov/nextorm/issues/33)
+- [ClickHouse support](https://github.com/AlexeyShirshov/nextorm/issues/49)
 
 ### 1.0.2-alpha
 

@@ -1,0 +1,33 @@
+using System.Linq.Expressions;
+
+namespace NextORM.Core;
+
+// public class ExpressionAliasProvider : IAliasProvider
+// {
+//     private LambdaExpression _joinCondition;
+
+//     public ExpressionAliasProvider(LambdaExpression joinCondition)
+//     {
+//         _joinCondition = joinCondition;
+//     }
+
+//     public string FindAlias(ParameterExpression param)
+//     {
+//         for (int i = 0; i < _joinCondition.Parameters.Count; i++)
+//         {
+//             if (_joinCondition.Parameters[i] == param)
+//                 return "t" + (i + 1).ToString();
+//         }
+//         return string.Empty;
+//     }
+
+//     public string GetNextAlias(FromExpression from)
+//     {
+//         throw new NotImplementedException();
+//     }
+
+//     public string GetNextAlias(QueryCommand queryCommand)
+//     {
+//         throw new NotImplementedException();
+//     }
+// }

@@ -1,0 +1,58 @@
+using System.Reflection;
+using System.Runtime.CompilerServices;
+
+namespace NextORM.Core;
+
+public static class TypeExtensions
+{
+    public static bool IsAnonymous(this Type type) => type.IsSealed
+        && type.IsGenericType
+        && (type.Attributes & TypeAttributes.NotPublic) != 0
+        && Attribute.IsDefined(type, typeof(CompilerGeneratedAttribute), false)
+        && type.Name.StartsWith("<>f__AnonymousType", StringComparison.Ordinal);
+    public static bool IsClosure(this Type type) => type.IsSealed
+        && (type.Attributes & TypeAttributes.NotPublic) != 0
+        && Attribute.IsDefined(type, typeof(CompilerGeneratedAttribute), false)
+        && type.Name.StartsWith("<>c__DisplayClass", StringComparison.Ordinal);
+    public static bool IsTuple(this Type type) => type.IsGenericType
+        && (type.Attributes & TypeAttributes.NotPublic) != 0
+        && type.Name.StartsWith("Tuple`", StringComparison.Ordinal);
+
+    public static bool TryGetProjectionDimension(this Type type, out int dim)
+    {
+        //const string m = "NextORM.Core.Projection`";
+        dim = 0;
+        if (type.IsGenericType && type.IsAssignableTo(typeof(IProjection)))
+        {
+            dim = type.GetGenericArguments().Length;
+            return true;
+        }
+        return false;
+    }
+    public static bool Similar(this Type x, Type y)
+    {
+        if (y is null) return false;
+
+        if (x == y
+        || x.IsAssignableFrom(y)
+        || x.IsAssignableTo(y))
+            return true;
+
+        if (x.IsGenericType && x.GetGenericTypeDefinition() == typeof(Nullable<>) && x.GenericTypeArguments[0].Similar(y))
+            return true;
+
+        if (y.IsGenericType && y.GetGenericTypeDefinition() == typeof(Nullable<>) && y.GenericTypeArguments[0].Similar(x))
+            return true;
+
+        return false;
+    }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsScalar(this Type type)
+    {
+        return Type.GetTypeCode(type) switch
+        {
+            TypeCode.Object => false,
+            _ => true
+        };
+    }
+}

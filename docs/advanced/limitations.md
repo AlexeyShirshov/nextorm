@@ -1,0 +1,78 @@
+# Limitations and out-of-scope features
+
+> nextorm is a read-only query builder: it generates `SELECT` statements and materialises their results, and deliberately leaves change tracking, DML and relationship inference to the caller.
+
+**Prerequisites:** [Provider overview](../providers/overview.md) · [API reference](api-reference.md)
+
+## Overview
+
+This page lists the capabilities that are **not** part of nextorm, with a one-line reason for each. It is
+derived from [SQL capabilities gap analysis](../specs/roadmap/sql-capabilities-gap-analysis.md); that document is the
+source of truth and also tracks what *is* implemented. Read the two together: a feature listed there as
+**Done** is not a limitation, even though the older sections of the analysis (sections 1–4) still describe
+the pre-implementation baseline.
+
+## Out of scope
+
+| Not supported | Rationale |
+|---|---|
+| **DML** — `INSERT`, `UPDATE`, `DELETE`, `MERGE` | nextorm is a read-only, no-change-tracking mapper by design; writes are expected to go through your own commands or another tool. |
+| **Navigation properties / relationship metadata** | There is no relationship metadata and no implicit join inference; you write joins explicitly with [`Join`](xref:NextORM.Core.EntityBuilder`1)/[`LeftJoin`](xref:NextORM.Core.EntityBuilder`1)/[`RightJoin`](xref:NextORM.Core.EntityBuilder`1)/[`FullJoin`](xref:NextORM.Core.EntityBuilder`1)/[`CrossJoin`](xref:NextORM.Core.EntityBuilder`1)/[`CrossApply`](xref:NextORM.Core.EntityBuilder`1)/[`OuterApply`](xref:NextORM.Core.EntityBuilder`1) (see [Joins](../guide/03-joins.md)). |
+| **Selecting a joined entity as a whole** | After a join the accumulated projection is positional (`Item1`..`Item8`, one item per source in join order) and only its columns can be selected (`Select(p => p.Item1.Id)`); a projection member that is the entity itself (`Select(p => p.Item1)`) is not a column and is rejected. Give the sides semantic names by projecting into a named type (`Select(p => new { Order = p.Item1.Id, Customer = p.Item2.RequiredString })`); see [Joins](../guide/03-joins.md#addressing-the-projection). |
+| **Correlated `APPLY` / `LATERAL` source** | [`CrossApply`](xref:NextORM.Core.EntityBuilder`1)/[`OuterApply`](xref:NextORM.Core.EntityBuilder`1) accept a lambda that receives the left-hand row, so the applied source can reference the outer row on a lateral-capable provider (SQL Server `CROSS/OUTER APPLY`, PostgreSQL/MySQL/MariaDB `... LATERAL`). Dialects without a lateral source (SQLite, ClickHouse) reject `APPLY` outright; the in-memory provider does not support it. The correlation lambda cannot reference a join projection — apply it to a single-entity source. |
+| **[`SelectMany`](xref:NextORM.Core.EntityBuilder`1) / [`GroupJoin`](xref:NextORM.Core.EntityBuilder`1) on SQL providers** | These LINQ operators are implemented for the in-memory provider only, where correlation is a plain delegate. On a SQL provider [`SelectMany`](xref:NextORM.Core.EntityBuilder`1)/[`GroupJoin`](xref:NextORM.Core.EntityBuilder`1) throw `NotSupportedException`; the explicit [`CrossApply`](xref:NextORM.Core.EntityBuilder`1)/[`OuterApply`](xref:NextORM.Core.EntityBuilder`1) join surface covers the non-correlated equivalent (see [Joins](../guide/03-joins.md)). |
+| **Correlated subqueries in the in-memory provider** | Correlation works for scalar subqueries, aggregate terminals and `EXISTS`/`IN`/`ANY`/`ALL` in `SELECT`, `WHERE`, `ORDER BY` and `HAVING` on every SQL provider, at any nesting depth (see [Subqueries](../guide/06-subqueries.md#correlated-scalar-subquery)). The in-memory provider has no per-row outer-row binding and throws `NotSupportedException`. |
+| **Correlated scalar terminals (`First`/`Single` and their `*OrDefault` forms)** | A missing row yields `null` for a nullable projection and `default` (for example `0`) for a non-nullable value projection when the terminal is `FirstOrDefault`/`SingleOrDefault`. `First`/`Single` on a non-nullable value projection throw when no row matches. `Single`/`SingleOrDefault` over more than one row throw on every provider whose scalar subqueries enforce cardinality (PostgreSQL, SQL Server, MySQL, MariaDB, ClickHouse); SQLite does not enforce it, so a numeric `Single`/`SingleOrDefault` over more than one row raises a database error through a rendered `case when count(*) > 1 then <numeric overflow> else value end` guard, and a non-numeric projection is rejected with `NotSupportedException`. |
+| **`INTERSECT ALL` / `EXCEPT ALL` on SQL Server and SQLite** | Neither engine can express these variants, so the dialect rejects them with a `NotSupportedException`; `INTERSECT` / `EXCEPT` (without `ALL`) and `UNION` / `UNION ALL` work everywhere. PostgreSQL supports both `ALL` variants. |
+| **Query hints outside SQL Server** | Statement-level hints are rendered only by the SQL Server dialect; SQLite, PostgreSQL, MySQL/MariaDB and ClickHouse reject a command that carries them with `NotSupportedException` (see [Query hints](../guide/17-query-hints.md)). Table hints (`WithTableHint("nolock")` → `WITH (NOLOCK)`) are supported on SQL Server only. Wiring the PostgreSQL (`pg_hint_plan`), MySQL and MariaDB hint mechanisms is tracked in [`todo_query_hints_providers.md`](../specs/roadmap/todo_query_hints_providers.md). |
+| **Raw SQL as a composable source or subquery** | Raw SQL is supported for a whole query ([`WithSql`](xref:NextORM.Core.EntityBuilder`1) / [`PrepareFromSql`](xref:NextORM.Core.EntityBuilder`1)), but it cannot be used as a composable `FROM`/subquery fragment. |
+| **Array functions outside PostgreSQL** | The array-parameter `any`/`all` quantifiers (`column = any(@array)`) and the array functions (`cardinality`, `array_length`, ...) require a provider with native arrays; only PostgreSQL opts in ([`SupportsArrays`](xref:NextORM.Core.ISqlDialect.SupportsArrays)). Other dialects reject them with `NotSupportedException` (see [Scalar functions](../guide/11-scalar-functions.md#arrays-postgresql)). |
+| **`string.Split` outside ClickHouse** | The CLR `string.Split` is rendered as `splitByChar(separator, value)` only on ClickHouse ([`StringSplit`](xref:NextORM.Core.ISqlDialect.StringSplit)); PostgreSQL reaches it through its own `string_to_array` array-operand path, while SQL Server (`STRING_SPLIT` is a table-valued function), MySQL/MariaDB and SQLite have no scalar array split and reject it. Only a one-character separator is supported (no `splitByString`), and the result is a `string[]` usable only inside another array function. |
+| **Native JSON functions outside PostgreSQL** | The `json`/`jsonb` functions and operators (`json_agg`, `json_build_object`, `->`, `->>`, `#>`, `@>`, `?`, ...) require a provider with a JSON type; only PostgreSQL opts in ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson)). SQL Server, MySQL and MariaDB provide the text-JSON subset (`json_value`/`json_query`/`json_modify`/`isjson`, [`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) over a normal text column instead (MySQL/MariaDB render it through `JSON_EXTRACT`/`JSON_SET`). Other dialects reject both surfaces with `NotSupportedException` (see [Scalar functions](../guide/11-scalar-functions.md#json-and-jsonb-postgresql)). |
+| **`greatest`/`least` on providers that do not opt in** | The functions are gated by [`SupportsGreatestLeast`](xref:NextORM.Core.ISqlDialect.SupportsGreatestLeast); PostgreSQL, MySQL/MariaDB, ClickHouse, SQL Server 2022+ and SQLite opt in. SQLite maps them to its multi-argument scalar `max`/`min` (a single argument returns the argument itself, because `max`/`min` with one argument is an aggregate). NULL semantics differ: PostgreSQL, SQL Server 2022+ and ClickHouse 24.12+ ignore NULL arguments, while MySQL/MariaDB and SQLite return NULL when any argument is NULL. A provider that does not opt in rejects them with `NotSupportedException`. `nullif` is ANSI and always available. |
+| **`date_trunc` outside PostgreSQL, SQL Server and ClickHouse** | `date_trunc` is gated by [`SupportsDateTrunc`](xref:NextORM.Core.ISqlDialect.SupportsDateTrunc); PostgreSQL, SQL Server 2022+ (`datetrunc`) and ClickHouse (`dateTrunc`) opt in. |
+| **ClickHouse date conversion/part functions outside ClickHouse** | The `toDate`/`toDateTime`/`toDate32`, `toYear`/..., `toStartOf*`, `toMonday`, `toYYYYMM`/`toYYYYMMDD` and `toUnixTimestamp` surface ([`DateConversion`](xref:NextORM.Core.ISqlDialect.DateConversion)) is ClickHouse-only; other providers reject it with `NotSupportedException`. The portable equivalents are `date_trunc`/`date_add`/`end_of_month` and the `DateTime` parts (see [Scalar functions](../guide/11-scalar-functions.md#date-conversion-and-parts-clickhouse)). |
+| **ClickHouse `multiIf` and `lagInFrame`/`leadInFrame` outside ClickHouse** | The multi-branch `multi_if` ([`MultiIf`](xref:NextORM.Core.ISqlDialect.MultiIf)) and the frame-respecting `lag_in_frame`/`lead_in_frame` window functions ([`SupportsInFrameWindowFunctions`](xref:NextORM.Core.ISqlDialect.SupportsInFrameWindowFunctions)) are ClickHouse-only; other providers reject them with `NotSupportedException`. Multi-branch conditions are portable through `iif`/the C# conditional (rendering `CASE WHEN`), and the standard `lag`/`lead` are the partition-based substitutes — but ClickHouse itself rejects an explicit frame on those, so a frame-aware neighbour needs `lagInFrame`/`leadInFrame`. |
+| **`array_agg` outside PostgreSQL** | `array_agg` is gated by [`SupportsArrayAgg`](xref:NextORM.Core.ISqlDialect.SupportsArrayAgg) and requires a provider with an array type, so only PostgreSQL opts in. `string_agg` is gated separately by [`SupportsStringAgg`](xref:NextORM.Core.ISqlDialect.SupportsStringAgg) and is also available on SQL Server 2017+ and ClickHouse (`arrayStringConcat(groupArray(x), delimiter)`). Note that an `array_agg` result is an array column, which the row reader cannot materialise yet, so use it inside the query (for example in a `HAVING`). |
+| **Boolean and regression aggregates outside PostgreSQL** | `bool_and`/`bool_or`/`every` ([`SupportsBooleanAggregates`](xref:NextORM.Core.ISqlDialect.SupportsBooleanAggregates)) and the `regr_*` family ([`SupportsRegressionAggregates`](xref:NextORM.Core.ISqlDialect.SupportsRegressionAggregates)) are PostgreSQL-only. `corr`/`covar_*` ([`SupportsStatisticalAggregates`](xref:NextORM.Core.ISqlDialect.SupportsStatisticalAggregates)) are also available on ClickHouse (`corr`/`covarPop`/`covarSamp`). |
+| **Aggregate `FILTER` outside PostgreSQL and SQLite** | The `FILTER (WHERE ...)` clause is gated by [`SupportsFilter`](xref:NextORM.Core.ISqlDialect.SupportsFilter); PostgreSQL and SQLite opt in, MySQL/MariaDB and SQL Server do not. ClickHouse rejects it too, but exposes the filtered-aggregate equivalent as the `-If` combinators (`count_if`/`sum_if`/`avg_if`/`min_if`/`max_if`, [`SupportsIfAggregates`](xref:NextORM.Core.ISqlDialect.SupportsIfAggregates)). |
+| **`GROUP BY CUBE`/`GROUPING SETS` on MySQL/MariaDB and the in-memory provider** | MySQL/MariaDB have no `CUBE` or `GROUPING SETS`, and the in-memory provider supports none of `ROLLUP`/`CUBE`/`GROUPING SETS`; these reject the modifier with `NotSupportedException`. `ROLLUP` works on every SQL provider (see [Grouping and aggregates](../guide/04-grouping-and-aggregates.md#rollup-and-cube)). |
+| **Stored procedures and dynamic SQL** | nextorm builds `SELECT` statements from LINQ; calling a stored procedure or assembling SQL at runtime is outside the builder surface (raw SQL for a whole query is available — [`WithSql`](xref:NextORM.Core.EntityBuilder`1)). |
+| **External sources (`OPENROWSET`/`OPENQUERY`, linked servers)** | Out of scope; the connection's own schema is queried. |
+| **DDL / administrative commands** | `CREATE`/`ALTER`/`DROP`, `OPTIMIZE`, `RENAME` and similar are not generated; use your own commands. |
+| **Transactions, `SaveChanges` and change tracking / CDC** | nextorm does not own a unit of work or track entities; read-only participation in a caller-managed transaction is tracked separately in [`todo_transactions.md`](../specs/roadmap/todo_transactions.md). |
+
+## Not limitations
+
+The following are fully implemented and verified; they appear in the *done* column of the gap analysis,
+not in the list above:
+
+- joins of every type (`INNER`, `LEFT`, `RIGHT`, `FULL`, `CROSS`, plus `CROSS APPLY`/`OUTER APPLY` and the lateral equivalent where supported) and arity 2–8, including a derived query as either side (the primary `FROM` source or the joined table);
+- correlated scalar subqueries and correlated `EXISTS`/`IN`/`ANY`/`ALL` in `SELECT`, `WHERE`, `ORDER BY` and `HAVING` on every SQL provider at any nesting depth (the in-memory provider has no per-row outer-row binding; see [Subqueries](../guide/06-subqueries.md));
+- `CASE WHEN` / ternary / `switch`, `COALESCE`, numeric `CAST`;
+- string, math and date/time scalar functions and `LIKE`;
+- date arithmetic (`date_add`/`end_of_month`/`date_diff`/`date_from_parts` and `DateTime.Add*`) on PostgreSQL, SQL Server, ClickHouse, MySQL/MariaDB and SQLite, plus `date_trunc` on PostgreSQL/SQL Server/ClickHouse and `string_agg` on PostgreSQL/SQL Server/ClickHouse/MySQL/MariaDB/SQLite;
+- the bitwise (`bit_and`/`bit_or`/`bit_xor`), statistical (`corr`/`covar_*`), `argMin`/`argMax` and `-If` (`count_if`/...) aggregates on ClickHouse;
+- binary columns - a `byte[]` property or projection maps to `bytea` (PostgreSQL), `varbinary`/`image` (SQL Server) or `blob` (SQLite);
+- `IN` over a list/array, logical `!` and unary operators;
+- `SELECT DISTINCT`, `INTERSECT`/`EXCEPT`, CTEs (including recursive), window functions and `GROUP BY ROLLUP`/`CUBE`/`GROUPING SETS` (`CUBE` and `GROUPING SETS` except MySQL/MariaDB);
+- user-defined scalar functions (`[SqlFunction]`) and table-valued functions (`[SqlTableFunction]`);
+- full-text predicates (`SqlFunctions.Sql.contains`/`freetext`) on SQL Server, PostgreSQL and MySQL/MariaDB, text-JSON functions (`json_value`/`json_query`/`json_modify`/`isjson`) on SQL Server and MySQL/MariaDB and SQL Server `openjson`/`string_split` table functions;
+- statement-level query hints and table hints on SQL Server (`Hint(...)`, `WithTableHint(...)`) and JSON output (`ForJson(...)` → `FOR JSON PATH`/`AUTO`) and XML output (`ForXml(...)` → `FOR XML`);
+- the scalar XML data-type methods on SQL Server (`xml_value`/`xml_query`/`xml_exist` → `xml.value('xpath', 'type')`/`xml.query('xpath')`/`xml.exist('xpath')`); the rowset method `.nodes` is not supported;
+- raw SQL for a whole query and the implicit plan cache / [`Prepare`](xref:NextORM.Core.EntityBuilder`1) reuse paths.
+
+Refer to [SQL capabilities gap analysis](../specs/roadmap/sql-capabilities-gap-analysis.md) for the status table and the
+test evidence behind each item.
+
+## See also
+
+- [SQL capabilities gap analysis](../specs/roadmap/sql-capabilities-gap-analysis.md)
+- [Query hints](../guide/17-query-hints.md)
+- [Provider overview](../providers/overview.md)
+- [API reference](api-reference.md)
+
+---
+
+Source: `docs/specs/roadmap/sql-capabilities-gap-analysis.md` (sections 1–4), implementation status table at the top of
+that document.

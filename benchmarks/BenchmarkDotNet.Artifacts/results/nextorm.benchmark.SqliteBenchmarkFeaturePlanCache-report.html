@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>nextorm.benchmark.SqliteBenchmarkFeaturePlanCache-20260917-152856</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)
+AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 16 logical and 8 physical cores
+.NET SDK 10.0.401
+  [Host] : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+</code></pre>
+<pre><code>Job=ShortRun  Runtime=.NET 10.0  Toolchain=InProcessEmitToolchain  
+IterationCount=3  LaunchCount=1  WarmupCount=3  
+</code></pre>
+
+<table>
+<thead><tr><th>Method                          </th><th>Mean</th><th>Ratio</th><th>Gen0</th><th>Allocated</th><th>Alloc Ratio</th>
+</tr>
+</thead><tbody><tr><td>Warm_PlanOnly_Distinct</td><td>166.0 &mu;s</td><td>1.00</td><td>24.9023</td><td>204.69 KB</td><td>1.00</td>
+</tr><tr><td>Warm_PlanOnly_In_AtIn_Captured</td><td>668.0 &mu;s</td><td>4.02</td><td>65.4297</td><td>542.2 KB</td><td>2.65</td>
+</tr><tr><td>Warm_PlanOnly_In_ListContains_Captured</td><td>731.2 &mu;s</td><td>4.41</td><td>61.5234</td><td>510.17 KB</td><td>2.49</td>
+</tr><tr><td>Warm_PlanOnly_In_AtIn_Inline</td><td>781.9 &mu;s</td><td>4.71</td><td>68.3594</td><td>565.64 KB</td><td>2.76</td>
+</tr><tr><td>Warm_PlanOnly_In_ListContains_Inline</td><td>870.8 &mu;s</td><td>5.25</td><td>64.4531</td><td>533.61 KB</td><td>2.61</td>
+</tr></tbody></table>
+</body>
+</html>

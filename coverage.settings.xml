@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Code coverage settings for the dotnet-coverage tool. The schema is the same as the
+  "Code Coverage" data collector configuration inside a .runsettings file:
+  https://learn.microsoft.com/dotnet/core/additional-tools/dotnet-coverage#settings
+-->
+<Configuration>
+  <CodeCoverage>
+    <!-- Only the product assemblies end up in the coverage report; test assemblies are skipped. -->
+    <ModulePaths>
+      <Include>
+        <ModulePath>.*nextorm\.(core|sqlite|postgres|sqlserver)\.dll$</ModulePath>
+      </Include>
+    </ModulePaths>
+
+    <!-- Unused/legacy code is annotated with [ExcludeFromCodeCoverage]; generated and obsolete
+         members are dropped as well (matches the exclusions in the crap-analysis guidelines). -->
+    <Attributes>
+      <Exclude>
+        <Attribute>^System\.Diagnostics\.CodeAnalysis\.ExcludeFromCodeCoverageAttribute$</Attribute>
+        <Attribute>^System\.CodeDom\.Compiler\.GeneratedCodeAttribute$</Attribute>
+        <Attribute>^System\.ObsoleteAttribute$</Attribute>
+      </Exclude>
+    </Attributes>
+  </CodeCoverage>
+</Configuration>
