@@ -69,6 +69,8 @@ internal sealed class QueryPlanner : IQueryPlanner
             ParameterProvider = new DefaultParameterProvider(),
             AliasProvider = aliasProvider,
             Logger = _logger!,
+            QuoteIdentifiers = queryCommand.ResolvedQuoteIdentifiers,
+            NamingConvention = queryCommand.ResolvedNamingConvention,
         };
         var sqlBuilder = new SqlBuilder(in ctx);
         return sqlBuilder.MakeSelect(queryCommand);
@@ -110,7 +112,8 @@ internal sealed class QueryPlanner : IQueryPlanner
                 var parameterList = @params!;
                 for (var i = 0; i < parameterList.Count; i++)
                 {
-                    if (!IsRuntimeParam(parameterList[i].Name))
+                    var parameter = parameterList[i];
+                    if (!IsRuntimeParam(parameter.Name) && !parameter.Stable)
                     {
                         needsParamRefresh = true;
                         break;
@@ -213,7 +216,7 @@ internal sealed class QueryPlanner : IQueryPlanner
 
         if (DataContextCache.Metadata.TryGetValue(t, out var entity) && !string.IsNullOrEmpty(entity.TableName))
         {
-            var from = new FromExpression(entity.TableName);
+            var from = new FromExpression(entity.TableName, entity.IsTableNameAuto, t.IsInterface);
             _fromCache.TryAdd(t, from);
             return from;
         }

@@ -34,6 +34,41 @@ internal readonly struct InValuesPartition
 internal static class InValues
 {
     /// <summary>
+    /// True when the value an expression folds to is fully determined by the expression shape, i.e.
+    /// it cannot change between two executions of a cached plan. Only inline arrays of immutable
+    /// values and value-type <c>new</c> expressions over immutable arguments qualify: a captured
+    /// member access, a method call (for example <c>Guid.NewGuid()</c>) or a reference-typed constant
+    /// (a <see cref="ConstantExpression"/> wrapping a mutable array) may change, so the cached
+    /// parameter must be refreshed.
+    /// </summary>
+    public static bool IsStableValueExpression(Expression expression)
+    {
+        switch (expression)
+        {
+            case ConstantExpression constant:
+                if (constant.Value is null) return true;
+                var type = constant.Value.GetType();
+                return type.IsValueType || type == typeof(string);
+
+            case NewArrayExpression array:
+                for (var (i, cnt) = (0, array.Expressions.Count); i < cnt; i++)
+                {
+                    if (!IsStableValueExpression(array.Expressions[i])) return false;
+                }
+                return true;
+
+            case NewExpression @new when @new.Type.IsValueType:
+                for (var (i, cnt) = (0, @new.Arguments.Count); i < cnt; i++)
+                {
+                    if (!IsStableValueExpression(@new.Arguments[i])) return false;
+                }
+                return true;
+
+            default:
+                return false;
+        }
+    }
+    /// <summary>
     /// Matches a value-list <c>SqlFunctions.Sql.@in(column, collection)</c> or the ClickHouse
     /// <c>global_in</c> (the subquery overloads are excluded) or an <c>Enumerable.Contains</c> /
     /// <c>MemoryExtensions.Contains</c> / instance <c>Contains</c> on a non-string collection.

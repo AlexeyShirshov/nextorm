@@ -59,12 +59,17 @@ internal static class InValuesTranslator
         var hasNull = partition.HasNull;
         var nullableAware = !elementType.IsValueType || Nullable.GetUnderlyingType(elementType) is not null;
 
+        // An inline list (new[] { ... } of constants) is part of the expression shape, so its values
+        // are fixed for a cached plan and do not have to be re-extracted on every execution. A captured
+        // collection is not: the plan key only sees its shape, not its current contents.
+        var stableValues = InValues.IsStableValueExpression(valuesExp);
+
         if (visitor.IsParamMode)
         {
             visitor.Visit(columnExp);
 
             for (var i = 0; i < nonNull.Count; i++)
-                visitor.Params.Add(new Parameter(visitor.ParameterProvider.GetParamName(), nonNull[i]));
+                visitor.Params.Add(new Parameter(visitor.ParameterProvider.GetParamName(), nonNull[i]) { Stable = stableValues });
 
             return;
         }
@@ -88,7 +93,7 @@ internal static class InValuesTranslator
             for (var i = 0; i < nonNull.Count; i++)
             {
                 var paramName = visitor.ParameterProvider.GetParamName();
-                visitor.Params.Add(new Parameter(paramName, nonNull[i]));
+                visitor.Params.Add(new Parameter(paramName, nonNull[i]) { Stable = stableValues });
 
                 if (i > 0)
                     inBuilder.Append(", ");

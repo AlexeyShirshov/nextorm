@@ -38,6 +38,7 @@ package adds a context, a dialect and a [`DataContextBuilder`](xref:NextORM.Core
 | [`EntityBuilder`](xref:NextORM.Core.EntityBuilder) | Fluent builder for an alias/table source that has no entity type ([`TableAlias`](xref:NextORM.Core.TableAlias) mode). |
 | [`JoinedEntityBuilder<T1,T2>`](xref:NextORM.Core.JoinedEntityBuilder`2) … [`JoinedEntityBuilder<T1..T8>`](xref:NextORM.Core.JoinedEntityBuilder`8) | Accumulated join builders; arity 2 through 8. |
 | [`EntityMetadataBuilder<T>`](xref:NextORM.Core.EntityMetadataBuilder`1) | Fluent entity-metadata configuration used by `IDataContext.From<T>(...)`. |
+| [`INamingConvention`](xref:NextORM.Core.INamingConvention) | Translates auto-derived table/column names (see `DataContextBuilder.UseNamingConvention`); built-in [`SnakeCaseNamingConvention`](xref:NextORM.Core.SnakeCaseNamingConvention) maps `SimpleEntity` to `simple_entity` and `FirstName` to `first_name`. |
 | [`Projection<T1,T2>`](xref:NextORM.Core.Projection`2) … [`Projection<T1..T8>`](xref:NextORM.Core.Projection`8) | Result shape of a joined query; exposes `Item1`…`` |
 | [`IProjection`](xref:NextORM.Core.IProjection) / [`IExtendableProjection`](xref:NextORM.Core.IExtendableProjection) | Markers for accumulated join projections (arity 8 is not extendable). |
 | [`CteQuery`](xref:NextORM.Core.CteQuery) | Fluent scope collecting `WITH` declarations. |
@@ -97,7 +98,7 @@ package adds a context, a dialect and a [`DataContextBuilder`](xref:NextORM.Core
 
 | Type | Description |
 |---|---|
-| [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) | Provider options builder: [`UseLoggerFactory`](xref:NextORM.Core.DataContextBuilder), [`LogSensitiveData`](xref:NextORM.Core.DataContextBuilder), [`Factory`](xref:NextORM.Core.DataContextBuilder.Factory), `` |
+| [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) | Provider options builder: [`UseLoggerFactory`](xref:NextORM.Core.DataContextBuilder), [`LogSensitiveData`](xref:NextORM.Core.DataContextBuilder), [`Factory`](xref:NextORM.Core.DataContextBuilder.Factory), [`UseQuotedIdentifiers`](xref:NextORM.Core.DataContextBuilder), [`UseNamingConvention`](xref:NextORM.Core.DataContextBuilder). |
 | [`ServiceCollectionExtensions`](xref:NextORM.Core.ServiceCollectionExtensions) | [`AddNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions) / [`AddKeyedNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions) (generic and options-driven). |
 
 ## Namespace [`NextORM.Sqlite`](xref:NextORM.Sqlite)

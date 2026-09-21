@@ -43,6 +43,13 @@ public class SqliteDialectTests
     }
 
     [Fact]
+    public void QuoteIdentifier_ShouldUseAnsiDoubleQuotes()
+    {
+        Dialect.QuoteIdentifier("id").Should().Be("\"id\"");
+        Dialect.QuoteIdentifier("a\"b").Should().Be("\"a\"\"b\"");
+    }
+
+    [Fact]
     public void ScalarFunctionHooks_ShouldUseSqliteForms()
     {
         Dialect.MakeStringLength("x").Should().Be("length(x)");

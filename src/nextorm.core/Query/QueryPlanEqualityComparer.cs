@@ -135,6 +135,10 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
         if (!StringListsEqual(x.Hints, y.Hints)) return false;
 
+        if (x.ResolvedQuoteIdentifiers != y.ResolvedQuoteIdentifiers) return false;
+
+        if (!ReferenceEquals(x.ResolvedNamingConvention, y.ResolvedNamingConvention)) return false;
+
         if (!IEqualityComparerExtensions.Equals(this, x.ReferencedQueries, y.ReferencedQueries)) return false;
 
         // The outer references are the actual expressions a correlated subquery points at (for
@@ -417,6 +421,10 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
             if (obj.HintsPlanHash != 0)
                 hash.Add(obj.HintsPlanHash);
+
+            hash.Add(obj.ResolvedQuoteIdentifiers);
+
+            hash.Add(obj.ResolvedNamingConvention);
 
             if (obj.WindowsPlanHash != 0)
                 hash.Add(obj.WindowsPlanHash);

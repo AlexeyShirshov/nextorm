@@ -79,6 +79,18 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     internal StringBuilder? Builder => _builder;
     internal bool IsPredicateContext => AsPredicate;
     internal VisitorOptions Options => _options;
+
+    /// <summary>
+    /// Appends a physical column/table identifier, quoting it through the dialect when identifier
+    /// quoting is enabled for this command.
+    /// </summary>
+    internal void AppendIdentifier(string name)
+    {
+        if (_options.QuoteIdentifiers)
+            _builder!.Append(_dialect.QuoteIdentifier(name));
+        else
+            _builder!.Append(name);
+    }
     protected override Expression VisitMethodCall(MethodCallExpression node)
     {
         if (!_paramMode
@@ -203,9 +215,9 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             throw new NotSupportedException(node.Method.Name);
 
         if (node.Arguments is [ConstantExpression constExp])
-            _builder!.Append(constExp.Value?.ToString());
+            AppendIdentifier(constExp.Value?.ToString() ?? string.Empty);
         else if (TableAliasAccessors.AllowsExpression(node.Method.Name) && node.Arguments is [Expression exp])
-            _builder!.Append(CompileExpression(exp));
+            AppendIdentifier(CompileExpression(exp));
         else
             throw new NotSupportedException(node.Method.Name);
     }
@@ -238,7 +250,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             value = ((Func<object>)d)();
 
         var paramName = _parameterProvider.GetParamName();
-        var p = new Parameter(paramName, value);
+        var p = new Parameter(paramName, value) { Stable = InValues.IsStableValueExpression(node) };
         _params.Add(p);
 
         if (!_paramMode)

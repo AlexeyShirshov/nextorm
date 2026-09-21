@@ -306,6 +306,31 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// </summary>
     public IReadOnlyList<string>? TableHints { get; internal set; }
     /// <summary>
+    /// Per-command override of identifier quoting: <c>true</c> quotes physical table/column names with
+    /// the provider's delimiter, <c>false</c> emits them verbatim, and <c>null</c> inherits the
+    /// context default (<c>DataContextBuilder.UseQuotedIdentifiers</c>). Set through
+    /// <c>WithQuotedIdentifiers</c>.
+    /// </summary>
+    public bool? QuoteIdentifiers { get; internal set; }
+    /// <summary>
+    /// The identifier-quoting flag resolved for this command during preparation: the command override
+    /// when present, otherwise the context default. It is part of the plan key (the inherited value
+    /// must not let two contexts with different defaults share a cached plan).
+    /// </summary>
+    internal bool ResolvedQuoteIdentifiers;
+    /// <summary>
+    /// Per-command override of the naming convention applied to auto-derived table/column names:
+    /// <see langword="null"/> inherits the context default
+    /// (<c>DataContextBuilder.UseNamingConvention</c>). Set through <c>WithNamingConvention</c>.
+    /// </summary>
+    public INamingConvention? NamingConvention { get; internal set; }
+    /// <summary>
+    /// The naming convention resolved for this command during preparation: the command override when
+    /// present, otherwise the context default. It is part of the plan key (the inherited value must
+    /// not let two contexts with different defaults share a cached plan).
+    /// </summary>
+    internal INamingConvention? ResolvedNamingConvention;
+    /// <summary>
     /// The trailing <c>FOR JSON</c> clause (SQL Server), or <c>null</c> when the result set is returned
     /// as rows. A dialect that does not implement it rejects a command that carries it.
     /// </summary>

@@ -15,19 +15,21 @@ public class EntityMetadataBuilder<T>
 
     public IEntityMetadata Build()
     {
-        return new EntityMetadata(string.IsNullOrEmpty(_tableName)
+        var (tableName, isTableNameAuto) = string.IsNullOrEmpty(_tableName)
             ? AutoBuildTableName()
-            : _tableName, _props.Count == 0
-                ? AutoBuildProperties()
-                : _props.Select(pb => pb.Build()).ToArray());
+            : (_tableName, false);
+
+        return new EntityMetadata(tableName, _props.Count == 0
+            ? AutoBuildProperties()
+            : _props.Select(pb => pb.Build()).ToArray(), isTableNameAuto);
     }
     public IEntityMetadata AutoBuild()
     {
         var propsMeta = AutoBuildProperties();
 
-        var tableName = AutoBuildTableName();
+        var (tableName, isTableNameAuto) = AutoBuildTableName();
 
-        return new EntityMetadata(tableName, propsMeta);
+        return new EntityMetadata(tableName, propsMeta, isTableNameAuto);
     }
 
     private static List<IPropertyMetadata> AutoBuildProperties()
@@ -44,7 +46,7 @@ public class EntityMetadataBuilder<T>
             var colAttr = prop.GetCustomAttribute<ColumnAttribute>(true);
             if (!string.IsNullOrEmpty(colAttr?.Name))
             {
-                propsMeta.Add(new PropertyMetadata { ColumnName = colAttr.Name, PropertyInfo = prop });
+                propsMeta.Add(new PropertyMetadata { ColumnName = colAttr.Name, PropertyInfo = prop, IsColumnNameAuto = false });
             }
             else
             {
@@ -62,7 +64,7 @@ public class EntityMetadataBuilder<T>
                         colAttr = intProp?.GetCustomAttribute<ColumnAttribute>(true);
                         if (!string.IsNullOrEmpty(colAttr?.Name))
                         {
-                            propsMeta.Add(new PropertyMetadata { ColumnName = colAttr.Name, PropertyInfo = prop });
+                            propsMeta.Add(new PropertyMetadata { ColumnName = colAttr.Name, PropertyInfo = prop, IsColumnNameAuto = false });
                             added = true;
                             break;
                         }
@@ -70,28 +72,35 @@ public class EntityMetadataBuilder<T>
                 }
 
                 if (!added)
-                    propsMeta.Add(new PropertyMetadata { ColumnName = prop.Name, PropertyInfo = prop });
+                    propsMeta.Add(new PropertyMetadata { ColumnName = prop.Name, PropertyInfo = prop, IsColumnNameAuto = true });
             }
         }
 
         return propsMeta;
     }
 
-    private static string? AutoBuildTableName()
+    private static (string? TableName, bool IsAuto) AutoBuildTableName()
     {
         var entityType = typeof(T);
         string? tableName = entityType.Name;
+        var isAuto = true;
 
         var sqlTableAttr = entityType.GetCustomAttribute<SqlTableAttribute>(true);
 
         if (sqlTableAttr is not null)
+        {
             tableName = sqlTableAttr.Name;
+            isAuto = false;
+        }
         else
         {
             var tableAttr = entityType.GetCustomAttribute<TableAttribute>(true);
 
             if (tableAttr is not null)
+            {
                 tableName = tableAttr.Name;
+                isAuto = false;
+            }
         }
 
         foreach (var interf in entityType.GetInterfaces())
@@ -99,17 +108,23 @@ public class EntityMetadataBuilder<T>
             sqlTableAttr = interf.GetCustomAttribute<SqlTableAttribute>(true);
 
             if (sqlTableAttr is not null)
+            {
                 tableName = sqlTableAttr.Name;
+                isAuto = false;
+            }
             else
             {
                 var tableAttr = interf.GetCustomAttribute<TableAttribute>(true);
 
                 if (tableAttr is not null)
+                {
                     tableName = tableAttr.Name;
+                    isAuto = false;
+                }
             }
         }
 
-        return tableName;
+        return (tableName, isAuto);
     }
 
     public EntityPropertyBuilder<T> Property(Expression<Func<T, object>> propertySelector)

@@ -27,6 +27,13 @@ public class SqlServerDialectTests
         Dialect.MakeTypeName(type).Should().Be(expected);
     }
 
+    [Fact]
+    public void QuoteIdentifier_ShouldUseBrackets()
+    {
+        Dialect.QuoteIdentifier("id").Should().Be("[id]");
+        Dialect.QuoteIdentifier("a]b").Should().Be("[a]]b]");
+    }
+
     [Theory]
     [InlineData("exists", true, "exists(SELECT 1)")]
     [InlineData("exists", false, "cast(case when exists(SELECT 1) then 1 else 0 end as bit)")]

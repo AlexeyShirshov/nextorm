@@ -240,12 +240,20 @@ Output:
 | 55 |
 
 `avg` keeps the fractional part on SQLite and PostgreSQL; SQL Server evaluates `AVG` over an integer
-column as an integer. The entity terminals forward to the same functions:
+column as an integer. Every aggregate also has an entity terminal that forwards to the same function:
+`Sum`, `Avg`, `Min` and `Max` are equivalent to `Select(...)` followed by `First()`, and `Count()` to
+`Select(e => SqlFunctions.Sql.count()).First()`:
 
 ```csharp
-var min = dataContext.From<ISimpleEntity>().Min(e => e.Id);            // SqlFunctions.Sql.min
-var max = await dataContext.From<ISimpleEntity>().MaxAsync(e => e.Id); // SqlFunctions.Sql.max
+var sum   = dataContext.From<ISimpleEntity>().Sum(e => e.Id);            // SqlFunctions.Sql.sum
+var avg   = dataContext.From<ISimpleEntity>().Avg(e => e.Id);            // SqlFunctions.Sql.avg
+var min   = dataContext.From<ISimpleEntity>().Min(e => e.Id);            // SqlFunctions.Sql.min
+var max   = await dataContext.From<ISimpleEntity>().MaxAsync(e => e.Id); // SqlFunctions.Sql.max
+var count = dataContext.From<ISimpleEntity>().Count();                   // SqlFunctions.Sql.count
 ```
+
+Each terminal has a synchronous and an `...Async` overload (plus a parameterised one); `Count()` is
+covered in more detail in the [Counting](#counting) section below.
 
 ## Counting
 

@@ -22,6 +22,13 @@ public class PostgresDialectTests
     }
 
     [Fact]
+    public void QuoteIdentifier_ShouldUseDoubleQuotes()
+    {
+        Dialect.QuoteIdentifier("id").Should().Be("\"id\"");
+        Dialect.QuoteIdentifier("a\"b").Should().Be("\"a\"\"b\"");
+    }
+
+    [Fact]
     public void QueryModifierHooks_ShouldUsePostgresForms()
     {
         Dialect.DistinctOn.Should().NotBeNull();

@@ -14,6 +14,9 @@ internal static class ClickHouseTestContext
     public static IDataContext Create() =>
         new ClickHouseDataContext(PlaceholderConnectionString, new DataContextBuilder());
 
+    public static IDataContext CreateQuoted() =>
+        new ClickHouseDataContext(PlaceholderConnectionString, new DataContextBuilder().UseQuotedIdentifiers());
+
     public static ClickHouseDataContext CreateClickHouse() =>
         new(PlaceholderConnectionString, new DataContextBuilder());
 }

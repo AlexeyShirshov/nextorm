@@ -43,6 +43,19 @@ public abstract partial class CommonTestSuite
     }
 
     [Fact]
+    public async Task QuotedIdentifiers_SelectAndWhere_ShouldReturnData()
+    {
+        var rows = await _sut.SimpleEntity
+            .WithQuotedIdentifiers()
+            .Where(e => e.Id > 1)
+            .Select(e => new { Id = (long)e.Id })
+            .ToListAsync();
+
+        rows.Should().NotBeEmpty();
+        rows.Should().OnlyContain(r => r.Id > 1);
+    }
+
+    [Fact]
     public async Task SelectSubQuery_ShouldReturnData()
     {
         await foreach (var row in _sut.From(_sut.From("simple_entity").Select(tbl => new { Id = tbl.GetInt64("id") })).Select(subQuery => new { subQuery.Id }).ToAsyncEnumerable())

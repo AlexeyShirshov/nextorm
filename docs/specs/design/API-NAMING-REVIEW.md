@@ -2389,6 +2389,63 @@ sqlite 241 / sqlserver 234 / postgres 241 / mysql 62 / mariadb 27 / clickhouse 1
 [`todo_public_api_freeze.md`](../roadmap/todo_public_api_freeze.md) (issue [#53](https://github.com/AlexeyShirshov/nextorm/issues/53)).
 Удаление дублирующих пар (собственно Фаза 3 RFC) закрыто 21.09.2026; открыт только трекинг поверхности.
 
+### Аудит 21.09.2026 — квотирование идентификаторов: XML-доки и публичная поверхность
+
+Фича «provider-aware quoted identifiers» (uncommitted). Новые публичные члены:
+
+| Член | Файл:строка | XML-док |
+|------|-------------|:-------:|
+| `ISqlDialect.QuoteIdentifier(string)` (DIM, ANSI `"name"`) | `DataContext/Dialect/ISqlDialect.cs:576` | ✅ |
+| `SqlDialectBase.QuoteIdentifier` (`virtual`, = `Escape(name)`) | `DataContext/Dialect/SqlDialectBase.cs:269` | ✅ |
+| `SqliteDialect.QuoteIdentifier` (override, ANSI) | `nextorm.sqlite/SqliteDialect.cs:147` | ✅ |
+| `DataContextBuilder.QuoteIdentifiers` (`get`) | `DI/DataContextBuilder.cs:26` | ✅ |
+| `DataContextBuilder.UseQuotedIdentifiers(bool = true)` | `DI/DataContextBuilder.cs:60` | ✅ |
+| `IContextEnvironment.QuoteIdentifiers` (DIM `=> false`) | `DataContext/Roles/IContextEnvironment.cs:20` | ✅ |
+| `DataContext.QuoteIdentifiers` (`get`) | `DataContext/DataContext.cs:86` | ❌ **нет `<summary>`** |
+| `EntityBuilder<TEntity>.WithQuotedIdentifiers(bool = true)` | `Builders/EntityBuilder.cs:1243` | ✅ |
+| `EntityBuilder.WithQuotedIdentifiers(bool = true)` | `Builders/EntityBuilder.cs:1385` | ✅ |
+| `QueryCommand.QuoteIdentifiers` (`bool?`, `get; internal set;`) | `Query/QueryCommand.cs:314` | ✅ |
+| `QueryCommand<TResult>.WithQuotedIdentifiers(bool = true)` | `Query/QueryCommand.TResult.cs:360` | ✅ |
+| `VisitorOptions.QuoteIdentifiers` (13-й позиционный параметр) | `Visitors/VisitorOptions.cs:29` | — (у record-параметров доков и раньше не было) |
+
+Задокументировано **10 из 11** новых публичных членов; пробел — `DataContext.QuoteIdentifiers`
+(соседние члены `DataContext` тоже без доков, но этот — новый; `CS1591` скрыт в `<NoWarn>`).
+`ContextEnvironment.QuoteIdentifiers` (`DataContext/ContextEnvironment.cs:44`) — `internal`, под
+`CS1591` не попадает. Новых публичных **типов** нет → **Приложение A (45) не меняется**.
+Подробности и P-уровни — в §3, «Аудит 21.09.2026 — квотирование идентификаторов».
+
+### Аудит 21.09.2026 — соглашения об именовании (snake_case): XML-доки и публичная поверхность
+
+Фича «provider-independent naming conventions (snake_case)» (uncommitted). Новые публичные члены:
+
+| Член | Файл:строка | XML-док |
+|------|-------------|:-------:|
+| `INamingConvention` (новый публичный тип) | `DataContext/Meta/INamingConvention.cs:13` | ✅ |
+| `INamingConvention.TableName(string, bool)` / `.ColumnName(string)` | `:18,21` | ✅ (`<param>`) |
+| `SnakeCaseNamingConvention` (новый публичный тип, `sealed`) | `DataContext/Meta/SnakeCaseNamingConvention.cs:14` | ✅ |
+| `SnakeCaseNamingConvention.Instance` | `:17` | ✅ |
+| `SnakeCaseNamingConvention.TableName` / `.ColumnName` | `:20,26` | ✅ (`<inheritdoc>`) |
+| `DataContextBuilder.NamingConvention` (`get`) | `DI/DataContextBuilder.cs:33` | ✅ |
+| `DataContextBuilder.UseNamingConvention(INamingConvention?)` | `:81` | ✅ |
+| `IContextEnvironment.NamingConvention` (DIM `=> null`) | `DataContext/Roles/IContextEnvironment.cs:28` | ✅ |
+| `DataContext.NamingConvention` (`get`) | `DataContext/DataContext.cs:98` | ✅ |
+| `IEntityMetadata.IsTableNameAuto` | `DataContext/Meta/IEntityMetadata.cs:20` | ✅ |
+| `IPropertyMetadata.IsColumnNameAuto` | `DataContext/Meta/IPropertyMetadata.cs:22` | ✅ |
+| `EntityBuilder<TEntity>.WithNamingConvention(INamingConvention?)` | `Builders/EntityBuilder.cs:1263` | ⚠️ self-`cref` |
+| `EntityBuilder.WithNamingConvention(INamingConvention?)` | `:1424` | ✅ |
+| `QueryCommand<TResult>.WithNamingConvention(INamingConvention?)` | `Query/QueryCommand.TResult.cs:374` | ✅ |
+| `QueryCommand.NamingConvention` (`get; internal set;`) | `Query/QueryCommand.cs:326` | ✅ |
+| `VisitorOptions.NamingConvention` (`init`-свойство в теле record) | `Visitors/VisitorOptions.cs:44` | ✅ |
+
+Задокументировано **15 из 15** новых публичных членов (100 %); `ContextEnvironment`/
+`ResolvedNamingConvention`/`FromExpression.IsAutoMapped`/`SourceIsInterface` — `internal`/поля с `<summary>`.
+`CS1591` по-прежнему в `<NoWarn>` всех 7 библиотечных `.csproj`. `IPropertyMetadata.IsColumnNameAuto` (как и
+`IsTableNameAuto`) добавлены **абстрактно** — см. §3, P2-1. Новые публичные **типы** (`INamingConvention`,
+`SnakeCaseNamingConvention`) **задокументированы** → счётчик недокументированных в Приложении A (45) не
+меняется. Пользовательская проза EN+RU обновлена (`docs/getting-started/03-entities-and-metadata.md:152-203`,
+`docs/ru/getting-started/03-entities-and-metadata.md:141-191`); **но** curated-индекс
+`docs/advanced/api-reference.md` (+RU) не дополнен — §3, P2-3.
+
 ## 3. Находки
 
 ### Статус находок (актуализация 18.09.2026)
@@ -2690,6 +2747,117 @@ XML-доки изменённых членов: оба приватные, до�
 `x.Int` исправлена в `docs/guide/provider-specific/clickhouse.md` (+RU). `x.Key` — пре-существующая
 опечатка, не внесённая этим фиксом.
 
+### Аудит 21.09.2026 — квотирование идентификаторов (P0/P1 по именам — нет; P2 — 4)
+
+**Область (uncommitted):** `ISqlDialect.QuoteIdentifier` (DIM) + `SqlDialectBase`/`SqliteDialect`
+overrides; флаг `bool QuoteIdentifiers` в `VisitorOptions`/`SqlBuildContext`;
+`BaseExpressionVisitor.AppendIdentifier`; точки вывода `MemberTranslator`/`SqlSourceRenderer`;
+`DataContextBuilder`/`IContextEnvironment`/`DataContext`; `EntityBuilder<TEntity>`/`EntityBuilder`/
+`QueryCommand`/`QueryCommand<TResult>`; план-ключ `QueryPlanEqualityComparer` (+`ResolvedQuoteIdentifiers`,
+`CopyTo`). Build Release **0/0**; новые SQL-gen тесты — sqlite **9/9**, sqlserver **2/2**.
+
+**P0 — нет.** `QuoteIdentifier`/`QuoteIdentifiers`/`UseQuotedIdentifiers`/`WithQuotedIdentifiers` не
+конфликтуют с BCL (`CA1716`/`CA1724`) и не вводят в заблуждение.
+
+**P1 — нет.** Ближайший риск — неразличение `Escape`/`QuoteIdentifier` (ниже) — косметика уровня P2.
+
+**P2-1 — `Escape` vs `QuoteIdentifier` (`ISqlDialect.cs:568,576`).** `Escape` задокументирован как
+«Quotes an identifier (alias, keyword)», но фактически это **alias/keyword**-делимитер (`'name'` в
+`SqlDialectBase`/SQLite, `[name]`/`` `name` ``/`"name"` у остальных), а `QuoteIdentifier` — физический
+идентификатор. `SqlDialectBase.QuoteIdentifier => Escape(name)` делает их синонимами на 5 из 6
+провайдеров, поэтому назначение не читается из имени. **Рекомендация (alpha, переименование на месте):**
+уточнить XML-док `Escape` («delimits an alias/keyword») либо переименовать в `QuoteAlias`/`EscapeAlias`
+(затронет 6 провайдеров + тесты). Не блокер.
+
+**P2-2 — `VisitorOptions` — 13-й позиционный параметр (`VisitorOptions.cs:29`).** Trailing
+`bool QuoteIdentifiers = false` **источник-совместим** (прежние позиционные вызовы компилируются) и
+**`with`-friendly** (record генерирует `init`-свойство), но **бинарно несовместим** (сигнатура
+primary-ctor изменилась) и растит и без того длинный список (13 > порог 5). Политика alpha бинарную
+совместимость не гарантирует, поэтому смена **допустима, менять не обязательно**. Строго лучше —
+объявить свойство в теле record (`public bool QuoteIdentifiers { get; init; }`), не трогая primary-ctor:
+`with { QuoteIdentifiers = true }` и object-initializer работают, а сигнатура ctor не меняется.
+Публичный `VisitorOptions` — деталь построения плана, внешних call-site в репо нет (4 конструирования
+в `SqlBuildContext`/`SqlSourceRenderer`).
+
+**P2-3 — документация EN+RU (`docs/**`, `docs/ru/**`).** Новый флаг не описан в пользовательской
+документации: в `docs/**`/`docs/ru/**` нет ни `UseQuotedIdentifiers`, ни `WithQuotedIdentifiers` —
+единственные вхождения в рабочем дереве — RFC `docs/specs/roadmap/todo_identifier_quoting.md` (вне
+контента сайта). Правки `docs/advanced/limitations.md`/`docs/guide/04-grouping-and-aggregates.md`
+(+RU) в этом же uncommitted-дереве относятся к другим фичам (хинты/агрегаты). RFC
+(`todo_identifier_quoting.md:79`) сам требует «Доки EN+RU», AGENTS.md — синхронные обе ветки.
+**Рекомендация:** раздел о квотировании в `docs/guide/**` + `docs/ru/guide/**`, а по итогам
+`code-smells-review.md` Находок 52–53 — оговорка о schema-qualified и экранировании разделителя.
+
+**P2-4 — Шаг 5 (трекинг).** `PublicAPI.Shipped/Unshipped.txt` по-прежнему нет; новые подписи (перечень
+в §4, Шаг 5) должны попасть в `PublicAPI.Unshipped.txt` при заморозке. DIM-члены
+(`ISqlDialect.QuoteIdentifier`, `IContextEnvironment.QuoteIdentifiers`) аддитивны и
+источник-совместимы для внешних реализаций — риск ниже, чем у обычных новых членов интерфейса.
+
+Приложение A (45) без изменений. Содержательные находки (schema-qualified, экранирование, план-ключ
+вложенных команд) — в `code-smells-review.md` (Находки 52–53 + наблюдения A–E).
+
+### Аудит 21.09.2026 — соглашения об именовании (P0 — нет; P1 — нет; P2 — 5)
+
+**Область (uncommitted):** `INamingConvention`/`SnakeCaseNamingConvention`;
+`UseNamingConvention`/`WithNamingConvention` на `DataContextBuilder`/`EntityBuilder<TEntity>`/
+`EntityBuilder`/`QueryCommand<TResult>`; `NamingConvention` на `IContextEnvironment` (DIM) /
+`ContextEnvironment` / `DataContext` / `QueryCommand`; `IsTableNameAuto`/`IsColumnNameAuto` в публичных
+метаданных; `VisitorOptions.NamingConvention` (init-свойство, не primary-ctor); план-ключ
+`QueryPlanEqualityComparer` (+`ResolvedNamingConvention`). Build Release **0/0**.
+
+**P0 — нет.** `INamingConvention`/`SnakeCaseNamingConvention`/`UseNamingConvention`/`WithNamingConvention`/
+`IsTableNameAuto`/`IsColumnNameAuto` не конфликтуют с BCL (`CA1716`/`CA1724`) и не вводят в заблуждение;
+`I`-префикс, `Is*`-булев префикс, builder-методы возвращают свой тип — конвенции соблюдены.
+
+**P1 — нет.** Все имена — PascalCase, без аббревиатур; синхронных близнецов нет, суффикс `Async` не нужен.
+
+**P2-1 — `IEntityMetadata.IsTableNameAuto` / `IPropertyMetadata.IsColumnNameAuto` — абстрактные члены
+публичных интерфейсов (`IEntityMetadata.cs:20`, `IPropertyMetadata.cs:22`).** В отличие от
+`IContextEnvironment.NamingConvention` (DIM `=> null`, `Roles/IContextEnvironment.cs:28`), здесь новые
+члены **без реализации по умолчанию** → source- и binary-breaking для внешних реализаторов. В репозитории
+интерфейсы реализуют только `internal` `EntityMetadata`/`PropertyMetadata`, фактического разрыва нет;
+политика alpha бинарную совместимость не гарантирует. **Рекомендация:** для консистентности с
+`IContextEnvironment` объявить DIM (например, `bool IsTableNameAuto => true;` / `IsColumnNameAuto => true;`)
+либо внести в список Шага 5 как осознанный разрыв.
+
+**P2-2 — изменены подписи публичного расширения и публичного ctor (`MemberInfoExtensions.cs:18`,
+`FromExpression.cs:6`).** `GetPropertyColumnName(this MemberInfo)` → `(this MemberInfo, INamingConvention? = null)`;
+`FromExpression(string)` → `(string, bool = false, bool = false)`. Добавление optional-параметра
+source-совместимо (прежние вызовы компилируются), но **бинарно несовместимо** (изменилась сигнатура).
+`VisitorOptions` тот же риск обошёл init-свойством (правильно, ср. P2-2 аудита квотирования).
+**Рекомендация:** внести новые подписи в `PublicAPI.Unshipped.txt` при заморозке (Шаг 5).
+
+**P2-3 — curated API-индекс не обновлён (`docs/advanced/api-reference.md` +
+`docs/ru/advanced/api-reference.md`).** `INamingConvention`/`SnakeCaseNamingConvention` отсутствуют в обоих
+(и файлы не менялись). Индекс позиционируется как «curated index of nextorm's public types», а
+`INamingConvention` — новый публичный extension point, который потребитель реализует и передаёт в
+`UseNamingConvention`. **Рекомендация:** добавить строку (например, в «Context and roles» или новую
+«Naming conventions») для `INamingConvention`/`SnakeCaseNamingConvention`; заодно завести/проверить
+`IEntityMetadata`/`IPropertyMetadata` (их в индексе тоже нет).
+
+**P2-4 — self-`<see cref>` в доке `EntityBuilder<TEntity>.WithNamingConvention`
+(`Builders/EntityBuilder.cs:1261`).** `<summary>` generic-метода ссылается на самого себя
+(`EntityBuilder{TEntity}.WithNamingConvention`); негенерик-версия (`:1422`) корректно ссылается на generic.
+Косметика XML-доков, покрытие не страдает. **Рекомендация:** заменить на описание сути (как у
+`QueryCommand<TResult>.WithNamingConvention`).
+
+**P2-5 — Шаг 5 (трекинг).** `PublicAPI.Shipped/Unshipped.txt` по-прежнему нет; заморозка — трекинг #53.
+Новые подписи к внесению: `INamingConvention` (тип) + `TableName(string, bool) -> string` +
+`ColumnName(string) -> string`; `SnakeCaseNamingConvention` (тип, `sealed`) +
+`Instance.get -> SnakeCaseNamingConvention` + два метода; `DataContextBuilder.NamingConvention.get ->
+INamingConvention?` + `UseNamingConvention(INamingConvention?) -> DataContextBuilder`;
+`IContextEnvironment.NamingConvention.get -> INamingConvention?` (DIM); `DataContext.NamingConvention.get ->
+INamingConvention?`; `IEntityMetadata.IsTableNameAuto.get -> bool`; `IPropertyMetadata.IsColumnNameAuto.get ->
+bool`; `EntityBuilder<TEntity>.WithNamingConvention(INamingConvention?) -> EntityBuilder<TEntity>`;
+`EntityBuilder.WithNamingConvention(INamingConvention?) -> EntityBuilder`; `QueryCommand.NamingConvention.get ->
+INamingConvention?`; `QueryCommand<TResult>.WithNamingConvention(INamingConvention?) -> QueryCommand<TResult>`;
+`VisitorOptions.NamingConvention.get -> INamingConvention?`; изменённые
+`MemberInfoExtensions.GetPropertyColumnName(MemberInfo, INamingConvention?) -> string` и
+`FromExpression.FromExpression(string, bool, bool) -> void`.
+
+Приложение A (45) без изменений (новые типы документированы). Содержательные находки по кэшу — в
+`code-smells-review.md` (Находки 54–55 и наблюдения A–E).
+
 ## 4. План работ
 
 Проект в стадии **alpha** — обратная совместимость не сохраняется. Все пункты выполняются **прямыми переименованиями на месте**, с одновременным обновлением кода, тестов, примеров и документации в одном изменении.
@@ -2730,6 +2898,8 @@ XML-доки изменённых членов: оба приватные, до�
 - `CS1591` по-прежнему в `<NoWarn>` **всех 7** библиотечных `.csproj` (`nextorm.core.csproj:9`, `nextorm.postgres.csproj:9`, `nextorm.sqlite.csproj:8`, `nextorm.sqlserver.csproj:17`, `nextorm.mysql.csproj:9`, `nextorm.mariadb.csproj:9`, `nextorm.clickhouse.csproj:9`).
 - `CA1716`/`CA1724`/`CA1002`/`CA1051` в `Directory.Build.props` не включены (там только `TreatWarningsAsErrors=true`). Прогон `nextorm.core` при `AnalysisLevel=latest-all` даёт по ним: `CA1716` — 46, `CA1002` — 14, `CA1051` — 46, `CA1724` — 0 (уникальных мест). Правила входят в набор `latest-all` и сборкой по умолчанию не гейтятся.
 - Единственное закрепление на сегодня — XML-`<remarks>` со ссылками на этот отчёт в местах находок (P0-1, P0-5, P0-6, P0-9, P1-16, P2-19, P2-25 и др.).
+- **Актуализация 21.09.2026 (квотирование идентификаторов).** Новые подписи к заморозке: `ISqlDialect.QuoteIdentifier(string) -> string` (DIM), `SqlDialectBase.QuoteIdentifier` (`virtual`) + `SqliteDialect.QuoteIdentifier` (`override`), `DataContextBuilder.QuoteIdentifiers.get -> bool` и `DataContextBuilder.UseQuotedIdentifiers(bool) -> DataContextBuilder`, `IContextEnvironment.QuoteIdentifiers.get -> bool` (DIM), `DataContext.QuoteIdentifiers.get -> bool`, `EntityBuilder<TEntity>.WithQuotedIdentifiers(bool) -> EntityBuilder<TEntity>`, `EntityBuilder.WithQuotedIdentifiers(bool) -> EntityBuilder`, `QueryCommand.QuoteIdentifiers.get -> bool?`, `QueryCommand<TResult>.WithQuotedIdentifiers(bool) -> QueryCommand<TResult>`, изменённая сигнатура primary-ctor `VisitorOptions` (+`VisitorOptions.QuoteIdentifiers.get -> bool`). DIM-члены аддитивны/источник-совместимы. Findings — §3, «Аудит 21.09.2026 — квотирование идентификаторов»; содержательные — `code-smells-review.md` Находки 52–53 и наблюдения A–E.
+- **Актуализация 21.09.2026 (соглашения об именовании, snake_case).** Новые подписи к заморозке: `INamingConvention` (тип) + `TableName(string, bool) -> string` + `ColumnName(string) -> string`; `SnakeCaseNamingConvention` (тип, `sealed`) + `Instance.get` + два метода; `DataContextBuilder.NamingConvention.get -> INamingConvention?` и `UseNamingConvention(INamingConvention?) -> DataContextBuilder`; `IContextEnvironment.NamingConvention.get -> INamingConvention?` (DIM); `DataContext.NamingConvention.get -> INamingConvention?`; `IEntityMetadata.IsTableNameAuto.get -> bool` (абстрактный — см. P2-1); `IPropertyMetadata.IsColumnNameAuto.get -> bool` (абстрактный); `EntityBuilder<TEntity>.WithNamingConvention(INamingConvention?) -> EntityBuilder<TEntity>`; `EntityBuilder.WithNamingConvention(INamingConvention?) -> EntityBuilder`; `QueryCommand.NamingConvention.get -> INamingConvention?`; `QueryCommand<TResult>.WithNamingConvention(INamingConvention?) -> QueryCommand<TResult>`; `VisitorOptions.NamingConvention.get -> INamingConvention?` (init-свойство); изменённые `MemberInfoExtensions.GetPropertyColumnName(MemberInfo, INamingConvention?) -> string` и `FromExpression.FromExpression(string, bool, bool) -> void` (source-совместимы, бинарно нет). Findings — §3, «Аудит 21.09.2026 — соглашения об именовании»; содержательные — `code-smells-review.md` Находки 54–55 и наблюдения A–E.
 - **Критерий (не выполнен):** build 0/0; новые нарушения именования валят сборку.
 
 ## 5. Что сделано

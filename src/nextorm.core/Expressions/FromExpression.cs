@@ -3,9 +3,11 @@ namespace NextORM.Core;
 public sealed class FromExpression
 {
      public FromExpression(Type srcType) => SourceType = srcType;
-     public FromExpression(string table)
+     public FromExpression(string table, bool isAutoMapped = false, bool sourceIsInterface = false)
      {
           Table = table;
+          IsAutoMapped = isAutoMapped;
+          SourceIsInterface = sourceIsInterface;
      }
      public FromExpression(QueryCommand subQuery)
      {
@@ -25,6 +27,13 @@ public sealed class FromExpression
      }
      //public OneOf<string, QueryCommand> Table { get; }
      public readonly string? Table;
+     /// <summary>
+     /// Whether <see cref="Table"/> was derived from the entity type name (and is therefore subject
+     /// to the active <see cref="INamingConvention"/>) rather than declared explicitly.
+     /// </summary>
+     public readonly bool IsAutoMapped;
+     /// <summary>Whether the entity source type is an interface, so the convention can drop its <c>I</c> prefix.</summary>
+     public readonly bool SourceIsInterface;
      public readonly QueryCommand? SubQuery;
      public readonly Type? SourceType;
      /// <summary>

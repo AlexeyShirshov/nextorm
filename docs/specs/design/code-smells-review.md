@@ -3319,6 +3319,196 @@ API нет (`PrepareGrouping`/`BuildKeyColumns` — `private static`; `GroupBy<T
 `VersionOverride`/inline `Version` — 0. `slopwatch` локальным tool'ом не установлен
 (`.config/dotnet-tools.json` — coverage/reportgenerator/docfx), скан выполнен вручную.
 
+## 🔎 Точечный аудит — квотирование идентификаторов (21.09.2026)
+
+**Область (uncommitted):** `ISqlDialect.QuoteIdentifier` (DIM) + `SqlDialectBase`/`SqliteDialect`
+override; флаг `bool QuoteIdentifiers` в `VisitorOptions`/`SqlBuildContext`; точки вывода
+`BaseExpressionVisitor.AppendIdentifier`, `MemberTranslator`, `SqlSourceRenderer`; `DataContextBuilder`/
+`IContextEnvironment`/`DataContext`; `EntityBuilder<TEntity>`/`EntityBuilder`/`QueryCommand`/
+`QueryCommand<TResult>`; план-ключ `QueryPlanEqualityComparer` (+`ResolvedQuoteIdentifiers`, `CopyTo`).
+Build Release **0/0**; новые SQL-gen тесты — sqlite **9/9**, sqlserver **2/2**.
+
+| Категория навыка | Результат |
+|---|---|
+| 1. `IDisposable` | ✅ Не затронуто: новых disposable-полей/локальных и `IDisposable`-типов нет. |
+| 2. Подавления | ✅ Фикс не добавил ни одного `#pragma`/`SuppressMessage`/`NoWarn`/`Skip=`/пустого `catch`. Срез: `src/` — **5** `#pragma` (все с парным `restore`, 5/5) + **6** `SuppressMessage` (все с `Justification`) = **11/11 оправданных, 0 неоправданных**; новых — **0**. |
+| 3. LINQ / горячий путь | ✅ `AppendIdentifier` — один `if` по record-свойству + (при включённом флаге) конкатенация строки; LINQ/лямбд/аллокаций в выключенном (default) режиме нет. `bool` в `SqlBuildContext` (readonly struct) и `VisitorOptions` — план строится раз на команду, не per-row. |
+| 4. События | ✅ Не затронуто. |
+| 5. Проектирование | ✅ Квотирование централизовано в `AppendIdentifier`/`QuoteIdentifier`; точки вывода не дублируют логику. ℹ️ `VisitorOptions` — 13 позиционных параметров (см. наблюдение F). |
+| 6. Исключения | ✅ Новых `catch`/`throw` нет. |
+| 7. Хэш-ключи кэша | ⚠️ `ResolvedQuoteIdentifiers` входит в `Equals` (`:138`) и hash (`:423`) согласованно; `CopyTo` копирует и `QuoteIdentifiers`, и `ResolvedQuoteIdentifiers` (`Clone.cs:33-34`) → DEBUG-assert `QueryPlan.GetCacheVersion` держится. Render вложенных команд берёт флаг **корня**, а hash — **свой** (наблюдение B); неверного разделения планов нет. |
+
+### 🟡 Находка 52 — schema-qualified физические имена квотируются целиком (ОТКРЫТА; P1-кандидат)
+
+`SqlSourceRenderer.cs:213` (`MakeFrom`) и объявление CTE (`:63`) оборачивают `from.Table`/`cte.Name`
+**целиком**. Для `[SqlTable("Sales.SalesOrderHeader")]` при включённом флаге получается
+`[Sales.SalesOrderHeader]` — один идентификатор вместо `[Sales].[SalesOrderHeader]`; то же для
+PostgreSQL `"bookings.airports_data"` и ClickHouse `` `datasets.hits_v1` ``. Схемно-квалифицированные
+имена используются в `examples/**` (MSSQL adventureworks, PostgreSQL aviasales, ClickHouse analytics) и
+обычны в реальных БД — критерий приёмки RFC («флаг включает квотирование и не ломает запросы») для них
+не выполняется. RFC сам помечает это открытым вопросом №3 (`docs/specs/roadmap/todo_identifier_quoting.md:66`),
+тестами не покрыто.
+
+- **Было:** `sqlBuilder.Append(ctx.QuoteIdentifiers ? ctx.Dialect.QuoteIdentifier(from.Table) : from.Table);`
+- **Стало (предложение):** разбирать имя по `.` и квотировать каждый сегмент отдельно (с
+  провайдерным разделителем схемы), либо явно отклонять (`NotSupportedException`/guard) при включённом
+  флаге и наличии `.`, задокументировав ограничение.
+- **Проверка:** SQL-gen тест `UseQuotedIdentifiers` на сущности с `[SqlTable("s.t")]` → `[s].[t]`
+  (и `"s"."t"` для PG/SQLite).
+
+### 🟡 Находка 53 — внутренний разделитель идентификатора не удваивается (ОТКРЫТА; P1-кандидат)
+
+Матрица RFC (`todo_identifier_quoting.md:25-30`) требует удвоения внутреннего разделителя
+(PostgreSQL `"`, SQL Server `]`, MySQL/MariaDB/ClickHouse `` ` ``). Реализация — простая конкатенация:
+default `ISqlDialect.cs:576`, `SqlDialectBase.cs:269` (=> `Escape`), `PostgresDialect.cs:26`,
+`SqlServerDialect.cs:25`, `MySqlDialect.cs:153`, `ClickHouseDialect.cs:300`. Имя `we"ird` на PG даёт
+`"we"ird"` (невалидно), `a]b` на MSSQL — `[a]b]`.
+
+- **Было:** `"\"" + keyword + "\""` (и аналоги в `Escape`).
+- **Стало:** удваивать вхождение разделителя (например `keyword.Replace("\"", "\"\"")`) в
+  `QuoteIdentifier` (и отдельно решить судьбу `Escape` — см. `API-NAMING-REVIEW.md`, P2-1).
+- **Проверка:** dialect-тест `QuoteIdentifier("a\"b")` → `"a""b"`; `QuoteIdentifier("a]b")` → `[a]]b]`.
+- **Примечание:** реальный риск ниже, чем у Находки 52: имена приходят из `[SqlTable]`/`[Column]`
+  (доверенный код), а не из пользовательского ввода; поэтому P1-кандидат, не P0. На SQLite внутренние
+  `"` в физическом имени встречаются редко, но контракт матрицы не выполнен.
+
+### ℹ️ Наблюдения (фикс не требуется)
+
+- **A. `AppendIdentifier` не сторожит `null`/пустую строку.** `BaseExpressionVisitor.cs:87-93`: при
+  включённом флаге `QuoteIdentifier(null/empty)` → `""` (пустой квотированный идентификатор), тогда как
+  выключенный режим печатает пусто. Call-site `:218` сам сворачивает `null` в `string.Empty`
+  (`constExp.Value?.ToString() ?? string.Empty`). Null-аргументы `TableAlias`-аксессоров маловероятны;
+  для робастности — guard `if (string.IsNullOrEmpty(name)) return;`.
+- **B. План-ключ вложенных команд расходится с рендером.** CTE/UNION/subquery рендерятся с флагом
+  **корня** (`SqlSourceRenderer.cs:44,68`, `SqlBuilder.cs:299` — `ctx with {…}` сохраняет
+  `QuoteIdentifiers`), а `UnionPlanHash`/`ReferencedQueriesPlanHash`/`CtesPlanHash` хэшируют
+  **собственный** `ResolvedQuoteIdentifiers` вложенной команды (`QueryCommand.QueryPreparer.cs:84,93,100,179`).
+  Следствие: per-command `WithQuotedIdentifiers` на вложенной команде молча игнорируется рендером, но
+  меняет ключ → лишние промахи кэша. Неверного разделения планов нет (корневой флаг в ключе тоже есть).
+  Кандидат: либо резолвить флаг вложенной команды при рендере, либо не включать его в хэш вложенных.
+- **C. `ResetPreparation` не сбрасывает `ResolvedQuoteIdentifiers`.** `QueryCommand.cs:386-406`: после
+  `WithQuotedIdentifiers` (`QueryCommand.TResult.cs:360`) клон хранит устаревшее resolved-значение до
+  следующего `PrepareCommand`. Ошибочного пути не найдено: `QueryPlanner.GetPreparedQueryCommand`
+  вызывает `PrepareCommand` **до** построения `QueryPlan` (`QueryPlanner.cs:83,90`), а `CopyTo` копирует
+  resolved (`Clone.cs:34`), поэтому DEBUG-assert `QueryPlan.GetCacheVersion` держится. Гигиена:
+  сбрасывать в `ResetPreparation` либо заменить поле вычисляемым свойством.
+- **D. Имена окон не квотируются.** `SqlBuilder.cs:273` печатает `window.Name` без кавычек.
+  `WindowSql.IsValidWindowName` (`Visitors/WindowSql.cs:43-63`) допускает зарезервированные слова
+  (`window select as (…)` → невалидный SQL) независимо от флага — **пре-существующее**, вне объёма v1
+  (RFC перечисляет только имена функций, `todo_identifier_quoting.md:65`). CTE-колоночных алиасов в
+  модели нет (`CteDefinition` — только `Name`, `Column`-списка нет), имена функций намеренно вне объёма.
+- **E. `QuoteIdentifier` на включённом флаге аллоцирует строку на идентификатор** (конкатенация);
+  режим opt-in, план строится раз на команду/кэш — не per-row. Не запах.
+- **F. `VisitorOptions` — 13 позиционных параметров** (`VisitorOptions.cs:16-29`), добавлен 13-й
+  (`QuoteIdentifiers`). Пре-существующий длинный список (record публичный); в репо 4 конструирования,
+  все `internal`. Альтернатива — свойство в теле record — разобрана в `API-NAMING-REVIEW.md` P2-2.
+
+**Проверка (21.09.2026, выполнено в этом проходе).** `dotnet build nextorm.sln -c Release` —
+**0 warnings / 0 errors**. `dotnet run --project tests/nextorm.sqlite.tests -c Release --no-build --
+-noColor -method "*QuotedIdentifiers*"` — **9/9**; то же для `nextorm.sqlserver.tests` — **2/2**
+(0 failed). Паттерн-скан: `#pragma warning disable` — 5 (все с парным `restore`), `SuppressMessage` —
+6 (все с `Justification`), `Skip=` — 0, пустых `catch` — 0, `Thread.Sleep` — 0, `Task.Delay` — 2
+(обе `Task.Delay(0)` в `tests/nextorm.core.tests/InMemoryTests.cs:125,414`), `NoWarn` — только `CS1591`
+в 7 библиотечных `.csproj`, `VersionOverride`/inline `Version` — 0. `.editorconfig` — 7
+`dotnet_diagnostic.*.severity`, все `silent` (S125/S108/S3060/S1104/S3604/S2292 + CA2254),
+`SonarAnalyzer` не подключён (записи `S*` инертны). `slopwatch` локальным tool'ом не установлен
+(`.config/dotnet-tools.json` — coverage/reportgenerator/docfx), скан выполнен вручную.
+
+## 🔎 Точечный аудит — соглашения об именовании (snake_case) (21.09.2026)
+
+**Область (uncommitted):** новые публичные типы `INamingConvention` (`DataContext/Meta/INamingConvention.cs`) и
+`SnakeCaseNamingConvention` (`DataContext/Meta/SnakeCaseNamingConvention.cs`); `UseNamingConvention` на
+`DataContextBuilder`, `NamingConvention` на `IContextEnvironment` (DIM `=> null`)/`ContextEnvironment`/
+`DataContext`; `IsTableNameAuto`/`IsColumnNameAuto` в `IEntityMetadata`/`IPropertyMetadata`;
+`WithNamingConvention` на `EntityBuilder<TEntity>`/`EntityBuilder`/`QueryCommand<TResult>`;
+`ResolvedNamingConvention` в `QueryCommand.QueryPreparer.Prepare` (`:28`) и план-ключе
+`QueryPlanEqualityComparer` (`:140,427`); `MemberInfoExtensions.GetPropertyColumnName` (ключ кэша
+`(PropertyInfo, INamingConvention?)`, `:11,22`); флаги `FromExpression.IsAutoMapped`/`SourceIsInterface`
+(`:34,36`); render-time трансляция в `SqlSourceRenderer.MakeFrom` (`:214`) и `MemberTranslator` (4 call-site).
+Build Release **0/0**.
+
+| Категория навыка | Результат |
+|---|---|
+| 1. `IDisposable` | ✅ Не затронуто: новых disposable-полей/локальных и `IDisposable`-типов нет; `using var visitor` не менялся. |
+| 2. Подавления | ✅ Фикс не добавил ни одного `#pragma`/`SuppressMessage`/`NoWarn`/`Skip=`/пустого `catch`. Срез: `src/` — **5** `#pragma` (все с парным `restore`, 5/5) + **6** `SuppressMessage` (все с `Justification`) = **11/11 оправданных, 0 неоправданных**; новых — **0**. |
+| 3. LINQ / горячий путь | ✅ `ToSnakeCase` — цикл + `StringBuilder`, без LINQ/лямбд; трансляция выполняется на cache-miss `_columnNames`, не per-row; имя таблицы транслируется при построении плана (кэшируется). Аллокация `StringBuilder` — только на промахе/плане, режим opt-in. |
+| 4. События | ✅ Не затронуто. |
+| 5. Проектирование | ✅ Логика централизована (`SnakeCaseNamingConvention` + `INamingConvention`, render-time в `MakeFrom`/`AppendIdentifier`); `EntityBuilder`/`JoinedEntityBuilder` лишь пробрасывают флаг. ℹ️ `EntityBuilder.cs` 1470 строк — pre-existing god-class (не усугублён: +~30 строк). |
+| 6. Исключения | ✅ Новых `catch`/`throw` нет. |
+| 7. Хэш-ключи кэша | ⚠️ `_columnNames` — статический словарь, ключ включает произвольный экземпляр `INamingConvention` (Находка 54); план-ключ `ReferenceEquals`+`hash.Add` корректен (корневой `ResolvedNamingConvention` резолвится до `QueryPlan`); `_fromCache` (Type→`FromExpression`) корректен — конвенция НЕ «запечена», применяется на рендере (Находка 55 — вложенные команды). |
+
+### 🟡 Находка 54 — статический `_columnNames` растёт по экземплярам конвенции и залипает на изменяемой конвенции (ОТКРЫТА; P2)
+
+`MemberInfoExtensions.cs:11` — `static readonly ConcurrentDictionary<(PropertyInfo, INamingConvention?), string>`,
+никогда не очищается. Ключ включает **произвольный экземпляр** `INamingConvention`; `UseNamingConvention`/
+`WithNamingConvention` принимают любой объект. Если потребитель создаёт конвенцию на контекст/запрос
+(`new SnakeCaseNamingConvention()` вместо `.Instance`), словарь бесконечно растёт
+(`кол-во PropertyInfo × кол-во экземпляров`, процесс-wide; `DataContextCache.Metadata` не очищает —
+`DataContextCache.cs:22-26`), а `QueryPlanEqualityComparer` (`ReferenceEquals`, `:140`) заодно фрагментирует
+план-кэш. Кроме того конвенция с `Equals`, отличным от ссылочного (record/`IEquatable`), даёт **разные**
+план-ключи, но **общий** ключ `_columnNames` — рассогласование семантики равенства; изменяемая конвенция
+отдаёт залипшее имя.
+
+- **Было:** `ConcurrentDictionary<PropertyInfo, string>` — один вход на `PropertyInfo` (процесс-wide).
+- **Стало (предложение):** ограничить кэш стабильными конвенциями: либо ключевать по
+  `(PropertyInfo, convention?.GetType())` для встроенных/безсостояниевых, либо вынести резолв в
+  метаданные/`FromExpression`, либо явно задокументировать «`INamingConvention` должен быть
+  stateless и стабильный (singleton)», плюс согласовать `Equals`/`ReferenceEquals` с план-ключом.
+- **Проверка:** тест/бенч: 1000 разных экземпляров `new SnakeCaseNamingConvention()` → `_columnNames`
+  растёт линейно (фиксирует утечку) / не растёт при ключе-по-типу; контракт задокументирован.
+
+### 🟡 Находка 55 — `WithNamingConvention` вложенной команды игнорируется рендером, но входит в хэш (ОТКРЫТА; P2)
+
+Вложенные команды (CTE/subquery/UNION) рендерятся с конвенцией **корня**: `SqlSourceRenderer.cs:44` и
+`:68` (`new SqlBuilder(ctx with {…})` сохраняет `NamingConvention`), `:256` (`new SqlBuilder(in ctx)` —
+`ctx` корня, не `cmd.ResolvedNamingConvention`); см. также `QueryPlanner.MakeSelect` (`:73`). При этом
+`UnionPlanHash`/`ReferencedQueriesPlanHash`/`CtesPlanHash` хэшируют **собственный**
+`ResolvedNamingConvention` вложенной команды (`QueryCommand.QueryPreparer.cs` — рекурсивный
+`GetQueryPlanEqualityComparer().GetHashCode(...)`). Следствие: `WithNamingConvention(...)` на вложенной
+команде молча не применяется (в отличие от корневой), но меняет ключ → лишние промахи кэша. Неверного
+разделения планов нет (корневой `ResolvedNamingConvention` в ключе тоже есть). Тот же паттерн, что и
+наблюдение B аудита квотирования.
+
+- **Было (эскиз):** `var sql = new SqlBuilder(in ctx).MakeSelect(cmd);` для `from.SubQuery`.
+- **Стало (предложение):** либо резолвить конвенцию вложенной команды при рендере
+  (`ctx with { NamingConvention = cmd.ResolvedNamingConvention }`), либо не включать resolved-значение
+  вложенной команды в `QueryPlanEqualityComparer` (использовать корневой).
+- **Проверка:** SQL-gen тест: вложенный подзапрос с `WithNamingConvention(X)` под корнем без конвенции
+  → имя таблицы/колонки транслируется (или документировать, что override только корневой).
+
+### ℹ️ Наблюдения (фикс не требуется)
+
+- **A. `ResetPreparation` не сбрасывает `ResolvedNamingConvention`.** `QueryCommand<TResult>.WithNamingConvention`
+  (`QueryCommand.TResult.cs:374`) — `Clone()` → `ResetPreparation()` → set `NamingConvention`;
+  `ResolvedNamingConvention` (`QueryCommand.cs:332`) остаётся от прежнего состояния до следующего
+  `PrepareCommand`. Ошибочного пути не найдено: `Prepare` перезаписывает resolved (`QueryPreparer.cs:28`) до
+  `new QueryPlan` (`QueryPlanner.cs:84,91`), `Clone` копирует оба (`QueryCommand.Clone.cs:33-34`). Тот же
+  паттерн, что и наблюдение C квотирования; гигиена — сбрасывать либо вычислять.
+- **B. `Equals` vs `ReferenceEquals` для конвенции.** План-ключ — `ReferenceEquals`
+  (`QueryPlanEqualityComparer.cs:140`), кэш имён — `ValueTuple` → `Equals` (`MemberInfoExtensions.cs:22`).
+  Для встроенного `SnakeCaseNamingConvention` (без override) это одно и то же; для value-equal
+  пользовательской конвенции — рассогласование (учтено в Находке 54).
+- **C. `_fromCache` (`QueryPlanner.cs:209`, Type→`FromExpression`) корректен при смене конвенции.**
+  `FromExpression` хранит только `IsAutoMapped`/`SourceIsInterface` (факты метаданных), а `TableName`
+  трансформируется на рендере (`SqlSourceRenderer.cs:214`) — один `FromExpression` на тип
+  переиспользуется всеми конвенциями, «запекания» нет.
+- **D. `IsColumnNameAuto`/`IsTableNameAuto` проставляются во всех ветках.** `AutoBuildProperties` —
+  `false` при `[Column]` (класс и интерфейс), `true` иначе; `AutoBuildTableName` — `false` при
+  `[SqlTable]`/`[Table]` (класс и интерфейс), `true` иначе; fluent `Table(string)`
+  (`EntityMetadataBuilder.cs:136`) и `HasColumnName` → `false`. Явные имена конвенцией не трогаются.
+- **E. `SnakeCaseNamingConvention` — без BCL-конфликта, namespace `NextORM.Core`**; `Instance` — singleton,
+  `ToSnakeCase` — `internal static`, LINQ-free. Тесты `SnakeCaseNamingConventionTests` (14 кейсов) покрывают
+  акронимы (`OrderID`→`order_id`, `HTTPServer`→`http_server`), интерфейсный `I`-дроп и граничный `IO`→`o`.
+
+**Проверка (21.09.2026, выполнено в этом проходе).** `dotnet build nextorm.sln -c Release` — **0 warnings /
+0 errors**. Паттерн-скан: `#pragma warning disable` — 5 (все с парным `restore`), `SuppressMessage` — 6
+(все с `Justification`), `Skip=` — 0, пустых `catch` — 0, `Thread.Sleep` — 0, `Task.Delay` — 2 (обе
+`Task.Delay(0)` в `tests/nextorm.core.tests/InMemoryTests.cs:125,414`), `NoWarn` — только `CS1591` в 7
+библиотечных `.csproj`, `VersionOverride`/inline `Version` — 0, `PublicAPI.*.txt` — 0. `.editorconfig` — 7
+`dotnet_diagnostic.*.severity`, все `silent` (S125/S108/S3060/S1104/S3604/S2292 + CA2254), `SonarAnalyzer`
+не подключён (записи `S*` инертны). `slopwatch` локальным tool'ом не установлен
+(`.config/dotnet-tools.json` — coverage/reportgenerator/docfx), скан выполнен вручную.
+
 ## Примечания
 
 - `SonarAnalyzer.CSharp` не подключён, поэтому правила `S####` (в т.ч. в 5 `SuppressMessage` из `src/`) сборкой не проверяются. При этом `.editorconfig` глушит 7 правил (`S125`, `S108`, `S3060`, `S1104`, `S3604`, `S2292` — `silent`; плюс `CA2254`), т.е. часть записей **инертна**: без пакета Sonar они не могут сработать (мёртвые настройки). `Directory.Build.props` задаёт только `TreatWarningsAsErrors=true` (без `AnalysisLevel=latest-all`), так что CA-правила навыка (включая `CA1508`/`CA2213`/`CA1816`) сборкой не гейтятся.

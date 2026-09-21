@@ -299,6 +299,9 @@ public sealed class ClickHouseDialect : SqlDialectBase
     // ClickHouse quotes identifiers with backticks; single-quoted aliases are syntax errors.
     public override string Escape(string keyword) => "`" + keyword + "`";
 
+    /// <summary>ClickHouse quotes a physical identifier with backticks, doubling an embedded backtick.</summary>
+    public override string QuoteIdentifier(string name) => "`" + name.Replace("`", "``") + "`";
+
     public override string MakeColumnReference(string name) => Escape(name);
 
     public override string MakeParam(string name) => $"@{name}";

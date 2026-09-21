@@ -133,4 +133,52 @@ public class InListCacheTests
         second.DbCommandParams.Cast<DbParameter>().Select(p => p.ParameterName).Should().Equal("p0", "p1");
         second.DbCommandParams[1].Value.Should().Be(3L);
     }
+
+    /// <summary>
+    /// An inline <c>new[] { ... }</c> list is fixed by the expression shape, so a cached plan must not
+    /// re-extract its values on every execution (<c>NeedsParamRefresh == false</c>). This is the warm
+    /// path optimization: the parameter values built with the plan are authoritative.
+    /// </summary>
+    [Fact]
+    public void In_InlineArray_CachedPlan_ShouldNotRefreshParams()
+    {
+        using var ctx = SqliteTestContext.Create();
+        ctx.PurgeQueryCache();
+        var e = ctx.From<IComplexEntity>();
+
+        var first = (DbPreparedQueryCommand<long>)ctx.GetPreparedQueryCommand(InlineAtInA(e), false, true, CancellationToken.None);
+        var second = (DbPreparedQueryCommand<long>)ctx.GetPreparedQueryCommand(InlineAtInB(e), false, true, CancellationToken.None);
+
+        ReferenceEquals(first, second).Should().BeTrue();
+        second.NoParams.Should().BeFalse();
+        second.NeedsParamRefresh.Should().BeFalse("an inline value list cannot change while its plan key stays the same");
+    }
+
+    /// <summary>
+    /// A captured collection can change between two executions of the same cached plan, so its
+    /// parameters must keep being refreshed on a cache hit (<c>NeedsParamRefresh == true</c>) and the
+    /// new value must reach the shared command.
+    /// </summary>
+    [Fact]
+    public void In_CapturedCollection_CachedSameShape_ShouldRefreshChangedValue()
+    {
+        using var ctx = SqliteTestContext.Create();
+        ctx.PurgeQueryCache();
+        var e = ctx.From<IComplexEntity>();
+
+        var values = new long[] { 1 };
+        var first = (DbPreparedQueryCommand<long>)ctx.GetPreparedQueryCommand(
+            e.Where(c => SqlFunctions.Sql.@in(c.Id, values)).Select(c => c.Id), false, true, CancellationToken.None);
+
+        first.NeedsParamRefresh.Should().BeTrue("a captured collection is not fixed by the expression shape");
+        first.DbCommandParams[0].Value.Should().Be(1L);
+
+        // Same length => same shape hash => the same cached plan, but the value changed.
+        values[0] = 2;
+        var second = (DbPreparedQueryCommand<long>)ctx.GetPreparedQueryCommand(
+            e.Where(c => SqlFunctions.Sql.@in(c.Id, values)).Select(c => c.Id), false, true, CancellationToken.None);
+
+        ReferenceEquals(first, second).Should().BeTrue();
+        second.DbCommandParams[0].Value.Should().Be(2L);
+    }
 }

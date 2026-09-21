@@ -7,11 +7,16 @@
 - `Directory.Build.props` redirects build output into per-host-OS dirs: `bin/<linux|windows>/`, `obj/<linux|windows>/`, so WSL and Windows builds coexist. Look there for artifacts; there is no shared `obj/`.
 
 ## C# semantic analysis (Roslyn)
-- For types, symbols, references, call graphs and impact analysis use the Roslyn tool, not `rg`/`sed`. Text search is fine for docs and string literals, but it cannot resolve overloads, partial types, renames or usings.
+- Symbols are Roslyn-only: for type/member definitions, references, call sites, implementations, overloads, renaming and impact analysis use the `roslyn` tool — never `rg`/`grep`/`sed`, not even as a first pass. Text search is fine only for docs, comments and string literals; it cannot resolve overloads, partial types or usings.
+- The global rule in `~/.config/opencode/AGENTS.md` ("C# symbols: Roslyn only") applies here too and takes precedence over any reflexive grep.
 - Custom tool `roslyn` is provided globally by opencode (`~/.config/opencode/tools/roslyn.ts`) and wraps the global `roslynq` dotnet tool, which loads this solution through `MSBuildWorkspace`. Pass `solution` only if the auto-detected `.sln` is wrong.
 - Actions: `structure`, `types`, `symbols`, `members`, `refs`, `callers`, `implementations`, `rename`; pass symbols by full name (e.g. `NextORM.Core.SqlBuilder` or `NextORM.Core.SqlBuilder.MakeSelect`).
 - Bulk renames: use `rename <symbol> <newName>` (dry-run) and add `apply=true` once the diff looks right — do not edit files one by one.
 - Diagnostics after edits: `dotnet build` (see Build & toolchain). `MSBuildWorkspace` cold start is slow on this solution, so prefer one invocation per analysis over per-file calls.
+
+## Todos
+- Keep the todo list current: call `todowrite` after **each** completed step (and again when starting the next one), not just at the beginning and the end.
+- The right-hand sidebar refreshes only when `todowrite` runs, so batching updates leaves it stale for many turns and the session loses its progress indicator.
 
 ## Layout
 - `src/nextorm.core` is the engine: query builder/plan cache, expression visitors (`Visitors/`), dialects, in-memory context. Providers reference it: `nextorm.sqlite`, `nextorm.sqlserver`, `nextorm.postgres`, `nextorm.mysql`, `nextorm.clickhouse`; `nextorm.mariadb` builds on `nextorm.mysql`.

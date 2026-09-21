@@ -11,4 +11,12 @@ public interface IEntityMetadata
 {
     IReadOnlyList<IPropertyMetadata> Properties { get; }
     string? TableName { get; }
+
+    /// <summary>
+    /// Whether <see cref="TableName"/> was derived from the CLR type name rather than declared with
+    /// an attribute or a fluent mapping. An active <see cref="INamingConvention"/> is applied only to
+    /// auto names. The default implementation returns <see langword="false"/> (treat an unknown
+    /// mapping as declared) so existing external implementations keep compiling.
+    /// </summary>
+    bool IsTableNameAuto => false;
 }

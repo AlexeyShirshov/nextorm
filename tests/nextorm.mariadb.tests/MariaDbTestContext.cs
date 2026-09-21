@@ -14,6 +14,9 @@ internal static class MariaDbTestContext
     public static IDataContext Create() =>
         new MariaDbDataContext(PlaceholderConnectionString, new DataContextBuilder());
 
+    public static IDataContext CreateQuoted() =>
+        new MariaDbDataContext(PlaceholderConnectionString, new DataContextBuilder().UseQuotedIdentifiers());
+
     public static MariaDbDataContext CreateMariaDb() =>
         new(PlaceholderConnectionString, new DataContextBuilder());
 }

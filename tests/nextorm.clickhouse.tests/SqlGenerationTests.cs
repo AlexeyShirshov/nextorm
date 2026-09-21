@@ -54,6 +54,15 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void QuotedIdentifiers_ShouldUseBackticks()
+    {
+        using var ctx = ClickHouseTestContext.CreateQuoted();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.Select(x => new { x.Id })).Should().Be("select `id` from `simple_entity`");
+    }
+
+    [Fact]
     public void StringConcat_ShouldUseConcatFunction()
     {
         using var ctx = ClickHouseTestContext.Create();

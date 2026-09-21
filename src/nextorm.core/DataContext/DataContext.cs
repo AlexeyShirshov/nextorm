@@ -28,7 +28,9 @@ public abstract class DataContext : IDataContext, IConnectionManager
             optionsBuilder.LoggerFactory,
             GetType(),
             needMapping: true,
-            optionsBuilder.ShouldLogSensitiveData);
+            optionsBuilder.ShouldLogSensitiveData,
+            optionsBuilder.QuoteIdentifiers,
+            optionsBuilder.NamingConvention);
 
         _queryCache = new QueryCache(QueryPlanStore.Clear);
 
@@ -82,6 +84,18 @@ public abstract class DataContext : IDataContext, IConnectionManager
     public ILogger? Logger => _environment.Logger;
     public ILogger? CommandLogger => _environment.CommandLogger;
     public bool NeedMapping => _environment.NeedMapping;
+    /// <summary>
+    /// Whether this context quotes physical identifiers by default (set with
+    /// <c>DataContextBuilder.UseQuotedIdentifiers</c>). A command can override it with
+    /// <c>WithQuotedIdentifiers</c>.
+    /// </summary>
+    public bool QuoteIdentifiers => _environment.QuoteIdentifiers;
+    /// <summary>
+    /// Convention applied to auto-derived table and column names by default (set with
+    /// <c>DataContextBuilder.UseNamingConvention</c>), or <see langword="null"/> to emit CLR names
+    /// verbatim. A command can override it with <c>WithNamingConvention</c>.
+    /// </summary>
+    public INamingConvention? NamingConvention => _environment.NamingConvention;
     public Dictionary<string, object> Properties => _environment.Properties;
     public Lazy<QueryCommand<bool>>? AnyCommand
     {

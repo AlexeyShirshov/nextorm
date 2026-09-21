@@ -24,6 +24,8 @@ public partial class QueryCommand
         internal static void Prepare(QueryCommand cmd, bool dontCalculateHash, CancellationToken cancellationToken)
         {
             if (cmd._dataContext is null) throw new InvalidOperationException("Cannot prepare command in cache");
+            cmd.ResolvedQuoteIdentifiers = cmd.QuoteIdentifiers ?? cmd._dataContext.QuoteIdentifiers;
+            cmd.ResolvedNamingConvention = cmd.NamingConvention ?? cmd._dataContext.NamingConvention;
 #if DEBUG
             if (cmd.Logger?.IsEnabled(LogLevel.Debug) ?? false) cmd.Logger.LogDebug("Preparing command");
 #endif

@@ -28,7 +28,7 @@ public class EntityPropertyBuilder<T>
         var miVisitor = new MemberExpressionVisitor();
         miVisitor.Visit(_propertySelector);
         var pi = (PropertyInfo)miVisitor.MemberInfo! ?? throw new InvalidOperationException($"Expression {_propertySelector} does not produce PropertyInfo");
-        var r = new PropertyMetadata() { ColumnName = _columnName!, PropertyInfo = pi };
+        var r = new PropertyMetadata() { ColumnName = _columnName!, PropertyInfo = pi, IsColumnNameAuto = false };
         return r;
     }
 }

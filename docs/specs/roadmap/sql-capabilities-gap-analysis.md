@@ -206,32 +206,50 @@ Ordered by impact on real query authoring. Per-feature details and owners live i
     typed schemas are expressible through `SqlTableFunctionAttribute.WithClause` (emitted as
     `with (...)` after the call).
     Todo: [`todo_builtin_tvf_expansion.md`](todo_builtin_tvf_expansion.md).
-14. **Column identifiers are emitted unquoted.** Outside projection aliases and inner-query columns,
-    nextorm writes the mapped column name verbatim (`select id from simple_entity`, even on PostgreSQL,
-    which would also accept `"id"`). A physical name that collides with a keyword must therefore be
-    pre-quoted in its `[Column]` mapping — as `SqlFunctions.IOpenJsonRow.Key` does for the T-SQL
-    reserved word `key`. EF Core and linq2db escape identifiers per provider instead. Fixing this
-    globally would change every generated statement and is deliberately deferred.
-    Todo: [`todo_identifier_quoting.md`](todo_identifier_quoting.md).
+14. **Column identifiers are emitted unquoted by default.** Outside projection aliases and inner-query
+    columns, nextorm writes the mapped column name verbatim (`select id from simple_entity`). Identifier
+    quoting is now available as an opt-in: `DataContextBuilder.UseQuotedIdentifiers()` sets a
+    context-wide default and `WithQuotedIdentifiers()` overrides it per command
+    (`docs/getting-started/03-entities-and-metadata.md`, "Quoted identifiers"). A physical name that
+    collides with a keyword then needs no manual quoting. The default is unchanged (verbatim), so
+    existing SQL is unaffected. Auto-derived names can likewise be translated to the database's
+    spelling with an opt-in naming convention: `DataContextBuilder.UseNamingConvention(...)` sets a
+    context-wide default and `WithNamingConvention()` overrides it per command; the built-in
+    `SnakeCaseNamingConvention` maps `SimpleEntity` to `simple_entity` and `FirstName` to
+    `first_name`, while names declared with `[SqlTable]`/`[Column]` or a fluent mapping are never
+    translated (`docs/getting-started/03-entities-and-metadata.md`, "Naming conventions").
 15. **Provider field/feature differences remain.** The accepted `date_add`/`date_trunc`/`date_diff`
     fields differ per provider (e.g. SQLite folds `millisecond`/`quarter`, SQL Server rejects
     `decade`/`century`/`millennium` for `date_trunc`), `CUBE`/`GROUPING SETS` and `FULL JOIN` are
     missing on MySQL/MariaDB, `GREATEST`/`LEAST` has provider-specific NULL semantics, and several
-    features (`FOR JSON`/`FOR XML`, table hints, query hints) exist on a subset of providers. These are
+    features (`FOR JSON`/`FOR XML`) exist on a subset of providers. These are
     documented in `docs/providers/*.md` rather than unified. Date/number formatting is deliberately
     left to provider-specific `[SqlFunction]` UDFs because the `.NET` (`FORMAT`), PostgreSQL (`to_char`)
     and `%` (`DATE_FORMAT`/`strftime`/`formatDateTime`) template languages are incompatible — a single
     portable `template` argument cannot exist.
     Todo: [`todo_provider_differences.md`](todo_provider_differences.md).
-16. **No DML and no navigation properties / relationship metadata** — by design for a read-only,
+16. **Query and table hints only on SQL Server.** Statement-level hints (`Hint(...)`) render only the
+    SQL Server `OPTION (...)` clause; PostgreSQL (`pg_hint_plan` comments), MySQL and MariaDB (native
+    `/*+ ... */` optimizer hints) are not wired. Table hints (`WithTableHint`) are SQL Server-only,
+    while MySQL/MariaDB and SQLite have index hints / `INDEXED BY`. SQLite and ClickHouse have no
+    statement hint syntax and stay gated.
+    Todo: [`todo_query_hints_providers.md`](todo_query_hints_providers.md).
+17. **No DML and no navigation properties / relationship metadata** — by design for a read-only,
     no-change-tracking mapper, but still a functional gap versus both references.
-    Todo: out of scope — [`limitations.md`](../advanced/limitations.md); DML tracked separately in
+    Todo: out of scope — [`limitations.md`](../../advanced/limitations.md); DML tracked separately in
     [`todo_insert.md`](todo_insert.md)/[`todo_update.md`](todo_update.md)/
     [`todo_delete.md`](todo_delete.md)/[`todo_merge.md`](todo_merge.md).
-17. **Server/engine limits** (not fixable in nextorm): SQL Server has no `INTERSECT ALL`/`EXCEPT ALL`
+18. **Server/engine limits** (not fixable in nextorm): SQL Server has no `INTERSECT ALL`/`EXCEPT ALL`
     (the dialect correctly throws `NotSupportedException`); the ClickHouse `Memory` engine does not
     support `FINAL`/`PREWHERE`/`SAMPLE` (an integration-test limitation, not missing functionality).
-    Todo: [`limitations.md`](../advanced/limitations.md) (out of scope: engine/server cannot).
+    Todo: [`limitations.md`](../../advanced/limitations.md) (out of scope: engine/server cannot).
+19. **Warm-path plan-build cost (performance).** On the fast (tmpfs) full run the prepared path wins
+    every measured class, but the non-prepared (warm) path is still ~1.2–1.7× behind Dapper on `CTE`,
+    recursive `CTE`, `Join4` and `IN`-list. Iteration 6 showed the cost is plan build/keying, not
+    execution; `IN`-list, `INTERSECT`/`EXCEPT` and recursive `CTE` were partly closed there.
+    Iteration 8 closed the `IN`-list refresh cost (inline lists no longer re-extracted on a cache hit);
+    `CTE`/recursive `CTE`/`Join4` and captured `IN` remain (see `performance-findings.md` M12).
+    Todo: [`todo_warm_path_plan_build.md`](todo_warm_path_plan_build.md).
 
 ---
 
@@ -268,6 +286,7 @@ developed in parallel on the same working tree.
 | 23 | Date arithmetic parity (MySQL/MariaDB, SQLite) | **Done** | `BuiltinFunctionTranslator.cs`, dialects | SQL-generation tests + provider integration tests |
 | 24 | Table hints | **Done on SQL Server** | `EntityBuilder.cs`, `SqlBuilder.cs`, SQL Server dialect | SQL-generation tests |
 | 25 | PostgreSQL extended scalar functions | **Done** | `SqlFunctions.cs`, `ExtendedScalarFunctionTranslator.cs`, Postgres dialect | SQL-generation tests |
+| 26 | Warm-path plan-build (CTE / recursive CTE / `Join4` / `IN`-list) | **Open** | `QueryCommand*.cs`, `SqlBuilder.cs`, `SqlSourceRenderer.cs`, `Visitors/`, `EntityBuilder.cs`, `JoinedEntityBuilder.cs` | `SqliteBenchmarkFeaturesFairCached`, SQL-generation tests |
 
 Workstream 17–25 extended provider parity.
 
@@ -321,4 +340,4 @@ providers. External servers can be used instead via `NEXTORM_POSTGRES_CONNECTION
 ## See also
 
 - [nextorm vs linq2db: functionality comparison](../comparison/linq2db-comparison.md) — a focused side-by-side of the
-  two libraries, including the `APPLY`/`LATERAL` and query-hint status.
+  two libraries across the current query surface, including the provider-only function families.

@@ -16,6 +16,9 @@ internal static class SqlServerTestContext
     public static IDataContext Create() =>
         new SqlServerDataContext(PlaceholderConnectionString, new DataContextBuilder());
 
+    public static IDataContext CreateQuoted() =>
+        new SqlServerDataContext(PlaceholderConnectionString, new DataContextBuilder().UseQuotedIdentifiers());
+
     public static SqlServerDataContext CreateSqlServer() =>
         new(PlaceholderConnectionString, new DataContextBuilder());
 }

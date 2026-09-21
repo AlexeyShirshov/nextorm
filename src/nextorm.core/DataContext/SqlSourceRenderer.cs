@@ -60,7 +60,7 @@ internal static class SqlSourceRenderer
                 if (i > 0)
                     withBuilder.Append(", ");
 
-                withBuilder.Append(cte.Name).Append(" as (");
+                withBuilder.Append(ctx.QuoteIdentifiers ? QuoteQualifiedIdentifier(ctx.Dialect, cte.Name) : cte.Name).Append(" as (");
 
                 // Each CTE is rendered in isolation: a fresh columns provider keeps the outer source
                 // list untouched, and a fresh alias provider makes alias numbering self-contained
@@ -210,7 +210,11 @@ internal static class SqlSourceRenderer
             var sqlBuilder = StringBuilderPool.Shared.Get();
             try
             {
-                sqlBuilder.Append(from.Table);
+                var tableName = from.Table!;
+                if (from.IsAutoMapped && ctx.NamingConvention is { } namingConvention)
+                    tableName = namingConvention.TableName(tableName, from.SourceIsInterface);
+
+                sqlBuilder.Append(ctx.QuoteIdentifiers ? QuoteQualifiedIdentifier(ctx.Dialect, tableName) : tableName);
 
                 // SQL Server places table hints after the table name and before its alias.
                 if (tableHints is { Count: > 0 })
@@ -296,7 +300,7 @@ internal static class SqlSourceRenderer
         {
             for (var (i, cnt) = (0, arguments.Count); i < cnt; i++)
             {
-                using var visitor = new BaseExpressionVisitor(new VisitorOptions(entityType ?? typeof(object), ctx.Dialect, ctx.ColumnsProvider, 0, ctx.AliasProvider, ctx.ParameterProvider, ctx.QueryProvider, true, true, ctx.Params, ctx.Logger));
+                using var visitor = new BaseExpressionVisitor(new VisitorOptions(entityType ?? typeof(object), ctx.Dialect, ctx.ColumnsProvider, 0, ctx.AliasProvider, ctx.ParameterProvider, ctx.QueryProvider, true, true, ctx.Params, ctx.Logger) { QuoteIdentifiers = ctx.QuoteIdentifiers, NamingConvention = ctx.NamingConvention });
                 visitor.Visit(arguments[i]);
             }
 
@@ -313,7 +317,7 @@ internal static class SqlSourceRenderer
                 if (i > 0)
                     sqlBuilder.Append(", ");
 
-                using var visitor = new BaseExpressionVisitor(new VisitorOptions(entityType ?? typeof(object), ctx.Dialect, ctx.ColumnsProvider, 0, ctx.AliasProvider, ctx.ParameterProvider, ctx.QueryProvider, true, false, ctx.Params, ctx.Logger));
+                using var visitor = new BaseExpressionVisitor(new VisitorOptions(entityType ?? typeof(object), ctx.Dialect, ctx.ColumnsProvider, 0, ctx.AliasProvider, ctx.ParameterProvider, ctx.QueryProvider, true, false, ctx.Params, ctx.Logger) { QuoteIdentifiers = ctx.QuoteIdentifiers, NamingConvention = ctx.NamingConvention });
                 visitor.Visit(arguments[i]);
                 sqlBuilder.Append(visitor.ToString());
             }
@@ -449,5 +453,22 @@ internal static class SqlSourceRenderer
                 && !string.Equals(visitor.ColumnName, selExp.PropertyName, StringComparison.OrdinalIgnoreCase));
 
         return (needAliasForColumn, visitor.ToString());
+    }
+
+    /// <summary>
+    /// Quotes a possibly schema-qualified identifier (<c>schema.table</c>, <c>db.schema.table</c>) by
+    /// quoting each dot-separated part separately, so a quoted qualified name stays a qualified name
+    /// instead of becoming one identifier that contains dots.
+    /// </summary>
+    private static string QuoteQualifiedIdentifier(ISqlDialect dialect, string name)
+    {
+        if (name.IndexOf('.') < 0)
+            return dialect.QuoteIdentifier(name);
+
+        var parts = name.Split('.');
+        for (var i = 0; i < parts.Length; i++)
+            parts[i] = dialect.QuoteIdentifier(parts[i]);
+
+        return string.Join('.', parts);
     }
 }

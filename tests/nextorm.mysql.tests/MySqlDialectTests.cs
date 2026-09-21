@@ -20,6 +20,13 @@ public class MySqlDialectTests
     }
 
     [Fact]
+    public void QuoteIdentifier_ShouldUseBackticks()
+    {
+        Dialect.QuoteIdentifier("id").Should().Be("`id`");
+        Dialect.QuoteIdentifier("a`b").Should().Be("`a``b`");
+    }
+
+    [Fact]
     public void TextJsonHooks_ShouldUseJsonExtractFamily()
     {
         Dialect.SupportsTextJson.Should().BeTrue();

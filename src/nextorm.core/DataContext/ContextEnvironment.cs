@@ -12,7 +12,7 @@ internal sealed class ContextEnvironment : IContextEnvironment
 {
     private readonly Dictionary<string, object> _properties = [];
 
-    internal ContextEnvironment(ILoggerFactory? loggerFactory, Type contextType, bool needMapping, bool logSensitiveData)
+    internal ContextEnvironment(ILoggerFactory? loggerFactory, Type contextType, bool needMapping, bool logSensitiveData, bool quoteIdentifiers = false, INamingConvention? namingConvention = null)
     {
         if (loggerFactory is not null)
         {
@@ -24,6 +24,8 @@ internal sealed class ContextEnvironment : IContextEnvironment
         LogParams = Logger?.IsEnabled(LogLevel.Debug) ?? false;
         NeedMapping = needMapping;
         LogSensitiveData = logSensitiveData;
+        QuoteIdentifiers = quoteIdentifiers;
+        NamingConvention = namingConvention;
     }
 
     public ILogger? Logger { get; }
@@ -39,6 +41,10 @@ internal sealed class ContextEnvironment : IContextEnvironment
     internal bool LogSensitiveData { get; }
 
     public bool NeedMapping { get; }
+
+    public bool QuoteIdentifiers { get; }
+
+    public INamingConvention? NamingConvention { get; }
 
     public Dictionary<string, object> Properties => _properties;
 }

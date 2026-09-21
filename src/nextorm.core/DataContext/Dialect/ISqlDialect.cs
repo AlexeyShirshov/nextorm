@@ -567,6 +567,19 @@ public interface ISqlDialect
     /// <summary>Quotes an identifier (alias, keyword).</summary>
     string Escape(string keyword);
     /// <summary>
+    /// Quotes a physical identifier (table or column name) with the provider's delimiter, doubling an
+    /// embedded delimiter. Used when identifier quoting is enabled on the context
+    /// (<c>DataContextBuilder.UseQuotedIdentifiers</c>) or on a single command
+    /// (<c>WithQuotedIdentifiers</c>). The default is the ANSI <c>"name"</c> form; a provider with a
+    /// different delimiter (SQL Server brackets, MySQL/MariaDB/ClickHouse backticks) overrides it.
+    /// <para>
+    /// Distinct from <see cref="Escape(string)"/>, which quotes an alias/keyword for the provider and
+    /// is single-quoted on SQLite (a valid alias but not a valid identifier). Declared as a default
+    /// interface method so that existing external implementations keep compiling.
+    /// </para>
+    /// </summary>
+    string QuoteIdentifier(string name) => "\"" + name.Replace("\"", "\"\"") + "\"";
+    /// <summary>
     /// Quotes a column alias when it is referenced from an outer query. Providers that emit quoted
     /// aliases (so they survive as case-sensitive identifiers) must quote the reference accordingly.
     /// </summary>

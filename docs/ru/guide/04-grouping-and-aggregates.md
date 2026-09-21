@@ -242,12 +242,20 @@ select sum(id) from simple_entity
 | 55 |
 
 `avg` сохраняет дробную часть в SQLite и PostgreSQL; SQL Server вычисляет `AVG` по целочисленному
-столбцу как целое. Терминалы на сущности перенаправляют к тем же функциям:
+столбцу как целое. У каждого агрегата есть терминал на сущности, который перенаправляет к той же
+функции: `Sum`, `Avg`, `Min` и `Max` эквивалентны `Select(...)` с последующим `First()`, а `Count()` —
+`Select(e => SqlFunctions.Sql.count()).First()`:
 
 ```csharp
-var min = dataContext.From<ISimpleEntity>().Min(e => e.Id);            // SqlFunctions.Sql.min
-var max = await dataContext.From<ISimpleEntity>().MaxAsync(e => e.Id); // SqlFunctions.Sql.max
+var sum   = dataContext.From<ISimpleEntity>().Sum(e => e.Id);            // SqlFunctions.Sql.sum
+var avg   = dataContext.From<ISimpleEntity>().Avg(e => e.Id);            // SqlFunctions.Sql.avg
+var min   = dataContext.From<ISimpleEntity>().Min(e => e.Id);            // SqlFunctions.Sql.min
+var max   = await dataContext.From<ISimpleEntity>().MaxAsync(e => e.Id); // SqlFunctions.Sql.max
+var count = dataContext.From<ISimpleEntity>().Count();                   // SqlFunctions.Sql.count
 ```
+
+У каждого терминала есть синхронная и `...Async`-перегрузка (плюс параметризованная); `Count()`
+подробнее описан в разделе [Подсчёт](#подсчёт) ниже.
 
 ## Подсчёт
 

@@ -45,6 +45,241 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void QuotedIdentifiers_ContextFlag_ShouldQuoteTableAndColumn()
+    {
+        using var ctx = SqliteTestContext.CreateQuoted();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.Select(x => new { x.Id })).Should().Be("select \"id\" from \"simple_entity\"");
+    }
+
+    [Fact]
+    public void QuotedIdentifiers_CommandOverride_ShouldEnable()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.Select(x => new { x.Id }).WithQuotedIdentifiers()).Should().Be("select \"id\" from \"simple_entity\"");
+    }
+
+    [Fact]
+    public void QuotedIdentifiers_CommandOverride_ShouldDisable()
+    {
+        using var ctx = SqliteTestContext.CreateQuoted();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.Select(x => new { x.Id }).WithQuotedIdentifiers(false)).Should().Be("select id from simple_entity");
+    }
+
+    [Fact]
+    public void QuotedIdentifiers_BuilderOverride_ShouldApplyToWhereAndAlias()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.WithQuotedIdentifiers().Where(x => x.Id > 1).Select(x => new { x.Id }))
+            .Should().Be("select \"id\" from \"simple_entity\"\n where (\"id\" > 1)");
+    }
+
+    [Fact]
+    public void QuotedIdentifiers_KeywordPhysicalNames_ShouldNotNeedManualQuoting()
+    {
+        using var ctx = SqliteTestContext.CreateQuoted();
+        var e = ctx.From<IKeywordEntity>();
+
+        SqlOf(ctx, e.Select(x => new { x.Value })).Should().Be("select \"select\" as 'Value' from \"order\"");
+    }
+
+    [Fact]
+    public void QuotedIdentifiers_Join_ShouldQuoteTablesAndColumns()
+    {
+        using var ctx = SqliteTestContext.CreateQuoted();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+            .Select(p => new { p.Item1.Id, p.Item2.String }));
+
+        sql.Should().Contain("from \"simple_entity\"");
+        sql.Should().Contain("join \"complex_entity\"");
+        sql.Should().Contain("t1.\"id\"");
+    }
+
+    [Fact]
+    public void QuotedIdentifiers_Cte_ShouldQuoteDeclarationAndReference()
+    {
+        using var ctx = SqliteTestContext.CreateQuoted();
+        var e = ctx.From<IComplexEntity>();
+
+        var cte = e.Where(x => x.Id > 1).Select(x => new { x.Id });
+        var sql = SqlOf(ctx, ctx.With("recent", cte).From("recent").Select(t => new { id = t["id"].AsInt }));
+
+        sql.Should().StartWith("with \"recent\" as (select \"id\" from \"complex_entity\"");
+        sql.Should().EndWith("select \"id\" from \"recent\"");
+    }
+
+    [Fact]
+    public void QuotedIdentifiers_DerivedTable_ShouldQuoteAliasedColumns()
+    {
+        using var ctx = SqliteTestContext.CreateQuoted();
+        var e = ctx.From<ISimpleEntity>();
+
+        var inner = e.Where(x => x.Id > 1).Select(x => new { x.Id });
+        var sql = SqlOf(ctx, ctx.From(inner).Select(t => new { t.Id }));
+
+        sql.Should().Contain("from (select \"id\" from \"simple_entity\"");
+    }
+
+    [Fact]
+    public void QuotedIdentifiers_SchemaQualifiedTable_ShouldQuoteEachPart()
+    {
+        using var ctx = SqliteTestContext.CreateQuoted();
+
+        SqlOf(ctx, ctx.From("main.simple_entity").Select(t => new { id = t["id"].AsInt }))
+            .Should().Be("select \"id\" from \"main\".\"simple_entity\"");
+    }
+
+    [Fact]
+    public void UnattributedPoco_ShouldAutoMapByName()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        SqlOf(ctx, ctx.From<BareEntity>().Select(x => new { x.Id, x.Name }))
+            .Should().Be("select Id, Name from BareEntity");
+    }
+
+    [Fact]
+    public void UnattributedInterface_ShouldKeepTypeNameAndProject()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        SqlOf(ctx, ctx.From<IBareEntity>().Where(x => x.Id > 1).Select(x => x.Name))
+            .Should().Be("select Name from IBareEntity\n where (Id > 1)");
+    }
+
+    [Fact]
+    public void UnattributedPoco_GetOnlyProperty_ShouldNotBeMapped()
+    {
+        using var ctx = SqliteTestContext.Create();
+        ctx.From<BareEntity>();
+
+        var metadata = DataContextCache.Metadata[typeof(BareEntity)];
+        metadata.TableName.Should().Be("BareEntity");
+        metadata.Properties.Select(p => p.ColumnName).Should().BeEquivalentTo(["Id", "Name", "Stock"]);
+    }
+
+    [Fact]
+    public void UnattributedPoco_PrivateSetter_ShouldBeMapped()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        SqlOf(ctx, ctx.From<BareEntity>().Select(x => new { x.Stock }))
+            .Should().Be("select Stock from BareEntity");
+    }
+
+    [Fact]
+    public void NamingConvention_ShouldSnakeCaseAutoNames()
+    {
+        using var ctx = SqliteTestContext.CreateSnakeCase();
+
+        SqlOf(ctx, ctx.From<BareEntity>().Select(x => new { x.Id, x.Name }))
+            .Should().Be("select id, name from bare_entity");
+    }
+
+    [Fact]
+    public void NamingConvention_Interface_ShouldDropLeadingIPrefix()
+    {
+        using var ctx = SqliteTestContext.CreateSnakeCase();
+
+        SqlOf(ctx, ctx.From<IBareEntity>().Where(x => x.Id > 1).Select(x => x.Name))
+            .Should().Be("select name from bare_entity\n where (id > 1)");
+    }
+
+    [Fact]
+    public void NamingConvention_ShouldNotTranslateExplicitNames()
+    {
+        using var ctx = SqliteTestContext.CreateSnakeCase();
+
+        SqlOf(ctx, ctx.From<ExplicitlyMappedEntity>().Select(x => new { x.Value, x.FirstName }))
+            .Should().Be("select ExplicitColumn as 'Value', first_name as 'FirstName' from ExplicitTable");
+    }
+
+    [Fact]
+    public void NamingConvention_QueryOverride_ShouldApply()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        SqlOf(ctx, ctx.From<BareEntity>().WithNamingConvention(SnakeCaseNamingConvention.Instance).Select(x => new { x.Id, x.Name }))
+            .Should().Be("select id, name from bare_entity");
+    }
+
+    [Fact]
+    public void NamingConvention_WithQuotedIdentifiers_ShouldQuoteTranslatedNames()
+    {
+        using var ctx = SqliteTestContext.CreateSnakeCaseQuoted();
+
+        SqlOf(ctx, ctx.From<BareEntity>().Select(x => new { x.Id, x.Name }))
+            .Should().Be("select \"id\", \"name\" from \"bare_entity\"");
+    }
+
+    [Fact]
+    public void NamingConvention_PlanCache_ShouldNotLeakBetweenContextDefaults()
+    {
+        using var plain = SqliteTestContext.Create();
+        plain.PurgeQueryCache();
+        var plainSql = Normalize(((DbPreparedQueryCommand<int>)plain.GetPreparedQueryCommand(
+            plain.From<BareEntity>().Select(x => x.Id), false, true, CancellationToken.None)).DbCommand.CommandText);
+        plainSql.Should().Be("select Id from BareEntity");
+
+        using var snake = SqliteTestContext.CreateSnakeCase();
+        var snakeSql = Normalize(((DbPreparedQueryCommand<int>)snake.GetPreparedQueryCommand(
+            snake.From<BareEntity>().Select(x => x.Id), false, true, CancellationToken.None)).DbCommand.CommandText);
+        snakeSql.Should().Be("select id from bare_entity");
+    }
+
+    [Fact]
+    public void NamingConvention_ShouldApplyToWhereAndGroupBy()
+    {
+        using var ctx = SqliteTestContext.CreateSnakeCase();
+
+        var sql = SqlOf(ctx, ctx.From<BareEntity>()
+            .Where(x => x.Stock > 1)
+            .GroupBy(x => x.Name)
+            .Select(x => new { x.Name, count = SqlFunctions.Sql.count() }));
+
+        sql.Should().Contain("from bare_entity");
+        sql.Should().Contain("where (stock > 1)");
+        sql.Should().Contain("group by name");
+    }
+
+    [Fact]
+    public void NamingConvention_ShouldApplyToJoinedTablesButNotExplicitOnes()
+    {
+        using var ctx = SqliteTestContext.CreateSnakeCase();
+
+        var sql = SqlOf(ctx, ctx.From<BareEntity>()
+            .Join(ctx.From<ExplicitlyMappedEntity>(), (a, b) => a.Id == b.Value)
+            .Select(p => new { p.Item1.Id, p.Item2.Value }));
+
+        sql.Should().Contain("from bare_entity");
+        sql.Should().Contain("join ExplicitTable");
+    }
+
+    [Fact]
+    public void QuotedIdentifiers_PlanCache_ShouldNotLeakBetweenContextDefaults()
+    {
+        using var plain = SqliteTestContext.Create();
+        plain.PurgeQueryCache();
+        var plainSql = Normalize(((DbPreparedQueryCommand<int>)plain.GetPreparedQueryCommand(
+            plain.From<ISimpleEntity>().Select(x => x.Id), false, true, CancellationToken.None)).DbCommand.CommandText);
+        plainSql.Should().Be("select id from simple_entity");
+
+        using var quoted = SqliteTestContext.CreateQuoted();
+        var quotedSql = Normalize(((DbPreparedQueryCommand<int>)quoted.GetPreparedQueryCommand(
+            quoted.From<ISimpleEntity>().Select(x => x.Id), false, true, CancellationToken.None)).DbCommand.CommandText);
+        quotedSql.Should().Be("select \"id\" from \"simple_entity\"");
+    }
+
+    [Fact]
     public void SelectDistinctWithUnionAll_ShouldKeepDistinctInLeftBranch()
     {
         using var ctx = SqliteTestContext.Create();

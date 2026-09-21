@@ -16,6 +16,8 @@ public class MariaDbDialectTests
     {
         Dialect.MakeConcat(["a", "b"]).Should().Be("concat(a, b)");
         Dialect.Escape("t1").Should().Be("`t1`");
+        Dialect.QuoteIdentifier("id").Should().Be("`id`");
+        Dialect.QuoteIdentifier("a`b").Should().Be("`a``b`");
         Dialect.MakeParam("p0").Should().Be("@p0");
         Dialect.MakeCoalesce("a", "b").Should().Be("coalesce(a, b)");
         Dialect.MakeStringLength("x").Should().Be("char_length(x)");

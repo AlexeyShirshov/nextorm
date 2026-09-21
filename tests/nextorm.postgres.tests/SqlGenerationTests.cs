@@ -35,6 +35,15 @@ public class SqlGenerationTests
         act.Should().Throw<NotSupportedException>().WithMessage("*PIVOT*");
     }
 
+    [Fact]
+    public void NamingConvention_WithQuotedIdentifiers_ShouldQuoteTranslatedNamesWithTheProviderDelimiter()
+    {
+        using var ctx = PostgresTestContext.CreateSnakeCaseQuoted();
+
+        SqlOf(ctx, ctx.From<BareEntity>().Select(x => new { x.Id, x.Name }))
+            .Should().Be("select \"id\", \"name\" from \"bare_entity\"");
+    }
+
     private static string SqlOfCached<T>(IDataContext ctx, QueryCommand<T> cmd)
         => Normalize(((DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None)).DbCommand.CommandText);
 
@@ -45,6 +54,24 @@ public class SqlGenerationTests
         var e = ctx.From<ISimpleEntity>();
 
         SqlOf(ctx, e.Distinct().Select(x => new { x.Id })).Should().Be("select distinct id from simple_entity");
+    }
+
+    [Fact]
+    public void QuotedIdentifiers_ShouldUseDoubleQuotes()
+    {
+        using var ctx = PostgresTestContext.CreateQuoted();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.Select(x => new { x.Id })).Should().Be("select \"id\" from \"simple_entity\"");
+    }
+
+    [Fact]
+    public void QuotedIdentifiers_CommandOverride_ShouldDisable()
+    {
+        using var ctx = PostgresTestContext.CreateQuoted();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.Select(x => new { x.Id }).WithQuotedIdentifiers(false)).Should().Be("select id from simple_entity");
     }
 
     [Fact]

@@ -262,6 +262,13 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual string MakeConcat(IReadOnlyList<string> parts) => string.Join(ConcatStringOperator, parts);
 
     public virtual string Escape(string keyword) => "'" + keyword + "'";
+    /// <summary>
+    /// Quotes a physical identifier with the ANSI double-quote delimiter, doubling an embedded quote.
+    /// A provider with a different delimiter overrides this; the alias-oriented
+    /// <see cref="Escape(string)"/> is deliberately not reused because SQLite's single-quoted alias
+    /// form is not a valid identifier.
+    /// </summary>
+    public virtual string QuoteIdentifier(string name) => "\"" + name.Replace("\"", "\"\"") + "\"";
     public virtual string MakeColumnReference(string name) => name;
     public virtual string MakeTableAlias(string tableAlias) => " as " + Escape(tableAlias);
     public virtual string MakeColumnAlias(string? colAlias) => string.IsNullOrEmpty(colAlias)

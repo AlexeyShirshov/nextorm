@@ -42,3 +42,9 @@ public interface IArrayEntity
     [Column("tags")]
     string[] Tags { get; set; }
 }
+
+public class BareEntity
+{
+    public int Id { get; set; }
+    public string? Name { get; set; }
+}

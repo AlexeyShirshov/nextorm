@@ -101,6 +101,16 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     internal ArrayJoinKind ArrayJoinKind { get => _arrayJoinKind; set => _arrayJoinKind = value; }
     /// <summary>Table-level hints applied to the primary physical table (for example SQL Server <c>nolock</c>).</summary>
     internal IReadOnlyList<string>? TableHints { get; set; }
+    /// <summary>
+    /// Per-query override of identifier quoting (<c>null</c> inherits the context default). Set through
+    /// <see cref="WithQuotedIdentifiers"/>.
+    /// </summary>
+    internal bool? QuoteIdentifiers { get; set; }
+    /// <summary>
+    /// Per-query override of the naming convention for auto-derived table/column names (<c>null</c>
+    /// inherits the context default). Set through <see cref="WithNamingConvention"/>.
+    /// </summary>
+    internal INamingConvention? NamingConvention { get; set; }
     internal string? Table { get => _table; set => _table = value; }
     /// <summary>
     /// Explicit FROM source, used for table-valued functions (and any other source that is neither a
@@ -160,6 +170,8 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 
         cmd.GroupingType = GroupingType;
         cmd.TableHints = TableHints;
+        cmd.QuoteIdentifiers = QuoteIdentifiers;
+        cmd.NamingConvention = NamingConvention;
         cmd.GroupingSets = GroupingSets;
         cmd.GroupByWithTotals = GroupByWithTotals;
         cmd.LimitBy = LimitByClause;
@@ -208,6 +220,8 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 
         cmd.GroupingType = GroupingType;
         cmd.TableHints = TableHints;
+        cmd.QuoteIdentifiers = QuoteIdentifiers;
+        cmd.NamingConvention = NamingConvention;
         cmd.GroupingSets = GroupingSets;
         cmd.GroupByWithTotals = GroupByWithTotals;
         cmd.LimitBy = LimitByClause;
@@ -821,6 +835,8 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         dst.SettingsList = _settings is null ? null : [.. _settings];
         dst.PreWhereCondition = _preWhere;
         dst.TableHints = TableHints;
+        dst.QuoteIdentifiers = QuoteIdentifiers;
+        dst.NamingConvention = NamingConvention;
         dst.Ctes = Ctes;
     }
     protected virtual object CloneImp()
@@ -1063,7 +1079,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// </summary>
     private JoinedEntityBuilder<TEntity, TJoinEntity> CreateJoined<TJoinEntity>(JoinExpression join, QueryCommand? query)
     {
-        var cb = new JoinedEntityBuilder<TEntity, TJoinEntity>(_dataProvider, join) { Logger = Logger, Table = Table, _query = query, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, Ctes = Ctes };
+        var cb = new JoinedEntityBuilder<TEntity, TJoinEntity>(_dataProvider, join) { Logger = Logger, Table = Table, _query = query, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention };
         cb.SourceFrom = SourceFrom;
         return cb;
     }
@@ -1224,6 +1240,34 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 
         return b;
     }
+    /// <summary>
+    /// Overrides identifier quoting for the commands this builder creates: when
+    /// <paramref name="value"/> is <c>true</c>, physical table and column names are quoted with the
+    /// provider's delimiter (<c>"id"</c> on PostgreSQL/SQLite, <c>[id]</c> on SQL Server,
+    /// `` `id` `` on MySQL/MariaDB/ClickHouse); when <c>false</c>, names are emitted verbatim.
+    /// Without a call the command inherits the context default set with
+    /// <c>DataContextBuilder.UseQuotedIdentifiers</c>.
+    /// </summary>
+    public EntityBuilder<TEntity> WithQuotedIdentifiers(bool value = true)
+    {
+        var b = Clone();
+
+        b.QuoteIdentifiers = value;
+
+        return b;
+    }
+    /// <summary>
+    /// Overrides the naming convention applied to auto-derived table/column names for the commands
+    /// this builder creates (see <c>DataContextBuilder.UseNamingConvention</c> for the context default).
+    /// </summary>
+    public EntityBuilder<TEntity> WithNamingConvention(INamingConvention? convention)
+    {
+        var b = Clone();
+
+        b.NamingConvention = convention;
+
+        return b;
+    }
     public EntityBuilder<TEntity> Having(Expression<Func<TEntity, bool>> condition)
     {
         var b = Clone();
@@ -1282,6 +1326,16 @@ public class EntityBuilder : ICloneable
     protected List<JoinExpression>? _joins;
     /// <summary>CTE declarations that must be attached to commands this builder creates.</summary>
     internal IReadOnlyList<CteDefinition>? Ctes { get; set; }
+    /// <summary>
+    /// Per-query override of identifier quoting (<c>null</c> inherits the context default). Set through
+    /// <see cref="WithQuotedIdentifiers"/>.
+    /// </summary>
+    internal bool? QuoteIdentifiers { get; set; }
+    /// <summary>
+    /// Per-query override of the naming convention for auto-derived table/column names (<c>null</c>
+    /// inherits the context default). Set through <see cref="WithNamingConvention"/>.
+    /// </summary>
+    internal INamingConvention? NamingConvention { get; set; }
     public EntityBuilder(IDataContext dataProvider) : this(dataProvider, null) { }
     public EntityBuilder(IDataContext dataProvider, string? table)
     {
@@ -1306,6 +1360,9 @@ public class EntityBuilder : ICloneable
         if (Ctes is not null)
             cmd.Ctes = Ctes;
 
+        cmd.QuoteIdentifiers = QuoteIdentifiers;
+        cmd.NamingConvention = NamingConvention;
+
         return cmd;
     }
     object ICloneable.Clone()
@@ -1321,6 +1378,8 @@ public class EntityBuilder : ICloneable
         dst._condition = _condition;
         dst._sorting = _sorting;
         dst.Ctes = Ctes;
+        dst.QuoteIdentifiers = QuoteIdentifiers;
+        dst.NamingConvention = NamingConvention;
     }
     protected virtual object CloneImp()
     {
@@ -1345,6 +1404,31 @@ public class EntityBuilder : ICloneable
 
         return b;
     }
+
+    /// <summary>
+    /// Overrides identifier quoting for the commands this builder creates (see
+    /// <see cref="EntityBuilder{TEntity}.WithQuotedIdentifiers"/>).
+    /// </summary>
+    public EntityBuilder WithQuotedIdentifiers(bool value = true)
+    {
+        var b = Clone();
+
+        b.QuoteIdentifiers = value;
+
+        return b;
+    }
+    /// <summary>
+    /// Overrides the naming convention for the commands this builder creates (see
+    /// <see cref="EntityBuilder{TEntity}.WithNamingConvention"/>).
+    /// </summary>
+    public EntityBuilder WithNamingConvention(INamingConvention? convention)
+    {
+        var b = Clone();
+
+        b.NamingConvention = convention;
+
+        return b;
+    }
     public JoinedEntityBuilder<TableAlias, TableAlias> Join(EntityBuilder from, Expression<Func<TableAlias, TableAlias, bool>> joinCondition)
         => JoinCore(from, JoinType.Inner, joinCondition);
     public JoinedEntityBuilder<TableAlias, TableAlias> LeftJoin(EntityBuilder from, Expression<Func<TableAlias, TableAlias, bool>> joinCondition)
@@ -1361,7 +1445,7 @@ public class EntityBuilder : ICloneable
         => JoinCore(from, JoinType.OuterApply, null);
     private JoinedEntityBuilder<TableAlias, TableAlias> JoinCore(EntityBuilder from, JoinType joinType, LambdaExpression? joinCondition)
     {
-        var cb = new JoinedEntityBuilder<TableAlias, TableAlias>(_dataProvider, new JoinExpression(joinCondition, joinType) { From = new FromExpression(from._table!), EntityType = joinCondition is null ? typeof(TableAlias) : null }) { Logger = Logger, Table = _table, Ctes = Ctes };
+        var cb = new JoinedEntityBuilder<TableAlias, TableAlias>(_dataProvider, new JoinExpression(joinCondition, joinType) { From = new FromExpression(from._table!), EntityType = joinCondition is null ? typeof(TableAlias) : null }) { Logger = Logger, Table = _table, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention };
         return cb;
     }
     public JoinedEntityBuilder<TableAlias, TJoinEntity> Join<TJoinEntity>(EntityBuilder<TJoinEntity> _, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition)
@@ -1380,7 +1464,7 @@ public class EntityBuilder : ICloneable
         => JoinCore(_, JoinType.OuterApply, null);
     private JoinedEntityBuilder<TableAlias, TJoinEntity> JoinCore<TJoinEntity>(EntityBuilder<TJoinEntity> _, JoinType joinType, LambdaExpression? joinCondition)
     {
-        var cb = new JoinedEntityBuilder<TableAlias, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition, joinType) { From = _dataProvider.GetFrom(typeof(TJoinEntity), null)!, EntityType = joinCondition is null ? typeof(TJoinEntity) : null }) { Logger = Logger, Table = _table, Ctes = Ctes };
+        var cb = new JoinedEntityBuilder<TableAlias, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition, joinType) { From = _dataProvider.GetFrom(typeof(TJoinEntity), null)!, EntityType = joinCondition is null ? typeof(TJoinEntity) : null }) { Logger = Logger, Table = _table, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention };
         return cb;
     }
 }

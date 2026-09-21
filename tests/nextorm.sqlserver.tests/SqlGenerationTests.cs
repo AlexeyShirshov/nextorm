@@ -32,6 +32,24 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void QuotedIdentifiers_ShouldUseBrackets()
+    {
+        using var ctx = SqlServerTestContext.CreateQuoted();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.Select(x => new { x.Id })).Should().Be("select [id] from [simple_entity]");
+    }
+
+    [Fact]
+    public void QuotedIdentifiers_CommandOverride_ShouldDisable()
+    {
+        using var ctx = SqlServerTestContext.CreateQuoted();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.Select(x => new { x.Id }).WithQuotedIdentifiers(false)).Should().Be("select id from simple_entity");
+    }
+
+    [Fact]
     public void IifChoose_ShouldUseSqlServerFunctions()
     {
         using var ctx = SqlServerTestContext.Create();

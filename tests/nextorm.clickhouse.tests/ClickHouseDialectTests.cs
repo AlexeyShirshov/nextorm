@@ -24,6 +24,8 @@ public class ClickHouseDialectTests
     {
         Dialect.Escape("t1").Should().Be("`t1`");
         Dialect.MakeColumnReference("t1").Should().Be("`t1`");
+        Dialect.QuoteIdentifier("id").Should().Be("`id`");
+        Dialect.QuoteIdentifier("a`b").Should().Be("`a``b`");
         Dialect.MakeParam("p0").Should().Be("@p0");
         Dialect.MakeCoalesce("a", "b").Should().Be("coalesce(a, b)");
         Dialect.MakeBool(true).Should().Be("true");

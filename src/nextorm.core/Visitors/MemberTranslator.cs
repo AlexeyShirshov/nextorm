@@ -121,7 +121,7 @@ internal static class MemberTranslator
             {
                 if (!visitor.IsParamMode)
                 {
-                    var colName = node.Member.GetPropertyColumnName();
+                    var colName = node.Member.GetPropertyColumnName(visitor.Options.NamingConvention);
                     if (!string.IsNullOrEmpty(colName))
                     {
                         if (!visitor.DontNeedAlias && visitor.ColumnsProvider.HasAliases)
@@ -143,7 +143,7 @@ internal static class MemberTranslator
                                 visitor.Builder!.Append(tableAliasForColumn).Append('.');
                         }
 
-                        visitor.Builder!.Append(colName);
+                        visitor.AppendIdentifier(colName);
                         visitor.ColumnName = colName;
                         return node;
                     }
@@ -231,10 +231,10 @@ internal static class MemberTranslator
 
                 visitor.Builder!.Append(tableAliasForColumn).Append('.');
 
-                var colName = memberAccessExp.Member.GetPropertyColumnName();
+                var colName = memberAccessExp.Member.GetPropertyColumnName(visitor.Options.NamingConvention);
                 if (!string.IsNullOrEmpty(colName))
                 {
-                    visitor.Builder!.Append(colName);
+                    visitor.AppendIdentifier(colName);
                     visitor.ColumnName = colName;
                     return node;
                 }
@@ -266,7 +266,7 @@ internal static class MemberTranslator
                 if (!string.IsNullOrEmpty(tableAliasForColumn))
                     visitor.Builder!.Append(tableAliasForColumn).Append('.');
 
-                visitor.Builder!.Append(column);
+                visitor.AppendIdentifier(column);
             }
 
             return node;
@@ -370,10 +370,10 @@ internal static class MemberTranslator
 
                 if (!visitor.IsParamMode)
                 {
-                    var colName = node.Member.GetPropertyColumnName();
+                    var colName = node.Member.GetPropertyColumnName(visitor.Options.NamingConvention);
                     if (!string.IsNullOrEmpty(colName))
                     {
-                        visitor.Builder!.Append(colName);
+                        visitor.AppendIdentifier(colName);
                         visitor.ColumnName = colName;
                         return node;
                     }
@@ -441,7 +441,7 @@ internal static class MemberTranslator
             || marker.Arguments is not [ConstantExpression { Value: int idx }])
             return false;
 
-        var colName = node.Member.GetPropertyColumnName();
+        var colName = node.Member.GetPropertyColumnName(visitor.Options.NamingConvention);
         if (string.IsNullOrEmpty(colName))
             return false;
 
@@ -460,7 +460,8 @@ internal static class MemberTranslator
             if (string.IsNullOrEmpty(aliasVisitor.Alias))
                 return false;
 
-            visitor.Builder!.Append(aliasVisitor.Alias).Append('.').Append(colName);
+            visitor.Builder!.Append(aliasVisitor.Alias).Append('.');
+            visitor.AppendIdentifier(colName);
         }
 
         visitor.ColumnName = colName;

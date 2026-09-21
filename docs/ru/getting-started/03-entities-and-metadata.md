@@ -6,12 +6,19 @@
 
 ## Обзор
 
-Прежде чем строить SQL, NextORM нужно знать три вещи: таблицу, на которую отображается тип, столбец, на который отображается каждое свойство, и то, как создавать материализованные строки. Метаданные объявляются одним из трёх способов:
+Прежде чем строить SQL, NextORM нужно знать три вещи: таблицу, на которую отображается тип, столбец, на который отображается каждое свойство, и то, как создавать материализованные строки. Отображение получается одним из следующих способов:
 
 1. **Атрибуты** на интерфейсе или классе (`[SqlTable]`, `[Column]`, при необходимости `[Table]`).
 2. **Fluent-построитель**, передаваемый в `From<T>(cfg => …)`.
-3. **Полное отсутствие метаданных** - начните с имени таблицы через `From("table")` и читайте столбцы через
-   [`TableAlias`](xref:NextORM.Core.TableAlias) (`tbl.GetInt32("id")`, `tbl.GetString("name")`, …).
+3. **Ничего** - `From<T>()` строит отображение из формы типа CLR (таблица = имя типа, столбец = имя
+   свойства). См. [Типы без атрибутов](#типы-без-атрибутов).
+4. **Имя таблицы** через `From("table")` и доступ к столбцам через
+   [`TableAlias`](xref:NextORM.Core.TableAlias) (`tbl.GetInt32("id")`, `tbl.GetString("name")`, …) -
+   без типа сущности вовсе.
+
+Имена, автоматически построенные в п. 3, можно привести к написанию базы данных с помощью
+[соглашения об именовании](#соглашения-об-именовании); имена, объявленные атрибутом или fluent-отображением,
+всегда берутся дословно.
 
 Метаданные разрешаются лениво и кэшируются **на уровне процесса** в [`Metadata`](xref:NextORM.Core.DataContextCache.Metadata) по типу при первом запросе типа через [`From`](xref:NextORM.Core.DataContextExtensions). Из-за этого кэша:
 
@@ -78,6 +85,113 @@ public class SimpleEntity : ISimpleEntity
 ```
 
 `EntityMetadataBuilder` читает отображение из интерфейса: он определяет имя таблицы по реализуемым интерфейсам и для каждого записываемого свойства ищет совпадающее свойство интерфейса, чтобы найти `[Column]`. Тогда и `dataContext.From<ISimpleEntity>()`, и `dataContext.From<SimpleEntity>()` дают один и тот же SQL. Класс с атрибутами непосредственно на нём работает так же, без необходимости в интерфейсе.
+
+## Типы без атрибутов
+
+Типу не нужны атрибуты, чтобы быть доступным для запросов: [`From<T>()`](xref:NextORM.Core.DataContextExtensions) строит отображение по форме типа (и кэширует его) при первом использовании типа.
+
+* **Имя таблицы** - имя типа CLR дословно. `Product` отображается на `Product`; интерфейс сохраняет свой
+  префикс, поэтому `IProduct` отображается на `IProduct` (а не на `products`).
+* **Имя столбца** - имя свойства дословно - без snake_case и без смены регистра. `Id` отображается на `Id`.
+* **Только записываемые свойства** - свойство отображается, если у него есть сеттер, в том числе
+  непубличный; свойство только для чтения (`{ get; }`) пропускается.
+* Построенные имена выводятся как есть, поэтому они должны точно совпадать с каталогом; включите
+  [Квотирование идентификаторов](#квотирование-идентификаторов), чтобы провайдер заквотировал их, или примените
+  [соглашение об именовании](#соглашения-об-именовании), чтобы транслировать их.
+
+```csharp
+public class Product
+{
+    public int Id { get; set; }
+    public string? Name { get; set; }
+    public decimal Price { get; }            // только get -> не отображается
+    public int Stock { get; private set; }   // непубличный сеттер -> отображается
+}
+
+var rows = await dataContext.From<Product>()
+    .Select(p => new { p.Id, p.Name })
+    .ToListAsync();
+```
+
+```sql
+select Id, Name from Product
+```
+
+Голый интерфейс годится как источник запроса, пока проекция даёт скаляр, анонимный тип, кортеж или DTO -
+у интерфейса нет конструктора, поэтому материализовать его целиком как строку нельзя:
+
+```csharp
+public interface IProduct
+{
+    int Id { get; set; }
+    string? Name { get; set; }
+}
+
+var names = await dataContext.From<IProduct>()
+    .Where(p => p.Id > 1)
+    .Select(p => p.Name)
+    .ToListAsync();
+```
+
+```sql
+select Name from IProduct
+ where (Id > 1)
+```
+
+Поскольку автоматически построенное имя таблицы сохраняет префикс `I`, сущности на основе интерфейса
+обычно задают явное отображение - см. [Атрибуты](#атрибуты) или [Fluent-регистрация](#fluent-регистрация).
+
+## Соглашения об именовании
+
+Автоматически построенные имена из раздела [Типы без атрибутов](#типы-без-атрибутов) по умолчанию выводятся дословно. Соглашение об именовании приводит их к написанию базы данных - например, встроенный `SnakeCaseNamingConvention` превращает `SimpleEntity` в `simple_entity`, а `FirstName` в `first_name`. Настройте его на контексте:
+
+```csharp
+var builder = new DataContextBuilder()
+    .UseNamingConvention(SnakeCaseNamingConvention.Instance)
+    .UseSqlite(connection);
+```
+
+или для отдельной команды через `WithNamingConvention(…)` (доступно на [`EntityBuilder<T>`](xref:NextORM.Core.EntityBuilder`1) и
+[`QueryCommand<T>`](xref:NextORM.Core.QueryCommand`1)), точно так же, как `WithQuotedIdentifiers`:
+
+```csharp
+public class Product
+{
+    public int Id { get; set; }
+    public string? Name { get; set; }
+}
+
+var rows = await dataContext.From<Product>()
+    .Where(p => p.Id > 1)
+    .Select(p => new { p.Id, p.Name })
+    .ToListAsync();
+
+// select id, name from product where (id > 1)
+```
+
+Соглашение применяется только к именам, производным от имени типа/свойства CLR. Имя, объявленное через
+`[SqlTable]`/`[Column]` или fluent-отображением, берётся дословно, поэтому смешанные отображения работают:
+
+```csharp
+[SqlTable("ExplicitTable")]
+public class ExplicitEntity
+{
+    [Column("ExplicitColumn")] public int Value { get; set; }
+    public string? FirstName { get; set; }   // -> first_name
+}
+```
+
+Для интерфейсного источника ведущая `I` отбрасывается, если за ней следует ещё одна заглавная
+(`IProduct` становится `product`, но `Idle` остаётся `idle`). Идущие подряд заглавные считаются одним
+словом, поэтому `OrderID` становится `order_id`, а `HTTPServer` - `http_server`. Сочетайте соглашение с
+[квотированием идентификаторов](#квотирование-идентификаторов), если транслированные имена всё ещё нужно квотировать.
+
+Настройка для отдельной команды действует на всю внешнюю команду, поэтому задавайте `WithNamingConvention`
+на выполняемом запросе, а не на вложенном подзапросе.
+
+У [`INamingConvention`](xref:NextORM.Core.INamingConvention) два члена - `TableName(string clrName, bool isInterface)`
+и `ColumnName(string propertyName)` - поэтому проект может подставить собственное написание; верните входное
+значение без изменений, чтобы отказаться от трансляции.
 
 ## Fluent-регистрация
 
@@ -160,9 +274,54 @@ var query = dataContext.From("complex_entity")
 
 [`From`](xref:NextORM.Core.DataContextExtensions) доступен и на конкретном [`DataContext`](xref:NextORM.Core.DataContext) (`dataContext.From("simple_entity")`), и как расширение на [`IDataContext`](xref:NextORM.Core.IDataContext), поэтому работает независимо от того, используется контекст через конкретный тип или через интерфейс. Независимо от сущностей, [`From`](xref:NextORM.Core.DataContextExtensions) также может обернуть подзапрос (`dataContext.From(innerQuery)`) или другой построитель сущности (`dataContext.From(entity)`).
 
+## Квотирование идентификаторов
+
+По умолчанию имена таблиц и столбцов выводятся дословно (см. [Различия провайдеров](#различия-провайдеров)),
+поэтому физическое имя, совпадающее с зарезервированным словом, приходится заранее квотировать в
+маппинге `[SqlTable]`/`[Column]`. Квотирование идентификаторов позволяет провайдеру сделать это самому.
+Включите его на контексте:
+
+```csharp
+var builder = new DataContextBuilder()
+    .UseQuotedIdentifiers()
+    .UseSqlite(connection);
+```
+
+или на отдельном запросе через `WithQuotedIdentifiers()` (есть на [`EntityBuilder<T>`](xref:NextORM.Core.EntityBuilder`1)
+и [`QueryCommand<T>`](xref:NextORM.Core.QueryCommand`1)); `WithQuotedIdentifiers(false)` явно выключает его для
+запроса, даже если на контексте он включён:
+
+```csharp
+var rows = await dataContext.From<ISimpleEntity>()
+    .WithQuotedIdentifiers()
+    .Where(e => e.Id > 1)
+    .Select(e => new { e.Id })
+    .ToListAsync();
+
+// select "id" from "simple_entity" where ("id" > 1)     (PostgreSQL, SQLite)
+// select [id] from [simple_entity] where ([id] > 1)     (SQL Server)
+// select `id` from `simple_entity` where (`id` > 1)     (MySQL, MariaDB, ClickHouse)
+```
+
+Каждый провайдер использует свой разделитель и удваивает внутренний (`"a""b"`, `[a]]b]`, `` `a``b` ``).
+Схемно-квалифицированное имя квотируется по частям (`"sales"."orders"`), а псевдонимы столбцов сохраняют
+прежнее квотирование. Поэтому зарезервированное слово в физическом имени работает без ручного
+квотирования:
+
+```csharp
+[SqlTable("orders")]
+public interface IOrder
+{
+    [Column("select")] int Value { get; set; }
+}
+```
+
+Квотирование сочетается с [соглашениями об именовании](#соглашения-об-именовании): сначала соглашение
+транслирует автоматически построенное имя, затем квотирование защищает транслированный идентификатор.
+
 ## Различия провайдеров
 
-Имена таблиц и столбцов выводятся **дословно** - NextORM не заключает идентификаторы в кавычки и не меняет регистр - поэтому строка в `[SqlTable]`/`[Column]`/`Table(...)`/`HasColumnName(...)` должна точно совпадать с именем в каталоге для каждого провайдера.
+Имена таблиц и столбцов выводятся **дословно** по умолчанию - NextORM не заключает идентификаторы в кавычки и не меняет регистр - поэтому строка в `[SqlTable]`/`[Column]`/`Table(...)`/`HasColumnName(...)` должна точно совпадать с именем в каталоге для каждого провайдера. [Квотирование идентификаторов](#квотирование-идентификаторов) включает квотирование на стороне провайдера.
 
 | Провайдер | Поведение |
 |---|---|

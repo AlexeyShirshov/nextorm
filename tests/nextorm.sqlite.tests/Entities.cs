@@ -32,3 +32,34 @@ public interface IComplexEntity
     [Column("dt")]
     DateTime? Datetime { get; set; }
 }
+
+[SqlTable("order")]
+public interface IKeywordEntity
+{
+    [Key]
+    [Column("select")]
+    int Value { get; set; }
+}
+
+public class BareEntity
+{
+    public int Id { get; set; }
+    public string? Name { get; set; }
+    public decimal Price { get; }
+    public int Stock { get; private set; }
+}
+
+public interface IBareEntity
+{
+    int Id { get; set; }
+    string? Name { get; set; }
+}
+
+[SqlTable("ExplicitTable")]
+public class ExplicitlyMappedEntity
+{
+    [Key]
+    [Column("ExplicitColumn")]
+    public int Value { get; set; }
+    public string? FirstName { get; set; }
+}

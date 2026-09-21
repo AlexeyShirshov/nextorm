@@ -24,6 +24,9 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// </summary>
     public override string Escape(string keyword) => "[" + keyword + "]";
 
+    /// <summary>SQL Server quotes a physical identifier with brackets, doubling an embedded <c>]</c>.</summary>
+    public override string QuoteIdentifier(string name) => "[" + name.Replace("]", "]]") + "]";
+
     /// <summary>
     /// SQL Server uses a bracket-quoted identifier for references as well, so that aliases that
     /// collide with a T-SQL keyword (e.g. "double") stay usable from an outer query.

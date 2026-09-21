@@ -7,12 +7,19 @@
 ## Overview
 
 NextORM needs to know three things before it can build SQL: the table a type maps to, the column each
-property maps to, and how to create materialised rows. Metadata is declared in one of three ways:
+property maps to, and how to create materialised rows. A mapping is obtained in one of these ways:
 
 1. **Attributes** on an interface or on a class (`[SqlTable]`, `[Column]`, optionally `[Table]`).
 2. A **fluent builder** passed to `From<T>(cfg => …)`.
-3. **No metadata at all** - start from a raw table name with `From("table")` and read columns through a
-   [`TableAlias`](xref:NextORM.Core.TableAlias) (`tbl.GetInt32("id")`, `tbl.GetString("name")`, …).
+3. **Nothing at all** - `From<T>()` auto-builds the mapping from the CLR type's shape (table = type
+   name, column = property name). See [Types without attributes](#types-without-attributes).
+4. A **raw table name** with `From("table")` and column access through a
+   [`TableAlias`](xref:NextORM.Core.TableAlias) (`tbl.GetInt32("id")`, `tbl.GetString("name")`, …) -
+   no entity type at all.
+
+The names auto-derived in item 3 can be translated to the database's spelling with a
+[naming convention](#naming-conventions); names declared with an attribute or a fluent mapping are
+always taken verbatim.
 
 Metadata is resolved lazily and cached **process-wide** in [`Metadata`](xref:NextORM.Core.DataContextCache.Metadata), keyed by type,
 the first time a type is queried through [`From`](xref:NextORM.Core.DataContextExtensions). Because of that cache:
@@ -86,6 +93,117 @@ public class SimpleEntity : ISimpleEntity
 interfaces and, for each writable property, looks up the matching interface property to find `[Column]`.
 Both `dataContext.From<ISimpleEntity>()` and `dataContext.From<SimpleEntity>()` then produce the same
 SQL. A class with attributes directly on it works the same way, with no interface required.
+
+## Types without attributes
+
+A type does not need any attribute to be queryable: [`From<T>()`](xref:NextORM.Core.DataContextExtensions) builds a mapping from
+the type's shape (and caches it) the first time the type is used.
+
+* **Table name** - the CLR type name, verbatim. `Product` maps to `Product`; an interface keeps its
+  prefix, so `IProduct` maps to `IProduct` (not `products`).
+* **Column name** - the property name, verbatim - no snake_case, no case folding. `Id` maps to `Id`.
+* **Writable properties only** - a property is mapped when it has a setter, including a non-public one;
+  a get-only property (`{ get; }`) is skipped.
+* The auto-built names are emitted as-is, so they must match the catalog exactly; enable
+  [Quoted identifiers](#quoted-identifiers) to have the provider quote them, or apply a
+  [naming convention](#naming-conventions) to translate them.
+
+```csharp
+public class Product
+{
+    public int Id { get; set; }
+    public string? Name { get; set; }
+    public decimal Price { get; }            // get-only -> not mapped
+    public int Stock { get; private set; }   // non-public setter -> mapped
+}
+
+var rows = await dataContext.From<Product>()
+    .Select(p => new { p.Id, p.Name })
+    .ToListAsync();
+```
+
+```sql
+select Id, Name from Product
+```
+
+A bare interface works as a query source as long as the projection produces a scalar, an anonymous
+type, a tuple or a DTO - an interface has no constructor, so it cannot be materialised as a whole row:
+
+```csharp
+public interface IProduct
+{
+    int Id { get; set; }
+    string? Name { get; set; }
+}
+
+var names = await dataContext.From<IProduct>()
+    .Where(p => p.Id > 1)
+    .Select(p => p.Name)
+    .ToListAsync();
+```
+
+```sql
+select Name from IProduct
+ where (Id > 1)
+```
+
+Because the auto-built table name keeps the interface's `I` prefix, an interface-backed entity is
+normally given an explicit mapping - see [Attributes](#attributes) or [Fluent registration](#fluent-registration).
+
+## Naming conventions
+
+The auto-built names of [Types without attributes](#types-without-attributes) are emitted verbatim by
+default. A naming convention translates them to the database's spelling - for example the built-in
+`SnakeCaseNamingConvention` turns `SimpleEntity` into `simple_entity` and `FirstName` into
+`first_name`. Configure it on the context:
+
+```csharp
+var builder = new DataContextBuilder()
+    .UseNamingConvention(SnakeCaseNamingConvention.Instance)
+    .UseSqlite(connection);
+```
+
+or per command with `WithNamingConvention(…)` (available on [`EntityBuilder<T>`](xref:NextORM.Core.EntityBuilder`1) and
+[`QueryCommand<T>`](xref:NextORM.Core.QueryCommand`1)), exactly like `WithQuotedIdentifiers`:
+
+```csharp
+public class Product
+{
+    public int Id { get; set; }
+    public string? Name { get; set; }
+}
+
+var rows = await dataContext.From<Product>()
+    .Where(p => p.Id > 1)
+    .Select(p => new { p.Id, p.Name })
+    .ToListAsync();
+
+// select id, name from product where (id > 1)
+```
+
+The convention applies only to names derived from the CLR type/property name. A name declared with
+`[SqlTable]`/`[Column]` or a fluent mapping is taken verbatim, so mixed mappings work:
+
+```csharp
+[SqlTable("ExplicitTable")]
+public class ExplicitEntity
+{
+    [Column("ExplicitColumn")] public int Value { get; set; }
+    public string? FirstName { get; set; }   // -> first_name
+}
+```
+
+For an interface source the leading `I` is dropped when it is followed by another capital
+(`IProduct` becomes `product`, but `Idle` stays `idle`). Runs of capitals are treated as one word, so
+`OrderID` becomes `order_id` and `HTTPServer` becomes `http_server`. Combine the convention with
+[Quoted identifiers](#quoted-identifiers) when the translated names still need quoting.
+
+The per-command setting resolves for the whole outer command, so set `WithNamingConvention` on the
+query you execute rather than on a nested subquery.
+
+[`INamingConvention`](xref:NextORM.Core.INamingConvention) has two members - `TableName(string clrName, bool isInterface)`
+and `ColumnName(string propertyName)` - so a project can plug in its own spelling; return the input
+unchanged to opt out.
 
 ## Fluent registration
 
@@ -175,11 +293,55 @@ extension on [`IDataContext`](xref:NextORM.Core.IDataContext), so it works wheth
 interface. Independently of entities, [`From`](xref:NextORM.Core.DataContextExtensions) can also wrap a subquery
 (`dataContext.From(innerQuery)`) or another entity builder (`dataContext.From(entity)`).
 
+## Quoted identifiers
+
+By default table and column names are emitted verbatim (see [Provider differences](#provider-differences)),
+so a physical name that is a reserved word has to be pre-quoted in its `[SqlTable]`/`[Column]` mapping.
+Identifier quoting lets the provider quote them instead. Enable it on the context:
+
+```csharp
+var builder = new DataContextBuilder()
+    .UseQuotedIdentifiers()
+    .UseSqlite(connection);
+```
+
+or per command with `WithQuotedIdentifiers()` (available on [`EntityBuilder<T>`](xref:NextORM.Core.EntityBuilder`1) and
+[`QueryCommand<T>`](xref:NextORM.Core.QueryCommand`1)); `WithQuotedIdentifiers(false)` explicitly turns it off for that
+command even when the context default is on:
+
+```csharp
+var rows = await dataContext.From<ISimpleEntity>()
+    .WithQuotedIdentifiers()
+    .Where(e => e.Id > 1)
+    .Select(e => new { e.Id })
+    .ToListAsync();
+
+// select "id" from "simple_entity" where ("id" > 1)     (PostgreSQL, SQLite)
+// select [id] from [simple_entity] where ([id] > 1)     (SQL Server)
+// select `id` from `simple_entity` where (`id` > 1)     (MySQL, MariaDB, ClickHouse)
+```
+
+Each provider uses its own delimiter and doubles an embedded one (`"a""b"`, `[a]]b]`, `` `a``b` ``).
+A schema-qualified name is quoted part by part (`"sales"."orders"`), and column aliases keep the quoting
+they already had. A reserved word mapped as a physical name therefore works without manual quoting:
+
+```csharp
+[SqlTable("orders")]
+public interface IOrder
+{
+    [Column("select")] int Value { get; set; }
+}
+```
+
+Quoting composes with [naming conventions](#naming-conventions): the convention translates the
+auto-built name first, then quoting protects the translated identifier.
+
 ## Provider differences
 
-Table and column names are emitted **verbatim** - NextORM does not quote or case-fold identifiers - so
-the string in `[SqlTable]`/`[Column]`/`Table(...)`/`HasColumnName(...)` must match the catalog name
-exactly for every provider.
+Table and column names are emitted **verbatim** by default - NextORM does not quote or case-fold
+identifiers - so the string in `[SqlTable]`/`[Column]`/`Table(...)`/`HasColumnName(...)` must match the
+catalog name exactly for every provider. [Quoted identifiers](#quoted-identifiers) opts into
+provider-side quoting instead.
 
 | Provider | Behaviour |
 |---|---|

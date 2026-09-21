@@ -152,6 +152,9 @@ public class MySqlDialect : SqlDialectBase
     // MySQL quotes identifiers with backticks; single-quoted aliases are syntax errors.
     public override string Escape(string keyword) => "`" + keyword + "`";
 
+    /// <summary>MySQL quotes a physical identifier with backticks, doubling an embedded backtick.</summary>
+    public override string QuoteIdentifier(string name) => "`" + name.Replace("`", "``") + "`";
+
     public override string MakeColumnReference(string name) => Escape(name);
 
     // MySQL's CAST target has its own type names (there is no cast(... as bigint/integer)); the CLR

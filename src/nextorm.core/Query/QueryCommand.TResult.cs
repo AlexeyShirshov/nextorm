@@ -351,6 +351,34 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
         return cmd;
     }
     /// <summary>
+    /// Overrides identifier quoting for this command: when <paramref name="value"/> is <c>true</c>,
+    /// physical table and column names are quoted with the provider's delimiter (<c>"id"</c> on
+    /// PostgreSQL/SQLite, <c>[id]</c> on SQL Server, `` `id` `` on MySQL/MariaDB/ClickHouse); when
+    /// <c>false</c>, names are emitted verbatim. Without a call the command inherits the context
+    /// default set with <c>DataContextBuilder.UseQuotedIdentifiers</c>.
+    /// </summary>
+    public QueryCommand<TResult> WithQuotedIdentifiers(bool value = true)
+    {
+        var cmd = (QueryCommand<TResult>)Clone();
+        cmd.ResetPreparation();
+        cmd.QuoteIdentifiers = value;
+        return cmd;
+    }
+    /// <summary>
+    /// Overrides the naming convention for this command: auto-derived table and column names are
+    /// translated through <paramref name="convention"/> (for example
+    /// <see cref="SnakeCaseNamingConvention.Instance"/>), while names declared with
+    /// <c>[SqlTable]</c>/<c>[Column]</c> or a fluent mapping stay verbatim. Without a call the command
+    /// inherits the context default set with <c>DataContextBuilder.UseNamingConvention</c>.
+    /// </summary>
+    public QueryCommand<TResult> WithNamingConvention(INamingConvention? convention)
+    {
+        var cmd = (QueryCommand<TResult>)Clone();
+        cmd.ResetPreparation();
+        cmd.NamingConvention = convention;
+        return cmd;
+    }
+    /// <summary>
     /// Appends a SQL Server <c>FOR JSON</c> clause to the statement, so the result set is returned as a
     /// single JSON document (<c>FOR JSON PATH</c> by default). A dialect that does not support it
     /// rejects the command when its SQL is built. The projection should be a single string column (or

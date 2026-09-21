@@ -38,6 +38,7 @@
 | [`EntityBuilder`](xref:NextORM.Core.EntityBuilder) | Fluent-построитель для источника псевдонима/таблицы без типа сущности (режим [`TableAlias`](xref:NextORM.Core.TableAlias)). |
 | [`JoinedEntityBuilder<T1,T2>`](xref:NextORM.Core.JoinedEntityBuilder`2) … [`JoinedEntityBuilder<T1..T8>`](xref:NextORM.Core.JoinedEntityBuilder`8) | Накопительные построители соединений; арность от 2 до 8. |
 | [`EntityMetadataBuilder<T>`](xref:NextORM.Core.EntityMetadataBuilder`1) | Fluent-конфигурация метаданных сущности, используемая `IDataContext.From<T>(...)`. |
+| [`INamingConvention`](xref:NextORM.Core.INamingConvention) | Транслирует автоматически построенные имена таблиц/столбцов (см. `DataContextBuilder.UseNamingConvention`); встроенный [`SnakeCaseNamingConvention`](xref:NextORM.Core.SnakeCaseNamingConvention) отображает `SimpleEntity` на `simple_entity`, а `FirstName` на `first_name`. |
 | [`Projection<T1,T2>`](xref:NextORM.Core.Projection`2) … [`Projection<T1..T8>`](xref:NextORM.Core.Projection`8) | Форма результата соединённого запроса; предоставляет `Item1`…`` |
 | [`IProjection`](xref:NextORM.Core.IProjection) / [`IExtendableProjection`](xref:NextORM.Core.IExtendableProjection) | Маркеры для накопленных проекций соединений (арность 8 не расширяема). |
 | [`CteQuery`](xref:NextORM.Core.CteQuery) | Fluent-область, собирающая объявления `WITH`. |
@@ -97,7 +98,7 @@
 
 | Тип | Описание |
 |---|---|
-| [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) | Построитель параметров провайдера: [`UseLoggerFactory`](xref:NextORM.Core.DataContextBuilder), [`LogSensitiveData`](xref:NextORM.Core.DataContextBuilder), [`Factory`](xref:NextORM.Core.DataContextBuilder.Factory), `` |
+| [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) | Построитель параметров провайдера: [`UseLoggerFactory`](xref:NextORM.Core.DataContextBuilder), [`LogSensitiveData`](xref:NextORM.Core.DataContextBuilder), [`Factory`](xref:NextORM.Core.DataContextBuilder.Factory), [`UseQuotedIdentifiers`](xref:NextORM.Core.DataContextBuilder), [`UseNamingConvention`](xref:NextORM.Core.DataContextBuilder). |
 | [`ServiceCollectionExtensions`](xref:NextORM.Core.ServiceCollectionExtensions) | [`AddNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions) / [`AddKeyedNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions) (универсальные и управляемые options). |
 
 ## Пространство имён `nextorm.sqlite`
