@@ -54,6 +54,17 @@ var rows = dataContext.From<IComplexEntity>()
 select nullableint as 'Int', count(*) from complex_entity group by nullableint
 ```
 
+For a single grouping column the anonymous wrapper is optional: pass the scalar expression directly.
+`GroupBy(e => e.Int)` and `GroupBy(e => new { e.Int })` produce the same SQL and share the same query
+plan, so the two forms can be used interchangeably:
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .GroupBy(e => e.Int)
+    .Select(e => new { e.Int, count = SqlFunctions.Sql.count() })
+    .ToList();
+```
+
 The `Output:` tables below show the rows returned by each example against the integration-test seed data (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
 
 Output:
@@ -411,12 +422,12 @@ its own dialect capability; PostgreSQL and ClickHouse opt into different subsets
 | Statistical | `SqlFunctions.Sql.corr(y, x)`, `covar_pop(y, x)`, `covar_samp(y, x)` | `corr(y, x)`, ... / `covarPop(y, x)`, ... | [`SupportsStatisticalAggregates`](xref:NextORM.Core.ISqlDialect.SupportsStatisticalAggregates) | PostgreSQL, ClickHouse |
 | Regression | `SqlFunctions.Postgres.regr_slope(y, x)`, `regr_intercept(y, x)`, `regr_r2(y, x)`, `regr_count(y, x)`, `regr_avgx(y, x)`, `regr_avgy(y, x)` | `regr_slope(y, x)`, ... | [`SupportsRegressionAggregates`](xref:NextORM.Core.ISqlDialect.SupportsRegressionAggregates) | PostgreSQL |
 | ArgMin/ArgMax | `SqlFunctions.ClickHouse.arg_min(value, by)`, `arg_max(value, by)` | `argMin(value, by)`, `argMax(value, by)` | [`SupportsArgMinMax`](xref:NextORM.Core.ISqlDialect.SupportsArgMinMax) | ClickHouse |
-| Distinct count | `SqlFunctions.ClickHouse.uniq(x)`, `uniq_exact(x)`, `uniq_combined(x)`, `uniq_hll12(x)` | `toInt64(uniq(x))`, `toInt64(uniqExact(x))`, ... | [`SupportsUniqAggregates`](xref:NextORM.Core.ISqlDialect.SupportsUniqAggregates) | ClickHouse |
-| Quantile / median | `SqlFunctions.ClickHouse.quantile(0.5, x)`, `quantile_exact(0.9, x)`, `quantile_timing(0.5, x)`, `median(x)` | `toFloat64(quantile(0.5)(x))`, `toFloat64(median(x))`, ... | [`SupportsQuantileAggregates`](xref:NextORM.Core.ISqlDialect.SupportsQuantileAggregates) | ClickHouse |
+| Distinct count | `SqlFunctions.ClickHouse.uniq(x)`, `uniq_exact(x)`, `uniq_combined(x)`, `uniq_hll12(x)` | `toInt64(uniq(x))`, `toInt64(uniqExact(x))`, ... | [`UniqAggregates`](xref:NextORM.Core.ISqlDialect.UniqAggregates) | ClickHouse |
+| Quantile / median | `SqlFunctions.ClickHouse.quantile(0.5, x)`, `quantile_exact(0.9, x)`, `quantile_timing(0.5, x)`, `median(x)` | `toFloat64(quantile(0.5)(x))`, `toFloat64(median(x))`, ... | [`QuantileAggregates`](xref:NextORM.Core.ISqlDialect.QuantileAggregates) | ClickHouse |
 | Arbitrary value | `SqlFunctions.Sql.any_agg(x)` | `ANY_VALUE(x)` / `any(x)` | [`SupportsAnyValueAggregate`](xref:NextORM.Core.ISqlDialect.SupportsAnyValueAggregate) | MySQL, ClickHouse |
 | Last row | `SqlFunctions.ClickHouse.any_last(x)` | `anyLast(x)` | [`SupportsAnyAggregates`](xref:NextORM.Core.ISqlDialect.SupportsAnyAggregates) | ClickHouse |
 | Filtered (`-If`) | `SqlFunctions.ClickHouse.count_if(() => p)`, `sum_if(x, () => p)`, `avg_if(x, () => p)`, `min_if(x, () => p)`, `max_if(x, () => p)` | `countIf(p)`, `sumIf(x, p)`, ... | [`SupportsIfAggregates`](xref:NextORM.Core.ISqlDialect.SupportsIfAggregates) | ClickHouse |
-| Sequence / funnel | `SqlFunctions.ClickHouse.window_funnel(window, ts, c1, c2)` , `sequence_match(pattern, ts, c1, c2)`, `retention(c1, c2)` | `toInt32(windowFunnel(window)(ts, c1, c2))`, `toInt32(sequenceMatch(pattern)(ts, c1, c2))`, `retention(c1, c2)` | [`SupportsSequenceAggregates`](xref:NextORM.Core.ISqlDialect.SupportsSequenceAggregates) | ClickHouse |
+| Sequence / funnel | `SqlFunctions.ClickHouse.window_funnel(window, ts, c1, c2)` , `sequence_match(pattern, ts, c1, c2)`, `retention(c1, c2)` | `toInt32(windowFunnel(window)(ts, c1, c2))`, `toInt32(sequenceMatch(pattern)(ts, c1, c2))`, `retention(c1, c2)` | [`SequenceAggregates`](xref:NextORM.Core.ISqlDialect.SequenceAggregates) | ClickHouse |
 | Ordered-set | `SqlFunctions.Postgres.percentile_cont(fraction, () => x)`, `percentile_disc(fraction, () => x)`, `mode(() => x)` | `percentile_cont(f) within group (order by x)`, ... | [`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates) | PostgreSQL |
 
 MariaDB does **not** support `any_agg`: it has no `ANY_VALUE` in 10.4–12.x (the SQL-2023 `T626` feature

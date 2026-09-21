@@ -1,7 +1,7 @@
 # План реализации: общие коррелированные подзапросы
 
-**Статус:** реализовано (SQL MVP, фазы 0–5) и запланированная граница для in-memory.
-**Дата среза:** 2026-09-18 (рабочее дерево в середине рефакторинга — номера строк сверять повторно).
+**Статус:** реализовано (SQL MVP, фазы 0–7); для depth ≥ 2, агрегатных терминалов и in-memory — осознанные явные границы (`NotSupportedException`).
+**Дата среза:** 2026-09-20 (HEAD `a63a6fa`; номера строк после рефакторингов сверять повторно).
 
 ## Прогресс
 
@@ -11,8 +11,8 @@
 | 1. Привязка внешних параметров | **Done** | `CorrelatedQueryExpressionVisitor.PushOuter`/`VisitLambda`/`ReferencesOuter`, `QueryCommand.QueryPreparer.PrepareColumns` |
 | 2. Коррелированный скаляр (SQL) | **Done** | `CorrelatedQueryExpressionVisitor` скалярная ветка → `GetQueryCommand`; тесты `CorrelatedQueryTests`, `CommonTestSuite.CorrelatedQuery` |
 | 3. `EXISTS`/`IN` вне `WHERE` | **Done** | тесты `CorrelatedInInSelect`, `CorrelatedExistsInOrderBy`, `CorrelatedExistsInSelect` |
-| 4. Агрегатные терминалы | **Done (явная граница)** | `IsAggregateTerminal` → `NotSupportedException`; тест `AggregateTerminalInsideSubquery_ShouldThrowNotSupported` |
-| 5. Глубина ≥ 2 | **Done (явная граница)** | `ContainsOuterRefMarker` → `NotSupportedException`; тест `NestedCorrelationDepth2_ShouldThrowNotSupported` |
+| 4. Агрегатные терминалы | **Done** | `CorrelatedQueryExpressionVisitor.ReplaceAggregateTerminal` → `builder.Select(agg).First()`; тесты `AggregateCountInsideSubquery_ShouldRenderAggregateSubquery`, `CorrelatedAggregateTerminalInSelect_ShouldAggregatePerRow` |
+| 5. Глубина ≥ 2 | **Done** | `QueryCommand.OuterRegistry`/`RootRegistry` (плоский реестр на корне) + `NestedCorrelationDepth2_ShouldReferenceBothOuterLevels`/`NestedCorrelationDepth2_ShouldEvaluatePerRow` |
 | 6. In-memory | **Done (явная граница, MVP)** | `InMemoryQueryBuilder.GetPreparedQueryCommand` → `NotSupportedException` при `OuterReferences.Count > 0`; тесты `CorrelatedQueryInMemoryTests` |
 | 7. Документация EN+RU | **Done** | `docs/guide/06-subqueries.md`, `docs/advanced/limitations.md`, `roadmap/sql-capabilities-gap-analysis.md` + RU-зеркала |
 
@@ -109,7 +109,7 @@ Scratch-файлы удалены; в фазе 0 эти сценарии ста�
 ### Не-цели
 
 - Коррелированный `APPLY`/`LATERAL` (roadmap §4.2) — использует тот же outer-reference API, но своя поверхность `FROM`.
-  Проектируем общий примитив, реализацию `APPLY` не делаем.
+  Проектируем общий примитив, реализацию `APPLY` не делаем; вынесено отдельно и реализовано — см. [`guide/03-joins.md`](../guide/03-joins.md) § «Correlated APPLY / LATERAL».
 - Composable raw SQL, `SelectMany`/`GroupJoin` на SQL-провайдерах, DML, navigation properties.
 - Новый публичный API: синтаксис уже выразим существующими терминалами `QueryCommand<T>`.
 
@@ -324,16 +324,19 @@ Scratch-файлы удалены; в фазе 0 эти сценарии ста�
 
 Статус после реализации (2026-09-18):
 
-1. **Общий outer-reference API для `APPLY`/`LATERAL`.** Оставлено `internal` (`PushOuter`/`OuterScope`), как и предлагалось;
-   публичный контракт не вводили. Открыто для будущего workstream (roadmap §4.2).
+1. **Общий outer-reference API для `APPLY`/`LATERAL`. — РЕАЛИЗОВАНО (2026-09-21).** `PushOuter`/`OuterScope`
+   остались `internal`; коррелированный источник выражается лямбдой над строкой левой стороны
+   (`CrossApply`/`OuterApply`), см. [`guide/03-joins.md`](../guide/03-joins.md) (roadmap §4.2).
 2. **Семантика скаляра без строки. — ДОРАБОТАНО.** Изначально `FirstOrDefault<int>` вёл себя как `First<int>` (кидал),
    потому что терминал не доносился до материализации. Исправлено: `ReplaceQueryCommand` записывает `DefaultOnEmpty`/
    `SingleScalar` в целевую команду, `PrepareColumns` переносит `DefaultOnNull` в `SelectExpression`, а
    `RowMapperFactory.MapColumn` (и override SQL Server) на SQL NULL возвращает `default(T)` для `*OrDefault`. Итог:
    nullable-проекция без строки → `null`; non-nullable value + `*OrDefault` → `default`; non-nullable `First`/`Single` → исключение.
    `Single`/`SingleOrDefault` при >1 строке: команда рендерится с `limit 2`, и провайдеры с проверкой кардинальности
-   (PG/SQL Server/MySQL/MariaDB/ClickHouse) бросают; SQLite её не проверяет, поэтому `Single`/`SingleOrDefault` в скалярном
-   подзапросе отклоняются `NotSupportedException` (`ISqlDialect.EnforcesScalarSubqueryCardinality` = false у SQLite).
+   (PG/SQL Server/MySQL/MariaDB/ClickHouse) бросают; SQLite её не проверяет, поэтому числовой `Single`/`SingleOrDefault` в скалярном
+   подзапросе гардируется рендером `case when count(*) > 1 then abs(-9223372036854775808) else value end`
+   (`QueryCommand.QueryPreparer.WrapSingleScalarCardinalityGuard`), а нечисловая проекция отклоняется
+   `NotSupportedException` (`ISqlDialect.EnforcesScalarSubqueryCardinality` = false у SQLite).
    Флаги учтены в `QueryPlanEqualityComparer`/`SelectExpressionPlanEqualityComparer`/`CopyTo` и в ключе маппера.
    Тесты: `CommonTestSuite.CorrelatedQuery.cs` (value-OrDefault, Single value/throw, gated по
    `ITestProvider.EnforcesScalarSubqueryCardinality`), `SqliteSpecificTests.CorrelatedScalarSingle_ShouldThrowNotSupported`,
@@ -374,5 +377,5 @@ Scratch-файлы удалены; в фазе 0 эти сценарии ста�
    `CorrelatedExistsOnJoinProjection_ShouldReferenceTheSecondItemAlias`,
    `SqlGenerationTests.CorrelatedScalarOnJoinProjection_ShouldReferenceOuterAlias`;
    интеграция: `CorrelatedScalarOnJoinProjection_ShouldEvaluatePerRow`,
-   `CorrelatedExistsOnJoinProjection_ShouldEvaluatePerRow`. Разбор — `WIP_correlated_scalar_projection.md`.
+   `CorrelatedExistsOnJoinProjection_ShouldEvaluatePerRow`.
 

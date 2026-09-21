@@ -23,6 +23,22 @@ public class SqlGenerationTests
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd) => Normalize(Prepare(ctx, cmd).DbCommand.CommandText);
 
     [Fact]
+    public void Pivot_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var act = () => SqlOf(ctx, e
+            .Pivot(PivotAggregate.Count, s => s.Id, s => s.Id, PivotValue.Create("1"))
+            .Select(t => new { V = t.GetNullableInt32("1") }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*PIVOT*");
+    }
+
+    private static string SqlOfCached<T>(IDataContext ctx, QueryCommand<T> cmd)
+        => Normalize(((DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None)).DbCommand.CommandText);
+
+    [Fact]
     public void SelectDistinct_ShouldEmitDistinct()
     {
         using var ctx = PostgresTestContext.Create();
@@ -194,6 +210,24 @@ public class SqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         SqlOf(ctx, e.Select(x => SqlFunctions.Sql.count_big())).Should().Contain("count(*)");
+    }
+
+    [Fact]
+    public void GroupBy_ScalarKey_ShouldMatchAnonymousKey()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var anonymous = SqlOf(ctx, e
+            .GroupBy(x => new { x.Int })
+            .Select(x => new { x.Int, count = SqlFunctions.Sql.count() }));
+
+        var scalar = SqlOf(ctx, e
+            .GroupBy(x => x.Int)
+            .Select(x => new { x.Int, count = SqlFunctions.Sql.count() }));
+
+        scalar.Should().Contain("group by nullableint");
+        scalar.Should().Be(anonymous);
     }
 
     [Fact]
@@ -386,6 +420,32 @@ public class SqlGenerationTests
 
         sql.Should().Contain("cross join lateral (select id, somestring as \"String\" from complex_entity");
         sql.Should().Contain(") as \"t2\"");
+    }
+
+    [Fact]
+    public void CrossApply_ToCorrelatedSubquery_ShouldEmitCrossJoinLateral()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .CrossApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id).Select(c => new { c.Id, c.String }))
+            .Select(p => new { p.Item1.Id, p.Item2.String }));
+
+        sql.Should().Be("select t1.id, t3.\"String\" from simple_entity as \"t1\" cross join lateral (select t2.id, t2.somestring as \"String\" from complex_entity as \"t2\"\n"
+            + " where t2.id = cast(t1.id as bigint)) as \"t3\"");
+    }
+
+    [Fact]
+    public void OuterApply_ToCorrelatedSubquery_ShouldEmitLeftJoinLateralOnTrue()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .OuterApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id).Select(c => new { c.Id, c.String }))
+            .Select(p => new { p.Item1.Id, p.Item2.String }));
+
+        sql.Should().Be("select t1.id, t3.\"String\" from simple_entity as \"t1\" left join lateral (select t2.id, t2.somestring as \"String\" from complex_entity as \"t2\"\n"
+            + " where t2.id = cast(t1.id as bigint)) as \"t3\" on true");
     }
 
     [Fact]
@@ -1455,6 +1515,44 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void Cte_JoinedToAnotherCte_ShouldQualifyAliasColumns()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var left = ctx.From<IComplexEntity>().Select(x => new { x.Id });
+        var right = ctx.From<ISimpleEntity>().Select(x => new { x.Id });
+
+        var sql = SqlOf(ctx, ctx.With("l", left).With("r", right)
+            .From("l")
+            .Join(ctx.From("r"), (l, r) => l.GetInt64("id") == r.GetInt64("id"))
+            .Select(p => new { Id = p.Item1.GetInt64("id"), Other = p.Item2.GetInt64("id") }));
+
+        sql.Should().Be("with l as (select id from complex_entity), r as (select id from simple_entity) select t1.id, t2.id from l as \"t1\" join r as \"t2\" on t1.id = t2.id");
+    }
+
+    [Fact]
+    public void Cte_Source_ShouldSupportGroupByHavingOrderByLimit()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var cte = ctx.From<IComplexEntity>().Select(x => new { x.Id, somestring = x.String });
+
+        var sql = SqlOf(ctx, ctx.With("recent", cte)
+            .From("recent")
+            .Where(t => t.GetInt64("id") > 0)
+            .GroupBy(t => new { somestring = t.GetString("somestring") })
+            .Having(t => SqlFunctions.Sql.count() > 1)
+            .OrderBy(t => t.GetString("somestring"))
+            .Limit(5)
+            .Select(t => new { somestring = t.GetString("somestring"), count = SqlFunctions.Sql.count() }));
+
+        sql.Should().StartWith("with recent as (select id, somestring from complex_entity) select somestring, count(*) as \"count\" from recent");
+        sql.Should().Contain("group by somestring");
+        sql.Should().Contain("having (count(*) > 1)");
+        sql.Should().Contain("order by somestring");
+        sql.Should().EndWith("limit 5");
+    }
+
+    [Fact]
     public void Cte_Recursive_ShouldEmitWithRecursiveKeyword()
     {
         using var ctx = PostgresTestContext.Create();
@@ -1943,6 +2041,182 @@ public class SqlGenerationTests
         var act = () => SqlOf(ctx, e.Select(x => new { x.Id, rn = SqlFunctions.Sql.row_number() }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*Over*");
+    }
+
+    [Fact]
+    public void WindowFrameGroups_ShouldEmitGroupsUnit()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            x.Id,
+            v = SqlFunctions.Sql.sum_over(x.Id).Over(
+                SqlFunctions.Sql.asc(() => x.Id),
+                WindowFrame.Groups(1, 1))
+        }));
+
+        sql.Should().Contain("sum(id) over (order by id groups between 1 preceding and 1 following) as \"v\"");
+    }
+
+    [Fact]
+    public void WindowFrameExclusion_ShouldEmitEveryVariant()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            x.Id,
+            cur = SqlFunctions.Sql.sum_over(x.Id).Over(
+                SqlFunctions.Sql.asc(() => x.Id),
+                WindowFrame.RowsUnboundedPrecedingToCurrentRow.WithExclusion(WindowFrameExclusion.CurrentRow)),
+            grp = SqlFunctions.Sql.sum_over(x.Id).Over(
+                SqlFunctions.Sql.asc(() => x.Id),
+                WindowFrame.RowsUnboundedPrecedingToCurrentRow.WithExclusion(WindowFrameExclusion.Group)),
+            tie = SqlFunctions.Sql.sum_over(x.Id).Over(
+                SqlFunctions.Sql.asc(() => x.Id),
+                WindowFrame.RowsUnboundedPrecedingToCurrentRow.WithExclusion(WindowFrameExclusion.Ties)),
+            noo = SqlFunctions.Sql.sum_over(x.Id).Over(
+                SqlFunctions.Sql.asc(() => x.Id),
+                WindowFrame.RowsUnboundedPrecedingToCurrentRow.WithExclusion(WindowFrameExclusion.NoOthers))
+        }));
+
+        sql.Should().Contain("rows between unbounded preceding and current row exclude current row");
+        sql.Should().Contain("rows between unbounded preceding and current row exclude group");
+        sql.Should().Contain("rows between unbounded preceding and current row exclude ties");
+        sql.Should().Contain("rows between unbounded preceding and current row exclude no others");
+    }
+
+    [Fact]
+    public void NamedWindow_ShouldEmitWindowClauseAndOverReference()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var b = e.Window("w", partitionBy: [x => x.Int], orderBy: [e.Asc(x => x.Id)]);
+        var sql = SqlOf(ctx, b.Select(x => new
+        {
+            x.Id,
+            rn = SqlFunctions.Sql.row_number().Over("w"),
+            total = SqlFunctions.Sql.sum_over(x.Id).Over("w")
+        }));
+
+        sql.Should().Contain("row_number() over w as \"rn\"");
+        sql.Should().Contain("sum(id) over w as \"total\"");
+        sql.Should().Contain("window w as (partition by nullableint order by id)");
+    }
+
+    [Fact]
+    public void NamedWindow_WithGroupsFrameAndExclusion_ShouldEmitInClause()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var b = e.Window(
+            "w",
+            orderBy: [e.Asc(x => x.Id)],
+            frame: WindowFrame.Groups(1, 1).WithExclusion(WindowFrameExclusion.Ties));
+        var sql = SqlOf(ctx, b.Select(x => new
+        {
+            x.Id,
+            total = SqlFunctions.Sql.sum_over(x.Id).Over("w")
+        }));
+
+        sql.Should().Contain("window w as (order by id groups between 1 preceding and 1 following exclude ties)");
+    }
+
+    [Fact]
+    public void NamedWindow_TwoWindows_ShouldEmitCommaSeparatedClause()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var b = e
+            .Window("w1", orderBy: [e.Asc(x => x.Id)])
+            .Window("w2", partitionBy: [x => x.Int]);
+        var sql = SqlOf(ctx, b.Select(x => new
+        {
+            x.Id,
+            r1 = SqlFunctions.Sql.rank().Over("w1"),
+            r2 = SqlFunctions.Sql.count_over().Over("w2")
+        }));
+
+        sql.Should().Contain("window w1 as (order by id), w2 as (partition by nullableint)");
+    }
+
+    [Fact]
+    public void NamedWindow_UnknownName_ShouldStillEmitReference()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            x.Id,
+            rn = SqlFunctions.Sql.row_number().Over("notdeclared")
+        }));
+
+        sql.Should().Contain("row_number() over notdeclared");
+    }
+
+    [Fact]
+    public void NamedWindow_InvalidReferenceName_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new
+        {
+            x.Id,
+            rn = SqlFunctions.Sql.row_number().Over("bad name")
+        }));
+
+        act.Should().Throw<ArgumentException>().WithMessage("*identifier*");
+    }
+
+    [Fact]
+    public void NamedWindow_ShouldReuseCachedPlanWithoutLosingTheClause()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var e1 = ctx.From<IComplexEntity>();
+        var first = SqlOfCached(ctx, e1.Window("w", orderBy: [e1.Asc(x => x.Id)]).Select(x => new
+        {
+            x.Id,
+            rn = SqlFunctions.Sql.row_number().Over("w")
+        }));
+
+        // A fresh, structurally identical command must hit the cached plan. In Debug the plan's
+        // GetCacheVersion re-checks the clone's plan hash, which includes WindowsPlanHash.
+        var e2 = ctx.From<IComplexEntity>();
+        var second = SqlOfCached(ctx, e2.Window("w", orderBy: [e2.Asc(x => x.Id)]).Select(x => new
+        {
+            x.Id,
+            rn = SqlFunctions.Sql.row_number().Over("w")
+        }));
+
+        second.Should().Be(first);
+        second.Should().Contain("window w as (order by id)");
+    }
+
+    [Fact]
+    public void WindowFrameGroups_ExclusionOnPlainFrame_ShouldRenderExclusion()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            x.Id,
+            v = SqlFunctions.Sql.sum_over(x.Id).Over(
+                SqlFunctions.Sql.asc(() => x.Id),
+                WindowFrame.Range(WindowFrameBound.UnboundedPreceding, WindowFrameBound.CurrentRow)
+                    .WithExclusion(WindowFrameExclusion.Group))
+        }));
+
+        sql.Should().Contain("range between unbounded preceding and current row exclude group");
     }
 
     public interface ITvfRow
@@ -2514,6 +2788,45 @@ public class SqlGenerationTests
         sql.Should().Contain("from complex_entity as \"t1\"");
     }
 
+    /// <summary>
+    /// An aggregate terminal inside a correlated subquery is rewritten to the equivalent aggregate
+    /// projection instead of being rejected.
+    /// </summary>
+    [Fact]
+    public void CorrelatedAggregateTerminalInSelect_ShouldRenderAggregateSubquery()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var outer = ctx.From<IComplexEntity>();
+        var inner = ctx.From<ISimpleEntity>();
+
+        var sql = SqlOf(ctx, outer.Select(it => new
+        {
+            it.Id,
+            c = inner.Where(s => s.Id == it.Id).Count()
+        }));
+
+        sql.Should().Contain("(select count(*) from simple_entity");
+        sql.Should().Contain("= t1.id");
+    }
+
+    [Fact]
+    public void CorrelatedStatisticalAggregateTerminalInSelect_ShouldRenderAggregateSubquery()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var outer = ctx.From<IComplexEntity>();
+        var inner = ctx.From<ISimpleEntity>();
+
+        var sql = SqlOf(ctx, outer.Select(it => new
+        {
+            it.Id,
+            sd = inner.Where(s => s.Id == it.Id).Stdev(s => s.Id),
+            vr = inner.Where(s => s.Id == it.Id).Var(s => s.Id)
+        }));
+
+        sql.Should().Contain("stddev(");
+        sql.Should().Contain("variance(");
+    }
+
     [Fact]
     public void ClickHouseArrayFunctions_UnsupportedByProvider_ShouldThrow()
     {
@@ -2557,6 +2870,41 @@ public class SqlGenerationTests
 
         var retention = () => SqlOf(ctx, e.Select(x => new { M = SqlFunctions.ClickHouse.retention(x.Id >= 1, x.Id >= 5) }));
         retention.Should().Throw<NotSupportedException>().WithMessage("*windowFunnel*");
+    }
+
+    [Fact]
+    public void ClickHouseMultiIf_UnsupportedByProvider_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new
+        {
+            B = SqlFunctions.ClickHouse.multi_if(
+                SqlFunctions.ClickHouse.when(x.Id == 1, "one"),
+                SqlFunctions.ClickHouse.otherwise("many"))
+        }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*multiIf*");
+    }
+
+    [Fact]
+    public void ClickHouseInFrameWindowFunctions_UnsupportedByProvider_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var lag = () => SqlOf(ctx, e.Select(x => new
+        {
+            P = SqlFunctions.ClickHouse.lag_in_frame(x.Id, 1).Over(SqlFunctions.Sql.asc(() => x.Id))
+        }));
+        lag.Should().Throw<NotSupportedException>().WithMessage("*lagInFrame*");
+
+        var lead = () => SqlOf(ctx, e.Select(x => new
+        {
+            N = SqlFunctions.ClickHouse.lead_in_frame(x.Id, 1).Over(SqlFunctions.Sql.asc(() => x.Id))
+        }));
+        lead.Should().Throw<NotSupportedException>().WithMessage("*leadInFrame*");
     }
 
     [Fact]
@@ -2787,6 +3135,17 @@ public class SqlGenerationTests
         sql.Should().Contain("ts_headline(somestring, to_tsquery('cat'))");
     }
 
+    [Fact]
+    public void XmlMethods_ShouldThrowBecauseOnlySqlServerHasThem()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.xml_query(x.String, "/root") }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*XML data-type methods*");
+    }
+
     private static Expression<Func<IComplexEntity, string>> SwitchOfId(string @default, params (long Test, string Result)[] cases)
     {
         var p = Expression.Parameter(typeof(IComplexEntity), "x");
@@ -2797,4 +3156,50 @@ public class SqlGenerationTests
 
         return Expression.Lambda<Func<IComplexEntity, string>>(body, p);
     }
+
+    [Fact]
+    public void DerivedSourceThenJoin_ShouldRenderDerivedTable()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var derived = ctx.From<IComplexEntity>()
+            .Where(c => c.Id > 0)
+            .Select(c => new { c.Id, c.String });
+
+        var sql = SqlOf(ctx, ctx.From(derived)
+            .Join(ctx.From<ISimpleEntity>(), (d, s) => d.Id == s.Id)
+            .Select(p => new { p.Item1.Id, SId = p.Item2.Id, p.Item1.String }));
+
+        sql.Should().Be("select t1.id, t2.id as \"SId\", t1.\"String\" from (select id, somestring as \"String\" from complex_entity\n where (id > 0)) as \"t1\" join simple_entity as \"t2\" on t1.id = cast(t2.id as bigint)");
+    }
+
+    [Fact]
+    public void DerivedSourceWithJoinThenJoin_ShouldResolveTheOuterAlias()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var derived = ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+            .Select(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.String });
+
+        var sql = SqlOf(ctx, ctx.From(derived)
+            .Join(ctx.From<IComplexEntity>(), (d, c2) => d.OrderId == c2.Id)
+            .Select(p => new { p.Item1.OrderId, p.Item1.CustomerName, Third = p.Item2.Id }));
+
+        sql.Should().Be("select t3.\"OrderId\", t3.\"CustomerName\", t4.id as \"Third\" from (select t1.id as \"OrderId\", t2.somestring as \"CustomerName\" from simple_entity as \"t1\" join complex_entity as \"t2\" on cast(t1.id as bigint) = t2.id) as \"t3\" join complex_entity as \"t4\" on cast(t3.\"OrderId\" as bigint) = t4.id");
+    }
+
+    [Fact]
+    public void DerivedSourceWhereThenJoin_ShouldPushTheFilterOntoTheProjection()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var derived = ctx.From<IComplexEntity>()
+            .Select(c => new { c.Id, c.String });
+
+        var sql = SqlOf(ctx, ctx.From(derived)
+            .Where(d => d.Id > 5)
+            .Join(ctx.From<ISimpleEntity>(), (d, s) => d.Id == s.Id)
+            .Select(p => new { p.Item1.Id, SId = p.Item2.Id }));
+
+        sql.Should().Be("select t1.id, t2.id as \"SId\" from (select id, somestring as \"String\" from complex_entity) as \"t1\" join simple_entity as \"t2\" on t1.id = cast(t2.id as bigint)\n where (t1.id > 5)");
+    }
+
 }

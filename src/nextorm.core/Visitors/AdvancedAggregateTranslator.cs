@@ -180,12 +180,12 @@ internal static class AdvancedAggregateTranslator
 
     /// <summary>
     /// Renders a distinct-count aggregate (<c>uniq</c>/<c>uniqExact</c>/<c>uniqCombined</c>/<c>uniqHLL12</c>)
-    /// through <see cref="ISqlDialect.MakeUniqAggregate"/>, which lets a dialect wrap the native
+    /// through <see cref="IUniqAggregateRenderer.Render"/>, which lets a dialect wrap the native
     /// unsigned result in a signed cast.
     /// </summary>
     private static void EmitUniq(BaseExpressionVisitor visitor, MethodCallExpression node, string name)
     {
-        if (!visitor.Dialect.SupportsUniqAggregates)
+        if (visitor.Dialect.UniqAggregates is not { } uniqAggregates)
             throw new NotSupportedException("The uniq/uniqExact/uniqCombined/uniqHLL12 aggregates are not supported by this provider.");
 
         if (visitor.IsParamMode)
@@ -195,16 +195,16 @@ internal static class AdvancedAggregateTranslator
         }
 
         visitor.NeedAliasForColumn = true;
-        visitor.Builder!.Append(visitor.Dialect.MakeUniqAggregate(name, visitor.VisitToString(node.Arguments[0])));
+        visitor.Builder!.Append(uniqAggregates.Render(name, visitor.VisitToString(node.Arguments[0])));
     }
 
     /// <summary>
     /// Renders a parameterised quantile aggregate (<c>quantile(level)(value)</c>) through
-    /// <see cref="ISqlDialect.MakeQuantile"/>, gated by <see cref="ISqlDialect.SupportsQuantileAggregates"/>.
+    /// <see cref="IQuantileAggregateRenderer.Render"/>, gated by <see cref="ISqlDialect.QuantileAggregates"/>.
     /// </summary>
     private static void EmitQuantile(BaseExpressionVisitor visitor, MethodCallExpression node, string name)
     {
-        if (!visitor.Dialect.SupportsQuantileAggregates)
+        if (visitor.Dialect.QuantileAggregates is not { } quantileAggregates)
             throw new NotSupportedException("The quantile/median aggregates are not supported by this provider.");
 
         if (visitor.IsParamMode)
@@ -215,19 +215,19 @@ internal static class AdvancedAggregateTranslator
         }
 
         visitor.NeedAliasForColumn = true;
-        visitor.Builder!.Append(visitor.Dialect.MakeQuantile(
+        visitor.Builder!.Append(quantileAggregates.Render(
             name,
             visitor.VisitToString(node.Arguments[0]),
             visitor.VisitToString(node.Arguments[1])));
     }
 
     /// <summary>
-    /// Renders the <c>median</c> aggregate through <see cref="ISqlDialect.MakeMedian"/>, gated by
-    /// <see cref="ISqlDialect.SupportsQuantileAggregates"/>.
+    /// Renders the <c>median</c> aggregate through <see cref="IQuantileAggregateRenderer.RenderMedian"/>, gated by
+    /// <see cref="ISqlDialect.QuantileAggregates"/>.
     /// </summary>
     private static void EmitMedian(BaseExpressionVisitor visitor, MethodCallExpression node)
     {
-        if (!visitor.Dialect.SupportsQuantileAggregates)
+        if (visitor.Dialect.QuantileAggregates is not { } quantileAggregates)
             throw new NotSupportedException("The quantile/median aggregates are not supported by this provider.");
 
         if (visitor.IsParamMode)
@@ -237,7 +237,7 @@ internal static class AdvancedAggregateTranslator
         }
 
         visitor.NeedAliasForColumn = true;
-        visitor.Builder!.Append(visitor.Dialect.MakeMedian(visitor.VisitToString(node.Arguments[0])));
+        visitor.Builder!.Append(quantileAggregates.RenderMedian(visitor.VisitToString(node.Arguments[0])));
     }
 
     /// <summary>Renders a two-argument aggregate (for example <c>corr(y, x)</c>) gated by a capability flag.</summary>
@@ -311,8 +311,8 @@ internal static class AdvancedAggregateTranslator
     /// <summary>
     /// Renders a ClickHouse sequence/funnel aggregate
     /// (<c>windowFunnel(window)(timestamp, conds...)</c>, <c>sequenceMatch(pattern)(timestamp, conds...)</c>,
-    /// <c>retention(conds...)</c>) through <see cref="ISqlDialect.MakeSequenceAggregate"/>, gated by
-    /// <see cref="ISqlDialect.SupportsSequenceAggregates"/>. The conditions are an inline
+    /// <c>retention(conds...)</c>) through <see cref="ISequenceAggregateRenderer.Render"/>, gated by
+    /// <see cref="ISqlDialect.SequenceAggregates"/>. The conditions are an inline
     /// <c>new[]</c> of boolean expressions, so each element is rendered separately.
     /// </summary>
     private static void EmitSequenceAggregate(
@@ -322,7 +322,7 @@ internal static class AdvancedAggregateTranslator
         Expression? timestamp,
         Expression conditions)
     {
-        if (!visitor.Dialect.SupportsSequenceAggregates)
+        if (visitor.Dialect.SequenceAggregates is not { } sequenceAggregates)
             throw new NotSupportedException("The windowFunnel/retention/sequenceMatch aggregates are not supported by this provider.");
 
         if (conditions is not NewArrayExpression { NodeType: ExpressionType.NewArrayInit } conditionArray)
@@ -361,7 +361,7 @@ internal static class AdvancedAggregateTranslator
         for (var (i, cnt) = (0, conditionArray.Expressions.Count); i < cnt; i++)
             arguments.Add(visitor.VisitToString(conditionArray.Expressions[i]));
 
-        visitor.Builder!.Append(visitor.Dialect.MakeSequenceAggregate(name, renderedParameters, string.Join(", ", arguments)));
+        visitor.Builder!.Append(sequenceAggregates.Render(name, renderedParameters, string.Join(", ", arguments)));
     }
 
     /// <summary>

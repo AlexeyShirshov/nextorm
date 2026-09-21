@@ -25,22 +25,25 @@ public sealed class MariaDbDialect : MySqlDialect
     public override bool SupportsAnyValueAggregate => false;
 
     /// <summary>MariaDB 11.7+ renders both UUID generators; MySQL has no v4/v7 generator.</summary>
-    public override bool SupportsUuidGenerators => true;
-
-    /// <summary>MariaDB supports the random v4 (<c>UUID_v4()</c>) and v7 (<c>UUID_v7()</c>, 11.7+) generators.</summary>
-    public override bool SupportsUuidGenerator(string name) => name is "gen_random_uuid" or "uuidv7";
-
-    /// <summary>MariaDB spells the UUID generators <c>UUID_v4()</c>/<c>UUID_v7()</c>.</summary>
-    public override string MakeUuidGenerator(string name) => name switch
-    {
-        "gen_random_uuid" => "uuid_v4()",
-        "uuidv7" => "uuid_v7()",
-        _ => base.MakeUuidGenerator(name)
-    };
+    public override IUuidGenerators UuidGenerators => MariaDbUuidGenerators.Instance;
 
     /// <summary>MariaDB 10.3+ supports the <c>FOR SYSTEM_TIME</c> temporal-table clause on system-versioned tables.</summary>
     public override bool SupportsTemporalTable => true;
 
     /// <summary>MariaDB has no <c>CONTAINED IN</c>, so it is gated off; the other kinds are supported.</summary>
     public override bool SupportsTemporalKind(TemporalKind kind) => kind != TemporalKind.ContainedIn;
+}
+
+internal sealed class MariaDbUuidGenerators : IUuidGenerators
+{
+    public static readonly MariaDbUuidGenerators Instance = new();
+
+    public bool Supports(string name) => name is "gen_random_uuid" or "uuidv7";
+
+    public string Render(string name) => name switch
+    {
+        "gen_random_uuid" => "uuid_v4()",
+        "uuidv7" => "uuid_v7()",
+        _ => throw new NotSupportedException($"The {name} UUID generator function is not supported by MariaDB.")
+    };
 }

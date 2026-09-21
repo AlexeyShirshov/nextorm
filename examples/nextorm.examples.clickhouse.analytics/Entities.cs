@@ -15,7 +15,10 @@ public interface IHit
     [Column("EventDate")] DateTime EventDate { get; set; }
     [Column("EventTime")] DateTime EventTime { get; set; }
     [Column("URL")] string Url { get; set; }
+    [Column("RefererDomain")] string RefererDomain { get; set; }
     [Column("SearchPhrase")] string SearchPhrase { get; set; }
+    [Column("IsMobile")] byte IsMobile { get; set; }
+    [Column("IsNotBounce")] byte IsNotBounce { get; set; }
 }
 
 [SqlTable("datasets.daily_unique_users_mv")]

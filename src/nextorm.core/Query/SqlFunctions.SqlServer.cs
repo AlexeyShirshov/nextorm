@@ -5,7 +5,8 @@ namespace NextORM.Core;
 
 /// <summary>
 /// Text-JSON surface (SQL Server and MySQL/MariaDB), the SQL Server-only <c>choose</c> conditional
-/// function (the portable <c>iif</c> lives on <see cref="CommonFunctions"/>) and the SQL Server table
+/// function (the portable <c>iif</c> lives on <see cref="CommonFunctions"/>), the SQL Server postfix
+/// XML data-type methods (<c>xml_value</c>/<c>xml_query</c>/<c>xml_exist</c>) and the SQL Server table
 /// functions. Exposed through <see cref="SqlFunctions.SqlServer"/>; every member is gated by a
 /// capability flag and rejected by providers that do not opt in.
 /// </summary>
@@ -36,6 +37,32 @@ namespace NextORM.Core;
         /// (see <see cref="ISqlDialect.SupportsTextJson"/>).
         /// </summary>
         public bool isjson(string? value) => default!;
+
+        /// <summary>
+        /// <c>xml.value(xquery, sqltype)</c>: the scalar value selected by the XQuery, cast to the
+        /// T-SQL type named by <paramref name="sqlType"/> (both arguments must be string literals).
+        /// Rendered in the postfix form <c>xmlcol.value('(path)[1]', 'int')</c>; <typeparamref name="T"/>
+        /// must match the requested SQL type. Requires a provider that supports the XML data-type
+        /// methods (see <see cref="IXmlFunctions.Supports"/>; SQL Server).
+        /// </summary>
+        public T? xml_value<T>(string? xml, string? xpath, string? sqlType) => default!;
+
+        /// <summary>
+        /// <c>xml.query(xquery)</c>: the XML fragment selected by the XQuery (the XQuery must be a
+        /// string literal). Rendered in the postfix form <c>xmlcol.query('/path')</c>. Requires a
+        /// provider that supports the XML data-type methods (see
+        /// <see cref="IXmlFunctions.Supports"/>; SQL Server).
+        /// </summary>
+        public string? xml_query(string? xml, string? xpath) => default!;
+
+        /// <summary>
+        /// <c>xml.exist(xquery)</c>: true when the XQuery selects at least one node (the XQuery must be
+        /// a string literal). Rendered in the postfix form <c>xmlcol.exist('/path')</c>, which yields
+        /// <c>bit</c>; in a predicate context the dialect compares it with 1. Requires a provider that
+        /// supports the XML data-type methods (see
+        /// <see cref="IXmlFunctions.Supports"/>; SQL Server).
+        /// </summary>
+        public bool xml_exist(string? xml, string? xpath) => default!;
 
         /// <summary>
         /// <c>string_split(value, separator)</c> as a FROM source (SQL Server 2016+); select

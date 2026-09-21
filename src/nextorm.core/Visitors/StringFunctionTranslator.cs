@@ -339,7 +339,7 @@ internal static class StringFunctionTranslator
         if (candidate.Type != typeof(char) && candidate.Type != typeof(string))
             throw new NotSupportedException("This string.Split overload is not supported; only a single char/string separator maps to SQL.");
 
-        if (!visitor.Dialect.SupportsStringSplit)
+        if (visitor.Dialect.StringSplit is not { } stringSplit)
             throw new NotSupportedException("string.Split is not supported by this provider.");
 
         if (!SqlLiteral.TryGetConstantString(candidate, out var separator))
@@ -355,7 +355,7 @@ internal static class StringFunctionTranslator
         }
 
         visitor.NeedAliasForColumn = true;
-        visitor.Builder!.Append(visitor.Dialect.MakeStringSplit(
+        visitor.Builder!.Append(stringSplit.Render(
             SqlLiteral.ToSqlStringLiteral(separator),
             visitor.VisitToString(node.Object)));
         return true;

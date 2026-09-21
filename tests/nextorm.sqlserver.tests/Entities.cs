@@ -32,3 +32,31 @@ public interface IComplexEntity
     [Column("dt")]
     DateTime? Datetime { get; set; }
 }
+
+[SqlTable("sales")]
+public interface ISalesEntity
+{
+    [Key]
+    [Column("id")]
+    int Id { get; set; }
+    [Column("category")]
+    string? Category { get; set; }
+    [Column("quarter")]
+    int Quarter { get; set; }
+    [Column("margin")]
+    decimal? Margin { get; set; }
+}
+
+[SqlTable("quarterly")]
+public interface IQuarterlyEntity
+{
+    [Key]
+    [Column("id")]
+    int Id { get; set; }
+    [Column("category")]
+    string? Category { get; set; }
+    [Column("q1")]
+    decimal? Q1 { get; set; }
+    [Column("q2")]
+    decimal? Q2 { get; set; }
+}

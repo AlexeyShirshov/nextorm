@@ -204,4 +204,42 @@ public abstract partial class CommonTestSuite
         rows.Should().OnlyContain(r => r.B == r.D);
         rows.Should().OnlyContain(r => !string.IsNullOrEmpty(r.B));
     }
+
+    [Fact]
+    public void DerivedSourceThenJoin_ShouldReturnData()
+    {
+        var derived = _sut.ComplexEntity.Select(c => new { c.Id, c.RequiredString });
+
+        var rows = _sut.From(derived)
+            .Where(d => d.Id > 1)
+            .Join(_sut.SimpleEntity, (d, s) => d.Id == s.Id)
+            .Select(p => new { LeftId = p.Item1.Id, SId = p.Item2.Id, p.Item1.RequiredString })
+            .ToList();
+
+        // complex_entity has ids 1..3; the filter keeps 2..3.
+        rows.Should().HaveCount(2);
+        rows.Should().OnlyContain(r => r.LeftId == r.SId && r.LeftId > 1);
+        rows.Should().OnlyContain(r => !string.IsNullOrEmpty(r.RequiredString));
+    }
+
+    [Fact]
+    public void DerivedSourceWithJoinThenJoin_ShouldReturnData()
+    {
+        // Regression: a derived source that itself contains a join used to resolve the outer join's
+        // entity to the *inner* query's table alias (an out-of-scope alias), producing SQL that the
+        // database rejects ("no such column"). The projected members themselves resolved correctly.
+        var derived = _sut.SimpleEntity
+            .Join(_sut.ComplexEntity, (s, c) => s.Id == c.Id)
+            .Select(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.RequiredString });
+
+        var rows = _sut.From(derived)
+            .Where(d => d.CustomerName != null)
+            .Join(_sut.ComplexEntity, (d, c2) => d.OrderId == c2.Id)
+            .Select(p => new { p.Item1.OrderId, p.Item1.CustomerName, Third = p.Item2.RequiredString })
+            .ToList();
+
+        // simple_entity has ids 1..10 and complex_entity 1..3, so the chain matches ids 1..3.
+        rows.Should().HaveCount(3);
+        rows.Should().OnlyContain(r => r.Third == r.CustomerName);
+    }
 }

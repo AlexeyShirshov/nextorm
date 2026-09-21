@@ -23,10 +23,11 @@ public static CteQuery WithRecursive(this IDataContext dataContext, string name,
 может ли тело ссылаться на собственное имя.
 
 [`From`](xref:NextORM.Core.CteQuery) (или `From(CteDefinition)`) начинает новый запрос, чей `from` — один из
-объявленных CTE, перенося каждое объявление в результирующую команду. Далее используется режим [`TableAlias`](xref:NextORM.Core.TableAlias)
-без сущности для чтения столбцов CTE (`t["id"].AsInt`), и применяются обычные операторы [`Where`](xref:NextORM.Core.EntityBuilder`1)/[`Join`](xref:NextORM.Core.EntityBuilder`1)/
-[`Select`](xref:NextORM.Core.EntityBuilder`1). Рекурсивные тела ссылаются на собственное имя тем же способом
-(`dataContext.From("nums")` внутри шагового запроса).
+объявленных CTE, перенося каждое объявление в результирующую команду. Возвращается обычный
+[`EntityBuilder<T>`](xref:NextORM.Core.EntityBuilder`1) над режимом [`TableAlias`](xref:NextORM.Core.TableAlias) без сущности, поэтому доступен
+**полный набор операторов** — [`Where`](xref:NextORM.Core.EntityBuilder`1)/[`Join`](xref:NextORM.Core.EntityBuilder`1)/[`GroupBy`](xref:NextORM.Core.EntityBuilder`1)/[`Having`](xref:NextORM.Core.EntityBuilder`1)/[`OrderBy`](xref:NextORM.Core.EntityBuilder`1)/[`Limit`](xref:NextORM.Core.EntityBuilder`1)/[`Select`](xref:NextORM.Core.EntityBuilder`1).
+Столбцы CTE читаются по имени (`t["id"].AsInt` или `t.GetInt64("id")`). Рекурсивные тела ссылаются на
+собственное имя тем же способом (`dataContext.From("nums")` внутри шагового запроса).
 
 Рендеринг: диалекты, использующие форму ANSI, выводят `with recursive`, когда любое определение рекурсивно
 (SQLite, PostgreSQL); SQL Server объявляет рекурсивный CTE только с `with` и добавляет параметр глубины
@@ -94,6 +95,62 @@ var rows = cte.From(cte.Ctes[0])
     .Select(t => new { id = t["id"].AsInt })
     .ToList();
 ```
+
+## Композиция поверх CTE
+
+Источник CTE — это обычный generic-билдер, поэтому над CTE работает всё, что работает над таблицей:
+фильтрация, агрегация, сортировка, пагинация и join. Более поздний CTE может агрегировать более ранний
+по имени:
+
+```csharp
+var first = dataContext.From<IComplexEntity>()
+    .Select(x => new { x.Id, name = x.String });
+
+var second = dataContext.From("first")
+    .GroupBy(t => new { name = t.GetString("name") })
+    .Select(t => new { name = t.GetString("name"), count = SqlFunctions.Sql.count() });
+
+var rows = dataContext
+    .With("first", first)
+    .With("second", second)
+    .From("second")
+    .OrderByDescending(t => t.GetInt32("count"))
+    .Select(t => new { name = t.GetString("name"), count = t.GetInt32("count") })
+    .ToList();
+```
+
+```sql
+-- SQLite
+with first as (select id, somestring as 'name' from complex_entity),
+     second as (select name, count(*) as 'count' from first group by name)
+select name, count from second order by count desc
+```
+
+CTE можно соединить с другим CTE (или с таблицей). Обе стороны адресуются по имени, и каждый столбец
+`TableAlias` квалифицируется именем таблицы, поэтому общий столбец двух CTE не становится
+неоднозначным:
+
+```csharp
+var left = dataContext.From<IComplexEntity>().Select(x => new { x.Id });
+var right = dataContext.From<ISimpleEntity>().Select(x => new { x.Id });
+
+var rows = dataContext
+    .With("l", left)
+    .With("r", right)
+    .From("l")
+    .Join(dataContext.From("r"), (l, r) => l.GetInt64("id") == r.GetInt64("id"))
+    .Select(p => new { Id = p.Item1.GetInt64("id"), Other = p.Item2.GetInt64("id") })
+    .ToList();
+```
+
+```sql
+-- SQLite
+with l as (select id from complex_entity), r as (select id from simple_entity) select t1.id, t2.id from l as 't1' join r as 't2' on t1.id = t2.id
+```
+
+> У источника CTE нет сопоставленной сущности, поэтому столбцы читаются по имени (`t.GetInt64("id")` /
+> `t["id"].AsInt`), и имена должны совпадать с выходными алиасами тела CTE. Называйте элементы проекции
+> по SQL-алиасам (нижний `snake_case`), чтобы внешние ссылки оставались точными.
 
 ## Рекурсивный CTE: числовая последовательность
 

@@ -6,6 +6,13 @@
 - `TreatWarningsAsErrors=true` for every project and configuration — nullable and analyzer warnings fail the build. Fix them or suppress explicitly via `NoWarn`.
 - `Directory.Build.props` redirects build output into per-host-OS dirs: `bin/<linux|windows>/`, `obj/<linux|windows>/`, so WSL and Windows builds coexist. Look there for artifacts; there is no shared `obj/`.
 
+## C# semantic analysis (Roslyn)
+- For types, symbols, references, call graphs and impact analysis use the Roslyn tool, not `rg`/`sed`. Text search is fine for docs and string literals, but it cannot resolve overloads, partial types, renames or usings.
+- Custom tool `roslyn` is provided globally by opencode (`~/.config/opencode/tools/roslyn.ts`) and wraps the global `roslynq` dotnet tool, which loads this solution through `MSBuildWorkspace`. Pass `solution` only if the auto-detected `.sln` is wrong.
+- Actions: `structure`, `types`, `symbols`, `members`, `refs`, `callers`, `implementations`, `rename`; pass symbols by full name (e.g. `NextORM.Core.SqlBuilder` or `NextORM.Core.SqlBuilder.MakeSelect`).
+- Bulk renames: use `rename <symbol> <newName>` (dry-run) and add `apply=true` once the diff looks right — do not edit files one by one.
+- Diagnostics after edits: `dotnet build` (see Build & toolchain). `MSBuildWorkspace` cold start is slow on this solution, so prefer one invocation per analysis over per-file calls.
+
 ## Layout
 - `src/nextorm.core` is the engine: query builder/plan cache, expression visitors (`Visitors/`), dialects, in-memory context. Providers reference it: `nextorm.sqlite`, `nextorm.sqlserver`, `nextorm.postgres`, `nextorm.mysql`, `nextorm.clickhouse`; `nextorm.mariadb` builds on `nextorm.mysql`.
 - `src/nextorm.core.sourcegenerator` is an empty `IIncrementalGenerator` stub — in the solution but referenced by no project, so it generates nothing today.
@@ -13,7 +20,9 @@
 
 ## Git
 - Never run `git push`; the user pushes manually.
-- Do not create commits unless explicitly asked.
+- Do not create commits unless explicitly asked — **this includes work in separate git worktrees**.
+- Never merge branches and never create merge commits unless explicitly asked. `git merge` inherently requires commits; do not use it as the default integration mechanism.
+- Integrate work done in isolated worktrees with **patches, not commits/merges**: in each worktree produce a diff (`git diff <base> > /tmp/<name>.patch`, or `git diff` for uncommitted changes), then apply it into the target tree (`git apply` / `patch`), leaving the result uncommitted for the user to review.
 
 ## Async naming
 - Use the `Async` suffix only when a method has a synchronous twin. If an async method is the only one (no sync counterpart exists), do not add the `Async` suffix.

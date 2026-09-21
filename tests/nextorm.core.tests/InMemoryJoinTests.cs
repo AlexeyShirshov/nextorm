@@ -224,4 +224,17 @@ public class InMemoryJoinTests
 
         act.Should().Throw<NotSupportedException>();
     }
+
+    [Fact]
+    public void TestDerivedSourceThenJoin_ShouldThrow()
+    {
+        var derived = _sut.SimpleEntity.Select(x => new { x.Id });
+
+        var act = () => _sut.DataProvider.From(derived)
+            .Join(_sut.SimpleEntity, (d, s) => d.Id == s.Id)
+            .Select(p => new { p.Item1.Id, SId = p.Item2.Id })
+            .ToList();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*derived query*primary FROM*");
+    }
 }

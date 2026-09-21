@@ -1,4 +1,4 @@
-using System.Linq.Expressions;
+﻿using System.Linq.Expressions;
 
 namespace NextORM.Core;
 
@@ -6,8 +6,8 @@ namespace NextORM.Core;
 /// Translates the session/information functions of <see cref="CommonFunctions"/>: <c>current_user</c>,
 /// <c>session_user</c>, <c>current_schema</c>, <c>current_database</c> and <c>version</c>.
 /// <para>
-/// The family is guarded by <see cref="ISqlDialect.SupportsSessionInfoFunctions"/> and each function by
-/// <see cref="ISqlDialect.SupportsSessionInfoFunction(string)"/>; a provider that cannot express a
+/// The family is guarded by <see cref="ISqlDialect.SessionInfoFunctions"/> and each function by
+/// <see cref="ISessionInfoFunctions.Supports"/>; a provider that cannot express a
 /// function fails with a clear message instead of emitting invalid SQL.
 /// </para>
 /// </summary>
@@ -30,16 +30,16 @@ internal static class SessionInfoFunctionTranslator
 
         var dialect = visitor.Dialect;
 
-        if (!dialect.SupportsSessionInfoFunctions)
+        if (dialect.SessionInfoFunctions is not { } sessionInfo)
             throw new NotSupportedException("The session information functions are not supported by this provider.");
 
-        if (!dialect.SupportsSessionInfoFunction(name))
+        if (!sessionInfo.Supports(name))
             throw new NotSupportedException($"The {name} function is not supported by this provider.");
 
         if (!visitor.IsParamMode)
         {
             visitor.NeedAliasForColumn = true;
-            visitor.Builder!.Append(dialect.MakeSessionInfoFunction(name));
+            visitor.Builder!.Append(sessionInfo.Render(name));
         }
 
         return true;

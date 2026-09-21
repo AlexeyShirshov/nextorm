@@ -28,6 +28,7 @@ internal sealed class SqliteTestProvider : ITestProvider
     // The bundled SQLite has JSON1 enabled, so json_each(...) is available as a row-returning function.
     public bool SupportsTableValuedFunctions => true;
     public bool EnforcesScalarSubqueryCardinality => false;
+    public bool SupportsApply => false;
     public string TableValuedFunctionSkipReason => string.Empty;
     public string SkipReason => string.Empty;
 

@@ -52,7 +52,69 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
         if (x.TableFunction is not null || y.TableFunction is not null)
             return _expComparer.Equals(x.TableFunction?.Call, y.TableFunction?.Call);
 
+        if (x.Pivot is not null || y.Pivot is not null)
+            return PivotEquals(x.Pivot, y.Pivot);
+
         return _equalityComparer.Value.Equals(x.SubQuery, y.SubQuery);
+    }
+
+    private bool PivotEquals(PivotExpression? x, PivotExpression? y)
+    {
+        if (ReferenceEquals(x, y)) return true;
+        if (x is null || y is null) return false;
+        if (x.IsUnpivot != y.IsUnpivot) return false;
+        if (!Equals(x.Inner, y.Inner)) return false;
+
+        if (x.IsUnpivot)
+            return x.UnpivotValueColumn == y.UnpivotValueColumn
+                && x.UnpivotNameColumn == y.UnpivotNameColumn
+                && ColumnsEqual(x.Columns, y.Columns);
+
+        return x.Aggregate == y.Aggregate
+            && _expComparer.Equals(x.AggregateColumn, y.AggregateColumn)
+            && _expComparer.Equals(x.ForColumn, y.ForColumn)
+            && ValuesEqual(x.Values, y.Values);
+    }
+
+    private static bool ColumnsEqual(IReadOnlyList<UnpivotColumn> x, IReadOnlyList<UnpivotColumn> y)
+    {
+        if (x.Count != y.Count) return false;
+        for (var i = 0; i < x.Count; i++)
+            if (x[i].Column != y[i].Column) return false;
+        return true;
+    }
+
+    private static bool ValuesEqual(IReadOnlyList<PivotValue> x, IReadOnlyList<PivotValue> y)
+    {
+        if (x.Count != y.Count) return false;
+        for (var i = 0; i < x.Count; i++)
+            if (x[i].Value != y[i].Value) return false;
+        return true;
+    }
+
+    private int PivotHash(PivotExpression pivot)
+    {
+        var hash = new System.HashCode();
+        hash.Add(pivot.IsUnpivot);
+        hash.Add(GetHashCode(pivot.Inner));
+
+        if (pivot.IsUnpivot)
+        {
+            hash.Add(pivot.UnpivotValueColumn);
+            hash.Add(pivot.UnpivotNameColumn);
+            foreach (var column in pivot.Columns)
+                hash.Add(column.Column);
+        }
+        else
+        {
+            hash.Add(pivot.Aggregate);
+            hash.Add(pivot.AggregateColumn is null ? 0 : _expComparer.GetHashCode(pivot.AggregateColumn));
+            hash.Add(pivot.ForColumn is null ? 0 : _expComparer.GetHashCode(pivot.ForColumn));
+            foreach (var value in pivot.Values)
+                hash.Add(value.Value);
+        }
+
+        return hash.ToHashCode();
     }
 
     public int GetHashCode(FromExpression? obj)
@@ -64,6 +126,9 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
 
         if (obj.TableFunction is not null)
             return _expComparer.GetHashCode(obj.TableFunction.Call);
+
+        if (obj.Pivot is not null)
+            return PivotHash(obj.Pivot);
 
         /*if (obj.TableAlias is not null)
         {

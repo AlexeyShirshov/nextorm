@@ -37,6 +37,9 @@ public interface IColumnsProvider
     /// </summary>
     void PushSourceScope();
 
-    /// <summary>Ends the scope opened by <see cref="PushSourceScope"/>.</summary>
+    /// <summary>
+    /// Ends the scope opened by <see cref="PushSourceScope"/>. Its entries remain addressable by
+    /// index (aliases are assigned globally), but stop satisfying any enclosing command's lookups.
+    /// </summary>
     void PopSourceScope();
 }

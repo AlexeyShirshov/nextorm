@@ -25,7 +25,7 @@ ADO.NET-провайдер `ClickHouse.Driver`. Он создаёт `ClickHouseC
   как выделенные функции `addYears`/`addQuarters`/…/`addSeconds` (`decade`/`century`/`millennium`
   сворачиваются в масштабированный `addYears`), `end_of_month` — как `toLastDayOfMonth(x)`;
 - поверхность приведения/частей даты `SqlFunctions.ClickHouse.to_*` (гейт
-  [`SupportsDateConversionFunctions`](xref:NextORM.Core.ISqlDialect.SupportsDateConversionFunctions)):
+  [`DateConversion`](xref:NextORM.Core.ISqlDialect.DateConversion)):
   `to_date`/`to_date_time`/`to_date32` — как `toDate`/`toDateTime`/`toDate32`; аксессоры `to_year`/
   `to_quarter`/`to_month`/`to_day_of_month`/`to_day_of_week`/`to_day_of_year`/`to_hour`/`to_minute`/
   `to_second` (а также проекции `DateTime.Year`/`Month`/…) — как `toYear`/`toQuarter`/…, обёрнутые в
@@ -62,7 +62,7 @@ ADO.NET-провайдер `ClickHouse.Driver`. Он создаёт `ClickHouseC
   `dict_has` — как `dictGet`/`dictGetOrDefault`/`dictHas`;
 - модификатор супер-агрегации `GROUP BY ... WITH TOTALS` ([`SupportsGroupByWithTotals`](xref:NextORM.Core.ISqlDialect.SupportsGroupByWithTotals))
   через `EntityBuilder.WithTotals()`;
-- `LIMIT n BY expr` ([`SupportsLimitBy`](xref:NextORM.Core.ISqlDialect.SupportsLimitBy)) через
+- `LIMIT n BY expr` ([`LimitBy`](xref:NextORM.Core.ISqlDialect.LimitBy)) через
   `EntityBuilder.LimitBy(...)`: не более `n` строк на каждое значение ключа, эмитится после `ORDER BY`
   и перед финальным `LIMIT`;
 - табличные функции `numbers`/`numbers_mt` через `SqlFunctions.ClickHouse.numbers(...)` (колонка `number`
@@ -76,10 +76,15 @@ ADO.NET-провайдер `ClickHouse.Driver`. Он создаёт `ClickHouseC
 - имена типов ClickHouse в приведениях (`Int32`, `Int64`, `Float64`, `Decimal(38, 10)`, …);
 - разбиение на страницы `limit n` / `limit n offset m`; offset без limit превращается в
   `limit 18446744073709551615 offset m`, потому что ClickHouse принимает `offset` только вместе с `limit`;
-- переносимый условный `iif` — как `if(condition, a, b)` ([`SupportsIif`](xref:NextORM.Core.ISqlDialect.SupportsIif),
-  [`MakeIif`](xref:NextORM.Core.ISqlDialect.MakeIif)), а оконные функции `percent_rank()`/`cume_dist()` и
-  `nth_value(expr, n)` поддерживаются ([`SupportsPercentRankCumeDist`](xref:NextORM.Core.ISqlDialect.SupportsPercentRankCumeDist),
-  [`SupportsNthValue`](xref:NextORM.Core.ISqlDialect.SupportsNthValue));
+- переносимый условный `iif` — как `if(condition, a, b)` ([`Iif`](xref:NextORM.Core.ISqlDialect.Iif),
+  [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render)), многоветвевный `multiIf` только для ClickHouse,
+  собираемый через `when(...)`/`otherwise(...)` ([`MultiIf`](xref:NextORM.Core.ISqlDialect.MultiIf),
+  [`IMultiIfRenderer.Render`](xref:NextORM.Core.IMultiIfRenderer.Render)), а оконные функции
+  `percent_rank()`/`cume_dist()`, `nth_value(expr, n)` и учитывающие фрейм
+  `lagInFrame(value[, offset[, default]])`/`leadInFrame(...)` поддерживаются
+  ([`SupportsPercentRankCumeDist`](xref:NextORM.Core.ISqlDialect.SupportsPercentRankCumeDist),
+  [`SupportsNthValue`](xref:NextORM.Core.ISqlDialect.SupportsNthValue),
+  [`SupportsInFrameWindowFunctions`](xref:NextORM.Core.ISqlDialect.SupportsInFrameWindowFunctions));
 - распределённый предикат `GLOBAL IN` через
   [`SqlFunctions.ClickHouse.global_in`](xref:NextORM.Core.ClickHouseFunctions) (по подзапросу или
   списку значений, [`SupportsGlobalPredicates`](xref:NextORM.Core.ISqlDialect.SupportsGlobalPredicates));
@@ -157,8 +162,8 @@ select concat('id:', id) as `Label` from simple_entity
 | quantile / median | `quantile(0.5)(x)`, `quantileExact(0.9)(x)`, `quantileTiming(0.5)(x)`, `median(x)` (как `toFloat64(...)`) |
 | any_agg (произвольное значение) | `any(x)` (кросс-провайдерно; `ANY_VALUE(x)` в MySQL) |
 | any_last (последняя строка) | `anyLast(x)` |
-| Условная функция | `iif(cond, a, b)` → `if(cond, a, b)` |
-| Оконные функции | `percent_rank()`, `cume_dist()`, `nth_value(expr, n)` поддерживаются |
+| Условная функция | `iif(cond, a, b)` → `if(cond, a, b)`; `multi_if(when(c1, v1), ..., otherwise(v))` → `multiIf(c1, v1, ..., v)` |
+| Оконные функции | `percent_rank()`, `cume_dist()`, `nth_value(expr, n)` поддерживаются; `lag_in_frame`/`lead_in_frame` → `lagInFrame`/`leadInFrame` (учитывают фрейм; обычные `lag`/`lead` на ClickHouse отвергают явный фрейм) |
 | Строковый JSON | `JSONExtractString`, `JSONExtractInt`, `JSONExtractFloat`, `JSONExtractBool`, `JSONExtractRaw`, `JSONHas`, `toInt64(JSONLength(...))`, `JSONType`, `visitParamExtract*`, `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (JSONPath) |
 | Словари | `dictGet`, `dictGetOrDefault`, `dictHas` (нужен сконфигурированный `CREATE DICTIONARY`) |
 | Session/info-функции | `currentUser()`, `currentDatabase()`, `version()` (`session_user`/`current_schema` недоступны) |
@@ -166,7 +171,7 @@ select concat('id:', id) as `Label` from simple_entity
 | `LIMIT n BY expr` | `limit [offset, ]n by col1, col2` (перед финальным `LIMIT`) |
 | Модификаторы запроса | `final`, `sample r [offset o]`, `prewhere`, `settings k = v` (`FINAL`/`PREWHERE` требуют поддерживающего движка таблицы) |
 | Табличные функции | `numbers`/`numbers_mt` (колонка `UInt64 number` приводится к `Int64`), `zeros`/`zeros_mt` (`zero UInt8`), `generateRandom` (встроенные `generate_random()`/`generate_random(seed)` фиксируют структуру `id UInt64, value Float64, name String` и приводят `id` к `Int64`) |
-| Функции массивов | над колонками/выражениями `Array(T)`: `length`, `has`, `indexOf`, `hasAny`, `hasAll`, `arrayStringConcat`, `splitByChar`, `arraySort`, `arrayReverse`, `arrayDistinct`, `range`, `arrayEnumerate`, `arrayCumSum`, `arraySlice`, `arrayPushBack`; CLR-метод `string.Split` рендерится как `splitByChar(separator, value)` под [`SupportsStringSplit`](xref:NextORM.Core.ISqlDialect.SupportsStringSplit) (только одноразрядный разделитель); `arrayJoin(array)` разворачивает по строке на элемент, а `EntityBuilder.ArrayJoin`/`LeftArrayJoin` рендерят клаузу `[left ]array join expr, ...`. `EntityBuilder.ArrayJoinElement`/`LeftArrayJoinElement` дополнительно привязывают вырожденный элемент к `ArrayJoinProjection<TEntity, TElement>.Element` (исходная сущность — в `.Item1`); выражение клаузы получает алиас, и `p.Element` ссылается на него (см. [`ClickHouseFunctions`](xref:NextORM.Core.ClickHouseFunctions), [`ArrayJoinKind`](xref:NextORM.Core.ArrayJoinKind), [`ArrayJoinProjection`](xref:NextORM.Core.ArrayJoinProjection`2)) |
+| Функции массивов | над колонками/выражениями `Array(T)`: `length`, `has`, `indexOf`, `hasAny`, `hasAll`, `arrayStringConcat`, `splitByChar`, `arraySort`, `arrayReverse`, `arrayDistinct`, `range`, `arrayEnumerate`, `arrayCumSum`, `arraySlice`, `arrayPushBack`; CLR-метод `string.Split` рендерится как `splitByChar(separator, value)` под [`StringSplit`](xref:NextORM.Core.ISqlDialect.StringSplit) (только одноразрядный разделитель); `arrayJoin(array)` разворачивает по строке на элемент, а `EntityBuilder.ArrayJoin`/`LeftArrayJoin` рендерят клаузу `[left ]array join expr, ...`. `EntityBuilder.ArrayJoinElement`/`LeftArrayJoinElement` дополнительно привязывают вырожденный элемент к `ArrayJoinProjection<TEntity, TElement>.Element` (исходная сущность — в `.Item1`); выражение клаузы получает алиас, и `p.Element` ссылается на него (см. [`ClickHouseFunctions`](xref:NextORM.Core.ClickHouseFunctions), [`ArrayJoinKind`](xref:NextORM.Core.ArrayJoinKind), [`ArrayJoinProjection`](xref:NextORM.Core.ArrayJoinProjection`2)) |
 | Нативный JSON / расширенные скаляры | не поддерживаются (только PostgreSQL) |
 
 ## Замечания и ограничения
@@ -180,6 +185,15 @@ select concat('id:', id) as `Label` from simple_entity
 - Для `null`-значений параметров тип ClickHouse невозможно вывести только из значения CLR. Когда
   запрос связывает параметр `null`, задайте явный тип параметра на уровне драйвера (например,
   пользовательским резолвером) или приведите плейсхолдер в SQL.
+- ClickHouse отвергает явный оконный фрейм у стандартных `lag`/`lead` (и других не учитывающих фрейм
+  оконных функций) с `BAD_ARGUMENTS`. Когда расчёт должен учитывать фрейм, используйте
+  `SqlFunctions.ClickHouse.lag_in_frame`/`lead_in_frame`; их «обычные» аналоги `lag`/`lead`
+  фрейм-агностичны.
+- `multi_if` возвращает общий супертип, который ClickHouse выводит для ветвей. Если `TResult` — числовой
+  CLR-тип, весь вызов приводится к нему (`cast(multiIf(...) as Int64)`, `Float64`, ...), потому что иначе
+  ClickHouse материализует общий тип (например `UInt8` для маленьких целых литералов), который row
+  reader не читает обратно; нечисловые результаты (строка, дата) не кастуются, поэтому для них выбирайте
+  `TResult`, совпадающий с ветвями.
 
 ## См. также
 

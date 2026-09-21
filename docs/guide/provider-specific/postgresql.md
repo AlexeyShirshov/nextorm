@@ -111,7 +111,7 @@ See [Scalar functions](../11-scalar-functions.md).
 ## `DISTINCT ON`
 
 [`DistinctOn`](xref:NextORM.Core.EntityBuilder`1) renders `SELECT DISTINCT ON (expr, ...)`, keeping the
-first row of each key ([`SupportsDistinctOn`](xref:NextORM.Core.ISqlDialect.SupportsDistinctOn));
+first row of each key ([`DistinctOn`](xref:NextORM.Core.ISqlDialect.DistinctOn));
 mutually exclusive with `Distinct`.
 
 ```csharp
@@ -154,6 +154,51 @@ adds to a derived source, so the dialect wraps those calls in a one-column subqu
 output column (`value`, `key`/`value`, `word`/`ndoc`/`nentry`) are emitted unchanged.
 
 See [Table-valued functions](../13-table-valued-functions.md).
+
+## `TABLESAMPLE`
+
+[`TableSample`](xref:NextORM.Core.EntityBuilder`1) appends a `TABLESAMPLE` modifier to the
+query's primary table ([`TableSample`](xref:NextORM.Core.ISqlDialect.TableSample)).
+PostgreSQL supports both sampling methods and an optional repeatable seed
+(`TableSample`,
+`ITableSampleMethods.Render`):
+
+```csharp
+var rows = dataContext.From<ISimpleEntity>()
+    .TableSample(10, TableSampleMethod.System, seed: 42)
+    .Select(e => e.Id)
+    .ToList();
+```
+
+```sql
+select id from simple_entity tablesample system (10) repeatable (42)
+```
+
+[`TableSampleMethod.System`](xref:NextORM.Core.TableSampleMethod.System) renders
+`tablesample system (10)` and [`TableSampleMethod.Bernoulli`](xref:NextORM.Core.TableSampleMethod.Bernoulli)
+renders `tablesample bernoulli (5)`; other providers reject the modifier at SQL build time. See
+[Table sampling](../01-querying-and-projections.md#table-sampling-tablesample).
+
+## Row locking
+
+[`ForUpdate`](xref:NextORM.Core.EntityBuilder`1.ForUpdate) and
+[`ForShare`](xref:NextORM.Core.EntityBuilder`1.ForShare) emit a trailing row-locking clause, placed
+after `WHERE` and `ORDER BY` ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock),
+`ILockRenderer.Render`):
+
+```csharp
+var rows = dataContext.From<ISimpleEntity>()
+    .Where(e => e.Id > 5)
+    .ForUpdate()
+    .ToList();
+```
+
+```sql
+select id from simple_entity where (id > 5) for update
+```
+
+`LockMode.Update` renders `for update` and `LockMode.Share` renders `for share`. See
+[Row locking](../01-querying-and-projections.md#row-locking-for-update--for-share).
 
 ## Not yet supported
 

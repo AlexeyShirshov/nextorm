@@ -18,17 +18,38 @@ if (loggerFactory is not null)
 
 await using var ctx = new SqlServerDataContext(database.ConnectionString, contextBuilder);
 
-await AdventureWorksQueries.VipChurn(ctx, CancellationToken.None);
-await AdventureWorksQueries.RollingKpi(ctx, CancellationToken.None);
-await AdventureWorksQueries.SupplyChain(ctx, CancellationToken.None);
-await AdventureWorksQueries.ProductAbcXyz(ctx, CancellationToken.None);
-await AdventureWorksQueries.QuarterlyPivot(ctx, CancellationToken.None);
-await AdventureWorksQueries.TopProductsByCategory(ctx, CancellationToken.None);
-await AdventureWorksQueries.TerritoryYearOverYear(ctx, CancellationToken.None);
-await AdventureWorksQueries.CustomerRfm(ctx, CancellationToken.None);
-await AdventureWorksQueries.QuotaAttainment(ctx, CancellationToken.None);
-await AdventureWorksQueries.TerritoryGrowthMonthOverMonth(ctx, CancellationToken.None);
-await AdventureWorksQueries.CustomerPareto(ctx, CancellationToken.None);
+var results = new List<(string Name, Exception? Error)>();
+
+await Run("VipChurn", () => AdventureWorksQueries.VipChurn(ctx, CancellationToken.None));
+await Run("RollingKpi", () => AdventureWorksQueries.RollingKpi(ctx, CancellationToken.None));
+await Run("SupplyChain", () => AdventureWorksQueries.SupplyChain(ctx, CancellationToken.None));
+await Run("ProductAbcXyz", () => AdventureWorksQueries.ProductAbcXyz(ctx, CancellationToken.None));
+await Run("QuarterlyPivot", () => AdventureWorksQueries.QuarterlyPivot(ctx, CancellationToken.None));
+await Run("TopProductsByCategory", () => AdventureWorksQueries.TopProductsByCategory(ctx, CancellationToken.None));
+await Run("TerritoryYearOverYear", () => AdventureWorksQueries.TerritoryYearOverYear(ctx, CancellationToken.None));
+await Run("CustomerRfm", () => AdventureWorksQueries.CustomerRfm(ctx, CancellationToken.None));
+await Run("QuotaAttainment", () => AdventureWorksQueries.QuotaAttainment(ctx, CancellationToken.None));
+await Run("TerritoryGrowthMonthOverMonth", () => AdventureWorksQueries.TerritoryGrowthMonthOverMonth(ctx, CancellationToken.None));
+await Run("CustomerPareto", () => AdventureWorksQueries.CustomerPareto(ctx, CancellationToken.None));
+
+Console.WriteLine();
+Console.WriteLine($"{results.Count(r => r.Error is null)}/{results.Count} queries succeeded; " +
+                  $"{results.Count(r => r.Error is not null)} not working (see README).");
+
+async Task Run(string name, Func<Task> query)
+{
+    try
+    {
+        await query();
+        results.Add((name, null));
+        Console.WriteLine($"[ OK ] {name}");
+    }
+    catch (Exception ex) when (ex is NotSupportedException or QueryPreparationException)
+    {
+        results.Add((name, ex));
+        Console.WriteLine($"[FAIL] {name}: {ex.GetType().Name}: {ex.Message}");
+    }
+}
 
 static string? ParseConnectionString(string[] args, params string[] names)
 {

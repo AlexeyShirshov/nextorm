@@ -89,20 +89,24 @@ internal readonly struct SqlBuilder
                         throw new NotSupportedException($"The FOR SYSTEM_TIME {temporal.Kind} clause is not supported by this SQL dialect");
                 }
 
-                var fromStr = SqlSourceRenderer.MakeFrom(in _ctx, from, new FromRenderOptions(needAlias, entityType, hasJoins, cmd.TableHints, cmd.Temporal));
+                var tableHints = cmd.TableHints;
+                if (cmd.RowLock is { } lockClause && _ctx.Dialect.Lock is { UsesTableHints: true } lockHint)
+                    tableHints = AppendHint(tableHints, lockHint.Render(lockClause.Mode));
+
+                var fromStr = SqlSourceRenderer.MakeFrom(in _ctx, from, new FromRenderOptions(needAlias, entityType, hasJoins, tableHints, cmd.Temporal));
                 if (!_ctx.ParamMode)
                 {
                     sqlBuilder!.Append(" from ").Append(fromStr);
 
                     if (cmd.TableSample is { } tablesample)
                     {
-                        if (!_ctx.Dialect.SupportsTableSample)
+                        if (_ctx.Dialect.TableSample is not { } tableSample)
                             throw new NotSupportedException("The TABLESAMPLE modifier is not supported by this SQL dialect");
 
-                        if (!_ctx.Dialect.SupportsTableSampleMethod(tablesample.Method))
+                        if (!tableSample.Supports(tablesample.Method))
                             throw new NotSupportedException($"The TABLESAMPLE {tablesample.Method} sampling method is not supported by this SQL dialect");
 
-                        sqlBuilder.Append(_ctx.Dialect.MakeTableSample(tablesample.Method, tablesample.Percent, tablesample.Seed));
+                        sqlBuilder.Append(tableSample.Render(tablesample.Method, tablesample.Percent, tablesample.Seed));
                     }
 
                     if (cmd.Final)
@@ -133,7 +137,7 @@ internal readonly struct SqlBuilder
 
                 if (cmd.ArrayJoinExpressions is { Count: > 0 } arrayJoinExpressions)
                 {
-                    if (!_ctx.Dialect.SupportsArrayJoinClause)
+                    if (_ctx.Dialect.ArrayJoinClause is not { } arrayJoinClause)
                         throw new NotSupportedException("The ARRAY JOIN clause is not supported by this SQL dialect");
 
                     var renderedArrayJoins = _ctx.ParamMode ? null : new string[arrayJoinExpressions.Count];
@@ -152,7 +156,7 @@ internal readonly struct SqlBuilder
                     }
 
                     if (!_ctx.ParamMode)
-                        sqlBuilder!.AppendLine().Append(_ctx.Dialect.MakeArrayJoin(cmd.ArrayJoinKind, renderedArrayJoins!));
+                        sqlBuilder!.AppendLine().Append(arrayJoinClause.Render(cmd.ArrayJoinKind, renderedArrayJoins!));
                 }
 
                 if (cmd.PreparedPreWhere is not null)
@@ -244,11 +248,33 @@ internal readonly struct SqlBuilder
                         sqlBuilder.Append(groupingSql);
                     }
 
-                    if (cmd.Having is not null)
+                    var having = cmd.PreparedHaving ?? cmd.Having;
+                    if (having is not null)
                     {
                         if (!_ctx.ParamMode) sqlBuilder!.AppendLine().Append(" having ");
-                        SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, cmd.Having, 0);
+                        SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, having, 0);
                     }
+                }
+
+                var windows = cmd.Windows;
+                if (windows is { Count: > 0 })
+                {
+                    if (!_ctx.Dialect.SupportsNamedWindows)
+                        throw new NotSupportedException("Named windows (the WINDOW clause) are not supported by this SQL dialect");
+
+                    var renderedWindows = _ctx.ParamMode ? null : new string[windows.Count];
+
+                    for (var wi = 0; wi < windows.Count; wi++)
+                    {
+                        var window = windows[wi];
+                        var windowSpec = MakeNamedWindow(in _ctx, entityType, window);
+
+                        if (!_ctx.ParamMode)
+                            renderedWindows![wi] = window.Name + " as (" + windowSpec + ")";
+                    }
+
+                    if (!_ctx.ParamMode)
+                        sqlBuilder!.AppendLine().Append(" window ").Append(string.Join(", ", renderedWindows!));
                 }
 
                 if (cmd.UnionQuery is not null)
@@ -314,7 +340,7 @@ internal readonly struct SqlBuilder
 
                 if (cmd.LimitBy is { } limitBy)
                 {
-                    if (!_ctx.Dialect.SupportsLimitBy)
+                    if (_ctx.Dialect.LimitBy is not { } limitByRenderer)
                         throw new NotSupportedException("The LIMIT BY clause is not supported by this SQL dialect");
 
                     var limitByColumns = cmd.LimitByColumns;
@@ -334,7 +360,7 @@ internal readonly struct SqlBuilder
                     if (!_ctx.ParamMode)
                     {
                         sqlBuilder!.AppendLine();
-                        _ctx.Dialect.MakeLimitBy(limitBy.Limit, limitBy.Offset, renderedLimitBy!, sqlBuilder);
+                        sqlBuilder.Append(limitByRenderer.Render(limitBy.Limit, limitBy.Offset, renderedLimitBy!));
                     }
                 }
 
@@ -361,10 +387,12 @@ internal readonly struct SqlBuilder
 
             if (!_ctx.ParamMode && cmd.RowLock is { } rowLock)
             {
-                if (!_ctx.Dialect.SupportsLocking)
+                if (_ctx.Dialect.Lock is not { } lockRenderer)
                     throw new NotSupportedException("The FOR UPDATE/FOR SHARE clause is not supported by this SQL dialect");
 
-                sqlBuilder!.AppendLine().Append(_ctx.Dialect.MakeLock(rowLock.Mode));
+                // Table-hint dialects already rendered the lock on the primary source.
+                if (!lockRenderer.UsesTableHints)
+                    sqlBuilder!.AppendLine().Append(lockRenderer.Render(rowLock.Mode));
             }
 
 
@@ -374,7 +402,7 @@ internal readonly struct SqlBuilder
 
                 if (cmd.DistinctOn is not null)
                 {
-                    if (!_ctx.Dialect.SupportsDistinctOn)
+                    if (_ctx.Dialect.DistinctOn is not { } distinctOn)
                         throw new NotSupportedException("The DISTINCT ON clause is not supported by this SQL dialect");
 
                     var distinctOnColumns = cmd.DistinctOnColumns;
@@ -390,7 +418,7 @@ internal readonly struct SqlBuilder
                         }
                     }
 
-                    selectBuilder.Append(_ctx.Dialect.MakeDistinctOn(renderedDistinctOn));
+                    selectBuilder.Append(distinctOn.Render(renderedDistinctOn));
                 }
                 // SQL Server renders the limit as TOP(n); DISTINCT has to precede it
                 // ("select distinct top(n) ..."), so the flag is emitted before the select-list branch.
@@ -499,4 +527,106 @@ internal readonly struct SqlBuilder
 
     public (bool NeedAliasForColumn, string Column) MakeColumn(SelectExpression selExp, Type entityType, bool dontNeedAlias, bool renameAware = false)
         => SqlSourceRenderer.MakeColumn(in _ctx, selExp, entityType, dontNeedAlias, renameAware);
+
+    /// <summary>
+    /// Returns <paramref name="hints"/> with <paramref name="hint"/> appended, or a single-element list
+    /// when <paramref name="hints"/> is <c>null</c> or empty. Used to fold a row-locking table hint into
+    /// the command's own table hints.
+    /// </summary>
+    private static IReadOnlyList<string> AppendHint(IReadOnlyList<string>? hints, string hint)
+    {
+        if (hints is not { Count: > 0 })
+            return [hint];
+
+        var combined = new string[hints.Count + 1];
+        for (var i = 0; i < hints.Count; i++)
+            combined[i] = hints[i];
+        combined[^1] = hint;
+        return combined;
+    }
+
+    /// <summary>
+    /// Renders the inner specification of a named window (<c>partition by ... order by ... frame</c>).
+    /// In parameter mode it renders nothing but still walks every key so captured constants become
+    /// parameters in the same order as the SQL pass.
+    /// </summary>
+    private static string MakeNamedWindow(in SqlBuildContext ctx, Type entityType, WindowDefinition window)
+    {
+        var spec = StringBuilderPool.Shared.Get();
+
+        try
+        {
+            for (var i = 0; i < window.PartitionBy.Count; i++)
+            {
+                if (i == 0)
+                {
+                    if (!ctx.ParamMode) spec.Append("partition by ");
+                }
+                else if (!ctx.ParamMode)
+                {
+                    spec.Append(", ");
+                }
+
+                var (_, column) = SqlSourceRenderer.MakeColumn(
+                    in ctx,
+                    new SelectExpression(window.PartitionBy[i].ReturnType) { Expression = window.PartitionBy[i] },
+                    entityType,
+                    dontNeedAlias: true);
+
+                if (!ctx.ParamMode)
+                    spec.Append(column);
+            }
+
+            for (var i = 0; i < window.OrderBy.Count; i++)
+            {
+                if (i == 0)
+                {
+                    if (!ctx.ParamMode)
+                        spec.Append(window.PartitionBy.Count > 0 ? " order by " : "order by ");
+                }
+                else if (!ctx.ParamMode)
+                {
+                    spec.Append(", ");
+                }
+
+                var key = window.OrderBy[i];
+                var (_, column) = SqlSourceRenderer.MakeColumn(
+                    in ctx,
+                    new SelectExpression(key.Expression.ReturnType) { Expression = key.Expression },
+                    entityType,
+                    dontNeedAlias: true);
+
+                if (!ctx.ParamMode)
+                {
+                    spec.Append(column);
+
+                    if (key.Direction == OrderDirection.Desc)
+                        spec.Append(" desc");
+                }
+            }
+
+            if (window.Frame is { } frame)
+            {
+                if (frame.Type == WindowFrameType.Groups && !ctx.Dialect.SupportsWindowFrameGroups)
+                    throw new NotSupportedException("The GROUPS window frame unit is not supported by this SQL dialect");
+
+                if (frame.Exclusion is not null && !ctx.Dialect.SupportsWindowFrameExclusion)
+                    throw new NotSupportedException("The EXCLUDE window frame clause is not supported by this SQL dialect");
+
+                if (!ctx.ParamMode)
+                {
+                    if (window.PartitionBy.Count > 0 || window.OrderBy.Count > 0)
+                        spec.Append(' ');
+
+                    spec.Append(WindowSql.RenderWindowFrame(frame));
+                }
+            }
+
+            return ctx.ParamMode ? string.Empty : spec.ToString();
+        }
+        finally
+        {
+            StringBuilderPool.Shared.Return(spec);
+        }
+    }
 }

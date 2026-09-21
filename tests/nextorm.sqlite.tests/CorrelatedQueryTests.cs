@@ -145,6 +145,28 @@ public class CorrelatedQueryTests
         sql.Should().Contain("from pair_inner as 't3'");
     }
 
+    /// <summary>
+    /// A correlated reference may be wrapped in a function over the outer column (<c>upper(c.String)</c>):
+    /// the member translator rewrites the outer column to its marker and the ordinary scalar translator
+    /// renders the call around it.
+    /// </summary>
+    [Fact]
+    public void CorrelatedFunctionOverOuterColumn_ShouldRenderAroundOuterAlias()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var outer = ctx.From<IComplexEntity>();
+        var inner = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, outer.Select(it => new
+        {
+            it.Id,
+            x = inner.Where(s => s.String == it.String!.ToUpper()).Select(s => s.Id).First()
+        }));
+
+        sql.Should().Contain("upper(t1.somestring)");
+        sql.Should().Contain("t2.somestring");
+    }
+
     [Fact]
     public void CorrelatedExistsInSelect_ShouldReferenceOuterAlias()
     {
@@ -194,31 +216,132 @@ public class CorrelatedQueryTests
         sql.Should().Contain("cast(t2.id as bigint) = t1.id");
     }
 
+    /// <summary>
+    /// An aggregate terminal inside a correlated subquery is rewritten to the equivalent aggregate
+    /// projection, so it renders as a scalar subquery over <c>count(*)</c> instead of being rejected.
+    /// </summary>
     [Fact]
-    public void AggregateTerminalInsideSubquery_ShouldThrowNotSupported()
+    public void AggregateCountInsideSubquery_ShouldRenderAggregateSubquery()
     {
         using var ctx = SqliteTestContext.Create();
         var outer = ctx.From<IComplexEntity>();
         var inner = ctx.From<ISimpleEntity>();
 
-        var act = () => SqlOf(ctx, outer.Select(it => new
+        var sql = SqlOf(ctx, outer.Select(it => new
         {
             it.Id,
             c = inner.Where(s => s.Id == it.Id).Count()
         }));
 
-        act.Should().Throw<NotSupportedException>().WithMessage("*aggregate terminal*");
+        sql.Should().Be("select t1.id, (select count(*) from simple_entity as 't2'\n"
+            + " where cast(t2.id as bigint) = t1.id\n"
+            + "limit 1) as 'c' from complex_entity as 't1'");
     }
 
     [Fact]
-    public void NestedCorrelationDepth2_ShouldThrowNotSupported()
+    public void AggregateOpsInsideSubquery_ShouldRenderAggregateFunctions()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var outer = ctx.From<IComplexEntity>();
+        var pairs = ctx.From<IPairEntity>();
+
+        var sql = SqlOf(ctx, outer.Select(it => new
+        {
+            it.Id,
+            s = pairs.Where(p => p.Id == it.Id).Sum(p => p.A),
+            mn = pairs.Where(p => p.Id == it.Id).Min(p => p.A),
+            mx = pairs.Where(p => p.Id == it.Id).Max(p => p.A),
+            av = pairs.Where(p => p.Id == it.Id).Avg(p => p.A)
+        }));
+
+        sql.Should().Contain("(select sum(t2.a) from pair_entity as 't2'");
+        sql.Should().Contain("(select min(t3.a) from pair_entity as 't3'");
+        sql.Should().Contain("(select max(t4.a) from pair_entity as 't4'");
+        sql.Should().Contain("(select avg(t5.a) from pair_entity as 't5'");
+        sql.Should().Contain("where cast(t2.id as bigint) = t1.id");
+    }
+
+    /// <summary>
+    /// A non-correlated aggregate terminal in a projection is rewritten the same way and renders as a
+    /// plain scalar aggregate subquery.
+    /// </summary>
+    [Fact]
+    public void NonCorrelatedAggregateTerminalInsideSubquery_ShouldRenderAggregateSubquery()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var outer = ctx.From<IComplexEntity>();
+        var inner = ctx.From<ISimpleEntity>();
+
+        var sql = SqlOf(ctx, outer.Select(it => new
+        {
+            it.Id,
+            c = inner.Where(s => s.Id == 1).Count()
+        }));
+
+        sql.Should().Contain("(select count(*) from simple_entity");
+        sql.Should().Contain("limit 1) as 'c'");
+    }
+
+    /// <summary>
+    /// SQLite does not enforce scalar-subquery cardinality, so a numeric <c>Single</c> scalar subquery
+    /// is rendered with a count guard that raises on a second row instead of returning the first.
+    /// </summary>
+    [Fact]
+    public void SingleScalar_ShouldRenderCardinalityGuard()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var outer = ctx.From<IComplexEntity>();
+        var inner = ctx.From<ISimpleEntity>();
+
+        var sql = SqlOf(ctx, outer.Select(it => new
+        {
+            it.Id,
+            sid = inner.Where(s => s.Id == it.Id).Select(s => s.Id).Single()
+        }));
+
+        sql.Should().Contain("case when (count(*) > 1) then cast(abs(-9223372036854775808) as integer) else t2.id end");
+    }
+
+    /// <summary>
+    /// A fully non-correlated subquery that itself contains a subquery must resolve each referenced
+    /// command against the root registry; it used to resolve the wrong (outer) command and recurse.
+    /// </summary>
+    [Fact]
+    public void NestedNonCorrelatedSubquery_ShouldResolveItsOwnInnerCommand()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var outer = ctx.From<IComplexEntity>();
+        var inner = ctx.From<ISimpleEntity>();
+
+        var sql = SqlOf(ctx, outer.Select(it => new
+        {
+            it.Id,
+            x = inner.Where(s => s.Id > 0)
+                   .Select(s => inner.Where(s2 => s2.Id == s.Id).Select(s2 => s2.Id).First())
+                   .First()
+        }));
+
+        sql.Should().Be("select t1.id, (select (select t3.id from simple_entity as 't3'\n"
+            + " where t3.id = t2.id\n"
+            + "limit 1) from simple_entity as 't2'\n"
+            + " where (t2.id > 0)\n"
+            + "limit 1) as 'x' from complex_entity as 't1'");
+    }
+
+    /// <summary>
+    /// Correlation depth greater than one: the innermost subquery references both the middle
+    /// subquery's parameter (<c>s.Id</c>) and the outermost one (<c>it.Id</c>). Each outer reference is
+    /// resolved to the alias of the scope that registered it.
+    /// </summary>
+    [Fact]
+    public void NestedCorrelationDepth2_ShouldReferenceBothOuterLevels()
     {
         using var ctx = SqliteTestContext.Create();
         var outer = ctx.From<IComplexEntity>();
         var mid = ctx.From<ISimpleEntity>();
         var inner = ctx.From<ISimpleEntity>();
 
-        var act = () => SqlOf(ctx, outer.Select(it => new
+        var sql = SqlOf(ctx, outer.Select(it => new
         {
             it.Id,
             x = mid.Where(s => s.Id == it.Id)
@@ -226,25 +349,57 @@ public class CorrelatedQueryTests
                    .First()
         }));
 
-        act.Should().Throw<NotSupportedException>().WithMessage("*Nested correlated*");
+        sql.Should().Be("select t1.id, (select (select t3.id from simple_entity as 't3'\n"
+            + " where (t3.id = t2.id and cast(t3.id as bigint) = t1.id)\n"
+            + "limit 1) from simple_entity as 't2'\n"
+            + " where cast(t2.id as bigint) = t1.id\n"
+            + "limit 1) as 'x' from complex_entity as 't1'");
     }
 
     private static string SqlOfCached<T>(SqliteDataContext ctx, QueryCommand<T> cmd)
         => Normalize(((DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None)).DbCommand.CommandText);
 
+    /// <summary>
+    /// A subquery in HAVING is prepared through the correlated-query visitor like WHERE, so a
+    /// correlated scalar resolves against the grouped outer query instead of emitting a raw
+    /// inner-command node (which previously forced an explicit <c>NotSupportedException</c>).
+    /// </summary>
     [Fact]
-    public void CorrelatedSubqueryInHaving_ShouldThrowNotSupported()
+    public void CorrelatedSubqueryInHaving_ShouldReferenceOuterAlias()
     {
         using var ctx = SqliteTestContext.Create();
         var outer = ctx.From<IComplexEntity>();
         var inner = ctx.From<ISimpleEntity>();
 
-        var act = () => SqlOf(ctx, outer
+        var sql = SqlOf(ctx, outer
             .GroupBy(it => new { it.Id })
             .Having(g => g.Id == inner.Where(s => s.Id == g.Id).Select(s => s.Id).First())
             .Select(g => new { g.Id }));
 
-        act.Should().Throw<NotSupportedException>().WithMessage("*HAVING*");
+        sql.Should().Contain(" having ");
+        sql.Should().Contain("(select t2.id from simple_entity as 't2'");
+        sql.Should().Contain("cast(t2.id as bigint) = t1.id");
+    }
+
+    /// <summary>
+    /// A non-correlated subquery in HAVING is prepared by the same path and renders as a plain scalar
+    /// subquery over the inner source.
+    /// </summary>
+    [Fact]
+    public void SubqueryInHaving_ShouldRenderScalarSubquery()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var outer = ctx.From<IComplexEntity>();
+        var inner = ctx.From<ISimpleEntity>();
+
+        var sql = SqlOf(ctx, outer
+            .GroupBy(it => new { it.Id })
+            .Having(g => g.Id == inner.Select(s => s.Id).First())
+            .Select(g => new { g.Id }));
+
+        sql.Should().Contain(" having ");
+        sql.Should().Contain("(select id from simple_entity");
+        sql.Should().Contain("limit 1");
     }
 
     [Fact]

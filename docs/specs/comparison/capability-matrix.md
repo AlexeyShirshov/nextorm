@@ -1,0 +1,76 @@
+# Capability matrix: nextorm vs EF Core and linq2db
+
+> Part of the comparison [`sql-capabilities-gap-analysis.md`](../roadmap/sql-capabilities-gap-analysis.md),
+> extracted into its own document. For per-provider details see `docs/providers/*.md`.
+
+Legend: **yes** = first-class support; **partial** = supported with limits; **no** = not supported.
+
+The managed SQL surface is split by portability: cross-provider helpers live on `SqlFunctions.Sql`, while the
+provider-only functions live on a provider-specific surface — `SqlFunctions.Postgres` (native arrays, native
+JSON, the extended scalar library, the PG-only aggregates and the `generate_series`/`unnest` table
+functions), `SqlFunctions.SqlServer` (JSON-as-text on SQL Server and MySQL/MariaDB, plus SQL Server `string_split`/`openjson`) and `SqlFunctions.ClickHouse`
+(`arg_min`/`arg_max` and the `-If` combinator). A call on another provider fails with a clear
+`NotSupportedException`, and its capability flags are the same ones documented below.
+
+| SQL construct | EF Core | linq2db | nextorm | Evidence in nextorm |
+|---|---|---|---|---|
+| INNER JOIN | yes | yes | **yes** | `SqlBuilder.MakeJoin` |
+| LEFT JOIN | yes (`GroupJoin`+`DefaultIfEmpty`) | yes (`LeftJoin`) | **yes** | `JoinType.Left` |
+| RIGHT JOIN | no (workaround) | yes | **yes** | `JoinType.Right`, `ISqlDialect.SupportsRightFullJoin` |
+| FULL JOIN | no (workaround) | yes | **yes** on SQL Server, PostgreSQL, SQLite and ClickHouse (not MySQL/MariaDB) | `JoinType.Full`, `ISqlDialect.SupportsFullJoin` |
+| CROSS JOIN | yes (`SelectMany`) | yes | **yes** | `JoinType.Cross` |
+| APPLY / LATERAL | partial | yes | **yes** | `JoinType.CrossApply/OuterApply`, `ISqlDialect.SupportsApply`/`MakeApply`; the applied source may be correlated (a lambda over the left-hand row), gated off on SQLite/ClickHouse |
+| Join strictness (`ANY`/`ALL`/`ASOF`) and `GLOBAL` | no | no | **yes** on ClickHouse | `JoinStrictness`, `EntityBuilder.WithStrictness`/`Global`, `ISqlDialect.SupportsJoinStrictness`/`SupportsGlobalJoin`/`MakeJoinKeyword`; `SEMI`/`ANTI`/`PASTE` are not implemented |
+| Query hints | yes | yes (provider specific) | **partial** — SQL Server only | `QueryCommand<TResult>.Hint`, `ISqlDialect.SupportsQueryHints`/`RenderQueryHints` |
+| Table hints | yes | yes | **partial** — SQL Server only | `EntityBuilder.WithTableHint`, `SupportsTableHints`/`MakeTableHints` |
+| JOIN to a derived table (subquery) | yes | yes | **yes** — the subquery may be either side: the *joined* side (`primary.Join(QueryCommand<T>)`) or the *primary* `FROM` source (`ctx.From(derivedQuery).Join(...)`); a `Where` may precede the join, other modifiers stay inside the derived query (the in-memory provider rejects a derived primary source) | `EntityBuilder`, `SqlBuilder.MakeFrom`, `DataContextExtensions.From(QueryCommand)` |
+| More than two joined tables | unlimited | unlimited | **yes — up to 8** | `Projection<T1..T8>`, `JoinedEntityBuilder<T1..T8>` |
+| Subquery in `FROM` | yes | yes | **yes** | `SqlBuilder.MakeFrom`, `FromExpression` |
+| Scalar subquery in `SELECT`/`WHERE`/`ORDER BY`/`HAVING` | yes | yes | **yes** — correlated and non-correlated | `CommonTestSuite.CorrelatedQuery.cs`, `CorrelatedQueryTests.cs` |
+| Correlated subquery | yes | yes | **yes (one level)** — scalar subqueries and `EXISTS`/`IN`/`ANY`/`ALL` in `SELECT`/`WHERE`/`ORDER BY`/`HAVING`, including outer references to a join-projection item (`p.Item1.Id`); deeper nesting and the in-memory provider throw `NotSupportedException` | `CorrelatedQueryExpressionVisitor.cs`, `MemberTranslator.TryTranslateProjectionOuterReference` |
+| `IN` (subquery) | yes | yes | **yes** — plus the ClickHouse distributed `GLOBAL IN` (`global_in`, `SupportsGlobalPredicates`) | `SqlFunctions.@in`, `SqlFunctions.ClickHouse.global_in`, `BaseExpressionVisitor` |
+| `IN` (list/array/`Contains`) | yes | yes | **yes** | `SqlFunctions.@in`, `Contains` |
+| `EXISTS` / `ANY` / `ALL` | yes | yes | **yes** | `SqlFunctions.exists/any/all` |
+| `WHERE` (and/or/not, comparisons) | yes | yes | **yes** | `WhereExpressionVisitor`, `VisitUnary` |
+| `GROUP BY` | yes | yes | **yes** | `EntityBuilder.GroupBy`, `SqlBuilder` |
+| `ROLLUP` / `CUBE` / `GROUPING SETS` | yes | yes | **yes** — `ROLLUP` on SQL Server, PostgreSQL, MySQL/MariaDB, SQLite and ClickHouse; `CUBE`/`GROUPING SETS` on SQL Server, PostgreSQL, SQLite and ClickHouse; `WITH TOTALS` on ClickHouse | `GroupByRollup`/`GroupByCube`/`GroupByGroupingSets`/`WithTotals`, `SupportsRollup`/`SupportsCube`/`SupportsGroupingSets`/`SupportsGroupByWithTotals` |
+| `LIMIT n BY expr` | no | no | **ClickHouse only** — at most `n` rows per distinct key | `LimitBy`, `ILimitByRenderer.Render` |
+| `FINAL` / `SAMPLE` / `PREWHERE` / `SETTINGS` | no | no | **ClickHouse only** for `FINAL`/`PREWHERE`/`SETTINGS`; the cross-provider `TABLESAMPLE` analog is exposed separately on PostgreSQL and SQL Server (see the `DISTINCT ON`/`WITH TIES`/`TABLESAMPLE` row) | `Final`/`Sample`/`PreWhere`/`Settings`, `SupportsFinal`/`SupportsSample`/`SupportsPreWhere`/`SupportsSettings` |
+| Generated-row table functions (`numbers`/`numbers_mt`, `zeros`/`zeros_mt`, `generateRandom`) | yes (`generate_series`/`unnest`) | yes (`string_split`/`openjson`) | **ClickHouse** — generated sources; `numbers`' `UInt64` is cast to `Int64`, `zeros`' `UInt8` materialises directly, and `generateRandom` fixes the structure `id UInt64, value Float64, name String` (casting `id` to `Int64`) | `ClickHouseFunctions.numbers`/`zeros`/`generate_random`, `INumbersRow`/`IZerosRow`/`IGenerateRandomRow`, `WrapTableFunction` |
+| `HAVING` | yes | yes | **yes** | `EntityBuilder.Having` |
+| Aggregates (`count`/`min`/`max`/`avg`/`sum`/`stdev`/`var`, distinct) | yes | yes | **yes** — `FILTER (WHERE ...)` on PostgreSQL and SQLite; boolean aggregates on PostgreSQL; bit and statistical aggregates on PostgreSQL and ClickHouse; `regr_*` on PostgreSQL; the arbitrary-value `any_agg` on MySQL and ClickHouse (MariaDB gated off — no `ANY_VALUE` until 13.2, MDEV-10426); `arg_min`/`arg_max`, the `uniq*` distinct-count family (the exact `uniqExact` overlaps the portable `count_distinct`/`count_big_distinct`, while SQL Server 2019+ `APPROX_COUNT_DISTINCT` is the approximate-distinct analog), the parameterised `quantile*`/`median`, the row-picking `any_last` and the `-If` combinators on ClickHouse (where `count`/`count_if` are cast to `toInt32`/`toInt64` because the native result is `UInt64`); the window percentiles `percentile_cont`/`percentile_disc` on SQL Server and MariaDB | `AdvancedAggregateTranslator.cs`, `WindowFunctionTranslator.cs`, `Supports*Aggregates`, `SupportsAnyValueAggregate`, `WrapsCountResult`, `SupportsPercentileWindow` |
+| `SELECT DISTINCT` | yes | yes | **yes** | `EntityBuilder.IsDistinct` |
+| `ORDER BY` (expression/ordinal, asc/desc, multiple) | yes | yes | **yes** | `EntityBuilder`, `SqlBuilder` |
+| `LIMIT`/`OFFSET`/`TOP` | yes | yes | **yes** | dialect `MakePage`/`MakeTop` |
+| `DISTINCT ON` / `WITH TIES` / `TABLESAMPLE` / `FOR UPDATE`/`FOR SHARE` | no | no | `DISTINCT ON` — **PostgreSQL only**; `WITH TIES` — **PostgreSQL + SQL Server**; `TABLESAMPLE` — **PostgreSQL** (`SYSTEM`/`BERNOULLI`) **+ SQL Server** (`SYSTEM`); row locking — **PostgreSQL + MySQL/MariaDB** (trailing `FOR UPDATE`/`LOCK IN SHARE MODE`) **+ SQL Server** (`WITH (UPDLOCK)`/`WITH (HOLDLOCK)` table hints) | `DistinctOn`/`WithTies`/`TableSample`/`ForUpdate`/`ForShare`, `DistinctOn`/`SupportsWithTies`/`TableSample`/`Lock`/`ILockRenderer.UsesTableHints`/`ILockRenderer.Render` |
+| Temporal tables (`FOR SYSTEM_TIME`) | no | no | **SQL Server + MariaDB** — `AS OF`/`BETWEEN ... AND ...`/`FROM ... TO ...`/`ALL`; `CONTAINED IN` — SQL Server only | `ForSystemTime`, `TemporalKind`/`TemporalClause`, `SupportsTemporalTable`/`SupportsTemporalKind`/`MakeTemporalTable` |
+| `UNION` / `UNION ALL` | yes | yes | **yes** | `QueryCommand`, `SqlBuilder` |
+| `INTERSECT` / `EXCEPT` | yes | yes | **yes** (with `ALL` on PostgreSQL, MariaDB and ClickHouse) | `UnionType`, `SupportsIntersectExceptAll` |
+| CTE (`WITH`), recursive CTE | yes | yes | **yes** | `QueryCommand.Cte`, `EntityBuilder` |
+| Window functions (`OVER`, `ROW_NUMBER`, ...) | yes | yes | **yes** — includes `percent_rank`/`cume_dist` (`SupportsPercentRankCumeDist`, ClickHouse included), `nth_value` (`SupportsNthValue`; PostgreSQL/MySQL/MariaDB/SQLite/ClickHouse, rejected on SQL Server), named windows (`WINDOW w AS (...)` + `OVER w`, `SupportsNamedWindows`; PostgreSQL/MySQL/MariaDB/ClickHouse/SQLite, rejected on SQL Server), the `GROUPS` frame unit (`SupportsWindowFrameGroups`; PostgreSQL/ClickHouse/SQLite) and frame `EXCLUDE` (`SupportsWindowFrameExclusion`; PostgreSQL/SQLite); ClickHouse additionally exposes the frame-respecting `lagInFrame`/`leadInFrame` (`lag_in_frame`/`lead_in_frame`, `SupportsInFrameWindowFunctions`) | `CommonFunctions.row_number/rank/lag/nth_value/...`, `ClickHouseFunctions.lag_in_frame`/`lead_in_frame`, `WindowDefinition`/`EntityBuilder.Window`, `WindowFunctionTranslator`, dialects |
+| `CASE WHEN` / ternary `?:` / `switch` | yes | yes | **yes** | `BaseExpressionVisitor.VisitConditional` |
+| `COALESCE` (`??`) | yes | yes | **yes** | `BaseExpressionVisitor`, `MakeCoalesce` |
+| `CAST` (numeric) | yes | yes | **yes** | `BaseExpressionVisitor` |
+| `LIKE` / string methods (`Contains`, `StartsWith`, `ToUpper`, `Substring`, `Trim`, `Remove`, `Insert`, `IndexOf`, `LastIndexOf`, `PadLeft`, `PadRight`, `new string(char, n)`, `Split`/`Join` on arrays) | yes | yes | **yes** (string `LastIndexOf` is not available on SQLite, which has no reversal; `Split` needs a scalar array — PostgreSQL `string_to_array`, ClickHouse `splitByChar`/`StringSplit` — while `Join` requires PostgreSQL arrays) | `BaseExpressionVisitor`, dialect string hooks |
+| Math functions (`Math.*`) | yes | yes | **yes** | `BaseExpressionVisitor`, `MakeMathFunction` |
+| Date/time functions (`DATEPART`, ...) | yes | yes | **yes** | `CommonFunctions`, `MakeDatePart`/`MakeDateAdd`/... |
+| Full-text search | partial (`EF.Functions`) | yes (provider) | **yes** on SQL Server, PostgreSQL, MySQL/MariaDB (boolean predicates); plus the native PostgreSQL `tsvector`/`tsquery` surface (`to_tsvector`/`to_tsquery`/`ts_rank`/`ts_headline`/`@@`) | `contains`/`freetext`, `SupportsFullText`/`MakeFullText`; `PostgresFunctions.to_tsvector/...`, `SupportsTextSearchFunctions` |
+| Native JSON | yes | yes | **yes on PostgreSQL** | `SupportsJson`, `JsonSqlTranslator` |
+| JSON scalar functions (`json_value`/`json_query`/`json_modify`, `isjson`) | yes | yes | **yes on SQL Server and MySQL/MariaDB** | `SupportsTextJson`, `MakeTextJsonFunction`, `MakeIsJson` |
+| String JSON (`JSONExtract*`, `JSONHas`, `JSONLength`, `JSONType`, `visitParamExtract*`, JSONPath `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS`) | no | no | **yes on ClickHouse** — `json_extract_string` is the same scalar-string extractor as the portable `json_value` (no separate surface needed), the typed `JSONExtractInt`/`Float`/`Bool`/`Raw` are ClickHouse-only, and the JSONPath scalars share the same gate | `SupportsJsonExtract`, `MakeJsonExtract`, `JsonExtractSqlTranslator` |
+| Dictionary functions (`dictGet`, `dictGetOrDefault`, `dictHas`) | no | no | **yes on ClickHouse** | `SupportsDictionaries`, `MakeDictionaryFunction`, `DictionarySqlTranslator` |
+| Array functions (`cardinality`/`array_*`/`@>`/`&&`/`array_shuffle`/`array_sample` (PG16+); ClickHouse `length`, `has`, `indexOf`, `hasAny`/`hasAll`, `arrayStringConcat`, `splitByChar`, `arraySort`/`arrayReverse`/`arrayDistinct`, `range`/`arrayEnumerate`/`arrayCumSum`/`arraySlice`/`arrayPushBack`, `arrayJoin`; CLR `string.Split` → `splitByChar`) | yes (`PostgresFunctions`, parameter arrays) | no | **yes on PostgreSQL and ClickHouse** — ClickHouse operates on `Array(T)` columns, `arrayJoin` expands one row per element, the `[LEFT] ARRAY JOIN` clause (+ element binding via `ArrayJoinElement`/`ArrayJoinProjection<TEntity, TElement>.Element`) and the CLR `string.Split` → `splitByChar` (`StringSplit`) are supported; higher-order functions and the array row reader are not implemented | `SupportsArrayFunctions`/`SupportsArrayJoin`/`ArrayJoinClause`/`StringSplit`, `MakeArrayFunction`/`IArrayJoinRenderer.Render`/`IStringSplitRenderer.Render`, `ArraySqlTranslator`, `ArrayJoinKind`, `ClickHouseFunctions` |
+| Conditional functions (`iif`, `choose`, `multi_if`) | no | no | **yes** — portable `iif` (native `iif` on SQL Server/SQLite, `if` on MySQL/MariaDB/ClickHouse, `case when` on PostgreSQL); `choose` is SQL Server-only (C# `?:` renders the portable `case`); the ClickHouse-only multi-branch `multi_if` renders `multiIf(c1, v1, …, else)` (`when`/`otherwise` builders) | `CommonFunctions.iif`, `SqlServerFunctions.choose`, `ClickHouseFunctions.multi_if`, `Iif`/`IIifRenderer.Render`, `SupportsChoose`, `MultiIf`/`IMultiIfRenderer.Render`, `BuiltinFunctionTranslator` |
+| `FOR JSON` / `FOR XML` | partial | yes (provider) | **yes on SQL Server** | `QueryCommand.ForJson/ForXml`, `SupportsForJson`/`SupportsForXml` |
+| XML data-type methods (`.value`/`.query`/`.exist`) | no | yes (provider) | **partial — SQL Server only** for the scalar methods (`SqlFunctions.SqlServer.xml_value`/`xml_query`/`xml_exist`, postfix `xmlcol.value('xpath', 'type')`); `.nodes` is not implemented (rowset needs an outer `FROM`/`APPLY` reference); PostgreSQL/MySQL/MariaDB have different XPath forms (`xpath`, `ExtractValue`) not unified here | `SqlServerFunctions.xml_value/xml_query/xml_exist`, `XmlFunctions`/`XmlFunctions`/`IXmlFunctions.Render` |
+| `GREATEST` / `LEAST` | yes | partial | **yes** on SQL Server, PostgreSQL, MySQL/MariaDB, SQLite and ClickHouse (NULL handling is provider-specific: PostgreSQL, SQL Server 2022+ and ClickHouse 24.12+ ignore NULL arguments, while MySQL/MariaDB and SQLite return NULL when any argument is NULL) | `SupportsGreatestLeast`/`MakeGreatest`/`MakeLeast` |
+| `STRING_AGG` / `ARRAY_AGG` | yes | yes | **yes** — `string_agg` on SQL Server, PostgreSQL, MySQL/MariaDB, SQLite and ClickHouse; `array_agg` on PostgreSQL | `string_agg`/`array_agg`, `SupportsStringAgg`/`SupportsArrayAgg` |
+| User-defined scalar-valued functions | yes (`DbFunction`) | yes (`Sql.Ext`/custom) | **yes** (`[SqlFunction]`) | `UdfScalarTranslator` |
+| Table-valued functions | yes (TVF mapping) | yes (`TableFunction`) | **yes** (`[SqlTableFunction]`); built-ins gated | `SqlBuilder.MakeTableFunction`, `SupportsTableFunction` |
+| Navigation properties (implicit joins) | yes | yes | **no** | explicit joins only; no relationship metadata |
+| DML (`INSERT`/`UPDATE`/`DELETE`/`MERGE`) | yes | yes | **no** | read-only provider |
+| Raw SQL (whole query) | yes (`FromSql`) | yes | **yes** | `PrepareFromSql`/`WithSql` |
+| Raw SQL as a composable source/subquery | yes | yes | **no** | `WithSql` replaces the whole query |
+
+The matrix was originally written before the section-5 workstreams landed; it has been updated in place on
+2026-09-19. For per-provider details see `docs/providers/*.md`.

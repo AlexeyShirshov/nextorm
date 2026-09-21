@@ -44,7 +44,8 @@
 - [API reference](advanced/api-reference.md)
 - [Prepared vs cached: reusing a query](specs/performance/prepared-vs-cached.md)
 - [SQL capabilities gap analysis](specs/roadmap/sql-capabilities-gap-analysis.md)
-- [nextorm vs linq2db: functionality comparison](specs/roadmap/linq2db-comparison.md)
+- [Capability matrix: nextorm vs EF Core and linq2db](specs/comparison/capability-matrix.md)
+- [nextorm vs linq2db: functionality comparison](specs/comparison/linq2db-comparison.md)
 
 ### Русская документация
 

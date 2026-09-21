@@ -11,6 +11,11 @@ public sealed class SqlServerDialect : SqlDialectBase
 {
     public static readonly SqlServerDialect Instance = new();
 
+    private readonly IPivotRenderer _pivot;
+
+    /// <summary>Creates the dialect and its capability renderers.</summary>
+    public SqlServerDialect() => _pivot = new SqlServerPivotRenderer(this);
+
     public override string MakeParam(string name) => $"@{name}";
 
     /// <summary>
@@ -44,32 +49,26 @@ public sealed class SqlServerDialect : SqlDialectBase
     public override string MakeIsJson(string value, bool asPredicate) =>
         asPredicate ? $"(isjson({value})) = 1" : $"cast(isjson({value}) as bit)";
 
+    /// <summary>SQL Server is the only provider with the postfix XML data-type methods.</summary>
+    public override IXmlFunctions XmlFunctions => SqlServerXmlFunctions.Instance;
+
     /// <summary>SQL Server renders the full-text predicates <c>contains</c>/<c>freetext</c>.</summary>
     public override bool SupportsFullText => true;
 
     public override string MakeFullText(string functionName, string column, string search) =>
         $"{functionName}({column}, {search})";
 
-    /// <summary>SQL Server supports the <c>TABLESAMPLE</c> table modifier.</summary>
-    public override bool SupportsTableSample => true;
-
-    /// <summary>SQL Server supports only the <c>SYSTEM</c> sampling method (there is no <c>BERNOULLI</c>).</summary>
-    public override bool SupportsTableSampleMethod(TableSampleMethod method) => method == TableSampleMethod.System;
-
-    /// <summary>SQL Server renders <c>tablesample (percent percent) [repeatable (seed)]</c>.</summary>
-    public override string MakeTableSample(TableSampleMethod method, double percent, double? seed)
-    {
-        var text = " tablesample (" + percent.ToString(System.Globalization.CultureInfo.InvariantCulture) + " percent)";
-        return seed is { } value
-            ? text + " repeatable (" + value.ToString(System.Globalization.CultureInfo.InvariantCulture) + ")"
-            : text;
-    }
+    /// <summary>SQL Server supports the <c>TABLESAMPLE</c> table modifier; only the <c>SYSTEM</c> method exists.</summary>
+    public override ITableSampleMethods TableSample => SqlServerTableSampleMethods.Instance;
 
     /// <summary>SQL Server supports the <c>FOR SYSTEM_TIME</c> temporal-table clause, including <c>CONTAINED IN</c>.</summary>
     public override bool SupportsTemporalTable => true;
 
     /// <summary>SQL Server supports every <c>FOR SYSTEM_TIME</c> kind.</summary>
     public override bool SupportsTemporalKind(TemporalKind kind) => true;
+
+    /// <summary>SQL Server supports the native <c>PIVOT</c>/<c>UNPIVOT</c> source constructs.</summary>
+    public override IPivotRenderer Pivot => _pivot;
 
     public override bool SupportsTableFunction(string name) =>
         name is "string_split" or "openjson";
@@ -78,6 +77,9 @@ public sealed class SqlServerDialect : SqlDialectBase
     public override bool SupportsTableHints => true;
 
     public override string MakeTableHints(IReadOnlyList<string> hints) => $" with ({string.Join(", ", hints)})";
+
+    /// <summary>SQL Server supports row locking through the <c>updlock</c>/<c>holdlock</c> table hints.</summary>
+    public override ILockRenderer Lock => SqlServerLockRenderer.Instance;
 
     /// <summary>SQL Server renders the result set as JSON through a trailing <c>FOR JSON</c> clause.</summary>
     public override bool SupportsForJson => true;
@@ -368,48 +370,19 @@ public sealed class SqlServerDialect : SqlDialectBase
     public override bool SupportsQueryHints => true;
 
     /// <summary>SQL Server implements the <c>iif</c> conditional function and the <c>choose</c> value picker.</summary>
-    public override bool SupportsIif => true;
+    public override IIifRenderer Iif => SqlServerIifRenderer.Instance;
 
     /// <summary>SQL Server is the only provider with the <c>choose</c> value-picker function.</summary>
     public override bool SupportsChoose => true;
-
-    /// <summary>SQL Server renders the conditional as <c>iif(condition, whenTrue, whenFalse)</c>.</summary>
-    public override string MakeIif(string condition, string whenTrue, string whenFalse) =>
-        $"iif({condition}, {whenTrue}, {whenFalse})";
 
     /// <summary>
     /// SQL Server renders <c>current_user</c>/<c>session_user</c> as the ANSI keywords and the
     /// database/schema/version information through <c>db_name()</c>/<c>schema_name()</c>/<c>@@version</c>.
     /// </summary>
-    public override bool SupportsSessionInfoFunctions => true;
-
-    /// <summary>SQL Server supports all five session/information functions.</summary>
-    public override bool SupportsSessionInfoFunction(string name) =>
-        name is "current_user" or "session_user" or "current_schema" or "current_database" or "version";
-
-    /// <summary>SQL Server maps the information functions onto <c>schema_name()</c>/<c>db_name()</c>/<c>@@version</c>.</summary>
-    public override string MakeSessionInfoFunction(string name) => name switch
-    {
-        "current_user" => "current_user",
-        "session_user" => "session_user",
-        "current_schema" => "schema_name()",
-        "current_database" => "db_name()",
-        "version" => "@@version",
-        _ => base.MakeSessionInfoFunction(name)
-    };
+    public override ISessionInfoFunctions SessionInfoFunctions => SqlServerSessionInfoFunctions.Instance;
 
     /// <summary>SQL Server can generate a random UUID through <c>newid()</c>; it has no v7 generator.</summary>
-    public override bool SupportsUuidGenerators => true;
-
-    /// <summary>SQL Server supports only the random v4 generator (<c>newid()</c>); <c>uuidv7</c> is unavailable.</summary>
-    public override bool SupportsUuidGenerator(string name) => name is "gen_random_uuid";
-
-    /// <summary>SQL Server renders the random v4 generator as <c>newid()</c>.</summary>
-    public override string MakeUuidGenerator(string name) => name switch
-    {
-        "gen_random_uuid" => "newid()",
-        _ => base.MakeUuidGenerator(name)
-    };
+    public override IUuidGenerators UuidGenerators => SqlServerUuidGenerators.Instance;
 
     public override string RenderQueryHints(string sql, IReadOnlyList<string> hints, string? maxRecursionOption)
     {
@@ -426,4 +399,113 @@ public sealed class SqlServerDialect : SqlDialectBase
 
         return $"{sql} option ({string.Join(", ", hints)})";
     }
+}
+
+internal sealed class SqlServerIifRenderer : IIifRenderer
+{
+    public static readonly SqlServerIifRenderer Instance = new();
+
+    public string Render(string condition, string whenTrue, string whenFalse) =>
+        $"iif({condition}, {whenTrue}, {whenFalse})";
+}
+
+internal sealed class SqlServerSessionInfoFunctions : ISessionInfoFunctions
+{
+    public static readonly SqlServerSessionInfoFunctions Instance = new();
+
+    public bool Supports(string name) =>
+        name is "current_user" or "session_user" or "current_schema" or "current_database" or "version";
+
+    public string Render(string name) => name switch
+    {
+        "current_user" => "current_user",
+        "session_user" => "session_user",
+        "current_schema" => "schema_name()",
+        "current_database" => "db_name()",
+        "version" => "@@version",
+        _ => throw new NotSupportedException($"The {name} session information function is not supported by SQL Server.")
+    };
+}
+
+internal sealed class SqlServerUuidGenerators : IUuidGenerators
+{
+    public static readonly SqlServerUuidGenerators Instance = new();
+
+    public bool Supports(string name) => name is "gen_random_uuid";
+
+    public string Render(string name) => name switch
+    {
+        "gen_random_uuid" => "newid()",
+        _ => throw new NotSupportedException($"The {name} UUID generator function is not supported by SQL Server.")
+    };
+}
+
+internal sealed class SqlServerXmlFunctions : IXmlFunctions
+{
+    public static readonly SqlServerXmlFunctions Instance = new();
+
+    public bool Supports(string name) => name is "value" or "query" or "exist";
+
+    public string Render(string name, string operand, IReadOnlyList<string> args) =>
+        $"{operand}.{name}({string.Join(", ", args)})";
+}
+
+internal sealed class SqlServerTableSampleMethods : ITableSampleMethods
+{
+    public static readonly SqlServerTableSampleMethods Instance = new();
+
+    public bool Supports(TableSampleMethod method) => method == TableSampleMethod.System;
+
+    public string Render(TableSampleMethod method, double percent, double? seed)
+    {
+        var text = " tablesample (" + percent.ToString(System.Globalization.CultureInfo.InvariantCulture) + " percent)";
+        return seed is { } value
+            ? text + " repeatable (" + value.ToString(System.Globalization.CultureInfo.InvariantCulture) + ")"
+            : text;
+    }
+}
+
+internal sealed class SqlServerPivotRenderer(SqlServerDialect dialect) : IPivotRenderer
+{
+    public string RenderPivot(PivotExpression pivot, string source, string aggregateColumn, string forColumn, string alias)
+    {
+        var sb = new StringBuilder(source);
+        sb.Append(" pivot (").Append(pivot.Aggregate.ToString().ToLowerInvariant()).Append('(')
+          .Append(aggregateColumn).Append(") for ").Append(forColumn).Append(" in (");
+
+        for (var i = 0; i < pivot.Values.Count; i++)
+        {
+            if (i > 0) sb.Append(", ");
+            sb.Append(dialect.Escape(pivot.Values[i].Value));
+        }
+
+        sb.Append("))").Append(dialect.MakeTableAlias(alias));
+        return sb.ToString();
+    }
+
+    public string RenderUnpivot(PivotExpression pivot, string source, string alias)
+    {
+        var sb = new StringBuilder(source);
+        sb.Append(" unpivot (").Append(dialect.Escape(pivot.UnpivotValueColumn!)).Append(" for ")
+          .Append(dialect.Escape(pivot.UnpivotNameColumn!)).Append(" in (");
+
+        for (var i = 0; i < pivot.Columns.Count; i++)
+        {
+            if (i > 0) sb.Append(", ");
+            sb.Append(dialect.Escape(pivot.Columns[i].Column));
+        }
+
+        sb.Append("))").Append(dialect.MakeTableAlias(alias));
+        return sb.ToString();
+    }
+}
+
+internal sealed class SqlServerLockRenderer : ILockRenderer
+{
+    public static readonly SqlServerLockRenderer Instance = new();
+
+    public bool UsesTableHints => true;
+
+    public string Render(LockMode mode) =>
+        mode == LockMode.Share ? "holdlock" : "updlock";
 }

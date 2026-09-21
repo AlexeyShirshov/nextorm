@@ -35,6 +35,7 @@ internal sealed class SqlServerTestProvider : ITestProvider
     // APPLY rather than used as a FROM table-valued function, so the test is skipped there.
     public bool SupportsTableValuedFunctions => false;
     public bool EnforcesScalarSubqueryCardinality => true;
+    public bool SupportsApply => true;
     public string TableValuedFunctionSkipReason => "The shared table-valued function test uses SQLite's json_each; SQL Server exposes row-returning JSON through CROSS APPLY OPENJSON instead.";
 
     public string SkipReason => SqlServerContainer.Failure ?? "SQL Server is not available.";
@@ -67,11 +68,18 @@ internal sealed class SqlServerTestProvider : ITestProvider
         """
         drop table if exists complex_entity;
         drop table if exists binary_entity;
+        drop table if exists xml_entity;
         drop table if exists simple_entity;
 
         create table simple_entity (id int not null primary key);
 
         insert into simple_entity (id) values (1),(2),(3),(4),(5),(6),(7),(8),(9),(10);
+
+        drop table if exists pivot_entity;
+
+        create table pivot_entity (id int not null primary key, q1 int null, q2 int null);
+
+        insert into pivot_entity (id, q1, q2) values (1, 10, 20), (2, 30, 40);
 
         create table complex_entity
         (
@@ -101,5 +109,14 @@ internal sealed class SqlServerTestProvider : ITestProvider
         );
 
         insert into binary_entity (id, data) values (1, 0x01020304), (2, null);
+
+        create table xml_entity
+        (
+            id int not null primary key,
+            payload xml null
+        );
+
+        insert into xml_entity (id, payload) values
+            (1, N'<root><item id="1">alpha</item><item id="2">beta</item></root>');
         """;
 }

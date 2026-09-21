@@ -167,7 +167,7 @@ SQL Server отклоняет `OFFSET ... FETCH` без `ORDER BY`, поэтом
 
 ## Limit By (ClickHouse)
 
-`LimitBy(limit, expr)` генерирует ClickHouse [`LIMIT n BY expr`](xref:NextORM.Core.ISqlDialect.SupportsLimitBy):
+`LimitBy(limit, expr)` генерирует ClickHouse [`LIMIT n BY expr`](xref:NextORM.Core.ISqlDialect.LimitBy):
 не более `limit` строк на каждое значение ключа. Ключом может быть одна колонка или анонимный тип для
 нескольких колонок; перегрузка принимает `offset` на группу (`LIMIT offset, n BY expr`). Клауза идёт
 после `ORDER BY` и перед финальным `LIMIT`:

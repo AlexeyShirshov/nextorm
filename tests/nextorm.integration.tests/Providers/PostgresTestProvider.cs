@@ -34,6 +34,7 @@ internal sealed class PostgresTestProvider : ITestProvider
     // (jsonb/json return types differ), so it is skipped for now.
     public bool SupportsTableValuedFunctions => false;
     public bool EnforcesScalarSubqueryCardinality => true;
+    public bool SupportsApply => true;
     public string TableValuedFunctionSkipReason => "The shared table-valued function test uses SQLite's json_each; no portable equivalent is configured for PostgreSQL.";
 
     public string SkipReason => PostgresContainer.Failure ?? "PostgreSQL is not available.";

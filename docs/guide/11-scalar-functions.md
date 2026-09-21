@@ -317,8 +317,7 @@ The `%`-style providers (`DATE_FORMAT`, `strftime`, `formatDateTime`) are declar
 
 `SqlFunctions.Sql.current_user()`, `session_user()`, `current_schema()`, `current_database()` and
 `version()` are cross-provider
-([`SupportsSessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SupportsSessionInfoFunctions) plus the
-per-function [`SupportsSessionInfoFunction`](xref:NextORM.Core.ISqlDialect.SupportsSessionInfoFunction)):
+([`SessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SessionInfoFunctions)):
 
 | C# | PostgreSQL | SQL Server | MySQL/MariaDB | ClickHouse | SQLite |
 |---|---|---|---|---|---|
@@ -333,8 +332,7 @@ A provider that cannot express a function throws `NotSupportedException`.
 ### UUID generators
 
 `SqlFunctions.Sql.gen_random_uuid()` (random v4) and `uuidv7()` are cross-provider
-([`SupportsUuidGenerators`](xref:NextORM.Core.ISqlDialect.SupportsUuidGenerators) plus the
-per-function [`SupportsUuidGenerator`](xref:NextORM.Core.ISqlDialect.SupportsUuidGenerator(string))):
+([`UuidGenerators`](xref:NextORM.Core.ISqlDialect.UuidGenerators)):
 
 | C# | PostgreSQL | SQL Server | MySQL | MariaDB | ClickHouse | SQLite |
 |---|---|---|---|---|---|---|
@@ -508,7 +506,7 @@ result can be projected like a scalar column.
 > directly throws at preparation time because the row reader cannot materialise `Array(T)` yet.
 
 The CLR `string.Split` is rendered as `splitByChar(separator, value)` (gated by
-[`SupportsStringSplit`](xref:NextORM.Core.ISqlDialect.SupportsStringSplit)); only a single-character
+[`StringSplit`](xref:NextORM.Core.ISqlDialect.StringSplit)); only a single-character
 separator is supported (the multi-character `splitByString` is not exposed), the result is a `string[]`
 usable only inside another array function, and the `count` overload, multiple separators and
 `StringSplitOptions` other than `None` throw `NotSupportedException`:
@@ -679,6 +677,38 @@ On MySQL/MariaDB the same calls render as `json_unquote(json_extract(...))`, `js
 returns an `int`) and as a projected value it is cast to `bit`. `isjson` is also used directly in a
 `WHERE` (`Where(e => SqlFunctions.SqlServer.isjson(e.String))`).
 
+## XML data-type methods (SQL Server)
+
+SQL Server's `xml` type exposes postfix methods
+([`XmlFunctions`](xref:NextORM.Core.ISqlDialect.XmlFunctions)). They are
+called through `SqlFunctions.SqlServer` and render `xmlcol.method(...)`; the XQuery and the SQL type
+must be string literals (both are emitted verbatim, with embedded single quotes escaped):
+
+```csharp
+var rows = dataContext.From<IXmlEntity>()
+    .Select(x => new
+    {
+        Value = SqlFunctions.SqlServer.xml_value<string>(x.Payload, "(/root/item)[1]", "nvarchar(100)"),
+        Fragment = SqlFunctions.SqlServer.xml_query(x.Payload, "/root/item[1]"),
+        Exists = SqlFunctions.SqlServer.xml_exist(x.Payload, "/root/item[2]")
+    })
+    .ToList();
+```
+
+```sql
+select payload.value('(/root/item)[1]', 'nvarchar(100)') as [Value], payload.query('/root/item[1]') as [Fragment], payload.exist('/root/item[2]') as [Exists] from xml_entity
+```
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.SqlServer.xml_value<T>(xml, xpath, sqlType)` | `xml.value('xpath', 'sqlType')` |
+| `SqlFunctions.SqlServer.xml_query(xml, xpath)` | `xml.query('xpath')` |
+| `SqlFunctions.SqlServer.xml_exist(xml, xpath)` | `xml.exist('xpath')` |
+
+`xml_exist` returns `bit`: in a predicate it renders `(xml.exist('xpath')) = 1`, as a projected value it
+stays a bit. The rowset method `.nodes` is not supported (it needs an outer reference inside
+`FROM`/`CROSS APPLY`).
+
 ## Conditional helpers
 
 `SqlFunctions.Sql.nullif` is ANSI and works on every SQL provider; `greatest`/`least` are gated by
@@ -708,14 +738,39 @@ select nullif(nullableint, 0) as "NoZero", greatest(id, 10) as "Hi", least(id, 1
 | `SqlFunctions.Postgres.num_nonnulls(a, b, ...)` | `num_nonnulls(a, b, ...)` |
 | `SqlFunctions.Sql.iif(condition, a, b)` | `iif(...)` (SQL Server, SQLite 3.32+), `if(...)` (MySQL/MariaDB, ClickHouse), `case when ... then ... else ... end` (PostgreSQL) |
 | `SqlFunctions.SqlServer.choose(index, a, b, ...)` | `choose(index, a, b, ...)` (SQL Server) |
+| `SqlFunctions.ClickHouse.multi_if(when(c1, v1), ..., otherwise(v))` | `multiIf(c1, v1, ..., v)` (ClickHouse) |
 
 `num_nulls`/`num_nonnulls` are part of the extended scalar library
 ([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions)).
-`iif` is portable ([`SupportsIif`](xref:NextORM.Core.ISqlDialect.SupportsIif)) and each dialect supplies its native
-spelling through [`MakeIif`](xref:NextORM.Core.ISqlDialect.MakeIif); `choose` remains SQL Server-only
+`iif` is portable ([`Iif`](xref:NextORM.Core.ISqlDialect.Iif)) and each dialect supplies its native
+spelling through [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render); `choose` remains SQL Server-only
 ([`SupportsChoose`](xref:NextORM.Core.ISqlDialect.SupportsChoose)). Calling `iif` through the specialized
 `SqlFunctions.SqlServer` surface still works by inheritance. The C# ternary `condition ? a : b` is separate
 and always renders the portable `case when ... end`.
+
+ClickHouse additionally has the multi-branch `multiIf` surface
+([`MultiIf`](xref:NextORM.Core.ISqlDialect.MultiIf),
+[`IMultiIfRenderer.Render`](xref:NextORM.Core.IMultiIfRenderer.Render)): build each branch with `when(condition, value)`
+and close it with `otherwise(value)`, which must be last. Other providers just use `case when`, which is
+already the portable form behind `iif`/the C# conditional, so they reject the ClickHouse-native spelling.
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        e.Id,
+        Bucket = SqlFunctions.ClickHouse.multi_if(
+            SqlFunctions.ClickHouse.when(e.Id == 1L, "one"),
+            SqlFunctions.ClickHouse.when(e.Id == 2L, "two"),
+            SqlFunctions.ClickHouse.otherwise("many"))
+    })
+    .ToList();
+```
+
+```sql
+-- ClickHouse
+select id, multiIf((id = 1), 'one', (id = 2), 'two', 'many') as `Bucket` from complex_entity
+```
 
 ## Date truncation (PostgreSQL, SQL Server, ClickHouse)
 
@@ -792,7 +847,7 @@ select datetime(dt, (1) || ' days') as 'NextDay', date(dt, 'start of month', '+1
 ## Date conversion and parts (ClickHouse)
 
 ClickHouse exposes its `to*` date/time functions through `SqlFunctions.ClickHouse`
-([`SupportsDateConversionFunctions`](xref:NextORM.Core.ISqlDialect.SupportsDateConversionFunctions); ClickHouse only).
+([`DateConversion`](xref:NextORM.Core.ISqlDialect.DateConversion); ClickHouse only).
 `to_date`/`to_date_time`/`to_date32` convert to `Date`/`DateTime`/`Date32`;
 `to_year`/`to_quarter`/`to_month`/`to_day_of_month`/`to_day_of_week`/`to_day_of_year`/`to_hour`/
 `to_minute`/`to_second` return the date parts (`toDayOfWeek` is Monday 1 … Sunday 7);
@@ -919,6 +974,7 @@ var elements = dataContext
 | `nullif` | supported | supported | supported |
 | `greatest` / `least` | `max(...)` / `min(...)` (single argument -> `(...)`) | supported (2022+) | supported |
 | `iif` | `iif(cond, a, b)` (3.32+) | `iif(cond, a, b)` | `case when cond then a else b end` |
+| `multi_if` | `NotSupportedException` | `NotSupportedException` | `NotSupportedException` (ClickHouse-only; `multiIf`) |
 | `date_trunc` | `NotSupportedException` | `datetrunc(...)` (2022+) | supported |
 | `date_add` / `end_of_month` / `date_diff` / `date_from_parts` | `datetime(x, n \|\| ' days')` / `date(x, 'start of month', ...)` / `strftime` difference / `date(printf(...))` | `dateadd(...)` / `eomonth(...)` / `datediff(...)` / `datefromparts(...)` | interval arithmetic / `date_trunc` / date-part difference / `make_date` |
 | `string_agg` / `array_agg` | `group_concat(x, delimiter)` (no `array_agg`) | `string_agg` (2017+); `array_agg` throws | supported |
@@ -936,7 +992,7 @@ PostgreSQL providers.
 ClickHouse renders `dateTrunc('part', x)`, `addDays`/`addMonths`/.../`addSeconds` (and a scaled
 `addYears` for `decade`/`century`/`millennium`), `toLastDayOfMonth(x)`,
 `arrayStringConcat(groupArray(x), delimiter)`, `groupBitAnd`/`groupBitOr`/`groupBitXor`,
-`covarPop`/`covarSamp`, `argMin`/`argMax` and the `-If` combinators. It rejects the ANSI
+`covarPop`/`covarSamp`, `argMin`/`argMax`, the `-If` combinators and `multiIf`. It rejects the ANSI
 `filter (where ...)` clause and the `regr_*`/boolean aggregates with `NotSupportedException`; see the
 [ClickHouse provider](../providers/clickhouse.md).
 

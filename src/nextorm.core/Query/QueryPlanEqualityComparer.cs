@@ -65,6 +65,8 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
             if (!_expComparer.Equals(xDistinctOn.Expression, yDistinctOn.Expression)) return false;
         }
 
+        if (!WindowsEqual(x.Windows, y.Windows)) return false;
+
         if (x.TableSample != y.TableSample) return false;
 
         if (x.Temporal != y.Temporal) return false;
@@ -153,6 +155,44 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
         for (var (i, cnt) = (0, x.Count); i < cnt; i++)
         {
             if (!string.Equals(x[i], y[i], StringComparison.Ordinal)) return false;
+        }
+
+        return true;
+    }
+
+    private bool WindowsEqual(IReadOnlyList<WindowDefinition>? x, IReadOnlyList<WindowDefinition>? y)
+    {
+        if (ReferenceEquals(x, y)) return true;
+        if (x is null || y is null) return false;
+        if (x.Count != y.Count) return false;
+
+        for (var (i, cnt) = (0, x.Count); i < cnt; i++)
+        {
+            var a = x[i];
+            var b = y[i];
+
+            if (!string.Equals(a.Name, b.Name, StringComparison.Ordinal)) return false;
+
+            if (a.PartitionBy.Count != b.PartitionBy.Count) return false;
+            for (var p = 0; p < a.PartitionBy.Count; p++)
+            {
+                if (!_expComparer.Equals(a.PartitionBy[p], b.PartitionBy[p])) return false;
+            }
+
+            if (a.OrderBy.Count != b.OrderBy.Count) return false;
+            for (var o = 0; o < a.OrderBy.Count; o++)
+            {
+                if (a.OrderBy[o].Direction != b.OrderBy[o].Direction) return false;
+                if (!_expComparer.Equals(a.OrderBy[o].Expression, b.OrderBy[o].Expression)) return false;
+            }
+
+            if (a.Frame?.Type != b.Frame?.Type
+                || a.Frame?.Start.Kind != b.Frame?.Start.Kind
+                || a.Frame?.Start.Offset != b.Frame?.Start.Offset
+                || a.Frame?.End.Kind != b.Frame?.End.Kind
+                || a.Frame?.End.Offset != b.Frame?.End.Offset
+                || a.Frame?.Exclusion != b.Frame?.Exclusion)
+                return false;
         }
 
         return true;
@@ -377,6 +417,9 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
             if (obj.HintsPlanHash != 0)
                 hash.Add(obj.HintsPlanHash);
+
+            if (obj.WindowsPlanHash != 0)
+                hash.Add(obj.WindowsPlanHash);
 
             return hash.ToHashCode();
         }

@@ -28,7 +28,7 @@ select id from array_entity left array join tags where id > 0
 Скалярный `array_join` (одна строка на элемент, проекция) и методы-клаузы
 `ArrayJoin`/`LeftArrayJoin`/`ArrayJoinElement`/`LeftArrayJoinElement` описаны в разделе
 [Массивы (ClickHouse)](../11-scalar-functions.md#массивы-clickhouse); функции массивов гейтятся
-`SupportsArrayFunctions`, клауза — `SupportsArrayJoinClause`.
+`SupportsArrayFunctions`, клауза — `ArrayJoinClause`.
 
 ## `LIMIT n BY expr`
 
@@ -48,7 +48,7 @@ select id, nullableint from complex_entity order by id limit 2 by nullableint
 ```
 
 См. [Сортировка и постраничная выборка](../05-sorting-and-paging.md#limit-by-clickhouse)
-([`SupportsLimitBy`](xref:NextORM.Core.ISqlDialect.SupportsLimitBy)).
+([`LimitBy`](xref:NextORM.Core.ISqlDialect.LimitBy)).
 
 ## `GROUP BY ... WITH TOTALS`
 
@@ -59,7 +59,7 @@ select id, nullableint from complex_entity order by id limit 2 by nullableint
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
     .GroupBy(x => x.Int)
-    .Select(x => new { x.Key, Count = SqlFunctions.Sql.count() })
+    .Select(x => new { x.Int, Count = SqlFunctions.Sql.count() })
     .WithTotals()
     .ToList();
 ```

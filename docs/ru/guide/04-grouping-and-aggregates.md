@@ -56,6 +56,17 @@ var rows = dataContext.From<IComplexEntity>()
 select nullableint as 'Int', count(*) from complex_entity group by nullableint
 ```
 
+Для одной группирующей колонки анонимная обёртка необязательна: можно передать скалярное выражение
+напрямую. `GroupBy(e => e.Int)` и `GroupBy(e => new { e.Int })` дают один и тот же SQL и делят один
+план запроса, поэтому формы взаимозаменяемы:
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .GroupBy(e => e.Int)
+    .Select(e => new { e.Int, count = SqlFunctions.Sql.count() })
+    .ToList();
+```
+
 Таблицы `Вывод:` ниже показывают строки, которые возвращает каждый пример на сид-данных интеграционных тестов (`tests/nextorm.integration.tests/Providers/SqliteTestProvider.cs`).
 
 Вывод:
@@ -414,12 +425,12 @@ var variance = dataContext.From<ISimpleEntity>().Select(x => SqlFunctions.Sql.va
 | Статистические | `SqlFunctions.Sql.corr(y, x)`, `covar_pop(y, x)`, `covar_samp(y, x)` | `corr(y, x)`, ... / `covarPop(y, x)`, ... | [`SupportsStatisticalAggregates`](xref:NextORM.Core.ISqlDialect.SupportsStatisticalAggregates) | PostgreSQL, ClickHouse |
 | Регрессия | `SqlFunctions.Postgres.regr_slope(y, x)`, `regr_intercept(y, x)`, `regr_r2(y, x)`, `regr_count(y, x)`, `regr_avgx(y, x)`, `regr_avgy(y, x)` | `regr_slope(y, x)`, ... | [`SupportsRegressionAggregates`](xref:NextORM.Core.ISqlDialect.SupportsRegressionAggregates) | PostgreSQL |
 | ArgMin/ArgMax | `SqlFunctions.ClickHouse.arg_min(value, by)`, `arg_max(value, by)` | `argMin(value, by)`, `argMax(value, by)` | [`SupportsArgMinMax`](xref:NextORM.Core.ISqlDialect.SupportsArgMinMax) | ClickHouse |
-| Число уникальных | `SqlFunctions.ClickHouse.uniq(x)`, `uniq_exact(x)`, `uniq_combined(x)`, `uniq_hll12(x)` | `toInt64(uniq(x))`, `toInt64(uniqExact(x))`, ... | [`SupportsUniqAggregates`](xref:NextORM.Core.ISqlDialect.SupportsUniqAggregates) | ClickHouse |
-| Квантиль / медиана | `SqlFunctions.ClickHouse.quantile(0.5, x)`, `quantile_exact(0.9, x)`, `quantile_timing(0.5, x)`, `median(x)` | `toFloat64(quantile(0.5)(x))`, `toFloat64(median(x))`, ... | [`SupportsQuantileAggregates`](xref:NextORM.Core.ISqlDialect.SupportsQuantileAggregates) | ClickHouse |
+| Число уникальных | `SqlFunctions.ClickHouse.uniq(x)`, `uniq_exact(x)`, `uniq_combined(x)`, `uniq_hll12(x)` | `toInt64(uniq(x))`, `toInt64(uniqExact(x))`, ... | [`UniqAggregates`](xref:NextORM.Core.ISqlDialect.UniqAggregates) | ClickHouse |
+| Квантиль / медиана | `SqlFunctions.ClickHouse.quantile(0.5, x)`, `quantile_exact(0.9, x)`, `quantile_timing(0.5, x)`, `median(x)` | `toFloat64(quantile(0.5)(x))`, `toFloat64(median(x))`, ... | [`QuantileAggregates`](xref:NextORM.Core.ISqlDialect.QuantileAggregates) | ClickHouse |
 | Произвольное значение | `SqlFunctions.Sql.any_agg(x)` | `ANY_VALUE(x)` / `any(x)` | [`SupportsAnyValueAggregate`](xref:NextORM.Core.ISqlDialect.SupportsAnyValueAggregate) | MySQL, ClickHouse |
 | Последняя строка | `SqlFunctions.ClickHouse.any_last(x)` | `anyLast(x)` | [`SupportsAnyAggregates`](xref:NextORM.Core.ISqlDialect.SupportsAnyAggregates) | ClickHouse |
 | С фильтром (`-If`) | `SqlFunctions.ClickHouse.count_if(() => p)`, `sum_if(x, () => p)`, `avg_if(x, () => p)`, `min_if(x, () => p)`, `max_if(x, () => p)` | `countIf(p)`, `sumIf(x, p)`, ... | [`SupportsIfAggregates`](xref:NextORM.Core.ISqlDialect.SupportsIfAggregates) | ClickHouse |
-| Последовательности / воронка | `SqlFunctions.ClickHouse.window_funnel(window, ts, c1, c2)`, `sequence_match(pattern, ts, c1, c2)`, `retention(c1, c2)` | `toInt32(windowFunnel(window)(ts, c1, c2))`, `toInt32(sequenceMatch(pattern)(ts, c1, c2))`, `retention(c1, c2)` | [`SupportsSequenceAggregates`](xref:NextORM.Core.ISqlDialect.SupportsSequenceAggregates) | ClickHouse |
+| Последовательности / воронка | `SqlFunctions.ClickHouse.window_funnel(window, ts, c1, c2)`, `sequence_match(pattern, ts, c1, c2)`, `retention(c1, c2)` | `toInt32(windowFunnel(window)(ts, c1, c2))`, `toInt32(sequenceMatch(pattern)(ts, c1, c2))`, `retention(c1, c2)` | [`SequenceAggregates`](xref:NextORM.Core.ISqlDialect.SequenceAggregates) | ClickHouse |
 | Упорядоченные | `SqlFunctions.Postgres.percentile_cont(fraction, () => x)`, `percentile_disc(fraction, () => x)`, `mode(() => x)` | `percentile_cont(f) within group (order by x)`, ... | [`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates) | PostgreSQL |
 
 MariaDB **не** поддерживает `any_agg`: в 10.4–12.x нет `ANY_VALUE` (возможность SQL-2023 `T626` всё ещё

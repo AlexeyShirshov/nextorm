@@ -1,212 +1,135 @@
-using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
 using NextORM.Core;
 
 namespace NextORM.Examples.ClickHouse.Analytics;
 
 /// <summary>
-/// The five demo queries from <c>docs/specs/clickhouse-demodb</c> plus six extra course-style
-/// exercises (see <c>examples/README.md</c>). The ones with no portable LINQ API (higher-order array
-/// functions, <c>windowFunnel</c>, <c>uniqMerge</c>, <c>groupArray</c>, ClickHouse-only date/aggregate
-/// syntax) run through <see cref="EntityExtensions.WithSql"/>; the rest are expressed with LINQ.
+/// The five demo queries from <c>Sql/</c> plus six extra course-style exercises (see
+/// <c>README.md</c>), expressed with the nextorm LINQ API. Each method's comment names the SQL file it
+/// models, states whether it currently works, and — when it does not — why (with the roadmap document
+/// that tracks the gap). Queries with no LINQ surface are <b>not</b> worked around: they throw
+/// <see cref="NotSupportedException"/> instead. Each working method prints the number of rows and the
+/// first few rows as JSON.
 /// </summary>
 public static class ClickHouseQueries
 {
-    // 1. clickhouse_array_analytics.sql
-    private const string ArrayAnalyticsSql =
-        """
-        select arrayFilter(x -> length(x) > 3,
-                           arrayMap(x -> lower(x), splitByChar(' ', SearchPhrase))) as clean_words,
-               count() as occurrence
-        from datasets.hits_v1
-        where SearchPhrase != '' and EventDate = '2014-03-20'
-        group by clean_words
-        order by occurrence desc
-        limit 10
-        """;
+    // 1. Sql/clickhouse_array_analytics.sql
+    // NOT WORKING: arrayMap/arrayFilter over array columns (higher-order lambdas) and grouping by the
+    // resulting array have no LINQ surface. Not worked around with raw SQL on purpose; tracked in
+    // docs/specs/roadmap/todo_clickhouse_arrays.md.
+    public static Task ArrayAnalytics(IDataContext ctx, CancellationToken ct) =>
+        throw new NotSupportedException(
+            "arrayMap/arrayFilter over arrays have no LINQ surface (see docs/specs/roadmap/todo_clickhouse_arrays.md).");
 
-    public sealed class WordFrequencyRow
-    {
-        [Column("clean_words")] public string[] CleanWords { get; set; } = [];
-        [Column("occurrence")] public ulong Occurrence { get; set; }
-    }
-
-    public static async Task ArrayAnalytics(IDataContext ctx, CancellationToken ct)
-    {
-        var rows = await ctx.From<IHit>()
-            .Select(h => new WordFrequencyRow { CleanWords = Array.Empty<string>(), Occurrence = 0 })
-            .WithSql(ArrayAnalyticsSql)
-            .ToListAsync(ct);
-
-        Print("1. array_analytics", rows);
-    }
-
-    // 2. clickhouse_funnel.sql
-    private const string FunnelSql =
-        """
-        select level, count() as conversion_count
-        from (
-            select UserID,
-                   windowFunnel(1800)(EventTime,
-                       URL LIKE '%/product/%',
-                       URL LIKE '%/cart%',
-                       URL LIKE '%/checkout/success%') as level
-            from datasets.hits_v1
-            where EventDate = '2014-03-20'
-            group by UserID
-        )
-        group by level
-        order by level asc
-        """;
-
-    public sealed class FunnelRow
-    {
-        [Column("level")] public byte Level { get; set; }
-        [Column("conversion_count")] public ulong ConversionCount { get; set; }
-    }
-
+    // 2. Sql/clickhouse_funnel.sql
+    // WORKING: windowFunnel(1800)(...) → SqlFunctions.ClickHouse.window_funnel(...); the inner
+    // GROUP BY UserID and the outer GROUP BY level map to two derived queries.
     public static async Task Funnel(IDataContext ctx, CancellationToken ct)
     {
-        var rows = await ctx.From<IHit>()
-            .Select(h => new FunnelRow { Level = 0, ConversionCount = 0 })
-            .WithSql(FunnelSql)
+        var perUser = ctx.From<IHit>()
+            .Where(h => h.EventDate == new DateTime(2014, 3, 20))
+            .GroupBy(h => new { h.UserId })
+            .Select(h => new
+            {
+                h.UserId,
+                Level = SqlFunctions.ClickHouse.window_funnel(1800, h.EventTime,
+                    h.Url.Contains("/product/"), h.Url.Contains("/cart"), h.Url.Contains("/checkout/success"))
+            });
+
+        var rows = await ctx.From(perUser)
+            .GroupBy(p => new { p.Level })
+            .OrderBy(p => p.Level)
+            .Select(p => new { p.Level, ConversionCount = SqlFunctions.Sql.count() })
             .ToListAsync(ct);
 
         Print("2. funnel", rows);
     }
 
-    // 3. clickhouse_incremental.sql
-    private const string IncrementalSql =
-        """
-        select EventDate as "Дата",
-               uniqMerge(users_state) as "Точное кол-во уникальных посетителей"
-        from datasets.daily_unique_users_mv
-        where EventDate >= '2014-03-01' and EventDate <= '2014-03-31'
-        group by EventDate
-        order by EventDate desc
-        """;
+    // 3. Sql/clickhouse_incremental.sql
+    // NOT WORKING: uniqMerge over an AggregateFunction(uniq, ...) state has no LINQ surface. Not worked
+    // around with raw SQL on purpose; tracked in docs/specs/roadmap/todo_clickhouse_aggregate_function_state.md.
+    public static Task Incremental(IDataContext ctx, CancellationToken ct) =>
+        throw new NotSupportedException(
+            "uniqMerge over an AggregateFunction state has no LINQ surface (see docs/specs/roadmap/todo_clickhouse_aggregate_function_state.md).");
 
-    public sealed class DailyUniqueRow
-    {
-        [Column("Дата")] public DateTime EventDate { get; set; }
-        [Column("Точное кол-во уникальных посетителей")] public ulong UniqueUsers { get; set; }
-    }
+    // 4. Sql/clickhouse_retention.sql
+    // NOT WORKING: the reference is `WITH first_visits AS (...), cohort_sizes AS (...) SELECT ...
+    // groupArray(...) ...`. The CTEs are expressible, but `groupArray((tuple))` builds an array/tuple
+    // result that has no LINQ surface, so the query cannot be modelled as CTEs + LINQ. Not worked
+    // around with raw SQL on purpose; tracked in docs/specs/roadmap/todo_clickhouse_arrays.md.
+    public static Task Retention(IDataContext ctx, CancellationToken ct) =>
+        throw new NotSupportedException(
+            "groupArray/tuple results have no LINQ surface (see docs/specs/roadmap/todo_clickhouse_arrays.md).");
 
-    public static async Task Incremental(IDataContext ctx, CancellationToken ct)
-    {
-        var rows = await ctx.From<IDailyUniqueUsers>()
-            .Select(d => new DailyUniqueRow { EventDate = d.EventDate, UniqueUsers = 0 })
-            .WithSql(IncrementalSql)
-            .ToListAsync(ct);
-
-        Print("3. incremental", rows);
-    }
-
-    // 4. clickhouse_retention.sql
-    // The source retention query references UserID from the outer scope (not exposed by the inner
-    // subquery) and divides by the cohort-week rather than the cohort; the corrected form below joins
-    // the cohort size and keeps the array-to-string projection used by the verification plan.
-    private const string RetentionSql =
-        """
-        with first_visits as (
-            select UserID, toMonday(min(EventDate)) as cohort_week
-            from datasets.hits_v1
-            group by UserID
-        ),
-        cohort_sizes as (
-            select cohort_week, count() as cohort_size
-            from first_visits
-            group by cohort_week
-        )
-        select t.cohort_week as "Неделя когорты",
-               toInt64(any(cs.cohort_size)) as "Размер когорты",
-               toString(groupArray((t.week_number, round(t.distinct_users / cs.cohort_size * 100, 2)))) as "Матрица удержания"
-        from (
-            select fv.cohort_week as cohort_week,
-                   toUInt8((toMonday(h.EventDate) - fv.cohort_week) / 7) as week_number,
-                   count(distinct h.UserID) as distinct_users
-            from datasets.hits_v1 h
-            join first_visits fv on h.UserID = fv.UserID
-            where week_number <= 4
-            group by fv.cohort_week, week_number
-        ) t
-        join cohort_sizes cs on t.cohort_week = cs.cohort_week
-        group by t.cohort_week
-        order by t.cohort_week desc
-        """;
-
-    public sealed class RetentionMatrixRow
-    {
-        [Column("Неделя когорты")] public DateTime CohortWeek { get; set; }
-        [Column("Размер когорты")] public long CohortSize { get; set; }
-        [Column("Матрица удержания")] public string Matrix { get; set; } = "";
-    }
-
-    public static async Task Retention(IDataContext ctx, CancellationToken ct)
-    {
-        var rows = await ctx.From<IHit>()
-            .Select(h => new RetentionMatrixRow { CohortWeek = h.EventDate, CohortSize = 0, Matrix = "" })
-            .WithSql(RetentionSql)
-            .ToListAsync(ct);
-
-        Print("4. retention", rows);
-    }
-
-    // 5. clickhouse_sessions.sql (lagInFrame -> lag, runningAccumulate -> cumulative sum_over)
+    // 5. Sql/clickhouse_sessions.sql
+    // WORKING: three chained CTEs (sessions, session_flags, session_counts) expressed as CTEs;
+    // lagInFrame → lag_in_frame(...).Over(...); runningAccumulate(if(…)) → framed sum_over(c ? 1 : 0)
+    // (runningAccumulate still has no LINQ surface); the quantile threshold is computed once and
+    // passed as a parameter.
     public static async Task Sessions(IDataContext ctx, CancellationToken ct)
     {
+        // CTE sessions.
         var sessions = ctx.From<IHit>()
             .Select(h => new
             {
-                h.UserId,
-                h.EventTime,
-                TimeDiff = SqlFunctions.Sql.date_diff("second",
-                    SqlFunctions.Sql.lag(h.EventTime).Over(partitionBy: () => h.UserId, orderBy: () => h.EventTime),
+                // hits_v1.UserID is UInt64; cast it to a signed 64-bit value so the CTE column is
+                // materialisable by the row reader (ClickHouse UInt64 has no CLR reader getter).
+                UserID = (long)h.UserId,
+                EventTime = h.EventTime,
+                time_diff = SqlFunctions.Sql.date_diff("second",
+                    SqlFunctions.ClickHouse.lag_in_frame(h.EventTime).Over(partitionBy: () => h.UserId, orderBy: () => h.EventTime),
                     h.EventTime)
             });
 
-        var flags = ctx.From(sessions)
+        // CTE session_flags.
+        var flags = ctx.From("sessions")
             .Select(s => new
             {
-                s.UserId,
-                s.EventTime,
-                SessionId = SqlFunctions.Sql
-                    .sum_over(s.TimeDiff == null || s.TimeDiff > 1800 ? 1 : 0)
+                UserID = s.GetInt64("UserID"),
+                EventTime = s.GetDateTime("EventTime"),
+                // runningAccumulate(if(...)): the if() result is an unsigned ClickHouse integer, so
+                // sum() returns UInt64; cast the frame to a signed value before it leaves the CTE.
+                session_id = (long)SqlFunctions.Sql
+                    .sum_over(s.GetNullableInt64("time_diff") == null || s.GetNullableInt64("time_diff") > 1800 ? 1 : 0)
                     .Over(
-                        partitionBy: () => s.UserId,
-                        orderBy: () => s.EventTime,
+                        partitionBy: () => s.GetInt64("UserID"),
+                        orderBy: () => s.GetDateTime("EventTime"),
                         frame: WindowFrame.RowsUnboundedPrecedingToCurrentRow)
             });
 
-        var counts = ctx.From(flags)
-            .GroupBy(f => new { f.UserId, f.SessionId })
+        // CTE session_counts.
+        var counts = ctx.From("session_flags")
+            .GroupBy(f => new { UserID = f.GetInt64("UserID"), session_id = f.GetInt64("session_id") })
             .Select(f => new
             {
-                f.UserId,
-                f.SessionId,
-                HitsInSession = SqlFunctions.Sql.count()
+                UserID = f.GetInt64("UserID"),
+                session_id = f.GetInt64("session_id"),
+                hits_in_session = SqlFunctions.Sql.count()
             });
 
-        var threshold = await ctx.From(counts)
-            .Select(c => SqlFunctions.ClickHouse.quantile(0.99, c.HitsInSession))
+        var scope = ctx.With("sessions", sessions).With("session_flags", flags).With("session_counts", counts);
+
+        var threshold = await scope.From("session_counts")
+            .Select(c => SqlFunctions.ClickHouse.quantile(0.99, c.GetInt32("hits_in_session")))
             .FirstAsync(ct);
 
-        var rows = await ctx.From(counts)
-            .Where(c => c.HitsInSession > threshold)
-            .OrderByDescending(c => c.HitsInSession)
+        var rows = await scope.From("session_counts")
+            .Where(c => c.GetInt32("hits_in_session") > threshold)
+            .OrderByDescending(c => c.GetInt32("hits_in_session"))
             .Limit(100)
             .Select(c => new
             {
-                c.UserId,
-                SessionId = c.SessionId,
-                Hits = c.HitsInSession
+                UserID = c.GetInt64("UserID"),
+                SessionId = c.GetInt64("session_id"),
+                Hits = c.GetInt32("hits_in_session")
             })
             .ToListAsync(ct);
 
         Print("5. sessions", rows);
     }
 
-    // 6. daily_traffic (course: GROUP BY date + uniq, fully LINQ)
+    // 6. daily_traffic
+    // WORKING: GROUP BY EventDate with count() + uniqExact.
     public static async Task DailyTraffic(IDataContext ctx, CancellationToken ct)
     {
         var rows = await ctx.From<IHit>()
@@ -224,143 +147,130 @@ public static class ClickHouseQueries
         Print("6. daily_traffic", rows);
     }
 
-    // 7. top_landing_pages (raw: URL + uniq)
-    private const string LandingPagesSql =
-        """
-        select URL as url,
-               count() as hits,
-               uniq(UserID) as users
-        from datasets.hits_v1
-        where EventDate = '2014-03-20' and URL != ''
-        group by URL
-        order by hits desc
-        limit 10
-        """;
-
-    public sealed class LandingPageRow
-    {
-        [Column("url")] public string Url { get; set; } = "";
-        [Column("hits")] public ulong Hits { get; set; }
-        [Column("users")] public ulong Users { get; set; }
-    }
-
+    // 7. top_landing_pages
+    // WORKING: URL grouping with count() + uniq, top-N by hits.
     public static async Task TopLandingPages(IDataContext ctx, CancellationToken ct)
     {
         var rows = await ctx.From<IHit>()
-            .Select(h => new LandingPageRow { Url = "", Hits = 0, Users = 0 })
-            .WithSql(LandingPagesSql)
+            .Where(h => h.EventDate == new DateTime(2014, 3, 20) && h.Url != "")
+            .GroupBy(h => new { h.Url })
+            .OrderByDescending(h => SqlFunctions.Sql.count())
+            .Limit(10)
+            .Select(h => new
+            {
+                h.Url,
+                Hits = SqlFunctions.Sql.count(),
+                Users = SqlFunctions.ClickHouse.uniq(h.UserId)
+            })
             .ToListAsync(ct);
 
         Print("7. top_landing_pages", rows);
     }
 
-    // 8. device_split (raw: conditional aggregates via countIf)
-    private const string DeviceSplitSql =
-        """
-        select if(IsMobile = 1, 'mobile', 'desktop') as device,
-               count() as hits,
-               uniq(UserID) as users,
-               round(countIf(SearchPhrase != '') / count(), 4) as search_share,
-               round(countIf(IsNotBounce = 0) / count(), 4) as bounce_share
-        from datasets.hits_v1
-        where EventDate between '2014-03-17' and '2014-03-23'
-        group by device
-        order by hits desc
-        """;
-
-    public sealed class DeviceSplitRow
-    {
-        [Column("device")] public string Device { get; set; } = "";
-        [Column("hits")] public ulong Hits { get; set; }
-        [Column("users")] public ulong Users { get; set; }
-        [Column("search_share")] public double SearchShare { get; set; }
-        [Column("bounce_share")] public double BounceShare { get; set; }
-    }
-
+    // 8. device_split
+    // WORKING: if(IsMobile = 1, …) → ternary; countIf → count_if; uniq → uniq; ROUND → Math.Round.
     public static async Task DeviceSplit(IDataContext ctx, CancellationToken ct)
     {
         var rows = await ctx.From<IHit>()
-            .Select(h => new DeviceSplitRow { Device = "", Hits = 0, Users = 0, SearchShare = 0, BounceShare = 0 })
-            .WithSql(DeviceSplitSql)
+            .Where(h => h.EventDate >= new DateTime(2014, 3, 17) && h.EventDate <= new DateTime(2014, 3, 23))
+            .GroupBy(h => new { Device = h.IsMobile == 1 ? "mobile" : "desktop" })
+            .OrderByDescending(h => SqlFunctions.Sql.count())
+            .Select(h => new
+            {
+                Device = h.IsMobile == 1 ? "mobile" : "desktop",
+                Hits = SqlFunctions.Sql.count(),
+                Users = SqlFunctions.ClickHouse.uniq(h.UserId),
+                SearchShare = Math.Round(
+                    (double)SqlFunctions.ClickHouse.count_if(() => h.SearchPhrase != "") / SqlFunctions.Sql.count(), 4),
+                BounceShare = Math.Round(
+                    (double)SqlFunctions.ClickHouse.count_if(() => h.IsNotBounce == 0) / SqlFunctions.Sql.count(), 4)
+            })
             .ToListAsync(ct);
 
         Print("8. device_split", rows);
     }
 
-    // 9. top_referrers (raw: RefererDomain + uniq)
-    private const string TopReferrersSql =
-        """
-        select RefererDomain as referrer,
-               count() as hits,
-               uniq(UserID) as users
-        from datasets.hits_v1
-        where EventDate = '2014-03-20' and RefererDomain != ''
-        group by RefererDomain
-        order by hits desc
-        limit 10
-        """;
-
-    public sealed class ReferrerRow
-    {
-        [Column("referrer")] public string Referrer { get; set; } = "";
-        [Column("hits")] public ulong Hits { get; set; }
-        [Column("users")] public ulong Users { get; set; }
-    }
-
+    // 9. top_referrers
+    // WORKING: RefererDomain grouping with count() + uniq, top-N by hits.
     public static async Task TopReferrers(IDataContext ctx, CancellationToken ct)
     {
         var rows = await ctx.From<IHit>()
-            .Select(h => new ReferrerRow { Referrer = "", Hits = 0, Users = 0 })
-            .WithSql(TopReferrersSql)
+            .Where(h => h.EventDate == new DateTime(2014, 3, 20) && h.RefererDomain != "")
+            .GroupBy(h => new { h.RefererDomain })
+            .OrderByDescending(h => SqlFunctions.Sql.count())
+            .Limit(10)
+            .Select(h => new
+            {
+                h.RefererDomain,
+                Hits = SqlFunctions.Sql.count(),
+                Users = SqlFunctions.ClickHouse.uniq(h.UserId)
+            })
             .ToListAsync(ct);
 
         Print("9. top_referrers", rows);
     }
 
-    // 10. session_depth (raw: sessionization + histogram buckets with multiIf)
-    private const string SessionDepthSql =
-        """
-        with hits as (
-            select UserID, EventTime,
-                   lagInFrame(EventTime) over (partition by UserID order by EventTime) as prev_event
-            from datasets.hits_v1
-            where EventDate = '2014-03-20'
-        ),
-        flags as (
-            select UserID, EventTime,
-                   sum(if(prev_event is null or EventTime - prev_event > 1800, 1, 0))
-                       over (partition by UserID order by EventTime rows between unbounded preceding and current row) as session_id
-            from hits
-        ),
-        sessions as (
-            select UserID, session_id, count() as hits
-            from flags
-            group by UserID, session_id
-        )
-        select multiIf(hits = 1, '01: single', hits <= 3, '02: 2-3', hits <= 10, '03: 4-10', hits <= 30, '04: 11-30', '05: 30+') as bucket,
-               count() as sessions
-        from sessions
-        group by bucket
-        order by bucket asc
-        """;
-
-    public sealed class SessionDepthRow
-    {
-        [Column("bucket")] public string Bucket { get; set; } = "";
-        [Column("sessions")] public ulong Sessions { get; set; }
-    }
-
+    // 10. session_depth
+    // WORKING: lagInFrame → lag_in_frame; running sum → framed sum_over; multiIf → multi_if.
     public static async Task SessionDepth(IDataContext ctx, CancellationToken ct)
     {
-        var rows = await ctx.From<IHit>()
-            .Select(h => new SessionDepthRow { Bucket = "", Sessions = 0 })
-            .WithSql(SessionDepthSql)
+        var hits = ctx.From<IHit>()
+            .Where(h => h.EventDate == new DateTime(2014, 3, 20))
+            .Select(h => new
+            {
+                h.UserId,
+                h.EventTime,
+                PrevEvent = SqlFunctions.ClickHouse.lag_in_frame((DateTime?)h.EventTime)
+                    .Over(partitionBy: () => h.UserId, orderBy: () => h.EventTime)
+            });
+
+        var flags = ctx.From(hits)
+            .Select(h => new
+            {
+                h.UserId,
+                h.EventTime,
+                SessionId = SqlFunctions.Sql
+                    .sum_over(h.PrevEvent == null || SqlFunctions.Sql.date_diff("second", h.PrevEvent, h.EventTime) > 1800 ? 1 : 0)
+                    .Over(partitionBy: () => h.UserId, orderBy: () => h.EventTime, frame: WindowFrame.RowsUnboundedPrecedingToCurrentRow)
+            });
+
+        var sessions = ctx.From(flags)
+            .GroupBy(f => new { f.UserId, f.SessionId })
+            .Select(f => new { f.UserId, f.SessionId, Hits = SqlFunctions.Sql.count() });
+
+        var rows = await ctx.From(sessions)
+            .GroupBy(s => new
+            {
+                Bucket = SqlFunctions.ClickHouse.multi_if(
+                        SqlFunctions.ClickHouse.when(s.Hits == 1, "01: single"),
+                        SqlFunctions.ClickHouse.when(s.Hits <= 3, "02: 2-3"),
+                        SqlFunctions.ClickHouse.when(s.Hits <= 10, "03: 4-10"),
+                        SqlFunctions.ClickHouse.when(s.Hits <= 30, "04: 11-30"),
+                        SqlFunctions.ClickHouse.otherwise("05: 30+"))
+            })
+            .OrderBy(s => SqlFunctions.ClickHouse.multi_if(
+                        SqlFunctions.ClickHouse.when(s.Hits == 1, "01: single"),
+                        SqlFunctions.ClickHouse.when(s.Hits <= 3, "02: 2-3"),
+                        SqlFunctions.ClickHouse.when(s.Hits <= 10, "03: 4-10"),
+                        SqlFunctions.ClickHouse.when(s.Hits <= 30, "04: 11-30"),
+                        SqlFunctions.ClickHouse.otherwise("05: 30+")))
+            .Select(s => new
+            {
+                Bucket = SqlFunctions.ClickHouse.multi_if(
+                        SqlFunctions.ClickHouse.when(s.Hits == 1, "01: single"),
+                        SqlFunctions.ClickHouse.when(s.Hits <= 3, "02: 2-3"),
+                        SqlFunctions.ClickHouse.when(s.Hits <= 10, "03: 4-10"),
+                        SqlFunctions.ClickHouse.when(s.Hits <= 30, "04: 11-30"),
+                        SqlFunctions.ClickHouse.otherwise("05: 30+")),
+                Sessions = SqlFunctions.Sql.count()
+            })
             .ToListAsync(ct);
 
         Print("10. session_depth", rows);
     }
 
-    // 11. rolling_activity (course: window over an aggregate, fully LINQ)
+    // 11. rolling_activity
+    // WORKING: window over an aggregate with 7-day and cumulative frames.
     public static async Task RollingActivity(IDataContext ctx, CancellationToken ct)
     {
         var daily = ctx.From<IHit>()
@@ -380,10 +290,11 @@ public static class ClickHouseQueries
                 d.EventDate,
                 d.Hits,
                 d.Users,
-                Rolling7DayHits = SqlFunctions.Sql.sum_over(d.Hits).Over(
+                // sum() widens the Int32 count to Int64 in ClickHouse; cast so the CLR type matches.
+                Rolling7DayHits = (long)SqlFunctions.Sql.sum_over(d.Hits).Over(
                     SqlFunctions.Sql.asc(() => d.EventDate),
                     WindowFrame.Rows(WindowFrameBound.Preceding(6), WindowFrameBound.CurrentRow)),
-                CumulativeHits = SqlFunctions.Sql.sum_over(d.Hits).Over(
+                CumulativeHits = (long)SqlFunctions.Sql.sum_over(d.Hits).Over(
                     SqlFunctions.Sql.asc(() => d.EventDate),
                     WindowFrame.RowsUnboundedPrecedingToCurrentRow)
             })

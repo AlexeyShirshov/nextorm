@@ -39,18 +39,18 @@ public class MariaDbDialectTests
     [Fact]
     public void InheritedSessionInfoHooks_ShouldBeUnchanged()
     {
-        Dialect.SupportsSessionInfoFunctions.Should().BeTrue();
-        Dialect.MakeSessionInfoFunction("current_user").Should().Be("current_user()");
-        Dialect.MakeSessionInfoFunction("current_database").Should().Be("database()");
+        Dialect.SessionInfoFunctions.Should().NotBeNull();
+        Dialect.SessionInfoFunctions!.Render("current_user").Should().Be("current_user()");
+        Dialect.SessionInfoFunctions!.Render("current_database").Should().Be("database()");
     }
 
     [Fact]
     public void UuidHooks_ShouldUseMariaDbForms()
     {
-        Dialect.SupportsUuidGenerators.Should().BeTrue();
-        Dialect.SupportsUuidGenerator("gen_random_uuid").Should().BeTrue();
-        Dialect.SupportsUuidGenerator("uuidv7").Should().BeTrue();
-        Dialect.MakeUuidGenerator("gen_random_uuid").Should().Be("uuid_v4()");
-        Dialect.MakeUuidGenerator("uuidv7").Should().Be("uuid_v7()");
+        Dialect.UuidGenerators.Should().NotBeNull();
+        Dialect.UuidGenerators!.Supports("gen_random_uuid").Should().BeTrue();
+        Dialect.UuidGenerators!.Supports("uuidv7").Should().BeTrue();
+        Dialect.UuidGenerators!.Render("gen_random_uuid").Should().Be("uuid_v4()");
+        Dialect.UuidGenerators!.Render("uuidv7").Should().Be("uuid_v7()");
     }
 }

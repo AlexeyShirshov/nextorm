@@ -33,16 +33,29 @@ internal static class WindowFunctionTranslator
             return false;
 
         if (node.Object is not MethodCallExpression functionCall
-            || functionCall.Method.DeclaringType != typeof(CommonFunctions)
+            || (functionCall.Method.DeclaringType != typeof(CommonFunctions)
+                && functionCall.Method.DeclaringType != typeof(ClickHouseFunctions))
             || WindowSql.MapWindowFunctionName(functionCall.Method.Name) is not { } functionName)
             return false;
 
         // The Over overloads differ in which parameters are present (partition-only, order-only, arrays,
-        // frame), so the arguments are mapped by parameter name/type rather than by position.
-        WindowSql.SplitWindowArguments(node, out var partitionArgument, out var orderArgument, out var frameArgument);
+        // a named window, frame), so the arguments are mapped by parameter name/type rather than by position.
+        WindowSql.SplitWindowArguments(node, out var partitionArgument, out var orderArgument, out var frameArgument, out var namedWindow);
 
         var partitions = WindowSql.ParseWindowPartitions(partitionArgument);
         var orders = WindowSql.ParseWindowOrders(orderArgument);
+
+        if (namedWindow is not null)
+        {
+            if (!WindowSql.IsValidWindowName(namedWindow))
+                throw new ArgumentException("A window name must be a non-empty SQL identifier.", nameof(node));
+
+            if (!visitor.Dialect.SupportsNamedWindows)
+                throw new NotSupportedException("Named windows (the WINDOW clause) are not supported by this provider.");
+        }
+
+        if (functionName is "lagInFrame" or "leadInFrame" && !visitor.Dialect.SupportsInFrameWindowFunctions)
+            throw new NotSupportedException("The lagInFrame/leadInFrame window functions are not supported by this provider.");
 
         if (functionName is "percent_rank" or "cume_dist" && !visitor.Dialect.SupportsPercentRankCumeDist)
             throw new NotSupportedException("The percent_rank/cume_dist window functions are not supported by this provider.");
@@ -58,6 +71,8 @@ internal static class WindowFunctionTranslator
         {
             // The parameter-extraction pass emits no SQL, but it still has to walk every embedded
             // expression so captured constants become parameters in the same order as the SQL pass.
+            // A named-window reference carries no specification of its own (it is declared on the
+            // query, where the WINDOW clause walks it).
             for (var (i, cnt) = (0, functionCall.Arguments.Count); i < cnt; i++)
                 visitor.Visit(functionCall.Arguments[i]);
 
@@ -72,6 +87,17 @@ internal static class WindowFunctionTranslator
 
         var frame = EvaluateWindowFrame(visitor, frameArgument);
 
+        if (frame is not null)
+        {
+            if (frame.Type == WindowFrameType.Groups && !visitor.Dialect.SupportsWindowFrameGroups)
+                throw new NotSupportedException("The GROUPS window frame unit is not supported by this provider.");
+
+            if (frame.Exclusion is not null && !visitor.Dialect.SupportsWindowFrameExclusion)
+                throw new NotSupportedException("The EXCLUDE window frame clause is not supported by this provider.");
+        }
+
+        var named = namedWindow is not null;
+
         visitor.NeedAliasForColumn = true;
         var windowStart = visitor.Builder!.Length;
 
@@ -85,7 +111,7 @@ internal static class WindowFunctionTranslator
             visitor.Visit(functionArgs[0]);
             visitor.Builder!.Append(") within group (order by ");
             visitor.Visit(functionArgs[1]);
-            visitor.Builder!.Append(") over (");
+            visitor.Builder!.Append(named ? ") over " : ") over (");
         }
         else
         {
@@ -114,40 +140,47 @@ internal static class WindowFunctionTranslator
                 }
             }
 
-            visitor.Builder!.Append(") over (");
+            visitor.Builder!.Append(named ? ") over " : ") over (");
         }
 
-        if (partitions.Count > 0)
+        if (named)
         {
-            visitor.Builder!.Append("partition by ");
-            for (var (i, cnt) = (0, partitions.Count); i < cnt; i++)
+            visitor.Builder!.Append(namedWindow);
+        }
+        else
+        {
+            if (partitions.Count > 0)
             {
-                if (i > 0) visitor.Builder!.Append(", ");
-                visitor.Visit(partitions[i]);
+                visitor.Builder!.Append("partition by ");
+                for (var (i, cnt) = (0, partitions.Count); i < cnt; i++)
+                {
+                    if (i > 0) visitor.Builder!.Append(", ");
+                    visitor.Visit(partitions[i]);
+                }
             }
-        }
 
-        if (orders.Count > 0)
-        {
-            if (partitions.Count > 0) visitor.Builder!.Append(' ');
-
-            visitor.Builder!.Append("order by ");
-            for (var (i, cnt) = (0, orders.Count); i < cnt; i++)
+            if (orders.Count > 0)
             {
-                if (i > 0) visitor.Builder!.Append(", ");
-                visitor.Visit(orders[i].Body);
-                if (orders[i].Direction == OrderDirection.Desc)
-                    visitor.Builder!.Append(" desc");
+                if (partitions.Count > 0) visitor.Builder!.Append(' ');
+
+                visitor.Builder!.Append("order by ");
+                for (var (i, cnt) = (0, orders.Count); i < cnt; i++)
+                {
+                    if (i > 0) visitor.Builder!.Append(", ");
+                    visitor.Visit(orders[i].Body);
+                    if (orders[i].Direction == OrderDirection.Desc)
+                        visitor.Builder!.Append(" desc");
+                }
             }
-        }
 
-        if (frame is not null)
-        {
-            if (partitions.Count > 0 || orders.Count > 0) visitor.Builder!.Append(' ');
-            visitor.Builder!.Append(WindowSql.RenderWindowFrame(frame));
-        }
+            if (frame is not null)
+            {
+                if (partitions.Count > 0 || orders.Count > 0) visitor.Builder!.Append(' ');
+                visitor.Builder!.Append(WindowSql.RenderWindowFrame(frame));
+            }
 
-        visitor.Builder!.Append(')');
+            visitor.Builder!.Append(')');
+        }
 
         if (functionName == "count" && visitor.Dialect.WrapsCountResult)
         {

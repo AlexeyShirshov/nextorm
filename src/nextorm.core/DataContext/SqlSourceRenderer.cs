@@ -199,6 +199,9 @@ internal static class SqlSourceRenderer
         if (from.TableFunction is not null)
             return MakeTableFunction(in ctx, from, needAlias, entityType, hasJoins);
 
+        if (from.Pivot is not null)
+            return MakePivot(in ctx, from);
+
         if (!ctx.ParamMode && !string.IsNullOrEmpty(from.Table))
         {
             if (tableHints is { Count: > 0 } && !ctx.Dialect.SupportsTableHints)
@@ -347,6 +350,50 @@ internal static class SqlSourceRenderer
         {
             StringBuilderPool.Shared.Return(sqlBuilder);
         }
+    }
+
+    /// <summary>
+    /// Renders a <c>PIVOT</c>/<c>UNPIVOT</c> source: the inner source is rendered recursively (without an
+    /// alias, so its columns stay unqualified inside the pivot clause) and the provider dialect composes
+    /// the clause. The result is always aliased (T-SQL requires it) and registered as a
+    /// <see cref="TableAlias"/> source so its named output columns resolve. In parameter mode the pivot
+    /// column expressions are still walked so their parameters are collected in the same order.
+    /// </summary>
+    private static string MakePivot(in SqlBuildContext ctx, FromExpression from)
+    {
+        var pivot = from.Pivot!;
+
+        if (ctx.Dialect.Pivot is not { } pivotRenderer)
+            throw new NotSupportedException(pivot.IsUnpivot
+                ? "The UNPIVOT source construct is not supported by this provider."
+                : "The PIVOT source construct is not supported by this provider.");
+
+        var source = MakeFrom(in ctx, pivot.Inner, new FromRenderOptions(false, pivot.InnerEntityType, false, null, null));
+
+        var aggregateColumn = string.Empty;
+        var forColumn = string.Empty;
+        if (!pivot.IsUnpivot)
+        {
+            aggregateColumn = RenderPivotColumn(in ctx, pivot.InnerEntityType, pivot.AggregateColumn!);
+            forColumn = RenderPivotColumn(in ctx, pivot.InnerEntityType, pivot.ForColumn!);
+        }
+
+        if (ctx.ParamMode) return string.Empty;
+
+        ctx.ColumnsProvider.Add(typeof(TableAlias), false);
+
+        var alias = ctx.AliasProvider!.GetNextAlias(from);
+        return pivot.IsUnpivot
+            ? pivotRenderer.RenderUnpivot(pivot, source, alias)
+            : pivotRenderer.RenderPivot(pivot, source, aggregateColumn, forColumn, alias);
+    }
+
+    /// <summary>Renders one pivot column expression (aggregate argument or <c>FOR</c> column) unqualified.</summary>
+    private static string RenderPivotColumn(in SqlBuildContext ctx, Type innerEntityType, Expression expression)
+    {
+        using var visitor = ctx.CreateColumnVisitor(innerEntityType, 0, dontNeedAlias: true);
+        visitor.Visit(expression);
+        return ctx.ParamMode ? string.Empty : visitor.ToString();
     }
 
     internal static void MakeWhere(in SqlBuildContext ctx, StringBuilder? target, Type entityType, Expression condition, int dim)

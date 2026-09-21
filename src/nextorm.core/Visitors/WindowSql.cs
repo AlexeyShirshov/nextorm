@@ -18,6 +18,8 @@ internal static class WindowSql
         nameof(CommonFunctions.ntile) => "ntile",
         nameof(CommonFunctions.lag) => "lag",
         nameof(CommonFunctions.lead) => "lead",
+        nameof(ClickHouseFunctions.lag_in_frame) => "lagInFrame",
+        nameof(ClickHouseFunctions.lead_in_frame) => "leadInFrame",
         nameof(CommonFunctions.first_value) => "first_value",
         nameof(CommonFunctions.last_value) => "last_value",
         nameof(CommonFunctions.nth_value) => "nth_value",
@@ -32,6 +34,30 @@ internal static class WindowSql
         nameof(CommonFunctions.count_over) => "count",
         _ => null
     };
+
+    /// <summary>
+    /// True when <paramref name="name"/> is a simple ASCII SQL identifier. Window names are inlined
+    /// verbatim into the <c>WINDOW</c> clause and the <c>OVER</c> reference, so anything else is
+    /// rejected to keep the name from being a SQL-injection vector.
+    /// </summary>
+    internal static bool IsValidWindowName(string? name)
+    {
+        if (string.IsNullOrEmpty(name))
+            return false;
+
+        var first = name[0];
+        if (!((first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z') || first == '_'))
+            return false;
+
+        for (var i = 1; i < name.Length; i++)
+        {
+            var c = name[i];
+            if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'))
+                return false;
+        }
+
+        return true;
+    }
 
     internal static List<Expression> ParseWindowPartitions(Expression? expression)
     {
@@ -107,22 +133,32 @@ internal static class WindowSql
 
     /// <summary>
     /// Maps the <c>Over</c> overload arguments onto partition/order/frame slots. The overloads differ
-    /// in which slots exist (partition-only, order-only, arrays), so this is driven by the parameter
-    /// names of the resolved method rather than by position.
+    /// in which slots exist (partition-only, order-only, arrays, a named window), so this is driven by
+    /// the parameter names of the resolved method rather than by position.
     /// </summary>
     internal static void SplitWindowArguments(
         MethodCallExpression node,
         out Expression? partitionArgument,
         out Expression? orderArgument,
-        out Expression? frameArgument)
+        out Expression? frameArgument,
+        out string? namedWindow)
     {
         partitionArgument = null;
         orderArgument = null;
         frameArgument = null;
+        namedWindow = null;
 
         var parameters = node.Method.GetParameters();
         var args = node.Arguments;
         var index = 0;
+
+        if (parameters.Length > 0 && parameters[0].Name == "windowName")
+        {
+            if (args[0] is ConstantExpression { Value: string name })
+                namedWindow = name;
+
+            return;
+        }
 
         if (parameters.Length > 0 && parameters[0].Name == "partitionBy")
             partitionArgument = args[index++];
@@ -136,9 +172,30 @@ internal static class WindowSql
 
     internal static string RenderWindowFrame(WindowFrame frame)
     {
-        var unit = frame.Type == WindowFrameType.Rows ? "rows" : "range";
-        return $"{unit} between {RenderWindowFrameBound(frame.Start)} and {RenderWindowFrameBound(frame.End)}";
+        var unit = frame.Type switch
+        {
+            WindowFrameType.Rows => "rows",
+            WindowFrameType.Range => "range",
+            WindowFrameType.Groups => "groups",
+            _ => throw new NotSupportedException(frame.Type.ToString())
+        };
+
+        var result = $"{unit} between {RenderWindowFrameBound(frame.Start)} and {RenderWindowFrameBound(frame.End)}";
+
+        if (frame.Exclusion is { } exclusion)
+            result += " " + RenderWindowFrameExclusion(exclusion);
+
+        return result;
     }
+
+    internal static string RenderWindowFrameExclusion(WindowFrameExclusion exclusion) => exclusion switch
+    {
+        WindowFrameExclusion.NoOthers => "exclude no others",
+        WindowFrameExclusion.CurrentRow => "exclude current row",
+        WindowFrameExclusion.Group => "exclude group",
+        WindowFrameExclusion.Ties => "exclude ties",
+        _ => throw new NotSupportedException(exclusion.ToString())
+    };
 
     private static string RenderWindowFrameBound(WindowFrameBound bound) => bound.Kind switch
     {

@@ -17,6 +17,9 @@ internal static class InMemoryJoin
         if (join.From.TableFunction is not null)
             throw new NotSupportedException("Table-valued function sources are not supported by the in-memory provider.");
 
+        if (join.From.Pivot is not null)
+            throw new NotSupportedException("The PIVOT/UNPIVOT source construct is not supported by the in-memory provider.");
+
         if (join.Strictness is not JoinStrictness.Default)
             throw new NotSupportedException($"The {join.Strictness} join modifier is not supported by the in-memory provider.");
 

@@ -68,7 +68,8 @@ internal static class NormSqlTranslator
         // call would produce invalid SQL, so fail with an actionable message instead. The declaring-type
         // guard keeps the PostgreSQL ordered-set aggregate percentile_cont (declared on
         // PostgresFunctions) distinct from the CommonFunctions window percentile (same method name).
-        if (node.Method.DeclaringType == typeof(CommonFunctions)
+        if ((node.Method.DeclaringType == typeof(CommonFunctions)
+                || node.Method.DeclaringType == typeof(ClickHouseFunctions))
             && WindowSql.MapWindowFunctionName(node.Method.Name) is { } windowFunction)
             throw new NotSupportedException($"The window function {windowFunction} must be completed with Over(...).");
 
@@ -380,6 +381,9 @@ internal static class NormSqlTranslator
             return;
 
         if (TextJsonSqlTranslator.TryTranslate(visitor, node))
+            return;
+
+        if (XmlSqlTranslator.TryTranslate(visitor, node))
             return;
 
         if (JsonExtractSqlTranslator.TryTranslate(visitor, node))

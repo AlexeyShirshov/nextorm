@@ -121,6 +121,9 @@ internal static class InMemoryQueryBuilder
         if (queryCommand.From?.TableFunction is not null)
             throw new NotSupportedException("Table-valued function sources are not supported by the in-memory provider.");
 
+        if (queryCommand.From?.Pivot is not null)
+            throw new NotSupportedException("The PIVOT/UNPIVOT source construct is not supported by the in-memory provider.");
+
         if (queryCommand.From?.LinqSource is { } linqSource)
             return InMemoryLinqSource.BuildLinqSourceDelegate<TResult>(linqSource, context, InMemoryDataContext.miApplySelectMany, InMemoryDataContext.miApplyGroupJoin, InMemoryDataContext.miCreateEnumeratorAdapter);
 

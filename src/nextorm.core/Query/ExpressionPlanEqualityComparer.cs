@@ -620,8 +620,11 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
             VisitBase(node);
             if (node.Type.IsAssignableTo(typeof(QueryCommand)) && node.Arguments is [ConstantExpression cex] && cex.Value is int idx)
             {
-                var cmd = _queryProvider.ReferencedQueries[idx];
-                _hash.Add(cmd, _queryProvider.GetQueryPlanEqualityComparer());
+                // Nested commands share the root registry, so a reference index baked into a nested
+                // command's projection must be resolved there (matching the renderer).
+                var registry = (_queryProvider as QueryCommand)?.RootRegistry ?? _queryProvider;
+                var cmd = registry.ReferencedQueries[idx];
+                _hash.Add(cmd, registry.GetQueryPlanEqualityComparer());
             }
             else
             {

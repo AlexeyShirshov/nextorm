@@ -62,14 +62,24 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
     /// resolved during SQL generation and in the in-memory provider.
     /// </summary>
     public Type? EntityType { get; init; }
-    public required FromExpression From { get; init; }
+    private FromExpression _from = null!;
+    public required FromExpression From { get => _from; init => _from = value; }
+    /// <summary>
+    /// Set for a correlated <c>CROSS/OUTER APPLY</c> source: a lambda whose parameter is the
+    /// left-hand row and whose body builds the applied query. The concrete derived query is built
+    /// from it during preparation (<c>QueryCommand.QueryPreparer.PrepareJoin</c>) and installed as
+    /// <see cref="From"/>; it is not part of the public surface.
+    /// </summary>
+    internal LambdaExpression? ApplySource { get; init; }
+    /// <summary>Installs the derived query built from <see cref="ApplySource"/> during preparation.</summary>
+    internal void SetFrom(FromExpression from) => _from = from;
     internal JoinExpression CloneForCache()
     {
         var newFrom = From.CloneForCache();
 
         if (newFrom == From) return this;
 
-        return new JoinExpression(JoinCondition, JoinType) { From = newFrom!, EntityType = EntityType, Strictness = Strictness, IsGlobal = IsGlobal };
+        return new JoinExpression(JoinCondition, JoinType) { From = newFrom!, EntityType = EntityType, Strictness = Strictness, IsGlobal = IsGlobal, ApplySource = ApplySource };
     }
     // public override int GetHashCode()
     // {

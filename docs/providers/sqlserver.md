@@ -111,21 +111,31 @@ the PostgreSQL `json`/`jsonb` surface still throws. A typed `OPENJSON ... WITH (
 `[SqlTableFunction("openjson", WithClause = "...")]` wrapper (see the table-valued-functions guide). The full-text predicates `SqlFunctions.Sql.contains` and
 `SqlFunctions.Sql.freetext` ([`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText)) render as T-SQL `contains(...)`/`freetext(...)` and require a
 full-text index on the column. `SqlFunctions.Sql.iif(condition, whenTrue, whenFalse)` renders `iif(...)`
-([`SupportsIif`](xref:NextORM.Core.ISqlDialect.SupportsIif), spelled through [`MakeIif`](xref:NextORM.Core.ISqlDialect.MakeIif)) and
+([`Iif`](xref:NextORM.Core.ISqlDialect.Iif), spelled through [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render)) and
 `SqlFunctions.SqlServer.choose(index, ...)` renders `choose(...)` ([`SupportsChoose`](xref:NextORM.Core.ISqlDialect.SupportsChoose)); the
 specialized `SqlFunctions.SqlServer.iif` spelling still works by inheritance. Table hints ([`SupportsTableHints`](xref:NextORM.Core.ISqlDialect.SupportsTableHints)) render as `WITH (hint, ...)` after the
 primary table name: `ctx.From<IComplexEntity>().WithTableHint("nolock")` emits
-`from complex_entity with (nolock)`. `QueryCommand.ForJson(...)` ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson)) appends a trailing
+`from complex_entity with (nolock)`. Row locking reuses the same mechanism:
+`ForUpdate`/`ForShare` ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock),
+[`ILockRenderer.UsesTableHints`](xref:NextORM.Core.ILockRenderer.UsesTableHints)) attach `with (updlock)`/
+`with (holdlock)` to the primary table instead of a trailing `FOR UPDATE`/`FOR SHARE` clause.
+`QueryCommand.ForJson(...)` ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson)) appends a trailing
 `FOR JSON PATH`/`FOR JSON AUTO` clause (with optional `ROOT('...')` and `INCLUDE_NULL_VALUES`), and
 `QueryCommand.ForXml(...)` ([`SupportsForXml`](xref:NextORM.Core.ISqlDialect.SupportsForXml)) a `FOR XML RAW/AUTO/EXPLICIT/PATH` one (with optional row
 element, `ROOT('...')` and `ELEMENTS`). The session/information family
-([`SupportsSessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SupportsSessionInfoFunctions)) renders `SqlFunctions.Sql.current_user()`/`session_user()` as the
+([`SessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SessionInfoFunctions)) renders `SqlFunctions.Sql.current_user()`/`session_user()` as the
 ANSI key words and `current_schema()`/`current_database()`/`version()` as `schema_name()`/`db_name()`/`@@version`.
 SQL Server renders the window percentiles `SqlFunctions.Sql.percentile_cont(fraction, property).Over()` and
 `percentile_disc(...)` as `percentile_cont(fraction) within group (order by property) over (...)`
 ([`SupportsPercentileWindow`](xref:NextORM.Core.ISqlDialect.SupportsPercentileWindow)); it has no exact ordered-set
 aggregate form. The arbitrary-value aggregate `any_agg` (`ANY_VALUE`) is **not** enabled: T-SQL exposes
 `ANY_VALUE` only on SQL Server 2025 / Fabric, which the version-agnostic dialect cannot assume.
+The scalar XML data-type methods `SqlFunctions.SqlServer.xml_value(xml, xpath, sqlType)`,
+`xml_query(xml, xpath)` and `xml_exist(xml, xpath)`
+([`XmlFunctions`](xref:NextORM.Core.ISqlDialect.XmlFunctions)) render the
+postfix T-SQL form `xmlcol.value('xpath', 'type')` / `xmlcol.query('xpath')` / `xmlcol.exist('xpath')`;
+the XQuery and the SQL type must be string literals. The rowset method `.nodes` is not supported (it
+needs an outer reference inside `FROM`/`CROSS APPLY`).
 
 ## Recursive CTEs and `maxRecursion`
 
@@ -195,14 +205,16 @@ join complex_entity as [t2] on t1.id = t2.id
 | `date_add` / `date_diff` / `date_from_parts` / `end_of_month` | `dateadd(field, amount, value)` / `datediff(field, start, end)` / `datefromparts(y, m, d)` / `eomonth(value)` |
 | `string_agg` / `array_agg` | `string_agg` supported (SQL Server 2017+); `array_agg` not supported (throws) |
 | Text JSON | `json_value` / `json_query` / `json_modify` (SQL Server 2016+) |
-| Conditional functions | `iif(...)` (portable, [`SupportsIif`](xref:NextORM.Core.ISqlDialect.SupportsIif)) / `choose(...)` ([`SupportsChoose`](xref:NextORM.Core.ISqlDialect.SupportsChoose)) |
+| Conditional functions | `iif(...)` (portable, [`Iif`](xref:NextORM.Core.ISqlDialect.Iif)) / `choose(...)` ([`SupportsChoose`](xref:NextORM.Core.ISqlDialect.SupportsChoose)) |
 | Full-text predicates | `contains(...)` / `freetext(...)` (column must be full-text indexed) |
 | Table hints | `with (hint, ...)` after the primary table ([`WithTableHint`](xref:NextORM.Core.EntityBuilder`1)) |
+| Row locking | `ForUpdate`/`ForShare` render `with (updlock)`/`with (holdlock)` on the primary table ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock), [`ILockRenderer.UsesTableHints`](xref:NextORM.Core.ILockRenderer.UsesTableHints)) |
 | Session/info functions | `current_user`, `session_user`, `schema_name()`, `db_name()`, `@@version` |
 | Window percentiles | `percentile_cont`/`percentile_disc` as `... within group (order by x) over (...)` (SQL Server 2012+) |
 | Arbitrary-value aggregate | not supported (`ANY_VALUE` is SQL Server 2025 / Fabric only) |
 | JSON output | trailing `for json path` / `for json auto` ([`ForJson`](xref:NextORM.Core.QueryCommand`1)) |
 | XML output | trailing `for xml raw/auto/explicit/path` ([`ForXml`](xref:NextORM.Core.QueryCommand`1)) |
+| XML data-type methods | `xml.value('xpath', 'type')` / `xml.query('xpath')` / `xml.exist('xpath')` ([`XmlFunctions`](xref:NextORM.Core.ISqlDialect.XmlFunctions); `.nodes` not supported) |
 | `AVG` over an integer column | truncated to an integer |
 | `ORDER BY … DESC` null placement | nulls sort last by default |
 

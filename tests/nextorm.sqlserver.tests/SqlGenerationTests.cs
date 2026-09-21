@@ -63,6 +63,56 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void NamedWindow_ShouldThrowBecauseSqlServerHasNoWindowClause()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var b = e.Window("w", orderBy: [e.Asc(x => x.Id)]);
+        var act = () => SqlOf(ctx, b.Select(x => new
+        {
+            x.Id,
+            rn = SqlFunctions.Sql.row_number().Over("w")
+        }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*Named windows*");
+    }
+
+    [Fact]
+    public void WindowFrameGroups_ShouldThrowBecauseSqlServerLacksGroups()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new
+        {
+            x.Id,
+            v = SqlFunctions.Sql.sum_over(x.Id).Over(
+                SqlFunctions.Sql.asc(() => x.Id),
+                WindowFrame.Groups(1, 1))
+        }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*GROUPS*");
+    }
+
+    [Fact]
+    public void WindowFrameExclusion_ShouldThrowBecauseSqlServerLacksExclude()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new
+        {
+            x.Id,
+            v = SqlFunctions.Sql.sum_over(x.Id).Over(
+                SqlFunctions.Sql.asc(() => x.Id),
+                WindowFrame.RowsUnboundedPrecedingToCurrentRow.WithExclusion(WindowFrameExclusion.CurrentRow))
+        }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*EXCLUDE*");
+    }
+
+    [Fact]
     public void SessionInfoFunctions_ShouldUseSqlServerNames()
     {
         using var ctx = SqlServerTestContext.Create();
@@ -501,6 +551,85 @@ public class SqlGenerationTests
 
         sql.Should().Contain("cross apply (select id, somestring as [String] from complex_entity");
         sql.Should().Contain(") as [t2]");
+    }
+
+    [Fact]
+    public void CrossApply_ToCorrelatedSubquery_ShouldReferenceOuterAlias()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .CrossApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id).Select(c => new { c.Id, c.String }))
+            .Select(p => new { p.Item1.Id, p.Item2.String }));
+
+        sql.Should().Be("select t1.id, t3.[String] from simple_entity as [t1] cross apply (select t2.id, t2.somestring as [String] from complex_entity as [t2]\n"
+            + " where t2.id = cast(t1.id as bigint)) as [t3]");
+    }
+
+    [Fact]
+    public void OuterApply_ToCorrelatedSubquery_ShouldReferenceOuterAlias()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .OuterApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id).Select(c => new { c.Id, c.String }))
+            .Select(p => new { p.Item1.Id, p.Item2.String }));
+
+        sql.Should().Be("select t1.id, t3.[String] from simple_entity as [t1] outer apply (select t2.id, t2.somestring as [String] from complex_entity as [t2]\n"
+            + " where t2.id = cast(t1.id as bigint)) as [t3]");
+    }
+
+    [Fact]
+    public void CrossApply_ToCorrelatedBuilderSource_ShouldProjectTheEntity()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .CrossApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id))
+            .Select(p => new { p.Item1.Id, p.Item2.String }));
+
+        sql.Should().Contain("cross apply (select t2.id, t2.nullableint as [Int], t2.somestring as [String]");
+        sql.Should().Contain("where t2.id = cast(t1.id as bigint)) as [t3]");
+    }
+
+    [Fact]
+    public void CrossApply_ToCorrelatedSubqueryWithCapturedValue_ShouldParameterizeTheValue()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var min = 0L;
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .CrossApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id && c.Id > min).Select(c => new { c.Id }))
+            .Select(p => new { OuterId = p.Item1.Id, InnerId = p.Item2.Id }));
+
+        sql.Should().Contain("t2.id = cast(t1.id as bigint)");
+        sql.Should().Contain("t2.id > @min");
+    }
+
+    [Fact]
+    public void CrossApply_OnJoinedProjection_ShouldThrowClearNotSupported()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var joined = ctx.From<ISimpleEntity>().Join(ctx.From<IComplexEntity>(), (a, b) => a.Id == b.Id);
+
+        var act = () => joined
+            .CrossApply(p => ctx.From<IComplexEntity>().Where(c => c.Id == p.Item1.Id).Select(c => new { c.Id }))
+            .Select(q => new { q.Item1.Item1.Id });
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*join projection*");
+    }
+
+    [Fact]
+    public void OuterApply_ToCorrelatedBuilderSource_ShouldProjectTheEntity()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .OuterApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id))
+            .Select(p => new { p.Item1.Id, p.Item2.String }));
+
+        sql.Should().Contain("outer apply (select t2.id, t2.nullableint as [Int], t2.somestring as [String]");
+        sql.Should().Contain("where t2.id = cast(t1.id as bigint)) as [t3]");
     }
 
     [Fact]
@@ -1872,6 +2001,27 @@ public class SqlGenerationTests
         sql.Should().Contain("join simple_entity as [t2]");
     }
 
+    /// <summary>
+    /// An aggregate terminal inside a correlated subquery is rewritten to the equivalent aggregate
+    /// projection instead of being rejected.
+    /// </summary>
+    [Fact]
+    public void CorrelatedAggregateTerminalInSelect_ShouldRenderAggregateSubquery()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var outer = ctx.From<IComplexEntity>();
+        var inner = ctx.From<ISimpleEntity>();
+
+        var sql = SqlOf(ctx, outer.Select(it => new
+        {
+            it.Id,
+            c = inner.Where(s => s.Id == it.Id).Count()
+        }));
+
+        sql.Should().Contain("count(*) from simple_entity");
+        sql.Should().Contain("= t1.id");
+    }
+
     [Fact]
     public void TableSample_ShouldEmitPercent()
     {
@@ -1946,14 +2096,33 @@ public class SqlGenerationTests
     }
 
     [Fact]
-    public void ForUpdate_ShouldThrowBecauseSqlServerUsesTableHints()
+    public void ForUpdate_ShouldEmitUpdlockTableHint()
     {
         using var ctx = SqlServerTestContext.Create();
         var e = ctx.From<ISimpleEntity>();
 
-        var act = () => SqlOf(ctx, e.ForUpdate().Select(x => x.Id));
+        SqlOf(ctx, e.ForUpdate().Select(x => x.Id))
+            .Should().Be("select id from simple_entity with (updlock)");
+    }
 
-        act.Should().Throw<NotSupportedException>().WithMessage("*FOR UPDATE*");
+    [Fact]
+    public void ForShare_ShouldEmitHoldlockTableHint()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.ForShare().Select(x => x.Id))
+            .Should().Be("select id from simple_entity with (holdlock)");
+    }
+
+    [Fact]
+    public void ForUpdate_WithTableHint_ShouldCombineHints()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.WithTableHint("rowlock").ForUpdate().Select(x => x.Id))
+            .Should().Be("select id from simple_entity with (rowlock, updlock)");
     }
 
     [Fact]
@@ -2028,6 +2197,268 @@ public class SqlGenerationTests
         sql.Should().Contain("from simple_entity for system_time all as ");
     }
 
+    [Fact]
+    public void XmlValue_ShouldEmitPostfixMethod()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            V = SqlFunctions.SqlServer.xml_value<int>(x.String, "(/root/item)[1]", "int")
+        }));
+
+        sql.Should().Contain("somestring.value('(/root/item)[1]', 'int') as [V]");
+    }
+
+    [Fact]
+    public void XmlQuery_ShouldEmitPostfixMethod()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.xml_query(x.String, "/root/item") }))
+            .Should().Contain("somestring.query('/root/item') as [V]");
+    }
+
+    [Fact]
+    public void XmlExist_ShouldMaterialisePredicateAndBit()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // exist() returns bit (an int-like value in T-SQL), so a WHERE context compares it with 1 ...
+        SqlOf(ctx, e.Where(x => SqlFunctions.SqlServer.xml_exist(x.String, "/root"))
+            .Select(x => new { x.Id }))
+            .Should().Contain("where (somestring.exist('/root')) = 1");
+
+        // ... and a projection keeps the bit value.
+        SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.xml_exist(x.String, "/root") }))
+            .Should().Contain("somestring.exist('/root') as [V]");
+    }
+
+    [Fact]
+    public void XmlMethods_ShouldThrowWhenArgumentsAreNotConstants()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        var xpath = "/root";
+
+        var act = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.xml_query(x.String, xpath) }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*constant*");
+    }
+
+    private static string SqlOfCached<T>(IDataContext ctx, QueryCommand<T> cmd)
+        => Normalize(((DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None)).DbCommand.CommandText);
+
+    [Fact]
+    public void Pivot_ShouldEmitPivotClause()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<ISalesEntity>();
+
+        SqlOf(ctx, e
+            .Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter,
+                PivotValue.Create("1"), PivotValue.Create("2"))
+            .Select(t => new
+            {
+                Category = t.GetString("category"),
+                Q1 = t.GetNullableDecimal("[1]"),
+                Q2 = t.GetNullableDecimal("[2]")
+            }))
+            .Should().Be("select category, [1], [2] from sales pivot (sum(margin) for quarter in ([1], [2])) as [t1]");
+    }
+
+    [Fact]
+    public void Pivot_ShouldRenderEveryAggregateAndKeepValueWithoutAlias()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<ISalesEntity>();
+
+        foreach (var aggregate in new[] { PivotAggregate.Count, PivotAggregate.Avg, PivotAggregate.Min, PivotAggregate.Max })
+        {
+            var name = aggregate.ToString().ToLowerInvariant();
+            SqlOf(ctx, e.Pivot(aggregate, s => s.Margin, s => s.Category, PivotValue.Create("North"))
+                .Select(t => new { V = t.GetNullableDecimal("North") }))
+                .Should().Contain($"pivot ({name}(margin) for category in ([North]))");
+        }
+    }
+
+    [Fact]
+    public void Pivot_ShouldReuseCachedPlan()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var e1 = ctx.From<ISalesEntity>();
+        var first = SqlOfCached(ctx, e1
+            .Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter, PivotValue.Create("1"))
+            .Select(t => new { Category = t.GetString("category"), Q1 = t.GetNullableDecimal("[1]") }));
+
+        var e2 = ctx.From<ISalesEntity>();
+        var second = SqlOfCached(ctx, e2
+            .Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter, PivotValue.Create("1"))
+            .Select(t => new { Category = t.GetString("category"), Q1 = t.GetNullableDecimal("[1]") }));
+
+        second.Should().Be(first);
+        second.Should().Contain("pivot (sum(margin) for quarter in ([1]))");
+    }
+
+    [Fact]
+    public void Pivot_ShouldReuseCachedPlan_DerivedSource()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var derived1 = ctx.From<ISalesEntity>()
+            .Where(s => s.Margin > 0)
+            .Select(s => new { s.Category, s.Quarter, s.Margin });
+        var first = SqlOfCached(ctx, ctx.From(derived1)
+            .Pivot(PivotAggregate.Sum, x => x.Margin, x => x.Quarter, PivotValue.Create("1"))
+            .Select(t => new { Category = t.GetString("category"), Q1 = t.GetNullableDecimal("[1]") }));
+
+        var derived2 = ctx.From<ISalesEntity>()
+            .Where(s => s.Margin > 0)
+            .Select(s => new { s.Category, s.Quarter, s.Margin });
+        var second = SqlOfCached(ctx, ctx.From(derived2)
+            .Pivot(PivotAggregate.Sum, x => x.Margin, x => x.Quarter, PivotValue.Create("1"))
+            .Select(t => new { Category = t.GetString("category"), Q1 = t.GetNullableDecimal("[1]") }));
+
+        second.Should().Be(first);
+        second.Should().Contain("from (select category, quarter, margin from sales");
+        second.Should().Contain("pivot (sum(margin) for quarter in ([1]))");
+    }
+
+    [Fact]
+    public void Unpivot_ShouldEmitUnpivotClause()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IQuarterlyEntity>();
+
+        SqlOf(ctx, e
+            .Unpivot("val", "qtr", UnpivotColumn.Create("q1"), UnpivotColumn.Create("q2"))
+            .Select(t => new
+            {
+                Category = t.GetString("category"),
+                Qtr = t.GetString("qtr"),
+                Val = t.GetNullableDecimal("val")
+            }))
+            .Should().Be("select category, qtr, val from quarterly unpivot ([val] for [qtr] in ([q1], [q2])) as [t1]");
+    }
+
+    [Fact]
+    public void Pivot_ShouldAcceptDerivedSource()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var derived = ctx.From<ISalesEntity>()
+            .Where(s => s.Margin > 0)
+            .Select(s => new { s.Category, s.Quarter, s.Margin });
+
+        SqlOf(ctx, ctx.From(derived)
+            .Pivot(PivotAggregate.Sum, x => x.Margin, x => x.Quarter, PivotValue.Create("1"), PivotValue.Create("2"))
+            .Select(t => new { Category = t.GetString("category"), Q1 = t.GetNullableDecimal("[1]") }))
+            .Should().Be("select category, [1] from (select category, quarter, margin from sales\n where (margin > cast(0 as decimal(38, 10)))) as [t1] pivot (sum(margin) for quarter in ([1], [2])) as [t2]");
+    }
+
+    [Fact]
+    public void Pivot_ShouldAcceptDerivedComputedSource()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var derived = ctx.From<ISalesEntity>()
+            .Where(s => s.Margin > 0)
+            .Select(s => new
+            {
+                CategoryName = s.Category,
+                QuarterNum = "Q" + s.Quarter,
+                Margin = s.Margin * 2
+            });
+
+        SqlOf(ctx, ctx.From(derived)
+            .Pivot(PivotAggregate.Sum, x => x.Margin, x => x.QuarterNum, PivotValue.Create("Q1"))
+            .Select(t => new { Category = t.GetString("CategoryName"), Q1 = t.GetNullableDecimal("[Q1]") }))
+            .Should().Be("select CategoryName, [Q1] from (select category as [CategoryName], ('Q'+quarter) as [QuarterNum], (margin * cast(2 as decimal(38, 10))) as [Margin] from sales\n where (margin > cast(0 as decimal(38, 10)))) as [t1] pivot (sum([Margin]) for [QuarterNum] in ([Q1])) as [t2]");
+    }
+
+    [Fact]
+    public void Unpivot_ShouldAcceptDerivedSource()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var derived = ctx.From<IQuarterlyEntity>()
+            .Select(s => new { s.Category, s.Q1, s.Q2 });
+
+        SqlOf(ctx, ctx.From(derived)
+            .Unpivot("val", "qtr", UnpivotColumn.Create("q1"), UnpivotColumn.Create("q2"))
+            .Select(t => new { Category = t.GetString("category"), Val = t.GetNullableDecimal("val") }))
+            .Should().Be("select category, val from (select category, q1, q2 from quarterly) as [t1] unpivot ([val] for [qtr] in ([q1], [q2])) as [t2]");
+    }
+
+    [Fact]
+    public void Pivot_ShouldThrowWhenSourceIsFiltered()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<ISalesEntity>();
+
+        var act = () => e.Where(s => s.Quarter > 0)
+            .Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter, PivotValue.Create("1"));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*plain table*");
+    }
+
+    [Fact]
+    public void Pivot_ShouldThrowWhenDerivedSourceHasModifiers()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var derived = ctx.From<ISalesEntity>().Select(s => new { s.Category, s.Quarter, s.Margin });
+
+        var ordered = () => ctx.From(derived).OrderBy(x => x.Quarter)
+            .Pivot(PivotAggregate.Sum, x => x.Margin, x => x.Quarter, PivotValue.Create("1"));
+        ordered.Should().Throw<NotSupportedException>().WithMessage("*derived query*");
+
+        var filtered = () => ctx.From(derived).Where(x => x.Quarter > 0)
+            .Pivot(PivotAggregate.Sum, x => x.Margin, x => x.Quarter, PivotValue.Create("1"));
+        filtered.Should().Throw<NotSupportedException>().WithMessage("*derived query*");
+    }
+
+    [Fact]
+    public void Pivot_ShouldThrowWhenSourceHasModifiers()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<ISalesEntity>();
+
+        var limited = () => e.Limit(1).Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter, PivotValue.Create("1"));
+        limited.Should().Throw<NotSupportedException>().WithMessage("*plain table*");
+
+        var sampled = () => e.TableSample(10).Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter, PivotValue.Create("1"));
+        sampled.Should().Throw<NotSupportedException>().WithMessage("*plain table*");
+
+        var ordered = () => e.OrderBy(x => x.Id).Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter, PivotValue.Create("1"));
+        ordered.Should().Throw<NotSupportedException>().WithMessage("*plain table*");
+
+        var hinted = () => e.WithTableHint("nolock").Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter, PivotValue.Create("1"));
+        hinted.Should().Throw<NotSupportedException>().WithMessage("*plain table*");
+    }
+
+    [Fact]
+    public void Pivot_ShouldThrowWithoutValues()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<ISalesEntity>();
+
+        var act = () => e.Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter);
+
+        act.Should().Throw<ArgumentException>().WithMessage("*at least one value*");
+    }
+
+    [Fact]
+    public void Unpivot_ShouldThrowWithoutColumns()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IQuarterlyEntity>();
+
+        var act = () => e.Unpivot("val", "qtr");
+
+        act.Should().Throw<ArgumentException>().WithMessage("*at least one column*");
+    }
+
     private static Expression<Func<IComplexEntity, string>> SwitchOfId(string @default, params (long Test, string Result)[] cases)
     {
         var p = Expression.Parameter(typeof(IComplexEntity), "x");
@@ -2037,5 +2468,78 @@ public class SqlGenerationTests
         var body = Expression.Switch(Expression.Property(p, nameof(IComplexEntity.Id)), Expression.Constant(@default), switchCases);
 
         return Expression.Lambda<Func<IComplexEntity, string>>(body, p);
+    }
+
+    [Fact]
+    public void DerivedSourceThenJoin_ShouldRenderDerivedTable()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var derived = ctx.From<IComplexEntity>()
+            .Where(c => c.Id > 0)
+            .Select(c => new { c.Id, c.String });
+
+        var sql = SqlOf(ctx, ctx.From(derived)
+            .Join(ctx.From<ISimpleEntity>(), (d, s) => d.Id == s.Id)
+            .Select(p => new { p.Item1.Id, SId = p.Item2.Id, p.Item1.String }));
+
+        sql.Should().Be("select t1.id, t2.id as [SId], t1.[String] from (select id, somestring as [String] from complex_entity\n where (id > 0)) as [t1] join simple_entity as [t2] on t1.id = cast(t2.id as bigint)");
+    }
+
+    [Fact]
+    public void DerivedSourceWithJoinThenJoin_ShouldResolveTheOuterAlias()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var derived = ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+            .Select(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.String });
+
+        var sql = SqlOf(ctx, ctx.From(derived)
+            .Join(ctx.From<IComplexEntity>(), (d, c2) => d.OrderId == c2.Id)
+            .Select(p => new { p.Item1.OrderId, p.Item1.CustomerName, Third = p.Item2.Id }));
+
+        sql.Should().Be("select t3.[OrderId], t3.[CustomerName], t4.id as [Third] from (select t1.id as [OrderId], t2.somestring as [CustomerName] from simple_entity as [t1] join complex_entity as [t2] on cast(t1.id as bigint) = t2.id) as [t3] join complex_entity as [t4] on cast(t3.[OrderId] as bigint) = t4.id");
+    }
+
+    [Fact]
+    public void DerivedSourceWhereThenJoin_ShouldPushTheFilterOntoTheProjection()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var derived = ctx.From<IComplexEntity>()
+            .Select(c => new { c.Id, c.String });
+
+        var sql = SqlOf(ctx, ctx.From(derived)
+            .Where(d => d.Id > 5)
+            .Join(ctx.From<ISimpleEntity>(), (d, s) => d.Id == s.Id)
+            .Select(p => new { p.Item1.Id, SId = p.Item2.Id }));
+
+        sql.Should().Be("select t1.id, t2.id as [SId] from (select id, somestring as [String] from complex_entity) as [t1] join simple_entity as [t2] on t1.id = cast(t2.id as bigint)\n where (t1.id > 5)");
+    }
+
+    [Fact]
+    public void DerivedSourceDistinctThenJoin_ShouldThrow()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var derived = ctx.From<IComplexEntity>().Select(c => new { c.Id });
+
+        var act = () => SqlOf(ctx, ctx.From(derived)
+            .Distinct()
+            .Join(ctx.From<ISimpleEntity>(), (d, s) => d.Id == s.Id)
+            .Select(p => new { p.Item1.Id, SId = p.Item2.Id }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*only a Where clause*");
+    }
+
+    [Fact]
+    public void DerivedSourceOrderByThenJoin_ShouldThrow()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var derived = ctx.From<IComplexEntity>().Select(c => new { c.Id });
+
+        var act = () => SqlOf(ctx, ctx.From(derived)
+            .OrderBy(d => d.Id)
+            .Join(ctx.From<ISimpleEntity>(), (d, s) => d.Id == s.Id)
+            .Select(p => new { p.Item1.Id, SId = p.Item2.Id }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*only a Where clause*");
     }
 }

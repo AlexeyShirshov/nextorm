@@ -29,29 +29,27 @@ public sealed class SqliteDialect : SqlDialectBase
         $"group_concat({value}, {delimiter})";
 
     /// <summary>SQLite exposes only the library version from the session/information family.</summary>
-    public override bool SupportsSessionInfoFunctions => true;
-
-    /// <summary>SQLite has no session/user/schema/database information; only the library version is exposed.</summary>
-    public override bool SupportsSessionInfoFunction(string name) => name is "version";
-
-    /// <summary>SQLite renders <c>version()</c> as <c>sqlite_version()</c>.</summary>
-    public override string MakeSessionInfoFunction(string name) =>
-        name == "version" ? "sqlite_version()" : base.MakeSessionInfoFunction(name);
+    public override ISessionInfoFunctions SessionInfoFunctions => SqliteSessionInfoFunctions.Instance;
 
     public override bool SupportsGreatestLeast => true;
 
     /// <summary>SQLite 3.32+ renders the portable <c>iif</c> as <c>iif(condition, whenTrue, whenFalse)</c>.</summary>
-    public override bool SupportsIif => true;
-
-    /// <summary>SQLite 3.32+ renders the portable <c>iif</c> as <c>iif(condition, whenTrue, whenFalse)</c>.</summary>
-    public override string MakeIif(string condition, string whenTrue, string whenFalse) =>
-        $"iif({condition}, {whenTrue}, {whenFalse})";
+    public override IIifRenderer Iif => SqliteIifRenderer.Instance;
 
     /// <summary>SQLite 3.25+ supports the ANSI <c>percent_rank</c>/<c>cume_dist</c> window functions.</summary>
     public override bool SupportsPercentRankCumeDist => true;
 
     /// <summary>SQLite 3.25+ supports <c>nth_value(value, n)</c> as a window function.</summary>
     public override bool SupportsNthValue => true;
+
+    /// <summary>SQLite 3.25+ declares named windows (<c>WINDOW w AS (...)</c>) and references them with <c>OVER w</c>.</summary>
+    public override bool SupportsNamedWindows => true;
+
+    /// <summary>SQLite 3.28+ supports the <c>GROUPS</c> window frame unit.</summary>
+    public override bool SupportsWindowFrameGroups => true;
+
+    /// <summary>SQLite 3.28+ supports the frame <c>EXCLUDE CURRENT ROW</c>/<c>GROUP</c>/<c>TIES</c>/<c>NO OTHERS</c> clause.</summary>
+    public override bool SupportsWindowFrameExclusion => true;
 
     public override string MakeGreatest(IReadOnlyList<string> args) =>
         args.Count == 1 ? $"({args[0]})" : $"max({string.Join(", ", args)})";
@@ -185,4 +183,24 @@ public sealed class SqliteDialect : SqlDialectBase
         if (paging.Offset > 0)
             sqlBuilder.Append(" offset ").Append(paging.Offset);
     }
+}
+
+internal sealed class SqliteIifRenderer : IIifRenderer
+{
+    public static readonly SqliteIifRenderer Instance = new();
+
+    public string Render(string condition, string whenTrue, string whenFalse) =>
+        $"iif({condition}, {whenTrue}, {whenFalse})";
+}
+
+internal sealed class SqliteSessionInfoFunctions : ISessionInfoFunctions
+{
+    public static readonly SqliteSessionInfoFunctions Instance = new();
+
+    public bool Supports(string name) => name is "version";
+
+    public string Render(string name) =>
+        name == "version"
+            ? "sqlite_version()"
+            : throw new NotSupportedException($"The {name} session information function is not supported by SQLite.");
 }

@@ -55,6 +55,16 @@ public class InMemoryTests
         act.Should().Throw<NotSupportedException>().WithMessage("*TABLESAMPLE*");
     }
     [Fact]
+    public void TestPivot_ShouldThrow()
+    {
+        var act = () => _sut.SimpleEntity
+            .Pivot(PivotAggregate.Count, it => it.Id, it => it.Id, PivotValue.Create("1"))
+            .Select(t => new { V = t.GetNullableInt32("1") })
+            .ToList();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*PIVOT/UNPIVOT*");
+    }
+    [Fact]
     public void TestWithTies_ShouldThrow()
     {
         var act = () => _sut.SimpleEntity.Limit(2).WithTies().Select(it => new { it.Id }).ToList();
@@ -550,6 +560,25 @@ public class InMemoryTests
         r.Should().Contain(x => x.Parity == 0 && x.count == 1);
     }
     [Fact]
+    public void GroupBy_ScalarKey_ShouldAggregatePerGroup()
+    {
+        _sut.SimpleEntity.WithData(new[]
+        {
+            new SimpleEntity { Id = 1 },
+            new SimpleEntity { Id = 2 },
+            new SimpleEntity { Id = 3 },
+        });
+
+        var r = _sut.SimpleEntity
+            .GroupBy(e => e.Id % 2)
+            .Select(e => new { Parity = e.Id % 2, count = SqlFunctions.Sql.count() })
+            .ToList();
+
+        r.Should().HaveCount(2);
+        r.Should().Contain(x => x.Parity == 1 && x.count == 2);
+        r.Should().Contain(x => x.Parity == 0 && x.count == 1);
+    }
+    [Fact]
     public void GroupByRollup_ShouldThrow()
     {
         _sut.SimpleEntity.WithData(new[] { new SimpleEntity { Id = 1 } });
@@ -803,6 +832,19 @@ public class InMemoryTests
             .FromTableFunction(() => Tvf.SimpleTvf())
             .Select(it => new { it.Id })
             .ToList();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*in-memory*");
+    }
+
+    [Fact]
+    public void CorrelatedApply_ShouldThrowClearNotSupported()
+    {
+        // The in-memory provider executes joins row-wise and has no correlated APPLY/LATERAL source
+        // yet (see docs/specs/roadmap/todo_correlated_inmemory.md), so it must fail loudly.
+        var act = () => _sut.DataProvider
+            .From<SimpleEntity>()
+            .CrossApply(s => _sut.DataProvider.From<SimpleEntity>().Where(x => x.Id == s.Id))
+            .Select(p => new { p.Item1.Id });
 
         act.Should().Throw<NotSupportedException>().WithMessage("*in-memory*");
     }

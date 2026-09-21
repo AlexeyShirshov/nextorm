@@ -322,8 +322,7 @@ var rows = dataContext.From<IComplexEntity>()
 
 `SqlFunctions.Sql.current_user()`, `session_user()`, `current_schema()`, `current_database()` и
 `version()` — кросс-провайдерные
-([`SupportsSessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SupportsSessionInfoFunctions) плюс
-пофункциональный [`SupportsSessionInfoFunction`](xref:NextORM.Core.ISqlDialect.SupportsSessionInfoFunction)):
+([`SessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SessionInfoFunctions)):
 
 | C# | PostgreSQL | SQL Server | MySQL/MariaDB | ClickHouse | SQLite |
 |---|---|---|---|---|---|
@@ -338,8 +337,7 @@ var rows = dataContext.From<IComplexEntity>()
 ### Генераторы UUID
 
 `SqlFunctions.Sql.gen_random_uuid()` (случайный v4) и `uuidv7()` — кросс-провайдерные
-([`SupportsUuidGenerators`](xref:NextORM.Core.ISqlDialect.SupportsUuidGenerators) плюс
-пофункциональный [`SupportsUuidGenerator`](xref:NextORM.Core.ISqlDialect.SupportsUuidGenerator(string))):
+([`UuidGenerators`](xref:NextORM.Core.ISqlDialect.UuidGenerators)):
 
 | C# | PostgreSQL | SQL Server | MySQL | MariaDB | ClickHouse | SQLite |
 |---|---|---|---|---|---|---|
@@ -517,7 +515,7 @@ select cardinality(@norm_p1) as "N" from complex_entity where array_length(@norm
 > материализовать `Array(T)`.
 
 CLR-метод `string.Split` рендерится как `splitByChar(separator, value)` (гейт
-[`SupportsStringSplit`](xref:NextORM.Core.ISqlDialect.SupportsStringSplit)); поддерживается только
+[`StringSplit`](xref:NextORM.Core.ISqlDialect.StringSplit)); поддерживается только
 одноразрядный разделитель (многосимвольный `splitByString` не выставлен), результат — `string[]`,
 пригодный только внутри другой array-функции; overload с `count`, несколько разделителей и
 `StringSplitOptions`, отличный от `None`, бросают `NotSupportedException`:
@@ -688,6 +686,37 @@ select json_value(somestring, '$.id') as [Id], json_query(somestring, '$.name') 
 (T-SQL `ISJSON` возвращает `int`), а при проецировании как значение приводится к `bit`. `isjson`
 можно также использовать прямо в `WHERE` (`Where(e => SqlFunctions.SqlServer.isjson(e.String))`).
 
+## Методы типа XML (SQL Server)
+
+Тип `xml` SQL Server предоставляет постфиксные методы
+([`XmlFunctions`](xref:NextORM.Core.ISqlDialect.XmlFunctions)). Они
+вызываются через `SqlFunctions.SqlServer` и рендерятся как `xmlcol.method(...)`; XQuery и SQL-тип
+обязаны быть строковыми литералами (оба эмитятся дословно, одиночные кавычки экранируются):
+
+```csharp
+var rows = dataContext.From<IXmlEntity>()
+    .Select(x => new
+    {
+        Value = SqlFunctions.SqlServer.xml_value<string>(x.Payload, "(/root/item)[1]", "nvarchar(100)"),
+        Fragment = SqlFunctions.SqlServer.xml_query(x.Payload, "/root/item[1]"),
+        Exists = SqlFunctions.SqlServer.xml_exist(x.Payload, "/root/item[2]")
+    })
+    .ToList();
+```
+
+```sql
+select payload.value('(/root/item)[1]', 'nvarchar(100)') as [Value], payload.query('/root/item[1]') as [Fragment], payload.exist('/root/item[2]') as [Exists] from xml_entity
+```
+
+| C# | SQL |
+|---|---|
+| `SqlFunctions.SqlServer.xml_value<T>(xml, xpath, sqlType)` | `xml.value('xpath', 'sqlType')` |
+| `SqlFunctions.SqlServer.xml_query(xml, xpath)` | `xml.query('xpath')` |
+| `SqlFunctions.SqlServer.xml_exist(xml, xpath)` | `xml.exist('xpath')` |
+
+`xml_exist` возвращает `bit`: в предикате рендерится как `(xml.exist('xpath')) = 1`, при проецировании
+остаётся bit. Строковый метод `.nodes` не поддерживается (нужна внешняя ссылка в `FROM`/`CROSS APPLY`).
+
 ## Условные функции
 
 `SqlFunctions.Sql.nullif` — ANSI и работает на всех SQL-провайдерах; `greatest`/`least` включаются флагом
@@ -717,14 +746,40 @@ select nullif(nullableint, 0) as "NoZero", greatest(id, 10) as "Hi", least(id, 1
 | `SqlFunctions.Sql.iif(condition, a, b)` | `iif(...)` (SQL Server, SQLite 3.32+), `if(...)` (MySQL/MariaDB, ClickHouse), `case when ... then ... else ... end` (PostgreSQL) |
 | `SqlFunctions.SqlServer.choose(index, a, b, ...)` | `choose(index, a, b, ...)` (SQL Server) |
 | `SqlFunctions.Postgres.num_nonnulls(a, b, ...)` | `num_nonnulls(a, b, ...)` |
+| `SqlFunctions.ClickHouse.multi_if(when(c1, v1), ..., otherwise(v))` | `multiIf(c1, v1, ..., v)` (ClickHouse) |
 
 `num_nulls`/`num_nonnulls` входят в расширенную библиотеку скалярных функций
 ([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions)).
-`iif` переносим ([`SupportsIif`](xref:NextORM.Core.ISqlDialect.SupportsIif)), и каждый диалект задаёт своё
-нативное написание через [`MakeIif`](xref:NextORM.Core.ISqlDialect.MakeIif); `choose` остаётся только для
+`iif` переносим ([`Iif`](xref:NextORM.Core.ISqlDialect.Iif)), и каждый диалект задаёт своё
+нативное написание через [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render); `choose` остаётся только для
 SQL Server ([`SupportsChoose`](xref:NextORM.Core.ISqlDialect.SupportsChoose)). Вызов `iif` через
 специализированную поверхность `SqlFunctions.SqlServer` по-прежнему работает по наследованию.
 C#-тернарник `condition ? a : b` отдельный и всегда рендерит переносимый `case when ... end`.
+
+Помимо этого ClickHouse предоставляет многоветвевную поверхность `multiIf`
+([`MultiIf`](xref:NextORM.Core.ISqlDialect.MultiIf),
+[`IMultiIfRenderer.Render`](xref:NextORM.Core.IMultiIfRenderer.Render)): каждая ветвь собирается через
+`when(condition, value)`, а завершает вызов `otherwise(value)` (обязательно последним). Остальные
+провайдеры используют `case when` — это уже переносимая форма за `iif`/C#-тернарником, поэтому
+нативное написание ClickHouse они отвергают.
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        e.Id,
+        Bucket = SqlFunctions.ClickHouse.multi_if(
+            SqlFunctions.ClickHouse.when(e.Id == 1L, "one"),
+            SqlFunctions.ClickHouse.when(e.Id == 2L, "two"),
+            SqlFunctions.ClickHouse.otherwise("many"))
+    })
+    .ToList();
+```
+
+```sql
+-- ClickHouse
+select id, multiIf((id = 1), 'one', (id = 2), 'two', 'many') as `Bucket` from complex_entity
+```
 
 ## Усечение даты (PostgreSQL, SQL Server, ClickHouse)
 
@@ -802,7 +857,7 @@ select datetime(dt, (1) || ' days') as 'NextDay', date(dt, 'start of month', '+1
 ## Приведение и части даты (ClickHouse)
 
 ClickHouse предоставляет свои `to*`-функции даты/времени через `SqlFunctions.ClickHouse`
-([`SupportsDateConversionFunctions`](xref:NextORM.Core.ISqlDialect.SupportsDateConversionFunctions); только ClickHouse).
+([`DateConversion`](xref:NextORM.Core.ISqlDialect.DateConversion); только ClickHouse).
 `to_date`/`to_date_time`/`to_date32` приводят к `Date`/`DateTime`/`Date32`;
 `to_year`/`to_quarter`/`to_month`/`to_day_of_month`/`to_day_of_week`/`to_day_of_year`/`to_hour`/
 `to_minute`/`to_second` возвращают части даты (`toDayOfWeek` — понедельник 1 … воскресенье 7);
@@ -935,6 +990,7 @@ var elements = dataContext
 | `nullif` | поддерживается | поддерживается | поддерживается |
 | `greatest` / `least` | `max(...)` / `min(...)` (один аргумент -> `(...)`) | поддерживается (2022+) | поддерживается |
 | `iif` | `iif(cond, a, b)` (3.32+) | `iif(cond, a, b)` | `case when cond then a else b end` |
+| `multi_if` | `NotSupportedException` | `NotSupportedException` | `NotSupportedException` (только ClickHouse; `multiIf`) |
 | `date_trunc` | `NotSupportedException` | `datetrunc(...)` (2022+) | поддерживается |
 | `date_add` / `end_of_month` / `date_diff` / `date_from_parts` | `datetime(x, n \|\| ' days')` / `date(x, 'start of month', ...)` / разность `strftime` / `date(printf(...))` | `dateadd(...)` / `eomonth(...)` / `datediff(...)` / `datefromparts(...)` | интервальная арифметика / `date_trunc` / разность частей даты / `make_date` |
 | `string_agg` / `array_agg` | `group_concat(x, delimiter)` (нет `array_agg`) | `string_agg` (2017+); `array_agg` бросает исключение | поддерживается |
@@ -952,7 +1008,7 @@ PostgreSQL.
 ClickHouse рендерит `dateTrunc('part', x)`, `addDays`/`addMonths`/.../`addSeconds` (и масштабированный
 `addYears` для `decade`/`century`/`millennium`), `toLastDayOfMonth(x)`,
 `arrayStringConcat(groupArray(x), delimiter)`, `groupBitAnd`/`groupBitOr`/`groupBitXor`,
-`covarPop`/`covarSamp`, `argMin`/`argMax` и комбинаторы `-If`. Он отклоняет ANSI-предложение
+`covarPop`/`covarSamp`, `argMin`/`argMax`, комбинаторы `-If` и `multiIf`. Он отклоняет ANSI-предложение
 `filter (where ...)`, агрегаты `regr_*` и логические агрегаты через `NotSupportedException`; см.
 [Провайдер ClickHouse](../providers/clickhouse.md).
 

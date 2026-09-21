@@ -78,9 +78,15 @@ public static class DataContextExtensions
     /// <summary>
     /// Starts a query against a raw table (or CTE) name. Needed when the context is used through
     /// <see cref="IDataContext"/> and therefore has no concrete <c>From(string)</c> instance method.
+    /// <para>
+    /// Columns are read through <see cref="TableAlias"/> accessors
+    /// (<c>t.GetInt64("id")</c> / <c>t["id"].AsInt</c>). The returned builder is generic so that the
+    /// full operator set (<c>Where</c>/<c>Join</c>/<c>GroupBy</c>/<c>Having</c>/<c>OrderBy</c>/
+    /// <c>Limit</c>/<c>Select</c>) is available, unlike the previous non-generic shape.
+    /// </para>
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static EntityBuilder From(this IDataContext dataContext, string table)
+    public static EntityBuilder<TableAlias> From(this IDataContext dataContext, string table)
         => new(dataContext, table) { Logger = dataContext.CommandLogger };
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

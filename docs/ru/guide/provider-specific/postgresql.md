@@ -113,7 +113,7 @@ Native-поверхность реализована только в PostgreSQL;
 ## `DISTINCT ON`
 
 [`DistinctOn`](xref:NextORM.Core.EntityBuilder`1) рендерит `SELECT DISTINCT ON (expr, ...)`, оставляя
-первую строку каждого ключа ([`SupportsDistinctOn`](xref:NextORM.Core.ISqlDialect.SupportsDistinctOn));
+первую строку каждого ключа ([`DistinctOn`](xref:NextORM.Core.ISqlDialect.DistinctOn));
 взаимоисключающе с `Distinct`.
 
 ```csharp
@@ -156,6 +156,52 @@ PostgreSQL заменяет единственную колонку скаляр
 (`value`, `key`/`value`, `word`/`ndoc`/`nentry`) эмитятся без обёртки.
 
 См. [Табличные функции](../13-table-valued-functions.md).
+
+## `TABLESAMPLE`
+
+[`TableSample`](xref:NextORM.Core.EntityBuilder`1) добавляет модификатор `TABLESAMPLE` к
+основной таблице запроса ([`TableSample`](xref:NextORM.Core.ISqlDialect.TableSample)).
+PostgreSQL поддерживает оба метода сэмплирования и необязательное повторяемое зерно (seed)
+(`TableSample`,
+`ITableSampleMethods.Render`):
+
+```csharp
+var rows = dataContext.From<ISimpleEntity>()
+    .TableSample(10, TableSampleMethod.System, seed: 42)
+    .Select(e => e.Id)
+    .ToList();
+```
+
+```sql
+select id from simple_entity tablesample system (10) repeatable (42)
+```
+
+[`TableSampleMethod.System`](xref:NextORM.Core.TableSampleMethod.System) генерирует
+`tablesample system (10)`, а [`TableSampleMethod.Bernoulli`](xref:NextORM.Core.TableSampleMethod.Bernoulli)
+— `tablesample bernoulli (5)`; остальные провайдеры отклоняют модификатор при построении SQL. См.
+[Сэмплирование таблицы](../01-querying-and-projections.md#сэмплирование-таблицы-tablesample).
+
+## Блокировка строк
+
+[`ForUpdate`](xref:NextORM.Core.EntityBuilder`1.ForUpdate) и
+[`ForShare`](xref:NextORM.Core.EntityBuilder`1.ForShare) генерируют завершающее предложение блокировки
+строк, которое ставится после `WHERE` и `ORDER BY`
+([`Lock`](xref:NextORM.Core.ISqlDialect.Lock),
+`ILockRenderer.Render`):
+
+```csharp
+var rows = dataContext.From<ISimpleEntity>()
+    .Where(e => e.Id > 5)
+    .ForUpdate()
+    .ToList();
+```
+
+```sql
+select id from simple_entity where (id > 5) for update
+```
+
+`LockMode.Update` генерирует `for update`, а `LockMode.Share` — `for share`. См.
+[Блокировку строк](../01-querying-and-projections.md#блокировка-строк-for-update--for-share).
 
 ## Пока не поддерживается
 

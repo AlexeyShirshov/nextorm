@@ -112,17 +112,16 @@ public class SqliteDialectTests
     [Fact]
     public void SessionInfoHooks_ShouldExposeOnlyTheVersion()
     {
-        Dialect.SupportsSessionInfoFunctions.Should().BeTrue();
-        Dialect.SupportsSessionInfoFunction("version").Should().BeTrue();
-        Dialect.SupportsSessionInfoFunction("current_user").Should().BeFalse();
-        Dialect.SupportsSessionInfoFunction("current_database").Should().BeFalse();
-        Dialect.MakeSessionInfoFunction("version").Should().Be("sqlite_version()");
+        Dialect.SessionInfoFunctions.Should().NotBeNull();
+        Dialect.SessionInfoFunctions!.Supports("version").Should().BeTrue();
+        Dialect.SessionInfoFunctions!.Supports("current_user").Should().BeFalse();
+        Dialect.SessionInfoFunctions!.Supports("current_database").Should().BeFalse();
+        Dialect.SessionInfoFunctions!.Render("version").Should().Be("sqlite_version()");
     }
 
     [Fact]
     public void UuidHooks_ShouldBeUnsupported()
     {
-        Dialect.SupportsUuidGenerators.Should().BeFalse();
-        Dialect.SupportsUuidGenerator("gen_random_uuid").Should().BeFalse();
+        Dialect.UuidGenerators.Should().BeNull();
     }
 }

@@ -39,10 +39,10 @@
   `lpad`, `initcap`, ...), POSIX-регулярные выражения (`regexp_replace`, `regexp_like`, ...), дата/время
   (`make_interval`, `justify_days`, `justify_hours`, `to_char`, `to_date`, ...), `num_nulls`/`num_nonnulls`
   и помощник типа `pg_typeof`;
-- session/info-функции включены ([`SupportsSessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SupportsSessionInfoFunctions) равно `true`):
+- session/info-функции включены ([`SessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SessionInfoFunctions) равно `true`):
   `SqlFunctions.Sql.current_user`/`session_user`/`current_schema` отрисовываются ключевыми словами, а
   `current_database`/`version` — как `current_database()`/`version()`;
-- генераторы UUID включены ([`SupportsUuidGenerators`](xref:NextORM.Core.ISqlDialect.SupportsUuidGenerators) равно `true`):
+- генераторы UUID включены ([`UuidGenerators`](xref:NextORM.Core.ISqlDialect.UuidGenerators) равно `true`):
   `SqlFunctions.Sql.gen_random_uuid()` отрисовывается как `gen_random_uuid()` (PostgreSQL 13+), а
   `uuidv7()` — как `uuidv7()` (PostgreSQL 18+);
 - логические, битовые, статистические и упорядоченные агрегаты включены ([`SupportsBooleanAggregates`](xref:NextORM.Core.ISqlDialect.SupportsBooleanAggregates),

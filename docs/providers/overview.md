@@ -48,6 +48,7 @@ change.
 | Paging without `ORDER BY` | accepted | injects `order by (select null as anyorder)` | accepted | accepted | accepted | accepted | accepted |
 | `INTERSECT ALL` / `EXCEPT ALL` (`*ALL`) | throws `NotSupportedException` | throws `NotSupportedException` | supported | throws `NotSupportedException` | supported | supported | not applicable |
 | Recursive CTE keyword | `with recursive` | `with` (plus `option (maxrecursion n)`) | `with recursive` | `with recursive` | `with recursive` | `with` (no recursive CTE support) | not applicable |
+| Named windows / `GROUPS` / `EXCLUDE` | named window + `GROUPS` + `EXCLUDE` | throws (no `WINDOW` clause) | named window + `GROUPS` + `EXCLUDE` | named window only | named window only | named window + `GROUPS` | not applicable |
 | String concatenation | `\|\|` | `+` | `\|\|` | `concat(a, b)` | `concat(a, b)` | `concat(a, b)` | not applicable |
 | Boolean literal | `1` / `0` | `1` / `0` (via `bit`) | `true` / `false` | `1` / `0` (`true` / `false`) | `1` / `0` (`true` / `false`) | `true` / `false` | not applicable |
 | `??` (coalesce) | `ifnull(a, b)` | `isnull(a, b)` | `coalesce(a, b)` | `coalesce(a, b)` | `coalesce(a, b)` | `coalesce(a, b)` | not applicable |
@@ -59,6 +60,8 @@ change.
 | `string_agg` | `group_concat(x, delimiter)` | supported (2017+) | supported | `group_concat(x separator delimiter)` | `group_concat(x separator delimiter)` | `arrayStringConcat(groupArray(...), ...)` | throws |
 | Full-text `contains` / `freetext` | throws | `contains` / `freetext` | `to_tsvector(...) @@ ...tsquery(...)` | `match(...) against(...)` | `match(...) against(...)` | throws | throws |
 | Bit / statistical / `-If` aggregates | throws | throws | supported | throws | throws | `groupBit*`, `corr`/`covarPop`, `countIf`/… | throws |
+| `multi_if` (multi-branch) | throws | throws | throws | throws | throws | `multiIf(c1, v1, …, else)` | not applicable |
+| `lag_in_frame` / `lead_in_frame` | throws | throws | throws | throws | throws | `lagInFrame` / `leadInFrame` | not applicable |
 | Identifier / alias quoting | single quotes: `as 't1'` | brackets: `as [t1]` | double quotes: `as "t1"` | backticks: `` as `t1` `` | backticks: `` as `t1` `` | backticks: `` as `t1` `` | not applicable |
 | Derived table (subquery in `FROM`) alias | not required | required | required | required | required | required | not applicable |
 | Table-valued function alias | not required | required | required | required | required | required | TVF source not supported |

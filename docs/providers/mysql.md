@@ -27,13 +27,13 @@ property. [`MySqlDialect`](xref:NextORM.MySql.MySqlDialect) (`src/nextorm.mysql/
   backslash as a string-literal escape;
 - paging is `limit n` / `limit n offset m`; an offset without a limit becomes
   `limit 18446744073709551615 offset m`, because MySQL only accepts `offset` together with `limit`;
-- the session/information family ([`SupportsSessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SupportsSessionInfoFunctions)) renders
+- the session/information family ([`SessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SessionInfoFunctions)) renders
   `SqlFunctions.Sql.current_user`/`session_user`/`current_database`/`version` as `current_user()`/`session_user()`/
   `database()`/`version()` and `current_schema` as `schema()`;
 - the arbitrary-value aggregate [`SqlFunctions.Sql.any_agg`](xref:NextORM.Core.CommonFunctions.any_agg``1) renders as
   `ANY_VALUE(x)` ([`SupportsAnyValueAggregate`](xref:NextORM.Core.ISqlDialect.SupportsAnyValueAggregate), MySQL 5.7+);
 - the portable conditional [`SqlFunctions.Sql.iif`](xref:NextORM.Core.CommonFunctions.iif``1) renders as
-  `if(condition, a, b)` ([`SupportsIif`](xref:NextORM.Core.ISqlDialect.SupportsIif), [`MakeIif`](xref:NextORM.Core.ISqlDialect.MakeIif)).
+  `if(condition, a, b)` ([`Iif`](xref:NextORM.Core.ISqlDialect.Iif), [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render)).
 
 ## Registering the provider
 

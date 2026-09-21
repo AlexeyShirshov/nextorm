@@ -18,17 +18,38 @@ if (loggerFactory is not null)
 
 await using var ctx = new PostgresDataContext(database.ConnectionString, contextBuilder);
 
-await AviasalesQueries.AircraftDelayChains(ctx, CancellationToken.None);
-await AviasalesQueries.BusinessOccupancyMatrix(ctx, CancellationToken.None);
-await AviasalesQueries.PassengerNoShowAnalysis(ctx, CancellationToken.None);
-await AviasalesQueries.RollingRevenueMetrics(ctx, CancellationToken.None);
-await AviasalesQueries.RouteNetworkAbcXyz(ctx, CancellationToken.None);
-await AviasalesQueries.TopRoutesByCity(ctx, CancellationToken.None);
-await AviasalesQueries.AirportOnTimePerformance(ctx, CancellationToken.None);
-await AviasalesQueries.DelayPercentilesByModel(ctx, CancellationToken.None);
-await AviasalesQueries.FrequentFlyers(ctx, CancellationToken.None);
-await AviasalesQueries.PassengerGrowth(ctx, CancellationToken.None);
-await AviasalesQueries.CancellationByRoute(ctx, CancellationToken.None);
+var results = new List<(string Name, Exception? Error)>();
+
+await Run("AircraftDelayChains", () => AviasalesQueries.AircraftDelayChains(ctx, CancellationToken.None));
+await Run("BusinessOccupancyMatrix", () => AviasalesQueries.BusinessOccupancyMatrix(ctx, CancellationToken.None));
+await Run("PassengerNoShowAnalysis", () => AviasalesQueries.PassengerNoShowAnalysis(ctx, CancellationToken.None));
+await Run("RollingRevenueMetrics", () => AviasalesQueries.RollingRevenueMetrics(ctx, CancellationToken.None));
+await Run("RouteNetworkAbcXyz", () => AviasalesQueries.RouteNetworkAbcXyz(ctx, CancellationToken.None));
+await Run("TopRoutesByCity", () => AviasalesQueries.TopRoutesByCity(ctx, CancellationToken.None));
+await Run("AirportOnTimePerformance", () => AviasalesQueries.AirportOnTimePerformance(ctx, CancellationToken.None));
+await Run("DelayPercentilesByModel", () => AviasalesQueries.DelayPercentilesByModel(ctx, CancellationToken.None));
+await Run("FrequentFlyers", () => AviasalesQueries.FrequentFlyers(ctx, CancellationToken.None));
+await Run("PassengerGrowth", () => AviasalesQueries.PassengerGrowth(ctx, CancellationToken.None));
+await Run("CancellationByRoute", () => AviasalesQueries.CancellationByRoute(ctx, CancellationToken.None));
+
+Console.WriteLine();
+Console.WriteLine($"{results.Count(r => r.Error is null)}/{results.Count} queries succeeded; " +
+                  $"{results.Count(r => r.Error is not null)} not working (see README).");
+
+async Task Run(string name, Func<Task> query)
+{
+    try
+    {
+        await query();
+        results.Add((name, null));
+        Console.WriteLine($"[ OK ] {name}");
+    }
+    catch (Exception ex) when (ex is NotSupportedException or QueryPreparationException)
+    {
+        results.Add((name, ex));
+        Console.WriteLine($"[FAIL] {name}: {ex.GetType().Name}: {ex.Message}");
+    }
+}
 
 static string? ParseConnectionString(string[] args, params string[] names)
 {

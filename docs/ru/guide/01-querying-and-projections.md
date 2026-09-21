@@ -364,10 +364,51 @@ var elements = dataContext
 select unnest as "Value" from unnest(@norm_p0) as "t1"
 ```
 
+Если полные имена `SqlFunctions.*` кажутся слишком громоздкими, импортируйте поверхность через
+`using static NextORM.Core.SqlFunctions;` и опустите префикс класса:
+
+```csharp
+using static NextORM.Core.SqlFunctions;
+
+var elements = dataContext
+    .FromTableFunction(() => Postgres.unnest(Parameter<long[]>(0)))
+    .Select(r => r.Value)
+    .ToList(new long[] { 1, 2, 3 });
+```
+
 `SqlFunctions.Postgres.generate_series(start, stop)` аналогично генерирует числовую последовательность.
 Встроенные помощники включаются провайдером ([`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect)), а
 пользовательская функция объявляется через `[SqlTableFunction]`; см.
 [Табличные функции](13-table-valued-functions.md).
+
+## Сэмплирование таблицы (`TABLESAMPLE`)
+
+[`TableSample`](xref:NextORM.Core.EntityBuilder`1) добавляет модификатор `TABLESAMPLE` к
+основной таблице, поэтому база читает только процент её строк вместо полного сканирования таблицы.
+Процент должен находиться в диапазоне `(0, 100]`; метод сэмплирования по умолчанию —
+[`TableSampleMethod.System`](xref:NextORM.Core.TableSampleMethod.System), а необязательное зерно (seed)
+делает выборку повторяемой:
+
+```csharp
+var rows = await dataContext.From<SimpleEntity>()
+    .TableSample(10, TableSampleMethod.System, seed: 42)
+    .Select(x => x.Id)
+    .ToListAsync();
+```
+
+```sql
+-- PostgreSQL
+select id from simple_entity tablesample system (10) repeatable (42)
+
+-- SQL Server
+select id from simple_entity tablesample (10 percent) repeatable (42)
+```
+
+PostgreSQL поддерживает и `System`, и [`Bernoulli`](xref:NextORM.Core.TableSampleMethod.Bernoulli);
+SQL Server поддерживает только `System`. Все остальные провайдеры выбрасывают `NotSupportedException`
+при построении SQL ([`TableSample`](xref:NextORM.Core.ISqlDialect.TableSample) и
+[`ITableSampleMethods.Render`](xref:NextORM.Core.ITableSampleMethods.Render)). Модификатор применяется только к
+основной таблице запроса.
 
 ## JSON-вывод (SQL Server)
 
@@ -408,6 +449,37 @@ select id from complex_entity for xml raw('row'), root('items'), elements
 ```
 
 `FOR JSON` и `FOR XML` взаимно исключают друг друга; их сочетание выбрасывает `NotSupportedException`.
+
+## Блокировка строк (`FOR UPDATE` / `FOR SHARE`)
+
+[`ForUpdate`](xref:NextORM.Core.EntityBuilder`1.ForUpdate) и
+[`ForShare`](xref:NextORM.Core.EntityBuilder`1.ForShare) блокируют выбранные строки до конца
+окружающей транзакции. PostgreSQL, MySQL и MariaDB генерируют завершающее предложение, которое
+ставится последним — после `WHERE`, `ORDER BY` и запроса страницы; SQL Server вместо этого
+привязывает табличный хинт `WITH (updlock)`/`WITH (holdlock)` к основной таблице:
+
+```csharp
+var rows = await dataContext.From<SimpleEntity>()
+    .Where(x => x.Id > 5)
+    .ForUpdate()
+    .ToListAsync();
+```
+
+```sql
+-- PostgreSQL / MySQL / MariaDB
+select id from simple_entity where (id > 5) for update
+
+-- SQL Server
+select id from simple_entity with (updlock) where (id > 5)
+```
+
+`ForUpdate()` блокирует строки монопольно; [`ForShare`](xref:NextORM.Core.EntityBuilder`1.ForShare)
+берёт разделяемую блокировку — PostgreSQL генерирует `for share`, MySQL/MariaDB генерируют
+`lock in share mode`, а SQL Server — `holdlock` (разделяемая) против `updlock` для `ForUpdate`.
+Предложение реализовано в PostgreSQL, MySQL, MariaDB и SQL Server
+([`Lock`](xref:NextORM.Core.ISqlDialect.Lock); в SQL Server — через
+[`ILockRenderer.UsesTableHints`](xref:NextORM.Core.ILockRenderer.UsesTableHints));
+все остальные провайдеры выбрасывают `NotSupportedException` при построении SQL.
 
 ## Различия провайдеров
 

@@ -41,13 +41,13 @@ public class ClickHouseDialectTests
     {
         Dialect.SupportsArrayFunctions.Should().BeTrue();
         Dialect.SupportsArrayJoin.Should().BeTrue();
-        Dialect.SupportsStringSplit.Should().BeTrue();
+        Dialect.StringSplit.Should().NotBeNull();
     }
 
     [Fact]
     public void MakeStringSplit_ShouldRenderSplitByChar()
     {
-        Dialect.MakeStringSplit("','", "somestring").Should().Be("splitByChar(',', somestring)");
+        Dialect.StringSplit!.Render("','", "somestring").Should().Be("splitByChar(',', somestring)");
     }
 
     [Fact]
@@ -102,20 +102,31 @@ public class ClickHouseDialectTests
     [Fact]
     public void MakeUniqAggregate_ShouldCastToInt64()
     {
-        Dialect.MakeUniqAggregate("uniq_exact", "x").Should().Be("toInt64(uniqExact(x))");
+        Dialect.UniqAggregates!.Render("uniq_exact", "x").Should().Be("toInt64(uniqExact(x))");
     }
 
     [Fact]
     public void MakeSequenceAggregate_ShouldMapProviderNames()
     {
-        Dialect.SupportsSequenceAggregates.Should().BeTrue();
+        Dialect.SequenceAggregates.Should().NotBeNull();
 
-        Dialect.MakeSequenceAggregate("window_funnel", "3600", "dt, id <= 2")
+        Dialect.SequenceAggregates!.Render("window_funnel", "3600", "dt, id <= 2")
             .Should().Be("toInt32(windowFunnel(3600)(dt, id <= 2))");
-        Dialect.MakeSequenceAggregate("sequence_match", "'(?1)(?2)'", "dt, id <= 1")
+        Dialect.SequenceAggregates!.Render("sequence_match", "'(?1)(?2)'", "dt, id <= 1")
             .Should().Be("toInt32(sequenceMatch('(?1)(?2)')(dt, id <= 1))");
-        Dialect.MakeSequenceAggregate("retention", null, "id <= 2, id <= 5")
+        Dialect.SequenceAggregates!.Render("retention", null, "id <= 2, id <= 5")
             .Should().Be("retention(id <= 2, id <= 5)");
+    }
+
+    [Fact]
+    public void MakeMultiIf_ShouldRenderMultiIfCallAndCastNumericResult()
+    {
+        Dialect.MultiIf.Should().NotBeNull();
+
+        Dialect.MultiIf!.Render(["id = 1", "'one'", "id = 2", "'two'", "'many'"], typeof(string))
+            .Should().Be("multiIf(id = 1, 'one', id = 2, 'two', 'many')");
+        Dialect.MultiIf!.Render(["id = 1", "1", "2"], typeof(long))
+            .Should().Be("cast(multiIf(id = 1, 1, 2) as Int64)");
     }
 
     [Fact]
@@ -193,14 +204,14 @@ public class ClickHouseDialectTests
     [Fact]
     public void MakeLimitBy_ShouldRenderClause()
     {
-        Dialect.SupportsLimitBy.Should().BeTrue();
+        Dialect.LimitBy.Should().NotBeNull();
 
         var sb = new StringBuilder();
-        Dialect.MakeLimitBy(5, 0, ["a", "b"], sb);
+        sb.Append(Dialect.LimitBy!.Render(5, 0, ["a", "b"]));
         sb.ToString().Should().Be("limit 5 by a, b");
 
         sb.Clear();
-        Dialect.MakeLimitBy(5, 2, ["a"], sb);
+        sb.Append(Dialect.LimitBy!.Render(5, 2, ["a"]));
         sb.ToString().Should().Be("limit 2, 5 by a");
     }
 
@@ -215,9 +226,9 @@ public class ClickHouseDialectTests
     [Fact]
     public void MakeQuantile_ShouldUseDoubleParenthesesAndCastToFloat64()
     {
-        Dialect.MakeQuantile("quantile", "0.5", "x").Should().Be("toFloat64(quantile(0.5)(x))");
-        Dialect.MakeQuantile("quantile_exact", "0.9", "x").Should().Be("toFloat64(quantileExact(0.9)(x))");
-        Dialect.MakeMedian("x").Should().Be("toFloat64(median(x))");
+        Dialect.QuantileAggregates!.Render("quantile", "0.5", "x").Should().Be("toFloat64(quantile(0.5)(x))");
+        Dialect.QuantileAggregates!.Render("quantile_exact", "0.9", "x").Should().Be("toFloat64(quantileExact(0.9)(x))");
+        Dialect.QuantileAggregates!.RenderMedian("x").Should().Be("toFloat64(median(x))");
     }
 
     [Fact]
@@ -241,19 +252,19 @@ public class ClickHouseDialectTests
     [Fact]
     public void MakeDateConversion_ShouldMapToClickHouseNames()
     {
-        Dialect.SupportsDateConversionFunctions.Should().BeTrue();
+        Dialect.DateConversion.Should().NotBeNull();
 
-        Dialect.MakeDateConversion("to_date", ["s"]).Should().Be("toDate(s)");
-        Dialect.MakeDateConversion("to_date_time", ["s"]).Should().Be("toDateTime(s)");
-        Dialect.MakeDateConversion("to_date32", ["s"]).Should().Be("toDate32(s)");
-        Dialect.MakeDateConversion("to_start_of_year", ["dt"]).Should().Be("toStartOfYear(dt)");
-        Dialect.MakeDateConversion("to_start_of_month", ["dt"]).Should().Be("toStartOfMonth(dt)");
-        Dialect.MakeDateConversion("to_start_of_week", ["dt"]).Should().Be("toStartOfWeek(dt)");
-        Dialect.MakeDateConversion("to_monday", ["dt"]).Should().Be("toMonday(dt)");
-        Dialect.MakeDateConversion("to_yyyymm", ["dt"]).Should().Be("toInt32(toYYYYMM(dt))");
-        Dialect.MakeDateConversion("to_yyyymmdd", ["dt"]).Should().Be("toInt32(toYYYYMMDD(dt))");
-        Dialect.MakeDateConversion("to_day_of_week", ["dt"]).Should().Be("toInt32(toDayOfWeek(dt))");
-        Dialect.MakeDateConversion("to_unix_timestamp", ["dt"]).Should().Be("toInt64(toUnixTimestamp(dt))");
+        Dialect.DateConversion!.Render("to_date", ["s"]).Should().Be("toDate(s)");
+        Dialect.DateConversion!.Render("to_date_time", ["s"]).Should().Be("toDateTime(s)");
+        Dialect.DateConversion!.Render("to_date32", ["s"]).Should().Be("toDate32(s)");
+        Dialect.DateConversion!.Render("to_start_of_year", ["dt"]).Should().Be("toStartOfYear(dt)");
+        Dialect.DateConversion!.Render("to_start_of_month", ["dt"]).Should().Be("toStartOfMonth(dt)");
+        Dialect.DateConversion!.Render("to_start_of_week", ["dt"]).Should().Be("toStartOfWeek(dt)");
+        Dialect.DateConversion!.Render("to_monday", ["dt"]).Should().Be("toMonday(dt)");
+        Dialect.DateConversion!.Render("to_yyyymm", ["dt"]).Should().Be("toInt32(toYYYYMM(dt))");
+        Dialect.DateConversion!.Render("to_yyyymmdd", ["dt"]).Should().Be("toInt32(toYYYYMMDD(dt))");
+        Dialect.DateConversion!.Render("to_day_of_week", ["dt"]).Should().Be("toInt32(toDayOfWeek(dt))");
+        Dialect.DateConversion!.Render("to_unix_timestamp", ["dt"]).Should().Be("toInt64(toUnixTimestamp(dt))");
     }
 
     [Theory]
@@ -305,26 +316,28 @@ public class ClickHouseDialectTests
         Dialect.SupportsQueryHints.Should().BeFalse();
         Dialect.SupportsDateTrunc.Should().BeTrue();
         Dialect.SupportsDateArithmetic.Should().BeTrue();
-        Dialect.SupportsDateConversionFunctions.Should().BeTrue();
+        Dialect.DateConversion.Should().NotBeNull();
         Dialect.SupportsStringAgg.Should().BeTrue();
         Dialect.SupportsArrayAgg.Should().BeFalse();
-        Dialect.SupportsStringSplit.Should().BeTrue();
+        Dialect.StringSplit.Should().NotBeNull();
         Dialect.SupportsBitAggregates.Should().BeTrue();
         Dialect.SupportsStatisticalAggregates.Should().BeTrue();
         Dialect.SupportsRegressionAggregates.Should().BeFalse();
         Dialect.SupportsArgMinMax.Should().BeTrue();
         Dialect.SupportsIfAggregates.Should().BeTrue();
-        Dialect.SupportsUniqAggregates.Should().BeTrue();
-        Dialect.SupportsQuantileAggregates.Should().BeTrue();
+        Dialect.UniqAggregates.Should().NotBeNull();
+        Dialect.QuantileAggregates.Should().NotBeNull();
         Dialect.SupportsAnyAggregates.Should().BeTrue();
         Dialect.SupportsAnyValueAggregate.Should().BeTrue();
         Dialect.SupportsPercentileWindow.Should().BeFalse();
         Dialect.SupportsPercentRankCumeDist.Should().BeTrue();
+        Dialect.SupportsInFrameWindowFunctions.Should().BeTrue();
+        Dialect.MultiIf.Should().NotBeNull();
         Dialect.SupportsJsonExtract.Should().BeTrue();
         Dialect.SupportsDictionaries.Should().BeTrue();
         Dialect.SupportsGroupByWithTotals.Should().BeTrue();
         Dialect.SupportsGlobalPredicates.Should().BeTrue();
-        Dialect.SupportsLimitBy.Should().BeTrue();
+        Dialect.LimitBy.Should().NotBeNull();
         Dialect.SupportsFinal.Should().BeTrue();
         Dialect.SupportsSample.Should().BeTrue();
         Dialect.SupportsPreWhere.Should().BeTrue();
@@ -334,24 +347,24 @@ public class ClickHouseDialectTests
     [Fact]
     public void SessionInfoHooks_ShouldUseClickHouseForms()
     {
-        Dialect.SupportsSessionInfoFunctions.Should().BeTrue();
-        Dialect.SupportsSessionInfoFunction("current_user").Should().BeTrue();
-        Dialect.SupportsSessionInfoFunction("current_database").Should().BeTrue();
-        Dialect.SupportsSessionInfoFunction("version").Should().BeTrue();
-        Dialect.SupportsSessionInfoFunction("session_user").Should().BeFalse();
-        Dialect.SupportsSessionInfoFunction("current_schema").Should().BeFalse();
-        Dialect.MakeSessionInfoFunction("current_user").Should().Be("currentUser()");
-        Dialect.MakeSessionInfoFunction("current_database").Should().Be("currentDatabase()");
-        Dialect.MakeSessionInfoFunction("version").Should().Be("version()");
+        Dialect.SessionInfoFunctions.Should().NotBeNull();
+        Dialect.SessionInfoFunctions!.Supports("current_user").Should().BeTrue();
+        Dialect.SessionInfoFunctions!.Supports("current_database").Should().BeTrue();
+        Dialect.SessionInfoFunctions!.Supports("version").Should().BeTrue();
+        Dialect.SessionInfoFunctions!.Supports("session_user").Should().BeFalse();
+        Dialect.SessionInfoFunctions!.Supports("current_schema").Should().BeFalse();
+        Dialect.SessionInfoFunctions!.Render("current_user").Should().Be("currentUser()");
+        Dialect.SessionInfoFunctions!.Render("current_database").Should().Be("currentDatabase()");
+        Dialect.SessionInfoFunctions!.Render("version").Should().Be("version()");
     }
 
     [Fact]
     public void UuidHooks_ShouldUseClickHouseForms()
     {
-        Dialect.SupportsUuidGenerators.Should().BeTrue();
-        Dialect.SupportsUuidGenerator("gen_random_uuid").Should().BeTrue();
-        Dialect.SupportsUuidGenerator("uuidv7").Should().BeTrue();
-        Dialect.MakeUuidGenerator("gen_random_uuid").Should().Be("generateUUIDv4()");
-        Dialect.MakeUuidGenerator("uuidv7").Should().Be("generateUUIDv7()");
+        Dialect.UuidGenerators.Should().NotBeNull();
+        Dialect.UuidGenerators!.Supports("gen_random_uuid").Should().BeTrue();
+        Dialect.UuidGenerators!.Supports("uuidv7").Should().BeTrue();
+        Dialect.UuidGenerators!.Render("gen_random_uuid").Should().Be("generateUUIDv4()");
+        Dialect.UuidGenerators!.Render("uuidv7").Should().Be("generateUUIDv7()");
     }
 }

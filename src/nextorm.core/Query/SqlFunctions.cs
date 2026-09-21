@@ -296,51 +296,51 @@ public static partial class SqlFunctions
 
         /// <summary>
         /// The name of the current user (<c>current_user</c>). Requires a provider that supports it
-        /// (see <see cref="ISqlDialect.SupportsSessionInfoFunctions"/> and
-        /// <see cref="ISqlDialect.SupportsSessionInfoFunction(string)"/>).
+        /// (see <see cref="ISqlDialect.SessionInfoFunctions"/> and
+        /// <see cref="ISessionInfoFunctions.Supports"/>).
         /// </summary>
         public string? current_user() => default!;
 
         /// <summary>
         /// The name of the session user (<c>session_user</c>). Requires a provider that supports it
-        /// (see <see cref="ISqlDialect.SupportsSessionInfoFunctions"/> and
-        /// <see cref="ISqlDialect.SupportsSessionInfoFunction(string)"/>).
+        /// (see <see cref="ISqlDialect.SessionInfoFunctions"/> and
+        /// <see cref="ISessionInfoFunctions.Supports"/>).
         /// </summary>
         public string? session_user() => default!;
 
         /// <summary>
         /// The current schema (<c>current_schema</c>). Requires a provider that supports it
-        /// (see <see cref="ISqlDialect.SupportsSessionInfoFunctions"/> and
-        /// <see cref="ISqlDialect.SupportsSessionInfoFunction(string)"/>).
+        /// (see <see cref="ISqlDialect.SessionInfoFunctions"/> and
+        /// <see cref="ISessionInfoFunctions.Supports"/>).
         /// </summary>
         public string? current_schema() => default!;
 
         /// <summary>
         /// The current database name (<c>current_database()</c>). Requires a provider that supports it
-        /// (see <see cref="ISqlDialect.SupportsSessionInfoFunctions"/> and
-        /// <see cref="ISqlDialect.SupportsSessionInfoFunction(string)"/>).
+        /// (see <see cref="ISqlDialect.SessionInfoFunctions"/> and
+        /// <see cref="ISessionInfoFunctions.Supports"/>).
         /// </summary>
         public string? current_database() => default!;
 
         /// <summary>
         /// The provider version string (<c>version()</c>). Requires a provider that supports it
-        /// (see <see cref="ISqlDialect.SupportsSessionInfoFunctions"/> and
-        /// <see cref="ISqlDialect.SupportsSessionInfoFunction(string)"/>).
+        /// (see <see cref="ISqlDialect.SessionInfoFunctions"/> and
+        /// <see cref="ISessionInfoFunctions.Supports"/>).
         /// </summary>
         public string? version() => default!;
 
         /// <summary>
         /// Generates a random UUID v4 (<c>gen_random_uuid()</c>). Requires a provider that supports it
-        /// (see <see cref="ISqlDialect.SupportsUuidGenerators"/> and
-        /// <see cref="ISqlDialect.SupportsUuidGenerator(string)"/>): PostgreSQL 13+, SQL Server
+        /// (see <see cref="ISqlDialect.UuidGenerators"/> and
+        /// <see cref="IUuidGenerators.Supports"/>): PostgreSQL 13+, SQL Server
         /// (<c>newid()</c>), MariaDB (<c>uuid_v4()</c>) and ClickHouse (<c>generateUUIDv4()</c>).
         /// </summary>
         public Guid? gen_random_uuid() => default!;
 
         /// <summary>
         /// Generates a UUID v7 (<c>uuidv7()</c>). Requires a provider that supports it
-        /// (see <see cref="ISqlDialect.SupportsUuidGenerators"/> and
-        /// <see cref="ISqlDialect.SupportsUuidGenerator(string)"/>): PostgreSQL 18+, MariaDB 11.7+
+        /// (see <see cref="ISqlDialect.UuidGenerators"/> and
+        /// <see cref="IUuidGenerators.Supports"/>): PostgreSQL 18+, MariaDB 11.7+
         /// (<c>uuid_v7()</c>) and ClickHouse (<c>generateUUIDv7()</c>).
         /// </summary>
         public Guid? uuidv7() => default!;
@@ -361,7 +361,7 @@ public static partial class SqlFunctions
         /// <summary>
         /// <c>iif(condition, whenTrue, whenFalse)</c>: the conditional expression, rendered as <c>iif</c>
         /// (SQL Server, SQLite), <c>if</c> (MySQL/MariaDB, ClickHouse) or <c>case when ... then ... else ... end</c>
-        /// (PostgreSQL). Requires a provider that supports it (see <see cref="ISqlDialect.SupportsIif"/>).
+        /// (PostgreSQL). Requires a provider that supports it (see <see cref="ISqlDialect.Iif"/>).
         /// </summary>
         public TResult? iif<TResult>(bool condition, TResult? whenTrue, TResult? whenFalse) => default!;
 

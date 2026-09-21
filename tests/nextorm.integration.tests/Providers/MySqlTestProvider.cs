@@ -36,6 +36,7 @@ internal sealed class MySqlTestProvider : ITestProvider
     // so it is skipped for now.
     public bool SupportsTableValuedFunctions => false;
     public bool EnforcesScalarSubqueryCardinality => true;
+    public bool SupportsApply => true;
     public string TableValuedFunctionSkipReason => "The shared table-valued function test uses SQLite's json_each; MySQL exposes JSON rows through JSON_TABLE with a different shape.";
 
     public string SkipReason => MySqlContainer.Failure ?? "MySQL is not available.";

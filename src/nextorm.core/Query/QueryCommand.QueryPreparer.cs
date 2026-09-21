@@ -49,6 +49,7 @@ public partial class QueryCommand
             var (groupingList, groupingPlanHash) = PrepareGrouping(cmd, dontCalculateHash, cancellationToken);
             var limitByColumns = PrepareLimitBy(cmd, cancellationToken);
             var distinctOnColumns = PrepareDistinctOn(cmd, cancellationToken);
+            PrepareWindows(cmd, dontCalculateHash);
             var sortingPlanHash = PrepareSorting(cmd, dontCalculateHash, cancellationToken);
 
             cmd._union?.PrepareCommand(dontCalculateHash, cancellationToken);
@@ -148,6 +149,9 @@ public partial class QueryCommand
         {
             if (from?.SubQuery is not null && !from.SubQuery._isPrepared)
                 from.SubQuery.PrepareCommand(dontCalculateHash, cancellationToken);
+
+            if (from?.Pivot is not null)
+                PrepareFrom(from.Pivot.Inner, dontCalculateHash, cancellationToken);
         }
 
         private static void PrepareCtes(QueryCommand cmd, bool noHash, CancellationToken cancellationToken)
@@ -214,7 +218,29 @@ public partial class QueryCommand
             || type == typeof(Guid)
             || (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>));
 
-        private static (SelectExpression[]?, int) PrepareColumns(QueryCommand cmd, bool noHash, Type? srcType, CancellationToken cancellationToken)
+        private static readonly MethodInfo CountAllMI = typeof(CommonFunctions).GetMethod(nameof(CommonFunctions.count), [typeof(object[])])!;
+    private static readonly MethodInfo AbsMI = typeof(Math).GetMethod(nameof(Math.Abs), [typeof(long)])!;
+
+    /// <summary>
+    /// Wraps a scalar-subquery projection in a
+    /// <c>case when count(*) &gt; 1 then &lt;numeric overflow&gt; else value end</c> guard so a dialect
+    /// without scalar-subquery cardinality enforcement (SQLite) raises a database error on a second row
+    /// instead of silently returning the first. Non-numeric projections are left untouched; the dialect
+    /// rejects those (<see cref="QueryCommand.IsCardinalityGuardable"/>).
+    /// </summary>
+    private static Expression WrapSingleScalarCardinalityGuard(Expression expression)
+    {
+        if (expression is not LambdaExpression lambda || !QueryCommand.IsCardinalityGuardable(lambda.Body.Type))
+            return expression;
+
+        var count = Expression.Call(CommonFunctions.SQLExpression, CountAllMI, Expression.NewArrayInit(typeof(object)));
+        var moreThanOne = Expression.GreaterThan(count, Expression.Constant(1));
+        var overflow = Expression.Call(AbsMI, Expression.Constant(long.MinValue));
+        var body = Expression.Condition(moreThanOne, Expression.Convert(overflow, lambda.Body.Type), lambda.Body);
+        return Expression.Lambda(body, lambda.Parameters);
+    }
+
+    private static (SelectExpression[]?, int) PrepareColumns(QueryCommand cmd, bool noHash, Type? srcType, CancellationToken cancellationToken)
         {
             var selectList = cmd._selectList;
             int columnsPlanHash = 7;
@@ -272,6 +298,12 @@ public partial class QueryCommand
                         {
                             Expression = selectExp,
                         };
+                        // A dialect that does not enforce scalar-subquery cardinality (SQLite) would
+                        // silently return the first row for Single/SingleOrDefault, so wrap the
+                        // projection in a guard that raises a database error on a second row.
+                        if (cmd.SingleScalar
+                            && (cmd._dataContext as DataContext)?.Dialect is { EnforcesScalarSubqueryCardinality: false })
+                            selExp.Expression = WrapSingleScalarCardinalityGuard(selExp.Expression);
                         selExp.DefaultOnNull = !selExp.Nullable && CorrelatedQueryExpressionVisitor.IsOrDefaultScalar(cmd._exp.Body);
                         if (!cmd._dontCache && !noHash)
                             selExp.PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
@@ -400,7 +432,23 @@ public partial class QueryCommand
                 {
                     var join = cmd._joins[idx];
 
-                    PrepareFrom(join.From, noHash, cancellationToken);
+                    if (join.ApplySource is { } applySource)
+                    {
+                        // A correlated CROSS/OUTER APPLY source: build the derived query with the
+                        // left-hand row in scope, so its column references become outer references of
+                        // this command; the built command is installed as the join source and rendered
+                        // like any other derived table by the apply clause.
+                        var applyVisitor = new CorrelatedQueryExpressionVisitor(cmd._dataContext!, cmd, cancellationToken, cmd._dataContext!.Logger);
+                        using var outerScope = applyVisitor.PushOuter(applySource.Parameters[0]);
+                        var applyCommand = applyVisitor.BuildQueryCommand(applySource.Body);
+                        if (!applyCommand.IsPrepared)
+                            applyCommand.PrepareCommand(noHash, cancellationToken);
+                        join.SetFrom(new FromExpression(applyCommand));
+                    }
+                    else
+                    {
+                        PrepareFrom(join.From, noHash, cancellationToken);
+                    }
 
                     if (!cmd._dontCache && !noHash) unchecked
                         {
@@ -546,6 +594,55 @@ public partial class QueryCommand
             return columns;
         }
 
+        /// <summary>
+        /// Folds the named window definitions into the plan key: their names, partition/order keys and
+        /// frames all change the emitted <c>WINDOW</c> clause, so two otherwise identical commands must
+        /// not share a cached plan.
+        /// </summary>
+        private static void PrepareWindows(QueryCommand cmd, bool noHash)
+        {
+            if (cmd.Windows is not { Count: > 0 } windows)
+                return;
+
+            if (cmd._dontCache || noHash)
+                return;
+
+            var comparer = cmd.GetExpressionPlanEqualityComparer();
+
+            XxHash32 hash = new();
+            unchecked
+            {
+                for (var i = 0; i < windows.Count; i++)
+                {
+                    var window = windows[i];
+                    hash.Add(window.Name);
+
+                    for (var p = 0; p < window.PartitionBy.Count; p++)
+                        hash.Add((Expression)window.PartitionBy[p], comparer);
+
+                    for (var o = 0; o < window.OrderBy.Count; o++)
+                    {
+                        var key = window.OrderBy[o];
+                        hash.Add((int)key.Direction);
+                        hash.Add(key.Expression, comparer);
+                    }
+
+                    if (window.Frame is { } frame)
+                    {
+                        hash.Add((int)frame.Type);
+                        hash.Add((int)frame.Start.Kind);
+                        hash.Add(frame.Start.Offset);
+                        hash.Add((int)frame.End.Kind);
+                        hash.Add(frame.End.Offset);
+                        if (frame.Exclusion is { } exclusion)
+                            hash.Add((int)exclusion);
+                    }
+                }
+
+                cmd.WindowsPlanHash = hash.ToHashCode();
+            }
+        }
+
         private static SelectExpression[] BuildKeyColumns(LambdaExpression expression, string clauseName, CancellationToken cancellationToken)
         {
             if (expression.Body is NewExpression ctor && !IsSingleColumnType(ctor.Type))
@@ -596,51 +693,39 @@ public partial class QueryCommand
             int groupingPlanHash = 7;
             if (cmd._groupExp is not null && groupingList is null)
             {
-                if (cmd._groupExp.Body is NewExpression ctor && !IsSingleColumnType(ctor.Type))
+                var columns = BuildKeyColumns(cmd._groupExp, "GROUP BY", cancellationToken);
+                groupingList = columns;
+
+                for (var idx = 0; idx < columns.Length; idx++)
                 {
-                    var args = ctor.Arguments;
-                    var argsCount = args.Count;
+                    if (cancellationToken.IsCancellationRequested)
+                        return (groupingList, groupingPlanHash);
 
-                    groupingList = new SelectExpression[argsCount];
+                    var selExp = columns[idx];
+                    if (!noHash)
+                        selExp.PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
 
-                    for (var idx = 0; idx < argsCount; idx++)
-                    {
-                        if (cancellationToken.IsCancellationRequested)
-                            return (groupingList, groupingPlanHash);
-
-                        var arg = args[idx];
-                        var ctorParam = ctor.Constructor!.GetParameters()[idx];
-
-                        var selExp = new SelectExpression(ctorParam.ParameterType)
+                    if (!cmd._dontCache && !noHash) unchecked
                         {
-                            Index = idx,
-                            PropertyName = ctorParam.Name!,
-                            Expression = arg
-                        };
-                        if (!noHash)
-                            selExp.PlanHashCode = cmd.GetSelectExpressionPlanEqualityComparer().GetHashCode(selExp);
-                        groupingList[idx] = selExp;
-
-                        if (!cmd._dontCache && !noHash) unchecked
-                            {
-                                groupingPlanHash = groupingPlanHash * 13 + selExp.PlanHashCode;
-                            }
-                    }
+                            groupingPlanHash = groupingPlanHash * 13 + selExp.PlanHashCode;
+                        }
                 }
-                else
-                    throw new InvalidOperationException("Only new expression is supported");
             }
 
             if (cmd._having is not null)
             {
-                // A subquery in HAVING is not carried through the correlated-query visitor (it is only
-                // visited by the renderer), so it would emit garbage such as a raw inner-command node.
-                // Reject it explicitly instead of emitting silently invalid SQL.
-                if (ContainsSubquery(cmd._having))
-                    throw new NotSupportedException("Subqueries are not supported in HAVING; move the condition to WHERE or project it in SELECT.");
+                // Run the correlated-query visitor over HAVING just like WHERE: a subquery in the
+                // predicate (correlated on the grouping key or not) then registers its outer references
+                // on this command and renders through the normal select path. The visited form is cached
+                // on the command and preferred by the renderer.
+                var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(cmd._dataContext!, cmd, cancellationToken, cmd._dataContext!.Logger);
+                cmd.PreparedHaving = innerQueryVisitor.Visit(cmd._having);
 
                 if (!cmd._dontCache && !noHash) unchecked
                     {
+                        // Hash the raw HAVING lambda, matching QueryPlanEqualityComparer.Equals which
+                        // compares <c>Having</c>; the prepared form is a deterministic function of it and
+                        // of the outer references that the plan key already covers.
                         groupingPlanHash = groupingPlanHash * 13 + cmd.GetExpressionPlanEqualityComparer().GetHashCode(cmd._having);
                     }
             }
@@ -648,41 +733,5 @@ public partial class QueryCommand
             return (groupingList, groupingPlanHash);
         }
 
-        /// <summary>True when the expression contains a subquery (an <see cref="EntityBuilder{T}"/> chain or a query command).</summary>
-        private static bool ContainsSubquery(Expression expression)
-        {
-            var detector = new SubqueryDetector();
-            detector.Visit(expression);
-            return detector.Found;
-        }
-
-        private sealed class SubqueryDetector : ExpressionVisitor
-        {
-            public bool Found { get; private set; }
-
-            public override Expression? Visit(Expression? node)
-                => Found || node is null ? node : base.Visit(node);
-
-            protected override Expression VisitMethodCall(MethodCallExpression node)
-            {
-                if (node.Object?.Type.IsAssignableTo(typeof(QueryCommand)) == true
-                    || node.Type.IsAssignableTo(typeof(QueryCommand)))
-                {
-                    Found = true;
-                    return node;
-                }
-
-                for (var i = 0; i < node.Arguments.Count; i++)
-                {
-                    if (node.Arguments[i].Type.IsAssignableTo(typeof(QueryCommand)))
-                    {
-                        Found = true;
-                        return node;
-                    }
-                }
-
-                return base.VisitMethodCall(node);
-            }
-        }
     }
 }

@@ -253,4 +253,123 @@ public abstract partial class CommonTestSuite
         r.Should().HaveCount(3);
         r.Should().OnlyContain(x => x.a == x.Id && x.b == x.Id);
     }
+
+    /// <summary>
+    /// A subquery in HAVING is prepared through the correlated-query visitor like WHERE, so a
+    /// correlated <c>exists</c> can reference the grouping key. It used to be rejected with
+    /// <c>NotSupportedException</c> because HAVING was never run through the visitor.
+    /// </summary>
+    [Fact]
+    public void CorrelatedExistsInHaving_ShouldEvaluatePerGroup()
+    {
+        var r = _sut.ComplexEntity
+            .Where(e => e.Int != null)
+            .GroupBy(e => new { e.Int })
+            .Having(g => SqlFunctions.Sql.exists(_sut.ComplexEntity.Where(c => c.Int == g.Int)))
+            .Select(g => new { g.Int, count = SqlFunctions.Sql.count() })
+            .ToList();
+
+        r.Should().NotBeEmpty();
+    }
+
+    /// <summary>
+    /// Correlation depth greater than one: the innermost subquery references both the middle subquery's
+    /// parameter and the outermost one, and evaluates per outer row.
+    /// </summary>
+    [Fact]
+    public void NestedCorrelationDepth2_ShouldEvaluatePerRow()
+    {
+        var r = _sut.ComplexEntity
+            .Select(it => new
+            {
+                it.Id,
+                x = _sut.SimpleEntity.Where(s => s.Id == it.Id)
+                       .Select(s => _sut.SimpleEntity.Where(s2 => s2.Id == s.Id && s2.Id == it.Id).Select(s2 => s2.Id).First())
+                       .First()
+            })
+            .ToList();
+
+        r.Should().NotBeEmpty();
+        r.Should().OnlyContain(row => row.x == (int)row.Id);
+    }
+
+    /// <summary>
+    /// An aggregate terminal (<c>Count</c>/<c>Max</c>/...) inside a correlated subquery is rewritten to
+    /// the equivalent aggregate projection, so it evaluates per outer row on every SQL provider.
+    /// </summary>
+    [Fact]
+    public void CorrelatedAggregateTerminalInSelect_ShouldAggregatePerRow()
+    {
+        var r = _sut.ComplexEntity
+            .Select(it => new
+            {
+                it.Id,
+                cnt = _sut.ComplexEntity.Where(c => c.Id == it.Id).Count(),
+                mx = _sut.ComplexEntity.Where(c => c.Id == it.Id).Max(c => (long?)c.Id)
+            })
+            .ToList();
+
+        r.Should().NotBeEmpty();
+        r.Should().OnlyContain(row => row.cnt == 1 && row.mx == row.Id);
+    }
+
+    /// <summary>
+    /// A correlated reference may be wrapped in a function over the outer column
+    /// (<c>e.String.ToUpper()</c>); the member translator rewrites the outer column to its marker and
+    /// the ordinary scalar translator renders the call around it.
+    /// </summary>
+    [Fact]
+    public void CorrelatedFunctionOverOuterColumn_ShouldEvaluatePerRow()
+    {
+        var r = _sut.ComplexEntity
+            .Where(e => e.String != null)
+            .Select(e => new
+            {
+                e.Id,
+                matches = SqlFunctions.Sql.exists(_sut.ComplexEntity.Where(c => c.String == e.String!.ToUpper()))
+            })
+            .ToList();
+
+        r.Should().NotBeEmpty();
+    }
+
+    /// <summary>
+    /// A correlated <c>CROSS APPLY</c>/<c>CROSS JOIN LATERAL</c> source is evaluated per left-hand
+    /// row, so a match filter on the outer key keeps only the matching left rows.
+    /// </summary>
+    [Fact]
+    public void CorrelatedCrossApply_ShouldEvaluatePerOuterRow()
+    {
+        Assert.SkipUnless(Provider.SupportsApply, ApplySkipReason);
+
+        var r = _sut.SimpleEntity
+            .CrossApply(s => _sut.ComplexEntity.Where(c => c.Id == s.Id).Select(c => new { c.Id, c.String }))
+            .Select(p => new { p.Item1.Id, p.Item2.String })
+            .ToList();
+
+        r.Should().HaveCount(3);
+        r.Select(x => x.Id).Should().BeEquivalentTo(new[] { 1, 2, 3 });
+    }
+
+    /// <summary>
+    /// A correlated <c>OUTER APPLY</c>/<c>LEFT JOIN LATERAL ... ON true</c> keeps left-hand rows with
+    /// no match, projecting NULLs from the applied source.
+    /// </summary>
+    [Fact]
+    public void CorrelatedOuterApply_ShouldPreserveUnmatchedRows()
+    {
+        Assert.SkipUnless(Provider.SupportsApply, ApplySkipReason);
+
+        var r = _sut.SimpleEntity
+            .OuterApply(s => _sut.ComplexEntity.Where(c => c.Id == s.Id).Select(c => new { c.Id }))
+            .Select(p => new { p.Item1.Id, cid = (long?)p.Item2.Id })
+            .ToList();
+
+        r.Should().HaveCount(10);
+        r.Count(x => x.cid is null).Should().Be(7);
+        r.Where(x => x.cid is not null).Select(x => x.Id).Should().BeEquivalentTo(new[] { 1, 2, 3 });
+    }
+
+    private static string ApplySkipReason =>
+        "This provider has no lateral/APPLY source, so a correlated APPLY cannot be rendered.";
 }

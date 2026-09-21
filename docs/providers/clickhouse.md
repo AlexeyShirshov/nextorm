@@ -25,7 +25,7 @@ and returns [`Instance`](xref:NextORM.ClickHouse.ClickHouseDialect.Instance) fro
   `addYears`/`addQuarters`/…/`addSeconds` functions (`decade`/`century`/`millennium` fold onto a scaled
   `addYears`), `end_of_month` as `toLastDayOfMonth(x)`;
 - the date conversion/part surface `SqlFunctions.ClickHouse.to_*` (gated by
-  [`SupportsDateConversionFunctions`](xref:NextORM.Core.ISqlDialect.SupportsDateConversionFunctions)):
+  [`DateConversion`](xref:NextORM.Core.ISqlDialect.DateConversion)):
   `to_date`/`to_date_time`/`to_date32` as `toDate`/`toDateTime`/`toDate32`, the `to_year`/`to_quarter`/
   `to_month`/`to_day_of_month`/`to_day_of_week`/`to_day_of_year`/`to_hour`/`to_minute`/`to_second`
   accessors (and the `DateTime.Year`/`Month`/… projections) as `toYear`/`toQuarter`/… wrapped in
@@ -65,7 +65,7 @@ and returns [`Instance`](xref:NextORM.ClickHouse.ClickHouseDialect.Instance) fro
 - ClickHouse type names in casts (`Int32`, `Int64`, `Float64`, `Decimal(38, 10)`, …);
 - `limit n` / `limit n offset m` paging; an offset without a limit becomes
   `limit 18446744073709551615 offset m`, because ClickHouse only accepts `offset` together with `limit`;
-- `LIMIT n BY expr` ([`SupportsLimitBy`](xref:NextORM.Core.ISqlDialect.SupportsLimitBy)) via
+- `LIMIT n BY expr` ([`LimitBy`](xref:NextORM.Core.ISqlDialect.LimitBy)) via
   `EntityBuilder.LimitBy(...)`: at most `n` rows per distinct key, emitted after `ORDER BY` and before the
   final `LIMIT`;
 - the `numbers`/`numbers_mt` table functions via `SqlFunctions.ClickHouse.numbers(...)` (the `UInt64`
@@ -76,10 +76,14 @@ and returns [`Instance`](xref:NextORM.ClickHouse.ClickHouseDialect.Instance) fro
   `PreWhere(predicate)` and `Settings(("key", "value"), ...)`
   ([`SupportsFinal`](xref:NextORM.Core.ISqlDialect.SupportsFinal)/[`SupportsSample`](xref:NextORM.Core.ISqlDialect.SupportsSample)/[`SupportsPreWhere`](xref:NextORM.Core.ISqlDialect.SupportsPreWhere)/[`SupportsSettings`](xref:NextORM.Core.ISqlDialect.SupportsSettings));
   `FINAL`/`PREWHERE` need a table engine that supports them (the `Memory` engine rejects both);
-- the portable conditional `iif` as `if(condition, a, b)` ([`SupportsIif`](xref:NextORM.Core.ISqlDialect.SupportsIif),
-  [`MakeIif`](xref:NextORM.Core.ISqlDialect.MakeIif)), and the `percent_rank()`/`cume_dist()` and
-  `nth_value(expr, n)` window functions ([`SupportsPercentRankCumeDist`](xref:NextORM.Core.ISqlDialect.SupportsPercentRankCumeDist),
-  [`SupportsNthValue`](xref:NextORM.Core.ISqlDialect.SupportsNthValue));
+- the portable conditional `iif` as `if(condition, a, b)` ([`Iif`](xref:NextORM.Core.ISqlDialect.Iif),
+  [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render)), the ClickHouse-only multi-branch `multiIf` built with
+  `when(...)`/`otherwise(...)` ([`MultiIf`](xref:NextORM.Core.ISqlDialect.MultiIf),
+  [`IMultiIfRenderer.Render`](xref:NextORM.Core.IMultiIfRenderer.Render)), and the `percent_rank()`/`cume_dist()`,
+  `nth_value(expr, n)` and frame-respecting `lagInFrame(value[, offset[, default]])`/`leadInFrame(...)`
+  window functions ([`SupportsPercentRankCumeDist`](xref:NextORM.Core.ISqlDialect.SupportsPercentRankCumeDist),
+  [`SupportsNthValue`](xref:NextORM.Core.ISqlDialect.SupportsNthValue),
+  [`SupportsInFrameWindowFunctions`](xref:NextORM.Core.ISqlDialect.SupportsInFrameWindowFunctions));
 - the distributed `GLOBAL IN` predicate via
   [`SqlFunctions.ClickHouse.global_in`](xref:NextORM.Core.ClickHouseFunctions) (over a subquery or a
   value list, [`SupportsGlobalPredicates`](xref:NextORM.Core.ISqlDialect.SupportsGlobalPredicates));
@@ -156,8 +160,8 @@ select concat('id:', id) as `Label` from simple_entity
 | quantile / median | `quantile(0.5)(x)`, `quantileExact(0.9)(x)`, `quantileTiming(0.5)(x)`, `median(x)` (as `toFloat64(...)`) |
 | any_agg (arbitrary value) | `any(x)` (cross-provider; `ANY_VALUE(x)` on MySQL) |
 | any_last (last row) | `anyLast(x)` |
-| Conditional function | `iif(cond, a, b)` → `if(cond, a, b)` |
-| Window functions | `percent_rank()`, `cume_dist()`, `nth_value(expr, n)` supported |
+| Conditional function | `iif(cond, a, b)` → `if(cond, a, b)`; `multi_if(when(c1, v1), ..., otherwise(v))` → `multiIf(c1, v1, ..., v)` |
+| Window functions | `percent_rank()`, `cume_dist()`, `nth_value(expr, n)` supported; `lag_in_frame`/`lead_in_frame` → `lagInFrame`/`leadInFrame` (frame-respecting; the plain `lag`/`lead` reject an explicit frame on ClickHouse) |
 | String JSON | `JSONExtractString`, `JSONExtractInt`, `JSONExtractFloat`, `JSONExtractBool`, `JSONExtractRaw`, `JSONHas`, `toInt64(JSONLength(...))`, `JSONType`, `visitParamExtract*`, `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (JSONPath) |
 | Dictionaries | `dictGet`, `dictGetOrDefault`, `dictHas` (needs a configured `CREATE DICTIONARY`) |
 | Session/info functions | `currentUser()`, `currentDatabase()`, `version()` (`session_user`/`current_schema` are not available) |
@@ -165,7 +169,7 @@ select concat('id:', id) as `Label` from simple_entity
 | `LIMIT n BY expr` | `limit [offset, ]n by col1, col2` (before the final `LIMIT`) |
 | Query modifiers | `final`, `sample r [offset o]`, `prewhere`, `settings k = v` (`FINAL`/`PREWHERE` need a supporting table engine) |
 | Table functions | `numbers`/`numbers_mt` (the `UInt64 number` column is cast to `Int64`), `zeros`/`zeros_mt` (`zero UInt8`), `generateRandom` (the built-in `generate_random()`/`generate_random(seed)` fix the structure `id UInt64, value Float64, name String` and cast `id` to `Int64`) |
-| Array functions | over `Array(T)` columns/expressions: `length`, `has`, `indexOf`, `hasAny`, `hasAll`, `arrayStringConcat`, `splitByChar`, `arraySort`, `arrayReverse`, `arrayDistinct`, `range`, `arrayEnumerate`, `arrayCumSum`, `arraySlice`, `arrayPushBack`; the CLR `string.Split` renders as `splitByChar(separator, value)` under [`SupportsStringSplit`](xref:NextORM.Core.ISqlDialect.SupportsStringSplit) (one-character separator only); `arrayJoin(array)` expands one row per element, and `EntityBuilder.ArrayJoin`/`LeftArrayJoin` render the `[left ]array join expr, ...` clause. `EntityBuilder.ArrayJoinElement`/`LeftArrayJoinElement` additionally bind the expanded element to `ArrayJoinProjection<TEntity, TElement>.Element` (with the original entity at `.Item1`); the clause expression is aliased and `p.Element` references that alias (see [`ClickHouseFunctions`](xref:NextORM.Core.ClickHouseFunctions), [`ArrayJoinKind`](xref:NextORM.Core.ArrayJoinKind), [`ArrayJoinProjection`](xref:NextORM.Core.ArrayJoinProjection`2)) |
+| Array functions | over `Array(T)` columns/expressions: `length`, `has`, `indexOf`, `hasAny`, `hasAll`, `arrayStringConcat`, `splitByChar`, `arraySort`, `arrayReverse`, `arrayDistinct`, `range`, `arrayEnumerate`, `arrayCumSum`, `arraySlice`, `arrayPushBack`; the CLR `string.Split` renders as `splitByChar(separator, value)` under [`StringSplit`](xref:NextORM.Core.ISqlDialect.StringSplit) (one-character separator only); `arrayJoin(array)` expands one row per element, and `EntityBuilder.ArrayJoin`/`LeftArrayJoin` render the `[left ]array join expr, ...` clause. `EntityBuilder.ArrayJoinElement`/`LeftArrayJoinElement` additionally bind the expanded element to `ArrayJoinProjection<TEntity, TElement>.Element` (with the original entity at `.Item1`); the clause expression is aliased and `p.Element` references that alias (see [`ClickHouseFunctions`](xref:NextORM.Core.ClickHouseFunctions), [`ArrayJoinKind`](xref:NextORM.Core.ArrayJoinKind), [`ArrayJoinProjection`](xref:NextORM.Core.ArrayJoinProjection`2)) |
 | Native JSON / extended scalars | not supported (PostgreSQL-only) |
 
 ## Notes and limitations
@@ -178,6 +182,14 @@ select concat('id:', id) as `Label` from simple_entity
 - Null parameter values cannot have their ClickHouse type inferred from the CLR value alone. When a
   query binds a `null` parameter, set an explicit parameter type at the driver level (for example with
   a custom resolver) or cast the placeholder in SQL.
+- ClickHouse rejects an explicit window frame on the standard `lag`/`lead` (and other non-frame-aware
+  window functions) with `BAD_ARGUMENTS`. Use `SqlFunctions.ClickHouse.lag_in_frame`/`lead_in_frame`
+  when the calculation must respect the frame; their `lag`/`lead` spelling is frame-agnostic.
+- `multi_if` returns the common supertype ClickHouse infers for its branches. When `TResult` is a
+  numeric CLR type the whole call is cast to it (`cast(multiIf(...) as Int64)`, `Float64`, ...), because
+  ClickHouse would otherwise materialise the common type (for example `UInt8` for small integer
+  literals), which the row reader cannot read back; non-numeric results (string, date) are not cast, so
+  choose a `TResult` matching the branches for those.
 
 ## See also
 

@@ -34,6 +34,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     private LambdaExpression? _preWhere;
     private List<LambdaExpression>? _arrayJoins;
     private ArrayJoinKind _arrayJoinKind;
+    private List<WindowDefinition>? _windows;
     private Type? _sourceEntityType;
     private bool _bindArrayJoinElement;
     private List<KeyValuePair<string, string>>? _settings;
@@ -94,6 +95,8 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     internal LambdaExpression? PreWhereCondition { get => _preWhere; set => _preWhere = value; }
     /// <summary>The <c>ARRAY JOIN</c> expressions (ClickHouse), or <c>null</c> when there are none.</summary>
     internal IReadOnlyList<LambdaExpression>? ArrayJoins { get => _arrayJoins; set => _arrayJoins = value is null ? null : [.. value]; }
+    /// <summary>The named window definitions declared for this query, or <c>null</c> when there are none.</summary>
+    internal IReadOnlyList<WindowDefinition>? Windows { get => _windows; set => _windows = value is null ? null : [.. value]; }
     /// <summary>The <c>ARRAY JOIN</c> kind (plain or <c>LEFT</c>) shared by <see cref="ArrayJoins"/>.</summary>
     internal ArrayJoinKind ArrayJoinKind { get => _arrayJoinKind; set => _arrayJoinKind = value; }
     /// <summary>Table-level hints applied to the primary physical table (for example SQL Server <c>nolock</c>).</summary>
@@ -140,6 +143,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             Settings = _settings,
             PreWhere = _preWhere,
             ArrayJoins = _arrayJoins,
+            Windows = _windows,
             ArrayJoinKind = _arrayJoinKind,
             BindArrayJoinElement = _bindArrayJoinElement,
         });
@@ -187,6 +191,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             Settings = _settings,
             PreWhere = _preWhere,
             ArrayJoins = _arrayJoins,
+            Windows = _windows,
             ArrayJoinKind = _arrayJoinKind,
             BindArrayJoinElement = _bindArrayJoinElement,
         });
@@ -320,7 +325,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// array element (a row whose array is empty is dropped). Repeated calls append to the same clause.
     /// The expanded element is not bound to a CLR member: use
     /// <see cref="ClickHouseFunctions.array_join{T}(T[])"/> in the projection when the value is needed.
-    /// Requires a dialect that supports it (see <see cref="ISqlDialect.SupportsArrayJoinClause"/>).
+    /// Requires a dialect that supports it (see <see cref="ISqlDialect.ArrayJoinClause"/>).
     /// </summary>
     public EntityBuilder<TEntity> ArrayJoin<TArray>(Expression<Func<TEntity, TArray>> array)
         => AddArrayJoin(array, ArrayJoinKind.Inner);
@@ -328,7 +333,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// <summary>
     /// Adds the ClickHouse <c>LEFT ARRAY JOIN</c> clause: like <see cref="ArrayJoin{TArray}"/> but a row
     /// whose array is empty is kept (with the array column at its default). Requires a dialect that
-    /// supports it (see <see cref="ISqlDialect.SupportsArrayJoinClause"/>).
+    /// supports it (see <see cref="ISqlDialect.ArrayJoinClause"/>).
     /// </summary>
     public EntityBuilder<TEntity> LeftArrayJoin<TArray>(Expression<Func<TEntity, TArray>> array)
         => AddArrayJoin(array, ArrayJoinKind.Left);
@@ -357,7 +362,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// Adds a ClickHouse <c>ARRAY JOIN</c> over <paramref name="array"/> and returns a builder whose
     /// projection parameter exposes both the original entity (<c>p.Item1</c>) and the expanded element
     /// (<c>p.Element</c>). A row whose array is empty is dropped. Requires a dialect that supports the
-    /// clause (see <see cref="ISqlDialect.SupportsArrayJoinClause"/>).
+    /// clause (see <see cref="ISqlDialect.ArrayJoinClause"/>).
     /// </summary>
     /// <typeparam name="TElement">The element type of the joined array.</typeparam>
     /// <exception cref="InvalidOperationException">
@@ -372,7 +377,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// whose projection parameter exposes both the original entity (<c>p.Item1</c>) and the expanded
     /// element (<c>p.Element</c>). Unlike <see cref="ArrayJoinElement{TElement}"/> a row whose array is
     /// empty is kept (with the element at its default). Requires a dialect that supports the clause
-    /// (see <see cref="ISqlDialect.SupportsArrayJoinClause"/>).
+    /// (see <see cref="ISqlDialect.ArrayJoinClause"/>).
     /// </summary>
     /// <typeparam name="TElement">The element type of the joined array.</typeparam>
     /// <exception cref="InvalidOperationException">
@@ -397,6 +402,9 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 
         if (_arrayJoins is { Count: > 0 } && _arrayJoinKind != kind)
             throw new InvalidOperationException("An ARRAY JOIN clause cannot mix ARRAY JOIN and LEFT ARRAY JOIN.");
+
+        if (_windows is not null)
+            throw new InvalidOperationException("Named windows must be declared after joins; Window cannot be applied before ArrayJoinElement/LeftArrayJoinElement.");
 
         var b = new EntityBuilder<ArrayJoinProjection<TEntity, TElement>>(_dataProvider)
         {
@@ -493,7 +501,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// key, where <paramref name="exp"/> is a single column or an anonymous type to key on several
     /// columns. PostgreSQL requires the leading <c>ORDER BY</c> expressions to match the key. Cannot be
     /// combined with <see cref="Distinct"/>. Requires a dialect that supports it (see
-    /// <see cref="ISqlDialect.SupportsDistinctOn"/>).
+    /// <see cref="ISqlDialect.DistinctOn"/>).
     /// </summary>
     /// <param name="exp">The key selector: a single column or an anonymous type keying on several columns.</param>
     public EntityBuilder<TEntity> DistinctOn<TResult>(Expression<Func<TEntity, TResult>> exp)
@@ -509,9 +517,60 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         return b;
     }
     /// <summary>
+    /// Declares a named window <c>w AS (PARTITION BY ... ORDER BY ... frame)</c> on this query. Window
+    /// functions reference it with <c>Over("w")</c>; every declared window renders in a single
+    /// <c>WINDOW</c> clause after <c>GROUP BY</c>/<c>HAVING</c>. Requires a dialect that supports named
+    /// windows (see <see cref="ISqlDialect.SupportsNamedWindows"/>). Declare windows after any join, on
+    /// the final builder.
+    /// </summary>
+    /// <param name="name">The window name (a simple SQL identifier).</param>
+    /// <param name="partitionBy">Optional <c>PARTITION BY</c> key expressions.</param>
+    /// <param name="orderBy">Optional <c>ORDER BY</c> keys, built with <see cref="Asc"/> or <see cref="Desc"/>.</param>
+    /// <param name="frame">Optional frame.</param>
+    public EntityBuilder<TEntity> Window(
+        string name,
+        Expression<Func<TEntity, object?>>[]? partitionBy = null,
+        NamedWindowOrderKey[]? orderBy = null,
+        WindowFrame? frame = null)
+    {
+        if (!WindowSql.IsValidWindowName(name))
+            throw new ArgumentException("A window name must be a non-empty SQL identifier.", nameof(name));
+
+        if (_windows is not null)
+        {
+            for (var i = 0; i < _windows.Count; i++)
+            {
+                if (string.Equals(_windows[i].Name, name, StringComparison.Ordinal))
+                    throw new InvalidOperationException($"A window named '{name}' is already declared on this query.");
+            }
+        }
+
+        IReadOnlyList<LambdaExpression> partitions = partitionBy ?? [];
+        IReadOnlyList<NamedWindowOrderKey> keys = orderBy ?? [];
+
+        var b = Clone();
+        (b._windows ??= []).Add(new WindowDefinition(name, partitions, keys, frame));
+
+        return b;
+    }
+
+    /// <summary>Ascending <c>ORDER BY</c> key of a named window declared with <see cref="Window"/>.</summary>
+    public NamedWindowOrderKey Asc(Expression<Func<TEntity, object?>> expression)
+    {
+        ArgumentNullException.ThrowIfNull(expression);
+        return new NamedWindowOrderKey(expression, OrderDirection.Asc);
+    }
+
+    /// <summary>Descending <c>ORDER BY</c> key of a named window declared with <see cref="Window"/>.</summary>
+    public NamedWindowOrderKey Desc(Expression<Func<TEntity, object?>> expression)
+    {
+        ArgumentNullException.ThrowIfNull(expression);
+        return new NamedWindowOrderKey(expression, OrderDirection.Desc);
+    }
+    /// <summary>
     /// Adds a <c>TABLESAMPLE</c> modifier to the primary table: reads only <paramref name="percent"/>
     /// percent of the table using <paramref name="method"/>. <paramref name="seed"/> makes the sample
-    /// repeatable. Requires a dialect that supports it (see <see cref="ISqlDialect.SupportsTableSample"/>).
+    /// repeatable. Requires a dialect that supports it (see <see cref="ISqlDialect.TableSample"/>).
     /// </summary>
     /// <param name="percent">The percentage of the table to sample; must be in <c>(0, 100]</c>.</param>
     /// <param name="method">The sampling algorithm.</param>
@@ -541,17 +600,109 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 
         return b;
     }
+
     /// <summary>
-    /// Adds a trailing <c>FOR UPDATE</c> row-locking clause: the selected rows are locked exclusively
-    /// until the transaction ends. Requires a dialect that supports it (see
-    /// <see cref="ISqlDialect.SupportsLocking"/>).
+    /// Reshapes this query's source into columns with the native <c>PIVOT</c> operator: for every
+    /// distinct <paramref name="forColumn"/> value in <paramref name="values"/> a result column is
+    /// produced from <paramref name="aggregate"/> of <paramref name="aggregateColumn"/>. The result is
+    /// an untyped source (<see cref="TableAlias"/>): select the grouping columns and the pivoted columns
+    /// by name. Each result column is named by its pivot value, so quote non-identifier values in the
+    /// projection (<c>Q1 = t.GetNullableDecimal("[1]")</c>).
+    /// Requires a dialect that supports it (see <see cref="ISqlDialect.Pivot"/>). The source may
+    /// be a plain table/entity, a table-valued function or a derived query (<c>From(query)</c>); filters
+    /// and other modifiers belong to the reshaped result (or, for a derived source, inside the derived
+    /// query).
+    /// </summary>
+    /// <param name="aggregate">The aggregate applied to each cell (<c>SUM</c>/<c>COUNT</c>/<c>AVG</c>/<c>MIN</c>/<c>MAX</c>).</param>
+    /// <param name="aggregateColumn">The column expression aggregated into each cell.</param>
+    /// <param name="forColumn">The column whose values become the result columns.</param>
+    /// <param name="values">The pivot values; each value names its result column.</param>
+    public EntityBuilder<TableAlias> Pivot(
+        PivotAggregate aggregate,
+        Expression<Func<TEntity, object?>> aggregateColumn,
+        Expression<Func<TEntity, object?>> forColumn,
+        params PivotValue[] values)
+    {
+        ArgumentNullException.ThrowIfNull(aggregateColumn);
+        ArgumentNullException.ThrowIfNull(forColumn);
+        ArgumentNullException.ThrowIfNull(values);
+        if (values.Length == 0)
+            throw new ArgumentException("A PIVOT requires at least one value.", nameof(values));
+
+        var spec = PivotExpression.ForPivot(ResolvePivotInner(), typeof(TEntity), aggregate, aggregateColumn, forColumn, values);
+        return new EntityBuilder<TableAlias>(_dataProvider) { Logger = Logger, SourceFrom = new FromExpression(spec) };
+    }
+
+    /// <summary>
+    /// Reshapes this query's source with the native <c>UNPIVOT</c> operator: the listed columns are
+    /// stacked into two result columns (<paramref name="valueColumnName"/> holding the value and
+    /// <paramref name="nameColumnName"/> holding the originating column name). Requires a dialect that
+    /// supports it (see <see cref="ISqlDialect.Pivot"/>). The source may be a plain
+    /// table/entity or a derived query (<c>From(query)</c>).
+    /// </summary>
+    /// <param name="valueColumnName">The name of the output column that receives the values.</param>
+    /// <param name="nameColumnName">The name of the output column that receives the source column name.</param>
+    /// <param name="columns">The source columns to unpivot; each column's name becomes its name-column value.</param>
+    public EntityBuilder<TableAlias> Unpivot(
+        string valueColumnName,
+        string nameColumnName,
+        params UnpivotColumn[] columns)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(valueColumnName);
+        ArgumentException.ThrowIfNullOrEmpty(nameColumnName);
+        ArgumentNullException.ThrowIfNull(columns);
+        if (columns.Length == 0)
+            throw new ArgumentException("An UNPIVOT requires at least one column.", nameof(columns));
+
+        var spec = PivotExpression.ForUnpivot(ResolvePivotInner(), typeof(TEntity), valueColumnName, nameColumnName, columns);
+        return new EntityBuilder<TableAlias>(_dataProvider) { Logger = Logger, SourceFrom = new FromExpression(spec) };
+    }
+
+    /// <summary>
+    /// Resolves the source a <c>PIVOT</c>/<c>UNPIVOT</c> wraps. A plain table/entity mapping, a
+    /// table-valued function and a derived query (<c>From(query)</c>) are allowed; the native operators
+    /// apply to a table expression, so any filter, join, grouping, ordering, paging or table modifier on
+    /// this builder must be applied to the reshaped result (or, for a derived source, moved into the
+    /// derived query).
+    /// </summary>
+    private FromExpression ResolvePivotInner()
+    {
+        if (_joins is { Count: > 0 } || _condition is not null || _having is not null
+            || _group is not null || _sorting is { Count: > 0 } || !Paging.IsEmpty || IsDistinct
+            || _tablesample is not null || _temporal is not null || _rowLock is not null || _preWhere is not null
+            || _arrayJoins is { Count: > 0 } || _settings is { Count: > 0 } || _limitBy is not null
+            || _distinctOn is not null || _windows is { Count: > 0 } || IsFinal || SampleRatio is not null
+            || TableHints is { Count: > 0 } || Ctes is { Count: > 0 })
+            throw new NotSupportedException(_query is not null
+                ? "PIVOT/UNPIVOT over a derived query accepts no modifiers on the pivot builder; apply filters, joins, grouping, ordering, paging and table modifiers inside the derived query or to the reshaped result."
+                : "PIVOT/UNPIVOT can only be applied to a plain table/entity source, a table-valued function or a derived query; apply filters, joins, grouping, ordering, paging and table modifiers to the reshaped result.");
+
+        if (_query is not null)
+            return new FromExpression(_query);
+
+        if (_from is not null)
+            return _from;
+
+        if (!string.IsNullOrEmpty(_table))
+            return new FromExpression(_table);
+
+        return _dataProvider.GetFrom(typeof(TEntity), null)
+            ?? throw new BuildSqlCommandException($"A PIVOT/UNPIVOT source could not be resolved for type {typeof(TEntity)}.");
+    }
+
+    /// <summary>
+    /// Locks the selected rows exclusively until the transaction ends. Renders a trailing <c>FOR UPDATE</c>
+    /// clause on dialects that support it, or a table hint on the primary source (<c>with (updlock)</c> on
+    /// SQL Server). Requires a dialect that supports row locking (see
+    /// <see cref="ISqlDialect.Lock"/>).
     /// </summary>
     public EntityBuilder<TEntity> ForUpdate() => WithRowLock(LockMode.Update);
 
     /// <summary>
-    /// Adds a trailing <c>FOR SHARE</c> row-locking clause: the selected rows are locked in shared mode
-    /// until the transaction ends. Requires a dialect that supports it (see
-    /// <see cref="ISqlDialect.SupportsLocking"/>).
+    /// Locks the selected rows in shared mode until the transaction ends. Renders a trailing <c>FOR SHARE</c>
+    /// clause on dialects that support it, or a table hint on the primary source (<c>with (holdlock)</c> on
+    /// SQL Server). Requires a dialect that supports row locking (see
+    /// <see cref="ISqlDialect.Lock"/>).
     /// </summary>
     public EntityBuilder<TEntity> ForShare() => WithRowLock(LockMode.Share);
 
@@ -602,7 +753,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// Adds a <c>LIMIT n BY expr</c> clause (ClickHouse): at most <paramref name="limit"/> rows per
     /// distinct value of <paramref name="exp"/>. <paramref name="exp"/> may be a single column or an
     /// anonymous type to key on several columns. Requires a dialect that supports it (see
-    /// <see cref="ISqlDialect.SupportsLimitBy"/>).
+    /// <see cref="ISqlDialect.LimitBy"/>).
     /// </summary>
     public EntityBuilder<TEntity> LimitBy<TResult>(int limit, Expression<Func<TEntity, TResult>> exp)
         => LimitBy(limit, 0, exp);
@@ -610,7 +761,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// Adds a <c>LIMIT offset, n BY expr</c> clause (ClickHouse): skips <paramref name="offset"/> rows
     /// and then returns at most <paramref name="limit"/> rows per distinct key. <paramref name="limit"/>
     /// must be positive and <paramref name="offset"/> non-negative. Requires a dialect that supports it
-    /// (see <see cref="ISqlDialect.SupportsLimitBy"/>).
+    /// (see <see cref="ISqlDialect.LimitBy"/>).
     /// </summary>
     public EntityBuilder<TEntity> LimitBy<TResult>(int limit, int offset, Expression<Func<TEntity, TResult>> exp)
     {
@@ -636,6 +787,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         dst._condition = _condition;
         dst._having = _having;
         dst._arrayJoins = _arrayJoins is null ? null : [.. _arrayJoins];
+        dst._windows = _windows is null ? null : [.. _windows];
         dst._arrayJoinKind = _arrayJoinKind;
         dst._sourceEntityType = _sourceEntityType;
         dst._bindArrayJoinElement = _bindArrayJoinElement;
@@ -806,18 +958,26 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         => JoinCore(_, JoinType.OuterApply, null);
     private JoinedEntityBuilder<TEntity, TJoinEntity> JoinCore<TJoinEntity>(EntityBuilder<TJoinEntity> _, JoinType joinType, LambdaExpression? joinCondition)
     {
-        QueryCommand? query = null;
-        if (_condition is not null || _query is not null)
-        {
-            query = ToCommand();
-        }
+        if (_windows is not null)
+            throw new InvalidOperationException("Named windows must be declared after joins; Window cannot be combined with a later Join.");
 
         // A TVF (or other explicit source) on either side is carried as a FromExpression: the right
         // side keeps the joined entity's own source, the left side keeps the one propagated below.
-        var cb = new JoinedEntityBuilder<TEntity, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition, joinType) { From = _.SourceFrom ?? _dataProvider.GetFrom(typeof(TJoinEntity), null)!, EntityType = joinCondition is null ? typeof(TJoinEntity) : null }) { Logger = Logger, _query = query, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, Ctes = Ctes };
-        cb.SourceFrom = SourceFrom;
-        return cb;
+        var joined = CreateJoined<TJoinEntity>(new JoinExpression(joinCondition, joinType) { From = GetJoinSource(_), EntityType = joinCondition is null ? typeof(TJoinEntity) : null }, ResolveJoinBase());
+        ApplyWhereToJoined(joined);
+        return joined;
     }
+
+    /// <summary>
+    /// Resolves the joined side of a <c>Join</c>. A builder over a raw table or CTE name (the
+    /// <c>From(string)</c> / CTE shape) carries the name in <see cref="Table"/> rather than a
+    /// <see cref="FromExpression"/>, so it must be turned back into a table source here; otherwise the
+    /// join would fall back to entity metadata that does not exist for <see cref="TableAlias"/>.
+    /// </summary>
+    private FromExpression GetJoinSource<TJoinEntity>(EntityBuilder<TJoinEntity> builder)
+        => builder.SourceFrom
+           ?? (builder.Table is not null ? new FromExpression(builder.Table) : _dataProvider.GetFrom(typeof(TJoinEntity), null)!);
+
     public JoinedEntityBuilder<TEntity, TJoinEntity> Join<TJoinEntity>(QueryCommand<TJoinEntity> query, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
         => JoinCore(query, JoinType.Inner, joinCondition);
     public JoinedEntityBuilder<TEntity, TJoinEntity> LeftJoin<TJoinEntity>(QueryCommand<TJoinEntity> query, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
@@ -837,17 +997,150 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// </summary>
     public JoinedEntityBuilder<TEntity, TJoinEntity> OuterApply<TJoinEntity>(QueryCommand<TJoinEntity> query)
         => JoinCore(query, JoinType.OuterApply, null);
-    private JoinedEntityBuilder<TEntity, TJoinEntity> JoinCore<TJoinEntity>(QueryCommand<TJoinEntity> query, JoinType joinType, LambdaExpression? joinCondition)
+    /// <summary>
+    /// Applies a correlated derived query to every left-hand row (<c>CROSS APPLY</c> /
+    /// <c>CROSS JOIN LATERAL</c>). <paramref name="source"/> receives the left-hand row, so the query
+    /// it builds may reference its columns; there is no <c>ON</c> condition.
+    /// <typeparam name="TJoinEntity">The element type yielded by the applied query.</typeparam>
+    /// </summary>
+    public JoinedEntityBuilder<TEntity, TJoinEntity> CrossApply<TJoinEntity>(Expression<Func<TEntity, QueryCommand<TJoinEntity>>> source)
+        => JoinApply<TJoinEntity>(source, JoinType.CrossApply);
+    /// <summary>
+    /// Applies a correlated derived query to every left-hand row, preserving left-hand rows with an
+    /// empty result (<c>OUTER APPLY</c> / <c>LEFT JOIN LATERAL ... ON true</c>). <paramref name="source"/>
+    /// receives the left-hand row, so the query it builds may reference its columns.
+    /// <typeparam name="TJoinEntity">The element type yielded by the applied query.</typeparam>
+    /// </summary>
+    public JoinedEntityBuilder<TEntity, TJoinEntity> OuterApply<TJoinEntity>(Expression<Func<TEntity, QueryCommand<TJoinEntity>>> source)
+        => JoinApply<TJoinEntity>(source, JoinType.OuterApply);
+    /// <summary>
+    /// Applies a correlated derived query to every left-hand row (<c>CROSS APPLY</c> /
+    /// <c>CROSS JOIN LATERAL</c>). <paramref name="source"/> receives the left-hand row, so the query
+    /// it builds may reference its columns; there is no <c>ON</c> condition.
+    /// <typeparam name="TJoinEntity">The element type yielded by the applied query.</typeparam>
+    /// </summary>
+    public JoinedEntityBuilder<TEntity, TJoinEntity> CrossApply<TJoinEntity>(Expression<Func<TEntity, EntityBuilder<TJoinEntity>>> source)
+        => JoinApply<TJoinEntity>(source, JoinType.CrossApply);
+    /// <summary>
+    /// Applies a correlated derived query to every left-hand row, preserving left-hand rows with an
+    /// empty result (<c>OUTER APPLY</c> / <c>LEFT JOIN LATERAL ... ON true</c>). <paramref name="source"/>
+    /// receives the left-hand row, so the query it builds may reference its columns.
+    /// <typeparam name="TJoinEntity">The element type yielded by the applied query.</typeparam>
+    /// </summary>
+    public JoinedEntityBuilder<TEntity, TJoinEntity> OuterApply<TJoinEntity>(Expression<Func<TEntity, EntityBuilder<TJoinEntity>>> source)
+        => JoinApply<TJoinEntity>(source, JoinType.OuterApply);
+    private JoinedEntityBuilder<TEntity, TJoinEntity> JoinApply<TJoinEntity>(LambdaExpression source, JoinType joinType)
     {
-        QueryCommand? queryBase = null;
-        if (_condition is not null || _query is not null)
-        {
-            queryBase = ToCommand();
-        }
+        if (typeof(TEntity).TryGetProjectionDimension(out _))
+            throw new NotSupportedException(
+                "A correlated CROSS/OUTER APPLY source cannot reference a join projection; apply it to a single-entity source instead.");
 
-        var cb = new JoinedEntityBuilder<TEntity, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition, joinType) { From = new FromExpression(query), EntityType = joinCondition is null ? typeof(TJoinEntity) : null }) { Logger = Logger, _query = queryBase, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, Ctes = Ctes };
+        if (_dataProvider is InMemoryDataContext)
+            throw new NotSupportedException(
+                "A correlated CROSS/OUTER APPLY source is not supported by the in-memory provider; see docs/specs/roadmap/todo_correlated_inmemory.md.");
+
+        if (_windows is not null)
+            throw new InvalidOperationException("Named windows must be declared after joins; Window cannot be combined with a later Join.");
+
+        QueryCommand? queryBase = ResolveJoinBase();
+
+        var body = source.Body.Type == typeof(QueryCommand) ? source.Body : Expression.Convert(source.Body, typeof(QueryCommand));
+        var applySource = Expression.Lambda(body, source.Parameters);
+
+        var joined = CreateJoined<TJoinEntity>(new JoinExpression(null, joinType)
+        {
+            From = new FromExpression(typeof(TJoinEntity)),
+            EntityType = typeof(TJoinEntity),
+            ApplySource = applySource
+        }, queryBase);
+        ApplyWhereToJoined(joined);
+        return joined;
+    }
+    /// <summary>
+    /// Wraps a join into a <see cref="JoinedEntityBuilder{TEntity, TJoinEntity}"/>, carrying this
+    /// builder's query modifiers (table, grouping, limits, hints, ...) onto the joined builder. Shared
+    /// by the join and apply variants so they stay in sync.
+    /// </summary>
+    private JoinedEntityBuilder<TEntity, TJoinEntity> CreateJoined<TJoinEntity>(JoinExpression join, QueryCommand? query)
+    {
+        var cb = new JoinedEntityBuilder<TEntity, TJoinEntity>(_dataProvider, join) { Logger = Logger, Table = Table, _query = query, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, Ctes = Ctes };
         cb.SourceFrom = SourceFrom;
         return cb;
+    }
+    private JoinedEntityBuilder<TEntity, TJoinEntity> JoinCore<TJoinEntity>(QueryCommand<TJoinEntity> query, JoinType joinType, LambdaExpression? joinCondition)
+    {
+        if (_windows is not null)
+            throw new InvalidOperationException("Named windows must be declared after joins; Window cannot be combined with a later Join.");
+
+        QueryCommand? queryBase = ResolveJoinBase();
+
+        var joined = CreateJoined<TJoinEntity>(new JoinExpression(joinCondition, joinType) { From = new FromExpression(query), EntityType = joinCondition is null ? typeof(TJoinEntity) : null }, queryBase);
+        ApplyWhereToJoined(joined);
+        return joined;
+    }
+    /// <summary>
+    /// Resolves the left-hand command a <c>Join</c>/<c>Apply</c> builds on. A derived query
+    /// (<c>From(query)</c>) is used directly as the join source: wrapping it in an extra subquery would
+    /// hide its projection, and an anonymous projection has no entity metadata to fall back on. Only a
+    /// <c>Where</c> may precede the join (it is carried onto the projection by
+    /// <see cref="ApplyWhereToJoined{TJoinEntity}"/>); any other modifier must be moved into the derived
+    /// query, because relocating it past the join would change the semantics.
+    /// </summary>
+    private QueryCommand? ResolveJoinBase()
+    {
+        if (_query is null)
+            return _condition is not null ? ToCommand() : null;
+
+        if (_dataProvider is InMemoryDataContext)
+            throw new NotSupportedException(
+                "A derived query as the primary FROM source cannot be joined by the in-memory provider.");
+
+        if (typeof(TEntity).TryGetProjectionDimension(out _))
+            throw new NotSupportedException(
+                "A derived query as the primary FROM source can be joined only once; add further joins to the derived query instead.");
+
+        if (HasNoNonWhereModifiers())
+            return _query;
+
+        throw new NotSupportedException(
+            "A derived query as the primary FROM source supports only a Where clause before Join; put OrderBy/GroupBy/Distinct and other modifiers into the derived query.");
+    }
+    /// <summary>
+    /// True when no builder modifier other than <c>Where</c> is set. Such a modifier would be relocated
+    /// past the join by <c>CreateJoined</c>, changing the query's semantics, so it must be rejected
+    /// instead of being silently applied on the joined projection.
+    /// </summary>
+    private bool HasNoNonWhereModifiers()
+        => !IsDistinct && !IsFinal && SampleRatio is null && SampleOffset == 0
+        && _group is null && _having is null && _sorting is null && _preWhere is null
+        && _arrayJoins is null && _windows is null && _limitBy is null && _distinctOn is null
+        && _tablesample is null && _temporal is null && _rowLock is null && _settings is null
+        && Paging.IsEmpty;
+    /// <summary>
+    /// Moves a <c>Where</c> written before the join onto the joined projection: the derived source
+    /// becomes the projected item 1, so <c>d =&gt; d.X</c> is rewritten to <c>p =&gt; p.Item1.X</c> and
+    /// resolved by the ordinary projection-column machinery. Only the exact lambda parameter is
+    /// replaced (not every parameter of the same type), so a nested lambda over the same type keeps
+    /// referring to its own parameter.
+    /// </summary>
+    private void ApplyWhereToJoined<TJoinEntity>(JoinedEntityBuilder<TEntity, TJoinEntity> joined)
+    {
+        if (_query is null || _condition is null)
+            return;
+
+        var param = Expression.Parameter(typeof(Projection<TEntity, TJoinEntity>), _condition.Parameters[0].Name);
+        var item1 = Expression.Property(param, nameof(Projection<TEntity, TJoinEntity>.Item1));
+        var body = new ReplaceTargetParameterVisitor(_condition.Parameters[0], item1).Visit(_condition.Body);
+        joined.Condition = Expression.Lambda<Func<Projection<TEntity, TJoinEntity>, bool>>(body, param);
+    }
+    /// <summary>
+    /// Replaces one specific parameter node (by reference) inside an expression, leaving parameters of
+    /// the same type untouched.
+    /// </summary>
+    private sealed class ReplaceTargetParameterVisitor(ParameterExpression target, Expression replacement) : ExpressionVisitor
+    {
+        protected override Expression VisitParameter(ParameterExpression node)
+            => ReferenceEquals(node, target) ? replacement : base.VisitParameter(node);
     }
     public EntityBuilder<TEntity> GroupBy<TResult>(Expression<Func<TEntity, TResult>> exp)
     {

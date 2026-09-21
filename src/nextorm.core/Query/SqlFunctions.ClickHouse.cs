@@ -7,6 +7,8 @@ namespace NextORM.Core;
 /// <c>uniq</c>/<c>uniqExact</c>/<c>uniqCombined</c>/<c>uniqHLL12</c> aggregates, the parameterised
 /// <c>quantile(level)(value)</c> family with <c>median</c>, the <c>anyLast</c> row-picking
 /// aggregate, the sequence/funnel aggregates <c>windowFunnel</c>/<c>retention</c>/<c>sequenceMatch</c>,
+/// the frame-respecting <c>lagInFrame</c>/<c>leadInFrame</c> window functions, the multi-branch
+/// <c>multiIf</c> conditional (through <see cref="when{T}(bool, T)"/>/<see cref="otherwise{T}(T)"/>),
 /// the string-JSON <c>JSONExtract*</c>/<c>JSONHas</c> and <c>visitParamExtract*</c> families
 /// plus the JSONPath <c>json_value</c>/<c>json_query</c>/<c>json_exists</c> scalars,
 /// the dictionary functions, the <c>-If</c> aggregate combinator, the distributed <c>global_in</c>
@@ -55,7 +57,7 @@ namespace NextORM.Core;
 
         /// <summary>
         /// <c>uniq(value)</c>: the approximate number of distinct values. Requires a provider that
-        /// supports the distinct-count family (see <see cref="ISqlDialect.SupportsUniqAggregates"/>; ClickHouse).
+        /// supports the distinct-count family (see <see cref="ISqlDialect.UniqAggregates"/>; ClickHouse).
         /// </summary>
         public long uniq<T>(T? value) => default!;
 
@@ -71,7 +73,7 @@ namespace NextORM.Core;
         /// <summary>
         /// <c>quantile(level)(value)</c>: the approximate <paramref name="level"/> quantile
         /// (0..1). Requires a provider that supports the quantile family (see
-        /// <see cref="ISqlDialect.SupportsQuantileAggregates"/>; ClickHouse).
+        /// <see cref="ISqlDialect.QuantileAggregates"/>; ClickHouse).
         /// </summary>
         public double? quantile<T>(double level, T? value) => default!;
 
@@ -96,7 +98,7 @@ namespace NextORM.Core;
         /// <c>windowFunnel(window)(timestamp, cond1, cond2, ...)</c>: the maximum number of consecutive
         /// conditions satisfied within the sliding <paramref name="window"/> (in units of
         /// <paramref name="timestamp"/>). Requires a provider that supports it (see
-        /// <see cref="ISqlDialect.SupportsSequenceAggregates"/>; ClickHouse). The conditions must be
+        /// <see cref="ISqlDialect.SequenceAggregates"/>; ClickHouse). The conditions must be
         /// inline expressions; a captured condition array is rejected.
         /// </summary>
         public int window_funnel<TTime>(long window, TTime? timestamp, params bool[] conditions) => default!;
@@ -105,7 +107,7 @@ namespace NextORM.Core;
         /// <c>sequenceMatch(pattern)(timestamp, cond1, cond2, ...)</c>: <c>1</c> when the event chain
         /// matches the <paramref name="pattern"/> (for example <c>"(?1).*(?2)"</c>), otherwise <c>0</c>.
         /// Requires a provider that supports it (see
-        /// <see cref="ISqlDialect.SupportsSequenceAggregates"/>; ClickHouse). The conditions must be
+        /// <see cref="ISqlDialect.SequenceAggregates"/>; ClickHouse). The conditions must be
         /// inline expressions.
         /// </summary>
         public int sequence_match<TTime>(string? pattern, TTime? timestamp, params bool[] conditions) => default!;
@@ -115,7 +117,7 @@ namespace NextORM.Core;
         /// first-and-second, and so on). Returns an array, so it can only be used as the operand of
         /// another array function (for example <see cref="length{T}(T[])"/> or
         /// <see cref="array_string_concat{T}(T[], string?)"/>). Requires a provider that supports it (see
-        /// <see cref="ISqlDialect.SupportsSequenceAggregates"/>; ClickHouse). The conditions must be
+        /// <see cref="ISqlDialect.SequenceAggregates"/>; ClickHouse). The conditions must be
         /// inline expressions.
         /// </summary>
         public int[] retention(params bool[] conditions) => default!;
@@ -354,7 +356,7 @@ namespace NextORM.Core;
         /// <summary>
         /// <c>toDate(value)</c>: converts a string or date/time value to a <c>Date</c>. Requires a
         /// provider that supports the date conversion surface (see
-        /// <see cref="ISqlDialect.SupportsDateConversionFunctions"/>; ClickHouse).
+        /// <see cref="ISqlDialect.DateConversion"/>; ClickHouse).
         /// </summary>
         public DateTime? to_date<T>(T? value) => default!;
 
@@ -429,4 +431,69 @@ namespace NextORM.Core;
 
         /// <summary><c>toUnixTimestamp(value)</c>: the Unix timestamp in seconds.</summary>
         public long to_unix_timestamp<T>(T? value) => default!;
+
+        /// <summary>
+        /// A single branch of a <see cref="multi_if{TResult}(MultiIfBranch{TResult}[])"/> call: a
+        /// condition with its result (<see cref="when{T}(bool, T)"/>) or the final else value
+        /// (<see cref="otherwise{T}(T)"/>). Only ever produced by the compiler while building an
+        /// expression tree; the dialect renders it as an argument of <c>multiIf</c>.
+        /// </summary>
+        public sealed class MultiIfBranch<T>
+        {
+            private MultiIfBranch()
+            {
+            }
+        }
+
+        /// <summary>
+        /// A <c>multiIf</c> branch: when <paramref name="condition"/> is true, the result is
+        /// <paramref name="value"/>. Requires a provider that supports <c>multiIf</c> (see
+        /// <see cref="ISqlDialect.MultiIf"/>; ClickHouse).
+        /// </summary>
+        public MultiIfBranch<T> when<T>(bool condition, T? value) => default!;
+
+        /// <summary>
+        /// The final <c>multiIf</c> else value, used when every preceding <see cref="when{T}(bool, T)"/>
+        /// condition is false. Must be the last branch.
+        /// </summary>
+        public MultiIfBranch<T> otherwise<T>(T? value) => default!;
+
+        /// <summary>
+        /// <c>multiIf(cond1, then1, cond2, then2, ..., else)</c>: the value of the first true branch, or
+        /// the trailing else value. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.MultiIf"/>; ClickHouse). Each branch is built with
+        /// <see cref="when{T}(bool, T)"/> and the final else with <see cref="otherwise{T}(T)"/>; the
+        /// conditions and values must be inline expressions (a captured branch array is rejected). A
+        /// numeric <typeparamref name="TResult"/> is cast to its ClickHouse type so it materialises;
+        /// otherwise the result must match the common supertype ClickHouse infers for the branches.
+        /// </summary>
+        public TResult? multi_if<TResult>(params MultiIfBranch<TResult>[] branches) => default!;
+
+        /// <summary>
+        /// <c>lagInFrame(value[, offset[, default]])</c>: like <c>CommonFunctions.lag</c> but evaluated
+        /// within the ordered window frame. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SupportsInFrameWindowFunctions"/>; ClickHouse). The standard <c>lag</c>
+        /// looks at the whole partition and ignores the frame, so the two differ on a partial frame.
+        /// </summary>
+        public WindowFunction<T?> lag_in_frame<T>(T? value) => default!;
+
+        /// <summary><c>lagInFrame(value, offset)</c>: as <c>lag_in_frame</c> with an explicit offset.</summary>
+        public WindowFunction<T?> lag_in_frame<T>(T? value, int offset) => default!;
+
+        /// <summary><c>lagInFrame(value, offset, default)</c>: as <c>lag_in_frame</c> with a fallback value.</summary>
+        public WindowFunction<T?> lag_in_frame<T>(T? value, int offset, T? defaultValue) => default!;
+
+        /// <summary>
+        /// <c>leadInFrame(value[, offset[, default]])</c>: like <c>CommonFunctions.lead</c> but evaluated
+        /// within the ordered window frame. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.SupportsInFrameWindowFunctions"/>; ClickHouse). The standard <c>lead</c>
+        /// looks at the whole partition and ignores the frame, so the two differ on a partial frame.
+        /// </summary>
+        public WindowFunction<T?> lead_in_frame<T>(T? value) => default!;
+
+        /// <summary><c>leadInFrame(value, offset)</c>: as <c>lead_in_frame</c> with an explicit offset.</summary>
+        public WindowFunction<T?> lead_in_frame<T>(T? value, int offset) => default!;
+
+        /// <summary><c>leadInFrame(value, offset, default)</c>: as <c>lead_in_frame</c> with a fallback value.</summary>
+        public WindowFunction<T?> lead_in_frame<T>(T? value, int offset, T? defaultValue) => default!;
     }

@@ -260,4 +260,74 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
         stats.Select(s => (s.Word, s.Ndoc, s.Nentry)).Should().Equal(("cat", 1, 2), ("dog", 1, 1));
     }
+
+    [Fact]
+    public void NamedWindow_ShouldDeclareOnceAndReference()
+    {
+        var e = _sut.ComplexEntity;
+
+        var rows = e
+            .Window("w", partitionBy: [x => x.Int], orderBy: [e.Asc(x => x.Id)])
+            .Select(x => new
+            {
+                x.Id,
+                rn = SqlFunctions.Sql.row_number().Over("w"),
+                total = SqlFunctions.Sql.sum_over(x.Id).Over("w")
+            })
+            .ToList();
+
+        var byId = rows.ToDictionary(x => x.Id);
+
+        // id 1 is alone in the null partition; ids 2 and 3 share the nullableint = 1 partition. The
+        // window has an ORDER BY, so sum() is a running sum (the ORDER BY default frame).
+        byId[1].rn.Should().Be(1);
+        byId[2].rn.Should().Be(1);
+        byId[3].rn.Should().Be(2);
+
+        byId[1].total.Should().Be(1L);
+        byId[2].total.Should().Be(2L);
+        byId[3].total.Should().Be(5L);
+    }
+
+    [Fact]
+    public void GroupsFrame_ShouldIncludeWholePeerGroups()
+    {
+        var rows = _sut.ComplexEntity
+            .Select(x => new
+            {
+                x.Id,
+                total = SqlFunctions.Sql.sum_over(x.Id).Over(
+                    SqlFunctions.Sql.asc(() => x.Id),
+                    WindowFrame.Groups(1, 1))
+            })
+            .ToList();
+
+        var byId = rows.ToDictionary(x => x.Id);
+
+        // The seeded ids are distinct, so each peer group is a single row and a one-group frame on each
+        // side covers the adjacent rows.
+        byId[1].total.Should().Be(3L);
+        byId[2].total.Should().Be(6L);
+        byId[3].total.Should().Be(5L);
+    }
+
+    [Fact]
+    public void FrameExclusion_ShouldRemoveCurrentRow()
+    {
+        var rows = _sut.ComplexEntity
+            .Select(x => new
+            {
+                x.Id,
+                n = SqlFunctions.Sql.count_over().Over(
+                    SqlFunctions.Sql.asc(() => x.Id),
+                    WindowFrame.RowsUnboundedPrecedingToCurrentRow.WithExclusion(WindowFrameExclusion.CurrentRow))
+            })
+            .ToList();
+
+        var byId = rows.ToDictionary(x => x.Id);
+
+        byId[1].n.Should().Be(0);
+        byId[2].n.Should().Be(1);
+        byId[3].n.Should().Be(2);
+    }
 }

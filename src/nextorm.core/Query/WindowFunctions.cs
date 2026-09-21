@@ -34,6 +34,14 @@ public sealed class WindowFunction<T>
     public T Over(WindowOrder orderBy, WindowFrame? frame = null) => default!;
 
     /// <summary>
+    /// Completes the window function by referencing a named window declared on the query with
+    /// <c>EntityBuilder.Window(...)</c> (rendered as <c>OVER windowName</c>). Requires a dialect that
+    /// supports the <c>WINDOW</c> clause (see <see cref="ISqlDialect.SupportsNamedWindows"/>).
+    /// </summary>
+    /// <param name="windowName">The name of a window declared on the same query.</param>
+    public T Over(string windowName) => default!;
+
+    /// <summary>
     /// Completes the window function with multiple ordered keys. Use this when a mixed
     /// <c>asc</c>/<c>desc</c> ordering or more than one order key is required; partition keys for
     /// this shape are supplied through the array overload (see the <c>Over</c> overload below).
@@ -68,11 +76,32 @@ public sealed class WindowOrder
     public OrderDirection Direction { get; }
 }
 
-/// <summary>Which of the two SQL frame units a <see cref="WindowFrame"/> uses.</summary>
+/// <summary>Which SQL frame unit a <see cref="WindowFrame"/> uses.</summary>
 public enum WindowFrameType
 {
     Rows,
-    Range
+    Range,
+    /// <summary>
+    /// The <c>GROUPS</c> unit: an offset counts whole peer groups (rows equal on the window's
+    /// <c>ORDER BY</c> key) instead of physical rows (<c>ROWS</c>) or ordering values (<c>RANGE</c>).
+    /// </summary>
+    Groups
+}
+
+/// <summary>
+/// A frame exclusion (<c>EXCLUDE ...</c>) that removes rows around the current row from the frame even
+/// when they fall inside the frame boundaries.
+/// </summary>
+public enum WindowFrameExclusion
+{
+    /// <summary>Keep the current row and its peers (<c>EXCLUDE NO OTHERS</c>), the default.</summary>
+    NoOthers,
+    /// <summary>Remove the current row from the frame (<c>EXCLUDE CURRENT ROW</c>).</summary>
+    CurrentRow,
+    /// <summary>Remove the current row and its ordering peers (<c>EXCLUDE GROUP</c>).</summary>
+    Group,
+    /// <summary>Remove the current row's ordering peers but keep the current row (<c>EXCLUDE TIES</c>).</summary>
+    Ties
 }
 
 /// <summary>The kind of a single frame boundary.</summary>
@@ -112,16 +141,18 @@ public sealed class WindowFrameBound
 }
 
 /// <summary>
-/// The optional <c>ROWS</c>/<c>RANGE BETWEEN ... AND ...</c> frame of a window specification.
-/// Both frame units and all standard boundaries are supported by every provider nextorm targets.
+/// The optional <c>ROWS</c>/<c>RANGE</c>/<c>GROUPS BETWEEN ... AND ...</c> frame of a window
+/// specification, with an optional <c>EXCLUDE</c>. Not every provider can express every unit or an
+/// exclusion; the translator rejects an unsupported combination through the dialect capability flags.
 /// </summary>
 public sealed class WindowFrame
 {
-    private WindowFrame(WindowFrameType type, WindowFrameBound start, WindowFrameBound end)
+    private WindowFrame(WindowFrameType type, WindowFrameBound start, WindowFrameBound end, WindowFrameExclusion? exclusion)
     {
         Type = type;
         Start = start;
         End = end;
+        Exclusion = exclusion;
     }
 
     /// <summary>Frame unit.</summary>
@@ -133,22 +164,42 @@ public sealed class WindowFrame
     /// <summary>Upper (or, for a reversed frame, last written) boundary.</summary>
     public WindowFrameBound End { get; }
 
+    /// <summary>
+    /// The frame exclusion, or <c>null</c> when none was requested (the default
+    /// <c>EXCLUDE NO OTHERS</c>). A dialect that cannot render an exclusion rejects a frame that sets it
+    /// (see <see cref="ISqlDialect.SupportsWindowFrameExclusion"/>).
+    /// </summary>
+    public WindowFrameExclusion? Exclusion { get; }
+
     /// <summary>A <c>rows between</c> frame with explicit boundaries.</summary>
-    public static WindowFrame Rows(WindowFrameBound start, WindowFrameBound end) => new(WindowFrameType.Rows, start, end);
+    public static WindowFrame Rows(WindowFrameBound start, WindowFrameBound end) => new(WindowFrameType.Rows, start, end, null);
 
     /// <summary>A <c>range between</c> frame with explicit boundaries.</summary>
-    public static WindowFrame Range(WindowFrameBound start, WindowFrameBound end) => new(WindowFrameType.Range, start, end);
+    public static WindowFrame Range(WindowFrameBound start, WindowFrameBound end) => new(WindowFrameType.Range, start, end, null);
+
+    /// <summary>A <c>groups between</c> frame with explicit peer-group boundaries.</summary>
+    public static WindowFrame Groups(WindowFrameBound start, WindowFrameBound end) => new(WindowFrameType.Groups, start, end, null);
+
+    /// <summary><c>groups between &lt;preceding&gt; preceding and &lt;following&gt; following</c>.</summary>
+    public static WindowFrame Groups(int preceding, int following)
+        => new(WindowFrameType.Groups, WindowFrameBound.Preceding(preceding), WindowFrameBound.Following(following), null);
+
+    /// <summary>
+    /// Returns a copy of this frame carrying <paramref name="exclusion"/>. Passing
+    /// <see cref="WindowFrameExclusion.NoOthers"/> requests the explicit <c>EXCLUDE NO OTHERS</c>.
+    /// </summary>
+    public WindowFrame WithExclusion(WindowFrameExclusion exclusion) => new(Type, Start, End, exclusion);
 
     /// <summary><c>rows between &lt;preceding&gt; preceding and &lt;following&gt; following</c>.</summary>
     public static WindowFrame Rows(int preceding, int following)
-        => new(WindowFrameType.Rows, WindowFrameBound.Preceding(preceding), WindowFrameBound.Following(following));
+        => new(WindowFrameType.Rows, WindowFrameBound.Preceding(preceding), WindowFrameBound.Following(following), null);
 
     /// <summary><c>rows between unbounded preceding and current row</c>, the default running aggregate frame.</summary>
     public static WindowFrame RowsUnboundedPrecedingToCurrentRow
-        => new(WindowFrameType.Rows, WindowFrameBound.UnboundedPreceding, WindowFrameBound.CurrentRow);
+        => new(WindowFrameType.Rows, WindowFrameBound.UnboundedPreceding, WindowFrameBound.CurrentRow, null);
 
     /// <summary><c>range between unbounded preceding and current row</c>.</summary>
     public static WindowFrame RangeUnboundedPrecedingToCurrentRow
-        => new(WindowFrameType.Range, WindowFrameBound.UnboundedPreceding, WindowFrameBound.CurrentRow);
+        => new(WindowFrameType.Range, WindowFrameBound.UnboundedPreceding, WindowFrameBound.CurrentRow, null);
 }
 

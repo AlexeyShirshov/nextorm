@@ -13,6 +13,18 @@ public sealed class ClickHouseDialect : SqlDialectBase
 {
     public static readonly ClickHouseDialect Instance = new();
 
+    private readonly IMultiIfRenderer _multiIf;
+    private readonly IUniqAggregateRenderer _uniqAggregates;
+    private readonly IQuantileAggregateRenderer _quantileAggregates;
+
+    /// <summary>Creates the dialect and its capability renderers.</summary>
+    public ClickHouseDialect()
+    {
+        _multiIf = new ClickHouseMultiIfRenderer(this);
+        _uniqAggregates = new ClickHouseUniqAggregateRenderer(this);
+        _quantileAggregates = new ClickHouseQuantileAggregateRenderer(this);
+    }
+
     /// <summary>A ClickHouse derived table (subquery in FROM) must have an alias.</summary>
     public override bool RequireSubqueryAlias => true;
 
@@ -38,14 +50,7 @@ public sealed class ClickHouseDialect : SqlDialectBase
     public override bool SupportsArrayJoin => true;
 
     /// <summary>ClickHouse renders <c>string.Split</c> as <c>splitByChar(separator, value)</c>.</summary>
-    public override bool SupportsStringSplit => true;
-
-    /// <summary>
-    /// ClickHouse's <c>splitByChar</c> takes a one-character separator; multi-character separators
-    /// (ClickHouse's <c>splitByString</c>) are not exposed.
-    /// </summary>
-    public override string MakeStringSplit(string separator, string value) =>
-        $"splitByChar({separator}, {value})";
+    public override IStringSplitRenderer StringSplit => ClickHouseStringSplitRenderer.Instance;
 
     /// <summary>
     /// <c>length</c> and <c>indexOf</c> return <c>UInt64</c> natively; cast them to <c>Int64</c> so the
@@ -87,11 +92,10 @@ public sealed class ClickHouseDialect : SqlDialectBase
     public override bool SupportsGreatestLeast => true;
 
     /// <summary>ClickHouse renders the portable <c>iif</c> as <c>if(condition, whenTrue, whenFalse)</c>.</summary>
-    public override bool SupportsIif => true;
+    public override IIifRenderer Iif => ClickHouseIifRenderer.Instance;
 
-    /// <summary>ClickHouse renders the portable <c>iif</c> as <c>if(condition, whenTrue, whenFalse)</c>.</summary>
-    public override string MakeIif(string condition, string whenTrue, string whenFalse) =>
-        $"if({condition}, {whenTrue}, {whenFalse})";
+    /// <summary>ClickHouse implements the multi-branch conditional <c>multiIf(cond1, then1, ..., else)</c>.</summary>
+    public override IMultiIfRenderer MultiIf => _multiIf;
 
     // ClickHouse has dateTrunc(unit, datetime) and the addYears/.../addSeconds family plus
     // toLastDayOfMonth(date).
@@ -103,7 +107,7 @@ public sealed class ClickHouseDialect : SqlDialectBase
     /// <c>toDate32</c>, the <c>toYear</c>/... part accessors, <c>toStartOf*</c>, <c>toMonday</c>,
     /// <c>toYYYYMM</c>/<c>toYYYYMMDD</c>, <c>toUnixTimestamp</c>).
     /// </summary>
-    public override bool SupportsDateConversionFunctions => true;
+    public override IDateConversionRenderer DateConversion => ClickHouseDateConversionRenderer.Instance;
 
     public override bool SupportsDateTruncField(string field) =>
         field is not ("decade" or "century" or "millennium") && base.SupportsDateTruncField(field);
@@ -118,11 +122,11 @@ public sealed class ClickHouseDialect : SqlDialectBase
     public override bool SupportsStatisticalAggregates => true;
     public override bool SupportsArgMinMax => true;
     public override bool SupportsIfAggregates => true;
-    /// <summary>ClickHouse implements the distinct-count <c>uniq*</c> and parameterised <c>quantile*</c> aggregates.</summary>
-    public override bool SupportsUniqAggregates => true;
+    /// <summary>ClickHouse implements the distinct-count <c>uniq*</c> aggregates.</summary>
+    public override IUniqAggregateRenderer UniqAggregates => _uniqAggregates;
 
     /// <summary>ClickHouse implements the parameterised <c>quantile(level)(value)</c> family and <c>median</c>.</summary>
-    public override bool SupportsQuantileAggregates => true;
+    public override IQuantileAggregateRenderer QuantileAggregates => _quantileAggregates;
 
     /// <summary>ClickHouse implements the <c>any</c>/<c>anyLast</c> row-picking aggregates.</summary>
     public override bool SupportsAnyAggregates => true;
@@ -135,6 +139,18 @@ public sealed class ClickHouseDialect : SqlDialectBase
 
     /// <summary>ClickHouse implements the <c>nth_value(value, n)</c> window function.</summary>
     public override bool SupportsNthValue => true;
+
+    /// <summary>
+    /// ClickHouse implements the frame-respecting offset window functions <c>lagInFrame</c>/<c>leadInFrame</c>
+    /// (unlike the standard <c>lag</c>/<c>lead</c>, which ignore the window frame).
+    /// </summary>
+    public override bool SupportsInFrameWindowFunctions => true;
+
+    /// <summary>ClickHouse declares named windows (<c>WINDOW w AS (...)</c>) and references them with <c>OVER w</c>.</summary>
+    public override bool SupportsNamedWindows => true;
+
+    /// <summary>ClickHouse supports the <c>GROUPS</c> window frame unit.</summary>
+    public override bool SupportsWindowFrameGroups => true;
 
     /// <summary>
     /// ClickHouse implements the <c>JSONExtract*</c>/<c>JSONHas</c>/<c>visitParamExtract*</c> string-JSON
@@ -177,34 +193,10 @@ public sealed class ClickHouseDialect : SqlDialectBase
     /// ClickHouse renders <c>currentUser()</c>, <c>currentDatabase()</c> and <c>version()</c>; it has no
     /// session-user or schema concept, so <c>session_user</c>/<c>current_schema</c> stay unavailable.
     /// </summary>
-    public override bool SupportsSessionInfoFunctions => true;
-
-    /// <summary>ClickHouse supports <c>current_user</c>/<c>current_database</c>/<c>version</c> only.</summary>
-    public override bool SupportsSessionInfoFunction(string name) =>
-        name is "current_user" or "current_database" or "version";
-
-    /// <summary>ClickHouse spells the supported functions in camel case.</summary>
-    public override string MakeSessionInfoFunction(string name) => name switch
-    {
-        "current_user" => "currentUser()",
-        "current_database" => "currentDatabase()",
-        "version" => "version()",
-        _ => base.MakeSessionInfoFunction(name)
-    };
+    public override ISessionInfoFunctions SessionInfoFunctions => ClickHouseSessionInfoFunctions.Instance;
 
     /// <summary>ClickHouse renders both UUID generators.</summary>
-    public override bool SupportsUuidGenerators => true;
-
-    /// <summary>ClickHouse supports both the random v4 and the v7 generators.</summary>
-    public override bool SupportsUuidGenerator(string name) => name is "gen_random_uuid" or "uuidv7";
-
-    /// <summary>ClickHouse spells the UUID generators in camel case.</summary>
-    public override string MakeUuidGenerator(string name) => name switch
-    {
-        "gen_random_uuid" => "generateUUIDv4()",
-        "uuidv7" => "generateUUIDv7()",
-        _ => base.MakeUuidGenerator(name)
-    };
+    public override IUuidGenerators UuidGenerators => ClickHouseUuidGenerators.Instance;
 
     /// <summary>ClickHouse implements the dictionary functions <c>dictGet</c>/<c>dictGetOrDefault</c>/<c>dictHas</c>.</summary>
     public override bool SupportsDictionaries => true;
@@ -223,50 +215,14 @@ public sealed class ClickHouseDialect : SqlDialectBase
         return $"{function}({string.Join(", ", args)})";
     }
 
-    // The uniq* aggregates return UInt64, which the row reader cannot materialise; cast to Int64.
-    public override string MakeUniqAggregate(string name, string argument) =>
-        $"toInt64({MakeAggregate(name)}({argument}))";
-
     // count()/countIf() also return UInt64; cast to the CLR type the function declares (int vs long).
     public override bool WrapsCountResult => true;
 
     public override string WrapCount(string countExpression, bool big) =>
         big ? $"toInt64({countExpression})" : $"toInt32({countExpression})";
 
-    // quantileTiming returns Float32 and quantileExact keeps the input type; toFloat64 pins every
-    // variant to the CLR double the methods declare.
-    public override string MakeQuantile(string name, string level, string value) =>
-        $"toFloat64({MakeAggregate(name)}({level})({value}))";
-
-    /// <summary>ClickHouse's <c>median</c> is <c>quantile(0.5)</c>; cast it so it materialises as a CLR double.</summary>
-    public override string MakeMedian(string value) => $"toFloat64(median({value}))";
-
     /// <summary>ClickHouse implements the <c>windowFunnel</c>/<c>retention</c>/<c>sequenceMatch</c> aggregates.</summary>
-    public override bool SupportsSequenceAggregates => true;
-
-    /// <summary>
-    /// ClickHouse spells the sequence/funnel aggregates in camel case and renders the parameterised
-    /// forms with double parentheses (<c>windowFunnel(window)(timestamp, ...)</c>). <c>windowFunnel</c>
-    /// and <c>sequenceMatch</c> return an unsigned integer, which the row reader cannot materialise as
-    /// the declared CLR <see cref="int"/>, so they are cast with <c>toInt32(...)</c>; <c>retention</c>
-    /// returns <c>Array(UInt8)</c> and stays uncast (usable only nested).
-    /// </summary>
-    public override string MakeSequenceAggregate(string name, string? parameters, string arguments)
-    {
-        var function = name switch
-        {
-            "window_funnel" => "windowFunnel",
-            "sequence_match" => "sequenceMatch",
-            "retention" => "retention",
-            _ => name
-        };
-
-        var call = parameters is null
-            ? $"{function}({arguments})"
-            : $"{function}({parameters})({arguments})";
-
-        return name is "window_funnel" or "sequence_match" ? $"toInt32({call})" : call;
-    }
+    public override ISequenceAggregateRenderer SequenceAggregates => ClickHouseSequenceAggregateRenderer.Instance;
 
     // The ClickHouse driver turns CommandBehavior.SingleRow into a trailing LIMIT 1, which would
     // duplicate the limit the dialect already renders for single-row commands.
@@ -316,7 +272,7 @@ public sealed class ClickHouseDialect : SqlDialectBase
     public override bool SupportsGlobalPredicates => true;
 
     /// <summary>ClickHouse implements <c>LIMIT n BY expr</c>.</summary>
-    public override bool SupportsLimitBy => true;
+    public override ILimitByRenderer LimitBy => ClickHouseLimitByRenderer.Instance;
 
     /// <summary>ClickHouse implements the <c>FINAL</c> table modifier.</summary>
     public override bool SupportsFinal => true;
@@ -328,26 +284,10 @@ public sealed class ClickHouseDialect : SqlDialectBase
     public override bool SupportsPreWhere => true;
 
     /// <summary>ClickHouse implements the <c>ARRAY JOIN</c> clause.</summary>
-    public override bool SupportsArrayJoinClause => true;
-
-    /// <summary>Renders <c>[left ]array join expr, ...</c>.</summary>
-    public override string MakeArrayJoin(ArrayJoinKind kind, IReadOnlyList<string> expressions)
-    {
-        var keyword = kind == ArrayJoinKind.Left ? " left array join " : " array join ";
-        return keyword + string.Join(", ", expressions);
-    }
+    public override IArrayJoinRenderer ArrayJoinClause => ClickHouseArrayJoinRenderer.Instance;
 
     /// <summary>ClickHouse implements the trailing <c>SETTINGS</c> clause.</summary>
     public override bool SupportsSettings => true;
-
-    /// <summary>Renders <c>limit [offset, ]n by col1, col2</c>; ClickHouse places it before the final LIMIT.</summary>
-    public override void MakeLimitBy(int limit, int offset, IReadOnlyList<string> columns, StringBuilder sqlBuilder)
-    {
-        sqlBuilder.Append("limit ");
-        if (offset > 0)
-            sqlBuilder.Append(offset).Append(", ");
-        sqlBuilder.Append(limit).Append(" by ").Append(string.Join(", ", columns));
-    }
 
     public override string MakeGrouping(string columns, GroupingType groupingType) => groupingType switch
     {
@@ -509,44 +449,6 @@ public sealed class ClickHouseDialect : SqlDialectBase
 
     public override string MakeEndOfMonth(string value) => $"toLastDayOfMonth({value})";
 
-    /// <summary>
-    /// ClickHouse spells the conversion/truncation surface in camel case; <c>toYYYYMM</c>/<c>toYYYYMMDD</c>
-    /// return <c>UInt32</c> and <c>toUnixTimestamp</c> <c>UInt32</c>/<c>Int64</c>, so they are cast to the
-    /// CLR integer the methods declare.
-    /// </summary>
-    public override string MakeDateConversion(string name, IReadOnlyList<string> args)
-    {
-        var function = name switch
-        {
-            "to_date" => "toDate",
-            "to_date_time" => "toDateTime",
-            "to_date32" => "toDate32",
-            "to_day_of_week" => "toDayOfWeek",
-            "to_start_of_year" => "toStartOfYear",
-            "to_start_of_quarter" => "toStartOfQuarter",
-            "to_start_of_month" => "toStartOfMonth",
-            "to_start_of_week" => "toStartOfWeek",
-            "to_start_of_day" => "toStartOfDay",
-            "to_start_of_hour" => "toStartOfHour",
-            "to_start_of_minute" => "toStartOfMinute",
-            "to_start_of_second" => "toStartOfSecond",
-            "to_monday" => "toMonday",
-            "to_yyyymm" => "toYYYYMM",
-            "to_yyyymmdd" => "toYYYYMMDD",
-            "to_unix_timestamp" => "toUnixTimestamp",
-            _ => name
-        };
-
-        var call = $"{function}({string.Join(", ", args)})";
-
-        return name switch
-        {
-            "to_day_of_week" or "to_yyyymm" or "to_yyyymmdd" => $"toInt32({call})",
-            "to_unix_timestamp" => $"toInt64({call})",
-            _ => call
-        };
-    }
-
     public override string MakeDateFromParts(string year, string month, string day) =>
         $"makeDate({year}, {month}, {day})";
 
@@ -579,5 +481,164 @@ public sealed class ClickHouseDialect : SqlDialectBase
 
         if (paging.Offset > 0)
             sqlBuilder.Append(" offset ").Append(paging.Offset);
+    }
+}
+
+internal sealed class ClickHouseIifRenderer : IIifRenderer
+{
+    public static readonly ClickHouseIifRenderer Instance = new();
+
+    public string Render(string condition, string whenTrue, string whenFalse) =>
+        $"if({condition}, {whenTrue}, {whenFalse})";
+}
+
+internal sealed class ClickHouseSessionInfoFunctions : ISessionInfoFunctions
+{
+    public static readonly ClickHouseSessionInfoFunctions Instance = new();
+
+    public bool Supports(string name) => name is "current_user" or "current_database" or "version";
+
+    public string Render(string name) => name switch
+    {
+        "current_user" => "currentUser()",
+        "current_database" => "currentDatabase()",
+        "version" => "version()",
+        _ => throw new NotSupportedException($"The {name} session information function is not supported by ClickHouse.")
+    };
+}
+
+internal sealed class ClickHouseUuidGenerators : IUuidGenerators
+{
+    public static readonly ClickHouseUuidGenerators Instance = new();
+
+    public bool Supports(string name) => name is "gen_random_uuid" or "uuidv7";
+
+    public string Render(string name) => name switch
+    {
+        "gen_random_uuid" => "generateUUIDv4()",
+        "uuidv7" => "generateUUIDv7()",
+        _ => throw new NotSupportedException($"The {name} UUID generator function is not supported by ClickHouse.")
+    };
+}
+
+internal sealed class ClickHouseLimitByRenderer : ILimitByRenderer
+{
+    public static readonly ClickHouseLimitByRenderer Instance = new();
+
+    public string Render(int limit, int offset, IReadOnlyList<string> columns)
+    {
+        var prefix = offset > 0 ? $"{offset}, " : string.Empty;
+        return $"limit {prefix}{limit} by {string.Join(", ", columns)}";
+    }
+}
+
+internal sealed class ClickHouseStringSplitRenderer : IStringSplitRenderer
+{
+    public static readonly ClickHouseStringSplitRenderer Instance = new();
+
+    public string Render(string separator, string value) =>
+        $"splitByChar({separator}, {value})";
+}
+
+internal sealed class ClickHouseMultiIfRenderer(ClickHouseDialect dialect) : IMultiIfRenderer
+{
+    public string Render(IReadOnlyList<string> arguments, Type resultType)
+    {
+        var call = $"multiIf({string.Join(", ", arguments)})";
+
+        return resultType == typeof(byte) || resultType == typeof(short) || resultType == typeof(int)
+            || resultType == typeof(long) || resultType == typeof(float) || resultType == typeof(double)
+            || resultType == typeof(decimal)
+            ? $"cast({call} as {dialect.MakeTypeName(resultType)})"
+            : call;
+    }
+}
+
+internal sealed class ClickHouseUniqAggregateRenderer(ClickHouseDialect dialect) : IUniqAggregateRenderer
+{
+    // The uniq* aggregates return UInt64, which the row reader cannot materialise; cast to Int64.
+    public string Render(string name, string argument) =>
+        $"toInt64({dialect.MakeAggregate(name)}({argument}))";
+}
+
+internal sealed class ClickHouseQuantileAggregateRenderer(ClickHouseDialect dialect) : IQuantileAggregateRenderer
+{
+    // quantileTiming returns Float32 and quantileExact keeps the input type; toFloat64 pins every
+    // variant to the CLR double the methods declare.
+    public string Render(string name, string level, string value) =>
+        $"toFloat64({dialect.MakeAggregate(name)}({level})({value}))";
+
+    // ClickHouse's median is quantile(0.5); cast it so it materialises as a CLR double.
+    public string RenderMedian(string value) => $"toFloat64(median({value}))";
+}
+
+internal sealed class ClickHouseSequenceAggregateRenderer : ISequenceAggregateRenderer
+{
+    public static readonly ClickHouseSequenceAggregateRenderer Instance = new();
+
+    public string Render(string name, string? parameters, string arguments)
+    {
+        var function = name switch
+        {
+            "window_funnel" => "windowFunnel",
+            "sequence_match" => "sequenceMatch",
+            "retention" => "retention",
+            _ => name
+        };
+
+        var call = parameters is null
+            ? $"{function}({arguments})"
+            : $"{function}({parameters})({arguments})";
+
+        return name is "window_funnel" or "sequence_match" ? $"toInt32({call})" : call;
+    }
+}
+
+internal sealed class ClickHouseArrayJoinRenderer : IArrayJoinRenderer
+{
+    public static readonly ClickHouseArrayJoinRenderer Instance = new();
+
+    public string Render(ArrayJoinKind kind, IReadOnlyList<string> expressions)
+    {
+        var keyword = kind == ArrayJoinKind.Left ? " left array join " : " array join ";
+        return keyword + string.Join(", ", expressions);
+    }
+}
+
+internal sealed class ClickHouseDateConversionRenderer : IDateConversionRenderer
+{
+    public static readonly ClickHouseDateConversionRenderer Instance = new();
+
+    public string Render(string name, IReadOnlyList<string> args)
+    {
+        var function = name switch
+        {
+            "to_date" => "toDate",
+            "to_date_time" => "toDateTime",
+            "to_date32" => "toDate32",
+            "to_day_of_week" => "toDayOfWeek",
+            "to_start_of_year" => "toStartOfYear",
+            "to_start_of_quarter" => "toStartOfQuarter",
+            "to_start_of_month" => "toStartOfMonth",
+            "to_start_of_week" => "toStartOfWeek",
+            "to_start_of_day" => "toStartOfDay",
+            "to_start_of_hour" => "toStartOfHour",
+            "to_start_of_minute" => "toStartOfMinute",
+            "to_start_of_second" => "toStartOfSecond",
+            "to_monday" => "toMonday",
+            "to_yyyymm" => "toYYYYMM",
+            "to_yyyymmdd" => "toYYYYMMDD",
+            "to_unix_timestamp" => "toUnixTimestamp",
+            _ => name
+        };
+
+        var call = $"{function}({string.Join(", ", args)})";
+
+        return name switch
+        {
+            "to_day_of_week" or "to_yyyymm" or "to_yyyymmdd" => $"toInt32({call})",
+            "to_unix_timestamp" => $"toInt64({call})",
+            _ => call
+        };
     }
 }

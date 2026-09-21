@@ -44,7 +44,7 @@
 - [Краткий справочник API](advanced/api-reference.md)
 - [Prepared vs cached: переиспользование запроса](../specs/performance/prepared-vs-cached.md)
 - [Анализ пробелов в SQL](../specs/roadmap/sql-capabilities-gap-analysis.md)
-- [nextorm vs linq2db: сравнение функционала](../specs/ru/roadmap/linq2db-comparison.md)
+- [nextorm vs linq2db: сравнение функционала](../specs/ru/comparison/linq2db-comparison.md)
 
 ### Введение
 

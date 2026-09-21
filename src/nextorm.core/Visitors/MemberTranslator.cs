@@ -480,8 +480,11 @@ internal static class MemberTranslator
 
             // Single/SingleOrDefault require at most one row. Where the engine enforces scalar-subquery
             // cardinality the extra row is rejected by the database (the command is rendered with
-            // limit 2); where it does not (SQLite) we refuse instead of silently returning the first.
-            if (innerQuery.SingleScalar && !visitor.Dialect.EnforcesScalarSubqueryCardinality)
+            // limit 2); where it does not (SQLite) a numeric projection carries a count guard
+            // (QueryPreparer.WrapSingleScalarCardinalityGuard) and any other projection is refused
+            // instead of silently returning the first row.
+            if (innerQuery.SingleScalar && !visitor.Dialect.EnforcesScalarSubqueryCardinality
+                && (innerQuery.ResultType is not { } resultType || !QueryCommand.IsCardinalityGuardable(resultType)))
                 throw new NotSupportedException(
                     $"'{visitor.Dialect.GetType().Name}' cannot enforce Single/SingleOrDefault in a scalar subquery " +
                     "(a scalar subquery returning several rows yields the first row instead of an error); " +

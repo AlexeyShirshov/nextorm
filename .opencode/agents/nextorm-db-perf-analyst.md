@@ -2,6 +2,7 @@
 description: Database/ADO provider performance for nextorm — DbContext role interfaces, plan cache and Prepare(), query executor, row materialization, SQL builders, and the SqliteBenchmark* suite. Use when optimizing or measuring nextorm's database contexts (SQLite/Postgres/SQL Server/MySQL/ClickHouse). Can apply fixes.
 mode: subagent
 temperature: 0.1
+variant: max
 permission:
   edit: allow
 ---

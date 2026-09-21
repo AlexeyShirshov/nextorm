@@ -15,6 +15,7 @@ public partial class QueryCommand
         dst.WherePlanHash = WherePlanHash;
         dst.SortingPlanHash = SortingPlanHash;
         dst.PreparedCondition = PreparedCondition;
+        dst.PreparedHaving = PreparedHaving;
         dst.InValuesShapeHash = InValuesShapeHash;
         dst.ResultPlanHash = ResultPlanHash;
         dst.GroupingPlanHash = GroupingPlanHash;
@@ -27,11 +28,13 @@ public partial class QueryCommand
         dst.ReferencedQueriesPlanHash = ReferencedQueriesPlanHash;
         dst.CtesPlanHash = CtesPlanHash;
         dst.HintsPlanHash = HintsPlanHash;
+        dst.WindowsPlanHash = WindowsPlanHash;
         dst._hints = _hints;
         // Outer references participate in the plan key (QueryPlanEqualityComparer), so the cached
         // clone must carry them; otherwise the hash captured at construction would not match the
         // recomputed hash in QueryPlan.GetCacheVersion and the Debug.Assert would fail.
         dst._outerRefs = _outerRefs;
+        dst.OuterRegistry = OuterRegistry;
 
         dst.ResultType = ResultType;
         dst.Paging = Paging;
@@ -58,6 +61,7 @@ public partial class QueryCommand
         dst.Settings = Settings;
         dst._preWhere = _preWhere;
         dst._arrayJoins = _arrayJoins;
+        dst._windows = _windows;
         dst.ArrayJoinKind = ArrayJoinKind;
         dst.BindArrayJoinElement = BindArrayJoinElement;
         dst._preparedArrayJoin = _preparedArrayJoin;

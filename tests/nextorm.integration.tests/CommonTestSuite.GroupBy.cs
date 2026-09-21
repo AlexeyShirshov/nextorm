@@ -20,6 +20,19 @@ public abstract partial class CommonTestSuite
     }
 
     [Fact]
+    public void TestGroup_ScalarKey()
+    {
+        var r = _sut.ComplexEntity.GroupBy(e => e.Int).Select(e => new { e.Int, count = SqlFunctions.Sql.count() }).ToList();
+
+        r.Should().NotBeNullOrEmpty();
+
+        r.Should().HaveCount(2);
+
+        r.Should().Contain(x => x.Int == null && x.count == 1);
+        r.Should().Contain(x => x.Int == 1 && x.count == 2);
+    }
+
+    [Fact]
     public void TestGroup_Having()
     {
         var r = _sut.ComplexEntity.GroupBy(e => new { e.Int }).Having(e => SqlFunctions.Sql.count() > 1).Select(e => new { e.Int, count = SqlFunctions.Sql.count() }).ToList();

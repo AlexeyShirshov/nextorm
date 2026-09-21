@@ -29,17 +29,16 @@ public class MySqlDialect : SqlDialectBase
     public override bool SupportsGreatestLeast => true;
 
     /// <summary>MySQL renders the portable <c>iif</c> as <c>if(condition, whenTrue, whenFalse)</c>.</summary>
-    public override bool SupportsIif => true;
-
-    /// <summary>MySQL renders the portable <c>iif</c> as <c>if(condition, whenTrue, whenFalse)</c>.</summary>
-    public override string MakeIif(string condition, string whenTrue, string whenFalse) =>
-        $"if({condition}, {whenTrue}, {whenFalse})";
+    public override IIifRenderer Iif => MySqlIifRenderer.Instance;
 
     /// <summary>MySQL 8.0+ (and MariaDB 10.2+) support the ANSI <c>percent_rank</c>/<c>cume_dist</c> window functions.</summary>
     public override bool SupportsPercentRankCumeDist => true;
 
     /// <summary>MySQL 8.0+ supports <c>nth_value(value, n)</c> as a window function.</summary>
     public override bool SupportsNthValue => true;
+
+    /// <summary>MySQL 8.0+ declares named windows (the <c>WINDOW</c> clause) and references them with <c>OVER w</c>.</summary>
+    public override bool SupportsNamedWindows => true;
 
     // MySQL/MariaDB full-text search matches against a FULLTEXT index; contains uses boolean mode,
     // freetext natural-language mode. The relevance score is turned into a boolean.
@@ -59,22 +58,7 @@ public class MySqlDialect : SqlDialectBase
     public override bool SupportsAnyValueAggregate => true;
 
     /// <summary>MySQL/MariaDB render the whole session/information family.</summary>
-    public override bool SupportsSessionInfoFunctions => true;
-
-    /// <summary>MySQL/MariaDB support all five session/information functions.</summary>
-    public override bool SupportsSessionInfoFunction(string name) =>
-        name is "current_user" or "session_user" or "current_schema" or "current_database" or "version";
-
-    /// <summary>MySQL/MariaDB render the functions as calls; schema()/database() are synonyms for the current database.</summary>
-    public override string MakeSessionInfoFunction(string name) => name switch
-    {
-        "current_user" => "current_user()",
-        "session_user" => "session_user()",
-        "current_schema" => "schema()",
-        "current_database" => "database()",
-        "version" => "version()",
-        _ => base.MakeSessionInfoFunction(name)
-    };
+    public override ISessionInfoFunctions SessionInfoFunctions => MySqlSessionInfoFunctions.Instance;
 
     public override string MakeTextJsonFunction(string name, IReadOnlyList<string> args) => name switch
     {
@@ -265,9 +249,41 @@ public class MySqlDialect : SqlDialectBase
     }
 
     /// <summary>MySQL/MariaDB support the trailing row-locking clause.</summary>
-    public override bool SupportsLocking => true;
+    public override ILockRenderer Lock => MySqlLockRenderer.Instance;
+}
 
-    /// <summary>MySQL/MariaDB render <c>for update</c> and <c>lock in share mode</c>.</summary>
-    public override string MakeLock(LockMode mode) =>
+internal sealed class MySqlIifRenderer : IIifRenderer
+{
+    public static readonly MySqlIifRenderer Instance = new();
+
+    public string Render(string condition, string whenTrue, string whenFalse) =>
+        $"if({condition}, {whenTrue}, {whenFalse})";
+}
+
+internal sealed class MySqlSessionInfoFunctions : ISessionInfoFunctions
+{
+    public static readonly MySqlSessionInfoFunctions Instance = new();
+
+    public bool Supports(string name) =>
+        name is "current_user" or "session_user" or "current_schema" or "current_database" or "version";
+
+    public string Render(string name) => name switch
+    {
+        "current_user" => "current_user()",
+        "session_user" => "session_user()",
+        "current_schema" => "schema()",
+        "current_database" => "database()",
+        "version" => "version()",
+        _ => throw new NotSupportedException($"The {name} session information function is not supported by MySQL/MariaDB.")
+    };
+}
+
+internal sealed class MySqlLockRenderer : ILockRenderer
+{
+    public static readonly MySqlLockRenderer Instance = new();
+
+    public bool UsesTableHints => false;
+
+    public string Render(LockMode mode) =>
         mode == LockMode.Share ? " lock in share mode" : " for update";
 }

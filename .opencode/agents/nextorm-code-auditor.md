@@ -2,6 +2,7 @@
 description: Code audit for nextorm — code smells (suppressions, IDisposable correctness, LINQ on hot paths, god classes, cache hash keys) and public-API naming (P0/P1/P2, XML-doc coverage, surface locking). Owns docs/specs/design/code-smells-review.md and docs/specs/design/API-NAMING-REVIEW.md. Triggers on "code audit", "code smells", "API naming review", "нейминг публичного API", "XML-doc coverage", "CS1591", "подавления предупреждений", "SupressMessage", "IDisposable", "lock the public API surface". May update the two registers only; never edits code.
 mode: subagent
 temperature: 0.1
+variant: max
 permission:
   edit:
     "*": deny

@@ -60,6 +60,12 @@ public sealed record QueryDefinition
     /// <summary>Optional ClickHouse <c>PREWHERE</c> predicate.</summary>
     public LambdaExpression? PreWhere { get; init; }
     /// <summary>
+    /// Named window definitions declared for this query (<c>WINDOW w AS (...)</c>), or <c>null</c> when
+    /// the query declares none. A dialect that does not support the clause rejects a query that carries
+    /// them.
+    /// </summary>
+    public IReadOnlyList<WindowDefinition>? Windows { get; init; }
+    /// <summary>
     /// Optional ClickHouse <c>ARRAY JOIN</c> expressions (the array lambdas accumulated by the builder),
     /// or <c>null</c> when the clause is absent.
     /// </summary>

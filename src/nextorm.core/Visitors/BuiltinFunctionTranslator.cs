@@ -5,14 +5,15 @@ namespace NextORM.Core;
 /// <summary>
 /// Translates the scalar and aggregate built-ins of <see cref="CommonFunctions"/> that are not part of
 /// the array/JSON surface: <c>nullif</c>, <c>greatest</c>/<c>least</c>, the <c>iif</c>/<c>choose</c>
-/// conditionals, the <c>date_trunc</c>/<c>date_add</c>/<c>date_diff</c>/<c>end_of_month</c>/
+/// conditionals (plus the ClickHouse-only <c>multiIf</c>), the <c>date_trunc</c>/<c>date_add</c>/<c>date_diff</c>/<c>end_of_month</c>/
 /// <c>date_from_parts</c> date helpers, <c>contains</c>/<c>freetext</c> and the
 /// <c>string_agg</c>/<c>array_agg</c> aggregates (including their optional
 /// <c>FILTER (WHERE ...)</c> clause).
 /// <para>
 /// Each provider-specific group is guarded by a dialect capability
-/// (<see cref="ISqlDialect.SupportsGreatestLeast"/>, <see cref="ISqlDialect.SupportsIif"/>,
-/// <see cref="ISqlDialect.SupportsChoose"/>, <see cref="ISqlDialect.SupportsDateTrunc"/>,
+/// (<see cref="ISqlDialect.SupportsGreatestLeast"/>, <see cref="ISqlDialect.Iif"/>,
+/// <see cref="ISqlDialect.SupportsChoose"/>, <see cref="ISqlDialect.MultiIf"/>,
+/// <see cref="ISqlDialect.SupportsDateTrunc"/>,
 /// <see cref="ISqlDialect.SupportsDateArithmetic"/>, <see cref="ISqlDialect.SupportsFullText"/>,
 /// <see cref="ISqlDialect.SupportsStringArrayAggregates"/>, <see cref="ISqlDialect.SupportsFilter"/>)
 /// so a provider that cannot express the construct fails with a clear message instead of emitting
@@ -41,6 +42,12 @@ internal static class BuiltinFunctionTranslator
             case nameof(SqlServerFunctions.choose) when node.Arguments.Count == 2:
                 EmitChoose(visitor, FlattenChoose(node.Arguments));
                 return true;
+            case nameof(ClickHouseFunctions.multi_if) when node.Arguments.Count == 1:
+                EmitMultiIf(visitor, node);
+                return true;
+            case nameof(ClickHouseFunctions.when):
+            case nameof(ClickHouseFunctions.otherwise):
+                throw new NotSupportedException("The when/otherwise branches can only be used inside multi_if.");
             case nameof(CommonFunctions.date_trunc) when node.Arguments.Count == 2:
                 EmitDateTrunc(visitor, node.Arguments);
                 return true;
@@ -123,7 +130,7 @@ internal static class BuiltinFunctionTranslator
     /// <summary>Renders the portable <c>iif</c> through the dialect's native conditional spelling.</summary>
     private static void EmitIif(BaseExpressionVisitor visitor, IReadOnlyList<Expression> args)
     {
-        if (!visitor.Dialect.SupportsIif)
+        if (visitor.Dialect.Iif is not { } iif)
             throw new NotSupportedException("The iif conditional function is not supported by this provider.");
 
         if (visitor.IsParamMode)
@@ -135,7 +142,7 @@ internal static class BuiltinFunctionTranslator
         }
 
         visitor.NeedAliasForColumn = true;
-        visitor.Builder!.Append(visitor.Dialect.MakeIif(
+        visitor.Builder!.Append(iif.Render(
             visitor.VisitToString(args[0]),
             visitor.VisitToString(args[1]),
             visitor.VisitToString(args[2])));
@@ -161,6 +168,94 @@ internal static class BuiltinFunctionTranslator
         }
 
         return args;
+    }
+
+    /// <summary>
+    /// Renders the ClickHouse-only multi-branch conditional <c>multiIf(cond1, then1, ..., else)</c>
+    /// (gated by <see cref="ISqlDialect.MultiIf"/>). The branches are the inline
+    /// <c>when</c>/<c>otherwise</c> calls of the <c>params</c> array.
+    /// </summary>
+    private static void EmitMultiIf(BaseExpressionVisitor visitor, MethodCallExpression node)
+    {
+        if (visitor.Dialect.MultiIf is not { } multiIf)
+            throw new NotSupportedException("The multiIf conditional function is not supported by this provider.");
+
+        var branches = FlattenMultiIfBranches(node.Arguments[0]);
+
+        if (visitor.IsParamMode)
+        {
+            for (var (i, cnt) = (0, branches.Count); i < cnt; i++)
+            {
+                if (branches[i].Condition is { } condition)
+                    visitor.Visit(condition);
+
+                visitor.Visit(branches[i].Value);
+            }
+
+            return;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        var rendered = new List<string>(branches.Count * 2);
+        for (var (i, cnt) = (0, branches.Count); i < cnt; i++)
+        {
+            if (branches[i].Condition is { } condition)
+                rendered.Add(visitor.VisitToString(condition));
+
+            rendered.Add(visitor.VisitToString(branches[i].Value));
+        }
+
+        visitor.Builder!.Append(multiIf.Render(
+            rendered,
+            Nullable.GetUnderlyingType(node.Type) ?? node.Type));
+    }
+
+    /// <summary>
+    /// Flattens the <c>params</c> branch array of <c>multi_if</c> into condition/value pairs and the
+    /// trailing else value (<c>Condition == null</c>). The branches must be inline
+    /// <c>when(condition, value)</c>/<c>otherwise(value)</c> calls, with exactly one trailing
+    /// <c>otherwise</c>.
+    /// </summary>
+    private static IReadOnlyList<(Expression? Condition, Expression Value)> FlattenMultiIfBranches(Expression expression)
+    {
+        if (expression is not NewArrayExpression { Expressions: var items } || items.Count == 0)
+            throw new NotSupportedException("The multiIf branches must be inline when(...)/otherwise(...) calls.");
+
+        var branches = new List<(Expression?, Expression)>(items.Count);
+        var hasElse = false;
+
+        for (var (i, cnt) = (0, items.Count); i < cnt; i++)
+        {
+            if (items[i] is not MethodCallExpression call
+                || call.Method.DeclaringType != typeof(ClickHouseFunctions)
+                || call.Method.Name is not (nameof(ClickHouseFunctions.when) or nameof(ClickHouseFunctions.otherwise))
+                || call.Arguments.Count == 0)
+                throw new NotSupportedException("The multiIf branches must be inline when(...)/otherwise(...) calls.");
+
+            if (call.Method.Name == nameof(ClickHouseFunctions.otherwise))
+            {
+                if (i != items.Count - 1)
+                    throw new NotSupportedException("The multiIf otherwise(...) branch must be the last one.");
+
+                hasElse = true;
+                branches.Add((null, call.Arguments[0]));
+            }
+            else
+            {
+                if (call.Arguments.Count != 2)
+                    throw new NotSupportedException("A multiIf when(...) branch requires a condition and a value.");
+
+                branches.Add((call.Arguments[0], call.Arguments[1]));
+            }
+        }
+
+        if (!hasElse)
+            throw new NotSupportedException("multiIf requires a final otherwise(...) branch.");
+
+        if (branches.Count < 2)
+            throw new NotSupportedException("multiIf requires at least one when(...) branch.");
+
+        return branches;
     }
 
     /// <summary><c>date_trunc(field, value)</c> with a validated constant date-part name.</summary>

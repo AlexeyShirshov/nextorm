@@ -7,8 +7,8 @@ namespace NextORM.Core;
 /// (<c>to_date</c>/<c>to_date_time</c>/<c>to_date32</c>, the <c>to_year</c>/... part accessors,
 /// <c>to_start_of_*</c>, <c>to_monday</c>, <c>to_yyyymm</c>/<c>to_yyyymmdd</c> and
 /// <c>to_unix_timestamp</c>). The part accessors reuse the existing <see cref="ISqlDialect.MakeDatePart"/>
-/// hook; the rest go through <see cref="ISqlDialect.MakeDateConversion"/>. Only a dialect that opts in
-/// with <see cref="ISqlDialect.SupportsDateConversionFunctions"/> (ClickHouse) may use these constructs;
+/// hook; the rest go through <see cref="IDateConversionRenderer.Render"/>. Only a dialect that opts in
+/// with <see cref="ISqlDialect.DateConversion"/> (ClickHouse) may use these constructs;
 /// every other provider rejects them with a clear message.
 /// </summary>
 internal static class DateConversionSqlTranslator
@@ -77,7 +77,7 @@ internal static class DateConversionSqlTranslator
 
     private static void EmitConversion(BaseExpressionVisitor visitor, MethodCallExpression node, string name)
     {
-        RequireSupport(visitor);
+        var dateConversion = RequireSupport(visitor);
 
         var args = node.Arguments;
 
@@ -94,13 +94,11 @@ internal static class DateConversionSqlTranslator
         for (var (i, cnt) = (0, args.Count); i < cnt; i++)
             rendered[i] = visitor.VisitToString(args[i]);
 
-        visitor.Builder!.Append(visitor.Dialect.MakeDateConversion(name, rendered));
+        visitor.Builder!.Append(dateConversion.Render(name, rendered));
     }
 
-    private static void RequireSupport(BaseExpressionVisitor visitor)
-    {
-        if (!visitor.Dialect.SupportsDateConversionFunctions)
-            throw new NotSupportedException(
-                "The date conversion functions (toDate/toDateTime/toDate32/toStartOf*/toMonday/toYYYYMM/toUnixTimestamp) are not supported by this provider.");
-    }
+    private static IDateConversionRenderer RequireSupport(BaseExpressionVisitor visitor) =>
+        visitor.Dialect.DateConversion
+        ?? throw new NotSupportedException(
+            "The date conversion functions (toDate/toDateTime/toDate32/toStartOf*/toMonday/toYYYYMM/toUnixTimestamp) are not supported by this provider.");
 }

@@ -146,20 +146,19 @@ public class MySqlDialectTests
     [Fact]
     public void SessionInfoHooks_ShouldUseMySqlForms()
     {
-        Dialect.SupportsSessionInfoFunctions.Should().BeTrue();
-        Dialect.SupportsSessionInfoFunction("current_schema").Should().BeTrue();
-        Dialect.MakeSessionInfoFunction("current_user").Should().Be("current_user()");
-        Dialect.MakeSessionInfoFunction("session_user").Should().Be("session_user()");
-        Dialect.MakeSessionInfoFunction("current_schema").Should().Be("schema()");
-        Dialect.MakeSessionInfoFunction("current_database").Should().Be("database()");
-        Dialect.MakeSessionInfoFunction("version").Should().Be("version()");
+        Dialect.SessionInfoFunctions.Should().NotBeNull();
+        Dialect.SessionInfoFunctions!.Supports("current_schema").Should().BeTrue();
+        Dialect.SessionInfoFunctions!.Render("current_user").Should().Be("current_user()");
+        Dialect.SessionInfoFunctions!.Render("session_user").Should().Be("session_user()");
+        Dialect.SessionInfoFunctions!.Render("current_schema").Should().Be("schema()");
+        Dialect.SessionInfoFunctions!.Render("current_database").Should().Be("database()");
+        Dialect.SessionInfoFunctions!.Render("version").Should().Be("version()");
     }
 
     [Fact]
     public void UuidHooks_ShouldBeUnsupported()
     {
         // MySQL has only UUID() (v1); a v4/v7 generator is not available.
-        Dialect.SupportsUuidGenerators.Should().BeFalse();
-        Dialect.SupportsUuidGenerator("gen_random_uuid").Should().BeFalse();
+        Dialect.UuidGenerators.Should().BeNull();
     }
 }

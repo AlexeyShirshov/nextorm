@@ -56,6 +56,13 @@ public interface ITestProvider
     /// </summary>
     bool EnforcesScalarSubqueryCardinality { get; }
 
+    /// <summary>
+    /// True when the provider can render a correlated <c>CROSS/OUTER APPLY</c> source (or its
+    /// <c>LATERAL</c> equivalent). SQL Server, PostgreSQL, MySQL and MariaDB can; SQLite and
+    /// ClickHouse have no lateral source, so the shared correlated-apply tests are skipped there.
+    /// </summary>
+    bool SupportsApply { get; }
+
     void EnsureSeeded();
 
     IDataContext CreateContext();

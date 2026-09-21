@@ -27,7 +27,7 @@ select id from array_entity left array join tags where id > 0
 The scalar `array_join` (one row per element, projectable) and the clause methods
 `ArrayJoin`/`LeftArrayJoin`/`ArrayJoinElement`/`LeftArrayJoinElement` are covered in
 [Arrays (ClickHouse)](../11-scalar-functions.md#arrays-clickhouse); the array functions are gated by
-`SupportsArrayFunctions`, the clause by `SupportsArrayJoinClause`.
+`SupportsArrayFunctions`, the clause by `ArrayJoinClause`.
 
 ## `LIMIT n BY expr`
 
@@ -47,7 +47,7 @@ select id, nullableint from complex_entity order by id limit 2 by nullableint
 ```
 
 See [Sorting and paging](../05-sorting-and-paging.md#limit-by-clickhouse)
-([`SupportsLimitBy`](xref:NextORM.Core.ISqlDialect.SupportsLimitBy)).
+([`LimitBy`](xref:NextORM.Core.ISqlDialect.LimitBy)).
 
 ## `GROUP BY ... WITH TOTALS`
 
@@ -58,7 +58,7 @@ be combined with `GROUPING SETS`:
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
     .GroupBy(x => x.Int)
-    .Select(x => new { x.Key, Count = SqlFunctions.Sql.count() })
+    .Select(x => new { x.Int, Count = SqlFunctions.Sql.count() })
     .WithTotals()
     .ToList();
 ```

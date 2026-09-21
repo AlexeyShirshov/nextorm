@@ -23,10 +23,11 @@ Declarations are immutable: every [`With`](xref:NextORM.Core.DataContextExtensio
 and whether the body may reference its own name.
 
 [`From`](xref:NextORM.Core.CteQuery) (or `From(CteDefinition)`) starts a new query whose `from` is one of the
-declared CTEs, carrying every declaration into the resulting command. From there the entity-free
-[`TableAlias`](xref:NextORM.Core.TableAlias) mode is used to read the CTE columns (`t["id"].AsInt`), and the normal [`Where`](xref:NextORM.Core.EntityBuilder`1)/[`Join`](xref:NextORM.Core.EntityBuilder`1)/
-[`Select`](xref:NextORM.Core.EntityBuilder`1) operators apply. Recursive bodies reference their own name the same way
-(`dataContext.From("nums")` inside the step query).
+declared CTEs, carrying every declaration into the resulting command. It returns the regular
+[`EntityBuilder<T>`](xref:NextORM.Core.EntityBuilder`1) over the entity-free [`TableAlias`](xref:NextORM.Core.TableAlias) mode, so the
+**full operator set** applies — [`Where`](xref:NextORM.Core.EntityBuilder`1)/[`Join`](xref:NextORM.Core.EntityBuilder`1)/[`GroupBy`](xref:NextORM.Core.EntityBuilder`1)/[`Having`](xref:NextORM.Core.EntityBuilder`1)/[`OrderBy`](xref:NextORM.Core.EntityBuilder`1)/[`Limit`](xref:NextORM.Core.EntityBuilder`1)/[`Select`](xref:NextORM.Core.EntityBuilder`1).
+CTE columns are read by name (`t["id"].AsInt` or `t.GetInt64("id")`). Recursive bodies reference their own
+name the same way (`dataContext.From("nums")` inside the step query).
 
 Rendering: dialects that use the ANSI form emit `with recursive` when any definition is recursive
 (SQLite, PostgreSQL); SQL Server declares a recursive CTE with `with` alone and appends the depth option
@@ -94,6 +95,60 @@ var rows = cte.From(cte.Ctes[0])
     .Select(t => new { id = t["id"].AsInt })
     .ToList();
 ```
+
+## Composing over a CTE
+
+The CTE source is the regular generic builder, so anything that works over a table works over a CTE:
+filter, aggregate, order, page and join. A later CTE can also aggregate an earlier one by name:
+
+```csharp
+var first = dataContext.From<IComplexEntity>()
+    .Select(x => new { x.Id, name = x.String });
+
+var second = dataContext.From("first")
+    .GroupBy(t => new { name = t.GetString("name") })
+    .Select(t => new { name = t.GetString("name"), count = SqlFunctions.Sql.count() });
+
+var rows = dataContext
+    .With("first", first)
+    .With("second", second)
+    .From("second")
+    .OrderByDescending(t => t.GetInt32("count"))
+    .Select(t => new { name = t.GetString("name"), count = t.GetInt32("count") })
+    .ToList();
+```
+
+```sql
+-- SQLite
+with first as (select id, somestring as 'name' from complex_entity),
+     second as (select name, count(*) as 'count' from first group by name)
+select name, count from second order by count desc
+```
+
+A CTE can be joined to another CTE (or to a table). Both sides are addressed by name, and each
+`TableAlias` column is table-qualified, so a column shared by both CTEs is unambiguous:
+
+```csharp
+var left = dataContext.From<IComplexEntity>().Select(x => new { x.Id });
+var right = dataContext.From<ISimpleEntity>().Select(x => new { x.Id });
+
+var rows = dataContext
+    .With("l", left)
+    .With("r", right)
+    .From("l")
+    .Join(dataContext.From("r"), (l, r) => l.GetInt64("id") == r.GetInt64("id"))
+    .Select(p => new { Id = p.Item1.GetInt64("id"), Other = p.Item2.GetInt64("id") })
+    .ToList();
+```
+
+```sql
+-- SQLite
+with l as (select id from complex_entity), r as (select id from simple_entity) select t1.id, t2.id from l as 't1' join r as 't2' on t1.id = t2.id
+```
+
+> The CTE source has no mapped entity, so its columns are read by name (`t.GetInt64("id")` /
+> `t["id"].AsInt`) and the names must match the CTE body's output aliases. Name the projection members
+> after the SQL aliases (lower-case `snake_case`) so the outer references stay exact.
 
 ## Recursive CTE: a number series
 

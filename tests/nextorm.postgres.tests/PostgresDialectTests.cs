@@ -24,19 +24,19 @@ public class PostgresDialectTests
     [Fact]
     public void QueryModifierHooks_ShouldUsePostgresForms()
     {
-        Dialect.SupportsDistinctOn.Should().BeTrue();
-        Dialect.MakeDistinctOn(["a", "b"]).Should().Be("distinct on (a, b) ");
+        Dialect.DistinctOn.Should().NotBeNull();
+        Dialect.DistinctOn!.Render(["a", "b"]).Should().Be("distinct on (a, b) ");
 
-        Dialect.SupportsTableSample.Should().BeTrue();
-        Dialect.SupportsTableSampleMethod(TableSampleMethod.System).Should().BeTrue();
-        Dialect.SupportsTableSampleMethod(TableSampleMethod.Bernoulli).Should().BeTrue();
-        Dialect.MakeTableSample(TableSampleMethod.System, 10, null).Should().Be(" tablesample system (10)");
-        Dialect.MakeTableSample(TableSampleMethod.Bernoulli, 5, 7).Should().Be(" tablesample bernoulli (5) repeatable (7)");
+        Dialect.TableSample.Should().NotBeNull();
+        Dialect.TableSample!.Supports(TableSampleMethod.System).Should().BeTrue();
+        Dialect.TableSample!.Supports(TableSampleMethod.Bernoulli).Should().BeTrue();
+        Dialect.TableSample!.Render(TableSampleMethod.System, 10, null).Should().Be(" tablesample system (10)");
+        Dialect.TableSample!.Render(TableSampleMethod.Bernoulli, 5, 7).Should().Be(" tablesample bernoulli (5) repeatable (7)");
 
         Dialect.SupportsWithTies.Should().BeTrue();
-        Dialect.SupportsLocking.Should().BeTrue();
-        Dialect.MakeLock(LockMode.Update).Should().Be(" for update");
-        Dialect.MakeLock(LockMode.Share).Should().Be(" for share");
+        Dialect.Lock.Should().NotBeNull();
+        Dialect.Lock!.Render(LockMode.Update).Should().Be(" for update");
+        Dialect.Lock!.Render(LockMode.Share).Should().Be(" for share");
 
         Dialect.SupportsTextSearchFunctions.Should().BeTrue();
     }
@@ -172,24 +172,24 @@ public class PostgresDialectTests
     [Fact]
     public void SessionInfoHooks_ShouldUsePostgresForms()
     {
-        Dialect.SupportsSessionInfoFunctions.Should().BeTrue();
-        Dialect.SupportsSessionInfoFunction("current_user").Should().BeTrue();
-        Dialect.SupportsSessionInfoFunction("current_database").Should().BeTrue();
-        Dialect.MakeSessionInfoFunction("current_user").Should().Be("current_user");
-        Dialect.MakeSessionInfoFunction("session_user").Should().Be("session_user");
-        Dialect.MakeSessionInfoFunction("current_schema").Should().Be("current_schema");
-        Dialect.MakeSessionInfoFunction("current_database").Should().Be("current_database()");
-        Dialect.MakeSessionInfoFunction("version").Should().Be("version()");
+        Dialect.SessionInfoFunctions.Should().NotBeNull();
+        Dialect.SessionInfoFunctions!.Supports("current_user").Should().BeTrue();
+        Dialect.SessionInfoFunctions!.Supports("current_database").Should().BeTrue();
+        Dialect.SessionInfoFunctions!.Render("current_user").Should().Be("current_user");
+        Dialect.SessionInfoFunctions!.Render("session_user").Should().Be("session_user");
+        Dialect.SessionInfoFunctions!.Render("current_schema").Should().Be("current_schema");
+        Dialect.SessionInfoFunctions!.Render("current_database").Should().Be("current_database()");
+        Dialect.SessionInfoFunctions!.Render("version").Should().Be("version()");
     }
 
     [Fact]
     public void UuidHooks_ShouldUsePostgresForms()
     {
-        Dialect.SupportsUuidGenerators.Should().BeTrue();
-        Dialect.SupportsUuidGenerator("gen_random_uuid").Should().BeTrue();
-        Dialect.SupportsUuidGenerator("uuidv7").Should().BeTrue();
-        Dialect.MakeUuidGenerator("gen_random_uuid").Should().Be("gen_random_uuid()");
-        Dialect.MakeUuidGenerator("uuidv7").Should().Be("uuidv7()");
+        Dialect.UuidGenerators.Should().NotBeNull();
+        Dialect.UuidGenerators!.Supports("gen_random_uuid").Should().BeTrue();
+        Dialect.UuidGenerators!.Supports("uuidv7").Should().BeTrue();
+        Dialect.UuidGenerators!.Render("gen_random_uuid").Should().Be("gen_random_uuid()");
+        Dialect.UuidGenerators!.Render("uuidv7").Should().Be("uuidv7()");
     }
 
     [Fact]

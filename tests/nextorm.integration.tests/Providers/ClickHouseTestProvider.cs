@@ -34,6 +34,7 @@ internal sealed class ClickHouseTestProvider : ITestProvider
     // The shared TVF test targets SQLite's json_each, which has no ClickHouse equivalent.
     public bool SupportsTableValuedFunctions => false;
     public bool EnforcesScalarSubqueryCardinality => true;
+    public bool SupportsApply => false;
     public string TableValuedFunctionSkipReason => "The shared table-valued function test uses SQLite's json_each; no portable equivalent is configured for ClickHouse.";
 
     public string SkipReason => ClickHouseContainer.Failure ?? "ClickHouse is not available.";

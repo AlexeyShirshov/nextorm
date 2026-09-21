@@ -7,7 +7,7 @@
 
 > Номера строк — по актуальному рабочему дереву HEAD `d21c473` (Build `0 warnings / 0 errors`), если не указано иное. Числа в разделах «Повторный аудит» и «Динамика» — исторические снимки на соответствующий коммит.
 >
-> **Примечание (20.09.2026):** полностью реализованные отчёты `WIP_*.md`, на которые ссылаются записи ниже, перенесены в документацию и удалены из `docs/specs/roadmap/`; ссылки на них в этом журнале — историческое свидетельство аудита.
+> **Примечание (20.09.2026):** ссылки на удалённые рабочие отчёты в этом журнале — историческое свидетельство аудита; их выводы перенесены в документацию.
 
 ---
 
@@ -44,7 +44,7 @@
 Изменение новых запахов не вносит: добавленных `SuppressMessage`/`#pragma`/`NoWarn`, пустых
 `catch`, `Task.Delay`/`Thread.Sleep`, `Skip=` нет; `IDisposable`, события, LINQ и хэш-ключи не
 затронуты. `WindowSql.MapWindowFunctionName` (`WindowSql.cs:23-24`) использует `nameof`.
-`percent_rank`/`cume_dist` — ANSI-функции без `Make*`/`Supports*`-хуков: `WindowFunctionTranslator` 
+`percent_rank`/`cume_dist` — ANSI-функции без `Make*`/`Supports*`-хуков: `WindowFunctionTranslator`
 рендерит их как есть (`WindowFunctionTranslator.cs:77-80`), ветка `MakeAggregate` для них не
 вызывается. Build Release — **0/0**. Чинить нечего; соотношение подавлений проекта не изменилось
 (5 `SuppressMessage` с обоснованием + 5 `#pragma` с `restore`, неоправданных — 0).
@@ -556,7 +556,7 @@ unit-тесты).
 
 - Ключ `"doy"` — единственное сокращение среди полнословных `year`/`month`/`day`/`hour`/`minute`/`second`; выбран под `extract(doy …)`. После фикса Находки 8 он остаётся чисто внутренним контрактом визитора и диалектов.
 - Новые `public override MakeDatePart` (`MySqlDialect.cs:159`, `ClickHouseDialect.cs:98`) не имеют XML-`<summary>` — ровно как существующий SQL Server-override (`SqlServerDialect.cs:152`); `CS1591` скрыт в 7 `.csproj` до Шага 5 (см. `API-NAMING-REVIEW.md`).
-- `DateTime.DayOfWeek` намеренно не маппится. Обоснование в WIP слишком широкое: `datepart(weekday)`/`DATEFIRST` — это только SQL Server; PostgreSQL `extract(dow …)` и SQLite `strftime('%w')` уже 0-based как .NET, MySQL `dayofweek()-1` и ClickHouse `toDayOfWeek()%7` дают тот же результат. Т.е. безопасный пер-диалектный маппинг существует, но это отдельная задача.
+- `DateTime.DayOfWeek` намеренно не маппится. Обоснование в плане слишком широкое: `datepart(weekday)`/`DATEFIRST` — это только SQL Server; PostgreSQL `extract(dow …)` и SQLite `strftime('%w')` уже 0-based как .NET, MySQL `dayofweek()-1` и ClickHouse `toDayOfWeek()%7` дают тот же результат. Т.е. безопасный пер-диалектный маппинг существует, но это отдельная задача.
 - `tests/nextorm.sqlite.tests/SqlGenerationTests.cs:1063` — метод по-прежнему `DateTimeYearMonthDay_ShouldUseStrftime`, хотя теперь покрывает и `DayOfYear`; имя теста сузилось.
 
 ---
@@ -891,7 +891,7 @@ write-only состояние.
   (`QueryCommand.QueryPreparer.cs:469-473`), тогда как ClickHouse поддерживает отрицательные `LIMIT BY`
   (выборка с конца группы) и смешанные знаки. Осознанное ограничение — стоит зафиксировать в XML-доке
   `EntityBuilder.LimitBy`/`ISqlDialect.MakeLimitBy`.
-- **WIP-расхождения.** `WIP_limit_by.md:58` заявляет `LimitBy_WithOffsetAndOrderBy_ShouldOrderAndLimit`,
+- **Расхождения с планом.** План заявлял `LimitBy_WithOffsetAndOrderBy_ShouldOrderAndLimit`,
   фактический тест — `...ShouldOrderThenLimitBy` (`tests/nextorm.clickhouse.tests/SqlGenerationTests.cs:448`);
   раздел «Результат» (`:70-72`) не заполнен.
 
@@ -929,7 +929,7 @@ write-only состояние.
 
 ### 🟡 Находка 12 — `PreWhere` не объединяет условия, в отличие от `Where` (ОТКРЫТА)
 
-`EntityBuilder.PreWhere` (`EntityBuilder.cs:257-264`) перезаписывает `_preWhere`, тогда как `Where` (`:181-194`) соединяет предикаты через `AndAlso`. `.PreWhere(a).PreWhere(b)` молча теряет `a`, хотя цепочка выглядит накопительной. WIP (`WIP_query_modifiers.md:30-31`) заявляет образец `Where` — по подготовке выражения образец соблюдён, по семантике — нет.
+`EntityBuilder.PreWhere` (`EntityBuilder.cs:257-264`) перезаписывает `_preWhere`, тогда как `Where` (`:181-194`) соединяет предикаты через `AndAlso`. `.PreWhere(a).PreWhere(b)` молча теряет `a`, хотя цепочка выглядит накопительной. план заявлял образец `Where` — по подготовке выражения образец соблюдён, по семантике — нет.
 
 - **Было:** `b._preWhere = condition;`
 - **Стало:** повтор объединения `Where` — `ReplaceParameterExpressionVisitor` + `AndAlso` (ClickHouse допускает одну `PREWHERE`, конъюнкция даёт предсказуемую семантику), либо явная XML-оговорка «последний вызов побеждает», если перезапись осознанна.
@@ -1171,7 +1171,7 @@ mysql **42/42**, mariadb **11/11**, clickhouse **89/89**, sqlite **205/205** (fa
 
 ## 🔎 Точечный аудит — ClickHouse табличные функции `zeros`/`zeros_mt` (20.09.2026)
 
-Область: `SqlFunctions.IZerosRow` (`Query/SqlFunctions.cs:111-120`), `ClickHouseFunctions.zeros`/`zeros_mt` (`Query/SqlFunctions.ClickHouse.cs:170-185`), `ClickHouseDialect.SupportsTableFunction` (`src/nextorm.clickhouse/ClickHouseDialect.cs:183-185`), `SqlSourceRenderer.MakeTableFunction` (`DataContext/SqlSourceRenderer.cs:311-317`), тесты `tests/nextorm.clickhouse.tests/SqlGenerationTests.cs:555-579`, `ClickHouseDialectTests.cs:98-105`, `tests/nextorm.postgres.tests/SqlGenerationTests.cs:1458-1468`, `tests/nextorm.integration.tests/ClickHouseIntegrationTests.cs:177-187`. Build Release — **0/0**; unit: clickhouse **96/96**, core **157/157**, postgres **171/171** (0 failed); контейнерная интеграция `ZerosTableFunction_ShouldReturnThreeRows` на реальном ClickHouse зелёная (по `WIP_clickhouse_table_functions_remaining.md`; в этом аудите не перезапускалась).
+Область: `SqlFunctions.IZerosRow` (`Query/SqlFunctions.cs:111-120`), `ClickHouseFunctions.zeros`/`zeros_mt` (`Query/SqlFunctions.ClickHouse.cs:170-185`), `ClickHouseDialect.SupportsTableFunction` (`src/nextorm.clickhouse/ClickHouseDialect.cs:183-185`), `SqlSourceRenderer.MakeTableFunction` (`DataContext/SqlSourceRenderer.cs:311-317`), тесты `tests/nextorm.clickhouse.tests/SqlGenerationTests.cs:555-579`, `ClickHouseDialectTests.cs:98-105`, `tests/nextorm.postgres.tests/SqlGenerationTests.cs:1458-1468`, `tests/nextorm.integration.tests/ClickHouseIntegrationTests.cs:177-187`. Build Release — **0/0**; unit: clickhouse **96/96**, core **157/157**, postgres **171/171** (0 failed); контейнерная интеграция `ZerosTableFunction_ShouldReturnThreeRows` на реальном ClickHouse зелёная (ранее; в этом аудите не перезапускалась).
 
 | Категория навыка | Результат |
 |---|---|
@@ -1202,7 +1202,7 @@ mysql **42/42**, mariadb **11/11**, clickhouse **89/89**, sqlite **205/205** (fa
 `tests/nextorm.postgres.tests/SqlGenerationTests.cs:1470-1483`,
 `tests/nextorm.integration.tests/ClickHouseIntegrationTests.cs:189-211`. Build Release — **0/0**;
 unit: clickhouse **99/99**, postgres **172/172** (0 failed); контейнерная интеграция
-`GlobalIn_Subquery_/Values_ShouldFilter` на реальном ClickHouse — зелёные по `WIP_global_in.md`
+`GlobalIn_Subquery_/Values_ShouldFilter` на реальном ClickHouse — зелёные ранее
 (в этом аудите не перезапускалась — `docker`/`podman` CLI недоступны).
 
 | Категория навыка | Результат |
@@ -1405,7 +1405,7 @@ in-memory (`DataContext/InMemoryJoin.cs:20-21`), ClickHouse (`src/nextorm.clickh
 > protected-хук `OnLastJoinReplaced` (`EntityBuilder.cs:333-335`; override —
 > `JoinedEntityBuilder.cs:66`), как и предлагалось. Историческое описание ниже сохранено.
 
-**Ответ на вопрос 1: да, это реальный aliasing-баг, а не только «пометка на месте».** Заявленное в `WIP_clickhouse_join_strictness.md:47-48` обоснование (замена объекта рассинхронизировала бы `JoinCondition` и `Joins[^1]` в arity 2) верно как ограничение реализации, но закрыто мутацией разделяемого состояния. `EntityBuilder.cs:17-20` объявляет билдер «Fluent, immutable query builder», а все прочие модификаторы (`Final`/`Sample`/`Settings`/`PreWhere`/`WithTotals` — `EntityBuilder.cs:200-273,595-599`) идут через `Clone()`-then-set. `WithStrictness` же делает `_joins[^1].Strictness = strictness` и `return this` (`EntityBuilder.cs:285,287`).
+**Ответ на вопрос 1: да, это реальный aliasing-баг, а не только «пометка на месте».** Заявленное ранее обоснование (замена объекта рассинхронизировала бы `JoinCondition` и `Joins[^1]` в arity 2) верно как ограничение реализации, но закрыто мутацией разделяемого состояния. `EntityBuilder.cs:17-20` объявляет билдер «Fluent, immutable query builder», а все прочие модификаторы (`Final`/`Sample`/`Settings`/`PreWhere`/`WithTotals` — `EntityBuilder.cs:200-273,595-599`) идут через `Clone()`-then-set. `WithStrictness` же делает `_joins[^1].Strictness = strictness` и `return this` (`EntityBuilder.cs:285,287`).
 
 **Почему объект разделяемый.** `JoinExpression`-объекты общие для всех клонов билдера:
 - arity 2: `CloneImp` передаёт тот же `JoinCondition` в конструктор (`JoinedEntityBuilder.cs:51-58`), а `CopyTo` `_joins` не копирует вовсе (`EntityBuilder.cs:352-376`) → `r._joins[0]` — тот же объект;
@@ -1437,7 +1437,7 @@ in-memory (`DataContext/InMemoryJoin.cs:20-21`), ClickHouse (`src/nextorm.clickh
 - **Param-mode и план-кэш — согласованы (вопрос 5).** `MakeJoin` проверяет strictness **до** разветвления по `ParamMode` (`SqlSourceRenderer.cs:89-95`), а сам keyword (не несущий параметров) пропускается только в SQL-режиме (`:104-107`); вызывается из обоих проходов (`SqlBuilder.cs:100`). `Strictness` входит в `Equals`/`GetHashCode` плана и переносится `CloneForCache` (`JoinExpression.cs:65`). Пропущенных путей нет. Единственная асимметрия: in-memory бросает при перечислении (`InMemoryJoin.cs:20-21`), а не при построении плана — консистентно с тем, что in-memory вообще не строит SQL-план.
 - **Публичный API — аддитивен, переименований нет** (см. `API-NAMING-REVIEW.md`, раздел JS).
 
-**Проверка:** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors** (прогнано в этом проходе); в изменённых файлах `#pragma warning disable`/`SuppressMessage`/`NoWarn` — **0**; соотношение подавлений проекта не изменилось (5 оправданных `SuppressMessage` + 5 парных `#pragma`, неоправданных — **0/10**); `find -name 'PublicAPI*.txt'` — пусто. Тесты в этом проходе не перезапускались (только build); результаты из `WIP_clickhouse_join_strictness.md:77-79` относятся к прогону автора фичи.
+**Проверка:** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors** (прогнано в этом проходе); в изменённых файлах `#pragma warning disable`/`SuppressMessage`/`NoWarn` — **0**; соотношение подавлений проекта не изменилось (5 оправданных `SuppressMessage` + 5 парных `#pragma`, неоправданных — **0/10**); `find -name 'PublicAPI*.txt'` — пусто. Тесты в этом проходе не перезапускались (только build); результаты относятся к прогону автора фичи.
 
 ### 🔎 Точечный аудит — ClickHouse `GLOBAL JOIN` (20.09.2026)
 
@@ -1469,7 +1469,7 @@ Build Release — **0 warnings / 0 errors** (прогнано в этом про
 
 ### ℹ️ Находка 18 — неполное покрытие композиции `GLOBAL` (ℹ️, тесты; исправить не обязательно)
 
-`WIP_global_join.md:43-44` и XML-док `Global()` заявляют комбинируемость в любом порядке, но покрыт только один порядок: `GlobalJoin_ShouldRenderGlobalModifier` (`tests/nextorm.clickhouse.tests/SqlGenerationTests.cs:859-875`) проверяет `.Global().WithStrictness(Any)` → `global any join`; обратный порядок `.WithStrictness(Any).Global()` и «`WithStrictness` после `Global` не сбрасывает global» отдельным тестом не зафиксированы (сам код корректен — см. вопрос 1). Также нет `Global_WithoutJoin_ShouldThrow` (аналога `WithStrictness_WithoutJoin_ShouldThrow` — `:817-825`) и нет плоской цепочки, упражняющей ковариантный `new Global()` (аналога `WithStrictness_ThenJoin_ShouldKeepStrictnessOnFirstJoin` — `:844-856`).
+План и XML-док `Global()` заявляли комбинируемость в любом порядке, но покрыт только один порядок: `GlobalJoin_ShouldRenderGlobalModifier` (`tests/nextorm.clickhouse.tests/SqlGenerationTests.cs:859-875`) проверяет `.Global().WithStrictness(Any)` → `global any join`; обратный порядок `.WithStrictness(Any).Global()` и «`WithStrictness` после `Global` не сбрасывает global» отдельным тестом не зафиксированы (сам код корректен — см. вопрос 1). Также нет `Global_WithoutJoin_ShouldThrow` (аналога `WithStrictness_WithoutJoin_ShouldThrow` — `:817-825`) и нет плоской цепочки, упражняющей ковариантный `new Global()` (аналога `WithStrictness_ThenJoin_ShouldKeepStrictnessOnFirstJoin` — `:844-856`).
 
 **Было/Стало:** код менять не нужно; **Стало** — добавить 2-3 регресс-теста (обратный порядок, `Global()` без join, flat-chain arity). Рекомендация для `nextorm-design-engineer`; не блокирует, поэтому находка помечена ℹ️.
 
@@ -1478,7 +1478,7 @@ Build Release — **0 warnings / 0 errors** (прогнано в этом про
 - **`Strictness`/`IsGlobal` можно сузить до `internal init`.** Оба свойства выставляются только в объектном инициализаторе `new JoinExpression { ... }` (`JoinExpression.cs:72`, `EntityBuilder.cs:315-321`), поэтому `init` вместо `internal set` дополнительно запретил бы любую будущую in-place-мутацию и закрепил инвариант Находки 16. Косметическое упрочнение, не дефект.
 - **`Global()`/`IsGlobal`/`SupportsGlobalJoin` — нейминг конвенциям соответствует.** `Is*` для bool, `Supports*` — как `SupportsGlobalPredicates` (GLOBAL IN) и `SupportsJoinStrictness`; `Global()` — терсный модификатор в одном ряду с `Distinct()`/`Final()`/`Sample()`. P0/P1 нет (см. `API-NAMING-REVIEW.md`, раздел «ClickHouse GLOBAL JOIN (точечный аудит 20.09.2026)»).
 
-**Проверка:** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors** (прогнано в этом проходе); в изменённых файлах `#pragma warning disable`/`SuppressMessage`/`NoWarn` — **0**; соотношение подавлений проекта не изменилось (5 оправданных `SuppressMessage` + 5 парных `#pragma`, неоправданных — **0/10**); `find -name 'PublicAPI*.txt'` — пусто (Шаг 5 открыт); XML-`<summary>` есть у `IsGlobal`, `SupportsGlobalJoin`, `Global()` (8 перегрузок: базовая + 7 `<inheritdoc/>`) и у обеих реализаций `MakeJoinKeyword`. Тесты в этом проходе не перезапускались (только build); ClickHouse unit/integration — по `WIP_global_join.md:53-60`.
+**Проверка:** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors** (прогнано в этом проходе); в изменённых файлах `#pragma warning disable`/`SuppressMessage`/`NoWarn` — **0**; соотношение подавлений проекта не изменилось (5 оправданных `SuppressMessage` + 5 парных `#pragma`, неоправданных — **0/10**); `find -name 'PublicAPI*.txt'` — пусто (Шаг 5 открыт); XML-`<summary>` есть у `IsGlobal`, `SupportsGlobalJoin`, `Global()` (8 перегрузок: базовая + 7 `<inheritdoc/>`) и у обеих реализаций `MakeJoinKeyword`. Тесты в этом проходе не перезапускались (только build); ClickHouse unit/integration — по прогону автора фичи.
 
 ## 🔎 Точечный аудит — ClickHouse массивы и `arrayJoin` (20.09.2026)
 
@@ -2081,6 +2081,1243 @@ Build Release — **0 warnings / 0 errors** (прогнано в этом про
 `#pragma warning disable`/`SuppressMessage`/`NoWarn`/`Skip=`/`Task.Delay`/`Thread.Sleep`/пустые `catch` — **0**;
 `rg -c "for \(var \(i, cnt\) = \(0, args\.Count\)"` — **18** в **8** файлах; `git ls-files --eol` новых файлов —
 `i/lf`. Тесты в этом проходе не перезапускались (только build).
+
+## 🔎 Сводный аудит — слияние `todo-pg2`/`todo-mssql2`/`todo-ch2` в `1.0.3-alpha` (20.09.2026)
+
+Область (дельта трёх merge'ей, база `970769a`, HEAD `8670bba`): PostgreSQL наборные TVF
+(`Query/SqlFunctions{,.Postgres}.cs`, `PostgresDialect` — `SupportsTableFunction`/`WrapTableFunction`,
+`Expressions/SelectExpression.cs` ветка `string[]`, `Visitors/JsonSqlTranslator.cs` ветка `jsonpath`),
+MSSQL `Visitors/MemberTranslator.cs` (внутренний `TryTranslateProjectionOuterReference`),
+ClickHouse `Query/SqlFunctions.ClickHouse.cs` (8 array-методов + `window_funnel`/`sequence_match`/`retention`),
+`ISqlDialect`/`SqlDialectBase`/`ClickHouseDialect` (`SupportsSequenceAggregates`/`MakeSequenceAggregate`),
+`Visitors/{ArraySqlTranslator,AdvancedAggregateTranslator}.cs`. Build Release — **0 warnings / 0 errors** (этот проход).
+Юнит-наборы (Debug, 0 failed): core **166**, postgres **220**, sqlserver **199**, sqlite **223**, mysql **53**,
+mariadb **20**, clickhouse **164**. Контейнерная интеграция на Podman-сокете (0 failed / 0 skipped):
+общий PG-набор **213**, PG-specific **18**, ClickHouse **48**, общий SQL Server **213**, SQL-specific **15**,
+MySQL **213**.
+
+| Категория навыка | Результат |
+|---|---|
+| 2. Подавления | ✅ В диффе `970769a..HEAD` (`src`+`tests`) новых `#pragma`/`SuppressMessage`/`NoWarn` — **0**. База прежняя: `SuppressMessage` — **5** (все с `Justification`), `#pragma disable` — **5** (все с парным `restore`); неоправданных — **0/10**. `CS1591` остаётся в `<NoWarn>` 7 библиотечных `.csproj` (принято, Шаг 5 открыт). |
+| Слоп-паттерны (slopwatch локально не установлен; скан вручную) | ✅ `Skip=` — **0**; `Task.Delay` — **2** (обе `Task.Delay(0)` как yield в `tests/nextorm.core.tests/InMemoryTests.cs:115,404`); `Thread.Sleep`/пустых `catch`/инлайновых `Version`/`VersionOverride` — **0**. |
+| 1/3/4/6. `IDisposable`, LINQ, события, исключения | ✅ Новых disposable-полей/`using`, LINQ, подписок и `catch` нет; новые `throw` — `NotSupportedException` без `catch` (`AdvancedAggregateTranslator.cs:326,329`, `JsonSqlTranslator`-путь `jsonpath`). |
+| 5. Проектирование | ℹ️ **Находка 30 актуализирована** (+4 emit-цикла `EmitSequenceAggregate`, ниже); `MemberTranslator.TryTranslateProjectionOuterReference` (`:433`) — новый `private static` (~45 строк), god-класс не расширяет; `PostgresDialect` — два строковых списка имён (ниже). |
+| 7. Хэш-ключи | ✅ Новый код — чистый рендер (`MakeSequenceAggregate`, `WrapTableFunction`, `TryTranslateProjectionOuterReference`); `GetHashCode`/план-ключ не трогаются; `retention` возвращает `int[]` и материализуется только вложенно. |
+
+### ℹ️ Находка 30 (актуализация 20.09.2026) — `EmitSequenceAggregate` добавляет 4 emit-цикла
+
+`AdvancedAggregateTranslator.EmitSequenceAggregate` (`:318-365`) построчно повторяет форму
+`SqlOperandTranslator.EmitFunction`: param-режим → `NeedAliasForColumn` → `Append` + циклы
+`VisitToString`. Узкий счётчик `for (var (i, cnt) = (0, args.Count))` — по-прежнему **18** в **8** файлах
+(не изменился), но новый метод добавляет **4** цикла того же семейства:
+`(0, parameters.Count)` — `:333,351`, `(0, conditionArray.Expressions.Count)` — `:339,361`.
+Отдельной находки не заводится — это тот же класс, что Находки 15/30.
+
+### ℹ️ Наблюдения (фикс не требуется)
+
+- **`SupportsSequenceAggregates` абстрактный при DIM-рендере.** `ISqlDialect.cs:416` не имеет дефолта,
+  `MakeSequenceAggregate` (`:425`) — DIM. Асимметрия source-совместимости вынесена в
+  `API-NAMING-REVIEW.md` как **SQ-DIM** (P2); здесь не дублируется.
+- **Два строковых списка имён в `PostgresDialect`.** `SupportsTableFunction` (`:47`, 11 имён) и
+  `WrapTableFunction` (`:63`, 6 имён) должны поддерживаться в синхроне. Расхождение сейчас осознанное
+  (обёртка только у одно-колоночных функций, где колонка названа по функции: `generate_series`, `unnest`,
+  `regexp_matches`, `regexp_split_to_table`, `jsonb_object_keys`, `jsonb_path_query`), но при добавлении
+  имени только в один список появится либо необёрнутый single-column TVF, либо лишняя обёртка. ℹ️.
+- **`string[]`-ветка row reader — точечная, не общая материализация массивов.** `SelectExpression.cs:117`
+  повторяет образец `byte[]` и нужна только для PG `regexp_matches` (`text[]`); заблокированный пункт
+  «row reader `Array(T)`/`Tuple`» не открывается (см. точечный аудит PG-setof выше).
+- **MSSQL `TryTranslateProjectionOuterReference` — только `internal`/`private`.** `MemberTranslator.cs:433`;
+  новых подавлений, LINQ, событий и disposable-полей нет; рефлексия не добавлялась, ветка `VisitMember`
+  (`:243`) вставлена после существующих.
+- **Новых LF-only `.cs`-файлов нет** (дифф добавляет только `M`-файлы); Находки 20/22/29 не расширяются.
+
+**Проверка:** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors** (этот проход); в диффе
+`src`+`tests` новых `#pragma warning disable`/`SuppressMessage`/`NoWarn`/`Skip=`/`Task.Delay`/`Thread.Sleep`/
+пустых `catch` — **0**; узкий счётчик `rg -c "for \(var \(i, cnt\) = \(0, args\.Count\)"` — **18** в
+**8** файлах (без изменений, +4 цикла `parameters.Count`/`conditionArray.Expressions.Count` в
+`EmitSequenceAggregate`); `rg --files -g 'PublicAPI*.txt'` — пусто (Шаг 5 открыт, см. `API-NAMING-REVIEW.md`).
+
+## 🔎 Сводный аудит Batch 3 — именованные окна / XML-методы / ClickHouse `multi_if` (20.09.2026)
+
+Область (три патча Batch 3 поверх `8670bba`, наложены без коммита): PostgreSQL/ANSI именованные окна и
+`GROUPS`/`EXCLUDE` (`Query/WindowDefinition.cs`, `Query/WindowFunctions.cs`, `Builders/EntityBuilder.cs`,
+`Query/QueryCommand*`, `DataContext/SqlBuilder.cs`, `Visitors/WindowSql.cs`), SQL Server XML
+`value`/`query`/`exist` (`Visitors/XmlSqlTranslator.cs`), ClickHouse `multiIf` + `lagInFrame`/`leadInFrame`
+(`Visitors/BuiltinFunctionTranslator.cs`, `Visitors/{WindowSql,WindowFunctionTranslator,NormSqlTranslator}.cs`).
+Build Release — **0 warnings / 0 errors** (этот проход). Публичная поверхность и находки — в
+`API-NAMING-REVIEW.md` («Сводный аудит Batch 3…»; `NW1`/`X1`/`MF1` свёрнуты в RD2 (batch 3), `NW2` — naming).
+
+| Категория навыка | Результат |
+|---|---|
+| 1. `IDisposable` | ✅ Новых disposable-полей/`using`/`IAsyncDisposable` нет; окна/XML/`multiIf` — чистый рендер в `StringBuilder`/`LambdaExpression`. |
+| 2. Подавления | ✅ В диффе `8670bba..рабочее дерево` (`src`+`tests`) новых `#pragma`/`SuppressMessage`/`NoWarn` — **0**. База прежняя: `SuppressMessage` — **5** (все с `Justification`), `#pragma disable` — **5** (все с парным `restore`); неоправданных — **0/10**. `CS1591` остаётся в `<NoWarn>` 7 библиотечных `.csproj` (принято, Шаг 5). |
+| 3. LINQ на горячем пути | ✅ Новый код — индексированные `for`-циклы (`MakeNamedWindow` `SqlBuilder.cs:529-607`, `WindowsEqual` `QueryPlanEqualityComparer.cs:163-199`, `PrepareWindows` `QueryCommand.QueryPreparer.cs:555-596`, `FlattenMultiIfBranches`); новых `.Select/.Where/.ToList` в рантайме нет. |
+| 4/6. События, исключения | ✅ Новых подписок/`catch` нет; новые `throw` — `NotSupportedException`/`ArgumentException` без перехвата (`WindowFunctionTranslator.cs:87-101`, `XmlSqlTranslator.cs:41-68`, `BuiltinFunctionTranslator.cs:50,181,222-256`). |
+| 5. Проектирование | ℹ️ Ниже — stringly-typed диспетчеризация `Over`-перегрузок и два метода близко к порогу «длинный»; god-классы не расширены (`BuiltinFunctionTranslator` 489 строк, `WindowFunctionTranslator` 217). |
+| 7. Хэш-ключи | ✅ `WindowsPlanHash` (`QueryCommand.cs:51`) считается по имени/партиции/порядку/рамке+`Exclusion` (`QueryCommand.QueryPreparer.cs:555-596`), `WindowsEqual` — зеркально; `CopyTo` переносит `_windows`/`WindowsPlanHash` (`QueryCommand.Clone.cs:62,30`). Расхождения ключа и рендера нет. |
+| Слоп-паттерны (slopwatch локально не установлен; скан вручную) | ✅ `Skip=`/`Ignore` — **0**; `Task.Delay` — **2** (обе `Task.Delay(0)` как yield в `tests/nextorm.core.tests/InMemoryTests.cs:115,404`, не задержки); `Thread.Sleep` — **0**; пустых `catch` — **0**; инлайновых `Version`/`VersionOverride` — **0**. |
+
+### ℹ️ Наблюдения (фикс не требуется)
+
+- **`WindowSql.SplitWindowArguments`/`AddWindowOrder` диспетчеризуют по имени параметра/метода.**
+  `Over` выбирает слоты по `parameters[i].Name` (`"windowName"`/`"partitionBy"`/`"orderBy"`) и типу
+  (`WindowFrame`), а `AddWindowOrder` распознаёт `CommonFunctions.asc`/`desc` по
+  `DeclaringType`+`Method.Name` (`Visitors/WindowSql.cs:102-171`). Это осознанно (перегрузки отличаются
+  составом слотов) и покрыто SQL-gen тестами; остаточная хрупкость — при переименовании параметра маппинг
+  сломается молча. Отдельной находки не заводится (ср. уже принятый name-based диспетчинг DSL).
+- **Два метода Batch 3 близко к порогу «длинный метод» (>30 строк).**
+  `BuiltinFunctionTranslator.FlattenMultiIfBranches` (`:219-259`, ~41 строка) и `EmitMultiIf` (`:178-211`,
+  ~34 строки); `WindowFunctionTranslator` вырос, но остаётся < 500 строк. Уже разобранные god-классы не
+  расширяются; отдельной находки нет (порог эвристический, методы линейны).
+- **`MultiIfBranch<T>` — пустой публичный маркер с приватным ctor.** Осознанный непрозрачный носитель
+  для `params`-дерева выражений (ср. `WindowFunction<T>`, `WindowOrder`); XML-doc есть, самостоятельного
+  смысла не имеет, голый `when`/`otherwise` отвергается транслятором с понятным сообщением.
+- **`xml_*` в param-режиме обходит только операнд.** `XmlSqlTranslator.TryTranslate` при
+  `visitor.IsParamMode` посещает `args[0]` и не читает литеральные xpath/тип
+  (`Visitors/XmlSqlTranslator.cs:52-56`) — корректно, т.к. остальные аргументы по контракту константы
+  (проверяются в SQL-проходе, `:64`), а сервер их не параметризует.
+- **Новых LF-only `.cs`-файлов нет**; Находки 20/22/29 не расширяются. (В начале аудита в рабочем
+  дереве присутствовал untracked `tests/nextorm.postgres.tests/TempCteProbe.cs`; к концу прохода файл
+  уже отсутствовал — в находки не заводится.)
+
+**Проверка:** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**; unit (Debug, 0 failed):
+core **174**, postgres **232**, sqlserver **207**, sqlite **226**, mysql **57**, mariadb **24**,
+clickhouse **175**; контейнерная интеграция — PG-specific **21/0**, общий PG **213/0** (6 skip),
+ClickHouse **50/0**, SQL-specific **16/0**, `DialectCapabilityContractTests` **8/0**, MySQL **213/0**
+(7 skip); в диффе `src`+`tests` новых `#pragma warning disable`/`SuppressMessage`/`NoWarn`/`Skip=`/
+`Task.Delay`/`Thread.Sleep`/пустых `catch` — **0**; `rg --files -g 'PublicAPI*.txt'` — пусто (Шаг 5
+открыт, см. `API-NAMING-REVIEW.md`).
+
+## 🔎 Точечный аудит — SQL Server `PIVOT`/`UNPIVOT` (20.09.2026)
+
+Область (uncommitted поверх `8670bba`; план фичи, пункты выполненного бэклога Phase 2):
+новый источник `PivotExpression` (`Query/PivotExpression.cs` — новый файл),
+поле/ctor `Expressions/FromExpression.cs`, `Builders/EntityBuilder.cs` (`Pivot`/`Unpivot`/`ResolvePivotInner`),
+`DataContext/SqlSourceRenderer.cs` (`MakePivot`/`RenderPivotColumn`), `Query/QueryCommand.QueryPreparer.cs`
+(`PrepareFrom`), `Expressions/FromExpressionPlanEqualityComparer.cs` (`PivotEquals`/`PivotHash`/`ColumnsEqual`/
+`ValuesEqual`), `DataContext/InMemoryQueryBuilder.cs`/`InMemoryJoin.cs` (отказ) и диалектные хуки
+(`DataContext/Dialect/{ISqlDialect,SqlDialectBase}.cs`, `src/nextorm.sqlserver/SqlServerDialect.cs`).
+Build Release — **0 warnings / 0 errors** (этот проход). Публичная поверхность и нейминг — в
+`API-NAMING-REVIEW.md` («SQL Server нативный `PIVOT`/`UNPIVOT`…»).
+
+| Категория навыка | Результат |
+|---|---|
+| 1. `IDisposable` | ✅ Новых disposable-полей/`using`/`IAsyncDisposable` нет; `MakePivot`/`RenderPivotColumn` работают с `BaseExpressionVisitor` в `using` и `StringBuilder` диалекта. |
+| 2. Подавления | ✅ В диффе (`src`+`tests`, включая новый `PivotExpression.cs`) новых `#pragma`/`SuppressMessage`/`NoWarn` — **0**. База не менялась: `SuppressMessage` — **5** (все с `Justification`), `#pragma warning disable` — **5** (все с парным `restore`); неоправданных — **0/10**. Отношение «подавлено/обосновано» — 10/10 (подавления только легитимные). |
+| 3. LINQ на горячем пути | ✅ `PivotEquals`/`PivotHash` — индексированные `for`, без LINQ; `MakePivot`/`RenderPivotColumn` — рендер. Новых `.Select/.Where/.ToList` в рантайме нет. |
+| 4/6. События, исключения | ✅ Новых подписок/`catch` нет; новые `throw` — `NotSupportedException`/`ArgumentException` без перехвата (`EntityBuilder.cs:627,652,666`, `SqlSourceRenderer.cs:367`). |
+| 5. Проектирование | ℹ️ Новых god-классов нет (`MakePivot` — 28 строк). Найдена одна связная логическая ошибка (Находка 31) и наблюдение по валидации. |
+| 7. Хэш-ключи | ✅ `PivotHash` (`FromExpressionPlanEqualityComparer.cs:95`) сворачивает `IsUnpivot`+`Inner`+агрегат/лямбды/значения (или value/name/колонки), `PivotEquals` — зеркально (`:61`); `Values`/`Columns` сравниваются поэлементно (`:79,87`). План-ключ и рендер согласованы, дублирования нет. |
+| Слоп-паттерны (slopwatch локально не установлен; скан вручную) | ✅ `Skip=`/`Ignore` — **0**; `Thread.Sleep` — **0**; пустых `catch` — **0**; инлайновых `Version`/`VersionOverride` — **0**; новые `Task.Delay` — **0** (базовые 2 — `Task.Delay(0)` yield, `tests/nextorm.core.tests/InMemoryTests.cs:125,414`). |
+
+### ✅ Находка 31 — `Pivot`/`Unpivot` молча теряли уже выставленные модификаторы запроса (ИСПРАВЛЕНА 21.09.2026, была 🔴)
+
+**Место:** `src/nextorm.core/Builders/EntityBuilder.cs:630` и `:655` (создание нового `EntityBuilder<TableAlias>`), `:665` (`ResolvePivotInner`).
+
+**Было (что делает код):** `Pivot`/`Unpivot` возвращают **новый** builder
+`new EntityBuilder<TableAlias>(_dataProvider) { Logger = Logger, SourceFrom = … }` и переносят только
+`Logger` + `FromExpression`. `ResolvePivotInner` отклоняет лишь `_query`/`_joins`/`_condition`/`_having`/`_group`,
+а поля `_tablesample` (set `:584`), `_temporal` (`:599`), `_rowLock` (`:696`), `Paging` (`:703`), `_sorting`
+(`:1104`), `_preWhere` (`:319`), `_arrayJoins` (`:355`), `_settings`, `_limitBy` (`:756`), `_distinctOn` (`:515`),
+`_windows` (`:552`) **не проверяются и не переносятся**, хотя `CopyProjectionIndependentStateTo`
+(`:785-810`) умеет их копировать (как это делает `Clone`/`Join`).
+
+**Стало (последствие):** `ctx.From<Sales>().TableSample(10).Pivot(...)`, `.ForSystemTime(...).Pivot(...)`,
+`.ForUpdate().Pivot(...)`, `.Limit(10).Pivot(...)` возвращают валидный SQL **без** запрошенного модификатора —
+молчаливая потеря данных/выборки/блокировки без ошибки. Это расходится с явным отказом для
+`Where`/`Join`/`Group` (тот же `ResolvePivotInner`, сообщение «apply filters, joins and grouping to the
+reshaped result»): часть неподдерживаемых модификаторов отвергается, часть — молча теряется.
+
+**Рекомендация (fix now):** либо расширить guard в `ResolvePivotInner` на **все** непустые поля (по образцу
+`_condition`), возвращая `NotSupportedException` с понятным текстом, либо переносить projection-независимое
+состояние через `CopyProjectionIndependentStateTo`. Семантически `TableSample`/`Temporal` применяются к
+внутреннему источнику, поэтому для них перенос на результат неверен — им нужен явный отказ; `Limit`/`OrderBy`/
+`RowLock`/`Settings` можно переносить на результат. Минимум — не терять молча. Добавить тест на отказ
+(напр. `.TableSample(10).Pivot(...)` / `.Limit(1).Unpivot(...)`).
+
+**Стало (21.09.2026).** Guard в `ResolvePivotInner` (`EntityBuilder.cs:670-677`) расширен на **все** переносимые
+модификаторы: `_joins`/`_condition`/`_having`/`_group`/`_sorting`/`Paging`/`IsDistinct`/`_tablesample`/`_temporal`/
+`_rowLock`/`_preWhere`/`_arrayJoins`/`_settings`/`_limitBy`/`_distinctOn`/`_windows`/`IsFinal`/`SampleRatio`/
+`TableHints`/`Ctes` — каждый бросает `NotSupportedException`, ни один не теряется молча. Покрытие:
+`Pivot_ShouldThrowWhenSourceHasModifiers` (`tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:2398` — `Limit`,
+`TableSample`, `OrderBy`, `WithTableHint`) и `Pivot_ShouldThrowWhenDerivedSourceHasModifiers` (`:2383` —
+`OrderBy`/`Where` поверх производного источника). Косметика на будущее: guard проверяет `SampleRatio`, но не
+`SampleOffset` (join-guard `HasNoNonWhereModifiers` проверяет `SampleOffset == 0`); недостижимо, т.к.
+`Sample(ratio, offset)` всегда выставляет `SampleRatio` (`EntityBuilder.cs:260-276`).
+
+### ℹ️ Наблюдения (фикс не требуется)
+
+- **PIVOT-слоты агрегата/`FOR` не валидируются как «простая колонка».** Лямбды типизированы как
+  `Expression<Func<TEntity, object?>>`, а `RenderPivotColumn` (`SqlSourceRenderer.cs:392-397`) пропускает их
+  через обычный column-visitor, т.е. `s => s.Margin * 2` отрендерится как `sum(margin * 2)`. Документация
+  T-SQL («FROM clause plus JOIN, APPLY, PIVOT») определяет слоты как *column* (`<aggregate_function>(<value_column>)`,
+  `FOR <pivot_column>`), поэтому вычисляемое выражение сервер может отвергнуть. Валидации «member-access»
+  и теста на составное выражение нет. Отдельной находки не заводится (граница «caller responsibility», как
+  у аргументов `[SqlTableFunction]`), но дешёвая проверка в `Pivot`/`Unpivot` была бы полезна.
+- **`PivotValue`/`UnpivotColumn` — классы без value-equality.** `PivotValue.Create("1") != PivotValue.Create("1")`
+  по ссылке, но план-ключ сравнивает по полю (`ValuesEqual`/`ColumnsEqual`), поэтому расхождения кэша нет.
+- **Новых LF-only `.cs` нет**; Находки 20/22/29 не расширяются. `PivotExpression.cs` — новый untracked файл.
+
+**Проверка:** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**; unit (по данным задачи,
+0 failed): core **175**, postgres **235**, sqlserver **214**, sqlite **230**, mysql **58**, mariadb **25**,
+clickhouse **176**; интеграция SQL Server — `SqlServerSpecificTests` **18/0** (в т.ч. `Pivot_ShouldReshapeRows`,
+`Unpivot_ShouldStackColumns`), `DialectCapabilityContractTests` **10/0**; покрытие line **84.8%** / branch
+**73.8%** (база 84.7% / 73.6%). `rg` по диффу: новых `#pragma warning disable`/`SuppressMessage`/`NoWarn`/
+`Skip=`/`Task.Delay`/`Thread.Sleep`/пустых `catch` — **0**; `rg --files -g 'PublicAPI*.txt'` — пусто
+(Шаг 5 открыт, см. `API-NAMING-REVIEW.md`).
+
+## 🔎 Точечный аудит — capability-объекты диалекта (Фаза 1) и `PreparedHaving` (20.09.2026)
+
+**Область:** `DataContext/Dialect/DialectCapabilities.cs` (новый), `DataContext/Dialect/ISqlDialect.cs`,
+`SqlDialectBase.cs`, шесть
+`*Dialect.cs`; `Query/QueryCommand.cs`, `QueryCommand.Clone.cs`, `QueryCommand.QueryPreparer.cs`,
+`DataContext/SqlBuilder.cs`; тесты `DialectCapabilityContractTests.cs`, `CorrelatedQueryTests.cs`,
+`CommonTestSuite.CorrelatedQuery.cs`. Build Release **0/0**. `slopwatch` локальным tool'ом не
+установлен — паттерн-скан вручную.
+
+| Категория навыка | Статус |
+|---|---|
+| 1. `IDisposable` | ✅ Рендереры — `internal sealed` синглтоны (`static readonly Instance`), полей/ресурсов нет, `IDisposable` не нужен; `CorrelatedQueryExpressionVisitor.OuterScope` — пре-существующий `IDisposable` в `using`-паттерне. |
+| 2. Подавления | ✅ Новых `#pragma`/`SuppressMessage`/`NoWarn`/`Skip=`/`Task.Delay`/`Thread.Sleep`/пустых `catch` в диффе — **0**. База: `SuppressMessage` — **5** (все с `Justification`), `#pragma warning disable` — **5** (все с парным `restore`), соотношение не менялось. |
+| 3. LINQ | ✅ Не затронуто (LINQ-цепочек в диффе нет). |
+| 4. События | ✅ Не затронуто (подписок нет). |
+| 5. Проектирование | ✅ God-классы не расширены (`PrepareGrouping` +~10 строк; `DialectCapabilities.cs` — 63 строки на 4 интерфейса); длинных списков параметров ≥6 нет. ℹ️ ниже — `SubqueryDetector` удалён, визит HAVING стал безусловным. |
+| 6. Исключения | ✅ Новые `throw new NotSupportedException(...)` — гейты capability с именем функции/провайдера; не пустой `catch`, не `catch (Exception)`. |
+| 7. Хэш-ключи | 🟡 **Находка 32** — хэш сворачивает `PreparedHaving`, а `Equals` сравнивает исходный `Having` (ниже). |
+
+### ✅ Находка 32 — `Equals` и `GetHashCode` план-ключа используют разные представления `HAVING` (ИСПРАВЛЕНА 21.09.2026, была P2)
+
+**Место:** `Query/QueryCommand.QueryPreparer.cs:694,698`, `Query/QueryPlanEqualityComparer.cs:130,343-344`,
+`DataContext/SqlBuilder.cs:247`.
+
+**Было:** `groupingPlanHash` сворачивал хэш исходного `cmd._having`, а `Equals` сравнивал
+`x.Having`/`y.Having` — обе стороны план-ключа использовали одну и ту же лямбду.
+
+**Стало:** `PrepareGrouping` прогоняет `CorrelatedQueryExpressionVisitor` над `_having` и сворачивает
+в `groupingPlanHash` хэш `cmd.PreparedHaving`; `QueryPlanEqualityComparer.Equals` по-прежнему сравнивает
+исходный `x.Having` (`:130`), а `GetHashCode` — через `GroupingPlanHash` (`:343-344`). `SqlBuilder`
+рендерит `PreparedHaving ?? Having` (`:247`). Итог: **равенство ключа строится по одному представлению,
+хэш — по другому**.
+
+**Оценка контракта `Equals ⇒ same hash`:** сейчас он **держится**, потому что `PreparedHaving`
+детерминированно выводится из `Having` и уже зарегистрированных внешних ссылок команды, а `Equals`
+дополнительно сравнивает `PreparedCondition` (`:117`) и `OuterReferences` (`:144`) — у равных команд
+совпадает и результат визитора. Но инвариант не зафиксирован конструкцией: любая недетерминированность
+или иная нормализация в `CorrelatedQueryExpressionVisitor` даст Equal-команды с разными хэшами. Для
+`QueryPlan` (ключ словаря, `Cache/QueryPlan.cs:43,54`) это промах/дубль плана, а не неверный результат:
+при совпавшем хэше `Equals` разводит ключи.
+
+**Фикс:** обе стороны — по одному представлению: в `Equals` сравнивать `x.PreparedHaving ?? x.Having`
+с `y.PreparedHaving ?? y.Having` (хэш уже по `PreparedHaving`), либо дополнительно сворачивать в хэш и
+исходный `Having`. Регресс-тест: две структурно одинаковые grouped+HAVING команды дают одну запись
+план-кэша / равные `QueryPlan.GetHashCode()`.
+
+**Стало (21.09.2026):** обе стороны — по исходной лямбде. `PrepareGrouping`
+(`QueryCommand.QueryPreparer.cs:729`) сворачивает в `groupingPlanHash` хэш `cmd._having` (сырой
+`HAVING`), а `QueryPlanEqualityComparer.Equals` сравнивает `x.Having`/`y.Having`
+(`QueryPlanEqualityComparer.cs:130`). `PreparedHaving` остаётся только представлением для рендера
+(`SqlBuilder` → `PreparedHaving ?? Having`) и в план-ключ не входит; рассинхрон снят. Проверка:
+grouped+HAVING SQL-gen/интеграционные тесты (`CorrelatedQueryTests.CorrelatedSubqueryInHaving_ShouldReferenceOuterAlias`,
+`SubqueryInHaving_ShouldRenderScalarSubquery`) зелёные.
+
+### ℹ️ Наблюдения (фикс не требуется)
+
+- **Аллокации / hot-path.** Синглтоны рендереров статичны, без полей и без `IDisposable`; на вызов —
+  только интерполяция/`string.Join(", ", columns)` (как в прежних `Make*`). `CorrelatedQueryExpressionVisitor`
+  над `_having` создаётся один раз на `PrepareCommand` (результат кэшируется), не на исполнение; раньше
+  визит оплачивался лишь при подзапросе в HAVING (`SubqueryDetector`), теперь — для любого HAVING.
+  Не горячий путь.
+- **Граница in-memory для HAVING.** `InMemoryGrouping.cs:139` читает исходный `Having`, не
+  `PreparedHaving`; коррелированный HAVING по-прежнему отсекается guard'ом `OuterReferences`
+  (`InMemoryQueryBuilder.cs:40-42`, внятный `NotSupportedException`), поэтому тихо неверных данных нет.
+  Но не-коррелированный подзапрос в HAVING теперь минует прежний общий `ContainsSubquery`-guard и
+  доходит до in-memory без старого сообщения — качество диагностики может просесть. Сверить с
+  `docs/specs/roadmap/todo_correlated_inmemory.md`; полезен тест на сообщение in-memory.
+- **EOL.** Новый `DialectCapabilities.cs` — CRLF (63/63), новые/изменённые тесты — CRLF; Находки 20/22/29
+  не расширяются.
+
+**Проверка:** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**; `rg` по диффу — 0 новых
+подавлений/`Skip=`/задержек/пустых `catch` (`Task.Delay` — 2, обе прежние `Task.Delay(0)` в
+`tests/nextorm.core.tests/InMemoryTests.cs:125,414`); `rg --files -g 'PublicAPI*.txt'` — пусто (Шаг 5
+открыт, см. `API-NAMING-REVIEW.md`, DC3); Приложение A (45) без изменений.
+
+## 🔎 Точечный аудит — агрегатные терминалы внутри коррелированного подзапроса (21.09.2026)
+
+**Область:** `Visitors/CorrelatedQueryExpressionVisitor.cs` — ветка агрегатных терминалов
+(`Count`/`Min`/`Max`/`Avg`/`Sum`/`Stdev`/`Stdevp`/`Var`/`Varp`) больше не бросает
+`NotSupportedException`, а переписывается в `builderReceiver.Select(<агрегат>).First()`; после выноса
+21.09.2026: `ReplaceAggregateTerminal` (`:357-363`) + новый `internal`
+`Visitors/AggregateTerminalRewriter.cs` (`CountMI` `:14`, `Rewrite` `:21-45`, `UnwrapLambda` `:48-53`,
+`AggregateMethodFor` `:55-66`, `SelectMethodFor` `:68-83`);
+тесты `tests/nextorm.sqlite.tests/CorrelatedQueryTests.cs:224,242,269`,
+`tests/nextorm.postgres.tests/SqlGenerationTests.cs:2752`,
+`tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:1930`,
+`tests/nextorm.integration.tests/CommonTestSuite.CorrelatedQuery.cs:280`. Build Release **0/0**;
+`slopwatch` локальным tool'ом не установлен — паттерн-скан вручную.
+
+| Категория навыка | Статус |
+|---|---|
+| 1. `IDisposable` | ✅ Не затронуто: новых ресурсов/полей-`IDisposable` нет; `OuterScope` — пре-существующий. |
+| 2. Подавления | ✅ Новых `#pragma`/`SuppressMessage`/`NoWarn`/`Skip=`/`Task.Delay`/`Thread.Sleep`/пустых `catch` в диффе — **0**. База не менялась: `SuppressMessage` — **5** (все с `Justification`), `#pragma warning disable` — **5** (все с парным `restore`). |
+| 3. LINQ | ℹ️ На пути **подготовки** появляется `GetMethods(...).SingleOrDefault(...)` (`SelectMethodFor`), не на горячем per-row пути. |
+| 4. События | ✅ Не затронуто. |
+| 5. Проектирование | 🟡 **Находка 33** (порог god-class; вынос применён, класс всё ещё > 500 — открыта), 🟡 **Находка 34** (DRY — открыта), ✅ **Находка 35** (закрыта 21.09.2026: Stdev/Var покрыты; остаток Stdevp/Varp принят). Длинных списков параметров нет. |
+| 6. Исключения | ✅ Новые `throw new NotSupportedException(...)` — доменные гейты с текстом; пустых/`catch (Exception)` нет. |
+| 7. Хэш-ключи | ✅ `ExpressionsCache` для rewrite безопасен: тела с `OuterRefMarker` не кэшируются (`GetQueryCommand:482-486`). |
+
+### 🟡 Находка 33 — `CorrelatedQueryExpressionVisitor` превышает порог god-class (ОТКРЫТА, P2)
+
+**Место:** `Visitors/CorrelatedQueryExpressionVisitor.cs:11` (объявление), `:357-363` (glue
+`ReplaceAggregateTerminal`); вынесенная ось — `Visitors/AggregateTerminalRewriter.cs`.
+
+**Было (HEAD):** 596 строк файла; тело класса (строки 11–596) = 586, из них вложенные типы
+`OuterScope` (11) + `OuterReferenceDetector` (13) + `OuterRefMarkerDetector` (12) = 36, т.е. **550** собственных строк — уже > 500, хотя в таблице Находки 4 отмечено
+«Все прочие — < 500» (неточность реестра).
+
+**Стало (после выноса 21.09.2026):** 608 строк файла; тело класса = 598, собственных строк **562**.
+Rewrite вынесен в `Visitors/AggregateTerminalRewriter.cs` (`internal static`, 83 строки); до выноса было
+669 строк / ≈635 собственных (вынос снял ≈73, но под порог 500 класс не вывел — +12 к HEAD, glue
+`ReplaceAggregateTerminal`).
+
+**Оценка:** порог раздела 5 навыка — > 500 строк на класс (Находка 4), и он превышен (550 уже на HEAD,
+562 после выноса). Вынос rewrite снял вклад изменения, но класс остаётся god-class — переполнение
+пре-существующее. Также требует правки утверждение «Все прочие — < 500».
+
+**Фикс (выполнено 21.09.2026: `AggregateTerminalRewriter`).** Остаток — вынести следующую ось
+(`GetQueryCommand`/`ReplaceQueryCommand`, `IsOrDefaultScalar`, `ContainsOuterRefMarker` +
+`OuterRefMarkerDetector`, `IsAggregateTerminal`) в `internal`-коллаборатор; либо зафиксировать класс
+осознанным исключением рядом с `ExpressionPlanEqualityComparer`.
+
+### 🟡 Находка 34 — дублирование построения агрегатного `Select` (ОТКРЫТА, P2)
+
+**Место:** `Visitors/AggregateTerminalRewriter.cs:21-45` (`Rewrite`) против
+`Builders/EntityBuilderExtensions.cs:277-282` (`CountCore`) и `:284-289` (`AggregateCore`).
+
+**Проблема:** не-Count ветка повторяет тело `AggregateCore` строка-в-строку
+(`Expression.Call(CommonFunctions.SQLExpression, sqlMethod.MakeGenericMethod(typeof(TResult)), exp.Body)`),
+Count-ветка — тело `CountCore`; маппинг «имя семейства → `*MI`» (`AggregateMethodFor`,
+`AggregateTerminalRewriter.cs:55-66`) дублирует восемь публичных forwarder'ов `Min`/`Max`/…
+(`EntityBuilderExtensions.cs:191-245`). Новое семейство агрегата придётся заводить в 2–3 местах.
+
+**Фикс:** единый `internal static` хелпер в `EntityBuilderExtensions` (например,
+`BuildAggregateSelector<TEntity,TResult>(MethodInfo, Expression<Func<TEntity,TResult>>)` и
+`BuildCountSelector<TEntity>()`), вызываемый и из `AggregateCore`/`CountCore`, и из rewriter'а.
+
+### ✅ Находка 35 — rewrite: статистические агрегаты покрыты (ЗАКРЫТА частично, P2)
+
+**Место:** `Visitors/CorrelatedQueryExpressionVisitor.cs:338-350` (`IsAggregateTerminal`),
+`Visitors/AggregateTerminalRewriter.cs:55-66` (`AggregateMethodFor`); тесты
+`tests/nextorm.sqlite.tests/CorrelatedQueryTests.cs:224,242,269`.
+
+**Проблема:** заявлено 9 семейств, а коррелированный rewrite покрыт только `Count`/`Sum`/`Min`/`Max`/`Avg`
+(sqlite) и `Count` (Postgres/SQL Server). Ветки `Stdev`/`Stdevp`/`Var`/`Varp` в rewrite не исполняются
+ни одним тестом (standalone-терминалы покрыты в `CommonTestSuite.Aggregates.cs`, но это другой путь).
+Ошибочные пути `SelectMethodFor` (`.Single`) и `UnwrapLambda` (аргумент не-lambda) тоже не покрыты.
+
+**Фикс:** добавить SQL-gen тесты на `Stdev`/`Var` в коррелированном подзапросе для провайдера со
+статистическими агрегатами (PostgreSQL/SQL Server; SQLite гейтится по capability).
+
+**Стало (21.09.2026):** добавлен `tests/nextorm.postgres.tests/SqlGenerationTests.cs:2769`
+`CorrelatedStatisticalAggregateTerminalInSelect_ShouldRenderAggregateSubquery` — `Stdev`→`stddev(`,
+`Var`→`variance(`; postgres **237/0**. Остаток (`Stdevp`/`Varp` и ошибочные пути
+`SelectMethodFor`/`UnwrapLambda`) принят как механический вариант тех же веток — отдельный тест не
+требуется; при желании `Stdevp`/`Varp` добавляются в тот же тест.
+
+### ♻️ Обновление 21.09.2026 — применённые фиксы
+
+- **Находка 33 — не закрыта.** Rewrite вынесен в `Visitors/AggregateTerminalRewriter.cs` (`internal static`,
+  83 строки: `CountMI`, `Rewrite`, `UnwrapLambda`, `AggregateMethodFor`, `SelectMethodFor`). Визитор
+  669→**608** строк (собственных ≈635→**562**); класс по-прежнему > 500, поэтому Находка остаётся
+  открытой — пре-существующее переполнение (550 уже на HEAD) закрывается только выносом следующей оси.
+- **Находка 35 — закрыта частично.** Postgres-тест `:2769` покрывает `Stdev`/`Var`; `Stdevp`/`Varp` и
+  ошибочные пути — принятый остаток. postgres **237/0**.
+- **Находка 34 — открыта.** Логика переехала в `AggregateTerminalRewriter`, но дублирование с
+  `EntityBuilderExtensions.CountCore`/`AggregateCore` и дублирование «имя → `*MI`» сохранились.
+- ℹ️ **Новая косметическая деталь.** `AggregateTerminalRewriter.CountMI` (`AggregateTerminalRewriter.cs:14`) —
+  PascalCase-поле, но новый класс **не несёт** `[SuppressMessage("Style","IDE1006")]`, который был у
+  `CorrelatedQueryExpressionVisitor` (`:9`) и `SelectExpression` (`:7`). Сборка 0/0 (IDE1006 — suggestion,
+  не гейтится); при включении `EnforceCodeStyleInBuild`/`AnalysisLevel=latest-all` (Шаг 5) поле может
+  пометиться. Фикс не обязателен; при переносе подавления обновить `Justification` (список примеров).
+
+### ℹ️ Наблюдения (фикс не требуется)
+
+- **Рефлексия безопасна; рекомендация выполнена 21.09.2026.** `AggregateTerminalRewriter.SelectMethodFor`
+  (`AggregateTerminalRewriter.cs:68-83`) не может не найти метод для достижимого получателя:
+  `IsEntityBuilder` (`CorrelatedQueryExpressionVisitor.cs:317`) сравнивает `GetGenericTypeDefinition()`
+  с `EntityBuilder<>`, а определения наследников (`JoinedEntityBuilder<,>`) в `EntityBuilder<>` **не**
+  конвертируются (проверено: `typeof(JoinedEntityBuilder<int,string>)` → `IsEntityBuilder == false`).
+  Значит `builderReceiver.Type` — всегда ровно `EntityBuilder<TEntity>`, у которого `Select<TResult>`
+  один; на случай будущего второго `Select` теперь `SingleOrDefault` + осмысленный
+  `NotSupportedException` с именем типа (было бы `InvalidOperationException` без контекста).
+- **`Expression.Quote`/`MakeGenericMethod`/`NewArrayInit` безопасны (проверено экспериментом на .NET 10).**
+  `T?` у unconstrained generic-параметра стирается в `T`: `sum<T>(T?)` при `T=decimal` имеет параметр
+  `decimal`, `T=decimal?` — `Nullable<decimal>`, `T=string` — `string`; `selector.ReturnType` совпадает
+  с типом `selector.Body` без nullable-lift. `Expression.Quote(Lambda)` даёт
+  `Expression<Func<TEntity,resultType>>` — ровно тип параметра `Select`. `NewArrayInit(typeof(object))`
+  (пустой массив) совпадает с `count(params object?[])`. `InvalidOperationException`/`ArgumentException`
+  не ожидаются.
+- **Перегрузки с `params ReadOnlySpan<object?>` недостижимы внутри дерева выражений.** Компилятор
+  запрещает (`CS8640`, `CS9226`), поэтому `node.Arguments` агрегатного терминала в дереве — это
+  `[builder, lambda]` (или `[builder]` для `Count()`); «молчаливое отбрасывание `@params`» в
+  `Rewrite` — невозможный сценарий, не находка.
+- **`IsAggregateTerminal` не мёртв** — используется как диспетчер в `:228`; все новые хелперы и `CountMI`
+  имеют вызовы; неиспользуемого кода нет.
+- **XML-документация.** `ReplaceAggregateTerminal`, `IsAggregateTerminal`, класс `AggregateTerminalRewriter`
+  и `Rewrite` документированы; `UnwrapLambda`/`AggregateMethodFor`/`SelectMethodFor` — без `<summary>`;
+  члены `private` (или `internal`-тип), `CS1591` не задействован (и вообще в `<NoWarn>` всех 7 библиотек),
+  на Приложение A (`API-NAMING-REVIEW.md`) не влияет. Косметика.
+- **Аллокации на пути подготовки.** `GetMethods(...)` (массив) + LINQ `.SingleOrDefault` + сборка `Expression`
+  выполняются при `PrepareCommand` (промах план-кэша), не на строку результата; при желании кэшируются
+  `static readonly` по закрытому типу builder'а. Не горячий путь.
+- **`ExpressionsCache`.** `GetQueryCommand` не кэширует тела с `OuterRefMarker` (`:482-486`) и компилирует
+  их на каждый внешний command; не-коррелированное тело без параметров компилируется напрямую. Тот же
+  контракт, что у существующего скалярного пути; новый ключ/гонки не появляются.
+- **Регресс golden SQL.** Новая ветка срабатывает только для имён, которые раньше падали
+  `NotSupportedException`; неагрегатные терминалы идут прежним путём. Существующие golden-тесты не
+  меняются.
+
+**Проверка (обновлено 21.09.2026):** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**;
+фулл-наборы: postgres **237/0**, sqlite **235/0**, sqlserver **216/0**, core **175/0** (в т.ч. новый
+`CorrelatedStatisticalAggregateTerminalInSelect` — 1/1);
+`rg` по диффу — 0 новых подавлений/`Skip=`/задержек/пустых `catch`; `rg --files -g 'PublicAPI*.txt'` —
+пусто (Шаг 5 открыт); публичная поверхность не менялась (новые члены — `private`/на `internal`-типе).
+
+## 🔎 Точечный аудит — глубина корреляции ≥ 2 и SQLite-гард `Single` (21.09.2026)
+
+**Область:** `Query/QueryCommand.cs` (новые `OuterRegistry`/`RootRegistry`/`IsCardinalityGuardable`,
+форвард `AddCommand`/`AddOuterReference`), `Query/QueryCommand.Clone.cs`, `Query/QueryCommand.QueryPreparer.cs`
+(`WrapSingleScalarCardinalityGuard`, сайт гарда), `Visitors/CorrelatedQueryExpressionVisitor.cs` (снятие
+`NotSupportedException` для глубины > 1, `GetQueryCommand` через `RootRegistry`, новый
+`ReplaceParametersByValueVisitor`), `Query/ExpressionPlanEqualityComparer.cs` (`VisitIndex`),
+`Visitors/MemberTranslator.cs` (гейт `Single`); тесты `tests/nextorm.sqlite.tests/CorrelatedQueryTests.cs`,
+`tests/nextorm.{postgres,sqlserver,clickhouse,mysql,mariadb,sqlite}.tests/SqlGenerationTests.cs`,
+`tests/nextorm.integration.tests/CommonTestSuite.CorrelatedQuery.cs`, `SqliteSpecificTests.cs`.
+Build Release **0/0**; после фикса Находки 36 — sqlite **237/0** (см. «Проверка»);
+`slopwatch` локальным tool'ом не установлен — паттерн-скан вручную.
+
+| Категория навыка | Статус |
+|---|---|
+| 1. `IDisposable` | ✅ Не затронуто: `ReplaceParametersByValueVisitor` — stateless `ExpressionVisitor`, ресурсов/полей-`IDisposable` нет; `OuterScope` — пре-существующий `using`-паттерн. |
+| 2. Подавления | ✅ Новых `#pragma`/`SuppressMessage`/`NoWarn`/`Skip=`/`Task.Delay`/`Thread.Sleep`/пустых `catch` в диффе — **0**. База не менялась: `SuppressMessage` — **5** (все с `Justification`), `#pragma warning disable` — **5** (все с парным `restore`), неоправданных нет. |
+| 3. LINQ | ✅ Не горячий путь: гард и инлайн выполняются при `PrepareCommand` (промах план-кэша); LINQ-цепочек по коллекциям в новых путях нет. |
+| 4. События | ✅ Не затронуто. |
+| 5. Проектирование | ✅ **Находка 36** (вложенный некоррелированный подзапрос → StackOverflow; ИСПРАВЛЕНА 21.09.2026), 🟡 **Находка 37** (ложное срабатывание `Single`-гарда при `DISTINCT`/`GROUP BY`/`UNION`, P2, открыта), ℹ️ **Находка 38** (робастность `OuterRegistry`, P2, открыта). |
+| 6. Исключения | ✅ Новых пустых/`catch (Exception)` нет; снятые `NotSupportedException` (глубина > 1, агрегатные терминалы) расширяют поддержку, SQLite-гард бросает `SqliteException` на уровне БД осознанно. |
+| 7. Хэш-ключи | ✅ `ExpressionPlanEqualityComparer.VisitIndex` (`:620-628`) резолвит ссылки через `RootRegistry`, согласованно с рендером корреляционной цепочки; **Находка 32 закрыта** (см. выше). `ReferencedQueriesPlanHash` вложенных команд = 0, но ссылки входят в ключ инлайново (см. Наблюдения). |
+
+### ✅ Находка 36 — вложенный некоррелированный подзапрос: локальная регистрация против рендера от корня → StackOverflow (ИСПРАВЛЕНА 21.09.2026, была P1-кандидат)
+
+**Место:** `Query/QueryCommand.cs:410` (`AddCommand` форвардит только при `OuterRegistry != null`),
+`Visitors/CorrelatedQueryExpressionVisitor.cs:453,483` (`OuterRegistry` ставится только на тело с
+`OuterRefMarker`), `Query/QueryCommand.cs:448` (`AddOuterReference`, там же), рендер —
+`Visitors/MemberTranslator.cs:479-494` + `DataContext/SqlBuilder.cs` (всегда резолвит `ReferencedQueries`
+от корневой команды, `QueryProvider` не меняется при `MakeSelect(innerQuery)`).
+
+**Было/воспроизведено (HEAD `8670bba`, worktree):**
+
+```csharp
+outer.Select(it => new {
+    it.Id,
+    x = mid.Where(s => s.Id > 0)
+           .Select(s => inner.Where(c => c.Id == s.Id).Select(c => c.Id).First())
+           .First()
+})
+```
+
+Промежуточная команда `M` не несёт маркера (её ссылка `s` — собственный параметр), поэтому
+`M.OuterRegistry == null` и `M.AddCommand(inner)` пишет в `M._referencedQueries`. Рендер при
+`MakeSelect(M)` использует `QueryProvider` = корень `R`, читает `R.ReferencedQueries[0]` = `M` и снова
+рендерит `M` → неограниченная рекурсия, **StackOverflow** (процесс, exit 134). Control depth-2
+correlated (`mid.Where(s => s.Id == it.Id)...`) при этом рендерится корректно.
+
+**Это не регресс фичи A.** На HEAD `8670bba` тот же сценарий падает так же (проверено worktree); фича A
+снимает `NotSupportedException` для глубины > 1, но не покрывает некоррелированное вложение. Новый
+`OuterRegistry`/`RootRegistry` — естественное место для фикса.
+
+**Фикс (выполнено 21.09.2026).** `CorrelatedQueryExpressionVisitor.ReplaceQueryCommand` теперь ставит
+`cmd.OuterRegistry ??= _queryProvider` для **каждой** команды-подзапроса
+(`CorrelatedQueryExpressionVisitor.cs:529`), включая closure-путь `tv.Has2`/entity-builder, который
+строит команду вне `GetQueryCommand`. В `GetQueryCommand` добавлен детектор
+`ContainsSubqueryExpression`/`NestedSubqueryDetector` (`:394-415`): тело с вложенным подзапросом
+компилируется инлайном захваченных значений (как коррелированный случай) и получает `OuterRegistry`
+(`:476,510`) — иначе оно кэшировалось бы в `ExpressionsCache` с индексами, относительными чужого
+реестра. `AddCommand`/`AddOuterReference` теперь форвардят в корень так же, как рендер.
+
+**Проверка фикса (21.09.2026).** Прежний падающий сценарий
+(`mid.Where(s => s.Id > 0).Select(s => inner.Where(c => c.Id == s.Id).Select(c => c.Id).First()).First()`)
+рендерится без рекурсии (ранее StackOverflow, exit 134):
+`(select (select t3.id from complex_entity as 't3' where t3.id = cast(t2.id as bigint) limit 1) from simple_entity as 't2' where (t2.id > 0) limit 1)`.
+Регресс-тест `tests/nextorm.sqlite.tests/CorrelatedQueryTests.cs:310`
+`NestedNonCorrelatedSubquery_ShouldResolveItsOwnInnerCommand` (точный SQL) — SQLite **1/1**; sqlite-набор
+**237/0** (было 236). Control depth-2 correlated по-прежнему корректен.
+
+### 🟡 Находка 37 — SQLite-гард `Single` считает `count(*)`, а не строки результата: ложное срабатывание при `DISTINCT`/`GROUP BY`/`UNION` (P2)
+
+**Место:** `Query/QueryCommand.QueryPreparer.cs:231-241` (`WrapSingleScalarCardinalityGuard`), сайт
+`:304-306`.
+
+**Воспроизведено рендером (SQLite):** `inner.Select(s => s.Id).Distinct().Single()` →
+`select distinct case when (count(*) > 1) then cast(abs(-9223372036854775808) as integer) else id end from simple_entity limit 2`;
+`inner.GroupBy(s => new { s.Id }).Select(g => g.Id).Single()` → то же с `group by id`. `count(*)` считает
+входные строки, а не строки результата: две строки с одним `id` дают `count(*)=2` и `integer overflow`,
+хотя `Distinct`/`GROUP BY` дают одну строку и `Single` должен вернуть значение. `UNION` — тот же класс
+(гард применяется к первому операнду и не видит объединение). Это не ложное срабатывание «в пользу
+ошибки», а ложный отказ: корректный запрос падает.
+
+**Фикс:** оборачивать только «простую» команду (`!IsDistinct`, `DistinctOn is null`, `GroupingList` пуст,
+`Union is null`); иначе сохранять прежний `NotSupportedException` (или считать строки обёрткой
+`select count(*) from (подзапрос)`). Тест: `Distinct`/`GroupBy` + `Single` на SQLite.
+
+### ℹ️ Находка 38 — робастность `OuterRegistry`: нет защиты от цикла, форвард обходит `_isPrepared`, клон копирует ссылку (P2, фикс не обязателен)
+
+- **Цикл.** `RootRegistry` (`QueryCommand.cs:362-371`) и `AddCommand` (`:410`) идут по цепочке
+  `OuterRegistry` без множества посещённых. Текущими внутренними путями цикл не создаётся
+  (`OuterRegistry` всегда указывает на уже построенного предка), поэтому бесконечного прохода нет; но
+  инвариант «цепочка конечна и упирается в корень» ничем не зафиксирован. Фикс: документировать
+  инвариант или visited-set.
+- **DEBUG-гард.** `AddCommand` форвардит `owner.AddCommand(cmd)` **до** `#if DEBUG if (_isPrepared) throw`
+  (`:410` против `:412-416`), поэтому защита от мутации подготовленной вложенной команды не срабатывает
+  (остаётся защита корня). `AddOuterReference` (`:444-457`) гарда не имеет вовсе — как и раньше.
+  DEBUG-only.
+- **Клон.** `QueryCommand.Clone.cs:37` переносит `OuterRegistry` **ссылкой** на оригинального предка;
+  `_referencedQueries` при этом клонируются (`:105-108`). Сейчас безопасно (клоны план-кэша не
+  переподготавливаются и не вызывают `AddCommand`), но корень вложенной команды-клона указывает на живой
+  оригинал — при любой будущей мутации клона это тихо запишет в чужой реестр. Фикс: ремапить
+  `OuterRegistry` на клон предка либо зафиксировать «клоны не мутируются».
+
+### ℹ️ Наблюдения (фикс не требуется)
+
+- **`ReplaceParametersByValueVisitor` (`CorrelatedQueryExpressionVisitor.cs:394-407`) безопасен
+  (проверено экспериментом на .NET 10).** Значения приходят из
+  `ReplaceConstantsExpressionVisitor.GetConstantParameter` (`ExpressionExtensions.cs:129-133`), где тип
+  `ParameterExpression` всегда равен статическому типу `ConstantExpression`, поэтому
+  `Expression.Constant(value, node.Type)` — точный round-trip. `null` возможен только для ссылочных и
+  `Nullable<>` типов; боксованный underlying в `Nullable<T>` принимается
+  (`typeof(int?).IsAssignableFrom(typeof(int)) == true`, проверено). Пропуск `ExpressionsCache` обоснован:
+  индексы маркеров указывают в корневой реестр, а инлайн восстанавливает константы, которые
+  `ReplaceConstantsExpressionVisitor` параметризовал (`Expression.Constant(idx, ...)`), т.е. маркер не
+  портится; тела с `OuterRefMarker` по-прежнему не кэшируются. Для глубины 1 поведение меняется только
+  тем, что вложенные ссылки форвардятся в корень (это чинит вложенную регистрацию).
+- **SQLite-гард корректен по механизму (проверено SQLite 3.37.2).** `abs(-9223372036854775808)` бросает
+  `integer overflow`: SQLite разбирает отрицательный литерал как int64 min и документирует это поведение;
+  `cast(... as <тип>)` не успевает сработать. 0/1/>1 строк и `SingleOrDefault` дают ожидаемые значения
+  (`DefaultOnNull` при 0 строк → default, `Single` без строк → null → throw); покрыто
+  `SqliteSpecificTests`. `Math.Abs(long.MinValue)` как C#-выражение не исполняется клиентом: контексты без
+  `DataContext` гард не получают.
+- **`(cmd._dataContext as DataContext)` (`QueryCommand.QueryPreparer.cs:305`).** Гард молча не применяется,
+  если SQL-контекст не наследует абстрактный `DataContext`; в `IDataContext` нет `Dialect`. Сейчас
+  не-`DataContext` только `InMemoryDataContext` (SQL не рендерит), поэтому живого дефекта нет; при
+  появлении SQL-контекста без `DataContext` гейт `MemberTranslator.cs:486-491` пропустит guardable-проекцию
+  без гарда. Надёжнее вынести `Dialect`/capability в `IDataContext`.
+- **`IsCardinalityGuardable` (`QueryCommand.cs:350-356`).** Как `internal static` — рабочий общий дом для
+  `QueryPreparer` и `MemberTranslator`, хотя по смыслу это capability диалекта (рядом с
+  `ISqlDialect.EnforcesScalarSubqueryCardinality`). XML-`<summary>` есть у всех новых internal-членов
+  (`OuterRegistry`, `RootRegistry`, `IsCardinalityGuardable`, `PreparedHaving`,
+  `WrapSingleScalarCardinalityGuard`); `CountAllMI`/`AbsMI` — private-поля, CS1591 не гейтится.
+- **`ReferencedQueriesPlanHash` вложенных команд = 0.** `ReferencedQueries` вложенной команды пуст/`null`
+  (геттер `QueryCommand.cs:269` `=> _referencedQueries!`), но ссылки вложенной команды входят в план-ключ
+  инлайново через `VisitIndex` в `SelectList`/`PreparedCondition`, и `Equals` резолвит их тем же
+  `RootRegistry`; контракт `Equals ⇒ same hash` держится. Геттер отдаёт `null` — helper
+  `IEqualityComparerExtensions.Equals` null-безопасен.
+- **Двойной источник истины типа проекции.** Гард проверяет `lambda.Body.Type`, а `MemberTranslator`
+  (`:487`) — `innerQuery.ResultType`. Для `Select<TResult>` они совпадают, но инвариант не зафиксирован;
+  расхождение даст либо ложный throw, либо незагарженный проход. Косметика/на будущее.
+- **Покрытие.** Путь отказа нечисловой проекции (`string`/`DateTime`/`Guid` `Single` на SQLite →
+  `NotSupportedException` из `MemberTranslator.cs:486-491`) тестами не покрыт: прежний
+  `CorrelatedScalarSingle_ShouldThrowNotSupported` (int) переделан в value-тест, замены для нечисловой
+  проекции нет. Полезен SQL-gen тест.
+- **`ReplaceCommand`/`AnyCommand`.** `GetAnyCommand` (`Builders/EntityBuilderExtensions.cs:267-272`) меняет
+  `_referencedQueries[0]` через `ReplaceCommand` (`QueryCommand.cs:395-405`) без пересчёта
+  `ReferencedQueriesPlanHash`: ключ план-кэша any-команды остаётся от первой подставленной команды.
+  Пре-существующее; с фичей A сюда может попасть вложенная команда с корнево-относительными индексами, а
+  рендер any-команды использует её саму как `QueryProvider`. Рекомендация: освежать хэш/переподготавливать;
+  тест на две разные any-команды.
+- **EOL.** Все правленые файлы в области — CRLF (QueryCommand.cs 459/459, QueryPreparer 737/737,
+  CorrelatedQueryExpressionVisitor 639/639, ExpressionPlanEqualityComparer 893/893, MemberTranslator
+  506/506, AggregateTerminalRewriter 84/84, CorrelatedQueryTests.cs 495/495). Находки 20/22/29 не
+  расширяются.
+
+**Проверка (актуализация 21.09.2026, после фикса Находки 36):** `dotnet build nextorm.sln -c Release` —
+**0 warnings / 0 errors**. Юнит-наборы Release: core **175/0**, sqlite **237/0** (было 236 — добавлен
+тест Находки 36), postgres **237/0**, sqlserver **216/0**, mysql **58/0**, mariadb **25/0**,
+clickhouse **178/0**. Debug-прогон (до фикса): sqlite **236/0**, postgres **237/0**, sqlserver
+**216/0** (DEBUG-ассерты `QueryPlan` и гарды `_isPrepared` прошли). Полный интеграционный прогон
+Testcontainers (SQLite+PostgreSQL+SQL Server+MySQL+ClickHouse) по отчёту исполнителя: **997 total,
+0 failed, 28 skipped** (capability-скипы); аудитом в этом проходе не перезапускался. `rg` по диффу — 0 новых подавлений/`Skip=`/`Task.Delay`/
+`Thread.Sleep`/пустых `catch`; `rg --files -g 'PublicAPI*.txt'` — пусто (Шаг 5 открыт); конфигурация
+`.editorconfig` — 7 `dotnet_diagnostic.*.severity` (S125/S108/S3060/S1104/S3604/S2292 + CA2254), все
+`silent`; `SonarAnalyzer` не подключён (записи `S*` инертны, уже отмечено в «Примечаниях»).
+
+**Регресс golden SQL по 6 диалектам:** единственное изменение отрендеренного SQL — SQLite `Single`
+scalar-subquery (был `NotSupportedException`, стал гард; тесты обновлены). Для остальных диалектов
+`EnforcesScalarSubqueryCardinality == true` и гард не добавляется; изменение реестра затрагивает только
+коррелированные подзапросы и подтверждено зелёными golden-наборами (`postgres`/`sqlserver`/`sqlite`/
+`mysql`/`mariadb`/`clickhouse`). Новых падений существующих golden-тестов нет.
+
+## 🔎 Точечный аудит — коррелированный CROSS/OUTER APPLY (21.09.2026)
+
+**Область:** `Builders/EntityBuilder.cs` (четыре новые перегрузки `CrossApply`/`OuterApply`, `JoinApply`,
+`CreateJoined`, `GetJoinSource`), `Expressions/JoinExpression.cs` (`From`/`SetFrom`/`ApplySource`),
+`Visitors/CorrelatedQueryExpressionVisitor.cs` (`BuildQueryCommand`),
+`Query/QueryCommand.QueryPreparer.cs` (`PrepareJoin`), `DataContext/SqlSourceRenderer.cs`
+(`MakeApplyJoin`), `DataContext/Dialect/ISqlDialect.cs` + `SqlDialectBase.cs` + диалекты
+(`SupportsApply`/`MakeApply`); тесты `tests/nextorm.{sqlserver,postgres,mysql,sqlite,clickhouse}.tests/
+SqlGenerationTests.cs`, `tests/nextorm.core.tests/InMemoryTests.cs`,
+`tests/nextorm.integration.tests/CommonTestSuite.CorrelatedQuery.cs` + `ITestProvider.SupportsApply`.
+Build Release **0/0**; `slopwatch` локальным tool'ом не установлен — паттерн-скан вручную.
+
+| Категория навыка | Статус |
+|---|---|
+| 1. `IDisposable` | ✅ Не затронуто: новых `IDisposable`/полей-ресурсов нет; `PushOuter` возвращает пре-существующий `OuterScope` (`CorrelatedQueryExpressionVisitor.cs:38-54`). |
+| 2. Подавления | ✅ Новых `#pragma`/`SuppressMessage`/`NoWarn`/`Skip=`/`Task.Delay`/`Thread.Sleep`/пустых `catch` в диффе — **0**; база не менялась: `SuppressMessage` — **5** (все с `Justification`), `#pragma warning disable` — **5** (все с парным `restore`). |
+| 3. LINQ | ✅ `JoinApply`/`PrepareJoin` — путь подготовки (промах план-кэша), не per-row; LINQ-цепочек по коллекциям в новых путях нет. |
+| 4. События | ✅ Не затронуто. |
+| 5. Проектирование | ✅ **Находка 39** (наследуемая correlated-перегрузка на `JoinedEntityBuilder`; ИСПРАВЛЕНА 21.09.2026, была P1), 🟡 **Находка 40** (мутация `JoinExpression.SetFrom` + field-backed `From`; открыта, P2), 🟡 **Находка 41** (гейт по конкретному `InMemoryDataContext` — повтор Находки 21; открыта, P2), ✅ **Находка 42** (`BuildQueryCommand`/`== typeof`/DRY; ЗАКРЫТА частично 21.09.2026 — `OuterRegistry` исправлен, косметический остаток принят). |
+| 6. Исключения | ✅ Новые `NotSupportedException`/`InvalidOperationException` — доменные гейты; пустых/`catch (Exception)`/`throw ex;` нет. |
+| 7. Хэш-ключи | ✅ Новый источник входит в план-ключ: `PrepareJoin` ставит построенный `From` **до** хеширования (`QueryCommand.QueryPreparer.cs:446,453-456`), `JoinExpressionPlanEqualityComparer` сравнивает/хеширует `From` (`:36,47`) → `FromExpressionPlanEqualityComparer` → `QueryPlanEqualityComparer` для `SubQuery`. `ApplySource` в ключе нет, но `From` из него детерминированно выводится (инсталляция всегда предшествует хешу). |
+
+### ✅ Находка 39 — correlated `CrossApply`/`OuterApply` на `JoinedEntityBuilder` компилируется, но ломается (ИСПРАВЛЕНА 21.09.2026, была P1)
+
+**Место:** `Builders/EntityBuilder.cs:999,1006,1013,1020` (четыре перегрузки объявлены только на
+`EntityBuilder<TEntity>`), `:1022-1050` (`JoinApply`), `:1052-1056` (`CreateJoined`),
+`Builders/Joins/JoinedEntityBuilder.cs:13,20-22` (конструктор 2-арности ставит `_joins = [join]`),
+`:31-34` (value-перегрузки `new`, идут через собственный `JoinCore` `:36-43`).
+
+**Проблема:** `JoinedEntityBuilder<T1,T2> : EntityBuilder<Projection<T1,T2>>`
+(`JoinedEntityBuilder.cs:13`), поэтому новые перегрузки **наследуются** с `TEntity = Projection<T1,T2>`.
+Вызов `joined.CrossApply(p => ...)` компилируется (probe: `p.Item1` доступен, результат —
+`JoinedEntityBuilder<Projection<T1,T2>, T>` с вложенной арностью, `q.Item1.Item1`). Но `CreateJoined`
+строит `new JoinedEntityBuilder<Projection<T1,T2>, T>(_dataProvider, applyJoin)`, чей конструктор ставит
+`_joins = [applyJoin]` и **теряет исходный join**; левый тип `Projection<T1,T2>` не зарегистрирован как
+таблица → `BuildSqlCommandException: Table name is not registered for type
+NextORM.Core.Projection`2[...]. Materialize the entity first`. Воспроизведено:
+`ctx.From<IProbeSimple>().Join(ctx.From<IProbeComplex>(), (a,b) => a.Id == b.Id).CrossApply(p => ...)`.
+Значение-перегрузки (`new CrossApply<T3>(EntityBuilder<T3>)`) дефекта не имеют: их `JoinCore`
+(`JoinedEntityBuilder.cs:36-43`) создаёт плоскую арность и добавляет оба join'а.
+
+**Фикс:** объявить `new`-перегрузки correlated-формы на каждом `JoinedEntityBuilder<T1..T8>` (плоская
+арность, сохранение `_joins` через собственный `JoinCore`) **либо** научить `CreateJoined` копировать
+`_joins` и резолвить источник левого `Projection<>`; **либо** явно скрыть наследуемые перегрузки
+(`[EditorBrowsable(Never)]`/`new`-заглушка с внятным `NotSupportedException`). Регресс-тест:
+`joined.CrossApply(p => ...)` → точный SQL (в наборе сейчас нет).
+
+**Стало (21.09.2026).** `EntityBuilder.JoinApply` теперь отклоняет correlated-форму над join-проекцией:
+`if (typeof(TEntity).TryGetProjectionDimension(out _)) throw new NotSupportedException("A correlated
+CROSS/OUTER APPLY source cannot reference a join projection; apply it to a single-entity source
+instead.")` (`Builders/EntityBuilder.cs:1028-1030`). Поскольку `JoinedEntityBuilder<T1,T2> :
+EntityBuilder<Projection<T1,T2>>`, вызов `joined.CrossApply(p => ...)` теперь падает с внятным
+сообщением сразу на построении (проверено probe'ом: `NotSupportedException: A correlated CROSS/OUTER
+APPLY source cannot reference a join projection...`), а не `BuildSqlCommandException` из рендера.
+Регресс-тест `tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:610`
+`CrossApply_OnJoinedProjection_ShouldThrowClearNotSupported` — **1/1**; SQL Server-набор **221/0**.
+Перегрузки для value-формы (`new CrossApply<T3>(EntityBuilder<T3>)`) этой проблемы не имели и не
+затронуты — они сохраняют плоскую арность.
+
+### 🟡 Находка 40 — `JoinExpression` снова мутируется: `SetFrom` + field-backed `From` (P2)
+
+**Место:** `Expressions/JoinExpression.cs:65-74` (`private FromExpression _from = null!;`
+`public required FromExpression From { get => _from; init => _from = value; }`, `internal SetFrom`),
+`:77-83` (`CloneForCache` возвращает `this`, когда `From.CloneForCache() == From` — в т.ч. placeholder
+`new FromExpression(typeof(TJoinEntity))` c `SourceType != null`, `FromExpression.cs:75`),
+`Query/QueryCommand.QueryPreparer.cs:435-446` (rebuild + `join.SetFrom(new FromExpression(applyCommand))`).
+
+**Проблема:** `JoinExpression` был неизменяемым (`From` — auto-property `init`; `Strictness`/`IsGlobal` —
+`init`; модификаторы копируют, Находки 16/17). Теперь `PrepareJoin` мутирует элемент `cmd._joins` на
+месте, а `CloneForCache` при `newFrom == From` возвращает **тот же** экземпляр — значит `SetFrom` может
+переписать `From` join'а, разделяемого с кэш-клоном. `ApplySource` после подготовки сохраняется
+(избыточное состояние) и копируется в кэш-клон. Живого падения не наблюдалось (кэш-клоны делаются после
+подготовки, `From` = `SubQuery` → `CloneForCache` возвращает новый `FromExpression`), но инвариант
+«join неизменяем после конструирования» снят.
+
+**Фикс:** строить apply-команду до создания `JoinExpression` (init-значение `From`) либо возвращать новый
+`JoinExpression` (как fluent-модификаторы); как минимум — обнулять `ApplySource` после `SetFrom` и
+гарантировать, что подготовка не мутирует разделяемый join. Тест: повторная подготовка/кэш-клон с
+apply-источником не меняет SQL.
+
+### 🟡 Находка 41 — in-memory APPLY гейтится по конкретному `InMemoryDataContext` (P2, повтор Находки 21)
+
+**Место:** `Builders/EntityBuilder.cs:1024` (`if (_dataProvider is InMemoryDataContext) throw ...`).
+
+Несогласованно с остальными провайдерами без lateral-источника: SQLite/ClickHouse отклоняются
+**декларативно** через `ISqlDialect.SupportsApply == false` на рендере (`SqlSourceRenderer.cs:181-182`),
+а in-memory — императивно в билдере, уже на этапе построения. Это тот же паттерн, что Находка 21
+(ветвление по конкретному `InMemoryDataContext`). Фикс: capability на `IDataContext`/провайдере (или
+бросать в рендере/диалекте), чтобы гейт не зависел от конкретного типа контекста.
+
+### ✅ Находка 42 — `BuildQueryCommand`: тонкий алиас, `== typeof`, дублирование (ЗАКРЫТА частично 21.09.2026, была P2)
+
+**Место:** `Visitors/CorrelatedQueryExpressionVisitor.cs:525-530`
+(`internal QueryCommand BuildQueryCommand(Expression body) { var cmd = GetQueryCommand(body); cmd.OuterRegistry ??= _queryProvider; return cmd; }`),
+`Builders/EntityBuilder.cs:1045` (`source.Body.Type == typeof(QueryCommand)`),
+`EntityBuilder.cs:1026-1050` vs `:949-958` (дублирование `_windows`-гарда и `queryBase`).
+
+- `BuildQueryCommand` обходит `ReplaceQueryCommand`, который безусловно ставит
+  `cmd.OuterRegistry ??= _queryProvider` (Находка 36); `GetQueryCommand` ставит его только в ветках
+  маркера/вложенного подзапроса. APPLY-источник без маркера и вложений оставит `OuterRegistry == null`;
+  сегодня такой источник ничего не регистрирует (живого дефекта нет), но для единообразия стоит
+  выставлять реестр и здесь (или назвать метод `BuildApplySource`).
+- `source.Body.Type == typeof(QueryCommand)` почти всегда `false` (для `QueryCommand<T>`/`EntityBuilder<T>`
+  точного совпадения нет), поэтому `Expression.Convert` навешивается всегда; безвредно (implicit-операторы
+  `EntityBuilder.cs:824-825`), но условие вводит в заблуждение — `IsAssignableTo(typeof(QueryCommand))`.
+- `JoinApply` (`:1022-1050`) и `JoinCore` (`:949-963`) дублируют `_windows`-гард и `queryBase`;
+  `CreateJoined` устранил лишь тройное построение `JoinedEntityBuilder`. Вынести общий
+  `PrepareJoinedBase`.
+
+**Стало (21.09.2026).** `BuildQueryCommand` теперь выставляет реестр:
+`internal QueryCommand BuildQueryCommand(Expression body) { var cmd = GetQueryCommand(body);
+cmd.OuterRegistry ??= _queryProvider; return cmd; }`
+(`CorrelatedQueryExpressionVisitor.cs:525-530`) — поведение совпадает с `ReplaceQueryCommand`;
+под-пункт закрыт. Остаток: `source.Body.Type == typeof(QueryCommand)` (`EntityBuilder.cs:1045`)
+по-прежнему `==` (безвредно — есть implicit-операторы `EntityBuilder.cs:824-825` — но вводит в
+заблуждение), и `_windows`-гард + `queryBase` всё ещё продублированы в трёх путях
+(`JoinApply:1036-1043`, `JoinCore(EntityBuilder):951-958`, `JoinCore(QueryCommand):1068-1075`);
+`CreateJoined` объединяет только построение `JoinedEntityBuilder` (как и до фикса). Остаток —
+косметика ℹ️, принят; при желании выносится в общий `PrepareJoinedBase`.
+
+### ℹ️ Наблюдения (фикс не требуется)
+
+- **План-ключ нового источника покрыт (проверено по коду).** `PrepareJoin` устанавливает `From` до
+  `GetJoinExpressionPlanEqualityComparer().GetHashCode(join)` (`QueryPreparer.cs:446,453-456`);
+  `JoinExpressionPlanEqualityComparer.Equals/GetHashCode` сравнивают `From` (`:36,47`), а
+  `FromExpressionPlanEqualityComparer` для `SubQuery` идёт в `QueryPlanEqualityComparer` (то есть в SQL,
+  проекцию и `OuterReferences` построенной apply-команды). `ApplySource` в ключе отсутствует, но `From`
+  из него выводится детерминированно — коллизии планов нет, пока инсталляция предшествует хешу (она
+  предшествует). Наблюдение: `ApplySource` остаётся в кэш-клоне и в ключе не участвует.
+- **`ITestProvider.SupportsApply`** (`tests/nextorm.integration.tests/Providers/ITestProvider.cs:59-64`) —
+  тест-интерфейс, XML-док есть, реализован всеми провайдерами; `DialectCapabilityContractTests` его с
+  `ISqlDialect.SupportsApply` не сверяет. Дрейф тест-флага и диалект-флага был бы виден падением
+  интеграционного теста (при `true` без диалекта) или лишним skip'ом (при `false`), поэтому риск
+  минорный.
+- **Документация — исправлена 21.09.2026.** Врезка «Correlation is not expressible yet» /
+  «Корреляция пока не выражается» удалена; в `docs/guide/03-joins.md:181` и
+  `docs/ru/guide/03-joins.md:183` добавлен раздел «Correlated APPLY / LATERAL»; синхронно обновлены
+  `docs/advanced/limitations.md` (+RU), `sql-capabilities-gap-analysis.md`,
+  `todo_correlated_apply_lateral.md`, `plan-correlated-subqueries.md`. См. `API-NAMING-REVIEW.md`,
+  AP5 (закрыт).
+- **EOL.** Все правленые файлы в области — CRLF (EntityBuilder.cs 1312/1312, JoinExpression.cs 114/114,
+  CorrelatedQueryExpressionVisitor.cs 679/679, QueryPreparer.cs 753/753, ISqlDialect.cs 1098/1098,
+  SqlDialectBase.cs 656/656, ITestProvider.cs 69/69, SqlGenerationTests.cs 2342/2342). Находки 20/22/29
+  не расширяются.
+
+**Проверка (актуализация 21.09.2026, после фиксов Находок 39/42):** `dotnet build nextorm.sln -c Release`
+— **0 warnings / 0 errors**. Release-наборы: core **176/0**, sqlite **238/0**, sqlserver **221/0**
+(было 220 — добавлен тест Находки 39), postgres **239/0**, mysql **60/0**, mariadb **25/0**,
+clickhouse **179/0**; SQL Server-фильтр `~Apply` — **9/9** (включая
+`CrossApply_OnJoinedProjection_ShouldThrowClearNotSupported`). Находка 39 подтверждена probe'ом:
+`joined.CrossApply(...)` теперь даёт `NotSupportedException` с текстом «join projection» вместо
+`BuildSqlCommandException`. Полный интеграционный прогон Testcontainers — по отчёту исполнителя
+**1005 total / 0 failed / 30 skipped**; аудитом не перезапускался. `rg` по диффу — 0 новых подавлений/
+`Skip=`/`Task.Delay`/`Thread.Sleep`/пустых `catch`; `rg --files -g 'PublicAPI*.txt'` — пусто (Шаг 5
+открыт).
+
+## 🔎 Точечный аудит — производный запрос как первичный `FROM` с `Join` (21.09.2026)
+
+**Область:** `Builders/EntityBuilder.cs` — новые private `ResolveJoinBase` (`:1079-1093`),
+`HasNoNonWhereModifiers` (`:1099-1104`), `ApplyWhereToJoined<TJoinEntity>` (`:1112-1121`) и
+`ReplaceTargetParameterVisitor` (`:1126-1130`); вызовы в `JoinCore` (`:949-959`, `:1060-1070`) и
+`JoinApply` (`:1022-1048`); общий `CreateJoined` (`:1054-1059`). Рендер не менялся
+(`SqlSourceRenderer.MakeFrom` для `FromExpression.SubQuery`). Публичный API не добавлен. Тесты:
+`DerivedSourceThenJoin_*`/`DerivedSourceWhereThenJoin_*` + `DerivedSourceDistinctThenJoin_ShouldThrow`
+(`tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:2400`)/`DerivedSourceOrderByThenJoin_ShouldThrow`
+(`:2414`) в `tests/nextorm.{sqlserver,postgres,mysql,mariadb,sqlite,clickhouse}.tests/SqlGenerationTests.cs`;
+`tests/nextorm.core.tests/InMemoryJoinTests.cs:229`; `tests/nextorm.integration.tests/CommonTestSuite.Join.cs:209`.
+Build Release — **0/0**; `slopwatch` локальным tool'ом не установлен — паттерн-скан вручную.
+
+| Категория навыка | Статус |
+|---|---|
+| 1. `IDisposable` | ✅ Не затронуто: новых disposable-полей/локальных нет, новых `IDisposable`-типов нет. |
+| 2. Подавления | ✅ Новых `#pragma`/`SuppressMessage`/`NoWarn`/`Skip=`/пустых `catch` — **0**; `src/` — **6** `SuppressMessage` (все с `Justification`; +1 из untracked `AggregateTerminalRewriter.cs` относительно прежних 5) + **5** `#pragma disable` (все с парным `restore`), неоправданных **0/11**. |
+| 3. LINQ | ✅ Новые пути — построение выражения на подготовке (`ReplaceTargetParameterVisitor.Visit`), не per-row; LINQ по коллекциям нет. |
+| 4. События | ✅ Не затронуто. |
+| 5. Проектирование | ✅ Находки 43/44 исправлены 21.09.2026; ℹ️ — кумулятивный регресс размера класса, дубль in-memory-гейта (Находка 41). |
+| 6. Исключения | ✅ Новые `NotSupportedException` — доменные гейты (`:1084-1092`, тесты `TestDerivedSourceThenJoin_ShouldThrow`, `DerivedSourceDistinctThenJoin_ShouldThrow`, `DerivedSourceOrderByThenJoin_ShouldThrow`); пустых/`catch (Exception)`/`throw ex;` нет. |
+| 7. Хэш-ключи | ✅ План-ключ покрывает перенесённый `Where`: `QueryCommand.cs:111` (`_condition = definition.Condition`) → `QueryCommand.QueryPreparer.cs:510` (`PreparedCondition`) → `QueryPlanEqualityComparer.cs:117`; производный `From` — `:113`. `CreateJoined` не копирует `_condition` → двойного применения нет. |
+
+### ✅ Находка 43 — `HasOnlyWhereModifier()` пропускала `IsDistinct`: `DISTINCT` молча переезжал на join-результат (ИСПРАВЛЕНА 21.09.2026, была P2)
+
+**Место (было):** `Builders/EntityBuilder.cs:1097-1101` (`HasOnlyWhereModifier`), `:490-497` (`Distinct()` →
+`IsDistinct = true`), `:1078-1091` (`BuildJoinBase`), `:1056` (`CreateJoined` копирует `IsDistinct`).
+
+**Проблема:** guard проверял `_group`/`_having`/`_sorting`/`_preWhere`/`_arrayJoins`/`_windows`/
+`_limitBy`/`_distinctOn`/`_tablesample`/`_temporal`/`_rowLock`/`_settings`/`Paging`, но **не** `IsDistinct`.
+`ctx.From(derived).Distinct().Join(...)` проходил как «только `Where`»: `BuildJoinBase` возвращал `_query`
+(без `DISTINCT`), а `CreateJoined` переносил `IsDistinct = true` на join-билдер ⇒ `SELECT DISTINCT … FROM
+(derived) JOIN …` вместо `DISTINCT` по производной проекции **до** join.
+
+**Стало (21.09.2026).** `HasNoNonWhereModifiers()` (`EntityBuilder.cs:1099-1104`) теперь отвергает
+**каждый** переносимый модификатор: `!IsDistinct && !IsFinal && SampleRatio is null && SampleOffset == 0`
++ прежний список + `Paging.IsEmpty`. `ResolveJoinBase` (`:1079-1093`) для производного источника
+(`_query != null`) больше **не** откатывается молча в `ToCommand()`: при `HasNoNonWhereModifiers()` —
+возвращает `_query`, иначе бросает `NotSupportedException` «…supports only a Where clause before Join;
+put OrderBy/GroupBy/Distinct and other modifiers into the derived query.». Регресс-тесты
+`DerivedSourceDistinctThenJoin_ShouldThrow`/`DerivedSourceOrderByThenJoin_ShouldThrow`
+(`tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:2400,2414`) — по 1/1, сообщение `*only a Where clause*`.
+
+**Проверка:** build Release **0/0**; SQL Server-набор **226/0**; golden `DerivedSourceThenJoin_*`/
+`DerivedSourceWhereThenJoin_*` по 6 диалектам зелёные.
+
+### ✅ Находка 44 — `CarryWhereCondition` использовала type-based rebind: вложенные лямбды того же типа переписывались на `p.Item1` (ИСПРАВЛЕНА 21.09.2026, была P2)
+
+**Место (было):** `Builders/EntityBuilder.cs:1107-1115` (`new ReplaceParameterExpressionVisitor(item1).Visit(...)`),
+`Visitors/ReplaceExpressionVisitor.cs:16-21` (сопоставление `if (_parameter.Type == node.Type)`).
+
+**Проблема:** visitor сопоставлял параметры **по типу**, а не по ссылке; цель замены — `p.Item1` типа
+`TEntity`, поэтому любой `ParameterExpression` того же типа внутри `_condition.Body` заменялся. Для
+самоссылающейся сущности (`Node { List<Node> Children }`, `Where(d => d.Children.Any(c => c.Id == d.Id))`)
+параметр `c` тоже типа `Node` и тело становилось `p.Item1.Children.Any(p.Item1.Id == p.Item1.Id)`.
+
+**Стало (21.09.2026).** `ApplyWhereToJoined<TJoinEntity>` (бывш. `CarryWhereCondition`, `:1112-1121`)
+использует private nested `ReplaceTargetParameterVisitor` (`:1126-1130`), который заменяет **точный**
+узел `_condition.Parameters[0]` по `ReferenceEquals(node, target)`, не трогая параметры того же типа во
+вложенных лямбдах. Публичный `ReplaceParameterExpressionVisitor` не менялся (его type-контракт нужен для
+склейки `Where`×2 на `:235/:314/:1204/:1311`). Отдельный регресс-тест на самоссылающуюся сущность не
+заводился (трансляция `Any` по навигации вне области); корректность гарантирована reference-сопоставлением.
+
+**Проверка:** build Release **0/0**; существующие `DerivedSource*`/in-memory/integration тесты зелёные.
+
+### ✅ Находка 41 — дополнение (актуализация 21.09.2026)
+
+`ResolveJoinBase` по-прежнему ветвится по конкретному типу
+`if (_dataProvider is InMemoryDataContext || typeof(TEntity).TryGetProjectionDimension(out _)) throw …`
+(`EntityBuilder.cs:1084`), но теперь одним гейтом закрывает **и** InMemory, **и** цепочку join поверх
+производного первичного источника (последнее — по существу расширение Находки 39/AP1 про плоскую
+арность). Отдельный номер не завожу: паттерн `is InMemoryDataContext` остаётся дополнением к Находке 41
+(`JoinApply:1028`); живой дефект — внятный `NotSupportedException`, покрыт `InMemoryJoinTests.cs:229`.
+
+### ℹ️ Наблюдения (фикс не требуется)
+
+- **God-class регресс (кумулятивный).** `EntityBuilder<TEntity>` физически занимает строки 21–1255
+  (~1235) — далеко за порогом >500 и выше зафиксированных в Находке 4 «466». Рост даёт не только этот
+  фикс (windows/pivot/apply/derived — несколько незакоммиченных фич), но порог превышен снова. Кандидат
+  на вынос блока clause-модификаторов в partial/параметр-объект (ср. `EntityBuilderExtensions`).
+- **`ApplyWhereToJoined` после `CreateJoined` при `_query is null`.** Две дешёвые проверки
+  (`_query`/`_condition`), на подготовке, не per-row — принято; `HasNoNonWhereModifiers()` больше не
+  дублируется (гейт остался в `ResolveJoinBase`), и это безопасно: метод вызывается сразу после
+  `ResolveJoinBase` без мутации билдера.
+- **Наследуемая `Join(QueryCommand<…>)` на `JoinedEntityBuilder<T1..T8>` не перекрыта.** `CreateJoined`
+  не переносит `_joins`, поэтому цепочка `joined.Join(queryCommand, …)` теряет предыдущие join'ы — тот
+  же класс, что Находка 39/AP1 (там закрыт только correlated-`Apply` guard'ом). Для **производного**
+  первичного источника цепочка теперь гейтится `TryGetProjectionDimension` (`:1084`), но для
+  **непроизводного** (`_query is null`) наследуемый путь по-прежнему возможен; дефект пре-существующий,
+  отдельного номера не завожу.
+- **План-ключ и EOL.** `_fromComparer`/`PreparedCondition` покрывают и источник, и перенесённый `Where`
+  (`QueryPlanEqualityComparer.cs:113,117`); `EntityBuilder.cs` — 1372/1372 CRLF, LF-only строк — 0;
+  тестовые файлы фичи — CRLF. Находки 20/22/29 не расширяются.
+- **XML-доки новых private-членов.** `<summary>` есть у `ResolveJoinBase`, `HasNoNonWhereModifiers`,
+  `ApplyWhereToJoined`, `ReplaceTargetParameterVisitor`, `CreateJoined`, `GetJoinSource`; у private
+  `JoinCore`/`JoinApply` доков нет (пре-существующее; `CS1591` в `<NoWarn>` 7 библиотек — не гейтится).
+- **Док-разрыв — закрыт 21.09.2026.** `todo_mssql_derived_from_join.md` удалён; gap 3 удалён из
+  `sql-capabilities-gap-analysis.md` и пункты перенумерованы; «joins over a derived query» убрано из
+  Future workstreams; обновлены guide EN+RU, limitations EN+RU, capability-matrix.
+  **Дополнение 21.09.2026:** остаток `docs/specs/roadmap/todo_mssql_pivot_derived.md` тоже удалён (выводы свёрнуты в
+  доки), ограничение снято — `PIVOT`/`UNPIVOT` теперь принимают производный источник (`From(query)`); см.
+  «Точечный аудит — PIVOT/UNPIVOT по производному источнику» выше. Ссылок на удалённый файл в реестре больше нет.
+
+**Проверка (актуализация 21.09.2026, после фиксов 43/44).** `dotnet build nextorm.sln -c Release` —
+**0 warnings / 0 errors** (прогнано в этом проходе). Подавления: `src/` — **6** `SuppressMessage` (все с
+`Justification`) + **5** `#pragma disable` (все с `restore`), неоправданных **0/11**; `tests/` — 0.
+`.editorconfig` — 7 `dotnet_diagnostic.*.severity`, все `silent` (S125/S108/S3060/S1104/S3604/S2292 +
+CA2254), `SonarAnalyzer` не подключён (записи `S*` инертны). `rg --files -g 'PublicAPI*.txt'` — пусто
+(Шаг 5 открыт). Release-наборы и покрытие — по отчёту исполнителя (core 177, sqlite 240, sqlserver 226,
+postgres 241, mysql 62, mariadb 27, clickhouse 181; integration 1009 total, реальных падений 0 —
+окруженческие флейки ClickHouse/SqlServerSpecificTests прошли на повторе; coverage 85.1 % line /
+73.8 % branch); аудитом тесты/покрытие не перезапускались. `rg` по диффу — 0 новых `Skip=`/`Task.Delay`/
+`Thread.Sleep`/пустых `catch`.
+
+## 🔎 Точечный аудит — SQL Server `PIVOT`/`UNPIVOT` по производному источнику (21.09.2026)
+
+**Область:** изменение `Builders/EntityBuilder.cs` — `ResolvePivotInner` (`:668-690`) больше не отвергает
+`_query`, а возвращает `new FromExpression(_query)`; XML-`<summary>` `Pivot`/`Unpivot`/`ResolvePivotInner`;
+тесты `Pivot_ShouldAcceptDerivedSource`/`Pivot_ShouldAcceptDerivedComputedSource`/`Unpivot_ShouldAcceptDerivedSource`/
+`Pivot_ShouldThrowWhenDerivedSourceHasModifiers` (`tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:2325-2395`)
+и `Pivot_ShouldReshapeDerivedSource`/`Unpivot_ShouldStackDerivedColumns`
+(`tests/nextorm.integration.tests/SqlServerSpecificTests.cs:288,304`). Публичной поверхности не добавлено;
+диалектные хуки и рендер (`SqlSourceRenderer.MakePivot`, `QueryPreparer.PrepareFrom`) не менялись — ветка
+`FromExpression.SubQuery` уже существовала. Build Release — **0 warnings / 0 errors** (этот проход).
+
+| Категория навыка | Результат |
+|---|---|
+| 1. `IDisposable` | ✅ Не затронуто: новых disposable-полей/локальных нет. |
+| 2. Подавления | ✅ Новых `#pragma`/`SuppressMessage`/`NoWarn`/`Skip=` — **0**; база не менялась (`src/` — 6 `SuppressMessage` все с `Justification` + 5 `#pragma disable` все с парным `restore`, неоправданных **0/11**). |
+| 3. LINQ на горячем пути | ✅ `ResolvePivotInner` — построение на подготовке, не per-row; LINQ по коллекциям нет. Одна аллокация `new FromExpression(_query)` на билд запроса — принято (ср. ветку `_table`/`_from`). |
+| 4/6. События, исключения | ✅ Новых подписок/`catch` нет; `NotSupportedException` — доменный гейт. |
+| 5. Проектирование | ✅ Находки 45/46 исправлены 21.09.2026 (ниже). Заодно **закрыта Находка 31** (guard расширен на все модификаторы). |
+| 7. Хэш-ключи | ✅ `PivotEquals`/`PivotHash` рекурсивно сворачивают `Inner`, в т.ч. новый `SubQuery` (`FromExpressionPlanEqualityComparer.cs:61-76,95-118`) — сравнение и хэш согласованы; деталь по `CloneForCache` — Находка 45. |
+| Слоп-паттерны (slopwatch локально не установлен; скан вручную) | ✅ `Skip=`/`Ignore`/`Thread.Sleep`/пустых `catch`/инлайновых `Version` — **0** в изменённых файлах фичи. |
+
+### ✅ Находка 45 — `FromExpression.CloneForCache()` делил `Pivot.Inner.SubQuery` между планом-кэшем и живым запросом (ИСПРАВЛЕНА 21.09.2026, была P2)
+
+**Место:** `src/nextorm.core/Expressions/FromExpression.cs:75` (условие `|| Pivot is not null` → `return this`).
+
+**Было (что делает код):** `CloneForCache` считает любой `Pivot` иммутабельным и возвращает `this`; до этой
+фичи `Pivot.Inner` мог быть только таблицей/TVF/сущностью (они тоже шарятся — `:75`). Теперь `ResolvePivotInner`
+(`EntityBuilder.cs:679-680`) кладёт внутрь `new FromExpression(_query)`, поэтому план-кэш
+(`QueryCommand.CloneForCache` → `QueryCommand.Clone.cs:94`) получает `_from.Pivot.Inner.SubQuery`, ссылающийся
+на **живой** производный `QueryCommand`, тогда как «голый» производный `FROM` тот же метод глубоко клонирует
+(`:77`). Это расходится с заявленным инвариантом «кэш владеет клонами, чтобы поздняя ре-подготовка живого
+запроса не меняла то, с чем сравнивается кэш» (`QueryCommand.Clone.cs:100-101`).
+
+**Последствие (до фикса):** план-кэш и живой запрос делят внутренний подзапрос. Живого падения не
+воспроизведено (`_isPrepared`-гейт `PrepareFrom`, `QueryCommand.QueryPreparer.cs:150-151`, не даёт
+ре-подготовить inner), поэтому это P2-hardening, а не подтверждённый дефект. Переиспользование плана запинено
+только для табличного источника (`Pivot_ShouldReuseCachedPlan`, `SqlGenerationTests.cs:2289`); производный
+случай не покрыт.
+
+**Стало (21.09.2026).** `FromExpression.CloneForCache` (`Expressions/FromExpression.cs:75-79`) больше не считает
+любой `Pivot` шарируемым: он вызывает `Pivot.CloneForCache()` и возвращает `this` только при
+`ReferenceEquals(pivot, Pivot)`, иначе — свежий `FromExpression(pivot)`. Новый `internal
+PivotExpression.CloneForCache` (`Query/PivotExpression.cs:154-163`) шарит таблицу/TVF/сущность
+(`Inner.CloneForCache()` вернул `this`), а производный `Inner` глубоко клонирует. Инвариант
+`QueryCommand.Clone.cs:100-101` восстановлен для pivot-источника. Тест:
+`Pivot_ShouldReuseCachedPlan_DerivedSource` (`tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:2308`) — два
+структурно идентичных производных pivot'а через кэш-путь дают одинаковый SQL с подзапросом и `pivot`-клаузой.
+Публичной поверхности не добавлено (`CloneForCache` — `internal`).
+
+### ✅ Находка 46 — сообщение guard'а `ResolvePivotInner` не упоминало TVF-источник и безусловно давало производный совет (ИСПРАВЛЕНА 21.09.2026, была P2)
+
+**Место:** `src/nextorm.core/Builders/EntityBuilder.cs:676-677`.
+
+**Было (что делает код):** guard допускает таблицу/сущность (`_table`/метаданные), TVF (`_from.TableFunction`),
+производный (`_query`) и даже вложенный pivot (`_from.Pivot`), но сообщение перечисляет только «a plain
+table/entity source or a derived query» и всегда добавляет «or (for a derived source) inside the derived
+query». TVF, который XML-`<summary>` (`:612`) честно называет, в тексте отсутствует; производный совет
+выводится и при `_query is null` (обычная таблица).
+
+**Последствие (до фикса):** пользователь TVF-источника получает текст, из которого не следует, что его форма
+вообще поддерживается; производный совет нерелевантен для табличного случая. На корректность не влияет, но
+это единственная диагностика ошибки.
+
+**Стало (21.09.2026).** `ResolvePivotInner` ветвит сообщение по `_query` (`EntityBuilder.cs:676-678`):
+производный источник → «PIVOT/UNPIVOT over a derived query accepts no modifiers on the pivot builder; apply …
+inside the derived query or to the reshaped result.»; иначе → «… a plain table/entity source, a table-valued
+function or a derived query; …» (TVF теперь назван). Существующие ассерты `*plain table*`/`*derived query*`
+(`SqlGenerationTests.cs:2403,2414,2418,2428-2437`) проходят.
+
+**Проверка (после фиксов 45/46, 21.09.2026).** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**;
+`dotnet test tests/nextorm.sqlserver.tests -c Release --filter "FullyQualifiedName~Pivot|FullyQualifiedName~Unpivot"`
+— **13/13 passed** (в т.ч. `Pivot_ShouldReuseCachedPlan_DerivedSource`). По отчёту исполнителя: unit core 177/
+sqlite 241/sqlserver 234, integration 1011 total / 0 failed / 30 skipped, coverage 85.1 % line / 73.8 % branch,
+пример MSSQL 11/11. `.editorconfig` — 7 `dotnet_diagnostic.*.severity`, все `silent` (S125/S108/S3060/S1104/S3604/
+S2292 + CA2254), `SonarAnalyzer` не подключён (записи `S*` инертны); `rg --files -g 'PublicAPI*.txt'` — пусто
+(Шаг 5 открыт).
+
+## 🔎 Точечный аудит — capability-объекты диалекта (Фаза 2 + 2a) (21.09.2026)
+
+**Область:** `src/nextorm.core/DataContext/Dialect/DialectCapabilities.cs` (+12 публичных интерфейсов),
+`ISqlDialect.cs` (12 nullable DIM-свойств, `Supports*`/`Make*` → вычисляемые делегаты),
+`SqlDialectBase.cs` (12 `virtual` object-свойств, удаление throwing-заглушек), шесть `*Dialect.cs`
+(override объекта вместо `Make*`), `tests/nextorm.integration.tests/DialectCapabilityContractTests.cs`.
+Build Release — **0 warnings / 0 errors** (этот проход). `slopwatch` локальным tool'ом не установлен —
+паттерн-скан выполнен вручную. Продолжение аудита Фазы 1 (Находка 32 и раздел 20.09.2026).
+
+| Категория навыка | Результат |
+|---|---|
+| 1. `IDisposable` | ✅ Рендереры — `internal sealed` синглтоны/поля-ссылки без ресурсов; `IDisposable`/`CA2213`/`CA1816` неприменимы. Захватывающие рендереры держат только ссылку на диалект-синглтон. |
+| 2. Подавления | ✅ Новых `#pragma`/`SuppressMessage`/`NoWarn`/`Skip=`/`Task.Delay`/`Thread.Sleep`/пустых `catch` в диффе — **0**. База `src/`: **6** `SuppressMessage` (все с `Justification`) + **5** `#pragma warning disable` (все с парным `restore`), неоправданных **0/11**. В `tests/` `Skip=`/`Ignore` — 0. |
+| 3. LINQ на горячем пути | ✅ Дифф LINQ-цепочек не добавляет; рендеры — прямая интерполяция/`string.Join`, как прежние `Make*`. `AllDialects()` в тесте — reflection, не горячий путь. |
+| 4/6. События, исключения | ✅ Новых подписок/`catch` нет; `NotSupportedException` — доменные гейты capability, не пустой `catch`/`catch (Exception)`. |
+| 5. Проектирование | ✅ Находки 47–49 закрыты 21.09.2026 (ниже); 16 интерфейсов, god-классы не расширены. |
+| 7. Хэш-ключи | ✅ Не затронуто: capability-объекты в план-ключ не входят (singleton на диалект, ключи не менялись). |
+| EOL | ✅ Все 10 затронутых файлов — CRLF (`DialectCapabilities.cs` 224/224); Находки 20/22/29 не расширяются. |
+
+### ✅ Находка 47 — `ILockRenderer` несёт бросающий метод: capability-объект с «половинчатой» поддержкой (ИСПРАВЛЕНА 21.09.2026, была P2)
+
+**Место:** `DialectCapabilities.cs:214-224` (`UsesTableHints:217`, `Render:220`, `RenderHint:223`);
+`SqlServerDialect.cs:503-514` (`Render` бросает, `:509-510`); `PostgresDialect.cs:282-293`
+(`RenderHint` бросает, `:291-292`); `MySqlDialect.cs:281-292` (`:290-291`);
+`tests/nextorm.integration.tests/DialectCapabilityContractTests.cs:190-201`.
+
+**Суть:** присутствие объекта означает «row locking поддержан», но внутри него один из двух рендеров
+всегда бросает: SQL Server бросает `Render`, PostgreSQL/MySQL (и наследующий MariaDB) бросают
+`RenderHint`. Это возвращает внутрь capability-объекта ровно ту проблему, которую закрывает RFC
+(«объект есть ⇒ рендер работает»): потребитель обязан знать `UsesTableHints`, иначе получает
+`NotSupportedException` из якобы «поддерживающего» объекта. Нарушен ISP: 3 из 4 реализаций содержат
+мёртвый бросающий член. Контрактный тест это маскирует — вызывает только метод, выбранный по
+`UsesTableHints` (`:192-200`), поэтому непокрытая ветка не падает; его же XML-док обещает «non-null object
+implies its renderer does not throw».
+
+**Фикс:** один `Render(LockMode mode)`, возвращающий только токен (`updlock`/`holdlock`/` for update`/
+` lock in share mode`), а форму вынести в отдельный член диалекта (`bool LockingUsesTableHints` уже есть,
+`ISqlDialect.cs:1164`) или enum `LockPlacement`. Тогда ни один метод объекта не бросает. Альтернатива —
+разнести `ILockClauseRenderer`/`ILockHintRenderer` (два объекта, `Lock` = один из них).
+
+### ✅ Находка 48 — контрактный тест: вакуумная проверка `Pivot` и пропущенный `MakeTableSample` (ИСПРАВЛЕНА 21.09.2026, была P2)
+
+**Место:** `tests/nextorm.integration.tests/DialectCapabilityContractTests.cs:203-204`; `:172-182`.
+
+**Суть:** `if (dialect.Pivot is { } pivot) pivot.Should().NotBeNull();` — при паттерне `is { } pivot`
+проверка `NotBeNull()` всегда истинна; ни `RenderPivot`, ни `RenderUnpivot` не вызываются, хотя заявленный
+инвариант (см. `API-NAMING-REVIEW.md`, «Фаза 2 + 2a») — «объект не `null` ⇒ `Render` не бросает для всех
+новых объектов». `IPivotRenderer` — единственный из 16 объектов, чей рендер тестом вообще не исполняется
+(и единственный с `PivotExpression`-зависимым телом, где ошибка рендера наиболее вероятна). Рядом
+`MakeTableSample` (`:172-182` проверяет только `tableSample.Render`) не вызывается.
+
+**Фикс:** построить минимальный `PivotExpression` (pivot + unpivot) и вызвать оба метода на каждом
+диалекте с непустым `Pivot`; добавить `dialect.MakeTableSample(...)` для поддерживаемого метода.
+
+### ✅ Находка 49 — вычисляемые `Supports*` в `SqlDialectBase` остаются `virtual`: инвариант обходится override'ом (ИСПРАВЛЕНА 21.09.2026, была P2, hardening)
+
+**Место:** `SqlDialectBase.cs:39,45,71,88,98,113,120,137,157,163,181,186,220,262,270,283,662` — 17
+вычисляемых флагов на 16 объектов.
+
+**Суть:** флаг вычисляется из объекта и в in-repo диалектах **не** переопределяется (проверено:
+`override bool Supports*` для 16 object-backed возможностей — **0**). Но `public virtual` позволяет
+наследнику `SqlDialectBase` переопределить `SupportsX => true` без объекта; тогда `MakeX` бросит — исходная
+класс-A-щель сохраняется для внешних диалектов (продолжение ℹ️-заметки Фазы 1; `ISqlDialect`-DIM флаги
+можно переопределить так же). Инвариант держится на in-repo диалектах, а не на конструкции.
+
+**Фикс:** снять `virtual` с вычисляемых `Supports*` в `SqlDialectBase` (`public bool SupportsX => X is not null;`),
+оставив `virtual` только объектное свойство; тогда через базу «солгать» нельзя — диалект обязан дать
+объект. Для прямых реализаций `ISqlDialect` (мимо базы) щель остаётся и закрывается в Фазе 3 удалением пар.
+
+### ℹ️ Наблюдения (фикс не требуется)
+
+- **Thread-safety захватывающих рендереров.** `SqlServerPivotRenderer` (`SqlServerDialect.cs:468-501`) и
+  `ClickHouseMultiIfRenderer`/`ClickHouseUniqAggregates`/`ClickHouseQuantileAggregates`
+  (`ClickHouseDialect.cs:581-611`) захватывают диалект; полей, кроме `readonly`-ссылки, нет; вызываемые
+  `Escape`/`MakeTableAlias`/`MakeTypeName`/`MakeAggregate` — чистые и состояние не мутируют; диалекты
+  `sealed` (`SqlServerDialect.cs:10`, `ClickHouseDialect.cs:12`), вызовы ленивые (из `Render`, не из ctor),
+  поэтому `CA2214` не возникает. Синглтоны, доступные конкурентно, безопасны. `Escape`/`MakeTableAlias`
+  применены корректно: идентификаторы PIVOT/UNPIVOT и алиас результата брекет-квотируются через диалект.
+- **Disposal/аллокации.** `IDisposable` не нужен. Конструктор диалекта создаёт рендереры один раз
+  (`SqlServerDialect.cs:17`, `ClickHouseDialect.cs:21-26`) — +1..3 объекта на диалект, не на запрос.
+  `Render` аллоцирует локальный `StringBuilder`/`string.Join` как прежние `Make*` — не регрессия.
+- **Класс B `MakeUniqAggregate`/`MakeQuantile`/`MakeMedian`.** До изменения база давала не-бросающий
+  ANSI-дефолт (`$"{MakeAggregate(name)}({argument})"` и т.п., `SqlDialectBase.cs:115-127`); теперь без
+  объекта — `NotSupportedException`. Формально это выход за класс A и поведенческое изменение для внешнего
+  диалекта, который выставлял `SupportsUniqAggregates`/`SupportsQuantileAggregates` и полагался на
+  `base.Make*`. Практический риск низкий: дефолт был валиден только для ClickHouse (иной провайдер получил
+  бы семантически невалидный SQL), alpha допускает слом, Фаза 3 удаляет пары. Зафиксировано, не чинится.
+- **XML-docs.** Все 16 публичных интерфейсов (12 новых) и их члены имеют `<summary>`; у
+  `IPivotRenderer.RenderPivot`/`RenderUnpivot` нет `<param>` (CS1591 в `<NoWarn>` всех 7 `.csproj`, не
+  гейтится). Приложение A (45) не меняется.
+- **Находка 24** (`SupportsTableSampleMethod` бросал) закрыта этим изменением: базовый
+  `SupportsTableSampleMethod` теперь `=> TableSample?.Supports(method) ?? false` (`SqlDialectBase.cs:223`).
+- **Находка 34/33** (дублирование/размер `CorrelatedQueryExpressionVisitor`) не затрагиваются.
+
+**Проверка.** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**; `rg` по диффу — 0
+добавленных подавлений/`Skip=`/задержек/пустых `catch`; база подавлений `src/`: 6 `SuppressMessage` (все с
+`Justification`) + 5 `#pragma disable` (все с парным `restore`), неоправданных **0/11**; `Task.Delay` — 2
+(прежние `Task.Delay(0)`); `.editorconfig` — 7 `dotnet_diagnostic.*.severity`, все `silent`, `SonarAnalyzer`
+не подключён (записи `S*` инертны); `rg --files -g 'PublicAPI*.txt'` — пусто (Шаг 5 открыт, DC3/DC8);
+docker-интеграция не перезапускалась (по отчёту исполнителя: 1005 total / 0 failed / 30 skipped,
+`DialectCapabilityContractTests` 3/3). Публичная сторона — `API-NAMING-REVIEW.md`, DC5–DC8.
+
+**Стало (21.09.2026, фиксы применены).**
+- **Находка 47 — закрыта.** `ILockRenderer` сведён к `{ bool UsesTableHints; string Render(LockMode); }`
+  (`DialectCapabilities.cs:222-231`), `RenderHint` удалён (`rg RenderHint src tests` — пусто).
+  `SqlServerLockRenderer.Render` возвращает голый токен (`updlock`/`holdlock`, `SqlServerDialect.cs:503-513`),
+  `PostgresLockRenderer`/`MySqlLockRenderer` — трейлинг-клаузу (`PostgresDialect.cs:282-291`,
+  `MySqlDialect.cs:281-290`). `SqlDialectBase.MakeLock`/`MakeLockHint` оба делегируют в `ILockRenderer.Render`
+  (`SqlDialectBase.cs:668,673`), достижим только выбранный по форме метод. Ни один capability-объект больше не
+  несёт бросающего метода. Контрактный тест вызывает `Render(Share)` без ветвления (`:207-211`) и сверяет
+  `LockingUsesTableHints == lockRenderer.UsesTableHints` (`:210`).
+- **Находка 48 — закрыта.** Тест собирает минимальный `PivotExpression` через `internal static
+  PivotExpression.ForPivot`/`ForUnpivot` рефлексией (`DialectCapabilityContractTests.cs:22-36`; у
+  integration-проекта нет `InternalsVisibleTo`), затем вызывает `RenderPivot`+`MakePivot` и
+  `RenderUnpivot`+`MakeUnpivot` (`:213-222`); `TableSample`-блок дополнительно ассертит
+  `dialect.MakeTableSample(...)` (`:197`). Вакуумный `NotBeNull()` убран, `IPivotRenderer` теперь
+  действительно исполняется.
+- **Находка 49 — закрыта.** С `virtual` снято у 17 вычисляемых `Supports*`-свойств + 4 поимённых/помесячных
+  предикатов + `LockingUsesTableHints` (22 члена) в `SqlDialectBase`; object-свойства остались `virtual`.
+  Проверка: `grep "public virtual bool Supports.*is not null" SqlDialectBase.cs` — пусто; in-repo диалектов,
+  переопределяющих вычисляемый флаг, — 0, поэтому поведение не изменилось, а база больше не позволяет
+  «солгать» флагом без объекта. Остаётся только путь прямой реализации `ISqlDialect` мимо базы (закрывается
+  в Фазе 3 удалением пар).
+
+**Обновление 21.09.2026 (Фаза 3):** `MakeLock`/`MakeLockHint`/`LockingUsesTableHints`,
+`MakePivot`/`MakeUnpivot`/`MakeTableSample` и 22 вычисляемых `Supports*` **удалены**; см. раздел
+«Фаза 3: удаление дублирующих `Supports*`/`Make*`» ниже.
+
+**Остаточные наблюдения (ℹ️, не P2).**
+- `PivotExpression.ForPivot`/`ForUnpivot` вызываются из теста рефлексией — приемлемый обход отсутствия
+  `InternalsVisibleTo`; при желании можно добавить `[assembly: InternalsVisibleTo("nextorm.integration.tests")]`.
+- Дип покрытия 85.1→85.0 % line / 73.8→73.2 % branch — это DIM-фолбэки `ISqlDialect`/`SqlDialectBase`,
+  структурно недостижимые через базу (компилируются, но не исполняются); носители полностью покрыты.
+
+**Проверка (после фиксов 47–49, 21.09.2026).** `dotnet build nextorm.sln -c Release` — **0 warnings /
+0 errors** (перепроверено); `DialectCapabilityContractTests` — **3/3 passed** (перепроверено, 710 ms).
+По отчёту исполнителя: unit core 177 / sqlite 241 / sqlserver 234 / postgres 241 / mysql 62 / mariadb 27 /
+clickhouse 181, 0 failed; full integration 1005 / 0 failed / 30 skipped; coverage 85.0/73.2;
+`rg '\bRenderHint\b|\bITableSampleRenderer\b|\bISequenceAggregates\b' src tests` — пусто;
+`rg --files -g 'PublicAPI*.txt'` — пусто (Шаг 5 / DC3 / DC8 — по решению автора). Публичная сторона —
+`API-NAMING-REVIEW.md`: DC5/DC6 ✅, DC7 ℹ️.
+
+## 🔎 Точечный аудит — Фаза 3: удаление дублирующих `Supports*`/`Make*` (21.09.2026)
+
+**Область:** `DataContext/Dialect/{ISqlDialect,SqlDialectBase,DialectCapabilities}.cs`, шесть `*Dialect.cs`,
+трансляторы (`StringFunctionTranslator`, `XmlSqlTranslator`, `DateConversionSqlTranslator`,
+`SessionInfoFunctionTranslator`, `UuidFunctionTranslator`, `AdvancedAggregateTranslator`,
+`BuiltinFunctionTranslator`), `DataContext/{SqlBuilder,SqlSourceRenderer}.cs`, 6 dialect-тестов,
+`tests/nextorm.integration.tests/DialectCapabilityContractTests.cs`. Build Release — **0 warnings /
+0 errors**; контрактный тест — **2/2** (перепроверено этим аудитом). `slopwatch` локальным tool'ом не
+установлен — паттерн-скан вручную.
+
+| Категория навыка | Результат |
+|---|---|
+| 1. `IDisposable` | ✅ Не затронуто: удаление членов/миграция вызовов, новых disposable-полей нет. |
+| 2. Подавления | ✅ Новых `#pragma`/`SuppressMessage`/`NoWarn`/`Skip=`/`Task.Delay`/`Thread.Sleep`/пустых `catch` — **0**; база `src/`: 6 `SuppressMessage` (все с `Justification`) + 5 `#pragma disable` (все с `restore`), неоправданных **0/11**. |
+| 3. LINQ на горячем пути | ✅ Не затронуто; guard'ы — `is not { } local` без LINQ-цепочек. |
+| 4/6. События, исключения | ✅ Новых подписок/`catch` нет; `NotSupportedException` — доменные гейты capability. |
+| 5. Проектирование | ✅ Дублирование `Supports*`/`Make*` устранено; единственный источник — объект; **Находка 49 снята удалением** (вычисляемых object-backed флагов в базе больше нет). Новых P0–P2 нет. |
+| 7. Хэш-ключи | ✅ Не затронуто. |
+| EOL | ✅ Затронутые `.cs` — CRLF; новых LF-файлов нет. |
+
+### ✅ Находка 50 — удаление 41 дублирующего члена: проверка мигрированных call-site (ЗАКРЫТА 21.09.2026, наблюдение)
+
+Удалена вся class-A пара `Supports*`/`Make*`, ставшая вычисляемым делегатом к 16 capability-объектам
+(41 уникальный член; в `ISqlDialect` + `SqlDialectBase` — 60 деклараций), плюс избыточный
+`ClickHouseDialect.MakeDateConversion`. Проверка мигрированных мест (сверено с исходным поведением):
+
+- **Lock hint vs clause** (`SqlBuilder.cs:93-94`, `:388-396`): hint-форма выбирается через
+  `_ctx.Dialect.Lock is { UsesTableHints: true } lockHint` и `lockHint.Render(mode)`; трейлинг-клауза —
+  `if (!lockRenderer.UsesTableHints) ... lockRenderer.Render(rowLock.Mode)`. Удалённый
+  `LockingUsesTableHints` нигде не остался; выбор эквивалентен прежнему.
+- **`MakeLimitBy` → `limitByRenderer.Render(...)`** (`SqlBuilder.cs:341-364`): null-guard
+  `_ctx.Dialect.LimitBy is not { } limitByRenderer` бросает то же сообщение, `AppendLine()` + `Append(render)`
+  сохранены; порядок «guard → append» не изменился.
+- **Null-guard паттерн** во всех трансляторах (`StringFunctionTranslator.cs:342`, `XmlSqlTranslator.cs:40`,
+  `DateConversionSqlTranslator.RequireSupport`, `SessionInfoFunctionTranslator.cs:33`,
+  `UuidFunctionTranslator.cs:31`, `AdvancedAggregateTranslator.cs:188,207,230,325`,
+  `BuiltinFunctionTranslator.cs:133,180`, `SqlSourceRenderer.cs:366`): `is not { } local` с прежними
+  сообщениями; поимённые `object.Supports(name)` + `object.Render(name)` эквивалентны удалённым
+  `ISqlDialect.SupportsX(name)`/`MakeX(name)`.
+- **`SqlSourceRenderer.MakePivot`** (`:362-389`) — guard `ctx.Dialect.Pivot` + `RenderPivot`/`RenderUnpivot`.
+- **Тесты:** 6 dialect-тестов и контрактный тест переведены; `DialectCapabilityContractTests` сведён к
+  2 фактам — удалён тавтологичный факт «флаг ↔ объект», render-факт проверяет только объекты
+  (`Iif`…`Lock`, pivot через `RenderPivot`/`RenderUnpivot`, `:149-156`). Удалять факт было корректно:
+  флагов-делегатов больше нет.
+- **Новых P0–P2 не введено.** ℹ️ остаётся прежнее: `PivotExpression.ForPivot`/`ForUnpivot` вызываются
+  из теста рефлексией (нет `InternalsVisibleTo`).
+
+### ✅ Находка 49 (актуализация Фазы 3, 21.09.2026) — снята удалением
+
+Находка 49 (вычисляемые `Supports*` остаются `virtual` в `SqlDialectBase`) **снята**: Фаза 3 удалила
+17 вычисляемых `Supports*`-свойств + 4 поимённых/помесячных предиката + `LockingUsesTableHints` вместе с
+`Make*`-делегатами. `SqlDialectBase` больше не содержит object-backed вычисляемых флагов — обходить
+override'ом нечего (остались только class-B/C `Supports*`, не привязанные к объекту).
+
+### ✅ Находки 47/48 (актуализация Фазы 3, 21.09.2026) — текст фикса устарел, находки закрыты
+
+- **Находка 47:** рекомендация «`bool LockingUsesTableHints` уже есть» устарела — `LockingUsesTableHints`
+  удалён в Фазе 3, как и `SqlDialectBase.MakeLock`/`MakeLockHint`. Фиксация прежняя: `ILockRenderer` =
+  `{ bool UsesTableHints; string Render }`; форму даёт `Lock.UsesTableHints` (без dialect-обёрток).
+- **Находка 48:** `MakePivot`/`MakeUnpivot`/`MakeTableSample` удалены в Фазе 3; контрактный тест теперь
+  вызывает только `RenderPivot`/`RenderUnpivot` и `tableSample.Render`, т.е. render-without-throwing
+  сохранён без dialect-обёрток.
+
+**Проверка (Фаза 3, 21.09.2026).** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**;
+`dotnet run --project tests/nextorm.integration.tests -c Release --no-build -- -class
+nextorm.integration.tests.DialectCapabilityContractTests` — **2/2 passed**. `rg` по `src`/`tests` для 41
+удалённого члена — пусто (единственные совпадения — `SqlSourceRenderer.MakePivot`/`MakeArrayJoin`,
+статические хелперы, не члены интерфейса); `docs` — старых имён нет (рабочий RFC удалён, его закрытые выводы перенесены в этот реестр и `API-NAMING-REVIEW.md`).
+По отчёту
+исполнителя: unit core/sqlite/sqlserver/postgres/mysql/mariadb/clickhouse — 0 failed; integration 1005 /
+0 failed / 30 skipped; coverage 85.2 % line / 74 % branch. `rg --files -g 'PublicAPI*.txt'` — пусто;
+трекинг/заморозка — [`todo_public_api_freeze.md`](../roadmap/todo_public_api_freeze.md), issue [#53](https://github.com/AlexeyShirshov/nextorm/issues/53) (см.
+`API-NAMING-REVIEW.md`, «Фаза 3»). Публичная сторона: удаление 41 пары — source+binary-breaking для
+внешних реализаторов `ISqlDialect`/`SqlDialectBase` (alpha допускает; фиксация — [`todo_public_api_freeze.md`](../roadmap/todo_public_api_freeze.md)).
+
+## 🔎 Точечный аудит — закрытие source-скоупа в `DefaultColumnsProvider` (21.09.2026)
+
+**Область (uncommitted):** `Query/DefaultColumnsProvider.cs` — 4-й флаг `closed` в записи `_list` (`:10` ветка NET8/ValueList, `:15` ветка `#else`/List), `PopSourceScope` (`:24-39`), пропуск закрытых записей в `FindAlias(ParameterExpression,…)` (`:65`), `FindQueryCommand` (`:92`) и `FindAlias(Type,…)` (`:116`); XML-`<summary>` `IColumnsProvider.PopSourceScope` (`Query/IColumnsProvider.cs:40-44`). Индекс записи остаётся равным номеру алиаса (`t{idx+1}`, `DefaultAliasProvider.FindAlias:26`), поэтому записи **не удаляются**, а помечаются `closed`. Исправляет утечку: записи вложенной команды оставались видимыми для объемлющей, и внешний `Join` по тому же типу сущности резолвился в чужой alias (`t2` из внутреннего join → SQLite `no such column: t2.requiredstring`).
+
+**Тесты (uncommitted):** `DerivedSourceWithJoinThenJoin_ShouldResolveTheOuterAlias` в шести `tests/nextorm.{sqlite,sqlserver,postgres,mysql,mariadb,clickhouse}.tests/SqlGenerationTests.cs` (`:2282`, `:2489`, `:3158`, `:589`, `:323`, `:1789`); интеграционный `DerivedSourceWithJoinThenJoin_ShouldReturnData` (`tests/nextorm.integration.tests/CommonTestSuite.Join.cs:226`). Публичная поверхность не менялась.
+
+| Категория навыка | Статус |
+|---|---|
+| 1. `IDisposable` | ✅ Не затронуто: новых disposable-полей/локальных и `IDisposable`-типов нет; `DefaultColumnsProvider` владеет только `ValueList`/`List`, unmanaged-ресурсов нет, финализаторов/`Dispose` не добавлено. |
+| 2. Подавления | ✅ Новых `#pragma`/`SuppressMessage`/`NoWarn`/`Skip=`/пустых `catch` — **0**. В `src/`: **5** `SuppressMessage` (все с `Justification`) + **5** `#pragma` (все с парным `restore`) → неоправданных **0/10**; в `tests/`: 0. Соотношение не изменилось. |
+| 3. LINQ / горячий путь | ✅ `PopSourceScope` — арифметический цикл, LINQ и аллокаций нет; `FindAlias` добавляет по одной проверке `item.Item4` на запись-кандидат (перебор записей команды, не per-row). 4-й `bool` **не увеличил** запись: `(object,object,bool)` и `(object,object,bool,bool)` оба **24 байта** (padding; замер `Unsafe.SizeOf`, см. «Проверка»). `PopSourceScope` вызывается раз на команду (`SqlBuilder.cs:57/518`), не на колонку/строку. |
+| 4. События | ✅ Не затронуто. |
+| 5. Проектирование | ✅ Правка минимальна и локализована (флаг в той же записи, без второго параллельного состояния); ⚠️ `#else`-ветка не компилируется (наблюдение A), `FindQueryCommand` остаётся type-indexed (наблюдение C). |
+| 6. Исключения | ✅ `PopSourceScope` — в `finally` (`SqlBuilder.cs:516-518`), парность push/pop гарантирована; новых `catch`/`throw` нет. На NET8+ `Peek()` на пустом стеке бросает (раньше `ValueList.Pop()` молча уводил `_curIdx` в минус) — fail-fast корректен, путь недостижим. |
+| 7. Хэш-ключи кэша | ✅ Рендер-онли: меняется только видимость записей при построении SQL; нумерация алиасов детерминирована и не менялась, состав `QueryPlan`/`QueryPlanEqualityComparer` не затронут, кэш-ключ не инвалидируется. |
+
+### ✅ Вердикт по граничным случаям (закрытый скоуп не ломает существующие пути)
+
+| Путь | Почему безопасно | Покрытие |
+|---|---|---|
+| Коррелированные подзапросы (`includeOuterScopes:true`) | Внешняя запись добавляется объемлющей командой до `PushSourceScope` вложенной и остаётся **open** до её собственного `PopSourceScope`; внешний lookup (`AliasResolver.GetOuterAliasFromParam`) идёт при ещё не завершённом рендере внешней команды. Скип закрытых дополнительно убирает ложное попадание в запись соседнего/уже закрытого подзапроса. | `CorrelatedQueryTests` + `CommonTestSuite.CorrelatedQuery` (все зелёные) |
+| Глубина корреляции ≥ 2 | Средняя запись **open**, пока рендерится самый внутренний подзапрос (средняя ещё не делала pop); внутренний видит и `t2`, и `t1`. | `NestedCorrelationDepth2_ShouldReferenceBothOuterLevels`, `NestedCorrelationDepth2_ShouldEvaluatePerRow` |
+| Соседние вложенные подзапросы одного типа | Первый сосед закрывает свои записи в своём `PopSourceScope`; второй при поиске своей записи идёт от своего `SourceScopeStart` (не видит чужие), а объемлющая команда при поиске внешнего alias теперь пропускает закрытые. | `CorrelatedSiblingSubqueriesOfSameType_ShouldUseTheirOwnAlias`, `CorrelatedSiblingExistsOfSameType_ShouldUseTheirOwnAlias` |
+| Несколько join'ов с источниками-подзапросами | `Add(cmd)` для производного источника делает **объемлющая** команда после возврата вложенного `MakeSelect` (`SqlSourceRenderer.cs:252→256`), т.е. запись open; внутренние записи закрыты. Именно этот путь — баг-репро. | `DerivedSourceWithJoinThenJoin_ShouldResolveTheOuterAlias` (6 диалектов) + интеграционный |
+| `ARRAY JOIN` | Привязанный элемент адресуется фиксированным алиасом `ArrayJoinNames.ElementAlias` (`MemberTranslator.cs:103`), а не индексом `ColumnsProvider`; пересечения нет. | `SqlGenerationTests` ClickHouse + интеграционные `ARRAY JOIN` |
+| CTE | Каждый CTE рендерится со **свежим** `DefaultColumnsProvider` (`SqlSourceRenderer.cs:44,68`), состояние `closed` за границу CTE не переходит. | `Cte_*`, `Cte_JoinedToAnotherCte_ShouldQualifyAliasColumns` |
+| `PIVOT`/`UNPIVOT` и TVF | Внутренний `MakeFrom` добавляет запись и возвращается до `Add(TableAlias)`/`GetNextAlias`; `RenderPivotColumn` выполняется уже при open-записи. `#else`-ветка TVF не задействована. | SQL Server `Pivot_*`, интеграционные `Pivot_ShouldReshapeDerivedSource` |
+| `FindAlias`/`FindQueryCommand` после pop вложенной команды | Закрытая запись больше не удовлетворяет поиск; запись, добавленная текущей командой **после** возврата вложенной, остаётся open. `foundIdx`/`paramIdx` не сдвигаются закрытыми записями (проверка `closed` стоит до инкремента). | `NestedNonCorrelatedSubquery_ShouldResolveItsOwnInnerCommand`, `CorrelatedScalarOnJoinProjection_*` |
+| `FindQueryCommand` в коррелированном скаляре проекции | Внутренний подзапрос ищет внешнюю запись при открытой объемлющей команде; закрытые кандидаты-сиблинги пропускаются. Регрессии нет. | `CorrelatedScalarInSelect_*`, `CorrelatedScalarOnJoinProjection_*`, `CorrelatedAggregateTerminalInSelect` |
+
+### ℹ️ Наблюдения (фикс не требуется)
+
+- **A. `#else`-ветка `DefaultColumnsProvider.cs:14-18` не компилируется ни одним TFM.** `nextorm.core.csproj:4` — `<TargetFramework>net10.0</TargetFramework>`, поэтому `NET8_0_OR_GREATER` всегда истинно и ветка `List<(Type, QueryCommand?, bool, bool)>` — мёртвый (непроверяемый сборкой) код; синхронность арности здесь держится только глазами. Фикс **обновил обе ветки корректно**, но будущая правка в `#else` не будет поймана `dotnet build`. Тот же паттерн — `DefaultAliasProvider.cs:16-20`, `ValueList.cs:5/162`. Пре-существующее; рекомендация (опционально): убрать `#if`/`#else` (репо одно-TFM) либо добавить TFM/compile-check, реально компилирующий `#else`.
+- **B. `PopSourceScope` повторно сканирует уже закрытый суффикс.** Каждый pop идёт `[scopeStart, _list.Count)`; внешние pop'ы заново перебирают диапазоны, закрытые вложенными (запись не переписывается, но чтение есть). Суммарная работа на построение — сумма длин суффиксов (глубина вложенности × записи), без аллокаций; на практике глубина мала. Принято; при росте вложенности заменить на high-water mark на скоуп.
+- **C. `FindQueryCommand` остаётся type-indexed.** Два источника с одинаковым CLR-типом результата (например, два производных запроса с идентичной формой анонимной проекции) по-прежнему дадут первый **open**-матч; флаг `closed` лишь убирает чужие закрытые кандидаты и не добавляет различения по позиции. Пре-существующее, не регрессия; отдельного номера не завожу.
+- **D. Два «скоупа» в одном публичном интерфейсе.** `PushScope`/`PopScope` (вхождения lambda-параметров, `_scope`) и `PushSourceScope`/`PopSourceScope` (записи команд, `_sourceScopes`) — разные сущности; у пары source-скоупа доки есть (в этом фиксе `PopSourceScope` доуточнён), у `PushScope`/`PopScope`/`FindAlias`/`FindQueryCommand`/`Add`/`HasAliases` — нет. Пре-существующий пробел; кандидат в `API-NAMING-REVIEW.md` к Шагу 5, не к этому фиксу.
+
+**Проверка (21.09.2026, выполнено в этом проходе).** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**. `dotnet run --project tests/<p> -c Release --no-build`: core **177/177**, sqlite **242/242**, sqlserver **235/235**, postgres **242/242**, mysql **63/63**, mariadb **28/28**, clickhouse **182/182** (0 failed везде). Integration без `DOCKER_HOST` (реально выполняется SQLite, остальные провайдеры skip): **Total 1008 / Failed 0 / Skipped 780** (выполнено 228); точечно `DerivedSourceWithJoinThenJoin_ShouldReturnData` — **1/1**, `SqlGenerationTests.DerivedSourceWithJoinThenJoin_ShouldResolveTheOuterAlias` (SQLite) — **1/1**. Замер размера записи: `Unsafe.SizeOf<(object,object,bool)>() == 24`, `Unsafe.SizeOf<(object,object,bool,bool)>() == 24` (фикс не растит inline-буфер `ValueList`). `rg` по изменённым файлам: подавлений/`Skip=`/`Task.Delay`/пустых `catch` — 0; EOL: `DefaultColumnsProvider.cs`/`IColumnsProvider.cs` — CRLF. Diff фикса локален двум файлам; тесты и остальная рабочая правка — в общем uncommitted-дереве (много несвязанных изменений, см. предыдущие разделы).
+
+## 🔎 Точечный аудит — скалярный ключ GroupBy (21.09.2026)
+
+**Область (uncommitted):** `Query/QueryCommand.QueryPreparer.cs` — `PrepareGrouping` (`:690-734`):
+ветка `if (Body is NewExpression ctor && !IsSingleColumnType(ctor.Type)) {…} else throw new
+InvalidOperationException("Only new expression is supported")` заменена на вызов общего
+`BuildKeyColumns(cmd._groupExp, "GROUP BY", cancellationToken)` (`:646-688`; уже используется для
+`DISTINCT ON`/`LIMIT BY`) и тот же цикл `PlanHashCode`/`GroupingPlanHash` (`:699-712`). Публичного
+API нет (`PrepareGrouping`/`BuildKeyColumns` — `private static`; `GroupBy<TResult>` уже generic).
+Тесты: `InMemoryTests.GroupBy_ScalarKey_ShouldAggregatePerGroup`,
+`SqlGenerationTests.GroupBy_ScalarKey_ShouldMatchAnonymousKey` (sqlite+postgres),
+`CommonTestSuite.GroupBy.TestGroup_ScalarKey`. Build Release **0/0**.
+
+| Категория навыка | Результат |
+|---|---|
+| 1. `IDisposable` | ✅ Не затронуто: новых disposable-полей/локальных и `IDisposable`-типов нет. |
+| 2. Подавления | ✅ Фикс не добавил ни одного `#pragma`/`SuppressMessage`/`NoWarn`/`Skip=`/пустого `catch`. Срез рабочего дерева: `src/` — **6** `SuppressMessage` (все с `Justification`) + **5** `#pragma` (все с парным `restore`) → неоправданных **0/11**; `tests/` — 0 (шестой `SuppressMessage` — из несвязанных uncommitted-правок, не из этого фикса; база реестра была 5). |
+| 3. LINQ / горячий путь | ✅ Правка — построение плана (раз на команду, не per-row); LINQ/аллокаций в новом коде нет, `SelectExpression[]` аллоцируется один раз, как и прежней веткой. |
+| 4. События | ✅ Не затронуто. |
+| 5. Проектирование | ✅ Дублирование устранено: `GROUP BY` использует тот же expand-хелпер, что `DISTINCT ON`/`LIMIT BY`; ℹ️ ниже — `BuildKeyColumns` стал 3-м потребителем. |
+| 6. Исключения | ✅ Новых `catch`/`throw`; удалён `throw new InvalidOperationException("Only new expression is supported")`. Для `GroupBy(e => new { })` `BuildKeyColumns` бросает `QueryPreparationException("GROUP BY requires at least one key column.")` вместо прежнего тихого пустого списка — fail-fast, не регресс. |
+| 7. Хэш-ключи кэша | ✅ Паритет сохранён: анонимная ветка `BuildKeyColumns` (`:648-673`) — дословная копия удалённого блока (`Index=idx`, `PropertyName=ctorParam.Name!`, `Expression=args[idx]`), `PlanHashCode` считается тем же `SelectExpressionPlanEqualityComparer` в том же порядке → `GroupingPlanHash` для `new { x.Int }` не меняется. |
+
+### ℹ️ Наблюдения (фикс не требуется)
+
+- **`BuildKeyColumns` — теперь 3-й потребитель (`DISTINCT ON`/`LIMIT BY`/`GROUP BY`).** Прежнее
+  наблюдение прямо предупреждало держать в виду расхождение: `BuildKeyColumns` не проставляет
+  `SelectExpression.PlanHashCode`, а `PrepareGrouping` — проставляет после вызова (`:705-706`). Третий
+  потребитель добавлен корректно: LIMIT BY/DISTINCT ON в `GroupingPlanHash` не входят (хэшируются
+  напрямую в `QueryPlanEqualityComparer`), GROUP BY — входит и хэшируется тем же циклом, что и прежде.
+- **Отмена безопасна.** Анонимная ветка `BuildKeyColumns` при отмене посреди цикла возвращает
+  частично заполненный массив (`:660-661`), но `PrepareGrouping` перепроверяет тот же токен в начале
+  каждой итерации до разыменования `columns[idx]` (`:701-702`) → `NullReferenceException` невозможен;
+  скалярная ветка (`:675-687`) отмену не наблюдает, но так же ведёт себя и для `DISTINCT ON`/`LIMIT BY`.
+- **`PropertyName`/`Index` для GROUP BY безопасны.** Единственный рендер-потребитель `_groupingList`
+  — `SqlBuilder.cs:176-201`: `MakeColumn(..., alias:false)` использует только `Expression`/
+  `PropertyType`; `PropertyName`/`Index` нужны лишь план-компаратору и детерминированы.
+- **Скалярная и анонимная формы законно делят план.** `GroupBy(x => x.Int)` и
+  `GroupBy(x => new { x.Int })` дают value-equal `SelectExpression` (Type/Index/PropertyName/
+  Expression) → один план-ключ; SQL идентичен (закреплено тестом). Переименованный член
+  (`new { Value = x.Int }`) даёт отдельный ключ при том же SQL — только промах кэша, не дефект.
+
+### 🟡 Находка 51 — `tests/nextorm.integration.tests/CommonTestSuite.GroupBy.cs` целиком LF-only (пре-существует; файл затронут фичей)
+
+Файл — **93/93 строк LF-only** (`file` → «ASCII text»; проверка LF-only счётчиком → 93/93),
+`git diff` предупреждает «LF will be replaced by CRLF». Тот же класс, что Находки 20/22/29, но LF были
+у файла **уже на HEAD `d21c473`** (`git show HEAD:…` → 80/80) — это **не регресс** скалярного GroupBy;
+13 новых строк `TestGroup_ScalarKey` лишь унаследовали LF. Номер заведён, потому что файл изменён и
+ранее в реестре не числился.
+
+- **Стало:** нормализовать переводы строк файла в CRLF (`perl -pi`, замена одиночного LF на CRLF, как в Находках 20/22/29).
+- **Проверка:** `file` → CRLF; счётчик LF-only → **0/93**.
+
+**Проверка (21.09.2026, выполнено в этом проходе).** `dotnet build nextorm.sln -c Release` —
+**0 warnings / 0 errors**. `dotnet run --project tests/<p> -c Release --no-build -noColor`: core
+**178/178**, sqlite **243/243**, postgres **243/243** (0 failed). Integration без `DOCKER_HOST`
+(выполняется только SQLite): `-method "*TestGroup_ScalarKey*"` — **Total 4 / Failed 0 / Skipped 3**.
+Паттерн-скан: `#pragma warning disable` — 5 (все с `restore`), `SuppressMessage` — 6 (все с
+`Justification`), `Skip=` — 0, пустых `catch` — 0, `Task.Delay` — 2 (обе `Task.Delay(0)` в
+`InMemoryTests.cs:125,414`), `Thread.Sleep` — 0, `NoWarn` — только `CS1591` в 7 библиотечных `.csproj`,
+`VersionOverride`/inline `Version` — 0. `slopwatch` локальным tool'ом не установлен
+(`.config/dotnet-tools.json` — coverage/reportgenerator/docfx), скан выполнен вручную.
 
 ## Примечания
 

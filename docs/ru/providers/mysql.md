@@ -27,13 +27,13 @@
   обратный слэш как escape-символ строкового литерала;
 - разбиение на страницы — `limit n` / `limit n offset m`; offset без limit превращается в
   `limit 18446744073709551615 offset m`, потому что MySQL принимает `offset` только вместе с `limit`;
-- семейство session/info ([`SupportsSessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SupportsSessionInfoFunctions)) отрисовывает
+- семейство session/info ([`SessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SessionInfoFunctions)) отрисовывает
   `SqlFunctions.Sql.current_user`/`session_user`/`current_database`/`version` как `current_user()`/`session_user()`/
   `database()`/`version()`, а `current_schema` — как `schema()`;
 - агрегат произвольного значения [`SqlFunctions.Sql.any_agg`](xref:NextORM.Core.CommonFunctions.any_agg``1) отрисовывается как
   `ANY_VALUE(x)` ([`SupportsAnyValueAggregate`](xref:NextORM.Core.ISqlDialect.SupportsAnyValueAggregate), MySQL 5.7+);
 - переносимый условный [`SqlFunctions.Sql.iif`](xref:NextORM.Core.CommonFunctions.iif``1) отрисовывается как
-  `if(condition, a, b)` ([`SupportsIif`](xref:NextORM.Core.ISqlDialect.SupportsIif), [`MakeIif`](xref:NextORM.Core.ISqlDialect.MakeIif)).
+  `if(condition, a, b)` ([`Iif`](xref:NextORM.Core.ISqlDialect.Iif), [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render)).
 
 ## Регистрация провайдера
 

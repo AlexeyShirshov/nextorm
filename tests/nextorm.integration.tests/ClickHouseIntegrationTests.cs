@@ -507,6 +507,64 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     }
 
     [Fact]
+    public void MultiIf_ShouldReturnMatchedBranch()
+    {
+        // complex_entity ids are 1..3, so the first two conditions match and the third row takes the else.
+        var rows = _sut.ComplexEntity
+            .Select(x => new
+            {
+                x.Id,
+                B = SqlFunctions.ClickHouse.multi_if(
+                    SqlFunctions.ClickHouse.when(x.Id == 1L, "one"),
+                    SqlFunctions.ClickHouse.when(x.Id == 2L, "two"),
+                    SqlFunctions.ClickHouse.otherwise("many")),
+                N = SqlFunctions.ClickHouse.multi_if(
+                    SqlFunctions.ClickHouse.when(x.Id == 1L, 10L),
+                    SqlFunctions.ClickHouse.when(x.Id == 2L, 20L),
+                    SqlFunctions.ClickHouse.otherwise(30L))
+            })
+            .OrderBy(1, OrderDirection.Asc)
+            .ToList();
+
+        rows.Select(r => r.B).Should().Equal("one", "two", "many");
+        rows.Select(r => r.N).Should().Equal(10L, 20L, 30L);
+    }
+
+    [Fact]
+    public void InFrameWindowFunctions_ShouldRespectFrame()
+    {
+        // ClickHouse rejects an explicit frame on lag/lead ("Window function 'lag' does not expect
+        // window frame to be explicitly specified"), while lagInFrame/leadInFrame accept and respect
+        // it. A frame that starts at the current row has no preceding row, so lagInFrame(x, 1) yields
+        // the default, whereas the frame-less lag returns the previous partition row.
+        var startingFrame = WindowFrame.Rows(WindowFrameBound.CurrentRow, WindowFrameBound.Following(1));
+        var endingFrame = WindowFrame.Rows(WindowFrameBound.Preceding(1), WindowFrameBound.CurrentRow);
+
+        var rows = _sut.SimpleEntity
+            .Where(x => x.Id <= 3)
+            .Select(x => new
+            {
+                x.Id,
+                Prev = SqlFunctions.Sql.lag(x.Id, 1, 0).Over(SqlFunctions.Sql.asc(() => x.Id)),
+                PrevInFrame = SqlFunctions.ClickHouse.lag_in_frame(x.Id, 1, 0).Over(SqlFunctions.Sql.asc(() => x.Id), startingFrame),
+                Next = SqlFunctions.Sql.lead(x.Id, 1, 0).Over(SqlFunctions.Sql.asc(() => x.Id)),
+                NextInFrame = SqlFunctions.ClickHouse.lead_in_frame(x.Id, 1, 0).Over(SqlFunctions.Sql.asc(() => x.Id), endingFrame)
+            })
+            .OrderBy(1, OrderDirection.Asc)
+            .ToList();
+
+        rows[0].Prev.Should().Be(0);
+        rows[1].Prev.Should().Be(1);
+        rows[2].Prev.Should().Be(2);
+        rows.Should().OnlyContain(r => r.PrevInFrame == 0);
+
+        rows[0].Next.Should().Be(2);
+        rows[1].Next.Should().Be(3);
+        rows[2].Next.Should().Be(0);
+        rows.Should().OnlyContain(r => r.NextInFrame == 0);
+    }
+
+    [Fact]
     public void IfAggregates_ShouldFilterBeforeAggregating()
     {
         // The arguments are cast to the ClickHouse result types (Int64 for the integer sum/min/max,

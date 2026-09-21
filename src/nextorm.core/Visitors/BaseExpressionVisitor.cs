@@ -169,7 +169,28 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             v.Visit(node.Object);
             if (v.Has)
             {
-                var tableAliasForColumn = AliasResolver.GetAliasFromParam(this, v.Target!, false);
+                string? tableAliasForColumn;
+
+                if (v.Target!.Type.IsAssignableTo(typeof(IProjection)) && node.Object is MemberExpression member)
+                {
+                    // A column reached through a joined projection (p.Item1.GetString("c")): the
+                    // member name carries the 1-based position in the projection, exactly like the
+                    // mapped-member path in MemberTranslator. Resolving the bare parameter instead
+                    // would yield no alias and silently drop the qualifier, which makes a shared
+                    // column name ambiguous.
+                    var name = member.Member.Name;
+                    var digitsStart = name.Length;
+                    while (digitsStart > 0 && char.IsAsciiDigit(name[digitsStart - 1])) digitsStart--;
+                    var position = 0;
+                    for (var i = digitsStart; i < name.Length; i++) position = position * 10 + (name[i] - '0');
+                    position--;
+                    var paramIdx = ProjectionAliasCache.GetOccurrence(v.Target.Type, position);
+                    tableAliasForColumn = AliasResolver.GetAliasFromParam(this, member.Type, paramIdx, false);
+                }
+                else
+                {
+                    tableAliasForColumn = AliasResolver.GetAliasFromParam(this, v.Target!, false);
+                }
 
                 if (!string.IsNullOrEmpty(tableAliasForColumn))
                 {
@@ -190,16 +211,20 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     }
 
     /// <summary>
-    /// Folds a method call with no lambda parameters into a constant and emits it as a query
-    /// parameter, caching the compiled delegate by expression key.
+    /// Folds an expression with no lambda parameters (a call or a value-type constructor such as
+    /// <c>new DateTime(2014, 3, 20)</c>) into a constant and emits it as a query parameter, caching
+    /// the compiled delegate by expression key.
     /// </summary>
-    private void EmitFoldedParameter(MethodCallExpression node)
+    private void EmitFoldedParameter(Expression node)
     {
         object? value;
         var keyCmd = new ExpressionKey(node, _queryProvider);
         if (!DataContextCache.ExpressionsCache.TryGetValue(keyCmd, out var d))
         {
-            var del = Expression.Lambda<Func<object>>(node).Compile();
+            // A value-type body needs an explicit boxing conversion before it can be the body of a
+            // Func&lt;object&gt;; a reference-type body is already compatible.
+            var body = node.Type.IsValueType ? Expression.Convert(node, typeof(object)) : node;
+            var del = Expression.Lambda<Func<object>>(body).Compile();
             DataContextCache.ExpressionsCache[keyCmd] = del;
             value = del();
 
@@ -271,6 +296,16 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             _builder!.Append(_dialect.MakeRepeat(
                 SqlLiteral.ToSqlStringLiteral(character),
                 VisitToString(countArg)));
+            return node;
+        }
+
+        // A value-type constructor that does not reference the query (for example
+        // new DateTime(2014, 3, 20)) is a constant. Falling through to base.VisitNew would visit the
+        // constructor arguments and concatenate their literals into meaningless SQL ("2014320"), so
+        // fold the whole expression into a parameter instead.
+        if (node.Type.IsValueType && !node.Has<ParameterExpression>())
+        {
+            EmitFoldedParameter(node);
             return node;
         }
 

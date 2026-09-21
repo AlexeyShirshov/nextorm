@@ -1,4 +1,4 @@
-using System.Linq.Expressions;
+﻿using System.Linq.Expressions;
 
 namespace NextORM.Core;
 
@@ -6,8 +6,8 @@ namespace NextORM.Core;
 /// Translates the UUID generator functions of <see cref="CommonFunctions"/>: <c>gen_random_uuid</c>
 /// (random v4) and <c>uuidv7</c>.
 /// <para>
-/// The family is guarded by <see cref="ISqlDialect.SupportsUuidGenerators"/> and each generator by
-/// <see cref="ISqlDialect.SupportsUuidGenerator(string)"/>; a provider that cannot express a generator
+/// The family is guarded by <see cref="ISqlDialect.UuidGenerators"/> and each generator by
+/// <see cref="IUuidGenerators.Supports"/>; a provider that cannot express a generator
 /// fails with a clear message instead of emitting invalid SQL.
 /// </para>
 /// </summary>
@@ -28,16 +28,16 @@ internal static class UuidFunctionTranslator
 
         var dialect = visitor.Dialect;
 
-        if (!dialect.SupportsUuidGenerators)
+        if (dialect.UuidGenerators is not { } uuidGenerators)
             throw new NotSupportedException("The UUID generator functions are not supported by this provider.");
 
-        if (!dialect.SupportsUuidGenerator(name))
+        if (!uuidGenerators.Supports(name))
             throw new NotSupportedException($"The {name} function is not supported by this provider.");
 
         if (!visitor.IsParamMode)
         {
             visitor.NeedAliasForColumn = true;
-            visitor.Builder!.Append(dialect.MakeUuidGenerator(name));
+            visitor.Builder!.Append(uuidGenerators.Render(name));
         }
 
         return true;

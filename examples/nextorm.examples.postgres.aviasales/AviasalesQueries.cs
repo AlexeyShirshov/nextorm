@@ -5,13 +5,17 @@ using NextORM.Core;
 namespace NextORM.Examples.Postgres.Aviasales;
 
 /// <summary>
-/// The five demo queries from <c>docs/specs/postgres-demodb</c> plus six extra course-style exercises
-/// (see <c>examples/README.md</c>), expressed with the nextorm LINQ API. Each method prints the number
-/// of rows and the first few rows as JSON.
+/// The five demo queries from <c>Sql/</c> plus six extra course-style exercises (see
+/// <c>README.md</c>), expressed with the nextorm LINQ API. Each method's comment names the SQL file it
+/// models and states whether it is <c>WORKING</c>; when it is not, the comment says why (with the
+/// roadmap document that tracks the gap). Each working method prints the number of rows and the first
+/// few rows as JSON.
 /// </summary>
 public static class AviasalesQueries
 {
-    // 1. aircraft_delay_chains.sql — WITH flight_delays AS (...) ... JOIN airplanes_data
+    // 1. Sql/aircraft_delay_chains.sql — WITH flight_delays AS (...), delay_chains AS (...), then JOIN
+    // WORKING: two CTEs; delay_chains reads flight_delays by name; the outer query joins the CTE to
+    // airplanes_data (the CTE API supports the join, unlike the old derived-query form).
     public static async Task AircraftDelayChains(IDataContext ctx, CancellationToken ct)
     {
         // CTE flight_delays (delay_minutes + LAG over the same partition).
@@ -19,95 +23,131 @@ public static class AviasalesQueries
             .Where(f => (f.Status == "Departed" || f.Status == "Arrived") && f.ActualDeparture != null)
             .Select(f => new
             {
-                f.FlightId,
-                f.AirplaneCode,
-                f.ScheduledDeparture,
+                flight_id = f.FlightId,
+                airplane_code = f.AirplaneCode,
+                actual_departure = f.ActualDeparture,
+                scheduled_departure = f.ScheduledDeparture,
                 // EXTRACT(EPOCH FROM actual_departure - scheduled_departure) / 60
-                DelayMinutes = SqlFunctions.Sql.date_diff("seconds", f.ScheduledDeparture, f.ActualDeparture) / 60.0,
-                PrevDelayMinutes = SqlFunctions.Sql.lag(
-                        SqlFunctions.Sql.date_diff("seconds", f.ScheduledDeparture, f.ActualDeparture) / 60.0)
+                delay_minutes = SqlFunctions.Sql.date_diff("second", f.ScheduledDeparture, f.ActualDeparture) / 60.0,
+                prev_departure = SqlFunctions.Sql.lag(f.ActualDeparture)
+                    .Over(partitionBy: () => f.AirplaneCode, orderBy: () => f.ActualDeparture),
+                prev_delay_minutes = SqlFunctions.Sql.lag(
+                        SqlFunctions.Sql.date_diff("second", f.ScheduledDeparture, f.ActualDeparture) / 60.0)
                     .Over(partitionBy: () => f.AirplaneCode, orderBy: () => f.ActualDeparture)
             });
 
-        // The original joins the CTE to airplanes_data; a derived query as the primary FROM source is
-        // not supported yet (see docs/specs/roadmap/sql-capabilities-gap-analysis.md, known gap 10).
-        var rows = await ctx.From(flightDelays)
-            .Join(ctx.From<IAirplaneData>(), (d, a) => d.AirplaneCode == a.AirplaneCode)
-            .Where(p => p.Item1.DelayMinutes > 30 && p.Item1.PrevDelayMinutes > 30)
-            .OrderBy(p => p.Item1.AirplaneCode)
-            .OrderBy(p => p.Item1.ScheduledDeparture)
+        // CTE delay_chains: SELECT *, CASE ... AS is_chain_link FROM flight_delays.
+        var delayChains = ctx.From("flight_delays")
+            .Select(d => new
+            {
+                flight_id = d.GetInt32("flight_id"),
+                airplane_code = d.GetString("airplane_code"),
+                actual_departure = d.GetNullableDateTime("actual_departure"),
+                scheduled_departure = d.GetDateTime("scheduled_departure"),
+                delay_minutes = d.GetDouble("delay_minutes"),
+                prev_departure = d.GetNullableDateTime("prev_departure"),
+                prev_delay_minutes = d.GetNullableDouble("prev_delay_minutes"),
+                is_chain_link = d.GetDouble("delay_minutes") > 15 && d.GetNullableDouble("prev_delay_minutes") > 15
+                    ? 1 : 0
+            });
+
+        var rows = await ctx.With("flight_delays", flightDelays).With("delay_chains", delayChains)
+            .From("delay_chains")
+            .Join(ctx.From<IAirplaneData>(), (dc, ac) => dc.GetString("airplane_code") == ac.AirplaneCode)
+            .Where(p => p.Item1.GetDouble("delay_minutes") > 30 && p.Item1.GetNullableDouble("prev_delay_minutes") > 30)
+            .OrderBy(p => p.Item1.GetString("airplane_code"))
+            .OrderBy(p => p.Item1.GetDateTime("scheduled_departure"))
             .Select(p => new
             {
                 Model = SqlFunctions.Postgres.json_get_text(p.Item2.Model, "ru"),
-                p.Item1.AirplaneCode,
-                p.Item1.ScheduledDeparture,
-                DelayMinutes = Math.Round((decimal)(p.Item1.DelayMinutes ?? 0.0), 1),
-                PrevDelayMinutes = Math.Round((decimal)(p.Item1.PrevDelayMinutes ?? 0.0), 1)
+                AirplaneCode = p.Item1.GetString("airplane_code"),
+                ScheduledDeparture = p.Item1.GetDateTime("scheduled_departure"),
+                DelayMinutes = Math.Round(p.Item1.GetDouble("delay_minutes"), 1),
+                PrevDelayMinutes = Math.Round(p.Item1.GetNullableDouble("prev_delay_minutes") ?? 0.0, 1)
             })
             .ToListAsync(ct);
 
         Print("1. aircraft_delay_chains", rows);
     }
 
-    // 2. business_occupancy_matrix.sql — WITH flight_business_capacity + flight_occupancy, then joins
+    // 2. Sql/business_occupancy_matrix.sql — WITH flight_business_capacity, flight_occupancy, then joins
+    // WORKING: two CTEs expressed as CTEs, joined to each other and to airplanes_data; the pivot is a
+    // plain AVG(CASE ...) over day_of_week.
     public static async Task BusinessOccupancyMatrix(IDataContext ctx, CancellationToken ct)
     {
         // CTE flight_business_capacity: COUNT(*) over the business seats per airplane.
         var capacity = ctx.From<ISeat>()
             .Where(s => s.FareConditions == "Business")
             .GroupBy(s => new { s.AirplaneCode })
-            .Select(s => new { s.AirplaneCode, TotalBusinessSeats = SqlFunctions.Sql.count() });
+            .Select(s => new { airplane_code = s.AirplaneCode, total_business_seats = SqlFunctions.Sql.count() });
 
         // CTE flight_occupancy: COUNT(bp.seat_no) per flight (no seats join, so no fan-out).
         var occupancy = ctx.From<ITimetable>()
-            .Where(f => f.Status == "Departed" || f.Status == "Arrived")
             .Join(ctx.From<ISegment>(), (f, tf) => f.FlightId == tf.FlightId && tf.FareConditions == "Business")
             .LeftJoin(ctx.From<IBoardingPass>(),
                 (p, bp) => p.Item2.FlightId == bp.FlightId && p.Item2.TicketNo == bp.TicketNo)
+            .Where(p => p.Item1.Status == "Departed" || p.Item1.Status == "Arrived")
             .GroupBy(p => new { p.Item1.FlightId, p.Item1.AirplaneCode, p.Item1.ScheduledDeparture })
             .Select(p => new
             {
-                p.Item1.FlightId,
-                p.Item1.AirplaneCode,
-                p.Item1.ScheduledDeparture,
+                flight_id = p.Item1.FlightId,
+                airplane_code = p.Item1.AirplaneCode,
+                scheduled_departure = p.Item1.ScheduledDeparture,
                 // EXTRACT(ISODOW FROM scheduled_departure): days since the ISO Monday + 1
-                DayOfWeek = SqlFunctions.Sql.date_diff("day",
+                day_of_week = SqlFunctions.Sql.date_diff("day",
                     SqlFunctions.Sql.date_trunc("week", p.Item1.ScheduledDeparture), p.Item1.ScheduledDeparture) + 1,
-                OccupiedBusinessSeats = SqlFunctions.Sql.count(p.Item3.SeatNo)
+                occupied_business_seats = SqlFunctions.Sql.count(p.Item3.SeatNo)
             });
 
-        // FROM flight_occupancy JOIN flight_business_capacity JOIN airplanes_data (see known gap 10).
-        var enriched = ctx.From(occupancy)
-            .Join(capacity, (o, c) => o.AirplaneCode == c.AirplaneCode)
-            .Join(ctx.From<IAirplaneData>(), (p, a) => p.Item1.AirplaneCode == a.AirplaneCode)
+        // FROM flight_occupancy JOIN flight_business_capacity JOIN airplanes_data.
+        var scope = ctx.With("flight_business_capacity", capacity).With("flight_occupancy", occupancy);
+
+        var rows = await scope
+            .From("flight_occupancy")
+            .Join(scope.From("flight_business_capacity"),
+                (fo, cap) => fo.GetString("airplane_code") == cap.GetString("airplane_code"))
+            .Join(ctx.From<IAirplaneData>(), (p, ac) => p.Item1.GetString("airplane_code") == ac.AirplaneCode)
+            .GroupBy(p => new { model = SqlFunctions.Postgres.json_get_text(p.Item3.Model, "ru") })
+            .OrderBy(p => SqlFunctions.Postgres.json_get_text(p.Item3.Model, "ru"))
             .Select(p => new
             {
                 Model = SqlFunctions.Postgres.json_get_text(p.Item3.Model, "ru"),
-                p.Item1.DayOfWeek,
-                Ratio = (decimal?)p.Item1.OccupiedBusinessSeats
-                        / SqlFunctions.Sql.nullif(p.Item2.TotalBusinessSeats, 0)
-            });
-
-        var rows = await ctx.From(enriched)
-            .GroupBy(e => new { e.Model })
-            .OrderBy(e => e.Model)
-            .Select(e => new
-            {
-                e.Model,
-                Mon = Math.Round((SqlFunctions.Sql.avg(e.Ratio, () => e.DayOfWeek == 1) ?? 0m) * 100, 1),
-                Tue = Math.Round((SqlFunctions.Sql.avg(e.Ratio, () => e.DayOfWeek == 2) ?? 0m) * 100, 1),
-                Wed = Math.Round((SqlFunctions.Sql.avg(e.Ratio, () => e.DayOfWeek == 3) ?? 0m) * 100, 1),
-                Thu = Math.Round((SqlFunctions.Sql.avg(e.Ratio, () => e.DayOfWeek == 4) ?? 0m) * 100, 1),
-                Fri = Math.Round((SqlFunctions.Sql.avg(e.Ratio, () => e.DayOfWeek == 5) ?? 0m) * 100, 1),
-                Sat = Math.Round((SqlFunctions.Sql.avg(e.Ratio, () => e.DayOfWeek == 6) ?? 0m) * 100, 1),
-                Sun = Math.Round((SqlFunctions.Sql.avg(e.Ratio, () => e.DayOfWeek == 7) ?? 0m) * 100, 1)
+                Mon = Math.Round(SqlFunctions.Sql.avg(p.Item1.GetInt32("day_of_week") == 1
+                        ? (decimal?)p.Item1.GetInt32("occupied_business_seats")
+                          / SqlFunctions.Sql.nullif(p.Item2.GetInt32("total_business_seats"), 0) * 100
+                        : null) ?? 0m, 1),
+                Tue = Math.Round(SqlFunctions.Sql.avg(p.Item1.GetInt32("day_of_week") == 2
+                        ? (decimal?)p.Item1.GetInt32("occupied_business_seats")
+                          / SqlFunctions.Sql.nullif(p.Item2.GetInt32("total_business_seats"), 0) * 100
+                        : null) ?? 0m, 1),
+                Wed = Math.Round(SqlFunctions.Sql.avg(p.Item1.GetInt32("day_of_week") == 3
+                        ? (decimal?)p.Item1.GetInt32("occupied_business_seats")
+                          / SqlFunctions.Sql.nullif(p.Item2.GetInt32("total_business_seats"), 0) * 100
+                        : null) ?? 0m, 1),
+                Thu = Math.Round(SqlFunctions.Sql.avg(p.Item1.GetInt32("day_of_week") == 4
+                        ? (decimal?)p.Item1.GetInt32("occupied_business_seats")
+                          / SqlFunctions.Sql.nullif(p.Item2.GetInt32("total_business_seats"), 0) * 100
+                        : null) ?? 0m, 1),
+                Fri = Math.Round(SqlFunctions.Sql.avg(p.Item1.GetInt32("day_of_week") == 5
+                        ? (decimal?)p.Item1.GetInt32("occupied_business_seats")
+                          / SqlFunctions.Sql.nullif(p.Item2.GetInt32("total_business_seats"), 0) * 100
+                        : null) ?? 0m, 1),
+                Sat = Math.Round(SqlFunctions.Sql.avg(p.Item1.GetInt32("day_of_week") == 6
+                        ? (decimal?)p.Item1.GetInt32("occupied_business_seats")
+                          / SqlFunctions.Sql.nullif(p.Item2.GetInt32("total_business_seats"), 0) * 100
+                        : null) ?? 0m, 1),
+                Sun = Math.Round(SqlFunctions.Sql.avg(p.Item1.GetInt32("day_of_week") == 7
+                        ? (decimal?)p.Item1.GetInt32("occupied_business_seats")
+                          / SqlFunctions.Sql.nullif(p.Item2.GetInt32("total_business_seats"), 0) * 100
+                        : null) ?? 0m, 1)
             })
             .ToListAsync(ct);
 
         Print("2. business_occupancy_matrix", rows);
     }
 
-    // 3. passenger_noshow_analysis.sql — WITH passenger_flight_history + passenger_stats
+    // 3. Sql/passenger_noshow_analysis.sql — WITH passenger_flight_history, passenger_stats
+    // WORKING: two CTEs; passenger_stats groups passenger_flight_history by name.
     public static async Task PassengerNoShowAnalysis(IDataContext ctx, CancellationToken ct)
     {
         // CTE passenger_flight_history: carries the is_noshow flag exactly as the original.
@@ -119,59 +159,70 @@ public static class AviasalesQueries
             .Where(p => p.Item3.Status == "Departed" || p.Item3.Status == "Arrived")
             .Select(p => new
             {
-                p.Item1.PassengerId,
-                p.Item1.PassengerName,
-                p.Item3.FlightId,
-                p.Item2.Price,
-                IsNoShow = p.Item4.SeatNo == null ? 1 : 0
+                passenger_id = p.Item1.PassengerId,
+                passenger_name = p.Item1.PassengerName,
+                ticket_no = p.Item1.TicketNo,
+                flight_id = p.Item3.FlightId,
+                price = p.Item2.Price,
+                is_noshow = p.Item4.SeatNo == null ? 1 : 0
             });
 
         // CTE passenger_stats: COUNT(flight_id), SUM(is_noshow), SUM(price).
-        var stats = ctx.From(history)
-            .GroupBy(h => new { h.PassengerId, h.PassengerName })
+        var stats = ctx.From("passenger_flight_history")
+            .GroupBy(h => new { passenger_id = h.GetString("passenger_id"), passenger_name = h.GetString("passenger_name") })
             .Select(h => new
             {
-                h.PassengerId,
-                h.PassengerName,
-                TotalBooked = SqlFunctions.Sql.count(),
-                TotalNoShows = SqlFunctions.Sql.sum(h.IsNoShow),
-                Wasted = SqlFunctions.Sql.sum(h.Price)
+                passenger_id = h.GetString("passenger_id"),
+                passenger_name = h.GetString("passenger_name"),
+                total_booked_flights = SqlFunctions.Sql.count(h.GetInt32("flight_id")),
+                total_noshows = SqlFunctions.Sql.sum(h.GetInt32("is_noshow")),
+                wasted_money = SqlFunctions.Sql.sum(h.GetDecimal("price"))
             });
 
-        var rows = await ctx.From(stats)
-            .Where(s => s.TotalBooked >= 3 && s.TotalBooked == s.TotalNoShows)
-            .OrderByDescending(s => s.Wasted)
-            .OrderBy(s => s.PassengerName)
-            .Select(s => new { s.PassengerId, s.PassengerName, s.TotalBooked, s.Wasted })
+        var rows = await ctx.With("passenger_flight_history", history).With("passenger_stats", stats)
+            .From("passenger_stats")
+            .Where(s => s.GetInt32("total_booked_flights") >= 3
+                        && s.GetInt32("total_booked_flights") == s.GetInt32("total_noshows"))
+            .OrderByDescending(s => s.GetDecimal("wasted_money"))
+            .OrderBy(s => s.GetString("passenger_name"))
+            .Select(s => new
+            {
+                PassengerId = s.GetString("passenger_id"),
+                PassengerName = s.GetString("passenger_name"),
+                TotalBookedFlights = s.GetInt32("total_booked_flights"),
+                WastedMoney = s.GetDecimal("wasted_money")
+            })
             .ToListAsync(ct);
 
         Print("3. passenger_noshow_analysis", rows);
     }
 
-    // 4. rolling_revenue_metrics.sql — WITH daily_revenue, then SUM/AVG windows
+    // 4. Sql/rolling_revenue_metrics.sql — WITH daily_revenue, then SUM/AVG windows
+    // WORKING: CTE daily_revenue; the outer query reads it by name and applies framed windows.
     public static async Task RollingRevenueMetrics(IDataContext ctx, CancellationToken ct)
     {
         // CTE daily_revenue.
         var daily = ctx.From<IBooking>()
-            .GroupBy(b => new { SalesDate = SqlFunctions.Sql.date_trunc("day", b.BookDate) })
+            .GroupBy(b => new { sales_date = SqlFunctions.Sql.date_trunc("day", b.BookDate) })
             .Select(b => new
             {
-                SalesDate = SqlFunctions.Sql.date_trunc("day", b.BookDate),
-                DailyAmount = SqlFunctions.Sql.sum(b.TotalAmount)
+                sales_date = SqlFunctions.Sql.date_trunc("day", b.BookDate),
+                daily_amount = SqlFunctions.Sql.sum(b.TotalAmount)
             });
 
-        var rows = await ctx.From(daily)
-            .OrderByDescending(d => d.SalesDate)
+        var rows = await ctx.With("daily_revenue", daily)
+            .From("daily_revenue")
+            .OrderByDescending(d => d.GetDateTime("sales_date"))
             .Select(d => new
             {
-                d.SalesDate,
-                d.DailyAmount,
-                Cumulative = SqlFunctions.Sql.sum_over(d.DailyAmount).Over(
-                    SqlFunctions.Sql.asc(() => d.SalesDate),
+                sales_date = d.GetDateTime("sales_date"),
+                daily_amount = d.GetDecimal("daily_amount"),
+                cumulative = SqlFunctions.Sql.sum_over(d.GetDecimal("daily_amount")).Over(
+                    SqlFunctions.Sql.asc(() => (object?)d.GetDateTime("sales_date")),
                     WindowFrame.RowsUnboundedPrecedingToCurrentRow),
-                MovingAvg7 = Math.Round(
-                    SqlFunctions.Sql.avg_over(d.DailyAmount).Over(
-                        SqlFunctions.Sql.asc(() => d.SalesDate),
+                moving_avg_7 = Math.Round(
+                    SqlFunctions.Sql.avg_over(d.GetDecimal("daily_amount")).Over(
+                        SqlFunctions.Sql.asc(() => (object?)d.GetDateTime("sales_date")),
                         WindowFrame.Rows(WindowFrameBound.Preceding(6), WindowFrameBound.CurrentRow)),
                     2)
             })
@@ -180,9 +231,11 @@ public static class AviasalesQueries
         Print("4. rolling_revenue_metrics", rows);
     }
 
-    // 5. route_network_abc_xyz.sql
+    // 5. Sql/route_network_abc_xyz.sql — WITH route_monthly_revenue, route_aggregates, abc_analys
+    // WORKING: three chained CTEs; the running share is a window over the route aggregate.
     public static async Task RouteNetworkAbcXyz(IDataContext ctx, CancellationToken ct)
     {
+        // CTE route_monthly_revenue.
         var monthly = ctx.From<ITimetable>()
             .Join(ctx.From<IAirportData>(), (f, dep) => f.DepartureAirport == dep.AirportCode)
             .Join(ctx.From<IAirportData>(), (p, arr) => p.Item1.ArrivalAirport == arr.AirportCode)
@@ -190,54 +243,58 @@ public static class AviasalesQueries
             .Join(ctx.From<ITicket>(), (p, t) => p.Item4.TicketNo == t.TicketNo)
             .GroupBy(p => new
             {
-                Route = SqlFunctions.Postgres.json_get_text(p.Item2.City, "ru")
+                route = SqlFunctions.Postgres.json_get_text(p.Item2.City, "ru")
                         + " -> " + SqlFunctions.Postgres.json_get_text(p.Item3.City, "ru"),
-                FlightMonth = SqlFunctions.Sql.date_trunc("month", p.Item1.ScheduledDeparture)
+                flight_month = SqlFunctions.Sql.date_trunc("month", p.Item1.ScheduledDeparture)
             })
             .Select(p => new
             {
-                Route = SqlFunctions.Postgres.json_get_text(p.Item2.City, "ru")
+                route = SqlFunctions.Postgres.json_get_text(p.Item2.City, "ru")
                         + " -> " + SqlFunctions.Postgres.json_get_text(p.Item3.City, "ru"),
-                FlightMonth = SqlFunctions.Sql.date_trunc("month", p.Item1.ScheduledDeparture),
-                MonthlyRevenue = SqlFunctions.Sql.sum(p.Item4.Price),
-                PassengerCount = SqlFunctions.Sql.count_distinct(p.Item5.TicketNo)
+                flight_month = SqlFunctions.Sql.date_trunc("month", p.Item1.ScheduledDeparture),
+                monthly_revenue = SqlFunctions.Sql.sum(p.Item4.Price),
+                passenger_count = SqlFunctions.Sql.count_distinct(p.Item5.TicketNo)
             });
 
         // CTE route_aggregates.
-        var aggregates = ctx.From(monthly)
-            .GroupBy(r => new { r.Route })
+        var aggregates = ctx.From("route_monthly_revenue")
+            .GroupBy(r => new { route = r.GetString("route") })
             .Select(r => new
             {
-                r.Route,
-                TotalRevenue = SqlFunctions.Sql.sum(r.MonthlyRevenue),
-                AvgPassengers = SqlFunctions.Sql.avg(r.PassengerCount),
-                StddevPassengers = SqlFunctions.Sql.stdev(r.PassengerCount)
+                route = r.GetString("route"),
+                total_revenue = SqlFunctions.Sql.sum(r.GetDecimal("monthly_revenue")),
+                avg_passengers = SqlFunctions.Sql.avg(r.GetDecimal("passenger_count")),
+                stddev_passengers = SqlFunctions.Sql.stdev(r.GetDecimal("passenger_count"))
             });
 
         // CTE abc_analys: the running share is a window over the route aggregate.
-        var abc = ctx.From(aggregates)
+        var abc = ctx.From("route_aggregates")
             .Select(a => new
             {
-                a.Route,
-                a.TotalRevenue,
-                a.AvgPassengers,
-                a.StddevPassengers,
-                RunningPercent = SqlFunctions.Sql.sum_over(a.TotalRevenue).Over(SqlFunctions.Sql.desc(() => a.TotalRevenue))
-                                 / SqlFunctions.Sql.sum_over(a.TotalRevenue).Over()
+                route = a.GetString("route"),
+                total_revenue = a.GetDecimal("total_revenue"),
+                avg_passengers = a.GetNullableDecimal("avg_passengers"),
+                stddev_passengers = a.GetNullableDecimal("stddev_passengers"),
+                running_percent = SqlFunctions.Sql.sum_over(a.GetDecimal("total_revenue"))
+                                      .Over(SqlFunctions.Sql.desc(() => (object?)a.GetDecimal("total_revenue")))
+                                  / SqlFunctions.Sql.sum_over(a.GetDecimal("total_revenue")).Over()
             });
 
-        var rows = await ctx.From(abc)
-            .OrderByDescending(a => a.TotalRevenue)
+        var rows = await ctx.With("route_monthly_revenue", monthly)
+            .With("route_aggregates", aggregates)
+            .With("abc_analys", abc)
+            .From("abc_analys")
+            .OrderByDescending(a => a.GetDecimal("total_revenue"))
             .Select(a => new
             {
-                a.Route,
-                RevenueMln = Math.Round(a.TotalRevenue / 1000000.0m, 2),
-                Abc = a.RunningPercent <= 0.80m ? "A"
-                    : a.RunningPercent <= 0.95m ? "B"
+                Route = a.GetString("route"),
+                RevenueMln = Math.Round(a.GetDecimal("total_revenue") / 1000000.0m, 2),
+                Abc = a.GetDecimal("running_percent") <= 0.80m ? "A"
+                    : a.GetDecimal("running_percent") <= 0.95m ? "B"
                     : "C",
-                Xyz = a.AvgPassengers == 0 ? "Z"
-                    : a.StddevPassengers / a.AvgPassengers < 0.10 ? "X"
-                    : a.StddevPassengers / a.AvgPassengers <= 0.25 ? "Y"
+                Xyz = a.GetNullableDecimal("avg_passengers") == 0 || a.GetNullableDecimal("stddev_passengers") == null ? "Z"
+                    : a.GetNullableDecimal("stddev_passengers") / a.GetNullableDecimal("avg_passengers") < 0.10m ? "X"
+                    : a.GetNullableDecimal("stddev_passengers") / a.GetNullableDecimal("avg_passengers") <= 0.25m ? "Y"
                     : "Z"
             })
             .ToListAsync(ct);
@@ -245,7 +302,8 @@ public static class AviasalesQueries
         Print("5. route_network_abc_xyz", rows);
     }
 
-    // 6. top_routes_by_city (course: "top-N per group" with RANK)
+    // 6. top_routes_by_city
+    // WORKING: RANK() OVER (PARTITION BY city ORDER BY revenue DESC) top-N per group.
     public static async Task TopRoutesByCity(IDataContext ctx, CancellationToken ct)
     {
         var routeRevenue = ctx.From<ITimetable>()
@@ -296,7 +354,8 @@ public static class AviasalesQueries
         Print("6. top_routes_by_city", rows);
     }
 
-    // 7. airport_otp (course: conditional aggregation / FILTER)
+    // 7. airport_otp
+    // WORKING: conditional aggregation (SUM(CASE…)) plus a derived-query HAVING-equivalent filter.
     public static async Task AirportOnTimePerformance(IDataContext ctx, CancellationToken ct)
     {
         var flights = ctx.From<ITimetable>()
@@ -342,7 +401,8 @@ public static class AviasalesQueries
         Print("7. airport_otp", rows);
     }
 
-    // 8. delay_percentiles_by_model (course: percentile_disc ... WITHIN GROUP)
+    // 8. delay_percentiles_by_model
+    // WORKING: percentile_disc(...) WITHIN GROUP (ORDER BY …).
     public static async Task DelayPercentilesByModel(IDataContext ctx, CancellationToken ct)
     {
         var stats = ctx.From<ITimetable>()
@@ -367,7 +427,8 @@ public static class AviasalesQueries
         Print("8. delay_percentiles_by_model", rows);
     }
 
-    // 9. frequent_flyers (course: string_agg / group_concat)
+    // 9. frequent_flyers
+    // WORKING: string_agg + HAVING count() >= 5 + LIMIT.
     public static async Task FrequentFlyers(IDataContext ctx, CancellationToken ct)
     {
         var rows = await ctx.From<ITicket>()
@@ -395,7 +456,8 @@ public static class AviasalesQueries
         Print("9. frequent_flyers", rows);
     }
 
-    // 10. passenger_growth_mom (course: LAG over a monthly aggregate)
+    // 10. passenger_growth_mom
+    // WORKING: LAG over a monthly aggregate.
     public static async Task PassengerGrowth(IDataContext ctx, CancellationToken ct)
     {
         var monthly = ctx.From<ITimetable>()
@@ -436,7 +498,8 @@ public static class AviasalesQueries
         Print("10. passenger_growth_mom", rows);
     }
 
-    // 11. cancellation_by_route (course: conditional count + rate, TOP N)
+    // 11. cancellation_by_route
+    // WORKING: conditional COUNT + rate, top-N.
     public static async Task CancellationByRoute(IDataContext ctx, CancellationToken ct)
     {
         var perRoute = ctx.From<ITimetable>()

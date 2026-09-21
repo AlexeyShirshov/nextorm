@@ -141,6 +141,20 @@ public class SqlServerDialectTests
     }
 
     [Fact]
+    public void XmlHooks_ShouldRenderPostfixCalls()
+    {
+        Dialect.XmlFunctions.Should().NotBeNull();
+        Dialect.XmlFunctions!.Supports("value").Should().BeTrue();
+        Dialect.XmlFunctions!.Supports("query").Should().BeTrue();
+        Dialect.XmlFunctions!.Supports("exist").Should().BeTrue();
+        Dialect.XmlFunctions!.Supports("nodes").Should().BeFalse();
+
+        Dialect.XmlFunctions!.Render("value", "payload", ["'(/root)[1]'", "'int'"]).Should().Be("payload.value('(/root)[1]', 'int')");
+        Dialect.XmlFunctions!.Render("query", "payload", ["'/root'"]).Should().Be("payload.query('/root')");
+        Dialect.XmlFunctions!.Render("exist", "payload", ["'/root'"]).Should().Be("payload.exist('/root')");
+    }
+
+    [Fact]
     public void ForXmlHooks_ShouldRenderClause()
     {
         Dialect.SupportsForXml.Should().BeTrue();
@@ -156,6 +170,15 @@ public class SqlServerDialectTests
         Dialect.SupportsTableHints.Should().BeTrue();
         Dialect.MakeTableHints(["nolock"]).Should().Be(" with (nolock)");
         Dialect.MakeTableHints(["nolock", "index(ix)"]).Should().Be(" with (nolock, index(ix))");
+    }
+
+    [Fact]
+    public void LockingHooks_ShouldUseTableHints()
+    {
+        Dialect.Lock.Should().NotBeNull();
+        Dialect.Lock!.UsesTableHints.Should().BeTrue();
+        Dialect.Lock!.Render(LockMode.Update).Should().Be("updlock");
+        Dialect.Lock!.Render(LockMode.Share).Should().Be("holdlock");
     }
 
     [Fact]
@@ -235,6 +258,7 @@ public class SqlServerDialectTests
         Dialect.SupportsRollup.Should().BeTrue();
         Dialect.SupportsCube.Should().BeTrue();
         Dialect.SupportsTextJson.Should().BeTrue();
+        Dialect.XmlFunctions.Should().NotBeNull();
         Dialect.SupportsFullText.Should().BeTrue();
         Dialect.SupportsTableHints.Should().BeTrue();
         Dialect.SupportsForJson.Should().BeTrue();
@@ -246,21 +270,21 @@ public class SqlServerDialectTests
     [Fact]
     public void SessionInfoHooks_ShouldUseSqlServerForms()
     {
-        Dialect.SupportsSessionInfoFunctions.Should().BeTrue();
-        Dialect.SupportsSessionInfoFunction("session_user").Should().BeTrue();
-        Dialect.MakeSessionInfoFunction("current_user").Should().Be("current_user");
-        Dialect.MakeSessionInfoFunction("session_user").Should().Be("session_user");
-        Dialect.MakeSessionInfoFunction("current_schema").Should().Be("schema_name()");
-        Dialect.MakeSessionInfoFunction("current_database").Should().Be("db_name()");
-        Dialect.MakeSessionInfoFunction("version").Should().Be("@@version");
+        Dialect.SessionInfoFunctions.Should().NotBeNull();
+        Dialect.SessionInfoFunctions!.Supports("session_user").Should().BeTrue();
+        Dialect.SessionInfoFunctions!.Render("current_user").Should().Be("current_user");
+        Dialect.SessionInfoFunctions!.Render("session_user").Should().Be("session_user");
+        Dialect.SessionInfoFunctions!.Render("current_schema").Should().Be("schema_name()");
+        Dialect.SessionInfoFunctions!.Render("current_database").Should().Be("db_name()");
+        Dialect.SessionInfoFunctions!.Render("version").Should().Be("@@version");
     }
 
     [Fact]
     public void UuidHooks_ShouldUseSqlServerForms()
     {
-        Dialect.SupportsUuidGenerators.Should().BeTrue();
-        Dialect.SupportsUuidGenerator("gen_random_uuid").Should().BeTrue();
-        Dialect.SupportsUuidGenerator("uuidv7").Should().BeFalse();
-        Dialect.MakeUuidGenerator("gen_random_uuid").Should().Be("newid()");
+        Dialect.UuidGenerators.Should().NotBeNull();
+        Dialect.UuidGenerators!.Supports("gen_random_uuid").Should().BeTrue();
+        Dialect.UuidGenerators!.Supports("uuidv7").Should().BeFalse();
+        Dialect.UuidGenerators!.Render("gen_random_uuid").Should().Be("newid()");
     }
 }

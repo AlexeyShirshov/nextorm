@@ -363,10 +363,51 @@ var elements = dataContext
 select unnest as "Value" from unnest(@norm_p0) as "t1"
 ```
 
+If the fully qualified `SqlFunctions.*` names feel too verbose, import the surface with
+`using static NextORM.Core.SqlFunctions;` and drop the class prefix:
+
+```csharp
+using static NextORM.Core.SqlFunctions;
+
+var elements = dataContext
+    .FromTableFunction(() => Postgres.unnest(Parameter<long[]>(0)))
+    .Select(r => r.Value)
+    .ToList(new long[] { 1, 2, 3 });
+```
+
 `SqlFunctions.Postgres.generate_series(start, stop)` generates a numeric series the same way. The
 built-ins are gated by the provider ([`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect)),
 and a user-defined function is declared with `[SqlTableFunction]`; see
 [Table-valued functions](13-table-valued-functions.md).
+
+## Table sampling (`TABLESAMPLE`)
+
+[`TableSample`](xref:NextORM.Core.EntityBuilder`1) adds a `TABLESAMPLE` modifier to the
+primary table, so the database reads only a percentage of its rows instead of scanning the whole table.
+The percentage must be in `(0, 100]`; the sampling method defaults to
+[`TableSampleMethod.System`](xref:NextORM.Core.TableSampleMethod.System) and an optional seed makes the
+sample repeatable:
+
+```csharp
+var rows = await dataContext.From<SimpleEntity>()
+    .TableSample(10, TableSampleMethod.System, seed: 42)
+    .Select(x => x.Id)
+    .ToListAsync();
+```
+
+```sql
+-- PostgreSQL
+select id from simple_entity tablesample system (10) repeatable (42)
+
+-- SQL Server
+select id from simple_entity tablesample (10 percent) repeatable (42)
+```
+
+PostgreSQL supports both `System` and [`Bernoulli`](xref:NextORM.Core.TableSampleMethod.Bernoulli);
+SQL Server supports only `System`. Every other provider throws `NotSupportedException` when the SQL is
+built ([`TableSample`](xref:NextORM.Core.ISqlDialect.TableSample) and
+[`ITableSampleMethods.Render`](xref:NextORM.Core.ITableSampleMethods.Render)). The modifier applies to the query's
+primary table only.
 
 ## JSON output (SQL Server)
 
@@ -407,6 +448,36 @@ select id from complex_entity for xml raw('row'), root('items'), elements
 ```
 
 `FOR JSON` and `FOR XML` are mutually exclusive; combining them throws `NotSupportedException`.
+
+## Row locking (`FOR UPDATE` / `FOR SHARE`)
+
+[`ForUpdate`](xref:NextORM.Core.EntityBuilder`1.ForUpdate) and
+[`ForShare`](xref:NextORM.Core.EntityBuilder`1.ForShare) lock the selected rows until the surrounding
+transaction ends. PostgreSQL, MySQL and MariaDB emit a trailing clause placed last, after `WHERE`,
+`ORDER BY` and a page request; SQL Server attaches a `WITH (updlock)`/`WITH (holdlock)` table hint to
+the primary source instead:
+
+```csharp
+var rows = await dataContext.From<SimpleEntity>()
+    .Where(x => x.Id > 5)
+    .ForUpdate()
+    .ToListAsync();
+```
+
+```sql
+-- PostgreSQL / MySQL / MariaDB
+select id from simple_entity where (id > 5) for update
+
+-- SQL Server
+select id from simple_entity with (updlock) where (id > 5)
+```
+
+`ForUpdate()` locks rows exclusively; [`ForShare`](xref:NextORM.Core.EntityBuilder`1.ForShare) takes a
+shared lock — PostgreSQL renders `for share`, MySQL/MariaDB render `lock in share mode`, and SQL Server
+renders `holdlock` (shared) versus `updlock` for `ForUpdate`. The clause is implemented by PostgreSQL,
+MySQL, MariaDB and SQL Server ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock); SQL Server uses
+[`ILockRenderer.UsesTableHints`](xref:NextORM.Core.ILockRenderer.UsesTableHints));
+every other provider throws `NotSupportedException` when the SQL is built.
 
 ## Provider differences
 

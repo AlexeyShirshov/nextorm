@@ -114,10 +114,10 @@ SQL Server 2017+ включает
 Предикаты полнотекстового поиска `SqlFunctions.Sql.contains` и `SqlFunctions.Sql.freetext` ([`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText))
 отрисовываются как T-SQL `contains(...)`/`freetext(...)` и требуют полнотекстового индекса на колонке.
 `SqlFunctions.Sql.iif(condition, whenTrue, whenFalse)` отрисовывает `iif(...)`
-([`SupportsIif`](xref:NextORM.Core.ISqlDialect.SupportsIif), написание через [`MakeIif`](xref:NextORM.Core.ISqlDialect.MakeIif)), а
+([`Iif`](xref:NextORM.Core.ISqlDialect.Iif), написание через [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render)), а
 `SqlFunctions.SqlServer.choose(index, ...)` — `choose(...)` ([`SupportsChoose`](xref:NextORM.Core.ISqlDialect.SupportsChoose));
 специализированное написание `SqlFunctions.SqlServer.iif` по-прежнему работает по наследованию.
-Семейство session/info ([`SupportsSessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SupportsSessionInfoFunctions)) отрисовывает
+Семейство session/info ([`SessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SessionInfoFunctions)) отрисовывает
 `SqlFunctions.Sql.current_user()`/`session_user()` как ключевые слова ANSI, а
 `current_schema()`/`current_database()`/`version()` — как `schema_name()`/`db_name()`/`@@version`.
 SQL Server отрисовывает оконные квантили `SqlFunctions.Sql.percentile_cont(fraction, property).Over()` и
@@ -126,8 +126,19 @@ SQL Server отрисовывает оконные квантили `SqlFunction
 упорядоченно-агрегатной формы у него нет. Агрегат произвольного значения `any_agg` (`ANY_VALUE`)
 **не** включён: T-SQL даёт `ANY_VALUE` только в SQL Server 2025 / Fabric, чего версионно-агностичный
 диалект предположить не может.
+Скалярные методы типа XML `SqlFunctions.SqlServer.xml_value(xml, xpath, sqlType)`,
+`xml_query(xml, xpath)` и `xml_exist(xml, xpath)`
+([`XmlFunctions`](xref:NextORM.Core.ISqlDialect.XmlFunctions)) рендерят
+постфиксную форму T-SQL `xmlcol.value('xpath', 'type')` / `xmlcol.query('xpath')` / `xmlcol.exist('xpath')`;
+XQuery и SQL-тип обязаны быть строковыми литералами. Строковый метод `.nodes` не поддерживается (нужна
+внешняя ссылка в `FROM`/`CROSS APPLY`).
 Табличные хинты ([`SupportsTableHints`](xref:NextORM.Core.ISqlDialect.SupportsTableHints)) отрисовываются как `WITH (hint, ...)` после имени основной
 таблицы: `ctx.From<IComplexEntity>().WithTableHint("nolock")` даёт `from complex_entity with (nolock)`.
+Блокировка строк использует тот же механизм: `ForUpdate`/`ForShare`
+([`Lock`](xref:NextORM.Core.ISqlDialect.Lock),
+[`ILockRenderer.UsesTableHints`](xref:NextORM.Core.ILockRenderer.UsesTableHints)) привязывают
+`with (updlock)`/`with (holdlock)` к основной таблице вместо завершающего предложения
+`FOR UPDATE`/`FOR SHARE`.
 `QueryCommand.ForJson(...)` ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson)) добавляет завершающее предложение
 `FOR JSON PATH`/`FOR JSON AUTO` (с необязательными `ROOT('...')` и `INCLUDE_NULL_VALUES`), а
 `QueryCommand.ForXml(...)` ([`SupportsForXml`](xref:NextORM.Core.ISqlDialect.SupportsForXml)) — `FOR XML RAW/AUTO/EXPLICIT/PATH` (с необязательными
@@ -204,11 +215,13 @@ join complex_entity as [t2] on t1.id = t2.id
 | Session/info-функции | `current_user`, `session_user`, `schema_name()`, `db_name()`, `@@version` |
 | Оконные квантили | `percentile_cont`/`percentile_disc` как `... within group (order by x) over (...)` (SQL Server 2012+) |
 | Агрегат произвольного значения | не поддерживается (`ANY_VALUE` только в SQL Server 2025 / Fabric) |
-| Условные функции | `iif(...)` (переносимая, [`SupportsIif`](xref:NextORM.Core.ISqlDialect.SupportsIif)) / `choose(...)` ([`SupportsChoose`](xref:NextORM.Core.ISqlDialect.SupportsChoose)) |
+| Условные функции | `iif(...)` (переносимая, [`Iif`](xref:NextORM.Core.ISqlDialect.Iif)) / `choose(...)` ([`SupportsChoose`](xref:NextORM.Core.ISqlDialect.SupportsChoose)) |
 | Предикаты полнотекстового поиска | `contains(...)` / `freetext(...)` (колонка должна быть полнотекстово проиндексирована) |
 | Табличные хинты | `with (hint, ...)` после основной таблицы ([`WithTableHint`](xref:NextORM.Core.EntityBuilder`1)) |
+| Блокировка строк | `ForUpdate`/`ForShare` рендерят `with (updlock)`/`with (holdlock)` на основной таблице ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock), [`ILockRenderer.UsesTableHints`](xref:NextORM.Core.ILockRenderer.UsesTableHints)) |
 | JSON-вывод | завершающие `for json path` / `for json auto` ([`ForJson`](xref:NextORM.Core.QueryCommand`1)) |
 | XML-вывод | завершающие `for xml raw/auto/explicit/path` ([`ForXml`](xref:NextORM.Core.QueryCommand`1)) |
+| Методы типа XML | `xml.value('xpath', 'type')` / `xml.query('xpath')` / `xml.exist('xpath')` ([`XmlFunctions`](xref:NextORM.Core.ISqlDialect.XmlFunctions); `.nodes` не поддерживается) |
 | `AVG` по целочисленному столбцу | усекается до целого |
 | Размещение null при `ORDER BY … DESC` | null сортируются последними по умолчанию |
 

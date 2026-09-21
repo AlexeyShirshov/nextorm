@@ -83,6 +83,28 @@ var rows = await dataContext.From<ISimpleEntity>()
     .ToListAsync();
 ```
 
+### Адресация проекции
+
+Накопленная проекция позиционна и следует tuple-конвенции: `Item1` — базовый (левый) источник,
+`Item2` — первый присоединённый, `ItemN` — *N*-й добавленный, в порядке соединений. Имена не
+семантичны — из `Item1`/`Item2` не видно, где «заказ», а где «клиент», — поэтому придайте им смысл,
+спроецировав в именованный тип сразу после соединения и используя его дальше в запросе:
+
+```csharp
+var rows = await dataContext.From<ISimpleEntity>()
+    .Join(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+    .Select(p => new { Order = p.Item1.Id, Customer = p.Item2.RequiredString })
+    .ToListAsync();
+```
+
+```sql
+select t1.id as 'Order', t2.requiredstring as 'Customer' from simple_entity as 't1' join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
+```
+
+Член проекции обязан быть колонкой одной из соединённых сущностей (`p.Item1.Id`); ссылка на сущность
+целиком (`Order = p.Item1`) колонкой не является и отклоняется. Если нужны несколько колонок одной
+стороны, перечислите их явно.
+
 ## Внешние соединения
 
 [`LeftJoin`](xref:NextORM.Core.EntityBuilder`1) сохраняет каждую строку левой стороны и заполняет правую сторону значением `NULL`, когда
@@ -180,11 +202,35 @@ var rows = dataContext.From<ISimpleEntity>()
 ... from simple_entity as t1 left join lateral (select ...) as t2 on true
 ```
 
-> **Корреляция пока не выражается.** Применяемый источник не может ссылаться на столбцы строки левой
-> стороны, потому что нет публичного API, позволяющего описать ссылку на внешнюю строку внутри
-> подзапроса в `FROM`. До его появления [`CrossApply`](xref:NextORM.Core.EntityBuilder`1)/[`OuterApply`](xref:NextORM.Core.EntityBuilder`1) эквивалентны `CROSS JOIN`/`LEFT JOIN`
-> по некоррелированному источнику и отклоняются диалектами без lateral-источника
-> (`SupportsApply == false`).
+### Коррелированный APPLY / LATERAL
+
+Применяемый источник может ссылаться на столбцы строки левой стороны, если построить его внутри
+лямбды, принимающей эту строку. [`CrossApply`](xref:NextORM.Core.EntityBuilder`1)/[`OuterApply`](xref:NextORM.Core.EntityBuilder`1) принимают такую лямбду в двух формах: возвращающую
+`QueryCommand<T>` (производный запрос с проекцией) и возвращающую `EntityBuilder<T>` (сущность целиком).
+
+```csharp
+var rows = await dataContext.From<ISimpleEntity>()
+    .CrossApply(s => dataContext.From<IComplexEntity>()
+        .Where(c => c.Id == s.Id)
+        .Select(c => new { c.Id, c.RequiredString }))
+    .Select(p => new { p.Item1.Id, p.Item2.RequiredString })
+    .ToListAsync();
+```
+
+```sql
+-- SQL Server
+... from simple_entity as [t1] cross apply (select ... from complex_entity as [t2] where t2.id = t1.id) as [t3]
+-- PostgreSQL / MySQL / MariaDB
+... from simple_entity as t1 cross join lateral (select ...) as t3
+```
+
+Параметр лямбды ведёт себя как внешний параметр коррелированного скалярного подзапроса: столбец строки
+левой стороны (здесь `s.Id`) становится внешней ссылкой и разрешается в псевдоним левой таблицы.
+[`OuterApply`](xref:NextORM.Core.EntityBuilder`1) дополнительно сохраняет строки левой стороны с пустым применяемым источником, заполняя их `NULL`.
+
+Корреляция требует lateral-источника: диалекты с `SupportsApply == false` (SQLite, ClickHouse) отклоняют
+коррелированный apply через `NotSupportedException`, как и in-memory-провайдер. Коррелированный apply
+не может ссылаться на проекцию соединения — применяйте его к источнику из одной сущности.
 
 ## Соединение с подзапросом
 
@@ -200,6 +246,53 @@ var rows = await dataContext.From<ISimpleEntity>()
     .Join(subQuery, (s, c) => s.Id == c.Id)
     .Select(p => new { p.Item1.Id, p.Item2.RequiredString })
     .ToListAsync();
+```
+
+## Производный запрос как первичный источник
+
+`QueryCommand<T>` может быть и **первичным** источником `FROM`, а присоединяемая таблица пишется второй:
+
+```csharp
+var derived = dataContext.From<IComplexEntity>()
+    .Where(c => c.Id > 0)
+    .Select(c => new { c.Id, c.RequiredString });
+
+var rows = await dataContext.From(derived)
+    .Join(dataContext.From<ISimpleEntity>(), (d, s) => d.Id == s.Id)
+    .Select(p => new { p.Item1.Id, SId = p.Item2.Id })
+    .ToListAsync();
+```
+
+```sql
+select t1.id, t2.id as 'SId' from (select id, requiredstring from complex_entity where (id > 0)) as 't1' join simple_entity as 't2' on cast(t1.id as bigint) = t2.id
+```
+
+`Where` можно написать до соединения — он применяется к производной таблице (`d => d.Id > 5`
+превращается в фильтр производного источника, `where t1.id > 5`). Любой другой модификатор
+(`OrderBy`, `GroupBy`, `Distinct`, paging, ...) нужно применять **внутри** производного запроса:
+перенос его за соединение изменил бы смысл запроса, поэтому билдер бросает `NotSupportedException`, а
+не переносит модификатор молча. Соединение работает во всех SQL-провайдерах; провайдер in-memory его
+отвергает.
+
+Производный запрос может и сам содержать соединения: его проекция `Select` становится колонками
+производной таблицы, и на эти члены можно ссылаться в последующих `Where`/`Join`. Каждый источник
+получает позиционный алиас (`t1`, `t2`, ...), поэтому внешнее соединение никогда не переиспользует
+алиас изнутри производного запроса:
+
+```csharp
+var derived = dataContext.From<ISimpleEntity>()
+    .Join(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+    .Select(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.RequiredString });
+
+var rows = await dataContext.From(derived)
+    .Where(d => d.CustomerName != null)
+    .Join(dataContext.From<IComplexEntity>(), (d, c2) => d.OrderId == c2.Id)
+    .Select(p => new { p.Item1.OrderId, p.Item1.CustomerName, Third = p.Item2.RequiredString })
+    .ToListAsync();
+```
+
+```sql
+select t3.OrderId, t3.CustomerName, t4.requiredstring as 'Third' from (select t1.id as 'OrderId', t2.requiredstring as 'CustomerName' from simple_entity as 't1' join complex_entity as 't2' on cast(t1.id as bigint) = t2.id) as 't3' join complex_entity as 't4' on cast(t3.OrderId as bigint) = t4.id where t3.CustomerName is not null
 ```
 
 ## Соединение с необработанной таблицей
@@ -337,7 +430,7 @@ var global = dataContext.From<ISimpleEntity>()
 | PostgreSQL | `as "t1"` | обязателен | поддержаны left/right/full | `CROSS JOIN LATERAL` / `LEFT JOIN LATERAL ... ON true` |
 | MySQL / MariaDB | `as \`t1\`` | обязателен | поддержаны left/right (без full) | `CROSS JOIN LATERAL` / `LEFT JOIN LATERAL ... ON true` |
 | ClickHouse | `as \`t1\`` | обязателен | поддержаны left/right/full | не поддерживается (`NotSupportedException`) |
-| In-memory | неприменимо (выполнение через делегаты) | неприменимо | поддержаны inner/left/right/full/cross; APPLY и источники в виде табличных функций — нет | не поддерживается |
+| In-memory | неприменимо (выполнение через делегаты) | неприменимо | поддержаны inner/left/right/full/cross; APPLY и источники в виде табличных функций — нет | не поддерживается (включая коррелированный apply) |
 
 Провайдер in-memory компилирует условие соединения в делегат и выполняет цикл, поэтому он не
 генерирует SQL; он поддерживает соединения [`Inner`](xref:NextORM.Core.JoinType.Inner), [`Left`](xref:NextORM.Core.JoinType.Left), [`Right`](xref:NextORM.Core.JoinType.Right), [`Full`](xref:NextORM.Core.JoinType.Full) и [`Cross`](xref:NextORM.Core.JoinType.Cross) (см.

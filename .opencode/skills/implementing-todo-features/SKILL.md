@@ -1,24 +1,26 @@
 ---
 name: implementing-todo-features
-description: Close an unchecked provider-backlog item (docs/specs/roadmap/todo_postgres.md, todo_mssql.md, todo_clickhouse.md) end-to-end — save a WIP_<feature>.md report in docs/specs/roadmap first, map the function across every provider (mandatory provider x form matrix), pick the closest C# analog, add the SqlFunctions.Sql / provider *Functions surface, run nextorm-code-auditor, add tests, keep line coverage >= MIN_LINE_COVERAGE, and update docs EN+RU plus specs. Use when adding a missing SQL function/aggregate/operator or LINQ operator, when the user says "нереализованный функционал", "закрыть TODO", "добавить функцию", "SqlFunctions.Sql", "провайдерный пробел", "WIP отчет", or picks a `[ ]` item from todo_*.
+description: Close an unchecked backlog item (a per-feature docs/specs/roadmap/todo_*.md, indexed by docs/specs/roadmap/sql-capabilities-gap-analysis.md) end-to-end — save a work plan to docs/specs/roadmap/todo_<feature>.md first, map the function across every provider (mandatory provider x form matrix), pick the closest C# analog, add the SqlFunctions.Sql / provider *Functions surface, run nextorm-code-auditor, add tests, keep line coverage >= MIN_LINE_COVERAGE, and update docs EN+RU plus specs. Use when adding a missing SQL function/aggregate/operator or LINQ operator, when the user says "нереализованный функционал", "закрыть TODO", "добавить функцию", "SqlFunctions.Sql", "провайдерный пробел", "план фичи", or picks a blocked/`[ ]` item from todo_*.
 ---
 
 # Implementing a TODO feature across providers
 
-Turn one unchecked `[ ]` backlog item into a shipped, audited, tested, documented feature.
-Work the eight steps in order. Do not skip step 3 (WIP report), step 6 (audit) or step 8 (docs/specs).
+Turn one unchecked/blocked backlog item into a shipped, audited, tested, documented feature.
+Work the eight steps in order. Do not skip step 3 (work plan), step 6 (audit) or step 8 (docs/specs).
 
 ## 0. Backlog map (pick exactly one item)
 
-| Backlog | Scope | Primary code |
-| --- | --- | --- |
-| `docs/specs/roadmap/todo_postgres.md` | PG scalar/aggregate/array/JSON/table functions | `src/nextorm.core/Query/SqlFunctions.Postgres.cs`, `src/nextorm.postgres/PostgresDialect.cs` |
-| `docs/specs/roadmap/todo_mssql.md` | T-SQL functions/constructs + provider-consistency audit | `src/nextorm.core/Query/SqlFunctions.SqlServer.cs`, `src/nextorm.sqlserver/SqlServerDialect.cs` |
-| `docs/specs/roadmap/todo_clickhouse.md` | ClickHouse functions/combinators | `src/nextorm.core/Query/SqlFunctions.ClickHouse.cs`, `src/nextorm.clickhouse/ClickHouseDialect.cs` |
+The open backlog lives in the per-feature `docs/specs/roadmap/todo_*.md`, one file per item; the ordered index
+(gaps, blockers, owners) is `docs/specs/roadmap/sql-capabilities-gap-analysis.md` §4:
 
-Cross-provider context: `docs/specs/roadmap/sql-capabilities-gap-analysis.md`, `linq2db-comparison.md`.
-Respect the backlog's own ordering ("Приоритетный шортлист" for PG; "от простого к сложному" for
-MSSQL/ClickHouse; Easy -> Medium for in-memory). One item per change.
+- gap-analysis §4 — prioritized remaining gaps, each `Todo:` line pointing at its `todo_*.md`;
+- `todo_*.md` — the actual per-feature plan/backlog for one item;
+- deliberately out-of-scope work is documented in `docs/advanced/limitations.md` (+RU).
+
+Cross-provider context: `docs/specs/roadmap/sql-capabilities-gap-analysis.md`,
+`docs/specs/comparison/linq2db-comparison.md`. Primary code by area:
+`src/nextorm.core/Query/SqlFunctions.{Postgres,SqlServer,ClickHouse}.cs` and the matching
+`src/nextorm.<provider>/*Dialect.cs`. One item per change.
 
 ## 1. Map the function across every provider (mandatory matrix)
 
@@ -34,7 +36,7 @@ rg -n "<function-or-operator>" src/nextorm.core src/nextorm.sqlite src/nextorm.p
 Build a **provider × form matrix** with a row for **every** provider (`PostgreSQL`, `SQL Server`,
 `MySQL`, `MariaDB`, `ClickHouse`, `SQLite`, and `InMemory` where relevant); an unsupported cell is
 written as `—` plus the reason (e.g. "no session-user concept"). The matrix is the deliverable of this
-step and goes verbatim into the WIP (step 3). A "sibling findings" section that mentions only one
+step and goes verbatim into the work plan (step 3). A "sibling findings" section that mentions only one
 provider — or that lists only surfaces *within* one provider (e.g. `PostgresFunctions` vs
 `ExtendedScalarFunctionTranslator`) — has **not** done this step.
 
@@ -55,7 +57,7 @@ filled from the **providers' own documentation**, not from the nextorm codebase:
 For each provider record **whether the function exists there and its exact native spelling/signature**.
 A cell may only say `—` (unsupported) after the provider's own docs were checked; absence from the
 nextorm codebase or from a translator is **not** evidence that the provider cannot express it. State in
-the WIP which documentation was consulted per provider.
+the work plan which documentation was consulted per provider.
 
 Check, in this order:
 1. Public surfaces: `CommonFunctions` (`src/nextorm.core/Query/SqlFunctions.cs`), `PostgresFunctions`,
@@ -100,12 +102,12 @@ Rules:
 - If no CLR member matches, add a new method; names mirror SQL tokens (`count_big`, `array_agg`); see
   `docs/specs/design/API-NAMING-REVIEW.md` finding P1-10.
 
-## 3. Save the WIP report (before writing any code)
+## 3. Save the work plan (before writing any code)
 
-Persist the analysis from steps 0–2 to `docs/specs/roadmap/WIP_<feature>.md` — lowercase, SQL/CLR token
-as the name (e.g. `WIP_left.md`, `WIP_date_trunc.md`). This is the working plan the rest of the steps
-execute against; do not start step 4 without it. Use the register style (Russian H2/H3 is fine, match the
-neighbouring `todo_*` files). It must contain:
+Persist the analysis from steps 0–2 to `docs/specs/roadmap/todo_<feature>.md` (specs/roadmap) — lowercase, SQL/CLR
+token as the name (e.g. `todo_date_trunc.md`); if the item already has a root todo, update it. This is
+the working plan the rest of the steps execute against; do not start step 4 without it. Use the register
+style (Russian H2/H3 is fine, match the neighbouring `todo_*` files). It must contain:
 
 - Item + source backlog, target provider(s), and acceptance criterion.
 - The step-1 **provider × form matrix — one row for every provider, `—` + reason where unsupported,
@@ -119,9 +121,9 @@ neighbouring `todo_*` files). It must contain:
   (line/branch before the change).
 - Docs/specs files to touch.
 
-Keep the file updated as the work proceeds. When the item ships, fold its conclusions into the backlog
-checkbox and docs (step 8), then either delete `WIP_<feature>.md` or mark it done — do not leave a stale
-plan behind.
+Keep the file updated as the work proceeds. When the item ships, fold its conclusions into the docs and
+delete the work-plan file (step 8) — do not leave a stale plan behind; the item's `Todo:` entry in
+`docs/specs/roadmap/sql-capabilities-gap-analysis.md` §4 is then repointed/removed.
 
 ## 4. Add the surface — priority order
 
@@ -225,9 +227,16 @@ SQL-generation tests.
 
 ## 8. Docs and specs
 
-- Flip the backlog checkbox `[ ]` -> `[x]` and append the implementation pointer (file/method/test)
-  in the same style as neighbouring entries.
-- Resolve `docs/specs/roadmap/WIP_<feature>.md` (fold it in or delete it) — do not leave it stale.
+- Update the item's per-feature `docs/specs/roadmap/todo_*.md` (mark shipped / delete) and repoint its `Todo:`
+  line in `docs/specs/roadmap/sql-capabilities-gap-analysis.md` §4 to the shipped docs.
+- **Move the new functionality into the documentation** (EN + RU). First try to cluster it into the
+  existing guide section that matches its area — `docs/guide/11-scalar-functions.md`,
+  `04-grouping-and-aggregates.md`, `10-window-functions.md`, `13-table-valued-functions.md` (plus the
+  `docs/ru/guide/` mirror). If the feature does not belong to any existing section, **create a new
+  guide page** (and its RU mirror, and a DocFX `toc.yml` entry on both sides) rather than leaving it
+  undocumented. Reference the new function/operator with its exact C# signature and a short sample.
+- After the documentation is in place, **delete** the provisional work-plan file — its conclusions must
+  live in the docs/backlog, not in the plan file.
 - Provider docs EN + RU: `docs/providers/<provider>.md` and `docs/ru/providers/<provider>.md`; guide
   pages `docs/guide/11-scalar-functions.md`, `04-grouping-and-aggregates.md`,
   `10-window-functions.md`, `13-table-valued-functions.md` plus the `docs/ru/guide/` mirror, as applicable.
@@ -240,9 +249,10 @@ SQL-generation tests.
 
 ## Definition of done
 
-- [ ] `WIP_<feature>.md` written in `docs/specs/roadmap/` before coding and kept current, including the
-      step-1 provider × form matrix with a row for every provider, filled from the providers' own
-      documentation (state the source consulted per provider), not only from grepping nextorm.
+- [ ] Work plan `docs/specs/roadmap/todo_<feature>.md` written (or the existing todo updated) before
+      coding and kept current, including the step-1 provider × form matrix with a row for every provider,
+      filled from the providers' own documentation (state the source consulted per provider), not only
+      from grepping nextorm.
 - [ ] All capable providers updated with their native spelling via `Make*`; the rest gated with a
       `Supports*` flag justified per function. Post-check: `rg "<name>" src/nextorm.*/*Dialect.cs`
       matches more than the origin dialect, or the single match is explained by the matrix.
@@ -252,7 +262,9 @@ SQL-generation tests.
 - [ ] `nextorm-code-auditor` run; findings applied and persisted in the registers.
 - [ ] SQL-generation tests + integration/core tests added and green.
 - [ ] Coverage before/after reported; line coverage did not drop below the previous value / 75.
-- [ ] Backlog checkbox, docs EN+RU and specs updated; `WIP_<feature>.md` resolved.
+- [ ] Item status in its `docs/specs/roadmap/todo_*.md` / gap-analysis §4, docs EN+RU and specs updated: the new
+      functionality is documented in an existing guide section, or in a **new** guide page (+ RU mirror +
+      `toc.yml`) when it cannot be clustered; provisional work-plan file deleted.
 
 ## Boundaries
 

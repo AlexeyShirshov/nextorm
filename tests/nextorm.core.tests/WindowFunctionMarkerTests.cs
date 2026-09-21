@@ -48,6 +48,117 @@ public class WindowFunctionMarkerTests
     }
 
     [Fact]
+    public void Over_NamedWindowOverload_ShouldReturnDefaultValue()
+    {
+        var function = new WindowFunction<int>();
+
+        function.Over("w").Should().Be(0);
+    }
+
+    [Fact]
+    public void WindowFrame_GroupsFactory_ShouldExposeTypeAndBounds()
+    {
+        var groups = WindowFrame.Groups(WindowFrameBound.Preceding(2), WindowFrameBound.Following(3));
+
+        groups.Type.Should().Be(WindowFrameType.Groups);
+        groups.Start.Kind.Should().Be(WindowFrameBoundKind.Preceding);
+        groups.Start.Offset.Should().Be(2);
+        groups.End.Kind.Should().Be(WindowFrameBoundKind.Following);
+        groups.End.Offset.Should().Be(3);
+        groups.Exclusion.Should().BeNull();
+
+        WindowFrame.Groups(1, 1).Type.Should().Be(WindowFrameType.Groups);
+    }
+
+    [Fact]
+    public void WindowFrame_WithExclusion_ShouldSetExclusion()
+    {
+        var frame = WindowFrame.RowsUnboundedPrecedingToCurrentRow;
+        frame.Exclusion.Should().BeNull();
+
+        var currentRow = frame.WithExclusion(WindowFrameExclusion.CurrentRow);
+        currentRow.Exclusion.Should().Be(WindowFrameExclusion.CurrentRow);
+        currentRow.Type.Should().Be(WindowFrameType.Rows);
+        currentRow.Start.Kind.Should().Be(WindowFrameBoundKind.UnboundedPreceding);
+
+        frame.WithExclusion(WindowFrameExclusion.Group).Exclusion.Should().Be(WindowFrameExclusion.Group);
+        frame.WithExclusion(WindowFrameExclusion.Ties).Exclusion.Should().Be(WindowFrameExclusion.Ties);
+        frame.WithExclusion(WindowFrameExclusion.NoOthers).Exclusion.Should().Be(WindowFrameExclusion.NoOthers);
+    }
+
+    [Fact]
+    public void Window_ShouldExposeDefinitionOnCommand()
+    {
+        using var ctx = new InMemoryDataContext();
+        var e = ctx.From<SimpleEntity>();
+
+        var cmd = e.Window("w", partitionBy: [x => x.Id], orderBy: [e.Desc(x => x.Id)])
+            .Select(x => new { x.Id });
+
+        var window = cmd.Windows.Should().ContainSingle().Subject;
+        window.Name.Should().Be("w");
+        window.PartitionBy.Should().ContainSingle();
+        window.OrderBy.Should().ContainSingle().Which.Direction.Should().Be(OrderDirection.Desc);
+        window.Frame.Should().BeNull();
+    }
+
+    [Fact]
+    public void Window_DuplicateName_ShouldThrow()
+    {
+        using var ctx = new InMemoryDataContext();
+        var e = ctx.From<SimpleEntity>();
+
+        var act = () => e.Window("w").Window("w");
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*already declared*");
+    }
+
+    [Fact]
+    public void Window_InvalidName_ShouldThrow()
+    {
+        using var ctx = new InMemoryDataContext();
+        var e = ctx.From<SimpleEntity>();
+
+        var act = () => e.Window("1 bad");
+
+        act.Should().Throw<ArgumentException>().WithMessage("*identifier*");
+    }
+
+    [Fact]
+    public void Window_BeforeJoin_ShouldThrow()
+    {
+        using var ctx = new InMemoryDataContext();
+        var e = ctx.From<SimpleEntity>();
+
+        var act = () => e.Window("w").Join(ctx.From<SimpleEntity>(), (a, b) => a.Id == b.Id);
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*after joins*");
+    }
+
+    [Fact]
+    public void Window_PlanEquality_ShouldCompareWindows()
+    {
+        using var ctx = new InMemoryDataContext();
+        var e = ctx.From<SimpleEntity>();
+
+        var a = e.Window("w", partitionBy: [x => x.Id]).Select(x => new { x.Id });
+        var same = e.Window("w", partitionBy: [x => x.Id]).Select(x => new { x.Id });
+        var otherName = e.Window("v", partitionBy: [x => x.Id]).Select(x => new { x.Id });
+        var otherFrame = e.Window("w", partitionBy: [x => x.Id], frame: WindowFrame.Groups(1, 1)).Select(x => new { x.Id });
+
+        a.PrepareCommand(CancellationToken.None);
+        same.PrepareCommand(CancellationToken.None);
+        otherName.PrepareCommand(CancellationToken.None);
+        otherFrame.PrepareCommand(CancellationToken.None);
+
+        var comparer = a.GetQueryPlanEqualityComparer();
+
+        comparer.Equals(a, same).Should().BeTrue();
+        comparer.Equals(a, otherName).Should().BeFalse();
+        comparer.Equals(a, otherFrame).Should().BeFalse();
+    }
+
+    [Fact]
     public void WindowOrderConstructor_ShouldExposeExpressionAndDirection()
     {
         Expression<Func<object?>> expression = () => 1;

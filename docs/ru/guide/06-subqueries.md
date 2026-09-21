@@ -1,6 +1,6 @@
 # Подзапросы
 
-> Используйте `QueryCommand<T>` как источник `FROM`, как скалярное значение в проекции, `WHERE` или `ORDER BY`, либо как коррелированный предикат `EXISTS` / `IN` / `ANY` / `ALL`.
+> Используйте `QueryCommand<T>` как источник `FROM`, как скалярное значение в проекции, `WHERE`, `ORDER BY` или `HAVING`, либо как коррелированный предикат `EXISTS` / `IN` / `ANY` / `ALL`.
 
 **Предварительные требования:** [Запросы и проекции](01-querying-and-projections.md) · [Фильтрация (WHERE)](02-filtering-where.md) · [Соединения](03-joins.md)
 
@@ -10,7 +10,7 @@
 другой запрос четырьмя способами:
 
 * как **производную таблицу** в `FROM`, через [`From`](xref:NextORM.Core.DataContext);
-* как **скалярный подзапрос** в проекции, `WHERE` или `ORDER BY`, вызывая терминал для одной строки,
+* как **скалярный подзапрос** в проекции, `WHERE`, `ORDER BY` или `HAVING`, вызывая терминал для одной строки,
   такой как [`First`](xref:NextORM.Core.EntityBuilder`1) или [`Single`](xref:NextORM.Core.EntityBuilder`1), внутри внешнего выражения;
 * как **коррелированный предикат** с `SqlFunctions.Sql.exists(...)`, `SqlFunctions.Sql.@in(column, query)`,
   `SqlFunctions.Sql.any(query)` или `SqlFunctions.Sql.all(query)`.
@@ -137,7 +137,7 @@ var rows = dataContext.From<IComplexEntity>()
 
 Скалярный подзапрос может ссылаться на член внешнего запроса; nextorm квалифицирует его псевдонимом
 внешней таблицы. Это работает у каждого SQL-провайдера и в любой позиции значения (проекция,
-`WHERE`, `ORDER BY`):
+`WHERE`, `ORDER BY`, `HAVING`):
 
 ```csharp
 var rows = await dataContext.From<IComplexEntity>()
@@ -169,13 +169,48 @@ select t1.id, (select top(1) t3.id from complex_entity as [t3]
  where t3.id = cast(t1.id as bigint)) as [cid] from simple_entity as [t1] join complex_entity as [t2] on cast(t1.id as bigint) = t2.id
 ```
 
-Действуют два ограничения:
+Подзапрос может также стоять в `HAVING`, где он может ссылаться на ключ группировки. Он
+подготавливается тем же коррелированным visitor'ом, что и `WHERE`:
 
-* подзапрос, вложенный в другой коррелированный подзапрос (глубина корреляции больше одной),
-  выбрасывает `NotSupportedException` вместо неверного SQL;
-* in-memory провайдер не может связать внешнюю строку при выполнении внутреннего запроса, поэтому
-  коррелированные подзапросы там выбрасывают `NotSupportedException`. Для коррелированных запросов
-  используйте SQL-провайдер.
+```csharp
+var rows = await dataContext.From<IComplexEntity>()
+    .Where(e => e.Int != null)
+    .GroupBy(e => new { e.Int })
+    .Having(g => SqlFunctions.Sql.exists(dataContext.From<IComplexEntity>().Where(c => c.Int == g.Int)))
+    .Select(g => new { g.Int, count = SqlFunctions.Sql.count() })
+    .ToListAsync();
+```
+
+Внешняя ссылка может быть обёрнута в скалярную функцию над внешним столбцом (например
+`e.String.ToUpper()`); функция отображается вокруг квалифицированного внешнего псевдонима так же,
+как и любое другое выражение.
+
+Агрегатный терминал ([`Count`](xref:NextORM.Core.EntityBuilder`1), `Sum(...)`, `Min`/`Max`/`Avg`, ...)
+транслируется в соответствующий SQL-агрегат над подзапросом, поэтому его можно использовать прямо с
+внешней ссылкой:
+
+```csharp
+var rows = await dataContext.From<IComplexEntity>()
+    .Select(it => new { it.Id, cnt = dataContext.From<IComplexEntity>().Where(c => c.Id == it.Id).Count() })
+    .ToListAsync();
+```
+
+```sql
+select t1.id, (select count(*) from complex_entity as 't2'
+ where cast(t2.id as bigint) = t1.id
+limit 1) as 'cnt' from complex_entity as 't1'
+```
+
+Корреляция вкладывается произвольно: коррелированный подзапрос может сам содержать коррелированный
+подзапрос, и каждая внешняя ссылка разрешается в псевдоним того scope, который её объявил.
+
+Действует одно ограничение: in-memory провайдер не может связать внешнюю строку при выполнении
+внутреннего запроса, поэтому коррелированные подзапросы там выбрасывают `NotSupportedException`. Для
+коррелированных запросов используйте SQL-провайдер.
+
+На SQLite числовой `Single`/`SingleOrDefault` при более чем одной строке поднимает ошибку БД через
+рендер-гард по количеству строк (провайдер не проверяет кардинальность скалярного подзапроса);
+нечисловая проекция отклоняется с `NotSupportedException`.
 
 ## Коррелированный EXISTS
 
@@ -275,10 +310,6 @@ SQLite не реализует `ANY` или `ALL`; тот же запрос пр
 
 * Вложенная корреляция (подзапрос, ссылающийся на внешнюю ссылку другого подзапроса) отклоняется с
   `NotSupportedException`; явная ошибка предотвращает привязку внешнего маркера к чужому запросу.
-* Агрегатные терминалы ([`Count`](xref:NextORM.Core.EntityBuilder`1), `Sum(...)`, ...) нельзя использовать как проекцию подзапроса,
-  потому что они выполняются немедленно; используйте `SqlFunctions.Sql.count()` (или соответствующий
-  агрегат [`Sql`](xref:NextORM.Core.SqlFunctions.Sql)) либо вызывайте терминал отдельно. Использование такого терминала внутри
-  подзапроса выбрасывает `NotSupportedException`.
 * In-memory провайдер отклоняет коррелированные подзапросы (см. выше).
 
 ## См. также

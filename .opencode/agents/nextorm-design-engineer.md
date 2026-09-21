@@ -2,6 +2,7 @@
 description: Design + performance review AND fix for nextorm — SOLID/DRY class and interface design, type design (sealed / readonly struct / Span vs Memory / ValueTask / collection return types) and the ~50 .NET performance anti-patterns. Triggers on "design review", "SOLID", "DRY", "god class", "fat interface", "type design", "sealed", "allocation anti-patterns", "refactor this", "what should we refactor next". Produces prioritized findings with file:line and then applies the selected fixes; builds and tests them. Does not benchmark.
 mode: subagent
 temperature: 0.1
+variant: max
 permission:
   edit: allow
   task: allow

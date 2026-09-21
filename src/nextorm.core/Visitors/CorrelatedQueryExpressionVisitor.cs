@@ -226,9 +226,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         else if (GetEntityBuilderReceiver(node) is { } builderReceiver)
         {
             if (IsAggregateTerminal(node.Method.Name))
-                throw new NotSupportedException(
-                    $"The aggregate terminal '{node.Method.Name}' cannot be used inside a subquery projection; " +
-                    "project the aggregate explicitly (for example SqlFunctions.Sql.count()/sum(...)) so it can be translated to SQL.");
+                return ReplaceAggregateTerminal(node, builderReceiver);
 
             QueryCommand cmd;
 
@@ -254,11 +252,13 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         }
         else if (node.Object?.Type.IsAssignableTo(typeof(QueryCommand)) ?? false)
         {
-            // A correlated scalar subquery: the inner query references a member of an outer parameter.
-            // Route it through GetQueryCommand so the outer member is replaced with an OuterRefMarker
-            // and registered on this (outer) command; the existing non-correlated closure path below
-            // would leave the outer parameter free and fail at Compile().
-            if (_forPrepare && _outerParams is { Count: > 0 } && ReferencesOuter(node.Object))
+            // A correlated scalar subquery: the inner query references a member of an outer parameter
+            // (the immediate one, or - at correlation depth greater than one - a marker an ancestor
+            // scope already resolved). Route it through GetQueryCommand so the outer member is replaced
+            // with an OuterRefMarker and registered on the root command; the non-correlated closure path
+            // below would either leave the outer parameter free and fail at Compile(), or rewrite the
+            // marker's index constant as a closure value and corrupt the marker.
+            if (_forPrepare && ((_outerParams is { Count: > 0 } && ReferencesOuter(node.Object)) || ContainsOuterRefMarker(node.Object)))
             {
                 var outerCmd = GetQueryCommand(node.Object);
                 return ReplaceQueryCommand(node, outerCmd);
@@ -334,8 +334,8 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 
     /// <summary>
     /// True for the <see cref="EntityBuilder{TEntity}"/> terminal methods that execute an aggregate
-    /// immediately. They produce no translatable SQL projection, so a subquery that reaches one is
-    /// rejected instead of silently emitting a non-aggregated select.
+    /// immediately. Inside a subquery they are rewritten to the equivalent aggregate projection (see
+    /// <see cref="ReplaceAggregateTerminal"/>) instead of being executed as a separate query.
     /// </summary>
     private static bool IsAggregateTerminal(string methodName) => methodName switch
     {
@@ -350,6 +350,20 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         nameof(EntityBuilderExtensions.Varp) => true,
         _ => false
     };
+
+    /// <summary>
+    /// Rewrites an aggregate terminal used inside a subquery (<c>inner.Where(...).Count()</c>) into
+    /// the equivalent scalar subquery and reads it back with the single-row <c>First</c> terminal, so
+    /// the query renders as <c>(select count(*)/sum(...) from ...)</c> instead of being rejected.
+    /// </summary>
+    private Expression ReplaceAggregateTerminal(MethodCallExpression node, Expression builderReceiver)
+    {
+        var selectCall = AggregateTerminalRewriter.Rewrite(node, builderReceiver);
+        var cmd = GetQueryCommand(selectCall);
+        var firstCall = Expression.Call(selectCall, selectCall.Type.GetMethod("First", Type.EmptyTypes)!);
+        return ReplaceQueryCommand(firstCall, cmd);
+    }
+
     /// <summary>True when the expression already contains an <see cref="OuterRefMarker{T}"/> from an ancestor scope.</summary>
     private static bool ContainsOuterRefMarker(Expression expression)
     {
@@ -371,16 +385,65 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         }
     }
 
+    /// <summary>
+    /// True when the expression contains a nested subquery of its own (a member call on a
+    /// <see cref="QueryCommand"/>). Such a command must share the root registry and cannot be cached
+    /// through <c>ExpressionsCache</c>, because the reference indices its preparation bakes in are
+    /// relative to the registry it is rendered with.
+    /// </summary>
+    private static bool ContainsSubqueryExpression(Expression expression)
+    {
+        var detector = new NestedSubqueryDetector();
+        detector.Visit(expression);
+        return detector.Found;
+    }
+
+    private sealed class NestedSubqueryDetector : ExpressionVisitor
+    {
+        public bool Found { get; private set; }
+
+        protected override Expression VisitMethodCall(MethodCallExpression node)
+        {
+            if (node.Object?.Type.IsAssignableTo(typeof(QueryCommand)) == true
+                || (node.Object is null && node.Arguments.Count > 0 && node.Arguments[0].Type.IsAssignableTo(typeof(QueryCommand))))
+                Found = true;
+
+            return Found ? node : base.VisitMethodCall(node);
+        }
+    }
+
+    /// <summary>
+    /// Replaces the delegate parameters a correlated subquery body was compiled with by their captured
+    /// values, so the built command holds closure accesses instead of free parameters. A nested
+    /// subquery in its projection can then still be recognised (and prepared) when the command itself
+    /// is prepared, which is what correlation depth greater than one needs.
+    /// </summary>
+    private sealed class ReplaceParametersByValueVisitor(List<(ParameterExpression Parameter, object? Value)> parameters) : ExpressionVisitor
+    {
+        protected override Expression VisitParameter(ParameterExpression node)
+        {
+            for (var (i, count) = (0, parameters.Count); i < count; i++)
+            {
+                var (parameter, value) = parameters[i];
+                if (ReferenceEquals(parameter, node))
+                    return Expression.Constant(value, node.Type);
+            }
+
+            return base.VisitParameter(node);
+        }
+    }
+
     private QueryCommand GetQueryCommand(Expression exp)
     {
-        // A marker inside the subquery expression means an ancestor command already resolved an
-        // outer reference; resolving a second level here would bind the marker to the wrong command's
-        // ReferencedQueries/OuterReferences and silently emit the wrong SQL, so reject it explicitly.
-        if (ContainsOuterRefMarker(exp))
-            throw new NotSupportedException("Nested correlated subqueries deeper than one level are not supported.");
+        // Nested commands resolve ReferencedQueries/OuterReferences against the root registry, so a
+        // marker registered by an ancestor scope (correlation depth > 1) is looked up there too. A
+        // marker that is already baked into `exp` is left in place; it stays valid because every
+        // command created below this point shares the root registry (see QueryCommand.OuterRegistry).
+        var registry = (_queryProvider as QueryCommand)?.RootRegistry ?? _queryProvider;
 
         QueryCommand cmd;
         var predVisitor = new PredicateExpressionVisitor<int>((exp, storeValue) => exp is IndexExpression idxExp
+
             && idxExp.Object is MemberExpression propExp && propExp.Member == ReferencedQueriesPI && propExp.Expression is ParameterExpression && exp.Type.IsAssignableTo(typeof(IQueryRegistry))
             && idxExp.Arguments is [ConstantExpression c] && c.Value is int idx && storeValue(idx)
         );
@@ -388,7 +451,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 
         if (predVisitor.Result)
         {
-            cmd = _queryProvider.ReferencedQueries[predVisitor.Value];
+            cmd = registry.ReferencedQueries[predVisitor.Value];
         }
         else
         {
@@ -405,11 +468,17 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                 // member can map to a different index on another command (depending on how many
                 // references that command registered first), so sharing the delegate through
                 // ExpressionsCache would resolve the marker against the wrong list (wrong SQL or an
-                // out-of-range index). Compile such bodies per outer command instead.
-                if (ContainsOuterRefMarker(body))
+                // out-of-range index). Compile such bodies per outer command instead, and inline the
+                // captured values rather than passing them as delegate parameters: a nested subquery in
+                // the projection keeps its closure members (which the subquery visitor must still
+                // recognise when this command itself is prepared), instead of free parameters it cannot
+                // resolve (see ReplaceParametersByValueVisitor).
+                if (ContainsOuterRefMarker(body) || ContainsSubqueryExpression(body))
                 {
-                    var d = Expression.Lambda(body, pp).Compile();
-                    cmd = (QueryCommand)d.DynamicInvoke(args)!;
+                    var inlinedBody = new ReplaceParametersByValueVisitor(constRepl.Params).Visit(body);
+                    var d = Expression.Lambda<Func<QueryCommand>>(inlinedBody).Compile();
+                    cmd = d();
+                    cmd.OuterRegistry = _queryProvider;
                 }
                 else
                 {
@@ -438,9 +507,25 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                 // the command can be built without closure parameters.
                 var d = Expression.Lambda<Func<QueryCommand>>(body).Compile();
                 cmd = d();
+                if (ContainsOuterRefMarker(body) || ContainsSubqueryExpression(body))
+                    cmd.OuterRegistry = _queryProvider;
             }
         }
 
+        return cmd;
+    }
+
+    /// <summary>
+    /// Builds the command the expression <paramref name="body"/> represents while the currently pushed
+    /// outer parameters are in scope: their member accesses become <see cref="OuterRefMarker{T}"/>
+    /// nodes registered on the command this visitor was created for. Used by a correlated
+    /// <c>CROSS/OUTER APPLY</c> source, whose derived query is not part of a projection and therefore
+    /// never reaches <see cref="ReplaceQueryCommand"/>.
+    /// </summary>
+    internal QueryCommand BuildQueryCommand(Expression body)
+    {
+        var cmd = GetQueryCommand(body);
+        cmd.OuterRegistry ??= _queryProvider;
         return cmd;
     }
 
@@ -452,7 +537,10 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         }
         else
         {
-            //cmd = cmd.Clone();
+            // Every subquery command shares the root registry, so the reference indices baked while it
+            // is prepared resolve against the registry the renderer uses (the root command). This also
+            // covers commands built outside GetQueryCommand (the closure path below).
+            cmd.OuterRegistry ??= _queryProvider;
 
             var methodName = node.Method.Name;
             if (methodName.StartsWith("First", StringComparison.Ordinal))

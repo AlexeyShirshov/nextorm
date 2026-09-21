@@ -25,6 +25,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     protected LambdaExpression? _preWhere;
     protected LambdaExpression[]? _arrayJoins;
     internal Expression[]? _preparedArrayJoin;
+    private IReadOnlyList<WindowDefinition>? _windows;
     protected bool _isPrepared;
     protected Type? _srcType;
     private bool _dontCache;
@@ -43,6 +44,11 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// with different hints do not share a cached plan (and therefore the wrong SQL).
     /// </summary>
     internal int HintsPlanHash;
+    /// <summary>
+    /// Hash of <see cref="Windows"/>. It is part of the plan key so two otherwise identical commands
+    /// with different named windows (or the same name with different keys) do not share a cached plan.
+    /// </summary>
+    internal int WindowsPlanHash;
     internal Type? ResultType;
     public Paging Paging;
     /// <summary>
@@ -58,6 +64,12 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// </summary>
     internal bool SingleScalar;
     internal Expression? PreparedCondition;
+    /// <summary>
+    /// The HAVING predicate after it has been run through the correlated-query visitor. Subqueries in
+    /// HAVING register their outer references here, exactly like <see cref="PreparedCondition"/> does
+    /// for WHERE; the renderer prefers it over the raw <see cref="Having"/> lambda.
+    /// </summary>
+    internal Expression? PreparedHaving;
     /// <summary>
     /// Hash of the value-list (<c>in</c>/<c>Contains</c>) shapes found in <see cref="PreparedCondition"/>.
     /// A captured collection's member access contributes nothing to the expression plan hash, so this
@@ -116,6 +128,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         Settings = definition.Settings;
         _preWhere = definition.PreWhere;
         _arrayJoins = definition.ArrayJoins?.ToArray();
+        _windows = definition.Windows;
         ArrayJoinKind = definition.ArrayJoinKind;
         BindArrayJoinElement = definition.BindArrayJoinElement;
     }
@@ -147,6 +160,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         Settings = Settings,
         PreWhere = _preWhere,
         ArrayJoins = _arrayJoins,
+        Windows = _windows,
         ArrayJoinKind = ArrayJoinKind,
         BindArrayJoinElement = BindArrayJoinElement,
     };
@@ -227,6 +241,12 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     public IReadOnlyList<KeyValuePair<string, string>>? Settings { get; internal set; }
     /// <summary>The ClickHouse <c>PREWHERE</c> predicate, or <c>null</c> when there is none.</summary>
     public LambdaExpression? PreWhere => _preWhere;
+    /// <summary>
+    /// The named window definitions declared for this query (<c>WINDOW w AS (...)</c>), or <c>null</c>
+    /// when the query declares none. A dialect that does not support the clause rejects a command that
+    /// carries them when its SQL is built.
+    /// </summary>
+    public IReadOnlyList<WindowDefinition>? Windows => _windows;
     /// <summary>
     /// The prepared ClickHouse <c>ARRAY JOIN</c> expressions, or <c>null</c> when the clause is absent.
     /// A dialect that does not support it rejects the command when its SQL is built. Internal so the
@@ -313,6 +333,42 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     public UnionType UnionType { get => _unionType; }
     public IReadOnlyList<Expression>? OuterReferences => _outerRefs;
 
+    /// <summary>
+    /// The registry that owns the <see cref="ReferencedQueries"/> and <see cref="OuterReferences"/>
+    /// this command's expressions resolve against when it was built as a correlated subquery. Nested
+    /// commands share the root command's registry, so the renderer - which always resolves references
+    /// against the root - can resolve markers registered one or more correlation levels up.
+    /// </summary>
+    internal IQueryRegistry? OuterRegistry { get; set; }
+
+    /// <summary>
+    /// True for the projection types a scalar <c>Single</c>/<c>SingleOrDefault</c> subquery can guard
+    /// itself against a second row on a dialect that does not enforce cardinality: the guard raises a
+    /// database error through a numeric overflow, so only numeric (and nullable numeric) projections
+    /// are supported.
+    /// </summary>
+    internal static bool IsCardinalityGuardable(Type type)
+    {
+        var underlying = Nullable.GetUnderlyingType(type) ?? type;
+        return underlying == typeof(int) || underlying == typeof(long) || underlying == typeof(short)
+            || underlying == typeof(byte) || underlying == typeof(double) || underlying == typeof(float)
+            || underlying == typeof(decimal);
+    }
+
+    /// <summary>
+    /// The outermost registry in the <see cref="OuterRegistry"/> chain (this command when it has no
+    /// outer registry).
+    /// </summary>
+    internal IQueryRegistry RootRegistry
+    {
+        get
+        {
+            IQueryRegistry registry = this;
+            while (registry is QueryCommand { OuterRegistry: { } owner })
+                registry = owner;
+            return registry;
+        }
+    }
 
     public virtual void ResetPreparation()
     {
@@ -327,6 +383,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         HasPreWhereInValues = false;
         _from = null;
         PreparedCondition = null;
+        PreparedHaving = null;
         InValuesShapeHash = 0;
         InValuesPartitions = null;
         HasTopLevelInValues = false;
@@ -348,6 +405,10 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     }
     int IQueryRegistry.AddCommand(QueryCommand cmd)
     {
+        // A nested command shares the root registry so the renderer (which resolves
+        // ReferencedQueries against the root command) sees the same list the visitor appended to.
+        if (OuterRegistry is { } owner) return owner.AddCommand(cmd);
+
 #if DEBUG
         if (_isPrepared) throw new InvalidOperationException("QueryCommand prepared");
 
@@ -382,6 +443,10 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
 
     public int AddOuterReference(Expression node)
     {
+        // See IQueryRegistry.AddCommand: outer references live on the root registry so a marker
+        // registered while preparing a nested command is resolvable when the root is rendered.
+        if (OuterRegistry is { } owner) return owner.AddOuterReference(node);
+
         var outerRefs = _outerRefs ??= [];
 
         var idx = outerRefs.Count;

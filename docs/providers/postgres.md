@@ -39,10 +39,10 @@
   `initcap`, ...), POSIX regular expression (`regexp_replace`, `regexp_like`, ...), date/time
   (`make_interval`, `justify_days`, `justify_hours`, `to_char`, `to_date`, ...), `num_nulls`/`num_nonnulls`
   and the type helper `pg_typeof`;
-- the session/information functions are enabled ([`SupportsSessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SupportsSessionInfoFunctions) is `true`):
+- the session/information functions are enabled ([`SessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SessionInfoFunctions) is `true`):
   `SqlFunctions.Sql.current_user`/`session_user`/`current_schema` render the key words and
   `current_database`/`version` render `current_database()`/`version()`;
-- the UUID generators are enabled ([`SupportsUuidGenerators`](xref:NextORM.Core.ISqlDialect.SupportsUuidGenerators) is `true`):
+- the UUID generators are enabled ([`UuidGenerators`](xref:NextORM.Core.ISqlDialect.UuidGenerators) is `true`):
   `SqlFunctions.Sql.gen_random_uuid()` renders `gen_random_uuid()` (PostgreSQL 13+) and `uuidv7()`
   renders `uuidv7()` (PostgreSQL 18+);
 - the boolean, bitwise, statistical and ordered-set aggregates are enabled

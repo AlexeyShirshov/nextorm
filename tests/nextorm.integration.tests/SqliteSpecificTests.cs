@@ -147,14 +147,14 @@ public sealed class SqliteSpecificTests : ProviderTestSuite
     }
 
     /// <summary>
-    /// SQLite does not enforce scalar-subquery cardinality (it returns the first row), so
-    /// Single/SingleOrDefault inside a scalar subquery are rejected instead of silently taking the
-    /// first row. Providers that do enforce it render <c>limit 2</c> and let the database throw.
+    /// SQLite does not enforce scalar-subquery cardinality (it returns the first row), so a numeric
+    /// Single/SingleOrDefault scalar subquery is rendered with a count guard. A single matching row
+    /// returns the value.
     /// </summary>
     [Fact]
-    public void CorrelatedScalarSingle_ShouldThrowNotSupported()
+    public void CorrelatedScalarSingle_ShouldReturnTheSingleValue()
     {
-        var act = () => _sut.SimpleEntity
+        var r = _sut.SimpleEntity
             .Where(s => s.Id == 1)
             .Select(s => new
             {
@@ -163,6 +163,56 @@ public sealed class SqliteSpecificTests : ProviderTestSuite
             })
             .ToList();
 
-        act.Should().Throw<NotSupportedException>();
+        r.Should().ContainSingle();
+        r[0].cid.Should().Be(1);
+    }
+
+    /// <summary>
+    /// More than one matching row must raise through the guard instead of silently returning the first.
+    /// </summary>
+    [Fact]
+    public void CorrelatedScalarSingle_ShouldThrowWhenMultipleRowsMatch()
+    {
+        var act = () => _sut.SimpleEntity
+            .Where(s => s.Id == 1)
+            .Select(s => new
+            {
+                s.Id,
+                cid = _sut.ComplexEntity.Select(c => (int?)c.Id).Single()
+            })
+            .ToList();
+
+        act.Should().Throw<Microsoft.Data.Sqlite.SqliteException>();
+    }
+
+    /// <summary>No matching row yields the default for SingleOrDefault (same as enforcing providers).</summary>
+    [Fact]
+    public void CorrelatedScalarSingleOrDefault_ShouldYieldDefaultWhenNoRowMatches()
+    {
+        var r = _sut.ComplexEntity
+            .Select(it => new
+            {
+                it.Id,
+                sid = _sut.SimpleEntity.Where(s => s.Id == it.Id + 100).Select(s => s.Id).SingleOrDefault()
+            })
+            .ToList();
+
+        r.Should().NotBeEmpty();
+        r.Should().OnlyContain(row => row.sid == 0);
+    }
+
+    /// <summary>No matching row throws for Single on a non-nullable projection (same as enforcing providers).</summary>
+    [Fact]
+    public void CorrelatedScalarSingle_ShouldThrowWhenNoRowMatches()
+    {
+        var act = () => _sut.ComplexEntity
+            .Select(it => new
+            {
+                it.Id,
+                sid = _sut.SimpleEntity.Where(s => s.Id == it.Id + 100).Select(s => s.Id).Single()
+            })
+            .ToList();
+
+        act.Should().Throw<Exception>();
     }
 }

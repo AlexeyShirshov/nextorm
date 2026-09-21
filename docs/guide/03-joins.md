@@ -82,6 +82,28 @@ var rows = await dataContext.From<ISimpleEntity>()
     .ToListAsync();
 ```
 
+### Addressing the projection
+
+The accumulated projection is positional and tuple-style: `Item1` is the base (left-hand) source, `Item2`
+the first joined source and `ItemN` the *N*-th source added, in join order. The names are not semantic —
+nothing in `Item1`/`Item2` says which side is the "order" and which the "customer" — so give them meaning
+by projecting into a named type right after the join and threading that type through the rest of the query:
+
+```csharp
+var rows = await dataContext.From<ISimpleEntity>()
+    .Join(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+    .Select(p => new { Order = p.Item1.Id, Customer = p.Item2.RequiredString })
+    .ToListAsync();
+```
+
+```sql
+select t1.id as 'Order', t2.requiredstring as 'Customer' from simple_entity as 't1' join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
+```
+
+A projection member must be a column of one of the joined entities (`p.Item1.Id`); referring to an entity
+as a whole (`Order = p.Item1`) is not a column and is rejected. When you need several columns from the same
+side, list each of them explicitly.
+
 ## Outer joins
 
 [`LeftJoin`](xref:NextORM.Core.EntityBuilder`1) keeps every row of the left side and fills the right side with `NULL` when there is no
@@ -178,10 +200,36 @@ var rows = dataContext.From<ISimpleEntity>()
 ... from simple_entity as t1 left join lateral (select ...) as t2 on true
 ```
 
-> **Correlation is not expressible yet.** The applied source cannot reference columns of the left-hand
-> row, because there is no public API to author an outer-row reference inside a `FROM` subquery. Until
-> that lands, [`CrossApply`](xref:NextORM.Core.EntityBuilder`1)/[`OuterApply`](xref:NextORM.Core.EntityBuilder`1) are equivalent to a `CROSS JOIN`/`LEFT JOIN` over a non-correlated
-> source and are rejected by dialects without a lateral source (`SupportsApply == false`).
+### Correlated APPLY / LATERAL
+
+The applied source can reference columns of the left-hand row by building it inside a lambda that
+receives that row. [`CrossApply`](xref:NextORM.Core.EntityBuilder`1)/[`OuterApply`](xref:NextORM.Core.EntityBuilder`1) accept such a lambda in two forms: one returning a
+`QueryCommand<T>` (a projected derived query) and one returning an `EntityBuilder<T>` (the whole
+entity).
+
+```csharp
+var rows = await dataContext.From<ISimpleEntity>()
+    .CrossApply(s => dataContext.From<IComplexEntity>()
+        .Where(c => c.Id == s.Id)
+        .Select(c => new { c.Id, c.RequiredString }))
+    .Select(p => new { p.Item1.Id, p.Item2.RequiredString })
+    .ToListAsync();
+```
+
+```sql
+-- SQL Server
+... from simple_entity as [t1] cross apply (select ... from complex_entity as [t2] where t2.id = t1.id) as [t3]
+-- PostgreSQL / MySQL / MariaDB
+... from simple_entity as t1 cross join lateral (select ...) as t3
+```
+
+The lambda parameter behaves like the outer parameter of a correlated scalar subquery: a column of the
+left-hand row (here `s.Id`) becomes an outer reference resolved to the left-hand table alias.
+[`OuterApply`](xref:NextORM.Core.EntityBuilder`1) also keeps left-hand rows whose applied source is empty, projecting `NULL`s.
+
+Correlation needs a lateral source: dialects with `SupportsApply == false` (SQLite, ClickHouse) reject a
+correlated apply with `NotSupportedException`, as does the in-memory provider. A correlated apply cannot
+reference a join projection; apply it to a single-entity source instead.
 
 ## Joining a subquery
 
@@ -197,6 +245,51 @@ var rows = await dataContext.From<ISimpleEntity>()
     .Join(subQuery, (s, c) => s.Id == c.Id)
     .Select(p => new { p.Item1.Id, p.Item2.RequiredString })
     .ToListAsync();
+```
+
+## Joining a derived query as the primary source
+
+A `QueryCommand<T>` can also be the **primary** `FROM` source, with the joined table written second:
+
+```csharp
+var derived = dataContext.From<IComplexEntity>()
+    .Where(c => c.Id > 0)
+    .Select(c => new { c.Id, c.RequiredString });
+
+var rows = await dataContext.From(derived)
+    .Join(dataContext.From<ISimpleEntity>(), (d, s) => d.Id == s.Id)
+    .Select(p => new { p.Item1.Id, SId = p.Item2.Id })
+    .ToListAsync();
+```
+
+```sql
+select t1.id, t2.id as 'SId' from (select id, requiredstring from complex_entity where (id > 0)) as 't1' join simple_entity as 't2' on cast(t1.id as bigint) = t2.id
+```
+
+A `Where` may be written before the join; it is applied to the derived table (`d => d.Id > 5` becomes a
+filter on the derived source, `where t1.id > 5`). Any other modifier (`OrderBy`, `GroupBy`, `Distinct`,
+paging, ...) must be applied **inside** the derived query, because moving it past the join would change
+the query's meaning — the builder throws `NotSupportedException` instead of silently relocating it. The
+join works on every SQL provider; the in-memory provider rejects it.
+
+The derived query may itself contain joins: its `Select` projection becomes the derived table's columns,
+and those members can be referenced by the follow-up `Where`/`Join`. Every source is aliased
+positionally (`t1`, `t2`, ...), so the outer join never reuses an alias from inside the derived query:
+
+```csharp
+var derived = dataContext.From<ISimpleEntity>()
+    .Join(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+    .Select(p => new { OrderId = p.Item1.Id, CustomerName = p.Item2.RequiredString });
+
+var rows = await dataContext.From(derived)
+    .Where(d => d.CustomerName != null)
+    .Join(dataContext.From<IComplexEntity>(), (d, c2) => d.OrderId == c2.Id)
+    .Select(p => new { p.Item1.OrderId, p.Item1.CustomerName, Third = p.Item2.RequiredString })
+    .ToListAsync();
+```
+
+```sql
+select t3.OrderId, t3.CustomerName, t4.requiredstring as 'Third' from (select t1.id as 'OrderId', t2.requiredstring as 'CustomerName' from simple_entity as 't1' join complex_entity as 't2' on cast(t1.id as bigint) = t2.id) as 't3' join complex_entity as 't4' on cast(t3.OrderId as bigint) = t4.id where t3.CustomerName is not null
 ```
 
 ## Joining a raw table
@@ -331,7 +424,7 @@ supported. See [Provider-specific SQL](provider-specific/overview.md) for the fu
 | PostgreSQL | `as "t1"` | required | left/right/full supported | `CROSS JOIN LATERAL` / `LEFT JOIN LATERAL ... ON true` |
 | MySQL / MariaDB | `as \`t1\`` | required | left/right supported (no full) | `CROSS JOIN LATERAL` / `LEFT JOIN LATERAL ... ON true` |
 | ClickHouse | `as \`t1\`` | required | left/right/full supported | not supported (`NotSupportedException`) |
-| In-memory | not applicable (delegate execution) | not applicable | inner/left/right/full/cross supported; APPLY and table-valued function sources are not | not supported |
+| In-memory | not applicable (delegate execution) | not applicable | inner/left/right/full/cross supported; APPLY and table-valued function sources are not | not supported (correlated apply included) |
 
 The in-memory provider compiles the join condition to a delegate and loops, so it does not emit SQL;
 it supports [`Inner`](xref:NextORM.Core.JoinType.Inner), [`Left`](xref:NextORM.Core.JoinType.Left), [`Right`](xref:NextORM.Core.JoinType.Right), [`Full`](xref:NextORM.Core.JoinType.Full) and [`Cross`](xref:NextORM.Core.JoinType.Cross) joins (see
@@ -350,8 +443,10 @@ it supports [`Inner`](xref:NextORM.Core.JoinType.Inner), [`Left`](xref:NextORM.C
 ---
 
 Source: `tests/nextorm.integration.tests/CommonTestSuite.Join.cs:9`,
+`tests/nextorm.integration.tests/CommonTestSuite.Join.cs:226`,
 `tests/nextorm.core.tests/InMemoryJoinTests.cs:14`,
 `tests/nextorm.sqlite.tests/SqlGenerationTests.cs:320`,
+`tests/nextorm.sqlite.tests/SqlGenerationTests.cs:2282`,
 `tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:379`,
 `tests/nextorm.postgres.tests/SqlGenerationTests.cs:312`
 (and the other provider `SqlGenerationTests.cs`).

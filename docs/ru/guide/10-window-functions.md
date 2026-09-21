@@ -37,6 +37,9 @@ public sealed class WindowFunction<T>
     public T Over(Expression<Func<object?>>[]? partitionBy,
                   WindowOrder[]? orderBy = null,
                   WindowFrame? frame = null);
+
+    // reference a named window declared on the query (see "Named windows")
+    public T Over(string windowName);
 }
 ```
 
@@ -63,6 +66,8 @@ public sealed class WindowFunction<T>
 | Сегменты (бакеты) | `ntile(buckets)` | `ntile(n)` |
 | Предыдущее значение | `lag(property[, offset[, defaultValue]])` | `lag(expr, offset[, default])` |
 | Следующее значение | `lead(property[, offset[, defaultValue]])` | `lead(expr, offset[, default])` |
+| Предыдущее значение в рамке (ClickHouse) | `SqlFunctions.ClickHouse.lag_in_frame(property[, offset[, defaultValue]])` | `lagInFrame(expr, offset[, default])` |
+| Следующее значение в рамке (ClickHouse) | `SqlFunctions.ClickHouse.lead_in_frame(property[, offset[, defaultValue]])` | `leadInFrame(expr, offset[, default])` |
 | Первое в рамке | `first_value(property)` | `first_value(expr)` |
 | Последнее в рамке | `last_value(property)` | `last_value(expr)` |
 | N-е в рамке | `nth_value(property, n)` | `nth_value(expr, n)` |
@@ -165,6 +170,37 @@ var rows = dataContext.From<IComplexEntity>()
 select id, lag(id, 1, 0) over (order by id) as 'prev', lead(nullableint, 2, 0) over (order by id) as 'next' from complex_entity
 ```
 
+### `lagInFrame` / `leadInFrame` (ClickHouse)
+
+[`lagInFrame`/`leadInFrame`](xref:NextORM.Core.ClickHouseFunctions) в ClickHouse — аналоги `lag`/`lead`,
+учитывающие фрейм; они доступны как `SqlFunctions.ClickHouse.lag_in_frame`/`lead_in_frame`
+([`SupportsInFrameWindowFunctions`](xref:NextORM.Core.ISqlDialect.SupportsInFrameWindowFunctions)). Обычные
+`lag`/`lead` смотрят на весь партишен и на ClickHouse отвергают явный фрейм с `BAD_ARGUMENTS`;
+frame-варианты вычисляются внутри упорядоченного фрейма, поэтому частичный фрейм может дать значение по
+умолчанию там, где стандартная функция вернула бы строку партишена:
+
+```csharp
+var startingFrame = WindowFrame.Rows(WindowFrameBound.CurrentRow, WindowFrameBound.Following(1));
+
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        e.Id,
+        prev = SqlFunctions.Sql.lag(e.Id, 1, 0L).Over(SqlFunctions.Sql.asc(() => e.Id)),
+        prevInFrame = SqlFunctions.ClickHouse.lag_in_frame(e.Id, 1, 0L)
+            .Over(SqlFunctions.Sql.asc(() => e.Id), startingFrame)
+    })
+    .ToList();
+```
+
+```sql
+-- ClickHouse: во фрейме [current row, 1 following] нет предшествующей строки, поэтому prevInFrame всегда 0
+select id,
+       lag(id, 1, 0) over (order by id) as `prev`,
+       lagInFrame(id, 1, 0) over (order by id rows between current row and 1 following) as `prevInFrame`
+from complex_entity
+```
+
 ## Оконные агрегаты
 
 ```csharp
@@ -191,6 +227,7 @@ select id, sum(id) over (partition by nullableint) as 'total', count(*) over (pa
 |---|---|
 | [`Rows`](xref:NextORM.Core.WindowFrame) | `rows between <start> and <end>` |
 | [`Range`](xref:NextORM.Core.WindowFrame) | `range between <start> and <end>` |
+| [`Groups`](xref:NextORM.Core.WindowFrame.Groups) | `groups between <start> and <end>` (группы-ровесники) |
 | [`Rows`](xref:NextORM.Core.WindowFrame) | `rows between <preceding> preceding and <following> following` |
 | [`RowsUnboundedPrecedingToCurrentRow`](xref:NextORM.Core.WindowFrame.RowsUnboundedPrecedingToCurrentRow) | `rows between unbounded preceding and current row` |
 | [`RangeUnboundedPrecedingToCurrentRow`](xref:NextORM.Core.WindowFrame.RangeUnboundedPrecedingToCurrentRow) | `range between unbounded preceding and current row` |
@@ -224,17 +261,67 @@ var rows = dataContext.From<IComplexEntity>()
 select id, sum(id) over (order by id rows between unbounded preceding and current row) as 'running', sum(id) over (order by id rows between 1 preceding and 1 following) as 'sliding' from complex_entity
 ```
 
+Рамка может исключать строки вокруг текущей через
+[`WindowFrame.WithExclusion`](xref:NextORM.Core.WindowFrame.WithExclusion) и
+[`WindowFrameExclusion`](xref:NextORM.Core.WindowFrameExclusion):
+
+| Исключение | Генерирует |
+|---|---|
+| [`NoOthers`](xref:NextORM.Core.WindowFrameExclusion.NoOthers) | `exclude no others` (по умолчанию) |
+| [`CurrentRow`](xref:NextORM.Core.WindowFrameExclusion.CurrentRow) | `exclude current row` |
+| [`Group`](xref:NextORM.Core.WindowFrameExclusion.Group) | `exclude group` (текущая строка и её ровесники) |
+| [`Ties`](xref:NextORM.Core.WindowFrameExclusion.Ties) | `exclude ties` (только ровесники) |
+
+## Именованные окна
+
+Спецификацию окна можно объявить один раз на запросе и переиспользовать несколькими оконными
+функциями — генерируется один SQL-`WINDOW`-клауза. Объявите её через
+`EntityBuilder<TEntity>.Window(name, partitionBy, orderBy, frame)` и ссылайтесь через
+`Over("name")`; ключи `ORDER BY` строятся хелперами `Asc`/`Desc` у builder'а.
+
+```csharp
+var e = dataContext.From<IComplexEntity>();
+
+var rows = e
+    .Window("w", partitionBy: [x => x.Int], orderBy: [e.Asc(x => x.Id)])
+    .Select(x => new
+    {
+        x.Id,
+        rn = SqlFunctions.Sql.row_number().Over("w"),
+        total = SqlFunctions.Sql.sum_over(x.Id).Over("w")
+    })
+    .ToList();
+```
+
+```sql
+select id, row_number() over w as 'rn', sum(id) over w as 'total' from complex_entity window w as (partition by nullableint order by id)
+```
+
+Имя должно быть обычным SQL-идентификатором. Повтор имени на одном запросе, недопустимое имя или
+`Window` перед последующим `Join` отклоняются. Именованные окна поддерживают PostgreSQL, MySQL,
+MariaDB, ClickHouse и SQLite ([`SupportsNamedWindows`](xref:NextORM.Core.ISqlDialect.SupportsNamedWindows));
+в SQL Server нет `WINDOW`-клаузы, поэтому запрос отклоняется через `NotSupportedException`.
+
 ## Различия между провайдерами
 
-Оконные функции соответствуют ANSI, и каждый SQL-провайдер, поддерживаемый nextorm, поддерживает обе
-единицы рамки, поэтому генерируемый SQL одинаков, за исключением заключения в кавычки идентификаторов
-(одинарные кавычки, квадратные скобки или двойные кавычки для псевдонима; см.
+Оконные функции соответствуют ANSI, и каждый SQL-провайдер, поддерживаемый nextorm, поддерживает
+единицы рамки `ROWS` и `RANGE`, поэтому большая часть SQL одинакова, за исключением заключения в
+кавычки идентификаторов (одинарные кавычки, квадратные скобки или двойные кавычки для псевдонима; см.
 [Обзор провайдеров](../providers/overview.md)). Пару `percent_rank()`/`cume_dist()` поддерживают все
 провайдеры ([`SupportsPercentRankCumeDist`](xref:NextORM.Core.ISqlDialect.SupportsPercentRankCumeDist)).
 Единственная непереносимая value-функция — `nth_value`: в SQL Server нет `NTH_VALUE`, поэтому
 [`SupportsNthValue`](xref:NextORM.Core.ISqlDialect.SupportsNthValue) заставляет его отклонять вызов
 через `NotSupportedException`, тогда как PostgreSQL, MySQL/MariaDB, SQLite и ClickHouse рендерят
 `nth_value(expr, n)`.
+
+Новые возможности гейтятся по отдельности:
+
+- **Именованные окна** ([`SupportsNamedWindows`](xref:NextORM.Core.ISqlDialect.SupportsNamedWindows)) —
+  PostgreSQL, MySQL, MariaDB, ClickHouse и SQLite; в SQL Server нет `WINDOW`-клаузы.
+- **Единица рамки `GROUPS`** ([`SupportsWindowFrameGroups`](xref:NextORM.Core.ISqlDialect.SupportsWindowFrameGroups)) —
+  PostgreSQL (11+), ClickHouse и SQLite (3.28+); SQL Server, MySQL и MariaDB её отклоняют.
+- **`EXCLUDE` рамки** ([`SupportsWindowFrameExclusion`](xref:NextORM.Core.ISqlDialect.SupportsWindowFrameExclusion)) —
+  PostgreSQL и SQLite; SQL Server, MySQL, MariaDB и ClickHouse её отклоняют.
 
 Второе исключение — оконные квантили: `percentile_cont`/`percentile_disc` непереносимы как оконные
 функции. SQL Server и MariaDB рендерят их как
@@ -246,12 +333,12 @@ MySQL, SQLite и ClickHouse отклоняют оконную форму чер�
 
 | Провайдер | Поведение |
 |---|---|
-| SQLite | Полная поддержка `OVER`; псевдонимы столбцов в одинарных кавычках (`as 'rn'`). |
-| SQL Server | Полная поддержка `OVER`; нет `nth_value`; псевдонимы в квадратных скобках (`as [rn]`). |
-| PostgreSQL | Полная поддержка `OVER`; псевдонимы в двойных кавычках (`as "rn"`). |
-| MySQL | Полная поддержка `OVER`; псевдонимы столбцов в обратных кавычках (`` as `rn` ``). |
-| MariaDB | Полная поддержка `OVER`; псевдонимы в обратных кавычках. |
-| ClickHouse | Поддержка `OVER`; псевдонимы в обратных кавычках. |
+| SQLite | Полная поддержка `OVER`, именованные окна, `GROUPS` и `EXCLUDE`; псевдонимы столбцов в одинарных кавычках (`as 'rn'`). |
+| SQL Server | Полная поддержка `OVER`; нет именованных окон, `GROUPS`, `EXCLUDE` и `nth_value`; псевдонимы в квадратных скобках (`as [rn]`). |
+| PostgreSQL | Полная поддержка `OVER`, именованные окна, `GROUPS` (11+) и `EXCLUDE`; псевдонимы в двойных кавычках (`as "rn"`). |
+| MySQL | Поддержка `OVER` и именованных окон; нет `GROUPS`, нет `EXCLUDE`; псевдонимы столбцов в обратных кавычках (`` as `rn` ``). |
+| MariaDB | Поддержка `OVER` и именованных окон; нет `GROUPS`, нет `EXCLUDE`; псевдонимы в обратных кавычках. |
+| ClickHouse | Поддержка `OVER`, именованных окон и `GROUPS`; нет `EXCLUDE`; псевдонимы в обратных кавычках. |
 | In-memory | Не применимо: оконные функции рендерятся SQL-диалектами и не являются частью провайдера in-memory. |
 
 ## См. также
@@ -262,8 +349,8 @@ MySQL, SQLite и ClickHouse отклоняют оконную форму чер�
 
 ---
 
-Source: `src/nextorm.core/Query/WindowFunctions.cs:16` ([`WindowFunction<T>`](xref:NextORM.Core.WindowFunction`1)), `:56` ([`WindowOrder`](xref:NextORM.Core.WindowOrder)), `:72`/`:79` (frame enums), `:89` ([`WindowFrameBound`](xref:NextORM.Core.WindowFrameBound)), `:118` ([`WindowFrame`](xref:NextORM.Core.WindowFrame)); `src/nextorm.core/Query/SqlFunctions.cs:308` (`asc`/`desc`), `:314` (functions);
-`src/nextorm.core/Visitors/BaseExpressionVisitor.cs:621`;
-`tests/nextorm.integration.tests/CommonTestSuite.Window.cs:14`, `:33`, `:54`, `:72`, `:99`;
-`tests/nextorm.core.tests/WindowFunctionMarkerTests.cs:28`, `:64`;
-generated SQL: `tests/nextorm.sqlite.tests/SqlGenerationTests.cs:1266`, `:1281`, `:1297`, `:1314`, `:1330`, `:1346`, `:1366`, `:1383`, `:1401`, `:1422`.
+Source: `src/nextorm.core/Query/WindowFunctions.cs` ([`WindowFunction<T>`](xref:NextORM.Core.WindowFunction`1), [`WindowOrder`](xref:NextORM.Core.WindowOrder), frame enums, [`WindowFrameBound`](xref:NextORM.Core.WindowFrameBound), [`WindowFrame`](xref:NextORM.Core.WindowFrame)); `src/nextorm.core/Query/WindowDefinition.cs` ([`WindowDefinition`](xref:NextORM.Core.WindowDefinition), [`NamedWindowOrderKey`](xref:NextORM.Core.NamedWindowOrderKey)); `src/nextorm.core/Query/SqlFunctions.cs` (`asc`/`desc`, functions);
+`src/nextorm.core/Visitors/WindowFunctionTranslator.cs`, `src/nextorm.core/Visitors/WindowSql.cs`;
+`tests/nextorm.integration.tests/CommonTestSuite.Window.cs`, `tests/nextorm.integration.tests/PostgresSpecificTests.cs` (named windows/`GROUPS`/`EXCLUDE`);
+`tests/nextorm.core.tests/WindowFunctionMarkerTests.cs`;
+generated SQL: `tests/nextorm.postgres.tests/SqlGenerationTests.cs`, `tests/nextorm.sqlite.tests/SqlGenerationTests.cs`.

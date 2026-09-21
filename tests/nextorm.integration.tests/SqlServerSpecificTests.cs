@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using FluentAssertions;
 using NextORM.Core;
@@ -215,5 +216,104 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
             .Select(e => e.String!.LastIndexOf("d"))
             .First()
             .Should().Be(6);
+    }
+
+    [SqlTable("xml_entity")]
+    public interface IXmlEntity
+    {
+        [Key]
+        [Column("id")]
+        int Id { get; set; }
+        [Column("payload")]
+        string? Payload { get; set; }
+    }
+
+    [Fact]
+    public void XmlMethods_ShouldReturnValues()
+    {
+        var e = _sut.DataProvider.From<IXmlEntity>();
+
+        var r = e.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Value = SqlFunctions.SqlServer.xml_value<string>(x.Payload, "(/root/item)[1]", "nvarchar(100)"),
+                Query = SqlFunctions.SqlServer.xml_query(x.Payload, "/root/item[1]"),
+                Exists = SqlFunctions.SqlServer.xml_exist(x.Payload, "/root/item[2]")
+            })
+            .First();
+
+        r.Value.Should().Be("alpha");
+        r.Query.Should().Contain("alpha");
+        r.Exists.Should().BeTrue();
+    }
+
+    [SqlTable("pivot_entity")]
+    private interface IPivotEntity
+    {
+        [Key]
+        [Column("id")]
+        int Id { get; set; }
+        [Column("q1")]
+        int? Q1 { get; set; }
+        [Column("q2")]
+        int? Q2 { get; set; }
+    }
+
+    [Fact]
+    public void Pivot_ShouldReshapeRows()
+    {
+        var row = _sut.SimpleEntity
+            .Pivot(PivotAggregate.Count, x => x.Id, x => x.Id, PivotValue.Create("1"), PivotValue.Create("2"))
+            .Select(t => new { One = t.GetNullableInt32("[1]"), Two = t.GetNullableInt32("[2]") })
+            .First();
+
+        row.One.Should().Be(1);
+        row.Two.Should().Be(1);
+    }
+
+    [Fact]
+    public void Unpivot_ShouldStackColumns()
+    {
+        var rows = _sut.DataProvider.From<IPivotEntity>()
+            .Unpivot("val", "qtr", UnpivotColumn.Create("q1"), UnpivotColumn.Create("q2"))
+            .Select(t => new { Id = t.GetInt32("id"), Qtr = t.GetString("qtr"), Val = t.GetNullableInt32("val") })
+            .ToList();
+
+        rows.Should().HaveCount(4);
+        rows.Should().Contain(r => r.Id == 1 && r.Qtr == "q1" && r.Val == 10);
+        rows.Should().Contain(r => r.Id == 2 && r.Qtr == "q2" && r.Val == 40);
+    }
+
+    [Fact]
+    public void Pivot_ShouldReshapeDerivedSource()
+    {
+        var derived = _sut.SimpleEntity
+            .Where(x => x.Id <= 2)
+            .Select(x => new { x.Id });
+
+        var row = _sut.DataProvider.From(derived)
+            .Pivot(PivotAggregate.Count, x => x.Id, x => x.Id, PivotValue.Create("1"), PivotValue.Create("2"))
+            .Select(t => new { One = t.GetNullableInt32("[1]"), Two = t.GetNullableInt32("[2]") })
+            .First();
+
+        row.One.Should().Be(1);
+        row.Two.Should().Be(1);
+    }
+
+    [Fact]
+    public void Unpivot_ShouldStackDerivedColumns()
+    {
+        var derived = _sut.DataProvider.From<IPivotEntity>()
+            .Where(x => x.Id > 0)
+            .Select(x => new { x.Id, x.Q1, x.Q2 });
+
+        var rows = _sut.DataProvider.From(derived)
+            .Unpivot("val", "qtr", UnpivotColumn.Create("q1"), UnpivotColumn.Create("q2"))
+            .Select(t => new { Id = t.GetInt32("id"), Qtr = t.GetString("qtr"), Val = t.GetNullableInt32("val") })
+            .ToList();
+
+        rows.Should().HaveCount(4);
+        rows.Should().Contain(r => r.Id == 1 && r.Qtr == "q1" && r.Val == 10);
+        rows.Should().Contain(r => r.Id == 2 && r.Qtr == "q2" && r.Val == 40);
     }
 }

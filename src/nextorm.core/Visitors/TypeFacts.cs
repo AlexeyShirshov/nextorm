@@ -52,9 +52,14 @@ internal static class TypeFacts
         static bool IsNumeric(Type t) => t == typeof(byte) || t == typeof(short) || t == typeof(int)
             || t == typeof(long) || t == typeof(float) || t == typeof(double) || t == typeof(decimal);
 
+        // Unsigned CLR types (ClickHouse's native UInt*) are valid conversion sources; the target must
+        // still be a type the dialects know how to name.
+        static bool IsConversionSource(Type t) => IsNumeric(t) || t == typeof(sbyte)
+            || t == typeof(ushort) || t == typeof(uint) || t == typeof(ulong);
+
         var unwrappedSource = Unwrap(source);
         underlyingTarget = Unwrap(target);
 
-        return IsNumeric(unwrappedSource) && IsNumeric(underlyingTarget) && unwrappedSource != underlyingTarget;
+        return IsConversionSource(unwrappedSource) && IsNumeric(underlyingTarget) && unwrappedSource != underlyingTarget;
     }
 }

@@ -1,6 +1,6 @@
 # Subqueries
 
-> Use a `QueryCommand<T>` as a `FROM` source, as a scalar value in a projection, `WHERE` or `ORDER BY`, or as a correlated `EXISTS` / `IN` / `ANY` / `ALL` predicate.
+> Use a `QueryCommand<T>` as a `FROM` source, as a scalar value in a projection, `WHERE`, `ORDER BY` or `HAVING`, or as a correlated `EXISTS` / `IN` / `ANY` / `ALL` predicate.
 
 **Prerequisites:** [Querying and projections](01-querying-and-projections.md) · [Filtering (WHERE)](02-filtering-where.md) · [Joins](03-joins.md)
 
@@ -10,7 +10,7 @@ Any `QueryCommand<T>` — the object you get back from `EntityBuilder<T>.Select(
 another query in four ways:
 
 * as a **derived table** in `FROM`, through [`From`](xref:NextORM.Core.DataContext);
-* as a **scalar subquery** in a projection, `WHERE` or `ORDER BY`, by calling a single-row terminal
+* as a **scalar subquery** in a projection, `WHERE`, `ORDER BY` or `HAVING`, by calling a single-row terminal
   such as [`First`](xref:NextORM.Core.EntityBuilder`1) or [`Single`](xref:NextORM.Core.EntityBuilder`1) inside the outer expression;
 * as a **correlated predicate** with `SqlFunctions.Sql.exists(...)`, `SqlFunctions.Sql.@in(column, query)`,
   `SqlFunctions.Sql.any(query)` or `SqlFunctions.Sql.all(query)`.
@@ -135,7 +135,7 @@ Output:
 
 A scalar subquery may reference a member of the outer query; nextorm then qualifies it with the outer
 table alias. This works on every SQL provider and in every value position (projection, `WHERE`,
-`ORDER BY`):
+`ORDER BY`, `HAVING`):
 
 ```csharp
 var rows = await dataContext.From<IComplexEntity>()
@@ -167,12 +167,47 @@ select t1.id, (select top(1) t3.id from complex_entity as [t3]
  where t3.id = cast(t1.id as bigint)) as [cid] from simple_entity as [t1] join complex_entity as [t2] on cast(t1.id as bigint) = t2.id
 ```
 
-Two limits apply:
+A subquery may also appear in `HAVING`, where it can reference the grouping key. It is prepared through
+the same correlated-query visitor as `WHERE`:
 
-* a subquery nested inside another correlated subquery (correlation depth greater than one) throws
-  `NotSupportedException` instead of producing the wrong SQL;
-* the in-memory provider cannot bind the outer row while executing the inner query, so correlated
-  subqueries throw `NotSupportedException` there. Use a SQL provider for correlated queries.
+```csharp
+var rows = await dataContext.From<IComplexEntity>()
+    .Where(e => e.Int != null)
+    .GroupBy(e => new { e.Int })
+    .Having(g => SqlFunctions.Sql.exists(dataContext.From<IComplexEntity>().Where(c => c.Int == g.Int)))
+    .Select(g => new { g.Int, count = SqlFunctions.Sql.count() })
+    .ToListAsync();
+```
+
+The outer reference may be wrapped in a scalar function over the outer column (for example
+`e.String.ToUpper()`); the function is rendered around the qualified outer alias just like any other
+expression.
+
+An aggregate terminal ([`Count`](xref:NextORM.Core.EntityBuilder`1), `Sum(...)`, `Min`/`Max`/`Avg`, ...)
+is translated to the matching SQL aggregate over the subquery, so it can be used directly with an outer
+reference:
+
+```csharp
+var rows = await dataContext.From<IComplexEntity>()
+    .Select(it => new { it.Id, cnt = dataContext.From<IComplexEntity>().Where(c => c.Id == it.Id).Count() })
+    .ToListAsync();
+```
+
+```sql
+select t1.id, (select count(*) from complex_entity as 't2'
+ where cast(t2.id as bigint) = t1.id
+limit 1) as 'cnt' from complex_entity as 't1'
+```
+
+Correlation nests arbitrarily: a correlated subquery may itself contain a correlated subquery, and
+each outer reference resolves to the alias of the scope that declared it.
+
+One limit applies: the in-memory provider cannot bind the outer row while executing the inner query,
+so correlated subqueries throw `NotSupportedException` there. Use a SQL provider for correlated queries.
+
+On SQLite a numeric `Single`/`SingleOrDefault` over more than one row raises a database error through a
+rendered count guard (the provider does not enforce scalar-subquery cardinality); a non-numeric
+projection is rejected with `NotSupportedException`.
 
 ## Correlated EXISTS
 
@@ -271,9 +306,6 @@ SQL provider. On SQL Server a boolean-valued subquery predicate projected as a s
 
 * Nested correlation (a subquery that references an outer reference of another subquery) is rejected
   with `NotSupportedException`; keeping it explicit avoids binding an outer marker to the wrong query.
-* Aggregate terminals ([`Count`](xref:NextORM.Core.EntityBuilder`1), `Sum(...)`, ...) cannot be used as a subquery projection because
-  they execute immediately; use `SqlFunctions.Sql.count()` (or the matching [`Sql`](xref:NextORM.Core.SqlFunctions.Sql) aggregate) or call the
-  terminal on its own. Using one inside a subquery throws `NotSupportedException`.
 * The in-memory provider rejects correlated subqueries (see above).
 
 ## See also

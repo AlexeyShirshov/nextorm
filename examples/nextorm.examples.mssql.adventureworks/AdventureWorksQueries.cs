@@ -5,12 +5,17 @@ using NextORM.Core;
 namespace NextORM.Examples.SqlServer.AdventureWorks;
 
 /// <summary>
-/// The five demo queries from <c>docs/specs/mssql-demodb</c> plus six extra course-style exercises
-/// (see <c>examples/README.md</c>), expressed with the nextorm LINQ API.
+/// The five demo queries from <c>Sql/</c> plus six extra course-style exercises (see
+/// <c>README.md</c>), expressed with the nextorm LINQ API. Each method's comment names the SQL file it
+/// models and states whether it is <c>WORKING</c>; when it is not, the comment says why (with the
+/// roadmap document that tracks the gap). <c>README.md</c> maps every SQL construct to the nextorm
+/// construct that replaces it.
 /// </summary>
 public static class AdventureWorksQueries
 {
-    // 1. mssql_vip_churn.sql
+    // 1. Sql/mssql_vip_churn.sql
+    // WORKING: two CTEs (CustomerOrders, CustomerMetrics) expressed as CTEs; CustomerMetrics groups
+    // CustomerOrders by name; the outer query LEFT JOINs it to SalesPerson/Person. FORMAT uses DemoUdf.
     public static async Task VipChurn(IDataContext ctx, CancellationToken ct)
     {
         // CTE CustomerOrders; the manager join stays in the outer SELECT.
@@ -19,46 +24,50 @@ public static class AdventureWorksQueries
             .Join(ctx.From<IPerson>(), (p, per) => p.Item2.PersonId == per.BusinessEntityId)
             .Select(p => new
             {
-                p.Item1.CustomerId,
+                CustomerID = p.Item1.CustomerId,
                 CustomerName = p.Item3.FirstName + " " + p.Item3.LastName,
-                p.Item1.SalesOrderId,
-                p.Item1.OrderDate,
-                p.Item1.TotalDue,
-                p.Item1.SalesPersonId,
+                SalesOrderID = p.Item1.SalesOrderId,
+                OrderDate = p.Item1.OrderDate,
+                TotalDue = p.Item1.TotalDue,
+                SalesPersonID = p.Item1.SalesPersonId,
                 LastCompanyOrderDate = SqlFunctions.Sql.max_over(p.Item1.OrderDate).Over(),
                 PrevOrderDate = SqlFunctions.Sql.lag(p.Item1.OrderDate)
                     .Over(partitionBy: () => p.Item1.CustomerId, orderBy: () => p.Item1.OrderDate)
             });
 
         // CTE CustomerMetrics
-        var metrics = ctx.From(customerOrders)
-            .GroupBy(c => new { c.CustomerId, c.CustomerName, c.SalesPersonId })
+        var metrics = ctx.From("CustomerOrders")
+            .GroupBy(c => new
+            {
+                CustomerID = c.GetInt32("CustomerID"),
+                CustomerName = c.GetString("CustomerName"),
+                SalesPersonID = c.GetNullableInt32("SalesPersonID")
+            })
             .Select(c => new
             {
-                c.CustomerId,
-                c.CustomerName,
-                c.SalesPersonId,
-                LifetimeValue = SqlFunctions.Sql.sum(c.TotalDue),
-                LastPurchaseDate = SqlFunctions.Sql.max(c.OrderDate),
+                CustomerID = c.GetInt32("CustomerID"),
+                CustomerName = c.GetString("CustomerName"),
+                SalesPersonID = c.GetNullableInt32("SalesPersonID"),
+                LifetimeValue = SqlFunctions.Sql.sum(c.GetDecimal("TotalDue")),
+                LastPurchaseDate = SqlFunctions.Sql.max(c.GetDateTime("OrderDate")),
                 DaysSinceLastOrder = SqlFunctions.Sql.date_diff("day",
-                    SqlFunctions.Sql.max(c.OrderDate), SqlFunctions.Sql.max(c.LastCompanyOrderDate))
+                    SqlFunctions.Sql.max(c.GetDateTime("OrderDate")),
+                    SqlFunctions.Sql.max(c.GetNullableDateTime("LastCompanyOrderDate")))
             });
 
-        // Joining a derived query as the primary FROM source is not supported yet; this mirrors the
-        // original and is expected to fail during preparation. See
-        // docs/specs/roadmap/sql-capabilities-gap-analysis.md, known gap 10.
-        var rows = await ctx.From(metrics)
-            .LeftJoin(ctx.From<ISalesPerson>(), (m, sp) => m.SalesPersonId == sp.BusinessEntityId)
+        var rows = await ctx.With("CustomerOrders", customerOrders).With("CustomerMetrics", metrics)
+            .From("CustomerMetrics")
+            .LeftJoin(ctx.From<ISalesPerson>(), (m, sp) => m.GetNullableInt32("SalesPersonID") == sp.BusinessEntityId)
             .LeftJoin(ctx.From<IPerson>(), (p, per) => p.Item2.BusinessEntityId == per.BusinessEntityId)
-            .Where(p => p.Item1.LifetimeValue > 50000 && p.Item1.DaysSinceLastOrder > 180)
-            .OrderByDescending(p => p.Item1.LifetimeValue)
+            .Where(p => p.Item1.GetDecimal("LifetimeValue") > 50000 && p.Item1.GetInt32("DaysSinceLastOrder") > 180)
+            .OrderByDescending(p => p.Item1.GetDecimal("LifetimeValue"))
             .Select(p => new
             {
-                p.Item1.CustomerId,
-                p.Item1.CustomerName,
-                Ltv = Math.Round(p.Item1.LifetimeValue, 2),
-                LastPurchase = p.Item1.LastPurchaseDate,
-                p.Item1.DaysSinceLastOrder,
+                CustomerID = p.Item1.GetInt32("CustomerID"),
+                CustomerName = p.Item1.GetString("CustomerName"),
+                Ltv = Math.Round(p.Item1.GetDecimal("LifetimeValue"), 2),
+                LastPurchase = DemoUdf.Format(p.Item1.GetDateTime("LastPurchaseDate"), "yyyy-MM-dd"),
+                DaysSinceLastOrder = p.Item1.GetInt32("DaysSinceLastOrder"),
                 Manager = p.Item3.FirstName + " " + p.Item3.LastName
             })
             .ToListAsync(ct);
@@ -66,9 +75,12 @@ public static class AdventureWorksQueries
         Print("1. vip_churn", rows);
     }
 
-    // 2. mssql_rolling_kpi.sql
+    // 2. Sql/mssql_rolling_kpi.sql
+    // WORKING: CTE MonthlySales; the outer query reads it by name, formats via DemoUdf and applies
+    // cumulative/3-month window frames.
     public static async Task RollingKpi(IDataContext ctx, CancellationToken ct)
     {
+        // CTE MonthlySales.
         var monthly = ctx.From<ISalesOrderHeader>()
             .Join(ctx.From<ISalesTerritory>(), (soh, st) => soh.TerritoryId == st.TerritoryId)
             .GroupBy(p => new
@@ -83,29 +95,35 @@ public static class AdventureWorksQueries
                 MonthlyRevenue = SqlFunctions.Sql.sum(p.Item1.TotalDue)
             });
 
-        var rows = await ctx.From(monthly)
-            .OrderBy(m => m.RegionName)
-            .OrderByDescending(m => m.SalesMonth)
+        var rows = await ctx.With("MonthlySales", monthly)
+            .From("MonthlySales")
+            .OrderBy(m => m.GetString("RegionName"))
+            .OrderByDescending(m => m.GetDateTime("SalesMonth"))
             .Select(m => new
             {
-                m.RegionName,
-                Month = m.SalesMonth,
-                m.MonthlyRevenue,
-                Cumulative = SqlFunctions.Sql.sum_over(m.MonthlyRevenue).Over(
-                    partitionBy: () => m.RegionName,
-                    orderBy: () => m.SalesMonth,
-                    frame: WindowFrame.RowsUnboundedPrecedingToCurrentRow),
-                MovingAvg3 = SqlFunctions.Sql.avg_over(m.MonthlyRevenue).Over(
-                    partitionBy: () => m.RegionName,
-                    orderBy: () => m.SalesMonth,
-                    frame: WindowFrame.Rows(WindowFrameBound.Preceding(2), WindowFrameBound.CurrentRow))
+                Region = m.GetString("RegionName"),
+                Month = DemoUdf.Format(m.GetDateTime("SalesMonth"), "yyyy-MM"),
+                MonthlyRevenue = Math.Round(m.GetDecimal("MonthlyRevenue"), 2),
+                Cumulative = Math.Round(
+                    SqlFunctions.Sql.sum_over(m.GetDecimal("MonthlyRevenue")).Over(
+                        partitionBy: () => m.GetString("RegionName"),
+                        orderBy: () => m.GetDateTime("SalesMonth"),
+                        frame: WindowFrame.RowsUnboundedPrecedingToCurrentRow),
+                    2),
+                MovingAvg3 = Math.Round(
+                    SqlFunctions.Sql.avg_over(m.GetDecimal("MonthlyRevenue")).Over(
+                        partitionBy: () => m.GetString("RegionName"),
+                        orderBy: () => m.GetDateTime("SalesMonth"),
+                        frame: WindowFrame.Rows(WindowFrameBound.Preceding(2), WindowFrameBound.CurrentRow)),
+                    2)
             })
             .ToListAsync(ct);
 
         Print("2. rolling_kpi", rows);
     }
 
-    // 3. mssql_supply_chain.sql
+    // 3. Sql/mssql_supply_chain.sql
+    // WORKING: two CTEs (SupplierDelays, ProductionImpact); the outer query joins them by name.
     public static async Task SupplyChain(IDataContext ctx, CancellationToken ct)
     {
         // CTE SupplierDelays
@@ -115,8 +133,8 @@ public static class AdventureWorksQueries
             .Where(p => p.Item1.ModifiedDate > SqlFunctions.Sql.date_add("day", 5, p.Item1.DueDate))
             .Select(p => new
             {
-                p.Item1.ProductId,
-                p.Item2.VendorId,
+                ProductID = p.Item1.ProductId,
+                VendorID = p.Item2.VendorId,
                 VendorName = p.Item3.Name,
                 DelayDays = SqlFunctions.Sql.date_diff("day", p.Item1.DueDate, p.Item1.ModifiedDate)
             });
@@ -127,87 +145,94 @@ public static class AdventureWorksQueries
             .Where(p => p.Item1.EndDate > p.Item1.DueDate)
             .Select(p => new
             {
-                p.Item1.ProductId,
+                ProductID = p.Item1.ProductId,
                 ProductName = p.Item2.Name,
-                p.Item1.OrderQty,
+                OrderQty = p.Item1.OrderQty,
                 ProdDelayDays = SqlFunctions.Sql.date_diff("day", p.Item1.DueDate, p.Item1.EndDate)
             });
 
-        // Joining a derived query as the primary FROM source is not supported yet; this mirrors the
-        // original and is expected to fail during preparation. See
-        // docs/specs/roadmap/sql-capabilities-gap-analysis.md, known gap 10.
-        var rows = await ctx.From(productionImpact)
-            .Join(supplierDelays, (pi, sd) => pi.ProductId == sd.ProductId)
-            .OrderByDescending(p => p.Item1.ProdDelayDays)
-            .OrderByDescending(p => p.Item2.DelayDays)
+        var rows = await ctx.With("SupplierDelays", supplierDelays).With("ProductionImpact", productionImpact)
+            .From("ProductionImpact")
+            .Join(ctx.From("SupplierDelays"), (pi, sd) => pi.GetInt32("ProductID") == sd.GetInt32("ProductID"))
+            .OrderByDescending(p => p.Item1.GetInt32("ProdDelayDays"))
+            .OrderByDescending(p => p.Item2.GetInt32("DelayDays"))
             .Select(p => new
             {
-                Component = p.Item1.ProductName,
-                Vendor = p.Item2.VendorName,
-                SupplyDelay = p.Item2.DelayDays,
-                ProductionQty = p.Item1.OrderQty,
-                AssemblyShift = p.Item1.ProdDelayDays
+                Component = p.Item1.GetString("ProductName"),
+                Vendor = p.Item2.GetString("VendorName"),
+                SupplyDelay = p.Item2.GetInt32("DelayDays"),
+                ProductionQty = p.Item1.GetInt32("OrderQty"),
+                AssemblyShift = p.Item1.GetInt32("ProdDelayDays")
             })
             .ToListAsync(ct);
 
         Print("3. supply_chain", rows);
     }
 
-    // 4. mssql_product_abc_xyz.sql
+    // 4. Sql/mssql_product_abc_xyz.sql
+    // WORKING: three chained CTEs (ProductQuarterlySales, ProductAggregates, AbcRanking); the
+    // running-share windows and CASE-based ABC/XYZ classes are computed over the CTEs.
     public static async Task ProductAbcXyz(IDataContext ctx, CancellationToken ct)
     {
+        // CTE ProductQuarterlySales.
         var quarterly = ctx.From<ISalesOrderDetail>()
             .Join(ctx.From<ISalesOrderHeader>(), (sod, soh) => sod.SalesOrderId == soh.SalesOrderId)
             .Join(ctx.From<IProduct>(), (p, pr) => p.Item1.ProductId == pr.ProductId)
             .GroupBy(p => new
             {
                 p.Item1.ProductId,
-                p.Item3.Name,
+                ProductName = p.Item3.Name,
                 SalesQuarter = SqlFunctions.Sql.date_trunc("quarter", p.Item2.OrderDate)
             })
             .Select(p => new
             {
-                p.Item1.ProductId,
+                ProductID = p.Item1.ProductId,
                 ProductName = p.Item3.Name,
                 SalesQuarter = SqlFunctions.Sql.date_trunc("quarter", p.Item2.OrderDate),
                 QuarterlyRevenue = SqlFunctions.Sql.sum(p.Item1.LineTotal),
                 QuarterlyQty = SqlFunctions.Sql.sum(p.Item1.OrderQty)
             });
 
-        var aggregates = ctx.From(quarterly)
-            .GroupBy(q => new { q.ProductId, q.ProductName })
+        // CTE ProductAggregates.
+        var aggregates = ctx.From("ProductQuarterlySales")
+            .GroupBy(q => new { ProductID = q.GetInt32("ProductID"), ProductName = q.GetString("ProductName") })
             .Select(q => new
             {
-                q.ProductId,
-                q.ProductName,
-                TotalRevenue = SqlFunctions.Sql.sum(q.QuarterlyRevenue),
-                AvgQty = SqlFunctions.Sql.avg((double)q.QuarterlyQty),
-                StdevQty = SqlFunctions.Sql.stdev((double)q.QuarterlyQty)
+                ProductID = q.GetInt32("ProductID"),
+                ProductName = q.GetString("ProductName"),
+                TotalRevenue = SqlFunctions.Sql.sum(q.GetDecimal("QuarterlyRevenue")),
+                AvgQty = SqlFunctions.Sql.avg((double)q.GetInt32("QuarterlyQty")),
+                StdevQty = SqlFunctions.Sql.stdev((double)q.GetInt32("QuarterlyQty"))
             });
 
-        var abc = ctx.From(aggregates)
+        // CTE AbcRanking.
+        var abc = ctx.From("ProductAggregates")
             .Select(a => new
             {
-                a.ProductName,
-                a.TotalRevenue,
-                a.AvgQty,
-                a.StdevQty,
-                RunningPercent = SqlFunctions.Sql.sum_over(a.TotalRevenue).Over(SqlFunctions.Sql.desc(() => a.TotalRevenue))
-                                 / SqlFunctions.Sql.sum_over(a.TotalRevenue).Over()
+                ProductName = a.GetString("ProductName"),
+                TotalRevenue = a.GetDecimal("TotalRevenue"),
+                AvgQty = a.GetNullableDouble("AvgQty"),
+                StdevQty = a.GetNullableDouble("StdevQty"),
+                RunningPercent = SqlFunctions.Sql.sum_over(a.GetDecimal("TotalRevenue"))
+                                      .Over(SqlFunctions.Sql.desc(() => (object?)a.GetDecimal("TotalRevenue")))
+                                  / SqlFunctions.Sql.sum_over(a.GetDecimal("TotalRevenue")).Over()
             });
 
-        var rows = await ctx.From(abc)
-            .OrderByDescending(a => a.TotalRevenue)
+        var rows = await ctx.With("ProductQuarterlySales", quarterly)
+            .With("ProductAggregates", aggregates)
+            .With("AbcRanking", abc)
+            .From("AbcRanking")
+            .OrderByDescending(a => a.GetDecimal("TotalRevenue"))
             .Select(a => new
             {
-                a.ProductName,
-                TotalRevenue = Math.Round(a.TotalRevenue, 2),
-                Abc = a.RunningPercent <= 0.80m ? "A"
-                    : a.RunningPercent <= 0.95m ? "B"
+                ProductName = a.GetString("ProductName"),
+                TotalRevenue = Math.Round(a.GetDecimal("TotalRevenue"), 2),
+                Abc = a.GetDecimal("RunningPercent") <= 0.80m ? "A"
+                    : a.GetDecimal("RunningPercent") <= 0.95m ? "B"
                     : "C",
-                Xyz = a.AvgQty == 0 ? "Z"
-                    : a.StdevQty / a.AvgQty < 0.15 ? "X"
-                    : a.StdevQty / a.AvgQty <= 0.30 ? "Y"
+                Xyz = a.GetNullableDouble("AvgQty") == 0 || a.GetNullableDouble("StdevQty") == null ? "Z"
+                    : a.GetNullableDouble("StdevQty") / a.GetNullableDouble("AvgQty") < 0.15 ? "X"
+                    : a.GetNullableDouble("StdevQty") / a.GetNullableDouble("AvgQty") <= 0.30 ? "Y"
                     : "Z"
             })
             .ToListAsync(ct);
@@ -215,38 +240,46 @@ public static class AdventureWorksQueries
         Print("4. product_abc_xyz", rows);
     }
 
-    // 5. mssql_quarterly_pivot.sql (native PIVOT replaced by conditional SUM(CASE ...))
+    // 5. Sql/mssql_quarterly_pivot.sql
+    // WORKING: a derived query (5-table join with a computed Margin and FOR column) reshaped by the
+    // native PIVOT (EntityBuilder.Pivot now accepts a derived source, not only a plain table/entity).
     public static async Task QuarterlyPivot(IDataContext ctx, CancellationToken ct)
     {
-        var margins = ctx.From<ISalesOrderDetail>()
+        var orderMargins = ctx.From<ISalesOrderDetail>()
             .Join(ctx.From<ISalesOrderHeader>(), (sod, soh) => sod.SalesOrderId == soh.SalesOrderId)
             .Join(ctx.From<IProduct>(), (p, pr) => p.Item1.ProductId == pr.ProductId)
             .Join(ctx.From<IProductSubcategory>(), (p, psc) => p.Item3.ProductSubcategoryId == psc.ProductSubcategoryId)
             .Join(ctx.From<IProductCategory>(), (p, pc) => p.Item4.ProductCategoryId == pc.ProductCategoryId)
-            .Where(p => p.Item2.OrderDate.Year == 2013)
+            .Where(p => SqlFunctions.Sql.extract("year", p.Item2.OrderDate) == 2013)
             .Select(p => new
             {
                 CategoryName = p.Item5.Name,
-                Quarter = SqlFunctions.Sql.date_diff("quarter",
-                    SqlFunctions.Sql.date_from_parts(2013, 1, 1), p.Item2.OrderDate) + 1,
-                Margin = p.Item1.LineTotal - (p.Item3.StandardCost * p.Item1.OrderQty)
+                QuarterNum = SqlFunctions.Sql.extract("quarter", p.Item2.OrderDate),
+                Margin = p.Item1.LineTotal - p.Item3.StandardCost * p.Item1.OrderQty
             });
 
-        var rows = await ctx.From(margins)
-            .GroupBy(m => new { m.CategoryName })
-            .OrderBy(m => m.CategoryName)
-            .Select(m => new QuarterlyPivotRow(
-                m.CategoryName,
-                SqlFunctions.Sql.sum(m.Quarter == 1 ? m.Margin : (decimal?)null),
-                SqlFunctions.Sql.sum(m.Quarter == 2 ? m.Margin : (decimal?)null),
-                SqlFunctions.Sql.sum(m.Quarter == 3 ? m.Margin : (decimal?)null),
-                SqlFunctions.Sql.sum(m.Quarter == 4 ? m.Margin : (decimal?)null)))
+        var rows = await ctx.From(orderMargins)
+            .Pivot(
+                PivotAggregate.Sum,
+                m => m.Margin,
+                m => m.QuarterNum,
+                PivotValue.Create("1"), PivotValue.Create("2"), PivotValue.Create("3"), PivotValue.Create("4"))
+            .OrderBy(t => t.GetString("CategoryName"))
+            .Select(t => new
+            {
+                Category = t.GetString("CategoryName"),
+                Q1 = t.GetNullableDecimal("[1]"),
+                Q2 = t.GetNullableDecimal("[2]"),
+                Q3 = t.GetNullableDecimal("[3]"),
+                Q4 = t.GetNullableDecimal("[4]")
+            })
             .ToListAsync(ct);
 
         Print("5. quarterly_pivot", rows);
     }
 
-    // 6. top_products_by_category (course: ROW_NUMBER() top-N per group)
+    // 6. top_products_by_category
+    // WORKING: ROW_NUMBER() OVER (PARTITION BY category ORDER BY revenue DESC) top-N per group.
     public static async Task TopProductsByCategory(IDataContext ctx, CancellationToken ct)
     {
         var productRevenue = ctx.From<ISalesOrderDetail>()
@@ -290,7 +323,8 @@ public static class AdventureWorksQueries
         Print("6. top_products_by_category", rows);
     }
 
-    // 7. territory_yoy (course: LAG for year-over-year growth)
+    // 7. territory_yoy
+    // WORKING: LAG over a yearly aggregate (year-over-year growth).
     public static async Task TerritoryYearOverYear(IDataContext ctx, CancellationToken ct)
     {
         var yearly = ctx.From<ISalesOrderHeader>()
@@ -330,7 +364,8 @@ public static class AdventureWorksQueries
         Print("7. territory_yoy", rows);
     }
 
-    // 8. customer_rfm (course: NTILE() RFM segmentation)
+    // 8. customer_rfm
+    // WORKING: NTILE(4) OVER (ORDER BY … DESC) RFM segmentation.
     public static async Task CustomerRfm(IDataContext ctx, CancellationToken ct)
     {
         var rfm = ctx.From<ISalesOrderHeader>()
@@ -377,7 +412,8 @@ public static class AdventureWorksQueries
         Print("8. customer_rfm", rows);
     }
 
-    // 9. quota_attainment (course: per-entity target vs actual)
+    // 9. quota_attainment
+    // WORKING: per-entity target vs actual, computed in Select.
     public static async Task QuotaAttainment(IDataContext ctx, CancellationToken ct)
     {
         var rows = await ctx.From<ISalesPerson>()
@@ -396,7 +432,8 @@ public static class AdventureWorksQueries
         Print("9. quota_attainment", rows);
     }
 
-    // 10. territory_growth_mom (course: month-over-month % change)
+    // 10. territory_growth_mom
+    // WORKING: LAG over a monthly aggregate (month-over-month % change).
     public static async Task TerritoryGrowthMonthOverMonth(IDataContext ctx, CancellationToken ct)
     {
         var monthly = ctx.From<ISalesOrderHeader>()
@@ -436,7 +473,8 @@ public static class AdventureWorksQueries
         Print("10. territory_growth_mom", rows);
     }
 
-    // 11. customer_pareto (course: ABC / Pareto 80-20 concentration)
+    // 11. customer_pareto
+    // WORKING: ABC / Pareto 80-20 concentration with running window shares.
     public static async Task CustomerPareto(IDataContext ctx, CancellationToken ct)
     {
         var customerRevenue = ctx.From<ISalesOrderHeader>()

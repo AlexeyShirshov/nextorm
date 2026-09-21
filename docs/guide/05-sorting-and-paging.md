@@ -166,7 +166,7 @@ SQLite has no `OFFSET` without `LIMIT`, so an offset-only query emits the sentin
 
 ## Limit By (ClickHouse)
 
-`LimitBy(limit, expr)` renders ClickHouse [`LIMIT n BY expr`](xref:NextORM.Core.ISqlDialect.SupportsLimitBy):
+`LimitBy(limit, expr)` renders ClickHouse [`LIMIT n BY expr`](xref:NextORM.Core.ISqlDialect.LimitBy):
 at most `limit` rows per distinct value of the key. The key may be a single column or an anonymous type
 to key on several columns, and an overload takes a per-key `offset` (`LIMIT offset, n BY expr`). The
 clause is emitted after `ORDER BY` and before the final `LIMIT`:
