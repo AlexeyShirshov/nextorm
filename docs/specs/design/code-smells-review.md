@@ -1,6 +1,9 @@
 # Аудит запахов кода — nextorm
 
 **Дата:** 16.09.2026 (повторный аудит после коммита `9641660` «mass refactoring»); **актуализация 18.09.2026 по HEAD `d21c473`**
+
+**Предрелизный аудит v1.0.3-alpha (21.09.2026, HEAD `2a2dfa6`, рабочее дерево чистое = `origin/1.0.3-alpha`): открытых P0/P1 нет.** Находки 8, 19, 28, 52 и 53, помеченные ниже как «ОТКРЫТА» (в т.ч. с 🔴 и как P1-кандидаты), фактически исправлены в коде/тестах — статусы закрыты в этом проходе. Подавления: `src/` — **6** `SuppressMessage` (все с `Justification`), **5** `#pragma` (все с парным `restore`) = **11/11 оправданных, 0 неоправданных**; `Skip=` — 0, пустых `catch` — 0, `Task.Delay` — 2 (обе `Task.Delay(0)`-yield), `NoWarn` — только `CS1591` в 7 библиотечных `.csproj` (Шаг 5, P2-трекинг).
+
 **Область анализа:** `src/` (основной), дополнительно `tests/` и `benchmarks/`
 **Метод:** read-only аудит по каталогу `skill:dotnet-csharp-code-smells` + `skill:slopwatch` (паттерн-скан выполнен вручную: локальный tool `slopwatch` в `.config/dotnet-tools.json` не установлен)
 **Статус:** Находки 1 (подавления), 2 (`IDisposable`), 3 (LINQ), 4 (god-классы), 5 (хэш-ключи), **6 (утечка подписки внешнего соединения)** и **7 (`*DELETE*.cs`)** — **исправлены/закрыты 18.09.2026**. Находка 4: god-классы разобраны — `EntityBuilder<TEntity>` **769→466**, `SqlBuilder` **716→318**, `ScalarFunctionTranslator` **595→131**, `BaseExpressionVisitor` **425→366** (`VisitMethodCall` 183→77); единственное исключение автора — `ExpressionPlanEqualityComparer` (879 формально, 77 собственных строк). Длинные списки параметров ≥6 — все 15 «боевых» разобраны параметр-объектами. Осознанно не закрываются: `CA2213`/`CA1816` (ложные) и `CA1508` (2 вероятно ложных в `NormSqlTranslator.cs:223,250`, сборкой не гейтится). `#pragma disable` в `src/` — 5, все с `restore`.
@@ -534,7 +537,9 @@ sqlite/postgres/sqlserver/mysql/clickhouse и `MakeDatePart("doy", …)` sqlite/
 | Слоп-паттерны (slopwatch вручную) | ✅ `Skip=` — 0 (единственное совпадение — имя теста `…ShouldIgnoreValue`); `Task.Delay` — 2, обе прежние `Task.Delay(0)` (`tests/nextorm.core.tests/InMemoryTests.cs:80,369`); `Thread.Sleep`/пустых `catch` — 0. |
 | 1/3–7. `IDisposable`, LINQ, события, исключения, хэш-ключи | ✅ Изменением не затронуты. |
 
-### 🔴 Находка 8 — SQL Server получает недопустимый `datepart(doy, …)` (ОТКРЫТА)
+### ✅ Находка 8 — SQL Server получает недопустимый `datepart(doy, …)` (ИСПРАВЛЕНА 21.09.2026; была 🔴)
+
+> **Закрыто 21.09.2026 (HEAD `2a2dfa6`).** `SqlServerDialect.MakeDatePart` (`src/nextorm.sqlserver/SqlServerDialect.cs:188-196`) теперь маппит `"doy" => datepart(dayofyear, …)`. Покрытие: SQL-gen `tests/nextorm.sqlserver.tests/SqlGenerationTests.cs` и интеграционный `tests/nextorm.integration.tests/CommonTestSuite.Functions.cs` (runs every provider). Неактуален был реестр, а не код.
 
 `MemberTranslator.cs:68` канонизирует `DateTime.DayOfYear` в часть `"doy"`. База
 (`SqlDialectBase.cs:207`) рендерит `extract(doy from …)` — это валидный PostgreSQL; MySQL
@@ -1502,10 +1507,12 @@ Build Release — **0 warnings / 0 errors** (прогнано в этом про
 | Слоп-паттерны (`slopwatch` локально не установлен, скан вручную) | ✅ `Skip=` — 0; `Task.Delay` — **2**, обе прежние `Task.Delay(0)` (`tests/nextorm.core.tests/InMemoryTests.cs:80,369`); `Thread.Sleep`/пустых `catch`/inline `Version`/`VersionOverride` — 0. |
 | 3. LINQ | ✅ Новых LINQ-цепочек нет; `EmitArrayFunction` — `for`-цикл по `IReadOnlyList<Expression>`. |
 | 4. События / 6. Исключения | ✅ Подписок нет; новые `throw new NotSupportedException` — гейты `RequireArrayFunctions`/`RequireArrayJoin` (`ArraySqlTranslator.cs:259-271`), не пустые `catch`/не `catch (Exception)`. |
-| 5. Проектирование | 🟡 **Находка 19** — default-разделитель `array_string_concat` (ниже); ℹ️ док-дрейф классовых `<summary>` (см. `API-NAMING-REVIEW.md`, раздел «ClickHouse массивы и `arrayJoin`», AR3). |
+| 5. Проектирование | ✅ **Находка 19** — default-разделитель `array_string_concat` закрыт (ниже); ℹ️ док-дрейф классовых `<summary>` (см. `API-NAMING-REVIEW.md`, раздел «ClickHouse массивы и `arrayJoin`», AR3). |
 | 7. Хэш-ключи | ✅ Новых членов план-ключа нет: методы DSL различаются `MethodInfo` в дереве выражения; захваченный массив биндится параметром, а `QueryPlanner.ExtractParams` освежает его значение на кэш-хите (`QueryPlanner.cs:170-180`) — имя не `norm_pN`, поэтому `NeedsParamRefresh` истинно. |
 
-### 🟡 Находка 19 — `array_string_concat` при default-разделителе рендерит SQL `null` вместо пустого (ОТКРЫТА; P1-кандидат, рантайм-эффект требует контейнера)
+### ✅ Находка 19 — `array_string_concat` при default-разделителе больше не рендерит SQL `null` (ИСПРАВЛЕНА 21.09.2026; была P1-кандидат)
+
+> **Закрыто 21.09.2026 (HEAD `2a2dfa6`).** `ArraySqlTranslator` (`src/nextorm.core/Visitors/ArraySqlTranslator.cs:209-217`) при `args[1]` = `ConstantExpression { Value: null }` опускает второй аргумент (`arrayStringConcat(col)`), а не рендерит `null`. Покрытие — `tests/nextorm.clickhouse.tests/SqlGenerationTests.cs`, `tests/nextorm.integration.tests/ClickHouseIntegrationTests.cs`.
 
 `ClickHouseFunctions.array_string_concat<T>(T[] array, string? delimiter = null)`
 (`Query/SqlFunctions.ClickHouse.cs:240-241`) объявлен с XML-доком «default separator is the empty string».
@@ -1879,7 +1886,7 @@ mariadb **14/14**, sqlite **209/209**, clickhouse **137/137** (0 failed). Соо
 | 2. Подавления | ✅ Новых `#pragma`/`SuppressMessage`/`NoWarn` в изменённых файлах — **0**. База прежняя: в `src/` **5** `SuppressMessage` (все с `Justification`) + **5** `#pragma disable` (все с парным `restore`: 3+1+1) — неоправданных **0/10**. |
 | Слоп-паттерны (slopwatch локальным tool'ом не установлен; скан вручную) | ✅ `Skip=` — 0; `Task.Delay` — 2, обе `Task.Delay(0)` (`tests/nextorm.core.tests/InMemoryTests.cs:115,404`); `Thread.Sleep`/пустых `catch` — 0; инлайновых `Version`/`VersionOverride` — 0. |
 | 1/3/4/6. `IDisposable`, LINQ, события, исключения | ✅ Новых disposable-полей, `.Count()`/`.Any()`, подписок и `catch` нет; новые `throw` — `NotSupportedException` (`SqlBuilder.cs:102,105`; `InMemoryQueryBuilder.cs:104`; `ExtendedScalarFunctionTranslator.cs:189,196`), `ArgumentNullException`/`ArgumentOutOfRangeException` (`EntityBuilder.cs:537`; `TemporalClause.cs:56`) без `catch`. |
-| 5. Проектирование | 🟡 Находки 27/28/29. |
+| 5. Проектирование | 🟡 Находки 27/29; ✅ Находка 28 закрыта 21.09.2026 (temporal до алиаса). |
 | 7. Хэш-ключи | 🟡 Находка 27 — `Temporal` в компараторе сравнивается по ссылке, хотя хэш считается по `Kind`/`From`/`To`. |
 
 ### 🟡 Находка 27 — `TemporalClause` без value-equality: план-ключ сравнивает клаузу по ссылке (ОТКРЫТА)
@@ -1901,7 +1908,9 @@ mariadb **14/14**, sqlite **209/209**, clickhouse **137/137** (0 failed). Соо
 - **Проверка:** тест «две одинаковые команды с `TemporalClause.AsOf(t)` дают равные план-ключи» (либо
   `Equals(a, b)` истинно при равных `Kind`/`From`/`To`).
 
-### 🟡 Находка 28 — `FOR SYSTEM_TIME` рендерится после алиаса → невалидный SQL при JOIN (ОТКРЫТА, P1-кандидат)
+### ✅ Находка 28 — `FOR SYSTEM_TIME` рендерится до алиаса (ИСПРАВЛЕНА 21.09.2026; была P1-кандидат)
+
+> **Закрыто 21.09.2026 (HEAD `2a2dfa6`).** `SqlSourceRenderer` (`src/nextorm.core/DataContext/SqlSourceRenderer.cs:223-225`) вставляет temporal-клаузу между именем таблицы и алиасом (SQL Server/MariaDB-грамматика). Покрытие — `tests/nextorm.sqlserver.tests/SqlGenerationTests.cs`, `tests/nextorm.mariadb.tests/SqlGenerationTests.cs`.
 
 `SqlBuilder` дописывает temporal-клаузу после `fromStr` (`DataContext/SqlBuilder.cs:99-108`), а `fromStr`
 уже содержит алиас, когда `needAlias` (`:79,83`): `SqlSourceRenderer.MakeFrom` при `needAlias` добавляет
@@ -3338,7 +3347,9 @@ Build Release **0/0**; новые SQL-gen тесты — sqlite **9/9**, sqlserv
 | 6. Исключения | ✅ Новых `catch`/`throw` нет. |
 | 7. Хэш-ключи кэша | ⚠️ `ResolvedQuoteIdentifiers` входит в `Equals` (`:138`) и hash (`:423`) согласованно; `CopyTo` копирует и `QuoteIdentifiers`, и `ResolvedQuoteIdentifiers` (`Clone.cs:33-34`) → DEBUG-assert `QueryPlan.GetCacheVersion` держится. Render вложенных команд берёт флаг **корня**, а hash — **свой** (наблюдение B); неверного разделения планов нет. |
 
-### 🟡 Находка 52 — schema-qualified физические имена квотируются целиком (ОТКРЫТА; P1-кандидат)
+### ✅ Находка 52 — schema-qualified имена квотируются по сегментам (ИСПРАВЛЕНА 21.09.2026; была P1-кандидат)
+
+> **Закрыто 21.09.2026 (HEAD `2a2dfa6`).** Введён `SqlSourceRenderer.QuoteQualifiedIdentifier` (`src/nextorm.core/DataContext/SqlSourceRenderer.cs:463`), применяемый к `from.Table` (`:217`) и CTE (`:63`); `Sales.SalesOrderHeader` → `[Sales].[SalesOrderHeader]`. Покрытие — тесты `QuoteIdentifiers`/`QuotedIdentifiers` в `tests/nextorm.*.tests/SqlGenerationTests.cs`.
 
 `SqlSourceRenderer.cs:213` (`MakeFrom`) и объявление CTE (`:63`) оборачивают `from.Table`/`cte.Name`
 **целиком**. Для `[SqlTable("Sales.SalesOrderHeader")]` при включённом флаге получается
@@ -3356,7 +3367,9 @@ PostgreSQL `"bookings.airports_data"` и ClickHouse `` `datasets.hits_v1` ``. С
 - **Проверка:** SQL-gen тест `UseQuotedIdentifiers` на сущности с `[SqlTable("s.t")]` → `[s].[t]`
   (и `"s"."t"` для PG/SQLite).
 
-### 🟡 Находка 53 — внутренний разделитель идентификатора не удваивается (ОТКРЫТА; P1-кандидат)
+### ✅ Находка 53 — внутренний разделитель идентификатора удваивается (ИСПРАВЛЕНА 21.09.2026; была P1-кандидат)
+
+> **Закрыто 21.09.2026 (HEAD `2a2dfa6`).** `QuoteIdentifier` удваивает разделитель: default `ISqlDialect.cs:581`/`SqlDialectBase.cs:271` (`"` → `""`), SQL Server `SqlServerDialect.cs:28` (`]` → `]]`), MySQL `MySqlDialect.cs:156` и ClickHouse `ClickHouseDialect.cs:303` (`` ` `` → ` `` `).
 
 Матрица RFC (`todo_identifier_quoting.md:25-30`) требует удвоения внутреннего разделителя
 (PostgreSQL `"`, SQL Server `]`, MySQL/MariaDB/ClickHouse `` ` ``). Реализация — простая конкатенация:

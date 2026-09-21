@@ -9,7 +9,7 @@
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <PackageId>nextorm</PackageId>
     <Title>Nextorm</Title>
-    <Version>1.0.1-alpha.141</Version>
+    <Version>1.0.3-alpha</Version>
     <PackageTags>orm;sql;micro-orm</PackageTags>
     <Description>A high performance ORM (object-relational mapping) library supporting PostgreSQL, SQL Server, MySQL, Sqlite</Description>
     <Authors>Alexey Shirshov</Authors>

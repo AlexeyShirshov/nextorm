@@ -67,7 +67,7 @@ Nextorm uses protocol-level libraries (for example, SqlClient for Microsoft SQL 
 
 ## Status
 
-The current status (1.0.1-alpha) is a prof of concept.
+The current status (1.0.3-alpha) is a prof of concept.
 
 ## Roadmap
 
@@ -122,6 +122,26 @@ They differ in cost, lifetime and thread-safety rules. Which one to use, what ea
 its limitations: **[Prepared vs Cached](specs/performance/prepared-vs-cached.md)**.
 
 ## Releases
+
+### 1.0.3-alpha
+
+- [Table-valued functions](https://github.com/AlexeyShirshov/nextorm/issues/8)
+- [Scalar-valued functions](https://github.com/AlexeyShirshov/nextorm/issues/9)
+- [Table hints](https://github.com/AlexeyShirshov/nextorm/issues/14)
+- [Benchmark with Dapper and EF](https://github.com/AlexeyShirshov/nextorm/issues/17)
+- [Новые возможности SQL-генерации](https://github.com/AlexeyShirshov/nextorm/issues/19)
+- [PostgreSQL support](https://github.com/AlexeyShirshov/nextorm/issues/21)
+- [MySQL support](https://github.com/AlexeyShirshov/nextorm/issues/22)
+- [SQL functions](https://github.com/AlexeyShirshov/nextorm/issues/33)
+- [ClickHouse support](https://github.com/AlexeyShirshov/nextorm/issues/49)
+
+### 1.0.2-alpha
+
+- [Aggregates (count, min, max, avg, sum, stdev, var)](https://github.com/AlexeyShirshov/nextorm/issues/12)
+- [Grouping (GROUP BY / HAVING)](https://github.com/AlexeyShirshov/nextorm/issues/13)
+- [Union](https://github.com/AlexeyShirshov/nextorm/issues/18)
+- [Correlated subqueries](https://github.com/AlexeyShirshov/nextorm/issues/35)
+- [Custom ExpressionVisitor](https://github.com/AlexeyShirshov/nextorm/issues/45)
 
 ### 1.0.1-alpha
 
