@@ -506,6 +506,8 @@ internal readonly struct SqlBuilder
                 }
             }
 
+            if (!_ctx.ParamMode && cmd.From?.RawSqlSource is not null)
+                EnsureUniqueParameterNames(_ctx.Params);
 
 #if DEBUG
             if (Logger?.IsEnabled(LogLevel.Debug) ?? false) Logger.LogDebug("Generated sql with param mode {mode}: {sql}", _ctx.ParamMode, r);
@@ -627,6 +629,22 @@ internal readonly struct SqlBuilder
         finally
         {
             StringBuilderPool.Shared.Return(spec);
+        }
+    }
+
+    // A raw SQL FROM source adds its parameters by property name; a captured variable of the same name
+    // in the surrounding query would add a second parameter with that name, which most providers reject
+    // at execution. Fail at build time with an actionable message instead.
+    private static void EnsureUniqueParameterNames(List<Parameter> @params)
+    {
+        for (var i = 0; i < @params.Count; i++)
+        {
+            for (var j = i + 1; j < @params.Count; j++)
+            {
+                if (string.Equals(@params[i].Name, @params[j].Name, StringComparison.Ordinal))
+                    throw new BuildSqlCommandException(
+                        $"The raw SQL source and the query produced two parameters named '{@params[i].Name}'. Rename the colliding captured variable or raw-SQL parameter.");
+            }
         }
     }
 }

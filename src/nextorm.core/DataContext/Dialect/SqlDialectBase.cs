@@ -496,6 +496,9 @@ public abstract class SqlDialectBase : ISqlDialect
     // functions are emitted verbatim and never consult this.
     public virtual bool SupportsTableFunction(string name) => false;
 
+    /// <summary>Defaults to <c>false</c>; every SQL provider overrides it to <c>true</c> (derived tables).</summary>
+    public virtual bool SupportsRawSqlSource => false;
+
     public virtual string MakeCount(bool distinct, bool big) => distinct ? "count(distinct " : "count(";
 
     // ClickHouse's count aggregates return UInt64, which the row reader cannot materialise; a dialect

@@ -476,14 +476,29 @@ public class SqlGenerationTests
     }
 
     [Fact]
-    public void QueryHint_ShouldThrowBecausePostgresHasNoQueryHints()
+    public void QueryHint_ShouldEmitInlineOptimizerHintComment()
     {
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<ISimpleEntity>();
 
-        var act = () => SqlOf(ctx, e.Select(x => new { x.Id }).Hint("recompile"));
+        var sql = SqlOf(ctx, e.Select(x => new { x.Id }).Hint("recompile"));
 
-        act.Should().Throw<NotSupportedException>().WithMessage("*Query hints*");
+        sql.Should().Be("select /*+ recompile */ id from simple_entity");
+    }
+
+    [Fact]
+    public void QueryHint_WithCte_ShouldPlaceHintAfterTheTopLevelSelect()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var cte = e.Where(x => x.Id > 1).Select(x => new { x.Id });
+        var sql = SqlOf(ctx, ctx.With("recent", cte).From("recent").Select(t => new { id = t["id"].AsInt })
+            .Hint("SeqScan(recent)"));
+
+        sql.Should().StartWith("with recent as (select id from complex_entity");
+        sql.Should().Contain(") select /*+ SeqScan(recent) */ id");
+        sql.Should().EndWith("from recent");
     }
 
     [Fact]
@@ -1444,6 +1459,18 @@ public class SqlGenerationTests
             .Select(r => new { r.Value }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*string_split*");
+    }
+
+    [Fact]
+    public void BuiltInTableFunction_Containstable_ShouldThrowOnPostgres()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var act = () => SqlOf(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.SqlServer.containstable<int>("docs", "body", "cat"))
+            .Select(r => new { r.Key }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*containstable*");
     }
 
     [Fact]
@@ -3116,6 +3143,22 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void TextSearchRankCd_ShouldRenderTsRankCd()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Rank = SqlFunctions.Postgres.ts_rank_cd(
+                SqlFunctions.Postgres.to_tsvector(x.String!),
+                SqlFunctions.Postgres.to_tsquery("cat"))
+        }));
+
+        sql.Should().Contain("ts_rank_cd(to_tsvector(somestring), to_tsquery('cat'))");
+    }
+
+    [Fact]
     public void TextSearchMatch_ShouldRenderAtAtOperator()
     {
         using var ctx = PostgresTestContext.Create();
@@ -3227,6 +3270,87 @@ public class SqlGenerationTests
             .Select(p => new { p.Item1.Id, SId = p.Item2.Id }));
 
         sql.Should().Be("select t1.id, t2.id as \"SId\" from (select id, somestring as \"String\" from complex_entity) as \"t1\" join simple_entity as \"t2\" on t1.id = cast(t2.id as bigint)\n where (t1.id > 5)");
+    }
+
+    [Fact]
+    public void DerivedSourceOverDerivedWithWindow_ShouldResolvePassThroughColumns()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        // The middle derived query projects pass-through columns of another derived query plus a
+        // window function. The outer query must resolve the pass-through columns against the source
+        // the middle query was built from, not lose them to the source-scope boundary.
+        var revenue = ctx.From<IComplexEntity>()
+            .GroupBy(x => new { DepartureCity = x.String, Route = x.String + " -> " + x.String })
+            .Select(x => new
+            {
+                DepartureCity = x.String,
+                Route = x.String + " -> " + x.String,
+                Revenue = SqlFunctions.Sql.sum(x.Id)
+            });
+
+        var ranked = ctx.From(revenue)
+            .Select(r => new
+            {
+                r.DepartureCity,
+                r.Route,
+                r.Revenue,
+                Place = SqlFunctions.Sql.rank().Over(
+                    partitionBy: new Expression<Func<object?>>[] { () => r.DepartureCity },
+                    orderBy: new[] { SqlFunctions.Sql.desc(() => r.Revenue) })
+            });
+
+        var sql = SqlOf(ctx, ctx.From(ranked)
+            .Where(r => r.Place <= 3)
+            .OrderBy(r => r.DepartureCity)
+            .Select(r => new { r.DepartureCity, r.Place, r.Route, r.Revenue }));
+
+        sql.Should().NotContain("select ,");
+        sql.Should().Contain("select \"DepartureCity\", \"Place\", \"Route\", \"Revenue\"");
+        sql.Should().Contain("order by t2.\"DepartureCity\"");
+    }
+
+    [Fact]
+    public void FromSql_ShouldRenderDerivedTableWithNamedParameters()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var min = 1;
+
+        var command = Prepare(ctx, ctx
+            .FromSql("select id from complex_entity where id > @min", new { min })
+            .Select(t => new { Id = t["id"].AsInt }));
+
+        var sql = Normalize(command.DbCommand.CommandText);
+        sql.Should().Be("select t1.id from (select id from complex_entity where id > @min) as \"t1\"");
+        command.DbCommandParams.Cast<DbParameter>().Select(p => p.ParameterName).Should().Equal("min");
+    }
+
+    [Fact]
+    public void FromSql_AsJoinedSource_ShouldRenderDerivedTableAndResolveColumns()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx
+            .From<ISimpleEntity>()
+            .Join(ctx.FromSql("select id from complex_entity"), (s, r) => s.Id == r["id"].AsInt)
+            .Select(p => new { p.Item1.Id, R = p.Item2["id"].AsInt }));
+
+        sql.Should().Contain("join (select id from complex_entity) as \"t2\"");
+        sql.Should().Contain("on t1.id = t2.id");
+    }
+
+    [Fact]
+    public void FromSql_CollidingParameterName_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var min = 1;
+
+        var act = () => Prepare(ctx, ctx
+            .FromSql("select id from complex_entity where id > @min", new { min })
+            .Where(t => t["id"].AsInt > min)
+            .Select(t => new { Id = t["id"].AsInt }));
+
+        act.Should().Throw<BuildSqlCommandException>().WithMessage("*two parameters named 'min'*");
     }
 
 }

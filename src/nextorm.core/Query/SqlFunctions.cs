@@ -184,6 +184,20 @@ public static partial class SqlFunctions
     }
 
     /// <summary>
+    /// Row shape produced by <see cref="SqlServerFunctions.containstable{TKey}(string?, string?, string?)"/>
+    /// and <see cref="SqlServerFunctions.freetexttable{TKey}(string?, string?, string?)"/>: the SQL Server
+    /// full-text <c>KEY</c> (the full-text key of the matched row, used to join back to the base table)
+    /// and <c>RANK</c> (the relevance score) columns.
+    /// </summary>
+    public interface IKeyRankRow<TKey>
+    {
+        [Column("[key]")]
+        TKey Key { get; set; }
+        [Column("[rank]")]
+        int Rank { get; set; }
+    }
+
+    /// <summary>
     /// Row shape produced by <see cref="ClickHouseFunctions.numbers(long)"/> and
     /// <see cref="ClickHouseFunctions.numbers_mt(long)"/>: a single column named <c>number</c> holding the
     /// generated value.

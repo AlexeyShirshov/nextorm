@@ -20,6 +20,8 @@ public sealed class SqlTableFunctionAttribute : Attribute
     public string? Name { get; set; }       // defaults to the CLR method name
     public string? Schema { get; set; }     // optional schema/owner prefix
     public string? WithClause { get; set; } // optional trailing WITH (...) body
+    public string? CallClause { get; set; } // optional verbatim SQL inside the call parentheses
+    public int[]? VerbatimArguments { get; set; } // argument indices emitted as raw identifiers
 }
 ```
 
@@ -305,6 +307,56 @@ var person = dataContext
 ```sql
 select name, age from openjson(@json) with (name nvarchar(50) '$.name', age int '$.age') as [t1]
 ```
+
+SQL Server also ships the full-text table functions `SqlFunctions.SqlServer.containstable` and
+`freetexttable`, which expose the matched row's full-text key and relevance score through
+[`SqlFunctions.IKeyRankRow<TKey>`](xref:NextORM.Core.SqlFunctions.IKeyRankRow`1) (`.Key`, `.Rank`). Join the
+function back to the indexed table on `Key` and order by `Rank`:
+
+```csharp
+var search = "stuffed bear";
+
+var ranked = dataContext
+    .FromTableFunction(() => SqlFunctions.SqlServer.containstable<int>("documents", "title", search))
+    .Join(dataContext.From<IDocument>(), (k, d) => k.Key == d.Id)
+    .OrderByDescending(p => p.Item1.Rank)
+    .Select(p => new { p.Item2.Id, p.Item1.Rank })
+    .ToList();
+```
+
+`containstable` uses `CONTAINSTABLE` (boolean/prefix/phrase syntax) and `freetexttable` the
+natural-language `FREETEXTTABLE`; both are SQL Server-only
+([`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect.SupportsTableFunction)), and other providers throw
+`NotSupportedException`. The `table` and `column` arguments are emitted **verbatim** as identifiers (see
+`VerbatimArguments`), so pass the table name or alias exactly as it appears in the generated query, and
+only pass trusted values.
+
+For a table function whose schema lives **inside** the call parentheses rather than in a trailing `WITH`
+clause, set [`CallClause`](xref:NextORM.Core.SqlTableFunctionAttribute.CallClause) to append verbatim SQL
+after the arguments (include your own leading separator). MySQL `JSON_TABLE` is the typical case:
+
+```csharp
+public interface IJsonTableRow
+{
+    [Column("id")]
+    int Id { get; set; }
+    [Column("name")]
+    string? Name { get; set; }
+}
+
+private static class JsonTableTvf
+{
+    [SqlTableFunction("json_table", CallClause = ", '$[*]' columns(id int path '$.id', name varchar(50) path '$.name')")]
+    public static IQueryable<IJsonTableRow> JsonTable(string doc) => throw new NotSupportedException();
+}
+```
+
+```sql
+select id, name from json_table(@doc, '$[*]' columns(id int path '$.id', name varchar(50) path '$.name')) as `t1`
+```
+
+`VerbatimArguments` is the related hook for functions that take a raw identifier (a table or column name):
+each listed argument must be a constant string and is rendered unquoted.
 
 `SqlFunctions.ClickHouse.numbers`/`numbers_mt` are ClickHouse table functions returning
 [`SqlFunctions.INumbersRow`](xref:NextORM.Core.SqlFunctions.INumbersRow) (the single `number` column). `numbers(count)` yields

@@ -89,6 +89,27 @@ public static class DataContextExtensions
     public static EntityBuilder<TableAlias> From(this IDataContext dataContext, string table)
         => new(dataContext, table) { Logger = dataContext.CommandLogger };
 
+    /// <summary>
+    /// Starts a query from a raw SQL fragment used as a composable <c>FROM</c> source: it is rendered as
+    /// <c>(&lt;sql&gt;) AS alias</c> and can be filtered, joined, projected, grouped and paged further.
+    /// Columns are read through <see cref="TableAlias"/> accessors (<c>t["id"].AsInt</c>).
+    /// <paramref name="parameters"/> is an object whose public properties become the named parameters
+    /// referenced by the SQL (the same convention as <c>WithSql</c>). Requires a provider that supports
+    /// a derived-table <c>FROM</c> source (<see cref="ISqlDialect.SupportsRawSqlSource"/>).
+    /// </summary>
+    /// <exception cref="NotSupportedException">
+    /// The active provider reports <see cref="ISqlDialect.SupportsRawSqlSource"/> as <c>false</c>, or the
+    /// context is the in-memory provider (which cannot evaluate raw SQL).
+    /// </exception>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static EntityBuilder<TableAlias> FromSql(this IDataContext dataContext, string sql, object? parameters = null)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+        ArgumentException.ThrowIfNullOrEmpty(sql);
+
+        return new EntityBuilder<TableAlias>(dataContext) { Logger = dataContext.CommandLogger, SourceFrom = new FromExpression(new RawSqlSourceExpression(sql, parameters)) };
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static EntityBuilder<TResult> From<TResult>(this IDataContext dataContext, QueryCommand<TResult> query)
         => new(dataContext, query) { Logger = dataContext.CommandLogger };

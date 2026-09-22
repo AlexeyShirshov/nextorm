@@ -144,9 +144,12 @@ Ordered by impact on real query authoring. Per-feature details and owners live i
    referenced-query registries are flattened onto the root command so each marker resolves in the scope
    that declared it. The only remaining limit is the in-memory provider (no per-row outer-row binding).
    Todo: [`todo_correlated_inmemory.md`](todo_correlated_inmemory.md) (in-memory).
-2. **Raw SQL is not composable.** `WithSql` replaces the whole query, so raw SQL cannot be used as a
-   `FROM` source, joined, or further filtered; EF Core (`FromSql`) and linq2db both allow this.
-   Todo: [`todo_composable_raw_sql.md`](todo_composable_raw_sql.md).
+2. **Raw SQL is composable.** `WithSql` still replaces a whole query, and a raw fragment can now also be
+   used as a `FROM` source and joined/filtered further: [`FromSql`](../../guide/14-raw-sql.md#compositing-raw-sql-as-a-from-source)
+   renders it as a derived table (`FROM (&lt;sql&gt;) AS alias`) with named parameters, gated by
+   [`SupportsRawSqlSource`](xref:NextORM.Core.ISqlDialect.SupportsRawSqlSource). This matches EF Core
+   (`FromSql`) and linq2db.
+   Shipped: [Raw SQL](../../guide/14-raw-sql.md).
 3. **No XML `.nodes` rowset method.** The scalar XML data-type methods (`.value`/`.query`/`.exist`) ship
    on SQL Server (`SqlServerFunctions.xml_*`), and the native `PIVOT`/`UNPIVOT` source construct ships
    via `EntityBuilder.Pivot`/`Unpivot` (`Pivot`/`Pivot`) over a plain table/entity, a
@@ -191,21 +194,21 @@ Ordered by impact on real query authoring. Per-feature details and owners live i
     `cluster`/`clusterAllReplicas`; PostgreSQL `jsonb_to_record(set)`.
     Todo: [`todo_dynamic_result_schema.md`](todo_dynamic_result_schema.md),
     [`todo_clickhouse_server_table_functions.md`](todo_clickhouse_server_table_functions.md).
-12. **Full-text search has no ranking/score.** `contains`/`freetext` render boolean predicates; there is
-    no `ts_rank`/`CONTAINSTABLE` score projection.
-    Todo: [`todo_fulltext_ranking.md`](todo_fulltext_ranking.md).
-13. **The pre-declared table-function set is small.** `SqlFunctions.Sql` ships the built-ins, each gated
+12. **Full-text ranking/score is implemented.** `contains`/`freetext` render the boolean predicates, and
+    ranking is available: PostgreSQL `ts_rank`/`ts_rank_cd`/`ts_headline` and the SQL Server
+    `containstable`/`freetexttable` table functions with `KEY`/`RANK`.
+    Shipped: [Table-valued functions](../../guide/13-table-valued-functions.md#built-in-table-functions).
+13. **The pre-declared table-function set is expanded.** `SqlFunctions.Sql` ships the built-ins, each gated
     by `ISqlDialect.SupportsTableFunction`: `generate_series`, `unnest`, `regexp_matches`,
     `regexp_split_to_table`, `jsonb_array_elements(_text)`, `jsonb_each(_text)`, `jsonb_object_keys`,
-    `jsonb_path_query` and `ts_stat` (PostgreSQL), `string_split`/`openjson` (SQL Server) and
+    `jsonb_path_query` and `ts_stat` (PostgreSQL), `string_split`/`openjson` and now
+    `containstable`/`freetexttable` with `KEY`/`RANK` (SQL Server) and
     `numbers`/`numbers_mt`/`zeros`/`zeros_mt`/`generateRandom` (ClickHouse). MySQL/MariaDB and SQLite
-    expose none of them, so there a user must declare their own `[SqlTableFunction]` wrapper (user
-    wrappers are never gated), while EF Core and linq2db surface many more provider TVFs out of the box.
-    Not mapped: `CONTAINSTABLE`/`FREETEXTTABLE` with ranking, MySQL `JSON_TABLE` and PostgreSQL
-    `jsonb_to_record`/`json_populate_record` (dynamic record schema). SQL Server `OPENJSON ... WITH`
-    typed schemas are expressible through `SqlTableFunctionAttribute.WithClause` (emitted as
-    `with (...)` after the call).
-    Todo: [`todo_builtin_tvf_expansion.md`](todo_builtin_tvf_expansion.md).
+    still expose no built-ins, so there a user declares their own `[SqlTableFunction]` wrapper (user
+    wrappers are never gated); MySQL `JSON_TABLE` is expressible through the new
+    `SqlTableFunctionAttribute.CallClause` in-call schema, and `OPENJSON ... WITH` through `WithClause`.
+    The remaining dynamic-schema `jsonb_to_record`/`json_populate_record` is tracked in item 11.
+    Shipped: [Table-valued functions](../../guide/13-table-valued-functions.md).
 14. **Column identifiers are emitted unquoted by default.** Outside projection aliases and inner-query
     columns, nextorm writes the mapped column name verbatim (`select id from simple_entity`). Identifier
     quoting is now available as an opt-in: `DataContextBuilder.UseQuotedIdentifiers()` sets a
@@ -228,12 +231,13 @@ Ordered by impact on real query authoring. Per-feature details and owners live i
     and `%` (`DATE_FORMAT`/`strftime`/`formatDateTime`) template languages are incompatible — a single
     portable `template` argument cannot exist.
     Todo: [`todo_provider_differences.md`](todo_provider_differences.md).
-16. **Query and table hints only on SQL Server.** Statement-level hints (`Hint(...)`) render only the
-    SQL Server `OPTION (...)` clause; PostgreSQL (`pg_hint_plan` comments), MySQL and MariaDB (native
-    `/*+ ... */` optimizer hints) are not wired. Table hints (`WithTableHint`) are SQL Server-only,
-    while MySQL/MariaDB and SQLite have index hints / `INDEXED BY`. SQLite and ClickHouse have no
-    statement hint syntax and stay gated.
-    Todo: [`todo_query_hints_providers.md`](todo_query_hints_providers.md).
+16. **Table hints only on SQL Server.** Statement-level hints (`Hint(...)`) are now wired on SQL Server
+    (`OPTION (...)`), PostgreSQL and MySQL/MariaDB (inline `/*+ ... */`, read by the optional
+    `pg_hint_plan` extension on PostgreSQL and as native optimizer hints on MySQL/MariaDB); SQLite and
+    ClickHouse have no statement-hint syntax and stay gated. Table hints (`WithTableHint`) remain
+    SQL Server-only, since the MySQL/MariaDB and SQLite index hints (`USE INDEX`/`INDEXED BY`) change
+    the plan but not the locking semantics of `WITH (NOLOCK)`.
+    Shipped: [Query hints](../../guide/17-query-hints.md).
 17. **No DML and no navigation properties / relationship metadata** — by design for a read-only,
     no-change-tracking mapper, but still a functional gap versus both references.
     Todo: out of scope — [`limitations.md`](../../advanced/limitations.md); DML tracked separately in
@@ -290,8 +294,8 @@ developed in parallel on the same working tree.
 
 Workstream 17–25 extended provider parity.
 
-Future workstreams (not scheduled): composable raw SQL, `CONTAINSTABLE`/`FREETEXTTABLE` with ranking,
-`OPENJSON ... WITH` typed schemas, `JSON_TABLE`, the rowset XML method `.nodes` (the scalar XML
+Future workstreams (not scheduled): dynamic-schema table sources (ClickHouse
+`values()`, PostgreSQL `jsonb_to_record`), the rowset XML method `.nodes` (the scalar XML
 `.value`/`.query`/`.exist` and the native `PIVOT`/`UNPIVOT` source construct ship on SQL Server), DML,
 navigation properties.
 

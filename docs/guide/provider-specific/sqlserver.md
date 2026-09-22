@@ -208,11 +208,17 @@ SQL Server supports only the `System` method
 throws `NotSupportedException`. See
 [Table sampling](../01-querying-and-projections.md#table-sampling-tablesample).
 
+## Full-text search
+
+The cross-provider boolean predicates `contains`/`freetext` render `CONTAINS`/`FREETEXT`. For ranking,
+`SqlFunctions.SqlServer.containstable`/`freetexttable` expose the matched key and `RANK` score through
+`SqlFunctions.IKeyRankRow<TKey>`; see
+[Table-valued functions](../13-table-valued-functions.md#built-in-table-functions).
+
 ## Not yet supported
 
-`CONTAINSTABLE`/`FREETEXTTABLE` (full-text with a `RANK` column, which references the base table by
-name) and the rowset XML method `.nodes` (which needs an outer `FROM`/`CROSS APPLY`
-reference) are tracked in the backlog. See [Limitations and out-of-scope features](../../advanced/limitations.md).
+The rowset XML method `.nodes` (which needs an outer `FROM`/`CROSS APPLY`
+reference) is tracked in the backlog. See [Limitations and out-of-scope features](../../advanced/limitations.md).
 
 ## See also
 

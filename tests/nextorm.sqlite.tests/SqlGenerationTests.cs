@@ -2561,4 +2561,32 @@ public class SqlGenerationTests
         sql.Should().Be("select t1.id, t2.id as 'SId' from (select id, somestring as 'String' from complex_entity) as 't1' join simple_entity as 't2' on t1.id = cast(t2.id as bigint)\n where (t1.id > 5)");
     }
 
+    [Fact]
+    public void FromSql_ShouldRenderDerivedTableWithNamedParameters()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var min = 1;
+
+        var sql = SqlOf(ctx, ctx
+            .FromSql("select id from complex_entity where id > $min", new { min })
+            .Select(t => new { Id = t["id"].AsInt }));
+
+        sql.Should().Contain("from (select id from complex_entity where id > $min)");
+        sql.Should().Contain("select id from");
+    }
+
+    [Fact]
+    public void FromSql_AsJoinedSource_ShouldRenderDerivedTableAndResolveColumns()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx
+            .From<ISimpleEntity>()
+            .Join(ctx.FromSql("select id from complex_entity"), (s, r) => s.Id == r["id"].AsInt)
+            .Select(p => new { p.Item1.Id, R = p.Item2["id"].AsInt }));
+
+        sql.Should().Contain("join (select id from complex_entity) as 't2'");
+        sql.Should().Contain("on t1.id = t2.id");
+    }
+
 }

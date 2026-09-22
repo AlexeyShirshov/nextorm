@@ -74,7 +74,10 @@ public sealed class SqlServerDialect : SqlDialectBase
     public override IPivotRenderer Pivot => _pivot;
 
     public override bool SupportsTableFunction(string name) =>
-        name is "string_split" or "openjson";
+        name is "string_split" or "openjson" or "containstable" or "freetexttable";
+
+    /// <summary>SQL Server supports a raw SQL derived table (<c>FROM (&lt;sql&gt;) AS alias</c>).</summary>
+    public override bool SupportsRawSqlSource => true;
 
     /// <summary>SQL Server renders table hints as <c>with (hint, ...)</c> after the table name.</summary>
     public override bool SupportsTableHints => true;

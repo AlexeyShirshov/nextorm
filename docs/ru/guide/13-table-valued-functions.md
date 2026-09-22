@@ -306,6 +306,56 @@ var person = dataContext
 select name, age from openjson(@json) with (name nvarchar(50) '$.name', age int '$.age') as [t1]
 ```
 
+SQL Server также предоставляет полнотекстовые табличные функции `SqlFunctions.SqlServer.containstable` и
+`freetexttable`, отдающие ключ совпавшей строки и оценку релевантности через
+[`SqlFunctions.IKeyRankRow<TKey>`](xref:NextORM.Core.SqlFunctions.IKeyRankRow`1) (`.Key`, `.Rank`).
+Присоедините функцию обратно к индексированной таблице по `Key` и упорядочьте по `Rank`:
+
+```csharp
+var search = "stuffed bear";
+
+var ranked = dataContext
+    .FromTableFunction(() => SqlFunctions.SqlServer.containstable<int>("documents", "title", search))
+    .Join(dataContext.From<IDocument>(), (k, d) => k.Key == d.Id)
+    .OrderByDescending(p => p.Item1.Rank)
+    .Select(p => new { p.Item2.Id, p.Item1.Rank })
+    .ToList();
+```
+
+`containstable` использует `CONTAINSTABLE` (синтаксис boolean/prefix/phrase), `freetexttable` —
+естественно-языковой `FREETEXTTABLE`; обе доступны только в SQL Server
+([`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect.SupportsTableFunction)), остальные провайдеры
+бросают `NotSupportedException`. Аргументы `table` и `column` эмитятся **дословно** как идентификаторы
+(см. `VerbatimArguments`), поэтому передавайте имя таблицы или псевдоним точно так, как он фигурирует в
+сгенерированном запросе, и только доверенные значения.
+
+Если схема табличной функции находится **внутри** скобок вызова, а не в завершающем `WITH`, задайте
+[`CallClause`](xref:NextORM.Core.SqlTableFunctionAttribute.CallClause), чтобы дословно дописать SQL после
+аргументов (включите свой ведущий разделитель). Типичный случай — MySQL `JSON_TABLE`:
+
+```csharp
+public interface IJsonTableRow
+{
+    [Column("id")]
+    int Id { get; set; }
+    [Column("name")]
+    string? Name { get; set; }
+}
+
+private static class JsonTableTvf
+{
+    [SqlTableFunction("json_table", CallClause = ", '$[*]' columns(id int path '$.id', name varchar(50) path '$.name')")]
+    public static IQueryable<IJsonTableRow> JsonTable(string doc) => throw new NotSupportedException();
+}
+```
+
+```sql
+select id, name from json_table(@doc, '$[*]' columns(id int path '$.id', name varchar(50) path '$.name')) as `t1`
+```
+
+`VerbatimArguments` — родственный хук для функций, принимающих «сырой» идентификатор (имя таблицы или
+колонки): каждый указанный аргумент должен быть строковой константой и эмитится без кавычек.
+
 `SqlFunctions.ClickHouse.numbers`/`numbers_mt` — табличные функции ClickHouse, возвращающие
 [`SqlFunctions.INumbersRow`](xref:NextORM.Core.SqlFunctions.INumbersRow) (единственная колонка `number`). `numbers(count)` даёт
 последовательные целые с нуля, `numbers(start, stop[, step])` — произвольный диапазон:

@@ -2861,6 +2861,131 @@ INamingConvention?`; `QueryCommand<TResult>.WithNamingConvention(INamingConventi
 Приложение A (45) без изменений (новые типы документированы). Содержательные находки по кэшу — в
 `code-smells-review.md` (Находки 54–55 и наблюдения A–E).
 
+### Аудит 22.09.2026 — слияние `todo_fulltext_ranking` + `todo_builtin_tvf_expansion` (P0 — нет; P1 — нет; P2 — 2)
+
+**Область (uncommitted, worktree `tvf-expansion`):** `Query/SqlFunctions.cs` (`IKeyRankRow<TKey>`),
+`Query/SqlFunctions.SqlServer.cs` (`containstable<TKey>`/`freetexttable<TKey>`),
+`Query/SqlFunctions.Postgres.cs` (`ts_rank_cd`), `Visitors/ExtendedScalarFunctionTranslator.cs`
+(`ts_rank_cd` в `TextSearchFunctions`), `SqlTableFunctionAttribute.cs` (`CallClause`/`VerbatimArguments`),
+`Expressions/TableFunctionExpression.cs` (`CallClause`/`VerbatimArguments` + перегрузка ctor),
+`DataContext/SqlSourceRenderer.cs` (`MakeTableFunction`/`IsVerbatimArgument`/`GetVerbatimArgument`),
+`src/nextorm.sqlserver/SqlServerDialect.cs` (`SupportsTableFunction`); тесты — sqlserver/postgres/mysql.
+Build Release — **0/0**; тесты (Release, `--no-build`) core **192/192**, sqlserver **240/240**,
+postgres **249/249**, mysql **66/66** (0 failed, 0 skipped).
+
+**P0 — нет.** `SqlFunctions.IKeyRankRow<TKey>`, `containstable<TKey>`, `freetexttable<TKey>`, `ts_rank_cd`,
+`CallClause`, `VerbatimArguments` не конфликтуют с BCL (`CA1716`/`CA1724`) и не вводят в заблуждение:
+`I…Row` — принятая схема row-интерфейсов (`IOpenJsonRow`, `IUnnestRow<T>`); `containstable`/`freetexttable`/
+`ts_rank_cd` — SQL-зеркала (DSL-исключение, как `openjson`/`string_split`/`ts_rank`/`generate_series`);
+`CallClause`/`VerbatimArguments` — PascalCase-существительные.
+
+**P1 — нет.** Новых типов с аббревиатурами/суффиксными отклонениями и синхронных близнецов-методов нет;
+суффикс `Async` не требуется.
+
+| # | Ур. | Файл:строка | Проблема | Рекомендация |
+|---|-----|-------------|----------|--------------|
+| TFV1 | P2 | `SqlTableFunctionAttribute.cs:47-55`; `Expressions/TableFunctionExpression.cs:48-52` | XML-док `CallClause` говорит лишь «emitted verbatim», тогда как родственный `VerbatimArguments` (`SqlTableFunctionAttribute.cs:57-63`) прямо предупреждает «only pass trusted values». Обе настройки эмитят сырой SQL, предупреждение должно быть у обеих | Дописать в `<summary>` `CallClause` (атрибут и свойство выражения): «only developer-authored SQL; never user input» |
+| TFV2 | P2 | `Expressions/TableFunctionExpression.cs:26` | Новый **публичный** 6-параметрический ctor (`string, string?, string?, string?, IReadOnlyList<int>?, MethodCallExpression`) превышает порог «>5»; call-site в решении — только фабрика `Create` (`:82`) и два делегирующих ctor (`:15,21`), внешних нет | Сделать широчайший ctor `internal` (фабрика `Create` — единственный потребитель) либо ввести параметр-объект; 3-/4-арг. публичные ctor'ы не трогать |
+
+**✅ Исправлено (22.09.2026):** TFV1 — в `<summary>` `CallClause` добавлено «This is developer-authored SQL only — never build it from user input»; TFV2 — 6-параметрический ctor `TableFunctionExpression` понижен до `internal` (публичны только прежние 3-/4-арг. ctor'ы и фабрика `Create`).
+
+**ℹ️ Наблюдения (фикс не требуется):**
+- **`GetVerbatimArgument` — ограничение «только константная строка».** `SqlSourceRenderer.cs:386-389`
+  принимает исключительно `ConstantExpression { Value: string }`, иначе бросает `NotSupportedException`
+  с понятным текстом. Документировано на `SqlTableFunctionAttribute.VerbatimArguments` («must be a constant
+  string»), но не на встроенных `containstable`/`freetexttable` (там только «only pass trusted values»);
+  рекомендация — дописать «literal» и в доки методов (в связке с TFV1).
+- **Param-mode согласован.** В первом проходе (`SqlSourceRenderer.cs:301-308`) verbatim-аргументы
+  пропускаются, во втором (`:318-332`) — выводятся сырым текстом; порядок параметров совпадает. Тесты
+  подтверждают: `containstable`/`freetexttable` → params `["search"]`, `JSON_TABLE` → `["doc"]`.
+- **SQL-инъекция — принятый escape-hatch, не новый разрыв.** `VerbatimArguments` обходит параметризацию
+  осознанно и задокументирован как trusted; у встроенных `containstable`/`freetexttable` жёстко зашиты
+  индексы `{0, 1}` (table/column), а пользовательский ввод обязан идти в `search` (индекс 2, параметризуется
+  штатно). `CallClause` задаётся только разработчиком через атрибут. Это то же DSL-исключение, что уже
+  принято у `[SqlFunction]`/`WithClause`; единственный зазор — док-предупреждение (TFV1).
+- **Индексы `VerbatimArguments` не валидируются.** Отрицательный/выходящий за `Arguments.Count`/дублирующий
+  индекс молча игнорируется (совпадения не будет). Риск низкий (метаданные автора кода); при желании —
+  валидация в `TableFunctionExpression.Create`.
+- **XML-доки.** `<summary>` есть у `IKeyRankRow<TKey>`, `containstable<TKey>`, `freetexttable<TKey>`,
+  `ts_rank_cd`, обоих `CallClause`/`VerbatimArguments` и нового ctor. `IKeyRankRow<TKey>.Key`/`.Rank` — без
+  индивидуальных `<summary>`, как у всех соседних row-интерфейсов (`IOpenJsonRow`, `IUnnestRow<T>`);
+  `<typeparam name="TKey">` отсутствует так же, как у `IUnnestRow<T>`. Приложение A (45) без изменений
+  (новый тип документирован); `CS1591` по-прежнему в `<NoWarn>` 7 библиотечных `.csproj`.
+- **Квотирование `[key]`/`[rank]` консистентно.** `IKeyRankRow<TKey>` повторяет приём `IOpenJsonRow`
+  (`[Column("[key]")]` для зарезервированного `KEY`); `[rank]` заквотирован тем же стилем. Гейт
+  `SupportsTableFunction("containstable"/"freetexttable")` (`SqlServerDialect.cs:76-77`) не даёт другим
+  провайдерам отрендерить SQL Server-специфичное имя (тест `BuiltInTableFunction_Containstable_ShouldThrowOnPostgres`).
+- **Extend-only соблюдён.** Старые ctor'ы `TableFunctionExpression` (3-/4-арг.) сохранены и делегируют новому;
+  `SqlTableFunctionAttribute` получил только новые свойства; удалённых/изменённых публичных членов нет.
+  Изменение `SupportsTableFunction` — поведенческое аддитивное, не сигнатурное.
+- **Шаг 5 (трекинг).** `PublicAPI.Shipped/Unshipped.txt` по-прежнему нет, `PublicApiAnalyzers` не подключён.
+  При заморозке внести: `SqlFunctions.IKeyRankRow<TKey>` (+`Key.get`/`Key.set`/`Rank.get`/`Rank.set`),
+  `SqlServerFunctions.containstable<TKey>(string,string,string)`,
+  `SqlServerFunctions.freetexttable<TKey>(string,string,string)`,
+  `PostgresFunctions.ts_rank_cd(string?,string?)`, `SqlTableFunctionAttribute.CallClause.get/set`,
+  `SqlTableFunctionAttribute.VerbatimArguments.get/set`, `TableFunctionExpression.CallClause.get`,
+  `TableFunctionExpression.VerbatimArguments.get`, ctor
+  `(string,string?,string?,string?,IReadOnlyList<int>?,MethodCallExpression)`.
+
+**Проверка:** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**;
+`dotnet test tests/nextorm.{core,sqlserver,postgres,mysql}.tests -c Release --no-build` — core **192/192**,
+sqlserver **240/240**, postgres **249/249**, mysql **66/66** (0 failed, 0 skipped); `find -name 'PublicAPI*.txt'`
+— пусто; в диффе `src`+`tests` новых `#pragma`/`SuppressMessage`/`NoWarn` — **0**. EN+RU
+`docs/guide/13-table-valued-functions.md`, `docs/guide/provider-specific/{postgresql,sqlserver}.md`,
+`docs/providers/{overview,postgres,sqlserver}.md`, `docs/advanced/{api-reference,limitations}.md` синхронны.
+
+### Аудит 22.09.2026 — композируемый сырой SQL: новые публичные `FromSql` и `SupportsRawSqlSource` (P0 — нет; P1 — нет; P2 — 4)
+
+**Область (uncommitted, worktree `composable-raw-sql`):** новый публичный
+`DataContextExtensions.FromSql(this IDataContext, string, object? = null) -> EntityBuilder<TableAlias>`
+(`DataContextExtensions.cs:101`); новый публичный член `ISqlDialect.SupportsRawSqlSource`
+(`ISqlDialect.cs:785`, default `false` в `SqlDialectBase.cs:500`, `true` в 6 SQL-диалектах); `internal`
+`RawSqlSourceExpression` + `FromExpression.RawSqlSource`; рендер `SqlSourceRenderer.MakeRawSqlSource`.
+Build Release — **0/0**; тесты — core 192, postgres 249, sqlserver 240, mysql 67, mariadb 29, sqlite 270,
+clickhouse 185 = **1232/1232, 0 failed, 0 skipped**. Новых публичных **типов** нет.
+
+**P0 — нет.** `FromSql` совпадает с именем EF Core (`RelationalQueryableExtensions.FromSql`) в другом
+namespace/типе и с семейством `From*` nextorm (`From` / `FromTableFunction`); `SupportsRawSqlSource` —
+существующая `Supports*`-конвенция capability-гейта. BCL-конфликтов (`CA1716`/`CA1724`) и вводящих в
+заблуждение имён нет.
+
+**P1 — нет.** Оба имени — PascalCase, без аббревиатур; синхронного близнеца у `FromSql` нет → суффикс
+`Async` не нужен; `Supports*` — булев префикс.
+
+**P2-1 — `ISqlDialect.SupportsRawSqlSource` объявлен абстрактно, без DIM (`ISqlDialect.cs:785`).**
+Член без реализации по умолчанию → source- и binary-breaking для внешних реализаторов `ISqlDialect`
+(в репозитории интерфейс реализуют только `SqlDialectBase`-производные, фактического разрыва нет;
+политика alpha это допускает). При этом XML-док говорит «The safe default is `false`; a provider that
+leaves it `false` rejects such a source…», что подразумевает именно DIM — док и сигнатура расходятся.
+**Рекомендация:** для консистентности с `IContextEnvironment.NamingConvention`/`QuoteIdentifier`
+объявить `bool SupportsRawSqlSource => false;` в интерфейсе, либо внести в список Шага 5 как осознанный
+разрыв. Ср. P2-1 аудита «соглашения об именовании» (`IEntityMetadata.IsTableNameAuto`).
+
+**P2-2 — in-memory поведение не описано.** `FromSql` на `InMemoryDataContext` не отклоняется явно:
+композиция даёт фантомную строку либо `NullReferenceException` (см. `code-smells-review.md`,
+Находка 56). `docs/guide/14-raw-sql.md` (+RU) говорит «a provider opts in through
+`SupportsRawSqlSource`; every SQL provider does», но не фиксирует, что in-memory (не `ISqlDialect`)
+фичу не поддерживает, а `docs/advanced/limitations.md` (+RU) удалил единственную строку про raw SQL
+как источник. **Рекомендация:** вернуть оговорку в limitations и/или добавить явный отказ (Находка 56).
+
+**P2-3 — XML-доки `FromSql` не упоминают отказ для диалекта без поддержки.** Документированы
+назначение, конвенция параметров и `TableAlias`-аксессоры (`DataContextExtensions.cs:91-100`), но нет
+`<exception cref="NotSupportedException">` для случая `SupportsRawSqlSource == false` (бросается позже,
+при подготовке команды, `SqlSourceRenderer.cs:294`). Дополнительно `WithSql` в доке — `<c>`, не
+`<see cref>`. Не блокер (ср. AJ9).
+
+**P2-4 — Шаг 5 (трекинг).** `PublicAPI.Shipped/Unshipped.txt` по-прежнему нет; при заморозке внести
+`NextORM.Core.DataContextExtensions.FromSql(NextORM.Core.IDataContext, string, object?) -> EntityBuilder<TableAlias>`
+и `NextORM.Core.ISqlDialect.SupportsRawSqlSource.get -> bool`. Приложение A (45) без изменений (новых
+публичных типов нет, оба новых члена документированы). Трекинг — `todo_public_api_freeze.md`, issue #53.
+
+Capability-объекты (Фаза 3) не применимы: `SupportsRawSqlSource` не дублирует объект-рендерер — рендер
+`(<sql>) AS alias` лежит в ядре, dialect-specific остаётся только существующий `RequireSubqueryAlias`.
+Соотношение подавлений проекта не изменилось (11/11 оправданных, 0 неоправданных); новых
+`Skip=`/`#pragma`/`SuppressMessage`/`NoWarn`/`Task.Delay`/пустых `catch` нет.
+
+**✅ Исправлено (22.09.2026):** P2-2/P2-3 закрыты — in-memory оговорён в `docs/guide/14-raw-sql.md` EN+RU (и в тесте `InMemoryTests.FromSql_ShouldThrowClearNotSupported`), у `FromSql` добавлен `<exception cref="NotSupportedException">`. P2-1 принят как проектная конвенция: флаги `ISqlDialect` объявлены абстрактно, а safe-default живёт в `SqlDialectBase` (так же, как `SupportsTableHints`), поэтому расхождения с докой нет. P2-4 остаётся трекингом заморозки (`todo_public_api_freeze.md`).
+
 ## 4. План работ
 
 Проект в стадии **alpha** — обратная совместимость не сохраняется. Все пункты выполняются **прямыми переименованиями на месте**, с одновременным обновлением кода, тестов, примеров и документации в одном изменении.

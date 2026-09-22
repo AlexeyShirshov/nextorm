@@ -64,11 +64,11 @@ nextorm points at the source that owns the behaviour.
 | `GREATEST` / `LEAST` | partial | **yes** (NULL handling is provider-specific) | `SupportsGreatestLeast`/`MakeGreatest`/`MakeLeast` |
 | `STRING_AGG` / `ARRAY_AGG` | yes | **yes** — `string_agg` cross-provider; `array_agg` on PostgreSQL | `SupportsStringAgg`/`SupportsArrayAgg` |
 | User-defined scalar functions | yes (`DbFunction` / `Sql.Ext`) | yes (`[SqlFunction]`) | `SqlFunctionAttribute.cs` |
-| Table-valued functions | yes (`TableFunction`) | yes (`[SqlTableFunction]`); built-ins gated, the pre-declared set (`generate_series`/`unnest`/…, `string_split`/`openjson`, ClickHouse `numbers`/`zeros`/`generateRandom`) is smaller | `SqlTableFunctionAttribute.cs`, `SqlBuilder.MakeTableFunction`, `SupportsTableFunction` |
+| Table-valued functions | yes (`TableFunction`) | yes (`[SqlTableFunction]`); built-ins gated, the pre-declared set (`generate_series`/`unnest`/…, `string_split`/`openjson`, `containstable`/`freetexttable`, ClickHouse `numbers`/`zeros`/`generateRandom`) is smaller | `SqlTableFunctionAttribute.cs`, `SqlBuilder.MakeTableFunction`, `SupportsTableFunction` |
 | Native `PIVOT` / `UNPIVOT` source | no (raw SQL) | **yes on SQL Server** | `EntityBuilder.Pivot`/`Unpivot` |
 | Raw SQL (whole query) | yes | yes | `WithSql` / `PrepareFromSql` |
-| Raw SQL as a composable source/subquery | yes | **no** | — |
-| Query hints | yes (provider specific) | **partial** — SQL Server `OPTION (...)` only | `QueryCommand<TResult>.Hint`, `ISqlDialect.SupportsQueryHints`/`RenderQueryHints` |
+| Raw SQL as a composable source/subquery | yes | **yes** — `FromSql` renders the fragment as a derived table, joined/filtered further | `DataContextExtensions.FromSql`, `ISqlDialect.SupportsRawSqlSource` |
+| Query hints | yes (provider specific) | **yes** — SQL Server `OPTION (...)`, PostgreSQL/MySQL/MariaDB inline `/*+ ... */`; SQLite/ClickHouse reject | `QueryCommand<TResult>.Hint`, `ISqlDialect.SupportsQueryHints`/`RenderQueryHints` |
 | Table hints (e.g. `WITH (NOLOCK)`) | yes | **partial** — SQL Server only | `EntityBuilder.WithTableHint`, `ISqlDialect.SupportsTableHints`/`MakeTableHints` |
 | Identifier quoting | yes (per provider) | opt-in — `UseQuotedIdentifiers()`/`WithQuotedIdentifiers()`; default emits physical names verbatim | `ISqlDialect.QuoteIdentifier` |
 | Naming conventions (e.g. snake_case) | via `MappingSchema`/attributes (no built-in convention) | opt-in — `UseNamingConvention()`/`WithNamingConvention()`; built-in `SnakeCaseNamingConvention`; explicit names stay verbatim | `INamingConvention` / `SnakeCaseNamingConvention` |
@@ -116,11 +116,11 @@ nextorm points at the source that owns the behaviour.
 * **Data modification**: `INSERT`/`UPDATE`/`DELETE`/`MERGE`, bulk copy, temporary tables — entirely
   absent from nextorm by design.
 * **Relationships**: `[Association]`, `LoadWith` eager loading and implicit join inference.
-* **Hint breadth**: query and table hints across providers (nextorm exposes both on SQL Server only),
-  plus query filters, interceptors and other extensibility.
-* **Composable raw SQL**: linq2db lets raw SQL be used as a `FROM` source, joined and filtered further;
-  nextorm's `WithSql` replaces the whole query.
-* **Coverage beyond the query core**: a larger pre-declared TVF set, full-text ranking/score, the XML
+* **Hint breadth**: nextorm exposes statement-level query hints on SQL Server, PostgreSQL and
+  MySQL/MariaDB, but table hints only on SQL Server; linq2db additionally covers cross-provider table
+  hints,   plus query filters, interceptors and other extensibility.
+* **Coverage beyond the query core**: a larger pre-declared TVF set (though nextorm now ships
+  `CONTAINSTABLE`/`FREETEXTTABLE` with `KEY`/`RANK` and the PostgreSQL `ts_rank`/`ts_rank_cd`), the XML
   `.nodes` rowset and dynamic-schema sources (ClickHouse `values()`/server table functions, MySQL
   `JSON_TABLE`, PostgreSQL `jsonb_to_record`).
 * **Provider breadth**: Oracle, Firebird, DB2, SAP HANA, Informix, Sybase, SQL CE and more.
@@ -147,8 +147,8 @@ nesting depth on the SQL providers, while the in-memory provider has no per-row 
 If the requirement is *read and report over an existing schema* with a small, fast, provider-portable
 mapper, nextorm now covers essentially the whole analytic query surface that linq2db offers, including
 the provider-only function families and the ClickHouse-specific constructs. The remaining functional delta
-is deliberate: DML and change tracking, relationships, cross-provider hint breadth, composable raw SQL,
-a larger pre-declared TVF set with full-text ranking, broader provider coverage and the
+is deliberate: DML and change tracking, relationships, table hints outside SQL Server, composable raw SQL,
+a larger pre-declared TVF set, broader provider coverage and the
 larger extensibility/ecosystem surface. Mapping output, by contrast, is more configurable in nextorm:
 identifier quoting and naming conventions are opt-in and can be overridden per command, whereas
 linq2db quotes by default and fixes names through its mapping schema. Conversely, linq2db is the better

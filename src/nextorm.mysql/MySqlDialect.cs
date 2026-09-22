@@ -22,6 +22,59 @@ public class MySqlDialect : SqlDialectBase
     // the SqlDialectBase default.
     public override bool SupportsApply => true;
 
+    /// <summary>MySQL/MariaDB support a raw SQL derived table (<c>FROM (&lt;sql&gt;) AS alias</c>).</summary>
+    public override bool SupportsRawSqlSource => true;
+
+    /// <summary>MySQL 5.7+ (and MariaDB 10.2+) render statement-level hints as inline optimizer hints.</summary>
+    public override bool SupportsQueryHints => true;
+
+    /// <summary>
+    /// Renders the statement-level hints as a <c>/*+ ... */</c> optimizer-hint comment immediately after
+    /// the top-level <c>select</c> (the position MySQL and MariaDB require; a <c>WITH</c> prefix and
+    /// subqueries are skipped). Neither has a <c>maxrecursion</c> option, so
+    /// <paramref name="maxRecursionOption"/> is ignored.
+    /// </summary>
+    public override string RenderQueryHints(string sql, IReadOnlyList<string> hints, string? maxRecursionOption)
+    {
+        var depth = 0;
+        for (var i = 0; i < sql.Length; i++)
+        {
+            var c = sql[i];
+            if (c is '\'' or '"' or '`')
+            {
+                var quote = c;
+                for (i++; i < sql.Length; i++)
+                {
+                    if (sql[i] != quote) continue;
+                    if (quote == '\'' && i + 1 < sql.Length && sql[i + 1] == '\'') { i++; continue; }
+                    break;
+                }
+
+                continue;
+            }
+
+            if (c == '(') { depth++; continue; }
+            if (c == ')') { if (depth > 0) depth--; continue; }
+            if (depth != 0 || !MatchesSelect(sql, i)) continue;
+
+            return sql.Insert(i + "select".Length, $" /*+ {string.Join(" ", hints)} */");
+        }
+
+        return sql;
+    }
+
+    private static bool MatchesSelect(string sql, int index)
+    {
+        const string keyword = "select";
+        if (index + keyword.Length > sql.Length) return false;
+        if (string.Compare(sql, index, keyword, 0, keyword.Length, StringComparison.OrdinalIgnoreCase) != 0) return false;
+        if (index > 0 && IsIdentifierChar(sql[index - 1])) return false;
+        var end = index + keyword.Length;
+        return end >= sql.Length || !IsIdentifierChar(sql[end]);
+    }
+
+    private static bool IsIdentifierChar(char c) => char.IsLetterOrDigit(c) || c == '_';
+
     // MySQL/MariaDB have a right join but no full join.
     public override bool SupportsFullJoin => false;
 

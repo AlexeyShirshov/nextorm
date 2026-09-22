@@ -28,6 +28,9 @@ public sealed class ClickHouseDialect : SqlDialectBase
     /// <summary>A ClickHouse derived table (subquery in FROM) must have an alias.</summary>
     public override bool RequireSubqueryAlias => true;
 
+    /// <summary>ClickHouse supports a raw SQL derived table (<c>FROM (&lt;sql&gt;) AS alias</c>).</summary>
+    public override bool SupportsRawSqlSource => true;
+
     /// <summary>ClickHouse implements the <c>INTERSECT ALL</c>/<c>EXCEPT ALL</c> set-operation variants.</summary>
     public override bool SupportsIntersectExceptAll => true;
 

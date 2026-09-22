@@ -208,11 +208,16 @@ SQL Server поддерживает только метод `System`
 выбрасывает `NotSupportedException`. См.
 [Сэмплирование таблицы](../01-querying-and-projections.md#сэмплирование-таблицы-tablesample).
 
+## Полнотекстовый поиск
+
+Кросс-провайдерные boolean-предикаты `contains`/`freetext` рендерят `CONTAINS`/`FREETEXT`. Для
+ранжирования `SqlFunctions.SqlServer.containstable`/`freetexttable` отдают ключ совпавшей строки и
+оценку `RANK` через `SqlFunctions.IKeyRankRow<TKey>`; см.
+[Табличные функции](../13-table-valued-functions.md#built-in-table-functions).
+
 ## Пока не поддерживается
 
-`CONTAINSTABLE`/`FREETEXTTABLE` (полнотекстовый поиск с колонкой `RANK`, ссылающийся на базовую
-таблицу по имени) и строковый метод `.nodes` (нужна внешняя ссылка в
-`FROM`/`CROSS APPLY`) значатся в бэклоге. См.
+Строковый метод `.nodes` (нужна внешняя ссылка в `FROM`/`CROSS APPLY`) значится в бэклоге. См.
 [Ограничения и возможности вне области охвата](../../advanced/limitations.md).
 
 ## См. также

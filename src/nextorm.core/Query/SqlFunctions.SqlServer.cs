@@ -88,6 +88,25 @@ namespace NextORM.Core;
         public IQueryable<SqlFunctions.IOpenJsonRow> openjson(string? json) => throw new NotSupportedException();
 
         /// <summary>
+        /// <c>CONTAINSTABLE(table, column, search)</c> as a FROM source (SQL Server full-text search with
+        /// ranking). Join it back to the full-text-indexed table on
+        /// <see cref="SqlFunctions.IKeyRankRow{TKey}.Key"/> and project
+        /// <see cref="SqlFunctions.IKeyRankRow{TKey}.Rank"/>:
+        /// <c>ctx.From&lt;IDocument&gt;().Join(ctx.FromTableFunction(() =&gt; SqlFunctions.SqlServer.containstable&lt;int&gt;("documents", "title", search)), (d, k) =&gt; d.Id == k.Key).OrderByDescending(p =&gt; p.Item2.Rank)</c>.
+        /// <paramref name="table"/> and <paramref name="column"/> are emitted verbatim as identifiers
+        /// (the table name or its alias exactly as it appears in the query); only pass trusted values.
+        /// </summary>
+        [SqlTableFunction("containstable", VerbatimArguments = new[] { 0, 1 })]
+        public IQueryable<SqlFunctions.IKeyRankRow<TKey>> containstable<TKey>(string table, string column, string search) => throw new NotSupportedException();
+
+        /// <summary>
+        /// <c>FREETEXTTABLE(table, column, search)</c> as a FROM source; the natural-language counterpart
+        /// of <see cref="containstable{TKey}(string, string, string)"/> (same <c>KEY</c>/<c>RANK</c> columns).
+        /// </summary>
+        [SqlTableFunction("freetexttable", VerbatimArguments = new[] { 0, 1 })]
+        public IQueryable<SqlFunctions.IKeyRankRow<TKey>> freetexttable<TKey>(string table, string column, string search) => throw new NotSupportedException();
+
+        /// <summary>
         /// <c>choose(index, value, ...)</c>: the 1-based <paramref name="index"/>-th value (NULL when out
         /// of range). Requires a provider that supports it (see
         /// <see cref="ISqlDialect.SupportsChoose"/>; SQL Server).

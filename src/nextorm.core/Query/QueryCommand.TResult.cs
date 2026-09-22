@@ -346,7 +346,9 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     public QueryCommand<TResult> Hint(params string[] hints)
     {
         var cmd = (QueryCommand<TResult>)Clone();
+        var source = cmd._from;
         cmd.ResetPreparation();
+        cmd._from = source;
         cmd.AddHints(hints);
         return cmd;
     }

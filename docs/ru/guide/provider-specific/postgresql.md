@@ -73,7 +73,8 @@ select jsonb_agg(somestring) from complex_entity
 дополнительно предоставляет native-поверхность текстового поиска, гейтится
 [`SupportsTextSearchFunctions`](xref:NextORM.Core.ISqlDialect.SupportsTextSearchFunctions):
 `to_tsvector`, `to_tsquery` (плюс `plainto_tsquery`/`phraseto_tsquery`/`websearch_to_tsquery`),
-`ts_rank`, `ts_headline` и оператор совпадения `@@`. `tsvector`/`tsquery` на CLR-стороне представлены
+`ts_rank`, `ts_rank_cd` (ранжирование по плотности покрытия), `ts_headline` и оператор совпадения `@@`.
+`tsvector`/`tsquery` на CLR-стороне представлены
 `string`.
 
 ```csharp

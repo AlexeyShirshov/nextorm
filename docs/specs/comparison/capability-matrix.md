@@ -21,7 +21,7 @@ functions), `SqlFunctions.SqlServer` (JSON-as-text on SQL Server and MySQL/Maria
 | CROSS JOIN | yes (`SelectMany`) | yes | **yes** | `JoinType.Cross` |
 | APPLY / LATERAL | partial | yes | **yes** | `JoinType.CrossApply/OuterApply`, `ISqlDialect.SupportsApply`/`MakeApply`; the applied source may be correlated (a lambda over the left-hand row), gated off on SQLite/ClickHouse |
 | Join strictness (`ANY`/`ALL`/`ASOF`) and `GLOBAL` | no | no | **yes** on ClickHouse | `JoinStrictness`, `EntityBuilder.WithStrictness`/`Global`, `ISqlDialect.SupportsJoinStrictness`/`SupportsGlobalJoin`/`MakeJoinKeyword`; `SEMI`/`ANTI`/`PASTE` are not implemented |
-| Query hints | yes | yes (provider specific) | **partial** — SQL Server only | `QueryCommand<TResult>.Hint`, `ISqlDialect.SupportsQueryHints`/`RenderQueryHints` |
+| Query hints | yes | yes (provider specific) | **partial** — SQL Server `OPTION (...)`, PostgreSQL/MySQL/MariaDB inline `/*+ ... */`; SQLite/ClickHouse reject | `QueryCommand<TResult>.Hint`, `ISqlDialect.SupportsQueryHints`/`RenderQueryHints` |
 | Table hints | yes | yes | **partial** — SQL Server only | `EntityBuilder.WithTableHint`, `SupportsTableHints`/`MakeTableHints` |
 | JOIN to a derived table (subquery) | yes | yes | **yes** — the subquery may be either side: the *joined* side (`primary.Join(QueryCommand<T>)`) or the *primary* `FROM` source (`ctx.From(derivedQuery).Join(...)`); a `Where` may precede the join, other modifiers stay inside the derived query (the in-memory provider rejects a derived primary source) | `EntityBuilder`, `SqlBuilder.MakeFrom`, `DataContextExtensions.From(QueryCommand)` |
 | More than two joined tables | unlimited | unlimited | **yes — up to 8** | `Projection<T1..T8>`, `JoinedEntityBuilder<T1..T8>` |
@@ -54,7 +54,7 @@ functions), `SqlFunctions.SqlServer` (JSON-as-text on SQL Server and MySQL/Maria
 | `LIKE` / string methods (`Contains`, `StartsWith`, `ToUpper`, `Substring`, `Trim`, `Remove`, `Insert`, `IndexOf`, `LastIndexOf`, `PadLeft`, `PadRight`, `new string(char, n)`, `Split`/`Join` on arrays) | yes | yes | **yes** (string `LastIndexOf` is not available on SQLite, which has no reversal; `Split` needs a scalar array — PostgreSQL `string_to_array`, ClickHouse `splitByChar`/`StringSplit` — while `Join` requires PostgreSQL arrays) | `BaseExpressionVisitor`, dialect string hooks |
 | Math functions (`Math.*`) | yes | yes | **yes** | `BaseExpressionVisitor`, `MakeMathFunction` |
 | Date/time functions (`DATEPART`, ...) | yes | yes | **yes** | `CommonFunctions`, `MakeDatePart`/`MakeDateAdd`/... |
-| Full-text search | partial (`EF.Functions`) | yes (provider) | **yes** on SQL Server, PostgreSQL, MySQL/MariaDB (boolean predicates); plus the native PostgreSQL `tsvector`/`tsquery` surface (`to_tsvector`/`to_tsquery`/`ts_rank`/`ts_headline`/`@@`) | `contains`/`freetext`, `SupportsFullText`/`MakeFullText`; `PostgresFunctions.to_tsvector/...`, `SupportsTextSearchFunctions` |
+| Full-text search | partial (`EF.Functions`) | yes (provider) | **yes** on SQL Server, PostgreSQL, MySQL/MariaDB (boolean predicates); plus the native PostgreSQL `tsvector`/`tsquery` surface (`to_tsvector`/`to_tsquery`/`ts_rank`/`ts_rank_cd`/`ts_headline`/`@@`) and SQL Server ranking (`containstable`/`freetexttable` → `KEY`/`RANK`) | `contains`/`freetext`, `SupportsFullText`/`MakeFullText`; `PostgresFunctions.to_tsvector/...`, `SupportsTextSearchFunctions`; `SqlServerFunctions.containstable/freetexttable` |
 | Native JSON | yes | yes | **yes on PostgreSQL** | `SupportsJson`, `JsonSqlTranslator` |
 | JSON scalar functions (`json_value`/`json_query`/`json_modify`, `isjson`) | yes | yes | **yes on SQL Server and MySQL/MariaDB** | `SupportsTextJson`, `MakeTextJsonFunction`, `MakeIsJson` |
 | String JSON (`JSONExtract*`, `JSONHas`, `JSONLength`, `JSONType`, `visitParamExtract*`, JSONPath `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS`) | no | no | **yes on ClickHouse** — `json_extract_string` is the same scalar-string extractor as the portable `json_value` (no separate surface needed), the typed `JSONExtractInt`/`Float`/`Bool`/`Raw` are ClickHouse-only, and the JSONPath scalars share the same gate | `SupportsJsonExtract`, `MakeJsonExtract`, `JsonExtractSqlTranslator` |
@@ -70,7 +70,7 @@ functions), `SqlFunctions.SqlServer` (JSON-as-text on SQL Server and MySQL/Maria
 | Navigation properties (implicit joins) | yes | yes | **no** | explicit joins only; no relationship metadata |
 | DML (`INSERT`/`UPDATE`/`DELETE`/`MERGE`) | yes | yes | **no** | read-only provider |
 | Raw SQL (whole query) | yes (`FromSql`) | yes | **yes** | `PrepareFromSql`/`WithSql` |
-| Raw SQL as a composable source/subquery | yes | yes | **no** | `WithSql` replaces the whole query |
+| Raw SQL as a composable source/subquery | yes | yes | **yes** — `FromSql` renders the fragment as a derived table, joined/filtered further | `DataContextExtensions.FromSql`, `ISqlDialect.SupportsRawSqlSource` |
 
 The matrix was originally written before the section-5 workstreams landed; it has been updated in place on
 2026-09-19. For per-provider details see `docs/providers/*.md`.

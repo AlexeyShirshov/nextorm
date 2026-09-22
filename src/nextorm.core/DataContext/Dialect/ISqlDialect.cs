@@ -777,6 +777,13 @@ public interface ISqlDialect
     /// </summary>
     bool SupportsTableFunction(string name);
     /// <summary>
+    /// True when the provider can use a raw SQL fragment as a composable <c>FROM</c> source rendered as a
+    /// derived table (<c>(&lt;sql&gt;) AS alias</c>; see <see cref="DataContextExtensions.FromSql"/>). The
+    /// safe default is <c>false</c>; a provider that leaves it <c>false</c> rejects such a source with a
+    /// clear <see cref="NotSupportedException"/>.
+    /// </summary>
+    bool SupportsRawSqlSource { get; }
+    /// <summary>
     /// Renders the opening fragment of a count aggregate. <paramref name="big"/> requests a 64-bit
     /// count; dialects where <c>count</c> already returns a 64-bit integer ignore the flag.
     /// </summary>

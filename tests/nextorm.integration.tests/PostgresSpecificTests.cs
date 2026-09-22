@@ -39,6 +39,17 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    public void QueryHint_ShouldExecuteAsPlainComment()
+    {
+        var ids = _sut.SimpleEntity
+            .Select(it => it.Id)
+            .Hint("SeqScan(simple_entity)")
+            .ToList();
+
+        ids.Should().NotBeEmpty();
+    }
+
+    [Fact]
     public void Stdev_ShouldMatchSampleStandardDeviation()
     {
         _sut.SimpleEntity

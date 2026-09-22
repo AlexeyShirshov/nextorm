@@ -14,6 +14,9 @@ public sealed class SqliteDialect : SqlDialectBase
     // Single/SingleOrDefault inside a scalar subquery cannot be enforced by the engine.
     public override bool EnforcesScalarSubqueryCardinality => false;
 
+    // SQLite supports a raw SQL derived table (FROM (<sql>) AS alias).
+    public override bool SupportsRawSqlSource => true;
+
     // SQLite 3.30+ accepts the FILTER (WHERE ...) aggregate clause.
     public override bool SupportsFilter => true;
 

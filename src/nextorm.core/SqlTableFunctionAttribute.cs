@@ -43,4 +43,23 @@ public sealed class SqlTableFunctionAttribute : Attribute
     /// CLR types used by the projection.
     /// </summary>
     public string? WithClause { get; set; }
+
+    /// <summary>
+    /// Optional verbatim SQL appended inside the call parentheses, after the arguments, for table
+    /// functions whose schema is part of the call itself (for example MySQL
+    /// <c>JSON_TABLE(doc, path COLUMNS(...))</c>). The value is emitted verbatim, so include your own
+    /// leading separator; set <c>CallClause = ",'$[*]' columns(id int path '$.id')"</c> to render
+    /// <c>json_table(@doc,'$[*]' columns(id int path '$.id'))</c>. The mapped row type still supplies
+    /// the CLR types used by the projection. This is developer-authored SQL only — never build it from
+    /// user input.
+    /// </summary>
+    public string? CallClause { get; set; }
+
+    /// <summary>
+    /// Indices of the arguments that must be emitted verbatim as SQL identifiers instead of values
+    /// (for example the <c>table</c> and <c>column</c> names of SQL Server
+    /// <c>CONTAINSTABLE(table, column, search)</c>). Each such argument must be a constant string and
+    /// is rendered unquoted; only pass trusted values.
+    /// </summary>
+    public int[]? VerbatimArguments { get; set; }
 }

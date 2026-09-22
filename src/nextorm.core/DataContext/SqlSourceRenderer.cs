@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Linq.Expressions;
+using System.Reflection;
 using System.Text;
 using Microsoft.Extensions.Logging;
 
@@ -202,6 +203,9 @@ internal static class SqlSourceRenderer
         if (from.Pivot is not null)
             return MakePivot(in ctx, from);
 
+        if (from.RawSqlSource is not null)
+            return MakeRawSqlSource(in ctx, from, needAlias, entityType);
+
         if (!ctx.ParamMode && !string.IsNullOrEmpty(from.Table))
         {
             if (tableHints is { Count: > 0 } && !ctx.Dialect.SupportsTableHints)
@@ -280,6 +284,53 @@ internal static class SqlSourceRenderer
     }
 
     /// <summary>
+    /// Renders a raw SQL fragment as a derived table: <c>(&lt;sql&gt;) AS alias</c>. The fragment's
+    /// named parameters (the public properties of <see cref="RawSqlSourceExpression.Parameters"/>) are
+    /// bound into the enclosing command in both the parameter and the SQL pass, so the order matches.
+    /// Columns are read through <see cref="TableAlias"/> accessors.
+    /// </summary>
+    private static string MakeRawSqlSource(in SqlBuildContext ctx, FromExpression from, bool needAlias, Type? entityType)
+    {
+        if (!ctx.Dialect.SupportsRawSqlSource)
+            throw new NotSupportedException("Raw SQL as a FROM source is not supported by this SQL dialect");
+
+        var raw = from.RawSqlSource!;
+
+        if (raw.Parameters is not null)
+        {
+            var props = raw.Parameters.GetType().GetProperties(BindingFlags.Instance | BindingFlags.Public);
+            for (var (i, cnt) = (0, props.Length); i < cnt; i++)
+            {
+                var prop = props[i];
+                ctx.Params.Add(new Parameter(prop.Name, prop.GetValue(raw.Parameters)));
+            }
+        }
+
+        if (ctx.ParamMode)
+            return string.Empty;
+
+        var sqlBuilder = StringBuilderPool.Shared.Get();
+        try
+        {
+            sqlBuilder.Append('(').Append(raw.Sql).Append(')');
+
+            if (needAlias || ctx.Dialect.RequireSubqueryAlias)
+            {
+                if (entityType is not null)
+                    ctx.ColumnsProvider.Add(entityType, false);
+
+                sqlBuilder.Append(ctx.Dialect.MakeTableAlias(ctx.AliasProvider!.GetNextAlias(from)));
+            }
+
+            return sqlBuilder.ToString();
+        }
+        finally
+        {
+            StringBuilderPool.Shared.Return(sqlBuilder);
+        }
+    }
+
+    /// <summary>
     /// Renders a table-valued function call (<c>[schema.]name(arg1, arg2, ...)</c>) as a FROM source.
     /// The arguments go through the regular expression visitor, so captured values become parameters
     /// exactly like everywhere else; the parameter pass walks them (in the same order) without
@@ -300,6 +351,9 @@ internal static class SqlSourceRenderer
         {
             for (var (i, cnt) = (0, arguments.Count); i < cnt; i++)
             {
+                if (IsVerbatimArgument(function, i))
+                    continue;
+
                 using var visitor = new BaseExpressionVisitor(new VisitorOptions(entityType ?? typeof(object), ctx.Dialect, ctx.ColumnsProvider, 0, ctx.AliasProvider, ctx.ParameterProvider, ctx.QueryProvider, true, true, ctx.Params, ctx.Logger) { QuoteIdentifiers = ctx.QuoteIdentifiers, NamingConvention = ctx.NamingConvention });
                 visitor.Visit(arguments[i]);
             }
@@ -317,10 +371,19 @@ internal static class SqlSourceRenderer
                 if (i > 0)
                     sqlBuilder.Append(", ");
 
+                if (IsVerbatimArgument(function, i))
+                {
+                    sqlBuilder.Append(GetVerbatimArgument(arguments[i]));
+                    continue;
+                }
+
                 using var visitor = new BaseExpressionVisitor(new VisitorOptions(entityType ?? typeof(object), ctx.Dialect, ctx.ColumnsProvider, 0, ctx.AliasProvider, ctx.ParameterProvider, ctx.QueryProvider, true, false, ctx.Params, ctx.Logger) { QuoteIdentifiers = ctx.QuoteIdentifiers, NamingConvention = ctx.NamingConvention });
                 visitor.Visit(arguments[i]);
                 sqlBuilder.Append(visitor.ToString());
             }
+
+            if (!string.IsNullOrEmpty(function.CallClause))
+                sqlBuilder.Append(function.CallClause);
 
             sqlBuilder.Append(')');
 
@@ -355,6 +418,26 @@ internal static class SqlSourceRenderer
             StringBuilderPool.Shared.Return(sqlBuilder);
         }
     }
+
+    private static bool IsVerbatimArgument(TableFunctionExpression function, int index)
+    {
+        var indexes = function.VerbatimArguments;
+        if (indexes is null)
+            return false;
+
+        for (var (i, cnt) = (0, indexes.Count); i < cnt; i++)
+        {
+            if (indexes[i] == index)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static string GetVerbatimArgument(Expression argument) =>
+        argument is ConstantExpression { Value: string text }
+            ? text
+            : throw new NotSupportedException("A verbatim table-function argument must be a constant string.");
 
     /// <summary>
     /// Renders a <c>PIVOT</c>/<c>UNPIVOT</c> source: the inner source is rendered recursively (without an

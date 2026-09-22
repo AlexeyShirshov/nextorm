@@ -3522,6 +3522,242 @@ Build Release **0/0**.
 не подключён (записи `S*` инертны). `slopwatch` локальным tool'ом не установлен
 (`.config/dotnet-tools.json` — coverage/reportgenerator/docfx), скан выполнен вручную.
 
+## 🔎 Точечный аудит — query hints PostgreSQL/MySQL (`/*+ ... */`) (22.09.2026)
+
+**Область (uncommitted):** `src/nextorm.postgres/PostgresDialect.cs` — `SupportsQueryHints` (`:41`),
+`RenderQueryHints` (`:48-53`); `src/nextorm.mysql/MySqlDialect.cs` — `:26`, `:33-38` (MariaDB наследует);
+тесты `tests/nextorm.{postgres,mysql,mariadb}.tests/*` и `tests/nextorm.integration.tests/{Postgres,MySql}SpecificTests.cs`;
+доки EN+RU (`docs/guide/17-query-hints.md`, `docs/advanced/limitations.md`) и матрицы
+`docs/specs/comparison/*`; RFC `docs/specs/roadmap/todo_query_hints_providers.md` удалён, §4 п.16
+`sql-capabilities-gap-analysis.md` переведён в «Shipped». Новых публичных имён нет — переопределены уже
+существующие члены `ISqlDialect`/`SqlDialectBase`; XML-`<summary>` у обоих override есть.
+
+| Категория навыка | Вердикт |
+|---|---|
+| 1. `IDisposable` | ✅ Не затронуто: новых disposable-полей/локальных и `IDisposable`-типов нет. |
+| 2. Подавления | ✅ Новых `#pragma`/`SuppressMessage`/`NoWarn`/`Skip=`/пустых `catch` — **0**. В `src/`: **5** `#pragma` (все с парным `restore`) + **6** `SuppressMessage` (все с `Justification`) → неоправданных **0/11**; `Skip=` — 0, `Task.Delay` — 2 (обе `Task.Delay(0)`-yield в `tests/nextorm.core.tests/InMemoryTests.cs`), `Thread.Sleep` — 0, пустых `catch` — 0. Соотношение не изменилось. |
+| 3. LINQ / горячий путь | ✅ LINQ нет; `IndexOf`/`Insert`/`string.Join` — на построении SQL (план-кэшируется, не per-row); аллокации того же порядка, что интерполяция SQL Server-хука. См. ℹ️ B. |
+| 4. События | ✅ Не затронуто. |
+| 5. Проектирование | ✅ **Находка 56 исправлена 22.09.2026** (позиция комментария теперь ищется по верхнеуровневому `select` с учётом скобок/кавычек; во время фикса найден и закрыт смежный баг ядра `Hint`). ℹ️ A — тело метода по-прежнему продублировано в двух диалектах (принято: план запрещает расширять публичную поверхность `protected`-хелпером). |
+| 6. Исключения | ✅ Новых `catch`/`throw` нет; `Hint` на SQLite/ClickHouse по-прежнему бросает `NotSupportedException` (`SqlBuilder.cs:492-493`), негативные тесты сохранены. |
+| 7. Хэш-ключи кэша | ✅ Хинты уже участвуют в план-ключе (регресс-тест `QueryHint_ShouldNotReuseThePlanOfAnUnhintedCommand`, `tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:730-741`); фича — рендер-онли, состав `QueryPlanEqualityComparer` не менялся. |
+
+### ✅ Находка 56 — позиция inline-комментария берётся `IndexOf("select")`, при `WITH`-запросе хинт попадает не в тот query block (ИСПРАВЛЕНА 22.09.2026; P1)
+
+Оба диалекта (`PostgresDialect.cs:50-52`, `MySqlDialect.cs:35-37`) ищут точку вставки как
+`sql.IndexOf("select", StringComparison.OrdinalIgnoreCase)` — первое **литеральное** вхождение подстроки.
+Для CTE-запроса `SqlBuilder` приставляет `withClause` перед готовым `select …` (`SqlBuilder.cs:466-467`,
+`SqlSourceRenderer.MakeWithClause:22-80`), поэтому первой находится `select` **внутри тела CTE**, а не
+верхнеуровневый. Комментарий уезжает внутрь CTE: MySQL применит optimizer hint к этому query block, а
+`pg_hint_plan` читает комментарий сразу после первого ключевого слова инструкции и такой хинт не увидит —
+т.е. для CTE-запросов хинт молча не срабатывает. Опаснее второй случай: если первый идентификатор до
+`select` содержит подстроку `select` (CTE с именем `selected`, `select_ids`, …), `start + 6` разрывает
+идентификатор и рендерится синтаксически невалидный SQL (`with select /*+ … */ed as (…)`).
+
+CTE + `Hint` — поддерживаемая комбинация: SQL Server покрывает её тестом
+`QueryHint_WithRecursiveCte_ShouldMergeIntoOneOptionClause` (`tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:714-727`);
+у PG/MySQL аналогичного теста нет (все новые тесты — на одиночный `select`), т.е. путь не покрыт.
+
+- **Было:** `const string keyword = "select"; var start = sql.IndexOf(keyword, OrdinalIgnoreCase); return start < 0 ? sql : sql.Insert(start + keyword.Length, $" /*+ {string.Join(" ", hints)} */");`
+- **Стало (предложение):** вычислять позицию по ведущему ключевому слову инструкции (пропустив префикс `with …`), а не по первому вхождению подстроки, и вынести общий helper (ℹ️ A); добавить SQL-gen тесты PG/MySQL `WithRecursiveCte … Hint` (хинт сразу после верхнеуровневого `select`) и негатив на CTE-имя, содержащее `select`.
+- **Проверка:** SQL-gen тест с CTE + `Hint` ассертит позицию комментария и целостность идентификатора; тест «CTE-имя `selected`» не порождает невалидный SQL.
+
+- **Исправление (22.09.2026):** `RenderQueryHints` обоих диалектов заменён на сканер: он идёт по строке, отслеживает глубину `(...)` и пропускает кавычки (`'`, `"`, `` ` ``), вставляя `/*+ … */` после первого `select` на нулевой глубине с проверкой границ идентификатора. Добавлены ассерты диалекта на CTE и на CTE-имя `selected`, а также SQL-gen тесты `QueryHint_WithCte_ShouldPlaceHintAfterTheTopLevelSelect` (PG/MySQL). Во время проверки CTE-кейса найден и закрыт **смежный баг ядра:** `QueryCommand<TResult>.Hint` клонирует команду и вызывает `ResetPreparation()`, который обнуляет `_from`; для источника-`TableAlias` (CTE/производный запрос) `GetFrom` вернуть его не может, поэтому хинт **терял `FROM`** (`with recent as (...) select /*+ … */ id` без `from recent`). `Hint` теперь сохраняет `_from` клона до `ResetPreparation` и восстанавливает его после. Регресс-гейт: core 192/192, sqlite 268/268, postgres 249/249, sqlserver 238/238, mysql 67/67, mariadb 30/30, clickhouse 183/183; `dotnet build -c Release` 0/0. Прочие clone+reset методы (`WithQuotedIdentifiers`/`WithNamingConvention`) сохраняют тот же баг источника — вынесены на следующий аудит.
+
+### ℹ️ Наблюдения (фикс не требуется)
+
+- **A. Тело `RenderQueryHints` продублировано между диалектами.** `PostgresDialect.cs:48-53` и
+  `MySqlDialect.cs:33-38` совпадают построчно (различаются только XML-доки). Семейство «комментарных»
+  хинтов лучше держать в одном `protected`/`internal` helper'е `SqlDialectBase` рядом с базовым
+  `RenderQueryHints` (`SqlDialectBase.cs:515-516`) — убирает копию и позволяет починить Находку 56 в
+  одном месте. Не блокер.
+- **B. Аллокации на построении SQL.** `string.Join(" ", hints)` + `sql.Insert(...)` дают две новые строки
+  на команду с хинтами; вызывается однократно на форму запроса (план-кэш, `SqlBuilder.cs:489-499`), не на
+  строку/колонку. На фоне `StringBuilder`-сборки всего SQL и интерполяции SQL Server-хука — не горячий
+  путь. Принято.
+- **C. `maxRecursionOption` фактически всегда `null`.** `MakeMaxRecursion` переопределён только в SQL Server
+  (`SqlDialectBase.cs:258` → `null`), поэтому игнорирование параметра в PG/MySQL ничего не теряет. Если
+  появится диалект с recursion-опцией, контракт `RenderQueryHints` обяжет его учесть.
+- **D. `SupportsQueryHints => true` для PostgreSQL при отсутствии расширения.** `pg_hint_plan` — не ядро;
+  без расширения `/*+ … */` — обычный комментарий, поэтому флаг не вводит в заблуждение и оговорён в
+  XML-доке и `docs/guide/17-query-hints.md`. Принято.
+
+**Проверка (22.09.2026, выполнено в этом проходе).** `dotnet build nextorm.sln -c Release` — **0 warnings /
+0 errors**. `dotnet run --project tests/<p> -c Release --no-build`: postgres **248/248**, mysql **66/66**,
+mariadb **30/30** (0 failed, 0 skipped). Паттерн-скан: `#pragma`/`SuppressMessage`/`Skip=`/`Task.Delay`/
+пустых `catch` новых — **0**; EOL: оба диалекта и все правленые тесты — CRLF (согласовано с `AGENTS.md`).
+`PublicAPI.*.txt` — по-прежнему 0 (Шаг 5 открыт); новых имён нет, добавлены **4** `override` уже
+существующих членов (по паре `SupportsQueryHints`+`RenderQueryHints` в PostgreSQL и MySQL; MariaDB
+наследует). `slopwatch` локальным tool'ом не установлен — скан выполнен вручную.
+
+## 🔎 Точечный аудит — PostgreSQL `ts_rank_cd` + `[SqlTableFunction]` `CallClause`/`VerbatimArguments` (22.09.2026)
+
+Область (uncommitted, worktree `tvf-expansion`): `Query/SqlFunctions.cs` (`IKeyRankRow<TKey>`),
+`Query/SqlFunctions.SqlServer.cs` (`containstable<TKey>`/`freetexttable<TKey>`),
+`Query/SqlFunctions.Postgres.cs` (`ts_rank_cd`), `Visitors/ExtendedScalarFunctionTranslator.cs`,
+`SqlTableFunctionAttribute.cs` (`CallClause`/`VerbatimArguments`), `Expressions/TableFunctionExpression.cs`,
+`DataContext/SqlSourceRenderer.cs` (`MakeTableFunction`/`IsVerbatimArgument`/`GetVerbatimArgument`),
+`src/nextorm.sqlserver/SqlServerDialect.cs`; тесты sqlserver/postgres/mysql. Build Release — **0/0**
+(прогнано в этом проходе); тесты Release `--no-build` — core **192/192**, sqlserver **240/240**,
+postgres **249/249**, mysql **66/66** (0 failed, 0 skipped).
+
+| Категория навыка | Результат |
+|---|---|
+| 2. Подавления | ✅ В диффе `src`+`tests` новых `#pragma warning disable`/`SuppressMessage`/`NoWarn` — **0**. База прежняя: 6 `SuppressMessage` (все с `Justification`, `<Pending>` — 0) + 5 `#pragma disable` (все с парным `restore`) = **11/11 оправданных, 0 неоправданных**. |
+| Слоп-паттерны (slopwatch локальным tool'ом не установлен; скан вручную) | ✅ `Skip=`/`Ignore` — 0; пустых `catch` — 0; `Thread.Sleep` — 0; `Task.Delay` — 2, обе прежние `Task.Delay(0)`-yield (`tests/nextorm.core.tests/InMemoryTests.cs`); инлайновых `Version`/`VersionOverride`/CPM-bypass — 0; `*.dump`/мусорных артефактов нет. |
+| 1/4/6. `IDisposable`, события, исключения | ✅ Новых disposable-полей/подписок нет; новые `throw` — `NotSupportedException` (`SqlSourceRenderer.cs:389`, `SqlFunctions.SqlServer.cs:100,107`) без `catch`. |
+| 3. LINQ на горячем пути | ✅ `IsVerbatimArgument` (`SqlSourceRenderer.cs:371-384`) — явный цикл по `int[]`, без LINQ и без аллокаций; вызывается 2× на аргумент. Находка 3 держится. |
+| 5. Проектирование | 🟡 Находка 56 (новый публичный 6-параметрический ctor). |
+| 7. Хэш-ключи кэша | ✅ Нового per-instance состояния нет: `CallClause`/`VerbatimArguments` — константы атрибута метода, resolved `FROM` остаётся чистой функцией вызова; план-ключ не затронут. |
+| EOL (AGENTS.md: CRLF) | ✅ Все изменённые `.cs` (`src`+`tests`) — CRLF-only, LF-строк **0** (проверено `perl -ne 'print if /(?<!\r)\n$/'`); Находки 20/22/29 не повторяются. |
+
+### 🟡 Находка 56 — новый публичный 6-параметрический ctor `TableFunctionExpression` (ОТКРЫТА, P2)
+
+- **Было:** `new TableFunctionExpression(name, schema, withClause, callClause, verbatimArguments, call)`
+  (`Expressions/TableFunctionExpression.cs:26`) — 6 позиционных параметров, публичный; порог реестра «≥6»
+  превышен (ср. `VisitorOptions` P2-2 и `FromExpression` в API-реестре).
+- **Стало:** сузить широчайший ctor до `internal` — единственный потребитель в решении это фабрика
+  `TableFunctionExpression.Create` (`:82`), внешних call-site нет (`roslyn refs` — 3 ссылки, все
+  внутри `TableFunctionExpression.cs`); либо ввести параметр-объект. Публичные 3-/4-арг. ctor'ы не трогать.
+- **Импакт:** косметика публичной поверхности (alpha; обратная совместимость не гарантируется), сборкой не
+  гейтится.
+- **Проверка:** build 0/0; публичная поверхность без 6-арг. ctor (или с параметром-объектом).
+
+### ℹ️ Наблюдения (фикс не требуется)
+
+- **A. Param-mode и порядок аргументов согласованы.** Первый проход `MakeTableFunction`
+  (`SqlSourceRenderer.cs:301-308`) пропускает verbatim-аргументы, второй (`:318-332`) рендерит их сырым
+  текстом; порядок параметров совпадает. Тесты фиксируют params `["search"]` (`containstable`/
+  `freetexttable`) и `["doc"]` (`JSON_TABLE`).
+- **B. `GetVerbatimArgument` — явный fail-fast.** Не-константный verbatim-аргумент (например, захваченная
+  локальная переменная с именем таблицы) бросает `NotSupportedException` с понятным текстом
+  (`SqlSourceRenderer.cs:386-389`), а не выдаёт небезопасный SQL. Ограничение задокументировано на
+  `SqlTableFunctionAttribute.VerbatimArguments`; док-зазор у встроенных методов — в API-реестре (TFV1).
+- **C. Свойство-массив `SqlTableFunctionAttribute.VerbatimArguments` (`int[]?`) — изменяемая ссылка.**
+  Для атрибутов риск низкий (значение задаётся в метаданных), но при желании — `IReadOnlyList<int>?`
+  или защитная копия в `Create`. Косметика.
+- **D. `SupportsTableFunction` — строковый гейт по имени.** SQL Server добавил `"containstable"`/
+  `"freetexttable"` (`SqlServerDialect.cs:76-77`); контрактный тест `SupportsTableFunction_…` расширен, а
+  `BuiltInTableFunction_Containstable_ShouldThrowOnPostgres` подтверждает отказ на чужом провайдере.
+
+**Проверка:** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**;
+`dotnet test tests/nextorm.{core,sqlserver,postgres,mysql}.tests -c Release --no-build` — core **192/192**,
+sqlserver **240/240**, postgres **249/249**, mysql **66/66** (0 failed, 0 skipped); в диффе новых
+`#pragma`/`SuppressMessage`/`NoWarn`/`Skip=`/`Task.Delay`/пустых `catch` — **0**; `find -name 'PublicAPI*.txt'`
+— пусто; LF-only строк в изменённых `.cs` — **0**. Публичный API-разбор — в `API-NAMING-REVIEW.md`
+(раздел 22.09.2026, TFV1/TFV2). **Актуализация 22.09.2026:** оба P2 закрыты (TFV1 — док-предупреждение у
+`CallClause`; TFV2 — ctor понижен до `internal`); повторная сборка/тесты — 0/0 и 747/747.
+
+## 🔎 Точечный аудит — композируемый сырой SQL (`FromSql`) (22.09.2026, uncommitted worktree `composable-raw-sql`)
+
+**Область:** `src/nextorm.core/Expressions/RawSqlSourceExpression.cs` (новый, `internal`),
+`Expressions/FromExpression.cs` (поле + ctor + `CloneForCache`), `DataContext/SqlSourceRenderer.cs`
+(`MakeRawSqlSource`), `DataContext/DataContextExtensions.cs` (`FromSql`),
+`DataContext/Dialect/ISqlDialect.cs` + `SqlDialectBase.cs` + 6 диалектов (`SupportsRawSqlSource`).
+Build Release — **0 warnings / 0 errors**; тесты — core 192, postgres 249, sqlserver 240, mysql 67,
+mariadb 29, sqlite 270, clickhouse 185 = **1232/1232, 0 failed, 0 skipped**.
+
+| Категория навыка | Результат |
+|---|---|
+| 1. Управление ресурсами (`IDisposable`) | ✅ Не затронуто; новых disposable-полей/локальных нет. |
+| 2. Подавления предупреждений | ✅ Новых нет; соотношение проекта не изменилось — **11/11 оправданных** (6 `SuppressMessage` + 5 `#pragma`), неоправданных — 0. |
+| 3. Антипаттерны LINQ | 🟡 **Находка 58** — рефлексия по объекту-параметру на каждом рендере/исполнении кэш-плана (LINQ-free, но аллокации). |
+| 4. Работа с событиями | ✅ Не затронуто. |
+| 5. Запахи проектирования | ✅ `MakeRawSqlSource` — 31 строка, один приватный метод; god-классов/длинных списков параметров нет. |
+| 6. Обработка исключений | 🟡 **Находка 56** — in-memory путь `FromSql` не гейтится → NRE/фантомная строка вместо `NotSupportedException`; 🟡 **Находка 57** — коллизия имён именованных параметров. |
+| 7. Хэш-ключи кэша (S2328) | ✅ `FromExpression.CloneForCache` (`:100`) включает `RawSqlSource` в early-return; `RawSqlSourceExpression` иммутабелен (`readonly`-свойства), поэтому `this` для кэш-плана безопасен, а значения параметров перечитываются на исполнении (см. Находку 58). |
+
+### 🟡 Находка 56 — `FromSql` на in-memory провайдере не отклоняется: NRE или фантомная строка
+
+`InMemoryQueryBuilder.GetPreparedQueryCommand` явно отклоняет `WithSql`/`PrepareFromSql` (`:32-34`) и
+TVF/PIVOT-источники (`:121-125`), но `FromSql` кладёт фрагмент в `FromExpression.RawSqlSource`, а не в
+`CustomData`, поэтому ни один guard не срабатывает. Ветка `else` (`:165-190`) исполняет запрос как по
+обычной таблице: `CreateEnumerator<TResult, TEntity>` (`:199-217`) не находит данных `TableAlias` и
+подставляет фантомную строку. Проверено точечным репро вне репозитория (`InMemoryDataContext`):
+`FromSql("select 1 as id", null).Select(t => new { A = 1 }).ToList()` → **1 фантомная строка** (данных
+нет, результат непустой); `…Select(t => new { Id = t["id"].AsInt }).ToList()` →
+`System.NullReferenceException` в скомпилированной лямбде проекции
+(`lambda_method…(Closure, TableAlias)`), а не понятный отказ. То есть одновременно «тихо неверный
+результат» (как в Находке 9) и необработанный NRE.
+
+- **Было:** guard смотрит только `queryCommand.CustomData is RawSqlOverride` (`InMemoryQueryBuilder.cs:32`).
+- **Стало (предложение):** рядом добавить
+  `if (queryCommand.From?.RawSqlSource is not null) throw new NotSupportedException("Raw SQL as a FROM source is not supported by the in-memory provider; run the query against a SQL provider.");`
+  (в духе `:121-125`).
+- **Проверка:** unit-тест `InMemoryTests` на `NotSupportedException`; оговорка в
+  `docs/advanced/limitations.md` (+RU).
+
+### 🟡 Находка 57 — именованные параметры фрагмента не уникализируются: коллизия/дубликаты имён
+
+`MakeRawSqlSource` (`SqlSourceRenderer.cs:299-308`) добавляет в `ctx.Params` по одному
+`Parameter(prop.Name, value)` на каждое публичное свойство объекта-параметра, **не проверяя
+уникальность** имён. Имена движковых параметров тоже берутся из имён членов (`MemberTranslator` —
+`node.Member.Name`, `SqlOperandTranslator`/`InValuesTranslator` — `GetParamName`), поэтому совпадение с
+именем во фрагменте даёт два `Parameter` с одним именем, а `QueryPlanner` (`:128-132`) без дедупликации
+зовёт `_createParam(p.Name, …)` на каждый → два `DbParameter` с одним именем. Проверено точечным репро
+(SQLite, сборка команды):
+- фрагмент `…where id > $min` (`new { min = 1 }`) + `.Where(t => t["v"].AsInt > min)` (захват `min = 99`)
+  → SQL `… where id > $min) where (v > $min)`, `PARAMS: min=1, min=99`, **2 параметра с одним именем**;
+- два вхождения одного фрагмента (join raw-источника на raw-источник) → `PARAMS: min=1, min=2`, `COUNT: 2`.
+- Исполнение на SQLite: `InvalidOperationException: Must add values for the following parameters: $min`.
+  SQL Server `SqlParameterCollection` отклоняет дубликат имени; итог зависит от драйвера, но «валидная
+  с виду» композиция падает либо (на терпимом драйвере) связывает одно значение с обоими
+  плейсхолдерами — тихо неверно.
+
+- **Было:** `ctx.Params.Add(new Parameter(prop.Name, prop.GetValue(raw.Parameters)));` без проверки.
+- **Стало (предложение):** при добавлении raw-параметров либо уникализировать имя (префикс вида
+  `__raw_<n>_<name>` + переписать вхождения в фрагменте), либо детектировать совпадение по имени и
+  бросать понятное исключение; задокументировать зарезервированное пространство имён.
+- **Проверка:** SQL-gen тест «фрагмент + захваченная переменная с тем же именем» и тест на два вхождения
+  источника; при уникализации — исполнение на SQLite + интеграционный тест.
+
+### 🟡 Находка 58 — рефлексия по объекту-параметру на каждом рендере/исполнении кэш-плана
+
+`MakeRawSqlSource` (`:301-305`) на каждом вызове делает `raw.Parameters.GetType().GetProperties(...)`
+(массив) и `prop.GetValue(...)` (бокс). LINQ нет, но аллокации/рефлексия есть, и для кэш-плана это не
+разовая работа: `Parameter.Stable` по умолчанию `false` (`Parameter.cs:21`), поэтому `QueryPlanner`
+выставляет `needsParamRefresh = true` (`:109-122`) и на **каждом** исполнении кэш-плана зовёт
+`ExtractParams` (`:47-52`) → param-mode проход → снова `MakeRawSqlSource` → снова рефлексия. Тот же путь
+уже есть у `WithSql` (`QueryCommandExtensions.cs:27-31`), т.е. долг теперь на двух call-site'ах; для
+читающего API это лишние аллокации на запрос.
+
+- **Было:** `GetProperties`/`GetValue` без кэша.
+- **Стало (предложение):** кэшировать аксессоры по типу (как `ParamNameCache`/`MemberTranslator`:
+  `PropertyInfo[]` или скомпилированные геттеры в `ConditionalWeakTable<Type, …>`/
+  `ConcurrentDictionary<Type, …>`).
+- **Проверка:** аллокационный/бенч-тест кэш-плана `FromSql` до/после; тест, что значения перечитываются
+  при повторном исполнении (флаг `Stable` не выставляется — см. `needsParamRefresh`).
+
+### ℹ️ Наблюдения (фикс не требуется)
+
+- **SQL-инъекция — by design.** Фрагмент эмитится дословно (как `WithSql` и EF Core `FromSql`);
+  значения биндятся параметрами, а не интерполируются, новых путей для пользовательского ввода нет.
+  Предупреждение есть в `docs/guide/14-raw-sql.md` (+RU): «The fragment is emitted verbatim (only pass
+  trusted SQL)» / «передавайте только доверенный SQL».
+- **`GetProperties(Instance | Public)` включает индексаторы.** Объект-параметр с публичным
+  индексатором (словарь/обёртка) уронит `prop.GetValue` (`TargetParameterCountException`).
+  Пре-существующее у `WithSql` (`QueryCommandExtensions.cs:27`); `FromSql` наследует ту же конвенцию —
+  кандидат в доку (какие объекты допустимы), не блокер.
+- **ClickHouse-тест использует `@min`,** тогда как параметры ClickHouse — `{name:Type}`; рендер
+  проверяется как текст, фрагмент не исполним. Интеграционного теста на новую фичу нет ни у одного
+  провайдера (в TODO-приёмке он значился) — стоит добавить хотя бы SQLite/PostgreSQL, иначе связывание
+  параметров и исполнение не покрыты.
+- **Гейт диалекта согласован.** `MakeRawSqlSource` бросает `NotSupportedException`
+  (`SqlSourceRenderer.cs:294`) до `ParamMode`-ветки, поэтому param- и SQL-проходы видят один и тот же
+  отказ; `SqlDialectBase` default `false` (`:500`), все 6 SQL-диалектов — `true`. In-memory гейт не
+  использует `ISqlDialect` — см. Находку 56.
+- **CRLF.** Все изменённые/новые `.cs` и `.md` — CRLF (кроме удалённого файла, которого нет в дереве).
+
+**Актуализация 22.09.2026 (фиксы применены).** Находки 56 и 57 закрыты: `InMemoryQueryBuilder` теперь гейтит `From?.RawSqlSource`/`HasRawSqlJoin` (`NotSupportedException`, тест `InMemoryTests.FromSql_ShouldThrowClearNotSupported`); для команды с raw-источником `SqlBuilder.MakeSelect` валидирует уникальность имён параметров и бросает `BuildSqlCommandException` с подсказкой переименовать (`EnsureUniqueParameterNames`, тест `FromSql_CollidingParameterName_ShouldThrow`). Оговорка про in-memory (`P2-2`) и `<exception>` у `FromSql` (`P2-3`) добавлены. Находка 58 (рефлексия без кэша) остаётся открытой — тот же долг у `WithSql`, вынесена отдельно. Регресс-гейт: build 0/0; core 193/193, postgres 250/250, sqlserver 240/240, mysql 67/67, mariadb 29/29, sqlite 270/270, clickhouse 185/185.
+
+**Проверка (22.09.2026).** Build Release — **0/0**; тесты **1232/1232** (см. выше). Скан слопа: новых
+`Skip=`/`#pragma`/`SuppressMessage`/`NoWarn`/`Task.Delay`/пустых `catch` нет; `slopwatch` локальным
+tool'ом не установлен (`.config/dotnet-tools.json` — coverage/reportgenerator/docfx), скан выполнен
+вручную. Воспроизведения Находок 56–57 — точечные репро вне репозитория (код в рамках аудита не
+правился).
+
+---
+
 ## Примечания
 
 - `SonarAnalyzer.CSharp` не подключён, поэтому правила `S####` (в т.ч. в 5 `SuppressMessage` из `src/`) сборкой не проверяются. При этом `.editorconfig` глушит 7 правил (`S125`, `S108`, `S3060`, `S1104`, `S3604`, `S2292` — `silent`; плюс `CA2254`), т.е. часть записей **инертна**: без пакета Sonar они не могут сработать (мёртвые настройки). `Directory.Build.props` задаёт только `TreatWarningsAsErrors=true` (без `AnalysisLevel=latest-all`), так что CA-правила навыка (включая `CA1508`/`CA2213`/`CA1816`) сборкой не гейтятся.

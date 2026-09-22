@@ -59,6 +59,7 @@ nextorm состоит из нейтрального к провайдеру я�
 | Приведение / части даты (`SqlFunctions.ClickHouse.to_*`) | бросает | бросает | бросает | бросает | бросает | `toDate`/`toDateTime`/`toDate32`, `toYear`/…, `toStartOf*`, `toMonday`, `toYYYYMM`/`toYYYYMMDD`, `toUnixTimestamp` | бросает |
 | `string_agg` | `group_concat(x, delimiter)` | поддерживается (2017+) | поддерживается | `group_concat(x separator delimiter)` | `group_concat(x separator delimiter)` | `arrayStringConcat(groupArray(...), ...)` | бросает |
 | Полнотекст `contains` / `freetext` | бросает | `contains` / `freetext` | `to_tsvector(...) @@ ...tsquery(...)` | `match(...) against(...)` | `match(...) against(...)` | бросает | бросает |
+| Полнотекстовое ранжирование / score | бросает | `containstable` / `freetexttable` (`RANK`, табличная функция) | `ts_rank` / `ts_rank_cd` | бросает | бросает | бросает | бросает |
 | Битовые / статистические / `-If` агрегаты | бросает | бросает | поддерживается | бросает | бросает | `groupBit*`, `corr`/`covarPop`, `countIf`/… | бросает |
 | `multi_if` (многоветвевный) | бросает | бросает | бросает | бросает | бросает | `multiIf(c1, v1, …, else)` | не применимо |
 | `lag_in_frame` / `lead_in_frame` | бросает | бросает | бросает | бросает | бросает | `lagInFrame` / `leadInFrame` | не применимо |

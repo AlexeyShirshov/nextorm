@@ -184,6 +184,42 @@ Output:
 Column names in the raw `select` list are matched against that projection, so they must line up with the
 mapped column names (or `[Column]` names) exactly.
 
+## Compositing raw SQL as a `FROM` source
+
+[`FromSql`](xref:NextORM.Core.DataContextExtensions.FromSql) uses a raw fragment as the query's **source**
+instead of a mapped table, so it can be filtered, joined, grouped, projected and paged like any other
+source. Columns are read through [`TableAlias`](xref:NextORM.Core.TableAlias) accessors
+(`t["id"].AsInt`); the same params-object convention binds named parameters.
+
+```csharp
+var rows = dataContext
+    .FromSql("select id, somestring from complex_entity where id > @min", new { min = 5 })
+    .Select(t => new { Id = t["id"].AsInt })
+    .ToList();
+```
+
+```sql
+select t1.id from (select id, somestring from complex_entity where id > @min) as "t1"
+```
+
+The fragment can also be the **joined** side (rendered as an aliased derived table):
+
+```csharp
+var rows = dataContext
+    .From<ISimpleEntity>()
+    .Join(dataContext.FromSql("select id from complex_entity"), (s, r) => s.Id == r["id"].AsInt)
+    .Select(p => new { p.Item1.Id, R = p.Item2["id"].AsInt })
+    .ToList();
+```
+
+```sql
+select t1.id, t2.id from simple_entity as "t1" join (select id from complex_entity) as "t2" on t1.id = t2.id
+```
+
+The fragment is emitted verbatim (only pass trusted SQL). A provider opts in through
+[`SupportsRawSqlSource`](xref:NextORM.Core.ISqlDialect.SupportsRawSqlSource); every SQL provider does,
+and SQLite omits the derived-table alias when the source is not joined.
+
 ## Provider differences
 
 | Provider | Behaviour |
@@ -194,7 +230,7 @@ mapped column names (or `[Column]` names) exactly.
 | MySQL | Statement passed through verbatim; `@name` parameters. |
 | MariaDB | Statement passed through verbatim; `@name` parameters. |
 | ClickHouse | Statement passed through verbatim; `@name` parameters (rewritten to `{name:Type}` by the driver). |
-| In-memory | [`PrepareFromSql`](xref:NextORM.Core.EntityBuilder`1) is not supported ([`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext) throws `NotSupportedException`); use a SQL provider for raw statements. |
+| In-memory | [`PrepareFromSql`](xref:NextORM.Core.EntityBuilder`1) and [`FromSql`](xref:NextORM.Core.DataContextExtensions.FromSql) are not supported ([`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext) throws `NotSupportedException`); use a SQL provider for raw statements. |
 
 ## See also
 
@@ -204,5 +240,5 @@ mapped column names (or `[Column]` names) exactly.
 
 ---
 
-Source: `src/nextorm.core/Query/QueryCommandExtensions.cs:7`, `src/nextorm.core/Builders/EntityExtensions.cs:5`, `src/nextorm.core/Query/RawSqlOverride.cs:3`, `src/nextorm.core/DataContext/InMemoryDataContext.cs:634`;
+Source: `src/nextorm.core/Query/QueryCommandExtensions.cs:7`, `src/nextorm.core/Builders/EntityExtensions.cs:5`, `src/nextorm.core/Query/RawSqlOverride.cs:3`, `src/nextorm.core/DataContext/InMemoryDataContext.cs:634`, `src/nextorm.core/DataContext/DataContextExtensions.cs` (`FromSql`), `src/nextorm.core/DataContext/SqlSourceRenderer.cs` (`MakeRawSqlSource`);
 `tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:671`, `:698`, `:713`.

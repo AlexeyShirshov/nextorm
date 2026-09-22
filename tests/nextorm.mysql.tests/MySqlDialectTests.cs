@@ -99,7 +99,7 @@ public class MySqlDialectTests
         Dialect.SupportsFullJoin.Should().BeFalse();
         Dialect.SupportsIntersectExceptAll.Should().BeFalse();
         Dialect.SupportsApply.Should().BeTrue();
-        Dialect.SupportsQueryHints.Should().BeFalse();
+        Dialect.SupportsQueryHints.Should().BeTrue();
         Dialect.SupportsCube.Should().BeFalse();
         Dialect.SupportsDateArithmetic.Should().BeTrue();
         Dialect.SupportsStringAgg.Should().BeTrue();
@@ -107,6 +107,20 @@ public class MySqlDialectTests
         Dialect.SupportsAnyValueAggregate.Should().BeTrue();
         Dialect.MakeAggregate("any_agg").Should().Be("ANY_VALUE");
         Dialect.SupportsPercentileWindow.Should().BeFalse();
+    }
+
+    [Fact]
+    public void QueryHintHooks_ShouldUseInlineOptimizerHintComment()
+    {
+        Dialect.SupportsQueryHints.Should().BeTrue();
+        Dialect.RenderQueryHints("select 1", ["MAX_EXECUTION_TIME(1000)"], null)
+            .Should().Be("select /*+ MAX_EXECUTION_TIME(1000) */ 1");
+        Dialect.RenderQueryHints("select 1", ["NO_RANGE_OPTIMIZATION(t idx)"], null)
+            .Should().Be("select /*+ NO_RANGE_OPTIMIZATION(t idx) */ 1");
+        Dialect.RenderQueryHints("with recent as (select 1) select recent.* from recent", ["MAX_EXECUTION_TIME(1000)"], null)
+            .Should().Be("with recent as (select 1) select /*+ MAX_EXECUTION_TIME(1000) */ recent.* from recent");
+        Dialect.RenderQueryHints("with selected as (select 1) select selected.* from selected", ["h"], null)
+            .Should().Be("with selected as (select 1) select /*+ h */ selected.* from selected");
     }
 
     [Fact]

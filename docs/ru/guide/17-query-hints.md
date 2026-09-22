@@ -71,10 +71,25 @@ select id from complex_entity with (nolock)
 | Провайдер | Хинты запросов |
 |---|---|
 | SQL Server | Поддерживаются: рендерятся как завершающее предложение `OPTION (hint, ...)`. |
+| PostgreSQL | Поддерживаются: рендерятся как встроенный комментарий `/*+ hint ... */` сразу после `SELECT` — в позиции, которую читает опциональное расширение `pg_hint_plan`; без расширения это обычный комментарий. |
+| MySQL / MariaDB | Поддерживаются: рендерятся как встроенный комментарий-optimizer-hint `/*+ hint ... */` сразу после `SELECT`. |
 | SQLite | Не поддерживаются: построение SQL выбрасывает `NotSupportedException`. |
-| PostgreSQL | Не поддерживаются: построение SQL выбрасывает `NotSupportedException`. |
-| MySQL / MariaDB | Не поддерживаются: построение SQL выбрасывает `NotSupportedException`. |
-| ClickHouse | Не поддерживаются: построение SQL выбрасывает `NotSupportedException`. |
+| ClickHouse | Не поддерживаются: используйте `Settings(...)`; `Hint(...)` выбрасывает `NotSupportedException`. |
+
+Несколько хинтов объединяются в один комментарий через пробел — форма, которую ожидают и
+`pg_hint_plan`, и оптимизатор MySQL/MariaDB:
+
+```csharp
+// PostgreSQL:  select /*+ SeqScan(simple_entity) */ id from simple_entity
+var pg = dataContext.From<ISimpleEntity>()
+    .Select(x => new { x.Id })
+    .Hint("SeqScan(simple_entity)");
+
+// MySQL / MariaDB:  select /*+ MAX_EXECUTION_TIME(1000) */ id from simple_entity
+var my = dataContext.From<ISimpleEntity>()
+    .Select(x => new { x.Id })
+    .Hint("MAX_EXECUTION_TIME(1000)");
+```
 
 Провайдер включается через [`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints) и [`RenderQueryHints`](xref:NextORM.Core.ISqlDialect);
 построитель отклоняет команду с хинтами у диалекта, который сообщает `false`.
@@ -127,4 +142,5 @@ settings max_threads = 2
 
 Source: `src/nextorm.core/Query/QueryCommand.TResult.cs` ([`Hint`](xref:NextORM.Core.QueryCommand`1)),
 `src/nextorm.core/DataContext/Dialect/ISqlDialect.cs` ([`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints) / [`RenderQueryHints`](xref:NextORM.Core.ISqlDialect)),
-`src/nextorm.sqlserver/SqlServerDialect.cs`.
+`src/nextorm.sqlserver/SqlServerDialect.cs`, `src/nextorm.postgres/PostgresDialect.cs`,
+`src/nextorm.mysql/MySqlDialect.cs` (MariaDB наследует).

@@ -72,7 +72,8 @@ The cross-provider boolean predicates `contains`/`freetext` render
 additionally exposes the native text-search scalar surface, gated by
 [`SupportsTextSearchFunctions`](xref:NextORM.Core.ISqlDialect.SupportsTextSearchFunctions):
 `to_tsvector`, `to_tsquery` (plus `plainto_tsquery`/`phraseto_tsquery`/`websearch_to_tsquery`),
-`ts_rank`, `ts_headline` and the `@@` match operator. `tsvector`/`tsquery` are represented as `string`
+`ts_rank`, `ts_rank_cd` (cover-density ranking), `ts_headline` and the `@@` match operator.
+`tsvector`/`tsquery` are represented as `string`
 on the CLR side.
 
 ```csharp

@@ -33,7 +33,9 @@
   (`x + (n * interval '1 day')`, `date_trunc('month', x) + interval '1 month - 1 day'`);
 - the `string_agg`/`array_agg` aggregates are enabled ([`SupportsStringArrayAggregates`](xref:NextORM.Core.ISqlDialect.SupportsStringArrayAggregates) is `true`);
 - full-text search is enabled ([`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText) is `true`): `SqlFunctions.Sql.contains` renders
-  `to_tsvector(col) @@ plainto_tsquery(search)` and `freetext` `websearch_to_tsquery(search)`;
+  `to_tsvector(col) @@ plainto_tsquery(search)` and `freetext` `websearch_to_tsquery(search)`; ranking is
+  available through the native `SqlFunctions.Postgres.ts_rank`/`ts_rank_cd`/`ts_headline` (gated by
+  [`SupportsTextSearchFunctions`](xref:NextORM.Core.ISqlDialect.SupportsTextSearchFunctions));
 - the extended scalar function library is enabled ([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions) is `true`):
   additional math (`asin`, `cbrt`, `degrees`, `pi`, `mod`, ...), string (`split_part`, `lpad`,
   `initcap`, ...), POSIX regular expression (`regexp_replace`, `regexp_like`, ...), date/time

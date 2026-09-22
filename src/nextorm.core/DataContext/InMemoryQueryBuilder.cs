@@ -33,6 +33,12 @@ internal static class InMemoryQueryBuilder
             throw new NotSupportedException(
                 "Raw SQL (WithSql/PrepareFromSql) is not supported by the in-memory provider; run the statement against a SQL provider.");
 
+        // A raw SQL fragment used as a composable FROM source (FromSql) has no expression tree to
+        // evaluate, so reject it here too instead of materialising a phantom/default row.
+        if (queryCommand.From?.RawSqlSource is not null || HasRawSqlJoin(queryCommand))
+            throw new NotSupportedException(
+                "Raw SQL as a FROM source (FromSql) is not supported by the in-memory provider; run the query against a SQL provider.");
+
         // Correlated subqueries need a per-row execution of the inner query with the outer row's
         // values bound. The in-memory enumerator has no such binding, and the SQL-shaped prepared
         // condition (an <IQueryRegistry> lambda) is not a TEntity predicate, so the condition was
@@ -419,5 +425,20 @@ internal static class InMemoryQueryBuilder
             (conditionFactory, conditionDirect) = InMemoryConditionFactory.GetConditionPredicates(query, condition, context.ConditionFactoryCache, context.ConditionDirectCache);
         }
         return new InMemoryCompiledQuery<TResult, TEntity>(context.GetMap<TResult, TEntity>(query), conditionDelegate, conditionFactory, conditionDirect);
+    }
+
+    private static bool HasRawSqlJoin(QueryCommand queryCommand)
+    {
+        var joins = queryCommand.Joins;
+        if (joins is null)
+            return false;
+
+        for (var i = 0; i < joins.Length; i++)
+        {
+            if (joins[i].From?.RawSqlSource is not null)
+                return true;
+        }
+
+        return false;
     }
 }

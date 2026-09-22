@@ -848,4 +848,15 @@ public class InMemoryTests
 
         act.Should().Throw<NotSupportedException>().WithMessage("*in-memory*");
     }
+
+    [Fact]
+    public void FromSql_ShouldThrowClearNotSupported()
+    {
+        var act = () => _sut.DataProvider
+            .FromSql("select id from simple_entity")
+            .Select(t => new { Id = t["id"].AsInt })
+            .ToList();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*FromSql*");
+    }
 }

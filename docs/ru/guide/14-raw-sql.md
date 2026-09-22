@@ -185,6 +185,43 @@ public sealed class IdDto
 Имена столбцов в необработанном списке `select` сопоставляются с этой проекцией, поэтому они должны точно
 совпадать с сопоставленными именами столбцов (или именами `[Column]`).
 
+## Композиция сырого SQL как источника `FROM`
+
+[`FromSql`](xref:NextORM.Core.DataContextExtensions.FromSql) использует сырой фрагмент как **источник**
+запроса вместо сопоставленной таблицы, поэтому его можно фильтровать, присоединять, группировать,
+проецировать и постранично листать как любой другой источник. Столбцы читаются через аксессоры
+[`TableAlias`](xref:NextORM.Core.TableAlias) (`t["id"].AsInt`); именованные параметры привязываются по той
+же конвенции объекта `params`.
+
+```csharp
+var rows = dataContext
+    .FromSql("select id, somestring from complex_entity where id > @min", new { min = 5 })
+    .Select(t => new { Id = t["id"].AsInt })
+    .ToList();
+```
+
+```sql
+select t1.id from (select id, somestring from complex_entity where id > @min) as "t1"
+```
+
+Фрагмент может быть и **присоединяемой** стороной (рендерится как производная таблица с псевдонимом):
+
+```csharp
+var rows = dataContext
+    .From<ISimpleEntity>()
+    .Join(dataContext.FromSql("select id from complex_entity"), (s, r) => s.Id == r["id"].AsInt)
+    .Select(p => new { p.Item1.Id, R = p.Item2["id"].AsInt })
+    .ToList();
+```
+
+```sql
+select t1.id, t2.id from simple_entity as "t1" join (select id from complex_entity) as "t2" on t1.id = t2.id
+```
+
+Фрагмент эмитится дословно (передавайте только доверенный SQL). Провайдер включается через
+[`SupportsRawSqlSource`](xref:NextORM.Core.ISqlDialect.SupportsRawSqlSource); его включают все SQL-провайдеры,
+а SQLite опускает псевдоним производной таблицы, когда источник не присоединяется.
+
 ## Различия между провайдерами
 
 | Провайдер | Поведение |
@@ -195,7 +232,7 @@ public sealed class IdDto
 | MySQL | Инструкция передаётся дословно; параметры `@name`. |
 | MariaDB | Инструкция передаётся дословно; параметры `@name`. |
 | ClickHouse | Инструкция передаётся дословно; параметры `@name` (драйвер переписывает их в `{name:Type}`). |
-| In-memory | [`PrepareFromSql`](xref:NextORM.Core.EntityBuilder`1) не поддерживается ([`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext) бросает `NotSupportedException`); для необработанных инструкций используйте SQL-провайдер. |
+| In-memory | [`PrepareFromSql`](xref:NextORM.Core.EntityBuilder`1) и [`FromSql`](xref:NextORM.Core.DataContextExtensions.FromSql) не поддерживаются ([`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext) бросает `NotSupportedException`); для необработанных инструкций используйте SQL-провайдер. |
 
 ## См. также
 
@@ -205,5 +242,5 @@ public sealed class IdDto
 
 ---
 
-Source: `src/nextorm.core/Query/QueryCommandExtensions.cs:7`, `src/nextorm.core/Builders/EntityExtensions.cs:5`, `src/nextorm.core/Query/RawSqlOverride.cs:3`, `src/nextorm.core/DataContext/InMemoryDataContext.cs:634`;
+Source: `src/nextorm.core/Query/QueryCommandExtensions.cs:7`, `src/nextorm.core/Builders/EntityExtensions.cs:5`, `src/nextorm.core/Query/RawSqlOverride.cs:3`, `src/nextorm.core/DataContext/InMemoryDataContext.cs:634`, `src/nextorm.core/DataContext/DataContextExtensions.cs` (`FromSql`), `src/nextorm.core/DataContext/SqlSourceRenderer.cs` (`MakeRawSqlSource`);
 `tests/nextorm.integration.tests/CommonTestSuite.SqlCommand.cs:671`, `:698`, `:713`.

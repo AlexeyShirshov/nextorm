@@ -125,7 +125,7 @@ public class PostgresDialectTests
         Dialect.SupportsRightFullJoin.Should().BeTrue();
         Dialect.SupportsIntersectExceptAll.Should().BeTrue();
         Dialect.SupportsApply.Should().BeTrue();
-        Dialect.SupportsQueryHints.Should().BeFalse();
+        Dialect.SupportsQueryHints.Should().BeTrue();
         Dialect.SupportsArrays.Should().BeTrue();
         Dialect.SupportsJson.Should().BeTrue();
         Dialect.SupportsFilter.Should().BeTrue();
@@ -197,6 +197,19 @@ public class PostgresDialectTests
         Dialect.UuidGenerators!.Supports("uuidv7").Should().BeTrue();
         Dialect.UuidGenerators!.Render("gen_random_uuid").Should().Be("gen_random_uuid()");
         Dialect.UuidGenerators!.Render("uuidv7").Should().Be("uuidv7()");
+    }
+
+    [Fact]
+    public void QueryHintHooks_ShouldUseInlineComment()
+    {
+        Dialect.SupportsQueryHints.Should().BeTrue();
+        Dialect.RenderQueryHints("select 1", ["recompile"], null).Should().Be("select /*+ recompile */ 1");
+        Dialect.RenderQueryHints("select 1", ["IndexScan(t)", "HashJoin(u v)"], null)
+            .Should().Be("select /*+ IndexScan(t) HashJoin(u v) */ 1");
+        Dialect.RenderQueryHints("with recent as (select 1) select recent.* from recent", ["SeqScan(recent)"], null)
+            .Should().Be("with recent as (select 1) select /*+ SeqScan(recent) */ recent.* from recent");
+        Dialect.RenderQueryHints("with selected as (select 1) select selected.* from selected", ["h"], null)
+            .Should().Be("with selected as (select 1) select /*+ h */ selected.* from selected");
     }
 
     [Fact]

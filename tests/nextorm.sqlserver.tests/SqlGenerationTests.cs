@@ -1650,6 +1650,39 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void Containstable_ShouldEmitVerbatimTableAndColumnWithRank()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var search = "cat";
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.SqlServer.containstable<int>("complex_entity", "somestring", search))
+            .Join(ctx.From<IComplexEntity>(), (k, c) => k.Key == c.Id)
+            .Select(p => new { p.Item1.Rank, p.Item2.Id }));
+
+        Normalize(command.DbCommand.CommandText).Should()
+            .Be("select t1.[rank] as [Rank], t2.id from containstable(complex_entity, somestring, @search) as [t1] join complex_entity as [t2] on cast(t1.[key] as bigint) = t2.id");
+        command.DbCommandParams.Cast<DbParameter>().Select(p => p.ParameterName)
+            .Should().Equal("search");
+    }
+
+    [Fact]
+    public void Freetexttable_ShouldEmitVerbatimTableAndColumnWithRank()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var search = "cat";
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.SqlServer.freetexttable<int>("complex_entity", "somestring", search))
+            .Select(r => new { r.Key, r.Rank }));
+
+        Normalize(command.DbCommand.CommandText).Should()
+            .Be("select [key] as [Key], [rank] as [Rank] from freetexttable(complex_entity, somestring, @search) as [t1]");
+        command.DbCommandParams.Cast<DbParameter>().Select(p => p.ParameterName)
+            .Should().Equal("search");
+    }
+
+    [Fact]
     public void OpenJsonWith_ShouldAppendWithClause()
     {
         using var ctx = SqlServerTestContext.Create();
@@ -2559,5 +2592,35 @@ public class SqlGenerationTests
             .Select(p => new { p.Item1.Id, SId = p.Item2.Id }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*only a Where clause*");
+    }
+
+    [Fact]
+    public void FromSql_ShouldRenderDerivedTableWithNamedParameters()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var min = 1;
+
+        var command = Prepare(ctx, ctx
+            .FromSql("select id from complex_entity where id > @min", new { min })
+            .Select(t => new { Id = t["id"].AsInt }));
+
+        var sql = Normalize(command.DbCommand.CommandText);
+        sql.Should().Contain("from (select id from complex_entity where id > @min) as [t1]");
+        sql.Should().Contain("t1.id");
+        command.DbCommandParams.Cast<DbParameter>().Select(p => p.ParameterName).Should().Equal("min");
+    }
+
+    [Fact]
+    public void FromSql_AsJoinedSource_ShouldRenderDerivedTableAndResolveColumns()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx
+            .From<ISimpleEntity>()
+            .Join(ctx.FromSql("select id from complex_entity"), (s, r) => s.Id == r["id"].AsInt)
+            .Select(p => new { p.Item1.Id, R = p.Item2["id"].AsInt }));
+
+        sql.Should().Contain("join (select id from complex_entity) as [t2]");
+        sql.Should().Contain("on t1.id = t2.id");
     }
 }

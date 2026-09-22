@@ -128,6 +128,8 @@ public class SqlServerDialectTests
     {
         Dialect.SupportsTableFunction("string_split").Should().BeTrue();
         Dialect.SupportsTableFunction("openjson").Should().BeTrue();
+        Dialect.SupportsTableFunction("containstable").Should().BeTrue();
+        Dialect.SupportsTableFunction("freetexttable").Should().BeTrue();
         Dialect.SupportsTableFunction("generate_series").Should().BeFalse();
     }
 

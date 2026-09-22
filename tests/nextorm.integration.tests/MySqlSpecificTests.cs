@@ -82,13 +82,14 @@ public sealed class MySqlSpecificTests : ProviderTestSuite
     }
 
     [Fact]
-    public void QueryHint_ShouldThrowBecauseMySqlHasNoQueryHints()
+    public void QueryHint_ShouldEmitOptimizerHintAndReturnRows()
     {
-        var query = _sut.SimpleEntity.Select(it => it.Id).Hint("recompile");
+        var ids = _sut.SimpleEntity
+            .Select(it => it.Id)
+            .Hint("MAX_EXECUTION_TIME(1000)")
+            .ToList();
 
-        var act = () => query.ToList();
-
-        act.Should().Throw<NotSupportedException>();
+        ids.Should().NotBeEmpty();
     }
 
     [Fact]

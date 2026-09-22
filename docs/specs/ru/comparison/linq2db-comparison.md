@@ -67,7 +67,7 @@
 | Табличные функции | yes (`TableFunction`) | yes (`[SqlTableFunction]`); встроенные gated, предобъявленный набор (`generate_series`/`unnest`/…, `string_split`/`openjson`, ClickHouse `numbers`/`zeros`/`generateRandom`) меньше | `SqlTableFunctionAttribute.cs`, `SqlBuilder.MakeTableFunction`, `SupportsTableFunction` |
 | Нативный источник `PIVOT` / `UNPIVOT` | no (сырой SQL) | **yes на SQL Server** | `EntityBuilder.Pivot`/`Unpivot` |
 | Сырой SQL (запрос целиком) | yes | yes | `WithSql` / `PrepareFromSql` |
-| Сырой SQL как композируемый источник/подзапрос | yes | **no** | — |
+| Сырой SQL как композируемый источник/подзапрос | yes | **yes** — `FromSql` рендерит фрагмент как производную таблицу, можно соединять/фильтровать дальше | `DataContextExtensions.FromSql`, `ISqlDialect.SupportsRawSqlSource` |
 | Хинты запросов | yes (зависит от провайдера) | **partial** — только SQL Server `OPTION (...)` | `QueryCommand<TResult>.Hint`, `ISqlDialect.SupportsQueryHints`/`RenderQueryHints` |
 | Табличные хинты (например `WITH (NOLOCK)`) | yes | **partial** — только SQL Server | `EntityBuilder.WithTableHint`, `ISqlDialect.SupportsTableHints`/`MakeTableHints` |
 | Квотирование идентификаторов | yes (по провайдеру) | включается явно — `UseQuotedIdentifiers()`/`WithQuotedIdentifiers()`; по умолчанию физические имена выводятся как есть | `ISqlDialect.QuoteIdentifier` |
@@ -119,11 +119,10 @@
 * **Связи**: `[Association]`, eager loading `LoadWith` и неявный вывод соединений.
 * **Широта хинтов**: хинты запросов и таблиц у разных провайдеров (в nextorm оба есть только в SQL Server),
   а также фильтры запросов, интерсепторы и прочая расширяемость.
-* **Композируемый сырой SQL**: в linq2db сырой SQL можно использовать как источник `FROM`, соединять и
-  фильтровать дальше; в nextorm `WithSql` заменяет запрос целиком.
-* **Покрытие за пределами ядра запросов**: более крупный предобъявленный набор TVF, ранжирование/оценка
-  в полнотекстовом поиске, rowset XML `.nodes` и источники с динамической схемой (ClickHouse
-  `values()`/серверные табличные функции, MySQL `JSON_TABLE`, PostgreSQL `jsonb_to_record`).
+* **Покрытие за пределами ядра запросов**: более крупный предобъявленный набор TVF (хотя nextorm уже
+  поставляет `CONTAINSTABLE`/`FREETEXTTABLE` с `KEY`/`RANK` и PostgreSQL `ts_rank`/`ts_rank_cd`), rowset XML
+  `.nodes` и источники с динамической схемой (ClickHouse `values()`/серверные табличные функции,
+  PostgreSQL `jsonb_to_record`).
 * **Широта провайдеров**: Oracle, Firebird, DB2, SAP HANA, Informix, Sybase, SQL CE и другие.
 * **Интеграция с EF Core** и более крупная экосистема.
 
@@ -150,8 +149,7 @@ in-memory нет построчной привязки внешней строк
 между провайдерами маппера, nextorm теперь покрывает практически всю аналитическую поверхность запросов,
 которую даёт linq2db, включая провайдерные семейства функций и конструкции, специфичные для ClickHouse.
 Оставшаяся функциональная дельта намеренна: DML и change tracking, связи, широта хинтов между
-провайдерами, композируемый сырой SQL, более крупный предобъявленный набор TVF с ранжированием в
-полнотекстовом поиске, более широкая матрица провайдеров и крупная поверхность расширяемости/экосистемы.
+провайдерами, композируемый сырой SQL, более крупный предобъявленный набор TVF, более широкая матрица провайдеров и крупная поверхность расширяемости/экосистемы.
 Вывод маппинга, напротив, в nextorm настраивается гибче: квотирование идентификаторов и соглашения об
 именовании включаются явно и переопределяются для отдельной команды, тогда как linq2db квотирует по
 умолчанию и фиксирует имена через схему отображения. И наоборот, linq2db лучше подходит, когда тот же

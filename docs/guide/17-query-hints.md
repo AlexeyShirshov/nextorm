@@ -70,10 +70,25 @@ on joined tables are not part of the API yet.
 | Provider | Query hints |
 |---|---|
 | SQL Server | Supported: rendered as a trailing `OPTION (hint, ...)` clause. |
+| PostgreSQL | Supported: rendered as an inline `/*+ hint ... */` comment immediately after `SELECT`, the position the optional `pg_hint_plan` extension reads; on a server without the extension it is an ordinary comment. |
+| MySQL / MariaDB | Supported: rendered as an inline `/*+ hint ... */` optimizer-hint comment immediately after `SELECT`. |
 | SQLite | Not supported: building the SQL throws `NotSupportedException`. |
-| PostgreSQL | Not supported: building the SQL throws `NotSupportedException`. |
-| MySQL / MariaDB | Not supported: building the SQL throws `NotSupportedException`. |
-| ClickHouse | Not supported: building the SQL throws `NotSupportedException`. |
+| ClickHouse | Not supported: use `Settings(...)` instead; `Hint(...)` throws `NotSupportedException`. |
+
+Multiple hints are joined inside one comment (space-separated), the form both `pg_hint_plan` and the
+MySQL/MariaDB optimizer expect:
+
+```csharp
+// PostgreSQL:  select /*+ SeqScan(simple_entity) */ id from simple_entity
+var pg = dataContext.From<ISimpleEntity>()
+    .Select(x => new { x.Id })
+    .Hint("SeqScan(simple_entity)");
+
+// MySQL / MariaDB:  select /*+ MAX_EXECUTION_TIME(1000) */ id from simple_entity
+var my = dataContext.From<ISimpleEntity>()
+    .Select(x => new { x.Id })
+    .Hint("MAX_EXECUTION_TIME(1000)");
+```
 
 A provider opts in through [`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints) and [`RenderQueryHints`](xref:NextORM.Core.ISqlDialect); the
 builder rejects a command that carries hints on a dialect that reports `false`.
@@ -126,4 +141,5 @@ both.
 
 Source: `src/nextorm.core/Query/QueryCommand.TResult.cs` ([`Hint`](xref:NextORM.Core.QueryCommand`1)),
 `src/nextorm.core/DataContext/Dialect/ISqlDialect.cs` ([`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints) / [`RenderQueryHints`](xref:NextORM.Core.ISqlDialect)),
-`src/nextorm.sqlserver/SqlServerDialect.cs`.
+`src/nextorm.sqlserver/SqlServerDialect.cs`, `src/nextorm.postgres/PostgresDialect.cs`,
+`src/nextorm.mysql/MySqlDialect.cs` (MariaDB inherits).

@@ -25,6 +25,10 @@ public sealed class FromExpression
      {
           LinqSource = linqSource;
      }
+     internal FromExpression(RawSqlSourceExpression rawSqlSource)
+     {
+          RawSqlSource = rawSqlSource;
+     }
      //public OneOf<string, QueryCommand> Table { get; }
      public readonly string? Table;
      /// <summary>
@@ -53,6 +57,12 @@ public sealed class FromExpression
      /// <see cref="TableFunction"/>.
      /// </summary>
      internal readonly LinqSourceExpression? LinqSource;
+     /// <summary>
+     /// Set when the source is a raw SQL fragment rendered as a derived table. Mutually exclusive with
+     /// <see cref="Table"/>, <see cref="SubQuery"/>, <see cref="TableFunction"/>, <see cref="Pivot"/> and
+     /// <see cref="LinqSource"/>.
+     /// </summary>
+     internal readonly RawSqlSourceExpression? RawSqlSource;
 
      // public override int GetHashCode()
      // {
@@ -87,7 +97,7 @@ public sealed class FromExpression
                return ReferenceEquals(pivot, Pivot) ? this : new FromExpression(pivot);
           }
 
-          if (!string.IsNullOrEmpty(Table) || SourceType is not null || TableFunction is not null || LinqSource is not null) return this;
+          if (!string.IsNullOrEmpty(Table) || SourceType is not null || TableFunction is not null || LinqSource is not null || RawSqlSource is not null) return this;
 
           return new FromExpression(SubQuery!.CloneForCache());// { TableAlias = TableAlias };
      }
