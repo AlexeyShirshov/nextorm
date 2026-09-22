@@ -1,6 +1,6 @@
 # Set operations
 
-> Combine two result sets with [`Union`](xref:NextORM.Core.QueryCommand`1), [`UnionAll`](xref:NextORM.Core.QueryCommand`1), [`Intersect`](xref:NextORM.Core.QueryCommand`1), [`IntersectAll`](xref:NextORM.Core.QueryCommand`1), [`Except`](xref:NextORM.Core.QueryCommand`1) and [`ExceptAll`](xref:NextORM.Core.QueryCommand`1), and chain them left to right.
+> Combine two result sets with [`Union`](xref:NextORM.Core.QueryCommand`1.Union``1(NextORM.Core.QueryCommand{``0})), [`UnionAll`](xref:NextORM.Core.QueryCommand`1.UnionAll``1(NextORM.Core.QueryCommand{``0})), [`Intersect`](xref:NextORM.Core.QueryCommand`1.Intersect``1(NextORM.Core.QueryCommand{``0})), [`IntersectAll`](xref:NextORM.Core.QueryCommand`1.IntersectAll``1(NextORM.Core.QueryCommand{``0})), [`Except`](xref:NextORM.Core.QueryCommand`1.Except``1(NextORM.Core.QueryCommand{``0})) and [`ExceptAll`](xref:NextORM.Core.QueryCommand`1.ExceptAll``1(NextORM.Core.QueryCommand{``0})), and chain them left to right.
 
 **Prerequisites:** [Querying and projections](01-querying-and-projections.md) · [Subqueries](06-subqueries.md) · [SELECT DISTINCT](08-distinct.md)
 
@@ -55,7 +55,7 @@ select id from simple_entity
 
 The two sides may also be different entities as long as the element types line up. In the
 integration suite `SimpleEntity` (ids `1..10`) is unioned with `ComplexEntity` (ids `1..3`) cast to
-`int`, so the deduplicated union has 10 rows and the [`UnionAll`](xref:NextORM.Core.QueryCommand`1) of the same pair has 13:
+`int`, so the deduplicated union has 10 rows and the [`UnionAll`](xref:NextORM.Core.QueryCommand`1.UnionAll``1(NextORM.Core.QueryCommand{``0})) of the same pair has 13:
 
 ```csharp
 var distinctCount = dataContext.From(
@@ -132,7 +132,7 @@ not supported by this SQL dialect"`).
 
 ## Querying a set-operation result
 
-A set operation returns a command, so you query it through [`From`](xref:NextORM.Core.DataContextExtensions):
+A set operation returns a command, so you query it through [`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)):
 
 ```csharp
 var cmd = dataContext.From<IComplexEntity>().Select(it => it.Int)

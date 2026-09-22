@@ -13,9 +13,9 @@
 
 - parameter placeholder `@name`;
 - string concatenation with `||`;
-- [`MakeCoalesce`](xref:NextORM.Core.ISqlDialect) renders `coalesce(a, b)`;
+- [`MakeCoalesce`](xref:NextORM.Core.ISqlDialect.MakeCoalesce(System.String,System.String)) renders `coalesce(a, b)`;
 - boolean literals are `true`/`false`;
-- identifiers use double quotes ([`Escape`](xref:NextORM.Core.ISqlDialect) returns `"name"`), and [`MakeColumnReference`](xref:NextORM.Core.ISqlDialect) quotes a name too
+- identifiers use double quotes ([`Escape`](xref:NextORM.Core.ISqlDialect.Escape(System.String)) returns `"name"`), and [`MakeColumnReference`](xref:NextORM.Core.ISqlDialect.MakeColumnReference(System.String)) quotes a name too
   so that a quoted alias survives when it is referenced from an outer query;
 - derived tables and table-valued functions must be aliased ([`RequireSubqueryAlias`](xref:NextORM.Core.ISqlDialect.RequireSubqueryAlias) is `true`, and its
   consequence is that an alias is always emitted);
@@ -199,13 +199,13 @@ ctx.From<IComplexEntity>()
 ```
 
 These are documented in
-[Scalar functions](../guide/11-scalar-functions.md#string-and-array-aggregates-postgresql). SQLite also
+[Scalar functions](../guide/11-scalar-functions.md#string-and-array-aggregates). SQLite also
 accepts the `FILTER` clause; the other functions are PostgreSQL-only.
 
 ## `*ALL` set operations and null ordering
 
 PostgreSQL is the only supported relational provider that implements `INTERSECT ALL` and `EXCEPT ALL`,
-so [`IntersectAll`](xref:NextORM.Core.QueryCommand`1)/[`ExceptAll`](xref:NextORM.Core.QueryCommand`1) render their SQL directly.
+so [`IntersectAll`](xref:NextORM.Core.QueryCommand`1.IntersectAll``1(NextORM.Core.QueryCommand{``0}))/[`ExceptAll`](xref:NextORM.Core.QueryCommand`1.ExceptAll``1(NextORM.Core.QueryCommand{``0})) render their SQL directly.
 
 ```csharp
 var q = a.Select(x => x.Id).IntersectAll(b.Select(x => x.Id));   // ... intersect all ...

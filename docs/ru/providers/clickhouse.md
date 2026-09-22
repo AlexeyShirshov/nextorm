@@ -89,30 +89,30 @@ ADO.NET-провайдер `ClickHouse.Driver`. Он создаёт `ClickHouseC
 - разбиение на страницы `limit n` / `limit n offset m`; offset без limit превращается в
   `limit 18446744073709551615 offset m`, потому что ClickHouse принимает `offset` только вместе с `limit`;
 - переносимый условный `iif` — как `if(condition, a, b)` ([`Iif`](xref:NextORM.Core.ISqlDialect.Iif),
-  [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render)), многоветвевный `multiIf` только для ClickHouse,
+  [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render(System.String,System.String,System.String))), многоветвевный `multiIf` только для ClickHouse,
   собираемый через `when(...)`/`otherwise(...)` ([`MultiIf`](xref:NextORM.Core.ISqlDialect.MultiIf),
-  [`IMultiIfRenderer.Render`](xref:NextORM.Core.IMultiIfRenderer.Render)), а оконные функции
+  [`IMultiIfRenderer.Render`](xref:NextORM.Core.IMultiIfRenderer.Render(System.Collections.Generic.IReadOnlyList{System.String},System.Type))), а оконные функции
   `percent_rank()`/`cume_dist()`, `nth_value(expr, n)` и учитывающие фрейм
   `lagInFrame(value[, offset[, default]])`/`leadInFrame(...)` поддерживаются
   ([`SupportsPercentRankCumeDist`](xref:NextORM.Core.ISqlDialect.SupportsPercentRankCumeDist),
   [`SupportsNthValue`](xref:NextORM.Core.ISqlDialect.SupportsNthValue),
   [`SupportsInFrameWindowFunctions`](xref:NextORM.Core.ISqlDialect.SupportsInFrameWindowFunctions));
 - распределённый предикат `GLOBAL IN` через
-  [`SqlFunctions.ClickHouse.global_in`](xref:NextORM.Core.ClickHouseFunctions) (по подзапросу или
+  [`SqlFunctions.ClickHouse.global_in`](xref:NextORM.Core.ClickHouseFunctions.global_in``1(``0,NextORM.Core.QueryCommand{``0})) (по подзапросу или
   списку значений, [`SupportsGlobalPredicates`](xref:NextORM.Core.ISqlDialect.SupportsGlobalPredicates));
   отрицание — через C# `!` (`GLOBAL NOT IN`);
 - модификаторы строгости/типа join `ANY`/`ALL`/`ASOF` через
-  [`EntityBuilder.WithStrictness`](xref:NextORM.Core.EntityBuilder`1) сразу после join
+  [`EntityBuilder.WithStrictness`](xref:NextORM.Core.EntityBuilder`1.WithStrictness(NextORM.Core.JoinStrictness)) сразу после join
   ([`SupportsJoinStrictness`](xref:NextORM.Core.ISqlDialect.SupportsJoinStrictness),
-  [`MakeJoinKeyword`](xref:NextORM.Core.ISqlDialect.MakeJoinKeyword), enum `JoinStrictness`).
+  [`MakeJoinKeyword`](xref:NextORM.Core.ISqlDialect.MakeJoinKeyword(NextORM.Core.JoinType,NextORM.Core.JoinStrictness,System.Boolean)), enum `JoinStrictness`).
   `LEFT ANY JOIN` оставляет одну правую строку на каждую левую, `ALL` — все совпадения, а `ASOF`
   требует хотя бы одной equi-колонки и неравенства последним. Для видов `SEMI`/`ANTI`/`PASTE` есть
-  отдельные методы-построители: [`SemiJoin`](xref:NextORM.Core.EntityBuilder`1)/`AntiJoin` отдают
+  отдельные методы-построители: [`SemiJoin`](xref:NextORM.Core.EntityBuilder`1.SemiJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}}))/`AntiJoin` отдают
   только левые колонки для левых строк, у которых есть (соответственно нет) совпадение, а `PasteJoin`
   сопоставляет два источника по позиции строки без `ON` (строк — сколько у более короткой стороны).
   Гейты — [`SupportsSemiAntiJoin`](xref:NextORM.Core.ISqlDialect.SupportsSemiAntiJoin)/`SupportsPasteJoin`.
   Вариант `GLOBAL` (правая сторона разрешается один раз и broadcast'ится для распределённых
-  запросов) задаётся через [`EntityBuilder.Global`](xref:NextORM.Core.EntityBuilder`1) и
+  запросов) задаётся через [`EntityBuilder.Global`](xref:NextORM.Core.EntityBuilder`1.Global) и
   комбинируется со strictness (`global left any join`,
   [`SupportsGlobalJoin`](xref:NextORM.Core.ISqlDialect.SupportsGlobalJoin)).
 
@@ -222,7 +222,7 @@ select concat('id:', id) as `Label` from simple_entity
   JSON в колонке `String` (или приведите колонку в SQL), если нужно материализовать саму колонку.
 - В `hits_v1` и других широких таблицах колонок намного больше, чем объявляет интерфейс сущности.
   Вместо маппинга всех колонок лишние можно спроецировать по имени через
-  [`SqlFunctions.Column<T>`](xref:NextORM.Core.SqlFunctions) (см.
+  [`SqlFunctions.Column<T>`](xref:NextORM.Core.SqlFunctions.Column``1(System.Object,System.String)) (см.
   [Запросы и проекции](../guide/01-querying-and-projections.md#колонки-по-имени)); имя сверяется
   дословно, поэтому кавычки — по диалекту.
 

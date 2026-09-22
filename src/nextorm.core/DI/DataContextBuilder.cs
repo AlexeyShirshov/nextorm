@@ -17,6 +17,11 @@ public class DataContextBuilder
     //private IDataProvider? _dataProvider;
     private bool _logSensitiveData;
     private Func<DataContextBuilder, IDataContext>? _factory;
+    /// <summary>
+    /// Whether command parameter values are written to the configured logger. Defaults to
+    /// <see langword="false"/>; enable it only for local diagnostics, since parameter values may contain
+    /// sensitive data. Set through <see cref="LogSensitiveData"/>.
+    /// </summary>
     public bool ShouldLogSensitiveData => _logSensitiveData;
     /// <summary>
     /// Whether physical identifiers (table and column names) are quoted with the provider's delimiter
@@ -35,9 +40,22 @@ public class DataContextBuilder
     internal ILoggerFactory? LoggerFactory => _loggerFactory;
     // public bool CacheQueryCommand { get; set; } = true;
     // public bool CacheExpressions { get; set; } = true;
+    /// <summary>
+    /// Factory invoked by <see cref="CreateDataContext"/> to materialize the configured context.
+    /// <see langword="null"/> until one of the provider extensions (for example
+    /// <c>UseInMemoryContext</c>) assigns it; <see cref="CreateDataContext"/> throws
+    /// <see cref="InvalidOperationException"/> in that state.
+    /// </summary>
     public Func<DataContextBuilder, IDataContext>? Factory { get => _factory; set => _factory = value; }
 
     //public Dictionary<string, object> Property => _props;
+    /// <summary>
+    /// Sets the logger factory used for diagnostic logging (SQL text and, when enabled, parameter
+    /// values).
+    /// </summary>
+    /// <param name="loggerFactory">The logger factory to use; must not be <see langword="null"/>.</param>
+    /// <returns>This builder, to allow chaining.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="loggerFactory"/> is <see langword="null"/>.</exception>
     public DataContextBuilder UseLoggerFactory(ILoggerFactory loggerFactory)
     {
         ArgumentNullException.ThrowIfNull(loggerFactory);
@@ -52,6 +70,12 @@ public class DataContextBuilder
     //     _dataProvider = dataProvider;        
     //     return this;
     // }
+    /// <summary>
+    /// Enables or disables logging of command parameter values. Disabled by default; only enable it for
+    /// local diagnostics, as parameter values may contain sensitive data.
+    /// </summary>
+    /// <param name="logSensitiveData"><see langword="true"/> to log parameter values; otherwise <see langword="false"/>.</param>
+    /// <returns>This builder, to allow chaining.</returns>
     public DataContextBuilder LogSensitiveData(bool logSensitiveData)
     {
         _logSensitiveData = logSensitiveData;
@@ -84,6 +108,11 @@ public class DataContextBuilder
         return this;
     }
 
+    /// <summary>
+    /// Creates a data context from the current configuration by invoking <see cref="Factory"/>.
+    /// </summary>
+    /// <returns>The configured <see cref="IDataContext"/>.</returns>
+    /// <exception cref="InvalidOperationException">No factory has been configured on this builder.</exception>
     public IDataContext CreateDataContext()
     {
         if (_factory is null)

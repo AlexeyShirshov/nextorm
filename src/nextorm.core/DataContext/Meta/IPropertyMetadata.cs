@@ -11,7 +11,13 @@ namespace NextORM.Core;
 /// </remarks>
 public interface IPropertyMetadata
 {
+    /// <summary>
+    /// The CLR property this mapping describes.
+    /// </summary>
     PropertyInfo PropertyInfo { get; }
+    /// <summary>
+    /// The column that <see cref="PropertyInfo"/> maps to.
+    /// </summary>
     string ColumnName { get; }
 
     /// <summary>

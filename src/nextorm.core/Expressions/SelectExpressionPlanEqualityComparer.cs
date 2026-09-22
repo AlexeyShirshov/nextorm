@@ -1,6 +1,10 @@
 using Microsoft.Extensions.Logging;
 namespace NextORM.Core;
 
+/// <summary>
+/// Compares and hashes projected columns for query-plan caching, taking the column ordinal, target
+/// property, null-defaulting flag and source expression into account.
+/// </summary>
 public sealed class SelectExpressionPlanEqualityComparer : IEqualityComparer<SelectExpression>
 {
     //private readonly IDictionary<ExpressionKey, Delegate> _cache;
@@ -13,10 +17,15 @@ public sealed class SelectExpressionPlanEqualityComparer : IEqualityComparer<Sel
     //     : this(new ExpressionCache<Delegate>())
     // {
     // }
+    /// <summary>Initializes a comparer without a logger.</summary>
+    /// <param name="queryProvider">The registry that supplies the expression plan comparer.</param>
     public SelectExpressionPlanEqualityComparer(IQueryRegistry queryProvider)
         : this(queryProvider, null)
     {
     }
+    /// <summary>Initializes a comparer.</summary>
+    /// <param name="queryProvider">The registry that supplies the expression plan comparer.</param>
+    /// <param name="logger">An optional logger; currently unused.</param>
     public SelectExpressionPlanEqualityComparer(IQueryRegistry queryProvider, ILogger? logger)
     {
         //_cache = cache ?? new ExpressionCache<Delegate>();
@@ -25,6 +34,10 @@ public sealed class SelectExpressionPlanEqualityComparer : IEqualityComparer<Sel
     }
     // private SelectExpressionPlanEqualityComparer() { }
     // public static SelectExpressionPlanEqualityComparer Instance => new();
+    /// <summary>Determines whether two projected columns are equal for plan-cache purposes.</summary>
+    /// <param name="x">The first column.</param>
+    /// <param name="y">The second column.</param>
+    /// <returns><c>true</c> when both columns describe the same projection.</returns>
     public bool Equals(SelectExpression? x, SelectExpression? y)
     {
         if (x == y) return true;
@@ -45,6 +58,9 @@ public sealed class SelectExpressionPlanEqualityComparer : IEqualityComparer<Sel
         return true;
     }
 
+    /// <summary>Returns a hash code for a projected column consistent with the equality comparison.</summary>
+    /// <param name="obj">The column to hash.</param>
+    /// <returns>The hash code, or zero when <paramref name="obj"/> is <c>null</c>.</returns>
     public int GetHashCode(SelectExpression obj)
     {
         if (obj is null) return 0;

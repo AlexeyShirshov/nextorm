@@ -22,6 +22,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 {
     // private const string AnyCommandProperty = "NextORM.Core.AnyCommand";
     #region Fields
+    /// <summary>The data context this builder creates commands from and resolves sources against.</summary>
     protected readonly IDataContext _dataProvider;
     private QueryCommand? _query;
     private Expression<Func<TEntity, bool>>? _condition;
@@ -40,19 +41,30 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     private List<KeyValuePair<string, string>>? _settings;
     private Expression<Func<TEntity, bool>>? _having;
     private List<Sorting>? _sorting;
+    /// <summary>The join clauses collected so far, or <c>null</c> when the query has no joins.</summary>
     protected List<JoinExpression>? _joins;
     private string? _table;
     private FromExpression? _from;
     #endregion
+    /// <summary>
+    /// Initializes a builder over the mapped entity type; the source is resolved from entity metadata.
+    /// </summary>
+    /// <param name="dataProvider">The data context that creates the query command.</param>
     public EntityBuilder(IDataContext dataProvider)
     {
         _dataProvider = dataProvider;
     }
+    /// <summary>Initializes a builder whose source is the derived <paramref name="query"/>.</summary>
+    /// <param name="dataProvider">The data context that creates the query command.</param>
+    /// <param name="query">The derived query to select from.</param>
     public EntityBuilder(IDataContext dataProvider, QueryCommand<TEntity> query)
     {
         _dataProvider = dataProvider;
         _query = query;
     }
+    /// <summary>Initializes a builder over the raw table named <paramref name="table"/>.</summary>
+    /// <param name="dataProvider">The data context that creates the query command.</param>
+    /// <param name="table">The physical table name to select from.</param>
     public EntityBuilder(IDataContext dataProvider, string table)
     {
         _dataProvider = dataProvider;
@@ -63,8 +75,14 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     internal QueryCommand? Query { get => _query; set => _query = value; }
     internal IDataContext DataProvider => _dataProvider;
     internal Expression<Func<TEntity, bool>>? Condition { get => _condition; set => _condition = value; }
+    /// <summary>
+    /// The ordering keys applied by <c>OrderBy</c>/<c>OrderByDescending</c>, or <c>null</c> when the
+    /// query is unordered.
+    /// </summary>
     public List<Sorting>? Sorting { get => _sorting; set => _sorting = value; }
+    /// <summary>The join clauses applied to the query, or <c>null</c> when there are none.</summary>
     public List<JoinExpression>? Joins { get => _joins; set => _joins = value; }
+    /// <summary>The limit/offset paging state set by <c>Limit</c>, <c>Offset</c> and <c>Page</c>.</summary>
     public Paging Paging;
     internal bool IsDistinct { get; set; }
     /// <summary>Super-aggregate modifier applied to the grouping list (<c>ROLLUP</c>/<c>CUBE</c>).</summary>
@@ -133,6 +151,13 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     //public event CommandCreatedHandler<TEntity>? CommandCreatedEvent;
     #endregion
 
+    /// <summary>
+    /// Projects each row with <paramref name="exp"/> and creates the SELECT command for the query,
+    /// carrying every modifier set on this builder.
+    /// </summary>
+    /// <typeparam name="TResult">The projection type produced by <paramref name="exp"/>.</typeparam>
+    /// <param name="exp">The projection expression.</param>
+    /// <returns>The command that produces <typeparamref name="TResult"/> rows.</returns>
     public QueryCommand<TResult> Select<TResult>(Expression<Func<TEntity, TResult>> exp)
     {
         var cmd = _dataProvider.CreateCommand<TResult>(new QueryDefinition
@@ -184,6 +209,11 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 
         return cmd;
     }
+    /// <summary>
+    /// Creates a SELECT command over the entity type without a custom projection, carrying every
+    /// modifier set on this builder.
+    /// </summary>
+    /// <returns>The command that produces <typeparamref name="TEntity"/> rows.</returns>
     public QueryCommand<TEntity> ToCommand()
     {
         var cmd = _dataProvider.CreateCommand<TEntity>(new QueryDefinition
@@ -241,6 +271,12 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 
     // }
 
+    /// <summary>
+    /// Adds <paramref name="condition"/> to the WHERE clause. A repeated call combines the predicates
+    /// with <c>and</c>. Returns a new builder; the current one is unchanged.
+    /// </summary>
+    /// <param name="condition">The predicate each row must satisfy.</param>
+    /// <returns>A builder with the added predicate.</returns>
     public EntityBuilder<TEntity> Where(Expression<Func<TEntity, bool>> condition)
     {
         var b = Clone();
@@ -501,6 +537,11 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     protected virtual void OnLastJoinReplaced(JoinExpression join)
     {
     }
+    /// <summary>
+    /// Adds <c>SELECT DISTINCT</c>, removing duplicate result rows. Cannot be combined with
+    /// <see cref="DistinctOn{TResult}"/>.
+    /// </summary>
+    /// <returns>A builder with the DISTINCT modifier.</returns>
     public EntityBuilder<TEntity> Distinct()
     {
         if (_distinctOn is not null)
@@ -726,6 +767,9 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         b._rowLock = new LockClause(mode);
         return b;
     }
+    /// <summary>Sets the maximum number of rows to return; zero means no limit.</summary>
+    /// <param name="limit">The page size; must be non-negative.</param>
+    /// <returns>A builder with the new limit.</returns>
     public EntityBuilder<TEntity> Limit(int limit)
     {
         var b = Clone();
@@ -734,6 +778,9 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 
         return b;
     }
+    /// <summary>Sets the number of leading rows to skip; zero starts from the first row.</summary>
+    /// <param name="offset">The number of rows to skip; must be non-negative.</param>
+    /// <returns>A builder with the new offset.</returns>
     public EntityBuilder<TEntity> Offset(int offset)
     {
         var b = Clone();
@@ -742,6 +789,10 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 
         return b;
     }
+    /// <summary>Sets both the page size and the start position in a single call.</summary>
+    /// <param name="limit">The page size; must be non-negative.</param>
+    /// <param name="offset">The number of leading rows to skip; must be non-negative.</param>
+    /// <returns>A builder with the new limit and offset.</returns>
     public EntityBuilder<TEntity> Page(int limit, int offset)
     {
         var b = Clone();
@@ -791,10 +842,20 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     {
         return CloneImp();
     }
+    /// <summary>
+    /// Returns a copy of this builder. Because the modifier methods already return copies, this is
+    /// useful to fork a query without applying a modifier.
+    /// </summary>
+    /// <returns>A new builder with the same state.</returns>
     public EntityBuilder<TEntity> Clone()
     {
         return (EntityBuilder<TEntity>)CloneImp();
     }
+    /// <summary>
+    /// Copies this builder's state onto <paramref name="dst"/>; called by <see cref="CloneImp"/>.
+    /// Protected so derived builders can extend the copy with their own state.
+    /// </summary>
+    /// <param name="dst">The builder that receives the state.</param>
     protected virtual void CopyTo(EntityBuilder<TEntity> dst)
     {
         CopyProjectionIndependentStateTo(dst);
@@ -839,6 +900,11 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         dst.NamingConvention = NamingConvention;
         dst.Ctes = Ctes;
     }
+    /// <summary>
+    /// Creates the copy returned by <see cref="Clone"/> and the explicit <c>ICloneable.Clone</c> call.
+    /// Overridden by derived builders to clone their extra state.
+    /// </summary>
+    /// <returns>A new builder with the same state.</returns>
     protected virtual object CloneImp()
     {
         var r = new EntityBuilder<TEntity>(_dataProvider) { Logger = Logger };
@@ -847,7 +913,19 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 
         return r;
     }
+    /// <summary>
+    /// Implicitly converts the builder to its command, so a builder can be passed where a
+    /// <see cref="QueryCommand{TEntity}"/> is expected.
+    /// </summary>
+    /// <param name="builder">The builder to convert.</param>
+    /// <returns>The command built by <see cref="ToCommand"/>.</returns>
     public static implicit operator QueryCommand<TEntity>(EntityBuilder<TEntity> builder) => builder.ToCommand();
+    /// <summary>
+    /// Implicitly converts the builder to its untyped command, so a builder can be passed where a
+    /// <see cref="QueryCommand"/> is expected.
+    /// </summary>
+    /// <param name="builder">The builder to convert.</param>
+    /// <returns>The command built by <see cref="ToCommand"/>.</returns>
     public static implicit operator QueryCommand(EntityBuilder<TEntity> builder) => builder.ToCommand();
     // public QueryCommand<TEntity> ToCommand() => Select<TEntity>(typeof(TEntity));
     // public IAsyncEnumerator<TEntity> GetAsyncEnumerator(CancellationToken cancellationToken = default) => ToCommand().GetAsyncEnumerator(cancellationToken);
@@ -950,14 +1028,48 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         return builder;
     }
 
+    /// <summary>
+    /// Adds an inner join to <paramref name="_"/>, using <paramref name="joinCondition"/> as the
+    /// <c>ON</c> predicate; only matching pairs survive.
+    /// </summary>
+    /// <param name="_">The builder for the joined entity; only its source is used.</param>
+    /// <param name="joinCondition">The join predicate over the two entities.</param>
+    /// <returns>A builder over the joined projection.</returns>
     public JoinedEntityBuilder<TEntity, TJoinEntity> Join<TJoinEntity>(EntityBuilder<TJoinEntity> _, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
         => JoinCore(_, JoinType.Inner, joinCondition);
+    /// <summary>
+    /// Adds a left outer join: every left-hand row is kept, and right-hand columns are <c>NULL</c>
+    /// when there is no match.
+    /// </summary>
+    /// <param name="_">The builder for the joined entity; only its source is used.</param>
+    /// <param name="joinCondition">The join predicate over the two entities.</param>
+    /// <returns>A builder over the joined projection.</returns>
     public JoinedEntityBuilder<TEntity, TJoinEntity> LeftJoin<TJoinEntity>(EntityBuilder<TJoinEntity> _, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
         => JoinCore(_, JoinType.Left, joinCondition);
+    /// <summary>
+    /// Adds a right outer join: every right-hand row is kept, and left-hand columns are <c>NULL</c>
+    /// when there is no match.
+    /// </summary>
+    /// <param name="_">The builder for the joined entity; only its source is used.</param>
+    /// <param name="joinCondition">The join predicate over the two entities.</param>
+    /// <returns>A builder over the joined projection.</returns>
     public JoinedEntityBuilder<TEntity, TJoinEntity> RightJoin<TJoinEntity>(EntityBuilder<TJoinEntity> _, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
         => JoinCore(_, JoinType.Right, joinCondition);
+    /// <summary>
+    /// Adds a full outer join: unmatched rows from both sides are kept, with the other side's columns
+    /// set to <c>NULL</c>.
+    /// </summary>
+    /// <param name="_">The builder for the joined entity; only its source is used.</param>
+    /// <param name="joinCondition">The join predicate over the two entities.</param>
+    /// <returns>A builder over the joined projection.</returns>
     public JoinedEntityBuilder<TEntity, TJoinEntity> FullJoin<TJoinEntity>(EntityBuilder<TJoinEntity> _, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
         => JoinCore(_, JoinType.Full, joinCondition);
+    /// <summary>
+    /// Adds a cross join producing the Cartesian product of the two sources; there is no <c>ON</c>
+    /// condition.
+    /// </summary>
+    /// <param name="_">The builder for the joined entity; only its source is used.</param>
+    /// <returns>A builder over the joined projection.</returns>
     public JoinedEntityBuilder<TEntity, TJoinEntity> CrossJoin<TJoinEntity>(EntityBuilder<TJoinEntity> _)
         => JoinCore(_, JoinType.Cross, null);
     /// <summary>
@@ -1040,14 +1152,48 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         => builder.SourceFrom
            ?? (builder.Table is not null ? new FromExpression(builder.Table) : _dataProvider.GetFrom(typeof(TJoinEntity), null)!);
 
+    /// <summary>
+    /// Adds an inner join to the derived <paramref name="query"/>, using
+    /// <paramref name="joinCondition"/> as the <c>ON</c> predicate; only matching pairs survive.
+    /// </summary>
+    /// <param name="query">The derived query to join.</param>
+    /// <param name="joinCondition">The join predicate over the two entities.</param>
+    /// <returns>A builder over the joined projection.</returns>
     public JoinedEntityBuilder<TEntity, TJoinEntity> Join<TJoinEntity>(QueryCommand<TJoinEntity> query, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
         => JoinCore(query, JoinType.Inner, joinCondition);
+    /// <summary>
+    /// Adds a left outer join to the derived <paramref name="query"/>: every left-hand row is kept,
+    /// and right-hand columns are <c>NULL</c> when there is no match.
+    /// </summary>
+    /// <param name="query">The derived query to join.</param>
+    /// <param name="joinCondition">The join predicate over the two entities.</param>
+    /// <returns>A builder over the joined projection.</returns>
     public JoinedEntityBuilder<TEntity, TJoinEntity> LeftJoin<TJoinEntity>(QueryCommand<TJoinEntity> query, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
         => JoinCore(query, JoinType.Left, joinCondition);
+    /// <summary>
+    /// Adds a right outer join to the derived <paramref name="query"/>: every right-hand row is kept,
+    /// and left-hand columns are <c>NULL</c> when there is no match.
+    /// </summary>
+    /// <param name="query">The derived query to join.</param>
+    /// <param name="joinCondition">The join predicate over the two entities.</param>
+    /// <returns>A builder over the joined projection.</returns>
     public JoinedEntityBuilder<TEntity, TJoinEntity> RightJoin<TJoinEntity>(QueryCommand<TJoinEntity> query, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
         => JoinCore(query, JoinType.Right, joinCondition);
+    /// <summary>
+    /// Adds a full outer join to the derived <paramref name="query"/>: unmatched rows from both sides
+    /// are kept, with the other side's columns set to <c>NULL</c>.
+    /// </summary>
+    /// <param name="query">The derived query to join.</param>
+    /// <param name="joinCondition">The join predicate over the two entities.</param>
+    /// <returns>A builder over the joined projection.</returns>
     public JoinedEntityBuilder<TEntity, TJoinEntity> FullJoin<TJoinEntity>(QueryCommand<TJoinEntity> query, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
         => JoinCore(query, JoinType.Full, joinCondition);
+    /// <summary>
+    /// Adds a cross join to the derived <paramref name="query"/>, producing the Cartesian product of
+    /// the two sources; there is no <c>ON</c> condition.
+    /// </summary>
+    /// <param name="query">The derived query to join.</param>
+    /// <returns>A builder over the joined projection.</returns>
     public JoinedEntityBuilder<TEntity, TJoinEntity> CrossJoin<TJoinEntity>(QueryCommand<TJoinEntity> query)
         => JoinCore(query, JoinType.Cross, null);
     /// <summary>Applies a derived query to every left-hand row (<c>CROSS APPLY</c>).</summary>
@@ -1204,6 +1350,13 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         protected override Expression VisitParameter(ParameterExpression node)
             => ReferenceEquals(node, target) ? replacement : base.VisitParameter(node);
     }
+    /// <summary>
+    /// Groups rows by <paramref name="exp"/>, a single column or an anonymous type/DTO keying on
+    /// several columns.
+    /// </summary>
+    /// <typeparam name="TResult">The grouping key type.</typeparam>
+    /// <param name="exp">The grouping key selector.</param>
+    /// <returns>A builder with the grouping applied.</returns>
     public EntityBuilder<TEntity> GroupBy<TResult>(Expression<Func<TEntity, TResult>> exp)
     {
         var b = Clone();
@@ -1314,6 +1467,12 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 
         return b;
     }
+    /// <summary>
+    /// Adds <paramref name="condition"/> to the HAVING clause, which filters grouped rows. A repeated
+    /// call combines the predicates with <c>and</c>.
+    /// </summary>
+    /// <param name="condition">The predicate each group must satisfy.</param>
+    /// <returns>A builder with the added predicate.</returns>
     public EntityBuilder<TEntity> Having(Expression<Func<TEntity, bool>> condition)
     {
         var b = Clone();
@@ -1328,6 +1487,12 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 
         return b;
     }
+    /// <summary>
+    /// Adds an ordering key. Repeated calls append keys, so the existing order is preserved.
+    /// </summary>
+    /// <param name="orderExp">The key selector.</param>
+    /// <param name="direction">Ascending or descending.</param>
+    /// <returns>A builder with the added ordering key.</returns>
     public EntityBuilder<TEntity> OrderBy(Expression<Func<TEntity, object?>> orderExp, OrderDirection direction)
     {
         var b = Clone();
@@ -1337,8 +1502,15 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             b._sorting.Add(new Sorting(orderExp) { Direction = direction });
         return b;
     }
+    /// <summary>Adds an ascending ordering key by <paramref name="orderExp"/>.</summary>
+    /// <param name="orderExp">The key selector.</param>
+    /// <returns>A builder with the added ordering key.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public EntityBuilder<TEntity> OrderBy(Expression<Func<TEntity, object?>> orderExp) => OrderBy(orderExp, OrderDirection.Asc);
+    /// <summary>Adds an ordering key by 1-based output column index.</summary>
+    /// <param name="columnIdx">The 1-based result column index; must be greater than zero.</param>
+    /// <param name="direction">Ascending or descending.</param>
+    /// <returns>A builder with the added ordering key.</returns>
     public EntityBuilder<TEntity> OrderBy(int columnIdx, OrderDirection direction)
     {
         if (columnIdx < 1) throw new ArgumentException("Column index must be greater than zero", nameof(columnIdx));
@@ -1350,10 +1522,19 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             b._sorting.Add(new Sorting(columnIdx) { Direction = direction });
         return b;
     }
+    /// <summary>Adds an ascending ordering key by 1-based output column index.</summary>
+    /// <param name="columnIdx">The 1-based result column index; must be greater than zero.</param>
+    /// <returns>A builder with the added ordering key.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public EntityBuilder<TEntity> OrderBy(int columnIdx) => OrderBy(columnIdx, OrderDirection.Asc);
+    /// <summary>Adds a descending ordering key by <paramref name="orderExp"/>.</summary>
+    /// <param name="orderExp">The key selector.</param>
+    /// <returns>A builder with the added ordering key.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public EntityBuilder<TEntity> OrderByDescending(Expression<Func<TEntity, object?>> orderExp) => OrderBy(orderExp, OrderDirection.Desc);
+    /// <summary>Adds a descending ordering key by 1-based output column index.</summary>
+    /// <param name="columnIdx">The 1-based result column index; must be greater than zero.</param>
+    /// <returns>A builder with the added ordering key.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public EntityBuilder<TEntity> OrderByDescending(int columnIdx) => OrderBy(columnIdx, OrderDirection.Desc);
 }
@@ -1369,6 +1550,7 @@ public class EntityBuilder : ICloneable
     internal ILogger? Logger { get; set; }
     private Expression<Func<TableAlias, bool>>? _condition;
     private List<Sorting>? _sorting;
+    /// <summary>The join clauses collected so far, or <c>null</c> when the query has no joins.</summary>
     protected List<JoinExpression>? _joins;
     /// <summary>CTE declarations that must be attached to commands this builder creates.</summary>
     internal IReadOnlyList<CteDefinition>? Ctes { get; set; }
@@ -1382,12 +1564,24 @@ public class EntityBuilder : ICloneable
     /// inherits the context default). Set through <see cref="WithNamingConvention"/>.
     /// </summary>
     internal INamingConvention? NamingConvention { get; set; }
+    /// <summary>Initializes a builder in the named-table (<c>TableAlias</c>) mode.</summary>
+    /// <param name="dataProvider">The data context that creates the query command.</param>
     public EntityBuilder(IDataContext dataProvider) : this(dataProvider, null) { }
+    /// <summary>Initializes a builder over the table named <paramref name="table"/>.</summary>
+    /// <param name="dataProvider">The data context that creates the query command.</param>
+    /// <param name="table">The physical table name to select from, or <c>null</c> when it is supplied later.</param>
     public EntityBuilder(IDataContext dataProvider, string? table)
     {
         _dataProvider = dataProvider;
         _table = table;
     }
+    /// <summary>
+    /// Projects each row with <paramref name="exp"/> and creates the SELECT command for the named
+    /// table, carrying the set filters, joins and ordering.
+    /// </summary>
+    /// <typeparam name="TResult">The projection type produced by <paramref name="exp"/>.</typeparam>
+    /// <param name="exp">The projection expression over <see cref="TableAlias"/>.</param>
+    /// <returns>The command that produces <typeparamref name="TResult"/> rows.</returns>
     public QueryCommand<TResult> Select<TResult>(Expression<Func<TableAlias, TResult>> exp)
     {
         //if (string.IsNullOrEmpty(_table)) throw new InvalidOperationException("Table must be specified");
@@ -1415,10 +1609,20 @@ public class EntityBuilder : ICloneable
     {
         return CloneImp();
     }
+    /// <summary>
+    /// Returns a copy of this builder. Because the modifier methods already return copies, this is
+    /// useful to fork a query without applying a modifier.
+    /// </summary>
+    /// <returns>A new builder with the same state.</returns>
     public EntityBuilder Clone()
     {
         return (EntityBuilder)CloneImp();
     }
+    /// <summary>
+    /// Copies this builder's state onto <paramref name="dst"/>; called by <see cref="CloneImp"/>.
+    /// Protected so derived builders can extend the copy with their own state.
+    /// </summary>
+    /// <param name="dst">The builder that receives the state.</param>
     protected virtual void CopyTo(EntityBuilder dst)
     {
         dst._condition = _condition;
@@ -1427,6 +1631,11 @@ public class EntityBuilder : ICloneable
         dst.QuoteIdentifiers = QuoteIdentifiers;
         dst.NamingConvention = NamingConvention;
     }
+    /// <summary>
+    /// Creates the copy returned by <see cref="Clone"/> and the explicit <c>ICloneable.Clone</c> call.
+    /// Overridden by derived builders to clone their extra state.
+    /// </summary>
+    /// <returns>A new builder with the same state.</returns>
     protected virtual object CloneImp()
     {
         var r = new EntityBuilder(_dataProvider, _table) { Logger = Logger };
@@ -1436,6 +1645,12 @@ public class EntityBuilder : ICloneable
         return r;
     }
 
+    /// <summary>
+    /// Adds <paramref name="condition"/> to the WHERE clause over the named table. A repeated call
+    /// combines the predicates with <c>and</c>. Returns a new builder; the current one is unchanged.
+    /// </summary>
+    /// <param name="condition">The predicate each row must satisfy.</param>
+    /// <returns>A builder with the added predicate.</returns>
     public EntityBuilder Where(Expression<Func<TableAlias, bool>> condition)
     {
         var b = Clone();
@@ -1475,18 +1690,65 @@ public class EntityBuilder : ICloneable
 
         return b;
     }
+    /// <summary>
+    /// Adds an inner join to <paramref name="from"/>, using <paramref name="joinCondition"/> as the
+    /// <c>ON</c> predicate; only matching pairs survive.
+    /// </summary>
+    /// <param name="from">The named-table builder whose source is joined.</param>
+    /// <param name="joinCondition">The join predicate over the two table aliases.</param>
+    /// <returns>A builder over the joined projection.</returns>
     public JoinedEntityBuilder<TableAlias, TableAlias> Join(EntityBuilder from, Expression<Func<TableAlias, TableAlias, bool>> joinCondition)
         => JoinCore(from, JoinType.Inner, joinCondition);
+    /// <summary>
+    /// Adds a left outer join to <paramref name="from"/>: every left-hand row is kept, and right-hand
+    /// columns are <c>NULL</c> when there is no match.
+    /// </summary>
+    /// <param name="from">The named-table builder whose source is joined.</param>
+    /// <param name="joinCondition">The join predicate over the two table aliases.</param>
+    /// <returns>A builder over the joined projection.</returns>
     public JoinedEntityBuilder<TableAlias, TableAlias> LeftJoin(EntityBuilder from, Expression<Func<TableAlias, TableAlias, bool>> joinCondition)
         => JoinCore(from, JoinType.Left, joinCondition);
+    /// <summary>
+    /// Adds a right outer join to <paramref name="from"/>: every right-hand row is kept, and left-hand
+    /// columns are <c>NULL</c> when there is no match.
+    /// </summary>
+    /// <param name="from">The named-table builder whose source is joined.</param>
+    /// <param name="joinCondition">The join predicate over the two table aliases.</param>
+    /// <returns>A builder over the joined projection.</returns>
     public JoinedEntityBuilder<TableAlias, TableAlias> RightJoin(EntityBuilder from, Expression<Func<TableAlias, TableAlias, bool>> joinCondition)
         => JoinCore(from, JoinType.Right, joinCondition);
+    /// <summary>
+    /// Adds a full outer join to <paramref name="from"/>: unmatched rows from both sides are kept,
+    /// with the other side's columns set to <c>NULL</c>.
+    /// </summary>
+    /// <param name="from">The named-table builder whose source is joined.</param>
+    /// <param name="joinCondition">The join predicate over the two table aliases.</param>
+    /// <returns>A builder over the joined projection.</returns>
     public JoinedEntityBuilder<TableAlias, TableAlias> FullJoin(EntityBuilder from, Expression<Func<TableAlias, TableAlias, bool>> joinCondition)
         => JoinCore(from, JoinType.Full, joinCondition);
+    /// <summary>
+    /// Adds a cross join producing the Cartesian product of the two sources; there is no <c>ON</c>
+    /// condition.
+    /// </summary>
+    /// <param name="from">The named-table builder whose source is joined.</param>
+    /// <returns>A builder over the joined projection.</returns>
     public JoinedEntityBuilder<TableAlias, TableAlias> CrossJoin(EntityBuilder from)
         => JoinCore(from, JoinType.Cross, null);
+    /// <summary>
+    /// Applies <paramref name="from"/> to every left-hand row (<c>CROSS APPLY</c> /
+    /// <c>CROSS JOIN LATERAL</c>); there is no <c>ON</c> condition.
+    /// </summary>
+    /// <param name="from">The named-table builder whose source is applied.</param>
+    /// <returns>A builder over the joined projection.</returns>
     public JoinedEntityBuilder<TableAlias, TableAlias> CrossApply(EntityBuilder from)
         => JoinCore(from, JoinType.CrossApply, null);
+    /// <summary>
+    /// Applies <paramref name="from"/> to every left-hand row, preserving left-hand rows with an empty
+    /// result (<c>OUTER APPLY</c> / <c>LEFT JOIN LATERAL ... ON true</c>). There is no <c>ON</c>
+    /// condition.
+    /// </summary>
+    /// <param name="from">The named-table builder whose source is applied.</param>
+    /// <returns>A builder over the joined projection.</returns>
     public JoinedEntityBuilder<TableAlias, TableAlias> OuterApply(EntityBuilder from)
         => JoinCore(from, JoinType.OuterApply, null);
     /// <summary>
@@ -1521,18 +1783,65 @@ public class EntityBuilder : ICloneable
         var cb = new JoinedEntityBuilder<TableAlias, TableAlias>(_dataProvider, new JoinExpression(joinCondition, joinType) { From = new FromExpression(from._table!), EntityType = joinCondition is null ? typeof(TableAlias) : null }) { Logger = Logger, Table = _table, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention };
         return cb;
     }
+    /// <summary>
+    /// Adds an inner join to <paramref name="_"/>, using <paramref name="joinCondition"/> as the
+    /// <c>ON</c> predicate; only matching pairs survive.
+    /// </summary>
+    /// <param name="_">The builder for the joined entity; only its source is used.</param>
+    /// <param name="joinCondition">The join predicate over the table alias and the joined entity.</param>
+    /// <returns>A builder over the joined projection.</returns>
     public JoinedEntityBuilder<TableAlias, TJoinEntity> Join<TJoinEntity>(EntityBuilder<TJoinEntity> _, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition)
         => JoinCore(_, JoinType.Inner, joinCondition);
+    /// <summary>
+    /// Adds a left outer join to <paramref name="_"/>: every left-hand row is kept, and right-hand
+    /// columns are <c>NULL</c> when there is no match.
+    /// </summary>
+    /// <param name="_">The builder for the joined entity; only its source is used.</param>
+    /// <param name="joinCondition">The join predicate over the table alias and the joined entity.</param>
+    /// <returns>A builder over the joined projection.</returns>
     public JoinedEntityBuilder<TableAlias, TJoinEntity> LeftJoin<TJoinEntity>(EntityBuilder<TJoinEntity> _, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition)
         => JoinCore(_, JoinType.Left, joinCondition);
+    /// <summary>
+    /// Adds a right outer join to <paramref name="_"/>: every right-hand row is kept, and left-hand
+    /// columns are <c>NULL</c> when there is no match.
+    /// </summary>
+    /// <param name="_">The builder for the joined entity; only its source is used.</param>
+    /// <param name="joinCondition">The join predicate over the table alias and the joined entity.</param>
+    /// <returns>A builder over the joined projection.</returns>
     public JoinedEntityBuilder<TableAlias, TJoinEntity> RightJoin<TJoinEntity>(EntityBuilder<TJoinEntity> _, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition)
         => JoinCore(_, JoinType.Right, joinCondition);
+    /// <summary>
+    /// Adds a full outer join to <paramref name="_"/>: unmatched rows from both sides are kept, with
+    /// the other side's columns set to <c>NULL</c>.
+    /// </summary>
+    /// <param name="_">The builder for the joined entity; only its source is used.</param>
+    /// <param name="joinCondition">The join predicate over the table alias and the joined entity.</param>
+    /// <returns>A builder over the joined projection.</returns>
     public JoinedEntityBuilder<TableAlias, TJoinEntity> FullJoin<TJoinEntity>(EntityBuilder<TJoinEntity> _, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition)
         => JoinCore(_, JoinType.Full, joinCondition);
+    /// <summary>
+    /// Adds a cross join producing the Cartesian product of the two sources; there is no <c>ON</c>
+    /// condition.
+    /// </summary>
+    /// <param name="_">The builder for the joined entity; only its source is used.</param>
+    /// <returns>A builder over the joined projection.</returns>
     public JoinedEntityBuilder<TableAlias, TJoinEntity> CrossJoin<TJoinEntity>(EntityBuilder<TJoinEntity> _)
         => JoinCore(_, JoinType.Cross, null);
+    /// <summary>
+    /// Applies <paramref name="_"/> to every left-hand row (<c>CROSS APPLY</c> /
+    /// <c>CROSS JOIN LATERAL</c>); there is no <c>ON</c> condition.
+    /// </summary>
+    /// <param name="_">The builder for the joined entity; only its source is used.</param>
+    /// <returns>A builder over the joined projection.</returns>
     public JoinedEntityBuilder<TableAlias, TJoinEntity> CrossApply<TJoinEntity>(EntityBuilder<TJoinEntity> _)
         => JoinCore(_, JoinType.CrossApply, null);
+    /// <summary>
+    /// Applies <paramref name="_"/> to every left-hand row, preserving left-hand rows with an empty
+    /// result (<c>OUTER APPLY</c> / <c>LEFT JOIN LATERAL ... ON true</c>). There is no <c>ON</c>
+    /// condition.
+    /// </summary>
+    /// <param name="_">The builder for the joined entity; only its source is used.</param>
+    /// <returns>A builder over the joined projection.</returns>
     public JoinedEntityBuilder<TableAlias, TJoinEntity> OuterApply<TJoinEntity>(EntityBuilder<TJoinEntity> _)
         => JoinCore(_, JoinType.OuterApply, null);
     /// <inheritdoc cref="SemiJoin(EntityBuilder, Expression{Func{TableAlias, TableAlias, bool}})"/>

@@ -14,7 +14,7 @@
 [`SqlServerDialect`](xref:NextORM.SqlServer.SqlServerDialect) (`src/nextorm.sqlserver/SqlServerDialect.cs`) — это диалект:
 
 - плейсхолдер параметра `@name`;
-- идентификаторы заключаются в квадратные скобки ([`Escape`](xref:NextORM.Core.ISqlDialect) возвращает `[name]`), включая ссылки на столбцы, чтобы псевдонимы, которые
+- идентификаторы заключаются в квадратные скобки ([`Escape`](xref:NextORM.Core.ISqlDialect.Escape(System.String)) возвращает `[name]`), включая ссылки на столбцы, чтобы псевдонимы, которые
   конфликтуют с ключевыми словами T-SQL, оставались пригодными;
 - отображение типов: `byte`→`tinyint`, `short`→`smallint`, `int`→`int`, `long`→`bigint`, `float`→`real`,
   `double`→`float`, `decimal`→`decimal(38, 10)`;
@@ -69,7 +69,7 @@ ctx.From<ISimpleEntity>().Page(5, 10).Select(x => x.Id);
 ```
 
 SQL Server отклоняет `OFFSET`/`FETCH` без `ORDER BY`, поэтому когда у запроса с разбиением на страницы нет сортировки, диалект
-внедряет постоянную сортировку `(select null as anyorder)` ([`GetPagingOrderBy`](xref:NextORM.Core.ISqlDialect)). Запрос только с offset выдаёт
+внедряет постоянную сортировку `(select null as anyorder)` ([`GetPagingOrderBy`](xref:NextORM.Core.ISqlDialect.GetPagingOrderBy(NextORM.Core.QueryCommand))). Запрос только с offset выдаёт
 `offset m rows` и без `fetch`. Когда у запроса уже есть `ORDER BY`, ничего не внедряется.
 
 ```csharp
@@ -114,7 +114,7 @@ SQL Server 2017+ включает
 Предикаты полнотекстового поиска `SqlFunctions.Sql.contains` и `SqlFunctions.Sql.freetext` ([`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText))
 отрисовываются как T-SQL `contains(...)`/`freetext(...)` и требуют полнотекстового индекса на колонке.
 `SqlFunctions.Sql.iif(condition, whenTrue, whenFalse)` отрисовывает `iif(...)`
-([`Iif`](xref:NextORM.Core.ISqlDialect.Iif), написание через [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render)), а
+([`Iif`](xref:NextORM.Core.ISqlDialect.Iif), написание через [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render(System.String,System.String,System.String))), а
 `SqlFunctions.SqlServer.choose(index, ...)` — `choose(...)` ([`SupportsChoose`](xref:NextORM.Core.ISqlDialect.SupportsChoose));
 специализированное написание `SqlFunctions.SqlServer.iif` по-прежнему работает по наследованию.
 Семейство session/info ([`SessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SessionInfoFunctions)) отрисовывает
@@ -135,7 +135,7 @@ XQuery и SQL-тип обязаны быть строковыми литерал
 `CrossApply`/`OuterApply`: он рендерит `<xml>.nodes('xpath') as [alias]([value])`, а развёрнутый
 `IXmlNodesRow.Value` проецируется скалярными методами выше (операнд обязан быть колонкой внешней строки,
 XQuery — строковым литералом).
-Табличные хинты ([`SupportsTableHints`](xref:NextORM.Core.ISqlDialect.SupportsTableHints)) отрисовываются как `WITH (hint, ...)` после имени основной
+Блокирующие табличные хинты ([`SupportsTableHints`](xref:NextORM.Core.ISqlDialect.SupportsTableHints)) отрисовываются как `WITH (hint, ...)` после имени основной
 таблицы: `ctx.From<IComplexEntity>().WithTableHint("nolock")` даёт `from complex_entity with (nolock)`.
 Блокировка строк использует тот же механизм: `ForUpdate`/`ForShare`
 ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock),
@@ -173,8 +173,8 @@ select n from nums option (maxrecursion 100)
 
 ## Операции над множествами `*ALL`
 
-В SQL Server нет ни `INTERSECT ALL`, ни `EXCEPT ALL`. Вызов [`IntersectAll`](xref:NextORM.Core.QueryCommand`1) или [`ExceptAll`](xref:NextORM.Core.QueryCommand`1) бросает
-`NotSupportedException` из диалекта до того, как какой-либо SQL достигнет базы данных; [`Intersect`](xref:NextORM.Core.QueryCommand`1) и [`Except`](xref:NextORM.Core.QueryCommand`1)
+В SQL Server нет ни `INTERSECT ALL`, ни `EXCEPT ALL`. Вызов [`IntersectAll`](xref:NextORM.Core.QueryCommand`1.IntersectAll``1(NextORM.Core.QueryCommand{``0})) или [`ExceptAll`](xref:NextORM.Core.QueryCommand`1.ExceptAll``1(NextORM.Core.QueryCommand{``0})) бросает
+`NotSupportedException` из диалекта до того, как какой-либо SQL достигнет базы данных; [`Intersect`](xref:NextORM.Core.QueryCommand`1.Intersect``1(NextORM.Core.QueryCommand{``0})) и [`Except`](xref:NextORM.Core.QueryCommand`1.Except``1(NextORM.Core.QueryCommand{``0}))
 (без `ALL`) работают.
 
 ```csharp
@@ -221,10 +221,10 @@ join complex_entity as [t2] on t1.id = t2.id
 | Условные функции | `iif(...)` (переносимая, [`Iif`](xref:NextORM.Core.ISqlDialect.Iif)) / `choose(...)` ([`SupportsChoose`](xref:NextORM.Core.ISqlDialect.SupportsChoose)) |
 | Предикаты полнотекстового поиска | `contains(...)` / `freetext(...)` (колонка должна быть полнотекстово проиндексирована) |
 | Полнотекстовое ранжирование | табличные функции `containstable(table, column, search)` / `freetexttable(...)` возвращают `KEY`/`RANK` ([`SqlFunctions.SqlServer`](xref:NextORM.Core.SqlFunctions.SqlServer), [`IKeyRankRow<TKey>`](xref:NextORM.Core.SqlFunctions.IKeyRankRow`1)) |
-| Табличные хинты | `with (hint, ...)` после основной таблицы ([`WithTableHint`](xref:NextORM.Core.EntityBuilder`1)) |
+| Блокирующие табличные хинты | `with (hint, ...)` после основной таблицы ([`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[]))) |
 | Блокировка строк | `ForUpdate`/`ForShare` рендерят `with (updlock)`/`with (holdlock)` на основной таблице ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock), [`ILockRenderer.UsesTableHints`](xref:NextORM.Core.ILockRenderer.UsesTableHints)) |
-| JSON-вывод | завершающие `for json path` / `for json auto` ([`ForJson`](xref:NextORM.Core.QueryCommand`1)) |
-| XML-вывод | завершающие `for xml raw/auto/explicit/path` ([`ForXml`](xref:NextORM.Core.QueryCommand`1)) |
+| JSON-вывод | завершающие `for json path` / `for json auto` ([`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean))) |
+| XML-вывод | завершающие `for xml raw/auto/explicit/path` ([`ForXml`](xref:NextORM.Core.QueryCommand`1.ForXml(NextORM.Core.ForXmlMode,System.String,System.String,System.Boolean))) |
 | Методы типа XML | `xml.value('xpath', 'type')` / `xml.query('xpath')` / `xml.exist('xpath')` / `xml.nodes('xpath') as [alias]([value])` ([`XmlFunctions`](xref:NextORM.Core.ISqlDialect.XmlFunctions)) |
 | `AVG` по целочисленному столбцу | усекается до целого |
 | Размещение null при `ORDER BY … DESC` | null сортируются последними по умолчанию |

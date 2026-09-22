@@ -4,6 +4,10 @@ using System.Linq.Expressions;
 
 namespace NextORM.Core;
 
+/// <summary>
+/// Default <see cref="IColumnsProvider"/> that tracks the column sources of a query in registration
+/// order and resolves lambda parameters to alias indexes within the current scope.
+/// </summary>
 public class DefaultColumnsProvider : IColumnsProvider
 {
 #if NET8_0_OR_GREATER
@@ -19,8 +23,10 @@ public class DefaultColumnsProvider : IColumnsProvider
     /// <summary>The index of the first entry owned by the command currently being rendered.</summary>
     private int SourceScopeStart => _sourceScopes.Count > 0 ? _sourceScopes.Peek() : 0;
 
+    /// <inheritdoc/>
     public void PushSourceScope() => _sourceScopes.Add(_list.Count);
 
+    /// <inheritdoc/>
     public void PopSourceScope()
     {
         // A nested command's entries keep their index (the alias provider numbers sources by the
@@ -38,19 +44,23 @@ public class DefaultColumnsProvider : IColumnsProvider
         _sourceScopes.Pop();
     }
 
+    /// <inheritdoc/>
     public void Add(Type entityType, bool fromProjection)
     {
         _list.Add((entityType, null, fromProjection, false));
     }
 
+    /// <inheritdoc/>
     public void Add(QueryCommand queryCommand, bool fromProjection)
     {
         _list.Add((queryCommand.ResultType!, queryCommand, fromProjection, false));
     }
 
+    /// <inheritdoc/>
     public int? FindAlias(ParameterExpression param, bool fromProjection)
         => FindAlias(param, fromProjection, includeOuterScopes: false);
 
+    /// <inheritdoc/>
     public int? FindAlias(ParameterExpression param, bool fromProjection, bool includeOuterScopes)
     {
         var entityType = param.Type;
@@ -84,6 +94,7 @@ public class DefaultColumnsProvider : IColumnsProvider
         return null;
     }
 
+    /// <inheritdoc/>
     public (int, QueryCommand?) FindQueryCommand(Type entityType)
     {
         // Prefer an in-scope source, but fall back to the most recently added out-of-scope one.
@@ -109,16 +120,19 @@ public class DefaultColumnsProvider : IColumnsProvider
         return fallback;
     }
 
+    /// <inheritdoc/>
     public void PopScope()
     {
         _scope.Pop();
     }
 
+    /// <inheritdoc/>
     public void PushScope(ReadOnlyCollection<ParameterExpression> parameters)
     {
         _scope.Add(parameters);
     }
 
+    /// <inheritdoc/>
     public int? FindAlias(Type entityType, int? paramIdx, bool fromProjection)
     {
         var foundIdx = -1;
@@ -141,5 +155,6 @@ public class DefaultColumnsProvider : IColumnsProvider
         return null;
     }
 
+    /// <inheritdoc/>
     public bool HasAliases => _list.Count > 0;
 }

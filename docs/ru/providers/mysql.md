@@ -14,9 +14,9 @@
 - идентификаторы и псевдонимы квотируются обратными кавычками;
 - конкатенация строк использует функцию `concat(a, b, ...)` — инфиксный `||` в MySQL является
   логическим ИЛИ, если не включён режим `PIPES_AS_CONCAT`, поэтому диалект его не выдаёт;
-- [`MakeCoalesce`](xref:NextORM.Core.ISqlDialect) отрисовывает `coalesce(a, b)`;
-- [`MakeStringLength`](xref:NextORM.Core.ISqlDialect) отрисовывает `char_length(x)` (`length()` в MySQL считает байты);
-- [`MakeNow`](xref:NextORM.Core.ISqlDialect) отрисовывает `now()` для локального времени и `utc_timestamp()` для UTC;
+- [`MakeCoalesce`](xref:NextORM.Core.ISqlDialect.MakeCoalesce(System.String,System.String)) отрисовывает `coalesce(a, b)`;
+- [`MakeStringLength`](xref:NextORM.Core.ISqlDialect.MakeStringLength(System.String)) отрисовывает `char_length(x)` (`length()` в MySQL считает байты);
+- [`MakeNow`](xref:NextORM.Core.ISqlDialect.MakeNow(System.Boolean)) отрисовывает `now()` для локального времени и `utc_timestamp()` для UTC;
 - `stdev`/`stdevp`/`var`/`varp` отображаются в `stddev_samp`/`stddev_pop`/`var_samp`/`var_pop`
   (`stddev` и `variance` в MySQL — синонимы *популяционных* величин);
 - преобразование CLR-типа отрисовывается через цель MySQL `CAST` (`signed`/`unsigned` для целых,
@@ -30,10 +30,10 @@
 - семейство session/info ([`SessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SessionInfoFunctions)) отрисовывает
   `SqlFunctions.Sql.current_user`/`session_user`/`current_database`/`version` как `current_user()`/`session_user()`/
   `database()`/`version()`, а `current_schema` — как `schema()`;
-- агрегат произвольного значения [`SqlFunctions.Sql.any_agg`](xref:NextORM.Core.CommonFunctions.any_agg``1) отрисовывается как
+- агрегат произвольного значения [`SqlFunctions.Sql.any_agg`](xref:NextORM.Core.CommonFunctions.any_agg``1(``0)) отрисовывается как
   `ANY_VALUE(x)` ([`SupportsAnyValueAggregate`](xref:NextORM.Core.ISqlDialect.SupportsAnyValueAggregate), MySQL 5.7+);
-- переносимый условный [`SqlFunctions.Sql.iif`](xref:NextORM.Core.CommonFunctions.iif``1) отрисовывается как
-  `if(condition, a, b)` ([`Iif`](xref:NextORM.Core.ISqlDialect.Iif), [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render)).
+- переносимый условный [`SqlFunctions.Sql.iif`](xref:NextORM.Core.CommonFunctions.iif``1(System.Boolean,``0,``0)) отрисовывается как
+  `if(condition, a, b)` ([`Iif`](xref:NextORM.Core.ISqlDialect.Iif), [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render(System.String,System.String,System.String))).
 
 ## Регистрация провайдера
 

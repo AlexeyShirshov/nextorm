@@ -14,6 +14,10 @@ public class WhereExpressionVisitor(VisitorOptions options)
     /// </summary>
     protected override bool AsPredicate => true;
 
+    /// <summary>
+    /// Renders an equality or inequality comparison, using the null-aware <c>is</c>/<c>is not</c> form
+    /// when either side is a null literal and <c>=</c>/<c>!=</c> otherwise.
+    /// </summary>
     protected override Expression VisitBinary(BinaryExpression node)
     {
         if (!_paramMode && node.Type == typeof(bool) && (node.NodeType == ExpressionType.Equal || node.NodeType == ExpressionType.NotEqual))

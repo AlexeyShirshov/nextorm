@@ -68,8 +68,8 @@ nextorm points at the source that owns the behaviour.
 | Native `PIVOT` / `UNPIVOT` source | no (raw SQL) | **yes on SQL Server** | `EntityBuilder.Pivot`/`Unpivot` |
 | Raw SQL (whole query) | yes | yes | `WithSql` / `PrepareFromSql` |
 | Raw SQL as a composable source/subquery | yes | **yes** — `FromSql` renders the fragment as a derived table, joined/filtered further | `DataContextExtensions.FromSql`, `ISqlDialect.SupportsRawSqlSource` |
-| Query hints | yes (provider specific) | **yes** — SQL Server `OPTION (...)`, PostgreSQL/MySQL/MariaDB inline `/*+ ... */`; SQLite/ClickHouse reject | `QueryCommand<TResult>.Hint`, `ISqlDialect.SupportsQueryHints`/`RenderQueryHints` |
-| Table hints (e.g. `WITH (NOLOCK)`) | yes | **partial** — SQL Server only | `EntityBuilder.WithTableHint`, `ISqlDialect.SupportsTableHints`/`MakeTableHints` |
+| Statement-level query hints | yes (provider specific) | **yes** — SQL Server `OPTION (...)`, PostgreSQL/MySQL/MariaDB inline `/*+ ... */`; SQLite/ClickHouse reject | `QueryCommand<TResult>.Hint`, `ISqlDialect.SupportsQueryHints`/`RenderQueryHints` |
+| Locking table hints (e.g. `WITH (NOLOCK)`) | yes | **partial** — SQL Server only | `EntityBuilder.WithTableHint`, `ISqlDialect.SupportsTableHints`/`MakeTableHints` |
 | Identifier quoting | yes (per provider) | opt-in — `UseQuotedIdentifiers()`/`WithQuotedIdentifiers()`; default emits physical names verbatim | `ISqlDialect.QuoteIdentifier` |
 | Naming conventions (e.g. snake_case) | via `MappingSchema`/attributes (no built-in convention) | opt-in — `UseNamingConvention()`/`WithNamingConvention()`; built-in `SnakeCaseNamingConvention`; explicit names stay verbatim | `INamingConvention` / `SnakeCaseNamingConvention` |
 | **DML** (`INSERT`/`UPDATE`/`DELETE`/`MERGE`) | yes | **no** (read-only by design) | — |

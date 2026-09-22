@@ -7,6 +7,10 @@ namespace NextORM.Core;
 /// </summary>
 public sealed class QueryPlan : IEquatable<QueryPlan>
 {
+    /// <summary>
+    /// The query command this plan describes. Replaced by an equal clone when
+    /// <see cref="GetCacheVersion"/> is called.
+    /// </summary>
     public QueryCommand QueryCommand;
     private readonly string? _sql;
     private QueryPlanEqualityComparer _comparer;
@@ -17,6 +21,12 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
     // stable even after GetCacheVersion() mutates the plan, which a dictionary key requires.
     private readonly int _hashPlan;
 
+    /// <summary>
+    /// Captures a canonical, hashable description of <paramref name="cmd"/> and computes its stable
+    /// hash. Used as the key of the plan cache.
+    /// </summary>
+    /// <param name="cmd">The command to describe.</param>
+    /// <param name="sql">The generated SQL, which participates in the hash when known.</param>
     public QueryPlan(QueryCommand cmd, string? sql)
     {
         QueryCommand = cmd;
@@ -40,13 +50,28 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
         return comparer.GetHashCode(cmd);
     }
 
+    /// <summary>
+    /// Returns the hash captured when the plan was constructed, keeping plan identity stable even
+    /// after <see cref="GetCacheVersion"/> swaps in an equal command clone.
+    /// </summary>
+    /// <returns>The stable plan hash.</returns>
     public override int GetHashCode() => _hashPlan;
 
+    /// <summary>
+    /// Determines whether <paramref name="obj"/> is a plan equal to this one.
+    /// </summary>
+    /// <param name="obj">The object to compare with, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when <paramref name="obj"/> is an equal <see cref="QueryPlan"/>.</returns>
     public override bool Equals(object? obj)
     {
         return Equals(obj as QueryPlan);
     }
 
+    /// <summary>
+    /// Determines whether another plan has the same SQL and an equivalent query command.
+    /// </summary>
+    /// <param name="obj">The plan to compare with, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when the plans are equal.</returns>
     public bool Equals(QueryPlan? obj)
     {
         if (obj is null) return false;
@@ -54,6 +79,12 @@ public sealed class QueryPlan : IEquatable<QueryPlan>
         return _sql == obj._sql && _comparer.Equals(QueryCommand, obj.QueryCommand);
     }
 
+    /// <summary>
+    /// Replaces <see cref="QueryCommand"/> with an equal clone whose build-time state has been
+    /// released, so the plan can be stored in the cache without retaining the original query tree.
+    /// The plan's hash is unchanged, preserving its identity as a dictionary key.
+    /// </summary>
+    /// <returns>This plan, after the command has been swapped for its cache clone.</returns>
     public QueryPlan GetCacheVersion()
     {
         var newCmd = QueryCommand.CloneForCache();

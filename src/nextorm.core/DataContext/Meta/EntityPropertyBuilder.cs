@@ -12,17 +12,31 @@ public class EntityPropertyBuilder<T>
     private readonly Expression<Func<T, object>> _propertySelector;
     private string? _columnName;
 
+    /// <summary>
+    /// Creates a builder for the property selected by <paramref name="propertySelector"/>.
+    /// </summary>
+    /// <param name="propertySelector">Selects the property to map; the expression must produce a <see cref="PropertyInfo"/>.</param>
     public EntityPropertyBuilder(Expression<Func<T, object>> propertySelector)
     {
         _propertySelector = propertySelector;
     }
 
+    /// <summary>
+    /// Sets the column name the selected property maps to.
+    /// </summary>
+    /// <param name="columnName">The target column name.</param>
+    /// <returns>This builder, for chaining.</returns>
     public EntityPropertyBuilder<T> HasColumnName(string columnName)
     {
         _columnName = columnName;
         return this;
     }
 
+    /// <summary>
+    /// Resolves the selected property's <see cref="PropertyInfo"/> and produces its mapping metadata.
+    /// </summary>
+    /// <returns>The property's mapping metadata.</returns>
+    /// <exception cref="InvalidOperationException">The selector does not produce a <see cref="PropertyInfo"/>.</exception>
     public IPropertyMetadata Build()
     {
         var miVisitor = new MemberExpressionVisitor();

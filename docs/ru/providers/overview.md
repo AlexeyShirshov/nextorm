@@ -69,9 +69,6 @@ nextorm состоит из нейтрального к провайдеру я�
 | Соединение `LEFT` / `RIGHT` / `FULL` / `CROSS` | да | да | да | без `FULL` | без `FULL` | да | да |
 | Возможность соединения `RIGHT` / `FULL` | поддерживается | поддерживается | поддерживается | только `RIGHT` | только `RIGHT` | поддерживается | поддерживается |
 
-Для сравнения по каждой возможности с EF Core и linq2db см.
-[SQL capabilities gap analysis](../../specs/roadmap/sql-capabilities-gap-analysis.md).
-
 ## Различия провайдеров: решения по унификации
 
 Там, где провайдеры различаются, nextorm либо **унифицирует** поверхность в коде, либо **гейтит**
@@ -87,7 +84,7 @@ nextorm состоит из нейтрального к провайдеру я�
 | Шаблоны форматирования дат/чисел (`to_char`, `FORMAT`, `strftime`, `formatDateTime`) | **Закрыто — не унифицируемо** | Языки шаблонов несовместимы, поэтому форматирование остаётся провайдерными UDF `[SqlFunction]`; единого портируемого аргумента `template` нет. |
 | `FOR JSON` / `FOR XML` | **Гейт (SQL Server)** | `SupportsForJson`/`SupportsForXml`. |
 | Хинты уровня инструкции | **Унифицировано** | SQL Server `OPTION (...)`, PostgreSQL/MySQL/MariaDB встроенный `/*+ ... */`; SQLite/ClickHouse без синтаксиса и остаются под гейтом (см. [Хинты запросов](../guide/17-query-hints.md)). |
-| Табличные хинты vs index hints | **Оставить провайдерным** | У `WITH (NOLOCK)` нет аналога среди index hints MySQL/MariaDB/SQLite (`USE INDEX`/`INDEXED BY` меняют план, а не блокировки), поэтому подключён только SQL Server (`SupportsTableHints`). |
+| Блокирующие табличные хинты vs index hints | **Оставить провайдерным** | У `WITH (NOLOCK)` нет аналога среди index hints MySQL/MariaDB/SQLite (`USE INDEX`/`INDEXED BY` меняют план, а не блокировки), поэтому подключён только SQL Server (`SupportsTableHints`). |
 | Сырой SQL как композируемый источник `FROM` | **Унифицировано** | `FromSql` + `SupportsRawSqlSource` у всех SQL-провайдеров (см. [Сырой SQL](../guide/14-raw-sql.md)). |
 | `INTERSECT ALL`/`EXCEPT ALL` | **Гейт** | PostgreSQL и MariaDB поддерживают; SQL Server/SQLite/MySQL отклоняют через `SupportsIntersectExceptAll`. |
 
@@ -96,7 +93,7 @@ nextorm состоит из нейтрального к провайдеру я�
 ## Как подключается диалект
 
 Диалект реализует [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) или наследуется от [`SqlDialectBase`](xref:NextORM.Core.SqlDialectBase). В [`SqlDialectBase`](xref:NextORM.Core.SqlDialectBase) абстрактными являются только
-[`MakeParam`](xref:NextORM.Core.ISqlDialect) и [`MakePage`](xref:NextORM.Core.ISqlDialect); у всех остальных членов есть рабочее значение по умолчанию ANSI, поэтому диалект
+[`MakeParam`](xref:NextORM.Core.ISqlDialect.MakeParam(System.String)) и [`MakePage`](xref:NextORM.Core.ISqlDialect.MakePage(NextORM.Core.Paging,System.Text.StringBuilder)); у всех остальных членов есть рабочее значение по умолчанию ANSI, поэтому диалект
 переопределяет только то, что отличается. Различия возможностей (разбиение на страницы, требующее `ORDER BY`, обязательные
 псевдонимы подзапросов, `INTERSECT ALL`/`EXCEPT ALL`) выражаются свойствами, а не особыми случаями в
 построителе SQL.
@@ -156,7 +153,6 @@ services.AddNextOrmContext(builder => builder.UseSqlite("app.db"));
 - [MariaDB](mariadb.md)
 - [ClickHouse](clickhouse.md)
 - [In-memory](in-memory.md)
-- [SQL capabilities gap analysis](../../specs/roadmap/sql-capabilities-gap-analysis.md)
 - [Limitations and out-of-scope features](../advanced/limitations.md)
 
 ---

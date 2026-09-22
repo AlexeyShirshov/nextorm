@@ -1,21 +1,21 @@
 # Querying and projections
 
-> Shape the result of a query with [`Select`](xref:NextORM.Core.EntityBuilder`1): one column, an anonymous type, a DTO or record, a tuple, a member initialiser, a nested entity or a calculated column.
+> Shape the result of a query with [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})): one column, an anonymous type, a DTO or record, a tuple, a member initialiser, a nested entity or a calculated column.
 
 **Prerequisites:** [Quickstart](../getting-started/02-quickstart.md) · [Entities and metadata](../getting-started/03-entities-and-metadata.md)
 
 ## Overview
 
 `dataContext.From<TEntity>()` returns an [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1). Every query starts by projecting that
-entity with [`Select`](xref:NextORM.Core.EntityBuilder`1):
+entity with [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})):
 
 ```csharp
 public QueryCommand<TResult> Select<TResult>(Expression<Func<TEntity, TResult>> exp)
 ```
 
 The lambda is not executed - it is translated into the `SELECT` list of the generated statement.
-[`Select`](xref:NextORM.Core.EntityBuilder`1) returns a [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1); the terminal ([`ToListAsync`](xref:NextORM.Core.EntityBuilder`1), [`FirstAsync`](xref:NextORM.Core.EntityBuilder`1),
-[`ToAsyncEnumerable`](xref:NextORM.Core.EntityBuilder`1), [`AnyAsync`](xref:NextORM.Core.EntityBuilder`1), ...) executes it. See [Sorting and paging](05-sorting-and-paging.md)
+[`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) returns a [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1); the terminal ([`ToListAsync`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])), [`FirstAsync`](xref:NextORM.Core.EntityBuilderExtensions.FirstAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])),
+[`ToAsyncEnumerable`](xref:NextORM.Core.EntityBuilderExtensions.ToAsyncEnumerable``1(NextORM.Core.EntityBuilder{``0},System.Object[])), [`AnyAsync`](xref:NextORM.Core.EntityBuilderExtensions.AnyAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])), ...) executes it. See [Sorting and paging](05-sorting-and-paging.md)
 for the terminals and their async forms.
 
 Rules that apply to every projection:
@@ -130,7 +130,7 @@ Output:
 
 A mapped entity only exposes the columns declared on it. A column that has no property — for example
 in a wide ClickHouse table — is projected with
-[`SqlFunctions.Column<T>`](xref:NextORM.Core.SqlFunctions):
+[`SqlFunctions.Column<T>`](xref:NextORM.Core.SqlFunctions.Column``1(System.Object,System.String)):
 
 ```csharp
 var rows = await dataContext.From<SimpleEntity>()
@@ -289,7 +289,7 @@ Output:
 
 ## Primitive and scalar projection
 
-[`Select`](xref:NextORM.Core.EntityBuilder`1) can return a single value instead of a row object:
+[`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) can return a single value instead of a row object:
 
 ```csharp
 var ids = await dataContext.From<SimpleEntity>()
@@ -413,13 +413,13 @@ var elements = dataContext
 ```
 
 `SqlFunctions.Postgres.generate_series(start, stop)` generates a numeric series the same way. The
-built-ins are gated by the provider ([`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect)),
+built-ins are gated by the provider ([`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect.SupportsTableFunction(System.String))),
 and a user-defined function is declared with `[SqlTableFunction]`; see
 [Table-valued functions](13-table-valued-functions.md).
 
 ## Table sampling (`TABLESAMPLE`)
 
-[`TableSample`](xref:NextORM.Core.EntityBuilder`1) adds a `TABLESAMPLE` modifier to the
+[`TableSample`](xref:NextORM.Core.EntityBuilder`1.TableSample(System.Double,NextORM.Core.TableSampleMethod,System.Nullable{System.Double})) adds a `TABLESAMPLE` modifier to the
 primary table, so the database reads only a percentage of its rows instead of scanning the whole table.
 The percentage must be in `(0, 100]`; the sampling method defaults to
 [`TableSampleMethod.System`](xref:NextORM.Core.TableSampleMethod.System) and an optional seed makes the
@@ -443,12 +443,12 @@ select id from simple_entity tablesample (10 percent) repeatable (42)
 PostgreSQL supports both `System` and [`Bernoulli`](xref:NextORM.Core.TableSampleMethod.Bernoulli);
 SQL Server supports only `System`. Every other provider throws `NotSupportedException` when the SQL is
 built ([`TableSample`](xref:NextORM.Core.ISqlDialect.TableSample) and
-[`ITableSampleMethods.Render`](xref:NextORM.Core.ITableSampleMethods.Render)). The modifier applies to the query's
+[`ITableSampleMethods.Render`](xref:NextORM.Core.ITableSampleMethods.Render(NextORM.Core.TableSampleMethod,System.Double,System.Nullable{System.Double}))). The modifier applies to the query's
 primary table only.
 
 ## JSON output (SQL Server)
 
-[`ForJson`](xref:NextORM.Core.QueryCommand`1) appends a SQL Server `FOR JSON` clause, so the database returns a
+[`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean)) appends a SQL Server `FOR JSON` clause, so the database returns a
 single JSON document instead of rows ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson)). The projection should be a single
 scalar/column because the result set collapses to one JSON column:
 
@@ -469,7 +469,7 @@ throw `NotSupportedException`.
 
 ## XML output (SQL Server)
 
-[`ForXml`](xref:NextORM.Core.QueryCommand`1) is the XML counterpart ([`SupportsForXml`](xref:NextORM.Core.ISqlDialect.SupportsForXml)); it supports
+[`ForXml`](xref:NextORM.Core.QueryCommand`1.ForXml(NextORM.Core.ForXmlMode,System.String,System.String,System.Boolean)) is the XML counterpart ([`SupportsForXml`](xref:NextORM.Core.ISqlDialect.SupportsForXml)); it supports
 `RAW`, `AUTO`, `EXPLICIT` and `PATH`, with an optional row element name, a `ROOT('...')` wrapper and the
 `ELEMENTS` flag:
 

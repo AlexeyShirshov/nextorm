@@ -1,6 +1,6 @@
 # Sorting and paging
 
-> Order rows with [`OrderBy`](xref:NextORM.Core.EntityBuilder`1)/[`OrderByDescending`](xref:NextORM.Core.EntityBuilder`1), slice them with [`Limit`](xref:NextORM.Core.Paging.Limit)/[`Offset`](xref:NextORM.Core.Paging.Offset)/[`Page`](xref:NextORM.Core.EntityBuilder`1), and read one row or a boolean with the single-row terminals.
+> Order rows with [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32))/[`OrderByDescending`](xref:NextORM.Core.EntityBuilder`1.OrderByDescending(System.Int32)), slice them with [`Limit`](xref:NextORM.Core.Paging.Limit)/[`Offset`](xref:NextORM.Core.Paging.Offset)/[`Page`](xref:NextORM.Core.EntityBuilder`1.Page(System.Int32,System.Int32)), and read one row or a boolean with the single-row terminals.
 
 **Prerequisites:** [Querying and projections](01-querying-and-projections.md) · [Filtering (WHERE)](02-filtering-where.md)
 
@@ -13,11 +13,11 @@ generated statement rather than a client-side operation:
   `OrderBy(expr)`, `OrderByDescending(expr)` and the ordinal overloads `OrderBy(int)`,
   `OrderBy(int, OrderDirection)`, `OrderByDescending(int)`.
 * [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1) also exposes `Limit(int)`, `Offset(int)` and `Page(int limit, int offset)`.
-* After [`Select`](xref:NextORM.Core.EntityBuilder`1), the returned [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) has the ordinal overloads only:
+* After [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), the returned [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) has the ordinal overloads only:
   `OrderBy(int columnIndex, OrderDirection direction)`, `OrderBy(int)` and `OrderByDescending(int)`.
 
-Each call appends to an immutable builder, so a second [`OrderBy`](xref:NextORM.Core.EntityBuilder`1) adds a tie-break key and leaves the
-first one in place. The terminal method ([`ToListAsync`](xref:NextORM.Core.EntityBuilder`1), [`FirstAsync`](xref:NextORM.Core.EntityBuilder`1), [`AnyAsync`](xref:NextORM.Core.EntityBuilder`1), ...) executes the
+Each call appends to an immutable builder, so a second [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)) adds a tie-break key and leaves the
+first one in place. The terminal method ([`ToListAsync`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])), [`FirstAsync`](xref:NextORM.Core.EntityBuilderExtensions.FirstAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])), [`AnyAsync`](xref:NextORM.Core.EntityBuilderExtensions.AnyAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])), ...) executes the
 command.
 
 ## Ordering by expression
@@ -128,7 +128,7 @@ Output:
 |----|
 | 2 |
 
-[`FirstAsync`](xref:NextORM.Core.EntityBuilder`1) applies its single-row paging limit (`limit 1` on SQLite and PostgreSQL, `top(1)` on
+[`FirstAsync`](xref:NextORM.Core.EntityBuilderExtensions.FirstAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])) applies its single-row paging limit (`limit 1` on SQLite and PostgreSQL, `top(1)` on
 SQL Server; see below). A plain `Limit(5).Select(it => it.Id)` produces
 `select id from simple_entity limit 5` on SQLite and PostgreSQL, and
 `select top(5) id from simple_entity` on SQL Server.
@@ -151,7 +151,7 @@ var page = await dataContext.From<SimpleEntity>()
 | SQL Server | `select id from simple_entity order by (select null as anyorder) offset 10 rows fetch next 5 rows only` |
 
 SQL Server rejects `OFFSET ... FETCH` without an `ORDER BY`, so the provider injects
-`order by (select null as anyorder)` when paging without an explicit sort. When an [`OrderBy`](xref:NextORM.Core.EntityBuilder`1) is
+`order by (select null as anyorder)` when paging without an explicit sort. When an [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)) is
 present it is used instead and nothing is injected.
 
 Offset/limit rendering per provider:
@@ -220,10 +220,10 @@ The single-row terminals are available in synchronous and asynchronous forms:
 
 | Terminal | Result |
 |---|---|
-| [`First`](xref:NextORM.Core.EntityBuilder`1) / [`FirstAsync`](xref:NextORM.Core.EntityBuilder`1) | the first row; throws `InvalidOperationException` if the sequence is empty |
-| [`FirstOrDefault`](xref:NextORM.Core.EntityBuilder`1) / [`FirstOrDefaultAsync`](xref:NextORM.Core.EntityBuilder`1) | the first row, or `default` if empty |
-| [`Single`](xref:NextORM.Core.EntityBuilder`1) / [`SingleAsync`](xref:NextORM.Core.EntityBuilder`1) | exactly one row; throws if empty or more than one |
-| [`SingleOrDefault`](xref:NextORM.Core.EntityBuilder`1) / [`SingleOrDefaultAsync`](xref:NextORM.Core.EntityBuilder`1) | the only row, or `default` if empty; throws if more than one |
+| [`First`](xref:NextORM.Core.EntityBuilderExtensions.First``1(NextORM.Core.EntityBuilder{``0})) / [`FirstAsync`](xref:NextORM.Core.EntityBuilderExtensions.FirstAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])) | the first row; throws `InvalidOperationException` if the sequence is empty |
+| [`FirstOrDefault`](xref:NextORM.Core.EntityBuilderExtensions.FirstOrDefault``1(NextORM.Core.EntityBuilder{``0})) / [`FirstOrDefaultAsync`](xref:NextORM.Core.EntityBuilderExtensions.FirstOrDefaultAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])) | the first row, or `default` if empty |
+| [`Single`](xref:NextORM.Core.EntityBuilderExtensions.Single``1(NextORM.Core.EntityBuilder{``0})) / [`SingleAsync`](xref:NextORM.Core.EntityBuilderExtensions.SingleAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])) | exactly one row; throws if empty or more than one |
+| [`SingleOrDefault`](xref:NextORM.Core.EntityBuilderExtensions.SingleOrDefault``1(NextORM.Core.EntityBuilder{``0})) / [`SingleOrDefaultAsync`](xref:NextORM.Core.EntityBuilderExtensions.SingleOrDefaultAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])) | the only row, or `default` if empty; throws if more than one |
 
 ```csharp
 var first = await dataContext.From<SimpleEntity>()
@@ -263,16 +263,16 @@ Output:
 
 The limit is how a single row is enforced without a second round trip:
 
-* [`First`](xref:NextORM.Core.EntityBuilder`1) / [`FirstOrDefault`](xref:NextORM.Core.EntityBuilder`1) set `Paging.Limit = 1` (and [`SingleRow`](xref:NextORM.Core.QueryCommand.SingleRow)) on the command.
-* [`Single`](xref:NextORM.Core.EntityBuilder`1) / [`SingleOrDefault`](xref:NextORM.Core.EntityBuilder`1) set `Paging.Limit = 2`; if the provider returns two rows the terminal
-  throws, so [`Single`](xref:NextORM.Core.EntityBuilder`1) can never silently truncate a result set.
+* [`First`](xref:NextORM.Core.EntityBuilderExtensions.First``1(NextORM.Core.EntityBuilder{``0})) / [`FirstOrDefault`](xref:NextORM.Core.EntityBuilderExtensions.FirstOrDefault``1(NextORM.Core.EntityBuilder{``0})) set `Paging.Limit = 1` (and [`SingleRow`](xref:NextORM.Core.QueryCommand.SingleRow)) on the command.
+* [`Single`](xref:NextORM.Core.EntityBuilderExtensions.Single``1(NextORM.Core.EntityBuilder{``0})) / [`SingleOrDefault`](xref:NextORM.Core.EntityBuilderExtensions.SingleOrDefault``1(NextORM.Core.EntityBuilder{``0})) set `Paging.Limit = 2`; if the provider returns two rows the terminal
+  throws, so [`Single`](xref:NextORM.Core.EntityBuilderExtensions.Single``1(NextORM.Core.EntityBuilder{``0})) can never silently truncate a result set.
 
 These limits are part of the command's shape and of the query-plan cache key, and they are applied
 whether or not the query already had a [`Limit`](xref:NextORM.Core.Paging.Limit)/``
 
 ## Any
 
-[`Any`](xref:NextORM.Core.EntityBuilder`1) and [`AnyAsync`](xref:NextORM.Core.EntityBuilder`1) are available on both [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1) and [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1). They
+[`Any`](xref:NextORM.Core.EntityBuilderExtensions.Any``1(NextORM.Core.EntityBuilder{``0})) and [`AnyAsync`](xref:NextORM.Core.EntityBuilderExtensions.AnyAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])) are available on both [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1) and [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1). They
 emit an `exists(...)` predicate and read a single boolean:
 
 ```csharp
@@ -287,7 +287,7 @@ select exists(select * from simple_entity where id = 100)
 ```
 
 SQL Server has no boolean scalar, so it renders the same predicate as
-`select cast(case when exists(...) then 1 else 0 end as bit)`. Unlike [`First`](xref:NextORM.Core.EntityBuilder`1), [`Any`](xref:NextORM.Core.EntityBuilder`1) does not need the
+`select cast(case when exists(...) then 1 else 0 end as bit)`. Unlike [`First`](xref:NextORM.Core.EntityBuilderExtensions.First``1(NextORM.Core.EntityBuilder{``0})), [`Any`](xref:NextORM.Core.EntityBuilderExtensions.Any``1(NextORM.Core.EntityBuilder{``0})) does not need the
 row data, so the projection is discarded and only existence is tested.
 
 ## Provider differences
@@ -300,7 +300,7 @@ row data, so the projection is discarded and only existence is tested.
 | MySQL | `LIMIT` / `OFFSET`; offset without limit emits `limit 18446744073709551615 offset n`; nulls sort as the smallest value (first ascending). |
 | MariaDB | Same as MySQL. |
 | ClickHouse | `LIMIT` / `OFFSET`; offset without limit emits `limit 18446744073709551615 offset n`. |
-| In-memory | [`OrderBy`](xref:NextORM.Core.EntityBuilder`1) / [`OrderByDescending`](xref:NextORM.Core.EntityBuilder`1) run through LINQ; nulls sort first ascending (the CLR default comparer). |
+| In-memory | [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)) / [`OrderByDescending`](xref:NextORM.Core.EntityBuilder`1.OrderByDescending(System.Int32)) run through LINQ; nulls sort first ascending (the CLR default comparer). |
 
 ## See also
 

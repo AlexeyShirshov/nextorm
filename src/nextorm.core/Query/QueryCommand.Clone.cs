@@ -1,8 +1,20 @@
 namespace NextORM.Core;
 
+/// <summary>
+/// Clone and copy support for <see cref="QueryCommand"/>: the live clone used by prepared commands and
+/// the trimmed clone kept as the plan-cache key.
+/// </summary>
 public partial class QueryCommand
 {
 
+    /// <summary>
+    /// Copies the shared plan state of this command into <paramref name="dst"/>. When
+    /// <paramref name="copyAll"/> is <c>true</c> the mutable query state (custom data, referenced
+    /// queries, union, from and CTEs) is copied by reference for a live clone; otherwise those parts
+    /// are deep-cloned so the plan-cache key cannot observe later mutations.
+    /// </summary>
+    /// <param name="dst">The target command.</param>
+    /// <param name="copyAll">Whether to copy all state by reference instead of cloning the mutable parts.</param>
     protected virtual void CopyTo(QueryCommand dst, bool copyAll)
     {
         dst._selectList = _selectList;
@@ -113,15 +125,22 @@ public partial class QueryCommand
         }
     }
 
+    /// <summary>Creates an empty command of the same concrete type for a live clone.</summary>
+    /// <returns>A new command bound to this command's data context.</returns>
     protected virtual QueryCommand CreateSelf()
     {
         return new QueryCommand(_dataContext, Definition);
     }
+    /// <summary>Creates an empty command of the same type for a plan-cache key, detached from the data context.</summary>
+    /// <returns>A new command with the mutable expressions cleared for later copying.</returns>
     protected virtual QueryCommand CreateSelfForClone()
     {
         return new QueryCommand(null, Definition with { Exp = null, Condition = null, Joins = CloneForCache(_joins), Group = null });
     }
 
+    /// <summary>Deep-clones the join expressions so a cached plan cannot observe later mutations.</summary>
+    /// <param name="joins">The joins to clone, or <c>null</c>.</param>
+    /// <returns>The cloned joins, or <c>null</c> when <paramref name="joins"/> is <c>null</c>.</returns>
     protected static JoinExpression[]? CloneForCache(JoinExpression[]? joins)
     {
         if (joins is null) return null;
@@ -136,12 +155,16 @@ public partial class QueryCommand
         return newJoins;
     }
 
+    /// <summary>Returns the detached clone that is stored in the plan cache and used as the cache key.</summary>
+    /// <returns>The cache clone.</returns>
     public QueryCommand CloneForCache()
     {
         var cmd = CreateSelfForClone();
         CopyTo(cmd, false);
         return cmd;
     }
+    /// <summary>Returns a deep, independently mutable copy of this command.</summary>
+    /// <returns>The cloned command.</returns>
     public QueryCommand Clone()
     {
         return (QueryCommand)(this as ICloneable).Clone();

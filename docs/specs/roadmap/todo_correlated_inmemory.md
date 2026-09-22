@@ -1,7 +1,7 @@
 # TODO: коррелированные подзапросы в in-memory
 
-> Вынесено из [`plan-correlated-subqueries.md`](plan-correlated-subqueries.md) §5 (фаза 6). SQL-провайдеры
-> поддержаны (см. `plan-correlated-subqueries.md`); в in-memory корреляция закрыта **явной
+> Вынесено из плана реализации коррелированных подзапросов (фаза 6). SQL-провайдеры
+> поддержаны; в in-memory корреляция закрыта **явной
 > границей** — `NotSupportedException`, а не поддержкой. Источник в gap-анализе:
 > `roadmap/sql-capabilities-gap-analysis.md` §4.1 («any correlated subquery on the in-memory provider
 > throws `NotSupportedException`»).
@@ -88,7 +88,6 @@
 
 ## Ссылки
 
-- `plan-correlated-subqueries.md` §1.4, §5 (фаза 6), §9.
 - [`guide/03-joins.md`](../guide/03-joins.md) § «Correlated APPLY / LATERAL» — коррелированный APPLY на SQL-провайдерах (реализован).
 - `roadmap/sql-capabilities-gap-analysis.md` §4.1.
 - `.opencode/skills/running-integration-tests/SKILL.md` — прогон интеграционных тестов.

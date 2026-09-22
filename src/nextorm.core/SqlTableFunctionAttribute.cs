@@ -16,10 +16,19 @@ namespace NextORM.Core;
 [AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
 public sealed class SqlTableFunctionAttribute : Attribute
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SqlTableFunctionAttribute"/> class. The SQL function
+    /// name defaults to the CLR method name.
+    /// </summary>
     public SqlTableFunctionAttribute()
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SqlTableFunctionAttribute"/> class with an explicit
+    /// SQL function name.
+    /// </summary>
+    /// <param name="name">The SQL table function name to call; must not be <see langword="null"/>.</param>
     public SqlTableFunctionAttribute(string name)
     {
         Name = name;

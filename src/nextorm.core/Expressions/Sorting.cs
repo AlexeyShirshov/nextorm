@@ -16,11 +16,15 @@ public struct Sorting
     private Expression? _preparedExpression;
     private readonly int? _columnIdx;
 
+    /// <summary>Initializes a sort key from an expression that is translated during preparation.</summary>
+    /// <param name="expression">The <c>ORDER BY</c> key expression.</param>
     public Sorting(Expression expression)
     {
         _expression = expression;
     }
 
+    /// <summary>Initializes a sort key from an already-resolved result-set column index.</summary>
+    /// <param name="columnIdx">The zero-based column index.</param>
     public Sorting(int columnIdx)
     {
         _columnIdx = columnIdx;
@@ -43,6 +47,8 @@ public struct Sorting
         set => _preparedExpression = value;
     }
 
+    /// <summary>The original <c>ORDER BY</c> expression, or <c>null</c> when the key is a column index.</summary>
     public readonly Expression? SortExpression => _expression;
+    /// <summary>The resolved result-set column index, or <c>null</c> when the key is an expression.</summary>
     public readonly int? ColumnIndex => _columnIdx;
 }

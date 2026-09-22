@@ -4,6 +4,10 @@ using System.Linq.Expressions;
 
 namespace NextORM.Core;
 
+    /// <summary>
+    /// Default <see cref="IAliasProvider"/> that hands out deterministic aliases (<c>t1</c>, <c>t2</c>, ...)
+    /// in the order sources are registered.
+    /// </summary>
     public class DefaultAliasProvider : IAliasProvider
 {
     /// <summary>Returns the alias of the <paramref name="oneBasedIndex"/>-th source ("t1", "t2", ...).</summary>
@@ -18,6 +22,7 @@ namespace NextORM.Core;
 #else
     private readonly List<(string alias, object sourceProvider)> _valueList = [];
 #endif
+    /// <inheritdoc/>
     public string? FindAlias(int idx)
     {
 #if DEBUG
@@ -25,6 +30,7 @@ namespace NextORM.Core;
 #endif
         return _aliasNames.Get(idx + 1);
     }
+    /// <inheritdoc/>
     public string GetNextAlias(FromExpression from)
     {
         var idx = _valueList.Count;
@@ -34,6 +40,7 @@ namespace NextORM.Core;
         return alias;
     }
 
+    /// <inheritdoc/>
     public string GetNextAlias(QueryCommand queryCommand)
     {
         var idx = _valueList.Count;

@@ -9,6 +9,7 @@ namespace NextORM.SqlServer;
 /// </summary>
 public sealed class SqlServerDialect : SqlDialectBase
 {
+    /// <summary>The shared SQL Server dialect instance.</summary>
     public static readonly SqlServerDialect Instance = new();
 
     private readonly IPivotRenderer _pivot;
@@ -16,6 +17,7 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <summary>Creates the dialect and its capability renderers.</summary>
     public SqlServerDialect() => _pivot = new SqlServerPivotRenderer(this);
 
+    /// <summary>Renders a positional parameter as <c>@name</c>.</summary>
     public override string MakeParam(string name) => $"@{name}";
 
     /// <summary>
@@ -42,7 +44,9 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <summary>SQL Server supports <c>GROUP BY ROLLUP (...)</c> and <c>GROUP BY CUBE (...)</c>.</summary>
     public override bool SupportsRollup => true;
 
+    /// <summary>SQL Server supports <c>GROUP BY CUBE (...)</c>.</summary>
     public override bool SupportsCube => true;
+    /// <summary>SQL Server supports <c>GROUP BY GROUPING SETS (...)</c>.</summary>
     public override bool SupportsGroupingSets => true;
 
     /// <summary>SQL Server 2016+ renders the JSON-as-text functions (<c>json_value</c>, ...) over nvarchar.</summary>
@@ -58,6 +62,7 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <summary>SQL Server renders the full-text predicates <c>contains</c>/<c>freetext</c>.</summary>
     public override bool SupportsFullText => true;
 
+    /// <summary>Renders the full-text predicate <c>contains(column, search)</c> or <c>freetext(column, search)</c>.</summary>
     public override string MakeFullText(string functionName, string column, string search) =>
         $"{functionName}({column}, {search})";
 
@@ -73,6 +78,7 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <summary>SQL Server supports the native <c>PIVOT</c>/<c>UNPIVOT</c> source constructs.</summary>
     public override IPivotRenderer Pivot => _pivot;
 
+    /// <summary>SQL Server exposes <c>string_split</c>, <c>openjson</c>, <c>containstable</c> and <c>freetexttable</c>.</summary>
     public override bool SupportsTableFunction(string name) =>
         name is "string_split" or "openjson" or "containstable" or "freetexttable";
 
@@ -82,6 +88,7 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <summary>SQL Server renders table hints as <c>with (hint, ...)</c> after the table name.</summary>
     public override bool SupportsTableHints => true;
 
+    /// <summary>Renders the hints as a <c>with (hint, ...)</c> suffix.</summary>
     public override string MakeTableHints(IReadOnlyList<string> hints) => $" with ({string.Join(", ", hints)})";
 
     /// <summary>SQL Server supports row locking through the <c>updlock</c>/<c>holdlock</c> table hints.</summary>
@@ -90,6 +97,7 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <summary>SQL Server renders the result set as JSON through a trailing <c>FOR JSON</c> clause.</summary>
     public override bool SupportsForJson => true;
 
+    /// <summary>Renders the trailing <c>FOR JSON</c> clause with its mode, root and null-value options.</summary>
     public override string MakeForJson(ForJsonClause clause)
     {
         var sqlBuilder = new StringBuilder("for json ");
@@ -107,6 +115,7 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <summary>SQL Server renders the result set as XML through a trailing <c>FOR XML</c> clause.</summary>
     public override bool SupportsForXml => true;
 
+    /// <summary>Renders the trailing <c>FOR XML</c> clause with its mode, element name, root and elements options.</summary>
     public override string MakeForXml(ForXmlClause clause)
     {
         var sqlBuilder = new StringBuilder("for xml ");
@@ -138,6 +147,7 @@ public sealed class SqlServerDialect : SqlDialectBase
     public override bool SupportsGreatestLeast => true;
 
     // SQL Server 2012+ supports the ANSI percent_rank()/cume_dist() window functions.
+    /// <summary>SQL Server 2012+ implements the <c>percent_rank</c>/<c>cume_dist</c> window functions.</summary>
     public override bool SupportsPercentRankCumeDist => true;
 
     /// <summary>SQL Server renders percentiles as the <c>PERCENTILE_CONT</c>/<c>PERCENTILE_DISC</c> analytic functions (no exact ordered-set aggregate form).</summary>
@@ -146,6 +156,7 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <summary>SQL Server 2017 introduced <c>string_agg</c>; it has no array type, so <c>array_agg</c> stays unavailable.</summary>
     public override bool SupportsStringAgg => true;
 
+    /// <summary>Renders a lateral source as <c>CROSS APPLY</c> or <c>OUTER APPLY</c>.</summary>
     public override string MakeApply(JoinType applyType, string source) => applyType switch
     {
         JoinType.CrossApply => $" cross apply {source}",
@@ -153,6 +164,7 @@ public sealed class SqlServerDialect : SqlDialectBase
         _ => base.MakeApply(applyType, source)
     };
 
+    /// <summary>Maps the CLR type to its SQL Server column type (<c>tinyint</c>, <c>smallint</c>, <c>int</c>, <c>bigint</c>, <c>real</c>, <c>float</c>, <c>decimal</c>).</summary>
     public override string MakeTypeName(Type type) => type switch
     {
         _ when type == typeof(byte) => "tinyint",
@@ -166,18 +178,24 @@ public sealed class SqlServerDialect : SqlDialectBase
     };
 
     // SQL Server has no length(); its equivalent is len().
+    /// <summary>SQL Server has no <c>length</c>; it renders <c>len(value)</c>.</summary>
     public override string MakeStringLength(string value) => $"len({value})";
 
+    /// <summary>Renders the one-based position through <c>charindex(substring, value)</c> (0 when absent).</summary>
     protected override string MakeStringPosition(string value, string substring) =>
         $"charindex({substring}, {value})";
 
+    /// <summary>Renders the one-based position from a zero-based start through <c>charindex(substring, value, start + 1)</c>.</summary>
     protected override string MakeStringPosition(string value, string substring, string start) =>
         $"charindex({substring}, {value}, {start} + 1)";
 
+    /// <summary>Renders <c>replicate(value, count)</c>.</summary>
     public override string MakeRepeat(string value, string count) => $"replicate({value}, {count})";
 
+    /// <summary>Renders <c>reverse(value)</c>.</summary>
     protected override string MakeStringReverse(string value) => $"reverse({value})";
 
+    /// <summary>Renders <c>stuff(value, start + 1, count, newValue)</c>, or the truncated prefix when the count is <c>null</c>.</summary>
     public override string MakeStuff(string value, string start, string? count, string newValue) =>
         count is null
             ? $"substring({value}, 1, {start})"
@@ -209,9 +227,11 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// </summary>
     public override bool SupportsDateTrunc => true;
 
+    /// <summary>Accepts the date-trunc fields except <c>decade</c>, <c>century</c> and <c>millennium</c>, which T-SQL <c>datetrunc</c> lacks.</summary>
     public override bool SupportsDateTruncField(string field) =>
         field is not ("decade" or "century" or "millennium") && base.SupportsDateTruncField(field);
 
+    /// <summary>Renders <c>datetrunc(part, value)</c>, mapping the plural ANSI sub-second names to the singular T-SQL ones.</summary>
     public override string MakeDateTrunc(string field, string value)
     {
         var part = field switch
@@ -232,6 +252,7 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// </summary>
     public override bool SupportsDateArithmetic => true;
 
+    /// <summary>Renders <c>dateadd(part, amount, value)</c>, folding <c>decade</c>/<c>century</c>/<c>millennium</c> onto a scaled <c>year</c>.</summary>
     public override string MakeDateAdd(string field, string amount, string value)
     {
         // T-SQL dateadd has no decade/century/millennium parts (datepart has them, dateadd does not),
@@ -251,6 +272,7 @@ public sealed class SqlServerDialect : SqlDialectBase
         return $"dateadd({part}, {scaled}, {value})";
     }
 
+    /// <summary>Renders <c>datediff(part, start, end)</c> with the singular T-SQL part names.</summary>
     public override string MakeDateDiff(string field, string start, string end)
     {
         // T-SQL datediff uses the singular part names; plural ANSI parts map onto them.
@@ -264,15 +286,19 @@ public sealed class SqlServerDialect : SqlDialectBase
         return $"datediff({part}, {start}, {end})";
     }
 
+    /// <summary>Renders <c>eomonth(value)</c>.</summary>
     public override string MakeEndOfMonth(string value) => $"eomonth({value})";
 
+    /// <summary>Renders <c>datefromparts(year, month, day)</c>.</summary>
     public override string MakeDateFromParts(string year, string month, string day) =>
         $"datefromparts({year}, {month}, {day})";
 
+    /// <summary>Renders <c>getutcdate()</c> for UTC or <c>getdate()</c> for local time.</summary>
     public override string MakeNow(bool utc) => utc ? "getutcdate()" : "getdate()";
 
     // T-SQL has no trunc; the 3-argument round(number, length, function) truncates when function is
     // non-zero. Its round() also requires the length argument, unlike the ANSI/Math single-argument form.
+    /// <summary>Renders <c>round(number, 0, 1)</c> for <c>trunc</c> and <c>round(number, 0)</c> for the one-argument <c>round</c>.</summary>
     public override string MakeMathFunction(string name, IReadOnlyList<string> args) => (name, args.Count) switch
     {
         ("trunc", 1) => $"round({args[0]}, 0, 1)",
@@ -280,6 +306,7 @@ public sealed class SqlServerDialect : SqlDialectBase
         _ => base.MakeMathFunction(name, args)
     };
 
+    /// <summary>T-SQL has no boolean type: a scalar boolean is materialised as <c>cast(case when ... then 1 else 0 end as bit)</c>.</summary>
     public override string MakeBooleanPredicate(string predicate, bool asPredicate)
     {
         // T-SQL has no boolean type: a predicate is valid only as a condition, so a scalar use has to
@@ -289,6 +316,7 @@ public sealed class SqlServerDialect : SqlDialectBase
             : $"cast(case when {predicate} then 1 else 0 end as bit)";
     }
 
+    /// <summary>A bit value is not a valid T-SQL predicate, so it is compared with its true literal (<c>(value) = 1</c>).</summary>
     public override string MakeBooleanValuePredicate(string value)
     {
         // A bit value is not a valid predicate in T-SQL, so it has to be compared with its true
@@ -296,6 +324,7 @@ public sealed class SqlServerDialect : SqlDialectBase
         return $"({value}) = 1";
     }
 
+    /// <summary>T-SQL has no boolean type: <c>exists</c>/<c>any</c>/<c>all</c> are materialised as a bit scalar in a projection.</summary>
     public override string MakeSubqueryPredicate(string keyword, string query, bool asPredicate)
     {
         // SQL Server has no boolean type: EXISTS/ANY/ALL are valid only as a predicate, while a
@@ -310,8 +339,10 @@ public sealed class SqlServerDialect : SqlDialectBase
     }
 
     // T-SQL has both isnull and coalesce; isnull is kept as the historical rendering.
+    /// <summary>T-SQL has both <c>isnull</c> and <c>coalesce</c>; this renders the historical <c>isnull(v1, v2)</c>.</summary>
     public override string MakeCoalesce(string v1, string v2) => $"isnull({v1},{v2})";
 
+    /// <summary>Renders the boolean coalesce as <c>(isnull(v1, v2)) = 1</c> so it stays usable as a predicate.</summary>
     public override string MakeBoolCoalesce(string v1, string v2)
     {
         // A bit expression is not a valid predicate in T-SQL, so compare it with 1; the result is
@@ -319,6 +350,7 @@ public sealed class SqlServerDialect : SqlDialectBase
         return $"({MakeCoalesce(v1, v2)}) = 1";
     }
 
+    /// <summary>Materialises a boolean-valued CASE as a <c>bit</c> scalar, compared with <c>1</c> in a predicate context.</summary>
     public override string MakeCase(string caseExpression, bool isBooleanResult, bool asPredicate)
     {
         if (!isBooleanResult)
@@ -332,6 +364,7 @@ public sealed class SqlServerDialect : SqlDialectBase
         return asPredicate ? $"{bitValue} = 1" : bitValue;
     }
 
+    /// <summary>Renders <c>count_big(...)</c> for the large form (<c>count</c> otherwise), preserving the <c>distinct</c> modifier.</summary>
     public override string MakeCount(bool distinct, bool big)
     {
         // count_big returns bigint while count returns int; the SQL Server provider can express both.
@@ -341,6 +374,7 @@ public sealed class SqlServerDialect : SqlDialectBase
         return base.MakeCount(distinct, false);
     }
 
+    /// <summary>Renders <c>offset n rows</c> and an optional <c>fetch next m rows only|with ties</c>.</summary>
     public override void MakePage(Paging paging, StringBuilder sqlBuilder)
     {
         sqlBuilder.Append("offset ").Append(paging.Offset).Append(" rows");
@@ -354,6 +388,7 @@ public sealed class SqlServerDialect : SqlDialectBase
     public override bool SupportsWithTies => true;
 
     // SQL Server rejects OFFSET/FETCH without ORDER BY, so a constant sort has to be injected.
+    /// <summary>Injects a constant sort because SQL Server rejects <c>OFFSET</c>/<c>FETCH</c> without an <c>ORDER BY</c>.</summary>
     public override string? GetPagingOrderBy(QueryCommand queryCommand)
         => queryCommand.Paging.IsEmpty ? null : "(select null as anyorder)";
 
@@ -366,10 +401,12 @@ public sealed class SqlServerDialect : SqlDialectBase
 
     // T-SQL has no RECURSIVE keyword: a recursive CTE is declared with `with` alone, so the flag is
     // intentionally ignored.
+    /// <summary>T-SQL has no <c>RECURSIVE</c> keyword, so the flag is ignored and <c>with</c> is always rendered.</summary>
     public override string MakeWith(bool recursive) => "with ";
 
     // MAXRECURSION overrides the 100-level default. The option is appended at the end of the
     // statement; the builder supplies the depth requested by the CTE declaration.
+    /// <summary>Renders the trailing <c>option (maxrecursion n)</c> clause.</summary>
     public override string? MakeMaxRecursion(int maxRecursion) => $"option (maxrecursion {maxRecursion})";
 
     /// <summary>SQL Server renders statement-level hints as a trailing <c>OPTION (...)</c> clause.</summary>
@@ -390,6 +427,7 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <summary>SQL Server can generate a random UUID through <c>newid()</c>; it has no v7 generator.</summary>
     public override IUuidGenerators UuidGenerators => SqlServerUuidGenerators.Instance;
 
+    /// <summary>Appends the hints as an <c>option (...)</c> clause, folding an existing <c>maxrecursion</c> option into it.</summary>
     public override string RenderQueryHints(string sql, IReadOnlyList<string> hints, string? maxRecursionOption)
     {
         // T-SQL allows only one OPTION clause per statement. When the query also declared a CTE

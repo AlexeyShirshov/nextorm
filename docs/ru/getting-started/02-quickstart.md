@@ -10,14 +10,14 @@
 
 1. **сущность** (класс или интерфейс), свойства которой отображаются на столбцы;
 2. **контекст** ([`IDataContext`](xref:NextORM.Core.IDataContext)), созданный из подключения или строки подключения;
-3. **запрос**, построенный с помощью [`From`](xref:NextORM.Core.DataContextExtensions), [`Select`](xref:NextORM.Core.EntityBuilder`1), [`Where`](xref:NextORM.Core.EntityBuilder`1) и так далее;
-4. **терминальный метод**, такой как [`ToList`](xref:NextORM.Core.EntityBuilder`1), [`First`](xref:NextORM.Core.EntityBuilder`1), [`Any`](xref:NextORM.Core.EntityBuilder`1) или [`ToAsyncEnumerable`](xref:NextORM.Core.EntityBuilder`1), который его выполняет.
+3. **запрос**, построенный с помощью [`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)), [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), [`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})) и так далее;
+4. **терминальный метод**, такой как [`ToList`](xref:NextORM.Core.EntityBuilderExtensions.ToList``1(NextORM.Core.EntityBuilder{``0},System.ReadOnlySpan{System.Object})), [`First`](xref:NextORM.Core.EntityBuilderExtensions.First``1(NextORM.Core.EntityBuilder{``0})), [`Any`](xref:NextORM.Core.EntityBuilderExtensions.Any``1(NextORM.Core.EntityBuilder{``0})) или [`ToAsyncEnumerable`](xref:NextORM.Core.EntityBuilderExtensions.ToAsyncEnumerable``1(NextORM.Core.EntityBuilder{``0},System.Object[])), который его выполняет.
 
-[`From`](xref:NextORM.Core.DataContextExtensions) также регистрирует метаданные `T` при первом обращении. Контекст поддерживает освобождение: контекст, созданный из строки подключения, владеет подключением и закрывает его, тогда как контекст, созданный из переданного `DbConnection`, оставляет это подключение открытым.
+[`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)) также регистрирует метаданные `T` при первом обращении. Контекст поддерживает освобождение: контекст, созданный из строки подключения, владеет подключением и закрывает его, тогда как контекст, созданный из переданного `DbConnection`, оставляет это подключение открытым.
 
 ## Полная минимальная программа
 
-Следующая программа самодостаточна. Она создаёт базу данных SQLite в памяти, наполняет одну таблицу, строит контекст с помощью [`UseSqlite`](xref:NextORM.Sqlite.SqliteDataContextOptionsBuilderExtensions) и возвращает строки как анонимный тип.
+Следующая программа самодостаточна. Она создаёт базу данных SQLite в памяти, наполняет одну таблицу, строит контекст с помощью [`UseSqlite`](xref:NextORM.Sqlite.SqliteDataContextOptionsBuilderExtensions.UseSqlite(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection)) и возвращает строки как анонимный тип.
 
 ```csharp
 using System.ComponentModel.DataAnnotations;
@@ -74,7 +74,7 @@ select id from simple_entity
 
 ## Использование строки подключения
 
-[`UseSqlite`](xref:NextORM.Sqlite.SqliteDataContextOptionsBuilderExtensions) также принимает путь к файлу (или фрагмент строки подключения SQLite), и тогда контекст создаёт подключение и владеет им:
+[`UseSqlite`](xref:NextORM.Sqlite.SqliteDataContextOptionsBuilderExtensions.UseSqlite(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection)) также принимает путь к файлу (или фрагмент строки подключения SQLite), и тогда контекст создаёт подключение и владеет им:
 
 ```csharp
 var builder = new DataContextBuilder().UseSqlite("app.db");
@@ -88,16 +88,16 @@ using var dataContext = builder.CreateDataContext();
 
 ## Чтение данных
 
-В запросе выше используется [`ToAsyncEnumerable`](xref:NextORM.Core.EntityBuilder`1). Другие распространённые терминальные методы:
+В запросе выше используется [`ToAsyncEnumerable`](xref:NextORM.Core.EntityBuilderExtensions.ToAsyncEnumerable``1(NextORM.Core.EntityBuilder{``0},System.Object[])). Другие распространённые терминальные методы:
 
 | Терминал | Результат |
 |---|---|
-| [`ToList`](xref:NextORM.Core.EntityBuilder`1) / [`ToListAsync`](xref:NextORM.Core.EntityBuilder`1) | `List<TResult>` |
-| [`First`](xref:NextORM.Core.EntityBuilder`1) / [`FirstAsync`](xref:NextORM.Core.EntityBuilder`1) | первая строка; выбрасывает исключение, если последовательность пуста |
-| [`FirstOrDefault`](xref:NextORM.Core.EntityBuilder`1) / [`FirstOrDefaultAsync`](xref:NextORM.Core.EntityBuilder`1) | первая строка или `default` |
-| [`Single`](xref:NextORM.Core.EntityBuilder`1) / [`SingleOrDefault`](xref:NextORM.Core.EntityBuilder`1) (и `…Async`) | ровно одна строка (или `default`) |
-| [`Any`](xref:NextORM.Core.EntityBuilder`1) / [`AnyAsync`](xref:NextORM.Core.EntityBuilder`1) | `bool` |
-| [`Count`](xref:NextORM.Core.EntityBuilder`1) / [`CountAsync`](xref:NextORM.Core.EntityBuilder`1) | `int` |
+| [`ToList`](xref:NextORM.Core.EntityBuilderExtensions.ToList``1(NextORM.Core.EntityBuilder{``0},System.ReadOnlySpan{System.Object})) / [`ToListAsync`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])) | `List<TResult>` |
+| [`First`](xref:NextORM.Core.EntityBuilderExtensions.First``1(NextORM.Core.EntityBuilder{``0})) / [`FirstAsync`](xref:NextORM.Core.EntityBuilderExtensions.FirstAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])) | первая строка; выбрасывает исключение, если последовательность пуста |
+| [`FirstOrDefault`](xref:NextORM.Core.EntityBuilderExtensions.FirstOrDefault``1(NextORM.Core.EntityBuilder{``0})) / [`FirstOrDefaultAsync`](xref:NextORM.Core.EntityBuilderExtensions.FirstOrDefaultAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])) | первая строка или `default` |
+| [`Single`](xref:NextORM.Core.EntityBuilderExtensions.Single``1(NextORM.Core.EntityBuilder{``0})) / [`SingleOrDefault`](xref:NextORM.Core.EntityBuilderExtensions.SingleOrDefault``1(NextORM.Core.EntityBuilder{``0})) (и `…Async`) | ровно одна строка (или `default`) |
+| [`Any`](xref:NextORM.Core.EntityBuilderExtensions.Any``1(NextORM.Core.EntityBuilder{``0})) / [`AnyAsync`](xref:NextORM.Core.EntityBuilderExtensions.AnyAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])) | `bool` |
+| [`Count`](xref:NextORM.Core.EntityBuilderExtensions.Count``1(NextORM.Core.EntityBuilder{``0})) / [`CountAsync`](xref:NextORM.Core.EntityBuilderExtensions.CountAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])) | `int` |
 
 Каждый терминальный метод имеет синхронную и асинхронную форму; в коде приложения предпочитайте асинхронную форму.
 

@@ -14,8 +14,8 @@
 
 - плейсхолдер параметра `$name`;
 - конкатенация строк с помощью `||`;
-- [`MakeCoalesce`](xref:NextORM.Core.ISqlDialect) отрисовывает `ifnull(a, b)`;
-- [`MakeNow`](xref:NextORM.Core.ISqlDialect) отрисовывает `datetime('now')` и для локального, и для UTC (`SQLite has no now()`);
+- [`MakeCoalesce`](xref:NextORM.Core.ISqlDialect.MakeCoalesce(System.String,System.String)) отрисовывает `ifnull(a, b)`;
+- [`MakeNow`](xref:NextORM.Core.ISqlDialect.MakeNow(System.Boolean)) отрисовывает `datetime('now')` и для локального, и для UTC (`SQLite has no now()`);
 - части даты используют `cast(strftime(...) as integer)` для `year`/`month`/`day`/`hour`/`minute`/`second`
   и `dayofyear` (`%j`), с откатом к ANSI `extract(part from value)` для всего остального;
 - `Math.Log` отображается на `ln(...)` (в SQLite `log()` — это логарифм по основанию 10);
@@ -53,7 +53,7 @@ using IDataContext ctx = new SqliteDataContext("Data Source=app.db", new DataCon
 
 В Microsoft.Data.Sqlite нет авторегистрации на основе атрибутов, поэтому основная библиотека регистрирует свои пользовательские
 агрегаты явно и один раз на соединение
-(`src/nextorm.sqlite/SQLiteFunctions.cs`, вызывается из [`OnConnectionCreated`](xref:NextORM.Sqlite.SqliteDataContext)):
+(`src/nextorm.sqlite/SQLiteFunctions.cs`, вызывается из [`OnConnectionCreated`](xref:NextORM.Sqlite.SqliteDataContext.OnConnectionCreated(System.Data.Common.DbConnection))):
 
 | Функция | Значение |
 |---|---|
@@ -124,7 +124,7 @@ await ctx.From<ISimpleEntity>()
     .ToListAsync();
 ```
 
-[`IntersectAll`](xref:NextORM.Core.QueryCommand`1) и [`ExceptAll`](xref:NextORM.Core.QueryCommand`1) отклоняются диалектом с `NotSupportedException`, потому что в SQLite
+[`IntersectAll`](xref:NextORM.Core.QueryCommand`1.IntersectAll``1(NextORM.Core.QueryCommand{``0})) и [`ExceptAll`](xref:NextORM.Core.QueryCommand`1.ExceptAll``1(NextORM.Core.QueryCommand{``0})) отклоняются диалектом с `NotSupportedException`, потому что в SQLite
 нет `intersect all` / `except all`.
 
 ## Различия провайдеров

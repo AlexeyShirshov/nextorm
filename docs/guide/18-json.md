@@ -10,7 +10,7 @@ nextorm deliberately has no cross-provider JSON method. "Working with JSON" mean
 different providers, and the engine keeps those mechanisms separate instead of pretending they are one
 feature:
 
-* **SQL Server** has two independent surfaces. [`ForJson`](xref:NextORM.Core.QueryCommand`1) appends a
+* **SQL Server** has two independent surfaces. [`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean)) appends a
   trailing `FOR JSON PATH`/`FOR JSON AUTO` clause so the whole result set comes back as one JSON
   document, and [`SqlServer`](xref:NextORM.Core.SqlFunctions.SqlServer) provides the JSON-as-text scalar functions
   (`json_value`, `json_query`, `json_modify`, `isjson`) plus the `openjson` table function.
@@ -56,7 +56,7 @@ database lacks JSON support.
 
 ### Return the whole result set as one JSON document
 
-[`ForJson`](xref:NextORM.Core.QueryCommand`1) adds a trailing `FOR JSON` clause. The database then returns a
+[`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean)) adds a trailing `FOR JSON` clause. The database then returns a
 single-row, single-column result, so project a single column and read it as a string with
 `First()`/`FirstOrDefault()`:
 
@@ -87,8 +87,8 @@ select somestring from complex_entity for json auto
 
 The optional `root` wraps the document in `ROOT('name')` and `includeNullValues` adds
 `INCLUDE_NULL_VALUES`. The clause is placed after `ORDER BY` and before a trailing `OPTION (...)`, so it
-composes with [`Hint`](xref:NextORM.Core.QueryCommand`1): a `for json path option (recompile)`
-query is valid. (Table hints, [`WithTableHint`](xref:NextORM.Core.EntityBuilder`1), attach to the
+composes with [`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[])): a `for json path option (recompile)`
+query is valid. (Table hints, [`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[])), attach to the
 `FROM` table and are independent of the JSON clause.) A dialect that does not support the
 clause rejects the command, and combining `ForJson` with `ForXml` throws
 `NotSupportedException("FOR JSON and FOR XML cannot be combined.")`.
@@ -135,7 +135,7 @@ select id from complex_entity where (isjson(somestring)) = 1
 ### Turn JSON into rows with `openjson`
 
 `SqlFunctions.SqlServer.openjson(json)` is a table-valued function (SQL Server 2016+) used through
-[`FromTableFunction`](xref:NextORM.Core.DataContextExtensions). Its default
+[`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})). Its default
 schema yields the properties of a JSON object or the elements of a JSON array as
 [`SqlFunctions.IOpenJsonRow`](xref:NextORM.Core.SqlFunctions.IOpenJsonRow) (`Key`/`Value`/`Type`):
 
@@ -155,7 +155,7 @@ select [key] as [Key], value, type from openjson(@json) as [t1]
 For a typed projection declare your own `[SqlTableFunction("openjson")]` wrapper whose row shape
 matches the `WITH (...)` clause; nextorm only emits the call, it does not create the function.
 `SqlFunctions.SqlServer.string_split` follows the same pattern for a comma-separated string. Both are
-gated by [`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect), so only SQL Server emits them.
+gated by [`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect.SupportsTableFunction(System.String)), so only SQL Server emits them.
 
 ## PostgreSQL
 

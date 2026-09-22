@@ -8,7 +8,7 @@
 
 nextorm предоставляет две точки входа для `SELECT DISTINCT`:
 
-* [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) — устанавливает флаг в построителе, до [`Select`](xref:NextORM.Core.EntityBuilder`1):
+* [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) — устанавливает флаг в построителе, до [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})):
 
   ```csharp
   dataContext.From<IComplexEntity>().Distinct().Select(x => new { x.Int })
@@ -90,7 +90,7 @@ select distinct t2.id from simple_entity as 't1' cross join complex_entity as 't
 
 ## Distinct и постраничный вывод
 
-Постраничный вывод применяется к результату distinct. Вызов [`Limit`](xref:NextORM.Core.Paging.Limit)/[`Page`](xref:NextORM.Core.EntityBuilder`1) размещается до [`Select`](xref:NextORM.Core.EntityBuilder`1),
+Постраничный вывод применяется к результату distinct. Вызов [`Limit`](xref:NextORM.Core.Paging.Limit)/[`Page`](xref:NextORM.Core.EntityBuilder`1.Page(System.Int32,System.Int32)) размещается до [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})),
 а проверенная форма ([`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct), затем [`Limit`](xref:NextORM.Core.Paging.Limit)) определяется порядком ключевых слов провайдера:
 
 ```csharp
@@ -140,7 +140,7 @@ select distinct nullableint from complex_entity
 select nullableint from complex_entity
 ```
 
-При [`UnionAll`](xref:NextORM.Core.QueryCommand`1) ветви конкатенируются без дополнительного устранения дубликатов, поэтому левая ветвь
+При [`UnionAll`](xref:NextORM.Core.QueryCommand`1.UnionAll``1(NextORM.Core.QueryCommand{``0})) ветви конкатенируются без дополнительного устранения дубликатов, поэтому левая ветвь
 содержит distinct, а правая — нет:
 
 ```csharp
@@ -163,7 +163,7 @@ select nullableint from complex_entity
 PostgreSQL дополнительно поддерживает `DISTINCT ON (expr, ...)`, который оставляет первую строку
 каждого уникального ключа согласно `ORDER BY` (ведущие выражения сортировки должны совпадать с
 ключом). Вместо `Distinct` используйте
-[`DistinctOn`](xref:NextORM.Core.EntityBuilder`1.DistinctOn); их сочетание бросает исключение,
+[`DistinctOn`](xref:NextORM.Core.EntityBuilder`1.DistinctOn``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})); их сочетание бросает исключение,
 поскольку PostgreSQL считает их взаимоисключающими.
 
 ```csharp
@@ -195,8 +195,8 @@ select distinct on (somestring) id, somestring from complex_entity order by some
 
 ## См. также
 
-- [Операции над множествами](07-set-operations.md) - [`Union`](xref:NextORM.Core.QueryCommand`1) уже удаляет дубликаты; [`UnionAll`](xref:NextORM.Core.QueryCommand`1) — нет.
-- [Сортировка и постраничный вывод](05-sorting-and-paging.md) - [`Limit`](xref:NextORM.Core.Paging.Limit), [`Offset`](xref:NextORM.Core.Paging.Offset) и [`Page`](xref:NextORM.Core.EntityBuilder`1).
+- [Операции над множествами](07-set-operations.md) - [`Union`](xref:NextORM.Core.QueryCommand`1.Union``1(NextORM.Core.QueryCommand{``0})) уже удаляет дубликаты; [`UnionAll`](xref:NextORM.Core.QueryCommand`1.UnionAll``1(NextORM.Core.QueryCommand{``0})) — нет.
+- [Сортировка и постраничный вывод](05-sorting-and-paging.md) - [`Limit`](xref:NextORM.Core.Paging.Limit), [`Offset`](xref:NextORM.Core.Paging.Offset) и [`Page`](xref:NextORM.Core.EntityBuilder`1.Page(System.Int32,System.Int32)).
 - [Запросы и проекции](01-querying-and-projections.md)
 
 ---

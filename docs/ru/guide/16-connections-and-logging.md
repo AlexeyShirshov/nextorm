@@ -137,10 +137,10 @@ using var ctx = builder.CreateDataContext();
 | Член | Категория | Назначение |
 |---|---|---|
 | [`Logger`](xref:NextORM.Core.QueryCommand.Logger) | тип контекста (например, `nextorm.sqlite.SqliteDataContext`) | сообщения о соединении и командах. Доступен на [`IContextEnvironment`](xref:NextORM.Core.IContextEnvironment). |
-| `CommandLogger` | тип [`QueryCommand`](xref:NextORM.Core.QueryCommand) | привязывается к командам, построенным [`From`](xref:NextORM.Core.DataContextExtensions) / `From(...)`. Доступен на [`IContextEnvironment`](xref:NextORM.Core.IContextEnvironment). |
+| `CommandLogger` | тип [`QueryCommand`](xref:NextORM.Core.QueryCommand) | привязывается к командам, построенным [`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)) / `From(...)`. Доступен на [`IContextEnvironment`](xref:NextORM.Core.IContextEnvironment). |
 | [`ResultSetEnumeratorLogger`](xref:NextORM.Core.InMemoryDataContext.ResultSetEnumeratorLogger) | `NextORM.Core.ResultSetEnumerator` | сообщения жизненного цикла потоковой передачи (`Trace` при `MoveNext`, `Debug` при открытии соединения или освобождении читателя). Внутренний. |
 
-### [`LogSensitiveData`](xref:NextORM.Core.DataContextBuilder)
+### [`LogSensitiveData`](xref:NextORM.Core.DataContextBuilder.LogSensitiveData(System.Boolean))
 
 `LogSensitiveData(bool)` управляет тем, записываются ли значения параметров и строка подключения. По умолчанию — `false`:
 
@@ -152,7 +152,7 @@ using var ctx = builder.CreateDataContext();
 
 ### Логирование команд
 
-Буферизованные терминалы ([`ToList`](xref:NextORM.Core.EntityBuilder`1), [`First`](xref:NextORM.Core.EntityBuilder`1), [`ExecuteScalar`](xref:NextORM.Core.QueryCommand`1), ...) логируют команду через [`Logger`](xref:NextORM.Core.QueryCommand.Logger) перед её выполнением. Потоковые терминалы используют [`ResultSetEnumeratorLogger`](xref:NextORM.Core.InMemoryDataContext.ResultSetEnumeratorLogger), который также выдаёт `Move next` на уровне `Trace`. Оба пути работают на уровне `Debug`, поэтому уровень логирования настроенной фабрики должен допускать `Debug`, чтобы что-либо появилось:
+Буферизованные терминалы ([`ToList`](xref:NextORM.Core.EntityBuilderExtensions.ToList``1(NextORM.Core.EntityBuilder{``0},System.ReadOnlySpan{System.Object})), [`First`](xref:NextORM.Core.EntityBuilderExtensions.First``1(NextORM.Core.EntityBuilder{``0})), [`ExecuteScalar`](xref:NextORM.Core.QueryCommand`1.ExecuteScalar(System.ReadOnlySpan{System.Object})), ...) логируют команду через [`Logger`](xref:NextORM.Core.QueryCommand.Logger) перед её выполнением. Потоковые терминалы используют [`ResultSetEnumeratorLogger`](xref:NextORM.Core.InMemoryDataContext.ResultSetEnumeratorLogger), который также выдаёт `Move next` на уровне `Trace`. Оба пути работают на уровне `Debug`, поэтому уровень логирования настроенной фабрики должен допускать `Debug`, чтобы что-либо появилось:
 
 ```csharp
 var builder = new DataContextBuilder()
@@ -197,4 +197,4 @@ Source: `tests/nextorm.sqlite.tests/ConnectionManagementTests.cs:24` (created co
 `src/nextorm.core/DataContext/Roles/IContextEnvironment.cs:8`,
 `src/nextorm.core/DataContext/DataContext.cs:106` ([`GetConnection`](xref:NextORM.Core.DataContext.GetConnection)),
 `src/nextorm.core/DataContext/DataContext.cs:176` ([`ConnectionString`](xref:NextORM.Core.DataContext.ConnectionString)),
-`src/nextorm.core/DI/DataContextBuilder.cs:20` ([`UseLoggerFactory`](xref:NextORM.Core.DataContextBuilder)).
+`src/nextorm.core/DI/DataContextBuilder.cs:20` ([`UseLoggerFactory`](xref:NextORM.Core.DataContextBuilder.UseLoggerFactory(Microsoft.Extensions.Logging.ILoggerFactory))).

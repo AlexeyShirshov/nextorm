@@ -79,7 +79,9 @@ public sealed class WindowOrder
 /// <summary>Which SQL frame unit a <see cref="WindowFrame"/> uses.</summary>
 public enum WindowFrameType
 {
+    /// <summary>The <c>ROWS</c> unit: offsets count physical rows.</summary>
     Rows,
+    /// <summary>The <c>RANGE</c> unit: offsets count ordering values rather than physical rows.</summary>
     Range,
     /// <summary>
     /// The <c>GROUPS</c> unit: an offset counts whole peer groups (rows equal on the window's
@@ -107,10 +109,15 @@ public enum WindowFrameExclusion
 /// <summary>The kind of a single frame boundary.</summary>
 public enum WindowFrameBoundKind
 {
+    /// <summary>From the start of the partition, regardless of offset.</summary>
     UnboundedPreceding,
+    /// <summary>A fixed number of rows before the current row.</summary>
     Preceding,
+    /// <summary>The current row.</summary>
     CurrentRow,
+    /// <summary>A fixed number of rows after the current row.</summary>
     Following,
+    /// <summary>To the end of the partition, regardless of offset.</summary>
     UnboundedFollowing
 }
 
@@ -129,8 +136,11 @@ public sealed class WindowFrameBound
     /// <summary>The offset of a <c>preceding</c>/<c>following</c> boundary; zero otherwise.</summary>
     public int Offset { get; }
 
+    /// <summary>A boundary at the start of the partition.</summary>
     public static WindowFrameBound UnboundedPreceding => new(WindowFrameBoundKind.UnboundedPreceding, 0);
+    /// <summary>A boundary at the current row.</summary>
     public static WindowFrameBound CurrentRow => new(WindowFrameBoundKind.CurrentRow, 0);
+    /// <summary>A boundary at the end of the partition.</summary>
     public static WindowFrameBound UnboundedFollowing => new(WindowFrameBoundKind.UnboundedFollowing, 0);
 
     /// <summary>A boundary <paramref name="rows"/> rows before the current row.</summary>

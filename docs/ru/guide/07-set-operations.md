@@ -1,6 +1,6 @@
 # Операции над множествами
 
-> Объединяйте два набора результатов с помощью [`Union`](xref:NextORM.Core.QueryCommand`1), [`UnionAll`](xref:NextORM.Core.QueryCommand`1), [`Intersect`](xref:NextORM.Core.QueryCommand`1), [`IntersectAll`](xref:NextORM.Core.QueryCommand`1), [`Except`](xref:NextORM.Core.QueryCommand`1) и [`ExceptAll`](xref:NextORM.Core.QueryCommand`1) и выстраивайте их в цепочку слева направо.
+> Объединяйте два набора результатов с помощью [`Union`](xref:NextORM.Core.QueryCommand`1.Union``1(NextORM.Core.QueryCommand{``0})), [`UnionAll`](xref:NextORM.Core.QueryCommand`1.UnionAll``1(NextORM.Core.QueryCommand{``0})), [`Intersect`](xref:NextORM.Core.QueryCommand`1.Intersect``1(NextORM.Core.QueryCommand{``0})), [`IntersectAll`](xref:NextORM.Core.QueryCommand`1.IntersectAll``1(NextORM.Core.QueryCommand{``0})), [`Except`](xref:NextORM.Core.QueryCommand`1.Except``1(NextORM.Core.QueryCommand{``0})) и [`ExceptAll`](xref:NextORM.Core.QueryCommand`1.ExceptAll``1(NextORM.Core.QueryCommand{``0})) и выстраивайте их в цепочку слева направо.
 
 **Предварительные требования:** [Запросы и проекции](01-querying-and-projections.md) · [Подзапросы](06-subqueries.md) · [SELECT DISTINCT](08-distinct.md)
 
@@ -57,7 +57,7 @@ select id from simple_entity
 
 Сторонами также могут быть разные сущности, если типы элементов совпадают. В наборе интеграционных
 тестов `SimpleEntity` (ids `1..10`) объединяется через union с `ComplexEntity` (ids `1..3`),
-приведённой к `int`, поэтому объединение с устранением дубликатов даёт 10 строк, а [`UnionAll`](xref:NextORM.Core.QueryCommand`1) той же
+приведённой к `int`, поэтому объединение с устранением дубликатов даёт 10 строк, а [`UnionAll`](xref:NextORM.Core.QueryCommand`1.UnionAll``1(NextORM.Core.QueryCommand{``0})) той же
 пары — 13:
 
 ```csharp
@@ -135,7 +135,7 @@ dialect"`).
 
 ## Запрос результата операции над множествами
 
-Операция над множествами возвращает запрос, поэтому вы делаете запрос к нему через [`From`](xref:NextORM.Core.DataContextExtensions):
+Операция над множествами возвращает запрос, поэтому вы делаете запрос к нему через [`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)):
 
 ```csharp
 var cmd = dataContext.From<IComplexEntity>().Select(it => it.Int)

@@ -70,7 +70,7 @@ namespace NextORM.Core;
         /// into one row per node selected by <paramref name="xpath"/> (the XQuery must be a string
         /// literal). Use only as the source of
         /// <see cref="EntityBuilder{TEntity}.CrossApply{TJoinEntity}(System.Linq.Expressions.Expression{System.Func{TEntity, QueryCommand{TJoinEntity}}})"/>
-        /// (or <c>OuterApply</c>); rendered as <c>&lt;xml&gt;.nodes('xpath') as [alias]([value])</c>,
+        /// (or <c>OuterApply</c>); rendered as <c>&lt;xml&gt;.nodes('xpath') as \[alias\](\[value\])</c>,
         /// and the unfolded <see cref="SqlFunctions.IXmlNodesRow.Value"/> is projected further with
         /// <see cref="xml_value{T}(string?, string?, string?)"/>/<see cref="xml_query(string?, string?)"/>/
         /// <see cref="xml_exist(string?, string?)"/>. Requires a provider that supports the XML

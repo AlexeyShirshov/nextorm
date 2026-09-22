@@ -9,7 +9,14 @@ namespace NextORM.Core;
 /// </remarks>
 public class Parameter(string name, object? value)
 {
+    /// <summary>
+    /// The placeholder name (without the provider's parameter prefix) used to bind
+    /// <see cref="Value"/> in the generated SQL.
+    /// </summary>
     public string Name { get; set; } = name;
+    /// <summary>
+    /// The value bound to <see cref="Name"/>, or <see langword="null"/> for a SQL <c>NULL</c>.
+    /// </summary>
     public object? Value { get; set; } = value;
 
     /// <summary>

@@ -26,7 +26,7 @@ select choose(2, 'a', 'b', 'c') as [Label] from complex_entity
 
 ## Хинты
 
-[`WithTableHint`](xref:NextORM.Core.EntityBuilder`1) привязывает табличный хинт к таблице `FROM`
+[`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[])) привязывает табличный хинт к таблице `FROM`
 запроса ([`SupportsTableHints`](xref:NextORM.Core.ISqlDialect.SupportsTableHints)), а хинт запроса
 рендерит завершающую клаузу `OPTION (...)`, например `OPTION (RECOMPILE)`
 ([`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints)); параметр CTE
@@ -51,7 +51,7 @@ select id from simple_entity with (updlock)
 
 `ForUpdate` рендерит `updlock` (блокировка обновления до конца транзакции), а `ForShare` — `holdlock`
 (разделяемая блокировка). Хинт блокировки комбинируется с
-[`WithTableHint`](xref:NextORM.Core.EntityBuilder`1): `.WithTableHint("rowlock").ForUpdate()` даёт
+[`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[])): `.WithTableHint("rowlock").ForUpdate()` даёт
 `with (rowlock, updlock)`. См.
 [Блокировку строк](../01-querying-and-projections.md#блокировка-строк-for-update--for-share).
 
@@ -102,12 +102,12 @@ select t2.value.value('(.)[1]/@id', 'int') as [Id]
 from xml_entity as [t1] cross apply t1.payload.nodes('/root/item') as [t2](value)
 ```
 
-См. [Скалярные функции](../11-scalar-functions.md#методы-типа-xml).
+См. [Скалярные функции](../11-scalar-functions.md#методы-типа-xml-sql-server).
 
 ## Табличные функции
 
 `string_split(...)` и `openjson(...)` доступны через
-[`FromTableFunction`](xref:NextORM.Core.EntityBuilder`1). См.
+[`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})). См.
 [Табличные функции](../13-table-valued-functions.md) и
 [Поддержка JSON в разных провайдерах](../18-json.md).
 
@@ -135,7 +135,7 @@ MariaDB поддерживает ту же клаузу на системно-в
 
 [`EntityBuilder<TEntity>.Pivot`](xref:NextORM.Core.EntityBuilder`1) разворачивает источник в колонки
 нативным оператором T-SQL `PIVOT`, а
-[`Unpivot`](xref:NextORM.Core.EntityBuilder`1) складывает колонки в строки через `UNPIVOT`
+[`Unpivot`](xref:NextORM.Core.EntityBuilder`1.Unpivot(System.String,System.String,NextORM.Core.UnpivotColumn[])) складывает колонки в строки через `UNPIVOT`
 ([`Pivot`](xref:NextORM.Core.ISqlDialect.Pivot) /
 [`Pivot`](xref:NextORM.Core.ISqlDialect.Pivot)). Результат — нетипизированный
 источник: группирующие колонки и колонки-значения выбираются по имени через `TableAlias`. Операторы
@@ -200,7 +200,7 @@ order by CategoryName
 
 ## `TABLESAMPLE`
 
-[`TableSample`](xref:NextORM.Core.EntityBuilder`1) добавляет модификатор `TABLESAMPLE` к
+[`TableSample`](xref:NextORM.Core.EntityBuilder`1.TableSample(System.Double,NextORM.Core.TableSampleMethod,System.Nullable{System.Double})) добавляет модификатор `TABLESAMPLE` к
 основной таблице запроса ([`TableSample`](xref:NextORM.Core.ISqlDialect.TableSample));
 необязательный seed делает выборку воспроизводимой. SQL Server рендерит
 `tablesample (10 percent)` / `tablesample (10 percent) repeatable (3)`
@@ -227,7 +227,7 @@ SQL Server поддерживает только метод `System`
 Кросс-провайдерные boolean-предикаты `contains`/`freetext` рендерят `CONTAINS`/`FREETEXT`. Для
 ранжирования `SqlFunctions.SqlServer.containstable`/`freetexttable` отдают ключ совпавшей строки и
 оценку `RANK` через `SqlFunctions.IKeyRankRow<TKey>`; см.
-[Табличные функции](../13-table-valued-functions.md#built-in-table-functions).
+[Табличные функции](../13-table-valued-functions.md#встроенные-табличные-функции).
 
 ## Пока не поддерживается
 

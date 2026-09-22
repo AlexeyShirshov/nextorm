@@ -2,7 +2,9 @@
 
 **Дата:** 16.09.2026 (повторный аудит после коммита `9641660` «mass refactoring»); **актуализация 18.09.2026 по HEAD `d21c473`**
 
-**Предрелизный аудит v1.0.3-alpha (21.09.2026, HEAD `2a2dfa6`, рабочее дерево чистое = `origin/1.0.3-alpha`): открытых P0/P1 нет.** Находки 8, 19, 28, 52 и 53, помеченные ниже как «ОТКРЫТА» (в т.ч. с 🔴 и как P1-кандидаты), фактически исправлены в коде/тестах — статусы закрыты в этом проходе. Подавления: `src/` — **6** `SuppressMessage` (все с `Justification`), **5** `#pragma` (все с парным `restore`) = **11/11 оправданных, 0 неоправданных**; `Skip=` — 0, пустых `catch` — 0, `Task.Delay` — 2 (обе `Task.Delay(0)`-yield), `NoWarn` — только `CS1591` в 7 библиотечных `.csproj` (Шаг 5, P2-трекинг).
+**Предрелизный аудит v1.0.3-alpha (21.09.2026, HEAD `2a2dfa6`, рабочее дерево чистое = `origin/1.0.3-alpha`): открытых P0/P1 нет.** Находки 8, 19, 28, 52 и 53, помеченные ниже как «ОТКРЫТА» (в т.ч. с 🔴 и как P1-кандидаты), фактически исправлены в коде/тестах — статусы закрыты в этом проходе. Подавления: `src/` — **6** `SuppressMessage` (все с `Justification`), **5** `#pragma` (все с парным `restore`) = **11/11 оправданных, 0 неоправданных**; `Skip=` — 0, пустых `catch` — 0, `Task.Delay` — 2 (обе `Task.Delay(0)`-yield), `NoWarn` — только `CS1591` в 7 библиотечных `.csproj` (на 22.09.2026 `CS1591` снят во всех 7 — см. предрелизный аудит v1.0.4-alpha ниже).
+
+**Предрелизный аудит v1.0.4-alpha (22.09.2026, HEAD `91379b1` + uncommitted working tree, ~193 файла).** **Открытых P0/P1 нет.** Релизный дифф — XML-документация публичного API (`CS1591` убран из `<NoWarn>` всех 7 библиотечных `.csproj`), правки доков EN+RU (xref, снятие публичных ссылок на `docs/specs/**`) и фичи #55–#58; в `src/` — только `///`-комментарии и 7 строк `NoWarn` (поведение не менялось). Подавления `src/`: **6** `SuppressMessage` (все с `Justification`: `DbPreparedQueryCommand.cs:84`, `QueryExecutor.cs:71` — S2583; `SelectExpression.cs:12`, `AggregateTerminalRewriter.cs:12`, `CorrelatedQueryExpressionVisitor.cs:9` — IDE1006; `CorrelatedQueryExpressionVisitor.cs:10` — S3011) + **5** `#pragma warning disable` (все с парным `restore`: `EntityBuilderExtensions.cs:123,140,156` CS8619; `InMemoryLinqSource.cs:82` CS8714; `ExpressionPlanEqualityComparer.cs:421` IDE0066) = **11/11** оправданных, **0** неоправданных; новых в диффе — **0**. `Skip=` — **0**; пустых `catch` — **0** (единственный `catch` `src/` — `InMemoryAggregates.cs:84`, фильтр `TargetInvocationException` + переброс через EDF); `Task.Delay` — **2** (обе baseline `Task.Delay(0)`-yield, `tests/nextorm.core.tests/InMemoryTests.cs:125,414`); `Thread.Sleep` — 0. **`NoWarn` больше ничего не глушит:** во всех 7 `.csproj` теперь `<NoWarn>$(NoWarn)</NoWarn>` (no-op) — `CS1591` снят, и под `TreatWarningsAsErrors=true` пропуск XML-дока публичного члена роняет сборку. `slopwatch` локально не установлен (`.config/dotnet-tools.json` — только coverage/reportgenerator/docfx), скан выполнен вручную. XML-док-работа закрыла внутренние находки **61** и **72** (устаревшие XML-summary `TypeFacts`/`AdvancedAggregateTranslator`, forwarder `IsSingleColumnType`; summary `NormSqlTranslator`/`TranslateNormParam` теперь упоминают `SqlFunctions.Column<T>`). Незакрытые находки имеют только 🟡 P2/ℹ️-приоритет; заморозка `PublicAPI.Shipped/Unshipped.txt` (issue #53, Шаг 5) остаётся **P2** и релиз не блокирует. API-сторона — `API-NAMING-REVIEW.md` (предрелизный аудит v1.0.4-alpha).
 
 **Обновление 22.09.2026 (uncommitted worktree `clickhouse-json-type`).** **Находка 60** (🔴 P1-кандидат: `ClickHouseFunctions.json_all_paths_with_types` был объявлен `string[]` при нативном `Map(String, String)`) **закрыта 22.09.2026** вариантом B: контракт изменён на `Dictionary<string,string>` + `GetValue`-ветка в `SelectExpression.GetDataRecordMethod`, материализация подтверждена контейнерным интеграционным тестом на реальном ClickHouse. `json_all_paths` (`Array(String)`) и `to_json_string` — вне дефекта. Разбор и рекомендации — в конце журнала; API-сторона — `API-NAMING-REVIEW.md`, J8–J10.
 
@@ -39,7 +41,7 @@
 | Категория навыка | Статус |
 |---|---|
 | 1. Управление ресурсами (`IDisposable`) | ✅ Находка 2 держится; `CA2213` — 1 (ложное, `_conn` по владению), `CA1816` — 2 (ложные из-за индирекции) |
-| 2. Подавление предупреждений | ✅ В `src/`: 5 `SuppressMessage` (0 `<Pending>`) + 5 `#pragma` (все с `restore`). В `tests/`: мёртвые `*DELETE*.cs` с 2 `<Pending>` удалены (Находка 7); `<Pending>` — 0 |
+| 2. Подавление предупреждений | ✅ В `src/`: 6 `SuppressMessage` (все с `Justification`, 0 `<Pending>`) + 5 `#pragma` (все с `restore`). В `tests/`: мёртвые `*DELETE*.cs` с 2 `<Pending>` удалены (Находка 7); `<Pending>` — 0 |
 | 3. Антипаттерны LINQ | ✅ Чисто: `.Count()`/`.Distinct().Count()` в `src/` — 0 (единственное вхождение строки — комментарий `InMemoryDataContext.cs:1137`); `CA1827`/`CA1851`/`CA1829` — 0 при `latest-all` |
 | 4. Работа с событиями | ✅ `DataContext.Disposed` — ок; подписка `DbConnection.Disposed` для внешнего соединения снимается при dispose контекста (`DbConnectionManager.DisposeConnection`), покрыто `ConnectionManagementTests` (Находка 6) |
 | 5. Запахи проектирования | ✅ God-классы разобраны (см. Находку 4): `EntityBuilder<TEntity>` **769→466**, `SqlBuilder` **716→318** (+`SqlSourceRenderer` 359), `ScalarFunctionTranslator` **595→131** (+`StringFunctionTranslator` 363, `MathFunctionTranslator` 57, `DateTimeFunctionTranslator` 50), `BaseExpressionVisitor` **425→366** (`VisitMethodCall` 183→77, локальные `CompileExp`/`EmitValue` вынесены, switch по `nameof(TableAlias.*)` → таблица `TableAliasAccessors`). Длинные списки параметров ≥6 — ✅ все 15 «боевых» разобраны через параметр-объекты (`QueryDefinition` и др.) |
@@ -55,7 +57,7 @@
 | Пункт | Результат |
 |---|---|
 | 1. `IDisposable` | ✅ Фиксы Находки 2 держатся: `DataContext.DisposeAsync` (`DataContext.cs:176`) и `InMemoryDataContext.DisposeAsync` (`InMemoryDataContext.cs:1183`) идут через `Dispose()`; `InMemoryEnumerator.Dispose` освобождает `_enumerator` (`InMemoryEnumerator.cs:227`). Минорное наблюдение — `ResultSetEnumerator.DisposeAsync` (`:71`). `CA2213` — 1 (`_conn`, by design), `CA1816` — 2 (ложные). |
-| 2. Подавления | ✅ В `src/`: 5 `SuppressMessage` (все с `Justification`, 0 `<Pending>`) + 5 `#pragma` (все с `restore`). В `tests/nextorm.core.tests/` мёртвые `*DELETE*.cs` (Находка 7) удалены 18.09.2026; `<Pending>` — 0. |
+| 2. Подавления | ✅ В `src/`: 6 `SuppressMessage` (все с `Justification`, 0 `<Pending>`) + 5 `#pragma` (все с `restore`). В `tests/nextorm.core.tests/` мёртвые `*DELETE*.cs` (Находка 7) удалены 18.09.2026; `<Pending>` — 0. |
 | 3. LINQ | ✅ В `src/` нет `.Count()`/`.Distinct().Count()` по коллекциям (единственное совпадение — комментарий `InMemoryDataContext.cs:1137`); `CA1827`/`CA1851`/`CA1829` при `AnalysisLevel=latest-all` — 0. |
 | 4. События | ✅ `DataContext.Disposed` (`DataContext.cs:105`) поднимается ровно один раз; подписка `DbConnection.Disposed` для внешнего соединения снимается при dispose контекста (`DbConnectionManager.DisposeConnection`), план-кэш при этом детачится — Находка 6 исправлена. |
 | 5. Проектирование | ✅ God-классы разобраны 18.09.2026 (см. Находку 4). Списки параметров ≥6 — ✅ все 15 «боевых» исправлены параметр-объектами; остались только `VisitorOptions` (сам параметр-объект), `make_interval` (сигнатура SQL) и `XxHash32.Combine` (фреймворк-стиль). |
@@ -148,13 +150,14 @@ Build Release — **0/0** (прогнано); ClickHouse unit **65/65**, Postgre
 | `Query/QueryCommand.cs:632` — IDE0028 | Код приведён к `_referencedQueries ??= [];`; подавление не нужно. |
 | `Builders/EntityBuilder.cs:15` — S2292 | Снято как избыточное: в `.editorconfig` уже стоит `dotnet_diagnostic.S2292.severity = silent`, а `SonarAnalyzer.CSharp` не подключён — правило не может сработать. |
 
-### Оставлено с обоснованием (5)
+### Оставлено с обоснованием (6)
 
 | Файл:строка | Правило | Обоснование |
 |---|---|---|
-| `DataContext/Cache/DbPreparedQueryCommand.cs:37` | S2583 | Обе ветки достижимы: `@params` может быть `null`; анализатор не моделирует преобразование в `ReadOnlySpan`. |
-| `DataContext/QueryExecutor.cs:73` | S2583 | Состояние пула соединений заранее неизвестно — проверка `ConnectionState.Closed` достижима с обеих сторон; сайт переехал из `DataContext` при выносе исполнения (шаг F1). |
-| `Expressions/SelectExpression.cs:7` | IDE1006 | `GetInt32MI` и подобные — намеренный PascalCase для immutable-таблиц рефлексии; правило лишь suggestion. |
+| `DataContext/Cache/DbPreparedQueryCommand.cs:84` | S2583 | Обе ветки достижимы: `@params` может быть `null`; анализатор не моделирует преобразование в `ReadOnlySpan`. |
+| `DataContext/QueryExecutor.cs:71` | S2583 | Состояние пула соединений заранее неизвестно — проверка `ConnectionState.Closed` достижима с обеих сторон; сайт переехал из `DataContext` при выносе исполнения (шаг F1). |
+| `Expressions/SelectExpression.cs:12` | IDE1006 | `GetInt32MI` и подобные — намеренный PascalCase для immutable-таблиц рефлексии; правило лишь suggestion. |
+| `Visitors/AggregateTerminalRewriter.cs:12` | IDE1006 | То же для `CountMI` и подобных immutable-таблиц рефлексии. |
 | `Visitors/CorrelatedQueryExpressionVisitor.cs:9` | IDE1006 | То же для `AnyMIGeneric`, `ConcatMI` и др. |
 | `Visitors/CorrelatedQueryExpressionVisitor.cs:10` | S3011 | Рефлексия нужна, чтобы привязать приватные `Any`/`Concat` в деревья выражений; публичной альтернативы нет. |
 
@@ -162,11 +165,11 @@ Build Release — **0/0** (прогнано); ClickHouse unit **65/65**, Postgre
 
 | Файл:строка | Правило | `restore` |
 |---|---|---|
-| `Builders/EntityBuilder.cs:547` | CS8619 | ✅ `:549` |
-| `Builders/EntityBuilder.cs:556` | CS8619 | ✅ `:558` |
-| `Builders/EntityBuilder.cs:588` | CS8619 | ✅ `:590` |
-| `Query/ExpressionPlanEqualityComparer.cs:406` | IDE0066 | ✅ `:408` |
-| `DataContext/InMemoryDataContext.cs:265` | CS8714 | ✅ `:267` |
+| `Builders/EntityBuilderExtensions.cs:123` | CS8619 | ✅ `:125` |
+| `Builders/EntityBuilderExtensions.cs:140` | CS8619 | ✅ `:142` |
+| `Builders/EntityBuilderExtensions.cs:156` | CS8619 | ✅ `:158` |
+| `Query/ExpressionPlanEqualityComparer.cs:421` | IDE0066 | ✅ `:423` |
+| `DataContext/InMemoryLinqSource.cs:82` | CS8714 | ✅ `:84` |
 
 «Blanket suppression» `XxHash32.cs:10` больше нет: остались только парные `disable`/`restore` на несколько строк.
 
@@ -4082,7 +4085,7 @@ ClickHouse + маппингу `ClickHouse.Driver` 1.4.0.
 | 6. События / исключения | ✅ Подписок нет; новых `catch`/`throw` нет; `GetDataRecordMethod` наоборот перестал бросать `NotSupportedException` для `T[]`/`Tuple`. |
 | 7. Аллокации на материализации (пункт брифинга) | ✅ `GetValue` возвращает уже материализованный массив/`System.Tuple` (ссылочные типы) — бокса нет, `MapColumn` добавляет только ссылочный `castclass` (`RowMapperFactory.cs:27-43`); построчного LINQ/аллокаций не появляется, маппер компилируется один раз на SQL/план. |
 
-### 🟡 Находка 61 — новые helper'ы классификации проекции оставили устаревшие XML-summary (ОТКРЫТА)
+### ✅ Находка 61 — новые helper'ы классификации проекции оставили устаревшие XML-summary (ЗАКРЫТА 22.09.2026, была P2)
 
 **Место:** `src/nextorm.core/Visitors/TypeFacts.cs:5-9` (классовый `<summary>`), `:45-74`; `src/nextorm.core/Query/QueryCommand.QueryPreparer.cs:209-215`; `src/nextorm.core/Visitors/AdvancedAggregateTranslator.cs:5-21`.
 
@@ -4092,7 +4095,7 @@ ClickHouse + маппингу `ClickHouse.Driver` 1.4.0.
 
 **Стало (рекомендация, маршрут — `nextorm-design-engineer`):** обновить классовый `<summary>` `TypeFacts` (добавить классификацию формы проекции; либо убрать «used by the visitors» и перечислить потребителей) и summary `AdvancedAggregateTranslator`; в `QueryPreparer` оставить один канонический вызов `TypeFacts.IsSingleColumnProjection` (убрать forwarder/дублирующий doc) — поведение не меняется.
 
-**Проверка:** build 0/0; `grep -n "IsSingleColumnType"` — 3 call-site (`:247,286,658`) + определение; XML `cref`‐ссылка на `IsTupleType` (`TypeFacts.cs:50`) разрешается. Фикс не применялся (правился только реестр).
+**Проверка:** build 0/0; `grep -n "IsSingleColumnType"` — 3 call-site (`:247,286,658`) + определение; XML `cref`‐ссылка на `IsTupleType` (`TypeFacts.cs:50`) разрешается. **Закрыто 22.09.2026:** summary `TypeFacts` дополнен формой проекции/Tuple и её потребителями (`TypeFacts.cs:5-10`), summary `AdvancedAggregateTranslator` — `groupArray`/`groupUniqArray` (`:5-16`), forwarder `IsSingleColumnType` удалён (все 3 call-site переведены на `TypeFacts.IsSingleColumnProjection`; `QueryPreparer.cs:239,278,650`).
 
 ### ℹ️ Наблюдения (фикс не требуется)
 
@@ -4411,7 +4414,7 @@ ClickHouse + маппингу `ClickHouse.Driver` 1.4.0.
 | 6. События / исключения | ✅ Подписок нет; новые `throw` — `NotSupportedException` в теле маркера (in-memory) и на неверной форме аргументов (`NormSqlTranslator.cs:78`); пустых/общих `catch` нет. |
 | 7. NRT / возвратный тип | ✅ `T Column<T>` — осознанно non-nullable (nullable-вариант достижим как `Column<string?>`); `object entity` намеренно (ср. `EF.Property<T>`); аннотации остальных членов не менялись. |
 
-### 🟡 Находка 72 — после добавления `Column` XML-summary и имя `TranslateNormParam` в `NormSqlTranslator` устарели (ОТКРЫТА, P2)
+### ✅ Находка 72 — после добавления `Column` XML-summary и имя `TranslateNormParam` в `NormSqlTranslator` устарели (ЗАКРЫТА 22.09.2026, была P2)
 
 **Место:** `src/nextorm.core/Visitors/NormSqlTranslator.cs:6-11` (классовый `<summary>`), `:37` (summary `TranslateNormParam`), `:38-44` (диспетчер).
 
@@ -4419,7 +4422,7 @@ ClickHouse + маппингу `ClickHouse.Driver` 1.4.0.
 
 **Стало (рекомендация, маршрут — `nextorm-design-engineer`):** дополнить классовый `<summary>` и summary `TranslateNormParam` упоминанием `SqlFunctions.Column<T>` (или переименовать в `TranslateSqlFunctionsMarker`), сохранив остальной текст. Поведение не меняется.
 
-**Проверка:** summary и тела прочитаны (`:6-11,37-44,75-85`); build Release `0/0`.
+**Проверка:** summary и тела прочитаны (`:6-11,37-44,75-85`); build Release `0/0`. **Закрыто 22.09.2026:** классовый summary упоминает `SqlFunctions.Parameter` и `SqlFunctions.Column<T>` (`NormSqlTranslator.cs:6-11`), summary `TranslateNormParam` — «Emits `SqlFunctions.Parameter`/`SqlFunctions.Column<T>`; any other `SqlFunctions` method throws» (`:36-37`); имя оставлено (косметика отдельного фикса не требует).
 
 ### 🟡 Находка 73 — `Column<T>(object entity, …)` не проверяет, что `entity` — параметр источника: опечатка молча даёт голый/чужой идентификатор (ОТКРЫТА, P2)
 

@@ -635,13 +635,17 @@ public interface ISqlDialect
     /// aliases (so they survive as case-sensitive identifiers) must quote the reference accordingly.
     /// </summary>
     string MakeColumnReference(string name);
+    /// <summary>Renders the alias clause for a table source (<c>AS alias</c>).</summary>
     string MakeTableAlias(string tableAlias);
+    /// <summary>Renders the alias clause for a projected column (<c>AS alias</c>); a null or empty <paramref name="colAlias"/> renders nothing.</summary>
     string MakeColumnAlias(string? colAlias);
     /// <summary>Renders a parameter placeholder, e.g. <c>@name</c> or <c>$name</c>.</summary>
     string MakeParam(string name);
     /// <summary>SQL type name used when a CLR conversion has to be rendered as a database cast.</summary>
     string MakeTypeName(Type type);
+    /// <summary>Renders the SQL literal for a boolean value.</summary>
     string MakeBool(bool v);
+    /// <summary>Renders <c>coalesce(v1, v2)</c> over the already-rendered operands.</summary>
     string MakeCoalesce(string v1, string v2);
     /// <summary>
     /// Coalesce over boolean operands. Dialects without a boolean type usable as a predicate
@@ -865,6 +869,7 @@ public interface ISqlDialect
     /// </summary>
     bool SupportsGlobalPredicates { get; }
 
+    /// <summary>Appends the provider's paging clause (LIMIT/OFFSET, OFFSET/FETCH or TOP) for <paramref name="paging"/> to <paramref name="sqlBuilder"/>.</summary>
     void MakePage(Paging paging, StringBuilder sqlBuilder);
     /// <summary>
     /// The provider's renderer for <c>LIMIT [offset, ]n BY expr</c> (ClickHouse). <c>null</c> means the
@@ -983,7 +988,10 @@ public interface ISqlDialect
 /// <summary>Which side of a string <see cref="string.Trim()"/> removes whitespace from.</summary>
 public enum StringTrimKind
 {
+    /// <summary>Trim whitespace from both ends.</summary>
     Both,
+    /// <summary>Trim leading whitespace only.</summary>
     Start,
+    /// <summary>Trim trailing whitespace only.</summary>
     End
 }

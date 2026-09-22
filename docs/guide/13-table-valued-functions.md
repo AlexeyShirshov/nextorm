@@ -1,6 +1,6 @@
 # Table-valued functions
 
-> Query a database table-valued function as a `FROM` source with [`FromTableFunction`](xref:NextORM.Core.DataContextExtensions) and map its rows
+> Query a database table-valued function as a `FROM` source with [`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})) and map its rows
 > like any other entity.
 
 **Prerequisites:** [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Joins](03-joins.md) · [Grouping and aggregates](04-grouping-and-aggregates.md)
@@ -9,7 +9,7 @@
 
 [`SqlTableFunctionAttribute`](xref:NextORM.Core.SqlTableFunctionAttribute) maps a placeholder static method to a database table-valued function.
 The method must return `IQueryable<T>` (where `T` describes the row shape) and is only referenced inside
-the expression passed to [`FromTableFunction`](xref:NextORM.Core.DataContextExtensions):
+the expression passed to [`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})):
 
 ```csharp
 [AttributeUsage(AttributeTargets.Method | AttributeTargets.Class)]
@@ -35,8 +35,8 @@ anything else throws `ArgumentException`. The call is translated to `[schema.]na
 with the arguments rendered through the regular expression visitor, so **captured values become
 parameters**. nextorm only emits the call - the function must already exist in the target database.
 
-The returned `EntityBuilder<T>` is an ordinary query source, so [`Where`](xref:NextORM.Core.EntityBuilder`1), [`OrderBy`](xref:NextORM.Core.EntityBuilder`1), [`GroupBy`](xref:NextORM.Core.EntityBuilder`1), [`Join`](xref:NextORM.Core.EntityBuilder`1),
-[`Select`](xref:NextORM.Core.EntityBuilder`1), paging and terminals all work over it.
+The returned `EntityBuilder<T>` is an ordinary query source, so [`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})), [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)), [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), [`Join`](xref:NextORM.Core.EntityBuilder`1.Join``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})),
+[`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), paging and terminals all work over it.
 
 ## Declaring the mapping
 
@@ -326,7 +326,7 @@ var ranked = dataContext
 
 `containstable` uses `CONTAINSTABLE` (boolean/prefix/phrase syntax) and `freetexttable` the
 natural-language `FREETEXTTABLE`; both are SQL Server-only
-([`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect.SupportsTableFunction)), and other providers throw
+([`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect.SupportsTableFunction(System.String))), and other providers throw
 `NotSupportedException`. The `table` and `column` arguments are emitted **verbatim** as identifiers (see
 `VerbatimArguments`), so pass the table name or alias exactly as it appears in the generated query, and
 only pass trusted values.
@@ -448,17 +448,17 @@ var hits = dataContext
 select id as `Id`, name as `Name` from url(@url, @format, @structure) as `t1`
 ```
 
-The functions are ClickHouse-only ([`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect.SupportsTableFunction))
+The functions are ClickHouse-only ([`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect.SupportsTableFunction(System.String)))
 and require the matching server permissions; URL/S3/remote authentication is the server's responsibility,
 so prefer named collections or `<remote_servers>` to keep secrets out of the query and its plan. The
 `format`/`merge`/`input` table functions are intentionally **not** pre-declared — `format`'s schema may be
 inferred from the data, `merge` derives it from the underlying tables and `input` is INSERT-only — so use
-the generic `[SqlTableFunction]` wrapper declared above or [`FromSql`](xref:NextORM.Core.DataContextExtensions)
+the generic `[SqlTableFunction]` wrapper declared above or [`FromSql`](xref:NextORM.Core.DataContextExtensions.FromSql(NextORM.Core.IDataContext,System.String,System.Object))
 for those.
 
 The mapped function must exist in the database — nextorm only emits the call, it does not create the
 function — so use the helper only on the provider that defines it. The built-in helpers are gated by
-[`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect): PostgreSQL enables `generate_series`, `unnest`,
+[`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect.SupportsTableFunction(System.String)): PostgreSQL enables `generate_series`, `unnest`,
 `regexp_matches`, `regexp_split_to_table`, `jsonb_array_elements(_text)`, `jsonb_each(_text)`,
 `jsonb_object_keys`, `jsonb_path_query` and `ts_stat`; SQL Server enables
 `string_split`/`openjson`, ClickHouse enables `numbers`/`numbers_mt`, `zeros`/`zeros_mt`,

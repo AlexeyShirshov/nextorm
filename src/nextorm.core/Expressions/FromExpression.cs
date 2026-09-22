@@ -1,22 +1,38 @@
 namespace NextORM.Core;
 
+/// <summary>
+/// Identifies a query source: a table name, an entity type, a subquery, a table-valued function, a
+/// <c>PIVOT</c>/<c>UNPIVOT</c>, or one of the in-memory-only source kinds.
+/// </summary>
 public sealed class FromExpression
 {
+     /// <summary>Creates a source for a mapped CLR entity type.</summary>
+     /// <param name="srcType">The entity type.</param>
      public FromExpression(Type srcType) => SourceType = srcType;
+     /// <summary>Creates a source for a named table.</summary>
+     /// <param name="table">The table name.</param>
+     /// <param name="isAutoMapped">Whether <paramref name="table"/> was derived from the entity type name.</param>
+     /// <param name="sourceIsInterface">Whether the entity source type is an interface.</param>
      public FromExpression(string table, bool isAutoMapped = false, bool sourceIsInterface = false)
      {
           Table = table;
           IsAutoMapped = isAutoMapped;
           SourceIsInterface = sourceIsInterface;
      }
+     /// <summary>Creates a source from a derived-table subquery.</summary>
+     /// <param name="subQuery">The subquery that produces the rows.</param>
      public FromExpression(QueryCommand subQuery)
      {
           SubQuery = subQuery;
      }
+     /// <summary>Creates a source from a table-valued function.</summary>
+     /// <param name="tableFunction">The table function call.</param>
      public FromExpression(TableFunctionExpression tableFunction)
      {
           TableFunction = tableFunction;
      }
+     /// <summary>Creates a source from a <c>PIVOT</c>/<c>UNPIVOT</c>.</summary>
+     /// <param name="pivot">The pivot definition.</param>
      public FromExpression(PivotExpression pivot)
      {
           Pivot = pivot;
@@ -34,6 +50,7 @@ public sealed class FromExpression
           XmlNodes = xmlNodes;
      }
      //public OneOf<string, QueryCommand> Table { get; }
+     /// <summary>The explicit table name, or <c>null</c> when the source is not a plain named table.</summary>
      public readonly string? Table;
      /// <summary>
      /// Whether <see cref="Table"/> was derived from the entity type name (and is therefore subject
@@ -42,7 +59,9 @@ public sealed class FromExpression
      public readonly bool IsAutoMapped;
      /// <summary>Whether the entity source type is an interface, so the convention can drop its <c>I</c> prefix.</summary>
      public readonly bool SourceIsInterface;
+     /// <summary>The derived-table subquery, or <c>null</c> when the source is not a subquery.</summary>
      public readonly QueryCommand? SubQuery;
+     /// <summary>The entity type, used when the source is a mapped CLR type rather than a table name.</summary>
      public readonly Type? SourceType;
      /// <summary>
      /// Set when the source is a table-valued function. Mutually exclusive with <see cref="Table"/>

@@ -31,7 +31,7 @@ The scalar `array_join` (one row per element, projectable) and the clause method
 
 ## `LIMIT n BY expr`
 
-[`LimitBy`](xref:NextORM.Core.EntityBuilder`1) returns the first `n` rows **per distinct key**, emitted
+[`LimitBy`](xref:NextORM.Core.EntityBuilder`1.LimitBy``1(System.Int32,System.Int32,System.Linq.Expressions.Expression{System.Func{`0,``0}})) returns the first `n` rows **per distinct key**, emitted
 after `ORDER BY` and before the final `LIMIT`:
 
 ```csharp
@@ -51,7 +51,7 @@ See [Sorting and paging](../05-sorting-and-paging.md#limit-by-clickhouse)
 
 ## `GROUP BY ... WITH TOTALS`
 
-[`WithTotals`](xref:NextORM.Core.EntityBuilder`1) appends the ClickHouse `with totals` modifier to a
+[`WithTotals`](xref:NextORM.Core.EntityBuilder`1.WithTotals) appends the ClickHouse `with totals` modifier to a
 grouping, adding a totals row for the whole result set. It is orthogonal to `ROLLUP`/`CUBE` and cannot
 be combined with `GROUPING SETS`:
 
@@ -122,7 +122,7 @@ position with no `ON` ([`SupportsSemiAntiJoin`](xref:NextORM.Core.ISqlDialect.Su
 
 ## `GLOBAL IN`
 
-[`SqlFunctions.ClickHouse.global_in`](xref:NextORM.Core.ClickHouseFunctions) renders the distributed
+[`SqlFunctions.ClickHouse.global_in`](xref:NextORM.Core.ClickHouseFunctions.global_in``1(``0,NextORM.Core.QueryCommand{``0})) renders the distributed
 predicate over a subquery or a value list; negate with `!` for `GLOBAL NOT IN`:
 
 ```csharp
@@ -192,7 +192,7 @@ See [Scalar functions](../11-scalar-functions.md) and [JSON support](../18-json.
 ## Table functions
 
 `numbers`/`numbers_mt` and the row-count generators `zeros`/`zeros_mt` are available through
-[`FromTableFunction`](xref:NextORM.Core.EntityBuilder`1). The `numbers` `UInt64` column is cast to
+[`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})). The `numbers` `UInt64` column is cast to
 `Int64` inside a wrapping subquery so it materialises as a CLR `long`; `zeros` materialises directly as
 `byte`:
 

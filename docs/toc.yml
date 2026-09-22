@@ -1,14 +1,14 @@
 - name: Home
   href: index.md
 - name: Getting started
-  href: getting-started/toc.yml
+  href: getting-started/
 - name: Guide
-  href: guide/toc.yml
+  href: guide/
 - name: Providers
-  href: providers/toc.yml
+  href: providers/
 - name: Advanced
-  href: advanced/toc.yml
+  href: advanced/
 - name: API reference
   href: api/
 - name: Русская документация
-  href: ru/toc.yml
+  href: ru/

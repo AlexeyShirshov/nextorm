@@ -18,6 +18,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     private readonly ISqlDialect _dialect;
     private readonly IColumnsProvider _columnsProvider;
     private readonly int _dim;
+    /// <summary>The SQL builder the visitor renders into, or <c>null</c> in parameter-only mode.</summary>
     protected readonly StringBuilder? _builder;
     private readonly ObjectPool<StringBuilder> _sbPool;
     private readonly List<Parameter> _params;
@@ -28,6 +29,9 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     private readonly IParameterProvider _parameterProvider;
     private readonly IQueryRegistry _queryProvider;
     private readonly bool _dontNeedAlias;
+    /// <summary>
+    /// Whether the visitor only collects parameters and does not append SQL (parameter-only mode).
+    /// </summary>
     protected readonly bool _paramMode;
     private bool _disposedValue;
     private readonly VisitorOptions _options;
@@ -53,8 +57,14 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         _logger = options.Logger;
     }
 
+    /// <summary>
+    /// Whether the column currently being rendered needs an alias, for example because it is cast or
+    /// repeated.
+    /// </summary>
     public bool NeedAliasForColumn { get => _needAliasForColumn; internal set => _needAliasForColumn = value; }
+    /// <summary>The provider that resolves the columns and table aliases of the query sources.</summary>
     public IColumnsProvider SourceProvider => _columnsProvider;
+    /// <summary>The name of the column currently being rendered, if any.</summary>
     public string? ColumnName { get => _colName; internal set => _colName = value; }
     /// <summary>
     /// True when the built expression is used as a condition (WHERE/HAVING) instead of a value.
@@ -97,6 +107,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         else
             _builder!.Append(name);
     }
+    /// <inheritdoc/>
     protected override Expression VisitMethodCall(MethodCallExpression node)
     {
         if (!_paramMode
@@ -116,6 +127,9 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         }
 
         if (TupleSqlTranslator.TryTranslateCreate(this, node))
+            return node;
+
+        if (NormSqlTranslator.TryTranslateColumnReference(this, node))
             return node;
 
         if (ScalarFunctionTranslator.TryTranslateBuiltIn(this, node))
@@ -257,6 +271,19 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 
     private static ParameterExpression? ResolveColumnSource(Expression source)
     {
+        // A by-name column is nearly always reached through the lambda parameter directly (h) or a
+        // projection member (p.Item2). Both shapes expose the parameter structurally, so the common
+        // path avoids allocating the expression visitor.
+        return source switch
+        {
+            ParameterExpression parameter => parameter,
+            MemberExpression { Expression: ParameterExpression parameter } => parameter,
+            _ => VisitForColumnSource(source)
+        };
+    }
+
+    private static ParameterExpression? VisitForColumnSource(Expression source)
+    {
         var v = new TypeExpressionVisitor<ParameterExpression>();
         v.Visit(source);
         return v.Has ? v.Target : null;
@@ -328,6 +355,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         return visitor.ToString();
     }
 
+    /// <inheritdoc/>
     protected override Expression VisitNew(NewExpression node)
     {
         // new string(char, int) repeats a single character; SQL has no char literal, so the character
@@ -369,9 +397,11 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         return base.VisitNew(node);
     }
 
+    /// <inheritdoc/>
     protected override Expression VisitIndex(IndexExpression node)
         => MemberTranslator.VisitIndex(this, node) ?? base.VisitIndex(node);
 
+    /// <inheritdoc/>
     protected override Expression VisitConstant(ConstantExpression node)
     {
         if (!_paramMode)
@@ -407,9 +437,11 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 
         return true;
     }
+    /// <inheritdoc/>
     protected override Expression VisitMember(MemberExpression node)
         => MemberTranslator.VisitMember(this, node) ?? base.VisitMember(node);
 
+    /// <inheritdoc/>
     protected override Expression VisitUnary(UnaryExpression node)
         => PredicateTranslator.VisitUnary(this, node) ?? base.VisitUnary(node);
 
@@ -418,9 +450,14 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     /// that is a bare boolean value is turned into a predicate by the dialect.
     /// </summary>
     internal void VisitCondition(Expression condition) => PredicateTranslator.VisitCondition(this, condition);
+    /// <inheritdoc/>
     protected override Expression VisitConditional(ConditionalExpression node) => PredicateTranslator.VisitConditional(this, node);
+    /// <inheritdoc/>
     protected override Expression VisitSwitch(SwitchExpression node) => PredicateTranslator.VisitSwitch(this, node);
+    /// <inheritdoc/>
     protected override Expression VisitBinary(BinaryExpression node) => PredicateTranslator.VisitBinary(this, node);
+    /// <summary>Returns the SQL emitted into this visitor's builder.</summary>
+    /// <returns>The rendered SQL text.</returns>
     public override string ToString()
     {
         return _builder!.ToString();
@@ -438,6 +475,12 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         return Clone();
     }
 
+    /// <summary>
+    /// Creates a fresh visitor with the same options but an empty builder, so a nested expression can
+    /// be rendered independently and then appended to the outer SQL.
+    /// </summary>
+    /// <returns>A new visitor that is not in parameter mode.</returns>
+    /// <exception cref="NotSupportedException">The current visitor is in parameter mode.</exception>
     public virtual BaseExpressionVisitor Clone()
     {
         if (_paramMode) throw new NotSupportedException("Cannot clone in param mode");
@@ -445,6 +488,10 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         return new BaseExpressionVisitor(_options);
     }
 
+    /// <summary>
+    /// Releases the resources used by the visitor, returning the pooled builder when applicable.
+    /// </summary>
+    /// <param name="disposing"><see langword="true"/> to release managed resources.</param>
     protected virtual void Dispose(bool disposing)
     {
         if (!_disposedValue)
@@ -457,6 +504,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             _disposedValue = true;
         }
     }
+    /// <summary>Returns the pooled builder and releases the visitor's resources.</summary>
     public void Dispose()
     {
         // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method

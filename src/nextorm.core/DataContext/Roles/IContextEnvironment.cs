@@ -7,9 +7,22 @@ namespace NextORM.Core;
 /// </summary>
 public interface IContextEnvironment
 {
+    /// <summary>
+    /// The general-purpose logger for the context, or <see langword="null"/> when logging is disabled.
+    /// </summary>
     ILogger? Logger { get; }
+    /// <summary>
+    /// The logger that traces executed SQL commands, or <see langword="null"/> when command logging is disabled.
+    /// </summary>
     ILogger? CommandLogger { get; }
+    /// <summary>
+    /// Whether rows returned by the provider must be mapped to results, as opposed to using a scalar
+    /// or in-memory fast path.
+    /// </summary>
     bool NeedMapping { get; }
+    /// <summary>
+    /// A user-owned bag of arbitrary context properties, not interpreted by the engine.
+    /// </summary>
     Dictionary<string, object> Properties { get; }
     /// <summary>
     /// The context-wide default for identifier quoting (see

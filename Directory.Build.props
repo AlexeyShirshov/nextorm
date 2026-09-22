@@ -28,4 +28,12 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
 
+  <!--
+    Single version for every project in the repository; bump it here, not per .csproj.
+    The packaging CI job overrides it with -p:Version=<git tag> on the release tag.
+  -->
+  <PropertyGroup>
+    <Version>1.0.4-alpha</Version>
+  </PropertyGroup>
+
 </Project>

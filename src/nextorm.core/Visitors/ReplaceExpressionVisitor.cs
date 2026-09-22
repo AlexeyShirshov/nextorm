@@ -9,10 +9,16 @@ public class ReplaceParameterExpressionVisitor : ExpressionVisitor
 {
     private readonly Expression _parameter;
 
+    /// <summary>
+    /// Creates a visitor that replaces any parameter whose type matches
+    /// <paramref name="parameter"/>'s type with <paramref name="parameter"/> itself.
+    /// </summary>
+    /// <param name="parameter">The replacement expression.</param>
     public ReplaceParameterExpressionVisitor(Expression parameter)
     {
         _parameter = parameter;
     }
+    /// <inheritdoc/>
     protected override Expression VisitParameter(ParameterExpression node)
     {
         if (_parameter.Type == node.Type)
@@ -33,10 +39,16 @@ public class ReplaceConstantExpressionVisitor : ExpressionVisitor
 {
     private readonly Expression _parameter;
 
+    /// <summary>
+    /// Creates a visitor that replaces any constant whose type matches
+    /// <paramref name="parameter"/>'s type with <paramref name="parameter"/> itself.
+    /// </summary>
+    /// <param name="parameter">The replacement expression.</param>
     public ReplaceConstantExpressionVisitor(Expression parameter)
     {
         _parameter = parameter;
     }
+    /// <inheritdoc/>
     protected override Expression VisitConstant(ConstantExpression node)
     {
         if (_parameter.Type == node.Type)

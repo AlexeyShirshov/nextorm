@@ -42,10 +42,6 @@
 
 - [Limitations and out-of-scope features](advanced/limitations.md)
 - [API reference](advanced/api-reference.md)
-- [Prepared vs cached: reusing a query](specs/performance/prepared-vs-cached.md)
-- [SQL capabilities gap analysis](specs/roadmap/sql-capabilities-gap-analysis.md)
-- [Capability matrix: nextorm vs EF Core and linq2db](specs/comparison/capability-matrix.md)
-- [nextorm vs linq2db: functionality comparison](specs/comparison/linq2db-comparison.md)
 
 ### Русская документация
 
@@ -67,7 +63,7 @@ Nextorm uses protocol-level libraries (for example, SqlClient for Microsoft SQL 
 
 ## Status
 
-The current status (1.0.3-alpha) is a prof of concept.
+The current status (1.0.4-alpha) is a prof of concept.
 
 ## Roadmap
 
@@ -115,13 +111,21 @@ In-memory provider is built-in in core library.
 ## Query reuse
 
 There are two independent ways to avoid re-building a query plan on every execution: the implicit plan
-cache (used automatically by [`EntityBuilder`](xref:NextORM.Core.EntityBuilder)/[`QueryCommand`](xref:NextORM.Core.QueryCommand) terminals) and explicit [`Prepare`](xref:NextORM.Core.EntityBuilder`1) returning an
+cache (used automatically by [`EntityBuilder`](xref:NextORM.Core.EntityBuilder)/[`QueryCommand`](xref:NextORM.Core.QueryCommand) terminals) and explicit [`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},System.Boolean,System.Threading.CancellationToken)) returning an
 [`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1).
 
 They differ in cost, lifetime and thread-safety rules. Which one to use, what each one costs per call and
-its limitations: **[Prepared vs Cached](specs/performance/prepared-vs-cached.md)**.
+its limitations are covered in the [Query reuse guide](guide/15-query-reuse.md).
 
 ## Releases
+
+### 1.0.4-alpha
+
+- [ClickHouse: закрыт остаток backlog — UInt64 row reader, серверные/кластерные TVF, нативный JSON](https://github.com/AlexeyShirshov/nextorm/issues/55)
+- [ClickHouse: массивы Array(T)/Tuple — row reader, array-агрегаты и higher-order (lambda) функции](https://github.com/AlexeyShirshov/nextorm/issues/56)
+- [ClickHouse: join kinds SEMI/ANTI/PASTE — JoinType.Semi/Anti/Paste, SemiJoin/AntiJoin/PasteJoin](https://github.com/AlexeyShirshov/nextorm/issues/57)
+- [Типизированный доступ к колонке по имени — SqlFunctions.Column<T>](https://github.com/AlexeyShirshov/nextorm/issues/58)
+- Полная XML-документация публичного API во всех пакетах
 
 ### 1.0.3-alpha
 

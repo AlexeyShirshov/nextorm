@@ -55,6 +55,7 @@
 ## Docs
 - DocFX is a local tool: `dotnet docfx docs/docfx.json`. `docs/api/` and `docs/_site/` are generated and gitignored; article pages are hand-written.
 - Renaming a public type or method requires updating both `docs/**` and `docs/ru/**` (prose, samples, source paths, curated API reference) in the same change. Grep both trees for the old name first.
+- Public docs (`docs/**`, `docs/ru/**`, root `readme.md`) must **not link to `docs/specs/**`**: specs are internal, excluded from the DocFX build and never published. No hyperlinks, no relative `.md` links, no GitHub `blob` links to specs from article pages or the readme — keep the reasoning inline or point to a public page.
 
 ## Benchmarks
 - `benchmarks/nextorm.benchmark` is a BenchmarkDotNet console app using `BenchmarkSwitcher`: `dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter *SqliteBenchmarkWhere*`.

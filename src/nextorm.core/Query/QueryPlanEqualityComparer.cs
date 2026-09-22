@@ -4,6 +4,10 @@ using System.Linq.Expressions;
 
 namespace NextORM.Core;
 
+/// <summary>
+/// Equality comparer that keys a whole <see cref="QueryCommand"/> plan (shape flags, expressions,
+/// joins, paging, ...) in the plan cache.
+/// </summary>
 public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 {
     // private readonly IDictionary<ExpressionKey, Delegate> _cache;
@@ -19,6 +23,8 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
     //     : this(new ExpressionCache<Delegate>())
     // {
     // }
+    /// <summary>Creates a comparer that reuses the registry's expression and shape comparers.</summary>
+    /// <param name="queryProvider">The registry owning the nested comparers.</param>
     public QueryPlanEqualityComparer(IQueryRegistry queryProvider)
     {
         //_queryProvider = queryProvider;
@@ -30,6 +36,10 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
     }
     // private QueryPlanEqualityComparer() { }
     // public static QueryPlanEqualityComparer Instance => new();
+    /// <summary>Determines whether two commands would produce the same cached plan.</summary>
+    /// <param name="x">The first command.</param>
+    /// <param name="y">The second command.</param>
+    /// <returns><c>true</c> when both commands are logically equal.</returns>
     public bool Equals(QueryCommand? x, QueryCommand? y)
     {
         if (x == y) return true;
@@ -272,6 +282,12 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
         return true;
     }
 
+    /// <summary>
+    /// Returns the plan-cache hash of <paramref name="obj"/>, combining the precomputed sub-plan
+    /// hashes with the plan-shape flags, paging and outer references.
+    /// </summary>
+    /// <param name="obj">The command to hash.</param>
+    /// <returns>The plan hash, or <c>0</c> when <paramref name="obj"/> is <c>null</c>.</returns>
     public int GetHashCode(QueryCommand? obj)
     {
         if (obj is null)

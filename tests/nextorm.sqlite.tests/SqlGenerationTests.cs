@@ -376,6 +376,16 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void ColumnByName_ScalarProjection_ShouldNotAlias()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>().Select(x => SqlFunctions.Column<int>(x, "id")));
+
+        sql.Should().Be("select id from simple_entity");
+    }
+
+    [Fact]
     public void Parameter_ShouldUseDollarPrefix()
     {
         using var ctx = SqliteTestContext.Create();

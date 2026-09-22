@@ -6,7 +6,7 @@
 
 ## Overview
 
-[`WithSql`](xref:NextORM.Core.EntityBuilder`1) and [`PrepareFromSql`](xref:NextORM.Core.EntityBuilder`1) let you keep a normal typed query as the **result shape** and swap in a
+[`WithSql`](xref:NextORM.Core.EntityExtensions.WithSql``1(NextORM.Core.EntityBuilder{``0},System.String)) and [`PrepareFromSql`](xref:NextORM.Core.EntityExtensions.PrepareFromSql``1(NextORM.Core.EntityBuilder{``0},System.String)) let you keep a normal typed query as the **result shape** and swap in a
 raw statement for execution. Everything else - the projection, the entity mapping, member-init
 construction, nested DTOs - is taken from the query you built before the swap.
 
@@ -26,9 +26,9 @@ public static QueryCommand<TResult> WithSql<TResult>(this EntityBuilder<TResult>
 public static IPreparedQueryCommand<TResult> PrepareFromSql<TResult>(this EntityBuilder<TResult> entity, string sql);
 ```
 
-* [`WithSql`](xref:NextORM.Core.EntityBuilder`1) returns a [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) that you execute with the usual terminals
-  ([`ToListAsync`](xref:NextORM.Core.EntityBuilder`1), [`FirstAsync`](xref:NextORM.Core.EntityBuilder`1), ...). It goes through the implicit plan cache like any other command.
-* [`PrepareFromSql`](xref:NextORM.Core.EntityBuilder`1) returns an [`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1); execute it with the context overloads
+* [`WithSql`](xref:NextORM.Core.EntityExtensions.WithSql``1(NextORM.Core.EntityBuilder{``0},System.String)) returns a [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) that you execute with the usual terminals
+  ([`ToListAsync`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])), [`FirstAsync`](xref:NextORM.Core.EntityBuilderExtensions.FirstAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])), ...). It goes through the implicit plan cache like any other command.
+* [`PrepareFromSql`](xref:NextORM.Core.EntityExtensions.PrepareFromSql``1(NextORM.Core.EntityBuilder{``0},System.String)) returns an [`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1); execute it with the context overloads
   (`dataContext.ToListAsync(prepared, ...)`, `dataContext.FirstAsync(prepared, ...)`, ...).
 * `@params` is a plain object. Its **public instance properties** become named parameters, in property
   order, with the property name as the parameter name.
@@ -41,7 +41,7 @@ The raw statement is passed through verbatim, including comments. Parameter plac
 the underlying ADO.NET provider expects (`@name` for SQL Server/PostgreSQL; Microsoft.Data.Sqlite also
 accepts `@name` even though nextorm's generated SQLite SQL uses `$name`).
 
-## [`WithSql`](xref:NextORM.Core.EntityBuilder`1)
+## [`WithSql`](xref:NextORM.Core.EntityExtensions.WithSql``1(NextORM.Core.EntityBuilder{``0},System.String))
 
 ```csharp
 var ids = await dataContext.From<ISimpleEntity>()
@@ -92,7 +92,7 @@ Output:
 |----|
 | 1 |
 
-## [`PrepareFromSql`](xref:NextORM.Core.EntityBuilder`1)
+## [`PrepareFromSql`](xref:NextORM.Core.EntityExtensions.PrepareFromSql``1(NextORM.Core.EntityBuilder{``0},System.String))
 
 Prepare a raw statement and execute it against the context. Runtime parameters are supplied at execution
 time exactly as for `Prepare(...)`:
@@ -186,7 +186,7 @@ mapped column names (or `[Column]` names) exactly.
 
 ## Compositing raw SQL as a `FROM` source
 
-[`FromSql`](xref:NextORM.Core.DataContextExtensions.FromSql) uses a raw fragment as the query's **source**
+[`FromSql`](xref:NextORM.Core.DataContextExtensions.FromSql(NextORM.Core.IDataContext,System.String,System.Object)) uses a raw fragment as the query's **source**
 instead of a mapped table, so it can be filtered, joined, grouped, projected and paged like any other
 source. Columns are read through [`TableAlias`](xref:NextORM.Core.TableAlias) accessors
 (`t["id"].AsInt`); the same params-object convention binds named parameters.
@@ -230,7 +230,7 @@ and SQLite omits the derived-table alias when the source is not joined.
 | MySQL | Statement passed through verbatim; `@name` parameters. |
 | MariaDB | Statement passed through verbatim; `@name` parameters. |
 | ClickHouse | Statement passed through verbatim; `@name` parameters (rewritten to `{name:Type}` by the driver). |
-| In-memory | [`PrepareFromSql`](xref:NextORM.Core.EntityBuilder`1) and [`FromSql`](xref:NextORM.Core.DataContextExtensions.FromSql) are not supported ([`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext) throws `NotSupportedException`); use a SQL provider for raw statements. |
+| In-memory | [`PrepareFromSql`](xref:NextORM.Core.EntityExtensions.PrepareFromSql``1(NextORM.Core.EntityBuilder{``0},System.String)) and [`FromSql`](xref:NextORM.Core.DataContextExtensions.FromSql(NextORM.Core.IDataContext,System.String,System.Object)) are not supported ([`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext) throws `NotSupportedException`); use a SQL provider for raw statements. |
 
 ## See also
 

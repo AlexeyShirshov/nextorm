@@ -11,6 +11,7 @@ public class DefaultParameterProvider : IParameterProvider
     private static readonly ParamNameCache _paramNames = new("p");
     private int _paramIdx;
 
+    /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public string GetParamName()
     {

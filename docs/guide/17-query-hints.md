@@ -6,7 +6,7 @@
 
 ## Overview
 
-[`Hint`](xref:NextORM.Core.QueryCommand`1) returns a new command carrying one or more
+[`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[])) returns a new command carrying one or more
 statement-level hints. Hints are provider specific: the command stores plain strings and the active
 [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) decides where and how they are rendered. A repeated call accumulates:
 
@@ -44,9 +44,9 @@ var sql = dataContext.WithRecursive("nums", body, 100)
 ... option (maxrecursion 100, recompile)
 ```
 
-## Table hints
+## Locking table hints
 
-`EntityBuilder<T>.WithTableHint(params string[] hints)` attaches table-level hints to the primary
+`EntityBuilder<T>.WithTableHint(params string[] hints)` attaches SQL Server locking hints (`nolock`/`updlock`/`holdlock`) to the primary
 physical table. SQL Server renders them as a `WITH (...)` clause between the table name and its alias:
 
 ```csharp
@@ -61,7 +61,7 @@ select id from complex_entity with (nolock)
 ```
 
 The hints are rendered verbatim, so only pass trusted values. A provider opts in through
-[`SupportsTableHints`](xref:NextORM.Core.ISqlDialect.SupportsTableHints) and [`MakeTableHints`](xref:NextORM.Core.ISqlDialect) (SQL Server); other dialects reject a
+[`SupportsTableHints`](xref:NextORM.Core.ISqlDialect.SupportsTableHints) and [`MakeTableHints`](xref:NextORM.Core.ISqlDialect.MakeTableHints(System.Collections.Generic.IReadOnlyList{System.String})) (SQL Server); other dialects reject a
 command that carries table hints with `NotSupportedException`. Only the primary table is covered; hints
 on joined tables are not part of the API yet.
 
@@ -90,7 +90,7 @@ var my = dataContext.From<ISimpleEntity>()
     .Hint("MAX_EXECUTION_TIME(1000)");
 ```
 
-A provider opts in through [`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints) and [`RenderQueryHints`](xref:NextORM.Core.ISqlDialect); the
+A provider opts in through [`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints) and [`RenderQueryHints`](xref:NextORM.Core.ISqlDialect.RenderQueryHints(System.String,System.Collections.Generic.IReadOnlyList{System.String},System.String)); the
 builder rejects a command that carries hints on a dialect that reports `false`.
 
 ## ClickHouse query modifiers
@@ -126,20 +126,20 @@ both.
 
 ## Limitations
 
-* Table hints are only rendered for the primary table; hints on a joined table are not part of the API
-  yet ([`WithTableHint`](xref:NextORM.Core.EntityBuilder`1) applies to the query's `FROM` table).
-* Concatenating a hinted command with a set operation ([`Union`](xref:NextORM.Core.QueryCommand`1), [`Intersect`](xref:NextORM.Core.QueryCommand`1), ...) is not guarded against;
+* Locking table hints are only rendered for the primary table; hints on a joined table are not part of the API
+  yet ([`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[])) applies to the query's `FROM` table).
+* Concatenating a hinted command with a set operation ([`Union`](xref:NextORM.Core.QueryCommand`1.Union``1(NextORM.Core.QueryCommand{``0})), [`Intersect`](xref:NextORM.Core.QueryCommand`1.Intersect``1(NextORM.Core.QueryCommand{``0})), ...) is not guarded against;
   the hint travels to the branch it was attached to and should be avoided there.
 
 ## See also
 
-- [Joins](03-joins.md) - [`CrossApply`](xref:NextORM.Core.EntityBuilder`1)/[`OuterApply`](xref:NextORM.Core.EntityBuilder`1).
+- [Joins](03-joins.md) - [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0}))/[`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0})).
 - [CTE](09-cte.md) - `maxRecursion` and the SQL Server `option (maxrecursion n)` clause.
 - [Queries and projections](01-querying-and-projections.md)
 
 ---
 
-Source: `src/nextorm.core/Query/QueryCommand.TResult.cs` ([`Hint`](xref:NextORM.Core.QueryCommand`1)),
-`src/nextorm.core/DataContext/Dialect/ISqlDialect.cs` ([`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints) / [`RenderQueryHints`](xref:NextORM.Core.ISqlDialect)),
+Source: `src/nextorm.core/Query/QueryCommand.TResult.cs` ([`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[]))),
+`src/nextorm.core/DataContext/Dialect/ISqlDialect.cs` ([`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints) / [`RenderQueryHints`](xref:NextORM.Core.ISqlDialect.RenderQueryHints(System.String,System.Collections.Generic.IReadOnlyList{System.String},System.String))),
 `src/nextorm.sqlserver/SqlServerDialect.cs`, `src/nextorm.postgres/PostgresDialect.cs`,
 `src/nextorm.mysql/MySqlDialect.cs` (MariaDB inherits).

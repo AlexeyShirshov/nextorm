@@ -8,7 +8,7 @@
 
 nextorm exposes two entry points for `SELECT DISTINCT`:
 
-* [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) — sets the flag on the builder, before [`Select`](xref:NextORM.Core.EntityBuilder`1):
+* [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) — sets the flag on the builder, before [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})):
 
   ```csharp
   dataContext.From<IComplexEntity>().Distinct().Select(x => new { x.Int })
@@ -90,7 +90,7 @@ select distinct t2.id from simple_entity as 't1' cross join complex_entity as 't
 
 ## Distinct and paging
 
-Paging is applied to the distinct result. The [`Limit`](xref:NextORM.Core.Paging.Limit)/[`Page`](xref:NextORM.Core.EntityBuilder`1) call is placed before [`Select`](xref:NextORM.Core.EntityBuilder`1), and the
+Paging is applied to the distinct result. The [`Limit`](xref:NextORM.Core.Paging.Limit)/[`Page`](xref:NextORM.Core.EntityBuilder`1.Page(System.Int32,System.Int32)) call is placed before [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), and the
 double-checked shape ([`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) then [`Limit`](xref:NextORM.Core.Paging.Limit)) is governed by the provider's keyword order:
 
 ```csharp
@@ -140,7 +140,7 @@ select distinct nullableint from complex_entity
 select nullableint from complex_entity
 ```
 
-With [`UnionAll`](xref:NextORM.Core.QueryCommand`1) the branches are concatenated without an extra deduplication, so the left branch is
+With [`UnionAll`](xref:NextORM.Core.QueryCommand`1.UnionAll``1(NextORM.Core.QueryCommand{``0})) the branches are concatenated without an extra deduplication, so the left branch is
 distinct but the right one is not:
 
 ```csharp
@@ -162,7 +162,7 @@ select nullableint from complex_entity
 
 PostgreSQL also supports `DISTINCT ON (expr, ...)`, which keeps the first row of each distinct key
 according to the `ORDER BY` (the leading sort expressions must match the key). Use
-[`DistinctOn`](xref:NextORM.Core.EntityBuilder`1.DistinctOn) instead of `Distinct`; combining the two
+[`DistinctOn`](xref:NextORM.Core.EntityBuilder`1.DistinctOn``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) instead of `Distinct`; combining the two
 throws, because PostgreSQL treats them as mutually exclusive.
 
 ```csharp
@@ -194,8 +194,8 @@ every other provider rejects it at SQL build time.
 
 ## See also
 
-- [Set operations](07-set-operations.md) - [`Union`](xref:NextORM.Core.QueryCommand`1) already removes duplicates; [`UnionAll`](xref:NextORM.Core.QueryCommand`1) does not.
-- [Sorting and paging](05-sorting-and-paging.md) - [`Limit`](xref:NextORM.Core.Paging.Limit), [`Offset`](xref:NextORM.Core.Paging.Offset) and [`Page`](xref:NextORM.Core.EntityBuilder`1).
+- [Set operations](07-set-operations.md) - [`Union`](xref:NextORM.Core.QueryCommand`1.Union``1(NextORM.Core.QueryCommand{``0})) already removes duplicates; [`UnionAll`](xref:NextORM.Core.QueryCommand`1.UnionAll``1(NextORM.Core.QueryCommand{``0})) does not.
+- [Sorting and paging](05-sorting-and-paging.md) - [`Limit`](xref:NextORM.Core.Paging.Limit), [`Offset`](xref:NextORM.Core.Paging.Offset) and [`Page`](xref:NextORM.Core.EntityBuilder`1.Page(System.Int32,System.Int32)).
 - [Querying and projections](01-querying-and-projections.md)
 
 ---

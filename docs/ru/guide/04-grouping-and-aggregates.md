@@ -1,6 +1,6 @@
 # Группировка и агрегаты
 
-> Группируйте строки с помощью [`GroupBy`](xref:NextORM.Core.EntityBuilder`1), фильтруйте группы с помощью [`Having`](xref:NextORM.Core.EntityBuilder`1) и вычисляйте `count`, `min`, `max`, `avg`, `sum`, `stdev`, `var` и их `_distinct`-варианты через ``
+> Группируйте строки с помощью [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), фильтруйте группы с помощью [`Having`](xref:NextORM.Core.EntityBuilder`1.Having(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})) и вычисляйте `count`, `min`, `max`, `avg`, `sum`, `stdev`, `var` и их `_distinct`-варианты через ``
 
 **Предварительные требования:** [Запросы и проекции](01-querying-and-projections.md) · [Фильтрация (WHERE)](02-filtering-where.md) · [Сортировка и постраничный вывод](05-sorting-and-paging.md)
 
@@ -8,7 +8,7 @@
 
 `EntityBuilder<T>.GroupBy(...)` добавляет предложение `GROUP BY`, а `EntityBuilder<T>.Having(...)` добавляет
 предложение `HAVING`, которое фильтрует группы. Оба являются предложениями построителя, поэтому они
-комбинируются с [`Where`](xref:NextORM.Core.EntityBuilder`1), [`OrderBy`](xref:NextORM.Core.EntityBuilder`1), [`Limit`](xref:NextORM.Core.Paging.Limit)/[`Page`](xref:NextORM.Core.EntityBuilder`1) и проекцией точно так же, как в любом другом
+комбинируются с [`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})), [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)), [`Limit`](xref:NextORM.Core.Paging.Limit)/[`Page`](xref:NextORM.Core.EntityBuilder`1.Page(System.Int32,System.Int32)) и проекцией точно так же, как в любом другом
 запросе:
 
 ```csharp
@@ -19,7 +19,7 @@ var rows = dataContext.From<IComplexEntity>()
 ```
 
 Агрегатные функции находятся в [`Sql`](xref:NextORM.Core.SqlFunctions.Sql) и имеют смысл только внутри проекции или предиката
-[`Having`](xref:NextORM.Core.EntityBuilder`1). Они называются ровно так:
+[`Having`](xref:NextORM.Core.EntityBuilder`1.Having(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})). Они называются ровно так:
 
 | Функция | Результат | Функция | Результат |
 |---|---|---|---|
@@ -38,7 +38,7 @@ var rows = dataContext.From<IComplexEntity>()
 функции принимают аргумент-выражение. Суффикс `_distinct` добавляет `distinct` внутри круглых
 скобок.
 
-У распространённых агрегатов также есть удобные терминалы на `EntityBuilder<T>`: [`Count`](xref:NextORM.Core.EntityBuilder`1), `Min(x)`,
+У распространённых агрегатов также есть удобные терминалы на `EntityBuilder<T>`: [`Count`](xref:NextORM.Core.EntityBuilderExtensions.Count``1(NextORM.Core.EntityBuilder{``0})), `Min(x)`,
 `Max(x)`, `Avg(x)`, `Sum(x)`, `Stdev(x)`, `Stdevp(x)`, `Var(x)` и `Varp(x)`, каждый с `...Async`-двойником
 и перегрузкой, принимающей позиционные параметры. У `count`, `count_big`, `count_distinct` и
 `count_big_distinct` нет терминала на сущности, и они используются через ``
@@ -78,7 +78,7 @@ var rows = dataContext.From<IComplexEntity>()
 
 ## Having
 
-[`Having`](xref:NextORM.Core.EntityBuilder`1) фильтрует группы после агрегирования, тогда как [`Where`](xref:NextORM.Core.EntityBuilder`1) фильтрует строки до него:
+[`Having`](xref:NextORM.Core.EntityBuilder`1.Having(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})) фильтрует группы после агрегирования, тогда как [`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})) фильтрует строки до него:
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -98,7 +98,7 @@ select nullableint as 'Int', count(*) from complex_entity group by nullableint h
 |-----|-------|
 | 1 | 2 |
 
-[`Where`](xref:NextORM.Core.EntityBuilder`1) и [`Having`](xref:NextORM.Core.EntityBuilder`1) можно комбинировать в одном запросе; [`Where`](xref:NextORM.Core.EntityBuilder`1) применяется до группировки:
+[`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})) и [`Having`](xref:NextORM.Core.EntityBuilder`1.Having(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})) можно комбинировать в одном запросе; [`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})) применяется до группировки:
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -213,7 +213,7 @@ Grouping sets доступны в SQL Server, PostgreSQL, SQLite и ClickHouse
 
 ## Агрегаты без группировки
 
-Агрегат по всей таблице — это проекция без [`GroupBy`](xref:NextORM.Core.EntityBuilder`1):
+Агрегат по всей таблице — это проекция без [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})):
 
 ```csharp
 var count = dataContext.From<ISimpleEntity>().Select(e => SqlFunctions.Sql.count()).First();
@@ -299,7 +299,7 @@ select count(distinct nullableint) from complex_entity
 `toInt64(...)`.
 
 Сокращение уровня построителя `EntityBuilder<T>.Count()` эквивалентно
-`Select(e => SqlFunctions.Sql.count())` с последующим [`First`](xref:NextORM.Core.EntityBuilder`1):
+`Select(e => SqlFunctions.Sql.count())` с последующим [`First`](xref:NextORM.Core.EntityBuilderExtensions.First``1(NextORM.Core.EntityBuilder{``0})):
 
 ```csharp
 var count = dataContext.From<ISimpleEntity>().Count();
@@ -399,7 +399,7 @@ select varp(id) from simple_entity
 
 `stdev` — выборочное стандартное отклонение, `stdevp` — генеральное; `var`/`varp` — соответствующие
 дисперсии. У каждой есть `_distinct`-форма (`stdev_distinct`, `stdevp_distinct`, `var_distinct`,
-`varp_distinct`) и терминал на сущности ([`Stdev`](xref:NextORM.Core.EntityBuilder`1), [`Stdevp`](xref:NextORM.Core.EntityBuilder`1), [`Var`](xref:NextORM.Core.EntityBuilder`1), [`Varp`](xref:NextORM.Core.EntityBuilder`1)) с синхронной,
+`varp_distinct`) и терминал на сущности ([`Stdev`](xref:NextORM.Core.EntityBuilderExtensions.Stdev``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})), [`Stdevp`](xref:NextORM.Core.EntityBuilderExtensions.Stdevp``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})), [`Var`](xref:NextORM.Core.EntityBuilderExtensions.Var``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})), [`Varp`](xref:NextORM.Core.EntityBuilderExtensions.Varp``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}}))) с синхронной,
 `...Async` и параметризованной перегрузкой:
 
 ```csharp
@@ -566,14 +566,14 @@ SQLite различаются в порядке `NULL` (PostgreSQL — перв�
 
 `GROUP BY ROLLUP (...)`/`CUBE (...)` генерируется в ANSI-форме в SQL Server, PostgreSQL и SQLite, а в
 виде хвостового `... WITH ROLLUP`/`WITH CUBE` — в MySQL/MariaDB и ClickHouse. В MySQL/MariaDB нет
-`CUBE`, поэтому [`GroupByCube`](xref:NextORM.Core.EntityBuilder`1) там бросает исключение; провайдер in-memory отклоняет оба модификатора.
+`CUBE`, поэтому [`GroupByCube`](xref:NextORM.Core.EntityBuilder`1.GroupByCube``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) там бросает исключение; провайдер in-memory отклоняет оба модификатора.
 `GROUP BY GROUPING SETS (...)` доступен в SQL Server, PostgreSQL, SQLite и ClickHouse, но не в
 MySQL/MariaDB и не в провайдере in-memory. `WITH TOTALS` — только ClickHouse; провайдер in-memory
 отклоняет его так же, как `ROLLUP`/`CUBE`.
 
 ## См. также
 
-- [Сортировка и постраничный вывод](05-sorting-and-paging.md) - [`OrderBy`](xref:NextORM.Core.EntityBuilder`1) по выражению или порядковому номеру.
+- [Сортировка и постраничный вывод](05-sorting-and-paging.md) - [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)) по выражению или порядковому номеру.
 - [Соединения](03-joins.md) - агрегат по соединённой проекции.
 - [Запросы и проекции](01-querying-and-projections.md)
 

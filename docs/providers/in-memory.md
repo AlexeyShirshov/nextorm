@@ -52,9 +52,9 @@ var ids = ctx.From<SimpleEntity>()
 // ids.Id == 1
 ```
 
-[`WithData`](xref:NextORM.Core.EntityBuilder`1) and [`WithAsyncData`](xref:NextORM.Core.EntityBuilder`1) (`src/nextorm.core/Builders/InMemoryCommandBuilder.cs`) attach a
-collection to the context's `Data` dictionary keyed by entity type; [`WithData`](xref:NextORM.Core.EntityBuilder`1) takes an `IEnumerable<T>`
-and [`WithAsyncData`](xref:NextORM.Core.EntityBuilder`1) an `IAsyncEnumerable<T>`. Both are no-ops for other providers.
+[`WithData`](xref:NextORM.Core.InMemoryCommandBuilderExtensions.WithData``1(NextORM.Core.EntityBuilder{``0},System.Collections.Generic.IEnumerable{``0})) and [`WithAsyncData`](xref:NextORM.Core.InMemoryCommandBuilderExtensions.WithAsyncData``1(NextORM.Core.EntityBuilder{``0},System.Collections.Generic.IAsyncEnumerable{``0})) (`src/nextorm.core/Builders/InMemoryCommandBuilder.cs`) attach a
+collection to the context's `Data` dictionary keyed by entity type; [`WithData`](xref:NextORM.Core.InMemoryCommandBuilderExtensions.WithData``1(NextORM.Core.EntityBuilder{``0},System.Collections.Generic.IEnumerable{``0})) takes an `IEnumerable<T>`
+and [`WithAsyncData`](xref:NextORM.Core.InMemoryCommandBuilderExtensions.WithAsyncData``1(NextORM.Core.EntityBuilder{``0},System.Collections.Generic.IAsyncEnumerable{``0})) an `IAsyncEnumerable<T>`. Both are no-ops for other providers.
 
 ```csharp
 ctx.From<SimpleEntity>().WithAsyncData(GetRows());
@@ -74,25 +74,25 @@ Covered by `InMemoryTests` and `InMemoryJoinTests`:
 | Feature | Evidence |
 |---|---|
 | Projection: anonymous, primitive/scalar, `Tuple` | `InMemoryTests.SelectPrimitive_ShouldReturnData`, `TestTuples` |
-| [`Where`](xref:NextORM.Core.EntityBuilder`1), including `==` on nullable and captured values | `InMemoryTests.TestWhere`, `Contains_ShouldFilterData` |
+| [`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})), including `==` on nullable and captured values | `InMemoryTests.TestWhere`, `Contains_ShouldFilterData` |
 | Subquery used as a `FROM` source (`ctx.From(subQuery)`) | `InMemoryTests.TestWhere_Subquery` |
-| Buffered and async sources ([`WithData`](xref:NextORM.Core.EntityBuilder`1) / [`WithAsyncData`](xref:NextORM.Core.EntityBuilder`1)) | `InMemoryTests.TestAsync` |
-| Streaming with [`Pipeline`](xref:NextORM.Core.QueryCommand`1), observing cancellation | `InMemoryTests.TestFetch`, `TestFetch_PipelineStopsOnCancellation` |
-| [`Limit`](xref:NextORM.Core.Paging.Limit) / [`Offset`](xref:NextORM.Core.Paging.Offset) / [`First`](xref:NextORM.Core.EntityBuilder`1) / [`Single`](xref:NextORM.Core.EntityBuilder`1) and their `OrDefault` forms | `InMemoryTests.Top_ShouldLimitData`, `First_ShouldReturnFirst`, `Single_ShouldReturnSingle` |
-| [`OrderBy`](xref:NextORM.Core.EntityBuilder`1) / [`OrderByDescending`](xref:NextORM.Core.EntityBuilder`1), including async sources | `InMemoryTests.OrderBy_ShouldSortData`, `OrderByOverAsyncSource_ShouldSortData` |
-| Materializers [`ToArray`](xref:NextORM.Core.EntityBuilder`1) / [`ToHashSet`](xref:NextORM.Core.EntityBuilder`1) / [`ToDictionary`](xref:NextORM.Core.EntityBuilder`1) (and async) | `InMemoryTests.ToArray_ShouldReturnData`, `ToHashSet_ShouldReturnData`, `ToDictionary_ShouldReturnData` |
-| [`Any`](xref:NextORM.Core.EntityBuilder`1) and projected `exists` | `InMemoryTests.SelectAny_ShouldReturnData`, [`Any`](xref:NextORM.Core.EntityBuilder`1) |
+| Buffered and async sources ([`WithData`](xref:NextORM.Core.InMemoryCommandBuilderExtensions.WithData``1(NextORM.Core.EntityBuilder{``0},System.Collections.Generic.IEnumerable{``0})) / [`WithAsyncData`](xref:NextORM.Core.InMemoryCommandBuilderExtensions.WithAsyncData``1(NextORM.Core.EntityBuilder{``0},System.Collections.Generic.IAsyncEnumerable{``0}))) | `InMemoryTests.TestAsync` |
+| Streaming with [`Pipeline`](xref:NextORM.Core.QueryCommand`1.Pipeline(System.Object[])), observing cancellation | `InMemoryTests.TestFetch`, `TestFetch_PipelineStopsOnCancellation` |
+| [`Limit`](xref:NextORM.Core.Paging.Limit) / [`Offset`](xref:NextORM.Core.Paging.Offset) / [`First`](xref:NextORM.Core.EntityBuilderExtensions.First``1(NextORM.Core.EntityBuilder{``0})) / [`Single`](xref:NextORM.Core.EntityBuilderExtensions.Single``1(NextORM.Core.EntityBuilder{``0})) and their `OrDefault` forms | `InMemoryTests.Top_ShouldLimitData`, `First_ShouldReturnFirst`, `Single_ShouldReturnSingle` |
+| [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)) / [`OrderByDescending`](xref:NextORM.Core.EntityBuilder`1.OrderByDescending(System.Int32)), including async sources | `InMemoryTests.OrderBy_ShouldSortData`, `OrderByOverAsyncSource_ShouldSortData` |
+| Materializers [`ToArray`](xref:NextORM.Core.EntityBuilderExtensions.ToArray``1(NextORM.Core.EntityBuilder{``0},System.ReadOnlySpan{System.Object})) / [`ToHashSet`](xref:NextORM.Core.EntityBuilderExtensions.ToHashSet``1(NextORM.Core.EntityBuilder{``0},System.Collections.Generic.IEqualityComparer{``0},System.ReadOnlySpan{System.Object})) / [`ToDictionary`](xref:NextORM.Core.EntityBuilderExtensions.ToDictionary``2(NextORM.Core.EntityBuilder{``0},System.Func{``0,``1},System.Collections.Generic.IEqualityComparer{``1},System.ReadOnlySpan{System.Object})) (and async) | `InMemoryTests.ToArray_ShouldReturnData`, `ToHashSet_ShouldReturnData`, `ToDictionary_ShouldReturnData` |
+| [`Any`](xref:NextORM.Core.EntityBuilderExtensions.Any``1(NextORM.Core.EntityBuilder{``0})) and projected `exists` | `InMemoryTests.SelectAny_ShouldReturnData`, [`Any`](xref:NextORM.Core.EntityBuilderExtensions.Any``1(NextORM.Core.EntityBuilder{``0})) |
 | [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) over value-equality projections | `InMemoryTests.TestDistinct` |
 | Joins: inner, left, right, full, cross, chained to 8 tables | `InMemoryJoinTests.TestJoin`, `TestLeftJoin`, `TestRightJoinChained`, `TestFullJoinChained`, `TestCrossJoin8Tables_ShouldCloneAndMaterializeAtEveryArity` |
-| Aggregates [`Count`](xref:NextORM.Core.EntityBuilder`1)/[`Sum`](xref:NextORM.Core.EntityBuilder`1)/[`Min`](xref:NextORM.Core.EntityBuilder`1)/[`Max`](xref:NextORM.Core.EntityBuilder`1)/[`Avg`](xref:NextORM.Core.EntityBuilder`1)/[`Stdev`](xref:NextORM.Core.EntityBuilder`1)/[`Var`](xref:NextORM.Core.EntityBuilder`1) (buffered sources) | `InMemoryTests.Count_ShouldReturnRowCount`, `Sum_ShouldReturnSum`, `MinMax_ShouldReturnBounds`, `Avg_ShouldReturnAverage` |
-| [`GroupBy`](xref:NextORM.Core.EntityBuilder`1) / [`Having`](xref:NextORM.Core.EntityBuilder`1) with per-group aggregates (buffered sources) | `InMemoryTests.GroupBy_ShouldAggregatePerGroup`, `GroupBy_Having_ShouldFilterGroups`, `GroupBy_Avg_ShouldAggregatePerGroup`, `GroupBy_OrderByColumn_ShouldSortGroups` |
+| Aggregates [`Count`](xref:NextORM.Core.EntityBuilderExtensions.Count``1(NextORM.Core.EntityBuilder{``0}))/[`Sum`](xref:NextORM.Core.EntityBuilderExtensions.Sum``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}}))/[`Min`](xref:NextORM.Core.EntityBuilderExtensions.Min``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}}))/[`Max`](xref:NextORM.Core.EntityBuilderExtensions.Max``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}}))/[`Avg`](xref:NextORM.Core.EntityBuilderExtensions.Avg``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}}))/[`Stdev`](xref:NextORM.Core.EntityBuilderExtensions.Stdev``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}}))/[`Var`](xref:NextORM.Core.EntityBuilderExtensions.Var``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})) (buffered sources) | `InMemoryTests.Count_ShouldReturnRowCount`, `Sum_ShouldReturnSum`, `MinMax_ShouldReturnBounds`, `Avg_ShouldReturnAverage` |
+| [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) / [`Having`](xref:NextORM.Core.EntityBuilder`1.Having(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})) with per-group aggregates (buffered sources) | `InMemoryTests.GroupBy_ShouldAggregatePerGroup`, `GroupBy_Having_ShouldFilterGroups`, `GroupBy_Avg_ShouldAggregatePerGroup`, `GroupBy_OrderByColumn_ShouldSortGroups` |
 | Set operations `UNION` / `UNION ALL` / `INTERSECT` / `INTERSECT ALL` / `EXCEPT` / `EXCEPT ALL` | `InMemoryTests.Union_ShouldRemoveDuplicates`, `UnionAll_ShouldKeepDuplicates`, `Intersect_ShouldReturnOnlyCommonRows`, `Except_ShouldReturnOnlyLeftRows`, `SetOperations_WhenChained_ShouldApplyLeftToRight` |
-| [`Last`](xref:NextORM.Core.EntityBuilder`1) / [`LastOrDefault`](xref:NextORM.Core.EntityBuilder`1) over an ordered query (reversed `ORDER BY`) | `InMemoryTests.Last_ShouldReturnLastOrderedRow`, `LastOrDefault_ShouldReturnLastOrderedRow` |
+| [`Last`](xref:NextORM.Core.EntityBuilderExtensions.Last``1(NextORM.Core.EntityBuilder{``0})) / [`LastOrDefault`](xref:NextORM.Core.EntityBuilderExtensions.LastOrDefault``1(NextORM.Core.EntityBuilder{``0})) over an ordered query (reversed `ORDER BY`) | `InMemoryTests.Last_ShouldReturnLastOrderedRow`, `LastOrDefault_ShouldReturnLastOrderedRow` |
 | Buffered subquery source (`ctx.From(cmd)`) with sync materialization and aggregates | `InMemoryTests.SubquerySource_SyncToList_ShouldReturnRows`, `SubquerySource_Count_ShouldReturnRowCount`, `SetOperation_AsSubquery_Count_ShouldReturnRowCount` |
-| [`SelectMany`](xref:NextORM.Core.EntityBuilder`1) (flatten, correlated) and [`GroupJoin`](xref:NextORM.Core.EntityBuilder`1) (grouped inner rows) | `InMemorySelectManyTests.SelectMany_Correlated_ShouldFlattenPerRow`, `GroupJoin_ShouldGroupInnerRows` |
+| [`SelectMany`](xref:NextORM.Core.EntityBuilder`1.SelectMany``1(System.Linq.Expressions.Expression{System.Func{`0,System.Collections.Generic.IEnumerable{``0}}})) (flatten, correlated) and [`GroupJoin`](xref:NextORM.Core.EntityBuilder`1.GroupJoin``3(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``1}},System.Linq.Expressions.Expression{System.Func{``0,``1}},System.Linq.Expressions.Expression{System.Func{`0,System.Collections.Generic.IEnumerable{``0},``2}})) (grouped inner rows) | `InMemorySelectManyTests.SelectMany_Correlated_ShouldFlattenPerRow`, `GroupJoin_ShouldGroupInnerRows` |
 
 The in-memory provider shares the same `EntityBuilder<T>` fluent API as the SQL providers, so the same query
-object works against both — **except** [`SelectMany`](xref:NextORM.Core.EntityBuilder`1)/[`GroupJoin`](xref:NextORM.Core.EntityBuilder`1), which are in-memory only: on a SQL provider
+object works against both — **except** [`SelectMany`](xref:NextORM.Core.EntityBuilder`1.SelectMany``1(System.Linq.Expressions.Expression{System.Func{`0,System.Collections.Generic.IEnumerable{``0}}}))/[`GroupJoin`](xref:NextORM.Core.EntityBuilder`1.GroupJoin``3(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``1}},System.Linq.Expressions.Expression{System.Func{``0,``1}},System.Linq.Expressions.Expression{System.Func{`0,System.Collections.Generic.IEnumerable{``0},``2}})), which are in-memory only: on a SQL provider
 they throw `NotSupportedException` immediately (see [Limitations](../advanced/limitations.md)).
 
 ## Unsupported
@@ -119,14 +119,14 @@ The provider fails loudly instead of returning wrong results:
   // NotSupportedException: "DISTINCT is not supported by the in-memory provider for projection type ..."
   ```
 
-- **Raw SQL** ([`PrepareFromSql`](xref:NextORM.Core.EntityBuilder`1)) is not supported (`NotSupportedException`).
-- **Aggregates or [`GroupBy`](xref:NextORM.Core.EntityBuilder`1) over an `IAsyncEnumerable` source** throw `NotSupportedException`; both are
+- **Raw SQL** ([`PrepareFromSql`](xref:NextORM.Core.EntityExtensions.PrepareFromSql``1(NextORM.Core.EntityBuilder{``0},System.String))) is not supported (`NotSupportedException`).
+- **Aggregates or [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) over an `IAsyncEnumerable` source** throw `NotSupportedException`; both are
   computed for buffered `IEnumerable` sources.
 - **Filtered aggregates** (`SqlFunctions.Sql.count(e => filter)` and the `(value, filter)` overloads) and
   **grouped ordering by expression** throw `NotSupportedException`; order groups by column index instead.
 - **Set operations over an `IAsyncEnumerable` source** throw `NotSupportedException`; operands are
   buffered.
-- **[`Last`](xref:NextORM.Core.EntityBuilder`1)/[`LastOrDefault`](xref:NextORM.Core.EntityBuilder`1) without `ORDER BY`** throw `InvalidOperationException`: a query without
+- **[`Last`](xref:NextORM.Core.EntityBuilderExtensions.Last``1(NextORM.Core.EntityBuilder{``0}))/[`LastOrDefault`](xref:NextORM.Core.EntityBuilderExtensions.LastOrDefault``1(NextORM.Core.EntityBuilder{``0})) without `ORDER BY`** throw `InvalidOperationException`: a query without
   ordering has no defined last row.
 - **Aggregates over an async subquery source** throw `NotSupportedException`; buffered subquery sources
   are folded.
@@ -147,7 +147,7 @@ The provider fails loudly instead of returning wrong results:
 | Raw SQL | `NotSupportedException` |
 | [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) on non-value-equality types | `NotSupportedException` |
 | Correlated subqueries | `NotSupportedException` |
-| [`SelectMany`](xref:NextORM.Core.EntityBuilder`1) / [`GroupJoin`](xref:NextORM.Core.EntityBuilder`1) | supported (these operators are in-memory only) |
+| [`SelectMany`](xref:NextORM.Core.EntityBuilder`1.SelectMany``1(System.Linq.Expressions.Expression{System.Func{`0,System.Collections.Generic.IEnumerable{``0}}})) / [`GroupJoin`](xref:NextORM.Core.EntityBuilder`1.GroupJoin``3(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``1}},System.Linq.Expressions.Expression{System.Func{``0,``1}},System.Linq.Expressions.Expression{System.Func{`0,System.Collections.Generic.IEnumerable{``0},``2}})) | supported (these operators are in-memory only) |
 
 ## See also
 

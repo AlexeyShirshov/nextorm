@@ -372,7 +372,7 @@ select coalesce(somestring, '') from complex_entity
 select (cast(id as double precision) / 2) from complex_entity
 ```
 
-Numeric cast targets come from [`MakeTypeName`](xref:NextORM.Core.ISqlDialect):
+Numeric cast targets come from [`MakeTypeName`](xref:NextORM.Core.ISqlDialect.MakeTypeName(System.Type)):
 
 | CLR type | SQLite / PostgreSQL | SQL Server |
 |---|---|---|
@@ -388,7 +388,7 @@ Numeric cast targets come from [`MakeTypeName`](xref:NextORM.Core.ISqlDialect):
 
 PostgreSQL has native array types. An array operand is always passed as a **single parameter** (the
 whole array), never expanded into a value list, so the SQL text does not depend on the number of
-elements and the plan stays cacheable. An array can be a runtime parameter ([`Parameter`](xref:NextORM.Core.SqlFunctions)), a
+elements and the plan stays cacheable. An array can be a runtime parameter ([`Parameter`](xref:NextORM.Core.SqlFunctions.Parameter``1(System.Int32))), a
 captured local/field or an inline `new[]`. Only a dialect that opts in with [`SupportsArrays`](xref:NextORM.Core.ISqlDialect.SupportsArrays)
 (PostgreSQL) can render the array surface; every other provider throws `NotSupportedException`.
 
@@ -413,7 +413,7 @@ var same = dataContext.From<IComplexEntity>()
 select id from complex_entity where (id = any(@p0))
 ```
 
-A runtime array parameter uses the same [`Parameter`](xref:NextORM.Core.SqlFunctions) mechanism, so the array never has to be known when
+A runtime array parameter uses the same [`Parameter`](xref:NextORM.Core.SqlFunctions.Parameter``1(System.Int32)) mechanism, so the array never has to be known when
 the query is prepared:
 
 ```csharp
@@ -805,14 +805,14 @@ select nullif(nullableint, 0) as "NoZero", greatest(id, 10) as "Hi", least(id, 1
 `num_nulls`/`num_nonnulls` are part of the extended scalar library
 ([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions)).
 `iif` is portable ([`Iif`](xref:NextORM.Core.ISqlDialect.Iif)) and each dialect supplies its native
-spelling through [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render); `choose` remains SQL Server-only
+spelling through [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render(System.String,System.String,System.String)); `choose` remains SQL Server-only
 ([`SupportsChoose`](xref:NextORM.Core.ISqlDialect.SupportsChoose)). Calling `iif` through the specialized
 `SqlFunctions.SqlServer` surface still works by inheritance. The C# ternary `condition ? a : b` is separate
 and always renders the portable `case when ... end`.
 
 ClickHouse additionally has the multi-branch `multiIf` surface
 ([`MultiIf`](xref:NextORM.Core.ISqlDialect.MultiIf),
-[`IMultiIfRenderer.Render`](xref:NextORM.Core.IMultiIfRenderer.Render)): build each branch with `when(condition, value)`
+[`IMultiIfRenderer.Render`](xref:NextORM.Core.IMultiIfRenderer.Render(System.Collections.Generic.IReadOnlyList{System.String},System.Type))): build each branch with `when(condition, value)`
 and close it with `otherwise(value)`, which must be last. Other providers just use `case when`, which is
 already the portable form behind `iif`/the C# conditional, so they reject the ClickHouse-native spelling.
 
@@ -861,7 +861,7 @@ select dateTrunc('month', dt) as `Month` from complex_entity
 `SqlFunctions.Sql.date_add(field, amount, value)` adds a number of units to a date/time and
 `SqlFunctions.Sql.end_of_month(value)` returns the last day of its month ([`SupportsDateArithmetic`](xref:NextORM.Core.ISqlDialect.SupportsDateArithmetic);
 PostgreSQL, SQL Server, ClickHouse, MySQL/MariaDB and SQLite opt in). The field must be a constant
-string; the provider validates which parts it accepts ([`SupportsDateAddField`](xref:NextORM.Core.ISqlDialect) and friends).
+string; the provider validates which parts it accepts ([`SupportsDateAddField`](xref:NextORM.Core.ISqlDialect.SupportsDateAddField(System.String)) and friends).
 SQL Server renders `dateadd(field, amount, value)` and `eomonth(value)`, folding
 `decade`/`century`/`millennium` onto a scaled `year` add; PostgreSQL renders interval arithmetic;
 ClickHouse renders the dedicated `addDays`/`addMonths`/…/`addSeconds` functions (folding the three

@@ -378,7 +378,7 @@ select coalesce(somestring, '') from complex_entity
 select (cast(id as double precision) / 2) from complex_entity
 ```
 
-Целевые типы числового приведения берутся из [`MakeTypeName`](xref:NextORM.Core.ISqlDialect):
+Целевые типы числового приведения берутся из [`MakeTypeName`](xref:NextORM.Core.ISqlDialect.MakeTypeName(System.Type)):
 
 | Тип CLR | SQLite / PostgreSQL | SQL Server |
 |---|---|---|
@@ -394,7 +394,7 @@ select (cast(id as double precision) / 2) from complex_entity
 
 В PostgreSQL есть встроенные типы-массивы. Массив всегда передаётся **одним параметром** (целиком), а
 не разворачивается в список значений, поэтому текст SQL не зависит от количества элементов, и план
-запроса остаётся кэшируемым. Массивом может быть runtime-параметр ([`Parameter`](xref:NextORM.Core.SqlFunctions)),
+запроса остаётся кэшируемым. Массивом может быть runtime-параметр ([`Parameter`](xref:NextORM.Core.SqlFunctions.Parameter``1(System.Int32))),
 захваченная локальная переменная/поле или встроенный `new[]`. Поверхность массивов умеет рендерить
 только диалект, включивший [`SupportsArrays`](xref:NextORM.Core.ISqlDialect.SupportsArrays) (PostgreSQL); все остальные провайдеры бросают
 `NotSupportedException`.
@@ -420,7 +420,7 @@ var same = dataContext.From<IComplexEntity>()
 select id from complex_entity where (id = any(@p0))
 ```
 
-Runtime-параметр-массив использует тот же механизм [`Parameter`](xref:NextORM.Core.SqlFunctions), поэтому массив не нужно знать в момент
+Runtime-параметр-массив использует тот же механизм [`Parameter`](xref:NextORM.Core.SqlFunctions.Parameter``1(System.Int32)), поэтому массив не нужно знать в момент
 подготовки запроса:
 
 ```csharp
@@ -811,14 +811,14 @@ select nullif(nullableint, 0) as "NoZero", greatest(id, 10) as "Hi", least(id, 1
 `num_nulls`/`num_nonnulls` входят в расширенную библиотеку скалярных функций
 ([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions)).
 `iif` переносим ([`Iif`](xref:NextORM.Core.ISqlDialect.Iif)), и каждый диалект задаёт своё
-нативное написание через [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render); `choose` остаётся только для
+нативное написание через [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render(System.String,System.String,System.String)); `choose` остаётся только для
 SQL Server ([`SupportsChoose`](xref:NextORM.Core.ISqlDialect.SupportsChoose)). Вызов `iif` через
 специализированную поверхность `SqlFunctions.SqlServer` по-прежнему работает по наследованию.
 C#-тернарник `condition ? a : b` отдельный и всегда рендерит переносимый `case when ... end`.
 
 Помимо этого ClickHouse предоставляет многоветвевную поверхность `multiIf`
 ([`MultiIf`](xref:NextORM.Core.ISqlDialect.MultiIf),
-[`IMultiIfRenderer.Render`](xref:NextORM.Core.IMultiIfRenderer.Render)): каждая ветвь собирается через
+[`IMultiIfRenderer.Render`](xref:NextORM.Core.IMultiIfRenderer.Render(System.Collections.Generic.IReadOnlyList{System.String},System.Type))): каждая ветвь собирается через
 `when(condition, value)`, а завершает вызов `otherwise(value)` (обязательно последним). Остальные
 провайдеры используют `case when` — это уже переносимая форма за `iif`/C#-тернарником, поэтому
 нативное написание ClickHouse они отвергают.
@@ -868,7 +868,7 @@ select dateTrunc('month', dt) as `Month` from complex_entity
 `SqlFunctions.Sql.date_add(field, amount, value)` прибавляет к дате/времени заданное число единиц, а
 `SqlFunctions.Sql.end_of_month(value)` возвращает последний день месяца ([`SupportsDateArithmetic`](xref:NextORM.Core.ISqlDialect.SupportsDateArithmetic);
 его включают PostgreSQL, SQL Server, ClickHouse, MySQL/MariaDB и SQLite). Поле должно быть константной
-строкой; диалект проверяет, какие части он принимает ([`SupportsDateAddField`](xref:NextORM.Core.ISqlDialect) и др.).
+строкой; диалект проверяет, какие части он принимает ([`SupportsDateAddField`](xref:NextORM.Core.ISqlDialect.SupportsDateAddField(System.String)) и др.).
 SQL Server отрисовывает `dateadd(field, amount, value)` и `eomonth(value)`, сворачивая
 `decade`/`century`/`millennium` в масштабированное прибавление `year`; PostgreSQL отрисовывает
 интервальную арифметику; ClickHouse отрисовывает выделенные функции

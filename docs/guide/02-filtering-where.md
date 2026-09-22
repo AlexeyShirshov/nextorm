@@ -6,20 +6,20 @@
 
 ## Overview
 
-[`Where`](xref:NextORM.Core.EntityBuilder`1) takes a boolean expression and returns a new [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1); like every builder method it
-is immutable, so the original is unchanged. Repeating [`Where`](xref:NextORM.Core.EntityBuilder`1) combines the predicates with `and`:
+[`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})) takes a boolean expression and returns a new [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1); like every builder method it
+is immutable, so the original is unchanged. Repeating [`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})) combines the predicates with `and`:
 
 ```csharp
 public EntityBuilder<TEntity> Where(Expression<Func<TEntity, bool>> condition)
 ```
 
 The lambda is translated into the `WHERE` clause and nothing is executed until a terminal such as
-[`ToListAsync`](xref:NextORM.Core.EntityBuilder`1) is called. The same expression tree is also what the in-memory provider compiles and
+[`ToListAsync`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])) is called. The same expression tree is also what the in-memory provider compiles and
 runs, so a query that works against a real database can be exercised in memory.
 
 Two kinds of values reach the database differently:
 
-* A **captured local** (a variable from the enclosing scope) and [`Parameter`](xref:NextORM.Core.SqlFunctions) become command
+* A **captured local** (a variable from the enclosing scope) and [`Parameter`](xref:NextORM.Core.SqlFunctions.Parameter``1(System.Int32)) become command
   parameters, so the plan can be reused across executions with different values.
 * A **literal constant** written directly in the lambda is rendered inline in the SQL text.
 
@@ -214,7 +214,7 @@ select id, case when id = 1 then 'one' when id = 2 then 'two' else 'other' end a
 A switch whose comparison is a method call (for example a string equality overload, which the C#
 compiler uses for some string patterns) is not supported and throws `NotSupportedException`.
 
-## Captured parameters and [`Parameter`](xref:NextORM.Core.SqlFunctions)
+## Captured parameters and [`Parameter`](xref:NextORM.Core.SqlFunctions.Parameter``1(System.Int32))
 
 A captured local is extracted as a named command parameter:
 
@@ -232,7 +232,7 @@ var rows = await dataContext.From<ComplexEntity>()
 | SQL Server | `select id from complex_entity where (id > @threshold)` |
 | PostgreSQL | `select id from complex_entity where (id > @threshold)` |
 
-[`Parameter`](xref:NextORM.Core.SqlFunctions) declares a runtime parameter whose value is supplied to the terminal, which is
+[`Parameter`](xref:NextORM.Core.SqlFunctions.Parameter``1(System.Int32)) declares a runtime parameter whose value is supplied to the terminal, which is
 useful when the same query shape is prepared or cached and executed repeatedly:
 
 ```csharp
@@ -306,14 +306,14 @@ Special cases:
 
 A captured list or array is captured by reference by the expression tree, but its values are built
 into the prepared command. When the collection is mutated or reassigned between executions, nextorm
-detects the changed shape and rebuilds the command, so a second [`ToList`](xref:NextORM.Core.EntityBuilder`1) sees the new values rather
+detects the changed shape and rebuilds the command, so a second [`ToList`](xref:NextORM.Core.EntityBuilderExtensions.ToList``1(NextORM.Core.EntityBuilder{``0},System.ReadOnlySpan{System.Object})) sees the new values rather
 than stale results.
 
 ### `GLOBAL IN` (ClickHouse)
 
 ClickHouse's distributed predicate `column GLOBAL IN (subquery | values)` is exposed through
-[`SqlFunctions.ClickHouse.global_in`](xref:NextORM.Core.ClickHouseFunctions), which takes the same
-left-hand column and right-hand side as [`SqlFunctions.Sql.@in`](xref:NextORM.Core.SqlFunctions):
+[`SqlFunctions.ClickHouse.global_in`](xref:NextORM.Core.ClickHouseFunctions.global_in``1(``0,NextORM.Core.QueryCommand{``0})), which takes the same
+left-hand column and right-hand side as [`SqlFunctions.Sql.@in`](xref:NextORM.Core.CommonFunctions.in``1(``0,NextORM.Core.QueryCommand{``0})):
 
 ```csharp
 var values = new int[] { 1, 3 };
@@ -354,7 +354,7 @@ helpers:
 | `SqlFunctions.Sql.freetext(x.String, "foo")` | `freetext(somestring, 'foo')` (SQL Server) |
 
 `SqlFunctions.Sql.contains`/`SqlFunctions.Sql.freetext` are full-text predicates ([`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText),
-rendered by [`MakeFullText`](xref:NextORM.Core.ISqlDialect)); the column must be full-text indexed. SQL Server renders
+rendered by [`MakeFullText`](xref:NextORM.Core.ISqlDialect.MakeFullText(System.String,System.String,System.String))); the column must be full-text indexed. SQL Server renders
 `contains`/`freetext` (materialised as a `bit` when projected), PostgreSQL
 `to_tsvector(col) @@ plainto_tsquery(search)` (or `websearch_to_tsquery` for `freetext`), and
 MySQL/MariaDB `match(col) against(search in boolean mode) > 0` (natural-language mode for `freetext`).

@@ -89,29 +89,29 @@ and returns [`Instance`](xref:NextORM.ClickHouse.ClickHouseDialect.Instance) fro
   ([`SupportsFinal`](xref:NextORM.Core.ISqlDialect.SupportsFinal)/[`SupportsSample`](xref:NextORM.Core.ISqlDialect.SupportsSample)/[`SupportsPreWhere`](xref:NextORM.Core.ISqlDialect.SupportsPreWhere)/[`SupportsSettings`](xref:NextORM.Core.ISqlDialect.SupportsSettings));
   `FINAL`/`PREWHERE` need a table engine that supports them (the `Memory` engine rejects both);
 - the portable conditional `iif` as `if(condition, a, b)` ([`Iif`](xref:NextORM.Core.ISqlDialect.Iif),
-  [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render)), the ClickHouse-only multi-branch `multiIf` built with
+  [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render(System.String,System.String,System.String))), the ClickHouse-only multi-branch `multiIf` built with
   `when(...)`/`otherwise(...)` ([`MultiIf`](xref:NextORM.Core.ISqlDialect.MultiIf),
-  [`IMultiIfRenderer.Render`](xref:NextORM.Core.IMultiIfRenderer.Render)), and the `percent_rank()`/`cume_dist()`,
+  [`IMultiIfRenderer.Render`](xref:NextORM.Core.IMultiIfRenderer.Render(System.Collections.Generic.IReadOnlyList{System.String},System.Type))), and the `percent_rank()`/`cume_dist()`,
   `nth_value(expr, n)` and frame-respecting `lagInFrame(value[, offset[, default]])`/`leadInFrame(...)`
   window functions ([`SupportsPercentRankCumeDist`](xref:NextORM.Core.ISqlDialect.SupportsPercentRankCumeDist),
   [`SupportsNthValue`](xref:NextORM.Core.ISqlDialect.SupportsNthValue),
   [`SupportsInFrameWindowFunctions`](xref:NextORM.Core.ISqlDialect.SupportsInFrameWindowFunctions));
 - the distributed `GLOBAL IN` predicate via
-  [`SqlFunctions.ClickHouse.global_in`](xref:NextORM.Core.ClickHouseFunctions) (over a subquery or a
+  [`SqlFunctions.ClickHouse.global_in`](xref:NextORM.Core.ClickHouseFunctions.global_in``1(``0,NextORM.Core.QueryCommand{``0})) (over a subquery or a
   value list, [`SupportsGlobalPredicates`](xref:NextORM.Core.ISqlDialect.SupportsGlobalPredicates));
   negate with C# `!` for `GLOBAL NOT IN`;
 - the join strictness/kind modifiers `ANY`/`ALL`/`ASOF` via
-  [`EntityBuilder.WithStrictness`](xref:NextORM.Core.EntityBuilder`1) right after a join
+  [`EntityBuilder.WithStrictness`](xref:NextORM.Core.EntityBuilder`1.WithStrictness(NextORM.Core.JoinStrictness)) right after a join
   ([`SupportsJoinStrictness`](xref:NextORM.Core.ISqlDialect.SupportsJoinStrictness),
-  [`MakeJoinKeyword`](xref:NextORM.Core.ISqlDialect.MakeJoinKeyword), enum `JoinStrictness`).
+  [`MakeJoinKeyword`](xref:NextORM.Core.ISqlDialect.MakeJoinKeyword(NextORM.Core.JoinType,NextORM.Core.JoinStrictness,System.Boolean)), enum `JoinStrictness`).
   `LEFT ANY JOIN` keeps a single right-hand row per left-hand row, `ALL` keeps every match and
   `ASOF` needs one equi-join column plus a final inequality. The `SEMI`/`ANTI`/`PASTE` kinds have
-  dedicated builder methods: [`SemiJoin`](xref:NextORM.Core.EntityBuilder`1)/`AntiJoin` return only the
+  dedicated builder methods: [`SemiJoin`](xref:NextORM.Core.EntityBuilder`1.SemiJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}}))/`AntiJoin` return only the
   left-hand columns for left rows that do (respectively do not) have a match, and `PasteJoin` pairs the
   two sources by row position with no `ON` (yielding as many rows as the shorter side). They are gated
   by [`SupportsSemiAntiJoin`](xref:NextORM.Core.ISqlDialect.SupportsSemiAntiJoin)/`SupportsPasteJoin`.
   The `GLOBAL` variant (resolved once and broadcast for distributed queries) is set with
-  [`EntityBuilder.Global`](xref:NextORM.Core.EntityBuilder`1) and combines with strictness
+  [`EntityBuilder.Global`](xref:NextORM.Core.EntityBuilder`1.Global) and combines with strictness
   (`global left any join`, [`SupportsGlobalJoin`](xref:NextORM.Core.ISqlDialect.SupportsGlobalJoin)).
 
 ClickHouse has no recursive CTE support, so the dialect declares every CTE with plain `with`.
@@ -218,7 +218,7 @@ select concat('id:', id) as `Label` from simple_entity
   a `String` column (or cast the column in SQL) when you need to materialise the column itself.
 - `hits_v1` and similar wide tables have far more columns than an entity interface declares. Rather
   than mapping every column, project the extra ones by name with
-  [`SqlFunctions.Column<T>`](xref:NextORM.Core.SqlFunctions) (see
+  [`SqlFunctions.Column<T>`](xref:NextORM.Core.SqlFunctions.Column``1(System.Object,System.String)) (see
   [Querying and projections](../guide/01-querying-and-projections.md#columns-by-name)); the name is
   matched verbatim, so quoting follows the dialect.
 

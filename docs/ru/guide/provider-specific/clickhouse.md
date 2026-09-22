@@ -32,7 +32,7 @@ select id from array_entity left array join tags where id > 0
 
 ## `LIMIT n BY expr`
 
-[`LimitBy`](xref:NextORM.Core.EntityBuilder`1) возвращает первые `n` строк **на каждое значение
+[`LimitBy`](xref:NextORM.Core.EntityBuilder`1.LimitBy``1(System.Int32,System.Int32,System.Linq.Expressions.Expression{System.Func{`0,``0}})) возвращает первые `n` строк **на каждое значение
 ключа**, клауза рендерится после `ORDER BY` и до финального `LIMIT`:
 
 ```csharp
@@ -52,7 +52,7 @@ select id, nullableint from complex_entity order by id limit 2 by nullableint
 
 ## `GROUP BY ... WITH TOTALS`
 
-[`WithTotals`](xref:NextORM.Core.EntityBuilder`1) добавляет к группировке модификатор ClickHouse
+[`WithTotals`](xref:NextORM.Core.EntityBuilder`1.WithTotals) добавляет к группировке модификатор ClickHouse
 `with totals` — строку итогов по всему набору. Он ортогонален `ROLLUP`/`CUBE` и не сочетается с
 `GROUPING SETS`:
 
@@ -124,7 +124,7 @@ select t1.id, t2.somestring from simple_entity as `t1` global left any join comp
 
 ## `GLOBAL IN`
 
-[`SqlFunctions.ClickHouse.global_in`](xref:NextORM.Core.ClickHouseFunctions) рендерит распределённый
+[`SqlFunctions.ClickHouse.global_in`](xref:NextORM.Core.ClickHouseFunctions.global_in``1(``0,NextORM.Core.QueryCommand{``0})) рендерит распределённый
 предикат по подзапросу или списку значений; отрицание через `!` даёт `GLOBAL NOT IN`:
 
 ```csharp
@@ -196,7 +196,7 @@ MySQL и MariaDB) и `corr`/`covar*` — документированы на т�
 ## Табличные функции
 
 `numbers`/`numbers_mt` и генераторы строк `zeros`/`zeros_mt` доступны через
-[`FromTableFunction`](xref:NextORM.Core.EntityBuilder`1). Колонка `number` типа `UInt64` приводится к
+[`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})). Колонка `number` типа `UInt64` приводится к
 `Int64` внутри оборачивающего подзапроса, чтобы материализоваться в CLR `long`; `zeros`
 материализуется сразу в `byte`:
 

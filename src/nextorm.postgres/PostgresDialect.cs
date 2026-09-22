@@ -9,28 +9,37 @@ namespace NextORM.Postgres;
 /// </summary>
 public sealed class PostgresDialect : SqlDialectBase
 {
+    /// <summary>Gets the shared PostgreSQL dialect instance.</summary>
     public static readonly PostgresDialect Instance = new();
 
+    /// <inheritdoc/>
     public override string ConcatStringOperator => "||";
 
+    /// <inheritdoc/>
     public override string MakeParam(string name) => $"@{name}";
 
+    /// <inheritdoc/>
     public override string MakeCoalesce(string v1, string v2) => $"coalesce({v1}, {v2})";
 
+    /// <inheritdoc/>
     public override string MakeBool(bool v) => v ? "true" : "false";
 
     /// <summary>PostgreSQL's text type is <c>text</c> (the base maps <see cref="string"/> to the CLR name).</summary>
     public override string MakeTypeName(Type type) => type == typeof(string) ? "text" : base.MakeTypeName(type);
 
     // PostgreSQL only accepts double-quoted identifiers; single-quoted aliases are a syntax error.
+    /// <inheritdoc/>
     public override string Escape(string keyword) => "\"" + keyword + "\"";
 
+    /// <inheritdoc/>
     public override string MakeColumnReference(string name) => Escape(name);
 
+    /// <inheritdoc/>
     public override bool RequireSubqueryAlias => true;
 
     // PostgreSQL spells the APPLY surface as CROSS JOIN LATERAL / LEFT JOIN LATERAL ... ON true,
     // which is exactly the SqlDialectBase default.
+    /// <inheritdoc/>
     public override bool SupportsApply => true;
 
     /// <summary>PostgreSQL supports a raw SQL derived table (<c>FROM (&lt;sql&gt;) AS alias</c>).</summary>
@@ -91,16 +100,22 @@ public sealed class PostgresDialect : SqlDialectBase
     private static bool IsIdentifierChar(char c) => char.IsLetterOrDigit(c) || c == '_';
 
     // PostgreSQL is the only supported provider that implements INTERSECT ALL / EXCEPT ALL.
+    /// <inheritdoc/>
     public override bool SupportsIntersectExceptAll => true;
 
     // PostgreSQL renders the ANSI GROUP BY ROLLUP (...)/CUBE (...) form.
+    /// <inheritdoc/>
     public override bool SupportsRollup => true;
+    /// <inheritdoc/>
     public override bool SupportsCube => true;
+    /// <inheritdoc/>
     public override bool SupportsGroupingSets => true;
 
     // PostgreSQL has native array types and the any/all quantifiers over arrays.
+    /// <inheritdoc/>
     public override bool SupportsArrays => true;
 
+    /// <inheritdoc/>
     public override bool SupportsTableFunction(string name) =>
         name is "generate_series" or "unnest"
             or "regexp_matches" or "regexp_split_to_table"
@@ -124,11 +139,14 @@ public sealed class PostgresDialect : SqlDialectBase
             : call;
 
     // PostgreSQL has native json/jsonb types and the associated functions/operators.
+    /// <inheritdoc/>
     public override bool SupportsJson => true;
 
     // PostgreSQL accepts the FILTER (WHERE ...) aggregate clause, greatest/least, date_trunc and the
     // string_agg/array_agg aggregate surface.
+    /// <inheritdoc/>
     public override bool SupportsFilter => true;
+    /// <inheritdoc/>
     public override bool SupportsGreatestLeast => true;
 
     /// <summary>PostgreSQL has no <c>iif</c>/<c>if</c> function; it renders the conditional as a <c>CASE</c> expression.</summary>
@@ -148,8 +166,11 @@ public sealed class PostgresDialect : SqlDialectBase
 
     /// <summary>PostgreSQL supports the frame <c>EXCLUDE CURRENT ROW</c>/<c>GROUP</c>/<c>TIES</c>/<c>NO OTHERS</c> clause.</summary>
     public override bool SupportsWindowFrameExclusion => true;
+    /// <inheritdoc/>
     public override bool SupportsDateTrunc => true;
+    /// <inheritdoc/>
     public override bool SupportsDateArithmetic => true;
+    /// <inheritdoc/>
     public override bool SupportsStringArrayAggregates => true;
 
     /// <summary>PostgreSQL renders every date part through <c>extract</c>, including the ISO week and dow forms.</summary>
@@ -162,8 +183,10 @@ public sealed class PostgresDialect : SqlDialectBase
 
     // PostgreSQL full-text search matches a tsvector against a tsquery; contains/freetext differ in
     // how the search string is parsed (plain terms vs. web-search syntax).
+    /// <inheritdoc/>
     public override bool SupportsFullText => true;
 
+    /// <inheritdoc/>
     public override string MakeFullText(string functionName, string column, string search) =>
         functionName == "freetext"
             ? $"to_tsvector({column}) @@ websearch_to_tsquery({search})"
@@ -177,6 +200,7 @@ public sealed class PostgresDialect : SqlDialectBase
 
     // PostgreSQL is the reference provider for the extended scalar function library and the
     // bool/bit/statistical/ordered-set aggregate surface.
+    /// <inheritdoc/>
     public override bool SupportsExtendedScalarFunctions => true;
 
     /// <summary>PostgreSQL has the standalone session random seed <c>setseed</c>.</summary>
@@ -194,12 +218,18 @@ public sealed class PostgresDialect : SqlDialectBase
     /// <summary>PostgreSQL renders both UUID generators through the core functions.</summary>
     public override IUuidGenerators UuidGenerators => PostgresUuidGenerators.Instance;
 
+    /// <inheritdoc/>
     public override bool SupportsBooleanAggregates => true;
+    /// <inheritdoc/>
     public override bool SupportsBitAggregates => true;
+    /// <inheritdoc/>
     public override bool SupportsStatisticalAggregates => true;
+    /// <inheritdoc/>
     public override bool SupportsRegressionAggregates => true;
+    /// <inheritdoc/>
     public override bool SupportsOrderedAggregates => true;
 
+    /// <inheritdoc/>
     public override string MakeAggregate(string name) => name switch
     {
         "stdev" => "stddev",
@@ -210,6 +240,7 @@ public sealed class PostgresDialect : SqlDialectBase
     };
 
     // PostgreSQL's log() is base 10; the natural logarithm (Math.Log) is ln().
+    /// <inheritdoc/>
     public override string MakeMathFunction(string name, IReadOnlyList<string> args) =>
         name == "log" && args.Count == 1
             ? $"ln({args[0]})"
@@ -230,18 +261,23 @@ public sealed class PostgresDialect : SqlDialectBase
         return underlying == typeof(double) || underlying == typeof(float);
     }
 
+    /// <inheritdoc/>
     protected override string MakeStringPosition(string value, string substring) =>
         $"strpos({value}, {substring})";
 
+    /// <inheritdoc/>
     public override string MakeRepeat(string value, string count) => $"repeat({value}, {count})";
 
+    /// <inheritdoc/>
     protected override string MakeStringReverse(string value) => $"reverse({value})";
 
+    /// <inheritdoc/>
     public override string MakeStuff(string value, string start, string? count, string newValue) =>
         count is null
             ? MakeSubstring(value, "0", start)
             : $"overlay({value} placing {newValue} from {start} + 1 for {count})";
 
+    /// <inheritdoc/>
     public override void MakePage(Paging paging, StringBuilder sqlBuilder)
     {
         // WITH TIES is only expressible through the FETCH form (LIMIT has no WITH TIES variant).

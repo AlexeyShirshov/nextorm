@@ -35,6 +35,21 @@ internal static class NormSqlTranslator
         return false;
     }
 
+    /// <summary>
+    /// Handles <c>SqlFunctions.Column&lt;T&gt;(entity, "name")</c> before the generic function
+    /// translators: the call is a marker, so running the scalar/window/in-values probes first only adds
+    /// work on the SQL-build path.
+    /// </summary>
+    internal static bool TryTranslateColumnReference(BaseExpressionVisitor visitor, MethodCallExpression node)
+    {
+        if (node.Method.DeclaringType != typeof(SqlFunctions)
+            || node.Method.Name != nameof(SqlFunctions.Column))
+            return false;
+
+        TranslateColumn(visitor, node);
+        return true;
+    }
+
     /// <summary>Emits <c>SqlFunctions.Parameter</c>/<c>SqlFunctions.Column&lt;T&gt;</c>; any other <see cref="SqlFunctions"/> method throws.</summary>
     private static void TranslateNormParam(BaseExpressionVisitor visitor, MethodCallExpression node)
     {

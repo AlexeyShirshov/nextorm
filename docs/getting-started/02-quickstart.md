@@ -10,17 +10,17 @@ A NextORM query always has four parts:
 
 1. an **entity** (a class or an interface) whose properties map to columns;
 2. a **context** ([`IDataContext`](xref:NextORM.Core.IDataContext)) built from a connection or a connection string;
-3. a **query** built with [`From`](xref:NextORM.Core.DataContextExtensions), [`Select`](xref:NextORM.Core.EntityBuilder`1), [`Where`](xref:NextORM.Core.EntityBuilder`1), and so on;
-4. a **terminal** such as [`ToList`](xref:NextORM.Core.EntityBuilder`1), [`First`](xref:NextORM.Core.EntityBuilder`1), [`Any`](xref:NextORM.Core.EntityBuilder`1) or [`ToAsyncEnumerable`](xref:NextORM.Core.EntityBuilder`1) that executes it.
+3. a **query** built with [`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)), [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), [`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})), and so on;
+4. a **terminal** such as [`ToList`](xref:NextORM.Core.EntityBuilderExtensions.ToList``1(NextORM.Core.EntityBuilder{``0},System.ReadOnlySpan{System.Object})), [`First`](xref:NextORM.Core.EntityBuilderExtensions.First``1(NextORM.Core.EntityBuilder{``0})), [`Any`](xref:NextORM.Core.EntityBuilderExtensions.Any``1(NextORM.Core.EntityBuilder{``0})) or [`ToAsyncEnumerable`](xref:NextORM.Core.EntityBuilderExtensions.ToAsyncEnumerable``1(NextORM.Core.EntityBuilder{``0},System.Object[])) that executes it.
 
-[`From`](xref:NextORM.Core.DataContextExtensions) also registers `T`'s metadata the first time it is seen. The context is disposable: a
+[`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)) also registers `T`'s metadata the first time it is seen. The context is disposable: a
 context created from a connection string owns and closes the connection, while a context created from a
 supplied `DbConnection` leaves that connection open.
 
 ## Complete minimal program
 
 The following program is self-contained. It creates an in-memory SQLite database, seeds one table,
-builds a context with [`UseSqlite`](xref:NextORM.Sqlite.SqliteDataContextOptionsBuilderExtensions), and streams the rows back as an anonymous type.
+builds a context with [`UseSqlite`](xref:NextORM.Sqlite.SqliteDataContextOptionsBuilderExtensions.UseSqlite(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection)), and streams the rows back as an anonymous type.
 
 ```csharp
 using System.ComponentModel.DataAnnotations;
@@ -77,7 +77,7 @@ select id from simple_entity
 
 ## Using a connection string
 
-[`UseSqlite`](xref:NextORM.Sqlite.SqliteDataContextOptionsBuilderExtensions) also accepts a file path (or an SQLite connection string fragment), and the context then
+[`UseSqlite`](xref:NextORM.Sqlite.SqliteDataContextOptionsBuilderExtensions.UseSqlite(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection)) also accepts a file path (or an SQLite connection string fragment), and the context then
 creates and owns the connection:
 
 ```csharp
@@ -92,16 +92,16 @@ using var dataContext = builder.CreateDataContext();
 
 ## Reading the data
 
-The query above uses [`ToAsyncEnumerable`](xref:NextORM.Core.EntityBuilder`1). The other common terminals are:
+The query above uses [`ToAsyncEnumerable`](xref:NextORM.Core.EntityBuilderExtensions.ToAsyncEnumerable``1(NextORM.Core.EntityBuilder{``0},System.Object[])). The other common terminals are:
 
 | Terminal | Result |
 |---|---|
-| [`ToList`](xref:NextORM.Core.EntityBuilder`1) / [`ToListAsync`](xref:NextORM.Core.EntityBuilder`1) | `List<TResult>` |
-| [`First`](xref:NextORM.Core.EntityBuilder`1) / [`FirstAsync`](xref:NextORM.Core.EntityBuilder`1) | the first row; throws if the sequence is empty |
-| [`FirstOrDefault`](xref:NextORM.Core.EntityBuilder`1) / [`FirstOrDefaultAsync`](xref:NextORM.Core.EntityBuilder`1) | the first row or `default` |
-| [`Single`](xref:NextORM.Core.EntityBuilder`1) / [`SingleOrDefault`](xref:NextORM.Core.EntityBuilder`1) (and `…Async`) | exactly one row (or `default`) |
-| [`Any`](xref:NextORM.Core.EntityBuilder`1) / [`AnyAsync`](xref:NextORM.Core.EntityBuilder`1) | `bool` |
-| [`Count`](xref:NextORM.Core.EntityBuilder`1) / [`CountAsync`](xref:NextORM.Core.EntityBuilder`1) | `int` |
+| [`ToList`](xref:NextORM.Core.EntityBuilderExtensions.ToList``1(NextORM.Core.EntityBuilder{``0},System.ReadOnlySpan{System.Object})) / [`ToListAsync`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])) | `List<TResult>` |
+| [`First`](xref:NextORM.Core.EntityBuilderExtensions.First``1(NextORM.Core.EntityBuilder{``0})) / [`FirstAsync`](xref:NextORM.Core.EntityBuilderExtensions.FirstAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])) | the first row; throws if the sequence is empty |
+| [`FirstOrDefault`](xref:NextORM.Core.EntityBuilderExtensions.FirstOrDefault``1(NextORM.Core.EntityBuilder{``0})) / [`FirstOrDefaultAsync`](xref:NextORM.Core.EntityBuilderExtensions.FirstOrDefaultAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])) | the first row or `default` |
+| [`Single`](xref:NextORM.Core.EntityBuilderExtensions.Single``1(NextORM.Core.EntityBuilder{``0})) / [`SingleOrDefault`](xref:NextORM.Core.EntityBuilderExtensions.SingleOrDefault``1(NextORM.Core.EntityBuilder{``0})) (and `…Async`) | exactly one row (or `default`) |
+| [`Any`](xref:NextORM.Core.EntityBuilderExtensions.Any``1(NextORM.Core.EntityBuilder{``0})) / [`AnyAsync`](xref:NextORM.Core.EntityBuilderExtensions.AnyAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])) | `bool` |
+| [`Count`](xref:NextORM.Core.EntityBuilderExtensions.Count``1(NextORM.Core.EntityBuilder{``0})) / [`CountAsync`](xref:NextORM.Core.EntityBuilderExtensions.CountAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])) | `int` |
 
 Every terminal has a synchronous and an async form; prefer the async form in application code.
 

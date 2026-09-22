@@ -1,6 +1,6 @@
 # Внедрение зависимостей
 
-> Регистрируйте контексты NextORM с помощью [`AddNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions), настраивайте провайдер и логирование на scoped [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) и получайте один экземпляр контекста на область (scope).
+> Регистрируйте контексты NextORM с помощью [`AddNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions.AddNextOrmContext(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{NextORM.Core.DataContextBuilder})), настраивайте провайдер и логирование на scoped [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) и получайте один экземпляр контекста на область (scope).
 
 **Предварительные требования:** [Установка](01-installation.md) · [Быстрый старт](02-quickstart.md).
 
@@ -8,7 +8,7 @@
 
 Регистрация DI находится в [`NextORM.Core`](xref:NextORM.Core) ([`ServiceCollectionExtensions`](xref:NextORM.Core.ServiceCollectionExtensions)) и работает с любым контейнером `Microsoft.Extensions.DependencyInjection`. Есть два пути регистрации:
 
-* **Путь типа** - [`AddNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions) регистрирует конкретный тип контекста как scoped и
+* **Путь типа** - [`AddNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions.AddNextOrmContext(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{NextORM.Core.DataContextBuilder})) регистрирует конкретный тип контекста как scoped и
   перенаправляет [`IDataContext`](xref:NextORM.Core.IDataContext) на него. Контейнер создаёт `TContext`, поэтому его конструктор должен быть
   разрешим из контейнера (например, конструктор без параметров у [`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext)).
 * **Путь параметров** - `AddNextOrmContext(Action<DataContextBuilder>)` (или перегрузка
@@ -24,7 +24,7 @@
   `ArgumentNullException` во время регистрации, а не во время разрешения;
 * сам [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) является scoped, поэтому каждая область получает свежий построитель.
 
-Keyed-варианты ([`AddKeyedNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions)) регистрируют построитель и [`IDataContext`](xref:NextORM.Core.IDataContext) под ключом сервиса, так что могут сосуществовать несколько по-разному настроенных контекстов.
+Keyed-варианты ([`AddKeyedNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions.AddKeyedNextOrmContext(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{NextORM.Core.DataContextBuilder},System.Object))) регистрируют построитель и [`IDataContext`](xref:NextORM.Core.IDataContext) под ключом сервиса, так что могут сосуществовать несколько по-разному настроенных контекстов.
 
 ## Регистрация контекста
 
@@ -100,7 +100,7 @@ using var dataContext = builder.CreateDataContext();
 | `LogSensitiveData(bool)` | Управляет тем, записываются ли значения параметров в логи. |
 | [`CreateDataContext`](xref:NextORM.Core.DataContextBuilder.CreateDataContext) | Вызывает [`Factory`](xref:NextORM.Core.DataContextBuilder.Factory); выбрасывает `InvalidOperationException("Context is not set")`, когда ни один провайдер не настроен. |
 
-Расширения провайдеров ([`UseSqlite`](xref:NextORM.Sqlite.SqliteDataContextOptionsBuilderExtensions)/[`UseSqlServer`](xref:NextORM.SqlServer.SqlServerDataContextOptionsBuilderExtensions)/[`UsePostgres`](xref:NextORM.Postgres.PostgresDataContextOptionsBuilderExtensions), в пакетах провайдеров) принимают либо строку подключения, либо `DbConnection`:
+Расширения провайдеров ([`UseSqlite`](xref:NextORM.Sqlite.SqliteDataContextOptionsBuilderExtensions.UseSqlite(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection))/[`UseSqlServer`](xref:NextORM.SqlServer.SqlServerDataContextOptionsBuilderExtensions.UseSqlServer(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection))/[`UsePostgres`](xref:NextORM.Postgres.PostgresDataContextOptionsBuilderExtensions.UsePostgres(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection)), в пакетах провайдеров) принимают либо строку подключения, либо `DbConnection`:
 
 ```csharp
 builder.UseSqlite("app.db");              // context creates and owns the connection
@@ -115,8 +115,8 @@ builder.UsePostgres("Host=localhost;Database=app");
 
 | Регистрация | Сервис | Время жизни | Примечания |
 |---|---|---|---|
-| [`AddNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions) | `T` | scoped | один раз на область |
-| [`AddNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions) | [`IDataContext`](xref:NextORM.Core.IDataContext) | scoped | перенаправляет на тот же экземпляр `T` |
+| [`AddNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions.AddNextOrmContext(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{NextORM.Core.DataContextBuilder})) | `T` | scoped | один раз на область |
+| [`AddNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions.AddNextOrmContext(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{NextORM.Core.DataContextBuilder})) | [`IDataContext`](xref:NextORM.Core.IDataContext) | scoped | перенаправляет на тот же экземпляр `T` |
 | `AddNextOrmContext(Action<…>)` | [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) | scoped | создаётся заново для каждой области |
 | `AddNextOrmContext(Action<…>)` | [`IDataContext`](xref:NextORM.Core.IDataContext) | scoped | `builder.CreateDataContext()` |
 | `AddKeyedNextOrmContext(…, key)` | keyed [`IDataContext`](xref:NextORM.Core.IDataContext) / [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) | scoped | разрешается по ключу |
@@ -125,16 +125,16 @@ builder.UsePostgres("Host=localhost;Database=app");
 
 ## Различия провайдеров
 
-[`UseLoggerFactory`](xref:NextORM.Core.DataContextBuilder) и [`LogSensitiveData`](xref:NextORM.Core.DataContextBuilder) ведут себя одинаково во всех провайдерах; различается только расширение `Use…`, выбирающее провайдер.
+[`UseLoggerFactory`](xref:NextORM.Core.DataContextBuilder.UseLoggerFactory(Microsoft.Extensions.Logging.ILoggerFactory)) и [`LogSensitiveData`](xref:NextORM.Core.DataContextBuilder.LogSensitiveData(System.Boolean)) ведут себя одинаково во всех провайдерах; различается только расширение `Use…`, выбирающее провайдер.
 
 | Провайдер | Расширение | Перегрузки |
 |---|---|---|
-| SQLite | [`UseSqlite`](xref:NextORM.Sqlite.SqliteDataContextOptionsBuilderExtensions) | `string filepath`, `DbConnection` |
-| SQL Server | [`UseSqlServer`](xref:NextORM.SqlServer.SqlServerDataContextOptionsBuilderExtensions) | `string connectionString`, `DbConnection` |
-| PostgreSQL | [`UsePostgres`](xref:NextORM.Postgres.PostgresDataContextOptionsBuilderExtensions) | `string connectionString`, `DbConnection` |
-| MySQL | [`UseMySql`](xref:NextORM.MySql.MySqlDataContextOptionsBuilderExtensions) | `string connectionString`, `DbConnection` |
-| MariaDB | [`UseMariaDb`](xref:NextORM.MariaDb.MariaDbDataContextOptionsBuilderExtensions) | `string connectionString`, `DbConnection` |
-| ClickHouse | [`UseClickHouse`](xref:NextORM.ClickHouse.ClickHouseDataContextOptionsBuilderExtensions) | `string connectionString`, `DbConnection` |
+| SQLite | [`UseSqlite`](xref:NextORM.Sqlite.SqliteDataContextOptionsBuilderExtensions.UseSqlite(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection)) | `string filepath`, `DbConnection` |
+| SQL Server | [`UseSqlServer`](xref:NextORM.SqlServer.SqlServerDataContextOptionsBuilderExtensions.UseSqlServer(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection)) | `string connectionString`, `DbConnection` |
+| PostgreSQL | [`UsePostgres`](xref:NextORM.Postgres.PostgresDataContextOptionsBuilderExtensions.UsePostgres(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection)) | `string connectionString`, `DbConnection` |
+| MySQL | [`UseMySql`](xref:NextORM.MySql.MySqlDataContextOptionsBuilderExtensions.UseMySql(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection)) | `string connectionString`, `DbConnection` |
+| MariaDB | [`UseMariaDb`](xref:NextORM.MariaDb.MariaDbDataContextOptionsBuilderExtensions.UseMariaDb(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection)) | `string connectionString`, `DbConnection` |
+| ClickHouse | [`UseClickHouse`](xref:NextORM.ClickHouse.ClickHouseDataContextOptionsBuilderExtensions.UseClickHouse(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection)) | `string connectionString`, `DbConnection` |
 | In-memory | нет | зарегистрируйте [`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext) напрямую или назначьте [`Factory`](xref:NextORM.Core.DataContextBuilder.Factory) |
 
 ## См. также

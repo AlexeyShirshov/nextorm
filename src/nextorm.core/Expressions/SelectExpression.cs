@@ -5,15 +5,24 @@ using System.Reflection;
 
 namespace NextORM.Core;
 
+/// <summary>
+/// A single projected column of a query: its ordinal, the expression that produces it, the target
+/// property it maps to and the reader accessor used to materialize it.
+/// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE1006:Naming Styles", Justification = "Static readonly reflection-metadata fields (GetInt32MI, ...) are intentionally PascalCase as immutable lookup tables; IDE1006 is a suggestion and is not enforced by the build.")]
 public sealed class SelectExpression //: IEquatable<SelectExpression>
 {
     private readonly Type _realType;
     //private readonly bool _nullable;
+    /// <summary>Whether the CLR type can hold <c>null</c> (a reference type or a <see cref="Nullable{T}"/>).</summary>
     public readonly bool Nullable;
+    /// <summary>The zero-based ordinal of the column in the result set.</summary>
     public int Index { get; set; }
+    /// <summary>The target property name, or <c>null</c> for a positional projection.</summary>
     public string? PropertyName { get; set; }
+    /// <summary>The expression that produces the value, or <c>null</c> for a plain entity column.</summary>
     public Expression? Expression { get; set; }
+    /// <summary>The CLR type of the value produced.</summary>
     public Type PropertyType { get; set; }
     internal PropertyInfo? PropertyInfo { get; set; }
 
@@ -28,6 +37,8 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
     //private readonly IDictionary<ExpressionKey, Delegate> _expCache;
     // private readonly IQueryRegistry _queryProvider;
 
+    /// <summary>Initializes a projected column for the given CLR type, deriving its nullability from the type.</summary>
+    /// <param name="propertyType">The CLR type of the value produced.</param>
     public SelectExpression(Type propertyType)
     {
         PropertyType = propertyType;
@@ -62,6 +73,8 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
     // internal int XxHash32;
     internal int PlanHashCode;
 
+    /// <summary>Gets the reader accessor that reads a value of this column's type from a data record.</summary>
+    /// <returns>The <see cref="MethodInfo"/> of the matching <see cref="IDataRecord"/> getter.</returns>
     public MethodInfo GetDataRecordMethod()
     {
         // var recordType = typeof(IDataRecord);

@@ -38,6 +38,13 @@ public struct Paging
     /// </summary>
     public bool HasWithTies { get; set; }
 
+    /// <summary>
+    /// <c>true</c> when neither a limit nor an offset is set, so no paging clause is emitted.
+    /// </summary>
     public readonly bool IsEmpty => _offset <= 0 && _limit <= 0;
+    /// <summary>
+    /// <c>true</c> when only a positive limit is set (offset is zero), so the provider can emit a simple
+    /// <c>TOP</c>/<c>LIMIT</c> without an <c>OFFSET</c>.
+    /// </summary>
     public readonly bool IsTop => _offset <= 0 && _limit > 0;
 }

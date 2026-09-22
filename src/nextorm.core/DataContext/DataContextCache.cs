@@ -23,8 +23,20 @@ public static class DataContextCache
     private readonly static ConcurrentDictionary<Type, SelectExpression[]> _selectListCache = new();
     private readonly static ExpressionCache<Delegate> _expCache = new();
     private readonly static ExpressionCache<Func<object?, object?>> _inValuesCache = new();
+    /// <summary>
+    /// Entity metadata resolved for each CLR type, keyed by that type. Populated lazily on the first
+    /// <c>From&lt;T&gt;</c> call and reused for the rest of the process.
+    /// </summary>
     public static IDictionary<Type, IEntityMetadata> Metadata => _metadata;
+    /// <summary>
+    /// Cached select lists (the projected columns) of each CLR type, keyed by that type, so the
+    /// projection is not rebuilt per query.
+    /// </summary>
     public static IDictionary<Type, SelectExpression[]> SelectListCache => _selectListCache;
+    /// <summary>
+    /// Compiled expression delegates keyed by <see cref="ExpressionKey"/>, avoiding recompilation of
+    /// the same expression tree when it is encountered again.
+    /// </summary>
     public static IDictionary<ExpressionKey, Delegate> ExpressionsCache => _expCache;
     /// <summary>
     /// Compiled accessors that read the captured collection of an <c>in</c>/<c>Contains</c> predicate,

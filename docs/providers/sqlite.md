@@ -14,8 +14,8 @@ connection it creates, and returns [`Instance`](xref:NextORM.Sqlite.SqliteDialec
 
 - parameter placeholder `$name`;
 - string concatenation with `||`;
-- [`MakeCoalesce`](xref:NextORM.Core.ISqlDialect) renders `ifnull(a, b)`;
-- [`MakeNow`](xref:NextORM.Core.ISqlDialect) renders `datetime('now')` for both local and UTC (`SQLite has no now()`);
+- [`MakeCoalesce`](xref:NextORM.Core.ISqlDialect.MakeCoalesce(System.String,System.String)) renders `ifnull(a, b)`;
+- [`MakeNow`](xref:NextORM.Core.ISqlDialect.MakeNow(System.Boolean)) renders `datetime('now')` for both local and UTC (`SQLite has no now()`);
 - date parts use `cast(strftime(...) as integer)` for `year`/`month`/`day`/`hour`/`minute`/`second` and
   `dayofyear` (`%j`), falling back to ANSI `extract(part from value)` for anything else;
 - `Math.Log` maps to `ln(...)` (SQLite's `log()` is base 10);
@@ -53,7 +53,7 @@ using IDataContext ctx = new SqliteDataContext("Data Source=app.db", new DataCon
 
 Microsoft.Data.Sqlite has no attribute-based auto-registration, so the core library registers its custom
 aggregates explicitly and once per connection
-(`src/nextorm.sqlite/SQLiteFunctions.cs`, called from [`OnConnectionCreated`](xref:NextORM.Sqlite.SqliteDataContext)):
+(`src/nextorm.sqlite/SQLiteFunctions.cs`, called from [`OnConnectionCreated`](xref:NextORM.Sqlite.SqliteDataContext.OnConnectionCreated(System.Data.Common.DbConnection))):
 
 | Function | Meaning |
 |---|---|
@@ -124,7 +124,7 @@ await ctx.From<ISimpleEntity>()
     .ToListAsync();
 ```
 
-[`IntersectAll`](xref:NextORM.Core.QueryCommand`1) and [`ExceptAll`](xref:NextORM.Core.QueryCommand`1) are rejected by the dialect with a `NotSupportedException` because SQLite
+[`IntersectAll`](xref:NextORM.Core.QueryCommand`1.IntersectAll``1(NextORM.Core.QueryCommand{``0})) and [`ExceptAll`](xref:NextORM.Core.QueryCommand`1.ExceptAll``1(NextORM.Core.QueryCommand{``0})) are rejected by the dialect with a `NotSupportedException` because SQLite
 has no `intersect all` / `except all`.
 
 ## Provider differences

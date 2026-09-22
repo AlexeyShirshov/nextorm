@@ -9,12 +9,15 @@ public class AliasFromProjectionVisitor : ExpressionVisitor
 {
     private string? _alias;
 
+    /// <summary>Initializes a new instance of the <see cref="AliasFromProjectionVisitor"/> class.</summary>
     public AliasFromProjectionVisitor()
     {
     }
 
+    /// <summary>The alias derived from the visited projection member, or <c>null</c> when none was found.</summary>
     public string? Alias { get => _alias; }
 
+    /// <inheritdoc/>
     protected override Expression VisitMember(MemberExpression node)
     {
         if (node.Expression!.Type!.TryGetProjectionDimension(out _))

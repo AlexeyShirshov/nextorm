@@ -6,8 +6,8 @@
 
 ## Обзор
 
-[`Where`](xref:NextORM.Core.EntityBuilder`1) принимает логическое выражение и возвращает новый [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1); как и любой метод
-построителя, он неизменяемый, поэтому исходный объект не меняется. Повторный вызов [`Where`](xref:NextORM.Core.EntityBuilder`1) объединяет
+[`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})) принимает логическое выражение и возвращает новый [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1); как и любой метод
+построителя, он неизменяемый, поэтому исходный объект не меняется. Повторный вызов [`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})) объединяет
 предикаты с помощью `and`:
 
 ```csharp
@@ -15,12 +15,12 @@ public EntityBuilder<TEntity> Where(Expression<Func<TEntity, bool>> condition)
 ```
 
 Лямбда транслируется в предложение `WHERE`, и ничего не выполняется, пока не вызван терминальный метод,
-такой как [`ToListAsync`](xref:NextORM.Core.EntityBuilder`1). То же дерево выражений также компилирует и выполняет in-memory провайдер,
+такой как [`ToListAsync`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])). То же дерево выражений также компилирует и выполняет in-memory провайдер,
 поэтому запрос, работающий с реальной базой данных, можно прогнать и в памяти.
 
 Два вида значений по-разному попадают в базу данных:
 
-* **Захваченная локальная переменная** (переменная из внешней области видимости) и [`Parameter`](xref:NextORM.Core.SqlFunctions)
+* **Захваченная локальная переменная** (переменная из внешней области видимости) и [`Parameter`](xref:NextORM.Core.SqlFunctions.Parameter``1(System.Int32))
   становятся параметрами команды, поэтому план может повторно использоваться при выполнениях с разными
   значениями.
 * **Литеральная константа**, записанная непосредственно в лямбде, подставляется в текст SQL как есть.
@@ -218,7 +218,7 @@ switch, в котором сравнение является вызовом м�
 компилятор C# использует для некоторых строковых шаблонов), не поддерживается и выбрасывает
 `NotSupportedException`.
 
-## Захваченные параметры и [`Parameter`](xref:NextORM.Core.SqlFunctions)
+## Захваченные параметры и [`Parameter`](xref:NextORM.Core.SqlFunctions.Parameter``1(System.Int32))
 
 Захваченная локальная переменная извлекается как именованный параметр команды:
 
@@ -236,7 +236,7 @@ var rows = await dataContext.From<ComplexEntity>()
 | SQL Server | `select id from complex_entity where (id > @threshold)` |
 | PostgreSQL | `select id from complex_entity where (id > @threshold)` |
 
-[`Parameter`](xref:NextORM.Core.SqlFunctions) объявляет параметр времени выполнения, значение которого передаётся терминальному
+[`Parameter`](xref:NextORM.Core.SqlFunctions.Parameter``1(System.Int32)) объявляет параметр времени выполнения, значение которого передаётся терминальному
 методу; это полезно, когда одна и та же форма запроса подготавливается или кэшируется и выполняется
 многократно:
 
@@ -312,14 +312,14 @@ select id from complex_entity where id in ($p0, $p1)
 
 Захваченный список или массив захватывается деревом выражений по ссылке, но его значения встраиваются
 в подготовленную команду. Когда коллекция изменяется или переприсваивается между выполнениями, nextorm
-обнаруживает изменившуюся форму и перестраивает команду, поэтому второй [`ToList`](xref:NextORM.Core.EntityBuilder`1) видит новые значения,
+обнаруживает изменившуюся форму и перестраивает команду, поэтому второй [`ToList`](xref:NextORM.Core.EntityBuilderExtensions.ToList``1(NextORM.Core.EntityBuilder{``0},System.ReadOnlySpan{System.Object})) видит новые значения,
 а не устаревшие результаты.
 
 ### `GLOBAL IN` (ClickHouse)
 
 Распределённый предикат ClickHouse `column GLOBAL IN (subquery | values)` доступен через
-[`SqlFunctions.ClickHouse.global_in`](xref:NextORM.Core.ClickHouseFunctions), принимающий ту же
-левую колонку и правую часть, что и [`SqlFunctions.Sql.@in`](xref:NextORM.Core.SqlFunctions):
+[`SqlFunctions.ClickHouse.global_in`](xref:NextORM.Core.ClickHouseFunctions.global_in``1(``0,NextORM.Core.QueryCommand{``0})), принимающий ту же
+левую колонку и правую часть, что и [`SqlFunctions.Sql.@in`](xref:NextORM.Core.CommonFunctions.in``1(``0,NextORM.Core.QueryCommand{``0})):
 
 ```csharp
 var values = new int[] { 1, 3 };
@@ -360,7 +360,7 @@ select id from complex_entity where global in (@p0, @p1)
 | `SqlFunctions.Sql.freetext(x.String, "foo")` | `freetext(somestring, 'foo')` (SQL Server) |
 
 `SqlFunctions.Sql.contains`/`SqlFunctions.Sql.freetext` — предикаты полнотекстового поиска
-([`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText), отрисовываются через [`MakeFullText`](xref:NextORM.Core.ISqlDialect)); колонка должна быть
+([`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText), отрисовываются через [`MakeFullText`](xref:NextORM.Core.ISqlDialect.MakeFullText(System.String,System.String,System.String))); колонка должна быть
 полнотекстово проиндексирована. SQL Server отрисовывает `contains`/`freetext` (при проецировании
 материализуются в `bit`), PostgreSQL — `to_tsvector(col) @@ plainto_tsquery(search)` (или
 `websearch_to_tsquery` для `freetext`), MySQL/MariaDB — `match(col) against(search in boolean mode) > 0`

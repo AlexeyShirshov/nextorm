@@ -4,6 +4,14 @@ using System.Runtime.CompilerServices;
 
 namespace NextORM.Core;
 
+/// <summary>
+/// Enumerates the results of an in-memory query, mapping each <typeparamref name="TEntity"/> source
+/// row to a <typeparamref name="TResult"/> projection. Supports both asynchronous and synchronous
+/// consumption (the data is already in memory) and, when <c>DISTINCT</c> was requested,
+/// de-duplicates projected values as they are produced.
+/// </summary>
+/// <typeparam name="TResult">The projected element type.</typeparam>
+/// <typeparam name="TEntity">The source element type.</typeparam>
 public sealed class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TResult>, IEnumerator<TResult>, IEnumeratorInit<TEntity>, IEnumerable<TResult>
 {
     private readonly Func<TEntity, TResult>? _map;
@@ -23,11 +31,22 @@ public sealed class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TRes
     private TEntity _current = default!;
     private HashSet<TResult>? _seen;
 
+    /// <summary>
+    /// Initializes an enumerator over the given compiled query.
+    /// </summary>
+    /// <param name="cmd">The compiled in-memory query, supplying the projection and predicate.</param>
+    /// <param name="cancellationToken">Token checked before each asynchronous move; once cancelled, enumeration ends.</param>
     public InMemoryEnumerator(InMemoryCompiledQuery<TResult, TEntity> cmd, CancellationToken cancellationToken)
         : this(cmd, cancellationToken, false)
     {
     }
 
+    /// <summary>
+    /// Initializes an enumerator over the given compiled query, optionally de-duplicating the projection.
+    /// </summary>
+    /// <param name="cmd">The compiled in-memory query, supplying the projection and predicate.</param>
+    /// <param name="cancellationToken">Token checked before each asynchronous move; once cancelled, enumeration ends.</param>
+    /// <param name="distinct">When <see langword="true"/>, projected values are de-duplicated as they are produced, matching <c>SELECT DISTINCT</c>.</param>
     public InMemoryEnumerator(InMemoryCompiledQuery<TResult, TEntity> cmd, CancellationToken cancellationToken, bool distinct)
     {
         ArgumentNullException.ThrowIfNull(cmd);
@@ -45,6 +64,13 @@ public sealed class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TRes
             _seen = new HashSet<TResult>(InMemoryDistinct.GetComparer<TResult>());
     }
 
+    /// <summary>
+    /// Binds the source sequence and parameter values to enumerate. Called once before enumeration by
+    /// the in-memory executor; <paramref name="data"/> is dispatched to fast paths for
+    /// <c>List&lt;TEntity&gt;</c> and <c>TEntity[]</c>, falling back to a generic enumerator otherwise.
+    /// </summary>
+    /// <param name="data">The source rows to enumerate.</param>
+    /// <param name="params">Positional parameter values consumed by a parameterised predicate, if any.</param>
     public void Init(IEnumerable<TEntity> data, object[]? @params)
     {
         _idx = -1;
@@ -80,6 +106,10 @@ public sealed class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TRes
         }
     }
 
+    /// <summary>
+    /// Gets the projected value for the current source row. Reading it before the first successful
+    /// <see cref="MoveNext"/> or after enumeration has finished is undefined.
+    /// </summary>
     public TResult Current
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -88,6 +118,11 @@ public sealed class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TRes
 
     object? IEnumerator.Current => Current;
 
+    /// <summary>
+    /// Releases the underlying source enumerator. Equivalent to <see cref="Dispose"/>; provided for
+    /// <see cref="IAsyncEnumerator{T}"/> consumers.
+    /// </summary>
+    /// <returns>A completed value task.</returns>
     public ValueTask DisposeAsync()
     {
         // Route through Dispose() so the inner enumerator is released exactly once.
@@ -95,6 +130,11 @@ public sealed class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TRes
         return ValueTask.CompletedTask;
     }
 
+    /// <summary>
+    /// Asynchronously advances to the next matching row. Because the data is already in memory the
+    /// work is synchronous; the returned task is already completed.
+    /// </summary>
+    /// <returns><see langword="true"/> when a row was found; otherwise <see langword="false"/>.</returns>
     public ValueTask<bool> MoveNextAsync()
     {
         if (_cancellationToken.IsCancellationRequested)
@@ -104,6 +144,11 @@ public sealed class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TRes
         return ValueTask.FromResult(MoveNext());
     }
 
+    /// <summary>
+    /// Advances to the next row matching the predicate and, when <c>DISTINCT</c> was requested,
+    /// skips already-seen projections.
+    /// </summary>
+    /// <returns><see langword="true"/> when a row was found; otherwise <see langword="false"/>.</returns>
     public bool MoveNext()
     {
         if (_seen is null)
@@ -220,10 +265,19 @@ public sealed class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TRes
         return false;
     }
 
+    /// <summary>
+    /// Does nothing. Re-running the source would require a fresh <see cref="Init"/>, so the
+    /// enumerator is re-created rather than reset.
+    /// </summary>
     public void Reset()
     {
     }
 
+    /// <summary>
+    /// Disposes the fallback source enumerator (created for arbitrary
+    /// <see cref="IEnumerable{T}"/> sources) so streaming sources are not leaked. Safe to call more
+    /// than once.
+    /// </summary>
     public void Dispose()
     {
         // The fallback enumerator (created for arbitrary IEnumerable<TEntity> sources) is
@@ -233,6 +287,10 @@ public sealed class InMemoryEnumerator<TResult, TEntity> : IAsyncEnumerator<TRes
         GC.SuppressFinalize(this);
     }
 
+    /// <summary>
+    /// Returns this instance as the synchronous enumerator over the projected results.
+    /// </summary>
+    /// <returns>This enumerator.</returns>
     public IEnumerator<TResult> GetEnumerator() => this;
 
     IEnumerator IEnumerable.GetEnumerator() => this;

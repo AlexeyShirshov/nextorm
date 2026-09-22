@@ -52,9 +52,9 @@ var ids = ctx.From<SimpleEntity>()
 // ids.Id == 1
 ```
 
-[`WithData`](xref:NextORM.Core.EntityBuilder`1) и [`WithAsyncData`](xref:NextORM.Core.EntityBuilder`1) (`src/nextorm.core/Builders/InMemoryCommandBuilder.cs`) присоединяют
-коллекцию к словарю `Data` контекста с ключом по типу сущности; [`WithData`](xref:NextORM.Core.EntityBuilder`1) принимает `IEnumerable<T>`,
-а [`WithAsyncData`](xref:NextORM.Core.EntityBuilder`1) — `IAsyncEnumerable<T>`. Оба являются пустыми операциями для других провайдеров.
+[`WithData`](xref:NextORM.Core.InMemoryCommandBuilderExtensions.WithData``1(NextORM.Core.EntityBuilder{``0},System.Collections.Generic.IEnumerable{``0})) и [`WithAsyncData`](xref:NextORM.Core.InMemoryCommandBuilderExtensions.WithAsyncData``1(NextORM.Core.EntityBuilder{``0},System.Collections.Generic.IAsyncEnumerable{``0})) (`src/nextorm.core/Builders/InMemoryCommandBuilder.cs`) присоединяют
+коллекцию к словарю `Data` контекста с ключом по типу сущности; [`WithData`](xref:NextORM.Core.InMemoryCommandBuilderExtensions.WithData``1(NextORM.Core.EntityBuilder{``0},System.Collections.Generic.IEnumerable{``0})) принимает `IEnumerable<T>`,
+а [`WithAsyncData`](xref:NextORM.Core.InMemoryCommandBuilderExtensions.WithAsyncData``1(NextORM.Core.EntityBuilder{``0},System.Collections.Generic.IAsyncEnumerable{``0})) — `IAsyncEnumerable<T>`. Оба являются пустыми операциями для других провайдеров.
 
 ```csharp
 ctx.From<SimpleEntity>().WithAsyncData(GetRows());
@@ -74,25 +74,25 @@ static async IAsyncEnumerable<SimpleEntity> GetRows()
 | Возможность | Подтверждение |
 |---|---|
 | Проекция: анонимная, примитив/скаляр, `Tuple` | `InMemoryTests.SelectPrimitive_ShouldReturnData`, `TestTuples` |
-| [`Where`](xref:NextORM.Core.EntityBuilder`1), включая `==` по nullable и захваченным значениям | `InMemoryTests.TestWhere`, `Contains_ShouldFilterData` |
+| [`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})), включая `==` по nullable и захваченным значениям | `InMemoryTests.TestWhere`, `Contains_ShouldFilterData` |
 | Подзапрос, используемый как источник `FROM` (`ctx.From(subQuery)`) | `InMemoryTests.TestWhere_Subquery` |
-| Буферизованные и асинхронные источники ([`WithData`](xref:NextORM.Core.EntityBuilder`1) / [`WithAsyncData`](xref:NextORM.Core.EntityBuilder`1)) | `InMemoryTests.TestAsync` |
-| Потоковая передача с [`Pipeline`](xref:NextORM.Core.QueryCommand`1), с соблюдением отмены | `InMemoryTests.TestFetch`, `TestFetch_PipelineStopsOnCancellation` |
-| [`Limit`](xref:NextORM.Core.Paging.Limit) / [`Offset`](xref:NextORM.Core.Paging.Offset) / [`First`](xref:NextORM.Core.EntityBuilder`1) / [`Single`](xref:NextORM.Core.EntityBuilder`1) и их формы `OrDefault` | `InMemoryTests.Top_ShouldLimitData`, `First_ShouldReturnFirst`, `Single_ShouldReturnSingle` |
-| [`OrderBy`](xref:NextORM.Core.EntityBuilder`1) / [`OrderByDescending`](xref:NextORM.Core.EntityBuilder`1), включая асинхронные источники | `InMemoryTests.OrderBy_ShouldSortData`, `OrderByOverAsyncSource_ShouldSortData` |
-| Материализаторы [`ToArray`](xref:NextORM.Core.EntityBuilder`1) / [`ToHashSet`](xref:NextORM.Core.EntityBuilder`1) / [`ToDictionary`](xref:NextORM.Core.EntityBuilder`1) (и async) | `InMemoryTests.ToArray_ShouldReturnData`, `ToHashSet_ShouldReturnData`, `ToDictionary_ShouldReturnData` |
-| [`Any`](xref:NextORM.Core.EntityBuilder`1) и проецируемый `exists` | `InMemoryTests.SelectAny_ShouldReturnData`, [`Any`](xref:NextORM.Core.EntityBuilder`1) |
+| Буферизованные и асинхронные источники ([`WithData`](xref:NextORM.Core.InMemoryCommandBuilderExtensions.WithData``1(NextORM.Core.EntityBuilder{``0},System.Collections.Generic.IEnumerable{``0})) / [`WithAsyncData`](xref:NextORM.Core.InMemoryCommandBuilderExtensions.WithAsyncData``1(NextORM.Core.EntityBuilder{``0},System.Collections.Generic.IAsyncEnumerable{``0}))) | `InMemoryTests.TestAsync` |
+| Потоковая передача с [`Pipeline`](xref:NextORM.Core.QueryCommand`1.Pipeline(System.Object[])), с соблюдением отмены | `InMemoryTests.TestFetch`, `TestFetch_PipelineStopsOnCancellation` |
+| [`Limit`](xref:NextORM.Core.Paging.Limit) / [`Offset`](xref:NextORM.Core.Paging.Offset) / [`First`](xref:NextORM.Core.EntityBuilderExtensions.First``1(NextORM.Core.EntityBuilder{``0})) / [`Single`](xref:NextORM.Core.EntityBuilderExtensions.Single``1(NextORM.Core.EntityBuilder{``0})) и их формы `OrDefault` | `InMemoryTests.Top_ShouldLimitData`, `First_ShouldReturnFirst`, `Single_ShouldReturnSingle` |
+| [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)) / [`OrderByDescending`](xref:NextORM.Core.EntityBuilder`1.OrderByDescending(System.Int32)), включая асинхронные источники | `InMemoryTests.OrderBy_ShouldSortData`, `OrderByOverAsyncSource_ShouldSortData` |
+| Материализаторы [`ToArray`](xref:NextORM.Core.EntityBuilderExtensions.ToArray``1(NextORM.Core.EntityBuilder{``0},System.ReadOnlySpan{System.Object})) / [`ToHashSet`](xref:NextORM.Core.EntityBuilderExtensions.ToHashSet``1(NextORM.Core.EntityBuilder{``0},System.Collections.Generic.IEqualityComparer{``0},System.ReadOnlySpan{System.Object})) / [`ToDictionary`](xref:NextORM.Core.EntityBuilderExtensions.ToDictionary``2(NextORM.Core.EntityBuilder{``0},System.Func{``0,``1},System.Collections.Generic.IEqualityComparer{``1},System.ReadOnlySpan{System.Object})) (и async) | `InMemoryTests.ToArray_ShouldReturnData`, `ToHashSet_ShouldReturnData`, `ToDictionary_ShouldReturnData` |
+| [`Any`](xref:NextORM.Core.EntityBuilderExtensions.Any``1(NextORM.Core.EntityBuilder{``0})) и проецируемый `exists` | `InMemoryTests.SelectAny_ShouldReturnData`, [`Any`](xref:NextORM.Core.EntityBuilderExtensions.Any``1(NextORM.Core.EntityBuilder{``0})) |
 | [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) по проекциям с равенством по значению | `InMemoryTests.TestDistinct` |
 | Соединения: inner, left, right, full, cross, цепочкой до 8 таблиц | `InMemoryJoinTests.TestJoin`, `TestLeftJoin`, `TestRightJoinChained`, `TestFullJoinChained`, `TestCrossJoin8Tables_ShouldCloneAndMaterializeAtEveryArity` |
-| Агрегаты [`Count`](xref:NextORM.Core.EntityBuilder`1)/[`Sum`](xref:NextORM.Core.EntityBuilder`1)/[`Min`](xref:NextORM.Core.EntityBuilder`1)/[`Max`](xref:NextORM.Core.EntityBuilder`1)/[`Avg`](xref:NextORM.Core.EntityBuilder`1)/[`Stdev`](xref:NextORM.Core.EntityBuilder`1)/[`Var`](xref:NextORM.Core.EntityBuilder`1) (буферизованные источники) | `InMemoryTests.Count_ShouldReturnRowCount`, `Sum_ShouldReturnSum`, `MinMax_ShouldReturnBounds`, `Avg_ShouldReturnAverage` |
-| [`GroupBy`](xref:NextORM.Core.EntityBuilder`1) / [`Having`](xref:NextORM.Core.EntityBuilder`1) с агрегатами по группам (буферизованные источники) | `InMemoryTests.GroupBy_ShouldAggregatePerGroup`, `GroupBy_Having_ShouldFilterGroups`, `GroupBy_Avg_ShouldAggregatePerGroup`, `GroupBy_OrderByColumn_ShouldSortGroups` |
+| Агрегаты [`Count`](xref:NextORM.Core.EntityBuilderExtensions.Count``1(NextORM.Core.EntityBuilder{``0}))/[`Sum`](xref:NextORM.Core.EntityBuilderExtensions.Sum``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}}))/[`Min`](xref:NextORM.Core.EntityBuilderExtensions.Min``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}}))/[`Max`](xref:NextORM.Core.EntityBuilderExtensions.Max``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}}))/[`Avg`](xref:NextORM.Core.EntityBuilderExtensions.Avg``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}}))/[`Stdev`](xref:NextORM.Core.EntityBuilderExtensions.Stdev``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}}))/[`Var`](xref:NextORM.Core.EntityBuilderExtensions.Var``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})) (буферизованные источники) | `InMemoryTests.Count_ShouldReturnRowCount`, `Sum_ShouldReturnSum`, `MinMax_ShouldReturnBounds`, `Avg_ShouldReturnAverage` |
+| [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) / [`Having`](xref:NextORM.Core.EntityBuilder`1.Having(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})) с агрегатами по группам (буферизованные источники) | `InMemoryTests.GroupBy_ShouldAggregatePerGroup`, `GroupBy_Having_ShouldFilterGroups`, `GroupBy_Avg_ShouldAggregatePerGroup`, `GroupBy_OrderByColumn_ShouldSortGroups` |
 | Set-операции `UNION` / `UNION ALL` / `INTERSECT` / `INTERSECT ALL` / `EXCEPT` / `EXCEPT ALL` | `InMemoryTests.Union_ShouldRemoveDuplicates`, `UnionAll_ShouldKeepDuplicates`, `Intersect_ShouldReturnOnlyCommonRows`, `Except_ShouldReturnOnlyLeftRows`, `SetOperations_WhenChained_ShouldApplyLeftToRight` |
-| [`Last`](xref:NextORM.Core.EntityBuilder`1) / [`LastOrDefault`](xref:NextORM.Core.EntityBuilder`1) по упорядоченному запросу (обратный `ORDER BY`) | `InMemoryTests.Last_ShouldReturnLastOrderedRow`, `LastOrDefault_ShouldReturnLastOrderedRow` |
+| [`Last`](xref:NextORM.Core.EntityBuilderExtensions.Last``1(NextORM.Core.EntityBuilder{``0})) / [`LastOrDefault`](xref:NextORM.Core.EntityBuilderExtensions.LastOrDefault``1(NextORM.Core.EntityBuilder{``0})) по упорядоченному запросу (обратный `ORDER BY`) | `InMemoryTests.Last_ShouldReturnLastOrderedRow`, `LastOrDefault_ShouldReturnLastOrderedRow` |
 | Буферизованный подзапрос-источник (`ctx.From(cmd)`) с синхронной материализацией и агрегатами | `InMemoryTests.SubquerySource_SyncToList_ShouldReturnRows`, `SubquerySource_Count_ShouldReturnRowCount`, `SetOperation_AsSubquery_Count_ShouldReturnRowCount` |
-| [`SelectMany`](xref:NextORM.Core.EntityBuilder`1) (разворот, коррелированный) и [`GroupJoin`](xref:NextORM.Core.EntityBuilder`1) (сгруппированные строки внутренней стороны) | `InMemorySelectManyTests.SelectMany_Correlated_ShouldFlattenPerRow`, `GroupJoin_ShouldGroupInnerRows` |
+| [`SelectMany`](xref:NextORM.Core.EntityBuilder`1.SelectMany``1(System.Linq.Expressions.Expression{System.Func{`0,System.Collections.Generic.IEnumerable{``0}}})) (разворот, коррелированный) и [`GroupJoin`](xref:NextORM.Core.EntityBuilder`1.GroupJoin``3(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``1}},System.Linq.Expressions.Expression{System.Func{``0,``1}},System.Linq.Expressions.Expression{System.Func{`0,System.Collections.Generic.IEnumerable{``0},``2}})) (сгруппированные строки внутренней стороны) | `InMemorySelectManyTests.SelectMany_Correlated_ShouldFlattenPerRow`, `GroupJoin_ShouldGroupInnerRows` |
 
 Провайдер in-memory разделяет тот же fluent-API `EntityBuilder<T>`, что и SQL-провайдеры, поэтому один и тот же объект запроса
-работает с обоими — **кроме** [`SelectMany`](xref:NextORM.Core.EntityBuilder`1)/[`GroupJoin`](xref:NextORM.Core.EntityBuilder`1): они доступны только в in-memory, а на SQL-провайдере
+работает с обоими — **кроме** [`SelectMany`](xref:NextORM.Core.EntityBuilder`1.SelectMany``1(System.Linq.Expressions.Expression{System.Func{`0,System.Collections.Generic.IEnumerable{``0}}}))/[`GroupJoin`](xref:NextORM.Core.EntityBuilder`1.GroupJoin``3(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``1}},System.Linq.Expressions.Expression{System.Func{``0,``1}},System.Linq.Expressions.Expression{System.Func{`0,System.Collections.Generic.IEnumerable{``0},``2}})): они доступны только в in-memory, а на SQL-провайдере
 сразу бросают `NotSupportedException` (см. [Ограничения](../advanced/limitations.md)).
 
 ## Не поддерживается
@@ -119,13 +119,13 @@ static async IAsyncEnumerable<SimpleEntity> GetRows()
   // NotSupportedException: "DISTINCT is not supported by the in-memory provider for projection type ..."
   ```
 
-- **Raw SQL** ([`PrepareFromSql`](xref:NextORM.Core.EntityBuilder`1)) не поддерживается (`NotSupportedException`).
-- **Агрегаты или [`GroupBy`](xref:NextORM.Core.EntityBuilder`1) по источнику `IAsyncEnumerable`** бросают `NotSupportedException`; и то, и другое
+- **Raw SQL** ([`PrepareFromSql`](xref:NextORM.Core.EntityExtensions.PrepareFromSql``1(NextORM.Core.EntityBuilder{``0},System.String))) не поддерживается (`NotSupportedException`).
+- **Агрегаты или [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) по источнику `IAsyncEnumerable`** бросают `NotSupportedException`; и то, и другое
   вычисляется для буферизованных источников `IEnumerable`.
 - **Агрегаты с фильтром** (`SqlFunctions.Sql.count(e => filter)` и перегрузки `(value, filter)`) и
   **упорядочивание групп по выражению** бросают `NotSupportedException`; упорядочивайте группы по индексу колонки.
 - **Set-операции по источнику `IAsyncEnumerable`** бросают `NotSupportedException`; операнды буферизуются.
-- **[`Last`](xref:NextORM.Core.EntityBuilder`1)/[`LastOrDefault`](xref:NextORM.Core.EntityBuilder`1) без `ORDER BY`** бросают `InvalidOperationException`: у запроса без
+- **[`Last`](xref:NextORM.Core.EntityBuilderExtensions.Last``1(NextORM.Core.EntityBuilder{``0}))/[`LastOrDefault`](xref:NextORM.Core.EntityBuilderExtensions.LastOrDefault``1(NextORM.Core.EntityBuilder{``0})) без `ORDER BY`** бросают `InvalidOperationException`: у запроса без
   упорядочивания нет определённой последней строки.
 - **Агрегаты по асинхронному подзапросу-источнику** бросают `NotSupportedException`; буферизованные
   подзапросы сворачиваются.
@@ -146,7 +146,7 @@ static async IAsyncEnumerable<SimpleEntity> GetRows()
 | Raw SQL | `NotSupportedException` |
 | [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct) по типам без равенства по значению | `NotSupportedException` |
 | Коррелированные подзапросы | `NotSupportedException` |
-| [`SelectMany`](xref:NextORM.Core.EntityBuilder`1) / [`GroupJoin`](xref:NextORM.Core.EntityBuilder`1) | поддерживаются (эти операторы доступны только в in-memory) |
+| [`SelectMany`](xref:NextORM.Core.EntityBuilder`1.SelectMany``1(System.Linq.Expressions.Expression{System.Func{`0,System.Collections.Generic.IEnumerable{``0}}})) / [`GroupJoin`](xref:NextORM.Core.EntityBuilder`1.GroupJoin``3(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``1}},System.Linq.Expressions.Expression{System.Func{``0,``1}},System.Linq.Expressions.Expression{System.Func{`0,System.Collections.Generic.IEnumerable{``0},``2}})) | поддерживаются (эти операторы доступны только в in-memory) |
 
 ## См. также
 

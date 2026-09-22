@@ -9,9 +9,9 @@
 Any `QueryCommand<T>` — the object you get back from `EntityBuilder<T>.Select(...)` — can be embedded in
 another query in four ways:
 
-* as a **derived table** in `FROM`, through [`From`](xref:NextORM.Core.DataContext);
+* as a **derived table** in `FROM`, through [`From`](xref:NextORM.Core.DataContext.From(System.String));
 * as a **scalar subquery** in a projection, `WHERE`, `ORDER BY` or `HAVING`, by calling a single-row terminal
-  such as [`First`](xref:NextORM.Core.EntityBuilder`1) or [`Single`](xref:NextORM.Core.EntityBuilder`1) inside the outer expression;
+  such as [`First`](xref:NextORM.Core.EntityBuilderExtensions.First``1(NextORM.Core.EntityBuilder{``0})) or [`Single`](xref:NextORM.Core.EntityBuilderExtensions.Single``1(NextORM.Core.EntityBuilder{``0})) inside the outer expression;
 * as a **correlated predicate** with `SqlFunctions.Sql.exists(...)`, `SqlFunctions.Sql.@in(column, query)`,
   `SqlFunctions.Sql.any(query)` or `SqlFunctions.Sql.all(query)`.
 
@@ -25,7 +25,7 @@ fails with a `SqliteException` at execution time.
 
 ## Subquery as a FROM source
 
-[`From`](xref:NextORM.Core.DataContextExtensions) accepts a prepared `QueryCommand<T>` (or an `EntityBuilder<T>`) and produces a builder over its
+[`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)) accepts a prepared `QueryCommand<T>` (or an `EntityBuilder<T>`) and produces a builder over its
 columns:
 
 ```csharp
@@ -53,7 +53,7 @@ var rows = dataContext.From(nested).Select(t => new { t.Id, t.Calc }).ToList();
 
 ## Scalar subquery in SELECT
 
-Calling a single-row terminal ([`First`](xref:NextORM.Core.EntityBuilder`1), [`FirstOrDefault`](xref:NextORM.Core.EntityBuilder`1), [`Single`](xref:NextORM.Core.EntityBuilder`1), [`SingleOrDefault`](xref:NextORM.Core.EntityBuilder`1)) inside the
+Calling a single-row terminal ([`First`](xref:NextORM.Core.EntityBuilderExtensions.First``1(NextORM.Core.EntityBuilder{``0})), [`FirstOrDefault`](xref:NextORM.Core.EntityBuilderExtensions.FirstOrDefault``1(NextORM.Core.EntityBuilder{``0})), [`Single`](xref:NextORM.Core.EntityBuilderExtensions.Single``1(NextORM.Core.EntityBuilder{``0})), [`SingleOrDefault`](xref:NextORM.Core.EntityBuilderExtensions.SingleOrDefault``1(NextORM.Core.EntityBuilder{``0}))) inside the
 projection embeds the inner query as a scalar column. The scalar projection is aliased with the
 outer property name:
 
@@ -112,7 +112,7 @@ Output:
 
 ## Scalar subquery in ORDER BY
 
-An `ORDER BY` key may be an expression containing a scalar subquery. The first [`OrderBy`](xref:NextORM.Core.EntityBuilder`1) uses the
+An `ORDER BY` key may be an expression containing a scalar subquery. The first [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)) uses the
 subquery, the second breaks ties:
 
 ```csharp
@@ -149,7 +149,7 @@ from complex_entity as 't1'
 ```
 
 The outer query qualifies only the referenced member; the inner query keeps its own columns and
-aliases. [`FirstOrDefault`](xref:NextORM.Core.EntityBuilder`1)/[`SingleOrDefault`](xref:NextORM.Core.EntityBuilder`1) yield `NULL` when no inner row matches.
+aliases. [`FirstOrDefault`](xref:NextORM.Core.EntityBuilderExtensions.FirstOrDefault``1(NextORM.Core.EntityBuilder{``0}))/[`SingleOrDefault`](xref:NextORM.Core.EntityBuilderExtensions.SingleOrDefault``1(NextORM.Core.EntityBuilder{``0})) yield `NULL` when no inner row matches.
 
 The referenced member may also come from a join projection: `p.Item1.Id` resolves the table alias
 from the projection item's position and the column from its mapping, so a subquery can correlate to
@@ -183,7 +183,7 @@ The outer reference may be wrapped in a scalar function over the outer column (f
 `e.String.ToUpper()`); the function is rendered around the qualified outer alias just like any other
 expression.
 
-An aggregate terminal ([`Count`](xref:NextORM.Core.EntityBuilder`1), `Sum(...)`, `Min`/`Max`/`Avg`, ...)
+An aggregate terminal ([`Count`](xref:NextORM.Core.EntityBuilderExtensions.Count``1(NextORM.Core.EntityBuilder{``0})), `Sum(...)`, `Min`/`Max`/`Avg`, ...)
 is translated to the matching SQL aggregate over the subquery, so it can be used directly with an outer
 reference:
 

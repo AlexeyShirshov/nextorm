@@ -85,6 +85,14 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         }
     }
 
+    /// <summary>
+    /// Creates the visitor used while preparing a command: it rewrites correlated subqueries and
+    /// registers their outer references on <paramref name="queryProvider"/>.
+    /// </summary>
+    /// <param name="dataProvider">The materializer used to execute non-prepared (Any) subqueries.</param>
+    /// <param name="queryProvider">The registry the subqueries and outer references are registered on.</param>
+    /// <param name="cancellationToken">The token passed to prepared subcommands.</param>
+    /// <param name="logger">The optional logger for cache-miss diagnostics.</param>
     public CorrelatedQueryExpressionVisitor(IQueryMaterializer dataProvider, IQueryRegistry queryProvider, CancellationToken cancellationToken, ILogger? logger)
     {
         _dataProvider = dataProvider;
@@ -95,6 +103,14 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         //_refs = new();
     }
 
+    /// <summary>
+    /// Creates the visitor used to evaluate a subquery against a concrete entity type rather than to
+    /// prepare a command.
+    /// </summary>
+    /// <param name="dataProvider">The materializer used to execute the subquery.</param>
+    /// <param name="queryProvider">The registry the subquery is resolved against.</param>
+    /// <param name="entityType">The entity type the resulting subquery lambda is parameterised on.</param>
+    /// <param name="logger">The optional logger for cache-miss diagnostics.</param>
     public CorrelatedQueryExpressionVisitor(IQueryMaterializer dataProvider, IQueryRegistry queryProvider, Type entityType, ILogger? logger)
     {
         _dataProvider = dataProvider;
@@ -121,6 +137,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
     //         }
     //         return base.VisitConstant(node);
     //     }
+    /// <inheritdoc/>
     protected override Expression VisitMethodCall(MethodCallExpression node)
     {
         if (node.Method.DeclaringType == typeof(CommonFunctions)
@@ -600,6 +617,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         }
     }
 
+    /// <inheritdoc/>
     protected override Expression VisitLambda<T>(Expression<T> node)
     {
         if (node is LambdaExpression lambdaExpression && lambdaExpression.Parameters is [ParameterExpression exp])
@@ -631,6 +649,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 
         return base.VisitLambda(node);
     }
+    /// <inheritdoc/>
     protected override Expression VisitBinary(BinaryExpression node)
     {
         Expression? leftNode = null;
@@ -673,6 +692,10 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
 
         return base.VisitBinary(node);
     }
+    /// <summary>
+    /// Visits a conversion, preserving a lambda whose body is a <c>QueryCommand</c> (a subquery)
+    /// instead of wrapping it in a new conversion node.
+    /// </summary>
     protected override Expression VisitUnary(UnaryExpression node)
     {
         if (node.NodeType == ExpressionType.Convert)

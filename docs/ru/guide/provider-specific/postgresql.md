@@ -58,7 +58,7 @@ select jsonb_agg(somestring) from complex_entity
 
 * `percentile_cont`/`percentile_disc` — упорядоченные агрегаты, рендерятся как
   `percentile_cont(f) within group (order by x)` ([`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates),
-  [`MakeWithinGroup`](xref:NextORM.Core.ISqlDialect)); `mode()` — упорядоченный агрегат mode;
+  [`MakeWithinGroup`](xref:NextORM.Core.ISqlDialect.MakeWithinGroup(System.String,System.String))); `mode()` — упорядоченный агрегат mode;
 * `bool_and`/`bool_or`/`every`, семейство регрессии `regr_*` и `bit_and`/`bit_or`/`bit_xor` есть только
   у PostgreSQL, и остальные диалекты их отклоняют;
 * `array_agg` и поверхность строковых/массивных агрегатов гейтятся
@@ -113,7 +113,7 @@ Native-поверхность реализована только в PostgreSQL;
 
 ## `DISTINCT ON`
 
-[`DistinctOn`](xref:NextORM.Core.EntityBuilder`1) рендерит `SELECT DISTINCT ON (expr, ...)`, оставляя
+[`DistinctOn`](xref:NextORM.Core.EntityBuilder`1.DistinctOn``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) рендерит `SELECT DISTINCT ON (expr, ...)`, оставляя
 первую строку каждого ключа ([`DistinctOn`](xref:NextORM.Core.ISqlDialect.DistinctOn));
 взаимоисключающе с `Distinct`.
 
@@ -134,7 +134,7 @@ select distinct on (somestring) id, somestring from complex_entity order by some
 ## Функции, возвращающие наборы
 
 Функции PostgreSQL, возвращающие набор, доступны как табличные функции через
-[`FromTableFunction`](xref:NextORM.Core.EntityBuilder`1):
+[`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})):
 
 | `SqlFunctions.Postgres.*` | Колонки SQL | Row-shape |
 | --- | --- | --- |
@@ -160,7 +160,7 @@ PostgreSQL заменяет единственную колонку скаляр
 
 ## `TABLESAMPLE`
 
-[`TableSample`](xref:NextORM.Core.EntityBuilder`1) добавляет модификатор `TABLESAMPLE` к
+[`TableSample`](xref:NextORM.Core.EntityBuilder`1.TableSample(System.Double,NextORM.Core.TableSampleMethod,System.Nullable{System.Double})) добавляет модификатор `TABLESAMPLE` к
 основной таблице запроса ([`TableSample`](xref:NextORM.Core.ISqlDialect.TableSample)).
 PostgreSQL поддерживает оба метода сэмплирования и необязательное повторяемое зерно (seed)
 (`TableSample`,

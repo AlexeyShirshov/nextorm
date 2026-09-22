@@ -1,14 +1,14 @@
 # Grouping and aggregates
 
-> Group rows with [`GroupBy`](xref:NextORM.Core.EntityBuilder`1), filter groups with [`Having`](xref:NextORM.Core.EntityBuilder`1), and compute `count`, `min`, `max`, `avg`, `sum`, `stdev`, `var` and their `_distinct` variants through ``
+> Group rows with [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), filter groups with [`Having`](xref:NextORM.Core.EntityBuilder`1.Having(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})), and compute `count`, `min`, `max`, `avg`, `sum`, `stdev`, `var` and their `_distinct` variants through ``
 
 **Prerequisites:** [Querying and projections](01-querying-and-projections.md) · [Filtering (WHERE)](02-filtering-where.md) · [Sorting and paging](05-sorting-and-paging.md)
 
 ## Overview
 
 `EntityBuilder<T>.GroupBy(...)` attaches a `GROUP BY` clause and `EntityBuilder<T>.Having(...)` attaches a `HAVING`
-clause that filters the groups. Both are clauses on the builder, so they are combined with [`Where`](xref:NextORM.Core.EntityBuilder`1),
-[`OrderBy`](xref:NextORM.Core.EntityBuilder`1), [`Limit`](xref:NextORM.Core.Paging.Limit)/[`Page`](xref:NextORM.Core.EntityBuilder`1) and the projection exactly like any other query:
+clause that filters the groups. Both are clauses on the builder, so they are combined with [`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})),
+[`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)), [`Limit`](xref:NextORM.Core.Paging.Limit)/[`Page`](xref:NextORM.Core.EntityBuilder`1.Page(System.Int32,System.Int32)) and the projection exactly like any other query:
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -17,7 +17,7 @@ var rows = dataContext.From<IComplexEntity>()
     .ToList();
 ```
 
-The aggregate functions live on [`Sql`](xref:NextORM.Core.SqlFunctions.Sql) and are only meaningful inside a projection or a [`Having`](xref:NextORM.Core.EntityBuilder`1)
+The aggregate functions live on [`Sql`](xref:NextORM.Core.SqlFunctions.Sql) and are only meaningful inside a projection or a [`Having`](xref:NextORM.Core.EntityBuilder`1.Having(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}}))
 predicate. They are named exactly as follows:
 
 | Function | Result | Function | Result |
@@ -36,7 +36,7 @@ Called with no arguments, `count()` / `count_big()` count rows (`count(*)`); cal
 expressions they count non-null values of those expressions. The other functions take an expression
 argument. The `_distinct` suffix adds `distinct` inside the parentheses.
 
-The common aggregates also have convenience terminals on `EntityBuilder<T>`: [`Count`](xref:NextORM.Core.EntityBuilder`1), `Min(x)`, `Max(x)`,
+The common aggregates also have convenience terminals on `EntityBuilder<T>`: [`Count`](xref:NextORM.Core.EntityBuilderExtensions.Count``1(NextORM.Core.EntityBuilder{``0})), `Min(x)`, `Max(x)`,
 `Avg(x)`, `Sum(x)`, `Stdev(x)`, `Stdevp(x)`, `Var(x)` and `Varp(x)`, each with an `...Async` twin and
 an overload that accepts positional parameters. `count`, `count_big`, `count_distinct` and
 `count_big_distinct` have no entity terminal and are used through ``
@@ -76,7 +76,7 @@ Output:
 
 ## Having
 
-[`Having`](xref:NextORM.Core.EntityBuilder`1) filters groups after aggregation, where a [`Where`](xref:NextORM.Core.EntityBuilder`1) filters rows before it:
+[`Having`](xref:NextORM.Core.EntityBuilder`1.Having(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})) filters groups after aggregation, where a [`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})) filters rows before it:
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -96,7 +96,7 @@ Output:
 |-----|-------|
 | 1 | 2 |
 
-[`Where`](xref:NextORM.Core.EntityBuilder`1) and [`Having`](xref:NextORM.Core.EntityBuilder`1) can be combined on the same query; the [`Where`](xref:NextORM.Core.EntityBuilder`1) is applied before grouping:
+[`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})) and [`Having`](xref:NextORM.Core.EntityBuilder`1.Having(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})) can be combined on the same query; the [`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})) is applied before grouping:
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -211,7 +211,7 @@ Grouping sets are available on SQL Server, PostgreSQL, SQLite and ClickHouse
 
 ## Aggregates without grouping
 
-An aggregate over the whole table is a projection without [`GroupBy`](xref:NextORM.Core.EntityBuilder`1):
+An aggregate over the whole table is a projection without [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})):
 
 ```csharp
 var count = dataContext.From<ISimpleEntity>().Select(e => SqlFunctions.Sql.count()).First();
@@ -296,7 +296,7 @@ the row reader cannot materialise, so the dialect casts `count`/`count_distinct`
 `toInt32(...)` and `count_big`/`count_big_distinct` to `toInt64(...)`.
 
 The builder-level shortcut `EntityBuilder<T>.Count()` is equivalent to
-`Select(e => SqlFunctions.Sql.count())` followed by [`First`](xref:NextORM.Core.EntityBuilder`1):
+`Select(e => SqlFunctions.Sql.count())` followed by [`First`](xref:NextORM.Core.EntityBuilderExtensions.First``1(NextORM.Core.EntityBuilder{``0})):
 
 ```csharp
 var count = dataContext.From<ISimpleEntity>().Count();
@@ -396,7 +396,7 @@ Output:
 
 `stdev` is the sample standard deviation, `stdevp` the population one; `var`/`varp` are the matching
 variances. Each has a `_distinct` form (`stdev_distinct`, `stdevp_distinct`, `var_distinct`,
-`varp_distinct`) and an entity terminal ([`Stdev`](xref:NextORM.Core.EntityBuilder`1), [`Stdevp`](xref:NextORM.Core.EntityBuilder`1), [`Var`](xref:NextORM.Core.EntityBuilder`1), [`Varp`](xref:NextORM.Core.EntityBuilder`1)) with a synchronous,
+`varp_distinct`) and an entity terminal ([`Stdev`](xref:NextORM.Core.EntityBuilderExtensions.Stdev``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})), [`Stdevp`](xref:NextORM.Core.EntityBuilderExtensions.Stdevp``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})), [`Var`](xref:NextORM.Core.EntityBuilderExtensions.Var``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}})), [`Varp`](xref:NextORM.Core.EntityBuilderExtensions.Varp``2(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{``0,``1}}))) with a synchronous,
 `...Async` and parameterised overload:
 
 ```csharp
@@ -564,14 +564,14 @@ differ on `NULL` ordering (PostgreSQL first, SQLite last).
 
 `GROUP BY ROLLUP (...)`/`CUBE (...)` is emitted in the ANSI form by SQL Server, PostgreSQL and SQLite,
 and as the trailing `... WITH ROLLUP`/`WITH CUBE` by MySQL/MariaDB and ClickHouse. MySQL/MariaDB have
-no `CUBE`, so [`GroupByCube`](xref:NextORM.Core.EntityBuilder`1) throws there; the in-memory provider rejects both modifiers.
+no `CUBE`, so [`GroupByCube`](xref:NextORM.Core.EntityBuilder`1.GroupByCube``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) throws there; the in-memory provider rejects both modifiers.
 `GROUP BY GROUPING SETS (...)` is available on SQL Server, PostgreSQL, SQLite and ClickHouse, but not on
 MySQL/MariaDB or the in-memory provider. `WITH TOTALS` is ClickHouse-only; the in-memory provider rejects
 it as well as `ROLLUP`/`CUBE`.
 
 ## See also
 
-- [Sorting and paging](05-sorting-and-paging.md) - [`OrderBy`](xref:NextORM.Core.EntityBuilder`1) by expression or ordinal.
+- [Sorting and paging](05-sorting-and-paging.md) - [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)) by expression or ordinal.
 - [Joins](03-joins.md) - aggregate over a joined projection.
 - [Querying and projections](01-querying-and-projections.md)
 

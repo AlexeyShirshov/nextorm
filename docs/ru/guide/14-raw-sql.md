@@ -6,7 +6,7 @@
 
 ## Обзор
 
-[`WithSql`](xref:NextORM.Core.EntityBuilder`1) и [`PrepareFromSql`](xref:NextORM.Core.EntityBuilder`1) позволяют сохранить обычный типизированный запрос как **форму результата** и
+[`WithSql`](xref:NextORM.Core.EntityExtensions.WithSql``1(NextORM.Core.EntityBuilder{``0},System.String)) и [`PrepareFromSql`](xref:NextORM.Core.EntityExtensions.PrepareFromSql``1(NextORM.Core.EntityBuilder{``0},System.String)) позволяют сохранить обычный типизированный запрос как **форму результата** и
 подставить необработанную инструкцию для выполнения. Всё остальное — проекция, сопоставление сущности,
 конструирование через инициализацию членов, вложенные DTO — берётся из запроса, построенного до подстановки.
 
@@ -26,9 +26,9 @@ public static QueryCommand<TResult> WithSql<TResult>(this EntityBuilder<TResult>
 public static IPreparedQueryCommand<TResult> PrepareFromSql<TResult>(this EntityBuilder<TResult> entity, string sql);
 ```
 
-* [`WithSql`](xref:NextORM.Core.EntityBuilder`1) возвращает [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1), который вы выполняете обычными терминалами
-  ([`ToListAsync`](xref:NextORM.Core.EntityBuilder`1), [`FirstAsync`](xref:NextORM.Core.EntityBuilder`1), ...). Он проходит через неявный кэш планов, как и любая другая команда.
-* [`PrepareFromSql`](xref:NextORM.Core.EntityBuilder`1) возвращает [`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1); выполняйте его через перегрузки контекста
+* [`WithSql`](xref:NextORM.Core.EntityExtensions.WithSql``1(NextORM.Core.EntityBuilder{``0},System.String)) возвращает [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1), который вы выполняете обычными терминалами
+  ([`ToListAsync`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])), [`FirstAsync`](xref:NextORM.Core.EntityBuilderExtensions.FirstAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])), ...). Он проходит через неявный кэш планов, как и любая другая команда.
+* [`PrepareFromSql`](xref:NextORM.Core.EntityExtensions.PrepareFromSql``1(NextORM.Core.EntityBuilder{``0},System.String)) возвращает [`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1); выполняйте его через перегрузки контекста
   (`dataContext.ToListAsync(prepared, ...)`, `dataContext.FirstAsync(prepared, ...)`, ...).
 * `@params` — это обычный объект. Его **открытые свойства экземпляра** становятся именованными параметрами
   в порядке свойств, причём имя свойства используется как имя параметра.
@@ -42,7 +42,7 @@ public static IPreparedQueryCommand<TResult> PrepareFromSql<TResult>(this Entity
 Microsoft.Data.Sqlite также принимает `@name`, хотя генерируемый nextorm SQL для SQLite использует
 `$name`).
 
-## [`WithSql`](xref:NextORM.Core.EntityBuilder`1)
+## [`WithSql`](xref:NextORM.Core.EntityExtensions.WithSql``1(NextORM.Core.EntityBuilder{``0},System.String))
 
 ```csharp
 var ids = await dataContext.From<ISimpleEntity>()
@@ -93,7 +93,7 @@ select id from simple_entity where id = @id
 |----|
 | 1 |
 
-## [`PrepareFromSql`](xref:NextORM.Core.EntityBuilder`1)
+## [`PrepareFromSql`](xref:NextORM.Core.EntityExtensions.PrepareFromSql``1(NextORM.Core.EntityBuilder{``0},System.String))
 
 Подготовьте необработанную инструкцию и выполните её в контексте. Параметры времени выполнения передаются
 во время выполнения точно так же, как для `Prepare(...)`:
@@ -187,7 +187,7 @@ public sealed class IdDto
 
 ## Композиция сырого SQL как источника `FROM`
 
-[`FromSql`](xref:NextORM.Core.DataContextExtensions.FromSql) использует сырой фрагмент как **источник**
+[`FromSql`](xref:NextORM.Core.DataContextExtensions.FromSql(NextORM.Core.IDataContext,System.String,System.Object)) использует сырой фрагмент как **источник**
 запроса вместо сопоставленной таблицы, поэтому его можно фильтровать, присоединять, группировать,
 проецировать и постранично листать как любой другой источник. Столбцы читаются через аксессоры
 [`TableAlias`](xref:NextORM.Core.TableAlias) (`t["id"].AsInt`); именованные параметры привязываются по той
@@ -232,7 +232,7 @@ select t1.id, t2.id from simple_entity as "t1" join (select id from complex_enti
 | MySQL | Инструкция передаётся дословно; параметры `@name`. |
 | MariaDB | Инструкция передаётся дословно; параметры `@name`. |
 | ClickHouse | Инструкция передаётся дословно; параметры `@name` (драйвер переписывает их в `{name:Type}`). |
-| In-memory | [`PrepareFromSql`](xref:NextORM.Core.EntityBuilder`1) и [`FromSql`](xref:NextORM.Core.DataContextExtensions.FromSql) не поддерживаются ([`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext) бросает `NotSupportedException`); для необработанных инструкций используйте SQL-провайдер. |
+| In-memory | [`PrepareFromSql`](xref:NextORM.Core.EntityExtensions.PrepareFromSql``1(NextORM.Core.EntityBuilder{``0},System.String)) и [`FromSql`](xref:NextORM.Core.DataContextExtensions.FromSql(NextORM.Core.IDataContext,System.String,System.Object)) не поддерживаются ([`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext) бросает `NotSupportedException`); для необработанных инструкций используйте SQL-провайдер. |
 
 ## См. также
 

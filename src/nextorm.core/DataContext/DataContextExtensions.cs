@@ -35,42 +35,124 @@ public static class DataContextExtensions
         return new(dataContext) { Logger = dataContext.CommandLogger };
     }
 
+    /// <summary>
+    /// Asynchronously determines whether the query produces at least one row. Stops after the first
+    /// matching row rather than materializing the full result.
+    /// </summary>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="preparedQueryCommand">The prepared query to evaluate.</param>
+    /// <param name="params">Positional parameter values, in the order the SQL references them.</param>
+    /// <param name="cancellationToken">Token used to cancel the operation.</param>
+    /// <returns><see langword="true"/> when at least one row matches; otherwise <see langword="false"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Task<bool> AnyAsync(this IDataContext dataContext, IPreparedQueryCommand<bool> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
         => dataContext.ExecuteScalar<bool>(preparedQueryCommand, @params, true, cancellationToken);
 
+    /// <summary>
+    /// Asynchronously determines whether the query produces at least one row, using no parameters.
+    /// </summary>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="preparedQueryCommand">The prepared query to evaluate.</param>
+    /// <param name="cancellationToken">Token used to cancel the operation.</param>
+    /// <returns><see langword="true"/> when at least one row matches; otherwise <see langword="false"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Task<bool> AnyAsync(this IDataContext dataContext, IPreparedQueryCommand<bool> preparedQueryCommand, CancellationToken cancellationToken)
         => dataContext.ExecuteScalar<bool>(preparedQueryCommand, null, true, cancellationToken);
 
+    /// <summary>
+    /// Asynchronously determines whether the query produces at least one row.
+    /// </summary>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="preparedQueryCommand">The prepared query to evaluate.</param>
+    /// <param name="params">Positional parameter values, in the order the SQL references them.</param>
+    /// <returns><see langword="true"/> when at least one row matches; otherwise <see langword="false"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Task<bool> AnyAsync(this IDataContext dataContext, IPreparedQueryCommand<bool> preparedQueryCommand, params object[]? @params)
         => dataContext.ExecuteScalar<bool>(preparedQueryCommand, @params, true, CancellationToken.None);
 
+    /// <summary>
+    /// Synchronously determines whether the query produces at least one row.
+    /// </summary>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="preparedQueryCommand">The prepared query to evaluate.</param>
+    /// <param name="params">Positional parameter values, in the order the SQL references them.</param>
+    /// <returns><see langword="true"/> when at least one row matches; otherwise <see langword="false"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool Any(this IDataContext dataContext, IPreparedQueryCommand<bool> preparedQueryCommand, params ReadOnlySpan<object?> @params)
         => dataContext.ExecuteScalar<bool>(preparedQueryCommand, @params, true);
 
+    /// <summary>
+    /// Asynchronously executes the query and materializes every row into a new list.
+    /// </summary>
+    /// <typeparam name="TResult">The projected element type.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="preparedQueryCommand">The prepared query to execute.</param>
+    /// <param name="params">Positional parameter values, in the order the SQL references them.</param>
+    /// <returns>A list containing the materialized rows; empty when the query matches nothing.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Task<List<TResult>> ToListAsync<TResult>(this IDataContext dataContext, IPreparedQueryCommand<TResult> preparedQueryCommand, params object[]? @params)
         => dataContext.ToListAsync(preparedQueryCommand, @params, CancellationToken.None);
 
+    /// <summary>
+    /// Synchronously executes the query and materializes every row into a new list, using no parameters.
+    /// </summary>
+    /// <typeparam name="TResult">The projected element type.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="preparedQueryCommand">The prepared query to execute.</param>
+    /// <returns>A list containing the materialized rows; empty when the query matches nothing.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static List<TResult> ToList<TResult>(this IDataContext dataContext, IPreparedQueryCommand<TResult> preparedQueryCommand)
         => dataContext.ToList(preparedQueryCommand, ReadOnlySpan<object?>.Empty);
 
+    /// <summary>
+    /// Asynchronously returns the first row of the query.
+    /// </summary>
+    /// <typeparam name="TResult">The projected element type.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="preparedQueryCommand">The prepared query to execute.</param>
+    /// <param name="params">Positional parameter values, in the order the SQL references them.</param>
+    /// <returns>The first materialized row.</returns>
+    /// <exception cref="InvalidOperationException">The query returns no rows.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Task<TResult> FirstAsync<TResult>(this IDataContext dataContext, IPreparedQueryCommand<TResult> preparedQueryCommand, params object[]? @params)
         => dataContext.FirstAsync(preparedQueryCommand, @params, CancellationToken.None);
 
+    /// <summary>
+    /// Asynchronously returns the first row of the query, or the default value of
+    /// <typeparamref name="TResult"/> when the query returns no rows.
+    /// </summary>
+    /// <typeparam name="TResult">The projected element type.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="preparedQueryCommand">The prepared query to execute.</param>
+    /// <param name="params">Positional parameter values, in the order the SQL references them.</param>
+    /// <returns>The first materialized row, or <see langword="default"/> when there are none.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Task<TResult?> FirstOrDefaultAsync<TResult>(this IDataContext dataContext, IPreparedQueryCommand<TResult> preparedQueryCommand, params object[]? @params)
         => dataContext.FirstOrDefaultAsync(preparedQueryCommand, @params, CancellationToken.None);
 
+    /// <summary>
+    /// Asynchronously returns the only row of the query.
+    /// </summary>
+    /// <typeparam name="TResult">The projected element type.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="preparedQueryCommand">The prepared query to execute.</param>
+    /// <param name="params">Positional parameter values, in the order the SQL references them.</param>
+    /// <returns>The single materialized row.</returns>
+    /// <exception cref="InvalidOperationException">The query returns no rows or more than one row.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Task<TResult> SingleAsync<TResult>(this IDataContext dataContext, IPreparedQueryCommand<TResult> preparedQueryCommand, params object[]? @params)
         => dataContext.SingleAsync(preparedQueryCommand, @params, CancellationToken.None);
 
+    /// <summary>
+    /// Asynchronously returns the only row of the query, or the default value of
+    /// <typeparamref name="TResult"/> when the query returns no rows.
+    /// </summary>
+    /// <typeparam name="TResult">The projected element type.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="preparedQueryCommand">The prepared query to execute.</param>
+    /// <param name="params">Positional parameter values, in the order the SQL references them.</param>
+    /// <returns>The single materialized row, or <see langword="default"/> when there are none.</returns>
+    /// <exception cref="InvalidOperationException">The query returns more than one row.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Task<TResult?> SingleOrDefaultAsync<TResult>(this IDataContext dataContext, IPreparedQueryCommand<TResult> preparedQueryCommand, params object[]? @params)
         => dataContext.SingleOrDefaultAsync(preparedQueryCommand, @params, CancellationToken.None);
@@ -110,10 +192,25 @@ public static class DataContextExtensions
         return new EntityBuilder<TableAlias>(dataContext) { Logger = dataContext.CommandLogger, SourceFrom = new FromExpression(new RawSqlSourceExpression(sql, parameters)) };
     }
 
+    /// <summary>
+    /// Starts a query from an existing <see cref="QueryCommand{TResult}"/> and returns a fluent
+    /// builder over its definition.
+    /// </summary>
+    /// <typeparam name="TResult">The projected element type.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="query">The command whose definition drives the query.</param>
+    /// <returns>A builder for composing the query further.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static EntityBuilder<TResult> From<TResult>(this IDataContext dataContext, QueryCommand<TResult> query)
         => new(dataContext, query) { Logger = dataContext.CommandLogger };
 
+    /// <summary>
+    /// Starts a new query builder that shares the source and definition of an existing builder.
+    /// </summary>
+    /// <typeparam name="TResult">The projected element type.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="builder">The builder to copy the query shape from.</param>
+    /// <returns>A new builder bound to <paramref name="dataContext"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static EntityBuilder<TResult> From<TResult>(this IDataContext dataContext, EntityBuilder<TResult> builder)
         => new(dataContext, builder) { Logger = dataContext.CommandLogger };

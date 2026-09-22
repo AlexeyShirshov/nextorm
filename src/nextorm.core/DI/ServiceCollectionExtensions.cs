@@ -17,6 +17,13 @@ namespace NextORM.Core;
 /// </summary>
 public static class ServiceCollectionExtensions
 {
+    /// <summary>
+    /// Registers an unkeyed <see cref="IDataContext"/> (and its scoped <see cref="DataContextBuilder"/>)
+    /// configured by <paramref name="optionsBuilder"/>, which may resolve services from the provider.
+    /// </summary>
+    /// <param name="services">The service collection to register into.</param>
+    /// <param name="optionsBuilder">Delegate that configures the builder using the current <see cref="IServiceProvider"/>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="services"/> or <paramref name="optionsBuilder"/> is <see langword="null"/>.</exception>
     public static void AddNextOrmContext(this IServiceCollection services, Action<IServiceProvider, DataContextBuilder> optionsBuilder)
     {
         ArgumentNullException.ThrowIfNull(services);
@@ -25,6 +32,14 @@ public static class ServiceCollectionExtensions
         services.RegisterContextFactory(null, optionsBuilder);
     }
 
+    /// <summary>
+    /// Registers a keyed <see cref="IDataContext"/> (and its scoped <see cref="DataContextBuilder"/>)
+    /// configured by <paramref name="optionsBuilder"/>, which may resolve services from the provider.
+    /// </summary>
+    /// <param name="services">The service collection to register into.</param>
+    /// <param name="optionsBuilder">Delegate that configures the builder using the current <see cref="IServiceProvider"/>.</param>
+    /// <param name="serviceKey">The key under which the context is registered.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="services"/> or <paramref name="optionsBuilder"/> is <see langword="null"/>.</exception>
     public static void AddKeyedNextOrmContext(this IServiceCollection services, Action<IServiceProvider, DataContextBuilder> optionsBuilder, object? serviceKey)
     {
         ArgumentNullException.ThrowIfNull(services);
@@ -33,6 +48,13 @@ public static class ServiceCollectionExtensions
         services.RegisterContextFactory(serviceKey, optionsBuilder);
     }
 
+    /// <summary>
+    /// Registers an unkeyed <see cref="IDataContext"/> (and its scoped <see cref="DataContextBuilder"/>)
+    /// configured by <paramref name="optionsBuilder"/>.
+    /// </summary>
+    /// <param name="services">The service collection to register into.</param>
+    /// <param name="optionsBuilder">Delegate that configures the builder.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="services"/> or <paramref name="optionsBuilder"/> is <see langword="null"/>.</exception>
     public static void AddNextOrmContext(this IServiceCollection services, Action<DataContextBuilder> optionsBuilder)
     {
         ArgumentNullException.ThrowIfNull(services);
@@ -41,6 +63,14 @@ public static class ServiceCollectionExtensions
         services.RegisterContextFactory(null, (_, builder) => optionsBuilder(builder));
     }
 
+    /// <summary>
+    /// Registers a keyed <see cref="IDataContext"/> (and its scoped <see cref="DataContextBuilder"/>)
+    /// configured by <paramref name="optionsBuilder"/>.
+    /// </summary>
+    /// <param name="services">The service collection to register into.</param>
+    /// <param name="optionsBuilder">Delegate that configures the builder.</param>
+    /// <param name="serviceKey">The key under which the context is registered.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="services"/> or <paramref name="optionsBuilder"/> is <see langword="null"/>.</exception>
     public static void AddKeyedNextOrmContext(this IServiceCollection services, Action<DataContextBuilder> optionsBuilder, object? serviceKey)
     {
         ArgumentNullException.ThrowIfNull(services);
@@ -49,6 +79,13 @@ public static class ServiceCollectionExtensions
         services.RegisterContextFactory(serviceKey, (_, builder) => optionsBuilder(builder));
     }
 
+    /// <summary>
+    /// Registers the concrete context type <typeparamref name="T"/> once per scope and forwards
+    /// <see cref="IDataContext"/> to it, so both resolve to the same instance.
+    /// </summary>
+    /// <typeparam name="T">The concrete context type to register.</typeparam>
+    /// <param name="services">The service collection to register into.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="services"/> is <see langword="null"/>.</exception>
     public static void AddNextOrmContext<T>(this IServiceCollection services)
         where T : class, IDataContext
     {
@@ -57,6 +94,14 @@ public static class ServiceCollectionExtensions
         services.RegisterContextType<T>(null);
     }
 
+    /// <summary>
+    /// Registers the concrete context type <typeparamref name="T"/> under a key once per scope and
+    /// forwards the keyed <see cref="IDataContext"/> to it, so both resolve to the same instance.
+    /// </summary>
+    /// <typeparam name="T">The concrete context type to register.</typeparam>
+    /// <param name="services">The service collection to register into.</param>
+    /// <param name="serviceKey">The key under which the context is registered.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="services"/> is <see langword="null"/>.</exception>
     public static void AddKeyedNextOrmContext<T>(this IServiceCollection services, object? serviceKey)
         where T : class, IDataContext
     {

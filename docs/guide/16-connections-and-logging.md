@@ -137,10 +137,10 @@ Three loggers are created from the factory:
 | Member | Category | Purpose |
 |---|---|---|
 | [`Logger`](xref:NextORM.Core.QueryCommand.Logger) | the context type (for example `nextorm.sqlite.SqliteDataContext`) | connection and command messages. Exposed on [`IContextEnvironment`](xref:NextORM.Core.IContextEnvironment). |
-| `CommandLogger` | the [`QueryCommand`](xref:NextORM.Core.QueryCommand) type | attached to the commands built by [`From`](xref:NextORM.Core.DataContextExtensions) / `From(...)`. Exposed on [`IContextEnvironment`](xref:NextORM.Core.IContextEnvironment). |
+| `CommandLogger` | the [`QueryCommand`](xref:NextORM.Core.QueryCommand) type | attached to the commands built by [`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)) / `From(...)`. Exposed on [`IContextEnvironment`](xref:NextORM.Core.IContextEnvironment). |
 | [`ResultSetEnumeratorLogger`](xref:NextORM.Core.InMemoryDataContext.ResultSetEnumeratorLogger) | `NextORM.Core.ResultSetEnumerator` | streaming lifecycle messages (`Trace` on `MoveNext`, `Debug` when opening the connection or disposing the reader). Internal. |
 
-### [`LogSensitiveData`](xref:NextORM.Core.DataContextBuilder)
+### [`LogSensitiveData`](xref:NextORM.Core.DataContextBuilder.LogSensitiveData(System.Boolean))
 
 `LogSensitiveData(bool)` controls whether parameter values and the connection string are written. It defaults to `false`:
 
@@ -152,7 +152,7 @@ Turn it on only when the log sink is trusted: parameter values may contain perso
 
 ### Command logging
 
-Buffered terminals ([`ToList`](xref:NextORM.Core.EntityBuilder`1), [`First`](xref:NextORM.Core.EntityBuilder`1), [`ExecuteScalar`](xref:NextORM.Core.QueryCommand`1), ...) log the command through [`Logger`](xref:NextORM.Core.QueryCommand.Logger) before executing it. Streaming terminals use [`ResultSetEnumeratorLogger`](xref:NextORM.Core.InMemoryDataContext.ResultSetEnumeratorLogger), which also emits `Move next` at `Trace`. Both paths are at `Debug`, so the log level of the configured factory must allow `Debug` for anything to appear:
+Buffered terminals ([`ToList`](xref:NextORM.Core.EntityBuilderExtensions.ToList``1(NextORM.Core.EntityBuilder{``0},System.ReadOnlySpan{System.Object})), [`First`](xref:NextORM.Core.EntityBuilderExtensions.First``1(NextORM.Core.EntityBuilder{``0})), [`ExecuteScalar`](xref:NextORM.Core.QueryCommand`1.ExecuteScalar(System.ReadOnlySpan{System.Object})), ...) log the command through [`Logger`](xref:NextORM.Core.QueryCommand.Logger) before executing it. Streaming terminals use [`ResultSetEnumeratorLogger`](xref:NextORM.Core.InMemoryDataContext.ResultSetEnumeratorLogger), which also emits `Move next` at `Trace`. Both paths are at `Debug`, so the log level of the configured factory must allow `Debug` for anything to appear:
 
 ```csharp
 var builder = new DataContextBuilder()
@@ -197,4 +197,4 @@ Source: `tests/nextorm.sqlite.tests/ConnectionManagementTests.cs:24` (created co
 `src/nextorm.core/DataContext/Roles/IContextEnvironment.cs:8`,
 `src/nextorm.core/DataContext/DataContext.cs:106` ([`GetConnection`](xref:NextORM.Core.DataContext.GetConnection)),
 `src/nextorm.core/DataContext/DataContext.cs:176` ([`ConnectionString`](xref:NextORM.Core.DataContext.ConnectionString)),
-`src/nextorm.core/DI/DataContextBuilder.cs:20` ([`UseLoggerFactory`](xref:NextORM.Core.DataContextBuilder)).
+`src/nextorm.core/DI/DataContextBuilder.cs:20` ([`UseLoggerFactory`](xref:NextORM.Core.DataContextBuilder.UseLoggerFactory(Microsoft.Extensions.Logging.ILoggerFactory))).

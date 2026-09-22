@@ -13,6 +13,11 @@ public class EntityMetadataBuilder<T>
     private readonly IList<EntityPropertyBuilder<T>> _props = new List<EntityPropertyBuilder<T>>();
     private string? _tableName;
 
+    /// <summary>
+    /// Builds the metadata from the mappings declared on this builder, auto-deriving the table name
+    /// and, when no properties were declared, the property mappings from the CLR type.
+    /// </summary>
+    /// <returns>The resolved entity metadata.</returns>
     public IEntityMetadata Build()
     {
         var (tableName, isTableNameAuto) = string.IsNullOrEmpty(_tableName)
@@ -23,6 +28,11 @@ public class EntityMetadataBuilder<T>
             ? AutoBuildProperties()
             : _props.Select(pb => pb.Build()).ToArray(), isTableNameAuto);
     }
+    /// <summary>
+    /// Builds the metadata entirely by reflecting over the CLR type, ignoring any table or property
+    /// mappings declared on this builder.
+    /// </summary>
+    /// <returns>The auto-derived entity metadata.</returns>
     public IEntityMetadata AutoBuild()
     {
         var propsMeta = AutoBuildProperties();
@@ -127,12 +137,22 @@ public class EntityMetadataBuilder<T>
         return (tableName, isAuto);
     }
 
+    /// <summary>
+    /// Declares a fluent mapping for the property selected by <paramref name="propertySelector"/>.
+    /// </summary>
+    /// <param name="propertySelector">Selects the property to map; the expression must produce a <see cref="PropertyInfo"/>.</param>
+    /// <returns>A builder for the selected property's column mapping.</returns>
     public EntityPropertyBuilder<T> Property(Expression<Func<T, object>> propertySelector)
     {
         var pb = new EntityPropertyBuilder<T>(propertySelector);
         _props.Add(pb);
         return pb;
     }
+    /// <summary>
+    /// Overrides the table name for the entity instead of deriving it from the CLR type or attributes.
+    /// </summary>
+    /// <param name="tableName">The table name to map the entity to.</param>
+    /// <returns>This builder, for chaining.</returns>
     public EntityMetadataBuilder<T> Table(string tableName)
     {
         _tableName = tableName;

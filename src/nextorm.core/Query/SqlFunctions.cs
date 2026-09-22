@@ -58,6 +58,13 @@ public static partial class SqlFunctions
     /// </summary>
     public static ClickHouseFunctions ClickHouse => default!;
 
+    /// <summary>
+    /// References the <paramref name="idx"/>-th positional parameter of the command (for example
+    /// <c>@p0</c>). Only valid inside a query expression.
+    /// </summary>
+    /// <typeparam name="T">The CLR type of the parameter value.</typeparam>
+    /// <param name="idx">The zero-based parameter index.</param>
+    /// <returns>The parameter value, materialized as <typeparamref name="T"/>.</returns>
     public static T Parameter<T>(int idx) => default!;
 
     /// <summary>
@@ -81,6 +88,7 @@ public static partial class SqlFunctions
     /// </summary>
     public interface IGenerateSeriesRow
     {
+        /// <summary>The generated number.</summary>
         [Column("generate_series")]
         long Value { get; set; }
     }
@@ -91,6 +99,7 @@ public static partial class SqlFunctions
     /// </summary>
     public interface IUnnestRow<T>
     {
+        /// <summary>The array element.</summary>
         [Column("unnest")]
         T Value { get; set; }
     }
@@ -102,6 +111,7 @@ public static partial class SqlFunctions
     /// </summary>
     public interface IRegexpMatchesRow
     {
+        /// <summary>The captured groups of one match, or the whole match when there are no groups.</summary>
         [Column("regexp_matches")]
         string[] Matches { get; set; }
     }
@@ -112,6 +122,7 @@ public static partial class SqlFunctions
     /// </summary>
     public interface IRegexpSplitToTableRow
     {
+        /// <summary>One fragment produced by the split.</summary>
         [Column("regexp_split_to_table")]
         string? Value { get; set; }
     }
@@ -123,6 +134,7 @@ public static partial class SqlFunctions
     /// </summary>
     public interface IJsonArrayElementsRow
     {
+        /// <summary>One array element (a jsonb document rendered as text, or plain text).</summary>
         [Column("value")]
         string? Value { get; set; }
     }
@@ -134,8 +146,10 @@ public static partial class SqlFunctions
     /// </summary>
     public interface IJsonbEachRow
     {
+        /// <summary>The property name.</summary>
         [Column("key")]
         string? Key { get; set; }
+        /// <summary>The property value (a jsonb document rendered as text, or plain text).</summary>
         [Column("value")]
         string? Value { get; set; }
     }
@@ -146,6 +160,7 @@ public static partial class SqlFunctions
     /// </summary>
     public interface IJsonObjectKeysRow
     {
+        /// <summary>One top-level object key.</summary>
         [Column("jsonb_object_keys")]
         string? Key { get; set; }
     }
@@ -156,6 +171,7 @@ public static partial class SqlFunctions
     /// </summary>
     public interface IJsonPathQueryRow
     {
+        /// <summary>One JSONPath match (a jsonb document rendered as text).</summary>
         [Column("jsonb_path_query")]
         string? Value { get; set; }
     }
@@ -166,10 +182,13 @@ public static partial class SqlFunctions
     /// </summary>
     public interface ITsStatRow
     {
+        /// <summary>The lexeme.</summary>
         [Column("word")]
         string? Word { get; set; }
+        /// <summary>The number of documents containing the lexeme.</summary>
         [Column("ndoc")]
         int? Ndoc { get; set; }
+        /// <summary>The total number of occurrences of the lexeme.</summary>
         [Column("nentry")]
         int? Nentry { get; set; }
     }
@@ -180,6 +199,7 @@ public static partial class SqlFunctions
     /// </summary>
     public interface IStringSplitRow
     {
+        /// <summary>One fragment produced by the split.</summary>
         [Column("value")]
         string? Value { get; set; }
     }
@@ -191,6 +211,7 @@ public static partial class SqlFunctions
     /// </summary>
     public interface IXmlNodesRow
     {
+        /// <summary>One XML node selected by the XQuery, projected further with <c>xml_value</c>/<c>xml_query</c>/<c>xml_exist</c>.</summary>
         [Column("value")]
         string? Value { get; set; }
     }
@@ -203,10 +224,13 @@ public static partial class SqlFunctions
     {
         // KEY is a reserved word in T-SQL, so the physical name is quoted here. The openjson helper
         // is gated to SQL Server (see ISqlDialect.SupportsTableFunction), so the quoting is safe.
+        /// <summary>The property name or array index.</summary>
         [Column("[key]")]
         string? Key { get; set; }
+        /// <summary>The property or element value.</summary>
         [Column("value")]
         string? Value { get; set; }
+        /// <summary>The JSON value type reported by <c>openjson</c>.</summary>
         [Column("type")]
         int Type { get; set; }
     }
@@ -219,8 +243,10 @@ public static partial class SqlFunctions
     /// </summary>
     public interface IKeyRankRow<TKey>
     {
+        /// <summary>The full-text key of the matched row, used to join back to the base table.</summary>
         [Column("[key]")]
         TKey Key { get; set; }
+        /// <summary>The relevance score of the match.</summary>
         [Column("[rank]")]
         int Rank { get; set; }
     }
@@ -232,6 +258,7 @@ public static partial class SqlFunctions
     /// </summary>
     public interface INumbersRow
     {
+        /// <summary>The generated number.</summary>
         [Column("number")]
         long Value { get; set; }
     }
@@ -243,6 +270,7 @@ public static partial class SqlFunctions
     /// </summary>
     public interface IZerosRow
     {
+        /// <summary>The constant byte <c>0</c> (ClickHouse <c>UInt8</c>).</summary>
         [Column("zero")]
         byte Value { get; set; }
     }
@@ -254,10 +282,13 @@ public static partial class SqlFunctions
     /// </summary>
     public interface IGenerateRandomRow
     {
+        /// <summary>The generated <c>UInt64</c> identifier.</summary>
         [Column("id")]
         long Id { get; set; }
+        /// <summary>The generated <c>Float64</c> value.</summary>
         [Column("value")]
         double Value { get; set; }
+        /// <summary>The generated string.</summary>
         [Column("name")]
         string? Name { get; set; }
     }
@@ -316,10 +347,28 @@ public static partial class SqlFunctions
             typeof(CommonFunctions).GetMethods(BindingFlags.Public | BindingFlags.Instance)
                 .Single(m => m.Name == name && m.GetParameters().Length == 1);
 
+        /// <summary>
+        /// <c>exists(subquery)</c>: true when the correlated subquery returns at least one row. ANSI
+        /// and portable across every provider.
+        /// </summary>
+        /// <param name="cmd">The correlated subquery.</param>
         public bool exists(QueryCommand cmd) => default!;
 
+        /// <summary>
+        /// <c>column like pattern</c>: SQL pattern matching where <c>%</c> and <c>_</c> are wildcards.
+        /// ANSI and portable, but case-sensitivity follows the provider's collation.
+        /// </summary>
+        /// <param name="column">The value to test.</param>
+        /// <param name="pattern">The pattern to match against.</param>
         public bool like(string? column, string? pattern) => default!;
 
+        /// <summary>
+        /// <c>column like pattern escape escapeChar</c>: SQL pattern matching with an explicit escape
+        /// character for the wildcards. ANSI and portable.
+        /// </summary>
+        /// <param name="column">The value to test.</param>
+        /// <param name="pattern">The pattern to match against.</param>
+        /// <param name="escapeChar">The character that escapes a literal <c>%</c> or <c>_</c>.</param>
         public bool like(string? column, string? pattern, string? escapeChar) => default!;
 
         /// <summary>
@@ -387,14 +436,41 @@ public static partial class SqlFunctions
         /// </summary>
         public Guid? uuidv7() => default!;
 
+        /// <summary>
+        /// <c>column in (subquery)</c>: true when <paramref name="column"/> equals a value returned by
+        /// the correlated subquery.
+        /// </summary>
+        /// <typeparam name="T">The compared value type.</typeparam>
+        /// <param name="column">The value to test.</param>
+        /// <param name="cmd">The subquery producing candidate values.</param>
         public bool @in<T>(T column, QueryCommand<T> cmd) => default!;
 
+        /// <summary><c>column in (values)</c>: true when <paramref name="column"/> equals one of the in-memory values.</summary>
+        /// <typeparam name="T">The compared value type.</typeparam>
+        /// <param name="column">The value to test.</param>
+        /// <param name="values">The candidate values.</param>
         public bool @in<T>(T column, IEnumerable<T> values) => default!;
 
+        /// <summary><c>column in (v0, v1, ...)</c>: true when <paramref name="column"/> equals one of the listed values.</summary>
+        /// <typeparam name="T">The compared value type.</typeparam>
+        /// <param name="column">The value to test.</param>
+        /// <param name="values">The candidate values.</param>
         public bool @in<T>(T column, params T[] values) => default!;
 
+        /// <summary>
+        /// <c>any(subquery)</c>: the <c>ANY</c> subquery quantifier, true when any row of the subquery
+        /// satisfies the comparison. Distinct from <c>any_agg</c>, the arbitrary-value aggregate.
+        /// </summary>
+        /// <typeparam name="T">The subquery result type.</typeparam>
+        /// <param name="cmd">The subquery.</param>
         public T any<T>(QueryCommand<T> cmd) => default!;
 
+        /// <summary>
+        /// <c>all(subquery)</c>: the <c>ALL</c> subquery quantifier, true when every row of the
+        /// subquery satisfies the comparison.
+        /// </summary>
+        /// <typeparam name="T">The subquery result type.</typeparam>
+        /// <param name="cmd">The subquery.</param>
         public T all<T>(QueryCommand<T> cmd) => default!;
 
         /// <summary><c>nullif(value, other)</c>: null when the two arguments are equal. ANSI and portable.</summary>
@@ -495,40 +571,94 @@ public static partial class SqlFunctions
         /// <summary>Filtered <c>string_agg(value, delimiter) filter (where ...)</c>.</summary>
         public string? string_agg<T>(T? value, string delimiter, Expression<Func<bool>> filter) => default!;
 
+        /// <summary>
+        /// <c>count</c> aggregate. With no arguments it is <c>count(*)</c>; with arguments it counts
+        /// the rows whose listed expression(s) are non-null. Only SQLite renders a bare <c>count()</c>;
+        /// other providers require an argument or the filtered overload.
+        /// </summary>
+        /// <param name="properties">The expressions to count, or an empty array for <c>count(*)</c>.</param>
         public int count(params object?[] properties) => default!;
 
+        /// <summary>64-bit <c>count</c> (<c>count_big</c> on SQL Server).</summary>
+        /// <param name="properties">The expressions to count, or an empty array for <c>count(*)</c>.</param>
         public long count_big(params object?[] properties) => default!;
 
+        /// <summary><c>count(distinct ...)</c>: the number of distinct non-null values of the listed expression(s).</summary>
+        /// <param name="properties">The expressions whose distinct values are counted.</param>
         public int count_distinct(params object?[] properties) => default!;
 
+        /// <summary>64-bit <c>count(distinct ...)</c> (<c>count_big(distinct ...)</c> on SQL Server).</summary>
+        /// <param name="properties">The expressions whose distinct values are counted.</param>
         public long count_big_distinct(params object?[] properties) => default!;
 
+        /// <summary><c>min</c> aggregate: the smallest non-null value of <paramref name="property"/>.</summary>
+        /// <typeparam name="T">The value type.</typeparam>
+        /// <param name="property">The value to aggregate.</param>
         public T? min<T>(T? property) => default!;
 
+        /// <summary><c>max</c> aggregate: the largest non-null value of <paramref name="property"/>.</summary>
+        /// <typeparam name="T">The value type.</typeparam>
+        /// <param name="property">The value to aggregate.</param>
         public T? max<T>(T? property) => default!;
 
+        /// <summary><c>avg</c> aggregate: the arithmetic mean of the non-null values.</summary>
+        /// <typeparam name="T">The value type.</typeparam>
+        /// <param name="property">The value to aggregate.</param>
         public T? avg<T>(T? property) => default!;
 
+        /// <summary><c>avg(distinct ...)</c>: the arithmetic mean of the distinct non-null values.</summary>
+        /// <typeparam name="T">The value type.</typeparam>
+        /// <param name="property">The value to aggregate.</param>
         public T? avg_distinct<T>(T? property) => default!;
 
+        /// <summary><c>sum</c> aggregate: the sum of the non-null values.</summary>
+        /// <typeparam name="T">The value type.</typeparam>
+        /// <param name="property">The value to aggregate.</param>
         public T? sum<T>(T? property) => default!;
 
+        /// <summary><c>sum(distinct ...)</c>: the sum of the distinct non-null values.</summary>
+        /// <typeparam name="T">The value type.</typeparam>
+        /// <param name="property">The value to aggregate.</param>
         public T? sum_distinct<T>(T? property) => default!;
 
+        /// <summary><c>stdev</c> aggregate: the sample standard deviation of the non-null values.</summary>
+        /// <typeparam name="T">The value type.</typeparam>
+        /// <param name="property">The value to aggregate.</param>
         public T? stdev<T>(T? property) => default!;
 
+        /// <summary><c>stdev(distinct ...)</c>: the sample standard deviation of the distinct non-null values.</summary>
+        /// <typeparam name="T">The value type.</typeparam>
+        /// <param name="property">The value to aggregate.</param>
         public T? stdev_distinct<T>(T? property) => default!;
 
+        /// <summary><c>stdevp</c> aggregate: the population standard deviation of the non-null values.</summary>
+        /// <typeparam name="T">The value type.</typeparam>
+        /// <param name="property">The value to aggregate.</param>
         public T? stdevp<T>(T? property) => default!;
 
+        /// <summary><c>stdevp(distinct ...)</c>: the population standard deviation of the distinct non-null values.</summary>
+        /// <typeparam name="T">The value type.</typeparam>
+        /// <param name="property">The value to aggregate.</param>
         public T? stdevp_distinct<T>(T? property) => default!;
 
+        /// <summary><c>var</c> aggregate: the sample variance of the non-null values.</summary>
+        /// <typeparam name="T">The value type.</typeparam>
+        /// <param name="property">The value to aggregate.</param>
         public T? var<T>(T? property) => default!;
 
+        /// <summary><c>var(distinct ...)</c>: the sample variance of the distinct non-null values.</summary>
+        /// <typeparam name="T">The value type.</typeparam>
+        /// <param name="property">The value to aggregate.</param>
         public T? var_distinct<T>(T? property) => default!;
 
+        /// <summary><c>varp</c> aggregate: the population variance of the non-null values.</summary>
+        /// <typeparam name="T">The value type.</typeparam>
+        /// <param name="property">The value to aggregate.</param>
         public T? varp<T>(T? property) => default!;
 
+        /// <summary><c>varp(distinct ...)</c>: the population variance of the distinct non-null values.</summary>
+        /// <typeparam name="T">The value type.</typeparam>
+        /// <param name="property">The value to aggregate.</param>
         public T? varp_distinct<T>(T? property) => default!;
 
         /// <summary>

@@ -68,8 +68,8 @@
 | Нативный источник `PIVOT` / `UNPIVOT` | no (сырой SQL) | **yes на SQL Server** | `EntityBuilder.Pivot`/`Unpivot` |
 | Сырой SQL (запрос целиком) | yes | yes | `WithSql` / `PrepareFromSql` |
 | Сырой SQL как композируемый источник/подзапрос | yes | **yes** — `FromSql` рендерит фрагмент как производную таблицу, можно соединять/фильтровать дальше | `DataContextExtensions.FromSql`, `ISqlDialect.SupportsRawSqlSource` |
-| Хинты запросов | yes (зависит от провайдера) | **partial** — только SQL Server `OPTION (...)` | `QueryCommand<TResult>.Hint`, `ISqlDialect.SupportsQueryHints`/`RenderQueryHints` |
-| Табличные хинты (например `WITH (NOLOCK)`) | yes | **partial** — только SQL Server | `EntityBuilder.WithTableHint`, `ISqlDialect.SupportsTableHints`/`MakeTableHints` |
+| Хинты уровня инструкции | yes (зависит от провайдера) | **yes** — SQL Server `OPTION (...)`, PostgreSQL/MySQL/MariaDB встроенный `/*+ ... */`; SQLite/ClickHouse отклоняют | `QueryCommand<TResult>.Hint`, `ISqlDialect.SupportsQueryHints`/`RenderQueryHints` |
+| Блокирующие табличные хинты (например `WITH (NOLOCK)`) | yes | **partial** — только SQL Server | `EntityBuilder.WithTableHint`, `ISqlDialect.SupportsTableHints`/`MakeTableHints` |
 | Квотирование идентификаторов | yes (по провайдеру) | включается явно — `UseQuotedIdentifiers()`/`WithQuotedIdentifiers()`; по умолчанию физические имена выводятся как есть | `ISqlDialect.QuoteIdentifier` |
 | Соглашения об именовании (например snake_case) | через `MappingSchema`/атрибуты (встроенной конвенции нет) | включается явно — `UseNamingConvention()`/`WithNamingConvention()`; встроенный `SnakeCaseNamingConvention`; явные имена — дословно | `INamingConvention` / `SnakeCaseNamingConvention` |
 | **DML** (`INSERT`/`UPDATE`/`DELETE`/`MERGE`) | yes | **no** (только чтение по замыслу) | — |

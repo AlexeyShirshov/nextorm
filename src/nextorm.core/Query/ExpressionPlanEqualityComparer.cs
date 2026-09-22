@@ -8,6 +8,10 @@ using System.Runtime.CompilerServices;
 
 namespace NextORM.Core;
 
+/// <summary>
+/// Compares expressions structurally so that logically identical queries share a cached plan. Owns the
+/// thread-static hashing visitor used by <c>GetHashCode</c>.
+/// </summary>
 public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
 {
     private readonly static ConcurrentDictionary<QueryCommandKey, Func<object?, QueryCommand>> _cmdCache = new();
@@ -23,15 +27,26 @@ public class ExpressionPlanEqualityComparer : IEqualityComparer<Expression?>
     private readonly ILogger? _logger;
     private readonly IQueryRegistry _queryProvider;
 
+    /// <summary>Creates a comparer for the given registry without plan-cache logging.</summary>
+    /// <param name="queryProvider">The registry that resolves referenced queries and nested comparers.</param>
     public ExpressionPlanEqualityComparer(IQueryRegistry queryProvider)
         : this(queryProvider, null)
     {
     }
+    /// <summary>Creates a comparer for the given registry, logging plan-cache misses through <paramref name="logger"/>.</summary>
+    /// <param name="queryProvider">The registry that resolves referenced queries and nested comparers.</param>
+    /// <param name="logger">The optional logger for plan-cache diagnostics.</param>
     public ExpressionPlanEqualityComparer(IQueryRegistry queryProvider, ILogger? logger)
     {
         _queryProvider = queryProvider;
         _logger = logger;
     }
+    /// <summary>
+    /// Returns a structural hash of <paramref name="obj"/>, resolving nested commands and outer
+    /// references through the registry.
+    /// </summary>
+    /// <param name="obj">The expression to hash.</param>
+    /// <returns>The structural hash, or <c>0</c> when <paramref name="obj"/> is <c>null</c>.</returns>
     public int GetHashCode(Expression obj)
     {
         if (obj == null)

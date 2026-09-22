@@ -5,6 +5,11 @@ using System.Reflection;
 
 namespace NextORM.Core;
 
+/// <summary>
+/// In-memory <see cref="IDataContext"/> implementation that evaluates LINQ queries over
+/// <see cref="Data"/> without a database. Used for unit testing and for querying materialised object
+/// graphs with the same operators as the SQL contexts.
+/// </summary>
 public partial class InMemoryDataContext : IDataContext
 {
     internal static readonly MethodInfo miCreateAsyncEnumerator = typeof(InMemoryDataContext).GetMethod(nameof(CreateAsyncEnumerator), BindingFlags.NonPublic | BindingFlags.Instance)!;
@@ -41,6 +46,10 @@ public partial class InMemoryDataContext : IDataContext
     private readonly IDictionary<Type, object?> _data = new Dictionary<Type, object?>();
     private bool _disposedValue;
     private readonly Dictionary<QueryPlan, object> _cmdIdx = [];
+    /// <summary>
+    /// Creates an empty in-memory context. Seeds the table-alias slot and the plan cache; data is
+    /// supplied through <see cref="Data"/>.
+    /// </summary>
     public InMemoryDataContext()
     {
         _data[typeof(TableAlias)] = new TableAlias?[] { null };
@@ -55,8 +64,11 @@ public partial class InMemoryDataContext : IDataContext
     private readonly ContextEnvironment _environment = new(null, typeof(InMemoryDataContext), needMapping: false, logSensitiveData: false);
     private readonly QueryCache _queryCache;
     private readonly InMemoryQueryExecutor _executor = new();
+    /// <summary>Logger for the context's diagnostic messages, or <see langword="null"/> (the in-memory context has no logger factory).</summary>
     public ILogger? Logger => _environment.Logger;
+    /// <summary>Whether projected rows must be materialised into CLR objects. Always <see langword="false"/> for the in-memory context.</summary>
     public bool NeedMapping => _environment.NeedMapping;
+    /// <summary>Data source keyed by entity type; add or replace entries to seed queries.</summary>
     public IDictionary<Type, object?> Data => _data;
     /// <summary>
     /// Per-instance compiled-delegate cache. Deliberately <b>not</b> shared, unlike
@@ -74,14 +86,19 @@ public partial class InMemoryDataContext : IDataContext
 
     /// <inheritdoc cref="Metadata"/>
     public IDictionary<Type, SelectExpression[]> SelectListCache => DataContextCache.SelectListCache;
+    /// <summary>Logger category used to trace executed commands, or <see langword="null"/>.</summary>
     public ILogger? CommandLogger => _environment.CommandLogger;
+    /// <summary>Logger category used by the row-reader path, or <see langword="null"/>.</summary>
     public ILogger? ResultSetEnumeratorLogger => _environment.ResultSetEnumeratorLogger;
+    /// <summary>User-owned bag of arbitrary state attached to this context.</summary>
     public Dictionary<string, object> Properties => _environment.Properties;
+    /// <summary>Lazily created, cached <c>Any</c> query for this context, or <see langword="null"/> until it is first needed.</summary>
     public Lazy<QueryCommand<bool>>? AnyCommand
     {
         get => _queryCache.AnyCommand;
         set => _queryCache.AnyCommand = value;
     }
+    /// <summary>Whether compiled expression delegates are reused between executions. Defaults to <see langword="false"/>.</summary>
     public bool CacheExpressions { get; set; }
 
     /// <summary>
@@ -99,8 +116,20 @@ public partial class InMemoryDataContext : IDataContext
     {
         return (InMemoryPreparedQueryCommand<TResult>)GetPreparedQueryCommand(queryCommand, false, true, cancellationToken);
     }
+    /// <summary>Prepares <paramref name="queryCommand"/> for in-memory execution, delegating to <see cref="InMemoryQueryBuilder"/>.</summary>
+    /// <typeparam name="TResult">The projected result type.</typeparam>
+    /// <param name="queryCommand">The command to prepare.</param>
+    /// <param name="createEnumerator">When <see langword="true"/>, builds a streaming enumerator as part of preparation.</param>
+    /// <param name="storeInCache">When <see langword="true"/>, stores the prepared command in the plan cache.</param>
+    /// <param name="cancellationToken">Token used to cancel preparation.</param>
+    /// <returns>The prepared command, ready to execute.</returns>
     public IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, CancellationToken cancellationToken)
         => InMemoryQueryBuilder.GetPreparedQueryCommand(this, queryCommand, createEnumerator, storeInCache, cancellationToken);
+    /// <summary>Builds the delegate that creates a row enumerator for a prepared query.</summary>
+    /// <typeparam name="TResult">The projected result type.</typeparam>
+    /// <param name="queryCommand">The command to build the enumerator for.</param>
+    /// <param name="cancellationToken">Token used to cancel preparation.</param>
+    /// <returns>A factory that creates enumerators over the command's result.</returns>
     protected CreateEnumeratorDelegate<TResult> BuildCreateEnumeratorDelegate<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
         => InMemoryQueryBuilder.BuildCreateEnumeratorDelegate(this, queryCommand, cancellationToken);
     private CreateEnumeratorDelegate<TResult> BuildLinqSourceDelegate<TResult>(LinqSourceExpression source)
@@ -192,11 +221,19 @@ public partial class InMemoryDataContext : IDataContext
         => InMemoryProjectionFactory.CreateProjection(left, right, dim);
     private IAsyncEnumerator<TResult> CreateEnumeratorAdapter<TResult, TEntity>(QueryCommand<TResult> queryCommand, InMemoryPreparedQueryCommand<TResult> cacheEntry, IAsyncEnumerator<TEntity> enumerator)
         => InMemoryQueryBuilder.CreateEnumeratorAdapter<TResult, TEntity>(this, queryCommand, cacheEntry, enumerator);
+    /// <summary>Returns a FROM expression for <paramref name="srcType"/>; the in-memory context does not need the command's source.</summary>
+    /// <param name="srcType">The entity or source type to wrap.</param>
+    /// <param name="queryCommand">Unused; present for interface compatibility.</param>
+    /// <returns>A FROM expression over <paramref name="srcType"/>.</returns>
     public FromExpression? GetFrom(Type srcType, QueryCommand? queryCommand)
     {
         return new FromExpression(srcType);
     }
 
+    /// <summary>Rewrites <paramref name="column"/>'s expression by substituting <paramref name="param"/> for its parameter placeholder.</summary>
+    /// <param name="column">The projected column whose expression is accessed.</param>
+    /// <param name="param">The replacement expression, typically the row or entity parameter.</param>
+    /// <returns>The column expression with the parameter substituted.</returns>
     public Expression MapColumn(SelectExpression column, Expression param)
     {
         var replace = new ReplaceParameterExpressionVisitor(param);
@@ -204,11 +241,15 @@ public partial class InMemoryDataContext : IDataContext
         //return Expression.PropertyOrField(param, column.PropertyName!);
     }
 
+    /// <summary>In-memory no-op: there is no compiled plan to invalidate.</summary>
+    /// <param name="queryCommand">The command to reset.</param>
     public void ResetPreparation(QueryCommand queryCommand)
     {
         //   queryCommand.RemovePayload<CreateEnumeratorPayload>();
     }
 
+    /// <summary>Asynchronously releases the context. Delegates to <see cref="Dispose()"/> so cleanup runs exactly once.</summary>
+    /// <returns>A completed task.</returns>
     public ValueTask DisposeAsync()
     {
         // Route through Dispose() so _disposedValue is set consistently with Dispose().
@@ -220,6 +261,11 @@ public partial class InMemoryDataContext : IDataContext
     record CreateEnumeratorPayload(Delegate Delegate);
     record CreateMainEnumeratorPayload(Delegate Delegate);
 
+    /// <summary>
+    /// Releases managed state. Called from <see cref="Dispose()"/>; <paramref name="disposing"/> is
+    /// <see langword="true"/> for managed cleanup.
+    /// </summary>
+    /// <param name="disposing"><see langword="true"/> when invoked from <see cref="Dispose()"/>.</param>
     protected virtual void Dispose(bool disposing)
     {
         if (!_disposedValue)
@@ -242,6 +288,7 @@ public partial class InMemoryDataContext : IDataContext
     //     Dispose(disposing: false);
     // }
 
+    /// <summary>Releases the context. Safe to call more than once.</summary>
     public void Dispose()
     {
         // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method
@@ -296,8 +343,18 @@ public partial class InMemoryDataContext : IDataContext
     //     return Task.FromResult((IEnumerator<TResult>)CreateAsyncEnumerator(queryCommand, @params, cancellationToken));
     // }
 
+    /// <summary>Returns a factory that materialises a <typeparamref name="TResult"/> from a <typeparamref name="TEntity"/> row.</summary>
+    /// <typeparam name="TResult">The projected result type.</typeparam>
+    /// <typeparam name="TEntity">The source entity type.</typeparam>
+    /// <param name="queryCommand">The command that defines the projection.</param>
+    /// <returns>A factory returning a row mapper for the projection.</returns>
     public Func<Func<TEntity, TResult>> GetMap<TResult, TEntity>(QueryCommand<TResult> queryCommand)
         => InMemoryRowMaterializer.GetMap<TResult, TEntity>(this, queryCommand, _expCache);
+    /// <summary>Creates a synchronous enumerator over the prepared command's rows.</summary>
+    /// <typeparam name="TResult">The projected result type.</typeparam>
+    /// <param name="preparedQueryCommand">The prepared command to enumerate.</param>
+    /// <param name="params">Positional parameters bound to the command, or <see langword="null"/>.</param>
+    /// <returns>A synchronous enumerator over the result rows.</returns>
     public IEnumerator<TResult> CreateEnumerator<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params)
         => _executor.CreateEnumerator(preparedQueryCommand, @params);
 
@@ -307,44 +364,131 @@ public partial class InMemoryDataContext : IDataContext
     /// </summary>
     public IEnumerable<TResult> GetEnumerable<TResult>(IPreparedQueryCommand<TResult> preparedCommand, params object[]? @params)
         => _executor.GetEnumerable(preparedCommand, @params);
+    /// <summary>Creates an async enumerator for a query command, preparing it if necessary.</summary>
+    /// <typeparam name="TResult">The projected result type.</typeparam>
+    /// <param name="queryCommand">The command to enumerate.</param>
+    /// <param name="params">Positional parameters bound to the command, or <see langword="null"/>.</param>
+    /// <param name="cancellationToken">Token used to cancel enumeration.</param>
+    /// <returns>An async enumerator over the result rows.</returns>
     protected IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
         => InMemoryQueryBuilder.CreateAsyncEnumerator(this, queryCommand, @params, cancellationToken);
+    /// <summary>Creates an async enumerator over the prepared command's rows.</summary>
+    /// <typeparam name="TResult">The projected result type.</typeparam>
+    /// <param name="preparedQueryCommand">The prepared command to enumerate.</param>
+    /// <param name="params">Positional parameters bound to the command, or <see langword="null"/>.</param>
+    /// <param name="cancellationToken">Token used to cancel enumeration.</param>
+    /// <returns>An async enumerator over the result rows.</returns>
     public IAsyncEnumerator<TResult> CreateAsyncEnumerator<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
         => _executor.CreateAsyncEnumerator(preparedQueryCommand, @params, cancellationToken);
 
+    /// <summary>Executes the command and buffers all rows into a list.</summary>
+    /// <typeparam name="TResult">The projected result type.</typeparam>
+    /// <param name="preparedQueryCommand">The prepared command to execute.</param>
+    /// <param name="params">Positional parameters bound to the command, or <see langword="null"/>.</param>
+    /// <param name="cancellationToken">Token used to cancel execution.</param>
+    /// <returns>The materialised rows; empty when the query yields none.</returns>
     public Task<List<TResult>> ToListAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
         => _executor.ToListAsync(preparedQueryCommand, @params, cancellationToken);
 
+    /// <summary>Executes the command and buffers all rows into a list.</summary>
+    /// <typeparam name="TResult">The projected result type.</typeparam>
+    /// <param name="preparedQueryCommand">The prepared command to execute.</param>
+    /// <param name="params">Positional parameters bound to the command.</param>
+    /// <returns>The materialised rows; empty when the query yields none.</returns>
     public List<TResult> ToList<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, ReadOnlySpan<object?> @params)
         => _executor.ToList(preparedQueryCommand, @params);
 
+    /// <summary>Executes the command and converts the first column of the first row to <typeparamref name="TResult"/>.</summary>
+    /// <typeparam name="TResult">The scalar type to convert the value to.</typeparam>
+    /// <param name="preparedQueryCommand">The prepared command to execute.</param>
+    /// <param name="params">Positional parameters bound to the command, or <see langword="null"/>.</param>
+    /// <param name="throwIfNull">When <see langword="true"/>, throws <see cref="InvalidOperationException"/> when the result is null; otherwise returns <see langword="default"/>.</param>
+    /// <param name="cancellationToken">Token used to cancel execution.</param>
+    /// <returns>The scalar value, or <see langword="default"/> when the result is null and <paramref name="throwIfNull"/> is <see langword="false"/>.</returns>
     public Task<TResult?> ExecuteScalar<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, bool throwIfNull, CancellationToken cancellationToken)
         => _executor.ExecuteScalar(preparedQueryCommand, @params, throwIfNull, cancellationToken);
 
+    /// <summary>Executes the command and converts the first column of the first row to <typeparamref name="TResult"/>.</summary>
+    /// <typeparam name="TResult">The scalar type to convert the value to.</typeparam>
+    /// <param name="preparedQueryCommand">The prepared command to execute.</param>
+    /// <param name="params">Positional parameters bound to the command.</param>
+    /// <param name="throwIfNull">When <see langword="true"/>, throws <see cref="InvalidOperationException"/> when the result is null; otherwise returns <see langword="default"/>.</param>
+    /// <returns>The scalar value, or <see langword="default"/> when the result is null and <paramref name="throwIfNull"/> is <see langword="false"/>.</returns>
     public TResult? ExecuteScalar<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, ReadOnlySpan<object?> @params, bool throwIfNull)
         => _executor.ExecuteScalar(preparedQueryCommand, @params, throwIfNull);
 
+    /// <summary>Returns the first row of the result.</summary>
+    /// <typeparam name="TResult">The projected result type.</typeparam>
+    /// <param name="preparedQueryCommand">The prepared command to execute.</param>
+    /// <param name="params">Positional parameters bound to the command.</param>
+    /// <returns>The first projected row.</returns>
+    /// <exception cref="InvalidOperationException">The result set is empty.</exception>
     public TResult First<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, ReadOnlySpan<object?> @params)
         => _executor.First(preparedQueryCommand, @params);
 
+    /// <summary>Returns the first row of the result, or <see langword="default"/> when the result set is empty.</summary>
+    /// <typeparam name="TResult">The projected result type.</typeparam>
+    /// <param name="preparedQueryCommand">The prepared command to execute.</param>
+    /// <param name="params">Positional parameters bound to the command.</param>
+    /// <returns>The first projected row, or <see langword="default"/> when there is none.</returns>
     public TResult? FirstOrDefault<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, ReadOnlySpan<object?> @params)
         => _executor.FirstOrDefault(preparedQueryCommand, @params);
+    /// <summary>Asynchronously returns the first row of the result.</summary>
+    /// <typeparam name="TResult">The projected result type.</typeparam>
+    /// <param name="preparedQueryCommand">The prepared command to execute.</param>
+    /// <param name="params">Positional parameters bound to the command, or <see langword="null"/>.</param>
+    /// <param name="cancellationToken">Token used to cancel execution.</param>
+    /// <returns>The first projected row.</returns>
+    /// <exception cref="InvalidOperationException">The result set is empty.</exception>
     public Task<TResult> FirstAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
         => _executor.FirstAsync(preparedQueryCommand, @params, cancellationToken);
 
+    /// <summary>Asynchronously returns the first row of the result, or <see langword="default"/> when the result set is empty.</summary>
+    /// <typeparam name="TResult">The projected result type.</typeparam>
+    /// <param name="preparedQueryCommand">The prepared command to execute.</param>
+    /// <param name="params">Positional parameters bound to the command, or <see langword="null"/>.</param>
+    /// <param name="cancellationToken">Token used to cancel execution.</param>
+    /// <returns>The first projected row, or <see langword="default"/> when there is none.</returns>
     public Task<TResult?> FirstOrDefaultAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
         => _executor.FirstOrDefaultAsync(preparedQueryCommand, @params, cancellationToken);
 
+    /// <summary>Returns the only row of the result.</summary>
+    /// <typeparam name="TResult">The projected result type.</typeparam>
+    /// <param name="preparedQueryCommand">The prepared command to execute.</param>
+    /// <param name="params">Positional parameters bound to the command.</param>
+    /// <returns>The single projected row.</returns>
+    /// <exception cref="InvalidOperationException">The result set is empty or contains more than one row.</exception>
     public TResult Single<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, ReadOnlySpan<object?> @params)
         => _executor.Single(preparedQueryCommand, @params);
 
+    /// <summary>Returns the only row of the result, or <see langword="default"/> when the result set is empty.</summary>
+    /// <typeparam name="TResult">The projected result type.</typeparam>
+    /// <param name="preparedQueryCommand">The prepared command to execute.</param>
+    /// <param name="params">Positional parameters bound to the command.</param>
+    /// <returns>The single projected row, or <see langword="default"/> when there is none.</returns>
+    /// <exception cref="InvalidOperationException">The result set contains more than one row.</exception>
     public TResult? SingleOrDefault<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, ReadOnlySpan<object?> @params)
         => _executor.SingleOrDefault(preparedQueryCommand, @params);
+    /// <summary>Asynchronously returns the only row of the result.</summary>
+    /// <typeparam name="TResult">The projected result type.</typeparam>
+    /// <param name="preparedQueryCommand">The prepared command to execute.</param>
+    /// <param name="params">Positional parameters bound to the command, or <see langword="null"/>.</param>
+    /// <param name="cancellationToken">Token used to cancel execution.</param>
+    /// <returns>The single projected row.</returns>
+    /// <exception cref="InvalidOperationException">The result set is empty or contains more than one row.</exception>
     public Task<TResult> SingleAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
         => _executor.SingleAsync(preparedQueryCommand, @params, cancellationToken);
 
+    /// <summary>Asynchronously returns the only row of the result, or <see langword="default"/> when the result set is empty.</summary>
+    /// <typeparam name="TResult">The projected result type.</typeparam>
+    /// <param name="preparedQueryCommand">The prepared command to execute.</param>
+    /// <param name="params">Positional parameters bound to the command, or <see langword="null"/>.</param>
+    /// <param name="cancellationToken">Token used to cancel execution.</param>
+    /// <returns>The single projected row, or <see langword="default"/> when there is none.</returns>
+    /// <exception cref="InvalidOperationException">The result set contains more than one row.</exception>
     public Task<TResult?> SingleOrDefaultAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
         => _executor.SingleOrDefaultAsync(preparedQueryCommand, @params, cancellationToken);
 
+    /// <summary>Clears all cached query plans held by this context.</summary>
     public void PurgeQueryCache() => _queryCache.PurgeQueryCache();
 }

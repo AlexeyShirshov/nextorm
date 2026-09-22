@@ -10,8 +10,10 @@ namespace NextORM.MariaDb;
 /// </summary>
 public sealed class MariaDbDialect : MySqlDialect
 {
+    /// <summary>Gets the shared MariaDB dialect instance.</summary>
     public static new readonly MariaDbDialect Instance = new();
 
+    /// <inheritdoc/>
     public override bool SupportsIntersectExceptAll => true;
 
     /// <summary>MariaDB 10.3+ renders <c>PERCENTILE_CONT</c>/<c>PERCENTILE_DISC</c> as window functions.</summary>

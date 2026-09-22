@@ -14,19 +14,30 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     private List<QueryCommand>? _referencedQueries;
     private List<Expression>? _outerRefs;
     private readonly JoinExpression[]? _joins;
+    /// <summary>The prepared projection columns after <c>PrepareCommand</c>, or <c>null</c> before preparation.</summary>
     protected SelectExpression[]? _selectList;
     private object? _customData;
+    /// <summary>The prepared <c>FROM</c> source (physical table, subquery, CTE or set-operation operand), or <c>null</c> before preparation.</summary>
     protected FromExpression? _from;
+    /// <summary>The context that executes the command, or <c>null</c> for an unbound cached clone.</summary>
     protected IDataContext? _dataContext;
+    /// <summary>The original projection lambda, or <c>null</c> for a command without an explicit projection.</summary>
     protected readonly LambdaExpression? _exp;
+    /// <summary>The <c>WHERE</c> predicate lambda before preparation, or <c>null</c> when there is none.</summary>
     protected readonly LambdaExpression? _condition;
+    /// <summary>The <c>GROUP BY</c> key selector before preparation, or <c>null</c> when there is no grouping.</summary>
     protected readonly LambdaExpression? _groupExp;
+    /// <summary>The <c>HAVING</c> predicate before preparation, or <c>null</c> when there is none.</summary>
     protected readonly LambdaExpression? _having;
+    /// <summary>The ClickHouse <c>PREWHERE</c> predicate before preparation, or <c>null</c> when there is none.</summary>
     protected LambdaExpression? _preWhere;
+    /// <summary>The ClickHouse <c>ARRAY JOIN</c> expressions before preparation, or <c>null</c> when the clause is absent.</summary>
     protected LambdaExpression[]? _arrayJoins;
     internal Expression[]? _preparedArrayJoin;
     private IReadOnlyList<WindowDefinition>? _windows;
+    /// <summary>Whether the command has been prepared and its cached plan hashes are current.</summary>
     protected bool _isPrepared;
+    /// <summary>The entity type the command reads from, or <c>null</c> for a command without a source type.</summary>
     protected Type? _srcType;
     private bool _dontCache;
     internal int ColumnsPlanHash;
@@ -50,6 +61,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// </summary>
     internal int WindowsPlanHash;
     internal Type? ResultType;
+    /// <summary>The paging state (<c>LIMIT</c>/<c>OFFSET</c>) applied to the query.</summary>
     public Paging Paging;
     /// <summary>
     /// True when this command is used as a correlated scalar with a <c>*OrDefault</c> terminal
@@ -101,8 +113,15 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     private SelectExpression[]? _groupingList;
     private SelectExpression[]? _limitByColumns;
     private SelectExpression[]? _distinctOnColumns;
+    /// <summary>The sort columns before preparation, or <c>null</c> when the query has no <c>ORDER BY</c>.</summary>
     protected readonly Sorting[]? _sorting;
 
+    /// <summary>
+    /// Initializes a command from a query shape, copying each collaborator and leaving the command
+    /// unprepared.
+    /// </summary>
+    /// <param name="dataProvider">The context that executes the command, or <c>null</c> for an unbound clone.</param>
+    /// <param name="definition">The shape to copy from.</param>
     protected QueryCommand(IDataContext? dataProvider, QueryDefinition definition)
     {
         _dataContext = dataProvider;
@@ -164,23 +183,32 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         ArrayJoinKind = ArrayJoinKind,
         BindArrayJoinElement = BindArrayJoinElement,
     };
+    /// <summary>The logger that receives command-preparation diagnostics, or <c>null</c> when logging is disabled.</summary>
     public ILogger? Logger { get; }
+    /// <summary>The prepared <c>FROM</c> source, or <c>null</c> before preparation.</summary>
     public FromExpression? From { get => _from; set => _from = value; }
+    /// <summary>The prepared projection columns, or <c>null</c> before preparation.</summary>
     public SelectExpression[]? SelectList => _selectList;
+    /// <summary>The prepared <c>GROUP BY</c> columns, or <c>null</c> when the query has no grouping.</summary>
     public SelectExpression[]? GroupingList => _groupingList;
+    /// <summary>The entity type the command reads from, or <c>null</c> for a command without a source type.</summary>
     public Type? EntityType => _srcType;
+    /// <summary>Whether the command has been prepared and its cached plan hashes are current.</summary>
     public bool IsPrepared
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _isPrepared;
     }
+    /// <summary>The <c>WHERE</c> predicate lambda, or <c>null</c> when there is none.</summary>
     public Expression? Condition => _condition;
     /// <summary>
     /// The original projection lambda. Exposed internally so the in-memory grouped path can rewrite
     /// aggregate calls in the projection body; SQL providers use <see cref="SelectList"/> instead.
     /// </summary>
     internal LambdaExpression? ProjectionExpression => _exp;
+    /// <summary>The join clauses declared for the query, or <c>null</c> when there are none.</summary>
     public JoinExpression[]? Joins => _joins;
+    /// <summary>Whether the prepared plan may be stored in and reused from the plan cache; set to <c>false</c> for commands that must not be cached.</summary>
     public bool Cache
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -189,6 +217,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     }
     internal QueryCommand? FromQuery => From?.SubQuery;
     internal bool OneColumn { get; set; }
+    /// <summary>Whether the command is shaped to return at most a single row (set by the <c>First</c>/<c>Single</c> terminals).</summary>
     public bool SingleRow { get; set; }
     /// <summary>
     /// Whether the command was marked with <c>DISTINCT</c>. Named <c>IsDistinct</c> rather than
@@ -266,9 +295,13 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// <summary>Whether <see cref="PreparedPreWhere"/> contains a top-level value-list whose shape is refreshed per run.</summary>
     internal bool HasPreWhereInValues;
     internal bool IgnoreColumns { get; set; }
+    /// <summary>The commands referenced by correlated subqueries in this command's expressions, in registration order; empty until preparation registers one.</summary>
     public IReadOnlyList<QueryCommand> ReferencedQueries => _referencedQueries!;
+    /// <summary>The sort columns declared for the query, or <c>null</c> when the query has no <c>ORDER BY</c>.</summary>
     public Sorting[]? Sorting => _sorting;
+    /// <summary>An extension slot for provider- or consumer-specific data; the core engine never reads or writes it.</summary>
     public object? CustomData { get => _customData; set => _customData = value; }
+    /// <summary>The context that executes the command, or <c>null</c> for an unbound cached clone.</summary>
     public IDataContext? DataContext { get => _dataContext; set => _dataContext = value; }
     /// <summary>
     /// Common table expressions declared for this command, in declaration order, or <c>null</c> when
@@ -340,6 +373,7 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// as rows. Mutually exclusive with <see cref="ForJsonClause"/>.
     /// </summary>
     public ForXmlClause? ForXmlClause { get; internal set; }
+    /// <summary>The <c>GROUP BY</c> key selector, or <c>null</c> when the query has no grouping.</summary>
     public LambdaExpression? GroupBy { get => _groupExp; }
     /// <summary>
     /// The super-aggregate modifier applied to the grouping list (<c>ROLLUP</c>/<c>CUBE</c>), or
@@ -353,9 +387,13 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// <c>null</c> otherwise. An empty set yields the grand total.
     /// </summary>
     public IReadOnlyList<int[]>? GroupingSets { get; internal set; }
+    /// <summary>The <c>HAVING</c> predicate lambda, or <c>null</c> when there is none.</summary>
     public LambdaExpression? Having { get => _having; }
+    /// <summary>The second operand of the command's set operation, or <c>null</c> when the command carries none.</summary>
     public QueryCommand? UnionQuery { get => _union; }
+    /// <summary>The set operation (<c>UNION</c>/<c>INTERSECT</c>/<c>EXCEPT</c> and their <c>ALL</c> variants) applied to the query.</summary>
     public UnionType UnionType { get => _unionType; }
+    /// <summary>The expressions registered as correlated outer references during preparation, or <c>null</c> when there are none.</summary>
     public IReadOnlyList<Expression>? OuterReferences => _outerRefs;
 
     /// <summary>
@@ -395,6 +433,10 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         }
     }
 
+    /// <summary>
+    /// Discards every prepared piece (from, columns, grouping, conditions, array joins and hashes) so the
+    /// command is prepared again on its next execution. Called after a clone is mutated.
+    /// </summary>
     public virtual void ResetPreparation()
     {
         _isPrepared = false;
@@ -446,6 +488,9 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         return idx;
     }
 
+    /// <summary>Attaches a set operation to this command, chaining it onto an existing operation when one is present.</summary>
+    /// <param name="queryCommand">The second operand of the set operation.</param>
+    /// <param name="unionType">The kind of set operation to apply.</param>
     protected void SetOperation(QueryCommand queryCommand, UnionType unionType)
     {
         if (_union is null)
@@ -466,6 +511,9 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         _unionType = UnionType.None;
     }
 
+    /// <summary>Registers an expression as a correlated outer reference and returns its index.</summary>
+    /// <param name="node">The expression that references an outer query.</param>
+    /// <returns>The zero-based index of the reference in the command's outer-reference list.</returns>
     public int AddOuterReference(Expression node)
     {
         // See IQueryRegistry.AddCommand: outer references live on the root registry so a marker

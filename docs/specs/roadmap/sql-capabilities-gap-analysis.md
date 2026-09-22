@@ -8,7 +8,7 @@ The analysis is based on the current `1.0.3-alpha` tree: `SqlBuilder`, `QueryCom
 `BaseExpressionVisitor`, `CorrelatedQueryExpressionVisitor`, the join builders, the `ISqlDialect`
 contract and the provider dialects, plus the integration tests under `tests/nextorm.integration.tests`.
 
-> **Status (updated 2026-09-19).** Sections 1–4 below started as the original gap analysis and were
+> **Status (updated 2026-09-22).** Sections 1–4 below started as the original gap analysis and were
 > refreshed in place; the implementation status is:
 >
 > | # | Workstream | Status |
@@ -28,7 +28,7 @@ contract and the provider dialects, plus the integration tests under `tests/next
 > | 13 | Navigation properties / relationships | **Out of scope** |
 > | 14 | DML (`INSERT`/`UPDATE`/`DELETE`) | **Out of scope** |
 > | 15 | `APPLY` / `LATERAL` (`CrossApply`/`OuterApply`) | **Done** — SQL Server `CROSS/OUTER APPLY`, PostgreSQL/MySQL/MariaDB `LATERAL`, including a **correlated** applied source (a lambda over the left-hand row); gated by `ISqlDialect.SupportsApply` (SQLite/ClickHouse reject); the in-memory provider does not support it |
-> | 16 | Statement-level query hints (`Hint(...)`) | **Done on SQL Server** (`OPTION (...)`); other dialects reject hints with `NotSupportedException` |
+> | 16 | Statement-level query hints (`Hint(...)`) | **Done on SQL Server, PostgreSQL and MySQL/MariaDB** (SQL Server `OPTION (...)`, PostgreSQL/MySQL/MariaDB inline `/*+ ... */`); SQLite and ClickHouse reject with `NotSupportedException` |
 > | 17 | Full-text search (`contains`/`freetext`) | **Done** on SQL Server, PostgreSQL and MySQL/MariaDB via `MakeFullText` |
 > | 18 | JSON scalar functions (`json_value`/`json_query`/`json_modify`, `isjson`) | **Done on SQL Server and MySQL/MariaDB** (`SupportsTextJson`); native JSON documents on PostgreSQL (`SupportsJson`) |
 > | 19 | `FOR JSON` / `FOR XML` | **Done on SQL Server** (`ForJson`/`ForXml`) |
@@ -36,12 +36,12 @@ contract and the provider dialects, plus the integration tests under `tests/next
 > | 21 | `STRING_AGG` / `ARRAY_AGG` (incl. `WITHIN GROUP`, `FILTER`) | **Done** — `string_agg` on SQL Server, PostgreSQL, MySQL/MariaDB, SQLite and ClickHouse; `array_agg` on PostgreSQL (`MakeStringAgg`/`MakeArrayAgg`) |
 > | 22 | `ROLLUP` / `CUBE` / `GROUPING SETS` | **Done** — `ROLLUP` on SQL Server, PostgreSQL, MySQL/MariaDB, SQLite and ClickHouse; `CUBE`/`GROUPING SETS` on SQL Server, PostgreSQL, SQLite and ClickHouse (`GroupByRollup`/`GroupByCube`/`GroupByGroupingSets`) |
 > | 23 | Date arithmetic (`date_add`/`date_diff`/`date_trunc`/`end_of_month`/`date_from_parts`, `DateTime.Add*`) | **Done** across SQL Server, PostgreSQL, MySQL/MariaDB, SQLite and ClickHouse; the accepted fields differ per provider and are validated by `SupportsDateTruncField`/`SupportsDateAddField`/`SupportsDateDiffField`. The ClickHouse-native conversion/part surface (`toDate`/`toDateTime`/`toDate32`, `toYear`/..., `toStartOf*`, `toMonday`, `toYYYYMM`/`toYYYYMMDD`, `toUnixTimestamp`) is exposed through `SqlFunctions.ClickHouse` under `DateConversion` |
-> | 24 | Table hints (`with (nolock)`, ...) | **Done on SQL Server** (`WithTableHint`); other dialects throw |
+> | 24 | Locking table hints (`with (nolock)`/`updlock`/`holdlock`) | **Done on SQL Server** (`WithTableHint`); other dialects throw (the MySQL/MariaDB/SQLite index hints have different semantics and are not exposed) |
 > | 25 | Extended scalar + session/info functions (`make_interval`, `justify_*`, `to_*`, `timezone`, `gen_random_uuid`/`uuidv7`, `pg_typeof`; `current_user`/`session_user`/`current_schema`/`current_database`/`version`) | Extended scalar + `pg_typeof`: **Done on PostgreSQL** (`SupportsExtendedScalarFunctions`). Session/info: **Done** cross-provider — all five on PostgreSQL/SQL Server/MySQL/MariaDB, `current_user`/`current_database`/`version` on ClickHouse and `version` on SQLite (`SessionInfoFunctions` + per-name `SessionInfoFunctions`). UUID generators: **Done** cross-provider — `gen_random_uuid`/`uuidv7` on PostgreSQL/MariaDB/ClickHouse, `gen_random_uuid` (`newid()`) also on SQL Server, gated off on MySQL (v1 only) and SQLite (`UuidGenerators` + per-name `UuidGenerators`) |
 > | 26 | Correlated scalar subqueries (and correlated `EXISTS`/`IN`/`ANY`/`ALL` in `SELECT`/`WHERE`/`ORDER BY`/`HAVING`) | **Done on SQL providers** (any nesting depth; join-projection outer references included); the in-memory provider still throws `NotSupportedException` (`todo_correlated_inmemory.md`) |
 >
-> Test coverage after the work is **83.6% line** (CI threshold 75%); the full integration suite is
-> 803 tests / 0 failed / 23 capability-based skips. Benchmarks and the performance optimizations that
+> Test coverage after the work is **85.4% line / 74.5% branch** (CI threshold 75%); the full test run is
+> 2333 passed / 0 failed / 30 capability-based skips. Benchmarks and the performance optimizations that
 > followed are documented in
 > [Iteration 6 of `benchmark-report.md`](https://github.com/AlexeyShirshov/nextorm/blob/main/docs/specs/performance/benchmark-report.md):
 > prepared nextorm wins every new feature against compiled EF Core/linq2db/Dapper, and the warm-path
@@ -103,6 +103,13 @@ These are fully implemented and covered by SQL-generation or integration tests:
   cross-provider arbitrary-value `any_agg` (`ANY_VALUE` on MySQL, `any` on
   ClickHouse; MariaDB and SQL Server gated off) and the window percentiles
   `percentile_cont`/`percentile_disc` on SQL Server/MariaDB.
+* **ClickHouse exclusive surface** — native `Array(T)`/`Tuple(...)` values materialise as CLR `T[]`/
+  `System.Tuple<...>` (with the array-returning `groupArray`/`groupUniqArray`/`topK`/`topKWeighted`/
+  `quantiles`, the array-returning `JSONExtractKeys*`/`JSONExtractArrayRaw` and the hierarchical
+  `dictGetHierarchy`/`dictGetChildren`), higher-order lambdas (`arrayMap`/`arrayFilter`/…), scalar
+  predicates over arrays (`startsWith`/`endsWith`/`hasSubstr`), `tuple`/`tupleElement`, and the
+  `SEMI`/`ANTI`/`PASTE` join kinds. Typed access to an unmapped column by name
+  (`SqlFunctions.Column<T>`) works on every SQL provider.
 * **Window model extensions** — named windows (`WINDOW w AS (...)` referenced by `OVER w`) on
   PostgreSQL, MySQL, MariaDB, ClickHouse and SQLite; the `GROUPS` frame unit on PostgreSQL, ClickHouse
   and SQLite; frame `EXCLUDE` on PostgreSQL and SQLite. Each piece is gated individually
@@ -133,6 +140,11 @@ These are fully implemented and covered by SQL-generation or integration tests:
 ---
 
 ## 4. Remaining gaps, in order of significance
+
+> This list is a status ledger refreshed in place, not a to-do: an item marked **shipped** / **done** /
+> **closed** describes a gap that no longer exists. The live subset today is item 1 (in-memory
+> correlation), item 6 (aggregate-function state, blocked by the driver), item 11 (dynamic-schema table
+> sources), item 18 (DML / navigation, out of scope) and item 19 (engine limits, out of scope).
 
 Ordered by impact on real query authoring. Per-feature details and owners live in the per-feature
 `docs/specs/roadmap/todo_*.md`; the full matrix is in
@@ -179,12 +191,13 @@ Ordered by impact on real query authoring. Per-feature details and owners live i
    `dictIsIn` (as `bool`) are exposed as
    [`ClickHouseFunctions.dict_get_hierarchy`](xref:NextORM.Core.ClickHouseFunctions.dict_get_hierarchy)/`dict_get_children`/`dict_is_in`.
    Still open on this item: `untuple` (changes the column
-   set, not a scalar value).
+   set, not a scalar value) and binding the element of several `ARRAY JOIN` expressions at once
+   (`ArrayJoinElement`/`LeftArrayJoinElement` bind a single array expression); both are documented in
+   [Limitations](../../advanced/limitations.md).
    Shipped: [ClickHouse provider](../../providers/clickhouse.md),
    [Provider-specific SQL](../../guide/provider-specific/clickhouse.md#aggregates),
    [Grouping and aggregates](../../guide/04-grouping-and-aggregates.md),
    [Scalar functions](../../guide/11-scalar-functions.md#arrays-clickhouse).
-   Todo: [`todo_clickhouse_arrays.md`](todo_clickhouse_arrays.md).
 5. **ClickHouse higher-order array functions — shipped.** `arrayMap`/`arrayFilter`/`arrayExists`/
    `arrayAll`/`arrayCount`/`arrayFirst*`/`arrayLast*` translate an inline lambda argument
    (`ClickHouseFunctions.array_map`/`array_filter`/`array_exists`/`array_all`/`array_count`/
@@ -275,23 +288,26 @@ Ordered by impact on real query authoring. Per-feature details and owners live i
     (`DATE_FORMAT`/`strftime`/`formatDateTime`) template languages are incompatible — a single portable
     `template` argument cannot exist.
     Shipped: [Provider overview](../../providers/overview.md).
-16. **Table hints only on SQL Server.** Statement-level hints (`Hint(...)`) are now wired on SQL Server
-    (`OPTION (...)`), PostgreSQL and MySQL/MariaDB (inline `/*+ ... */`, read by the optional
+16. **Statement-level query hints — shipped cross-provider.** `Hint(...)` renders SQL Server
+    `OPTION (...)` and the inline PostgreSQL/MySQL/MariaDB `/*+ ... */` (read by the optional
     `pg_hint_plan` extension on PostgreSQL and as native optimizer hints on MySQL/MariaDB); SQLite and
-    ClickHouse have no statement-hint syntax and stay gated. Table hints (`WithTableHint`) remain
-    SQL Server-only, since the MySQL/MariaDB and SQLite index hints (`USE INDEX`/`INDEXED BY`) change
-    the plan but not the locking semantics of `WITH (NOLOCK)`.
+    ClickHouse have no statement-hint syntax and reject it.
     Shipped: [Query hints](../../guide/17-query-hints.md).
-17. **No DML and no navigation properties / relationship metadata** — by design for a read-only,
+17. **Locking table hints — SQL Server only.** `WithTableHint(...)` renders the SQL Server locking
+    hints `WITH (NOLOCK)`/`UPDLOCK`/`HOLDLOCK`. The MySQL/MariaDB and SQLite index hints
+    (`USE INDEX`/`INDEXED BY`) change the plan but not the locking semantics of `WITH (NOLOCK)`, so
+    they are not exposed; a separate index-hint surface is future work.
+    See [Limitations](../../advanced/limitations.md).
+18. **No DML and no navigation properties / relationship metadata** — by design for a read-only,
     no-change-tracking mapper, but still a functional gap versus both references.
     Todo: out of scope — [`limitations.md`](../../advanced/limitations.md); DML tracked separately in
     [`todo_insert.md`](todo_insert.md)/[`todo_update.md`](todo_update.md)/
     [`todo_delete.md`](todo_delete.md)/[`todo_merge.md`](todo_merge.md).
-18. **Server/engine limits** (not fixable in nextorm): SQL Server has no `INTERSECT ALL`/`EXCEPT ALL`
+19. **Server/engine limits** (not fixable in nextorm): SQL Server has no `INTERSECT ALL`/`EXCEPT ALL`
     (the dialect correctly throws `NotSupportedException`); the ClickHouse `Memory` engine does not
     support `FINAL`/`PREWHERE`/`SAMPLE` (an integration-test limitation, not missing functionality).
     Todo: [`limitations.md`](../../advanced/limitations.md) (out of scope: engine/server cannot).
-19. **Warm-path plan-build cost (performance) — closed by decision.** On the fast (tmpfs) full run the
+20. **Warm-path plan-build cost (performance) — closed by decision.** On the fast (tmpfs) full run the
     prepared path wins every measured class; the non-prepared (warm) path stays ~1.1–1.6× behind Dapper on
     `CTE`, recursive `CTE`, `Join4` and `IN`-list. Iterations 6 and 8 closed the `IN`-list refresh cost and
     parts of `INTERSECT`/`EXCEPT` and recursive `CTE`; a fresh iteration-9 measurement confirms the remaining
@@ -329,7 +345,7 @@ developed in parallel on the same working tree.
 | 13 | Navigation properties / relationships | **Out of scope** | metadata (`Meta/`), `EntityBuilder.cs`, `SqlBuilder.cs` | — |
 | 14 | DML (`INSERT`/`UPDATE`/`DELETE`) | **Out of scope** | new subsystem + provider `DbCommand` layer | — |
 | 15 | `APPLY` / `LATERAL` | **Done** (incl. correlated sources) | `JoinExpression.cs`, `SqlBuilder.cs`, dialects | SQL-generation tests |
-| 16 | Statement-level query hints | **Done on SQL Server** | `QueryCommand.TResult.cs`, `SqlBuilder.cs`, SQL Server dialect | SQL-generation tests |
+| 16 | Statement-level query hints | **Done on SQL Server, PostgreSQL and MySQL/MariaDB** | `QueryCommand.TResult.cs`, `SqlBuilder.cs`, dialects | SQL-generation tests |
 | 17 | Full-text search (`contains`/`freetext`) | **Done** | `BuiltinFunctionTranslator.cs`, `ISqlDialect.cs`, `SqlDialectBase.cs`, dialects | SQL-generation tests |
 | 18 | JSON scalar functions and `isjson` | **Done on SQL Server** | `TextJsonSqlTranslator.cs`, `ISqlDialect.cs`, SQL Server dialect | SQL-generation tests |
 | 19 | `FOR JSON` / `FOR XML` | **Done on SQL Server** | `ForJson.cs`, `ForXml.cs`, `QueryCommand.TResult.cs`, `SqlBuilder.cs`, SQL Server dialect | SQL-generation tests |
@@ -337,7 +353,7 @@ developed in parallel on the same working tree.
 | 21 | `STRING_AGG` / `ARRAY_AGG` | **Done** | `SqlFunctions.cs`, `BuiltinFunctionTranslator.cs`, `ISqlDialect.cs`, `SqlDialectBase.cs`, dialects | SQL-generation tests (+ ClickHouse integration) |
 | 22 | `ROLLUP` / `CUBE` / `GROUPING SETS` | **Done** | `EntityBuilder.cs`, `QueryCommand.cs`, `SqlBuilder.cs`, dialects | SQL-generation tests |
 | 23 | Date arithmetic parity (MySQL/MariaDB, SQLite) | **Done** | `BuiltinFunctionTranslator.cs`, dialects | SQL-generation tests + provider integration tests |
-| 24 | Table hints | **Done on SQL Server** | `EntityBuilder.cs`, `SqlBuilder.cs`, SQL Server dialect | SQL-generation tests |
+| 24 | Locking table hints | **Done on SQL Server** | `EntityBuilder.cs`, `SqlBuilder.cs`, SQL Server dialect | SQL-generation tests |
 | 25 | PostgreSQL extended scalar functions | **Done** | `SqlFunctions.cs`, `ExtendedScalarFunctionTranslator.cs`, Postgres dialect | SQL-generation tests |
 | 26 | Warm-path plan-build (CTE / recursive CTE / `Join4` / `IN`-list) | **Closed (decision)** | `QueryCommand*.cs`, `SqlBuilder.cs`, `SqlSourceRenderer.cs`, `Visitors/`, `EntityBuilder.cs`, `JoinedEntityBuilder.cs` | `SqliteBenchmarkFeaturesFairCached`, SQL-generation tests |
 

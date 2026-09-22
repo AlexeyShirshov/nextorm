@@ -6,11 +6,19 @@ namespace NextORM.Core;
 /// </summary>
 public sealed class CteDefinition
 {
+    /// <summary>Creates a non-recursive CTE definition.</summary>
+    /// <param name="name">The name the CTE is declared under and referenced by in <c>from</c>.</param>
+    /// <param name="query">The query that defines the CTE.</param>
     public CteDefinition(string name, QueryCommand query)
         : this(name, query, false, null)
     {
     }
 
+    /// <summary>Creates a CTE definition, optionally recursive and with a recursion-depth limit.</summary>
+    /// <param name="name">The name the CTE is declared under and referenced by in <c>from</c>.</param>
+    /// <param name="query">The query that defines the CTE.</param>
+    /// <param name="recursive">Whether the CTE body may reference its own name.</param>
+    /// <param name="maxRecursion">Optional recursion-depth limit; see <see cref="MaxRecursion"/>.</param>
     public CteDefinition(string name, QueryCommand query, bool recursive, int? maxRecursion = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(name);

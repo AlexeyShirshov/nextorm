@@ -1,6 +1,10 @@
 using System.Diagnostics.CodeAnalysis;
 namespace NextORM.Core;
 
+/// <summary>
+/// Compares and hashes query sources for plan-cache purposes: table names by value, and subqueries,
+/// table functions, pivots and xml row-sets structurally.
+/// </summary>
 public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromExpression?>
 {
     //private readonly IDictionary<ExpressionKey, Delegate> _cache;
@@ -19,6 +23,8 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
     //     : this(new ExpressionCache<Delegate>())
     // {
     // }
+    /// <summary>Initializes a comparer.</summary>
+    /// <param name="queryProvider">The registry that supplies the nested plan comparers.</param>
     public FromExpressionPlanEqualityComparer(IQueryRegistry queryProvider)
     //        : this(cache, queryProvider, null)
     {
@@ -35,6 +41,10 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
     // }
     // private FromExpressionPlanEqualityComparer() { }
     // public static FromExpressionPlanEqualityComparer Instance => new();
+    /// <summary>Determines whether two query sources are equal for plan-cache purposes.</summary>
+    /// <param name="x">The first source.</param>
+    /// <param name="y">The second source.</param>
+    /// <returns><c>true</c> when both sources resolve to the same underlying source.</returns>
     public bool Equals(FromExpression? x, FromExpression? y)
     {
         if (x == y) return true;
@@ -124,6 +134,9 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
         return hash.ToHashCode();
     }
 
+    /// <summary>Returns a hash code for a query source consistent with the equality comparison.</summary>
+    /// <param name="obj">The source to hash.</param>
+    /// <returns>The hash code, or zero when <paramref name="obj"/> is <c>null</c>.</returns>
     public int GetHashCode(FromExpression? obj)
     {
         if (obj is null) return 0;
