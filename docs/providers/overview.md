@@ -59,6 +59,7 @@ change.
 | Date conversion / parts (`SqlFunctions.ClickHouse.to_*`) | throws | throws | throws | throws | throws | `toDate`/`toDateTime`/`toDate32`, `toYear`/…, `toStartOf*`, `toMonday`, `toYYYYMM`/`toYYYYMMDD`, `toUnixTimestamp` | throws |
 | `string_agg` | `group_concat(x, delimiter)` | supported (2017+) | supported | `group_concat(x separator delimiter)` | `group_concat(x separator delimiter)` | `arrayStringConcat(groupArray(...), ...)` | throws |
 | Full-text `contains` / `freetext` | throws | `contains` / `freetext` | `to_tsvector(...) @@ ...tsquery(...)` | `match(...) against(...)` | `match(...) against(...)` | throws | throws |
+| Full-text ranking / score | throws | `containstable` / `freetexttable` (`RANK`, table function) | `ts_rank` / `ts_rank_cd` | throws | throws | throws | throws |
 | Bit / statistical / `-If` aggregates | throws | throws | supported | throws | throws | `groupBit*`, `corr`/`covarPop`, `countIf`/… | throws |
 | `multi_if` (multi-branch) | throws | throws | throws | throws | throws | `multiIf(c1, v1, …, else)` | not applicable |
 | `lag_in_frame` / `lead_in_frame` | throws | throws | throws | throws | throws | `lagInFrame` / `leadInFrame` | not applicable |
@@ -68,13 +69,32 @@ change.
 | `LEFT` / `RIGHT` / `FULL` / `CROSS` join | yes | yes | yes | no `FULL` | no `FULL` | yes | yes |
 | `RIGHT` / `FULL` join capability | supported | supported | supported | `RIGHT` only | `RIGHT` only | supported | supported |
 
-For the feature-by-feature comparison against EF Core and linq2db, see
-[SQL capabilities gap analysis](../specs/roadmap/sql-capabilities-gap-analysis.md).
+## Provider differences: unification decisions
+
+Where providers differ, nextorm either **unifies** the surface in code, **gates** the feature so an
+unsupported provider throws `NotSupportedException`, or **documents** the difference and leaves it
+provider-specific. The decision for every known divergence:
+
+| Difference | Decision | Rationale / hook |
+|---|---|---|
+| `date_add`/`date_diff`/`date_trunc` accepted fields | **Leave provider-specific, gated per field** | `SupportsDateAddField`/`SupportsDateDiffField`/`SupportsDateTruncField` reject an unsupported field; a single normalized set would silently change results (SQLite folds `millisecond`/`quarter`, SQL Server has no `decade`/`century`/`millennium`). |
+| `FULL JOIN` on MySQL/MariaDB | **Gated, no polyfill** | `SupportsFullJoin => false`; a `LEFT JOIN … UNION … RIGHT JOIN` rewrite changes row shape/deduplication and can defeat the planner, so it is never emitted implicitly. |
+| `CUBE`/`GROUPING SETS` on MySQL/MariaDB (and all of `ROLLUP`/`CUBE`/`GROUPING SETS` in-memory) | **Gated, no polyfill** | `SupportsCube`/`SupportsGroupingSets`; a `UNION ALL` emulation multiplies scans and changes semantics (`GROUPING()`), so it is left to raw SQL. |
+| `GREATEST`/`LEAST` NULL semantics | **Documented difference** | PostgreSQL/SQL Server 2022+/ClickHouse ignore NULL arguments; MySQL/MariaDB and SQLite return NULL when any argument is NULL. Availability is gated by `SupportsGreatestLeast`; the NULL behaviour is not rewritten. |
+| Date/number formatting templates (`to_char`, `FORMAT`, `strftime`, `formatDateTime`) | **Closed — not unifiable** | The template languages are incompatible, so formatting stays provider-specific `[SqlFunction]` UDFs; there is no portable `template` argument. |
+| `FOR JSON` / `FOR XML` | **Gated (SQL Server)** | `SupportsForJson`/`SupportsForXml`. |
+| Statement-level query hints | **Unified** | SQL Server `OPTION (...)`, PostgreSQL/MySQL/MariaDB inline `/*+ ... */`; SQLite/ClickHouse have no syntax and stay gated (see [Query hints](../guide/17-query-hints.md)). |
+| Locking table hints vs index hints | **Leave provider-specific** | `WITH (NOLOCK)` has no equivalent in MySQL/MariaDB/SQLite index hints (`USE INDEX`/`INDEXED BY` change the plan, not locking), so only SQL Server is wired (`SupportsTableHints`). |
+| Raw SQL as a composable `FROM` source | **Unified** | `FromSql` + `SupportsRawSqlSource` on every SQL provider (see [Raw SQL](../guide/14-raw-sql.md#compositing-raw-sql-as-a-from-source)). |
+| `INTERSECT ALL`/`EXCEPT ALL` | **Gated** | PostgreSQL and MariaDB support them; SQL Server/SQLite/MySQL reject via `SupportsIntersectExceptAll`. |
+
+The per-feature rows in the [limitations](../advanced/limitations.md) table spell out the resulting
+runtime behaviour.
 
 ## How a dialect plugs in
 
 A dialect implements [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) or derives from [`SqlDialectBase`](xref:NextORM.Core.SqlDialectBase). In [`SqlDialectBase`](xref:NextORM.Core.SqlDialectBase) only
-[`MakeParam`](xref:NextORM.Core.ISqlDialect) and [`MakePage`](xref:NextORM.Core.ISqlDialect) are abstract; every other member has a working ANSI default, so a dialect
+[`MakeParam`](xref:NextORM.Core.ISqlDialect.MakeParam(System.String)) and [`MakePage`](xref:NextORM.Core.ISqlDialect.MakePage(NextORM.Core.Paging,System.Text.StringBuilder)) are abstract; every other member has a working ANSI default, so a dialect
 overrides just what is different. Capability differences (paging requiring an `ORDER BY`, required
 subquery aliases, `INTERSECT ALL`/`EXCEPT ALL`) are expressed as properties rather than special cases in
 the SQL builder.
@@ -134,7 +154,6 @@ registrations.
 - [MariaDB](mariadb.md)
 - [ClickHouse](clickhouse.md)
 - [In-memory](in-memory.md)
-- [SQL capabilities gap analysis](../specs/roadmap/sql-capabilities-gap-analysis.md)
 - [Limitations and out-of-scope features](../advanced/limitations.md)
 
 ---

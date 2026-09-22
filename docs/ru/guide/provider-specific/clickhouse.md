@@ -32,7 +32,7 @@ select id from array_entity left array join tags where id > 0
 
 ## `LIMIT n BY expr`
 
-[`LimitBy`](xref:NextORM.Core.EntityBuilder`1) возвращает первые `n` строк **на каждое значение
+[`LimitBy`](xref:NextORM.Core.EntityBuilder`1.LimitBy``1(System.Int32,System.Int32,System.Linq.Expressions.Expression{System.Func{`0,``0}})) возвращает первые `n` строк **на каждое значение
 ключа**, клауза рендерится после `ORDER BY` и до финального `LIMIT`:
 
 ```csharp
@@ -52,7 +52,7 @@ select id, nullableint from complex_entity order by id limit 2 by nullableint
 
 ## `GROUP BY ... WITH TOTALS`
 
-[`WithTotals`](xref:NextORM.Core.EntityBuilder`1) добавляет к группировке модификатор ClickHouse
+[`WithTotals`](xref:NextORM.Core.EntityBuilder`1.WithTotals) добавляет к группировке модификатор ClickHouse
 `with totals` — строку итогов по всему набору. Он ортогонален `ROLLUP`/`CUBE` и не сочетается с
 `GROUPING SETS`:
 
@@ -117,11 +117,14 @@ select t1.id, t2.somestring from simple_entity as `t1` global left any join comp
 ([`SupportsJoinStrictness`](xref:NextORM.Core.ISqlDialect.SupportsJoinStrictness)/[`SupportsGlobalJoin`](xref:NextORM.Core.ISqlDialect.SupportsGlobalJoin)).
 `ANY` оставляет одну правую строку на каждую левую, `ALL` — все совпадения, `ASOF` требует одну
 колонку равенства и завершающее неравенство; `GLOBAL` рассылает правую сторону в распределённых
-запросах. Соединения `SEMI`/`ANTI`/`PASTE` не поддерживаются.
+запросах. Для `SEMI`/`ANTI`/`PASTE` есть отдельные построители: `SemiJoin`/`AntiJoin` отдают только
+левые колонки для левых строк, у которых есть (соответственно нет) совпадение, а `PasteJoin`
+сопоставляет два источника по позиции строки без `ON`
+([`SupportsSemiAntiJoin`](xref:NextORM.Core.ISqlDialect.SupportsSemiAntiJoin)/`SupportsPasteJoin`).
 
 ## `GLOBAL IN`
 
-[`SqlFunctions.ClickHouse.global_in`](xref:NextORM.Core.ClickHouseFunctions) рендерит распределённый
+[`SqlFunctions.ClickHouse.global_in`](xref:NextORM.Core.ClickHouseFunctions.global_in``1(``0,NextORM.Core.QueryCommand{``0})) рендерит распределённый
 предикат по подзапросу или списку значений; отрицание через `!` даёт `GLOBAL NOT IN`:
 
 ```csharp
@@ -142,19 +145,24 @@ select id from simple_entity where global in (@p0, @p1)
 ## Агрегаты
 
 Эксклюзивные агрегаты ClickHouse живут на [`ClickHouseFunctions`](xref:NextORM.Core.ClickHouseFunctions)
-и отклоняются всеми остальными диалектами. Некоторые типы результата row reader не материализует
-(`UInt64`, `Float32`), поэтому диалект оборачивает их в
-`toInt64(...)`/`toInt32(...)`/`toFloat64(...)`:
+и отклоняются всеми остальными диалектами. Их нативные типы результата (`UInt64`, `Float32`, целые
+типы комбинаторов `-If`) не всегда совпадают с объявленным CLR-типом, поэтому диалект оборачивает их в
+`toInt64(...)`/`toInt32(...)`/`toFloat64(...)`, нормализуя значение к типу, который объявляет метод:
 
 * агрегаты числа уникальных `uniq`/`uniq_exact`/`uniq_combined`/`uniq_hll12` (`toInt64`);
-* параметрические `quantile(level)(value)`/`quantile_exact`/`quantile_timing` и `median` (`toFloat64`);
+* параметрические `quantile(level)(value)`/`quantile_exact`/`quantile_timing` и `median` (`toFloat64`), многоуровневые `quantiles(level1, level2, ...)(value)` (возвращают `Array(Float64)`, материализуются как CLR `double[]`; уровни должны быть inline-массивом);
+* агрегаты наиболее частых значений `topK(k)(value)`/`topKWeighted(k)(value, weight)` (возвращают `Array(T)`, материализуются как CLR `T[]`);
 * агрегат последнего произвольного значения `any_last` (`anyLast`);
-* агрегаты последовательностей/воронки `window_funnel`/`sequence_match`/`retention` (`windowFunnel`/`sequenceMatch` с `toInt32(...)`; `retention` возвращает массив, применим только вложенно);
+* возвращающие массивы агрегаты `group_array`/`group_uniq_array` (`groupArray`/`groupUniqArray`, материализуются как CLR `T[]`; `groupArray` над array-колонкой даёт вложенный `T[][]`);
+* агрегаты последовательностей/воронки `window_funnel`/`sequence_match`/`retention` (`windowFunnel`/`sequenceMatch` с `toInt32(...)`; `retention` возвращает массив, проецируется напрямую);
 * комбинаторы `-If`: `count_if`/`sum_if`/`avg_if`/`min_if`/`max_if`;
 * `arg_min`/`arg_max`.
 
 Переносимые агрегаты — в том числе `count`, произвольное значение `any_agg` (рендерится `ANY_VALUE` в
-MySQL и MariaDB) и `corr`/`covar*` — документированы на тематической странице.
+MySQL и MariaDB) и `corr`/`covar*` — документированы на тематической странице. Обычная колонка `UInt64`
+(или любая проекция `ulong`/`ulong?`) материализуется напрямую через аксессор построителя строк
+`DbDataReader.GetFieldValue<ulong>`, поэтому нормализующее приведение нужно только результатам функций
+выше.
 
 См. [Группировка и агрегаты](../04-grouping-and-aggregates.md).
 
@@ -163,12 +171,24 @@ MySQL и MariaDB) и `corr`/`covar*` — документированы на т�
 * извлекатели строкового JSON `JSONExtractString`/`JSONExtractInt`/`JSONExtractFloat`/
   `JSONExtractBool`/`JSONExtractRaw`/`JSONHas`/`JSONType`, `json_length` и плоский
   `visitParamExtract*`;
+* возвращающие массивы `JSONExtractKeys`/`JSONExtractArrayRaw` (`json_extract_keys`/
+  `json_extract_array_raw`, проецируются как `string[]`) и `JSONExtractKeysAndValues`
+  (`json_extract_keys_and_values<T>`, проецируется как `Tuple<string, T>[]`; `T` — non-nullable
+  ClickHouse-тип);
 * JSONPath-скаляры `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (по строковому JSON);
-* словарные функции `dict_get`/`dict_get_or_default`/`dict_has` (нужен настроенный
+* функции нативного JSON `json_all_paths`/`json_all_paths_with_types` (`JSONAllPaths`/
+  `JSONAllPathsWithTypes`; первая проецируется как `string[]`, нативный `Map(String, String)` второй —
+  как `Dictionary<string, string>`; обе принимают нативное значение `JSON`) и `to_json_string`
+  (`toJSONString`);
+* словарные функции `dict_get`/`dict_get_or_default`/`dict_has` и иерархические
+  `dict_get_hierarchy`/`dict_get_children`/`dict_is_in` (нужен настроенный
   `CREATE DICTIONARY`);
-* функции массивов `length`/`has`/`index_of`/`has_any`/`has_all`/`array_string_concat`/
-  `split_by_char`/`array_sort`/`array_reverse`/`array_distinct`/`range`/`array_enumerate`/
-  `array_cum_sum`/`array_slice`/`array_push_back`.
+* функции массивов `length`/`has`/`index_of`/`has_any`/`has_all`/`starts_with`/`ends_with`/
+  `has_substr`/`array_string_concat`/`split_by_char`/`array_sort`/`array_reverse`/`array_distinct`/
+  `range`/`array_enumerate`/`array_cum_sum`/`array_slice`/`array_push_back`;
+* конструктор кортежа и доступ к элементу: `System.Tuple.Create(a, b)` рендерится как `tuple(a, b)`,
+  а `System.Tuple<...>.ItemN` — как `tupleElement(t, n)` (целый `Tuple(...)` проецируется как
+  `System.Tuple<...>`); `untuple` не поддерживается.
 
 См. [Скалярные функции](../11-scalar-functions.md) и [Поддержка JSON](../18-json.md)
 ([`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract)/[`SupportsDictionaries`](xref:NextORM.Core.ISqlDialect.SupportsDictionaries)).
@@ -176,7 +196,7 @@ MySQL и MariaDB) и `corr`/`covar*` — документированы на т�
 ## Табличные функции
 
 `numbers`/`numbers_mt` и генераторы строк `zeros`/`zeros_mt` доступны через
-[`FromTableFunction`](xref:NextORM.Core.EntityBuilder`1). Колонка `number` типа `UInt64` приводится к
+[`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})). Колонка `number` типа `UInt64` приводится к
 `Int64` внутри оборачивающего подзапроса, чтобы материализоваться в CLR `long`; `zeros`
 материализуется сразу в `byte`:
 
@@ -190,9 +210,8 @@ var rows = dataContext.FromTableFunction(() => SqlFunctions.ClickHouse.zeros(3))
 
 ## Пока не поддерживается
 
-Соединения `SEMI`/`ANTI`/`PASTE`, функции высшего порядка над массивами
-(`arrayMap`/`arrayFilter`), row reader для массивов/кортежей, нативный тип `JSON` и распределённые
-табличные функции (`remote`, `cluster`, `s3`, `file`) вне области охвата. См.
+Нативный тип колонки `JSON` (его reader/type-mapping) и
+распределённые табличные функции (`remote`, `cluster`, `s3`, `file`) вне области охвата. См.
 [Ограничения и возможности вне области охвата](../../advanced/limitations.md).
 
 ## См. также

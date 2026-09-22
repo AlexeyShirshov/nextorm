@@ -28,7 +28,7 @@ scalar library, the PostgreSQL-only aggregates and the `generate_series`/`unnest
 [`ClickHouse`](xref:NextORM.Core.SqlFunctions.ClickHouse) (ClickHouse: `arg_min`/`arg_max`, the `-If` combinator, the string-JSON
 `JSONExtract*` family, the flat-JSON `visitParamExtract*` fast path, the JSONPath scalars
 `json_value`/`json_query`/`json_exists` and the dictionary functions
-`dict_get`/`dict_get_or_default`/`dict_has`). Calling one of them on a
+`dict_get`/`dict_get_or_default`/`dict_has`/`dict_get_hierarchy`/`dict_get_children`/`dict_is_in`). Calling one of them on a
 provider that does not opt in throws `NotSupportedException`.
 
 ## String functions
@@ -372,7 +372,7 @@ select coalesce(somestring, '') from complex_entity
 select (cast(id as double precision) / 2) from complex_entity
 ```
 
-Numeric cast targets come from [`MakeTypeName`](xref:NextORM.Core.ISqlDialect):
+Numeric cast targets come from [`MakeTypeName`](xref:NextORM.Core.ISqlDialect.MakeTypeName(System.Type)):
 
 | CLR type | SQLite / PostgreSQL | SQL Server |
 |---|---|---|
@@ -388,7 +388,7 @@ Numeric cast targets come from [`MakeTypeName`](xref:NextORM.Core.ISqlDialect):
 
 PostgreSQL has native array types. An array operand is always passed as a **single parameter** (the
 whole array), never expanded into a value list, so the SQL text does not depend on the number of
-elements and the plan stays cacheable. An array can be a runtime parameter ([`Parameter`](xref:NextORM.Core.SqlFunctions)), a
+elements and the plan stays cacheable. An array can be a runtime parameter ([`Parameter`](xref:NextORM.Core.SqlFunctions.Parameter``1(System.Int32))), a
 captured local/field or an inline `new[]`. Only a dialect that opts in with [`SupportsArrays`](xref:NextORM.Core.ISqlDialect.SupportsArrays)
 (PostgreSQL) can render the array surface; every other provider throws `NotSupportedException`.
 
@@ -413,7 +413,7 @@ var same = dataContext.From<IComplexEntity>()
 select id from complex_entity where (id = any(@p0))
 ```
 
-A runtime array parameter uses the same [`Parameter`](xref:NextORM.Core.SqlFunctions) mechanism, so the array never has to be known when
+A runtime array parameter uses the same [`Parameter`](xref:NextORM.Core.SqlFunctions.Parameter``1(System.Int32)) mechanism, so the array never has to be known when
 the query is prepared:
 
 ```csharp
@@ -459,8 +459,8 @@ The array functions and operators map to their PostgreSQL names:
 | `SqlFunctions.Postgres.string_to_array(s, delimiter)` | `string_to_array(s, delimiter)` |
 
 > The functions that return an array (`array_append`, `array_cat`, `array_reverse`, `string_to_array`,
-> ...) are meant to be used inside a query (a predicate, `having` or a nested expression); the row reader
-> cannot materialise an array column yet, so projecting one directly throws at preparation time.
+> ...) can be used inside a query (a predicate, `having` or a nested expression) or projected directly:
+> the row reader materialises an `Array(T)` result as a CLR `T[]`.
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -487,6 +487,9 @@ result can be projected like a scalar column.
 | `SqlFunctions.ClickHouse.index_of(a, element)` | `indexOf(a, element)` |
 | `SqlFunctions.ClickHouse.has_any(a, b)` | `hasAny(a, b)` |
 | `SqlFunctions.ClickHouse.has_all(a, b)` | `hasAll(a, b)` |
+| `SqlFunctions.ClickHouse.starts_with(a, prefix)` | `startsWith(a, prefix)` |
+| `SqlFunctions.ClickHouse.ends_with(a, suffix)` | `endsWith(a, suffix)` |
+| `SqlFunctions.ClickHouse.has_substr(a, other)` | `hasSubstr(a, other)` |
 | `SqlFunctions.ClickHouse.array_string_concat(a, delimiter)` | `arrayStringConcat(a, delimiter)` |
 | `SqlFunctions.ClickHouse.split_by_char(separator, s)` | `splitByChar(separator, s)` |
 | `SqlFunctions.ClickHouse.array_sort(a)` | `arraySort(a)` |
@@ -498,17 +501,52 @@ result can be projected like a scalar column.
 | `SqlFunctions.ClickHouse.array_slice(a, offset, length)` | `arraySlice(a, offset, length)` |
 | `SqlFunctions.ClickHouse.array_push_back(a, element)` | `arrayPushBack(a, element)` |
 | `SqlFunctions.ClickHouse.array_join(a)` | `arrayJoin(a)` |
+| `SqlFunctions.ClickHouse.group_array(a)` | `groupArray(a)` |
+| `SqlFunctions.ClickHouse.group_uniq_array(a)` | `groupUniqArray(a)` |
+| `SqlFunctions.ClickHouse.array_map(f, a)` | `arrayMap(f, a)` |
+| `SqlFunctions.ClickHouse.array_filter(f, a)` | `arrayFilter(f, a)` |
+| `SqlFunctions.ClickHouse.array_exists(f, a)` | `arrayExists(f, a)` |
+| `SqlFunctions.ClickHouse.array_all(f, a)` | `arrayAll(f, a)` |
+| `SqlFunctions.ClickHouse.array_count(f, a)` | `arrayCount(f, a)` |
+| `SqlFunctions.ClickHouse.array_first(f, a)` | `arrayFirst(f, a)` |
+| `SqlFunctions.ClickHouse.array_first_index(f, a)` | `arrayFirstIndex(f, a)` |
+| `SqlFunctions.ClickHouse.array_last(f, a)` | `arrayLast(f, a)` |
+| `SqlFunctions.ClickHouse.array_last_index(f, a)` | `arrayLastIndex(f, a)` |
 
 > `length`/`indexOf` return `UInt64` natively, so the dialect casts them with `toInt64(...)`. Functions
 > that return an array (`split_by_char`, `array_sort`, `array_reverse`, `array_distinct`, `range`,
-> `array_enumerate`, `array_cum_sum`, `array_slice`, `array_push_back`) can only be used as the operand
-> of another array function (for example `length(...)` or `array_string_concat(...)`); projecting one
-> directly throws at preparation time because the row reader cannot materialise `Array(T)` yet.
+> `array_enumerate`, `array_cum_sum`, `array_slice`, `array_push_back`, `group_array`,
+> `group_uniq_array`) can be projected directly — the row reader materialises an `Array(T)` result as a
+> CLR `T[]` — or used as the operand of another array function (for example `length(...)` or
+> `array_string_concat(...)`). The same reader materialises a native `Tuple(...)` column (or a
+> `Tuple(...)`-returning expression) as a `System.Tuple<...>` of arity 1–7.
+
+> The array relation predicates return `bool`: `starts_with(array, prefix)`/`ends_with(array, suffix)`
+> test a prefix/suffix and `has_substr(array, other)` tests that `other` occurs in `array` contiguously
+> and in order (an empty `other` is always contained). They require a provider that supports the array
+> functions.
+
+> The tuple surface is built from `System.Tuple.Create`/`System.Tuple<...>.ItemN`: `Tuple.Create(a, b)`
+> renders `tuple(a, b)` and `x.Pair.Item1` on a `Tuple(...)` column renders `tupleElement(pair, 1)`.
+> A whole `Tuple(...)` expression projects as `System.Tuple<...>` (arity 1–7). Requires a provider with
+> a native tuple type (see [`SupportsTupleFunctions`](xref:NextORM.Core.ISqlDialect.SupportsTupleFunctions);
+> ClickHouse); `untuple` is not supported because it changes the result column set rather than producing
+> a scalar.
+
+> The higher-order (lambda) functions take an inline C# lambda whose parameter is the array element,
+> for example `array_map(v => -v, e.Nums)` renders `arrayMap(v -> -(v), nums)`. `array_exists`/`array_all`
+> return `bool`; `array_count`/`array_first_index`/`array_last_index` return `long` (the dialect casts
+> the native `UInt32` with `toInt64(...)`); `array_first`/`array_last` return the element or its default
+> value when nothing matches. They require a provider that supports the higher-order array functions
+> (see [`SupportsHigherOrderArrayFunctions`](xref:NextORM.Core.ISqlDialect.SupportsHigherOrderArrayFunctions);
+> ClickHouse). ClickHouse promotes the arithmetic result type independently of C# (an `Int32` element
+> multiplied by an integer literal becomes `Array(Int64)`), so cast inside the lambda
+> (`v => (long)v * 2`) when the element type must match the projected `T[]`.
 
 The CLR `string.Split` is rendered as `splitByChar(separator, value)` (gated by
 [`StringSplit`](xref:NextORM.Core.ISqlDialect.StringSplit)); only a single-character
 separator is supported (the multi-character `splitByString` is not exposed), the result is a `string[]`
-usable only inside another array function, and the `count` overload, multiple separators and
+that can be projected directly or used inside another array function, and the `count` overload, multiple separators and
 `StringSplitOptions` other than `None` throw `NotSupportedException`:
 
 ```csharp
@@ -704,10 +742,34 @@ select payload.value('(/root/item)[1]', 'nvarchar(100)') as [Value], payload.que
 | `SqlFunctions.SqlServer.xml_value<T>(xml, xpath, sqlType)` | `xml.value('xpath', 'sqlType')` |
 | `SqlFunctions.SqlServer.xml_query(xml, xpath)` | `xml.query('xpath')` |
 | `SqlFunctions.SqlServer.xml_exist(xml, xpath)` | `xml.exist('xpath')` |
+| `SqlFunctions.SqlServer.xml_nodes(xml, xpath)` | `xml.nodes('xpath') as [alias]([value])` (APPLY source) |
 
 `xml_exist` returns `bit`: in a predicate it renders `(xml.exist('xpath')) = 1`, as a projected value it
-stays a bit. The rowset method `.nodes` is not supported (it needs an outer reference inside
-`FROM`/`CROSS APPLY`).
+stays a bit.
+
+The rowset method `.nodes` is a correlated source, not a scalar: use it as the source of
+`CrossApply`/`OuterApply` and project the unfolded `IXmlNodesRow.Value` with the scalar methods above.
+It unfolds the XML value into one row per node selected by the XQuery and renders
+`<xml>.nodes('xpath') as [alias]([value])`:
+
+```csharp
+var rows = dataContext.From<IXmlEntity>()
+    .CrossApply(x => SqlFunctions.SqlServer.xml_nodes(x.Payload, "/root/item"))
+    .Select(p => new
+    {
+        Id = SqlFunctions.SqlServer.xml_value<int>(p.Item2.Value, "(.)[1]/@id", "int"),
+        Text = SqlFunctions.SqlServer.xml_value<string>(p.Item2.Value, "(.)[1]", "nvarchar(100)")
+    })
+    .ToList();
+```
+
+```sql
+select t2.value.value('(.)[1]/@id', 'int') as [Id], t2.value.value('(.)[1]', 'nvarchar(100)') as [Text]
+from xml_entity as [t1] cross apply t1.payload.nodes('/root/item') as [t2](value)
+```
+
+The operand must be a column of the outer row and the XQuery a string literal; every other provider
+rejects `xml_nodes` with a `NotSupportedException`, as does the in-memory provider.
 
 ## Conditional helpers
 
@@ -743,14 +805,14 @@ select nullif(nullableint, 0) as "NoZero", greatest(id, 10) as "Hi", least(id, 1
 `num_nulls`/`num_nonnulls` are part of the extended scalar library
 ([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions)).
 `iif` is portable ([`Iif`](xref:NextORM.Core.ISqlDialect.Iif)) and each dialect supplies its native
-spelling through [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render); `choose` remains SQL Server-only
+spelling through [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render(System.String,System.String,System.String)); `choose` remains SQL Server-only
 ([`SupportsChoose`](xref:NextORM.Core.ISqlDialect.SupportsChoose)). Calling `iif` through the specialized
 `SqlFunctions.SqlServer` surface still works by inheritance. The C# ternary `condition ? a : b` is separate
 and always renders the portable `case when ... end`.
 
 ClickHouse additionally has the multi-branch `multiIf` surface
 ([`MultiIf`](xref:NextORM.Core.ISqlDialect.MultiIf),
-[`IMultiIfRenderer.Render`](xref:NextORM.Core.IMultiIfRenderer.Render)): build each branch with `when(condition, value)`
+[`IMultiIfRenderer.Render`](xref:NextORM.Core.IMultiIfRenderer.Render(System.Collections.Generic.IReadOnlyList{System.String},System.Type))): build each branch with `when(condition, value)`
 and close it with `otherwise(value)`, which must be last. Other providers just use `case when`, which is
 already the portable form behind `iif`/the C# conditional, so they reject the ClickHouse-native spelling.
 
@@ -799,7 +861,7 @@ select dateTrunc('month', dt) as `Month` from complex_entity
 `SqlFunctions.Sql.date_add(field, amount, value)` adds a number of units to a date/time and
 `SqlFunctions.Sql.end_of_month(value)` returns the last day of its month ([`SupportsDateArithmetic`](xref:NextORM.Core.ISqlDialect.SupportsDateArithmetic);
 PostgreSQL, SQL Server, ClickHouse, MySQL/MariaDB and SQLite opt in). The field must be a constant
-string; the provider validates which parts it accepts ([`SupportsDateAddField`](xref:NextORM.Core.ISqlDialect) and friends).
+string; the provider validates which parts it accepts ([`SupportsDateAddField`](xref:NextORM.Core.ISqlDialect.SupportsDateAddField(System.String)) and friends).
 SQL Server renders `dateadd(field, amount, value)` and `eomonth(value)`, folding
 `decade`/`century`/`millennium` onto a scaled `year` add; PostgreSQL renders interval arithmetic;
 ClickHouse renders the dedicated `addDays`/`addMonths`/…/`addSeconds` functions (folding the three

@@ -22,6 +22,10 @@ public interface IProjection
 /// </summary>
 public interface IExtendableProjection : IProjection
 {
+    /// <summary>Absorbs <paramref name="newItem"/> as the next projection item, returning a projection of one higher arity.</summary>
+    /// <typeparam name="T">The type of the item to append.</typeparam>
+    /// <param name="newItem">The value to append as the next <c>ItemN</c> property.</param>
+    /// <returns>A new projection that also exposes the appended item.</returns>
     IProjection Extend<T>(T newItem);
 }
 
@@ -30,9 +34,12 @@ public interface IExtendableProjection : IProjection
 /// </summary>
 public class Projection<T1, T2> : IExtendableProjection
 {
+    /// <summary>The value contributed by the first joined table.</summary>
     public T1 Item1 { get; init; } = default!;
+    /// <summary>The value contributed by the second joined table.</summary>
     public T2 Item2 { get; init; } = default!;
 
+    /// <inheritdoc/>
     public IProjection Extend<T>(T newItem)
     {
         return new Projection<T1, T2, T>
@@ -49,10 +56,14 @@ public class Projection<T1, T2> : IExtendableProjection
 /// </summary>
 public class Projection<T1, T2, T3> : IExtendableProjection
 {
+    /// <summary>The value contributed by the first joined table.</summary>
     public T1 Item1 { get; init; } = default!;
+    /// <summary>The value contributed by the second joined table.</summary>
     public T2 Item2 { get; init; } = default!;
+    /// <summary>The value contributed by the third joined table.</summary>
     public T3 Item3 { get; init; } = default!;
 
+    /// <inheritdoc/>
     public IProjection Extend<T>(T newItem)
     {
         return new Projection<T1, T2, T3, T>
@@ -70,11 +81,16 @@ public class Projection<T1, T2, T3> : IExtendableProjection
 /// </summary>
 public class Projection<T1, T2, T3, T4> : IExtendableProjection
 {
+    /// <summary>The value contributed by the first joined table.</summary>
     public T1 Item1 { get; init; } = default!;
+    /// <summary>The value contributed by the second joined table.</summary>
     public T2 Item2 { get; init; } = default!;
+    /// <summary>The value contributed by the third joined table.</summary>
     public T3 Item3 { get; init; } = default!;
+    /// <summary>The value contributed by the fourth joined table.</summary>
     public T4 Item4 { get; init; } = default!;
 
+    /// <inheritdoc/>
     public IProjection Extend<T>(T newItem)
     {
         return new Projection<T1, T2, T3, T4, T>
@@ -93,12 +109,18 @@ public class Projection<T1, T2, T3, T4> : IExtendableProjection
 /// </summary>
 public class Projection<T1, T2, T3, T4, T5> : IExtendableProjection
 {
+    /// <summary>The value contributed by the first joined table.</summary>
     public T1 Item1 { get; init; } = default!;
+    /// <summary>The value contributed by the second joined table.</summary>
     public T2 Item2 { get; init; } = default!;
+    /// <summary>The value contributed by the third joined table.</summary>
     public T3 Item3 { get; init; } = default!;
+    /// <summary>The value contributed by the fourth joined table.</summary>
     public T4 Item4 { get; init; } = default!;
+    /// <summary>The value contributed by the fifth joined table.</summary>
     public T5 Item5 { get; init; } = default!;
 
+    /// <inheritdoc/>
     public IProjection Extend<T>(T newItem)
     {
         return new Projection<T1, T2, T3, T4, T5, T>
@@ -118,13 +140,20 @@ public class Projection<T1, T2, T3, T4, T5> : IExtendableProjection
 /// </summary>
 public class Projection<T1, T2, T3, T4, T5, T6> : IExtendableProjection
 {
+    /// <summary>The value contributed by the first joined table.</summary>
     public T1 Item1 { get; init; } = default!;
+    /// <summary>The value contributed by the second joined table.</summary>
     public T2 Item2 { get; init; } = default!;
+    /// <summary>The value contributed by the third joined table.</summary>
     public T3 Item3 { get; init; } = default!;
+    /// <summary>The value contributed by the fourth joined table.</summary>
     public T4 Item4 { get; init; } = default!;
+    /// <summary>The value contributed by the fifth joined table.</summary>
     public T5 Item5 { get; init; } = default!;
+    /// <summary>The value contributed by the sixth joined table.</summary>
     public T6 Item6 { get; init; } = default!;
 
+    /// <inheritdoc/>
     public IProjection Extend<T>(T newItem)
     {
         return new Projection<T1, T2, T3, T4, T5, T6, T>
@@ -145,14 +174,22 @@ public class Projection<T1, T2, T3, T4, T5, T6> : IExtendableProjection
 /// </summary>
 public class Projection<T1, T2, T3, T4, T5, T6, T7> : IExtendableProjection
 {
+    /// <summary>The value contributed by the first joined table.</summary>
     public T1 Item1 { get; init; } = default!;
+    /// <summary>The value contributed by the second joined table.</summary>
     public T2 Item2 { get; init; } = default!;
+    /// <summary>The value contributed by the third joined table.</summary>
     public T3 Item3 { get; init; } = default!;
+    /// <summary>The value contributed by the fourth joined table.</summary>
     public T4 Item4 { get; init; } = default!;
+    /// <summary>The value contributed by the fifth joined table.</summary>
     public T5 Item5 { get; init; } = default!;
+    /// <summary>The value contributed by the sixth joined table.</summary>
     public T6 Item6 { get; init; } = default!;
+    /// <summary>The value contributed by the seventh joined table.</summary>
     public T7 Item7 { get; init; } = default!;
 
+    /// <inheritdoc/>
     public IProjection Extend<T>(T newItem)
     {
         return new Projection<T1, T2, T3, T4, T5, T6, T7, T>
@@ -177,12 +214,20 @@ public class Projection<T1, T2, T3, T4, T5, T6, T7> : IExtendableProjection
 /// </summary>
 public class Projection<T1, T2, T3, T4, T5, T6, T7, T8> : IProjection
 {
+    /// <summary>The value contributed by the first joined table.</summary>
     public T1 Item1 { get; init; } = default!;
+    /// <summary>The value contributed by the second joined table.</summary>
     public T2 Item2 { get; init; } = default!;
+    /// <summary>The value contributed by the third joined table.</summary>
     public T3 Item3 { get; init; } = default!;
+    /// <summary>The value contributed by the fourth joined table.</summary>
     public T4 Item4 { get; init; } = default!;
+    /// <summary>The value contributed by the fifth joined table.</summary>
     public T5 Item5 { get; init; } = default!;
+    /// <summary>The value contributed by the sixth joined table.</summary>
     public T6 Item6 { get; init; } = default!;
+    /// <summary>The value contributed by the seventh joined table.</summary>
     public T7 Item7 { get; init; } = default!;
+    /// <summary>The value contributed by the eighth joined table.</summary>
     public T8 Item8 { get; init; } = default!;
 }

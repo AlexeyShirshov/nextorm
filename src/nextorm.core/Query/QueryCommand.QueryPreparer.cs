@@ -206,20 +206,6 @@ public partial class QueryCommand
             }
         }
 
-        /// <summary>
-        /// True for the types a projection maps to a single column. A <see cref="NewExpression"/> whose
-        /// result is one of these (for example <c>new string('*', 4)</c>) is a scalar, not a composite
-        /// (anonymous-type) projection, and must not be expanded into constructor arguments.
-        /// </summary>
-        private static bool IsSingleColumnType(Type type) =>
-            type.IsPrimitive
-            || type == typeof(string)
-            || type == typeof(byte[])
-            || type == typeof(DateTime)
-            || type == typeof(decimal)
-            || type == typeof(Guid)
-            || (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>));
-
         private static readonly MethodInfo CountAllMI = typeof(CommonFunctions).GetMethod(nameof(CommonFunctions.count), [typeof(object[])])!;
     private static readonly MethodInfo AbsMI = typeof(Math).GetMethod(nameof(Math.Abs), [typeof(long)])!;
 
@@ -250,7 +236,7 @@ public partial class QueryCommand
             {
                 if (cmd._exp is not null)
                 {
-                    if (cmd._exp.Body is NewExpression ctor && !IsSingleColumnType(ctor.Type))
+                    if (cmd._exp.Body is NewExpression ctor && !TypeFacts.IsSingleColumnProjection(ctor.Type))
                     {
                         var args = ctor.Arguments;
                         var argsCount = args.Count;
@@ -289,7 +275,8 @@ public partial class QueryCommand
 
 
                     }
-                    else if (IsSingleColumnType(cmd._exp.Body.Type))
+                    else if (TypeFacts.IsSingleColumnProjection(cmd._exp.Body.Type)
+                        || (cmd._exp.Body is not NewExpression && TypeFacts.IsTupleType(cmd._exp.Body.Type)))
                     {
 
                         cmd.OneColumn = true;
@@ -442,10 +429,23 @@ public partial class QueryCommand
                         // like any other derived table by the apply clause.
                         var applyVisitor = new CorrelatedQueryExpressionVisitor(cmd._dataContext!, cmd, cancellationToken, cmd._dataContext!.Logger);
                         using var outerScope = applyVisitor.PushOuter(applySource.Parameters[0]);
-                        var applyCommand = applyVisitor.BuildQueryCommand(applySource.Body);
-                        if (!applyCommand.IsPrepared)
-                            applyCommand.PrepareCommand(noHash, cancellationToken);
-                        join.SetFrom(new FromExpression(applyCommand));
+
+                        if (XmlNodesExpression.TryCreate(applySource, applyVisitor, out var xmlNodes))
+                        {
+                            // The xml.nodes() rowset is not a derived query: its source is the
+                            // outer row's XML column. Register the row-shape metadata (as
+                            // FromTableFunction does for its row type) and install the special
+                            // FROM source; the apply clause renders it as <col>.nodes(...) as [alias]([col]).
+                            cmd._dataContext!.From<SqlFunctions.IXmlNodesRow>();
+                            join.SetFrom(new FromExpression(xmlNodes!));
+                        }
+                        else
+                        {
+                            var applyCommand = applyVisitor.BuildQueryCommand(applySource.Body);
+                            if (!applyCommand.IsPrepared)
+                                applyCommand.PrepareCommand(noHash, cancellationToken);
+                            join.SetFrom(new FromExpression(applyCommand));
+                        }
                     }
                     else
                     {
@@ -647,7 +647,7 @@ public partial class QueryCommand
 
         private static SelectExpression[] BuildKeyColumns(LambdaExpression expression, string clauseName, CancellationToken cancellationToken)
         {
-            if (expression.Body is NewExpression ctor && !IsSingleColumnType(ctor.Type))
+            if (expression.Body is NewExpression ctor && !TypeFacts.IsSingleColumnProjection(ctor.Type))
             {
                 var args = ctor.Arguments;
                 var argsCount = args.Count;

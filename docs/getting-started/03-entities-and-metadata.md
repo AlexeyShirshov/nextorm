@@ -22,7 +22,7 @@ The names auto-derived in item 3 can be translated to the database's spelling wi
 always taken verbatim.
 
 Metadata is resolved lazily and cached **process-wide** in [`Metadata`](xref:NextORM.Core.DataContextCache.Metadata), keyed by type,
-the first time a type is queried through [`From`](xref:NextORM.Core.DataContextExtensions). Because of that cache:
+the first time a type is queried through [`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)). Because of that cache:
 
 * the config delegate passed to `From<T>(…)` runs only on the first call for that type in the
   process;
@@ -68,7 +68,7 @@ select id from simple_entity
   conventional choice.
 * **Binary columns** - a `byte[]` property maps to a binary column (`bytea` on PostgreSQL,
   `varbinary`/`image` on SQL Server, `blob` on SQLite). A `byte[]` can also be projected directly
-  (`Select(x => x.Data)`) and compared against a `byte[]` parameter of [`Parameter`](xref:NextORM.Core.SqlFunctions).
+  (`Select(x => x.Data)`) and compared against a `byte[]` parameter of [`Parameter`](xref:NextORM.Core.SqlFunctions.Parameter``1(System.Int32)).
 
 ### Interface plus class
 
@@ -96,7 +96,7 @@ SQL. A class with attributes directly on it works the same way, with no interfac
 
 ## Types without attributes
 
-A type does not need any attribute to be queryable: [`From<T>()`](xref:NextORM.Core.DataContextExtensions) builds a mapping from
+A type does not need any attribute to be queryable: [`From<T>()`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)) builds a mapping from
 the type's shape (and caches it) the first time the type is used.
 
 * **Table name** - the CLR type name, verbatim. `Product` maps to `Product`; an interface keeps its
@@ -207,7 +207,7 @@ unchanged to opt out.
 
 ## Fluent registration
 
-Instead of attributes, pass a configuration delegate to [`From`](xref:NextORM.Core.DataContextExtensions). [`EntityMetadataBuilder<T>`](xref:NextORM.Core.EntityMetadataBuilder`1) exposes
+Instead of attributes, pass a configuration delegate to [`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)). [`EntityMetadataBuilder<T>`](xref:NextORM.Core.EntityMetadataBuilder`1) exposes
 `Table(string)` and `Property(Expression<Func<T, object>>)`; the returned [`EntityPropertyBuilder<T>`](xref:NextORM.Core.EntityPropertyBuilder`1)
 exposes `HasColumnName(string)`.
 
@@ -218,7 +218,7 @@ dataContext.From<SimpleEntity>(cfg => cfg
     .HasColumnName("id"));
 ```
 
-To map several properties, call [`Property`](xref:NextORM.Core.EntityMetadataBuilder`1) once per member:
+To map several properties, call [`Property`](xref:NextORM.Core.EntityMetadataBuilder`1.Property(System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) once per member:
 
 ```csharp
 public class Product
@@ -245,7 +245,7 @@ Rules for the fluent path ([`Build`](xref:NextORM.Core.EntityMetadataBuilder`1.B
 ## Entities from a raw table: [`TableAlias`](xref:NextORM.Core.TableAlias)
 
 No entity and no metadata are required to query. Start from a table name with `From("table")` and read
-columns through the [`TableAlias`](xref:NextORM.Core.TableAlias) passed to [`Select`](xref:NextORM.Core.EntityBuilder`1)/[`Where`](xref:NextORM.Core.EntityBuilder`1):
+columns through the [`TableAlias`](xref:NextORM.Core.TableAlias) passed to [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}}))/[`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})):
 
 ```csharp
 await foreach (var row in dataContext.From("simple_entity")
@@ -288,9 +288,9 @@ var query = dataContext.From("complex_entity")
     .Select(c => new { Id = c["id"].AsInt });
 ```
 
-[`From`](xref:NextORM.Core.DataContextExtensions) is available both on the concrete [`DataContext`](xref:NextORM.Core.DataContext) (`dataContext.From("simple_entity")`) and as an
+[`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)) is available both on the concrete [`DataContext`](xref:NextORM.Core.DataContext) (`dataContext.From("simple_entity")`) and as an
 extension on [`IDataContext`](xref:NextORM.Core.IDataContext), so it works whether the context is used through its concrete type or the
-interface. Independently of entities, [`From`](xref:NextORM.Core.DataContextExtensions) can also wrap a subquery
+interface. Independently of entities, [`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)) can also wrap a subquery
 (`dataContext.From(innerQuery)`) or another entity builder (`dataContext.From(entity)`).
 
 ## Quoted identifiers

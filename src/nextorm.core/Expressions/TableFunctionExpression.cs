@@ -12,16 +12,24 @@ public sealed class TableFunctionExpression
 {
     /// <summary>Creates a table-function source without a trailing <c>WITH</c> clause.</summary>
     public TableFunctionExpression(string name, string? schema, MethodCallExpression call)
-        : this(name, schema, null, call)
+        : this(name, schema, null, null, null, call)
     {
     }
 
     /// <summary>Creates a table-function source, optionally with a trailing <c>WITH (...)</c> clause body.</summary>
     public TableFunctionExpression(string name, string? schema, string? withClause, MethodCallExpression call)
+        : this(name, schema, withClause, null, null, call)
+    {
+    }
+
+    /// <summary>Creates a table-function source with an in-call clause and verbatim identifier arguments.</summary>
+    internal TableFunctionExpression(string name, string? schema, string? withClause, string? callClause, IReadOnlyList<int>? verbatimArguments, MethodCallExpression call)
     {
         Name = name;
         Schema = schema;
         WithClause = withClause;
+        CallClause = callClause;
+        VerbatimArguments = verbatimArguments;
         Call = call;
     }
 
@@ -36,6 +44,18 @@ public sealed class TableFunctionExpression
     /// <see cref="SqlTableFunctionAttribute.WithClause"/>), appended verbatim after the call.
     /// </summary>
     public string? WithClause { get; }
+
+    /// <summary>
+    /// Optional verbatim SQL appended inside the call parentheses after the arguments (from
+    /// <see cref="SqlTableFunctionAttribute.CallClause"/>).
+    /// </summary>
+    public string? CallClause { get; }
+
+    /// <summary>
+    /// Indices of the arguments emitted verbatim as SQL identifiers (from
+    /// <see cref="SqlTableFunctionAttribute.VerbatimArguments"/>); <c>null</c> when every argument is a value.
+    /// </summary>
+    public IReadOnlyList<int>? VerbatimArguments { get; }
 
     /// <summary>The CLR method call the FROM source was created from; its arguments are the TVF arguments.</summary>
     public MethodCallExpression Call { get; }
@@ -59,6 +79,6 @@ public sealed class TableFunctionExpression
 
         var name = string.IsNullOrEmpty(attribute.Name) ? method.Name : attribute.Name;
 
-        return new TableFunctionExpression(name, attribute.Schema, attribute.WithClause, call);
+        return new TableFunctionExpression(name, attribute.Schema, attribute.WithClause, attribute.CallClause, attribute.VerbatimArguments, call);
     }
 }

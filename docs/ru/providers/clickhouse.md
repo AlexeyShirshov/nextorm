@@ -15,6 +15,9 @@ ADO.NET-провайдер `ClickHouse.Driver`. Он создаёт `ClickHouseC
 - плейсхолдер параметра `@name`; драйвер переписывает их в нативный для ClickHouse вид
   `{name:Type}` и выводит тип из значения .NET;
 - идентификаторы и псевдонимы в обратных кавычках;
+- нативные колонки `UInt64` и свойства/проекции `ulong`/`ulong?` материализуются через аксессор
+  построителя строк `DbDataReader.GetFieldValue<ulong>`, поэтому SQL-приведение не нужно (тем же
+  аксессором пользуется MySQL/MariaDB `BIGINT UNSIGNED`);
 - конкатенацию строк функцией `concat(a, b, ...)`;
 - `coalesce(a, b)`, логические литералы `true`/`false` и `lengthUTF8(x)` для длины строки;
 - `trimBoth`/`trimLeft`/`trimRight` для трёх видов trim;
@@ -41,25 +44,31 @@ ADO.NET-провайдер `ClickHouse.Driver`. Он создаёт `ClickHouseC
   фильтрованные агрегаты `count_if`/`sum_if`/`avg_if`/`min_if`/`max_if` — как комбинаторы `-If`
   `countIf`/`sumIf`/`avgIf`/`minIf`/`maxIf`; агрегаты числа уникальных значений
   `uniq`/`uniq_exact`/`uniq_combined`/`uniq_hll12` — как `uniq`/`uniqExact`/`uniqCombined`/`uniqHLL12`,
-  обёрнутые в `toInt64(...)` (нативный `UInt64` приводится, чтобы построитель строк мог
-  материализовать целое CLR); агрегаты количества (`count`/`count_distinct`/`count_if` и
+  обёрнутые в `toInt64(...)` для нормализации нативного `UInt64` к объявленному CLR `long`; агрегаты
+  количества (`count`/`count_distinct`/`count_if` и
   `count_big`/`count_big_distinct`) приводятся так же — в `toInt32(...)` для возвращающих `int`
   вариантов и `toInt64(...)` для 64-битных; параметрические агрегаты квантилей `quantile(level)(value)`/`quantileExact`/
   `quantileTiming` и `median`, обёрнутые в `toFloat64(...)` (чтобы любой вариант материализовался как
   `double`); агрегат произвольного значения `any_agg` — как `any` (кросс-провайдерно: `ANY_VALUE(x)` в
-  MySQL), а агрегат последней строки `any_last` — как `anyLast`; агрегаты последовательностей/воронки
+  MySQL), а агрегат последней строки `any_last` — как `anyLast`; возвращающие массивы агрегаты
+  `group_array`/`group_uniq_array` — как `groupArray`/`groupUniqArray` (материализуются как CLR `T[]`);
+  агрегаты последовательностей/воронки
   `window_funnel`/`sequence_match`/`retention` — как `windowFunnel`/`sequenceMatch`/`retention`
-  (`windowFunnel`/`sequenceMatch` обёрнуты в `toInt32(...)`; `retention` возвращает `Array(UInt8)`,
-  поэтому применим только вложенно внутри другой array-функции); извлекающие функции
+  (`windowFunnel`/`sequenceMatch` обёрнуты в `toInt32(...)`; `retention` возвращает `Array(UInt8)` как `byte[]`); извлекающие функции
   строкового JSON `json_extract_string`/`json_extract_int`/`json_extract_float`/`json_extract_bool`/
   `json_extract_raw`/`json_has`/`json_type` — как `JSONExtractString`/`JSONExtractInt`/`JSONExtractFloat`/
   `JSONExtractBool`/`JSONExtractRaw`/`JSONHas`/`JSONType`, `json_length` — как
-  `toInt64(JSONLength(...))`, а быстрый разбор плоского JSON `visit_param_extract_string`/`_int`/`_float`/
+  `toInt64(JSONLength(...))`, возвращающие массивы `json_extract_keys`/`json_extract_array_raw`/
+  `json_extract_keys_and_values` — как `JSONExtractKeys`/`JSONExtractArrayRaw`/`JSONExtractKeysAndValues`
+  (проецируются как `string[]`/`Tuple<string, T>[]`; тип значения последней — non-nullable generic), а быстрый разбор плоского JSON `visit_param_extract_string`/`_int`/`_float`/
   `_bool`/`_raw` — как `visitParamExtractString`/`visitParamExtractInt`/`visitParamExtractFloat`/
   `visitParamExtractBool`/`visitParamExtractRaw`; JSONPath-скаляры `json_value`/`json_query`/
-  `json_exists` — как `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (тот же гейт [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract));
+  `json_exists` — как `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS`, а функции нативного JSON `json_all_paths`/
+  `json_all_paths_with_types`/`to_json_string` — как `JSONAllPaths`/`JSONAllPathsWithTypes`/`toJSONString`
+  (тот же гейт [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract));
   функции словарей `dict_get`/`dict_get_or_default`/
-  `dict_has` — как `dictGet`/`dictGetOrDefault`/`dictHas`;
+  `dict_has`/`dict_get_hierarchy`/`dict_get_children`/`dict_is_in` — как
+  `dictGet`/`dictGetOrDefault`/`dictHas`/`dictGetHierarchy`/`dictGetChildren`/`dictIsIn`;
 - модификатор супер-агрегации `GROUP BY ... WITH TOTALS` ([`SupportsGroupByWithTotals`](xref:NextORM.Core.ISqlDialect.SupportsGroupByWithTotals))
   через `EntityBuilder.WithTotals()`;
 - `LIMIT n BY expr` ([`LimitBy`](xref:NextORM.Core.ISqlDialect.LimitBy)) через
@@ -68,7 +77,10 @@ ADO.NET-провайдер `ClickHouse.Driver`. Он создаёт `ClickHouseC
 - табличные функции `numbers`/`numbers_mt` через `SqlFunctions.ClickHouse.numbers(...)` (колонка `number`
   типа `UInt64` приводится к `Int64` подзапросом-обёрткой, чтобы row reader мог её материализовать) и
   `zeros`/`zeros_mt` через `SqlFunctions.ClickHouse.zeros(...)` (`IZerosRow`, колонка `zero UInt8`
-  материализуется напрямую как `byte`);
+  материализуется напрямую как `byte`); также предобъявлены серверные/кластерные табличные функции
+  `url`/`s3`/`file`/`remote`/`remote_secure`/`cluster`/`cluster_all_replicas` (схема строки задаётся
+  generic-интерфейсом `TRow` вызывающего и должна совпадать с аргументом `structure` или целевой
+  таблицей);
 - модификаторы запроса `FINAL`/`SAMPLE`/`PREWHERE`/`SETTINGS` через `Final()`, `Sample(ratio[, offset])`,
   `PreWhere(predicate)` и `Settings(("key", "value"), ...)`
   ([`SupportsFinal`](xref:NextORM.Core.ISqlDialect.SupportsFinal)/[`SupportsSample`](xref:NextORM.Core.ISqlDialect.SupportsSample)/[`SupportsPreWhere`](xref:NextORM.Core.ISqlDialect.SupportsPreWhere)/[`SupportsSettings`](xref:NextORM.Core.ISqlDialect.SupportsSettings));
@@ -77,26 +89,30 @@ ADO.NET-провайдер `ClickHouse.Driver`. Он создаёт `ClickHouseC
 - разбиение на страницы `limit n` / `limit n offset m`; offset без limit превращается в
   `limit 18446744073709551615 offset m`, потому что ClickHouse принимает `offset` только вместе с `limit`;
 - переносимый условный `iif` — как `if(condition, a, b)` ([`Iif`](xref:NextORM.Core.ISqlDialect.Iif),
-  [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render)), многоветвевный `multiIf` только для ClickHouse,
+  [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render(System.String,System.String,System.String))), многоветвевный `multiIf` только для ClickHouse,
   собираемый через `when(...)`/`otherwise(...)` ([`MultiIf`](xref:NextORM.Core.ISqlDialect.MultiIf),
-  [`IMultiIfRenderer.Render`](xref:NextORM.Core.IMultiIfRenderer.Render)), а оконные функции
+  [`IMultiIfRenderer.Render`](xref:NextORM.Core.IMultiIfRenderer.Render(System.Collections.Generic.IReadOnlyList{System.String},System.Type))), а оконные функции
   `percent_rank()`/`cume_dist()`, `nth_value(expr, n)` и учитывающие фрейм
   `lagInFrame(value[, offset[, default]])`/`leadInFrame(...)` поддерживаются
   ([`SupportsPercentRankCumeDist`](xref:NextORM.Core.ISqlDialect.SupportsPercentRankCumeDist),
   [`SupportsNthValue`](xref:NextORM.Core.ISqlDialect.SupportsNthValue),
   [`SupportsInFrameWindowFunctions`](xref:NextORM.Core.ISqlDialect.SupportsInFrameWindowFunctions));
 - распределённый предикат `GLOBAL IN` через
-  [`SqlFunctions.ClickHouse.global_in`](xref:NextORM.Core.ClickHouseFunctions) (по подзапросу или
+  [`SqlFunctions.ClickHouse.global_in`](xref:NextORM.Core.ClickHouseFunctions.global_in``1(``0,NextORM.Core.QueryCommand{``0})) (по подзапросу или
   списку значений, [`SupportsGlobalPredicates`](xref:NextORM.Core.ISqlDialect.SupportsGlobalPredicates));
   отрицание — через C# `!` (`GLOBAL NOT IN`);
 - модификаторы строгости/типа join `ANY`/`ALL`/`ASOF` через
-  [`EntityBuilder.WithStrictness`](xref:NextORM.Core.EntityBuilder`1) сразу после join
+  [`EntityBuilder.WithStrictness`](xref:NextORM.Core.EntityBuilder`1.WithStrictness(NextORM.Core.JoinStrictness)) сразу после join
   ([`SupportsJoinStrictness`](xref:NextORM.Core.ISqlDialect.SupportsJoinStrictness),
-  [`MakeJoinKeyword`](xref:NextORM.Core.ISqlDialect.MakeJoinKeyword), enum `JoinStrictness`).
+  [`MakeJoinKeyword`](xref:NextORM.Core.ISqlDialect.MakeJoinKeyword(NextORM.Core.JoinType,NextORM.Core.JoinStrictness,System.Boolean)), enum `JoinStrictness`).
   `LEFT ANY JOIN` оставляет одну правую строку на каждую левую, `ALL` — все совпадения, а `ASOF`
-  требует хотя бы одной equi-колонки и неравенства последним. `SEMI`/`ANTI`/`PASTE` не поддерживаются.
+  требует хотя бы одной equi-колонки и неравенства последним. Для видов `SEMI`/`ANTI`/`PASTE` есть
+  отдельные методы-построители: [`SemiJoin`](xref:NextORM.Core.EntityBuilder`1.SemiJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}}))/`AntiJoin` отдают
+  только левые колонки для левых строк, у которых есть (соответственно нет) совпадение, а `PasteJoin`
+  сопоставляет два источника по позиции строки без `ON` (строк — сколько у более короткой стороны).
+  Гейты — [`SupportsSemiAntiJoin`](xref:NextORM.Core.ISqlDialect.SupportsSemiAntiJoin)/`SupportsPasteJoin`.
   Вариант `GLOBAL` (правая сторона разрешается один раз и broadcast'ится для распределённых
-  запросов) задаётся через [`EntityBuilder.Global`](xref:NextORM.Core.EntityBuilder`1) и
+  запросов) задаётся через [`EntityBuilder.Global`](xref:NextORM.Core.EntityBuilder`1.Global) и
   комбинируется со strictness (`global left any join`,
   [`SupportsGlobalJoin`](xref:NextORM.Core.ISqlDialect.SupportsGlobalJoin)).
 
@@ -164,15 +180,17 @@ select concat('id:', id) as `Label` from simple_entity
 | any_last (последняя строка) | `anyLast(x)` |
 | Условная функция | `iif(cond, a, b)` → `if(cond, a, b)`; `multi_if(when(c1, v1), ..., otherwise(v))` → `multiIf(c1, v1, ..., v)` |
 | Оконные функции | `percent_rank()`, `cume_dist()`, `nth_value(expr, n)` поддерживаются; `lag_in_frame`/`lead_in_frame` → `lagInFrame`/`leadInFrame` (учитывают фрейм; обычные `lag`/`lead` на ClickHouse отвергают явный фрейм) |
-| Строковый JSON | `JSONExtractString`, `JSONExtractInt`, `JSONExtractFloat`, `JSONExtractBool`, `JSONExtractRaw`, `JSONHas`, `toInt64(JSONLength(...))`, `JSONType`, `visitParamExtract*`, `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (JSONPath) |
-| Словари | `dictGet`, `dictGetOrDefault`, `dictHas` (нужен сконфигурированный `CREATE DICTIONARY`) |
+| Строковый JSON | `JSONExtractString`, `JSONExtractInt`, `JSONExtractFloat`, `JSONExtractBool`, `JSONExtractRaw`, `JSONHas`, `toInt64(JSONLength(...))`, `JSONType`, `JSONExtractKeys`/`JSONExtractArrayRaw` (`string[]`), `JSONExtractKeysAndValues` (`Tuple<string, T>[]`), `visitParamExtract*`, `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (JSONPath) |
+| Функции нативного JSON | `json_all_paths` → `JSONAllPaths` (проецируется как `string[]`), `json_all_paths_with_types` → `JSONAllPathsWithTypes` (нативный `Map(String, String)` отдаётся как `Dictionary<string, string>`; мост к коллекции — `mapKeys`/`mapValues`), `to_json_string` → `toJSONString`; все принимают нативное значение `JSON` (`CAST(col AS JSON)` для колонки `String`); сам нативный *тип колонки* `JSON` не замаплен |
+| Словари | `dictGet`, `dictGetOrDefault`, `dictHas`, `dictGetHierarchy`, `dictGetChildren`, `dictIsIn` (нужен сконфигурированный `CREATE DICTIONARY`) |
 | Session/info-функции | `currentUser()`, `currentDatabase()`, `version()` (`session_user`/`current_schema` недоступны) |
 | `GROUP BY ... WITH TOTALS` | `with totals` (отдельная строка итогов не отдаётся `ClickHouse.Driver`) |
 | `LIMIT n BY expr` | `limit [offset, ]n by col1, col2` (перед финальным `LIMIT`) |
 | Модификаторы запроса | `final`, `sample r [offset o]`, `prewhere`, `settings k = v` (`FINAL`/`PREWHERE` требуют поддерживающего движка таблицы) |
-| Табличные функции | `numbers`/`numbers_mt` (колонка `UInt64 number` приводится к `Int64`), `zeros`/`zeros_mt` (`zero UInt8`), `generateRandom` (встроенные `generate_random()`/`generate_random(seed)` фиксируют структуру `id UInt64, value Float64, name String` и приводят `id` к `Int64`) |
-| Функции массивов | над колонками/выражениями `Array(T)`: `length`, `has`, `indexOf`, `hasAny`, `hasAll`, `arrayStringConcat`, `splitByChar`, `arraySort`, `arrayReverse`, `arrayDistinct`, `range`, `arrayEnumerate`, `arrayCumSum`, `arraySlice`, `arrayPushBack`; CLR-метод `string.Split` рендерится как `splitByChar(separator, value)` под [`StringSplit`](xref:NextORM.Core.ISqlDialect.StringSplit) (только одноразрядный разделитель); `arrayJoin(array)` разворачивает по строке на элемент, а `EntityBuilder.ArrayJoin`/`LeftArrayJoin` рендерят клаузу `[left ]array join expr, ...`. `EntityBuilder.ArrayJoinElement`/`LeftArrayJoinElement` дополнительно привязывают вырожденный элемент к `ArrayJoinProjection<TEntity, TElement>.Element` (исходная сущность — в `.Item1`); выражение клаузы получает алиас, и `p.Element` ссылается на него (см. [`ClickHouseFunctions`](xref:NextORM.Core.ClickHouseFunctions), [`ArrayJoinKind`](xref:NextORM.Core.ArrayJoinKind), [`ArrayJoinProjection`](xref:NextORM.Core.ArrayJoinProjection`2)) |
-| Нативный JSON / расширенные скаляры | не поддерживаются (только PostgreSQL) |
+| Табличные функции | `numbers`/`numbers_mt` (колонка `UInt64 number` приводится к `Int64`), `zeros`/`zeros_mt` (`zero UInt8`), `generateRandom` (встроенные `generate_random()`/`generate_random(seed)` фиксируют структуру `id UInt64, value Float64, name String` и приводят `id` к `Int64`), а также серверные/кластерные `url(url, format, structure)`, `s3(url, format, structure)`, `file(path, format, structure)`, `remote(addresses, db, table)`, `remote_secure(...)`, `cluster(cluster, db, table)`, `cluster_all_replicas(...)` (схема строки — generic-интерфейс `TRow` вызывающего) |
+| Функции массивов | над колонками/выражениями `Array(T)`: `length`, `has`, `indexOf`, `hasAny`, `hasAll`, `startsWith`, `endsWith`, `hasSubstr`, `arrayStringConcat`, `splitByChar`, `arraySort`, `arrayReverse`, `arrayDistinct`, `range`, `arrayEnumerate`, `arrayCumSum`, `arraySlice`, `arrayPushBack`; CLR-метод `string.Split` рендерится как `splitByChar(separator, value)` под [`StringSplit`](xref:NextORM.Core.ISqlDialect.StringSplit) (только одноразрядный разделитель); `arrayJoin(array)` разворачивает по строке на элемент, а `EntityBuilder.ArrayJoin`/`LeftArrayJoin` рендерят клаузу `[left ]array join expr, ...`. `EntityBuilder.ArrayJoinElement`/`LeftArrayJoinElement` дополнительно привязывают вырожденный элемент к `ArrayJoinProjection<TEntity, TElement>.Element` (исходная сущность — в `.Item1`); выражение клаузы получает алиас, и `p.Element` ссылается на него (см. [`ClickHouseFunctions`](xref:NextORM.Core.ClickHouseFunctions), [`ArrayJoinKind`](xref:NextORM.Core.ArrayJoinKind), [`ArrayJoinProjection`](xref:NextORM.Core.ArrayJoinProjection`2)) |
+| Поверхность кортежей | нативная колонка/выражение `Tuple(...)` проецируется как `System.Tuple<...>` (арность 1–7); `Tuple.Create(a, b, ...)` рендерится как `tuple(a, b, ...)`, а `System.Tuple<...>.ItemN` — как `tupleElement(t, n)`, оба под [`SupportsTupleFunctions`](xref:NextORM.Core.ISqlDialect.SupportsTupleFunctions); `untuple` не поддерживается (меняет набор колонок результата) |
+| Нативный тип колонки JSON | не замаплен: `ClickHouse.Driver` читает нативную колонку `JSON` как `System.Text.Json.Nodes.JsonObject`, который row reader материализовать не умеет. Функции нативного JSON при этом доступны над любым JSON-выражением |
 
 ## Замечания и ограничения
 
@@ -191,9 +209,22 @@ select concat('id:', id) as `Label` from simple_entity
   фрейм-агностичны.
 - `multi_if` возвращает общий супертип, который ClickHouse выводит для ветвей. Если `TResult` — числовой
   CLR-тип, весь вызов приводится к нему (`cast(multiIf(...) as Int64)`, `Float64`, ...), потому что иначе
-  ClickHouse материализует общий тип (например `UInt8` для маленьких целых литералов), который row
-  reader не читает обратно; нечисловые результаты (строка, дата) не кастуются, поэтому для них выбирайте
+  ClickHouse материализует общий тип (например `UInt8` для маленьких целых литералов), не совпадающий с
+  объявленным CLR `TResult`; нечисловые результаты (строка, дата) не кастуются, поэтому для них выбирайте
   `TResult`, совпадающий с ветвями.
+- Функции нативного JSON (`json_value`/`json_query`/`json_exists`, `json_all_paths`/
+  `json_all_paths_with_types`/`to_json_string`) включаются флагом `SupportsJsonExtract`. Пара
+  `JSONAllPaths` принимает нативное значение `JSON` (колонку `String` приведите через
+  `CAST(col AS JSON)`); `json_all_paths` проецируется как `string[]`, а `json_all_paths_with_types`
+  отдаёт нативный `Map(String, String)` как `Dictionary<string, string>` (мост к коллекции —
+  `mapKeys`/`mapValues`). Сама нативная *колонка* `JSON` при этом не замаплена: `ClickHouse.Driver`
+  отдаёт её как `System.Text.Json.Nodes.JsonObject`, для которого у row reader нет маппинга. Храните
+  JSON в колонке `String` (или приведите колонку в SQL), если нужно материализовать саму колонку.
+- В `hits_v1` и других широких таблицах колонок намного больше, чем объявляет интерфейс сущности.
+  Вместо маппинга всех колонок лишние можно спроецировать по имени через
+  [`SqlFunctions.Column<T>`](xref:NextORM.Core.SqlFunctions.Column``1(System.Object,System.String)) (см.
+  [Запросы и проекции](../guide/01-querying-and-projections.md#колонки-по-имени)); имя сверяется
+  дословно, поэтому кавычки — по диалекту.
 
 ## См. также
 

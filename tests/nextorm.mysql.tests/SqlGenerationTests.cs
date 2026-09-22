@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations.Schema;
 using System.Data.Common;
 using FluentAssertions;
 using NextORM.Core;
@@ -388,14 +389,29 @@ public class SqlGenerationTests
     }
 
     [Fact]
-    public void QueryHint_ShouldThrowBecauseMySqlHasNoQueryHints()
+    public void QueryHint_ShouldEmitInlineOptimizerHintComment()
     {
         using var ctx = MySqlTestContext.Create();
         var e = ctx.From<ISimpleEntity>();
 
-        var act = () => SqlOf(ctx, e.Select(x => new { x.Id }).Hint("recompile"));
+        var sql = SqlOf(ctx, e.Select(x => new { x.Id }).Hint("NO_RANGE_OPTIMIZATION(t1)"));
 
-        act.Should().Throw<NotSupportedException>().WithMessage("*Query hints*");
+        sql.Should().Be("select /*+ NO_RANGE_OPTIMIZATION(t1) */ id from simple_entity");
+    }
+
+    [Fact]
+    public void QueryHint_WithCte_ShouldPlaceHintAfterTheTopLevelSelect()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var cte = e.Where(x => x.Id > 1).Select(x => new { x.Id });
+        var sql = SqlOf(ctx, ctx.With("recent", cte).From("recent").Select(t => new { id = t["id"].AsInt })
+            .Hint("MAX_EXECUTION_TIME(1000)"));
+
+        sql.Should().StartWith("with recent as (select id from complex_entity");
+        sql.Should().Contain(") select /*+ MAX_EXECUTION_TIME(1000) */ id");
+        sql.Should().Contain("from recent");
     }
 
     [Fact]
@@ -580,6 +596,18 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void XmlNodes_ShouldThrowBecauseOnlySqlServerHasThem()
+    {
+        using var ctx = MySqlTestContext.Create();
+
+        var act = () => SqlOf(ctx, ctx.From<IComplexEntity>()
+            .CrossApply(x => SqlFunctions.SqlServer.xml_nodes(x.String, "/root/item"))
+            .Select(p => new { p.Item2.Value }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*xml.nodes*");
+    }
+
+    [Fact]
     public void DerivedSourceThenJoin_ShouldRenderDerivedTable()
     {
         using var ctx = MySqlTestContext.Create();
@@ -622,6 +650,66 @@ public class SqlGenerationTests
             .Select(p => new { p.Item1.Id, SId = p.Item2.Id }));
 
         sql.Should().Be("select t1.id, t2.id as `SId` from (select id, somestring as `String` from complex_entity) as `t1` join simple_entity as `t2` on t1.id = cast(t2.id as signed)\n where (t1.id > 5)");
+    }
+
+    public interface IJsonTableRow
+    {
+        [Column("id")]
+        int Id { get; set; }
+        [Column("name")]
+        string? Name { get; set; }
+    }
+
+    private static class JsonTableTvf
+    {
+        [SqlTableFunction("json_table", CallClause = ", '$[*]' columns(id int path '$.id', name varchar(50) path '$.name')")]
+        public static IQueryable<IJsonTableRow> JsonTable(string doc) => throw new NotSupportedException();
+    }
+
+    [Fact]
+    public void TableFunction_CallClause_ShouldEmitJsonTableColumns()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var doc = "[]";
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => JsonTableTvf.JsonTable(doc))
+            .Select(r => new { r.Id, r.Name }));
+
+        Normalize(command.DbCommand.CommandText).Should()
+            .Be("select id, name from json_table(@doc, '$[*]' columns(id int path '$.id', name varchar(50) path '$.name')) as `t1`");
+        command.DbCommandParams.Cast<DbParameter>().Select(p => p.ParameterName)
+            .Should().Equal("doc");
+    }
+
+    [Fact]
+    public void FromSql_ShouldRenderDerivedTableWithNamedParameters()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var min = 1;
+
+        var command = Prepare(ctx, ctx
+            .FromSql("select id from complex_entity where id > @min", new { min })
+            .Select(t => new { Id = t["id"].AsInt }));
+
+        var sql = Normalize(command.DbCommand.CommandText);
+        sql.Should().Contain("from (select id from complex_entity where id > @min) as `t1`");
+        sql.Should().Contain("t1.id");
+        command.DbCommandParams.Cast<DbParameter>().Select(p => p.ParameterName).Should().Equal("min");
+    }
+
+    [Fact]
+    public void FromSql_AsJoinedSource_ShouldRenderDerivedTableAndResolveColumns()
+    {
+        using var ctx = MySqlTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx
+            .From<ISimpleEntity>()
+            .Join(ctx.FromSql("select id from complex_entity"), (s, r) => s.Id == r["id"].AsInt)
+            .Select(p => new { p.Item1.Id, R = p.Item2["id"].AsInt }));
+
+        sql.Should().Contain("join (select id from complex_entity) as `t2`");
+        sql.Should().Contain("on t1.id = t2.id");
     }
 
 }

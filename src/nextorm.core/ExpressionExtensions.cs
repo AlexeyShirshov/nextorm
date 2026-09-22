@@ -9,6 +9,12 @@ namespace NextORM.Core;
 /// </summary>
 public static class ExpressionExtensions
 {
+    /// <summary>
+    /// Determines whether the expression tree contains a node of type <typeparamref name="T"/>.
+    /// </summary>
+    /// <typeparam name="T">The expression node type to look for.</typeparam>
+    /// <param name="exp">The expression tree to search.</param>
+    /// <returns><see langword="true"/> when a matching node exists; otherwise <see langword="false"/>.</returns>
     public static bool Has<T>(this Expression exp)
         where T : Expression
     {
@@ -16,6 +22,14 @@ public static class ExpressionExtensions
         visitor.Visit(exp);
         return visitor.Has;
     }
+    /// <summary>
+    /// Determines whether the expression tree contains a node of type <typeparamref name="T"/> and,
+    /// when it does, returns the first matching node through <paramref name="param"/>.
+    /// </summary>
+    /// <typeparam name="T">The expression node type to look for.</typeparam>
+    /// <param name="exp">The expression tree to search.</param>
+    /// <param name="param">The first matching node, or <c>null</c> when none was found.</param>
+    /// <returns><see langword="true"/> when a matching node exists; otherwise <see langword="false"/>.</returns>
     public static bool Has<T>(this Expression exp, out T? param)
         where T : Expression
     {
@@ -24,6 +38,12 @@ public static class ExpressionExtensions
         param = visitor.Target;
         return visitor.Has;
     }
+    /// <summary>
+    /// Determines whether the expression contains a special method call that requires an explicit
+    /// conversion before it can be compared.
+    /// </summary>
+    /// <param name="exp">The expression tree to inspect.</param>
+    /// <returns><see langword="true"/> when a conversion is required; otherwise <see langword="false"/>.</returns>
     public static bool NeedToConvert(this Expression exp)
     {
         var visitor = new TestSpecialMethodCallVisitor();
@@ -40,8 +60,16 @@ public class TypeExpressionVisitor<T> : ExpressionVisitor
 {
     private bool _has;
     private T? _target;
+    /// <summary>Whether a node of type <typeparamref name="T"/> was found during the visit.</summary>
     public bool Has => _has;
+    /// <summary>The first node of type <typeparamref name="T"/> found during the visit, or <c>null</c>.</summary>
     public T? Target => _target;
+    /// <summary>
+    /// Records the first node assignable to <typeparamref name="T"/> and stops there; otherwise
+    /// continues the base traversal.
+    /// </summary>
+    /// <param name="node">The current node.</param>
+    /// <returns>The node, or the result of the base visit.</returns>
     [return: NotNullIfNotNull("node")]
     public override Expression? Visit(Expression? node)
     {
@@ -70,12 +98,22 @@ public class TypeExpressionVisitor<T1, T2> : ExpressionVisitor
 {
     private bool _has1;
     private T1? _target1;
+    /// <summary>Whether a node of type <typeparamref name="T1"/> was found during the visit.</summary>
     public bool Has1 => _has1;
+    /// <summary>The first node of type <typeparamref name="T1"/> found during the visit, or <c>null</c>.</summary>
     public T1? Target1 => _target1;
     private bool _has2;
     private T2? _target2;
+    /// <summary>Whether a node of type <typeparamref name="T2"/> was found during the visit.</summary>
     public bool Has2 => _has2;
+    /// <summary>The first node of type <typeparamref name="T2"/> found during the visit, or <c>null</c>.</summary>
     public T2? Target2 => _target2;
+    /// <summary>
+    /// Records the first node assignable to <typeparamref name="T1"/> or <typeparamref name="T2"/> and
+    /// stops there; otherwise continues the base traversal.
+    /// </summary>
+    /// <param name="node">The current node.</param>
+    /// <returns>The node, or the result of the base visit.</returns>
     [return: NotNullIfNotNull("node")]
     public override Expression? Visit(Expression? node)
     {
@@ -109,19 +147,32 @@ public class ReplaceConstantsExpressionVisitor : ExpressionVisitor
     private readonly IEnumerable<ParameterExpression>? _outerParams;
     private readonly IQueryRegistry? _queryProvider;
 
+    /// <summary>
+    /// Creates a visitor that replaces runtime values with query parameters, matching an argument to a
+    /// parameter by type.
+    /// </summary>
+    /// <param name="params">The values to register as parameters; may be <c>null</c>.</param>
     public ReplaceConstantsExpressionVisitor(params object[]? @params)
     {
         _replaceParams = @params;
     }
+    /// <summary>
+    /// Creates a visitor that replaces members of <paramref name="params"/> with outer-reference
+    /// markers and all other constants with parameters.
+    /// </summary>
+    /// <param name="params">The outer parameters whose members become outer references; may be <c>null</c>.</param>
+    /// <param name="queryProvider">The registry the outer references are registered on.</param>
     public ReplaceConstantsExpressionVisitor(IEnumerable<ParameterExpression>? @params, IQueryRegistry queryProvider)
     {
         _outerParams = @params;
         _queryProvider = queryProvider;
     }
+    /// <summary>The parameters produced while replacing constants, as parameter/value pairs.</summary>
     public List<(ParameterExpression, object?)> Params => _params;
 
     // public bool HasOuterParams { get; internal set; }
 
+    /// <inheritdoc/>
     protected override Expression VisitConstant(ConstantExpression node)
     {
         // if (node.Type.IsScalar())
@@ -130,6 +181,7 @@ public class ReplaceConstantsExpressionVisitor : ExpressionVisitor
         //}
         //return node;
     }
+    /// <inheritdoc/>
     protected override Expression VisitParameter(ParameterExpression node)
     {
         if (_replaceParams is not null)
@@ -153,6 +205,7 @@ public class ReplaceConstantsExpressionVisitor : ExpressionVisitor
         _params.Add((p, node.Value));
         return p;
     }
+    /// <inheritdoc/>
     protected override Expression VisitMember(MemberExpression node)
     {
         if (node.NodeType == ExpressionType.MemberAccess && node.Expression is ParameterExpression param
@@ -164,6 +217,12 @@ public class ReplaceConstantsExpressionVisitor : ExpressionVisitor
 
         return base.VisitMember(node);
     }
+    /// <summary>
+    /// Returns the constructor of <c>OuterRefMarker&lt;T&gt;</c> closed over
+    /// <paramref name="type"/>, used to build an outer-reference marker node.
+    /// </summary>
+    /// <param name="type">The type of the outer reference.</param>
+    /// <returns>The constructor taking the reference index.</returns>
     public static ConstructorInfo GetOuterRefMarkerCI(Type type)
     {
         return typeof(OuterRefMarker<>).MakeGenericType(type).GetConstructor([typeof(int)])!;
@@ -179,9 +238,17 @@ public class PredicateExpressionVisitor<T>(Func<Expression?, Func<T, bool>, bool
     private readonly Func<Expression?, Func<T, bool>, bool> _predicate = predicate;
     private T? _value;
     private bool _result;
+    /// <summary>The value captured by the predicate through its store callback, if any.</summary>
     public T? Value => _value;
+    /// <summary>Whether the caller-supplied predicate matched a node during the visit.</summary>
     public bool Result => _result;
 
+    /// <summary>
+    /// Invokes the caller-supplied predicate for each node; on a match it records the result and stops,
+    /// otherwise it continues the base traversal.
+    /// </summary>
+    /// <param name="node">The current node.</param>
+    /// <returns>The node, or the result of the base visit.</returns>
     [return: NotNullIfNotNull("node")]
     public override Expression? Visit(Expression? node)
     {

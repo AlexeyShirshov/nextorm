@@ -526,6 +526,161 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void GroupArray_ShouldRenderGroupArray()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.group_array(x.Id) }))
+            .Should().Contain("groupArray(id)");
+    }
+
+    [Fact]
+    public void GroupUniqArray_ShouldRenderGroupUniqArray()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.group_uniq_array(x.Id) }))
+            .Should().Contain("groupUniqArray(id)");
+    }
+
+    [Fact]
+    public void ArrayColumn_ShouldProjectDirectly()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        SqlOf(ctx, e.Select(x => x.Nums)).Should().Be("select nums from array_entity");
+    }
+
+    [Fact]
+    public void ArrayExpression_ShouldProjectWithoutWrapper()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        SqlOf(ctx, e.Select(x => SqlFunctions.ClickHouse.array_sort(x.Nums)))
+            .Should().Contain("arraySort(nums)");
+    }
+
+    [Fact]
+    public void ArrayMap_ShouldRenderArrayMap()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        SqlOf(ctx, e.Select(x => SqlFunctions.ClickHouse.array_map(v => -v, x.Nums)))
+            .Should().Contain("arrayMap(v -> -(v), nums)");
+    }
+
+    [Fact]
+    public void ArrayFilter_ShouldRenderArrayFilter()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        SqlOf(ctx, e.Select(x => SqlFunctions.ClickHouse.array_filter(v => v > 2, x.Nums)))
+            .Should().Contain("arrayFilter(v -> (v > 2), nums)");
+    }
+
+    [Fact]
+    public void ArrayExists_ShouldRenderArrayExists()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        SqlOf(ctx, e.Select(x => SqlFunctions.ClickHouse.array_exists(v => v > 2, x.Nums)))
+            .Should().Contain("arrayExists(v -> (v > 2), nums)");
+    }
+
+    [Fact]
+    public void ArrayAll_ShouldRenderArrayAll()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        SqlOf(ctx, e.Select(x => SqlFunctions.ClickHouse.array_all(v => v > 2, x.Nums)))
+            .Should().Contain("arrayAll(v -> (v > 2), nums)");
+    }
+
+    [Fact]
+    public void ArrayCount_ShouldRenderArrayCount()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        SqlOf(ctx, e.Select(x => SqlFunctions.ClickHouse.array_count(v => v > 2, x.Nums)))
+            .Should().Contain("arrayCount(v -> (v > 2), nums)");
+    }
+
+    [Fact]
+    public void ArrayFirstAndLast_ShouldRenderArrayFirstAndLast()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            F = SqlFunctions.ClickHouse.array_first(v => v > 2, x.Nums),
+            FI = SqlFunctions.ClickHouse.array_first_index(v => v > 2, x.Nums),
+            L = SqlFunctions.ClickHouse.array_last(v => v > 2, x.Nums),
+            LI = SqlFunctions.ClickHouse.array_last_index(v => v > 2, x.Nums)
+        }));
+
+        sql.Should().Contain("arrayFirst(v -> (v > 2), nums)");
+        sql.Should().Contain("arrayFirstIndex(v -> (v > 2), nums)");
+        sql.Should().Contain("arrayLast(v -> (v > 2), nums)");
+        sql.Should().Contain("arrayLastIndex(v -> (v > 2), nums)");
+    }
+
+    [Fact]
+    public void NestedHigherOrderLambda_ShouldReferenceOuterParameter()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        SqlOf(ctx, e.Select(x => SqlFunctions.ClickHouse.array_map(
+                a => SqlFunctions.ClickHouse.array_exists(b => a == b, x.Nums),
+                x.Nums)))
+            .Should().Contain("arrayMap(a -> arrayExists(b -> (a = b), nums), nums)");
+    }
+
+    [Fact]
+    public void HigherOrderLambda_WithMemberAccessOnParameter_ShouldThrow()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => SqlFunctions.ClickHouse.array_filter(s => s.Length > 0, x.Tags)));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*Member access*");
+    }
+
+    [Fact]
+    public void HigherOrderLambda_NotInline_ShouldThrow()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+        System.Linq.Expressions.Expression<Func<long, long>> function = v => -v;
+
+        var act = () => SqlOf(ctx, e.Select(x => SqlFunctions.ClickHouse.array_map<long, long>(function, x.Nums)));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*inline lambda*");
+    }
+
+    [Fact]
+    public void ArrayFilter_ShouldNestInsideAnotherArrayFunction()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        SqlOf(ctx, e.Select(x => SqlFunctions.ClickHouse.array_sort(
+                SqlFunctions.ClickHouse.array_filter(v => v > 2, x.Nums))))
+            .Should().Contain("arraySort(arrayFilter(v -> (v > 2), nums))");
+    }
+
+    [Fact]
     public void BitAggregates_ShouldUseGroupBitFunctions()
     {
         using var ctx = ClickHouseTestContext.Create();
@@ -715,6 +870,98 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void TopK_ShouldRenderTopK()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            T = SqlFunctions.ClickHouse.top_k(3, x.Id),
+            W = SqlFunctions.ClickHouse.top_k_weighted(2, x.Id, x.Int)
+        }));
+
+        sql.Should().Contain("topK(3)(id)");
+        sql.Should().Contain("topKWeighted(2)(id, nullableint)");
+    }
+
+    [Fact]
+    public void Quantiles_ShouldRenderQuantiles()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Q = SqlFunctions.ClickHouse.quantiles(new[] { 0.25, 0.5, 0.75 }, x.Id)
+        }));
+
+        sql.Should().Contain("quantiles(0.25, 0.5, 0.75)(id)");
+    }
+
+    [Fact]
+    public void Quantiles_WithCapturedLevels_ShouldThrow()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        var levels = new[] { 0.25, 0.5 };
+
+        var act = () => SqlOf(ctx, e.Select(x => new
+        {
+            Q = SqlFunctions.ClickHouse.quantiles(levels, x.Id)
+        }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*inline*");
+    }
+
+    [Fact]
+    public void TopK_WithCapturedK_ShouldParameteriseK()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        var k = 3L;
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            T = SqlFunctions.ClickHouse.top_k(k, x.Id)
+        }));
+
+        sql.Should().Contain("topK(@k)(id)");
+    }
+
+    [Fact]
+    public void TopK_WithCapturedK_ShouldRefreshParamsOnCachedPlan()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        var k = 2L;
+
+        QueryCommand<long[]> Build() => e.Select(x => SqlFunctions.ClickHouse.top_k(k, x.Id));
+
+        _ = ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
+        var second = (DbPreparedQueryCommand<long[]>)ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
+
+        Normalize(second.DbCommand.CommandText).Should().Contain("topK(@k)(id)");
+    }
+
+    [Fact]
+    public void Quantiles_WithCapturedFilter_ShouldRefreshParamsOnCachedPlan()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        var min = 1L;
+
+        QueryCommand<double[]> Build() => e
+            .Where(x => x.Id > min)
+            .Select(x => SqlFunctions.ClickHouse.quantiles(new[] { 0.5 }, x.Id));
+
+        _ = ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
+        var second = (DbPreparedQueryCommand<double[]>)ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
+
+        Normalize(second.DbCommand.CommandText).Should().Contain("quantiles(0.5)(id)");
+    }
+
+    [Fact]
     public void AnyAggregates_ShouldUseClickHouseNames()
     {
         using var ctx = ClickHouseTestContext.Create();
@@ -812,6 +1059,41 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void JsonArrayExtractFunctions_ShouldUseClickHouseNames()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            K = SqlFunctions.ClickHouse.json_extract_keys(x.String),
+            KP = SqlFunctions.ClickHouse.json_extract_keys(x.String, "o"),
+            A = SqlFunctions.ClickHouse.json_extract_array_raw(x.String),
+            AP = SqlFunctions.ClickHouse.json_extract_array_raw(x.String, "o"),
+            V = SqlFunctions.ClickHouse.json_extract_keys_and_values<int>(x.String),
+            VP = SqlFunctions.ClickHouse.json_extract_keys_and_values<long>(x.String, "o")
+        }));
+
+        sql.Should().Contain("JSONExtractKeys(somestring)");
+        sql.Should().Contain("JSONExtractKeys(somestring, 'o')");
+        sql.Should().Contain("JSONExtractArrayRaw(somestring)");
+        sql.Should().Contain("JSONExtractArrayRaw(somestring, 'o')");
+        sql.Should().Contain("JSONExtractKeysAndValues(somestring, 'Int32')");
+        sql.Should().Contain("JSONExtractKeysAndValues(somestring, 'o', 'Int64')");
+    }
+
+    [Fact]
+    public void JsonExtractKeysAndValues_WithNullableType_ShouldThrow()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.json_extract_keys_and_values<int?>(x.String) }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*non-nullable*");
+    }
+
+    [Fact]
     public void JsonPathFunctions_ShouldUseClickHouseNames()
     {
         using var ctx = ClickHouseTestContext.Create();
@@ -827,6 +1109,24 @@ public class SqlGenerationTests
         sql.Should().Contain("JSON_VALUE(somestring, '$.a')");
         sql.Should().Contain("JSON_QUERY(somestring, '$.b')");
         sql.Should().Contain("JSON_EXISTS(somestring, '$.c')");
+    }
+
+    [Fact]
+    public void NativeJsonFunctions_ShouldUseClickHouseNames()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Paths = SqlFunctions.ClickHouse.json_all_paths(x.String),
+            PathsWithTypes = SqlFunctions.ClickHouse.json_all_paths_with_types(x.String),
+            Text = SqlFunctions.ClickHouse.to_json_string(x.String)
+        }));
+
+        sql.Should().Contain("JSONAllPaths(somestring)");
+        sql.Should().Contain("JSONAllPathsWithTypes(somestring)");
+        sql.Should().Contain("toJSONString(somestring)");
     }
 
     [Fact]
@@ -867,6 +1167,42 @@ public class SqlGenerationTests
         sql.Should().Contain("dictGet('dict', 'attr', id)");
         sql.Should().Contain("dictGetOrDefault('dict', 'attr', id, 'n/a')");
         sql.Should().Contain("dictHas('dict', id)");
+    }
+
+    [Fact]
+    public void HierarchicalDictFunctions_ShouldUseClickHouseNames()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            H = SqlFunctions.ClickHouse.dict_get_hierarchy<long>("dict", x.Id),
+            C = SqlFunctions.ClickHouse.dict_get_children<long>("dict", x.Id),
+            I = SqlFunctions.ClickHouse.dict_is_in<long>("dict", x.Id, 3L)
+        }));
+
+        sql.Should().Contain("dictGetHierarchy('dict', id)");
+        sql.Should().Contain("dictGetChildren('dict', id)");
+        sql.Should().Contain("dictIsIn('dict', id, 3)");
+    }
+
+    [Fact]
+    public void HierarchicalDictFunctions_WithCapturedDict_ShouldRefreshParamsOnCachedPlan()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        var dict = "dict";
+
+        QueryCommand<ulong[]> Build() => e.Select(x => SqlFunctions.ClickHouse.dict_get_hierarchy<long>(dict, x.Id));
+
+        _ = ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
+        dict = "dict2";
+        var second = (DbPreparedQueryCommand<ulong[]>)ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
+
+        Normalize(second.DbCommand.CommandText).Should().Contain("dictGetHierarchy(@dict, id)");
+        second.DbCommand.Parameters.Count.Should().Be(1);
+        second.DbCommand.Parameters["dict"].Value.Should().Be("dict2");
     }
 
     [Fact]
@@ -1009,6 +1345,118 @@ public class SqlGenerationTests
 
         Normalize(command.DbCommand.CommandText).Should().Contain(
             "from generateRandom('id UInt64, value Float64, name String', @seed)");
+    }
+
+    [Fact]
+    public void TableFunction_Url_ShouldEmitCall()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var location = "http://127.0.0.1/data.csv";
+        var format = "CSV";
+        var structure = "id UInt64, name String";
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.ClickHouse.url<IServerTableRow>(location, format, structure))
+            .Select(r => new { r.Id, r.Name }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Contain("from url(@location, @format, @structure) as `t1`");
+    }
+
+    [Fact]
+    public void TableFunction_S3_ShouldEmitCall()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var location = "s3://bucket/data.csv";
+        var format = "CSV";
+        var structure = "id UInt64, name String";
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.ClickHouse.s3<IServerTableRow>(location, format, structure))
+            .Select(r => new { r.Id }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Contain("from s3(@location, @format, @structure) as `t1`");
+    }
+
+    [Fact]
+    public void TableFunction_File_ShouldEmitCall()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var path = "data.csv";
+        var format = "CSV";
+        var structure = "id UInt64, name String";
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.ClickHouse.file<IServerTableRow>(path, format, structure))
+            .Select(r => new { r.Id }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Contain("from file(@path, @format, @structure) as `t1`");
+    }
+
+    [Fact]
+    public void TableFunction_Remote_ShouldEmitCall()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var addresses = "127.0.0.1:9000";
+        var database = "default";
+        var table = "hits";
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.ClickHouse.remote<IServerTableRow>(addresses, database, table))
+            .Select(r => new { r.Id }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Contain("from remote(@addresses, @database, @table) as `t1`");
+    }
+
+    [Fact]
+    public void TableFunction_RemoteSecure_ShouldEmitCall()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var addresses = "remote.example.com:9440";
+        var database = "default";
+        var table = "hits";
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.ClickHouse.remote_secure<IServerTableRow>(addresses, database, table))
+            .Select(r => new { r.Id }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Contain("from remoteSecure(@addresses, @database, @table) as `t1`");
+    }
+
+    [Fact]
+    public void TableFunction_Cluster_ShouldEmitCall()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var cluster = "my_cluster";
+        var database = "default";
+        var table = "hits";
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.ClickHouse.cluster<IServerTableRow>(cluster, database, table))
+            .Select(r => new { r.Id }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Contain("from cluster(@cluster, @database, @table) as `t1`");
+    }
+
+    [Fact]
+    public void TableFunction_ClusterAllReplicas_ShouldEmitCall()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var cluster = "my_cluster";
+        var database = "default";
+        var table = "hits";
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.ClickHouse.cluster_all_replicas<IServerTableRow>(cluster, database, table))
+            .Select(r => new { r.Id }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Contain("from clusterAllReplicas(@cluster, @database, @table) as `t1`");
     }
 
     [Fact]
@@ -1331,6 +1779,186 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void SemiJoin_ShouldRenderLeftSemiJoinAndKeepLeftColumns()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, simple.SemiJoin(complex, (s, c) => s.Id == c.Id).Select(s => new { s.Id }));
+
+        sql.Should().Contain(" left semi join ").And.Contain(" on ");
+        sql.Should().NotContain("somestring");
+    }
+
+    [Fact]
+    public void AntiJoin_ShouldRenderLeftAntiJoin()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, simple.AntiJoin(complex, (s, c) => s.Id == c.Id).Select(s => new { s.Id }))
+            .Should().Contain(" left anti join ").And.Contain(" on ");
+    }
+
+    [Fact]
+    public void PasteJoin_ShouldRenderPasteJoinWithoutOnAndExposeBothSides()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, simple.PasteJoin(complex).Select(p => new { p.Item1.Id, p.Item2.String }));
+
+        sql.Should().Contain(" paste join ").And.NotContain(" on ");
+        sql.Should().Contain("somestring");
+    }
+
+    [Fact]
+    public void SemiAntiPasteJoin_FromQueryCommand_ShouldRender()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>().Where(c => c.Id > 0);
+        var complexQuery = (QueryCommand<IComplexEntity>)complex;
+
+        SqlOf(ctx, simple.SemiJoin(complexQuery, (s, c) => s.Id == (int)c.Id).Select(s => new { s.Id }))
+            .Should().Contain(" left semi join ");
+        SqlOf(ctx, simple.AntiJoin(complexQuery, (s, c) => s.Id == (int)c.Id).Select(s => new { s.Id }))
+            .Should().Contain(" left anti join ");
+        SqlOf(ctx, simple.PasteJoin(complexQuery).Select(p => new { p.Item1.Id, p.Item2.String }))
+            .Should().Contain(" paste join ").And.Contain("somestring");
+    }
+
+    [Fact]
+    public void AntiJoin_AfterJoin_ShouldKeepBothJoins()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, simple.LeftJoin(complex, (s, c) => s.Id == c.Id)
+            .AntiJoin(simple, (p, s2) => p.Item1.Id == s2.Id)
+            .Select(p => new { p.Item1.Id, p.Item2.String }));
+
+        sql.Should().Contain(" left join ").And.Contain(" left anti join ");
+    }
+
+    [Fact]
+    public void PasteJoin_AfterJoin_ShouldExtendProjectionToThree()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, simple.LeftJoin(complex, (s, c) => s.Id == c.Id)
+            .PasteJoin(simple)
+            .Select(p => new { First = p.Item1.Id, p.Item2.String, Third = p.Item3.Id }));
+
+        sql.Should().Contain(" left join ").And.Contain(" paste join ");
+    }
+
+    [Fact]
+    public void SemiJoin_WithStrictness_ShouldThrow()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, simple.SemiJoin(complex, (s, c) => s.Id == c.Id)
+            .WithStrictness(JoinStrictness.Any)
+            .Select(s => new { s.Id }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*cannot be applied to a Semi join*");
+    }
+
+    [Fact]
+    public void SemiJoin_ShouldNotMutateSourceBuilder()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
+
+        var semi = simple.SemiJoin(complex, (s, c) => s.Id == c.Id);
+
+        SqlOf(ctx, simple.Select(s => new { s.Id })).Should().NotContain(" join ");
+        SqlOf(ctx, semi.Select(s => new { s.Id })).Should().Contain(" left semi join ");
+    }
+
+    [Fact]
+    public void SemiAntiPasteJoin_OnNamedTable_ShouldRender()
+    {
+        using var ctx = ClickHouseTestContext.CreateClickHouse();
+        var t1 = ctx.From("simple_entity");
+        var t2 = ctx.From("complex_entity");
+
+        SqlOf(ctx, t1.SemiJoin(t2, (a, b) => a.GetInt64("id") == b.GetInt64("id")).Select(a => new { Id = a.GetInt32("id") }))
+            .Should().Contain(" left semi join ");
+        SqlOf(ctx, t1.AntiJoin(t2, (a, b) => a.GetInt64("id") == b.GetInt64("id")).Select(a => new { Id = a.GetInt32("id") }))
+            .Should().Contain(" left anti join ");
+        SqlOf(ctx, t1.PasteJoin(t2).Select(p => new { A = p.Item1.GetInt32("id"), B = p.Item2.GetInt64("id") }))
+            .Should().Contain(" paste join ");
+
+        var e1 = ctx.From<ISimpleEntity>();
+        var e2 = ctx.From<IComplexEntity>();
+        SqlOf(ctx, t1.SemiJoin(e1, (a, b) => a.GetInt64("id") == b.Id).Select(a => new { Id = a.GetInt32("id") }))
+            .Should().Contain(" left semi join ");
+        SqlOf(ctx, t1.AntiJoin(e2, (a, b) => a.GetInt64("id") == b.Id).Select(a => new { Id = a.GetInt32("id") }))
+            .Should().Contain(" left anti join ");
+        SqlOf(ctx, t1.PasteJoin(e2).Select(p => new { A = p.Item1.GetInt32("id"), B = p.Item2.Id }))
+            .Should().Contain(" paste join ");
+    }
+
+    [Fact]
+    public void SemiJoin_AfterWindow_ShouldThrow()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
+
+        var act = () => simple.Window("w").SemiJoin(complex, (s, c) => s.Id == c.Id);
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*Named windows*");
+    }
+
+    [Fact]
+    public void SemiAntiPaste_OnJoinedLhs_ShouldRenderAtEveryArity()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var s = ctx.From<ISimpleEntity>();
+        var c = ctx.From<IComplexEntity>();
+
+        var a2 = s.Join(c, (p, x) => p.Id == x.Id);
+        var a3 = a2.Join(s, (p, x) => p.Item1.Id == x.Id);
+        var a4 = a3.Join(s, (p, x) => p.Item1.Id == x.Id);
+        var a5 = a4.Join(s, (p, x) => p.Item1.Id == x.Id);
+        var a6 = a5.Join(s, (p, x) => p.Item1.Id == x.Id);
+        var a7 = a6.Join(s, (p, x) => p.Item1.Id == x.Id);
+
+        SqlOf(ctx, a2.SemiJoin(s, (p, x) => p.Item1.Id == x.Id).Select(p => new { p.Item1.Id })).Should().Contain(" left semi join ");
+        SqlOf(ctx, a3.SemiJoin(s, (p, x) => p.Item1.Id == x.Id).Select(p => new { p.Item1.Id })).Should().Contain(" left semi join ");
+        SqlOf(ctx, a4.SemiJoin(s, (p, x) => p.Item1.Id == x.Id).Select(p => new { p.Item1.Id })).Should().Contain(" left semi join ");
+        SqlOf(ctx, a5.SemiJoin(s, (p, x) => p.Item1.Id == x.Id).Select(p => new { p.Item1.Id })).Should().Contain(" left semi join ");
+        SqlOf(ctx, a6.SemiJoin(s, (p, x) => p.Item1.Id == x.Id).Select(p => new { p.Item1.Id })).Should().Contain(" left semi join ");
+        SqlOf(ctx, a7.SemiJoin(s, (p, x) => p.Item1.Id == x.Id).Select(p => new { p.Item1.Id })).Should().Contain(" left semi join ");
+
+        SqlOf(ctx, a2.AntiJoin(s, (p, x) => p.Item1.Id == x.Id).Select(p => new { p.Item1.Id })).Should().Contain(" left anti join ");
+        SqlOf(ctx, a3.AntiJoin(s, (p, x) => p.Item1.Id == x.Id).Select(p => new { p.Item1.Id })).Should().Contain(" left anti join ");
+        SqlOf(ctx, a4.AntiJoin(s, (p, x) => p.Item1.Id == x.Id).Select(p => new { p.Item1.Id })).Should().Contain(" left anti join ");
+        SqlOf(ctx, a5.AntiJoin(s, (p, x) => p.Item1.Id == x.Id).Select(p => new { p.Item1.Id })).Should().Contain(" left anti join ");
+        SqlOf(ctx, a6.AntiJoin(s, (p, x) => p.Item1.Id == x.Id).Select(p => new { p.Item1.Id })).Should().Contain(" left anti join ");
+        SqlOf(ctx, a7.AntiJoin(s, (p, x) => p.Item1.Id == x.Id).Select(p => new { p.Item1.Id })).Should().Contain(" left anti join ");
+
+        SqlOf(ctx, a2.PasteJoin(s).Select(p => new { p.Item1.Id })).Should().Contain(" paste join ");
+        SqlOf(ctx, a3.PasteJoin(s).Select(p => new { p.Item1.Id })).Should().Contain(" paste join ");
+        SqlOf(ctx, a4.PasteJoin(s).Select(p => new { p.Item1.Id })).Should().Contain(" paste join ");
+        SqlOf(ctx, a5.PasteJoin(s).Select(p => new { p.Item1.Id })).Should().Contain(" paste join ");
+        SqlOf(ctx, a6.PasteJoin(s).Select(p => new { p.Item1.Id })).Should().Contain(" paste join ");
+        SqlOf(ctx, a7.PasteJoin(s).Select(p => new { p.Item1.Id })).Should().Contain(" paste join ");
+    }
+
+    [Fact]
     public void Global_ThenJoin_ShouldKeepGlobalOnFirstJoin()
     {
         using var ctx = ClickHouseTestContext.Create();
@@ -1389,6 +2017,97 @@ public class SqlGenerationTests
 
         sql.Should().Contain("hasAny(nums, @p0)");
         sql.Should().Contain("hasAll(nums, @p1)");
+    }
+
+    [Fact]
+    public void ArrayRelationPredicates_ShouldRender()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            S = SqlFunctions.ClickHouse.starts_with(x.Nums, new long[] { 3, 1 }),
+            E = SqlFunctions.ClickHouse.ends_with(x.Nums, new long[] { 1, 2 }),
+            C = SqlFunctions.ClickHouse.has_substr(x.Nums, new long[] { 1, 2 })
+        }));
+
+        sql.Should().Contain("startsWith(nums, @p0)");
+        sql.Should().Contain("endsWith(nums, @p1)");
+        sql.Should().Contain("hasSubstr(nums, @p2)");
+    }
+
+    [Fact]
+    public void TupleElementAccess_ShouldRenderTupleElement()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<ITupleEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new { A = x.Pair.Item1, B = x.Pair.Item2 }));
+
+        sql.Should().Contain("tupleElement(pair, 1)");
+        sql.Should().Contain("tupleElement(pair, 2)");
+    }
+
+    [Fact]
+    public void TupleCreate_ShouldRenderTuple()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => Tuple.Create(x.Id, x.String)))
+            .Should().Contain("tuple(id, somestring)");
+    }
+
+    [Fact]
+    public void TupleCreate_WithCapturedValue_ShouldRefreshParamsOnCachedPlan()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<ITupleEntity>();
+        var extra = 5;
+
+        QueryCommand<Tuple<int, int>> Build() => e.Select(x => Tuple.Create(x.Id, extra));
+
+        _ = ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
+        var second = (DbPreparedQueryCommand<Tuple<int, int>>)ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
+
+        Normalize(second.DbCommand.CommandText).Should().Contain("tuple(id, @extra)");
+    }
+
+    [Fact]
+    public void TupleElementAccess_WithCapturedFilter_ShouldRefreshParamsOnCachedPlan()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<ITupleEntity>();
+        var min = 0;
+
+        QueryCommand<int> Build() => e.Where(x => x.Id > min).Select(x => x.Pair.Item1);
+
+        _ = ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
+        var second = (DbPreparedQueryCommand<int>)ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
+
+        Normalize(second.DbCommand.CommandText).Should().Contain("tupleElement(pair, 1)");
+    }
+
+    [Fact]
+    public void TupleElementAccess_OnCapturedTuple_ShouldNotTranslateToSql()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<ITupleEntity>();
+        var local = Tuple.Create(1, "a");
+
+        SqlOf(ctx, e.Select(x => new { V = local.Item1 }))
+            .Should().NotContain("tupleElement");
+    }
+
+    [Fact]
+    public void TupleElementAccess_OnNewTuple_ShouldRenderNestedTuple()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<ITupleEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = new Tuple<int, int>(x.Id, x.Id).Item1 }))
+            .Should().Contain("tupleElement(tuple(id, id), 1)");
     }
 
     [Fact]
@@ -1768,15 +2487,35 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void XmlNodes_ShouldThrowBecauseClickHouseHasNoApply()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var act = () => SqlOf(ctx, ctx.From<IComplexEntity>()
+            .CrossApply(x => SqlFunctions.SqlServer.xml_nodes(x.String, "/root/item"))
+            .Select(p => new { p.Item2.Value }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*CrossApply*");
+    }
+
+    [Fact]
     public void UnsignedNumericCast_ShouldEmitCastInsteadOfDropping()
     {
-        // ClickHouse's UInt64 has no CLR reader getter, so a user casts the column to a signed type.
-        // The conversion source is a ulong, which TypeFacts must accept or the cast is dropped and
-        // the UInt64 column cannot be materialised.
+        // A user can still cast a UInt64 column to a signed type. The conversion source is a ulong,
+        // which TypeFacts must accept or the cast is dropped.
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<IUnsignedCastEntity>();
 
         SqlOf(ctx, e.Select(x => new { V = (long)x.Big })).Should().Contain("cast(Big as Int64)");
+    }
+
+    [Fact]
+    public void UnsignedNumericProjection_ShouldRenderNativeColumnWithoutCast()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IUnsignedCastEntity>();
+
+        SqlOf(ctx, e.Select(x => new { x.Big })).Should().Be("select Big from unsigned_cast");
     }
 
     [Fact]
@@ -1824,6 +2563,82 @@ public class SqlGenerationTests
         sql.Should().Be("select t1.id, t2.id as `SId` from (select id, somestring as `String` from complex_entity) as `t1` join simple_entity as `t2` on t1.id = cast(t2.id as Int64)\n where (t1.id > 5)");
     }
 
+    [Fact]
+    public void FromSql_ShouldRenderDerivedTableWithNamedParameters()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var min = 1;
+
+        var command = Prepare(ctx, ctx
+            .FromSql("select id from complex_entity where id > @min", new { min })
+            .Select(t => new { Id = t["id"].AsInt }));
+
+        var sql = Normalize(command.DbCommand.CommandText);
+        sql.Should().Contain("from (select id from complex_entity where id > @min) as `t1`");
+        sql.Should().Contain("t1.id");
+    }
+
+    [Fact]
+    public void FromSql_AsJoinedSource_ShouldRenderDerivedTableAndResolveColumns()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx
+            .From<ISimpleEntity>()
+            .Join(ctx.FromSql("select id from complex_entity"), (s, r) => s.Id == r["id"].AsInt)
+            .Select(p => new { p.Item1.Id, R = p.Item2["id"].AsInt }));
+
+        sql.Should().Contain("join (select id from complex_entity) as `t2`");
+        sql.Should().Contain("on t1.id = t2.id");
+    }
+
+    [Fact]
+    public void ColumnByName_ShouldRenderColumnIdentifierAndRenameAlias()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Select(x => new { Region = SqlFunctions.Column<ulong>(x, "RegionID") }));
+
+        sql.Should().Be("select RegionID as `Region` from simple_entity");
+    }
+
+    [Fact]
+    public void ColumnByName_OnJoinProjection_ShouldQualifyWithTableAlias()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+            .Where(p => SqlFunctions.Column<string>(p.Item2, "somestring") == "x")
+            .Select(p => new { p.Item1.Id, S = SqlFunctions.Column<string>(p.Item2, "somestring") }));
+
+        sql.Should().Contain("where t2.somestring = 'x'");
+        sql.Should().Contain("t2.somestring as `S`");
+    }
+
+    [Fact]
+    public void ColumnByName_QuotedIdentifiers_ShouldBacktick()
+    {
+        using var ctx = ClickHouseTestContext.CreateQuoted();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Select(x => new { R = SqlFunctions.Column<ulong>(x, "RegionID") }));
+
+        sql.Should().Be("select `RegionID` as `R` from `simple_entity`");
+    }
+
+    [Fact]
+    public void ColumnByName_OnNonSource_ShouldThrow()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Select(x => new { R = SqlFunctions.Column<int>("not-a-source", "id") }));
+
+        act.Should().Throw<BuildSqlCommandException>();
+    }
+
 }
 
 [SqlTable("unsigned_cast")]
@@ -1834,4 +2649,14 @@ public interface IUnsignedCastEntity
     ulong Big { get; set; }
 
 
+}
+
+public interface IServerTableRow
+{
+    [System.ComponentModel.DataAnnotations.Key]
+    [System.ComponentModel.DataAnnotations.Schema.Column("id")]
+    long Id { get; set; }
+
+    [System.ComponentModel.DataAnnotations.Schema.Column("name")]
+    string? Name { get; set; }
 }

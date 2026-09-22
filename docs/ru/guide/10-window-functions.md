@@ -43,14 +43,14 @@ public sealed class WindowFunction<T>
 }
 ```
 
-[`Over`](xref:NextORM.Core.WindowFunction`1) без аргументов рендерит пустую спецификацию (`over ()`). Поскольку деревья выражений C# отклоняют
+[`Over`](xref:NextORM.Core.WindowFunction`1.Over(NextORM.Core.WindowOrder,NextORM.Core.WindowFrame)) без аргументов рендерит пустую спецификацию (`over ()`). Поскольку деревья выражений C# отклоняют
 именованные аргументы, пропускающие предшествующий параметр со значением по умолчанию, спецификация
 **только с сортировкой** должна использовать перегрузку [`WindowOrder`](xref:NextORM.Core.WindowOrder) — `Over(SqlFunctions.Sql.asc(() => e.Id))` —
 а не `Over(orderBy: ...)`. `SqlFunctions.Sql.asc(expression)` и `SqlFunctions.Sql.desc(expression)` возвращают [`WindowOrder`](xref:NextORM.Core.WindowOrder)
 (ключ сортировки плюс [`OrderDirection`](xref:NextORM.Core.OrderDirection)).
 
-Вызов оконной функции **без** [`Over`](xref:NextORM.Core.WindowFunction`1) — ошибка: посетитель бросает `NotSupportedException`, в сообщении
-которого упоминается [`Over`](xref:NextORM.Core.WindowFunction`1).
+Вызов оконной функции **без** [`Over`](xref:NextORM.Core.WindowFunction`1.Over(NextORM.Core.WindowOrder,NextORM.Core.WindowFrame)) — ошибка: посетитель бросает `NotSupportedException`, в сообщении
+которого упоминается [`Over`](xref:NextORM.Core.WindowFunction`1.Over(NextORM.Core.WindowOrder,NextORM.Core.WindowFrame)).
 
 ## Функции
 
@@ -78,7 +78,7 @@ public sealed class WindowFunction<T>
 | Оконное количество | `count_over()` / `count_over(property)` | `count(*)` / `count(expr)` |
 
 Варианты агрегатов имеют суффикс `_over`, чтобы не конфликтовать со скалярными агрегатами `sum`, `avg`,
-`min`, `max` и `count`, используемыми с [`GroupBy`](xref:NextORM.Core.EntityBuilder`1).
+`min`, `max` и `count`, используемыми с [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})).
 
 ## Номер строки по секции
 
@@ -172,7 +172,7 @@ select id, lag(id, 1, 0) over (order by id) as 'prev', lead(nullableint, 2, 0) o
 
 ### `lagInFrame` / `leadInFrame` (ClickHouse)
 
-[`lagInFrame`/`leadInFrame`](xref:NextORM.Core.ClickHouseFunctions) в ClickHouse — аналоги `lag`/`lead`,
+[`lagInFrame`](xref:NextORM.Core.ClickHouseFunctions.lag_in_frame``1(``0))/[`leadInFrame`](xref:NextORM.Core.ClickHouseFunctions.lead_in_frame``1(``0)) в ClickHouse — аналоги `lag`/`lead`,
 учитывающие фрейм; они доступны как `SqlFunctions.ClickHouse.lag_in_frame`/`lead_in_frame`
 ([`SupportsInFrameWindowFunctions`](xref:NextORM.Core.ISqlDialect.SupportsInFrameWindowFunctions)). Обычные
 `lag`/`lead` смотрят на весь партишен и на ClickHouse отвергают явный фрейм с `BAD_ARGUMENTS`;
@@ -225,19 +225,19 @@ select id, sum(id) over (partition by nullableint) as 'total', count(*) over (pa
 
 | Фабрика | Генерирует |
 |---|---|
-| [`Rows`](xref:NextORM.Core.WindowFrame) | `rows between <start> and <end>` |
-| [`Range`](xref:NextORM.Core.WindowFrame) | `range between <start> and <end>` |
-| [`Groups`](xref:NextORM.Core.WindowFrame.Groups) | `groups between <start> and <end>` (группы-ровесники) |
-| [`Rows`](xref:NextORM.Core.WindowFrame) | `rows between <preceding> preceding and <following> following` |
+| [`Rows`](xref:NextORM.Core.WindowFrame.Rows(NextORM.Core.WindowFrameBound,NextORM.Core.WindowFrameBound)) | `rows between <start> and <end>` |
+| [`Range`](xref:NextORM.Core.WindowFrame.Range(NextORM.Core.WindowFrameBound,NextORM.Core.WindowFrameBound)) | `range between <start> and <end>` |
+| [`Groups`](xref:NextORM.Core.WindowFrame.Groups(NextORM.Core.WindowFrameBound,NextORM.Core.WindowFrameBound)) | `groups between <start> and <end>` (группы-ровесники) |
+| [`Rows`](xref:NextORM.Core.WindowFrame.Rows(NextORM.Core.WindowFrameBound,NextORM.Core.WindowFrameBound)) | `rows between <preceding> preceding and <following> following` |
 | [`RowsUnboundedPrecedingToCurrentRow`](xref:NextORM.Core.WindowFrame.RowsUnboundedPrecedingToCurrentRow) | `rows between unbounded preceding and current row` |
 | [`RangeUnboundedPrecedingToCurrentRow`](xref:NextORM.Core.WindowFrame.RangeUnboundedPrecedingToCurrentRow) | `range between unbounded preceding and current row` |
 
 | Граница | Генерирует |
 |---|---|
 | [`UnboundedPreceding`](xref:NextORM.Core.WindowFrameBound.UnboundedPreceding) | `unbounded preceding` |
-| [`Preceding`](xref:NextORM.Core.WindowFrameBound) | `<n> preceding` |
+| [`Preceding`](xref:NextORM.Core.WindowFrameBound.Preceding(System.Int32)) | `<n> preceding` |
 | [`CurrentRow`](xref:NextORM.Core.WindowFrameBound.CurrentRow) | `current row` |
-| [`Following`](xref:NextORM.Core.WindowFrameBound) | `<n> following` |
+| [`Following`](xref:NextORM.Core.WindowFrameBound.Following(System.Int32)) | `<n> following` |
 | [`UnboundedFollowing`](xref:NextORM.Core.WindowFrameBound.UnboundedFollowing) | `unbounded following` |
 
 Агрегат с накопительной рамкой и скользящее окно:
@@ -262,7 +262,7 @@ select id, sum(id) over (order by id rows between unbounded preceding and curren
 ```
 
 Рамка может исключать строки вокруг текущей через
-[`WindowFrame.WithExclusion`](xref:NextORM.Core.WindowFrame.WithExclusion) и
+[`WindowFrame.WithExclusion`](xref:NextORM.Core.WindowFrame.WithExclusion(NextORM.Core.WindowFrameExclusion)) и
 [`WindowFrameExclusion`](xref:NextORM.Core.WindowFrameExclusion):
 
 | Исключение | Генерирует |
@@ -328,7 +328,7 @@ MariaDB, ClickHouse и SQLite ([`SupportsNamedWindows`](xref:NextORM.Core.ISqlDi
 `percentile_cont(f) within group (order by x) over (...)` под флагом
 [`SupportsPercentileWindow`](xref:NextORM.Core.ISqlDialect.SupportsPercentileWindow); PostgreSQL выражает
 квантили упорядоченным **агрегатом**
-([`SqlFunctions.Postgres.percentile_cont`](xref:NextORM.Core.PostgresFunctions.percentile_cont)), а
+([`SqlFunctions.Postgres.percentile_cont`](xref:NextORM.Core.PostgresFunctions.percentile_cont``1(System.Double,System.Linq.Expressions.Expression{System.Func{``0}}))), а
 MySQL, SQLite и ClickHouse отклоняют оконную форму через `NotSupportedException`.
 
 | Провайдер | Поведение |

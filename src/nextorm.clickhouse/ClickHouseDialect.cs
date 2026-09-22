@@ -11,11 +11,13 @@ namespace NextORM.ClickHouse;
 /// </summary>
 public sealed class ClickHouseDialect : SqlDialectBase
 {
+    /// <summary>The shared ClickHouse dialect instance.</summary>
     public static readonly ClickHouseDialect Instance = new();
 
     private readonly IMultiIfRenderer _multiIf;
     private readonly IUniqAggregateRenderer _uniqAggregates;
     private readonly IQuantileAggregateRenderer _quantileAggregates;
+    private readonly ITopKAggregateRenderer _topKAggregates;
 
     /// <summary>Creates the dialect and its capability renderers.</summary>
     public ClickHouseDialect()
@@ -23,14 +25,19 @@ public sealed class ClickHouseDialect : SqlDialectBase
         _multiIf = new ClickHouseMultiIfRenderer(this);
         _uniqAggregates = new ClickHouseUniqAggregateRenderer(this);
         _quantileAggregates = new ClickHouseQuantileAggregateRenderer(this);
+        _topKAggregates = new ClickHouseTopKAggregateRenderer(this);
     }
 
     /// <summary>A ClickHouse derived table (subquery in FROM) must have an alias.</summary>
     public override bool RequireSubqueryAlias => true;
 
+    /// <summary>ClickHouse supports a raw SQL derived table (<c>FROM (&lt;sql&gt;) AS alias</c>).</summary>
+    public override bool SupportsRawSqlSource => true;
+
     /// <summary>ClickHouse implements the <c>INTERSECT ALL</c>/<c>EXCEPT ALL</c> set-operation variants.</summary>
     public override bool SupportsIntersectExceptAll => true;
 
+    /// <summary>ClickHouse concatenates with the <c>concat(part, ...)</c> function rather than the <c>+</c> operator.</summary>
     public override string MakeConcat(IReadOnlyList<string> parts) => $"concat({string.Join(", ", parts)})";
 
     /// <summary>ClickHouse implements the <c>ANY</c>/<c>ALL</c>/<c>ASOF</c> join modifiers.</summary>
@@ -39,12 +46,32 @@ public sealed class ClickHouseDialect : SqlDialectBase
     /// <summary>ClickHouse implements the <c>GLOBAL</c> join modifier.</summary>
     public override bool SupportsGlobalJoin => true;
 
+    /// <summary>ClickHouse implements the <c>LEFT SEMI</c>/<c>LEFT ANTI</c> join kinds.</summary>
+    public override bool SupportsSemiAntiJoin => true;
+
+    /// <summary>ClickHouse implements the <c>PASTE</c> join kind.</summary>
+    public override bool SupportsPasteJoin => true;
+
     /// <summary>
     /// ClickHouse has a native <c>Array(T)</c> type and implements the array functions over array
     /// columns (<c>length</c>, <c>has</c>, <c>indexOf</c>, <c>arrayStringConcat</c>, <c>hasAny</c>/<c>hasAll</c>,
-    /// <c>arraySort</c>, <c>arrayReverse</c>, <c>arrayDistinct</c>, <c>splitByChar</c>).
+    /// <c>startsWith</c>/<c>endsWith</c>/<c>hasSubstr</c>, <c>arraySort</c>, <c>arrayReverse</c>, <c>arrayDistinct</c>,
+    /// <c>splitByChar</c>).
     /// </summary>
     public override bool SupportsArrayFunctions => true;
+
+    /// <summary>
+    /// ClickHouse implements the higher-order (lambda) array functions (<c>arrayMap</c>,
+    /// <c>arrayFilter</c>, <c>arrayExists</c>, <c>arrayAll</c>, <c>arrayCount</c>,
+    /// <c>arrayFirst*</c>, <c>arrayLast*</c>).
+    /// </summary>
+    public override bool SupportsHigherOrderArrayFunctions => true;
+
+    /// <summary>
+    /// ClickHouse has a native <c>Tuple(...)</c> type and implements the <c>tuple</c> constructor and
+    /// <c>tupleElement</c> access.
+    /// </summary>
+    public override bool SupportsTupleFunctions => true;
 
     /// <summary>ClickHouse implements <c>arrayJoin(array)</c>, which expands one row per element.</summary>
     public override bool SupportsArrayJoin => true;
@@ -53,18 +80,33 @@ public sealed class ClickHouseDialect : SqlDialectBase
     public override IStringSplitRenderer StringSplit => ClickHouseStringSplitRenderer.Instance;
 
     /// <summary>
-    /// <c>length</c> and <c>indexOf</c> return <c>UInt64</c> natively; cast them to <c>Int64</c> so the
-    /// row reader can materialise the declared CLR integer.
+    /// <c>length</c>, <c>indexOf</c>, <c>arrayCount</c>, <c>arrayFirstIndex</c> and
+    /// <c>arrayLastIndex</c> return <c>UInt64</c>/<c>UInt32</c> natively; cast them to <c>Int64</c> so
+    /// the result matches the declared CLR <c>long</c>.
     /// </summary>
     public override string MakeArrayFunction(string name, string call) =>
-        name is "length" or "indexOf" ? $"toInt64({call})" : call;
+        name is "length" or "indexOf" or "arrayCount" or "arrayFirstIndex" or "arrayLastIndex" ? $"toInt64({call})" : call;
 
     /// <summary>
     /// Renders <c>[global] [inner|left|right|full|cross] [any|all|asof] join</c>. ClickHouse places the
-    /// <c>GLOBAL</c> modifier first and the strictness after the join type, before <c>join</c>.
+    /// <c>GLOBAL</c> modifier first and the strictness after the join type, before <c>join</c>. The
+    /// <c>LEFT SEMI</c>/<c>LEFT ANTI</c>/<c>PASTE</c> kinds render their own keyword.
     /// </summary>
     public override string MakeJoinKeyword(JoinType joinType, JoinStrictness strictness, bool isGlobal)
     {
+        if (joinType is JoinType.Semi or JoinType.Anti or JoinType.Paste)
+        {
+            var kind = joinType switch
+            {
+                JoinType.Semi => "left semi",
+                JoinType.Anti => "left anti",
+                JoinType.Paste => "paste",
+                _ => throw new NotSupportedException($"The {joinType} join is not supported")
+            };
+
+            return (isGlobal ? " global" : "") + " " + kind + " join ";
+        }
+
         var type = joinType switch
         {
             JoinType.Inner => "",
@@ -89,6 +131,7 @@ public sealed class ClickHouseDialect : SqlDialectBase
     }
 
     // ClickHouse renders greatest(...)/least(...).
+    /// <summary>ClickHouse renders the standard <c>greatest(...)</c>/<c>least(...)</c> functions.</summary>
     public override bool SupportsGreatestLeast => true;
 
     /// <summary>ClickHouse renders the portable <c>iif</c> as <c>if(condition, whenTrue, whenFalse)</c>.</summary>
@@ -99,7 +142,9 @@ public sealed class ClickHouseDialect : SqlDialectBase
 
     // ClickHouse has dateTrunc(unit, datetime) and the addYears/.../addSeconds family plus
     // toLastDayOfMonth(date).
+    /// <summary>ClickHouse implements date truncation through <c>dateTrunc(unit, value)</c>.</summary>
     public override bool SupportsDateTrunc => true;
+    /// <summary>ClickHouse implements date arithmetic through its <c>addYears</c>/.../<c>addSeconds</c> family.</summary>
     public override bool SupportsDateArithmetic => true;
 
     /// <summary>
@@ -109,24 +154,33 @@ public sealed class ClickHouseDialect : SqlDialectBase
     /// </summary>
     public override IDateConversionRenderer DateConversion => ClickHouseDateConversionRenderer.Instance;
 
+    /// <summary>Accepts the date-trunc fields except <c>decade</c>, <c>century</c> and <c>millennium</c>, which ClickHouse <c>dateTrunc</c> lacks.</summary>
     public override bool SupportsDateTruncField(string field) =>
         field is not ("decade" or "century" or "millennium") && base.SupportsDateTruncField(field);
 
     // string_agg is rendered as arrayStringConcat(groupArray(value), delimiter). ClickHouse has no
     // array type usable by the row reader, so array_agg stays unavailable.
+    /// <summary>ClickHouse renders <c>string_agg</c> through <c>arrayStringConcat(groupArray(value), delimiter)</c>; <c>array_agg</c> stays unavailable.</summary>
     public override bool SupportsStringAgg => true;
 
     // ClickHouse renders the bit aggregates as groupBitAnd/groupBitOr/groupBitXor, the statistical
     // aggregates as corr/covarPop/covarSamp and the filtered aggregates as the -If combinators.
+    /// <summary>ClickHouse implements the bit aggregates as <c>groupBitAnd</c>/<c>groupBitOr</c>/<c>groupBitXor</c>.</summary>
     public override bool SupportsBitAggregates => true;
+    /// <summary>ClickHouse implements the statistical aggregates as <c>corr</c>/<c>covarPop</c>/<c>covarSamp</c>.</summary>
     public override bool SupportsStatisticalAggregates => true;
+    /// <summary>ClickHouse implements the <c>argMin</c>/<c>argMax</c> aggregates.</summary>
     public override bool SupportsArgMinMax => true;
+    /// <summary>ClickHouse implements the filtered <c>-If</c> aggregate combinators.</summary>
     public override bool SupportsIfAggregates => true;
     /// <summary>ClickHouse implements the distinct-count <c>uniq*</c> aggregates.</summary>
     public override IUniqAggregateRenderer UniqAggregates => _uniqAggregates;
 
     /// <summary>ClickHouse implements the parameterised <c>quantile(level)(value)</c> family and <c>median</c>.</summary>
     public override IQuantileAggregateRenderer QuantileAggregates => _quantileAggregates;
+
+    /// <summary>ClickHouse implements the parameterised <c>topK(N)(value)</c>/<c>topKWeighted(N)(value, weight)</c> aggregates.</summary>
+    public override ITopKAggregateRenderer TopKAggregates => _topKAggregates;
 
     /// <summary>ClickHouse implements the <c>any</c>/<c>anyLast</c> row-picking aggregates.</summary>
     public override bool SupportsAnyAggregates => true;
@@ -159,8 +213,9 @@ public sealed class ClickHouseDialect : SqlDialectBase
     public override bool SupportsJsonExtract => true;
 
     /// <summary>
-    /// ClickHouse spells the string-JSON extractors in camel case; <c>JSONLength</c> returns <c>UInt64</c>,
-    /// which the row reader cannot materialise, so it is cast to <c>Int64</c>.
+    /// ClickHouse spells the string-JSON extractors in camel case and the native-JSON functions as
+    /// <c>JSONAllPaths</c>/<c>JSONAllPathsWithTypes</c>/<c>toJSONString</c>; <c>JSONLength</c> returns
+    /// <c>UInt64</c>, which the row reader cannot materialise, so it is cast to <c>Int64</c>.
     /// </summary>
     public override string MakeJsonExtract(string name, IReadOnlyList<string> args)
     {
@@ -171,6 +226,9 @@ public sealed class ClickHouseDialect : SqlDialectBase
             "json_extract_float" => "JSONExtractFloat",
             "json_extract_bool" => "JSONExtractBool",
             "json_extract_raw" => "JSONExtractRaw",
+            "json_extract_keys" => "JSONExtractKeys",
+            "json_extract_array_raw" => "JSONExtractArrayRaw",
+            "json_extract_keys_and_values" => "JSONExtractKeysAndValues",
             "json_has" => "JSONHas",
             "json_length" => "JSONLength",
             "json_type" => "JSONType",
@@ -182,6 +240,9 @@ public sealed class ClickHouseDialect : SqlDialectBase
             "json_value" => "JSON_VALUE",
             "json_query" => "JSON_QUERY",
             "json_exists" => "JSON_EXISTS",
+            "json_all_paths" => "JSONAllPaths",
+            "json_all_paths_with_types" => "JSONAllPathsWithTypes",
+            "to_json_string" => "toJSONString",
             _ => name
         };
 
@@ -198,7 +259,7 @@ public sealed class ClickHouseDialect : SqlDialectBase
     /// <summary>ClickHouse renders both UUID generators.</summary>
     public override IUuidGenerators UuidGenerators => ClickHouseUuidGenerators.Instance;
 
-    /// <summary>ClickHouse implements the dictionary functions <c>dictGet</c>/<c>dictGetOrDefault</c>/<c>dictHas</c>.</summary>
+    /// <summary>ClickHouse implements the dictionary functions <c>dictGet</c>/<c>dictGetOrDefault</c>/<c>dictHas</c>/<c>dictGetHierarchy</c>/<c>dictGetChildren</c>/<c>dictIsIn</c>.</summary>
     public override bool SupportsDictionaries => true;
 
     /// <summary>ClickHouse spells the dictionary functions in camel case.</summary>
@@ -209,6 +270,9 @@ public sealed class ClickHouseDialect : SqlDialectBase
             "dict_get" => "dictGet",
             "dict_get_or_default" => "dictGetOrDefault",
             "dict_has" => "dictHas",
+            "dict_get_hierarchy" => "dictGetHierarchy",
+            "dict_get_children" => "dictGetChildren",
+            "dict_is_in" => "dictIsIn",
             _ => name
         };
 
@@ -216,8 +280,10 @@ public sealed class ClickHouseDialect : SqlDialectBase
     }
 
     // count()/countIf() also return UInt64; cast to the CLR type the function declares (int vs long).
+    /// <summary>ClickHouse's <c>count</c>/<c>countIf</c> return <c>UInt64</c>, so the result is cast to the declared CLR type.</summary>
     public override bool WrapsCountResult => true;
 
+    /// <summary>Casts the count expression to <c>Int64</c> for the large form and <c>Int32</c> otherwise.</summary>
     public override string WrapCount(string countExpression, bool big) =>
         big ? $"toInt64({countExpression})" : $"toInt32({countExpression})";
 
@@ -226,11 +292,15 @@ public sealed class ClickHouseDialect : SqlDialectBase
 
     // The ClickHouse driver turns CommandBehavior.SingleRow into a trailing LIMIT 1, which would
     // duplicate the limit the dialect already renders for single-row commands.
+    /// <summary>ClickHouse is <c>false</c> because the driver would append a duplicate <c>LIMIT 1</c> to the one the dialect already renders.</summary>
     public override bool SupportsCommandBehaviorSingleRow => false;
 
     // ClickHouse spells the super-aggregate as a trailing modifier (GROUP BY a, b WITH ROLLUP/CUBE).
+    /// <summary>ClickHouse spells <c>ROLLUP</c> as the trailing modifier <c>GROUP BY ... WITH ROLLUP</c>.</summary>
     public override bool SupportsRollup => true;
+    /// <summary>ClickHouse spells <c>CUBE</c> as the trailing modifier <c>GROUP BY ... WITH CUBE</c>.</summary>
     public override bool SupportsCube => true;
+    /// <summary>ClickHouse supports <c>GROUP BY GROUPING SETS (...)</c>.</summary>
     public override bool SupportsGroupingSets => true;
 
     /// <summary>ClickHouse implements the <c>GROUP BY ... WITH TOTALS</c> modifier.</summary>
@@ -239,17 +309,23 @@ public sealed class ClickHouseDialect : SqlDialectBase
     /// <summary>The super-aggregate <c>WITH TOTALS</c> is a trailing modifier after the grouping list.</summary>
     public override string MakeGroupByTotals(string grouping) => $"{grouping} with totals";
 
-    /// <summary>ClickHouse provides the <c>numbers</c>/<c>numbers_mt</c>, <c>zeros</c>/<c>zeros_mt</c> and <c>generateRandom</c> table functions.</summary>
+    /// <summary>
+    /// ClickHouse provides the <c>numbers</c>/<c>numbers_mt</c>, <c>zeros</c>/<c>zeros_mt</c> and
+    /// <c>generateRandom</c> table functions plus the server/cluster table functions <c>url</c>,
+    /// <c>s3</c>, <c>file</c>, <c>remote</c>, <c>remoteSecure</c>, <c>cluster</c> and
+    /// <c>clusterAllReplicas</c>.
+    /// </summary>
     public override bool SupportsTableFunction(string name) =>
-        name is "numbers" or "numbers_mt" or "zeros" or "zeros_mt" or "generateRandom";
+        name is "numbers" or "numbers_mt" or "zeros" or "zeros_mt" or "generateRandom"
+            or "url" or "s3" or "file" or "remote" or "remoteSecure" or "cluster" or "clusterAllReplicas";
 
     // The fixed structure the built-in generate_random()/generate_random(seed) map to
     // (ClickHouse's own no-argument generateRandom has a dynamic, random schema).
     private const string GenerateRandomStructure = "'id UInt64, value Float64, name String'";
 
     /// <summary>
-    /// <c>numbers</c>/<c>numbers_mt</c> expose an unsigned <c>UInt64 number</c> column, which the row
-    /// reader cannot materialise; cast it to <c>Int64</c> through a wrapping subquery. The built-in
+    /// <c>numbers</c>/<c>numbers_mt</c> expose an unsigned <c>UInt64 number</c> column; cast it to
+    /// <c>Int64</c> through a wrapping subquery to match <c>INumbersRow.Value</c>. The built-in
     /// <c>generateRandom</c> gets its fixed structure injected here and its <c>id</c> column cast the
     /// same way.
     /// </summary>
@@ -289,6 +365,7 @@ public sealed class ClickHouseDialect : SqlDialectBase
     /// <summary>ClickHouse implements the trailing <c>SETTINGS</c> clause.</summary>
     public override bool SupportsSettings => true;
 
+    /// <summary>Renders the trailing <c>with rollup</c>/<c>with cube</c> super-aggregate modifier.</summary>
     public override string MakeGrouping(string columns, GroupingType groupingType) => groupingType switch
     {
         GroupingType.Rollup => $"{columns} with rollup",
@@ -297,33 +374,44 @@ public sealed class ClickHouseDialect : SqlDialectBase
     };
 
     // ClickHouse quotes identifiers with backticks; single-quoted aliases are syntax errors.
+    /// <summary>ClickHouse quotes aliases with backticks (single-quoted aliases are syntax errors).</summary>
     public override string Escape(string keyword) => "`" + keyword + "`";
 
     /// <summary>ClickHouse quotes a physical identifier with backticks, doubling an embedded backtick.</summary>
     public override string QuoteIdentifier(string name) => "`" + name.Replace("`", "``") + "`";
 
+    /// <summary>ClickHouse uses the backtick-quoted identifier for references as well.</summary>
     public override string MakeColumnReference(string name) => Escape(name);
 
+    /// <summary>Renders a positional parameter as <c>@name</c>.</summary>
     public override string MakeParam(string name) => $"@{name}";
 
+    /// <summary>Renders the standard <c>coalesce(v1, v2)</c>.</summary>
     public override string MakeCoalesce(string v1, string v2) => $"coalesce({v1}, {v2})";
 
+    /// <summary>ClickHouse has a native boolean type, rendered as <c>true</c>/<c>false</c>.</summary>
     public override string MakeBool(bool v) => v ? "true" : "false";
 
     // length() counts bytes in ClickHouse; lengthUTF8() counts characters, matching string.Length.
+    /// <summary><c>length</c> counts bytes, so <c>lengthUTF8(value)</c> is used to match <c>string.Length</c>.</summary>
     public override string MakeStringLength(string value) => $"lengthUTF8({value})";
 
     // position() works in bytes; positionUTF8() works in characters, matching string.IndexOf.
+    /// <summary><c>position</c> counts bytes, so <c>positionUTF8(value, substring)</c> is used to match <c>string.IndexOf</c>.</summary>
     protected override string MakeStringPosition(string value, string substring) =>
         $"positionUTF8({value}, {substring})";
 
+    /// <summary>Renders the character-wise <c>positionUTF8(value, substring, start + 1)</c> from a zero-based start.</summary>
     protected override string MakeStringPosition(string value, string substring, string start) =>
         $"positionUTF8({value}, {substring}, {start} + 1)";
 
+    /// <summary>Renders <c>repeat(value, count)</c>.</summary>
     public override string MakeRepeat(string value, string count) => $"repeat({value}, {count})";
 
+    /// <summary>Renders the character-wise <c>reverseUTF8(value)</c>.</summary>
     protected override string MakeStringReverse(string value) => $"reverseUTF8({value})";
 
+    /// <summary>Renders <c>trimLeft</c>, <c>trimRight</c> or <c>trimBoth</c> according to the trim kind.</summary>
     public override string MakeTrim(string value, StringTrimKind kind) => kind switch
     {
         StringTrimKind.Start => $"trimLeft({value})",
@@ -332,6 +420,7 @@ public sealed class ClickHouseDialect : SqlDialectBase
     };
 
     // now() uses the server time zone; the optional argument selects a zone.
+    /// <summary>Renders <c>now('UTC')</c> for UTC or the server-timezone <c>now()</c> for local time.</summary>
     public override string MakeNow(bool utc) => utc ? "now('UTC')" : "now()";
 
     /// <summary>
@@ -362,6 +451,7 @@ public sealed class ClickHouseDialect : SqlDialectBase
     public override bool SupportsDatePart(string part) =>
         part is "dow" or "isodow" or "epoch" || base.SupportsDatePart(part);
 
+    /// <summary>Maps the portable aggregate name to its ClickHouse spelling (for example <c>stdev</c> to <c>stddevSamp</c>).</summary>
     public override string MakeAggregate(string name) => name switch
     {
         "stdev" => "stddevSamp",
@@ -380,8 +470,12 @@ public sealed class ClickHouseDialect : SqlDialectBase
         "uniq_hll12" => "uniqHLL12",
         "quantile_exact" => "quantileExact",
         "quantile_timing" => "quantileTiming",
+        "top_k" => "topK",
+        "top_k_weighted" => "topKWeighted",
         "any_agg" => "any",
         "any_last" => "anyLast",
+        "group_array" => "groupArray",
+        "group_uniq_array" => "groupUniqArray",
         "count_if" => "countIf",
         "sum_if" => "sumIf",
         "avg_if" => "avgIf",
@@ -450,14 +544,18 @@ public sealed class ClickHouseDialect : SqlDialectBase
         return $"dateDiff('{unit}', {start}, {end})";
     }
 
+    /// <summary>Renders <c>toLastDayOfMonth(value)</c>.</summary>
     public override string MakeEndOfMonth(string value) => $"toLastDayOfMonth({value})";
 
+    /// <summary>Renders <c>makeDate(year, month, day)</c>.</summary>
     public override string MakeDateFromParts(string year, string month, string day) =>
         $"makeDate({year}, {month}, {day})";
 
+    /// <summary>Renders <c>arrayStringConcat(groupArray(value), delimiter)</c>.</summary>
     public override string MakeStringAgg(string value, string delimiter) =>
         $"arrayStringConcat(groupArray({value}), {delimiter})";
 
+    /// <summary>Maps the CLR type to its ClickHouse type name (<c>UInt8</c>, <c>Int16</c>, <c>Int32</c>, <c>Int64</c>, <c>Float32</c>, <c>Float64</c>, <c>Decimal</c>).</summary>
     public override string MakeTypeName(Type type) => type switch
     {
         _ when type == typeof(byte) => "UInt8",
@@ -471,8 +569,10 @@ public sealed class ClickHouseDialect : SqlDialectBase
     };
 
     // ClickHouse declares every CTE with `with`; there is no RECURSIVE keyword.
+    /// <summary>ClickHouse declares every CTE with <c>with</c>; there is no <c>RECURSIVE</c> keyword.</summary>
     public override string MakeWith(bool recursive) => "with ";
 
+    /// <summary>Renders <c>limit n offset m</c>, using the maximum unsigned bigint limit for offset-only pages.</summary>
     public override void MakePage(Paging paging, StringBuilder sqlBuilder)
     {
         // ClickHouse requires LIMIT before OFFSET, so an offset-only page uses the maximum unsigned
@@ -559,7 +659,7 @@ internal sealed class ClickHouseMultiIfRenderer(ClickHouseDialect dialect) : IMu
 
 internal sealed class ClickHouseUniqAggregateRenderer(ClickHouseDialect dialect) : IUniqAggregateRenderer
 {
-    // The uniq* aggregates return UInt64, which the row reader cannot materialise; cast to Int64.
+    // The uniq* aggregates return UInt64; cast to Int64 to match the declared long.
     public string Render(string name, string argument) =>
         $"toInt64({dialect.MakeAggregate(name)}({argument}))";
 }
@@ -571,8 +671,22 @@ internal sealed class ClickHouseQuantileAggregateRenderer(ClickHouseDialect dial
     public string Render(string name, string level, string value) =>
         $"toFloat64({dialect.MakeAggregate(name)}({level})({value}))";
 
+    // quantiles returns Array(Float64) for numeric input, which already matches the declared double[].
+    public string RenderLevels(string name, string levels, string value) =>
+        $"{dialect.MakeAggregate(name)}({levels})({value})";
+
     // ClickHouse's median is quantile(0.5); cast it so it materialises as a CLR double.
     public string RenderMedian(string value) => $"toFloat64(median({value}))";
+}
+
+internal sealed class ClickHouseTopKAggregateRenderer(ClickHouseDialect dialect) : ITopKAggregateRenderer
+{
+    // topK/topKWeighted return the value type, which the caller declares as T[].
+    public string Render(string name, string k, string value) =>
+        $"{dialect.MakeAggregate(name)}({k})({value})";
+
+    public string RenderWeighted(string name, string k, string value, string weight) =>
+        $"{dialect.MakeAggregate(name)}({k})({value}, {weight})";
 }
 
 internal sealed class ClickHouseSequenceAggregateRenderer : ISequenceAggregateRenderer

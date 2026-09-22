@@ -59,6 +59,7 @@ nextorm состоит из нейтрального к провайдеру я�
 | Приведение / части даты (`SqlFunctions.ClickHouse.to_*`) | бросает | бросает | бросает | бросает | бросает | `toDate`/`toDateTime`/`toDate32`, `toYear`/…, `toStartOf*`, `toMonday`, `toYYYYMM`/`toYYYYMMDD`, `toUnixTimestamp` | бросает |
 | `string_agg` | `group_concat(x, delimiter)` | поддерживается (2017+) | поддерживается | `group_concat(x separator delimiter)` | `group_concat(x separator delimiter)` | `arrayStringConcat(groupArray(...), ...)` | бросает |
 | Полнотекст `contains` / `freetext` | бросает | `contains` / `freetext` | `to_tsvector(...) @@ ...tsquery(...)` | `match(...) against(...)` | `match(...) against(...)` | бросает | бросает |
+| Полнотекстовое ранжирование / score | бросает | `containstable` / `freetexttable` (`RANK`, табличная функция) | `ts_rank` / `ts_rank_cd` | бросает | бросает | бросает | бросает |
 | Битовые / статистические / `-If` агрегаты | бросает | бросает | поддерживается | бросает | бросает | `groupBit*`, `corr`/`covarPop`, `countIf`/… | бросает |
 | `multi_if` (многоветвевный) | бросает | бросает | бросает | бросает | бросает | `multiIf(c1, v1, …, else)` | не применимо |
 | `lag_in_frame` / `lead_in_frame` | бросает | бросает | бросает | бросает | бросает | `lagInFrame` / `leadInFrame` | не применимо |
@@ -68,13 +69,31 @@ nextorm состоит из нейтрального к провайдеру я�
 | Соединение `LEFT` / `RIGHT` / `FULL` / `CROSS` | да | да | да | без `FULL` | без `FULL` | да | да |
 | Возможность соединения `RIGHT` / `FULL` | поддерживается | поддерживается | поддерживается | только `RIGHT` | только `RIGHT` | поддерживается | поддерживается |
 
-Для сравнения по каждой возможности с EF Core и linq2db см.
-[SQL capabilities gap analysis](../../specs/roadmap/sql-capabilities-gap-analysis.md).
+## Различия провайдеров: решения по унификации
+
+Там, где провайдеры различаются, nextorm либо **унифицирует** поверхность в коде, либо **гейтит**
+возможность (неподдерживающий провайдер бросает `NotSupportedException`), либо **документирует**
+различие и оставляет его провайдерным. Решение по каждому известному расхождению:
+
+| Различие | Решение | Обоснование / хук |
+|---|---|---|
+| Принимаемые поля `date_add`/`date_diff`/`date_trunc` | **Оставить провайдерным, гейт по полю** | `SupportsDateAddField`/`SupportsDateDiffField`/`SupportsDateTruncField` отклоняют неподдерживаемое поле; единый нормализованный набор молча менял бы результат (SQLite сворачивает `millisecond`/`quarter`, в SQL Server нет `decade`/`century`/`millennium`). |
+| `FULL JOIN` в MySQL/MariaDB | **Гейт без полифилла** | `SupportsFullJoin => false`; переписывание в `LEFT JOIN … UNION … RIGHT JOIN` меняет форму строк/дедупликацию и может испортить план, поэтому неявно не эмитится. |
+| `CUBE`/`GROUPING SETS` в MySQL/MariaDB (и весь `ROLLUP`/`CUBE`/`GROUPING SETS` в in-memory) | **Гейт без полифилла** | `SupportsCube`/`SupportsGroupingSets`; эмуляция через `UNION ALL` множит сканы и меняет семантику (`GROUPING()`), поэтому оставлена сырому SQL. |
+| NULL-семантика `GREATEST`/`LEAST` | **Документированное различие** | PostgreSQL/SQL Server 2022+/ClickHouse игнорируют NULL-аргументы; MySQL/MariaDB и SQLite возвращают NULL, если любой аргумент NULL. Доступность гейтится `SupportsGreatestLeast`; поведение с NULL не переписывается. |
+| Шаблоны форматирования дат/чисел (`to_char`, `FORMAT`, `strftime`, `formatDateTime`) | **Закрыто — не унифицируемо** | Языки шаблонов несовместимы, поэтому форматирование остаётся провайдерными UDF `[SqlFunction]`; единого портируемого аргумента `template` нет. |
+| `FOR JSON` / `FOR XML` | **Гейт (SQL Server)** | `SupportsForJson`/`SupportsForXml`. |
+| Хинты уровня инструкции | **Унифицировано** | SQL Server `OPTION (...)`, PostgreSQL/MySQL/MariaDB встроенный `/*+ ... */`; SQLite/ClickHouse без синтаксиса и остаются под гейтом (см. [Хинты запросов](../guide/17-query-hints.md)). |
+| Блокирующие табличные хинты vs index hints | **Оставить провайдерным** | У `WITH (NOLOCK)` нет аналога среди index hints MySQL/MariaDB/SQLite (`USE INDEX`/`INDEXED BY` меняют план, а не блокировки), поэтому подключён только SQL Server (`SupportsTableHints`). |
+| Сырой SQL как композируемый источник `FROM` | **Унифицировано** | `FromSql` + `SupportsRawSqlSource` у всех SQL-провайдеров (см. [Сырой SQL](../guide/14-raw-sql.md)). |
+| `INTERSECT ALL`/`EXCEPT ALL` | **Гейт** | PostgreSQL и MariaDB поддерживают; SQL Server/SQLite/MySQL отклоняют через `SupportsIntersectExceptAll`. |
+
+Строки таблицы [ограничений](../advanced/limitations.md) описывают итоговое поведение в рантайме.
 
 ## Как подключается диалект
 
 Диалект реализует [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) или наследуется от [`SqlDialectBase`](xref:NextORM.Core.SqlDialectBase). В [`SqlDialectBase`](xref:NextORM.Core.SqlDialectBase) абстрактными являются только
-[`MakeParam`](xref:NextORM.Core.ISqlDialect) и [`MakePage`](xref:NextORM.Core.ISqlDialect); у всех остальных членов есть рабочее значение по умолчанию ANSI, поэтому диалект
+[`MakeParam`](xref:NextORM.Core.ISqlDialect.MakeParam(System.String)) и [`MakePage`](xref:NextORM.Core.ISqlDialect.MakePage(NextORM.Core.Paging,System.Text.StringBuilder)); у всех остальных членов есть рабочее значение по умолчанию ANSI, поэтому диалект
 переопределяет только то, что отличается. Различия возможностей (разбиение на страницы, требующее `ORDER BY`, обязательные
 псевдонимы подзапросов, `INTERSECT ALL`/`EXCEPT ALL`) выражаются свойствами, а не особыми случаями в
 построителе SQL.
@@ -134,7 +153,6 @@ services.AddNextOrmContext(builder => builder.UseSqlite("app.db"));
 - [MariaDB](mariadb.md)
 - [ClickHouse](clickhouse.md)
 - [In-memory](in-memory.md)
-- [SQL capabilities gap analysis](../../specs/roadmap/sql-capabilities-gap-analysis.md)
 - [Limitations and out-of-scope features](../advanced/limitations.md)
 
 ---

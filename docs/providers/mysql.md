@@ -14,9 +14,9 @@ property. [`MySqlDialect`](xref:NextORM.MySql.MySqlDialect) (`src/nextorm.mysql/
 - identifiers and aliases are quoted with backticks;
 - string concatenation uses the `concat(a, b, ...)` function — MySQL's infix `||` is a logical OR
   unless the `PIPES_AS_CONCAT` SQL mode is set, so the dialect never emits it;
-- [`MakeCoalesce`](xref:NextORM.Core.ISqlDialect) renders `coalesce(a, b)`;
-- [`MakeStringLength`](xref:NextORM.Core.ISqlDialect) renders `char_length(x)` (MySQL's `length()` counts bytes);
-- [`MakeNow`](xref:NextORM.Core.ISqlDialect) renders `now()` for local time and `utc_timestamp()` for UTC;
+- [`MakeCoalesce`](xref:NextORM.Core.ISqlDialect.MakeCoalesce(System.String,System.String)) renders `coalesce(a, b)`;
+- [`MakeStringLength`](xref:NextORM.Core.ISqlDialect.MakeStringLength(System.String)) renders `char_length(x)` (MySQL's `length()` counts bytes);
+- [`MakeNow`](xref:NextORM.Core.ISqlDialect.MakeNow(System.Boolean)) renders `now()` for local time and `utc_timestamp()` for UTC;
 - `stdev`/`stdevp`/`var`/`varp` map to `stddev_samp`/`stddev_pop`/`var_samp`/`var_pop` (`stddev` and
   `variance` are the *population* synonyms in MySQL);
 - a CLR conversion is rendered with a MySQL `CAST` target (`signed`/`unsigned` for the integer types,
@@ -30,10 +30,10 @@ property. [`MySqlDialect`](xref:NextORM.MySql.MySqlDialect) (`src/nextorm.mysql/
 - the session/information family ([`SessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SessionInfoFunctions)) renders
   `SqlFunctions.Sql.current_user`/`session_user`/`current_database`/`version` as `current_user()`/`session_user()`/
   `database()`/`version()` and `current_schema` as `schema()`;
-- the arbitrary-value aggregate [`SqlFunctions.Sql.any_agg`](xref:NextORM.Core.CommonFunctions.any_agg``1) renders as
+- the arbitrary-value aggregate [`SqlFunctions.Sql.any_agg`](xref:NextORM.Core.CommonFunctions.any_agg``1(``0)) renders as
   `ANY_VALUE(x)` ([`SupportsAnyValueAggregate`](xref:NextORM.Core.ISqlDialect.SupportsAnyValueAggregate), MySQL 5.7+);
-- the portable conditional [`SqlFunctions.Sql.iif`](xref:NextORM.Core.CommonFunctions.iif``1) renders as
-  `if(condition, a, b)` ([`Iif`](xref:NextORM.Core.ISqlDialect.Iif), [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render)).
+- the portable conditional [`SqlFunctions.Sql.iif`](xref:NextORM.Core.CommonFunctions.iif``1(System.Boolean,``0,``0)) renders as
+  `if(condition, a, b)` ([`Iif`](xref:NextORM.Core.ISqlDialect.Iif), [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render(System.String,System.String,System.String))).
 
 ## Registering the provider
 

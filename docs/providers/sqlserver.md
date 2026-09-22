@@ -14,7 +14,7 @@ SqlClient's typed getters are strict about widening.
 [`SqlServerDialect`](xref:NextORM.SqlServer.SqlServerDialect) (`src/nextorm.sqlserver/SqlServerDialect.cs`) is the dialect:
 
 - parameter placeholder `@name`;
-- identifiers are bracket-quoted ([`Escape`](xref:NextORM.Core.ISqlDialect) returns `[name]`), including column references so aliases that
+- identifiers are bracket-quoted ([`Escape`](xref:NextORM.Core.ISqlDialect.Escape(System.String)) returns `[name]`), including column references so aliases that
   collide with T-SQL keywords stay usable;
 - type mapping: `byte`→`tinyint`, `short`→`smallint`, `int`→`int`, `long`→`bigint`, `float`→`real`,
   `double`→`float`, `decimal`→`decimal(38, 10)`;
@@ -69,7 +69,7 @@ ctx.From<ISimpleEntity>().Page(5, 10).Select(x => x.Id);
 ```
 
 SQL Server rejects `OFFSET`/`FETCH` without an `ORDER BY`, so when a paged query has no sort the dialect
-injects the constant sort `(select null as anyorder)` ([`GetPagingOrderBy`](xref:NextORM.Core.ISqlDialect)). An offset-only query emits
+injects the constant sort `(select null as anyorder)` ([`GetPagingOrderBy`](xref:NextORM.Core.ISqlDialect.GetPagingOrderBy(NextORM.Core.QueryCommand))). An offset-only query emits
 `offset m rows` and no `fetch`. When the query already has an `ORDER BY`, nothing is injected.
 
 ```csharp
@@ -111,9 +111,9 @@ the PostgreSQL `json`/`jsonb` surface still throws. A typed `OPENJSON ... WITH (
 `[SqlTableFunction("openjson", WithClause = "...")]` wrapper (see the table-valued-functions guide). The full-text predicates `SqlFunctions.Sql.contains` and
 `SqlFunctions.Sql.freetext` ([`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText)) render as T-SQL `contains(...)`/`freetext(...)` and require a
 full-text index on the column. `SqlFunctions.Sql.iif(condition, whenTrue, whenFalse)` renders `iif(...)`
-([`Iif`](xref:NextORM.Core.ISqlDialect.Iif), spelled through [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render)) and
+([`Iif`](xref:NextORM.Core.ISqlDialect.Iif), spelled through [`IIifRenderer.Render`](xref:NextORM.Core.IIifRenderer.Render(System.String,System.String,System.String))) and
 `SqlFunctions.SqlServer.choose(index, ...)` renders `choose(...)` ([`SupportsChoose`](xref:NextORM.Core.ISqlDialect.SupportsChoose)); the
-specialized `SqlFunctions.SqlServer.iif` spelling still works by inheritance. Table hints ([`SupportsTableHints`](xref:NextORM.Core.ISqlDialect.SupportsTableHints)) render as `WITH (hint, ...)` after the
+specialized `SqlFunctions.SqlServer.iif` spelling still works by inheritance. Locking table hints ([`SupportsTableHints`](xref:NextORM.Core.ISqlDialect.SupportsTableHints)) render as `WITH (hint, ...)` after the
 primary table name: `ctx.From<IComplexEntity>().WithTableHint("nolock")` emits
 `from complex_entity with (nolock)`. Row locking reuses the same mechanism:
 `ForUpdate`/`ForShare` ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock),
@@ -130,12 +130,15 @@ SQL Server renders the window percentiles `SqlFunctions.Sql.percentile_cont(frac
 ([`SupportsPercentileWindow`](xref:NextORM.Core.ISqlDialect.SupportsPercentileWindow)); it has no exact ordered-set
 aggregate form. The arbitrary-value aggregate `any_agg` (`ANY_VALUE`) is **not** enabled: T-SQL exposes
 `ANY_VALUE` only on SQL Server 2025 / Fabric, which the version-agnostic dialect cannot assume.
-The scalar XML data-type methods `SqlFunctions.SqlServer.xml_value(xml, xpath, sqlType)`,
+The XML data-type methods `SqlFunctions.SqlServer.xml_value(xml, xpath, sqlType)`,
 `xml_query(xml, xpath)` and `xml_exist(xml, xpath)`
 ([`XmlFunctions`](xref:NextORM.Core.ISqlDialect.XmlFunctions)) render the
 postfix T-SQL form `xmlcol.value('xpath', 'type')` / `xmlcol.query('xpath')` / `xmlcol.exist('xpath')`;
-the XQuery and the SQL type must be string literals. The rowset method `.nodes` is not supported (it
-needs an outer reference inside `FROM`/`CROSS APPLY`).
+the XQuery and the SQL type must be string literals. The rowset method `.nodes` is exposed as
+`SqlFunctions.SqlServer.xml_nodes(xml, xpath)` and used as a correlated `CrossApply`/`OuterApply`
+source: it renders `<xml>.nodes('xpath') as [alias]([value])` and the unfolded `IXmlNodesRow.Value` is
+projected with the scalar methods above (the operand must be an outer row column, the XQuery a string
+literal).
 
 ## Recursive CTEs and `maxRecursion`
 
@@ -163,8 +166,8 @@ statement option; SQL Server's default depth is 100, so only pass a value when y
 
 ## `*ALL` set operations
 
-SQL Server has neither `INTERSECT ALL` nor `EXCEPT ALL`. Calling [`IntersectAll`](xref:NextORM.Core.QueryCommand`1) or [`ExceptAll`](xref:NextORM.Core.QueryCommand`1) throws a
-`NotSupportedException` from the dialect before any SQL reaches the database; [`Intersect`](xref:NextORM.Core.QueryCommand`1) and [`Except`](xref:NextORM.Core.QueryCommand`1)
+SQL Server has neither `INTERSECT ALL` nor `EXCEPT ALL`. Calling [`IntersectAll`](xref:NextORM.Core.QueryCommand`1.IntersectAll``1(NextORM.Core.QueryCommand{``0})) or [`ExceptAll`](xref:NextORM.Core.QueryCommand`1.ExceptAll``1(NextORM.Core.QueryCommand{``0})) throws a
+`NotSupportedException` from the dialect before any SQL reaches the database; [`Intersect`](xref:NextORM.Core.QueryCommand`1.Intersect``1(NextORM.Core.QueryCommand{``0})) and [`Except`](xref:NextORM.Core.QueryCommand`1.Except``1(NextORM.Core.QueryCommand{``0}))
 (without `ALL`) work.
 
 ```csharp
@@ -207,14 +210,15 @@ join complex_entity as [t2] on t1.id = t2.id
 | Text JSON | `json_value` / `json_query` / `json_modify` (SQL Server 2016+) |
 | Conditional functions | `iif(...)` (portable, [`Iif`](xref:NextORM.Core.ISqlDialect.Iif)) / `choose(...)` ([`SupportsChoose`](xref:NextORM.Core.ISqlDialect.SupportsChoose)) |
 | Full-text predicates | `contains(...)` / `freetext(...)` (column must be full-text indexed) |
-| Table hints | `with (hint, ...)` after the primary table ([`WithTableHint`](xref:NextORM.Core.EntityBuilder`1)) |
+| Full-text ranking | `containstable(table, column, search)` / `freetexttable(...)` table functions return `KEY`/`RANK` ([`SqlFunctions.SqlServer`](xref:NextORM.Core.SqlFunctions.SqlServer), [`IKeyRankRow<TKey>`](xref:NextORM.Core.SqlFunctions.IKeyRankRow`1)) |
+| Locking table hints | `with (hint, ...)` after the primary table ([`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[]))) |
 | Row locking | `ForUpdate`/`ForShare` render `with (updlock)`/`with (holdlock)` on the primary table ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock), [`ILockRenderer.UsesTableHints`](xref:NextORM.Core.ILockRenderer.UsesTableHints)) |
 | Session/info functions | `current_user`, `session_user`, `schema_name()`, `db_name()`, `@@version` |
 | Window percentiles | `percentile_cont`/`percentile_disc` as `... within group (order by x) over (...)` (SQL Server 2012+) |
 | Arbitrary-value aggregate | not supported (`ANY_VALUE` is SQL Server 2025 / Fabric only) |
-| JSON output | trailing `for json path` / `for json auto` ([`ForJson`](xref:NextORM.Core.QueryCommand`1)) |
-| XML output | trailing `for xml raw/auto/explicit/path` ([`ForXml`](xref:NextORM.Core.QueryCommand`1)) |
-| XML data-type methods | `xml.value('xpath', 'type')` / `xml.query('xpath')` / `xml.exist('xpath')` ([`XmlFunctions`](xref:NextORM.Core.ISqlDialect.XmlFunctions); `.nodes` not supported) |
+| JSON output | trailing `for json path` / `for json auto` ([`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean))) |
+| XML output | trailing `for xml raw/auto/explicit/path` ([`ForXml`](xref:NextORM.Core.QueryCommand`1.ForXml(NextORM.Core.ForXmlMode,System.String,System.String,System.Boolean))) |
+| XML data-type methods | `xml.value('xpath', 'type')` / `xml.query('xpath')` / `xml.exist('xpath')` / `xml.nodes('xpath') as [alias]([value])` ([`XmlFunctions`](xref:NextORM.Core.ISqlDialect.XmlFunctions)) |
 | `AVG` over an integer column | truncated to an integer |
 | `ORDER BY … DESC` null placement | nulls sort last by default |
 

@@ -1,6 +1,6 @@
 # Табличные функции
 
-> Запрашивайте табличную функцию базы данных как источник `FROM` с помощью [`FromTableFunction`](xref:NextORM.Core.DataContextExtensions) и
+> Запрашивайте табличную функцию базы данных как источник `FROM` с помощью [`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})) и
 > сопоставляйте её строки как любую другую сущность.
 
 **Предварительные требования:** [Сущности и метаданные](../getting-started/03-entities-and-metadata.md) · [Соединения](03-joins.md) · [Группировка и агрегаты](04-grouping-and-aggregates.md)
@@ -9,7 +9,7 @@
 
 [`SqlTableFunctionAttribute`](xref:NextORM.Core.SqlTableFunctionAttribute) сопоставляет статический метод-заглушку табличной функции базы данных. Метод
 должен возвращать `IQueryable<T>` (где `T` описывает форму строки) и упоминается только внутри выражения,
-переданного в [`FromTableFunction`](xref:NextORM.Core.DataContextExtensions):
+переданного в [`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})):
 
 ```csharp
 [AttributeUsage(AttributeTargets.Method | AttributeTargets.Class)]
@@ -33,8 +33,8 @@ public static EntityBuilder<T> FromTableFunction<T>(this IDataContext dataContex
 аргументы рендерятся через обычный посетитель выражений, поэтому **захваченные значения становятся
 параметрами**. nextorm только генерирует вызов — функция уже должна существовать в целевой базе данных.
 
-Возвращаемый `EntityBuilder<T>` — обычный источник запроса, поэтому [`Where`](xref:NextORM.Core.EntityBuilder`1), [`OrderBy`](xref:NextORM.Core.EntityBuilder`1), [`GroupBy`](xref:NextORM.Core.EntityBuilder`1), [`Join`](xref:NextORM.Core.EntityBuilder`1),
-[`Select`](xref:NextORM.Core.EntityBuilder`1), разбиение на страницы и терминалы работают с ним.
+Возвращаемый `EntityBuilder<T>` — обычный источник запроса, поэтому [`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})), [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)), [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), [`Join`](xref:NextORM.Core.EntityBuilder`1.Join``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})),
+[`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), разбиение на страницы и терминалы работают с ним.
 
 ## Объявление сопоставления
 
@@ -306,6 +306,56 @@ var person = dataContext
 select name, age from openjson(@json) with (name nvarchar(50) '$.name', age int '$.age') as [t1]
 ```
 
+SQL Server также предоставляет полнотекстовые табличные функции `SqlFunctions.SqlServer.containstable` и
+`freetexttable`, отдающие ключ совпавшей строки и оценку релевантности через
+[`SqlFunctions.IKeyRankRow<TKey>`](xref:NextORM.Core.SqlFunctions.IKeyRankRow`1) (`.Key`, `.Rank`).
+Присоедините функцию обратно к индексированной таблице по `Key` и упорядочьте по `Rank`:
+
+```csharp
+var search = "stuffed bear";
+
+var ranked = dataContext
+    .FromTableFunction(() => SqlFunctions.SqlServer.containstable<int>("documents", "title", search))
+    .Join(dataContext.From<IDocument>(), (k, d) => k.Key == d.Id)
+    .OrderByDescending(p => p.Item1.Rank)
+    .Select(p => new { p.Item2.Id, p.Item1.Rank })
+    .ToList();
+```
+
+`containstable` использует `CONTAINSTABLE` (синтаксис boolean/prefix/phrase), `freetexttable` —
+естественно-языковой `FREETEXTTABLE`; обе доступны только в SQL Server
+([`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect.SupportsTableFunction(System.String))), остальные провайдеры
+бросают `NotSupportedException`. Аргументы `table` и `column` эмитятся **дословно** как идентификаторы
+(см. `VerbatimArguments`), поэтому передавайте имя таблицы или псевдоним точно так, как он фигурирует в
+сгенерированном запросе, и только доверенные значения.
+
+Если схема табличной функции находится **внутри** скобок вызова, а не в завершающем `WITH`, задайте
+[`CallClause`](xref:NextORM.Core.SqlTableFunctionAttribute.CallClause), чтобы дословно дописать SQL после
+аргументов (включите свой ведущий разделитель). Типичный случай — MySQL `JSON_TABLE`:
+
+```csharp
+public interface IJsonTableRow
+{
+    [Column("id")]
+    int Id { get; set; }
+    [Column("name")]
+    string? Name { get; set; }
+}
+
+private static class JsonTableTvf
+{
+    [SqlTableFunction("json_table", CallClause = ", '$[*]' columns(id int path '$.id', name varchar(50) path '$.name')")]
+    public static IQueryable<IJsonTableRow> JsonTable(string doc) => throw new NotSupportedException();
+}
+```
+
+```sql
+select id, name from json_table(@doc, '$[*]' columns(id int path '$.id', name varchar(50) path '$.name')) as `t1`
+```
+
+`VerbatimArguments` — родственный хук для функций, принимающих «сырой» идентификатор (имя таблицы или
+колонки): каждый указанный аргумент должен быть строковой константой и эмитится без кавычек.
+
 `SqlFunctions.ClickHouse.numbers`/`numbers_mt` — табличные функции ClickHouse, возвращающие
 [`SqlFunctions.INumbersRow`](xref:NextORM.Core.SqlFunctions.INumbersRow) (единственная колонка `number`). `numbers(count)` даёт
 последовательные целые с нуля, `numbers(start, stop[, step])` — произвольный диапазон:
@@ -362,13 +412,59 @@ from (select toInt64(id) as id, value, name from generateRandom('id UInt64, valu
 limit 3
 ```
 
+В ClickHouse также есть серверные/кластерные табличные функции, предобъявленные как generic-обёртки,
+схему строки для которых объявляет вызывающий. Имена `[Column]` в интерфейсе `TRow` должны совпадать с
+аргументом `structure` (`url`/`s3`/`file`) или с целевой таблицей
+(`remote`/`remoteSecure`/`cluster`/`clusterAllReplicas`):
+
+| `SqlFunctions.ClickHouse.*` | SQL |
+| --- | --- |
+| `url<TRow>(url, format, structure)` | `url(url, format, structure)` |
+| `s3<TRow>(url, format, structure)` | `s3(url, format, structure)` |
+| `file<TRow>(path, format, structure)` | `file(path, format, structure)` |
+| `remote<TRow>(addresses, database, table)` | `remote(addresses, database, table)` |
+| `remote_secure<TRow>(addresses, database, table)` | `remoteSecure(addresses, database, table)` |
+| `cluster<TRow>(cluster, database, table)` | `cluster(cluster, database, table)` |
+| `cluster_all_replicas<TRow>(cluster, database, table)` | `clusterAllReplicas(cluster, database, table)` |
+
+```csharp
+public interface IHitsRow
+{
+    [Column("id")]
+    long Id { get; set; }
+    [Column("name")]
+    string? Name { get; set; }
+}
+
+var hits = dataContext
+    .FromTableFunction(() => SqlFunctions.ClickHouse.url<IHitsRow>(
+        "http://127.0.0.1:12345/", "CSV", "id UInt64, name String"))
+    .Select(r => new { r.Id, r.Name })
+    .ToList();
+```
+
+```sql
+select id as `Id`, name as `Name` from url(@url, @format, @structure) as `t1`
+```
+
+Функции доступны только в ClickHouse
+([`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect.SupportsTableFunction(System.String))) и требуют
+соответствующих серверных прав; аутентификация URL/S3/remote — ответственность сервера, поэтому
+предпочитайте named collections или `<remote_servers>`, чтобы секреты не попадали в запрос и его план.
+Табличные функции `format`/`merge`/`input` намеренно **не** предобъявлены: схема `format` может
+выводиться из данных, `merge` берёт её из подлежащих таблиц, а `input` допустима только в `INSERT` —
+для них используйте generic-обёртку `[SqlTableFunction]` (см. выше) или
+[`FromSql`](xref:NextORM.Core.DataContextExtensions.FromSql(NextORM.Core.IDataContext,System.String,System.Object)).
+
 Сопоставленная функция должна существовать в базе — nextorm только генерирует вызов, он её не создаёт, —
 поэтому используйте хелпер только на провайдере, где она определена. Встроенные хелперы гейтятся
-[`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect): PostgreSQL разрешает `generate_series`, `unnest`,
+[`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect.SupportsTableFunction(System.String)): PostgreSQL разрешает `generate_series`, `unnest`,
 `regexp_matches`, `regexp_split_to_table`, `jsonb_array_elements(_text)`, `jsonb_each(_text)`,
 `jsonb_object_keys`, `jsonb_path_query` и `ts_stat`; SQL Server —
-`string_split`/`openjson`, ClickHouse — `numbers`/`numbers_mt`, `zeros`/`zeros_mt` и `generateRandom`, а любой другой
-провайдер отклоняет их с `NotSupportedException` (пользовательская `[SqlTableFunction]` не гейтится).
+`string_split`/`openjson`, ClickHouse — `numbers`/`numbers_mt`, `zeros`/`zeros_mt`, `generateRandom` и
+серверные/кластерные `url`/`s3`/`file`/`remote`/`remoteSecure`/`cluster`/`clusterAllReplicas`, а любой
+другой провайдер отклоняет их с `NotSupportedException` (пользовательская `[SqlTableFunction]` не
+гейтится).
 
 ## Различия между провайдерами
 
@@ -400,4 +496,5 @@ Source: `src/nextorm.core/SqlTableFunctionAttribute.cs:17`, `src/nextorm.core/Da
 `tests/nextorm.core.tests/SqlTableFunctionAttributeTests.cs:8`;
 generated SQL: `tests/nextorm.sqlite.tests/SqlGenerationTests.cs:1453`, `:1462`, `:1475`, `:1489`, `:1503`;
 `tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:1044`, `:1066`, `:1080`, `:1094`;
-`tests/nextorm.postgres.tests/SqlGenerationTests.cs:976`, `:998`, `:1012`, `:1026`.
+`tests/nextorm.postgres.tests/SqlGenerationTests.cs:976`, `:998`, `:1012`, `:1026`, `:1477`;
+`tests/nextorm.clickhouse.tests/SqlGenerationTests.cs:1015`, `:1031`, `:1047`, `:1063`, `:1079`, `:1095`, `:1111`.

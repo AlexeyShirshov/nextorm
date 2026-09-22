@@ -7,6 +7,13 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.ObjectPool;
 
 namespace NextORM.Core;
+/// <summary>
+/// Enumerates the rows of a prepared database command. The data reader is created lazily on the
+/// first move, using the connection supplied by <see cref="IConnectionManager"/>; rows are
+/// materialized by the compiled query's map delegate inside <c>MoveNext</c>/<c>MoveNextAsync</c>,
+/// leaving <see cref="Current"/> a plain field read.
+/// </summary>
+/// <typeparam name="TResult">The projected element type.</typeparam>
 public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IAsyncInit<TResult>
 {
     //private readonly QueryCommand<TResult> _cmd;
@@ -30,6 +37,11 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
     private DbConnection? _conn;
     private bool _disposed;
     private TResult _current = default!;
+    /// <summary>
+    /// Initializes an enumerator for the given compiled database query.
+    /// </summary>
+    /// <param name="compiledQuery">The compiled query supplying the command text, behavior and row mapper.</param>
+    /// <param name="sbPool">Pool used to build the sensitive-data log message; defaults to <c>StringBuilderPool.Shared</c> when <see langword="null"/>.</param>
     public ResultSetEnumerator(DbPreparedQueryCommand<TResult> compiledQuery, ObjectPool<StringBuilder>? sbPool = null)
     {
         //_cmd = cmd;
@@ -40,6 +52,10 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
     // The row is materialized in MoveNext/MoveNextAsync, so Current is a plain field read.
     // This keeps mapping out of the async-iterator's `yield return enumerator.Current` path
     // and out of the interface dispatch that can't be inlined.
+    /// <summary>
+    /// Gets the row materialized by the most recent successful <see cref="MoveNext"/> or
+    /// <see cref="MoveNextAsync"/>.
+    /// </summary>
     public TResult Current
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -68,6 +84,11 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
             _connectionManager = null;
     }
 
+    /// <summary>
+    /// Asynchronously disposes the active data reader, if any, and releases the reference to it. The
+    /// underlying connection is owned by the context and is not closed here.
+    /// </summary>
+    /// <returns>A value task completing when the reader has been disposed.</returns>
     public ValueTask DisposeAsync()
     {
         GC.SuppressFinalize(this);
@@ -94,6 +115,12 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
     //     _params = (List<Parameter>)data;
     // }
 
+    /// <summary>
+    /// Asynchronously advances to the next row, opening the reader and executing the command on the
+    /// first call. When the provider completes <c>ReadAsync</c> synchronously (the common buffered
+    /// case) the row is read without crossing an await.
+    /// </summary>
+    /// <returns><see langword="true"/> when a row was read; otherwise <see langword="false"/>.</returns>
     public ValueTask<bool> MoveNextAsync()
     {
         var reader = _reader;
@@ -138,6 +165,11 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
 
         return false;
     }
+    /// <summary>
+    /// Synchronously advances to the next row, opening the reader and executing the command on the
+    /// first call.
+    /// </summary>
+    /// <returns><see langword="true"/> when a row was read; otherwise <see langword="false"/>.</returns>
     public bool MoveNext()
     {
         if (_reader is null) InitReader(_params);
@@ -160,6 +192,12 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
         _createParam = createParam;
         _conn = connectionManager.GetConnection();
     }
+    /// <summary>
+    /// Opens the connection and executes the command synchronously, creating the data reader. Does
+    /// nothing when a reader already exists.
+    /// </summary>
+    /// <param name="params">Positional parameter values, in the order the SQL references them.</param>
+    /// <exception cref="InvalidOperationException">No connection or connection manager has been assigned.</exception>
     public void InitReader(object[]? @params)
     {
         if (_reader is not null) return;
@@ -176,6 +214,14 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
 
         _reader = sqlCommand.ExecuteReader(_compiledQuery.Behavior);
     }
+    /// <summary>
+    /// Asynchronously opens the connection and executes the command, creating the data reader. Does
+    /// nothing when a reader already exists.
+    /// </summary>
+    /// <param name="params">Positional parameter values, in the order the SQL references them.</param>
+    /// <param name="cancellationToken">Token used to cancel opening and execution.</param>
+    /// <returns>A task completing when the reader has been created.</returns>
+    /// <exception cref="InvalidOperationException">No connection or connection manager has been assigned.</exception>
     public async Task InitReaderAsync(object[]? @params, CancellationToken cancellationToken)
     {
         if (_reader is not null) return;
@@ -228,6 +274,10 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
             _sbPool.Return(sb);
         }
     }
+    /// <summary>
+    /// Disposes and clears the active data reader so the enumerator can start over. The connection is
+    /// only dropped, not disposed, because it is owned by the context.
+    /// </summary>
     public void Reset()
     {
         if (_reader is not null)
@@ -260,6 +310,9 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
     //     Dispose(disposing: false);
     // }
 
+    /// <summary>
+    /// Releases the enumerator by resetting it, then suppresses finalization.
+    /// </summary>
     public void Dispose()
     {
         // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method

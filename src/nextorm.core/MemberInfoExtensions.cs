@@ -2,6 +2,10 @@ using System.Collections.Concurrent;
 using System.Reflection;
 
 namespace NextORM.Core;
+/// <summary>
+/// Helpers for resolving a member's column name and for looking up its metadata in the shared entity
+/// metadata cache.
+/// </summary>
 public static class MemberInfoExtensions
 {
     // Entity metadata is registered once per type (DataContextCache.Metadata only builds on a miss),
@@ -37,6 +41,16 @@ public static class MemberInfoExtensions
 
         return string.Empty;
     }
+    /// <summary>
+    /// Looks up the metadata for <paramref name="pi"/> in the entity metadata registered for
+    /// <paramref name="type"/>. Because the metadata is keyed by type, the property is matched by
+    /// scanning that entity's properties rather than by a direct dictionary lookup.
+    /// </summary>
+    /// <param name="dic">Entity metadata cache keyed by entity type.</param>
+    /// <param name="type">The entity type whose metadata should be searched.</param>
+    /// <param name="pi">The property to find in the entity's metadata.</param>
+    /// <param name="prop">When this method returns <see langword="true"/>, the matching property metadata; otherwise <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when the type and property are both found; otherwise <see langword="false"/>.</returns>
     public static bool TryGetValue(this IDictionary<Type, IEntityMetadata> dic, Type type, PropertyInfo pi, out IPropertyMetadata? prop)
     {
         if (dic.TryGetValue(type, out var entity))

@@ -6,6 +6,28 @@ postgres 150, mysql 31, mariadb 7, clickhouse 47, integration 833/0 failed)
 
 **Предрелизный аудит v1.0.3-alpha (21.09.2026, HEAD `2a2dfa6`, рабочее дерево чистое = `origin/1.0.3-alpha`): открытых P0/P1 по публичному API нет.** QM1 (переименование `Tablesample`→`TableSample`) и AR2 (пробел в док-описании ClickHouse-массивов) фактически закрыты в коде/доках; XP2 закрыт ранее — статусы отмечены в этом проходе. Шаг 5 (заморозка `PublicAPI.Shipped/Unshipped.txt`) остаётся открытым **P2** (RD2 и производные, трекинг — issue #53) и alpha-релиз не блокирует.
 
+**Предрелизный аудит v1.0.4-alpha (22.09.2026, HEAD `91379b1` + uncommitted working tree, ~193 файла).** **Открытых P0/P1 нет.** P0 по именам — нет; P1 по именам — нет. Три P1-**доковых** находки прошлых срезов закрыты в текущем дереве вместе с док-кампанией: **CHJ1** (проза «`SEMI`/`ANTI`/`PASTE` не поддерживаются» заменена описанием `SemiJoin`/`AntiJoin`/`PasteJoin` в `docs/providers/clickhouse.md` EN+RU, `docs/guide/03-joins.md` EN+RU §«SEMI / ANTI / PASTE joins», `advanced/api-reference` EN+RU; gap-analysis §4 п.8 → «shipped»; `todo_clickhouse_join_strictness.md` удалён), **CHCB1** (by-name-доступ `SqlFunctions.Column<T>` описан в `guide/01-querying-and-projections.md` EN+RU §«Columns by name»/«Колонки по имени», `providers/clickhouse` EN+RU, `advanced/api-reference` EN+RU; gap-analysis §4 п.10 → «shipped»; `todo_clickhouse_columns_by_name.md` удалён) и **CHARR2** (сняты оговорки «массив нельзя материализовать»/«только вложенно»: `advanced/limitations` EN+RU, `providers/clickhouse` EN+RU, `guide/provider-specific/clickhouse` EN+RU). Также закрыты P2-док/XML: **CHARR3**, **CHARP1**, **CHARP2**, **CHTUP2**, **CHJS2**, **CHJ3**, а вместе с ними все более ранние P2-находки класса «публичный член без XML-`<summary>`» (**N2**, **U5**, **Q4**, **A2**, **D2**, **S2**, **S3**, **LIM2**, **IF1**, **IF2**, **AJ3**, **RD1**, **XP4** и аналогичные) — кампания задокументировала все 1283 публичных члена, `CS1591` теперь ошибка сборки. **XML-документация публичного API — 100 %** (`CS1591` убран из `<NoWarn>` всех 7 библиотечных `.csproj`, задокументированы 1283 члена, Приложение A закрыто) — переименований и изменений поведения нет. Открытыми остаются только **P2**: трекинг `PublicAPI.*.txt` (**Шаг 5**, issue #53; продолжения RD2/AR1/CHJ2/CHCB2/CHARR1/HOAF1/CHQA4/CHARP3/CHTUP1/CHJS1/CHDH1 и др.), принятые с обоснованием **CHQA1** (source-break `IQuantileAggregateRenderer` — pre-1.0 alpha) и **CHJ4** (политика DIM vs abstract), и **CHCB3** (форма/устойчивость `object entity`; кодовая сторона — `code-smells-review.md`, Находка 73). Детали — в таблицах ниже; счётчики подавлений/слопа — `code-smells-review.md` (предрелизный аудит v1.0.4-alpha).
+
+**Обновление 22.09.2026 (clickhouse-json-type, влито в дерево).** **J8 (P1) закрыт** и **J10 закрыт**: `json_all_paths_with_types` переведён на `Dictionary<string,string>` (+ ветка `GetValue` в `SelectExpression.GetDataRecordMethod`), материализация подтверждена контейнерным интеграционным тестом; доки синхронизированы (нативный `JSON`-аргумент, прямая проекция `string[]`/`Dictionary`). Открыт только J9 (трекинг `PublicAPI.Unshipped.txt` при заморозке, Шаг 5). Детали — в разделе «ClickHouse нативные JSON-функции …».
+
+**Обновление 22.09.2026 (uncommitted worktree — ClickHouse row reader `Array(T)`/`Tuple`).** Добавлены два публичных агрегата `ClickHouseFunctions.group_array<T>`/`group_uniq_array<T>` (`src/nextorm.core/Query/SqlFunctions.ClickHouse.cs:127-143`); row reader (`SelectExpression.GetDataRecordMethod`) и классификация проекции (`TypeFacts`) — `internal`/без новых подписей. Новых публичных типов нет → Приложение A (45) без изменений, покрытие методов +2 (215/1094 против baseline 213/1092). P0/P1 по **именам** нет; открыты CHARR1 (трекинг `PublicAPI`, Шаг 5), CHARR2 (P1-док: EN/RU утверждают «массив нельзя материализовать»/«только вложенно»), CHARR3 (док-пробел). Подробности — в разделе «ClickHouse row reader `Array(T)`/`Tuple` и агрегаты `group_array`/`group_uniq_array`».
+
+**Обновление 22.09.2026 (uncommitted worktree — ClickHouse higher-order/lambda array-функции).** Добавлены `ISqlDialect.SupportsHigherOrderArrayFunctions` (+база/override) и 9 публичных методов `ClickHouseFunctions.array_map`/`array_filter`/`array_exists`/`array_all`/`array_count`/`array_first`/`array_first_index`/`array_last`/`array_last_index` (`Query/SqlFunctions.ClickHouse.cs:485-545`); новых публичных типов нет → Приложение A (45) без изменений, покрытие методов +9 (арифметически, 224/1103). P0 по именам нет; **HOAF2 (P1 док) и HOAF3 (P2 док) закрыты**; открыт P2 **HOAF1** (трекинг, Шаг 5). Подробности — в разделе «Аудит 22.09.2026 — ClickHouse higher-order (lambda) array-функции».
+
+**Обновление 22.09.2026 (uncommitted worktree — ClickHouse параметризованные array-агрегаты `topK`/`topKWeighted`/`quantiles`).** Добавлены новый публичный тип `ITopKAggregateRenderer` (+ DIM `ISqlDialect.TopKAggregates`), абстрактный член `IQuantileAggregateRenderer.RenderLevels` (переименован из `RenderArray`) и 3 метода `ClickHouseFunctions.quantiles`/`top_k`/`top_k_weighted` (`Query/SqlFunctions.ClickHouse.cs:95-118`). Новый публичный тип задокументирован → Приложение A (45) без изменений, общее число публичных типов +1, покрытие методов +3 (арифметически, 227/1106). P0/P1 по **именам** нет; **CHQA2 применён** (`RenderArray`→`RenderLevels`), **CHQA3 закрыт** (доки EN+RU/gap-analysis); открыты P2 **CHQA1** (source-break внешних реализаторов `IQuantileAggregateRenderer`; принято — pre-1.0 alpha, единственный in-repo реализатор) и **CHQA4** (трекинг `PublicAPI`, Шаг 5). Подробности — в разделе «Аудит 22.09.2026 — ClickHouse параметризованные array-агрегаты `topK`/`topKWeighted`/`quantiles`».
+
+**Обновление 22.09.2026 (uncommitted worktree — ClickHouse скалярная поверхность над `Tuple` `tuple`/`tupleElement`, срез 5 `todo_clickhouse_arrays.md`).** Новый публичный член `ISqlDialect.SupportsTupleFunctions` (DIM `=> false`) + `SqlDialectBase`/`ClickHouseDialect` override; новых публичных типов и DSL-методов нет → Приложение A (45) без изменений. P0/P1 по **именам** нет; открыты P2 **CHTUP1** (трекинг `PublicAPI`, Шаг 5) и **CHTUP2** (доки EN+RU/gap-analysis). Подробности — в разделе «Аудит 22.09.2026 — ClickHouse скалярная поверхность над `Tuple` (`tuple`/`tupleElement`)».
+
+**Обновление 22.09.2026 (uncommitted worktree — ClickHouse array-возвращающие JSON-функции `JSONExtractKeys`/`JSONExtractKeysAndValues`/`JSONExtractArrayRaw`, срез 6 `todo_clickhouse_arrays.md`).** Добавлены 6 публичных методов `ClickHouseFunctions.json_extract_keys`/`json_extract_array_raw`/`json_extract_keys_and_values<T>` (`Query/SqlFunctions.ClickHouse.cs:194-224`); новых публичных типов и членов `ISqlDialect` нет (переиспользуется `SupportsJsonExtract`/`MakeJsonExtract`) → Приложение A (45) без изменений, покрытие методов +6 (арифметически, **236/1115**). P0/P1 по **именам** нет; открыты P2 **CHJS1** (трекинг `PublicAPI`, Шаг 5), **CHJS2** (доки EN+RU/gap-analysis не обновлены) и **CHJS3** (nullable `T`-контракт; кодовая сторона — `code-smells-review.md`, Находка 66). Подробности — в разделе «Аудит 22.09.2026 — ClickHouse array-возвращающие JSON-функции …».
+
+**Обновление 22.09.2026 (uncommitted worktree — ClickHouse иерархические dictionary-функции `dictGetHierarchy`/`dictGetChildren`/`dictIsIn`, срез 7 `todo_clickhouse_arrays.md`).** Добавлены 3 публичных метода `ClickHouseFunctions.dict_get_hierarchy<TKey>`/`dict_get_children<TKey>` (→ `ulong[]`) и `dict_is_in<TKey>` (→ `bool`) (`Query/SqlFunctions.ClickHouse.cs:316,323,331`); новых публичных типов и членов `ISqlDialect` нет (переиспользуется `SupportsDictionaries`/`MakeDictionaryFunction`) → Приложение A (45) без изменений, покрытие методов +3 (арифметически, **239/1118**). P0/P1 по **именам** нет; открыт P2 **CHDH1** (трекинг `PublicAPI`, Шаг 5); **CHDH2** (доки EN+RU/gap-analysis) и **CHDH3** (устаревшие `<summary>` гейта `SupportsDictionaries`/override) **закрыты 22.09.2026**. Подробности — в разделе «Аудит 22.09.2026 — ClickHouse иерархические dictionary-функции …».
+
+**Обновление 22.09.2026 (uncommitted worktree — ClickHouse `SEMI`/`ANTI`/`PASTE` joins).** Добавлены `JoinType.Semi`/`Anti`/`Paste` (`src/nextorm.core/Expressions/JoinExpression.cs:28,33,39`), DIM-гейты `ISqlDialect.SupportsSemiAntiJoin`/`SupportsPasteJoin` (`:71,78`) + `SqlDialectBase`/`ClickHouseDialect` override, рендер `left semi`/`left anti`/`paste join` (`ClickHouseDialect.MakeJoinKeyword:92`) и 30 публичных DSL-методов `SemiJoin`/`AntiJoin`/`PasteJoin` (`EntityBuilder`, non-generic `EntityBuilder`, `JoinedEntityBuilder<T1..T7>`); новых публичных **типов** нет → Приложение A (45) без изменений, покрытие методов +30 (арифметически, **269/1148**). P0/P1 по **именам** нет; открыт **P1 доковый CHJ1** (`docs/providers/clickhouse.md:108` + RU `:109`, guide/api-reference и gap-analysis утверждают «`SEMI`/`ANTI`/`PASTE` не поддерживаются»), P2 **CHJ2** (трекинг `PublicAPI`, Шаг 5), **CHJ3** (устаревшие XML-summary `MakeJoinKeyword` + 2 члена `SqlDialectBase` без XML) и **CHJ4** (DIM vs abstract политика). Подробности — в разделе «Аудит 22.09.2026 — ClickHouse `SEMI`/`ANTI`/`PASTE` joins».
+
+**Обновление 22.09.2026 (uncommitted worktree — доступ к колонкам mapped-сущностей по имени `SqlFunctions.Column<T>`).** Добавлен один публичный член `SqlFunctions.Column<T>(object entity, string columnName) -> T` (`src/nextorm.core/Query/SqlFunctions.cs:75`), полностью задокументирован (summary/typeparam/param/remarks, без `<returns>`); новых публичных **типов** нет → Приложение A (45) без изменений, покрытие методов +1 (арифметически, **270/1149**). P0/P1 по **именам** нет (`Column<T>` = `Parameter<T>`-паттерн + `EF.Property<T>`); открыт **P1 доковый CHCB1** (gap-analysis §4 п.10 и roadmap утверждают отсутствие by-name-доступа; guide/providers/api-reference EN+RU не обновлены), P2 **CHCB2** (трекинг `PublicAPI`, Шаг 5) и **CHCB3** (форма `object entity` без валидации источника; кодовая сторона — `code-smells-review.md`, Находка 73). Подробности — в разделе «Аудит 22.09.2026 — доступ к колонкам mapped-сущностей по имени».
+
+**Обновление 22.09.2026 (полная XML-документация публичного API).** `CS1591` убран из `<NoWarn>` всех 7 библиотечных `.csproj` — отсутствие XML-документации у любого публичного типа/члена (метод, конструктор, свойство, поле, событие) теперь является ошибкой сборки (`TreatWarningsAsErrors=true`). Задокументированы все **1283** ранее недокументированных публичных члена (`nextorm.core` — 1056, провайдеры — 227; крупнейшие: `SqlDialectBase` 116, `EntityBuilderExtensions` 89, `QueryCommand<TResult>` 69, `JoinedEntityBuilder` 65, `EntityBuilder` 60). Покрытие XML-документацией доведено до **100 %** (исторический baseline 18.09.2026 — таблица в разделе 2). Build Debug `0 warnings / 0 errors`; unit-тесты: core 198, sqlite 273, sqlserver 246, postgres 273, mysql 71, mariadb 31, clickhouse 247 — все зелёные. Правки — только `///`-комментарии и `NoWarn`; переименований и изменений поведения нет. Шаг 3 [`todo_public_api_freeze.md`](../roadmap/todo_public_api_freeze.md) закрыт.
+
 **Область:** `src/nextorm.core`, `src/nextorm.postgres`, `src/nextorm.sqlite`, `src/nextorm.sqlserver`, `src/nextorm.mysql`, `src/nextorm.mariadb`, `src/nextorm.clickhouse`, `src/nextorm.core.sourcegenerator`
 **Методика:** скилл `api-design` (Framework Design Guidelines) + `dotnet-xml-docs` (XML-документация). Основание для вывода — XML-комментарий (`<summary>`/`<param>`, если есть) либо тело метода/свойства. Проект в стадии **alpha**: обратная совместимость не поддерживается, имена меняются напрямую.
 
@@ -23,7 +45,7 @@ postgres 150, mysql 31, mariadb 7, clickhouse 47, integration 833/0 failed)
 
 **Alpha-политика:** обратная совместимость не сохраняется. Старое имя заменяется новым **на месте** — в коде, тестах, примерах и документации. Ничего не помечаем `[Obsolete]`, не заводим алиасов, дублирующих членов и type forwarders. Поверхность замораживается только к релизу 1.0.
 
-## 2. Покрытие XML-документацией (актуализация 18.09.2026)
+## 2. Покрытие XML-документацией (исторический baseline 18.09.2026)
 
 Замер отражением по собранным сборкам (`ExportedTypes` + `GetMembers`) и сгенерированным `.xml`-файлам, HEAD `d21c473`:
 
@@ -37,6 +59,10 @@ postgres 150, mysql 31, mariadb 7, clickhouse 47, integration 833/0 failed)
 | Публичные события | 0 | 1 | 0 % |
 
 Область — 7 библиотечных сборок (`nextorm.core` + 6 провайдеров). Единственный публичный тип `nextorm.core.sourcegenerator` (`AnonymousClassEqualityComparer`) задокументирован; сам проект `GenerateDocumentationFile` не включает. Прошлый baseline (33/142 типа, 56/742 метода, 34/208 свойств) устарел — с тех пор XML-доки массово добавлены. `GenerateDocumentationFile=true` включён в 7 проектах, но `NoWarn=CS1591` скрывает пропуски — NuGet-потребители не видят IntelliSense-доков. **Недокументированных публичных типов — 45** (полный список в приложении A).
+
+> **Обновление 22.09.2026:** покрытие доведено до **100 %**. Задокументированы все 1283 публичных
+> члена; `CS1591` убран из `<NoWarn>` во всех 7 библиотечных `.csproj` и теперь является ошибкой
+> сборки. Таблица и Приложение A выше — исторический замер от 18.09.2026.
 
 ### Документация `greatest`/`least` после включения SQLite (актуализация 19.09.2026)
 
@@ -473,6 +499,32 @@ JSONPath-семантика SQL Server/MySQL (те же `json_value(json, '$.pat
 tests/<p> -c Release --no-build` — clickhouse **101/101**, postgres **174/174**, sqlserver **177/177**,
 mysql **44/44**, mariadb **14/14**, sqlite **207/207**, core **157/157**; `find -name 'PublicAPI*.txt'`
 — пусто; XML-`<summary>` у трёх новых методов и `SupportsJsonPath` (+ оверрайд) присутствуют.
+
+### ClickHouse нативные JSON-функции `json_all_paths`/`json_all_paths_with_types`/`to_json_string` (точечный аудит 22.09.2026, worktree `clickhouse-json-type`)
+
+Публичная поверхность аддитивна, переименований нет. Новые члены (Шаг 5 — внести в `PublicAPI.Unshipped.txt`):
+`ClickHouseFunctions.json_all_paths(string?)` → `string[]` (`src/nextorm.core/Query/SqlFunctions.ClickHouse.cs:174`),
+`ClickHouseFunctions.json_all_paths_with_types(string?)` → `string[]` (`:183`),
+`ClickHouseFunctions.to_json_string<T>(T?)` → `string?` (`:190`); XML-`<summary>` есть у всех трёх
+(`:167-173`, `:176-182`, `:185-189`). `ISqlDialect` новых членов не получил — расширены только XML-доки
+`SupportsJsonExtract` (`ISqlDialect.cs:399-410`) и `MakeJsonExtract` (`:412-420`), `SqlDialectBase.SupportsJsonExtract`
+(`SqlDialectBase.cs:101`); `ClickHouseDialect.MakeJsonExtract` добавил три пары имён (`ClickHouseDialect.cs:189-191`).
+Имена snake_case — сознательное SQL-зеркало (реестр §3, как `json_extract_*`/`visit_param_extract_*`/`uniq`),
+P0/P1 по именам нет. Build Release — **0/0**; unit: clickhouse **188/188**, postgres **257/257** (0 failed, 0 skipped).
+
+| # | Ур. | Место | Проблема | Рекомендация |
+|---|-----|-------|----------|--------------|
+| J8 | P1 | `Query/SqlFunctions.ClickHouse.cs:176-183` | Возвратный тип `string[]` не соответствует нативному `Map(String,String)`: `ClickHouse.Driver` отдаёт `Dictionary<string,string>`, а nextorm для `string[]` делает `(string[])GetValue` (`Expressions/SelectExpression.cs:117-122`, `DataContext/RowMapperFactory.cs:24-53`) → `InvalidCastException` при прямой проекции; задокументированная вложенность `length<T>(T[])` для `Map` невалидна (ClickHouse `length` — String/Array/QBit, мост — `mapKeys`/`mapValues`). Разбор — `code-smells-review.md`, Находка 60 | Исправить контракт (гейт fail-fast либо `IReadOnlyDictionary<string,string>` + map-ридер + `mapKeys`/`mapValues`); не документировать `length` как пример. **Закрыто 22.09.2026 (вариант B):** контракт → `Dictionary<string,string>`, `GetValue`-ветка в `SelectExpression.GetDataRecordMethod`, интеграционный тест `JsonAllPathsWithTypes_ShouldProjectNativeJsonMap` зелёный |
+| J9 | P2 | `PublicAPI.*.txt` отсутствуют | Три новых метода `ClickHouseFunctions` не трекаются; Шаг 5 открыт | При включении `PublicApiAnalyzers` внести в `PublicAPI.Unshipped.txt` (ср. J1/JP5/D1) |
+| J10 | P2 | `Query/SqlFunctions.ClickHouse.cs:167-183`; `ISqlDialect.cs:399-410` | XML-доки: `json_all_paths` назван «usable only nested» (для `Array(String)` это избыточно — драйвер отдаёт `string[]`); `json_all_paths_with_types` обещает вложенность через `length`, что неверно для `Map`; у обоих не указано, что аргумент — нативный `JSON`, а тесты передают `String`-колонку | Синхронизировать доки с фактическим контрактом после фикса J8; явно указать требование нативного `JSON` (или `CAST`) и мост `mapKeys`/`mapValues` |
+
+Пробелы документации EN/RU: доки ClickHouse-поверхности обновлены в обеих ветках и синхронны по именам
+(`docs/guide/18-json.md`, `docs/providers/clickhouse.md`, `docs/guide/provider-specific/clickhouse.md`,
+`docs/advanced/limitations.md` + RU); gap-analysis §4 п.7 помечен shipped; `todo_clickhouse_json_type.md` удалён.
+J8 и J10 закрыты 22.09.2026; остаётся только J9 (трекинг `PublicAPI.Unshipped.txt` при заморозке, Шаг 5).
+
+**Проверка:** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**; unit clickhouse **188/188**,
+postgres **257/257**; `find -name 'PublicAPI*.txt'` — пусто; XML-`<summary>` у трёх новых методов присутствуют.
 
 ### ClickHouse функции словарей `dictGet`/`dictGetOrDefault`/`dictHas` (точечный аудит 19.09.2026)
 
@@ -2861,6 +2913,537 @@ INamingConvention?`; `QueryCommand<TResult>.WithNamingConvention(INamingConventi
 Приложение A (45) без изменений (новые типы документированы). Содержательные находки по кэшу — в
 `code-smells-review.md` (Находки 54–55 и наблюдения A–E).
 
+### Аудит 22.09.2026 — слияние `todo_fulltext_ranking` + `todo_builtin_tvf_expansion` (P0 — нет; P1 — нет; P2 — 2)
+
+**Область (uncommitted, worktree `tvf-expansion`):** `Query/SqlFunctions.cs` (`IKeyRankRow<TKey>`),
+`Query/SqlFunctions.SqlServer.cs` (`containstable<TKey>`/`freetexttable<TKey>`),
+`Query/SqlFunctions.Postgres.cs` (`ts_rank_cd`), `Visitors/ExtendedScalarFunctionTranslator.cs`
+(`ts_rank_cd` в `TextSearchFunctions`), `SqlTableFunctionAttribute.cs` (`CallClause`/`VerbatimArguments`),
+`Expressions/TableFunctionExpression.cs` (`CallClause`/`VerbatimArguments` + перегрузка ctor),
+`DataContext/SqlSourceRenderer.cs` (`MakeTableFunction`/`IsVerbatimArgument`/`GetVerbatimArgument`),
+`src/nextorm.sqlserver/SqlServerDialect.cs` (`SupportsTableFunction`); тесты — sqlserver/postgres/mysql.
+Build Release — **0/0**; тесты (Release, `--no-build`) core **192/192**, sqlserver **240/240**,
+postgres **249/249**, mysql **66/66** (0 failed, 0 skipped).
+
+**P0 — нет.** `SqlFunctions.IKeyRankRow<TKey>`, `containstable<TKey>`, `freetexttable<TKey>`, `ts_rank_cd`,
+`CallClause`, `VerbatimArguments` не конфликтуют с BCL (`CA1716`/`CA1724`) и не вводят в заблуждение:
+`I…Row` — принятая схема row-интерфейсов (`IOpenJsonRow`, `IUnnestRow<T>`); `containstable`/`freetexttable`/
+`ts_rank_cd` — SQL-зеркала (DSL-исключение, как `openjson`/`string_split`/`ts_rank`/`generate_series`);
+`CallClause`/`VerbatimArguments` — PascalCase-существительные.
+
+**P1 — нет.** Новых типов с аббревиатурами/суффиксными отклонениями и синхронных близнецов-методов нет;
+суффикс `Async` не требуется.
+
+| # | Ур. | Файл:строка | Проблема | Рекомендация |
+|---|-----|-------------|----------|--------------|
+| TFV1 | P2 | `SqlTableFunctionAttribute.cs:47-55`; `Expressions/TableFunctionExpression.cs:48-52` | XML-док `CallClause` говорит лишь «emitted verbatim», тогда как родственный `VerbatimArguments` (`SqlTableFunctionAttribute.cs:57-63`) прямо предупреждает «only pass trusted values». Обе настройки эмитят сырой SQL, предупреждение должно быть у обеих | Дописать в `<summary>` `CallClause` (атрибут и свойство выражения): «only developer-authored SQL; never user input» |
+| TFV2 | P2 | `Expressions/TableFunctionExpression.cs:26` | Новый **публичный** 6-параметрический ctor (`string, string?, string?, string?, IReadOnlyList<int>?, MethodCallExpression`) превышает порог «>5»; call-site в решении — только фабрика `Create` (`:82`) и два делегирующих ctor (`:15,21`), внешних нет | Сделать широчайший ctor `internal` (фабрика `Create` — единственный потребитель) либо ввести параметр-объект; 3-/4-арг. публичные ctor'ы не трогать |
+
+**✅ Исправлено (22.09.2026):** TFV1 — в `<summary>` `CallClause` добавлено «This is developer-authored SQL only — never build it from user input»; TFV2 — 6-параметрический ctor `TableFunctionExpression` понижен до `internal` (публичны только прежние 3-/4-арг. ctor'ы и фабрика `Create`).
+
+**ℹ️ Наблюдения (фикс не требуется):**
+- **`GetVerbatimArgument` — ограничение «только константная строка».** `SqlSourceRenderer.cs:386-389`
+  принимает исключительно `ConstantExpression { Value: string }`, иначе бросает `NotSupportedException`
+  с понятным текстом. Документировано на `SqlTableFunctionAttribute.VerbatimArguments` («must be a constant
+  string»), но не на встроенных `containstable`/`freetexttable` (там только «only pass trusted values»);
+  рекомендация — дописать «literal» и в доки методов (в связке с TFV1).
+- **Param-mode согласован.** В первом проходе (`SqlSourceRenderer.cs:301-308`) verbatim-аргументы
+  пропускаются, во втором (`:318-332`) — выводятся сырым текстом; порядок параметров совпадает. Тесты
+  подтверждают: `containstable`/`freetexttable` → params `["search"]`, `JSON_TABLE` → `["doc"]`.
+- **SQL-инъекция — принятый escape-hatch, не новый разрыв.** `VerbatimArguments` обходит параметризацию
+  осознанно и задокументирован как trusted; у встроенных `containstable`/`freetexttable` жёстко зашиты
+  индексы `{0, 1}` (table/column), а пользовательский ввод обязан идти в `search` (индекс 2, параметризуется
+  штатно). `CallClause` задаётся только разработчиком через атрибут. Это то же DSL-исключение, что уже
+  принято у `[SqlFunction]`/`WithClause`; единственный зазор — док-предупреждение (TFV1).
+- **Индексы `VerbatimArguments` не валидируются.** Отрицательный/выходящий за `Arguments.Count`/дублирующий
+  индекс молча игнорируется (совпадения не будет). Риск низкий (метаданные автора кода); при желании —
+  валидация в `TableFunctionExpression.Create`.
+- **XML-доки.** `<summary>` есть у `IKeyRankRow<TKey>`, `containstable<TKey>`, `freetexttable<TKey>`,
+  `ts_rank_cd`, обоих `CallClause`/`VerbatimArguments` и нового ctor. `IKeyRankRow<TKey>.Key`/`.Rank` — без
+  индивидуальных `<summary>`, как у всех соседних row-интерфейсов (`IOpenJsonRow`, `IUnnestRow<T>`);
+  `<typeparam name="TKey">` отсутствует так же, как у `IUnnestRow<T>`. Приложение A (45) без изменений
+  (новый тип документирован); `CS1591` по-прежнему в `<NoWarn>` 7 библиотечных `.csproj`.
+- **Квотирование `[key]`/`[rank]` консистентно.** `IKeyRankRow<TKey>` повторяет приём `IOpenJsonRow`
+  (`[Column("[key]")]` для зарезервированного `KEY`); `[rank]` заквотирован тем же стилем. Гейт
+  `SupportsTableFunction("containstable"/"freetexttable")` (`SqlServerDialect.cs:76-77`) не даёт другим
+  провайдерам отрендерить SQL Server-специфичное имя (тест `BuiltInTableFunction_Containstable_ShouldThrowOnPostgres`).
+- **Extend-only соблюдён.** Старые ctor'ы `TableFunctionExpression` (3-/4-арг.) сохранены и делегируют новому;
+  `SqlTableFunctionAttribute` получил только новые свойства; удалённых/изменённых публичных членов нет.
+  Изменение `SupportsTableFunction` — поведенческое аддитивное, не сигнатурное.
+- **Шаг 5 (трекинг).** `PublicAPI.Shipped/Unshipped.txt` по-прежнему нет, `PublicApiAnalyzers` не подключён.
+  При заморозке внести: `SqlFunctions.IKeyRankRow<TKey>` (+`Key.get`/`Key.set`/`Rank.get`/`Rank.set`),
+  `SqlServerFunctions.containstable<TKey>(string,string,string)`,
+  `SqlServerFunctions.freetexttable<TKey>(string,string,string)`,
+  `PostgresFunctions.ts_rank_cd(string?,string?)`, `SqlTableFunctionAttribute.CallClause.get/set`,
+  `SqlTableFunctionAttribute.VerbatimArguments.get/set`, `TableFunctionExpression.CallClause.get`,
+  `TableFunctionExpression.VerbatimArguments.get`, ctor
+  `(string,string?,string?,string?,IReadOnlyList<int>?,MethodCallExpression)`.
+
+**Проверка:** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**;
+`dotnet test tests/nextorm.{core,sqlserver,postgres,mysql}.tests -c Release --no-build` — core **192/192**,
+sqlserver **240/240**, postgres **249/249**, mysql **66/66** (0 failed, 0 skipped); `find -name 'PublicAPI*.txt'`
+— пусто; в диффе `src`+`tests` новых `#pragma`/`SuppressMessage`/`NoWarn` — **0**. EN+RU
+`docs/guide/13-table-valued-functions.md`, `docs/guide/provider-specific/{postgresql,sqlserver}.md`,
+`docs/providers/{overview,postgres,sqlserver}.md`, `docs/advanced/{api-reference,limitations}.md` синхронны.
+
+### Аудит 22.09.2026 — композируемый сырой SQL: новые публичные `FromSql` и `SupportsRawSqlSource` (P0 — нет; P1 — нет; P2 — 4)
+
+**Область (uncommitted, worktree `composable-raw-sql`):** новый публичный
+`DataContextExtensions.FromSql(this IDataContext, string, object? = null) -> EntityBuilder<TableAlias>`
+(`DataContextExtensions.cs:101`); новый публичный член `ISqlDialect.SupportsRawSqlSource`
+(`ISqlDialect.cs:785`, default `false` в `SqlDialectBase.cs:500`, `true` в 6 SQL-диалектах); `internal`
+`RawSqlSourceExpression` + `FromExpression.RawSqlSource`; рендер `SqlSourceRenderer.MakeRawSqlSource`.
+Build Release — **0/0**; тесты — core 192, postgres 249, sqlserver 240, mysql 67, mariadb 29, sqlite 270,
+clickhouse 185 = **1232/1232, 0 failed, 0 skipped**. Новых публичных **типов** нет.
+
+**P0 — нет.** `FromSql` совпадает с именем EF Core (`RelationalQueryableExtensions.FromSql`) в другом
+namespace/типе и с семейством `From*` nextorm (`From` / `FromTableFunction`); `SupportsRawSqlSource` —
+существующая `Supports*`-конвенция capability-гейта. BCL-конфликтов (`CA1716`/`CA1724`) и вводящих в
+заблуждение имён нет.
+
+**P1 — нет.** Оба имени — PascalCase, без аббревиатур; синхронного близнеца у `FromSql` нет → суффикс
+`Async` не нужен; `Supports*` — булев префикс.
+
+**P2-1 — `ISqlDialect.SupportsRawSqlSource` объявлен абстрактно, без DIM (`ISqlDialect.cs:785`).**
+Член без реализации по умолчанию → source- и binary-breaking для внешних реализаторов `ISqlDialect`
+(в репозитории интерфейс реализуют только `SqlDialectBase`-производные, фактического разрыва нет;
+политика alpha это допускает). При этом XML-док говорит «The safe default is `false`; a provider that
+leaves it `false` rejects such a source…», что подразумевает именно DIM — док и сигнатура расходятся.
+**Рекомендация:** для консистентности с `IContextEnvironment.NamingConvention`/`QuoteIdentifier`
+объявить `bool SupportsRawSqlSource => false;` в интерфейсе, либо внести в список Шага 5 как осознанный
+разрыв. Ср. P2-1 аудита «соглашения об именовании» (`IEntityMetadata.IsTableNameAuto`).
+
+**P2-2 — in-memory поведение не описано.** `FromSql` на `InMemoryDataContext` не отклоняется явно:
+композиция даёт фантомную строку либо `NullReferenceException` (см. `code-smells-review.md`,
+Находка 56). `docs/guide/14-raw-sql.md` (+RU) говорит «a provider opts in through
+`SupportsRawSqlSource`; every SQL provider does», но не фиксирует, что in-memory (не `ISqlDialect`)
+фичу не поддерживает, а `docs/advanced/limitations.md` (+RU) удалил единственную строку про raw SQL
+как источник. **Рекомендация:** вернуть оговорку в limitations и/или добавить явный отказ (Находка 56).
+
+**P2-3 — XML-доки `FromSql` не упоминают отказ для диалекта без поддержки.** Документированы
+назначение, конвенция параметров и `TableAlias`-аксессоры (`DataContextExtensions.cs:91-100`), но нет
+`<exception cref="NotSupportedException">` для случая `SupportsRawSqlSource == false` (бросается позже,
+при подготовке команды, `SqlSourceRenderer.cs:294`). Дополнительно `WithSql` в доке — `<c>`, не
+`<see cref>`. Не блокер (ср. AJ9).
+
+**P2-4 — Шаг 5 (трекинг).** `PublicAPI.Shipped/Unshipped.txt` по-прежнему нет; при заморозке внести
+`NextORM.Core.DataContextExtensions.FromSql(NextORM.Core.IDataContext, string, object?) -> EntityBuilder<TableAlias>`
+и `NextORM.Core.ISqlDialect.SupportsRawSqlSource.get -> bool`. Приложение A (45) без изменений (новых
+публичных типов нет, оба новых члена документированы). Трекинг — `todo_public_api_freeze.md`, issue #53.
+
+Capability-объекты (Фаза 3) не применимы: `SupportsRawSqlSource` не дублирует объект-рендерер — рендер
+`(<sql>) AS alias` лежит в ядре, dialect-specific остаётся только существующий `RequireSubqueryAlias`.
+Соотношение подавлений проекта не изменилось (11/11 оправданных, 0 неоправданных); новых
+`Skip=`/`#pragma`/`SuppressMessage`/`NoWarn`/`Task.Delay`/пустых `catch` нет.
+
+**✅ Исправлено (22.09.2026):** P2-2/P2-3 закрыты — in-memory оговорён в `docs/guide/14-raw-sql.md` EN+RU (и в тесте `InMemoryTests.FromSql_ShouldThrowClearNotSupported`), у `FromSql` добавлен `<exception cref="NotSupportedException">`. P2-1 принят как проектная конвенция: флаги `ISqlDialect` объявлены абстрактно, а safe-default живёт в `SqlDialectBase` (так же, как `SupportsTableHints`), поэтому расхождения с докой нет. P2-4 остаётся трекингом заморозки (`todo_public_api_freeze.md`).
+
+### Аудит 22.09.2026 — SQL Server `xml.nodes()` rowset как источник `CROSS/OUTER APPLY` (P0 — нет; P1 — нет; P2 — 3)
+
+**Область (uncommitted).** Новые публичные члены:
+`NextORM.Core.SqlFunctions.IXmlNodesRow` (`Query/SqlFunctions.cs:175-179`; свойство `Value` c `[Column("value")]`)
+и `NextORM.Core.SqlServerFunctions.xml_nodes(string? xml, string? xpath) -> QueryCommand<SqlFunctions.IXmlNodesRow>`
+(`Query/SqlFunctions.SqlServer.cs:67-79`). Изменён `internal SqlServerXmlFunctions.Supports` (`src/nextorm.sqlserver/SqlServerDialect.cs:453`:
+`"nodes"` → `true`) — внешней поверхности не даёт. Build Release — **0/0**; `nextorm.sqlserver.tests`
+**245/245**, `nextorm.core.tests` **194/194** (0 failed/0 skipped); `rg --files -g 'PublicAPI*.txt'` — пусто
+(Шаг 5 открыт). Новый публичный **тип** один — `IXmlNodesRow` — и он документирован вместе с новым методом,
+поэтому Приложение A (45 недокументированных) не меняется.
+
+**P0 — нет.** `xml_nodes` — snake_case-зеркало SQL-токена, как `xml_value`/`xml_query`/`xml_exist`; дублирующие
+имена/BCL-конфликты (`CA1716`/`CA1724`) отсутствуют. `IXmlNodesRow` следует семейству
+`IStringSplitRow`/`IOpenJsonRow`/`INumbersRow` (`I`-префикс, `Row`-суффикс, `[Column]` на `Value`). Прямой вызов
+`xml_nodes` бросает `NotSupportedException` — ровно как `string_split`/`openjson` (`SqlFunctions.SqlServer.cs:89,102`).
+
+**P1 — нет.** Все имена PascalCase/`snake_case`-DSL; параметры `xml`/`xpath` и их порядок совпадают с
+соседними XML-методами; синхронного близнеца нет → суффикс `Async` не нужен.
+
+**P2-1 — два разных идиома для «SQL-функция, дающая rowset».** `string_split`/`openjson`/
+`generate_series`/`unnest`/`numbers` — `IQueryable<Row>` + `[SqlTableFunction]`, подключаются через
+`FromTableFunction`; `xml_nodes` — `QueryCommand<Row>`, валиден **только** как
+`CrossApply`/`OuterApply`-источник. Расхождение осознанное и обосновано (`CROSS APPLY` c корреляцией
+невыразим через `FromTableFunction`; см. XML-док метода и `todo_xml_nodes.md`), поэтому P2, а не P1.
+**Рекомендация:** перенести это обоснование в `<remarks>` метода/`docs/guide/provider-specific/sqlserver.md`,
+чтобы две идиомы читались как намеренные.
+
+**P2-2 — классовый `<summary>` `SqlServerFunctions` не упоминает `xml_nodes`.** `Query/SqlFunctions.SqlServer.cs:6-12`
+перечисляет «postfix XML data-type methods (`xml_value`/`xml_query`/`xml_exist`)», хотя теперь их четыре.
+Сам `xml_nodes` задокументирован полностью (`<summary>` + `<see cref>` на `CrossApply`/`IXmlNodesRow.Value`/
+`xml_value`/`xml_query`/`xml_exist`); все cref'ы резолвятся — build **0/0** при `CS1591` в `<NoWarn>`
+(`CS1574` не подавлен, значит ссылки валидны). **Рекомендация:** добавить `nodes` в классовый `<summary>`
+(и при желании — в `<summary>` свойства `SqlFunctions.SqlServer`).
+
+**P2-3 — пользовательские доки EN+RU не обновлены.** `docs/guide/11-scalar-functions.md`,
+`docs/guide/provider-specific/sqlserver.md`, `docs/providers/sqlserver.md`, `docs/advanced/api-reference.md`,
+`docs/advanced/limitations.md` и их `docs/ru/**`-зеркала описывают три XML-скаляра, но `xml_nodes`/
+`IXmlNodesRow` в них нет (`rg` по `docs/**` вне `specs/` — 0 совпадений). `AGENTS.md` требует синхронного
+обновления `docs/**` и `docs/ru/**`, а рабочий план фичи (`todo_xml_nodes.md` §«Документация») прямо
+перечисляет эти файлы и снятие пункта из `sql-capabilities-gap-analysis.md` §4. **Рекомендация:** отдать
+`nextorm-design-engineer` (EN+RU в одном изменении).
+
+**P2-4 (трекинг Шага 5).** При заморозке внести в `PublicAPI.Unshipped.txt` (файла нет):
+`NextORM.Core.SqlFunctions.IXmlNodesRow`, `.Value.get -> string?`, `.Value.set -> void`,
+`NextORM.Core.SqlServerFunctions.xml_nodes(string?, string?) -> NextORM.Core.QueryCommand<NextORM.Core.SqlFunctions.IXmlNodesRow>`,
+а также `SqlServerDialect.Supports("nodes")` не является публичной сигнатурой (класс `internal`) — не вносить.
+Трекинг — `todo_public_api_freeze.md`, issue #53.
+
+**Проверка (22.09.2026).** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**;
+`dotnet test tests/nextorm.sqlserver.tests -c Debug` — **245/245**; `dotnet test tests/nextorm.core.tests
+-c Debug` — **194/194**; `rg --files -g 'PublicAPI*.txt'` — пусто; `grep -r xml_nodes docs` вне `specs/` —
+пусто (подтверждает P2-3); подавления проекта 11/11 (0 неоправданных).
+
+### Аудит 22.09.2026 — ClickHouse `UInt64` row reader (`DbDataReader.GetFieldValue<ulong>`) (публичный API без изменений; P0 — нет; P1 — нет; P2 — нет)
+
+**Область (uncommitted worktree `clickhouse-uint64-row-reader`).** `src/nextorm.core/Expressions/SelectExpression.cs:60,113-116`
+(новое `private readonly static MethodInfo GetFieldValueMI` + ветка `ulong` в **уже существующем публичном**
+`GetDataRecordMethod()`; сигнатура метода не менялась); `src/nextorm.core/DataContext/RowMapperFactory.cs:26-30`
+(`RowMapperFactory` — `internal`); `src/nextorm.clickhouse/ClickHouseDialect.cs:57-59,163-166,251-256,562-566`
+(только комментарии); тесты `SelectExpressionTests.cs:18-34`, `ClickHouseDialectTests.cs:143-148`,
+`SqlGenerationTests.cs:1793-1801`, `ClickHouseIntegrationTests.cs:789-836` + `ClickHouseTestProvider.cs:137-152`;
+доки EN+RU.
+
+**Публичной поверхности не добавлено — подтверждено.** `git diff -- src/` не содержит добавленных `public`/
+`protected`/`internal` объявлений: единственный новый член с модификатором доступа — `private readonly static
+MethodInfo GetFieldValueMI`. `RowMapperFactory.MapColumn` — `public`-член `internal`-типа (внешней поверхности не
+даёт), его контракт не менялся; `SelectExpression.GetDataRecordMethod()` добавлен только `else if`-веткой.
+`IUInt64Entity` (`ClickHouseIntegrationTests.cs:833`) объявлен в **тестовой** сборке — в публичную поверхность 7
+библиотек не входит. Проверено чтением диффа и `roslyn refs` по явному `solution=nextorm.sln`:
+`RowMapperFactory.MapColumn` — 1 ссылка, `RowMapperFactory.GetOrBuild` — 1, `SelectExpression.GetDataRecordMethod`
+— 5 (1 прод-вызов + 4 тестовых).
+
+**XML-док покрытие не изменилось.** Новых публичных типов/членов нет; `GetDataRecordMethod()` остаётся без
+XML-дока, как и до изменения (`CS1591` в `<NoWarn>` всех 7 библиотечных `.csproj`). Приложение A
+(**45** недокументированных публичных типов) не меняется.
+
+**Шаг 5 (заморозка) — статус без изменений.** `PublicAPI.Shipped.txt`/`PublicAPI.Unshipped.txt` отсутствуют;
+`Microsoft.CodeAnalysis.PublicApiAnalyzers`, `EnablePackageValidation`/ApiCompat и API-approval тест не подключены.
+В будущий `PublicAPI.Unshipped.txt` из этого изменения вносить **нечего** (изменённые члены — `private`/`internal`).
+Трекинг — [`todo_public_api_freeze.md`](../roadmap/todo_public_api_freeze.md), issue #53.
+
+**Доки.** `docs/advanced/limitations.md`, `docs/providers/clickhouse.md`, `docs/guide/provider-specific/clickhouse.md`
+и их `docs/ru/**`-зеркала обновлены синхронно; `docs/specs/roadmap/sql-capabilities-gap-analysis.md` §4 п.4 обновлён,
+`todo_clickhouse_uint64_row_reader.md` удалён. Публичного переименования нет, но правило `AGENTS.md` о синхронности
+EN/RU соблюдено. Непроверенное утверждение доков про MySQL/MariaDB `BIGINT UNSIGNED` (нет интеграционного теста на
+этот диалект) вынесено как наблюдение 3 в `code-smells-review.md` — на именование публичного API не влияет.
+
+**Проверка (22.09.2026).** `dotnet build nextorm.sln -c Release --no-incremental` — **0 warnings / 0 errors**;
+`nextorm.core.tests` — **196/196**, `nextorm.clickhouse.tests` — **188/188** (0 failed/0 skipped);
+`find -name 'PublicAPI*.txt'` — пусто; `grep "public"` по добавленным строкам `src/`-диффа — только `private`-поле;
+подавления проекта 11/11 (0 неоправданных).
+### Аудит 22.09.2026 — серверные/кластерные табличные функции ClickHouse (P0 — нет; P1 — нет; P2 — 2)
+
+Область: `ClickHouseFunctions.url<T>`/`s3<T>`/`file<T>`/`remote<T>`/`remote_secure<T>`/`cluster<T>`/
+`cluster_all_replicas<T>` (`Query/SqlFunctions.ClickHouse.cs`), `ClickHouseDialect.SupportsTableFunction`
+(`src/nextorm.clickhouse/ClickHouseDialect.cs`), док класса `ClickHouseFunctions`
+(`Query/SqlFunctions.ClickHouse.cs:5-17`) и свойства `SqlFunctions.ClickHouse` (`Query/SqlFunctions.cs:41-58`);
+тесты `tests/nextorm.clickhouse.tests/SqlGenerationTests.cs` (7 SQL-gen + `IServerTableRow`),
+`ClickHouseDialectTests.cs` (`SupportsTableFunction` ×16, `:168-185`), `tests/nextorm.postgres.tests/SqlGenerationTests.cs`
+(`BuiltInTableFunction_ClickHouseServerTableFunctions_ShouldThrowOnPostgres`). Build Release — **0/0**;
+`dotnet test tests/nextorm.clickhouse.tests -c Debug` — **193/193**; `dotnet test tests/nextorm.postgres.tests
+-c Debug --filter FullyQualifiedName~BuiltInTableFunction` — **6/6**. XML-`<summary>` есть у всех 7 новых
+публичных методов; **новых публичных типов нет** (схема строки объявляется generic-параметром `TRow`
+вызывающего) → Приложение A (45) без изменений; Шаг 5 по-прежнему открыт.
+
+| # | Ур. | Файл:строка | Проблема | Рекомендация |
+|---|-----|-------------|----------|--------------|
+| SCTF1 | P2 | `Query/SqlFunctions.ClickHouse.cs` (`url`…`cluster_all_replicas`) | Новые публичные члены не отслеживаются: `PublicAPI.Shipped/Unshipped.txt` отсутствуют, `PublicApiAnalyzers` не подключён. Шаг 5 открыт | Внести 7 методов `ClickHouseFunctions.*<TRow>` в `PublicAPI.Unshipped.txt` при заморозке (ср. TF1/Z1) |
+| SCTF2 | P2 | `Query/SqlFunctions.ClickHouse.cs`, `docs/guide/13-table-valued-functions.md` (+RU), `docs/providers/clickhouse.md` (+RU) | Отложенные `format`/`merge`/`input` задокументированы в limitation-таблице и guide, но не являются элементом кода; при изменении решения вернуться к `SupportsTableFunction` | Оставить как осознанный пропуск до `todo_dynamic_result_schema.md` |
+
+ℹ️ **Наблюдения (фикс не требуется):**
+- **Именование — конвенции соблюдены, P0/P1 нет.** SQL-имена `remoteSecure`/`clusterAllReplicas` против
+  CLR `remote_secure`/`cluster_all_replicas` точно повторяют пару `generate_random`/`generateRandom`;
+  алиасы `url`/`s3`/`file`/`remote`/`cluster` — SQL-зеркало (реестр §3).
+- **Generic `TRow` вместо именованного row-интерфейса — обосновано.** У `url`/`s3`/`file` схема задаётся
+  строкой `structure`, у `remote`/`remoteSecure`/`cluster`/`clusterAllReplicas` — целевой таблицей,
+  поэтому единого `I…Row` нет; `IUnnestRow<T>` уже показывает, что generic row-интерфейс — принятый
+  приём. `format`/`merge`/`input` оставлены на динамическую схему (`todo_dynamic_result_schema.md`).
+- **Секреты не проходят аргументами.** `remote`/`remoteSecure`/`s3` не принимают `user`/`password`/ключи;
+  аутентификация — серверная (`<remote_servers>`/named collections), поэтому секреты не попадают в
+  план/лог **по умолчанию**; значения параметров логируются лишь при opt-in `LoggingOptions.LogSensitiveData`
+  (`QueryExecutor.cs:43-49`, `ResultSetEnumerator.cs:193-225`), а URL-аргумент биндится параметром и в
+  план-ключ не входит (значения closure в ключ не входят). Caller-declared `url` может содержать
+  `user:pass@`/presigned-параметры, поэтому доки/guide рекомендуют named collections. Формулировка
+  уточнена 22.09.2026.
+- **`<typeparam name="TRow">` отсутствует** у 7 методов при наличии `<typeparamref name="TRow"/>` (как у
+  `IUnnestRow<T>`); на `CS1591` (в `<NoWarn>` 7 библиотечных `.csproj`) не влияет — для полноты DocFX
+  тег можно добавить. ℹ️.
+
+**Проверка (22.09.2026).** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**;
+`dotnet test tests/nextorm.clickhouse.tests -c Debug` — **193/193**; `grep -n 'format\|merge\|input'
+docs/advanced/limitations.md` — строки отложенных функций присутствуют; `rg --files -g 'PublicAPI*.txt'` — пусто.
+
+### Аудит 22.09.2026 — ClickHouse row reader `Array(T)`/`Tuple` и агрегаты `group_array`/`group_uniq_array` (P0 — нет; P1 — 1 доковый; P2 — 2)
+
+Публичная поверхность аддитивна; переименований нет. Новые члены:
+
+- `ClickHouseFunctions.group_array<T>(T? value) -> T[]` (`Query/SqlFunctions.ClickHouse.cs:127-134`) → `groupArray(value)`;
+- `ClickHouseFunctions.group_uniq_array<T>(T? value) -> T[]` (`:136-143`) → `groupUniqArray(value)`;
+- маппинг — `ClickHouseDialect.MakeAggregate` (`src/nextorm.clickhouse/ClickHouseDialect.cs:398-399`); трансляция — `AdvancedAggregateTranslator.EmitSimple` (`src/nextorm.core/Visitors/AdvancedAggregateTranslator.cs:142-147`) под флагом `ISqlDialect.SupportsArrayFunctions`.
+- Row reader (публичная сигнатура не меняется): `SelectExpression.GetDataRecordMethod()` (`Expressions/SelectExpression.cs:117-130`) — `GetValue`-ветки для `T[]`/`System.Tuple`; `TypeFacts.IsSingleColumnProjection`/`IsTupleType` (`Visitors/TypeFacts.cs:45-74`) — `internal`, внешней поверхности не дают.
+
+**CS1591/XML-doc.** XML-`<summary>` есть у обоих новых методов; доки обновлены и у array-возвращающих соседей (`retention`, `split_by_char`, `array_sort`/`array_reverse`/`array_distinct`/`range`/`array_enumerate`/`array_cum_sum`/`array_slice`/`array_push_back`) — с «можно проецировать напрямую». Новых публичных **типов** нет → Приложение A (45) без изменений; покрытие публичных методов **+2** (215/1094 против baseline 213/1092, актуализация 18.09.2026) — дельта пересчитана арифметически по диффу. Именование — конвенции соблюдены: snake_case DSL зеркалит SQL (`groupArray`/`groupUniqArray` по образцу `uniq_exact`→`uniqExact`), гейт — как у соседних array-функций. P0/P1 по **именам** нет.
+
+| # | Ур. | Место | Проблема | Рекомендация |
+|---|-----|-------|----------|--------------|
+| CHARR1 | P2 | `Query/SqlFunctions.ClickHouse.cs:134,143`; `PublicAPI.*.txt` отсутствуют | 2 новых публичных члена не трекаются (`PublicApiAnalyzers` не подключён, Шаг 5 открыт). **Продолжение RD2/AR1/ASF1/SQ1/SCTF1, не новая находка**; новых abstract-членов `ISqlDialect` нет, разрыва для внешних реализаторов не создаётся | При заморозке внести `ClickHouseFunctions.group_array<T>(T? value) -> T[]` и `group_uniq_array<T>(T? value) -> T[]` в `PublicAPI.Unshipped.txt` (точный текст — из анализатора при заморозке) |
+| CHARR2 ✅ закрыта 22.09.2026 | P1 (док) | `docs/advanced/limitations.md:36` (+`docs/ru/advanced/limitations.md:36`); `docs/providers/clickhouse.md:56` (+RU); `docs/guide/provider-specific/clickhouse.md:152` (+RU) | EN/RU-доки прямо противоречат реализованному поведению (тот же класс, что AR2): массив-колонку больше не «нельзя материализовать» (`array_agg` теперь проецируется напрямую — `tests/nextorm.postgres.tests/SqlGenerationTests.cs` изменён), а `retention`/`split_by_char`/`array_*` больше не «usable only nested». Правило AGENTS.md `docs/**` **и** `docs/ru/**` не выполнено | Снять оговорки «row reader не умеет»/«только вложенно» и описать прямую проекцию `T[]`/`Tuple` в обеих языковых ветках |
+| CHARR3 ✅ закрыта 22.09.2026 | P2 | `Query/SqlFunctions.ClickHouse.cs:5-25` (классовый `<summary>`); `docs/providers/clickhouse.md:40-56` (+RU); `docs/guide/provider-specific/clickhouse.md:148-153` (+RU); `docs/advanced/api-reference.md` (+RU) | Новые `group_array`/`group_uniq_array` не добавлены в прозаическую докуку (precedent AR3/AJ5/RD2); классовый `<summary>` `ClickHouseFunctions` перечисляет array-функции, но не эти агрегаты | Дополнить `<summary>` класса и `SqlFunctions.ClickHouse`, а также provider/guide/api-reference-списки EN+RU одним изменением |
+
+ℹ️ **Наблюдения (фикс не требуется):**
+
+- **`T? value` — осознанная nullability.** Для unconstrained `T` это не `Nullable<T>`; соседний `array_push_back<T>(T[], T)` использует `T` — косметическая неоднородность, не P-нарушение.
+- **`<typeparam name="T">` отсутствует** у обоих методов (как у соседних generic-членов) — на `CS1591` (в `<NoWarn>` 7 библиотечных `.csproj`) не влияет; для полноты DocFX можно добавить.
+- **`ValueTuple` и арность >7 не покрыты.** `TypeFacts.IsTupleType` (`Visitors/TypeFacts.cs:66-74`) распознаёт только `System.Tuple` арности 1..7 (драйвер ClickHouse возвращает `System.Tuple`; интеграционный тест — `Tuple<int,string>`); TODO-план (`docs/specs/roadmap/todo_clickhouse_arrays.md:70`) обещает `ValueTuple<>` — расхождение формулировки; арность 8+ не проверена. Кандидат — юнит/интеграционный тест на арности 1 и 3.
+- **Row reader без новых публичных типов/флагов.** Тип ветки выбирается по `SelectExpression.PropertyType`, диалектного флага нет: это инфраструктура материализации, а не SQL-функция; SQL Server/MySQL/MariaDB/SQLite физически не отдают array/Tuple-колонку, InMemory row reader не использует. Обоснование — в `code-smells-review.md`, точечный аудит 22.09.2026.
+- **Шаг 5 не двигается:** `PublicAPI.*.txt` — **0** файлов, `PublicApiAnalyzers`/ApiCompat/API-approval не настроены; новые подписи — в CHARR1.
+
+**Проверка (22.09.2026).** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**; `dotnet test tests/nextorm.clickhouse.tests -c Release --no-build` — **201/201**, `tests/nextorm.postgres.tests` — **265/265** (прогнано в этом проходе); `find . -name 'PublicAPI*.txt'` — пусто (подтверждает CHARR1); XML-`<summary>` у обоих новых методов и `<see cref="ISqlDialect.SupportsArrayFunctions"/>` разрешается; новых публичных типов нет — Приложение A (45) без изменений. Контейнерная интеграция ClickHouse 25.8 в этом проходе не перезапускалась; по отчёту автора изменения — ClickHouse **63/63**, PostgreSQL **223** (6 capability-skips).
+
+### Аудит 22.09.2026 — ClickHouse higher-order (lambda) array-функции (P0 — нет; P1 — 1 доковый; P2 — 2)
+
+**Область (uncommitted worktree).** Публичная поверхность аддитивна; переименований нет. Новые члены:
+
+- `ISqlDialect.SupportsHigherOrderArrayFunctions` (`src/nextorm.core/DataContext/Dialect/ISqlDialect.cs:145-152`, **abstract**; default `false` — `SqlDialectBase.cs:36`; override — `src/nextorm.clickhouse/ClickHouseDialect.cs:57`);
+- 9 методов `ClickHouseFunctions` (`src/nextorm.core/Query/SqlFunctions.ClickHouse.cs:485-545`):
+  `array_map<TIn,TOut>(Expression<Func<TIn,TOut>> function, TIn[] array) -> TOut[]` (`:485`);
+  `array_filter<T>(Expression<Func<T,bool>> predicate, T[] array) -> T[]` (`:492`);
+  `array_exists<T>(...)-> bool` (`:499`); `array_all<T>(...)-> bool` (`:506`);
+  `array_count<T>(...)-> long` (`:513`);
+  `array_first<T>(...)-> T?` (`:521`); `array_first_index<T>(...)-> long` (`:529`);
+  `array_last<T>(...)-> T?` (`:537`); `array_last_index<T>(...)-> long` (`:545`);
+- `ClickHouseDialect.MakeArrayFunction` расширен `arrayCount`/`arrayFirstIndex`/`arrayLastIndex` → `toInt64(...)` (`ClickHouseDialect.cs:65-71`); `ArraySqlTranslator.TryTranslateHigherOrderArray`/`EmitHigherOrderArray`/`ExtractLambda` и `HigherOrderLambdaVisitor` (`Visitors/ArraySqlTranslator.cs:261-341,408-455`) — `internal`, внешней поверхности не дают;
+- новых публичных **типов** нет → **Приложение A (45) без изменений**.
+
+**CS1591/XML-doc.** XML-`<summary>` есть у всех 9 новых методов и у нового флага (интерфейс + база + ClickHouse); `<typeparam name>` отсутствует (как у соседних generic-членов) — на `CS1591` в `<NoWarn>` 7 библиотечных `.csproj` не влияет. Покрытие публичных методов — **+9** к последнему зафиксированному **215/1094** → **224/1103** (арифметически по диффу; переизмерение рефлексией в этом проходе не выполнялось). **Имя флага — P0/P1 нет:** snake_case DSL зеркалит SQL (`arrayMap`/…/`arrayLastIndex`), лямбда-аргумент стоит **первым** (SQL `arrayMap(func, arr)`); прецедент `Expression<Func<…>>` — `count(Expression<Func<bool>>)` (`Query/SqlFunctions.cs:531`), `sum<T>(T?, Expression<Func<bool>>)` (`:546`), `string_agg<T>(T?, string, Expression<Func<bool>>)` (`:480`), но там лямбда — **трейлинг-фильтр без параметра**, здесь — обязательный поэлементный трансформер (соответствие SQL, а не фильтру). `T?` у `array_first`/`array_last` — см. ℹ️.
+
+| # | Ур. | Место | Проблема | Рекомендация |
+|---|-----|-------|----------|--------------|
+| HOAF1 | P2 | `Query/SqlFunctions.ClickHouse.cs:485-545`; `DataContext/Dialect/ISqlDialect.cs:152`; `SqlDialectBase.cs:36`; `ClickHouseDialect.cs:57,70`; `PublicAPI.*.txt` отсутствуют | 9 новых методов и новый **абстрактный** член `ISqlDialect` не трекаются (Шаг 5 открыт). `SupportsHigherOrderArrayFunctions` abstract — source-breaking для внешних реализаторов `ISqlDialect` (продолжение AR1/AJ1/CHARR1, не новая проблема) | При заморозке внести флаг (`ISqlDialect` + оба override'а) и 9 подписей `ClickHouseFunctions.*` в `PublicAPI.Unshipped.txt` (точный текст — из анализатора) |
+| HOAF2 ✅ закрыта 22.09.2026 | **P1 (док)** | `docs/guide/provider-specific/clickhouse.md:197-201` (+`docs/ru/guide/provider-specific/clickhouse.md:199-204`) | EN/RU прямо противоречили реализации («higher-order array functions … are out of scope today») | Снято: пункт убран из «Not yet supported»/«Пока не поддерживается»; флаг + 9 методов описаны в `guide/11-scalar-functions.md` (EN+RU) |
+| HOAF3 ✅ закрыта 22.09.2026 | P2 | `docs/guide/11-scalar-functions.md` (+RU); `docs/advanced/api-reference.md` (+RU); `docs/specs/roadmap/sql-capabilities-gap-analysis.md` §4 п.5 | Новые 9 методов и флаг не были добавлены в доки EN+RU; §4 п.5 гласил «has not been started» | Таблица guide/11, список api-reference и §4 п.5 (EN+RU) дополнены; comparison-спеки обновлены |
+
+ℹ️ **Наблюдения (фикс не требуется):**
+
+- **`T?` у `array_first`/`array_last` — «может быть default», а не NULL.** ClickHouse `arrayFirst`/`arrayLast` при отсутствии совпадения возвращают default элемента (0/пустая строка), не SQL NULL; для value-`T` `T?` = `Nullable<T>` остаётся не-null (`0`), для reference-`T` `T?` не меняет рантайм-тип. Форма согласована с соседями `group_array<T>(T?)`/`array_push_back`, но XML-док «or the default value of `T`» был бы точнее слова `null`. Путь «нет совпадения» интеграционным тестом не покрыт (проверены только совпадающие элементы) — кандидат в тест.
+- **Отдельный флаг не конфликтует с `SupportsArrayFunctions`/`SupportsArrayJoin`.** Размещён в том же array-кластере (`ISqlDialect.cs:135/143/152/165`; `SqlDialectBase.cs:34-37`), тот же `virtual => false` и CH-override, XML-док с обоснованием. Дифференциатор «есть array-функции, нет lambda» пока недостижим (только CH реализует массивы), но это семейный флаг (не по члену) — «зонтик без доказательства невыразимости» (ср. ASF1) не создаётся.
+- **Лямбда-параметр эмитится голым идентификатором** (`ArraySqlTranslator.cs:430`), а не через `AppendIdentifier`: это связанная переменная SQL-лямбды, не физический столбец/таблица, поэтому кавычки диалекта (`QuoteIdentifiers`) неприменимы; physical-идентификаторы внутри тела по-прежнему идут через `MemberTranslator`. Утечки лямбда-параметра в резолвер колонок нет: `VisitMember` (`:439-446`) на корне-параметре бросает `NotSupportedException`.
+- **Аргументы-массивы рендерятся существующим `SqlOperandTranslator.AppendArrayOrColumn`** (`ArraySqlTranslator.cs:310,325`): колонка — в SQL, захваченный/inline-массив — одним параметром; SQL не зависит от числа элементов, план остаётся кэшируемым.
+
+**Проверка (22.09.2026).** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**; `dotnet test tests/nextorm.clickhouse.tests -c Debug` — **208/208**; `dotnet test tests/nextorm.postgres.tests -c Debug` — **266/266**; контейнерная интеграция `DOCKER_HOST=… dotnet test tests/nextorm.integration.tests -c Debug --filter "FullyQualifiedName~ClickHouseIntegrationTests.Array"` — **15/15** (0 failed / 0 skipped; включая 5 новых). XML-`<summary>` у 9 методов и флага; новых публичных типов нет — Приложение A (45) без изменений; `find -name 'PublicAPI*.txt'` — пусто (подтверждает HOAF1). Содержательная кодовая сторона — `code-smells-review.md`, Находки 62–63.
+
+### Аудит 22.09.2026 — ClickHouse параметризованные array-агрегаты `topK`/`topKWeighted`/`quantiles` (P0 — нет; P1 — нет; P2 — 4)
+
+**Область (uncommitted worktree).** Публичная поверхность аддитивна; переименований нет. Новые члены:
+
+- `IQuantileAggregateRenderer.RenderArray(string name, string levels, string value) -> string` (`src/nextorm.core/DataContext/Dialect/DialectCapabilities.cs:125-126`) — **новый абстрактный** член публичного интерфейса;
+- `ITopKAggregateRenderer` (`DialectCapabilities.cs:132-143`) — новый публичный тип + `Render`/`RenderWeighted`;
+- `ISqlDialect.TopKAggregates` DIM `=> null` (`src/nextorm.core/DataContext/Dialect/ISqlDialect.cs:386-392`), реализация `SqlDialectBase.TopKAggregates` (`:93-94`) и `ClickHouseDialect.TopKAggregates` (`src/nextorm.clickhouse/ClickHouseDialect.cs:145`);
+- 3 метода `ClickHouseFunctions` (`src/nextorm.core/Query/SqlFunctions.ClickHouse.cs`):
+  - `quantiles<T>(double[] levels, T? value) -> double[]` (`:95-102`) → `quantiles(level...)(value)`;
+  - `top_k<T>(long k, T? value) -> T[]` (`:104-111`) → `topK(k)(value)`;
+  - `top_k_weighted<T, TWeight>(long k, T? value, TWeight? weight) -> T[]` (`:113-118`) → `topKWeighted(k)(value, weight)`.
+
+**CS1591/XML-doc.** XML-`<summary>` есть у всех новых типов/членов (новый интерфейс + 2 члена, DIM, база/override, 3 метода) и у обновлённых классовых summary `ClickHouseFunctions`/`AdvancedAggregateTranslator`; `<typeparam name>`/`<param>` отсутствуют у части generic-членов (как у соседей) — на `CS1591` в `<NoWarn>` 7 библиотечных `.csproj` не влияет. Новый публичный **тип** `ITopKAggregateRenderer` задокументирован, поэтому Приложение A (45 недокументированных) **не меняется**, но общее число публичных типов **+1** (переизмерение рефлексией в этом проходе не выполнялось). Покрытие публичных методов **+3** к зафиксированному 224/1103 → **227/1106** (арифметически по диффу).
+
+**Именование — P0/P1 по именам нет.** `top_k`/`top_k_weighted` — snake_case-зеркало SQL `topK`/`topKWeighted` по образцу `uniq_exact`→`uniqExact`/`quantile_exact`→`quantileExact`; `quantiles` — множественное от `quantile`; `ITopKAggregateRenderer` — по образцу `IUniqAggregateRenderer`/`IQuantileAggregateRenderer`; `k` — нативный параметр ClickHouse. Выделение отдельного capability-объекта вместо `SupportsArrayFunctions` обосновано (per-function, не family-umbrella) и повторяет rationale `IUniqAggregateRenderer`.
+
+| # | Ур. | Место | Проблема | Рекомендация |
+|---|-----|-------|----------|--------------|
+| CHQA1 | P2 (API-compat) | `DataContext/Dialect/DialectCapabilities.cs:125-126` | `RenderArray` добавлен **абстрактным** членом в публичный интерфейс `IQuantileAggregateRenderer` — source-break для внешних реализаторов. Контраст с тем же изменением: `ISqlDialect.TopKAggregates` намеренно оформлен DIM «so that existing external implementations keep compiling» (`ISqlDialect.cs:389`), а topK вынесен отдельным объектом. In-repo реализатор один (`ClickHouseQuantileAggregateRenderer`), pre-1.0/alpha — риск низкий; continuation AR1/AJ1/CHARR1/HOAF1 | Согласовать политику: либо зафиксировать, что renderer-интерфейсы не рассчитаны на внешнюю реализацию, либо вынести multi-level форму в отдельный объект `IMultiQuantileAggregateRenderer` (по образцу `ITopKAggregateRenderer`) вместо расширения существующего. Alpha-политика (`API-NAMING-REVIEW.md` §1) второй вариант не обязывает |
+| CHQA2 ✅ применено 22.09.2026 | P2 (naming) | `DataContext/Dialect/DialectCapabilities.cs:125-126` | `RenderArray` называет форму по CLR-типу (массив) и читается как «рендерит массив», хотя у `quantiles` массив — это **параметр** (`levels`), а sibling'ы названы по агрегату (`Render`, `RenderMedian`) | Переименовано в `RenderLevels(name, levels, value)` (roslyn rename, 5 документов): параллельно `RenderMedian`, имя совпадает с параметром |
+| CHQA3 ✅ закрыто 22.09.2026 | P2 (доки) | `docs/advanced/api-reference.md:63,70` (+`docs/ru/advanced/api-reference.md:63,70`); `docs/guide/04-grouping-and-aggregates.md:420-439` (+RU); `docs/guide/provider-specific/clickhouse.md:141-153` (+RU); `docs/specs/roadmap/sql-capabilities-gap-analysis.md:170` | `quantiles`/`top_k`/`top_k_weighted`, `ITopKAggregateRenderer` и `IQuantileAggregateRenderer.RenderArray` не добавлены в доки EN+RU; gap-analysis §4 п.4 по-прежнему гласил «Still open on this item: `topK`/`topKWeighted`/`quantiles`» | Дополнены api-reference/guide-04/provider-specific EN+RU (семейства, гейты `QuantileAggregates`/`TopKAggregates`, double-parentheses форма, `Array(T)`/`Array(Float64)`); `topK`/`quantiles` сняты из «Still open» в gap-analysis §4 п.4 |
+| CHQA4 | P2 (трекинг) | `Query/SqlFunctions.ClickHouse.cs:95-118`; `DataContext/Dialect/DialectCapabilities.cs:125,132-143`; `ISqlDialect.cs:386-392`; `PublicAPI.*.txt` отсутствуют | Новый публичный тип `ITopKAggregateRenderer` + DIM `TopKAggregates` + абстрактный `RenderArray` + 3 метода не трекаются (`PublicApiAnalyzers` не подключён, Шаг 5 открыт). Continuation RD2/AR1/AJ1/CHARR1/HOAF1 — не новая проблема | При заморозке внести в `PublicAPI.Unshipped.txt` новый тип и все члены (base/override/DIM + 3 метода); точный текст — из анализатора |
+
+ℹ️ **Наблюдения (фикс не требуется):**
+
+- **`ISqlDialect`-сторона не ломает внешних реализаторов.** `TopKAggregates` — DIM `=> null` (`ISqlDialect.cs:386-392`), как у остальных capability-объектов; `SqlDialectBase` даёт `virtual` `=> null`, ClickHouse переопределяет. Пара «вычисляемый/абстрактный член vs объект» — существующий паттерн Фаз 2/3.
+- **`RenderArray` в контрактном тесте вызывается не вакуумно** (`tests/nextorm.integration.tests/DialectCapabilityContractTests.cs:123`): при непустом `QuantileAggregates` проверяется `NotBeNullOrEmpty`, а `Dialects.Should().Contain(d => d.TopKAggregates != null)` (`:182`) не даёт объекту «потеряться». Находка 48 не повторяется.
+- **Имена тестов согласованы.** `ClickHouseDialectTests.MakeTopK_ShouldUseDoubleParentheses` (`:266`) следует прежнему `MakeQuantile_ShouldUseDoubleParenthesesAndCastToFloat64` (`:256`) — стиль `Make*` для юнит-тестов рендереров уже принят, P-нарушения нет.
+- **Ограничения среза осознанны** (`load_factor`/`'counts'`; `quantilesExact`/`Timing`/`GK`) — отражены в `todo_clickhouse_arrays.md`, новых публичных членов под них нет.
+
+**Проверка (22.09.2026).** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**; XML-`<summary>` у всех новых типов/членов; новых публичных типов ровно **1** (`ITopKAggregateRenderer`) → Приложение A (45) без изменений; `find -name 'PublicAPI*.txt'` — пусто (подтверждает CHQA4). Полный прогон с покрытием — **2315 passed / 30 skipped / 0 failed**, **line 85.4% / branch 74.4%** (ClickHouse **220/220**, postgres **268/268**, ClickHouse+capability-contract **73/73**). Содержательная кодовая сторона — `code-smells-review.md`, Находка 64.
+
+### Аудит 22.09.2026 — ClickHouse предикаты над массивами `startsWith`/`endsWith`/`hasSubstr` (uncommitted worktree, срез 4 `todo_clickhouse_arrays.md`; P0 — нет; P1 — нет; P2 — 3)
+
+**Область (uncommitted worktree, branch `1.0.4-alpha`, HEAD `ba9c29b`).** Публичная поверхность аддитивна; переименований нет. Новые члены:
+
+- `ClickHouseFunctions.starts_with<T>(T[] array, T[] prefix) -> bool` (`Query/SqlFunctions.ClickHouse.cs:451`) → `startsWith(array, prefix)`;
+- `ClickHouseFunctions.ends_with<T>(T[] array, T[] suffix) -> bool` (`:454`) → `endsWith(array, suffix)`;
+- `ClickHouseFunctions.has_substr<T>(T[] array, T[] other) -> bool` (`:462`) → `hasSubstr(array, other)`;
+- трансляция — `Visitors/ArraySqlTranslator.TryTranslateClickHouseArray` (`Visitors/ArraySqlTranslator.cs:212-220`): три `case` → `EmitArrayFunction` через существующий `RequireArrayFunctions` (`:392`), гейт `ISqlDialect.SupportsArrayFunctions` (только `ClickHouseDialect.cs:52 => true`); `internal`, внешней поверхности не даёт;
+- обновлена классовая `<summary>` `ClickHouseFunctions` (`Query/SqlFunctions.ClickHouse.cs:24-25`); новых публичных **типов**/флагов/`Make*`-хуков нет.
+
+**Матрица подтверждена.** `startsWith`/`endsWith`/`hasSubstr` над `Array(T)` есть только у ClickHouse (PostgreSQL — лишь частная эмуляция префикса срезом, у остальных нет array-типа); проверено на реальном ClickHouse 25.8: `startsWith([3,1,2],[3,1])=1`, `endsWith([3,1,2],[1,2])=1`, `hasSubstr([3,1,2],[1,2])=1`, `hasSubstr([3,1,2],[3,2])=0` (непрерывная подпоследовательность).
+
+**CS1591/XML-doc.** XML-`<summary>` есть у всех 3 новых методов (`:446-462`); новых публичных типов нет → **Приложение A (45) без изменений**. Покрытие публичных методов — **+3** к зафиксированному **227/1106** → **230/1109** (арифметически по диффу; переизмерение рефлексией в этом проходе не выполнялось).
+
+**Именование — P0/P1 по именам нет.** `starts_with`/`ends_with`/`has_substr` — snake_case-зеркало ClickHouse-токенов `startsWith`/`endsWith`/`hasSubstr`, ровно как `has_any`→`hasAny`/`has_all`→`hasAll`/`index_of`→`indexOf`; форма `bool <verb>_<noun><T>(T[] array, T[] other) -> bool` повторяет соседей, первый параметр — массив (порядок SQL), имена `prefix`/`suffix`/`other` описательны. BCL-конфликтов нет (`startsWith` не затеняет `System.String.StartsWith` — другой тип и сигнатура).
+
+| # | Ур. | Место | Проблема | Рекомендация |
+|---|-----|-------|----------|--------------|
+| CHARP1 ✅ закрыта 22.09.2026 | P2 (доки) | `docs/guide/11-scalar-functions.md:487-490` (+`docs/ru/guide/11-scalar-functions.md:494-497`); `docs/guide/provider-specific/clickhouse.md:176` (+RU `:178`); `docs/providers/clickhouse.md:181` (+RU); `docs/advanced/api-reference.md:63` (+`docs/ru/advanced/api-reference.md:63`) | Три новых метода не добавлены в доки EN+RU, хотя сам план среза (`todo_clickhouse_arrays.md`, тест-план) перечисляет эти файлы; правило AGENTS.md «`docs/**` **и** `docs/ru/**`» не выполнено. Противоречия с реализацией нет — только пропуск (класс AR3/CHARR3/HOAF3) | Дополнить списки array-функций `startsWith`/`endsWith`/`hasSubstr` (CLR `starts_with`/`ends_with`/`has_substr`) в guide/11, provider-specific/clickhouse, providers/clickhouse и api-reference, EN+RU одним изменением |
+| CHARP2 ✅ закрыта 22.09.2026 | P2 | `Query/SqlFunctions.cs:41-57`; `DataContext/Dialect/ISqlDialect.cs:136-143` | Кумулятивный док-пробел (ср. Z2/GLI1/AR3/CHARR3): классовая `<summary>` `ClickHouseFunctions` пополнена `startsWith`/`endsWith`/`hasSubstr`, но `<summary>` свойства `SqlFunctions.ClickHouse` и гейта `SupportsArrayFunctions` перечисляют array-функции без них | Дополнить оба перечня при закрытии Шага 5 (либо тем же изменением, что CHARP1) |
+| CHARP3 | P2 (трекинг) | `Query/SqlFunctions.ClickHouse.cs:451,454,462`; `PublicAPI.*.txt` отсутствуют | 3 новых члена публичной поверхности не трекаются (`PublicApiAnalyzers` не подключён, Шаг 5 открыт). **Продолжение RD2/AR1/ASF1/SQ1/CHARR1/HOAF1/CHQA4, не новая находка**; новых abstract-членов `ISqlDialect` нет, разрыва для внешних реализаторов не создаётся | При заморозке внести три подписи `ClickHouseFunctions.starts_with<T>`/`ends_with<T>`/`has_substr<T>` в `PublicAPI.Unshipped.txt` (точный текст — из анализатора) |
+
+ℹ️ **Наблюдения (фикс не требуется):**
+
+- **Переиспользование `SupportsArrayFunctions` вместо per-function гейта — обосновано (DC-критерий).** Три метода — то же семейство «array-функции над нативным `Array(T)`», что `length`/`has`/`has_any`/`has_all`/`arraySort`; отдельный `Supports*` на каждый член был бы «зонтиком без доказательства невыразимости» (ASF1), тем более что имена совпадают с ClickHouse-токенами и `Make*`-хук не нужен (результат `UInt8`→`bool`, каст не добавляется; `MakeArrayFunction` не расширяется). Аналогия DC7 (один объект принудительно уравнивает co-support) здесь безвредна: array-тип есть только у ClickHouse, и он поддерживает все три предиката.
+- **Версионная оговорка.** Перегрузки этих функций над `Array(T)` появились в относительно свежих ClickHouse; модель гейтов диалектная, не версионная, поэтому поддержка старых серверов — внешняя по отношению к реестру (для проверенного 25.8 не блокер).
+- **Post-check (`rg` по `*Dialect.cs`) пуст — и это ожидаемо.** `rg "startsWith|endsWith|hasSubstr" src/nextorm.*/*Dialect.cs` — **0 совпадений**; единственный диалектный маркер — `ClickHouseDialect.SupportsArrayFunctions => true` (`ClickHouseDialect.cs:52`). Маппинг имён живёт в общем `ArraySqlTranslator` (CH-only ветка), как у `hasAny`/`hasAll`/`arraySort`; «одиночность» диалекта выражена флагом, а не токеном. Матрице не противоречит.
+- **`ends_with` без оговорки о гейте.** `<summary>` `starts_with`/`has_substr` несут «Requires a provider that supports array functions (see `SupportsArrayFunctions`)», у `ends_with` — нет; стилевая неоднородность внутри одного семейства, не P-нарушение.
+
+**Проверка (22.09.2026).** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors** (этот проход); `rg "startsWith|endsWith|hasSubstr" src/nextorm.*/*Dialect.cs` — **0** (объяснено выше); `find -name 'PublicAPI*.txt'` — **0** (подтверждает CHARP3); XML-`<summary>` у всех 3 методов; новых публичных типов нет — Приложение A (45) без изменений. Тесты (по отчёту автора изменения): clickhouse unit **221/221**, postgres **269/269**, контейнерная интеграция `ClickHouseIntegrationTests` **72/72**, полный прогон **2318 passed / 30 skipped / 0 failed**, покрытие **line 85.4% / branch 74.4%** (базис не изменился). Содержательная кодовая сторона — `code-smells-review.md`, точечный аудит 22.09.2026.
+
+### Аудит 22.09.2026 — ClickHouse скалярная поверхность над `Tuple` (`tuple`/`tupleElement`), срез 5 `todo_clickhouse_arrays.md` (uncommitted worktree; P0 — нет; P1 — нет; P2 — 2)
+
+**Область (uncommitted worktree, branch `1.0.4-alpha`, HEAD `265a83d`).** Публичная поверхность аддитивна; переименований нет. Новые члены:
+
+- `ISqlDialect.SupportsTupleFunctions` — **DIM** `=> false` (`src/nextorm.core/DataContext/Dialect/ISqlDialect.cs:155-162`);
+- `SqlDialectBase.SupportsTupleFunctions` — `public virtual` (`src/nextorm.core/DataContext/Dialect/SqlDialectBase.cs:36`);
+- `ClickHouseDialect.SupportsTupleFunctions` — `public override` + XML-`<summary>` (`src/nextorm.clickhouse/ClickHouseDialect.cs:61-66`);
+- `internal static TupleSqlTranslator` (`src/nextorm.core/Visitors/TupleSqlTranslator.cs`) и его точки вызова (`BaseExpressionVisitor.VisitMethodCall:118`, `MemberTranslator.TryTranslate:86`) — `internal`, внешней поверхности не дают; новых публичных **DSL-методов** и **типов** нет → **Приложение A (45) без изменений**.
+
+**Уточнение tier-а.** «Tier (a) — без нового публичного API» верно только для DSL/типов: новый публичный член поверхности всё же один — capability-флаг (DIM + `virtual` + `override`). Он аддитивен и за счёт DIM **source- и binary-совместим** для внешних реализаторов `ISqlDialect` (в отличие от abstract-соседей).
+
+**CS1591/XML-doc.** XML-`<summary>` есть у DIM (`:155-161`) и у ClickHouse-override (`:61-65`); `SqlDialectBase`-override без доки — ровно как соседние `SupportsArrays`/`SupportsArrayFunctions` (`SqlDialectBase.cs:34-38`), на `CS1591` (в `<NoWarn>` 7 библиотечных `.csproj`) не влияет. Новых публичных типов нет → Приложение A (45) без изменений. Покрытие публичных **свойств** — арифметически **+3** члена (интерфейс + база + override), из них с докой **+2**; публичных методов **+0** (переизмерение рефлексией в этом проходе не выполнялось).
+
+**Именование — P0/P1 по именам нет.** `SupportsTupleFunctions` следует семейству `SupportsArrays`/`SupportsArrayFunctions`/`SupportsHigherOrderArrayFunctions` (`bool` + `<summary>`), BCL-конфликтов нет; `Tuple.Create`/`System.Tuple<>.ItemN` — существующие BCL-имена, которые **транслируются**, а не добавляются в поверхность.
+
+| # | Ур. | Место | Проблема | Рекомендация |
+|---|-----|-------|----------|--------------|
+| CHTUP1 | P2 (трекинг) | `ISqlDialect.cs:155-162`; `SqlDialectBase.cs:36`; `ClickHouseDialect.cs:61-66`; `PublicAPI.*.txt` отсутствуют | Новый публичный член (DIM + `virtual` + `override`) не трекается (`PublicApiAnalyzers` не подключён, Шаг 5 открыт). **Продолжение RD2/AR1/ASF1/SQ1/CHARR1/HOAF1/CHQA4/CHARP3, не новая проблема**; DIM-форма разрыва для внешних реализаторов не создаёт | При заморозке внести `ISqlDialect.SupportsTupleFunctions` (DIM), `SqlDialectBase.SupportsTupleFunctions`, `ClickHouseDialect.SupportsTupleFunctions` в `PublicAPI.Unshipped.txt` (точный текст — из анализатора) |
+| CHTUP2 ✅ закрыта 22.09.2026 | P2 (док) | `docs/guide/11-scalar-functions.md:521-522` (+`docs/ru/guide/11-scalar-functions.md:528-529`); `docs/guide/provider-specific/clickhouse.md` (+RU); `docs/providers/clickhouse.md` (+RU); `docs/advanced/api-reference.md` (+RU); `docs/advanced/limitations.md` (+RU); `docs/specs/roadmap/sql-capabilities-gap-analysis.md:173-175` | Новая скалярная поверхность (`Tuple.Create`→`tuple(...)`, `.ItemN`→`tupleElement(t, n)`) не описана в EN+RU, хотя тест-план среза (`todo_clickhouse_arrays.md`) перечисляет эти файлы (правило AGENTS.md «`docs/**` **и** `docs/ru/**`»). В guide/11 (EN+RU) есть только материализация `Tuple(...)` row reader-ом, про трансляцию конструктора/элемента — нет; `untuple` не записан как ограничение; gap-analysis §4 п.4 держит `tuple`/`tupleElement` в «Still open». Противоречия с реализацией нет — только пропуск (класс AR3/CHARR3/HOAF3/CHARP1) | Дополнить guide/11, provider-specific/clickhouse, providers/clickhouse, api-reference (скалярная поверхность + гейт `SupportsTupleFunctions`), limitations (`untuple`, меняет набор колонок) и gap-analysis §4 п.4 EN+RU одним изменением |
+
+ℹ️ **Наблюдения (фикс не требуется):**
+
+- **Гейт `SupportsTupleFunctions` вместо `SupportsArrayFunctions` — обоснован (DC-критерий).** `Array(T)` и `Tuple(...)` — разные семейства типов: ClickHouse поддерживает оба, PostgreSQL — массивы ([`SupportsArrays`](xref:NextORM.Core.ISqlDialect.SupportsArrays) `=> true`), но скалярной tuple-поверхности не имеет; переиспользование array-флага принудительно связало бы co-support и сломало будущий «array без tuple». Отдельный семейный флаг (конструктор + доступ к элементу) не является «зонтиком без доказательства невыразимости» (ASF1): обе формы — нативные функции `tuple`/`tupleElement` одного типа.
+- **DIM vs abstract.** `SupportsTupleFunctions` оформлен DIM, тогда как ближайшие array-соседи (`SupportsArrays`, `SupportsArrayFunctions`, `SupportsHigherOrderArrayFunctions`, `SupportsArrayJoin` — `ISqlDialect.cs:135/144/153/175`) **abstract**. В файле и раньше сосуществовали обе формы (`StringSplit`, `TopKAggregates` — DIM), а DIM безопаснее для внешних реализаторов; расхождение с соседями — вопрос единой политики Шага 5, не P-нарушение. Полезно зафиксировать выбор при заморозке.
+- **`new Tuple<...>(a, b)` как проекция не тронут** (`NewExpression`, многоколоночная проекция по `TypeFacts.IsSingleColumnProjection`); но `.ItemN` на **вложенном** `new Tuple<...>` даёт битый SQL — это кодовая сторона, `code-smells-review.md`, Находка 65.
+- **Арность.** `TypeFacts.IsTupleType` по-прежнему распознаёт `System.Tuple` 1..7 (`Visitors/TypeFacts.cs:67-75`); `Tuple.Create` арности 8 отрендерит `tuple(...)`, но не материализуется — пре-существующее ограничение среза 1, не новое.
+- **`untuple` вне объёма** (возвращает несколько колонок, а не скаляр) — решение среза; требует только записи в `limitations` (CHTUP2).
+
+**Проверка (22.09.2026).** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors** (этот проход); `dotnet test tests/nextorm.clickhouse.tests -c Release --no-build` — **226/226**, `tests/nextorm.postgres.tests` — **271/271** (прогнано в этом проходе); `rg "tupleElement|SupportsTupleFunctions" src/nextorm.*/*Dialect.cs` — только `ClickHouseDialect.cs:64,66` (объяснено в `code-smells-review.md`); `find -name 'PublicAPI*.txt'` — **0** (подтверждает CHTUP1); XML-`<summary>` у DIM и override; новых публичных типов нет — Приложение A (45) без изменений. Тесты (по отчёту автора изменения): контейнерная интеграция `ClickHouseIntegrationTests` **74/74**, полный прогон **2327 passed / 30 skipped / 0 failed**, покрытие **line 85.4% / branch 74.5%** (baseline 85.4%/74.4%). Содержательная кодовая сторона — `code-smells-review.md`, точечный аудит 22.09.2026.
+
+### Аудит 22.09.2026 — ClickHouse array-возвращающие JSON-функции `JSONExtractKeys`/`JSONExtractKeysAndValues`/`JSONExtractArrayRaw`, срез 6 `todo_clickhouse_arrays.md` (uncommitted worktree; P0 — нет; P1 — нет; P2 — 3)
+
+**Область (uncommitted worktree, branch `1.0.4-alpha`).** Публичная поверхность аддитивна; переименований нет. Новые члены — 6 методов `ClickHouseFunctions` (`src/nextorm.core/Query/SqlFunctions.ClickHouse.cs:194-224`):
+
+- `string[] json_extract_keys(string? json)` (`:200`) → `JSONExtractKeys(json)`;
+- `string[] json_extract_keys(string? json, string? path)` (`:203`) → `JSONExtractKeys(json, path)`;
+- `string[] json_extract_array_raw(string? json)` (`:210`) → `JSONExtractArrayRaw(json)`;
+- `string[] json_extract_array_raw(string? json, string? path)` (`:213`) → `JSONExtractArrayRaw(json, path)`;
+- `Tuple<string, T>[] json_extract_keys_and_values<T>(string? json)` (`:221`) → `JSONExtractKeysAndValues(json, value_type)`;
+- `Tuple<string, T>[] json_extract_keys_and_values<T>(string? json, string? path)` (`:224`) → `JSONExtractKeysAndValues(json, path, value_type)`.
+
+Трансляция и маппинг — `internal` (`Visitors/JsonExtractSqlTranslator.cs:44-52`, `src/nextorm.clickhouse/ClickHouseDialect.cs:198-200`), внешней поверхности не дают; новых публичных **типов**, полей и членов `ISqlDialect` нет (переиспользуется `SupportsJsonExtract`/`MakeJsonExtract`) → **Приложение A (45) без изменений**.
+
+**CS1591/XML-doc.** XML-`<summary>` есть у всех 6 новых методов (у 2-аргументных — `<see cref>` на 1-аргументный sibling); `<typeparam name="T">` у generic-пары отсутствует — как у соседних generic-членов, на `CS1591` (в `<NoWarn>` 7 библиотечных `.csproj`) не влияет. Покрытие публичных методов — **+6** к зафиксированному **230/1109** → **236/1115** (арифметически по диффу; переизмерение рефлексией в этом проходе не выполнялось).
+
+**Именование — P0/P1 по именам нет.** `json_extract_keys`/`json_extract_array_raw`/`json_extract_keys_and_values` — snake_case-зеркало ClickHouse-токенов `JSONExtractKeys`/`JSONExtractArrayRaw`/`JSONExtractKeysAndValues`, ровно как `json_extract_string`→`JSONExtractString`/`json_extract_raw`→`JSONExtractRaw` (J-раздел) и `has_any`→`hasAny`; 1-/2-аргументные перегрузки отражают необязательный `path` ClickHouse (у остальных `json_extract_*` `path` обязателен — там нативно нет 1-аргументной формы). BCL-конфликтов нет. Возвратные типы — `string[]`/`Tuple<string,T>[]` — согласованы с `json_all_paths -> string[]`, `group_array<T> -> T[]` и с формой `System.Tuple`, которую отдаёт драйвер и распознаёт `TypeFacts.IsTupleType`. `T` обязан задаваться явно (нет параметра типа `T`) — это осознанно и отражено в XML. Единственный содержательный вопрос — nullable `T` (CHJS3, кодовая сторона — `code-smells-review.md`, Находка 66).
+
+**Переиспользование `SupportsJsonExtract` вместо нового флага — обосновано.** Три функции — то же семейство JSON-as-text из текстовой колонки, что `JSONExtract*`/`visitParamExtract*`: `SupportsJsonExtract => true` выставляет только ClickHouse, поэтому отдельный флаг был бы истинен ровно там же и добавил бы лишний публичный контракт к Шагу 5 (source-breaking для внешних реализаторов) без функционального эффекта — тот же вывод, что для `visitParamExtract*` и `startsWith`/`hasSubstr`.
+
+| # | Ур. | Место | Проблема | Рекомендация |
+|---|-----|-------|----------|--------------|
+| CHJS1 | P2 (трекинг) | `Query/SqlFunctions.ClickHouse.cs:200,203,210,213,221,224`; `PublicAPI.*.txt` отсутствуют | 6 новых членов публичной поверхности не трекаются (`PublicApiAnalyzers` не подключён, Шаг 5 открыт). **Продолжение RD2/AR1/ASF1/SQ1/CHARR1/HOAF1/CHQA4/CHARP3/CHTUP1, не новая проблема**; новых abstract-членов `ISqlDialect` нет | При заморозке внести шесть подписей `ClickHouseFunctions.json_extract_keys`/`json_extract_array_raw`/`json_extract_keys_and_values<T>` в `PublicAPI.Unshipped.txt` (точный текст — из анализатора) |
+| CHJS2 ✅ закрыта 22.09.2026 | P2 (док) | `docs/guide/18-json.md:22-25,47,301` (+`docs/ru/guide/18-json.md:22-25,47,304`); `docs/guide/provider-specific/clickhouse.md:168-169` (+RU); `docs/providers/clickhouse.md:57-59,173` (+RU `:58-60,176`); `docs/advanced/api-reference.md:63` (+RU `:63`); `docs/specs/roadmap/sql-capabilities-gap-analysis.md:175-177` | Три новых метода не добавлены в доки EN+RU, хотя тест-план среза (`todo_clickhouse_arrays.md`) перечисляет эти файлы (правило AGENTS.md «`docs/**` **и** `docs/ru/**`»). Список ClickHouse-функций `guide/18-json.md:22-25` заканчивается `JSONType`; gap-analysis §4 п.4 по-прежнему держит `JSONExtractKeys`/`JSONExtractKeysAndValues`/`JSONExtractArrayRaw` в «Still open on this item». Противоречия с реализацией нет — только пропуск (класс AR3/CHARR3/HOAF3/CHARP1/CHTUP2) | Дополнить списки JSON-функций (`JSONExtractKeys`/`JSONExtractKeysAndValues`/`JSONExtractArrayRaw`; CLR `json_extract_keys`/`json_extract_array_raw`/`json_extract_keys_and_values<T>`; результаты `string[]`/`Tuple<string,T>[]`; гейт `SupportsJsonExtract`) в guide/18, provider-specific/clickhouse, providers/clickhouse и api-reference EN+RU и снять три функции из «Still open» в gap-analysis одним изменением |
+| CHJS3 | P2 (контракт) | `Query/SqlFunctions.ClickHouse.cs:221,224`; `Visitors/JsonExtractSqlTranslator.cs:130` | `T` не ограничен, поэтому `json_extract_keys_and_values<int?>` допустим, но `value_type` разворачивается до `'Int32'`, а объявленный элемент остаётся `Tuple<string,int?>` → потенциальный `InvalidCastException` на материализации (подробно — `code-smells-review.md`, Находка 66). XML-док не оговаривает допустимость nullable `T` | Зафиксировать контракт: либо отклонять nullable `T` с понятным исключением, либо рендерить nullable ClickHouse-тип; в XML-`<typeparam name="T">` описать ожидаемый non-nullable ClickHouse-тип и добавить тест на `int?` |
+
+ℹ️ **Наблюдения (фикс не требуется):**
+
+- **`Tuple<string,T>[]` — верная форма.** `Array(Tuple(String, value_type))` материализуется `System.Tuple<,>`-массивом (драйвер ClickHouse.Client; `TypeFacts.IsTupleType` — `Visitors/TypeFacts.cs:67-75`), ветка `SelectExpression.GetDataRecordMethod` для `T[]` — `GetValue` (`:117-123`), как у `group_array`/`json_all_paths`. `ValueTuple` намеренно не используется.
+- **Литерал `value_type` рендерится в core через `Dialect.MakeTypeName`.** Провайдерное знание (имя типа) остаётся в диалекте; жёсткое `'` — общий строковый литерал SQL, риск экранирования отсутствует (имя типа из `System.Type`). Если у второго диалекта появится иная форма `value_type`, литерал следует увести в `MakeJsonExtract`/новый хук — сейчас преждевременно (см. `code-smells-review.md`, ℹ️).
+- **`MakeTypeName` для `value_type` наследует пре-существующие пробелы диалекта.** `Guid`→`"Guid"` (у ClickHouse `UUID`), `sbyte`→`"SByte"`, `char`→`"Char"` — та же функция используется и в кастах (`ClickHouseDialect.cs:595`), т.е. это не новое; `bool`→`"Boolean"` требует проверки алиаса. Кандидат в тест при расширении набора `T`.
+- **Тестовое покрытие среза.** CH SQL-gen покрывает все 6 форм (в т.ч. `Int32`/`Int64` для `value_type`), postgres rejection — 3 формы, контейнерная интеграция — 6 форм на реальном ClickHouse 25.8; nullable `T` и нечисловые `T` (`string`/`bool`) не покрыты — см. CHJS3.
+- **Шаг 5 не двигается:** `PublicAPI.*.txt` — **0** файлов, `PublicApiAnalyzers`/ApiCompat/API-approval не настроены; новые подписи — в CHJS1.
+
+**Проверка (22.09.2026).** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors** (этот проход); `rg "JSONExtractKeys|JSONExtractArrayRaw|json_extract_keys" src/nextorm.*/*Dialect.cs` — только `ClickHouseDialect.cs:198-200` (объяснено в `code-smells-review.md`, post-check); `find -name 'PublicAPI*.txt'` — **0** (подтверждает CHJS1); XML-`<summary>` у всех 6 методов; новых публичных типов нет — Приложение A (45) без изменений. Тесты (по отчёту автора изменения): clickhouse unit **228/228**, postgres **271/271**, контейнерная интеграция `ClickHouseIntegrationTests` **75/75**, полный прогон **2330 passed / 30 skipped / 0 failed**, покрытие **line 85.4% / branch 74.5%** (baseline 85.4%/74.5%). Содержательная кодовая сторона — `code-smells-review.md`, Находка 66.
+
+### Аудит 22.09.2026 — ClickHouse иерархические dictionary-функции `dictGetHierarchy`/`dictGetChildren`/`dictIsIn`, срез 7 `todo_clickhouse_arrays.md` (uncommitted worktree; P0 — нет; P1 — нет; P2 — 3)
+
+**Область (uncommitted worktree).** Публичная поверхность аддитивна; переименований нет. Новые члены — 3 метода `ClickHouseFunctions` (`src/nextorm.core/Query/SqlFunctions.ClickHouse.cs`):
+
+- `ulong[] dict_get_hierarchy<TKey>(string? dict, TKey? id)` (`:316`) → `dictGetHierarchy('dict', key)`;
+- `ulong[] dict_get_children<TKey>(string? dict, TKey? id)` (`:323`) → `dictGetChildren('dict', key)`;
+- `bool dict_is_in<TKey>(string? dict, TKey? childId, TKey? ancestorId)` (`:331`) → `dictIsIn('dict', child, ancestor)`.
+
+Трансляция — 3 ветки `internal` `DictionarySqlTranslator.TryTranslate` (`Visitors/DictionarySqlTranslator.cs:31-39`, `EmitFunction` — `:45-66`); маппинг имён — `ClickHouseDialect.MakeDictionaryFunction` +3 (`src/nextorm.clickhouse/ClickHouseDialect.cs:242-244`). Новых публичных **типов** и членов `ISqlDialect` нет — гейт прежний `SupportsDictionaries` (D-раздел), нового флага не вводится → **Приложение A (45) без изменений**.
+
+**CS1591/XML-doc.** XML-`<summary>` есть у всех 3 новых методов (с `<see cref="ISqlDialect.SupportsDictionaries"/>`); `<typeparam name="TKey">` отсутствует — как у соседних `dict_has<TKey>`/`dict_get<TValue,TKey>`, на `CS1591` (в `<NoWarn>` 7 библиотечных `.csproj`) не влияет. Покрытие публичных методов — **+3** к зафиксированному **236/1115** → **239/1118** (арифметически по диффу; переизмерение рефлексией в этом проходе не выполнялось).
+
+**Именование — P0/P1 по именам нет.** `dict_get_hierarchy`/`dict_get_children`/`dict_is_in` — snake_case-зеркало ClickHouse-токенов `dictGetHierarchy`/`dictGetChildren`/`dictIsIn`, ровно как `dict_get`→`dictGet`, `dict_get_or_default`→`dictGetOrDefault`, `dict_has`→`dictHas` и `json_extract_keys`→`JSONExtractKeys`; BCL-конфликтов нет. Возвратные типы `ulong[]`/`bool` соответствуют нативным `Array(UInt64)`/`UInt8` (проверено автором на 25.8) и существующей поверхности: `ulong` — уже первоклассный тип проекции (row reader `SelectExpression.cs:113-115`; интеграционные `UInt64Columns_ShouldMaterializeAsUlong`/`UInt64Projection_ShouldMaterializeValueAboveInt64Max`), `Array(T)` → `T[]` (`json_all_paths`/`group_array`), `UInt8`→`bool` (`dict_has`/`JSONHas`). Арность (`==2`/`==3`) и порядок аргументов `child, ancestor` совпадают с ClickHouse.
+
+**Переиспользование `SupportsDictionaries` вместо нового флага — обосновано (DC-критерий).** Три функции — то же семейство hierarchical dictionaries, что `dictGet*`/`dictHas`: `SupportsDictionaries => true` выставляет только ClickHouse, отдельный флаг был бы истинен ровно там же и добавил бы лишний публичный контракт к Шагу 5; гейт и `MakeDictionaryFunction`-хук уже существуют, транслятор — один и тот же.
+
+| # | Ур. | Место | Проблема | Рекомендация |
+|---|-----|-------|----------|--------------|
+| CHDH1 | P2 (трекинг) | `Query/SqlFunctions.ClickHouse.cs:316,323,331`; `PublicAPI.*.txt` отсутствуют | 3 новых члена публичной поверхности не трекаются (`PublicApiAnalyzers` не подключён, Шаг 5 открыт). **Продолжение D1/RD2/…/CHJS1/CHTUP1, не новая проблема** | При заморозке внести три подписи `ClickHouseFunctions.dict_get_hierarchy<TKey>`/`dict_get_children<TKey>`/`dict_is_in<TKey>` в `PublicAPI.Unshipped.txt` (точный текст — из анализатора) |
+| CHDH2 | P2 (док) | `docs/guide/11-scalar-functions.md:30-31` (+`docs/ru/guide/11-scalar-functions.md:33`); `docs/guide/provider-specific/clickhouse.md:178` (+RU `:180`); `docs/providers/clickhouse.md:69-70,178` (+RU `:69-70,180`); `docs/advanced/api-reference.md:63` (+RU `:63`); `docs/specs/roadmap/sql-capabilities-gap-analysis.md:179` | Три новых метода не добавлены в доки EN+RU, хотя тест-план среза (`todo_clickhouse_arrays.md`, §«Срез 7») перечисляет эти файлы (правило AGENTS.md «`docs/**` **и** `docs/ru/**`»). Списки dictionary-функций в guide/11, provider-specific/clickhouse, providers/clickhouse и api-reference заканчиваются `dict_get`/`dict_get_or_default`/`dict_has`; gap-analysis §4 п.4 всё ещё держит `dictGetHierarchy`/`dictGetChildren`/`dictIsIn` в «Still open on this item». Противоречия с реализацией нет — только пропуск (класс AR3/CHARR3/HOAF3/CHARP1/CHTUP2/CHJS2) | **ИСПРАВЛЕНА 22.09.2026:** списки дополнены (`dict_get_hierarchy`/`dict_get_children` → `ulong[]`, `dict_is_in` → `bool`) в guide/11, provider-specific/clickhouse, providers/clickhouse, api-reference и `capability-matrix.md` EN+RU; три функции сняты из «Still open» в gap-analysis; `docfx` — 0 errors |
+| CHDH3 | P2 (док, кумулятивный) | `DataContext/Dialect/ISqlDialect.cs:486-491`; `src/nextorm.clickhouse/ClickHouseDialect.cs:231` | XML-`<summary>` гейта `SupportsDictionaries` и его ClickHouse-override перечисляют только `dictGet`/`dictGetOrDefault`/`dictHas` — после этого среза семейство 6 функций. Пре-существующее накопление (ср. D3/CHARP2), не регресс среза, на `CS1591`/сборку не влияет | **ИСПРАВЛЕНА 22.09.2026:** оба `<summary>` перечисляют `dictGet`/`dictGetOrDefault`/`dictHas`/`dictGetHierarchy`/`dictGetChildren`/`dictIsIn`; build `0/0` |
+
+ℹ️ **Наблюдения (фикс не требуется):**
+
+- **`ulong[]` для `Array(UInt64)` — верная форма, но без интеграционной материализации.** `dictGetHierarchy`/`dictGetChildren` всегда возвращают `Array(UInt64)` независимо от типа ключа (проверено автором `clickhouse-local` 25.8); `ClickHouse.Driver` 1.4.0 отдаёт `Array(UInt64)` как `ulong[]` (элементный framework-тип — `ulong`, тот же, что у скалярного `UInt64`), row reader идёт по общей array-ветке `GetValue`+cast (`SelectExpression.cs:117-123`). Интеграционный тест отсутствует намеренно: нужен `CREATE DICTIONARY ... HIERARCHICAL` (у остальных `dictGet*` интеграционных тестов тоже нет) — пре-существующее ограничение D-раздела, не регресс среза. При расширении на `dict_get`-подобный integration harness — добавить `Array(UInt64)`-проекцию.
+- **`bool` для `dictIsIn` — тот же путь, что `dictHas`.** Нативный `UInt8` → `bool` (`SelectExpression.GetBooleanMI`), подтверждено существующим `dict_has`/`JSONHas`; отдельного риска нет.
+- **Тестовое покрытие среза.** CH SQL-gen `HierarchicalDictFunctions_ShouldUseClickHouseNames` (`tests/nextorm.clickhouse.tests/SqlGenerationTests.cs:1173`) — 3 формы; маппинг имён — `ClickHouseDialectTests.MakeDictionaryFunction_ShouldMapNames` (`:249`, +3 ассерта); rejection — postgres `DictFunctions_ShouldThrowBecausePostgresHasNoDictionaries` (`tests/nextorm.postgres.tests/SqlGenerationTests.cs:1865`, +3 записи). Кодовая сторона о втором SQL-gen тесте — `code-smells-review.md`, Находка 67.
+
+**Проверка (22.09.2026).** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors** (этот проход); `find -name 'PublicAPI*.txt'` — **0** (подтверждает CHDH1); XML-`<summary>` у всех 3 методов; новых публичных типов нет — Приложение A (45) без изменений; изменённые `.cs` — CRLF. Тесты (по отчёту автора изменения): полный прогон **2333 passed / 30 skipped / 0 failed**, покрытие **line 85.4% / branch 74.5%**. Содержательная кодовая сторона — `code-smells-review.md`, точечный аудит 22.09.2026.
+
+### Аудит 22.09.2026 — ClickHouse `SEMI`/`ANTI`/`PASTE` joins (uncommitted worktree; P0 — нет; P1 — 1 доковый; P2 — 3)
+
+**Область (uncommitted worktree).** Публичная поверхность аддитивна; переименований нет. Новые члены:
+
+- `JoinType.Semi = 8`/`Anti = 9`/`Paste = 10` — `src/nextorm.core/Expressions/JoinExpression.cs:28,33,39` (XML-`<summary>` у каждого, включая `<see cref="JoinStrictness"/>` в `Semi`/`Anti`);
+- `ISqlDialect.SupportsSemiAntiJoin`/`SupportsPasteJoin` — `DataContext/Dialect/ISqlDialect.cs:71,78` (**default interface members** `=> false`, XML-`<summary>`+`<see cref="JoinType.Semi"/>`/`Paste` есть);
+- `SqlDialectBase.SupportsSemiAntiJoin`/`SupportsPasteJoin` — `DataContext/Dialect/SqlDialectBase.cs:30-31` (`public virtual => false`; **XML-`<summary>` отсутствует**);
+- override ClickHouse — `src/nextorm.clickhouse/ClickHouseDialect.cs:48,51` (XML-`<summary>` есть); `ClickHouseDialect.MakeJoinKeyword` (`:92`) **расширен** рендером `left semi join`/`left anti join`/`paste join` (существующий член, арность не менялась);
+- DSL `EntityBuilder<TEntity>.SemiJoin`/`AntiJoin`/`PasteJoin` + 3 `QueryCommand`-перегрузки — `Builders/EntityBuilder.cs:981,989,996,999,1002,1005` (XML-`<summary>`/`<inheritdoc cref>` есть); non-generic `EntityBuilder` — 6 методов `:1506,1509,1515,1548,1551,1554`;
+- 18 `new`-методов на `JoinedEntityBuilder<T1..T7>` (по 3 на арность; терминал `T8` не расширяется) — `Builders/Joins/JoinedEntityBuilder.cs:36,39,42,122,125,128,188,191,194,254,257,260,320,323,326,386,389,392` (у всех XML-`<summary>`).
+
+**CS1591/XML-doc.** XML-комментарий есть у 3 enum-членов, 2 членов `ISqlDialect` (DIM), 2 override'ов ClickHouse и всех 30 DSL-методов (30-й — `<inheritdoc cref>`); **без XML остаются только 2 новых `public virtual`-члена `SqlDialectBase`** (`:30-31`) — `CS1591` скрыт `<NoWarn>` в 7 библиотечных `.csproj` (Шаг 5), сборка 0/0 дефект не покажет. Новых публичных **типов** нет → **Приложение A (45) без изменений**. Общее число публичных типов не менялось; покрытие: методы **+30** к **239/1118** → **269/1148**; свойства **+6** (4 документированы → **101/353**); члены enum **+3** документированы (если считать их полями — **21/87**) — арифметически по диффу, переизмерение рефлексией в этом проходе не выполнялось.
+
+**Именование — P0/P1 по именам нет.** `SemiJoin`/`AntiJoin`/`PasteJoin` повторяют существующий паттерн `LeftJoin`/`RightJoin`/`FullJoin`/`CrossJoin`/`CrossApply`/`OuterApply` (`EntityBuilder.cs:1487-1500`); `SupportsSemiAntiJoin`/`SupportsPasteJoin` — `Supports*`-пару `SupportsGlobalJoin`/`SupportsJoinStrictness`; `JoinType.Semi`/`Anti`/`Paste` — официальные токены ClickHouse (`LEFT SEMI/ANTI JOIN`, `PASTE JOIN`), PascalCase, без BCL-конфликтов (нет `System.*.Semi`/`Paste`). Возвратные формы согласованы с семантикой: SEMI/ANTI не добавляют правых колонок (возврат `EntityBuilder<TEntity>`/`JoinedEntityBuilder<T1..Tn>` с той же арностью, как и левая сторона), PASTE добавляет одну (`JoinedEntityBuilder<TEntity,TJoinEntity>`) — ошибка проектирования вида «SEMI отдал правые колонки» невозможна на уровне типов.
+
+| # | Ур. | Место | Проблема | Рекомендация |
+|---|-----|-------|----------|--------------|
+| CHJ1 ✅ закрыта 22.09.2026 | **P1 (док)** | `docs/providers/clickhouse.md:108`; `docs/ru/providers/clickhouse.md:109`; `docs/guide/03-joins.md:430` (+RU `:436`); `docs/advanced/api-reference.md:86` (+RU `:86`); `docs/specs/roadmap/sql-capabilities-gap-analysis.md:209-210`; `docs/specs/roadmap/todo_clickhouse_join_strictness.md:5` | **Прозаическая документация прямо противоречит реализации.** EN: «`ASOF` needs one equi-join column plus a final inequality. **`SEMI`/`ANTI`/`PASTE` are not supported.**» и RU-зеркало «`SEMI`/`ANTI`/`PASTE` **не поддерживаются**» — после фичи ClickHouse их поддерживает через `SemiJoin`/`AntiJoin`/`PasteJoin`. Также: `JoinType` в guide/03-joins и в api-reference перечислен только до `Cross`/`OuterApply` (нет `Semi`/`Anti`/`Paste` и `FullCross`, если он уже есть в enum); gap-analysis §4 п.8 всё ещё «not implemented»; `todo_clickhouse_join_strictness.md` в статусе «заблокировано» при том, что срез закрыт. AGENTS.md требует править `docs/**` **и** `docs/ru/**`; класс — как CHARR2/AR3 (док опровергает код) | **Обязательно к исправлению в том же изменении:** в `providers/clickhouse.md` (+RU) заменить «not supported» на описание `SemiJoin`/`AntiJoin`/`PasteJoin` (левые колонки, SEMI не размножает строки, PASTE — по позиции/без `ON`); дополнить списки `JoinType` в guide/03-joins EN+RU и api-reference EN+RU (`Semi`/`Anti`/`Paste`); закрыть п.8 в gap-analysis; перевести `todo_clickhouse_join_strictness.md` в «Done». Маршрут — `nextorm-design-engineer` |
+| CHJ2 | P2 (трекинг) | `ISqlDialect.cs:71,78`; `SqlDialectBase.cs:30-31`; `ClickHouseDialect.cs:48,51`; `JoinExpression.cs:28,33,39`; `EntityBuilder.cs:981…1005,1506…1554`; `JoinedEntityBuilder.cs:36…392`; `PublicAPI.*.txt` отсутствуют | Новые 30 методов / 6 свойств / 3 члена enum не трекаются (`PublicApiAnalyzers` не подключён, Шаг 5 открыт). **Продолжение JS1/GG1/CHDH1, не новая проблема.** DIM-флаги не создают source-разрыва, но всё равно попадут в `PublicAPI.Unshipped.txt`; `MakeJoinKeyword` арность не менял | При заморозке внести флаги (`SupportsSemiAntiJoin.get`/`SupportsPasteJoin.get`), override'ы базы/ClickHouse, 3 члена `JoinType` и 30 DSL-методов (точный текст — из анализатора) |
+| CHJ3 ✅ закрыта 22.09.2026 | P2 (док XML) | `ISqlDialect.cs:79-85`; `src/nextorm.clickhouse/ClickHouseDialect.cs:87-91`; `SqlDialectBase.cs:30-31` | XML-`<summary>` `MakeJoinKeyword` (интерфейс) утверждает «Renders the join keyword for `joinType`…», но не упоминает, что `joinType` теперь может быть `Semi`/`Anti`/`Paste` и что для них есть отдельные гейты; summary ClickHouse-оверрайда перечисляет только `[global] [inner|left|right|full|cross] [any|all|asof] join` (без `left semi`/`left anti`/`paste`). У 2 новых `virtual`-членов `SqlDialectBase` XML нет вовсе. На `CS1591` (в `<NoWarn>`) и сборку не влияет | Дополнить `<summary>` `MakeJoinKeyword` (интерфейс+ClickHouse) новыми видами и гейтами `SupportsSemiAntiJoin`/`SupportsPasteJoin`; добавить `<summary>` двум `SqlDialectBase`-членам при закрытии Шага 5 (кумулятивно, ср. CHDH3/CHARR2) |
+| CHJ4 | P2 (политика совместимости) | `ISqlDialect.cs:71,78` vs `:59,64`; `SqlDialectBase.cs:30-31` | Новые флаги — **default interface members** (`=> false`), тогда как соседние `SupportsJoinStrictness` (`:59`) и `SupportsGlobalJoin` (`:64`) — абстрактные; в одном контракте две политики совместимости (тот же класс, что JS2/AR4/SQ-DIM). Дополнительно `SqlDialectBase` повторяет тот же `=> false`, что DIM, — для in-repo диалектов DIM избыточен (перекрыт `virtual`-override'ом), но нужен внешним реализаторам `ISqlDialect` без базы | **Принято с обоснованием:** DIM снимает source-разрыв для внешних реализаторов `ISqlDialect` — направление, рекомендованное AR4/SQ-DIM. Зафиксировать решение на Шаге 5: либо унифицировать все новые `Supports*`-флаги как DIM `=> false`, либо явно оставить `SupportsJoinStrictness`/`SupportsGlobalJoin` абстрактными (alpha-разрыв уже принят JS2/GG1). Не блокер релиза |
+
+ℹ️ **Наблюдения (фикс не требуется).**
+
+- **Отдельный флаг `SupportsSemiAntiJoin` на два вида (SEMI+ANTI) — оправдан (DC-критерий).** Оба вида всегда реализуются вместе (ClickHouse) и нигде больше; отдельные `SupportsSemiJoin`/`SupportsAntiJoin` были бы истинны ровно в одном диалекте и добавили бы лишний публичный контракт к Шагу 5. `SupportsPasteJoin` отделён, т.к. `PASTE` не имеет `ON` и образует самостоятельную конструкцию (совпадает с `todo_clickhouse_join_strictness.md` §«Что нужно решить»).
+- **`new`-перегрузки 18 (6 арностей × 3) — вынужденная ковариантность, не дубли контракта** (см. code-smells ℹ️ для `WithStrictness`): плоская цепочка `.Join().SemiJoin()/PasteJoin()` должна сохранять конкретный arity; общий базовый метод вернул бы `EntityBuilder<Projection<…>>` и сломал chaining. Дублирование тел — уже Находка 68 в code-smells, не именование.
+- **Отсутствие отдельного публичного `MakeSemiJoinKeyword`/`MakePasteJoinKeyword` — правильно.** Все виды рендерятся одним хуком `MakeJoinKeyword`, как `GLOBAL`/strictness (GG2): единый keyword `[global ]left semi join` связнее трёх хуков.
+- **Приложение A (45) без изменений** — новых публичных типов нет; все новые члены либо задокументированы, либо (2 `SqlDialectBase`-члена) относятся к существующему типу.
+
+**Проверка (22.09.2026).** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**; `find -name 'PublicAPI*.txt'` — **0** (подтверждает CHJ2); XML-`<summary>` у `JoinType.Semi/Anti/Paste`, `ISqlDialect.SupportsSemiAntiJoin/SupportsPasteJoin`, `ClickHouseDialect`-override'ов и 30 DSL-методов; новые публичные типы отсутствуют — Приложение A (45) без изменений; `rg "SEMI|ANTI|PASTE" docs/providers/clickhouse.md docs/ru/providers/clickhouse.md` — противоречие CHJ1 подтверждено обеими ветками. Содержательная кодовая сторона — `code-smells-review.md`, точечный аудит 22.09.2026 (Находки 68–71).
+
+### Аудит 22.09.2026 — доступ к колонкам mapped-сущностей по имени (`SqlFunctions.Column<T>`), uncommitted worktree (P0 — нет; P1 — 1 доковый; P2 — 2)
+
+**Область (uncommitted worktree).** Публичная поверхность аддитивна; переименований нет. Новый член:
+
+- `SqlFunctions.Column<T>(object entity, string columnName) -> T` — `src/nextorm.core/Query/SqlFunctions.cs:75` (маркер, тело — `throw new NotSupportedException`); новые публичные **типы** отсутствуют.
+
+**CS1591/XML-doc.** У члена есть `<summary>` + `<typeparam>` + `<param>`×2 + `<remarks>` (`:63-74`) → `CS1591` закрыт; отсутствует только `<returns>` (ℹ️ ниже). Новых публичных типов нет → **Приложение A (45) без изменений**; покрытие методов +1 (арифметически, **270/1149**), из них документирован — 1. Сборка `0/0`; `CS1591` скрыт `<NoWarn>` в 7 библиотечных `.csproj` (Шаг 5).
+
+**Именование — P0/P1 по именам нет.** `Column<T>` следует паттерну соседнего маркера `Parameter<T>` (`SqlFunctions.cs:61`) и `EF.Property<T>(object entity, string propertyName)`; существительное-имя согласовано с SQL-зеркальной поверхностью `SqlFunctions`, BCL-конфликтов нет (`System.*.Column` отсутствует). Порядок параметров «сущность (target) → имя (required)», возврат `T`, generic-параметр `T` — по конвенции. `object entity` — цена эргономики: `Column<TEntity, T>(TEntity entity, …)` был бы типобезопаснее, но многословнее и не давал бы вывести `T`; EF Core принял то же решение (см. CHCB3).
+
+| # | Ур. | Место | Проблема | Рекомендация |
+|---|-----|-------|----------|--------------|
+| CHCB1 ✅ закрыта 22.09.2026 | **P1 (док)** | `docs/specs/roadmap/sql-capabilities-gap-analysis.md:223-225`; `docs/specs/roadmap/todo_clickhouse_columns_by_name.md:52-64`; `docs/guide/01-querying-and-projections.md` (+RU `docs/ru/...`), `docs/providers/clickhouse.md` (+RU), `docs/advanced/api-reference.md` (+RU) | **Прозаическая документация не обновлена и противоречит реализации.** gap-analysis §4 п.10 по-прежнему «**ClickHouse columns have no by-name access without an entity property** … Todo: todo_clickhouse_columns_by_name.md»; roadmap-файл (статус «в работе») в §«Документация» заявляет, что обновлены `guide/01-querying-and-projections` (+RU), `providers/clickhouse` (+RU), `advanced/api-reference` (+RU) и gap-analysis → «shipped», но в рабочем дереве этих правок нет — `SqlFunctions.Column` встречается только в самом roadmap-файле. Дополнительно §«Тесты» обещает интеграцию на `hits_v1`/`IHit` со сверкой `WithSql`, а реализованы тесты на `wide_entity`/`IWideEntity` без `WithSql`. Класс CHJ1/CHARR2 (док опровергает код); AGENTS.md требует EN **и** RU | **Обязательно к исправлению в том же изменении (маршрут — `nextorm-design-engineer`):** добавить подраздел «колонки по имени» в `guide/01-querying-and-projections` (EN+RU; untyped `TableAlias` + entity `Column<T>`), строку в `providers/clickhouse` (EN+RU) и `advanced/api-reference` (EN+RU); перевести gap-analysis §4 п.10 в «shipped», roadmap-файл → «готово»; привести §«Тесты» в соответствие с фактическими тестами |
+| CHCB2 | P2 (трекинг) | `SqlFunctions.cs:75`; `PublicAPI.*.txt` отсутствуют | Новый публичный член не трекается (`PublicApiAnalyzers` не подключён, Шаг 5 открыт). **Продолжение JS1/CHJ2/CHDH1, не новая проблема** | При заморозке внести `NextORM.Core.SqlFunctions.Column<T>(object? entity, string? columnName) -> T` (точный текст — из анализатора) |
+| CHCB3 | P2 (форма/устойчивость) | `SqlFunctions.cs:75`; `NormSqlTranslator.cs:75-85`; `BaseExpressionVisitor.cs:206-246`; ср. `MemberTranslator.cs:417` | `object entity` + отсутствие проверки источника: не-параметрическое/производное выражение молча даёт голый или чужой `alias.column` вместо ошибки. Кодовая сторона — `code-smells-review.md`, **Находка 73**. Публичная сигнатура повторяет `EF.Property<T>(object, string)`, поэтому проблема — в отсутствии валидации, а не в `object` как таковом | Требовать разрешения аргумента в параметр источника (иначе `BuildSqlCommandException`); при желании — ограничить тип дженерик-параметром сущности. Добавить негативный тест |
+
+ℹ️ **Наблюдения (фикс не требуется).**
+
+- **`Column<T>` в `SqlFunctions` (core), а не в провайдерном `ClickHouseFunctions` — правильно.** Фича — builder-level ссылка на идентификатор `alias.column`, работающая в любом SQL-диалекте через `QuoteIdentifier`/`AppendIdentifier`; todo-матрица подтверждает поддержку PG/SQL Server/MySQL/MariaDB/ClickHouse/SQLite. Отдельного `Supports*`-гейта не требуется (не SQL-функция).
+- **Единственный публичный член, покрытие `CS1591` не страдает.** Отсутствие `<returns>` — косметика: стоило бы дописать «The column value read as `T`» (ср. соседние члены без `<returns>` тоже есть — `Parameter<T>` вообще без XML, пре-существующая дыра).
+- **Тестовая матрица только 3 диалекта** (CH/PG/SQLite); SQL Server/MySQL/MariaDB используют общий `AppendIdentifier`/`QuoteIdentifier` (ℹ️).
+- **Приложение A без изменений** — новых публичных типов нет; поверхность заморозки растёт на одну подпись (CHCB2).
+
+**Проверка (22.09.2026).** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**; `find -name 'PublicAPI*.txt'` — **0** (подтверждает CHCB2); XML-`<summary>`/`<typeparam>`/`<param>`/`<remarks>` у `Column<T>` подтверждены (`SqlFunctions.cs:63-76`); `grep "SqlFunctions.Column" docs/` — только `docs/specs/roadmap/todo_clickhouse_columns_by_name.md` (подтверждает CHCB1); `grep "no by-name access" docs/specs/roadmap/sql-capabilities-gap-analysis.md` — §4 п.10 не обновлён. Тесты — см. содержательную сторону, `code-smells-review.md` (Находки 72–73).
+
 ## 4. План работ
 
 Проект в стадии **alpha** — обратная совместимость не сохраняется. Все пункты выполняются **прямыми переименованиями на месте**, с одновременным обновлением кода, тестов, примеров и документации в одном изменении.
@@ -2980,7 +3563,9 @@ INamingConvention?`; `QueryCommand<TResult>.WithNamingConvention(INamingConventi
 - Бенчмарки (A/B против `d21c473`, `SqliteBenchmarkJoin`/`Where`): `Prepared`-пути по аллокациям идентичны (13.01/92.42/107.64 KB); в `Cached`-путях +~555 B/запрос (Join 94.05→99.6 KB, Where 535.8→591.3 KB) — это код параллельно влившегося рефакторинга (correlated-subquery `OuterReferences` в `QueryPlanEqualityComparer`/`QueryCommand.Clone`, выкачка `InMemory*`), а не переименований P0/P1/P2: откат `Paging`/`Sorting` к полям аллокации не изменил. `Paging`/`Sorting`, DSL- и namespace-переименования аллопрофиль не меняют.
 
 
-## Приложение A — публичные типы без XML-документации (45)
+## Приложение A — публичные типы без XML-документации (исторический список 18.09.2026; закрыто 22.09.2026)
+
+**Закрыто 22.09.2026:** все перечисленные ниже типы задокументированы (см. обновление в разделе 2); список сохранён как исторический.
 
 Полный машинный список (FQN, включая вложенные публичные типы), получен отражением по 7 собранным библиотечным сборкам (HEAD `d21c473`). Использовать как бэклог Шага 4. Generic-арность записана в метаданных (`` `1 `` = один generic-параметр). Прошлый список из 109 позиций устарел — после массового добавления `<summary>`/`<remarks>` он сократился до 45.
 

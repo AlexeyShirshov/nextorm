@@ -18,6 +18,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     private readonly ISqlDialect _dialect;
     private readonly IColumnsProvider _columnsProvider;
     private readonly int _dim;
+    /// <summary>The SQL builder the visitor renders into, or <c>null</c> in parameter-only mode.</summary>
     protected readonly StringBuilder? _builder;
     private readonly ObjectPool<StringBuilder> _sbPool;
     private readonly List<Parameter> _params;
@@ -28,6 +29,9 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     private readonly IParameterProvider _parameterProvider;
     private readonly IQueryRegistry _queryProvider;
     private readonly bool _dontNeedAlias;
+    /// <summary>
+    /// Whether the visitor only collects parameters and does not append SQL (parameter-only mode).
+    /// </summary>
     protected readonly bool _paramMode;
     private bool _disposedValue;
     private readonly VisitorOptions _options;
@@ -53,8 +57,14 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         _logger = options.Logger;
     }
 
+    /// <summary>
+    /// Whether the column currently being rendered needs an alias, for example because it is cast or
+    /// repeated.
+    /// </summary>
     public bool NeedAliasForColumn { get => _needAliasForColumn; internal set => _needAliasForColumn = value; }
+    /// <summary>The provider that resolves the columns and table aliases of the query sources.</summary>
     public IColumnsProvider SourceProvider => _columnsProvider;
+    /// <summary>The name of the column currently being rendered, if any.</summary>
     public string? ColumnName { get => _colName; internal set => _colName = value; }
     /// <summary>
     /// True when the built expression is used as a condition (WHERE/HAVING) instead of a value.
@@ -80,6 +90,12 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     internal StringBuilder? Builder => _builder;
     internal bool IsPredicateContext => AsPredicate;
     internal VisitorOptions Options => _options;
+    /// <summary>
+    /// The higher-order array lambda parameters bound by this visitor (name to emit for a parameter),
+    /// or <c>null</c>. Overridden by <see cref="HigherOrderLambdaVisitor"/> so a nested lambda can see
+    /// the parameters of the enclosing one.
+    /// </summary>
+    internal virtual IReadOnlyDictionary<ParameterExpression, string>? LambdaParameters => null;
 
     /// <summary>
     /// Appends a physical column/table identifier, quoting it through the dialect when identifier
@@ -92,6 +108,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         else
             _builder!.Append(name);
     }
+    /// <inheritdoc/>
     protected override Expression VisitMethodCall(MethodCallExpression node)
     {
         if (!_paramMode
@@ -109,6 +126,12 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 
             return node;
         }
+
+        if (TupleSqlTranslator.TryTranslateCreate(this, node))
+            return node;
+
+        if (NormSqlTranslator.TryTranslateColumnReference(this, node))
+            return node;
 
         if (ScalarFunctionTranslator.TryTranslateBuiltIn(this, node))
             return node;
@@ -176,44 +199,11 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     /// </summary>
     private void EmitTableAliasColumn(MethodCallExpression node)
     {
-        if (_columnsProvider.HasAliases && !_dontNeedAlias)
-        {
-            var v = new TypeExpressionVisitor<ParameterExpression>();
-            v.Visit(node.Object);
-            if (v.Has)
-            {
-                string? tableAliasForColumn;
-
-                if (v.Target!.Type.IsAssignableTo(typeof(IProjection)) && node.Object is MemberExpression member)
-                {
-                    // A column reached through a joined projection (p.Item1.GetString("c")): the
-                    // member name carries the 1-based position in the projection, exactly like the
-                    // mapped-member path in MemberTranslator. Resolving the bare parameter instead
-                    // would yield no alias and silently drop the qualifier, which makes a shared
-                    // column name ambiguous.
-                    var name = member.Member.Name;
-                    var digitsStart = name.Length;
-                    while (digitsStart > 0 && char.IsAsciiDigit(name[digitsStart - 1])) digitsStart--;
-                    var position = 0;
-                    for (var i = digitsStart; i < name.Length; i++) position = position * 10 + (name[i] - '0');
-                    position--;
-                    var paramIdx = ProjectionAliasCache.GetOccurrence(v.Target.Type, position);
-                    tableAliasForColumn = AliasResolver.GetAliasFromParam(this, member.Type, paramIdx, false);
-                }
-                else
-                {
-                    tableAliasForColumn = AliasResolver.GetAliasFromParam(this, v.Target!, false);
-                }
-
-                if (!string.IsNullOrEmpty(tableAliasForColumn))
-                {
-                    _builder!.Append(tableAliasForColumn).Append('.');
-                }
-            }
-        }
-
         if (!TableAliasAccessors.IsAccessor(node.Method.Name))
             throw new NotSupportedException(node.Method.Name);
+
+        if (_columnsProvider.HasAliases && !_dontNeedAlias)
+            AppendColumnAlias(node.Object!);
 
         if (node.Arguments is [ConstantExpression constExp])
             AppendIdentifier(constExp.Value?.ToString() ?? string.Empty);
@@ -222,6 +212,88 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         else
             throw new NotSupportedException(node.Method.Name);
     }
+
+    /// <summary>
+    /// Renders a mapped entity's column selected by name
+    /// (<c>SqlFunctions.Column&lt;T&gt;(entity, "name")</c>), prefixing it with the table alias when
+    /// the query has aliased sources. The entity argument must be a source parameter; anything else
+    /// would silently render an unqualified or wrong identifier.
+    /// </summary>
+    internal void AppendColumnReference(Expression source, string columnName)
+    {
+        var unwrapped = UnwrapConvert(source);
+        var target = ResolveColumnSource(unwrapped)
+            ?? throw new BuildSqlCommandException(
+                $"SqlFunctions.Column requires an entity source parameter (got '{source}').");
+
+        if (_columnsProvider.HasAliases && !_dontNeedAlias)
+            AppendColumnAlias(unwrapped, target);
+
+        AppendIdentifier(columnName);
+    }
+
+    /// <summary>
+    /// Appends the table alias of the source that carries a by-name column. A projection member
+    /// (<c>p.Item1</c>) is resolved by its 1-based occurrence, so a type repeated in the projection
+    /// picks the right table instead of the first one.
+    /// </summary>
+    private void AppendColumnAlias(Expression source)
+    {
+        var target = ResolveColumnSource(source);
+        if (target is null)
+            return;
+
+        AppendColumnAlias(source, target);
+    }
+
+    private void AppendColumnAlias(Expression source, ParameterExpression target)
+    {
+        string? tableAliasForColumn;
+
+        if (target.Type.IsAssignableTo(typeof(IProjection)) && source is MemberExpression member)
+        {
+            var name = member.Member.Name;
+            var digitsStart = name.Length;
+            while (digitsStart > 0 && char.IsAsciiDigit(name[digitsStart - 1])) digitsStart--;
+            var position = 0;
+            for (var i = digitsStart; i < name.Length; i++) position = position * 10 + (name[i] - '0');
+            position--;
+            var paramIdx = ProjectionAliasCache.GetOccurrence(target.Type, position);
+            tableAliasForColumn = AliasResolver.GetAliasFromParam(this, member.Type, paramIdx, false);
+        }
+        else
+        {
+            tableAliasForColumn = AliasResolver.GetAliasFromParam(this, target, false);
+        }
+
+        if (!string.IsNullOrEmpty(tableAliasForColumn))
+            _builder!.Append(tableAliasForColumn).Append('.');
+    }
+
+    private static ParameterExpression? ResolveColumnSource(Expression source)
+    {
+        // A by-name column is nearly always reached through the lambda parameter directly (h) or a
+        // projection member (p.Item2). Both shapes expose the parameter structurally, so the common
+        // path avoids allocating the expression visitor.
+        return source switch
+        {
+            ParameterExpression parameter => parameter,
+            MemberExpression { Expression: ParameterExpression parameter } => parameter,
+            _ => VisitForColumnSource(source)
+        };
+    }
+
+    private static ParameterExpression? VisitForColumnSource(Expression source)
+    {
+        var v = new TypeExpressionVisitor<ParameterExpression>();
+        v.Visit(source);
+        return v.Has ? v.Target : null;
+    }
+
+    private static Expression UnwrapConvert(Expression exp)
+        => exp is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } unary
+            ? UnwrapConvert(unary.Operand)
+            : exp;
 
     /// <summary>
     /// Folds an expression with no lambda parameters (a call or a value-type constructor such as
@@ -284,6 +356,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         return visitor.ToString();
     }
 
+    /// <inheritdoc/>
     protected override Expression VisitNew(NewExpression node)
     {
         // new string(char, int) repeats a single character; SQL has no char literal, so the character
@@ -325,9 +398,11 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         return base.VisitNew(node);
     }
 
+    /// <inheritdoc/>
     protected override Expression VisitIndex(IndexExpression node)
         => MemberTranslator.VisitIndex(this, node) ?? base.VisitIndex(node);
 
+    /// <inheritdoc/>
     protected override Expression VisitConstant(ConstantExpression node)
     {
         if (!_paramMode)
@@ -363,9 +438,11 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 
         return true;
     }
+    /// <inheritdoc/>
     protected override Expression VisitMember(MemberExpression node)
         => MemberTranslator.VisitMember(this, node) ?? base.VisitMember(node);
 
+    /// <inheritdoc/>
     protected override Expression VisitUnary(UnaryExpression node)
         => PredicateTranslator.VisitUnary(this, node) ?? base.VisitUnary(node);
 
@@ -374,9 +451,14 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     /// that is a bare boolean value is turned into a predicate by the dialect.
     /// </summary>
     internal void VisitCondition(Expression condition) => PredicateTranslator.VisitCondition(this, condition);
+    /// <inheritdoc/>
     protected override Expression VisitConditional(ConditionalExpression node) => PredicateTranslator.VisitConditional(this, node);
+    /// <inheritdoc/>
     protected override Expression VisitSwitch(SwitchExpression node) => PredicateTranslator.VisitSwitch(this, node);
+    /// <inheritdoc/>
     protected override Expression VisitBinary(BinaryExpression node) => PredicateTranslator.VisitBinary(this, node);
+    /// <summary>Returns the SQL emitted into this visitor's builder.</summary>
+    /// <returns>The rendered SQL text.</returns>
     public override string ToString()
     {
         return _builder!.ToString();
@@ -394,6 +476,12 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         return Clone();
     }
 
+    /// <summary>
+    /// Creates a fresh visitor with the same options but an empty builder, so a nested expression can
+    /// be rendered independently and then appended to the outer SQL.
+    /// </summary>
+    /// <returns>A new visitor that is not in parameter mode.</returns>
+    /// <exception cref="NotSupportedException">The current visitor is in parameter mode.</exception>
     public virtual BaseExpressionVisitor Clone()
     {
         if (_paramMode) throw new NotSupportedException("Cannot clone in param mode");
@@ -401,6 +489,10 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         return new BaseExpressionVisitor(_options);
     }
 
+    /// <summary>
+    /// Releases the resources used by the visitor, returning the pooled builder when applicable.
+    /// </summary>
+    /// <param name="disposing"><see langword="true"/> to release managed resources.</param>
     protected virtual void Dispose(bool disposing)
     {
         if (!_disposedValue)
@@ -413,6 +505,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             _disposedValue = true;
         }
     }
+    /// <summary>Returns the pooled builder and releases the visitor's resources.</summary>
     public void Dispose()
     {
         // Do not change this code. Put cleanup code in 'Dispose(bool disposing)' method

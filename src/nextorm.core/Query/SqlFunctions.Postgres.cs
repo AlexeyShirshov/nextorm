@@ -491,6 +491,11 @@ namespace NextORM.Core;
         /// <param name="tsquery">The <c>tsquery</c> to rank against.</param>
         public double? ts_rank(string? tsvector, string? tsquery) => default!;
 
+        /// <summary>Cover-density relevance score of a <c>tsvector</c> against a <c>tsquery</c> (<c>ts_rank_cd</c>).</summary>
+        /// <param name="tsvector">The <c>tsvector</c> to rank.</param>
+        /// <param name="tsquery">The <c>tsquery</c> to rank against.</param>
+        public double? ts_rank_cd(string? tsvector, string? tsquery) => default!;
+
         /// <summary>A highlighted excerpt of <paramref name="document"/> for <paramref name="tsquery"/> (<c>ts_headline</c>).</summary>
         /// <param name="document">The source document.</param>
         /// <param name="tsquery">The <c>tsquery</c> whose matches are highlighted.</param>

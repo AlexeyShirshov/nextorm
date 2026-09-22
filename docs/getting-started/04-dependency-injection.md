@@ -1,6 +1,6 @@
 # Dependency injection
 
-> Register NextORM contexts with [`AddNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions), configure the provider and logging on a scoped [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder), and resolve a single context instance per scope.
+> Register NextORM contexts with [`AddNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions.AddNextOrmContext(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{NextORM.Core.DataContextBuilder})), configure the provider and logging on a scoped [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder), and resolve a single context instance per scope.
 
 **Prerequisites:** [Installation](01-installation.md) · [Quickstart](02-quickstart.md).
 
@@ -9,7 +9,7 @@
 DI registration lives in [`NextORM.Core`](xref:NextORM.Core) ([`ServiceCollectionExtensions`](xref:NextORM.Core.ServiceCollectionExtensions)) and works with any
 `Microsoft.Extensions.DependencyInjection` container. There are two registration paths:
 
-* **Type path** - [`AddNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions) registers the concrete context type as scoped and
+* **Type path** - [`AddNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions.AddNextOrmContext(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{NextORM.Core.DataContextBuilder})) registers the concrete context type as scoped and
   forwards [`IDataContext`](xref:NextORM.Core.IDataContext) to it. The container constructs `TContext`, so its constructor must be
   resolvable from the container (for example the parameterless [`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext)).
 * **Options path** - `AddNextOrmContext(Action<DataContextBuilder>)` (or the
@@ -25,7 +25,7 @@ The guarantees come from the XML docs on [`ServiceCollectionExtensions`](xref:Ne
   `ArgumentNullException` at registration time, not at resolution time;
 * the [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) itself is scoped, so every scope gets a fresh builder.
 
-Keyed variants ([`AddKeyedNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions)) register the builder and [`IDataContext`](xref:NextORM.Core.IDataContext) under a service key,
+Keyed variants ([`AddKeyedNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions.AddKeyedNextOrmContext(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{NextORM.Core.DataContextBuilder},System.Object))) register the builder and [`IDataContext`](xref:NextORM.Core.IDataContext) under a service key,
 so several differently-configured contexts can coexist.
 
 ## Registering a context
@@ -103,7 +103,7 @@ using var dataContext = builder.CreateDataContext();
 | `LogSensitiveData(bool)` | Controls whether parameter values are written to the logs. |
 | [`CreateDataContext`](xref:NextORM.Core.DataContextBuilder.CreateDataContext) | Invokes [`Factory`](xref:NextORM.Core.DataContextBuilder.Factory); throws `InvalidOperationException("Context is not set")` when no provider was configured. |
 
-The provider extensions ([`UseSqlite`](xref:NextORM.Sqlite.SqliteDataContextOptionsBuilderExtensions)/[`UseSqlServer`](xref:NextORM.SqlServer.SqlServerDataContextOptionsBuilderExtensions)/[`UsePostgres`](xref:NextORM.Postgres.PostgresDataContextOptionsBuilderExtensions), in the provider packages) each accept
+The provider extensions ([`UseSqlite`](xref:NextORM.Sqlite.SqliteDataContextOptionsBuilderExtensions.UseSqlite(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection))/[`UseSqlServer`](xref:NextORM.SqlServer.SqlServerDataContextOptionsBuilderExtensions.UseSqlServer(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection))/[`UsePostgres`](xref:NextORM.Postgres.PostgresDataContextOptionsBuilderExtensions.UsePostgres(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection)), in the provider packages) each accept
 either a connection string or a `DbConnection`:
 
 ```csharp
@@ -121,8 +121,8 @@ verifies that the file exists.
 
 | Registration | Service | Lifetime | Notes |
 |---|---|---|---|
-| [`AddNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions) | `T` | scoped | once per scope |
-| [`AddNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions) | [`IDataContext`](xref:NextORM.Core.IDataContext) | scoped | forwards to the same `T` instance |
+| [`AddNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions.AddNextOrmContext(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{NextORM.Core.DataContextBuilder})) | `T` | scoped | once per scope |
+| [`AddNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions.AddNextOrmContext(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{NextORM.Core.DataContextBuilder})) | [`IDataContext`](xref:NextORM.Core.IDataContext) | scoped | forwards to the same `T` instance |
 | `AddNextOrmContext(Action<…>)` | [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) | scoped | built fresh per scope |
 | `AddNextOrmContext(Action<…>)` | [`IDataContext`](xref:NextORM.Core.IDataContext) | scoped | `builder.CreateDataContext()` |
 | `AddKeyedNextOrmContext(…, key)` | keyed [`IDataContext`](xref:NextORM.Core.IDataContext) / [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) | scoped | resolved with the key |
@@ -133,17 +133,17 @@ root provider - always create a scope.
 
 ## Provider differences
 
-[`UseLoggerFactory`](xref:NextORM.Core.DataContextBuilder) and [`LogSensitiveData`](xref:NextORM.Core.DataContextBuilder) behave identically across providers; only the `Use…` extension
+[`UseLoggerFactory`](xref:NextORM.Core.DataContextBuilder.UseLoggerFactory(Microsoft.Extensions.Logging.ILoggerFactory)) and [`LogSensitiveData`](xref:NextORM.Core.DataContextBuilder.LogSensitiveData(System.Boolean)) behave identically across providers; only the `Use…` extension
 that selects the provider differs.
 
 | Provider | Extension | Overloads |
 |---|---|---|
-| SQLite | [`UseSqlite`](xref:NextORM.Sqlite.SqliteDataContextOptionsBuilderExtensions) | `string filepath`, `DbConnection` |
-| SQL Server | [`UseSqlServer`](xref:NextORM.SqlServer.SqlServerDataContextOptionsBuilderExtensions) | `string connectionString`, `DbConnection` |
-| PostgreSQL | [`UsePostgres`](xref:NextORM.Postgres.PostgresDataContextOptionsBuilderExtensions) | `string connectionString`, `DbConnection` |
-| MySQL | [`UseMySql`](xref:NextORM.MySql.MySqlDataContextOptionsBuilderExtensions) | `string connectionString`, `DbConnection` |
-| MariaDB | [`UseMariaDb`](xref:NextORM.MariaDb.MariaDbDataContextOptionsBuilderExtensions) | `string connectionString`, `DbConnection` |
-| ClickHouse | [`UseClickHouse`](xref:NextORM.ClickHouse.ClickHouseDataContextOptionsBuilderExtensions) | `string connectionString`, `DbConnection` |
+| SQLite | [`UseSqlite`](xref:NextORM.Sqlite.SqliteDataContextOptionsBuilderExtensions.UseSqlite(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection)) | `string filepath`, `DbConnection` |
+| SQL Server | [`UseSqlServer`](xref:NextORM.SqlServer.SqlServerDataContextOptionsBuilderExtensions.UseSqlServer(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection)) | `string connectionString`, `DbConnection` |
+| PostgreSQL | [`UsePostgres`](xref:NextORM.Postgres.PostgresDataContextOptionsBuilderExtensions.UsePostgres(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection)) | `string connectionString`, `DbConnection` |
+| MySQL | [`UseMySql`](xref:NextORM.MySql.MySqlDataContextOptionsBuilderExtensions.UseMySql(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection)) | `string connectionString`, `DbConnection` |
+| MariaDB | [`UseMariaDb`](xref:NextORM.MariaDb.MariaDbDataContextOptionsBuilderExtensions.UseMariaDb(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection)) | `string connectionString`, `DbConnection` |
+| ClickHouse | [`UseClickHouse`](xref:NextORM.ClickHouse.ClickHouseDataContextOptionsBuilderExtensions.UseClickHouse(NextORM.Core.DataContextBuilder,System.Data.Common.DbConnection)) | `string connectionString`, `DbConnection` |
 | In-memory | none | register [`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext) directly or assign [`Factory`](xref:NextORM.Core.DataContextBuilder.Factory) |
 
 ## See also

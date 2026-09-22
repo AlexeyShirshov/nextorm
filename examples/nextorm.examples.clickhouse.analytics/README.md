@@ -64,11 +64,12 @@ clause order: `From().Where().GroupBy().Having().OrderBy().Limit().Select()`.
 | `arrayMap`/`arrayFilter` (higher-order lambdas), `uniqMerge` (`-Merge`/`-State`), `groupArray`/tuple results | no LINQ surface yet ; the query is **NOT WORKING** and throws instead of falling back to raw SQL |
 
 > **Unsigned types.** `hits_v1` stores `UserID`/`WatchID` as `UInt64`, and ClickHouse returns `UInt64`
-> from `count()`/`uniq()`/`sum()` over unsigned inputs. The dialect already casts `count`, `uniq`,
-> `windowFunnel` and friends to a signed type; a plain `UInt64` column, however, has no CLR reader
-> getter, so the query casts it in SQL — `UserID = (long)h.UserId` renders `cast(UserID as Int64)` —
-> before reading it back with `GetInt64(...)`. `Funnel`/`DailyTraffic` also rely on a compile-time
-> `new DateTime(...)` literal being bound as a parameter rather than inlined.
+> from `count()`/`uniq()`/`sum()` over unsigned inputs. The dialect casts the aggregate/function results
+> that declare a signed CLR type (`count`, `uniq`, `windowFunnel`, ...) to that type; a plain `UInt64`
+> column now materialises directly as `ulong` (`UserID = h.UserId` reads `GetFieldValue<ulong>`, with no
+> SQL cast). These demo queries still cast to `long` (`UserID = (long)h.UserId` renders `cast(UserID as
+> Int64)`) because the rest of the query works in signed 64-bit. `Funnel`/`DailyTraffic` also rely on a
+> compile-time `new DateTime(...)` literal being bound as a parameter rather than inlined.
 
 ## Demo queries: SQL file → method
 

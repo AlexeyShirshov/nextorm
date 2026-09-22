@@ -32,7 +32,7 @@ nextorm points at the source that owns the behaviour.
 | Predicates (`WHERE`: comparison, `and`/`or`/`!`, arithmetic, bitwise/shift) | yes | yes | `Visitors/WhereExpressionVisitor.cs`, `BaseExpressionVisitor.cs` |
 | `INNER` / `LEFT` / `RIGHT` / `FULL` / `CROSS JOIN` | yes | **yes** (`FULL JOIN` not on MySQL/MariaDB) | `SqlBuilder.MakeJoin`, `EntityBuilder.Join/LeftJoin/RightJoin/FullJoin/CrossJoin`, `ISqlDialect.SupportsFullJoin` |
 | `APPLY` / `LATERAL` | yes | **yes** (including correlated sources; gated off on SQLite/ClickHouse) | `JoinType.CrossApply/OuterApply`, `SqlBuilder.MakeApplyJoin`, `ISqlDialect.SupportsApply`/`MakeApply` |
-| Join strictness (`ANY`/`ALL`/`ASOF`) and `GLOBAL` | no | **yes** on ClickHouse (`SEMI`/`ANTI`/`PASTE` not implemented) | `JoinStrictness`, `EntityBuilder.WithStrictness`/`Global`, `ISqlDialect.SupportsJoinStrictness`/`SupportsGlobalJoin` |
+| Join strictness (`ANY`/`ALL`/`ASOF`) and `GLOBAL` | no | **yes** on ClickHouse (`SEMI`/`ANTI`/`PASTE` via `SemiJoin`/`AntiJoin`/`PasteJoin`) | `JoinStrictness`, `EntityBuilder.WithStrictness`/`Global`, `ISqlDialect.SupportsJoinStrictness`/`SupportsGlobalJoin` |
 | Join arity | unlimited | 2–8 (compile-time cap) | `Projection<T1..T8>`, `JoinedEntityBuilder<T1..T8>` |
 | JOIN to a derived table (subquery) | yes | **yes** — either side: the joined side (`Join(QueryCommand<T>)`) or the primary `FROM` source | `EntityBuilder`, `SqlBuilder.MakeFrom`, `DataContextExtensions.From(QueryCommand)` |
 | Subqueries (`FROM`, scalar, correlated `EXISTS/IN/ANY/ALL`) | yes | yes — correlated at any nesting depth on the SQL providers; the in-memory provider throws `NotSupportedException` | `CorrelatedQueryExpressionVisitor.cs`, `MemberTranslator.TryTranslateProjectionOuterReference` |
@@ -57,19 +57,19 @@ nextorm points at the source that owns the behaviour.
 | Native JSON documents | yes | **yes on PostgreSQL** | `SupportsJson`, `JsonSqlTranslator` |
 | JSON scalar functions (`json_value`/`json_query`/`json_modify`, `isjson`) | yes | **yes on SQL Server and MySQL/MariaDB** | `SupportsTextJson`, `MakeTextJsonFunction`/`MakeIsJson` |
 | String JSON + dictionary functions (ClickHouse) | no | **yes on ClickHouse** | `SupportsJsonExtract`, `SupportsDictionaries`, `MakeJsonExtract`/`MakeDictionaryFunction` |
-| Arrays (`cardinality`/`array_*`/`@>`/`&&`, ClickHouse `Array(T)`, `ARRAY JOIN`) | no | **yes on PostgreSQL and ClickHouse** (`ARRAY JOIN`; higher-order functions not implemented) | `SupportsArrayFunctions`/`SupportsArrayJoin`, `ArraySqlTranslator`, `IArrayJoinRenderer.Render` |
+| Arrays (`cardinality`/`array_*`/`@>`/`&&`, ClickHouse `Array(T)`, `ARRAY JOIN`) | no | **yes on PostgreSQL and ClickHouse** (`ARRAY JOIN`; higher-order/lambda functions and the `Array(T)`/`Tuple` row reader are implemented) | `SupportsArrayFunctions`/`SupportsHigherOrderArrayFunctions`/`SupportsArrayJoin`, `ArraySqlTranslator`, `ArrayJoinClause`/`IArrayJoinRenderer.Render` |
 | Conditional functions (`iif`/`choose`/`multi_if`) | no | **yes** (portable `iif`; `choose` SQL Server only; `multi_if` ClickHouse) | `CommonFunctions.iif`, `SupportsChoose`, `MultiIf`/`IMultiIfRenderer.Render` |
 | `FOR JSON` / `FOR XML` | yes (provider) | **yes on SQL Server** | `QueryCommand.ForJson/ForXml`, `SupportsForJson`/`SupportsForXml` |
-| XML data-type scalar methods (`.value`/`.query`/`.exist`) | yes (provider) | **partial** — SQL Server only (`.nodes` rowset not implemented) | `SqlServerFunctions.xml_value`/`xml_query`/`xml_exist` |
+| XML data-type methods (`.value`/`.query`/`.exist`/`.nodes`) | yes (provider) | **partial** — SQL Server only | `SqlServerFunctions.xml_value`/`xml_query`/`xml_exist`/`xml_nodes` |
 | `GREATEST` / `LEAST` | partial | **yes** (NULL handling is provider-specific) | `SupportsGreatestLeast`/`MakeGreatest`/`MakeLeast` |
 | `STRING_AGG` / `ARRAY_AGG` | yes | **yes** — `string_agg` cross-provider; `array_agg` on PostgreSQL | `SupportsStringAgg`/`SupportsArrayAgg` |
 | User-defined scalar functions | yes (`DbFunction` / `Sql.Ext`) | yes (`[SqlFunction]`) | `SqlFunctionAttribute.cs` |
-| Table-valued functions | yes (`TableFunction`) | yes (`[SqlTableFunction]`); built-ins gated, the pre-declared set (`generate_series`/`unnest`/…, `string_split`/`openjson`, ClickHouse `numbers`/`zeros`/`generateRandom`) is smaller | `SqlTableFunctionAttribute.cs`, `SqlBuilder.MakeTableFunction`, `SupportsTableFunction` |
+| Table-valued functions | yes (`TableFunction`) | yes (`[SqlTableFunction]`); built-ins gated, the pre-declared set (`generate_series`/`unnest`/…, `string_split`/`openjson`, `containstable`/`freetexttable`, ClickHouse `numbers`/`zeros`/`generateRandom`) is smaller | `SqlTableFunctionAttribute.cs`, `SqlBuilder.MakeTableFunction`, `SupportsTableFunction` |
 | Native `PIVOT` / `UNPIVOT` source | no (raw SQL) | **yes on SQL Server** | `EntityBuilder.Pivot`/`Unpivot` |
 | Raw SQL (whole query) | yes | yes | `WithSql` / `PrepareFromSql` |
-| Raw SQL as a composable source/subquery | yes | **no** | — |
-| Query hints | yes (provider specific) | **partial** — SQL Server `OPTION (...)` only | `QueryCommand<TResult>.Hint`, `ISqlDialect.SupportsQueryHints`/`RenderQueryHints` |
-| Table hints (e.g. `WITH (NOLOCK)`) | yes | **partial** — SQL Server only | `EntityBuilder.WithTableHint`, `ISqlDialect.SupportsTableHints`/`MakeTableHints` |
+| Raw SQL as a composable source/subquery | yes | **yes** — `FromSql` renders the fragment as a derived table, joined/filtered further | `DataContextExtensions.FromSql`, `ISqlDialect.SupportsRawSqlSource` |
+| Statement-level query hints | yes (provider specific) | **yes** — SQL Server `OPTION (...)`, PostgreSQL/MySQL/MariaDB inline `/*+ ... */`; SQLite/ClickHouse reject | `QueryCommand<TResult>.Hint`, `ISqlDialect.SupportsQueryHints`/`RenderQueryHints` |
+| Locking table hints (e.g. `WITH (NOLOCK)`) | yes | **partial** — SQL Server only | `EntityBuilder.WithTableHint`, `ISqlDialect.SupportsTableHints`/`MakeTableHints` |
 | Identifier quoting | yes (per provider) | opt-in — `UseQuotedIdentifiers()`/`WithQuotedIdentifiers()`; default emits physical names verbatim | `ISqlDialect.QuoteIdentifier` |
 | Naming conventions (e.g. snake_case) | via `MappingSchema`/attributes (no built-in convention) | opt-in — `UseNamingConvention()`/`WithNamingConvention()`; built-in `SnakeCaseNamingConvention`; explicit names stay verbatim | `INamingConvention` / `SnakeCaseNamingConvention` |
 | **DML** (`INSERT`/`UPDATE`/`DELETE`/`MERGE`) | yes | **no** (read-only by design) | — |
@@ -116,13 +116,13 @@ nextorm points at the source that owns the behaviour.
 * **Data modification**: `INSERT`/`UPDATE`/`DELETE`/`MERGE`, bulk copy, temporary tables — entirely
   absent from nextorm by design.
 * **Relationships**: `[Association]`, `LoadWith` eager loading and implicit join inference.
-* **Hint breadth**: query and table hints across providers (nextorm exposes both on SQL Server only),
-  plus query filters, interceptors and other extensibility.
-* **Composable raw SQL**: linq2db lets raw SQL be used as a `FROM` source, joined and filtered further;
-  nextorm's `WithSql` replaces the whole query.
-* **Coverage beyond the query core**: a larger pre-declared TVF set, full-text ranking/score, the XML
-  `.nodes` rowset and dynamic-schema sources (ClickHouse `values()`/server table functions, MySQL
-  `JSON_TABLE`, PostgreSQL `jsonb_to_record`).
+* **Hint breadth**: nextorm exposes statement-level query hints on SQL Server, PostgreSQL and
+  MySQL/MariaDB, but table hints only on SQL Server; linq2db additionally covers cross-provider table
+  hints,   plus query filters, interceptors and other extensibility.
+* **Coverage beyond the query core**: a larger pre-declared TVF set (though nextorm now ships
+  `CONTAINSTABLE`/`FREETEXTTABLE` with `KEY`/`RANK`, the PostgreSQL `ts_rank`/`ts_rank_cd` and the SQL
+  Server XML `.nodes` rowset via `xml_nodes`), and dynamic-schema sources (ClickHouse `values()`/server
+  table functions, MySQL `JSON_TABLE`, PostgreSQL `jsonb_to_record`).
 * **Provider breadth**: Oracle, Firebird, DB2, SAP HANA, Informix, Sybase, SQL CE and more.
 * **EF Core integration** and a larger ecosystem.
 
@@ -147,8 +147,8 @@ nesting depth on the SQL providers, while the in-memory provider has no per-row 
 If the requirement is *read and report over an existing schema* with a small, fast, provider-portable
 mapper, nextorm now covers essentially the whole analytic query surface that linq2db offers, including
 the provider-only function families and the ClickHouse-specific constructs. The remaining functional delta
-is deliberate: DML and change tracking, relationships, cross-provider hint breadth, composable raw SQL,
-a larger pre-declared TVF set with full-text ranking, broader provider coverage and the
+is deliberate: DML and change tracking, relationships, table hints outside SQL Server, composable raw SQL,
+a larger pre-declared TVF set, broader provider coverage and the
 larger extensibility/ecosystem surface. Mapping output, by contrast, is more configurable in nextorm:
 identifier quoting and naming conventions are opt-in and can be overridden per command, whereas
 linq2db quotes by default and fixes names through its mapping schema. Conversely, linq2db is the better

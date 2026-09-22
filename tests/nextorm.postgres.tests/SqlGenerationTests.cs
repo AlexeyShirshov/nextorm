@@ -158,6 +158,17 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void ColumnByName_ShouldRenderColumnIdentifierAndRenameAlias()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Select(x => new { Region = SqlFunctions.Column<int>(x, "region_id") }));
+
+        sql.Should().Be("select region_id as \"Region\" from simple_entity");
+    }
+
+    [Fact]
     public void Parameter_ShouldUseAtPrefix()
     {
         using var ctx = PostgresTestContext.Create();
@@ -399,6 +410,23 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void SemiAntiPasteJoin_UnsupportedByProvider_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
+
+        var semi = () => SqlOf(ctx, simple.SemiJoin(complex, (s, c) => s.Id == c.Id).Select(s => new { s.Id }));
+        semi.Should().Throw<NotSupportedException>().WithMessage("*Semi join is not supported*");
+
+        var anti = () => SqlOf(ctx, simple.AntiJoin(complex, (s, c) => s.Id == c.Id).Select(s => new { s.Id }));
+        anti.Should().Throw<NotSupportedException>().WithMessage("*Anti join is not supported*");
+
+        var paste = () => SqlOf(ctx, simple.PasteJoin(complex).Select(p => new { p.Item1.Id, p.Item2.String }));
+        paste.Should().Throw<NotSupportedException>().WithMessage("*PASTE join is not supported*");
+    }
+
+    [Fact]
     public void CrossJoin_ShouldEmitCrossJoinWithoutOn()
     {
         using var ctx = PostgresTestContext.Create();
@@ -476,14 +504,29 @@ public class SqlGenerationTests
     }
 
     [Fact]
-    public void QueryHint_ShouldThrowBecausePostgresHasNoQueryHints()
+    public void QueryHint_ShouldEmitInlineOptimizerHintComment()
     {
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<ISimpleEntity>();
 
-        var act = () => SqlOf(ctx, e.Select(x => new { x.Id }).Hint("recompile"));
+        var sql = SqlOf(ctx, e.Select(x => new { x.Id }).Hint("recompile"));
 
-        act.Should().Throw<NotSupportedException>().WithMessage("*Query hints*");
+        sql.Should().Be("select /*+ recompile */ id from simple_entity");
+    }
+
+    [Fact]
+    public void QueryHint_WithCte_ShouldPlaceHintAfterTheTopLevelSelect()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var cte = e.Where(x => x.Id > 1).Select(x => new { x.Id });
+        var sql = SqlOf(ctx, ctx.With("recent", cte).From("recent").Select(t => new { id = t["id"].AsInt })
+            .Hint("SeqScan(recent)"));
+
+        sql.Should().StartWith("with recent as (select id from complex_entity");
+        sql.Should().Contain(") select /*+ SeqScan(recent) */ id");
+        sql.Should().EndWith("from recent");
     }
 
     [Fact]
@@ -1244,13 +1287,64 @@ public class SqlGenerationTests
 
         SqlOf(ctx, e.Select(x => SqlFunctions.Sql.string_agg(x.String, ",")))
             .Should().Contain("string_agg(somestring, ',')");
-        // array_agg produces an array column, which the row reader cannot materialise yet; assert the
-        // generated SQL through a predicate instead of a projection.
-        SqlOf(ctx, e
-            .GroupBy(x => new { x.Int })
-            .Having(x => SqlFunctions.Postgres.array_agg(x.Id) != null)
-            .Select(x => new { x.Int }))
+        // array_agg produces an array column; the row reader materialises it as T[].
+        SqlOf(ctx, e.Select(x => SqlFunctions.Postgres.array_agg(x.Id)))
             .Should().Contain("array_agg(id)");
+    }
+
+    [Fact]
+    public void GroupArray_UnsupportedByProvider_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.group_array(x.Id) }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*groupArray/groupUniqArray*");
+    }
+
+    [Fact]
+    public void HigherOrderArrayFunction_UnsupportedByProvider_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => SqlFunctions.ClickHouse.array_map(t => t, x.Tags)));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*higher-order array functions*");
+    }
+
+    [Fact]
+    public void ArrayRelationPredicates_UnsupportedByProvider_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => SqlFunctions.ClickHouse.has_substr(x.Tags, new[] { "a" })));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*array functions*");
+    }
+
+    [Fact]
+    public void TupleFunctions_UnsupportedByProvider_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => Tuple.Create(x.Id, x.String)));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*native tuple type*");
+    }
+
+    [Fact]
+    public void TupleElementAccess_UnsupportedByProvider_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<ITupleEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => x.Pair.Item1));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*native tuple type*");
     }
 
     [Fact]
@@ -1444,6 +1538,54 @@ public class SqlGenerationTests
             .Select(r => new { r.Value }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*string_split*");
+    }
+
+    [Fact]
+    public void BuiltInTableFunction_Containstable_ShouldThrowOnPostgres()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var act = () => SqlOf(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.SqlServer.containstable<int>("docs", "body", "cat"))
+            .Select(r => new { r.Key }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*containstable*");
+    }
+
+    [Theory]
+    [InlineData("url")]
+    [InlineData("s3")]
+    [InlineData("file")]
+    [InlineData("remote")]
+    [InlineData("remoteSecure")]
+    [InlineData("cluster")]
+    [InlineData("clusterAllReplicas")]
+    public void BuiltInTableFunction_ClickHouseServerTableFunctions_ShouldThrowOnPostgres(string name)
+    {
+        using var ctx = PostgresTestContext.Create();
+        var location = "http://127.0.0.1/data.csv";
+        var format = "CSV";
+        var structure = "id UInt64, name String";
+        var addresses = "127.0.0.1:9000";
+        var cluster = "my_cluster";
+        var database = "default";
+        var table = "hits";
+
+        var source = name switch
+        {
+            "url" => ctx.FromTableFunction(() => SqlFunctions.ClickHouse.url<ISimpleEntity>(location, format, structure)),
+            "s3" => ctx.FromTableFunction(() => SqlFunctions.ClickHouse.s3<ISimpleEntity>(location, format, structure)),
+            "file" => ctx.FromTableFunction(() => SqlFunctions.ClickHouse.file<ISimpleEntity>(location, format, structure)),
+            "remote" => ctx.FromTableFunction(() => SqlFunctions.ClickHouse.remote<ISimpleEntity>(addresses, database, table)),
+            "remoteSecure" => ctx.FromTableFunction(() => SqlFunctions.ClickHouse.remote_secure<ISimpleEntity>(addresses, database, table)),
+            "cluster" => ctx.FromTableFunction(() => SqlFunctions.ClickHouse.cluster<ISimpleEntity>(cluster, database, table)),
+            "clusterAllReplicas" => ctx.FromTableFunction(() => SqlFunctions.ClickHouse.cluster_all_replicas<ISimpleEntity>(cluster, database, table)),
+            _ => throw new ArgumentOutOfRangeException(nameof(name), name, "Unknown ClickHouse server table function.")
+        };
+
+        var act = () => SqlOf(ctx, source.Select(r => new { r.Id }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*");
     }
 
     [Fact]
@@ -1668,6 +1810,28 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void QuantilesAggregates_ShouldThrowBecausePostgresHasNoQuantile()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => SqlFunctions.ClickHouse.quantiles(new[] { 0.25, 0.5 }, x.Id)));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*quantile*");
+    }
+
+    [Fact]
+    public void TopKAggregates_ShouldThrowBecausePostgresHasNoTopK()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => SqlFunctions.ClickHouse.top_k(3, x.Id)));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*topK*");
+    }
+
+    [Fact]
     public void AnyAggregates_ShouldThrowBecausePostgresHasNoAnyAggregate()
     {
         using var ctx = PostgresTestContext.Create();
@@ -1698,11 +1862,31 @@ public class SqlGenerationTests
             () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.visit_param_extract_int(x.String, "n") })),
             () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.visit_param_extract_float(x.String, "f") })),
             () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.visit_param_extract_bool(x.String, "b") })),
-            () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.visit_param_extract_raw(x.String, "o") }))
+            () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.visit_param_extract_raw(x.String, "o") })),
+            () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.json_extract_keys(x.String) })),
+            () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.json_extract_array_raw(x.String, "a") })),
+            () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.json_extract_keys_and_values<int>(x.String) }))
         ];
 
         foreach (var act in acts)
             act.Should().Throw<NotSupportedException>().WithMessage("*JSONExtract*");
+    }
+
+    [Fact]
+    public void NativeJsonFunctions_ShouldThrowBecausePostgresHasNoNativeJson()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        Action[] acts =
+        [
+            () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.json_all_paths(x.String) })),
+            () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.json_all_paths_with_types(x.String) })),
+            () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.to_json_string(x.String) }))
+        ];
+
+        foreach (var act in acts)
+            act.Should().Throw<NotSupportedException>().WithMessage("*native-JSON*");
     }
 
     [Fact]
@@ -1715,7 +1899,10 @@ public class SqlGenerationTests
         [
             () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.dict_get<string, long>("d", "a", x.Id) })),
             () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.dict_get_or_default<string, long>("d", "a", x.Id, "n/a") })),
-            () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.dict_has<long>("d", x.Id) }))
+            () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.dict_has<long>("d", x.Id) })),
+            () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.dict_get_hierarchy<long>("d", x.Id) })),
+            () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.dict_get_children<long>("d", x.Id) })),
+            () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.dict_is_in<long>("d", x.Id, 3L) }))
         ];
 
         foreach (var act in acts)
@@ -3116,6 +3303,22 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void TextSearchRankCd_ShouldRenderTsRankCd()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Rank = SqlFunctions.Postgres.ts_rank_cd(
+                SqlFunctions.Postgres.to_tsvector(x.String!),
+                SqlFunctions.Postgres.to_tsquery("cat"))
+        }));
+
+        sql.Should().Contain("ts_rank_cd(to_tsvector(somestring), to_tsquery('cat'))");
+    }
+
+    [Fact]
     public void TextSearchMatch_ShouldRenderAtAtOperator()
     {
         using var ctx = PostgresTestContext.Create();
@@ -3171,6 +3374,18 @@ public class SqlGenerationTests
         var act = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.SqlServer.xml_query(x.String, "/root") }));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*XML data-type methods*");
+    }
+
+    [Fact]
+    public void XmlNodes_ShouldThrowBecauseOnlySqlServerHasThem()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var act = () => SqlOf(ctx, ctx.From<IComplexEntity>()
+            .CrossApply(x => SqlFunctions.SqlServer.xml_nodes(x.String, "/root/item"))
+            .Select(p => new { p.Item2.Value }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*xml.nodes*");
     }
 
     private static Expression<Func<IComplexEntity, string>> SwitchOfId(string @default, params (long Test, string Result)[] cases)
@@ -3265,6 +3480,49 @@ public class SqlGenerationTests
         sql.Should().NotContain("select ,");
         sql.Should().Contain("select \"DepartureCity\", \"Place\", \"Route\", \"Revenue\"");
         sql.Should().Contain("order by t2.\"DepartureCity\"");
+    }
+
+    [Fact]
+    public void FromSql_ShouldRenderDerivedTableWithNamedParameters()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var min = 1;
+
+        var command = Prepare(ctx, ctx
+            .FromSql("select id from complex_entity where id > @min", new { min })
+            .Select(t => new { Id = t["id"].AsInt }));
+
+        var sql = Normalize(command.DbCommand.CommandText);
+        sql.Should().Be("select t1.id from (select id from complex_entity where id > @min) as \"t1\"");
+        command.DbCommandParams.Cast<DbParameter>().Select(p => p.ParameterName).Should().Equal("min");
+    }
+
+    [Fact]
+    public void FromSql_AsJoinedSource_ShouldRenderDerivedTableAndResolveColumns()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx
+            .From<ISimpleEntity>()
+            .Join(ctx.FromSql("select id from complex_entity"), (s, r) => s.Id == r["id"].AsInt)
+            .Select(p => new { p.Item1.Id, R = p.Item2["id"].AsInt }));
+
+        sql.Should().Contain("join (select id from complex_entity) as \"t2\"");
+        sql.Should().Contain("on t1.id = t2.id");
+    }
+
+    [Fact]
+    public void FromSql_CollidingParameterName_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var min = 1;
+
+        var act = () => Prepare(ctx, ctx
+            .FromSql("select id from complex_entity where id > @min", new { min })
+            .Where(t => t["id"].AsInt > min)
+            .Select(t => new { Id = t["id"].AsInt }));
+
+        act.Should().Throw<BuildSqlCommandException>().WithMessage("*two parameters named 'min'*");
     }
 
 }

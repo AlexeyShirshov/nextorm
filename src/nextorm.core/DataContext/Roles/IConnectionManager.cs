@@ -11,6 +11,9 @@ public interface IConnectionManager
 {
     /// <summary>Returns the connection in use, creating it on first access.</summary>
     DbConnection GetConnection();
+    /// <summary>
+    /// Opens the connection if it is closed, blocking until it is open or the open fails.
+    /// </summary>
     void EnsureConnectionOpen();
     /// <summary>
     /// Opens the connection if it is closed. The token is honoured while opening, so a caller that

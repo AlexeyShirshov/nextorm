@@ -57,7 +57,7 @@ internal static class ExtendedScalarFunctionTranslator
         nameof(PostgresFunctions.to_tsvector), nameof(PostgresFunctions.to_tsquery),
         nameof(PostgresFunctions.plainto_tsquery), nameof(PostgresFunctions.phraseto_tsquery),
         nameof(PostgresFunctions.websearch_to_tsquery), nameof(PostgresFunctions.ts_rank),
-        nameof(PostgresFunctions.ts_headline)
+        nameof(PostgresFunctions.ts_rank_cd), nameof(PostgresFunctions.ts_headline)
     };
 
     /// <summary>Translates an extended scalar call; returns <c>false</c> when it is not one of them.</summary>

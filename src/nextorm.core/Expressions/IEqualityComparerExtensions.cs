@@ -2,8 +2,18 @@ using System.Runtime.InteropServices;
 
 namespace NextORM.Core;
 
+/// <summary>
+/// Extension methods that compare collections element-wise with an <see cref="IEqualityComparer{T}"/>
+/// or <see cref="IValueEqualityComparer{T}"/>.
+/// </summary>
 public static class IEqualityComparerExtensions
 {
+    /// <summary>Determines whether two arrays contain the same elements, using the comparer.</summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="comparer">The element comparer.</param>
+    /// <param name="x">The first array, or <c>null</c>.</param>
+    /// <param name="y">The second array, or <c>null</c>.</param>
+    /// <returns><c>true</c> when both are <c>null</c>, or both have equal length and equal elements.</returns>
     public static bool Equals<T>(this IEqualityComparer<T> comparer, T[]? x, T[]? y)
         where T : class
     {
@@ -28,6 +38,12 @@ public static class IEqualityComparerExtensions
 
         return true; // both nulls
     }
+    /// <summary>Determines whether two lists contain the same elements, using the comparer.</summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="comparer">The element comparer.</param>
+    /// <param name="x">The first list, or <c>null</c>.</param>
+    /// <param name="y">The second list, or <c>null</c>.</param>
+    /// <returns><c>true</c> when both are <c>null</c>, or both have equal count and equal elements.</returns>
     public static bool Equals<T>(this IEqualityComparer<T> comparer, IReadOnlyList<T>? x, IReadOnlyList<T>? y)
     {
         if (x is null && y is not null) return false;
@@ -54,6 +70,12 @@ public static class IEqualityComparerExtensions
 
         return true; // both nulls
     }
+    /// <summary>Determines whether two arrays contain the same value elements, using the by-reference comparer.</summary>
+    /// <typeparam name="T">The element type.</typeparam>
+    /// <param name="comparer">The value comparer.</param>
+    /// <param name="x">The first array, or <c>null</c>.</param>
+    /// <param name="y">The second array, or <c>null</c>.</param>
+    /// <returns><c>true</c> when both are <c>null</c>, or both have equal length and equal elements.</returns>
     public static bool ValueEquals<T>(this IValueEqualityComparer<T> comparer, T[]? x, T[]? y)
         where T : struct
     {

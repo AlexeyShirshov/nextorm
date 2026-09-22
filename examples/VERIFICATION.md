@@ -35,7 +35,7 @@ are recorded as `FAIL`; any other exception aborts the run.
 |---|---|---|
 | CH `ArrayAnalytics` | higher-order lambdas `arrayMap`/`arrayFilter` (and grouping by an array) are not translated | [`todo_clickhouse_arrays.md`](../docs/specs/roadmap/todo_clickhouse_arrays.md) (lambda/higher-order аргументы) |
 | CH `Incremental` | no `AggregateFunction(...)` state type, so the `-Merge` combinator `uniqMerge` cannot be expressed | [`todo_clickhouse_aggregate_function_state.md`](../docs/specs/roadmap/todo_clickhouse_aggregate_function_state.md) |
-| CH `Retention` | no row reader for `Array(T)`/`Tuple`, so `groupArray((...))` cannot be materialised (plus native `UInt64`) | [`todo_clickhouse_arrays.md`](../docs/specs/roadmap/todo_clickhouse_arrays.md), [`todo_clickhouse_uint64_row_reader.md`](../docs/specs/roadmap/todo_clickhouse_uint64_row_reader.md) |
+| CH `Retention` | no row reader for `Array(T)`/`Tuple`, so `groupArray((...))` cannot be materialised | [`todo_clickhouse_arrays.md`](../docs/specs/roadmap/todo_clickhouse_arrays.md) |
 
 MSSQL `QuarterlyPivot` is no longer a failure: the native `PIVOT` now accepts a derived query, so the
 reference `WITH OrderMargins AS (<5-table join>) ... PIVOT (...)` is expressed directly.

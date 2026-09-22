@@ -30,8 +30,8 @@ select id from complex_entity where (id = any(@p0))
 ```
 
 See [Arrays (PostgreSQL)](../11-scalar-functions.md#arrays-postgresql). Functions that return an array
-are meant to be used inside a query; the row reader cannot materialise an array column yet, so
-projecting one directly throws at preparation time.
+can be used inside a query or projected directly: the row reader materialises an `Array(T)` result as
+a CLR `T[]`.
 
 ## `json` and `jsonb`
 
@@ -57,7 +57,7 @@ See [JSON and JSONB (PostgreSQL)](../11-scalar-functions.md) and
 
 * `percentile_cont`/`percentile_disc` are ordered-set aggregates rendered as
   `percentile_cont(f) within group (order by x)` ([`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates),
-  [`MakeWithinGroup`](xref:NextORM.Core.ISqlDialect)); `mode()` is the ordered-set mode;
+  [`MakeWithinGroup`](xref:NextORM.Core.ISqlDialect.MakeWithinGroup(System.String,System.String))); `mode()` is the ordered-set mode;
 * `bool_and`/`bool_or`/`every`, the `regr_*` regression family and `bit_and`/`bit_or`/`bit_xor` are
   PostgreSQL-only and are rejected by every other dialect;
 * `array_agg` and the string/array aggregate surface are gated by
@@ -72,7 +72,8 @@ The cross-provider boolean predicates `contains`/`freetext` render
 additionally exposes the native text-search scalar surface, gated by
 [`SupportsTextSearchFunctions`](xref:NextORM.Core.ISqlDialect.SupportsTextSearchFunctions):
 `to_tsvector`, `to_tsquery` (plus `plainto_tsquery`/`phraseto_tsquery`/`websearch_to_tsquery`),
-`ts_rank`, `ts_headline` and the `@@` match operator. `tsvector`/`tsquery` are represented as `string`
+`ts_rank`, `ts_rank_cd` (cover-density ranking), `ts_headline` and the `@@` match operator.
+`tsvector`/`tsquery` are represented as `string`
 on the CLR side.
 
 ```csharp
@@ -110,7 +111,7 @@ See [Scalar functions](../11-scalar-functions.md).
 
 ## `DISTINCT ON`
 
-[`DistinctOn`](xref:NextORM.Core.EntityBuilder`1) renders `SELECT DISTINCT ON (expr, ...)`, keeping the
+[`DistinctOn`](xref:NextORM.Core.EntityBuilder`1.DistinctOn``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) renders `SELECT DISTINCT ON (expr, ...)`, keeping the
 first row of each key ([`DistinctOn`](xref:NextORM.Core.ISqlDialect.DistinctOn));
 mutually exclusive with `Distinct`.
 
@@ -131,7 +132,7 @@ See [Distinct](../08-distinct.md).
 ## Set-returning functions
 
 PostgreSQL's set-returning functions are exposed as table-valued functions through
-[`FromTableFunction`](xref:NextORM.Core.EntityBuilder`1):
+[`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})):
 
 | `SqlFunctions.Postgres.*` | SQL output columns | Row shape |
 | --- | --- | --- |
@@ -157,7 +158,7 @@ See [Table-valued functions](../13-table-valued-functions.md).
 
 ## `TABLESAMPLE`
 
-[`TableSample`](xref:NextORM.Core.EntityBuilder`1) appends a `TABLESAMPLE` modifier to the
+[`TableSample`](xref:NextORM.Core.EntityBuilder`1.TableSample(System.Double,NextORM.Core.TableSampleMethod,System.Nullable{System.Double})) appends a `TABLESAMPLE` modifier to the
 query's primary table ([`TableSample`](xref:NextORM.Core.ISqlDialect.TableSample)).
 PostgreSQL supports both sampling methods and an optional repeatable seed
 (`TableSample`,

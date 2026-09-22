@@ -31,7 +31,7 @@ The scalar `array_join` (one row per element, projectable) and the clause method
 
 ## `LIMIT n BY expr`
 
-[`LimitBy`](xref:NextORM.Core.EntityBuilder`1) returns the first `n` rows **per distinct key**, emitted
+[`LimitBy`](xref:NextORM.Core.EntityBuilder`1.LimitBy``1(System.Int32,System.Int32,System.Linq.Expressions.Expression{System.Func{`0,``0}})) returns the first `n` rows **per distinct key**, emitted
 after `ORDER BY` and before the final `LIMIT`:
 
 ```csharp
@@ -51,7 +51,7 @@ See [Sorting and paging](../05-sorting-and-paging.md#limit-by-clickhouse)
 
 ## `GROUP BY ... WITH TOTALS`
 
-[`WithTotals`](xref:NextORM.Core.EntityBuilder`1) appends the ClickHouse `with totals` modifier to a
+[`WithTotals`](xref:NextORM.Core.EntityBuilder`1.WithTotals) appends the ClickHouse `with totals` modifier to a
 grouping, adding a totals row for the whole result set. It is orthogonal to `ROLLUP`/`CUBE` and cannot
 be combined with `GROUPING SETS`:
 
@@ -116,11 +116,13 @@ See [Joins](../03-joins.md#provider-specific-join-modifiers-clickhouse)
 ([`SupportsJoinStrictness`](xref:NextORM.Core.ISqlDialect.SupportsJoinStrictness)/[`SupportsGlobalJoin`](xref:NextORM.Core.ISqlDialect.SupportsGlobalJoin)).
 `ANY` keeps one right-hand row per left-hand row, `ALL` keeps every match and `ASOF` needs one equi-join
 column plus a final inequality; `GLOBAL` broadcasts the right side for distributed queries.
-`SEMI`/`ANTI`/`PASTE` joins are not supported.
+`SEMI`/`ANTI`/`PASTE` have dedicated builders: `SemiJoin`/`AntiJoin` return only the left-hand columns
+for left rows that do (respectively do not) have a match, and `PasteJoin` pairs the two sources by row
+position with no `ON` ([`SupportsSemiAntiJoin`](xref:NextORM.Core.ISqlDialect.SupportsSemiAntiJoin)/`SupportsPasteJoin`).
 
 ## `GLOBAL IN`
 
-[`SqlFunctions.ClickHouse.global_in`](xref:NextORM.Core.ClickHouseFunctions) renders the distributed
+[`SqlFunctions.ClickHouse.global_in`](xref:NextORM.Core.ClickHouseFunctions.global_in``1(``0,NextORM.Core.QueryCommand{``0})) renders the distributed
 predicate over a subquery or a value list; negate with `!` for `GLOBAL NOT IN`:
 
 ```csharp
@@ -141,18 +143,25 @@ See [Filtering](../02-filtering-where.md#global-in-clickhouse)
 ## Aggregates
 
 ClickHouse-exclusive aggregates live on [`ClickHouseFunctions`](xref:NextORM.Core.ClickHouseFunctions)
-and are rejected by every other dialect. Some return types the row reader cannot materialise (`UInt64`,
-`Float32`), so the dialect wraps them in `toInt64(...)`/`toInt32(...)`/`toFloat64(...)` casts:
+and are rejected by every other dialect. Their native result types (`UInt64`, `Float32`, the `-If`
+integer types) do not always match the declared CLR return type, so the dialect wraps them in
+`toInt64(...)`/`toInt32(...)`/`toFloat64(...)` casts that normalise the value to the type the method
+declares:
 
 * distinct-count aggregates `uniq`/`uniq_exact`/`uniq_combined`/`uniq_hll12` (`toInt64`);
-* parameterised `quantile(level)(value)`/`quantile_exact`/`quantile_timing` and `median` (`toFloat64`);
+* parameterised `quantile(level)(value)`/`quantile_exact`/`quantile_timing` and `median` (`toFloat64`), multi-level `quantiles(level1, level2, ...)(value)` (returns `Array(Float64)`, materialised as a CLR `double[]`; the levels must be an inline array);
+* the most-frequent `topK(k)(value)`/`topKWeighted(k)(value, weight)` aggregates (return `Array(T)`, materialised as a CLR `T[]`);
 * the last-row arbitrary-value aggregate `any_last` (`anyLast`);
-* the sequence/funnel aggregates `window_funnel`/`sequence_match`/`retention` (`windowFunnel`/`sequenceMatch` with `toInt32(...)`; `retention` returns an array, usable only nested);
+* the array-returning aggregates `group_array`/`group_uniq_array` (`groupArray`/`groupUniqArray`, materialised as a CLR `T[]`; `groupArray` of an array column yields a nested `T[][]`);
+* the sequence/funnel aggregates `window_funnel`/`sequence_match`/`retention` (`windowFunnel`/`sequenceMatch` with `toInt32(...)`; `retention` returns an array, projected directly);
 * the `-If` combinators `count_if`/`sum_if`/`avg_if`/`min_if`/`max_if`;
 * `arg_min`/`arg_max`.
 
 Portable aggregates — including `count`, the arbitrary-value `any_agg` (rendered `ANY_VALUE` on MySQL and
-MariaDB) and `corr`/`covar*` — are documented with the concept page, not here.
+MariaDB) and `corr`/`covar*` — are documented with the concept page, not here. A plain `UInt64` column
+(or any `ulong`/`ulong?` projection) materialises directly through the row reader's
+`DbDataReader.GetFieldValue<ulong>` accessor, so only the function results above need the normalising
+cast.
 
 See [Grouping and aggregates](../04-grouping-and-aggregates.md).
 
@@ -160,11 +169,22 @@ See [Grouping and aggregates](../04-grouping-and-aggregates.md).
 
 * string-JSON extractors `JSONExtractString`/`JSONExtractInt`/`JSONExtractFloat`/`JSONExtractBool`/
   `JSONExtractRaw`/`JSONHas`/`JSONType`, `json_length`, and the flat-JSON `visitParamExtract*`;
+* array-returning `JSONExtractKeys`/`JSONExtractArrayRaw` (`json_extract_keys`/`json_extract_array_raw`,
+  projecting as `string[]`) and `JSONExtractKeysAndValues` (`json_extract_keys_and_values<T>`, projecting
+  as `Tuple<string, T>[]`; `T` must be a non-nullable ClickHouse type);
 * JSONPath scalars `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (over string JSON);
-* dictionary lookups `dict_get`/`dict_get_or_default`/`dict_has` (need a configured `CREATE DICTIONARY`);
-* array functions `length`/`has`/`index_of`/`has_any`/`has_all`/`array_string_concat`/`split_by_char`/
-  `array_sort`/`array_reverse`/`array_distinct`/`range`/`array_enumerate`/`array_cum_sum`/`array_slice`/
-  `array_push_back`.
+* native-JSON functions `json_all_paths`/`json_all_paths_with_types` (`JSONAllPaths`/
+  `JSONAllPathsWithTypes`; the former projects as `string[]`, the latter's native `Map(String, String)`
+  as `Dictionary<string, string>`; both take a native `JSON` value) and `to_json_string`
+  (`toJSONString`);
+* dictionary lookups `dict_get`/`dict_get_or_default`/`dict_has` and the hierarchy
+  `dict_get_hierarchy`/`dict_get_children`/`dict_is_in` (need a configured `CREATE DICTIONARY`);
+* array functions `length`/`has`/`index_of`/`has_any`/`has_all`/`starts_with`/`ends_with`/`has_substr`/
+  `array_string_concat`/`split_by_char`/`array_sort`/`array_reverse`/`array_distinct`/`range`/
+  `array_enumerate`/`array_cum_sum`/`array_slice`/`array_push_back`;
+* tuple constructor and element access: `System.Tuple.Create(a, b)` renders `tuple(a, b)` and
+  `System.Tuple<...>.ItemN` renders `tupleElement(t, n)` (a whole `Tuple(...)` projects as
+  `System.Tuple<...>`); `untuple` is not supported.
 
 See [Scalar functions](../11-scalar-functions.md) and [JSON support](../18-json.md)
 ([`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract)/[`SupportsDictionaries`](xref:NextORM.Core.ISqlDialect.SupportsDictionaries)).
@@ -172,7 +192,7 @@ See [Scalar functions](../11-scalar-functions.md) and [JSON support](../18-json.
 ## Table functions
 
 `numbers`/`numbers_mt` and the row-count generators `zeros`/`zeros_mt` are available through
-[`FromTableFunction`](xref:NextORM.Core.EntityBuilder`1). The `numbers` `UInt64` column is cast to
+[`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})). The `numbers` `UInt64` column is cast to
 `Int64` inside a wrapping subquery so it materialises as a CLR `long`; `zeros` materialises directly as
 `byte`:
 
@@ -186,9 +206,9 @@ See [Table-valued functions](../13-table-valued-functions.md).
 
 ## Not yet supported
 
-`SEMI`/`ANTI`/`PASTE` joins, higher-order array functions (`arrayMap`/`arrayFilter`), array/tuple row
-readers, the native `JSON` type, and distributed table functions (`remote`, `cluster`, `s3`, `file`)
-are out of scope today. See [Limitations and out-of-scope features](../../advanced/limitations.md).
+The native `JSON` column type (its reader/type-mapping) and distributed
+table functions (`remote`, `cluster`, `s3`, `file`) are out of scope today. See
+[Limitations and out-of-scope features](../../advanced/limitations.md).
 
 ## See also
 

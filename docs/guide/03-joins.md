@@ -1,29 +1,29 @@
 # Joins
 
-> Combine rows from two or more entities, derived queries or raw tables with [`Join`](xref:NextORM.Core.EntityBuilder`1), [`LeftJoin`](xref:NextORM.Core.EntityBuilder`1), [`RightJoin`](xref:NextORM.Core.EntityBuilder`1), [`FullJoin`](xref:NextORM.Core.EntityBuilder`1), [`CrossJoin`](xref:NextORM.Core.EntityBuilder`1), [`CrossApply`](xref:NextORM.Core.EntityBuilder`1) and [`OuterApply`](xref:NextORM.Core.EntityBuilder`1).
+> Combine rows from two or more entities, derived queries or raw tables with [`Join`](xref:NextORM.Core.EntityBuilder`1.Join``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})), [`LeftJoin`](xref:NextORM.Core.EntityBuilder`1.LeftJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})), [`RightJoin`](xref:NextORM.Core.EntityBuilder`1.RightJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})), [`FullJoin`](xref:NextORM.Core.EntityBuilder`1.FullJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})), [`CrossJoin`](xref:NextORM.Core.EntityBuilder`1.CrossJoin``1(NextORM.Core.EntityBuilder{``0})), [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0})) and [`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0})).
 
 **Prerequisites:** [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Querying and projections](01-querying-and-projections.md) · [Filtering (WHERE)](02-filtering-where.md)
 
 ## Overview
 
-Every `EntityBuilder<T>` exposes seven join methods: [`Join`](xref:NextORM.Core.EntityBuilder`1) (inner), [`LeftJoin`](xref:NextORM.Core.EntityBuilder`1), [`RightJoin`](xref:NextORM.Core.EntityBuilder`1), [`FullJoin`](xref:NextORM.Core.EntityBuilder`1),
-[`CrossJoin`](xref:NextORM.Core.EntityBuilder`1), [`CrossApply`](xref:NextORM.Core.EntityBuilder`1) and [`OuterApply`](xref:NextORM.Core.EntityBuilder`1). A join condition is an expression over the two sides and is
-emitted as the `ON` clause of the join, exactly where the builder can translate it. [`CrossJoin`](xref:NextORM.Core.EntityBuilder`1),
-[`CrossApply`](xref:NextORM.Core.EntityBuilder`1) and [`OuterApply`](xref:NextORM.Core.EntityBuilder`1) take no condition; the first emits `cross join`, the latter two emit the
+Every `EntityBuilder<T>` exposes seven join methods: [`Join`](xref:NextORM.Core.EntityBuilder`1.Join``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})) (inner), [`LeftJoin`](xref:NextORM.Core.EntityBuilder`1.LeftJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})), [`RightJoin`](xref:NextORM.Core.EntityBuilder`1.RightJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})), [`FullJoin`](xref:NextORM.Core.EntityBuilder`1.FullJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})),
+[`CrossJoin`](xref:NextORM.Core.EntityBuilder`1.CrossJoin``1(NextORM.Core.EntityBuilder{``0})), [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0})) and [`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0})). A join condition is an expression over the two sides and is
+emitted as the `ON` clause of the join, exactly where the builder can translate it. [`CrossJoin`](xref:NextORM.Core.EntityBuilder`1.CrossJoin``1(NextORM.Core.EntityBuilder{``0})),
+[`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0})) and [`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0})) take no condition; the first emits `cross join`, the latter two emit the
 provider's lateral/apply form (see [APPLY and LATERAL](#apply-and-lateral)).
 
 The right-hand side can be:
 
 * another typed entity, `EntityBuilder<TJoinEntity>`;
 * a `QueryCommand<TJoinEntity>` — a subquery that is rendered as a derived table;
-* a raw table, [`EntityBuilder`](xref:NextORM.Core.EntityBuilder) created through [`From`](xref:NextORM.Core.DataContext), whose columns are read through
+* a raw table, [`EntityBuilder`](xref:NextORM.Core.EntityBuilder) created through [`From`](xref:NextORM.Core.DataContext.From(System.String)), whose columns are read through
   the [`TableAlias`](xref:NextORM.Core.TableAlias) indexer (`t["id"]`).
 
 Two things are important before looking at the examples:
 
 1. **Join arity is capped at eight tables, at compile time.** The first join returns
    [`JoinedEntityBuilder<T1, T2>`](xref:NextORM.Core.JoinedEntityBuilder`2), the next [`JoinedEntityBuilder<T1, T2, T3>`](xref:NextORM.Core.JoinedEntityBuilder`3), and so on up to `JoinedEntityBuilder<T1..T8>`.
-   `JoinedEntityBuilder` deliberately exposes no further [`Join`](xref:NextORM.Core.EntityBuilder`1)/[`LeftJoin`](xref:NextORM.Core.EntityBuilder`1)/[`RightJoin`](xref:NextORM.Core.EntityBuilder`1)/[`FullJoin`](xref:NextORM.Core.EntityBuilder`1)/[`CrossJoin`](xref:NextORM.Core.EntityBuilder`1)
+   `JoinedEntityBuilder` deliberately exposes no further [`Join`](xref:NextORM.Core.EntityBuilder`1.Join``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}}))/[`LeftJoin`](xref:NextORM.Core.EntityBuilder`1.LeftJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}}))/[`RightJoin`](xref:NextORM.Core.EntityBuilder`1.RightJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}}))/[`FullJoin`](xref:NextORM.Core.EntityBuilder`1.FullJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}}))/[`CrossJoin`](xref:NextORM.Core.EntityBuilder`1.CrossJoin``1(NextORM.Core.EntityBuilder{``0}))
    methods, and `Projection<T1..T8>` does not implement [`IExtendableProjection`](xref:NextORM.Core.IExtendableProjection), so a ninth join
    does not compile.
 2. **The accumulated projection is addressed as `p.Item1`, `p.Item2`, … `p.Item8`.** After the first join the
@@ -70,7 +70,7 @@ var rows = await dataContext.From<ISimpleEntity>()
     .ToListAsync();
 ```
 
-A [`Where`](xref:NextORM.Core.EntityBuilder`1) placed before the join filters the left side first; the two are equivalent for inner joins
+A [`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})) placed before the join filters the left side first; the two are equivalent for inner joins
 but differ for outer joins:
 
 ```csharp
@@ -106,8 +106,8 @@ side, list each of them explicitly.
 
 ## Outer joins
 
-[`LeftJoin`](xref:NextORM.Core.EntityBuilder`1) keeps every row of the left side and fills the right side with `NULL` when there is no
-match; [`RightJoin`](xref:NextORM.Core.EntityBuilder`1) and [`FullJoin`](xref:NextORM.Core.EntityBuilder`1) behave symmetrically.
+[`LeftJoin`](xref:NextORM.Core.EntityBuilder`1.LeftJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})) keeps every row of the left side and fills the right side with `NULL` when there is no
+match; [`RightJoin`](xref:NextORM.Core.EntityBuilder`1.RightJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})) and [`FullJoin`](xref:NextORM.Core.EntityBuilder`1.FullJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})) behave symmetrically.
 
 ```csharp
 var rows = dataContext.From<ISimpleEntity>()
@@ -120,7 +120,7 @@ var rows = dataContext.From<ISimpleEntity>()
 select t1.id as 'LeftId', t2.requiredstring as 'RightString' from simple_entity as 't1' left join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
 ```
 
-[`RightJoin`](xref:NextORM.Core.EntityBuilder`1) and [`FullJoin`](xref:NextORM.Core.EntityBuilder`1) are emitted with the same shape:
+[`RightJoin`](xref:NextORM.Core.EntityBuilder`1.RightJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})) and [`FullJoin`](xref:NextORM.Core.EntityBuilder`1.FullJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})) are emitted with the same shape:
 
 ```csharp
 var right = dataContext.From<IComplexEntity>()
@@ -134,12 +134,12 @@ var full = dataContext.From<ISimpleEntity>()
     .ToList();
 ```
 
-[`RightJoin`](xref:NextORM.Core.EntityBuilder`1) and [`FullJoin`](xref:NextORM.Core.EntityBuilder`1) are rejected with `NotSupportedException` only when a dialect reports
+[`RightJoin`](xref:NextORM.Core.EntityBuilder`1.RightJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})) and [`FullJoin`](xref:NextORM.Core.EntityBuilder`1.FullJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})) are rejected with `NotSupportedException` only when a dialect reports
 `SupportsRightFullJoin == false`; all providers nextorm ships declare support.
 
 ## Cross join
 
-[`CrossJoin`](xref:NextORM.Core.EntityBuilder`1) takes no condition and produces the Cartesian product:
+[`CrossJoin`](xref:NextORM.Core.EntityBuilder`1.CrossJoin``1(NextORM.Core.EntityBuilder{``0})) takes no condition and produces the Cartesian product:
 
 ```csharp
 var count = dataContext.From<ISimpleEntity>().CrossJoin(dataContext.From<IComplexEntity>()).Count();
@@ -157,13 +157,13 @@ Output:
 
 ## APPLY and LATERAL
 
-[`CrossApply`](xref:NextORM.Core.EntityBuilder`1) and [`OuterApply`](xref:NextORM.Core.EntityBuilder`1) render the provider's lateral-source form. The right-hand side is the same
+[`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0})) and [`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0})) render the provider's lateral-source form. The right-hand side is the same
 set of sources that a regular join accepts — a typed entity, a `QueryCommand<T>` derived table, a raw
 table or a table-valued function — but there is no `ON` condition:
 
-* [`CrossApply`](xref:NextORM.Core.EntityBuilder`1) keeps only the left-hand rows for which the applied source returns at least one row
+* [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0})) keeps only the left-hand rows for which the applied source returns at least one row
   (SQL Server `CROSS APPLY`, PostgreSQL/MySQL/MariaDB `CROSS JOIN LATERAL`);
-* [`OuterApply`](xref:NextORM.Core.EntityBuilder`1) also keeps left-hand rows whose applied source is empty, filling the right side with
+* [`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0})) also keeps left-hand rows whose applied source is empty, filling the right side with
   `NULL` (SQL Server `OUTER APPLY`, PostgreSQL/MySQL/MariaDB `LEFT JOIN LATERAL ... ON true`).
 
 ```csharp
@@ -203,7 +203,7 @@ var rows = dataContext.From<ISimpleEntity>()
 ### Correlated APPLY / LATERAL
 
 The applied source can reference columns of the left-hand row by building it inside a lambda that
-receives that row. [`CrossApply`](xref:NextORM.Core.EntityBuilder`1)/[`OuterApply`](xref:NextORM.Core.EntityBuilder`1) accept such a lambda in two forms: one returning a
+receives that row. [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0}))/[`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0})) accept such a lambda in two forms: one returning a
 `QueryCommand<T>` (a projected derived query) and one returning an `EntityBuilder<T>` (the whole
 entity).
 
@@ -225,7 +225,7 @@ var rows = await dataContext.From<ISimpleEntity>()
 
 The lambda parameter behaves like the outer parameter of a correlated scalar subquery: a column of the
 left-hand row (here `s.Id`) becomes an outer reference resolved to the left-hand table alias.
-[`OuterApply`](xref:NextORM.Core.EntityBuilder`1) also keeps left-hand rows whose applied source is empty, projecting `NULL`s.
+[`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0})) also keeps left-hand rows whose applied source is empty, projecting `NULL`s.
 
 Correlation needs a lateral source: dialects with `SupportsApply == false` (SQLite, ClickHouse) reject a
 correlated apply with `NotSupportedException`, as does the in-memory provider. A correlated apply cannot
@@ -374,7 +374,7 @@ for (var i = 1; i <= 3; i++)
 
 ClickHouse adds two join modifiers that the other dialects do not have: a **strictness** modifier
 (`ANY`/`ALL`/`ASOF`) and the distributed `GLOBAL` prefix. Both are applied to the join that was just
-added, with [`WithStrictness`](xref:NextORM.Core.EntityBuilder`1) and [`Global`](xref:NextORM.Core.EntityBuilder`1):
+added, with [`WithStrictness`](xref:NextORM.Core.EntityBuilder`1.WithStrictness(NextORM.Core.JoinStrictness)) and [`Global`](xref:NextORM.Core.EntityBuilder`1.Global):
 
 ```csharp
 var rows = dataContext.From<ISimpleEntity>()
@@ -388,10 +388,10 @@ var rows = dataContext.From<ISimpleEntity>()
 select t1.id, t2.somestring from simple_entity as `t1` left any join complex_entity as `t2` on cast(t1.id as bigint) = t2.id
 ```
 
-[`JoinStrictness.Any`](xref:NextORM.Core.JoinStrictness) renders `<type> any join` and keeps a single
-right-hand row per left-hand row; [`JoinStrictness.All`](xref:NextORM.Core.JoinStrictness) keeps every
-match; [`JoinStrictness.Asof`](xref:NextORM.Core.JoinStrictness) renders `asof join`, which requires one
-equi-join column plus a final inequality. [`Global`](xref:NextORM.Core.EntityBuilder`1) renders the
+[`JoinStrictness.Any`](xref:NextORM.Core.JoinStrictness.Any) renders `<type> any join` and keeps a single
+right-hand row per left-hand row; [`JoinStrictness.All`](xref:NextORM.Core.JoinStrictness.All) keeps every
+match; [`JoinStrictness.Asof`](xref:NextORM.Core.JoinStrictness.Asof) renders `asof join`, which requires one
+equi-join column plus a final inequality. [`Global`](xref:NextORM.Core.EntityBuilder`1.Global) renders the
 `GLOBAL` prefix used by distributed queries and composes with the strictness modifier in either order
 (`global left any join`):
 
@@ -412,8 +412,36 @@ are not mutated; a modifier set before a later join stays on the join it was app
 `INNER`/`LEFT`/`RIGHT`/`FULL` joins (`CROSS`/`APPLY` throw `NotSupportedException`). The modifiers are
 ClickHouse-only ([`SupportsJoinStrictness`](xref:NextORM.Core.ISqlDialect.SupportsJoinStrictness),
 [`SupportsGlobalJoin`](xref:NextORM.Core.ISqlDialect.SupportsGlobalJoin)); every other provider and the
-in-memory context reject them with `NotSupportedException`. `SEMI`/`ANTI`/`PASTE` joins are not
-supported. See [Provider-specific SQL](provider-specific/overview.md) for the full catalogue.
+in-memory context reject them with `NotSupportedException`.
+
+### SEMI / ANTI / PASTE joins
+
+`SEMI`, `ANTI` and `PASTE` are join *kinds* rather than modifiers: they change which columns and rows
+the join contributes, so they get dedicated builders instead of `WithStrictness`:
+
+```csharp
+var ids = dataContext.From<ISimpleEntity>()
+    .SemiJoin(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+    .Select(s => s.Id)
+    .ToList();
+```
+
+```sql
+select t1.id from simple_entity as `t1` left semi join complex_entity as `t2` on cast(t1.id as bigint) = t2.id
+```
+
+- [`SemiJoin`](xref:NextORM.Core.EntityBuilder`1.SemiJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})) keeps only the left-hand columns, once per left row that
+  has at least one matching right row;
+- [`AntiJoin`](xref:NextORM.Core.EntityBuilder`1.AntiJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})) keeps only the left-hand columns for left rows with no
+  match (the complement of `SemiJoin`);
+- [`PasteJoin`](xref:NextORM.Core.EntityBuilder`1.PasteJoin``1(NextORM.Core.EntityBuilder{``0})) pairs the two sources by row position with no `ON`; the
+  projection exposes both sides and the result has as many rows as the shorter side.
+
+`SemiJoin`/`AntiJoin` return the same projection shape (the right columns are not accessible), whereas
+`PasteJoin` extends it by one item. They are ClickHouse-only
+([`SupportsSemiAntiJoin`](xref:NextORM.Core.ISqlDialect.SupportsSemiAntiJoin)/[`SupportsPasteJoin`](xref:NextORM.Core.ISqlDialect.SupportsPasteJoin));
+every other provider and the in-memory context reject them with `NotSupportedException`. See
+[Provider-specific SQL](provider-specific/overview.md) for the full catalogue.
 
 ## Provider differences
 
@@ -428,7 +456,7 @@ supported. See [Provider-specific SQL](provider-specific/overview.md) for the fu
 
 The in-memory provider compiles the join condition to a delegate and loops, so it does not emit SQL;
 it supports [`Inner`](xref:NextORM.Core.JoinType.Inner), [`Left`](xref:NextORM.Core.JoinType.Left), [`Right`](xref:NextORM.Core.JoinType.Right), [`Full`](xref:NextORM.Core.JoinType.Full) and [`Cross`](xref:NextORM.Core.JoinType.Cross) joins (see
-`tests/nextorm.core.tests/InMemoryJoinTests.cs`). [`CrossApply`](xref:NextORM.Core.EntityBuilder`1)/[`OuterApply`](xref:NextORM.Core.EntityBuilder`1) are SQL-only and throw
+`tests/nextorm.core.tests/InMemoryJoinTests.cs`). [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0}))/[`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0})) are SQL-only and throw
 `NotSupportedException` on the in-memory provider, like the other unsupported join types. Joins through
 `JoinedEntityBuilder<T1..T8>` are resolved at query build time on every provider.
 

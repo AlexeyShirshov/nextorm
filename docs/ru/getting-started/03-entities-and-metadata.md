@@ -20,7 +20,7 @@
 [соглашения об именовании](#соглашения-об-именовании); имена, объявленные атрибутом или fluent-отображением,
 всегда берутся дословно.
 
-Метаданные разрешаются лениво и кэшируются **на уровне процесса** в [`Metadata`](xref:NextORM.Core.DataContextCache.Metadata) по типу при первом запросе типа через [`From`](xref:NextORM.Core.DataContextExtensions). Из-за этого кэша:
+Метаданные разрешаются лениво и кэшируются **на уровне процесса** в [`Metadata`](xref:NextORM.Core.DataContextCache.Metadata) по типу при первом запросе типа через [`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)). Из-за этого кэша:
 
 * делегат конфигурации, переданный в `From<T>(…)`, выполняется только при первом вызове для этого типа в
   процессе;
@@ -63,7 +63,7 @@ select id from simple_entity
   и является общепринятым выбором.
 * **Бинарные столбцы** - свойство `byte[]` отображается на бинарный столбец (`bytea` в PostgreSQL,
   `varbinary`/`image` в SQL Server, `blob` в SQLite). `byte[]` можно также проецировать напрямую
-  (`Select(x => x.Data)`) и сравнивать с параметром `byte[]` через [`Parameter`](xref:NextORM.Core.SqlFunctions).
+  (`Select(x => x.Data)`) и сравнивать с параметром `byte[]` через [`Parameter`](xref:NextORM.Core.SqlFunctions.Parameter``1(System.Int32)).
 
 ### Интерфейс плюс класс
 
@@ -88,7 +88,7 @@ public class SimpleEntity : ISimpleEntity
 
 ## Типы без атрибутов
 
-Типу не нужны атрибуты, чтобы быть доступным для запросов: [`From<T>()`](xref:NextORM.Core.DataContextExtensions) строит отображение по форме типа (и кэширует его) при первом использовании типа.
+Типу не нужны атрибуты, чтобы быть доступным для запросов: [`From<T>()`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)) строит отображение по форме типа (и кэширует его) при первом использовании типа.
 
 * **Имя таблицы** - имя типа CLR дословно. `Product` отображается на `Product`; интерфейс сохраняет свой
   префикс, поэтому `IProduct` отображается на `IProduct` (а не на `products`).
@@ -195,7 +195,7 @@ public class ExplicitEntity
 
 ## Fluent-регистрация
 
-Вместо атрибутов передайте делегат конфигурации в [`From`](xref:NextORM.Core.DataContextExtensions). [`EntityMetadataBuilder<T>`](xref:NextORM.Core.EntityMetadataBuilder`1) предоставляет `Table(string)` и `Property(Expression<Func<T, object>>)`; возвращаемый [`EntityPropertyBuilder<T>`](xref:NextORM.Core.EntityPropertyBuilder`1) предоставляет `HasColumnName(string)`.
+Вместо атрибутов передайте делегат конфигурации в [`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)). [`EntityMetadataBuilder<T>`](xref:NextORM.Core.EntityMetadataBuilder`1) предоставляет `Table(string)` и `Property(Expression<Func<T, object>>)`; возвращаемый [`EntityPropertyBuilder<T>`](xref:NextORM.Core.EntityPropertyBuilder`1) предоставляет `HasColumnName(string)`.
 
 ```csharp
 dataContext.From<SimpleEntity>(cfg => cfg
@@ -204,7 +204,7 @@ dataContext.From<SimpleEntity>(cfg => cfg
     .HasColumnName("id"));
 ```
 
-Чтобы отобразить несколько свойств, вызывайте [`Property`](xref:NextORM.Core.EntityMetadataBuilder`1) по одному разу на член:
+Чтобы отобразить несколько свойств, вызывайте [`Property`](xref:NextORM.Core.EntityMetadataBuilder`1.Property(System.Linq.Expressions.Expression{System.Func{`0,System.Object}})) по одному разу на член:
 
 ```csharp
 public class Product
@@ -231,7 +231,7 @@ dataContext.From<Product>(cfg =>
 
 ## Сущности из необработанной таблицы: [`TableAlias`](xref:NextORM.Core.TableAlias)
 
-Чтобы выполнить запрос, не нужны ни сущность, ни метаданные. Начните с имени таблицы через `From("table")` и читайте столбцы через [`TableAlias`](xref:NextORM.Core.TableAlias), передаваемый в [`Select`](xref:NextORM.Core.EntityBuilder`1)/[`Where`](xref:NextORM.Core.EntityBuilder`1):
+Чтобы выполнить запрос, не нужны ни сущность, ни метаданные. Начните с имени таблицы через `From("table")` и читайте столбцы через [`TableAlias`](xref:NextORM.Core.TableAlias), передаваемый в [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}}))/[`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})):
 
 ```csharp
 await foreach (var row in dataContext.From("simple_entity")
@@ -272,7 +272,7 @@ var query = dataContext.From("complex_entity")
     .Select(c => new { Id = c["id"].AsInt });
 ```
 
-[`From`](xref:NextORM.Core.DataContextExtensions) доступен и на конкретном [`DataContext`](xref:NextORM.Core.DataContext) (`dataContext.From("simple_entity")`), и как расширение на [`IDataContext`](xref:NextORM.Core.IDataContext), поэтому работает независимо от того, используется контекст через конкретный тип или через интерфейс. Независимо от сущностей, [`From`](xref:NextORM.Core.DataContextExtensions) также может обернуть подзапрос (`dataContext.From(innerQuery)`) или другой построитель сущности (`dataContext.From(entity)`).
+[`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)) доступен и на конкретном [`DataContext`](xref:NextORM.Core.DataContext) (`dataContext.From("simple_entity")`), и как расширение на [`IDataContext`](xref:NextORM.Core.IDataContext), поэтому работает независимо от того, используется контекст через конкретный тип или через интерфейс. Независимо от сущностей, [`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)) также может обернуть подзапрос (`dataContext.From(innerQuery)`) или другой построитель сущности (`dataContext.From(entity)`).
 
 ## Квотирование идентификаторов
 

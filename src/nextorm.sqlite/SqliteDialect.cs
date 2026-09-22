@@ -6,31 +6,45 @@ namespace NextORM.Sqlite;
 /// <summary>SQLite dialect: <c>||</c> concatenation, <c>$name</c> parameters, <c>limit/offset</c> paging.</summary>
 public sealed class SqliteDialect : SqlDialectBase
 {
+    /// <summary>Gets the shared SQLite dialect instance.</summary>
     public static readonly SqliteDialect Instance = new();
 
+    /// <inheritdoc/>
     public override string ConcatStringOperator => "||";
 
     // SQLite silently returns the first row of a scalar subquery that produces several rows, so
     // Single/SingleOrDefault inside a scalar subquery cannot be enforced by the engine.
+    /// <inheritdoc/>
     public override bool EnforcesScalarSubqueryCardinality => false;
 
+    // SQLite supports a raw SQL derived table (FROM (<sql>) AS alias).
+    /// <inheritdoc/>
+    public override bool SupportsRawSqlSource => true;
+
     // SQLite 3.30+ accepts the FILTER (WHERE ...) aggregate clause.
+    /// <inheritdoc/>
     public override bool SupportsFilter => true;
 
     // SQLite 3.33+ accepts the ANSI GROUP BY ROLLUP (...)/CUBE (...) form.
+    /// <inheritdoc/>
     public override bool SupportsRollup => true;
+    /// <inheritdoc/>
     public override bool SupportsCube => true;
+    /// <inheritdoc/>
     public override bool SupportsGroupingSets => true;
 
     // SQLite aggregates strings through group_concat (there is no array_agg).
+    /// <inheritdoc/>
     public override bool SupportsStringAgg => true;
 
+    /// <inheritdoc/>
     public override string MakeStringAgg(string value, string delimiter) =>
         $"group_concat({value}, {delimiter})";
 
     /// <summary>SQLite exposes only the library version from the session/information family.</summary>
     public override ISessionInfoFunctions SessionInfoFunctions => SqliteSessionInfoFunctions.Instance;
 
+    /// <inheritdoc/>
     public override bool SupportsGreatestLeast => true;
 
     /// <summary>SQLite 3.32+ renders the portable <c>iif</c> as <c>iif(condition, whenTrue, whenFalse)</c>.</summary>
@@ -51,26 +65,32 @@ public sealed class SqliteDialect : SqlDialectBase
     /// <summary>SQLite 3.28+ supports the frame <c>EXCLUDE CURRENT ROW</c>/<c>GROUP</c>/<c>TIES</c>/<c>NO OTHERS</c> clause.</summary>
     public override bool SupportsWindowFrameExclusion => true;
 
+    /// <inheritdoc/>
     public override string MakeGreatest(IReadOnlyList<string> args) =>
         args.Count == 1 ? $"({args[0]})" : $"max({string.Join(", ", args)})";
 
+    /// <inheritdoc/>
     public override string MakeLeast(IReadOnlyList<string> args) =>
         args.Count == 1 ? $"({args[0]})" : $"min({string.Join(", ", args)})";
 
     // instr() is the one-based position primitive; SQLite has no reverse(), so string.LastIndexOf is
     // not available (the base throws a clear message).
+    /// <inheritdoc/>
     protected override string MakeStringPosition(string value, string substring) =>
         $"instr({value}, {substring})";
 
     // There is no repeat(); a run of the (single-character) value is produced by replacing every '00'
     // of a zero blob's hex representation, whose length in bytes is its character count.
+    /// <inheritdoc/>
     public override string MakeRepeat(string value, string count) =>
         $"replace(hex(zeroblob({count})), '00', {value})";
 
     // SQLite has no dateadd/datediff; it adjusts a date through a modifier string and measures
     // differences in seconds (or months for calendar parts).
+    /// <inheritdoc/>
     public override bool SupportsDateArithmetic => true;
 
+    /// <inheritdoc/>
     public override string MakeDateAdd(string field, string amount, string value)
     {
         // The modifier number carries its own sign, so the amount expression is concatenated into
@@ -105,6 +125,7 @@ public sealed class SqliteDialect : SqlDialectBase
             : $"datetime({value}, {modifier})";
     }
 
+    /// <inheritdoc/>
     public override string MakeDateDiff(string field, string start, string end)
     {
         var seconds = $"(strftime('%s', {end}) - strftime('%s', {start}))";
@@ -129,17 +150,22 @@ public sealed class SqliteDialect : SqlDialectBase
         $"((cast(strftime('%Y', {end}) as integer) * 12 + cast(strftime('%m', {end}) as integer)) - "
         + $"(cast(strftime('%Y', {start}) as integer) * 12 + cast(strftime('%m', {start}) as integer)))";
 
+    /// <inheritdoc/>
     public override string MakeEndOfMonth(string value) =>
         $"date({value}, 'start of month', '+1 month', '-1 day')";
 
+    /// <inheritdoc/>
     public override string MakeDateFromParts(string year, string month, string day) =>
         $"date(printf('%04d-%02d-%02d', {year}, {month}, {day}))";
 
+    /// <inheritdoc/>
     public override string MakeCoalesce(string v1, string v2) => $"ifnull({v1}, {v2})";
 
+    /// <inheritdoc/>
     public override string MakeParam(string name) => $"${name}";
 
     // SQLite has no now(); datetime('now') is UTC and is used for both local and UTC requests.
+    /// <inheritdoc/>
     public override string MakeNow(bool utc) => "datetime('now')";
 
     /// <summary>
@@ -169,11 +195,13 @@ public sealed class SqliteDialect : SqlDialectBase
         part is "dow" or "isodow" or "epoch" || base.SupportsDatePart(part);
 
     // SQLite's log() is base 10; the natural logarithm (Math.Log) is ln().
+    /// <inheritdoc/>
     public override string MakeMathFunction(string name, IReadOnlyList<string> args) =>
         name == "log" && args.Count == 1
             ? $"ln({args[0]})"
             : base.MakeMathFunction(name, args);
 
+    /// <inheritdoc/>
     public override void MakePage(Paging paging, StringBuilder sqlBuilder)
     {
         sqlBuilder.Append("limit ").Append(paging.Limit > 0

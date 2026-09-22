@@ -16,10 +16,19 @@ namespace NextORM.Core;
 [AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
 public sealed class SqlTableFunctionAttribute : Attribute
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SqlTableFunctionAttribute"/> class. The SQL function
+    /// name defaults to the CLR method name.
+    /// </summary>
     public SqlTableFunctionAttribute()
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SqlTableFunctionAttribute"/> class with an explicit
+    /// SQL function name.
+    /// </summary>
+    /// <param name="name">The SQL table function name to call; must not be <see langword="null"/>.</param>
     public SqlTableFunctionAttribute(string name)
     {
         Name = name;
@@ -43,4 +52,23 @@ public sealed class SqlTableFunctionAttribute : Attribute
     /// CLR types used by the projection.
     /// </summary>
     public string? WithClause { get; set; }
+
+    /// <summary>
+    /// Optional verbatim SQL appended inside the call parentheses, after the arguments, for table
+    /// functions whose schema is part of the call itself (for example MySQL
+    /// <c>JSON_TABLE(doc, path COLUMNS(...))</c>). The value is emitted verbatim, so include your own
+    /// leading separator; set <c>CallClause = ",'$[*]' columns(id int path '$.id')"</c> to render
+    /// <c>json_table(@doc,'$[*]' columns(id int path '$.id'))</c>. The mapped row type still supplies
+    /// the CLR types used by the projection. This is developer-authored SQL only — never build it from
+    /// user input.
+    /// </summary>
+    public string? CallClause { get; set; }
+
+    /// <summary>
+    /// Indices of the arguments that must be emitted verbatim as SQL identifiers instead of values
+    /// (for example the <c>table</c> and <c>column</c> names of SQL Server
+    /// <c>CONTAINSTABLE(table, column, search)</c>). Each such argument must be a constant string and
+    /// is rendered unquoted; only pass trusted values.
+    /// </summary>
+    public int[]? VerbatimArguments { get; set; }
 }

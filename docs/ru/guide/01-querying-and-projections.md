@@ -1,21 +1,21 @@
 # Запросы и проекции
 
-> Формируйте результат запроса с помощью [`Select`](xref:NextORM.Core.EntityBuilder`1): одна колонка, анонимный тип, DTO или запись (record), кортеж, инициализатор членов, вложенная сущность или вычисляемая колонка.
+> Формируйте результат запроса с помощью [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})): одна колонка, анонимный тип, DTO или запись (record), кортеж, инициализатор членов, вложенная сущность или вычисляемая колонка.
 
 **Предварительные требования:** [Быстрый старт](../getting-started/02-quickstart.md) · [Сущности и метаданные](../getting-started/03-entities-and-metadata.md)
 
 ## Обзор
 
 `dataContext.From<TEntity>()` возвращает [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1). Каждый запрос начинается с
-проецирования этой сущности с помощью [`Select`](xref:NextORM.Core.EntityBuilder`1):
+проецирования этой сущности с помощью [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})):
 
 ```csharp
 public QueryCommand<TResult> Select<TResult>(Expression<Func<TEntity, TResult>> exp)
 ```
 
 Лямбда не выполняется - она транслируется в список `SELECT` генерируемого оператора.
-[`Select`](xref:NextORM.Core.EntityBuilder`1) возвращает [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1); терминальный метод ([`ToListAsync`](xref:NextORM.Core.EntityBuilder`1), [`FirstAsync`](xref:NextORM.Core.EntityBuilder`1),
-[`ToAsyncEnumerable`](xref:NextORM.Core.EntityBuilder`1), [`AnyAsync`](xref:NextORM.Core.EntityBuilder`1), ...) выполняет его. См. [Сортировку и постраничную выборку](05-sorting-and-paging.md)
+[`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) возвращает [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1); терминальный метод ([`ToListAsync`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])), [`FirstAsync`](xref:NextORM.Core.EntityBuilderExtensions.FirstAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])),
+[`ToAsyncEnumerable`](xref:NextORM.Core.EntityBuilderExtensions.ToAsyncEnumerable``1(NextORM.Core.EntityBuilder{``0},System.Object[])), [`AnyAsync`](xref:NextORM.Core.EntityBuilderExtensions.AnyAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])), ...) выполняет его. См. [Сортировку и постраничную выборку](05-sorting-and-paging.md)
 для терминальных методов и их асинхронных форм.
 
 Правила, применимые к любой проекции:
@@ -126,6 +126,43 @@ select id, ((somestring || '/') || requiredstring) as 'Display' from complex_ent
 | 1 | dadfasd/sdf |
 | 2 | xxx/asdfgoi |
 | 3 | null |
+
+## Колонки по имени
+
+Mapped-сущность раскрывает только объявленные в ней колонки. Колонка без свойства — например, в
+широкой таблице ClickHouse — проецируется через
+[`SqlFunctions.Column<T>`](xref:NextORM.Core.SqlFunctions.Column``1(System.Object,System.String)):
+
+```csharp
+var rows = await dataContext.From<SimpleEntity>()
+    .Select(entity => new { Region = SqlFunctions.Column<ulong>(entity, "region_id") })
+    .ToListAsync();
+```
+
+```sql
+-- SQLite
+select region_id as 'Region' from simple_entity
+```
+
+Первым аргументом должен быть параметр лямбды запроса (источник); имя сверяется с именем колонки в
+базе дословно, поэтому кавычки зависят от провайдера (`` `region_id` `` в ClickHouse и MySQL,
+`"region_id"` в PostgreSQL и SQLite, `[region_id]` в SQL Server). Значение материализуется как `T`,
+поэтому тип должен поддерживаться row reader. В отличие от mapped-члена, колонка не сверяется с
+метаданными сущности: опечатка в имени проявится на базе.
+
+Тот же доступ работает в предикате и на join-проекции:
+
+```csharp
+var rows = await dataContext.From<SimpleEntity>()
+    .Join(dataContext.From<ComplexEntity>(), (s, c) => s.Id == c.Id)
+    .Where(p => SqlFunctions.Column<long>(p.Item2, "region_id") > 0)
+    .Select(p => new { p.Item1.Id, Region = SqlFunctions.Column<long>(p.Item2, "region_id") })
+    .ToListAsync();
+```
+
+Для источника вообще без типа сущности (`From("table")`) колонки читаются через
+[`TableAlias`](xref:NextORM.Core.TableAlias) — см. [Joins](03-joins.md) и [CTE](09-cte.md).
+In-memory-провайдер не имеет понятия имени колонки и отклоняет `SqlFunctions.Column`.
 
 ## DTO
 
@@ -253,7 +290,7 @@ select id from simple_entity
 
 ## Примитивная и скалярная проекция
 
-[`Select`](xref:NextORM.Core.EntityBuilder`1) может возвращать одно значение вместо объекта строки:
+[`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) может возвращать одно значение вместо объекта строки:
 
 ```csharp
 var ids = await dataContext.From<SimpleEntity>()
@@ -377,13 +414,13 @@ var elements = dataContext
 ```
 
 `SqlFunctions.Postgres.generate_series(start, stop)` аналогично генерирует числовую последовательность.
-Встроенные помощники включаются провайдером ([`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect)), а
+Встроенные помощники включаются провайдером ([`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect.SupportsTableFunction(System.String))), а
 пользовательская функция объявляется через `[SqlTableFunction]`; см.
 [Табличные функции](13-table-valued-functions.md).
 
 ## Сэмплирование таблицы (`TABLESAMPLE`)
 
-[`TableSample`](xref:NextORM.Core.EntityBuilder`1) добавляет модификатор `TABLESAMPLE` к
+[`TableSample`](xref:NextORM.Core.EntityBuilder`1.TableSample(System.Double,NextORM.Core.TableSampleMethod,System.Nullable{System.Double})) добавляет модификатор `TABLESAMPLE` к
 основной таблице, поэтому база читает только процент её строк вместо полного сканирования таблицы.
 Процент должен находиться в диапазоне `(0, 100]`; метод сэмплирования по умолчанию —
 [`TableSampleMethod.System`](xref:NextORM.Core.TableSampleMethod.System), а необязательное зерно (seed)
@@ -407,12 +444,12 @@ select id from simple_entity tablesample (10 percent) repeatable (42)
 PostgreSQL поддерживает и `System`, и [`Bernoulli`](xref:NextORM.Core.TableSampleMethod.Bernoulli);
 SQL Server поддерживает только `System`. Все остальные провайдеры выбрасывают `NotSupportedException`
 при построении SQL ([`TableSample`](xref:NextORM.Core.ISqlDialect.TableSample) и
-[`ITableSampleMethods.Render`](xref:NextORM.Core.ITableSampleMethods.Render)). Модификатор применяется только к
+[`ITableSampleMethods.Render`](xref:NextORM.Core.ITableSampleMethods.Render(NextORM.Core.TableSampleMethod,System.Double,System.Nullable{System.Double}))). Модификатор применяется только к
 основной таблице запроса.
 
 ## JSON-вывод (SQL Server)
 
-[`ForJson`](xref:NextORM.Core.QueryCommand`1) добавляет предложение SQL Server `FOR JSON`, поэтому база
+[`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean)) добавляет предложение SQL Server `FOR JSON`, поэтому база
 возвращает один JSON-документ вместо строк ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson)). Проекция должна быть
 одним скаляром/колонкой, потому что набор результатов сворачивается в одну JSON-колонку:
 
@@ -433,7 +470,7 @@ select id, somestring from complex_entity for json path, root('items'), include_
 
 ## XML-вывод (SQL Server)
 
-[`ForXml`](xref:NextORM.Core.QueryCommand`1) — XML-аналог ([`SupportsForXml`](xref:NextORM.Core.ISqlDialect.SupportsForXml)); поддерживаются
+[`ForXml`](xref:NextORM.Core.QueryCommand`1.ForXml(NextORM.Core.ForXmlMode,System.String,System.String,System.Boolean)) — XML-аналог ([`SupportsForXml`](xref:NextORM.Core.ISqlDialect.SupportsForXml)); поддерживаются
 `RAW`, `AUTO`, `EXPLICIT` и `PATH`, с необязательным именем элемента строки, обёрткой `ROOT('...')` и
 флагом `ELEMENTS`:
 

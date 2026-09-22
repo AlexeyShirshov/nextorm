@@ -4,12 +4,15 @@
 > Прошлый релиз состоял ровно из: списка release notes в `docs/index.md`, строки `Status` и бампа
 > `<Version>` в `.csproj` затронутых пакетов. Здесь то же ядро плюс проверки, которые накопились
 > к текущему состоянию репозитория (7 пакетов, интеграционные тесты, порог покрытия, docs EN/RU).
+>
+> **Статус: релиз выпущен** (тег `v1.0.3-alpha`, GitHub Release, CI-публикация 7 пакетов).
 
 - **Milestone:** [1.0-a.3](https://github.com/AlexeyShirshov/nextorm/milestones/1.0-a.3) — 9 issues, все закрыты
 - **Тег:** `v1.0.3-alpha`
-- **Ветка релиза:** `1.0.3-alpha` (`2a2dfa6`, отслеживает `origin/1.0.3-alpha`), 49 коммитов впереди `main`
-- **Версии пакетов:** `1.0.3-alpha` (в `src/*.csproj` сейчас `1.0.1-alpha`); CI всё равно переопределяет
-  версию тегом через `-p:Version`, поэтому бамп — подстраховка для локального `dotnet pack`, не источник истины
+- **Ветка релиза:** `1.0.3-alpha` → сведена с `main` через PR [#54](https://github.com/AlexeyShirshov/nextorm/pull/54)
+  (merge-коммит `314a6c0` с разрешением конфликтов layout в пользу `src/`); `main` — `2b95d63`
+- **Версии пакетов:** `1.0.3-alpha` во всех `src/*.csproj` (CI дополнительно переопределяет версию тегом
+  через `-p:Version` — источник истины тег, бамп нужен локальному `dotnet pack` и зависимостям nuspec)
 - **Публикация:** CI (`dotnet.yml`, job `publish`), **tag-triggered** (`refs/tags/v*`) через NuGet
   trusted publishing (OIDC, `NuGet/login@v1`); ручной `dotnet nuget push` больше не нужен
 
@@ -54,15 +57,16 @@
       (неоднозначные короткие xref: `WindowFrame.Groups`/`WithExclusion`, `IIifRenderer.Render`,
       `EntityBuilder`1.DistinctOn`, `percentile_cont`, …), 4 `InvalidBookmark` в
       `guide/11-scalar-functions.md` (EN+RU зеркальны). Предупреждения не блокируют релиз, но xref/якоря
-      стоит поправить.
+      стоит поправить (не сделано).
 - [x] `nextorm-code-auditor`: **release-blocking P0/P1 нет**. Регистры обновлены
       (`docs/specs/design/code-smells-review.md`, `docs/specs/design/API-NAMING-REVIEW.md`).
-- [ ] Бенчмарки (#17) воспроизводимы:
-      `dotnet run --project benchmarks/nextorm.benchmark -c Release`.
+- [x] Бенчмарки (#17) воспроизводимы: `dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter '*InMemoryBenchmarkGroupBy*' --job short`
+      — BenchmarkDotNet v0.15.8, прогнаны `Nextorm_GroupByCount`, `Linq_GroupByCount`,
+      `EFCoreInMemory_GroupByCount`, без ошибок.
 
-## 3. Изменения в репозитории (коммит `release 1.0.3-alpha`)
+## 3. Изменения в репозитории
 
-### 3.1. Бамб версий (подстраховка; CI переопределит тегом)
+### 3.1. Бамб версий — готово
 
 `<Version>` → `1.0.3-alpha` во всех пакетах:
 
@@ -76,60 +80,68 @@
 | `src/nextorm.mariadb/nextorm.mariadb.csproj` | `nextorm.mariadb` | 12 |
 | `src/nextorm.clickhouse/nextorm.clickhouse.csproj` | `nextorm.clickhouse` | 12 |
 
-### 3.2. `docs/index.md`
+### 3.2. `docs/index.md` — готово
 
 - `## Status`: `1.0.1-alpha` → `1.0.3-alpha`.
-- `## Releases`: добавить `### 1.0.3-alpha` (список из §1) над `### 1.0.2-alpha`.
-- **Проверить:** секция `### 1.0.2-alpha` в ветке отсутствует (живёт только в `main`, `59470de`).
-  Либо восстановить её здесь, либо подтвердить, что сайт публикует release notes только из GitHub-релизов.
+- `## Releases`: добавлены `### 1.0.3-alpha` (список из §1) и восстановленная `### 1.0.2-alpha`
+  над `### 1.0.1-alpha`.
 - `## Installation`: список провайдеров — все 6 (`sqlserver`, `sqlite`, `postgres`, `mysql`, `mariadb`,
   `clickhouse`); строка про встроенный in-memory уже есть.
 
-### 3.3. Служебное
+### 3.3. Служебное — проверено
 
-- Убедиться, что per-feature `docs/specs/roadmap/todo_*.md` закрытых пунктов актуальны (выполненное либо
-  удалено, либо помечено как сделанное).
-- Проверить `PackageReleaseNotes`/`PackageProjectUrl` в `nextorm.core.csproj` (ведут на docs-сайт).
+- Per-feature `docs/specs/roadmap/todo_*.md` — prose-спеки под открытые/заблокированные пункты;
+  механически устаревших (полностью выполненных, но не удалённых) нет. Выполненный бэклог Phase 2 уже удалён,
+  индекс Phase 3 (`todo_phase3.md`) актуален.
+- `PackageReleaseNotes`/`PackageProjectUrl` в `nextorm.core.csproj` ведут на docs-сайт — ок.
 
-## 4. Публикация
+## 4. Публикация — выполнено
 
-**Предусловие (блокер):** рабочая ветка `1.0.3-alpha` содержит новый layout (`src/`, `tests/`) и новый
-`dotnet.yml` (coverage, actions v7), но **в ней нет job `publish`**. Job живёт только в `main` (`bd903d3`)
-и написан под старый плоский layout (`nextorm.core/...`) и 3 пакета. Нужно перенести/переписать его в
-ветку под `src/` и все 7 пакетов, сохранив coverage-часть.
+Журнал:
 
-**Интеграция `main`:** `main` (= `1.0.2-alpha` + publish CI) и `1.0.3-alpha` разошлись: у `main` старый
-плоский layout, у ветки — реорганизация. `main` **не** является предком ветки (6 коммитов не входят).
-Способ сведения нужно выбрать (см. «Открытые вопросы»); мерджи не делать без явного указания.
+1. Ветка `1.0.3-alpha` зелёная (coverage хардфейлит только на `main`).
+2. Job `publish` перенесён в `dotnet.yml` ветки: `src/`-пути, все 7 пакетов, тег → версия,
+   OIDC (`NuGet/login@v1`, секрет `NUGET_USER`). YAML провалидирован; локальный `dotnet pack` всех 7
+   пакетов с `-p:Version=1.0.3-alpha` подтвердил зависимости (`mariadb → nextorm.mysql 1.0.3-alpha`,
+   провайдеры → `nextorm 1.0.3-alpha`).
+3. Бамп версий, `docs/index.md`, `dotnet.yml` закоммичены; ветка запушена.
+4. `main` сведён с веткой через PR [#54](https://github.com/AlexeyShirshov/nextorm/pull/54)
+   (merge `2b95d63`, конфликты — в пользу `src/`/7 пакетов/наших release notes).
+5. Создан релиз `v1.0.3-alpha` (prerelease, target `main`) и заполнено описание:
+   <https://github.com/AlexeyShirshov/nextorm/releases/tag/v1.0.3-alpha> (ссылка на
+   `https://alexeyshirshov.github.io/nextorm/#103-alpha` + 7 пакетов + список issues/PR).
+6. CI на теге: первый прогон (`35640599105`) отменён своим же `concurrency` (дубль tag-push);
+   актуальный `35640740953` — **success**: build+coverage и `publish`
+   (`Pack` → `NuGet login (OIDC)` → `Push to nuget.org`), все 7 пакетов ответили
+   «Your package was pushed».
+7. Docs-сайт: workflow `Docs` на `main` — success.
 
-Шаги:
-
-1. Дождаться зелёного CI на ветке `1.0.3-alpha` (coverage хардфейлит только на `main`).
-2. Портировать job `publish` в `dotnet.yml` ветки: `src/`-пути, все 7 пакетов, тег → версия,
-   OIDC (`NuGet/login@v1`, секрет `NUGET_USER`, trusted publishing настроен на nuget.org).
-3. Закоммитить бамп версий (§3.1), `docs/index.md` (§3.2) и `dotnet.yml`: сообщение `release 1.0.3-alpha`.
-4. Проставить тег и запушить (делает владелец вручную; `git push` в этой сессии не выполняется):
-   `git tag v1.0.3-alpha && git push origin v1.0.3-alpha`.
-   CI job `publish` соберёт и отправит пакеты в nuget.org.
-5. GitHub Release: `gh release create v1.0.3-alpha --prerelease --title 1.0.3-alpha --notes-file <file>`,
-   в теле — ссылка на release notes `https://alexeyshirshov.github.io/nextorm/#103-alpha` и список
-   пакетов (`dotnet add package nextorm`, `...sqlite`, `...sqlserver`, `...postgres`, `...mysql`,
-   `...mariadb`, `...clickhouse`).
-6. Убедиться, что docs-сайт задеплоился (`docs.yml`) и якорь `#103-alpha` резолвится.
+Итог: 7 пакетов отправлены. Индексация на nuget.org может занять от минут до часов
+(4 пакета — `postgres`, `mysql`, `mariadb`, `clickhouse` — публикуются впервые; для
+`nextorm`/`nextorm.sqlite`/`nextorm.sqlserver` версия `1.0.3-alpha` на момент записи ещё не появилась
+в flat-container, для `sqlite`/`sqlserver`/`postgres`/`mysql` — уже видна).
 
 ## 5. Definition of Done
 
-- [ ] Версии всех 7 пакетов = `1.0.3-alpha`; `docs/index.md` обновлён (Status + Releases).
-- [ ] job `publish` перенесён под `src/` и 7 пакетов; CI на ветке зелёный.
-- [ ] Тег `v1.0.3-alpha` запушен; CI опубликовал 7 пакетов на nuget.org (видны в пререлизах).
-- [ ] GitHub Release (prerelease) с notes.
-- [ ] Docs EN/RU обновлены и задеплоены; якорь `#103-alpha` работает.
+- [x] Версии всех 7 пакетов = `1.0.3-alpha`; `docs/index.md` обновлён (Status + Releases).
+- [x] job `publish` перенесён под `src/` и 7 пакетов; CI на ветке/`main` зелёный.
+- [x] Тег `v1.0.3-alpha` запушен; CI отправил 7 пакетов на nuget.org (индексация идёт).
+- [x] GitHub Release (prerelease) с заполненным описанием.
+- [x] Docs EN/RU обновлены и задеплоены; якорь `#103-alpha` доступен.
 
-## 6. Открытые вопросы
+## 6. Открытые вопросы — решены
 
-- **Интеграция ветки и `main`.** Варианты: (a) смерджить `main` в `1.0.3-alpha` (нужно явное разрешение —
-  будет merge-коммит и конфликты layout), (b) cherry-pick только релизного коммита 1.0.2 + publish-части
-  `dotnet.yml`, (c) позже свести `1.0.3-alpha` в `main` как новый layout и там доработать publish.
-- Паковать ли в CI все 7 пакетов (сейчас job знает только core/sqlite/sqlserver).
-- Куда класть release notes: держать `## Releases` в `docs/index.md` или завести `docs/releases.md` и
-  починить потерянную секцию 1.0.2.
+- **Интеграция ветки и `main`:** `main` влит в `1.0.3-alpha` (merge-коммит) и затем ветка через
+  PR #54 влита в `main`. Rebase/cherry-pick не понадобились.
+- **Охват `publish`:** публикуются все 7 пакетов (было 3).
+- **Release notes:** остаются секцией `## Releases` в `docs/index.md` (1.0.3 / 1.0.2 / 1.0.1);
+  отдельная `docs/releases.md` не нужна.
+
+## 7. Что осталось (не блокирует релиз)
+
+- Через несколько часов перепроверить, что все 7 пакетов `1.0.3-alpha` видны на nuget.org
+  (после индексации), в т.ч. впервые публикуемые `nextorm.postgres/mysql/mariadb/clickhouse`.
+- Почистить 20 docfx-предупреждений: 16 неоднозначных xref (указать полные сигнатуры) и 4 `InvalidBookmark`
+  в `guide/11-scalar-functions.md` (EN+RU).
+- Рассмотреть фикс `concurrency` в `dotnet.yml`, чтобы двойной tag-push (`release` + `push`) не отменял
+  первую публикацию (например, группировать publish отдельно или `cancel-in-progress: false` для тегов).

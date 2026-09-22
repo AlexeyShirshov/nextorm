@@ -73,6 +73,17 @@ public class ClickHouseDialectTests
         Dialect.MakeJoinKeyword(JoinType.Left, JoinStrictness.Any, true).Should().Be(" global left any join ");
     }
 
+    [Fact]
+    public void SemiAntiPasteJoins_ShouldRenderClickHouseKeywords()
+    {
+        Dialect.SupportsSemiAntiJoin.Should().BeTrue();
+        Dialect.SupportsPasteJoin.Should().BeTrue();
+
+        Dialect.MakeJoinKeyword(JoinType.Semi, JoinStrictness.Default, false).Should().Be(" left semi join ");
+        Dialect.MakeJoinKeyword(JoinType.Anti, JoinStrictness.Default, false).Should().Be(" left anti join ");
+        Dialect.MakeJoinKeyword(JoinType.Paste, JoinStrictness.Default, false).Should().Be(" paste join ");
+    }
+
     [Theory]
     [InlineData("stdev", "stddevSamp")]
     [InlineData("stdevp", "stddevPop")]
@@ -91,6 +102,8 @@ public class ClickHouseDialectTests
     [InlineData("uniq_hll12", "uniqHLL12")]
     [InlineData("quantile_exact", "quantileExact")]
     [InlineData("quantile_timing", "quantileTiming")]
+    [InlineData("top_k", "topK")]
+    [InlineData("top_k_weighted", "topKWeighted")]
     [InlineData("any_agg", "any")]
     [InlineData("any_last", "anyLast")]
     [InlineData("count_if", "countIf")]
@@ -141,6 +154,14 @@ public class ClickHouseDialectTests
     }
 
     [Fact]
+    public void MakeArrayFunction_ShouldCastLengthAndIndexOfToInt64()
+    {
+        Dialect.MakeArrayFunction("length", "length(x)").Should().Be("toInt64(length(x))");
+        Dialect.MakeArrayFunction("indexOf", "indexOf(x, 'a')").Should().Be("toInt64(indexOf(x, 'a'))");
+        Dialect.MakeArrayFunction("arrayStringConcat", "arrayStringConcat(x, ',')").Should().Be("arrayStringConcat(x, ',')");
+    }
+
+    [Fact]
     public void MakeJsonExtract_ShouldMapNamesAndCastLength()
     {
         Dialect.MakeJsonExtract("json_extract_string", ["json", "'s'"]).Should().Be("JSONExtractString(json, 's')");
@@ -158,6 +179,14 @@ public class ClickHouseDialectTests
     }
 
     [Fact]
+    public void MakeJsonExtract_ShouldMapNativeJsonNames()
+    {
+        Dialect.MakeJsonExtract("json_all_paths", ["json"]).Should().Be("JSONAllPaths(json)");
+        Dialect.MakeJsonExtract("json_all_paths_with_types", ["json"]).Should().Be("JSONAllPathsWithTypes(json)");
+        Dialect.MakeJsonExtract("to_json_string", ["x"]).Should().Be("toJSONString(x)");
+    }
+
+    [Fact]
     public void MakeGroupByTotals_ShouldAppendTotals()
     {
         Dialect.MakeGroupByTotals("nullableint").Should().Be("nullableint with totals");
@@ -172,6 +201,16 @@ public class ClickHouseDialectTests
         Dialect.SupportsTableFunction("zeros").Should().BeTrue();
         Dialect.SupportsTableFunction("zeros_mt").Should().BeTrue();
         Dialect.SupportsTableFunction("generateRandom").Should().BeTrue();
+        Dialect.SupportsTableFunction("url").Should().BeTrue();
+        Dialect.SupportsTableFunction("s3").Should().BeTrue();
+        Dialect.SupportsTableFunction("file").Should().BeTrue();
+        Dialect.SupportsTableFunction("remote").Should().BeTrue();
+        Dialect.SupportsTableFunction("remoteSecure").Should().BeTrue();
+        Dialect.SupportsTableFunction("cluster").Should().BeTrue();
+        Dialect.SupportsTableFunction("clusterAllReplicas").Should().BeTrue();
+        Dialect.SupportsTableFunction("merge").Should().BeFalse();
+        Dialect.SupportsTableFunction("format").Should().BeFalse();
+        Dialect.SupportsTableFunction("input").Should().BeFalse();
         Dialect.SupportsTableFunction("generate_series").Should().BeFalse();
     }
 
@@ -223,6 +262,9 @@ public class ClickHouseDialectTests
         Dialect.MakeDictionaryFunction("dict_get", ["'d'", "'a'", "id"]).Should().Be("dictGet('d', 'a', id)");
         Dialect.MakeDictionaryFunction("dict_get_or_default", ["'d'", "'a'", "id", "0"]).Should().Be("dictGetOrDefault('d', 'a', id, 0)");
         Dialect.MakeDictionaryFunction("dict_has", ["'d'", "id"]).Should().Be("dictHas('d', id)");
+        Dialect.MakeDictionaryFunction("dict_get_hierarchy", ["'d'", "id"]).Should().Be("dictGetHierarchy('d', id)");
+        Dialect.MakeDictionaryFunction("dict_get_children", ["'d'", "id"]).Should().Be("dictGetChildren('d', id)");
+        Dialect.MakeDictionaryFunction("dict_is_in", ["'d'", "child", "ancestor"]).Should().Be("dictIsIn('d', child, ancestor)");
     }
 
     [Fact]
@@ -230,7 +272,15 @@ public class ClickHouseDialectTests
     {
         Dialect.QuantileAggregates!.Render("quantile", "0.5", "x").Should().Be("toFloat64(quantile(0.5)(x))");
         Dialect.QuantileAggregates!.Render("quantile_exact", "0.9", "x").Should().Be("toFloat64(quantileExact(0.9)(x))");
+        Dialect.QuantileAggregates!.RenderLevels("quantiles", "0.25, 0.5, 0.75", "x").Should().Be("quantiles(0.25, 0.5, 0.75)(x)");
         Dialect.QuantileAggregates!.RenderMedian("x").Should().Be("toFloat64(median(x))");
+    }
+
+    [Fact]
+    public void MakeTopK_ShouldUseDoubleParentheses()
+    {
+        Dialect.TopKAggregates!.Render("top_k", "3", "x").Should().Be("topK(3)(x)");
+        Dialect.TopKAggregates!.RenderWeighted("top_k_weighted", "2", "x", "w").Should().Be("topKWeighted(2)(x, w)");
     }
 
     [Fact]

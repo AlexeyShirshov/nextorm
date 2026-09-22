@@ -2,13 +2,26 @@ using System.Linq.Expressions;
 
 namespace NextORM.Core;
 
+/// <summary>
+/// The kind of join connecting a left and right source. Numeric values are part of the plan hash and
+/// must stay stable.
+/// </summary>
 public enum JoinType
 {
+    /// <summary><c>INNER JOIN</c>: keeps only rows that match on both sides.</summary>
     Inner = 0,
+    /// <summary><c>LEFT [OUTER] JOIN</c>: keeps every left row, padding unmatched right columns with nulls.</summary>
     Left = 1,
+    /// <summary><c>RIGHT [OUTER] JOIN</c>: keeps every right row, padding unmatched left columns with nulls.</summary>
     Right = 2,
+    /// <summary><c>FULL [OUTER] JOIN</c>: keeps every row from both sides, padding where there is no match.</summary>
     Full = 3,
+    /// <summary><c>CROSS JOIN</c>: the Cartesian product of both sources; has no <c>ON</c> condition.</summary>
     Cross = 4,
+    /// <summary>
+    /// A conditionless cross join variant. Renders and evaluates like <see cref="Cross"/>; kept as a
+    /// distinct value for callers that need to distinguish it.
+    /// </summary>
     FullCross = 5,
     /// <summary>
     /// <c>CROSS APPLY</c> / <c>CROSS JOIN LATERAL</c>: the right-hand source is evaluated per
@@ -19,7 +32,24 @@ public enum JoinType
     /// <c>OUTER APPLY</c> / <c>LEFT JOIN LATERAL ... ON true</c>: like <see cref="CrossApply"/> but
     /// left-hand rows with an empty right-hand source are preserved with nulls.
     /// </summary>
-    OuterApply = 7
+    OuterApply = 7,
+    /// <summary>
+    /// ClickHouse <c>LEFT SEMI JOIN</c>: keeps only the left-hand columns, for left rows that have at
+    /// least one match on the right. Modelled as a join type rather than a
+    /// <see cref="JoinStrictness"/> modifier because it changes the result column set.
+    /// </summary>
+    Semi = 8,
+    /// <summary>
+    /// ClickHouse <c>LEFT ANTI JOIN</c>: keeps only the left-hand columns, for left rows with no match
+    /// on the right; the complement of <see cref="Semi"/>.
+    /// </summary>
+    Anti = 9,
+    /// <summary>
+    /// ClickHouse <c>PASTE JOIN</c>: joins the two sources by row position with no <c>ON</c>
+    /// condition. The result carries the left and right columns side by side and as many rows as the
+    /// shorter side.
+    /// </summary>
+    Paste = 10
 }
 
 /// <summary>
@@ -39,9 +69,17 @@ public enum JoinStrictness
     Asof = 3
 }
 
+/// <summary>
+/// A join between two sources: the join kind, the optional <c>ON</c> condition, the joined
+/// <see cref="From"/> source and the optional ClickHouse strictness and global modifiers.
+/// </summary>
+/// <param name="joinCondition">The <c>ON</c> condition, or <c>null</c> for a conditionless join.</param>
+/// <param name="joinType">The kind of join to perform.</param>
 public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType = JoinType.Inner)
 {
+    /// <summary>The kind of join.</summary>
     public JoinType JoinType { get; } = joinType;
+    /// <summary>The <c>ON</c> condition, or <c>null</c> when the join has none (cross and apply joins).</summary>
     public LambdaExpression? JoinCondition { get; } = joinCondition;
     /// <summary>
     /// Join modifier (<c>ANY</c>/<c>ALL</c>/<c>ASOF</c>). Set through the fluent
@@ -63,6 +101,7 @@ public class JoinExpression(LambdaExpression? joinCondition, JoinType joinType =
     /// </summary>
     public Type? EntityType { get; init; }
     private FromExpression _from = null!;
+    /// <summary>The right-hand source being joined.</summary>
     public required FromExpression From { get => _from; init => _from = value; }
     /// <summary>
     /// Set for a correlated <c>CROSS/OUTER APPLY</c> source: a lambda whose parameter is the

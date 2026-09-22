@@ -6,7 +6,7 @@
 
 ## Обзор
 
-[`Hint`](xref:NextORM.Core.QueryCommand`1) возвращает новую команду с одним или несколькими
+[`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[])) возвращает новую команду с одним или несколькими
 хинтами уровня инструкции. Хинты зависят от провайдера: команда хранит обычные строки, а активный
 [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) решает, где и как их отрисовать. Повторный вызов накапливает хинты:
 
@@ -44,9 +44,9 @@ var sql = dataContext.WithRecursive("nums", body, 100)
 ... option (maxrecursion 100, recompile)
 ```
 
-## Табличные хинты
+## Блокирующие табличные хинты
 
-`EntityBuilder<T>.WithTableHint(params string[] hints)` прикрепляет хинты уровня таблицы к основной
+`EntityBuilder<T>.WithTableHint(params string[] hints)` прикрепляет блокирующие хинты SQL Server (`nolock`/`updlock`/`holdlock`) к основной
 физической таблице. SQL Server рендерит их как предложение `WITH (...)`, между именем таблицы и её
 псевдонимом:
 
@@ -62,7 +62,7 @@ select id from complex_entity with (nolock)
 ```
 
 Хинты рендерятся дословно, поэтому передавайте только доверенные значения. Провайдер включается через
-[`SupportsTableHints`](xref:NextORM.Core.ISqlDialect.SupportsTableHints) и [`MakeTableHints`](xref:NextORM.Core.ISqlDialect) (SQL Server); остальные диалекты
+[`SupportsTableHints`](xref:NextORM.Core.ISqlDialect.SupportsTableHints) и [`MakeTableHints`](xref:NextORM.Core.ISqlDialect.MakeTableHints(System.Collections.Generic.IReadOnlyList{System.String})) (SQL Server); остальные диалекты
 отклоняют команду с табличными хинтами через `NotSupportedException`. Покрыта только основная
 таблица; хинты на присоединённых таблицах пока не входят в API.
 
@@ -71,12 +71,27 @@ select id from complex_entity with (nolock)
 | Провайдер | Хинты запросов |
 |---|---|
 | SQL Server | Поддерживаются: рендерятся как завершающее предложение `OPTION (hint, ...)`. |
+| PostgreSQL | Поддерживаются: рендерятся как встроенный комментарий `/*+ hint ... */` сразу после `SELECT` — в позиции, которую читает опциональное расширение `pg_hint_plan`; без расширения это обычный комментарий. |
+| MySQL / MariaDB | Поддерживаются: рендерятся как встроенный комментарий-optimizer-hint `/*+ hint ... */` сразу после `SELECT`. |
 | SQLite | Не поддерживаются: построение SQL выбрасывает `NotSupportedException`. |
-| PostgreSQL | Не поддерживаются: построение SQL выбрасывает `NotSupportedException`. |
-| MySQL / MariaDB | Не поддерживаются: построение SQL выбрасывает `NotSupportedException`. |
-| ClickHouse | Не поддерживаются: построение SQL выбрасывает `NotSupportedException`. |
+| ClickHouse | Не поддерживаются: используйте `Settings(...)`; `Hint(...)` выбрасывает `NotSupportedException`. |
 
-Провайдер включается через [`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints) и [`RenderQueryHints`](xref:NextORM.Core.ISqlDialect);
+Несколько хинтов объединяются в один комментарий через пробел — форма, которую ожидают и
+`pg_hint_plan`, и оптимизатор MySQL/MariaDB:
+
+```csharp
+// PostgreSQL:  select /*+ SeqScan(simple_entity) */ id from simple_entity
+var pg = dataContext.From<ISimpleEntity>()
+    .Select(x => new { x.Id })
+    .Hint("SeqScan(simple_entity)");
+
+// MySQL / MariaDB:  select /*+ MAX_EXECUTION_TIME(1000) */ id from simple_entity
+var my = dataContext.From<ISimpleEntity>()
+    .Select(x => new { x.Id })
+    .Hint("MAX_EXECUTION_TIME(1000)");
+```
+
+Провайдер включается через [`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints) и [`RenderQueryHints`](xref:NextORM.Core.ISqlDialect.RenderQueryHints(System.String,System.Collections.Generic.IReadOnlyList{System.String},System.String));
 построитель отклоняет команду с хинтами у диалекта, который сообщает `false`.
 
 ## Модификаторы запроса ClickHouse
@@ -112,19 +127,20 @@ settings max_threads = 2
 
 ## Ограничения
 
-* Табличные хинты рендерятся только для основной таблицы; хинты на присоединённой таблице пока не
-  входят в API ([`WithTableHint`](xref:NextORM.Core.EntityBuilder`1) применяется к таблице из `FROM` запроса).
-* Объединение команды с хинтами через операцию над множествами ([`Union`](xref:NextORM.Core.QueryCommand`1), [`Intersect`](xref:NextORM.Core.QueryCommand`1), ...) не
+* Блокирующие табличные хинты рендерятся только для основной таблицы; хинты на присоединённой таблице пока не
+  входят в API ([`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[])) применяется к таблице из `FROM` запроса).
+* Объединение команды с хинтами через операцию над множествами ([`Union`](xref:NextORM.Core.QueryCommand`1.Union``1(NextORM.Core.QueryCommand{``0})), [`Intersect`](xref:NextORM.Core.QueryCommand`1.Intersect``1(NextORM.Core.QueryCommand{``0})), ...) не
   защищено; хинт «уезжает» в ту ветку, к которой был привязан, и этого следует избегать.
 
 ## См. также
 
-- [Соединения](03-joins.md) - [`CrossApply`](xref:NextORM.Core.EntityBuilder`1)/[`OuterApply`](xref:NextORM.Core.EntityBuilder`1).
+- [Соединения](03-joins.md) - [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0}))/[`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0})).
 - [CTE](09-cte.md) - `maxRecursion` и предложение SQL Server `option (maxrecursion n)`.
 - [Запросы и проекции](01-querying-and-projections.md)
 
 ---
 
-Source: `src/nextorm.core/Query/QueryCommand.TResult.cs` ([`Hint`](xref:NextORM.Core.QueryCommand`1)),
-`src/nextorm.core/DataContext/Dialect/ISqlDialect.cs` ([`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints) / [`RenderQueryHints`](xref:NextORM.Core.ISqlDialect)),
-`src/nextorm.sqlserver/SqlServerDialect.cs`.
+Source: `src/nextorm.core/Query/QueryCommand.TResult.cs` ([`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[]))),
+`src/nextorm.core/DataContext/Dialect/ISqlDialect.cs` ([`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints) / [`RenderQueryHints`](xref:NextORM.Core.ISqlDialect.RenderQueryHints(System.String,System.Collections.Generic.IReadOnlyList{System.String},System.String))),
+`src/nextorm.sqlserver/SqlServerDialect.cs`, `src/nextorm.postgres/PostgresDialect.cs`,
+`src/nextorm.mysql/MySqlDialect.cs` (MariaDB наследует).

@@ -12,8 +12,8 @@ namespace NextORM.Core;
 /// Only a dialect that opts in with <see cref="ISqlDialect.XmlFunctions"/> and lists the
 /// individual method through <see cref="IXmlFunctions.Supports"/> (SQL Server) may use
 /// these constructs; every other provider rejects them with a clear message. The rowset method
-/// <c>nodes</c> is deliberately absent: it needs an outer reference inside <c>CROSS/OUTER APPLY</c>,
-/// which the engine cannot express yet.
+/// <c>nodes</c> is not a scalar and is handled as a <c>CROSS/OUTER APPLY</c> source
+/// (<see cref="SqlServerFunctions.xml_nodes(string?, string?)"/>), not here.
 /// </para>
 /// </summary>
 internal static class XmlSqlTranslator

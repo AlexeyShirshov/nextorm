@@ -32,7 +32,7 @@
 | Предикаты (`WHERE`: сравнения, `and`/`or`/`!`, арифметика, битовые/сдвиги) | yes | yes | `Visitors/WhereExpressionVisitor.cs`, `BaseExpressionVisitor.cs` |
 | `INNER` / `LEFT` / `RIGHT` / `FULL` / `CROSS JOIN` | yes | **yes** (`FULL JOIN` нет в MySQL/MariaDB) | `SqlBuilder.MakeJoin`, `EntityBuilder.Join/LeftJoin/RightJoin/FullJoin/CrossJoin`, `ISqlDialect.SupportsFullJoin` |
 | `APPLY` / `LATERAL` | yes | **yes** (включая коррелированные источники; отключено в SQLite/ClickHouse) | `JoinType.CrossApply/OuterApply`, `SqlBuilder.MakeApplyJoin`, `ISqlDialect.SupportsApply`/`MakeApply` |
-| Строгость соединений (`ANY`/`ALL`/`ASOF`) и `GLOBAL` | no | **yes** в ClickHouse (`SEMI`/`ANTI`/`PASTE` не реализованы) | `JoinStrictness`, `EntityBuilder.WithStrictness`/`Global`, `ISqlDialect.SupportsJoinStrictness`/`SupportsGlobalJoin` |
+| Строгость соединений (`ANY`/`ALL`/`ASOF`) и `GLOBAL` | no | **yes** в ClickHouse (`SEMI`/`ANTI`/`PASTE` через `SemiJoin`/`AntiJoin`/`PasteJoin`) | `JoinStrictness`, `EntityBuilder.WithStrictness`/`Global`, `ISqlDialect.SupportsJoinStrictness`/`SupportsGlobalJoin` |
 | Арность соединений | не ограничена | 2–8 (ограничение на этапе компиляции) | `Projection<T1..T8>`, `JoinedEntityBuilder<T1..T8>` |
 | Соединение с производной таблицей (подзапросом) | yes | **yes** — с любой стороны: присоединяемая (`Join(QueryCommand<T>)`) или основной источник `FROM` | `EntityBuilder`, `SqlBuilder.MakeFrom`, `DataContextExtensions.From(QueryCommand)` |
 | Подзапросы (`FROM`, скалярные, коррелированные `EXISTS/IN/ANY/ALL`) | yes | yes — корреляция на любой глубине у SQL-провайдеров; in-memory выбрасывает `NotSupportedException` | `CorrelatedQueryExpressionVisitor.cs`, `MemberTranslator.TryTranslateProjectionOuterReference` |
@@ -57,19 +57,19 @@
 | Нативные JSON-документы | yes | **yes на PostgreSQL** | `SupportsJson`, `JsonSqlTranslator` |
 | JSON скалярные функции (`json_value`/`json_query`/`json_modify`, `isjson`) | yes | **yes на SQL Server и MySQL/MariaDB** | `SupportsTextJson`, `MakeTextJsonFunction`/`MakeIsJson` |
 | Строковый JSON + функции словарей (ClickHouse) | no | **yes на ClickHouse** | `SupportsJsonExtract`, `SupportsDictionaries`, `MakeJsonExtract`/`MakeDictionaryFunction` |
-| Массивы (`cardinality`/`array_*`/`@>`/`&&`, `Array(T)` в ClickHouse, `ARRAY JOIN`) | no | **yes на PostgreSQL и ClickHouse** (`ARRAY JOIN`; функции высшего порядка не реализованы) | `SupportsArrayFunctions`/`SupportsArrayJoin`, `ArraySqlTranslator`, `IArrayJoinRenderer.Render` |
+| Массивы (`cardinality`/`array_*`/`@>`/`&&`, `Array(T)` в ClickHouse, `ARRAY JOIN`) | no | **yes на PostgreSQL и ClickHouse** (`ARRAY JOIN`; функции высшего порядка и row reader `Array(T)`/`Tuple` реализованы) | `SupportsArrayFunctions`/`SupportsHigherOrderArrayFunctions`/`SupportsArrayJoin`, `ArraySqlTranslator`, `ArrayJoinClause`/`IArrayJoinRenderer.Render` |
 | Условные функции (`iif`/`choose`/`multi_if`) | no | **yes** (переносимый `iif`; `choose` только SQL Server; `multi_if` ClickHouse) | `CommonFunctions.iif`, `SupportsChoose`, `MultiIf`/`IMultiIfRenderer.Render` |
 | `FOR JSON` / `FOR XML` | yes (провайдер) | **yes на SQL Server** | `QueryCommand.ForJson/ForXml`, `SupportsForJson`/`SupportsForXml` |
-| Скалярные методы типа XML (`.value`/`.query`/`.exist`) | yes (провайдер) | **partial** — только SQL Server (rowset `.nodes` не реализован) | `SqlServerFunctions.xml_value`/`xml_query`/`xml_exist` |
+| Методы типа XML (`.value`/`.query`/`.exist`/`.nodes`) | yes (провайдер) | **partial** — только SQL Server | `SqlServerFunctions.xml_value`/`xml_query`/`xml_exist`/`xml_nodes` |
 | `GREATEST` / `LEAST` | partial | **yes** (обработка NULL зависит от провайдера) | `SupportsGreatestLeast`/`MakeGreatest`/`MakeLeast` |
 | `STRING_AGG` / `ARRAY_AGG` | yes | **yes** — `string_agg` кросс-провайдерно; `array_agg` на PostgreSQL | `SupportsStringAgg`/`SupportsArrayAgg` |
 | Пользовательские скалярные функции | yes (`DbFunction` / `Sql.Ext`) | yes (`[SqlFunction]`) | `SqlFunctionAttribute.cs` |
 | Табличные функции | yes (`TableFunction`) | yes (`[SqlTableFunction]`); встроенные gated, предобъявленный набор (`generate_series`/`unnest`/…, `string_split`/`openjson`, ClickHouse `numbers`/`zeros`/`generateRandom`) меньше | `SqlTableFunctionAttribute.cs`, `SqlBuilder.MakeTableFunction`, `SupportsTableFunction` |
 | Нативный источник `PIVOT` / `UNPIVOT` | no (сырой SQL) | **yes на SQL Server** | `EntityBuilder.Pivot`/`Unpivot` |
 | Сырой SQL (запрос целиком) | yes | yes | `WithSql` / `PrepareFromSql` |
-| Сырой SQL как композируемый источник/подзапрос | yes | **no** | — |
-| Хинты запросов | yes (зависит от провайдера) | **partial** — только SQL Server `OPTION (...)` | `QueryCommand<TResult>.Hint`, `ISqlDialect.SupportsQueryHints`/`RenderQueryHints` |
-| Табличные хинты (например `WITH (NOLOCK)`) | yes | **partial** — только SQL Server | `EntityBuilder.WithTableHint`, `ISqlDialect.SupportsTableHints`/`MakeTableHints` |
+| Сырой SQL как композируемый источник/подзапрос | yes | **yes** — `FromSql` рендерит фрагмент как производную таблицу, можно соединять/фильтровать дальше | `DataContextExtensions.FromSql`, `ISqlDialect.SupportsRawSqlSource` |
+| Хинты уровня инструкции | yes (зависит от провайдера) | **yes** — SQL Server `OPTION (...)`, PostgreSQL/MySQL/MariaDB встроенный `/*+ ... */`; SQLite/ClickHouse отклоняют | `QueryCommand<TResult>.Hint`, `ISqlDialect.SupportsQueryHints`/`RenderQueryHints` |
+| Блокирующие табличные хинты (например `WITH (NOLOCK)`) | yes | **partial** — только SQL Server | `EntityBuilder.WithTableHint`, `ISqlDialect.SupportsTableHints`/`MakeTableHints` |
 | Квотирование идентификаторов | yes (по провайдеру) | включается явно — `UseQuotedIdentifiers()`/`WithQuotedIdentifiers()`; по умолчанию физические имена выводятся как есть | `ISqlDialect.QuoteIdentifier` |
 | Соглашения об именовании (например snake_case) | через `MappingSchema`/атрибуты (встроенной конвенции нет) | включается явно — `UseNamingConvention()`/`WithNamingConvention()`; встроенный `SnakeCaseNamingConvention`; явные имена — дословно | `INamingConvention` / `SnakeCaseNamingConvention` |
 | **DML** (`INSERT`/`UPDATE`/`DELETE`/`MERGE`) | yes | **no** (только чтение по замыслу) | — |
@@ -119,11 +119,10 @@
 * **Связи**: `[Association]`, eager loading `LoadWith` и неявный вывод соединений.
 * **Широта хинтов**: хинты запросов и таблиц у разных провайдеров (в nextorm оба есть только в SQL Server),
   а также фильтры запросов, интерсепторы и прочая расширяемость.
-* **Композируемый сырой SQL**: в linq2db сырой SQL можно использовать как источник `FROM`, соединять и
-  фильтровать дальше; в nextorm `WithSql` заменяет запрос целиком.
-* **Покрытие за пределами ядра запросов**: более крупный предобъявленный набор TVF, ранжирование/оценка
-  в полнотекстовом поиске, rowset XML `.nodes` и источники с динамической схемой (ClickHouse
-  `values()`/серверные табличные функции, MySQL `JSON_TABLE`, PostgreSQL `jsonb_to_record`).
+* **Покрытие за пределами ядра запросов**: более крупный предобъявленный набор TVF (хотя nextorm уже
+  поставляет `CONTAINSTABLE`/`FREETEXTTABLE` с `KEY`/`RANK`, PostgreSQL `ts_rank`/`ts_rank_cd` и rowset
+  XML `.nodes` SQL Server через `xml_nodes`), а также источники с динамической схемой (ClickHouse
+  `values()`/серверные табличные функции, PostgreSQL `jsonb_to_record`).
 * **Широта провайдеров**: Oracle, Firebird, DB2, SAP HANA, Informix, Sybase, SQL CE и другие.
 * **Интеграция с EF Core** и более крупная экосистема.
 
@@ -150,8 +149,7 @@ in-memory нет построчной привязки внешней строк
 между провайдерами маппера, nextorm теперь покрывает практически всю аналитическую поверхность запросов,
 которую даёт linq2db, включая провайдерные семейства функций и конструкции, специфичные для ClickHouse.
 Оставшаяся функциональная дельта намеренна: DML и change tracking, связи, широта хинтов между
-провайдерами, композируемый сырой SQL, более крупный предобъявленный набор TVF с ранжированием в
-полнотекстовом поиске, более широкая матрица провайдеров и крупная поверхность расширяемости/экосистемы.
+провайдерами, композируемый сырой SQL, более крупный предобъявленный набор TVF, более широкая матрица провайдеров и крупная поверхность расширяемости/экосистемы.
 Вывод маппинга, напротив, в nextorm настраивается гибче: квотирование идентификаторов и соглашения об
 именовании включаются явно и переопределяются для отдельной команды, тогда как linq2db квотирует по
 умолчанию и фиксирует имена через схему отображения. И наоборот, linq2db лучше подходит, когда тот же

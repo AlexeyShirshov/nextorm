@@ -13,9 +13,9 @@
 
 - parameter placeholder `@name`;
 - string concatenation with `||`;
-- [`MakeCoalesce`](xref:NextORM.Core.ISqlDialect) renders `coalesce(a, b)`;
+- [`MakeCoalesce`](xref:NextORM.Core.ISqlDialect.MakeCoalesce(System.String,System.String)) renders `coalesce(a, b)`;
 - boolean literals are `true`/`false`;
-- identifiers use double quotes ([`Escape`](xref:NextORM.Core.ISqlDialect) returns `"name"`), and [`MakeColumnReference`](xref:NextORM.Core.ISqlDialect) quotes a name too
+- identifiers use double quotes ([`Escape`](xref:NextORM.Core.ISqlDialect.Escape(System.String)) returns `"name"`), and [`MakeColumnReference`](xref:NextORM.Core.ISqlDialect.MakeColumnReference(System.String)) quotes a name too
   so that a quoted alias survives when it is referenced from an outer query;
 - derived tables and table-valued functions must be aliased ([`RequireSubqueryAlias`](xref:NextORM.Core.ISqlDialect.RequireSubqueryAlias) is `true`, and its
   consequence is that an alias is always emitted);
@@ -33,7 +33,9 @@
   (`x + (n * interval '1 day')`, `date_trunc('month', x) + interval '1 month - 1 day'`);
 - the `string_agg`/`array_agg` aggregates are enabled ([`SupportsStringArrayAggregates`](xref:NextORM.Core.ISqlDialect.SupportsStringArrayAggregates) is `true`);
 - full-text search is enabled ([`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText) is `true`): `SqlFunctions.Sql.contains` renders
-  `to_tsvector(col) @@ plainto_tsquery(search)` and `freetext` `websearch_to_tsquery(search)`;
+  `to_tsvector(col) @@ plainto_tsquery(search)` and `freetext` `websearch_to_tsquery(search)`; ranking is
+  available through the native `SqlFunctions.Postgres.ts_rank`/`ts_rank_cd`/`ts_headline` (gated by
+  [`SupportsTextSearchFunctions`](xref:NextORM.Core.ISqlDialect.SupportsTextSearchFunctions));
 - the extended scalar function library is enabled ([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions) is `true`):
   additional math (`asin`, `cbrt`, `degrees`, `pi`, `mod`, ...), string (`split_part`, `lpad`,
   `initcap`, ...), POSIX regular expression (`regexp_replace`, `regexp_like`, ...), date/time
@@ -197,13 +199,13 @@ ctx.From<IComplexEntity>()
 ```
 
 These are documented in
-[Scalar functions](../guide/11-scalar-functions.md#string-and-array-aggregates-postgresql). SQLite also
+[Scalar functions](../guide/11-scalar-functions.md#string-and-array-aggregates). SQLite also
 accepts the `FILTER` clause; the other functions are PostgreSQL-only.
 
 ## `*ALL` set operations and null ordering
 
 PostgreSQL is the only supported relational provider that implements `INTERSECT ALL` and `EXCEPT ALL`,
-so [`IntersectAll`](xref:NextORM.Core.QueryCommand`1)/[`ExceptAll`](xref:NextORM.Core.QueryCommand`1) render their SQL directly.
+so [`IntersectAll`](xref:NextORM.Core.QueryCommand`1.IntersectAll``1(NextORM.Core.QueryCommand{``0}))/[`ExceptAll`](xref:NextORM.Core.QueryCommand`1.ExceptAll``1(NextORM.Core.QueryCommand{``0})) render their SQL directly.
 
 ```csharp
 var q = a.Select(x => x.Id).IntersectAll(b.Select(x => x.Id));   // ... intersect all ...

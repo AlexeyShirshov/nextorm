@@ -9,5 +9,9 @@ namespace NextORM.Core;
 /// </remarks>
 public interface IParameterProvider
 {
+    /// <summary>
+    /// Returns the next unused parameter name for the command being built.
+    /// </summary>
+    /// <returns>A unique parameter name such as <c>p0</c>.</returns>
     string GetParamName();
 }

@@ -32,7 +32,7 @@ public class MariaDbDialectTests
         Dialect.SupportsFullJoin.Should().BeFalse();
         Dialect.SupportsIntersectExceptAll.Should().BeTrue();
         Dialect.SupportsApply.Should().BeTrue();
-        Dialect.SupportsQueryHints.Should().BeFalse();
+        Dialect.SupportsQueryHints.Should().BeTrue();
         Dialect.SupportsAnyValueAggregate.Should().BeFalse();
         Dialect.MakeAggregate("any_agg").Should().Be("ANY_VALUE");
         Dialect.SupportsPercentileWindow.Should().BeTrue();
@@ -44,6 +44,14 @@ public class MariaDbDialectTests
         Dialect.SessionInfoFunctions.Should().NotBeNull();
         Dialect.SessionInfoFunctions!.Render("current_user").Should().Be("current_user()");
         Dialect.SessionInfoFunctions!.Render("current_database").Should().Be("database()");
+    }
+
+    [Fact]
+    public void QueryHintHooks_ShouldInheritInlineOptimizerHintComment()
+    {
+        Dialect.SupportsQueryHints.Should().BeTrue();
+        Dialect.RenderQueryHints("select 1", ["MAX_EXECUTION_TIME(1000)"], null)
+            .Should().Be("select /*+ MAX_EXECUTION_TIME(1000) */ 1");
     }
 
     [Fact]

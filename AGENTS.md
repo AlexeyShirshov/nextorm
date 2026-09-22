@@ -46,6 +46,7 @@
   ```
   Pre-pulled images: `postgres:17-alpine`, `mcr.microsoft.com/mssql/server:2022-latest`, `mysql:8.4`, `testcontainers/ryuk`; `clickhouse/clickhouse-server:25.8-alpine` is pulled on the first ClickHouse run (`TESTCONTAINERS_RYUK_DISABLED` is not needed). Without `DOCKER_HOST` only the SQLite integration tests run. See `.opencode/skills/running-integration-tests/SKILL.md`.
 - External databases: `NEXTORM_POSTGRES_CONNECTION`, `NEXTORM_SQLSERVER_CONNECTION`, `NEXTORM_MYSQL_CONNECTION`, `NEXTORM_CLICKHOUSE_CONNECTION` (see `tests/nextorm.integration.tests/Providers/*Container.cs`).
+- **Container-backed integration tests are not optional evidence.** Load `.opencode/skills/running-integration-tests/SKILL.md` before running them. If the Podman socket is missing, do **not** stop at "cannot run": start the machine (`"/mnt/c/Program Files/RedHat/Podman/podman.exe" machine start`), wait, re-check the socket and rerun with `DOCKER_HOST` (see the skill's Troubleshooting). A run where PostgreSQL/SQL Server/MySQL/ClickHouse report `skipped` (i.e. no `DOCKER_HOST`) is **not** a passing run: either set `DOCKER_HOST` and execute them, or state explicitly which providers were not run. Never present a suite that skips provider tests as green.
 
 ## Coverage
 - `coverage.settings.xml` includes only `nextorm.{core,sqlite,postgres,sqlserver}`.
@@ -54,6 +55,7 @@
 ## Docs
 - DocFX is a local tool: `dotnet docfx docs/docfx.json`. `docs/api/` and `docs/_site/` are generated and gitignored; article pages are hand-written.
 - Renaming a public type or method requires updating both `docs/**` and `docs/ru/**` (prose, samples, source paths, curated API reference) in the same change. Grep both trees for the old name first.
+- Public docs (`docs/**`, `docs/ru/**`, root `readme.md`) must **not link to `docs/specs/**`**: specs are internal, excluded from the DocFX build and never published. No hyperlinks, no relative `.md` links, no GitHub `blob` links to specs from article pages or the readme — keep the reasoning inline or point to a public page.
 
 ## Benchmarks
 - `benchmarks/nextorm.benchmark` is a BenchmarkDotNet console app using `BenchmarkSwitcher`: `dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter *SqliteBenchmarkWhere*`.

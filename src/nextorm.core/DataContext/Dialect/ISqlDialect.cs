@@ -63,10 +63,27 @@ public interface ISqlDialect
     /// </summary>
     bool SupportsGlobalJoin { get; }
     /// <summary>
+    /// True when the provider understands the ClickHouse <c>SEMI</c>/<c>ANTI</c> join kinds
+    /// (<see cref="JoinType.Semi"/>/<see cref="JoinType.Anti"/>), which return only the left-hand
+    /// columns. Declared as a default interface method returning <c>false</c> so existing external
+    /// implementations keep compiling; only ClickHouse opts in today.
+    /// </summary>
+    bool SupportsSemiAntiJoin => false;
+    /// <summary>
+    /// True when the provider understands the ClickHouse <c>PASTE JOIN</c> kind
+    /// (<see cref="JoinType.Paste"/>), a position-based join with no <c>ON</c> condition. Declared as a
+    /// default interface method returning <c>false</c> so existing external implementations keep
+    /// compiling; only ClickHouse opts in today.
+    /// </summary>
+    bool SupportsPasteJoin => false;
+    /// <summary>
     /// Renders the join keyword for <paramref name="joinType"/> with an optional
     /// <see cref="JoinStrictness"/> modifier and/or the <c>GLOBAL</c> modifier. A dialect that did not
     /// opt in with <see cref="SupportsJoinStrictness"/>/<see cref="SupportsGlobalJoin"/> is only ever
-    /// asked for <see cref="JoinStrictness.Default"/> and <c>false</c>.
+    /// asked for <see cref="JoinStrictness.Default"/> and <c>false</c>. The ClickHouse-only
+    /// <see cref="JoinType.Semi"/>/<see cref="JoinType.Anti"/>/<see cref="JoinType.Paste"/> kinds are
+    /// only requested from a dialect that opted in with
+    /// <see cref="SupportsSemiAntiJoin"/>/<see cref="SupportsPasteJoin"/>.
     /// </summary>
     string MakeJoinKeyword(JoinType joinType, JoinStrictness strictness, bool isGlobal);
     /// <summary>
@@ -137,10 +154,29 @@ public interface ISqlDialect
     /// True when the provider has an array type and can render the array functions of
     /// <see cref="ClickHouseFunctions"/> over array <em>columns</em> (for example <c>length</c>,
     /// <c>has</c>, <c>indexOf</c>, <c>arrayStringConcat</c>, <c>hasAny</c>/<c>hasAll</c>,
+    /// <c>startsWith</c>/<c>endsWith</c>/<c>hasSubstr</c>,
     /// <c>arraySort</c>, <c>arrayReverse</c>, <c>arrayDistinct</c>). The safe default is
     /// <c>false</c>; only ClickHouse opts in today.
     /// </summary>
     bool SupportsArrayFunctions { get; }
+
+    /// <summary>
+    /// True when the provider translates the higher-order (lambda) array functions of
+    /// <see cref="ClickHouseFunctions"/> (<c>arrayMap</c>, <c>arrayFilter</c>, <c>arrayExists</c>,
+    /// <c>arrayAll</c>, <c>arrayCount</c>, <c>arrayFirst*</c>, <c>arrayLast*</c>). The safe default is
+    /// <c>false</c>; only ClickHouse opts in today. A provider with plain array functions may still
+    /// lack lambda syntax, so this is separate from <see cref="SupportsArrayFunctions"/>.
+    /// </summary>
+    bool SupportsHigherOrderArrayFunctions { get; }
+
+    /// <summary>
+    /// True when the provider has a native tuple type and renders the tuple surface: the
+    /// <c>tuple(...)</c> constructor (from <c>Tuple.Create</c>) and element access
+    /// (from <c>System.Tuple&lt;...&gt;.ItemN</c> as <c>tupleElement(tuple, n)</c>). Declared as a
+    /// default interface method returning <c>false</c> so existing external implementations keep
+    /// compiling; only ClickHouse opts in today.
+    /// </summary>
+    bool SupportsTupleFunctions => false;
 
     /// <summary>
     /// The provider's renderer for a scalar <c>string.Split</c>; <c>null</c> means the provider cannot
@@ -375,6 +411,14 @@ public interface ISqlDialect
     IQuantileAggregateRenderer? QuantileAggregates => null;
 
     /// <summary>
+    /// The provider's renderer for the ClickHouse parameterised top-K aggregates
+    /// (<c>topK(N)(value)</c>, <c>topKWeighted(N)(value, weight)</c>); <c>null</c> means the provider
+    /// cannot express them. Declared as a default interface method so that existing external
+    /// implementations keep compiling.
+    /// </summary>
+    ITopKAggregateRenderer? TopKAggregates => null;
+
+    /// <summary>
     /// True when the provider can render the <c>anyLast</c> row-picking aggregate (the value of an
     /// arbitrary last row; <c>ClickHouseFunctions.any_last</c>). The safe default is <c>false</c>;
     /// ClickHouse opts in today. The arbitrary-value aggregate without the last-row restriction is
@@ -397,19 +441,26 @@ public interface ISqlDialect
     ISequenceAggregateRenderer? SequenceAggregates => null;
 
     /// <summary>
-    /// True when the provider can render the string-JSON functions over JSON stored in a text column:
-    /// the <c>JSONExtract*</c>/<c>JSONHas</c> and <c>visitParamExtract*</c> families
-    /// (<c>ClickHouseFunctions.json_extract_*</c>/<c>visit_param_extract_*</c>) and the JSONPath scalars
+    /// True when the provider can render the JSON functions over JSON stored in a text column or a native
+    /// JSON column: the <c>JSONExtract*</c>/<c>JSONHas</c> and <c>visitParamExtract*</c> families
+    /// (<c>ClickHouseFunctions.json_extract_*</c>/<c>visit_param_extract_*</c>), the JSONPath scalars
     /// <c>JSON_VALUE</c>/<c>JSON_QUERY</c>/<c>JSON_EXISTS</c>
-    /// (<c>ClickHouseFunctions.json_value</c>/<c>json_query</c>/<c>json_exists</c>). This is distinct from
-    /// the PostgreSQL JSON type (<see cref="SupportsJson"/>) and the SQL Server/MySQL text-JSON functions
-    /// (<see cref="SupportsTextJson"/>). The safe default is <c>false</c>; ClickHouse opts in today.
+    /// (<c>ClickHouseFunctions.json_value</c>/<c>json_query</c>/<c>json_exists</c>) and the native-JSON
+    /// functions <c>JSONAllPaths</c>/<c>JSONAllPathsWithTypes</c>/<c>toJSONString</c>
+    /// (<c>ClickHouseFunctions.json_all_paths</c>/<c>json_all_paths_with_types</c>/<c>to_json_string</c>).
+    /// The native-JSON functions require a native <c>JSON</c>-valued argument (a <c>String</c> column needs
+    /// <c>CAST(col AS JSON)</c>); <c>JSONAllPathsWithTypes</c> returns <c>Map(String, String)</c>, surfaced
+    /// as a <see cref="System.Collections.Generic.Dictionary{TKey, TValue}"/>.
+    /// This is distinct from the PostgreSQL JSON type (<see cref="SupportsJson"/>) and the SQL
+    /// Server/MySQL text-JSON functions (<see cref="SupportsTextJson"/>). The safe default is
+    /// <c>false</c>; ClickHouse opts in today.
     /// </summary>
     bool SupportsJsonExtract { get; }
     /// <summary>
-    /// Renders a ClickHouse string-JSON function over the already-rendered <paramref name="args"/>: the
-    /// <c>JSONExtract*</c>/<c>visitParamExtract*</c> family and the JSONPath scalars
-    /// (<c>JSON_VALUE</c>/<c>JSON_QUERY</c>/<c>JSON_EXISTS</c>). Only called when
+    /// Renders a ClickHouse JSON function over the already-rendered <paramref name="args"/>: the
+    /// <c>JSONExtract*</c>/<c>visitParamExtract*</c> family, the JSONPath scalars
+    /// (<c>JSON_VALUE</c>/<c>JSON_QUERY</c>/<c>JSON_EXISTS</c>) and the native-JSON functions
+    /// (<c>JSONAllPaths</c>/<c>JSONAllPathsWithTypes</c>/<c>toJSONString</c>). Only called when
     /// <see cref="SupportsJsonExtract"/> is <c>true</c>. The default renders
     /// <c>name(arg1, arg2, ...)</c>; ClickHouse maps the snake_case name to its native spelling and
     /// casts the unsigned results it cannot materialise.
@@ -451,8 +502,8 @@ public interface ISqlDialect
 
     /// <summary>
     /// True when the provider can render the ClickHouse dictionary functions
-    /// (<c>dictGet</c>/<c>dictGetOrDefault</c>/<c>dictHas</c>). The safe default is <c>false</c>;
-    /// ClickHouse opts in today.
+    /// (<c>dictGet</c>/<c>dictGetOrDefault</c>/<c>dictHas</c>/<c>dictGetHierarchy</c>/<c>dictGetChildren</c>/<c>dictIsIn</c>).
+    /// The safe default is <c>false</c>; ClickHouse opts in today.
     /// </summary>
     bool SupportsDictionaries { get; }
     /// <summary>
@@ -584,13 +635,17 @@ public interface ISqlDialect
     /// aliases (so they survive as case-sensitive identifiers) must quote the reference accordingly.
     /// </summary>
     string MakeColumnReference(string name);
+    /// <summary>Renders the alias clause for a table source (<c>AS alias</c>).</summary>
     string MakeTableAlias(string tableAlias);
+    /// <summary>Renders the alias clause for a projected column (<c>AS alias</c>); a null or empty <paramref name="colAlias"/> renders nothing.</summary>
     string MakeColumnAlias(string? colAlias);
     /// <summary>Renders a parameter placeholder, e.g. <c>@name</c> or <c>$name</c>.</summary>
     string MakeParam(string name);
     /// <summary>SQL type name used when a CLR conversion has to be rendered as a database cast.</summary>
     string MakeTypeName(Type type);
+    /// <summary>Renders the SQL literal for a boolean value.</summary>
     string MakeBool(bool v);
+    /// <summary>Renders <c>coalesce(v1, v2)</c> over the already-rendered operands.</summary>
     string MakeCoalesce(string v1, string v2);
     /// <summary>
     /// Coalesce over boolean operands. Dialects without a boolean type usable as a predicate
@@ -777,6 +832,13 @@ public interface ISqlDialect
     /// </summary>
     bool SupportsTableFunction(string name);
     /// <summary>
+    /// True when the provider can use a raw SQL fragment as a composable <c>FROM</c> source rendered as a
+    /// derived table (<c>(&lt;sql&gt;) AS alias</c>; see <see cref="DataContextExtensions.FromSql"/>). The
+    /// safe default is <c>false</c>; a provider that leaves it <c>false</c> rejects such a source with a
+    /// clear <see cref="NotSupportedException"/>.
+    /// </summary>
+    bool SupportsRawSqlSource { get; }
+    /// <summary>
     /// Renders the opening fragment of a count aggregate. <paramref name="big"/> requests a 64-bit
     /// count; dialects where <c>count</c> already returns a 64-bit integer ignore the flag.
     /// </summary>
@@ -807,6 +869,7 @@ public interface ISqlDialect
     /// </summary>
     bool SupportsGlobalPredicates { get; }
 
+    /// <summary>Appends the provider's paging clause (LIMIT/OFFSET, OFFSET/FETCH or TOP) for <paramref name="paging"/> to <paramref name="sqlBuilder"/>.</summary>
     void MakePage(Paging paging, StringBuilder sqlBuilder);
     /// <summary>
     /// The provider's renderer for <c>LIMIT [offset, ]n BY expr</c> (ClickHouse). <c>null</c> means the
@@ -925,7 +988,10 @@ public interface ISqlDialect
 /// <summary>Which side of a string <see cref="string.Trim()"/> removes whitespace from.</summary>
 public enum StringTrimKind
 {
+    /// <summary>Trim whitespace from both ends.</summary>
     Both,
+    /// <summary>Trim leading whitespace only.</summary>
     Start,
+    /// <summary>Trim trailing whitespace only.</summary>
     End
 }

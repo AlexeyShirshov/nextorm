@@ -4,6 +4,10 @@ using System.Linq.Expressions;
 
 namespace NextORM.Core;
 
+/// <summary>
+/// Default <see cref="IColumnsProvider"/> that tracks the column sources of a query in registration
+/// order and resolves lambda parameters to alias indexes within the current scope.
+/// </summary>
 public class DefaultColumnsProvider : IColumnsProvider
 {
 #if NET8_0_OR_GREATER
@@ -19,8 +23,10 @@ public class DefaultColumnsProvider : IColumnsProvider
     /// <summary>The index of the first entry owned by the command currently being rendered.</summary>
     private int SourceScopeStart => _sourceScopes.Count > 0 ? _sourceScopes.Peek() : 0;
 
+    /// <inheritdoc/>
     public void PushSourceScope() => _sourceScopes.Add(_list.Count);
 
+    /// <inheritdoc/>
     public void PopSourceScope()
     {
         // A nested command's entries keep their index (the alias provider numbers sources by the
@@ -38,22 +44,27 @@ public class DefaultColumnsProvider : IColumnsProvider
         _sourceScopes.Pop();
     }
 
+    /// <inheritdoc/>
     public void Add(Type entityType, bool fromProjection)
     {
         _list.Add((entityType, null, fromProjection, false));
     }
 
+    /// <inheritdoc/>
     public void Add(QueryCommand queryCommand, bool fromProjection)
     {
         _list.Add((queryCommand.ResultType!, queryCommand, fromProjection, false));
     }
 
+    /// <inheritdoc/>
     public int? FindAlias(ParameterExpression param, bool fromProjection)
         => FindAlias(param, fromProjection, includeOuterScopes: false, includeNestedSources: false);
 
+    /// <inheritdoc/>
     public int? FindAlias(ParameterExpression param, bool fromProjection, bool includeOuterScopes)
         => FindAlias(param, fromProjection, includeOuterScopes, includeNestedSources: false);
 
+    /// <inheritdoc/>
     public int? FindAlias(ParameterExpression param, bool fromProjection, bool includeOuterScopes, bool includeNestedSources)
     {
         if (includeNestedSources)
@@ -99,9 +110,11 @@ public class DefaultColumnsProvider : IColumnsProvider
         return null;
     }
 
+    /// <inheritdoc/>
     public (int, QueryCommand?) FindQueryCommand(Type entityType)
         => FindQueryCommand(entityType, includeNestedSources: false);
 
+    /// <inheritdoc/>
     public (int, QueryCommand?) FindQueryCommand(Type entityType, bool includeNestedSources)
     {
         if (includeNestedSources)
@@ -116,30 +129,46 @@ public class DefaultColumnsProvider : IColumnsProvider
 
     private (int, QueryCommand?) FindQueryCommandInScope(Type entityType, bool onlyNested)
     {
+        // Prefer an in-scope source, but fall back to the most recently added out-of-scope one.
+        // Rendering a derived query's pass-through column re-visits the expression against the source
+        // that derived query was built from (for example the middle query over the inner derived
+        // query's columns), and that source's scope has already been popped by the time the enclosing
+        // query renders its projection. The entry is inactive for the enclosing command's own alias
+        // lookups, yet it is the only command that can resolve the nested member.
+        (int Index, QueryCommand? Command) fallback = default;
+
         for (var (i, cnt) = (0, _list.Count); i < cnt; i++)
         {
             var item = _list[i];
-            if (item.Item4 != onlyNested) continue;
-            if (item.Item1 == entityType)
+            if (item.Item1 != entityType)
+                continue;
+
+            if (!item.Item4)
                 return (i, item.Item2);
+
+            fallback = (i, item.Item2);
         }
 
-        return (default, default);
+        return fallback;
     }
 
+    /// <inheritdoc/>
     public void PopScope()
     {
         _scope.Pop();
     }
 
+    /// <inheritdoc/>
     public void PushScope(ReadOnlyCollection<ParameterExpression> parameters)
     {
         _scope.Add(parameters);
     }
 
+    /// <inheritdoc/>
     public int? FindAlias(Type entityType, int? paramIdx, bool fromProjection)
         => FindAlias(entityType, paramIdx, fromProjection, includeNestedSources: false);
 
+    /// <inheritdoc/>
     public int? FindAlias(Type entityType, int? paramIdx, bool fromProjection, bool includeNestedSources)
     {
         if (includeNestedSources)
@@ -175,5 +204,6 @@ public class DefaultColumnsProvider : IColumnsProvider
         return null;
     }
 
+    /// <inheritdoc/>
     public bool HasAliases => _list.Count > 0;
 }

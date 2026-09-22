@@ -1,10 +1,8 @@
 # SQL Server-specific SQL
 
 > SQL Server contributes the `CHOOSE` conditional function, statement/table hints and the `FOR JSON`/
-> `FOR XML` result shape, the scalar XML data-type methods (`value`/`query`/`exist`), the native
-> `PIVOT`/`UNPIVOT` source constructs, plus `string_split`/`openjson` table functions.
-> `CONTAINSTABLE` and the rowset XML method `.nodes` are the remaining SQL Server surfaces not part
-> of nextorm.
+> `FOR XML` result shape, the XML data-type methods (`value`/`query`/`exist` and the `nodes` rowset),
+> the native `PIVOT`/`UNPIVOT` source constructs, plus `string_split`/`openjson` table functions.
 
 **Prerequisites:** [Querying and projections](../01-querying-and-projections.md) · [SQL Server provider](../../providers/sqlserver.md)
 
@@ -28,7 +26,7 @@ See [Scalar functions](../11-scalar-functions.md#conditional-helpers).
 
 ## Hints
 
-[`WithTableHint`](xref:NextORM.Core.EntityBuilder`1) attaches a table hint to the query's `FROM` table
+[`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[])) attaches a table hint to the query's `FROM` table
 ([`SupportsTableHints`](xref:NextORM.Core.ISqlDialect.SupportsTableHints)), and a query hint renders the
 trailing `OPTION (...)` clause, for example `OPTION (RECOMPILE)`
 ([`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints)); the CTE `maxRecursion`
@@ -52,7 +50,7 @@ select id from simple_entity with (updlock)
 
 `ForUpdate` renders `updlock` (update lock held to the end of the transaction) and `ForShare` renders
 `holdlock` (shared lock). The lock hint combines with
-[`WithTableHint`](xref:NextORM.Core.EntityBuilder`1), so `.WithTableHint("rowlock").ForUpdate()`
+[`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[])), so `.WithTableHint("rowlock").ForUpdate()`
 renders `with (rowlock, updlock)`. See
 [Row locking](../01-querying-and-projections.md#row-locking-for-update--for-share).
 
@@ -86,14 +84,29 @@ select payload.value('(/root/item)[1]', 'nvarchar(100)') as [Value],
 from xml_entity
 ```
 
-The rowset method `.nodes` is not supported: it needs an outer `FROM`/`CROSS APPLY` reference.
+The rowset method `.nodes` is a correlated `CrossApply`/`OuterApply` source: `xml_nodes(xml, xpath)`
+unfolds the XML value into one row per node and renders `<xml>.nodes('xpath') as [alias]([value])`,
+after which the unfolded `IXmlNodesRow.Value` is projected with the scalar methods above. The operand
+must be a column of the outer row and the XQuery a string literal.
 
-See [Scalar functions](../11-scalar-functions.md#xml-data-type-methods).
+```csharp
+var rows = dataContext.From<IXmlEntity>()
+    .CrossApply(x => SqlFunctions.SqlServer.xml_nodes(x.Payload, "/root/item"))
+    .Select(p => new { Id = SqlFunctions.SqlServer.xml_value<int>(p.Item2.Value, "(.)[1]/@id", "int") })
+    .ToList();
+```
+
+```sql
+select t2.value.value('(.)[1]/@id', 'int') as [Id]
+from xml_entity as [t1] cross apply t1.payload.nodes('/root/item') as [t2](value)
+```
+
+See [Scalar functions](../11-scalar-functions.md#xml-data-type-methods-sql-server).
 
 ## Table-valued functions
 
 `string_split(...)` and `openjson(...)` are exposed through
-[`FromTableFunction`](xref:NextORM.Core.EntityBuilder`1). See
+[`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})). See
 [Table-valued functions](../13-table-valued-functions.md) and
 [JSON support across providers](../18-json.md).
 
@@ -121,7 +134,7 @@ MariaDB supports the same clause on system-versioned tables, except `CONTAINED I
 
 [`EntityBuilder<TEntity>.Pivot`](xref:NextORM.Core.EntityBuilder`1) reshapes a source into columns with
 the native T-SQL `PIVOT` operator and
-[`Unpivot`](xref:NextORM.Core.EntityBuilder`1) stacks columns into rows with `UNPIVOT`
+[`Unpivot`](xref:NextORM.Core.EntityBuilder`1.Unpivot(System.String,System.String,NextORM.Core.UnpivotColumn[])) stacks columns into rows with `UNPIVOT`
 ([`Pivot`](xref:NextORM.Core.ISqlDialect.Pivot) /
 [`Pivot`](xref:NextORM.Core.ISqlDialect.Pivot)). The result is an untyped source:
 select the grouping columns and the pivoted columns by name through `TableAlias`. The operators apply to
@@ -186,7 +199,7 @@ order by CategoryName
 
 ## `TABLESAMPLE`
 
-[`TableSample`](xref:NextORM.Core.EntityBuilder`1) adds a `TABLESAMPLE` modifier to the
+[`TableSample`](xref:NextORM.Core.EntityBuilder`1.TableSample(System.Double,NextORM.Core.TableSampleMethod,System.Nullable{System.Double})) adds a `TABLESAMPLE` modifier to the
 query's primary table ([`TableSample`](xref:NextORM.Core.ISqlDialect.TableSample)); an
 optional seed makes the sample repeatable. SQL Server renders `tablesample (10 percent)` /
 `tablesample (10 percent) repeatable (3)`
@@ -208,11 +221,17 @@ SQL Server supports only the `System` method
 throws `NotSupportedException`. See
 [Table sampling](../01-querying-and-projections.md#table-sampling-tablesample).
 
+## Full-text search
+
+The cross-provider boolean predicates `contains`/`freetext` render `CONTAINS`/`FREETEXT`. For ranking,
+`SqlFunctions.SqlServer.containstable`/`freetexttable` expose the matched key and `RANK` score through
+`SqlFunctions.IKeyRankRow<TKey>`; see
+[Table-valued functions](../13-table-valued-functions.md#built-in-table-functions).
+
 ## Not yet supported
 
-`CONTAINSTABLE`/`FREETEXTTABLE` (full-text with a `RANK` column, which references the base table by
-name) and the rowset XML method `.nodes` (which needs an outer `FROM`/`CROSS APPLY`
-reference) are tracked in the backlog. See [Limitations and out-of-scope features](../../advanced/limitations.md).
+No SQL Server-specific surface remains open. See
+[Limitations and out-of-scope features](../../advanced/limitations.md).
 
 ## See also
 

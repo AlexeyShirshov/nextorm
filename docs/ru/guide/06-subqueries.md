@@ -9,9 +9,9 @@
 Любой `QueryCommand<T>` — объект, который возвращает `EntityBuilder<T>.Select(...)`, — можно встроить в
 другой запрос четырьмя способами:
 
-* как **производную таблицу** в `FROM`, через [`From`](xref:NextORM.Core.DataContext);
+* как **производную таблицу** в `FROM`, через [`From`](xref:NextORM.Core.DataContext.From(System.String));
 * как **скалярный подзапрос** в проекции, `WHERE`, `ORDER BY` или `HAVING`, вызывая терминал для одной строки,
-  такой как [`First`](xref:NextORM.Core.EntityBuilder`1) или [`Single`](xref:NextORM.Core.EntityBuilder`1), внутри внешнего выражения;
+  такой как [`First`](xref:NextORM.Core.EntityBuilderExtensions.First``1(NextORM.Core.EntityBuilder{``0})) или [`Single`](xref:NextORM.Core.EntityBuilderExtensions.Single``1(NextORM.Core.EntityBuilder{``0})), внутри внешнего выражения;
 * как **коррелированный предикат** с `SqlFunctions.Sql.exists(...)`, `SqlFunctions.Sql.@in(column, query)`,
   `SqlFunctions.Sql.any(query)` или `SqlFunctions.Sql.all(query)`.
 
@@ -25,7 +25,7 @@
 
 ## Подзапрос как источник FROM
 
-[`From`](xref:NextORM.Core.DataContextExtensions) принимает подготовленный `QueryCommand<T>` (или `EntityBuilder<T>`) и создаёт построитель по его
+[`From`](xref:NextORM.Core.DataContextExtensions.From(NextORM.Core.IDataContext,System.String)) принимает подготовленный `QueryCommand<T>` (или `EntityBuilder<T>`) и создаёт построитель по его
 столбцам:
 
 ```csharp
@@ -54,7 +54,7 @@ var rows = dataContext.From(nested).Select(t => new { t.Id, t.Calc }).ToList();
 
 ## Скалярный подзапрос в SELECT
 
-Вызов терминала для одной строки ([`First`](xref:NextORM.Core.EntityBuilder`1), [`FirstOrDefault`](xref:NextORM.Core.EntityBuilder`1), [`Single`](xref:NextORM.Core.EntityBuilder`1), [`SingleOrDefault`](xref:NextORM.Core.EntityBuilder`1)) внутри
+Вызов терминала для одной строки ([`First`](xref:NextORM.Core.EntityBuilderExtensions.First``1(NextORM.Core.EntityBuilder{``0})), [`FirstOrDefault`](xref:NextORM.Core.EntityBuilderExtensions.FirstOrDefault``1(NextORM.Core.EntityBuilder{``0})), [`Single`](xref:NextORM.Core.EntityBuilderExtensions.Single``1(NextORM.Core.EntityBuilder{``0})), [`SingleOrDefault`](xref:NextORM.Core.EntityBuilderExtensions.SingleOrDefault``1(NextORM.Core.EntityBuilder{``0}))) внутри
 проекции встраивает внутренний запрос как скалярный столбец. Скалярной проекции присваивается
 псевдоним по имени внешнего свойства:
 
@@ -114,7 +114,7 @@ var row = await dataContext.From<IComplexEntity>()
 
 ## Скалярный подзапрос в ORDER BY
 
-Ключ `ORDER BY` может быть выражением, содержащим скалярный подзапрос. Первый [`OrderBy`](xref:NextORM.Core.EntityBuilder`1) использует
+Ключ `ORDER BY` может быть выражением, содержащим скалярный подзапрос. Первый [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)) использует
 подзапрос, второй разрешает равенство:
 
 ```csharp
@@ -151,7 +151,7 @@ from complex_entity as 't1'
 ```
 
 Внешний запрос квалифицирует только упомянутый член; внутренний запрос сохраняет свои столбцы и
-псевдонимы. [`FirstOrDefault`](xref:NextORM.Core.EntityBuilder`1)/[`SingleOrDefault`](xref:NextORM.Core.EntityBuilder`1) дают `NULL`, когда во внутреннем запросе нет строк.
+псевдонимы. [`FirstOrDefault`](xref:NextORM.Core.EntityBuilderExtensions.FirstOrDefault``1(NextORM.Core.EntityBuilder{``0}))/[`SingleOrDefault`](xref:NextORM.Core.EntityBuilderExtensions.SingleOrDefault``1(NextORM.Core.EntityBuilder{``0})) дают `NULL`, когда во внутреннем запросе нет строк.
 
 Упомянутый член может также приходить из join-проекции: `p.Item1.Id` определяет псевдоним таблицы
 по позиции элемента проекции, а столбец — по его разметке, поэтому подзапрос может коррелировать с
@@ -185,7 +185,7 @@ var rows = await dataContext.From<IComplexEntity>()
 `e.String.ToUpper()`); функция отображается вокруг квалифицированного внешнего псевдонима так же,
 как и любое другое выражение.
 
-Агрегатный терминал ([`Count`](xref:NextORM.Core.EntityBuilder`1), `Sum(...)`, `Min`/`Max`/`Avg`, ...)
+Агрегатный терминал ([`Count`](xref:NextORM.Core.EntityBuilderExtensions.Count``1(NextORM.Core.EntityBuilder{``0})), `Sum(...)`, `Min`/`Max`/`Avg`, ...)
 транслируется в соответствующий SQL-агрегат над подзапросом, поэтому его можно использовать прямо с
 внешней ссылкой:
 

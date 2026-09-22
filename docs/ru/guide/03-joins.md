@@ -1,15 +1,15 @@
 # Соединения
 
-> Объединяйте строки из двух или более сущностей, производных запросов или необработанных таблиц с помощью [`Join`](xref:NextORM.Core.EntityBuilder`1), [`LeftJoin`](xref:NextORM.Core.EntityBuilder`1), [`RightJoin`](xref:NextORM.Core.EntityBuilder`1), [`FullJoin`](xref:NextORM.Core.EntityBuilder`1), [`CrossJoin`](xref:NextORM.Core.EntityBuilder`1), [`CrossApply`](xref:NextORM.Core.EntityBuilder`1) и [`OuterApply`](xref:NextORM.Core.EntityBuilder`1).
+> Объединяйте строки из двух или более сущностей, производных запросов или необработанных таблиц с помощью [`Join`](xref:NextORM.Core.EntityBuilder`1.Join``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})), [`LeftJoin`](xref:NextORM.Core.EntityBuilder`1.LeftJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})), [`RightJoin`](xref:NextORM.Core.EntityBuilder`1.RightJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})), [`FullJoin`](xref:NextORM.Core.EntityBuilder`1.FullJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})), [`CrossJoin`](xref:NextORM.Core.EntityBuilder`1.CrossJoin``1(NextORM.Core.EntityBuilder{``0})), [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0})) и [`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0})).
 
 **Предварительные требования:** [Сущности и метаданные](../getting-started/03-entities-and-metadata.md) · [Запросы и проекции](01-querying-and-projections.md) · [Фильтрация (WHERE)](02-filtering-where.md)
 
 ## Обзор
 
-Каждый `EntityBuilder<T>` предоставляет семь методов соединения: [`Join`](xref:NextORM.Core.EntityBuilder`1) (inner), [`LeftJoin`](xref:NextORM.Core.EntityBuilder`1), [`RightJoin`](xref:NextORM.Core.EntityBuilder`1),
-[`FullJoin`](xref:NextORM.Core.EntityBuilder`1), [`CrossJoin`](xref:NextORM.Core.EntityBuilder`1), [`CrossApply`](xref:NextORM.Core.EntityBuilder`1) и [`OuterApply`](xref:NextORM.Core.EntityBuilder`1). Условие соединения — это выражение над двумя
+Каждый `EntityBuilder<T>` предоставляет семь методов соединения: [`Join`](xref:NextORM.Core.EntityBuilder`1.Join``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})) (inner), [`LeftJoin`](xref:NextORM.Core.EntityBuilder`1.LeftJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})), [`RightJoin`](xref:NextORM.Core.EntityBuilder`1.RightJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})),
+[`FullJoin`](xref:NextORM.Core.EntityBuilder`1.FullJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})), [`CrossJoin`](xref:NextORM.Core.EntityBuilder`1.CrossJoin``1(NextORM.Core.EntityBuilder{``0})), [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0})) и [`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0})). Условие соединения — это выражение над двумя
 сторонами, которое генерируется как предложение `ON` соединения, именно там, где построитель может его
-транслировать. [`CrossJoin`](xref:NextORM.Core.EntityBuilder`1), [`CrossApply`](xref:NextORM.Core.EntityBuilder`1) и [`OuterApply`](xref:NextORM.Core.EntityBuilder`1) не принимают условие; первый генерирует
+транслировать. [`CrossJoin`](xref:NextORM.Core.EntityBuilder`1.CrossJoin``1(NextORM.Core.EntityBuilder{``0})), [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0})) и [`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0})) не принимают условие; первый генерирует
 `cross join`, а последние два — форму lateral/apply конкретного провайдера (см.
 [APPLY и LATERAL](#apply-и-lateral)).
 
@@ -17,7 +17,7 @@
 
 * другой типизированной сущностью, `EntityBuilder<TJoinEntity>`;
 * `QueryCommand<TJoinEntity>` — подзапрос, который отображается как производная таблица;
-* необработанной таблицей, [`EntityBuilder`](xref:NextORM.Core.EntityBuilder), созданной через [`From`](xref:NextORM.Core.DataContext), столбцы которой
+* необработанной таблицей, [`EntityBuilder`](xref:NextORM.Core.EntityBuilder), созданной через [`From`](xref:NextORM.Core.DataContext.From(System.String)), столбцы которой
   читаются через индексатор [`TableAlias`](xref:NextORM.Core.TableAlias) (`t["id"]`).
 
 Прежде чем перейти к примерам, важно понять две вещи:
@@ -25,7 +25,7 @@
 1. **Арность соединений ограничена восемью таблицами на этапе компиляции.** Первое соединение
    возвращает [`JoinedEntityBuilder<T1, T2>`](xref:NextORM.Core.JoinedEntityBuilder`2), следующее — [`JoinedEntityBuilder<T1, T2, T3>`](xref:NextORM.Core.JoinedEntityBuilder`3) и так далее вплоть до
    `JoinedEntityBuilder<T1..T8>`. `JoinedEntityBuilder` намеренно не предоставляет дальнейших методов
-   [`Join`](xref:NextORM.Core.EntityBuilder`1)/[`LeftJoin`](xref:NextORM.Core.EntityBuilder`1)/[`RightJoin`](xref:NextORM.Core.EntityBuilder`1)/[`FullJoin`](xref:NextORM.Core.EntityBuilder`1)/[`CrossJoin`](xref:NextORM.Core.EntityBuilder`1), а `Projection<T1..T8>` не реализует
+   [`Join`](xref:NextORM.Core.EntityBuilder`1.Join``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}}))/[`LeftJoin`](xref:NextORM.Core.EntityBuilder`1.LeftJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}}))/[`RightJoin`](xref:NextORM.Core.EntityBuilder`1.RightJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}}))/[`FullJoin`](xref:NextORM.Core.EntityBuilder`1.FullJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}}))/[`CrossJoin`](xref:NextORM.Core.EntityBuilder`1.CrossJoin``1(NextORM.Core.EntityBuilder{``0})), а `Projection<T1..T8>` не реализует
    [`IExtendableProjection`](xref:NextORM.Core.IExtendableProjection), поэтому девятое соединение не компилируется.
 2. **Накопленная проекция адресуется как `p.Item1`, `p.Item2`, … `p.Item8`.** После первого соединения
    условие получает эту проекцию вместо обычной сущности, поэтому цепочка соединений ссылается на
@@ -71,7 +71,7 @@ var rows = await dataContext.From<ISimpleEntity>()
     .ToListAsync();
 ```
 
-[`Where`](xref:NextORM.Core.EntityBuilder`1), размещённый до соединения, сначала фильтрует левую сторону; для внутренних соединений эти
+[`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})), размещённый до соединения, сначала фильтрует левую сторону; для внутренних соединений эти
 два варианта эквивалентны, но для внешних соединений они различаются:
 
 ```csharp
@@ -107,8 +107,8 @@ select t1.id as 'Order', t2.requiredstring as 'Customer' from simple_entity as '
 
 ## Внешние соединения
 
-[`LeftJoin`](xref:NextORM.Core.EntityBuilder`1) сохраняет каждую строку левой стороны и заполняет правую сторону значением `NULL`, когда
-совпадения нет; [`RightJoin`](xref:NextORM.Core.EntityBuilder`1) и [`FullJoin`](xref:NextORM.Core.EntityBuilder`1) ведут себя симметрично.
+[`LeftJoin`](xref:NextORM.Core.EntityBuilder`1.LeftJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})) сохраняет каждую строку левой стороны и заполняет правую сторону значением `NULL`, когда
+совпадения нет; [`RightJoin`](xref:NextORM.Core.EntityBuilder`1.RightJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})) и [`FullJoin`](xref:NextORM.Core.EntityBuilder`1.FullJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})) ведут себя симметрично.
 
 ```csharp
 var rows = dataContext.From<ISimpleEntity>()
@@ -121,7 +121,7 @@ var rows = dataContext.From<ISimpleEntity>()
 select t1.id as 'LeftId', t2.requiredstring as 'RightString' from simple_entity as 't1' left join complex_entity as 't2' on cast(t1.id as bigint) = t2.id
 ```
 
-[`RightJoin`](xref:NextORM.Core.EntityBuilder`1) и [`FullJoin`](xref:NextORM.Core.EntityBuilder`1) генерируются в той же форме:
+[`RightJoin`](xref:NextORM.Core.EntityBuilder`1.RightJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})) и [`FullJoin`](xref:NextORM.Core.EntityBuilder`1.FullJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})) генерируются в той же форме:
 
 ```csharp
 var right = dataContext.From<IComplexEntity>()
@@ -135,12 +135,12 @@ var full = dataContext.From<ISimpleEntity>()
     .ToList();
 ```
 
-[`RightJoin`](xref:NextORM.Core.EntityBuilder`1) и [`FullJoin`](xref:NextORM.Core.EntityBuilder`1) отклоняются с `NotSupportedException` только тогда, когда диалект сообщает
+[`RightJoin`](xref:NextORM.Core.EntityBuilder`1.RightJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})) и [`FullJoin`](xref:NextORM.Core.EntityBuilder`1.FullJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})) отклоняются с `NotSupportedException` только тогда, когда диалект сообщает
 `SupportsRightFullJoin == false`; все поставляемые с nextorm провайдеры заявляют о поддержке.
 
 ## Перекрёстное соединение
 
-[`CrossJoin`](xref:NextORM.Core.EntityBuilder`1) не принимает условие и порождает декартово произведение:
+[`CrossJoin`](xref:NextORM.Core.EntityBuilder`1.CrossJoin``1(NextORM.Core.EntityBuilder{``0})) не принимает условие и порождает декартово произведение:
 
 ```csharp
 var count = dataContext.From<ISimpleEntity>().CrossJoin(dataContext.From<IComplexEntity>()).Count();
@@ -158,13 +158,13 @@ select count(*) from simple_entity as 't1' cross join complex_entity as 't2'
 
 ## APPLY и LATERAL
 
-[`CrossApply`](xref:NextORM.Core.EntityBuilder`1) и [`OuterApply`](xref:NextORM.Core.EntityBuilder`1) генерируют форму lateral-источника конкретного провайдера. Правая сторона —
+[`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0})) и [`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0})) генерируют форму lateral-источника конкретного провайдера. Правая сторона —
 это тот же набор источников, что принимает обычное соединение: типизированная сущность, производная
 таблица `QueryCommand<T>`, необработанная таблица или табличная функция, — но без условия `ON`:
 
-* [`CrossApply`](xref:NextORM.Core.EntityBuilder`1) оставляет только те строки левой стороны, для которых применяемый источник возвращает
+* [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0})) оставляет только те строки левой стороны, для которых применяемый источник возвращает
   хотя бы одну строку (SQL Server `CROSS APPLY`, PostgreSQL/MySQL/MariaDB `CROSS JOIN LATERAL`);
-* [`OuterApply`](xref:NextORM.Core.EntityBuilder`1) дополнительно сохраняет строки левой стороны с пустым применяемым источником, заполняя
+* [`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0})) дополнительно сохраняет строки левой стороны с пустым применяемым источником, заполняя
   правую сторону значением `NULL` (SQL Server `OUTER APPLY`, PostgreSQL/MySQL/MariaDB
   `LEFT JOIN LATERAL ... ON true`).
 
@@ -205,7 +205,7 @@ var rows = dataContext.From<ISimpleEntity>()
 ### Коррелированный APPLY / LATERAL
 
 Применяемый источник может ссылаться на столбцы строки левой стороны, если построить его внутри
-лямбды, принимающей эту строку. [`CrossApply`](xref:NextORM.Core.EntityBuilder`1)/[`OuterApply`](xref:NextORM.Core.EntityBuilder`1) принимают такую лямбду в двух формах: возвращающую
+лямбды, принимающей эту строку. [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0}))/[`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0})) принимают такую лямбду в двух формах: возвращающую
 `QueryCommand<T>` (производный запрос с проекцией) и возвращающую `EntityBuilder<T>` (сущность целиком).
 
 ```csharp
@@ -226,7 +226,7 @@ var rows = await dataContext.From<ISimpleEntity>()
 
 Параметр лямбды ведёт себя как внешний параметр коррелированного скалярного подзапроса: столбец строки
 левой стороны (здесь `s.Id`) становится внешней ссылкой и разрешается в псевдоним левой таблицы.
-[`OuterApply`](xref:NextORM.Core.EntityBuilder`1) дополнительно сохраняет строки левой стороны с пустым применяемым источником, заполняя их `NULL`.
+[`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0})) дополнительно сохраняет строки левой стороны с пустым применяемым источником, заполняя их `NULL`.
 
 Корреляция требует lateral-источника: диалекты с `SupportsApply == false` (SQLite, ClickHouse) отклоняют
 коррелированный apply через `NotSupportedException`, как и in-memory-провайдер. Коррелированный apply
@@ -377,8 +377,8 @@ for (var i = 1; i <= 3; i++)
 
 ClickHouse добавляет два модификатора соединения, которых нет у остальных диалектов: модификатор
 **строгости** (`ANY`/`ALL`/`ASOF`) и распределённый префикс `GLOBAL`. Оба применяются к только что
-добавленному соединению методами [`WithStrictness`](xref:NextORM.Core.EntityBuilder`1) и
-[`Global`](xref:NextORM.Core.EntityBuilder`1):
+добавленному соединению методами [`WithStrictness`](xref:NextORM.Core.EntityBuilder`1.WithStrictness(NextORM.Core.JoinStrictness)) и
+[`Global`](xref:NextORM.Core.EntityBuilder`1.Global):
 
 ```csharp
 var rows = dataContext.From<ISimpleEntity>()
@@ -392,11 +392,11 @@ var rows = dataContext.From<ISimpleEntity>()
 select t1.id, t2.somestring from simple_entity as `t1` left any join complex_entity as `t2` on cast(t1.id as bigint) = t2.id
 ```
 
-[`JoinStrictness.Any`](xref:NextORM.Core.JoinStrictness) рендерит `<type> any join` и оставляет одну
-правую строку на каждую левую; [`JoinStrictness.All`](xref:NextORM.Core.JoinStrictness) оставляет все
-совпадения; [`JoinStrictness.Asof`](xref:NextORM.Core.JoinStrictness) рендерит `asof join`, для
+[`JoinStrictness.Any`](xref:NextORM.Core.JoinStrictness.Any) рендерит `<type> any join` и оставляет одну
+правую строку на каждую левую; [`JoinStrictness.All`](xref:NextORM.Core.JoinStrictness.All) оставляет все
+совпадения; [`JoinStrictness.Asof`](xref:NextORM.Core.JoinStrictness.Asof) рендерит `asof join`, для
 которого нужна одна колонка равенства и завершающее неравенство.
-[`Global`](xref:NextORM.Core.EntityBuilder`1) рендерит префикс `GLOBAL`, используемый в
+[`Global`](xref:NextORM.Core.EntityBuilder`1.Global) рендерит префикс `GLOBAL`, используемый в
 распределённых запросах, и сочетается с модификатором строгости в любом порядке
 (`global left any join`):
 
@@ -418,8 +418,36 @@ var global = dataContext.From<ISimpleEntity>()
 (для `CROSS`/`APPLY` — `NotSupportedException`). Модификаторы доступны только в ClickHouse
 ([`SupportsJoinStrictness`](xref:NextORM.Core.ISqlDialect.SupportsJoinStrictness),
 [`SupportsGlobalJoin`](xref:NextORM.Core.ISqlDialect.SupportsGlobalJoin)); остальные провайдеры и
-контекст in-memory отклоняют их через `NotSupportedException`. Соединения `SEMI`/`ANTI`/`PASTE` не
-поддерживаются. Полный каталог — в разделе [Специфичный для провайдеров SQL](provider-specific/overview.md).
+контекст in-memory отклоняют их через `NotSupportedException`.
+
+### Соединения SEMI / ANTI / PASTE
+
+`SEMI`, `ANTI` и `PASTE` — это *виды* соединения, а не модификаторы: они меняют набор колонок и строк,
+которые даёт соединение, поэтому для них есть отдельные построители, а не `WithStrictness`:
+
+```csharp
+var ids = dataContext.From<ISimpleEntity>()
+    .SemiJoin(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+    .Select(s => s.Id)
+    .ToList();
+```
+
+```sql
+select t1.id from simple_entity as `t1` left semi join complex_entity as `t2` on cast(t1.id as bigint) = t2.id
+```
+
+- [`SemiJoin`](xref:NextORM.Core.EntityBuilder`1.SemiJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})) оставляет только левые колонки — по одной на каждую
+  левую строку, у которой есть хотя бы одно совпадение справа;
+- [`AntiJoin`](xref:NextORM.Core.EntityBuilder`1.AntiJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})) оставляет только левые колонки для левых строк без
+  совпадения (дополнение к `SemiJoin`);
+- [`PasteJoin`](xref:NextORM.Core.EntityBuilder`1.PasteJoin``1(NextORM.Core.EntityBuilder{``0})) сопоставляет два источника по позиции строки без `ON`;
+  проекция содержит обе стороны, а строк — сколько у более короткой стороны.
+
+`SemiJoin`/`AntiJoin` возвращают ту же форму проекции (правые колонки недоступны), а `PasteJoin`
+добавляет один элемент. Они доступны только в ClickHouse
+([`SupportsSemiAntiJoin`](xref:NextORM.Core.ISqlDialect.SupportsSemiAntiJoin)/[`SupportsPasteJoin`](xref:NextORM.Core.ISqlDialect.SupportsPasteJoin));
+остальные провайдеры и контекст in-memory отклоняют их через `NotSupportedException`. Полный каталог —
+в разделе [Специфичный для провайдеров SQL](provider-specific/overview.md).
 
 ## Различия между провайдерами
 
@@ -434,7 +462,7 @@ var global = dataContext.From<ISimpleEntity>()
 
 Провайдер in-memory компилирует условие соединения в делегат и выполняет цикл, поэтому он не
 генерирует SQL; он поддерживает соединения [`Inner`](xref:NextORM.Core.JoinType.Inner), [`Left`](xref:NextORM.Core.JoinType.Left), [`Right`](xref:NextORM.Core.JoinType.Right), [`Full`](xref:NextORM.Core.JoinType.Full) и [`Cross`](xref:NextORM.Core.JoinType.Cross) (см.
-`tests/nextorm.core.tests/InMemoryJoinTests.cs`). [`CrossApply`](xref:NextORM.Core.EntityBuilder`1)/[`OuterApply`](xref:NextORM.Core.EntityBuilder`1) существуют только для SQL и
+`tests/nextorm.core.tests/InMemoryJoinTests.cs`). [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0}))/[`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0})) существуют только для SQL и
 выбрасывают `NotSupportedException` в провайдере in-memory, как и остальные неподдерживаемые типы
 соединений. Соединения через `JoinedEntityBuilder<T1..T8>` разрешаются на этапе построения запроса у каждого
 провайдера.

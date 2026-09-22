@@ -9,7 +9,7 @@
 В nextorm намеренно нет кросс-провайдерного метода для JSON. «Работа с JSON» означает разное у разных
 провайдеров, и движок держит эти механизмы раздельно, а не делает вид, что это одна функция:
 
-* **SQL Server** имеет две независимые поверхности. [`ForJson`](xref:NextORM.Core.QueryCommand`1) добавляет
+* **SQL Server** имеет две независимые поверхности. [`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean)) добавляет
   завершающее предложение `FOR JSON PATH`/`FOR JSON AUTO`, поэтому весь набор строк возвращается одним
   JSON-документом, а [`SqlServer`](xref:NextORM.Core.SqlFunctions.SqlServer) предоставляет текстовые JSON-функции
   (`json_value`, `json_query`, `json_modify`, `isjson`) и табличную функцию `openjson`.
@@ -20,12 +20,17 @@
   JSON-функций, что и SQL Server ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)),
   через семейство `JSON_EXTRACT`/`JSON_UNQUOTE`/`JSON_SET`.
 * **ClickHouse** отображает извлекающие функции строкового JSON (`JSONExtractString`, `JSONExtractInt`,
-  `JSONExtractFloat`, `JSONExtractBool`, `JSONExtractRaw`, `JSONHas`, `JSONLength`, `JSONType`) и быстрый
+  `JSONExtractFloat`, `JSONExtractBool`, `JSONExtractRaw`, `JSONHas`, `JSONLength`, `JSONType`) — плюс
+  возвращающие массивы `JSONExtractKeys`/`JSONExtractArrayRaw` (проецируются как `string[]`) и
+  `JSONExtractKeysAndValues` (проецируется как `Tuple<string, T>[]`) — и быстрый
   разбор плоского JSON (`visitParamExtractString`/`Int`/`Float`/`Bool`/`Raw`) через
-  [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract), а также JSONPath-скаляры
-  `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (методы `json_value`/`json_query`/`json_exists`) через тот же
-  флаг; его нативный тип `JSON`
-  пока не отображён.
+  [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract), JSONPath-скаляры
+  `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (методы `json_value`/`json_query`/`json_exists`) и функции
+  нативного JSON `JSONAllPaths`/`JSONAllPathsWithTypes`/`toJSONString` (методы `json_all_paths`/
+  `json_all_paths_with_types`/`to_json_string`) через тот же флаг. Они принимают нативное значение
+  `JSON` (`CAST(col AS JSON)` для колонки `String`); `JSONAllPaths` проецируется как `string[]`, а
+  `JSONAllPathsWithTypes` — как `Map(String, String)` → `Dictionary<string, string>`. Нативная *колонка*
+  `JSON` пока не отображена (драйвер отдаёт её как `System.Text.Json.Nodes.JsonObject`).
 * **SQLite** не предоставляет ни одной JSON-конструкции. В СУБД есть JSON1, но nextorm его пока не
   отображает, поэтому построение SQL бросает `NotSupportedException`.
 
@@ -41,7 +46,7 @@
 | PostgreSQL | Нет | Поддерживаются ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson)) | Нет | Нет |
 | SQLite | Нет | Нет | Нет | Нет |
 | MySQL / MariaDB | Нет | Не отображаются | Поддерживаются ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) | Нет |
-| ClickHouse | Нет | Не отображаются | Строковый JSON + JSONPath-скаляры ([`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract)) | Нет |
+| ClickHouse | Нет | Не отображаются | Строковый JSON + JSONPath-скаляры + функции нативного JSON (`JSONAllPaths`/`JSONAllPathsWithTypes`/`toJSONString`; [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract)) | Нет |
 | In-memory | Не применимо (нет SQL) | Не применимо | Не применимо | Не применимо |
 
 «Нет» означает, что команда отклоняется через `NotSupportedException` при построении SQL, а не то, что
@@ -51,7 +56,7 @@
 
 ### Вернуть весь набор строк одним JSON-документом
 
-[`ForJson`](xref:NextORM.Core.QueryCommand`1) добавляет завершающее предложение `FOR JSON`. Тогда СУБД
+[`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean)) добавляет завершающее предложение `FOR JSON`. Тогда СУБД
 возвращает результат из одной строки и одной колонки, поэтому проецируйте одну колонку и читайте её
 как строку через `First()`/`FirstOrDefault()`:
 
@@ -82,9 +87,9 @@ select somestring from complex_entity for json auto
 
 Необязательный `root` оборачивает документ в `ROOT('name')`, а `includeNullValues` добавляет
 `INCLUDE_NULL_VALUES`. Предложение размещается после `ORDER BY` и перед завершающим `OPTION (...)`,
-поэтому сочетается с [`Hint`](xref:NextORM.Core.QueryCommand`1): запрос
+поэтому сочетается с [`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[])): запрос
 `for json path option (recompile)` корректен. (Табличные хинты,
-[`WithTableHint`](xref:NextORM.Core.EntityBuilder`1), прикрепляются к таблице `FROM` и не
+[`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[])), прикрепляются к таблице `FROM` и не
 зависят от JSON-предложения.) Диалект без
 поддержки предложения отклоняет команду, а совмещение `ForJson` с `ForXml` бросает
 `NotSupportedException("FOR JSON and FOR XML cannot be combined.")`.
@@ -131,7 +136,7 @@ select id from complex_entity where (isjson(somestring)) = 1
 ### Развернуть JSON в строки через `openjson`
 
 `SqlFunctions.SqlServer.openjson(json)` — табличная функция (SQL Server 2016+), используемая через
-[`FromTableFunction`](xref:NextORM.Core.DataContextExtensions). Её
+[`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})). Её
 схема по умолчанию выдаёт свойства JSON-объекта или элементы JSON-массива в виде
 [`SqlFunctions.IOpenJsonRow`](xref:NextORM.Core.SqlFunctions.IOpenJsonRow) (`Key`/`Value`/`Type`):
 
@@ -151,7 +156,7 @@ select [key] as [Key], value, type from openjson(@json) as [t1]
 Для типизированной проекции объявите собственный `[SqlTableFunction("openjson")]`-враппер, форма строки
 которого совпадает с предложением `WITH (...)`; nextorm только генерирует вызов и не создаёт функцию.
 `SqlFunctions.SqlServer.string_split` устроен так же для строки с разделителем. Обе функции включаются
-через [`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect), поэтому их генерирует только SQL Server.
+через [`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect.SupportsTableFunction(System.String)), поэтому их генерирует только SQL Server.
 
 ## PostgreSQL
 
@@ -298,9 +303,15 @@ select id from complex_entity where (@norm_p0 @> @norm_p1) and (@norm_p2 ? 'key'
   текстовые функции SQL Server и MySQL/MariaDB требуют
   [`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson). Каждая бросает исключение на
   чужом провайдере.
-* Извлекающие функции строкового JSON ClickHouse (`JSONExtract*`/`visitParamExtract*`) требуют
-  [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract); они не пересекаются с
-  набором `SupportsTextJson`.
+* JSON-поверхность ClickHouse (`JSONExtract*`/`visitParamExtract*`, JSONPath-скаляры и функции нативного
+  JSON `JSONAllPaths`/`JSONAllPathsWithTypes`/`toJSONString`) требует
+  [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract); она не пересекается с
+  набором `SupportsTextJson`. Функции нативного JSON принимают нативное значение `JSON` (колонку
+  `String` приведите через `CAST(col AS JSON)`); `json_all_paths` проецируется как `string[]`, а
+  `json_all_paths_with_types` — как `Dictionary<string, string>` (`mapKeys`/`mapValues` превращают map в
+  коллекцию). Нативная *колонка* `JSON` пока не отображена: драйвер отдаёт её как
+  `System.Text.Json.Nodes.JsonObject`, поэтому проецируйте JSON через колонку `String` или приведите её
+  в SQL.
 * В SQLite есть JSON-возможности в СУБД, но nextorm их пока не отображает; расширение JSON1 в SQLite
   тоже не отображено.
 * Провайдер in-memory не генерирует SQL, поэтому `ForJson`/`ForXml` и JSON-поверхности к нему не

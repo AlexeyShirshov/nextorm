@@ -1,6 +1,6 @@
 # Table-valued functions
 
-> Query a database table-valued function as a `FROM` source with [`FromTableFunction`](xref:NextORM.Core.DataContextExtensions) and map its rows
+> Query a database table-valued function as a `FROM` source with [`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})) and map its rows
 > like any other entity.
 
 **Prerequisites:** [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Joins](03-joins.md) · [Grouping and aggregates](04-grouping-and-aggregates.md)
@@ -9,7 +9,7 @@
 
 [`SqlTableFunctionAttribute`](xref:NextORM.Core.SqlTableFunctionAttribute) maps a placeholder static method to a database table-valued function.
 The method must return `IQueryable<T>` (where `T` describes the row shape) and is only referenced inside
-the expression passed to [`FromTableFunction`](xref:NextORM.Core.DataContextExtensions):
+the expression passed to [`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})):
 
 ```csharp
 [AttributeUsage(AttributeTargets.Method | AttributeTargets.Class)]
@@ -20,6 +20,8 @@ public sealed class SqlTableFunctionAttribute : Attribute
     public string? Name { get; set; }       // defaults to the CLR method name
     public string? Schema { get; set; }     // optional schema/owner prefix
     public string? WithClause { get; set; } // optional trailing WITH (...) body
+    public string? CallClause { get; set; } // optional verbatim SQL inside the call parentheses
+    public int[]? VerbatimArguments { get; set; } // argument indices emitted as raw identifiers
 }
 ```
 
@@ -33,8 +35,8 @@ anything else throws `ArgumentException`. The call is translated to `[schema.]na
 with the arguments rendered through the regular expression visitor, so **captured values become
 parameters**. nextorm only emits the call - the function must already exist in the target database.
 
-The returned `EntityBuilder<T>` is an ordinary query source, so [`Where`](xref:NextORM.Core.EntityBuilder`1), [`OrderBy`](xref:NextORM.Core.EntityBuilder`1), [`GroupBy`](xref:NextORM.Core.EntityBuilder`1), [`Join`](xref:NextORM.Core.EntityBuilder`1),
-[`Select`](xref:NextORM.Core.EntityBuilder`1), paging and terminals all work over it.
+The returned `EntityBuilder<T>` is an ordinary query source, so [`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}})), [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)), [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), [`Join`](xref:NextORM.Core.EntityBuilder`1.Join``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}})),
+[`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), paging and terminals all work over it.
 
 ## Declaring the mapping
 
@@ -306,6 +308,56 @@ var person = dataContext
 select name, age from openjson(@json) with (name nvarchar(50) '$.name', age int '$.age') as [t1]
 ```
 
+SQL Server also ships the full-text table functions `SqlFunctions.SqlServer.containstable` and
+`freetexttable`, which expose the matched row's full-text key and relevance score through
+[`SqlFunctions.IKeyRankRow<TKey>`](xref:NextORM.Core.SqlFunctions.IKeyRankRow`1) (`.Key`, `.Rank`). Join the
+function back to the indexed table on `Key` and order by `Rank`:
+
+```csharp
+var search = "stuffed bear";
+
+var ranked = dataContext
+    .FromTableFunction(() => SqlFunctions.SqlServer.containstable<int>("documents", "title", search))
+    .Join(dataContext.From<IDocument>(), (k, d) => k.Key == d.Id)
+    .OrderByDescending(p => p.Item1.Rank)
+    .Select(p => new { p.Item2.Id, p.Item1.Rank })
+    .ToList();
+```
+
+`containstable` uses `CONTAINSTABLE` (boolean/prefix/phrase syntax) and `freetexttable` the
+natural-language `FREETEXTTABLE`; both are SQL Server-only
+([`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect.SupportsTableFunction(System.String))), and other providers throw
+`NotSupportedException`. The `table` and `column` arguments are emitted **verbatim** as identifiers (see
+`VerbatimArguments`), so pass the table name or alias exactly as it appears in the generated query, and
+only pass trusted values.
+
+For a table function whose schema lives **inside** the call parentheses rather than in a trailing `WITH`
+clause, set [`CallClause`](xref:NextORM.Core.SqlTableFunctionAttribute.CallClause) to append verbatim SQL
+after the arguments (include your own leading separator). MySQL `JSON_TABLE` is the typical case:
+
+```csharp
+public interface IJsonTableRow
+{
+    [Column("id")]
+    int Id { get; set; }
+    [Column("name")]
+    string? Name { get; set; }
+}
+
+private static class JsonTableTvf
+{
+    [SqlTableFunction("json_table", CallClause = ", '$[*]' columns(id int path '$.id', name varchar(50) path '$.name')")]
+    public static IQueryable<IJsonTableRow> JsonTable(string doc) => throw new NotSupportedException();
+}
+```
+
+```sql
+select id, name from json_table(@doc, '$[*]' columns(id int path '$.id', name varchar(50) path '$.name')) as `t1`
+```
+
+`VerbatimArguments` is the related hook for functions that take a raw identifier (a table or column name):
+each listed argument must be a constant string and is rendered unquoted.
+
 `SqlFunctions.ClickHouse.numbers`/`numbers_mt` are ClickHouse table functions returning
 [`SqlFunctions.INumbersRow`](xref:NextORM.Core.SqlFunctions.INumbersRow) (the single `number` column). `numbers(count)` yields
 consecutive integers from zero, `numbers(start, stop[, step])` an arbitrary range:
@@ -362,14 +414,57 @@ from (select toInt64(id) as id, value, name from generateRandom('id UInt64, valu
 limit 3
 ```
 
+ClickHouse also ships the server/cluster table functions, pre-declared as generic wrappers whose row
+shape is declared by the caller. The `TRow` interface's `[Column]` names must match the `structure`
+argument (`url`/`s3`/`file`) or the target table (`remote`/`remoteSecure`/`cluster`/`clusterAllReplicas`):
+
+| `SqlFunctions.ClickHouse.*` | SQL output |
+| --- | --- |
+| `url<TRow>(url, format, structure)` | `url(url, format, structure)` |
+| `s3<TRow>(url, format, structure)` | `s3(url, format, structure)` |
+| `file<TRow>(path, format, structure)` | `file(path, format, structure)` |
+| `remote<TRow>(addresses, database, table)` | `remote(addresses, database, table)` |
+| `remote_secure<TRow>(addresses, database, table)` | `remoteSecure(addresses, database, table)` |
+| `cluster<TRow>(cluster, database, table)` | `cluster(cluster, database, table)` |
+| `cluster_all_replicas<TRow>(cluster, database, table)` | `clusterAllReplicas(cluster, database, table)` |
+
+```csharp
+public interface IHitsRow
+{
+    [Column("id")]
+    long Id { get; set; }
+    [Column("name")]
+    string? Name { get; set; }
+}
+
+var hits = dataContext
+    .FromTableFunction(() => SqlFunctions.ClickHouse.url<IHitsRow>(
+        "http://127.0.0.1:12345/", "CSV", "id UInt64, name String"))
+    .Select(r => new { r.Id, r.Name })
+    .ToList();
+```
+
+```sql
+select id as `Id`, name as `Name` from url(@url, @format, @structure) as `t1`
+```
+
+The functions are ClickHouse-only ([`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect.SupportsTableFunction(System.String)))
+and require the matching server permissions; URL/S3/remote authentication is the server's responsibility,
+so prefer named collections or `<remote_servers>` to keep secrets out of the query and its plan. The
+`format`/`merge`/`input` table functions are intentionally **not** pre-declared — `format`'s schema may be
+inferred from the data, `merge` derives it from the underlying tables and `input` is INSERT-only — so use
+the generic `[SqlTableFunction]` wrapper declared above or [`FromSql`](xref:NextORM.Core.DataContextExtensions.FromSql(NextORM.Core.IDataContext,System.String,System.Object))
+for those.
+
 The mapped function must exist in the database — nextorm only emits the call, it does not create the
 function — so use the helper only on the provider that defines it. The built-in helpers are gated by
-[`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect): PostgreSQL enables `generate_series`, `unnest`,
+[`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect.SupportsTableFunction(System.String)): PostgreSQL enables `generate_series`, `unnest`,
 `regexp_matches`, `regexp_split_to_table`, `jsonb_array_elements(_text)`, `jsonb_each(_text)`,
 `jsonb_object_keys`, `jsonb_path_query` and `ts_stat`; SQL Server enables
-`string_split`/`openjson`, ClickHouse enables `numbers`/`numbers_mt` and `zeros`/`zeros_mt`, and any
-other provider rejects them with `NotSupportedException` (a user-defined `[SqlTableFunction]` is never
-gated).
+`string_split`/`openjson`, ClickHouse enables `numbers`/`numbers_mt`, `zeros`/`zeros_mt`,
+`generateRandom` and the server/cluster functions `url`/`s3`/`file`/`remote`/`remoteSecure`/`cluster`/
+`clusterAllReplicas`, and any other provider rejects them with `NotSupportedException` (a user-defined
+`[SqlTableFunction]` is never gated).
 
 ## Provider differences
 
@@ -401,4 +496,5 @@ Source: `src/nextorm.core/SqlTableFunctionAttribute.cs:17`, `src/nextorm.core/Da
 `tests/nextorm.core.tests/SqlTableFunctionAttributeTests.cs:8`;
 generated SQL: `tests/nextorm.sqlite.tests/SqlGenerationTests.cs:1453`, `:1462`, `:1475`, `:1489`, `:1503`;
 `tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:1044`, `:1066`, `:1080`, `:1094`;
-`tests/nextorm.postgres.tests/SqlGenerationTests.cs:976`, `:998`, `:1012`, `:1026`.
+`tests/nextorm.postgres.tests/SqlGenerationTests.cs:976`, `:998`, `:1012`, `:1026`, `:1477`;
+`tests/nextorm.clickhouse.tests/SqlGenerationTests.cs:1015`, `:1031`, `:1047`, `:1063`, `:1079`, `:1095`, `:1111`.

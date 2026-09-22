@@ -54,7 +54,7 @@ collections-and-linq / io-and-serialization).
 | M9 | ✅ сделано | 🟡 Moderate | allocations, concurrency | общий мутируемый `Visitor` → per-(thread, comparer) TLS (регресс-тест: 49 971/50 000 неверных хэшей до фикса); `CompareLambda` больше не бросает | `ExpressionPlanEqualityComparer.cs` |
 | M10 | ✅ сделано (выигрыш не измерен) | 🟡 Moderate | CPU, structural | `sealed`: `ResultSetEnumerator`, `InMemoryEnumerator`, `InMemoryCompiledQuery`, `QueryCommand<TResult>`; JIT-эффект в микро-бенчмарке = 0 | `ResultSetEnumerator.cs:9`, `InMemoryEnumerator.cs:6`, `InMemoryCompiledQuery.cs:4`, `QueryCommand.cs:773` |
 | M11 | ✅ сделано | 🟡 Moderate | allocations | LINQ → циклы в plan/map-build (4 места); `Select().ToArray()` −72 B/вызов (путь холодный) | `DataContext.cs` |
-| **M12** | 🔴 открыто | 🟠 High | allocations, CPU | **implicit-кэш проигрывает явному `Prepare()`**: 17.56 vs 11.94 µs/вызов (1.47×) и 3.76 vs 0.76 KB (4.94×); но кэш **в 2.4× лучше полного отказа от кэша** (42.06 µs, +Gen1) — рекомендация «убрать кэш» снята | `DataContext.cs` (`GetPreparedQueryCommand`), `QueryCommand.PrepareCommand`, `QueryPlanCacheKey` |
+| **M12** | 🟢 закрыто (решение) | 🟠 High | allocations, CPU | **implicit-кэш проигрывает явному `Prepare()`**: 17.56 vs 11.94 µs/вызов (1.47×) и 3.76 vs 0.76 KB (4.94×); но кэш **в 2.4× лучше полного отказа от кэша** (42.06 µs, +Gen1) — рекомендация «убрать кэш» снята | `DataContext.cs` (`GetPreparedQueryCommand`), `QueryCommand.PrepareCommand`, `QueryPlanCacheKey` |
 | I1 | ✅ закрыто | ℹ️ Info | strings | `string.Format` убран из всех 3 «живых» сайтов (последний — `MakeTop`) | `BaseExpressionVisitor.cs`, `IParameterProvider.cs`, `SqlServerDataContext.cs` |
 | I2 | ✅ сделано | ℹ️ Info | allocations | LINQ в map-build → циклы (2 сайта в in-memory + 2 в `DataContext` из M11) | `InMemoryDataContext.cs:650,658` |
 | I3 | 🔵 закрыто (холодные) | ℹ️ Info | allocations | остаток 19 (было 27); реальные — `_joins?.ToArray()` (снапшот мутабельного списка, только при join'ах), `CloneForCache`, reflection | `src/` |
@@ -71,8 +71,9 @@ inline `ValueList<T>`); кэши ограничены (`MapperCache` cap 4096, `
 
 # Remediation
 
-Порядок работ: **M2 → M1 → M3 → M4 → M5–M8 → M9 → M10 → M11 → I1–I6** (закрыто) → **M12 (открыто)**.
+Порядок работ: **M2 → M1 → M3 → M4 → M5–M8 → M9 → M10 → M11 → I1–I6** (закрыто) → **M12 (закрыто решением)**.
 M12 — переоткрытие M1: механизм кэша корректен, но его **экономика** не подтвердилась (см. M12).
+Закрыт 2026-09-22 решением «`Prepare()` — санкционированный быстрый путь, fresh-fluent warm-паритет с Dapper снят как цель».
 
 ---
 
@@ -487,9 +488,9 @@ map-cache miss, по разу на форму запроса на поток), �
 
 ---
 
-## M12 — cached-путь дороже `Prepare()`, но дешевле отказа от кэша (открыто)
+## M12 — cached-путь дороже `Prepare()`, но дешевле отказа от кэша (закрыто решением)
 
-**Статус:** 🔴 открыто. Уточняет M1 (см. addendum там). Это **не** про корректность кэша —
+**Статус:** 🟢 закрыто решением (2026-09-22). Уточняет M1 (см. addendum там). Это **не** про корректность кэша —
 механизм работает (M9 починил единственную гонку). Вопрос — **с чем сравнивать**.
 
 > ⚠️ **Коррекция первой версии.** Первая редакция этого пункта утверждала «кэш не окупается»,
@@ -610,6 +611,31 @@ if (createEnumerator && compiledQuery.Enumerator is null)
 как считается hit, пошаговая декомпозиция 3.56 µs, семантика `nonStreamUsing`, правила безопасности
 (shared mutable `DbCommand`/enumerator), lifetime/инвалидация, гайд по выбору, known problems, команды
 воспроизведения. Ссылки добавлены в `readme.md` (Features) и `docs/index.md` (раздел Query reuse).
+
+### Решение (2026-09-22)
+
+Пункт закрыт **решением**, а не правкой кода. Свежий baseline (итерация 9,
+`SqliteBenchmarkFeaturesFairCached`, изолированный worktree на `1.0.4-alpha`) подтверждает разрыв
+1.11–1.60× (CTE 1.22×, recursive CTE 1.29×, Join4 1.11×, IN 1.40–1.60×) и 7–8× аллокаций; разложение
+показывает, что стоимость — это построение и хеширование свежего дерева на каждый вызов
+(≈3–9 µs/запрос), причём `QueryPlanEqualityComparer` уже считает по под-хешам (`*PlanHash`,
+`CtesPlanHash` через `GetHashCode(subQuery)`), т.е. скрытых повторных обходов под-команд нет.
+
+Вывод: критерий «≤ ±3 % от Dapper» для не-prepared fluent-арм'ов **недостижим безопасной локальной
+правкой** — arm Dapper сравнивается с константным SQL, а fluent-путь обязан построить и захешировать
+дерево. Закрытие требовало бы структурного паритета fluent с `Prepare()` (shape-keyed кэш подготовленных
+команд), что является отдельным крупным рефактором ядра с риском для семантики cache-ключей (см. M9).
+
+Принятое решение:
+
+- **`Prepare()` — санкционированный быстрый путь** повторного выполнения: 1.47× по времени и ~5× по
+  аллокациям быстрее implicit-кэша и быстрее Dapper на всех классах. Пользовательские доки и примеры
+  уже продвигают его (`docs/guide/15-query-reuse.md`, `prepared-vs-cached.md`).
+- **Implicit plan cache сохраняется** (он в 2.4× быстрее полного отказа от кэша) как безопасный
+  per-thread дефолт.
+- **Fresh-fluent warm-паритет с Dapper снят как цель**; пункт бэклога
+  (`todo_warm_path_plan_build.md`) удалён, §4 п.19 помечен closed-by-decision. При необходимости паритет
+  оформляется заново как структурная задача M12 #3 с отдельным бенчмарк-гейтом.
 
 ---
 

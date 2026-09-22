@@ -1,18 +1,28 @@
 using System.Data;
+using System.Data.Common;
 using System.Linq.Expressions;
 using System.Reflection;
 
 namespace NextORM.Core;
 
+/// <summary>
+/// A single projected column of a query: its ordinal, the expression that produces it, the target
+/// property it maps to and the reader accessor used to materialize it.
+/// </summary>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE1006:Naming Styles", Justification = "Static readonly reflection-metadata fields (GetInt32MI, ...) are intentionally PascalCase as immutable lookup tables; IDE1006 is a suggestion and is not enforced by the build.")]
 public sealed class SelectExpression //: IEquatable<SelectExpression>
 {
     private readonly Type _realType;
     //private readonly bool _nullable;
+    /// <summary>Whether the CLR type can hold <c>null</c> (a reference type or a <see cref="Nullable{T}"/>).</summary>
     public readonly bool Nullable;
+    /// <summary>The zero-based ordinal of the column in the result set.</summary>
     public int Index { get; set; }
+    /// <summary>The target property name, or <c>null</c> for a positional projection.</summary>
     public string? PropertyName { get; set; }
+    /// <summary>The expression that produces the value, or <c>null</c> for a plain entity column.</summary>
     public Expression? Expression { get; set; }
+    /// <summary>The CLR type of the value produced.</summary>
     public Type PropertyType { get; set; }
     internal PropertyInfo? PropertyInfo { get; set; }
 
@@ -27,6 +37,8 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
     //private readonly IDictionary<ExpressionKey, Delegate> _expCache;
     // private readonly IQueryRegistry _queryProvider;
 
+    /// <summary>Initializes a projected column for the given CLR type, deriving its nullability from the type.</summary>
+    /// <param name="propertyType">The CLR type of the value produced.</param>
     public SelectExpression(Type propertyType)
     {
         PropertyType = propertyType;
@@ -56,10 +68,13 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
     private readonly static MethodInfo GetInt16MI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetInt16))!;
     private readonly static MethodInfo GetByteMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetByte))!;
     private readonly static MethodInfo GetGuidMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetGuid))!;
+    private readonly static MethodInfo GetFieldValueMI = typeof(DbDataReader).GetMethod(nameof(DbDataReader.GetFieldValue))!;
     private readonly static MethodInfo GetValueMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetValue))!;
     // internal int XxHash32;
     internal int PlanHashCode;
 
+    /// <summary>Gets the reader accessor that reads a value of this column's type from a data record.</summary>
+    /// <returns>The <see cref="MethodInfo"/> of the matching <see cref="IDataRecord"/> getter.</returns>
     public MethodInfo GetDataRecordMethod()
     {
         // var recordType = typeof(IDataRecord);
@@ -108,21 +123,34 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
         {
             return GetGuidMI;
         }
-        else if (_realType == typeof(byte[]))
+        else if (_realType == typeof(ulong))
         {
-            // Binary columns (bytea/varbinary/blob) have no typed reader getter; read the value
-            // through GetValue and let the caller cast it to byte[].
+            return GetFieldValueMI.MakeGenericMethod(typeof(ulong));
+        }
+        else if (_realType.IsArray)
+        {
+            // Array columns and array-returning expressions (binary bytea/varbinary/blob,
+            // PostgreSQL text[]/int[], ClickHouse Array(T) including nested arrays) have no typed
+            // reader getter; read the value through GetValue and let the caller cast it to the
+            // declared array type.
             return GetValueMI;
         }
-        else if (_realType == typeof(string[]))
+        else if (TypeFacts.IsTupleType(_realType))
         {
-            // PostgreSQL text[] columns (for example regexp_matches) have no typed reader getter;
-            // read the value through GetValue and let the caller cast it to string[].
+            // A ClickHouse Tuple(...) column is read as System.Tuple<...> by the driver; read the
+            // value through GetValue and let the caller cast it.
+            return GetValueMI;
+        }
+        else if (_realType == typeof(Dictionary<string, string>))
+        {
+            // A native ClickHouse Map(String, String) has no typed reader getter; read the value
+            // through GetValue and let the caller cast it to Dictionary<string, string>.
             return GetValueMI;
         }
         else
             throw new NotSupportedException($"Property '{PropertyName}' with index ({Index}) has type {_realType} which is not supported");
     }
+
     // public override int GetHashCode()
     // {
     //     unchecked

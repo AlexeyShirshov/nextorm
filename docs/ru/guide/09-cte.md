@@ -18,14 +18,14 @@ public static CteQuery WithRecursive(this IDataContext dataContext, string name,
     int? maxRecursion = null);
 ```
 
-Объявления неизменяемы: каждый вызов [`With`](xref:NextORM.Core.DataContextExtensions)/[`WithRecursive`](xref:NextORM.Core.DataContextExtensions) возвращает **новую** область видимости, которая
+Объявления неизменяемы: каждый вызов [`With`](xref:NextORM.Core.DataContextExtensions.With(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand))/[`WithRecursive`](xref:NextORM.Core.DataContextExtensions.WithRecursive(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand,System.Nullable{System.Int32})) возвращает **новую** область видимости, которая
 добавляет [`CteDefinition`](xref:NextORM.Core.CteDefinition) к предыдущим. Определение фиксирует имя, [`QueryCommand`](xref:NextORM.Core.QueryCommand), который его создаёт, и
 может ли тело ссылаться на собственное имя.
 
-[`From`](xref:NextORM.Core.CteQuery) (или `From(CteDefinition)`) начинает новый запрос, чей `from` — один из
+[`From`](xref:NextORM.Core.CteQuery.From(NextORM.Core.CteDefinition)) (или `From(CteDefinition)`) начинает новый запрос, чей `from` — один из
 объявленных CTE, перенося каждое объявление в результирующую команду. Возвращается обычный
 [`EntityBuilder<T>`](xref:NextORM.Core.EntityBuilder`1) над режимом [`TableAlias`](xref:NextORM.Core.TableAlias) без сущности, поэтому доступен
-**полный набор операторов** — [`Where`](xref:NextORM.Core.EntityBuilder`1)/[`Join`](xref:NextORM.Core.EntityBuilder`1)/[`GroupBy`](xref:NextORM.Core.EntityBuilder`1)/[`Having`](xref:NextORM.Core.EntityBuilder`1)/[`OrderBy`](xref:NextORM.Core.EntityBuilder`1)/[`Limit`](xref:NextORM.Core.EntityBuilder`1)/[`Select`](xref:NextORM.Core.EntityBuilder`1).
+**полный набор операторов** — [`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}}))/[`Join`](xref:NextORM.Core.EntityBuilder`1.Join``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}}))/[`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}}))/[`Having`](xref:NextORM.Core.EntityBuilder`1.Having(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}}))/[`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32))/[`Limit`](xref:NextORM.Core.EntityBuilder`1.Limit(System.Int32))/[`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})).
 Столбцы CTE читаются по имени (`t["id"].AsInt` или `t.GetInt64("id")`). Рекурсивные тела ссылаются на
 собственное имя тем же способом (`dataContext.From("nums")` внутри шагового запроса).
 
@@ -63,7 +63,7 @@ with recent as (select id from complex_entity where (id > 1)) select id from rec
 
 ## Цепочка объявлений
 
-Каждый [`With`](xref:NextORM.Core.DataContextExtensions) добавляется к предыдущей области видимости, поэтому более поздний CTE может быть определён
+Каждый [`With`](xref:NextORM.Core.DataContextExtensions.With(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand)) добавляется к предыдущей области видимости, поэтому более поздний CTE может быть определён
 через более ранний. Объявления рендерятся в порядке объявления:
 
 ```csharp
@@ -155,7 +155,7 @@ with l as (select id from complex_entity), r as (select id from simple_entity) s
 ## Рекурсивный CTE: числовая последовательность
 
 Рекурсивный CTE — это `union all` **якоря** (нерекурсивного запроса) и **шага**, который читает CTE по
-имени и останавливается, когда предикат перестаёт совпадать. Вызовите [`WithRecursive`](xref:NextORM.Core.DataContextExtensions), передав объединение
+имени и останавливается, когда предикат перестаёт совпадать. Вызовите [`WithRecursive`](xref:NextORM.Core.DataContextExtensions.WithRecursive(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand,System.Nullable{System.Int32})), передав объединение
 в качестве тела:
 
 ```csharp
@@ -269,7 +269,7 @@ with recent as (select id from complex_entity where (id > $threshold)) select id
 
 ## См. также
 
-* [Операции над множествами](07-set-operations.md) — [`UnionAll`](xref:NextORM.Core.QueryCommand`1) и другие, используются для построения рекурсивного тела.
+* [Операции над множествами](07-set-operations.md) — [`UnionAll`](xref:NextORM.Core.QueryCommand`1.UnionAll``1(NextORM.Core.QueryCommand{``0})) и другие, используются для построения рекурсивного тела.
 * [Соединения](03-joins.md) — соединение CTE с таблицей, как в `CommonTestSuite.Cte.cs`.
 * [Необработанный SQL](14-raw-sql.md) — когда вся инструкция написана вручную.
 * [Переиспользование запросов: кэш против Prepare](15-query-reuse.md) — как кэшируются планы CTE.

@@ -10,7 +10,7 @@ nextorm deliberately has no cross-provider JSON method. "Working with JSON" mean
 different providers, and the engine keeps those mechanisms separate instead of pretending they are one
 feature:
 
-* **SQL Server** has two independent surfaces. [`ForJson`](xref:NextORM.Core.QueryCommand`1) appends a
+* **SQL Server** has two independent surfaces. [`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean)) appends a
   trailing `FOR JSON PATH`/`FOR JSON AUTO` clause so the whole result set comes back as one JSON
   document, and [`SqlServer`](xref:NextORM.Core.SqlFunctions.SqlServer) provides the JSON-as-text scalar functions
   (`json_value`, `json_query`, `json_modify`, `isjson`) plus the `openjson` table function.
@@ -20,12 +20,17 @@ feature:
   Server ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) over the
   `JSON_EXTRACT`/`JSON_UNQUOTE`/`JSON_SET` family.
 * **ClickHouse** maps its string-JSON extractors (`JSONExtractString`, `JSONExtractInt`,
-  `JSONExtractFloat`, `JSONExtractBool`, `JSONExtractRaw`, `JSONHas`, `JSONLength`, `JSONType`) and the
+  `JSONExtractFloat`, `JSONExtractBool`, `JSONExtractRaw`, `JSONHas`, `JSONLength`, `JSONType`) — plus
+  the array-returning `JSONExtractKeys`/`JSONExtractArrayRaw` (projecting as `string[]`) and
+  `JSONExtractKeysAndValues` (projecting as `Tuple<string, T>[]`) — and the
   flat-JSON fast path (`visitParamExtractString`/`Int`/`Float`/`Bool`/`Raw`) through
-  [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract), and its JSONPath scalars
-  `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (written as `json_value`/`json_query`/`json_exists`) through
-  the same flag; its native `JSON` type is
-  not mapped yet.
+  [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract), its JSONPath scalars
+  `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (written as `json_value`/`json_query`/`json_exists`) and its
+  native-JSON functions `JSONAllPaths`/`JSONAllPathsWithTypes`/`toJSONString` (written as
+  `json_all_paths`/`json_all_paths_with_types`/`to_json_string`) through the same flag. These take a
+  native `JSON` value (`CAST(col AS JSON)` for a `String` column); `JSONAllPaths` projects as `string[]`
+  and `JSONAllPathsWithTypes` as `Map(String, String)` → `Dictionary<string, string>`. A native `JSON`
+  *column* is still not mapped (the driver returns it as `System.Text.Json.Nodes.JsonObject`).
 * **SQLite** does not expose any JSON construct. The database has JSON1, but nextorm does not map it
   yet, so building the SQL throws `NotSupportedException`.
 
@@ -41,7 +46,7 @@ section for your provider; the [provider matrix](#provider-matrix) and
 | PostgreSQL | No | Supported ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson)) | No | No |
 | SQLite | No | No | No | No |
 | MySQL / MariaDB | No | Not exposed | Supported ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) | No |
-| ClickHouse | No | Not exposed | String JSON + JSONPath scalars ([`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract)) | No |
+| ClickHouse | No | Not exposed | String JSON + JSONPath scalars + native-JSON functions (`JSONAllPaths`/`JSONAllPathsWithTypes`/`toJSONString`; [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract)) | No |
 | In-memory | Not applicable (no SQL) | Not applicable | Not applicable | Not applicable |
 
 "No" means the command is rejected with `NotSupportedException` when its SQL is built, not that the
@@ -51,7 +56,7 @@ database lacks JSON support.
 
 ### Return the whole result set as one JSON document
 
-[`ForJson`](xref:NextORM.Core.QueryCommand`1) adds a trailing `FOR JSON` clause. The database then returns a
+[`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean)) adds a trailing `FOR JSON` clause. The database then returns a
 single-row, single-column result, so project a single column and read it as a string with
 `First()`/`FirstOrDefault()`:
 
@@ -82,8 +87,8 @@ select somestring from complex_entity for json auto
 
 The optional `root` wraps the document in `ROOT('name')` and `includeNullValues` adds
 `INCLUDE_NULL_VALUES`. The clause is placed after `ORDER BY` and before a trailing `OPTION (...)`, so it
-composes with [`Hint`](xref:NextORM.Core.QueryCommand`1): a `for json path option (recompile)`
-query is valid. (Table hints, [`WithTableHint`](xref:NextORM.Core.EntityBuilder`1), attach to the
+composes with [`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[])): a `for json path option (recompile)`
+query is valid. (Table hints, [`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[])), attach to the
 `FROM` table and are independent of the JSON clause.) A dialect that does not support the
 clause rejects the command, and combining `ForJson` with `ForXml` throws
 `NotSupportedException("FOR JSON and FOR XML cannot be combined.")`.
@@ -130,7 +135,7 @@ select id from complex_entity where (isjson(somestring)) = 1
 ### Turn JSON into rows with `openjson`
 
 `SqlFunctions.SqlServer.openjson(json)` is a table-valued function (SQL Server 2016+) used through
-[`FromTableFunction`](xref:NextORM.Core.DataContextExtensions). Its default
+[`FromTableFunction`](xref:NextORM.Core.DataContextExtensions.FromTableFunction``1(NextORM.Core.IDataContext,System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{``0}}})). Its default
 schema yields the properties of a JSON object or the elements of a JSON array as
 [`SqlFunctions.IOpenJsonRow`](xref:NextORM.Core.SqlFunctions.IOpenJsonRow) (`Key`/`Value`/`Type`):
 
@@ -150,7 +155,7 @@ select [key] as [Key], value, type from openjson(@json) as [t1]
 For a typed projection declare your own `[SqlTableFunction("openjson")]` wrapper whose row shape
 matches the `WITH (...)` clause; nextorm only emits the call, it does not create the function.
 `SqlFunctions.SqlServer.string_split` follows the same pattern for a comma-separated string. Both are
-gated by [`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect), so only SQL Server emits them.
+gated by [`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect.SupportsTableFunction(System.String)), so only SQL Server emits them.
 
 ## PostgreSQL
 
@@ -295,9 +300,14 @@ The construction and aggregation functions return `string?`; deserialize with
 * The PostgreSQL `json`/`jsonb` surface (`SqlFunctions.Postgres`) requires [`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson);
   the SQL Server and MySQL/MariaDB text functions require
   [`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson). Each throws on the other provider.
-* ClickHouse's string-JSON extractors (`JSONExtract*`/`visitParamExtract*`) require
-  [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract); they do not overlap with the
-  `SupportsTextJson` set.
+* ClickHouse's JSON surface (`JSONExtract*`/`visitParamExtract*`, the JSONPath scalars and the
+  native-JSON `JSONAllPaths`/`JSONAllPathsWithTypes`/`toJSONString`) requires
+  [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract); it does not overlap with the
+  `SupportsTextJson` set. The native-JSON functions take a native `JSON` value (cast a `String` column
+  with `CAST(col AS JSON)`); `json_all_paths` projects as `string[]` and `json_all_paths_with_types` as
+  `Dictionary<string, string>` (`mapKeys`/`mapValues` turn the map into a collection). A native `JSON`
+  *column* is not mapped yet: the driver returns it as `System.Text.Json.Nodes.JsonObject`, so project
+  JSON through a `String` column or cast it in SQL.
 * SQLite has JSON features in the database, but nextorm does not expose them yet; SQLite's JSON1
   extension is likewise not mapped.
 * The in-memory provider produces no SQL, so `ForJson`/`ForXml` and the JSON function surfaces do not

@@ -107,6 +107,22 @@ internal sealed class MySqlTestProvider : ITestProvider
 
         "create table binary_entity (id int not null primary key, data varbinary(16) null)",
 
-        "insert into binary_entity (id, data) values (1, x'01020304'), (2, null)"
+        "insert into binary_entity (id, data) values (1, x'01020304'), (2, null)",
+
+        "drop table if exists uint64_entity",
+        """
+        create table uint64_entity
+        (
+            id bigint unsigned not null,
+            value bigint unsigned not null,
+            maybe bigint unsigned null
+        )
+        """,
+        """
+        insert into uint64_entity (id, value, maybe) values
+            (1, 18446744073709551615, 18446744073709551615),
+            (2, 0, null),
+            (3, 42, 7)
+        """
     ];
 }

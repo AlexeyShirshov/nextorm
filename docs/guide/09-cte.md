@@ -18,14 +18,14 @@ public static CteQuery WithRecursive(this IDataContext dataContext, string name,
     int? maxRecursion = null);
 ```
 
-Declarations are immutable: every [`With`](xref:NextORM.Core.DataContextExtensions)/[`WithRecursive`](xref:NextORM.Core.DataContextExtensions) call returns a **new** scope that appends a
+Declarations are immutable: every [`With`](xref:NextORM.Core.DataContextExtensions.With(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand))/[`WithRecursive`](xref:NextORM.Core.DataContextExtensions.WithRecursive(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand,System.Nullable{System.Int32})) call returns a **new** scope that appends a
 [`CteDefinition`](xref:NextORM.Core.CteDefinition) to the previous ones. A definition records the name, the [`QueryCommand`](xref:NextORM.Core.QueryCommand) that produces it
 and whether the body may reference its own name.
 
-[`From`](xref:NextORM.Core.CteQuery) (or `From(CteDefinition)`) starts a new query whose `from` is one of the
+[`From`](xref:NextORM.Core.CteQuery.From(NextORM.Core.CteDefinition)) (or `From(CteDefinition)`) starts a new query whose `from` is one of the
 declared CTEs, carrying every declaration into the resulting command. It returns the regular
 [`EntityBuilder<T>`](xref:NextORM.Core.EntityBuilder`1) over the entity-free [`TableAlias`](xref:NextORM.Core.TableAlias) mode, so the
-**full operator set** applies — [`Where`](xref:NextORM.Core.EntityBuilder`1)/[`Join`](xref:NextORM.Core.EntityBuilder`1)/[`GroupBy`](xref:NextORM.Core.EntityBuilder`1)/[`Having`](xref:NextORM.Core.EntityBuilder`1)/[`OrderBy`](xref:NextORM.Core.EntityBuilder`1)/[`Limit`](xref:NextORM.Core.EntityBuilder`1)/[`Select`](xref:NextORM.Core.EntityBuilder`1).
+**full operator set** applies — [`Where`](xref:NextORM.Core.EntityBuilder`1.Where(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}}))/[`Join`](xref:NextORM.Core.EntityBuilder`1.Join``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}}))/[`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}}))/[`Having`](xref:NextORM.Core.EntityBuilder`1.Having(System.Linq.Expressions.Expression{System.Func{`0,System.Boolean}}))/[`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32))/[`Limit`](xref:NextORM.Core.EntityBuilder`1.Limit(System.Int32))/[`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})).
 CTE columns are read by name (`t["id"].AsInt` or `t.GetInt64("id")`). Recursive bodies reference their own
 name the same way (`dataContext.From("nums")` inside the step query).
 
@@ -63,7 +63,7 @@ Output:
 
 ## Chained declarations
 
-Each [`With`](xref:NextORM.Core.DataContextExtensions) appends to the previous scope, so a later CTE can be defined in terms of an earlier one.
+Each [`With`](xref:NextORM.Core.DataContextExtensions.With(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand)) appends to the previous scope, so a later CTE can be defined in terms of an earlier one.
 The declarations are rendered in declaration order:
 
 ```csharp
@@ -153,7 +153,7 @@ with l as (select id from complex_entity), r as (select id from simple_entity) s
 ## Recursive CTE: a number series
 
 A recursive CTE is a `union all` of an **anchor** (a non-recursive query) and a **step** that reads the
-CTE by name and stops when the predicate no longer matches. Call [`WithRecursive`](xref:NextORM.Core.DataContextExtensions) with the union as the
+CTE by name and stops when the predicate no longer matches. Call [`WithRecursive`](xref:NextORM.Core.DataContextExtensions.WithRecursive(NextORM.Core.IDataContext,System.String,NextORM.Core.QueryCommand,System.Nullable{System.Int32})) with the union as the
 body:
 
 ```csharp
@@ -267,7 +267,7 @@ plan cache.
 
 ## See also
 
-* [Set operations](07-set-operations.md) - [`UnionAll`](xref:NextORM.Core.QueryCommand`1) and friends, used to build a recursive body.
+* [Set operations](07-set-operations.md) - [`UnionAll`](xref:NextORM.Core.QueryCommand`1.UnionAll``1(NextORM.Core.QueryCommand{``0})) and friends, used to build a recursive body.
 * [Joins](03-joins.md) - joining a CTE to a table, as in `CommonTestSuite.Cte.cs`.
 * [Raw SQL](14-raw-sql.md) - when the whole statement is hand-written.
 * [Query reuse: cache vs Prepare](15-query-reuse.md) - how CTE plans are cached.

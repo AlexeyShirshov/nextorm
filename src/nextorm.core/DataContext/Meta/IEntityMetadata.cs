@@ -9,7 +9,13 @@ namespace NextORM.Core;
 /// </remarks>
 public interface IEntityMetadata
 {
+    /// <summary>
+    /// The mapped properties of the entity, in the order they were declared or discovered.
+    /// </summary>
     IReadOnlyList<IPropertyMetadata> Properties { get; }
+    /// <summary>
+    /// The mapped table name, or <see langword="null"/> when the entity is not table-mapped.
+    /// </summary>
     string? TableName { get; }
 
     /// <summary>

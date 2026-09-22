@@ -120,7 +120,14 @@ public sealed class DialectCapabilityContractTests
             if (dialect.QuantileAggregates is { } quantile)
             {
                 quantile.Render("quantile", "0.5", "[x]").Should().NotBeNullOrEmpty();
+                quantile.RenderLevels("quantiles", "0.5", "[x]").Should().NotBeNullOrEmpty();
                 quantile.RenderMedian("[x]").Should().NotBeNullOrEmpty();
+            }
+
+            if (dialect.TopKAggregates is { } topK)
+            {
+                topK.Render("top_k", "3", "[x]").Should().NotBeNullOrEmpty();
+                topK.RenderWeighted("top_k_weighted", "2", "[x]", "[w]").Should().NotBeNullOrEmpty();
             }
 
             if (dialect.MultiIf is { } multiIf)
@@ -172,6 +179,7 @@ public sealed class DialectCapabilityContractTests
         dialects.Should().Contain(d => d.SequenceAggregates != null);
         dialects.Should().Contain(d => d.UniqAggregates != null);
         dialects.Should().Contain(d => d.QuantileAggregates != null);
+        dialects.Should().Contain(d => d.TopKAggregates != null);
         dialects.Should().Contain(d => d.MultiIf != null);
         dialects.Should().Contain(d => d.DistinctOn != null);
         dialects.Should().Contain(d => d.TableSample != null);

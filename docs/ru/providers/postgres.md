@@ -13,9 +13,9 @@
 
 - плейсхолдер параметра `@name`;
 - конкатенация строк с помощью `||`;
-- [`MakeCoalesce`](xref:NextORM.Core.ISqlDialect) отрисовывает `coalesce(a, b)`;
+- [`MakeCoalesce`](xref:NextORM.Core.ISqlDialect.MakeCoalesce(System.String,System.String)) отрисовывает `coalesce(a, b)`;
 - логические литералы — `true`/`false`;
-- идентификаторы используют двойные кавычки ([`Escape`](xref:NextORM.Core.ISqlDialect) возвращает `"name"`), и [`MakeColumnReference`](xref:NextORM.Core.ISqlDialect) тоже квотирует имя,
+- идентификаторы используют двойные кавычки ([`Escape`](xref:NextORM.Core.ISqlDialect.Escape(System.String)) возвращает `"name"`), и [`MakeColumnReference`](xref:NextORM.Core.ISqlDialect.MakeColumnReference(System.String)) тоже квотирует имя,
   чтобы квотированный псевдоним сохранялся, когда на него ссылаются из внешнего запроса;
 - производные таблицы и табличные функции должны иметь псевдонимы ([`RequireSubqueryAlias`](xref:NextORM.Core.ISqlDialect.RequireSubqueryAlias) равно `true`, и его
   следствием является то, что псевдоним выдаётся всегда);
@@ -34,6 +34,8 @@
 - агрегаты `string_agg`/`array_agg` включены ([`SupportsStringArrayAggregates`](xref:NextORM.Core.ISqlDialect.SupportsStringArrayAggregates) равно `true`);
 - полнотекстовый поиск включён ([`SupportsFullText`](xref:NextORM.Core.ISqlDialect.SupportsFullText) равно `true`): `SqlFunctions.Sql.contains` отрисовывает
   `to_tsvector(col) @@ plainto_tsquery(search)`, а `freetext` — `websearch_to_tsquery(search)`;
+  ранжирование доступно через native `SqlFunctions.Postgres.ts_rank`/`ts_rank_cd`/`ts_headline` (гейтится
+  [`SupportsTextSearchFunctions`](xref:NextORM.Core.ISqlDialect.SupportsTextSearchFunctions));
 - расширенная библиотека скалярных функций включена ([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions) равно `true`):
   дополнительные математические (`asin`, `cbrt`, `degrees`, `pi`, `mod`, ...), строковые (`split_part`,
   `lpad`, `initcap`, ...), POSIX-регулярные выражения (`regexp_replace`, `regexp_like`, ...), дата/время
@@ -197,13 +199,13 @@ ctx.From<IComplexEntity>()
 ```
 
 Они описаны в разделе
-[Скалярные функции](../guide/11-scalar-functions.md#строковые-и-массивные-агрегаты-postgresql). SQLite
+[Скалярные функции](../guide/11-scalar-functions.md#строковые-и-массивные-агрегаты). SQLite
 также принимает предложение `FILTER`; остальные функции доступны только в PostgreSQL.
 
 ## Операции над множествами `*ALL` и порядок null
 
 PostgreSQL — единственный поддерживаемый реляционный провайдер, реализующий `INTERSECT ALL` и `EXCEPT ALL`,
-поэтому [`IntersectAll`](xref:NextORM.Core.QueryCommand`1)/[`ExceptAll`](xref:NextORM.Core.QueryCommand`1) отрисовывают свой SQL напрямую.
+поэтому [`IntersectAll`](xref:NextORM.Core.QueryCommand`1.IntersectAll``1(NextORM.Core.QueryCommand{``0}))/[`ExceptAll`](xref:NextORM.Core.QueryCommand`1.ExceptAll``1(NextORM.Core.QueryCommand{``0})) отрисовывают свой SQL напрямую.
 
 ```csharp
 var q = a.Select(x => x.Id).IntersectAll(b.Select(x => x.Id));   // ... intersect all ...

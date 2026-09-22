@@ -6,9 +6,10 @@ namespace NextORM.Core;
 /// <summary>
 /// Text-JSON surface (SQL Server and MySQL/MariaDB), the SQL Server-only <c>choose</c> conditional
 /// function (the portable <c>iif</c> lives on <see cref="CommonFunctions"/>), the SQL Server postfix
-/// XML data-type methods (<c>xml_value</c>/<c>xml_query</c>/<c>xml_exist</c>) and the SQL Server table
-/// functions. Exposed through <see cref="SqlFunctions.SqlServer"/>; every member is gated by a
-/// capability flag and rejected by providers that do not opt in.
+/// XML data-type methods (<c>xml_value</c>/<c>xml_query</c>/<c>xml_exist</c> and the
+/// <c>xml_nodes</c> rowset) and the SQL Server table functions. Exposed through
+/// <see cref="SqlFunctions.SqlServer"/>; every member is gated by a capability flag and rejected by
+/// providers that do not opt in.
 /// </summary>
     public class SqlServerFunctions : CommonFunctions
     {
@@ -65,6 +66,26 @@ namespace NextORM.Core;
         public bool xml_exist(string? xml, string? xpath) => default!;
 
         /// <summary>
+        /// <c>xml.nodes(xquery)</c> as a composable rowset source (SQL Server): unfolds the XML value
+        /// into one row per node selected by <paramref name="xpath"/> (the XQuery must be a string
+        /// literal). Use only as the source of
+        /// <see cref="EntityBuilder{TEntity}.CrossApply{TJoinEntity}(System.Linq.Expressions.Expression{System.Func{TEntity, QueryCommand{TJoinEntity}}})"/>
+        /// (or <c>OuterApply</c>); rendered as <c>&lt;xml&gt;.nodes('xpath') as \[alias\](\[value\])</c>,
+        /// and the unfolded <see cref="SqlFunctions.IXmlNodesRow.Value"/> is projected further with
+        /// <see cref="xml_value{T}(string?, string?, string?)"/>/<see cref="xml_query(string?, string?)"/>/
+        /// <see cref="xml_exist(string?, string?)"/>. Requires a provider that supports the XML
+        /// data-type methods (see <see cref="IXmlFunctions.Supports"/>; SQL Server).
+        /// </summary>
+        /// <remarks>
+        /// Unlike the <c>[SqlTableFunction]</c> sources (<c>string_split</c>/<c>openjson</c>) this is a
+        /// correlated source over the left-hand row's column, not a standalone table function, so it is
+        /// expressed through <c>CrossApply</c>/<c>OuterApply</c> rather than
+        /// <c>FromTableFunction</c>.
+        /// </remarks>
+        public QueryCommand<SqlFunctions.IXmlNodesRow> xml_nodes(string? xml, string? xpath) =>
+            throw new NotSupportedException("xml_nodes can only be used as a CROSS/OUTER APPLY source.");
+
+        /// <summary>
         /// <c>string_split(value, separator)</c> as a FROM source (SQL Server 2016+); select
         /// <see cref="SqlFunctions.IStringSplitRow.Value"/>. Use through
         /// <see cref="DataContextExtensions.FromTableFunction{T}(IDataContext, Expression{Func{IQueryable{T}}})"/>.
@@ -86,6 +107,25 @@ namespace NextORM.Core;
         /// </summary>
         [SqlTableFunction("openjson")]
         public IQueryable<SqlFunctions.IOpenJsonRow> openjson(string? json) => throw new NotSupportedException();
+
+        /// <summary>
+        /// <c>CONTAINSTABLE(table, column, search)</c> as a FROM source (SQL Server full-text search with
+        /// ranking). Join it back to the full-text-indexed table on
+        /// <see cref="SqlFunctions.IKeyRankRow{TKey}.Key"/> and project
+        /// <see cref="SqlFunctions.IKeyRankRow{TKey}.Rank"/>:
+        /// <c>ctx.From&lt;IDocument&gt;().Join(ctx.FromTableFunction(() =&gt; SqlFunctions.SqlServer.containstable&lt;int&gt;("documents", "title", search)), (d, k) =&gt; d.Id == k.Key).OrderByDescending(p =&gt; p.Item2.Rank)</c>.
+        /// <paramref name="table"/> and <paramref name="column"/> are emitted verbatim as identifiers
+        /// (the table name or its alias exactly as it appears in the query); only pass trusted values.
+        /// </summary>
+        [SqlTableFunction("containstable", VerbatimArguments = new[] { 0, 1 })]
+        public IQueryable<SqlFunctions.IKeyRankRow<TKey>> containstable<TKey>(string table, string column, string search) => throw new NotSupportedException();
+
+        /// <summary>
+        /// <c>FREETEXTTABLE(table, column, search)</c> as a FROM source; the natural-language counterpart
+        /// of <see cref="containstable{TKey}(string, string, string)"/> (same <c>KEY</c>/<c>RANK</c> columns).
+        /// </summary>
+        [SqlTableFunction("freetexttable", VerbatimArguments = new[] { 0, 1 })]
+        public IQueryable<SqlFunctions.IKeyRankRow<TKey>> freetexttable<TKey>(string table, string column, string search) => throw new NotSupportedException();
 
         /// <summary>
         /// <c>choose(index, value, ...)</c>: the 1-based <paramref name="index"/>-th value (NULL when out

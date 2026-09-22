@@ -23,6 +23,28 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     }
 
     [Fact]
+    public void ColumnByName_ShouldReadUnmappedColumn()
+    {
+        var rows = _sut.DataProvider.From<IWideEntity>()
+            .OrderBy(x => x.Id)
+            .Select(x => new { x.Id, Region = SqlFunctions.Column<ulong>(x, "regionid") })
+            .ToList();
+
+        rows.Should().HaveCount(3);
+        rows.Select(r => r.Region).Should().Equal(10UL, 20UL, 30UL);
+    }
+
+    [Fact]
+    public void ColumnByName_InWhere_ShouldFilterByUnmappedColumn()
+    {
+        _sut.DataProvider.From<IWideEntity>()
+            .Where(x => SqlFunctions.Column<ulong>(x, "regionid") == 20)
+            .Select(x => x.Id)
+            .First()
+            .Should().Be(2);
+    }
+
+    [Fact]
     public void CountAggregates_ShouldCastToInt64InProjection()
     {
         // The native count()/countIf() return UInt64, which the anonymous-projection materializer
@@ -109,6 +131,29 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
         r.H.Should().BeTrue();
         r.L.Should().Be(3L);
         r.T.Should().Be("String");
+    }
+
+    [Fact]
+    public void JsonArrayExtract_ShouldProjectArrays()
+    {
+        var r = _sut.SimpleEntity
+            .Select(x => new
+            {
+                K = SqlFunctions.ClickHouse.json_extract_keys("{\"a\":1,\"b\":2}"),
+                KP = SqlFunctions.ClickHouse.json_extract_keys("{\"o\":{\"a\":1}}", "o"),
+                A = SqlFunctions.ClickHouse.json_extract_array_raw("[1,2,3]"),
+                AP = SqlFunctions.ClickHouse.json_extract_array_raw("{\"o\":[1,2]}", "o"),
+                V = SqlFunctions.ClickHouse.json_extract_keys_and_values<int>("{\"a\":1,\"b\":2}"),
+                VP = SqlFunctions.ClickHouse.json_extract_keys_and_values<int>("{\"o\":{\"c\":3}}", "o")
+            })
+            .First();
+
+        r.K.Should().Equal("a", "b");
+        r.KP.Should().Equal("a");
+        r.A.Should().Equal("1", "2", "3");
+        r.AP.Should().Equal("1", "2");
+        r.V.Should().BeEquivalentTo(new[] { Tuple.Create("a", 1), Tuple.Create("b", 2) });
+        r.VP.Should().Equal(Tuple.Create("c", 3));
     }
 
     [Fact]
@@ -281,6 +326,42 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
         r.E.Should().Be(2.0);
         r.M.Should().Be(2.0);
         r.Q.Should().BeApproximately(2.0, 1e-12);
+    }
+
+    [Fact]
+    public void TopK_ShouldReturnMostFrequentValues()
+    {
+        // complex_entity ids are 1..3 (all distinct), so topK(2) returns two of them.
+        var r = _sut.ComplexEntity
+            .Select(x => SqlFunctions.ClickHouse.top_k(2, x.Id))
+            .First();
+
+        r.Should().HaveCount(2);
+        r.Should().OnlyContain(id => id >= 1 && id <= 3);
+    }
+
+    [Fact]
+    public void TopKWeighted_ShouldReturnWeightedValues()
+    {
+        var r = _sut.ComplexEntity
+            .Select(x => SqlFunctions.ClickHouse.top_k_weighted(2, x.Id, x.Id))
+            .First();
+
+        r.Should().HaveCount(2);
+        r.Should().OnlyContain(id => id >= 1 && id <= 3);
+    }
+
+    [Fact]
+    public void Quantiles_ShouldReturnMultipleQuantiles()
+    {
+        // ids 1..3: the 0.5 level is the median, so the middle value is 2.
+        var r = _sut.ComplexEntity
+            .Select(x => SqlFunctions.ClickHouse.quantiles(new[] { 0.25, 0.5, 0.75 }, x.Id))
+            .First();
+
+        r.Should().HaveCount(3);
+        r.Should().BeInAscendingOrder();
+        r[1].Should().BeApproximately(2.0, 1e-12);
     }
 
     [Fact]
@@ -646,6 +727,52 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     }
 
     [Fact]
+    public void SemiJoin_ShouldKeepOnlyMatchingLeftRows()
+    {
+        // complex_entity has ids 1..3, so exactly the simple rows 1,2,3 have a match.
+        _sut.SimpleEntity
+            .SemiJoin(_sut.ComplexEntity, (s, c) => s.Id == c.Id)
+            .Select(s => s.Id)
+            .ToList()
+            .Should().BeEquivalentTo([1, 2, 3]);
+    }
+
+    [Fact]
+    public void AntiJoin_ShouldKeepOnlyNonMatchingLeftRows()
+    {
+        _sut.SimpleEntity
+            .AntiJoin(_sut.ComplexEntity, (s, c) => s.Id == c.Id)
+            .Select(s => s.Id)
+            .ToList()
+            .Should().BeEquivalentTo([4, 5, 6, 7, 8, 9, 10]);
+    }
+
+    [Fact]
+    public void SemiJoin_ShouldNotDuplicateOnMultipleMatches()
+    {
+        // All three complex rows share small = 3: a plain join yields 9 rows, SEMI keeps each left row once.
+        _sut.ComplexEntity
+            .SemiJoin(_sut.ComplexEntity, (a, b) => a.SmallInt == b.SmallInt)
+            .Select(a => a.Id)
+            .ToList()
+            .Should().HaveCount(3);
+    }
+
+    [Fact]
+    public void PasteJoin_ShouldPairByPositionAndUseShorterSide()
+    {
+        // 10 left rows and 3 right rows, so PASTE yields min(10, 3) = 3 rows carrying both sides.
+        var rows = _sut.SimpleEntity
+            .PasteJoin(_sut.ComplexEntity)
+            .Select(p => new { L = p.Item1.Id, R = p.Item2.Id })
+            .ToList();
+
+        rows.Should().HaveCount(3);
+        rows.Select(r => r.R).Should().BeEquivalentTo([1L, 2L, 3L]);
+        rows.Select(r => r.L).Distinct().Should().HaveCount(3);
+    }
+
+    [Fact]
     public void ArrayFunctions_ShouldReturnValues()
     {
         var r = _sut.ArrayEntity
@@ -685,6 +812,29 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
             .ToList();
 
         ids.Should().Equal(1);
+    }
+
+    [Fact]
+    public void ArrayRelationPredicates_ShouldReturnValues()
+    {
+        // array_entity id = 1 has nums = [3, 1, 2].
+        var r = _sut.ArrayEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                S = SqlFunctions.ClickHouse.starts_with(x.Nums, new[] { 3, 1 }),
+                SMiss = SqlFunctions.ClickHouse.starts_with(x.Nums, new[] { 1, 3 }),
+                E = SqlFunctions.ClickHouse.ends_with(x.Nums, new[] { 1, 2 }),
+                C = SqlFunctions.ClickHouse.has_substr(x.Nums, new[] { 1, 2 }),
+                CMiss = SqlFunctions.ClickHouse.has_substr(x.Nums, new[] { 3, 2 })
+            })
+            .First();
+
+        r.S.Should().BeTrue();
+        r.SMiss.Should().BeFalse();
+        r.E.Should().BeTrue();
+        r.C.Should().BeTrue();
+        r.CMiss.Should().BeFalse();
     }
 
     [Fact]
@@ -786,6 +936,274 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
         rows.Should().ContainSingle();
         rows[0].Tag.Should().BeNullOrEmpty();
     }
+
+    [Fact]
+    public void UInt64Columns_ShouldMaterializeAsUlong()
+    {
+        var rows = _sut.DataProvider
+            .From<IUInt64Entity>()
+            .OrderBy(x => x.Id)
+            .Select(x => new { x.Id, x.Value })
+            .ToList();
+
+        rows.Should().HaveCount(3);
+        rows[0].Id.Should().Be(1UL);
+        rows[0].Value.Should().Be(ulong.MaxValue);
+        rows[2].Value.Should().Be(42UL);
+    }
+
+    [Fact]
+    public void UInt64Projection_ShouldMaterializeValueAboveInt64Max()
+    {
+        var value = _sut.DataProvider
+            .From<IUInt64Entity>()
+            .OrderByDescending(x => x.Value)
+            .Select(x => x.Value)
+            .First();
+
+        value.Should().Be(ulong.MaxValue);
+    }
+
+    [Fact]
+    public void NullableUInt64_ShouldMaterializeNullAndValue()
+    {
+        var rows = _sut.DataProvider
+            .From<IUInt64Entity>()
+            .OrderBy(x => x.Id)
+            .Select(x => new { x.Id, x.Maybe })
+            .ToList();
+
+        rows[0].Maybe.Should().Be(ulong.MaxValue);
+        rows[1].Maybe.Should().BeNull();
+        rows[2].Maybe.Should().Be(7UL);
+    }
+
+    [Fact]
+    public void JsonAllPaths_ShouldProjectNativeJsonPaths()
+    {
+        var r = _sut.DataProvider
+            .From<IJsonEntity>()
+            .Where(x => x.Id == 1)
+            .Select(x => new { Paths = SqlFunctions.ClickHouse.json_all_paths(x.Doc) })
+            .First();
+
+        r.Paths.Should().Contain("name").And.Contain("age").And.Contain("nested.x");
+    }
+
+    [Fact]
+    public void JsonAllPathsWithTypes_ShouldProjectNativeJsonMap()
+    {
+        var r = _sut.DataProvider
+            .From<IJsonEntity>()
+            .Where(x => x.Id == 1)
+            .Select(x => new { Typed = SqlFunctions.ClickHouse.json_all_paths_with_types(x.Doc) })
+            .First();
+
+        r.Typed.Should().NotBeEmpty();
+        r.Typed.Should().ContainKey("name");
+        r.Typed["name"].Should().Be("String");
+    }
+
+    [Fact]
+    public void ToJsonString_ShouldSerialiseNativeJson()
+    {
+        var r = _sut.DataProvider
+            .From<IJsonEntity>()
+            .Where(x => x.Id == 1)
+            .Select(x => new { Text = SqlFunctions.ClickHouse.to_json_string(x.Doc) })
+            .First();
+
+        r.Text.Should().NotBeNull().And.Contain("\"name\"").And.Contain("alice");
+    }
+
+    [Fact]
+    public void ArrayColumns_ShouldProjectDirectly()
+    {
+        var r = _sut.ArrayEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new { x.Tags, x.Nums })
+            .First();
+
+        r.Tags.Should().Equal("a", "b", "c");
+        r.Nums.Should().Equal(3, 1, 2);
+    }
+
+    [Fact]
+    public void ArrayExpression_ShouldProjectWithoutWrapper()
+    {
+        var sorted = _sut.ArrayEntity
+            .Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.ClickHouse.array_sort(x.Nums))
+            .First();
+
+        sorted.Should().Equal(1, 2, 3);
+    }
+
+    [Fact]
+    public void NestedArrayExpression_ShouldProjectWithoutWrapper()
+    {
+        var r = _sut.ArrayEntity
+            .Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.ClickHouse.array_push_back(
+                SqlFunctions.ClickHouse.array_reverse(x.Nums), 9))
+            .First();
+
+        r.Should().Equal(2, 1, 3, 9);
+    }
+
+    [Fact]
+    public void GroupArray_ShouldMaterialiseArrayAggregate()
+    {
+        var ids = _sut.ArrayEntity
+            .Select(x => SqlFunctions.ClickHouse.array_sort(
+                SqlFunctions.ClickHouse.group_array(x.Id)))
+            .First();
+
+        ids.Should().Equal(1, 2, 3);
+    }
+
+    [Fact]
+    public void GroupUniqArray_ShouldMaterialiseDistinctArray()
+    {
+        var events = _sut.DataProvider
+            .From<IEventEntity>()
+            .Select(x => SqlFunctions.ClickHouse.array_sort(
+                SqlFunctions.ClickHouse.group_uniq_array(x.Event)))
+            .First();
+
+        events.Should().Equal(1, 2, 3);
+    }
+
+    [Fact]
+    public void GroupArray_OfArrayColumn_ShouldMaterialiseNestedArray()
+    {
+        var grouped = _sut.ArrayEntity
+            .Select(x => SqlFunctions.ClickHouse.group_array(x.Tags))
+            .First();
+
+        grouped.Should().HaveCount(3);
+        grouped.SelectMany(x => x).Should().BeEquivalentTo(new[] { "a", "b", "c", "b" });
+        grouped.Should().ContainSingle(x => x.Length == 0);
+    }
+
+    [Fact]
+    public void ArrayMap_ShouldMapElements()
+    {
+        var mapped = _sut.ArrayEntity
+            .Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.ClickHouse.array_map(v => -v, x.Nums))
+            .First();
+
+        mapped.Should().Equal(-3, -1, -2);
+    }
+
+    [Fact]
+    public void ArrayFilter_ShouldKeepMatchingElements()
+    {
+        var filtered = _sut.ArrayEntity
+            .Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.ClickHouse.array_sort(
+                SqlFunctions.ClickHouse.array_filter(v => v > 1, x.Nums)))
+            .First();
+
+        filtered.Should().Equal(2, 3);
+    }
+
+    [Fact]
+    public void ArrayExistsAndAll_ShouldReturnBoolean()
+    {
+        var r = _sut.ArrayEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Exists = SqlFunctions.ClickHouse.array_exists(v => v == 2, x.Nums),
+                All = SqlFunctions.ClickHouse.array_all(v => v > 0, x.Nums)
+            })
+            .First();
+
+        r.Exists.Should().BeTrue();
+        r.All.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ArrayCount_ShouldCountMatchingElements()
+    {
+        var count = _sut.ArrayEntity
+            .Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.ClickHouse.array_count(v => v > 1, x.Nums))
+            .First();
+
+        count.Should().Be(2);
+    }
+
+    [Fact]
+    public void ArrayFirstAndLast_ShouldReturnElementAndIndex()
+    {
+        var r = _sut.ArrayEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                First = SqlFunctions.ClickHouse.array_first(v => v > 1, x.Nums),
+                FirstIndex = SqlFunctions.ClickHouse.array_first_index(v => v > 1, x.Nums),
+                Last = SqlFunctions.ClickHouse.array_last(v => v > 1, x.Nums),
+                LastIndex = SqlFunctions.ClickHouse.array_last_index(v => v > 1, x.Nums)
+            })
+            .First();
+
+        r.First.Should().Be(3);
+        r.FirstIndex.Should().Be(1);
+        r.Last.Should().Be(2);
+        r.LastIndex.Should().Be(3);
+    }
+
+    [Fact]
+    public void TupleColumn_ShouldProjectAsSystemTuple()
+    {
+        var pair = _sut.DataProvider
+            .From<ITupleEntity>()
+            .Where(x => x.Id == 1)
+            .Select(x => x.Pair)
+            .First();
+
+        pair.Should().Be(Tuple.Create(7, "seven"));
+    }
+
+    [Fact]
+    public void TupleElementAccess_ShouldReturnValues()
+    {
+        var r = _sut.DataProvider
+            .From<ITupleEntity>()
+            .Where(x => x.Id == 1)
+            .Select(x => new { A = x.Pair.Item1, B = x.Pair.Item2 })
+            .First();
+
+        r.A.Should().Be(7);
+        r.B.Should().Be("seven");
+    }
+
+    [Fact]
+    public void TupleCreate_ShouldMaterialiseTuple()
+    {
+        var pair = _sut.DataProvider
+            .From<ITupleEntity>()
+            .Where(x => x.Id == 1)
+            .Select(x => Tuple.Create(x.Id, x.Pair.Item2))
+            .First();
+
+        pair.Should().Be(Tuple.Create(1, "seven"));
+    }
+}
+
+[SqlTable("uint64_entity")]
+public interface IUInt64Entity
+{
+    [Key]
+    [Column("id")]
+    ulong Id { get; set; }
+    [Column("value")]
+    ulong Value { get; set; }
+    [Column("maybe")]
+    ulong? Maybe { get; set; }
 }
 
 [SqlTable("event_entity")]
@@ -798,4 +1216,32 @@ public interface IEventEntity
     DateTime Timestamp { get; set; }
     [Column("event")]
     int Event { get; set; }
+}
+
+[SqlTable("json_entity")]
+public interface IJsonEntity
+{
+    [Key]
+    [Column("id")]
+    int Id { get; set; }
+    [Column("doc")]
+    string Doc { get; set; }
+}
+
+[SqlTable("tuple_entity")]
+public interface ITupleEntity
+{
+    [Key]
+    [Column("id")]
+    int Id { get; set; }
+    [Column("pair")]
+    Tuple<int, string> Pair { get; set; }
+}
+
+[SqlTable("wide_entity")]
+public interface IWideEntity
+{
+    [Key]
+    [Column("id")]
+    int Id { get; set; }
 }

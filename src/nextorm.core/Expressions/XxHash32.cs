@@ -34,6 +34,10 @@ public struct XxHash32
         return BitConverter.ToUInt32(result);
     }
 
+    /// <summary>Combines the hash code of a single value into a 32-bit hash code.</summary>
+    /// <typeparam name="T1">The type of the value.</typeparam>
+    /// <param name="value1">The value to include in the hash.</param>
+    /// <returns>The combined hash code.</returns>
     public static int Combine<T1>(T1 value1)
     {
         // Provide a way of diffusing bits from something with a limited
@@ -54,6 +58,12 @@ public struct XxHash32
         return (int)hash;
     }
 
+    /// <summary>Combines the hash codes of two values into a single 32-bit hash code.</summary>
+    /// <typeparam name="T1">The type of the first value.</typeparam>
+    /// <typeparam name="T2">The type of the second value.</typeparam>
+    /// <param name="value1">The first value to include in the hash.</param>
+    /// <param name="value2">The second value to include in the hash.</param>
+    /// <returns>The combined hash code.</returns>
     public static int Combine<T1, T2>(T1 value1, T2 value2)
     {
         uint hc1 = (uint)(value1 is null ? 0 : value1.GetHashCode());
@@ -69,6 +79,14 @@ public struct XxHash32
         return (int)hash;
     }
 
+    /// <summary>Combines the hash codes of three values into a single 32-bit hash code.</summary>
+    /// <typeparam name="T1">The type of the first value.</typeparam>
+    /// <typeparam name="T2">The type of the second value.</typeparam>
+    /// <typeparam name="T3">The type of the third value.</typeparam>
+    /// <param name="value1">The first value to include in the hash.</param>
+    /// <param name="value2">The second value to include in the hash.</param>
+    /// <param name="value3">The third value to include in the hash.</param>
+    /// <returns>The combined hash code.</returns>
     public static int Combine<T1, T2, T3>(T1 value1, T2 value2, T3 value3)
     {
         uint hc1 = (uint)(value1 is null ? 0 : value1.GetHashCode());
@@ -86,6 +104,16 @@ public struct XxHash32
         return (int)hash;
     }
 
+    /// <summary>Combines the hash codes of four values into a single 32-bit hash code.</summary>
+    /// <typeparam name="T1">The type of the first value.</typeparam>
+    /// <typeparam name="T2">The type of the second value.</typeparam>
+    /// <typeparam name="T3">The type of the third value.</typeparam>
+    /// <typeparam name="T4">The type of the fourth value.</typeparam>
+    /// <param name="value1">The first value to include in the hash.</param>
+    /// <param name="value2">The second value to include in the hash.</param>
+    /// <param name="value3">The third value to include in the hash.</param>
+    /// <param name="value4">The fourth value to include in the hash.</param>
+    /// <returns>The combined hash code.</returns>
     public static int Combine<T1, T2, T3, T4>(T1 value1, T2 value2, T3 value3, T4 value4)
     {
         uint hc1 = (uint)(value1 is null ? 0 : value1.GetHashCode());
@@ -107,6 +135,18 @@ public struct XxHash32
         return (int)hash;
     }
 
+    /// <summary>Combines the hash codes of five values into a single 32-bit hash code.</summary>
+    /// <typeparam name="T1">The type of the first value.</typeparam>
+    /// <typeparam name="T2">The type of the second value.</typeparam>
+    /// <typeparam name="T3">The type of the third value.</typeparam>
+    /// <typeparam name="T4">The type of the fourth value.</typeparam>
+    /// <typeparam name="T5">The type of the fifth value.</typeparam>
+    /// <param name="value1">The first value to include in the hash.</param>
+    /// <param name="value2">The second value to include in the hash.</param>
+    /// <param name="value3">The third value to include in the hash.</param>
+    /// <param name="value4">The fourth value to include in the hash.</param>
+    /// <param name="value5">The fifth value to include in the hash.</param>
+    /// <returns>The combined hash code.</returns>
     public static int Combine<T1, T2, T3, T4, T5>(T1 value1, T2 value2, T3 value3, T4 value4, T5 value5)
     {
         uint hc1 = (uint)(value1 is null ? 0 : value1.GetHashCode());
@@ -131,6 +171,20 @@ public struct XxHash32
         return (int)hash;
     }
 
+    /// <summary>Combines the hash codes of six values into a single 32-bit hash code.</summary>
+    /// <typeparam name="T1">The type of the first value.</typeparam>
+    /// <typeparam name="T2">The type of the second value.</typeparam>
+    /// <typeparam name="T3">The type of the third value.</typeparam>
+    /// <typeparam name="T4">The type of the fourth value.</typeparam>
+    /// <typeparam name="T5">The type of the fifth value.</typeparam>
+    /// <typeparam name="T6">The type of the sixth value.</typeparam>
+    /// <param name="value1">The first value to include in the hash.</param>
+    /// <param name="value2">The second value to include in the hash.</param>
+    /// <param name="value3">The third value to include in the hash.</param>
+    /// <param name="value4">The fourth value to include in the hash.</param>
+    /// <param name="value5">The fifth value to include in the hash.</param>
+    /// <param name="value6">The sixth value to include in the hash.</param>
+    /// <returns>The combined hash code.</returns>
     public static int Combine<T1, T2, T3, T4, T5, T6>(T1 value1, T2 value2, T3 value3, T4 value4, T5 value5, T6 value6)
     {
         uint hc1 = (uint)(value1 is null ? 0 : value1.GetHashCode());
@@ -157,6 +211,22 @@ public struct XxHash32
         return (int)hash;
     }
 
+    /// <summary>Combines the hash codes of seven values into a single 32-bit hash code.</summary>
+    /// <typeparam name="T1">The type of the first value.</typeparam>
+    /// <typeparam name="T2">The type of the second value.</typeparam>
+    /// <typeparam name="T3">The type of the third value.</typeparam>
+    /// <typeparam name="T4">The type of the fourth value.</typeparam>
+    /// <typeparam name="T5">The type of the fifth value.</typeparam>
+    /// <typeparam name="T6">The type of the sixth value.</typeparam>
+    /// <typeparam name="T7">The type of the seventh value.</typeparam>
+    /// <param name="value1">The first value to include in the hash.</param>
+    /// <param name="value2">The second value to include in the hash.</param>
+    /// <param name="value3">The third value to include in the hash.</param>
+    /// <param name="value4">The fourth value to include in the hash.</param>
+    /// <param name="value5">The fifth value to include in the hash.</param>
+    /// <param name="value6">The sixth value to include in the hash.</param>
+    /// <param name="value7">The seventh value to include in the hash.</param>
+    /// <returns>The combined hash code.</returns>
     public static int Combine<T1, T2, T3, T4, T5, T6, T7>(T1 value1, T2 value2, T3 value3, T4 value4, T5 value5, T6 value6, T7 value7)
     {
         uint hc1 = (uint)(value1 is null ? 0 : value1.GetHashCode());
@@ -185,6 +255,24 @@ public struct XxHash32
         return (int)hash;
     }
 
+    /// <summary>Combines the hash codes of eight values into a single 32-bit hash code.</summary>
+    /// <typeparam name="T1">The type of the first value.</typeparam>
+    /// <typeparam name="T2">The type of the second value.</typeparam>
+    /// <typeparam name="T3">The type of the third value.</typeparam>
+    /// <typeparam name="T4">The type of the fourth value.</typeparam>
+    /// <typeparam name="T5">The type of the fifth value.</typeparam>
+    /// <typeparam name="T6">The type of the sixth value.</typeparam>
+    /// <typeparam name="T7">The type of the seventh value.</typeparam>
+    /// <typeparam name="T8">The type of the eighth value.</typeparam>
+    /// <param name="value1">The first value to include in the hash.</param>
+    /// <param name="value2">The second value to include in the hash.</param>
+    /// <param name="value3">The third value to include in the hash.</param>
+    /// <param name="value4">The fourth value to include in the hash.</param>
+    /// <param name="value5">The fifth value to include in the hash.</param>
+    /// <param name="value6">The sixth value to include in the hash.</param>
+    /// <param name="value7">The seventh value to include in the hash.</param>
+    /// <param name="value8">The eighth value to include in the hash.</param>
+    /// <returns>The combined hash code.</returns>
     public static int Combine<T1, T2, T3, T4, T5, T6, T7, T8>(T1 value1, T2 value2, T3 value3, T4 value4, T5 value5, T6 value6, T7 value7, T8 value8)
     {
         uint hc1 = (uint)(value1 is null ? 0 : value1.GetHashCode());
@@ -258,11 +346,18 @@ public struct XxHash32
         return hash;
     }
 
+    /// <summary>Adds a value to the running hash code.</summary>
+    /// <typeparam name="T">The type of the value.</typeparam>
+    /// <param name="value">The value to add; a <c>null</c> reference contributes zero.</param>
     public void Add<T>(T? value)
     {
         Add(value is null ? 0 : value.GetHashCode());
     }
 
+    /// <summary>Adds a value to the running hash code, computing its hash with the supplied comparer.</summary>
+    /// <typeparam name="T">The type of the value.</typeparam>
+    /// <param name="value">The value to add; a <c>null</c> reference contributes zero.</param>
+    /// <param name="comparer">The comparer used to hash <paramref name="value"/>, or <c>null</c> to use the value's own hash code.</param>
     public void Add<T>(T? value, IEqualityComparer<T?>? comparer)
     {
         Add(value is null ? 0 : (comparer?.GetHashCode(value) ?? value.GetHashCode()));
@@ -348,6 +443,8 @@ public struct XxHash32
         }
     }
 
+    /// <summary>Adds a 32-bit integer to the running hash code.</summary>
+    /// <param name="value">The value to add.</param>
     public void Add(int value)
     {
         // The original xxHash works as follows:
@@ -398,6 +495,8 @@ public struct XxHash32
         }
     }
 
+    /// <summary>Computes the final 32-bit hash code from the values added so far.</summary>
+    /// <returns>The xxHash32 hash code.</returns>
     public int ToHashCode()
     {
         // Storing the value of _length locally shaves of quite a few bytes

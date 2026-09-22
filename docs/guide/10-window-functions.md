@@ -43,14 +43,14 @@ public sealed class WindowFunction<T>
 }
 ```
 
-[`Over`](xref:NextORM.Core.WindowFunction`1) with no arguments renders an empty specification (`over ()`). Because C# expression trees
+[`Over`](xref:NextORM.Core.WindowFunction`1.Over(NextORM.Core.WindowOrder,NextORM.Core.WindowFrame)) with no arguments renders an empty specification (`over ()`). Because C# expression trees
 reject named arguments that skip a preceding defaulted parameter, an **order-only** specification must
 use the [`WindowOrder`](xref:NextORM.Core.WindowOrder) overload - `Over(SqlFunctions.Sql.asc(() => e.Id))` - rather than `Over(orderBy: ...)`.
 `SqlFunctions.Sql.asc(expression)` and `SqlFunctions.Sql.desc(expression)` return a [`WindowOrder`](xref:NextORM.Core.WindowOrder) (an order key plus an
 [`OrderDirection`](xref:NextORM.Core.OrderDirection)).
 
-Calling a window function **without** [`Over`](xref:NextORM.Core.WindowFunction`1) is an error: the visitor throws `NotSupportedException`
-whose message mentions [`Over`](xref:NextORM.Core.WindowFunction`1).
+Calling a window function **without** [`Over`](xref:NextORM.Core.WindowFunction`1.Over(NextORM.Core.WindowOrder,NextORM.Core.WindowFrame)) is an error: the visitor throws `NotSupportedException`
+whose message mentions [`Over`](xref:NextORM.Core.WindowFunction`1.Over(NextORM.Core.WindowOrder,NextORM.Core.WindowFrame)).
 
 ## Functions
 
@@ -78,7 +78,7 @@ whose message mentions [`Over`](xref:NextORM.Core.WindowFunction`1).
 | Windowed count | `count_over()` / `count_over(property)` | `count(*)` / `count(expr)` |
 
 The aggregate variants carry an `_over` suffix so they do not clash with the scalar aggregates `sum`,
-`avg`, `min`, `max` and `count` that are used with [`GroupBy`](xref:NextORM.Core.EntityBuilder`1).
+`avg`, `min`, `max` and `count` that are used with [`GroupBy`](xref:NextORM.Core.EntityBuilder`1.GroupBy``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})).
 
 ## Row number over a partition
 
@@ -170,7 +170,7 @@ select id, lag(id, 1, 0) over (order by id) as 'prev', lead(nullableint, 2, 0) o
 
 ### `lagInFrame` / `leadInFrame` (ClickHouse)
 
-ClickHouse's [`lagInFrame`/`leadInFrame`](xref:NextORM.Core.ClickHouseFunctions) are the frame-respecting
+ClickHouse's [`lagInFrame`](xref:NextORM.Core.ClickHouseFunctions.lag_in_frame``1(``0))/[`leadInFrame`](xref:NextORM.Core.ClickHouseFunctions.lead_in_frame``1(``0)) are the frame-respecting
 counterparts of `lag`/`lead`, exposed as `SqlFunctions.ClickHouse.lag_in_frame`/`lead_in_frame`
 ([`SupportsInFrameWindowFunctions`](xref:NextORM.Core.ISqlDialect.SupportsInFrameWindowFunctions)). The
 standard `lag`/`lead` look at the whole partition and, on ClickHouse, reject an explicit frame with
@@ -223,19 +223,19 @@ units and [`WindowFrameBound`](xref:NextORM.Core.WindowFrameBound) has the bound
 
 | Factory | Renders |
 |---|---|
-| [`Rows`](xref:NextORM.Core.WindowFrame) | `rows between <start> and <end>` |
-| [`Range`](xref:NextORM.Core.WindowFrame) | `range between <start> and <end>` |
-| [`Groups`](xref:NextORM.Core.WindowFrame.Groups) | `groups between <start> and <end>` (peer groups) |
-| [`Rows`](xref:NextORM.Core.WindowFrame) | `rows between <preceding> preceding and <following> following` |
+| [`Rows`](xref:NextORM.Core.WindowFrame.Rows(NextORM.Core.WindowFrameBound,NextORM.Core.WindowFrameBound)) | `rows between <start> and <end>` |
+| [`Range`](xref:NextORM.Core.WindowFrame.Range(NextORM.Core.WindowFrameBound,NextORM.Core.WindowFrameBound)) | `range between <start> and <end>` |
+| [`Groups`](xref:NextORM.Core.WindowFrame.Groups(NextORM.Core.WindowFrameBound,NextORM.Core.WindowFrameBound)) | `groups between <start> and <end>` (peer groups) |
+| [`Rows`](xref:NextORM.Core.WindowFrame.Rows(NextORM.Core.WindowFrameBound,NextORM.Core.WindowFrameBound)) | `rows between <preceding> preceding and <following> following` |
 | [`RowsUnboundedPrecedingToCurrentRow`](xref:NextORM.Core.WindowFrame.RowsUnboundedPrecedingToCurrentRow) | `rows between unbounded preceding and current row` |
 | [`RangeUnboundedPrecedingToCurrentRow`](xref:NextORM.Core.WindowFrame.RangeUnboundedPrecedingToCurrentRow) | `range between unbounded preceding and current row` |
 
 | Boundary | Renders |
 |---|---|
 | [`UnboundedPreceding`](xref:NextORM.Core.WindowFrameBound.UnboundedPreceding) | `unbounded preceding` |
-| [`Preceding`](xref:NextORM.Core.WindowFrameBound) | `<n> preceding` |
+| [`Preceding`](xref:NextORM.Core.WindowFrameBound.Preceding(System.Int32)) | `<n> preceding` |
 | [`CurrentRow`](xref:NextORM.Core.WindowFrameBound.CurrentRow) | `current row` |
-| [`Following`](xref:NextORM.Core.WindowFrameBound) | `<n> following` |
+| [`Following`](xref:NextORM.Core.WindowFrameBound.Following(System.Int32)) | `<n> following` |
 | [`UnboundedFollowing`](xref:NextORM.Core.WindowFrameBound.UnboundedFollowing) | `unbounded following` |
 
 A framed running aggregate and a sliding window:
@@ -260,7 +260,7 @@ select id, sum(id) over (order by id rows between unbounded preceding and curren
 ```
 
 A frame may also exclude rows around the current one with
-[`WindowFrame.WithExclusion`](xref:NextORM.Core.WindowFrame.WithExclusion) and a
+[`WindowFrame.WithExclusion`](xref:NextORM.Core.WindowFrame.WithExclusion(NextORM.Core.WindowFrameExclusion)) and a
 [`WindowFrameExclusion`](xref:NextORM.Core.WindowFrameExclusion):
 
 | Exclusion | Renders |
@@ -325,7 +325,7 @@ window functions. SQL Server and MariaDB render them as
 `percentile_cont(f) within group (order by x) over (...)` under
 [`SupportsPercentileWindow`](xref:NextORM.Core.ISqlDialect.SupportsPercentileWindow); PostgreSQL expresses
 percentiles as an ordered-set **aggregate** instead
-([`SqlFunctions.Postgres.percentile_cont`](xref:NextORM.Core.PostgresFunctions.percentile_cont)), and
+([`SqlFunctions.Postgres.percentile_cont`](xref:NextORM.Core.PostgresFunctions.percentile_cont``1(System.Double,System.Linq.Expressions.Expression{System.Func{``0}}))), and
 MySQL, SQLite and ClickHouse reject the window form with `NotSupportedException`.
 
 | Provider | Behaviour |

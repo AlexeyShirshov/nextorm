@@ -5,22 +5,29 @@ namespace NextORM.Core;
 /// <summary>
 /// ClickHouse-only SQL surface: the <c>argMin</c>/<c>argMax</c> aggregates, the distinct-count
 /// <c>uniq</c>/<c>uniqExact</c>/<c>uniqCombined</c>/<c>uniqHLL12</c> aggregates, the parameterised
-/// <c>quantile(level)(value)</c> family with <c>median</c>, the <c>anyLast</c> row-picking
+/// <c>quantile(level)(value)</c>/<c>quantiles(level...)(value)</c> family with <c>median</c>, the
+/// <c>topK(k)(value)</c>/<c>topKWeighted(k)(value, weight)</c> aggregates, the <c>anyLast</c> row-picking
 /// aggregate, the sequence/funnel aggregates <c>windowFunnel</c>/<c>retention</c>/<c>sequenceMatch</c>,
 /// the frame-respecting <c>lagInFrame</c>/<c>leadInFrame</c> window functions, the multi-branch
 /// <c>multiIf</c> conditional (through <see cref="when{T}(bool, T)"/>/<see cref="otherwise{T}(T)"/>),
 /// the string-JSON <c>JSONExtract*</c>/<c>JSONHas</c> and <c>visitParamExtract*</c> families
-/// plus the JSONPath <c>json_value</c>/<c>json_query</c>/<c>json_exists</c> scalars,
+/// plus the JSONPath <c>json_value</c>/<c>json_query</c>/<c>json_exists</c> scalars and the native-JSON
+/// <c>JSONAllPaths</c>/<c>JSONAllPathsWithTypes</c>/<c>toJSONString</c> functions,
 /// the dictionary functions, the <c>-If</c> aggregate combinator, the distributed <c>global_in</c>
 /// predicate, the <c>numbers</c>/<c>numbers_mt</c> and <c>zeros</c>/<c>zeros_mt</c> table functions
-/// (plus <c>generateRandom</c>),
+/// (plus <c>generateRandom</c>) and the server/cluster table functions
+/// (<c>url</c>/<c>s3</c>/<c>file</c>/<c>remote</c>/<c>remoteSecure</c>/<c>cluster</c>/<c>clusterAllReplicas</c>),
 /// the date conversion/part surface (<c>toDate</c>/<c>toDateTime</c>/<c>toDate32</c>, the
 /// <c>toYear</c>/... accessors, <c>toStartOf*</c>, <c>toMonday</c>, <c>toYYYYMM</c>/<c>toYYYYMMDD</c>,
 /// <c>toUnixTimestamp</c>),
 /// and the array functions over array columns and expressions (<c>arrayJoin</c>, <c>length</c>,
-/// <c>has</c>, <c>indexOf</c>, <c>hasAny</c>/<c>hasAll</c>, <c>arrayStringConcat</c>,
+/// <c>has</c>, <c>indexOf</c>, <c>hasAny</c>/<c>hasAll</c>, <c>startsWith</c>/<c>endsWith</c>/<c>hasSubstr</c>,
+/// <c>arrayStringConcat</c>,
 /// <c>splitByChar</c>, <c>arraySort</c>, <c>arrayReverse</c>, <c>arrayDistinct</c>, <c>range</c>,
-/// <c>arrayEnumerate</c>, <c>arrayCumSum</c>, <c>arraySlice</c>, <c>arrayPushBack</c>).
+/// <c>arrayEnumerate</c>, <c>arrayCumSum</c>, <c>arraySlice</c>, <c>arrayPushBack</c>), the
+/// higher-order (lambda) array functions (<c>arrayMap</c>, <c>arrayFilter</c>, <c>arrayExists</c>,
+/// <c>arrayAll</c>, <c>arrayCount</c>, <c>arrayFirst*</c>, <c>arrayLast*</c>) plus the
+/// array-returning aggregates <c>groupArray</c>/<c>groupUniqArray</c>.
 /// Exposed through <see cref="SqlFunctions.ClickHouse"/>; every member is gated by a capability flag
 /// and rejected by providers that do not opt in.
 /// </summary>
@@ -87,6 +94,31 @@ namespace NextORM.Core;
         public double? median<T>(T? value) => default!;
 
         /// <summary>
+        /// <c>quantiles(level1, level2, ...)(value)</c>: the approximate quantiles at every
+        /// <paramref name="levels"/> value in one pass. The native result is <c>Array(Float64)</c>,
+        /// surfaced as <c>double[]</c> and projected directly. Requires a provider that supports the
+        /// quantile family (see <see cref="ISqlDialect.QuantileAggregates"/>; ClickHouse). The levels
+        /// must be an inline array; a captured array is rejected.
+        /// </summary>
+        public double[] quantiles<T>(double[] levels, T? value) => default!;
+
+        /// <summary>
+        /// <c>topK(k)(value)</c>: the approximately most frequent values, sorted by descending
+        /// approximate frequency. The native result is <c>Array(T)</c>, surfaced as <c>T[]</c> and
+        /// projected directly (or used as the operand of an array function such as
+        /// <see cref="array_sort{T}(T[])"/>). Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.TopKAggregates"/>; ClickHouse). The result is approximate.
+        /// </summary>
+        public T[] top_k<T>(long k, T? value) => default!;
+
+        /// <summary>
+        /// <c>topKWeighted(k)(value, weight)</c>: the values with the largest approximate sum of
+        /// <paramref name="weight"/>, surfaced as <c>T[]</c>. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.TopKAggregates"/>; ClickHouse). The result is approximate.
+        /// </summary>
+        public T[] top_k_weighted<T, TWeight>(long k, T? value, TWeight? weight) => default!;
+
+        /// <summary>
         /// <c>anyLast(value)</c>: the <paramref name="value"/> of an arbitrary last row. Requires a
         /// provider that supports it (see <see cref="ISqlDialect.SupportsAnyAggregates"/>; ClickHouse).
         /// The arbitrary-value aggregate without the last-row restriction is the cross-provider
@@ -114,13 +146,31 @@ namespace NextORM.Core;
 
         /// <summary>
         /// <c>retention(cond1, cond2, ...)</c>: the 1/0 condition mask (the first condition, then the
-        /// first-and-second, and so on). Returns an array, so it can only be used as the operand of
-        /// another array function (for example <see cref="length{T}(T[])"/> or
+        /// first-and-second, and so on). Returns an array, so it can be projected directly or used as
+        /// the operand of another array function (for example <see cref="length{T}(T[])"/> or
         /// <see cref="array_string_concat{T}(T[], string?)"/>). Requires a provider that supports it (see
         /// <see cref="ISqlDialect.SequenceAggregates"/>; ClickHouse). The conditions must be
         /// inline expressions.
         /// </summary>
         public int[] retention(params bool[] conditions) => default!;
+
+        /// <summary>
+        /// <c>groupArray(value)</c>: aggregates the values of a group into an array. The native result
+        /// is <c>Array(T)</c>, surfaced as <c>T[]</c> and projected directly (or used as the operand of
+        /// an array function such as <see cref="array_sort{T}(T[])"/>). Requires a provider that
+        /// supports the array surface (see <see cref="ISqlDialect.SupportsArrayFunctions"/>; ClickHouse).
+        /// The element order is unspecified; sort or concatenate in SQL for a stable result.
+        /// </summary>
+        public T[] group_array<T>(T? value) => default!;
+
+        /// <summary>
+        /// <c>groupUniqArray(value)</c>: aggregates the distinct values of a group into an array. The
+        /// native result is <c>Array(T)</c>, surfaced as <c>T[]</c> and projected directly. Requires a
+        /// provider that supports the array surface (see
+        /// <see cref="ISqlDialect.SupportsArrayFunctions"/>; ClickHouse). The element order is
+        /// unspecified.
+        /// </summary>
+        public T[] group_uniq_array<T>(T? value) => default!;
 
         /// <summary>
         /// <c>JSONExtractString(json, path)</c>: the string at <paramref name="path"/>. JSON is stored in
@@ -140,6 +190,40 @@ namespace NextORM.Core;
 
         /// <summary><c>JSONExtractRaw(json, path)</c>: the raw JSON fragment (object/array) at <paramref name="path"/>.</summary>
         public string? json_extract_raw(string? json, string? path) => default!;
+
+        /// <summary>
+        /// <c>JSONExtractKeys(json)</c>: the object keys, surfaced as <c>string[]</c> and projected
+        /// directly (or used as the operand of another array function). Requires a provider that
+        /// supports the string-JSON family (see <see cref="ISqlDialect.SupportsJsonExtract"/>;
+        /// ClickHouse).
+        /// </summary>
+        public string[] json_extract_keys(string? json) => default!;
+
+        /// <summary><c>JSONExtractKeys(json, path)</c>: as <see cref="json_extract_keys(string?)"/> at <paramref name="path"/>.</summary>
+        public string[] json_extract_keys(string? json, string? path) => default!;
+
+        /// <summary>
+        /// <c>JSONExtractArrayRaw(json)</c>: the array elements, each as raw JSON text, surfaced as
+        /// <c>string[]</c> and projected directly. Requires a provider that supports the string-JSON
+        /// family (see <see cref="ISqlDialect.SupportsJsonExtract"/>; ClickHouse).
+        /// </summary>
+        public string[] json_extract_array_raw(string? json) => default!;
+
+        /// <summary><c>JSONExtractArrayRaw(json, path)</c>: as <see cref="json_extract_array_raw(string?)"/> at <paramref name="path"/>.</summary>
+        public string[] json_extract_array_raw(string? json, string? path) => default!;
+
+        /// <summary>
+        /// <c>JSONExtractKeysAndValues(json, value_type)</c>: the object key/value pairs, surfaced as
+        /// <c>Tuple&lt;string, T&gt;[]</c> and projected directly. Requires a provider that supports the
+        /// string-JSON family (see <see cref="ISqlDialect.SupportsJsonExtract"/>; ClickHouse).
+        /// </summary>
+        /// <typeparam name="T">The ClickHouse value type, named in SQL through the dialect type map; it
+        /// must be a non-nullable CLR type.</typeparam>
+        public Tuple<string, T>[] json_extract_keys_and_values<T>(string? json) => default!;
+
+        /// <summary><c>JSONExtractKeysAndValues(json, path, value_type)</c>: as <see cref="json_extract_keys_and_values{T}(string?)"/> at <paramref name="path"/>.</summary>
+        /// <typeparam name="T">The ClickHouse value type; it must be a non-nullable CLR type.</typeparam>
+        public Tuple<string, T>[] json_extract_keys_and_values<T>(string? json, string? path) => default!;
 
         /// <summary><c>JSONHas(json, path)</c>: true when <paramref name="path"/> exists.</summary>
         public bool json_has(string? json, string? path) => default!;
@@ -162,6 +246,34 @@ namespace NextORM.Core;
 
         /// <summary><c>JSON_EXISTS(json, path)</c>: true when the JSONPath <paramref name="path"/> exists.</summary>
         public bool json_exists(string? json, string? path) => default!;
+
+        /// <summary>
+        /// <c>JSONAllPaths(json)</c>: the list of paths stored in the native ClickHouse <c>JSON</c>
+        /// value. The native result is <c>Array(String)</c>, surfaced as <c>string[]</c> and projected
+        /// directly (or used as the operand of an array function such as
+        /// <see cref="length{T}(T[])"/>). <paramref name="json"/> must be a native ClickHouse <c>JSON</c>
+        /// value; a <c>String</c> column needs <c>CAST(col AS JSON)</c> first. Requires a provider that
+        /// supports the JSON functions (see <see cref="ISqlDialect.SupportsJsonExtract"/>; ClickHouse).
+        /// </summary>
+        public string[] json_all_paths(string? json) => default!;
+
+        /// <summary>
+        /// <c>JSONAllPathsWithTypes(json)</c>: the paths stored in the native ClickHouse <c>JSON</c>
+        /// value together with their data types. The native result is <c>Map(String, String)</c>,
+        /// surfaced as <c>Dictionary&lt;string, string&gt;</c> and projected directly; use ClickHouse
+        /// <c>mapKeys</c>/<c>mapValues</c> to turn it into a collection. <paramref name="json"/> must be
+        /// a native ClickHouse <c>JSON</c> value; a <c>String</c> column needs <c>CAST(col AS JSON)</c>
+        /// first. Requires a provider that supports the JSON functions (see
+        /// <see cref="ISqlDialect.SupportsJsonExtract"/>; ClickHouse).
+        /// </summary>
+        public Dictionary<string, string> json_all_paths_with_types(string? json) => default!;
+
+        /// <summary>
+        /// <c>toJSONString(value)</c>: serialises <paramref name="value"/> to its JSON text
+        /// representation. Requires a provider that supports the JSON functions (see
+        /// <see cref="ISqlDialect.SupportsJsonExtract"/>; ClickHouse).
+        /// </summary>
+        public string? to_json_string<T>(T? value) => default!;
 
         /// <summary>
         /// <c>visitParamExtractString(json, name)</c>: the string value of the flat <paramref name="name"/>
@@ -195,6 +307,28 @@ namespace NextORM.Core;
 
         /// <summary><c>dictHas('dict', id)</c>: true when the dictionary contains <paramref name="id"/>.</summary>
         public bool dict_has<TKey>(string? dict, TKey? id) => default!;
+
+        /// <summary>
+        /// <c>dictGetHierarchy('dict', key)</c>: the key and all its parents in a hierarchical dictionary,
+        /// from the key up to the root. Requires a provider that supports dictionaries (see
+        /// <see cref="ISqlDialect.SupportsDictionaries"/>; ClickHouse).
+        /// </summary>
+        public ulong[] dict_get_hierarchy<TKey>(string? dict, TKey? id) => default!;
+
+        /// <summary>
+        /// <c>dictGetChildren('dict', key)</c>: the first-level children of <paramref name="id"/> in a
+        /// hierarchical dictionary. Requires a provider that supports dictionaries (see
+        /// <see cref="ISqlDialect.SupportsDictionaries"/>; ClickHouse).
+        /// </summary>
+        public ulong[] dict_get_children<TKey>(string? dict, TKey? id) => default!;
+
+        /// <summary>
+        /// <c>dictIsIn('dict', child, ancestor)</c>: true when <paramref name="childId"/> is
+        /// <paramref name="ancestorId"/> or a descendant of it in a hierarchical dictionary. Requires a
+        /// provider that supports dictionaries (see <see cref="ISqlDialect.SupportsDictionaries"/>;
+        /// ClickHouse).
+        /// </summary>
+        public bool dict_is_in<TKey>(string? dict, TKey? childId, TKey? ancestorId) => default!;
 
         /// <summary>
         /// <c>column GLOBAL IN (subquery)</c>: like <c>IN</c>, but the right-hand result is sent to every
@@ -271,6 +405,76 @@ namespace NextORM.Core;
         public IQueryable<SqlFunctions.IGenerateRandomRow> generate_random(long seed) => throw new NotSupportedException();
 
         /// <summary>
+        /// <c>url(url, format, structure)</c> as a FROM source: reads the resource at
+        /// <paramref name="url"/> in <paramref name="format"/> with the column layout
+        /// <paramref name="structure"/> (for example <c>'id UInt64, name String'</c>). The row shape is
+        /// declared by the caller through <typeparamref name="TRow"/>, whose <c>[Column]</c> names must
+        /// match <paramref name="structure"/>. Requires a provider that supports table functions (see
+        /// <see cref="ISqlDialect.SupportsTableFunction"/>; ClickHouse). Use through
+        /// <see cref="DataContextExtensions.FromTableFunction{T}(IDataContext, System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{T}}})"/>.
+        /// The URL selects the backend: an HTTP(S) URL is fetched directly, a recognised non-HTTP
+        /// scheme (<c>file://</c>, <c>s3://</c>, …) is delegated to the matching function.
+        /// </summary>
+        [SqlTableFunction("url")]
+        public IQueryable<TRow> url<TRow>(string url, string format, string structure) => throw new NotSupportedException();
+
+        /// <summary>
+        /// <c>s3(url, format, structure)</c> as a FROM source: reads an object from Amazon S3 or Google
+        /// Cloud Storage in the given <paramref name="format"/> and column layout; the row shape is
+        /// declared by the caller through <typeparamref name="TRow"/>. Requires a provider that supports
+        /// table functions (see <see cref="ISqlDialect.SupportsTableFunction"/>; ClickHouse). Credentials
+        /// are taken from the server configuration or a named collection; do not pass secrets in the URL.
+        /// </summary>
+        [SqlTableFunction("s3")]
+        public IQueryable<TRow> s3<TRow>(string url, string format, string structure) => throw new NotSupportedException();
+
+        /// <summary>
+        /// <c>file(path, format, structure)</c> as a FROM source: reads a file under the server's
+        /// <c>user_files_path</c> in the given <paramref name="format"/> and column layout; the row shape
+        /// is declared by the caller through <typeparamref name="TRow"/>. Requires a provider that
+        /// supports table functions (see <see cref="ISqlDialect.SupportsTableFunction"/>; ClickHouse).
+        /// The path is resolved by the server and is not a client filesystem path.
+        /// </summary>
+        [SqlTableFunction("file")]
+        public IQueryable<TRow> file<TRow>(string path, string format, string structure) => throw new NotSupportedException();
+
+        /// <summary>
+        /// <c>remote(addresses, database, table)</c> as a FROM source: reads <paramref name="table"/> from
+        /// the ClickHouse server(s) at <paramref name="addresses"/> (comma-separated <c>host[:port]</c>
+        /// list) without creating a distributed table. The row shape is declared by the caller through
+        /// <typeparamref name="TRow"/> and must match the remote table. Requires a provider that supports
+        /// table functions (see <see cref="ISqlDialect.SupportsTableFunction"/>; ClickHouse). Credentials
+        /// come from the server's <c>remote_servers</c> configuration, never from query arguments.
+        /// </summary>
+        [SqlTableFunction("remote")]
+        public IQueryable<TRow> remote<TRow>(string addresses, string database, string table) => throw new NotSupportedException();
+
+        /// <summary>
+        /// <c>remoteSecure(addresses, database, table)</c> as a FROM source: the TLS counterpart of
+        /// <see cref="remote{TRow}(string, string, string)"/> (default secure port 9440).
+        /// </summary>
+        [SqlTableFunction("remoteSecure")]
+        public IQueryable<TRow> remote_secure<TRow>(string addresses, string database, string table) => throw new NotSupportedException();
+
+        /// <summary>
+        /// <c>cluster(cluster, database, table)</c> as a FROM source: reads <paramref name="table"/> from
+        /// one replica of each shard of the configured <paramref name="cluster"/>. The row shape is
+        /// declared by the caller through <typeparamref name="TRow"/>. Requires a provider that supports
+        /// table functions (see <see cref="ISqlDialect.SupportsTableFunction"/>; ClickHouse). Connection
+        /// settings and credentials come from the server's <c>remote_servers</c> configuration.
+        /// </summary>
+        [SqlTableFunction("cluster")]
+        public IQueryable<TRow> cluster<TRow>(string cluster, string database, string table) => throw new NotSupportedException();
+
+        /// <summary>
+        /// <c>clusterAllReplicas(cluster, database, table)</c> as a FROM source: like
+        /// <see cref="cluster{TRow}(string, string, string)"/> but queries every replica of every shard as
+        /// a separate connection.
+        /// </summary>
+        [SqlTableFunction("clusterAllReplicas")]
+        public IQueryable<TRow> cluster_all_replicas<TRow>(string cluster, string database, string table) => throw new NotSupportedException();
+
+        /// <summary>
         /// <c>arrayJoin(array)</c>: expands the array into one row per element. Requires a provider that
         /// supports it (see <see cref="ISqlDialect.SupportsArrayJoin"/>; ClickHouse). The expanded value
         /// can be projected and filtered like a scalar column.
@@ -295,52 +499,71 @@ namespace NextORM.Core;
         /// <summary><c>hasAll(array, other)</c>: true when every element of <paramref name="other"/> is in <paramref name="array"/>.</summary>
         public bool has_all<T>(T[] array, T[] other) => default!;
 
+        /// <summary>
+        /// <c>startsWith(array, prefix)</c>: true when <paramref name="array"/> begins with the
+        /// <paramref name="prefix"/> elements, in order. Requires a provider that supports array
+        /// functions (see <see cref="ISqlDialect.SupportsArrayFunctions"/>; ClickHouse).
+        /// </summary>
+        public bool starts_with<T>(T[] array, T[] prefix) => default!;
+
+        /// <summary><c>endsWith(array, suffix)</c>: true when <paramref name="array"/> ends with the <paramref name="suffix"/> elements, in order.</summary>
+        public bool ends_with<T>(T[] array, T[] suffix) => default!;
+
+        /// <summary>
+        /// <c>hasSubstr(array, other)</c>: true when the elements of <paramref name="other"/> appear in
+        /// <paramref name="array"/> contiguously and in the same order (an empty <paramref name="other"/>
+        /// is always contained). Requires a provider that supports array functions (see
+        /// <see cref="ISqlDialect.SupportsArrayFunctions"/>; ClickHouse).
+        /// </summary>
+        public bool has_substr<T>(T[] array, T[] other) => default!;
+
         /// <summary><c>arrayStringConcat(array, delimiter)</c>: joins the elements into one string (default separator is the empty string).</summary>
         public string array_string_concat<T>(T[] array, string? delimiter = null) => default!;
 
-        /// <summary><c>splitByChar(separator, value)</c>: splits the string by a single-character separator. Returns an array, so it can only be used as the operand of another array function.</summary>
+        /// <summary><c>splitByChar(separator, value)</c>: splits the string by a single-character separator. Returns an array, so it can be projected directly or used as the operand of another array function.</summary>
         public string[] split_by_char(string? separator, string? value) => default!;
 
-        /// <summary><c>arraySort(array)</c>: the elements in ascending order. Returns an array, so it can only be used as the operand of another array function.</summary>
+        /// <summary><c>arraySort(array)</c>: the elements in ascending order. Returns an array, so it can be projected directly or used as the operand of another array function.</summary>
         public T[] array_sort<T>(T[] array) => default!;
 
-        /// <summary><c>arrayReverse(array)</c>: the elements in reverse order. Returns an array, so it can only be used as the operand of another array function.</summary>
+        /// <summary><c>arrayReverse(array)</c>: the elements in reverse order. Returns an array, so it can be projected directly or used as the operand of another array function.</summary>
         public T[] array_reverse<T>(T[] array) => default!;
 
-        /// <summary><c>arrayDistinct(array)</c>: the distinct elements. Returns an array, so it can only be used as the operand of another array function.</summary>
+        /// <summary><c>arrayDistinct(array)</c>: the distinct elements. Returns an array, so it can be projected directly or used as the operand of another array function.</summary>
         public T[] array_distinct<T>(T[] array) => default!;
 
         /// <summary>
         /// <c>range(end)</c>: the integers from <c>0</c> up to (but excluding) <paramref name="end"/>.
-        /// Returns an array, so it can only be used as the operand of another array function (for
+        /// Returns an array, so it can be projected directly or used as the operand of another array
+        /// function (for
         /// example <see cref="length{T}(T[])"/> or <see cref="array_string_concat{T}(T[], string?)"/>).
         /// Requires a provider that supports array functions (see
         /// <see cref="ISqlDialect.SupportsArrayFunctions"/>; ClickHouse).
         /// </summary>
         public long[] range(long end) => default!;
 
-        /// <summary><c>range(start, end)</c>: the integers in <c>[start, end)</c>. Returns an array, so it can only be used nested.</summary>
+        /// <summary><c>range(start, end)</c>: the integers in <c>[start, end)</c>. Returns an array, so it can be projected directly or nested.</summary>
         public long[] range(long start, long end) => default!;
 
-        /// <summary><c>range(start, end, step)</c>: the integers in <c>[start, end)</c> with the given step. Returns an array, so it can only be used nested.</summary>
+        /// <summary><c>range(start, end, step)</c>: the integers in <c>[start, end)</c> with the given step. Returns an array, so it can be projected directly or nested.</summary>
         public long[] range(long start, long end, long step) => default!;
 
         /// <summary>
         /// <c>arrayEnumerate(array)</c>: the one-based positions <c>[1, 2, ..., length(array)]</c>.
-        /// Returns an array, so it can only be used as the operand of another array function.
+        /// Returns an array, so it can be projected directly or used as the operand of another array function.
         /// </summary>
         public long[] array_enumerate<T>(T[] array) => default!;
 
         /// <summary>
-        /// <c>arrayCumSum(array)</c>: the running sums of the elements. Returns an array, so it can
-        /// only be used as the operand of another array function.
+        /// <c>arrayCumSum(array)</c>: the running sums of the elements. Returns an array, so it can be
+        /// projected directly or used as the operand of another array function.
         /// </summary>
         public T[] array_cum_sum<T>(T[] array) => default!;
 
         /// <summary>
         /// <c>arraySlice(array, offset)</c>: the elements from the one-based <paramref name="offset"/>
-        /// to the end (a negative offset counts from the end). Returns an array, so it can only be used
-        /// as the operand of another array function.
+        /// to the end (a negative offset counts from the end). Returns an array, so it can be projected
+        /// directly or used as the operand of another array function.
         /// </summary>
         public T[] array_slice<T>(T[] array, long offset) => default!;
 
@@ -349,9 +572,78 @@ namespace NextORM.Core;
 
         /// <summary>
         /// <c>arrayPushBack(array, element)</c>: the array with <paramref name="element"/> appended.
-        /// Returns an array, so it can only be used as the operand of another array function.
+        /// Returns an array, so it can be projected directly or used as the operand of another array function.
         /// </summary>
         public T[] array_push_back<T>(T[] array, T element) => default!;
+
+        /// <summary>
+        /// <c>arrayMap(function, array)</c>: the array of the lambda results. Requires a provider that
+        /// translates the higher-order array functions (see
+        /// <see cref="ISqlDialect.SupportsHigherOrderArrayFunctions"/>; ClickHouse). The lambda body may
+        /// use its parameter in operators and function calls; member access on the parameter is not
+        /// supported.
+        /// </summary>
+        public TOut[] array_map<TIn, TOut>(Expression<Func<TIn, TOut>> function, TIn[] array) => default!;
+
+        /// <summary>
+        /// <c>arrayFilter(predicate, array)</c>: the elements for which the lambda returns true.
+        /// Requires a provider that supports the higher-order array functions (see
+        /// <see cref="ISqlDialect.SupportsHigherOrderArrayFunctions"/>; ClickHouse).
+        /// </summary>
+        public T[] array_filter<T>(Expression<Func<T, bool>> predicate, T[] array) => default!;
+
+        /// <summary>
+        /// <c>arrayExists(predicate, array)</c>: true when the lambda returns true for at least one
+        /// element. Requires a provider that supports the higher-order array functions (see
+        /// <see cref="ISqlDialect.SupportsHigherOrderArrayFunctions"/>; ClickHouse).
+        /// </summary>
+        public bool array_exists<T>(Expression<Func<T, bool>> predicate, T[] array) => default!;
+
+        /// <summary>
+        /// <c>arrayAll(predicate, array)</c>: true when the lambda returns true for every element.
+        /// Requires a provider that supports the higher-order array functions (see
+        /// <see cref="ISqlDialect.SupportsHigherOrderArrayFunctions"/>; ClickHouse).
+        /// </summary>
+        public bool array_all<T>(Expression<Func<T, bool>> predicate, T[] array) => default!;
+
+        /// <summary>
+        /// <c>arrayCount(predicate, array)</c>: the number of elements for which the lambda returns
+        /// true. Requires a provider that supports the higher-order array functions (see
+        /// <see cref="ISqlDialect.SupportsHigherOrderArrayFunctions"/>; ClickHouse).
+        /// </summary>
+        public long array_count<T>(Expression<Func<T, bool>> predicate, T[] array) => default!;
+
+        /// <summary>
+        /// <c>arrayFirst(predicate, array)</c>: the first element for which the lambda returns true,
+        /// or the default value of <typeparamref name="T"/> when there is none. Requires a provider
+        /// that supports the higher-order array functions (see
+        /// <see cref="ISqlDialect.SupportsHigherOrderArrayFunctions"/>; ClickHouse).
+        /// </summary>
+        public T? array_first<T>(Expression<Func<T, bool>> predicate, T[] array) => default!;
+
+        /// <summary>
+        /// <c>arrayFirstIndex(predicate, array)</c>: the one-based index of the first element for
+        /// which the lambda returns true, or <c>0</c> when there is none. Requires a provider that
+        /// supports the higher-order array functions (see
+        /// <see cref="ISqlDialect.SupportsHigherOrderArrayFunctions"/>; ClickHouse).
+        /// </summary>
+        public long array_first_index<T>(Expression<Func<T, bool>> predicate, T[] array) => default!;
+
+        /// <summary>
+        /// <c>arrayLast(predicate, array)</c>: the last element for which the lambda returns true, or
+        /// the default value of <typeparamref name="T"/> when there is none. Requires a provider that
+        /// supports the higher-order array functions (see
+        /// <see cref="ISqlDialect.SupportsHigherOrderArrayFunctions"/>; ClickHouse).
+        /// </summary>
+        public T? array_last<T>(Expression<Func<T, bool>> predicate, T[] array) => default!;
+
+        /// <summary>
+        /// <c>arrayLastIndex(predicate, array)</c>: the one-based index of the last element for which
+        /// the lambda returns true, or <c>0</c> when there is none. Requires a provider that supports
+        /// the higher-order array functions (see
+        /// <see cref="ISqlDialect.SupportsHigherOrderArrayFunctions"/>; ClickHouse).
+        /// </summary>
+        public long array_last_index<T>(Expression<Func<T, bool>> predicate, T[] array) => default!;
 
         /// <summary>
         /// <c>toDate(value)</c>: converts a string or date/time value to a <c>Date</c>. Requires a

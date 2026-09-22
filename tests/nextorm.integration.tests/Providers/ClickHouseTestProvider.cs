@@ -71,11 +71,17 @@ internal sealed class ClickHouseTestProvider : ITestProvider
     [
         "drop table if exists simple_entity",
         "drop table if exists complex_entity",
+        "drop table if exists wide_entity",
 
         """
         create table simple_entity (id Int32) engine = Memory
         """,
         "insert into simple_entity (id) values (1),(2),(3),(4),(5),(6),(7),(8),(9),(10)",
+
+        """
+        create table wide_entity (id Int32, regionid UInt64, note String) engine = Memory
+        """,
+        "insert into wide_entity (id, regionid, note) values (1, 10, 'a'), (2, 20, 'b'), (3, 30, 'c')",
 
         """
         create table complex_entity
@@ -132,6 +138,50 @@ internal sealed class ClickHouseTestProvider : ITestProvider
             (2, '2023-01-01 00:01:00', 2),
             (3, '2023-01-01 00:02:00', 3),
             (4, '2023-01-01 00:03:00', 2)
+        """,
+
+        "drop table if exists uint64_entity",
+        """
+        create table uint64_entity
+        (
+            id UInt64,
+            value UInt64,
+            maybe Nullable(UInt64)
+        ) engine = Memory
+        """,
+        """
+        insert into uint64_entity (id, value, maybe) values
+            (1, 18446744073709551615, 18446744073709551615),
+            (2, 0, NULL),
+            (3, 42, 7)
+        """,
+
+        "drop table if exists json_entity",
+        """
+        create table json_entity
+        (
+            id Int32,
+            doc JSON
+        ) engine = Memory
+        """,
+        """
+        insert into json_entity (id, doc) values
+            (1, '{"name":"alice","age":30,"nested":{"x":1}}'),
+            (2, '{"flag":true,"list":[1,2,3]}')
+        """,
+
+        "drop table if exists tuple_entity",
+        """
+        create table tuple_entity
+        (
+            id Int32,
+            pair Tuple(Int32, String)
+        ) engine = Memory
+        """,
+        """
+        insert into tuple_entity (id, pair) values
+            (1, (7, 'seven')),
+            (2, (9, 'nine'))
         """
     ];
 }

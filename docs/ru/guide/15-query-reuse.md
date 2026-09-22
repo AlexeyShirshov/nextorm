@@ -1,21 +1,21 @@
-# Повторное использование запросов: кэш планов и [`Prepare`](xref:NextORM.Core.EntityBuilder`1)
+# Повторное использование запросов: кэш планов и [`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},System.Boolean,System.Threading.CancellationToken))
 
-> Сохраняйте SQL и построчный маппер для «горячего» запроса вместо их пересборки при каждом вызове — либо через неявный кэш планов, используемый каждым терминалом, либо через явный [`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1), возвращаемый [`Prepare`](xref:NextORM.Core.EntityBuilder`1).
+> Сохраняйте SQL и построчный маппер для «горячего» запроса вместо их пересборки при каждом вызове — либо через неявный кэш планов, используемый каждым терминалом, либо через явный [`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1), возвращаемый [`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},System.Boolean,System.Threading.CancellationToken)).
 
 **Предварительные требования:** [Quickstart](../getting-started/02-quickstart.md) · [Entities and metadata](../getting-started/03-entities-and-metadata.md) · [Dependency injection](../getting-started/04-dependency-injection.md).
 
 ## Обзор
 
-Каждый терминал, такой как [`ToListAsync`](xref:NextORM.Core.EntityBuilder`1), делает несколько вещей: превращает построенный во fluent-стиле [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) в SQL и построчный маппер, подготавливает [`DbCommand`](xref:NextORM.Core.DbPreparedQueryCommand`1.DbCommand) и читает результат. Два независимых механизма позволяют оплатить первую часть лишь один раз:
+Каждый терминал, такой как [`ToListAsync`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])), делает несколько вещей: превращает построенный во fluent-стиле [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) в SQL и построчный маппер, подготавливает [`DbCommand`](xref:NextORM.Core.DbPreparedQueryCommand`1.DbCommand) и читает результат. Два независимых механизма позволяют оплатить первую часть лишь один раз:
 
 * **неявный кэш планов** — автоматический, с ключом по структурной форме запроса;
-* **[`Prepare`](xref:NextORM.Core.EntityBuilder`1)** — явный, возвращает [`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1), который вы храните и выполняете сами.
+* **[`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},System.Boolean,System.Threading.CancellationToken))** — явный, возвращает [`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1), который вы храните и выполняете сами.
 
 Их легко спутать, потому что внешне они похожи. Они различаются ключом, временем жизни, потокобезопасностью и тем, заполняют ли они кэш:
 
-| | Неявный кэш планов | Явный [`Prepare`](xref:NextORM.Core.EntityBuilder`1) |
+| | Неявный кэш планов | Явный [`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},System.Boolean,System.Threading.CancellationToken)) |
 |---|---|---|
-| Точка входа | любой терминал на [`EntityBuilder`](xref:NextORM.Core.EntityBuilder) / [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) ([`ToList`](xref:NextORM.Core.EntityBuilder`1), [`ToListAsync`](xref:NextORM.Core.EntityBuilder`1), [`ToAsyncEnumerable`](xref:NextORM.Core.EntityBuilder`1), ...) | [`Prepare`](xref:NextORM.Core.QueryCommand`1) / `EntityBuilder<T>.Prepare()` |
+| Точка входа | любой терминал на [`EntityBuilder`](xref:NextORM.Core.EntityBuilder) / [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) ([`ToList`](xref:NextORM.Core.EntityBuilderExtensions.ToList``1(NextORM.Core.EntityBuilder{``0},System.ReadOnlySpan{System.Object})), [`ToListAsync`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])), [`ToAsyncEnumerable`](xref:NextORM.Core.EntityBuilderExtensions.ToAsyncEnumerable``1(NextORM.Core.EntityBuilder{``0},System.Object[])), ...) | [`Prepare`](xref:NextORM.Core.QueryCommand`1.Prepare(System.Boolean,System.Threading.CancellationToken)) / `EntityBuilder<T>.Prepare()` |
 | Ключ поиска | структурный хеш формы запроса | отсутствует — вы храните возвращённую команду |
 | Время жизни | до `PurgeQueryCache()` или завершения процесса | пока вы храните ссылку |
 | Область действия | **на поток**, разделяется всеми [`IDataContext`](xref:NextORM.Core.IDataContext) в этом потоке | экземпляр, который вы храните |
@@ -23,7 +23,7 @@
 | Безопасен для конкурентного использования | да, по построению (запись на поток) | **нет** (один изменяемый [`DbCommand`](xref:NextORM.Core.DbPreparedQueryCommand`1.DbCommand) и перечислитель) |
 | Потоковый (`IAsyncEnumerable`) | да | только с `nonStreamUsing: false` |
 
-На этой странице описаны API и правила кэширования. Измеренная стоимость каждого варианта и обоснование выбора одного из них приведены в [Prepared vs cached](../../specs/performance/prepared-vs-cached.md) и здесь не повторяются.
+На этой странице описаны API и правила кэширования; измеренная стоимость каждого варианта здесь не повторяется.
 
 ## Терминалы на [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1)
 
@@ -33,14 +33,14 @@
 
 | Терминал | Возвращает |
 |---|---|
-| [`ToList`](xref:NextORM.Core.EntityBuilder`1) / `ToList(params ReadOnlySpan<object?>)` | `List<TResult>` |
+| [`ToList`](xref:NextORM.Core.EntityBuilderExtensions.ToList``1(NextORM.Core.EntityBuilder{``0},System.ReadOnlySpan{System.Object})) / `ToList(params ReadOnlySpan<object?>)` | `List<TResult>` |
 | `ToListAsync(...)` (необязательный `CancellationToken`, необязательный `params object[]`) | `Task<List<TResult>>` |
-| [`First`](xref:NextORM.Core.EntityBuilder`1) / `FirstAsync(...)` | `TResult` |
-| [`FirstOrDefault`](xref:NextORM.Core.EntityBuilder`1) / `FirstOrDefaultAsync(...)` | `TResult?` |
-| [`Single`](xref:NextORM.Core.EntityBuilder`1) / `SingleAsync(...)` | `TResult` |
-| [`SingleOrDefault`](xref:NextORM.Core.EntityBuilder`1) / `SingleOrDefaultAsync(...)` | `TResult?` |
-| [`Any`](xref:NextORM.Core.EntityBuilder`1) / `AnyAsync(...)` | `bool` |
-| [`ExecuteScalar`](xref:NextORM.Core.QueryCommand`1) / `ExecuteScalarAsync(...)` | `TResult?` |
+| [`First`](xref:NextORM.Core.EntityBuilderExtensions.First``1(NextORM.Core.EntityBuilder{``0})) / `FirstAsync(...)` | `TResult` |
+| [`FirstOrDefault`](xref:NextORM.Core.EntityBuilderExtensions.FirstOrDefault``1(NextORM.Core.EntityBuilder{``0})) / `FirstOrDefaultAsync(...)` | `TResult?` |
+| [`Single`](xref:NextORM.Core.EntityBuilderExtensions.Single``1(NextORM.Core.EntityBuilder{``0})) / `SingleAsync(...)` | `TResult` |
+| [`SingleOrDefault`](xref:NextORM.Core.EntityBuilderExtensions.SingleOrDefault``1(NextORM.Core.EntityBuilder{``0})) / `SingleOrDefaultAsync(...)` | `TResult?` |
+| [`Any`](xref:NextORM.Core.EntityBuilderExtensions.Any``1(NextORM.Core.EntityBuilder{``0})) / `AnyAsync(...)` | `bool` |
+| [`ExecuteScalar`](xref:NextORM.Core.QueryCommand`1.ExecuteScalar(System.ReadOnlySpan{System.Object})) / `ExecuteScalarAsync(...)` | `TResult?` |
 
 Потоковые:
 
@@ -52,7 +52,7 @@
 | `CreateAsyncEnumerator(...)` | `IAsyncEnumerator<TResult>` |
 | `CreateEnumeratorAsync(...)` | `Task<IEnumerator<TResult>>` |
 
-`params object[]` (или `ReadOnlySpan<object?>`), принимаемые терминалами, несут значения времени выполнения для плейсхолдеров [`Parameter`](xref:NextORM.Core.SqlFunctions) в запросе.
+`params object[]` (или `ReadOnlySpan<object?>`), принимаемые терминалами, несут значения времени выполнения для плейсхолдеров [`Parameter`](xref:NextORM.Core.SqlFunctions.Parameter``1(System.Int32)) в запросе.
 
 ```csharp
 using var ctx = new SqliteDataContext("Data Source=app.db", new DataContextBuilder());
@@ -82,9 +82,9 @@ for (var i = 0; i < 2; i++)
 
 Обе итерации переиспользуют одну и ту же запись кэша.
 
-## Явный [`Prepare`](xref:NextORM.Core.EntityBuilder`1)
+## Явный [`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},System.Boolean,System.Threading.CancellationToken))
 
-[`Prepare`](xref:NextORM.Core.EntityBuilder`1) объявлен и на [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1), и на `EntityBuilder<T>` и возвращает [`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1):
+[`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},System.Boolean,System.Threading.CancellationToken)) объявлен и на [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1), и на `EntityBuilder<T>` и возвращает [`IPreparedQueryCommand<TResult>`](xref:NextORM.Core.IPreparedQueryCommand`1):
 
 ```csharp
 public IPreparedQueryCommand<TResult> Prepare(bool nonStreamUsing = true, CancellationToken cancellationToken = default)
@@ -123,7 +123,7 @@ var many = await byId.ToListAsync(ctx, 43);  // same prepared command, new value
 
 ### Потоковая передача требует `nonStreamUsing: false`
 
-Подготовленная команда, созданная со значением по умолчанию, не владеет [`ResultSetEnumerator<TResult>`](xref:NextORM.Core.ResultSetEnumerator`1).#ctor(NextORM.Core.DbPreparedQueryCommand{`0},Microsoft.Extensions.ObjectPool.ObjectPool{System.Text.StringBuilder}). Буферизованные и скалярные терминалы работают; потоковый терминал завершается ошибкой `InvalidOperationException`, сообщение которой говорит использовать `Prepare(nonStreamUsing: false)`. [`ToEnumerable`](xref:NextORM.Core.EntityBuilder`1) — это ленивый итератор, поэтому на этом пути исключение появляется при начале перечисления, а не в момент вызова.
+Подготовленная команда, созданная со значением по умолчанию, не владеет [`ResultSetEnumerator<TResult>`](xref:NextORM.Core.ResultSetEnumerator`1).#ctor(NextORM.Core.DbPreparedQueryCommand{`0},Microsoft.Extensions.ObjectPool.ObjectPool{System.Text.StringBuilder}). Буферизованные и скалярные терминалы работают; потоковый терминал завершается ошибкой `InvalidOperationException`, сообщение которой говорит использовать `Prepare(nonStreamUsing: false)`. [`ToEnumerable`](xref:NextORM.Core.EntityBuilderExtensions.ToEnumerable``1(NextORM.Core.EntityBuilder{``0},System.Object[])) — это ленивый итератор, поэтому на этом пути исключение появляется при начале перечисления, а не в момент вызова.
 
 ```csharp
 // Buffered default: no enumerator is created.
@@ -143,9 +143,9 @@ await foreach (var id in streaming.ToAsyncEnumerable(ctx))
 
 > **Правила совместного использования.** Подготовленная команда владеет одним изменяемым [`DbCommand`](xref:NextORM.Core.DbPreparedQueryCommand`1.DbCommand) и одним [`ResultSetEnumerator<TResult>`](xref:NextORM.Core.ResultSetEnumerator`1).#ctor(NextORM.Core.DbPreparedQueryCommand{`0},Microsoft.Extensions.ObjectPool.ObjectPool{System.Text.StringBuilder}). Значения параметров, `DbCommand.Connection` и читатель перечислителя перезаписываются при каждом выполнении. Не делите одну подготовленную команду между потоками и не запускайте две перекрывающиеся итерации по одной подготовленной команде. У неявного кэша этой проблемы нет: он привязан к потоку.
 
-### [`Prepare`](xref:NextORM.Core.EntityBuilder`1) не заполняет кэш планов
+### [`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},System.Boolean,System.Threading.CancellationToken)) не заполняет кэш планов
 
-[`Prepare`](xref:NextORM.Core.EntityBuilder`1) вызывает планировщик с `storeInCache: false`, поэтому его нельзя найти последующим неявным поиском, и он не может «загрязнить» кэш:
+[`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},System.Boolean,System.Threading.CancellationToken)) вызывает планировщик с `storeInCache: false`, поэтому его нельзя найти последующим неявным поиском, и он не может «загрязнить» кэш:
 
 ```csharp
 ctx.PurgeQueryCache();
@@ -213,17 +213,16 @@ id in ($p0, $p1)
 
 | Провайдер | Поведение |
 |---|---|
-| SQLite | Кэш планов и [`Prepare`](xref:NextORM.Core.EntityBuilder`1) — основное поведение; подготовленная команда оборачивает `SqliteCommand`. |
+| SQLite | Кэш планов и [`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},System.Boolean,System.Threading.CancellationToken)) — основное поведение; подготовленная команда оборачивает `SqliteCommand`. |
 | SQL Server | Тот же механизм; разбиение на страницы `TOP` против `OFFSET ... FETCH` является частью записанной формы плана, поэтому режим разбиения на страницы «запекается» в кэшированный SQL. |
 | PostgreSQL | Тот же механизм; подготовленная команда оборачивает `NpgsqlCommand`. |
-| MySQL | Кэш планов и [`Prepare`](xref:NextORM.Core.EntityBuilder`1) — основное поведение; подготовленная команда оборачивает `MySqlCommand`. |
+| MySQL | Кэш планов и [`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},System.Boolean,System.Threading.CancellationToken)) — основное поведение; подготовленная команда оборачивает `MySqlCommand`. |
 | MariaDB | Тот же механизм; подготовленная команда оборачивает `MySqlCommand` (драйвер MySQL). |
-| ClickHouse | Кэш планов и [`Prepare`](xref:NextORM.Core.EntityBuilder`1) — основное поведение; подготовленная команда оборачивает `ClickHouseCommand`. |
-| In-memory | [`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext) хранит собственный кэш скомпилированных запросов и возвращает [`InMemoryPreparedQueryCommand<TResult>`](xref:NextORM.Core.InMemoryPreparedQueryCommand`1); [`Prepare`](xref:NextORM.Core.EntityBuilder`1) работает, но [`PrepareFromSql`](xref:NextORM.Core.EntityBuilder`1) для raw-SQL не поддерживается (`NotSupportedException`). |
+| ClickHouse | Кэш планов и [`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},System.Boolean,System.Threading.CancellationToken)) — основное поведение; подготовленная команда оборачивает `ClickHouseCommand`. |
+| In-memory | [`InMemoryDataContext`](xref:NextORM.Core.InMemoryDataContext) хранит собственный кэш скомпилированных запросов и возвращает [`InMemoryPreparedQueryCommand<TResult>`](xref:NextORM.Core.InMemoryPreparedQueryCommand`1); [`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},System.Boolean,System.Threading.CancellationToken)) работает, но [`PrepareFromSql`](xref:NextORM.Core.EntityExtensions.PrepareFromSql``1(NextORM.Core.EntityBuilder{``0},System.String)) для raw-SQL не поддерживается (`NotSupportedException`). |
 
 ## См. также
 
-* [Prepared vs cached: reusing a query](../../specs/performance/prepared-vs-cached.md) — стоимость, бенчмарки и ограничения.
 * [Connections and logging](16-connections-and-logging.md)
 * [Dependency injection](../getting-started/04-dependency-injection.md)
 * [Documentation index](../index.md)
@@ -234,12 +233,12 @@ Source: `tests/nextorm.sqlite.tests/PlanCacheTests.cs:49` (buffered then streami
 `tests/nextorm.sqlite.tests/PlanCacheTests.cs:99` (`Prepare(nonStreamUsing: false)`),
 `tests/nextorm.sqlite.tests/PlanCacheTests.cs:124` (buffered reuse),
 `tests/nextorm.sqlite.tests/PlanCacheTests.cs:152` (streaming the default throws),
-`tests/nextorm.sqlite.tests/PlanCacheTests.cs:257` ([`Prepare`](xref:NextORM.Core.EntityBuilder`1) does not populate the cache);
+`tests/nextorm.sqlite.tests/PlanCacheTests.cs:257` ([`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},System.Boolean,System.Threading.CancellationToken)) does not populate the cache);
 `tests/nextorm.sqlite.tests/InListCacheTests.cs:41` (same-shape captured collection),
 `tests/nextorm.sqlite.tests/InListCacheTests.cs:92` (reassigned array),
 `tests/nextorm.sqlite.tests/InListCacheTests.cs:117` (grown list);
 `tests/nextorm.core.tests/DataContextCacheScopeTests.cs:20` (cache sharing scope);
 `tests/nextorm.integration.tests/CommonTestSuite.Cache.cs:6`;
-`src/nextorm.core/Query/QueryCommand.TResult.cs:38` ([`Prepare`](xref:NextORM.Core.EntityBuilder`1)),
+`src/nextorm.core/Query/QueryCommand.TResult.cs:38` ([`Prepare`](xref:NextORM.Core.EntityBuilderExtensions.Prepare``1(NextORM.Core.EntityBuilder{``0},System.Boolean,System.Threading.CancellationToken))),
 `src/nextorm.core/DataContext/Cache/IPreparedQueryCommand.cs:5` (prepared terminals),
 `src/nextorm.core/DataContext/DataContext.cs:315` (`GetPreparedQueryCommand`).
