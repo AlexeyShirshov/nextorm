@@ -137,6 +137,7 @@ public interface ISqlDialect
     /// True when the provider has an array type and can render the array functions of
     /// <see cref="ClickHouseFunctions"/> over array <em>columns</em> (for example <c>length</c>,
     /// <c>has</c>, <c>indexOf</c>, <c>arrayStringConcat</c>, <c>hasAny</c>/<c>hasAll</c>,
+    /// <c>startsWith</c>/<c>endsWith</c>/<c>hasSubstr</c>,
     /// <c>arraySort</c>, <c>arrayReverse</c>, <c>arrayDistinct</c>). The safe default is
     /// <c>false</c>; only ClickHouse opts in today.
     /// </summary>

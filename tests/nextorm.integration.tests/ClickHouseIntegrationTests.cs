@@ -724,6 +724,29 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     }
 
     [Fact]
+    public void ArrayRelationPredicates_ShouldReturnValues()
+    {
+        // array_entity id = 1 has nums = [3, 1, 2].
+        var r = _sut.ArrayEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                S = SqlFunctions.ClickHouse.starts_with(x.Nums, new[] { 3, 1 }),
+                SMiss = SqlFunctions.ClickHouse.starts_with(x.Nums, new[] { 1, 3 }),
+                E = SqlFunctions.ClickHouse.ends_with(x.Nums, new[] { 1, 2 }),
+                C = SqlFunctions.ClickHouse.has_substr(x.Nums, new[] { 1, 2 }),
+                CMiss = SqlFunctions.ClickHouse.has_substr(x.Nums, new[] { 3, 2 })
+            })
+            .First();
+
+        r.S.Should().BeTrue();
+        r.SMiss.Should().BeFalse();
+        r.E.Should().BeTrue();
+        r.C.Should().BeTrue();
+        r.CMiss.Should().BeFalse();
+    }
+
+    [Fact]
     public void ArrayJoin_ShouldExpandRows()
     {
         var rows = _sut.ArrayEntity

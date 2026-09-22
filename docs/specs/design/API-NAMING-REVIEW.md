@@ -3244,6 +3244,37 @@ docs/advanced/limitations.md` — строки отложенных функци
 
 **Проверка (22.09.2026).** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**; XML-`<summary>` у всех новых типов/членов; новых публичных типов ровно **1** (`ITopKAggregateRenderer`) → Приложение A (45) без изменений; `find -name 'PublicAPI*.txt'` — пусто (подтверждает CHQA4). Полный прогон с покрытием — **2315 passed / 30 skipped / 0 failed**, **line 85.4% / branch 74.4%** (ClickHouse **220/220**, postgres **268/268**, ClickHouse+capability-contract **73/73**). Содержательная кодовая сторона — `code-smells-review.md`, Находка 64.
 
+### Аудит 22.09.2026 — ClickHouse предикаты над массивами `startsWith`/`endsWith`/`hasSubstr` (uncommitted worktree, срез 4 `todo_clickhouse_arrays.md`; P0 — нет; P1 — нет; P2 — 3)
+
+**Область (uncommitted worktree, branch `1.0.4-alpha`, HEAD `ba9c29b`).** Публичная поверхность аддитивна; переименований нет. Новые члены:
+
+- `ClickHouseFunctions.starts_with<T>(T[] array, T[] prefix) -> bool` (`Query/SqlFunctions.ClickHouse.cs:451`) → `startsWith(array, prefix)`;
+- `ClickHouseFunctions.ends_with<T>(T[] array, T[] suffix) -> bool` (`:454`) → `endsWith(array, suffix)`;
+- `ClickHouseFunctions.has_substr<T>(T[] array, T[] other) -> bool` (`:462`) → `hasSubstr(array, other)`;
+- трансляция — `Visitors/ArraySqlTranslator.TryTranslateClickHouseArray` (`Visitors/ArraySqlTranslator.cs:212-220`): три `case` → `EmitArrayFunction` через существующий `RequireArrayFunctions` (`:392`), гейт `ISqlDialect.SupportsArrayFunctions` (только `ClickHouseDialect.cs:52 => true`); `internal`, внешней поверхности не даёт;
+- обновлена классовая `<summary>` `ClickHouseFunctions` (`Query/SqlFunctions.ClickHouse.cs:24-25`); новых публичных **типов**/флагов/`Make*`-хуков нет.
+
+**Матрица подтверждена.** `startsWith`/`endsWith`/`hasSubstr` над `Array(T)` есть только у ClickHouse (PostgreSQL — лишь частная эмуляция префикса срезом, у остальных нет array-типа); проверено на реальном ClickHouse 25.8: `startsWith([3,1,2],[3,1])=1`, `endsWith([3,1,2],[1,2])=1`, `hasSubstr([3,1,2],[1,2])=1`, `hasSubstr([3,1,2],[3,2])=0` (непрерывная подпоследовательность).
+
+**CS1591/XML-doc.** XML-`<summary>` есть у всех 3 новых методов (`:446-462`); новых публичных типов нет → **Приложение A (45) без изменений**. Покрытие публичных методов — **+3** к зафиксированному **227/1106** → **230/1109** (арифметически по диффу; переизмерение рефлексией в этом проходе не выполнялось).
+
+**Именование — P0/P1 по именам нет.** `starts_with`/`ends_with`/`has_substr` — snake_case-зеркало ClickHouse-токенов `startsWith`/`endsWith`/`hasSubstr`, ровно как `has_any`→`hasAny`/`has_all`→`hasAll`/`index_of`→`indexOf`; форма `bool <verb>_<noun><T>(T[] array, T[] other) -> bool` повторяет соседей, первый параметр — массив (порядок SQL), имена `prefix`/`suffix`/`other` описательны. BCL-конфликтов нет (`startsWith` не затеняет `System.String.StartsWith` — другой тип и сигнатура).
+
+| # | Ур. | Место | Проблема | Рекомендация |
+|---|-----|-------|----------|--------------|
+| CHARP1 | P2 (доки) | `docs/guide/11-scalar-functions.md:487-490` (+`docs/ru/guide/11-scalar-functions.md:494-497`); `docs/guide/provider-specific/clickhouse.md:176` (+RU `:178`); `docs/providers/clickhouse.md:181` (+RU); `docs/advanced/api-reference.md:63` (+`docs/ru/advanced/api-reference.md:63`) | Три новых метода не добавлены в доки EN+RU, хотя сам план среза (`todo_clickhouse_arrays.md`, тест-план) перечисляет эти файлы; правило AGENTS.md «`docs/**` **и** `docs/ru/**`» не выполнено. Противоречия с реализацией нет — только пропуск (класс AR3/CHARR3/HOAF3) | Дополнить списки array-функций `startsWith`/`endsWith`/`hasSubstr` (CLR `starts_with`/`ends_with`/`has_substr`) в guide/11, provider-specific/clickhouse, providers/clickhouse и api-reference, EN+RU одним изменением |
+| CHARP2 | P2 | `Query/SqlFunctions.cs:41-57`; `DataContext/Dialect/ISqlDialect.cs:136-143` | Кумулятивный док-пробел (ср. Z2/GLI1/AR3/CHARR3): классовая `<summary>` `ClickHouseFunctions` пополнена `startsWith`/`endsWith`/`hasSubstr`, но `<summary>` свойства `SqlFunctions.ClickHouse` и гейта `SupportsArrayFunctions` перечисляют array-функции без них | Дополнить оба перечня при закрытии Шага 5 (либо тем же изменением, что CHARP1) |
+| CHARP3 | P2 (трекинг) | `Query/SqlFunctions.ClickHouse.cs:451,454,462`; `PublicAPI.*.txt` отсутствуют | 3 новых члена публичной поверхности не трекаются (`PublicApiAnalyzers` не подключён, Шаг 5 открыт). **Продолжение RD2/AR1/ASF1/SQ1/CHARR1/HOAF1/CHQA4, не новая находка**; новых abstract-членов `ISqlDialect` нет, разрыва для внешних реализаторов не создаётся | При заморозке внести три подписи `ClickHouseFunctions.starts_with<T>`/`ends_with<T>`/`has_substr<T>` в `PublicAPI.Unshipped.txt` (точный текст — из анализатора) |
+
+ℹ️ **Наблюдения (фикс не требуется):**
+
+- **Переиспользование `SupportsArrayFunctions` вместо per-function гейта — обосновано (DC-критерий).** Три метода — то же семейство «array-функции над нативным `Array(T)`», что `length`/`has`/`has_any`/`has_all`/`arraySort`; отдельный `Supports*` на каждый член был бы «зонтиком без доказательства невыразимости» (ASF1), тем более что имена совпадают с ClickHouse-токенами и `Make*`-хук не нужен (результат `UInt8`→`bool`, каст не добавляется; `MakeArrayFunction` не расширяется). Аналогия DC7 (один объект принудительно уравнивает co-support) здесь безвредна: array-тип есть только у ClickHouse, и он поддерживает все три предиката.
+- **Версионная оговорка.** Перегрузки этих функций над `Array(T)` появились в относительно свежих ClickHouse; модель гейтов диалектная, не версионная, поэтому поддержка старых серверов — внешняя по отношению к реестру (для проверенного 25.8 не блокер).
+- **Post-check (`rg` по `*Dialect.cs`) пуст — и это ожидаемо.** `rg "startsWith|endsWith|hasSubstr" src/nextorm.*/*Dialect.cs` — **0 совпадений**; единственный диалектный маркер — `ClickHouseDialect.SupportsArrayFunctions => true` (`ClickHouseDialect.cs:52`). Маппинг имён живёт в общем `ArraySqlTranslator` (CH-only ветка), как у `hasAny`/`hasAll`/`arraySort`; «одиночность» диалекта выражена флагом, а не токеном. Матрице не противоречит.
+- **`ends_with` без оговорки о гейте.** `<summary>` `starts_with`/`has_substr` несут «Requires a provider that supports array functions (see `SupportsArrayFunctions`)», у `ends_with` — нет; стилевая неоднородность внутри одного семейства, не P-нарушение.
+
+**Проверка (22.09.2026).** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors** (этот проход); `rg "startsWith|endsWith|hasSubstr" src/nextorm.*/*Dialect.cs` — **0** (объяснено выше); `find -name 'PublicAPI*.txt'` — **0** (подтверждает CHARP3); XML-`<summary>` у всех 3 методов; новых публичных типов нет — Приложение A (45) без изменений. Тесты (по отчёту автора изменения): clickhouse unit **221/221**, postgres **269/269**, контейнерная интеграция `ClickHouseIntegrationTests` **72/72**, полный прогон **2318 passed / 30 skipped / 0 failed**, покрытие **line 85.4% / branch 74.4%** (базис не изменился). Содержательная кодовая сторона — `code-smells-review.md`, точечный аудит 22.09.2026.
+
 ## 4. План работ
 
 Проект в стадии **alpha** — обратная совместимость не сохраняется. Все пункты выполняются **прямыми переименованиями на месте**, с одновременным обновлением кода, тестов, примеров и документации в одном изменении.

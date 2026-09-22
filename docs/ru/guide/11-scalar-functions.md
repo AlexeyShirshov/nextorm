@@ -494,6 +494,9 @@ select cardinality(@norm_p1) as "N" from complex_entity where array_length(@norm
 | `SqlFunctions.ClickHouse.index_of(a, element)` | `indexOf(a, element)` |
 | `SqlFunctions.ClickHouse.has_any(a, b)` | `hasAny(a, b)` |
 | `SqlFunctions.ClickHouse.has_all(a, b)` | `hasAll(a, b)` |
+| `SqlFunctions.ClickHouse.starts_with(a, prefix)` | `startsWith(a, prefix)` |
+| `SqlFunctions.ClickHouse.ends_with(a, suffix)` | `endsWith(a, suffix)` |
+| `SqlFunctions.ClickHouse.has_substr(a, other)` | `hasSubstr(a, other)` |
 | `SqlFunctions.ClickHouse.array_string_concat(a, delimiter)` | `arrayStringConcat(a, delimiter)` |
 | `SqlFunctions.ClickHouse.split_by_char(separator, s)` | `splitByChar(separator, s)` |
 | `SqlFunctions.ClickHouse.array_sort(a)` | `arraySort(a)` |
@@ -524,6 +527,10 @@ select cardinality(@norm_p1) as "N" from complex_entity where array_length(@norm
 > как CLR `T[]` — либо использовать как операнд другой array-функции (например, `length(...)` или
 > `array_string_concat(...)`). Тот же reader материализует нативную колонку `Tuple(...)` (или
 > выражение типа `Tuple(...)`) как `System.Tuple<...>` арности 1–7.
+
+> Предикаты отношения массивов возвращают `bool`: `starts_with(array, prefix)`/`ends_with(array, suffix)`
+> проверяют префикс/суффикс, а `has_substr(array, other)` — что `other` входит в `array` непрерывно и
+> по порядку (пустой `other` содержится всегда). Требуется провайдер, поддерживающий array-функции.
 
 > Функции высшего порядка (lambda) принимают inline-лямбду C#, параметр которой — элемент массива;
 > например `array_map(v => -v, e.Nums)` рендерится как `arrayMap(v -> -(v), nums)`.

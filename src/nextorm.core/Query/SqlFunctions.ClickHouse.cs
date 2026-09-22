@@ -21,7 +21,8 @@ namespace NextORM.Core;
 /// <c>toYear</c>/... accessors, <c>toStartOf*</c>, <c>toMonday</c>, <c>toYYYYMM</c>/<c>toYYYYMMDD</c>,
 /// <c>toUnixTimestamp</c>),
 /// and the array functions over array columns and expressions (<c>arrayJoin</c>, <c>length</c>,
-/// <c>has</c>, <c>indexOf</c>, <c>hasAny</c>/<c>hasAll</c>, <c>arrayStringConcat</c>,
+/// <c>has</c>, <c>indexOf</c>, <c>hasAny</c>/<c>hasAll</c>, <c>startsWith</c>/<c>endsWith</c>/<c>hasSubstr</c>,
+/// <c>arrayStringConcat</c>,
 /// <c>splitByChar</c>, <c>arraySort</c>, <c>arrayReverse</c>, <c>arrayDistinct</c>, <c>range</c>,
 /// <c>arrayEnumerate</c>, <c>arrayCumSum</c>, <c>arraySlice</c>, <c>arrayPushBack</c>), the
 /// higher-order (lambda) array functions (<c>arrayMap</c>, <c>arrayFilter</c>, <c>arrayExists</c>,
@@ -441,6 +442,24 @@ namespace NextORM.Core;
 
         /// <summary><c>hasAll(array, other)</c>: true when every element of <paramref name="other"/> is in <paramref name="array"/>.</summary>
         public bool has_all<T>(T[] array, T[] other) => default!;
+
+        /// <summary>
+        /// <c>startsWith(array, prefix)</c>: true when <paramref name="array"/> begins with the
+        /// <paramref name="prefix"/> elements, in order. Requires a provider that supports array
+        /// functions (see <see cref="ISqlDialect.SupportsArrayFunctions"/>; ClickHouse).
+        /// </summary>
+        public bool starts_with<T>(T[] array, T[] prefix) => default!;
+
+        /// <summary><c>endsWith(array, suffix)</c>: true when <paramref name="array"/> ends with the <paramref name="suffix"/> elements, in order.</summary>
+        public bool ends_with<T>(T[] array, T[] suffix) => default!;
+
+        /// <summary>
+        /// <c>hasSubstr(array, other)</c>: true when the elements of <paramref name="other"/> appear in
+        /// <paramref name="array"/> contiguously and in the same order (an empty <paramref name="other"/>
+        /// is always contained). Requires a provider that supports array functions (see
+        /// <see cref="ISqlDialect.SupportsArrayFunctions"/>; ClickHouse).
+        /// </summary>
+        public bool has_substr<T>(T[] array, T[] other) => default!;
 
         /// <summary><c>arrayStringConcat(array, delimiter)</c>: joins the elements into one string (default separator is the empty string).</summary>
         public string array_string_concat<T>(T[] array, string? delimiter = null) => default!;

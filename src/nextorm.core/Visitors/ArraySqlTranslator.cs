@@ -209,6 +209,15 @@ internal static class ArraySqlTranslator
             case nameof(ClickHouseFunctions.has_all) when args.Count == 2:
                 sqlName = "hasAll";
                 break;
+            case nameof(ClickHouseFunctions.starts_with) when args.Count == 2:
+                sqlName = "startsWith";
+                break;
+            case nameof(ClickHouseFunctions.ends_with) when args.Count == 2:
+                sqlName = "endsWith";
+                break;
+            case nameof(ClickHouseFunctions.has_substr) when args.Count == 2:
+                sqlName = "hasSubstr";
+                break;
             case nameof(ClickHouseFunctions.array_string_concat) when args.Count == 2:
                 sqlName = "arrayStringConcat";
 

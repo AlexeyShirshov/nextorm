@@ -1287,6 +1287,17 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void ArrayRelationPredicates_UnsupportedByProvider_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => SqlFunctions.ClickHouse.has_substr(x.Tags, new[] { "a" })));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*array functions*");
+    }
+
+    [Fact]
     public void FilteredAggregates_ShouldEmitFilterClause()
     {
         using var ctx = PostgresTestContext.Create();

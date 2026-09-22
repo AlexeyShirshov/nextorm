@@ -173,9 +173,9 @@ See [Grouping and aggregates](../04-grouping-and-aggregates.md).
   as `Dictionary<string, string>`; both take a native `JSON` value) and `to_json_string`
   (`toJSONString`);
 * dictionary lookups `dict_get`/`dict_get_or_default`/`dict_has` (need a configured `CREATE DICTIONARY`);
-* array functions `length`/`has`/`index_of`/`has_any`/`has_all`/`array_string_concat`/`split_by_char`/
-  `array_sort`/`array_reverse`/`array_distinct`/`range`/`array_enumerate`/`array_cum_sum`/`array_slice`/
-  `array_push_back`.
+* array functions `length`/`has`/`index_of`/`has_any`/`has_all`/`starts_with`/`ends_with`/`has_substr`/
+  `array_string_concat`/`split_by_char`/`array_sort`/`array_reverse`/`array_distinct`/`range`/
+  `array_enumerate`/`array_cum_sum`/`array_slice`/`array_push_back`.
 
 See [Scalar functions](../11-scalar-functions.md) and [JSON support](../18-json.md)
 ([`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract)/[`SupportsDictionaries`](xref:NextORM.Core.ISqlDialect.SupportsDictionaries)).

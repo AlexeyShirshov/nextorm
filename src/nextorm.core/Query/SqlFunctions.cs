@@ -49,6 +49,7 @@ public static partial class SqlFunctions
     /// (<c>toDate</c>/<c>toDateTime</c>/<c>toDate32</c>, <c>toYear</c>/..., <c>toStartOf*</c>,
     /// <c>toMonday</c>, <c>toYYYYMM</c>/<c>toYYYYMMDD</c>, <c>toUnixTimestamp</c>), as well as the array functions over array
     /// columns (<c>arrayJoin</c>, <c>length</c>, <c>has</c>, <c>indexOf</c>, <c>hasAny</c>/<c>hasAll</c>,
+    /// <c>startsWith</c>/<c>endsWith</c>/<c>hasSubstr</c>,
     /// <c>arrayStringConcat</c>, <c>splitByChar</c>, <c>arraySort</c>, <c>arrayReverse</c>,
     /// <c>arrayDistinct</c>). Every member is
     /// gated by a capability flag

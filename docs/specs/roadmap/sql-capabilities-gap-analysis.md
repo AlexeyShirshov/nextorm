@@ -200,11 +200,14 @@ Ordered by impact on real query authoring. Per-feature details and owners live i
     set (left table only, incompatible with `Projection<T1,T2>`) and `PASTE JOIN` has no `ON`, so a
     result shape must be chosen first.
     Todo: [`todo_clickhouse_join_strictness.md`](todo_clickhouse_join_strictness.md).
-9. **ClickHouse scalar-over-array functions are not mapped.** `startsWith`/`endsWith`/`position`/
-    `length` over arrays are blocked by the missing array parameter binding and row reader; the correct
-    mappings are `position` -> `indexOf`, `length` -> `length`, and prefix/suffix -> `hasSubstr`
-    (`startsWith`/`endsWith` accept only `String`/`FixedString`).
-    Todo: [`todo_clickhouse_arrays.md`](todo_clickhouse_arrays.md) (binding/тип скаляров над `Array`).
+9. **ClickHouse scalar-over-array predicates — shipped.** `startsWith`/`endsWith` over `Array(T)` and
+    the contiguous-subsequence `hasSubstr` are exposed as
+    [`ClickHouseFunctions.starts_with`](xref:NextORM.Core.ClickHouseFunctions.starts_with)/`ends_with`/`has_substr`
+    under `SupportsArrayFunctions`; `length`/`position` over arrays map to `length`/`indexOf`
+    ([`ClickHouseFunctions.length`](xref:NextORM.Core.ClickHouseFunctions.length)/`index_of`). Other
+    providers throw `NotSupportedException`.
+    Shipped: [Scalar functions](../../guide/11-scalar-functions.md#arrays-clickhouse),
+    [Provider-specific SQL](../../guide/provider-specific/clickhouse.md).
 10. **ClickHouse columns have no by-name access without an entity property.** `IHit` describes only 6
     `hits_v1` columns; the rest are reachable only through `WithSql`.
     Todo: [`todo_clickhouse_columns_by_name.md`](todo_clickhouse_columns_by_name.md).

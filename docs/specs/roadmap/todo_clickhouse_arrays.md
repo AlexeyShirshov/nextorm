@@ -2,7 +2,7 @@
 
 > Рабочий план. Источник: `docs/specs/roadmap/sql-capabilities-gap-analysis.md` §4 п.4 (row reader),
 > п.5 (higher-order), п.9 (скаляры над массивами).
-> **Статус: срезы 1 (row reader), 2 (topK/topKWeighted/quantiles) и 3 (higher-order lambda) — готовы; срез 4 (скаляры над массивами) — открыт.**
+> **Статус: срезы 1 (row reader), 2 (topK/topKWeighted/quantiles), 3 (higher-order lambda) и 4 (предикаты над массивами `startsWith`/`endsWith`/`hasSubstr`) — готовы.**
 
 ## Источник, цель, критерий приёмки
 
@@ -214,10 +214,58 @@ MySQL, MariaDB, SQLite использованы официальные стра�
   (+RU), `docs/advanced/api-reference.md` (+RU), `docs/specs/roadmap/sql-capabilities-gap-analysis.md`
   §4 п.5, `docs/specs/design/API-NAMING-REVIEW.md` (новые public-методы).
 
-### Срез 4 (gap §4 п.9): скаляры над массивами
-`position` → `indexOf`, `length` → `length`, префикс/суффикс → `hasSubstr`/`arraySlice`. Требует
-разделения гейта на `SupportsArrayParameters`/`SupportsArrayFunctions` (для binding `T[]`-параметров
-с явным типом) и срезов 1–2.
+### Срез 4 (gap §4 п.9): скаляры над массивами — `startsWith`/`endsWith`/`hasSubstr`
+
+**Статус: готово (см. ниже) / план.** Из §4 п.9 закрыты ранее `length`→`length` (срез first-order) и
+`position`→`indexOf` (`index_of`); остаются предикаты отношения массивов.
+
+#### Матрица «провайдер × форма» — предикаты над массивами
+
+Форма: есть ли нативный скаляр, проверяющий префикс/суффикс/вхождение подмассива (contiguous
+subsequence). Проверено по документации провайдеров и на реальном ClickHouse 25.8.
+
+| Провайдер | Array-тип | `startsWith`/`endsWith`/`hasSubstr` над Array | Источник |
+| --- | --- | --- | --- |
+| PostgreSQL | `integer[]`, … | — (нет скаляров; префикс выразим только срезом `a[1:array_length(p,1)] = p`, общего `hasSubstr` нет) | https://www.postgresql.org/docs/current/functions-array.html |
+| SQL Server | — (нет array-типа) | — | https://learn.microsoft.com/sql/t-sql/data-types/data-types-transact-sql |
+| MySQL | — (JSON only) | — | https://dev.mysql.com/doc/refman/8.4/en/json.html |
+| MariaDB | — (JSON only) | — | https://mariadb.com/kb/en/json-data-type/ |
+| SQLite | — (JSON only) | — | https://www.sqlite.org/json1.html |
+| ClickHouse | `Array(T)` | `startsWith(arr, prefix)`, `endsWith(arr, suffix)`, `hasSubstr(arr, sub)` (contiguous ordered subsequence) — проверено `clickhouse-local` на 25.8 | https://clickhouse.com/docs/en/sql-reference/functions/array-functions |
+| InMemory | CLR `T[]` | — (поверхность ClickHouse-only, не транслируется) | — |
+
+#### Единообразие провайдеров (решение)
+
+- Фича ClickHouse-only: только ClickHouse выражает предикаты нативно; PostgreSQL — лишь частную
+  эмуляцию префикса, остальные не имеют array-типа. Поверхность — `ClickHouseFunctions`, гейт
+  `SupportsArrayFunctions` (как у `has`/`hasAny`/`hasAll`; отдельный флаг не нужен — одно семейство).
+- Ранее в плане предполагалась эмуляция префикс/суффикс через `hasSubstr`/`arraySlice`; проверка на
+  ClickHouse 25.8 показала, что `startsWith`/`endsWith` работают над `Array(T)` напрямую, поэтому
+  маппинг — нативный. `hasSubstr` добавляется как самостоятельный предикат вхождения подмассива.
+- `Make*`-хук не нужен: имена (`startsWith`/`endsWith`/`hasSubstr`) совпадают с ClickHouse-токенами и
+  заданы только этим диалектом (как `hasAny`/`hasAll`/`arraySort`); хардкод в трансляторе.
+
+#### Tier и публичный API
+
+- Closest C# analog: нет (у `T[]`/BCL нет предиката префикса/суффикса/подмассива); tier (b) — новые
+  методы `ClickHouseFunctions` + ветка транслятора.
+- `public bool starts_with<T>(T[] array, T[] prefix)` → `startsWith(array, prefix)`;
+- `public bool ends_with<T>(T[] array, T[] suffix)` → `endsWith(array, suffix)`;
+- `public bool has_substr<T>(T[] array, T[] other)` → `hasSubstr(array, other)`.
+- Трансляция: ветки в `ArraySqlTranslator.TryTranslateClickHouseArray` → `EmitArrayFunction`
+  (аргументы-массивы биндятся одним параметром, `MakeArrayFunction` не кастит — результат `UInt8`→`bool`).
+
+#### Тест-план
+
+- SQL-gen (clickhouse): `StartsWith_ShouldRenderStartsWith` (`startsWith(nums, @p0)`),
+  `EndsWith_ShouldRenderEndsWith`, `HasSubstr_ShouldRenderHasSubstr`;
+- rejection (postgres): `ArrayRelationPredicates_UnsupportedByProvider_ShouldThrow`;
+- интеграционные (ClickHouse 25.8, `array_entity` id=1 nums=[3,1,2]): `starts_with` → true на `[3,1]`,
+  `ends_with` → true на `[1,2]`, `has_substr([1,2])` → true, `has_substr([3,2])` → false;
+- покрытие: core-транслятор покрывается clickhouse-тестами; базис line 85.4% / branch 74.4%.
+- Доки EN+RU: `docs/guide/11-scalar-functions.md` (+RU) таблица ClickHouse arrays,
+  `docs/guide/provider-specific/clickhouse.md` (+RU), `docs/advanced/api-reference.md` (+RU),
+  gap-analysis §4 п.9; `API-NAMING-REVIEW.md` (новые публичные методы).
 
 ### Прочее
 - `tuple`/`tupleElement`/`untuple` — скалярная поверхность над `Tuple` (после среза 1).

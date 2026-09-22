@@ -487,6 +487,9 @@ result can be projected like a scalar column.
 | `SqlFunctions.ClickHouse.index_of(a, element)` | `indexOf(a, element)` |
 | `SqlFunctions.ClickHouse.has_any(a, b)` | `hasAny(a, b)` |
 | `SqlFunctions.ClickHouse.has_all(a, b)` | `hasAll(a, b)` |
+| `SqlFunctions.ClickHouse.starts_with(a, prefix)` | `startsWith(a, prefix)` |
+| `SqlFunctions.ClickHouse.ends_with(a, suffix)` | `endsWith(a, suffix)` |
+| `SqlFunctions.ClickHouse.has_substr(a, other)` | `hasSubstr(a, other)` |
 | `SqlFunctions.ClickHouse.array_string_concat(a, delimiter)` | `arrayStringConcat(a, delimiter)` |
 | `SqlFunctions.ClickHouse.split_by_char(separator, s)` | `splitByChar(separator, s)` |
 | `SqlFunctions.ClickHouse.array_sort(a)` | `arraySort(a)` |
@@ -517,6 +520,11 @@ result can be projected like a scalar column.
 > CLR `T[]` — or used as the operand of another array function (for example `length(...)` or
 > `array_string_concat(...)`). The same reader materialises a native `Tuple(...)` column (or a
 > `Tuple(...)`-returning expression) as a `System.Tuple<...>` of arity 1–7.
+
+> The array relation predicates return `bool`: `starts_with(array, prefix)`/`ends_with(array, suffix)`
+> test a prefix/suffix and `has_substr(array, other)` tests that `other` occurs in `array` contiguously
+> and in order (an empty `other` is always contained). They require a provider that supports the array
+> functions.
 
 > The higher-order (lambda) functions take an inline C# lambda whose parameter is the array element,
 > for example `array_map(v => -v, e.Nums)` renders `arrayMap(v -> -(v), nums)`. `array_exists`/`array_all`

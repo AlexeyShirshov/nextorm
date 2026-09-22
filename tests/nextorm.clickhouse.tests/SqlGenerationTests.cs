@@ -1769,6 +1769,24 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void ArrayRelationPredicates_ShouldRender()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            S = SqlFunctions.ClickHouse.starts_with(x.Nums, new long[] { 3, 1 }),
+            E = SqlFunctions.ClickHouse.ends_with(x.Nums, new long[] { 1, 2 }),
+            C = SqlFunctions.ClickHouse.has_substr(x.Nums, new long[] { 1, 2 })
+        }));
+
+        sql.Should().Contain("startsWith(nums, @p0)");
+        sql.Should().Contain("endsWith(nums, @p1)");
+        sql.Should().Contain("hasSubstr(nums, @p2)");
+    }
+
+    [Fact]
     public void ArrayStringConcat_ShouldRenderArrayStringConcat()
     {
         using var ctx = ClickHouseTestContext.Create();
