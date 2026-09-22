@@ -162,6 +162,12 @@ Cached vs `Prepare()` end-to-end, across benchmark classes (same SQL, same plan)
 | `SqliteBenchmarkSimulateWork` (stream) | 7.00 ms / 6.24 MB | 57.07 ms / 30.55 MB | 8.15× | 4.90× |
 | `SqliteBenchmarkCachedPlan` (1 row) | 11.94 µs / 0.76 KB | 17.56 µs / 3.76 KB | 1.47× | 4.94× |
 
+> **Decision (2026-09-22).** The non-prepared *fluent* path is not a target to match Dapper's constant-SQL
+> arm: even with a working plan cache it pays for building and hashing a fresh expression tree on every call
+> (measured 1.1–1.6× Dapper on `CTE`/recursive `CTE`/`Join4`/`IN`, 7–8× the allocations). Use `Prepare()` for
+> repeated execution of one shape; the implicit cache stays the safe per-thread default. See
+> `performance-findings.md` (M12, «Решение») for the iteration-9 measurements.
+
 ---
 
 ## 4. Known problems

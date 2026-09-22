@@ -221,16 +221,20 @@ Ordered by impact on real query authoring. Per-feature details and owners live i
     `SnakeCaseNamingConvention` maps `SimpleEntity` to `simple_entity` and `FirstName` to
     `first_name`, while names declared with `[SqlTable]`/`[Column]` or a fluent mapping are never
     translated (`docs/getting-started/03-entities-and-metadata.md`, "Naming conventions").
-15. **Provider field/feature differences remain.** The accepted `date_add`/`date_trunc`/`date_diff`
-    fields differ per provider (e.g. SQLite folds `millisecond`/`quarter`, SQL Server rejects
-    `decade`/`century`/`millennium` for `date_trunc`), `CUBE`/`GROUPING SETS` and `FULL JOIN` are
-    missing on MySQL/MariaDB, `GREATEST`/`LEAST` has provider-specific NULL semantics, and several
-    features (`FOR JSON`/`FOR XML`) exist on a subset of providers. These are
-    documented in `docs/providers/*.md` rather than unified. Date/number formatting is deliberately
-    left to provider-specific `[SqlFunction]` UDFs because the `.NET` (`FORMAT`), PostgreSQL (`to_char`)
-    and `%` (`DATE_FORMAT`/`strftime`/`formatDateTime`) template languages are incompatible — a single
-    portable `template` argument cannot exist.
-    Todo: [`todo_provider_differences.md`](todo_provider_differences.md).
+15. **Provider field/feature differences are decided and documented.** The accepted
+    `date_add`/`date_trunc`/`date_diff` fields differ per provider (e.g. SQLite folds
+    `millisecond`/`quarter`, SQL Server rejects `decade`/`century`/`millennium` for `date_trunc`),
+    `CUBE`/`GROUPING SETS` and `FULL JOIN` are missing on MySQL/MariaDB, `GREATEST`/`LEAST` has
+    provider-specific NULL semantics, and several features (`FOR JSON`/`FOR XML`) exist on a subset of
+    providers. Each divergence now carries an explicit **unify / gate / document** decision in
+    [Provider differences: unification decisions](../../providers/overview.md#provider-differences-unification-decisions):
+    date fields and `FULL JOIN`/`CUBE`/`GROUPING SETS` are gated per field/feature (no polyfill: the
+    rewrites change row shape/semantics and defeat the planner), `GREATEST`/`LEAST` NULL behaviour is a
+    documented difference, and date/number formatting stays provider-specific `[SqlFunction]` UDFs
+    because the `.NET` (`FORMAT`), PostgreSQL (`to_char`) and `%`
+    (`DATE_FORMAT`/`strftime`/`formatDateTime`) template languages are incompatible — a single portable
+    `template` argument cannot exist.
+    Shipped: [Provider overview](../../providers/overview.md).
 16. **Table hints only on SQL Server.** Statement-level hints (`Hint(...)`) are now wired on SQL Server
     (`OPTION (...)`), PostgreSQL and MySQL/MariaDB (inline `/*+ ... */`, read by the optional
     `pg_hint_plan` extension on PostgreSQL and as native optimizer hints on MySQL/MariaDB); SQLite and
@@ -247,13 +251,18 @@ Ordered by impact on real query authoring. Per-feature details and owners live i
     (the dialect correctly throws `NotSupportedException`); the ClickHouse `Memory` engine does not
     support `FINAL`/`PREWHERE`/`SAMPLE` (an integration-test limitation, not missing functionality).
     Todo: [`limitations.md`](../../advanced/limitations.md) (out of scope: engine/server cannot).
-19. **Warm-path plan-build cost (performance).** On the fast (tmpfs) full run the prepared path wins
-    every measured class, but the non-prepared (warm) path is still ~1.2–1.7× behind Dapper on `CTE`,
-    recursive `CTE`, `Join4` and `IN`-list. Iteration 6 showed the cost is plan build/keying, not
-    execution; `IN`-list, `INTERSECT`/`EXCEPT` and recursive `CTE` were partly closed there.
-    Iteration 8 closed the `IN`-list refresh cost (inline lists no longer re-extracted on a cache hit);
-    `CTE`/recursive `CTE`/`Join4` and captured `IN` remain (see `performance-findings.md` M12).
-    Todo: [`todo_warm_path_plan_build.md`](todo_warm_path_plan_build.md).
+19. **Warm-path plan-build cost (performance) — closed by decision.** On the fast (tmpfs) full run the
+    prepared path wins every measured class; the non-prepared (warm) path stays ~1.1–1.6× behind Dapper on
+    `CTE`, recursive `CTE`, `Join4` and `IN`-list. Iterations 6 and 8 closed the `IN`-list refresh cost and
+    parts of `INTERSECT`/`EXCEPT` and recursive `CTE`; a fresh iteration-9 measurement confirms the remaining
+    gap is the inherent per-call cost of building and hashing a fresh expression tree (≈3–9 µs per query),
+    and `QueryPlanEqualityComparer` already hashes by sub-hashes, so there is no safe local lever. **Why it
+    is closed:** the fresh-fluent arm is compared against Dapper's constant SQL, and closing the gap requires
+    the structural fluent/`Prepare()` parity rework (M12 #3) that touches cache-key semantics (M9). The
+    sanctioned fast path is [`Prepare()`](../../guide/15-query-reuse.md) (faster than Dapper on every class);
+    the implicit plan cache stays as the safe per-thread default. See `performance-findings.md` M12
+    (Решение).
+    Closed: [`performance-findings.md` M12](../performance/performance-findings.md).
 
 ---
 
@@ -290,7 +299,7 @@ developed in parallel on the same working tree.
 | 23 | Date arithmetic parity (MySQL/MariaDB, SQLite) | **Done** | `BuiltinFunctionTranslator.cs`, dialects | SQL-generation tests + provider integration tests |
 | 24 | Table hints | **Done on SQL Server** | `EntityBuilder.cs`, `SqlBuilder.cs`, SQL Server dialect | SQL-generation tests |
 | 25 | PostgreSQL extended scalar functions | **Done** | `SqlFunctions.cs`, `ExtendedScalarFunctionTranslator.cs`, Postgres dialect | SQL-generation tests |
-| 26 | Warm-path plan-build (CTE / recursive CTE / `Join4` / `IN`-list) | **Open** | `QueryCommand*.cs`, `SqlBuilder.cs`, `SqlSourceRenderer.cs`, `Visitors/`, `EntityBuilder.cs`, `JoinedEntityBuilder.cs` | `SqliteBenchmarkFeaturesFairCached`, SQL-generation tests |
+| 26 | Warm-path plan-build (CTE / recursive CTE / `Join4` / `IN`-list) | **Closed (decision)** | `QueryCommand*.cs`, `SqlBuilder.cs`, `SqlSourceRenderer.cs`, `Visitors/`, `EntityBuilder.cs`, `JoinedEntityBuilder.cs` | `SqliteBenchmarkFeaturesFairCached`, SQL-generation tests |
 
 Workstream 17–25 extended provider parity.
 

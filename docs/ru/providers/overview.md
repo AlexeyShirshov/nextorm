@@ -72,6 +72,27 @@ nextorm состоит из нейтрального к провайдеру я�
 Для сравнения по каждой возможности с EF Core и linq2db см.
 [SQL capabilities gap analysis](../../specs/roadmap/sql-capabilities-gap-analysis.md).
 
+## Различия провайдеров: решения по унификации
+
+Там, где провайдеры различаются, nextorm либо **унифицирует** поверхность в коде, либо **гейтит**
+возможность (неподдерживающий провайдер бросает `NotSupportedException`), либо **документирует**
+различие и оставляет его провайдерным. Решение по каждому известному расхождению:
+
+| Различие | Решение | Обоснование / хук |
+|---|---|---|
+| Принимаемые поля `date_add`/`date_diff`/`date_trunc` | **Оставить провайдерным, гейт по полю** | `SupportsDateAddField`/`SupportsDateDiffField`/`SupportsDateTruncField` отклоняют неподдерживаемое поле; единый нормализованный набор молча менял бы результат (SQLite сворачивает `millisecond`/`quarter`, в SQL Server нет `decade`/`century`/`millennium`). |
+| `FULL JOIN` в MySQL/MariaDB | **Гейт без полифилла** | `SupportsFullJoin => false`; переписывание в `LEFT JOIN … UNION … RIGHT JOIN` меняет форму строк/дедупликацию и может испортить план, поэтому неявно не эмитится. |
+| `CUBE`/`GROUPING SETS` в MySQL/MariaDB (и весь `ROLLUP`/`CUBE`/`GROUPING SETS` в in-memory) | **Гейт без полифилла** | `SupportsCube`/`SupportsGroupingSets`; эмуляция через `UNION ALL` множит сканы и меняет семантику (`GROUPING()`), поэтому оставлена сырому SQL. |
+| NULL-семантика `GREATEST`/`LEAST` | **Документированное различие** | PostgreSQL/SQL Server 2022+/ClickHouse игнорируют NULL-аргументы; MySQL/MariaDB и SQLite возвращают NULL, если любой аргумент NULL. Доступность гейтится `SupportsGreatestLeast`; поведение с NULL не переписывается. |
+| Шаблоны форматирования дат/чисел (`to_char`, `FORMAT`, `strftime`, `formatDateTime`) | **Закрыто — не унифицируемо** | Языки шаблонов несовместимы, поэтому форматирование остаётся провайдерными UDF `[SqlFunction]`; единого портируемого аргумента `template` нет. |
+| `FOR JSON` / `FOR XML` | **Гейт (SQL Server)** | `SupportsForJson`/`SupportsForXml`. |
+| Хинты уровня инструкции | **Унифицировано** | SQL Server `OPTION (...)`, PostgreSQL/MySQL/MariaDB встроенный `/*+ ... */`; SQLite/ClickHouse без синтаксиса и остаются под гейтом (см. [Хинты запросов](../guide/17-query-hints.md)). |
+| Табличные хинты vs index hints | **Оставить провайдерным** | У `WITH (NOLOCK)` нет аналога среди index hints MySQL/MariaDB/SQLite (`USE INDEX`/`INDEXED BY` меняют план, а не блокировки), поэтому подключён только SQL Server (`SupportsTableHints`). |
+| Сырой SQL как композируемый источник `FROM` | **Унифицировано** | `FromSql` + `SupportsRawSqlSource` у всех SQL-провайдеров (см. [Сырой SQL](../guide/14-raw-sql.md)). |
+| `INTERSECT ALL`/`EXCEPT ALL` | **Гейт** | PostgreSQL и MariaDB поддерживают; SQL Server/SQLite/MySQL отклоняют через `SupportsIntersectExceptAll`. |
+
+Строки таблицы [ограничений](../advanced/limitations.md) описывают итоговое поведение в рантайме.
+
 ## Как подключается диалект
 
 Диалект реализует [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) или наследуется от [`SqlDialectBase`](xref:NextORM.Core.SqlDialectBase). В [`SqlDialectBase`](xref:NextORM.Core.SqlDialectBase) абстрактными являются только

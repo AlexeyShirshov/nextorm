@@ -1056,3 +1056,48 @@ NEXTORM_BENCH_DB=/tmp/nextorm-bench/test.db \
 ```
 
 
+# Итерация 9 — закрытие warm-пути по решению (2026-09-22)
+
+> Итерация **не вносит правок в код**: она фиксирует свежий baseline в изолированном worktree на
+> `1.0.4-alpha` (HEAD `433aa51`) и закрывает пункт `todo_warm_path_plan_build.md` **решением**.
+> Итог вынесен в `performance-findings.md` (M12, раздел «Решение») и
+> `docs/specs/roadmap/sql-capabilities-gap-analysis.md` §4 п.19.
+
+## Замер
+
+`SqliteBenchmarkFeaturesFairCached`, BenchmarkDotNet `ShortRun`, `InProcessEmitToolchain` (дефолтный
+`NextormConfig`), 3 warmup / 3 iteration — числа **зашумлённые, индикативные, не для отчёта**.
+Среднее на вызов бенчмарки (внутри 10 запросов в цикле), µs:
+
+| Фича | Dapper | nextorm cached | Отрыв | Аллокации (nextorm / Dapper) |
+|---|---:|---:|---:|---:|
+| `CTE` | 249.4 | 304.7 | **1.22×** | 109.3 KB / 15.7 KB |
+| `RecursiveCte` | 280.9 | 361.0 | **1.29×** | 123.5 KB / 15.3 KB |
+| `Join4` | 291.5 | 323.6 | **1.11×** | 104.2 KB / 20.2 KB |
+| `IN` inline (`@in` / `Contains`) | 217.7 | 304.2 / 317.5 | **1.40–1.46×** | 72.7 / 73.5 KB vs 12.7 KB |
+| `IN` captured (`@in` / `Contains`) | 217.7 | 336.2 / 347.6 | **1.54–1.60×** | 83.4 / 84.7 KB vs 12.7 KB |
+
+Пересчёт на запрос: структурная накладная implicit-пути (построение дерева + полный обход `*PlanHash`)
+≈ 3–9 µs/запрос для всех фич; captured `IN` добавляет ≈ 3 µs/запрос — `ExtractParams` при cache-hit
+перерисовывает весь select в param-режиме (`QueryPlanner.cs:177`), чтобы собрать изменившиеся значения.
+Проверено по коду: `QueryPlanEqualityComparer` считает по под-хешам (`*PlanHash`, `CtesPlanHash` через
+`GetHashCode(subQuery)`), полного повторного обхода под-команд нет — стоимость именно в построении плана
+свежей fluent-команды.
+
+## Решение
+
+Критерий «≤ ±3 % от Dapper» для не-prepared fluent-арм'ов **недостижим безопасной локальной правкой**:
+arm Dapper сравнивается с константным SQL, а fluent-путь обязан построить и захешировать дерево на каждый
+вызов. Поэтому пункт закрывается решением, а не правкой:
+
+- `Prepare()` — санкционированный быстрый путь (быстрее Dapper на всех классах, 1.47× по времени и ~5×
+  по аллокациям быстрее implicit-кэша); implicit plan cache сохраняется как безопасный per-thread дефолт;
+- fresh-fluent warm-паритет с Dapper снят как цель; при необходимости он оформляется заново как
+  структурная задача M12 #3 (shape-keyed кэш подготовленных команд) с отдельным бенчмарк-гейтом.
+
+```bash
+# воспроизведение итерации 9 (изолированный worktree)
+NEXTORM_BENCH_DB=/tmp/nextorm-bench/test.db \
+  dotnet run -c Release --no-build --project benchmarks/nextorm.benchmark -- \
+  --filter "*SqliteBenchmarkFeaturesFairCached*"
+```
