@@ -86,15 +86,27 @@ public class DefaultColumnsProvider : IColumnsProvider
 
     public (int, QueryCommand?) FindQueryCommand(Type entityType)
     {
+        // Prefer an in-scope source, but fall back to the most recently added out-of-scope one.
+        // Rendering a derived query's pass-through column re-visits the expression against the source
+        // that derived query was built from (for example the middle query over the inner derived
+        // query's columns), and that source's scope has already been popped by the time the enclosing
+        // query renders its projection. The entry is inactive for the enclosing command's own alias
+        // lookups, yet it is the only command that can resolve the nested member.
+        (int Index, QueryCommand? Command) fallback = default;
+
         for (var (i, cnt) = (0, _list.Count); i < cnt; i++)
         {
             var item = _list[i];
-            if (item.Item4) continue;
-            if (item.Item1 == entityType)
+            if (item.Item1 != entityType)
+                continue;
+
+            if (!item.Item4)
                 return (i, item.Item2);
+
+            fallback = (i, item.Item2);
         }
 
-        return (default, default);
+        return fallback;
     }
 
     public void PopScope()

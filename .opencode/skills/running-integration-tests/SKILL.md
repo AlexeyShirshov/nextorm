@@ -5,6 +5,12 @@ description: Run nextorm's xunit v3 integration tests (tests/nextorm.integration
 
 # Running nextorm integration tests
 
+## MANDATORY — read this before claiming any result
+
+- Never run `tests/nextorm.integration.tests` **without** `DOCKER_HOST` and then call it a pass. Without it only SQLite runs and PostgreSQL/SQL Server/MySQL/ClickHouse are all `skipped`; **skips are not evidence**.
+- If `ls -l /mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock` fails, do **not** stop at "cannot run": start the machine with `"/mnt/c/Program Files/RedHat/Podman/podman.exe" machine start`, wait a few seconds and re-check the socket (see Troubleshooting), then run with `DOCKER_HOST`.
+- Run the container suite whenever a change can affect SQL generation, providers or the query engine — not only when explicitly asked. Loading this skill is the first step, before running the tests.
+
 ## Environment: Podman runs on Windows, WSL talks to it over a socket
 
 - Podman is a **Windows Podman Desktop WSL2 machine** named `podman-machine-default`. It is **not installed in WSL**: `podman` is not on the WSL `PATH`, so `podman machine list` fails with `command not found`.
