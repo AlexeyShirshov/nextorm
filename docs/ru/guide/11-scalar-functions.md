@@ -532,6 +532,12 @@ select cardinality(@norm_p1) as "N" from complex_entity where array_length(@norm
 > проверяют префикс/суффикс, а `has_substr(array, other)` — что `other` входит в `array` непрерывно и
 > по порядку (пустой `other` содержится всегда). Требуется провайдер, поддерживающий array-функции.
 
+> Поверхность кортежей строится на `System.Tuple.Create`/`System.Tuple<...>.ItemN`: `Tuple.Create(a, b)`
+> рендерится как `tuple(a, b)`, а `x.Pair.Item1` по колонке `Tuple(...)` — как `tupleElement(pair, 1)`.
+> Целое выражение `Tuple(...)` проецируется как `System.Tuple<...>` (арность 1–7). Требуется провайдер
+> с нативным tuple-типом (см. [`SupportsTupleFunctions`](xref:NextORM.Core.ISqlDialect.SupportsTupleFunctions);
+> ClickHouse); `untuple` не поддерживается, так как меняет набор колонок результата, а не даёт скаляр.
+
 > Функции высшего порядка (lambda) принимают inline-лямбду C#, параметр которой — элемент массива;
 > например `array_map(v => -v, e.Nums)` рендерится как `arrayMap(v -> -(v), nums)`.
 > `array_exists`/`array_all` возвращают `bool`; `array_count`/`array_first_index`/`array_last_index` —

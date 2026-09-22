@@ -83,6 +83,9 @@ internal static class MemberTranslator
             return true;
         }
 
+        if (TupleSqlTranslator.TryTranslateElement(visitor, node))
+            return true;
+
         return false;
     }
 

@@ -526,6 +526,13 @@ result can be projected like a scalar column.
 > and in order (an empty `other` is always contained). They require a provider that supports the array
 > functions.
 
+> The tuple surface is built from `System.Tuple.Create`/`System.Tuple<...>.ItemN`: `Tuple.Create(a, b)`
+> renders `tuple(a, b)` and `x.Pair.Item1` on a `Tuple(...)` column renders `tupleElement(pair, 1)`.
+> A whole `Tuple(...)` expression projects as `System.Tuple<...>` (arity 1–7). Requires a provider with
+> a native tuple type (see [`SupportsTupleFunctions`](xref:NextORM.Core.ISqlDialect.SupportsTupleFunctions);
+> ClickHouse); `untuple` is not supported because it changes the result column set rather than producing
+> a scalar.
+
 > The higher-order (lambda) functions take an inline C# lambda whose parameter is the array element,
 > for example `array_map(v => -v, e.Nums)` renders `arrayMap(v -> -(v), nums)`. `array_exists`/`array_all`
 > return `bool`; `array_count`/`array_first_index`/`array_last_index` return `long` (the dialect casts

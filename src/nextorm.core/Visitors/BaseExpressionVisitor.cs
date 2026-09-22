@@ -115,6 +115,9 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             return node;
         }
 
+        if (TupleSqlTranslator.TryTranslateCreate(this, node))
+            return node;
+
         if (ScalarFunctionTranslator.TryTranslateBuiltIn(this, node))
             return node;
 

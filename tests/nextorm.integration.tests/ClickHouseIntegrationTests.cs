@@ -1076,6 +1076,31 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
 
         pair.Should().Be(Tuple.Create(7, "seven"));
     }
+
+    [Fact]
+    public void TupleElementAccess_ShouldReturnValues()
+    {
+        var r = _sut.DataProvider
+            .From<ITupleEntity>()
+            .Where(x => x.Id == 1)
+            .Select(x => new { A = x.Pair.Item1, B = x.Pair.Item2 })
+            .First();
+
+        r.A.Should().Be(7);
+        r.B.Should().Be("seven");
+    }
+
+    [Fact]
+    public void TupleCreate_ShouldMaterialiseTuple()
+    {
+        var pair = _sut.DataProvider
+            .From<ITupleEntity>()
+            .Where(x => x.Id == 1)
+            .Select(x => Tuple.Create(x.Id, x.Pair.Item2))
+            .First();
+
+        pair.Should().Be(Tuple.Create(1, "seven"));
+    }
 }
 
 [SqlTable("uint64_entity")]

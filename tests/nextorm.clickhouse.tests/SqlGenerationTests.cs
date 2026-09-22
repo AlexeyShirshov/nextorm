@@ -1787,6 +1787,79 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void TupleElementAccess_ShouldRenderTupleElement()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<ITupleEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new { A = x.Pair.Item1, B = x.Pair.Item2 }));
+
+        sql.Should().Contain("tupleElement(pair, 1)");
+        sql.Should().Contain("tupleElement(pair, 2)");
+    }
+
+    [Fact]
+    public void TupleCreate_ShouldRenderTuple()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => Tuple.Create(x.Id, x.String)))
+            .Should().Contain("tuple(id, somestring)");
+    }
+
+    [Fact]
+    public void TupleCreate_WithCapturedValue_ShouldRefreshParamsOnCachedPlan()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<ITupleEntity>();
+        var extra = 5;
+
+        QueryCommand<Tuple<int, int>> Build() => e.Select(x => Tuple.Create(x.Id, extra));
+
+        _ = ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
+        var second = (DbPreparedQueryCommand<Tuple<int, int>>)ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
+
+        Normalize(second.DbCommand.CommandText).Should().Contain("tuple(id, @extra)");
+    }
+
+    [Fact]
+    public void TupleElementAccess_WithCapturedFilter_ShouldRefreshParamsOnCachedPlan()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<ITupleEntity>();
+        var min = 0;
+
+        QueryCommand<int> Build() => e.Where(x => x.Id > min).Select(x => x.Pair.Item1);
+
+        _ = ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
+        var second = (DbPreparedQueryCommand<int>)ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
+
+        Normalize(second.DbCommand.CommandText).Should().Contain("tupleElement(pair, 1)");
+    }
+
+    [Fact]
+    public void TupleElementAccess_OnCapturedTuple_ShouldNotTranslateToSql()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<ITupleEntity>();
+        var local = Tuple.Create(1, "a");
+
+        SqlOf(ctx, e.Select(x => new { V = local.Item1 }))
+            .Should().NotContain("tupleElement");
+    }
+
+    [Fact]
+    public void TupleElementAccess_OnNewTuple_ShouldRenderNestedTuple()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<ITupleEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = new Tuple<int, int>(x.Id, x.Id).Item1 }))
+            .Should().Contain("tupleElement(tuple(id, id), 1)");
+    }
+
+    [Fact]
     public void ArrayStringConcat_ShouldRenderArrayStringConcat()
     {
         using var ctx = ClickHouseTestContext.Create();

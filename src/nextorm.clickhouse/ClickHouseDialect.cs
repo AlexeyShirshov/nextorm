@@ -47,7 +47,8 @@ public sealed class ClickHouseDialect : SqlDialectBase
     /// <summary>
     /// ClickHouse has a native <c>Array(T)</c> type and implements the array functions over array
     /// columns (<c>length</c>, <c>has</c>, <c>indexOf</c>, <c>arrayStringConcat</c>, <c>hasAny</c>/<c>hasAll</c>,
-    /// <c>arraySort</c>, <c>arrayReverse</c>, <c>arrayDistinct</c>, <c>splitByChar</c>).
+    /// <c>startsWith</c>/<c>endsWith</c>/<c>hasSubstr</c>, <c>arraySort</c>, <c>arrayReverse</c>, <c>arrayDistinct</c>,
+    /// <c>splitByChar</c>).
     /// </summary>
     public override bool SupportsArrayFunctions => true;
 
@@ -57,6 +58,12 @@ public sealed class ClickHouseDialect : SqlDialectBase
     /// <c>arrayFirst*</c>, <c>arrayLast*</c>).
     /// </summary>
     public override bool SupportsHigherOrderArrayFunctions => true;
+
+    /// <summary>
+    /// ClickHouse has a native <c>Tuple(...)</c> type and implements the <c>tuple</c> constructor and
+    /// <c>tupleElement</c> access.
+    /// </summary>
+    public override bool SupportsTupleFunctions => true;
 
     /// <summary>ClickHouse implements <c>arrayJoin(array)</c>, which expands one row per element.</summary>
     public override bool SupportsArrayJoin => true;

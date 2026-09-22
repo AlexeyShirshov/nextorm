@@ -177,7 +177,10 @@ MySQL и MariaDB) и `corr`/`covar*` — документированы на т�
   `CREATE DICTIONARY`);
 * функции массивов `length`/`has`/`index_of`/`has_any`/`has_all`/`starts_with`/`ends_with`/
   `has_substr`/`array_string_concat`/`split_by_char`/`array_sort`/`array_reverse`/`array_distinct`/
-  `range`/`array_enumerate`/`array_cum_sum`/`array_slice`/`array_push_back`.
+  `range`/`array_enumerate`/`array_cum_sum`/`array_slice`/`array_push_back`;
+* конструктор кортежа и доступ к элементу: `System.Tuple.Create(a, b)` рендерится как `tuple(a, b)`,
+  а `System.Tuple<...>.ItemN` — как `tupleElement(t, n)` (целый `Tuple(...)` проецируется как
+  `System.Tuple<...>`); `untuple` не поддерживается.
 
 См. [Скалярные функции](../11-scalar-functions.md) и [Поддержка JSON](../18-json.md)
 ([`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract)/[`SupportsDictionaries`](xref:NextORM.Core.ISqlDialect.SupportsDictionaries)).

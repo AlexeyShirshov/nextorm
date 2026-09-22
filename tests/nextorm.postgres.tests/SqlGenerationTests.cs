@@ -1298,6 +1298,28 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void TupleFunctions_UnsupportedByProvider_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => Tuple.Create(x.Id, x.String)));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*native tuple type*");
+    }
+
+    [Fact]
+    public void TupleElementAccess_UnsupportedByProvider_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<ITupleEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => x.Pair.Item1));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*native tuple type*");
+    }
+
+    [Fact]
     public void FilteredAggregates_ShouldEmitFilterClause()
     {
         using var ctx = PostgresTestContext.Create();

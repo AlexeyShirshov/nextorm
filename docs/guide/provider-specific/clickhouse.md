@@ -175,7 +175,10 @@ See [Grouping and aggregates](../04-grouping-and-aggregates.md).
 * dictionary lookups `dict_get`/`dict_get_or_default`/`dict_has` (need a configured `CREATE DICTIONARY`);
 * array functions `length`/`has`/`index_of`/`has_any`/`has_all`/`starts_with`/`ends_with`/`has_substr`/
   `array_string_concat`/`split_by_char`/`array_sort`/`array_reverse`/`array_distinct`/`range`/
-  `array_enumerate`/`array_cum_sum`/`array_slice`/`array_push_back`.
+  `array_enumerate`/`array_cum_sum`/`array_slice`/`array_push_back`;
+* tuple constructor and element access: `System.Tuple.Create(a, b)` renders `tuple(a, b)` and
+  `System.Tuple<...>.ItemN` renders `tupleElement(t, n)` (a whole `Tuple(...)` projects as
+  `System.Tuple<...>`); `untuple` is not supported.
 
 See [Scalar functions](../11-scalar-functions.md) and [JSON support](../18-json.md)
 ([`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract)/[`SupportsDictionaries`](xref:NextORM.Core.ISqlDialect.SupportsDictionaries)).

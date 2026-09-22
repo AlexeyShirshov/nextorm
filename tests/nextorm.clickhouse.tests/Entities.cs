@@ -44,3 +44,13 @@ public interface IArrayEntity
     [Column("nums")]
     long[] Nums { get; set; }
 }
+
+[SqlTable("tuple_entity")]
+public interface ITupleEntity
+{
+    [Key]
+    [Column("id")]
+    int Id { get; set; }
+    [Column("pair")]
+    Tuple<int, string> Pair { get; set; }
+}

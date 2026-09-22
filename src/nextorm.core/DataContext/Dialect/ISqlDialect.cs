@@ -153,6 +153,15 @@ public interface ISqlDialect
     bool SupportsHigherOrderArrayFunctions { get; }
 
     /// <summary>
+    /// True when the provider has a native tuple type and renders the tuple surface: the
+    /// <c>tuple(...)</c> constructor (from <c>Tuple.Create</c>) and element access
+    /// (from <c>System.Tuple&lt;...&gt;.ItemN</c> as <c>tupleElement(tuple, n)</c>). Declared as a
+    /// default interface method returning <c>false</c> so existing external implementations keep
+    /// compiling; only ClickHouse opts in today.
+    /// </summary>
+    bool SupportsTupleFunctions => false;
+
+    /// <summary>
     /// The provider's renderer for a scalar <c>string.Split</c>; <c>null</c> means the provider cannot
     /// express it. Declared as a default interface method so that existing external implementations keep
     /// compiling.

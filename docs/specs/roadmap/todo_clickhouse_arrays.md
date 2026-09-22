@@ -2,7 +2,7 @@
 
 > Рабочий план. Источник: `docs/specs/roadmap/sql-capabilities-gap-analysis.md` §4 п.4 (row reader),
 > п.5 (higher-order), п.9 (скаляры над массивами).
-> **Статус: срезы 1 (row reader), 2 (topK/topKWeighted/quantiles), 3 (higher-order lambda) и 4 (предикаты над массивами `startsWith`/`endsWith`/`hasSubstr`) — готовы.**
+> **Статус: срезы 1 (row reader), 2 (topK/topKWeighted/quantiles), 3 (higher-order lambda), 4 (предикаты над массивами `startsWith`/`endsWith`/`hasSubstr`) и 5 (`tuple`/`tupleElement`) — готовы.**
 
 ## Источник, цель, критерий приёмки
 
@@ -267,10 +267,55 @@ subsequence). Проверено по документации провайде�
   `docs/guide/provider-specific/clickhouse.md` (+RU), `docs/advanced/api-reference.md` (+RU),
   gap-analysis §4 п.9; `API-NAMING-REVIEW.md` (новые публичные методы).
 
+### Срез 5 (gap §4 п.4 остаток): скалярная поверхность над `Tuple` — `tuple`/`tupleElement`
+
+**Статус: готово.** `Tuple.Create` → `tuple(...)`, `Tuple<>.ItemN` → `tupleElement(t, n)`; гейт
+`SupportsTupleFunctions` (DIM default `false`, CH override). `untuple` — вне объёма (меняет набор
+колонок, не скаляр).
+
+#### Матрица «провайдер × форма» — конструктор и доступ к элементу кортежа
+
+| Провайдер | Tuple/record-тип | `tuple(...)` / `tupleElement` / `untuple` | Источник |
+| --- | --- | --- | --- |
+| PostgreSQL | composite/record `(a,b)` | `ROW(a,b)` и доступ к полю `(t).f1`; `untuple` нет; nextorm не моделирует composite-тип → `—` | https://www.postgresql.org/docs/current/rowtypes.html |
+| SQL Server | — (нет tuple-типа) | — | https://learn.microsoft.com/sql/t-sql/data-types/data-types-transact-sql |
+| MySQL | — (row constructor `(a,b)` не first-class) | — | https://dev.mysql.com/doc/refman/8.4/en/row-constructor.html |
+| MariaDB | — | — | https://mariadb.com/kb/en/row-constructors/ |
+| SQLite | — | — | https://www.sqlite.org/lang_expr.html |
+| ClickHouse | `Tuple(T1, …, Tn)` | `tuple(x1, …)`, `tupleElement(t, n)` (и `t.n`), `untuple(t)` — проверено `clickhouse-local` на 25.8 | https://clickhouse.com/docs/en/sql-reference/data-types/tuple , https://clickhouse.com/docs/en/sql-reference/functions/tuple-functions |
+| InMemory | CLR `Tuple`/`ValueTuple` | — (поверхность ClickHouse-only, переводчиком не обрабатывается) | — |
+
+#### Единообразие провайдеров (решение)
+
+- Фича ClickHouse-only: только ClickHouse имеет first-class `Tuple(T...)` и `tupleElement`; PostgreSQL
+  composite-тип nextorm не моделирует, остальные tuple-типа не имеют. Новый флаг
+  `ISqlDialect.SupportsTupleFunctions` (DIM default `false`, `SqlDialectBase` virtual `false`, CH
+  override) — отдельный от `SupportsArrayFunctions` (array ≠ tuple).
+- `untuple(tuple)`: возвращает несколько колонок, а не скаляр, поэтому в nextorm не выразим; остаётся
+  ограничением (см. `docs/advanced/limitations.md`).
+
+#### Tier и реализация
+
+- Closest C# analog (tier a, без нового публичного API): `System.Tuple.Create(a, b, …)` конструирует
+  кортеж, `System.Tuple<…>.ItemN` читает элемент. Новый internal `TupleSqlTranslator`:
+  `TryTranslateCreate` → `tuple(args…)`, `TryTranslateElement` → `tupleElement(t, N)`.
+  `TryTranslateCreate` вызывается из `BaseExpressionVisitor.VisitMethodCall`, `TryTranslateElement` —
+  из `MemberTranslator` (`.ItemN`). `.ItemN` переводится только когда выражение-кортеж ссылается на
+  запрос (`Has<ParameterExpression>()`); захваченный/локальный `Tuple` сворачивается в константу, как
+  раньше. `new Tuple<...>(a, b)` не затронут — это `NewExpression` (многоколоночная проекция).
+- Тест-план: SQL-gen clickhouse `TupleElementAccess_ShouldRenderTupleElement`,
+  `TupleCreate_ShouldRenderTuple`, refresh кэш-плана (`…_WithCapturedValue_…`,
+  `…_WithCapturedFilter_…`), локальный кортеж `…_OnCapturedTuple_ShouldNotTranslateToSql`; rejection
+  postgres `TupleFunctions_…`/`TupleElementAccess_…`; интеграционные `tuple_entity` id=1
+  (`TupleElementAccess_ShouldReturnValues`, `TupleCreate_ShouldMaterialiseTuple`).
+- Доки EN+RU: `docs/guide/11-scalar-functions.md` (+RU), `docs/guide/provider-specific/clickhouse.md`
+  (+RU), `docs/providers/clickhouse.md` (+RU), `docs/advanced/api-reference.md` (+RU),
+  `docs/advanced/limitations.md` (+RU, `untuple`); gap-analysis §4 п.4; `API-NAMING-REVIEW.md`.
+
 ### Прочее
-- `tuple`/`tupleElement`/`untuple` — скалярная поверхность над `Tuple` (после среза 1).
 - Возвращающие массивы `JSONExtractKeys`/`JSONExtractKeysAndValues`/`JSONExtractArrayRaw`.
 - `dictGetHierarchy`/`dictGetChildren`/`dictIsIn`.
+- `untuple` (меняет набор колонок; не скаляр).
 - Привязка элемента для нескольких массивов/join’ов.
 
 ## Критерий приёмки (полного item)

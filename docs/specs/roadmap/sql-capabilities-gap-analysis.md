@@ -169,10 +169,12 @@ Ordered by impact on real query authoring. Per-feature details and owners live i
    Native `UInt64` rows (`hits_v1.UserID`, any `UInt64` column and `ulong`/`ulong?` projection) now
    materialise through the row reader without a SQL cast; the aggregate/function results that declare a
    signed CLR return type (`count`, `uniq*`, `length`, `index_of`, `json_length`) keep their normalising
-   cast.
+   cast. The tuple scalar surface is shipped too: `Tuple.Create(a, b, ...)` renders `tuple(a, b, ...)`
+   and `System.Tuple<...>.ItemN` renders `tupleElement(t, n)`, both under
+   [`SupportsTupleFunctions`](xref:NextORM.Core.ISqlDialect.SupportsTupleFunctions).
    Still open on this item: the array-returning
-   `JSONExtractKeys`/`JSONExtractKeysAndValues`/`JSONExtractArrayRaw`, the `tuple`/`tupleElement`/`untuple`
-   scalars and `dictGetHierarchy`/`dictGetChildren`/`dictIsIn`.
+   `JSONExtractKeys`/`JSONExtractKeysAndValues`/`JSONExtractArrayRaw`, `untuple` (changes the column
+   set, not a scalar value) and `dictGetHierarchy`/`dictGetChildren`/`dictIsIn`.
    Shipped: [ClickHouse provider](../../providers/clickhouse.md),
    [Provider-specific SQL](../../guide/provider-specific/clickhouse.md#aggregates),
    [Grouping and aggregates](../../guide/04-grouping-and-aggregates.md),

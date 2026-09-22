@@ -33,6 +33,7 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual bool SupportsForXml => false;
     public virtual bool SupportsArrays => false;
     public virtual bool SupportsArrayFunctions => false;
+    public virtual bool SupportsTupleFunctions => false;
     public virtual bool SupportsHigherOrderArrayFunctions => false;
     public virtual bool SupportsArrayJoin => false;
     public virtual IStringSplitRenderer? StringSplit => null;
