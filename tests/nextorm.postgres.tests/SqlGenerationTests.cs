@@ -3229,4 +3229,42 @@ public class SqlGenerationTests
         sql.Should().Be("select t1.id, t2.id as \"SId\" from (select id, somestring as \"String\" from complex_entity) as \"t1\" join simple_entity as \"t2\" on t1.id = cast(t2.id as bigint)\n where (t1.id > 5)");
     }
 
+    [Fact]
+    public void DerivedSourceOverDerivedWithWindow_ShouldResolvePassThroughColumns()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        // The middle derived query projects pass-through columns of another derived query plus a
+        // window function. The outer query must resolve the pass-through columns against the source
+        // the middle query was built from, not lose them to the source-scope boundary.
+        var revenue = ctx.From<IComplexEntity>()
+            .GroupBy(x => new { DepartureCity = x.String, Route = x.String + " -> " + x.String })
+            .Select(x => new
+            {
+                DepartureCity = x.String,
+                Route = x.String + " -> " + x.String,
+                Revenue = SqlFunctions.Sql.sum(x.Id)
+            });
+
+        var ranked = ctx.From(revenue)
+            .Select(r => new
+            {
+                r.DepartureCity,
+                r.Route,
+                r.Revenue,
+                Place = SqlFunctions.Sql.rank().Over(
+                    partitionBy: new Expression<Func<object?>>[] { () => r.DepartureCity },
+                    orderBy: new[] { SqlFunctions.Sql.desc(() => r.Revenue) })
+            });
+
+        var sql = SqlOf(ctx, ctx.From(ranked)
+            .Where(r => r.Place <= 3)
+            .OrderBy(r => r.DepartureCity)
+            .Select(r => new { r.DepartureCity, r.Place, r.Route, r.Revenue }));
+
+        sql.Should().NotContain("select ,");
+        sql.Should().Contain("select \"DepartureCity\", \"Place\", \"Route\", \"Revenue\"");
+        sql.Should().Contain("order by t2.\"DepartureCity\"");
+    }
+
 }

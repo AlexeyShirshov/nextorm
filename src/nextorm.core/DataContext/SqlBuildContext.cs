@@ -24,6 +24,7 @@ internal readonly record struct SqlBuildContext
         Logger = options.Logger;
         QuoteIdentifiers = options.QuoteIdentifiers;
         NamingConvention = options.NamingConvention;
+        IncludeNestedSources = options.IncludeNestedSources;
     }
 
     internal ISqlDialect Dialect { get; init; }
@@ -36,10 +37,11 @@ internal readonly record struct SqlBuildContext
     internal ILogger? Logger { get; init; }
     internal bool QuoteIdentifiers { get; init; }
     internal INamingConvention? NamingConvention { get; init; }
+    internal bool IncludeNestedSources { get; init; }
 
     internal WhereExpressionVisitor CreateWhereVisitor(Type entityType, int dim)
-        => new(new VisitorOptions(entityType, Dialect, ColumnsProvider, dim, AliasProvider, ParameterProvider, QueryProvider, false, ParamMode, Params, Logger) { QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention });
+        => new(new VisitorOptions(entityType, Dialect, ColumnsProvider, dim, AliasProvider, ParameterProvider, QueryProvider, false, ParamMode, Params, Logger) { QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, IncludeNestedSources = IncludeNestedSources });
 
     internal BaseExpressionVisitor CreateColumnVisitor(Type entityType, int dim, bool dontNeedAlias)
-        => new(new VisitorOptions(entityType, Dialect, ColumnsProvider, dim, AliasProvider, ParameterProvider, QueryProvider, dontNeedAlias, ParamMode, Params, Logger) { QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention });
+        => new(new VisitorOptions(entityType, Dialect, ColumnsProvider, dim, AliasProvider, ParameterProvider, QueryProvider, dontNeedAlias, ParamMode, Params, Logger) { QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, IncludeNestedSources = IncludeNestedSources });
 }

@@ -42,4 +42,12 @@ public sealed record VisitorOptions(
     /// <c>with</c>.
     /// </summary>
     public INamingConvention? NamingConvention { get; init; }
+
+    /// <summary>
+    /// When <see langword="true"/> the source lookups also consider the entries of nested commands
+    /// that have already finished rendering. A derived query exposes its output columns by re-rendering
+    /// the projection expression, which references the nested command's own sources; those entries are
+    /// otherwise hidden from the enclosing command (see <c>IColumnsProvider.PopSourceScope</c>).
+    /// </summary>
+    public bool IncludeNestedSources { get; init; }
 }

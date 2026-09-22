@@ -56,7 +56,7 @@ the log only appears at the end.
 | Example | Result | Documented `FAIL`s |
 |---|---|---|
 | postgres aviasales | **11/11** | — |
-| mssql adventureworks | **10/11** | `QuarterlyPivot` (`PIVOT` exists but only over a plain table/entity; the reference pivots a join-derived CTE) |
+| mssql adventureworks | **11/11** | — |
 | clickhouse analytics | **8/11** | `ArrayAnalytics`, `Incremental`, `Retention` (arrays / `-Merge` / `groupArray` have no LINQ surface) |
 
 A `[FAIL]` is expected only for documented engine gaps (`NotSupportedException` /

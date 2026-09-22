@@ -67,7 +67,7 @@ Nextorm uses protocol-level libraries (for example, SqlClient for Microsoft SQL 
 
 ## Status
 
-The current status (1.0.3-alpha) is a prof of concept.
+The current status (1.0.3.1-alpha) is a prof of concept.
 
 ## Roadmap
 
@@ -122,6 +122,12 @@ They differ in cost, lifetime and thread-safety rules. Which one to use, what ea
 its limitations: **[Prepared vs Cached](specs/performance/prepared-vs-cached.md)**.
 
 ## Releases
+
+### 1.0.3.1-alpha
+
+- Hotfix for a regression introduced in [1.0.3-alpha](#103-alpha): a derived query whose projection references a
+  source from a nested command rendered an incomplete column list (invalid SQL, or `Operation is not valid due to
+  the current state of the object`). Affected PostgreSQL, SQL Server, MySQL/MariaDB and ClickHouse.
 
 ### 1.0.3-alpha
 
