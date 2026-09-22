@@ -1,10 +1,8 @@
 # SQL Server-specific SQL
 
 > SQL Server contributes the `CHOOSE` conditional function, statement/table hints and the `FOR JSON`/
-> `FOR XML` result shape, the scalar XML data-type methods (`value`/`query`/`exist`), the native
-> `PIVOT`/`UNPIVOT` source constructs, plus `string_split`/`openjson` table functions.
-> `CONTAINSTABLE` and the rowset XML method `.nodes` are the remaining SQL Server surfaces not part
-> of nextorm.
+> `FOR XML` result shape, the XML data-type methods (`value`/`query`/`exist` and the `nodes` rowset),
+> the native `PIVOT`/`UNPIVOT` source constructs, plus `string_split`/`openjson` table functions.
 
 **Prerequisites:** [Querying and projections](../01-querying-and-projections.md) · [SQL Server provider](../../providers/sqlserver.md)
 
@@ -86,7 +84,22 @@ select payload.value('(/root/item)[1]', 'nvarchar(100)') as [Value],
 from xml_entity
 ```
 
-The rowset method `.nodes` is not supported: it needs an outer `FROM`/`CROSS APPLY` reference.
+The rowset method `.nodes` is a correlated `CrossApply`/`OuterApply` source: `xml_nodes(xml, xpath)`
+unfolds the XML value into one row per node and renders `<xml>.nodes('xpath') as [alias]([value])`,
+after which the unfolded `IXmlNodesRow.Value` is projected with the scalar methods above. The operand
+must be a column of the outer row and the XQuery a string literal.
+
+```csharp
+var rows = dataContext.From<IXmlEntity>()
+    .CrossApply(x => SqlFunctions.SqlServer.xml_nodes(x.Payload, "/root/item"))
+    .Select(p => new { Id = SqlFunctions.SqlServer.xml_value<int>(p.Item2.Value, "(.)[1]/@id", "int") })
+    .ToList();
+```
+
+```sql
+select t2.value.value('(.)[1]/@id', 'int') as [Id]
+from xml_entity as [t1] cross apply t1.payload.nodes('/root/item') as [t2](value)
+```
 
 See [Scalar functions](../11-scalar-functions.md#xml-data-type-methods).
 
@@ -217,8 +230,8 @@ The cross-provider boolean predicates `contains`/`freetext` render `CONTAINS`/`F
 
 ## Not yet supported
 
-The rowset XML method `.nodes` (which needs an outer `FROM`/`CROSS APPLY`
-reference) is tracked in the backlog. See [Limitations and out-of-scope features](../../advanced/limitations.md).
+No SQL Server-specific surface remains open. See
+[Limitations and out-of-scope features](../../advanced/limitations.md).
 
 ## See also
 

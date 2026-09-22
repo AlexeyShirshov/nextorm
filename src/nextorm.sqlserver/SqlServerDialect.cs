@@ -450,7 +450,7 @@ internal sealed class SqlServerXmlFunctions : IXmlFunctions
 {
     public static readonly SqlServerXmlFunctions Instance = new();
 
-    public bool Supports(string name) => name is "value" or "query" or "exist";
+    public bool Supports(string name) => name is "value" or "query" or "exist" or "nodes";
 
     public string Render(string name, string operand, IReadOnlyList<string> args) =>
         $"{operand}.{name}({string.Join(", ", args)})";

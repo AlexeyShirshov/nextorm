@@ -314,6 +314,18 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void XmlNodes_ShouldThrowBecauseOnlySqlServerHasThem()
+    {
+        using var ctx = MariaDbTestContext.Create();
+
+        var act = () => SqlOf(ctx, ctx.From<IComplexEntity>()
+            .CrossApply(x => SqlFunctions.SqlServer.xml_nodes(x.String, "/root/item"))
+            .Select(p => new { p.Item2.Value }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*xml.nodes*");
+    }
+
+    [Fact]
     public void DerivedSourceThenJoin_ShouldRenderDerivedTable()
     {
         using var ctx = MariaDbTestContext.Create();

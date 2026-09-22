@@ -713,9 +713,34 @@ select payload.value('(/root/item)[1]', 'nvarchar(100)') as [Value], payload.que
 | `SqlFunctions.SqlServer.xml_value<T>(xml, xpath, sqlType)` | `xml.value('xpath', 'sqlType')` |
 | `SqlFunctions.SqlServer.xml_query(xml, xpath)` | `xml.query('xpath')` |
 | `SqlFunctions.SqlServer.xml_exist(xml, xpath)` | `xml.exist('xpath')` |
+| `SqlFunctions.SqlServer.xml_nodes(xml, xpath)` | `xml.nodes('xpath') as [alias]([value])` (источник APPLY) |
 
 `xml_exist` возвращает `bit`: в предикате рендерится как `(xml.exist('xpath')) = 1`, при проецировании
-остаётся bit. Строковый метод `.nodes` не поддерживается (нужна внешняя ссылка в `FROM`/`CROSS APPLY`).
+остаётся bit.
+
+Строковый метод `.nodes` — это коррелированный источник, а не скаляр: используйте его как источник
+`CrossApply`/`OuterApply` и проецируйте развёрнутый `IXmlNodesRow.Value` скалярными методами выше. Он
+разворачивает XML-значение в строки — по одной на узел, выбранный XQuery, — и рендерит
+`<xml>.nodes('xpath') as [alias]([value])`:
+
+```csharp
+var rows = dataContext.From<IXmlEntity>()
+    .CrossApply(x => SqlFunctions.SqlServer.xml_nodes(x.Payload, "/root/item"))
+    .Select(p => new
+    {
+        Id = SqlFunctions.SqlServer.xml_value<int>(p.Item2.Value, "(.)[1]/@id", "int"),
+        Text = SqlFunctions.SqlServer.xml_value<string>(p.Item2.Value, "(.)[1]", "nvarchar(100)")
+    })
+    .ToList();
+```
+
+```sql
+select t2.value.value('(.)[1]/@id', 'int') as [Id], t2.value.value('(.)[1]', 'nvarchar(100)') as [Text]
+from xml_entity as [t1] cross apply t1.payload.nodes('/root/item') as [t2](value)
+```
+
+Операнд обязан быть колонкой внешней строки, а XQuery — строковым литералом; все прочие провайдеры
+отвергают `xml_nodes` с `NotSupportedException`, как и in-memory-провайдер.
 
 ## Условные функции
 

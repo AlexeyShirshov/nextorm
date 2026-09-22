@@ -1,9 +1,8 @@
 # Специфичный для SQL Server SQL
 
 > SQL Server даёт условную функцию `CHOOSE`, хинты инструкции/таблицы и форму результата `FOR JSON`/
-> `FOR XML`, скалярные методы типа XML (`value`/`query`/`exist`), нативные конструкции источника
-> `PIVOT`/`UNPIVOT`, а также табличные функции `string_split`/`openjson`. `CONTAINSTABLE` и
-> строковый метод `.nodes` — оставшиеся поверхности SQL Server, пока не входящие в nextorm.
+> `FOR XML`, методы типа XML (`value`/`query`/`exist` и rowset `nodes`), нативные конструкции
+> источника `PIVOT`/`UNPIVOT`, а также табличные функции `string_split`/`openjson`.
 
 **Что нужно знать:** [Запросы и проекции](../01-querying-and-projections.md) · [Провайдер SQL Server](../../providers/sqlserver.md)
 
@@ -86,7 +85,22 @@ select payload.value('(/root/item)[1]', 'nvarchar(100)') as [Value],
 from xml_entity
 ```
 
-Строковый метод `.nodes` не поддерживается: ему нужна внешняя ссылка в `FROM`/`CROSS APPLY`.
+Строковый метод `.nodes` — коррелированный источник `CrossApply`/`OuterApply`: `xml_nodes(xml, xpath)`
+разворачивает XML-значение в строки (по одной на узел) и рендерит
+`<xml>.nodes('xpath') as [alias]([value])`, после чего развёрнутый `IXmlNodesRow.Value` проецируется
+скалярными методами выше. Операнд обязан быть колонкой внешней строки, а XQuery — строковым литералом.
+
+```csharp
+var rows = dataContext.From<IXmlEntity>()
+    .CrossApply(x => SqlFunctions.SqlServer.xml_nodes(x.Payload, "/root/item"))
+    .Select(p => new { Id = SqlFunctions.SqlServer.xml_value<int>(p.Item2.Value, "(.)[1]/@id", "int") })
+    .ToList();
+```
+
+```sql
+select t2.value.value('(.)[1]/@id', 'int') as [Id]
+from xml_entity as [t1] cross apply t1.payload.nodes('/root/item') as [t2](value)
+```
 
 См. [Скалярные функции](../11-scalar-functions.md#методы-типа-xml).
 
@@ -217,7 +231,7 @@ SQL Server поддерживает только метод `System`
 
 ## Пока не поддерживается
 
-Строковый метод `.nodes` (нужна внешняя ссылка в `FROM`/`CROSS APPLY`) значится в бэклоге. См.
+Открытых специфичных для SQL Server поверхностей не осталось. См.
 [Ограничения и возможности вне области охвата](../../advanced/limitations.md).
 
 ## См. также

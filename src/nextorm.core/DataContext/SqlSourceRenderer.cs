@@ -203,6 +203,9 @@ internal static class SqlSourceRenderer
         if (from.Pivot is not null)
             return MakePivot(in ctx, from);
 
+        if (from.XmlNodes is not null)
+            return MakeXmlNodes(in ctx, from, entityType);
+
         if (from.RawSqlSource is not null)
             return MakeRawSqlSource(in ctx, from, needAlias, entityType);
 
@@ -417,6 +420,64 @@ internal static class SqlSourceRenderer
         {
             StringBuilderPool.Shared.Return(sqlBuilder);
         }
+    }
+
+    /// <summary>
+    /// Renders a SQL Server <c>xml.nodes()</c> rowset: <c>&lt;xml&gt;.nodes('xpath') as [alias]([column])</c>.
+    /// The XML operand is an outer reference of the enclosing command (the left-hand row the apply is
+    /// correlated with), so it renders as its table alias and column; the column alias is required for
+    /// the unfolded <see cref="SqlFunctions.IXmlNodesRow.Value"/> to be addressable. Only SQL Server
+    /// opts in (<see cref="IXmlFunctions.Supports"/> with <c>nodes</c>); every other provider throws.
+    /// </summary>
+    private static string MakeXmlNodes(in SqlBuildContext ctx, FromExpression from, Type? entityType)
+    {
+        var nodes = from.XmlNodes!;
+
+        if (ctx.Dialect.XmlFunctions is not { } xmlFunctions || !xmlFunctions.Supports("nodes"))
+            throw new NotSupportedException("The XML xml.nodes() rowset method is not supported by this provider.");
+
+        if (ctx.ParamMode)
+            return string.Empty;
+
+        using var visitor = ctx.CreateColumnVisitor(entityType ?? typeof(object), 0, dontNeedAlias: false);
+        visitor.Visit(nodes.Operand);
+        var operand = visitor.ToString();
+
+        var rendered = xmlFunctions.Render("nodes", operand, new[] { SqlLiteral.ToSqlStringLiteral(nodes.XPath) });
+
+        ctx.ColumnsProvider.Add(entityType!, false);
+        var alias = ctx.AliasProvider!.GetNextAlias(from);
+        var column = GetSingleColumnName(entityType!, ctx.NamingConvention);
+
+        var sqlBuilder = StringBuilderPool.Shared.Get();
+        try
+        {
+            sqlBuilder.Append(rendered)
+                      .Append(ctx.Dialect.MakeTableAlias(alias))
+                      .Append('(')
+                      .Append(ctx.QuoteIdentifiers ? ctx.Dialect.QuoteIdentifier(column) : column)
+                      .Append(')');
+
+            return sqlBuilder.ToString();
+        }
+        finally
+        {
+            StringBuilderPool.Shared.Return(sqlBuilder);
+        }
+    }
+
+    /// <summary>Resolves the single mapped column of an <c>xml.nodes()</c> row shape.</summary>
+    private static string GetSingleColumnName(Type rowType, INamingConvention? convention)
+    {
+        var props = rowType.GetProperties(BindingFlags.Instance | BindingFlags.Public);
+        for (var (i, cnt) = (0, props.Length); i < cnt; i++)
+        {
+            var name = props[i].GetPropertyColumnName(convention);
+            if (!string.IsNullOrEmpty(name))
+                return name;
+        }
+
+        throw new BuildSqlCommandException($"The {rowType.Name} row shape does not declare a mapped column.");
     }
 
     private static bool IsVerbatimArgument(TableFunctionExpression function, int index)

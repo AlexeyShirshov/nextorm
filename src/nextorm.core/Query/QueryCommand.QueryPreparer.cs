@@ -442,10 +442,23 @@ public partial class QueryCommand
                         // like any other derived table by the apply clause.
                         var applyVisitor = new CorrelatedQueryExpressionVisitor(cmd._dataContext!, cmd, cancellationToken, cmd._dataContext!.Logger);
                         using var outerScope = applyVisitor.PushOuter(applySource.Parameters[0]);
-                        var applyCommand = applyVisitor.BuildQueryCommand(applySource.Body);
-                        if (!applyCommand.IsPrepared)
-                            applyCommand.PrepareCommand(noHash, cancellationToken);
-                        join.SetFrom(new FromExpression(applyCommand));
+
+                        if (XmlNodesExpression.TryCreate(applySource, applyVisitor, out var xmlNodes))
+                        {
+                            // The xml.nodes() rowset is not a derived query: its source is the
+                            // outer row's XML column. Register the row-shape metadata (as
+                            // FromTableFunction does for its row type) and install the special
+                            // FROM source; the apply clause renders it as <col>.nodes(...) as [alias]([col]).
+                            cmd._dataContext!.From<SqlFunctions.IXmlNodesRow>();
+                            join.SetFrom(new FromExpression(xmlNodes!));
+                        }
+                        else
+                        {
+                            var applyCommand = applyVisitor.BuildQueryCommand(applySource.Body);
+                            if (!applyCommand.IsPrepared)
+                                applyCommand.PrepareCommand(noHash, cancellationToken);
+                            join.SetFrom(new FromExpression(applyCommand));
+                        }
                     }
                     else
                     {

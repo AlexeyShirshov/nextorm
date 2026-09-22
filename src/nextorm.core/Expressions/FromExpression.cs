@@ -29,6 +29,10 @@ public sealed class FromExpression
      {
           RawSqlSource = rawSqlSource;
      }
+     internal FromExpression(XmlNodesExpression xmlNodes)
+     {
+          XmlNodes = xmlNodes;
+     }
      //public OneOf<string, QueryCommand> Table { get; }
      public readonly string? Table;
      /// <summary>
@@ -63,6 +67,13 @@ public sealed class FromExpression
      /// <see cref="LinqSource"/>.
      /// </summary>
      internal readonly RawSqlSourceExpression? RawSqlSource;
+     /// <summary>
+     /// Set when the source is a SQL Server <c>xml.nodes()</c> rowset (a correlated
+     /// <c>CROSS/OUTER APPLY</c> source). Mutually exclusive with <see cref="Table"/>,
+     /// <see cref="SubQuery"/>, <see cref="TableFunction"/>, <see cref="Pivot"/>,
+     /// <see cref="LinqSource"/> and <see cref="RawSqlSource"/>.
+     /// </summary>
+     internal readonly XmlNodesExpression? XmlNodes;
 
      // public override int GetHashCode()
      // {
@@ -97,7 +108,7 @@ public sealed class FromExpression
                return ReferenceEquals(pivot, Pivot) ? this : new FromExpression(pivot);
           }
 
-          if (!string.IsNullOrEmpty(Table) || SourceType is not null || TableFunction is not null || LinqSource is not null || RawSqlSource is not null) return this;
+          if (!string.IsNullOrEmpty(Table) || SourceType is not null || TableFunction is not null || LinqSource is not null || RawSqlSource is not null || XmlNodes is not null) return this;
 
           return new FromExpression(SubQuery!.CloneForCache());// { TableAlias = TableAlias };
      }

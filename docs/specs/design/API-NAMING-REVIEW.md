@@ -2986,6 +2986,59 @@ Capability-объекты (Фаза 3) не применимы: `SupportsRawSqlS
 
 **✅ Исправлено (22.09.2026):** P2-2/P2-3 закрыты — in-memory оговорён в `docs/guide/14-raw-sql.md` EN+RU (и в тесте `InMemoryTests.FromSql_ShouldThrowClearNotSupported`), у `FromSql` добавлен `<exception cref="NotSupportedException">`. P2-1 принят как проектная конвенция: флаги `ISqlDialect` объявлены абстрактно, а safe-default живёт в `SqlDialectBase` (так же, как `SupportsTableHints`), поэтому расхождения с докой нет. P2-4 остаётся трекингом заморозки (`todo_public_api_freeze.md`).
 
+### Аудит 22.09.2026 — SQL Server `xml.nodes()` rowset как источник `CROSS/OUTER APPLY` (P0 — нет; P1 — нет; P2 — 3)
+
+**Область (uncommitted).** Новые публичные члены:
+`NextORM.Core.SqlFunctions.IXmlNodesRow` (`Query/SqlFunctions.cs:175-179`; свойство `Value` c `[Column("value")]`)
+и `NextORM.Core.SqlServerFunctions.xml_nodes(string? xml, string? xpath) -> QueryCommand<SqlFunctions.IXmlNodesRow>`
+(`Query/SqlFunctions.SqlServer.cs:67-79`). Изменён `internal SqlServerXmlFunctions.Supports` (`src/nextorm.sqlserver/SqlServerDialect.cs:453`:
+`"nodes"` → `true`) — внешней поверхности не даёт. Build Release — **0/0**; `nextorm.sqlserver.tests`
+**245/245**, `nextorm.core.tests` **194/194** (0 failed/0 skipped); `rg --files -g 'PublicAPI*.txt'` — пусто
+(Шаг 5 открыт). Новый публичный **тип** один — `IXmlNodesRow` — и он документирован вместе с новым методом,
+поэтому Приложение A (45 недокументированных) не меняется.
+
+**P0 — нет.** `xml_nodes` — snake_case-зеркало SQL-токена, как `xml_value`/`xml_query`/`xml_exist`; дублирующие
+имена/BCL-конфликты (`CA1716`/`CA1724`) отсутствуют. `IXmlNodesRow` следует семейству
+`IStringSplitRow`/`IOpenJsonRow`/`INumbersRow` (`I`-префикс, `Row`-суффикс, `[Column]` на `Value`). Прямой вызов
+`xml_nodes` бросает `NotSupportedException` — ровно как `string_split`/`openjson` (`SqlFunctions.SqlServer.cs:89,102`).
+
+**P1 — нет.** Все имена PascalCase/`snake_case`-DSL; параметры `xml`/`xpath` и их порядок совпадают с
+соседними XML-методами; синхронного близнеца нет → суффикс `Async` не нужен.
+
+**P2-1 — два разных идиома для «SQL-функция, дающая rowset».** `string_split`/`openjson`/
+`generate_series`/`unnest`/`numbers` — `IQueryable<Row>` + `[SqlTableFunction]`, подключаются через
+`FromTableFunction`; `xml_nodes` — `QueryCommand<Row>`, валиден **только** как
+`CrossApply`/`OuterApply`-источник. Расхождение осознанное и обосновано (`CROSS APPLY` c корреляцией
+невыразим через `FromTableFunction`; см. XML-док метода и `todo_xml_nodes.md`), поэтому P2, а не P1.
+**Рекомендация:** перенести это обоснование в `<remarks>` метода/`docs/guide/provider-specific/sqlserver.md`,
+чтобы две идиомы читались как намеренные.
+
+**P2-2 — классовый `<summary>` `SqlServerFunctions` не упоминает `xml_nodes`.** `Query/SqlFunctions.SqlServer.cs:6-12`
+перечисляет «postfix XML data-type methods (`xml_value`/`xml_query`/`xml_exist`)», хотя теперь их четыре.
+Сам `xml_nodes` задокументирован полностью (`<summary>` + `<see cref>` на `CrossApply`/`IXmlNodesRow.Value`/
+`xml_value`/`xml_query`/`xml_exist`); все cref'ы резолвятся — build **0/0** при `CS1591` в `<NoWarn>`
+(`CS1574` не подавлен, значит ссылки валидны). **Рекомендация:** добавить `nodes` в классовый `<summary>`
+(и при желании — в `<summary>` свойства `SqlFunctions.SqlServer`).
+
+**P2-3 — пользовательские доки EN+RU не обновлены.** `docs/guide/11-scalar-functions.md`,
+`docs/guide/provider-specific/sqlserver.md`, `docs/providers/sqlserver.md`, `docs/advanced/api-reference.md`,
+`docs/advanced/limitations.md` и их `docs/ru/**`-зеркала описывают три XML-скаляра, но `xml_nodes`/
+`IXmlNodesRow` в них нет (`rg` по `docs/**` вне `specs/` — 0 совпадений). `AGENTS.md` требует синхронного
+обновления `docs/**` и `docs/ru/**`, а рабочий план фичи (`todo_xml_nodes.md` §«Документация») прямо
+перечисляет эти файлы и снятие пункта из `sql-capabilities-gap-analysis.md` §4. **Рекомендация:** отдать
+`nextorm-design-engineer` (EN+RU в одном изменении).
+
+**P2-4 (трекинг Шага 5).** При заморозке внести в `PublicAPI.Unshipped.txt` (файла нет):
+`NextORM.Core.SqlFunctions.IXmlNodesRow`, `.Value.get -> string?`, `.Value.set -> void`,
+`NextORM.Core.SqlServerFunctions.xml_nodes(string?, string?) -> NextORM.Core.QueryCommand<NextORM.Core.SqlFunctions.IXmlNodesRow>`,
+а также `SqlServerDialect.Supports("nodes")` не является публичной сигнатурой (класс `internal`) — не вносить.
+Трекинг — `todo_public_api_freeze.md`, issue #53.
+
+**Проверка (22.09.2026).** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**;
+`dotnet test tests/nextorm.sqlserver.tests -c Debug` — **245/245**; `dotnet test tests/nextorm.core.tests
+-c Debug` — **194/194**; `rg --files -g 'PublicAPI*.txt'` — пусто; `grep -r xml_nodes docs` вне `specs/` —
+пусто (подтверждает P2-3); подавления проекта 11/11 (0 неоправданных).
+
 ## 4. План работ
 
 Проект в стадии **alpha** — обратная совместимость не сохраняется. Все пункты выполняются **прямыми переименованиями на месте**, с одновременным обновлением кода, тестов, примеров и документации в одном изменении.

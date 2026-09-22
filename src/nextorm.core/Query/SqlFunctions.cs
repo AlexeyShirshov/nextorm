@@ -168,6 +168,17 @@ public static partial class SqlFunctions
     }
 
     /// <summary>
+    /// Row shape produced by <see cref="SqlServerFunctions.xml_nodes(string?, string?)"/>: the single
+    /// <c>value</c> column holds one XML node selected by the XQuery (an <c>xml</c> value that is
+    /// projected further with <c>xml_value</c>/<c>xml_query</c>/<c>xml_exist</c>).
+    /// </summary>
+    public interface IXmlNodesRow
+    {
+        [Column("value")]
+        string? Value { get; set; }
+    }
+
+    /// <summary>
     /// Row shape produced by <see cref="SqlServerFunctions.openjson(string?)"/>: the <c>key</c>/<c>value</c>/<c>type</c>
     /// columns of SQL Server's <c>openjson</c> (the default schema, i.e. object properties or array elements).
     /// </summary>

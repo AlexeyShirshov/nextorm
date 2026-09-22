@@ -850,6 +850,17 @@ public class InMemoryTests
     }
 
     [Fact]
+    public void XmlNodesApply_ShouldThrowClearNotSupported()
+    {
+        var act = () => _sut.DataProvider
+            .From<SimpleEntity>()
+            .CrossApply(s => SqlFunctions.SqlServer.xml_nodes(s.Id.ToString(), "/root/item"))
+            .Select(p => new { p.Item1.Id });
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*in-memory*");
+    }
+
+    [Fact]
     public void FromSql_ShouldThrowClearNotSupported()
     {
         var act = () => _sut.DataProvider

@@ -704,10 +704,34 @@ select payload.value('(/root/item)[1]', 'nvarchar(100)') as [Value], payload.que
 | `SqlFunctions.SqlServer.xml_value<T>(xml, xpath, sqlType)` | `xml.value('xpath', 'sqlType')` |
 | `SqlFunctions.SqlServer.xml_query(xml, xpath)` | `xml.query('xpath')` |
 | `SqlFunctions.SqlServer.xml_exist(xml, xpath)` | `xml.exist('xpath')` |
+| `SqlFunctions.SqlServer.xml_nodes(xml, xpath)` | `xml.nodes('xpath') as [alias]([value])` (APPLY source) |
 
 `xml_exist` returns `bit`: in a predicate it renders `(xml.exist('xpath')) = 1`, as a projected value it
-stays a bit. The rowset method `.nodes` is not supported (it needs an outer reference inside
-`FROM`/`CROSS APPLY`).
+stays a bit.
+
+The rowset method `.nodes` is a correlated source, not a scalar: use it as the source of
+`CrossApply`/`OuterApply` and project the unfolded `IXmlNodesRow.Value` with the scalar methods above.
+It unfolds the XML value into one row per node selected by the XQuery and renders
+`<xml>.nodes('xpath') as [alias]([value])`:
+
+```csharp
+var rows = dataContext.From<IXmlEntity>()
+    .CrossApply(x => SqlFunctions.SqlServer.xml_nodes(x.Payload, "/root/item"))
+    .Select(p => new
+    {
+        Id = SqlFunctions.SqlServer.xml_value<int>(p.Item2.Value, "(.)[1]/@id", "int"),
+        Text = SqlFunctions.SqlServer.xml_value<string>(p.Item2.Value, "(.)[1]", "nvarchar(100)")
+    })
+    .ToList();
+```
+
+```sql
+select t2.value.value('(.)[1]/@id', 'int') as [Id], t2.value.value('(.)[1]', 'nvarchar(100)') as [Text]
+from xml_entity as [t1] cross apply t1.payload.nodes('/root/item') as [t2](value)
+```
+
+The operand must be a column of the outer row and the XQuery a string literal; every other provider
+rejects `xml_nodes` with a `NotSupportedException`, as does the in-memory provider.
 
 ## Conditional helpers
 

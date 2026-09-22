@@ -156,11 +156,12 @@ public class SqlServerDialectTests
         Dialect.XmlFunctions!.Supports("value").Should().BeTrue();
         Dialect.XmlFunctions!.Supports("query").Should().BeTrue();
         Dialect.XmlFunctions!.Supports("exist").Should().BeTrue();
-        Dialect.XmlFunctions!.Supports("nodes").Should().BeFalse();
+        Dialect.XmlFunctions!.Supports("nodes").Should().BeTrue();
 
         Dialect.XmlFunctions!.Render("value", "payload", ["'(/root)[1]'", "'int'"]).Should().Be("payload.value('(/root)[1]', 'int')");
         Dialect.XmlFunctions!.Render("query", "payload", ["'/root'"]).Should().Be("payload.query('/root')");
         Dialect.XmlFunctions!.Render("exist", "payload", ["'/root'"]).Should().Be("payload.exist('/root')");
+        Dialect.XmlFunctions!.Render("nodes", "payload", ["'/root/item'"]).Should().Be("payload.nodes('/root/item')");
     }
 
     [Fact]

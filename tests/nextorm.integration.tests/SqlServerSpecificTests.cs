@@ -247,6 +247,23 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
         r.Exists.Should().BeTrue();
     }
 
+    [Fact]
+    public void XmlNodes_ShouldUnfoldNodesAndProjectValues()
+    {
+        var rows = _sut.DataProvider.From<IXmlEntity>()
+            .CrossApply(x => SqlFunctions.SqlServer.xml_nodes(x.Payload, "/root/item"))
+            .Select(p => new
+            {
+                Id = SqlFunctions.SqlServer.xml_value<int>(p.Item2.Value, "(.)[1]/@id", "int"),
+                Value = SqlFunctions.SqlServer.xml_value<string>(p.Item2.Value, "(.)[1]", "nvarchar(100)")
+            })
+            .ToList();
+
+        rows.Should().HaveCount(2);
+        rows.Should().Contain(r => r.Id == 1 && r.Value == "alpha");
+        rows.Should().Contain(r => r.Id == 2 && r.Value == "beta");
+    }
+
     [SqlTable("pivot_entity")]
     private interface IPivotEntity
     {

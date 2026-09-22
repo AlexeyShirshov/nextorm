@@ -2300,6 +2300,62 @@ public class SqlGenerationTests
         act.Should().Throw<NotSupportedException>().WithMessage("*constant*");
     }
 
+    [Fact]
+    public void XmlNodes_ShouldEmitCrossApplyRowset()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<IComplexEntity>()
+            .CrossApply(x => SqlFunctions.SqlServer.xml_nodes(x.String, "/root/item"))
+            .Select(p => new
+            {
+                Id = SqlFunctions.SqlServer.xml_value<int>(p.Item2.Value, "(.)[1]/@id", "int"),
+                Value = p.Item2.Value
+            }));
+
+        sql.Should().Contain("from complex_entity as [t1] cross apply t1.somestring.nodes('/root/item') as [t2](value)");
+        sql.Should().Contain("t2.value.value('(.)[1]/@id', 'int') as [Id]");
+        sql.Should().Contain("t2.value from complex_entity");
+    }
+
+    [Fact]
+    public void XmlNodes_OuterApply_ShouldEmitOuterApplyRowset()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<IComplexEntity>()
+            .OuterApply(x => SqlFunctions.SqlServer.xml_nodes(x.String, "/root/item"))
+            .Select(p => new { Value = p.Item2.Value }));
+
+        sql.Should().Contain("outer apply t1.somestring.nodes('/root/item') as [t2](value)");
+    }
+
+    [Fact]
+    public void XmlNodes_ShouldThrowWhenXPathIsNotConstant()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var xpath = "/root/item";
+
+        var act = () => SqlOf(ctx, ctx.From<IComplexEntity>()
+            .CrossApply(x => SqlFunctions.SqlServer.xml_nodes(x.String, xpath))
+            .Select(p => new { p.Item2.Value }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*constant*");
+    }
+
+    [Fact]
+    public void XmlNodes_ShouldThrowWhenOperandIsNotAnOuterColumn()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var payload = "<root><item/></root>";
+
+        var act = () => SqlOf(ctx, ctx.From<IComplexEntity>()
+            .CrossApply(x => SqlFunctions.SqlServer.xml_nodes(payload, "/root/item"))
+            .Select(p => new { p.Item2.Value }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*outer row*");
+    }
+
     private static string SqlOfCached<T>(IDataContext ctx, QueryCommand<T> cmd)
         => Normalize(((DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, true, CancellationToken.None)).DbCommand.CommandText);
 

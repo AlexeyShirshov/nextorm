@@ -3758,6 +3758,96 @@ tool'ом не установлен (`.config/dotnet-tools.json` — coverage/re
 
 ---
 
+## Аудит 22.09.2026 — SQL Server `xml.nodes()` rowset как `CROSS/OUTER APPLY` источник
+
+**Область (uncommitted worktree).** Новый публичный `SqlFunctions.IXmlNodesRow` (`Query/SqlFunctions.cs:175-179`);
+новый публичный `SqlServerFunctions.xml_nodes(string?, string?) -> QueryCommand<IXmlNodesRow>`
+(`Query/SqlFunctions.SqlServer.cs:67-79`); новый `internal sealed XmlNodesExpression` (`Expressions/XmlNodesExpression.cs`);
+`FromExpression.XmlNodes` + ctor + `CloneForCache` (`Expressions/FromExpression.cs:32-35,70-76,111`);
+`FromExpressionPlanEqualityComparer` ветки Equals/GetHashCode (`:58-63,140-146`); `PrepareJoin`-интерцепт
+(`Query/QueryCommand.QueryPreparer.cs:446-454`); `CorrelatedQueryExpressionVisitor.RewriteOuterReference`
+(`Visitors/CorrelatedQueryExpressionVisitor.cs:56-64`); `SqlSourceRenderer.MakeXmlNodes`/`GetSingleColumnName`
+(`DataContext/SqlSourceRenderer.cs:425-481`); `SqlServerXmlFunctions.Supports("nodes") == true`
+(`src/nextorm.sqlserver/SqlServerDialect.cs:453`); доки `DialectCapabilities`/`XmlSqlTranslator`; тесты во всех
+провайдерах + core + интеграционный.
+
+**База (этот проход).** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**.
+`tests/nextorm.sqlserver.tests` — **245/245**, `tests/nextorm.core.tests` — **194/194** (0 failed, 0 skipped).
+Подавления: `src/` — **6** `SuppressMessage` (все с `Justification`, `<Pending>` — 0) + **5** `#pragma warning
+disable` (все с парным `restore`) = **11/11** оправданных, **0** неоправданных; в изменённых файлах новых —
+**0** (2 `SuppressMessage` в `CorrelatedQueryExpressionVisitor.cs:9-10` — пре-существующие). Слоп: новых
+`Skip=`/`Task.Delay`/`Thread.Sleep`/пустых `catch`/`NoWarn` в изменённых файлах — **0** (`slopwatch` локально
+не установлен, скан вручную).
+
+| # | Проверка | Итог |
+|---|----------|------|
+| 1. `IDisposable` | ✅ `MakeXmlNodes` создаёт визитор через `using var visitor = ctx.CreateColumnVisitor(...)` (`SqlSourceRenderer.cs:442`), как `MakePivot`/`MakeArrayJoin`; в `ParamMode` возвращается до создания визитора — утечки нет. `PrepareJoin` сохраняет `using var outerScope` (`:444`). Новых disposable-**полей** нет. |
+| 2. Подавления | ✅ Новых `#pragma`/`SuppressMessage`/`NoWarn` — **0**; соотношение проекта 11/11, неоправданных 0. |
+| 3. LINQ на горячем пути | ✅ `MakeXmlNodes`/`GetSingleColumnName`/`TryCreate` — индексированные циклы и `is`-паттерны; `.Count()`/`.ToList()`/LINQ нет. |
+| 4. God-классы | ℹ️ `SqlSourceRenderer` физически **603** строки тела (было 542 на HEAD), собственного кода (без комментариев/пустых) — **429**; `MakeXmlNodes`+`GetSingleColumnName` — +48 из +61 строк этого изменения. Формального нарушения порога по «собственным» строкам нет, но заявление закрытия Находки 4 «все прочие < 500» по физическому замеру больше не держится — см. ниже. |
+| 5. Hash-ключи / план-кэш | ✅ `XmlNodesExpression` иммутабелен (`readonly` свойства, expression-tree), `CloneForCache` возвращает `this` — шаринг безопасен. `FromExpressionPlanEqualityComparer` для `XmlNodes` сравнивает `XPath` + `Operand`, а сами внешние ссылки (реальная колонка `t1.somestring`) входят в план-ключ команды через `QueryPlanEqualityComparer.Equals` (`Query/QueryPlanEqualityComparer.cs:148`) и `GetHashCode` (`:413-417`) — **разные XML-колонки не делят план**. |
+| 6. События / исключения | ✅ Подписок нет; новые `throw` — `NotSupportedException` (`SqlSourceRenderer.cs:437`, `XmlNodesExpression.cs:42`, `SqlFunctions.SqlServer.cs:79`) и `BuildSqlCommandException` (`SqlSourceRenderer.cs:480`) без `catch`. |
+| 7. Публичная поверхность | ✅ Новых недокументированных типов нет; Приложение A (45) не меняется — см. `API-NAMING-REVIEW.md`, раздел «SQL Server `xml.nodes()` rowset». |
+
+### ⚠️ Находка 59 — `RewriteOuterReference` теряет `ReplaceConstantsExpressionVisitor.Params` (P2, открыта)
+
+**Место:** `src/nextorm.core/Visitors/CorrelatedQueryExpressionVisitor.cs:63-64` →
+`Expressions/XmlNodesExpression.cs:44`.
+
+**Что не так.** `RewriteOuterReference` возвращает только `.Visit(...)`, отбрасывая визитор вместе с его
+`Params` — а `ReplaceConstantsExpressionVisitor.VisitConstant` (`ExpressionExtensions.cs:125-132,150-155`)
+превращает каждую константу/захваченное значение в `ParameterExpression` и складывает её в `_params`.
+Для документированного сценария (`x => xml_nodes(x.XmlCol, "…")`) операнд — внешняя ссылка, и ветка
+`VisitMember` (`:156-166`) заменяет её на `OuterRefMarker<T>(idx).Ref`, параметры не возникают. Но литерал или
+захваченная переменная (`var xml = "…"; … xml_nodes(xml, "/x")`) даёт в операнде **свободный**
+`ParameterExpression`, который ничем не биндится: `MakeXmlNodes` рендерит его через column-визитор и он не
+попадает в `ctx.Params`. Это асимметрия с `GetQueryCommand` (`:468-522`), где `constRepl.Params` **читаются** и
+компилируются в тело запроса. Тест `XmlNodes_ShouldThrowWhenXPathIsNotConstant` покрывает только непостоянный
+**xpath**; для **xml**-операнда аналогичного гейта нет.
+
+**Было:** `xml_nodes(capturedOrLiteralXml, "/x")` → операнд с неотбинденным параметром (рендер/исполнение
+неверны либо падают позже без внятной диагностики).
+
+**Стало (рекомендация).** Либо потребовать «операнд — внешняя ссылка» и бросить
+`NotSupportedException` по образцу xpath-гейта (`XmlNodesExpression.cs:41-42`), либо вернуть
+`constRepl.Params` наружу и пробросить их в `ctx.Params`/подготовку команды, как в `GetQueryCommand`.
+Код не правился — маршрутизировано в `nextorm-design-engineer`.
+
+**Проверка:** механизм подтверждён чтением `ReplaceConstantsExpressionVisitor`/`RewriteOuterReference`;
+репро-запрос не исполнялся (в этом проходе код и тесты не менялись).
+
+### ℹ️ Наблюдения (фикс не требуется)
+
+- **`GetSingleColumnName` — рефлексия без кэша и «первая попавшаяся» колонка.** `SqlSourceRenderer.cs:470-481`
+  делает `rowType.GetProperties(...)` на каждом рендере и возвращает первую колонку с непустым именем,
+  игнорируя остальные. Сегодня `entityType` всегда `IXmlNodesRow` (ровно один `[Column("value")]`), поэтому
+  поведение корректно и тест фиксирует `as [t2](value)`, но хелпер переусложнён и не кэширован. Тот же класс
+  долга, что Находка 58 (рефлексия без кэша), и `FromSql`-`GetProperties` (`:304`). Путь — сборка плана, не
+  построчная материализация, поэтому ℹ️.
+- **`TryCreate` — NRT и слоение.** `out XmlNodesExpression? nodes` без `[NotNullWhen(true)]` —
+  вызывающий (`QueryCommand.QueryPreparer.cs:453`) вынужден писать `xmlNodes!`. Атрибут убрал бы
+  null-forgiving и документировал контракт. Плюс `XmlNodesExpression.TryCreate` принимает
+  `CorrelatedQueryExpressionVisitor` только чтобы дёрнуть `RewriteOuterReference` — лёгкое протекание
+  абстракции «выражение → визитор»; терпимо, т.к. тип `internal`.
+- **`MakeXmlNodes` жёстко требует `entityType`.** `ctx.ColumnsProvider.Add(entityType!, false)` и
+  `GetSingleColumnName(entityType!, …)` (`:448,450`) упадут с `NullReferenceException` при `entityType == null`.
+  Сегодня безопасно: `JoinApply` ставит `EntityType = typeof(TJoinEntity)` (`EntityBuilder.cs:1060-1065`), а
+  `FromExpression(XmlNodes)` ставится только из apply-ветки `PrepareJoin` (`:446-454`). Оговорка для будущих
+  путей (например, обычный `JOIN` с `XmlNodes`-источником) — стоит защитить guard'ом.
+- **Доки-поверхность.** Классовый `<summary>` `SqlServerFunctions` (`SqlFunctions.SqlServer.cs:6-12`)
+  перечисляет только `xml_value`/`xml_query`/`xml_exist` — без `xml_nodes`; `docs/**` EN+RU, описывающие
+  XML-скаляры, метода не содержат. Обе — `P2` в `API-NAMING-REVIEW.md`.
+- **CRLF.** Изменённые/новые `.cs` и `.md` — CRLF.
+
+**Проверка (22.09.2026).** Build Release — **0/0**; `nextorm.sqlserver.tests` — **245/245**,
+`nextorm.core.tests` — **194/194** (прогнано в этом проходе); в изменённых файлах `#pragma warning
+disable`/`SuppressMessage`/`NoWarn`/`Skip=`/`Task.Delay` — **0**; соотношение подавлений проекта **11/11**
+(0 неоправданных); `rg --files -g 'PublicAPI*.txt'` — пусто (Шаг 5 открыт). План-ключ проверен чтением
+`FromExpressionPlanEqualityComparer`/`QueryPlanEqualityComparer`; `SqlSourceRenderer` измерен по методике
+Находки 4.
+
+---
+
 ## Примечания
 
 - `SonarAnalyzer.CSharp` не подключён, поэтому правила `S####` (в т.ч. в 5 `SuppressMessage` из `src/`) сборкой не проверяются. При этом `.editorconfig` глушит 7 правил (`S125`, `S108`, `S3060`, `S1104`, `S3604`, `S2292` — `silent`; плюс `CA2254`), т.е. часть записей **инертна**: без пакета Sonar они не могут сработать (мёртвые настройки). `Directory.Build.props` задаёт только `TreatWarningsAsErrors=true` (без `AnalysisLevel=latest-all`), так что CA-правила навыка (включая `CA1508`/`CA2213`/`CA1816`) сборкой не гейтятся.

@@ -60,7 +60,7 @@
 | Массивы (`cardinality`/`array_*`/`@>`/`&&`, `Array(T)` в ClickHouse, `ARRAY JOIN`) | no | **yes на PostgreSQL и ClickHouse** (`ARRAY JOIN`; функции высшего порядка не реализованы) | `SupportsArrayFunctions`/`SupportsArrayJoin`, `ArraySqlTranslator`, `IArrayJoinRenderer.Render` |
 | Условные функции (`iif`/`choose`/`multi_if`) | no | **yes** (переносимый `iif`; `choose` только SQL Server; `multi_if` ClickHouse) | `CommonFunctions.iif`, `SupportsChoose`, `MultiIf`/`IMultiIfRenderer.Render` |
 | `FOR JSON` / `FOR XML` | yes (провайдер) | **yes на SQL Server** | `QueryCommand.ForJson/ForXml`, `SupportsForJson`/`SupportsForXml` |
-| Скалярные методы типа XML (`.value`/`.query`/`.exist`) | yes (провайдер) | **partial** — только SQL Server (rowset `.nodes` не реализован) | `SqlServerFunctions.xml_value`/`xml_query`/`xml_exist` |
+| Методы типа XML (`.value`/`.query`/`.exist`/`.nodes`) | yes (провайдер) | **partial** — только SQL Server | `SqlServerFunctions.xml_value`/`xml_query`/`xml_exist`/`xml_nodes` |
 | `GREATEST` / `LEAST` | partial | **yes** (обработка NULL зависит от провайдера) | `SupportsGreatestLeast`/`MakeGreatest`/`MakeLeast` |
 | `STRING_AGG` / `ARRAY_AGG` | yes | **yes** — `string_agg` кросс-провайдерно; `array_agg` на PostgreSQL | `SupportsStringAgg`/`SupportsArrayAgg` |
 | Пользовательские скалярные функции | yes (`DbFunction` / `Sql.Ext`) | yes (`[SqlFunction]`) | `SqlFunctionAttribute.cs` |
@@ -120,9 +120,9 @@
 * **Широта хинтов**: хинты запросов и таблиц у разных провайдеров (в nextorm оба есть только в SQL Server),
   а также фильтры запросов, интерсепторы и прочая расширяемость.
 * **Покрытие за пределами ядра запросов**: более крупный предобъявленный набор TVF (хотя nextorm уже
-  поставляет `CONTAINSTABLE`/`FREETEXTTABLE` с `KEY`/`RANK` и PostgreSQL `ts_rank`/`ts_rank_cd`), rowset XML
-  `.nodes` и источники с динамической схемой (ClickHouse `values()`/серверные табличные функции,
-  PostgreSQL `jsonb_to_record`).
+  поставляет `CONTAINSTABLE`/`FREETEXTTABLE` с `KEY`/`RANK`, PostgreSQL `ts_rank`/`ts_rank_cd` и rowset
+  XML `.nodes` SQL Server через `xml_nodes`), а также источники с динамической схемой (ClickHouse
+  `values()`/серверные табличные функции, PostgreSQL `jsonb_to_record`).
 * **Широта провайдеров**: Oracle, Firebird, DB2, SAP HANA, Informix, Sybase, SQL CE и другие.
 * **Интеграция с EF Core** и более крупная экосистема.
 

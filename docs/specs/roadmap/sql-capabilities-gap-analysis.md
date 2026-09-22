@@ -150,14 +150,15 @@ Ordered by impact on real query authoring. Per-feature details and owners live i
    [`SupportsRawSqlSource`](xref:NextORM.Core.ISqlDialect.SupportsRawSqlSource). This matches EF Core
    (`FromSql`) and linq2db.
    Shipped: [Raw SQL](../../guide/14-raw-sql.md).
-3. **No XML `.nodes` rowset method.** The scalar XML data-type methods (`.value`/`.query`/`.exist`) ship
-   on SQL Server (`SqlServerFunctions.xml_*`), and the native `PIVOT`/`UNPIVOT` source construct ships
-   via `EntityBuilder.Pivot`/`Unpivot` (`Pivot`/`Pivot`) over a plain table/entity, a
-   table-valued function or a derived query (the pivot input can carry joins and computed aggregate/FOR
-   columns). The rowset XML method
-   `.nodes` still needs an outer reference inside `FROM`/`CROSS APPLY` (the mechanism now used by
-   correlated `APPLY` exists, but `.nodes` additionally returns a rowset from a column value).
-   Todo: [`todo_xml_nodes.md`](todo_xml_nodes.md).
+3. **XML `.nodes` rowset method — shipped.** The XML data-type methods (`.value`/`.query`/`.exist` and
+   the `.nodes` rowset) ship on SQL Server: `SqlFunctions.SqlServer.xml_value`/`xml_query`/`xml_exist`
+   and the `xml_nodes` rowset, which is used as a correlated `CrossApply`/`OuterApply` source and
+   renders `<xml>.nodes('xpath') as [alias]([value])` (the unfolded `IXmlNodesRow.Value` is projected
+   with the scalar methods). Gated by `IXmlFunctions.Supports("nodes")` (SQL Server only). The native
+   `PIVOT`/`UNPIVOT` source construct ships via `EntityBuilder.Pivot`/`Unpivot` over a plain
+   table/entity, a table-valued function or a derived query (the pivot input can carry joins and
+   computed aggregate/FOR columns).
+   Shipped: [SQL Server-specific SQL](../../guide/provider-specific/sqlserver.md#xml-data-type-methods).
 4. **ClickHouse has no row reader for arrays, tuples and `UInt64`.** This single infrastructure gap
    blocks `groupArray`/`groupUniqArray`, `topK`/`topKWeighted`, `quantiles`, the array-returning
    `JSONExtractKeys`/`JSONExtractKeysAndValues`/`JSONExtractArrayRaw`, `tuple`/`tupleElement`/`untuple`,
@@ -304,9 +305,9 @@ developed in parallel on the same working tree.
 Workstream 17–25 extended provider parity.
 
 Future workstreams (not scheduled): dynamic-schema table sources (ClickHouse
-`values()`, PostgreSQL `jsonb_to_record`), the rowset XML method `.nodes` (the scalar XML
-`.value`/`.query`/`.exist` and the native `PIVOT`/`UNPIVOT` source construct ship on SQL Server), DML,
-navigation properties.
+`values()`, PostgreSQL `jsonb_to_record`), DML, navigation properties. The XML `.nodes` rowset (the
+scalar `.value`/`.query`/`.exist`) and the native `PIVOT`/`UNPIVOT` source construct ship on SQL
+Server.
 
 ### Cross-cutting requirements
 

@@ -60,7 +60,7 @@ nextorm points at the source that owns the behaviour.
 | Arrays (`cardinality`/`array_*`/`@>`/`&&`, ClickHouse `Array(T)`, `ARRAY JOIN`) | no | **yes on PostgreSQL and ClickHouse** (`ARRAY JOIN`; higher-order functions not implemented) | `SupportsArrayFunctions`/`SupportsArrayJoin`, `ArraySqlTranslator`, `IArrayJoinRenderer.Render` |
 | Conditional functions (`iif`/`choose`/`multi_if`) | no | **yes** (portable `iif`; `choose` SQL Server only; `multi_if` ClickHouse) | `CommonFunctions.iif`, `SupportsChoose`, `MultiIf`/`IMultiIfRenderer.Render` |
 | `FOR JSON` / `FOR XML` | yes (provider) | **yes on SQL Server** | `QueryCommand.ForJson/ForXml`, `SupportsForJson`/`SupportsForXml` |
-| XML data-type scalar methods (`.value`/`.query`/`.exist`) | yes (provider) | **partial** — SQL Server only (`.nodes` rowset not implemented) | `SqlServerFunctions.xml_value`/`xml_query`/`xml_exist` |
+| XML data-type methods (`.value`/`.query`/`.exist`/`.nodes`) | yes (provider) | **partial** — SQL Server only | `SqlServerFunctions.xml_value`/`xml_query`/`xml_exist`/`xml_nodes` |
 | `GREATEST` / `LEAST` | partial | **yes** (NULL handling is provider-specific) | `SupportsGreatestLeast`/`MakeGreatest`/`MakeLeast` |
 | `STRING_AGG` / `ARRAY_AGG` | yes | **yes** — `string_agg` cross-provider; `array_agg` on PostgreSQL | `SupportsStringAgg`/`SupportsArrayAgg` |
 | User-defined scalar functions | yes (`DbFunction` / `Sql.Ext`) | yes (`[SqlFunction]`) | `SqlFunctionAttribute.cs` |
@@ -120,9 +120,9 @@ nextorm points at the source that owns the behaviour.
   MySQL/MariaDB, but table hints only on SQL Server; linq2db additionally covers cross-provider table
   hints,   plus query filters, interceptors and other extensibility.
 * **Coverage beyond the query core**: a larger pre-declared TVF set (though nextorm now ships
-  `CONTAINSTABLE`/`FREETEXTTABLE` with `KEY`/`RANK` and the PostgreSQL `ts_rank`/`ts_rank_cd`), the XML
-  `.nodes` rowset and dynamic-schema sources (ClickHouse `values()`/server table functions, MySQL
-  `JSON_TABLE`, PostgreSQL `jsonb_to_record`).
+  `CONTAINSTABLE`/`FREETEXTTABLE` with `KEY`/`RANK`, the PostgreSQL `ts_rank`/`ts_rank_cd` and the SQL
+  Server XML `.nodes` rowset via `xml_nodes`), and dynamic-schema sources (ClickHouse `values()`/server
+  table functions, MySQL `JSON_TABLE`, PostgreSQL `jsonb_to_record`).
 * **Provider breadth**: Oracle, Firebird, DB2, SAP HANA, Informix, Sybase, SQL CE and more.
 * **EF Core integration** and a larger ecosystem.
 

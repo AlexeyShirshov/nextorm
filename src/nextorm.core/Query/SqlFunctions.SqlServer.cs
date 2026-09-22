@@ -6,9 +6,10 @@ namespace NextORM.Core;
 /// <summary>
 /// Text-JSON surface (SQL Server and MySQL/MariaDB), the SQL Server-only <c>choose</c> conditional
 /// function (the portable <c>iif</c> lives on <see cref="CommonFunctions"/>), the SQL Server postfix
-/// XML data-type methods (<c>xml_value</c>/<c>xml_query</c>/<c>xml_exist</c>) and the SQL Server table
-/// functions. Exposed through <see cref="SqlFunctions.SqlServer"/>; every member is gated by a
-/// capability flag and rejected by providers that do not opt in.
+/// XML data-type methods (<c>xml_value</c>/<c>xml_query</c>/<c>xml_exist</c> and the
+/// <c>xml_nodes</c> rowset) and the SQL Server table functions. Exposed through
+/// <see cref="SqlFunctions.SqlServer"/>; every member is gated by a capability flag and rejected by
+/// providers that do not opt in.
 /// </summary>
     public class SqlServerFunctions : CommonFunctions
     {
@@ -63,6 +64,26 @@ namespace NextORM.Core;
         /// <see cref="IXmlFunctions.Supports"/>; SQL Server).
         /// </summary>
         public bool xml_exist(string? xml, string? xpath) => default!;
+
+        /// <summary>
+        /// <c>xml.nodes(xquery)</c> as a composable rowset source (SQL Server): unfolds the XML value
+        /// into one row per node selected by <paramref name="xpath"/> (the XQuery must be a string
+        /// literal). Use only as the source of
+        /// <see cref="EntityBuilder{TEntity}.CrossApply{TJoinEntity}(System.Linq.Expressions.Expression{System.Func{TEntity, QueryCommand{TJoinEntity}}})"/>
+        /// (or <c>OuterApply</c>); rendered as <c>&lt;xml&gt;.nodes('xpath') as [alias]([value])</c>,
+        /// and the unfolded <see cref="SqlFunctions.IXmlNodesRow.Value"/> is projected further with
+        /// <see cref="xml_value{T}(string?, string?, string?)"/>/<see cref="xml_query(string?, string?)"/>/
+        /// <see cref="xml_exist(string?, string?)"/>. Requires a provider that supports the XML
+        /// data-type methods (see <see cref="IXmlFunctions.Supports"/>; SQL Server).
+        /// </summary>
+        /// <remarks>
+        /// Unlike the <c>[SqlTableFunction]</c> sources (<c>string_split</c>/<c>openjson</c>) this is a
+        /// correlated source over the left-hand row's column, not a standalone table function, so it is
+        /// expressed through <c>CrossApply</c>/<c>OuterApply</c> rather than
+        /// <c>FromTableFunction</c>.
+        /// </remarks>
+        public QueryCommand<SqlFunctions.IXmlNodesRow> xml_nodes(string? xml, string? xpath) =>
+            throw new NotSupportedException("xml_nodes can only be used as a CROSS/OUTER APPLY source.");
 
         /// <summary>
         /// <c>string_split(value, separator)</c> as a FROM source (SQL Server 2016+); select

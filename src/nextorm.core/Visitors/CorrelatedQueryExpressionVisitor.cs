@@ -53,6 +53,16 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         }
     }
 
+    /// <summary>
+    /// Rewrites a member access of a currently-pushed outer parameter (for example the XML column a
+    /// correlated <c>CROSS/OUTER APPLY</c> source is built from) into an <see cref="OuterRefMarker{T}"/>
+    /// registered on the command this visitor prepares. Used by
+    /// <see cref="XmlNodesExpression.TryCreate"/> for the <c>xml.nodes()</c> rowset operand, whose
+    /// rendered form is <c>alias.column</c>.
+    /// </summary>
+    internal Expression RewriteOuterReference(Expression expression)
+        => new ReplaceConstantsExpressionVisitor(_outerParams, _queryProvider).Visit(expression);
+
     /// <summary>True when <paramref name="expression"/> references any parameter currently treated as outer.</summary>
     private bool ReferencesOuter(Expression expression)
     {

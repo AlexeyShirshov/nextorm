@@ -130,12 +130,15 @@ SQL Server renders the window percentiles `SqlFunctions.Sql.percentile_cont(frac
 ([`SupportsPercentileWindow`](xref:NextORM.Core.ISqlDialect.SupportsPercentileWindow)); it has no exact ordered-set
 aggregate form. The arbitrary-value aggregate `any_agg` (`ANY_VALUE`) is **not** enabled: T-SQL exposes
 `ANY_VALUE` only on SQL Server 2025 / Fabric, which the version-agnostic dialect cannot assume.
-The scalar XML data-type methods `SqlFunctions.SqlServer.xml_value(xml, xpath, sqlType)`,
+The XML data-type methods `SqlFunctions.SqlServer.xml_value(xml, xpath, sqlType)`,
 `xml_query(xml, xpath)` and `xml_exist(xml, xpath)`
 ([`XmlFunctions`](xref:NextORM.Core.ISqlDialect.XmlFunctions)) render the
 postfix T-SQL form `xmlcol.value('xpath', 'type')` / `xmlcol.query('xpath')` / `xmlcol.exist('xpath')`;
-the XQuery and the SQL type must be string literals. The rowset method `.nodes` is not supported (it
-needs an outer reference inside `FROM`/`CROSS APPLY`).
+the XQuery and the SQL type must be string literals. The rowset method `.nodes` is exposed as
+`SqlFunctions.SqlServer.xml_nodes(xml, xpath)` and used as a correlated `CrossApply`/`OuterApply`
+source: it renders `<xml>.nodes('xpath') as [alias]([value])` and the unfolded `IXmlNodesRow.Value` is
+projected with the scalar methods above (the operand must be an outer row column, the XQuery a string
+literal).
 
 ## Recursive CTEs and `maxRecursion`
 
@@ -215,7 +218,7 @@ join complex_entity as [t2] on t1.id = t2.id
 | Arbitrary-value aggregate | not supported (`ANY_VALUE` is SQL Server 2025 / Fabric only) |
 | JSON output | trailing `for json path` / `for json auto` ([`ForJson`](xref:NextORM.Core.QueryCommand`1)) |
 | XML output | trailing `for xml raw/auto/explicit/path` ([`ForXml`](xref:NextORM.Core.QueryCommand`1)) |
-| XML data-type methods | `xml.value('xpath', 'type')` / `xml.query('xpath')` / `xml.exist('xpath')` ([`XmlFunctions`](xref:NextORM.Core.ISqlDialect.XmlFunctions); `.nodes` not supported) |
+| XML data-type methods | `xml.value('xpath', 'type')` / `xml.query('xpath')` / `xml.exist('xpath')` / `xml.nodes('xpath') as [alias]([value])` ([`XmlFunctions`](xref:NextORM.Core.ISqlDialect.XmlFunctions)) |
 | `AVG` over an integer column | truncated to an integer |
 | `ORDER BY … DESC` null placement | nulls sort last by default |
 

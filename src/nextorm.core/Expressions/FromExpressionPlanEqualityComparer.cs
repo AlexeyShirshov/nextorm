@@ -55,6 +55,13 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
         if (x.Pivot is not null || y.Pivot is not null)
             return PivotEquals(x.Pivot, y.Pivot);
 
+        if (x.XmlNodes is not null || y.XmlNodes is not null)
+        {
+            if (x.XmlNodes is null || y.XmlNodes is null) return false;
+            return x.XmlNodes.XPath == y.XmlNodes.XPath
+                && _expComparer.Equals(x.XmlNodes.Operand, y.XmlNodes.Operand);
+        }
+
         return _equalityComparer.Value.Equals(x.SubQuery, y.SubQuery);
     }
 
@@ -129,6 +136,14 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
 
         if (obj.Pivot is not null)
             return PivotHash(obj.Pivot);
+
+        if (obj.XmlNodes is not null)
+        {
+            var nodesHash = new System.HashCode();
+            nodesHash.Add(obj.XmlNodes.XPath);
+            nodesHash.Add(_expComparer.GetHashCode(obj.XmlNodes.Operand));
+            return nodesHash.ToHashCode();
+        }
 
         /*if (obj.TableAlias is not null)
         {

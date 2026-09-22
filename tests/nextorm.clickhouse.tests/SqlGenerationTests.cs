@@ -1768,6 +1768,18 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void XmlNodes_ShouldThrowBecauseClickHouseHasNoApply()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var act = () => SqlOf(ctx, ctx.From<IComplexEntity>()
+            .CrossApply(x => SqlFunctions.SqlServer.xml_nodes(x.String, "/root/item"))
+            .Select(p => new { p.Item2.Value }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*CrossApply*");
+    }
+
+    [Fact]
     public void UnsignedNumericCast_ShouldEmitCastInsteadOfDropping()
     {
         // ClickHouse's UInt64 has no CLR reader getter, so a user casts the column to a signed type.

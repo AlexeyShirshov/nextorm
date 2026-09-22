@@ -73,8 +73,9 @@ public interface ILimitByRenderer
 /// <summary>
 /// A dialect's surface for the postfix XML data-type methods on a SQL Server <c>xml</c> column
 /// (<c>operand.value('xpath', 'sqltype')</c>, <c>operand.query('xpath')</c>,
-/// <c>operand.exist('xpath')</c>). The predicate and the renderer live on one object, so a method the
-/// dialect reports as supported always has a rendering; <c>null</c> is the capability being absent.
+/// <c>operand.exist('xpath')</c> and the <c>operand.nodes('xpath')</c> rowset). The predicate and the
+/// renderer live on one object, so a method the dialect reports as supported always has a rendering;
+/// <c>null</c> is the capability being absent.
 /// </summary>
 public interface IXmlFunctions
 {

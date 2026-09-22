@@ -3216,6 +3216,18 @@ public class SqlGenerationTests
         act.Should().Throw<NotSupportedException>().WithMessage("*XML data-type methods*");
     }
 
+    [Fact]
+    public void XmlNodes_ShouldThrowBecauseOnlySqlServerHasThem()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var act = () => SqlOf(ctx, ctx.From<IComplexEntity>()
+            .CrossApply(x => SqlFunctions.SqlServer.xml_nodes(x.String, "/root/item"))
+            .Select(p => new { p.Item2.Value }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*xml.nodes*");
+    }
+
     private static Expression<Func<IComplexEntity, string>> SwitchOfId(string @default, params (long Test, string Result)[] cases)
     {
         var p = Expression.Parameter(typeof(IComplexEntity), "x");

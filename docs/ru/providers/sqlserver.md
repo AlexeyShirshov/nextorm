@@ -126,12 +126,15 @@ SQL Server отрисовывает оконные квантили `SqlFunction
 упорядоченно-агрегатной формы у него нет. Агрегат произвольного значения `any_agg` (`ANY_VALUE`)
 **не** включён: T-SQL даёт `ANY_VALUE` только в SQL Server 2025 / Fabric, чего версионно-агностичный
 диалект предположить не может.
-Скалярные методы типа XML `SqlFunctions.SqlServer.xml_value(xml, xpath, sqlType)`,
+Методы типа XML `SqlFunctions.SqlServer.xml_value(xml, xpath, sqlType)`,
 `xml_query(xml, xpath)` и `xml_exist(xml, xpath)`
 ([`XmlFunctions`](xref:NextORM.Core.ISqlDialect.XmlFunctions)) рендерят
 постфиксную форму T-SQL `xmlcol.value('xpath', 'type')` / `xmlcol.query('xpath')` / `xmlcol.exist('xpath')`;
-XQuery и SQL-тип обязаны быть строковыми литералами. Строковый метод `.nodes` не поддерживается (нужна
-внешняя ссылка в `FROM`/`CROSS APPLY`).
+XQuery и SQL-тип обязаны быть строковыми литералами. Строковый метод `.nodes` доступен как
+`SqlFunctions.SqlServer.xml_nodes(xml, xpath)` и используется как коррелированный источник
+`CrossApply`/`OuterApply`: он рендерит `<xml>.nodes('xpath') as [alias]([value])`, а развёрнутый
+`IXmlNodesRow.Value` проецируется скалярными методами выше (операнд обязан быть колонкой внешней строки,
+XQuery — строковым литералом).
 Табличные хинты ([`SupportsTableHints`](xref:NextORM.Core.ISqlDialect.SupportsTableHints)) отрисовываются как `WITH (hint, ...)` после имени основной
 таблицы: `ctx.From<IComplexEntity>().WithTableHint("nolock")` даёт `from complex_entity with (nolock)`.
 Блокировка строк использует тот же механизм: `ForUpdate`/`ForShare`
@@ -222,7 +225,7 @@ join complex_entity as [t2] on t1.id = t2.id
 | Блокировка строк | `ForUpdate`/`ForShare` рендерят `with (updlock)`/`with (holdlock)` на основной таблице ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock), [`ILockRenderer.UsesTableHints`](xref:NextORM.Core.ILockRenderer.UsesTableHints)) |
 | JSON-вывод | завершающие `for json path` / `for json auto` ([`ForJson`](xref:NextORM.Core.QueryCommand`1)) |
 | XML-вывод | завершающие `for xml raw/auto/explicit/path` ([`ForXml`](xref:NextORM.Core.QueryCommand`1)) |
-| Методы типа XML | `xml.value('xpath', 'type')` / `xml.query('xpath')` / `xml.exist('xpath')` ([`XmlFunctions`](xref:NextORM.Core.ISqlDialect.XmlFunctions); `.nodes` не поддерживается) |
+| Методы типа XML | `xml.value('xpath', 'type')` / `xml.query('xpath')` / `xml.exist('xpath')` / `xml.nodes('xpath') as [alias]([value])` ([`XmlFunctions`](xref:NextORM.Core.ISqlDialect.XmlFunctions)) |
 | `AVG` по целочисленному столбцу | усекается до целого |
 | Размещение null при `ORDER BY … DESC` | null сортируются последними по умолчанию |
 
