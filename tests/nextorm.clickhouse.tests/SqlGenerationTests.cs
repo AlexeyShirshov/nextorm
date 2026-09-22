@@ -1779,6 +1779,186 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void SemiJoin_ShouldRenderLeftSemiJoinAndKeepLeftColumns()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, simple.SemiJoin(complex, (s, c) => s.Id == c.Id).Select(s => new { s.Id }));
+
+        sql.Should().Contain(" left semi join ").And.Contain(" on ");
+        sql.Should().NotContain("somestring");
+    }
+
+    [Fact]
+    public void AntiJoin_ShouldRenderLeftAntiJoin()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, simple.AntiJoin(complex, (s, c) => s.Id == c.Id).Select(s => new { s.Id }))
+            .Should().Contain(" left anti join ").And.Contain(" on ");
+    }
+
+    [Fact]
+    public void PasteJoin_ShouldRenderPasteJoinWithoutOnAndExposeBothSides()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, simple.PasteJoin(complex).Select(p => new { p.Item1.Id, p.Item2.String }));
+
+        sql.Should().Contain(" paste join ").And.NotContain(" on ");
+        sql.Should().Contain("somestring");
+    }
+
+    [Fact]
+    public void SemiAntiPasteJoin_FromQueryCommand_ShouldRender()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>().Where(c => c.Id > 0);
+        var complexQuery = (QueryCommand<IComplexEntity>)complex;
+
+        SqlOf(ctx, simple.SemiJoin(complexQuery, (s, c) => s.Id == (int)c.Id).Select(s => new { s.Id }))
+            .Should().Contain(" left semi join ");
+        SqlOf(ctx, simple.AntiJoin(complexQuery, (s, c) => s.Id == (int)c.Id).Select(s => new { s.Id }))
+            .Should().Contain(" left anti join ");
+        SqlOf(ctx, simple.PasteJoin(complexQuery).Select(p => new { p.Item1.Id, p.Item2.String }))
+            .Should().Contain(" paste join ").And.Contain("somestring");
+    }
+
+    [Fact]
+    public void AntiJoin_AfterJoin_ShouldKeepBothJoins()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, simple.LeftJoin(complex, (s, c) => s.Id == c.Id)
+            .AntiJoin(simple, (p, s2) => p.Item1.Id == s2.Id)
+            .Select(p => new { p.Item1.Id, p.Item2.String }));
+
+        sql.Should().Contain(" left join ").And.Contain(" left anti join ");
+    }
+
+    [Fact]
+    public void PasteJoin_AfterJoin_ShouldExtendProjectionToThree()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, simple.LeftJoin(complex, (s, c) => s.Id == c.Id)
+            .PasteJoin(simple)
+            .Select(p => new { First = p.Item1.Id, p.Item2.String, Third = p.Item3.Id }));
+
+        sql.Should().Contain(" left join ").And.Contain(" paste join ");
+    }
+
+    [Fact]
+    public void SemiJoin_WithStrictness_ShouldThrow()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, simple.SemiJoin(complex, (s, c) => s.Id == c.Id)
+            .WithStrictness(JoinStrictness.Any)
+            .Select(s => new { s.Id }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*cannot be applied to a Semi join*");
+    }
+
+    [Fact]
+    public void SemiJoin_ShouldNotMutateSourceBuilder()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
+
+        var semi = simple.SemiJoin(complex, (s, c) => s.Id == c.Id);
+
+        SqlOf(ctx, simple.Select(s => new { s.Id })).Should().NotContain(" join ");
+        SqlOf(ctx, semi.Select(s => new { s.Id })).Should().Contain(" left semi join ");
+    }
+
+    [Fact]
+    public void SemiAntiPasteJoin_OnNamedTable_ShouldRender()
+    {
+        using var ctx = ClickHouseTestContext.CreateClickHouse();
+        var t1 = ctx.From("simple_entity");
+        var t2 = ctx.From("complex_entity");
+
+        SqlOf(ctx, t1.SemiJoin(t2, (a, b) => a.GetInt64("id") == b.GetInt64("id")).Select(a => new { Id = a.GetInt32("id") }))
+            .Should().Contain(" left semi join ");
+        SqlOf(ctx, t1.AntiJoin(t2, (a, b) => a.GetInt64("id") == b.GetInt64("id")).Select(a => new { Id = a.GetInt32("id") }))
+            .Should().Contain(" left anti join ");
+        SqlOf(ctx, t1.PasteJoin(t2).Select(p => new { A = p.Item1.GetInt32("id"), B = p.Item2.GetInt64("id") }))
+            .Should().Contain(" paste join ");
+
+        var e1 = ctx.From<ISimpleEntity>();
+        var e2 = ctx.From<IComplexEntity>();
+        SqlOf(ctx, t1.SemiJoin(e1, (a, b) => a.GetInt64("id") == b.Id).Select(a => new { Id = a.GetInt32("id") }))
+            .Should().Contain(" left semi join ");
+        SqlOf(ctx, t1.AntiJoin(e2, (a, b) => a.GetInt64("id") == b.Id).Select(a => new { Id = a.GetInt32("id") }))
+            .Should().Contain(" left anti join ");
+        SqlOf(ctx, t1.PasteJoin(e2).Select(p => new { A = p.Item1.GetInt32("id"), B = p.Item2.Id }))
+            .Should().Contain(" paste join ");
+    }
+
+    [Fact]
+    public void SemiJoin_AfterWindow_ShouldThrow()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
+
+        var act = () => simple.Window("w").SemiJoin(complex, (s, c) => s.Id == c.Id);
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*Named windows*");
+    }
+
+    [Fact]
+    public void SemiAntiPaste_OnJoinedLhs_ShouldRenderAtEveryArity()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var s = ctx.From<ISimpleEntity>();
+        var c = ctx.From<IComplexEntity>();
+
+        var a2 = s.Join(c, (p, x) => p.Id == x.Id);
+        var a3 = a2.Join(s, (p, x) => p.Item1.Id == x.Id);
+        var a4 = a3.Join(s, (p, x) => p.Item1.Id == x.Id);
+        var a5 = a4.Join(s, (p, x) => p.Item1.Id == x.Id);
+        var a6 = a5.Join(s, (p, x) => p.Item1.Id == x.Id);
+        var a7 = a6.Join(s, (p, x) => p.Item1.Id == x.Id);
+
+        SqlOf(ctx, a2.SemiJoin(s, (p, x) => p.Item1.Id == x.Id).Select(p => new { p.Item1.Id })).Should().Contain(" left semi join ");
+        SqlOf(ctx, a3.SemiJoin(s, (p, x) => p.Item1.Id == x.Id).Select(p => new { p.Item1.Id })).Should().Contain(" left semi join ");
+        SqlOf(ctx, a4.SemiJoin(s, (p, x) => p.Item1.Id == x.Id).Select(p => new { p.Item1.Id })).Should().Contain(" left semi join ");
+        SqlOf(ctx, a5.SemiJoin(s, (p, x) => p.Item1.Id == x.Id).Select(p => new { p.Item1.Id })).Should().Contain(" left semi join ");
+        SqlOf(ctx, a6.SemiJoin(s, (p, x) => p.Item1.Id == x.Id).Select(p => new { p.Item1.Id })).Should().Contain(" left semi join ");
+        SqlOf(ctx, a7.SemiJoin(s, (p, x) => p.Item1.Id == x.Id).Select(p => new { p.Item1.Id })).Should().Contain(" left semi join ");
+
+        SqlOf(ctx, a2.AntiJoin(s, (p, x) => p.Item1.Id == x.Id).Select(p => new { p.Item1.Id })).Should().Contain(" left anti join ");
+        SqlOf(ctx, a3.AntiJoin(s, (p, x) => p.Item1.Id == x.Id).Select(p => new { p.Item1.Id })).Should().Contain(" left anti join ");
+        SqlOf(ctx, a4.AntiJoin(s, (p, x) => p.Item1.Id == x.Id).Select(p => new { p.Item1.Id })).Should().Contain(" left anti join ");
+        SqlOf(ctx, a5.AntiJoin(s, (p, x) => p.Item1.Id == x.Id).Select(p => new { p.Item1.Id })).Should().Contain(" left anti join ");
+        SqlOf(ctx, a6.AntiJoin(s, (p, x) => p.Item1.Id == x.Id).Select(p => new { p.Item1.Id })).Should().Contain(" left anti join ");
+        SqlOf(ctx, a7.AntiJoin(s, (p, x) => p.Item1.Id == x.Id).Select(p => new { p.Item1.Id })).Should().Contain(" left anti join ");
+
+        SqlOf(ctx, a2.PasteJoin(s).Select(p => new { p.Item1.Id })).Should().Contain(" paste join ");
+        SqlOf(ctx, a3.PasteJoin(s).Select(p => new { p.Item1.Id })).Should().Contain(" paste join ");
+        SqlOf(ctx, a4.PasteJoin(s).Select(p => new { p.Item1.Id })).Should().Contain(" paste join ");
+        SqlOf(ctx, a5.PasteJoin(s).Select(p => new { p.Item1.Id })).Should().Contain(" paste join ");
+        SqlOf(ctx, a6.PasteJoin(s).Select(p => new { p.Item1.Id })).Should().Contain(" paste join ");
+        SqlOf(ctx, a7.PasteJoin(s).Select(p => new { p.Item1.Id })).Should().Contain(" paste join ");
+    }
+
+    [Fact]
     public void Global_ThenJoin_ShouldKeepGlobalOnFirstJoin()
     {
         using var ctx = ClickHouseTestContext.Create();

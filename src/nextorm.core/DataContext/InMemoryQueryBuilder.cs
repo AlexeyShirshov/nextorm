@@ -242,6 +242,9 @@ internal static class InMemoryQueryBuilder
     next:
         {
 
+            if (queryCommand.Joins is { Length: > 0 } && !typeof(TEntity).IsAssignableTo(typeof(IProjection)))
+                throw new NotSupportedException($"The {queryCommand.Joins[0].JoinType} join is not supported by the in-memory provider.");
+
             if (queryCommand.Joins?.Length > 0 && typeof(TEntity).IsAssignableTo(typeof(IProjection)))
             {
                 var dim = 2;
@@ -359,6 +362,9 @@ internal static class InMemoryQueryBuilder
 
     public static IAsyncEnumerator<TResult> CreateEnumeratorAdapter<TResult, TEntity>(InMemoryDataContext context, QueryCommand<TResult> queryCommand, InMemoryPreparedQueryCommand<TResult> cacheEntry, IAsyncEnumerator<TEntity> enumerator)
     {
+        if (queryCommand.Joins is { Length: > 0 } && !typeof(TEntity).IsAssignableTo(typeof(IProjection)))
+            throw new NotSupportedException($"The {queryCommand.Joins[0].JoinType} join is not supported by the in-memory provider.");
+
         if (queryCommand.Joins?.Length > 0 && typeof(TEntity).IsAssignableTo(typeof(IProjection)))
         {
             throw new NotImplementedException("joins");

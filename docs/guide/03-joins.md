@@ -412,8 +412,36 @@ are not mutated; a modifier set before a later join stays on the join it was app
 `INNER`/`LEFT`/`RIGHT`/`FULL` joins (`CROSS`/`APPLY` throw `NotSupportedException`). The modifiers are
 ClickHouse-only ([`SupportsJoinStrictness`](xref:NextORM.Core.ISqlDialect.SupportsJoinStrictness),
 [`SupportsGlobalJoin`](xref:NextORM.Core.ISqlDialect.SupportsGlobalJoin)); every other provider and the
-in-memory context reject them with `NotSupportedException`. `SEMI`/`ANTI`/`PASTE` joins are not
-supported. See [Provider-specific SQL](provider-specific/overview.md) for the full catalogue.
+in-memory context reject them with `NotSupportedException`.
+
+### SEMI / ANTI / PASTE joins
+
+`SEMI`, `ANTI` and `PASTE` are join *kinds* rather than modifiers: they change which columns and rows
+the join contributes, so they get dedicated builders instead of `WithStrictness`:
+
+```csharp
+var ids = dataContext.From<ISimpleEntity>()
+    .SemiJoin(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+    .Select(s => s.Id)
+    .ToList();
+```
+
+```sql
+select t1.id from simple_entity as `t1` left semi join complex_entity as `t2` on cast(t1.id as bigint) = t2.id
+```
+
+- [`SemiJoin`](xref:NextORM.Core.EntityBuilder`1) keeps only the left-hand columns, once per left row that
+  has at least one matching right row;
+- [`AntiJoin`](xref:NextORM.Core.EntityBuilder`1) keeps only the left-hand columns for left rows with no
+  match (the complement of `SemiJoin`);
+- [`PasteJoin`](xref:NextORM.Core.EntityBuilder`1) pairs the two sources by row position with no `ON`; the
+  projection exposes both sides and the result has as many rows as the shorter side.
+
+`SemiJoin`/`AntiJoin` return the same projection shape (the right columns are not accessible), whereas
+`PasteJoin` extends it by one item. They are ClickHouse-only
+([`SupportsSemiAntiJoin`](xref:NextORM.Core.ISqlDialect.SupportsSemiAntiJoin)/[`SupportsPasteJoin`](xref:NextORM.Core.ISqlDialect.SupportsPasteJoin));
+every other provider and the in-memory context reject them with `NotSupportedException`. See
+[Provider-specific SQL](provider-specific/overview.md) for the full catalogue.
 
 ## Provider differences
 

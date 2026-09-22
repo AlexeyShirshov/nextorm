@@ -116,7 +116,9 @@ See [Joins](../03-joins.md#provider-specific-join-modifiers-clickhouse)
 ([`SupportsJoinStrictness`](xref:NextORM.Core.ISqlDialect.SupportsJoinStrictness)/[`SupportsGlobalJoin`](xref:NextORM.Core.ISqlDialect.SupportsGlobalJoin)).
 `ANY` keeps one right-hand row per left-hand row, `ALL` keeps every match and `ASOF` needs one equi-join
 column plus a final inequality; `GLOBAL` broadcasts the right side for distributed queries.
-`SEMI`/`ANTI`/`PASTE` joins are not supported.
+`SEMI`/`ANTI`/`PASTE` have dedicated builders: `SemiJoin`/`AntiJoin` return only the left-hand columns
+for left rows that do (respectively do not) have a match, and `PasteJoin` pairs the two sources by row
+position with no `ON` ([`SupportsSemiAntiJoin`](xref:NextORM.Core.ISqlDialect.SupportsSemiAntiJoin)/`SupportsPasteJoin`).
 
 ## `GLOBAL IN`
 
@@ -204,7 +206,7 @@ See [Table-valued functions](../13-table-valued-functions.md).
 
 ## Not yet supported
 
-`SEMI`/`ANTI`/`PASTE` joins, the native `JSON` column type (its reader/type-mapping), and distributed
+The native `JSON` column type (its reader/type-mapping) and distributed
 table functions (`remote`, `cluster`, `s3`, `file`) are out of scope today. See
 [Limitations and out-of-scope features](../../advanced/limitations.md).
 

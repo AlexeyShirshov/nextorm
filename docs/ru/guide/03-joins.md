@@ -418,8 +418,36 @@ var global = dataContext.From<ISimpleEntity>()
 (для `CROSS`/`APPLY` — `NotSupportedException`). Модификаторы доступны только в ClickHouse
 ([`SupportsJoinStrictness`](xref:NextORM.Core.ISqlDialect.SupportsJoinStrictness),
 [`SupportsGlobalJoin`](xref:NextORM.Core.ISqlDialect.SupportsGlobalJoin)); остальные провайдеры и
-контекст in-memory отклоняют их через `NotSupportedException`. Соединения `SEMI`/`ANTI`/`PASTE` не
-поддерживаются. Полный каталог — в разделе [Специфичный для провайдеров SQL](provider-specific/overview.md).
+контекст in-memory отклоняют их через `NotSupportedException`.
+
+### Соединения SEMI / ANTI / PASTE
+
+`SEMI`, `ANTI` и `PASTE` — это *виды* соединения, а не модификаторы: они меняют набор колонок и строк,
+которые даёт соединение, поэтому для них есть отдельные построители, а не `WithStrictness`:
+
+```csharp
+var ids = dataContext.From<ISimpleEntity>()
+    .SemiJoin(dataContext.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+    .Select(s => s.Id)
+    .ToList();
+```
+
+```sql
+select t1.id from simple_entity as `t1` left semi join complex_entity as `t2` on cast(t1.id as bigint) = t2.id
+```
+
+- [`SemiJoin`](xref:NextORM.Core.EntityBuilder`1) оставляет только левые колонки — по одной на каждую
+  левую строку, у которой есть хотя бы одно совпадение справа;
+- [`AntiJoin`](xref:NextORM.Core.EntityBuilder`1) оставляет только левые колонки для левых строк без
+  совпадения (дополнение к `SemiJoin`);
+- [`PasteJoin`](xref:NextORM.Core.EntityBuilder`1) сопоставляет два источника по позиции строки без `ON`;
+  проекция содержит обе стороны, а строк — сколько у более короткой стороны.
+
+`SemiJoin`/`AntiJoin` возвращают ту же форму проекции (правые колонки недоступны), а `PasteJoin`
+добавляет один элемент. Они доступны только в ClickHouse
+([`SupportsSemiAntiJoin`](xref:NextORM.Core.ISqlDialect.SupportsSemiAntiJoin)/[`SupportsPasteJoin`](xref:NextORM.Core.ISqlDialect.SupportsPasteJoin));
+остальные провайдеры и контекст in-memory отклоняют их через `NotSupportedException`. Полный каталог —
+в разделе [Специфичный для провайдеров SQL](provider-specific/overview.md).
 
 ## Различия между провайдерами
 

@@ -1,5 +1,4 @@
-﻿using System.Diagnostics;
-using System.Linq.Expressions;
+﻿using System.Linq.Expressions;
 using System.Reflection;
 using System.Text;
 using Microsoft.Extensions.Logging;
@@ -86,6 +85,22 @@ internal static class SqlSourceRenderer
         if (join.JoinType is JoinType.Right && !ctx.Dialect.SupportsRightFullJoin
             || join.JoinType is JoinType.Full && (!ctx.Dialect.SupportsRightFullJoin || !ctx.Dialect.SupportsFullJoin))
             throw new NotSupportedException($"The {join.JoinType} join is not supported by this SQL dialect");
+
+        if (join.JoinType is JoinType.Semi or JoinType.Anti or JoinType.Paste)
+        {
+            if (join.Strictness is not JoinStrictness.Default || join.IsGlobal)
+                throw new NotSupportedException($"The join modifier cannot be applied to a {join.JoinType} join");
+
+            if (join.JoinType is JoinType.Semi or JoinType.Anti)
+            {
+                if (!ctx.Dialect.SupportsSemiAntiJoin)
+                    throw new NotSupportedException($"The {join.JoinType} join is not supported by this SQL dialect");
+            }
+            else if (!ctx.Dialect.SupportsPasteJoin)
+            {
+                throw new NotSupportedException("The PASTE join is not supported by this SQL dialect");
+            }
+        }
 
         if (join.Strictness is not JoinStrictness.Default || join.IsGlobal)
         {
@@ -233,11 +248,8 @@ internal static class SqlSourceRenderer
 
                 if (needAlias)
                 {
-                    if (hasJoins)
-                    {
-                        Debug.Assert(typeof(IProjection).IsAssignableFrom(entityType));
+                    if (hasJoins && typeof(IProjection).IsAssignableFrom(entityType))
                         ctx.ColumnsProvider.Add(entityType!.GetGenericArguments()[0], false);
-                    }
                     else
                         ctx.ColumnsProvider.Add(entityType!, false);
 
@@ -403,13 +415,8 @@ internal static class SqlSourceRenderer
 
             if (needAlias || ctx.Dialect.RequireSubqueryAlias)
             {
-                if (hasJoins)
-                {
-                    Debug.Assert(typeof(IProjection).IsAssignableFrom(entityType));
-                    ctx.ColumnsProvider.Add(entityType!.GetGenericArguments()[0], false);
-                }
-                else if (entityType is not null)
-                    ctx.ColumnsProvider.Add(entityType, false);
+                if (entityType is not null)
+                    ctx.ColumnsProvider.Add(hasJoins && typeof(IProjection).IsAssignableFrom(entityType) ? entityType.GetGenericArguments()[0] : entityType, false);
 
                 sqlBuilder.Append(ctx.Dialect.MakeTableAlias(ctx.AliasProvider!.GetNextAlias(from)));
             }

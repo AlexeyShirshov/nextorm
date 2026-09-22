@@ -1,8 +1,29 @@
 # TODO: ClickHouse `AggregateFunction(...)` state type (`-State`/`-Merge`, `runningAccumulate`)
 
 > Рабочий план (design RFC). Источник: `docs/specs/roadmap/sql-capabilities-gap-analysis.md` §4 п.6.
+> **Статус: заблокировано драйвером `ClickHouse.Driver` 1.4.0** (проверено 22.09.2026).
 
-## Пункт и цель
+## Блокер (проверено 22.09.2026)
+
+- **Драйвер не может читать/писать `AggregateFunction(...)`.** `ClickHouse.Driver`
+  1.4.0 (`Types/AggregateFunctionType.cs`) бросает `AggregateFunctionException` из `FrameworkType`,
+  `Read`, `Write` и `ToString`: «Unable to directly query column with type
+  AggregateFunction(&lt;function&gt;). Use &lt;function&gt;Merge() function to query this value».
+  Значит, материализация состояния в CLR (`byte[]` или отдельный тип) и передача состояния из CLR
+  невозможны на этой версии драйвера — а это и есть цель пункта («чтение/передача»).
+- **`uniqMerge(uniqState(x))` невыразим в одном запросе** — ClickHouse отклоняет вложенный агрегат
+  (`ILLEGAL_AGGREGATION`). Состояние обязано пройти через серверный подзапрос/таблицу-состояние, т.е.
+  пересечь CLR-границу, что упирается в первый блокер.
+- **`runningAccumulate` объявлен устаревшим в ClickHouse 25.8** (`DEPRECATED_FUNCTION`; без
+  `allow_deprecated_error_prone_window_functions=1` — ошибка). ClickHouse рекомендует оконные функции.
+- `SimpleAggregateFunction(...)` драйвер читает/пишет как underlying-тип (`SimpleAggregateFunctionType`
+  делегирует `UnderlyingType`), но `sumMerge(...)` по нему не работает
+  (`It must be AggregateFunction(...)`), т.е. для `-Merge` он не подходит.
+
+Вывод зафиксирован в `docs/advanced/limitations.md` (+RU). Разблокировка — новая версия драйвера,
+умеющая читать `AggregateFunction` (тогда вернуться к дизайну ниже).
+
+## Пункт и цель (исходно)
 
 - Проблема: комбинаторы `-State`/`-Merge` (`uniqState`/`uniqMerge`/`sumState`/`sumMerge`, …) и
   `runningAccumulate` требуют колонки типа `AggregateFunction(<agg>, <types>)`; такого типа в

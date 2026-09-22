@@ -73,6 +73,17 @@ public class ClickHouseDialectTests
         Dialect.MakeJoinKeyword(JoinType.Left, JoinStrictness.Any, true).Should().Be(" global left any join ");
     }
 
+    [Fact]
+    public void SemiAntiPasteJoins_ShouldRenderClickHouseKeywords()
+    {
+        Dialect.SupportsSemiAntiJoin.Should().BeTrue();
+        Dialect.SupportsPasteJoin.Should().BeTrue();
+
+        Dialect.MakeJoinKeyword(JoinType.Semi, JoinStrictness.Default, false).Should().Be(" left semi join ");
+        Dialect.MakeJoinKeyword(JoinType.Anti, JoinStrictness.Default, false).Should().Be(" left anti join ");
+        Dialect.MakeJoinKeyword(JoinType.Paste, JoinStrictness.Default, false).Should().Be(" paste join ");
+    }
+
     [Theory]
     [InlineData("stdev", "stddevSamp")]
     [InlineData("stdevp", "stddevPop")]

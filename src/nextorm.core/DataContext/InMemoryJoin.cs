@@ -23,6 +23,9 @@ internal static class InMemoryJoin
         if (join.Strictness is not JoinStrictness.Default)
             throw new NotSupportedException($"The {join.Strictness} join modifier is not supported by the in-memory provider.");
 
+        if (join.JoinType is JoinType.Semi or JoinType.Anti or JoinType.Paste)
+            throw new NotSupportedException($"The {join.JoinType} join is not supported by the in-memory provider.");
+
         if (join.IsGlobal)
             throw new NotSupportedException("The GLOBAL join modifier is not supported by the in-memory provider.");
 

@@ -399,6 +399,23 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void SemiAntiPasteJoin_UnsupportedByProvider_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var simple = ctx.From<ISimpleEntity>();
+        var complex = ctx.From<IComplexEntity>();
+
+        var semi = () => SqlOf(ctx, simple.SemiJoin(complex, (s, c) => s.Id == c.Id).Select(s => new { s.Id }));
+        semi.Should().Throw<NotSupportedException>().WithMessage("*Semi join is not supported*");
+
+        var anti = () => SqlOf(ctx, simple.AntiJoin(complex, (s, c) => s.Id == c.Id).Select(s => new { s.Id }));
+        anti.Should().Throw<NotSupportedException>().WithMessage("*Anti join is not supported*");
+
+        var paste = () => SqlOf(ctx, simple.PasteJoin(complex).Select(p => new { p.Item1.Id, p.Item2.String }));
+        paste.Should().Throw<NotSupportedException>().WithMessage("*PASTE join is not supported*");
+    }
+
+    [Fact]
     public void CrossJoin_ShouldEmitCrossJoinWithoutOn()
     {
         using var ctx = PostgresTestContext.Create();

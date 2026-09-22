@@ -106,7 +106,11 @@ ADO.NET-провайдер `ClickHouse.Driver`. Он создаёт `ClickHouseC
   ([`SupportsJoinStrictness`](xref:NextORM.Core.ISqlDialect.SupportsJoinStrictness),
   [`MakeJoinKeyword`](xref:NextORM.Core.ISqlDialect.MakeJoinKeyword), enum `JoinStrictness`).
   `LEFT ANY JOIN` оставляет одну правую строку на каждую левую, `ALL` — все совпадения, а `ASOF`
-  требует хотя бы одной equi-колонки и неравенства последним. `SEMI`/`ANTI`/`PASTE` не поддерживаются.
+  требует хотя бы одной equi-колонки и неравенства последним. Для видов `SEMI`/`ANTI`/`PASTE` есть
+  отдельные методы-построители: [`SemiJoin`](xref:NextORM.Core.EntityBuilder`1)/`AntiJoin` отдают
+  только левые колонки для левых строк, у которых есть (соответственно нет) совпадение, а `PasteJoin`
+  сопоставляет два источника по позиции строки без `ON` (строк — сколько у более короткой стороны).
+  Гейты — [`SupportsSemiAntiJoin`](xref:NextORM.Core.ISqlDialect.SupportsSemiAntiJoin)/`SupportsPasteJoin`.
   Вариант `GLOBAL` (правая сторона разрешается один раз и broadcast'ится для распределённых
   запросов) задаётся через [`EntityBuilder.Global`](xref:NextORM.Core.EntityBuilder`1) и
   комбинируется со strictness (`global left any join`,

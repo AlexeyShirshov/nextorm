@@ -44,6 +44,12 @@ public sealed class ClickHouseDialect : SqlDialectBase
     /// <summary>ClickHouse implements the <c>GLOBAL</c> join modifier.</summary>
     public override bool SupportsGlobalJoin => true;
 
+    /// <summary>ClickHouse implements the <c>LEFT SEMI</c>/<c>LEFT ANTI</c> join kinds.</summary>
+    public override bool SupportsSemiAntiJoin => true;
+
+    /// <summary>ClickHouse implements the <c>PASTE</c> join kind.</summary>
+    public override bool SupportsPasteJoin => true;
+
     /// <summary>
     /// ClickHouse has a native <c>Array(T)</c> type and implements the array functions over array
     /// columns (<c>length</c>, <c>has</c>, <c>indexOf</c>, <c>arrayStringConcat</c>, <c>hasAny</c>/<c>hasAll</c>,
@@ -81,10 +87,24 @@ public sealed class ClickHouseDialect : SqlDialectBase
 
     /// <summary>
     /// Renders <c>[global] [inner|left|right|full|cross] [any|all|asof] join</c>. ClickHouse places the
-    /// <c>GLOBAL</c> modifier first and the strictness after the join type, before <c>join</c>.
+    /// <c>GLOBAL</c> modifier first and the strictness after the join type, before <c>join</c>. The
+    /// <c>LEFT SEMI</c>/<c>LEFT ANTI</c>/<c>PASTE</c> kinds render their own keyword.
     /// </summary>
     public override string MakeJoinKeyword(JoinType joinType, JoinStrictness strictness, bool isGlobal)
     {
+        if (joinType is JoinType.Semi or JoinType.Anti or JoinType.Paste)
+        {
+            var kind = joinType switch
+            {
+                JoinType.Semi => "left semi",
+                JoinType.Anti => "left anti",
+                JoinType.Paste => "paste",
+                _ => throw new NotSupportedException($"The {joinType} join is not supported")
+            };
+
+            return (isGlobal ? " global" : "") + " " + kind + " join ";
+        }
+
         var type = joinType switch
         {
             JoinType.Inner => "",

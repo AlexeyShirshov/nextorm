@@ -194,7 +194,10 @@ Ordered by impact on real query authoring. Per-feature details and owners live i
    Shipped: [Scalar functions](../../guide/11-scalar-functions.md#arrays-clickhouse),
    [Provider-specific SQL](../../guide/provider-specific/clickhouse.md).
 6. **ClickHouse `-State`/`-Merge` combinators and `runningAccumulate` need an
-   `AggregateFunction(...)` state type**, which nextorm does not model.
+   `AggregateFunction(...)` state type — blocked by the driver.** `ClickHouse.Driver` 1.4.0 throws
+   `AggregateFunctionException` from `FrameworkType`/`Read`/`Write`, so the state cannot be materialised
+   or passed as a CLR value; `uniqMerge(uniqState(x))` is illegal (`ILLEGAL_AGGREGATION`) and
+   `runningAccumulate` is deprecated in 25.8. Documented in [Limitations](../../advanced/limitations.md).
    Todo: [`todo_clickhouse_aggregate_function_state.md`](todo_clickhouse_aggregate_function_state.md).
 7. **ClickHouse native `JSON` type — shipped.** The JSONPath scalars `JSON_VALUE`/`JSON_QUERY`/
    `JSON_EXISTS` and the native-JSON functions `JSONAllPaths`/`JSONAllPathsWithTypes`/`toJSONString` are
@@ -203,10 +206,12 @@ Ordered by impact on real query authoring. Per-feature details and owners live i
    as `System.Text.Json.Nodes.JsonObject`); see [Limitations](../../advanced/limitations.md).
    Shipped: [ClickHouse-specific SQL](../../guide/provider-specific/clickhouse.md#json-dictionaries-and-array-functions),
    [JSON support](../../guide/18-json.md).
-8. **ClickHouse join `SEMI`/`ANTI`/`PASTE` is not implemented.** `SEMI`/`ANTI` change the result column
-    set (left table only, incompatible with `Projection<T1,T2>`) and `PASTE JOIN` has no `ON`, so a
-    result shape must be chosen first.
-    Todo: [`todo_clickhouse_join_strictness.md`](todo_clickhouse_join_strictness.md).
+8. **ClickHouse join `SEMI`/`ANTI`/`PASTE` — shipped.** `SemiJoin`/`AntiJoin` return only the left-hand
+   columns (SEMI once per matching left row, ANTI for rows without a match) and `PasteJoin` pairs the two
+   sources by row position with no `ON`, so the result shapes are the left projection and
+   `Projection<T1,T2>` respectively; the kinds are gated by `SupportsSemiAntiJoin`/`SupportsPasteJoin`.
+   Shipped: [Provider-specific SQL](../../guide/provider-specific/clickhouse.md),
+   [Joins](../../guide/03-joins.md#semi--anti--paste-joins).
 9. **ClickHouse scalar-over-array predicates — shipped.** `startsWith`/`endsWith` over `Array(T)` and
     the contiguous-subsequence `hasSubstr` are exposed as
     [`ClickHouseFunctions.starts_with`](xref:NextORM.Core.ClickHouseFunctions.starts_with)/`ends_with`/`has_substr`

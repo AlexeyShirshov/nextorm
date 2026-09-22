@@ -117,7 +117,10 @@ select t1.id, t2.somestring from simple_entity as `t1` global left any join comp
 ([`SupportsJoinStrictness`](xref:NextORM.Core.ISqlDialect.SupportsJoinStrictness)/[`SupportsGlobalJoin`](xref:NextORM.Core.ISqlDialect.SupportsGlobalJoin)).
 `ANY` оставляет одну правую строку на каждую левую, `ALL` — все совпадения, `ASOF` требует одну
 колонку равенства и завершающее неравенство; `GLOBAL` рассылает правую сторону в распределённых
-запросах. Соединения `SEMI`/`ANTI`/`PASTE` не поддерживаются.
+запросах. Для `SEMI`/`ANTI`/`PASTE` есть отдельные построители: `SemiJoin`/`AntiJoin` отдают только
+левые колонки для левых строк, у которых есть (соответственно нет) совпадение, а `PasteJoin`
+сопоставляет два источника по позиции строки без `ON`
+([`SupportsSemiAntiJoin`](xref:NextORM.Core.ISqlDialect.SupportsSemiAntiJoin)/`SupportsPasteJoin`).
 
 ## `GLOBAL IN`
 
@@ -207,7 +210,7 @@ var rows = dataContext.FromTableFunction(() => SqlFunctions.ClickHouse.zeros(3))
 
 ## Пока не поддерживается
 
-Соединения `SEMI`/`ANTI`/`PASTE`, нативный тип колонки `JSON` (его reader/type-mapping) и
+Нативный тип колонки `JSON` (его reader/type-mapping) и
 распределённые табличные функции (`remote`, `cluster`, `s3`, `file`) вне области охвата. См.
 [Ограничения и возможности вне области охвата](../../advanced/limitations.md).
 

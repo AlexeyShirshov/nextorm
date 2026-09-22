@@ -19,7 +19,24 @@ public enum JoinType
     /// <c>OUTER APPLY</c> / <c>LEFT JOIN LATERAL ... ON true</c>: like <see cref="CrossApply"/> but
     /// left-hand rows with an empty right-hand source are preserved with nulls.
     /// </summary>
-    OuterApply = 7
+    OuterApply = 7,
+    /// <summary>
+    /// ClickHouse <c>LEFT SEMI JOIN</c>: keeps only the left-hand columns, for left rows that have at
+    /// least one match on the right. Modelled as a join type rather than a
+    /// <see cref="JoinStrictness"/> modifier because it changes the result column set.
+    /// </summary>
+    Semi = 8,
+    /// <summary>
+    /// ClickHouse <c>LEFT ANTI JOIN</c>: keeps only the left-hand columns, for left rows with no match
+    /// on the right; the complement of <see cref="Semi"/>.
+    /// </summary>
+    Anti = 9,
+    /// <summary>
+    /// ClickHouse <c>PASTE JOIN</c>: joins the two sources by row position with no <c>ON</c>
+    /// condition. The result carries the left and right columns side by side and as many rows as the
+    /// shorter side.
+    /// </summary>
+    Paste = 10
 }
 
 /// <summary>

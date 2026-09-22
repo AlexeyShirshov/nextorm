@@ -972,6 +972,52 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// </summary>
     public JoinedEntityBuilder<TEntity, TJoinEntity> OuterApply<TJoinEntity>(EntityBuilder<TJoinEntity> _)
         => JoinCore(_, JoinType.OuterApply, null);
+    /// <summary>
+    /// Adds a ClickHouse <c>LEFT SEMI JOIN</c> over <paramref name="_"/> and returns this builder
+    /// unchanged in shape: only the left-hand columns survive, and a left-hand row is kept once when at
+    /// least one right-hand row matches. Requires a dialect that supports it (see
+    /// <see cref="ISqlDialect.SupportsSemiAntiJoin"/>).
+    /// </summary>
+    public EntityBuilder<TEntity> SemiJoin<TJoinEntity>(EntityBuilder<TJoinEntity> _, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
+        => AddSemiAntiJoin(GetJoinSource(_), joinCondition, JoinType.Semi);
+    /// <summary>
+    /// Adds a ClickHouse <c>LEFT ANTI JOIN</c> over <paramref name="_"/>: only the left-hand columns
+    /// survive, and a left-hand row is kept when no right-hand row matches (the complement of
+    /// <see cref="SemiJoin{TJoinEntity}(EntityBuilder{TJoinEntity}, Expression{Func{TEntity, TJoinEntity, bool}})"/>).
+    /// Requires a dialect that supports it (see <see cref="ISqlDialect.SupportsSemiAntiJoin"/>).
+    /// </summary>
+    public EntityBuilder<TEntity> AntiJoin<TJoinEntity>(EntityBuilder<TJoinEntity> _, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
+        => AddSemiAntiJoin(GetJoinSource(_), joinCondition, JoinType.Anti);
+    /// <summary>
+    /// Adds a ClickHouse <c>PASTE JOIN</c> over <paramref name="_"/>: the two sources are paired by row
+    /// position with no <c>ON</c> condition, and the projection exposes both sides (as many rows as the
+    /// shorter side). Requires a dialect that supports it (see <see cref="ISqlDialect.SupportsPasteJoin"/>).
+    /// </summary>
+    public JoinedEntityBuilder<TEntity, TJoinEntity> PasteJoin<TJoinEntity>(EntityBuilder<TJoinEntity> _)
+        => JoinCore(_, JoinType.Paste, null);
+    /// <inheritdoc cref="SemiJoin{TJoinEntity}(EntityBuilder{TJoinEntity}, Expression{Func{TEntity, TJoinEntity, bool}})"/>
+    public EntityBuilder<TEntity> SemiJoin<TJoinEntity>(QueryCommand<TJoinEntity> query, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
+        => AddSemiAntiJoin(new FromExpression(query), joinCondition, JoinType.Semi);
+    /// <inheritdoc cref="AntiJoin{TJoinEntity}(EntityBuilder{TJoinEntity}, Expression{Func{TEntity, TJoinEntity, bool}})"/>
+    public EntityBuilder<TEntity> AntiJoin<TJoinEntity>(QueryCommand<TJoinEntity> query, Expression<Func<TEntity, TJoinEntity, bool>> joinCondition)
+        => AddSemiAntiJoin(new FromExpression(query), joinCondition, JoinType.Anti);
+    /// <inheritdoc cref="PasteJoin{TJoinEntity}(EntityBuilder{TJoinEntity})"/>
+    public JoinedEntityBuilder<TEntity, TJoinEntity> PasteJoin<TJoinEntity>(QueryCommand<TJoinEntity> query)
+        => JoinCore(query, JoinType.Paste, null);
+    private EntityBuilder<TEntity> AddSemiAntiJoin(FromExpression rightSource, LambdaExpression joinCondition, JoinType joinType)
+    {
+        if (_windows is not null)
+            throw new InvalidOperationException("Named windows must be declared after joins; Window cannot be combined with a later Join.");
+
+        var b = Clone();
+        var joins = b._joins;
+        if (joins is null)
+            b._joins = joins = _joins is null ? [] : [.. _joins];
+
+        joins.Add(new JoinExpression(joinCondition, joinType) { From = rightSource, EntityType = null });
+
+        return b;
+    }
     private JoinedEntityBuilder<TEntity, TJoinEntity> JoinCore<TJoinEntity>(EntityBuilder<TJoinEntity> _, JoinType joinType, LambdaExpression? joinCondition)
     {
         if (_windows is not null)
@@ -1443,6 +1489,33 @@ public class EntityBuilder : ICloneable
         => JoinCore(from, JoinType.CrossApply, null);
     public JoinedEntityBuilder<TableAlias, TableAlias> OuterApply(EntityBuilder from)
         => JoinCore(from, JoinType.OuterApply, null);
+    /// <summary>
+    /// Adds a ClickHouse <c>LEFT SEMI JOIN</c> over <paramref name="from"/> and keeps this builder's
+    /// shape: only the left-hand columns survive (see
+    /// <see cref="EntityBuilder{TEntity}.SemiJoin{TJoinEntity}(EntityBuilder{TJoinEntity}, Expression{Func{TEntity, TJoinEntity, bool}})"/>).
+    /// </summary>
+    public EntityBuilder SemiJoin(EntityBuilder from, Expression<Func<TableAlias, TableAlias, bool>> joinCondition)
+        => AddSemiAntiJoin(new JoinExpression(joinCondition, JoinType.Semi) { From = new FromExpression(from._table!) });
+    /// <inheritdoc cref="SemiJoin(EntityBuilder, Expression{Func{TableAlias, TableAlias, bool}})"/>
+    public EntityBuilder AntiJoin(EntityBuilder from, Expression<Func<TableAlias, TableAlias, bool>> joinCondition)
+        => AddSemiAntiJoin(new JoinExpression(joinCondition, JoinType.Anti) { From = new FromExpression(from._table!) });
+    /// <summary>
+    /// Adds a ClickHouse <c>PASTE JOIN</c> over <paramref name="from"/> (see
+    /// <see cref="EntityBuilder{TEntity}.PasteJoin{TJoinEntity}(EntityBuilder{TJoinEntity})"/>).
+    /// </summary>
+    public JoinedEntityBuilder<TableAlias, TableAlias> PasteJoin(EntityBuilder from)
+        => JoinCore(from, JoinType.Paste, null);
+    private EntityBuilder AddSemiAntiJoin(JoinExpression join)
+    {
+        var b = Clone();
+        var joins = b._joins;
+        if (joins is null)
+            b._joins = joins = _joins is null ? [] : [.. _joins];
+
+        joins.Add(join);
+
+        return b;
+    }
     private JoinedEntityBuilder<TableAlias, TableAlias> JoinCore(EntityBuilder from, JoinType joinType, LambdaExpression? joinCondition)
     {
         var cb = new JoinedEntityBuilder<TableAlias, TableAlias>(_dataProvider, new JoinExpression(joinCondition, joinType) { From = new FromExpression(from._table!), EntityType = joinCondition is null ? typeof(TableAlias) : null }) { Logger = Logger, Table = _table, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention };
@@ -1462,6 +1535,15 @@ public class EntityBuilder : ICloneable
         => JoinCore(_, JoinType.CrossApply, null);
     public JoinedEntityBuilder<TableAlias, TJoinEntity> OuterApply<TJoinEntity>(EntityBuilder<TJoinEntity> _)
         => JoinCore(_, JoinType.OuterApply, null);
+    /// <inheritdoc cref="SemiJoin(EntityBuilder, Expression{Func{TableAlias, TableAlias, bool}})"/>
+    public EntityBuilder SemiJoin<TJoinEntity>(EntityBuilder<TJoinEntity> _, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition)
+        => AddSemiAntiJoin(new JoinExpression(joinCondition, JoinType.Semi) { From = _dataProvider.GetFrom(typeof(TJoinEntity), null)! });
+    /// <inheritdoc cref="SemiJoin(EntityBuilder, Expression{Func{TableAlias, TableAlias, bool}})"/>
+    public EntityBuilder AntiJoin<TJoinEntity>(EntityBuilder<TJoinEntity> _, Expression<Func<TableAlias, TJoinEntity, bool>> joinCondition)
+        => AddSemiAntiJoin(new JoinExpression(joinCondition, JoinType.Anti) { From = _dataProvider.GetFrom(typeof(TJoinEntity), null)! });
+    /// <inheritdoc cref="PasteJoin(EntityBuilder)"/>
+    public JoinedEntityBuilder<TableAlias, TJoinEntity> PasteJoin<TJoinEntity>(EntityBuilder<TJoinEntity> _)
+        => JoinCore(_, JoinType.Paste, null);
     private JoinedEntityBuilder<TableAlias, TJoinEntity> JoinCore<TJoinEntity>(EntityBuilder<TJoinEntity> _, JoinType joinType, LambdaExpression? joinCondition)
     {
         var cb = new JoinedEntityBuilder<TableAlias, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition, joinType) { From = _dataProvider.GetFrom(typeof(TJoinEntity), null)!, EntityType = joinCondition is null ? typeof(TJoinEntity) : null }) { Logger = Logger, Table = _table, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention };

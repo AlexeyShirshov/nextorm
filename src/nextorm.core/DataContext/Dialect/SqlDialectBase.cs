@@ -27,6 +27,10 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual bool SupportsApply => false;
     public virtual bool SupportsJoinStrictness => false;
     public virtual bool SupportsGlobalJoin => false;
+    /// <summary>True when the dialect understands the ClickHouse <c>LEFT SEMI</c>/<c>LEFT ANTI</c> join kinds; the safe default is <c>false</c>.</summary>
+    public virtual bool SupportsSemiAntiJoin => false;
+    /// <summary>True when the dialect understands the ClickHouse <c>PASTE JOIN</c> kind; the safe default is <c>false</c>.</summary>
+    public virtual bool SupportsPasteJoin => false;
     public virtual bool SupportsQueryHints => false;
     public virtual bool SupportsTableHints => false;
     public virtual bool SupportsForJson => false;

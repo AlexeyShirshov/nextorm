@@ -63,10 +63,27 @@ public interface ISqlDialect
     /// </summary>
     bool SupportsGlobalJoin { get; }
     /// <summary>
+    /// True when the provider understands the ClickHouse <c>SEMI</c>/<c>ANTI</c> join kinds
+    /// (<see cref="JoinType.Semi"/>/<see cref="JoinType.Anti"/>), which return only the left-hand
+    /// columns. Declared as a default interface method returning <c>false</c> so existing external
+    /// implementations keep compiling; only ClickHouse opts in today.
+    /// </summary>
+    bool SupportsSemiAntiJoin => false;
+    /// <summary>
+    /// True when the provider understands the ClickHouse <c>PASTE JOIN</c> kind
+    /// (<see cref="JoinType.Paste"/>), a position-based join with no <c>ON</c> condition. Declared as a
+    /// default interface method returning <c>false</c> so existing external implementations keep
+    /// compiling; only ClickHouse opts in today.
+    /// </summary>
+    bool SupportsPasteJoin => false;
+    /// <summary>
     /// Renders the join keyword for <paramref name="joinType"/> with an optional
     /// <see cref="JoinStrictness"/> modifier and/or the <c>GLOBAL</c> modifier. A dialect that did not
     /// opt in with <see cref="SupportsJoinStrictness"/>/<see cref="SupportsGlobalJoin"/> is only ever
-    /// asked for <see cref="JoinStrictness.Default"/> and <c>false</c>.
+    /// asked for <see cref="JoinStrictness.Default"/> and <c>false</c>. The ClickHouse-only
+    /// <see cref="JoinType.Semi"/>/<see cref="JoinType.Anti"/>/<see cref="JoinType.Paste"/> kinds are
+    /// only requested from a dialect that opted in with
+    /// <see cref="SupportsSemiAntiJoin"/>/<see cref="SupportsPasteJoin"/>.
     /// </summary>
     string MakeJoinKeyword(JoinType joinType, JoinStrictness strictness, bool isGlobal);
     /// <summary>

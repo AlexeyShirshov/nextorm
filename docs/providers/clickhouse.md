@@ -105,7 +105,11 @@ and returns [`Instance`](xref:NextORM.ClickHouse.ClickHouseDialect.Instance) fro
   ([`SupportsJoinStrictness`](xref:NextORM.Core.ISqlDialect.SupportsJoinStrictness),
   [`MakeJoinKeyword`](xref:NextORM.Core.ISqlDialect.MakeJoinKeyword), enum `JoinStrictness`).
   `LEFT ANY JOIN` keeps a single right-hand row per left-hand row, `ALL` keeps every match and
-  `ASOF` needs one equi-join column plus a final inequality. `SEMI`/`ANTI`/`PASTE` are not supported.
+  `ASOF` needs one equi-join column plus a final inequality. The `SEMI`/`ANTI`/`PASTE` kinds have
+  dedicated builder methods: [`SemiJoin`](xref:NextORM.Core.EntityBuilder`1)/`AntiJoin` return only the
+  left-hand columns for left rows that do (respectively do not) have a match, and `PasteJoin` pairs the
+  two sources by row position with no `ON` (yielding as many rows as the shorter side). They are gated
+  by [`SupportsSemiAntiJoin`](xref:NextORM.Core.ISqlDialect.SupportsSemiAntiJoin)/`SupportsPasteJoin`.
   The `GLOBAL` variant (resolved once and broadcast for distributed queries) is set with
   [`EntityBuilder.Global`](xref:NextORM.Core.EntityBuilder`1) and combines with strictness
   (`global left any join`, [`SupportsGlobalJoin`](xref:NextORM.Core.ISqlDialect.SupportsGlobalJoin)).

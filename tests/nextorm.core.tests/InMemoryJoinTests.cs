@@ -92,6 +92,28 @@ public class InMemoryJoinTests
     }
 
     [Fact]
+    public void TestSemiAntiPasteJoin_ShouldThrow()
+    {
+        var semi = () => _sut.SimpleEntity
+            .SemiJoin(_sut.SimpleEntity, (t1, t2) => t1.Id == t2.Id)
+            .Select(t1 => new { t1.Id })
+            .ToList();
+        semi.Should().Throw<NotSupportedException>().WithMessage("*Semi join is not supported*");
+
+        var anti = () => _sut.SimpleEntity
+            .AntiJoin(_sut.SimpleEntity, (t1, t2) => t1.Id == t2.Id)
+            .Select(t1 => new { t1.Id })
+            .ToList();
+        anti.Should().Throw<NotSupportedException>().WithMessage("*Anti join is not supported*");
+
+        var paste = () => _sut.SimpleEntity
+            .PasteJoin(_sut.SimpleEntity)
+            .Select(p => new { p.Item1.Id, Second = p.Item2.Id })
+            .ToList();
+        paste.Should().Throw<NotSupportedException>().WithMessage("*Paste join is not supported*");
+    }
+
+    [Fact]
     public async Task TestCrossJoin8Tables_ShouldCloneAndMaterializeAtEveryArity()
     {
         // A single row per table keeps the cross product at one row while still walking every

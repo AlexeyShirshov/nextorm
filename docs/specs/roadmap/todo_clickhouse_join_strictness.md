@@ -2,7 +2,10 @@
 
 > Actionable-остаток ClickHouse join-воркстрима. `ANY`/`ALL`/`ASOF` и мутирующий модификатор
 > `WithStrictness(JoinStrictness)` реализованы.
-> **Статус: заблокировано** API-дизайном: не выбран результат для join'ов, меняющих набор колонок.
+> **Статус: готово (22.09.2026).** `SEMI`/`ANTI`/`PASTE` смоделированы новыми значениями
+> `JoinType` (`Semi`/`Anti`/`Paste`) с построителями `SemiJoin`/`AntiJoin` (левая проекция без
+> правых колонок) и `PasteJoin` (`Projection<T1,T2>`); гейты `ISqlDialect.SupportsSemiAntiJoin`/
+> `SupportsPasteJoin`, рендер `left semi join`/`left anti join`/`paste join`.
 
 ## Что уже сделано (не переделывать)
 

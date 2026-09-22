@@ -705,6 +705,52 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     }
 
     [Fact]
+    public void SemiJoin_ShouldKeepOnlyMatchingLeftRows()
+    {
+        // complex_entity has ids 1..3, so exactly the simple rows 1,2,3 have a match.
+        _sut.SimpleEntity
+            .SemiJoin(_sut.ComplexEntity, (s, c) => s.Id == c.Id)
+            .Select(s => s.Id)
+            .ToList()
+            .Should().BeEquivalentTo([1, 2, 3]);
+    }
+
+    [Fact]
+    public void AntiJoin_ShouldKeepOnlyNonMatchingLeftRows()
+    {
+        _sut.SimpleEntity
+            .AntiJoin(_sut.ComplexEntity, (s, c) => s.Id == c.Id)
+            .Select(s => s.Id)
+            .ToList()
+            .Should().BeEquivalentTo([4, 5, 6, 7, 8, 9, 10]);
+    }
+
+    [Fact]
+    public void SemiJoin_ShouldNotDuplicateOnMultipleMatches()
+    {
+        // All three complex rows share small = 3: a plain join yields 9 rows, SEMI keeps each left row once.
+        _sut.ComplexEntity
+            .SemiJoin(_sut.ComplexEntity, (a, b) => a.SmallInt == b.SmallInt)
+            .Select(a => a.Id)
+            .ToList()
+            .Should().HaveCount(3);
+    }
+
+    [Fact]
+    public void PasteJoin_ShouldPairByPositionAndUseShorterSide()
+    {
+        // 10 left rows and 3 right rows, so PASTE yields min(10, 3) = 3 rows carrying both sides.
+        var rows = _sut.SimpleEntity
+            .PasteJoin(_sut.ComplexEntity)
+            .Select(p => new { L = p.Item1.Id, R = p.Item2.Id })
+            .ToList();
+
+        rows.Should().HaveCount(3);
+        rows.Select(r => r.R).Should().BeEquivalentTo([1L, 2L, 3L]);
+        rows.Select(r => r.L).Distinct().Should().HaveCount(3);
+    }
+
+    [Fact]
     public void ArrayFunctions_ShouldReturnValues()
     {
         var r = _sut.ArrayEntity
