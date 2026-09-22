@@ -500,6 +500,15 @@ result can be projected like a scalar column.
 | `SqlFunctions.ClickHouse.array_join(a)` | `arrayJoin(a)` |
 | `SqlFunctions.ClickHouse.group_array(a)` | `groupArray(a)` |
 | `SqlFunctions.ClickHouse.group_uniq_array(a)` | `groupUniqArray(a)` |
+| `SqlFunctions.ClickHouse.array_map(f, a)` | `arrayMap(f, a)` |
+| `SqlFunctions.ClickHouse.array_filter(f, a)` | `arrayFilter(f, a)` |
+| `SqlFunctions.ClickHouse.array_exists(f, a)` | `arrayExists(f, a)` |
+| `SqlFunctions.ClickHouse.array_all(f, a)` | `arrayAll(f, a)` |
+| `SqlFunctions.ClickHouse.array_count(f, a)` | `arrayCount(f, a)` |
+| `SqlFunctions.ClickHouse.array_first(f, a)` | `arrayFirst(f, a)` |
+| `SqlFunctions.ClickHouse.array_first_index(f, a)` | `arrayFirstIndex(f, a)` |
+| `SqlFunctions.ClickHouse.array_last(f, a)` | `arrayLast(f, a)` |
+| `SqlFunctions.ClickHouse.array_last_index(f, a)` | `arrayLastIndex(f, a)` |
 
 > `length`/`indexOf` return `UInt64` natively, so the dialect casts them with `toInt64(...)`. Functions
 > that return an array (`split_by_char`, `array_sort`, `array_reverse`, `array_distinct`, `range`,
@@ -508,6 +517,16 @@ result can be projected like a scalar column.
 > CLR `T[]` — or used as the operand of another array function (for example `length(...)` or
 > `array_string_concat(...)`). The same reader materialises a native `Tuple(...)` column (or a
 > `Tuple(...)`-returning expression) as a `System.Tuple<...>` of arity 1–7.
+
+> The higher-order (lambda) functions take an inline C# lambda whose parameter is the array element,
+> for example `array_map(v => -v, e.Nums)` renders `arrayMap(v -> -(v), nums)`. `array_exists`/`array_all`
+> return `bool`; `array_count`/`array_first_index`/`array_last_index` return `long` (the dialect casts
+> the native `UInt32` with `toInt64(...)`); `array_first`/`array_last` return the element or its default
+> value when nothing matches. They require a provider that supports the higher-order array functions
+> (see [`SupportsHigherOrderArrayFunctions`](xref:NextORM.Core.ISqlDialect.SupportsHigherOrderArrayFunctions);
+> ClickHouse). ClickHouse promotes the arithmetic result type independently of C# (an `Int32` element
+> multiplied by an integer literal becomes `Array(Int64)`), so cast inside the lambda
+> (`v => (long)v * 2`) when the element type must match the projected `T[]`.
 
 The CLR `string.Split` is rendered as `splitByChar(separator, value)` (gated by
 [`StringSplit`](xref:NextORM.Core.ISqlDialect.StringSplit)); only a single-character

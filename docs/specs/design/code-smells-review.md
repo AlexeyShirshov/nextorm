@@ -8,6 +8,8 @@
 
 **Обновление 22.09.2026 (uncommitted worktree — ClickHouse row reader `Array(T)`/`Tuple`).** Добавлены `GetValue`-ветки для `T[]`/`System.Tuple` (`SelectExpression.cs:117-130`), классификация формы проекции (`TypeFacts.cs:45-74`) и ClickHouse-агрегаты `group_array`/`group_uniq_array` (`SqlFunctions.ClickHouse.cs:127-143`, гейт `SupportsArrayFunctions`). Build `0/0`, clickhouse **201/201**, postgres **265/265**; новых подавлений/слопа нет (11/11). Открыта **Находка 61** (устаревшие XML-summary классификации); доки-противоречия — `API-NAMING-REVIEW.md`, CHARR2/CHARR3.
 
+**Обновление 22.09.2026 (uncommitted worktree — ClickHouse higher-order/lambda array-функции).** Добавлены `array_map`/`array_filter`/`array_exists`/`array_all`/`array_count`/`array_first`/`array_first_index`/`array_last`/`array_last_index` + флаг `SupportsHigherOrderArrayFunctions`. Build `0/0`; clickhouse **208/208**, postgres **266/266**, контейнерная интеграция ClickHouse **15/15** (0 skipped; включая 5 новых). Новых подавлений/слопа — **0** (соотношение **11/11**). **Находки 62** (вложенная лямбда теряла внешний параметр) и **63** (`Clone()` без param-режимного guard) исправлены, подтверждены тестом (`NestedHigherOrderLambda_ShouldReferenceOuterParameter`) и build `0/0`; дублирование emit-цикла — продолжение Находок 15/30. Док-противоречие закрыто — `API-NAMING-REVIEW.md`, HOAF2/HOAF3.
+
 **Область анализа:** `src/` (основной), дополнительно `tests/` и `benchmarks/`
 **Метод:** read-only аудит по каталогу `skill:dotnet-csharp-code-smells` + `skill:slopwatch` (паттерн-скан выполнен вручную: локальный tool `slopwatch` в `.config/dotnet-tools.json` не установлен)
 **Статус:** Находки 1 (подавления), 2 (`IDisposable`), 3 (LINQ), 4 (god-классы), 5 (хэш-ключи), **6 (утечка подписки внешнего соединения)** и **7 (`*DELETE*.cs`)** — **исправлены/закрыты 18.09.2026**. Находка 4: god-классы разобраны — `EntityBuilder<TEntity>` **769→466**, `SqlBuilder` **716→318**, `ScalarFunctionTranslator` **595→131**, `BaseExpressionVisitor` **425→366** (`VisitMethodCall` 183→77); единственное исключение автора — `ExpressionPlanEqualityComparer` (879 формально, 77 собственных строк). Длинные списки параметров ≥6 — все 15 «боевых» разобраны параметр-объектами. Осознанно не закрываются: `CA2213`/`CA1816` (ложные) и `CA1508` (2 вероятно ложных в `NormSqlTranslator.cs:223,250`, сборкой не гейтится). `#pragma disable` в `src/` — 5, все с `restore`.
@@ -4090,6 +4092,58 @@ ClickHouse + маппингу `ClickHouse.Driver` 1.4.0.
 - **`byte[]`/`string[]` не регрессируют.** Прежние частные ветки полностью покрыты `IsArray`; `Nullable`-путь для них тот же.
 
 **Проверка (22.09.2026).** Build Release — **0/0**; `nextorm.clickhouse.tests` **201/201**, `nextorm.postgres.tests` **265/265** (прогнано в этом проходе); в диффе `#pragma`/`SuppressMessage`/`NoWarn`/`Skip=`/`Task.Delay`/пустых `catch` — **0**; соотношение подавлений **11/11** (0 неоправданных); `find -name 'PublicAPI*.txt'` — пусто (Шаг 5 открыт); все изменённые файлы CRLF. Контейнерная интеграция ClickHouse/PostgreSQL в этом проходе не перезапускалась; вывод по row reader построен чтением `SelectExpression`/`RowMapperFactory`/`SqlOperandTranslator` и приложенного набора тестов.
+
+## 🔎 Точечный аудит 22.09.2026 — ClickHouse higher-order (lambda) array-функции (uncommitted worktree)
+
+**Область.** `ClickHouseFunctions.array_map`/`array_filter`/`array_exists`/`array_all`/`array_count`/`array_first`/`array_first_index`/`array_last`/`array_last_index` (`src/nextorm.core/Query/SqlFunctions.ClickHouse.cs:485-545`); `ArraySqlTranslator.TryTranslateHigherOrderArray`/`EmitHigherOrderArray`/`ExtractLambda` (`src/nextorm.core/Visitors/ArraySqlTranslator.cs:261-341`); новый `internal sealed HigherOrderLambdaVisitor` (`:408-455`); флаг `ISqlDialect.SupportsHigherOrderArrayFunctions` (`src/nextorm.core/DataContext/Dialect/ISqlDialect.cs:145-152`; база `SqlDialectBase.cs:36`; override `src/nextorm.clickhouse/ClickHouseDialect.cs:57`); `MakeArrayFunction` +3 имени (`ClickHouseDialect.cs:70`). Тесты — clickhouse SQL-gen (7), postgres rejection (1), контейнерная интеграция ClickHouse (5).
+
+**База (этот проход).** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**; `dotnet test tests/nextorm.clickhouse.tests -c Debug` — **208/208**; `dotnet test tests/nextorm.postgres.tests -c Debug` — **266/266**; `DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock dotnet test tests/nextorm.integration.tests -c Debug --filter "FullyQualifiedName~ClickHouseIntegrationTests.Array"` — **15/15** (0 failed / 0 skipped; включая 5 новых). Подавления `src/`: **6** `SuppressMessage` (все с `Justification`) + **5** `#pragma warning disable` (все с `restore`) = **11/11** оправданных, **0** неоправданных; в диффе новых — **0**. Слоп: `Skip=`/`Task.Delay`/`Thread.Sleep`/пустых `catch`/`NoWarn`/inline `Version` — **0** (новых нет). `.editorconfig` — 6 инертных `S*`-silent без `SonarAnalyzer` (пре-существующее, см. «Примечания»).
+
+| # | Проверка | Итог |
+|---|----------|------|
+| 1. `IDisposable` | ✅ `using var bodyVisitor` корректен: `HigherOrderLambdaVisitor` наследует `BaseExpressionVisitor : IDisposable`; `Dispose(bool)` (`BaseExpressionVisitor.cs:403-414`) возвращает pooled `StringBuilder`, `using` гарантирует возврат и при `NotSupportedException` из `VisitMember`. Новых disposable-полей/локалов нет; `CA2000`/`CA2213` не затронуты. |
+| 2. Подавления | ✅ Новых `#pragma`/`SuppressMessage`/`NoWarn` — **0**; соотношение проекта **11/11** (0 неоправданных). |
+| 3. LINQ на горячем пути | ✅ Новых LINQ-цепочек нет: `TryTranslateHigherOrderArray` — `switch` по `nameof` + `args.Count`; `EmitHigherOrderArray` — циклы `for (var (i, cnt) = …)`. Аллокации (`Dictionary<ParameterExpression,string>` + визитор) — на холодном пути построения плана, не на выполнении. |
+| 4. God-классы | ✅ `ArraySqlTranslator` ~455 строк (было ~407, +48) — порог 500 не перейдён; `EmitHigherOrderArray` ~40 строк, `HigherOrderLambdaVisitor` ~48 (новый `internal`-тип). |
+| 5. Хэш-ключи / план-кэш | ✅ Лямбды уже поддержаны: `ExpressionPlanEqualityComparer.CompareLambda` (`:194-244`), `CompareParameter` (`:277-281`), хэшер `VisitLambda`/`VisitParameter` (`:652-658,760-765`). Две структурно одинаковые `v => v > 2` хэшируются и сравниваются одинаково → план-запись делится. Новых членов план-ключа нет. |
+| 6. События / исключения | ✅ Подписок нет; новых `catch` нет. Ошибочные формы бросают `NotSupportedException` (не-`ClickHouse`-провайдер `:285-287`; не-inline lambda `:335-341`; member-access на параметре `:439-446`; число параметров ≠1 `:297-298`). |
+| 7. Дублирование emit-циклов | ⚠️ `EmitHigherOrderArray` (`:293-333`) — очередная копия хвоста `EmitArrayFunction` (`:343-372`); продолжение Находок 15/30, см. ℹ️. |
+
+### 🟡 Находка 62 — вложенная higher-order лямбда молча теряет внешний параметр (ИСПРАВЛЕНА 22.09.2026, P2)
+
+**Место:** `src/nextorm.core/Visitors/ArraySqlTranslator.cs:300-305` (`EmitHigherOrderArray` строит `HigherOrderLambdaVisitor` с картой только текущей лямбды) и `:423-437` (`VisitParameter` эмитит лишь параметры своей карты; неизвестный `ParameterExpression` уходит в `base.VisitParameter`, который ничего не печатает).
+
+**Что не так.** При вложенном higher-order вызове внутри тела лямбды (например `array_map(a => array_exists(b => a == b, e.Nums), e.Nums)`, где `e.Nums` — int[]-колонка) внутренний `EmitHigherOrderArray` получает `visitor = bodyVisitor` и создаёт **новый** визитор с картой `{ b }`; внешний параметр `a` в карту не попадает. `VisitParameter(a)` возвращает узел без эмиссии, и `PredicateTranslator.VisitBinary` рендерит `( = b)` — синтаксически битый SQL вместо понятного `NotSupportedException`; ошибка всплывает только на сервере ClickHouse. Ограничение среза «одна лямбда с одним параметром» в коде не enforced для вложенности (внешний параметр не отслеживается).
+
+**Было:** карта параметров не пробрасывается во вложенный визитор; неизвестный параметр молча ничего не рендерит.
+
+**Исправлено:** добавлено `internal virtual IReadOnlyDictionary<ParameterExpression, string>? LambdaParameters` на `BaseExpressionVisitor`; `HigherOrderLambdaVisitor` его переопределяет, а `EmitHigherOrderArray` объединяет внешнюю карту с картой новой лямбды. Вложенный вызов теперь видит параметр внешней лямбды (`array_map(a => array_exists(b => a == b, nums), nums)` рендерит `arrayMap(a -> arrayExists(b -> (a = b), nums), nums)`). Тест: `NestedHigherOrderLambda_ShouldReferenceOuterParameter` (CH SQL-gen).
+
+**Проверка:** `dotnet test tests/nextorm.clickhouse.tests` — 209/209 (включая новый вложенный тест).
+
+### 🟡 Находка 63 — `HigherOrderLambdaVisitor.Clone()` ослабляет param-режимный инвариант базы (ИСПРАВЛЕНА 22.09.2026, P2, hardening)
+
+**Место:** `src/nextorm.core/Visitors/ArraySqlTranslator.cs:421` (`public override BaseExpressionVisitor Clone() => new HigherOrderLambdaVisitor(Options, _parameters);`) против `src/nextorm.core/Visitors/BaseExpressionVisitor.cs:396-401` (`if (_paramMode) throw new NotSupportedException("Cannot clone in param mode")`).
+
+**Что не так.** Override необходим и корректен по существу: `PredicateTranslator.VisitBinary` (`:305,308`) клонирует визитор при null-aware переписывании, и без переноса карты `_parameters` лямбда-параметр потерялся бы (как в примечании к `CompareLambda`). Но override **не повторяет** param-режимный guard базы. Сегодня все вызовы `Clone()` идут под `!IsParamMode` (`PredicateTranslator.cs:115,137,167,213,303,325`; `WhereExpressionVisitor.cs:19`), поэтому дефект недостижим; при будущем вызове клон в param-режиме получит `_builder == null`, и `ToString()` (`BaseExpressionVisitor.cs:381`) даст `NullReferenceException` вместо понятного исключения.
+
+**Было:** `Clone()` без проверки режима.
+
+**Исправлено:** `Clone()` теперь повторяет guard базы:
+`Clone() => IsParamMode ? throw new NotSupportedException("Cannot clone in param mode") : new HigherOrderLambdaVisitor(Options, _parameters);`.
+
+**Проверка:** `roslyn callers NextORM.Core.BaseExpressionVisitor.Clone` — 14 call-site, все под `!IsParamMode`; достижимые пути не изменились, build 0/0.
+
+### ℹ️ Наблюдения (фикс не требуется)
+
+- **Дублирование emit-цикла — продолжение Находок 15/30.** `EmitHigherOrderArray` (`ArraySqlTranslator.cs:293-333`) повторяет хвост `EmitArrayFunction` (`:343-372`: захват `builder.Length` → `ToString(start, len)` → откат → `MakeArrayFunction`) и второй `switch` по `nameof(ClickHouseFunctions.*)` (`:268-280` у `TryTranslateHigherOrderArray`). Отличие (префикс `name(param -> …`) намеренное; общий `EmitCore` не выносился. Не новый номер — тот же класс, что Находки 15/30.
+- **`VisitMember`-перехват уже́, чем «любая форма с корнем-параметром».** `IsLambdaParameter` (`:448-454`) разворачивает только цепочку `MemberExpression`; `Convert(v).Member`, `v[i].Member`, `v?.Member` (Conditional) не распознаются и уходят в `base.VisitMember` → `MemberTranslator`. Для элементных `T` слайса 3 (примитивы/строки) невоспроизводимо; при составном `T` — потенциальный «сырой» рендер. Кандидат в guard при расширении слайса.
+- **`ExtractLambda` принимает только `Quote(LambdaExpression)`** (`:335-341`): lambda, сохранённая в `Expression<Func<…>>`-переменную, отвергается MemberExpression-ветвью с понятным сообщением; XML-док методов не оговаривает «строго inline» (кандидат в формулировку).
+- **param-mode порядок согласован.** Тело обходится до аргументов-массивов (`:304-310`), ровно как печатается SQL (`:319-326`); тот же приём и `DontNeedAlias = false`, что у `AggregateFilter.AppendPredicate` (`AggregateFilter.cs:45-50`). `DontNeedAlias = false` осознан (иначе алиас колонки в теле потерялся бы).
+- **`MakeArrayFunction` +3 корректно.** `arrayCount`/`arrayFirstIndex`/`arrayLastIndex` нативно `UInt32` → `toInt64` (`ClickHouseDialect.cs:70`) согласовано с объявленными `long`; `arrayMap`/`arrayFilter`/`arrayFirst`/`arrayLast` не оборачиваются (возвращают `T[]`/`T`). Подтверждено интеграционно (`array_count` = 2, `array_first_index` = 1, `array_last_index` = 3).
+- **`HigherOrderLambdaVisitor` — второй тип в `ArraySqlTranslator.cs`** (`:408`), тогда как соседи-хелперы (`SqlOperandTranslator`, `AggregateFilter`) вынесены в одноимённые файлы. Для `internal`-типа — косметика (ср. P2-20 «файл ↔ тип» в `API-NAMING-REVIEW.md`).
+
+**Проверка (22.09.2026).** Build Release — **0/0**; clickhouse **208/208**, postgres **266/266**, интеграция ClickHouse **15/15** (0 skipped; включая 5 новых `ArrayMap`/`ArrayFilter`/`ArrayExistsAndAll`/`ArrayCount`/`ArrayFirstAndLast`). В диффе `#pragma`/`SuppressMessage`/`NoWarn`/`Skip=`/`Task.Delay`/пустых `catch` — **0**; соотношение подавлений **11/11** (0 неоправданных). `find -name 'PublicAPI*.txt'` — пусто (Шаг 5 открыт). Док-противоречие (provider-specific ClickHouse EN/RU относят higher-order к «out of scope») — `API-NAMING-REVIEW.md`, HOAF2/HOAF3; фикс кода не применялся.
 
 ## Примечания
 

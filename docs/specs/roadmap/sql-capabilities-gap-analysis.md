@@ -175,10 +175,14 @@ Ordered by impact on real query authoring. Per-feature details and owners live i
    [Grouping and aggregates](../../guide/04-grouping-and-aggregates.md),
    [Scalar functions](../../guide/11-scalar-functions.md#arrays-clickhouse).
    Todo: [`todo_clickhouse_arrays.md`](todo_clickhouse_arrays.md).
-5. **ClickHouse higher-order array functions are not translated.** `arrayMap`/`arrayFilter`/
-   `arrayExists`/`arrayAll`/`arrayCount`/`arrayFirst*` need lambda/higher-order argument translation,
-   which has not been started.
-   Todo: [`todo_clickhouse_arrays.md`](todo_clickhouse_arrays.md) (lambda/higher-order аргументы).
+5. **ClickHouse higher-order array functions — shipped.** `arrayMap`/`arrayFilter`/`arrayExists`/
+   `arrayAll`/`arrayCount`/`arrayFirst*`/`arrayLast*` translate an inline lambda argument
+   (`ClickHouseFunctions.array_map`/`array_filter`/`array_exists`/`array_all`/`array_count`/
+   `array_first`/`array_first_index`/`array_last`/`array_last_index`) under
+   [`SupportsHigherOrderArrayFunctions`](xref:NextORM.Core.ISqlDialect.SupportsHigherOrderArrayFunctions);
+   other providers throw `NotSupportedException`.
+   Shipped: [Scalar functions](../../guide/11-scalar-functions.md#arrays-clickhouse),
+   [Provider-specific SQL](../../guide/provider-specific/clickhouse.md).
 6. **ClickHouse `-State`/`-Merge` combinators and `runningAccumulate` need an
    `AggregateFunction(...)` state type**, which nextorm does not model.
    Todo: [`todo_clickhouse_aggregate_function_state.md`](todo_clickhouse_aggregate_function_state.md).

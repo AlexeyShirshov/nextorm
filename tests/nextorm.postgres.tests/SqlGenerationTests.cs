@@ -1276,6 +1276,17 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void HigherOrderArrayFunction_UnsupportedByProvider_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => SqlFunctions.ClickHouse.array_map(t => t, x.Tags)));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*higher-order array functions*");
+    }
+
+    [Fact]
     public void FilteredAggregates_ShouldEmitFilterClause()
     {
         using var ctx = PostgresTestContext.Create();

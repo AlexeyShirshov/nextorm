@@ -49,6 +49,13 @@ public sealed class ClickHouseDialect : SqlDialectBase
     /// </summary>
     public override bool SupportsArrayFunctions => true;
 
+    /// <summary>
+    /// ClickHouse implements the higher-order (lambda) array functions (<c>arrayMap</c>,
+    /// <c>arrayFilter</c>, <c>arrayExists</c>, <c>arrayAll</c>, <c>arrayCount</c>,
+    /// <c>arrayFirst*</c>, <c>arrayLast*</c>).
+    /// </summary>
+    public override bool SupportsHigherOrderArrayFunctions => true;
+
     /// <summary>ClickHouse implements <c>arrayJoin(array)</c>, which expands one row per element.</summary>
     public override bool SupportsArrayJoin => true;
 
@@ -56,11 +63,12 @@ public sealed class ClickHouseDialect : SqlDialectBase
     public override IStringSplitRenderer StringSplit => ClickHouseStringSplitRenderer.Instance;
 
     /// <summary>
-    /// <c>length</c> and <c>indexOf</c> return <c>UInt64</c> natively; cast them to <c>Int64</c> so the
-    /// result matches the declared CLR <c>long</c>.
+    /// <c>length</c>, <c>indexOf</c>, <c>arrayCount</c>, <c>arrayFirstIndex</c> and
+    /// <c>arrayLastIndex</c> return <c>UInt64</c>/<c>UInt32</c> natively; cast them to <c>Int64</c> so
+    /// the result matches the declared CLR <c>long</c>.
     /// </summary>
     public override string MakeArrayFunction(string name, string call) =>
-        name is "length" or "indexOf" ? $"toInt64({call})" : call;
+        name is "length" or "indexOf" or "arrayCount" or "arrayFirstIndex" or "arrayLastIndex" ? $"toInt64({call})" : call;
 
     /// <summary>
     /// Renders <c>[global] [inner|left|right|full|cross] [any|all|asof] join</c>. ClickHouse places the

@@ -57,7 +57,7 @@
 | Нативные JSON-документы | yes | **yes на PostgreSQL** | `SupportsJson`, `JsonSqlTranslator` |
 | JSON скалярные функции (`json_value`/`json_query`/`json_modify`, `isjson`) | yes | **yes на SQL Server и MySQL/MariaDB** | `SupportsTextJson`, `MakeTextJsonFunction`/`MakeIsJson` |
 | Строковый JSON + функции словарей (ClickHouse) | no | **yes на ClickHouse** | `SupportsJsonExtract`, `SupportsDictionaries`, `MakeJsonExtract`/`MakeDictionaryFunction` |
-| Массивы (`cardinality`/`array_*`/`@>`/`&&`, `Array(T)` в ClickHouse, `ARRAY JOIN`) | no | **yes на PostgreSQL и ClickHouse** (`ARRAY JOIN`; функции высшего порядка не реализованы) | `SupportsArrayFunctions`/`SupportsArrayJoin`, `ArraySqlTranslator`, `IArrayJoinRenderer.Render` |
+| Массивы (`cardinality`/`array_*`/`@>`/`&&`, `Array(T)` в ClickHouse, `ARRAY JOIN`) | no | **yes на PostgreSQL и ClickHouse** (`ARRAY JOIN`; функции высшего порядка и row reader `Array(T)`/`Tuple` реализованы) | `SupportsArrayFunctions`/`SupportsHigherOrderArrayFunctions`/`SupportsArrayJoin`, `ArraySqlTranslator`, `ArrayJoinClause`/`IArrayJoinRenderer.Render` |
 | Условные функции (`iif`/`choose`/`multi_if`) | no | **yes** (переносимый `iif`; `choose` только SQL Server; `multi_if` ClickHouse) | `CommonFunctions.iif`, `SupportsChoose`, `MultiIf`/`IMultiIfRenderer.Render` |
 | `FOR JSON` / `FOR XML` | yes (провайдер) | **yes на SQL Server** | `QueryCommand.ForJson/ForXml`, `SupportsForJson`/`SupportsForXml` |
 | Методы типа XML (`.value`/`.query`/`.exist`/`.nodes`) | yes (провайдер) | **partial** — только SQL Server | `SqlServerFunctions.xml_value`/`xml_query`/`xml_exist`/`xml_nodes` |

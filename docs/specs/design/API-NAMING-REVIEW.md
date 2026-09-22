@@ -10,6 +10,8 @@ postgres 150, mysql 31, mariadb 7, clickhouse 47, integration 833/0 failed)
 
 **Обновление 22.09.2026 (uncommitted worktree — ClickHouse row reader `Array(T)`/`Tuple`).** Добавлены два публичных агрегата `ClickHouseFunctions.group_array<T>`/`group_uniq_array<T>` (`src/nextorm.core/Query/SqlFunctions.ClickHouse.cs:127-143`); row reader (`SelectExpression.GetDataRecordMethod`) и классификация проекции (`TypeFacts`) — `internal`/без новых подписей. Новых публичных типов нет → Приложение A (45) без изменений, покрытие методов +2 (215/1094 против baseline 213/1092). P0/P1 по **именам** нет; открыты CHARR1 (трекинг `PublicAPI`, Шаг 5), CHARR2 (P1-док: EN/RU утверждают «массив нельзя материализовать»/«только вложенно»), CHARR3 (док-пробел). Подробности — в разделе «ClickHouse row reader `Array(T)`/`Tuple` и агрегаты `group_array`/`group_uniq_array`».
 
+**Обновление 22.09.2026 (uncommitted worktree — ClickHouse higher-order/lambda array-функции).** Добавлены `ISqlDialect.SupportsHigherOrderArrayFunctions` (+база/override) и 9 публичных методов `ClickHouseFunctions.array_map`/`array_filter`/`array_exists`/`array_all`/`array_count`/`array_first`/`array_first_index`/`array_last`/`array_last_index` (`Query/SqlFunctions.ClickHouse.cs:485-545`); новых публичных типов нет → Приложение A (45) без изменений, покрытие методов +9 (арифметически, 224/1103). P0 по именам нет; **HOAF2 (P1 док) и HOAF3 (P2 док) закрыты**; открыт P2 **HOAF1** (трекинг, Шаг 5). Подробности — в разделе «Аудит 22.09.2026 — ClickHouse higher-order (lambda) array-функции».
+
 **Область:** `src/nextorm.core`, `src/nextorm.postgres`, `src/nextorm.sqlite`, `src/nextorm.sqlserver`, `src/nextorm.mysql`, `src/nextorm.mariadb`, `src/nextorm.clickhouse`, `src/nextorm.core.sourcegenerator`
 **Методика:** скилл `api-design` (Framework Design Guidelines) + `dotnet-xml-docs` (XML-документация). Основание для вывода — XML-комментарий (`<summary>`/`<param>`, если есть) либо тело метода/свойства. Проект в стадии **alpha**: обратная совместимость не поддерживается, имена меняются напрямую.
 
@@ -3175,6 +3177,38 @@ docs/advanced/limitations.md` — строки отложенных функци
 - **Шаг 5 не двигается:** `PublicAPI.*.txt` — **0** файлов, `PublicApiAnalyzers`/ApiCompat/API-approval не настроены; новые подписи — в CHARR1.
 
 **Проверка (22.09.2026).** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**; `dotnet test tests/nextorm.clickhouse.tests -c Release --no-build` — **201/201**, `tests/nextorm.postgres.tests` — **265/265** (прогнано в этом проходе); `find . -name 'PublicAPI*.txt'` — пусто (подтверждает CHARR1); XML-`<summary>` у обоих новых методов и `<see cref="ISqlDialect.SupportsArrayFunctions"/>` разрешается; новых публичных типов нет — Приложение A (45) без изменений. Контейнерная интеграция ClickHouse 25.8 в этом проходе не перезапускалась; по отчёту автора изменения — ClickHouse **63/63**, PostgreSQL **223** (6 capability-skips).
+
+### Аудит 22.09.2026 — ClickHouse higher-order (lambda) array-функции (P0 — нет; P1 — 1 доковый; P2 — 2)
+
+**Область (uncommitted worktree).** Публичная поверхность аддитивна; переименований нет. Новые члены:
+
+- `ISqlDialect.SupportsHigherOrderArrayFunctions` (`src/nextorm.core/DataContext/Dialect/ISqlDialect.cs:145-152`, **abstract**; default `false` — `SqlDialectBase.cs:36`; override — `src/nextorm.clickhouse/ClickHouseDialect.cs:57`);
+- 9 методов `ClickHouseFunctions` (`src/nextorm.core/Query/SqlFunctions.ClickHouse.cs:485-545`):
+  `array_map<TIn,TOut>(Expression<Func<TIn,TOut>> function, TIn[] array) -> TOut[]` (`:485`);
+  `array_filter<T>(Expression<Func<T,bool>> predicate, T[] array) -> T[]` (`:492`);
+  `array_exists<T>(...)-> bool` (`:499`); `array_all<T>(...)-> bool` (`:506`);
+  `array_count<T>(...)-> long` (`:513`);
+  `array_first<T>(...)-> T?` (`:521`); `array_first_index<T>(...)-> long` (`:529`);
+  `array_last<T>(...)-> T?` (`:537`); `array_last_index<T>(...)-> long` (`:545`);
+- `ClickHouseDialect.MakeArrayFunction` расширен `arrayCount`/`arrayFirstIndex`/`arrayLastIndex` → `toInt64(...)` (`ClickHouseDialect.cs:65-71`); `ArraySqlTranslator.TryTranslateHigherOrderArray`/`EmitHigherOrderArray`/`ExtractLambda` и `HigherOrderLambdaVisitor` (`Visitors/ArraySqlTranslator.cs:261-341,408-455`) — `internal`, внешней поверхности не дают;
+- новых публичных **типов** нет → **Приложение A (45) без изменений**.
+
+**CS1591/XML-doc.** XML-`<summary>` есть у всех 9 новых методов и у нового флага (интерфейс + база + ClickHouse); `<typeparam name>` отсутствует (как у соседних generic-членов) — на `CS1591` в `<NoWarn>` 7 библиотечных `.csproj` не влияет. Покрытие публичных методов — **+9** к последнему зафиксированному **215/1094** → **224/1103** (арифметически по диффу; переизмерение рефлексией в этом проходе не выполнялось). **Имя флага — P0/P1 нет:** snake_case DSL зеркалит SQL (`arrayMap`/…/`arrayLastIndex`), лямбда-аргумент стоит **первым** (SQL `arrayMap(func, arr)`); прецедент `Expression<Func<…>>` — `count(Expression<Func<bool>>)` (`Query/SqlFunctions.cs:531`), `sum<T>(T?, Expression<Func<bool>>)` (`:546`), `string_agg<T>(T?, string, Expression<Func<bool>>)` (`:480`), но там лямбда — **трейлинг-фильтр без параметра**, здесь — обязательный поэлементный трансформер (соответствие SQL, а не фильтру). `T?` у `array_first`/`array_last` — см. ℹ️.
+
+| # | Ур. | Место | Проблема | Рекомендация |
+|---|-----|-------|----------|--------------|
+| HOAF1 | P2 | `Query/SqlFunctions.ClickHouse.cs:485-545`; `DataContext/Dialect/ISqlDialect.cs:152`; `SqlDialectBase.cs:36`; `ClickHouseDialect.cs:57,70`; `PublicAPI.*.txt` отсутствуют | 9 новых методов и новый **абстрактный** член `ISqlDialect` не трекаются (Шаг 5 открыт). `SupportsHigherOrderArrayFunctions` abstract — source-breaking для внешних реализаторов `ISqlDialect` (продолжение AR1/AJ1/CHARR1, не новая проблема) | При заморозке внести флаг (`ISqlDialect` + оба override'а) и 9 подписей `ClickHouseFunctions.*` в `PublicAPI.Unshipped.txt` (точный текст — из анализатора) |
+| HOAF2 ✅ закрыта 22.09.2026 | **P1 (док)** | `docs/guide/provider-specific/clickhouse.md:197-201` (+`docs/ru/guide/provider-specific/clickhouse.md:199-204`) | EN/RU прямо противоречили реализации («higher-order array functions … are out of scope today») | Снято: пункт убран из «Not yet supported»/«Пока не поддерживается»; флаг + 9 методов описаны в `guide/11-scalar-functions.md` (EN+RU) |
+| HOAF3 ✅ закрыта 22.09.2026 | P2 | `docs/guide/11-scalar-functions.md` (+RU); `docs/advanced/api-reference.md` (+RU); `docs/specs/roadmap/sql-capabilities-gap-analysis.md` §4 п.5 | Новые 9 методов и флаг не были добавлены в доки EN+RU; §4 п.5 гласил «has not been started» | Таблица guide/11, список api-reference и §4 п.5 (EN+RU) дополнены; comparison-спеки обновлены |
+
+ℹ️ **Наблюдения (фикс не требуется):**
+
+- **`T?` у `array_first`/`array_last` — «может быть default», а не NULL.** ClickHouse `arrayFirst`/`arrayLast` при отсутствии совпадения возвращают default элемента (0/пустая строка), не SQL NULL; для value-`T` `T?` = `Nullable<T>` остаётся не-null (`0`), для reference-`T` `T?` не меняет рантайм-тип. Форма согласована с соседями `group_array<T>(T?)`/`array_push_back`, но XML-док «or the default value of `T`» был бы точнее слова `null`. Путь «нет совпадения» интеграционным тестом не покрыт (проверены только совпадающие элементы) — кандидат в тест.
+- **Отдельный флаг не конфликтует с `SupportsArrayFunctions`/`SupportsArrayJoin`.** Размещён в том же array-кластере (`ISqlDialect.cs:135/143/152/165`; `SqlDialectBase.cs:34-37`), тот же `virtual => false` и CH-override, XML-док с обоснованием. Дифференциатор «есть array-функции, нет lambda» пока недостижим (только CH реализует массивы), но это семейный флаг (не по члену) — «зонтик без доказательства невыразимости» (ср. ASF1) не создаётся.
+- **Лямбда-параметр эмитится голым идентификатором** (`ArraySqlTranslator.cs:430`), а не через `AppendIdentifier`: это связанная переменная SQL-лямбды, не физический столбец/таблица, поэтому кавычки диалекта (`QuoteIdentifiers`) неприменимы; physical-идентификаторы внутри тела по-прежнему идут через `MemberTranslator`. Утечки лямбда-параметра в резолвер колонок нет: `VisitMember` (`:439-446`) на корне-параметре бросает `NotSupportedException`.
+- **Аргументы-массивы рендерятся существующим `SqlOperandTranslator.AppendArrayOrColumn`** (`ArraySqlTranslator.cs:310,325`): колонка — в SQL, захваченный/inline-массив — одним параметром; SQL не зависит от числа элементов, план остаётся кэшируемым.
+
+**Проверка (22.09.2026).** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**; `dotnet test tests/nextorm.clickhouse.tests -c Debug` — **208/208**; `dotnet test tests/nextorm.postgres.tests -c Debug` — **266/266**; контейнерная интеграция `DOCKER_HOST=… dotnet test tests/nextorm.integration.tests -c Debug --filter "FullyQualifiedName~ClickHouseIntegrationTests.Array"` — **15/15** (0 failed / 0 skipped; включая 5 новых). XML-`<summary>` у 9 методов и флага; новых публичных типов нет — Приложение A (45) без изменений; `find -name 'PublicAPI*.txt'` — пусто (подтверждает HOAF1). Содержательная кодовая сторона — `code-smells-review.md`, Находки 62–63.
 
 ## 4. План работ
 

@@ -143,6 +143,15 @@ public interface ISqlDialect
     bool SupportsArrayFunctions { get; }
 
     /// <summary>
+    /// True when the provider translates the higher-order (lambda) array functions of
+    /// <see cref="ClickHouseFunctions"/> (<c>arrayMap</c>, <c>arrayFilter</c>, <c>arrayExists</c>,
+    /// <c>arrayAll</c>, <c>arrayCount</c>, <c>arrayFirst*</c>, <c>arrayLast*</c>). The safe default is
+    /// <c>false</c>; only ClickHouse opts in today. A provider with plain array functions may still
+    /// lack lambda syntax, so this is separate from <see cref="SupportsArrayFunctions"/>.
+    /// </summary>
+    bool SupportsHigherOrderArrayFunctions { get; }
+
+    /// <summary>
     /// The provider's renderer for a scalar <c>string.Split</c>; <c>null</c> means the provider cannot
     /// express it. Declared as a default interface method so that existing external implementations keep
     /// compiling.

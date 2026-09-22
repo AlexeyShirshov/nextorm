@@ -937,6 +937,76 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     }
 
     [Fact]
+    public void ArrayMap_ShouldMapElements()
+    {
+        var mapped = _sut.ArrayEntity
+            .Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.ClickHouse.array_map(v => -v, x.Nums))
+            .First();
+
+        mapped.Should().Equal(-3, -1, -2);
+    }
+
+    [Fact]
+    public void ArrayFilter_ShouldKeepMatchingElements()
+    {
+        var filtered = _sut.ArrayEntity
+            .Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.ClickHouse.array_sort(
+                SqlFunctions.ClickHouse.array_filter(v => v > 1, x.Nums)))
+            .First();
+
+        filtered.Should().Equal(2, 3);
+    }
+
+    [Fact]
+    public void ArrayExistsAndAll_ShouldReturnBoolean()
+    {
+        var r = _sut.ArrayEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Exists = SqlFunctions.ClickHouse.array_exists(v => v == 2, x.Nums),
+                All = SqlFunctions.ClickHouse.array_all(v => v > 0, x.Nums)
+            })
+            .First();
+
+        r.Exists.Should().BeTrue();
+        r.All.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ArrayCount_ShouldCountMatchingElements()
+    {
+        var count = _sut.ArrayEntity
+            .Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.ClickHouse.array_count(v => v > 1, x.Nums))
+            .First();
+
+        count.Should().Be(2);
+    }
+
+    [Fact]
+    public void ArrayFirstAndLast_ShouldReturnElementAndIndex()
+    {
+        var r = _sut.ArrayEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                First = SqlFunctions.ClickHouse.array_first(v => v > 1, x.Nums),
+                FirstIndex = SqlFunctions.ClickHouse.array_first_index(v => v > 1, x.Nums),
+                Last = SqlFunctions.ClickHouse.array_last(v => v > 1, x.Nums),
+                LastIndex = SqlFunctions.ClickHouse.array_last_index(v => v > 1, x.Nums)
+            })
+            .First();
+
+        r.First.Should().Be(3);
+        r.FirstIndex.Should().Be(1);
+        r.Last.Should().Be(2);
+        r.LastIndex.Should().Be(3);
+    }
+
+    [Fact]
     public void TupleColumn_ShouldProjectAsSystemTuple()
     {
         var pair = _sut.DataProvider

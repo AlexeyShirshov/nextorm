@@ -22,7 +22,9 @@ namespace NextORM.Core;
 /// and the array functions over array columns and expressions (<c>arrayJoin</c>, <c>length</c>,
 /// <c>has</c>, <c>indexOf</c>, <c>hasAny</c>/<c>hasAll</c>, <c>arrayStringConcat</c>,
 /// <c>splitByChar</c>, <c>arraySort</c>, <c>arrayReverse</c>, <c>arrayDistinct</c>, <c>range</c>,
-/// <c>arrayEnumerate</c>, <c>arrayCumSum</c>, <c>arraySlice</c>, <c>arrayPushBack</c>) plus the
+/// <c>arrayEnumerate</c>, <c>arrayCumSum</c>, <c>arraySlice</c>, <c>arrayPushBack</c>), the
+/// higher-order (lambda) array functions (<c>arrayMap</c>, <c>arrayFilter</c>, <c>arrayExists</c>,
+/// <c>arrayAll</c>, <c>arrayCount</c>, <c>arrayFirst*</c>, <c>arrayLast*</c>) plus the
 /// array-returning aggregates <c>groupArray</c>/<c>groupUniqArray</c>.
 /// Exposed through <see cref="SqlFunctions.ClickHouse"/>; every member is gated by a capability flag
 /// and rejected by providers that do not opt in.
@@ -472,6 +474,75 @@ namespace NextORM.Core;
         /// Returns an array, so it can be projected directly or used as the operand of another array function.
         /// </summary>
         public T[] array_push_back<T>(T[] array, T element) => default!;
+
+        /// <summary>
+        /// <c>arrayMap(function, array)</c>: the array of the lambda results. Requires a provider that
+        /// translates the higher-order array functions (see
+        /// <see cref="ISqlDialect.SupportsHigherOrderArrayFunctions"/>; ClickHouse). The lambda body may
+        /// use its parameter in operators and function calls; member access on the parameter is not
+        /// supported.
+        /// </summary>
+        public TOut[] array_map<TIn, TOut>(Expression<Func<TIn, TOut>> function, TIn[] array) => default!;
+
+        /// <summary>
+        /// <c>arrayFilter(predicate, array)</c>: the elements for which the lambda returns true.
+        /// Requires a provider that supports the higher-order array functions (see
+        /// <see cref="ISqlDialect.SupportsHigherOrderArrayFunctions"/>; ClickHouse).
+        /// </summary>
+        public T[] array_filter<T>(Expression<Func<T, bool>> predicate, T[] array) => default!;
+
+        /// <summary>
+        /// <c>arrayExists(predicate, array)</c>: true when the lambda returns true for at least one
+        /// element. Requires a provider that supports the higher-order array functions (see
+        /// <see cref="ISqlDialect.SupportsHigherOrderArrayFunctions"/>; ClickHouse).
+        /// </summary>
+        public bool array_exists<T>(Expression<Func<T, bool>> predicate, T[] array) => default!;
+
+        /// <summary>
+        /// <c>arrayAll(predicate, array)</c>: true when the lambda returns true for every element.
+        /// Requires a provider that supports the higher-order array functions (see
+        /// <see cref="ISqlDialect.SupportsHigherOrderArrayFunctions"/>; ClickHouse).
+        /// </summary>
+        public bool array_all<T>(Expression<Func<T, bool>> predicate, T[] array) => default!;
+
+        /// <summary>
+        /// <c>arrayCount(predicate, array)</c>: the number of elements for which the lambda returns
+        /// true. Requires a provider that supports the higher-order array functions (see
+        /// <see cref="ISqlDialect.SupportsHigherOrderArrayFunctions"/>; ClickHouse).
+        /// </summary>
+        public long array_count<T>(Expression<Func<T, bool>> predicate, T[] array) => default!;
+
+        /// <summary>
+        /// <c>arrayFirst(predicate, array)</c>: the first element for which the lambda returns true,
+        /// or the default value of <typeparamref name="T"/> when there is none. Requires a provider
+        /// that supports the higher-order array functions (see
+        /// <see cref="ISqlDialect.SupportsHigherOrderArrayFunctions"/>; ClickHouse).
+        /// </summary>
+        public T? array_first<T>(Expression<Func<T, bool>> predicate, T[] array) => default!;
+
+        /// <summary>
+        /// <c>arrayFirstIndex(predicate, array)</c>: the one-based index of the first element for
+        /// which the lambda returns true, or <c>0</c> when there is none. Requires a provider that
+        /// supports the higher-order array functions (see
+        /// <see cref="ISqlDialect.SupportsHigherOrderArrayFunctions"/>; ClickHouse).
+        /// </summary>
+        public long array_first_index<T>(Expression<Func<T, bool>> predicate, T[] array) => default!;
+
+        /// <summary>
+        /// <c>arrayLast(predicate, array)</c>: the last element for which the lambda returns true, or
+        /// the default value of <typeparamref name="T"/> when there is none. Requires a provider that
+        /// supports the higher-order array functions (see
+        /// <see cref="ISqlDialect.SupportsHigherOrderArrayFunctions"/>; ClickHouse).
+        /// </summary>
+        public T? array_last<T>(Expression<Func<T, bool>> predicate, T[] array) => default!;
+
+        /// <summary>
+        /// <c>arrayLastIndex(predicate, array)</c>: the one-based index of the last element for which
+        /// the lambda returns true, or <c>0</c> when there is none. Requires a provider that supports
+        /// the higher-order array functions (see
+        /// <see cref="ISqlDialect.SupportsHigherOrderArrayFunctions"/>; ClickHouse).
+        /// </summary>
+        public long array_last_index<T>(Expression<Func<T, bool>> predicate, T[] array) => default!;
 
         /// <summary>
         /// <c>toDate(value)</c>: converts a string or date/time value to a <c>Date</c>. Requires a

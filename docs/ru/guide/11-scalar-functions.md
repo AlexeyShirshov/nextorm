@@ -507,6 +507,15 @@ select cardinality(@norm_p1) as "N" from complex_entity where array_length(@norm
 | `SqlFunctions.ClickHouse.array_join(a)` | `arrayJoin(a)` |
 | `SqlFunctions.ClickHouse.group_array(a)` | `groupArray(a)` |
 | `SqlFunctions.ClickHouse.group_uniq_array(a)` | `groupUniqArray(a)` |
+| `SqlFunctions.ClickHouse.array_map(f, a)` | `arrayMap(f, a)` |
+| `SqlFunctions.ClickHouse.array_filter(f, a)` | `arrayFilter(f, a)` |
+| `SqlFunctions.ClickHouse.array_exists(f, a)` | `arrayExists(f, a)` |
+| `SqlFunctions.ClickHouse.array_all(f, a)` | `arrayAll(f, a)` |
+| `SqlFunctions.ClickHouse.array_count(f, a)` | `arrayCount(f, a)` |
+| `SqlFunctions.ClickHouse.array_first(f, a)` | `arrayFirst(f, a)` |
+| `SqlFunctions.ClickHouse.array_first_index(f, a)` | `arrayFirstIndex(f, a)` |
+| `SqlFunctions.ClickHouse.array_last(f, a)` | `arrayLast(f, a)` |
+| `SqlFunctions.ClickHouse.array_last_index(f, a)` | `arrayLastIndex(f, a)` |
 
 > `length`/`indexOf` нативно возвращают `UInt64`, поэтому диалект оборачивает их в `toInt64(...)`.
 > Функции, возвращающие массив (`split_by_char`, `array_sort`, `array_reverse`, `array_distinct`,
@@ -515,6 +524,17 @@ select cardinality(@norm_p1) as "N" from complex_entity where array_length(@norm
 > как CLR `T[]` — либо использовать как операнд другой array-функции (например, `length(...)` или
 > `array_string_concat(...)`). Тот же reader материализует нативную колонку `Tuple(...)` (или
 > выражение типа `Tuple(...)`) как `System.Tuple<...>` арности 1–7.
+
+> Функции высшего порядка (lambda) принимают inline-лямбду C#, параметр которой — элемент массива;
+> например `array_map(v => -v, e.Nums)` рендерится как `arrayMap(v -> -(v), nums)`.
+> `array_exists`/`array_all` возвращают `bool`; `array_count`/`array_first_index`/`array_last_index` —
+> `long` (диалект оборачивает нативный `UInt32` в `toInt64(...)`); `array_first`/`array_last`
+> возвращают элемент или его значение по умолчанию при отсутствии совпадения. Требуется провайдер,
+> поддерживающий higher-order array-функции (см.
+> [`SupportsHigherOrderArrayFunctions`](xref:NextORM.Core.ISqlDialect.SupportsHigherOrderArrayFunctions);
+> ClickHouse). ClickHouse повышает тип арифметического результата независимо от C# (элемент `Int32`,
+> умноженный на целочисленный литерал, даёт `Array(Int64)`), поэтому приводите тип внутри лямбды
+> (`v => (long)v * 2`), если тип элемента должен совпадать с проецируемым `T[]`.
 
 CLR-метод `string.Split` рендерится как `splitByChar(separator, value)` (гейт
 [`StringSplit`](xref:NextORM.Core.ISqlDialect.StringSplit)); поддерживается только

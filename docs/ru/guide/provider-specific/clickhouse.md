@@ -198,9 +198,8 @@ var rows = dataContext.FromTableFunction(() => SqlFunctions.ClickHouse.zeros(3))
 
 ## Пока не поддерживается
 
-Соединения `SEMI`/`ANTI`/`PASTE`, функции высшего порядка над массивами
-(`arrayMap`/`arrayFilter`), нативный тип колонки `JSON` (его reader/type-mapping) и распределённые
-табличные функции (`remote`, `cluster`, `s3`, `file`) вне области охвата. См.
+Соединения `SEMI`/`ANTI`/`PASTE`, нативный тип колонки `JSON` (его reader/type-mapping) и
+распределённые табличные функции (`remote`, `cluster`, `s3`, `file`) вне области охвата. См.
 [Ограничения и возможности вне области охвата](../../advanced/limitations.md).
 
 ## См. также

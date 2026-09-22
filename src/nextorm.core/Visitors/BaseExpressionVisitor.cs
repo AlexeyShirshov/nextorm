@@ -79,6 +79,12 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     internal StringBuilder? Builder => _builder;
     internal bool IsPredicateContext => AsPredicate;
     internal VisitorOptions Options => _options;
+    /// <summary>
+    /// The higher-order array lambda parameters bound by this visitor (name to emit for a parameter),
+    /// or <c>null</c>. Overridden by <see cref="HigherOrderLambdaVisitor"/> so a nested lambda can see
+    /// the parameters of the enclosing one.
+    /// </summary>
+    internal virtual IReadOnlyDictionary<ParameterExpression, string>? LambdaParameters => null;
 
     /// <summary>
     /// Appends a physical column/table identifier, quoting it through the dialect when identifier

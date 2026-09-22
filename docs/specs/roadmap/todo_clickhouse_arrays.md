@@ -2,7 +2,7 @@
 
 > Рабочий план. Источник: `docs/specs/roadmap/sql-capabilities-gap-analysis.md` §4 п.4 (row reader),
 > п.5 (higher-order), п.9 (скаляры над массивами).
-> **Статус: срез 1 (row reader) — готово (влито в дерево); срезы 2–4 — открыты.**
+> **Статус: срезы 1 (row reader) и 3 (higher-order lambda) — готовы; срезы 2 (topK/quantiles) и 4 (скаляры над массивами) — открыты.**
 
 ## Источник, цель, критерий приёмки
 
@@ -100,9 +100,82 @@ MySQL, MariaDB, SQLite использованы официальные стра�
 Требуют renderer по образцу `IQuantileAggregateRenderer`; вынести в
 `todo_clickhouse_aggregate_function_state.md`-родственный, но это массивы — оставить в этом файле.
 
-### Срез 3 (gap §4 п.5): higher-order/lambda
-`arrayMap`/`arrayFilter`/`arrayExists`/`arrayAll`/`arrayCount`/`arrayFirst*` — трансляция
-lambda/higher-order аргумента; не начато.
+### Срез 3 (это изменение, gap §4 п.5): higher-order/lambda
+`arrayMap`/`arrayFilter`/`arrayExists`/`arrayAll`/`arrayCount`/`arrayFirst*`/`arrayLast*` —
+трансляция lambda/higher-order аргумента. **Статус: готово.**
+Гейт `SupportsHigherOrderArrayFunctions`; рендер через `HigherOrderLambdaVisitor` (параметр лямбды —
+голый идентификатор; вложенные лямбды видят параметры внешней через `BaseExpressionVisitor.LambdaParameters`);
+`MakeArrayFunction` оборачивает `arrayCount`/`arrayFirstIndex`/`arrayLastIndex` в `toInt64(...)`.
+Аудит: находки 62 (вложенная лямбда) и 63 (param-guard `Clone`) исправлены; HOAF2/HOAF3 (доки) закрыты.
+
+#### Матрица «провайдер × форма» — higher-order (lambda) array-функции
+
+Форма: наличие array-типа и lambda/higher-order функций над массивами.
+
+| Провайдер | Array-тип | Higher-order/lambda над массивами | Источник |
+| --- | --- | --- | --- |
+| PostgreSQL | `integer[]`, … | — (нет lambda-синтаксиса; только эмуляция через `unnest`+агрегат в подзапросе, не скалярная функция) | https://www.postgresql.org/docs/current/functions-array.html , https://www.postgresql.org/docs/current/functions.html |
+| SQL Server | — | — | https://learn.microsoft.com/sql/t-sql/data-types/data-types-transact-sql |
+| MySQL | — (JSON only) | — | https://dev.mysql.com/doc/refman/8.4/en/json.html |
+| MariaDB | — (JSON only) | — | https://mariadb.com/kb/en/json-data-type/ |
+| SQLite | — (json only) | — | https://www.sqlite.org/json1.html |
+| ClickHouse | `Array(T)` | `arrayMap`/`arrayFilter`/`arrayExists`/`arrayAll`/`arrayCount`/`arrayFirst`/`arrayFirstIndex`/`arrayLast`/`arrayLastIndex` | https://clickhouse.com/docs/en/sql-reference/functions/array-functions (проверено: сигнатуры `func(x[, y…]), arr[, cond…]`; arrayMap/Filter → `Array(T)`, arrayExists/All → `UInt8`, arrayCount/FirstIndex/LastIndex → `UInt32`, First/Last → элемент `T`) |
+| InMemory | CLR `T[]` | — (поверхность ClickHouse-only; in-memory её не транслирует и отклоняет) | — |
+
+#### Единообразие провайдеров (решение)
+
+- Фича ClickHouse-only: только ClickHouse умеет lambda/higher-order над массивами; PostgreSQL не
+  может выразить их скалярно (только `unnest`+агрегат в отдельном подзапросе, что не тот контракт),
+  остальные не имеют array-типа. Поэтому поверхность — `ClickHouseFunctions`, а не
+  `CommonFunctions`.
+- Гейт — новый `ISqlDialect.SupportsHigherOrderArrayFunctions` (ClickHouse `true`, база `false`).
+  Отдельный флаг, а не `SupportsArrayFunctions`: провайдер с array-функциями может не иметь
+  lambda; не family-umbrella. Не поддерживающий провайдер → `NotSupportedException`.
+- `Make*`-хук не нужен: имена (`arrayMap`/…/`arrayLastIndex`) совпадают с ClickHouse-токенами и
+  заданы только этим диалектом (как у существующих `arraySort`/`arrayReverse`); хардкод в
+  трансляторе, проверка пост-чек `rg "arrayMap" src/nextorm.*/*Dialect.cs` → совпадений нет, что
+  объяснено матрицей.
+- Post-check по skill: `rg "<name>" src/nextorm.*/*Dialect.cs` совпадений не даёт, т.к. фича
+  заведомо одного провайдера (обосновано выше).
+
+#### Tier и реализация
+
+- Closest C# analog: lambda-аргумент уже моделируется как `Expression<Func<…>>` (прецедент —
+  `ClickHouseFunctions.count_if`/`sum_if` через `AggregateFilter`). Tier (b): новые public-методы
+  + трансляция + диалектный флаг. Новый API:
+  - `public TOut[] array_map<TIn, TOut>(Expression<Func<TIn, TOut>> function, TIn[] array)` → `arrayMap`;
+  - `public T[] array_filter<T>(Expression<Func<T, bool>> predicate, T[] array)` → `arrayFilter`;
+  - `public bool array_exists<T>(Expression<Func<T, bool>> predicate, T[] array)` → `arrayExists`;
+  - `public bool array_all<T>(Expression<Func<T, bool>> predicate, T[] array)` → `arrayAll`;
+  - `public long array_count<T>(Expression<Func<T, bool>> predicate, T[] array)` → `arrayCount`;
+  - `public T? array_first<T>(Expression<Func<T, bool>> predicate, T[] array)` → `arrayFirst`;
+  - `public long array_first_index<T>(Expression<Func<T, bool>> predicate, T[] array)` → `arrayFirstIndex`;
+  - `public T? array_last<T>(Expression<Func<T, bool>> predicate, T[] array)` → `arrayLast`;
+  - `public long array_last_index<T>(Expression<Func<T, bool>> predicate, T[] array)` → `arrayLastIndex`.
+- Рендер lambda: `ArraySqlTranslator.TryTranslateHigherOrderArray` распознаёт методы
+  `ClickHouseFunctions` до обычного switch, проверяет гейт, разворачивает `Quote(LambdaExpression)`,
+  привязывает параметр к имени через новый `HigherOrderLambdaVisitor : BaseExpressionVisitor`
+  (переопределяет `VisitParameter` → голый идентификатор; `VisitMember` на корне-параметре →
+  понятный `NotSupportedException`, чтобы не утекло в резолвер колонок) и печатает
+  `name(param -> body, array)`. Порядок обхода (тело, затем массивы) един для SQL- и
+  param-проходов; массив рендерится существующим `SqlOperandTranslator.AppendArrayOrColumn`.
+  Ограничение среза: одна лямбда с одним параметром; member-access на параметре не поддержан.
+- Тест-план:
+  - SQL-gen (clickhouse): `ArrayMap_ShouldRenderArrayMap` (`arrayMap(v -> -(v), nums)`),
+    `ArrayFilter_ShouldRenderArrayFilter`, `ArrayExists_ShouldRenderArrayExists`,
+    `ArrayAll_ShouldRenderArrayAll`, `ArrayCount_ShouldRenderArrayCount`,
+    `ArrayFirstAndLast_ShouldRenderArrayFirstAndLast`,
+    `ArrayFilter_ShouldNestInsideAnotherArrayFunction`,
+    `NestedHigherOrderLambda_ShouldReferenceOuterParameter`;
+  - rejection (postgres): `HigherOrderArrayFunction_UnsupportedByProvider_ShouldThrow`;
+  - интеграционные (ClickHouse 25.8, `array_entity` id=1 nums=[3,1,2], tags=[a,b,c]):
+    `array_map` → [6,2,4], `array_sort(array_filter(...))`, `array_exists`/`array_all`,
+    `array_count`, `array_first`/`array_first_index`/`array_last`/`array_last_index` с предикатом;
+  - покрытие: `coverage.settings.xml` включает core — новые строки транслятора/визитора
+    покрываются clickhouse-тестами; ожидается рост/не снижение (базис: line 85.4%, branch 74.4%).
+- Доки: `docs/guide/11-scalar-functions.md` (+RU) — секция ClickHouse arrays; `docs/providers/clickhouse.md`
+  (+RU), `docs/advanced/api-reference.md` (+RU), `docs/specs/roadmap/sql-capabilities-gap-analysis.md`
+  §4 п.5, `docs/specs/design/API-NAMING-REVIEW.md` (новые public-методы).
 
 ### Срез 4 (gap §4 п.9): скаляры над массивами
 `position` → `indexOf`, `length` → `length`, префикс/суффикс → `hasSubstr`/`arraySlice`. Требует

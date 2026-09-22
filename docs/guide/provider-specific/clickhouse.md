@@ -196,9 +196,8 @@ See [Table-valued functions](../13-table-valued-functions.md).
 
 ## Not yet supported
 
-`SEMI`/`ANTI`/`PASTE` joins, higher-order array functions (`arrayMap`/`arrayFilter`), array/tuple row
-readers, the native `JSON` column type (its reader/type-mapping), and distributed table functions
-(`remote`, `cluster`, `s3`, `file`) are out of scope today. See
+`SEMI`/`ANTI`/`PASTE` joins, the native `JSON` column type (its reader/type-mapping), and distributed
+table functions (`remote`, `cluster`, `s3`, `file`) are out of scope today. See
 [Limitations and out-of-scope features](../../advanced/limitations.md).
 
 ## See also

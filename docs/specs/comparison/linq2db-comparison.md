@@ -57,7 +57,7 @@ nextorm points at the source that owns the behaviour.
 | Native JSON documents | yes | **yes on PostgreSQL** | `SupportsJson`, `JsonSqlTranslator` |
 | JSON scalar functions (`json_value`/`json_query`/`json_modify`, `isjson`) | yes | **yes on SQL Server and MySQL/MariaDB** | `SupportsTextJson`, `MakeTextJsonFunction`/`MakeIsJson` |
 | String JSON + dictionary functions (ClickHouse) | no | **yes on ClickHouse** | `SupportsJsonExtract`, `SupportsDictionaries`, `MakeJsonExtract`/`MakeDictionaryFunction` |
-| Arrays (`cardinality`/`array_*`/`@>`/`&&`, ClickHouse `Array(T)`, `ARRAY JOIN`) | no | **yes on PostgreSQL and ClickHouse** (`ARRAY JOIN`; higher-order functions not implemented) | `SupportsArrayFunctions`/`SupportsArrayJoin`, `ArraySqlTranslator`, `IArrayJoinRenderer.Render` |
+| Arrays (`cardinality`/`array_*`/`@>`/`&&`, ClickHouse `Array(T)`, `ARRAY JOIN`) | no | **yes on PostgreSQL and ClickHouse** (`ARRAY JOIN`; higher-order/lambda functions and the `Array(T)`/`Tuple` row reader are implemented) | `SupportsArrayFunctions`/`SupportsHigherOrderArrayFunctions`/`SupportsArrayJoin`, `ArraySqlTranslator`, `ArrayJoinClause`/`IArrayJoinRenderer.Render` |
 | Conditional functions (`iif`/`choose`/`multi_if`) | no | **yes** (portable `iif`; `choose` SQL Server only; `multi_if` ClickHouse) | `CommonFunctions.iif`, `SupportsChoose`, `MultiIf`/`IMultiIfRenderer.Render` |
 | `FOR JSON` / `FOR XML` | yes (provider) | **yes on SQL Server** | `QueryCommand.ForJson/ForXml`, `SupportsForJson`/`SupportsForXml` |
 | XML data-type methods (`.value`/`.query`/`.exist`/`.nodes`) | yes (provider) | **partial** — SQL Server only | `SqlServerFunctions.xml_value`/`xml_query`/`xml_exist`/`xml_nodes` |

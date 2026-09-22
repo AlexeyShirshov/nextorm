@@ -565,6 +565,122 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void ArrayMap_ShouldRenderArrayMap()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        SqlOf(ctx, e.Select(x => SqlFunctions.ClickHouse.array_map(v => -v, x.Nums)))
+            .Should().Contain("arrayMap(v -> -(v), nums)");
+    }
+
+    [Fact]
+    public void ArrayFilter_ShouldRenderArrayFilter()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        SqlOf(ctx, e.Select(x => SqlFunctions.ClickHouse.array_filter(v => v > 2, x.Nums)))
+            .Should().Contain("arrayFilter(v -> (v > 2), nums)");
+    }
+
+    [Fact]
+    public void ArrayExists_ShouldRenderArrayExists()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        SqlOf(ctx, e.Select(x => SqlFunctions.ClickHouse.array_exists(v => v > 2, x.Nums)))
+            .Should().Contain("arrayExists(v -> (v > 2), nums)");
+    }
+
+    [Fact]
+    public void ArrayAll_ShouldRenderArrayAll()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        SqlOf(ctx, e.Select(x => SqlFunctions.ClickHouse.array_all(v => v > 2, x.Nums)))
+            .Should().Contain("arrayAll(v -> (v > 2), nums)");
+    }
+
+    [Fact]
+    public void ArrayCount_ShouldRenderArrayCount()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        SqlOf(ctx, e.Select(x => SqlFunctions.ClickHouse.array_count(v => v > 2, x.Nums)))
+            .Should().Contain("arrayCount(v -> (v > 2), nums)");
+    }
+
+    [Fact]
+    public void ArrayFirstAndLast_ShouldRenderArrayFirstAndLast()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            F = SqlFunctions.ClickHouse.array_first(v => v > 2, x.Nums),
+            FI = SqlFunctions.ClickHouse.array_first_index(v => v > 2, x.Nums),
+            L = SqlFunctions.ClickHouse.array_last(v => v > 2, x.Nums),
+            LI = SqlFunctions.ClickHouse.array_last_index(v => v > 2, x.Nums)
+        }));
+
+        sql.Should().Contain("arrayFirst(v -> (v > 2), nums)");
+        sql.Should().Contain("arrayFirstIndex(v -> (v > 2), nums)");
+        sql.Should().Contain("arrayLast(v -> (v > 2), nums)");
+        sql.Should().Contain("arrayLastIndex(v -> (v > 2), nums)");
+    }
+
+    [Fact]
+    public void NestedHigherOrderLambda_ShouldReferenceOuterParameter()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        SqlOf(ctx, e.Select(x => SqlFunctions.ClickHouse.array_map(
+                a => SqlFunctions.ClickHouse.array_exists(b => a == b, x.Nums),
+                x.Nums)))
+            .Should().Contain("arrayMap(a -> arrayExists(b -> (a = b), nums), nums)");
+    }
+
+    [Fact]
+    public void HigherOrderLambda_WithMemberAccessOnParameter_ShouldThrow()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => SqlFunctions.ClickHouse.array_filter(s => s.Length > 0, x.Tags)));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*Member access*");
+    }
+
+    [Fact]
+    public void HigherOrderLambda_NotInline_ShouldThrow()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+        System.Linq.Expressions.Expression<Func<long, long>> function = v => -v;
+
+        var act = () => SqlOf(ctx, e.Select(x => SqlFunctions.ClickHouse.array_map<long, long>(function, x.Nums)));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*inline lambda*");
+    }
+
+    [Fact]
+    public void ArrayFilter_ShouldNestInsideAnotherArrayFunction()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        SqlOf(ctx, e.Select(x => SqlFunctions.ClickHouse.array_sort(
+                SqlFunctions.ClickHouse.array_filter(v => v > 2, x.Nums))))
+            .Should().Contain("arraySort(arrayFilter(v -> (v > 2), nums))");
+    }
+
+    [Fact]
     public void BitAggregates_ShouldUseGroupBitFunctions()
     {
         using var ctx = ClickHouseTestContext.Create();
