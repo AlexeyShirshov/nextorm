@@ -23,7 +23,11 @@ internal static class RowMapperFactory
     /// </summary>
     public static Expression MapColumn(SelectExpression column, Expression param)
     {
-        var getter = Expression.Call(param, column.GetDataRecordMethod(), Expression.Constant(column.Index));
+        var method = column.GetDataRecordMethod();
+        var accessor = method.DeclaringType == typeof(IDataRecord)
+            ? param
+            : Expression.Convert(param, method.DeclaringType!);
+        var getter = Expression.Call(accessor, method, Expression.Constant(column.Index));
 
         if (column.Nullable)
         {

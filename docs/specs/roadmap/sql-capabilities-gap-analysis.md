@@ -159,14 +159,17 @@ Ordered by impact on real query authoring. Per-feature details and owners live i
    table/entity, a table-valued function or a derived query (the pivot input can carry joins and
    computed aggregate/FOR columns).
    Shipped: [SQL Server-specific SQL](../../guide/provider-specific/sqlserver.md#xml-data-type-methods).
-4. **ClickHouse has no row reader for arrays, tuples and `UInt64`.** This single infrastructure gap
+4. **ClickHouse has no row reader for arrays and tuples.** This single infrastructure gap
    blocks `groupArray`/`groupUniqArray`, `topK`/`topKWeighted`, `quantiles`, the array-returning
    `JSONExtractKeys`/`JSONExtractKeysAndValues`/`JSONExtractArrayRaw`, `tuple`/`tupleElement`/`untuple`,
-   `dictGetHierarchy`/`dictGetChildren`/`dictIsIn` and projecting `Array(T)`/`Tuple` columns, and it
-   prevents materialising native `UInt64` rows (`hits_v1.UserID`, the native `count()`/`uniq()`/
-   `uniqMerge` results) without an SQL cast.
-   Todo: [`todo_clickhouse_arrays.md`](todo_clickhouse_arrays.md),
-   [`todo_clickhouse_uint64_row_reader.md`](todo_clickhouse_uint64_row_reader.md).
+   `dictGetHierarchy`/`dictGetChildren`/`dictIsIn` and projecting `Array(T)`/`Tuple` columns.
+   Native `UInt64` rows (`hits_v1.UserID`, any `UInt64` column and `ulong`/`ulong?` projection) now
+   materialise through the row reader without a SQL cast; the aggregate/function results that declare a
+   signed CLR return type (`count`, `uniq*`, `length`, `index_of`, `json_length`) keep their normalising
+   cast.
+   Shipped: [ClickHouse provider](../../providers/clickhouse.md),
+   [Provider-specific SQL](../../guide/provider-specific/clickhouse.md#aggregates).
+   Todo: [`todo_clickhouse_arrays.md`](todo_clickhouse_arrays.md).
 5. **ClickHouse higher-order array functions are not translated.** `arrayMap`/`arrayFilter`/
    `arrayExists`/`arrayAll`/`arrayCount`/`arrayFirst*` need lambda/higher-order argument translation,
    which has not been started.
@@ -174,10 +177,13 @@ Ordered by impact on real query authoring. Per-feature details and owners live i
 6. **ClickHouse `-State`/`-Merge` combinators and `runningAccumulate` need an
    `AggregateFunction(...)` state type**, which nextorm does not model.
    Todo: [`todo_clickhouse_aggregate_function_state.md`](todo_clickhouse_aggregate_function_state.md).
-7. **ClickHouse native `JSON` type is not supported.** `JSON_VALUE`/`JSON_QUERY` over the new `JSON`
-   type, `JSONAllPaths*` and `toJSONString` are absent; only the string-JSON `JSONExtract*`/
-   `visitParamExtract*` family is mapped.
-   Todo: [`todo_clickhouse_json_type.md`](todo_clickhouse_json_type.md).
+7. **ClickHouse native `JSON` type — shipped.** The JSONPath scalars `JSON_VALUE`/`JSON_QUERY`/
+   `JSON_EXISTS` and the native-JSON functions `JSONAllPaths`/`JSONAllPathsWithTypes`/`toJSONString` are
+   mapped on `ClickHouseFunctions` under `SupportsJsonExtract` (other providers throw
+   `NotSupportedException`). A native `JSON` *column* is not mapped to a CLR type yet (the driver reads it
+   as `System.Text.Json.Nodes.JsonObject`); see [Limitations](../../advanced/limitations.md).
+   Shipped: [ClickHouse-specific SQL](../../guide/provider-specific/clickhouse.md#json-dictionaries-and-array-functions),
+   [JSON support](../../guide/18-json.md).
 8. **ClickHouse join `SEMI`/`ANTI`/`PASTE` is not implemented.** `SEMI`/`ANTI` change the result column
     set (left table only, incompatible with `Projection<T1,T2>`) and `PASTE JOIN` has no `ON`, so a
     result shape must be chosen first.
@@ -190,11 +196,13 @@ Ordered by impact on real query authoring. Per-feature details and owners live i
 10. **ClickHouse columns have no by-name access without an entity property.** `IHit` describes only 6
     `hits_v1` columns; the rest are reachable only through `WithSql`.
     Todo: [`todo_clickhouse_columns_by_name.md`](todo_clickhouse_columns_by_name.md).
-11. **Dynamic-schema and server-scoped table sources.** ClickHouse `values()` (dynamic schema) and the
-    server/cluster table functions `url`/`s3`/`remote`/`remoteSecure`/`file`/`format`/`merge`/`input`/
-    `cluster`/`clusterAllReplicas`; PostgreSQL `jsonb_to_record(set)`.
-    Todo: [`todo_dynamic_result_schema.md`](todo_dynamic_result_schema.md),
-    [`todo_clickhouse_server_table_functions.md`](todo_clickhouse_server_table_functions.md).
+11. **Dynamic-schema and server-scoped table sources.** The ClickHouse server/cluster table functions
+    `url`/`s3`/`file`/`remote`/`remoteSecure`/`cluster`/`clusterAllReplicas` are shipped on
+    `SqlFunctions.ClickHouse.*` with a generic caller-declared `TRow` row interface; the dynamic-schema
+    `format`/`merge`/`input` remain on this item. Still open: ClickHouse `values()` (dynamic schema) and
+    PostgreSQL `jsonb_to_record(set)`.
+    Todo: [`todo_dynamic_result_schema.md`](todo_dynamic_result_schema.md).
+    Shipped: [Table-valued functions](../../guide/13-table-valued-functions.md#built-in-table-functions).
 12. **Full-text ranking/score is implemented.** `contains`/`freetext` render the boolean predicates, and
     ranking is available: PostgreSQL `ts_rank`/`ts_rank_cd`/`ts_headline` and the SQL Server
     `containstable`/`freetexttable` table functions with `KEY`/`RANK`.
@@ -204,7 +212,8 @@ Ordered by impact on real query authoring. Per-feature details and owners live i
     `regexp_split_to_table`, `jsonb_array_elements(_text)`, `jsonb_each(_text)`, `jsonb_object_keys`,
     `jsonb_path_query` and `ts_stat` (PostgreSQL), `string_split`/`openjson` and now
     `containstable`/`freetexttable` with `KEY`/`RANK` (SQL Server) and
-    `numbers`/`numbers_mt`/`zeros`/`zeros_mt`/`generateRandom` (ClickHouse). MySQL/MariaDB and SQLite
+    `numbers`/`numbers_mt`/`zeros`/`zeros_mt`/`generateRandom` and the server/cluster functions
+`url`/`s3`/`file`/`remote`/`remoteSecure`/`cluster`/`clusterAllReplicas` (ClickHouse). MySQL/MariaDB and SQLite
     still expose no built-ins, so there a user declares their own `[SqlTableFunction]` wrapper (user
     wrappers are never gated); MySQL `JSON_TABLE` is expressible through the new
     `SqlTableFunctionAttribute.CallClause` in-call schema, and `OPENJSON ... WITH` through `WithClause`.

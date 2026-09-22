@@ -10,10 +10,12 @@ namespace NextORM.Core;
 /// the frame-respecting <c>lagInFrame</c>/<c>leadInFrame</c> window functions, the multi-branch
 /// <c>multiIf</c> conditional (through <see cref="when{T}(bool, T)"/>/<see cref="otherwise{T}(T)"/>),
 /// the string-JSON <c>JSONExtract*</c>/<c>JSONHas</c> and <c>visitParamExtract*</c> families
-/// plus the JSONPath <c>json_value</c>/<c>json_query</c>/<c>json_exists</c> scalars,
+/// plus the JSONPath <c>json_value</c>/<c>json_query</c>/<c>json_exists</c> scalars and the native-JSON
+/// <c>JSONAllPaths</c>/<c>JSONAllPathsWithTypes</c>/<c>toJSONString</c> functions,
 /// the dictionary functions, the <c>-If</c> aggregate combinator, the distributed <c>global_in</c>
 /// predicate, the <c>numbers</c>/<c>numbers_mt</c> and <c>zeros</c>/<c>zeros_mt</c> table functions
-/// (plus <c>generateRandom</c>),
+/// (plus <c>generateRandom</c>) and the server/cluster table functions
+/// (<c>url</c>/<c>s3</c>/<c>file</c>/<c>remote</c>/<c>remoteSecure</c>/<c>cluster</c>/<c>clusterAllReplicas</c>),
 /// the date conversion/part surface (<c>toDate</c>/<c>toDateTime</c>/<c>toDate32</c>, the
 /// <c>toYear</c>/... accessors, <c>toStartOf*</c>, <c>toMonday</c>, <c>toYYYYMM</c>/<c>toYYYYMMDD</c>,
 /// <c>toUnixTimestamp</c>),
@@ -164,6 +166,34 @@ namespace NextORM.Core;
         public bool json_exists(string? json, string? path) => default!;
 
         /// <summary>
+        /// <c>JSONAllPaths(json)</c>: the list of paths stored in the native ClickHouse <c>JSON</c>
+        /// value. The native result is <c>Array(String)</c>, surfaced as <c>string[]</c> and projected
+        /// directly (or used as the operand of an array function such as
+        /// <see cref="length{T}(T[])"/>). <paramref name="json"/> must be a native ClickHouse <c>JSON</c>
+        /// value; a <c>String</c> column needs <c>CAST(col AS JSON)</c> first. Requires a provider that
+        /// supports the JSON functions (see <see cref="ISqlDialect.SupportsJsonExtract"/>; ClickHouse).
+        /// </summary>
+        public string[] json_all_paths(string? json) => default!;
+
+        /// <summary>
+        /// <c>JSONAllPathsWithTypes(json)</c>: the paths stored in the native ClickHouse <c>JSON</c>
+        /// value together with their data types. The native result is <c>Map(String, String)</c>,
+        /// surfaced as <c>Dictionary&lt;string, string&gt;</c> and projected directly; use ClickHouse
+        /// <c>mapKeys</c>/<c>mapValues</c> to turn it into a collection. <paramref name="json"/> must be
+        /// a native ClickHouse <c>JSON</c> value; a <c>String</c> column needs <c>CAST(col AS JSON)</c>
+        /// first. Requires a provider that supports the JSON functions (see
+        /// <see cref="ISqlDialect.SupportsJsonExtract"/>; ClickHouse).
+        /// </summary>
+        public Dictionary<string, string> json_all_paths_with_types(string? json) => default!;
+
+        /// <summary>
+        /// <c>toJSONString(value)</c>: serialises <paramref name="value"/> to its JSON text
+        /// representation. Requires a provider that supports the JSON functions (see
+        /// <see cref="ISqlDialect.SupportsJsonExtract"/>; ClickHouse).
+        /// </summary>
+        public string? to_json_string<T>(T? value) => default!;
+
+        /// <summary>
         /// <c>visitParamExtractString(json, name)</c>: the string value of the flat <paramref name="name"/>
         /// key. Requires a provider that supports the string-JSON family (see
         /// <see cref="ISqlDialect.SupportsJsonExtract"/>; ClickHouse).
@@ -269,6 +299,76 @@ namespace NextORM.Core;
         /// </summary>
         [SqlTableFunction("generateRandom")]
         public IQueryable<SqlFunctions.IGenerateRandomRow> generate_random(long seed) => throw new NotSupportedException();
+
+        /// <summary>
+        /// <c>url(url, format, structure)</c> as a FROM source: reads the resource at
+        /// <paramref name="url"/> in <paramref name="format"/> with the column layout
+        /// <paramref name="structure"/> (for example <c>'id UInt64, name String'</c>). The row shape is
+        /// declared by the caller through <typeparamref name="TRow"/>, whose <c>[Column]</c> names must
+        /// match <paramref name="structure"/>. Requires a provider that supports table functions (see
+        /// <see cref="ISqlDialect.SupportsTableFunction"/>; ClickHouse). Use through
+        /// <see cref="DataContextExtensions.FromTableFunction{T}(IDataContext, System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{T}}})"/>.
+        /// The URL selects the backend: an HTTP(S) URL is fetched directly, a recognised non-HTTP
+        /// scheme (<c>file://</c>, <c>s3://</c>, …) is delegated to the matching function.
+        /// </summary>
+        [SqlTableFunction("url")]
+        public IQueryable<TRow> url<TRow>(string url, string format, string structure) => throw new NotSupportedException();
+
+        /// <summary>
+        /// <c>s3(url, format, structure)</c> as a FROM source: reads an object from Amazon S3 or Google
+        /// Cloud Storage in the given <paramref name="format"/> and column layout; the row shape is
+        /// declared by the caller through <typeparamref name="TRow"/>. Requires a provider that supports
+        /// table functions (see <see cref="ISqlDialect.SupportsTableFunction"/>; ClickHouse). Credentials
+        /// are taken from the server configuration or a named collection; do not pass secrets in the URL.
+        /// </summary>
+        [SqlTableFunction("s3")]
+        public IQueryable<TRow> s3<TRow>(string url, string format, string structure) => throw new NotSupportedException();
+
+        /// <summary>
+        /// <c>file(path, format, structure)</c> as a FROM source: reads a file under the server's
+        /// <c>user_files_path</c> in the given <paramref name="format"/> and column layout; the row shape
+        /// is declared by the caller through <typeparamref name="TRow"/>. Requires a provider that
+        /// supports table functions (see <see cref="ISqlDialect.SupportsTableFunction"/>; ClickHouse).
+        /// The path is resolved by the server and is not a client filesystem path.
+        /// </summary>
+        [SqlTableFunction("file")]
+        public IQueryable<TRow> file<TRow>(string path, string format, string structure) => throw new NotSupportedException();
+
+        /// <summary>
+        /// <c>remote(addresses, database, table)</c> as a FROM source: reads <paramref name="table"/> from
+        /// the ClickHouse server(s) at <paramref name="addresses"/> (comma-separated <c>host[:port]</c>
+        /// list) without creating a distributed table. The row shape is declared by the caller through
+        /// <typeparamref name="TRow"/> and must match the remote table. Requires a provider that supports
+        /// table functions (see <see cref="ISqlDialect.SupportsTableFunction"/>; ClickHouse). Credentials
+        /// come from the server's <c>remote_servers</c> configuration, never from query arguments.
+        /// </summary>
+        [SqlTableFunction("remote")]
+        public IQueryable<TRow> remote<TRow>(string addresses, string database, string table) => throw new NotSupportedException();
+
+        /// <summary>
+        /// <c>remoteSecure(addresses, database, table)</c> as a FROM source: the TLS counterpart of
+        /// <see cref="remote{TRow}(string, string, string)"/> (default secure port 9440).
+        /// </summary>
+        [SqlTableFunction("remoteSecure")]
+        public IQueryable<TRow> remote_secure<TRow>(string addresses, string database, string table) => throw new NotSupportedException();
+
+        /// <summary>
+        /// <c>cluster(cluster, database, table)</c> as a FROM source: reads <paramref name="table"/> from
+        /// one replica of each shard of the configured <paramref name="cluster"/>. The row shape is
+        /// declared by the caller through <typeparamref name="TRow"/>. Requires a provider that supports
+        /// table functions (see <see cref="ISqlDialect.SupportsTableFunction"/>; ClickHouse). Connection
+        /// settings and credentials come from the server's <c>remote_servers</c> configuration.
+        /// </summary>
+        [SqlTableFunction("cluster")]
+        public IQueryable<TRow> cluster<TRow>(string cluster, string database, string table) => throw new NotSupportedException();
+
+        /// <summary>
+        /// <c>clusterAllReplicas(cluster, database, table)</c> as a FROM source: like
+        /// <see cref="cluster{TRow}(string, string, string)"/> but queries every replica of every shard as
+        /// a separate connection.
+        /// </summary>
+        [SqlTableFunction("clusterAllReplicas")]
+        public IQueryable<TRow> cluster_all_replicas<TRow>(string cluster, string database, string table) => throw new NotSupportedException();
 
         /// <summary>
         /// <c>arrayJoin(array)</c>: expands the array into one row per element. Requires a provider that

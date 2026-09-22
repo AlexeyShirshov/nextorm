@@ -141,8 +141,10 @@ See [Filtering](../02-filtering-where.md#global-in-clickhouse)
 ## Aggregates
 
 ClickHouse-exclusive aggregates live on [`ClickHouseFunctions`](xref:NextORM.Core.ClickHouseFunctions)
-and are rejected by every other dialect. Some return types the row reader cannot materialise (`UInt64`,
-`Float32`), so the dialect wraps them in `toInt64(...)`/`toInt32(...)`/`toFloat64(...)` casts:
+and are rejected by every other dialect. Their native result types (`UInt64`, `Float32`, the `-If`
+integer types) do not always match the declared CLR return type, so the dialect wraps them in
+`toInt64(...)`/`toInt32(...)`/`toFloat64(...)` casts that normalise the value to the type the method
+declares:
 
 * distinct-count aggregates `uniq`/`uniq_exact`/`uniq_combined`/`uniq_hll12` (`toInt64`);
 * parameterised `quantile(level)(value)`/`quantile_exact`/`quantile_timing` and `median` (`toFloat64`);
@@ -152,7 +154,10 @@ and are rejected by every other dialect. Some return types the row reader cannot
 * `arg_min`/`arg_max`.
 
 Portable aggregates — including `count`, the arbitrary-value `any_agg` (rendered `ANY_VALUE` on MySQL and
-MariaDB) and `corr`/`covar*` — are documented with the concept page, not here.
+MariaDB) and `corr`/`covar*` — are documented with the concept page, not here. A plain `UInt64` column
+(or any `ulong`/`ulong?` projection) materialises directly through the row reader's
+`DbDataReader.GetFieldValue<ulong>` accessor, so only the function results above need the normalising
+cast.
 
 See [Grouping and aggregates](../04-grouping-and-aggregates.md).
 
@@ -161,6 +166,10 @@ See [Grouping and aggregates](../04-grouping-and-aggregates.md).
 * string-JSON extractors `JSONExtractString`/`JSONExtractInt`/`JSONExtractFloat`/`JSONExtractBool`/
   `JSONExtractRaw`/`JSONHas`/`JSONType`, `json_length`, and the flat-JSON `visitParamExtract*`;
 * JSONPath scalars `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (over string JSON);
+* native-JSON functions `json_all_paths`/`json_all_paths_with_types` (`JSONAllPaths`/
+  `JSONAllPathsWithTypes`; the former projects as `string[]`, the latter's native `Map(String, String)`
+  as `Dictionary<string, string>`; both take a native `JSON` value) and `to_json_string`
+  (`toJSONString`);
 * dictionary lookups `dict_get`/`dict_get_or_default`/`dict_has` (need a configured `CREATE DICTIONARY`);
 * array functions `length`/`has`/`index_of`/`has_any`/`has_all`/`array_string_concat`/`split_by_char`/
   `array_sort`/`array_reverse`/`array_distinct`/`range`/`array_enumerate`/`array_cum_sum`/`array_slice`/
@@ -187,8 +196,9 @@ See [Table-valued functions](../13-table-valued-functions.md).
 ## Not yet supported
 
 `SEMI`/`ANTI`/`PASTE` joins, higher-order array functions (`arrayMap`/`arrayFilter`), array/tuple row
-readers, the native `JSON` type, and distributed table functions (`remote`, `cluster`, `s3`, `file`)
-are out of scope today. See [Limitations and out-of-scope features](../../advanced/limitations.md).
+readers, the native `JSON` column type (its reader/type-mapping), and distributed table functions
+(`remote`, `cluster`, `s3`, `file`) are out of scope today. See
+[Limitations and out-of-scope features](../../advanced/limitations.md).
 
 ## See also
 

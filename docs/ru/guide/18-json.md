@@ -22,10 +22,13 @@
 * **ClickHouse** отображает извлекающие функции строкового JSON (`JSONExtractString`, `JSONExtractInt`,
   `JSONExtractFloat`, `JSONExtractBool`, `JSONExtractRaw`, `JSONHas`, `JSONLength`, `JSONType`) и быстрый
   разбор плоского JSON (`visitParamExtractString`/`Int`/`Float`/`Bool`/`Raw`) через
-  [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract), а также JSONPath-скаляры
-  `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (методы `json_value`/`json_query`/`json_exists`) через тот же
-  флаг; его нативный тип `JSON`
-  пока не отображён.
+  [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract), JSONPath-скаляры
+  `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (методы `json_value`/`json_query`/`json_exists`) и функции
+  нативного JSON `JSONAllPaths`/`JSONAllPathsWithTypes`/`toJSONString` (методы `json_all_paths`/
+  `json_all_paths_with_types`/`to_json_string`) через тот же флаг. Они принимают нативное значение
+  `JSON` (`CAST(col AS JSON)` для колонки `String`); `JSONAllPaths` проецируется как `string[]`, а
+  `JSONAllPathsWithTypes` — как `Map(String, String)` → `Dictionary<string, string>`. Нативная *колонка*
+  `JSON` пока не отображена (драйвер отдаёт её как `System.Text.Json.Nodes.JsonObject`).
 * **SQLite** не предоставляет ни одной JSON-конструкции. В СУБД есть JSON1, но nextorm его пока не
   отображает, поэтому построение SQL бросает `NotSupportedException`.
 
@@ -41,7 +44,7 @@
 | PostgreSQL | Нет | Поддерживаются ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson)) | Нет | Нет |
 | SQLite | Нет | Нет | Нет | Нет |
 | MySQL / MariaDB | Нет | Не отображаются | Поддерживаются ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) | Нет |
-| ClickHouse | Нет | Не отображаются | Строковый JSON + JSONPath-скаляры ([`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract)) | Нет |
+| ClickHouse | Нет | Не отображаются | Строковый JSON + JSONPath-скаляры + функции нативного JSON (`JSONAllPaths`/`JSONAllPathsWithTypes`/`toJSONString`; [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract)) | Нет |
 | In-memory | Не применимо (нет SQL) | Не применимо | Не применимо | Не применимо |
 
 «Нет» означает, что команда отклоняется через `NotSupportedException` при построении SQL, а не то, что
@@ -298,9 +301,15 @@ select id from complex_entity where (@norm_p0 @> @norm_p1) and (@norm_p2 ? 'key'
   текстовые функции SQL Server и MySQL/MariaDB требуют
   [`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson). Каждая бросает исключение на
   чужом провайдере.
-* Извлекающие функции строкового JSON ClickHouse (`JSONExtract*`/`visitParamExtract*`) требуют
-  [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract); они не пересекаются с
-  набором `SupportsTextJson`.
+* JSON-поверхность ClickHouse (`JSONExtract*`/`visitParamExtract*`, JSONPath-скаляры и функции нативного
+  JSON `JSONAllPaths`/`JSONAllPathsWithTypes`/`toJSONString`) требует
+  [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract); она не пересекается с
+  набором `SupportsTextJson`. Функции нативного JSON принимают нативное значение `JSON` (колонку
+  `String` приведите через `CAST(col AS JSON)`); `json_all_paths` проецируется как `string[]`, а
+  `json_all_paths_with_types` — как `Dictionary<string, string>` (`mapKeys`/`mapValues` превращают map в
+  коллекцию). Нативная *колонка* `JSON` пока не отображена: драйвер отдаёт её как
+  `System.Text.Json.Nodes.JsonObject`, поэтому проецируйте JSON через колонку `String` или приведите её
+  в SQL.
 * В SQLite есть JSON-возможности в СУБД, но nextorm их пока не отображает; расширение JSON1 в SQLite
   тоже не отображено.
 * Провайдер in-memory не генерирует SQL, поэтому `ForJson`/`ForXml` и JSON-поверхности к нему не

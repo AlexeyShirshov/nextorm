@@ -830,6 +830,24 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void NativeJsonFunctions_ShouldUseClickHouseNames()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Paths = SqlFunctions.ClickHouse.json_all_paths(x.String),
+            PathsWithTypes = SqlFunctions.ClickHouse.json_all_paths_with_types(x.String),
+            Text = SqlFunctions.ClickHouse.to_json_string(x.String)
+        }));
+
+        sql.Should().Contain("JSONAllPaths(somestring)");
+        sql.Should().Contain("JSONAllPathsWithTypes(somestring)");
+        sql.Should().Contain("toJSONString(somestring)");
+    }
+
+    [Fact]
     public void VisitParamExtract_ShouldUseClickHouseNames()
     {
         using var ctx = ClickHouseTestContext.Create();
@@ -1009,6 +1027,118 @@ public class SqlGenerationTests
 
         Normalize(command.DbCommand.CommandText).Should().Contain(
             "from generateRandom('id UInt64, value Float64, name String', @seed)");
+    }
+
+    [Fact]
+    public void TableFunction_Url_ShouldEmitCall()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var location = "http://127.0.0.1/data.csv";
+        var format = "CSV";
+        var structure = "id UInt64, name String";
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.ClickHouse.url<IServerTableRow>(location, format, structure))
+            .Select(r => new { r.Id, r.Name }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Contain("from url(@location, @format, @structure) as `t1`");
+    }
+
+    [Fact]
+    public void TableFunction_S3_ShouldEmitCall()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var location = "s3://bucket/data.csv";
+        var format = "CSV";
+        var structure = "id UInt64, name String";
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.ClickHouse.s3<IServerTableRow>(location, format, structure))
+            .Select(r => new { r.Id }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Contain("from s3(@location, @format, @structure) as `t1`");
+    }
+
+    [Fact]
+    public void TableFunction_File_ShouldEmitCall()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var path = "data.csv";
+        var format = "CSV";
+        var structure = "id UInt64, name String";
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.ClickHouse.file<IServerTableRow>(path, format, structure))
+            .Select(r => new { r.Id }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Contain("from file(@path, @format, @structure) as `t1`");
+    }
+
+    [Fact]
+    public void TableFunction_Remote_ShouldEmitCall()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var addresses = "127.0.0.1:9000";
+        var database = "default";
+        var table = "hits";
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.ClickHouse.remote<IServerTableRow>(addresses, database, table))
+            .Select(r => new { r.Id }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Contain("from remote(@addresses, @database, @table) as `t1`");
+    }
+
+    [Fact]
+    public void TableFunction_RemoteSecure_ShouldEmitCall()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var addresses = "remote.example.com:9440";
+        var database = "default";
+        var table = "hits";
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.ClickHouse.remote_secure<IServerTableRow>(addresses, database, table))
+            .Select(r => new { r.Id }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Contain("from remoteSecure(@addresses, @database, @table) as `t1`");
+    }
+
+    [Fact]
+    public void TableFunction_Cluster_ShouldEmitCall()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var cluster = "my_cluster";
+        var database = "default";
+        var table = "hits";
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.ClickHouse.cluster<IServerTableRow>(cluster, database, table))
+            .Select(r => new { r.Id }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Contain("from cluster(@cluster, @database, @table) as `t1`");
+    }
+
+    [Fact]
+    public void TableFunction_ClusterAllReplicas_ShouldEmitCall()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var cluster = "my_cluster";
+        var database = "default";
+        var table = "hits";
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.ClickHouse.cluster_all_replicas<IServerTableRow>(cluster, database, table))
+            .Select(r => new { r.Id }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Contain("from clusterAllReplicas(@cluster, @database, @table) as `t1`");
     }
 
     [Fact]
@@ -1782,13 +1912,21 @@ public class SqlGenerationTests
     [Fact]
     public void UnsignedNumericCast_ShouldEmitCastInsteadOfDropping()
     {
-        // ClickHouse's UInt64 has no CLR reader getter, so a user casts the column to a signed type.
-        // The conversion source is a ulong, which TypeFacts must accept or the cast is dropped and
-        // the UInt64 column cannot be materialised.
+        // A user can still cast a UInt64 column to a signed type. The conversion source is a ulong,
+        // which TypeFacts must accept or the cast is dropped.
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<IUnsignedCastEntity>();
 
         SqlOf(ctx, e.Select(x => new { V = (long)x.Big })).Should().Contain("cast(Big as Int64)");
+    }
+
+    [Fact]
+    public void UnsignedNumericProjection_ShouldRenderNativeColumnWithoutCast()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IUnsignedCastEntity>();
+
+        SqlOf(ctx, e.Select(x => new { x.Big })).Should().Be("select Big from unsigned_cast");
     }
 
     [Fact]
@@ -1875,4 +2013,14 @@ public interface IUnsignedCastEntity
     ulong Big { get; set; }
 
 
+}
+
+public interface IServerTableRow
+{
+    [System.ComponentModel.DataAnnotations.Key]
+    [System.ComponentModel.DataAnnotations.Schema.Column("id")]
+    long Id { get; set; }
+
+    [System.ComponentModel.DataAnnotations.Schema.Column("name")]
+    string? Name { get; set; }
 }

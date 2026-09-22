@@ -98,7 +98,7 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <summary>Defaults to <c>null</c>; ClickHouse opts into the <c>windowFunnel</c>/<c>retention</c>/<c>sequenceMatch</c> aggregates.</summary>
     public virtual ISequenceAggregateRenderer? SequenceAggregates => null;
 
-    /// <summary>Defaults to <c>false</c>; ClickHouse opts into the string-JSON <c>JSONExtract*</c> family.</summary>
+    /// <summary>Defaults to <c>false</c>; ClickHouse opts into the string-JSON <c>JSONExtract*</c> family and the native-JSON functions.</summary>
     public virtual bool SupportsJsonExtract => false;
 
     /// <summary>Renders <c>name(args)</c>; ClickHouse maps the snake_case name to its native spelling and casts unsigned results.</summary>

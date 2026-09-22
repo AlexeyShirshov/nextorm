@@ -1473,6 +1473,42 @@ public class SqlGenerationTests
         act.Should().Throw<NotSupportedException>().WithMessage("*containstable*");
     }
 
+    [Theory]
+    [InlineData("url")]
+    [InlineData("s3")]
+    [InlineData("file")]
+    [InlineData("remote")]
+    [InlineData("remoteSecure")]
+    [InlineData("cluster")]
+    [InlineData("clusterAllReplicas")]
+    public void BuiltInTableFunction_ClickHouseServerTableFunctions_ShouldThrowOnPostgres(string name)
+    {
+        using var ctx = PostgresTestContext.Create();
+        var location = "http://127.0.0.1/data.csv";
+        var format = "CSV";
+        var structure = "id UInt64, name String";
+        var addresses = "127.0.0.1:9000";
+        var cluster = "my_cluster";
+        var database = "default";
+        var table = "hits";
+
+        var source = name switch
+        {
+            "url" => ctx.FromTableFunction(() => SqlFunctions.ClickHouse.url<ISimpleEntity>(location, format, structure)),
+            "s3" => ctx.FromTableFunction(() => SqlFunctions.ClickHouse.s3<ISimpleEntity>(location, format, structure)),
+            "file" => ctx.FromTableFunction(() => SqlFunctions.ClickHouse.file<ISimpleEntity>(location, format, structure)),
+            "remote" => ctx.FromTableFunction(() => SqlFunctions.ClickHouse.remote<ISimpleEntity>(addresses, database, table)),
+            "remoteSecure" => ctx.FromTableFunction(() => SqlFunctions.ClickHouse.remote_secure<ISimpleEntity>(addresses, database, table)),
+            "cluster" => ctx.FromTableFunction(() => SqlFunctions.ClickHouse.cluster<ISimpleEntity>(cluster, database, table)),
+            "clusterAllReplicas" => ctx.FromTableFunction(() => SqlFunctions.ClickHouse.cluster_all_replicas<ISimpleEntity>(cluster, database, table)),
+            _ => throw new ArgumentOutOfRangeException(nameof(name), name, "Unknown ClickHouse server table function.")
+        };
+
+        var act = () => SqlOf(ctx, source.Select(r => new { r.Id }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage($"*{name}*");
+    }
+
     [Fact]
     public void LogicalNot_InWhere_ShouldEmitNotPredicate()
     {
@@ -1730,6 +1766,23 @@ public class SqlGenerationTests
 
         foreach (var act in acts)
             act.Should().Throw<NotSupportedException>().WithMessage("*JSONExtract*");
+    }
+
+    [Fact]
+    public void NativeJsonFunctions_ShouldThrowBecausePostgresHasNoNativeJson()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        Action[] acts =
+        [
+            () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.json_all_paths(x.String) })),
+            () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.json_all_paths_with_types(x.String) })),
+            () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.to_json_string(x.String) }))
+        ];
+
+        foreach (var act in acts)
+            act.Should().Throw<NotSupportedException>().WithMessage("*native-JSON*");
     }
 
     [Fact]

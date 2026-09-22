@@ -142,9 +142,9 @@ select id from simple_entity where global in (@p0, @p1)
 ## Агрегаты
 
 Эксклюзивные агрегаты ClickHouse живут на [`ClickHouseFunctions`](xref:NextORM.Core.ClickHouseFunctions)
-и отклоняются всеми остальными диалектами. Некоторые типы результата row reader не материализует
-(`UInt64`, `Float32`), поэтому диалект оборачивает их в
-`toInt64(...)`/`toInt32(...)`/`toFloat64(...)`:
+и отклоняются всеми остальными диалектами. Их нативные типы результата (`UInt64`, `Float32`, целые
+типы комбинаторов `-If`) не всегда совпадают с объявленным CLR-типом, поэтому диалект оборачивает их в
+`toInt64(...)`/`toInt32(...)`/`toFloat64(...)`, нормализуя значение к типу, который объявляет метод:
 
 * агрегаты числа уникальных `uniq`/`uniq_exact`/`uniq_combined`/`uniq_hll12` (`toInt64`);
 * параметрические `quantile(level)(value)`/`quantile_exact`/`quantile_timing` и `median` (`toFloat64`);
@@ -154,7 +154,10 @@ select id from simple_entity where global in (@p0, @p1)
 * `arg_min`/`arg_max`.
 
 Переносимые агрегаты — в том числе `count`, произвольное значение `any_agg` (рендерится `ANY_VALUE` в
-MySQL и MariaDB) и `corr`/`covar*` — документированы на тематической странице.
+MySQL и MariaDB) и `corr`/`covar*` — документированы на тематической странице. Обычная колонка `UInt64`
+(или любая проекция `ulong`/`ulong?`) материализуется напрямую через аксессор построителя строк
+`DbDataReader.GetFieldValue<ulong>`, поэтому нормализующее приведение нужно только результатам функций
+выше.
 
 См. [Группировка и агрегаты](../04-grouping-and-aggregates.md).
 
@@ -164,6 +167,10 @@ MySQL и MariaDB) и `corr`/`covar*` — документированы на т�
   `JSONExtractBool`/`JSONExtractRaw`/`JSONHas`/`JSONType`, `json_length` и плоский
   `visitParamExtract*`;
 * JSONPath-скаляры `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (по строковому JSON);
+* функции нативного JSON `json_all_paths`/`json_all_paths_with_types` (`JSONAllPaths`/
+  `JSONAllPathsWithTypes`; первая проецируется как `string[]`, нативный `Map(String, String)` второй —
+  как `Dictionary<string, string>`; обе принимают нативное значение `JSON`) и `to_json_string`
+  (`toJSONString`);
 * словарные функции `dict_get`/`dict_get_or_default`/`dict_has` (нужен настроенный
   `CREATE DICTIONARY`);
 * функции массивов `length`/`has`/`index_of`/`has_any`/`has_all`/`array_string_concat`/
@@ -191,8 +198,9 @@ var rows = dataContext.FromTableFunction(() => SqlFunctions.ClickHouse.zeros(3))
 ## Пока не поддерживается
 
 Соединения `SEMI`/`ANTI`/`PASTE`, функции высшего порядка над массивами
-(`arrayMap`/`arrayFilter`), row reader для массивов/кортежей, нативный тип `JSON` и распределённые
-табличные функции (`remote`, `cluster`, `s3`, `file`) вне области охвата. См.
+(`arrayMap`/`arrayFilter`), row reader для массивов/кортежей, нативный тип колонки `JSON` (его
+reader/type-mapping) и распределённые табличные функции (`remote`, `cluster`, `s3`, `file`) вне
+области охвата. См.
 [Ограничения и возможности вне области охвата](../../advanced/limitations.md).
 
 ## См. также

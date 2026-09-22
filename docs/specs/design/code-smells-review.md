@@ -4,6 +4,8 @@
 
 **Предрелизный аудит v1.0.3-alpha (21.09.2026, HEAD `2a2dfa6`, рабочее дерево чистое = `origin/1.0.3-alpha`): открытых P0/P1 нет.** Находки 8, 19, 28, 52 и 53, помеченные ниже как «ОТКРЫТА» (в т.ч. с 🔴 и как P1-кандидаты), фактически исправлены в коде/тестах — статусы закрыты в этом проходе. Подавления: `src/` — **6** `SuppressMessage` (все с `Justification`), **5** `#pragma` (все с парным `restore`) = **11/11 оправданных, 0 неоправданных**; `Skip=` — 0, пустых `catch` — 0, `Task.Delay` — 2 (обе `Task.Delay(0)`-yield), `NoWarn` — только `CS1591` в 7 библиотечных `.csproj` (Шаг 5, P2-трекинг).
 
+**Обновление 22.09.2026 (uncommitted worktree `clickhouse-json-type`).** **Находка 60** (🔴 P1-кандидат: `ClickHouseFunctions.json_all_paths_with_types` был объявлен `string[]` при нативном `Map(String, String)`) **закрыта 22.09.2026** вариантом B: контракт изменён на `Dictionary<string,string>` + `GetValue`-ветка в `SelectExpression.GetDataRecordMethod`, материализация подтверждена контейнерным интеграционным тестом на реальном ClickHouse. `json_all_paths` (`Array(String)`) и `to_json_string` — вне дефекта. Разбор и рекомендации — в конце журнала; API-сторона — `API-NAMING-REVIEW.md`, J8–J10.
+
 **Область анализа:** `src/` (основной), дополнительно `tests/` и `benchmarks/`
 **Метод:** read-only аудит по каталогу `skill:dotnet-csharp-code-smells` + `skill:slopwatch` (паттерн-скан выполнен вручную: локальный tool `slopwatch` в `.config/dotnet-tools.json` не установлен)
 **Статус:** Находки 1 (подавления), 2 (`IDisposable`), 3 (LINQ), 4 (god-классы), 5 (хэш-ключи), **6 (утечка подписки внешнего соединения)** и **7 (`*DELETE*.cs`)** — **исправлены/закрыты 18.09.2026**. Находка 4: god-классы разобраны — `EntityBuilder<TEntity>` **769→466**, `SqlBuilder` **716→318**, `ScalarFunctionTranslator` **595→131**, `BaseExpressionVisitor` **425→366** (`VisitMethodCall` 183→77); единственное исключение автора — `ExpressionPlanEqualityComparer` (879 формально, 77 собственных строк). Длинные списки параметров ≥6 — все 15 «боевых» разобраны параметр-объектами. Осознанно не закрываются: `CA2213`/`CA1816` (ложные) и `CA1508` (2 вероятно ложных в `NormSqlTranslator.cs:223,250`, сборкой не гейтится). `#pragma disable` в `src/` — 5, все с `restore`.
@@ -3845,6 +3847,204 @@ disable`/`SuppressMessage`/`NoWarn`/`Skip=`/`Task.Delay` — **0**; соотно
 (0 неоправданных); `rg --files -g 'PublicAPI*.txt'` — пусто (Шаг 5 открыт). План-ключ проверен чтением
 `FromExpressionPlanEqualityComparer`/`QueryPlanEqualityComparer`; `SqlSourceRenderer` измерен по методике
 Находки 4.
+
+---
+
+## 🔎 Точечный аудит 22.09.2026 — ClickHouse `UInt64` row reader (`DbDataReader.GetFieldValue<ulong>`) (чисто; 3 наблюдения)
+
+**Область (uncommitted worktree `clickhouse-uint64-row-reader`).** Ветка `ulong` в публичном
+`SelectExpression.GetDataRecordMethod()` (`src/nextorm.core/Expressions/SelectExpression.cs:60,113-116`; новое
+`private readonly static MethodInfo GetFieldValueMI = typeof(DbDataReader).GetMethod(nameof(DbDataReader.GetFieldValue))!`);
+выбор аксессора `IDataRecord` → `DbDataReader` в `internal RowMapperFactory.MapColumn`
+(`src/nextorm.core/DataContext/RowMapperFactory.cs:26-30`); правки только комментариев в
+`ClickHouseDialect.cs:57-59,163-166,251-256,562-566`; тесты `SelectExpressionTests.cs:18-34`,
+`ClickHouseDialectTests.cs:143-148`, `SqlGenerationTests.cs:1793-1801`,
+`ClickHouseIntegrationTests.cs:789-836` + фикстура `ClickHouseTestProvider.cs:137-152`; доки EN+RU.
+
+**База (этот проход).** `dotnet build nextorm.sln -c Release --no-incremental` — **0 warnings / 0 errors**;
+`nextorm.core.tests` **196/196**, `nextorm.clickhouse.tests` **188/188** (0 failed/0 skipped). Подавления `src/`:
+**6** `SuppressMessage` (все с `Justification`, `<Pending>` — 0) + **5** `#pragma warning disable` (все с парным
+`restore`) = **11/11 оправданных, 0 неоправданных**; в изменённых файлах новых — **0**. Слоп: новых
+`Skip=`/`Task.Delay`/`Thread.Sleep`/пустых `catch`/`NoWarn` в изменённых файлах — **0** (`Task.Delay` по
+репозиторию — 2, обе `Task.Delay(0)`-yield в `InMemoryTests.cs:125,414`, пре-существующие; `slopwatch` локально
+не установлен, скан вручную). EOL: все изменённые файлы — CRLF.
+
+| # | Проверка | Итог |
+|---|----------|------|
+| 1. `IDisposable` | ✅ Новых disposable-полей/локалов нет; владение `ResultSetEnumerator._reader` (`DbDataReader?`) не менялось (`Reset`/`DisposeAsync` — `ResultSetEnumerator.cs:71-90,231-241`). |
+| 2. Подавления | ✅ Новых `#pragma`/`SuppressMessage`/`NoWarn` — **0**; соотношение проекта **11/11**, неоправданных `0`. |
+| 3. LINQ на горячем пути | ✅ `MapColumn`/`GetDataRecordMethod` — цепочка `==` и `Expression.Call`; LINQ/`.Count()`/`.ToList()` нет (пункт 2 вопроса из брифинга). |
+| 4. God-классы | ✅ `RowMapperFactory` **144** строки, `SelectExpression` **187**; изменение +4/+5 строк — порог не затронут. |
+| 5. Хэш-ключи / план-кэш | ✅ Ключ маппера (`RowMapperFactory.cs:121-143`) хэширует `column.PropertyType` + `Nullable`/`DefaultOnNull`/`Index`/`PropertyName`, поэтому `ulong` и `long` в одном SQL не делят запись кэша; `MapperCacheKey`/`MapperCache` не менялись, пере-хэш не нужен. Новое `GetFieldValueMI` — `static readonly`, в ключ не входит. |
+| 6. События / исключения | ✅ Подписок нет; новых `catch`/`throw` нет. Наоборот, `ulong` перестал бросать `NotSupportedException` из `GetDataRecordMethod` (`SelectExpression.cs:130`). |
+| 7. Аллокации/бокс на материализации (пункт брифинга) | ✅ `MapColumn` исполняется при сборке маппера (один раз на SQL/план), не построчно. Для всех не-`ulong` типов `accessor == param`, т.е. скомпилированное дерево **идентично прежнему** — регресса нет; для `ulong` добавляется один ссылочный `castclass`, бокса нет. Построчный бокс внутри `GetFieldValue<ulong>` — см. Наблюдение 2. |
+
+### ℹ️ Наблюдение 1 — контракт `Func<IDataRecord, TResult>` сужен до `DbDataReader` только для `ulong`
+
+**Место:** `RowMapperFactory.cs:26-30`; тип делегата — `ResultSetEnumerator.cs:21` (`Func<IDataRecord, TResult>`),
+вызовы `:125,149`; точка входа — `DataContext.cs:154`.
+
+Для `ulong` `MapColumn` добавляет `Expression.Convert(param, method.DeclaringType!)` — даункаст `IDataRecord` →
+`DbDataReader`. Фактический аргумент — `ResultSetEnumerator._reader` (`DbDataReader?`, `:26`), и все 13 реализаций
+`IDataRecord` в решении наследуют `DbDataReader` (кроме абстрактного `System.Data.Common.DbDataRecord`), поэтому
+сегодня путь **недостижим** и багом не является. Но подпись делегата/`MapColumnExpression` рекламирует
+`IDataRecord`: будущий `IDataRecord`-only ридер или тест-двойник упадёт с `InvalidCastException` **только** на
+`ulong`-колонках (латентное сужение контракта, LSP-характер).
+
+**Рекомендация (маршрут — `nextorm-design-engineer`, код не правился):** либо сузить делегат до
+`Func<DbDataReader, TResult>` (все существующие вызовы и так передают `DbDataReader`), либо оставить `IDataRecord`
+и дать `ulong`-ветке guard/fallback без даункаста. Пока — ℹ️, фикс не обязателен.
+
+### ℹ️ Наблюдение 2 — бокс в `GetFieldValue<ulong>` и охват SQL Server
+
+У `IDataRecord` нет `GetUInt64`, поэтому `DbDataReader.GetFieldValue<ulong>` — единственный портируемый аксессор;
+его реализация у провайдеров обычно идёт через `GetValue` и боксит `ulong`. Альтернатива
+`Convert.ToUInt64(record.GetValue(i))` боксит так же и медленнее, поэтому выбор верен. `Expression.Convert` в
+`MapColumn` — ссылочный `castclass`, не бокс; `ulong?`-ветка остаётся без бокса (`GetFieldValue<ulong>` →
+`Expression.Convert` в `ulong?`), а `IsDBNull` по-прежнему вызывается на `param` (`IDataRecord`), без лишнего
+приведения на строку. Отдельно: `SqlServerDataContext.IsNumeric` (`:72-74`) не включает `ulong`, поэтому SQL Server
+теперь тоже идёт в базовый `MapColumn` (раньше `ulong` там падал `NotSupportedException`) — ожидаемо для новой
+поддержки; нативного `UInt64` у SQL Server нет, так что практический смысл имеют ClickHouse/MySQL. Фикс не требуется.
+
+### ℹ️ Наблюдение 3 — доки заявляют MySQL/MariaDB `BIGINT UNSIGNED`, интеграционного теста на него нет
+
+`docs/advanced/limitations.md:56`, `docs/ru/advanced/limitations.md:56` и провайдерные страницы утверждают, что тем
+же аксессором пользуется MySQL/MariaDB `BIGINT UNSIGNED`, но в это изменение добавлен только ClickHouse-интеграционный
+тест (`IUInt64Entity`/`uint64_entity`); MySQL/MariaDB покрыты лишь общим core-тестом
+`SelectExpression.GetDataRecordMethod`. Код-путь общий (MySQL не переопределяет `MapColumnExpression`), но заявление
+о драйвере не подтверждено прогоном. Рекомендация: добавить `uint64`-кейс в MySQL-интеграцию (общий
+`CommonTestSuite` или MySQL-specific) либо смягчить формулировку. Это тест/док-точность, не запах кода.
+
+**Проверка (22.09.2026).** Build Release `--no-incremental` — **0/0**; core **196/196**, ClickHouse unit
+**188/188**; в изменённых файлах `#pragma`/`SuppressMessage`/`NoWarn`/`Skip=`/`Task.Delay` — **0**; соотношение
+подавлений проекта **11/11** (0 неоправданных); `PublicAPI*.txt` — пусто (Шаг 5 открыт); все изменённые файлы CRLF.
+План-ключ проверен чтением `RowMapperFactory.BuildKey`; контракт делегата — чтением `ResultSetEnumerator`/
+`MapColumnExpression`. ClickHouse-интеграционные тесты в этом проходе **не запускались** (нужен Testcontainers/Podman).
+## Аудит 22.09.2026 — серверные/кластерные табличные функции ClickHouse (generic `TRow`)
+
+**Область (uncommitted worktree).** Новые публичные `ClickHouseFunctions.url<TRow>`/`s3<TRow>`/`file<TRow>`/`remote<TRow>`/`remote_secure<TRow>`/`cluster<TRow>`/`cluster_all_replicas<TRow>` (`src/nextorm.core/Query/SqlFunctions.ClickHouse.cs:286,296,306,317,324,334,342`); расширенный гейт `ClickHouseDialect.SupportsTableFunction` (`src/nextorm.clickhouse/ClickHouseDialect.cs:251-253`); общий отказ `SqlSourceRenderer.MakeTableFunction` (`src/nextorm.core/DataContext/SqlSourceRenderer.cs:350-351`); доки класса/свойства; тесты `tests/nextorm.clickhouse.tests/SqlGenerationTests.cs:1015-1125` (+`IServerTableRow:1992`), `ClickHouseDialectTests.cs:168-185` (`SupportsTableFunction`, 16 утверждений), `tests/nextorm.postgres.tests/SqlGenerationTests.cs:1477-1507`; доки EN+RU.
+
+**База (этот проход).** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**; `dotnet test tests/nextorm.clickhouse.tests -c Debug` — **193/193**; `dotnet test tests/nextorm.postgres.tests -c Debug --filter FullyQualifiedName~BuiltInTableFunction` — **6/6** (0 failed, 0 skipped). Подавления: `src/` — **6** `SuppressMessage` (все с `Justification`, `<Pending>` — 0) + **5** `#pragma warning disable` (все с парным `restore`) = **11/11** оправданных, **0** неоправданных; в diff — **0** новых `#pragma`/`SuppressMessage`/`NoWarn`/`Skip=`/`Task.Delay`/`Thread.Sleep`/пустых `catch` (скан вручную: `slopwatch` локально не установлен — `.config/dotnet-tools.json` содержит только coverage/reportgenerator/docfx).
+
+| # | Проверка | Итог |
+|---|----------|------|
+| 1. `IDisposable` | ✅ Новых disposable-полей/локальных нет: 7 методов — `=> throw new NotSupportedException()`, `SupportsTableFunction` — предикат, `MakeTableFunction` ресурсов не удерживает; тесты — `using var ctx`. |
+| 2. Подавления | ✅ Новых — **0**; соотношение проекта 11/11 (0 неоправданных). |
+| 3. LINQ на горячем пути | ✅ В продовом коде LINQ нет; `SupportsTableFunction` — `is … or …`. В тестах `.Select(...)` — путь сборки SQL (не исполняется). |
+| 4. God-классы | ✅ `SqlFunctions.ClickHouse.cs` — 570 строк файла (комментарии/XML ~326, пустые ~110) → **~134 собственных** строк `ClickHouseFunctions` (< 500); новых классов/частичных файлов нет. |
+| 5. Хэш-ключи / план-кэш | ✅ **Ключевой вопрос проверен по существу — дефекта нет.** `TRow` входит в `QueryPlanEqualityComparer.Equals` (`:38`) и `GetHashCode` (`:291-292`): разные `TRow` = разные планы (ограничено числом закрытых generic-инстанциаций), одинаковые — делят план; сама TVF сравнивается структурно (`FromExpressionPlanEqualityComparer.Equals:52-53`, `GetHashCode:134-135`). Значения аргументов (URL/S3/адреса) в план-ключ **не** входят: для closure `ExpressionPlanEqualityComparer.CompareMember:255-258`/`VisitMember:675-712` хэшируют (тип замыкания, имя и тип члена), не значение — высококардинальные URL не размножают кэш. На cache-hit значения обновляются: `Parameter.Stable=false` (`BaseExpressionVisitor.cs:253` → `InValues.IsStableValueExpression(MemberExpression)` → `default:false`), поэтому `QueryPlanner` выставляет `needsParamRefresh` и зовёт `ExtractParams` (`QueryPlanner.cs:109-122,173-184`), а `MakeTableFunction` в param-режиме (`SqlSourceRenderer.cs:353-365`) перечитывает захваченные значения. Неограниченного/промахивающегося ключа нет. |
+| 6. События / исключения | ✅ Подписок нет; новые `throw` — только `NotSupportedException` общего гейта (`SqlSourceRenderer.cs:351`); `catch` не добавлено. |
+| 7. Публичная поверхность | ✅ 7 новых публичных методов, **новых типов нет**, `<summary>` есть у всех 7; Приложение A (45) без изменений — см. `API-NAMING-REVIEW.md` (SCTF1/SCTF2). |
+
+### ℹ️ Наблюдения (фикс не требуется)
+
+- **Security — значения параметризованы; лог значений только при opt-in.** Аргументы биндятся параметрами (`from url(@url, @format, @structure)`), в SQL-текст не инлайнятся и в план-ключ не входят. Значения параметров пишутся в лог только при явном `LoggingOptions.LogSensitiveData` (`QueryExecutor.cs:43-49`, `ResultSetEnumerator.cs:193-225`); по умолчанию логируется SQL с плейсхолдерами. Тесты используют инертные `http://127.0.0.1/...`/`remote.example.com` без креденшелов. Caller-declared `url` может содержать `user:pass@`/presigned-параметры — доки/guide рекомендуют named collections (формулировка уточнена в `API-NAMING-REVIEW.md`).
+- **Wrong-provider тест покрывает 3 из 7 имён.** `tests/nextorm.postgres.tests/SqlGenerationTests.cs:1477-1507` проверяет `url`, `remote`, `cluster_all_replicas`; `s3`/`file`/`remote_secure`/`cluster` на чужом провайдере не проверены. Все идут через один гейт, но регресс по конкретному имени пройдёт незамеченным. Рекомендация: `Theory` по 7 SQL-именам.
+- **Нет регресс-теста на план-кэш/refresh generic-TVF.** Корректность (разные `TRow` → разные планы; один `TRow`, разные URL → общий план + обновлённый параметр) подтверждена чтением компараторов и `QueryPlanner.ExtractParams`, но тестом не закреплена: существующие проверки смотрят SQL один раз на контекст. Кандидат — core-тест.
+- **Copy/paste в postgres-тесте.** `SqlGenerationTests.cs:1500-1502`: `cluster_all_replicas<ISimpleEntity>(database, database, table)` — первый аргумент (cluster) получает `database`; функционально безвредно (вызов бросает до рендера) + лишняя пустая строка (`:1509-1510`). Косметика.
+- **`<typeparam name="TRow">` отсутствует** у 7 методов при наличии `<typeparamref name="TRow"/>` — как у `IUnnestRow<T>`; на `CS1591` (в `<NoWarn>` 7 `.csproj`) не влияет, для DocFX можно добавить.
+- **Интеграционный тест не предложен осознанно.** Серверные TVF требуют внешних ресурсов (HTTP/S3/кластер) либо серверного `user_files_path`; SQL-gen — разумный максимум в отличие от `numbers`/`zeros`.
+- **CRLF.** Все добавленные `.cs`/`.md` — CRLF (кроме удалённого `todo_clickhouse_server_table_functions.md`).
+
+**Проверка (22.09.2026).** Build Release — **0/0**; `nextorm.clickhouse.tests` — **193/193**, `nextorm.postgres.tests --filter ~BuiltInTableFunction` — **6/6** (прогнано в этом проходе); новых подавлений/слопа в diff — **0**; `PublicAPI*.txt` — **0** файлов (Шаг 5 открыт); план-ключ/refresh проверены чтением `QueryPlanEqualityComparer`, `ExpressionPlanEqualityComparer`, `FromExpressionPlanEqualityComparer`, `QueryPlanner`.
+## 🔎 Аудит 22.09.2026 — ClickHouse нативные JSON-функции `json_all_paths`/`json_all_paths_with_types`/`to_json_string` (uncommitted worktree `clickhouse-json-type`)
+
+**Область (uncommitted worktree).** `ClickHouseFunctions.json_all_paths`/`json_all_paths_with_types` → `string[]`,
+`to_json_string<T>` → `string?` (`src/nextorm.core/Query/SqlFunctions.ClickHouse.cs:167-190`); ветки
+`JsonExtractSqlTranslator` (`src/nextorm.core/Visitors/JsonExtractSqlTranslator.cs:59-67`, `EmitFunction` `:93-118`);
+маппинг имён `ClickHouseDialect.MakeJsonExtract` (`src/nextorm.clickhouse/ClickHouseDialect.cs:169-197`, новые пары
+`:189-191`); расширенные XML-доки `SupportsJsonExtract`/`MakeJsonExtract` (`ISqlDialect.cs:399-421`,
+`SqlDialectBase.cs:101`); тесты `tests/nextorm.clickhouse.tests/SqlGenerationTests.cs:832-848`,
+`ClickHouseDialectTests.cs:160-166`, `tests/nextorm.postgres.tests/SqlGenerationTests.cs:1735-1750`; доки EN+RU,
+gap-analysis §4 п.7, удалён `todo_clickhouse_json_type.md`.
+
+**База (этот проход).** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**.
+`tests/nextorm.clickhouse.tests` — **188/188**, `tests/nextorm.postgres.tests` — **257/257** (0 failed, 0 skipped).
+Подавления: `src/` — **6** `SuppressMessage` (все с `Justification`, `<Pending>` — 0) + **5** `#pragma warning disable`
+(все с парным `restore`) = **11/11** оправданных, **0** неоправданных; в диффе новых — **0**. Слоп: новых
+`Skip=`/`Task.Delay`/`Thread.Sleep`/пустых `catch`/`NoWarn`/inline `Version` — **0** (`slopwatch` локальным tool'ом
+не установлен, скан вручную; `Task.Delay` проекта — 2, обе прежние `Task.Delay(0)`-yield в
+`tests/nextorm.core.tests/InMemoryTests.cs:80,369`). Контейнерные интеграционные тесты в этом проходе не
+запускались (CLI podman/docker в среде аудита нет; у новых функций интеграционного теста нет) — см. Находку 60.
+
+| # | Проверка | Итог |
+|---|----------|------|
+| 1. `IDisposable` | ✅ Новых disposable-полей/локальных нет: три DSL-заглушки `=> default!`, `EmitFunction` — строковый рендер без ресурсов; тесты оборачивают контекст в `using var`. |
+| 2. Подавления | ✅ В диффе `#pragma warning disable`/`SuppressMessage`/`NoWarn` — **0**; соотношение проекта **11/11** (0 неоправданных) не изменилось; `CS1591` — по-прежнему `NoWarn` в 7 библиотечных `.csproj` (Шаг 5). |
+| 3. LINQ на горячем пути | ✅ `EmitFunction` — `for` + `new string[args.Count]` на холодном пути построения плана; новых LINQ-цепочек нет. |
+| 4. God-классы | ✅ Новых god-классов нет: +3 ветки `switch`, `EmitFunction` остаётся **одним** методом (не копия, в отличие от прежней Находки 15). |
+| 5. Hash-ключи / план-кэш | ✅ Новые методы DSL различаются `MethodInfo` в дереве выражения; новых членов `QueryPlanEqualityComparer`/`_hashPlan` нет. |
+| 6. События / исключения | ✅ Подписок нет; новый `throw new NotSupportedException(nativeJson ? … : jsonPath ? … : …)` — гейт `SupportsJsonExtract`, не пустой `catch`. |
+| 7. Публичная поверхность | ✅ **Находка 60 закрыта 22.09.2026** — `json_all_paths_with_types` теперь `Dictionary<string,string>` (ветка `GetValue` в `SelectExpression.GetDataRecordMethod`), прямая проекция материализуется; остаётся J9 (трекинг `PublicAPI`, Шаг 5). |
+
+### 🔴 Находка 60 — `json_all_paths_with_types` объявлен `string[]`, а нативный результат — `Map(String, String)` (ЗАКРЫТА 22.09.2026 — вариант B: `Dictionary<string,string>` + `GetValue`-ветка, подтверждено интеграционным тестом)
+
+**Место:** `src/nextorm.core/Query/SqlFunctions.ClickHouse.cs:176-183` (объявление + XML-`<summary>`), транслятор
+`src/nextorm.core/Visitors/JsonExtractSqlTranslator.cs:62-64`, рендер `src/nextorm.clickhouse/ClickHouseDialect.cs:190`;
+путь материализации — `src/nextorm.core/Expressions/SelectExpression.cs:117-122` и
+`src/nextorm.core/DataContext/RowMapperFactory.cs:24-53`.
+
+**Что не так.** Официальная документация ClickHouse (JSON functions): `JSONAllPaths(json)` → `Array(String)`,
+`JSONAllPathsWithTypes(json)` → **`Map(String, String)`**. `ClickHouse.Driver` 1.4.0 маппит эти типы на CLR `string[]`
+и `Dictionary<string, string>` соответственно (`ArrayType.FrameworkType = T[]`, `MapType.FrameworkType =
+Dictionary<K,V>`; `DbDataReader.GetValue` возвращает ровно эти объекты). NextORM для CLR-типа `string[]` выбирает
+`IDataRecord.GetValue` + приведение (`SelectExpression.cs:117-122`), а `RowMapperFactory.MapColumn` заворачивает
+геттер в `(string[])((IDataRecord)record).GetValue(i)`. Следствия:
+
+1. **Прямая проекция `json_all_paths_with_types(...)`** даёт `(string[])(Dictionary<string,string>)` →
+   `InvalidCastException` при материализации строки. SQL-gen тест этого не ловит — он проверяет только текст SQL
+   (`SqlGenerationTests.cs:841,846`) и оборачивает вызов в `length`, т.е. прямой проекции в тестах нет.
+2. **Единственная задокументированная и протестированная вложенная форма** — `length<T>(T[])`
+   (`SqlFunctions.ClickHouse.cs:180`; `SqlGenerationTests.cs:841,846`) — для `Map` невалидна: документация ClickHouse
+   `length` перечисляет `String`/`FixedString`/`Array`/`QBit`, но не `Map`; мост `Map → Array` — это
+   `mapKeys`/`mapValues`. То есть у функции сегодня **нет ни одной корректной формы вызова**.
+
+**Было:** публичный `string[] json_all_paths_with_types(string?)`; рендер `JSONAllPathsWithTypes(col)`; тест ассертит
+`toInt64(length(JSONAllPathsWithTypes(somestring)))`.
+
+**Стало (рекомендация, одна из):**
+- **(A, минимальный корректный гейт)** запретить прямую проекцию/вложенность до появления map-ридера: не давать
+  `Map`-типу попасть в `SelectExpression.GetDataRecordMethod` (fail-fast `NotSupportedException` при построении плана)
+  либо явный guard в трансляторе/на подготовке; не документировать `length` как пример. `json_all_paths`
+  (`Array(String)`: `length` корректна) и `to_json_string` оставить.
+- **(B, полноценно)** ввести корректный CLR-контракт `IReadOnlyDictionary<string,string>`/`Dictionary<string,string>`
+  + кейс в `SelectExpression.GetDataRecordMethod()` (`GetValue` + cast) и мост `mapKeys`/`mapValues`
+  в array-поверхность; тогда прямая проекция материализуется, а `length` заменяется на `length(mapKeys(...))`.
+- **(C)** если нужны только пути — транслировать `json_all_paths_with_types` в `mapKeys(JSONAllPathsWithTypes(...))`
+  (теряя типы), либо не выставлять функцию до маппинга нативного `JSON`.
+
+**Проверка:** build 0/0; clickhouse 188/188, postgres 257/257; тип возврата и путь материализации подтверждены
+чтением `SelectExpression.GetDataRecordMethod`/`RowMapperFactory.MapColumn`; семантика ClickHouse — по официальной
+документации (JSON functions: `Map(String, String)`; `length` — String/Array/QBit); маппинг драйвера — по исходникам
+`ClickHouse/clickhouse-cs` (`ClickHouse.Driver` 1.4.0). Реальный ClickHouse в этом проходе не поднимался. Код не
+правился — маршрутизировано в `nextorm-design-engineer`.
+
+### ℹ️ Наблюдения (фикс не требуется / требует проверки)
+
+- **Аргумент `JSONAllPaths*` — нативный `JSON`, а unit-тест передаёт `String`-колонку.** По документации ClickHouse
+  аргумент `JSONAllPaths`/`JSONAllPathsWithTypes` — колонка типа `JSON`; тест рендерит `JSONAllPaths(somestring)`
+  (колонка `String`). Неявного `String → JSON` документация не описывает (нужен `CAST(col AS JSON)`), поэтому зелёный
+  SQL-gen не доказывает исполнимость. Вместе с отложенным маппингом нативного `JSON` это значит, что типизированного
+  пути вызвать эти две функции сегодня нет. Рекомендуется добавить интеграционный тест на
+  `JSONAllPaths(CAST(col AS JSON))` либо явно задокументировать требование нативного JSON-выражения.
+- **`json_all_paths` (`Array(String)`) — «usable only nested» избыточно.** Драйвер отдаёт `Array(String)` как
+  `string[]`, а `SelectExpression.GetDataRecordMethod()` уже поддерживает `string[]` (`GetValue` + cast), поэтому
+  прямая проекция `json_all_paths` должна материализоваться. XML-док (`:167-173`) и доки называют её «usable only
+  nested» — безопасное, но неточное сужение; проверить интеграционным тестом и либо разрешить прямую проекцию,
+  либо оставить ограничение осознанно.
+- **`EmitFunction` с двумя булевыми флагами** (`jsonPath`/`nativeJson`, `JsonExtractSqlTranslator.cs:93-100`) — вложенный
+  тернарник читается хуже плоских веток, но дублирования тела, как в Находке 15 (`EmitJsonPathFunction`), нет. Не находка.
+- **Новые ветки `switch`** (`:59-67`) — та же почти-дублирующая структура `case nameof(...)` + строковый литерал, что
+  и в ℹ️-наблюдении `JSONExtract*`/`visitParamExtract*`; не регресс.
+- **CRLF.** Изменённые/новые `.cs` и `.md` — CRLF.
+
+**Проверка (22.09.2026).** Build Release — **0/0**; `nextorm.clickhouse.tests` — **188/188**,
+`nextorm.postgres.tests` — **257/257** (прогнано в этом проходе); в диффе `#pragma warning
+disable`/`SuppressMessage`/`NoWarn`/`Skip=`/`Task.Delay`/`Thread.Sleep`/пустых `catch` — **0**; соотношение подавлений
+проекта **11/11** (0 неоправданных); `rg --files -g 'PublicAPI*.txt'` — пусто (Шаг 5 открыт). Контейнерная интеграция
+ClickHouse в этом проходе не запускалась (нет CLI podman/docker; у этих функций интеграционного теста нет) — прямой
+проекции/`Map`-материализации на реальном сервере нет; вывод построен по коду nextorm + официальной документации
+ClickHouse + маппингу `ClickHouse.Driver` 1.4.0.
 
 ---
 

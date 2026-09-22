@@ -414,14 +414,57 @@ from (select toInt64(id) as id, value, name from generateRandom('id UInt64, valu
 limit 3
 ```
 
+ClickHouse also ships the server/cluster table functions, pre-declared as generic wrappers whose row
+shape is declared by the caller. The `TRow` interface's `[Column]` names must match the `structure`
+argument (`url`/`s3`/`file`) or the target table (`remote`/`remoteSecure`/`cluster`/`clusterAllReplicas`):
+
+| `SqlFunctions.ClickHouse.*` | SQL output |
+| --- | --- |
+| `url<TRow>(url, format, structure)` | `url(url, format, structure)` |
+| `s3<TRow>(url, format, structure)` | `s3(url, format, structure)` |
+| `file<TRow>(path, format, structure)` | `file(path, format, structure)` |
+| `remote<TRow>(addresses, database, table)` | `remote(addresses, database, table)` |
+| `remote_secure<TRow>(addresses, database, table)` | `remoteSecure(addresses, database, table)` |
+| `cluster<TRow>(cluster, database, table)` | `cluster(cluster, database, table)` |
+| `cluster_all_replicas<TRow>(cluster, database, table)` | `clusterAllReplicas(cluster, database, table)` |
+
+```csharp
+public interface IHitsRow
+{
+    [Column("id")]
+    long Id { get; set; }
+    [Column("name")]
+    string? Name { get; set; }
+}
+
+var hits = dataContext
+    .FromTableFunction(() => SqlFunctions.ClickHouse.url<IHitsRow>(
+        "http://127.0.0.1:12345/", "CSV", "id UInt64, name String"))
+    .Select(r => new { r.Id, r.Name })
+    .ToList();
+```
+
+```sql
+select id as `Id`, name as `Name` from url(@url, @format, @structure) as `t1`
+```
+
+The functions are ClickHouse-only ([`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect.SupportsTableFunction))
+and require the matching server permissions; URL/S3/remote authentication is the server's responsibility,
+so prefer named collections or `<remote_servers>` to keep secrets out of the query and its plan. The
+`format`/`merge`/`input` table functions are intentionally **not** pre-declared — `format`'s schema may be
+inferred from the data, `merge` derives it from the underlying tables and `input` is INSERT-only — so use
+the generic `[SqlTableFunction]` wrapper declared above or [`FromSql`](xref:NextORM.Core.DataContextExtensions)
+for those.
+
 The mapped function must exist in the database — nextorm only emits the call, it does not create the
 function — so use the helper only on the provider that defines it. The built-in helpers are gated by
 [`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect): PostgreSQL enables `generate_series`, `unnest`,
 `regexp_matches`, `regexp_split_to_table`, `jsonb_array_elements(_text)`, `jsonb_each(_text)`,
 `jsonb_object_keys`, `jsonb_path_query` and `ts_stat`; SQL Server enables
-`string_split`/`openjson`, ClickHouse enables `numbers`/`numbers_mt` and `zeros`/`zeros_mt`, and any
-other provider rejects them with `NotSupportedException` (a user-defined `[SqlTableFunction]` is never
-gated).
+`string_split`/`openjson`, ClickHouse enables `numbers`/`numbers_mt`, `zeros`/`zeros_mt`,
+`generateRandom` and the server/cluster functions `url`/`s3`/`file`/`remote`/`remoteSecure`/`cluster`/
+`clusterAllReplicas`, and any other provider rejects them with `NotSupportedException` (a user-defined
+`[SqlTableFunction]` is never gated).
 
 ## Provider differences
 
@@ -453,4 +496,5 @@ Source: `src/nextorm.core/SqlTableFunctionAttribute.cs:17`, `src/nextorm.core/Da
 `tests/nextorm.core.tests/SqlTableFunctionAttributeTests.cs:8`;
 generated SQL: `tests/nextorm.sqlite.tests/SqlGenerationTests.cs:1453`, `:1462`, `:1475`, `:1489`, `:1503`;
 `tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:1044`, `:1066`, `:1080`, `:1094`;
-`tests/nextorm.postgres.tests/SqlGenerationTests.cs:976`, `:998`, `:1012`, `:1026`.
+`tests/nextorm.postgres.tests/SqlGenerationTests.cs:976`, `:998`, `:1012`, `:1026`, `:1477`;
+`tests/nextorm.clickhouse.tests/SqlGenerationTests.cs:1015`, `:1031`, `:1047`, `:1063`, `:1079`, `:1095`, `:1111`.

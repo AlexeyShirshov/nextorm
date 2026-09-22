@@ -6,6 +6,8 @@ postgres 150, mysql 31, mariadb 7, clickhouse 47, integration 833/0 failed)
 
 **Предрелизный аудит v1.0.3-alpha (21.09.2026, HEAD `2a2dfa6`, рабочее дерево чистое = `origin/1.0.3-alpha`): открытых P0/P1 по публичному API нет.** QM1 (переименование `Tablesample`→`TableSample`) и AR2 (пробел в док-описании ClickHouse-массивов) фактически закрыты в коде/доках; XP2 закрыт ранее — статусы отмечены в этом проходе. Шаг 5 (заморозка `PublicAPI.Shipped/Unshipped.txt`) остаётся открытым **P2** (RD2 и производные, трекинг — issue #53) и alpha-релиз не блокирует.
 
+**Обновление 22.09.2026 (clickhouse-json-type, влито в дерево).** **J8 (P1) закрыт** и **J10 закрыт**: `json_all_paths_with_types` переведён на `Dictionary<string,string>` (+ ветка `GetValue` в `SelectExpression.GetDataRecordMethod`), материализация подтверждена контейнерным интеграционным тестом; доки синхронизированы (нативный `JSON`-аргумент, прямая проекция `string[]`/`Dictionary`). Открыт только J9 (трекинг `PublicAPI.Unshipped.txt` при заморозке, Шаг 5). Детали — в разделе «ClickHouse нативные JSON-функции …».
+
 **Область:** `src/nextorm.core`, `src/nextorm.postgres`, `src/nextorm.sqlite`, `src/nextorm.sqlserver`, `src/nextorm.mysql`, `src/nextorm.mariadb`, `src/nextorm.clickhouse`, `src/nextorm.core.sourcegenerator`
 **Методика:** скилл `api-design` (Framework Design Guidelines) + `dotnet-xml-docs` (XML-документация). Основание для вывода — XML-комментарий (`<summary>`/`<param>`, если есть) либо тело метода/свойства. Проект в стадии **alpha**: обратная совместимость не поддерживается, имена меняются напрямую.
 
@@ -473,6 +475,32 @@ JSONPath-семантика SQL Server/MySQL (те же `json_value(json, '$.pat
 tests/<p> -c Release --no-build` — clickhouse **101/101**, postgres **174/174**, sqlserver **177/177**,
 mysql **44/44**, mariadb **14/14**, sqlite **207/207**, core **157/157**; `find -name 'PublicAPI*.txt'`
 — пусто; XML-`<summary>` у трёх новых методов и `SupportsJsonPath` (+ оверрайд) присутствуют.
+
+### ClickHouse нативные JSON-функции `json_all_paths`/`json_all_paths_with_types`/`to_json_string` (точечный аудит 22.09.2026, worktree `clickhouse-json-type`)
+
+Публичная поверхность аддитивна, переименований нет. Новые члены (Шаг 5 — внести в `PublicAPI.Unshipped.txt`):
+`ClickHouseFunctions.json_all_paths(string?)` → `string[]` (`src/nextorm.core/Query/SqlFunctions.ClickHouse.cs:174`),
+`ClickHouseFunctions.json_all_paths_with_types(string?)` → `string[]` (`:183`),
+`ClickHouseFunctions.to_json_string<T>(T?)` → `string?` (`:190`); XML-`<summary>` есть у всех трёх
+(`:167-173`, `:176-182`, `:185-189`). `ISqlDialect` новых членов не получил — расширены только XML-доки
+`SupportsJsonExtract` (`ISqlDialect.cs:399-410`) и `MakeJsonExtract` (`:412-420`), `SqlDialectBase.SupportsJsonExtract`
+(`SqlDialectBase.cs:101`); `ClickHouseDialect.MakeJsonExtract` добавил три пары имён (`ClickHouseDialect.cs:189-191`).
+Имена snake_case — сознательное SQL-зеркало (реестр §3, как `json_extract_*`/`visit_param_extract_*`/`uniq`),
+P0/P1 по именам нет. Build Release — **0/0**; unit: clickhouse **188/188**, postgres **257/257** (0 failed, 0 skipped).
+
+| # | Ур. | Место | Проблема | Рекомендация |
+|---|-----|-------|----------|--------------|
+| J8 | P1 | `Query/SqlFunctions.ClickHouse.cs:176-183` | Возвратный тип `string[]` не соответствует нативному `Map(String,String)`: `ClickHouse.Driver` отдаёт `Dictionary<string,string>`, а nextorm для `string[]` делает `(string[])GetValue` (`Expressions/SelectExpression.cs:117-122`, `DataContext/RowMapperFactory.cs:24-53`) → `InvalidCastException` при прямой проекции; задокументированная вложенность `length<T>(T[])` для `Map` невалидна (ClickHouse `length` — String/Array/QBit, мост — `mapKeys`/`mapValues`). Разбор — `code-smells-review.md`, Находка 60 | Исправить контракт (гейт fail-fast либо `IReadOnlyDictionary<string,string>` + map-ридер + `mapKeys`/`mapValues`); не документировать `length` как пример. **Закрыто 22.09.2026 (вариант B):** контракт → `Dictionary<string,string>`, `GetValue`-ветка в `SelectExpression.GetDataRecordMethod`, интеграционный тест `JsonAllPathsWithTypes_ShouldProjectNativeJsonMap` зелёный |
+| J9 | P2 | `PublicAPI.*.txt` отсутствуют | Три новых метода `ClickHouseFunctions` не трекаются; Шаг 5 открыт | При включении `PublicApiAnalyzers` внести в `PublicAPI.Unshipped.txt` (ср. J1/JP5/D1) |
+| J10 | P2 | `Query/SqlFunctions.ClickHouse.cs:167-183`; `ISqlDialect.cs:399-410` | XML-доки: `json_all_paths` назван «usable only nested» (для `Array(String)` это избыточно — драйвер отдаёт `string[]`); `json_all_paths_with_types` обещает вложенность через `length`, что неверно для `Map`; у обоих не указано, что аргумент — нативный `JSON`, а тесты передают `String`-колонку | Синхронизировать доки с фактическим контрактом после фикса J8; явно указать требование нативного `JSON` (или `CAST`) и мост `mapKeys`/`mapValues` |
+
+Пробелы документации EN/RU: доки ClickHouse-поверхности обновлены в обеих ветках и синхронны по именам
+(`docs/guide/18-json.md`, `docs/providers/clickhouse.md`, `docs/guide/provider-specific/clickhouse.md`,
+`docs/advanced/limitations.md` + RU); gap-analysis §4 п.7 помечен shipped; `todo_clickhouse_json_type.md` удалён.
+J8 и J10 закрыты 22.09.2026; остаётся только J9 (трекинг `PublicAPI.Unshipped.txt` при заморозке, Шаг 5).
+
+**Проверка:** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**; unit clickhouse **188/188**,
+postgres **257/257**; `find -name 'PublicAPI*.txt'` — пусто; XML-`<summary>` у трёх новых методов присутствуют.
 
 ### ClickHouse функции словарей `dictGet`/`dictGetOrDefault`/`dictHas` (точечный аудит 19.09.2026)
 
@@ -3038,6 +3066,86 @@ Capability-объекты (Фаза 3) не применимы: `SupportsRawSqlS
 `dotnet test tests/nextorm.sqlserver.tests -c Debug` — **245/245**; `dotnet test tests/nextorm.core.tests
 -c Debug` — **194/194**; `rg --files -g 'PublicAPI*.txt'` — пусто; `grep -r xml_nodes docs` вне `specs/` —
 пусто (подтверждает P2-3); подавления проекта 11/11 (0 неоправданных).
+
+### Аудит 22.09.2026 — ClickHouse `UInt64` row reader (`DbDataReader.GetFieldValue<ulong>`) (публичный API без изменений; P0 — нет; P1 — нет; P2 — нет)
+
+**Область (uncommitted worktree `clickhouse-uint64-row-reader`).** `src/nextorm.core/Expressions/SelectExpression.cs:60,113-116`
+(новое `private readonly static MethodInfo GetFieldValueMI` + ветка `ulong` в **уже существующем публичном**
+`GetDataRecordMethod()`; сигнатура метода не менялась); `src/nextorm.core/DataContext/RowMapperFactory.cs:26-30`
+(`RowMapperFactory` — `internal`); `src/nextorm.clickhouse/ClickHouseDialect.cs:57-59,163-166,251-256,562-566`
+(только комментарии); тесты `SelectExpressionTests.cs:18-34`, `ClickHouseDialectTests.cs:143-148`,
+`SqlGenerationTests.cs:1793-1801`, `ClickHouseIntegrationTests.cs:789-836` + `ClickHouseTestProvider.cs:137-152`;
+доки EN+RU.
+
+**Публичной поверхности не добавлено — подтверждено.** `git diff -- src/` не содержит добавленных `public`/
+`protected`/`internal` объявлений: единственный новый член с модификатором доступа — `private readonly static
+MethodInfo GetFieldValueMI`. `RowMapperFactory.MapColumn` — `public`-член `internal`-типа (внешней поверхности не
+даёт), его контракт не менялся; `SelectExpression.GetDataRecordMethod()` добавлен только `else if`-веткой.
+`IUInt64Entity` (`ClickHouseIntegrationTests.cs:833`) объявлен в **тестовой** сборке — в публичную поверхность 7
+библиотек не входит. Проверено чтением диффа и `roslyn refs` по явному `solution=nextorm.sln`:
+`RowMapperFactory.MapColumn` — 1 ссылка, `RowMapperFactory.GetOrBuild` — 1, `SelectExpression.GetDataRecordMethod`
+— 5 (1 прод-вызов + 4 тестовых).
+
+**XML-док покрытие не изменилось.** Новых публичных типов/членов нет; `GetDataRecordMethod()` остаётся без
+XML-дока, как и до изменения (`CS1591` в `<NoWarn>` всех 7 библиотечных `.csproj`). Приложение A
+(**45** недокументированных публичных типов) не меняется.
+
+**Шаг 5 (заморозка) — статус без изменений.** `PublicAPI.Shipped.txt`/`PublicAPI.Unshipped.txt` отсутствуют;
+`Microsoft.CodeAnalysis.PublicApiAnalyzers`, `EnablePackageValidation`/ApiCompat и API-approval тест не подключены.
+В будущий `PublicAPI.Unshipped.txt` из этого изменения вносить **нечего** (изменённые члены — `private`/`internal`).
+Трекинг — [`todo_public_api_freeze.md`](../roadmap/todo_public_api_freeze.md), issue #53.
+
+**Доки.** `docs/advanced/limitations.md`, `docs/providers/clickhouse.md`, `docs/guide/provider-specific/clickhouse.md`
+и их `docs/ru/**`-зеркала обновлены синхронно; `docs/specs/roadmap/sql-capabilities-gap-analysis.md` §4 п.4 обновлён,
+`todo_clickhouse_uint64_row_reader.md` удалён. Публичного переименования нет, но правило `AGENTS.md` о синхронности
+EN/RU соблюдено. Непроверенное утверждение доков про MySQL/MariaDB `BIGINT UNSIGNED` (нет интеграционного теста на
+этот диалект) вынесено как наблюдение 3 в `code-smells-review.md` — на именование публичного API не влияет.
+
+**Проверка (22.09.2026).** `dotnet build nextorm.sln -c Release --no-incremental` — **0 warnings / 0 errors**;
+`nextorm.core.tests` — **196/196**, `nextorm.clickhouse.tests` — **188/188** (0 failed/0 skipped);
+`find -name 'PublicAPI*.txt'` — пусто; `grep "public"` по добавленным строкам `src/`-диффа — только `private`-поле;
+подавления проекта 11/11 (0 неоправданных).
+### Аудит 22.09.2026 — серверные/кластерные табличные функции ClickHouse (P0 — нет; P1 — нет; P2 — 2)
+
+Область: `ClickHouseFunctions.url<T>`/`s3<T>`/`file<T>`/`remote<T>`/`remote_secure<T>`/`cluster<T>`/
+`cluster_all_replicas<T>` (`Query/SqlFunctions.ClickHouse.cs`), `ClickHouseDialect.SupportsTableFunction`
+(`src/nextorm.clickhouse/ClickHouseDialect.cs`), док класса `ClickHouseFunctions`
+(`Query/SqlFunctions.ClickHouse.cs:5-17`) и свойства `SqlFunctions.ClickHouse` (`Query/SqlFunctions.cs:41-58`);
+тесты `tests/nextorm.clickhouse.tests/SqlGenerationTests.cs` (7 SQL-gen + `IServerTableRow`),
+`ClickHouseDialectTests.cs` (`SupportsTableFunction` ×16, `:168-185`), `tests/nextorm.postgres.tests/SqlGenerationTests.cs`
+(`BuiltInTableFunction_ClickHouseServerTableFunctions_ShouldThrowOnPostgres`). Build Release — **0/0**;
+`dotnet test tests/nextorm.clickhouse.tests -c Debug` — **193/193**; `dotnet test tests/nextorm.postgres.tests
+-c Debug --filter FullyQualifiedName~BuiltInTableFunction` — **6/6**. XML-`<summary>` есть у всех 7 новых
+публичных методов; **новых публичных типов нет** (схема строки объявляется generic-параметром `TRow`
+вызывающего) → Приложение A (45) без изменений; Шаг 5 по-прежнему открыт.
+
+| # | Ур. | Файл:строка | Проблема | Рекомендация |
+|---|-----|-------------|----------|--------------|
+| SCTF1 | P2 | `Query/SqlFunctions.ClickHouse.cs` (`url`…`cluster_all_replicas`) | Новые публичные члены не отслеживаются: `PublicAPI.Shipped/Unshipped.txt` отсутствуют, `PublicApiAnalyzers` не подключён. Шаг 5 открыт | Внести 7 методов `ClickHouseFunctions.*<TRow>` в `PublicAPI.Unshipped.txt` при заморозке (ср. TF1/Z1) |
+| SCTF2 | P2 | `Query/SqlFunctions.ClickHouse.cs`, `docs/guide/13-table-valued-functions.md` (+RU), `docs/providers/clickhouse.md` (+RU) | Отложенные `format`/`merge`/`input` задокументированы в limitation-таблице и guide, но не являются элементом кода; при изменении решения вернуться к `SupportsTableFunction` | Оставить как осознанный пропуск до `todo_dynamic_result_schema.md` |
+
+ℹ️ **Наблюдения (фикс не требуется):**
+- **Именование — конвенции соблюдены, P0/P1 нет.** SQL-имена `remoteSecure`/`clusterAllReplicas` против
+  CLR `remote_secure`/`cluster_all_replicas` точно повторяют пару `generate_random`/`generateRandom`;
+  алиасы `url`/`s3`/`file`/`remote`/`cluster` — SQL-зеркало (реестр §3).
+- **Generic `TRow` вместо именованного row-интерфейса — обосновано.** У `url`/`s3`/`file` схема задаётся
+  строкой `structure`, у `remote`/`remoteSecure`/`cluster`/`clusterAllReplicas` — целевой таблицей,
+  поэтому единого `I…Row` нет; `IUnnestRow<T>` уже показывает, что generic row-интерфейс — принятый
+  приём. `format`/`merge`/`input` оставлены на динамическую схему (`todo_dynamic_result_schema.md`).
+- **Секреты не проходят аргументами.** `remote`/`remoteSecure`/`s3` не принимают `user`/`password`/ключи;
+  аутентификация — серверная (`<remote_servers>`/named collections), поэтому секреты не попадают в
+  план/лог **по умолчанию**; значения параметров логируются лишь при opt-in `LoggingOptions.LogSensitiveData`
+  (`QueryExecutor.cs:43-49`, `ResultSetEnumerator.cs:193-225`), а URL-аргумент биндится параметром и в
+  план-ключ не входит (значения closure в ключ не входят). Caller-declared `url` может содержать
+  `user:pass@`/presigned-параметры, поэтому доки/guide рекомендуют named collections. Формулировка
+  уточнена 22.09.2026.
+- **`<typeparam name="TRow">` отсутствует** у 7 методов при наличии `<typeparamref name="TRow"/>` (как у
+  `IUnnestRow<T>`); на `CS1591` (в `<NoWarn>` 7 библиотечных `.csproj`) не влияет — для полноты DocFX
+  тег можно добавить. ℹ️.
+
+**Проверка (22.09.2026).** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**;
+`dotnet test tests/nextorm.clickhouse.tests -c Debug` — **193/193**; `grep -n 'format\|merge\|input'
+docs/advanced/limitations.md` — строки отложенных функций присутствуют; `rg --files -g 'PublicAPI*.txt'` — пусто.
 
 ## 4. План работ
 

@@ -132,6 +132,36 @@ internal sealed class ClickHouseTestProvider : ITestProvider
             (2, '2023-01-01 00:01:00', 2),
             (3, '2023-01-01 00:02:00', 3),
             (4, '2023-01-01 00:03:00', 2)
+        """,
+
+        "drop table if exists uint64_entity",
+        """
+        create table uint64_entity
+        (
+            id UInt64,
+            value UInt64,
+            maybe Nullable(UInt64)
+        ) engine = Memory
+        """,
+        """
+        insert into uint64_entity (id, value, maybe) values
+            (1, 18446744073709551615, 18446744073709551615),
+            (2, 0, NULL),
+            (3, 42, 7)
+        """,
+
+        "drop table if exists json_entity",
+        """
+        create table json_entity
+        (
+            id Int32,
+            doc JSON
+        ) engine = Memory
+        """,
+        """
+        insert into json_entity (id, doc) values
+            (1, '{"name":"alice","age":30,"nested":{"x":1}}'),
+            (2, '{"flag":true,"list":[1,2,3]}')
         """
     ];
 }

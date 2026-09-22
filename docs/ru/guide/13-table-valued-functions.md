@@ -412,13 +412,59 @@ from (select toInt64(id) as id, value, name from generateRandom('id UInt64, valu
 limit 3
 ```
 
+В ClickHouse также есть серверные/кластерные табличные функции, предобъявленные как generic-обёртки,
+схему строки для которых объявляет вызывающий. Имена `[Column]` в интерфейсе `TRow` должны совпадать с
+аргументом `structure` (`url`/`s3`/`file`) или с целевой таблицей
+(`remote`/`remoteSecure`/`cluster`/`clusterAllReplicas`):
+
+| `SqlFunctions.ClickHouse.*` | SQL |
+| --- | --- |
+| `url<TRow>(url, format, structure)` | `url(url, format, structure)` |
+| `s3<TRow>(url, format, structure)` | `s3(url, format, structure)` |
+| `file<TRow>(path, format, structure)` | `file(path, format, structure)` |
+| `remote<TRow>(addresses, database, table)` | `remote(addresses, database, table)` |
+| `remote_secure<TRow>(addresses, database, table)` | `remoteSecure(addresses, database, table)` |
+| `cluster<TRow>(cluster, database, table)` | `cluster(cluster, database, table)` |
+| `cluster_all_replicas<TRow>(cluster, database, table)` | `clusterAllReplicas(cluster, database, table)` |
+
+```csharp
+public interface IHitsRow
+{
+    [Column("id")]
+    long Id { get; set; }
+    [Column("name")]
+    string? Name { get; set; }
+}
+
+var hits = dataContext
+    .FromTableFunction(() => SqlFunctions.ClickHouse.url<IHitsRow>(
+        "http://127.0.0.1:12345/", "CSV", "id UInt64, name String"))
+    .Select(r => new { r.Id, r.Name })
+    .ToList();
+```
+
+```sql
+select id as `Id`, name as `Name` from url(@url, @format, @structure) as `t1`
+```
+
+Функции доступны только в ClickHouse
+([`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect.SupportsTableFunction)) и требуют
+соответствующих серверных прав; аутентификация URL/S3/remote — ответственность сервера, поэтому
+предпочитайте named collections или `<remote_servers>`, чтобы секреты не попадали в запрос и его план.
+Табличные функции `format`/`merge`/`input` намеренно **не** предобъявлены: схема `format` может
+выводиться из данных, `merge` берёт её из подлежащих таблиц, а `input` допустима только в `INSERT` —
+для них используйте generic-обёртку `[SqlTableFunction]` (см. выше) или
+[`FromSql`](xref:NextORM.Core.DataContextExtensions).
+
 Сопоставленная функция должна существовать в базе — nextorm только генерирует вызов, он её не создаёт, —
 поэтому используйте хелпер только на провайдере, где она определена. Встроенные хелперы гейтятся
 [`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect): PostgreSQL разрешает `generate_series`, `unnest`,
 `regexp_matches`, `regexp_split_to_table`, `jsonb_array_elements(_text)`, `jsonb_each(_text)`,
 `jsonb_object_keys`, `jsonb_path_query` и `ts_stat`; SQL Server —
-`string_split`/`openjson`, ClickHouse — `numbers`/`numbers_mt`, `zeros`/`zeros_mt` и `generateRandom`, а любой другой
-провайдер отклоняет их с `NotSupportedException` (пользовательская `[SqlTableFunction]` не гейтится).
+`string_split`/`openjson`, ClickHouse — `numbers`/`numbers_mt`, `zeros`/`zeros_mt`, `generateRandom` и
+серверные/кластерные `url`/`s3`/`file`/`remote`/`remoteSecure`/`cluster`/`clusterAllReplicas`, а любой
+другой провайдер отклоняет их с `NotSupportedException` (пользовательская `[SqlTableFunction]` не
+гейтится).
 
 ## Различия между провайдерами
 
@@ -450,4 +496,5 @@ Source: `src/nextorm.core/SqlTableFunctionAttribute.cs:17`, `src/nextorm.core/Da
 `tests/nextorm.core.tests/SqlTableFunctionAttributeTests.cs:8`;
 generated SQL: `tests/nextorm.sqlite.tests/SqlGenerationTests.cs:1453`, `:1462`, `:1475`, `:1489`, `:1503`;
 `tests/nextorm.sqlserver.tests/SqlGenerationTests.cs:1044`, `:1066`, `:1080`, `:1094`;
-`tests/nextorm.postgres.tests/SqlGenerationTests.cs:976`, `:998`, `:1012`, `:1026`.
+`tests/nextorm.postgres.tests/SqlGenerationTests.cs:976`, `:998`, `:1012`, `:1026`, `:1477`;
+`tests/nextorm.clickhouse.tests/SqlGenerationTests.cs:1015`, `:1031`, `:1047`, `:1063`, `:1079`, `:1095`, `:1111`.

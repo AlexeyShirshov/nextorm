@@ -141,6 +141,14 @@ public class ClickHouseDialectTests
     }
 
     [Fact]
+    public void MakeArrayFunction_ShouldCastLengthAndIndexOfToInt64()
+    {
+        Dialect.MakeArrayFunction("length", "length(x)").Should().Be("toInt64(length(x))");
+        Dialect.MakeArrayFunction("indexOf", "indexOf(x, 'a')").Should().Be("toInt64(indexOf(x, 'a'))");
+        Dialect.MakeArrayFunction("arrayStringConcat", "arrayStringConcat(x, ',')").Should().Be("arrayStringConcat(x, ',')");
+    }
+
+    [Fact]
     public void MakeJsonExtract_ShouldMapNamesAndCastLength()
     {
         Dialect.MakeJsonExtract("json_extract_string", ["json", "'s'"]).Should().Be("JSONExtractString(json, 's')");
@@ -158,6 +166,14 @@ public class ClickHouseDialectTests
     }
 
     [Fact]
+    public void MakeJsonExtract_ShouldMapNativeJsonNames()
+    {
+        Dialect.MakeJsonExtract("json_all_paths", ["json"]).Should().Be("JSONAllPaths(json)");
+        Dialect.MakeJsonExtract("json_all_paths_with_types", ["json"]).Should().Be("JSONAllPathsWithTypes(json)");
+        Dialect.MakeJsonExtract("to_json_string", ["x"]).Should().Be("toJSONString(x)");
+    }
+
+    [Fact]
     public void MakeGroupByTotals_ShouldAppendTotals()
     {
         Dialect.MakeGroupByTotals("nullableint").Should().Be("nullableint with totals");
@@ -172,6 +188,16 @@ public class ClickHouseDialectTests
         Dialect.SupportsTableFunction("zeros").Should().BeTrue();
         Dialect.SupportsTableFunction("zeros_mt").Should().BeTrue();
         Dialect.SupportsTableFunction("generateRandom").Should().BeTrue();
+        Dialect.SupportsTableFunction("url").Should().BeTrue();
+        Dialect.SupportsTableFunction("s3").Should().BeTrue();
+        Dialect.SupportsTableFunction("file").Should().BeTrue();
+        Dialect.SupportsTableFunction("remote").Should().BeTrue();
+        Dialect.SupportsTableFunction("remoteSecure").Should().BeTrue();
+        Dialect.SupportsTableFunction("cluster").Should().BeTrue();
+        Dialect.SupportsTableFunction("clusterAllReplicas").Should().BeTrue();
+        Dialect.SupportsTableFunction("merge").Should().BeFalse();
+        Dialect.SupportsTableFunction("format").Should().BeFalse();
+        Dialect.SupportsTableFunction("input").Should().BeFalse();
         Dialect.SupportsTableFunction("generate_series").Should().BeFalse();
     }
 

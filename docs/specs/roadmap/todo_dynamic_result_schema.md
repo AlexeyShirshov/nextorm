@@ -16,7 +16,9 @@
 - Обычные TVF гейтятся `SupportsTableFunction`; динамическая схема — вне модели. TVF-механизм теперь
   умеет `CallClause`/`VerbatimArguments` (см. `docs/guide/13-table-valued-functions.md`), но
   `jsonb_to_record(set)` по-прежнему требует явного описания схемы результата.
-- См. также `todo_clickhouse_server_table_functions.md` (серверные TVF).
+- См. также серверные TVF ClickHouse (уже реализованы с generic-схемой `TRow`):
+  [Table-valued functions](../../guide/13-table-valued-functions.md#built-in-table-functions);
+  `format`/`merge`/`input` остаются здесь.
 
 ## Дизайн (черновик)
 

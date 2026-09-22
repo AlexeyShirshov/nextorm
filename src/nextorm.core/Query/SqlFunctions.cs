@@ -44,7 +44,8 @@ public static partial class SqlFunctions
     /// string-JSON <c>JSONExtract*</c>/<c>visitParamExtract*</c> family plus the JSONPath
     /// <c>json_value</c>/<c>json_query</c>/<c>json_exists</c> scalars, the dictionary functions, the
     /// <c>-If</c> combinator, the distributed <c>global_in</c> predicate and the <c>numbers</c>/<c>numbers_mt</c>
-    /// and <c>zeros</c>/<c>zeros_mt</c> table functions (plus <c>generateRandom</c>), the date conversion/part surface
+    /// and <c>zeros</c>/<c>zeros_mt</c> table functions (plus <c>generateRandom</c> and the server/cluster
+    /// table functions <c>url</c>/<c>s3</c>/<c>file</c>/<c>remote</c>/<c>remoteSecure</c>/<c>cluster</c>/<c>clusterAllReplicas</c>), the date conversion/part surface
     /// (<c>toDate</c>/<c>toDateTime</c>/<c>toDate32</c>, <c>toYear</c>/..., <c>toStartOf*</c>,
     /// <c>toMonday</c>, <c>toYYYYMM</c>/<c>toYYYYMMDD</c>, <c>toUnixTimestamp</c>), as well as the array functions over array
     /// columns (<c>arrayJoin</c>, <c>length</c>, <c>has</c>, <c>indexOf</c>, <c>hasAny</c>/<c>hasAll</c>,

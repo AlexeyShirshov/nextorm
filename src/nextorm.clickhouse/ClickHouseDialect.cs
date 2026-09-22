@@ -57,7 +57,7 @@ public sealed class ClickHouseDialect : SqlDialectBase
 
     /// <summary>
     /// <c>length</c> and <c>indexOf</c> return <c>UInt64</c> natively; cast them to <c>Int64</c> so the
-    /// row reader can materialise the declared CLR integer.
+    /// result matches the declared CLR <c>long</c>.
     /// </summary>
     public override string MakeArrayFunction(string name, string call) =>
         name is "length" or "indexOf" ? $"toInt64({call})" : call;
@@ -162,8 +162,9 @@ public sealed class ClickHouseDialect : SqlDialectBase
     public override bool SupportsJsonExtract => true;
 
     /// <summary>
-    /// ClickHouse spells the string-JSON extractors in camel case; <c>JSONLength</c> returns <c>UInt64</c>,
-    /// which the row reader cannot materialise, so it is cast to <c>Int64</c>.
+    /// ClickHouse spells the string-JSON extractors in camel case and the native-JSON functions as
+    /// <c>JSONAllPaths</c>/<c>JSONAllPathsWithTypes</c>/<c>toJSONString</c>; <c>JSONLength</c> returns
+    /// <c>UInt64</c>, which the row reader cannot materialise, so it is cast to <c>Int64</c>.
     /// </summary>
     public override string MakeJsonExtract(string name, IReadOnlyList<string> args)
     {
@@ -185,6 +186,9 @@ public sealed class ClickHouseDialect : SqlDialectBase
             "json_value" => "JSON_VALUE",
             "json_query" => "JSON_QUERY",
             "json_exists" => "JSON_EXISTS",
+            "json_all_paths" => "JSONAllPaths",
+            "json_all_paths_with_types" => "JSONAllPathsWithTypes",
+            "to_json_string" => "toJSONString",
             _ => name
         };
 
@@ -242,17 +246,23 @@ public sealed class ClickHouseDialect : SqlDialectBase
     /// <summary>The super-aggregate <c>WITH TOTALS</c> is a trailing modifier after the grouping list.</summary>
     public override string MakeGroupByTotals(string grouping) => $"{grouping} with totals";
 
-    /// <summary>ClickHouse provides the <c>numbers</c>/<c>numbers_mt</c>, <c>zeros</c>/<c>zeros_mt</c> and <c>generateRandom</c> table functions.</summary>
+    /// <summary>
+    /// ClickHouse provides the <c>numbers</c>/<c>numbers_mt</c>, <c>zeros</c>/<c>zeros_mt</c> and
+    /// <c>generateRandom</c> table functions plus the server/cluster table functions <c>url</c>,
+    /// <c>s3</c>, <c>file</c>, <c>remote</c>, <c>remoteSecure</c>, <c>cluster</c> and
+    /// <c>clusterAllReplicas</c>.
+    /// </summary>
     public override bool SupportsTableFunction(string name) =>
-        name is "numbers" or "numbers_mt" or "zeros" or "zeros_mt" or "generateRandom";
+        name is "numbers" or "numbers_mt" or "zeros" or "zeros_mt" or "generateRandom"
+            or "url" or "s3" or "file" or "remote" or "remoteSecure" or "cluster" or "clusterAllReplicas";
 
     // The fixed structure the built-in generate_random()/generate_random(seed) map to
     // (ClickHouse's own no-argument generateRandom has a dynamic, random schema).
     private const string GenerateRandomStructure = "'id UInt64, value Float64, name String'";
 
     /// <summary>
-    /// <c>numbers</c>/<c>numbers_mt</c> expose an unsigned <c>UInt64 number</c> column, which the row
-    /// reader cannot materialise; cast it to <c>Int64</c> through a wrapping subquery. The built-in
+    /// <c>numbers</c>/<c>numbers_mt</c> expose an unsigned <c>UInt64 number</c> column; cast it to
+    /// <c>Int64</c> through a wrapping subquery to match <c>INumbersRow.Value</c>. The built-in
     /// <c>generateRandom</c> gets its fixed structure injected here and its <c>id</c> column cast the
     /// same way.
     /// </summary>
@@ -562,7 +572,7 @@ internal sealed class ClickHouseMultiIfRenderer(ClickHouseDialect dialect) : IMu
 
 internal sealed class ClickHouseUniqAggregateRenderer(ClickHouseDialect dialect) : IUniqAggregateRenderer
 {
-    // The uniq* aggregates return UInt64, which the row reader cannot materialise; cast to Int64.
+    // The uniq* aggregates return UInt64; cast to Int64 to match the declared long.
     public string Render(string name, string argument) =>
         $"toInt64({dialect.MakeAggregate(name)}({argument}))";
 }

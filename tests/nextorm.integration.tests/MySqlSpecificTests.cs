@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using FluentAssertions;
 using NextORM.Core;
 
@@ -211,4 +213,59 @@ public sealed class MySqlSpecificTests : ProviderTestSuite
             .First()
             .Should().Be(6);
     }
+
+    [Fact]
+    public void UInt64Columns_ShouldMaterializeAsUlong()
+    {
+        // BIGINT UNSIGNED has no signed CLR counterpart, so it is read through the row reader's
+        // DbDataReader.GetFieldValue<ulong> accessor shared with ClickHouse UInt64.
+        var rows = _sut.DataProvider
+            .From<IMySqlUInt64Entity>()
+            .OrderBy(x => x.Id)
+            .Select(x => new { x.Id, x.Value })
+            .ToList();
+
+        rows.Should().HaveCount(3);
+        rows[0].Id.Should().Be(1UL);
+        rows[0].Value.Should().Be(ulong.MaxValue);
+        rows[2].Value.Should().Be(42UL);
+    }
+
+    [Fact]
+    public void UInt64Projection_ShouldMaterializeValueAboveInt64Max()
+    {
+        var value = _sut.DataProvider
+            .From<IMySqlUInt64Entity>()
+            .OrderByDescending(x => x.Value)
+            .Select(x => x.Value)
+            .First();
+
+        value.Should().Be(ulong.MaxValue);
+    }
+
+    [Fact]
+    public void NullableUInt64_ShouldMaterializeNullAndValue()
+    {
+        var rows = _sut.DataProvider
+            .From<IMySqlUInt64Entity>()
+            .OrderBy(x => x.Id)
+            .Select(x => new { x.Id, x.Maybe })
+            .ToList();
+
+        rows[0].Maybe.Should().Be(ulong.MaxValue);
+        rows[1].Maybe.Should().BeNull();
+        rows[2].Maybe.Should().Be(7UL);
+    }
+}
+
+[SqlTable("uint64_entity")]
+public interface IMySqlUInt64Entity
+{
+    [Key]
+    [Column("id")]
+    ulong Id { get; set; }
+    [Column("value")]
+    ulong Value { get; set; }
+    [Column("maybe")]
+    ulong? Maybe { get; set; }
 }

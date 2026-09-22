@@ -397,19 +397,26 @@ public interface ISqlDialect
     ISequenceAggregateRenderer? SequenceAggregates => null;
 
     /// <summary>
-    /// True when the provider can render the string-JSON functions over JSON stored in a text column:
-    /// the <c>JSONExtract*</c>/<c>JSONHas</c> and <c>visitParamExtract*</c> families
-    /// (<c>ClickHouseFunctions.json_extract_*</c>/<c>visit_param_extract_*</c>) and the JSONPath scalars
+    /// True when the provider can render the JSON functions over JSON stored in a text column or a native
+    /// JSON column: the <c>JSONExtract*</c>/<c>JSONHas</c> and <c>visitParamExtract*</c> families
+    /// (<c>ClickHouseFunctions.json_extract_*</c>/<c>visit_param_extract_*</c>), the JSONPath scalars
     /// <c>JSON_VALUE</c>/<c>JSON_QUERY</c>/<c>JSON_EXISTS</c>
-    /// (<c>ClickHouseFunctions.json_value</c>/<c>json_query</c>/<c>json_exists</c>). This is distinct from
-    /// the PostgreSQL JSON type (<see cref="SupportsJson"/>) and the SQL Server/MySQL text-JSON functions
-    /// (<see cref="SupportsTextJson"/>). The safe default is <c>false</c>; ClickHouse opts in today.
+    /// (<c>ClickHouseFunctions.json_value</c>/<c>json_query</c>/<c>json_exists</c>) and the native-JSON
+    /// functions <c>JSONAllPaths</c>/<c>JSONAllPathsWithTypes</c>/<c>toJSONString</c>
+    /// (<c>ClickHouseFunctions.json_all_paths</c>/<c>json_all_paths_with_types</c>/<c>to_json_string</c>).
+    /// The native-JSON functions require a native <c>JSON</c>-valued argument (a <c>String</c> column needs
+    /// <c>CAST(col AS JSON)</c>); <c>JSONAllPathsWithTypes</c> returns <c>Map(String, String)</c>, surfaced
+    /// as a <see cref="System.Collections.Generic.Dictionary{TKey, TValue}"/>.
+    /// This is distinct from the PostgreSQL JSON type (<see cref="SupportsJson"/>) and the SQL
+    /// Server/MySQL text-JSON functions (<see cref="SupportsTextJson"/>). The safe default is
+    /// <c>false</c>; ClickHouse opts in today.
     /// </summary>
     bool SupportsJsonExtract { get; }
     /// <summary>
-    /// Renders a ClickHouse string-JSON function over the already-rendered <paramref name="args"/>: the
-    /// <c>JSONExtract*</c>/<c>visitParamExtract*</c> family and the JSONPath scalars
-    /// (<c>JSON_VALUE</c>/<c>JSON_QUERY</c>/<c>JSON_EXISTS</c>). Only called when
+    /// Renders a ClickHouse JSON function over the already-rendered <paramref name="args"/>: the
+    /// <c>JSONExtract*</c>/<c>visitParamExtract*</c> family, the JSONPath scalars
+    /// (<c>JSON_VALUE</c>/<c>JSON_QUERY</c>/<c>JSON_EXISTS</c>) and the native-JSON functions
+    /// (<c>JSONAllPaths</c>/<c>JSONAllPathsWithTypes</c>/<c>toJSONString</c>). Only called when
     /// <see cref="SupportsJsonExtract"/> is <c>true</c>. The default renders
     /// <c>name(arg1, arg2, ...)</c>; ClickHouse maps the snake_case name to its native spelling and
     /// casts the unsigned results it cannot materialise.

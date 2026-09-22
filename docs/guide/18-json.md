@@ -22,10 +22,13 @@ feature:
 * **ClickHouse** maps its string-JSON extractors (`JSONExtractString`, `JSONExtractInt`,
   `JSONExtractFloat`, `JSONExtractBool`, `JSONExtractRaw`, `JSONHas`, `JSONLength`, `JSONType`) and the
   flat-JSON fast path (`visitParamExtractString`/`Int`/`Float`/`Bool`/`Raw`) through
-  [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract), and its JSONPath scalars
-  `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (written as `json_value`/`json_query`/`json_exists`) through
-  the same flag; its native `JSON` type is
-  not mapped yet.
+  [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract), its JSONPath scalars
+  `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (written as `json_value`/`json_query`/`json_exists`) and its
+  native-JSON functions `JSONAllPaths`/`JSONAllPathsWithTypes`/`toJSONString` (written as
+  `json_all_paths`/`json_all_paths_with_types`/`to_json_string`) through the same flag. These take a
+  native `JSON` value (`CAST(col AS JSON)` for a `String` column); `JSONAllPaths` projects as `string[]`
+  and `JSONAllPathsWithTypes` as `Map(String, String)` → `Dictionary<string, string>`. A native `JSON`
+  *column* is still not mapped (the driver returns it as `System.Text.Json.Nodes.JsonObject`).
 * **SQLite** does not expose any JSON construct. The database has JSON1, but nextorm does not map it
   yet, so building the SQL throws `NotSupportedException`.
 
@@ -41,7 +44,7 @@ section for your provider; the [provider matrix](#provider-matrix) and
 | PostgreSQL | No | Supported ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson)) | No | No |
 | SQLite | No | No | No | No |
 | MySQL / MariaDB | No | Not exposed | Supported ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) | No |
-| ClickHouse | No | Not exposed | String JSON + JSONPath scalars ([`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract)) | No |
+| ClickHouse | No | Not exposed | String JSON + JSONPath scalars + native-JSON functions (`JSONAllPaths`/`JSONAllPathsWithTypes`/`toJSONString`; [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract)) | No |
 | In-memory | Not applicable (no SQL) | Not applicable | Not applicable | Not applicable |
 
 "No" means the command is rejected with `NotSupportedException` when its SQL is built, not that the
@@ -295,9 +298,14 @@ The construction and aggregation functions return `string?`; deserialize with
 * The PostgreSQL `json`/`jsonb` surface (`SqlFunctions.Postgres`) requires [`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson);
   the SQL Server and MySQL/MariaDB text functions require
   [`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson). Each throws on the other provider.
-* ClickHouse's string-JSON extractors (`JSONExtract*`/`visitParamExtract*`) require
-  [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract); they do not overlap with the
-  `SupportsTextJson` set.
+* ClickHouse's JSON surface (`JSONExtract*`/`visitParamExtract*`, the JSONPath scalars and the
+  native-JSON `JSONAllPaths`/`JSONAllPathsWithTypes`/`toJSONString`) requires
+  [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract); it does not overlap with the
+  `SupportsTextJson` set. The native-JSON functions take a native `JSON` value (cast a `String` column
+  with `CAST(col AS JSON)`); `json_all_paths` projects as `string[]` and `json_all_paths_with_types` as
+  `Dictionary<string, string>` (`mapKeys`/`mapValues` turn the map into a collection). A native `JSON`
+  *column* is not mapped yet: the driver returns it as `System.Text.Json.Nodes.JsonObject`, so project
+  JSON through a `String` column or cast it in SQL.
 * SQLite has JSON features in the database, but nextorm does not expose them yet; SQLite's JSON1
   extension is likewise not mapped.
 * The in-memory provider produces no SQL, so `ForJson`/`ForXml` and the JSON function surfaces do not

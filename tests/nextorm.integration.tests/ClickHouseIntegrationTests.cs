@@ -786,6 +786,97 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
         rows.Should().ContainSingle();
         rows[0].Tag.Should().BeNullOrEmpty();
     }
+
+    [Fact]
+    public void UInt64Columns_ShouldMaterializeAsUlong()
+    {
+        var rows = _sut.DataProvider
+            .From<IUInt64Entity>()
+            .OrderBy(x => x.Id)
+            .Select(x => new { x.Id, x.Value })
+            .ToList();
+
+        rows.Should().HaveCount(3);
+        rows[0].Id.Should().Be(1UL);
+        rows[0].Value.Should().Be(ulong.MaxValue);
+        rows[2].Value.Should().Be(42UL);
+    }
+
+    [Fact]
+    public void UInt64Projection_ShouldMaterializeValueAboveInt64Max()
+    {
+        var value = _sut.DataProvider
+            .From<IUInt64Entity>()
+            .OrderByDescending(x => x.Value)
+            .Select(x => x.Value)
+            .First();
+
+        value.Should().Be(ulong.MaxValue);
+    }
+
+    [Fact]
+    public void NullableUInt64_ShouldMaterializeNullAndValue()
+    {
+        var rows = _sut.DataProvider
+            .From<IUInt64Entity>()
+            .OrderBy(x => x.Id)
+            .Select(x => new { x.Id, x.Maybe })
+            .ToList();
+
+        rows[0].Maybe.Should().Be(ulong.MaxValue);
+        rows[1].Maybe.Should().BeNull();
+        rows[2].Maybe.Should().Be(7UL);
+    }
+
+    [Fact]
+    public void JsonAllPaths_ShouldProjectNativeJsonPaths()
+    {
+        var r = _sut.DataProvider
+            .From<IJsonEntity>()
+            .Where(x => x.Id == 1)
+            .Select(x => new { Paths = SqlFunctions.ClickHouse.json_all_paths(x.Doc) })
+            .First();
+
+        r.Paths.Should().Contain("name").And.Contain("age").And.Contain("nested.x");
+    }
+
+    [Fact]
+    public void JsonAllPathsWithTypes_ShouldProjectNativeJsonMap()
+    {
+        var r = _sut.DataProvider
+            .From<IJsonEntity>()
+            .Where(x => x.Id == 1)
+            .Select(x => new { Typed = SqlFunctions.ClickHouse.json_all_paths_with_types(x.Doc) })
+            .First();
+
+        r.Typed.Should().NotBeEmpty();
+        r.Typed.Should().ContainKey("name");
+        r.Typed["name"].Should().Be("String");
+    }
+
+    [Fact]
+    public void ToJsonString_ShouldSerialiseNativeJson()
+    {
+        var r = _sut.DataProvider
+            .From<IJsonEntity>()
+            .Where(x => x.Id == 1)
+            .Select(x => new { Text = SqlFunctions.ClickHouse.to_json_string(x.Doc) })
+            .First();
+
+        r.Text.Should().NotBeNull().And.Contain("\"name\"").And.Contain("alice");
+    }
+}
+
+[SqlTable("uint64_entity")]
+public interface IUInt64Entity
+{
+    [Key]
+    [Column("id")]
+    ulong Id { get; set; }
+    [Column("value")]
+    ulong Value { get; set; }
+    [Column("maybe")]
+    ulong? Maybe { get; set; }
 }
 
 [SqlTable("event_entity")]
@@ -798,4 +889,14 @@ public interface IEventEntity
     DateTime Timestamp { get; set; }
     [Column("event")]
     int Event { get; set; }
+}
+
+[SqlTable("json_entity")]
+public interface IJsonEntity
+{
+    [Key]
+    [Column("id")]
+    int Id { get; set; }
+    [Column("doc")]
+    string Doc { get; set; }
 }

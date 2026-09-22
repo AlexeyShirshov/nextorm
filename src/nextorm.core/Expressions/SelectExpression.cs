@@ -1,4 +1,5 @@
 using System.Data;
+using System.Data.Common;
 using System.Linq.Expressions;
 using System.Reflection;
 
@@ -56,6 +57,7 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
     private readonly static MethodInfo GetInt16MI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetInt16))!;
     private readonly static MethodInfo GetByteMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetByte))!;
     private readonly static MethodInfo GetGuidMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetGuid))!;
+    private readonly static MethodInfo GetFieldValueMI = typeof(DbDataReader).GetMethod(nameof(DbDataReader.GetFieldValue))!;
     private readonly static MethodInfo GetValueMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.GetValue))!;
     // internal int XxHash32;
     internal int PlanHashCode;
@@ -108,6 +110,10 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
         {
             return GetGuidMI;
         }
+        else if (_realType == typeof(ulong))
+        {
+            return GetFieldValueMI.MakeGenericMethod(typeof(ulong));
+        }
         else if (_realType == typeof(byte[]))
         {
             // Binary columns (bytea/varbinary/blob) have no typed reader getter; read the value
@@ -118,6 +124,12 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
         {
             // PostgreSQL text[] columns (for example regexp_matches) have no typed reader getter;
             // read the value through GetValue and let the caller cast it to string[].
+            return GetValueMI;
+        }
+        else if (_realType == typeof(Dictionary<string, string>))
+        {
+            // A native ClickHouse Map(String, String) has no typed reader getter; read the value
+            // through GetValue and let the caller cast it to Dictionary<string, string>.
             return GetValueMI;
         }
         else
