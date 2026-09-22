@@ -485,8 +485,8 @@ public interface ISqlDialect
 
     /// <summary>
     /// True when the provider can render the ClickHouse dictionary functions
-    /// (<c>dictGet</c>/<c>dictGetOrDefault</c>/<c>dictHas</c>). The safe default is <c>false</c>;
-    /// ClickHouse opts in today.
+    /// (<c>dictGet</c>/<c>dictGetOrDefault</c>/<c>dictHas</c>/<c>dictGetHierarchy</c>/<c>dictGetChildren</c>/<c>dictIsIn</c>).
+    /// The safe default is <c>false</c>; ClickHouse opts in today.
     /// </summary>
     bool SupportsDictionaries { get; }
     /// <summary>

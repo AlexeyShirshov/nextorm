@@ -309,6 +309,28 @@ namespace NextORM.Core;
         public bool dict_has<TKey>(string? dict, TKey? id) => default!;
 
         /// <summary>
+        /// <c>dictGetHierarchy('dict', key)</c>: the key and all its parents in a hierarchical dictionary,
+        /// from the key up to the root. Requires a provider that supports dictionaries (see
+        /// <see cref="ISqlDialect.SupportsDictionaries"/>; ClickHouse).
+        /// </summary>
+        public ulong[] dict_get_hierarchy<TKey>(string? dict, TKey? id) => default!;
+
+        /// <summary>
+        /// <c>dictGetChildren('dict', key)</c>: the first-level children of <paramref name="id"/> in a
+        /// hierarchical dictionary. Requires a provider that supports dictionaries (see
+        /// <see cref="ISqlDialect.SupportsDictionaries"/>; ClickHouse).
+        /// </summary>
+        public ulong[] dict_get_children<TKey>(string? dict, TKey? id) => default!;
+
+        /// <summary>
+        /// <c>dictIsIn('dict', child, ancestor)</c>: true when <paramref name="childId"/> is
+        /// <paramref name="ancestorId"/> or a descendant of it in a hierarchical dictionary. Requires a
+        /// provider that supports dictionaries (see <see cref="ISqlDialect.SupportsDictionaries"/>;
+        /// ClickHouse).
+        /// </summary>
+        public bool dict_is_in<TKey>(string? dict, TKey? childId, TKey? ancestorId) => default!;
+
+        /// <summary>
         /// <c>column GLOBAL IN (subquery)</c>: like <c>IN</c>, but the right-hand result is sent to every
         /// node of a distributed cluster. Requires a provider that supports it (see
         /// <see cref="ISqlDialect.SupportsGlobalPredicates"/>; ClickHouse). Negate with C# <c>!</c> for

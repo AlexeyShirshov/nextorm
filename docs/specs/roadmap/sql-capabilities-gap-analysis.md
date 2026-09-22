@@ -175,8 +175,11 @@ Ordered by impact on real query authoring. Per-feature details and owners live i
    JSON functions `JSONExtractKeys`/`JSONExtractArrayRaw` (as `string[]`) and `JSONExtractKeysAndValues`
    (as `Tuple<string, T>[]`) are exposed as
    [`ClickHouseFunctions.json_extract_keys`](xref:NextORM.Core.ClickHouseFunctions.json_extract_keys)/`json_extract_array_raw`/`json_extract_keys_and_values`.
+   The hierarchical dictionary functions `dictGetHierarchy`/`dictGetChildren` (as `ulong[]`) and
+   `dictIsIn` (as `bool`) are exposed as
+   [`ClickHouseFunctions.dict_get_hierarchy`](xref:NextORM.Core.ClickHouseFunctions.dict_get_hierarchy)/`dict_get_children`/`dict_is_in`.
    Still open on this item: `untuple` (changes the column
-   set, not a scalar value) and `dictGetHierarchy`/`dictGetChildren`/`dictIsIn`.
+   set, not a scalar value).
    Shipped: [ClickHouse provider](../../providers/clickhouse.md),
    [Provider-specific SQL](../../guide/provider-specific/clickhouse.md#aggregates),
    [Grouping and aggregates](../../guide/04-grouping-and-aggregates.md),

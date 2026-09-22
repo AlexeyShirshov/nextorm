@@ -348,8 +348,43 @@ subsequence). Проверено по документации провайде�
 - Доки EN+RU: `docs/guide/18-json.md` (+RU), `docs/guide/provider-specific/clickhouse.md` (+RU),
   `docs/providers/clickhouse.md` (+RU), `docs/advanced/api-reference.md` (+RU); gap-analysis §4 п.4.
 
+### Срез 7 (gap §4 п.4 остаток): иерархические dictionary-функции — `dictGetHierarchy`/`dictGetChildren`/`dictIsIn`
+
+**Статус: готово.**
+
+#### Матрица «провайдер × форма» — иерархия словаря
+
+| Провайдер | Форма | Источник |
+| --- | --- | --- |
+| PostgreSQL | — (нет dictionaries, эквивалент — рекурсивный `WITH RECURSIVE`, другой контракт) | https://www.postgresql.org/docs/current/queries-with.html |
+| SQL Server | — | https://learn.microsoft.com/sql/t-sql/queries/with-common-table-expression-transact-sql |
+| MySQL | — | https://dev.mysql.com/doc/refman/8.4/en/with.html |
+| MariaDB | — | https://mariadb.com/kb/en/with/ |
+| SQLite | — (`WITH RECURSIVE` вручную, не функция) | https://www.sqlite.org/lang_with.html |
+| ClickHouse | `dictGetHierarchy('d', key)` → `Array(UInt64)`; `dictGetChildren('d', key)` → `Array(UInt64)`; `dictIsIn('d', child, ancestor)` → `UInt8` — проверено `clickhouse-local` на 25.8 | https://clickhouse.com/docs/en/sql-reference/functions/ext-dict-functions |
+| InMemory | — (поверхность ClickHouse-only) | — |
+
+#### Единообразие провайдеров (решение)
+
+- Фича ClickHouse-only и продолжает уже подключённое семейство `dictGet`/`dictGetOrDefault`/`dictHas`
+  (гейт `SupportsDictionaries`); нового флага не вводится. Tier (b): provider-методы на
+  `ClickHouseFunctions`, ветки в `DictionarySqlTranslator`, маппинг имён в
+  `ClickHouseDialect.MakeDictionaryFunction`.
+- Публичный API: `ulong[] dict_get_hierarchy<TKey>(string?, TKey?)`,
+  `ulong[] dict_get_children<TKey>(string?, TKey?)`, `bool dict_is_in<TKey>(string?, TKey?, TKey?)`.
+  Иерархия всегда `Array(UInt64)` независимо от типа ключа (проверено на 25.8), поэтому возврат
+  `ulong[]`; `dictIsIn` — `UInt8` → `bool`.
+- Материализация: `Array(UInt64)` → `ulong[]` — существующая array-ветка row reader (срез 1);
+  `UInt8` → `bool` — существующая ветка. Интеграционный тест недоступен: нужен `CREATE DICTIONARY`
+  с атрибутом `HIERARCHICAL` (у остальных `dictGet*` интеграционных тестов тоже нет), поэтому
+  проверка — SQL-gen + rejection.
+- Тест-план: SQL-gen clickhouse `HierarchicalDictFunctions_ShouldUseClickHouseNames`; rejection
+  postgres — расширен `DictFunctions_ShouldThrowBecausePostgresHasNoDictionaries`; unit
+  `ClickHouseDialectTests` для маппинга имён.
+- Доки EN+RU: `docs/guide/provider-specific/clickhouse.md` (+RU), `docs/providers/clickhouse.md`
+  (+RU), `docs/advanced/api-reference.md` (+RU); gap-analysis §4 п.4; `API-NAMING-REVIEW.md`.
+
 ### Прочее
-- `dictGetHierarchy`/`dictGetChildren`/`dictIsIn`.
 - `untuple` (меняет набор колонок; не скаляр).
 - Привязка элемента для нескольких массивов/join’ов.
 

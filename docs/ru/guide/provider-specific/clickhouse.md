@@ -177,7 +177,8 @@ MySQL и MariaDB) и `corr`/`covar*` — документированы на т�
   `JSONAllPathsWithTypes`; первая проецируется как `string[]`, нативный `Map(String, String)` второй —
   как `Dictionary<string, string>`; обе принимают нативное значение `JSON`) и `to_json_string`
   (`toJSONString`);
-* словарные функции `dict_get`/`dict_get_or_default`/`dict_has` (нужен настроенный
+* словарные функции `dict_get`/`dict_get_or_default`/`dict_has` и иерархические
+  `dict_get_hierarchy`/`dict_get_children`/`dict_is_in` (нужен настроенный
   `CREATE DICTIONARY`);
 * функции массивов `length`/`has`/`index_of`/`has_any`/`has_all`/`starts_with`/`ends_with`/
   `has_substr`/`array_string_concat`/`split_by_char`/`array_sort`/`array_reverse`/`array_distinct`/

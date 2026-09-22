@@ -4,7 +4,8 @@ namespace NextORM.Core;
 
 /// <summary>
 /// Translates the dictionary surface of <see cref="ClickHouseFunctions"/> (<c>dict_get</c>,
-/// <c>dict_get_or_default</c>, <c>dict_has</c>). Only a dialect that opts in with
+/// <c>dict_get_or_default</c>, <c>dict_has</c>, <c>dict_get_hierarchy</c>, <c>dict_get_children</c>,
+/// <c>dict_is_in</c>). Only a dialect that opts in with
 /// <see cref="ISqlDialect.SupportsDictionaries"/> (ClickHouse) may use these constructs; every other
 /// provider rejects them with a clear message.
 /// </summary>
@@ -27,6 +28,15 @@ internal static class DictionarySqlTranslator
             case nameof(ClickHouseFunctions.dict_has) when node.Arguments.Count == 2:
                 EmitFunction(visitor, node, "dict_has");
                 return true;
+            case nameof(ClickHouseFunctions.dict_get_hierarchy) when node.Arguments.Count == 2:
+                EmitFunction(visitor, node, "dict_get_hierarchy");
+                return true;
+            case nameof(ClickHouseFunctions.dict_get_children) when node.Arguments.Count == 2:
+                EmitFunction(visitor, node, "dict_get_children");
+                return true;
+            case nameof(ClickHouseFunctions.dict_is_in) when node.Arguments.Count == 3:
+                EmitFunction(visitor, node, "dict_is_in");
+                return true;
             default:
                 return false;
         }
@@ -35,7 +45,7 @@ internal static class DictionarySqlTranslator
     private static void EmitFunction(BaseExpressionVisitor visitor, MethodCallExpression node, string name)
     {
         if (!visitor.Dialect.SupportsDictionaries)
-            throw new NotSupportedException("The dictionary functions (dictGet/dictGetOrDefault/dictHas) are not supported by this provider.");
+            throw new NotSupportedException("The dictionary functions (dictGet, dictGetOrDefault, dictHas, dictGetHierarchy, dictGetChildren, dictIsIn) are not supported by this provider.");
 
         var args = node.Arguments;
 

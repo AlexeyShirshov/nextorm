@@ -175,7 +175,8 @@ See [Grouping and aggregates](../04-grouping-and-aggregates.md).
   `JSONAllPathsWithTypes`; the former projects as `string[]`, the latter's native `Map(String, String)`
   as `Dictionary<string, string>`; both take a native `JSON` value) and `to_json_string`
   (`toJSONString`);
-* dictionary lookups `dict_get`/`dict_get_or_default`/`dict_has` (need a configured `CREATE DICTIONARY`);
+* dictionary lookups `dict_get`/`dict_get_or_default`/`dict_has` and the hierarchy
+  `dict_get_hierarchy`/`dict_get_children`/`dict_is_in` (need a configured `CREATE DICTIONARY`);
 * array functions `length`/`has`/`index_of`/`has_any`/`has_all`/`starts_with`/`ends_with`/`has_substr`/
   `array_string_concat`/`split_by_char`/`array_sort`/`array_reverse`/`array_distinct`/`range`/
   `array_enumerate`/`array_cum_sum`/`array_slice`/`array_push_back`;

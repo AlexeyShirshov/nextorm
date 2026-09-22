@@ -67,7 +67,8 @@ ADO.NET-провайдер `ClickHouse.Driver`. Он создаёт `ClickHouseC
   `json_all_paths_with_types`/`to_json_string` — как `JSONAllPaths`/`JSONAllPathsWithTypes`/`toJSONString`
   (тот же гейт [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract));
   функции словарей `dict_get`/`dict_get_or_default`/
-  `dict_has` — как `dictGet`/`dictGetOrDefault`/`dictHas`;
+  `dict_has`/`dict_get_hierarchy`/`dict_get_children`/`dict_is_in` — как
+  `dictGet`/`dictGetOrDefault`/`dictHas`/`dictGetHierarchy`/`dictGetChildren`/`dictIsIn`;
 - модификатор супер-агрегации `GROUP BY ... WITH TOTALS` ([`SupportsGroupByWithTotals`](xref:NextORM.Core.ISqlDialect.SupportsGroupByWithTotals))
   через `EntityBuilder.WithTotals()`;
 - `LIMIT n BY expr` ([`LimitBy`](xref:NextORM.Core.ISqlDialect.LimitBy)) через
@@ -177,7 +178,7 @@ select concat('id:', id) as `Label` from simple_entity
 | Оконные функции | `percent_rank()`, `cume_dist()`, `nth_value(expr, n)` поддерживаются; `lag_in_frame`/`lead_in_frame` → `lagInFrame`/`leadInFrame` (учитывают фрейм; обычные `lag`/`lead` на ClickHouse отвергают явный фрейм) |
 | Строковый JSON | `JSONExtractString`, `JSONExtractInt`, `JSONExtractFloat`, `JSONExtractBool`, `JSONExtractRaw`, `JSONHas`, `toInt64(JSONLength(...))`, `JSONType`, `JSONExtractKeys`/`JSONExtractArrayRaw` (`string[]`), `JSONExtractKeysAndValues` (`Tuple<string, T>[]`), `visitParamExtract*`, `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (JSONPath) |
 | Функции нативного JSON | `json_all_paths` → `JSONAllPaths` (проецируется как `string[]`), `json_all_paths_with_types` → `JSONAllPathsWithTypes` (нативный `Map(String, String)` отдаётся как `Dictionary<string, string>`; мост к коллекции — `mapKeys`/`mapValues`), `to_json_string` → `toJSONString`; все принимают нативное значение `JSON` (`CAST(col AS JSON)` для колонки `String`); сам нативный *тип колонки* `JSON` не замаплен |
-| Словари | `dictGet`, `dictGetOrDefault`, `dictHas` (нужен сконфигурированный `CREATE DICTIONARY`) |
+| Словари | `dictGet`, `dictGetOrDefault`, `dictHas`, `dictGetHierarchy`, `dictGetChildren`, `dictIsIn` (нужен сконфигурированный `CREATE DICTIONARY`) |
 | Session/info-функции | `currentUser()`, `currentDatabase()`, `version()` (`session_user`/`current_schema` недоступны) |
 | `GROUP BY ... WITH TOTALS` | `with totals` (отдельная строка итогов не отдаётся `ClickHouse.Driver`) |
 | `LIMIT n BY expr` | `limit [offset, ]n by col1, col2` (перед финальным `LIMIT`) |

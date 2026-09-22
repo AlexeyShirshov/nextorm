@@ -1170,6 +1170,42 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void HierarchicalDictFunctions_ShouldUseClickHouseNames()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            H = SqlFunctions.ClickHouse.dict_get_hierarchy<long>("dict", x.Id),
+            C = SqlFunctions.ClickHouse.dict_get_children<long>("dict", x.Id),
+            I = SqlFunctions.ClickHouse.dict_is_in<long>("dict", x.Id, 3L)
+        }));
+
+        sql.Should().Contain("dictGetHierarchy('dict', id)");
+        sql.Should().Contain("dictGetChildren('dict', id)");
+        sql.Should().Contain("dictIsIn('dict', id, 3)");
+    }
+
+    [Fact]
+    public void HierarchicalDictFunctions_WithCapturedDict_ShouldRefreshParamsOnCachedPlan()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        var dict = "dict";
+
+        QueryCommand<ulong[]> Build() => e.Select(x => SqlFunctions.ClickHouse.dict_get_hierarchy<long>(dict, x.Id));
+
+        _ = ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
+        dict = "dict2";
+        var second = (DbPreparedQueryCommand<ulong[]>)ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
+
+        Normalize(second.DbCommand.CommandText).Should().Contain("dictGetHierarchy(@dict, id)");
+        second.DbCommand.Parameters.Count.Should().Be(1);
+        second.DbCommand.Parameters["dict"].Value.Should().Be("dict2");
+    }
+
+    [Fact]
     public void IfAggregates_ShouldUseIfCombinators()
     {
         using var ctx = ClickHouseTestContext.Create();

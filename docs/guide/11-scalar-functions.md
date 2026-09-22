@@ -28,7 +28,7 @@ scalar library, the PostgreSQL-only aggregates and the `generate_series`/`unnest
 [`ClickHouse`](xref:NextORM.Core.SqlFunctions.ClickHouse) (ClickHouse: `arg_min`/`arg_max`, the `-If` combinator, the string-JSON
 `JSONExtract*` family, the flat-JSON `visitParamExtract*` fast path, the JSONPath scalars
 `json_value`/`json_query`/`json_exists` and the dictionary functions
-`dict_get`/`dict_get_or_default`/`dict_has`). Calling one of them on a
+`dict_get`/`dict_get_or_default`/`dict_has`/`dict_get_hierarchy`/`dict_get_children`/`dict_is_in`). Calling one of them on a
 provider that does not opt in throws `NotSupportedException`.
 
 ## String functions

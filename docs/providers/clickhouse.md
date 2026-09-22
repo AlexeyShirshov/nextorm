@@ -67,7 +67,8 @@ and returns [`Instance`](xref:NextORM.ClickHouse.ClickHouseDialect.Instance) fro
   `json_all_paths_with_types`/`to_json_string` as `JSONAllPaths`/`JSONAllPathsWithTypes`/`toJSONString`
   (same [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract) gate);
   the dictionary functions `dict_get`/`dict_get_or_default`/
-  `dict_has` as `dictGet`/`dictGetOrDefault`/`dictHas`;
+  `dict_has`/`dict_get_hierarchy`/`dict_get_children`/`dict_is_in` as
+  `dictGet`/`dictGetOrDefault`/`dictHas`/`dictGetHierarchy`/`dictGetChildren`/`dictIsIn`;
 - the super-aggregate `GROUP BY ... WITH TOTALS` modifier ([`SupportsGroupByWithTotals`](xref:NextORM.Core.ISqlDialect.SupportsGroupByWithTotals))
   via `EntityBuilder.WithTotals()`;
 - ClickHouse type names in casts (`Int32`, `Int64`, `Float64`, `Decimal(38, 10)`, …);
@@ -175,7 +176,7 @@ select concat('id:', id) as `Label` from simple_entity
 | Window functions | `percent_rank()`, `cume_dist()`, `nth_value(expr, n)` supported; `lag_in_frame`/`lead_in_frame` → `lagInFrame`/`leadInFrame` (frame-respecting; the plain `lag`/`lead` reject an explicit frame on ClickHouse) |
 | String JSON | `JSONExtractString`, `JSONExtractInt`, `JSONExtractFloat`, `JSONExtractBool`, `JSONExtractRaw`, `JSONHas`, `toInt64(JSONLength(...))`, `JSONType`, `JSONExtractKeys`/`JSONExtractArrayRaw` (`string[]`), `JSONExtractKeysAndValues` (`Tuple<string, T>[]`), `visitParamExtract*`, `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (JSONPath) |
 | Native JSON functions | `json_all_paths` → `JSONAllPaths` (projects as `string[]`), `json_all_paths_with_types` → `JSONAllPathsWithTypes` (native `Map(String, String)` surfaced as `Dictionary<string, string>`; `mapKeys`/`mapValues` bridge to a collection), `to_json_string` → `toJSONString`; all take a native `JSON` value (`CAST(col AS JSON)` for a `String` column), while the native `JSON` *column type* itself is not mapped |
-| Dictionaries | `dictGet`, `dictGetOrDefault`, `dictHas` (needs a configured `CREATE DICTIONARY`) |
+| Dictionaries | `dictGet`, `dictGetOrDefault`, `dictHas`, `dictGetHierarchy`, `dictGetChildren`, `dictIsIn` (needs a configured `CREATE DICTIONARY`) |
 | Session/info functions | `currentUser()`, `currentDatabase()`, `version()` (`session_user`/`current_schema` are not available) |
 | `GROUP BY ... WITH TOTALS` | `with totals` (the extra totals row is not surfaced by `ClickHouse.Driver`) |
 | `LIMIT n BY expr` | `limit [offset, ]n by col1, col2` (before the final `LIMIT`) |

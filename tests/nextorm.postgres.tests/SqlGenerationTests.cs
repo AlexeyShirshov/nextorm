@@ -1871,7 +1871,10 @@ public class SqlGenerationTests
         [
             () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.dict_get<string, long>("d", "a", x.Id) })),
             () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.dict_get_or_default<string, long>("d", "a", x.Id, "n/a") })),
-            () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.dict_has<long>("d", x.Id) }))
+            () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.dict_has<long>("d", x.Id) })),
+            () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.dict_get_hierarchy<long>("d", x.Id) })),
+            () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.dict_get_children<long>("d", x.Id) })),
+            () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.dict_is_in<long>("d", x.Id, 3L) }))
         ];
 
         foreach (var act in acts)

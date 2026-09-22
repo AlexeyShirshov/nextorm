@@ -228,7 +228,7 @@ public sealed class ClickHouseDialect : SqlDialectBase
     /// <summary>ClickHouse renders both UUID generators.</summary>
     public override IUuidGenerators UuidGenerators => ClickHouseUuidGenerators.Instance;
 
-    /// <summary>ClickHouse implements the dictionary functions <c>dictGet</c>/<c>dictGetOrDefault</c>/<c>dictHas</c>.</summary>
+    /// <summary>ClickHouse implements the dictionary functions <c>dictGet</c>/<c>dictGetOrDefault</c>/<c>dictHas</c>/<c>dictGetHierarchy</c>/<c>dictGetChildren</c>/<c>dictIsIn</c>.</summary>
     public override bool SupportsDictionaries => true;
 
     /// <summary>ClickHouse spells the dictionary functions in camel case.</summary>
@@ -239,6 +239,9 @@ public sealed class ClickHouseDialect : SqlDialectBase
             "dict_get" => "dictGet",
             "dict_get_or_default" => "dictGetOrDefault",
             "dict_has" => "dictHas",
+            "dict_get_hierarchy" => "dictGetHierarchy",
+            "dict_get_children" => "dictGetChildren",
+            "dict_is_in" => "dictIsIn",
             _ => name
         };
 

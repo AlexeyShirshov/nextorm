@@ -251,6 +251,9 @@ public class ClickHouseDialectTests
         Dialect.MakeDictionaryFunction("dict_get", ["'d'", "'a'", "id"]).Should().Be("dictGet('d', 'a', id)");
         Dialect.MakeDictionaryFunction("dict_get_or_default", ["'d'", "'a'", "id", "0"]).Should().Be("dictGetOrDefault('d', 'a', id, 0)");
         Dialect.MakeDictionaryFunction("dict_has", ["'d'", "id"]).Should().Be("dictHas('d', id)");
+        Dialect.MakeDictionaryFunction("dict_get_hierarchy", ["'d'", "id"]).Should().Be("dictGetHierarchy('d', id)");
+        Dialect.MakeDictionaryFunction("dict_get_children", ["'d'", "id"]).Should().Be("dictGetChildren('d', id)");
+        Dialect.MakeDictionaryFunction("dict_is_in", ["'d'", "child", "ancestor"]).Should().Be("dictIsIn('d', child, ancestor)");
     }
 
     [Fact]
