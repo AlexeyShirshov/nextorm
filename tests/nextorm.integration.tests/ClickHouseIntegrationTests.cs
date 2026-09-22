@@ -865,6 +865,88 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
 
         r.Text.Should().NotBeNull().And.Contain("\"name\"").And.Contain("alice");
     }
+
+    [Fact]
+    public void ArrayColumns_ShouldProjectDirectly()
+    {
+        var r = _sut.ArrayEntity
+            .Where(x => x.Id == 1)
+            .Select(x => new { x.Tags, x.Nums })
+            .First();
+
+        r.Tags.Should().Equal("a", "b", "c");
+        r.Nums.Should().Equal(3, 1, 2);
+    }
+
+    [Fact]
+    public void ArrayExpression_ShouldProjectWithoutWrapper()
+    {
+        var sorted = _sut.ArrayEntity
+            .Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.ClickHouse.array_sort(x.Nums))
+            .First();
+
+        sorted.Should().Equal(1, 2, 3);
+    }
+
+    [Fact]
+    public void NestedArrayExpression_ShouldProjectWithoutWrapper()
+    {
+        var r = _sut.ArrayEntity
+            .Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.ClickHouse.array_push_back(
+                SqlFunctions.ClickHouse.array_reverse(x.Nums), 9))
+            .First();
+
+        r.Should().Equal(2, 1, 3, 9);
+    }
+
+    [Fact]
+    public void GroupArray_ShouldMaterialiseArrayAggregate()
+    {
+        var ids = _sut.ArrayEntity
+            .Select(x => SqlFunctions.ClickHouse.array_sort(
+                SqlFunctions.ClickHouse.group_array(x.Id)))
+            .First();
+
+        ids.Should().Equal(1, 2, 3);
+    }
+
+    [Fact]
+    public void GroupUniqArray_ShouldMaterialiseDistinctArray()
+    {
+        var events = _sut.DataProvider
+            .From<IEventEntity>()
+            .Select(x => SqlFunctions.ClickHouse.array_sort(
+                SqlFunctions.ClickHouse.group_uniq_array(x.Event)))
+            .First();
+
+        events.Should().Equal(1, 2, 3);
+    }
+
+    [Fact]
+    public void GroupArray_OfArrayColumn_ShouldMaterialiseNestedArray()
+    {
+        var grouped = _sut.ArrayEntity
+            .Select(x => SqlFunctions.ClickHouse.group_array(x.Tags))
+            .First();
+
+        grouped.Should().HaveCount(3);
+        grouped.SelectMany(x => x).Should().BeEquivalentTo(new[] { "a", "b", "c", "b" });
+        grouped.Should().ContainSingle(x => x.Length == 0);
+    }
+
+    [Fact]
+    public void TupleColumn_ShouldProjectAsSystemTuple()
+    {
+        var pair = _sut.DataProvider
+            .From<ITupleEntity>()
+            .Where(x => x.Id == 1)
+            .Select(x => x.Pair)
+            .First();
+
+        pair.Should().Be(Tuple.Create(7, "seven"));
+    }
 }
 
 [SqlTable("uint64_entity")]
@@ -899,4 +981,14 @@ public interface IJsonEntity
     int Id { get; set; }
     [Column("doc")]
     string Doc { get; set; }
+}
+
+[SqlTable("tuple_entity")]
+public interface ITupleEntity
+{
+    [Key]
+    [Column("id")]
+    int Id { get; set; }
+    [Column("pair")]
+    Tuple<int, string> Pair { get; set; }
 }

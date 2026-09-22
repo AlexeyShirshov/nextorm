@@ -459,8 +459,8 @@ The array functions and operators map to their PostgreSQL names:
 | `SqlFunctions.Postgres.string_to_array(s, delimiter)` | `string_to_array(s, delimiter)` |
 
 > The functions that return an array (`array_append`, `array_cat`, `array_reverse`, `string_to_array`,
-> ...) are meant to be used inside a query (a predicate, `having` or a nested expression); the row reader
-> cannot materialise an array column yet, so projecting one directly throws at preparation time.
+> ...) can be used inside a query (a predicate, `having` or a nested expression) or projected directly:
+> the row reader materialises an `Array(T)` result as a CLR `T[]`.
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -498,17 +498,21 @@ result can be projected like a scalar column.
 | `SqlFunctions.ClickHouse.array_slice(a, offset, length)` | `arraySlice(a, offset, length)` |
 | `SqlFunctions.ClickHouse.array_push_back(a, element)` | `arrayPushBack(a, element)` |
 | `SqlFunctions.ClickHouse.array_join(a)` | `arrayJoin(a)` |
+| `SqlFunctions.ClickHouse.group_array(a)` | `groupArray(a)` |
+| `SqlFunctions.ClickHouse.group_uniq_array(a)` | `groupUniqArray(a)` |
 
 > `length`/`indexOf` return `UInt64` natively, so the dialect casts them with `toInt64(...)`. Functions
 > that return an array (`split_by_char`, `array_sort`, `array_reverse`, `array_distinct`, `range`,
-> `array_enumerate`, `array_cum_sum`, `array_slice`, `array_push_back`) can only be used as the operand
-> of another array function (for example `length(...)` or `array_string_concat(...)`); projecting one
-> directly throws at preparation time because the row reader cannot materialise `Array(T)` yet.
+> `array_enumerate`, `array_cum_sum`, `array_slice`, `array_push_back`, `group_array`,
+> `group_uniq_array`) can be projected directly — the row reader materialises an `Array(T)` result as a
+> CLR `T[]` — or used as the operand of another array function (for example `length(...)` or
+> `array_string_concat(...)`). The same reader materialises a native `Tuple(...)` column (or a
+> `Tuple(...)`-returning expression) as a `System.Tuple<...>` of arity 1–7.
 
 The CLR `string.Split` is rendered as `splitByChar(separator, value)` (gated by
 [`StringSplit`](xref:NextORM.Core.ISqlDialect.StringSplit)); only a single-character
 separator is supported (the multi-character `splitByString` is not exposed), the result is a `string[]`
-usable only inside another array function, and the `count` overload, multiple separators and
+that can be projected directly or used inside another array function, and the `count` overload, multiple separators and
 `StringSplitOptions` other than `None` throw `NotSupportedException`:
 
 ```csharp

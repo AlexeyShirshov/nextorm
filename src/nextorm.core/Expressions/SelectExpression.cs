@@ -114,16 +114,18 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
         {
             return GetFieldValueMI.MakeGenericMethod(typeof(ulong));
         }
-        else if (_realType == typeof(byte[]))
+        else if (_realType.IsArray)
         {
-            // Binary columns (bytea/varbinary/blob) have no typed reader getter; read the value
-            // through GetValue and let the caller cast it to byte[].
+            // Array columns and array-returning expressions (binary bytea/varbinary/blob,
+            // PostgreSQL text[]/int[], ClickHouse Array(T) including nested arrays) have no typed
+            // reader getter; read the value through GetValue and let the caller cast it to the
+            // declared array type.
             return GetValueMI;
         }
-        else if (_realType == typeof(string[]))
+        else if (TypeFacts.IsTupleType(_realType))
         {
-            // PostgreSQL text[] columns (for example regexp_matches) have no typed reader getter;
-            // read the value through GetValue and let the caller cast it to string[].
+            // A ClickHouse Tuple(...) column is read as System.Tuple<...> by the driver; read the
+            // value through GetValue and let the caller cast it.
             return GetValueMI;
         }
         else if (_realType == typeof(Dictionary<string, string>))
@@ -135,6 +137,7 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
         else
             throw new NotSupportedException($"Property '{PropertyName}' with index ({Index}) has type {_realType} which is not supported");
     }
+
     // public override int GetHashCode()
     // {
     //     unchecked

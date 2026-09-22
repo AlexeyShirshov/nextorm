@@ -466,9 +466,8 @@ select id from complex_entity where id = any(@norm_p0)
 | `SqlFunctions.Postgres.string_to_array(s, delimiter)` | `string_to_array(s, delimiter)` |
 
 > Функции, возвращающие массив (`array_append`, `array_cat`, `array_reverse`, `string_to_array`, ...),
-> предназначены для использования внутри запроса (предикат, `having` или вложенное выражение);
-> построитель строк пока не умеет материализовать колонку-массив, поэтому прямое проецирование такой
-> функции падает на этапе подготовки.
+> можно использовать внутри запроса (предикат, `having` или вложенное выражение) или проецировать
+> напрямую: row reader материализует результат `Array(T)` как CLR `T[]`.
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -506,18 +505,21 @@ select cardinality(@norm_p1) as "N" from complex_entity where array_length(@norm
 | `SqlFunctions.ClickHouse.array_slice(a, offset, length)` | `arraySlice(a, offset, length)` |
 | `SqlFunctions.ClickHouse.array_push_back(a, element)` | `arrayPushBack(a, element)` |
 | `SqlFunctions.ClickHouse.array_join(a)` | `arrayJoin(a)` |
+| `SqlFunctions.ClickHouse.group_array(a)` | `groupArray(a)` |
+| `SqlFunctions.ClickHouse.group_uniq_array(a)` | `groupUniqArray(a)` |
 
 > `length`/`indexOf` нативно возвращают `UInt64`, поэтому диалект оборачивает их в `toInt64(...)`.
 > Функции, возвращающие массив (`split_by_char`, `array_sort`, `array_reverse`, `array_distinct`,
-> `range`, `array_enumerate`, `array_cum_sum`, `array_slice`, `array_push_back`), можно использовать
-> только как операнд другой array-функции (например, `length(...)` или `array_string_concat(...)`);
-> прямое проецирование такой функции падает на этапе подготовки, так как row reader пока не умеет
-> материализовать `Array(T)`.
+> `range`, `array_enumerate`, `array_cum_sum`, `array_slice`, `array_push_back`, `group_array`,
+> `group_uniq_array`), можно проецировать напрямую — row reader материализует результат `Array(T)`
+> как CLR `T[]` — либо использовать как операнд другой array-функции (например, `length(...)` или
+> `array_string_concat(...)`). Тот же reader материализует нативную колонку `Tuple(...)` (или
+> выражение типа `Tuple(...)`) как `System.Tuple<...>` арности 1–7.
 
 CLR-метод `string.Split` рендерится как `splitByChar(separator, value)` (гейт
 [`StringSplit`](xref:NextORM.Core.ISqlDialect.StringSplit)); поддерживается только
 одноразрядный разделитель (многосимвольный `splitByString` не выставлен), результат — `string[]`,
-пригодный только внутри другой array-функции; overload с `count`, несколько разделителей и
+который можно проецировать напрямую или использовать внутри другой array-функции; overload с `count`, несколько разделителей и
 `StringSplitOptions`, отличный от `None`, бросают `NotSupportedException`:
 
 ```csharp

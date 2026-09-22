@@ -22,7 +22,8 @@ namespace NextORM.Core;
 /// and the array functions over array columns and expressions (<c>arrayJoin</c>, <c>length</c>,
 /// <c>has</c>, <c>indexOf</c>, <c>hasAny</c>/<c>hasAll</c>, <c>arrayStringConcat</c>,
 /// <c>splitByChar</c>, <c>arraySort</c>, <c>arrayReverse</c>, <c>arrayDistinct</c>, <c>range</c>,
-/// <c>arrayEnumerate</c>, <c>arrayCumSum</c>, <c>arraySlice</c>, <c>arrayPushBack</c>).
+/// <c>arrayEnumerate</c>, <c>arrayCumSum</c>, <c>arraySlice</c>, <c>arrayPushBack</c>) plus the
+/// array-returning aggregates <c>groupArray</c>/<c>groupUniqArray</c>.
 /// Exposed through <see cref="SqlFunctions.ClickHouse"/>; every member is gated by a capability flag
 /// and rejected by providers that do not opt in.
 /// </summary>
@@ -116,13 +117,31 @@ namespace NextORM.Core;
 
         /// <summary>
         /// <c>retention(cond1, cond2, ...)</c>: the 1/0 condition mask (the first condition, then the
-        /// first-and-second, and so on). Returns an array, so it can only be used as the operand of
-        /// another array function (for example <see cref="length{T}(T[])"/> or
+        /// first-and-second, and so on). Returns an array, so it can be projected directly or used as
+        /// the operand of another array function (for example <see cref="length{T}(T[])"/> or
         /// <see cref="array_string_concat{T}(T[], string?)"/>). Requires a provider that supports it (see
         /// <see cref="ISqlDialect.SequenceAggregates"/>; ClickHouse). The conditions must be
         /// inline expressions.
         /// </summary>
         public int[] retention(params bool[] conditions) => default!;
+
+        /// <summary>
+        /// <c>groupArray(value)</c>: aggregates the values of a group into an array. The native result
+        /// is <c>Array(T)</c>, surfaced as <c>T[]</c> and projected directly (or used as the operand of
+        /// an array function such as <see cref="array_sort{T}(T[])"/>). Requires a provider that
+        /// supports the array surface (see <see cref="ISqlDialect.SupportsArrayFunctions"/>; ClickHouse).
+        /// The element order is unspecified; sort or concatenate in SQL for a stable result.
+        /// </summary>
+        public T[] group_array<T>(T? value) => default!;
+
+        /// <summary>
+        /// <c>groupUniqArray(value)</c>: aggregates the distinct values of a group into an array. The
+        /// native result is <c>Array(T)</c>, surfaced as <c>T[]</c> and projected directly. Requires a
+        /// provider that supports the array surface (see
+        /// <see cref="ISqlDialect.SupportsArrayFunctions"/>; ClickHouse). The element order is
+        /// unspecified.
+        /// </summary>
+        public T[] group_uniq_array<T>(T? value) => default!;
 
         /// <summary>
         /// <c>JSONExtractString(json, path)</c>: the string at <paramref name="path"/>. JSON is stored in
@@ -398,49 +417,50 @@ namespace NextORM.Core;
         /// <summary><c>arrayStringConcat(array, delimiter)</c>: joins the elements into one string (default separator is the empty string).</summary>
         public string array_string_concat<T>(T[] array, string? delimiter = null) => default!;
 
-        /// <summary><c>splitByChar(separator, value)</c>: splits the string by a single-character separator. Returns an array, so it can only be used as the operand of another array function.</summary>
+        /// <summary><c>splitByChar(separator, value)</c>: splits the string by a single-character separator. Returns an array, so it can be projected directly or used as the operand of another array function.</summary>
         public string[] split_by_char(string? separator, string? value) => default!;
 
-        /// <summary><c>arraySort(array)</c>: the elements in ascending order. Returns an array, so it can only be used as the operand of another array function.</summary>
+        /// <summary><c>arraySort(array)</c>: the elements in ascending order. Returns an array, so it can be projected directly or used as the operand of another array function.</summary>
         public T[] array_sort<T>(T[] array) => default!;
 
-        /// <summary><c>arrayReverse(array)</c>: the elements in reverse order. Returns an array, so it can only be used as the operand of another array function.</summary>
+        /// <summary><c>arrayReverse(array)</c>: the elements in reverse order. Returns an array, so it can be projected directly or used as the operand of another array function.</summary>
         public T[] array_reverse<T>(T[] array) => default!;
 
-        /// <summary><c>arrayDistinct(array)</c>: the distinct elements. Returns an array, so it can only be used as the operand of another array function.</summary>
+        /// <summary><c>arrayDistinct(array)</c>: the distinct elements. Returns an array, so it can be projected directly or used as the operand of another array function.</summary>
         public T[] array_distinct<T>(T[] array) => default!;
 
         /// <summary>
         /// <c>range(end)</c>: the integers from <c>0</c> up to (but excluding) <paramref name="end"/>.
-        /// Returns an array, so it can only be used as the operand of another array function (for
+        /// Returns an array, so it can be projected directly or used as the operand of another array
+        /// function (for
         /// example <see cref="length{T}(T[])"/> or <see cref="array_string_concat{T}(T[], string?)"/>).
         /// Requires a provider that supports array functions (see
         /// <see cref="ISqlDialect.SupportsArrayFunctions"/>; ClickHouse).
         /// </summary>
         public long[] range(long end) => default!;
 
-        /// <summary><c>range(start, end)</c>: the integers in <c>[start, end)</c>. Returns an array, so it can only be used nested.</summary>
+        /// <summary><c>range(start, end)</c>: the integers in <c>[start, end)</c>. Returns an array, so it can be projected directly or nested.</summary>
         public long[] range(long start, long end) => default!;
 
-        /// <summary><c>range(start, end, step)</c>: the integers in <c>[start, end)</c> with the given step. Returns an array, so it can only be used nested.</summary>
+        /// <summary><c>range(start, end, step)</c>: the integers in <c>[start, end)</c> with the given step. Returns an array, so it can be projected directly or nested.</summary>
         public long[] range(long start, long end, long step) => default!;
 
         /// <summary>
         /// <c>arrayEnumerate(array)</c>: the one-based positions <c>[1, 2, ..., length(array)]</c>.
-        /// Returns an array, so it can only be used as the operand of another array function.
+        /// Returns an array, so it can be projected directly or used as the operand of another array function.
         /// </summary>
         public long[] array_enumerate<T>(T[] array) => default!;
 
         /// <summary>
-        /// <c>arrayCumSum(array)</c>: the running sums of the elements. Returns an array, so it can
-        /// only be used as the operand of another array function.
+        /// <c>arrayCumSum(array)</c>: the running sums of the elements. Returns an array, so it can be
+        /// projected directly or used as the operand of another array function.
         /// </summary>
         public T[] array_cum_sum<T>(T[] array) => default!;
 
         /// <summary>
         /// <c>arraySlice(array, offset)</c>: the elements from the one-based <paramref name="offset"/>
-        /// to the end (a negative offset counts from the end). Returns an array, so it can only be used
-        /// as the operand of another array function.
+        /// to the end (a negative offset counts from the end). Returns an array, so it can be projected
+        /// directly or used as the operand of another array function.
         /// </summary>
         public T[] array_slice<T>(T[] array, long offset) => default!;
 
@@ -449,7 +469,7 @@ namespace NextORM.Core;
 
         /// <summary>
         /// <c>arrayPushBack(array, element)</c>: the array with <paramref name="element"/> appended.
-        /// Returns an array, so it can only be used as the operand of another array function.
+        /// Returns an array, so it can be projected directly or used as the operand of another array function.
         /// </summary>
         public T[] array_push_back<T>(T[] array, T element) => default!;
 

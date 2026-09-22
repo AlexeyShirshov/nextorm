@@ -8,6 +8,8 @@ postgres 150, mysql 31, mariadb 7, clickhouse 47, integration 833/0 failed)
 
 **Обновление 22.09.2026 (clickhouse-json-type, влито в дерево).** **J8 (P1) закрыт** и **J10 закрыт**: `json_all_paths_with_types` переведён на `Dictionary<string,string>` (+ ветка `GetValue` в `SelectExpression.GetDataRecordMethod`), материализация подтверждена контейнерным интеграционным тестом; доки синхронизированы (нативный `JSON`-аргумент, прямая проекция `string[]`/`Dictionary`). Открыт только J9 (трекинг `PublicAPI.Unshipped.txt` при заморозке, Шаг 5). Детали — в разделе «ClickHouse нативные JSON-функции …».
 
+**Обновление 22.09.2026 (uncommitted worktree — ClickHouse row reader `Array(T)`/`Tuple`).** Добавлены два публичных агрегата `ClickHouseFunctions.group_array<T>`/`group_uniq_array<T>` (`src/nextorm.core/Query/SqlFunctions.ClickHouse.cs:127-143`); row reader (`SelectExpression.GetDataRecordMethod`) и классификация проекции (`TypeFacts`) — `internal`/без новых подписей. Новых публичных типов нет → Приложение A (45) без изменений, покрытие методов +2 (215/1094 против baseline 213/1092). P0/P1 по **именам** нет; открыты CHARR1 (трекинг `PublicAPI`, Шаг 5), CHARR2 (P1-док: EN/RU утверждают «массив нельзя материализовать»/«только вложенно»), CHARR3 (док-пробел). Подробности — в разделе «ClickHouse row reader `Array(T)`/`Tuple` и агрегаты `group_array`/`group_uniq_array`».
+
 **Область:** `src/nextorm.core`, `src/nextorm.postgres`, `src/nextorm.sqlite`, `src/nextorm.sqlserver`, `src/nextorm.mysql`, `src/nextorm.mariadb`, `src/nextorm.clickhouse`, `src/nextorm.core.sourcegenerator`
 **Методика:** скилл `api-design` (Framework Design Guidelines) + `dotnet-xml-docs` (XML-документация). Основание для вывода — XML-комментарий (`<summary>`/`<param>`, если есть) либо тело метода/свойства. Проект в стадии **alpha**: обратная совместимость не поддерживается, имена меняются напрямую.
 
@@ -3146,6 +3148,33 @@ EN/RU соблюдено. Непроверенное утверждение до
 **Проверка (22.09.2026).** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**;
 `dotnet test tests/nextorm.clickhouse.tests -c Debug` — **193/193**; `grep -n 'format\|merge\|input'
 docs/advanced/limitations.md` — строки отложенных функций присутствуют; `rg --files -g 'PublicAPI*.txt'` — пусто.
+
+### Аудит 22.09.2026 — ClickHouse row reader `Array(T)`/`Tuple` и агрегаты `group_array`/`group_uniq_array` (P0 — нет; P1 — 1 доковый; P2 — 2)
+
+Публичная поверхность аддитивна; переименований нет. Новые члены:
+
+- `ClickHouseFunctions.group_array<T>(T? value) -> T[]` (`Query/SqlFunctions.ClickHouse.cs:127-134`) → `groupArray(value)`;
+- `ClickHouseFunctions.group_uniq_array<T>(T? value) -> T[]` (`:136-143`) → `groupUniqArray(value)`;
+- маппинг — `ClickHouseDialect.MakeAggregate` (`src/nextorm.clickhouse/ClickHouseDialect.cs:398-399`); трансляция — `AdvancedAggregateTranslator.EmitSimple` (`src/nextorm.core/Visitors/AdvancedAggregateTranslator.cs:142-147`) под флагом `ISqlDialect.SupportsArrayFunctions`.
+- Row reader (публичная сигнатура не меняется): `SelectExpression.GetDataRecordMethod()` (`Expressions/SelectExpression.cs:117-130`) — `GetValue`-ветки для `T[]`/`System.Tuple`; `TypeFacts.IsSingleColumnProjection`/`IsTupleType` (`Visitors/TypeFacts.cs:45-74`) — `internal`, внешней поверхности не дают.
+
+**CS1591/XML-doc.** XML-`<summary>` есть у обоих новых методов; доки обновлены и у array-возвращающих соседей (`retention`, `split_by_char`, `array_sort`/`array_reverse`/`array_distinct`/`range`/`array_enumerate`/`array_cum_sum`/`array_slice`/`array_push_back`) — с «можно проецировать напрямую». Новых публичных **типов** нет → Приложение A (45) без изменений; покрытие публичных методов **+2** (215/1094 против baseline 213/1092, актуализация 18.09.2026) — дельта пересчитана арифметически по диффу. Именование — конвенции соблюдены: snake_case DSL зеркалит SQL (`groupArray`/`groupUniqArray` по образцу `uniq_exact`→`uniqExact`), гейт — как у соседних array-функций. P0/P1 по **именам** нет.
+
+| # | Ур. | Место | Проблема | Рекомендация |
+|---|-----|-------|----------|--------------|
+| CHARR1 | P2 | `Query/SqlFunctions.ClickHouse.cs:134,143`; `PublicAPI.*.txt` отсутствуют | 2 новых публичных члена не трекаются (`PublicApiAnalyzers` не подключён, Шаг 5 открыт). **Продолжение RD2/AR1/ASF1/SQ1/SCTF1, не новая находка**; новых abstract-членов `ISqlDialect` нет, разрыва для внешних реализаторов не создаётся | При заморозке внести `ClickHouseFunctions.group_array<T>(T? value) -> T[]` и `group_uniq_array<T>(T? value) -> T[]` в `PublicAPI.Unshipped.txt` (точный текст — из анализатора при заморозке) |
+| CHARR2 | P1 (док) | `docs/advanced/limitations.md:36` (+`docs/ru/advanced/limitations.md:36`); `docs/providers/clickhouse.md:56` (+RU); `docs/guide/provider-specific/clickhouse.md:152` (+RU) | EN/RU-доки прямо противоречат реализованному поведению (тот же класс, что AR2): массив-колонку больше не «нельзя материализовать» (`array_agg` теперь проецируется напрямую — `tests/nextorm.postgres.tests/SqlGenerationTests.cs` изменён), а `retention`/`split_by_char`/`array_*` больше не «usable only nested». Правило AGENTS.md `docs/**` **и** `docs/ru/**` не выполнено | Снять оговорки «row reader не умеет»/«только вложенно» и описать прямую проекцию `T[]`/`Tuple` в обеих языковых ветках |
+| CHARR3 | P2 | `Query/SqlFunctions.ClickHouse.cs:5-25` (классовый `<summary>`); `docs/providers/clickhouse.md:40-56` (+RU); `docs/guide/provider-specific/clickhouse.md:148-153` (+RU); `docs/advanced/api-reference.md` (+RU) | Новые `group_array`/`group_uniq_array` не добавлены в прозаическую докуку (precedent AR3/AJ5/RD2); классовый `<summary>` `ClickHouseFunctions` перечисляет array-функции, но не эти агрегаты | Дополнить `<summary>` класса и `SqlFunctions.ClickHouse`, а также provider/guide/api-reference-списки EN+RU одним изменением |
+
+ℹ️ **Наблюдения (фикс не требуется):**
+
+- **`T? value` — осознанная nullability.** Для unconstrained `T` это не `Nullable<T>`; соседний `array_push_back<T>(T[], T)` использует `T` — косметическая неоднородность, не P-нарушение.
+- **`<typeparam name="T">` отсутствует** у обоих методов (как у соседних generic-членов) — на `CS1591` (в `<NoWarn>` 7 библиотечных `.csproj`) не влияет; для полноты DocFX можно добавить.
+- **`ValueTuple` и арность >7 не покрыты.** `TypeFacts.IsTupleType` (`Visitors/TypeFacts.cs:66-74`) распознаёт только `System.Tuple` арности 1..7 (драйвер ClickHouse возвращает `System.Tuple`; интеграционный тест — `Tuple<int,string>`); TODO-план (`docs/specs/roadmap/todo_clickhouse_arrays.md:70`) обещает `ValueTuple<>` — расхождение формулировки; арность 8+ не проверена. Кандидат — юнит/интеграционный тест на арности 1 и 3.
+- **Row reader без новых публичных типов/флагов.** Тип ветки выбирается по `SelectExpression.PropertyType`, диалектного флага нет: это инфраструктура материализации, а не SQL-функция; SQL Server/MySQL/MariaDB/SQLite физически не отдают array/Tuple-колонку, InMemory row reader не использует. Обоснование — в `code-smells-review.md`, точечный аудит 22.09.2026.
+- **Шаг 5 не двигается:** `PublicAPI.*.txt` — **0** файлов, `PublicApiAnalyzers`/ApiCompat/API-approval не настроены; новые подписи — в CHARR1.
+
+**Проверка (22.09.2026).** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**; `dotnet test tests/nextorm.clickhouse.tests -c Release --no-build` — **201/201**, `tests/nextorm.postgres.tests` — **265/265** (прогнано в этом проходе); `find . -name 'PublicAPI*.txt'` — пусто (подтверждает CHARR1); XML-`<summary>` у обоих новых методов и `<see cref="ISqlDialect.SupportsArrayFunctions"/>` разрешается; новых публичных типов нет — Приложение A (45) без изменений. Контейнерная интеграция ClickHouse 25.8 в этом проходе не перезапускалась; по отчёту автора изменения — ClickHouse **63/63**, PostgreSQL **223** (6 capability-skips).
 
 ## 4. План работ
 

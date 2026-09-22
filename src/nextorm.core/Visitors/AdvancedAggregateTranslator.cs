@@ -9,7 +9,8 @@ namespace NextORM.Core;
 /// <c>covar_*</c>, <c>regr_*</c>) and the ordered-set aggregates
 /// (<c>percentile_cont</c>/<c>percentile_disc</c>/<c>mode</c> with
 /// <c>WITHIN GROUP (ORDER BY ...)</c>) and the ClickHouse parameterised quantile aggregates
-/// (<c>quantile(level)(value)</c>/<c>median</c>).
+/// (<c>quantile(level)(value)</c>/<c>median</c>) and the ClickHouse array-returning aggregates
+/// <c>groupArray</c>/<c>groupUniqArray</c>.
 /// <para>
 /// Each family is guarded by its own dialect capability
 /// (<see cref="ISqlDialect.SupportsBooleanAggregates"/>,
@@ -137,6 +138,13 @@ internal static class AdvancedAggregateTranslator
                 return true;
             case nameof(ClickHouseFunctions.retention) when node.Arguments.Count == 1:
                 EmitSequenceAggregate(visitor, "retention", [], timestamp: null, node.Arguments[0]);
+                return true;
+
+            case nameof(ClickHouseFunctions.group_array) when node.Arguments.Count == 1:
+                EmitSimple(visitor, node, "group_array", () => visitor.Dialect.SupportsArrayFunctions, "groupArray/groupUniqArray");
+                return true;
+            case nameof(ClickHouseFunctions.group_uniq_array) when node.Arguments.Count == 1:
+                EmitSimple(visitor, node, "group_uniq_array", () => visitor.Dialect.SupportsArrayFunctions, "groupArray/groupUniqArray");
                 return true;
 
             case nameof(ClickHouseFunctions.quantile) when node.Arguments.Count == 2:

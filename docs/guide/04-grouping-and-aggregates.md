@@ -487,8 +487,8 @@ parameter; the key becomes `order by <key>`. Calling one on a provider without t
 The ClickHouse sequence/funnel aggregates take the conditions as inline boolean expressions (the
 `timestamp` column first). `window_funnel` returns the longest consecutive chain in a sliding window,
 `sequence_match` returns `1`/`0` for the pattern; both materialise as a CLR `int` (the dialect casts
-the native unsigned result with `toInt32(...)`). `retention` returns a `UInt8` mask as an array, which
-the row reader cannot materialise yet, so it can only be used inside another array function:
+the native unsigned result with `toInt32(...)`). `retention` returns a `UInt8` mask as an array,
+materialised as `byte[]` (project it directly or use it inside another array function):
 
 ```csharp
 var funnel = dataContext.From<IEventEntity>()
@@ -540,7 +540,9 @@ generic filtered-aggregate API rejects it there.
 
 `string_agg`/`array_agg` take a filter as well; `string_agg` is available on PostgreSQL, SQL Server
 2017+ and ClickHouse (as `arrayStringConcat(groupArray(x), delimiter)`), while `array_agg` is
-PostgreSQL-only (SQL Server has no array type and ClickHouse's array columns cannot be materialised).
+PostgreSQL-only (SQL Server has no array type). Both results are array columns, materialised by the
+row reader as a CLR `T[]`. ClickHouse additionally exposes its native array-returning aggregates
+`group_array`/`group_uniq_array` (`groupArray`/`groupUniqArray`).
 See [Scalar functions](11-scalar-functions.md#aggregate-filter) for the full surface.
 
 ## Provider differences

@@ -159,16 +159,21 @@ Ordered by impact on real query authoring. Per-feature details and owners live i
    table/entity, a table-valued function or a derived query (the pivot input can carry joins and
    computed aggregate/FOR columns).
    Shipped: [SQL Server-specific SQL](../../guide/provider-specific/sqlserver.md#xml-data-type-methods).
-4. **ClickHouse has no row reader for arrays and tuples.** This single infrastructure gap
-   blocks `groupArray`/`groupUniqArray`, `topK`/`topKWeighted`, `quantiles`, the array-returning
-   `JSONExtractKeys`/`JSONExtractKeysAndValues`/`JSONExtractArrayRaw`, `tuple`/`tupleElement`/`untuple`,
-   `dictGetHierarchy`/`dictGetChildren`/`dictIsIn` and projecting `Array(T)`/`Tuple` columns.
+4. **ClickHouse array/Tuple row reader — shipped.** `Array(T)` (including nested `Array(Array(T))`)
+   and `Tuple(...)` columns and expressions materialise as a CLR `T[]`/`System.Tuple<...>` (arity
+   1–7), and the array-returning aggregates `groupArray`/`groupUniqArray` are exposed as
+   [`ClickHouseFunctions.group_array`](xref:NextORM.Core.ClickHouseFunctions.group_array)/`group_uniq_array`.
    Native `UInt64` rows (`hits_v1.UserID`, any `UInt64` column and `ulong`/`ulong?` projection) now
    materialise through the row reader without a SQL cast; the aggregate/function results that declare a
    signed CLR return type (`count`, `uniq*`, `length`, `index_of`, `json_length`) keep their normalising
    cast.
+   Still open on this item: `topK`/`topKWeighted`/`quantiles`, the array-returning
+   `JSONExtractKeys`/`JSONExtractKeysAndValues`/`JSONExtractArrayRaw`, the `tuple`/`tupleElement`/`untuple`
+   scalars and `dictGetHierarchy`/`dictGetChildren`/`dictIsIn`.
    Shipped: [ClickHouse provider](../../providers/clickhouse.md),
-   [Provider-specific SQL](../../guide/provider-specific/clickhouse.md#aggregates).
+   [Provider-specific SQL](../../guide/provider-specific/clickhouse.md#aggregates),
+   [Grouping and aggregates](../../guide/04-grouping-and-aggregates.md),
+   [Scalar functions](../../guide/11-scalar-functions.md#arrays-clickhouse).
    Todo: [`todo_clickhouse_arrays.md`](todo_clickhouse_arrays.md).
 5. **ClickHouse higher-order array functions are not translated.** `arrayMap`/`arrayFilter`/
    `arrayExists`/`arrayAll`/`arrayCount`/`arrayFirst*` need lambda/higher-order argument translation,

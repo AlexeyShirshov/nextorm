@@ -30,8 +30,8 @@ select id from complex_entity where (id = any(@p0))
 ```
 
 See [Arrays (PostgreSQL)](../11-scalar-functions.md#arrays-postgresql). Functions that return an array
-are meant to be used inside a query; the row reader cannot materialise an array column yet, so
-projecting one directly throws at preparation time.
+can be used inside a query or projected directly: the row reader materialises an `Array(T)` result as
+a CLR `T[]`.
 
 ## `json` and `jsonb`
 

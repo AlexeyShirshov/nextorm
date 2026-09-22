@@ -1259,13 +1259,20 @@ public class SqlGenerationTests
 
         SqlOf(ctx, e.Select(x => SqlFunctions.Sql.string_agg(x.String, ",")))
             .Should().Contain("string_agg(somestring, ',')");
-        // array_agg produces an array column, which the row reader cannot materialise yet; assert the
-        // generated SQL through a predicate instead of a projection.
-        SqlOf(ctx, e
-            .GroupBy(x => new { x.Int })
-            .Having(x => SqlFunctions.Postgres.array_agg(x.Id) != null)
-            .Select(x => new { x.Int }))
+        // array_agg produces an array column; the row reader materialises it as T[].
+        SqlOf(ctx, e.Select(x => SqlFunctions.Postgres.array_agg(x.Id)))
             .Should().Contain("array_agg(id)");
+    }
+
+    [Fact]
+    public void GroupArray_UnsupportedByProvider_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.group_array(x.Id) }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*groupArray/groupUniqArray*");
     }
 
     [Fact]

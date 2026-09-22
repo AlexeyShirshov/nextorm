@@ -490,8 +490,7 @@ select groupBitAnd(id), covarPop(id, nullableint), argMax(somestring, id), count
 (столбец `timestamp` — первым). `window_funnel` возвращает длину наибольшей последовательной цепочки в
 скользящем окне, `sequence_match` — `1`/`0` для паттерна; оба материализуются как CLR `int` (диалект
 приводит нативный беззнаковый результат через `toInt32(...)`). `retention` возвращает маску `UInt8`
-как массив, который row reader пока не умеет материализовать, поэтому применим только внутри другой
-array-функции:
+как массив, материализуемый как `byte[]` (проецируется напрямую или внутри другой array-функции):
 
 ```csharp
 var funnel = dataContext.From<IEventEntity>()
@@ -543,7 +542,9 @@ ClickHouse не принимает ANSI-предложение `filter (where ..
 
 `string_agg`/`array_agg` тоже принимают фильтр; `string_agg` доступен в PostgreSQL, SQL Server
 2017+ и ClickHouse (как `arrayStringConcat(groupArray(x), delimiter)`), а `array_agg` — только в
-PostgreSQL (в SQL Server нет типа-массива, а массивы ClickHouse пока не материализуются). Полная
+PostgreSQL (в SQL Server нет типа-массива). Оба результата — колонки-массивы, материализуемые row
+reader'ом как CLR `T[]`. В ClickHouse дополнительно доступны нативные возвращающие массивы агрегаты
+`group_array`/`group_uniq_array` (`groupArray`/`groupUniqArray`). Полная
 поверхность — в разделе [Скалярные функции](11-scalar-functions.md#фильтр-агрегатов-filter).
 
 ## Различия между провайдерами

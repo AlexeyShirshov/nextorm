@@ -395,6 +395,8 @@ public sealed class ClickHouseDialect : SqlDialectBase
         "quantile_timing" => "quantileTiming",
         "any_agg" => "any",
         "any_last" => "anyLast",
+        "group_array" => "groupArray",
+        "group_uniq_array" => "groupUniqArray",
         "count_if" => "countIf",
         "sum_if" => "sumIf",
         "avg_if" => "avgIf",

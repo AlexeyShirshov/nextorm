@@ -149,7 +149,8 @@ select id from simple_entity where global in (@p0, @p1)
 * агрегаты числа уникальных `uniq`/`uniq_exact`/`uniq_combined`/`uniq_hll12` (`toInt64`);
 * параметрические `quantile(level)(value)`/`quantile_exact`/`quantile_timing` и `median` (`toFloat64`);
 * агрегат последнего произвольного значения `any_last` (`anyLast`);
-* агрегаты последовательностей/воронки `window_funnel`/`sequence_match`/`retention` (`windowFunnel`/`sequenceMatch` с `toInt32(...)`; `retention` возвращает массив, применим только вложенно);
+* возвращающие массивы агрегаты `group_array`/`group_uniq_array` (`groupArray`/`groupUniqArray`, материализуются как CLR `T[]`; `groupArray` над array-колонкой даёт вложенный `T[][]`);
+* агрегаты последовательностей/воронки `window_funnel`/`sequence_match`/`retention` (`windowFunnel`/`sequenceMatch` с `toInt32(...)`; `retention` возвращает массив, проецируется напрямую);
 * комбинаторы `-If`: `count_if`/`sum_if`/`avg_if`/`min_if`/`max_if`;
 * `arg_min`/`arg_max`.
 
@@ -198,9 +199,8 @@ var rows = dataContext.FromTableFunction(() => SqlFunctions.ClickHouse.zeros(3))
 ## Пока не поддерживается
 
 Соединения `SEMI`/`ANTI`/`PASTE`, функции высшего порядка над массивами
-(`arrayMap`/`arrayFilter`), row reader для массивов/кортежей, нативный тип колонки `JSON` (его
-reader/type-mapping) и распределённые табличные функции (`remote`, `cluster`, `s3`, `file`) вне
-области охвата. См.
+(`arrayMap`/`arrayFilter`), нативный тип колонки `JSON` (его reader/type-mapping) и распределённые
+табличные функции (`remote`, `cluster`, `s3`, `file`) вне области охвата. См.
 [Ограничения и возможности вне области охвата](../../advanced/limitations.md).
 
 ## См. также

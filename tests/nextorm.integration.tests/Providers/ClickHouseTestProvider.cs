@@ -162,6 +162,20 @@ internal sealed class ClickHouseTestProvider : ITestProvider
         insert into json_entity (id, doc) values
             (1, '{"name":"alice","age":30,"nested":{"x":1}}'),
             (2, '{"flag":true,"list":[1,2,3]}')
+        """,
+
+        "drop table if exists tuple_entity",
+        """
+        create table tuple_entity
+        (
+            id Int32,
+            pair Tuple(Int32, String)
+        ) engine = Memory
+        """,
+        """
+        insert into tuple_entity (id, pair) values
+            (1, (7, 'seven')),
+            (2, (9, 'nine'))
         """
     ];
 }

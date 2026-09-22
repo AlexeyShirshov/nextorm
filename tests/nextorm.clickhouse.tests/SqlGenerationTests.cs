@@ -526,6 +526,45 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void GroupArray_ShouldRenderGroupArray()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.group_array(x.Id) }))
+            .Should().Contain("groupArray(id)");
+    }
+
+    [Fact]
+    public void GroupUniqArray_ShouldRenderGroupUniqArray()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.group_uniq_array(x.Id) }))
+            .Should().Contain("groupUniqArray(id)");
+    }
+
+    [Fact]
+    public void ArrayColumn_ShouldProjectDirectly()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        SqlOf(ctx, e.Select(x => x.Nums)).Should().Be("select nums from array_entity");
+    }
+
+    [Fact]
+    public void ArrayExpression_ShouldProjectWithoutWrapper()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IArrayEntity>();
+
+        SqlOf(ctx, e.Select(x => SqlFunctions.ClickHouse.array_sort(x.Nums)))
+            .Should().Contain("arraySort(nums)");
+    }
+
+    [Fact]
     public void BitAggregates_ShouldUseGroupBitFunctions()
     {
         using var ctx = ClickHouseTestContext.Create();

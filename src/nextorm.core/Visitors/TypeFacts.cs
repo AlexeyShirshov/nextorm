@@ -3,9 +3,10 @@ using System.Linq.Expressions;
 namespace NextORM.Core;
 
 /// <summary>
-/// Static classification helpers for expressions and CLR types used by the visitors: whether an
-/// expression already renders as a predicate and whether a numeric conversion needs an explicit
-/// <c>cast(...)</c>.
+/// Static classification helpers for expressions and CLR types shared across the query pipeline:
+/// whether an expression already renders as a predicate and whether a numeric conversion needs an
+/// explicit <c>cast(...)</c> (used by the visitors), plus the single-column projection shape and the
+/// <see cref="System.Tuple"/> shape (used by the query preparer and the row reader).
 /// </summary>
 internal static class TypeFacts
 {
@@ -41,6 +42,37 @@ internal static class TypeFacts
             or nameof(CommonFunctions.contains) or nameof(CommonFunctions.freetext)
             or nameof(SqlServerFunctions.isjson);
     }
+
+    /// <summary>
+    /// True for a type a projection maps to a single column: the primitives, strings, dates, decimals,
+    /// GUIDs and nullables, plus an array (<c>T[]</c>, covering binary <c>byte[]</c>). A tuple is
+    /// deliberately excluded because <c>new Tuple&lt;...&gt;(a, b)</c> is a multi-column constructor
+    /// projection; a native <c>Tuple(...)</c> column is recognised separately by
+    /// <see cref="IsTupleType"/> at the non-<c>NewExpression</c> call site.
+    /// </summary>
+    internal static bool IsSingleColumnProjection(Type type) =>
+        type.IsPrimitive
+        || type == typeof(string)
+        || type == typeof(DateTime)
+        || type == typeof(decimal)
+        || type == typeof(Guid)
+        || (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Nullable<>))
+        || type.IsArray;
+
+    /// <summary>
+    /// True for the <see cref="System.Tuple"/> family (arity 1..7), the CLR shape the ClickHouse
+    /// driver returns for a <c>Tuple(...)</c> column. The &gt;7-element driver type is internal and
+    /// cannot be declared, so it is intentionally not recognised.
+    /// </summary>
+    internal static bool IsTupleType(Type type) =>
+        type.IsGenericType
+        && (type.GetGenericTypeDefinition() == typeof(Tuple<>)
+            || type.GetGenericTypeDefinition() == typeof(Tuple<,>)
+            || type.GetGenericTypeDefinition() == typeof(Tuple<,,>)
+            || type.GetGenericTypeDefinition() == typeof(Tuple<,,,>)
+            || type.GetGenericTypeDefinition() == typeof(Tuple<,,,,>)
+            || type.GetGenericTypeDefinition() == typeof(Tuple<,,,,,>)
+            || type.GetGenericTypeDefinition() == typeof(Tuple<,,,,,,>));
 
     /// <summary>
     /// True when a numeric CLR conversion actually changes the type and therefore has to be emitted
