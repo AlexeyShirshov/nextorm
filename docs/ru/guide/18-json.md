@@ -20,7 +20,9 @@
   JSON-функций, что и SQL Server ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)),
   через семейство `JSON_EXTRACT`/`JSON_UNQUOTE`/`JSON_SET`.
 * **ClickHouse** отображает извлекающие функции строкового JSON (`JSONExtractString`, `JSONExtractInt`,
-  `JSONExtractFloat`, `JSONExtractBool`, `JSONExtractRaw`, `JSONHas`, `JSONLength`, `JSONType`) и быстрый
+  `JSONExtractFloat`, `JSONExtractBool`, `JSONExtractRaw`, `JSONHas`, `JSONLength`, `JSONType`) — плюс
+  возвращающие массивы `JSONExtractKeys`/`JSONExtractArrayRaw` (проецируются как `string[]`) и
+  `JSONExtractKeysAndValues` (проецируется как `Tuple<string, T>[]`) — и быстрый
   разбор плоского JSON (`visitParamExtractString`/`Int`/`Float`/`Bool`/`Raw`) через
   [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract), JSONPath-скаляры
   `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (методы `json_value`/`json_query`/`json_exists`) и функции

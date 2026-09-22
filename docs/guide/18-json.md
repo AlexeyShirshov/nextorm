@@ -20,7 +20,9 @@ feature:
   Server ([`SupportsTextJson`](xref:NextORM.Core.ISqlDialect.SupportsTextJson)) over the
   `JSON_EXTRACT`/`JSON_UNQUOTE`/`JSON_SET` family.
 * **ClickHouse** maps its string-JSON extractors (`JSONExtractString`, `JSONExtractInt`,
-  `JSONExtractFloat`, `JSONExtractBool`, `JSONExtractRaw`, `JSONHas`, `JSONLength`, `JSONType`) and the
+  `JSONExtractFloat`, `JSONExtractBool`, `JSONExtractRaw`, `JSONHas`, `JSONLength`, `JSONType`) — plus
+  the array-returning `JSONExtractKeys`/`JSONExtractArrayRaw` (projecting as `string[]`) and
+  `JSONExtractKeysAndValues` (projecting as `Tuple<string, T>[]`) — and the
   flat-JSON fast path (`visitParamExtractString`/`Int`/`Float`/`Bool`/`Raw`) through
   [`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract), its JSONPath scalars
   `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (written as `json_value`/`json_query`/`json_exists`) and its

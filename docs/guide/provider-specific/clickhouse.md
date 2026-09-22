@@ -167,6 +167,9 @@ See [Grouping and aggregates](../04-grouping-and-aggregates.md).
 
 * string-JSON extractors `JSONExtractString`/`JSONExtractInt`/`JSONExtractFloat`/`JSONExtractBool`/
   `JSONExtractRaw`/`JSONHas`/`JSONType`, `json_length`, and the flat-JSON `visitParamExtract*`;
+* array-returning `JSONExtractKeys`/`JSONExtractArrayRaw` (`json_extract_keys`/`json_extract_array_raw`,
+  projecting as `string[]`) and `JSONExtractKeysAndValues` (`json_extract_keys_and_values<T>`, projecting
+  as `Tuple<string, T>[]`; `T` must be a non-nullable ClickHouse type);
 * JSONPath scalars `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (over string JSON);
 * native-JSON functions `json_all_paths`/`json_all_paths_with_types` (`JSONAllPaths`/
   `JSONAllPathsWithTypes`; the former projects as `string[]`, the latter's native `Map(String, String)`

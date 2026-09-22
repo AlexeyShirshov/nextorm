@@ -1834,7 +1834,10 @@ public class SqlGenerationTests
             () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.visit_param_extract_int(x.String, "n") })),
             () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.visit_param_extract_float(x.String, "f") })),
             () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.visit_param_extract_bool(x.String, "b") })),
-            () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.visit_param_extract_raw(x.String, "o") }))
+            () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.visit_param_extract_raw(x.String, "o") })),
+            () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.json_extract_keys(x.String) })),
+            () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.json_extract_array_raw(x.String, "a") })),
+            () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.json_extract_keys_and_values<int>(x.String) }))
         ];
 
         foreach (var act in acts)

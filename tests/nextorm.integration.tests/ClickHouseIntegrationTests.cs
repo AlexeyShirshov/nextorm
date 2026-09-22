@@ -112,6 +112,29 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     }
 
     [Fact]
+    public void JsonArrayExtract_ShouldProjectArrays()
+    {
+        var r = _sut.SimpleEntity
+            .Select(x => new
+            {
+                K = SqlFunctions.ClickHouse.json_extract_keys("{\"a\":1,\"b\":2}"),
+                KP = SqlFunctions.ClickHouse.json_extract_keys("{\"o\":{\"a\":1}}", "o"),
+                A = SqlFunctions.ClickHouse.json_extract_array_raw("[1,2,3]"),
+                AP = SqlFunctions.ClickHouse.json_extract_array_raw("{\"o\":[1,2]}", "o"),
+                V = SqlFunctions.ClickHouse.json_extract_keys_and_values<int>("{\"a\":1,\"b\":2}"),
+                VP = SqlFunctions.ClickHouse.json_extract_keys_and_values<int>("{\"o\":{\"c\":3}}", "o")
+            })
+            .First();
+
+        r.K.Should().Equal("a", "b");
+        r.KP.Should().Equal("a");
+        r.A.Should().Equal("1", "2", "3");
+        r.AP.Should().Equal("1", "2");
+        r.V.Should().BeEquivalentTo(new[] { Tuple.Create("a", 1), Tuple.Create("b", 2) });
+        r.VP.Should().Equal(Tuple.Create("c", 3));
+    }
+
+    [Fact]
     public void JsonPath_ShouldReadStringJson()
     {
         var r = _sut.SimpleEntity

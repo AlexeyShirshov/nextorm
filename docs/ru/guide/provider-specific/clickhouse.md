@@ -168,6 +168,10 @@ MySQL и MariaDB) и `corr`/`covar*` — документированы на т�
 * извлекатели строкового JSON `JSONExtractString`/`JSONExtractInt`/`JSONExtractFloat`/
   `JSONExtractBool`/`JSONExtractRaw`/`JSONHas`/`JSONType`, `json_length` и плоский
   `visitParamExtract*`;
+* возвращающие массивы `JSONExtractKeys`/`JSONExtractArrayRaw` (`json_extract_keys`/
+  `json_extract_array_raw`, проецируются как `string[]`) и `JSONExtractKeysAndValues`
+  (`json_extract_keys_and_values<T>`, проецируется как `Tuple<string, T>[]`; `T` — non-nullable
+  ClickHouse-тип);
 * JSONPath-скаляры `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (по строковому JSON);
 * функции нативного JSON `json_all_paths`/`json_all_paths_with_types` (`JSONAllPaths`/
   `JSONAllPathsWithTypes`; первая проецируется как `string[]`, нативный `Map(String, String)` второй —

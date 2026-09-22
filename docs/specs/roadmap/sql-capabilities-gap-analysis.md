@@ -171,9 +171,11 @@ Ordered by impact on real query authoring. Per-feature details and owners live i
    signed CLR return type (`count`, `uniq*`, `length`, `index_of`, `json_length`) keep their normalising
    cast. The tuple scalar surface is shipped too: `Tuple.Create(a, b, ...)` renders `tuple(a, b, ...)`
    and `System.Tuple<...>.ItemN` renders `tupleElement(t, n)`, both under
-   [`SupportsTupleFunctions`](xref:NextORM.Core.ISqlDialect.SupportsTupleFunctions).
-   Still open on this item: the array-returning
-   `JSONExtractKeys`/`JSONExtractKeysAndValues`/`JSONExtractArrayRaw`, `untuple` (changes the column
+   [`SupportsTupleFunctions`](xref:NextORM.Core.ISqlDialect.SupportsTupleFunctions). The array-returning
+   JSON functions `JSONExtractKeys`/`JSONExtractArrayRaw` (as `string[]`) and `JSONExtractKeysAndValues`
+   (as `Tuple<string, T>[]`) are exposed as
+   [`ClickHouseFunctions.json_extract_keys`](xref:NextORM.Core.ClickHouseFunctions.json_extract_keys)/`json_extract_array_raw`/`json_extract_keys_and_values`.
+   Still open on this item: `untuple` (changes the column
    set, not a scalar value) and `dictGetHierarchy`/`dictGetChildren`/`dictIsIn`.
    Shipped: [ClickHouse provider](../../providers/clickhouse.md),
    [Provider-specific SQL](../../guide/provider-specific/clickhouse.md#aggregates),

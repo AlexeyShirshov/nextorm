@@ -2,7 +2,7 @@
 
 > Рабочий план. Источник: `docs/specs/roadmap/sql-capabilities-gap-analysis.md` §4 п.4 (row reader),
 > п.5 (higher-order), п.9 (скаляры над массивами).
-> **Статус: срезы 1 (row reader), 2 (topK/topKWeighted/quantiles), 3 (higher-order lambda), 4 (предикаты над массивами `startsWith`/`endsWith`/`hasSubstr`) и 5 (`tuple`/`tupleElement`) — готовы.**
+> **Статус: срезы 1 (row reader), 2 (topK/topKWeighted/quantiles), 3 (higher-order lambda), 4 (предикаты над массивами `startsWith`/`endsWith`/`hasSubstr`), 5 (`tuple`/`tupleElement`) и 6 (`JSONExtractKeys`/`JSONExtractKeysAndValues`/`JSONExtractArrayRaw`) — готовы.**
 
 ## Источник, цель, критерий приёмки
 
@@ -312,8 +312,43 @@ subsequence). Проверено по документации провайде�
   (+RU), `docs/providers/clickhouse.md` (+RU), `docs/advanced/api-reference.md` (+RU),
   `docs/advanced/limitations.md` (+RU, `untuple`); gap-analysis §4 п.4; `API-NAMING-REVIEW.md`.
 
+### Срез 6 (gap §4 п.4 остаток): array-возвращающие `JSONExtractKeys`/`JSONExtractKeysAndValues`/`JSONExtractArrayRaw`
+
+**Статус: готово.**
+
+#### Матрица «провайдер × форма» — JSON-ключи/пары/сырой массив
+
+| Провайдер | JSON-as-text | Эти три функции | Источник |
+| --- | --- | --- | --- |
+| PostgreSQL | `json`/`jsonb` | — (эквиваленты `jsonb_object_keys`/`jsonb_each`/`jsonb_array_elements` — set-returning, другой контракт; скалярного `Array(T)` нет) | https://www.postgresql.org/docs/current/functions-json.html |
+| SQL Server | `nvarchar` + `OPENJSON` | — (только table-valued `OPENJSON`) | https://learn.microsoft.com/sql/t-sql/functions/openjson-transact-sql |
+| MySQL | `JSON` | — (`JSON_KEYS`/`JSON_EXTRACT` возвращают JSON, не `Array(T)`) | https://dev.mysql.com/doc/refman/8.4/en/json-functions.html |
+| MariaDB | `JSON` (alias) | — | https://mariadb.com/kb/en/json-functions/ |
+| SQLite | JSON1 (`json_each`/`json_extract`) | — (set-returning/JSON text, не `Array(T)`) | https://www.sqlite.org/json1.html |
+| ClickHouse | String column | `JSONExtractKeys(json[, path])` → `Array(String)`; `JSONExtractKeysAndValues(json[, path], value_type)` → `Array(Tuple(String, value_type))`; `JSONExtractArrayRaw(json[, path])` → `Array(String)` — проверено `clickhouse-local` на 25.8 | https://clickhouse.com/docs/en/sql-reference/functions/json-functions |
+| InMemory | — | — (поверхность ClickHouse-only) | — |
+
+#### Единообразие провайдеров (решение)
+
+- Фича ClickHouse-only и относится к уже подключённому семейству `JSONExtract*`/`JSONHas`
+  (`SupportsJsonExtract`); нового флага не вводится — это те же JSON-as-text скаляры, а не новое
+  семейство. Tier (b): provider-методы на `ClickHouseFunctions`, ветки в `JsonExtractSqlTranslator`,
+  маппинг имён в `ClickHouseDialect.MakeJsonExtract`.
+- `JSONExtractKeysAndValues` требует тип значения третьим аргументом — generic `T`, рендерится как
+  строковый литерал `'Int32'`/`'Int64'`/… через `ISqlDialect.MakeTypeName` (nullable `T` отклоняется
+  `NotSupportedException`, чтобы объявленный `Tuple<string, T>[]` совпал с материализацией драйвера).
+  Результаты — `string[]` и `Tuple<string, T>[]`; материализуются существующей
+  array-веткой row reader (срез 1).
+- Публичный API: `string[] json_extract_keys(string?)`, `json_extract_keys(string?, string?)`,
+  `string[] json_extract_array_raw(string?)`, `json_extract_array_raw(string?, string?)`,
+  `Tuple<string, T>[] json_extract_keys_and_values<T>(string?)` и `(string?, string?)`.
+- Тест-план: SQL-gen clickhouse `JsonArrayExtractFunctions_ShouldUseClickHouseNames`; rejection
+  postgres — добавлено в `JsonExtract_ShouldThrowBecausePostgresHasNoJsonExtract`; интеграционные
+  `JsonArrayExtract_ShouldProjectArrays` (строковые литералы, `SimpleEntity`).
+- Доки EN+RU: `docs/guide/18-json.md` (+RU), `docs/guide/provider-specific/clickhouse.md` (+RU),
+  `docs/providers/clickhouse.md` (+RU), `docs/advanced/api-reference.md` (+RU); gap-analysis §4 п.4.
+
 ### Прочее
-- Возвращающие массивы `JSONExtractKeys`/`JSONExtractKeysAndValues`/`JSONExtractArrayRaw`.
 - `dictGetHierarchy`/`dictGetChildren`/`dictIsIn`.
 - `untuple` (меняет набор колонок; не скаляр).
 - Привязка элемента для нескольких массивов/join’ов.

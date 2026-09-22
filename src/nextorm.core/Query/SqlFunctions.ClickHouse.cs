@@ -191,6 +191,40 @@ namespace NextORM.Core;
         /// <summary><c>JSONExtractRaw(json, path)</c>: the raw JSON fragment (object/array) at <paramref name="path"/>.</summary>
         public string? json_extract_raw(string? json, string? path) => default!;
 
+        /// <summary>
+        /// <c>JSONExtractKeys(json)</c>: the object keys, surfaced as <c>string[]</c> and projected
+        /// directly (or used as the operand of another array function). Requires a provider that
+        /// supports the string-JSON family (see <see cref="ISqlDialect.SupportsJsonExtract"/>;
+        /// ClickHouse).
+        /// </summary>
+        public string[] json_extract_keys(string? json) => default!;
+
+        /// <summary><c>JSONExtractKeys(json, path)</c>: as <see cref="json_extract_keys(string?)"/> at <paramref name="path"/>.</summary>
+        public string[] json_extract_keys(string? json, string? path) => default!;
+
+        /// <summary>
+        /// <c>JSONExtractArrayRaw(json)</c>: the array elements, each as raw JSON text, surfaced as
+        /// <c>string[]</c> and projected directly. Requires a provider that supports the string-JSON
+        /// family (see <see cref="ISqlDialect.SupportsJsonExtract"/>; ClickHouse).
+        /// </summary>
+        public string[] json_extract_array_raw(string? json) => default!;
+
+        /// <summary><c>JSONExtractArrayRaw(json, path)</c>: as <see cref="json_extract_array_raw(string?)"/> at <paramref name="path"/>.</summary>
+        public string[] json_extract_array_raw(string? json, string? path) => default!;
+
+        /// <summary>
+        /// <c>JSONExtractKeysAndValues(json, value_type)</c>: the object key/value pairs, surfaced as
+        /// <c>Tuple&lt;string, T&gt;[]</c> and projected directly. Requires a provider that supports the
+        /// string-JSON family (see <see cref="ISqlDialect.SupportsJsonExtract"/>; ClickHouse).
+        /// </summary>
+        /// <typeparam name="T">The ClickHouse value type, named in SQL through the dialect type map; it
+        /// must be a non-nullable CLR type.</typeparam>
+        public Tuple<string, T>[] json_extract_keys_and_values<T>(string? json) => default!;
+
+        /// <summary><c>JSONExtractKeysAndValues(json, path, value_type)</c>: as <see cref="json_extract_keys_and_values{T}(string?)"/> at <paramref name="path"/>.</summary>
+        /// <typeparam name="T">The ClickHouse value type; it must be a non-nullable CLR type.</typeparam>
+        public Tuple<string, T>[] json_extract_keys_and_values<T>(string? json, string? path) => default!;
+
         /// <summary><c>JSONHas(json, path)</c>: true when <paramref name="path"/> exists.</summary>
         public bool json_has(string? json, string? path) => default!;
 

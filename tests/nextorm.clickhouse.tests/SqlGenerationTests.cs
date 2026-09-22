@@ -1059,6 +1059,41 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void JsonArrayExtractFunctions_ShouldUseClickHouseNames()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            K = SqlFunctions.ClickHouse.json_extract_keys(x.String),
+            KP = SqlFunctions.ClickHouse.json_extract_keys(x.String, "o"),
+            A = SqlFunctions.ClickHouse.json_extract_array_raw(x.String),
+            AP = SqlFunctions.ClickHouse.json_extract_array_raw(x.String, "o"),
+            V = SqlFunctions.ClickHouse.json_extract_keys_and_values<int>(x.String),
+            VP = SqlFunctions.ClickHouse.json_extract_keys_and_values<long>(x.String, "o")
+        }));
+
+        sql.Should().Contain("JSONExtractKeys(somestring)");
+        sql.Should().Contain("JSONExtractKeys(somestring, 'o')");
+        sql.Should().Contain("JSONExtractArrayRaw(somestring)");
+        sql.Should().Contain("JSONExtractArrayRaw(somestring, 'o')");
+        sql.Should().Contain("JSONExtractKeysAndValues(somestring, 'Int32')");
+        sql.Should().Contain("JSONExtractKeysAndValues(somestring, 'o', 'Int64')");
+    }
+
+    [Fact]
+    public void JsonExtractKeysAndValues_WithNullableType_ShouldThrow()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new { V = SqlFunctions.ClickHouse.json_extract_keys_and_values<int?>(x.String) }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*non-nullable*");
+    }
+
+    [Fact]
     public void JsonPathFunctions_ShouldUseClickHouseNames()
     {
         using var ctx = ClickHouseTestContext.Create();

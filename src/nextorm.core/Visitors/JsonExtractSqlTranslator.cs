@@ -5,6 +5,7 @@ namespace NextORM.Core;
 /// <summary>
 /// Translates the string-JSON surface of <see cref="ClickHouseFunctions"/> (<c>json_extract_string</c>,
 /// <c>json_extract_int</c>, <c>json_extract_float</c>, <c>json_extract_bool</c>, <c>json_extract_raw</c>,
+/// <c>json_extract_keys</c>, <c>json_extract_array_raw</c>, <c>json_extract_keys_and_values</c>,
 /// <c>json_has</c>, <c>json_length</c>, <c>json_type</c>, the flat-JSON fast path
 /// <c>visit_param_extract_string</c>/<c>_int</c>/<c>_float</c>/<c>_bool</c>/<c>_raw</c>, the JSONPath
 /// scalars <c>json_value</c>/<c>json_query</c>/<c>json_exists</c> and the native-JSON
@@ -39,6 +40,15 @@ internal static class JsonExtractSqlTranslator
                 return true;
             case nameof(ClickHouseFunctions.json_extract_raw) when node.Arguments.Count == 2:
                 EmitFunction(visitor, node, "json_extract_raw");
+                return true;
+            case nameof(ClickHouseFunctions.json_extract_keys) when node.Arguments.Count is 1 or 2:
+                EmitFunction(visitor, node, "json_extract_keys");
+                return true;
+            case nameof(ClickHouseFunctions.json_extract_array_raw) when node.Arguments.Count is 1 or 2:
+                EmitFunction(visitor, node, "json_extract_array_raw");
+                return true;
+            case nameof(ClickHouseFunctions.json_extract_keys_and_values) when node.Arguments.Count is 1 or 2:
+                EmitFunction(visitor, node, "json_extract_keys_and_values", valueType: node.Method.GetGenericArguments()[0]);
                 return true;
             case nameof(ClickHouseFunctions.json_has) when node.Arguments.Count == 2:
                 EmitFunction(visitor, node, "json_has");
@@ -92,7 +102,7 @@ internal static class JsonExtractSqlTranslator
     /// <see cref="ISqlDialect.SupportsJsonExtract"/>. <paramref name="jsonPath"/> and
     /// <paramref name="nativeJson"/> only select the failure message.
     /// </summary>
-    private static void EmitFunction(BaseExpressionVisitor visitor, MethodCallExpression node, string name, bool jsonPath = false, bool nativeJson = false)
+    private static void EmitFunction(BaseExpressionVisitor visitor, MethodCallExpression node, string name, bool jsonPath = false, bool nativeJson = false, Type? valueType = null)
     {
         if (!visitor.Dialect.SupportsJsonExtract)
             throw new NotSupportedException(nativeJson
@@ -112,9 +122,18 @@ internal static class JsonExtractSqlTranslator
         }
 
         visitor.NeedAliasForColumn = true;
-        var rendered = new string[args.Count];
+        var rendered = new string[args.Count + (valueType is null ? 0 : 1)];
         for (var (i, cnt) = (0, args.Count); i < cnt; i++)
             rendered[i] = visitor.VisitToString(args[i]);
+
+        if (valueType is not null)
+        {
+            if (Nullable.GetUnderlyingType(valueType) is not null)
+                throw new NotSupportedException(
+                    "The JSONExtractKeysAndValues value type must be a non-nullable ClickHouse type.");
+
+            rendered[^1] = $"'{visitor.Dialect.MakeTypeName(valueType)}'";
+        }
 
         visitor.Builder!.Append(visitor.Dialect.MakeJsonExtract(name, rendered));
     }

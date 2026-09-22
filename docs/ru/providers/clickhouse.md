@@ -58,7 +58,9 @@ ADO.NET-провайдер `ClickHouse.Driver`. Он создаёт `ClickHouseC
   строкового JSON `json_extract_string`/`json_extract_int`/`json_extract_float`/`json_extract_bool`/
   `json_extract_raw`/`json_has`/`json_type` — как `JSONExtractString`/`JSONExtractInt`/`JSONExtractFloat`/
   `JSONExtractBool`/`JSONExtractRaw`/`JSONHas`/`JSONType`, `json_length` — как
-  `toInt64(JSONLength(...))`, а быстрый разбор плоского JSON `visit_param_extract_string`/`_int`/`_float`/
+  `toInt64(JSONLength(...))`, возвращающие массивы `json_extract_keys`/`json_extract_array_raw`/
+  `json_extract_keys_and_values` — как `JSONExtractKeys`/`JSONExtractArrayRaw`/`JSONExtractKeysAndValues`
+  (проецируются как `string[]`/`Tuple<string, T>[]`; тип значения последней — non-nullable generic), а быстрый разбор плоского JSON `visit_param_extract_string`/`_int`/`_float`/
   `_bool`/`_raw` — как `visitParamExtractString`/`visitParamExtractInt`/`visitParamExtractFloat`/
   `visitParamExtractBool`/`visitParamExtractRaw`; JSONPath-скаляры `json_value`/`json_query`/
   `json_exists` — как `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS`, а функции нативного JSON `json_all_paths`/
@@ -173,7 +175,7 @@ select concat('id:', id) as `Label` from simple_entity
 | any_last (последняя строка) | `anyLast(x)` |
 | Условная функция | `iif(cond, a, b)` → `if(cond, a, b)`; `multi_if(when(c1, v1), ..., otherwise(v))` → `multiIf(c1, v1, ..., v)` |
 | Оконные функции | `percent_rank()`, `cume_dist()`, `nth_value(expr, n)` поддерживаются; `lag_in_frame`/`lead_in_frame` → `lagInFrame`/`leadInFrame` (учитывают фрейм; обычные `lag`/`lead` на ClickHouse отвергают явный фрейм) |
-| Строковый JSON | `JSONExtractString`, `JSONExtractInt`, `JSONExtractFloat`, `JSONExtractBool`, `JSONExtractRaw`, `JSONHas`, `toInt64(JSONLength(...))`, `JSONType`, `visitParamExtract*`, `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (JSONPath) |
+| Строковый JSON | `JSONExtractString`, `JSONExtractInt`, `JSONExtractFloat`, `JSONExtractBool`, `JSONExtractRaw`, `JSONHas`, `toInt64(JSONLength(...))`, `JSONType`, `JSONExtractKeys`/`JSONExtractArrayRaw` (`string[]`), `JSONExtractKeysAndValues` (`Tuple<string, T>[]`), `visitParamExtract*`, `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (JSONPath) |
 | Функции нативного JSON | `json_all_paths` → `JSONAllPaths` (проецируется как `string[]`), `json_all_paths_with_types` → `JSONAllPathsWithTypes` (нативный `Map(String, String)` отдаётся как `Dictionary<string, string>`; мост к коллекции — `mapKeys`/`mapValues`), `to_json_string` → `toJSONString`; все принимают нативное значение `JSON` (`CAST(col AS JSON)` для колонки `String`); сам нативный *тип колонки* `JSON` не замаплен |
 | Словари | `dictGet`, `dictGetOrDefault`, `dictHas` (нужен сконфигурированный `CREATE DICTIONARY`) |
 | Session/info-функции | `currentUser()`, `currentDatabase()`, `version()` (`session_user`/`current_schema` недоступны) |

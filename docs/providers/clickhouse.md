@@ -57,7 +57,10 @@ and returns [`Instance`](xref:NextORM.ClickHouse.ClickHouseDialect.Instance) fro
 - the string-JSON extractors `json_extract_string`/`json_extract_int`/`json_extract_float`/
   `json_extract_bool`/`json_extract_raw`/`json_has`/`json_type` as `JSONExtractString`/`JSONExtractInt`/
   `JSONExtractFloat`/`JSONExtractBool`/`JSONExtractRaw`/`JSONHas`/`JSONType`, `json_length` as
-  `toInt64(JSONLength(...))`, and the flat-JSON fast path `visit_param_extract_string`/`_int`/`_float`/
+  `toInt64(JSONLength(...))`, the array-returning `json_extract_keys`/`json_extract_array_raw`/
+  `json_extract_keys_and_values` as `JSONExtractKeys`/`JSONExtractArrayRaw`/`JSONExtractKeysAndValues`
+  (projecting as `string[]`/`Tuple<string, T>[]`; the value type of the last is a non-nullable generic),
+  and the flat-JSON fast path `visit_param_extract_string`/`_int`/`_float`/
   `_bool`/`_raw` as `visitParamExtractString`/`visitParamExtractInt`/`visitParamExtractFloat`/
   `visitParamExtractBool`/`visitParamExtractRaw`; the JSONPath scalars `json_value`/`json_query`/
   `json_exists` as `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` and the native-JSON functions `json_all_paths`/
@@ -170,7 +173,7 @@ select concat('id:', id) as `Label` from simple_entity
 | any_last (last row) | `anyLast(x)` |
 | Conditional function | `iif(cond, a, b)` → `if(cond, a, b)`; `multi_if(when(c1, v1), ..., otherwise(v))` → `multiIf(c1, v1, ..., v)` |
 | Window functions | `percent_rank()`, `cume_dist()`, `nth_value(expr, n)` supported; `lag_in_frame`/`lead_in_frame` → `lagInFrame`/`leadInFrame` (frame-respecting; the plain `lag`/`lead` reject an explicit frame on ClickHouse) |
-| String JSON | `JSONExtractString`, `JSONExtractInt`, `JSONExtractFloat`, `JSONExtractBool`, `JSONExtractRaw`, `JSONHas`, `toInt64(JSONLength(...))`, `JSONType`, `visitParamExtract*`, `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (JSONPath) |
+| String JSON | `JSONExtractString`, `JSONExtractInt`, `JSONExtractFloat`, `JSONExtractBool`, `JSONExtractRaw`, `JSONHas`, `toInt64(JSONLength(...))`, `JSONType`, `JSONExtractKeys`/`JSONExtractArrayRaw` (`string[]`), `JSONExtractKeysAndValues` (`Tuple<string, T>[]`), `visitParamExtract*`, `JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` (JSONPath) |
 | Native JSON functions | `json_all_paths` → `JSONAllPaths` (projects as `string[]`), `json_all_paths_with_types` → `JSONAllPathsWithTypes` (native `Map(String, String)` surfaced as `Dictionary<string, string>`; `mapKeys`/`mapValues` bridge to a collection), `to_json_string` → `toJSONString`; all take a native `JSON` value (`CAST(col AS JSON)` for a `String` column), while the native `JSON` *column type* itself is not mapped |
 | Dictionaries | `dictGet`, `dictGetOrDefault`, `dictHas` (needs a configured `CREATE DICTIONARY`) |
 | Session/info functions | `currentUser()`, `currentDatabase()`, `version()` (`session_user`/`current_schema` are not available) |
