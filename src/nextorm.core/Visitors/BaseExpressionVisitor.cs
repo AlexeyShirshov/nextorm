@@ -184,44 +184,11 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     /// </summary>
     private void EmitTableAliasColumn(MethodCallExpression node)
     {
-        if (_columnsProvider.HasAliases && !_dontNeedAlias)
-        {
-            var v = new TypeExpressionVisitor<ParameterExpression>();
-            v.Visit(node.Object);
-            if (v.Has)
-            {
-                string? tableAliasForColumn;
-
-                if (v.Target!.Type.IsAssignableTo(typeof(IProjection)) && node.Object is MemberExpression member)
-                {
-                    // A column reached through a joined projection (p.Item1.GetString("c")): the
-                    // member name carries the 1-based position in the projection, exactly like the
-                    // mapped-member path in MemberTranslator. Resolving the bare parameter instead
-                    // would yield no alias and silently drop the qualifier, which makes a shared
-                    // column name ambiguous.
-                    var name = member.Member.Name;
-                    var digitsStart = name.Length;
-                    while (digitsStart > 0 && char.IsAsciiDigit(name[digitsStart - 1])) digitsStart--;
-                    var position = 0;
-                    for (var i = digitsStart; i < name.Length; i++) position = position * 10 + (name[i] - '0');
-                    position--;
-                    var paramIdx = ProjectionAliasCache.GetOccurrence(v.Target.Type, position);
-                    tableAliasForColumn = AliasResolver.GetAliasFromParam(this, member.Type, paramIdx, false);
-                }
-                else
-                {
-                    tableAliasForColumn = AliasResolver.GetAliasFromParam(this, v.Target!, false);
-                }
-
-                if (!string.IsNullOrEmpty(tableAliasForColumn))
-                {
-                    _builder!.Append(tableAliasForColumn).Append('.');
-                }
-            }
-        }
-
         if (!TableAliasAccessors.IsAccessor(node.Method.Name))
             throw new NotSupportedException(node.Method.Name);
+
+        if (_columnsProvider.HasAliases && !_dontNeedAlias)
+            AppendColumnAlias(node.Object!);
 
         if (node.Arguments is [ConstantExpression constExp])
             AppendIdentifier(constExp.Value?.ToString() ?? string.Empty);
@@ -230,6 +197,75 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         else
             throw new NotSupportedException(node.Method.Name);
     }
+
+    /// <summary>
+    /// Renders a mapped entity's column selected by name
+    /// (<c>SqlFunctions.Column&lt;T&gt;(entity, "name")</c>), prefixing it with the table alias when
+    /// the query has aliased sources. The entity argument must be a source parameter; anything else
+    /// would silently render an unqualified or wrong identifier.
+    /// </summary>
+    internal void AppendColumnReference(Expression source, string columnName)
+    {
+        var unwrapped = UnwrapConvert(source);
+        var target = ResolveColumnSource(unwrapped)
+            ?? throw new BuildSqlCommandException(
+                $"SqlFunctions.Column requires an entity source parameter (got '{source}').");
+
+        if (_columnsProvider.HasAliases && !_dontNeedAlias)
+            AppendColumnAlias(unwrapped, target);
+
+        AppendIdentifier(columnName);
+    }
+
+    /// <summary>
+    /// Appends the table alias of the source that carries a by-name column. A projection member
+    /// (<c>p.Item1</c>) is resolved by its 1-based occurrence, so a type repeated in the projection
+    /// picks the right table instead of the first one.
+    /// </summary>
+    private void AppendColumnAlias(Expression source)
+    {
+        var target = ResolveColumnSource(source);
+        if (target is null)
+            return;
+
+        AppendColumnAlias(source, target);
+    }
+
+    private void AppendColumnAlias(Expression source, ParameterExpression target)
+    {
+        string? tableAliasForColumn;
+
+        if (target.Type.IsAssignableTo(typeof(IProjection)) && source is MemberExpression member)
+        {
+            var name = member.Member.Name;
+            var digitsStart = name.Length;
+            while (digitsStart > 0 && char.IsAsciiDigit(name[digitsStart - 1])) digitsStart--;
+            var position = 0;
+            for (var i = digitsStart; i < name.Length; i++) position = position * 10 + (name[i] - '0');
+            position--;
+            var paramIdx = ProjectionAliasCache.GetOccurrence(target.Type, position);
+            tableAliasForColumn = AliasResolver.GetAliasFromParam(this, member.Type, paramIdx, false);
+        }
+        else
+        {
+            tableAliasForColumn = AliasResolver.GetAliasFromParam(this, target, false);
+        }
+
+        if (!string.IsNullOrEmpty(tableAliasForColumn))
+            _builder!.Append(tableAliasForColumn).Append('.');
+    }
+
+    private static ParameterExpression? ResolveColumnSource(Expression source)
+    {
+        var v = new TypeExpressionVisitor<ParameterExpression>();
+        v.Visit(source);
+        return v.Has ? v.Target : null;
+    }
+
+    private static Expression UnwrapConvert(Expression exp)
+        => exp is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } unary
+            ? UnwrapConvert(unary.Operand)
+            : exp;
 
     /// <summary>
     /// Folds an expression with no lambda parameters (a call or a value-type constructor such as

@@ -220,9 +220,12 @@ Ordered by impact on real query authoring. Per-feature details and owners live i
     providers throw `NotSupportedException`.
     Shipped: [Scalar functions](../../guide/11-scalar-functions.md#arrays-clickhouse),
     [Provider-specific SQL](../../guide/provider-specific/clickhouse.md).
-10. **ClickHouse columns have no by-name access without an entity property.** `IHit` describes only 6
-    `hits_v1` columns; the rest are reachable only through `WithSql`.
-    Todo: [`todo_clickhouse_columns_by_name.md`](todo_clickhouse_columns_by_name.md).
+10. **Typed column access by name — shipped.** `SqlFunctions.Column<T>(entity, "name")` projects a
+    column of a mapped entity that has no property (wide ClickHouse tables such as `hits_v1`); the
+    name is matched verbatim and the value materialised as `T`. Works on every SQL provider; the
+    in-memory provider rejects it. Shipped:
+    [Querying and projections](../../guide/01-querying-and-projections.md#columns-by-name),
+    [ClickHouse](../../providers/clickhouse.md).
 11. **Dynamic-schema and server-scoped table sources.** The ClickHouse server/cluster table functions
     `url`/`s3`/`file`/`remote`/`remoteSecure`/`cluster`/`clusterAllReplicas` are shipped on
     `SqlFunctions.ClickHouse.*` with a generic caller-declared `TRow` row interface; the dynamic-schema

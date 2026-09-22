@@ -126,6 +126,43 @@ Output:
 | 2 | xxx/asdfgoi |
 | 3 | null |
 
+## Columns by name
+
+A mapped entity only exposes the columns declared on it. A column that has no property — for example
+in a wide ClickHouse table — is projected with
+[`SqlFunctions.Column<T>`](xref:NextORM.Core.SqlFunctions):
+
+```csharp
+var rows = await dataContext.From<SimpleEntity>()
+    .Select(entity => new { Region = SqlFunctions.Column<ulong>(entity, "region_id") })
+    .ToListAsync();
+```
+
+```sql
+-- SQLite
+select region_id as 'Region' from simple_entity
+```
+
+The first argument must be the query lambda parameter (a source), and the name is matched against the
+database column verbatim, so quoting follows the provider (`` `region_id` `` on ClickHouse and MySQL,
+`"region_id"` on PostgreSQL and SQLite, `[region_id]` on SQL Server). The value is materialized as
+`T`, so the type must be one the row reader supports. Unlike a mapped member, the column is not
+validated against entity metadata: a misspelled name fails at the database.
+
+The same accessor works in a predicate and on a joined projection:
+
+```csharp
+var rows = await dataContext.From<SimpleEntity>()
+    .Join(dataContext.From<ComplexEntity>(), (s, c) => s.Id == c.Id)
+    .Where(p => SqlFunctions.Column<long>(p.Item2, "region_id") > 0)
+    .Select(p => new { p.Item1.Id, Region = SqlFunctions.Column<long>(p.Item2, "region_id") })
+    .ToListAsync();
+```
+
+For a source that has no entity type at all (`From("table")`), columns are read through
+[`TableAlias`](xref:NextORM.Core.TableAlias) — see [Joins](03-joins.md) and [CTE](09-cte.md). The
+in-memory provider has no column-name concept and rejects `SqlFunctions.Column`.
+
 ## DTO
 
 A non-anonymous type is projected through its constructor:

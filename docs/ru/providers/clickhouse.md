@@ -220,6 +220,11 @@ select concat('id:', id) as `Label` from simple_entity
   `mapKeys`/`mapValues`). Сама нативная *колонка* `JSON` при этом не замаплена: `ClickHouse.Driver`
   отдаёт её как `System.Text.Json.Nodes.JsonObject`, для которого у row reader нет маппинга. Храните
   JSON в колонке `String` (или приведите колонку в SQL), если нужно материализовать саму колонку.
+- В `hits_v1` и других широких таблицах колонок намного больше, чем объявляет интерфейс сущности.
+  Вместо маппинга всех колонок лишние можно спроецировать по имени через
+  [`SqlFunctions.Column<T>`](xref:NextORM.Core.SqlFunctions) (см.
+  [Запросы и проекции](../guide/01-querying-and-projections.md#колонки-по-имени)); имя сверяется
+  дословно, поэтому кавычки — по диалекту.
 
 ## См. также
 

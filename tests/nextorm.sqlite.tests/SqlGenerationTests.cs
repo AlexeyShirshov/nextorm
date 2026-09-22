@@ -365,6 +365,17 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void ColumnByName_ShouldRenderColumnIdentifierAndRenameAlias()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Select(x => new { Region = SqlFunctions.Column<int>(x, "region_id") }));
+
+        sql.Should().Be("select region_id as 'Region' from simple_entity");
+    }
+
+    [Fact]
     public void Parameter_ShouldUseDollarPrefix()
     {
         using var ctx = SqliteTestContext.Create();

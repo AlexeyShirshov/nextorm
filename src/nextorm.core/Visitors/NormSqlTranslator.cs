@@ -4,7 +4,8 @@ using Microsoft.Extensions.Logging;
 namespace NextORM.Core;
 
 /// <summary>
-/// Translates the <see cref="SqlFunctions"/> helper (<c>SqlFunctions.Parameter</c>) and the <see cref="CommonFunctions"/>
+/// Translates the <see cref="SqlFunctions"/> helpers (<c>SqlFunctions.Parameter</c>,
+/// <c>SqlFunctions.Column&lt;T&gt;</c>) and the <see cref="CommonFunctions"/>
 /// built-ins (aggregates, <c>EXISTS</c>/<c>ANY</c>/<c>ALL</c> and <c>IN</c> subqueries, value-list
 /// <c>IN</c>) into SQL. Extracted from <see cref="BaseExpressionVisitor.VisitMethodCall"/>; the
 /// branch order, the visitor walk and therefore the parameter numbering are unchanged.
@@ -34,9 +35,15 @@ internal static class NormSqlTranslator
         return false;
     }
 
-    /// <summary>Emits <c>SqlFunctions.Parameter</c> as a named parameter; any other <see cref="SqlFunctions"/> method throws.</summary>
+    /// <summary>Emits <c>SqlFunctions.Parameter</c>/<c>SqlFunctions.Column&lt;T&gt;</c>; any other <see cref="SqlFunctions"/> method throws.</summary>
     private static void TranslateNormParam(BaseExpressionVisitor visitor, MethodCallExpression node)
     {
+        if (node.Method.Name == nameof(SqlFunctions.Column))
+        {
+            TranslateColumn(visitor, node);
+            return;
+        }
+
         var paramIdx = node switch
         {
             {
@@ -59,6 +66,23 @@ internal static class NormSqlTranslator
         }
         else
             throw new NotSupportedException(node.Method.Name);
+    }
+
+    /// <summary>
+    /// Emits <c>SqlFunctions.Column&lt;T&gt;(entity, "name")</c> as the entity's column identifier
+    /// (table-qualified when the query has aliased sources). The column name is a compile-time
+    /// constant, so it participates in the plan key through the expression tree.
+    /// </summary>
+    private static void TranslateColumn(BaseExpressionVisitor visitor, MethodCallExpression node)
+    {
+        if (node.Arguments is not [Expression entity, ConstantExpression { Value: string columnName }])
+            throw new NotSupportedException(nameof(SqlFunctions.Column));
+
+        if (!visitor.IsParamMode)
+        {
+            visitor.AppendColumnReference(entity, columnName);
+            visitor.ColumnName = columnName;
+        }
     }
 
     /// <summary>Emits the <see cref="CommonFunctions"/> built-ins; an unrecognised method throws.</summary>

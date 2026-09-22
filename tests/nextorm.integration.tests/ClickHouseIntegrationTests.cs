@@ -23,6 +23,28 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     }
 
     [Fact]
+    public void ColumnByName_ShouldReadUnmappedColumn()
+    {
+        var rows = _sut.DataProvider.From<IWideEntity>()
+            .OrderBy(x => x.Id)
+            .Select(x => new { x.Id, Region = SqlFunctions.Column<ulong>(x, "regionid") })
+            .ToList();
+
+        rows.Should().HaveCount(3);
+        rows.Select(r => r.Region).Should().Equal(10UL, 20UL, 30UL);
+    }
+
+    [Fact]
+    public void ColumnByName_InWhere_ShouldFilterByUnmappedColumn()
+    {
+        _sut.DataProvider.From<IWideEntity>()
+            .Where(x => SqlFunctions.Column<ulong>(x, "regionid") == 20)
+            .Select(x => x.Id)
+            .First()
+            .Should().Be(2);
+    }
+
+    [Fact]
     public void CountAggregates_ShouldCastToInt64InProjection()
     {
         // The native count()/countIf() return UInt64, which the anonymous-projection materializer
@@ -1214,4 +1236,12 @@ public interface ITupleEntity
     int Id { get; set; }
     [Column("pair")]
     Tuple<int, string> Pair { get; set; }
+}
+
+[SqlTable("wide_entity")]
+public interface IWideEntity
+{
+    [Key]
+    [Column("id")]
+    int Id { get; set; }
 }

@@ -850,6 +850,17 @@ public class InMemoryTests
     }
 
     [Fact]
+    public void ColumnByName_ShouldThrowClearNotSupported()
+    {
+        var act = () => _sut.DataProvider
+            .From<SimpleEntity>()
+            .Select(it => new { R = SqlFunctions.Column<int>(it, "id") })
+            .ToList();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*in-memory*");
+    }
+
+    [Fact]
     public void XmlNodesApply_ShouldThrowClearNotSupported()
     {
         var act = () => _sut.DataProvider

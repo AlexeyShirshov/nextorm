@@ -127,6 +127,43 @@ select id, ((somestring || '/') || requiredstring) as 'Display' from complex_ent
 | 2 | xxx/asdfgoi |
 | 3 | null |
 
+## Колонки по имени
+
+Mapped-сущность раскрывает только объявленные в ней колонки. Колонка без свойства — например, в
+широкой таблице ClickHouse — проецируется через
+[`SqlFunctions.Column<T>`](xref:NextORM.Core.SqlFunctions):
+
+```csharp
+var rows = await dataContext.From<SimpleEntity>()
+    .Select(entity => new { Region = SqlFunctions.Column<ulong>(entity, "region_id") })
+    .ToListAsync();
+```
+
+```sql
+-- SQLite
+select region_id as 'Region' from simple_entity
+```
+
+Первым аргументом должен быть параметр лямбды запроса (источник); имя сверяется с именем колонки в
+базе дословно, поэтому кавычки зависят от провайдера (`` `region_id` `` в ClickHouse и MySQL,
+`"region_id"` в PostgreSQL и SQLite, `[region_id]` в SQL Server). Значение материализуется как `T`,
+поэтому тип должен поддерживаться row reader. В отличие от mapped-члена, колонка не сверяется с
+метаданными сущности: опечатка в имени проявится на базе.
+
+Тот же доступ работает в предикате и на join-проекции:
+
+```csharp
+var rows = await dataContext.From<SimpleEntity>()
+    .Join(dataContext.From<ComplexEntity>(), (s, c) => s.Id == c.Id)
+    .Where(p => SqlFunctions.Column<long>(p.Item2, "region_id") > 0)
+    .Select(p => new { p.Item1.Id, Region = SqlFunctions.Column<long>(p.Item2, "region_id") })
+    .ToListAsync();
+```
+
+Для источника вообще без типа сущности (`From("table")`) колонки читаются через
+[`TableAlias`](xref:NextORM.Core.TableAlias) — см. [Joins](03-joins.md) и [CTE](09-cte.md).
+In-memory-провайдер не имеет понятия имени колонки и отклоняет `SqlFunctions.Column`.
+
 ## DTO
 
 Неанонимный тип проецируется через свой конструктор:

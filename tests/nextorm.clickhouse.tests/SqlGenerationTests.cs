@@ -2592,6 +2592,53 @@ public class SqlGenerationTests
         sql.Should().Contain("on t1.id = t2.id");
     }
 
+    [Fact]
+    public void ColumnByName_ShouldRenderColumnIdentifierAndRenameAlias()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Select(x => new { Region = SqlFunctions.Column<ulong>(x, "RegionID") }));
+
+        sql.Should().Be("select RegionID as `Region` from simple_entity");
+    }
+
+    [Fact]
+    public void ColumnByName_OnJoinProjection_ShouldQualifyWithTableAlias()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Join(ctx.From<IComplexEntity>(), (s, c) => s.Id == c.Id)
+            .Where(p => SqlFunctions.Column<string>(p.Item2, "somestring") == "x")
+            .Select(p => new { p.Item1.Id, S = SqlFunctions.Column<string>(p.Item2, "somestring") }));
+
+        sql.Should().Contain("where t2.somestring = 'x'");
+        sql.Should().Contain("t2.somestring as `S`");
+    }
+
+    [Fact]
+    public void ColumnByName_QuotedIdentifiers_ShouldBacktick()
+    {
+        using var ctx = ClickHouseTestContext.CreateQuoted();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Select(x => new { R = SqlFunctions.Column<ulong>(x, "RegionID") }));
+
+        sql.Should().Be("select `RegionID` as `R` from `simple_entity`");
+    }
+
+    [Fact]
+    public void ColumnByName_OnNonSource_ShouldThrow()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .Select(x => new { R = SqlFunctions.Column<int>("not-a-source", "id") }));
+
+        act.Should().Throw<BuildSqlCommandException>();
+    }
+
 }
 
 [SqlTable("unsigned_cast")]

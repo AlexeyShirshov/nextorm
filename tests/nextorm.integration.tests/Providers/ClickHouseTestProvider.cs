@@ -71,11 +71,17 @@ internal sealed class ClickHouseTestProvider : ITestProvider
     [
         "drop table if exists simple_entity",
         "drop table if exists complex_entity",
+        "drop table if exists wide_entity",
 
         """
         create table simple_entity (id Int32) engine = Memory
         """,
         "insert into simple_entity (id) values (1),(2),(3),(4),(5),(6),(7),(8),(9),(10)",
+
+        """
+        create table wide_entity (id Int32, regionid UInt64, note String) engine = Memory
+        """,
+        "insert into wide_entity (id, regionid, note) values (1, 10, 'a'), (2, 20, 'b'), (3, 30, 'c')",
 
         """
         create table complex_entity

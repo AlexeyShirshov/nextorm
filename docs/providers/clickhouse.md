@@ -216,6 +216,11 @@ select concat('id:', id) as `Label` from simple_entity
   *column*, however, is not mapped: `ClickHouse.Driver` surfaces it as
   `System.Text.Json.Nodes.JsonObject`, which nextorm's row reader has no mapping for. Store JSON in
   a `String` column (or cast the column in SQL) when you need to materialise the column itself.
+- `hits_v1` and similar wide tables have far more columns than an entity interface declares. Rather
+  than mapping every column, project the extra ones by name with
+  [`SqlFunctions.Column<T>`](xref:NextORM.Core.SqlFunctions) (see
+  [Querying and projections](../guide/01-querying-and-projections.md#columns-by-name)); the name is
+  matched verbatim, so quoting follows the dialect.
 
 ## See also
 

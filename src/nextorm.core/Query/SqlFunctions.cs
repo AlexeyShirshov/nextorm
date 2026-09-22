@@ -61,6 +61,21 @@ public static partial class SqlFunctions
     public static T Parameter<T>(int idx) => default!;
 
     /// <summary>
+    /// References a column of an entity source by its database name with an explicit CLR type, for
+    /// entities that do not declare a property for the column (for example a wide ClickHouse table).
+    /// The value is materialized as <typeparamref name="T"/>.
+    /// </summary>
+    /// <typeparam name="T">The CLR type of the column value.</typeparam>
+    /// <param name="entity">The entity source the column belongs to (a query lambda parameter).</param>
+    /// <param name="columnName">The database column name.</param>
+    /// <remarks>
+    /// Only valid inside a query expression. The in-memory provider has no column-name concept and
+    /// rejects the query.
+    /// </remarks>
+    public static T Column<T>(object entity, string columnName) => throw new NotSupportedException(
+        "SqlFunctions.Column can only be used inside a query expression; the in-memory provider does not support column-by-name access.");
+
+    /// <summary>
     /// Row shape produced by <see cref="PostgresFunctions.generate_series(long, long)"/>: a single column
     /// named <c>generate_series</c> holding the generated number.
     /// </summary>
