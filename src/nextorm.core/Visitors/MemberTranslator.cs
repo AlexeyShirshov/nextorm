@@ -159,14 +159,14 @@ internal static class MemberTranslator
                     // }
                 }
 
-                var (n, innerQuery) = visitor.ColumnsProvider.FindQueryCommand(visitor.EntityType);
+                var (n, innerQuery) = visitor.ColumnsProvider.FindQueryCommand(visitor.EntityType, visitor.IncludeNestedSources);
                 if (innerQuery is not null)
                 {
                     var innerCol = innerQuery.SelectList!.SingleOrDefault(col => col.PropertyName == node.Member.Name);
                     if (innerCol is null)
                         throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
 
-                    var sqlBuilder = new SqlBuilder(visitor.Options);
+                    var sqlBuilder = new SqlBuilder(visitor.Options with { IncludeNestedSources = true });
                     var col = sqlBuilder.MakeColumn(innerCol, innerQuery.EntityType!, true, renameAware: true);
                     if (!visitor.IsParamMode)
                     {
@@ -389,14 +389,14 @@ internal static class MemberTranslator
                     // }
                 }
 
-                var (idx, innerQuery) = visitor.ColumnsProvider.FindQueryCommand(node.Expression!.Type);
+                var (idx, innerQuery) = visitor.ColumnsProvider.FindQueryCommand(node.Expression!.Type, visitor.IncludeNestedSources);
                 if (innerQuery is not null)
                 {
                     var innerCol = innerQuery.SelectList!.SingleOrDefault(col => col.PropertyName == node.Member.Name);
                     if (innerCol is null)
                         throw new BuildSqlCommandException($"Cannot find inner column {node.Member.Name}");
 
-                    var sqlBuilder = new SqlBuilder(visitor.Options);
+                    var sqlBuilder = new SqlBuilder(visitor.Options with { IncludeNestedSources = true });
                     var col = sqlBuilder.MakeColumn(innerCol, innerQuery.EntityType!, true, renameAware: true);
 
                     if (!visitor.IsParamMode)

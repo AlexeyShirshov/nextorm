@@ -21,11 +21,31 @@
   </PropertyGroup>
 
   <!--
+    Properties shared by every project. Override locally only where a project genuinely differs
+    (e.g. the source generator targets netstandard2.0). Packaging metadata for the published
+    libraries lives in src/Directory.Build.props.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <!--
     Warnings are errors in every project, in every configuration. Nullable and analyzer
     warnings must be fixed or explicitly suppressed via NoWarn, never left to rot.
   -->
   <PropertyGroup>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <!--
+    Nothing is packable unless it opts in (src/Directory.Build.props does for the libraries),
+    so tests, benchmarks and examples cannot be published by accident.
+  -->
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
   </PropertyGroup>
 
   <!--

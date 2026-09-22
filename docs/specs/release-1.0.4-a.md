@@ -55,20 +55,21 @@
 
 ## 3. Изменения в репозитории
 
-### 3.1. Бамп версий — готово
+### 3.1. Централизация свойств и версия — готово
 
-Версия вынесена в **одну точку** — `Directory.Build.props`:
+Общие свойства проектов вынесены из 20 `.csproj` в два `Directory.Build.props`:
 
-```xml
-<PropertyGroup>
-  <Version>1.0.4-alpha</Version>
-</PropertyGroup>
-```
+- **корень** (`Directory.Build.props`): `TargetFramework=net10.0`, `ImplicitUsings=enable`,
+  `Nullable=enable`, `LangVersion=latest`, `IsPackable=false` (по умолчанию), `TreatWarningsAsErrors`,
+  изоляция `obj/`/`bin/` по ОС и единый `<Version>1.0.4-alpha</Version>`;
+- **`src/Directory.Build.props`** (импортирует корень): `IsPackable=true`, `GenerateDocumentationFile=true`
+  и pack-метаданные (`PackageTags`, `Authors`, `Copyright`, `PackageReleaseNotes`, `PackageProjectUrl`,
+  `PackageReadmeFile`, `PackageLicenseExpression`, `RepositoryType`, `RepositoryUrl`).
 
-Дублирующие `<Version>` из всех 7 `src/*.csproj` удалены. Проверено: `-getProperty:Version` даёт
-`1.0.4-alpha` и для `src/*`, и для `tests/*`; `dotnet pack` даёт `nextorm.1.0.4-alpha.nupkg` и
-`nextorm.mariadb` с зависимостью `nextorm.mysql 1.0.4-alpha`; `-p:Version=<тег>` по-прежнему переопределяет
-(CI-путь не сломан).
+В `.csproj` остались только уникальные значения (`TargetFramework=netstandard2.0` у генератора,
+`PackageId`/`Title`/`Description`, `OutputType`/`AssemblyName`/`RootNamespace`, `ItemGroup`).
+Проверено `-getProperty`: библиотеки — net10.0/IsPackable=true/GenerateDocumentationFile=true/1.0.4-alpha,
+тесты и примеры — IsPackable=false без XML-доков, генератор — netstandard2.0.
 
 ### 3.2. `docs/index.md` — готово
 
@@ -117,3 +118,7 @@
 - После публикации перепроверить, что все 7 пакетов `1.0.4-alpha` видны на nuget.org (индексация — от минут до часов).
 - `todo_clickhouse_aggregate_function_state.md` (§4.6) — заблокирован драйвером `ClickHouse.Driver` 1.4.0.
 - Заморозка публичного API (issue #53).
+- Merge `main` (`b0a4759`, 1.0.3.1) → `1.0.4-alpha` в процессе (владелец завершает коммит). Конфликт
+  `includeNestedSources` разрешён: в `IColumnsProvider` возвращены 3 default-метода, в
+  `DefaultColumnsProvider` добавлены `<inheritdoc/>`. После фикса перепрогнаны гейты: `build` Release/Debug
+  **0/0**, unit **1339/0**, интеграционные **1052/0/30**, `docfx` **0/0**, `pack` 7 пакетов ок.

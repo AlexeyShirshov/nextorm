@@ -1,25 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <LangVersion>latest</LangVersion>
-    <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn)</NoWarn>
     <PackageId>nextorm.mariadb</PackageId>
     <Title>Nextorm MariaDB provider</Title>
-    <PackageTags>orm;sql;micro-orm</PackageTags>
     <Description>MariaDB provider for Nextorm</Description>
-    <Authors>Alexey Shirshov</Authors>
-    <Copyright>Alexey Shirshov</Copyright>
-    <PackageReleaseNotes>https://alexeyshirshov.github.io/nextorm/</PackageReleaseNotes>
-    <PackageProjectUrl>https://github.com/AlexeyShirshov/nextorm</PackageProjectUrl>
-    <PackageReadmeFile>readme.md</PackageReadmeFile>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageIcon></PackageIcon>
-    <RepositoryType>git</RepositoryType>
-    <RepositoryUrl>https://github.com/AlexeyShirshov/nextorm</RepositoryUrl>
   </PropertyGroup>
 
   <ItemGroup>

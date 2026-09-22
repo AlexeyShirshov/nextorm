@@ -58,21 +58,37 @@ public class DefaultColumnsProvider : IColumnsProvider
 
     /// <inheritdoc/>
     public int? FindAlias(ParameterExpression param, bool fromProjection)
-        => FindAlias(param, fromProjection, includeOuterScopes: false);
+        => FindAlias(param, fromProjection, includeOuterScopes: false, includeNestedSources: false);
 
     /// <inheritdoc/>
     public int? FindAlias(ParameterExpression param, bool fromProjection, bool includeOuterScopes)
+        => FindAlias(param, fromProjection, includeOuterScopes, includeNestedSources: false);
+
+    /// <inheritdoc/>
+    public int? FindAlias(ParameterExpression param, bool fromProjection, bool includeOuterScopes, bool includeNestedSources)
+    {
+        if (includeNestedSources)
+        {
+            var nested = FindAliasInScope(param, fromProjection, includeOuterScopes, onlyNested: true);
+            if (nested.HasValue)
+                return nested;
+        }
+
+        return FindAliasInScope(param, fromProjection, includeOuterScopes, onlyNested: false);
+    }
+
+    private int? FindAliasInScope(ParameterExpression param, bool fromProjection, bool includeOuterScopes, bool onlyNested)
     {
         var entityType = param.Type;
         var foundIdx = -1;
         ReadOnlyCollection<ParameterExpression>? paramColl = null;
         var paramIdx = -1;
-        var start = includeOuterScopes ? 0 : SourceScopeStart;
+        var start = includeOuterScopes || onlyNested ? 0 : SourceScopeStart;
 
         for (var (i, cnt) = (start, _list.Count); i < cnt; i++)
         {
             var item = _list[i];
-            if (item.Item4) continue;
+            if (item.Item4 != onlyNested) continue;
             if (item.Item1 == entityType && item.Item3 == fromProjection)
             {
                 if (_scope.Count > 0)
@@ -96,6 +112,22 @@ public class DefaultColumnsProvider : IColumnsProvider
 
     /// <inheritdoc/>
     public (int, QueryCommand?) FindQueryCommand(Type entityType)
+        => FindQueryCommand(entityType, includeNestedSources: false);
+
+    /// <inheritdoc/>
+    public (int, QueryCommand?) FindQueryCommand(Type entityType, bool includeNestedSources)
+    {
+        if (includeNestedSources)
+        {
+            var nested = FindQueryCommandInScope(entityType, onlyNested: true);
+            if (nested.Item2 is not null)
+                return nested;
+        }
+
+        return FindQueryCommandInScope(entityType, onlyNested: false);
+    }
+
+    private (int, QueryCommand?) FindQueryCommandInScope(Type entityType, bool onlyNested)
     {
         // Prefer an in-scope source, but fall back to the most recently added out-of-scope one.
         // Rendering a derived query's pass-through column re-visits the expression against the source
@@ -134,12 +166,29 @@ public class DefaultColumnsProvider : IColumnsProvider
 
     /// <inheritdoc/>
     public int? FindAlias(Type entityType, int? paramIdx, bool fromProjection)
+        => FindAlias(entityType, paramIdx, fromProjection, includeNestedSources: false);
+
+    /// <inheritdoc/>
+    public int? FindAlias(Type entityType, int? paramIdx, bool fromProjection, bool includeNestedSources)
+    {
+        if (includeNestedSources)
+        {
+            var nested = FindAliasInScope(entityType, paramIdx, fromProjection, onlyNested: true);
+            if (nested.HasValue)
+                return nested;
+        }
+
+        return FindAliasInScope(entityType, paramIdx, fromProjection, onlyNested: false);
+    }
+
+    private int? FindAliasInScope(Type entityType, int? paramIdx, bool fromProjection, bool onlyNested)
     {
         var foundIdx = -1;
-        for (var (i, cnt) = (SourceScopeStart, _list.Count); i < cnt; i++)
+        var start = onlyNested ? 0 : SourceScopeStart;
+        for (var (i, cnt) = (start, _list.Count); i < cnt; i++)
         {
             var item = _list[i];
-            if (item.Item4) continue;
+            if (item.Item4 != onlyNested) continue;
             if (item.Item1 == entityType && item.Item3 == fromProjection)
             {
                 if (paramIdx.HasValue)

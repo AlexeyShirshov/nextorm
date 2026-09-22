@@ -85,6 +85,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     internal Type EntityType => _entityType;
     internal int Dim => _dim;
     internal bool DontNeedAlias => _dontNeedAlias;
+    internal bool IncludeNestedSources => _options.IncludeNestedSources;
     internal bool IsParamMode => _paramMode;
     internal StringBuilder? Builder => _builder;
     internal bool IsPredicateContext => AsPredicate;

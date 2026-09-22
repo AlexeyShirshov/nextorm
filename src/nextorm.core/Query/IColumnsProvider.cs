@@ -38,6 +38,19 @@ public interface IColumnsProvider
     /// (used for outer-reference markers).
     /// </summary>
     int? FindAlias(ParameterExpression param, bool fromProjection, bool includeOuterScopes);
+
+    /// <summary>
+    /// Resolves the alias of <paramref name="param"/>, also considering the sources of nested commands
+    /// that already finished rendering when <paramref name="includeNestedSources"/> is <c>true</c>;
+    /// resolving a derived query's output columns needs that.
+    /// </summary>
+    /// <param name="param">The lambda parameter to resolve.</param>
+    /// <param name="fromProjection">Whether to match projection sources.</param>
+    /// <param name="includeOuterScopes">Whether the current source scope is ignored (see the three-argument overload).</param>
+    /// <param name="includeNestedSources">Whether sources of nested commands are considered too.</param>
+    int? FindAlias(ParameterExpression param, bool fromProjection, bool includeOuterScopes, bool includeNestedSources)
+        => FindAlias(param, fromProjection, includeOuterScopes);
+
     /// <summary>
     /// Resolves the alias index of a source by entity type, optionally selecting the
     /// <paramref name="paramIdx"/>-th same-typed source. Returns <c>null</c> when no matching source
@@ -47,12 +60,36 @@ public interface IColumnsProvider
     /// <param name="paramIdx">The zero-based index among same-typed sources, or <c>null</c> for the first.</param>
     /// <param name="fromProjection">Whether to match projection sources.</param>
     int? FindAlias(Type entityType, int? paramIdx, bool fromProjection);
+
+    /// <summary>
+    /// Like <see cref="FindAlias(Type, int?, bool)"/> but, when no source visible to the current command
+    /// matches and <paramref name="includeNestedSources"/> is <c>true</c>, falls back to a source of a
+    /// nested command.
+    /// </summary>
+    /// <param name="entityType">The source entity type.</param>
+    /// <param name="paramIdx">The zero-based index among same-typed sources, or <c>null</c> for the first.</param>
+    /// <param name="fromProjection">Whether to match projection sources.</param>
+    /// <param name="includeNestedSources">Whether sources of nested commands are considered too.</param>
+    int? FindAlias(Type entityType, int? paramIdx, bool fromProjection, bool includeNestedSources)
+        => FindAlias(entityType, paramIdx, fromProjection);
+
     /// <summary>
     /// Returns the alias index and nested command of the source of <paramref name="entityType"/>,
     /// preferring an in-scope source and falling back to the most recently added out-of-scope one.
     /// </summary>
     /// <param name="entityType">The source entity type.</param>
     (int, QueryCommand?) FindQueryCommand(Type entityType);
+
+    /// <summary>
+    /// Like <see cref="FindQueryCommand(Type)"/> but, when no source visible to the current command
+    /// matches and <paramref name="includeNestedSources"/> is <c>true</c>, falls back to a source of a
+    /// nested command.
+    /// </summary>
+    /// <param name="entityType">The source entity type.</param>
+    /// <param name="includeNestedSources">Whether sources of nested commands are considered too.</param>
+    (int, QueryCommand?) FindQueryCommand(Type entityType, bool includeNestedSources)
+        => FindQueryCommand(entityType);
+
     /// <summary>Pops the most recently pushed parameter scope.</summary>
     void PopScope();
     /// <summary>Pushes a parameter scope that disambiguates same-typed sources from the enclosing scope.</summary>

@@ -127,6 +127,12 @@ its limitations are covered in the [Query reuse guide](guide/15-query-reuse.md).
 - [Типизированный доступ к колонке по имени — SqlFunctions.Column<T>](https://github.com/AlexeyShirshov/nextorm/issues/58)
 - Полная XML-документация публичного API во всех пакетах
 
+### 1.0.3.1-alpha
+
+- Hotfix for a regression introduced in [1.0.3-alpha](#103-alpha): a derived query whose projection references a
+  source from a nested command rendered an incomplete column list (invalid SQL, or `Operation is not valid due to
+  the current state of the object`). Affected PostgreSQL, SQL Server, MySQL/MariaDB and ClickHouse.
+
 ### 1.0.3-alpha
 
 - [Table-valued functions](https://github.com/AlexeyShirshov/nextorm/issues/8)
