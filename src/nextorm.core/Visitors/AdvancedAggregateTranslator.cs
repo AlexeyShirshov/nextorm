@@ -9,7 +9,8 @@ namespace NextORM.Core;
 /// <c>covar_*</c>, <c>regr_*</c>) and the ordered-set aggregates
 /// (<c>percentile_cont</c>/<c>percentile_disc</c>/<c>mode</c> with
 /// <c>WITHIN GROUP (ORDER BY ...)</c>) and the ClickHouse parameterised quantile aggregates
-/// (<c>quantile(level)(value)</c>/<c>median</c>) and the ClickHouse array-returning aggregates
+/// (<c>quantile(level)(value)</c>/<c>quantiles(...)(value)</c>/<c>median</c>) and the ClickHouse
+/// <c>topK</c>/<c>topKWeighted</c> aggregates and the ClickHouse array-returning aggregates
 /// <c>groupArray</c>/<c>groupUniqArray</c>.
 /// <para>
 /// Each family is guarded by its own dialect capability
@@ -156,6 +157,15 @@ internal static class AdvancedAggregateTranslator
             case nameof(ClickHouseFunctions.quantile_timing) when node.Arguments.Count == 2:
                 EmitQuantile(visitor, node, "quantile_timing");
                 return true;
+            case nameof(ClickHouseFunctions.quantiles) when node.Arguments.Count == 2:
+                EmitQuantiles(visitor, node, "quantiles");
+                return true;
+            case nameof(ClickHouseFunctions.top_k) when node.Arguments.Count == 2:
+                EmitTopK(visitor, node, "top_k", weighted: false);
+                return true;
+            case nameof(ClickHouseFunctions.top_k_weighted) when node.Arguments.Count == 3:
+                EmitTopK(visitor, node, "top_k_weighted", weighted: true);
+                return true;
             case nameof(ClickHouseFunctions.median) when node.Arguments.Count == 1:
                 EmitMedian(visitor, node);
                 return true;
@@ -246,6 +256,70 @@ internal static class AdvancedAggregateTranslator
 
         visitor.NeedAliasForColumn = true;
         visitor.Builder!.Append(quantileAggregates.RenderMedian(visitor.VisitToString(node.Arguments[0])));
+    }
+
+    /// <summary>
+    /// Renders the multi-level quantile aggregate (<c>quantiles(level1, level2, ...)(value)</c>) through
+    /// <see cref="IQuantileAggregateRenderer.RenderLevels"/>, gated by
+    /// <see cref="ISqlDialect.QuantileAggregates"/>. The levels must be an inline array; a captured array
+    /// is rejected (there is no parameter form for the aggregate's parameter list).
+    /// </summary>
+    private static void EmitQuantiles(BaseExpressionVisitor visitor, MethodCallExpression node, string name)
+    {
+        if (visitor.Dialect.QuantileAggregates is not { } quantileAggregates)
+            throw new NotSupportedException("The quantile/median aggregates are not supported by this provider.");
+
+        if (node.Arguments[0] is not NewArrayExpression { NodeType: ExpressionType.NewArrayInit } levels)
+            throw new NotSupportedException("The quantiles levels must be inline expressions, not a captured array.");
+
+        if (visitor.IsParamMode)
+        {
+            for (var (i, cnt) = (0, levels.Expressions.Count); i < cnt; i++)
+                visitor.Visit(levels.Expressions[i]);
+
+            visitor.Visit(node.Arguments[1]);
+            return;
+        }
+
+        var parts = new List<string>(levels.Expressions.Count);
+        for (var (i, cnt) = (0, levels.Expressions.Count); i < cnt; i++)
+            parts.Add(visitor.VisitToString(levels.Expressions[i]));
+
+        visitor.NeedAliasForColumn = true;
+        visitor.Builder!.Append(quantileAggregates.RenderLevels(
+            name,
+            string.Join(", ", parts),
+            visitor.VisitToString(node.Arguments[1])));
+    }
+
+    /// <summary>
+    /// Renders the ClickHouse parameterised top-K aggregates
+    /// (<c>topK(k)(value)</c>, <c>topKWeighted(k)(value, weight)</c>) through
+    /// <see cref="ITopKAggregateRenderer"/>, gated by <see cref="ISqlDialect.TopKAggregates"/>.
+    /// </summary>
+    private static void EmitTopK(BaseExpressionVisitor visitor, MethodCallExpression node, string name, bool weighted)
+    {
+        if (visitor.Dialect.TopKAggregates is not { } topKAggregates)
+            throw new NotSupportedException("The topK/topKWeighted aggregates are not supported by this provider.");
+
+        if (visitor.IsParamMode)
+        {
+            visitor.Visit(node.Arguments[0]);
+            visitor.Visit(node.Arguments[1]);
+
+            if (weighted)
+                visitor.Visit(node.Arguments[2]);
+
+            return;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        var k = visitor.VisitToString(node.Arguments[0]);
+        var value = visitor.VisitToString(node.Arguments[1]);
+
+        visitor.Builder!.Append(weighted
+            ? topKAggregates.RenderWeighted(name, k, value, visitor.VisitToString(node.Arguments[2]))
+            : topKAggregates.Render(name, k, value));
     }
 
     /// <summary>Renders a two-argument aggregate (for example <c>corr(y, x)</c>) gated by a capability flag.</summary>

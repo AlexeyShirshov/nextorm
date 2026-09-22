@@ -284,6 +284,42 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     }
 
     [Fact]
+    public void TopK_ShouldReturnMostFrequentValues()
+    {
+        // complex_entity ids are 1..3 (all distinct), so topK(2) returns two of them.
+        var r = _sut.ComplexEntity
+            .Select(x => SqlFunctions.ClickHouse.top_k(2, x.Id))
+            .First();
+
+        r.Should().HaveCount(2);
+        r.Should().OnlyContain(id => id >= 1 && id <= 3);
+    }
+
+    [Fact]
+    public void TopKWeighted_ShouldReturnWeightedValues()
+    {
+        var r = _sut.ComplexEntity
+            .Select(x => SqlFunctions.ClickHouse.top_k_weighted(2, x.Id, x.Id))
+            .First();
+
+        r.Should().HaveCount(2);
+        r.Should().OnlyContain(id => id >= 1 && id <= 3);
+    }
+
+    [Fact]
+    public void Quantiles_ShouldReturnMultipleQuantiles()
+    {
+        // ids 1..3: the 0.5 level is the median, so the middle value is 2.
+        var r = _sut.ComplexEntity
+            .Select(x => SqlFunctions.ClickHouse.quantiles(new[] { 0.25, 0.5, 0.75 }, x.Id))
+            .First();
+
+        r.Should().HaveCount(3);
+        r.Should().BeInAscendingOrder();
+        r[1].Should().BeApproximately(2.0, 1e-12);
+    }
+
+    [Fact]
     public void DateTrunc_ShouldTruncateToMonth()
     {
         var r = _sut.ComplexEntity

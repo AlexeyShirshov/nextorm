@@ -16,6 +16,7 @@ public sealed class ClickHouseDialect : SqlDialectBase
     private readonly IMultiIfRenderer _multiIf;
     private readonly IUniqAggregateRenderer _uniqAggregates;
     private readonly IQuantileAggregateRenderer _quantileAggregates;
+    private readonly ITopKAggregateRenderer _topKAggregates;
 
     /// <summary>Creates the dialect and its capability renderers.</summary>
     public ClickHouseDialect()
@@ -23,6 +24,7 @@ public sealed class ClickHouseDialect : SqlDialectBase
         _multiIf = new ClickHouseMultiIfRenderer(this);
         _uniqAggregates = new ClickHouseUniqAggregateRenderer(this);
         _quantileAggregates = new ClickHouseQuantileAggregateRenderer(this);
+        _topKAggregates = new ClickHouseTopKAggregateRenderer(this);
     }
 
     /// <summary>A ClickHouse derived table (subquery in FROM) must have an alias.</summary>
@@ -138,6 +140,9 @@ public sealed class ClickHouseDialect : SqlDialectBase
 
     /// <summary>ClickHouse implements the parameterised <c>quantile(level)(value)</c> family and <c>median</c>.</summary>
     public override IQuantileAggregateRenderer QuantileAggregates => _quantileAggregates;
+
+    /// <summary>ClickHouse implements the parameterised <c>topK(N)(value)</c>/<c>topKWeighted(N)(value, weight)</c> aggregates.</summary>
+    public override ITopKAggregateRenderer TopKAggregates => _topKAggregates;
 
     /// <summary>ClickHouse implements the <c>any</c>/<c>anyLast</c> row-picking aggregates.</summary>
     public override bool SupportsAnyAggregates => true;
@@ -401,6 +406,8 @@ public sealed class ClickHouseDialect : SqlDialectBase
         "uniq_hll12" => "uniqHLL12",
         "quantile_exact" => "quantileExact",
         "quantile_timing" => "quantileTiming",
+        "top_k" => "topK",
+        "top_k_weighted" => "topKWeighted",
         "any_agg" => "any",
         "any_last" => "anyLast",
         "group_array" => "groupArray",
@@ -594,8 +601,22 @@ internal sealed class ClickHouseQuantileAggregateRenderer(ClickHouseDialect dial
     public string Render(string name, string level, string value) =>
         $"toFloat64({dialect.MakeAggregate(name)}({level})({value}))";
 
+    // quantiles returns Array(Float64) for numeric input, which already matches the declared double[].
+    public string RenderLevels(string name, string levels, string value) =>
+        $"{dialect.MakeAggregate(name)}({levels})({value})";
+
     // ClickHouse's median is quantile(0.5); cast it so it materialises as a CLR double.
     public string RenderMedian(string value) => $"toFloat64(median({value}))";
+}
+
+internal sealed class ClickHouseTopKAggregateRenderer(ClickHouseDialect dialect) : ITopKAggregateRenderer
+{
+    // topK/topKWeighted return the value type, which the caller declares as T[].
+    public string Render(string name, string k, string value) =>
+        $"{dialect.MakeAggregate(name)}({k})({value})";
+
+    public string RenderWeighted(string name, string k, string value, string weight) =>
+        $"{dialect.MakeAggregate(name)}({k})({value}, {weight})";
 }
 
 internal sealed class ClickHouseSequenceAggregateRenderer : ISequenceAggregateRenderer

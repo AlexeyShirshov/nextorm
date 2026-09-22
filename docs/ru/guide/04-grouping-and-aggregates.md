@@ -422,7 +422,8 @@ var variance = dataContext.From<ISimpleEntity>().Select(x => SqlFunctions.Sql.va
 агрегатов, а провайдерно-специфичные находятся в [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) (логические, битовые, регрессионные и
 упорядоченные) и [`ClickHouse`](xref:NextORM.Core.SqlFunctions.ClickHouse) (`arg_min`/`arg_max`, агрегаты числа уникальных
 `uniq`/`uniq_exact`/`uniq_combined`/`uniq_hll12`, параметрическое семейство квантилей
-`quantile`/`quantile_exact`/`quantile_timing`/`median`, комбинатор `-If` и агрегаты
+`quantile`/`quantile_exact`/`quantile_timing`/`quantiles`/`median`, агрегаты наиболее частых значений
+`top_k`/`top_k_weighted`, комбинатор `-If` и агрегаты
 последовательностей/воронки `window_funnel`/`sequence_match`/`retention`). Каждое семейство включается
 своим флагом диалекта; PostgreSQL и ClickHouse включают разные подмножества.
 
@@ -434,7 +435,8 @@ var variance = dataContext.From<ISimpleEntity>().Select(x => SqlFunctions.Sql.va
 | Регрессия | `SqlFunctions.Postgres.regr_slope(y, x)`, `regr_intercept(y, x)`, `regr_r2(y, x)`, `regr_count(y, x)`, `regr_avgx(y, x)`, `regr_avgy(y, x)` | `regr_slope(y, x)`, ... | [`SupportsRegressionAggregates`](xref:NextORM.Core.ISqlDialect.SupportsRegressionAggregates) | PostgreSQL |
 | ArgMin/ArgMax | `SqlFunctions.ClickHouse.arg_min(value, by)`, `arg_max(value, by)` | `argMin(value, by)`, `argMax(value, by)` | [`SupportsArgMinMax`](xref:NextORM.Core.ISqlDialect.SupportsArgMinMax) | ClickHouse |
 | Число уникальных | `SqlFunctions.ClickHouse.uniq(x)`, `uniq_exact(x)`, `uniq_combined(x)`, `uniq_hll12(x)` | `toInt64(uniq(x))`, `toInt64(uniqExact(x))`, ... | [`UniqAggregates`](xref:NextORM.Core.ISqlDialect.UniqAggregates) | ClickHouse |
-| Квантиль / медиана | `SqlFunctions.ClickHouse.quantile(0.5, x)`, `quantile_exact(0.9, x)`, `quantile_timing(0.5, x)`, `median(x)` | `toFloat64(quantile(0.5)(x))`, `toFloat64(median(x))`, ... | [`QuantileAggregates`](xref:NextORM.Core.ISqlDialect.QuantileAggregates) | ClickHouse |
+| Квантиль / медиана | `SqlFunctions.ClickHouse.quantile(0.5, x)`, `quantile_exact(0.9, x)`, `quantile_timing(0.5, x)`, `quantiles(new[] { 0.25, 0.5, 0.75 }, x)`, `median(x)` | `toFloat64(quantile(0.5)(x))`, `quantiles(0.25, 0.5, 0.75)(x)`, `toFloat64(median(x))`, ... | [`QuantileAggregates`](xref:NextORM.Core.ISqlDialect.QuantileAggregates) | ClickHouse |
+| Наиболее частые (top-K) | `SqlFunctions.ClickHouse.top_k(3, x)`, `top_k_weighted(2, x, w)` | `topK(3)(x)`, `topKWeighted(2)(x, w)` | [`TopKAggregates`](xref:NextORM.Core.ISqlDialect.TopKAggregates) | ClickHouse |
 | Произвольное значение | `SqlFunctions.Sql.any_agg(x)` | `ANY_VALUE(x)` / `any(x)` | [`SupportsAnyValueAggregate`](xref:NextORM.Core.ISqlDialect.SupportsAnyValueAggregate) | MySQL, ClickHouse |
 | Последняя строка | `SqlFunctions.ClickHouse.any_last(x)` | `anyLast(x)` | [`SupportsAnyAggregates`](xref:NextORM.Core.ISqlDialect.SupportsAnyAggregates) | ClickHouse |
 | С фильтром (`-If`) | `SqlFunctions.ClickHouse.count_if(() => p)`, `sum_if(x, () => p)`, `avg_if(x, () => p)`, `min_if(x, () => p)`, `max_if(x, () => p)` | `countIf(p)`, `sumIf(x, p)`, ... | [`SupportsIfAggregates`](xref:NextORM.Core.ISqlDialect.SupportsIfAggregates) | ClickHouse |

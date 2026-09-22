@@ -5,7 +5,8 @@ namespace NextORM.Core;
 /// <summary>
 /// ClickHouse-only SQL surface: the <c>argMin</c>/<c>argMax</c> aggregates, the distinct-count
 /// <c>uniq</c>/<c>uniqExact</c>/<c>uniqCombined</c>/<c>uniqHLL12</c> aggregates, the parameterised
-/// <c>quantile(level)(value)</c> family with <c>median</c>, the <c>anyLast</c> row-picking
+/// <c>quantile(level)(value)</c>/<c>quantiles(level...)(value)</c> family with <c>median</c>, the
+/// <c>topK(k)(value)</c>/<c>topKWeighted(k)(value, weight)</c> aggregates, the <c>anyLast</c> row-picking
 /// aggregate, the sequence/funnel aggregates <c>windowFunnel</c>/<c>retention</c>/<c>sequenceMatch</c>,
 /// the frame-respecting <c>lagInFrame</c>/<c>leadInFrame</c> window functions, the multi-branch
 /// <c>multiIf</c> conditional (through <see cref="when{T}(bool, T)"/>/<see cref="otherwise{T}(T)"/>),
@@ -90,6 +91,31 @@ namespace NextORM.Core;
 
         /// <summary><c>median(value)</c>: the median (the <c>0.5</c> quantile).</summary>
         public double? median<T>(T? value) => default!;
+
+        /// <summary>
+        /// <c>quantiles(level1, level2, ...)(value)</c>: the approximate quantiles at every
+        /// <paramref name="levels"/> value in one pass. The native result is <c>Array(Float64)</c>,
+        /// surfaced as <c>double[]</c> and projected directly. Requires a provider that supports the
+        /// quantile family (see <see cref="ISqlDialect.QuantileAggregates"/>; ClickHouse). The levels
+        /// must be an inline array; a captured array is rejected.
+        /// </summary>
+        public double[] quantiles<T>(double[] levels, T? value) => default!;
+
+        /// <summary>
+        /// <c>topK(k)(value)</c>: the approximately most frequent values, sorted by descending
+        /// approximate frequency. The native result is <c>Array(T)</c>, surfaced as <c>T[]</c> and
+        /// projected directly (or used as the operand of an array function such as
+        /// <see cref="array_sort{T}(T[])"/>). Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.TopKAggregates"/>; ClickHouse). The result is approximate.
+        /// </summary>
+        public T[] top_k<T>(long k, T? value) => default!;
+
+        /// <summary>
+        /// <c>topKWeighted(k)(value, weight)</c>: the values with the largest approximate sum of
+        /// <paramref name="weight"/>, surfaced as <c>T[]</c>. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.TopKAggregates"/>; ClickHouse). The result is approximate.
+        /// </summary>
+        public T[] top_k_weighted<T, TWeight>(long k, T? value, TWeight? weight) => default!;
 
         /// <summary>
         /// <c>anyLast(value)</c>: the <paramref name="value"/> of an arbitrary last row. Requires a

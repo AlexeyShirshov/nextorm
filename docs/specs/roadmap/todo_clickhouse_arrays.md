@@ -2,7 +2,7 @@
 
 > Рабочий план. Источник: `docs/specs/roadmap/sql-capabilities-gap-analysis.md` §4 п.4 (row reader),
 > п.5 (higher-order), п.9 (скаляры над массивами).
-> **Статус: срезы 1 (row reader) и 3 (higher-order lambda) — готовы; срезы 2 (topK/quantiles) и 4 (скаляры над массивами) — открыты.**
+> **Статус: срезы 1 (row reader), 2 (topK/topKWeighted/quantiles) и 3 (higher-order lambda) — готовы; срез 4 (скаляры над массивами) — открыт.**
 
 ## Источник, цель, критерий приёмки
 
@@ -94,11 +94,48 @@ MySQL, MariaDB, SQLite использованы официальные стра�
   `docs/guide/18-json.md`/`13-table-valued-functions.md` при необходимости,
   `docs/advanced/limitations.md` (+RU), `docs/advanced/api-reference.md` (+RU), gap-analysis §4 п.4.
 
-## Остаток (срезы 2–4)
+## Срез 2 (это изменение, gap §4 п.4 остаток): `topK`/`topKWeighted`/`quantiles` — параметризованные array-агрегаты
 
-### Срез 2 (gap §4 п.6, отдельный todo): `topK`/`topKWeighted`/`quantiles` — параметризованные агрегаты
-Требуют renderer по образцу `IQuantileAggregateRenderer`; вынести в
-`todo_clickhouse_aggregate_function_state.md`-родственный, но это массивы — оставить в этом файле.
+**Статус: готово.** Реализовано: `ITopKAggregateRenderer` (+`ISqlDialect.TopKAggregates`, CH-override);
+`IQuantileAggregateRenderer.RenderLevels`; 3 метода `ClickHouseFunctions`; `EmitTopK`/`EmitQuantiles`;
+`MakeAggregate` `top_k`→`topK`, `top_k_weighted`→`topKWeighted`. Аудит: Находка 64 (param-проход `k`)
+исправлена; CHQA2 (`RenderArray`→`RenderLevels`) применён; CHQA1/CHQA4 — приняты (трекинг); CHQA3 (доки) закрыт.
+
+- Closest C# analog: параметризованный агрегат с двумя скобками моделируется как existing
+  `quantile(level, value)` (tier b): новые public-методы + renderer, гейт по объекту-способности.
+- Публичный API (`SqlFunctions.ClickHouse.cs`):
+  - `public T[] top_k<T>(long k, T? value)` → `topK(k)(value)` (`Array(T)`);
+  - `public T[] top_k_weighted<T, TWeight>(long k, T? value, TWeight? weight)` → `topKWeighted(k)(value, weight)`;
+  - `public double[] quantiles<T>(double[] levels, T? value)` → `quantiles(level1, ...)(value)` (`Array(Float64)`).
+- Диалектный план:
+  - `IQuantileAggregateRenderer` расширяется `RenderArray(name, levels, value)`; ClickHouse реализует
+    `{MakeAggregate(name)}({levels})({value})` (для `quantiles` нативный тип уже `Array(Float64)`).
+  - Новый `ITopKAggregateRenderer { Render(name, k, value); RenderWeighted(name, k, value, weight) }`;
+    `ISqlDialect.TopKAggregates` default `null` (объект = способность), `SqlDialectBase` virtual `null`,
+    ClickHouse override. Отдельный объект, а не `SupportsArrayFunctions`: провайдер с массивами может
+    не иметь topK (per-function, не family-umbrella).
+  - `MakeAggregate`: `top_k` → `topK`, `top_k_weighted` → `topKWeighted`; `quantiles` — identity.
+- Трансляция: `AdvancedAggregateTranslator.EmitTopK` (2/3 аргумента; `k` — константа-литерал) и
+  `EmitQuantiles` (levels — только inline `new[]`; захваченный массив → `NotSupportedException`,
+  как у `EmitSequenceAggregate`). Param-mode обходит уровни и значение.
+- Ограничение среза: только `topK(N)`/`topKWeighted(N)`, без `load_factor`/`'counts'`; только
+  `quantiles` без `quantilesExact`/`quantilesTiming`/`quantilesGK`.
+- Тест-план:
+  - SQL-gen (clickhouse): `TopK_ShouldRenderTopK` (`topK(3)(id)`), `TopKWeighted_ShouldRenderTopKWeighted`,
+    `Quantiles_ShouldRenderQuantiles` (`quantiles(0.25, 0.5, 0.75)(id)`),
+    `Quantiles_WithCapturedLevels_ShouldThrow`;
+  - dialect: `MakeAggregate` для `top_k`/`top_k_weighted`; renderer-юниты `ITopKAggregateRenderer` и
+    `RenderArray`; `DialectCapabilityContractTests` — новый объект-способность;
+  - rejection (postgres): `TopK_UnsupportedByProvider_ShouldThrow`,
+    `Quantiles_UnsupportedByProvider_ShouldThrow`;
+  - интеграционные (ClickHouse 25.8, `complex_entity` id 1..3): `topK(2)(id)` → 2 элемента из {1,2,3};
+    `topKWeighted(2)(id, id)` → 2 элемента; `quantiles(0.25, 0.5, 0.75)(id)` → 3 элемента, середина ≈ 2;
+  - покрытие: core-транслятор покрывается clickhouse-тестами; базис line 85.4% / branch 74.4%.
+- Доки EN+RU: `docs/guide/04-grouping-and-aggregates.md` (+RU) — таблица ClickHouse,
+  `docs/guide/provider-specific/clickhouse.md` (+RU) агрегаты, `docs/advanced/api-reference.md` (+RU),
+  gap-analysis §4 п.4 (снять `topK`/`quantiles` из «Still open»).
+
+## Остаток (срез 4 и прочее)
 
 ### Срез 3 (это изменение, gap §4 п.5): higher-order/lambda
 `arrayMap`/`arrayFilter`/`arrayExists`/`arrayAll`/`arrayCount`/`arrayFirst*`/`arrayLast*` —

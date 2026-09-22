@@ -122,8 +122,24 @@ public interface IQuantileAggregateRenderer
     /// <summary>Renders the quantile aggregate <paramref name="name"/> over <paramref name="level"/> and <paramref name="value"/>.</summary>
     string Render(string name, string level, string value);
 
+    /// <summary>Renders the multi-level quantile aggregate <paramref name="name"/> over <paramref name="levels"/> and <paramref name="value"/>.</summary>
+    string RenderLevels(string name, string levels, string value);
+
     /// <summary>Renders the <c>median</c> aggregate over <paramref name="value"/>.</summary>
     string RenderMedian(string value);
+}
+
+/// <summary>
+/// A dialect's renderer for the ClickHouse parameterised top-K aggregates
+/// (<c>topK(N)(value)</c>, <c>topKWeighted(N)(value, weight)</c>). The object's presence is the capability.
+/// </summary>
+public interface ITopKAggregateRenderer
+{
+    /// <summary>Renders the top-K aggregate <paramref name="name"/> over <paramref name="k"/> and <paramref name="value"/>.</summary>
+    string Render(string name, string k, string value);
+
+    /// <summary>Renders the weighted top-K aggregate <paramref name="name"/> over <paramref name="k"/>, <paramref name="value"/> and <paramref name="weight"/>.</summary>
+    string RenderWeighted(string name, string k, string value, string weight);
 }
 
 /// <summary>

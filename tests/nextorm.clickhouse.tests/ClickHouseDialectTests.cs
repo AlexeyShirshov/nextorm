@@ -91,6 +91,8 @@ public class ClickHouseDialectTests
     [InlineData("uniq_hll12", "uniqHLL12")]
     [InlineData("quantile_exact", "quantileExact")]
     [InlineData("quantile_timing", "quantileTiming")]
+    [InlineData("top_k", "topK")]
+    [InlineData("top_k_weighted", "topKWeighted")]
     [InlineData("any_agg", "any")]
     [InlineData("any_last", "anyLast")]
     [InlineData("count_if", "countIf")]
@@ -256,7 +258,15 @@ public class ClickHouseDialectTests
     {
         Dialect.QuantileAggregates!.Render("quantile", "0.5", "x").Should().Be("toFloat64(quantile(0.5)(x))");
         Dialect.QuantileAggregates!.Render("quantile_exact", "0.9", "x").Should().Be("toFloat64(quantileExact(0.9)(x))");
+        Dialect.QuantileAggregates!.RenderLevels("quantiles", "0.25, 0.5, 0.75", "x").Should().Be("quantiles(0.25, 0.5, 0.75)(x)");
         Dialect.QuantileAggregates!.RenderMedian("x").Should().Be("toFloat64(median(x))");
+    }
+
+    [Fact]
+    public void MakeTopK_ShouldUseDoubleParentheses()
+    {
+        Dialect.TopKAggregates!.Render("top_k", "3", "x").Should().Be("topK(3)(x)");
+        Dialect.TopKAggregates!.RenderWeighted("top_k_weighted", "2", "x", "w").Should().Be("topKWeighted(2)(x, w)");
     }
 
     [Fact]

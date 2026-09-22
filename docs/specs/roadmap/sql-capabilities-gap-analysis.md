@@ -162,12 +162,15 @@ Ordered by impact on real query authoring. Per-feature details and owners live i
 4. **ClickHouse array/Tuple row reader — shipped.** `Array(T)` (including nested `Array(Array(T))`)
    and `Tuple(...)` columns and expressions materialise as a CLR `T[]`/`System.Tuple<...>` (arity
    1–7), and the array-returning aggregates `groupArray`/`groupUniqArray` are exposed as
-   [`ClickHouseFunctions.group_array`](xref:NextORM.Core.ClickHouseFunctions.group_array)/`group_uniq_array`.
+   [`ClickHouseFunctions.group_array`](xref:NextORM.Core.ClickHouseFunctions.group_array)/`group_uniq_array`,
+   the multi-level quantile aggregate `quantiles` (as `double[]`) and the most-frequent
+   `topK`/`topKWeighted` aggregates (as `T[]`) are exposed as
+   [`ClickHouseFunctions.quantiles`](xref:NextORM.Core.ClickHouseFunctions.quantiles)/`top_k`/`top_k_weighted`.
    Native `UInt64` rows (`hits_v1.UserID`, any `UInt64` column and `ulong`/`ulong?` projection) now
    materialise through the row reader without a SQL cast; the aggregate/function results that declare a
    signed CLR return type (`count`, `uniq*`, `length`, `index_of`, `json_length`) keep their normalising
    cast.
-   Still open on this item: `topK`/`topKWeighted`/`quantiles`, the array-returning
+   Still open on this item: the array-returning
    `JSONExtractKeys`/`JSONExtractKeysAndValues`/`JSONExtractArrayRaw`, the `tuple`/`tupleElement`/`untuple`
    scalars and `dictGetHierarchy`/`dictGetChildren`/`dictIsIn`.
    Shipped: [ClickHouse provider](../../providers/clickhouse.md),

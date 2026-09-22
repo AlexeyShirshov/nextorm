@@ -870,6 +870,98 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void TopK_ShouldRenderTopK()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            T = SqlFunctions.ClickHouse.top_k(3, x.Id),
+            W = SqlFunctions.ClickHouse.top_k_weighted(2, x.Id, x.Int)
+        }));
+
+        sql.Should().Contain("topK(3)(id)");
+        sql.Should().Contain("topKWeighted(2)(id, nullableint)");
+    }
+
+    [Fact]
+    public void Quantiles_ShouldRenderQuantiles()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Q = SqlFunctions.ClickHouse.quantiles(new[] { 0.25, 0.5, 0.75 }, x.Id)
+        }));
+
+        sql.Should().Contain("quantiles(0.25, 0.5, 0.75)(id)");
+    }
+
+    [Fact]
+    public void Quantiles_WithCapturedLevels_ShouldThrow()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        var levels = new[] { 0.25, 0.5 };
+
+        var act = () => SqlOf(ctx, e.Select(x => new
+        {
+            Q = SqlFunctions.ClickHouse.quantiles(levels, x.Id)
+        }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*inline*");
+    }
+
+    [Fact]
+    public void TopK_WithCapturedK_ShouldParameteriseK()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        var k = 3L;
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            T = SqlFunctions.ClickHouse.top_k(k, x.Id)
+        }));
+
+        sql.Should().Contain("topK(@k)(id)");
+    }
+
+    [Fact]
+    public void TopK_WithCapturedK_ShouldRefreshParamsOnCachedPlan()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        var k = 2L;
+
+        QueryCommand<long[]> Build() => e.Select(x => SqlFunctions.ClickHouse.top_k(k, x.Id));
+
+        _ = ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
+        var second = (DbPreparedQueryCommand<long[]>)ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
+
+        Normalize(second.DbCommand.CommandText).Should().Contain("topK(@k)(id)");
+    }
+
+    [Fact]
+    public void Quantiles_WithCapturedFilter_ShouldRefreshParamsOnCachedPlan()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        var min = 1L;
+
+        QueryCommand<double[]> Build() => e
+            .Where(x => x.Id > min)
+            .Select(x => SqlFunctions.ClickHouse.quantiles(new[] { 0.5 }, x.Id));
+
+        _ = ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
+        var second = (DbPreparedQueryCommand<double[]>)ctx.GetPreparedQueryCommand(Build(), false, true, CancellationToken.None);
+
+        Normalize(second.DbCommand.CommandText).Should().Contain("quantiles(0.5)(id)");
+    }
+
+    [Fact]
     public void AnyAggregates_ShouldUseClickHouseNames()
     {
         using var ctx = ClickHouseTestContext.Create();

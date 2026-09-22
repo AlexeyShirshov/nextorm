@@ -90,6 +90,9 @@ public abstract class SqlDialectBase : ISqlDialect
 
     public virtual IQuantileAggregateRenderer? QuantileAggregates => null;
 
+    /// <summary>Defaults to <c>null</c>; ClickHouse opts into the <c>topK</c>/<c>topKWeighted</c> aggregates.</summary>
+    public virtual ITopKAggregateRenderer? TopKAggregates => null;
+
     /// <summary>Defaults to <c>false</c>; ClickHouse opts into the <c>any</c>/<c>anyLast</c> aggregates.</summary>
     public virtual bool SupportsAnyAggregates => false;
 

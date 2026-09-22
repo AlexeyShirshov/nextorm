@@ -1749,6 +1749,28 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void QuantilesAggregates_ShouldThrowBecausePostgresHasNoQuantile()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => SqlFunctions.ClickHouse.quantiles(new[] { 0.25, 0.5 }, x.Id)));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*quantile*");
+    }
+
+    [Fact]
+    public void TopKAggregates_ShouldThrowBecausePostgresHasNoTopK()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => SqlFunctions.ClickHouse.top_k(3, x.Id)));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*topK*");
+    }
+
+    [Fact]
     public void AnyAggregates_ShouldThrowBecausePostgresHasNoAnyAggregate()
     {
         using var ctx = PostgresTestContext.Create();

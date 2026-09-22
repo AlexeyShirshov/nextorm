@@ -10,6 +10,8 @@
 
 **Обновление 22.09.2026 (uncommitted worktree — ClickHouse higher-order/lambda array-функции).** Добавлены `array_map`/`array_filter`/`array_exists`/`array_all`/`array_count`/`array_first`/`array_first_index`/`array_last`/`array_last_index` + флаг `SupportsHigherOrderArrayFunctions`. Build `0/0`; clickhouse **208/208**, postgres **266/266**, контейнерная интеграция ClickHouse **15/15** (0 skipped; включая 5 новых). Новых подавлений/слопа — **0** (соотношение **11/11**). **Находки 62** (вложенная лямбда теряла внешний параметр) и **63** (`Clone()` без param-режимного guard) исправлены, подтверждены тестом (`NestedHigherOrderLambda_ShouldReferenceOuterParameter`) и build `0/0`; дублирование emit-цикла — продолжение Находок 15/30. Док-противоречие закрыто — `API-NAMING-REVIEW.md`, HOAF2/HOAF3.
 
+**Обновление 22.09.2026 (uncommitted worktree — ClickHouse параметризованные array-агрегаты `topK`/`topKWeighted`/`quantiles`).** Добавлены `ITopKAggregateRenderer` (+ DIM `ISqlDialect.TopKAggregates`, `SqlDialectBase`/`ClickHouseDialect` override), абстрактный `IQuantileAggregateRenderer.RenderArray`, 3 публичных метода `ClickHouseFunctions` (`quantiles`/`top_k`/`top_k_weighted`) и трансляция `EmitQuantiles`/`EmitTopK` (`AdvancedAggregateTranslator.cs`). Build `0/0`; ClickHouse **220/220**, postgres **268/268**, контейнерная интеграция ClickHouse+capability-contract **73/73**; полный прогон **2315 passed / 30 skipped / 0 failed**, покрытие **line 85.4% / branch 74.4%** (базис HEAD: 85.4%/74.4%). Новых подавлений/слопа — **0** (соотношение **11/11**). **Находка 64** (🟡 P2: `EmitTopK` в param-режиме не обходил `k` → расхождение списков параметров извлечения/рендера при захваченном `k`) **исправлена** (вариант A: `Visit(Arguments[0])` в param-ветке; тесты `TopK_WithCapturedK_ShouldParameteriseK` и `TopK_WithCapturedK_ShouldRefreshParamsOnCachedPlan`). API-сторона — `API-NAMING-REVIEW.md`, CHQA1–CHQA4.
+
 **Область анализа:** `src/` (основной), дополнительно `tests/` и `benchmarks/`
 **Метод:** read-only аудит по каталогу `skill:dotnet-csharp-code-smells` + `skill:slopwatch` (паттерн-скан выполнен вручную: локальный tool `slopwatch` в `.config/dotnet-tools.json` не установлен)
 **Статус:** Находки 1 (подавления), 2 (`IDisposable`), 3 (LINQ), 4 (god-классы), 5 (хэш-ключи), **6 (утечка подписки внешнего соединения)** и **7 (`*DELETE*.cs`)** — **исправлены/закрыты 18.09.2026**. Находка 4: god-классы разобраны — `EntityBuilder<TEntity>` **769→466**, `SqlBuilder` **716→318**, `ScalarFunctionTranslator` **595→131**, `BaseExpressionVisitor` **425→366** (`VisitMethodCall` 183→77); единственное исключение автора — `ExpressionPlanEqualityComparer` (879 формально, 77 собственных строк). Длинные списки параметров ≥6 — все 15 «боевых» разобраны параметр-объектами. Осознанно не закрываются: `CA2213`/`CA1816` (ложные) и `CA1508` (2 вероятно ложных в `NormSqlTranslator.cs:223,250`, сборкой не гейтится). `#pragma disable` в `src/` — 5, все с `restore`.
@@ -4144,6 +4146,46 @@ ClickHouse + маппингу `ClickHouse.Driver` 1.4.0.
 - **`HigherOrderLambdaVisitor` — второй тип в `ArraySqlTranslator.cs`** (`:408`), тогда как соседи-хелперы (`SqlOperandTranslator`, `AggregateFilter`) вынесены в одноимённые файлы. Для `internal`-типа — косметика (ср. P2-20 «файл ↔ тип» в `API-NAMING-REVIEW.md`).
 
 **Проверка (22.09.2026).** Build Release — **0/0**; clickhouse **208/208**, postgres **266/266**, интеграция ClickHouse **15/15** (0 skipped; включая 5 новых `ArrayMap`/`ArrayFilter`/`ArrayExistsAndAll`/`ArrayCount`/`ArrayFirstAndLast`). В диффе `#pragma`/`SuppressMessage`/`NoWarn`/`Skip=`/`Task.Delay`/пустых `catch` — **0**; соотношение подавлений **11/11** (0 неоправданных). `find -name 'PublicAPI*.txt'` — пусто (Шаг 5 открыт). Док-противоречие (provider-specific ClickHouse EN/RU относят higher-order к «out of scope») — `API-NAMING-REVIEW.md`, HOAF2/HOAF3; фикс кода не применялся.
+
+## 🔎 Точечный аудит 22.09.2026 — ClickHouse параметризованные array-агрегаты `topK`/`topKWeighted`/`quantiles` (uncommitted worktree)
+
+**Область.** Capability-слой: новый `ITopKAggregateRenderer` (`src/nextorm.core/DataContext/Dialect/DialectCapabilities.cs:132-143`), новый **абстрактный** член `IQuantileAggregateRenderer.RenderArray` (`:125-126`), DIM `ISqlDialect.TopKAggregates` (`src/nextorm.core/DataContext/Dialect/ISqlDialect.cs:386-392`), `SqlDialectBase.TopKAggregates` (`:93-94`); реализация — `ClickHouseDialect._topKAggregates`/`TopKAggregates`/`MakeAggregate`/`RenderArray`/`ClickHouseTopKAggregateRenderer` (`src/nextorm.clickhouse/ClickHouseDialect.cs:19,27,145,409-410,605,612-619`). Публичный DSL — `ClickHouseFunctions.quantiles`/`top_k`/`top_k_weighted` (`src/nextorm.core/Query/SqlFunctions.ClickHouse.cs:95-118`). Трансляция — `AdvancedAggregateTranslator.TryTranslate` + `EmitQuantiles`/`EmitTopK` (`src/nextorm.core/Visitors/AdvancedAggregateTranslator.cs:160-168,261-322`). Тесты — clickhouse SQL-gen (3) + dialect (mapping, renderer), postgres rejection (2), интеграция ClickHouse (3) + capability-contract.
+
+**База (этот проход).** `dotnet build nextorm.sln -c Release` — **0 warnings / 0 errors**. Подавления `src/`: **6** `SuppressMessage` (все с `Justification`) + **5** `#pragma warning disable` (все с парным `restore`) = **11/11** оправданных, **0** неоправданных; в диффе новых — **0**. Слоп: `Skip=`/`Task.Delay`/`Thread.Sleep`/пустых `catch`/`NoWarn`/inline `Version` — **0** (новых нет; `slopwatch` локально не установлен — `.config/dotnet-tools.json` только coverage/reportgenerator/docfx; скан вручную). EOL: все 11 изменённых `.cs` — CRLF.
+
+| # | Проверка | Итог |
+|---|----------|------|
+| 1. `IDisposable` | ✅ `ClickHouseTopKAggregateRenderer` — `internal sealed`, держит только `readonly`-ссылку на `sealed`-диалект, ресурсов нет; `CA2000`/`CA2213`/`CA1816` неприменимы. |
+| 2. Подавления | ✅ Новых `#pragma`/`SuppressMessage`/`NoWarn` — **0**; соотношение проекта **11/11**. |
+| 3. LINQ на горячем пути | ✅ Новые циклы — `for (var (i, cnt) = …)` без LINQ (как `EmitSequenceAggregate`); `List<string>` в `EmitQuantiles` строится на построении плана, не на строке. |
+| 4. God-классы | ⚠️ `AdvancedAggregateTranslator.cs` — **492** строки (порог 500; ранее 418, +74 этим и соседними срезами). Новых типов нет; `ClickHouseDialect.cs` — 691 (+21). |
+| 5. Хэш-ключи / план-кэш | ✅ **Находка 64** исправлена: param-режим `EmitTopK` теперь обходит `Arguments[0]` (`k`), как обычный рендер, поэтому списки `ExtractParams` и `MakeSelectInternal` совпадают (тест `TopK_WithCapturedK_ShouldParameteriseK`). |
+| 6. События / исключения | ✅ Подписок нет; новых `catch` нет; guard'ы бросают `NotSupportedException` (нет topK у провайдера; не-inline `levels`). |
+| 7. NRT / тип возврата | ✅ `T[]`/`double[]` согласованы с нативными `Array(T)`/`Array(Float64)` и существующим `group_array<T> -> T[]`; `T? value` — как у соседей. |
+
+### 🟡 Находка 64 — `EmitTopK`: param-режим пропускал `k`, из-за чего извлечение и рендер параметров расходятся (ИСПРАВЛЕНА 22.09.2026, P2)
+
+**Место.** `src/nextorm.core/Visitors/AdvancedAggregateTranslator.cs:305-313` (`EmitTopK`, ветка `if (visitor.IsParamMode)` обходит только `Arguments[1]`/`Arguments[2]`) против `:316` (`var k = visitor.VisitToString(node.Arguments[0]);` в обычном режиме) и против sibling'а `EmitQuantile` (`:228-233`, обходит **оба** аргумента).
+
+**Что не так.** `QueryPlanner.ExtractParams` (`src/nextorm.core/DataContext/QueryPlanner.cs:47-52`) прогоняет запрос вторым проходом (`paramMode: true`) и на cache-hit при `NeedsParamRefresh` сопоставляет полученный список с параметрами подготовленной команды **по индексу** (`:177-183`). Обычный рендер (`MakeSelectInternal`, `:195-200`) собирает свой список из фактического обхода. Если `k` — захваченная переменная (`long k = 3; … top_k(k, x.Id)`; API это допускает — сигнатура `long k`, а документация лишь оговаривает «k — константа-литерал», guard'а нет), то:
+- рендер посещает `Arguments[0]` → добавляет параметр `k` в список (`MemberTranslator.cs:209`, `Stable == false`);
+- param-проход `EmitTopK` `k` не посещает → в списке извлечения его нет.
+
+Итог: `pp.Count` меньше `dbCommandParams.Count`. Если `k` — единственный параметр, refresh-цикл не выполняется вовсе и `k` **остаётся от первого выполнения** (на cache-hit эмитится `topK(<старое N>)(id)`); если параметров несколько — сдвиг индексов (обновляются не те значения) и/или срабатывание `Debug.Assert` (`QueryPlanner.cs:182`). Для литерала (`top_k(3, …)`) дефекта нет: `ConstantExpression` в param-режиме ничего не добавляет. Тот же класс, что Находки 35/43 (расхождение двух проходов), но новый триггер.
+
+**Исправлено (вариант A).** В param-ветке `EmitTopK` первым делом добавлен `visitor.Visit(node.Arguments[0]);` — оба прохода теперь посещают `k`, как у sibling'а `EmitQuantile`. Захваченный `k` рендерится параметром `@k` и извлекается тем же проходом (списки совпадают), литерал по-прежнему эмитится константой. Тест `TopK_WithCapturedK_ShouldParameteriseK` (CH SQL-gen) фиксирует `topK(@k)(id)`.
+
+**Проверка (после фикса).** build Release — **0/0**; `dotnet test tests/nextorm.clickhouse.tests` — **220/220** (включая тесты на захваченный `k`, в т.ч. refresh кэш-плана); `postgres` — **268/268**; контейнерная интеграция ClickHouse+capability-contract — **73/73** (0 skipped). Полный прогон с покрытием — **2315 passed / 30 skipped / 0 failed**, **line 85.4% / branch 74.4%** (базис HEAD 85.4%/74.4%).
+
+### ℹ️ Наблюдения (фикс не требуется)
+
+- **Summary `IQuantileAggregateRenderer` не пополнён multi-level формой.** `DialectCapabilities.cs:116-119` перечисляет `quantile(level)(value)`, `median(value)`, но не новый `quantiles(level...)(value)`; член добавлен, summary — прежний (ср. Находка 61). Косметика.
+- **`AdvancedAggregateTranslator.cs` 492 строки** — до порога god-class 500 остаётся 8 строк; следующее семейство переведёт файл за порог. Кандидат в декомпозицию (продолжение Находок 33/34).
+- **`EmitTopK`/`EmitQuantiles` дублируют каркас `EmitSimple`/`EmitUniq`/`EmitQuantile`** (guard → param-ветка → `NeedAliasForColumn` → рендер) — продолжение Наблюдения к `EmitQuantile` (аудит 19.09.2026); при следующем варианте свести к общему `EmitWithRenderer`.
+- **Ограничения среза документированы** (`topK(N)`/`topKWeighted(N)` без `load_factor`/`'counts'`; `quantiles` без `Exact`/`Timing`/`GK`) — соответствует `todo_clickhouse_arrays.md`, не запах.
+- **Положительное:** `ClickHouseTopKAggregateRenderer` — `internal sealed` без состояния; контрактный тест (`DialectCapabilityContractTests.cs:123,182`) вызывает `Render`/`RenderWeighted`/`RenderArray` не вакуумно (Находка 48 не повторяется).
+
+**Проверка (22.09.2026).** Build Release — **0/0**; в диффе `#pragma`/`SuppressMessage`/`NoWarn`/`Skip=`/`Task.Delay`/пустых `catch` — **0**; соотношение подавлений **11/11**; `find -name 'PublicAPI*.txt'` — пусто (Шаг 5 открыт); все изменённые файлы CRLF. Полный прогон с покрытием — **2315 passed / 30 skipped / 0 failed**, **line 85.4% / branch 74.4%** (ClickHouse **220/220**, postgres **268/268**, ClickHouse+capability-contract **73/73**). Публичная сторона — `API-NAMING-REVIEW.md`, CHQA1–CHQA4.
 
 ## Примечания
 

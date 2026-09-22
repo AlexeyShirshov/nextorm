@@ -384,6 +384,14 @@ public interface ISqlDialect
     IQuantileAggregateRenderer? QuantileAggregates => null;
 
     /// <summary>
+    /// The provider's renderer for the ClickHouse parameterised top-K aggregates
+    /// (<c>topK(N)(value)</c>, <c>topKWeighted(N)(value, weight)</c>); <c>null</c> means the provider
+    /// cannot express them. Declared as a default interface method so that existing external
+    /// implementations keep compiling.
+    /// </summary>
+    ITopKAggregateRenderer? TopKAggregates => null;
+
+    /// <summary>
     /// True when the provider can render the <c>anyLast</c> row-picking aggregate (the value of an
     /// arbitrary last row; <c>ClickHouseFunctions.any_last</c>). The safe default is <c>false</c>;
     /// ClickHouse opts in today. The arbitrary-value aggregate without the last-row restriction is
