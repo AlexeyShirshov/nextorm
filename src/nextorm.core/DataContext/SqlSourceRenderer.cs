@@ -34,13 +34,20 @@ internal static class SqlSourceRenderer
         }
 
         if (maxRecursion is int depth)
-            maxRecursionStmt = ctx.Dialect.MakeMaxRecursion(depth);
+            maxRecursionStmt = ctx.Dialect.MakeMaxRecursion(depth, ctx.KeywordCase);
 
         if (ctx.ParamMode)
         {
             for (var (i, cnt) = (0, ctes.Count); i < cnt; i++)
             {
                 var cte = ctes[i];
+
+                // A command whose WITH carries a data-modifying CTE disables plan caching
+                // (QueryPreparer.PrepareCtes), so this parameter pass never runs for one; only read CTEs
+                // are walked here.
+                if (cte.Mutation is not null)
+                    continue;
+
                 var walker = new SqlBuilder(ctx with { ParamMode = true, ColumnsProvider = new DefaultColumnsProvider(), QueryProvider = cte.Query, AliasProvider = null });
                 walker.MakeSelect(cte.Query);
             }
@@ -51,7 +58,7 @@ internal static class SqlSourceRenderer
         var withBuilder = StringBuilderPool.Shared.Get();
         try
         {
-            withBuilder.Append(ctx.Dialect.MakeWith(anyRecursive));
+            withBuilder.Append(ctx.Dialect.MakeWith(anyRecursive, ctx.KeywordCase));
 
             for (var (i, cnt) = (0, ctes.Count); i < cnt; i++)
             {
@@ -60,13 +67,24 @@ internal static class SqlSourceRenderer
                 if (i > 0)
                     withBuilder.Append(", ");
 
-                withBuilder.Append(ctx.QuoteIdentifiers ? QuoteQualifiedIdentifier(ctx.Dialect, cte.Name) : cte.Name).Append(" as (");
+                withBuilder.Append(ctx.QuoteIdentifiers ? QuoteQualifiedIdentifier(ctx.Dialect, cte.Name) : cte.Name).Append(SqlKeywords.Of(ctx.KeywordCase, " as ("));
 
-                // Each CTE is rendered in isolation: a fresh columns provider keeps the outer source
-                // list untouched, and a fresh alias provider makes alias numbering self-contained
-                // (mirroring how UNION branches are rendered).
-                var builder = new SqlBuilder(ctx with { ParamMode = false, ColumnsProvider = new DefaultColumnsProvider(), QueryProvider = cte.Query, AliasProvider = new DefaultAliasProvider() });
-                withBuilder.Append(builder.MakeSelect(cte.Query));
+                if (cte.Mutation is not null)
+                {
+                    // A data-modifying CTE body is the INSERT itself; its parameters share the enclosing
+                    // command's provider so the SQL pass and the (rarer) parameter pass number them alike.
+                    var (insertSql, insertParams) = RenderMutation(in ctx, cte);
+                    ctx.Params.AddRange(insertParams);
+                    withBuilder.Append(insertSql);
+                }
+                else
+                {
+                    // Each CTE is rendered in isolation: a fresh columns provider keeps the outer source
+                    // list untouched, and a fresh alias provider makes alias numbering self-contained
+                    // (mirroring how UNION branches are rendered).
+                    var builder = new SqlBuilder(ctx with { ParamMode = false, ColumnsProvider = new DefaultColumnsProvider(), QueryProvider = cte.Query, AliasProvider = new DefaultAliasProvider() });
+                    withBuilder.Append(builder.MakeSelect(cte.Query));
+                }
 
                 withBuilder.Append(')');
             }
@@ -78,6 +96,59 @@ internal static class SqlSourceRenderer
         {
             StringBuilderPool.Shared.Return(withBuilder);
         }
+    }
+
+    /// <summary>
+    /// Renders the <c>INSERT ... RETURNING</c> body of a data-modifying CTE. Only PostgreSQL accepts a
+    /// data-modifying CTE body. The body may be a <c>VALUES</c> insert or an <c>INSERT ... SELECT</c>
+    /// whose source is rendered here; any CTEs the source carries are dropped because they are already
+    /// declared by the enclosing <c>WITH</c> (a data-modifying CTE sees only the outer CTEs).
+    /// </summary>
+    private static (string Sql, List<Parameter> Parameters) RenderMutation(in SqlBuildContext ctx, CteDefinition cte)
+    {
+        if (!ctx.Dialect.SupportsDataModifyingCtes)
+            throw new NotSupportedException("Data-modifying common table expressions are only supported by PostgreSQL.");
+
+        var mutation = cte.Mutation!;
+        string? sourceSql = null;
+
+        if (mutation.Source is not null)
+        {
+            var source = mutation.Source;
+            if (source.Ctes is { Count: > 0 })
+            {
+                // The outer WITH already declares these CTEs; re-declaring them inside the body would
+                // nest a data-modifying statement and be rejected by PostgreSQL.
+                var stripped = source.CloneForCache();
+                stripped.Ctes = null;
+                source = stripped;
+            }
+
+            var start = ctx.Params.Count;
+            var sourceCtx = ctx with
+            {
+                ColumnsProvider = new DefaultColumnsProvider(),
+                QueryProvider = source,
+                AliasProvider = ctx.ParamMode ? null : new DefaultAliasProvider(),
+            };
+            sourceSql = new SqlBuilder(in sourceCtx).MakeSelect(source);
+
+            for (var i = start; i < ctx.Params.Count; i++)
+            {
+                if (NormParam.IsName(ctx.Params[i].Name))
+                    throw new NotSupportedException("An INSERT ... SELECT source cannot use SqlFunctions.Parameter runtime placeholders; capture the value in a local variable instead.");
+            }
+        }
+
+        return SqlMutationBuilder.MakeInsert(
+            ctx.Dialect,
+            ctx.QuoteIdentifiers,
+            ctx.NamingConvention,
+            mutation,
+            ctx.KeywordCase,
+            sourceSql,
+            sourceSql is null ? null : [],
+            parameterProvider: ctx.ParameterProvider);
     }
 
     internal static string? MakeJoin(in SqlBuildContext ctx, JoinExpression join, Type entityType)
@@ -121,7 +192,7 @@ internal static class SqlSourceRenderer
         {
             if (!ctx.ParamMode)
             {
-                sqlBuilder!.Append(ctx.Dialect.MakeJoinKeyword(join.JoinType, join.Strictness, join.IsGlobal));
+                sqlBuilder!.Append(ctx.Dialect.MakeJoinKeyword(join.JoinType, join.Strictness, join.IsGlobal, ctx.KeywordCase));
             }
 
             var joinCondition = join.JoinCondition;
@@ -168,7 +239,7 @@ internal static class SqlSourceRenderer
                     sqlBuilder!.Append(fromSql);
                 }
 
-                if (!ctx.ParamMode) sqlBuilder!.Append(" on ");
+                if (!ctx.ParamMode) sqlBuilder!.Append(SqlKeywords.Of(ctx.KeywordCase, " on "));
                 MakeWhere(in ctx, sqlBuilder, entityType, joinCondition.Body, dim);
             }
             finally
@@ -199,12 +270,12 @@ internal static class SqlSourceRenderer
 
         var source = MakeFrom(in ctx, join.From, new FromRenderOptions(true, join.EntityType ?? join.From.SourceType, false));
 
-        return ctx.ParamMode ? null : ctx.Dialect.MakeApply(join.JoinType, source);
+        return ctx.ParamMode ? null : ctx.Dialect.MakeApply(join.JoinType, source, ctx.KeywordCase);
     }
 
     internal static string MakeFrom(in SqlBuildContext ctx, FromExpression from, FromRenderOptions options)
     {
-        var (needAlias, entityType, hasJoins, tableHints, temporal) = options;
+        var (needAlias, entityType, hasJoins, tableHints, temporal, indexHints, indexHintKind) = options;
 
         if (from.LinqSource is not null)
             throw new NotSupportedException("SelectMany/GroupJoin sources are not supported by the SQL providers; they are only available on the in-memory provider.");
@@ -229,6 +300,14 @@ internal static class SqlSourceRenderer
             if (tableHints is { Count: > 0 } && !ctx.Dialect.SupportsTableHints)
                 throw new NotSupportedException("Table hints are not supported by this SQL dialect");
 
+            var indexRenderer = indexHints is not null ? ctx.Dialect.IndexHints : null;
+            if (indexHints is not null && indexRenderer is null)
+                throw new NotSupportedException("Index hints are not supported by this SQL dialect");
+
+            var indexHintSql = indexHints is not null
+                ? indexRenderer!.RenderIndexHint(indexHints, indexHintKind, ctx.KeywordCase)
+                : null;
+
             var sqlBuilder = StringBuilderPool.Shared.Get();
             try
             {
@@ -238,22 +317,33 @@ internal static class SqlSourceRenderer
 
                 sqlBuilder.Append(ctx.QuoteIdentifiers ? QuoteQualifiedIdentifier(ctx.Dialect, tableName) : tableName);
 
-                // SQL Server places table hints after the table name and before its alias.
-                if (tableHints is { Count: > 0 })
-                    sqlBuilder.Append(ctx.Dialect.MakeTableHints(tableHints));
+                // SQL Server places table hints and the index hint after the table name and before its
+                // alias; MySQL/SQLite place the standalone index clause there too.
+                if (indexHintSql is not null && indexRenderer is { MergesWithTableHints: true })
+                    sqlBuilder.Append(ctx.Dialect.MakeTableHints(TableHintsWithIndex(tableHints, indexHintSql), ctx.KeywordCase));
+                else
+                {
+                    if (tableHints is { Count: > 0 })
+                        sqlBuilder.Append(ctx.Dialect.MakeTableHints(tableHints, ctx.KeywordCase));
+
+                    if (indexHintSql is not null)
+                        sqlBuilder.Append(indexHintSql);
+                }
 
                 // Both SQL Server and MariaDB require FOR SYSTEM_TIME before the alias.
                 if (temporal is not null)
-                    sqlBuilder.Append(ctx.Dialect.MakeTemporalTable(temporal));
+                    sqlBuilder.Append(ctx.Dialect.MakeTemporalTable(temporal, ctx.KeywordCase));
 
-                if (needAlias)
+                if (needAlias || from.ColumnShape is not null)
                 {
-                    if (hasJoins && typeof(IProjection).IsAssignableFrom(entityType))
+                    if (from.ColumnShape is not null)
+                        ctx.ColumnsProvider.Add(from.ColumnShape, false);
+                    else if (hasJoins && typeof(IProjection).IsAssignableFrom(entityType))
                         ctx.ColumnsProvider.Add(entityType!.GetGenericArguments()[0], false);
                     else
                         ctx.ColumnsProvider.Add(entityType!, false);
 
-                    sqlBuilder.Append(ctx.Dialect.MakeTableAlias(ctx.AliasProvider!.GetNextAlias(from)));
+                    sqlBuilder.Append(ctx.Dialect.MakeTableAlias(ctx.AliasProvider!.GetNextAlias(from), ctx.KeywordCase));
                 }
 
                 return sqlBuilder.ToString();
@@ -284,7 +374,7 @@ internal static class SqlSourceRenderer
                     sqlBuilder.Append('(').Append(sql).Append(')');
                     if (needAlias || ctx.Dialect.RequireSubqueryAlias)
                     {
-                        sqlBuilder.Append(ctx.Dialect.MakeTableAlias(ctx.AliasProvider!.GetNextAlias(from)));
+                        sqlBuilder.Append(ctx.Dialect.MakeTableAlias(ctx.AliasProvider!.GetNextAlias(from), ctx.KeywordCase));
                     }
 
                     return sqlBuilder.ToString();
@@ -296,6 +386,23 @@ internal static class SqlSourceRenderer
             }
         }
         return string.Empty;
+    }
+
+    /// <summary>
+    /// Returns <paramref name="hints"/> with <paramref name="indexToken"/> appended, or a single-element
+    /// list when <paramref name="hints"/> is <c>null</c> or empty. Used to fold an index hint into the
+    /// dialect's single <c>WITH (...)</c> table-hint clause (SQL Server).
+    /// </summary>
+    private static IReadOnlyList<string> TableHintsWithIndex(IReadOnlyList<string>? hints, string indexToken)
+    {
+        if (hints is not { Count: > 0 })
+            return [indexToken];
+
+        var combined = new string[hints.Count + 1];
+        for (var i = 0; i < hints.Count; i++)
+            combined[i] = hints[i];
+        combined[^1] = indexToken;
+        return combined;
     }
 
     /// <summary>
@@ -334,7 +441,7 @@ internal static class SqlSourceRenderer
                 if (entityType is not null)
                     ctx.ColumnsProvider.Add(entityType, false);
 
-                sqlBuilder.Append(ctx.Dialect.MakeTableAlias(ctx.AliasProvider!.GetNextAlias(from)));
+                sqlBuilder.Append(ctx.Dialect.MakeTableAlias(ctx.AliasProvider!.GetNextAlias(from), ctx.KeywordCase));
             }
 
             return sqlBuilder.ToString();
@@ -369,7 +476,7 @@ internal static class SqlSourceRenderer
                 if (IsVerbatimArgument(function, i))
                     continue;
 
-                using var visitor = new BaseExpressionVisitor(new VisitorOptions(entityType ?? typeof(object), ctx.Dialect, ctx.ColumnsProvider, 0, ctx.AliasProvider, ctx.ParameterProvider, ctx.QueryProvider, true, true, ctx.Params, ctx.Logger) { QuoteIdentifiers = ctx.QuoteIdentifiers, NamingConvention = ctx.NamingConvention });
+                using var visitor = new BaseExpressionVisitor(new VisitorOptions(entityType ?? typeof(object), ctx.Dialect, ctx.ColumnsProvider, 0, ctx.AliasProvider, ctx.ParameterProvider, ctx.QueryProvider, true, true, ctx.Params, ctx.Logger) { QuoteIdentifiers = ctx.QuoteIdentifiers, NamingConvention = ctx.NamingConvention, KeywordCase = ctx.KeywordCase });
                 visitor.Visit(arguments[i]);
             }
 
@@ -392,7 +499,7 @@ internal static class SqlSourceRenderer
                     continue;
                 }
 
-                using var visitor = new BaseExpressionVisitor(new VisitorOptions(entityType ?? typeof(object), ctx.Dialect, ctx.ColumnsProvider, 0, ctx.AliasProvider, ctx.ParameterProvider, ctx.QueryProvider, true, false, ctx.Params, ctx.Logger) { QuoteIdentifiers = ctx.QuoteIdentifiers, NamingConvention = ctx.NamingConvention });
+                using var visitor = new BaseExpressionVisitor(new VisitorOptions(entityType ?? typeof(object), ctx.Dialect, ctx.ColumnsProvider, 0, ctx.AliasProvider, ctx.ParameterProvider, ctx.QueryProvider, true, false, ctx.Params, ctx.Logger) { QuoteIdentifiers = ctx.QuoteIdentifiers, NamingConvention = ctx.NamingConvention, KeywordCase = ctx.KeywordCase });
                 visitor.Visit(arguments[i]);
                 sqlBuilder.Append(visitor.ToString());
             }
@@ -411,14 +518,14 @@ internal static class SqlSourceRenderer
             }
 
             if (!string.IsNullOrEmpty(function.WithClause))
-                sqlBuilder.Append(" with (").Append(function.WithClause).Append(')');
+                sqlBuilder.Append(SqlKeywords.Of(ctx.KeywordCase, " with (")).Append(function.WithClause).Append(')');
 
             if (needAlias || ctx.Dialect.RequireSubqueryAlias)
             {
                 if (entityType is not null)
                     ctx.ColumnsProvider.Add(hasJoins && typeof(IProjection).IsAssignableFrom(entityType) ? entityType.GetGenericArguments()[0] : entityType, false);
 
-                sqlBuilder.Append(ctx.Dialect.MakeTableAlias(ctx.AliasProvider!.GetNextAlias(from)));
+                sqlBuilder.Append(ctx.Dialect.MakeTableAlias(ctx.AliasProvider!.GetNextAlias(from), ctx.KeywordCase));
             }
 
             return sqlBuilder.ToString();
@@ -460,7 +567,7 @@ internal static class SqlSourceRenderer
         try
         {
             sqlBuilder.Append(rendered)
-                      .Append(ctx.Dialect.MakeTableAlias(alias))
+                      .Append(ctx.Dialect.MakeTableAlias(alias, ctx.KeywordCase))
                       .Append('(')
                       .Append(ctx.QuoteIdentifiers ? ctx.Dialect.QuoteIdentifier(column) : column)
                       .Append(')');
@@ -539,8 +646,8 @@ internal static class SqlSourceRenderer
 
         var alias = ctx.AliasProvider!.GetNextAlias(from);
         return pivot.IsUnpivot
-            ? pivotRenderer.RenderUnpivot(pivot, source, alias)
-            : pivotRenderer.RenderPivot(pivot, source, aggregateColumn, forColumn, alias);
+            ? pivotRenderer.RenderUnpivot(pivot, source, alias, ctx.KeywordCase)
+            : pivotRenderer.RenderPivot(pivot, source, aggregateColumn, forColumn, alias, ctx.KeywordCase);
     }
 
     /// <summary>Renders one pivot column expression (aggregate argument or <c>FOR</c> column) unqualified.</summary>

@@ -12,6 +12,12 @@ internal static class SqliteTestContext
     public static IDataContext CreateQuoted() =>
         new SqliteDataContext(PlaceholderConnectionString, new DataContextBuilder().UseQuotedIdentifiers());
 
+    public static IDataContext CreateUppercase() =>
+        new SqliteDataContext(PlaceholderConnectionString, new DataContextBuilder().UseKeywordCase());
+
+    public static IDataContext CreateUppercaseQuoted() =>
+        new SqliteDataContext(PlaceholderConnectionString, new DataContextBuilder().UseKeywordCase().UseQuotedIdentifiers());
+
     public static IDataContext CreateSnakeCase() =>
         new SqliteDataContext(PlaceholderConnectionString, new DataContextBuilder().UseNamingConvention(SnakeCaseNamingConvention.Instance));
 

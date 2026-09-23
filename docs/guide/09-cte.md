@@ -253,6 +253,21 @@ plan, including a recursive CTE whose body is a `union all` of two fresh command
 See [Query reuse: cache vs Prepare](15-query-reuse.md) for the lifetime and invalidation rules of the
 plan cache.
 
+## Data-modifying CTE (PostgreSQL)
+
+PostgreSQL is the only supported provider that accepts a data-modifying statement as a CTE body
+(`WITH <name> AS (INSERT ... RETURNING ...)`), gated by
+[`SupportsDataModifyingCtes`](xref:NextORM.Core.ISqlDialect.SupportsDataModifyingCtes). nextorm exposes it
+as the `With(name, insert)` overload on `IDataContext`/`CteQuery`, which returns a
+[`MutationCteQuery<TResult>`](xref:NextORM.Core.MutationCteQuery`1) typed by the `RETURNING` projection;
+every other provider rejects it with `NotSupportedException`.
+
+The write CTE is documented together with the write surface it belongs to — typed read-back via
+`From`/`FromTable`, a `VALUES` or `INSERT ... SELECT` body, reading an earlier read CTE, and feeding a main
+`INSERT ... SELECT` — in
+[Data modification (INSERT): Data-modifying CTE](19-insert-statement.md#data-modifying-cte-postgresql).
+`UPDATE` and `DELETE` bodies are planned and will live in their respective guides.
+
 ## Provider differences
 
 | Provider | Behaviour |

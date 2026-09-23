@@ -840,7 +840,7 @@ public class InMemoryTests
     public void CorrelatedApply_ShouldThrowClearNotSupported()
     {
         // The in-memory provider executes joins row-wise and has no correlated APPLY/LATERAL source
-        // yet (see docs/specs/roadmap/todo_correlated_inmemory.md), so it must fail loudly.
+        // (only correlated subqueries in SELECT/WHERE/ORDER BY are supported), so it must fail loudly.
         var act = () => _sut.DataProvider
             .From<SimpleEntity>()
             .CrossApply(s => _sut.DataProvider.From<SimpleEntity>().Where(x => x.Id == s.Id))

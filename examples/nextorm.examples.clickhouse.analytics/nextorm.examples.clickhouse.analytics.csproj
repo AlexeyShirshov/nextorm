@@ -8,12 +8,9 @@
 
   <ItemGroup>
     <PackageReference Include="ClickHouse.Driver" />
+    <PackageReference Include="nextorm" />
+    <PackageReference Include="nextorm.clickhouse" />
     <PackageReference Include="Testcontainers.ClickHouse" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\..\src\nextorm.core\nextorm.core.csproj" />
-    <ProjectReference Include="..\..\src\nextorm.clickhouse\nextorm.clickhouse.csproj" />
   </ItemGroup>
 
 </Project>

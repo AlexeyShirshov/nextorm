@@ -1,14 +1,16 @@
 using System.Net.Http;
+using ClickHouse.Driver;
 using ClickHouse.Driver.ADO;
+using DotNet.Testcontainers.Builders;
 using Testcontainers.ClickHouse;
 
 namespace NextORM.Examples.ClickHouse.Analytics;
 
 /// <summary>
 /// Provisions the ClickHouse sample used by the demo queries: either an already running server (the
-/// <c>CLICKHOUSE_ANALYTICS_CONNECTION</c> environment variable or <c>--connection</c>) or a throwaway
-/// Testcontainers instance loaded with <c>hits_v1</c> (downloaded once and cached) plus the
-/// <c>daily_unique_users_mv</c> materialized view.
+/// <c>CLICKHOUSE_ANALYTICS_CONNECTION</c> environment variable or <c>--connection</c>) or a Testcontainers
+/// instance whose data directory is a named volume loaded with <c>hits_v1</c> (downloaded once and
+/// cached) plus the <c>daily_unique_users_mv</c> materialized view; later runs reuse the loaded volume.
 /// </summary>
 public sealed class DemoDatabase : IAsyncDisposable
 {
@@ -19,6 +21,9 @@ public sealed class DemoDatabase : IAsyncDisposable
     private const string DefaultDatasetUrl = "https://datasets.clickhouse.com/hits/tsv/hits_v1.tsv.xz";
     private const string DefaultImage = "clickhouse/clickhouse-server:25.8-alpine";
     private const string DatasetFile = "hits_v1.tsv.xz";
+    private const string VolumeName = "nextorm-examples-clickhouse-data";
+    private const string DataDirectory = "/var/lib/clickhouse";
+    private const string ReloadVariable = "NEXTORM_EXAMPLES_RELOAD";
 
     private static readonly string CacheDirectory = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cache", "nextorm", "clickhouse");
@@ -47,26 +52,69 @@ public sealed class DemoDatabase : IAsyncDisposable
 
         var dataset = await EnsureDataset(ct).ConfigureAwait(false);
 
+        if (IsReloadRequested())
+            await DeleteVolume(ct).ConfigureAwait(false);
+
+        // The ClickHouse data directory lives in a named volume: the examples are read-only, so the
+        // loaded dataset is reused across runs and the multi-minute load only happens on a cold volume.
+        // The dataset archive is copied at load time only, not on every run.
         var container = new ClickHouseBuilder(DefaultImage)
             .WithEnvironment("TZ", "UTC")
-            .WithResourceMapping(dataset, "/tmp/")
+            .WithVolumeMount(VolumeName, DataDirectory)
             .Build();
 
         Console.WriteLine($"[analytics] starting {DefaultImage} ...");
         await container.StartAsync(ct).ConfigureAwait(false);
 
         var connectionString = container.GetConnectionString();
-        await CreateSchema(connectionString, ct).ConfigureAwait(false);
 
-        Console.WriteLine($"[analytics] loading {Path.GetFileName(dataset)} (large, this takes several minutes) ...");
-        var result = await container.ExecAsync(
-            new[] { "sh", "-c", $"unxz -c /tmp/{DatasetFile} | clickhouse-client --max_insert_block_size=100000 --query 'INSERT INTO datasets.hits_v1 FORMAT TSV'" },
-            ct).ConfigureAwait(false);
+        if (await IsLoaded(connectionString, ct).ConfigureAwait(false))
+        {
+            Console.WriteLine($"[analytics] reusing the loaded dataset from volume '{VolumeName}'");
+        }
+        else
+        {
+            await CreateSchema(connectionString, ct).ConfigureAwait(false);
 
-        if (result.ExitCode != 0)
-            throw new InvalidOperationException($"Loading hits_v1 failed (exit {result.ExitCode}).{Environment.NewLine}{result.Stderr}");
+            Console.WriteLine($"[analytics] loading {Path.GetFileName(dataset)} (first run, this takes several minutes) ...");
+            await container.CopyAsync(dataset, "/tmp/", ct: ct).ConfigureAwait(false);
+            // The 3.5 GB TSV streams through a single socket; clickhouse-client's default 300 s
+            // send/receive timeout aborts the load on a slow (memory-pressured) host, so raise both.
+            var result = await container.ExecAsync(
+                new[] { "sh", "-c", $"unxz -c /tmp/{DatasetFile} | clickhouse-client --max_insert_block_size=100000 --send_timeout=3600 --receive_timeout=3600 --max_execution_time=0 --query 'INSERT INTO datasets.hits_v1 FORMAT TSV'" },
+                ct).ConfigureAwait(false);
+
+            if (result.ExitCode != 0)
+                throw new InvalidOperationException($"Loading hits_v1 failed (exit {result.ExitCode}).{Environment.NewLine}{result.Stderr}");
+        }
 
         return new DemoDatabase(connectionString, container);
+    }
+
+    private static bool IsReloadRequested() =>
+        bool.TryParse(Environment.GetEnvironmentVariable(ReloadVariable), out var reload) && reload;
+
+    private static async Task DeleteVolume(CancellationToken ct)
+    {
+        var volume = new VolumeBuilder().WithName(VolumeName).Build();
+        await volume.CreateAsync(ct).ConfigureAwait(false);
+        await volume.DeleteAsync(ct).ConfigureAwait(false);
+    }
+
+    private static async Task<bool> IsLoaded(string connectionString, CancellationToken ct)
+    {
+        try
+        {
+            await using var connection = new ClickHouseConnection(connectionString);
+            await connection.OpenAsync(ct).ConfigureAwait(false);
+            await using var command = connection.CreateCommand();
+            command.CommandText = "SELECT count() FROM datasets.hits_v1";
+            return Convert.ToInt64(await command.ExecuteScalarAsync(ct).ConfigureAwait(false)) > 0;
+        }
+        catch (ClickHouseServerException)
+        {
+            return false;
+        }
     }
 
     private static async Task<string> EnsureDataset(CancellationToken ct)

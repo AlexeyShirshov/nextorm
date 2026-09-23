@@ -14,12 +14,38 @@ namespace NextORM.Examples.ClickHouse.Analytics;
 public static class ClickHouseQueries
 {
     // 1. Sql/clickhouse_array_analytics.sql
-    // NOT WORKING: arrayMap/arrayFilter over array columns (higher-order lambdas) and grouping by the
-    // resulting array have no LINQ surface. Not worked around with raw SQL on purpose; tracked in
-    // docs/specs/roadmap/todo_clickhouse_arrays.md.
-    public static Task ArrayAnalytics(IDataContext ctx, CancellationToken ct) =>
-        throw new NotSupportedException(
-            "arrayMap/arrayFilter over arrays have no LINQ surface (see docs/specs/roadmap/todo_clickhouse_arrays.md).");
+    // WORKING: splitByChar → split_by_char; arrayMap(x -> lower(x)) → array_map(x => x.ToLower(), ...);
+    // arrayFilter(x -> length(x) > 3, ...) → array_filter(x => x.ToLower().Length > 3, ...). The
+    // length() of a higher-order lambda parameter cannot be written as x.Length (member access on the
+    // parameter is rejected by the translator), so it is reached through the lower() call — a no-op on
+    // the already-lowercased element. Grouping by the resulting array is supported by ClickHouse.
+    public static async Task ArrayAnalytics(IDataContext ctx, CancellationToken ct)
+    {
+        var rows = await ctx.From<IHit>()
+            .Where(h => h.SearchPhrase != "" && h.EventDate == new DateTime(2014, 3, 20))
+            .GroupBy(h => new
+            {
+                CleanWords = SqlFunctions.ClickHouse.array_filter(
+                    x => x.ToLower().Length > 3,
+                    SqlFunctions.ClickHouse.array_map(
+                        x => x.ToLower(),
+                        SqlFunctions.ClickHouse.split_by_char(" ", h.SearchPhrase)))
+            })
+            .OrderByDescending(h => SqlFunctions.Sql.count())
+            .Limit(10)
+            .Select(h => new
+            {
+                CleanWords = SqlFunctions.ClickHouse.array_filter(
+                    x => x.ToLower().Length > 3,
+                    SqlFunctions.ClickHouse.array_map(
+                        x => x.ToLower(),
+                        SqlFunctions.ClickHouse.split_by_char(" ", h.SearchPhrase))),
+                Occurrence = SqlFunctions.Sql.count()
+            })
+            .ToListAsync(ct);
+
+        Print("1. array_analytics", rows);
+    }
 
     // 2. Sql/clickhouse_funnel.sql
     // WORKING: windowFunnel(1800)(...) → SqlFunctions.ClickHouse.window_funnel(...); the inner
@@ -46,20 +72,86 @@ public static class ClickHouseQueries
     }
 
     // 3. Sql/clickhouse_incremental.sql
-    // NOT WORKING: uniqMerge over an AggregateFunction(uniq, ...) state has no LINQ surface. Not worked
-    // around with raw SQL on purpose; tracked in docs/specs/roadmap/todo_clickhouse_aggregate_function_state.md.
+    // NOT WORKING: uniqMerge over an AggregateFunction(uniq, UInt64) state has no LINQ surface in the
+    // released nextorm packages (there is no uniqMerge/`-Merge` combinator), so the state column cannot
+    // be projected as a scalar. Not worked around with raw SQL on purpose; tracked in
+    // docs/specs/roadmap/todo_clickhouse_aggregate_function_state.md.
     public static Task Incremental(IDataContext ctx, CancellationToken ct) =>
         throw new NotSupportedException(
             "uniqMerge over an AggregateFunction state has no LINQ surface (see docs/specs/roadmap/todo_clickhouse_aggregate_function_state.md).");
 
     // 4. Sql/clickhouse_retention.sql
-    // NOT WORKING: the reference is `WITH first_visits AS (...), cohort_sizes AS (...) SELECT ...
-    // groupArray(...) ...`. The CTEs are expressible, but `groupArray((tuple))` builds an array/tuple
-    // result that has no LINQ surface, so the query cannot be modelled as CTEs + LINQ. Not worked
-    // around with raw SQL on purpose; tracked in docs/specs/roadmap/todo_clickhouse_arrays.md.
-    public static Task Retention(IDataContext ctx, CancellationToken ct) =>
-        throw new NotSupportedException(
-            "groupArray/tuple results have no LINQ surface (see docs/specs/roadmap/todo_clickhouse_arrays.md).");
+    // WORKING: the WITH first_visits / cohort_sizes CTEs are declared with ctx.With and read back by
+    // name; the inner t subquery joins hits with first_visits; groupArray((week_number, pct)) →
+    // group_array(Tuple.Create(...)), which materialises as a CLR Tuple<...>[]. The matrix is formatted
+    // for display in C# (there is no portable toString()).
+    public static async Task Retention(IDataContext ctx, CancellationToken ct)
+    {
+        // CTE first_visits: each user's first (Monday-aligned) visit. UserID is projected as Int64 so the
+        // later join with hits_v1.UserID (UInt64) has a common key type on both sides.
+        var firstVisits = ctx.From<IHit>()
+            .GroupBy(h => new { h.UserId })
+            .Select(h => new
+            {
+                UserID = (long)h.UserId,
+                cohort_week = SqlFunctions.ClickHouse.to_monday(SqlFunctions.Sql.min(h.EventDate))
+            });
+
+        // CTE cohort_sizes: how many users start in each cohort week.
+        var cohortSizes = ctx.From("first_visits")
+            .GroupBy(f => new { cohort_week = f.GetDateTime("cohort_week") })
+            .Select(f => new
+            {
+                cohort_week = f.GetDateTime("cohort_week"),
+                cohort_size = SqlFunctions.Sql.count()
+            });
+
+        // CTE weekly: each cohort's weekly distinct users (the inner `t` subquery of the reference).
+        var weekly = ctx.From<IHit>()
+            .Join(ctx.From("first_visits"), (h, fv) => (long)h.UserId == fv.GetInt64("UserID"))
+            .GroupBy(p => new
+            {
+                cohort_week = p.Item2.GetDateTime("cohort_week"),
+                week_number = (byte)((SqlFunctions.Sql.date_diff("day", p.Item2.GetDateTime("cohort_week"),
+                    SqlFunctions.ClickHouse.to_monday(p.Item1.EventDate)) ?? 0) / 7)
+            })
+            .Select(p => new
+            {
+                cohort_week = p.Item2.GetDateTime("cohort_week"),
+                week_number = (byte)((SqlFunctions.Sql.date_diff("day", p.Item2.GetDateTime("cohort_week"),
+                    SqlFunctions.ClickHouse.to_monday(p.Item1.EventDate)) ?? 0) / 7),
+                distinct_users = SqlFunctions.Sql.count_distinct(p.Item1.UserId)
+            });
+
+        var scope = ctx.With("first_visits", firstVisits)
+            .With("cohort_sizes", cohortSizes)
+            .With("weekly", weekly);
+
+        var rows = await scope.From("weekly")
+            .Join(scope.From("cohort_sizes"), (w, cs) => w.GetDateTime("cohort_week") == cs.GetDateTime("cohort_week"))
+            .Where(p => p.Item1.GetInt32("week_number") <= 4)
+            .GroupBy(p => new { cohort_week = p.Item1.GetDateTime("cohort_week") })
+            .OrderByDescending(p => p.Item1.GetDateTime("cohort_week"))
+            .Select(p => new
+            {
+                CohortWeek = p.Item1.GetDateTime("cohort_week"),
+                CohortSize = SqlFunctions.Sql.max(p.Item2.GetInt32("cohort_size")),
+                RetentionMatrix = SqlFunctions.ClickHouse.group_array(Tuple.Create(
+                    p.Item1.GetByte("week_number"),
+                    Math.Round((double)p.Item1.GetInt32("distinct_users") / p.Item2.GetInt32("cohort_size") * 100, 2)))
+            })
+            .ToListAsync(ct);
+
+        var display = rows.Select(r => new
+        {
+            r.CohortWeek,
+            r.CohortSize,
+            RetentionMatrix = "[" + string.Join(", ",
+                r.RetentionMatrix.Select(t => $"(week {t.Item1}: {t.Item2:0.##}%)")) + "]"
+        });
+
+        Print("4. retention", display);
+    }
 
     // 5. Sql/clickhouse_sessions.sql
     // WORKING: three chained CTEs (sessions, session_flags, session_counts) expressed as CTEs;

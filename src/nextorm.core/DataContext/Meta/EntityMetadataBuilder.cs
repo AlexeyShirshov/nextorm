@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq.Expressions;
 using System.Reflection;
@@ -53,40 +54,78 @@ public class EntityMetadataBuilder<T>
         {
             var prop = props[idx];
             if (prop is null) continue;
-            var colAttr = prop.GetCustomAttribute<ColumnAttribute>(true);
-            if (!string.IsNullOrEmpty(colAttr?.Name))
+
+            // Attributes are declared on the interface for interface-mapped entities, so a property
+            // without a direct mapping falls back to its matching interface property (mirrors the
+            // former ColumnAttribute-only lookup).
+            var intProp = FindInterfaceProperty(entityType, prop);
+            var colAttr = prop.GetCustomAttribute<ColumnAttribute>(true) ?? intProp?.GetCustomAttribute<ColumnAttribute>(true);
+            var keyAttr = prop.GetCustomAttribute<KeyAttribute>(true) ?? intProp?.GetCustomAttribute<KeyAttribute>(true);
+            var generatedAttr = prop.GetCustomAttribute<DatabaseGeneratedAttribute>(true) ?? intProp?.GetCustomAttribute<DatabaseGeneratedAttribute>(true);
+            var generated = generatedAttr?.DatabaseGeneratedOption ?? DatabaseGeneratedOption.None;
+
+            var columnName = !string.IsNullOrEmpty(colAttr?.Name) ? colAttr!.Name! : prop.Name;
+            propsMeta.Add(new PropertyMetadata
             {
-                propsMeta.Add(new PropertyMetadata { ColumnName = colAttr.Name, PropertyInfo = prop, IsColumnNameAuto = false });
-            }
-            else
+                ColumnName = columnName,
+                PropertyInfo = prop,
+                IsColumnNameAuto = string.IsNullOrEmpty(colAttr?.Name),
+                IsKey = keyAttr is not null,
+                IsIdentity = generated == DatabaseGeneratedOption.Identity,
+                IsComputed = generated == DatabaseGeneratedOption.Computed,
+            });
+        }
+
+        InferKeyIfMissing(propsMeta, entityType.Name);
+
+        return propsMeta;
+    }
+
+    private static PropertyInfo? FindInterfaceProperty(Type entityType, PropertyInfo prop)
+    {
+        if (entityType.IsInterface || prop.GetMethod is null)
+            return null;
+
+        foreach (var interf in entityType.GetInterfaces())
+        {
+            var intMap = entityType.GetInterfaceMap(interf);
+
+            var implIdx = Array.IndexOf(intMap.TargetMethods, prop.GetMethod);
+            if (implIdx >= 0)
             {
-                var added = false;
-                foreach (var interf in entityType.GetInterfaces())
-                {
-                    var intMap = entityType.GetInterfaceMap(interf);
-
-                    var implIdx = Array.IndexOf(intMap.TargetMethods, prop!.GetMethod);
-                    if (implIdx >= 0)
-                    {
-                        var intMethod = intMap.InterfaceMethods[implIdx];
-
-                        var intProp = interf.GetProperties().FirstOrDefault(prop => prop.GetMethod == intMethod);
-                        colAttr = intProp?.GetCustomAttribute<ColumnAttribute>(true);
-                        if (!string.IsNullOrEmpty(colAttr?.Name))
-                        {
-                            propsMeta.Add(new PropertyMetadata { ColumnName = colAttr.Name, PropertyInfo = prop, IsColumnNameAuto = false });
-                            added = true;
-                            break;
-                        }
-                    }
-                }
-
-                if (!added)
-                    propsMeta.Add(new PropertyMetadata { ColumnName = prop.Name, PropertyInfo = prop, IsColumnNameAuto = true });
+                var intMethod = intMap.InterfaceMethods[implIdx];
+                var intProp = interf.GetProperties().FirstOrDefault(p => p.GetMethod == intMethod);
+                if (intProp is not null)
+                    return intProp;
             }
         }
 
-        return propsMeta;
+        return null;
+    }
+
+    // Key convention when no property is declared with [Key]/.Key(): the property named "Id" or
+    // "<TypeName>Id". Insert does not depend on the key, but update/delete (todo_update/todo_delete)
+    // address a row through it.
+    private static void InferKeyIfMissing(List<IPropertyMetadata> props, string typeName)
+    {
+        foreach (var p in props)
+        {
+            if (p.IsKey)
+                return;
+        }
+
+        var idName = typeName + "Id";
+        foreach (var candidate in new[] { "Id", idName })
+        {
+            foreach (var p in props)
+            {
+                if (string.Equals(p.PropertyInfo.Name, candidate, StringComparison.OrdinalIgnoreCase))
+                {
+                    ((PropertyMetadata)p).IsKey = true;
+                    return;
+                }
+            }
+        }
     }
 
     private static (string? TableName, bool IsAuto) AutoBuildTableName()

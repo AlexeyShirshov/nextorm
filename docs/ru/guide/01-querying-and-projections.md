@@ -444,7 +444,7 @@ select id from simple_entity tablesample (10 percent) repeatable (42)
 PostgreSQL поддерживает и `System`, и [`Bernoulli`](xref:NextORM.Core.TableSampleMethod.Bernoulli);
 SQL Server поддерживает только `System`. Все остальные провайдеры выбрасывают `NotSupportedException`
 при построении SQL ([`TableSample`](xref:NextORM.Core.ISqlDialect.TableSample) и
-[`ITableSampleMethods.Render`](xref:NextORM.Core.ITableSampleMethods.Render(NextORM.Core.TableSampleMethod,System.Double,System.Nullable{System.Double}))). Модификатор применяется только к
+[`ITableSampleMethods.Render`](xref:NextORM.Core.ITableSampleMethods.Render(NextORM.Core.TableSampleMethod,System.Double,System.Nullable{System.Double},NextORM.Core.KeywordCase))). Модификатор применяется только к
 основной таблице запроса.
 
 ## JSON-вывод (SQL Server)

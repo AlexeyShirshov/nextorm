@@ -1,5 +1,14 @@
 # TODO: Слияние данных (`MERGE` / upsert)
 
+> **Статус.** **Фаза 1 (key upsert) — реализована** (23.09.2026): `MergeInto` → `MergeBuilder<T>`,
+> `.Using(entity|batch)`, `.OnKeys()`, `.WhenMatchedUpdate()`, `.WhenNotMatchedInsert()`,
+> `.Merge()/.MergeAsync()/.ToSql()`; диалектные хуки `SupportsOnConflict`/`SupportsOnDuplicateKey`/
+> `SupportsMerge` + `MakeOnConflict`/`MakeOnDuplicateKey`/`MakeUpsertValueReference`/`MakeMerge`;
+> SQLite/PostgreSQL/MySQL/MariaDB/SQL Server — поддержка, ClickHouse и in-memory — `NotSupportedException`.
+> См. публичные доки: [Upsert (key merge)](../guide/19-insert-statement.md#upsert-key-merge),
+> [ограничения](../advanced/limitations.md), [обзор провайдеров](../providers/overview.md).
+> **Фаза 2 (полный `MERGE` с ветками, источник-запрос) — открыта** (см. «Этапы внедрения»).
+
 > Рабочий план (design RFC). Источник: GitHub issue
 > [#6 «TODO: Merge»](https://github.com/AlexeyShirshov/nextorm/issues/6), milestone `1.0-a.4`.
 > Общий каркас DML (метаданные, ось `MutationCommand`, `SqlMutationBuilder`, роль
@@ -157,7 +166,8 @@ linq2db (`Merge`, `MergeWithOutput`). Для батча источник рен�
 - **`WHEN NOT MATCHED BY SOURCE`.** Только SQL Server (и PG с оговорками); на остальных —
   `NotSupportedException`, а не молчаливая деградация.
 - **Источник-батч.** Большие батчи параметризуются и разбиваются на чанки (как в
-  [todo_insert.md](todo_insert.md)); `BulkCopy`/бинарная загрузка — вне области.
+  [todo_insert.md](todo_insert.md)); `BulkCopy`/бинарная загрузка — отдельный план
+  [todo_bulk_insert.md](todo_bulk_insert.md).
 - **Нет `RETURNING`/`OUTPUT`-материализации** в этой фазе (issue #15) — при необходимости отдельно.
 - **ClickHouse** не поддерживает ни транзакции, ни DML-merge — только `NotSupportedException`.
 - **Публичный API** — самый крупный билдер; обновить `API-NAMING-REVIEW.md` и (при заморозке)
@@ -167,12 +177,12 @@ linq2db (`Merge`, `MergeWithOutput`). Для батча источник рен�
 
 ## Этапы внедрения
 
-- **Фаза 1 (1.0-a.4):** `MergeCommand` + `MakeMerge` для **key upsert** (одна сущность и батч,
-  `.OnKeys()`), провайдеры SQLite/PostgreSQL/SQL Server/MySQL/MariaDB, ClickHouse — без поддержки.
-- **Фаза 2:** источник-запрос (`Using(EntityBuilder/QueryCommand)`), полный `MERGE` с ветками для
-  SQL Server/PostgreSQL 15+, `WHEN NOT MATCHED BY SOURCE`, `RETURNING`/`OUTPUT` (issue #15),
-  in-memory upsert.
-- **Вне области:** `BulkCopy`/binary insert, временные таблицы, `REPLACE`-семантика MariaDB,
+- **Фаза 1 (выполнена, 23.09.2026):** key upsert (одна сущность и батч, `.OnKeys()`) на
+  SQLite/PostgreSQL/SQL Server/MySQL/MariaDB; ClickHouse и in-memory — `NotSupportedException`.
+- **Фаза 2 (открыта):** источник-запрос (`Using(EntityBuilder/QueryCommand)`), полный `MERGE` с ветками
+  `WHEN MATCHED`/`WHEN NOT MATCHED BY SOURCE` для SQL Server/PostgreSQL 15+, `WHEN MATCHED THEN DELETE`,
+  `RETURNING`/`OUTPUT` (issue #15), in-memory upsert.
+- **Вне области** (bulk — обособленно в [todo_bulk_insert.md](todo_bulk_insert.md)): `BulkCopy`/binary insert, временные таблицы, `REPLACE`-семантика MariaDB,
   `ReplacingMergeTree` ClickHouse.
 
 ## План тестов
@@ -213,7 +223,7 @@ linq2db (`Merge`, `MergeWithOutput`). Для батча источник рен�
 - Тесты: `tests/nextorm.{core,sqlite,postgres,sqlserver,mysql}.tests/`,
   `tests/nextorm.integration.tests/*SpecificTests.cs` (MERGE/upsert не единообразен между
   провайдерами, поэтому — provider-specific).
-- Документация: `docs/guide/19-data-modification.md` (+RU), `docs/providers/*` (+RU),
+- Документация: `docs/guide/19-insert-statement.md` (+RU), `docs/providers/*` (+RU),
   `docs/advanced/limitations.md` (+RU), `docs/advanced/api-reference.md` (+RU),
   `docs/specs/comparison/linq2db-comparison.md` (+RU),
   `docs/specs/roadmap/sql-capabilities-gap-analysis.md`, `docs/specs/design/API-NAMING-REVIEW.md`.

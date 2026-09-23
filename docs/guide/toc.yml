@@ -34,6 +34,8 @@
   href: 17-query-hints.md
 - name: JSON support across providers
   href: 18-json.md
+- name: Data modification (INSERT)
+  href: 19-insert-statement.md
 - name: Provider-specific SQL
   items:
     - name: Overview

@@ -532,11 +532,20 @@ select cardinality(@norm_p1) as "N" from complex_entity where array_length(@norm
 > проверяют префикс/суффикс, а `has_substr(array, other)` — что `other` входит в `array` непрерывно и
 > по порядку (пустой `other` содержится всегда). Требуется провайдер, поддерживающий array-функции.
 
-> Поверхность кортежей строится на `System.Tuple.Create`/`System.Tuple<...>.ItemN`: `Tuple.Create(a, b)`
-> рендерится как `tuple(a, b)`, а `x.Pair.Item1` по колонке `Tuple(...)` — как `tupleElement(pair, 1)`.
-> Целое выражение `Tuple(...)` проецируется как `System.Tuple<...>` (арность 1–7). Требуется провайдер
-> с нативным tuple-типом (см. [`SupportsTupleFunctions`](xref:NextORM.Core.ISqlDialect.SupportsTupleFunctions);
-> ClickHouse); `untuple` не поддерживается, так как меняет набор колонок результата, а не даёт скаляр.
+> Поверхность row-значений (кортежей) кросс-провайдерная и строится на `System.Tuple.Create` /
+> `new Tuple<...>` / `System.Tuple<...>.ItemN`: конструктор рендерится через row-конструктор диалекта —
+> `tuple(a, b)` в ClickHouse, `ROW(a, b)` в PostgreSQL — а доступ к элементу *серверного* row рендерится
+> через позиционный доступ диалекта (`tupleElement(pair, 1)` в ClickHouse, `(pair).f1` в PostgreSQL).
+> Доступ к элементу *inline*-конструктора (`Tuple.Create(a, b).Item1`,
+> `new ValueTuple<...>(a, b).Item2`) сворачивается в сам аргумент, поэтому работает на любом диалекте,
+> умеющем выразить конструктор. `System.Tuple<,> ==` (в C# — ссылочное равенство) переинтерпретируется
+> как SQL-сравнение row-значений (`Tuple.Create(x.A, x.B) == Tuple.Create(1, 'a')` →
+> `ROW(a, b) = ROW(1, 'a')`); `ValueTuple` `==` в дереве выражений недостижим. Требуется провайдер с
+> нативным row-типом (см. [`ITupleRenderer`](xref:NextORM.Core.ITupleRenderer) /
+> [`ISqlDialect.Tuple`](xref:NextORM.Core.ISqlDialect.Tuple); PostgreSQL и ClickHouse); SQL Server,
+> MySQL, MariaDB, SQLite и провайдер in-memory отклоняют эту поверхность, а tuple `IN`/`Contains` по
+> списку значений пока не транслируется. `untuple` не поддерживается, так как меняет набор колонок
+> результата, а не даёт скаляр.
 
 > Функции высшего порядка (lambda) принимают inline-лямбду C#, параметр которой — элемент массива;
 > например `array_map(v => -v, e.Nums)` рендерится как `arrayMap(v -> -(v), nums)`.

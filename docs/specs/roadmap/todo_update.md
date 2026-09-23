@@ -151,7 +151,7 @@ public static Task<int> UpdateAsync<TEntity>(this IDataContext ctx, TEntity enti
   `DataContext/InMemoryDataContext.cs`.
 - Тесты: `tests/nextorm.{core,sqlite,postgres,sqlserver,mysql}.tests/`,
   `tests/nextorm.integration.tests/CommonTestSuite.Update.cs`, `*SpecificTests.cs`.
-- Документация: `docs/guide/19-data-modification.md` (+RU), `docs/providers/*` (+RU),
+- Документация: `docs/guide/19-insert-statement.md` (+RU), `docs/providers/*` (+RU),
   `docs/advanced/limitations.md` (+RU), `docs/advanced/api-reference.md` (+RU),
   `docs/specs/comparison/linq2db-comparison.md` (+RU),
   `docs/specs/roadmap/sql-capabilities-gap-analysis.md`, `docs/specs/design/API-NAMING-REVIEW.md`.

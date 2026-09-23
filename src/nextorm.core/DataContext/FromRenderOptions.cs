@@ -10,9 +10,13 @@ namespace NextORM.Core;
 /// <param name="HasJoins">Whether joins follow the source, which changes how columns are registered.</param>
 /// <param name="TableHints">Table-level hints rendered after the table name, or <c>null</c>.</param>
 /// <param name="Temporal">The <c>FOR SYSTEM_TIME</c> clause rendered before the alias, or <c>null</c>.</param>
+/// <param name="IndexHints">Index-hint index names rendered after the table name and before the alias, or <c>null</c>.</param>
+/// <param name="IndexHintKind">The intent of <paramref name="IndexHints"/>.</param>
 internal readonly record struct FromRenderOptions(
     bool NeedAlias,
     Type? EntityType,
     bool HasJoins,
     IReadOnlyList<string>? TableHints = null,
-    TemporalClause? Temporal = null);
+    TemporalClause? Temporal = null,
+    IReadOnlyList<string>? IndexHints = null,
+    IndexHintKind IndexHintKind = IndexHintKind.Use);

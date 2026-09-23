@@ -19,6 +19,30 @@ public class MySqlDialect : SqlDialectBase
     /// <summary>A MySQL derived table (subquery in FROM) must have an alias.</summary>
     public override bool RequireSubqueryAlias => true;
 
+    /// <summary>
+    /// MySQL has no <c>RETURNING</c>; the generated identity is read back with a separate
+    /// <c>SELECT LAST_INSERT_ID()</c>.
+    /// </summary>
+    public override bool SupportsLastInsertId => true;
+    /// <inheritdoc/>
+    public override string MakeLastInsertId(KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, "select last_insert_id()");
+
+    // MySQL/MariaDB insert an all-defaults row with the empty-column-list form and accept DEFAULT as a
+    // value in the VALUES list.
+    /// <inheritdoc/>
+    public override bool SupportsDefaultValues => true;
+    /// <inheritdoc/>
+    public override string MakeDefaultValues(KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, " () values ()");
+    /// <inheritdoc/>
+    public override bool SupportsColumnDefault => true;
+
+    // MySQL/MariaDB express a key upsert as INSERT ... ON DUPLICATE KEY UPDATE, assigning the incoming
+    // value through the VALUES(<column>) function (MariaDB has no `AS new` row alias).
+    /// <inheritdoc/>
+    public override bool SupportsOnDuplicateKey => true;
+    /// <inheritdoc/>
+    public override string MakeUpsertValueReference(string column, KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, "values(") + column + ")";
+
     // MySQL 8.0.14+ (and MariaDB 10.3+) spell the APPLY surface as an ANSI lateral join, which is
     // the SqlDialectBase default.
     /// <inheritdoc/>
@@ -36,7 +60,7 @@ public class MySqlDialect : SqlDialectBase
     /// subqueries are skipped). Neither has a <c>maxrecursion</c> option, so
     /// <paramref name="maxRecursionOption"/> is ignored.
     /// </summary>
-    public override string RenderQueryHints(string sql, IReadOnlyList<string> hints, string? maxRecursionOption)
+    public override string RenderQueryHints(string sql, IReadOnlyList<string> hints, string? maxRecursionOption, KeywordCase keywordCase = KeywordCase.Lower)
     {
         var depth = 0;
         for (var i = 0; i < sql.Length; i++)
@@ -210,9 +234,9 @@ public class MySqlDialect : SqlDialectBase
     public override bool SupportsRollup => true;
 
     /// <inheritdoc/>
-    public override string MakeGrouping(string columns, GroupingType groupingType) => groupingType switch
+    public override string MakeGrouping(string columns, GroupingType groupingType, KeywordCase keywordCase = KeywordCase.Lower) => groupingType switch
     {
-        GroupingType.Rollup => $"{columns} with rollup",
+        GroupingType.Rollup => columns + Kw(keywordCase, " with rollup"),
         _ => columns
     };
 
@@ -317,8 +341,8 @@ public class MySqlDialect : SqlDialectBase
     // MySQL treats the backslash as a string-literal escape too, so the escape character of a LIKE
     // predicate has to be written as a doubled backslash ('\\' rather than '\').
     /// <inheritdoc/>
-    public override string MakeLikeEscape(string escapeChar) =>
-        " escape '" + escapeChar.Replace("\\", "\\\\").Replace("'", "''") + "'";
+    public override string MakeLikeEscape(string escapeChar, KeywordCase keywordCase = KeywordCase.Lower) =>
+        Kw(keywordCase, " escape '") + escapeChar.Replace("\\", "\\\\").Replace("'", "''") + "'";
 
     // MySQL's ~ yields an unsigned 64-bit value, which overflows the signed CLR integer the
     // projection expects; -(x) - 1 keeps the two's-complement result signed.
@@ -326,18 +350,21 @@ public class MySqlDialect : SqlDialectBase
     public override string MakeOnesComplement(string operand) => $"(-({operand}) - 1)";
 
     /// <inheritdoc/>
-    public override void MakePage(Paging paging, StringBuilder sqlBuilder)
+    public override void MakePage(Paging paging, StringBuilder sqlBuilder, KeywordCase keywordCase = KeywordCase.Lower)
     {
         // MySQL requires LIMIT before OFFSET, and OFFSET is only valid together with LIMIT, so an
         // offset-only page uses the maximum unsigned bigint as the limit.
         if (paging.Limit > 0)
-            sqlBuilder.Append("limit ").Append(paging.Limit);
+            sqlBuilder.Append(Kw(keywordCase, "limit ")).Append(paging.Limit);
         else if (paging.Offset > 0)
-            sqlBuilder.Append("limit 18446744073709551615");
+            sqlBuilder.Append(Kw(keywordCase, "limit 18446744073709551615"));
 
         if (paging.Offset > 0)
-            sqlBuilder.Append(" offset ").Append(paging.Offset);
+            sqlBuilder.Append(Kw(keywordCase, " offset ")).Append(paging.Offset);
     }
+
+    /// <summary>MySQL/MariaDB support <c>USE INDEX</c>/<c>FORCE INDEX</c>/<c>IGNORE INDEX</c>.</summary>
+    public override IIndexHintRenderer? IndexHints => MySqlIndexHintRenderer.Instance;
 
     /// <summary>MySQL/MariaDB support the trailing row-locking clause.</summary>
     public override ILockRenderer Lock => MySqlLockRenderer.Instance;
@@ -375,6 +402,26 @@ internal sealed class MySqlLockRenderer : ILockRenderer
 
     public bool UsesTableHints => false;
 
-    public string Render(LockMode mode) =>
-        mode == LockMode.Share ? " lock in share mode" : " for update";
+    public string Render(LockMode mode, KeywordCase keywordCase = KeywordCase.Lower) =>
+        SqlKeywords.Of(keywordCase, mode == LockMode.Share ? " lock in share mode" : " for update");
+}
+
+internal sealed class MySqlIndexHintRenderer : IIndexHintRenderer
+{
+    public static readonly MySqlIndexHintRenderer Instance = new();
+
+    public bool MergesWithTableHints => false;
+
+    public string? RenderIndexHint(IReadOnlyList<string> indexes, IndexHintKind kind, KeywordCase keywordCase = KeywordCase.Lower)
+    {
+        if (indexes.Count == 0)
+            throw new NotSupportedException("MySQL/MariaDB index hints require at least one index name.");
+
+        return SqlKeywords.Of(keywordCase, kind switch
+        {
+            IndexHintKind.Force => " force index (",
+            IndexHintKind.Ignore => " ignore index (",
+            _ => " use index ("
+        }) + string.Join(", ", indexes) + ")";
+    }
 }

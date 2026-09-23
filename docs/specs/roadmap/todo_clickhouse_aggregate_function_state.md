@@ -36,7 +36,10 @@
 ## Текущее состояние
 
 - `uniqExact`/`count_distinct` есть; `uniqState`/`uniqMerge` не выражаются.
-- Пример `examples/nextorm.examples.clickhouse.analytics` (`Incremental`) обходит это сырым SQL.
+- Пример `examples/nextorm.examples.clickhouse.analytics` (`Incremental`) попадает сюда явно: запрос
+  выражается естественно и бросает `NotSupportedException` (сырым SQL не заменяется). Остальные
+  array/tuple-запросы примера (`ArrayAnalytics`, `Retention`) после перехода на пакеты `1.0.4-alpha`
+  теперь выражаются через `array_map`/`array_filter`/`group_array`.
 
 ## Дизайн (черновик)
 

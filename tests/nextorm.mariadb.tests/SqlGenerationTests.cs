@@ -19,6 +19,20 @@ public class SqlGenerationTests
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd) => Normalize(Prepare(ctx, cmd).DbCommand.CommandText);
 
     [Fact]
+    public void KeywordCase_Upper_ShouldUppercaseDialectClauses()
+    {
+        using var ctx = MariaDbTestContext.CreateUppercase();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e
+            .GroupByRollup(x => new { x.Int, x.Boolean })
+            .Select(x => new { x.Int, x.Boolean }))
+            .Should().Contain("GROUP BY nullableint, b WITH ROLLUP");
+
+        SqlOf(ctx, e.ForUpdate().Select(x => x.Int)).Should().EndWith("FOR UPDATE");
+    }
+
+    [Fact]
     public void Pivot_ShouldThrowBecauseNotSupported()
     {
         using var ctx = MariaDbTestContext.Create();

@@ -2,10 +2,20 @@
 
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!--
+      The runnable examples under examples/ consume the published nextorm packages (not the source
+      projects) so they double as a real consumer of what ships on nuget.org. Bump this together with
+      src/Directory.Build.props' <Version> when a release is published.
+    -->
+    <NextOrmVersion>1.0.4-alpha</NextOrmVersion>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
+    <PackageVersion Include="nextorm" Version="$(NextOrmVersion)" />
+    <PackageVersion Include="nextorm.clickhouse" Version="$(NextOrmVersion)" />
+    <PackageVersion Include="nextorm.postgres" Version="$(NextOrmVersion)" />
+    <PackageVersion Include="nextorm.sqlserver" Version="$(NextOrmVersion)" />
     <PackageVersion Include="ClickHouse.Driver" Version="1.4.0" />
     <PackageVersion Include="coverlet.collector" Version="10.0.1" />
     <PackageVersion Include="Dapper" Version="2.1.86" />

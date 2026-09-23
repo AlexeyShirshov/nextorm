@@ -39,13 +39,12 @@ internal static class InMemoryQueryBuilder
             throw new NotSupportedException(
                 "Raw SQL as a FROM source (FromSql) is not supported by the in-memory provider; run the query against a SQL provider.");
 
-        // Correlated subqueries need a per-row execution of the inner query with the outer row's
-        // values bound. The in-memory enumerator has no such binding, and the SQL-shaped prepared
-        // condition (an <IQueryRegistry> lambda) is not a TEntity predicate, so the condition was
-        // silently dropped and every row passed. Reject it explicitly instead of returning wrong data.
-        if (queryCommand.OuterReferences is { Count: > 0 })
+        // Correlated subqueries are evaluated per outer row by the in-memory materializer/condition
+        // rewriter. A correlated GROUP BY/HAVING still reaches the grouping path with markers it cannot
+        // bind, so reject it explicitly instead of returning wrong data.
+        if (queryCommand.OuterReferences is { Count: > 0 } && (queryCommand.GroupBy is not null || queryCommand.PreparedHaving is not null))
             throw new NotSupportedException(
-                "Correlated subqueries are not supported by the in-memory provider; run the query against a SQL provider.");
+                "Correlated subqueries in a grouped query are not supported by the in-memory provider; run the query against a SQL provider.");
 
         // Rejected here, before the row materializer is compiled: the projection of a bound ARRAY JOIN
         // references the ArrayJoinProjection parameter, which the in-memory materializer cannot bind.
@@ -234,7 +233,7 @@ internal static class InMemoryQueryBuilder
             // An async source cannot be sorted lazily without buffering; wrap it in an iterator that
             // materialises once and then serves the ordered rows. The raw source is cached above so a
             // repeat call does not wrap an already-wrapped sequence.
-            var ordered = InMemoryOrdering.OrderAsyncEnumerable(asyncData, queryCommand, cancellationToken, context.SortingSelectorCache);
+            var ordered = InMemoryOrdering.OrderAsyncEnumerable(context, asyncData, queryCommand, cancellationToken, context.SortingSelectorCache);
             return CreateEnumeratorAdapter(context, queryCommand, cacheEntry, ordered.GetAsyncEnumerator(cancellationToken));
         }
         return CreateEnumeratorAdapter(context, queryCommand, cacheEntry, asyncData.GetAsyncEnumerator(cancellationToken));
@@ -306,7 +305,7 @@ internal static class InMemoryQueryBuilder
 
             if (queryCommand.Sorting is not null)
             {
-                data = InMemoryOrdering.ApplyOrdering(data, queryCommand, context.SortingSelectorCache);
+                data = InMemoryOrdering.ApplyOrdering(context, data, queryCommand, context.SortingSelectorCache);
             }
             cacheEntry.Data = data;
 
@@ -428,7 +427,7 @@ internal static class InMemoryQueryBuilder
             else
                 conditionDelegate = (Func<TEntity, object[]?, bool>?)d;
 
-            (conditionFactory, conditionDirect) = InMemoryConditionFactory.GetConditionPredicates(query, condition, context.ConditionFactoryCache, context.ConditionDirectCache);
+            (conditionFactory, conditionDirect) = InMemoryConditionFactory.GetConditionPredicates(context, query, condition, context.ConditionFactoryCache, context.ConditionDirectCache);
         }
         return new InMemoryCompiledQuery<TResult, TEntity>(context.GetMap<TResult, TEntity>(query), conditionDelegate, conditionFactory, conditionDirect);
     }

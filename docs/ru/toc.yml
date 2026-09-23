@@ -50,6 +50,8 @@
       href: guide/17-query-hints.md
     - name: Поддержка JSON в разных провайдерах
       href: guide/18-json.md
+    - name: Изменение данных (INSERT)
+      href: guide/19-insert-statement.md
     - name: Специфичный для провайдеров SQL
       items:
         - name: Обзор

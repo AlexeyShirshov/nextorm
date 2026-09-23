@@ -50,4 +50,11 @@ public sealed record VisitorOptions(
     /// otherwise hidden from the enclosing command (see <c>IColumnsProvider.PopSourceScope</c>).
     /// </summary>
     public bool IncludeNestedSources { get; init; }
+
+    /// <summary>
+    /// The letter case in which the visitor emits SQL keywords. Declared as an init-only property so the
+    /// record's primary constructor stays source- and binary-compatible; a build stamps it from the
+    /// command's resolved <c>KeywordCase</c>.
+    /// </summary>
+    public KeywordCase KeywordCase { get; init; }
 }

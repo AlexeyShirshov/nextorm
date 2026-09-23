@@ -21,6 +21,55 @@ public sealed class SqlServerDialect : SqlDialectBase
     public override string MakeParam(string name) => $"@{name}";
 
     /// <summary>
+    /// SQL Server returns the generated identity through the <c>OUTPUT inserted.&lt;column&gt;</c>
+    /// clause of the insert (preferred over the session-scoped <c>SCOPE_IDENTITY()</c>).
+    /// </summary>
+    public override bool SupportsOutput => true;
+
+    /// <summary>
+    /// SQL Server reads the last generated identity through the batch-scoped <c>SCOPE_IDENTITY()</c>.
+    /// The identity-function terminal appends it to the insert as a single batch, which keeps
+    /// <c>SCOPE_IDENTITY()</c> in scope and unaffected by triggers.
+    /// </summary>
+    public override bool SupportsIdentityFunction => true;
+
+    /// <summary>SQL Server supports <c>INSERT ... DEFAULT VALUES</c> for an all-defaults row.</summary>
+    public override bool SupportsDefaultValues => true;
+
+    /// <summary>SQL Server accepts <c>DEFAULT</c> as a value in the <c>VALUES</c> list.</summary>
+    public override bool SupportsColumnDefault => true;
+
+    /// <summary>SQL Server expresses a key upsert as a <c>MERGE</c> over a <c>VALUES</c> derived source.</summary>
+    public override bool SupportsMerge => true;
+
+    /// <summary>Renders the key-upsert <c>MERGE ... USING (VALUES ...) AS source (...) ON ...</c> statement (T-SQL requires the terminating semicolon).</summary>
+    public override string MakeMerge(
+        string target,
+        IReadOnlyList<string> columns,
+        IReadOnlyList<string> keys,
+        IReadOnlyList<string> updateColumns,
+        string valuesRows,
+        KeywordCase keywordCase = KeywordCase.Lower)
+    {
+        var columnList = string.Join(", ", columns);
+        var match = string.Join(Kw(keywordCase, " and "), keys.Select(static k => "target." + k + " = source." + k));
+        var updates = string.Join(", ", updateColumns.Select(static c => "target." + c + " = source." + c));
+        var insertValues = string.Join(", ", columns.Select(static c => "source." + c));
+
+        return Kw(keywordCase, "merge into ") + target
+            + Kw(keywordCase, " as target using (values ") + valuesRows
+            + Kw(keywordCase, ") as source (") + columnList
+            + Kw(keywordCase, ") on ") + match
+            + Kw(keywordCase, " when matched then update set ") + updates
+            + Kw(keywordCase, " when not matched then insert (") + columnList
+            + Kw(keywordCase, ") values (") + insertValues
+            + ");";
+    }
+
+    /// <summary>Renders the identity-function query <c>select scope_identity()</c>.</summary>
+    public override string MakeIdentityFunction(KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, "select scope_identity()");
+
+    /// <summary>
     /// SQL Server bracket-quotes identifiers. Single quoted aliases (the base default) are accepted
     /// for columns but produce a syntax error for table and derived table aliases.
     /// </summary>
@@ -89,7 +138,11 @@ public sealed class SqlServerDialect : SqlDialectBase
     public override bool SupportsTableHints => true;
 
     /// <summary>Renders the hints as a <c>with (hint, ...)</c> suffix.</summary>
-    public override string MakeTableHints(IReadOnlyList<string> hints) => $" with ({string.Join(", ", hints)})";
+    public override string MakeTableHints(IReadOnlyList<string> hints, KeywordCase keywordCase = KeywordCase.Lower)
+        => Kw(keywordCase, " with (") + string.Join(", ", hints) + ")";
+
+    /// <summary>SQL Server renders index hints as a <c>WITH (INDEX(...))</c> table hint.</summary>
+    public override IIndexHintRenderer? IndexHints => SqlServerIndexHintRenderer.Instance;
 
     /// <summary>SQL Server supports row locking through the <c>updlock</c>/<c>holdlock</c> table hints.</summary>
     public override ILockRenderer Lock => SqlServerLockRenderer.Instance;
@@ -98,16 +151,16 @@ public sealed class SqlServerDialect : SqlDialectBase
     public override bool SupportsForJson => true;
 
     /// <summary>Renders the trailing <c>FOR JSON</c> clause with its mode, root and null-value options.</summary>
-    public override string MakeForJson(ForJsonClause clause)
+    public override string MakeForJson(ForJsonClause clause, KeywordCase keywordCase = KeywordCase.Lower)
     {
-        var sqlBuilder = new StringBuilder("for json ");
-        sqlBuilder.Append(clause.Mode == ForJsonMode.Auto ? "auto" : "path");
+        var sqlBuilder = new StringBuilder(Kw(keywordCase, "for json "));
+        sqlBuilder.Append(Kw(keywordCase, clause.Mode == ForJsonMode.Auto ? "auto" : "path"));
 
         if (!string.IsNullOrEmpty(clause.Root))
-            sqlBuilder.Append(", root('").Append(clause.Root.Replace("'", "''")).Append("')");
+            sqlBuilder.Append(Kw(keywordCase, ", root('")).Append(clause.Root.Replace("'", "''")).Append("')");
 
         if (clause.IncludeNullValues)
-            sqlBuilder.Append(", include_null_values");
+            sqlBuilder.Append(Kw(keywordCase, ", include_null_values"));
 
         return sqlBuilder.ToString();
     }
@@ -116,25 +169,25 @@ public sealed class SqlServerDialect : SqlDialectBase
     public override bool SupportsForXml => true;
 
     /// <summary>Renders the trailing <c>FOR XML</c> clause with its mode, element name, root and elements options.</summary>
-    public override string MakeForXml(ForXmlClause clause)
+    public override string MakeForXml(ForXmlClause clause, KeywordCase keywordCase = KeywordCase.Lower)
     {
-        var sqlBuilder = new StringBuilder("for xml ");
-        sqlBuilder.Append(clause.Mode switch
+        var sqlBuilder = new StringBuilder(Kw(keywordCase, "for xml "));
+        sqlBuilder.Append(Kw(keywordCase, clause.Mode switch
         {
             ForXmlMode.Raw => "raw",
             ForXmlMode.Auto => "auto",
             ForXmlMode.Explicit => "explicit",
             _ => "path"
-        });
+        }));
 
         if (!string.IsNullOrEmpty(clause.ElementName))
             sqlBuilder.Append("('").Append(clause.ElementName.Replace("'", "''")).Append("')");
 
         if (!string.IsNullOrEmpty(clause.Root))
-            sqlBuilder.Append(", root('").Append(clause.Root.Replace("'", "''")).Append("')");
+            sqlBuilder.Append(Kw(keywordCase, ", root('")).Append(clause.Root.Replace("'", "''")).Append("')");
 
         if (clause.Elements)
-            sqlBuilder.Append(", elements");
+            sqlBuilder.Append(Kw(keywordCase, ", elements"));
 
         return sqlBuilder.ToString();
     }
@@ -157,11 +210,11 @@ public sealed class SqlServerDialect : SqlDialectBase
     public override bool SupportsStringAgg => true;
 
     /// <summary>Renders a lateral source as <c>CROSS APPLY</c> or <c>OUTER APPLY</c>.</summary>
-    public override string MakeApply(JoinType applyType, string source) => applyType switch
+    public override string MakeApply(JoinType applyType, string source, KeywordCase keywordCase = KeywordCase.Lower) => applyType switch
     {
-        JoinType.CrossApply => $" cross apply {source}",
-        JoinType.OuterApply => $" outer apply {source}",
-        _ => base.MakeApply(applyType, source)
+        JoinType.CrossApply => Kw(keywordCase, " cross apply ") + source,
+        JoinType.OuterApply => Kw(keywordCase, " outer apply ") + source,
+        _ => base.MakeApply(applyType, source, keywordCase)
     };
 
     /// <summary>Maps the CLR type to its SQL Server column type (<c>tinyint</c>, <c>smallint</c>, <c>int</c>, <c>bigint</c>, <c>real</c>, <c>float</c>, <c>decimal</c>).</summary>
@@ -351,17 +404,17 @@ public sealed class SqlServerDialect : SqlDialectBase
     }
 
     /// <summary>Materialises a boolean-valued CASE as a <c>bit</c> scalar, compared with <c>1</c> in a predicate context.</summary>
-    public override string MakeCase(string caseExpression, bool isBooleanResult, bool asPredicate)
+    public override string MakeCase(string caseExpression, bool isBooleanResult, bool asPredicate, KeywordCase keywordCase = KeywordCase.Lower)
     {
         if (!isBooleanResult)
             return caseExpression;
 
         // T-SQL has no boolean type: a boolean-valued CASE has to be materialised as a bit scalar.
-        var bitValue = $"cast({caseExpression} as bit)";
+        var bitValue = Kw(keywordCase, "cast(") + caseExpression + Kw(keywordCase, " as bit)");
 
         // A bit scalar is not a valid predicate, so a condition context compares it with 1. The
         // result of that comparison is boolean, which is exactly what the predicate needs.
-        return asPredicate ? $"{bitValue} = 1" : bitValue;
+        return asPredicate ? bitValue + " = 1" : bitValue;
     }
 
     /// <summary>Renders <c>count_big(...)</c> for the large form (<c>count</c> otherwise), preserving the <c>distinct</c> modifier.</summary>
@@ -375,13 +428,13 @@ public sealed class SqlServerDialect : SqlDialectBase
     }
 
     /// <summary>Renders <c>offset n rows</c> and an optional <c>fetch next m rows only|with ties</c>.</summary>
-    public override void MakePage(Paging paging, StringBuilder sqlBuilder)
+    public override void MakePage(Paging paging, StringBuilder sqlBuilder, KeywordCase keywordCase = KeywordCase.Lower)
     {
-        sqlBuilder.Append("offset ").Append(paging.Offset).Append(" rows");
+        sqlBuilder.Append(Kw(keywordCase, "offset ")).Append(paging.Offset).Append(Kw(keywordCase, " rows"));
 
         if (paging.Limit > 0)
-            sqlBuilder.AppendLine().Append("fetch next ").Append(paging.Limit)
-                .Append(paging.HasWithTies ? " rows with ties" : " rows only");
+            sqlBuilder.AppendLine().Append(Kw(keywordCase, "fetch next ")).Append(paging.Limit)
+                .Append(Kw(keywordCase, paging.HasWithTies ? " rows with ties" : " rows only"));
     }
 
     /// <summary>SQL Server supports <c>TOP(n) WITH TIES</c> and <c>FETCH NEXT ... WITH TIES</c>.</summary>
@@ -393,21 +446,22 @@ public sealed class SqlServerDialect : SqlDialectBase
         => queryCommand.Paging.IsEmpty ? null : "(select null as anyorder)";
 
     /// <summary>SQL Server renders the inline limit as <c>top(n)</c>, or <c>top(n) with ties</c>.</summary>
-    public override bool MakeTop(int limit, bool withTies, out string? topStmt)
+    public override bool MakeTop(int limit, bool withTies, out string? topStmt, KeywordCase keywordCase = KeywordCase.Lower)
     {
-        topStmt = withTies ? $"top({limit}) with ties" : $"top({limit})";
+        topStmt = Kw(keywordCase, withTies ? $"top({limit}) with ties" : $"top({limit})");
         return true;
     }
 
     // T-SQL has no RECURSIVE keyword: a recursive CTE is declared with `with` alone, so the flag is
     // intentionally ignored.
     /// <summary>T-SQL has no <c>RECURSIVE</c> keyword, so the flag is ignored and <c>with</c> is always rendered.</summary>
-    public override string MakeWith(bool recursive) => "with ";
+    public override string MakeWith(bool recursive, KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, "with ");
 
     // MAXRECURSION overrides the 100-level default. The option is appended at the end of the
     // statement; the builder supplies the depth requested by the CTE declaration.
     /// <summary>Renders the trailing <c>option (maxrecursion n)</c> clause.</summary>
-    public override string? MakeMaxRecursion(int maxRecursion) => $"option (maxrecursion {maxRecursion})";
+    public override string? MakeMaxRecursion(int maxRecursion, KeywordCase keywordCase = KeywordCase.Lower) =>
+        Kw(keywordCase, "option (maxrecursion ") + maxRecursion + ")";
 
     /// <summary>SQL Server renders statement-level hints as a trailing <c>OPTION (...)</c> clause.</summary>
     public override bool SupportsQueryHints => true;
@@ -428,20 +482,21 @@ public sealed class SqlServerDialect : SqlDialectBase
     public override IUuidGenerators UuidGenerators => SqlServerUuidGenerators.Instance;
 
     /// <summary>Appends the hints as an <c>option (...)</c> clause, folding an existing <c>maxrecursion</c> option into it.</summary>
-    public override string RenderQueryHints(string sql, IReadOnlyList<string> hints, string? maxRecursionOption)
+    public override string RenderQueryHints(string sql, IReadOnlyList<string> hints, string? maxRecursionOption, KeywordCase keywordCase = KeywordCase.Lower)
     {
         // T-SQL allows only one OPTION clause per statement. When the query also declared a CTE
         // maxrecursion option, fold it into the same clause instead of emitting a second one. The
         // option text is produced by MakeMaxRecursion, so extracting its body stays local to this
         // dialect and the caller does not append it separately.
+        var option = Kw(keywordCase, " option (");
         if (maxRecursionOption is not null)
         {
             var open = maxRecursionOption.IndexOf('(');
             var body = maxRecursionOption[(open + 1)..^1];
-            return $"{sql} option ({body}, {string.Join(", ", hints)})";
+            return sql + option + body + ", " + string.Join(", ", hints) + ")";
         }
 
-        return $"{sql} option ({string.Join(", ", hints)})";
+        return sql + option + string.Join(", ", hints) + ")";
     }
 }
 
@@ -500,22 +555,22 @@ internal sealed class SqlServerTableSampleMethods : ITableSampleMethods
 
     public bool Supports(TableSampleMethod method) => method == TableSampleMethod.System;
 
-    public string Render(TableSampleMethod method, double percent, double? seed)
+    public string Render(TableSampleMethod method, double percent, double? seed, KeywordCase keywordCase = KeywordCase.Lower)
     {
-        var text = " tablesample (" + percent.ToString(System.Globalization.CultureInfo.InvariantCulture) + " percent)";
+        var text = SqlKeywords.Of(keywordCase, " tablesample (") + percent.ToString(System.Globalization.CultureInfo.InvariantCulture) + SqlKeywords.Of(keywordCase, " percent)");
         return seed is { } value
-            ? text + " repeatable (" + value.ToString(System.Globalization.CultureInfo.InvariantCulture) + ")"
+            ? text + SqlKeywords.Of(keywordCase, " repeatable (") + value.ToString(System.Globalization.CultureInfo.InvariantCulture) + ")"
             : text;
     }
 }
 
 internal sealed class SqlServerPivotRenderer(SqlServerDialect dialect) : IPivotRenderer
 {
-    public string RenderPivot(PivotExpression pivot, string source, string aggregateColumn, string forColumn, string alias)
+    public string RenderPivot(PivotExpression pivot, string source, string aggregateColumn, string forColumn, string alias, KeywordCase keywordCase = KeywordCase.Lower)
     {
         var sb = new StringBuilder(source);
-        sb.Append(" pivot (").Append(pivot.Aggregate.ToString().ToLowerInvariant()).Append('(')
-          .Append(aggregateColumn).Append(") for ").Append(forColumn).Append(" in (");
+        sb.Append(SqlKeywords.Of(keywordCase, " pivot (")).Append(pivot.Aggregate.ToString().ToLowerInvariant()).Append('(')
+          .Append(aggregateColumn).Append(SqlKeywords.Of(keywordCase, ") for ")).Append(forColumn).Append(SqlKeywords.Of(keywordCase, " in ("));
 
         for (var i = 0; i < pivot.Values.Count; i++)
         {
@@ -523,15 +578,15 @@ internal sealed class SqlServerPivotRenderer(SqlServerDialect dialect) : IPivotR
             sb.Append(dialect.Escape(pivot.Values[i].Value));
         }
 
-        sb.Append("))").Append(dialect.MakeTableAlias(alias));
+        sb.Append("))").Append(dialect.MakeTableAlias(alias, keywordCase));
         return sb.ToString();
     }
 
-    public string RenderUnpivot(PivotExpression pivot, string source, string alias)
+    public string RenderUnpivot(PivotExpression pivot, string source, string alias, KeywordCase keywordCase = KeywordCase.Lower)
     {
         var sb = new StringBuilder(source);
-        sb.Append(" unpivot (").Append(dialect.Escape(pivot.UnpivotValueColumn!)).Append(" for ")
-          .Append(dialect.Escape(pivot.UnpivotNameColumn!)).Append(" in (");
+        sb.Append(SqlKeywords.Of(keywordCase, " unpivot (")).Append(dialect.Escape(pivot.UnpivotValueColumn!)).Append(SqlKeywords.Of(keywordCase, " for "))
+          .Append(dialect.Escape(pivot.UnpivotNameColumn!)).Append(SqlKeywords.Of(keywordCase, " in ("));
 
         for (var i = 0; i < pivot.Columns.Count; i++)
         {
@@ -539,7 +594,7 @@ internal sealed class SqlServerPivotRenderer(SqlServerDialect dialect) : IPivotR
             sb.Append(dialect.Escape(pivot.Columns[i].Column));
         }
 
-        sb.Append("))").Append(dialect.MakeTableAlias(alias));
+        sb.Append("))").Append(dialect.MakeTableAlias(alias, keywordCase));
         return sb.ToString();
     }
 }
@@ -550,6 +605,24 @@ internal sealed class SqlServerLockRenderer : ILockRenderer
 
     public bool UsesTableHints => true;
 
-    public string Render(LockMode mode) =>
-        mode == LockMode.Share ? "holdlock" : "updlock";
+    public string Render(LockMode mode, KeywordCase keywordCase = KeywordCase.Lower) =>
+        SqlKeywords.Of(keywordCase, mode == LockMode.Share ? "holdlock" : "updlock");
+}
+
+internal sealed class SqlServerIndexHintRenderer : IIndexHintRenderer
+{
+    public static readonly SqlServerIndexHintRenderer Instance = new();
+
+    public bool MergesWithTableHints => true;
+
+    public string? RenderIndexHint(IReadOnlyList<string> indexes, IndexHintKind kind, KeywordCase keywordCase = KeywordCase.Lower)
+    {
+        if (kind == IndexHintKind.Ignore)
+            throw new NotSupportedException("SQL Server has no index-ignore hint; only INDEX(...) is supported.");
+
+        if (indexes.Count == 0)
+            throw new NotSupportedException("SQL Server index hints require at least one index name.");
+
+        return SqlKeywords.Of(keywordCase, "index(") + string.Join(", ", indexes) + ")";
+    }
 }

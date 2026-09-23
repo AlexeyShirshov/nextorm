@@ -30,10 +30,36 @@ public sealed class CteDefinition
         MaxRecursion = maxRecursion;
     }
 
+    /// <summary>
+    /// Creates a data-modifying CTE definition whose body is an <c>INSERT</c> and whose readable
+    /// columns are described by <paramref name="shape"/> (a prepared projection over the inserted
+    /// entity). Only PostgreSQL accepts a data-modifying CTE body.
+    /// </summary>
+    /// <param name="name">The name the CTE is declared under and referenced by in <c>from</c>.</param>
+    /// <param name="shape">A prepared command describing the columns returned by the mutation.</param>
+    /// <param name="mutation">The <c>INSERT</c> that forms the CTE body.</param>
+    internal CteDefinition(string name, QueryCommand shape, InsertCommand mutation)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(name);
+        ArgumentNullException.ThrowIfNull(shape);
+        ArgumentNullException.ThrowIfNull(mutation);
+
+        Name = name;
+        Query = shape;
+        Mutation = mutation;
+    }
+
     /// <summary>Name the CTE is declared under and referenced by in <c>from</c>.</summary>
     public string Name { get; }
-    /// <summary>Query that defines the CTE.</summary>
+    /// <summary>Query that defines the CTE, or the column shape of a data-modifying CTE.</summary>
     public QueryCommand Query { get; }
+    /// <summary>
+    /// The data-modifying statement (<c>INSERT ... RETURNING</c>) that forms the CTE body, or
+    /// <c>null</c> when the CTE is an ordinary read CTE.
+    /// </summary>
+    internal InsertCommand? Mutation { get; }
+    /// <summary>True when the CTE body is a data-modifying statement rather than a <c>SELECT</c>.</summary>
+    public bool IsDataModifying => Mutation is not null;
     /// <summary>True when the CTE body may reference <see cref="Name"/> (a recursive CTE).</summary>
     public bool Recursive { get; }
     /// <summary>
@@ -73,6 +99,20 @@ public sealed class CteQuery
     /// </summary>
     public CteQuery WithRecursive(string name, QueryCommand query, int? maxRecursion = null)
         => new(_dataContext, Append(new CteDefinition(name, query, true, maxRecursion)));
+
+    /// <summary>
+    /// Declares a data-modifying common table expression <b>after</b> the read CTEs collected so far, so
+    /// its <c>INSERT ... SELECT</c> body may reference them (PostgreSQL makes a CTE visible to later
+    /// ones). The returned scope is typed by the <c>RETURNING</c> projection.
+    /// </summary>
+    /// <typeparam name="TEntity">The mapped entity type inserted by the CTE body.</typeparam>
+    /// <typeparam name="TResult">The row shape the CTE returns through <c>RETURNING</c>.</typeparam>
+    /// <param name="name">The name the data-modifying CTE is declared under.</param>
+    /// <param name="insert">The returning insert that forms the CTE body.</param>
+    /// <returns>A scope that reads the mutation's returned rows.</returns>
+    /// <exception cref="NotSupportedException">The provider does not accept a data-modifying CTE body (only PostgreSQL does).</exception>
+    public MutationCteQuery<TResult> With<TEntity, TResult>(string name, InsertReturningBuilder<TEntity, TResult> insert)
+        => MutationCteQuery<TResult>.Create(_dataContext, name, insert, _ctes);
 
     /// <summary>Starts a query whose source is the CTE declared as <paramref name="cteName"/>.</summary>
     public EntityBuilder<TableAlias> From(string cteName) => new(_dataContext, cteName) { Ctes = _ctes, Logger = _dataContext.CommandLogger };

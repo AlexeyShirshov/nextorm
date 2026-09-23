@@ -23,6 +23,28 @@ public class SqlGenerationTests
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd) => Normalize(Prepare(ctx, cmd).DbCommand.CommandText);
 
     [Fact]
+    public void IndexHint_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var act = () => SqlOf(ctx, e.WithIndex("idx_id").Select(x => new { x.Id }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*Index hints*");
+    }
+
+    [Fact]
+    public void KeywordCase_Upper_ShouldUppercaseSkeletonAliasesAndPaging()
+    {
+        using var ctx = PostgresTestContext.CreateUppercase();
+        var e = ctx.From<ISimpleEntity>();
+
+        var sql = SqlOf(ctx, e.Limit(3).Offset(2).Select(x => new { X = x.Id }));
+
+        sql.Should().Be("SELECT id AS \"X\" FROM simple_entity\nLIMIT 3 OFFSET 2");
+    }
+
+    [Fact]
     public void Pivot_ShouldThrowBecauseNotSupported()
     {
         using var ctx = PostgresTestContext.Create();
@@ -1326,25 +1348,47 @@ public class SqlGenerationTests
     }
 
     [Fact]
-    public void TupleFunctions_UnsupportedByProvider_ShouldThrow()
+    public void TupleCreate_ShouldRenderRowConstructor()
     {
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<IComplexEntity>();
 
-        var act = () => SqlOf(ctx, e.Select(x => Tuple.Create(x.Id, x.String)));
-
-        act.Should().Throw<NotSupportedException>().WithMessage("*native tuple type*");
+        SqlOf(ctx, e.Select(x => Tuple.Create(x.Id, x.String)))
+            .Should().Contain("ROW(id, somestring)");
     }
 
     [Fact]
-    public void TupleElementAccess_UnsupportedByProvider_ShouldThrow()
+    public void TupleElementAccess_OnServerTuple_ShouldRenderRowField()
     {
         using var ctx = PostgresTestContext.Create();
         var e = ctx.From<ITupleEntity>();
 
-        var act = () => SqlOf(ctx, e.Select(x => x.Pair.Item1));
+        SqlOf(ctx, e.Select(x => x.Pair.Item1))
+            .Should().Contain("(pair).f1");
+    }
 
-        act.Should().Throw<NotSupportedException>().WithMessage("*native tuple type*");
+    [Fact]
+    public void TupleElementAccess_OnInlineConstructor_ShouldFoldToArgument()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => Tuple.Create(x.Id, x.String).Item2));
+
+        sql.Should().Contain("somestring");
+        sql.Should().NotContain("ROW(");
+    }
+
+    [Fact]
+    public void TupleEquality_ShouldRenderRowComparison()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Where(x => Tuple.Create(x.Id, x.String) == Tuple.Create(1L, "a"))
+            .Select(x => new { x.Id }));
+
+        sql.Should().Contain("ROW(id, somestring) = ROW(1, 'a')");
     }
 
     [Fact]
@@ -3274,6 +3318,22 @@ public class SqlGenerationTests
         var e = ctx.From<ISimpleEntity>();
 
         SqlOf(ctx, e.ForShare().Select(x => x.Id)).Should().EndWith("for share");
+    }
+
+    [Fact]
+    public void KeywordCase_Upper_ShouldUppercaseDialectClauses()
+    {
+        using var ctx = PostgresTestContext.CreateUppercase();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.DistinctOn(x => x.Int).Select(x => new { x.Int }))
+            .Should().Contain("SELECT DISTINCT ON (nullableint)");
+
+        SqlOf(ctx, e.TableSample(10, TableSampleMethod.System, 3).Select(x => x.Int))
+            .Should().Contain(" TABLESAMPLE system (10) REPEATABLE (3)");
+
+        SqlOf(ctx, e.ForUpdate().Select(x => x.Int)).Should().EndWith("FOR UPDATE");
+        SqlOf(ctx, e.ForShare().Select(x => x.Int)).Should().EndWith("FOR SHARE");
     }
 
     [Fact]

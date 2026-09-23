@@ -71,7 +71,7 @@ public sealed class ClickHouseDialect : SqlDialectBase
     /// ClickHouse has a native <c>Tuple(...)</c> type and implements the <c>tuple</c> constructor and
     /// <c>tupleElement</c> access.
     /// </summary>
-    public override bool SupportsTupleFunctions => true;
+    public override ITupleRenderer? Tuple => ClickHouseTupleRenderer.Instance;
 
     /// <summary>ClickHouse implements <c>arrayJoin(array)</c>, which expands one row per element.</summary>
     public override bool SupportsArrayJoin => true;
@@ -92,7 +92,7 @@ public sealed class ClickHouseDialect : SqlDialectBase
     /// <c>GLOBAL</c> modifier first and the strictness after the join type, before <c>join</c>. The
     /// <c>LEFT SEMI</c>/<c>LEFT ANTI</c>/<c>PASTE</c> kinds render their own keyword.
     /// </summary>
-    public override string MakeJoinKeyword(JoinType joinType, JoinStrictness strictness, bool isGlobal)
+    public override string MakeJoinKeyword(JoinType joinType, JoinStrictness strictness, bool isGlobal, KeywordCase keywordCase = KeywordCase.Lower)
     {
         if (joinType is JoinType.Semi or JoinType.Anti or JoinType.Paste)
         {
@@ -104,7 +104,7 @@ public sealed class ClickHouseDialect : SqlDialectBase
                 _ => throw new NotSupportedException($"The {joinType} join is not supported")
             };
 
-            return (isGlobal ? " global" : "") + " " + kind + " join ";
+            return Kw(keywordCase, (isGlobal ? " global" : "") + " " + kind + " join ");
         }
 
         var type = joinType switch
@@ -127,7 +127,7 @@ public sealed class ClickHouseDialect : SqlDialectBase
             _ => throw new NotSupportedException($"The {strictness} join modifier is not supported")
         };
 
-        return (isGlobal ? " global" : "") + type + modifier + " join ";
+        return Kw(keywordCase, (isGlobal ? " global" : "") + type + modifier + " join ");
     }
 
     // ClickHouse renders greatest(...)/least(...).
@@ -307,7 +307,7 @@ public sealed class ClickHouseDialect : SqlDialectBase
     public override bool SupportsGroupByWithTotals => true;
 
     /// <summary>The super-aggregate <c>WITH TOTALS</c> is a trailing modifier after the grouping list.</summary>
-    public override string MakeGroupByTotals(string grouping) => $"{grouping} with totals";
+    public override string MakeGroupByTotals(string grouping, KeywordCase keywordCase = KeywordCase.Lower) => grouping + Kw(keywordCase, " with totals");
 
     /// <summary>
     /// ClickHouse provides the <c>numbers</c>/<c>numbers_mt</c>, <c>zeros</c>/<c>zeros_mt</c> and
@@ -366,10 +366,10 @@ public sealed class ClickHouseDialect : SqlDialectBase
     public override bool SupportsSettings => true;
 
     /// <summary>Renders the trailing <c>with rollup</c>/<c>with cube</c> super-aggregate modifier.</summary>
-    public override string MakeGrouping(string columns, GroupingType groupingType) => groupingType switch
+    public override string MakeGrouping(string columns, GroupingType groupingType, KeywordCase keywordCase = KeywordCase.Lower) => groupingType switch
     {
-        GroupingType.Rollup => $"{columns} with rollup",
-        GroupingType.Cube => $"{columns} with cube",
+        GroupingType.Rollup => columns + Kw(keywordCase, " with rollup"),
+        GroupingType.Cube => columns + Kw(keywordCase, " with cube"),
         _ => columns
     };
 
@@ -570,20 +570,20 @@ public sealed class ClickHouseDialect : SqlDialectBase
 
     // ClickHouse declares every CTE with `with`; there is no RECURSIVE keyword.
     /// <summary>ClickHouse declares every CTE with <c>with</c>; there is no <c>RECURSIVE</c> keyword.</summary>
-    public override string MakeWith(bool recursive) => "with ";
+    public override string MakeWith(bool recursive, KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, "with ");
 
     /// <summary>Renders <c>limit n offset m</c>, using the maximum unsigned bigint limit for offset-only pages.</summary>
-    public override void MakePage(Paging paging, StringBuilder sqlBuilder)
+    public override void MakePage(Paging paging, StringBuilder sqlBuilder, KeywordCase keywordCase = KeywordCase.Lower)
     {
         // ClickHouse requires LIMIT before OFFSET, so an offset-only page uses the maximum unsigned
         // bigint as the limit.
         if (paging.Limit > 0)
-            sqlBuilder.Append("limit ").Append(paging.Limit);
+            sqlBuilder.Append(Kw(keywordCase, "limit ")).Append(paging.Limit);
         else if (paging.Offset > 0)
-            sqlBuilder.Append("limit 18446744073709551615");
+            sqlBuilder.Append(Kw(keywordCase, "limit 18446744073709551615"));
 
         if (paging.Offset > 0)
-            sqlBuilder.Append(" offset ").Append(paging.Offset);
+            sqlBuilder.Append(Kw(keywordCase, " offset ")).Append(paging.Offset);
     }
 }
 
@@ -628,10 +628,10 @@ internal sealed class ClickHouseLimitByRenderer : ILimitByRenderer
 {
     public static readonly ClickHouseLimitByRenderer Instance = new();
 
-    public string Render(int limit, int offset, IReadOnlyList<string> columns)
+    public string Render(int limit, int offset, IReadOnlyList<string> columns, KeywordCase keywordCase = KeywordCase.Lower)
     {
         var prefix = offset > 0 ? $"{offset}, " : string.Empty;
-        return $"limit {prefix}{limit} by {string.Join(", ", columns)}";
+        return SqlKeywords.Of(keywordCase, "limit ") + prefix + limit + SqlKeywords.Of(keywordCase, " by ") + string.Join(", ", columns);
     }
 }
 
@@ -715,9 +715,9 @@ internal sealed class ClickHouseArrayJoinRenderer : IArrayJoinRenderer
 {
     public static readonly ClickHouseArrayJoinRenderer Instance = new();
 
-    public string Render(ArrayJoinKind kind, IReadOnlyList<string> expressions)
+    public string Render(ArrayJoinKind kind, IReadOnlyList<string> expressions, KeywordCase keywordCase = KeywordCase.Lower)
     {
-        var keyword = kind == ArrayJoinKind.Left ? " left array join " : " array join ";
+        var keyword = SqlKeywords.Of(keywordCase, kind == ArrayJoinKind.Left ? " left array join " : " array join ");
         return keyword + string.Join(", ", expressions);
     }
 }
@@ -758,4 +758,13 @@ internal sealed class ClickHouseDateConversionRenderer : IDateConversionRenderer
             _ => call
         };
     }
+}
+
+internal sealed class ClickHouseTupleRenderer : ITupleRenderer
+{
+    public static readonly ClickHouseTupleRenderer Instance = new();
+
+    public string RenderConstructor(IReadOnlyList<string> fields) => "tuple(" + string.Join(", ", fields) + ")";
+
+    public string? RenderElement(string row, int oneBasedIndex) => "tupleElement(" + row + ", " + oneBasedIndex + ")";
 }

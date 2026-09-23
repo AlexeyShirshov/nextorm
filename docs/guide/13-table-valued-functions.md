@@ -487,6 +487,7 @@ function — so use the helper only on the provider that defines it. The built-i
 
 * [Joins](03-joins.md) - joining a TVF to a table or another TVF.
 * [User-defined functions](12-user-defined-functions.md) - the scalar equivalent.
+* [Insert statement](19-insert-statement.md) - a TVF (`unnest`, `generate_series`) as an `INSERT ... SELECT` source.
 * [Provider overview](../providers/overview.md) - the TVF alias requirement per provider.
 
 ---

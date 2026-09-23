@@ -57,7 +57,7 @@ See [JSON and JSONB (PostgreSQL)](../11-scalar-functions.md) and
 
 * `percentile_cont`/`percentile_disc` are ordered-set aggregates rendered as
   `percentile_cont(f) within group (order by x)` ([`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates),
-  [`MakeWithinGroup`](xref:NextORM.Core.ISqlDialect.MakeWithinGroup(System.String,System.String))); `mode()` is the ordered-set mode;
+  [`MakeWithinGroup`](xref:NextORM.Core.ISqlDialect.MakeWithinGroup(System.String,System.String,NextORM.Core.KeywordCase))); `mode()` is the ordered-set mode;
 * `bool_and`/`bool_or`/`every`, the `regr_*` regression family and `bit_and`/`bit_or`/`bit_xor` are
   PostgreSQL-only and are rejected by every other dialect;
 * `array_agg` and the string/array aggregate surface are gated by
@@ -200,6 +200,37 @@ select id from simple_entity where (id > 5) for update
 
 `LockMode.Update` renders `for update` and `LockMode.Share` renders `for share`. See
 [Row locking](../01-querying-and-projections.md#row-locking-for-update--for-share).
+
+## Data-modifying CTEs
+
+PostgreSQL is the only provider that accepts a data-modifying statement as a CTE body
+(`WITH <name> AS (INSERT ... RETURNING ...)`), gated by
+[`SupportsDataModifyingCtes`](xref:NextORM.Core.ISqlDialect.SupportsDataModifyingCtes). Start the scope with
+the `With(name, insert)` overload: it returns a [`MutationCteQuery<TResult>`](xref:NextORM.Core.MutationCteQuery`1)
+typed by the `RETURNING` projection, and `From(name)` reads those rows with the full operator set:
+
+```csharp
+var rows = dataContext
+    .With("ins", dataContext.InsertInto<IOrder>()
+        .Value(x => x.CustomerId, 7)
+        .Returning(x => new { x.Id, x.Total }))
+    .From("ins")
+    .Where(r => r.Total > 0)
+    .Select(r => new { r.Id })
+    .ToList();
+```
+
+```sql
+with ins as (insert into orders (customer_id) values (@p0) returning id, total) select id from ins as "t1"
+ where (t1.total > 0)
+```
+
+The body may be a `VALUES` insert or an `INSERT ... SELECT`, and the mutation may read an earlier read CTE
+(declare it first and use `CteQuery.With(name, insert)`) or feed a main `INSERT ... SELECT`. See
+[Data modification (INSERT): Data-modifying CTE](../19-insert-statement.md#data-modifying-cte-postgresql)
+for the full set of forms; general read CTEs are in
+[Common table expressions](../09-cte.md). Every
+other provider rejects `With(name, insert)` at build time with `NotSupportedException`.
 
 ## Not yet supported
 

@@ -1192,6 +1192,39 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
 
         pair.Should().Be(Tuple.Create(1, "seven"));
     }
+
+    [Fact]
+    public void Insert_Value_ShouldPersistRow()
+    {
+        var ctx = _sut.DataProvider;
+        var marker = "ins_" + Guid.NewGuid().ToString("N");
+
+        ctx.InsertInto<IInsertEntity>()
+            .Value(x => x.Name, marker)
+            .Value(x => x.Age, 42)
+            .Insert();
+
+        var rows = ctx.From<IInsertEntity>()
+            .Where(x => x.Name == marker)
+            .Select(x => new { x.Age })
+            .ToList();
+
+        rows.Should().ContainSingle();
+        rows[0].Age.Should().Be(42);
+    }
+
+    [Fact]
+    public void ReturningIdentity_ShouldThrowBecauseNotSupported()
+    {
+        var ctx = _sut.DataProvider;
+
+        var act = () => ctx.InsertInto<IInsertEntity>()
+            .Value(x => x.Name, "ins_unsupported")
+            .ReturningIdentity(x => x.Id)
+            .Single();
+
+        act.Should().Throw<NotSupportedException>();
+    }
 }
 
 [SqlTable("uint64_entity")]

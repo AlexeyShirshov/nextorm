@@ -90,6 +90,10 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     internal StringBuilder? Builder => _builder;
     internal bool IsPredicateContext => AsPredicate;
     internal VisitorOptions Options => _options;
+    /// <summary>The letter case in which this visitor emits SQL keywords, inherited from its options.</summary>
+    internal KeywordCase KeywordCase => _options.KeywordCase;
+    /// <summary>Resolves a lower-case keyword fragment (keywords and separators only) to the configured <see cref="KeywordCase"/>.</summary>
+    internal string Kw(string text) => SqlKeywords.Of(_options.KeywordCase, text);
     /// <summary>
     /// The higher-order array lambda parameters bound by this visitor (name to emit for a parameter),
     /// or <c>null</c>. Overridden by <see cref="HigherOrderLambdaVisitor"/> so a nested lambda can see
@@ -120,9 +124,9 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             // conversion was silently dropped.
             _needAliasForColumn = true;
 
-            _builder!.Append("cast(");
+            _builder!.Append(Kw("cast("));
             Visit(convertArg);
-            _builder!.Append(" as ").Append(_dialect.MakeTypeName(convertTarget)).Append(')');
+            _builder!.Append(Kw(" as ")).Append(_dialect.MakeTypeName(convertTarget)).Append(')');
 
             return node;
         }
@@ -385,6 +389,9 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             return node;
         }
 
+        if (TupleSqlTranslator.TryTranslateNew(this, node))
+            return node;
+
         // A value-type constructor that does not reference the query (for example
         // new DateTime(2014, 3, 20)) is a constant. Falling through to base.VisitNew would visit the
         // constructor arguments and concatenate their literals into meaningless SQL ("2014320"), so
@@ -418,7 +425,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     private bool TryEmitValue(Type t, object? v)
     {
         if (v is null)
-            _builder!.Append("null");
+            _builder!.Append(Kw("null"));
         else if (t == typeof(string) || t == typeof(Guid))
         {
             _builder!.Append('\'').Append(v.ToString()).Append('\'');

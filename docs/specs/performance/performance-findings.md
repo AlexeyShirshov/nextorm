@@ -165,7 +165,7 @@ public TResult? ExecuteScalar<TResult>(IPreparedQueryCommand<TResult> preparedQu
 **Фаза 2 — C# 13, `params ReadOnlySpan<object?>` (апгрейд языка).**
 `<LangVersion>13.0</LangVersion>` (или `latest`) и замена `params object?[]` → `params ReadOnlySpan<object?>`
 на sync-методах. Компилятор сам делает stack-alloc для малых арностей. **Binary-breaking** для
-публичного API → нужен bump версии пакета (сейчас `1.0.3-alpha` — допустимо) и запись в release notes.
+публичного API → нужен bump версии пакета (допустимо на текущей pre-1.0 alpha-линии) и запись в release notes.
 
 **Фаза 3 — async/streaming.**
 Span неприменим. Массив там неизбежен (сохраняется в enumerator). Ограничиться:
@@ -615,7 +615,7 @@ if (createEnumerator && compiledQuery.Enumerator is null)
 ### Решение (2026-09-22)
 
 Пункт закрыт **решением**, а не правкой кода. Свежий baseline (итерация 9,
-`SqliteBenchmarkFeaturesFairCached`, изолированный worktree на `1.0.4-alpha`) подтверждает разрыв
+`SqliteBenchmarkFeaturesFairCached`, изолированный worktree) подтверждает разрыв
 1.11–1.60× (CTE 1.22×, recursive CTE 1.29×, Join4 1.11×, IN 1.40–1.60×) и 7–8× аллокаций; разложение
 показывает, что стоимость — это построение и хеширование свежего дерева на каждый вызов
 (≈3–9 µs/запрос), причём `QueryPlanEqualityComparer` уже считает по под-хешам (`*PlanHash`,

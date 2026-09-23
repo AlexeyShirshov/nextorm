@@ -15,12 +15,12 @@ namespace NextORM.Core;
 internal static class InMemoryOrdering
 {
     /// <summary>Applies the query's <c>ORDER BY</c> to a buffered source using the compiled key selectors.</summary>
-    public static IEnumerable<TEntity> ApplyOrdering<TEntity>(IEnumerable<TEntity> data, QueryCommand queryCommand, IDictionary<ExpressionKey, Delegate> sortingSelectorCache)
+    public static IEnumerable<TEntity> ApplyOrdering<TEntity>(InMemoryDataContext context, IEnumerable<TEntity> data, QueryCommand queryCommand, IDictionary<ExpressionKey, Delegate> sortingSelectorCache)
     {
         IOrderedEnumerable<TEntity>? intData = null;
         foreach (var sorting in queryCommand.Sorting!)
         {
-            var del = GetSortingSelector<TEntity>(sorting, queryCommand, sortingSelectorCache);
+            var del = GetSortingSelector<TEntity>(context, sorting, queryCommand, sortingSelectorCache);
             if (sorting.Direction == OrderDirection.Asc)
                 intData = (intData ?? data).OrderBy(del);
             else
@@ -34,9 +34,23 @@ internal static class InMemoryOrdering
     /// ordered query recompiled its selector on every execution, which dominated <c>Last</c>/ordered
     /// iteration.
     /// </summary>
-    private static Func<TEntity, object> GetSortingSelector<TEntity>(Sorting sorting, QueryCommand queryCommand, IDictionary<ExpressionKey, Delegate> sortingSelectorCache)
+    private static Func<TEntity, object> GetSortingSelector<TEntity>(InMemoryDataContext context, Sorting sorting, QueryCommand queryCommand, IDictionary<ExpressionKey, Delegate> sortingSelectorCache)
     {
-        var expression = (Expression<Func<TEntity, object>>)sorting.PreparedExpression!;
+        Expression<Func<TEntity, object>> expression;
+        if (InMemoryCorrelatedSubqueryRewriter.IsNeeded(queryCommand))
+        {
+            var rewritten = new InMemoryCorrelatedSubqueryRewriter(context, queryCommand).Rewrite(sorting.PreparedExpression!);
+            expression = rewritten is LambdaExpression { Parameters.Count: 1 } single
+                ? Expression.Lambda<Func<TEntity, object>>(
+                    single.Body.Type == typeof(object) ? single.Body : Expression.Convert(single.Body, typeof(object)),
+                    single.Parameters[0])
+                : throw new NotSupportedException("The in-memory provider supports ORDER BY expressions that are single-parameter lambdas only.");
+        }
+        else
+        {
+            expression = (Expression<Func<TEntity, object>>)sorting.PreparedExpression!;
+        }
+
         var key = new ExpressionKey(expression, queryCommand);
         if (sortingSelectorCache.TryGetValue(key, out var cached))
             return (Func<TEntity, object>)cached;
@@ -51,6 +65,7 @@ internal static class InMemoryOrdering
     /// be yielded, and an <see cref="IAsyncEnumerable{T}"/> cannot be re-sorted lazily.
     /// </summary>
     public static async IAsyncEnumerable<TEntity> OrderAsyncEnumerable<TEntity>(
+        InMemoryDataContext context,
         IAsyncEnumerable<TEntity> source,
         QueryCommand queryCommand,
         [EnumeratorCancellation] CancellationToken cancellationToken,
@@ -60,7 +75,7 @@ internal static class InMemoryOrdering
         await foreach (var item in source.WithCancellation(cancellationToken).ConfigureAwait(false))
             data.Add(item);
 
-        foreach (var item in ApplyOrdering(data, queryCommand, sortingSelectorCache))
+        foreach (var item in ApplyOrdering(context, data, queryCommand, sortingSelectorCache))
             yield return item;
     }
 

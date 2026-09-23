@@ -63,7 +63,7 @@ Nextorm uses protocol-level libraries (for example, SqlClient for Microsoft SQL 
 
 ## Status
 
-The current status (1.0.4-alpha) is a prof of concept.
+The current status is a prof of concept.
 
 ## Roadmap
 

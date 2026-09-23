@@ -46,6 +46,8 @@ public partial class QueryCommand
         dst.ResolvedQuoteIdentifiers = ResolvedQuoteIdentifiers;
         dst.NamingConvention = NamingConvention;
         dst.ResolvedNamingConvention = ResolvedNamingConvention;
+        dst.KeywordCase = KeywordCase;
+        dst.ResolvedKeywordCase = ResolvedKeywordCase;
         // Outer references participate in the plan key (QueryPlanEqualityComparer), so the cached
         // clone must carry them; otherwise the hash captured at construction would not match the
         // recomputed hash in QueryPlan.GetCacheVersion and the Debug.Assert would fail.
@@ -85,6 +87,8 @@ public partial class QueryCommand
         dst.PreWhereShapeHash = PreWhereShapeHash;
         dst.HasPreWhereInValues = HasPreWhereInValues;
         dst.TableHints = TableHints;
+        dst.IndexHints = IndexHints;
+        dst.IndexHintKind = IndexHintKind;
         dst.ForJsonClause = ForJsonClause;
         dst.ForXmlClause = ForXmlClause;
 
@@ -115,7 +119,9 @@ public partial class QueryCommand
             {
                 // The cached plan must own clones of the CTE queries (like From/Union/ReferencedQueries)
                 // so later re-preparation of the live command cannot mutate what the cache compares against.
-                dst._ctes = _ctes.Select(c => new CteDefinition(c.Name, c.Query.CloneForCache(), c.Recursive, c.MaxRecursion)).ToList();
+                dst._ctes = _ctes.Select(c => c.Mutation is not null
+                    ? new CteDefinition(c.Name, c.Query.CloneForCache(), c.Mutation)
+                    : new CteDefinition(c.Name, c.Query.CloneForCache(), c.Recursive, c.MaxRecursion)).ToList();
             }
 
             if (_referencedQueries?.Count > 0)
@@ -153,6 +159,22 @@ public partial class QueryCommand
         }
 
         return newJoins;
+    }
+
+    /// <summary>
+    /// Returns a live clone detached from its correlated scope: the outer references, referenced
+    /// queries and outer registry are cleared, so the clone can be prepared and executed on its own by
+    /// the in-memory correlated evaluator with the outer values supplied as runtime parameters.
+    /// </summary>
+    internal QueryCommand CloneForCorrelatedEvaluation()
+    {
+        var clone = (QueryCommand)((ICloneable)this).Clone();
+        clone._outerRefs = null;
+        clone._referencedQueries = null;
+        clone.OuterRegistry = null;
+        clone.ReferencedQueriesPlanHash = 0;
+        clone.OneColumn = OneColumn;
+        return clone;
     }
 
     /// <summary>Returns the detached clone that is stored in the plan cache and used as the cache key.</summary>

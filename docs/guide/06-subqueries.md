@@ -202,8 +202,11 @@ limit 1) as 'cnt' from complex_entity as 't1'
 Correlation nests arbitrarily: a correlated subquery may itself contain a correlated subquery, and
 each outer reference resolves to the alias of the scope that declared it.
 
-One limit applies: the in-memory provider cannot bind the outer row while executing the inner query,
-so correlated subqueries throw `NotSupportedException` there. Use a SQL provider for correlated queries.
+The in-memory provider evaluates a correlated subquery once per outer row too, so scalar subqueries,
+aggregate terminals, `EXISTS` and `IN` work there for depth-one correlation as well. It still rejects
+correlation depth greater than one, an outer reference inside the inner projection or `ORDER BY`, a
+correlated `GROUP BY`/`HAVING`, and an async source with `NotSupportedException`; use a SQL provider for
+those forms.
 
 On SQLite a numeric `Single`/`SingleOrDefault` over more than one row raises a database error through a
 rendered count guard (the provider does not enforce scalar-subquery cardinality); a non-numeric
@@ -296,7 +299,7 @@ SQLite does not implement `ANY` or `ALL`; the same query is accepted by the tran
 | MySQL | required (`` as `t1` ``) | supported (correlated too) | supported |
 | MariaDB | required (`` as `t1` ``) | supported (correlated too) | supported |
 | ClickHouse | required (`` as `t1` ``) | supported (correlated too) | supported |
-| In-memory | not applicable | **not supported** - `NotSupportedException` for correlated | not covered |
+| In-memory | not applicable | supported (depth-one correlated scalar/`EXISTS`/`IN`); deeper forms throw `NotSupportedException` | not covered |
 
 A subquery that references the outer query forces the outer `FROM` to be aliased (`t1`) on every
 SQL provider. On SQL Server a boolean-valued subquery predicate projected as a scalar is wrapped in
@@ -306,7 +309,7 @@ SQL provider. On SQL Server a boolean-valued subquery predicate projected as a s
 
 * Nested correlation (a subquery that references an outer reference of another subquery) is rejected
   with `NotSupportedException`; keeping it explicit avoids binding an outer marker to the wrong query.
-* The in-memory provider rejects correlated subqueries (see above).
+* The in-memory provider supports depth-one correlated scalar/`EXISTS`/`IN` and rejects the deeper forms listed above.
 
 ## See also
 

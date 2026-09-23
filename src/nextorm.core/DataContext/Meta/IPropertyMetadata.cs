@@ -27,4 +27,32 @@ public interface IPropertyMetadata
     /// mapping as declared) so existing external implementations keep compiling.
     /// </summary>
     bool IsColumnNameAuto => false;
+
+    /// <summary>
+    /// Whether the property is (part of) the entity key. Declared with
+    /// <see cref="System.ComponentModel.DataAnnotations.KeyAttribute"/>, inferred from the
+    /// <c>Id</c>/<c>&lt;TypeName&gt;Id</c> convention, or set fluently with
+    /// <see cref="EntityPropertyBuilder{T}.Key"/>. Used by the DML builders to address a row; the
+    /// default implementation returns <see langword="false"/> so existing external implementations
+    /// keep compiling.
+    /// </summary>
+    bool IsKey => false;
+
+    /// <summary>
+    /// Whether the database generates the property's value (an identity/auto-increment column). Such a
+    /// property is excluded from the values written by an insert. Declared with
+    /// <see cref="System.ComponentModel.DataAnnotations.Schema.DatabaseGeneratedAttribute"/> or set
+    /// fluently with <see cref="EntityPropertyBuilder{T}.Identity"/>. The default implementation
+    /// returns <see langword="false"/> so existing external implementations keep compiling.
+    /// </summary>
+    bool IsIdentity => false;
+
+    /// <summary>
+    /// Whether the database generates the property's value and it can never be written (a computed
+    /// column). Such a property is excluded from the values written by an insert. Declared with
+    /// <see cref="System.ComponentModel.DataAnnotations.Schema.DatabaseGeneratedAttribute"/> or set
+    /// fluently with <see cref="EntityPropertyBuilder{T}.Computed"/>. The default implementation
+    /// returns <see langword="false"/> so existing external implementations keep compiling.
+    /// </summary>
+    bool IsComputed => false;
 }

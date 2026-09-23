@@ -526,12 +526,20 @@ result can be projected like a scalar column.
 > and in order (an empty `other` is always contained). They require a provider that supports the array
 > functions.
 
-> The tuple surface is built from `System.Tuple.Create`/`System.Tuple<...>.ItemN`: `Tuple.Create(a, b)`
-> renders `tuple(a, b)` and `x.Pair.Item1` on a `Tuple(...)` column renders `tupleElement(pair, 1)`.
-> A whole `Tuple(...)` expression projects as `System.Tuple<...>` (arity 1–7). Requires a provider with
-> a native tuple type (see [`SupportsTupleFunctions`](xref:NextORM.Core.ISqlDialect.SupportsTupleFunctions);
-> ClickHouse); `untuple` is not supported because it changes the result column set rather than producing
-> a scalar.
+> The row-value (tuple) surface is cross-provider and built from `System.Tuple.Create` /
+> `new Tuple<...>` / `System.Tuple<...>.ItemN`: a constructor renders through the dialect's row
+> constructor — `tuple(a, b)` on ClickHouse, `ROW(a, b)` on PostgreSQL — and access to an element of a
+> *server-side* row renders through the dialect's positional access (`tupleElement(pair, 1)` on
+> ClickHouse, `(pair).f1` on PostgreSQL). Access to an element of an *inline* constructor
+> (`Tuple.Create(a, b).Item1`, `new ValueTuple<...>(a, b).Item2`) folds to the argument, so it works on
+> every dialect that can express the constructor. `System.Tuple<,> ==` (reference equality in C#) is
+> reinterpreted as a SQL row-value comparison (`Tuple.Create(x.A, x.B) == Tuple.Create(1, 'a')` →
+> `ROW(a, b) = ROW(1, 'a')`); `ValueTuple` `==` cannot appear in an expression tree. Requires a provider
+> with a native row type (see [`ITupleRenderer`](xref:NextORM.Core.ITupleRenderer) /
+> [`ISqlDialect.Tuple`](xref:NextORM.Core.ISqlDialect.Tuple); PostgreSQL and ClickHouse); SQL Server,
+> MySQL, MariaDB, SQLite and the in-memory provider reject the surface, and tuple `IN`/`Contains` over a
+> value list is not translated yet. `untuple` is not supported because it changes the result column set
+> rather than producing a scalar.
 
 > The higher-order (lambda) functions take an inline C# lambda whose parameter is the array element,
 > for example `array_map(v => -v, e.Nums)` renders `arrayMap(v -> -(v), nums)`. `array_exists`/`array_all`

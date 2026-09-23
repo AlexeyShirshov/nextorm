@@ -25,6 +25,19 @@ public sealed class FromExpression
      {
           SubQuery = subQuery;
      }
+     /// <summary>
+     /// Creates a source for a named table whose readable columns are described by
+     /// <paramref name="columnShape"/> rather than by entity metadata. Used to read the rows a
+     /// data-modifying CTE returns: the name is the CTE (<c>from ins as "t1"</c>) and the shape carries
+     /// the <c>RETURNING</c> projection so member access resolves to the returned columns.
+     /// </summary>
+     /// <param name="table">The table/CTE name.</param>
+     /// <param name="columnShape">A prepared command whose projection describes the readable columns.</param>
+     internal FromExpression(string table, QueryCommand columnShape)
+     {
+          Table = table;
+          ColumnShape = columnShape;
+     }
      /// <summary>Creates a source from a table-valued function.</summary>
      /// <param name="tableFunction">The table function call.</param>
      public FromExpression(TableFunctionExpression tableFunction)
@@ -64,6 +77,12 @@ public sealed class FromExpression
      /// <summary>The entity type, used when the source is a mapped CLR type rather than a table name.</summary>
      public readonly Type? SourceType;
      /// <summary>
+     /// Set when the source is a named table whose readable columns come from a projection rather than
+     /// entity metadata (a data-modifying CTE read). The command supplies
+     /// <see cref="QueryCommand.ResultType"/> and <see cref="QueryCommand.SelectList"/> to the column
+     /// provider so member access resolves against the returned columns.
+     /// </summary>
+     internal readonly QueryCommand? ColumnShape;     /// <summary>
      /// Set when the source is a table-valued function. Mutually exclusive with <see cref="Table"/>
      /// and <see cref="SubQuery"/>.
      /// </summary>

@@ -72,7 +72,7 @@ internal readonly struct SqlBuilder
             if (cmd.Paging.HasWithTies && (cmd.IsDistinct || cmd.DistinctOn is not null))
                 throw new BuildSqlCommandException("WITH TIES cannot be combined with DISTINCT or DISTINCT ON.");
 
-            var pageApplied = !_ctx.ParamMode && !(cmd.IgnoreColumns || selectList is null) && cmd.Paging.IsTop && _ctx.Dialect.MakeTop(cmd.Paging.Limit, cmd.Paging.HasWithTies, out topStmt);
+            var pageApplied = !_ctx.ParamMode && !(cmd.IgnoreColumns || selectList is null) && cmd.Paging.IsTop && _ctx.Dialect.MakeTop(cmd.Paging.Limit, cmd.Paging.HasWithTies, out topStmt, _ctx.KeywordCase);
 
             var joins = cmd.Joins;
             var hasJoins = joins?.Length > 0;
@@ -91,12 +91,12 @@ internal readonly struct SqlBuilder
 
                 var tableHints = cmd.TableHints;
                 if (cmd.RowLock is { } lockClause && _ctx.Dialect.Lock is { UsesTableHints: true } lockHint)
-                    tableHints = AppendHint(tableHints, lockHint.Render(lockClause.Mode));
+                    tableHints = AppendHint(tableHints, lockHint.Render(lockClause.Mode, _ctx.KeywordCase));
 
-                var fromStr = SqlSourceRenderer.MakeFrom(in _ctx, from, new FromRenderOptions(needAlias, entityType, hasJoins, tableHints, cmd.Temporal));
+                var fromStr = SqlSourceRenderer.MakeFrom(in _ctx, from, new FromRenderOptions(needAlias, entityType, hasJoins, tableHints, cmd.Temporal, cmd.IndexHints, cmd.IndexHintKind));
                 if (!_ctx.ParamMode)
                 {
-                    sqlBuilder!.Append(" from ").Append(fromStr);
+                    sqlBuilder!.Append(Kw(" from ")).Append(fromStr);
 
                     if (cmd.TableSample is { } tablesample)
                     {
@@ -106,7 +106,7 @@ internal readonly struct SqlBuilder
                         if (!tableSample.Supports(tablesample.Method))
                             throw new NotSupportedException($"The TABLESAMPLE {tablesample.Method} sampling method is not supported by this SQL dialect");
 
-                        sqlBuilder.Append(tableSample.Render(tablesample.Method, tablesample.Percent, tablesample.Seed));
+                        sqlBuilder.Append(tableSample.Render(tablesample.Method, tablesample.Percent, tablesample.Seed, _ctx.KeywordCase));
                     }
 
                     if (cmd.Final)
@@ -114,7 +114,7 @@ internal readonly struct SqlBuilder
                         if (!_ctx.Dialect.SupportsFinal)
                             throw new NotSupportedException("The FINAL modifier is not supported by this SQL dialect");
 
-                        sqlBuilder.Append(_ctx.Dialect.MakeFinal());
+                        sqlBuilder.Append(_ctx.Dialect.MakeFinal(_ctx.KeywordCase));
                     }
 
                     if (cmd.SampleRatio is { } sampleRatio)
@@ -122,7 +122,7 @@ internal readonly struct SqlBuilder
                         if (!_ctx.Dialect.SupportsSample)
                             throw new NotSupportedException("The SAMPLE modifier is not supported by this SQL dialect");
 
-                        sqlBuilder.Append(_ctx.Dialect.MakeSample(sampleRatio, cmd.SampleOffset));
+                        sqlBuilder.Append(_ctx.Dialect.MakeSample(sampleRatio, cmd.SampleOffset, _ctx.KeywordCase));
                     }
                 }
 
@@ -150,13 +150,13 @@ internal readonly struct SqlBuilder
                             // The bound element is referenced by the projection (p.Element), so the
                             // last expression of the clause carries the alias the translator emits.
                             renderedArrayJoins![i] = cmd.BindArrayJoinElement && i == arrayJoinExpressions.Count - 1
-                                ? expressionSql + " as " + ArrayJoinNames.ElementAlias
+                                ? expressionSql + Kw(" as ") + ArrayJoinNames.ElementAlias
                                 : expressionSql;
                         }
                     }
 
                     if (!_ctx.ParamMode)
-                        sqlBuilder!.AppendLine().Append(arrayJoinClause.Render(cmd.ArrayJoinKind, renderedArrayJoins!));
+                        sqlBuilder!.AppendLine().Append(arrayJoinClause.Render(cmd.ArrayJoinKind, renderedArrayJoins!, _ctx.KeywordCase));
                 }
 
                 if (cmd.PreparedPreWhere is not null)
@@ -164,12 +164,12 @@ internal readonly struct SqlBuilder
                     if (!_ctx.Dialect.SupportsPreWhere)
                         throw new NotSupportedException("The PREWHERE clause is not supported by this SQL dialect");
 
-                    if (!_ctx.ParamMode) sqlBuilder!.AppendLine().Append(" prewhere ");
+                    if (!_ctx.ParamMode) sqlBuilder!.AppendLine().Append(Kw(" prewhere "));
                     SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, cmd.PreparedPreWhere, 0);
                 }
                 if (cmd.PreparedCondition is not null)
                 {
-                    if (!_ctx.ParamMode) sqlBuilder!.AppendLine().Append(" where ");
+                    if (!_ctx.ParamMode) sqlBuilder!.AppendLine().Append(Kw(" where "));
                     SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, cmd.PreparedCondition, 0);
                 }
 
@@ -211,7 +211,7 @@ internal readonly struct SqlBuilder
                                 throw new NotSupportedException("GROUP BY ... WITH TOTALS cannot be combined with GROUPING SETS.");
                         }
 
-                        sqlBuilder!.AppendLine().Append(" group by ");
+                        sqlBuilder!.AppendLine().Append(Kw(" group by "));
 
                         string groupingSql;
                         if (cmd.GroupingType == GroupingType.GroupingSets)
@@ -235,15 +235,15 @@ internal readonly struct SqlBuilder
                                 rendered[s] = "(" + string.Join(", ", parts) + ")";
                             }
 
-                            groupingSql = _ctx.Dialect.MakeGroupingSets(rendered);
+                            groupingSql = _ctx.Dialect.MakeGroupingSets(rendered, _ctx.KeywordCase);
                         }
                         else
                         {
-                            groupingSql = _ctx.Dialect.MakeGrouping(string.Join(", ", columns!), cmd.GroupingType);
+                            groupingSql = _ctx.Dialect.MakeGrouping(string.Join(", ", columns!), cmd.GroupingType, _ctx.KeywordCase);
                         }
 
                         if (cmd.GroupByWithTotals)
-                            groupingSql = _ctx.Dialect.MakeGroupByTotals(groupingSql);
+                            groupingSql = _ctx.Dialect.MakeGroupByTotals(groupingSql, _ctx.KeywordCase);
 
                         sqlBuilder.Append(groupingSql);
                     }
@@ -251,7 +251,7 @@ internal readonly struct SqlBuilder
                     var having = cmd.PreparedHaving ?? cmd.Having;
                     if (having is not null)
                     {
-                        if (!_ctx.ParamMode) sqlBuilder!.AppendLine().Append(" having ");
+                        if (!_ctx.ParamMode) sqlBuilder!.AppendLine().Append(Kw(" having "));
                         SqlSourceRenderer.MakeWhere(in _ctx, sqlBuilder, entityType, having, 0);
                     }
                 }
@@ -270,11 +270,11 @@ internal readonly struct SqlBuilder
                         var windowSpec = MakeNamedWindow(in _ctx, entityType, window);
 
                         if (!_ctx.ParamMode)
-                            renderedWindows![wi] = window.Name + " as (" + windowSpec + ")";
+                            renderedWindows![wi] = window.Name + Kw(" as (") + windowSpec + ")";
                     }
 
                     if (!_ctx.ParamMode)
-                        sqlBuilder!.AppendLine().Append(" window ").Append(string.Join(", ", renderedWindows!));
+                        sqlBuilder!.AppendLine().Append(Kw(" window ")).Append(string.Join(", ", renderedWindows!));
                 }
 
                 if (cmd.UnionQuery is not null)
@@ -286,12 +286,12 @@ internal readonly struct SqlBuilder
                     {
                         sqlBuilder!.AppendLine().Append(cmd.UnionType switch
                         {
-                            UnionType.Distinct => " union ",
-                            UnionType.All => " union all ",
-                            UnionType.Intersect => " intersect ",
-                            UnionType.IntersectAll => " intersect all ",
-                            UnionType.Except => " except ",
-                            UnionType.ExceptAll => " except all ",
+                            UnionType.Distinct => Kw(" union "),
+                            UnionType.All => Kw(" union all "),
+                            UnionType.Intersect => Kw(" intersect "),
+                            UnionType.IntersectAll => Kw(" intersect all "),
+                            UnionType.Except => Kw(" except "),
+                            UnionType.ExceptAll => Kw(" except all "),
                             _ => throw new NotSupportedException(cmd.UnionType.ToString("G"))
                         }).AppendLine();
                     }
@@ -304,7 +304,7 @@ internal readonly struct SqlBuilder
                 var sortingList = cmd.Sorting;
                 if (sortingList is not null)
                 {
-                    if (!_ctx.ParamMode) sqlBuilder!.AppendLine().Append(" order by ");
+                    if (!_ctx.ParamMode) sqlBuilder!.AppendLine().Append(Kw(" order by "));
 
                     for (var (i, cnt) = (0, sortingList.Length); i < cnt; i++)
                     {
@@ -316,7 +316,7 @@ internal readonly struct SqlBuilder
                             {
                                 sqlBuilder!.Append(sortingSql);
                                 if (sorting.Direction == OrderDirection.Desc)
-                                    sqlBuilder.Append(" desc");
+                                    sqlBuilder.Append(Kw(" desc"));
 
                                 sqlBuilder.Append(", ");
                             }
@@ -325,7 +325,7 @@ internal readonly struct SqlBuilder
                         {
                             sqlBuilder!.Append(sorting.ColumnIndex);
                             if (sorting.Direction == OrderDirection.Desc)
-                                sqlBuilder.Append(" desc");
+                                sqlBuilder.Append(Kw(" desc"));
 
                             sqlBuilder.Append(", ");
                         }
@@ -335,7 +335,7 @@ internal readonly struct SqlBuilder
                 }
                 else if (!pageApplied && !_ctx.ParamMode && _ctx.Dialect.GetPagingOrderBy(cmd) is { } pagingOrderBy)
                 {
-                    sqlBuilder!.AppendLine().Append(" order by ").Append(pagingOrderBy);
+                    sqlBuilder!.AppendLine().Append(Kw(" order by ")).Append(pagingOrderBy);
                 }
 
                 if (cmd.LimitBy is { } limitBy)
@@ -360,7 +360,7 @@ internal readonly struct SqlBuilder
                     if (!_ctx.ParamMode)
                     {
                         sqlBuilder!.AppendLine();
-                        sqlBuilder.Append(limitByRenderer.Render(limitBy.Limit, limitBy.Offset, renderedLimitBy!));
+                        sqlBuilder.Append(limitByRenderer.Render(limitBy.Limit, limitBy.Offset, renderedLimitBy!, _ctx.KeywordCase));
                     }
                 }
 
@@ -372,14 +372,14 @@ internal readonly struct SqlBuilder
                     if (!_ctx.ParamMode)
                     {
                         sqlBuilder!.AppendLine();
-                        sqlBuilder.Append(_ctx.Dialect.MakeSettings(settings));
+                        sqlBuilder.Append(_ctx.Dialect.MakeSettings(settings, _ctx.KeywordCase));
                     }
                 }
 
                 if (!pageApplied && !_ctx.ParamMode && !cmd.Paging.IsEmpty)
                 {
                     sqlBuilder!.AppendLine();
-                    _ctx.Dialect.MakePage(cmd.Paging, sqlBuilder);
+                    _ctx.Dialect.MakePage(cmd.Paging, sqlBuilder, _ctx.KeywordCase);
                 }
             }
             else if (!_ctx.ParamMode && sqlBuilder!.Length > 0)
@@ -392,13 +392,13 @@ internal readonly struct SqlBuilder
 
                 // Table-hint dialects already rendered the lock on the primary source.
                 if (!lockRenderer.UsesTableHints)
-                    sqlBuilder!.AppendLine().Append(lockRenderer.Render(rowLock.Mode));
+                    sqlBuilder!.AppendLine().Append(lockRenderer.Render(rowLock.Mode, _ctx.KeywordCase));
             }
 
 
             if (!_ctx.ParamMode)
             {
-                selectBuilder!.Append("select ");
+                selectBuilder!.Append(Kw("select "));
 
                 if (cmd.DistinctOn is not null)
                 {
@@ -418,12 +418,12 @@ internal readonly struct SqlBuilder
                         }
                     }
 
-                    selectBuilder.Append(distinctOn.Render(renderedDistinctOn));
+                    selectBuilder.Append(distinctOn.Render(renderedDistinctOn, _ctx.KeywordCase));
                 }
                 // SQL Server renders the limit as TOP(n); DISTINCT has to precede it
                 // ("select distinct top(n) ..."), so the flag is emitted before the select-list branch.
                 else if (cmd.IsDistinct)
-                    selectBuilder.Append("distinct ");
+                    selectBuilder.Append(Kw("distinct "));
             }
             if (cmd.IgnoreColumns || selectList is null)
             {
@@ -448,7 +448,7 @@ internal readonly struct SqlBuilder
 
                         if (needAliasForColumn)
                         {
-                            selectBuilder.Append(_ctx.Dialect.MakeColumnAlias(item.PropertyName));
+                            selectBuilder.Append(_ctx.Dialect.MakeColumnAlias(item.PropertyName, _ctx.KeywordCase));
                         }
 
                         selectBuilder.Append(", ");
@@ -475,7 +475,7 @@ internal readonly struct SqlBuilder
                     if (!_ctx.Dialect.SupportsForJson)
                         throw new NotSupportedException("FOR JSON is not supported by this SQL dialect");
 
-                    sqlBuilder!.Append(' ').Append(_ctx.Dialect.MakeForJson(forJson));
+                    sqlBuilder!.Append(' ').Append(_ctx.Dialect.MakeForJson(forJson, _ctx.KeywordCase));
                 }
 
                 if (cmd.ForXmlClause is { } forXml)
@@ -483,7 +483,7 @@ internal readonly struct SqlBuilder
                     if (!_ctx.Dialect.SupportsForXml)
                         throw new NotSupportedException("FOR XML is not supported by this SQL dialect");
 
-                    sqlBuilder!.Append(' ').Append(_ctx.Dialect.MakeForXml(forXml));
+                    sqlBuilder!.Append(' ').Append(_ctx.Dialect.MakeForXml(forXml, _ctx.KeywordCase));
                 }
 
                 var hints = cmd.Hints;
@@ -495,7 +495,7 @@ internal readonly struct SqlBuilder
                     // The dialect owns the final placement. It also receives the CTE maxrecursion
                     // option so a dialect that must coalesce it into one trailing OPTION clause
                     // (SQL Server) can do so instead of the caller appending a second clause.
-                    r = _ctx.Dialect.RenderQueryHints(sqlBuilder!.ToString(), hints, maxRecursionStmt);
+                    r = _ctx.Dialect.RenderQueryHints(sqlBuilder!.ToString(), hints, maxRecursionStmt, _ctx.KeywordCase);
                 }
                 else
                 {
@@ -530,6 +530,9 @@ internal readonly struct SqlBuilder
     public (bool NeedAliasForColumn, string Column) MakeColumn(SelectExpression selExp, Type entityType, bool dontNeedAlias, bool renameAware = false)
         => SqlSourceRenderer.MakeColumn(in _ctx, selExp, entityType, dontNeedAlias, renameAware);
 
+    /// <summary>Resolves a lower-case keyword fragment (keywords and separators only) to the configured <see cref="KeywordCase"/>.</summary>
+    private string Kw(string text) => SqlKeywords.Of(_ctx.KeywordCase, text);
+
     /// <summary>
     /// Returns <paramref name="hints"/> with <paramref name="hint"/> appended, or a single-element list
     /// when <paramref name="hints"/> is <c>null</c> or empty. Used to fold a row-locking table hint into
@@ -562,7 +565,7 @@ internal readonly struct SqlBuilder
             {
                 if (i == 0)
                 {
-                    if (!ctx.ParamMode) spec.Append("partition by ");
+                    if (!ctx.ParamMode) spec.Append(SqlKeywords.Of(ctx.KeywordCase, "partition by "));
                 }
                 else if (!ctx.ParamMode)
                 {
@@ -584,7 +587,7 @@ internal readonly struct SqlBuilder
                 if (i == 0)
                 {
                     if (!ctx.ParamMode)
-                        spec.Append(window.PartitionBy.Count > 0 ? " order by " : "order by ");
+                        spec.Append(window.PartitionBy.Count > 0 ? SqlKeywords.Of(ctx.KeywordCase, " order by ") : SqlKeywords.Of(ctx.KeywordCase, "order by "));
                 }
                 else if (!ctx.ParamMode)
                 {
@@ -603,7 +606,7 @@ internal readonly struct SqlBuilder
                     spec.Append(column);
 
                     if (key.Direction == OrderDirection.Desc)
-                        spec.Append(" desc");
+                        spec.Append(SqlKeywords.Of(ctx.KeywordCase, " desc"));
                 }
             }
 
@@ -620,7 +623,7 @@ internal readonly struct SqlBuilder
                     if (window.PartitionBy.Count > 0 || window.OrderBy.Count > 0)
                         spec.Append(' ');
 
-                    spec.Append(WindowSql.RenderWindowFrame(frame));
+                    spec.Append(WindowSql.RenderWindowFrame(frame, ctx.KeywordCase));
                 }
             }
 

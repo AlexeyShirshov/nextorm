@@ -82,6 +82,117 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     }
 
     /// <summary>
+    /// Creates a fresh <see cref="DbCommand"/> for a mutation, binds its parameters and attaches it to
+    /// the current connection. Unlike a prepared query command, a mutation command is not reused across
+    /// executions, so the parameters are added each time.
+    /// </summary>
+    private DbCommand CreateMutationCommand(string sql, IReadOnlyList<Parameter> parameters)
+    {
+        _connectionManager.EnsureConnectionOpen();
+        var conn = _connectionManager.GetConnection();
+
+        var cmd = conn.CreateCommand();
+        cmd.CommandText = sql;
+
+        for (var i = 0; i < parameters.Count; i++)
+            cmd.Parameters.Add(_createParam(parameters[i].Name, parameters[i].Value));
+
+        if (_logParams) LogParams(cmd);
+
+        return cmd;
+    }
+
+    /// <summary>Executes a mutation and returns the number of affected rows.</summary>
+    /// <param name="sql">The parameterised statement text.</param>
+    /// <param name="parameters">The parameters referenced by <paramref name="sql"/>.</param>
+    /// <returns>The number of rows affected, as reported by the provider.</returns>
+    public int ExecuteNonQuery(string sql, IReadOnlyList<Parameter> parameters)
+    {
+        CheckDisposed();
+        using var cmd = CreateMutationCommand(sql, parameters);
+        return cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>Asynchronously executes a mutation and returns the number of affected rows.</summary>
+    /// <param name="sql">The parameterised statement text.</param>
+    /// <param name="parameters">The parameters referenced by <paramref name="sql"/>.</param>
+    /// <param name="cancellationToken">Cancels execution.</param>
+    /// <returns>A task producing the number of rows affected.</returns>
+    public async Task<int> ExecuteNonQueryAsync(string sql, IReadOnlyList<Parameter> parameters, CancellationToken cancellationToken)
+    {
+        CheckDisposed();
+        using var cmd = CreateMutationCommand(sql, parameters);
+        return await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Executes a mutation and returns the first column of its first row, or <see langword="null"/>.</summary>
+    /// <param name="sql">The parameterised statement text.</param>
+    /// <param name="parameters">The parameters referenced by <paramref name="sql"/>.</param>
+    /// <returns>The scalar value, with <see cref="DBNull"/> normalized to <see langword="null"/>.</returns>
+    public object? ExecuteScalar(string sql, IReadOnlyList<Parameter> parameters)
+    {
+        CheckDisposed();
+        using var cmd = CreateMutationCommand(sql, parameters);
+        var result = cmd.ExecuteScalar();
+        return result is DBNull ? null : result;
+    }
+
+    /// <summary>Asynchronously executes a mutation and returns the first column of its first row, or <see langword="null"/>.</summary>
+    /// <param name="sql">The parameterised statement text.</param>
+    /// <param name="parameters">The parameters referenced by <paramref name="sql"/>.</param>
+    /// <param name="cancellationToken">Cancels execution.</param>
+    /// <returns>A task producing the scalar value, with <see cref="DBNull"/> normalized to <see langword="null"/>.</returns>
+    public async Task<object?> ExecuteScalarAsync(string sql, IReadOnlyList<Parameter> parameters, CancellationToken cancellationToken)
+    {
+        CheckDisposed();
+        using var cmd = CreateMutationCommand(sql, parameters);
+        var result = await cmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+        return result is DBNull ? null : result;
+    }
+
+    /// <summary>
+    /// Executes a mutation that returns rows (<c>INSERT ... RETURNING</c>/<c>OUTPUT</c>) and materialises
+    /// every returned row through <paramref name="mapper"/>.
+    /// </summary>
+    /// <typeparam name="TResult">The materialized row type.</typeparam>
+    /// <param name="sql">The parameterised statement text.</param>
+    /// <param name="parameters">The parameters referenced by <paramref name="sql"/>.</param>
+    /// <param name="mapper">The compiled row mapper.</param>
+    /// <returns>The returned rows, materialized in result-set order.</returns>
+    public List<TResult> ExecuteReader<TResult>(string sql, IReadOnlyList<Parameter> parameters, Func<IDataRecord, TResult> mapper)
+    {
+        CheckDisposed();
+        using var cmd = CreateMutationCommand(sql, parameters);
+        using var reader = cmd.ExecuteReader();
+
+        var list = new List<TResult>();
+        while (reader.Read())
+            list.Add(mapper(reader));
+
+        return list;
+    }
+
+    /// <summary>Asynchronously executes a mutation that returns rows and materialises every returned row.</summary>
+    /// <typeparam name="TResult">The materialized row type.</typeparam>
+    /// <param name="sql">The parameterised statement text.</param>
+    /// <param name="parameters">The parameters referenced by <paramref name="sql"/>.</param>
+    /// <param name="mapper">The compiled row mapper.</param>
+    /// <param name="cancellationToken">Cancels execution.</param>
+    /// <returns>A task producing the returned rows, materialized in result-set order.</returns>
+    public async Task<List<TResult>> ExecuteReaderAsync<TResult>(string sql, IReadOnlyList<Parameter> parameters, Func<IDataRecord, TResult> mapper, CancellationToken cancellationToken)
+    {
+        CheckDisposed();
+        using var cmd = CreateMutationCommand(sql, parameters);
+        using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+
+        var list = new List<TResult>();
+        while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            list.Add(mapper(reader));
+
+        return list;
+    }
+
+    /// <summary>
     /// Single entry guard for the public execution overloads: a context only executes the command
     /// representation it produces itself (mixing storage backends is not supported). Foreign
     /// implementations are rejected here, once, instead of in every overload.

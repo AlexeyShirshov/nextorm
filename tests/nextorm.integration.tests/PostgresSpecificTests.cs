@@ -323,6 +323,97 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    public void DataModifyingCte_ShouldInsertAndReturnRows()
+    {
+        var ctx = _sut.DataProvider;
+        var marker = "dmcte_" + Guid.NewGuid().ToString("N");
+
+        var returned = ctx.With("ins", ctx.InsertInto<IInsertEntity>()
+                .Value(x => x.Name, marker)
+                .Value(x => x.Age, 11)
+                .Returning(x => new { x.Id, x.Name }))
+            .From("ins")
+            .Select(r => new { r.Id, r.Name })
+            .ToList();
+
+        returned.Should().ContainSingle();
+        returned[0].Id.Should().BeGreaterThan(0);
+        returned[0].Name.Should().Be(marker);
+
+        ctx.From<IInsertEntity>()
+            .Where(x => x.Name == marker)
+            .Select(x => new { x.Age })
+            .ToList()
+            .Should().ContainSingle().Which.Age.Should().Be(11);
+    }
+
+    [Fact]
+    public void DataModifyingCte_InsertSelectBody_ShouldPersistRows()
+    {
+        var ctx = _sut.DataProvider;
+        var marker = "dmcte_src_" + Guid.NewGuid().ToString("N");
+
+        ctx.InsertInto<IInsertEntity>().Value(x => x.Name, marker).Value(x => x.Age, 31).Insert();
+
+        var returned = ctx.With("ins", ctx.InsertInto<IInsertEntity>()
+                .Values(ctx.From<IInsertEntity>().Where(x => x.Name == marker), s => new { s.Name, s.Age })
+                .Returning(x => new { x.Name, x.Age }))
+            .From("ins")
+            .Select(r => new { r.Name, r.Age })
+            .ToList();
+
+        returned.Should().ContainSingle();
+        returned[0].Name.Should().Be(marker);
+        returned[0].Age.Should().Be(31);
+
+        ctx.From<IInsertEntity>().Where(x => x.Name == marker).Select(x => new { x.Age }).ToList()
+            .Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void DataModifyingCte_MutationBodyReferencingReadCte_ShouldPersist()
+    {
+        var ctx = _sut.DataProvider;
+        var marker = "dmcte_ref_" + Guid.NewGuid().ToString("N");
+
+        ctx.InsertInto<IInsertEntity>().Value(x => x.Name, marker).Value(x => x.Age, 41).Insert();
+
+        var scope = ctx.With("src", ctx.From<IInsertEntity>().Where(x => x.Name == marker).Select(x => new { x.Name, x.Age }));
+        var insert = ctx.InsertInto<IInsertEntity>()
+            .Values(scope.From("src"), a => new { Name = a.GetString("Name"), Age = a.GetInt32("Age") })
+            .Returning(x => new { x.Name, x.Age });
+
+        var returned = scope.With("ins", insert).From("ins").Select(r => new { r.Name, r.Age }).ToList();
+
+        returned.Should().ContainSingle();
+        returned[0].Age.Should().Be(41);
+
+        ctx.From<IInsertEntity>().Where(x => x.Name == marker).Select(x => new { x.Age }).ToList()
+            .Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void InsertFromMutationCte_ShouldPersistRows()
+    {
+        var ctx = _sut.DataProvider;
+        var marker = "dmcte_main_" + Guid.NewGuid().ToString("N");
+
+        var source = ctx.With("ins", ctx.InsertInto<IInsertEntity>()
+                .Value(x => x.Name, marker)
+                .Value(x => x.Age, 51)
+                .Returning(x => new { x.Name, x.Age }))
+            .From("ins");
+
+        ctx.InsertInto<IInsertEntity>()
+            .Values(source, r => new { r.Name, r.Age })
+            .Insert()
+            .Should().Be(1);
+
+        ctx.From<IInsertEntity>().Where(x => x.Name == marker).Select(x => new { x.Age }).ToList()
+            .Should().HaveCount(2);
+    }
+
+    [Fact]
     public void FrameExclusion_ShouldRemoveCurrentRow()
     {
         var rows = _sut.ComplexEntity

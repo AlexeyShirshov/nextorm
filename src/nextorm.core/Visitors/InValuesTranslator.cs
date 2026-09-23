@@ -78,7 +78,7 @@ internal static class InValuesTranslator
 
         if (nonNull.Count == 0)
         {
-            var emptyPredicate = nullableAware && hasNull ? $"{column} is null" : "1 = 0";
+            var emptyPredicate = nullableAware && hasNull ? $"{column} {visitor.Kw("is null")}" : "1 = 0";
             visitor.Builder!.Append(visitor.Dialect.MakeBooleanPredicate(emptyPredicate, visitor.IsPredicateContext));
             return;
         }
@@ -89,7 +89,7 @@ internal static class InValuesTranslator
             if (nullableAware && hasNull)
                 inBuilder.Append('(');
 
-            inBuilder.Append(column).Append(global ? " global in (" : " in (");
+            inBuilder.Append(column).Append(global ? visitor.Kw(" global in (") : visitor.Kw(" in ("));
             for (var i = 0; i < nonNull.Count; i++)
             {
                 var paramName = visitor.ParameterProvider.GetParamName();
@@ -102,7 +102,7 @@ internal static class InValuesTranslator
             inBuilder.Append(')');
 
             if (nullableAware && hasNull)
-                inBuilder.Append(" or ").Append(column).Append(" is null)");
+                inBuilder.Append(visitor.Kw(" or ")).Append(column).Append(visitor.Kw(" is null)"));
 
             visitor.Builder!.Append(visitor.Dialect.MakeBooleanPredicate(inBuilder.ToString(), visitor.IsPredicateContext));
         }

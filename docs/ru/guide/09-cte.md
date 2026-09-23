@@ -255,6 +255,21 @@ with recent as (select id from complex_entity where (id > $threshold)) select id
 См. [Переиспользование запросов: кэш против Prepare](15-query-reuse.md) о времени жизни и правилах
 инвалидации кэша планов.
 
+## Модифицирующий CTE (PostgreSQL)
+
+PostgreSQL — единственный поддерживаемый провайдер, принимающий модифицирующую инструкцию как тело CTE
+(`WITH <имя> AS (INSERT ... RETURNING ...)`); гейтится
+[`SupportsDataModifyingCtes`](xref:NextORM.Core.ISqlDialect.SupportsDataModifyingCtes). nextorm открывает
+её перегрузкой `With(имя, insert)` у `IDataContext`/`CteQuery`, возвращающей
+[`MutationCteQuery<TResult>`](xref:NextORM.Core.MutationCteQuery`1), типизированный проекцией `RETURNING`;
+остальные провайдеры отклоняют её с `NotSupportedException`.
+
+Write-CTE документируется вместе с поверхностью записи, к которой принадлежит — типизированное чтение через
+`From`/`FromTable`, тело `VALUES` или `INSERT ... SELECT`, чтение более раннего read-CTE и питание
+главного `INSERT ... SELECT` — в разделе
+[Изменение данных (INSERT): Модифицирующий CTE](19-insert-statement.md#модифицирующий-cte-postgresql).
+Тела `UPDATE` и `DELETE` запланированы и будут жить в своих гайдах.
+
 ## Различия между провайдерами
 
 | Провайдер | Поведение |

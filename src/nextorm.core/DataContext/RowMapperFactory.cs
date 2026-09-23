@@ -76,6 +76,35 @@ internal static class RowMapperFactory
         return map;
     }
 
+    /// <summary>
+    /// Returns the compiled mapper for a mutation that returns rows (an <c>INSERT ... RETURNING</c>/
+    /// <c>OUTPUT</c>), building and caching it on a miss. Unlike the query overload there is no
+    /// <see cref="QueryCommand{TResult}"/>; the projection is carried by the caller as an explicit
+    /// select list, so the same materialization path is reused.
+    /// </summary>
+    /// <typeparam name="TResult">The materialized row type.</typeparam>
+    /// <param name="sql">The rendered statement text, used as part of the cache key.</param>
+    /// <param name="providerType">The concrete context type; its column-mapping policy is part of the cache key.</param>
+    /// <param name="selectList">The returned columns, in result-set order.</param>
+    /// <param name="oneColumn">Whether the projection is a single scalar column.</param>
+    /// <param name="mapColumn">The provider's column accessor factory.</param>
+    /// <returns>The compiled row mapper.</returns>
+    public static Func<IDataRecord, TResult> GetOrBuild<TResult>(
+        string sql,
+        Type providerType,
+        SelectExpression[] selectList,
+        bool oneColumn,
+        Func<SelectExpression, Expression, Expression> mapColumn)
+    {
+        var key = new MapperCacheKey(providerType, typeof(TResult), sql, BuildSignature(selectList), oneColumn);
+        if (MapperCache.TryGet(key, out var cached))
+            return (Func<IDataRecord, TResult>)cached;
+
+        var map = Build<TResult>(selectList, oneColumn, null, mapColumn);
+        MapperCache.Add(key, map);
+        return map;
+    }
+
     private static Func<IDataRecord, TResult> Build<TResult>(
         QueryCommand<TResult> queryCommand,
         ILogger? logger,
@@ -85,16 +114,31 @@ internal static class RowMapperFactory
         if (!queryCommand.IsPrepared)
             throw new InvalidOperationException("Command not prepared");
 #endif
+        return Build<TResult>(queryCommand.SelectList!, queryCommand.OneColumn, logger, mapColumn);
+    }
+
+    private static Func<IDataRecord, TResult> Build<TResult>(
+        SelectExpression[] selectList,
+        bool oneColumn,
+        ILogger? logger,
+        Func<SelectExpression, Expression, Expression> mapColumn)
+    {
         var resultType = typeof(TResult);
         var param = Expression.Parameter(typeof(IDataRecord));
         Expression<Func<IDataRecord, TResult>> lambda;
 
-        if (queryCommand.OneColumn)
+        if (oneColumn)
         {
             // The provider already evaluated the projection in SQL, so the single column is read
             // directly. Re-evaluating the select expression against the reader would apply a
             // computed expression twice (e.g. a CASE whose test reads a different column).
-            var body = mapColumn(queryCommand.SelectList![0], param);
+            var body = mapColumn(selectList[0], param);
+
+            // The column carries the source CLR type, but the scalar terminal may project it as
+            // another type (Returning(x => (long)x.IntCol), ReturningKey<long?>()); widen the read.
+            if (body.Type != resultType)
+                body = Expression.Convert(body, resultType);
+
             lambda = Expression.Lambda<Func<IDataRecord, TResult>>(body, param);
         }
         else
@@ -102,7 +146,7 @@ internal static class RowMapperFactory
             var body = RowMaterializerBuilder.Build(
                 resultType,
                 param,
-                queryCommand.SelectList!,
+                selectList,
                 ignoreColumns: false,
                 column => mapColumn(column, param));
 
@@ -120,13 +164,22 @@ internal static class RowMapperFactory
     /// </summary>
     private static MapperCacheKey BuildKey<TResult>(QueryCommand<TResult> queryCommand, string? sql, Type providerType)
     {
+        var signature = BuildSignature(queryCommand.SelectList);
+        unchecked
+        {
+            signature = signature * 31 + (queryCommand.EntityType?.GetHashCode() ?? 0);
+        }
+
+        return new MapperCacheKey(providerType, typeof(TResult), sql ?? string.Empty, signature, queryCommand.OneColumn);
+    }
+
+    private static int BuildSignature(SelectExpression[]? selectList)
+    {
         var signature = 7;
-        var selectList = queryCommand.SelectList;
         if (selectList is not null)
         {
             unchecked
             {
-                signature = signature * 31 + (queryCommand.EntityType?.GetHashCode() ?? 0);
                 for (var i = 0; i < selectList.Length; i++)
                 {
                     var column = selectList[i];
@@ -139,6 +192,6 @@ internal static class RowMapperFactory
             }
         }
 
-        return new MapperCacheKey(providerType, typeof(TResult), sql ?? string.Empty, signature, queryCommand.OneColumn);
+        return signature;
     }
 }

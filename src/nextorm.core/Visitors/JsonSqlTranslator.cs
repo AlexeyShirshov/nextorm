@@ -207,9 +207,9 @@ internal static class JsonSqlTranslator
         visitor.NeedAliasForColumn = true;
         visitor.Builder!.Append(sqlName).Append('(');
         SqlOperandTranslator.AppendArgument(visitor, args[0]);
-        visitor.Builder!.Append(", cast(");
+        visitor.Builder!.Append(visitor.Kw(", cast("));
         SqlOperandTranslator.AppendArgument(visitor, args[1]);
-        visitor.Builder!.Append(" as jsonpath))");
+        visitor.Builder!.Append(visitor.Kw(" as jsonpath))"));
     }
 
     private static void EmitCast(BaseExpressionVisitor visitor, Expression argument)
@@ -219,13 +219,13 @@ internal static class JsonSqlTranslator
         if (!visitor.IsParamMode)
         {
             visitor.NeedAliasForColumn = true;
-            visitor.Builder!.Append("cast(");
+            visitor.Builder!.Append(visitor.Kw("cast("));
         }
 
         SqlOperandTranslator.AppendArgument(visitor, argument);
 
         if (!visitor.IsParamMode)
-            visitor.Builder!.Append(" as jsonb)");
+            visitor.Builder!.Append(visitor.Kw(" as jsonb)"));
     }
 
     /// <summary>
@@ -240,13 +240,13 @@ internal static class JsonSqlTranslator
         if (!visitor.IsParamMode)
         {
             visitor.NeedAliasForColumn = true;
-            visitor.Builder!.Append("cast(");
+            visitor.Builder!.Append(visitor.Kw("cast("));
         }
 
         SqlOperandTranslator.AppendArgument(visitor, argument);
 
         if (!visitor.IsParamMode)
-            visitor.Builder!.Append(" as jsonpath)");
+            visitor.Builder!.Append(visitor.Kw(" as jsonpath)"));
     }
 
     private static void RequireJsonSupport(BaseExpressionVisitor visitor)

@@ -62,10 +62,11 @@ select id from simple_entity
   its interfaces; an attribute on an interface wins when both are present.
 * **Column name** - taken from `[Column]` when present, otherwise the property name is used verbatim.
   Only properties with a **setter** (`CanWrite`) are mapped; get-only properties are skipped.
-* **`[Key]`** - `System.ComponentModel.DataAnnotations.KeyAttribute`, shown here to document which
-  column is the primary key. NextORM does not read it for query generation (there is no DDL generation
-  and no change tracking), but it keeps the entity valid for upstream schema tooling and is the
-  conventional choice.
+* **`[Key]` and `[DatabaseGenerated]`** - `KeyAttribute` marks the primary key and
+  `DatabaseGeneratedAttribute` marks a database-generated column (`DatabaseGeneratedOption.Identity`
+  or `.Computed`). Queries ignore both, but the insert builder reads them: identity/computed columns
+  are excluded from the written values (see [Data modification (INSERT)](../guide/19-insert-statement.md)).
+  When no key is declared, a property named `Id` or `<TypeName>Id` is treated as the key by convention.
 * **Binary columns** - a `byte[]` property maps to a binary column (`bytea` on PostgreSQL,
   `varbinary`/`image` on SQL Server, `blob` on SQLite). A `byte[]` can also be projected directly
   (`Select(x => x.Data)`) and compared against a `byte[]` parameter of [`Parameter`](xref:NextORM.Core.SqlFunctions.Parameter``1(System.Int32)).

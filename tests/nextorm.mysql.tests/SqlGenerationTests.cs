@@ -21,6 +21,43 @@ public class SqlGenerationTests
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd) => Normalize(Prepare(ctx, cmd).DbCommand.CommandText);
 
     [Fact]
+    public void IndexHint_UseForceIgnore_ShouldRenderMySqlForms()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.WithIndex("idx_id").Select(x => new { x.Id }))
+            .Should().Be("select id from simple_entity use index (idx_id)");
+
+        SqlOf(ctx, e.WithIndex(IndexHintKind.Force, "idx_id", "idx_other").Select(x => new { x.Id }))
+            .Should().Be("select id from simple_entity force index (idx_id, idx_other)");
+
+        SqlOf(ctx, e.WithIndex(IndexHintKind.Ignore, "idx_id").Select(x => new { x.Id }))
+            .Should().Be("select id from simple_entity ignore index (idx_id)");
+    }
+
+    [Fact]
+    public void IndexHint_WhitespaceNames_ShouldBeIgnored()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.WithIndex("  ").Select(x => new { x.Id }))
+            .Should().Be("select id from simple_entity");
+    }
+
+    [Fact]
+    public void IndexHint_WithoutIndex_ShouldThrowOnMySql()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var act = () => SqlOf(ctx, e.WithoutIndex().Select(x => new { x.Id }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*at least one index*");
+    }
+
+    [Fact]
     public void Pivot_ShouldThrowBecauseNotSupported()
     {
         using var ctx = MySqlTestContext.Create();
@@ -424,6 +461,24 @@ public class SqlGenerationTests
             .GroupByRollup(x => new { x.Int, x.Boolean })
             .Select(x => new { x.Int, x.Boolean }))
             .Should().Contain("group by nullableint, b with rollup");
+    }
+
+    [Fact]
+    public void KeywordCase_Upper_ShouldUppercaseDialectClauses()
+    {
+        using var ctx = MySqlTestContext.CreateUppercase();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e
+            .GroupByRollup(x => new { x.Int, x.Boolean })
+            .Select(x => new { x.Int, x.Boolean }))
+            .Should().Contain("GROUP BY nullableint, b WITH ROLLUP");
+
+        SqlOf(ctx, e.ForUpdate().Select(x => x.Int)).Should().EndWith("FOR UPDATE");
+        SqlOf(ctx, e.ForShare().Select(x => x.Int)).Should().EndWith("LOCK IN SHARE MODE");
+
+        SqlOf(ctx, e.WithIndex(IndexHintKind.Force, "idx_int").Select(x => x.Int))
+            .Should().Contain("FORCE INDEX (idx_int)");
     }
 
     [Fact]

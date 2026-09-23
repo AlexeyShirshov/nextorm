@@ -33,6 +33,17 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void IndexHint_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var act = () => SqlOf(ctx, e.WithIndex("idx_id").Select(x => new { x.Id }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*Index hints*");
+    }
+
+    [Fact]
     public void CrossApply_ToCorrelatedSubquery_ShouldThrowBecauseNoLateral()
     {
         using var ctx = ClickHouseTestContext.Create();
@@ -1508,6 +1519,35 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void KeywordCase_Upper_ShouldUppercaseDialectClauses()
+    {
+        using var ctx = ClickHouseTestContext.CreateUppercase();
+        var e = ctx.From<IComplexEntity>();
+        var a = ctx.From<IArrayEntity>();
+
+        SqlOf(ctx, e.Final().Select(x => new { x.Id }))
+            .Should().Contain("FROM complex_entity FINAL");
+
+        SqlOf(ctx, e.Sample(0.1, 0.5).Select(x => new { x.Id }))
+            .Should().Contain("FROM complex_entity SAMPLE 0.1 OFFSET 0.5");
+
+        SqlOf(ctx, e.Settings(("max_threads", "2")).Select(x => new { x.Id }))
+            .Should().Contain("SETTINGS max_threads = 2");
+
+        SqlOf(ctx, e.LimitBy(2, x => x.Int).Select(x => new { x.Int }))
+            .Should().Contain("LIMIT 2 BY nullableint");
+
+        SqlOf(ctx, e
+            .GroupByRollup(x => new { x.Int, x.Boolean })
+            .WithTotals()
+            .Select(x => new { x.Int, x.Boolean }))
+            .Should().Contain("GROUP BY nullableint, b WITH ROLLUP WITH TOTALS");
+
+        SqlOf(ctx, a.ArrayJoin(x => x.Tags).Select(x => new { x.Id }))
+            .Should().Contain("ARRAY JOIN tags");
+    }
+
+    [Fact]
     public void PreWhere_ShouldEmitBeforeWhere()
     {
         using var ctx = ClickHouseTestContext.Create();
@@ -2101,13 +2141,14 @@ public class SqlGenerationTests
     }
 
     [Fact]
-    public void TupleElementAccess_OnNewTuple_ShouldRenderNestedTuple()
+    public void TupleElementAccess_OnNewTuple_ShouldFoldToArgument()
     {
         using var ctx = ClickHouseTestContext.Create();
         var e = ctx.From<ITupleEntity>();
 
-        SqlOf(ctx, e.Select(x => new { V = new Tuple<int, int>(x.Id, x.Id).Item1 }))
-            .Should().Contain("tupleElement(tuple(id, id), 1)");
+        var sql = SqlOf(ctx, e.Select(x => new { V = new Tuple<int, int>(x.Id, x.Id).Item1 }));
+
+        sql.Should().Contain("id as").And.NotContain("tupleElement");
     }
 
     [Fact]

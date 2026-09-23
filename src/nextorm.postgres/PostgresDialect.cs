@@ -15,6 +15,30 @@ public sealed class PostgresDialect : SqlDialectBase
     /// <inheritdoc/>
     public override string ConcatStringOperator => "||";
 
+    /// <summary>PostgreSQL has a native row-value type: <c>ROW(a, b)</c> with <c>(row).fN</c> access.</summary>
+    public override ITupleRenderer? Tuple => PostgresTupleRenderer.Instance;
+
+    /// <summary>PostgreSQL supports <c>INSERT ... RETURNING &lt;column&gt;</c>.</summary>
+    public override bool SupportsReturning => true;
+
+    /// <summary>PostgreSQL allows a data-modifying statement (<c>INSERT ... RETURNING</c>) as a CTE body.</summary>
+    public override bool SupportsDataModifyingCtes => true;
+
+    /// <summary>PostgreSQL expresses a key upsert as <c>INSERT ... ON CONFLICT (&lt;keys&gt;) DO UPDATE SET ...</c> (9.5+).</summary>
+    public override bool SupportsOnConflict => true;
+
+    /// <summary>PostgreSQL reads the last generated identity of the session through the <c>lastval()</c> function.</summary>
+    public override bool SupportsIdentityFunction => true;
+
+    /// <summary>PostgreSQL supports <c>INSERT ... DEFAULT VALUES</c> for an all-defaults row.</summary>
+    public override bool SupportsDefaultValues => true;
+
+    /// <summary>PostgreSQL accepts <c>DEFAULT</c> as a value in the <c>VALUES</c> list.</summary>
+    public override bool SupportsColumnDefault => true;
+
+    /// <summary>Renders the identity-function query <c>select lastval()</c>.</summary>
+    public override string MakeIdentityFunction(KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, "select lastval()");
+
     /// <inheritdoc/>
     public override string MakeParam(string name) => $"@{name}";
 
@@ -58,7 +82,7 @@ public sealed class PostgresDialect : SqlDialectBase
     /// skipped). PostgreSQL has no <c>maxrecursion</c> option, so <paramref name="maxRecursionOption"/>
     /// is ignored.
     /// </summary>
-    public override string RenderQueryHints(string sql, IReadOnlyList<string> hints, string? maxRecursionOption)
+    public override string RenderQueryHints(string sql, IReadOnlyList<string> hints, string? maxRecursionOption, KeywordCase keywordCase = KeywordCase.Lower)
     {
         var depth = 0;
         for (var i = 0; i < sql.Length; i++)
@@ -278,28 +302,28 @@ public sealed class PostgresDialect : SqlDialectBase
             : $"overlay({value} placing {newValue} from {start} + 1 for {count})";
 
     /// <inheritdoc/>
-    public override void MakePage(Paging paging, StringBuilder sqlBuilder)
+    public override void MakePage(Paging paging, StringBuilder sqlBuilder, KeywordCase keywordCase = KeywordCase.Lower)
     {
         // WITH TIES is only expressible through the FETCH form (LIMIT has no WITH TIES variant).
         if (paging.HasWithTies)
         {
             if (paging.Offset > 0)
-                sqlBuilder.Append("offset ").Append(paging.Offset).Append(' ');
+                sqlBuilder.Append(Kw(keywordCase, "offset ")).Append(paging.Offset).Append(' ');
 
-            sqlBuilder.Append("fetch first ").Append(paging.Limit).Append(" rows with ties");
+            sqlBuilder.Append(Kw(keywordCase, "fetch first ")).Append(paging.Limit).Append(Kw(keywordCase, " rows with ties"));
             return;
         }
 
         // PostgreSQL uses "limit N offset M"; OFFSET may appear on its own, but LIMIT must come first.
         if (paging.Limit > 0)
-            sqlBuilder.Append("limit ").Append(paging.Limit);
+            sqlBuilder.Append(Kw(keywordCase, "limit ")).Append(paging.Limit);
 
         if (paging.Offset > 0)
         {
             if (paging.Limit > 0)
                 sqlBuilder.Append(' ');
 
-            sqlBuilder.Append("offset ").Append(paging.Offset);
+            sqlBuilder.Append(Kw(keywordCase, "offset ")).Append(paging.Offset);
         }
     }
 
@@ -352,8 +376,8 @@ internal sealed class PostgresDistinctOnRenderer : IDistinctOnRenderer
 {
     public static readonly PostgresDistinctOnRenderer Instance = new();
 
-    public string Render(IReadOnlyList<string> columns) =>
-        "distinct on (" + string.Join(", ", columns) + ") ";
+    public string Render(IReadOnlyList<string> columns, KeywordCase keywordCase = KeywordCase.Lower) =>
+        SqlKeywords.Of(keywordCase, "distinct on (") + string.Join(", ", columns) + ") ";
 }
 
 internal sealed class PostgresTableSampleMethods : ITableSampleMethods
@@ -362,12 +386,12 @@ internal sealed class PostgresTableSampleMethods : ITableSampleMethods
 
     public bool Supports(TableSampleMethod method) => true;
 
-    public string Render(TableSampleMethod method, double percent, double? seed)
+    public string Render(TableSampleMethod method, double percent, double? seed, KeywordCase keywordCase = KeywordCase.Lower)
     {
-        var text = " tablesample " + method.ToString().ToLowerInvariant()
+        var text = SqlKeywords.Of(keywordCase, " tablesample ") + method.ToString().ToLowerInvariant()
             + " (" + percent.ToString(System.Globalization.CultureInfo.InvariantCulture) + ")";
         return seed is { } value
-            ? text + " repeatable (" + value.ToString(System.Globalization.CultureInfo.InvariantCulture) + ")"
+            ? text + SqlKeywords.Of(keywordCase, " repeatable (") + value.ToString(System.Globalization.CultureInfo.InvariantCulture) + ")"
             : text;
     }
 }
@@ -378,6 +402,15 @@ internal sealed class PostgresLockRenderer : ILockRenderer
 
     public bool UsesTableHints => false;
 
-    public string Render(LockMode mode) =>
-        mode == LockMode.Share ? " for share" : " for update";
+    public string Render(LockMode mode, KeywordCase keywordCase = KeywordCase.Lower) =>
+        SqlKeywords.Of(keywordCase, mode == LockMode.Share ? " for share" : " for update");
+}
+
+internal sealed class PostgresTupleRenderer : ITupleRenderer
+{
+    public static readonly PostgresTupleRenderer Instance = new();
+
+    public string RenderConstructor(IReadOnlyList<string> fields) => "ROW(" + string.Join(", ", fields) + ")";
+
+    public string? RenderElement(string row, int oneBasedIndex) => "(" + row + ").f" + oneBasedIndex;
 }

@@ -67,7 +67,8 @@ public interface ILimitByRenderer
     /// Renders the <c>limit [offset, ]n by col1, col2</c> clause over the already-rendered
     /// <paramref name="columns"/>.
     /// </summary>
-    string Render(int limit, int offset, IReadOnlyList<string> columns);
+    /// <paramref name="keywordCase"/> selects the letter case of the emitted SQL keywords.
+    string Render(int limit, int offset, IReadOnlyList<string> columns, KeywordCase keywordCase = KeywordCase.Lower);
 }
 
 /// <summary>
@@ -163,7 +164,8 @@ public interface IMultiIfRenderer
 public interface IDistinctOnRenderer
 {
     /// <summary>Renders the <c>DISTINCT ON</c> modifier over the already-rendered <paramref name="columns"/>.</summary>
-    string Render(IReadOnlyList<string> columns);
+    /// <paramref name="keywordCase"/> selects the letter case of the emitted SQL keywords.
+    string Render(IReadOnlyList<string> columns, KeywordCase keywordCase = KeywordCase.Lower);
 }
 
 /// <summary>
@@ -176,7 +178,8 @@ public interface ITableSampleMethods
     bool Supports(TableSampleMethod method);
 
     /// <summary>Renders the <c>TABLESAMPLE</c> clause for <paramref name="method"/>.</summary>
-    string Render(TableSampleMethod method, double percent, double? seed);
+    /// <paramref name="keywordCase"/> selects the letter case of the emitted SQL keywords.
+    string Render(TableSampleMethod method, double percent, double? seed, KeywordCase keywordCase = KeywordCase.Lower);
 }
 
 /// <summary>
@@ -190,13 +193,15 @@ public interface IPivotRenderer
     /// with the already-rendered <paramref name="aggregateColumn"/> and <paramref name="forColumn"/>
     /// fragments and the result <paramref name="alias"/>.
     /// </summary>
-    string RenderPivot(PivotExpression pivot, string source, string aggregateColumn, string forColumn, string alias);
+    /// <paramref name="keywordCase"/> selects the letter case of the emitted SQL keywords.
+    string RenderPivot(PivotExpression pivot, string source, string aggregateColumn, string forColumn, string alias, KeywordCase keywordCase = KeywordCase.Lower);
 
     /// <summary>
     /// Renders the native <c>UNPIVOT</c> construct over the already-rendered <paramref name="source"/>
     /// and the result <paramref name="alias"/>.
     /// </summary>
-    string RenderUnpivot(PivotExpression pivot, string source, string alias);
+    /// <paramref name="keywordCase"/> selects the letter case of the emitted SQL keywords.
+    string RenderUnpivot(PivotExpression pivot, string source, string alias, KeywordCase keywordCase = KeywordCase.Lower);
 }
 
 /// <summary>
@@ -206,7 +211,8 @@ public interface IPivotRenderer
 public interface IArrayJoinRenderer
 {
     /// <summary>Renders the <c>ARRAY JOIN</c> clause over the already-rendered <paramref name="expressions"/>.</summary>
-    string Render(ArrayJoinKind kind, IReadOnlyList<string> expressions);
+    /// <paramref name="keywordCase"/> selects the letter case of the emitted SQL keywords.
+    string Render(ArrayJoinKind kind, IReadOnlyList<string> expressions, KeywordCase keywordCase = KeywordCase.Lower);
 }
 
 /// <summary>
@@ -245,5 +251,50 @@ public interface ILockRenderer
     /// Renders the locking token for <paramref name="mode"/>: the trailing clause when
     /// <see cref="UsesTableHints"/> is <c>false</c>, otherwise the bare table-hint token.
     /// </summary>
-    string Render(LockMode mode);
+    /// <paramref name="keywordCase"/> selects the letter case of the emitted SQL keywords.
+    string Render(LockMode mode, KeywordCase keywordCase = KeywordCase.Lower);
+}
+
+/// <summary>
+/// A dialect's renderer for table index hints (MySQL/MariaDB <c>USE|FORCE|IGNORE INDEX</c>, SQLite
+/// <c>INDEXED BY</c>/<c>NOT INDEXED</c>, SQL Server <c>WITH (INDEX(...))</c>). The object's presence
+/// is the capability: a dialect that returns <see langword="null"/> rejects a command that carries an
+/// index hint.
+/// </summary>
+public interface IIndexHintRenderer
+{
+    /// <summary>
+    /// True when the hint is rendered as another entry of the table-hint <c>WITH (...)</c> list
+    /// (SQL Server) rather than as a standalone clause after the table name.
+    /// </summary>
+    bool MergesWithTableHints { get; }
+
+    /// <summary>
+    /// Renders the index hint for <paramref name="indexes"/> and <paramref name="kind"/>. When
+    /// <see cref="MergesWithTableHints"/> is <c>true</c> the returned fragment is the bare table-hint
+    /// token (the caller wraps it in <c>WITH (...)</c>); otherwise it is the standalone clause
+    /// including its leading separator. Returns <see langword="null"/> when the kind cannot be
+    /// expressed (for example <c>FORCE</c> on SQL Server).
+    /// </summary>
+    string? RenderIndexHint(IReadOnlyList<string> indexes, IndexHintKind kind, KeywordCase keywordCase = KeywordCase.Lower);
+}
+
+/// <summary>
+/// A dialect's renderer for row values / composite tuples: the constructor
+/// (PostgreSQL <c>ROW(a, b)</c>, ClickHouse <c>tuple(a, b)</c>) and, when supported, positional element
+/// access on a server-side row (PostgreSQL <c>(row).fN</c>, ClickHouse <c>tupleElement(row, N)</c>).
+/// The object's presence is the capability: a dialect that returns <see langword="null"/> rejects the
+/// tuple surface.
+/// </summary>
+public interface ITupleRenderer
+{
+    /// <summary>Renders a row constructor from its already-rendered field expressions.</summary>
+    string RenderConstructor(IReadOnlyList<string> fields);
+
+    /// <summary>
+    /// Renders access to the one-based <paramref name="oneBasedIndex"/> element of a server-side row,
+    /// or <see langword="null"/> when the dialect has no positional access (MySQL/MariaDB/SQLite). When
+    /// <see langword="null"/>, an inline constructor's element access is folded to the argument instead.
+    /// </summary>
+    string? RenderElement(string row, int oneBasedIndex);
 }

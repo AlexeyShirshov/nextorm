@@ -12,6 +12,18 @@ public sealed class SqliteDialect : SqlDialectBase
     /// <inheritdoc/>
     public override string ConcatStringOperator => "||";
 
+    // SQLite 3.35.0+ supports the ANSI INSERT ... RETURNING clause; last_insert_rowid() stays
+    // available as a fallback but RETURNING is preferred because it is scoped to the statement.
+    /// <inheritdoc/>
+    public override bool SupportsReturning => true;
+    /// <inheritdoc/>
+    public override bool SupportsLastInsertId => true;
+
+    // SQLite supports INSERT ... DEFAULT VALUES, but not the DEFAULT keyword as a value in a VALUES
+    // list: a column's default is applied by omitting the column instead.
+    /// <inheritdoc/>
+    public override bool SupportsDefaultValues => true;
+
     // SQLite silently returns the first row of a scalar subquery that produces several rows, so
     // Single/SingleOrDefault inside a scalar subquery cannot be enforced by the engine.
     /// <inheritdoc/>
@@ -20,6 +32,10 @@ public sealed class SqliteDialect : SqlDialectBase
     // SQLite supports a raw SQL derived table (FROM (<sql>) AS alias).
     /// <inheritdoc/>
     public override bool SupportsRawSqlSource => true;
+
+    // SQLite 3.24.0+ expresses a key upsert as INSERT ... ON CONFLICT (<keys>) DO UPDATE SET.
+    /// <inheritdoc/>
+    public override bool SupportsOnConflict => true;
 
     // SQLite 3.30+ accepts the FILTER (WHERE ...) aggregate clause.
     /// <inheritdoc/>
@@ -202,15 +218,18 @@ public sealed class SqliteDialect : SqlDialectBase
             : base.MakeMathFunction(name, args);
 
     /// <inheritdoc/>
-    public override void MakePage(Paging paging, StringBuilder sqlBuilder)
+    public override void MakePage(Paging paging, StringBuilder sqlBuilder, KeywordCase keywordCase = KeywordCase.Lower)
     {
-        sqlBuilder.Append("limit ").Append(paging.Limit > 0
+        sqlBuilder.Append(Kw(keywordCase, "limit ")).Append(paging.Limit > 0
             ? paging.Limit
             : -1);
 
         if (paging.Offset > 0)
-            sqlBuilder.Append(" offset ").Append(paging.Offset);
+            sqlBuilder.Append(Kw(keywordCase, " offset ")).Append(paging.Offset);
     }
+
+    /// <summary>SQLite supports <c>INDEXED BY</c> and <c>NOT INDEXED</c>.</summary>
+    public override IIndexHintRenderer? IndexHints => SqliteIndexHintRenderer.Instance;
 }
 
 internal sealed class SqliteIifRenderer : IIifRenderer
@@ -231,4 +250,22 @@ internal sealed class SqliteSessionInfoFunctions : ISessionInfoFunctions
         name == "version"
             ? "sqlite_version()"
             : throw new NotSupportedException($"The {name} session information function is not supported by SQLite.");
+}
+
+internal sealed class SqliteIndexHintRenderer : IIndexHintRenderer
+{
+    public static readonly SqliteIndexHintRenderer Instance = new();
+
+    public bool MergesWithTableHints => false;
+
+    public string? RenderIndexHint(IReadOnlyList<string> indexes, IndexHintKind kind, KeywordCase keywordCase = KeywordCase.Lower)
+    {
+        if (kind == IndexHintKind.Ignore)
+            return SqlKeywords.Of(keywordCase, " not indexed");
+
+        if (indexes.Count != 1)
+            throw new NotSupportedException("SQLite index hints require exactly one index name (INDEXED BY takes a single index).");
+
+        return SqlKeywords.Of(keywordCase, " indexed by ") + indexes[0];
+    }
 }

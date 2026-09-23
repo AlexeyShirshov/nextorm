@@ -209,42 +209,147 @@ public sealed class InsertBuilder<TEntity>
 `InsertWithIdentity`. Имена SQL-ориентированы (`Into`/`Value`/`Returning`), совместимы с linq2db
 (`InsertWithIdentity`) и ADO.NET.
 
-## Провайдерная матрица
+## Провайдерная матрица (шаг 1: провайдер × форма)
 
-| Провайдер | `INSERT ... VALUES` | Сгенерированный ключ | Комментарий |
-|---|---|---|---|
-| SQLite | да | `RETURNING` (SQLite 3.35+) и `last_insert_rowid()` | `MakeReturning` |
-| PostgreSQL | да | `RETURNING` | `MakeReturning` |
-| SQL Server | да | `OUTPUT inserted.<col>` / `SCOPE_IDENTITY()` | `MakeOutput` |
-| MySQL | да | `LAST_INSERT_ID()` (только auto-inc) | общего `RETURNING` нет |
-| MariaDB | да | `RETURNING` (10.5+) / `LAST_INSERT_ID()` | наследует MySQL-диалект |
-| ClickHouse | да, малые батчи | нет | массовая запись — бинарный API драйвера (`docs/providers/clickhouse.md:121`), вне билдера |
-| In-memory | Фаза 2 | — | Фаза 1 — `NotSupportedException` (роль не реализована) |
+Матрица заполнена по документации самих провайдеров, а не по коду nextorm; колонка «Источник» —
+что именно проверялось.
+
+| Провайдер | `INSERT ... VALUES` | Возврат сгенерированного ключа (нативная форма) | Транзакции | Источник |
+|---|---|---|---|---|
+| SQLite | да | `INSERT ... RETURNING col` (3.35.0+); также `last_insert_rowid()` | да | SQLite docs: `RETURNING` (lang_returning), `last_insert_rowid()` (lang_corefunc) |
+| PostgreSQL | да | `INSERT ... RETURNING col` | да | PostgreSQL docs: `INSERT` (sql-insert, `RETURNING`), `currval`/`RETURNING` |
+| SQL Server | да | `OUTPUT inserted.col`; `SCOPE_IDENTITY()`/`@@IDENTITY` | да | Microsoft Learn: `INSERT (Transact-SQL)` (OUTPUT), `SCOPE_IDENTITY`, `OUTPUT clause` |
+| MySQL | да | `LAST_INSERT_ID()` (auto-increment; общий `RETURNING` отсутствует) | да | MySQL docs: `INSERT ... RETURNING` отсутствует; `LAST_INSERT_ID()` |
+| MariaDB | да | `INSERT ... RETURNING` (10.5.0+); `LAST_INSERT_ID()` | да | MariaDB docs: `INSERT ... RETURNING`, `LAST_INSERT_ID()` |
+| ClickHouse | да (малые батчи) | нет | нет | ClickHouse docs: `INSERT INTO`, отсутствие `RETURNING`; массовая запись — бинарный API драйвера (`docs/providers/clickhouse.md`) |
+| In-memory | — (нет SQL) | — (это CLR-контекст без БД) | — | это не `ISqlDialect`-провайдер; отказ через роль `IMutationExecutor` |
+
+**Единообразие провайдеров (решение шага 1).** `INSERT ... VALUES` выразим на всех SQL-провайдерах,
+поэтому отдельная поверхность `PostgresFunctions`/… не заводится: одно кросс-провайдерное API
+(`InsertInto<T>()`), а нативное написание `VALUES` одинаково у всех. Возврат ключа различается, поэтому
+он делегирован трём `Supports*`-флагам с одним `Make*`-хуком на каждый:
+`SupportsReturning`/`MakeReturning` (SQLite, PostgreSQL — но MariaDB сознательно оставлена на MySQL-диалекте
+и пути `LAST_INSERT_ID`, чтобы не плодить четвёртую ветку), `SupportsOutput`/`MakeOutput` (SQL Server) и
+`SupportsLastInsertId`/`MakeLastInsertId` (MySQL/MariaDB). ClickHouse не выражает ни одной из трёх форм →
+`InsertWithIdentity` бросает `NotSupportedException`, обычный `Insert` работает. In-memory — не диалект, а
+отдельный контекст; роль `IMutationExecutor` им не реализуется, поэтому и `Insert`, и `InsertWithIdentity`
+отклоняются с явным сообщением (без per-function флага — обоснование: у in-memory нет серверной БД, которую
+можно менять).
+
+| Провайдер | `SupportsReturning` | `SupportsOutput` | `SupportsLastInsertId` | `MakeReturning`/`MakeOutput`/`MakeLastInsertId` |
+|---|---|---|---|---|
+| SQLite | `true` | `false` | `true` (резерв) | наследует ANSI `returning <col>`; `select last_insert_rowid()` |
+| PostgreSQL | `true` | `false` | `false` | ANSI `returning <col>` |
+| SQL Server | `false` | `true` | `false` | `output inserted.<col>` |
+| MySQL | `false` | `false` | `true` | `select last_insert_id()` |
+| MariaDB | `false` | `false` | `true` (наследует MySQL) | `select last_insert_id()` |
+| ClickHouse | `false` | `false` | `false` | — (ключ не возвращается) |
 
 Лимиты строк в одном `VALUES` (SQL Server 1000, SQLite ~500 параметров, PostgreSQL 65535) —
-билдер разбивает батч на чанки; массовый `BulkCopy`/binary insert — вне области.
+в фазе 1 батч **не** разбивается на чанки (документировано как ограничение); массовый
+`BulkCopy`/binary insert — отдельный план [todo_bulk_insert.md](todo_bulk_insert.md).
+
+## Статус фаз
+
+- **Фаза 1 (MVP) — реализована в этом изменении.** Флаги метаданных
+  `IsKey`/`IsIdentity`/`IsComputed` (атрибуты `[Key]`/`[DatabaseGenerated]` и флюентные
+  `.Key()`/`.Identity()`/`.Computed()`), ось `MutationCommand`/`InsertCommand`,
+  `SqlMutationBuilder.MakeInsert`, роль `IMutationExecutor` + `QueryExecutor.ExecuteNonQuery`,
+  `InsertInto<T>()` (значения/сущность/батч), `InsertWithIdentity`, хуки
+  `SupportsReturning`/`SupportsOutput`/`SupportsLastInsertId`. `Prepare()` в фазе 1 **не** реализован
+  (открытый вопрос 6); ClickHouse отклоняет только `InsertWithIdentity`, in-memory — и `Insert`, и
+  `InsertWithIdentity`.
+- **Фаза 2 (частично, issue #15):** `Returning`-материализация — **Done** (`Returning()`/
+  `Returning(projection)` → `InsertReturningBuilder.Single/ToList`, PostgreSQL/SQLite/SQL Server; см.
+  [guide 19](../guide/19-insert-statement.md)); `INSERT ... SELECT` — **Done** (см. ниже); key upsert —
+  **Done** ([todo_merge.md](todo_merge.md), Фаза 1); остаются полный `MERGE` с ветками, in-memory мутации, чанкинг батча.
+- **`INSERT ... SELECT` (реализовано, 23.09.2026).** Второй источник строк — серверный запрос:
+  тот же overload `Values<TSource,TResult>(EntityBuilder<TSource> source, Expression<Func<TSource,TResult>> mapping)`
+  (источник `IEnumerable` пишет на клиенте, `EntityBuilder` — рендерит `INSERT ... SELECT`). Целевые
+  колонки — по именам членов проекции (как у клиентского батча); `computed`/`SqlDefault` запрещены;
+  форма взаимоисключающая с прочими. Рендер: колонки → `OUTPUT` (SQL Server, перед `SELECT`) →
+  текст `SELECT` → `RETURNING` (PostgreSQL/SQLite); параметры источника вливаются в команду. Источник
+  с CTE (`With`) **поддерживается** — его `WITH` поднимается перед `INSERT`
+  (`with c as (...) insert into ... select ... from c`), а рантайм-`SqlFunctions.Parameter` отклоняется
+  (`NotSupportedException`). Реализация:
+  `InsertBuilder` (`_source`/`_selectColumns`), `InsertCommand.Source`/`SourceColumns`,
+  `SqlMutationBuilder` (`RenderSourceInsert`), `QueryPlanner.RenderSource`, приватный
+  `DataContext.BuildInsertSql`. Детали и провайдерная матрица были в рабочем плане
+  `todo_insert_select.md` (удалён после переноса выводов сюда в docs).
+- **Модифицирующие CTE (реализовано, 23.09.2026).** Postgres-only (`ISqlDialect.SupportsDataModifyingCtes`,
+  остальные бросают `NotSupportedException`): `ctx.With(name, insert.Returning(...))` и
+  `CteQuery.With<TEntity,TResult>(name, insert)` → `MutationCteQuery<TResult>`; `From(name)` читает
+  `RETURNING`-проекцию типизированно (полный набор операторов), `FromTable(name)` — соседний read-CTE,
+  `InsertInto<T>().Values(mutationCte.From(name), mapping)` — главный `INSERT ... SELECT` (его `WITH`
+  поднят перед `INSERT`), а тело CTE принимает и `VALUES`, и `INSERT ... SELECT` (в т.ч. читающий более
+  ранний read-CTE). План не кэшируется (`Cache=false`). Детали были в `todo_insert_cte.md` (удалён после
+  переноса выводов сюда и в guide 09).
+- **API генерации ключа (переименовано, 22.09.2026).** Плоский `InsertWithIdentity<TKey>(selector)` →
+  `TKey` заменён на builder-формы: `ReturningIdentity<TKey>(selector)` (колонка через `RETURNING`/`OUTPUT`,
+  фолбэк `LAST_INSERT_ID`), `ReturningIdentity<TKey>()` (identity-функция провайдера: `last_insert_rowid()`,
+  `lastval()`, `SCOPE_IDENTITY()`, `LAST_INSERT_ID()`; новый хук `ISqlDialect.SupportsIdentityFunction`/
+  `MakeIdentityFunction`) и `ReturningKey<TKey>()` (ключ из метаданных). Все читаются через
+  `InsertReturningBuilder.Single()/ToList()/SingleAsync()/ToListAsync()/ToSql()`. Обновления ниже в этом
+  файле (RFC-скетч) сохранены как исторические.
+- **Батч значений из источника (реализовано, 23.09.2026).** Кроме entity-батча добавлены формы ввода в
+  `InsertBuilder<TEntity>` (пишут в те же `Columns[c].Values[r]` + `RowCount`, рендер не менялся):
+  - `Values<TSource,TResult>(IEnumerable<TSource> source, Expression<Func<TSource,TResult>> mapping)` —
+    источник + проекция: concrete → member-init `new Order { Id = d.Id, Name = d.Name }`, interface →
+    анонимка с маппингом `new { Id = d.Id, Name = d.Name }`. Имена членов матчатся по **имени свойства**
+    `TEntity`; `computed` запрещён на всех путях записи (mapping/`Value`/`Values(column, …)`), `identity`
+    можно указать явно; значения биндятся параметрами.
+  - `Value<TScalar>(TScalar value)` и `Values<TScalar>(IEnumerable<TScalar> values)` — скалярный инсерт
+    (одно/несколько значений) без лямбды; колонка выводится как **единственная записываемая**
+    (`!IsIdentity && !IsComputed`); иначе `InvalidOperationException`.
+  - `Values<TValue>(Expression<Func<TEntity,TValue>> column, IEnumerable<TValue> values)` — колоночный
+    escape hatch для сущностей с несколькими колонками.
+  Формы взаимоисключающие (явный `ValueMode`), длины колонок валидируются в `BuildCommand`; `Single()`
+  на батче кидает по `RowCount > 1`. Источник — только `IEnumerable` (клиентский `VALUES`);
+  `IQueryable` = серверный `INSERT … SELECT` остаётся в фазе 2. Провайдеры: `INSERT … VALUES (...),(...)`
+  поддержан всеми SQL-диалектами; лимиты параметров/чанкинг не решаются здесь.
+- **`DEFAULT VALUES` и `DEFAULT`-значение (реализовано, 23.09.2026).** Строка целиком из дефолтов (все
+  колонки generated) вставляется без значений: `InsertInto<T>().Insert()` рендерит `DEFAULT VALUES`
+  (PostgreSQL/SQL Server/SQLite) или `() VALUES ()` (MySQL/MariaDB); ClickHouse отклоняет. Отдельную
+  колонку можно записать как дефолт через `SqlDefault.Value` (`Value(x => x.Col, SqlDefault.Value)` или
+  член проекции `Values(source, mapping)`); SQLite/ClickHouse не выражают `DEFAULT` в `VALUES` →
+  `NotSupportedException` (в SQLite вместо этого колонку опускают). Хуки
+  `ISqlDialect.SupportsDefaultValues`/`UsesEmptyColumnListForDefaults`/`SupportsColumnDefault`; новый
+  публичный тип `SqlDefault`.
+- **Вне области:** change tracking, `SaveChanges`, bulk copy (см. [todo_bulk_insert.md](todo_bulk_insert.md)); временные таблицы вынесены отдельно в [todo_create_table_as_select.md](todo_create_table_as_select.md).
 
 ## Ограничения и цена
 
 - **Нет change tracking / `SaveChanges`** — только явные команды; подключение к контексту/транзакции
   через роли (#32).
-- **Нет `INSERT ... SELECT`, upsert и default-values** в фазе 1; `ON CONFLICT`/`ON DUPLICATE KEY` —
-  предмет [todo_merge.md](todo_merge.md).
+- **Key upsert реализован** — `ON CONFLICT`/`ON DUPLICATE KEY`/`MERGE`, см. [todo_merge.md](todo_merge.md)
+  (Фаза 1) и [Upsert (key merge)](../guide/19-insert-statement.md#upsert-key-merge). Полный `MERGE` с
+  ветками остаётся предметом [todo_merge.md](todo_merge.md). `INSERT ... SELECT` и per-column
+  `DEFAULT`/`DEFAULT VALUES` уже реализованы (см. «Статус фаз»).
 - **ClickHouse**: транзакций нет, `RETURNING` нет; вставка строк через `VALUES` — только малые
   батчи, крупные — бинарным API.
-- **Публичный API расширяется**: новый интерфейс роли, билдер и флаги метаданных; обновление
-  `API-NAMING-REVIEW.md` и `PublicAPI.*` (когда заморозят поверхность).
-- **Метаданные — breaking change** для `IPropertyMetadata` (новые члены). На время
-  `dotnet build` 0/0 и покрытие не ниже базового (84.9% line / 73.2% branch).
+- **Публичный API расширяется**: новый публичный тип `InsertBuilder<TEntity>`, метод
+  `DataContextExtensions.InsertInto<T>`, DIM-члены `ISqlDialect.SupportsReturning`/`SupportsOutput`/
+  `SupportsLastInsertId` (+ `Make*`) и `IPropertyMetadata.IsKey`/`IsIdentity`/`IsComputed`,
+  флюентные `.Key()/.Identity()/.Computed()`; обновление `API-NAMING-REVIEW.md` и `PublicAPI.*`
+  (когда заморозят поверхность).
+- **Метаданные — НЕ breaking change.** `IsKey`/`IsIdentity`/`IsComputed` добавлены как default
+  interface members (`=> false`), поэтому внешние реализации `IPropertyMetadata` продолжают
+  компилироваться.
+- **Проверка фазы 1:** `dotnet build nextorm.sln -c Release` — 0/0; `dotnet docfx docs/docfx.json` —
+  0/0; полный прогон 2441 тестов (0 failed / 30 skipped) на SQLite/PostgreSQL/SQL Server/MySQL/
+  ClickHouse; покрытие **85.4% line / 74.6% branch** (порог 75%), новые файлы
+  `SqlMutationBuilder`/`MutationCommand`/`InsertCommand`/`InsertColumn`/`InsertValue` — 100%,
+  `InsertBuilder<TEntity>` — 87.1%.
 
 ## Этапы внедрения
 
 - **Фаза 1 (MVP, 1.0-a.4):** метаданные ключ/identity/computed, ось `MutationCommand`,
   `SqlMutationBuilder.MakeInsert`, роль `IMutationExecutor` + `ExecuteNonQuery`, `InsertInto`
   (значения/сущность/батч), `InsertWithIdentity`, ClickHouse/in-memory — `NotSupportedException`.
-- **Фаза 2:** `Returning`-материализация (issue #15), `INSERT ... SELECT`, `ON CONFLICT`/upsert
-  (совместно с merge), in-memory мутации.
-- **Вне области:** change tracking, `SaveChanges`, bulk copy, временные таблицы.
+- **Фаза 2 (частично):** `Returning`-материализация (issue #15) — **Done**; `INSERT ... SELECT` — **Done**;
+  модифицирующие CTE PostgreSQL — **Done**; key upsert — **Done** ([todo_merge.md](todo_merge.md), Фаза 1);
+  остаются полный `MERGE` с ветками, in-memory мутации.
+- **Вне области:** change tracking, `SaveChanges`, bulk copy (см. [todo_bulk_insert.md](todo_bulk_insert.md)); временные таблицы вынесены отдельно в [todo_create_table_as_select.md](todo_create_table_as_select.md).
 
 ## План тестов
 
@@ -287,7 +392,7 @@ public sealed class InsertBuilder<TEntity>
   `DataContext/DataContext.cs`, `DataContextExtensions.cs`, `DataContext/InMemoryDataContext.cs`.
 - Тесты: `tests/nextorm.{core,sqlite,postgres,sqlserver,mysql}.tests/`, `CommonTestSuite.Insert.cs`,
   `*SpecificTests.cs`.
-- Документация: `docs/guide/19-data-modification.md` (+RU), `docs/providers/*` (+RU),
+- Документация: `docs/guide/19-insert-statement.md` (+RU), `docs/providers/*` (+RU),
   `docs/advanced/limitations.md` (+RU), `docs/advanced/api-reference.md` (+RU),
   `docs/specs/comparison/linq2db-comparison.md` (+RU),
   `docs/specs/roadmap/sql-capabilities-gap-analysis.md`, `docs/specs/design/API-NAMING-REVIEW.md`.

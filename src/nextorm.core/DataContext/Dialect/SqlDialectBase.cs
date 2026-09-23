@@ -57,7 +57,10 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <inheritdoc/>
     public virtual bool SupportsArrayFunctions => false;
     /// <inheritdoc/>
-    public virtual bool SupportsTupleFunctions => false;
+    public virtual bool SupportsTupleFunctions => Tuple is not null;
+
+    /// <inheritdoc/>
+    public virtual ITupleRenderer? Tuple => null;
     /// <inheritdoc/>
     public virtual bool SupportsHigherOrderArrayFunctions => false;
     /// <inheritdoc/>
@@ -162,7 +165,7 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual bool SupportsGroupByWithTotals => false;
 
     /// <summary>Returns the grouping clause unchanged; ClickHouse appends <c> with totals</c>.</summary>
-    public virtual string MakeGroupByTotals(string grouping) => grouping;
+    public virtual string MakeGroupByTotals(string grouping, KeywordCase keywordCase = KeywordCase.Lower) => grouping;
     /// <summary>Defaults to <c>null</c>; every SQL provider exposes its native <c>iif</c> renderer.</summary>
     public virtual IIifRenderer? Iif => null;
 
@@ -198,17 +201,17 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual bool SupportsFinal => false;
 
     /// <summary>Renders the <c>FINAL</c> modifier; ClickHouse places it right after the table.</summary>
-    public virtual string MakeFinal() => " final";
+    public virtual string MakeFinal(KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, " final");
 
     /// <summary>Defaults to <c>false</c>; ClickHouse opts into the <c>SAMPLE</c> modifier.</summary>
     public virtual bool SupportsSample => false;
 
     /// <summary>Renders the <c>SAMPLE ratio [OFFSET offset]</c> modifier.</summary>
-    public virtual string MakeSample(double ratio, double offset)
+    public virtual string MakeSample(double ratio, double offset, KeywordCase keywordCase = KeywordCase.Lower)
     {
-        var text = " sample " + ratio.ToString(CultureInfo.InvariantCulture);
+        var text = Kw(keywordCase, " sample ") + ratio.ToString(CultureInfo.InvariantCulture);
         return offset > 0
-            ? text + " offset " + offset.ToString(CultureInfo.InvariantCulture)
+            ? text + Kw(keywordCase, " offset ") + offset.ToString(CultureInfo.InvariantCulture)
             : text;
     }
 
@@ -228,18 +231,18 @@ public abstract class SqlDialectBase : ISqlDialect
     /// Renders the SQL:2011 <c>FOR SYSTEM_TIME</c> clause (shared by SQL Server and MariaDB). Only
     /// reached through a dialect that set <see cref="SupportsTemporalTable"/>.
     /// </summary>
-    public virtual string MakeTemporalTable(TemporalClause clause)
+    public virtual string MakeTemporalTable(TemporalClause clause, KeywordCase keywordCase = KeywordCase.Lower)
     {
         static string Literal(DateTime value) =>
             "'" + value.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture) + "'";
 
         return clause.Kind switch
         {
-            TemporalKind.AsOf => " for system_time as of " + Literal(clause.From),
-            TemporalKind.Between => " for system_time between " + Literal(clause.From) + " and " + Literal(clause.To),
-            TemporalKind.FromTo => " for system_time from " + Literal(clause.From) + " to " + Literal(clause.To),
-            TemporalKind.ContainedIn => " for system_time contained in (" + Literal(clause.From) + ", " + Literal(clause.To) + ")",
-            TemporalKind.All => " for system_time all",
+            TemporalKind.AsOf => Kw(keywordCase, " for system_time as of ") + Literal(clause.From),
+            TemporalKind.Between => Kw(keywordCase, " for system_time between ") + Literal(clause.From) + Kw(keywordCase, " and ") + Literal(clause.To),
+            TemporalKind.FromTo => Kw(keywordCase, " for system_time from ") + Literal(clause.From) + Kw(keywordCase, " to ") + Literal(clause.To),
+            TemporalKind.ContainedIn => Kw(keywordCase, " for system_time contained in (") + Literal(clause.From) + ", " + Literal(clause.To) + ")",
+            TemporalKind.All => Kw(keywordCase, " for system_time all"),
             _ => throw new NotSupportedException($"Unknown temporal kind {clause.Kind}.")
         };
     }
@@ -257,44 +260,47 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual bool SupportsSettings => false;
 
     /// <summary>Renders the trailing <c>SETTINGS key = value, ...</c> clause.</summary>
-    public virtual string MakeSettings(IReadOnlyList<KeyValuePair<string, string>> settings)
-        => " settings " + string.Join(", ", settings.Select(static s => s.Key + " = " + s.Value));
+    public virtual string MakeSettings(IReadOnlyList<KeyValuePair<string, string>> settings, KeywordCase keywordCase = KeywordCase.Lower)
+        => Kw(keywordCase, " settings ") + string.Join(", ", settings.Select(static s => s.Key + " = " + s.Value));
 
     /// <inheritdoc/>
     public abstract string MakeParam(string name);
     /// <inheritdoc/>
-    public abstract void MakePage(Paging paging, StringBuilder sqlBuilder);
+    public abstract void MakePage(Paging paging, StringBuilder sqlBuilder, KeywordCase keywordCase = KeywordCase.Lower);
+
+    /// <summary>Resolves a lower-case keyword fragment (keywords and separators only) to the requested <see cref="KeywordCase"/>.</summary>
+    protected static string Kw(KeywordCase keywordCase, string text) => SqlKeywords.Of(keywordCase, text);
 
     // ANSI super-aggregate form. A provider that spells ROLLUP/CUBE as a trailing modifier
     // (MySQL/MariaDB, ClickHouse) overrides this; only reached through a dialect that opted in.
     /// <inheritdoc/>
-    public virtual string MakeGrouping(string columns, GroupingType groupingType) => groupingType switch
+    public virtual string MakeGrouping(string columns, GroupingType groupingType, KeywordCase keywordCase = KeywordCase.Lower) => groupingType switch
     {
-        GroupingType.Rollup => $"rollup ({columns})",
-        GroupingType.Cube => $"cube ({columns})",
+        GroupingType.Rollup => Kw(keywordCase, "rollup (") + columns + ")",
+        GroupingType.Cube => Kw(keywordCase, "cube (") + columns + ")",
         _ => columns
     };
 
     // Reached only through a dialect that set SupportsGroupingSets.
     /// <inheritdoc/>
-    public virtual string MakeGroupingSets(IReadOnlyList<string> groupingSets) =>
-        $"grouping sets ({string.Join(", ", groupingSets)})";
+    public virtual string MakeGroupingSets(IReadOnlyList<string> groupingSets, KeywordCase keywordCase = KeywordCase.Lower) =>
+        Kw(keywordCase, "grouping sets (") + string.Join(", ", groupingSets) + ")";
 
     // ANSI lateral form. A provider whose surface is literally CROSS/OUTER APPLY (SQL Server)
     // overrides this; the base body is only reached through a dialect that opted in with
     // SupportsApply, so it never runs for a provider that cannot express a lateral source.
     /// <inheritdoc/>
-    public virtual string MakeApply(JoinType applyType, string source) => applyType switch
+    public virtual string MakeApply(JoinType applyType, string source, KeywordCase keywordCase = KeywordCase.Lower) => applyType switch
     {
-        JoinType.CrossApply => $" cross join lateral {source}",
-        JoinType.OuterApply => $" left join lateral {source} on true",
+        JoinType.CrossApply => Kw(keywordCase, " cross join lateral ") + source,
+        JoinType.OuterApply => Kw(keywordCase, " left join lateral ") + source + Kw(keywordCase, " on true"),
         _ => throw new ArgumentOutOfRangeException(nameof(applyType), applyType, "Not an APPLY join type")
     };
 
     // ANSI form. The strictness/GLOBAL modifiers are ClickHouse-only; the SQL builder rejects them
     // for a dialect that did not opt in, so only Default/false reach this body in practice.
     /// <inheritdoc/>
-    public virtual string MakeJoinKeyword(JoinType joinType, JoinStrictness strictness, bool isGlobal)
+    public virtual string MakeJoinKeyword(JoinType joinType, JoinStrictness strictness, bool isGlobal, KeywordCase keywordCase = KeywordCase.Lower)
     {
         if (isGlobal)
             throw new NotSupportedException("The GLOBAL join modifier is not supported by this SQL dialect");
@@ -304,12 +310,12 @@ public abstract class SqlDialectBase : ISqlDialect
 
         return joinType switch
         {
-            JoinType.Inner => " join ",
-            JoinType.Left => " left join ",
-            JoinType.Right => " right join ",
-            JoinType.Full => " full join ",
-            JoinType.Cross => " cross join ",
-            JoinType.FullCross => " cross join ",
+            JoinType.Inner => SqlKeywords.Of(keywordCase, " join "),
+            JoinType.Left => SqlKeywords.Of(keywordCase, " left join "),
+            JoinType.Right => SqlKeywords.Of(keywordCase, " right join "),
+            JoinType.Full => SqlKeywords.Of(keywordCase, " full join "),
+            JoinType.Cross => SqlKeywords.Of(keywordCase, " cross join "),
+            JoinType.FullCross => SqlKeywords.Of(keywordCase, " cross join "),
             _ => throw new NotSupportedException(joinType.ToString())
         };
     }
@@ -317,9 +323,10 @@ public abstract class SqlDialectBase : ISqlDialect
     // ANSI/SQLite/PostgreSQL form: the RECURSIVE modifier is part of the WITH keyword. SQL Server
     // overrides MakeWith to drop it, and MakeMaxRecursion to expose its depth option.
     /// <inheritdoc/>
-    public virtual string MakeWith(bool recursive) => recursive ? "with recursive " : "with ";
+    public virtual string MakeWith(bool recursive, KeywordCase keywordCase = KeywordCase.Lower)
+        => SqlKeywords.Of(keywordCase, recursive ? "with recursive " : "with ");
     /// <inheritdoc/>
-    public virtual string? MakeMaxRecursion(int maxRecursion) => null;
+    public virtual string? MakeMaxRecursion(int maxRecursion, KeywordCase keywordCase = KeywordCase.Lower) => null;
 
     // A dialect with a concatenation operator joins the operands with it; a dialect where the
     // operator is not a concatenation overrides this with the concat function.
@@ -338,11 +345,12 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <inheritdoc/>
     public virtual string MakeColumnReference(string name) => name;
     /// <inheritdoc/>
-    public virtual string MakeTableAlias(string tableAlias) => " as " + Escape(tableAlias);
+    public virtual string MakeTableAlias(string tableAlias, KeywordCase keywordCase = KeywordCase.Lower)
+        => SqlKeywords.Of(keywordCase, " as ") + Escape(tableAlias);
     /// <inheritdoc/>
-    public virtual string MakeColumnAlias(string? colAlias) => string.IsNullOrEmpty(colAlias)
+    public virtual string MakeColumnAlias(string? colAlias, KeywordCase keywordCase = KeywordCase.Lower) => string.IsNullOrEmpty(colAlias)
         ? string.Empty
-        : " as " + Escape(colAlias);
+        : SqlKeywords.Of(keywordCase, " as ") + Escape(colAlias);
 
     /// <inheritdoc/>
     public virtual string MakeTypeName(Type type) => type switch
@@ -367,7 +375,7 @@ public abstract class SqlDialectBase : ISqlDialect
     // Dialects with a boolean type can return the ANSI CASE unchanged: it is already a valid
     // scalar and (for the boolean case) a valid predicate.
     /// <inheritdoc/>
-    public virtual string MakeCase(string caseExpression, bool isBooleanResult, bool asPredicate) => caseExpression;
+    public virtual string MakeCase(string caseExpression, bool isBooleanResult, bool asPredicate, KeywordCase keywordCase = KeywordCase.Lower) => caseExpression;
     /// <inheritdoc/>
     public virtual string MakeAggregate(string name) => name;
 
@@ -470,7 +478,7 @@ public abstract class SqlDialectBase : ISqlDialect
     protected virtual string MakeStringReverse(string value) =>
         throw new NotSupportedException("String reversal is not supported by this provider.");
     /// <inheritdoc/>
-    public virtual string MakeLikeEscape(string escapeChar) => " escape " + SqlLiteral.ToSqlStringLiteral(escapeChar);
+    public virtual string MakeLikeEscape(string escapeChar, KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, " escape ") + SqlLiteral.ToSqlStringLiteral(escapeChar);
     /// <inheritdoc/>
     public virtual string MakeOnesComplement(string operand) => $"~({operand})";
     // Dialects with a boolean type can use the predicate unchanged as a scalar.
@@ -593,7 +601,7 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual string MakeArrayFunction(string name, string call) => call;
 
     /// <inheritdoc/>
-    public virtual string MakeWithinGroup(string aggregate, string orderBy) => $"{aggregate} within group (order by {orderBy})";
+    public virtual string MakeWithinGroup(string aggregate, string orderBy, KeywordCase keywordCase = KeywordCase.Lower) => aggregate + Kw(keywordCase, " within group (order by ") + orderBy + ")";
 
     // A user-defined function name is emitted verbatim by default; a dialect that quotes or remaps
     // identifiers overrides this.
@@ -631,21 +639,24 @@ public abstract class SqlDialectBase : ISqlDialect
     // place the hints. The base body keeps the contract honest (no throwing placeholder) and lets a
     // provider stage hint support without breaking compilation.
     /// <inheritdoc/>
-    public virtual string RenderQueryHints(string sql, IReadOnlyList<string> hints, string? maxRecursionOption)
+    public virtual string RenderQueryHints(string sql, IReadOnlyList<string> hints, string? maxRecursionOption, KeywordCase keywordCase = KeywordCase.Lower)
         => sql;
 
     // Reached only through a dialect that set SupportsTableHints; the base body is harmless so a
     // dialect can stage the capability without breaking compilation.
     /// <inheritdoc/>
-    public virtual string MakeTableHints(IReadOnlyList<string> hints) => string.Empty;
+    public virtual string MakeTableHints(IReadOnlyList<string> hints, KeywordCase keywordCase = KeywordCase.Lower) => string.Empty;
+
+    /// <inheritdoc/>
+    public virtual IIndexHintRenderer? IndexHints => null;
 
     // Reached only through a dialect that set SupportsForJson.
     /// <inheritdoc/>
-    public virtual string MakeForJson(ForJsonClause clause) => string.Empty;
+    public virtual string MakeForJson(ForJsonClause clause, KeywordCase keywordCase = KeywordCase.Lower) => string.Empty;
 
     // Reached only through a dialect that set SupportsForXml.
     /// <inheritdoc/>
-    public virtual string MakeForXml(ForXmlClause clause) => string.Empty;
+    public virtual string MakeForXml(ForXmlClause clause, KeywordCase keywordCase = KeywordCase.Lower) => string.Empty;
 
     // Reached only through a dialect that set SupportsFullText.
     /// <inheritdoc/>
@@ -663,7 +674,7 @@ public abstract class SqlDialectBase : ISqlDialect
         $"{MakeTextJsonFunction(name)}({string.Join(", ", args)})";
 
     /// <inheritdoc/>
-    public virtual bool MakeTop(int limit, bool withTies, out string? topStmt)
+    public virtual bool MakeTop(int limit, bool withTies, out string? topStmt, KeywordCase keywordCase = KeywordCase.Lower)
     {
         topStmt = null;
         return false;
@@ -677,4 +688,55 @@ public abstract class SqlDialectBase : ISqlDialect
 
     /// <inheritdoc/>
     public virtual string? GetPagingOrderBy(QueryCommand queryCommand) => null;
+
+    /// <summary>Defaults to <c>false</c>; PostgreSQL and SQLite opt into the <c>RETURNING</c> clause.</summary>
+    public virtual bool SupportsReturning => false;
+    /// <summary>Defaults to <c>false</c>; SQL Server opts into the <c>OUTPUT</c> clause.</summary>
+    public virtual bool SupportsOutput => false;
+    /// <summary>Defaults to <c>false</c>; MySQL/MariaDB opt into <c>LAST_INSERT_ID()</c>.</summary>
+    public virtual bool SupportsLastInsertId => false;
+    /// <summary>Renders <c>RETURNING &lt;columns&gt;</c>; only reached through a dialect that set <see cref="SupportsReturning"/>.</summary>
+    public virtual string MakeReturning(IReadOnlyList<string> columns, KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, " returning ") + string.Join(", ", columns);
+    /// <summary>Renders <c>OUTPUT inserted.&lt;column&gt;</c>; only reached through a dialect that set <see cref="SupportsOutput"/>.</summary>
+    public virtual string MakeOutput(IReadOnlyList<string> columns, KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, " output ") + string.Join(", ", columns.Select(static c => "inserted." + c));
+    /// <summary>Renders the scalar query for the last generated identity; only reached through a dialect that set <see cref="SupportsLastInsertId"/>.</summary>
+    public virtual string MakeLastInsertId(KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, "select last_insert_rowid()");
+    /// <summary>Defaults to <see cref="SupportsLastInsertId"/>; SQL Server and PostgreSQL opt in explicitly.</summary>
+    public virtual bool SupportsIdentityFunction => SupportsLastInsertId;
+    /// <summary>Renders the scalar query for the last generated identity without naming the column; only reached through a dialect that set <see cref="SupportsIdentityFunction"/>.</summary>
+    public virtual string MakeIdentityFunction(KeywordCase keywordCase = KeywordCase.Lower) => MakeLastInsertId(keywordCase);
+
+    /// <summary>Defaults to <c>false</c>; PostgreSQL and SQLite 3.24+ opt into <c>ON CONFLICT ... DO UPDATE</c>.</summary>
+    public virtual bool SupportsOnConflict => false;
+    /// <summary>Renders <c> ON CONFLICT (&lt;keys&gt;) DO UPDATE SET </c>; only reached through a dialect that set <see cref="SupportsOnConflict"/>.</summary>
+    public virtual string MakeOnConflict(IReadOnlyList<string> keys, KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, " on conflict (") + string.Join(", ", keys) + Kw(keywordCase, ") do update set ");
+    /// <summary>Defaults to <c>false</c>; MySQL and MariaDB opt into <c>ON DUPLICATE KEY UPDATE</c>.</summary>
+    public virtual bool SupportsOnDuplicateKey => false;
+    /// <summary>Renders <c> ON DUPLICATE KEY UPDATE </c>; only reached through a dialect that set <see cref="SupportsOnDuplicateKey"/>.</summary>
+    public virtual string MakeOnDuplicateKey(KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, " on duplicate key update ");
+    /// <summary>Renders the incoming value of a column (<c>excluded.&lt;column&gt;</c>); MySQL/MariaDB override it with <c>VALUES(&lt;column&gt;)</c>. The qualifier is not cased by <see cref="KeywordCase"/>.</summary>
+    public virtual string MakeUpsertValueReference(string column, KeywordCase keywordCase = KeywordCase.Lower) => "excluded." + column;
+    /// <summary>Defaults to <c>false</c>; SQL Server opts into a key-upsert <c>MERGE</c>.</summary>
+    public virtual bool SupportsMerge => false;
+    /// <summary>Renders a key-upsert <c>MERGE</c>; only reached through a dialect that set <see cref="SupportsMerge"/>.</summary>
+    public virtual string MakeMerge(
+        string target,
+        IReadOnlyList<string> columns,
+        IReadOnlyList<string> keys,
+        IReadOnlyList<string> updateColumns,
+        string valuesRows,
+        KeywordCase keywordCase = KeywordCase.Lower)
+        => throw new NotSupportedException($"{GetType().Name} cannot render a MERGE upsert.");
+
+    /// <summary>Defaults to <c>false</c>; only PostgreSQL accepts a data-modifying statement (<c>INSERT ... RETURNING</c>) as a CTE body.</summary>
+    public virtual bool SupportsDataModifyingCtes => false;
+
+    /// <summary>Defaults to <c>false</c>; every SQL provider except ClickHouse opts into an all-defaults insert.</summary>
+    public virtual bool SupportsDefaultValues => false;
+    /// <summary>Renders the all-defaults row form; MySQL/MariaDB override it with <c>() VALUES ()</c>.</summary>
+    public virtual string MakeDefaultValues(KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, " default values");
+    /// <summary>Defaults to <c>false</c>; PostgreSQL, SQL Server, MySQL and MariaDB accept <c>DEFAULT</c> as a value.</summary>
+    public virtual bool SupportsColumnDefault => false;
+    /// <summary>Renders the <c>DEFAULT</c> keyword as a value; only reached through a dialect that set <see cref="SupportsColumnDefault"/>.</summary>
+    public virtual string MakeColumnDefault(KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, "default");
 }

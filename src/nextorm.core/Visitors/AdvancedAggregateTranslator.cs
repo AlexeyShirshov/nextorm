@@ -474,7 +474,7 @@ internal static class AdvancedAggregateTranslator
 
         var orderBy = visitor.VisitToString(UnwrapLambdaBody(orderArg));
 
-        visitor.Builder!.Append(visitor.Dialect.MakeWithinGroup(aggregate, orderBy));
+        visitor.Builder!.Append(visitor.Dialect.MakeWithinGroup(aggregate, orderBy, visitor.KeywordCase));
     }
 
     /// <summary>

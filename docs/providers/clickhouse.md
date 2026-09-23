@@ -103,7 +103,7 @@ and returns [`Instance`](xref:NextORM.ClickHouse.ClickHouseDialect.Instance) fro
 - the join strictness/kind modifiers `ANY`/`ALL`/`ASOF` via
   [`EntityBuilder.WithStrictness`](xref:NextORM.Core.EntityBuilder`1.WithStrictness(NextORM.Core.JoinStrictness)) right after a join
   ([`SupportsJoinStrictness`](xref:NextORM.Core.ISqlDialect.SupportsJoinStrictness),
-  [`MakeJoinKeyword`](xref:NextORM.Core.ISqlDialect.MakeJoinKeyword(NextORM.Core.JoinType,NextORM.Core.JoinStrictness,System.Boolean)), enum `JoinStrictness`).
+  [`MakeJoinKeyword`](xref:NextORM.Core.ISqlDialect.MakeJoinKeyword(NextORM.Core.JoinType,NextORM.Core.JoinStrictness,System.Boolean,NextORM.Core.KeywordCase)), enum `JoinStrictness`).
   `LEFT ANY JOIN` keeps a single right-hand row per left-hand row, `ALL` keeps every match and
   `ASOF` needs one equi-join column plus a final inequality. The `SEMI`/`ANTI`/`PASTE` kinds have
   dedicated builder methods: [`SemiJoin`](xref:NextORM.Core.EntityBuilder`1.SemiJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}}))/`AntiJoin` return only the

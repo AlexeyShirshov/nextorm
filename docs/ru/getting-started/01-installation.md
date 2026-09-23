@@ -18,7 +18,7 @@ NextORM разделён на небольшой основной пакет, н
   [`ClickHouseDataContext`](xref:NextORM.ClickHouse.ClickHouseDataContext)) и расширение регистрации `Use…`.
   Пакеты провайдеров транзитивно зависят от `nextorm`.
 
-Все текущие релизы являются пререлизами (линейка `1.0.1-alpha`), поэтому в каждой команде установки
+Все текущие релизы являются пререлизами, поэтому в каждой команде установки
 нужно явно разрешить пререлизные версии.
 
 ## Установка основного пакета
@@ -61,12 +61,12 @@ Install-Package nextorm.sqlite -Prerelease
 
 ## Целевая платформа
 
-Пакеты нацелены на `net10.0` и включают неявные using-директивы (implicit usings) и nullable reference types. `PackageReference` выглядит так (версии приведены для примера; используйте последнюю пререлизную версию `1.0.1-alpha`):
+Пакеты нацелены на `net10.0` и включают неявные using-директивы (implicit usings) и nullable reference types. `PackageReference` выглядит так (`*-*` подтягивает последний пререлиз):
 
 ```xml
 <ItemGroup>
-  <PackageReference Include="nextorm" Version="1.0.1-alpha" />
-  <PackageReference Include="nextorm.sqlite" Version="1.0.1-alpha" />
+  <PackageReference Include="nextorm" Version="*-*" />
+  <PackageReference Include="nextorm.sqlite" Version="*-*" />
 </ItemGroup>
 ```
 

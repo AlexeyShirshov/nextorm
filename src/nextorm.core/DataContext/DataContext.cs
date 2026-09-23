@@ -10,7 +10,7 @@ namespace NextORM.Core;
 /// commands. Providers derive from it and supply the SQL dialect, the connection factory and
 /// parameter creation.
 /// </summary>
-public abstract class DataContext : IDataContext, IConnectionManager
+public abstract class DataContext : IDataContext, IConnectionManager, IMutationExecutor
 {
     private bool _disposed;
     private readonly ContextEnvironment _environment;
@@ -49,7 +49,8 @@ public abstract class DataContext : IDataContext, IConnectionManager
             needMapping: true,
             optionsBuilder.ShouldLogSensitiveData,
             optionsBuilder.QuoteIdentifiers,
-            optionsBuilder.NamingConvention);
+            optionsBuilder.NamingConvention,
+            optionsBuilder.KeywordCase);
 
         _queryCache = new QueryCache(QueryPlanStore.Clear);
 
@@ -118,6 +119,12 @@ public abstract class DataContext : IDataContext, IConnectionManager
     /// verbatim. A command can override it with <c>WithNamingConvention</c>.
     /// </summary>
     public INamingConvention? NamingConvention => _environment.NamingConvention;
+    /// <summary>
+    /// The letter case in which this context emits SQL keywords by default (set with
+    /// <c>DataContextBuilder.UseKeywordCase</c>). A command can override it with
+    /// <c>WithKeywordCase</c>.
+    /// </summary>
+    public KeywordCase KeywordCase => _environment.KeywordCase;
     /// <summary>User-owned bag of arbitrary state attached to this context.</summary>
     public Dictionary<string, object> Properties => _environment.Properties;
     /// <summary>
@@ -219,6 +226,174 @@ public abstract class DataContext : IDataContext, IConnectionManager
     /// <returns>The resolved FROM expression, or <see langword="null"/> when the type is not mapped.</returns>
     public FromExpression? GetFrom(Type srcType, QueryCommand? queryCommand)
         => _planner.GetFrom(srcType, queryCommand);
+
+    // DML execution (IMutationExecutor). Kept as explicit implementations so the mutation axis does
+    // not widen the context's public surface; the public entry points live on the InsertBuilder.
+    string IMutationExecutor.Render(MutationCommand command)
+    {
+        EnsureReturningSupportedIfNeeded(command);
+        return BuildMutationSql(command).Sql;
+    }
+
+    bool IMutationExecutor.SupportsGeneratedColumns => Dialect.SupportsReturning || Dialect.SupportsOutput;
+
+    string IMutationExecutor.RenderIdentityFunction(MutationCommand command)
+    {
+        EnsureIdentityFunctionSupported();
+        // Mirror execution: a non-identity key cannot be read through the identity function.
+        if (command is InsertCommand { IdentityColumn: not null })
+            EnsureIdentityColumn(command);
+
+        var (sql, _) = BuildInsertSql((InsertCommand)command);
+        return sql + "; " + Dialect.MakeIdentityFunction(KeywordCase);
+    }
+
+    object? IMutationExecutor.ExecuteIdentityFunction(MutationCommand command)
+    {
+        EnsureIdentityFunctionSupported();
+        var (sql, parameters) = BuildInsertSql((InsertCommand)command);
+        // The identity function runs in the same batch as the insert: SCOPE_IDENTITY() is scoped to the
+        // batch, so issuing it as a separate command would return NULL on SQL Server.
+        return _executor.ExecuteScalar(sql + "; " + Dialect.MakeIdentityFunction(KeywordCase), parameters);
+    }
+
+    async Task<object?> IMutationExecutor.ExecuteIdentityFunction(MutationCommand command, CancellationToken cancellationToken)
+    {
+        EnsureIdentityFunctionSupported();
+        var (sql, parameters) = BuildInsertSql((InsertCommand)command);
+        return await _executor.ExecuteScalarAsync(sql + "; " + Dialect.MakeIdentityFunction(KeywordCase), parameters, cancellationToken).ConfigureAwait(false);
+    }
+
+    int IMutationExecutor.Execute(MutationCommand command)
+    {
+        var (sql, parameters) = BuildMutationSql(command);
+        return _executor.ExecuteNonQuery(sql, parameters);
+    }
+
+    async Task<int> IMutationExecutor.Execute(MutationCommand command, CancellationToken cancellationToken)
+    {
+        var (sql, parameters) = BuildMutationSql(command);
+        return await _executor.ExecuteNonQueryAsync(sql, parameters, cancellationToken).ConfigureAwait(false);
+    }
+
+    object? IMutationExecutor.ExecuteIdentity(MutationCommand command)
+    {
+        if (Dialect.SupportsReturning || Dialect.SupportsOutput)
+        {
+            var (sql, parameters) = BuildInsertSql((InsertCommand)command);
+            return _executor.ExecuteScalar(sql, parameters);
+        }
+
+        if (Dialect.SupportsLastInsertId)
+        {
+            EnsureIdentityColumn(command);
+            var (sql, parameters) = BuildInsertSql((InsertCommand)command);
+            _executor.ExecuteNonQuery(sql, parameters);
+            return _executor.ExecuteScalar(Dialect.MakeLastInsertId(KeywordCase), []);
+        }
+
+        throw new NotSupportedException(
+            $"{GetType().Name} cannot return a generated identity: the provider has no RETURNING, OUTPUT or LAST_INSERT_ID form. Use Insert() instead.");
+    }
+
+    async Task<object?> IMutationExecutor.ExecuteIdentity(MutationCommand command, CancellationToken cancellationToken)
+    {
+        if (Dialect.SupportsReturning || Dialect.SupportsOutput)
+        {
+            var (sql, parameters) = BuildInsertSql((InsertCommand)command);
+            return await _executor.ExecuteScalarAsync(sql, parameters, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (Dialect.SupportsLastInsertId)
+        {
+            EnsureIdentityColumn(command);
+            var (sql, parameters) = BuildInsertSql((InsertCommand)command);
+            await _executor.ExecuteNonQueryAsync(sql, parameters, cancellationToken).ConfigureAwait(false);
+            return await _executor.ExecuteScalarAsync(Dialect.MakeLastInsertId(KeywordCase), [], cancellationToken).ConfigureAwait(false);
+        }
+
+        throw new NotSupportedException(
+            $"{GetType().Name} cannot return a generated identity: the provider has no RETURNING, OUTPUT or LAST_INSERT_ID form. Use Insert() instead.");
+    }
+
+    IReadOnlyList<TResult> IMutationExecutor.ExecuteReturning<TResult>(MutationCommand command, SelectExpression[] selectList, bool oneColumn)
+    {
+        EnsureReturningSupported();
+        EnsureReturningMaterializable<TResult>(oneColumn);
+        var (sql, parameters) = BuildInsertSql((InsertCommand)command);
+        var mapper = RowMapperFactory.GetOrBuild<TResult>(sql, GetType(), selectList, oneColumn, MapColumnExpression);
+        return _executor.ExecuteReader(sql, parameters, mapper);
+    }
+
+    async Task<IReadOnlyList<TResult>> IMutationExecutor.ExecuteReturning<TResult>(MutationCommand command, SelectExpression[] selectList, bool oneColumn, CancellationToken cancellationToken)
+    {
+        EnsureReturningSupported();
+        EnsureReturningMaterializable<TResult>(oneColumn);
+        var (sql, parameters) = BuildInsertSql((InsertCommand)command);
+        var mapper = RowMapperFactory.GetOrBuild<TResult>(sql, GetType(), selectList, oneColumn, MapColumnExpression);
+        return await _executor.ExecuteReaderAsync(sql, parameters, mapper, cancellationToken).ConfigureAwait(false);
+    }
+
+    private (string Sql, List<Parameter> Parameters) BuildInsertSql(InsertCommand command)
+    {
+        if (command.Source is null)
+            return SqlMutationBuilder.MakeInsert(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase);
+
+        var (withSql, sourceSql, sourceParameters) = _planner.RenderSource(command.Source);
+        var (insertSql, parameters) = SqlMutationBuilder.MakeInsert(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, sourceSql, sourceParameters);
+
+        // A data-modifying CTE (or a hoisted read CTE) must precede INSERT, not sit inside the SELECT.
+        return (withSql is null ? insertSql : withSql + insertSql, parameters);
+    }
+
+    private (string Sql, List<Parameter> Parameters) BuildMutationSql(MutationCommand command)
+        => command switch
+        {
+            InsertCommand insert => BuildInsertSql(insert),
+            MergeCommand merge => SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, merge, KeywordCase),
+            _ => throw new NotSupportedException($"Unsupported mutation command {command.GetType().Name}."),
+        };
+
+    private void EnsureReturningSupported()
+    {
+        if (!Dialect.SupportsReturning && !Dialect.SupportsOutput)
+            throw new NotSupportedException(
+                $"{GetType().Name} cannot return inserted rows: the provider has no RETURNING or OUTPUT form. Use Insert() instead.");
+    }
+
+    // An interface/abstract TResult cannot be materialized as a whole (no constructor). Reject it with a
+    // clear message at execution time rather than letting RowMaterializerBuilder surface an opaque
+    // QueryPreparationException; SQL generation (ToSql) stays provider- and provider-shape-agnostic.
+    private static void EnsureReturningMaterializable<TResult>(bool oneColumn)
+    {
+        var resultType = typeof(TResult);
+
+        if (!oneColumn && (resultType.IsInterface || resultType.IsAbstract))
+            throw new NotSupportedException(
+                $"Cannot materialize the returned rows into {resultType.Name}: it is an interface or abstract. Project the mapped columns instead, e.g. Returning(x => new {{ x.Id, x.Name }}).");
+    }
+
+    private void EnsureReturningSupportedIfNeeded(MutationCommand command)
+    {
+        if (command is InsertCommand { ReturningColumns: { Count: > 0 } })
+            EnsureReturningSupported();
+    }
+
+    private void EnsureIdentityFunctionSupported()
+    {
+        if (!Dialect.SupportsIdentityFunction)
+            throw new NotSupportedException(
+                $"{GetType().Name} cannot return a generated identity without naming the column: the provider has no identity function (SCOPE_IDENTITY, lastval, LAST_INSERT_ID or last_insert_rowid). Project the key column instead, e.g. ReturningIdentity(x => x.Id).");
+    }
+
+    // LAST_INSERT_ID()/last_insert_rowid() return the auto-increment value regardless of the requested
+    // column, so the fallback is only sound when the resolved column is the declared identity.
+    private static void EnsureIdentityColumn(MutationCommand command)
+    {
+        if (command is not InsertCommand { IdentityColumn: { IsIdentity: true } })
+            throw new NotSupportedException(
+                "The provider returns the auto-increment value through LAST_INSERT_ID()/last_insert_rowid(), but the selected column is not declared as an identity. Use a provider with RETURNING/OUTPUT or select the identity column.");
+    }
 
     /// <summary>
     /// Releases the connection owned by the context and raises <see cref="Disposed"/>. Called from

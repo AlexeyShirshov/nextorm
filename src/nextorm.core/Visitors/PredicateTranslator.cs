@@ -20,9 +20,9 @@ internal static class PredicateTranslator
         {
             visitor.NeedAliasForColumn = true;
 
-            visitor.Builder!.Append("cast(");
+            visitor.Builder!.Append(visitor.Kw("cast("));
             visitor.Visit(node.Operand);
-            visitor.Builder!.Append(" as ").Append(visitor.Dialect.MakeTypeName(target)).Append(')');
+            visitor.Builder!.Append(visitor.Kw(" as ")).Append(visitor.Dialect.MakeTypeName(target)).Append(')');
 
             return node;
         }
@@ -63,7 +63,7 @@ internal static class PredicateTranslator
         }
 
         visitor.NeedAliasForColumn = true;
-        visitor.Builder!.Append(visitor.Dialect.MakeBooleanPredicate($"not ({RenderPredicate(visitor, node.Operand)})", visitor.IsPredicateContext));
+        visitor.Builder!.Append(visitor.Dialect.MakeBooleanPredicate($"{visitor.Kw("not")} ({RenderPredicate(visitor, node.Operand)})", visitor.IsPredicateContext));
 
         return node;
     }
@@ -186,12 +186,12 @@ internal static class PredicateTranslator
         var caseBuilder = visitor.BuilderPool.Get();
         try
         {
-            caseBuilder.Append("case when ").Append(test)
-                .Append(" then ").Append(trueVisitor.ToString())
-                .Append(" else ").Append(falseVisitor.ToString())
-                .Append(" end");
+            caseBuilder.Append(visitor.Kw("case when ")).Append(test)
+                .Append(visitor.Kw(" then ")).Append(trueVisitor.ToString())
+                .Append(visitor.Kw(" else ")).Append(falseVisitor.ToString())
+                .Append(visitor.Kw(" end"));
 
-            visitor.Builder!.Append(visitor.Dialect.MakeCase(caseBuilder.ToString(), TypeFacts.IsBoolean(node.Type), visitor.IsPredicateContext));
+            visitor.Builder!.Append(visitor.Dialect.MakeCase(caseBuilder.ToString(), TypeFacts.IsBoolean(node.Type), visitor.IsPredicateContext, visitor.KeywordCase));
         }
         finally
         {
@@ -233,7 +233,7 @@ internal static class PredicateTranslator
         {
             // A switch without cases is just its default arm.
             if (node.DefaultBody is null)
-                visitor.Builder!.Append("null");
+                visitor.Builder!.Append(visitor.Kw("null"));
             else
                 visitor.Visit(node.DefaultBody);
 
@@ -247,7 +247,7 @@ internal static class PredicateTranslator
             switchValueVisitor.Visit(node.SwitchValue);
             var switchValue = switchValueVisitor.ToString();
 
-            caseBuilder.Append("case");
+            caseBuilder.Append(visitor.Kw("case"));
 
             for (var (i, cnt) = (0, node.Cases.Count); i < cnt; i++)
             {
@@ -263,16 +263,16 @@ internal static class PredicateTranslator
                     using var testVisitor = visitor.Clone();
                     testVisitor.Visit(@case.TestValues[j]);
 
-                    caseBuilder.Append(" when ").Append(switchValue)
+                    caseBuilder.Append(visitor.Kw(" when ")).Append(switchValue)
                         .Append(" = ").Append(testVisitor.ToString())
-                        .Append(" then ").Append(body);
+                        .Append(visitor.Kw(" then ")).Append(body);
                 }
             }
 
-            caseBuilder.Append(" else ");
+            caseBuilder.Append(visitor.Kw(" else "));
 
             if (node.DefaultBody is null)
-                caseBuilder.Append("null");
+                caseBuilder.Append(visitor.Kw("null"));
             else
             {
                 using var defaultVisitor = visitor.Clone();
@@ -280,9 +280,9 @@ internal static class PredicateTranslator
                 caseBuilder.Append(defaultVisitor.ToString());
             }
 
-            caseBuilder.Append(" end");
+            caseBuilder.Append(visitor.Kw(" end"));
 
-            visitor.Builder!.Append(visitor.Dialect.MakeCase(caseBuilder.ToString(), TypeFacts.IsBoolean(node.Type), visitor.IsPredicateContext));
+            visitor.Builder!.Append(visitor.Dialect.MakeCase(caseBuilder.ToString(), TypeFacts.IsBoolean(node.Type), visitor.IsPredicateContext, visitor.KeywordCase));
         }
         finally
         {
@@ -326,7 +326,7 @@ internal static class PredicateTranslator
         {
             visitor.Builder!.Append('(');
             AppendCondition(visitor, node.Left);
-            visitor.Builder!.Append(node.NodeType == ExpressionType.AndAlso ? " and " : " or ");
+            visitor.Builder!.Append(node.NodeType == ExpressionType.AndAlso ? visitor.Kw(" and ") : visitor.Kw(" or "));
             AppendCondition(visitor, node.Right);
             visitor.Builder!.Append(')');
             return node;
@@ -357,7 +357,7 @@ internal static class PredicateTranslator
                 case ExpressionType.And:
                     visitor.Builder!.Append(" & "); break;
                 case ExpressionType.AndAlso:
-                    visitor.Builder!.Append(" and "); break;
+                    visitor.Builder!.Append(visitor.Kw(" and ")); break;
                 case ExpressionType.Decrement:
                     visitor.Builder!.Append(" -1 "); break;
                 case ExpressionType.Divide:
@@ -389,7 +389,7 @@ internal static class PredicateTranslator
                 case ExpressionType.Or:
                     visitor.Builder!.Append(" | "); break;
                 case ExpressionType.OrElse:
-                    visitor.Builder!.Append(" or "); break;
+                    visitor.Builder!.Append(visitor.Kw(" or ")); break;
                 case ExpressionType.Power:
                     visitor.Builder!.Append(" ^ "); break;
                 case ExpressionType.RightShift:

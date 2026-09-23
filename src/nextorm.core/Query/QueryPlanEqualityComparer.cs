@@ -105,6 +105,10 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
         if (!StringListsEqual(x.TableHints, y.TableHints)) return false;
 
+        if (!StringListsEqual(x.IndexHints, y.IndexHints)) return false;
+
+        if (x.IndexHintKind != y.IndexHintKind) return false;
+
         if (x.ForJsonClause != y.ForJsonClause) return false;
 
         if (x.ForXmlClause != y.ForXmlClause) return false;
@@ -148,6 +152,8 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
         if (x.ResolvedQuoteIdentifiers != y.ResolvedQuoteIdentifiers) return false;
 
         if (!ReferenceEquals(x.ResolvedNamingConvention, y.ResolvedNamingConvention)) return false;
+
+        if (x.ResolvedKeywordCase != y.ResolvedKeywordCase) return false;
 
         if (!IEqualityComparerExtensions.Equals(this, x.ReferencedQueries, y.ReferencedQueries)) return false;
 
@@ -276,6 +282,14 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
             if (a.Name != b.Name) return false;
             if (a.Recursive != b.Recursive) return false;
             if (a.MaxRecursion != b.MaxRecursion) return false;
+            // A data-modifying CTE's plan is never cached (its insert body is not part of the query
+            // shape), so compare the bodies by reference and the read CTE queries structurally.
+            if (a.IsDataModifying || b.IsDataModifying)
+            {
+                if (!ReferenceEquals(a.Mutation, b.Mutation)) return false;
+                continue;
+            }
+
             if (!Equals(a.Query, b.Query)) return false;
         }
 
@@ -332,6 +346,12 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
             if (obj.TableHints is { Count: > 0 })
                 foreach (var hint in obj.TableHints)
                     hash.Add(hint);
+
+            if (obj.IndexHints is { Count: > 0 })
+                foreach (var index in obj.IndexHints)
+                    hash.Add(index);
+
+            hash.Add(obj.IndexHintKind);
 
             if (obj.ForJsonClause is { } forJson)
                 hash.Add(forJson);
@@ -441,6 +461,8 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
             hash.Add(obj.ResolvedQuoteIdentifiers);
 
             hash.Add(obj.ResolvedNamingConvention);
+
+            hash.Add(obj.ResolvedKeywordCase);
 
             if (obj.WindowsPlanHash != 0)
                 hash.Add(obj.WindowsPlanHash);

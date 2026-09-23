@@ -20,6 +20,55 @@ public static class DataContextExtensions
         => new(dataContext, definition);
 
     /// <summary>
+    /// Starts an <c>INSERT</c> over the mapping of <typeparamref name="TEntity"/> and returns its fluent
+    /// builder. The type's metadata is resolved lazily and cached per process, exactly like
+    /// <c>From&lt;T&gt;()</c>; <paramref name="configEntity"/> therefore runs only on the first call for
+    /// <typeparamref name="TEntity"/> (declare keys/identity/computed columns there or with attributes).
+    /// </summary>
+    /// <typeparam name="TEntity">The mapped entity type to insert.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="configEntity">Optional mapping configuration, run only when the type is first mapped.</param>
+    /// <returns>A builder for the insert.</returns>
+    public static InsertBuilder<TEntity> InsertInto<TEntity>(this IDataContext dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity = null)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+
+        return new(dataContext, ResolveMetadata(configEntity));
+    }
+
+    /// <summary>
+    /// Starts a key upsert over the mapping of <typeparamref name="TEntity"/> and returns its fluent
+    /// builder. The source row set is supplied with <c>Using</c> and the match key with <c>OnKeys</c>;
+    /// the statement is rendered as <c>INSERT ... ON CONFLICT ... DO UPDATE</c>,
+    /// <c>INSERT ... ON DUPLICATE KEY UPDATE</c> or <c>MERGE</c> depending on the provider. Like
+    /// <see cref="InsertInto{TEntity}"/>, the type's metadata is resolved lazily and cached per process,
+    /// so <paramref name="configEntity"/> runs only on the first call for <typeparamref name="TEntity"/>.
+    /// </summary>
+    /// <typeparam name="TEntity">The mapped entity type upserted.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="configEntity">Optional mapping configuration, run only when the type is first mapped.</param>
+    /// <returns>A builder for the key upsert.</returns>
+    public static MergeBuilder<TEntity> MergeInto<TEntity>(this IDataContext dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity = null)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+
+        return new(dataContext, ResolveMetadata(configEntity));
+    }
+
+    private static IEntityMetadata ResolveMetadata<TEntity>(Action<EntityMetadataBuilder<TEntity>>? configEntity)
+    {
+        if (!DataContextCache.Metadata.TryGetValue(typeof(TEntity), out var metadata) || string.IsNullOrEmpty(metadata.TableName))
+        {
+            var eb = new EntityMetadataBuilder<TEntity>();
+            configEntity?.Invoke(eb);
+            metadata = eb.Build();
+            DataContextCache.Metadata[typeof(TEntity)] = metadata;
+        }
+
+        return metadata;
+    }
+
+    /// <summary>
     /// Starts a query over the mapping of <typeparamref name="T"/> and returns its fluent builder.
     /// The type's metadata is resolved lazily and cached per process; <paramref name="configEntity"/>
     /// therefore runs only on the first call for <typeparamref name="T"/>.
@@ -245,6 +294,35 @@ public static class DataContextExtensions
     /// <summary>Starts a CTE scope with a single non-recursive declaration.</summary>
     public static CteQuery With(this IDataContext dataContext, string name, QueryCommand query)
         => new CteQuery(dataContext, [new CteDefinition(name, query)]);
+
+    /// <summary>
+    /// Starts a CTE scope whose first declaration is a data-modifying common table expression: the
+    /// <paramref name="insert"/> runs as the CTE body and its <c>RETURNING</c> rows are read through
+    /// <see cref="MutationCteQuery{TResult}.From(string)"/>. The scope is typed by
+    /// <typeparamref name="TResult"/> so the returned rows can be filtered, joined and projected.
+    /// <para>
+    /// Example: <c>ctx.With("ins", ctx.InsertInto&lt;Order&gt;().Values(o).Returning(x =&gt; new { x.Id }))
+    /// .From("ins").Select(r =&gt; new { r.Id })</c>.
+    /// </para>
+    /// </summary>
+    /// <typeparam name="TEntity">The mapped entity type inserted by the CTE body.</typeparam>
+    /// <typeparam name="TResult">The row shape the CTE returns through <c>RETURNING</c>.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="name">The name the data-modifying CTE is declared under.</param>
+    /// <param name="insert">The returning insert that forms the CTE body.</param>
+    /// <returns>A scope that reads the mutation's returned rows and can declare more read CTEs.</returns>
+    /// <exception cref="NotSupportedException">
+    /// The active provider does not accept a data-modifying CTE body (only PostgreSQL does), or the
+    /// context is the read-only in-memory provider.
+    /// </exception>
+    public static MutationCteQuery<TResult> With<TEntity, TResult>(this IDataContext dataContext, string name, InsertReturningBuilder<TEntity, TResult> insert)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+        ArgumentNullException.ThrowIfNull(insert);
+        ArgumentException.ThrowIfNullOrEmpty(name);
+
+        return MutationCteQuery<TResult>.Create(dataContext, name, insert);
+    }
 
     /// <summary>
     /// Starts a CTE scope with a single recursive declaration. <paramref name="maxRecursion"/>

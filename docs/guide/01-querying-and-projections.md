@@ -443,7 +443,7 @@ select id from simple_entity tablesample (10 percent) repeatable (42)
 PostgreSQL supports both `System` and [`Bernoulli`](xref:NextORM.Core.TableSampleMethod.Bernoulli);
 SQL Server supports only `System`. Every other provider throws `NotSupportedException` when the SQL is
 built ([`TableSample`](xref:NextORM.Core.ISqlDialect.TableSample) and
-[`ITableSampleMethods.Render`](xref:NextORM.Core.ITableSampleMethods.Render(NextORM.Core.TableSampleMethod,System.Double,System.Nullable{System.Double}))). The modifier applies to the query's
+[`ITableSampleMethods.Render`](xref:NextORM.Core.ITableSampleMethods.Render(NextORM.Core.TableSampleMethod,System.Double,System.Nullable{System.Double},NextORM.Core.KeywordCase))). The modifier applies to the query's
 primary table only.
 
 ## JSON output (SQL Server)

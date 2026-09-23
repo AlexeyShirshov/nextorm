@@ -23,6 +23,47 @@ public class SqlGenerationTests
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd) => Normalize(Prepare(ctx, cmd).DbCommand.CommandText);
 
     [Fact]
+    public void IndexHint_WithIndex_ShouldEmitWithIndex()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.WithIndex("idx_id").Select(x => new { x.Id }))
+            .Should().Be("select id from simple_entity with (index(idx_id))");
+    }
+
+    [Fact]
+    public void IndexHint_ShouldMergeWithTableHintIntoSingleWithClause()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.WithTableHint("nolock").WithIndex("idx_id").Select(x => new { x.Id }))
+            .Should().Be("select id from simple_entity with (nolock, index(idx_id))");
+    }
+
+    [Fact]
+    public void KeywordCase_Upper_ShouldUppercaseTableHintsAndIndexHint()
+    {
+        using var ctx = SqlServerTestContext.CreateUppercase();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.WithTableHint("nolock").WithIndex("idx_id").Select(x => new { x.Id }))
+            .Should().Contain("WITH (nolock, INDEX(idx_id))");
+    }
+
+    [Fact]
+    public void KeywordCase_Upper_ShouldUppercaseSkeletonAndAlias()
+    {
+        using var ctx = SqlServerTestContext.CreateUppercase();
+        var e = ctx.From<ISimpleEntity>();
+
+        var sql = SqlOf(ctx, e.Limit(3).Select(x => new { X = x.Id }));
+
+        sql.Should().Contain("SELECT TOP(3) id AS [X] FROM simple_entity");
+    }
+
+    [Fact]
     public void SelectDistinct_ShouldEmitDistinct()
     {
         using var ctx = SqlServerTestContext.Create();
@@ -2164,6 +2205,36 @@ public class SqlGenerationTests
 
         SqlOf(ctx, e.ForShare().Select(x => x.Id))
             .Should().Be("select id from simple_entity with (holdlock)");
+    }
+
+    [Fact]
+    public void KeywordCase_Upper_ShouldUppercaseDialectClauses()
+    {
+        using var ctx = SqlServerTestContext.CreateUppercase();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.Select(x => new { x.Id }).ForJson())
+            .Should().EndWith("FOR JSON PATH");
+
+        SqlOf(ctx, e.Select(x => new { x.Id }).ForXml(ForXmlMode.Raw, "row", "root", elements: true))
+            .Should().EndWith("FOR XML RAW('row'), ROOT('root'), ELEMENTS");
+
+        SqlOf(ctx, e.Select(x => new { x.Id }).Hint("recompile"))
+            .Should().EndWith("OPTION (recompile)");
+
+        SqlOf(ctx, e.TableSample(10, TableSampleMethod.System, 3).Select(x => x.Id))
+            .Should().EndWith("TABLESAMPLE (10 PERCENT) REPEATABLE (3)");
+
+        SqlOf(ctx, e.ForSystemTime(TemporalClause.All()).Select(x => x.Id))
+            .Should().EndWith("FOR SYSTEM_TIME ALL");
+
+        SqlOf(ctx, e.ForUpdate().Select(x => x.Id))
+            .Should().EndWith("WITH (UPDLOCK)");
+
+        var anchor = e.Where(s => s.Id == 1).Select(s => new CteNumberRow { n = s.Id });
+        var step = ctx.From("nums").Where(t => t["n"].AsInt < 5).Select(t => new CteNumberRow { n = t["n"].AsInt + 1 });
+        SqlOf(ctx, ctx.WithRecursive("nums", anchor.UnionAll(step), 100).From("nums").Select(t => new CteNumberRow { n = t["n"].AsInt }))
+            .Should().Contain("OPTION (MAXRECURSION 100)");
     }
 
     [Fact]

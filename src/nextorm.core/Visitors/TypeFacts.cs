@@ -75,6 +75,23 @@ internal static class TypeFacts
             || type.GetGenericTypeDefinition() == typeof(Tuple<,,,,,,>));
 
     /// <summary>
+    /// True for the <see cref="ValueTuple"/> family (arity 1..7), the value-type tuple shape a
+    /// projection can also construct.
+    /// </summary>
+    internal static bool IsValueTupleType(Type type) =>
+        type.IsGenericType
+        && (type.GetGenericTypeDefinition() == typeof(ValueTuple<>)
+            || type.GetGenericTypeDefinition() == typeof(ValueTuple<,>)
+            || type.GetGenericTypeDefinition() == typeof(ValueTuple<,,>)
+            || type.GetGenericTypeDefinition() == typeof(ValueTuple<,,,>)
+            || type.GetGenericTypeDefinition() == typeof(ValueTuple<,,,,>)
+            || type.GetGenericTypeDefinition() == typeof(ValueTuple<,,,,,>)
+            || type.GetGenericTypeDefinition() == typeof(ValueTuple<,,,,,,>));
+
+    /// <summary>True for either the <see cref="Tuple"/> or the <see cref="ValueTuple"/> family.</summary>
+    internal static bool IsTupleLike(Type type) => IsTupleType(type) || IsValueTupleType(type);
+
+    /// <summary>
     /// True when a numeric CLR conversion actually changes the type and therefore has to be emitted
     /// as <c>cast(...)</c>; dropping it would silently change the SQL semantics.
     /// </summary>

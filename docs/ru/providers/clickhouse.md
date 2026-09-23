@@ -104,7 +104,7 @@ ADO.NET-провайдер `ClickHouse.Driver`. Он создаёт `ClickHouseC
 - модификаторы строгости/типа join `ANY`/`ALL`/`ASOF` через
   [`EntityBuilder.WithStrictness`](xref:NextORM.Core.EntityBuilder`1.WithStrictness(NextORM.Core.JoinStrictness)) сразу после join
   ([`SupportsJoinStrictness`](xref:NextORM.Core.ISqlDialect.SupportsJoinStrictness),
-  [`MakeJoinKeyword`](xref:NextORM.Core.ISqlDialect.MakeJoinKeyword(NextORM.Core.JoinType,NextORM.Core.JoinStrictness,System.Boolean)), enum `JoinStrictness`).
+  [`MakeJoinKeyword`](xref:NextORM.Core.ISqlDialect.MakeJoinKeyword(NextORM.Core.JoinType,NextORM.Core.JoinStrictness,System.Boolean,NextORM.Core.KeywordCase)), enum `JoinStrictness`).
   `LEFT ANY JOIN` оставляет одну правую строку на каждую левую, `ALL` — все совпадения, а `ASOF`
   требует хотя бы одной equi-колонки и неравенства последним. Для видов `SEMI`/`ANTI`/`PASTE` есть
   отдельные методы-построители: [`SemiJoin`](xref:NextORM.Core.EntityBuilder`1.SemiJoin``1(NextORM.Core.EntityBuilder{``0},System.Linq.Expressions.Expression{System.Func{`0,``0,System.Boolean}}))/`AntiJoin` отдают

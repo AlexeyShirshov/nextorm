@@ -42,6 +42,11 @@ change.
 |---|---|---|---|---|---|---|---|
 | Package | `nextorm.sqlite` | `nextorm.sqlserver` | `nextorm.postgres` | `nextorm.mysql` | `nextorm.mariadb` | `nextorm.clickhouse` | built into `nextorm` |
 | Parameter placeholder | `$name` | `@name` | `@name` | `@name` | `@name` | `@name` | not applicable |
+| `INSERT ... VALUES` | supported | supported | supported | supported | supported | supported (small batches) | throws `NotSupportedException` |
+| Key upsert (`MergeInto`) | `ON CONFLICT ... DO UPDATE` | `MERGE ... USING (VALUES ...)` | `ON CONFLICT ... DO UPDATE` | `ON DUPLICATE KEY UPDATE` | `ON DUPLICATE KEY UPDATE` | throws `NotSupportedException` | throws `NotSupportedException` |
+| Generated key (`ReturningIdentity`/`ReturningKey`) | `RETURNING` | `OUTPUT inserted.<col>` | `RETURNING` | `LAST_INSERT_ID()` fallback | `LAST_INSERT_ID()` fallback | throws `NotSupportedException` | throws `NotSupportedException` |
+| Identity function (`ReturningIdentity<TKey>()`) | `last_insert_rowid()` | `SCOPE_IDENTITY()` | `lastval()` | `LAST_INSERT_ID()` | `LAST_INSERT_ID()` | throws `NotSupportedException` | throws `NotSupportedException` |
+| Return inserted rows (`Returning`) | `RETURNING` | `OUTPUT inserted.<cols>` | `RETURNING` | throws `NotSupportedException` | throws `NotSupportedException` | throws `NotSupportedException` | throws `NotSupportedException` |
 | Limit only | `limit n` | `top(n)` | `limit n` | `limit n` | `limit n` | `limit n` | in-process take |
 | Limit + offset | `limit n offset m` | `offset m rows fetch next n rows only` | `limit n offset m` | `limit n offset m` | `limit n offset m` | `limit n offset m` | in-process skip/take |
 | Offset only | `limit -1 offset m` | `offset m rows` | `offset m` | `limit 18446744073709551615 offset m` | `limit 18446744073709551615 offset m` | `limit 18446744073709551615 offset m` | in-process skip |
@@ -94,7 +99,7 @@ runtime behaviour.
 ## How a dialect plugs in
 
 A dialect implements [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) or derives from [`SqlDialectBase`](xref:NextORM.Core.SqlDialectBase). In [`SqlDialectBase`](xref:NextORM.Core.SqlDialectBase) only
-[`MakeParam`](xref:NextORM.Core.ISqlDialect.MakeParam(System.String)) and [`MakePage`](xref:NextORM.Core.ISqlDialect.MakePage(NextORM.Core.Paging,System.Text.StringBuilder)) are abstract; every other member has a working ANSI default, so a dialect
+[`MakeParam`](xref:NextORM.Core.ISqlDialect.MakeParam(System.String)) and [`MakePage`](xref:NextORM.Core.ISqlDialect.MakePage(NextORM.Core.Paging,System.Text.StringBuilder,NextORM.Core.KeywordCase)) are abstract; every other member has a working ANSI default, so a dialect
 overrides just what is different. Capability differences (paging requiring an `ORDER BY`, required
 subquery aliases, `INTERSECT ALL`/`EXCEPT ALL`) are expressed as properties rather than special cases in
 the SQL builder.

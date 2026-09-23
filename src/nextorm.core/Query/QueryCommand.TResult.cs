@@ -589,7 +589,9 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     public QueryCommand<TResult> WithQuotedIdentifiers(bool value = true)
     {
         var cmd = (QueryCommand<TResult>)Clone();
+        var source = cmd._from;
         cmd.ResetPreparation();
+        cmd._from = source;
         cmd.QuoteIdentifiers = value;
         return cmd;
     }
@@ -603,8 +605,25 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     public QueryCommand<TResult> WithNamingConvention(INamingConvention? convention)
     {
         var cmd = (QueryCommand<TResult>)Clone();
+        var source = cmd._from;
         cmd.ResetPreparation();
+        cmd._from = source;
         cmd.NamingConvention = convention;
+        return cmd;
+    }
+    /// <summary>
+    /// Overrides the letter case in which this command's SQL keywords are emitted: <c>Upper</c> renders
+    /// <c>SELECT ... FROM ...</c>, <c>Lower</c> renders <c>select ... from ...</c>. Without a call the
+    /// command inherits the context default set with <c>DataContextBuilder.UseKeywordCase</c>.
+    /// Identifiers, string literals, function names, type names and raw SQL are never affected.
+    /// </summary>
+    public QueryCommand<TResult> WithKeywordCase(KeywordCase keywordCase = global::NextORM.Core.KeywordCase.Upper)
+    {
+        var cmd = (QueryCommand<TResult>)Clone();
+        var source = cmd._from;
+        cmd.ResetPreparation();
+        cmd._from = source;
+        cmd.KeywordCase = keywordCase;
         return cmd;
     }
     /// <summary>

@@ -91,6 +91,129 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void KeywordCase_CommandOverride_ShouldPreserveCteSource()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+        var cte = e.Where(x => x.Id > 1).Select(x => new { x.Id });
+
+        var cmd = ctx.With("recent", cte).From("recent").Select(t => new { id = t["id"].AsInt });
+        var sql = SqlOf(ctx, cmd.WithKeywordCase());
+
+        sql.Should().StartWith("WITH ");
+        sql.Should().Contain("FROM recent");
+    }
+
+    [Fact]
+    public void IndexHint_WithIndex_ShouldEmitIndexedBy()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.WithIndex("idx_id").Select(x => new { x.Id }))
+            .Should().Be("select id from simple_entity indexed by idx_id");
+    }
+
+    [Fact]
+    public void IndexHint_WithoutIndex_ShouldEmitNotIndexed()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.WithoutIndex().Select(x => new { x.Id }))
+            .Should().Be("select id from simple_entity not indexed");
+    }
+
+    [Fact]
+    public void IndexHint_ShouldRespectKeywordCase()
+    {
+        using var ctx = SqliteTestContext.CreateUppercase();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.WithIndex("idx_id").Select(x => new { x.Id }))
+            .Should().Contain("INDEXED BY idx_id");
+    }
+
+    [Fact]
+    public void KeywordCase_Upper_ShouldUppercaseCoreKeywords()
+    {
+        using var ctx = SqliteTestContext.CreateUppercase();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.Where(x => x.Id > 1).Select(x => new { x.Id }))
+            .Should().Be("SELECT id FROM simple_entity\n WHERE (id > 1)");
+    }
+
+    [Fact]
+    public void KeywordCase_Upper_ShouldUppercaseLogicalAndConditional()
+    {
+        using var ctx = SqliteTestContext.CreateUppercase();
+        var e = ctx.From<ISimpleEntity>();
+
+        var sql = SqlOf(ctx, e
+            .Where(x => x.Id > 1 && x.Id < 5)
+            .Select(x => x.Id == 1 ? 10 : 20));
+
+        sql.Should().Contain("WHERE ((id > 1) AND (id < 5))");
+        sql.Should().Contain("CASE WHEN");
+        sql.Should().Contain(" THEN ");
+        sql.Should().Contain(" ELSE ");
+        sql.Should().Contain(" END");
+    }
+
+    [Fact]
+    public void KeywordCase_Upper_ShouldNotTouchIdentifiersLiteralsOrFunctions()
+    {
+        using var ctx = SqliteTestContext.CreateUppercaseQuoted();
+        var e = ctx.From<IKeywordEntity>();
+
+        var sql = SqlOf(ctx, e.Where(x => x.Value == 1).Select(x => new { x.Value }));
+
+        sql.Should().Contain("\"select\"");
+        sql.Should().Contain("\"order\"");
+        sql.Should().NotContain("\"SELECT\"");
+        sql.Should().NotContain("\"ORDER\"");
+    }
+
+    [Fact]
+    public void KeywordCase_Upper_ShouldNotRewriteStringLiteral()
+    {
+        using var ctx = SqliteTestContext.CreateUppercase();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Where(x => x.String == "select from where").Select(x => new { x.Id }));
+
+        sql.Should().Contain("'select from where'");
+    }
+
+    [Fact]
+    public void KeywordCase_Lower_IsDefaultAndCommandOverride_ShouldWin()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var lower = SqlOf(ctx, e.Select(x => new { x.Id }));
+        lower.Should().StartWith("select ");
+
+        var upper = SqlOf(ctx, e.WithKeywordCase().Select(x => new { x.Id }));
+        upper.Should().StartWith("SELECT ");
+        upper.Should().NotBe(lower);
+    }
+
+    [Fact]
+    public void KeywordCase_Upper_ShouldUppercaseAliasesAndPaging()
+    {
+        using var ctx = SqliteTestContext.CreateUppercase();
+        var e = ctx.From<ISimpleEntity>();
+
+        var sql = SqlOf(ctx, e.Limit(3).Offset(2).Select(x => new { X = x.Id }));
+
+        sql.Should().Contain("SELECT id AS 'X'");
+        sql.Should().Contain("LIMIT 3");
+        sql.Should().Contain("OFFSET 2");
+    }
+
+    [Fact]
     public void QuotedIdentifiers_Join_ShouldQuoteTablesAndColumns()
     {
         using var ctx = SqliteTestContext.CreateQuoted();

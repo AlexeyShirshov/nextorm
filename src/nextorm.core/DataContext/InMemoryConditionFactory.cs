@@ -20,11 +20,15 @@ internal static class InMemoryConditionFactory
     /// so the enumerator does not index/box an <c>object[]</c> on every row.
     /// </summary>
     public static (Func<object[]?, Func<TEntity, bool>>? Factory, Func<TEntity, bool>? Direct) GetConditionPredicates<TResult, TEntity>(
+        InMemoryDataContext context,
         QueryCommand<TResult> query,
         Expression<Func<TEntity, bool>> condition,
         IDictionary<ExpressionKey, Delegate> conditionFactoryCache,
         IDictionary<ExpressionKey, Delegate> conditionDirectCache)
     {
+        if (InMemoryCorrelatedSubqueryRewriter.IsNeeded(query))
+            condition = (Expression<Func<TEntity, bool>>)new InMemoryCorrelatedSubqueryRewriter(context, query).Rewrite(condition);
+
         var key = new ExpressionKey(condition, query);
         if (conditionFactoryCache.TryGetValue(key, out var f))
             return ((Func<object[]?, Func<TEntity, bool>>)f, null);

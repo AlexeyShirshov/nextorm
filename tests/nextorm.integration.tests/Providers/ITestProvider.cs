@@ -63,6 +63,13 @@ public interface ITestProvider
     /// </summary>
     bool SupportsApply { get; }
 
+    /// <summary>
+    /// True when the provider can return the written rows from an <c>INSERT</c> through its
+    /// <c>RETURNING</c>/<c>OUTPUT</c> form. PostgreSQL, SQLite and SQL Server can; MySQL/MariaDB,
+    /// ClickHouse and the in-memory provider cannot, so the shared returning tests are skipped there.
+    /// </summary>
+    bool SupportsInsertReturning { get; }
+
     void EnsureSeeded();
 
     IDataContext CreateContext();

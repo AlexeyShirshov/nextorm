@@ -11,6 +11,9 @@ public class EntityPropertyBuilder<T>
 {
     private readonly Expression<Func<T, object>> _propertySelector;
     private string? _columnName;
+    private bool _isKey;
+    private bool _isIdentity;
+    private bool _isComputed;
 
     /// <summary>
     /// Creates a builder for the property selected by <paramref name="propertySelector"/>.
@@ -33,6 +36,39 @@ public class EntityPropertyBuilder<T>
     }
 
     /// <summary>
+    /// Marks the selected property as (part of) the entity key. The DML builders use the key to
+    /// address a row; declaring it here avoids the <c>Id</c>/<c>&lt;TypeName&gt;Id</c> convention.
+    /// </summary>
+    /// <returns>This builder, for chaining.</returns>
+    public EntityPropertyBuilder<T> Key()
+    {
+        _isKey = true;
+        return this;
+    }
+
+    /// <summary>
+    /// Marks the selected property as database-generated (an identity/auto-increment column). The
+    /// insert builders exclude it from the written values.
+    /// </summary>
+    /// <returns>This builder, for chaining.</returns>
+    public EntityPropertyBuilder<T> Identity()
+    {
+        _isIdentity = true;
+        return this;
+    }
+
+    /// <summary>
+    /// Marks the selected property as a database-generated computed column that can never be written.
+    /// The insert builders exclude it from the written values.
+    /// </summary>
+    /// <returns>This builder, for chaining.</returns>
+    public EntityPropertyBuilder<T> Computed()
+    {
+        _isComputed = true;
+        return this;
+    }
+
+    /// <summary>
     /// Resolves the selected property's <see cref="PropertyInfo"/> and produces its mapping metadata.
     /// </summary>
     /// <returns>The property's mapping metadata.</returns>
@@ -42,7 +78,7 @@ public class EntityPropertyBuilder<T>
         var miVisitor = new MemberExpressionVisitor();
         miVisitor.Visit(_propertySelector);
         var pi = (PropertyInfo)miVisitor.MemberInfo! ?? throw new InvalidOperationException($"Expression {_propertySelector} does not produce PropertyInfo");
-        var r = new PropertyMetadata() { ColumnName = _columnName!, PropertyInfo = pi, IsColumnNameAuto = false };
+        var r = new PropertyMetadata() { ColumnName = _columnName!, PropertyInfo = pi, IsColumnNameAuto = false, IsKey = _isKey, IsIdentity = _isIdentity, IsComputed = _isComputed };
         return r;
     }
 }

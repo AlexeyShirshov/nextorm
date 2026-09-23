@@ -42,6 +42,11 @@ nextorm состоит из нейтрального к провайдеру я�
 |---|---|---|---|---|---|---|---|
 | Пакет | `nextorm.sqlite` | `nextorm.sqlserver` | `nextorm.postgres` | `nextorm.mysql` | `nextorm.mariadb` | `nextorm.clickhouse` | встроен в `nextorm` |
 | Плейсхолдер параметра | `$name` | `@name` | `@name` | `@name` | `@name` | `@name` | не применимо |
+| `INSERT ... VALUES` | поддерживается | поддерживается | поддерживается | поддерживается | поддерживается | поддерживается (малые батчи) | бросает `NotSupportedException` |
+| Key upsert (`MergeInto`) | `ON CONFLICT ... DO UPDATE` | `MERGE ... USING (VALUES ...)` | `ON CONFLICT ... DO UPDATE` | `ON DUPLICATE KEY UPDATE` | `ON DUPLICATE KEY UPDATE` | бросает `NotSupportedException` | бросает `NotSupportedException` |
+| Сгенерированный ключ (`ReturningIdentity`/`ReturningKey`) | `RETURNING` | `OUTPUT inserted.<col>` | `RETURNING` | фолбэк `LAST_INSERT_ID()` | фолбэк `LAST_INSERT_ID()` | бросает `NotSupportedException` | бросает `NotSupportedException` |
+| Identity-функция (`ReturningIdentity<TKey>()`) | `last_insert_rowid()` | `SCOPE_IDENTITY()` | `lastval()` | `LAST_INSERT_ID()` | `LAST_INSERT_ID()` | бросает `NotSupportedException` | бросает `NotSupportedException` |
+| Возврат вставленных строк (`Returning`) | `RETURNING` | `OUTPUT inserted.<cols>` | `RETURNING` | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` |
 | Только limit | `limit n` | `top(n)` | `limit n` | `limit n` | `limit n` | `limit n` | take в процессе |
 | Limit + offset | `limit n offset m` | `offset m rows fetch next n rows only` | `limit n offset m` | `limit n offset m` | `limit n offset m` | `limit n offset m` | skip/take в процессе |
 | Только offset | `limit -1 offset m` | `offset m rows` | `offset m` | `limit 18446744073709551615 offset m` | `limit 18446744073709551615 offset m` | `limit 18446744073709551615 offset m` | skip в процессе |
@@ -93,7 +98,7 @@ nextorm состоит из нейтрального к провайдеру я�
 ## Как подключается диалект
 
 Диалект реализует [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) или наследуется от [`SqlDialectBase`](xref:NextORM.Core.SqlDialectBase). В [`SqlDialectBase`](xref:NextORM.Core.SqlDialectBase) абстрактными являются только
-[`MakeParam`](xref:NextORM.Core.ISqlDialect.MakeParam(System.String)) и [`MakePage`](xref:NextORM.Core.ISqlDialect.MakePage(NextORM.Core.Paging,System.Text.StringBuilder)); у всех остальных членов есть рабочее значение по умолчанию ANSI, поэтому диалект
+[`MakeParam`](xref:NextORM.Core.ISqlDialect.MakeParam(System.String)) и [`MakePage`](xref:NextORM.Core.ISqlDialect.MakePage(NextORM.Core.Paging,System.Text.StringBuilder,NextORM.Core.KeywordCase)); у всех остальных членов есть рабочее значение по умолчанию ANSI, поэтому диалект
 переопределяет только то, что отличается. Различия возможностей (разбиение на страницы, требующее `ORDER BY`, обязательные
 псевдонимы подзапросов, `INTERSECT ALL`/`EXCEPT ALL`) выражаются свойствами, а не особыми случаями в
 построителе SQL.

@@ -57,6 +57,56 @@ internal sealed class QueryPlanner : IQueryPlanner
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool IsRuntimeParam(string name) => NormParam.IsName(name);
 
+    // Renders a standalone SELECT (the source of an INSERT ... SELECT) to SQL plus its parameters, and
+    // hoists any CTE the source declares out of the SELECT. A data-modifying CTE must sit at the top
+    // level of the statement, so the caller places WithSql before "insert into"; a plain read CTE is
+    // hoisted the same way. The WITH and the SELECT share one parameter provider so the numbering matches
+    // the emitted SQL. Runtime SqlFunctions.Parameter placeholders cannot be bound through a mutation
+    // command, so they are rejected with an actionable message.
+    internal (string? WithSql, string Sql, List<Parameter> Parameters) RenderSource(QueryCommand source)
+    {
+        if (!source.IsPrepared)
+            source.PrepareCommand(false, CancellationToken.None);
+
+        var @params = new List<Parameter>();
+        var ctx = new SqlBuildContext
+        {
+            Dialect = _dialect(),
+            ParamMode = false,
+            Params = @params,
+            ColumnsProvider = new DefaultColumnsProvider(),
+            QueryProvider = source,
+            ParameterProvider = new DefaultParameterProvider(),
+            AliasProvider = new DefaultAliasProvider(),
+            Logger = _logger!,
+            QuoteIdentifiers = source.ResolvedQuoteIdentifiers,
+            NamingConvention = source.ResolvedNamingConvention,
+            KeywordCase = source.ResolvedKeywordCase,
+        };
+
+        string? withSql = null;
+        var body = source;
+        if (source.Ctes is { Count: > 0 } ctes)
+        {
+            withSql = SqlSourceRenderer.MakeWithClause(in ctx, ctes, out _);
+
+            body = source.CloneForCache();
+            body.Ctes = null;
+            ctx = ctx with { QueryProvider = body };
+        }
+
+        var sql = new SqlBuilder(in ctx).MakeSelect(body);
+
+        for (var i = 0; i < @params.Count; i++)
+        {
+            if (NormParam.IsName(@params[i].Name))
+                throw new NotSupportedException(
+                    "An INSERT ... SELECT source cannot use SqlFunctions.Parameter runtime placeholders; capture the value in a local variable instead.");
+        }
+
+        return (withSql, sql!, @params);
+    }
+
     private string? MakeSelect(QueryCommand queryCommand, bool paramMode, List<Parameter> @params, IQueryRegistry queryProvider, IAliasProvider? aliasProvider)
     {
         var ctx = new SqlBuildContext
@@ -71,6 +121,7 @@ internal sealed class QueryPlanner : IQueryPlanner
             Logger = _logger!,
             QuoteIdentifiers = queryCommand.ResolvedQuoteIdentifiers,
             NamingConvention = queryCommand.ResolvedNamingConvention,
+            KeywordCase = queryCommand.ResolvedKeywordCase,
         };
         var sqlBuilder = new SqlBuilder(in ctx);
         return sqlBuilder.MakeSelect(queryCommand);

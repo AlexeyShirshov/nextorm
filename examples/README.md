@@ -2,7 +2,8 @@
 
 Three runnable console applications that model realistic demo databases. Each one provisions its
 database with [Testcontainers](https://dotnet.testcontainers.org/) on first run (downloading and
-caching the official dataset), then executes the five demo queries and prints the result rows.
+caching the official dataset into a named Docker volume), then executes the five demo queries and
+prints the result rows. The examples only read, so the loaded database is reused on later runs.
 
 The model SQL lives next to the code, in each project's `Sql/` folder, and every C# method names the
 file it models. Each project README maps every SQL construct to the nextorm construct that replaces
@@ -13,6 +14,10 @@ it — start there to understand how to translate a query.
 | [`nextorm.examples.postgres.aviasales`](nextorm.examples.postgres.aviasales/README.md) | `nextorm.postgres` | PostgreSQL Pro demo «Авиаперевозки» (schema `bookings`), 2025-09-01 | [Sql/](nextorm.examples.postgres.aviasales/Sql) |
 | [`nextorm.examples.mssql.adventureworks`](nextorm.examples.mssql.adventureworks/README.md) | `nextorm.sqlserver` | AdventureWorks 2022 | [Sql/](nextorm.examples.mssql.adventureworks/Sql) |
 | [`nextorm.examples.clickhouse.analytics`](nextorm.examples.clickhouse.analytics/README.md) | `nextorm.clickhouse` | ClickHouse `datasets.hits_v1` | [Sql/](nextorm.examples.clickhouse.analytics/Sql) |
+
+> The three projects consume the **published `nextorm.*` NuGet packages** (version pinned by
+> `NextOrmVersion` in [`Directory.Packages.props`](../Directory.Packages.props)) instead of referencing
+> `src/` directly, so they double as a real consumer of what ships on nuget.org.
 
 ## Running
 
@@ -36,6 +41,10 @@ and reused. To run against an already provisioned server instead, pass a connect
 | analytics | `--connection` | `CLICKHOUSE_ANALYTICS_CONNECTION` (fallback `NEXTORM_DEMODB_CLICKHOUSE_CONNECTION`) |
 
 When a connection string is supplied, no container is started and no dataset is downloaded.
+
+The provisioned database is cached in a named volume (`nextorm-examples-{aviasales,adventureworks,clickhouse}-data`),
+so a warm run skips the dataset copy and the load and only starts a container against the existing
+volume. Set `NEXTORM_EXAMPLES_RELOAD=true` to delete the volume and rebuild from scratch.
 
 All queries run to completion: the program reports `[ OK ]`/`[FAIL]` per query and ends with an
 `n/m succeeded` summary. Only documented engine gaps (`NotSupportedException`/`QueryPreparationException`)
@@ -81,11 +90,13 @@ instead of being masked:
 * **SQL Server `PIVOT`** — the native `EntityBuilder.Pivot` now exists, but it accepts only a plain
   table/entity source; query 5 pivots a join-derived `WITH OrderMargins` CTE with a computed aggregate
   and `FOR` column, so it throws instead of being rewritten as conditional aggregation.
-* **ClickHouse** — `windowFunnel`, `lagInFrame` → `lag_in_frame`, `multiIf` → `multi_if` and
-  `countIf`/`uniq` are now expressed natively in LINQ (`runningAccumulate` is still approximated by a
-  framed `sum_over`); `arrayMap`/`arrayFilter`/array columns, `uniqMerge` (`-Merge`/`-State`) and
-  `groupArray`/tuple results still have no LINQ surface, so those queries throw instead of running the
-  original SQL through `WithSql`.
+* **ClickHouse** — `windowFunnel`, `lagInFrame` → `lag_in_frame`, `multiIf` → `multi_if`,
+  `countIf`/`uniq` are expressed natively in LINQ (`runningAccumulate` is still approximated by a framed
+  `sum_over`), and the array / higher-order-lambda surface (`splitByChar`, `arrayMap`, `arrayFilter`,
+  grouping by an array) plus `groupArray((…))`/tuple results are expressed through
+  `split_by_char`/`array_map`/`array_filter`/`group_array` + `Tuple.Create`; only `uniqMerge`
+  (`-Merge`/`-State`) still has no LINQ surface, so that query throws instead of running the original SQL
+  through `WithSql`.
 
 ## Extra course exercises
 
@@ -108,7 +119,7 @@ Last run against Testcontainers (Podman):
 |---|---|---|
 | postgres aviasales | 11/11 | — |
 | mssql adventureworks | 11/11 | — |
-| clickhouse analytics | 8/11 | `ArrayAnalytics`, `Incremental`, `Retention` (arrays / `-Merge` / `groupArray` have no LINQ surface) |
+| clickhouse analytics | 10/11 | `Incremental` (`uniqMerge` / `-Merge` has no LINQ surface on the released packages) |
 
 The detailed, dated verification log (per-query failures and the roadmap item that tracks each) lives in
 [`VERIFICATION.md`](VERIFICATION.md) — update it on every re-run.

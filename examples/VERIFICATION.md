@@ -1,6 +1,7 @@
 # Examples verification report
 
-> **Last verified: 2026-09-21** (working tree on top of commit `8670bba`).
+> **Last verified: 2026-09-23** (examples switched to the published `nextorm` **1.0.4-alpha** NuGet
+> packages; ClickHouse queries re-validated against `clickhouse/clickhouse-server:25.8-alpine`).
 > Re-run the examples whenever the engine gains features and update the tables below. This file is the
 > source of truth for "what works / what does not and why"; the topics are owned by the roadmap backlog
 > under [`docs/specs/roadmap/`](../docs/specs/roadmap) and [`docs/specs/`](../docs/specs).
@@ -27,21 +28,40 @@ are recorded as `FAIL`; any other exception aborts the run.
 |---|---|---|
 | `nextorm.examples.postgres.aviasales` | **11/11** | — |
 | `nextorm.examples.mssql.adventureworks` | **11/11** | — |
-| `nextorm.examples.clickhouse.analytics` | **8/11** | `ArrayAnalytics`, `Incremental`, `Retention` |
+| `nextorm.examples.clickhouse.analytics` | **10/11** | `Incremental` |
 
 ## Failures and their tracked cause
 
 | Query | Why it fails | Tracked in |
 |---|---|---|
-| CH `ArrayAnalytics` | higher-order lambdas `arrayMap`/`arrayFilter` (and grouping by an array) are not translated | [`todo_clickhouse_arrays.md`](../docs/specs/roadmap/todo_clickhouse_arrays.md) (lambda/higher-order аргументы) |
-| CH `Incremental` | no `AggregateFunction(...)` state type, so the `-Merge` combinator `uniqMerge` cannot be expressed | [`todo_clickhouse_aggregate_function_state.md`](../docs/specs/roadmap/todo_clickhouse_aggregate_function_state.md) |
-| CH `Retention` | no row reader for `Array(T)`/`Tuple`, so `groupArray((...))` cannot be materialised | [`todo_clickhouse_arrays.md`](../docs/specs/roadmap/todo_clickhouse_arrays.md) |
+| CH `Incremental` | `uniqMerge`, the `-Merge` combinator over an `AggregateFunction(uniq, …)` state column, has no LINQ surface in the released packages (the state cannot be projected as a scalar) | [`todo_clickhouse_aggregate_function_state.md`](../docs/specs/roadmap/todo_clickhouse_aggregate_function_state.md) |
 
 MSSQL `QuarterlyPivot` is no longer a failure: the native `PIVOT` now accepts a derived query, so the
 reference `WITH OrderMargins AS (<5-table join>) ... PIVOT (...)` is expressed directly.
 
 ## Actuality changes made on this verification
 
+* **Examples moved to the published packages.** The three projects now reference the `nextorm.*` NuGet
+  packages (`NextOrmVersion = 1.0.4-alpha` in [`Directory.Packages.props`](../Directory.Packages.props))
+  instead of `src/`, so they build against what ships on nuget.org. Re-run against Testcontainers after
+  the switch: postgres `11/11`, mssql `11/11`, clickhouse `10/11` (`Incremental` only).
+* **Databases are cached in named Docker volumes (the examples are read-only).** Each `DemoDatabase`
+  mounts a named volume at the provider's data directory and only copies the dataset + loads when a
+  row-count probe finds no data, so warm runs skip the copy and the multi-minute load and merely start
+  a container against the existing volume. Measured on Podman: mssql cold `31 s` → warm `12 s`,
+  postgres cold `2:34` → warm `1:31` (query time dominates), clickhouse cold `2:54` → warm `28 s`.
+  `NEXTORM_EXAMPLES_RELOAD=true` deletes the volume first for a cold rebuild. Volumes:
+  `nextorm-examples-{aviasales,adventureworks,clickhouse}-data`.
+* **CH `ArrayAnalytics` and `Retention` are now `WORKING` (ClickHouse 8/11 → 10/11).** The stale
+  "higher-order lambdas / `groupArray` have no LINQ surface" notes were wrong for the 1.0.4 surface:
+  `ArrayAnalytics` uses `split_by_char` → `array_map` → `array_filter` grouped by the resulting array, and
+  `Retention` uses `ctx.With(...)` CTEs + `group_array(Tuple.Create(...))`. `length(x)` inside the
+  higher-order lambda is written as `x.ToLower().Length` because member access on the lambda parameter
+  (`x.Length`) is rejected by the translator. A full `hits_v1` run against the 1.0.4 packages completed
+  with **10/11** — `[ OK ]` for `ArrayAnalytics` and `Retention` (plus all six course exercises), the only
+  `FAIL` being `Incremental`.
+* **CH `Incremental` remains the only `FAIL`**: `uniqMerge` (the `-Merge`/`-State` combinator) has no LINQ
+  surface in the released packages.
 * **CH `Sessions`** now uses the native `SqlFunctions.ClickHouse.lag_in_frame(...)` (was emulated with
   `Sql.lag`). `runningAccumulate(...)` is still emulated by a framed `sum_over(...)`.
 * **CH `SessionDepth`** now uses `SqlFunctions.ClickHouse.multi_if(when(...), …, otherwise(...))` in
@@ -65,7 +85,8 @@ reference `WITH OrderMargins AS (<5-table join>) ... PIVOT (...)` is expressed d
   fails with `DockerUnavailableException`. Recreate it with
   `"/mnt/c/Program Files/RedHat/Podman/podman.exe" machine start` (idempotent) and wait for
   `podman-user.sock` to reappear before retrying.
-* Loading `hits_v1` copies the ~841 MB archive through memory; free memory first
-  (`dotnet build-server shutdown`, `POST /containers/prune`) or the process is OOM-killed.
+* The first (cold) `hits_v1` load copies the ~841 MB archive and builds the columnar parts; free memory
+  first (`dotnet build-server shutdown`, `POST /containers/prune`) or the process is OOM-killed. Warm
+  runs reuse the named volume and skip it.
 * This repository is sometimes edited by another agent in parallel; re-check that the example
   `md5sum`s you measured still match before trusting a run, and re-run if the tree moved.
