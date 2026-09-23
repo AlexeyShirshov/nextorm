@@ -302,7 +302,7 @@ dataContext.InsertInto<IOrder>()
 
 A statement whose `WITH` contains a data-modifying CTE is never stored in the plan cache (it is
 side-effecting). Other providers reject `With(name, insert)` with `NotSupportedException`, because their
-CTE body must be a `SELECT`. For general read CTEs see [Common table expressions](09-cte.md); `UPDATE` will be documented in its own guide.
+CTE body must be a `SELECT`. For general read CTEs see [Common table expressions](09-cte.md); the `UPDATE` surface is documented in [Data modification (UPDATE)](21-update-statement.md).
 
 ## Reading the generated key
 

@@ -71,6 +71,12 @@ public sealed class PostgresDialect : SqlDialectBase
         return string.IsNullOrEmpty(where) ? sql : sql + Kw(keywordCase, " where ") + where;
     }
 
+    /// <summary>PostgreSQL updates rows based on a join through the <c>FROM</c> clause.</summary>
+    public override bool SupportsUpdateJoin => true;
+
+    /// <summary>PostgreSQL renders the <c>FROM</c> spelling of the multi-table update (the target stays out of <c>FROM</c>).</summary>
+    public override bool UpdateJoinRequiresFrom => true;
+
     /// <summary>Renders the identity-function query <c>select lastval()</c>.</summary>
     public override string MakeIdentityFunction(KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, "select lastval()");
 

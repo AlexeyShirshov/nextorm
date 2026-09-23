@@ -19,6 +19,14 @@ public sealed class SqliteDialect : SqlDialectBase
     /// <inheritdoc/>
     public override bool SupportsLastInsertId => true;
 
+    // SQLite 3.33+ supports UPDATE ... FROM (compatible with the PostgreSQL spelling); the target stays
+    // out of the FROM list and the join conditions are folded into WHERE. The FROM form is rendered by
+    // the SqlDialectBase default.
+    /// <inheritdoc/>
+    public override bool SupportsUpdateJoin => true;
+    /// <inheritdoc/>
+    public override bool UpdateJoinRequiresFrom => true;
+
     // SQLite supports INSERT ... DEFAULT VALUES, but not the DEFAULT keyword as a value in a VALUES
     // list: a column's default is applied by omitting the column instead.
     /// <inheritdoc/>

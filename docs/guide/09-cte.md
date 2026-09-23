@@ -266,7 +266,8 @@ The write CTE is documented together with the write surface it belongs to — ty
 `From`/`FromTable`, a `VALUES` or `INSERT ... SELECT` body, reading an earlier read CTE, and feeding a main
 `INSERT ... SELECT` — in
 [Data modification (INSERT): Data-modifying CTE](19-insert-statement.md#data-modifying-cte-postgresql).
-`UPDATE` and `DELETE` bodies are planned and will live in their respective guides.
+`UPDATE` and `DELETE` bodies are not supported as a CTE body (only `INSERT` is). For the general `UPDATE`
+surface see [Data modification (UPDATE)](21-update-statement.md).
 
 ## Provider differences
 

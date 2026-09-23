@@ -268,7 +268,7 @@ Write-CTE документируется вместе с поверхность�
 `From`/`FromTable`, тело `VALUES` или `INSERT ... SELECT`, чтение более раннего read-CTE и питание
 главного `INSERT ... SELECT` — в разделе
 [Изменение данных (INSERT): Модифицирующий CTE](19-insert-statement.md#модифицирующий-cte-postgresql).
-Тела `UPDATE` и `DELETE` запланированы и будут жить в своих гайдах.
+Тела `UPDATE` и `DELETE` в качестве тела CTE не поддерживаются (только `INSERT`). Общая поверхность `UPDATE` — в [Изменении данных (UPDATE)](21-update-statement.md).
 
 ## Различия между провайдерами
 

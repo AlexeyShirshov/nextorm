@@ -774,6 +774,58 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <summary>Defaults to <c>false</c>; PostgreSQL overrides it because its multi-table delete uses <c>USING</c>.</summary>
     public virtual bool DeleteJoinRequiresUsing => false;
 
+    /// <summary>Defaults to <c>true</c>; ClickHouse renders its <c>ALTER TABLE ... UPDATE</c> mutation through <see cref="MakeUpdateHead"/>.</summary>
+    public virtual bool SupportsUpdate => true;
+
+    /// <summary>Renders the update head; defaults to the ANSI <c>UPDATE &lt;table&gt; SET </c>.</summary>
+    public virtual string MakeUpdateHead(string table, KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, "update ") + table + Kw(keywordCase, " set ");
+
+    /// <summary>Defaults to <c>false</c>; ClickHouse's <c>ALTER TABLE ... UPDATE</c> requires a WHERE clause.</summary>
+    public virtual bool UpdateRequiresWhere => false;
+
+    /// <summary>Renders a suffix appended after the update's filter; defaults to none.</summary>
+    public virtual string? MakeUpdateSuffix(KeywordCase keywordCase = KeywordCase.Lower) => null;
+
+    /// <summary>Defaults to <c>false</c>; PostgreSQL, SQLite, SQL Server, MySQL and MariaDB override it for native multi-table updates.</summary>
+    public virtual bool SupportsUpdateJoin => false;
+
+    /// <summary>Defaults to <c>false</c>; PostgreSQL and SQLite override it because their multi-table update uses the <c>FROM</c> spelling.</summary>
+    public virtual bool UpdateJoinRequiresFrom => false;
+
+    /// <summary>
+    /// Renders the <c>FROM</c>-style multi-table update
+    /// (<c>UPDATE &lt;target&gt; AS alias SET &lt;assignments&gt; FROM &lt;usingSources&gt; WHERE &lt;joinConditions&gt; [AND ...]</c>),
+    /// shared by PostgreSQL and SQLite. The target is aliased in <c>UPDATE</c>, the joined tables are listed
+    /// in <c>FROM</c> and the join conditions are folded into the <c>WHERE</c> because a <c>FROM</c> join
+    /// condition cannot reference the update target. Only reached through a dialect that set
+    /// <see cref="SupportsUpdateJoin"/>; the alias-style dialects override it.
+    /// </summary>
+    public virtual string MakeUpdateJoin(
+        string target,
+        string targetAlias,
+        string assignments,
+        string fromAndJoins,
+        string usingSources,
+        string joinConditions,
+        string? whereSql,
+        KeywordCase keywordCase = KeywordCase.Lower)
+    {
+        if (!UpdateJoinRequiresFrom)
+            throw new NotSupportedException($"{GetType().Name} cannot render a multi-table UPDATE.");
+
+        var where = string.IsNullOrEmpty(joinConditions)
+            ? whereSql
+            : string.IsNullOrEmpty(whereSql)
+                ? joinConditions
+                : joinConditions + Kw(keywordCase, " and ") + whereSql;
+
+        var sql = Kw(keywordCase, "update ") + target + Kw(keywordCase, " as ") + targetAlias
+            + Kw(keywordCase, " set ") + assignments
+            + Kw(keywordCase, " from ") + usingSources;
+
+        return string.IsNullOrEmpty(where) ? sql : sql + Kw(keywordCase, " where ") + where;
+    }
+
     /// <summary>Defaults to <c>false</c>; every SQL provider except ClickHouse opts into an all-defaults insert.</summary>
     public virtual bool SupportsDefaultValues => false;
     /// <summary>Renders the all-defaults row form; MySQL/MariaDB override it with <c>() VALUES ()</c>.</summary>

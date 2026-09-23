@@ -45,6 +45,27 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <summary>SQL Server deletes rows based on a join through the <c>DELETE &lt;alias&gt; FROM ... JOIN</c> extension.</summary>
     public override bool SupportsDeleteJoin => true;
 
+    /// <summary>SQL Server updates rows based on a join through the <c>UPDATE &lt;alias&gt; ... FROM ... JOIN</c> extension.</summary>
+    public override bool SupportsUpdateJoin => true;
+
+    /// <summary>
+    /// Renders the SQL Server multi-table update: the <c>SET</c> list is qualified by the target alias and
+    /// the target is named again (with its joins) in the <c>FROM</c> clause.
+    /// </summary>
+    public override string MakeUpdateJoin(
+        string target,
+        string targetAlias,
+        string assignments,
+        string fromAndJoins,
+        string usingSources,
+        string joinConditions,
+        string? whereSql,
+        KeywordCase keywordCase = KeywordCase.Lower)
+    {
+        var sql = Kw(keywordCase, "update ") + targetAlias + Kw(keywordCase, " set ") + assignments + Kw(keywordCase, " from ") + fromAndJoins;
+        return string.IsNullOrEmpty(whereSql) ? sql : sql + Kw(keywordCase, " where ") + whereSql;
+    }
+
     /// <summary>SQL Server expresses a key upsert as a <c>MERGE</c> over a <c>VALUES</c> derived source.</summary>
     public override bool SupportsMerge => true;
 

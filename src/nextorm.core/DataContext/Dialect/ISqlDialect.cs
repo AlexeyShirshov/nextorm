@@ -1250,6 +1250,87 @@ public interface ISqlDialect
     /// than the alias spelling. Defaults to <c>false</c>.
     /// </summary>
     bool DeleteJoinRequiresUsing => false;
+
+    /// <summary>
+    /// Whether the dialect can execute an <c>UPDATE</c> and report the affected-row count. Declared as a
+    /// default interface method returning <c>true</c>; ClickHouse keeps it <c>true</c> but renders its
+    /// <c>ALTER TABLE ... UPDATE</c> mutation, which waits for the mutation
+    /// (<c>SETTINGS mutations_sync = 1</c>) yet reports no affected-row count. The native head is rendered
+    /// by <see cref="MakeUpdateHead"/>.
+    /// </summary>
+    bool SupportsUpdate => true;
+
+    /// <summary>
+    /// Renders the head of an <c>UPDATE</c> statement up to (but not including) its <c>SET</c> list, over
+    /// the already-resolved, quoted target table. Defaults to the ANSI <c>UPDATE &lt;table&gt; SET </c>;
+    /// ClickHouse overrides it with <c>ALTER TABLE &lt;table&gt; UPDATE </c>. Only reached through a
+    /// dialect that kept <see cref="SupportsUpdate"/> <c>true</c>.
+    /// </summary>
+    /// <param name="table">The quoted target table.</param>
+    /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
+    /// <returns>The rendered update head.</returns>
+    string MakeUpdateHead(string table, KeywordCase keywordCase = KeywordCase.Lower) => SqlKeywords.Of(keywordCase, "update ") + table + SqlKeywords.Of(keywordCase, " set ");
+
+    /// <summary>
+    /// Whether the dialect requires a <c>WHERE</c> clause on every update (ClickHouse's
+    /// <c>ALTER TABLE ... UPDATE</c> does). An update without a predicate then renders a trivially true
+    /// filter (<c>WHERE 1</c>). Defaults to <c>false</c>.
+    /// </summary>
+    bool UpdateRequiresWhere => false;
+
+    /// <summary>
+    /// Renders a dialect suffix appended after the update's filter (ClickHouse's
+    /// <c>SETTINGS mutations_sync = 1</c>), or <see langword="null"/> when there is none. Defaults to
+    /// <see langword="null"/>.
+    /// </summary>
+    /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
+    /// <returns>The suffix, or <see langword="null"/>.</returns>
+    string? MakeUpdateSuffix(KeywordCase keywordCase = KeywordCase.Lower) => null;
+
+    /// <summary>
+    /// Whether the dialect can update rows of one table based on a join (a native multi-table
+    /// <c>UPDATE</c>). Declared as a default interface method returning <c>false</c>; PostgreSQL, SQLite,
+    /// SQL Server, MySQL and MariaDB override it. ClickHouse's <c>ALTER TABLE ... UPDATE</c> mutation
+    /// cannot reference other tables, so it keeps the default.
+    /// </summary>
+    bool SupportsUpdateJoin => false;
+
+    /// <summary>
+    /// Whether <see cref="MakeUpdateJoin"/> must be given the <c>FROM</c> spelling (PostgreSQL and
+    /// SQLite): the target stays out of the source list, the joined tables are listed separately and the
+    /// join conditions are folded into the <c>WHERE</c> so they can reference the target alias. When
+    /// <c>false</c>, the alias spelling is used (SQL Server <c>UPDATE &lt;alias&gt; ... FROM</c>,
+    /// MySQL/MariaDB <c>UPDATE ... JOIN ... SET</c>). Defaults to <c>false</c>.
+    /// </summary>
+    bool UpdateJoinRequiresFrom => false;
+
+    /// <summary>
+    /// Renders a multi-table <c>UPDATE</c>. Only called when <see cref="SupportsUpdateJoin"/> is
+    /// <c>true</c>. The renderer supplies both spellings so the dialect can pick its native form: the
+    /// alias style (<c>&lt;target&gt; AS a JOIN &lt;b&gt; AS b ON ...</c>, SQL Server/MySQL/MariaDB) and
+    /// the <c>FROM</c> style (<c>&lt;b&gt; AS b, ...</c> plus join conditions, PostgreSQL/SQLite). The
+    /// <c>SET</c> list is rendered once and references the target through its alias.
+    /// </summary>
+    /// <param name="target">The target table with literal identifiers (already quoted), without an alias.</param>
+    /// <param name="targetAlias">The alias assigned to the target table, already escaped for the dialect.</param>
+    /// <param name="assignments">The rendered <c>&lt;column&gt; = &lt;value&gt;</c> list, without the <c>SET</c> keyword.</param>
+    /// <param name="fromAndJoins">The alias-style source: <c>&lt;target&gt; AS a JOIN &lt;b&gt; AS b ON ...</c>.</param>
+    /// <param name="usingSources">The <c>FROM</c>-style source list: <c>&lt;b&gt; AS b[, &lt;c&gt; AS c ...]</c>.</param>
+    /// <param name="joinConditions">The rendered join <c>ON</c> conditions, combined with <c>and</c>, without a leading <c>WHERE</c>.</param>
+    /// <param name="whereSql">The rendered user <c>WHERE</c> condition, or <see langword="null"/> when there is none.</param>
+    /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
+    /// <returns>The rendered multi-table <c>UPDATE</c>.</returns>
+    /// <exception cref="NotSupportedException">The dialect has no native multi-table <c>UPDATE</c>.</exception>
+    string MakeUpdateJoin(
+        string target,
+        string targetAlias,
+        string assignments,
+        string fromAndJoins,
+        string usingSources,
+        string joinConditions,
+        string? whereSql,
+        KeywordCase keywordCase = KeywordCase.Lower)
+        => throw new NotSupportedException($"{GetType().Name} cannot render a multi-table UPDATE.");
 }
 
 /// <summary>Which side of a string <see cref="string.Trim()"/> removes whitespace from.</summary>

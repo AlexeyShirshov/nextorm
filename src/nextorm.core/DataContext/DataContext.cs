@@ -338,6 +338,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, IMutationE
         => command switch
         {
             InsertCommand insert => BuildInsertSql(insert),
+            UpdateCommand update => BuildUpdateSql(update),
             DeleteCommand delete => BuildDeleteSql(delete),
             _ => throw new NotSupportedException($"Unsupported returning mutation command {command.GetType().Name}."),
         };
@@ -354,10 +355,35 @@ public abstract class DataContext : IDataContext, IConnectionManager, IMutationE
         return (withSql is null ? insertSql : withSql + insertSql, parameters);
     }
 
+    private (string Sql, List<Parameter> Parameters) BuildUpdateSql(UpdateCommand command)
+    {
+        if (!Dialect.SupportsUpdate)
+            throw new NotSupportedException(
+                $"{GetType().Name} does not support UPDATE: the provider has no synchronous single-statement UPDATE form.");
+
+        // One parameter provider for the whole statement: the SET list, the predicate and the key
+        // values must not restart parameter numbering, or their names would collide.
+        var provider = new DefaultParameterProvider();
+        var parameters = new List<Parameter>();
+
+        var (setSql, _) = _planner.RenderAssignments(command, provider, parameters);
+
+        string? whereSql = null;
+        if (command.Keys is not { Count: > 0 })
+        {
+            var (rendered, _) = _planner.RenderPredicate(command.Source, provider, parameters);
+            whereSql = rendered;
+        }
+
+        return SqlMutationBuilder.MakeUpdate(Dialect, QuoteIdentifiers, NamingConvention, command, setSql, parameters, whereSql, provider, KeywordCase);
+    }
+
     private (string Sql, List<Parameter> Parameters) BuildMutationSql(MutationCommand command)
         => command switch
         {
             InsertCommand insert => BuildInsertSql(insert),
+            UpdateCommand update => BuildUpdateSql(update),
+            UpdateJoinCommand updateJoin => BuildUpdateJoinSql(updateJoin),
             MergeCommand merge => SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, merge, KeywordCase),
             DeleteCommand delete => BuildDeleteSql(delete),
             DeleteJoinCommand deleteJoin => BuildDeleteJoinSql(deleteJoin),
@@ -396,6 +422,15 @@ public abstract class DataContext : IDataContext, IConnectionManager, IMutationE
         return _planner.RenderDeleteJoin(command);
     }
 
+    private (string Sql, List<Parameter> Parameters) BuildUpdateJoinSql(UpdateJoinCommand command)
+    {
+        if (!Dialect.SupportsUpdateJoin)
+            throw new NotSupportedException(
+                $"{GetType().Name} does not support updating from a joined table: the provider has no native multi-table UPDATE.");
+
+        return _planner.RenderUpdateJoin(command);
+    }
+
     private void EnsureReturningSupported()
     {
         if (!Dialect.SupportsReturning && !Dialect.SupportsOutput)
@@ -417,7 +452,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, IMutationE
 
     private void EnsureReturningSupportedIfNeeded(MutationCommand command)
     {
-        if (command is InsertCommand { ReturningColumns: { Count: > 0 } } or DeleteCommand { ReturningColumns: { Count: > 0 } })
+        if (command.ReturningColumns is { Count: > 0 })
             EnsureReturningSupported();
     }
 

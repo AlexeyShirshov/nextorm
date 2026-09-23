@@ -3,9 +3,10 @@
 > Рабочий план (design RFC). Источники: GitHub issues
 > [#3 «TODO: Insert»](https://github.com/AlexeyShirshov/nextorm/issues/3),
 > [#15 «TODO: Insert, update, delete with output table»](https://github.com/AlexeyShirshov/nextorm/issues/15);
-> milestone `1.0-a.4`. Этот документ вводит **общий каркас DML**, на который ссылаются планы
-> [todo_update.md](todo_update.md) и [todo_merge.md](todo_merge.md); `DELETE` (включая multi-table
-> join) уже реализован — см. [удаление](../../guide/20-delete-statement.md).
+> milestone `1.0-a.4`. Этот документ вводит **общий каркас DML**, на который ссылается план
+> [todo_merge.md](todo_merge.md); `UPDATE` (включая multi-table join и ClickHouse-мутацию) и `DELETE`
+> (включая multi-table join) уже реализованы — см. [обновление](../../guide/21-update-statement.md) и
+> [удаление](../../guide/20-delete-statement.md).
 >
 > **Статус (23.09.2026):** `INSERT` реализован (фазы 1 и 2 в части самой вставки; детали — «Статус фаз»);
 > открытых пунктов по самой вставке нет. Остатки ведут смежные планы: полный `MERGE` с ветками —

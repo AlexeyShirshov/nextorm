@@ -113,11 +113,16 @@ internal sealed class QueryPlanner : IQueryPlanner
     // the SELECT pipeline (captured values become parameters, correlated subqueries are rewritten);
     // only the condition is rendered - no FROM or select list.
     internal (string Sql, List<Parameter> Parameters) RenderPredicate(QueryCommand command)
+        => RenderPredicate(command, null, null);
+
+    // Overload used by UPDATE so the WHERE parameters continue the sequence started by the SET list
+    // (a fresh provider/list would restart parameter numbering and collide with the SET parameters).
+    internal (string Sql, List<Parameter> Parameters) RenderPredicate(QueryCommand command, IParameterProvider? parameterProvider, List<Parameter>? parameters)
     {
         if (!command.IsPrepared)
             command.PrepareCommand(false, CancellationToken.None);
 
-        var @params = new List<Parameter>();
+        var @params = parameters ?? new List<Parameter>();
         if (command.PreparedCondition is null)
             return (string.Empty, @params);
 
@@ -128,7 +133,7 @@ internal sealed class QueryPlanner : IQueryPlanner
             Params = @params,
             ColumnsProvider = new DefaultColumnsProvider(),
             QueryProvider = command,
-            ParameterProvider = new DefaultParameterProvider(),
+            ParameterProvider = parameterProvider ?? new DefaultParameterProvider(),
             AliasProvider = new DefaultAliasProvider(),
             Logger = _logger!,
             QuoteIdentifiers = command.ResolvedQuoteIdentifiers,
@@ -140,6 +145,72 @@ internal sealed class QueryPlanner : IQueryPlanner
         var builder = new StringBuilder();
         SqlSourceRenderer.MakeWhere(in ctx, builder, command.EntityType!, command.PreparedCondition, 0, dontNeedAlias: true);
         return (builder.ToString(), @params);
+    }
+
+    // Renders the SET list of an UPDATE command (without the SET keyword) together with its parameters.
+    // A constant RHS is bound as a parameter, a column RHS renders an unqualified column reference, and
+    // an arbitrary RHS expression is rendered by the same column visitor the SELECT/WHERE pipeline uses,
+    // so captured variables become parameters and mapped members become quoted columns. The provider and
+    // parameter list are shared with the WHERE renderer so names and numbering stay contiguous.
+    internal (string SetSql, List<Parameter> Parameters) RenderAssignments(
+        UpdateCommand command,
+        IParameterProvider parameterProvider,
+        List<Parameter> parameters)
+    {
+        var source = command.Source;
+        if (!source.IsPrepared)
+            source.PrepareCommand(false, CancellationToken.None);
+
+        var quoteIdentifiers = source.ResolvedQuoteIdentifiers;
+        var namingConvention = source.ResolvedNamingConvention;
+
+        var ctx = new SqlBuildContext
+        {
+            Dialect = _dialect(),
+            ParamMode = false,
+            Params = parameters,
+            ColumnsProvider = new DefaultColumnsProvider(),
+            QueryProvider = source,
+            ParameterProvider = parameterProvider,
+            AliasProvider = new DefaultAliasProvider(),
+            Logger = _logger!,
+            QuoteIdentifiers = quoteIdentifiers,
+            NamingConvention = namingConvention,
+            KeywordCase = source.ResolvedKeywordCase,
+        };
+        ctx.ColumnsProvider.Add(command.EntityType!, false);
+
+        var builder = new StringBuilder();
+        for (var i = 0; i < command.Assignments.Count; i++)
+        {
+            if (i > 0)
+                builder.Append(", ");
+
+            var assignment = command.Assignments[i];
+            builder.Append(SqlMutationBuilder.RenderColumnReference(ctx.Dialect, quoteIdentifiers, assignment.Property, namingConvention));
+            builder.Append(" = ");
+
+            switch (assignment.Kind)
+            {
+                case UpdateValueKind.Constant:
+                    var name = parameterProvider.GetParamName();
+                    parameters.Add(new Parameter(name, assignment.Constant));
+                    builder.Append(ctx.Dialect.MakeParam(name));
+                    break;
+                case UpdateValueKind.Column:
+                    builder.Append(SqlMutationBuilder.RenderColumnReference(ctx.Dialect, quoteIdentifiers, assignment.Column!, namingConvention));
+                    break;
+                default:
+                    using (var visitor = ctx.CreateColumnVisitor(command.EntityType!, 0, dontNeedAlias: true))
+                    {
+                        visitor.Visit(assignment.Expression!);
+                        visitor.WriteTo(builder);
+                    }
+                    break;
+            }
+        }
+
+        return (builder.ToString(), parameters);
     }
 
     // Renders a multi-table DELETE: the target is the first table of the prepared joined command, whose
@@ -168,6 +239,34 @@ internal sealed class QueryPlanner : IQueryPlanner
         };
 
         return new SqlBuilder(in ctx).MakeDeleteJoin(command);
+    }
+
+    // Renders a multi-table UPDATE: the target is the first table of the prepared joined command, whose
+    // joins and condition are rendered through the same source/condition pipeline as a SELECT, so aliases
+    // and parameters match the equivalent read query. The SET list shares the same parameter provider.
+    internal (string Sql, List<Parameter> Parameters) RenderUpdateJoin(UpdateJoinCommand command)
+    {
+        var source = command.Source;
+        if (!source.IsPrepared)
+            source.PrepareCommand(false, CancellationToken.None);
+
+        var @params = new List<Parameter>();
+        var ctx = new SqlBuildContext
+        {
+            Dialect = _dialect(),
+            ParamMode = false,
+            Params = @params,
+            ColumnsProvider = new DefaultColumnsProvider(),
+            QueryProvider = source,
+            ParameterProvider = new DefaultParameterProvider(),
+            AliasProvider = new DefaultAliasProvider(),
+            Logger = _logger!,
+            QuoteIdentifiers = source.ResolvedQuoteIdentifiers,
+            NamingConvention = source.ResolvedNamingConvention,
+            KeywordCase = source.ResolvedKeywordCase,
+        };
+
+        return new SqlBuilder(in ctx).MakeUpdateJoin(command);
     }
 
     private string? MakeSelect(QueryCommand queryCommand, bool paramMode, List<Parameter> @params, IQueryRegistry queryProvider, IAliasProvider? aliasProvider)

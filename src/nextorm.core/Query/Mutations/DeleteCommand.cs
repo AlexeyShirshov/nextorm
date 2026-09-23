@@ -1,28 +1,6 @@
 namespace NextORM.Core;
 
 /// <summary>
-/// A row identity used by the key form of <c>Delete(entity)</c>: one declared key column and the value
-/// read from the entity.
-/// </summary>
-internal sealed class DeleteKey
-{
-    /// <summary>Creates a key binding.</summary>
-    /// <param name="property">The key column.</param>
-    /// <param name="value">The value read from the entity.</param>
-    public DeleteKey(IPropertyMetadata property, object? value)
-    {
-        Property = property;
-        Value = value;
-    }
-
-    /// <summary>The key column.</summary>
-    public IPropertyMetadata Property { get; }
-
-    /// <summary>The value read from the entity, bound as a parameter.</summary>
-    public object? Value { get; }
-}
-
-/// <summary>
 /// A <c>DELETE</c> command: the target table plus exactly one of the two row filters — a prepared
 /// <see cref="Condition"/> (the predicate form <c>Where(...)</c>) or the declared key values
 /// (<see cref="Keys"/>, the <c>Delete(entity)</c> form). A command with neither deletes every row
@@ -37,7 +15,7 @@ internal sealed class DeleteCommand : MutationCommand
     /// <param name="condition">The predicate command whose condition is rendered as the <c>WHERE</c>, or <see langword="null"/> for the key/all-rows forms.</param>
     /// <param name="keys">The declared key values of the key form, or <see langword="null"/> for the predicate/all-rows forms.</param>
     /// <param name="returningColumns">The mapped columns to return through <c>RETURNING</c>/<c>OUTPUT</c>, or <see langword="null"/> for a plain delete.</param>
-    public DeleteCommand(Type entityType, string tableName, bool isTableNameAuto, QueryCommand? condition, IReadOnlyList<DeleteKey>? keys, IReadOnlyList<IPropertyMetadata>? returningColumns = null)
+    public DeleteCommand(Type entityType, string tableName, bool isTableNameAuto, QueryCommand? condition, IReadOnlyList<KeyValue>? keys, IReadOnlyList<IPropertyMetadata>? returningColumns = null)
         : base(SqlStatementType.Delete, entityType)
     {
         TableName = tableName;
@@ -57,11 +35,11 @@ internal sealed class DeleteCommand : MutationCommand
     public QueryCommand? Condition { get; }
 
     /// <summary>The declared key values rendered as equality predicates, or <see langword="null"/>.</summary>
-    public IReadOnlyList<DeleteKey>? Keys { get; }
+    public IReadOnlyList<KeyValue>? Keys { get; }
 
     /// <summary>
     /// The mapped columns the statement returns through <c>RETURNING</c>/<c>OUTPUT</c>, or
     /// <see langword="null"/> for a plain delete that only reports the affected-row count.
     /// </summary>
-    public IReadOnlyList<IPropertyMetadata>? ReturningColumns { get; }
+    public override IReadOnlyList<IPropertyMetadata>? ReturningColumns { get; }
 }

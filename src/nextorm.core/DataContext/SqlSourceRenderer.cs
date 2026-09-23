@@ -743,6 +743,57 @@ internal static class SqlSourceRenderer
         visitor.WriteTo(target);
     }
 
+    /// <summary>
+    /// Renders the <c>SET</c> list of a multi-table <c>UPDATE</c> (without the <c>SET</c> keyword). The
+    /// right-hand side is always rendered in aliased mode, so a column of any joined table keeps its
+    /// table alias; a constant right-hand side is bound as a parameter. When
+    /// <paramref name="qualifyTarget"/> is <c>false</c> (PostgreSQL and SQLite, whose <c>UPDATE ... FROM</c>
+    /// target is implicit) the left-hand column is rendered unqualified, because a table-qualified target
+    /// is parsed as a composite-field access there. The parameter provider is shared with the join
+    /// conditions and the filter so numbering stays contiguous.
+    /// </summary>
+    internal static string MakeUpdateAssignments(in SqlBuildContext ctx, Type entityType, IReadOnlyList<UpdateJoinAssignment> assignments, bool qualifyTarget)
+    {
+        var builder = StringBuilderPool.Shared.Get();
+        try
+        {
+            for (var i = 0; i < assignments.Count; i++)
+            {
+                if (i > 0)
+                    builder.Append(", ");
+
+                var assignment = assignments[i];
+
+                using (var target = ctx.CreateColumnVisitor(entityType, 0, dontNeedAlias: !qualifyTarget))
+                {
+                    target.Visit(assignment.Target);
+                    if (!ctx.ParamMode) builder.Append(target.ToString());
+                }
+
+                builder.Append(" = ");
+
+                if (assignment.Kind == UpdateValueKind.Constant)
+                {
+                    var name = ctx.ParameterProvider.GetParamName();
+                    ctx.Params.Add(new Parameter(name, assignment.Constant));
+                    builder.Append(ctx.Dialect.MakeParam(name));
+                }
+                else
+                {
+                    using var value = ctx.CreateColumnVisitor(entityType, 0, dontNeedAlias: false);
+                    value.Visit(assignment.Value!);
+                    if (!ctx.ParamMode) builder.Append(value.ToString());
+                }
+            }
+
+            return builder.ToString();
+        }
+        finally
+        {
+            StringBuilderPool.Shared.Return(builder);
+        }
+    }
+
     internal static string MakeSort(in SqlBuildContext ctx, Type entityType, Expression sorting, int dim)
     {
         // An ORDER BY expression can reference joined tables, so columns must keep their table alias

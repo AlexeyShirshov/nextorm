@@ -265,6 +265,90 @@ internal static class SqlMutationBuilder
     }
 
     /// <summary>
+    /// Renders an <c>UPDATE</c> statement for <paramref name="command"/>. The <c>SET</c> list arrives
+    /// already rendered (its parameters are in <paramref name="parameters"/>); the row filter is either
+    /// the already-rendered <paramref name="whereSql"/> of the predicate form, the declared key
+    /// equalities of the <c>Update(entity)</c> form, or nothing when no predicate was given (the whole
+    /// table is updated).
+    /// </summary>
+    /// <param name="dialect">The active SQL dialect.</param>
+    /// <param name="quoteIdentifiers">Whether physical identifiers must be quoted.</param>
+    /// <param name="namingConvention">Convention applied to auto-derived table/column names, or <see langword="null"/>.</param>
+    /// <param name="command">The update command to render.</param>
+    /// <param name="setSql">The rendered <c>&lt;column&gt; = &lt;value&gt;</c> list, without the <c>SET</c> keyword.</param>
+    /// <param name="parameters">The parameters of <paramref name="setSql"/> and of <paramref name="whereSql"/>; key values are appended to it.</param>
+    /// <param name="whereSql">The rendered condition of the predicate form, or <see langword="null"/>.</param>
+    /// <param name="parameterProvider">The provider that names the key parameters; shared with the <c>SET</c>/<c>WHERE</c> renderers so parameter names do not collide.</param>
+    /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
+    /// <returns>The rendered SQL and the parameters it references.</returns>
+    internal static (string Sql, List<Parameter> Parameters) MakeUpdate(
+        ISqlDialect dialect,
+        bool quoteIdentifiers,
+        INamingConvention? namingConvention,
+        UpdateCommand command,
+        string setSql,
+        List<Parameter> parameters,
+        string? whereSql,
+        IParameterProvider parameterProvider,
+        KeywordCase keywordCase = KeywordCase.Lower)
+    {
+        var writer = StringBuilderPool.Shared.Get();
+
+        try
+        {
+            var table = ResolveTableName(command.TableName, command.IsTableNameAuto, command.EntityType, namingConvention);
+            if (quoteIdentifiers)
+                table = dialect.QuoteIdentifier(table);
+
+            writer.Append(dialect.MakeUpdateHead(table, keywordCase));
+            writer.Append(setSql);
+
+            var returningColumns = RenderColumnsOrNull(dialect, quoteIdentifiers, namingConvention, command.ReturningColumns);
+
+            // T-SQL places OUTPUT between the SET list and the filter; the ANSI RETURNING clause is
+            // appended at the very end (below). MySQL/MariaDB have neither.
+            if (returningColumns is not null && dialect.SupportsOutput)
+                writer.Append(dialect.MakeOutput(returningColumns, keywordCase));
+
+            if (command.Keys is { Count: > 0 } keys)
+            {
+                writer.Append(SqlKeywords.Of(keywordCase, " where "));
+
+                for (var i = 0; i < keys.Count; i++)
+                {
+                    if (i > 0)
+                        writer.Append(SqlKeywords.Of(keywordCase, " and "));
+
+                    var column = RenderColumnReference(dialect, quoteIdentifiers, keys[i].Property, namingConvention);
+                    var name = parameterProvider.GetParamName();
+                    parameters.Add(new Parameter(name, keys[i].Value));
+                    writer.Append(column).Append(" = ").Append(dialect.MakeParam(name));
+                }
+            }
+            else if (!string.IsNullOrEmpty(whereSql))
+            {
+                writer.Append(SqlKeywords.Of(keywordCase, " where ")).Append(whereSql);
+            }
+            else if (dialect.UpdateRequiresWhere)
+            {
+                writer.Append(SqlKeywords.Of(keywordCase, " where 1"));
+            }
+
+            if (returningColumns is not null && dialect.SupportsReturning)
+                writer.Append(dialect.MakeReturning(returningColumns, keywordCase));
+
+            if (dialect.MakeUpdateSuffix(keywordCase) is { } suffix)
+                writer.Append(suffix);
+
+            return (writer.ToString(), parameters);
+        }
+        finally
+        {
+            StringBuilderPool.Shared.Return(writer);
+        }
+    }
+
+    /// <summary>
     /// Renders a <c>TRUNCATE TABLE</c> statement for <paramref name="command"/>.
     /// </summary>
     /// <param name="dialect">The active SQL dialect.</param>
@@ -445,7 +529,7 @@ internal static class SqlMutationBuilder
             ? namingConvention.ColumnName(property.ColumnName)
             : property.ColumnName;
 
-    private static string RenderColumnReference(ISqlDialect dialect, bool quoteIdentifiers, IPropertyMetadata property, INamingConvention? namingConvention)
+    internal static string RenderColumnReference(ISqlDialect dialect, bool quoteIdentifiers, IPropertyMetadata property, INamingConvention? namingConvention)
     {
         var name = ResolveColumnName(property, namingConvention);
         return quoteIdentifiers ? dialect.QuoteIdentifier(name) : name;

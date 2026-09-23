@@ -55,6 +55,62 @@ public static class DataContextExtensions
         return new(dataContext, ResolveMetadata(configEntity));
     }
 
+    /// <summary>
+    /// Starts an <c>UPDATE</c> over the mapping of <typeparamref name="TEntity"/> and returns its fluent
+    /// builder. Add the written columns with <c>Set</c> and the row filter with <c>Where</c>; omitting
+    /// <c>Where</c> updates every row. Like <see cref="InsertInto{TEntity}"/>, the type's metadata is
+    /// resolved lazily and cached per process, so <paramref name="configEntity"/> runs only on the first
+    /// call for <typeparamref name="TEntity"/>.
+    /// </summary>
+    /// <typeparam name="TEntity">The mapped entity type to update.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="configEntity">Optional mapping configuration, run only when the type is first mapped.</param>
+    /// <returns>A builder for the update.</returns>
+    public static UpdateBuilder<TEntity> Update<TEntity>(this IDataContext dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity = null)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+
+        return new(dataContext, ResolveMetadata(configEntity));
+    }
+
+    /// <summary>
+    /// Updates the row identified by the declared key of <paramref name="entity"/> in one command
+    /// (<c>UPDATE ... SET ... WHERE &lt;pk&gt; = @p</c>), writing every non-key, non-identity,
+    /// non-computed column. Uses the mapping's <c>[Key]</c>/<c>.Key()</c>.
+    /// </summary>
+    /// <typeparam name="TEntity">The mapped entity type.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="entity">The entity whose key identifies the row and whose values are written.</param>
+    /// <returns>The number of updated rows (0 or 1).</returns>
+    /// <exception cref="InvalidOperationException">The entity type declares no key.</exception>
+    /// <exception cref="NotSupportedException">The context does not support data modification (the in-memory provider), or the provider cannot express <c>UPDATE</c> (ClickHouse).</exception>
+    public static int Update<TEntity>(this IDataContext dataContext, TEntity entity)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+        ArgumentNullException.ThrowIfNull(entity);
+
+        return new UpdateBuilder<TEntity>(dataContext, ResolveMetadata<TEntity>(null)).UpdateEntity(entity);
+    }
+
+    /// <summary>
+    /// Asynchronously updates the row identified by the declared key of <paramref name="entity"/> in one
+    /// command, using the mapping's <c>[Key]</c>/<c>.Key()</c>.
+    /// </summary>
+    /// <typeparam name="TEntity">The mapped entity type.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="entity">The entity whose key identifies the row and whose values are written.</param>
+    /// <param name="cancellationToken">Cancels execution.</param>
+    /// <returns>A task producing the number of updated rows (0 or 1).</returns>
+    /// <exception cref="InvalidOperationException">The entity type declares no key.</exception>
+    /// <exception cref="NotSupportedException">The context does not support data modification (the in-memory provider), or the provider cannot express <c>UPDATE</c> (ClickHouse).</exception>
+    public static Task<int> UpdateAsync<TEntity>(this IDataContext dataContext, TEntity entity, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+        ArgumentNullException.ThrowIfNull(entity);
+
+        return new UpdateBuilder<TEntity>(dataContext, ResolveMetadata<TEntity>(null)).UpdateEntityAsync(entity, cancellationToken);
+    }
+
     private static IEntityMetadata ResolveMetadata<TEntity>(Action<EntityMetadataBuilder<TEntity>>? configEntity)
     {
         if (!DataContextCache.Metadata.TryGetValue(typeof(TEntity), out var metadata) || string.IsNullOrEmpty(metadata.TableName))
@@ -449,29 +505,113 @@ public static class DataContextExtensions
         return RenderDeleteJoin(query.DataProvider, new DeleteJoinCommand(typeof(T1), PrepareDeleteJoinSource(query)));
     }
 
+    /// <summary>
+    /// Starts a multi-table <c>UPDATE</c> over the join of <paramref name="query"/>: the target is the
+    /// first table of the chain and the <c>SET</c> values may read the joined tables. Only INNER
+    /// <c>Join</c> joins are supported; outer/cross joins are rejected because folding the join conditions
+    /// into the filter would change which rows are updated. PostgreSQL and SQLite render
+    /// <c>UPDATE ... FROM</c>; SQL Server renders <c>UPDATE &lt;alias&gt; ... FROM ... JOIN</c>;
+    /// MySQL/MariaDB render <c>UPDATE ... JOIN ... SET</c>. ClickHouse and the in-memory provider reject it.
+    /// </summary>
+    /// <typeparam name="T1">The target entity type whose rows are updated (the first table).</typeparam>
+    /// <typeparam name="T2">The joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to update.</param>
+    /// <returns>A builder for the assignments and the filter.</returns>
+    public static UpdateJoinBuilder<Projection<T1, T2>> UpdateJoin<T1, T2>(this JoinedEntityBuilder<T1, T2> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return new UpdateJoinBuilder<Projection<T1, T2>>(query, typeof(T1));
+    }
+
+    /// <summary>Starts a multi-table <c>UPDATE</c> over a three-table join. See <see cref="UpdateJoin{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are updated.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to update.</param>
+    /// <returns>A builder for the assignments and the filter.</returns>
+    public static UpdateJoinBuilder<Projection<T1, T2, T3>> UpdateJoin<T1, T2, T3>(this JoinedEntityBuilder<T1, T2, T3> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return new UpdateJoinBuilder<Projection<T1, T2, T3>>(query, typeof(T1));
+    }
+
+    /// <summary>Starts a multi-table <c>UPDATE</c> over a four-table join. See <see cref="UpdateJoin{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are updated.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <typeparam name="T4">The fourth joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to update.</param>
+    /// <returns>A builder for the assignments and the filter.</returns>
+    public static UpdateJoinBuilder<Projection<T1, T2, T3, T4>> UpdateJoin<T1, T2, T3, T4>(this JoinedEntityBuilder<T1, T2, T3, T4> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return new UpdateJoinBuilder<Projection<T1, T2, T3, T4>>(query, typeof(T1));
+    }
+
+    /// <summary>Starts a multi-table <c>UPDATE</c> over a five-table join. See <see cref="UpdateJoin{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are updated.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <typeparam name="T4">The fourth joined entity type.</typeparam>
+    /// <typeparam name="T5">The fifth joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to update.</param>
+    /// <returns>A builder for the assignments and the filter.</returns>
+    public static UpdateJoinBuilder<Projection<T1, T2, T3, T4, T5>> UpdateJoin<T1, T2, T3, T4, T5>(this JoinedEntityBuilder<T1, T2, T3, T4, T5> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return new UpdateJoinBuilder<Projection<T1, T2, T3, T4, T5>>(query, typeof(T1));
+    }
+
+    /// <summary>Starts a multi-table <c>UPDATE</c> over a six-table join. See <see cref="UpdateJoin{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are updated.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <typeparam name="T4">The fourth joined entity type.</typeparam>
+    /// <typeparam name="T5">The fifth joined entity type.</typeparam>
+    /// <typeparam name="T6">The sixth joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to update.</param>
+    /// <returns>A builder for the assignments and the filter.</returns>
+    public static UpdateJoinBuilder<Projection<T1, T2, T3, T4, T5, T6>> UpdateJoin<T1, T2, T3, T4, T5, T6>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return new UpdateJoinBuilder<Projection<T1, T2, T3, T4, T5, T6>>(query, typeof(T1));
+    }
+
+    /// <summary>Starts a multi-table <c>UPDATE</c> over a seven-table join. See <see cref="UpdateJoin{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are updated.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <typeparam name="T4">The fourth joined entity type.</typeparam>
+    /// <typeparam name="T5">The fifth joined entity type.</typeparam>
+    /// <typeparam name="T6">The sixth joined entity type.</typeparam>
+    /// <typeparam name="T7">The seventh joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to update.</param>
+    /// <returns>A builder for the assignments and the filter.</returns>
+    public static UpdateJoinBuilder<Projection<T1, T2, T3, T4, T5, T6, T7>> UpdateJoin<T1, T2, T3, T4, T5, T6, T7>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return new UpdateJoinBuilder<Projection<T1, T2, T3, T4, T5, T6, T7>>(query, typeof(T1));
+    }
+
+    /// <summary>Starts a multi-table <c>UPDATE</c> over an eight-table join. See <see cref="UpdateJoin{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are updated.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <typeparam name="T4">The fourth joined entity type.</typeparam>
+    /// <typeparam name="T5">The fifth joined entity type.</typeparam>
+    /// <typeparam name="T6">The sixth joined entity type.</typeparam>
+    /// <typeparam name="T7">The seventh joined entity type.</typeparam>
+    /// <typeparam name="T8">The eighth joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to update.</param>
+    /// <returns>A builder for the assignments and the filter.</returns>
+    public static UpdateJoinBuilder<Projection<T1, T2, T3, T4, T5, T6, T7, T8>> UpdateJoin<T1, T2, T3, T4, T5, T6, T7, T8>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return new UpdateJoinBuilder<Projection<T1, T2, T3, T4, T5, T6, T7, T8>>(query, typeof(T1));
+    }
+
     private static QueryCommand PrepareDeleteJoinSource<TProjection>(EntityBuilder<TProjection> query)
-    {
-        RequireInnerJoinsForDelete(query.Joins);
-
-        // Only the source, joins and condition of this command are used; the projection is an unused
-        // placeholder and column preparation is skipped (IgnoreColumns).
-        var command = query.Select(p => new { Unit = 1 });
-        command.IgnoreColumns = true;
-        return command;
-    }
-
-    private static void RequireInnerJoinsForDelete(IReadOnlyList<JoinExpression>? joins)
-    {
-        if (joins is null)
-            return;
-
-        for (var i = 0; i < joins.Count; i++)
-        {
-            if (joins[i].JoinType is not JoinType.Inner)
-                throw new NotSupportedException(
-                    $"A multi-table DELETE only supports INNER joins, not {joins[i].JoinType}. Delete the rows through a correlated subquery (Where with EXISTS/IN) instead.");
-        }
-    }
+        => JoinedMutationSource.Prepare(query, "DELETE");
 
     private static int ExecuteDeleteJoin(IDataContext dataContext, DeleteJoinCommand command)
     {

@@ -155,11 +155,11 @@ public sealed class DeleteBuilder<TEntity>
     {
         ArgumentNullException.ThrowIfNull(entity);
 
-        var keys = new List<DeleteKey>();
+        var keys = new List<KeyValue>();
         foreach (var property in _metadata.Properties)
         {
             if (property.IsKey)
-                keys.Add(new DeleteKey(property, property.PropertyInfo.GetValue(entity)));
+                keys.Add(new KeyValue(property, property.PropertyInfo.GetValue(entity)));
         }
 
         if (keys.Count == 0)

@@ -45,6 +45,9 @@ change.
 | `INSERT ... VALUES` | supported | supported | supported | supported | supported | supported (small batches) | throws `NotSupportedException` |
 | Key upsert (`MergeInto`) | `ON CONFLICT ... DO UPDATE` | `MERGE ... USING (VALUES ...)` | `ON CONFLICT ... DO UPDATE` | `ON DUPLICATE KEY UPDATE` | `ON DUPLICATE KEY UPDATE` | throws `NotSupportedException` | throws `NotSupportedException` |
 | `DELETE` (`DeleteFrom`/`Delete`) | supported | supported | supported | supported | supported | `ALTER TABLE ... DELETE ... SETTINGS mutations_sync = 1` | throws `NotSupportedException` |
+| `UPDATE` (`Update`/`Update(entity)`) | supported | supported | supported | supported | supported | `ALTER TABLE ... UPDATE ... SETTINGS mutations_sync = 1` | throws `NotSupportedException` |
+| `UPDATE ... RETURNING` (`Returning`) | `RETURNING` | `OUTPUT inserted.<col>` | `RETURNING` | throws `NotSupportedException` | throws `NotSupportedException` | throws `NotSupportedException` | throws `NotSupportedException` |
+| `UPDATE ... FROM` (`UpdateJoin`) | `UPDATE ... FROM` | `UPDATE <alias> ... FROM ... JOIN` | `UPDATE ... FROM` | `UPDATE ... JOIN ... SET` | `UPDATE ... JOIN ... SET` | throws `NotSupportedException` | throws `NotSupportedException` |
 | `DELETE ... RETURNING` (`Returning`) | `RETURNING` | `OUTPUT deleted.<col>` | `RETURNING` | throws `NotSupportedException` | throws `NotSupportedException` | throws `NotSupportedException` | throws `NotSupportedException` |
 | `TRUNCATE` (`Truncate`) | throws `NotSupportedException` | supported | supported | supported | supported | supported | throws `NotSupportedException` |
 | `DELETE ... USING`/join (`From<T>().Join(...).Delete()`, INNER) | throws `NotSupportedException` | `DELETE <a> FROM ... JOIN ...` | `DELETE FROM ... USING ...` | `DELETE <a> FROM ... JOIN ...` | `DELETE <a> FROM ... JOIN ...` | throws `NotSupportedException` | throws `NotSupportedException` |

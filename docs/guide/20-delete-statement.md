@@ -111,7 +111,7 @@ var removed = await ctx.From<ISimpleEntity>()
 
 * The in-memory context is query-only: `Delete`/`DeleteAsync`/`Truncate` (like every other write) throw `NotSupportedException`; query your own collections instead. `INSERT` on the in-memory provider is likewise out of scope by design.
 * `DELETE` is not prepared or plan-cached — optimisation in nextorm targets read-only queries only (`Prepare`, the implicit plan cache, benchmarks); a mutation always renders and executes one command per call.
-* There is deliberately no soft delete and no global query filter; `UPDATE` and a full `MERGE` with arbitrary branches are not part of this surface.
+* There is deliberately no soft delete and no global query filter; a full `MERGE` with arbitrary branches is not part of this surface, and `UPDATE` lives in its own guide ([Data modification (UPDATE)](21-update-statement.md)).
 
 ## See also
 

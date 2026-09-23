@@ -42,6 +42,28 @@ public class MySqlDialect : SqlDialectBase
     /// <summary>MySQL and MariaDB delete rows based on a join through the multi-table <c>DELETE &lt;alias&gt; FROM ... JOIN</c> form.</summary>
     public override bool SupportsDeleteJoin => true;
 
+    /// <summary>MySQL and MariaDB update rows based on a join through the multi-table <c>UPDATE ... JOIN ... SET</c> form.</summary>
+    public override bool SupportsUpdateJoin => true;
+
+    /// <summary>
+    /// Renders the MySQL/MariaDB multi-table update: the join specification sits between <c>UPDATE</c> and
+    /// <c>SET</c>, and any filter follows the <c>SET</c> list. The <c>SET</c> list names the target through
+    /// its alias.
+    /// </summary>
+    public override string MakeUpdateJoin(
+        string target,
+        string targetAlias,
+        string assignments,
+        string fromAndJoins,
+        string usingSources,
+        string joinConditions,
+        string? whereSql,
+        KeywordCase keywordCase = KeywordCase.Lower)
+    {
+        var sql = Kw(keywordCase, "update ") + fromAndJoins + Kw(keywordCase, " set ") + assignments;
+        return string.IsNullOrEmpty(whereSql) ? sql : sql + Kw(keywordCase, " where ") + whereSql;
+    }
+
     // MySQL/MariaDB express a key upsert as INSERT ... ON DUPLICATE KEY UPDATE, assigning the incoming
     // value through the VALUES(<column>) function (MariaDB has no `AS new` row alias).
     /// <inheritdoc/>

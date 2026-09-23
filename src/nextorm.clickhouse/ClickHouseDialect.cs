@@ -43,6 +43,15 @@ public sealed class ClickHouseDialect : SqlDialectBase
     /// <summary>Waits for the ClickHouse mutation, so a delete is visible to the next statement.</summary>
     public override string? MakeDeleteSuffix(KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, " settings mutations_sync = 1");
 
+    /// <summary>ClickHouse renders the <c>ALTER TABLE ... UPDATE</c> mutation head instead of the ANSI <c>UPDATE ... SET</c>.</summary>
+    public override string MakeUpdateHead(string table, KeywordCase keywordCase = KeywordCase.Lower) => $"{Kw(keywordCase, "alter table ")}{table}{Kw(keywordCase, " update ")}";
+
+    /// <summary>ClickHouse's <c>ALTER TABLE ... UPDATE</c> mutation requires a <c>WHERE</c> clause.</summary>
+    public override bool UpdateRequiresWhere => true;
+
+    /// <summary>Waits for the ClickHouse mutation, so an update is visible to the next statement.</summary>
+    public override string? MakeUpdateSuffix(KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, " settings mutations_sync = 1");
+
     /// <summary>ClickHouse has a native synchronous <c>TRUNCATE TABLE</c>.</summary>
     public override bool SupportsTruncate => true;
 

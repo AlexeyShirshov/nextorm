@@ -11,6 +11,8 @@ internal enum SqlStatementType
     Insert,
     /// <summary>An <c>UPDATE</c> statement.</summary>
     Update,
+    /// <summary>A multi-table <c>UPDATE</c> that changes rows of the target based on a join.</summary>
+    UpdateJoin,
     /// <summary>A <c>DELETE</c> statement.</summary>
     Delete,
     /// <summary>A multi-table <c>DELETE</c> that removes rows of the target based on a join.</summary>
@@ -42,6 +44,13 @@ internal abstract class MutationCommand
 
     /// <summary>The CLR entity type targeted by the mutation.</summary>
     public Type EntityType { get; }
+
+    /// <summary>
+    /// The mapped columns the statement returns through <c>RETURNING</c>/<c>OUTPUT</c>, or
+    /// <see langword="null"/> when the statement only reports the affected-row count. Overridden by the
+    /// commands whose builders expose a <c>Returning</c> terminal.
+    /// </summary>
+    public virtual IReadOnlyList<IPropertyMetadata>? ReturningColumns => null;
 }
 
 /// <summary>One column written by an <see cref="InsertCommand"/>: its mapping plus the value of each row.</summary>
@@ -145,7 +154,7 @@ internal sealed class InsertCommand : MutationCommand
     /// <see langword="null"/> for a plain insert. Mutually exclusive with <see cref="IdentityColumn"/>
     /// in practice: they are produced by different terminals.
     /// </summary>
-    public IReadOnlyList<IPropertyMetadata>? ReturningColumns { get; }
+    public override IReadOnlyList<IPropertyMetadata>? ReturningColumns { get; }
 
     /// <summary>
     /// The server-side <c>SELECT</c> whose rows are inserted (<c>INSERT ... SELECT</c>), or

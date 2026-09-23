@@ -624,6 +624,106 @@ internal readonly struct SqlBuilder
         }
     }
 
+    /// <summary>
+    /// Renders a multi-table <c>UPDATE</c> over the prepared joined source of <paramref name="cmd"/>. The
+    /// target is the first table of the chain; the <c>SET</c> list and the join conditions are rendered
+    /// through the shared <c>SELECT</c> source pipeline, so column aliasing matches the equivalent
+    /// <c>SELECT</c>. The dialect composes its native form (PostgreSQL/SQLite <c>UPDATE ... FROM</c>,
+    /// SQL Server <c>UPDATE &lt;alias&gt; ... FROM ... JOIN</c>, MySQL/MariaDB <c>UPDATE ... JOIN ... SET</c>).
+    /// </summary>
+    internal (string Sql, List<Parameter> Parameters) MakeUpdateJoin(UpdateJoinCommand cmd)
+    {
+        if (!_ctx.Dialect.SupportsUpdateJoin)
+            throw new NotSupportedException($"{_ctx.Dialect.GetType().Name} cannot render a multi-table UPDATE.");
+
+        var source = cmd.Source;
+
+        if (source.EntityType is not { } entityType)
+            throw new BuildSqlCommandException("A multi-table UPDATE command is missing its source entity type.");
+
+        if (source.Joins is not { Length: > 0 } joins)
+            throw new BuildSqlCommandException("A multi-table UPDATE needs at least one join.");
+
+        if (source.From is not { } targetFrom)
+            throw new BuildSqlCommandException("A multi-table UPDATE is missing its target source.");
+
+        _ctx.ColumnsProvider.PushSourceScope();
+        try
+        {
+            var fromAndJoins = StringBuilderPool.Shared.Get();
+            var usingSources = StringBuilderPool.Shared.Get();
+            var joinConditions = StringBuilderPool.Shared.Get();
+            var whereSql = StringBuilderPool.Shared.Get();
+            try
+            {
+                var targetSql = SqlSourceRenderer.MakeFrom(in _ctx, targetFrom, new FromRenderOptions(true, entityType, true), out var targetAlias);
+                if (string.IsNullOrEmpty(targetAlias))
+                    throw new NotSupportedException("A multi-table UPDATE can only target a physical table, not a derived or function source.");
+
+                // Table aliases are always escaped for the dialect (even when identifier quoting is off).
+                var targetAliasToken = _ctx.Dialect.Escape(targetAlias);
+
+                // The target without an alias, used by the FROM form (its UPDATE target must stay
+                // unaliased in the source list while the assignments and conditions reference the alias).
+                var target = SqlSourceRenderer.MakeFrom(in _ctx, targetFrom, new FromRenderOptions(false, null, false));
+
+                if (_ctx.Dialect.UpdateJoinRequiresFrom)
+                {
+                    for (var i = 0; i < joins.Length; i++)
+                    {
+                        var (fromSql, conditionSql) = SqlSourceRenderer.MakeJoinParts(in _ctx, joins[i], entityType);
+
+                        if (i > 0)
+                        {
+                            usingSources.Append(", ");
+                            joinConditions.Append(Kw(" and "));
+                        }
+
+                        usingSources.Append(fromSql);
+                        joinConditions.Append(conditionSql);
+                    }
+                }
+                else
+                {
+                    fromAndJoins.Append(targetSql);
+                    for (var i = 0; i < joins.Length; i++)
+                        fromAndJoins.Append(SqlSourceRenderer.MakeJoin(in _ctx, joins[i], entityType));
+                }
+
+                // Rendered after the sources so each table alias is already registered. PostgreSQL and
+                // SQLite keep the SET target unqualified (their UPDATE ... FROM target is implicit); the
+                // alias-style dialects qualify it by the target alias.
+                var assignments = SqlSourceRenderer.MakeUpdateAssignments(in _ctx, entityType, cmd.Assignments, qualifyTarget: !_ctx.Dialect.UpdateJoinRequiresFrom);
+
+                if (source.PreparedCondition is { } condition)
+                    SqlSourceRenderer.MakeWhere(in _ctx, whereSql, entityType, condition, 0);
+
+                var sql = _ctx.Dialect.MakeUpdateJoin(
+                    target,
+                    targetAliasToken,
+                    assignments,
+                    fromAndJoins.ToString(),
+                    usingSources.ToString(),
+                    joinConditions.ToString(),
+                    whereSql.Length == 0 ? null : whereSql.ToString(),
+                    _ctx.KeywordCase);
+
+                return (sql, _ctx.Params);
+            }
+            finally
+            {
+                StringBuilderPool.Shared.Return(whereSql);
+                StringBuilderPool.Shared.Return(joinConditions);
+                StringBuilderPool.Shared.Return(usingSources);
+                StringBuilderPool.Shared.Return(fromAndJoins);
+            }
+        }
+        finally
+        {
+            _ctx.ColumnsProvider.PopSourceScope();
+        }
+    }
+
     /// <summary>Resolves a lower-case keyword fragment (keywords and separators only) to the configured <see cref="KeywordCase"/>.</summary>
     private string Kw(string text) => SqlKeywords.Of(_ctx.KeywordCase, text);
 
