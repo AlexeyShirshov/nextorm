@@ -1163,6 +1163,59 @@ public interface ISqlDialect
         => throw new NotSupportedException($"{GetType().Name} cannot render a MERGE upsert.");
 
     /// <summary>
+    /// Whether the dialect renders a general, multi-branch <c>MERGE</c> statement (SQL Server,
+    /// PostgreSQL 15+). Declared as a default interface method returning <c>false</c> so existing
+    /// external implementations keep compiling.
+    /// </summary>
+    bool SupportsMergeStatement => false;
+
+    /// <summary>
+    /// Whether the dialect accepts a <c>WHEN MATCHED THEN DELETE</c> branch in a general <c>MERGE</c>
+    /// (SQL Server, PostgreSQL). Declared as a default interface method returning <c>false</c>.
+    /// </summary>
+    bool SupportsMergeDelete => false;
+
+    /// <summary>
+    /// Whether the dialect accepts a <c>WHEN NOT MATCHED BY SOURCE</c> branch (SQL Server only).
+    /// Declared as a default interface method returning <c>false</c>.
+    /// </summary>
+    bool SupportsMergeBySourceDelete => false;
+
+    /// <summary>
+    /// Whether a general <c>MERGE</c> accepts a <c>THEN DO NOTHING</c> branch (PostgreSQL only; SQL
+    /// Server has no <c>DO NOTHING</c> action). Declared as a default interface method returning
+    /// <c>false</c>.
+    /// </summary>
+    bool SupportsMergeDoNothing => false;
+
+    /// <summary>
+    /// Whether a general <c>MERGE</c> accepts a search condition: an explicit <c>ON &lt;condition&gt;</c>
+    /// and/or a <c>WHEN ... AND &lt;condition&gt;</c> branch condition (SQL Server, PostgreSQL).
+    /// Declared as a default interface method returning <c>false</c>.
+    /// </summary>
+    bool SupportsMergeConditionalBranches => false;
+
+    /// <summary>
+    /// Whether a general <c>MERGE</c> qualifies its target columns with the target alias in the
+    /// <c>UPDATE SET</c> list. Defaults to <c>true</c> (SQL Server); PostgreSQL overrides it to
+    /// <c>false</c> because its <c>MERGE</c> forbids qualifying a target column.
+    /// </summary>
+    bool SupportsMergeTargetQualification => true;
+
+    /// <summary>
+    /// Renders the terminator of a general <c>MERGE</c>. Defaults to none; SQL Server requires a
+    /// terminating semicolon.
+    /// </summary>
+    string MakeMergeStatementTerminator(KeywordCase keywordCase = KeywordCase.Lower) => string.Empty;
+
+    /// <summary>
+    /// Renders the <c>RETURNING</c> clause of a general <c>MERGE</c>. Defaults to the ANSI form; PostgreSQL
+    /// overrides it to qualify the target columns, whose names would otherwise be ambiguous with the source.
+    /// </summary>
+    string MakeMergeReturning(IReadOnlyList<string> columns, KeywordCase keywordCase = KeywordCase.Lower)
+        => MakeReturning(columns, keywordCase);
+
+    /// <summary>
     /// Whether the dialect can execute a <c>DELETE</c> and report the affected-row count. Declared as a
     /// default interface method returning <c>true</c>; the native statement is rendered by
     /// <see cref="MakeDeleteHead"/> (ClickHouse renders its <c>ALTER TABLE ... DELETE</c> mutation).
@@ -1331,6 +1384,49 @@ public interface ISqlDialect
         string? whereSql,
         KeywordCase keywordCase = KeywordCase.Lower)
         => throw new NotSupportedException($"{GetType().Name} cannot render a multi-table UPDATE.");
+
+    /// <summary>
+    /// Whether the dialect can materialise a query into a table with
+    /// <c>CREATE [TEMPORARY] TABLE ... AS SELECT</c>. Declared as a default interface method returning
+    /// <c>false</c> so existing external implementations keep compiling; PostgreSQL, SQLite, MySQL and
+    /// MariaDB opt in, while SQL Server (a different <c>SELECT ... INTO</c> form) and ClickHouse (no
+    /// temporary <c>AS SELECT</c>) keep the default.
+    /// </summary>
+    bool SupportsCreateTableAsSelect => false;
+
+    /// <summary>
+    /// Whether the dialect accepts a column list on <c>CREATE TABLE ... AS SELECT</c> (PostgreSQL,
+    /// MySQL, MariaDB). SQLite derives every column from the query and accepts no list, so it keeps the
+    /// default. Declared as a default interface method returning <c>false</c>.
+    /// </summary>
+    bool SupportsCreateTableAsSelectColumnList => false;
+
+    /// <summary>
+    /// Whether the dialect accepts <c>ON COMMIT { PRESERVE ROWS | DELETE ROWS | DROP }</c> on a
+    /// temporary table (PostgreSQL only). Declared as a default interface method returning <c>false</c>.
+    /// </summary>
+    bool SupportsCreateTableAsSelectOnCommit => false;
+
+    /// <summary>
+    /// Whether the dialect accepts <c>WITH [NO] DATA</c> after the query of a
+    /// <c>CREATE TABLE ... AS SELECT</c> (PostgreSQL only). Declared as a default interface method
+    /// returning <c>false</c>.
+    /// </summary>
+    bool SupportsCreateTableAsSelectWithNoData => false;
+
+    /// <summary>
+    /// Renders a <c>CREATE [TEMPORARY] TABLE ... AS SELECT</c> statement over the already-resolved,
+    /// optionally quoted <paramref name="clause"/> and the already-rendered <paramref name="selectSql"/>
+    /// body. Only called through a dialect that set <see cref="SupportsCreateTableAsSelect"/>; the
+    /// optional parts (column list, <c>ON COMMIT</c>, <c>WITH NO DATA</c>) are gated by their own flags
+    /// before this is reached.
+    /// </summary>
+    /// <param name="clause">The resolved clause options.</param>
+    /// <param name="selectSql">The rendered body query.</param>
+    /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
+    /// <returns>The rendered statement.</returns>
+    string MakeCreateTableAsSelect(CreateTableAsClause clause, string selectSql, KeywordCase keywordCase = KeywordCase.Lower)
+        => throw new NotSupportedException($"{GetType().Name} cannot render CREATE TABLE ... AS SELECT.");
 }
 
 /// <summary>Which side of a string <see cref="string.Trim()"/> removes whitespace from.</summary>

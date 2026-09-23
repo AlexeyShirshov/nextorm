@@ -88,4 +88,19 @@ public class MergeSqlGenerationTests
 
         act.Should().Throw<InvalidOperationException>();
     }
+
+    [Fact]
+    public void FullMerge_OnSqlite_ShouldThrow()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var act = () => ctx.MergeInto<IMergeEntity>()
+            .Using(new MergeEntity { Id = 1, Name = "a", Age = 5 })
+            .OnKeys()
+            .WhenMatched().ThenUpdate()
+            .WhenNotMatched().ThenInsert()
+            .ToSql();
+
+        act.Should().Throw<NotSupportedException>();
+    }
 }

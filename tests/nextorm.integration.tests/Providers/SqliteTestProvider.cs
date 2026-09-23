@@ -32,6 +32,7 @@ internal sealed class SqliteTestProvider : ITestProvider
     public bool SupportsInsertReturning => true;
     public bool SupportsTruncate => false;
     public bool SupportsDeleteJoin => false;
+    public bool SupportsCreateTableAsSelect => true;
     public string TableValuedFunctionSkipReason => string.Empty;
     public string SkipReason => string.Empty;
 

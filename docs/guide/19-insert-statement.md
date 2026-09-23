@@ -406,29 +406,11 @@ interface-mapped entity either project the columns (`Returning(x => new { x.Id, 
 class that implements the interface; `Returning()` on the interface itself throws a
 `NotSupportedException` at execution.
 
-## Upsert (key merge)
+## Upsert and MERGE
 
-[`MergeInto<TEntity>()`](xref:NextORM.Core.DataContextExtensions.MergeInto``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) writes a source row set into the table and lets the database decide, per declared key, whether to update the existing row or insert a new one. The source is a single mapped entity or a batch, the match key is resolved from the entity mapping with `OnKeys()`, and both branches — `WhenMatchedUpdate()` (set every non-key writable column from the source) and `WhenNotMatchedInsert()` — are required:
+The same builder family also writes rows through a `MERGE`: a portable **key upsert** (`OnKeys()` + `WhenMatchedUpdate()` + `WhenNotMatchedInsert()`, rendered as `INSERT ... ON CONFLICT` / `ON DUPLICATE KEY` / `MERGE`) and a general **full `MERGE`** with `WHEN MATCHED`/`WHEN NOT MATCHED` branches, arbitrary conditions, `THEN DELETE`/`THEN DO NOTHING` and `RETURNING`/`OUTPUT`. Both start from `ctx.MergeInto<TEntity>()` and are documented in their own guide:
 
-```csharp
-ctx.MergeInto<ISimpleEntity>()
-    .Using(new SimpleEntity { Id = 1, Name = "a" })   // or Using(new[] { e1, e2 })
-    .OnKeys()
-    .WhenMatchedUpdate()
-    .WhenNotMatchedInsert()
-    .Merge();
-```
-
-The builder renders the provider's native form; `ToSql()` inspects it without a connection:
-
-| Provider | Rendered form |
-|---|---|
-| PostgreSQL, SQLite | `INSERT ... ON CONFLICT (<keys>) DO UPDATE SET <col> = excluded.<col>` |
-| MySQL, MariaDB | `INSERT ... ON DUPLICATE KEY UPDATE <col> = VALUES(<col>)` |
-| SQL Server | `MERGE ... USING (VALUES ...) AS source (...) ON ... WHEN MATCHED THEN UPDATE SET ... WHEN NOT MATCHED THEN INSERT ...;` |
-| ClickHouse, in-memory | `NotSupportedException` |
-
-`Merge()`/`MergeAsync()` return the number of affected rows. The key must be declared (`[Key]`/`.Key()`) and must not be database-generated; an entity with only key columns is rejected because there is nothing to update. This is the *key upsert* form only — a full `MERGE` with arbitrary `WHEN MATCHED`/`WHEN NOT MATCHED` branches (including `DELETE`) is not part of this surface.
+- [Data merging (MERGE / upsert)](23-merge-statement.md)
 
 ## Inspecting the SQL
 
@@ -463,19 +445,24 @@ SQL provider. Only the generated-key form differs, and a provider that cannot ex
   parameter (`@p0`, `$p0`, ...) bound on execution.
 * **`null` overloads.** `Value(x => x.Name, null)` is ambiguous between the value and the column-expression
   overload; cast the literal: `Value(x => x.Name, (string?)null)`.
-* **Key upsert, no full `MERGE`** — `ON CONFLICT`/`ON DUPLICATE KEY`/`MERGE` key upsert **is** implemented
-  (see [Upsert (key merge)](#upsert-key-merge)); a full `MERGE` with arbitrary `WHEN MATCHED`/`WHEN NOT
-  MATCHED` branches is not. `INSERT ... SELECT` **is** implemented (see *A batch from a query*
-  above). (An all-defaults row *is* supported: see [Writing values](#writing-values).)
+* **Key upsert and full `MERGE`** — `ON CONFLICT`/`ON DUPLICATE KEY`/`MERGE` key upsert **is** implemented
+  (see [Upsert (key merge)](23-merge-statement.md#upsert-key-merge)), and a full `MERGE` with
+  `WHEN MATCHED`/`WHEN NOT MATCHED`/`WHEN NOT MATCHED BY SOURCE` branches is available on SQL Server and
+  PostgreSQL 15+ (see [Full MERGE](23-merge-statement.md#full-merge)). `INSERT ... SELECT` **is** implemented
+  (see *A batch from a query* above). (An all-defaults row *is* supported: see [Writing values](#writing-values).)
 * **Mutations are not prepared or plan-cached.** Optimisation in nextorm targets read-only queries
   only (`Prepare`, the implicit plan cache, benchmarks); a mutation always renders and executes one
   command per call.
+* **Affected-row count.** `Insert()`/`InsertAsync()` return the number of rows the provider reports.
+  ClickHouse does not report one for `INSERT ... VALUES`, so it returns `0` even though the row is
+  written — do not use the count to confirm a ClickHouse insert.
 * **No chunking of a large batch**; thousands of rows may hit the provider's per-statement limit. Use
   the provider's bulk-copy/binary API for bulk loads.
-* The in-memory provider is read-only: every write terminal (`Insert()`, `ReturningIdentity`, `ReturningKey`, ...) throws `NotSupportedException`.
+* The in-memory provider is query-only: `INSERT`/`UPDATE`/`DELETE` and the full `MERGE` throw `NotSupportedException`; only the key-upsert merge is applied to the registered sequence in the context.
 
 ## See also
 
+- [Data merging (MERGE / upsert)](23-merge-statement.md)
 - [Limitations and out-of-scope features](../advanced/limitations.md)
 - [Provider overview](../providers/overview.md)
 - [API reference](../advanced/api-reference.md)

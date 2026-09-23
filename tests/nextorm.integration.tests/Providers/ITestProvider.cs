@@ -83,6 +83,14 @@ public interface ITestProvider
     /// </summary>
     bool SupportsDeleteJoin { get; }
 
+    /// <summary>
+    /// True when the provider can materialise a query into a temporary table with
+    /// <c>CREATE TEMPORARY TABLE ... AS SELECT</c>. PostgreSQL, SQLite, MySQL and MariaDB can; SQL Server
+    /// uses a different <c>SELECT ... INTO #t</c> form and ClickHouse cannot express a temporary
+    /// <c>AS SELECT</c>, so the shared test is skipped there and the rejection test runs instead.
+    /// </summary>
+    bool SupportsCreateTableAsSelect { get; }
+
     void EnsureSeeded();
 
     IDataContext CreateContext();

@@ -39,6 +39,7 @@ internal sealed class SqlServerTestProvider : ITestProvider
     public bool SupportsInsertReturning => true;
     public bool SupportsTruncate => true;
     public bool SupportsDeleteJoin => true;
+    public bool SupportsCreateTableAsSelect => false;
     public string TableValuedFunctionSkipReason => "The shared table-valued function test uses SQLite's json_each; SQL Server exposes row-returning JSON through CROSS APPLY OPENJSON instead.";
 
     public string SkipReason => SqlServerContainer.Failure ?? "SQL Server is not available.";

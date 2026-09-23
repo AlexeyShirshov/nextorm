@@ -1937,6 +1937,25 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void Cte_Recursive_WithDistinctUnion_ShouldEmitUnionNotUnionAll()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var anchor = e.Where(s => s.Id == 1).Select(s => new CteNumberRow { n = s.Id });
+        var step = ctx.From("nums").Where(t => t["n"].AsInt < 5).Select(t => new CteNumberRow { n = t["n"].AsInt + 1 });
+        var body = anchor.Union(step);
+
+        var sql = SqlOf(ctx, ctx.WithRecursive("nums", body).From("nums").Select(t => new CteNumberRow { n = t["n"].AsInt * 2 }));
+
+        sql.Should().StartWith("with recursive nums as (");
+        sql.Should().Contain(" union ");
+        sql.Should().NotContain("union all");
+        sql.Should().Contain("(n * 2)");
+        sql.Should().NotContain("from (select");
+    }
+
+    [Fact]
     public void RowNumber_ShouldEmitOverWithPartitionAndOrder()
     {
         using var ctx = SqliteTestContext.Create();

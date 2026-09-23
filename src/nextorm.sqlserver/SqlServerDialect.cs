@@ -69,6 +69,21 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <summary>SQL Server expresses a key upsert as a <c>MERGE</c> over a <c>VALUES</c> derived source.</summary>
     public override bool SupportsMerge => true;
 
+    /// <summary>SQL Server renders a general, multi-branch <c>MERGE</c>.</summary>
+    public override bool SupportsMergeStatement => true;
+
+    /// <summary>SQL Server <c>MERGE</c> supports a <c>WHEN MATCHED THEN DELETE</c> branch.</summary>
+    public override bool SupportsMergeDelete => true;
+
+    /// <summary>SQL Server is the only supported provider with <c>WHEN NOT MATCHED BY SOURCE</c>.</summary>
+    public override bool SupportsMergeBySourceDelete => true;
+
+    /// <summary>SQL Server <c>MERGE</c> supports an explicit <c>ON &lt;condition&gt;</c> and <c>WHEN ... AND &lt;condition&gt;</c>.</summary>
+    public override bool SupportsMergeConditionalBranches => true;
+
+    /// <summary>SQL Server requires a terminating semicolon after <c>MERGE</c>.</summary>
+    public override string MakeMergeStatementTerminator(KeywordCase keywordCase = KeywordCase.Lower) => ";";
+
     /// <summary>Renders the key-upsert <c>MERGE ... USING (VALUES ...) AS source (...) ON ...</c> statement (T-SQL requires the terminating semicolon).</summary>
     public override string MakeMerge(
         string target,

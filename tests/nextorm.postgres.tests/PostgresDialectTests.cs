@@ -16,6 +16,16 @@ public class PostgresDialectTests
     private static readonly ISqlDialect Dialect = PostgresDialect.Instance;
 
     [Fact]
+    public void MergeHooks_ShouldMatchPostgres()
+    {
+        Dialect.SupportsMergeStatement.Should().BeTrue();
+        Dialect.SupportsMergeDelete.Should().BeTrue();
+        Dialect.SupportsMergeDoNothing.Should().BeTrue();
+        Dialect.SupportsMergeBySourceDelete.Should().BeFalse();
+        Dialect.SupportsMergeTargetQualification.Should().BeFalse();
+    }
+
+    [Fact]
     public void MakeTypeName_String_ShouldBeText()
     {
         Dialect.MakeTypeName(typeof(string)).Should().Be("text");

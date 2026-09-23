@@ -40,6 +40,7 @@ internal sealed class MySqlTestProvider : ITestProvider
     public bool SupportsInsertReturning => false;
     public bool SupportsTruncate => true;
     public bool SupportsDeleteJoin => true;
+    public bool SupportsCreateTableAsSelect => true;
     public string TableValuedFunctionSkipReason => "The shared table-valued function test uses SQLite's json_each; MySQL exposes JSON rows through JSON_TABLE with a different shape.";
 
     public string SkipReason => MySqlContainer.Failure ?? "MySQL is not available.";

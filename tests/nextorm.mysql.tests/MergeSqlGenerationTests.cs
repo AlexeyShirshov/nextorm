@@ -90,4 +90,19 @@ public class MergeSqlGenerationTests
             .ToSql()
             .Should().Be("INSERT INTO merge_entity (id, name, age) VALUES (@p0, @p1, @p2) ON DUPLICATE KEY UPDATE name = VALUES(name), age = VALUES(age)");
     }
+
+    [Fact]
+    public void FullMerge_OnMySql_ShouldThrow()
+    {
+        using var ctx = MySqlTestContext.Create();
+
+        var act = () => ctx.MergeInto<IMergeEntity>()
+            .Using(new MergeEntity { Id = 1, Name = "a", Age = 5 })
+            .OnKeys()
+            .WhenMatched().ThenUpdate()
+            .WhenNotMatched().ThenInsert()
+            .ToSql();
+
+        act.Should().Throw<NotSupportedException>();
+    }
 }

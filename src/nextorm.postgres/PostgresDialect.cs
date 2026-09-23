@@ -27,6 +27,25 @@ public sealed class PostgresDialect : SqlDialectBase
     /// <summary>PostgreSQL expresses a key upsert as <c>INSERT ... ON CONFLICT (&lt;keys&gt;) DO UPDATE SET ...</c> (9.5+).</summary>
     public override bool SupportsOnConflict => true;
 
+    /// <summary>PostgreSQL 15+ renders a general <c>MERGE</c>; the server version is a documented requirement.</summary>
+    public override bool SupportsMergeStatement => true;
+
+    /// <summary>PostgreSQL <c>MERGE</c> supports a <c>WHEN MATCHED THEN DELETE</c> branch.</summary>
+    public override bool SupportsMergeDelete => true;
+
+    /// <summary>PostgreSQL <c>MERGE</c> supports a <c>THEN DO NOTHING</c> branch.</summary>
+    public override bool SupportsMergeDoNothing => true;
+
+    /// <summary>PostgreSQL <c>MERGE</c> supports an explicit <c>ON &lt;condition&gt;</c> and <c>WHEN ... AND &lt;condition&gt;</c>.</summary>
+    public override bool SupportsMergeConditionalBranches => true;
+
+    /// <summary>PostgreSQL <c>MERGE</c> forbids qualifying a target column in the <c>UPDATE SET</c> list.</summary>
+    public override bool SupportsMergeTargetQualification => false;
+
+    /// <summary>PostgreSQL <c>MERGE ... RETURNING</c> must qualify target columns, otherwise they are ambiguous with the source.</summary>
+    public override string MakeMergeReturning(IReadOnlyList<string> columns, KeywordCase keywordCase = KeywordCase.Lower)
+        => Kw(keywordCase, " returning ") + string.Join(", ", columns.Select(static c => "target." + c));
+
     /// <summary>PostgreSQL reads the last generated identity of the session through the <c>lastval()</c> function.</summary>
     public override bool SupportsIdentityFunction => true;
 
@@ -373,6 +392,37 @@ public sealed class PostgresDialect : SqlDialectBase
 
     /// <summary>PostgreSQL supports the trailing <c>FOR UPDATE</c>/<c>FOR SHARE</c> row-locking clause.</summary>
     public override ILockRenderer Lock => PostgresLockRenderer.Instance;
+
+    /// <summary>PostgreSQL supports <c>CREATE [TEMPORARY] TABLE ... AS SELECT</c>.</summary>
+    public override bool SupportsCreateTableAsSelect => true;
+
+    /// <summary>PostgreSQL accepts a column list on <c>CREATE TABLE ... AS SELECT</c>.</summary>
+    public override bool SupportsCreateTableAsSelectColumnList => true;
+
+    /// <summary>PostgreSQL supports <c>ON COMMIT { PRESERVE ROWS | DELETE ROWS | DROP }</c> on a temporary table.</summary>
+    public override bool SupportsCreateTableAsSelectOnCommit => true;
+
+    /// <summary>PostgreSQL supports <c>WITH [NO] DATA</c> on <c>CREATE TABLE ... AS SELECT</c>.</summary>
+    public override bool SupportsCreateTableAsSelectWithNoData => true;
+
+    /// <summary>Adds the PostgreSQL <c>ON COMMIT { PRESERVE ROWS | DELETE ROWS | DROP }</c> clause of a temporary table.</summary>
+    protected override string MakeCreateTableAsHead(CreateTableAsClause clause, KeywordCase keywordCase)
+    {
+        var head = base.MakeCreateTableAsHead(clause, keywordCase);
+        if (clause.OnCommit is TempTableOnCommit.PreserveRows)
+            return head;
+
+        return head + Kw(keywordCase, " on commit ") + Kw(keywordCase, clause.OnCommit switch
+        {
+            TempTableOnCommit.DeleteRows => "delete rows",
+            TempTableOnCommit.Drop => "drop",
+            _ => "preserve rows",
+        });
+    }
+
+    /// <summary>Appends the PostgreSQL <c>WITH NO DATA</c> clause.</summary>
+    protected override string MakeCreateTableAsTail(CreateTableAsClause clause, KeywordCase keywordCase)
+        => clause.WithData ? string.Empty : Kw(keywordCase, " with no data");
 }
 
 internal sealed class PostgresIifRenderer : IIifRenderer

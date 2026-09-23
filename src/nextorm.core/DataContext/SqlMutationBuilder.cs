@@ -154,6 +154,11 @@ internal static class SqlMutationBuilder
     /// <param name="command">The key-upsert command to render.</param>
     /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
     /// <param name="parameterProvider">The provider that names the literal parameters, or <see langword="null"/> to start a fresh sequence.</param>
+    /// <param name="sourceSql">The rendered <c>SELECT</c> of a query-sourced full <c>MERGE</c> (<c>USING (&lt;select&gt;) AS source</c>), or <see langword="null"/> for a <c>VALUES</c> source.</param>
+    /// <param name="sourceParameters">The parameters referenced by <paramref name="sourceSql"/>, or <see langword="null"/>.</param>
+    /// <param name="parameters">The shared parameter accumulator (branch conditions and <c>VALUES</c> rows), or <see langword="null"/> to start a new one.</param>
+    /// <param name="matchConditionSql">The rendered <c>ON &lt;condition&gt;</c> of an explicit match, or <see langword="null"/> to match on the keys.</param>
+    /// <param name="branchConditions">The rendered <c>AND &lt;condition&gt;</c> of each branch in order, or <see langword="null"/>.</param>
     /// <returns>The rendered SQL and the parameters it references.</returns>
     /// <exception cref="NotSupportedException">The dialect has no <c>ON CONFLICT</c>, <c>ON DUPLICATE KEY</c> or <c>MERGE</c> form.</exception>
     internal static (string Sql, List<Parameter> Parameters) MakeMerge(
@@ -162,15 +167,22 @@ internal static class SqlMutationBuilder
         INamingConvention? namingConvention,
         MergeCommand command,
         KeywordCase keywordCase = KeywordCase.Lower,
-        IParameterProvider? parameterProvider = null)
+        IParameterProvider? parameterProvider = null,
+        string? sourceSql = null,
+        IReadOnlyList<Parameter>? sourceParameters = null,
+        List<Parameter>? parameters = null,
+        string? matchConditionSql = null,
+        IReadOnlyList<string?>? branchConditions = null)
     {
         parameterProvider ??= new DefaultParameterProvider();
-        var parameters = new List<Parameter>();
+        parameters ??= new List<Parameter>();
         var writer = StringBuilderPool.Shared.Get();
 
         try
         {
-            if (dialect.SupportsMerge)
+            if (command.Branches is not null)
+                RenderFullMerge(writer, dialect, quoteIdentifiers, namingConvention, command, parameters, keywordCase, parameterProvider, sourceSql, sourceParameters, matchConditionSql, branchConditions);
+            else if (dialect.SupportsMerge)
                 RenderMerge(writer, dialect, quoteIdentifiers, namingConvention, command, parameters, keywordCase, parameterProvider);
             else if (dialect.SupportsOnConflict || dialect.SupportsOnDuplicateKey)
                 RenderOnConflictUpsert(writer, dialect, quoteIdentifiers, namingConvention, command, parameters, keywordCase, parameterProvider);
@@ -371,6 +383,64 @@ internal static class SqlMutationBuilder
         return dialect.MakeTruncate(table, keywordCase);
     }
 
+    /// <summary>
+    /// Renders a <c>CREATE [TEMPORARY] TABLE ... AS SELECT</c> statement for <paramref name="command"/>:
+    /// the already-rendered body query is wrapped in the dialect's native form over the raw,
+    /// optionally quoted target table. The body carries its own <c>WITH</c> clause (a CTAS places
+    /// <c>WITH</c> inside the query, after <c>AS</c>). The optional parts are rejected up front on a
+    /// dialect whose capability flag is off, so the user gets an actionable error instead of invalid SQL.
+    /// </summary>
+    /// <param name="dialect">The active SQL dialect.</param>
+    /// <param name="quoteIdentifiers">Whether physical identifiers must be quoted.</param>
+    /// <param name="bodySql">The rendered body query, including its own <c>WITH</c> clause when it declares CTEs.</param>
+    /// <param name="sourceParameters">The parameters referenced by the body query.</param>
+    /// <param name="command">The materialisation command to render.</param>
+    /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
+    /// <returns>The rendered SQL and the parameters it references.</returns>
+    /// <exception cref="NotSupportedException">The dialect cannot express <c>CREATE TABLE ... AS SELECT</c> or one of the requested options.</exception>
+    internal static (string Sql, List<Parameter> Parameters) MakeCreateTableAsSelect(
+        ISqlDialect dialect,
+        bool quoteIdentifiers,
+        string bodySql,
+        IReadOnlyList<Parameter> sourceParameters,
+        CreateTableAsCommand command,
+        KeywordCase keywordCase = KeywordCase.Lower)
+    {
+        if (!dialect.SupportsCreateTableAsSelect)
+            throw new NotSupportedException(
+                $"{dialect.GetType().Name} cannot materialise a query into a table: it has no CREATE TABLE ... AS SELECT form.");
+
+        var options = command.Options;
+        if (options.Columns is { Count: > 0 } && !dialect.SupportsCreateTableAsSelectColumnList)
+            throw new NotSupportedException(
+                $"{dialect.GetType().Name} cannot declare a column list on CREATE TABLE ... AS SELECT.");
+        if (options.OnCommit is not TempTableOnCommit.PreserveRows && !command.Temporary)
+            throw new NotSupportedException(
+                "ON COMMIT applies only to a temporary table; use ToTempTable instead of ToTable.");
+        if (options.OnCommit is not TempTableOnCommit.PreserveRows && !dialect.SupportsCreateTableAsSelectOnCommit)
+            throw new NotSupportedException(
+                $"{dialect.GetType().Name} cannot use ON COMMIT on CREATE TABLE ... AS SELECT.");
+        if (!options.WithData && !dialect.SupportsCreateTableAsSelectWithNoData)
+            throw new NotSupportedException(
+                $"{dialect.GetType().Name} cannot render WITH NO DATA on CREATE TABLE ... AS SELECT.");
+
+        var table = quoteIdentifiers ? dialect.QuoteIdentifier(command.TargetName) : command.TargetName;
+
+        IReadOnlyList<string>? columns = null;
+        if (options.Columns is { Count: > 0 } rawColumns)
+        {
+            var rendered = new string[rawColumns.Count];
+            for (var i = 0; i < rawColumns.Count; i++)
+                rendered[i] = quoteIdentifiers ? dialect.QuoteIdentifier(rawColumns[i]) : rawColumns[i];
+
+            columns = rendered;
+        }
+
+        var clause = new CreateTableAsClause(table, command.Temporary, options.IfNotExists, columns, options.OnCommit, options.WithData);
+        var sql = dialect.MakeCreateTableAsSelect(clause, bodySql, keywordCase);
+        return (sql, new List<Parameter>(sourceParameters));
+    }
+
     // INSERT ... VALUES ... <ON CONFLICT ... DO UPDATE SET> | <ON DUPLICATE KEY UPDATE>, sharing the
     // insert head and the value rows; only the conflict clause and the incoming-value reference differ.
     private static void RenderOnConflictUpsert(
@@ -433,6 +503,238 @@ internal static class SqlMutationBuilder
         finally
         {
             StringBuilderPool.Shared.Return(rows);
+        }
+    }
+
+    // A general MERGE with an arbitrary set of branches:
+    // MERGE INTO <target> AS target USING (VALUES ...) AS source (<cols>) ON ... <branches> [OUTPUT|RETURNING] [;].
+    private static void RenderFullMerge(
+        StringBuilder writer,
+        ISqlDialect dialect,
+        bool quoteIdentifiers,
+        INamingConvention? namingConvention,
+        MergeCommand command,
+        List<Parameter> parameters,
+        KeywordCase keywordCase,
+        IParameterProvider parameterProvider,
+        string? sourceSql,
+        IReadOnlyList<Parameter>? sourceParameters,
+        string? matchConditionSql,
+        IReadOnlyList<string?>? branchConditions)
+    {
+        ValidateMergeBranches(dialect, command);
+
+        var table = ResolveTableName(command.TableName, command.IsTableNameAuto, command.EntityType, namingConvention);
+        if (quoteIdentifiers)
+            table = dialect.QuoteIdentifier(table);
+
+        var columns = RenderColumns(dialect, quoteIdentifiers, namingConvention, ColumnProperties(command.Columns));
+        var keys = RenderColumns(dialect, quoteIdentifiers, namingConvention, command.Keys);
+        var qualifyTarget = dialect.SupportsMergeTargetQualification;
+
+        var rows = StringBuilderPool.Shared.Get();
+        try
+        {
+            writer.Append(SqlKeywords.Of(keywordCase, "merge into ")).Append(table);
+            AppendMergeUsingSource(writer, rows, dialect, quoteIdentifiers, namingConvention, command, columns, parameters, keywordCase, parameterProvider, sourceSql, sourceParameters);
+            AppendMergeOnKeys(writer, keys, matchConditionSql, keywordCase);
+
+            for (var i = 0; i < command.Branches!.Count; i++)
+            {
+                var condition = branchConditions is not null && i < branchConditions.Count ? branchConditions[i] : null;
+                AppendMergeBranch(writer, dialect, quoteIdentifiers, namingConvention, command.Branches[i], condition, keywordCase, qualifyTarget);
+            }
+
+            AppendMergeReturning(writer, dialect, quoteIdentifiers, namingConvention, command, keywordCase);
+            writer.Append(dialect.MakeMergeStatementTerminator(keywordCase));
+        }
+        finally
+        {
+            StringBuilderPool.Shared.Return(rows);
+        }
+    }
+
+    private static void ValidateMergeBranches(ISqlDialect dialect, MergeCommand command)
+    {
+        if (!dialect.SupportsMergeStatement)
+            throw new NotSupportedException(
+                $"{dialect.GetType().Name} does not support the full MERGE statement; use its native upsert form (WhenMatchedUpdate/WhenNotMatchedInsert).");
+
+        var branches = command.Branches!;
+        var hasDelete = false;
+        var hasNothing = false;
+        var hasBySource = false;
+        var hasCondition = command.MatchCondition is not null;
+        foreach (var branch in branches)
+        {
+            if (branch.Action == MergeActionKind.Delete)
+                hasDelete = true;
+            if (branch.Action == MergeActionKind.Nothing)
+                hasNothing = true;
+            if (branch.Match == MergeMatchKind.NotMatchedBySource)
+                hasBySource = true;
+            if (branch.Condition is not null)
+                hasCondition = true;
+        }
+
+        if (hasDelete && !dialect.SupportsMergeDelete)
+            throw new NotSupportedException($"{dialect.GetType().Name} does not support a DELETE branch in MERGE.");
+        if (hasNothing && !dialect.SupportsMergeDoNothing)
+            throw new NotSupportedException($"{dialect.GetType().Name} does not support a DO NOTHING branch in MERGE.");
+        if (hasBySource && !dialect.SupportsMergeBySourceDelete)
+            throw new NotSupportedException($"{dialect.GetType().Name} does not support WHEN NOT MATCHED BY SOURCE.");
+        if (hasCondition && !dialect.SupportsMergeConditionalBranches)
+            throw new NotSupportedException($"{dialect.GetType().Name} does not support a merge search condition (On(...)/WhenMatched(condition)/WhenNotMatched(condition)).");
+    }
+
+    private static void AppendMergeUsingSource(
+        StringBuilder writer,
+        StringBuilder rows,
+        ISqlDialect dialect,
+        bool quoteIdentifiers,
+        INamingConvention? namingConvention,
+        MergeCommand command,
+        string[] columns,
+        List<Parameter> parameters,
+        KeywordCase keywordCase,
+        IParameterProvider parameterProvider,
+        string? sourceSql,
+        IReadOnlyList<Parameter>? sourceParameters)
+    {
+        if (command.Source is not null)
+        {
+            if (sourceSql is null)
+                throw new BuildSqlCommandException("A MERGE query source is missing its rendered source SQL.");
+
+            writer.Append(SqlKeywords.Of(keywordCase, " as target using (")).Append(sourceSql)
+                .Append(SqlKeywords.Of(keywordCase, ") as source"));
+
+            if (sourceParameters is { Count: > 0 })
+                parameters.AddRange(sourceParameters);
+        }
+        else
+        {
+            AppendValuesRows(rows, dialect, quoteIdentifiers, namingConvention, command.Columns, command.RowCount, parameters, keywordCase, parameterProvider);
+
+            writer.Append(SqlKeywords.Of(keywordCase, " as target using (values ")).Append(rows)
+                .Append(SqlKeywords.Of(keywordCase, ") as source (")).Append(string.Join(", ", columns)).Append(')');
+        }
+    }
+
+    private static void AppendMergeOnKeys(StringBuilder writer, string[] keys, string? matchConditionSql, KeywordCase keywordCase)
+    {
+        writer.Append(SqlKeywords.Of(keywordCase, " on "));
+
+        if (matchConditionSql is not null)
+        {
+            writer.Append(matchConditionSql);
+            return;
+        }
+
+        for (var i = 0; i < keys.Length; i++)
+        {
+            if (i > 0)
+                writer.Append(SqlKeywords.Of(keywordCase, " and "));
+
+            writer.Append("target.").Append(keys[i]).Append(" = source.").Append(keys[i]);
+        }
+    }
+
+    // Renders the WHEN <match> [AND <condition>] head of a branch; the action is appended by the caller.
+    private static void AppendMergeWhen(StringBuilder writer, MergeMatchKind match, string? condition, KeywordCase keywordCase)
+    {
+        writer.Append(match switch
+        {
+            MergeMatchKind.NotMatchedBySource => SqlKeywords.Of(keywordCase, " when not matched by source"),
+            MergeMatchKind.NotMatchedByTarget => SqlKeywords.Of(keywordCase, " when not matched"),
+            _ => SqlKeywords.Of(keywordCase, " when matched"),
+        });
+
+        if (condition is not null)
+            writer.Append(SqlKeywords.Of(keywordCase, " and ")).Append(condition);
+    }
+
+    private static void AppendMergeBranch(
+        StringBuilder writer,
+        ISqlDialect dialect,
+        bool quoteIdentifiers,
+        INamingConvention? namingConvention,
+        MergeBranch branch,
+        string? condition,
+        KeywordCase keywordCase,
+        bool qualifyTarget)
+    {
+        switch (branch.Action)
+        {
+            case MergeActionKind.Update:
+                AppendMergeWhen(writer, MergeMatchKind.Matched, condition, keywordCase);
+                writer.Append(SqlKeywords.Of(keywordCase, " then update set "));
+                AppendMergeAssignments(writer, dialect, quoteIdentifiers, namingConvention, branch.Columns, qualifyTarget);
+                break;
+            case MergeActionKind.Insert:
+                AppendMergeWhen(writer, MergeMatchKind.NotMatchedByTarget, condition, keywordCase);
+                var insertColumns = RenderColumns(dialect, quoteIdentifiers, namingConvention, branch.Columns);
+                writer.Append(SqlKeywords.Of(keywordCase, " then insert (")).Append(string.Join(", ", insertColumns))
+                    .Append(SqlKeywords.Of(keywordCase, ") values ("));
+                for (var i = 0; i < insertColumns.Length; i++)
+                {
+                    if (i > 0)
+                        writer.Append(", ");
+
+                    writer.Append("source.").Append(insertColumns[i]);
+                }
+
+                writer.Append(')');
+                break;
+            case MergeActionKind.Nothing:
+                AppendMergeWhen(writer, branch.Match, condition, keywordCase);
+                writer.Append(SqlKeywords.Of(keywordCase, " then do nothing"));
+                break;
+            default:
+                AppendMergeWhen(writer, branch.Match, condition, keywordCase);
+                writer.Append(SqlKeywords.Of(keywordCase, " then delete"));
+                break;
+        }
+    }
+
+    private static void AppendMergeReturning(
+        StringBuilder writer,
+        ISqlDialect dialect,
+        bool quoteIdentifiers,
+        INamingConvention? namingConvention,
+        MergeCommand command,
+        KeywordCase keywordCase)
+    {
+        var returningColumns = RenderColumnsOrNull(dialect, quoteIdentifiers, namingConvention, command.ReturningColumns);
+        if (returningColumns is null)
+            return;
+
+        if (dialect.SupportsOutput)
+            writer.Append(dialect.MakeOutput(returningColumns, keywordCase));
+        else if (dialect.SupportsReturning)
+            writer.Append(dialect.MakeMergeReturning(returningColumns, keywordCase));
+    }
+
+    // Renders the "target.col = source.col, ..." list of a MERGE update branch. PostgreSQL forbids
+    // qualifying the target column, SQL Server requires the target alias; the source is always qualified.
+    private static void AppendMergeAssignments(
+        StringBuilder writer,
+        ISqlDialect dialect,
+        bool quoteIdentifiers,
+        INamingConvention? namingConvention,
+        IReadOnlyList<IPropertyMetadata> columns,
+        bool qualifyTarget)
+    {
+        var rendered = RenderColumns(dialect, quoteIdentifiers, namingConvention, columns);
+        for (var i = 0; i < rendered.Length; i++)
+        {
+            if (i > 0)
+                writer.Append(", ");
+
+            if (qualifyTarget)
+                writer.Append("target.");
+
+            writer.Append(rendered[i]).Append(" = source.").Append(rendered[i]);
         }
     }
 

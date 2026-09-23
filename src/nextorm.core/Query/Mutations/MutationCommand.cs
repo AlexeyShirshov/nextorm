@@ -21,6 +21,8 @@ internal enum SqlStatementType
     Merge,
     /// <summary>A <c>TRUNCATE TABLE</c> statement.</summary>
     Truncate,
+    /// <summary>A <c>CREATE [TEMPORARY] TABLE ... AS SELECT</c> statement.</summary>
+    CreateTableAsSelect,
 }
 
 /// <summary>

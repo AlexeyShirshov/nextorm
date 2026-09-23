@@ -730,6 +730,34 @@ public abstract class SqlDialectBase : ISqlDialect
         KeywordCase keywordCase = KeywordCase.Lower)
         => throw new NotSupportedException($"{GetType().Name} cannot render a MERGE upsert.");
 
+    /// <summary>Defaults to <c>false</c>; SQL Server and PostgreSQL 15+ opt into the general, multi-branch <c>MERGE</c>.</summary>
+    public virtual bool SupportsMergeStatement => false;
+
+    /// <summary>Defaults to <c>false</c>; SQL Server and PostgreSQL opt into a <c>WHEN MATCHED THEN DELETE</c> branch.</summary>
+    public virtual bool SupportsMergeDelete => false;
+
+    /// <summary>Defaults to <c>false</c>; only SQL Server opts into <c>WHEN NOT MATCHED BY SOURCE</c>.</summary>
+    public virtual bool SupportsMergeBySourceDelete => false;
+
+    /// <summary>Defaults to <c>false</c>; only PostgreSQL accepts <c>THEN DO NOTHING</c> (SQL Server has no such action).</summary>
+    public virtual bool SupportsMergeDoNothing => false;
+
+    /// <summary>Defaults to <c>false</c>; SQL Server and PostgreSQL accept an explicit <c>ON &lt;condition&gt;</c> and <c>WHEN ... AND &lt;condition&gt;</c>.</summary>
+    public virtual bool SupportsMergeConditionalBranches => false;
+
+    /// <summary>Defaults to <c>true</c>; PostgreSQL overrides it because a <c>MERGE</c> target column must not be qualified.</summary>
+    public virtual bool SupportsMergeTargetQualification => true;
+
+    /// <summary>Renders the terminator of a general <c>MERGE</c>; defaults to none, SQL Server requires <c>;</c>.</summary>
+    public virtual string MakeMergeStatementTerminator(KeywordCase keywordCase = KeywordCase.Lower) => string.Empty;
+
+    /// <summary>
+    /// Renders the <c>RETURNING</c> clause of a general <c>MERGE</c>. Defaults to the ANSI form; PostgreSQL
+    /// overrides it to qualify the target columns, whose names would otherwise be ambiguous with the source.
+    /// </summary>
+    public virtual string MakeMergeReturning(IReadOnlyList<string> columns, KeywordCase keywordCase = KeywordCase.Lower)
+        => MakeReturning(columns, keywordCase);
+
     /// <summary>Defaults to <c>false</c>; only PostgreSQL accepts a data-modifying statement (<c>INSERT ... RETURNING</c>) as a CTE body.</summary>
     public virtual bool SupportsDataModifyingCtes => false;
 
@@ -834,4 +862,60 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual bool SupportsColumnDefault => false;
     /// <summary>Renders the <c>DEFAULT</c> keyword as a value; only reached through a dialect that set <see cref="SupportsColumnDefault"/>.</summary>
     public virtual string MakeColumnDefault(KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, "default");
+
+    /// <summary>Defaults to <c>false</c>; PostgreSQL, SQLite, MySQL and MariaDB opt into a temporary <c>CREATE TABLE ... AS SELECT</c>.</summary>
+    public virtual bool SupportsCreateTableAsSelect => false;
+
+    /// <summary>Defaults to <c>false</c>; PostgreSQL, MySQL and MariaDB accept a column list with <c>AS SELECT</c>, SQLite does not.</summary>
+    public virtual bool SupportsCreateTableAsSelectColumnList => false;
+
+    /// <summary>Defaults to <c>false</c>; only PostgreSQL accepts <c>ON COMMIT</c> on a temporary table.</summary>
+    public virtual bool SupportsCreateTableAsSelectOnCommit => false;
+
+    /// <summary>Defaults to <c>false</c>; only PostgreSQL accepts <c>WITH [NO] DATA</c>.</summary>
+    public virtual bool SupportsCreateTableAsSelectWithNoData => false;
+
+    /// <summary>
+    /// Renders the ANSI/CLI <c>CREATE [TEMPORARY] TABLE [IF NOT EXISTS] &lt;t&gt; [(cols)] AS &lt;select&gt;</c>
+    /// form by composing <see cref="MakeCreateTableAsHead"/> and <see cref="MakeCreateTableAsTail"/>.
+    /// Only reached through a dialect that set <see cref="SupportsCreateTableAsSelect"/>; PostgreSQL
+    /// overrides just those two seams to add <c>ON COMMIT</c> and <c>WITH [NO] DATA</c>.
+    /// </summary>
+    public virtual string MakeCreateTableAsSelect(CreateTableAsClause clause, string selectSql, KeywordCase keywordCase = KeywordCase.Lower)
+        => MakeCreateTableAsHead(clause, keywordCase) + Kw(keywordCase, " as ") + selectSql + MakeCreateTableAsTail(clause, keywordCase);
+
+    /// <summary>
+    /// Renders the head of a <c>CREATE ... TABLE ...</c> up to (but not including) <c>AS &lt;select&gt;</c>:
+    /// the temporary modifier, <c>IF NOT EXISTS</c>, the resolved table and the optional column list.
+    /// </summary>
+    /// <param name="clause">The resolved clause options.</param>
+    /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
+    /// <returns>The rendered statement head.</returns>
+    protected virtual string MakeCreateTableAsHead(CreateTableAsClause clause, KeywordCase keywordCase)
+    {
+        var writer = new StringBuilder();
+        writer.Append(Kw(keywordCase, "create "));
+        if (clause.Temporary)
+            writer.Append(Kw(keywordCase, "temporary "));
+
+        writer.Append(Kw(keywordCase, "table "));
+        if (clause.IfNotExists)
+            writer.Append(Kw(keywordCase, "if not exists "));
+
+        writer.Append(clause.Table);
+
+        if (clause.Columns is { Count: > 0 } columns)
+            writer.Append(" (").Append(string.Join(", ", columns)).Append(')');
+
+        return writer.ToString();
+    }
+
+    /// <summary>
+    /// Renders the tail appended after the body query. The base returns nothing; PostgreSQL overrides it
+    /// to emit <c>WITH NO DATA</c>.
+    /// </summary>
+    /// <param name="clause">The resolved clause options.</param>
+    /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
+    /// <returns>The rendered statement tail.</returns>
+    protected virtual string MakeCreateTableAsTail(CreateTableAsClause clause, KeywordCase keywordCase) => string.Empty;
 }

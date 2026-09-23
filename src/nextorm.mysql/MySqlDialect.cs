@@ -396,6 +396,12 @@ public class MySqlDialect : SqlDialectBase
 
     /// <summary>MySQL/MariaDB support the trailing row-locking clause.</summary>
     public override ILockRenderer Lock => MySqlLockRenderer.Instance;
+
+    /// <summary>MySQL/MariaDB support <c>CREATE [TEMPORARY] TABLE ... AS SELECT</c>.</summary>
+    public override bool SupportsCreateTableAsSelect => true;
+
+    /// <summary>MySQL/MariaDB accept a column list on <c>CREATE TABLE ... AS SELECT</c>.</summary>
+    public override bool SupportsCreateTableAsSelectColumnList => true;
 }
 
 internal sealed class MySqlIifRenderer : IIifRenderer

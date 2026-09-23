@@ -116,6 +116,7 @@ var removed = await ctx.From<ISimpleEntity>()
 ## См. также
 
 - [Изменение данных (INSERT)](19-insert-statement.md)
+- [Слияние данных (MERGE / upsert)](23-merge-statement.md)
 - [Соединения (JOIN)](03-joins.md)
 - [Ограничения и что вне области](../advanced/limitations.md)
 - [Обзор провайдеров](../providers/overview.md)

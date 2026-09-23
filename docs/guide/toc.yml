@@ -40,6 +40,10 @@
   href: 20-delete-statement.md
 - name: Data modification (UPDATE)
   href: 21-update-statement.md
+- name: Materializing a query into a table
+  href: 22-create-table-as.md
+- name: Data modification (MERGE)
+  href: 23-merge-statement.md
 - name: Provider-specific SQL
   items:
     - name: Overview

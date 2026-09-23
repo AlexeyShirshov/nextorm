@@ -238,6 +238,9 @@ public sealed class SqliteDialect : SqlDialectBase
 
     /// <summary>SQLite supports <c>INDEXED BY</c> and <c>NOT INDEXED</c>.</summary>
     public override IIndexHintRenderer? IndexHints => SqliteIndexHintRenderer.Instance;
+
+    /// <summary>SQLite supports <c>CREATE [TEMPORARY] TABLE ... AS SELECT</c>.</summary>
+    public override bool SupportsCreateTableAsSelect => true;
 }
 
 internal sealed class SqliteIifRenderer : IIifRenderer

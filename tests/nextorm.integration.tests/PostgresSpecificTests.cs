@@ -432,4 +432,64 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         byId[2].n.Should().Be(1);
         byId[3].n.Should().Be(2);
     }
+
+    private static int MergeTestKey() => Random.Shared.Next(1_000_000, int.MaxValue);
+
+    [Fact]
+    public void FullMerge_Returning_ShouldReturnMergedRows()
+    {
+        var ctx = _sut.DataProvider;
+        var id = MergeTestKey();
+        var marker = "pm_" + Guid.NewGuid().ToString("N");
+
+        var rows = ctx.MergeInto<IMergeEntity>()
+            .Using(new MergeEntity { Id = id, Name = marker, Age = 3 })
+            .OnKeys()
+            .WhenMatched().ThenUpdate()
+            .WhenNotMatched().ThenInsert()
+            .Returning(x => new { x.Id, x.Name })
+            .ToList();
+
+        rows.Should().ContainSingle();
+        rows[0].Id.Should().Be(id);
+        rows[0].Name.Should().Be(marker);
+    }
+
+    [Fact]
+    public void FullMerge_MatchedDelete_ShouldDeleteMatchedRow()
+    {
+        var ctx = _sut.DataProvider;
+        var deleteId = MergeTestKey();
+
+        ctx.InsertInto<IMergeEntity>()
+            .Values(new MergeEntity { Id = deleteId, Name = "old", Age = 1 })
+            .Insert();
+
+        ctx.MergeInto<IMergeEntity>()
+            .Using(new MergeEntity { Id = deleteId, Name = "ignored", Age = 0 })
+            .OnKeys()
+            .WhenMatched().ThenDelete()
+            .WhenNotMatched().ThenInsert()
+            .Merge();
+
+        ctx.From<IMergeEntity>().Where(x => x.Id == deleteId).Select(x => x.Id).ToList().Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Cte_Recursive_WithDistinctUnion_ShouldProduceNumberSeries()
+    {
+        var ctx = _sut.DataProvider;
+
+        var anchor = _sut.SimpleEntity.Where(s => s.Id == 1).Select(s => new CommonTestSuite.CteNumberRow { n = s.Id });
+        var step = ctx.From("nums").Where(t => t["n"].AsInt < 5).Select(t => new CommonTestSuite.CteNumberRow { n = t["n"].AsInt + 1 });
+        var body = anchor.Union(step);
+
+        var rows = ctx
+            .WithRecursive("nums", body)
+            .From("nums")
+            .Select(t => new CommonTestSuite.CteNumberRow { n = t["n"].AsInt })
+            .ToList();
+
+        rows.Select(r => r.n).OrderBy(n => n).Should().Equal(1, 2, 3, 4, 5);
+    }
 }

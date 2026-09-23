@@ -70,7 +70,7 @@ ctx.Update<ISimpleEntity>()
 ## Обновление всех строк
 
 В отличие от `DELETE`, который требует явного маркера `All()`, `UPDATE` без `Where` обновляет всю
-таблицу — как принято в `linq2db`/ADO.NET:
+таблицу:
 
 ```csharp
 ctx.Update<ISimpleEntity>().Set(x => x.Archived, true).Update();   // update simple_entity set archived = @p0
@@ -170,6 +170,7 @@ var updated = ctx.From<IOrder>()
 
 - [Изменение данных (INSERT)](19-insert-statement.md)
 - [Изменение данных (DELETE)](20-delete-statement.md)
+- [Слияние данных (MERGE / upsert)](23-merge-statement.md)
 - [Фильтрация (WHERE)](02-filtering-where.md)
 - [Ограничения и вне области](../advanced/limitations.md)
 - [Обзор провайдеров](../providers/overview.md)

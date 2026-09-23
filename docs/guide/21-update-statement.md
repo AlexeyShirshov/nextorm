@@ -69,7 +69,7 @@ the earlier assignment.
 ## Updating every row
 
 Unlike `DELETE`, which requires the explicit `All()` marker, `UPDATE` without `Where` updates the whole
-table, matching `linq2db`/ADO.NET convenience:
+table:
 
 ```csharp
 ctx.Update<ISimpleEntity>().Set(x => x.Archived, true).Update();   // update simple_entity set archived = @p0
@@ -167,6 +167,7 @@ ClickHouse and the in-memory provider throw.
 
 - [Data modification (INSERT)](19-insert-statement.md)
 - [Data modification (DELETE)](20-delete-statement.md)
+- [Data merging (MERGE / upsert)](23-merge-statement.md)
 - [Filtering (WHERE)](02-filtering-where.md)
 - [Limitations and out-of-scope features](../advanced/limitations.md)
 - [Provider overview](../providers/overview.md)

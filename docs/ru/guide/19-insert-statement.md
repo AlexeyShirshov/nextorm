@@ -409,29 +409,11 @@ var rows = ctx.InsertInto<Order>()
 (`Returning(x => new { x.Id, x.Name })`), либо используйте класс, реализующий интерфейс;
 `Returning()` на самом интерфейсе бросает `NotSupportedException` при исполнении.
 
-## Upsert (key merge)
+## Upsert и MERGE
 
-[`MergeInto<TEntity>()`](xref:NextORM.Core.DataContextExtensions.MergeInto``1(NextORM.Core.IDataContext,System.Action{NextORM.Core.EntityMetadataBuilder{``0}})) записывает набор строк-источника в таблицу и позволяет базе по объявленному ключу решить: обновить существующую строку или вставить новую. Источник — одна сущность или батч, ключ совпадения разрешается из маппинга сущности через `OnKeys()`, и обе ветки — `WhenMatchedUpdate()` (присвоить все не-key записываемые колонки из источника) и `WhenNotMatchedInsert()` — обязательны:
+Тот же билдер пишет строки и через `MERGE`: переносимый **key upsert** (`OnKeys()` + `WhenMatchedUpdate()` + `WhenNotMatchedInsert()`, рендерится как `INSERT ... ON CONFLICT` / `ON DUPLICATE KEY` / `MERGE`) и общий **полный `MERGE`** с ветками `WHEN MATCHED`/`WHEN NOT MATCHED`, произвольными условиями, `THEN DELETE`/`THEN DO NOTHING` и `RETURNING`/`OUTPUT`. Оба стартуют с `ctx.MergeInto<TEntity>()` и описаны в отдельном гайде:
 
-```csharp
-ctx.MergeInto<ISimpleEntity>()
-    .Using(new SimpleEntity { Id = 1, Name = "a" })   // или Using(new[] { e1, e2 })
-    .OnKeys()
-    .WhenMatchedUpdate()
-    .WhenNotMatchedInsert()
-    .Merge();
-```
-
-Билдер рендерит родную форму провайдера; `ToSql()` показывает её без соединения:
-
-| Провайдер | Рендер |
-|---|---|
-| PostgreSQL, SQLite | `INSERT ... ON CONFLICT (<keys>) DO UPDATE SET <col> = excluded.<col>` |
-| MySQL, MariaDB | `INSERT ... ON DUPLICATE KEY UPDATE <col> = VALUES(<col>)` |
-| SQL Server | `MERGE ... USING (VALUES ...) AS source (...) ON ... WHEN MATCHED THEN UPDATE SET ... WHEN NOT MATCHED THEN INSERT ...;` |
-| ClickHouse, in-memory | `NotSupportedException` |
-
-`Merge()`/`MergeAsync()` возвращают число затронутых строк. Ключ должен быть объявлен (`[Key]`/`.Key()`) и не быть генерируемым базой; сущность только из key-колонок отклоняется, так как обновлять нечего. Это только форма *key upsert* — полный `MERGE` с произвольными ветками `WHEN MATCHED`/`WHEN NOT MATCHED` (включая `DELETE`) в эту поверхность не входит.
+- [Слияние данных (MERGE / upsert)](23-merge-statement.md)
 
 ## Просмотр SQL
 
@@ -465,19 +447,24 @@ var sql = ctx.InsertInto<ISimpleEntity>().Value(x => x.Name, "a").ToSql();
   становится именованным параметром (`@p0`, `$p0`, ...), привязываемым при выполнении.
 * **Перегрузки с `null`.** `Value(x => x.Name, null)` неоднозначен между перегрузкой значения и
   перегрузкой выражения-колонки; приведите литерал: `Value(x => x.Name, (string?)null)`.
-* **Key upsert, но не полный `MERGE`** — key upsert через `ON CONFLICT`/`ON DUPLICATE KEY`/`MERGE`
-  **реализован** (см. [Upsert (key merge)](#upsert-key-merge)); полный `MERGE` с произвольными ветками
-  `WHEN MATCHED`/`WHEN NOT MATCHED` — нет. `INSERT ... SELECT` **реализован** (см. «Батч из
-  запроса» выше). (Строка «только дефолты» **поддерживается**: см. [Запись значений](#запись-значений).)
+* **Key upsert и полный `MERGE`** — key upsert через `ON CONFLICT`/`ON DUPLICATE KEY`/`MERGE`
+  **реализован** (см. [Upsert (key merge)](23-merge-statement.md#upsert-key-merge)), а полный `MERGE` с ветками
+  `WHEN MATCHED`/`WHEN NOT MATCHED`/`WHEN NOT MATCHED BY SOURCE` доступен на SQL Server и
+  PostgreSQL 15+ (см. [Полный `MERGE`](23-merge-statement.md#полный-merge)). `INSERT ... SELECT` **реализован**
+  (см. «Батч из запроса» выше). (Строка «только дефолты» **поддерживается**: см. [Запись значений](#запись-значений).)
 * **Мутации не готовятся и не кладутся в кэш планов.** Оптимизация в nextorm нацелена только на
   read-only запросы (`Prepare`, неявный кэш планов, бенчмарки); мутация всегда рендерит и выполняет
   одну команду за вызов.
+* **Число затронутых строк.** `Insert()`/`InsertAsync()` возвращают число строк, которое сообщает
+  провайдер. ClickHouse для `INSERT ... VALUES` его не сообщает и возвращает `0`, хотя строка
+  записана — не используйте счётчик для подтверждения вставки в ClickHouse.
 * **Нет разбиения большого батча на чанки**; тысячи строк могут упереться в лимит на утверждение.
   Для массовой загрузки используйте bulk-copy/бинарный API провайдера.
-* In-memory-провайдер только для чтения: любой терминал записи (`Insert()`, `ReturningIdentity`, `ReturningKey`, ...) бросает `NotSupportedException`.
+* In-memory-провайдер только для чтения: `INSERT`/`UPDATE`/`DELETE` и полный `MERGE` бросают `NotSupportedException`; только key-upsert merge применяется к зарегистрированной последовательности в контексте.
 
 ## См. также
 
+- [Слияние данных (MERGE / upsert)](23-merge-statement.md)
 - [Ограничения и что вне области](../advanced/limitations.md)
 - [Обзор провайдеров](../providers/overview.md)
 - [Краткий справочник API](../advanced/api-reference.md)
