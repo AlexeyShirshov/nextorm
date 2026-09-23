@@ -30,6 +30,8 @@ internal sealed class SqliteTestProvider : ITestProvider
     public bool EnforcesScalarSubqueryCardinality => false;
     public bool SupportsApply => false;
     public bool SupportsInsertReturning => true;
+    public bool SupportsTruncate => false;
+    public bool SupportsDeleteJoin => false;
     public string TableValuedFunctionSkipReason => string.Empty;
     public string SkipReason => string.Empty;
 
@@ -89,5 +91,7 @@ internal sealed class SqliteTestProvider : ITestProvider
         create table insert_entity (id integer primary key autoincrement, name text, age int);
 
         create table merge_entity (id integer primary key, name text, age int);
+
+        create table delete_entity (id integer primary key, name text, age int);
         """;
 }

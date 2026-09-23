@@ -196,89 +196,12 @@ public sealed class InsertReturningBuilder<TEntity, TResult>
             $"{_insert.DataContext.GetType().Name} does not support data modification. Use a database-backed context (SQLite, PostgreSQL, SQL Server, MySQL, MariaDB or ClickHouse); the in-memory provider is read-only.");
     }
 
-    /// <summary>
-    /// Parses a <c>Returning(projection)</c> selector into the mapped columns to return and the projection
-    /// shape the row mapper uses. Only member references are supported: the identity, a single member, an
-    /// anonymous type, a positional constructor or a member-init.
-    /// </summary>
     internal static (IReadOnlyList<IPropertyMetadata> Columns, SelectExpression[] SelectList, bool OneColumn) ParseProjection(
         LambdaExpression projection,
         IReadOnlyList<IPropertyMetadata> allProperties,
         Func<PropertyInfo, IPropertyMetadata?> find)
-    {
-        var body = UnwrapConvert(projection.Body);
-
-        if (body is ParameterExpression)
-        {
-            var entityTargets = new PropertyInfo[allProperties.Count];
-            for (var i = 0; i < entityTargets.Length; i++)
-                entityTargets[i] = allProperties[i].PropertyInfo;
-
-            return (allProperties, BuildSelectList(allProperties, entityTargets), false);
-        }
-
-        if (body is MemberExpression { Member: PropertyInfo singleMember })
-        {
-            var property = Resolve(singleMember, find);
-            return ([property], BuildSelectList([property], [singleMember]), true);
-        }
-
-        var members = new List<IPropertyMetadata>();
-        var targets = new List<PropertyInfo>();
-        if (body is NewExpression { Arguments.Count: > 0 } newExpression)
-        {
-            foreach (var argument in newExpression.Arguments)
-            {
-                if (argument is not MemberExpression { Member: PropertyInfo argumentMember })
-                    throw new NotSupportedException("A Returning projection may only reference mapped properties; use ReturningIdentity or ReturningKey for a generated key.");
-
-                members.Add(Resolve(argumentMember, find));
-                targets.Add(argumentMember);
-            }
-        }
-        else if (body is MemberInitExpression { Bindings.Count: > 0 } memberInit)
-        {
-            foreach (var binding in memberInit.Bindings)
-            {
-                if (binding is not MemberAssignment { Member: PropertyInfo targetMember, Expression: MemberExpression { Member: PropertyInfo bindingMember } })
-                    throw new NotSupportedException("A Returning projection may only reference mapped properties; use ReturningIdentity or ReturningKey for a generated key.");
-
-                members.Add(Resolve(bindingMember, find));
-                targets.Add(targetMember);
-            }
-        }
-        else
-        {
-            throw new NotSupportedException("A Returning projection must be the identity, a mapped property, an anonymous type or a member-init.");
-        }
-
-        return (members, BuildSelectList(members, targets), false);
-    }
+        => ReturningProjection.Parse(projection, allProperties, find);
 
     internal static SelectExpression[] BuildSelectList(IReadOnlyList<IPropertyMetadata> columns, IReadOnlyList<PropertyInfo> targets)
-    {
-        var selectList = new SelectExpression[columns.Count];
-        for (var i = 0; i < columns.Count; i++)
-        {
-            var column = columns[i];
-            var target = targets[i];
-            selectList[i] = new SelectExpression(column.PropertyInfo.PropertyType)
-            {
-                Index = i,
-                PropertyName = target.Name,
-                PropertyInfo = target,
-            };
-        }
-
-        return selectList;
-    }
-
-    private static IPropertyMetadata Resolve(PropertyInfo property, Func<PropertyInfo, IPropertyMetadata?> find)
-        => find(property)
-           ?? throw new BuildSqlCommandException($"Property {property.Name} is not mapped.");
-
-    private static Expression UnwrapConvert(Expression expression)
-        => expression is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } unary
-            ? UnwrapConvert(unary.Operand)
-            : expression;
+        => ReturningProjection.BuildSelectList(columns, targets);
 }

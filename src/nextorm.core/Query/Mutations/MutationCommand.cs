@@ -13,8 +13,12 @@ internal enum SqlStatementType
     Update,
     /// <summary>A <c>DELETE</c> statement.</summary>
     Delete,
+    /// <summary>A multi-table <c>DELETE</c> that removes rows of the target based on a join.</summary>
+    DeleteJoin,
     /// <summary>A <c>MERGE</c> statement.</summary>
     Merge,
+    /// <summary>A <c>TRUNCATE TABLE</c> statement.</summary>
+    Truncate,
 }
 
 /// <summary>

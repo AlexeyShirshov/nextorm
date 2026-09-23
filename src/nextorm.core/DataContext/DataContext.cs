@@ -320,7 +320,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, IMutationE
     {
         EnsureReturningSupported();
         EnsureReturningMaterializable<TResult>(oneColumn);
-        var (sql, parameters) = BuildInsertSql((InsertCommand)command);
+        var (sql, parameters) = BuildReturningSql(command);
         var mapper = RowMapperFactory.GetOrBuild<TResult>(sql, GetType(), selectList, oneColumn, MapColumnExpression);
         return _executor.ExecuteReader(sql, parameters, mapper);
     }
@@ -329,10 +329,18 @@ public abstract class DataContext : IDataContext, IConnectionManager, IMutationE
     {
         EnsureReturningSupported();
         EnsureReturningMaterializable<TResult>(oneColumn);
-        var (sql, parameters) = BuildInsertSql((InsertCommand)command);
+        var (sql, parameters) = BuildReturningSql(command);
         var mapper = RowMapperFactory.GetOrBuild<TResult>(sql, GetType(), selectList, oneColumn, MapColumnExpression);
         return await _executor.ExecuteReaderAsync(sql, parameters, mapper, cancellationToken).ConfigureAwait(false);
     }
+
+    private (string Sql, List<Parameter> Parameters) BuildReturningSql(MutationCommand command)
+        => command switch
+        {
+            InsertCommand insert => BuildInsertSql(insert),
+            DeleteCommand delete => BuildDeleteSql(delete),
+            _ => throw new NotSupportedException($"Unsupported returning mutation command {command.GetType().Name}."),
+        };
 
     private (string Sql, List<Parameter> Parameters) BuildInsertSql(InsertCommand command)
     {
@@ -351,14 +359,48 @@ public abstract class DataContext : IDataContext, IConnectionManager, IMutationE
         {
             InsertCommand insert => BuildInsertSql(insert),
             MergeCommand merge => SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, merge, KeywordCase),
+            DeleteCommand delete => BuildDeleteSql(delete),
+            DeleteJoinCommand deleteJoin => BuildDeleteJoinSql(deleteJoin),
+            TruncateCommand truncate => BuildTruncateSql(truncate),
             _ => throw new NotSupportedException($"Unsupported mutation command {command.GetType().Name}."),
         };
+
+    private (string Sql, List<Parameter> Parameters) BuildTruncateSql(TruncateCommand command)
+    {
+        if (!Dialect.SupportsTruncate)
+            throw new NotSupportedException(
+                $"{GetType().Name} does not support TRUNCATE; remove every row with DeleteFrom<T>().All() instead.");
+
+        return (SqlMutationBuilder.MakeTruncate(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase), []);
+    }
+
+    private (string Sql, List<Parameter> Parameters) BuildDeleteSql(DeleteCommand command)
+    {
+        if (!Dialect.SupportsDelete)
+            throw new NotSupportedException(
+                $"{GetType().Name} does not support DELETE: the provider has no synchronous single-statement DELETE form (use its ALTER TABLE ... DELETE mutation directly).");
+
+        if (command.Condition is null)
+            return SqlMutationBuilder.MakeDelete(Dialect, QuoteIdentifiers, NamingConvention, command, null, [], KeywordCase);
+
+        var (whereSql, parameters) = _planner.RenderPredicate(command.Condition);
+        return SqlMutationBuilder.MakeDelete(Dialect, QuoteIdentifiers, NamingConvention, command, whereSql, parameters, KeywordCase);
+    }
+
+    private (string Sql, List<Parameter> Parameters) BuildDeleteJoinSql(DeleteJoinCommand command)
+    {
+        if (!Dialect.SupportsDeleteJoin)
+            throw new NotSupportedException(
+                $"{GetType().Name} does not support deleting from a joined table: the provider has no native multi-table DELETE.");
+
+        return _planner.RenderDeleteJoin(command);
+    }
 
     private void EnsureReturningSupported()
     {
         if (!Dialect.SupportsReturning && !Dialect.SupportsOutput)
             throw new NotSupportedException(
-                $"{GetType().Name} cannot return inserted rows: the provider has no RETURNING or OUTPUT form. Use Insert() instead.");
+                $"{GetType().Name} cannot return written rows: the provider has no RETURNING or OUTPUT form.");
     }
 
     // An interface/abstract TResult cannot be materialized as a whole (no constructor). Reject it with a
@@ -375,7 +417,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, IMutationE
 
     private void EnsureReturningSupportedIfNeeded(MutationCommand command)
     {
-        if (command is InsertCommand { ReturningColumns: { Count: > 0 } })
+        if (command is InsertCommand { ReturningColumns: { Count: > 0 } } or DeleteCommand { ReturningColumns: { Count: > 0 } })
             EnsureReturningSupported();
     }
 

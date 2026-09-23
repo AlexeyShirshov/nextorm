@@ -39,6 +39,12 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <summary>SQL Server accepts <c>DEFAULT</c> as a value in the <c>VALUES</c> list.</summary>
     public override bool SupportsColumnDefault => true;
 
+    /// <summary>SQL Server has a native <c>TRUNCATE TABLE</c>.</summary>
+    public override bool SupportsTruncate => true;
+
+    /// <summary>SQL Server deletes rows based on a join through the <c>DELETE &lt;alias&gt; FROM ... JOIN</c> extension.</summary>
+    public override bool SupportsDeleteJoin => true;
+
     /// <summary>SQL Server expresses a key upsert as a <c>MERGE</c> over a <c>VALUES</c> derived source.</summary>
     public override bool SupportsMerge => true;
 

@@ -38,6 +38,8 @@ internal sealed class MySqlTestProvider : ITestProvider
     public bool EnforcesScalarSubqueryCardinality => true;
     public bool SupportsApply => true;
     public bool SupportsInsertReturning => false;
+    public bool SupportsTruncate => true;
+    public bool SupportsDeleteJoin => true;
     public string TableValuedFunctionSkipReason => "The shared table-valued function test uses SQLite's json_each; MySQL exposes JSON rows through JSON_TABLE with a different shape.";
 
     public string SkipReason => MySqlContainer.Failure ?? "MySQL is not available.";
@@ -78,6 +80,7 @@ internal sealed class MySqlTestProvider : ITestProvider
         "drop table if exists simple_entity",
         "drop table if exists insert_entity",
         "drop table if exists merge_entity",
+        "drop table if exists delete_entity",
 
         "create table simple_entity (id int not null primary key)",
 
@@ -139,6 +142,15 @@ internal sealed class MySqlTestProvider : ITestProvider
 
         """
         create table merge_entity
+        (
+            id int not null primary key,
+            name varchar(100) null,
+            age int null
+        )
+        """,
+
+        """
+        create table delete_entity
         (
             id int not null primary key,
             name varchar(100) null,

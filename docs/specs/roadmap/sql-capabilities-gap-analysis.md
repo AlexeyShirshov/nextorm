@@ -26,7 +26,7 @@ contract and the provider dialects, plus the integration tests under `tests/next
 > | 11 | User-defined scalar-valued functions (`[SqlFunction]`) | **Done** |
 > | 12 | Table-valued functions (`[SqlTableFunction]`) | **Done**; the built-in `SqlFunctions.Sql` TVFs are gated by `ISqlDialect.SupportsTableFunction` |
 > | 13 | Navigation properties / relationships | **Out of scope** |
-> | 14 | DML (`INSERT`/`UPDATE`/`DELETE`) | `INSERT ... VALUES` + returning rows + key upsert **Done**; `UPDATE`/`DELETE` out of scope |
+> | 14 | DML (`INSERT`/`UPDATE`/`DELETE`) | `INSERT` + returning rows + key upsert + `DELETE` (predicate/key/`All`/`Returning`/`Truncate`/join, ClickHouse mutation) **Done**; `UPDATE`/full `MERGE` out of scope; in-memory mutations out of scope |
 > | 15 | `APPLY` / `LATERAL` (`CrossApply`/`OuterApply`) | **Done** — SQL Server `CROSS/OUTER APPLY`, PostgreSQL/MySQL/MariaDB `LATERAL`, including a **correlated** applied source (a lambda over the left-hand row); gated by `ISqlDialect.SupportsApply` (SQLite/ClickHouse reject); the in-memory provider does not support it |
 > | 16 | Statement-level query hints (`Hint(...)`) | **Done on SQL Server, PostgreSQL and MySQL/MariaDB** (SQL Server `OPTION (...)`, PostgreSQL/MySQL/MariaDB inline `/*+ ... */`); SQLite and ClickHouse reject with `NotSupportedException` |
 > | 17 | Full-text search (`contains`/`freetext`) | **Done** on SQL Server, PostgreSQL and MySQL/MariaDB via `MakeFullText` |
@@ -161,7 +161,7 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
     PostgreSQL `jsonb_to_record(set)`.
     Todo: [`todo_dynamic_result_schema.md`](todo_dynamic_result_schema.md).
     Shipped: [Table-valued functions](../../guide/13-table-valued-functions.md#built-in-table-functions).
-18. **DML: `INSERT` and key upsert shipped; `UPDATE`/`DELETE` and full `MERGE` remain.** `INSERT ... VALUES` (single row, entity,
+18. **DML: `INSERT`, key upsert and `DELETE` shipped; `UPDATE` and full `MERGE` remain.** `INSERT ... VALUES` (single row, entity,
     batch) and `INSERT ... SELECT` (a server-side `Values(source, mapping)` source), the generated key
     (`ReturningIdentity`/`ReturningKey`, with the provider identity function for the column-less form) and
     returning the written rows (`Returning`/`Returning(projection)`, PostgreSQL/SQLite/SQL Server) ship
@@ -172,12 +172,20 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
     into a main `INSERT ... SELECT` (the `WITH` is hoisted before `INSERT`).
     **Key upsert** (`MergeInto` → `MergeBuilder<T>`) ships as the provider's native form: `ON CONFLICT ...
     DO UPDATE` (PostgreSQL, SQLite), `ON DUPLICATE KEY UPDATE` (MySQL, MariaDB) or `MERGE ... USING
-    (VALUES ...)` (SQL Server); ClickHouse and the in-memory provider reject it. `UPDATE`/`DELETE`, full
+    (VALUES ...)` (SQL Server); ClickHouse and the in-memory provider reject it. **`DELETE`**
+    (`DeleteFrom` → `DeleteBuilder<T>`, plus `Delete<T>(entity)` by key) ships a parameterised
+    `DELETE FROM <table> [WHERE ...]` on every provider; `Returning()` returns the removed rows
+    (PostgreSQL/SQLite `RETURNING`, SQL Server `OUTPUT deleted.<col>`), `Truncate<T>()` renders native
+    `TRUNCATE TABLE` (SQLite rejects it), and
+    ClickHouse deletes through `ALTER TABLE ... DELETE ... SETTINGS mutations_sync = 1`, and a multi-table
+    `DELETE` (`From<T>().Join(...).Delete()`, INNER joins, target is the first table) renders the native
+    form on PostgreSQL (`USING`), SQL Server, MySQL and MariaDB and throws on SQLite and ClickHouse.
+    The in-memory provider is query-only: `INSERT`/`DELETE`/`TRUNCATE` are out of scope and throw
+    `NotSupportedException`. `UPDATE`, full
     `MERGE` with arbitrary `WHEN MATCHED`/`WHEN NOT MATCHED` branches, change tracking/`SaveChanges` and
     navigation properties remain out of scope for the query-builder, no-change-tracking mapper.
-    Shipped: [Data modification (INSERT)](../guide/19-insert-statement.md), [Upsert (key merge)](../../guide/19-insert-statement.md#upsert-key-merge);
-    remaining `UPDATE`/`DELETE` tracked in
-    [`todo_update.md`](todo_update.md)/[`todo_delete.md`](todo_delete.md); full `MERGE` (phase 2) in [`todo_merge.md`](todo_merge.md).
+    Shipped: [Data modification (INSERT)](../guide/19-insert-statement.md), [Upsert (key merge)](../../guide/19-insert-statement.md#upsert-key-merge), [Delete](../../guide/20-delete-statement.md);
+    remaining `UPDATE` tracked in [`todo_update.md`](todo_update.md); full `MERGE` (phase 2) in [`todo_merge.md`](todo_merge.md).
 21. **`CREATE [TEMPORARY] TABLE ... AS SELECT` (CTAS) — planned, PostgreSQL-first.** Materialize a
     built `SELECT` into a (session-scoped) table for cross-statement reuse; the intra-statement case is
     already covered by materialized CTEs. The shared `CREATE ... TABLE ... AS SELECT` form works on
@@ -389,7 +397,7 @@ developed in parallel on the same working tree.
 | 11 | User-defined scalar-valued functions | **Done** | `SqlFunctions.cs`, `ISqlDialect.cs`, `BaseExpressionVisitor.cs` | `CommonTestSuite.Udf.cs` |
 | 12 | Table-valued functions | **Done** (+ gated built-ins) | builder + `ISqlDialect.cs`, `SqlBuilder.cs` | `CommonTestSuite.Tvf.cs`, SQL-generation tests |
 | 13 | Navigation properties / relationships | **Out of scope** | metadata (`Meta/`), `EntityBuilder.cs`, `SqlBuilder.cs` | — |
-| 14 | DML (`INSERT`/`UPDATE`/`DELETE`) | `INSERT` + `Returning` + key upsert **Done**; `UPDATE`/`DELETE` out of scope | new subsystem + provider `DbCommand` layer | `CommonTestSuite.Insert.cs`, SQL-generation tests |
+| 14 | DML (`INSERT`/`UPDATE`/`DELETE`) | `INSERT` + `Returning` + key upsert + `DELETE` (predicate/key/`All`/`Returning`/`Truncate`/join, ClickHouse mutation) **Done**; `UPDATE` out of scope; in-memory mutations out of scope | new subsystem + provider `DbCommand` layer | `CommonTestSuite.Insert.cs`, `CommonTestSuite.Delete.cs`, SQL-generation tests |
 | 15 | `APPLY` / `LATERAL` | **Done** (incl. correlated sources) | `JoinExpression.cs`, `SqlBuilder.cs`, dialects | SQL-generation tests |
 | 16 | Statement-level query hints | **Done on SQL Server, PostgreSQL and MySQL/MariaDB** | `QueryCommand.TResult.cs`, `SqlBuilder.cs`, dialects | SQL-generation tests |
 | 17 | Full-text search (`contains`/`freetext`) | **Done** | `BuiltinFunctionTranslator.cs`, `ISqlDialect.cs`, `SqlDialectBase.cs`, dialects | SQL-generation tests |

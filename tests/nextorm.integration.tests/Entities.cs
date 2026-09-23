@@ -112,3 +112,22 @@ public sealed class MergeEntity : IMergeEntity
     public string? Name { get; set; }
     public int Age { get; set; }
 }
+
+[SqlTable("delete_entity")]
+public interface IDeleteEntity
+{
+    [Key]
+    [Column("id")]
+    int Id { get; set; }
+    [Column("name")]
+    string? Name { get; set; }
+    [Column("age")]
+    int Age { get; set; }
+}
+
+public sealed class DeleteEntity : IDeleteEntity
+{
+    public int Id { get; set; }
+    public string? Name { get; set; }
+    public int Age { get; set; }
+}

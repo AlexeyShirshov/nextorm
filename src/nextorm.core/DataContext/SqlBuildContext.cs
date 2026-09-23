@@ -41,8 +41,8 @@ internal readonly record struct SqlBuildContext
     internal bool IncludeNestedSources { get; init; }
     internal KeywordCase KeywordCase { get; init; }
 
-    internal WhereExpressionVisitor CreateWhereVisitor(Type entityType, int dim)
-        => new(new VisitorOptions(entityType, Dialect, ColumnsProvider, dim, AliasProvider, ParameterProvider, QueryProvider, false, ParamMode, Params, Logger) { QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, IncludeNestedSources = IncludeNestedSources, KeywordCase = KeywordCase });
+    internal WhereExpressionVisitor CreateWhereVisitor(Type entityType, int dim, bool dontNeedAlias = false)
+        => new(new VisitorOptions(entityType, Dialect, ColumnsProvider, dim, AliasProvider, ParameterProvider, QueryProvider, dontNeedAlias, ParamMode, Params, Logger) { QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, IncludeNestedSources = IncludeNestedSources, KeywordCase = KeywordCase });
 
     internal BaseExpressionVisitor CreateColumnVisitor(Type entityType, int dim, bool dontNeedAlias)
         => new(new VisitorOptions(entityType, Dialect, ColumnsProvider, dim, AliasProvider, ParameterProvider, QueryProvider, dontNeedAlias, ParamMode, Params, Logger) { QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, IncludeNestedSources = IncludeNestedSources, KeywordCase = KeywordCase });

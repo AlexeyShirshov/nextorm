@@ -70,6 +70,19 @@ public interface ITestProvider
     /// </summary>
     bool SupportsInsertReturning { get; }
 
+    /// <summary>
+    /// True when the provider has a native <c>TRUNCATE TABLE</c>. SQL Server, PostgreSQL, MySQL and
+    /// MariaDB do; SQLite has no <c>TRUNCATE</c>, so the shared truncate test is skipped there.
+    /// </summary>
+    bool SupportsTruncate { get; }
+
+    /// <summary>
+    /// True when the provider has a native multi-table <c>DELETE</c> (delete from a table based on a
+    /// join). PostgreSQL, SQL Server, MySQL and MariaDB do; SQLite and ClickHouse have no join delete,
+    /// so the shared delete-join test is skipped there.
+    /// </summary>
+    bool SupportsDeleteJoin { get; }
+
     void EnsureSeeded();
 
     IDataContext CreateContext();

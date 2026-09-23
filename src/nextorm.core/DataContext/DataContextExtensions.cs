@@ -69,6 +69,455 @@ public static class DataContextExtensions
     }
 
     /// <summary>
+    /// Starts a <c>DELETE</c> over the mapping of <typeparamref name="TEntity"/> and returns its fluent
+    /// builder. The type's metadata is resolved lazily and cached per process, exactly like
+    /// <c>From&lt;T&gt;()</c>; <paramref name="configEntity"/> therefore runs only on the first call for
+    /// <typeparamref name="TEntity"/>.
+    /// </summary>
+    /// <typeparam name="TEntity">The mapped entity type whose rows are deleted.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="configEntity">Optional mapping configuration, run only when the type is first mapped.</param>
+    /// <returns>A builder for the delete.</returns>
+    public static DeleteBuilder<TEntity> DeleteFrom<TEntity>(this IDataContext dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity = null)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+
+        return new(dataContext, ResolveMetadata(configEntity));
+    }
+
+    /// <summary>
+    /// Deletes the row identified by the declared key of <paramref name="entity"/> in one command
+    /// (<c>DELETE FROM ... WHERE &lt;pk&gt; = @p</c>), using the mapping's <c>[Key]</c>/<c>.Key()</c>.
+    /// </summary>
+    /// <typeparam name="TEntity">The mapped entity type.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="entity">The entity whose key identifies the row to delete.</param>
+    /// <returns>The number of deleted rows (0 or 1).</returns>
+    /// <exception cref="InvalidOperationException">The entity type declares no key.</exception>
+    public static int Delete<TEntity>(this IDataContext dataContext, TEntity entity)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+        ArgumentNullException.ThrowIfNull(entity);
+
+        return new DeleteBuilder<TEntity>(dataContext, ResolveMetadata<TEntity>(null)).DeleteEntity(entity);
+    }
+
+    /// <summary>
+    /// Asynchronously deletes the row identified by the declared key of <paramref name="entity"/> in one
+    /// command, using the mapping's <c>[Key]</c>/<c>.Key()</c>.
+    /// </summary>
+    /// <typeparam name="TEntity">The mapped entity type.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="entity">The entity whose key identifies the row to delete.</param>
+    /// <param name="cancellationToken">Cancels execution.</param>
+    /// <returns>A task producing the number of deleted rows (0 or 1).</returns>
+    /// <exception cref="InvalidOperationException">The entity type declares no key.</exception>
+    public static Task<int> DeleteAsync<TEntity>(this IDataContext dataContext, TEntity entity, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+        ArgumentNullException.ThrowIfNull(entity);
+
+        return new DeleteBuilder<TEntity>(dataContext, ResolveMetadata<TEntity>(null)).DeleteEntityAsync(entity, cancellationToken);
+    }
+
+    /// <summary>
+    /// Deletes every row of the first table of a join that matches the join — a native multi-table
+    /// <c>DELETE</c>. The join condition (and any <c>Where</c> added to the joined builder) selects the
+    /// rows to remove. Only INNER <c>Join</c> joins are supported; outer/cross joins are rejected because
+    /// they change which rows are deleted. PostgreSQL renders <c>DELETE ... USING</c>; SQL Server, MySQL
+    /// and MariaDB render <c>DELETE &lt;alias&gt; FROM ... JOIN</c>. SQLite, ClickHouse and the in-memory
+    /// provider throw <see cref="NotSupportedException"/>.
+    /// </summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted (the first table).</typeparam>
+    /// <typeparam name="T2">The joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <returns>The number of deleted rows, as reported by the provider.</returns>
+    /// <exception cref="NotSupportedException">The provider has no native multi-table <c>DELETE</c> (SQLite, ClickHouse, in-memory), or a join is not an INNER <c>Join</c>.</exception>
+    public static int Delete<T1, T2>(this JoinedEntityBuilder<T1, T2> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return ExecuteDeleteJoin(query.DataProvider, new DeleteJoinCommand(typeof(T1), PrepareDeleteJoinSource(query)));
+    }
+
+    /// <summary>Asynchronously deletes the rows of the first table matching the join. See <see cref="Delete{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <param name="cancellationToken">Cancels execution.</param>
+    /// <returns>A task producing the number of deleted rows.</returns>
+    /// <exception cref="NotSupportedException">The provider has no native multi-table <c>DELETE</c>, or a join is not an INNER <c>Join</c>.</exception>
+    public static Task<int> DeleteAsync<T1, T2>(this JoinedEntityBuilder<T1, T2> query, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return ExecuteDeleteJoinAsync(query.DataProvider, new DeleteJoinCommand(typeof(T1), PrepareDeleteJoinSource(query)), cancellationToken);
+    }
+
+    /// <summary>Renders the multi-table <c>DELETE</c> the joined query would execute, without executing it. See <see cref="Delete{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <returns>The rendered SQL text.</returns>
+    /// <exception cref="NotSupportedException">The provider has no native multi-table <c>DELETE</c>, or a join is not an INNER <c>Join</c>.</exception>
+    public static string ToSql<T1, T2>(this JoinedEntityBuilder<T1, T2> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return RenderDeleteJoin(query.DataProvider, new DeleteJoinCommand(typeof(T1), PrepareDeleteJoinSource(query)));
+    }
+
+    /// <summary>Deletes every row of the first table of a three-table join that matches the join. See <see cref="Delete{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <returns>The number of deleted rows.</returns>
+    /// <exception cref="NotSupportedException">The provider has no native multi-table <c>DELETE</c>, or a join is not an INNER <c>Join</c>.</exception>
+    public static int Delete<T1, T2, T3>(this JoinedEntityBuilder<T1, T2, T3> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return ExecuteDeleteJoin(query.DataProvider, new DeleteJoinCommand(typeof(T1), PrepareDeleteJoinSource(query)));
+    }
+
+    /// <summary>Asynchronously deletes the rows of the first table of a three-table join that matches the join. See <see cref="Delete{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <param name="cancellationToken">Cancels execution.</param>
+    /// <returns>A task producing the number of deleted rows.</returns>
+    /// <exception cref="NotSupportedException">The provider has no native multi-table <c>DELETE</c>, or a join is not an INNER <c>Join</c>.</exception>
+    public static Task<int> DeleteAsync<T1, T2, T3>(this JoinedEntityBuilder<T1, T2, T3> query, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return ExecuteDeleteJoinAsync(query.DataProvider, new DeleteJoinCommand(typeof(T1), PrepareDeleteJoinSource(query)), cancellationToken);
+    }
+
+    /// <summary>Renders the multi-table <c>DELETE</c> a three-table join would execute. See <see cref="Delete{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <returns>The rendered SQL text.</returns>
+    /// <exception cref="NotSupportedException">The provider has no native multi-table <c>DELETE</c>, or a join is not an INNER <c>Join</c>.</exception>
+    public static string ToSql<T1, T2, T3>(this JoinedEntityBuilder<T1, T2, T3> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return RenderDeleteJoin(query.DataProvider, new DeleteJoinCommand(typeof(T1), PrepareDeleteJoinSource(query)));
+    }
+
+    /// <summary>Deletes every row of the first table of a four-table join that matches the join. See <see cref="Delete{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <typeparam name="T4">The fourth joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <returns>The number of deleted rows.</returns>
+    /// <exception cref="NotSupportedException">The provider has no native multi-table <c>DELETE</c>, or a join is not an INNER <c>Join</c>.</exception>
+    public static int Delete<T1, T2, T3, T4>(this JoinedEntityBuilder<T1, T2, T3, T4> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return ExecuteDeleteJoin(query.DataProvider, new DeleteJoinCommand(typeof(T1), PrepareDeleteJoinSource(query)));
+    }
+
+    /// <summary>Asynchronously deletes the rows of the first table of a four-table join that matches the join. See <see cref="Delete{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <typeparam name="T4">The fourth joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <param name="cancellationToken">Cancels execution.</param>
+    /// <returns>A task producing the number of deleted rows.</returns>
+    /// <exception cref="NotSupportedException">The provider has no native multi-table <c>DELETE</c>, or a join is not an INNER <c>Join</c>.</exception>
+    public static Task<int> DeleteAsync<T1, T2, T3, T4>(this JoinedEntityBuilder<T1, T2, T3, T4> query, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return ExecuteDeleteJoinAsync(query.DataProvider, new DeleteJoinCommand(typeof(T1), PrepareDeleteJoinSource(query)), cancellationToken);
+    }
+
+    /// <summary>Renders the multi-table <c>DELETE</c> a four-table join would execute. See <see cref="Delete{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <typeparam name="T4">The fourth joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <returns>The rendered SQL text.</returns>
+    /// <exception cref="NotSupportedException">The provider has no native multi-table <c>DELETE</c>, or a join is not an INNER <c>Join</c>.</exception>
+    public static string ToSql<T1, T2, T3, T4>(this JoinedEntityBuilder<T1, T2, T3, T4> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return RenderDeleteJoin(query.DataProvider, new DeleteJoinCommand(typeof(T1), PrepareDeleteJoinSource(query)));
+    }
+
+    /// <summary>Deletes every row of the first table of a five-table join that matches the join. See <see cref="Delete{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <typeparam name="T4">The fourth joined entity type.</typeparam>
+    /// <typeparam name="T5">The fifth joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <returns>The number of deleted rows.</returns>
+    /// <exception cref="NotSupportedException">The provider has no native multi-table <c>DELETE</c>, or a join is not an INNER <c>Join</c>.</exception>
+    public static int Delete<T1, T2, T3, T4, T5>(this JoinedEntityBuilder<T1, T2, T3, T4, T5> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return ExecuteDeleteJoin(query.DataProvider, new DeleteJoinCommand(typeof(T1), PrepareDeleteJoinSource(query)));
+    }
+
+    /// <summary>Asynchronously deletes the rows of the first table of a five-table join that matches the join. See <see cref="Delete{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <typeparam name="T4">The fourth joined entity type.</typeparam>
+    /// <typeparam name="T5">The fifth joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <param name="cancellationToken">Cancels execution.</param>
+    /// <returns>A task producing the number of deleted rows.</returns>
+    /// <exception cref="NotSupportedException">The provider has no native multi-table <c>DELETE</c>, or a join is not an INNER <c>Join</c>.</exception>
+    public static Task<int> DeleteAsync<T1, T2, T3, T4, T5>(this JoinedEntityBuilder<T1, T2, T3, T4, T5> query, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return ExecuteDeleteJoinAsync(query.DataProvider, new DeleteJoinCommand(typeof(T1), PrepareDeleteJoinSource(query)), cancellationToken);
+    }
+
+    /// <summary>Renders the multi-table <c>DELETE</c> a five-table join would execute. See <see cref="Delete{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <typeparam name="T4">The fourth joined entity type.</typeparam>
+    /// <typeparam name="T5">The fifth joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <returns>The rendered SQL text.</returns>
+    /// <exception cref="NotSupportedException">The provider has no native multi-table <c>DELETE</c>, or a join is not an INNER <c>Join</c>.</exception>
+    public static string ToSql<T1, T2, T3, T4, T5>(this JoinedEntityBuilder<T1, T2, T3, T4, T5> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return RenderDeleteJoin(query.DataProvider, new DeleteJoinCommand(typeof(T1), PrepareDeleteJoinSource(query)));
+    }
+
+    /// <summary>Deletes every row of the first table of a six-table join that matches the join. See <see cref="Delete{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <typeparam name="T4">The fourth joined entity type.</typeparam>
+    /// <typeparam name="T5">The fifth joined entity type.</typeparam>
+    /// <typeparam name="T6">The sixth joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <returns>The number of deleted rows.</returns>
+    /// <exception cref="NotSupportedException">The provider has no native multi-table <c>DELETE</c>, or a join is not an INNER <c>Join</c>.</exception>
+    public static int Delete<T1, T2, T3, T4, T5, T6>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return ExecuteDeleteJoin(query.DataProvider, new DeleteJoinCommand(typeof(T1), PrepareDeleteJoinSource(query)));
+    }
+
+    /// <summary>Asynchronously deletes the rows of the first table of a six-table join that matches the join. See <see cref="Delete{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <typeparam name="T4">The fourth joined entity type.</typeparam>
+    /// <typeparam name="T5">The fifth joined entity type.</typeparam>
+    /// <typeparam name="T6">The sixth joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <param name="cancellationToken">Cancels execution.</param>
+    /// <returns>A task producing the number of deleted rows.</returns>
+    /// <exception cref="NotSupportedException">The provider has no native multi-table <c>DELETE</c>, or a join is not an INNER <c>Join</c>.</exception>
+    public static Task<int> DeleteAsync<T1, T2, T3, T4, T5, T6>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> query, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return ExecuteDeleteJoinAsync(query.DataProvider, new DeleteJoinCommand(typeof(T1), PrepareDeleteJoinSource(query)), cancellationToken);
+    }
+
+    /// <summary>Renders the multi-table <c>DELETE</c> a six-table join would execute. See <see cref="Delete{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <typeparam name="T4">The fourth joined entity type.</typeparam>
+    /// <typeparam name="T5">The fifth joined entity type.</typeparam>
+    /// <typeparam name="T6">The sixth joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <returns>The rendered SQL text.</returns>
+    /// <exception cref="NotSupportedException">The provider has no native multi-table <c>DELETE</c>, or a join is not an INNER <c>Join</c>.</exception>
+    public static string ToSql<T1, T2, T3, T4, T5, T6>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return RenderDeleteJoin(query.DataProvider, new DeleteJoinCommand(typeof(T1), PrepareDeleteJoinSource(query)));
+    }
+
+    /// <summary>Deletes every row of the first table of a seven-table join that matches the join. See <see cref="Delete{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <typeparam name="T4">The fourth joined entity type.</typeparam>
+    /// <typeparam name="T5">The fifth joined entity type.</typeparam>
+    /// <typeparam name="T6">The sixth joined entity type.</typeparam>
+    /// <typeparam name="T7">The seventh joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <returns>The number of deleted rows.</returns>
+    /// <exception cref="NotSupportedException">The provider has no native multi-table <c>DELETE</c>, or a join is not an INNER <c>Join</c>.</exception>
+    public static int Delete<T1, T2, T3, T4, T5, T6, T7>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return ExecuteDeleteJoin(query.DataProvider, new DeleteJoinCommand(typeof(T1), PrepareDeleteJoinSource(query)));
+    }
+
+    /// <summary>Asynchronously deletes the rows of the first table of a seven-table join that matches the join. See <see cref="Delete{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <typeparam name="T4">The fourth joined entity type.</typeparam>
+    /// <typeparam name="T5">The fifth joined entity type.</typeparam>
+    /// <typeparam name="T6">The sixth joined entity type.</typeparam>
+    /// <typeparam name="T7">The seventh joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <param name="cancellationToken">Cancels execution.</param>
+    /// <returns>A task producing the number of deleted rows.</returns>
+    /// <exception cref="NotSupportedException">The provider has no native multi-table <c>DELETE</c>, or a join is not an INNER <c>Join</c>.</exception>
+    public static Task<int> DeleteAsync<T1, T2, T3, T4, T5, T6, T7>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> query, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return ExecuteDeleteJoinAsync(query.DataProvider, new DeleteJoinCommand(typeof(T1), PrepareDeleteJoinSource(query)), cancellationToken);
+    }
+
+    /// <summary>Renders the multi-table <c>DELETE</c> a seven-table join would execute. See <see cref="Delete{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <typeparam name="T4">The fourth joined entity type.</typeparam>
+    /// <typeparam name="T5">The fifth joined entity type.</typeparam>
+    /// <typeparam name="T6">The sixth joined entity type.</typeparam>
+    /// <typeparam name="T7">The seventh joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <returns>The rendered SQL text.</returns>
+    /// <exception cref="NotSupportedException">The provider has no native multi-table <c>DELETE</c>, or a join is not an INNER <c>Join</c>.</exception>
+    public static string ToSql<T1, T2, T3, T4, T5, T6, T7>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return RenderDeleteJoin(query.DataProvider, new DeleteJoinCommand(typeof(T1), PrepareDeleteJoinSource(query)));
+    }
+
+    /// <summary>Deletes every row of the first table of an eight-table join that matches the join. See <see cref="Delete{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <typeparam name="T4">The fourth joined entity type.</typeparam>
+    /// <typeparam name="T5">The fifth joined entity type.</typeparam>
+    /// <typeparam name="T6">The sixth joined entity type.</typeparam>
+    /// <typeparam name="T7">The seventh joined entity type.</typeparam>
+    /// <typeparam name="T8">The eighth joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <returns>The number of deleted rows.</returns>
+    /// <exception cref="NotSupportedException">The provider has no native multi-table <c>DELETE</c>, or a join is not an INNER <c>Join</c>.</exception>
+    public static int Delete<T1, T2, T3, T4, T5, T6, T7, T8>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return ExecuteDeleteJoin(query.DataProvider, new DeleteJoinCommand(typeof(T1), PrepareDeleteJoinSource(query)));
+    }
+
+    /// <summary>Asynchronously deletes the rows of the first table of an eight-table join that matches the join. See <see cref="Delete{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <typeparam name="T4">The fourth joined entity type.</typeparam>
+    /// <typeparam name="T5">The fifth joined entity type.</typeparam>
+    /// <typeparam name="T6">The sixth joined entity type.</typeparam>
+    /// <typeparam name="T7">The seventh joined entity type.</typeparam>
+    /// <typeparam name="T8">The eighth joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <param name="cancellationToken">Cancels execution.</param>
+    /// <returns>A task producing the number of deleted rows.</returns>
+    /// <exception cref="NotSupportedException">The provider has no native multi-table <c>DELETE</c>, or a join is not an INNER <c>Join</c>.</exception>
+    public static Task<int> DeleteAsync<T1, T2, T3, T4, T5, T6, T7, T8>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> query, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return ExecuteDeleteJoinAsync(query.DataProvider, new DeleteJoinCommand(typeof(T1), PrepareDeleteJoinSource(query)), cancellationToken);
+    }
+
+    /// <summary>Renders the multi-table <c>DELETE</c> an eight-table join would execute. See <see cref="Delete{T1, T2}(JoinedEntityBuilder{T1, T2})"/> for the full contract.</summary>
+    /// <typeparam name="T1">The target entity type whose rows are deleted.</typeparam>
+    /// <typeparam name="T2">The second joined entity type.</typeparam>
+    /// <typeparam name="T3">The third joined entity type.</typeparam>
+    /// <typeparam name="T4">The fourth joined entity type.</typeparam>
+    /// <typeparam name="T5">The fifth joined entity type.</typeparam>
+    /// <typeparam name="T6">The sixth joined entity type.</typeparam>
+    /// <typeparam name="T7">The seventh joined entity type.</typeparam>
+    /// <typeparam name="T8">The eighth joined entity type.</typeparam>
+    /// <param name="query">The joined query selecting the rows to delete.</param>
+    /// <returns>The rendered SQL text.</returns>
+    /// <exception cref="NotSupportedException">The provider has no native multi-table <c>DELETE</c>, or a join is not an INNER <c>Join</c>.</exception>
+    public static string ToSql<T1, T2, T3, T4, T5, T6, T7, T8>(this JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> query)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        return RenderDeleteJoin(query.DataProvider, new DeleteJoinCommand(typeof(T1), PrepareDeleteJoinSource(query)));
+    }
+
+    private static QueryCommand PrepareDeleteJoinSource<TProjection>(EntityBuilder<TProjection> query)
+    {
+        RequireInnerJoinsForDelete(query.Joins);
+
+        // Only the source, joins and condition of this command are used; the projection is an unused
+        // placeholder and column preparation is skipped (IgnoreColumns).
+        var command = query.Select(p => new { Unit = 1 });
+        command.IgnoreColumns = true;
+        return command;
+    }
+
+    private static void RequireInnerJoinsForDelete(IReadOnlyList<JoinExpression>? joins)
+    {
+        if (joins is null)
+            return;
+
+        for (var i = 0; i < joins.Count; i++)
+        {
+            if (joins[i].JoinType is not JoinType.Inner)
+                throw new NotSupportedException(
+                    $"A multi-table DELETE only supports INNER joins, not {joins[i].JoinType}. Delete the rows through a correlated subquery (Where with EXISTS/IN) instead.");
+        }
+    }
+
+    private static int ExecuteDeleteJoin(IDataContext dataContext, DeleteJoinCommand command)
+    {
+        if (dataContext is IMutationExecutor executor)
+            return executor.Execute(command);
+
+        throw UnsupportedDeleteJoin(dataContext);
+    }
+
+    private static Task<int> ExecuteDeleteJoinAsync(IDataContext dataContext, DeleteJoinCommand command, CancellationToken cancellationToken)
+    {
+        if (dataContext is IMutationExecutor executor)
+            return executor.Execute(command, cancellationToken);
+
+        throw UnsupportedDeleteJoin(dataContext);
+    }
+
+    private static string RenderDeleteJoin(IDataContext dataContext, DeleteJoinCommand command)
+    {
+        if (dataContext is IMutationExecutor executor)
+            return executor.Render(command);
+
+        throw UnsupportedDeleteJoin(dataContext);
+    }
+
+    private static NotSupportedException UnsupportedDeleteJoin(IDataContext dataContext)
+        => new(
+            $"{dataContext.GetType().Name} does not support deleting from a joined table. Use PostgreSQL, SQL Server, MySQL or MariaDB, or delete the rows through a correlated subquery (Where with EXISTS/IN).");
+
+    /// <summary>
+    /// Starts a <c>TRUNCATE TABLE</c> over the mapping of <typeparamref name="TEntity"/> and returns its
+    /// terminal. Resets the table faster than <c>DeleteFrom&lt;T&gt;().All()</c>; providers without a
+    /// native <c>TRUNCATE</c> (SQLite) reject it.
+    /// </summary>
+    /// <typeparam name="TEntity">The mapped entity type whose table is truncated.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="configEntity">Optional mapping configuration, run only when the type is first mapped.</param>
+    /// <returns>A builder for the truncate.</returns>
+    public static TruncateBuilder<TEntity> Truncate<TEntity>(this IDataContext dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity = null)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+
+        return new(dataContext, ResolveMetadata(configEntity));
+    }
+
+    /// <summary>
     /// Starts a query over the mapping of <typeparamref name="T"/> and returns its fluent builder.
     /// The type's metadata is resolved lazily and cached per process; <paramref name="configEntity"/>
     /// therefore runs only on the first call for <typeparamref name="T"/>.

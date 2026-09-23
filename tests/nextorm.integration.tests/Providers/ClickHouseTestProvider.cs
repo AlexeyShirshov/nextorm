@@ -36,6 +36,8 @@ internal sealed class ClickHouseTestProvider : ITestProvider
     public bool EnforcesScalarSubqueryCardinality => true;
     public bool SupportsApply => false;
     public bool SupportsInsertReturning => false;
+    public bool SupportsTruncate => true;
+    public bool SupportsDeleteJoin => false;
     public string TableValuedFunctionSkipReason => "The shared table-valued function test uses SQLite's json_each; no portable equivalent is configured for ClickHouse.";
 
     public string SkipReason => ClickHouseContainer.Failure ?? "ClickHouse is not available.";

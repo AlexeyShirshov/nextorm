@@ -3,7 +3,7 @@ namespace NextORM.Core;
 /// <summary>
 /// How a <c>FROM</c> source should be rendered: whether it needs an alias, its entity type, whether
 /// joins follow it, the table hints to apply and the temporal clause (if any). Bundled so
-/// <see cref="SqlSourceRenderer.MakeFrom"/> takes one value instead of a trailing list of flags.
+/// <see cref="SqlSourceRenderer.MakeFrom(in SqlBuildContext, FromExpression, FromRenderOptions)"/> takes one value instead of a trailing list of flags.
 /// </summary>
 /// <param name="NeedAlias">Whether the source must be aliased.</param>
 /// <param name="EntityType">Entity (or projection) type used to register the source columns.</param>

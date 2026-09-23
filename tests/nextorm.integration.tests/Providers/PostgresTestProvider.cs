@@ -36,6 +36,8 @@ internal sealed class PostgresTestProvider : ITestProvider
     public bool EnforcesScalarSubqueryCardinality => true;
     public bool SupportsApply => true;
     public bool SupportsInsertReturning => true;
+    public bool SupportsTruncate => true;
+    public bool SupportsDeleteJoin => true;
     public string TableValuedFunctionSkipReason => "The shared table-valued function test uses SQLite's json_each; no portable equivalent is configured for PostgreSQL.";
 
     public string SkipReason => PostgresContainer.Failure ?? "PostgreSQL is not available.";
@@ -69,6 +71,7 @@ internal sealed class PostgresTestProvider : ITestProvider
         drop table if exists simple_entity;
         drop table if exists insert_entity;
         drop table if exists merge_entity;
+        drop table if exists delete_entity;
 
         create table simple_entity (id integer primary key);
         insert into simple_entity (id) select generate_series(1, 10);
@@ -110,6 +113,13 @@ internal sealed class PostgresTestProvider : ITestProvider
         );
 
         create table merge_entity
+        (
+            id integer primary key,
+            name varchar(100),
+            age integer
+        );
+
+        create table delete_entity
         (
             id integer primary key,
             name varchar(100),

@@ -36,6 +36,41 @@ public sealed class PostgresDialect : SqlDialectBase
     /// <summary>PostgreSQL accepts <c>DEFAULT</c> as a value in the <c>VALUES</c> list.</summary>
     public override bool SupportsColumnDefault => true;
 
+    /// <summary>PostgreSQL has a native <c>TRUNCATE TABLE</c>.</summary>
+    public override bool SupportsTruncate => true;
+
+    /// <summary>PostgreSQL deletes rows based on a join through the <c>USING</c> clause.</summary>
+    public override bool SupportsDeleteJoin => true;
+
+    /// <summary>PostgreSQL renders the <c>USING</c> spelling of <see cref="MakeDeleteJoin"/>.</summary>
+    public override bool DeleteJoinRequiresUsing => true;
+
+    /// <summary>
+    /// Renders the PostgreSQL <c>USING</c> form of a multi-table delete. The joined tables are listed in
+    /// <c>USING</c> and the join conditions are folded into the <c>WHERE</c>, because a <c>USING</c> join
+    /// condition cannot reference the delete target (the target is aliased in <c>DELETE FROM</c>).
+    /// </summary>
+    public override string MakeDeleteJoin(
+        string target,
+        string targetAlias,
+        string fromAndJoins,
+        string usingSources,
+        string joinConditions,
+        string? whereSql,
+        KeywordCase keywordCase = KeywordCase.Lower)
+    {
+        var where = string.IsNullOrEmpty(joinConditions)
+            ? whereSql
+            : string.IsNullOrEmpty(whereSql)
+                ? joinConditions
+                : joinConditions + Kw(keywordCase, " and ") + whereSql;
+
+        var sql = Kw(keywordCase, "delete from ") + target + Kw(keywordCase, " as ") + targetAlias
+            + Kw(keywordCase, " using ") + usingSources;
+
+        return string.IsNullOrEmpty(where) ? sql : sql + Kw(keywordCase, " where ") + where;
+    }
+
     /// <summary>Renders the identity-function query <c>select lastval()</c>.</summary>
     public override string MakeIdentityFunction(KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, "select lastval()");
 

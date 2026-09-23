@@ -4,7 +4,16 @@
 > [#3 «TODO: Insert»](https://github.com/AlexeyShirshov/nextorm/issues/3),
 > [#15 «TODO: Insert, update, delete with output table»](https://github.com/AlexeyShirshov/nextorm/issues/15);
 > milestone `1.0-a.4`. Этот документ вводит **общий каркас DML**, на который ссылаются планы
-> [todo_update.md](todo_update.md), [todo_delete.md](todo_delete.md), [todo_merge.md](todo_merge.md).
+> [todo_update.md](todo_update.md) и [todo_merge.md](todo_merge.md); `DELETE` (включая multi-table
+> join) уже реализован — см. [удаление](../../guide/20-delete-statement.md).
+>
+> **Статус (23.09.2026):** `INSERT` реализован (фазы 1 и 2 в части самой вставки; детали — «Статус фаз»);
+> открытых пунктов по самой вставке нет. Остатки ведут смежные планы: полный `MERGE` с ветками —
+> [todo_merge.md](todo_merge.md), чанкинг крупного батча — [todo_bulk_insert.md](todo_bulk_insert.md).
+> In-memory мутации (`INSERT`/`DELETE`/`TRUNCATE`) — **вне области**: `InMemoryDataContext` — это
+> query-поверхность по коллекциям вызывающего кода, а не эмуляция БД (в отличие от EF Core InMemory,
+> где `Add` + `SaveChanges` — часть модели БД). Файл сохраняется как общий каркас DML, на который
+> ссылаются соседние планы.
 
 ## Пункт и цель
 
@@ -26,8 +35,9 @@
 2. **Реальные сценарии.** Без записи nextorm нельзя использовать как единственный слой доступа к
    данным; приходится смешивать его с сырым ADO.NET или другим ORM на том же соединении —
    именно тот сценарий, который закрывает [todo_transactions.md](todo_transactions.md).
-3. **Единая параметризация и план-кэш.** Записи должны переиспользовать существующий механизм
-   параметров (`norm_p`), `Prepare()` и кэш планов, чтобы не терять заявленную производительность.
+3. **Единая параметризация.** Записи должны переиспользовать существующий механизм параметров
+   (`norm_p`) с тем же биндингом, что и read-only запросы; оптимизация (`Prepare()`, кэш планов,
+   бенчмарки) на мутации **не** распространяется — только read-only запросы.
 
 ## Текущее состояние и разрыв
 
@@ -151,10 +161,11 @@ public interface IMutationExecutor
 
 ### 5. План-кэш, параметризация, транзакции
 
-- `Prepare()` и кэш планов распространяются на мутации: SQL параметризуется через существующий
-  `IParameterProvider`/`NormParam` (`Query/DefaultParameterProvider.cs:8`,
-  `DataContext/NormParam.cs:12`); значения-константы становятся параметрами, `x => x.Col` —
-  ссылкой на колонку.
+- Параметризация мутаций использует существующий `IParameterProvider`/`NormParam`
+  (`Query/DefaultParameterProvider.cs:8`, `DataContext/NormParam.cs:12`): значения-константы
+  становятся параметрами, `x => x.Col` — ссылкой на колонку. **`Prepare()` и кэш планов на
+  мутации не распространяются** — nextorm оптимизирует только read-only запросы (см. «Ограничения
+  и цена»): мутация всегда рендерит и исполняет одну команду.
 - `MutationCommand` привязывает `DbCommand.Transaction` так же, как SELECT после
   [todo_transactions.md](todo_transactions.md) (`Func<DbTransaction?>` в исполнитель).
   #3/#4/#5 и #32 идут в одном milestone `1.0-a.4`; при отсутствии транзакции путь не должен
@@ -201,7 +212,7 @@ public sealed class InsertBuilder<TEntity>
     public Task<int> InsertAsync(CancellationToken cancellationToken = default);
     public TKey InsertWithIdentity<TKey>(Expression<Func<TEntity, TKey>> keySelector);
     public Task<TKey> InsertWithIdentityAsync<TKey>(Expression<Func<TEntity, TKey>> keySelector, CancellationToken cancellationToken = default);
-    public InsertBuilder<TEntity> Prepare();
+    // Prepare()/plan-cache на мутациях — вне области: оптимизируются только read-only запросы.
 }
 ```
 
@@ -256,13 +267,14 @@ public sealed class InsertBuilder<TEntity>
   `.Key()`/`.Identity()`/`.Computed()`), ось `MutationCommand`/`InsertCommand`,
   `SqlMutationBuilder.MakeInsert`, роль `IMutationExecutor` + `QueryExecutor.ExecuteNonQuery`,
   `InsertInto<T>()` (значения/сущность/батч), `InsertWithIdentity`, хуки
-  `SupportsReturning`/`SupportsOutput`/`SupportsLastInsertId`. `Prepare()` в фазе 1 **не** реализован
-  (открытый вопрос 6); ClickHouse отклоняет только `InsertWithIdentity`, in-memory — и `Insert`, и
+  `SupportsReturning`/`SupportsOutput`/`SupportsLastInsertId`. `Prepare()` на мутациях — **вне
+  области** (только read-only запросы; см. открытый вопрос 6); ClickHouse отклоняет только `InsertWithIdentity`, in-memory — и `Insert`, и
   `InsertWithIdentity`.
 - **Фаза 2 (частично, issue #15):** `Returning`-материализация — **Done** (`Returning()`/
   `Returning(projection)` → `InsertReturningBuilder.Single/ToList`, PostgreSQL/SQLite/SQL Server; см.
   [guide 19](../guide/19-insert-statement.md)); `INSERT ... SELECT` — **Done** (см. ниже); key upsert —
-  **Done** ([todo_merge.md](todo_merge.md), Фаза 1); остаются полный `MERGE` с ветками, in-memory мутации, чанкинг батча.
+  **Done** ([todo_merge.md](todo_merge.md), Фаза 1); остаются полный `MERGE` с ветками и чанкинг батча;
+  in-memory мутации — **вне области** по замыслу (см. «Вне области» и «Ограничения и цена»).
 - **`INSERT ... SELECT` (реализовано, 23.09.2026).** Второй источник строк — серверный запрос:
   тот же overload `Values<TSource,TResult>(EntityBuilder<TSource> source, Expression<Func<TSource,TResult>> mapping)`
   (источник `IEnumerable` пишет на клиенте, `EntityBuilder` — рендерит `INSERT ... SELECT`). Целевые
@@ -315,18 +327,29 @@ public sealed class InsertBuilder<TEntity>
   `NotSupportedException` (в SQLite вместо этого колонку опускают). Хуки
   `ISqlDialect.SupportsDefaultValues`/`UsesEmptyColumnListForDefaults`/`SupportsColumnDefault`; новый
   публичный тип `SqlDefault`.
-- **Вне области:** change tracking, `SaveChanges`, bulk copy (см. [todo_bulk_insert.md](todo_bulk_insert.md)); временные таблицы вынесены отдельно в [todo_create_table_as_select.md](todo_create_table_as_select.md).
+- **Вне области:** change tracking, `SaveChanges`, bulk copy (см. [todo_bulk_insert.md](todo_bulk_insert.md)); in-memory мутации (`INSERT`/`DELETE`/`TRUNCATE`); временные таблицы вынесены отдельно в [todo_create_table_as_select.md](todo_create_table_as_select.md).
 
 ## Ограничения и цена
 
 - **Нет change tracking / `SaveChanges`** — только явные команды; подключение к контексту/транзакции
   через роли (#32).
+- **Оптимизация DML — вне области.** `Prepare()` и неявный кэш планов применяются только к
+  read-only запросам; мутация всегда рендерит и исполняет одну команду за вызов. Бенчмарки и
+  профилирование DML не ведутся.
 - **Key upsert реализован** — `ON CONFLICT`/`ON DUPLICATE KEY`/`MERGE`, см. [todo_merge.md](todo_merge.md)
   (Фаза 1) и [Upsert (key merge)](../guide/19-insert-statement.md#upsert-key-merge). Полный `MERGE` с
   ветками остаётся предметом [todo_merge.md](todo_merge.md). `INSERT ... SELECT` и per-column
   `DEFAULT`/`DEFAULT VALUES` уже реализованы (см. «Статус фаз»).
 - **ClickHouse**: транзакций нет, `RETURNING` нет; вставка строк через `VALUES` — только малые
   батчи, крупные — бинарным API.
+- **In-memory мутации — вне области (сознательное решение).** `InMemoryDataContext` — это
+  query-поверхность запросов по коллекциям, которыми владеет вызывающий код (`WithData`), а не
+  эмуляция базы данных (в отличие от EF Core InMemory, где `Add` + `SaveChanges` — часть модели БД).
+  Записывать некуда: нет персистентности, поэтому `INSERT`/`DELETE`/`TRUNCATE`
+  (`Insert`/`Delete`/`Truncate`, `ReturningIdentity`/`ReturningKey`) бросают `NotSupportedException` —
+  это не «не реализовано», а зафиксированная граница. Реализация DELETE/TRUNCATE для in-memory была
+  добавлена, но удалена в пользу этой границы. Кому нужны данные для in-memory-запросов, тот
+  создаёт/меняет коллекцию сам; сохранять результат запроса — тоже.
 - **Публичный API расширяется**: новый публичный тип `InsertBuilder<TEntity>`, метод
   `DataContextExtensions.InsertInto<T>`, DIM-члены `ISqlDialect.SupportsReturning`/`SupportsOutput`/
   `SupportsLastInsertId` (+ `Make*`) и `IPropertyMetadata.IsKey`/`IsIdentity`/`IsComputed`,
@@ -348,8 +371,8 @@ public sealed class InsertBuilder<TEntity>
   (значения/сущность/батч), `InsertWithIdentity`, ClickHouse/in-memory — `NotSupportedException`.
 - **Фаза 2 (частично):** `Returning`-материализация (issue #15) — **Done**; `INSERT ... SELECT` — **Done**;
   модифицирующие CTE PostgreSQL — **Done**; key upsert — **Done** ([todo_merge.md](todo_merge.md), Фаза 1);
-  остаются полный `MERGE` с ветками, in-memory мутации.
-- **Вне области:** change tracking, `SaveChanges`, bulk copy (см. [todo_bulk_insert.md](todo_bulk_insert.md)); временные таблицы вынесены отдельно в [todo_create_table_as_select.md](todo_create_table_as_select.md).
+  остаётся полный `MERGE` с ветками; in-memory мутации — **вне области**.
+- **Вне области:** change tracking, `SaveChanges`, bulk copy (см. [todo_bulk_insert.md](todo_bulk_insert.md)); in-memory мутации (`INSERT`/`DELETE`/`TRUNCATE`); временные таблицы вынесены отдельно в [todo_create_table_as_select.md](todo_create_table_as_select.md).
 
 ## План тестов
 
@@ -369,15 +392,16 @@ public sealed class InsertBuilder<TEntity>
 
 1. Отдельная ось `MutationCommand` vs дискриминатор `SqlStatementType` в `QueryCommand`
    (рекомендация — отдельная ось, чтобы не трогать SELECT-путь).
-2. `IMutationExecutor` вне `IDataContext` (рекомендация) vs в составе фасада с реализацией
-   in-memory в фазе 1.
+2. `IMutationExecutor` вне `IDataContext` — **решено:** роль вне фасада, in-memory её не реализует
+   для `INSERT`; in-memory мутации — вне области.
 3. Один билдер `InsertBuilder<T>` vs перегрузка `From<T>().Insert(...)`; SQL-ориентированные
    `InsertInto`/`Update`/`DeleteFrom`/`MergeInto` выглядят последовательнее.
 4. `InsertWithIdentity<TKey>(selector)` vs linq2db-стиль `InsertWithIdentity()` (возврат `object`)
    и `InsertWithInt32Identity`.
 5. Возврат числа строк vs `void` для провайдеров без affected-rows (ClickHouse) — рекомендация:
    `int`, а неподдерживаемое бросает.
-6. Нужен ли `.Prepare()` на мутациях в фазе 1 или достаточно неявного план-кэша.
+6. `.Prepare()` на мутациях — **решено: вне области.** Оптимизируются только read-only запросы
+   (`Prepare`, неявный кэш планов, бенчмарки); мутации всегда рендерят и исполняют одну команду.
 
 ## Файлы к изменению
 

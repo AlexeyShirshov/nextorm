@@ -242,8 +242,8 @@ public sealed class BulkInsertBuilder<TEntity>
   SQL Server `SqlBulkCopy` (+ `KeepIdentity`, `NotifyAfter`), MySQL/MariaDB `MySqlBulkCopy`,
   ClickHouse бинарная вставка.
 - **Фаза 3:** интеграция с `ITransactionManager`, отмена/прогресс, `IAsyncEnumerable`, проверка
-  MariaDB и тонкая настройка лимитов чанкера per-provider, in-memory (только если появятся
-  in-memory мутации).
+  MariaDB и тонкая настройка лимитов чанкера per-provider. In-memory не планируется: `INSERT` в
+  in-memory — вне области (см. [todo_insert.md](todo_insert.md)).
 - **Вне области:** change tracking/`SaveChanges`, upsert/`MERGE` (см. [todo_merge.md](todo_merge.md)),
   `INSERT ... SELECT`/CTAS (см. [todo_create_table_as_select.md](todo_create_table_as_select.md)),
   streaming LOB.

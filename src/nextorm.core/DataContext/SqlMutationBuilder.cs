@@ -186,6 +186,107 @@ internal static class SqlMutationBuilder
         }
     }
 
+    /// <summary>
+    /// Renders a <c>DELETE</c> statement for <paramref name="command"/>. The row filter is either the
+    /// already-rendered <paramref name="whereSql"/> of the predicate form, the declared key equalities of
+    /// the <c>Delete(entity)</c> form, or nothing (the explicit <c>All()</c> full-table delete).
+    /// </summary>
+    /// <param name="dialect">The active SQL dialect.</param>
+    /// <param name="quoteIdentifiers">Whether physical identifiers must be quoted.</param>
+    /// <param name="namingConvention">Convention applied to auto-derived table/column names, or <see langword="null"/>.</param>
+    /// <param name="command">The delete command to render.</param>
+    /// <param name="whereSql">The rendered condition of the predicate form, or <see langword="null"/>; its parameters are already in <paramref name="parameters"/>.</param>
+    /// <param name="parameters">The parameters of <paramref name="whereSql"/>; key values are appended to it.</param>
+    /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
+    /// <returns>The rendered SQL and the parameters it references.</returns>
+    internal static (string Sql, List<Parameter> Parameters) MakeDelete(
+        ISqlDialect dialect,
+        bool quoteIdentifiers,
+        INamingConvention? namingConvention,
+        DeleteCommand command,
+        string? whereSql,
+        List<Parameter> parameters,
+        KeywordCase keywordCase = KeywordCase.Lower)
+    {
+        var writer = StringBuilderPool.Shared.Get();
+
+        try
+        {
+            var table = ResolveTableName(command.TableName, command.IsTableNameAuto, command.EntityType, namingConvention);
+            if (quoteIdentifiers)
+                table = dialect.QuoteIdentifier(table);
+
+            writer.Append(dialect.MakeDeleteHead(table, keywordCase));
+
+            var returningColumns = RenderColumnsOrNull(dialect, quoteIdentifiers, namingConvention, command.ReturningColumns);
+
+            // T-SQL places OUTPUT between the target and the filter; the ANSI RETURNING clause is appended
+            // after the filter (below). MySQL/MariaDB have neither.
+            if (returningColumns is not null && dialect.SupportsOutput)
+                writer.Append(dialect.MakeDeletedOutput(returningColumns, keywordCase));
+
+            if (command.Keys is { Count: > 0 } keys)
+            {
+                var provider = new DefaultParameterProvider();
+                writer.Append(SqlKeywords.Of(keywordCase, " where "));
+
+                for (var i = 0; i < keys.Count; i++)
+                {
+                    if (i > 0)
+                        writer.Append(SqlKeywords.Of(keywordCase, " and "));
+
+                    var column = RenderColumnReference(dialect, quoteIdentifiers, keys[i].Property, namingConvention);
+                    var name = provider.GetParamName();
+                    parameters.Add(new Parameter(name, keys[i].Value));
+                    writer.Append(column).Append(" = ").Append(dialect.MakeParam(name));
+                }
+            }
+            else if (!string.IsNullOrEmpty(whereSql))
+            {
+                writer.Append(SqlKeywords.Of(keywordCase, " where ")).Append(whereSql);
+            }
+            else if (dialect.DeleteRequiresWhere)
+            {
+                writer.Append(SqlKeywords.Of(keywordCase, " where 1"));
+            }
+
+            if (returningColumns is not null && dialect.SupportsReturning)
+                writer.Append(dialect.MakeReturning(returningColumns, keywordCase));
+
+            if (dialect.MakeDeleteSuffix(keywordCase) is { } suffix)
+                writer.Append(suffix);
+
+            return (writer.ToString(), parameters);
+        }
+        finally
+        {
+            StringBuilderPool.Shared.Return(writer);
+        }
+    }
+
+    /// <summary>
+    /// Renders a <c>TRUNCATE TABLE</c> statement for <paramref name="command"/>.
+    /// </summary>
+    /// <param name="dialect">The active SQL dialect.</param>
+    /// <param name="quoteIdentifiers">Whether physical identifiers must be quoted.</param>
+    /// <param name="namingConvention">Convention applied to auto-derived table/column names, or <see langword="null"/>.</param>
+    /// <param name="command">The truncate command to render.</param>
+    /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
+    /// <returns>The rendered SQL text.</returns>
+    internal static string MakeTruncate(
+        ISqlDialect dialect,
+        bool quoteIdentifiers,
+        INamingConvention? namingConvention,
+        TruncateCommand command,
+        KeywordCase keywordCase = KeywordCase.Lower)
+    {
+        var table = ResolveTableName(command.TableName, command.IsTableNameAuto, command.EntityType, namingConvention);
+        if (quoteIdentifiers)
+            table = dialect.QuoteIdentifier(table);
+
+        return dialect.MakeTruncate(table, keywordCase);
+    }
+
     // INSERT ... VALUES ... <ON CONFLICT ... DO UPDATE SET> | <ON DUPLICATE KEY UPDATE>, sharing the
     // insert head and the value rows; only the conflict clause and the incoming-value reference differ.
     private static void RenderOnConflictUpsert(
@@ -268,6 +369,9 @@ internal static class SqlMutationBuilder
 
         return rendered;
     }
+
+    private static string[]? RenderColumnsOrNull(ISqlDialect dialect, bool quoteIdentifiers, INamingConvention? namingConvention, IReadOnlyList<IPropertyMetadata>? columns)
+        => columns is { Count: > 0 } ? RenderColumns(dialect, quoteIdentifiers, namingConvention, columns) : null;
 
     // One "(<values>)" tuple per row, separated by ", " (without the leading VALUES keyword).
     private static void AppendValuesRows(

@@ -52,6 +52,8 @@
       href: guide/18-json.md
     - name: Изменение данных (INSERT)
       href: guide/19-insert-statement.md
+    - name: Изменение данных (DELETE)
+      href: guide/20-delete-statement.md
     - name: Специфичный для провайдеров SQL
       items:
         - name: Обзор

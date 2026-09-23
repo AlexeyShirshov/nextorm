@@ -37,6 +37,8 @@ internal sealed class SqlServerTestProvider : ITestProvider
     public bool EnforcesScalarSubqueryCardinality => true;
     public bool SupportsApply => true;
     public bool SupportsInsertReturning => true;
+    public bool SupportsTruncate => true;
+    public bool SupportsDeleteJoin => true;
     public string TableValuedFunctionSkipReason => "The shared table-valued function test uses SQLite's json_each; SQL Server exposes row-returning JSON through CROSS APPLY OPENJSON instead.";
 
     public string SkipReason => SqlServerContainer.Failure ?? "SQL Server is not available.";
@@ -73,6 +75,7 @@ internal sealed class SqlServerTestProvider : ITestProvider
         drop table if exists simple_entity;
         drop table if exists insert_entity;
         drop table if exists merge_entity;
+        drop table if exists delete_entity;
 
         create table simple_entity (id int not null primary key);
 
@@ -130,6 +133,13 @@ internal sealed class SqlServerTestProvider : ITestProvider
         );
 
         create table merge_entity
+        (
+            id int not null primary key,
+            name nvarchar(100) null,
+            age int null
+        );
+
+        create table delete_entity
         (
             id int not null primary key,
             name nvarchar(100) null,

@@ -34,6 +34,18 @@ public sealed class ClickHouseDialect : SqlDialectBase
     /// <summary>ClickHouse supports a raw SQL derived table (<c>FROM (&lt;sql&gt;) AS alias</c>).</summary>
     public override bool SupportsRawSqlSource => true;
 
+    /// <summary>ClickHouse deletes through the synchronous <c>ALTER TABLE ... DELETE</c> mutation with <c>SETTINGS mutations_sync = 1</c>.</summary>
+    public override string MakeDeleteHead(string table, KeywordCase keywordCase = KeywordCase.Lower) => $"{Kw(keywordCase, "alter table ")}{table}{Kw(keywordCase, " delete")}";
+
+    /// <summary>ClickHouse's <c>ALTER TABLE ... DELETE</c> mutation requires a <c>WHERE</c> clause.</summary>
+    public override bool DeleteRequiresWhere => true;
+
+    /// <summary>Waits for the ClickHouse mutation, so a delete is visible to the next statement.</summary>
+    public override string? MakeDeleteSuffix(KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, " settings mutations_sync = 1");
+
+    /// <summary>ClickHouse has a native synchronous <c>TRUNCATE TABLE</c>.</summary>
+    public override bool SupportsTruncate => true;
+
     /// <summary>ClickHouse implements the <c>INTERSECT ALL</c>/<c>EXCEPT ALL</c> set-operation variants.</summary>
     public override bool SupportsIntersectExceptAll => true;
 

@@ -83,7 +83,7 @@ nextorm points at the source that owns the behaviour.
 | Identifier quoting | yes (per provider) | opt-in — `UseQuotedIdentifiers()`/`WithQuotedIdentifiers()`; default emits physical names verbatim | `ISqlDialect.QuoteIdentifier` |
 | Naming conventions (e.g. snake_case) | via `MappingSchema`/attributes (no built-in convention) | opt-in — `UseNamingConvention()`/`WithNamingConvention()`; built-in `SnakeCaseNamingConvention`; explicit names stay verbatim | `INamingConvention` / `SnakeCaseNamingConvention` |
 | SQL keyword casing (upper/lower) | no (keywords are emitted in the provider's canonical case) | **yes** — opt-in `KeywordCase.Upper`; the default `KeywordCase.Lower` is byte-for-byte the historical output | `KeywordCase`, `DataContextBuilder.UseKeywordCase`/`EntityBuilder.WithKeywordCase` |
-| **DML** (`INSERT`/`UPDATE`/`DELETE`/`MERGE`) | yes | **partial** — `INSERT ... VALUES` (single row, entity, batch), `INSERT ... SELECT` (`Values(source, mapping)` over an `EntityBuilder`), generated key (`ReturningIdentity`/`ReturningKey`) and returned rows (`Returning`, PostgreSQL/SQLite/SQL Server only) via `InsertInto`; **PostgreSQL data-modifying CTEs** (`With(name, insert)`/`CteQuery.With(name, insert)` → `MutationCteQuery<T>`, a write CTE whose `RETURNING` rows are read typed via `From`/`FromTable`, usable as a main `INSERT ... SELECT` source); **key upsert** (`MergeInto` → `MergeBuilder<T>`, native `ON CONFLICT ... DO UPDATE`/`ON DUPLICATE KEY UPDATE`/`MERGE ... USING (VALUES ...)`, ClickHouse/in-memory reject it); `UPDATE`/`DELETE` and full `MERGE` with branches not implemented | `InsertBuilder<TEntity>`, `InsertReturningBuilder<TEntity,TResult>`, `MergeBuilder<TEntity>`, `MutationCteQuery<TResult>`, `ISqlDialect.SupportsReturning`/`SupportsOutput`/`SupportsLastInsertId`/`SupportsIdentityFunction`/`SupportsDataModifyingCtes`/`SupportsOnConflict`/`SupportsOnDuplicateKey`/`SupportsMerge` |
+| **DML** (`INSERT`/`UPDATE`/`DELETE`/`MERGE`) | yes | **partial** — `INSERT ... VALUES` (single row, entity, batch), `INSERT ... SELECT` (`Values(source, mapping)` over an `EntityBuilder`), generated key (`ReturningIdentity`/`ReturningKey`) and returned rows (`Returning`, PostgreSQL/SQLite/SQL Server only) via `InsertInto`; **PostgreSQL data-modifying CTEs** (`With(name, insert)`/`CteQuery.With(name, insert)` → `MutationCteQuery<T>`, a write CTE whose `RETURNING` rows are read typed via `From`/`FromTable`, usable as a main `INSERT ... SELECT` source); **key upsert** (`MergeInto` → `MergeBuilder<T>`, native `ON CONFLICT ... DO UPDATE`/`ON DUPLICATE KEY UPDATE`/`MERGE ... USING (VALUES ...)`, ClickHouse/in-memory reject it); **`DELETE`** (`DeleteFrom` → `DeleteBuilder<T>` and `Delete<T>(entity)` by declared key, explicit `All()` for a full-table delete, native `DELETE FROM <table> [WHERE ...]`, `Returning()` for the removed rows, `Truncate<T>()` for `TRUNCATE TABLE`, ClickHouse `ALTER TABLE ... DELETE` mutation); `UPDATE` and full `MERGE` with branches not implemented | `InsertBuilder<TEntity>`, `InsertReturningBuilder<TEntity,TResult>`, `MergeBuilder<TEntity>`, `DeleteBuilder<TEntity>`, `MutationCteQuery<TResult>`, `ISqlDialect.SupportsReturning`/`SupportsOutput`/`SupportsLastInsertId`/`SupportsIdentityFunction`/`SupportsDataModifyingCtes`/`SupportsOnConflict`/`SupportsOnDuplicateKey`/`SupportsMerge`/`SupportsDelete` |
 | Bulk copy / merge / temporary tables | yes | **partial** — key upsert (`MergeInto`/`MergeBuilder<T>`) is implemented; bulk insert, full `MERGE` (phase 2) and CTAS/temporary tables are planned: [bulk insert](../roadmap/todo_bulk_insert.md), [`MERGE`](../roadmap/todo_merge.md), [CTAS](../roadmap/todo_create_table_as_select.md) | `MergeBuilder<TEntity>` |
 | Navigation properties / associations / eager loading | yes (`[Association]`, `LoadWith`) | **no** | — |
 | Change tracking / identity map | partial | **no** (by design) | — |
@@ -144,8 +144,8 @@ These are conscious scope decisions in nextorm's focused, no-change-tracking mod
 surface, which nextorm matches or exceeds. linq2db covers them:
 
 * **Full data modification**: nextorm ships an explicit write surface (`INSERT ... VALUES`/`INSERT ... SELECT`,
-  returning, key upsert and PostgreSQL data-modifying CTEs) only; full
-  `UPDATE`/`DELETE`/`MERGE` with branches, bulk copy, temporary tables and change tracking are out of scope by design
+  returning, key upsert, `DELETE` and PostgreSQL data-modifying CTEs) only; full
+  `UPDATE`, full `MERGE` with branches, bulk copy, temporary tables and change tracking are out of scope by design
   (each write is an explicit command, with no identity map). linq2db covers the full CRUD surface.
 * **Relationships**: nextorm has no relationship metadata — joins are always explicit; linq2db adds
   `[Association]`, `LoadWith` eager loading and implicit join inference.
@@ -190,7 +190,7 @@ families, the ClickHouse-specific constructs, cross-provider row values, TVFs an
 allocation footprint, benchmark results at or above Dapper, EF Core and linq2db on the shipped scenarios,
 and more configurable SQL output (identifier quoting, naming conventions and keyword casing are opt-in and
 overridable per command, whereas linq2db quotes by default and fixes names through its mapping schema).
-linq2db remains the better fit only when the same layer must also perform full CRUD (`UPDATE`/`DELETE` and
+linq2db remains the better fit only when the same layer must also perform full CRUD (`UPDATE` and
 full `MERGE` with branches), model relationships or generate the data layer from a live schema — surface nextorm deliberately
 leaves out.
 

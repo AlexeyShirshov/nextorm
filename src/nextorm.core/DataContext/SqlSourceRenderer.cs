@@ -173,15 +173,7 @@ internal static class SqlSourceRenderer
             }
         }
 
-        if (join.Strictness is not JoinStrictness.Default || join.IsGlobal)
-        {
-            if (join.Strictness is not JoinStrictness.Default && !ctx.Dialect.SupportsJoinStrictness)
-                throw new NotSupportedException($"The {join.Strictness} join modifier is not supported by this SQL dialect");
-            if (join.IsGlobal && !ctx.Dialect.SupportsGlobalJoin)
-                throw new NotSupportedException("The GLOBAL join modifier is not supported by this SQL dialect");
-            if (join.JoinType is not (JoinType.Inner or JoinType.Left or JoinType.Right or JoinType.Full))
-                throw new NotSupportedException($"The join modifier cannot be applied to a {join.JoinType} join");
-        }
+        ValidateJoinModifiers(in ctx, join);
 
         if (join.JoinType is JoinType.CrossApply or JoinType.OuterApply)
             return MakeApplyJoin(in ctx, join);
@@ -210,28 +202,13 @@ internal static class SqlSourceRenderer
 
             // A scope is pushed only when the condition's parameters contain a repeated type. Doing
             // this with a double loop avoids the Select/Distinct LINQ allocations on every build.
-            var joinParameters = joinCondition.Parameters;
-            var scopedAdded = false;
-            for (var i = 1; i < joinParameters.Count && !scopedAdded; i++)
-            {
-                var type = joinParameters[i].Type;
-                for (var j = 0; j < i; j++)
-                {
-                    if (joinParameters[j].Type == type)
-                    {
-                        scopedAdded = true;
-                        break;
-                    }
-                }
-            }
+            var scopedAdded = JoinNeedsScope(joinCondition.Parameters);
             if (scopedAdded)
                 ctx.ColumnsProvider.PushScope(joinCondition.Parameters);
 
             try
             {
-                var dim = 1;
-                if (joinCondition.Parameters[0].Type.TryGetProjectionDimension(out var joinDim))
-                    dim = joinDim;
+                var dim = JoinDimension(joinCondition);
 
                 var fromSql = MakeFrom(in ctx, join.From, new FromRenderOptions(true, joinCondition.Parameters[1].Type, false));
                 if (!ctx.ParamMode)
@@ -258,9 +235,87 @@ internal static class SqlSourceRenderer
     }
 
     /// <summary>
+    /// Renders the aliased <c>FROM</c> source and the <c>ON</c> condition of a join separately, under the
+    /// same column scope a repeated parameter type requires. Used by the multi-table <c>DELETE</c>
+    /// renderer: PostgreSQL needs the source in <c>USING</c> and the condition in <c>WHERE</c>, while the
+    /// alias-style dialects use <see cref="MakeJoin"/> instead. The condition is empty in parameter mode.
+    /// </summary>
+    internal static (string From, string Condition) MakeJoinParts(in SqlBuildContext ctx, JoinExpression join, Type entityType)
+    {
+        ValidateJoinModifiers(in ctx, join);
+
+        var condition = join.JoinCondition
+            ?? throw new BuildSqlCommandException("A multi-table DELETE only supports INNER joins, which carry a condition.");
+
+        var scopedAdded = JoinNeedsScope(condition.Parameters);
+        if (scopedAdded)
+            ctx.ColumnsProvider.PushScope(condition.Parameters);
+
+        try
+        {
+            var fromSql = MakeFrom(in ctx, join.From, new FromRenderOptions(true, condition.Parameters[1].Type, false));
+
+            var conditionBuilder = StringBuilderPool.Shared.Get();
+            try
+            {
+                if (!ctx.ParamMode)
+                    MakeWhere(in ctx, conditionBuilder, entityType, condition.Body, JoinDimension(condition));
+
+                return (fromSql, conditionBuilder.ToString());
+            }
+            finally
+            {
+                StringBuilderPool.Shared.Return(conditionBuilder);
+            }
+        }
+        finally
+        {
+            if (scopedAdded)
+                ctx.ColumnsProvider.PopScope();
+        }
+    }
+
+    // The strictness/GLOBAL modifiers are ClickHouse-only and their applicability depends on the join
+    // type; shared so the multi-table DELETE USING path rejects them exactly like the SELECT path.
+    private static void ValidateJoinModifiers(in SqlBuildContext ctx, JoinExpression join)
+    {
+        if (join.Strictness is JoinStrictness.Default && !join.IsGlobal)
+            return;
+
+        if (join.Strictness is not JoinStrictness.Default && !ctx.Dialect.SupportsJoinStrictness)
+            throw new NotSupportedException($"The {join.Strictness} join modifier is not supported by this SQL dialect");
+        if (join.IsGlobal && !ctx.Dialect.SupportsGlobalJoin)
+            throw new NotSupportedException("The GLOBAL join modifier is not supported by this SQL dialect");
+        if (join.JoinType is not (JoinType.Inner or JoinType.Left or JoinType.Right or JoinType.Full))
+            throw new NotSupportedException($"The join modifier cannot be applied to a {join.JoinType} join");
+    }
+
+    // A join condition needs a pushed column scope when two of its parameter types are the same (for
+    // example a self-join), so each alias resolves within its own scope.
+    private static bool JoinNeedsScope(IReadOnlyList<ParameterExpression> parameters)
+    {
+        for (var i = 1; i < parameters.Count; i++)
+        {
+            var type = parameters[i].Type;
+            for (var j = 0; j < i; j++)
+            {
+                if (parameters[j].Type == type)
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    // The join condition's dimension is the projection dimension of its left-hand parameter (1 for a
+    // plain entity, N for a projection of N joined tables).
+    private static int JoinDimension(LambdaExpression condition)
+        => condition.Parameters[0].Type.TryGetProjectionDimension(out var dim) ? dim : 1;
+
+    /// <summary>
     /// Renders a <c>CROSS APPLY</c>/<c>OUTER APPLY</c> (or lateral) source. Unlike a regular join
     /// there is no <c>ON</c> condition: the clause is produced entirely by the dialect. The source is
-    /// still rendered through <see cref="MakeFrom"/> so a derived table/table-valued function is
+    /// still rendered through <see cref="MakeFrom(in SqlBuildContext, FromExpression, FromRenderOptions)"/> so a derived table/table-valued function is
     /// parenthesised and aliased, and in parameter mode it is walked for captured parameters.
     /// </summary>
     private static string? MakeApplyJoin(in SqlBuildContext ctx, JoinExpression join)
@@ -274,8 +329,17 @@ internal static class SqlSourceRenderer
     }
 
     internal static string MakeFrom(in SqlBuildContext ctx, FromExpression from, FromRenderOptions options)
+        => MakeFrom(in ctx, from, options, out _);
+
+    /// <summary>
+    /// Renders a <c>FROM</c> source. <paramref name="alias"/> receives the alias assigned to a physical
+    /// table source (used by the multi-table <c>DELETE</c> renderer, which names the target alias), or
+    /// <see langword="null"/> for sources that are not aliased physical tables.
+    /// </summary>
+    internal static string MakeFrom(in SqlBuildContext ctx, FromExpression from, FromRenderOptions options, out string? alias)
     {
         var (needAlias, entityType, hasJoins, tableHints, temporal, indexHints, indexHintKind) = options;
+        alias = null;
 
         if (from.LinqSource is not null)
             throw new NotSupportedException("SelectMany/GroupJoin sources are not supported by the SQL providers; they are only available on the in-memory provider.");
@@ -343,7 +407,8 @@ internal static class SqlSourceRenderer
                     else
                         ctx.ColumnsProvider.Add(entityType!, false);
 
-                    sqlBuilder.Append(ctx.Dialect.MakeTableAlias(ctx.AliasProvider!.GetNextAlias(from), ctx.KeywordCase));
+                    alias = ctx.AliasProvider!.GetNextAlias(from);
+                    sqlBuilder.Append(ctx.Dialect.MakeTableAlias(alias, ctx.KeywordCase));
                 }
 
                 return sqlBuilder.ToString();
@@ -659,8 +724,16 @@ internal static class SqlSourceRenderer
     }
 
     internal static void MakeWhere(in SqlBuildContext ctx, StringBuilder? target, Type entityType, Expression condition, int dim)
+        => MakeWhere(in ctx, target, entityType, condition, dim, dontNeedAlias: false);
+
+    /// <summary>
+    /// Renders a condition without a table qualifier. Used by the statement types whose target table
+    /// is not aliased (<c>DELETE FROM &lt;table&gt; WHERE ...</c>): a single-source condition resolves
+    /// its columns unqualified instead of failing to find an alias.
+    /// </summary>
+    internal static void MakeWhere(in SqlBuildContext ctx, StringBuilder? target, Type entityType, Expression condition, int dim, bool dontNeedAlias)
     {
-        using var visitor = ctx.CreateWhereVisitor(entityType, dim);
+        using var visitor = ctx.CreateWhereVisitor(entityType, dim, dontNeedAlias);
         visitor.VisitCondition(condition);
 
         // In parameter mode nothing is emitted (the walk still collects parameters); otherwise the

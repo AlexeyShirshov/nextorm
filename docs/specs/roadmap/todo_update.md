@@ -71,7 +71,7 @@ public sealed class UpdateBuilder<TEntity>
 
     public int Update();
     public Task<int> UpdateAsync(CancellationToken cancellationToken = default);
-    public UpdateBuilder<TEntity> Prepare();
+    // Без Prepare(): оптимизация DML вне области (только read-only запросы).
 }
 
 // входные точки (расширения над IDataContext)
@@ -116,8 +116,9 @@ public static Task<int> UpdateAsync<TEntity>(this IDataContext ctx, TEntity enti
   выражение/сущность), `Where`, `Update()`/`UpdateAsync()`, форма `Update(entity)` по ключу,
   `NotSupportedException` для ClickHouse/in-memory.
 - **Фаза 2:** `RETURNING`/`OUTPUT` (issue #15), `UPDATE ... FROM`/multi-table, ClickHouse-мутация,
-  in-memory, `Prepare()`-эргономика.
-- **Вне области:** change tracking, optimistic concurrency (`rowversion`), global query filters.
+  in-memory.
+- **Вне области:** change tracking, optimistic concurrency (`rowversion`), global query filters;
+  оптимизация DML (`Prepare()`/plan-cache) — только read-only запросы.
 
 ## План тестов
 

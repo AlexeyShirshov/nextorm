@@ -1079,6 +1079,11 @@ public interface ISqlDialect
     /// </summary>
     string MakeOutput(IReadOnlyList<string> columns, KeywordCase keywordCase = KeywordCase.Lower) => SqlKeywords.Of(keywordCase, " output ") + string.Join(", ", columns.Select(static c => "inserted." + c));
     /// <summary>
+    /// Renders <c>OUTPUT deleted.&lt;column&gt; ...</c> for a <c>DELETE</c> (SQL Server reads the removed
+    /// row through <c>deleted</c>). Only called when <see cref="SupportsOutput"/> is <c>true</c>.
+    /// </summary>
+    string MakeDeletedOutput(IReadOnlyList<string> columns, KeywordCase keywordCase = KeywordCase.Lower) => SqlKeywords.Of(keywordCase, " output ") + string.Join(", ", columns.Select(static c => "deleted." + c));
+    /// <summary>
     /// Renders the scalar query that returns the last generated identity of the current session. Only
     /// called when <see cref="SupportsLastInsertId"/> is <c>true</c>.
     /// </summary>
@@ -1156,6 +1161,95 @@ public interface ISqlDialect
         string valuesRows,
         KeywordCase keywordCase = KeywordCase.Lower)
         => throw new NotSupportedException($"{GetType().Name} cannot render a MERGE upsert.");
+
+    /// <summary>
+    /// Whether the dialect can execute a <c>DELETE</c> and report the affected-row count. Declared as a
+    /// default interface method returning <c>true</c>; the native statement is rendered by
+    /// <see cref="MakeDeleteHead"/> (ClickHouse renders its <c>ALTER TABLE ... DELETE</c> mutation).
+    /// </summary>
+    bool SupportsDelete => true;
+
+    /// <summary>
+    /// Whether the dialect has a native <c>TRUNCATE TABLE</c> statement. Declared as a default interface
+    /// method returning <c>false</c>; SQLite has no <c>TRUNCATE</c> (use <c>DELETE</c>), so it keeps the
+    /// default.
+    /// </summary>
+    bool SupportsTruncate => false;
+
+    /// <summary>
+    /// Renders the native full-table truncation over the already-resolved, quoted target table. Only
+    /// called when <see cref="SupportsTruncate"/> is <c>true</c>.
+    /// </summary>
+    /// <param name="table">The quoted target table.</param>
+    /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
+    /// <returns>The rendered <c>TRUNCATE TABLE</c> statement.</returns>
+    string MakeTruncate(string table, KeywordCase keywordCase = KeywordCase.Lower) => SqlKeywords.Of(keywordCase, "truncate table ") + table;
+
+    /// <summary>
+    /// Renders the head of a <c>DELETE</c> statement up to (but not including) its filter, over the
+    /// already-resolved, quoted target table. Defaults to the ANSI <c>DELETE FROM &lt;table&gt;</c>;
+    /// ClickHouse overrides it with the <c>ALTER TABLE &lt;table&gt; DELETE</c> mutation head.
+    /// </summary>
+    /// <param name="table">The quoted target table.</param>
+    /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
+    /// <returns>The rendered delete head.</returns>
+    string MakeDeleteHead(string table, KeywordCase keywordCase = KeywordCase.Lower) => SqlKeywords.Of(keywordCase, "delete from ") + table;
+
+    /// <summary>
+    /// Whether the dialect requires a <c>WHERE</c> clause on every delete (ClickHouse's
+    /// <c>ALTER TABLE ... DELETE</c> does). A delete without a predicate then renders a trivially true
+    /// filter (<c>WHERE 1</c>). Defaults to <c>false</c>.
+    /// </summary>
+    bool DeleteRequiresWhere => false;
+
+    /// <summary>
+    /// Renders a dialect suffix appended after the delete's filter (ClickHouse's
+    /// <c>SETTINGS mutations_sync = 1</c>), or <see langword="null"/> when there is none. Defaults to
+    /// <see langword="null"/>.
+    /// </summary>
+    /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
+    /// <returns>The suffix, or <see langword="null"/>.</returns>
+    string? MakeDeleteSuffix(KeywordCase keywordCase = KeywordCase.Lower) => null;
+
+    /// <summary>
+    /// Whether the dialect can delete rows of one table based on a join (a native multi-table
+    /// <c>DELETE</c>). Declared as a default interface method returning <c>false</c>; PostgreSQL, SQL
+    /// Server, MySQL and MariaDB override it. SQLite has no join-<c>DELETE</c>, and ClickHouse's
+    /// <c>ALTER TABLE ... DELETE</c> mutation cannot reference other tables, so both keep the default.
+    /// </summary>
+    bool SupportsDeleteJoin => false;
+
+    /// <summary>
+    /// Renders a multi-table <c>DELETE</c>. Only called when <see cref="SupportsDeleteJoin"/> is
+    /// <c>true</c>. The renderer supplies both spellings so the dialect can pick its native form: the
+    /// alias style (<c>DELETE &lt;alias&gt; FROM &lt;fromAndJoins&gt;</c>, SQL Server/MySQL/MariaDB) and
+    /// the <c>USING</c> style (<c>DELETE FROM ... USING ...</c>, PostgreSQL), where the join conditions
+    /// are folded into the <c>WHERE</c> so they can reference the target alias.
+    /// </summary>
+    /// <param name="target">The target table with literal identifiers (already quoted), without an alias.</param>
+    /// <param name="targetAlias">The alias assigned to the target table, already escaped for the dialect.</param>
+    /// <param name="fromAndJoins">The alias-style source: <c>&lt;target&gt; AS a JOIN &lt;b&gt; AS b ON ...</c>.</param>
+    /// <param name="usingSources">The <c>USING</c>-style source list: <c>&lt;b&gt; AS b[, &lt;c&gt; AS c ...]</c>.</param>
+    /// <param name="joinConditions">The rendered join <c>ON</c> conditions, combined with <c>and</c>, without a leading <c>WHERE</c>.</param>
+    /// <param name="whereSql">The rendered user <c>WHERE</c> condition, or <see langword="null"/> when there is none.</param>
+    /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
+    /// <returns>The rendered multi-table <c>DELETE</c>.</returns>
+    /// <exception cref="NotSupportedException">The dialect has no native multi-table <c>DELETE</c>.</exception>
+    string MakeDeleteJoin(
+        string target,
+        string targetAlias,
+        string fromAndJoins,
+        string usingSources,
+        string joinConditions,
+        string? whereSql,
+        KeywordCase keywordCase = KeywordCase.Lower)
+        => throw new NotSupportedException($"{GetType().Name} cannot render a multi-table DELETE.");
+
+    /// <summary>
+    /// Whether <see cref="MakeDeleteJoin"/> must be given the <c>USING</c> spelling (PostgreSQL) rather
+    /// than the alias spelling. Defaults to <c>false</c>.
+    /// </summary>
+    bool DeleteJoinRequiresUsing => false;
 }
 
 /// <summary>Which side of a string <see cref="string.Trim()"/> removes whitespace from.</summary>

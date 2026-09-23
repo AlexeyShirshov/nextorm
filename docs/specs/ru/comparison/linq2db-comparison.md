@@ -84,7 +84,7 @@
 | Квотирование идентификаторов | yes (по провайдеру) | включается явно — `UseQuotedIdentifiers()`/`WithQuotedIdentifiers()`; по умолчанию физические имена выводятся как есть | `ISqlDialect.QuoteIdentifier` |
 | Соглашения об именовании (например snake_case) | через `MappingSchema`/атрибуты (встроенной конвенции нет) | включается явно — `UseNamingConvention()`/`WithNamingConvention()`; встроенный `SnakeCaseNamingConvention`; явные имена — дословно | `INamingConvention` / `SnakeCaseNamingConvention` |
 | Регистр ключевых слов SQL (верхний/нижний) | no (ключевые слова выводятся в каноническом регистре провайдера) | **yes** — включается через `KeywordCase.Upper`; по умолчанию `KeywordCase.Lower` байт-в-байт совпадает с историческим выводом | `KeywordCase`, `DataContextBuilder.UseKeywordCase`/`EntityBuilder.WithKeywordCase` |
-| **DML** (`INSERT`/`UPDATE`/`DELETE`/`MERGE`) | yes | **частично** — `INSERT ... VALUES` (одна строка, сущность, батч), `INSERT ... SELECT` (`Values(source, mapping)` поверх `EntityBuilder`), сгенерированный ключ (`ReturningIdentity`/`ReturningKey`) и возврат строк (`Returning`, только PostgreSQL/SQLite/SQL Server) через `InsertInto`; **модифицирующие CTE PostgreSQL** (`With(имя, insert)`/`CteQuery.With(имя, insert)` → `MutationCteQuery<T>`: write-CTE, чьи `RETURNING`-строки читаются типизированно через `From`/`FromTable` и могут питать главный `INSERT ... SELECT`); **key upsert** (`MergeInto` → `MergeBuilder<T>`, родные `ON CONFLICT ... DO UPDATE`/`ON DUPLICATE KEY UPDATE`/`MERGE ... USING (VALUES ...)`, ClickHouse/in-memory отклоняют); `UPDATE`/`DELETE` и полный `MERGE` с ветками не реализованы | `InsertBuilder<TEntity>`, `InsertReturningBuilder<TEntity,TResult>`, `MergeBuilder<TEntity>`, `MutationCteQuery<TResult>`, `ISqlDialect.SupportsReturning`/`SupportsOutput`/`SupportsLastInsertId`/`SupportsIdentityFunction`/`SupportsDataModifyingCtes`/`SupportsOnConflict`/`SupportsOnDuplicateKey`/`SupportsMerge` |
+| **DML** (`INSERT`/`UPDATE`/`DELETE`/`MERGE`) | yes | **частично** — `INSERT ... VALUES` (одна строка, сущность, батч), `INSERT ... SELECT` (`Values(source, mapping)` поверх `EntityBuilder`), сгенерированный ключ (`ReturningIdentity`/`ReturningKey`) и возврат строк (`Returning`, только PostgreSQL/SQLite/SQL Server) через `InsertInto`; **модифицирующие CTE PostgreSQL** (`With(имя, insert)`/`CteQuery.With(имя, insert)` → `MutationCteQuery<T>`: write-CTE, чьи `RETURNING`-строки читаются типизированно через `From`/`FromTable` и могут питать главный `INSERT ... SELECT`); **key upsert** (`MergeInto` → `MergeBuilder<T>`, родные `ON CONFLICT ... DO UPDATE`/`ON DUPLICATE KEY UPDATE`/`MERGE ... USING (VALUES ...)`, ClickHouse/in-memory отклоняют); **`DELETE`** (`DeleteFrom` → `DeleteBuilder<T>` и `Delete<T>(entity)` по объявленному ключу, явный `All()` для удаления всей таблицы, родной `DELETE FROM <table> [WHERE ...]`, `Returning()` для удалённых строк, `Truncate<T>()` для `TRUNCATE TABLE`, ClickHouse-мутация `ALTER TABLE ... DELETE`); `UPDATE` и полный `MERGE` с ветками не реализованы | `InsertBuilder<TEntity>`, `InsertReturningBuilder<TEntity,TResult>`, `MergeBuilder<TEntity>`, `DeleteBuilder<TEntity>`, `MutationCteQuery<TResult>`, `ISqlDialect.SupportsReturning`/`SupportsOutput`/`SupportsLastInsertId`/`SupportsIdentityFunction`/`SupportsDataModifyingCtes`/`SupportsOnConflict`/`SupportsOnDuplicateKey`/`SupportsMerge`/`SupportsDelete` |
 | Bulk copy / merge / временные таблицы | yes | **частично** — key upsert (`MergeInto`/`MergeBuilder<T>`) реализован; bulk insert, полный `MERGE` (фаза 2) и CTAS/временные таблицы запланированы: [bulk insert](../../roadmap/todo_bulk_insert.md), [`MERGE`](../../roadmap/todo_merge.md), [CTAS](../../roadmap/todo_create_table_as_select.md) | `MergeBuilder<TEntity>` |
 | Навигационные свойства / связи / eager loading | yes (`[Association]`, `LoadWith`) | **no** | — |
 | Отслеживание изменений / identity map | partial | **no** (по замыслу) | — |
@@ -147,8 +147,8 @@
 поверхности запросов, где nextorm не уступает linq2db или превосходит её. linq2db их покрывает:
 
 * **Полное изменение данных**: nextorm даёт только явную поверхность записи (`INSERT ... VALUES`/
-  `INSERT ... SELECT`, возврат строк, key upsert и модифицирующие CTE в PostgreSQL);
-  полные `UPDATE`/`DELETE`/`MERGE` с ветками, bulk copy, временные таблицы и change tracking — вне области по
+  `INSERT ... SELECT`, возврат строк, key upsert, `DELETE` и модифицирующие CTE в PostgreSQL);
+  полные `UPDATE` и `MERGE` с ветками, bulk copy, временные таблицы и change tracking — вне области по
   замыслу (каждая запись — явная команда, без identity map). linq2db покрывает полный CRUD.
 * **Связи**: у nextorm нет метаданных связей — соединения всегда явные; linq2db добавляет `[Association]`,
   eager loading `LoadWith` и неявный вывод соединений.
@@ -194,7 +194,7 @@
 на поставляемых сценариях и более настраиваемом выводе SQL (квотирование идентификаторов, соглашения об
 именовании и регистр ключевых слов включаются явно и переопределяются для отдельной команды, тогда как
 linq2db квотирует по умолчанию и фиксирует имена через схему отображения). linq2db остаётся лучшим выбором
-только тогда, когда тот же слой должен ещё и выполнять полный CRUD (`UPDATE`/`DELETE` и полный `MERGE`
+только тогда, когда тот же слой должен ещё и выполнять полный CRUD (`UPDATE` и полный `MERGE`
 с ветками), моделировать связи или генерировать слой доступа к данным из живой схемы — то, что nextorm осознанно
 оставляет за рамками.
 

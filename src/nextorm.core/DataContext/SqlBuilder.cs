@@ -530,6 +530,100 @@ internal readonly struct SqlBuilder
     public (bool NeedAliasForColumn, string Column) MakeColumn(SelectExpression selExp, Type entityType, bool dontNeedAlias, bool renameAware = false)
         => SqlSourceRenderer.MakeColumn(in _ctx, selExp, entityType, dontNeedAlias, renameAware);
 
+    /// <summary>
+    /// Renders a multi-table <c>DELETE</c> over the prepared joined source of <paramref name="cmd"/>.
+    /// The target is the first table of the chain; the join conditions and the optional user filter are
+    /// rendered by the shared <c>SELECT</c> source pipeline, so column aliasing matches the equivalent
+    /// <c>SELECT</c>. The dialect composes its native form (SQL Server/MySQL
+    /// <c>DELETE &lt;alias&gt; FROM ... JOIN</c>, PostgreSQL <c>DELETE ... USING</c>).
+    /// </summary>
+    internal (string Sql, List<Parameter> Parameters) MakeDeleteJoin(DeleteJoinCommand cmd)
+    {
+        if (!_ctx.Dialect.SupportsDeleteJoin)
+            throw new NotSupportedException($"{_ctx.Dialect.GetType().Name} cannot render a multi-table DELETE.");
+
+        var source = cmd.Source;
+
+        if (source.EntityType is not { } entityType)
+            throw new BuildSqlCommandException("A multi-table DELETE command is missing its source entity type.");
+
+        if (source.Joins is not { Length: > 0 } joins)
+            throw new BuildSqlCommandException("A multi-table DELETE needs at least one join.");
+
+        if (source.From is not { } targetFrom)
+            throw new BuildSqlCommandException("A multi-table DELETE is missing its target source.");
+
+        _ctx.ColumnsProvider.PushSourceScope();
+        try
+        {
+            var fromAndJoins = StringBuilderPool.Shared.Get();
+            var usingSources = StringBuilderPool.Shared.Get();
+            var joinConditions = StringBuilderPool.Shared.Get();
+            var whereSql = StringBuilderPool.Shared.Get();
+            try
+            {
+                var targetSql = SqlSourceRenderer.MakeFrom(in _ctx, targetFrom, new FromRenderOptions(true, entityType, true), out var targetAlias);
+                if (string.IsNullOrEmpty(targetAlias))
+                    throw new NotSupportedException("A multi-table DELETE can only target a physical table, not a derived or function source.");
+
+                // Table aliases are always escaped for the dialect (even when identifier quoting is off).
+                var targetAliasToken = _ctx.Dialect.Escape(targetAlias);
+
+                // The target without an alias, used by the PostgreSQL USING form (its DELETE target must
+                // stay unaliased while the join conditions reference the target alias).
+                var target = SqlSourceRenderer.MakeFrom(in _ctx, targetFrom, new FromRenderOptions(false, null, false));
+
+                if (_ctx.Dialect.DeleteJoinRequiresUsing)
+                {
+                    for (var i = 0; i < joins.Length; i++)
+                    {
+                        var (fromSql, conditionSql) = SqlSourceRenderer.MakeJoinParts(in _ctx, joins[i], entityType);
+
+                        if (i > 0)
+                        {
+                            usingSources.Append(", ");
+                            joinConditions.Append(Kw(" and "));
+                        }
+
+                        usingSources.Append(fromSql);
+                        joinConditions.Append(conditionSql);
+                    }
+                }
+                else
+                {
+                    fromAndJoins.Append(targetSql);
+                    for (var i = 0; i < joins.Length; i++)
+                        fromAndJoins.Append(SqlSourceRenderer.MakeJoin(in _ctx, joins[i], entityType));
+                }
+
+                if (source.PreparedCondition is { } condition)
+                    SqlSourceRenderer.MakeWhere(in _ctx, whereSql, entityType, condition, 0);
+
+                var sql = _ctx.Dialect.MakeDeleteJoin(
+                    target,
+                    targetAliasToken,
+                    fromAndJoins.ToString(),
+                    usingSources.ToString(),
+                    joinConditions.ToString(),
+                    whereSql.Length == 0 ? null : whereSql.ToString(),
+                    _ctx.KeywordCase);
+
+                return (sql, _ctx.Params);
+            }
+            finally
+            {
+                StringBuilderPool.Shared.Return(whereSql);
+                StringBuilderPool.Shared.Return(joinConditions);
+                StringBuilderPool.Shared.Return(usingSources);
+                StringBuilderPool.Shared.Return(fromAndJoins);
+            }
+        }
+        finally
+        {
+            _ctx.ColumnsProvider.PopSourceScope();
+        }
+    }
+
     /// <summary>Resolves a lower-case keyword fragment (keywords and separators only) to the configured <see cref="KeywordCase"/>.</summary>
     private string Kw(string text) => SqlKeywords.Of(_ctx.KeywordCase, text);
 

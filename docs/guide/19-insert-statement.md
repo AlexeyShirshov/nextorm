@@ -302,8 +302,7 @@ dataContext.InsertInto<IOrder>()
 
 A statement whose `WITH` contains a data-modifying CTE is never stored in the plan cache (it is
 side-effecting). Other providers reject `With(name, insert)` with `NotSupportedException`, because their
-CTE body must be a `SELECT`. For general read CTEs see [Common table expressions](09-cte.md); the `UPDATE`
-and `DELETE` bodies are planned and will be documented in their own guides.
+CTE body must be a `SELECT`. For general read CTEs see [Common table expressions](09-cte.md); `UPDATE` will be documented in its own guide.
 
 ## Reading the generated key
 
@@ -466,13 +465,14 @@ SQL provider. Only the generated-key form differs, and a provider that cannot ex
   overload; cast the literal: `Value(x => x.Name, (string?)null)`.
 * **Key upsert, no full `MERGE`** — `ON CONFLICT`/`ON DUPLICATE KEY`/`MERGE` key upsert **is** implemented
   (see [Upsert (key merge)](#upsert-key-merge)); a full `MERGE` with arbitrary `WHEN MATCHED`/`WHEN NOT
-  MATCHED` branches and `DELETE` is not. `INSERT ... SELECT` **is** implemented (see *A batch from a query*
+  MATCHED` branches is not. `INSERT ... SELECT` **is** implemented (see *A batch from a query*
   above). (An all-defaults row *is* supported: see [Writing values](#writing-values).)
-* **No `Prepare()`** on mutations in this version: each builder execution renders and executes one
-  command.
+* **Mutations are not prepared or plan-cached.** Optimisation in nextorm targets read-only queries
+  only (`Prepare`, the implicit plan cache, benchmarks); a mutation always renders and executes one
+  command per call.
 * **No chunking of a large batch**; thousands of rows may hit the provider's per-statement limit. Use
   the provider's bulk-copy/binary API for bulk loads.
-* The in-memory provider is read-only: `Insert()`, `ReturningIdentity` and `ReturningKey` throw `NotSupportedException`.
+* The in-memory provider is read-only: every write terminal (`Insert()`, `ReturningIdentity`, `ReturningKey`, ...) throws `NotSupportedException`.
 
 ## See also
 

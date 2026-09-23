@@ -36,6 +36,8 @@
   href: 18-json.md
 - name: Data modification (INSERT)
   href: 19-insert-statement.md
+- name: Data modification (DELETE)
+  href: 20-delete-statement.md
 - name: Provider-specific SQL
   items:
     - name: Overview

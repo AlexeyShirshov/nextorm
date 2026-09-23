@@ -699,6 +699,8 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual string MakeReturning(IReadOnlyList<string> columns, KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, " returning ") + string.Join(", ", columns);
     /// <summary>Renders <c>OUTPUT inserted.&lt;column&gt;</c>; only reached through a dialect that set <see cref="SupportsOutput"/>.</summary>
     public virtual string MakeOutput(IReadOnlyList<string> columns, KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, " output ") + string.Join(", ", columns.Select(static c => "inserted." + c));
+    /// <summary>Renders <c>OUTPUT deleted.&lt;column&gt; ...</c> for a <c>DELETE</c>; only reached through a dialect that set <see cref="SupportsOutput"/>.</summary>
+    public virtual string MakeDeletedOutput(IReadOnlyList<string> columns, KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, " output ") + string.Join(", ", columns.Select(static c => "deleted." + c));
     /// <summary>Renders the scalar query for the last generated identity; only reached through a dialect that set <see cref="SupportsLastInsertId"/>.</summary>
     public virtual string MakeLastInsertId(KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, "select last_insert_rowid()");
     /// <summary>Defaults to <see cref="SupportsLastInsertId"/>; SQL Server and PostgreSQL opt in explicitly.</summary>
@@ -730,6 +732,47 @@ public abstract class SqlDialectBase : ISqlDialect
 
     /// <summary>Defaults to <c>false</c>; only PostgreSQL accepts a data-modifying statement (<c>INSERT ... RETURNING</c>) as a CTE body.</summary>
     public virtual bool SupportsDataModifyingCtes => false;
+
+    /// <summary>Defaults to <c>true</c>; ClickHouse renders its <c>ALTER TABLE ... DELETE</c> mutation through <see cref="MakeDeleteHead"/>.</summary>
+    public virtual bool SupportsDelete => true;
+
+    /// <summary>Defaults to <c>false</c>; SQLite has no <c>TRUNCATE</c>, so it keeps the default and callers use <c>DELETE</c>.</summary>
+    public virtual bool SupportsTruncate => false;
+
+    /// <summary>Renders <c>TRUNCATE TABLE &lt;table&gt;</c>; only reached through a dialect that set <see cref="SupportsTruncate"/>.</summary>
+    public virtual string MakeTruncate(string table, KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, "truncate table ") + table;
+
+    /// <summary>Renders the delete head; defaults to the ANSI <c>DELETE FROM &lt;table&gt;</c>.</summary>
+    public virtual string MakeDeleteHead(string table, KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, "delete from ") + table;
+
+    /// <summary>Defaults to <c>false</c>; ClickHouse's <c>ALTER TABLE ... DELETE</c> requires a WHERE clause.</summary>
+    public virtual bool DeleteRequiresWhere => false;
+
+    /// <summary>Renders a suffix appended after the delete's filter; defaults to none.</summary>
+    public virtual string? MakeDeleteSuffix(KeywordCase keywordCase = KeywordCase.Lower) => null;
+
+    /// <summary>Defaults to <c>false</c>; PostgreSQL, SQL Server, MySQL and MariaDB override it for native multi-table deletes.</summary>
+    public virtual bool SupportsDeleteJoin => false;
+
+    /// <summary>
+    /// Renders the alias-style multi-table delete (<c>DELETE &lt;alias&gt; FROM &lt;target&gt; AS alias JOIN ... WHERE ...</c>),
+    /// shared by SQL Server, MySQL and MariaDB. PostgreSQL overrides it with the <c>USING</c> form.
+    /// </summary>
+    public virtual string MakeDeleteJoin(
+        string target,
+        string targetAlias,
+        string fromAndJoins,
+        string usingSources,
+        string joinConditions,
+        string? whereSql,
+        KeywordCase keywordCase = KeywordCase.Lower)
+    {
+        var sql = Kw(keywordCase, "delete ") + targetAlias + Kw(keywordCase, " from ") + fromAndJoins;
+        return string.IsNullOrEmpty(whereSql) ? sql : sql + Kw(keywordCase, " where ") + whereSql;
+    }
+
+    /// <summary>Defaults to <c>false</c>; PostgreSQL overrides it because its multi-table delete uses <c>USING</c>.</summary>
+    public virtual bool DeleteJoinRequiresUsing => false;
 
     /// <summary>Defaults to <c>false</c>; every SQL provider except ClickHouse opts into an all-defaults insert.</summary>
     public virtual bool SupportsDefaultValues => false;

@@ -36,6 +36,12 @@ public class MySqlDialect : SqlDialectBase
     /// <inheritdoc/>
     public override bool SupportsColumnDefault => true;
 
+    /// <summary>MySQL and MariaDB have a native <c>TRUNCATE TABLE</c>.</summary>
+    public override bool SupportsTruncate => true;
+
+    /// <summary>MySQL and MariaDB delete rows based on a join through the multi-table <c>DELETE &lt;alias&gt; FROM ... JOIN</c> form.</summary>
+    public override bool SupportsDeleteJoin => true;
+
     // MySQL/MariaDB express a key upsert as INSERT ... ON DUPLICATE KEY UPDATE, assigning the incoming
     // value through the VALUES(<column>) function (MariaDB has no `AS new` row alias).
     /// <inheritdoc/>

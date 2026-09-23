@@ -116,6 +116,11 @@ public class JoinedEntityBuilder<T1, T2> : EntityBuilder<Projection<T1, T2>>
         => (JoinedEntityBuilder<T1, T2>)base.LeftArrayJoin(array);
     /// <inheritdoc/>
     protected override void OnLastJoinReplaced(JoinExpression join) => JoinCondition = join;
+    /// <summary>Adds a <c>WHERE</c> condition while keeping the joined builder type, so the chain can end in a multi-table <c>Delete()</c>.</summary>
+    /// <param name="condition">The predicate each row must satisfy.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public new JoinedEntityBuilder<T1, T2> Where(Expression<Func<Projection<T1, T2>, bool>> condition)
+        => (JoinedEntityBuilder<T1, T2>)base.Where(condition);
     /// <summary>Creates an independent copy of this builder over the same projection.</summary>
     public new JoinedEntityBuilder<T1, T2> Clone()
     {
@@ -219,6 +224,11 @@ public class JoinedEntityBuilder<T1, T2, T3> : EntityBuilder<Projection<T1, T2, 
     /// <inheritdoc/>
     public new JoinedEntityBuilder<T1, T2, T3> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3>)base.LeftArrayJoin(array);
+    /// <summary>Adds a <c>WHERE</c> condition while keeping the joined builder type, so the chain can end in a multi-table <c>Delete()</c>.</summary>
+    /// <param name="condition">The predicate each row must satisfy.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public new JoinedEntityBuilder<T1, T2, T3> Where(Expression<Func<Projection<T1, T2, T3>, bool>> condition)
+        => (JoinedEntityBuilder<T1, T2, T3>)base.Where(condition);
     /// <summary>Creates an independent copy of this builder over the same projection.</summary>
     public new JoinedEntityBuilder<T1, T2, T3> Clone()
     {
@@ -316,6 +326,11 @@ public class JoinedEntityBuilder<T1, T2, T3, T4> : EntityBuilder<Projection<T1, 
     /// <inheritdoc/>
     public new JoinedEntityBuilder<T1, T2, T3, T4> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4>)base.LeftArrayJoin(array);
+    /// <summary>Adds a <c>WHERE</c> condition while keeping the joined builder type, so the chain can end in a multi-table <c>Delete()</c>.</summary>
+    /// <param name="condition">The predicate each row must satisfy.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public new JoinedEntityBuilder<T1, T2, T3, T4> Where(Expression<Func<Projection<T1, T2, T3, T4>, bool>> condition)
+        => (JoinedEntityBuilder<T1, T2, T3, T4>)base.Where(condition);
     /// <summary>Creates an independent copy of this builder over the same projection.</summary>
     public new JoinedEntityBuilder<T1, T2, T3, T4> Clone()
     {
@@ -413,6 +428,11 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5> : EntityBuilder<Projection<
     /// <inheritdoc/>
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5>)base.LeftArrayJoin(array);
+    /// <summary>Adds a <c>WHERE</c> condition while keeping the joined builder type, so the chain can end in a multi-table <c>Delete()</c>.</summary>
+    /// <param name="condition">The predicate each row must satisfy.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5> Where(Expression<Func<Projection<T1, T2, T3, T4, T5>, bool>> condition)
+        => (JoinedEntityBuilder<T1, T2, T3, T4, T5>)base.Where(condition);
     /// <summary>Creates an independent copy of this builder over the same projection.</summary>
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5> Clone()
     {
@@ -510,6 +530,11 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> : EntityBuilder<Project
     /// <inheritdoc/>
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>)base.LeftArrayJoin(array);
+    /// <summary>Adds a <c>WHERE</c> condition while keeping the joined builder type, so the chain can end in a multi-table <c>Delete()</c>.</summary>
+    /// <param name="condition">The predicate each row must satisfy.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> Where(Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, bool>> condition)
+        => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>)base.Where(condition);
     /// <summary>Creates an independent copy of this builder over the same projection.</summary>
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> Clone()
     {
@@ -607,6 +632,11 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> : EntityBuilder<Pro
     /// <inheritdoc/>
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>)base.LeftArrayJoin(array);
+    /// <summary>Adds a <c>WHERE</c> condition while keeping the joined builder type, so the chain can end in a multi-table <c>Delete()</c>.</summary>
+    /// <param name="condition">The predicate each row must satisfy.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> Where(Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, bool>> condition)
+        => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>)base.Where(condition);
     /// <summary>Creates an independent copy of this builder over the same projection.</summary>
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> Clone()
     {
@@ -651,6 +681,11 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> : EntityBuilder
     /// <inheritdoc/>
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7, T8>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8>)base.LeftArrayJoin(array);
+    /// <summary>Adds a <c>WHERE</c> condition while keeping the joined builder type, so the chain can end in a multi-table <c>Delete()</c>.</summary>
+    /// <param name="condition">The predicate each row must satisfy.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> Where(Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7, T8>, bool>> condition)
+        => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8>)base.Where(condition);
     /// <summary>Creates an independent copy of this builder over the same projection.</summary>
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> Clone()
     {

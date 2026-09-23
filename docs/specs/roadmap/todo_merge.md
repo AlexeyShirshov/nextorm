@@ -136,7 +136,7 @@ public sealed class MergeBuilder<TEntity>
 
     public int Merge();
     public Task<int> MergeAsync(CancellationToken cancellationToken = default);
-    public MergeBuilder<TEntity> Prepare();
+    // Без Prepare(): оптимизация DML вне области (только read-only запросы).
 }
 ```
 
@@ -188,7 +188,7 @@ linq2db (`Merge`, `MergeWithOutput`). Для батча источник рен�
 ## План тестов
 
 - Core (`tests/nextorm.core.tests/`): `.OnKeys()` требует объявленный ключ; форма `.On(expr)`
-  без ключей; ClickHouse/in-memory — `NotSupportedException`; `Prepare()` не пересобирает SQL.
+  без ключей; ClickHouse/in-memory — `NotSupportedException`.
 - SQL-gen (`tests/nextorm.{sqlite,postgres,sqlserver,mysql}.tests/SqlGenerationTests.cs`):
   `ON CONFLICT ... DO UPDATE` (PG/SQLite), `ON DUPLICATE KEY UPDATE` (MySQL/MariaDB),
   `MERGE ... USING ... WHEN MATCHED/NOT MATCHED` (SQL Server); параметризация `VALUES`.

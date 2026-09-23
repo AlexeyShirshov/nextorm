@@ -44,6 +44,10 @@ change.
 | Parameter placeholder | `$name` | `@name` | `@name` | `@name` | `@name` | `@name` | not applicable |
 | `INSERT ... VALUES` | supported | supported | supported | supported | supported | supported (small batches) | throws `NotSupportedException` |
 | Key upsert (`MergeInto`) | `ON CONFLICT ... DO UPDATE` | `MERGE ... USING (VALUES ...)` | `ON CONFLICT ... DO UPDATE` | `ON DUPLICATE KEY UPDATE` | `ON DUPLICATE KEY UPDATE` | throws `NotSupportedException` | throws `NotSupportedException` |
+| `DELETE` (`DeleteFrom`/`Delete`) | supported | supported | supported | supported | supported | `ALTER TABLE ... DELETE ... SETTINGS mutations_sync = 1` | throws `NotSupportedException` |
+| `DELETE ... RETURNING` (`Returning`) | `RETURNING` | `OUTPUT deleted.<col>` | `RETURNING` | throws `NotSupportedException` | throws `NotSupportedException` | throws `NotSupportedException` | throws `NotSupportedException` |
+| `TRUNCATE` (`Truncate`) | throws `NotSupportedException` | supported | supported | supported | supported | supported | throws `NotSupportedException` |
+| `DELETE ... USING`/join (`From<T>().Join(...).Delete()`, INNER) | throws `NotSupportedException` | `DELETE <a> FROM ... JOIN ...` | `DELETE FROM ... USING ...` | `DELETE <a> FROM ... JOIN ...` | `DELETE <a> FROM ... JOIN ...` | throws `NotSupportedException` | throws `NotSupportedException` |
 | Generated key (`ReturningIdentity`/`ReturningKey`) | `RETURNING` | `OUTPUT inserted.<col>` | `RETURNING` | `LAST_INSERT_ID()` fallback | `LAST_INSERT_ID()` fallback | throws `NotSupportedException` | throws `NotSupportedException` |
 | Identity function (`ReturningIdentity<TKey>()`) | `last_insert_rowid()` | `SCOPE_IDENTITY()` | `lastval()` | `LAST_INSERT_ID()` | `LAST_INSERT_ID()` | throws `NotSupportedException` | throws `NotSupportedException` |
 | Return inserted rows (`Returning`) | `RETURNING` | `OUTPUT inserted.<cols>` | `RETURNING` | throws `NotSupportedException` | throws `NotSupportedException` | throws `NotSupportedException` | throws `NotSupportedException` |

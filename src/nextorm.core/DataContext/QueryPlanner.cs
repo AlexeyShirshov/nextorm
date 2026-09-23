@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Text;
 
 namespace NextORM.Core;
 
@@ -105,6 +106,68 @@ internal sealed class QueryPlanner : IQueryPlanner
         }
 
         return (withSql, sql!, @params);
+    }
+
+    // Renders the WHERE predicate of a command as a standalone, unqualified condition, used by
+    // DELETE FROM <table> WHERE <condition>. The command is prepared first so the condition matches
+    // the SELECT pipeline (captured values become parameters, correlated subqueries are rewritten);
+    // only the condition is rendered - no FROM or select list.
+    internal (string Sql, List<Parameter> Parameters) RenderPredicate(QueryCommand command)
+    {
+        if (!command.IsPrepared)
+            command.PrepareCommand(false, CancellationToken.None);
+
+        var @params = new List<Parameter>();
+        if (command.PreparedCondition is null)
+            return (string.Empty, @params);
+
+        var ctx = new SqlBuildContext
+        {
+            Dialect = _dialect(),
+            ParamMode = false,
+            Params = @params,
+            ColumnsProvider = new DefaultColumnsProvider(),
+            QueryProvider = command,
+            ParameterProvider = new DefaultParameterProvider(),
+            AliasProvider = new DefaultAliasProvider(),
+            Logger = _logger!,
+            QuoteIdentifiers = command.ResolvedQuoteIdentifiers,
+            NamingConvention = command.ResolvedNamingConvention,
+            KeywordCase = command.ResolvedKeywordCase,
+        };
+        ctx.ColumnsProvider.Add(command.EntityType!, false);
+
+        var builder = new StringBuilder();
+        SqlSourceRenderer.MakeWhere(in ctx, builder, command.EntityType!, command.PreparedCondition, 0, dontNeedAlias: true);
+        return (builder.ToString(), @params);
+    }
+
+    // Renders a multi-table DELETE: the target is the first table of the prepared joined command, whose
+    // joins and condition are rendered through the same source/condition pipeline as a SELECT, so aliases
+    // and parameters match the equivalent read query.
+    internal (string Sql, List<Parameter> Parameters) RenderDeleteJoin(DeleteJoinCommand command)
+    {
+        var source = command.Source;
+        if (!source.IsPrepared)
+            source.PrepareCommand(false, CancellationToken.None);
+
+        var @params = new List<Parameter>();
+        var ctx = new SqlBuildContext
+        {
+            Dialect = _dialect(),
+            ParamMode = false,
+            Params = @params,
+            ColumnsProvider = new DefaultColumnsProvider(),
+            QueryProvider = source,
+            ParameterProvider = new DefaultParameterProvider(),
+            AliasProvider = new DefaultAliasProvider(),
+            Logger = _logger!,
+            QuoteIdentifiers = source.ResolvedQuoteIdentifiers,
+            NamingConvention = source.ResolvedNamingConvention,
+            KeywordCase = source.ResolvedKeywordCase,
+        };
+
+        return new SqlBuilder(in ctx).MakeDeleteJoin(command);
     }
 
     private string? MakeSelect(QueryCommand queryCommand, bool paramMode, List<Parameter> @params, IQueryRegistry queryProvider, IAliasProvider? aliasProvider)
