@@ -5,7 +5,8 @@ using NextORM.MariaDb;
 namespace NextORM.MariaDb.Tests;
 
 /// <summary>
-/// MariaDB inherits the MySQL rendering and only changes the set-operation capability flags.
+/// MariaDB inherits the MySQL rendering and changes the set-operation capability flags plus the
+/// row-locking renderer (<c>LOCK IN SHARE MODE</c> accepts wait modes on MariaDB, unlike MySQL).
 /// </summary>
 public class MariaDbDialectTests
 {
@@ -22,6 +23,18 @@ public class MariaDbDialectTests
         Dialect.MakeCoalesce("a", "b").Should().Be("coalesce(a, b)");
         Dialect.MakeStringLength("x").Should().Be("char_length(x)");
         Dialect.MakeNow(true).Should().Be("utc_timestamp()");
+    }
+
+    [Fact]
+    public void LockingHooks_ShouldAcceptWaitModesOnLockInShareMode()
+    {
+        Dialect.Lock.Should().NotBeNull();
+        Dialect.Lock!.Render(LockMode.Update).Should().Be(" for update");
+        Dialect.Lock!.Render(LockMode.Share).Should().Be(" lock in share mode");
+        Dialect.Lock!.Render(LockMode.Update, LockWaitMode.NoWait).Should().Be(" for update nowait");
+        Dialect.Lock!.Render(LockMode.Update, LockWaitMode.SkipLocked).Should().Be(" for update skip locked");
+        Dialect.Lock!.Render(LockMode.Share, LockWaitMode.NoWait).Should().Be(" lock in share mode nowait");
+        Dialect.Lock!.Render(LockMode.Share, LockWaitMode.SkipLocked).Should().Be(" lock in share mode skip locked");
     }
 
     [Fact]

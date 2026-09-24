@@ -32,7 +32,7 @@ DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.so
   dotnet run --project tests/nextorm.integration.tests -c Debug -- -noColor
 ```
 
-Single provider (much faster — only that provider's container starts, ~8–10s when the image is local):
+Single provider (much faster — only that provider's container starts; the first run initializes the database, later runs reuse the stopped container and start in a second or two):
 
 ```bash
 DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.sock \
@@ -55,8 +55,10 @@ DOCKER_HOST=unix:///mnt/wsl/podman-sockets/podman-machine-default/podman-user.so
 ## Behaviour and gotchas
 
 - **Without `DOCKER_HOST` only SQLite runs.** `ProviderTestSuite` calls `Assert.SkipUnless(Provider.IsAvailable, ...)` in its constructor, so PostgreSQL/SQL Server/MySQL/ClickHouse tests are reported as skipped — a green run proves nothing about those providers.
-- Containers start lazily per provider and are disposed at the end of the run (`DatabaseContainers` assembly fixture; `testcontainers/ryuk` also cleans up).
-- **`TESTCONTAINERS_RYUK_DISABLED=true` is not needed** — Ryuk starts fine against this Podman. Add it only as a fallback if the run fails while starting Ryuk.
+- Containers start lazily per provider; each is built with `WithReuse(true)` + a `reuse-id` label, so at the end of the run it is **stopped but kept** and the next run starts the same container (skipping PostgreSQL/SQL Server/MySQL/ClickHouse initialization — the heavy disk I/O that can stall WSL). The `DatabaseContainers` assembly fixture performs the stop.
+- To force a clean database, delete the reused containers. `podman.exe` defaults to the **rootful** connection and will not list them; use the rootless connection (the one the socket exposes): `"/mnt/c/Program Files/RedHat/Podman/podman.exe" --connection podman-machine-default ps -a --filter label=reuse-id`, then `... rm -f <id>`. Changing a builder configuration (image, env, port bindings) changes the reuse hash and creates a **new** container, leaving the previous one behind — purge from time to time.
+- Reuse does **not** leak rows between runs: every provider's `EnsureSeeded` runs `drop table if exists …` before `create table`. Do not rely on a dirty container in a test.
+- **`TESTCONTAINERS_RYUK_DISABLED=true` is not needed** — Ryuk starts fine against this Podman. Add it only as a fallback if the run fails while starting Ryuk. Reused containers are not registered with Ryuk (reuse disables it for them) — by design they survive a killed run.
 - Pre-pulled images: `postgres:17-alpine`, `mcr.microsoft.com/mssql/server:2022-latest`, `mysql:8.4`, `testcontainers/ryuk`.
   **ClickHouse is not pre-pulled** (`clickhouse/clickhouse-server:25.8-alpine`); the first ClickHouse run pulls it (needs network). Pre-pull with:
   `"/mnt/c/Program Files/RedHat/Podman/podman.exe" pull docker.io/clickhouse/clickhouse-server:25.8-alpine`.

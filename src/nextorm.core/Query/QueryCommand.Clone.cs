@@ -62,6 +62,7 @@ public partial class QueryCommand
         dst.DefaultOnEmpty = DefaultOnEmpty;
         dst.SingleScalar = SingleScalar;
         dst.SingleRow = SingleRow;
+        dst.DocumentMode = DocumentMode;
         dst.IsDistinct = IsDistinct;
         dst.GroupingType = GroupingType;
         dst.GroupingSets = GroupingSets;

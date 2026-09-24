@@ -205,4 +205,136 @@ public abstract partial class CommonTestSuite
         row.Name.Should().Be("src");
         row.Age.Should().Be(3);
     }
+
+    [Fact]
+    public void Merge_ExplicitColumns_ShouldUpdateAndInsert()
+    {
+        var ctx = _sut.DataProvider;
+        var id = MergeKey();
+        var marker = "mrg_" + Guid.NewGuid().ToString("N");
+
+        if (!((DataContext)ctx).Dialect.SupportsMergeStatement)
+        {
+            var unsupported = () => ctx.MergeInto<IMergeEntity>()
+                .Using(new MergeEntity { Id = id, Name = "x", Age = 1 })
+                .On((t, s) => t.Id == s.Id)
+                .WhenMatched().ThenUpdate(d => new { d.Name, d.Age })
+                .WhenNotMatched().ThenInsert(d => new { d.Id, d.Name, d.Age })
+                .Merge();
+            unsupported.Should().Throw<NotSupportedException>();
+            return;
+        }
+
+        ctx.InsertInto<IMergeEntity>()
+            .Values(new MergeEntity { Id = id, Name = "old", Age = 1 })
+            .Insert();
+
+        ctx.MergeInto<IMergeEntity>()
+            .Using(new MergeEntity { Id = id, Name = marker, Age = 9 })
+            .On((t, s) => t.Id == s.Id)
+            .WhenMatched().ThenUpdate(d => new { d.Name, d.Age })
+            .WhenNotMatched().ThenInsert(d => new { d.Id, d.Name, d.Age })
+            .Merge();
+
+        var row = ctx.From<IMergeEntity>().Where(x => x.Id == id).Select(x => new { x.Name, x.Age }).Single();
+        row.Name.Should().Be(marker);
+        row.Age.Should().Be(9);
+    }
+
+    [Fact]
+    public void Merge_ThenDelete_ShouldRemoveMatchedRow()
+    {
+        var ctx = _sut.DataProvider;
+        var id = MergeKey();
+
+        if (!((DataContext)ctx).Dialect.SupportsMergeDelete)
+        {
+            var unsupported = () => ctx.MergeInto<IMergeEntity>()
+                .Using(new MergeEntity { Id = id, Name = "x", Age = 1 })
+                .On((t, s) => t.Id == s.Id)
+                .WhenMatched().ThenDelete()
+                .WhenNotMatched().ThenInsert()
+                .Merge();
+            unsupported.Should().Throw<NotSupportedException>();
+            return;
+        }
+
+        ctx.InsertInto<IMergeEntity>()
+            .Values(new MergeEntity { Id = id, Name = "del", Age = 1 })
+            .Insert();
+
+        ctx.MergeInto<IMergeEntity>()
+            .Using(new MergeEntity { Id = id, Name = "del", Age = 1 })
+            .On((t, s) => t.Id == s.Id)
+            .WhenMatched().ThenDelete()
+            .WhenNotMatched().ThenInsert()
+            .Merge();
+
+        ctx.From<IMergeEntity>().Where(x => x.Id == id).Select(x => x.Id).ToList().Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Merge_WhenNotMatchedBySource_ShouldDeleteStaleTarget()
+    {
+        var ctx = _sut.DataProvider;
+        var sourceId = MergeKey();
+        var staleId = sourceId + 1;
+
+        if (!((DataContext)ctx).Dialect.SupportsMergeBySourceDelete)
+        {
+            var unsupported = () => ctx.MergeInto<IMergeEntity>()
+                .Using(new MergeEntity { Id = sourceId, Name = "s", Age = 2 })
+                .On((t, s) => t.Id == s.Id)
+                .WhenMatched().ThenUpdate()
+                .WhenNotMatchedBySource().ThenDelete()
+                .Merge();
+            unsupported.Should().Throw<NotSupportedException>();
+            return;
+        }
+
+        ctx.InsertInto<IMergeEntity>().Values([
+            new MergeEntity { Id = sourceId, Name = "old", Age = 1 },
+            new MergeEntity { Id = staleId, Name = "stale", Age = 1 },
+        ]).Insert();
+
+        ctx.MergeInto<IMergeEntity>()
+            .Using(new MergeEntity { Id = sourceId, Name = "fresh", Age = 5 })
+            .On((t, s) => t.Id == s.Id)
+            .WhenMatched().ThenUpdate()
+            .WhenNotMatchedBySource().ThenDelete()
+            .Merge();
+
+        ctx.From<IMergeEntity>().Where(x => x.Id == staleId).Select(x => x.Id).ToList().Should().BeEmpty();
+        ctx.From<IMergeEntity>().Where(x => x.Id == sourceId).Select(x => x.Name).Single().Should().Be("fresh");
+    }
+
+    [Fact]
+    public async Task MergeAsync_ShouldUpsert()
+    {
+        var ctx = _sut.DataProvider;
+        var id = MergeKey();
+        var marker = "mrg_" + Guid.NewGuid().ToString("N");
+
+        await ctx.MergeInto<IMergeEntity>()
+            .Using(new MergeEntity { Id = id, Name = marker, Age = 4 })
+            .OnKeys()
+            .WhenMatchedUpdate()
+            .WhenNotMatchedInsert()
+            .MergeAsync(TestContext.Current.CancellationToken);
+
+        ctx.From<IMergeEntity>().Where(x => x.Id == id).Select(x => x.Name).Single().Should().Be(marker);
+    }
+
+    [Fact]
+    public void Merge_ToSql_ShouldRenderMerge()
+    {
+        var sql = _sut.DataProvider.MergeInto<IMergeEntity>()
+            .Using(new MergeEntity { Id = MergeKey(), Name = "x", Age = 1 })
+            .OnKeys()
+            .WhenMatchedUpdate()
+            .WhenNotMatchedInsert()
+            .ToSql();
+
+        sql.Should().ContainEquivalentOf("insert");
+    }
 }

@@ -21,4 +21,17 @@ public class CteQueryTests
         recursive.Ctes[1].Recursive.Should().BeTrue();
         recursive.Ctes[1].MaxRecursion.Should().Be(50);
     }
+
+    [Fact]
+    public void Join_WithSameCteNameDeclaredOnBothSides_ShouldThrow()
+    {
+        using var ctx = new InMemoryDataContext();
+        var e = ctx.From<SimpleEntity>();
+        var left = ctx.With("c", e.Where(x => x.Id > 0).Select(x => new { x.Id }));
+        var right = ctx.With("c", e.Where(x => x.Id > 1).Select(x => new { x.Id }));
+
+        var act = () => left.From("c").Join(right.From("c"), (a, b) => a.GetInt64("id") == b.GetInt64("id"));
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*'c'*both sides of the join*");
+    }
 }

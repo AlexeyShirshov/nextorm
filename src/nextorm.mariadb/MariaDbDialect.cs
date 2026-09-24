@@ -13,6 +13,13 @@ public sealed class MariaDbDialect : MySqlDialect
     /// <summary>Gets the shared MariaDB dialect instance.</summary>
     public static new readonly MariaDbDialect Instance = new();
 
+    /// <summary>
+    /// MariaDB has no native bulk path enabled: <c>MySqlBulkCopy</c> requires a server-side
+    /// <c>local_infile</c> setting that is commonly disabled, so the portable
+    /// <c>INSERT ... VALUES</c> path is used instead (it also returns keys on request).
+    /// </summary>
+    public override bool SupportsBulkCopy => false;
+
     /// <inheritdoc/>
     public override bool SupportsIntersectExceptAll => true;
 
@@ -34,6 +41,33 @@ public sealed class MariaDbDialect : MySqlDialect
 
     /// <summary>MariaDB has no <c>CONTAINED IN</c>, so it is gated off; the other kinds are supported.</summary>
     public override bool SupportsTemporalKind(TemporalKind kind) => kind != TemporalKind.ContainedIn;
+
+    /// <summary>
+    /// MariaDB renders row locking with <c>LOCK IN SHARE MODE</c>, which — unlike MySQL's — accepts the
+    /// <c>NOWAIT</c>/<c>SKIP LOCKED</c> lock options, so the MySQL renderer is not reused.
+    /// </summary>
+    public override ILockRenderer Lock => MariaDbLockRenderer.Instance;
+}
+
+internal sealed class MariaDbLockRenderer : ILockRenderer
+{
+    public static readonly MariaDbLockRenderer Instance = new();
+
+    public bool UsesTableHints => false;
+
+    public string Render(LockMode mode, KeywordCase keywordCase = KeywordCase.Lower) =>
+        Render(mode, LockWaitMode.Wait, keywordCase);
+
+    public string Render(LockMode mode, LockWaitMode wait, KeywordCase keywordCase = KeywordCase.Lower) =>
+        SqlKeywords.Of(keywordCase, (mode == LockMode.Share ? " lock in share mode" : " for update") + LockWaitSuffix(wait));
+
+    private static string LockWaitSuffix(LockWaitMode wait) => wait switch
+    {
+        LockWaitMode.Wait => "",
+        LockWaitMode.NoWait => " nowait",
+        LockWaitMode.SkipLocked => " skip locked",
+        _ => throw new ArgumentOutOfRangeException(nameof(wait), wait, "Unknown locking wait mode.")
+    };
 }
 
 internal sealed class MariaDbUuidGenerators : IUuidGenerators

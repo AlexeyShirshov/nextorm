@@ -45,6 +45,13 @@ public sealed class SqliteDialect : SqlDialectBase
     /// <inheritdoc/>
     public override bool SupportsOnConflict => true;
 
+    // SQLite skips conflicting rows with either the INSERT OR IGNORE head (no conflict target needed)
+    // or a trailing ON CONFLICT DO NOTHING when a target is known.
+    /// <inheritdoc/>
+    public override bool SupportsInsertIgnore => true;
+    /// <inheritdoc/>
+    public override bool SupportsOnConflictDoNothing => true;
+
     // SQLite 3.30+ accepts the FILTER (WHERE ...) aggregate clause.
     /// <inheritdoc/>
     public override bool SupportsFilter => true;
@@ -241,6 +248,9 @@ public sealed class SqliteDialect : SqlDialectBase
 
     /// <summary>SQLite supports <c>CREATE [TEMPORARY] TABLE ... AS SELECT</c>.</summary>
     public override bool SupportsCreateTableAsSelect => true;
+
+    /// <summary>SQLite accepts <c>IF NOT EXISTS</c> on <c>CREATE TABLE ... AS SELECT</c>.</summary>
+    public override bool SupportsCreateTableAsSelectIfNotExists => true;
 }
 
 internal sealed class SqliteIifRenderer : IIifRenderer

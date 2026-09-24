@@ -451,8 +451,8 @@ The array functions and operators map to their PostgreSQL names:
 | `SqlFunctions.Postgres.array_fill(value, dims)` | `array_fill(value, dims)` |
 | `SqlFunctions.Postgres.array_dims(a)` | `array_dims(a)` |
 | `SqlFunctions.Postgres.array_positions(a, element)` | `array_positions(a, element)` |
-| `SqlFunctions.Postgres.array_reverse(a)` | `array_reverse(a)` |
-| `SqlFunctions.Postgres.array_sort(a)` | `array_sort(a)` |
+| `SqlFunctions.Postgres.array_reverse(a)` | `array_reverse(a)` (PostgreSQL 18+) |
+| `SqlFunctions.Postgres.array_sort(a)` | `array_sort(a)` (PostgreSQL 18+) |
 | `SqlFunctions.Postgres.array_shuffle(a)` | `array_shuffle(a)` (PostgreSQL 16+) |
 | `SqlFunctions.Postgres.array_sample(a, n)` | `array_sample(a, n)` (PostgreSQL 16+) |
 | `SqlFunctions.Postgres.array_to_string(a, delimiter)` | `array_to_string(a, delimiter)` |

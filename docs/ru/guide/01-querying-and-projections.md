@@ -420,15 +420,15 @@ var elements = dataContext
 
 ## Сэмплирование таблицы (`TABLESAMPLE`)
 
-[`TableSample`](xref:NextORM.Core.EntityBuilder`1.TableSample(System.Double,NextORM.Core.TableSampleMethod,System.Nullable{System.Double})) добавляет модификатор `TABLESAMPLE` к
+[`FromOptions.TableSample`](xref:NextORM.Core.FromOptions.TableSample(System.Double,NextORM.Core.TableSampleMethod,System.Nullable{System.Double})) добавляет модификатор `TABLESAMPLE` к
 основной таблице, поэтому база читает только процент её строк вместо полного сканирования таблицы.
-Процент должен находиться в диапазоне `(0, 100]`; метод сэмплирования по умолчанию —
+Сэмплирование — это опция источника на время запроса, поэтому она задаётся в вызове `From`. Процент
+должен находиться в диапазоне `(0, 100]`; метод сэмплирования по умолчанию —
 [`TableSampleMethod.System`](xref:NextORM.Core.TableSampleMethod.System), а необязательное зерно (seed)
 делает выборку повторяемой:
 
 ```csharp
-var rows = await dataContext.From<SimpleEntity>()
-    .TableSample(10, TableSampleMethod.System, seed: 42)
+var rows = await dataContext.From<SimpleEntity>(o => o.TableSample(10, TableSampleMethod.System, seed: 42))
     .Select(x => x.Id)
     .ToListAsync();
 ```
@@ -449,15 +449,15 @@ SQL Server поддерживает только `System`. Все остальн
 
 ## JSON-вывод (SQL Server)
 
-[`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean)) добавляет предложение SQL Server `FOR JSON`, поэтому база
-возвращает один JSON-документ вместо строк ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson)). Проекция должна быть
-одним скаляром/колонкой, потому что набор результатов сворачивается в одну JSON-колонку:
+[`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean,System.Object[])) — **терминальный оператор**: он выполняет запрос и возвращает
+весь набор результатов одним JSON-документом ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson)). Как терминал он не
+добавляет неявный `TOP 1`, поэтому документ покрывает все строки; тип элемента запроса не важен,
+так как база возвращает одну колонку-документ:
 
 ```csharp
-var json = dataContext.From<IComplexEntity>()
+string? json = dataContext.From<IComplexEntity>()
     .Select(e => new { e.Id, e.String })
-    .ForJson(ForJsonMode.Path, root: "items", includeNullValues: true)
-    .First();
+    .ForJson(ForJsonMode.Path, root: "items", includeNullValues: true);
 ```
 
 ```sql
@@ -465,27 +465,31 @@ select id, somestring from complex_entity for json path, root('items'), include_
 ```
 
 [`Path`](xref:NextORM.Core.ForJsonMode.Path) строит документ по псевдонимам проекции, [`Auto`](xref:NextORM.Core.ForJsonMode.Auto) — по структуре
-таблицы. Предложение ставится после `ORDER BY` и перед завершающим `OPTION (...)`. Остальные
-провайдеры выбрасывают `NotSupportedException`.
+таблицы. `ForJson` возвращает `null`, если запрос не вернул строк (SQL Server отдаёт SQL NULL для
+пустого результата `FOR JSON`). Предложение ставится после `ORDER BY` и перед завершающим
+`OPTION (...)`; остальные провайдеры выбрасывают `NotSupportedException`. Используйте
+[`WithForJson`](xref:NextORM.Core.QueryCommand`1.WithForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean)), чтобы только *присоединить* предложение и сохранить команду
+композируемой (для дальнейших хинтов или просмотра SQL).
 
 ## XML-вывод (SQL Server)
 
-[`ForXml`](xref:NextORM.Core.QueryCommand`1.ForXml(NextORM.Core.ForXmlMode,System.String,System.String,System.Boolean)) — XML-аналог ([`SupportsForXml`](xref:NextORM.Core.ISqlDialect.SupportsForXml)); поддерживаются
+[`ForXml`](xref:NextORM.Core.QueryCommand`1.ForXml(NextORM.Core.ForXmlMode,System.String,System.String,System.Boolean,System.Object[])) — XML-аналог и терминал ([`SupportsForXml`](xref:NextORM.Core.ISqlDialect.SupportsForXml)); поддерживаются
 `RAW`, `AUTO`, `EXPLICIT` и `PATH`, с необязательным именем элемента строки, обёрткой `ROOT('...')` и
 флагом `ELEMENTS`:
 
 ```csharp
-var xml = dataContext.From<IComplexEntity>()
+string? xml = dataContext.From<IComplexEntity>()
     .Select(e => new { e.Id })
-    .ForXml(ForXmlMode.Raw, elementName: "row", root: "items", elements: true)
-    .First();
+    .ForXml(ForXmlMode.Raw, elementName: "row", root: "items", elements: true);
 ```
 
 ```sql
 select id from complex_entity for xml raw('row'), root('items'), elements
 ```
 
-`FOR JSON` и `FOR XML` взаимно исключают друг друга; их сочетание выбрасывает `NotSupportedException`.
+Как и `ForJson`, `ForXml` возвращает `null` для пустого набора, а
+[`WithForXml`](xref:NextORM.Core.QueryCommand`1.WithForXml(NextORM.Core.ForXmlMode,System.String,System.String,System.Boolean)) присоединяет предложение без выполнения. `FOR JSON` и `FOR XML` взаимно исключают
+друг друга; их сочетание выбрасывает `NotSupportedException`.
 
 ## Блокировка строк (`FOR UPDATE` / `FOR SHARE`)
 
@@ -517,6 +521,36 @@ select id from simple_entity with (updlock) where (id > 5)
 ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock); в SQL Server — через
 [`ILockRenderer.UsesTableHints`](xref:NextORM.Core.ILockRenderer.UsesTableHints));
 все остальные провайдеры выбрасывают `NotSupportedException` при построении SQL.
+
+Режим ожидания задаётся [`LockWaitMode`](xref:NextORM.Core.LockWaitMode): если строку уже удерживает
+другая транзакция, [`NoWait`](xref:NextORM.Core.LockWaitMode.NoWait) падает немедленно вместо
+ожидания, а [`SkipLocked`](xref:NextORM.Core.LockWaitMode.SkipLocked) исключает занятые строки из
+результата — стандартный приём для очередей и пулов воркеров:
+
+```csharp
+var claimed = await dataContext.From<Job>()
+    .Where(x => x.State == "pending")
+    .ForUpdate(LockWaitMode.SkipLocked)
+    .ToListAsync();
+```
+
+```sql
+-- PostgreSQL / MySQL / MariaDB
+select id from job where (state = 'pending') for update skip locked
+
+-- SQL Server (READPAST приближает SKIP LOCKED)
+select id from job with (updlock, readpast) where (state = 'pending')
+```
+
+PostgreSQL и MySQL дописывают `nowait`/`skip locked` в конец
+(`FOR UPDATE`/`FOR SHARE [NOWAIT | SKIP LOCKED]`); разделяемая блокировка с режимом переключает MySQL
+с `lock in share mode` на `for share`, потому что `LOCK IN SHARE MODE` не принимает lock-option.
+MariaDB дописывает режим и к `for update`, и к `lock in share mode` (`NOWAIT` с 10.3+, `SKIP LOCKED`
+с 10.6+). SQL Server добавляет `nowait` или `readpast` в тот же табличный хинт
+(`with (updlock, nowait)` / `with (updlock, readpast)`); `readpast` пропускает любую заблокированную
+строку, а не только строку, удержанную другим писателем, поэтому он приближает, а не в точности
+повторяет `SKIP LOCKED`. По умолчанию [`Wait`](xref:NextORM.Core.LockWaitMode.Wait) сохраняет
+блокирующее поведение.
 
 ## Различия провайдеров
 

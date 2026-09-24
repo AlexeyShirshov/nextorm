@@ -376,6 +376,9 @@ internal static class MemberTranslator
                     var colName = node.Member.GetPropertyColumnName(visitor.Options.NamingConvention);
                     if (!string.IsNullOrEmpty(colName))
                     {
+                        if (TryTranslateDerivedProjectionMember(visitor, node, lambdaParameter, hasTableAliasForColumn))
+                            return node;
+
                         visitor.AppendIdentifier(colName);
                         visitor.ColumnName = colName;
                         return node;
@@ -422,6 +425,41 @@ internal static class MemberTranslator
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Resolves a member of a join-projection item whose source is a derived table rather than a
+    /// physical table. The whole-entity source of <c>CrossApply</c>/<c>OuterApply</c> is projected as
+    /// <c>somestring as "String"</c>, so a pass-through member must be referenced by the projected
+    /// name, not the physical column name. The lookup is deliberately confined to projection items:
+    /// a plain entity parameter inside a subquery must keep its physical column name.
+    /// </summary>
+    private static bool TryTranslateDerivedProjectionMember(
+        BaseExpressionVisitor visitor,
+        MemberExpression node,
+        ParameterExpression lambdaParameter,
+        bool hasTableAliasForColumn)
+    {
+        if (!lambdaParameter.Type!.IsAssignableTo(typeof(IProjection)))
+            return false;
+
+        var (idx, innerQuery) = visitor.ColumnsProvider.FindQueryCommand(node.Expression!.Type, visitor.IncludeNestedSources);
+        var innerCol = innerQuery?.SelectList?.SingleOrDefault(col => col.PropertyName == node.Member.Name);
+        if (innerCol is null)
+            return false;
+
+        var sqlBuilder = new SqlBuilder(visitor.Options with { IncludeNestedSources = true });
+        var col = sqlBuilder.MakeColumn(innerCol, innerQuery!.EntityType!, true, renameAware: true);
+
+        if (!hasTableAliasForColumn)
+            visitor.Builder!.Append(visitor.AliasProvider!.FindAlias(idx)).Append('.');
+
+        if (col.NeedAliasForColumn)
+            visitor.Builder!.Append(visitor.Dialect.MakeColumnReference(innerCol.PropertyName!));
+        else
+            visitor.Builder!.Append(col.Column);
+
+        return true;
     }
 
     /// <summary>

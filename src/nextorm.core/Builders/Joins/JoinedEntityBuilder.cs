@@ -84,7 +84,8 @@ public class JoinedEntityBuilder<T1, T2> : EntityBuilder<Projection<T1, T2>>
 
         var cb = new JoinedEntityBuilder<T1, T2, T3>(DataProvider) { Logger = Logger, Query = Query, Table = Table, SourceFrom = SourceFrom, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, IndexHints = IndexHints, IndexHintKind = IndexHintKind, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, KeywordCase = KeywordCase };
         if (Joins is not null) cb.Joins!.AddRange(Joins);
-        cb.Joins!.Add(new JoinExpression(joinCondition, joinType) { From = _dataProvider.GetFrom(typeof(T3), null)!, EntityType = joinCondition is null ? typeof(T3) : null });
+        cb.Joins!.Add(new JoinExpression(joinCondition, joinType) { From = JoinSourceResolver.Resolve(_dataProvider, _), EntityType = joinCondition is null ? typeof(T3) : null });
+        cb.Ctes = CteMerge.Merge(Ctes, _.Ctes);
         return cb;
     }
     // protected override void OnCommandCreated<TResult>(QueryCommand<TResult> cmd)
@@ -201,7 +202,8 @@ public class JoinedEntityBuilder<T1, T2, T3> : EntityBuilder<Projection<T1, T2, 
     {
         var cb = new JoinedEntityBuilder<T1, T2, T3, T4>(DataProvider) { Logger = Logger, Query = Query, Table = Table, SourceFrom = SourceFrom, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, IndexHints = IndexHints, IndexHintKind = IndexHintKind, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, KeywordCase = KeywordCase };
         if (Joins is not null) cb.Joins!.AddRange(Joins);
-        cb.Joins!.Add(new JoinExpression(joinCondition, joinType) { From = _dataProvider.GetFrom(typeof(T4), null)!, EntityType = joinCondition is null ? typeof(T4) : null });
+        cb.Joins!.Add(new JoinExpression(joinCondition, joinType) { From = JoinSourceResolver.Resolve(_dataProvider, _), EntityType = joinCondition is null ? typeof(T4) : null });
+        cb.Ctes = CteMerge.Merge(Ctes, _.Ctes);
         return cb;
     }
     /// <inheritdoc/>
@@ -303,7 +305,8 @@ public class JoinedEntityBuilder<T1, T2, T3, T4> : EntityBuilder<Projection<T1, 
     {
         var cb = new JoinedEntityBuilder<T1, T2, T3, T4, T5>(DataProvider) { Logger = Logger, Query = Query, Table = Table, SourceFrom = SourceFrom, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, IndexHints = IndexHints, IndexHintKind = IndexHintKind, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, KeywordCase = KeywordCase };
         if (Joins is not null) cb.Joins!.AddRange(Joins);
-        cb.Joins!.Add(new JoinExpression(joinCondition, joinType) { From = _dataProvider.GetFrom(typeof(T5), null)!, EntityType = joinCondition is null ? typeof(T5) : null });
+        cb.Joins!.Add(new JoinExpression(joinCondition, joinType) { From = JoinSourceResolver.Resolve(_dataProvider, _), EntityType = joinCondition is null ? typeof(T5) : null });
+        cb.Ctes = CteMerge.Merge(Ctes, _.Ctes);
         return cb;
     }
     /// <inheritdoc/>
@@ -405,7 +408,8 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5> : EntityBuilder<Projection<
     {
         var cb = new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>(DataProvider) { Logger = Logger, Query = Query, Table = Table, SourceFrom = SourceFrom, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, IndexHints = IndexHints, IndexHintKind = IndexHintKind, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, KeywordCase = KeywordCase };
         if (Joins is not null) cb.Joins!.AddRange(Joins);
-        cb.Joins!.Add(new JoinExpression(joinCondition, joinType) { From = _dataProvider.GetFrom(typeof(T6), null)!, EntityType = joinCondition is null ? typeof(T6) : null });
+        cb.Joins!.Add(new JoinExpression(joinCondition, joinType) { From = JoinSourceResolver.Resolve(_dataProvider, _), EntityType = joinCondition is null ? typeof(T6) : null });
+        cb.Ctes = CteMerge.Merge(Ctes, _.Ctes);
         return cb;
     }
     /// <inheritdoc/>
@@ -507,7 +511,8 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> : EntityBuilder<Project
     {
         var cb = new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>(DataProvider) { Logger = Logger, Query = Query, Table = Table, SourceFrom = SourceFrom, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, IndexHints = IndexHints, IndexHintKind = IndexHintKind, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, KeywordCase = KeywordCase };
         if (Joins is not null) cb.Joins!.AddRange(Joins);
-        cb.Joins!.Add(new JoinExpression(joinCondition, joinType) { From = _dataProvider.GetFrom(typeof(T7), null)!, EntityType = joinCondition is null ? typeof(T7) : null });
+        cb.Joins!.Add(new JoinExpression(joinCondition, joinType) { From = JoinSourceResolver.Resolve(_dataProvider, _), EntityType = joinCondition is null ? typeof(T7) : null });
+        cb.Ctes = CteMerge.Merge(Ctes, _.Ctes);
         return cb;
     }
     /// <inheritdoc/>
@@ -609,7 +614,8 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> : EntityBuilder<Pro
     {
         var cb = new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8>(DataProvider) { Logger = Logger, Query = Query, Table = Table, SourceFrom = SourceFrom, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, IndexHints = IndexHints, IndexHintKind = IndexHintKind, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, KeywordCase = KeywordCase };
         if (Joins is not null) cb.Joins!.AddRange(Joins);
-        cb.Joins!.Add(new JoinExpression(joinCondition, joinType) { From = _dataProvider.GetFrom(typeof(T8), null)!, EntityType = joinCondition is null ? typeof(T8) : null });
+        cb.Joins!.Add(new JoinExpression(joinCondition, joinType) { From = JoinSourceResolver.Resolve(_dataProvider, _), EntityType = joinCondition is null ? typeof(T8) : null });
+        cb.Ctes = CteMerge.Merge(Ctes, _.Ctes);
         return cb;
     }
     /// <inheritdoc/>

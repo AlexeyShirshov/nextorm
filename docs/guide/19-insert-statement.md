@@ -406,6 +406,11 @@ interface-mapped entity either project the columns (`Returning(x => new { x.Id, 
 class that implements the interface; `Returning()` on the interface itself throws a
 `NotSupportedException` at execution.
 
+## Bulk insert
+
+Writing a whole set — native bulk paths, chunking, `Returning`, `IgnoreDuplicates` and `KeepIdentity` —
+is documented in its own guide: [Bulk insert](24-bulk-insert.md).
+
 ## Upsert and MERGE
 
 The same builder family also writes rows through a `MERGE`: a portable **key upsert** (`OnKeys()` + `WhenMatchedUpdate()` + `WhenNotMatchedInsert()`, rendered as `INSERT ... ON CONFLICT` / `ON DUPLICATE KEY` / `MERGE`) and a general **full `MERGE`** with `WHEN MATCHED`/`WHEN NOT MATCHED` branches, arbitrary conditions, `THEN DELETE`/`THEN DO NOTHING` and `RETURNING`/`OUTPUT`. Both start from `ctx.MergeInto<TEntity>()` and are documented in their own guide:
@@ -432,7 +437,7 @@ var sql = ctx.InsertInto<ISimpleEntity>().Value(x => x.Name, "a").ToSql();
 | SQL Server | yes | `OUTPUT inserted.<col>` | yes | |
 | MySQL | yes | `LAST_INSERT_ID()` | — | no `RETURNING` |
 | MariaDB | yes | `LAST_INSERT_ID()` | — | `RETURNING` (10.5+) is not used |
-| ClickHouse | yes (small batches) | — | — | bulk load goes through the driver's binary API |
+| ClickHouse | yes (small batches) | — | — | bulk uses the portable `INSERT ... VALUES` path; bound it with `MaxBatchSize` |
 | In-memory | — | — | — | read-only context; `NotSupportedException` |
 
 `INSERT ... VALUES` itself is cross-provider and ungated: the same `InsertInto<T>()` API works on every
@@ -456,13 +461,15 @@ SQL provider. Only the generated-key form differs, and a provider that cannot ex
 * **Affected-row count.** `Insert()`/`InsertAsync()` return the number of rows the provider reports.
   ClickHouse does not report one for `INSERT ... VALUES`, so it returns `0` even though the row is
   written — do not use the count to confirm a ClickHouse insert.
-* **No chunking of a large batch**; thousands of rows may hit the provider's per-statement limit. Use
-  the provider's bulk-copy/binary API for bulk loads.
+* **Chunking a large batch.** `InsertInto<T>()` writes one statement; use
+  [Bulk insert](24-bulk-insert.md) for a whole set, including optional chunking
+  (`MaxBatchSize`/`MaxParameters`/`MaxSqlLength`) and native bulk paths.
 * The in-memory provider is query-only: `INSERT`/`UPDATE`/`DELETE` and the full `MERGE` throw `NotSupportedException`; only the key-upsert merge is applied to the registered sequence in the context.
 
 ## See also
 
 - [Data merging (MERGE / upsert)](23-merge-statement.md)
+- [Bulk insert](24-bulk-insert.md)
 - [Limitations and out-of-scope features](../advanced/limitations.md)
 - [Provider overview](../providers/overview.md)
 - [API reference](../advanced/api-reference.md)

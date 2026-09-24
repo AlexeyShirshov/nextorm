@@ -139,6 +139,29 @@ var updated = ctx.From<IOrder>()
 `UPDATE <alias> ... FROM ... JOIN`, MySQL/MariaDB — `UPDATE ... JOIN ... SET`; ClickHouse и in-memory
 бросают исключение.
 
+Присоединяемой стороной может быть CTE: его объявление поднимается перед `UPDATE`, а целью остаётся
+первая (физическая) таблица.
+
+```csharp
+var recent = ctx.With("recent", ctx.From<IOrder>().Where(o => o.Id > 1000).Select(o => new { o.Id }));
+
+var updated = ctx.From<IOrder>()
+    .Join(recent.From("recent"), (o, r) => o.Id == r.GetInt64("id"))
+    .UpdateJoin()
+    .Set(p => p.Item1.Status, "priority")
+    .Update();
+```
+
+```sql
+-- PostgreSQL
+with recent as (select id from orders where (id > 1000)) update orders as "t1" set status = @p0 from recent as "t2" where t1.id = t2.id
+```
+
+Это работает на каждом провайдере с `UPDATE ... FROM`/`JOIN`, в том числе когда CTE стоит на втором или
+последующем join, и для рекурсивных CTE (SQL Server дописывает `OPTION (MAXRECURSION n)`). Два разных
+объявления CTE с одинаковым именем по сторонам join отклоняются с `InvalidOperationException`: один
+`WITH` не может связать одно имя с двумя определениями. См. [Common table expressions](09-cte.md).
+
 ## Поддержка провайдерами
 
 | Провайдер | `UPDATE ... SET ... WHERE` | `RETURNING` / `OUTPUT` | `UPDATE ... FROM` |

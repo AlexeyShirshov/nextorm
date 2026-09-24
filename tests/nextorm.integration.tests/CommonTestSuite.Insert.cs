@@ -382,4 +382,43 @@ public abstract partial class CommonTestSuite
         rows.Should().HaveCount(2);
         rows.Select(r => r.Age).Should().BeEquivalentTo([6, 7]);
     }
+
+    [Fact]
+    public void Insert_ToSql_ShouldRenderInsert()
+    {
+        var sql = _sut.DataProvider.InsertInto<IInsertEntity>()
+            .Value(x => x.Name, "x")
+            .Value(x => x.Age, 1)
+            .ToSql();
+
+        sql.Should().ContainEquivalentOf("insert");
+    }
+
+    [Fact]
+    public async Task InsertAsync_Builder_ShouldPersistRow()
+    {
+        var ctx = _sut.DataProvider;
+        var marker = InsertMarker();
+
+        await ctx.InsertInto<IInsertEntity>()
+            .Value(x => x.Name, marker)
+            .Value(x => x.Age, 11)
+            .InsertAsync(TestContext.Current.CancellationToken);
+
+        ctx.From<IInsertEntity>().Where(x => x.Name == marker).Select(x => x.Age).ToList().Should().ContainSingle().Which.Should().Be(11);
+    }
+
+    [Fact]
+    public void Insert_ExpressionConstant_ShouldPersist()
+    {
+        var ctx = _sut.DataProvider;
+        var marker = InsertMarker();
+
+        ctx.InsertInto<IInsertEntity>()
+            .Value(x => x.Name, marker)
+            .Value(x => x.Age, x => 21)
+            .Insert();
+
+        ctx.From<IInsertEntity>().Where(x => x.Name == marker).Select(x => x.Age).Single().Should().Be(21);
+    }
 }

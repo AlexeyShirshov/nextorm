@@ -106,6 +106,25 @@ var removed = await ctx.From<ISimpleEntity>()
 * Цель — первая таблица (`Item1`); принимается только `Join` (INNER). `LeftJoin`/`RightJoin`/`FullJoin`/`CrossJoin` и `APPLY`-соединения бросают `NotSupportedException`, потому что меняют набор удаляемых строк.
 * Терминалы — extension-методы на соединённом билдере для арностей 2–8; `Delete()`/`DeleteAsync()` возвращают число затронутых строк. `ToSql()` рендерит инструкцию без открытия соединения и бросает на in-memory контексте.
 * `Returning` на multi-table delete недоступен; при необходимости прочитайте удалённые строки отдельным запросом.
+* Присоединяемая сторона может быть CTE, его объявление поднимается перед `DELETE` (PostgreSQL `with c as (…) delete from <t> as "t1" using c as "t2" where …`); целью остаётся первая физическая таблица, а CTE может стоять на любой позиции join. См. [Common table expressions](09-cte.md).
+
+### Удаление по CTE
+
+```csharp
+var e = ctx.From<IComplexEntity>();
+var scope = ctx.With("c", e.Where(x => x.Id > 0).Select(x => new { x.Id }));
+
+var removed = e
+    .Join(scope.From("c"), (t, c) => t.Id == c["id"].AsInt)
+    .Delete();
+```
+
+```sql
+-- PostgreSQL
+with c as (select id from complex_entity where (id > 0)) delete from complex_entity as "t1" using c as "t2" where t1.id = cast(t2.id as bigint)
+```
+
+`with …` эмитится перед мутацией на каждом провайдере с multi-table delete, а CTE может стоять на любой позиции join. Два разных CTE с одинаковым именем по сторонам join отклоняются `InvalidOperationException`. См. [Common table expressions](09-cte.md).
 
 ## Примечания и что вне области
 

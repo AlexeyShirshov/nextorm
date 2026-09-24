@@ -20,6 +20,7 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
     /// </summary>
     public readonly DbCommand DbCommand;
     private DbConnection? DbCommandConnection;
+    private DbTransaction? DbCommandTransaction;
     /// <summary>
     /// The parameter collection of <see cref="DbCommand"/>, cached so parameter lookups do not touch
     /// the command property on every execution.
@@ -95,6 +96,31 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
     /// <param name="conn">The connection the returned command must be attached to.</param>
     /// <returns>The prepared command, ready to execute on <paramref name="conn"/>.</returns>
     public DbCommand GetDbCommand(ReadOnlySpan<object?> @params, Func<string, object?, DbParameter> createParam, DbConnection conn)
+        => GetDbCommand(@params, createParam, conn, null);
+
+    /// <summary>
+    /// Binds <paramref name="params"/> to the command, attaches it to <paramref name="conn"/> and binds
+    /// <paramref name="transaction"/> (or clears it when <see langword="null"/>).
+    /// </summary>
+    /// <param name="params">The positional parameter values to bind, or <see langword="null"/> for none.</param>
+    /// <param name="createParam">Creates a provider parameter when the command has no matching one yet.</param>
+    /// <param name="conn">The connection the returned command must be attached to.</param>
+    /// <param name="transaction">The transaction to bind, or <see langword="null"/> to clear it.</param>
+    /// <returns>The prepared command, ready to execute on <paramref name="conn"/>.</returns>
+    public DbCommand GetDbCommand(object[]? @params, Func<string, object?, DbParameter> createParam, DbConnection conn, DbTransaction? transaction)
+        => GetDbCommand(@params is null ? ReadOnlySpan<object?>.Empty : @params, createParam, conn, transaction);
+
+    /// <summary>
+    /// Binds <paramref name="params"/> to the command, caching each parameter's position in
+    /// <see cref="ParamMap"/> so subsequent executions skip the provider's parameter lookup, and
+    /// attaches the command to <paramref name="conn"/> and <paramref name="transaction"/>.
+    /// </summary>
+    /// <param name="params">The positional parameter values to bind; an empty span binds nothing.</param>
+    /// <param name="createParam">Creates a provider parameter when the command has no matching one yet.</param>
+    /// <param name="conn">The connection the returned command must be attached to.</param>
+    /// <param name="transaction">The transaction to bind, or <see langword="null"/> to clear it.</param>
+    /// <returns>The prepared command, ready to execute on <paramref name="conn"/>.</returns>
+    public DbCommand GetDbCommand(ReadOnlySpan<object?> @params, Func<string, object?, DbParameter> createParam, DbConnection conn, DbTransaction? transaction)
     {
         var cmd = DbCommand;
         var parameters = DbCommandParams;//cmd.Parameters;
@@ -166,6 +192,12 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
             cmd.Connection = conn;
         }
 
+        if (DbCommandTransaction != transaction)
+        {
+            DbCommandTransaction = transaction;
+            cmd.Transaction = transaction;
+        }
+
         return cmd;
     }
     /// <summary>
@@ -177,7 +209,11 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
     public void ResetConnection(DbConnection conn, IDataContext dbContext)
     {
         if (DbCommand?.Connection == conn)
+        {
             DbCommand.Connection = null;
+            DbCommand.Transaction = null;
+            DbCommandTransaction = null;
+        }
 
         Enumerator?.DetachFrom(dbContext);
 

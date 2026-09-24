@@ -27,6 +27,15 @@ public sealed class PostgresDialect : SqlDialectBase
     /// <summary>PostgreSQL expresses a key upsert as <c>INSERT ... ON CONFLICT (&lt;keys&gt;) DO UPDATE SET ...</c> (9.5+).</summary>
     public override bool SupportsOnConflict => true;
 
+    /// <summary>PostgreSQL has a native bulk path (<c>COPY ... FROM STDIN (FORMAT BINARY)</c>).</summary>
+    public override bool SupportsBulkCopy => true;
+
+    /// <summary>PostgreSQL skips conflicting rows with a trailing <c>ON CONFLICT DO NOTHING</c>.</summary>
+    public override bool SupportsOnConflictDoNothing => true;
+
+    /// <summary>PostgreSQL writes an explicit value to a <c>GENERATED ALWAYS AS IDENTITY</c> column with <c>OVERRIDING SYSTEM VALUE</c>.</summary>
+    public override string MakeOverridingSystemValue(KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, " overriding system value");
+
     /// <summary>PostgreSQL 15+ renders a general <c>MERGE</c>; the server version is a documented requirement.</summary>
     public override bool SupportsMergeStatement => true;
 
@@ -396,6 +405,9 @@ public sealed class PostgresDialect : SqlDialectBase
     /// <summary>PostgreSQL supports <c>CREATE [TEMPORARY] TABLE ... AS SELECT</c>.</summary>
     public override bool SupportsCreateTableAsSelect => true;
 
+    /// <summary>PostgreSQL accepts <c>IF NOT EXISTS</c> on <c>CREATE TABLE ... AS SELECT</c>.</summary>
+    public override bool SupportsCreateTableAsSelectIfNotExists => true;
+
     /// <summary>PostgreSQL accepts a column list on <c>CREATE TABLE ... AS SELECT</c>.</summary>
     public override bool SupportsCreateTableAsSelectColumnList => true;
 
@@ -494,7 +506,18 @@ internal sealed class PostgresLockRenderer : ILockRenderer
     public bool UsesTableHints => false;
 
     public string Render(LockMode mode, KeywordCase keywordCase = KeywordCase.Lower) =>
-        SqlKeywords.Of(keywordCase, mode == LockMode.Share ? " for share" : " for update");
+        Render(mode, LockWaitMode.Wait, keywordCase);
+
+    public string Render(LockMode mode, LockWaitMode wait, KeywordCase keywordCase = KeywordCase.Lower) =>
+        SqlKeywords.Of(keywordCase, (mode == LockMode.Share ? " for share" : " for update") + LockWaitSuffix(wait));
+
+    private static string LockWaitSuffix(LockWaitMode wait) => wait switch
+    {
+        LockWaitMode.Wait => "",
+        LockWaitMode.NoWait => " nowait",
+        LockWaitMode.SkipLocked => " skip locked",
+        _ => throw new ArgumentOutOfRangeException(nameof(wait), wait, "Unknown locking wait mode.")
+    };
 }
 
 internal sealed class PostgresTupleRenderer : ITupleRenderer

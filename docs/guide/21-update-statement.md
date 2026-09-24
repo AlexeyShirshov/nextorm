@@ -138,6 +138,30 @@ join's `ON`), so an outer join would silently change which rows are updated — 
 SQL Server renders `UPDATE <alias> ... FROM ... JOIN`, and MySQL/MariaDB render `UPDATE ... JOIN ... SET`;
 ClickHouse and the in-memory provider throw.
 
+The joined side may be a CTE: its declaration is hoisted before the `UPDATE` while the target stays the
+first (physical) table.
+
+```csharp
+var recent = ctx.With("recent", ctx.From<IOrder>().Where(o => o.Id > 1000).Select(o => new { o.Id }));
+
+var updated = ctx.From<IOrder>()
+    .Join(recent.From("recent"), (o, r) => o.Id == r.GetInt64("id"))
+    .UpdateJoin()
+    .Set(p => p.Item1.Status, "priority")
+    .Update();
+```
+
+```sql
+-- PostgreSQL
+with recent as (select id from orders where (id > 1000)) update orders as "t1" set status = @p0 from recent as "t2" where t1.id = t2.id
+```
+
+This works on every provider that supports `UPDATE ... FROM`/`JOIN`, including when the CTE sits on the
+second or a later join, and for recursive CTEs (SQL Server appends `OPTION (MAXRECURSION n)`). Two
+distinct CTE declarations sharing a name on the two sides of a join are rejected with an
+`InvalidOperationException`, because a single `WITH` cannot bind one name to two definitions. See
+[Common table expressions](09-cte.md).
+
 ## Provider support at a glance
 
 | Provider | `UPDATE ... SET ... WHERE` | `RETURNING` / `OUTPUT` | `UPDATE ... FROM` |

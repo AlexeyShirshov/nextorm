@@ -152,6 +152,22 @@ public class DeleteSqlGenerationTests
     }
 
     [Fact]
+    public void DeleteJoin_FromCte_ShouldHoistWith()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var e = ctx.From<IComplexEntity>();
+        var scope = ctx.With("c", e.Where(x => x.Id > 0).Select(x => new { x.Id }));
+
+        var sql = e
+            .Join(scope.From("c"), (t, c) => t.Id == c["id"].AsInt)
+            .ToSql();
+
+        sql.Should().StartWith("with c as (select id from complex_entity");
+        sql.Should().Contain("delete from complex_entity as \"t1\" using c as \"t2\" where t1.id = cast(t2.id as bigint)");
+    }
+
+    [Fact]
     public void DeleteJoin_ThreeTables_ShouldChainJoins()
     {
         using var ctx = PostgresTestContext.Create();

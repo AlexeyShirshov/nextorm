@@ -627,12 +627,17 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
         return cmd;
     }
     /// <summary>
-    /// Appends a SQL Server <c>FOR JSON</c> clause to the statement, so the result set is returned as a
-    /// single JSON document (<c>FOR JSON PATH</c> by default). A dialect that does not support it
-    /// rejects the command when its SQL is built. The projection should be a single string column (or
-    /// a scalar projection) because the database returns one JSON column.
+    /// Attaches a SQL Server <c>FOR JSON</c> clause so the whole result set is returned as one JSON
+    /// document (<c>FOR JSON PATH</c> by default), and returns the command for further composition or
+    /// SQL inspection. Prefer <see cref="ForJson(ForJsonMode, string, bool, object[])"/> to execute
+    /// the query and read the document. A dialect that does not support the clause rejects the command
+    /// when its SQL is built.
     /// </summary>
-    public QueryCommand<TResult> ForJson(ForJsonMode mode = ForJsonMode.Path, string? root = null, bool includeNullValues = false)
+    /// <param name="mode">Whether the output is shaped by the projection aliases (<see cref="ForJsonMode.Path"/>) or the table structure (<see cref="ForJsonMode.Auto"/>).</param>
+    /// <param name="root">An optional <c>ROOT('name')</c> wrapper around the document, or <c>null</c> for none.</param>
+    /// <param name="includeNullValues">Whether null-valued properties are emitted (<c>INCLUDE_NULL_VALUES</c>).</param>
+    /// <returns>A new command carrying the <c>FOR JSON</c> clause.</returns>
+    public QueryCommand<TResult> WithForJson(ForJsonMode mode = ForJsonMode.Path, string? root = null, bool includeNullValues = false)
     {
         var cmd = (QueryCommand<TResult>)Clone();
         cmd.ResetPreparation();
@@ -640,15 +645,94 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
         return cmd;
     }
     /// <summary>
-    /// Appends a SQL Server <c>FOR XML</c> clause to the statement, so the result set is returned as a
-    /// single XML document (<c>FOR XML PATH</c> by default). A dialect that does not support it rejects
-    /// the command when its SQL is built, and combining it with <see cref="ForJson"/> throws.
+    /// Attaches a SQL Server <c>FOR XML</c> clause so the whole result set is returned as one XML
+    /// document (<c>FOR XML PATH</c> by default), and returns the command for further composition or
+    /// SQL inspection. Prefer <see cref="ForXml(ForXmlMode, string, string, bool, object[])"/> to
+    /// execute the query and read the document. A dialect that does not support the clause rejects the
+    /// command when its SQL is built, and combining it with <see cref="WithForJson"/> throws.
     /// </summary>
-    public QueryCommand<TResult> ForXml(ForXmlMode mode = ForXmlMode.Path, string? elementName = null, string? root = null, bool elements = false)
+    /// <param name="mode">The <c>FOR XML</c> shaping mode (<c>RAW</c>, <c>AUTO</c>, <c>EXPLICIT</c> or <c>PATH</c>).</param>
+    /// <param name="elementName">The row element name for <c>RAW</c>/<c>PATH</c>, or <c>null</c> for the default.</param>
+    /// <param name="root">An optional <c>ROOT('name')</c> wrapper around the document, or <c>null</c> for none.</param>
+    /// <param name="elements">Whether columns are emitted as child elements (<c>ELEMENTS</c>).</param>
+    /// <returns>A new command carrying the <c>FOR XML</c> clause.</returns>
+    public QueryCommand<TResult> WithForXml(ForXmlMode mode = ForXmlMode.Path, string? elementName = null, string? root = null, bool elements = false)
     {
         var cmd = (QueryCommand<TResult>)Clone();
         cmd.ResetPreparation();
         cmd.ForXmlClause = new ForXmlClause(mode, elementName, root, elements);
+        return cmd;
+    }
+    /// <summary>
+    /// Executes the query and returns the whole result set as one JSON document (SQL Server
+    /// <c>FOR JSON</c>). The projection drives the document shape in <see cref="ForJsonMode.Path"/> and
+    /// the table structure drives it in <see cref="ForJsonMode.Auto"/>; the query's own element type is
+    /// irrelevant because the database returns a single document column. This is a terminal operator,
+    /// so it does not apply an implicit <c>TOP 1</c>: the document covers the entire result set.
+    /// </summary>
+    /// <param name="mode">Whether the output is shaped by the projection aliases (<see cref="ForJsonMode.Path"/>) or the table structure (<see cref="ForJsonMode.Auto"/>).</param>
+    /// <param name="root">An optional <c>ROOT('name')</c> wrapper around the document, or <c>null</c> for none.</param>
+    /// <param name="includeNullValues">Whether null-valued properties are emitted (<c>INCLUDE_NULL_VALUES</c>).</param>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>The JSON document, or <c>null</c> when the query produced no rows (SQL Server <c>FOR JSON</c> yields SQL NULL for an empty result set).</returns>
+    public string? ForJson(ForJsonMode mode = ForJsonMode.Path, string? root = null, bool includeNullValues = false, params object[]? @params)
+        => ExecuteDocument(WithForJson(mode, root, includeNullValues), @params);
+    /// <summary>Asynchronously executes the query and returns the whole result set as one JSON document (SQL Server <c>FOR JSON</c>).</summary>
+    /// <param name="mode">Whether the output is shaped by the projection aliases (<see cref="ForJsonMode.Path"/>) or the table structure (<see cref="ForJsonMode.Auto"/>).</param>
+    /// <param name="root">An optional <c>ROOT('name')</c> wrapper around the document, or <c>null</c> for none.</param>
+    /// <param name="includeNullValues">Whether null-valued properties are emitted (<c>INCLUDE_NULL_VALUES</c>).</param>
+    /// <param name="cancellationToken">A token to cancel the query.</param>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A task producing the JSON document, or <c>null</c> when the query produced no rows.</returns>
+    public Task<string?> ForJsonAsync(ForJsonMode mode = ForJsonMode.Path, string? root = null, bool includeNullValues = false, CancellationToken cancellationToken = default, params object[]? @params)
+        => ExecuteDocumentAsync(WithForJson(mode, root, includeNullValues), @params, cancellationToken);
+    /// <summary>
+    /// Executes the query and returns the whole result set as one XML document (SQL Server
+    /// <c>FOR XML</c>). This is a terminal operator, so it does not apply an implicit <c>TOP 1</c>: the
+    /// document covers the entire result set.
+    /// </summary>
+    /// <param name="mode">The <c>FOR XML</c> shaping mode (<c>RAW</c>, <c>AUTO</c>, <c>EXPLICIT</c> or <c>PATH</c>).</param>
+    /// <param name="elementName">The row element name for <c>RAW</c>/<c>PATH</c>, or <c>null</c> for the default.</param>
+    /// <param name="root">An optional <c>ROOT('name')</c> wrapper around the document, or <c>null</c> for none.</param>
+    /// <param name="elements">Whether columns are emitted as child elements (<c>ELEMENTS</c>).</param>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>The XML document, or <c>null</c> when the query produced no rows.</returns>
+    public string? ForXml(ForXmlMode mode = ForXmlMode.Path, string? elementName = null, string? root = null, bool elements = false, params object[]? @params)
+        => ExecuteDocument(WithForXml(mode, elementName, root, elements), @params);
+    /// <summary>Asynchronously executes the query and returns the whole result set as one XML document (SQL Server <c>FOR XML</c>).</summary>
+    /// <param name="mode">The <c>FOR XML</c> shaping mode (<c>RAW</c>, <c>AUTO</c>, <c>EXPLICIT</c> or <c>PATH</c>).</param>
+    /// <param name="elementName">The row element name for <c>RAW</c>/<c>PATH</c>, or <c>null</c> for the default.</param>
+    /// <param name="root">An optional <c>ROOT('name')</c> wrapper around the document, or <c>null</c> for none.</param>
+    /// <param name="elements">Whether columns are emitted as child elements (<c>ELEMENTS</c>).</param>
+    /// <param name="cancellationToken">A token to cancel the query.</param>
+    /// <param name="params">Positional parameter values, bound in the order they appear in the SQL.</param>
+    /// <returns>A task producing the XML document, or <c>null</c> when the query produced no rows.</returns>
+    public Task<string?> ForXmlAsync(ForXmlMode mode = ForXmlMode.Path, string? elementName = null, string? root = null, bool elements = false, CancellationToken cancellationToken = default, params object[]? @params)
+        => ExecuteDocumentAsync(WithForXml(mode, elementName, root, elements), @params, cancellationToken);
+
+    private string? ExecuteDocument(QueryCommand<TResult> documentCommand, object[]? @params)
+    {
+        object[] boundParams = @params ?? [];
+        return CreateDocumentCommand(documentCommand).ExecuteScalar(boundParams);
+    }
+
+    private async Task<string?> ExecuteDocumentAsync(QueryCommand<TResult> documentCommand, object[]? @params, CancellationToken cancellationToken)
+    {
+        object[] boundParams = @params ?? [];
+        return await CreateDocumentCommand(documentCommand).ExecuteScalarAsync(cancellationToken, boundParams).ConfigureAwait(false);
+    }
+
+    private QueryCommand<string> CreateDocumentCommand(QueryCommand<TResult> configured)
+    {
+        if (_dataContext is not NextORM.Core.DataContext)
+            throw new NotSupportedException("FOR JSON / FOR XML requires a relational database provider.");
+
+        var cmd = new QueryCommand<string>(_dataContext, configured.Definition);
+        configured.CopyTo(cmd, true);
+        cmd.ForJsonClause = configured.ForJsonClause;
+        cmd.ForXmlClause = configured.ForXmlClause;
+        cmd.DocumentMode = true;
+        cmd.ResetPreparation();
         return cmd;
     }
     /// <summary>Returns a clone of this command combined with <paramref name="queryCommand"/> through <c>UNION</c> (duplicates removed).</summary>

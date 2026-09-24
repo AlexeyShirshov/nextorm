@@ -376,4 +376,19 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
         ctx.From<IMergeEntity>().Where(x => x.Id == orphanId).Select(x => x.Id).ToList().Should().BeEmpty();
         ctx.From<IMergeEntity>().Where(x => x.Id == matchedId).Select(x => x.Age).ToList().Should().ContainSingle().Which.Should().Be(9);
     }
+
+    [Fact]
+    public void BulkInsert_InsideTransaction_ShouldRollBack()
+    {
+        var ctx = _sut.DataProvider;
+        var marker = "bulktx_" + Guid.NewGuid().ToString("N");
+
+        using (var transaction = ((ITransactionManager)ctx).BeginTransaction())
+        {
+            ctx.BulkInsertInto<IInsertEntity>().Values([new InsertEntity { Name = marker, Age = 1 }]).BulkInsert();
+            transaction.Rollback();
+        }
+
+        ctx.From<IInsertEntity>().Where(x => x.Name == marker).Select(x => x.Age).ToList().Should().BeEmpty();
+    }
 }

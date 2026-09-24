@@ -7,8 +7,10 @@ tracked in [Implementation plan](#6-implementation-plan).
 The analysis is based on the current tree: `SqlBuilder`, `QueryCommand`,
 `BaseExpressionVisitor`, `CorrelatedQueryExpressionVisitor`, the join builders, the `ISqlDialect`
 contract and the provider dialects, plus the integration tests under `tests/nextorm.integration.tests`.
+Per-*function* coverage (which vendor built-in functions have no nextorm wrapper) is tracked separately
+in [`sql-function-coverage-gap.md`](sql-function-coverage-gap.md).
 
-> **Status (updated 2026-09-22).** Sections 1–4 below started as the original gap analysis and were
+> **Status (updated 2026-09-24).** Sections 1–4 below started as the original gap analysis and were
 > refreshed in place; the implementation status is:
 >
 > | # | Workstream | Status |
@@ -36,12 +38,22 @@ contract and the provider dialects, plus the integration tests under `tests/next
 > | 21 | `STRING_AGG` / `ARRAY_AGG` (incl. `WITHIN GROUP`, `FILTER`) | **Done** — `string_agg` on SQL Server, PostgreSQL, MySQL/MariaDB, SQLite and ClickHouse; `array_agg` on PostgreSQL (`MakeStringAgg`/`MakeArrayAgg`) |
 > | 22 | `ROLLUP` / `CUBE` / `GROUPING SETS` | **Done** — `ROLLUP` on SQL Server, PostgreSQL, MySQL/MariaDB, SQLite and ClickHouse; `CUBE`/`GROUPING SETS` on SQL Server, PostgreSQL, SQLite and ClickHouse (`GroupByRollup`/`GroupByCube`/`GroupByGroupingSets`) |
 > | 23 | Date arithmetic (`date_add`/`date_diff`/`date_trunc`/`end_of_month`/`date_from_parts`, `DateTime.Add*`) | **Done** across SQL Server, PostgreSQL, MySQL/MariaDB, SQLite and ClickHouse; the accepted fields differ per provider and are validated by `SupportsDateTruncField`/`SupportsDateAddField`/`SupportsDateDiffField`. The ClickHouse-native conversion/part surface (`toDate`/`toDateTime`/`toDate32`, `toYear`/..., `toStartOf*`, `toMonday`, `toYYYYMM`/`toYYYYMMDD`, `toUnixTimestamp`) is exposed through `SqlFunctions.ClickHouse` under `DateConversion` |
-> | 24 | Locking table hints + index hints | **Done** (`WithTableHint` on SQL Server; `WithIndex`/`WithoutIndex` on MySQL/MariaDB/SQLite/SQL Server; PostgreSQL/ClickHouse throw) |
+> | 24 | Locking table hints + row locking + index hints | **Done** (locking table hints — `WithTableHint` on SQL Server only; row locking — `ForUpdate`/`ForShare` on PostgreSQL/MySQL/MariaDB and SQL Server; `WithIndex`/`WithoutIndex` on MySQL/MariaDB/SQLite/SQL Server; PostgreSQL/ClickHouse throw on table/index hints) |
 > | 25 | Extended scalar + session/info functions (`make_interval`, `justify_*`, `to_*`, `timezone`, `gen_random_uuid`/`uuidv7`, `pg_typeof`; `current_user`/`session_user`/`current_schema`/`current_database`/`version`) | Extended scalar + `pg_typeof`: **Done on PostgreSQL** (`SupportsExtendedScalarFunctions`). Session/info: **Done** cross-provider — all five on PostgreSQL/SQL Server/MySQL/MariaDB, `current_user`/`current_database`/`version` on ClickHouse and `version` on SQLite (`SessionInfoFunctions` + per-name `SessionInfoFunctions`). UUID generators: **Done** cross-provider — `gen_random_uuid`/`uuidv7` on PostgreSQL/MariaDB/ClickHouse, `gen_random_uuid` (`newid()`) also on SQL Server, gated off on MySQL (v1 only) and SQLite (`UuidGenerators` + per-name `UuidGenerators`) |
 > | 26 | Correlated scalar subqueries (and correlated `EXISTS`/`IN`/`ANY`/`ALL` in `SELECT`/`WHERE`/`ORDER BY`/`HAVING`) | **Done on SQL providers** (any nesting depth; join-projection outer references included) and on the in-memory provider for depth-one scalar/aggregate/`EXISTS`/`IN` (deeper forms throw `NotSupportedException`) |
+> | 27 | Materialize a query into a table (CTAS: `ToTable`/`ToTempTable`) | **Done** on PostgreSQL, SQLite, MySQL, MariaDB, SQL Server (via `SELECT ... INTO`) and ClickHouse (persistent, `ENGINE = MergeTree`); the temporary `ToTempTable` form is on PostgreSQL/SQLite/MySQL/MariaDB only |
+> | 28 | Bulk insert / bulk copy (native `COPY`/`SqlBulkCopy` + chunked `VALUES`; `BulkInsertOptions`/`BulkInsertOptionsBuilder`) | **Done** |
+> | 29 | Row values (`System.Tuple`/`ValueTuple`) cross-provider (`ROW`/`tupleElement`, comparisons) | **Done** on PostgreSQL and ClickHouse |
+> | 30 | EF Core integration (`nextorm.entityframeworkcore`): shared connection/transaction + `IModel` mapping | **Planned**; the `ITransactionManager` prerequisite is **Done** |
+> | 31 | Transactions (`ITransactionManager`): nextorm-owned and enlisted (EF Core/Dapper/ADO.NET) transaction | **Done** on SQLite/PostgreSQL/SQL Server/MySQL/MariaDB; ClickHouse and in-memory reject |
+> | 32 | Row-locking wait modes (`NOWAIT`/`SKIP LOCKED`) | **Done** (PostgreSQL/MySQL/MariaDB/SQL Server; SQLite/ClickHouse/in-memory reject) |
+> | 33 | Global query filters (soft-delete / multi-tenancy) | **Planned** ([`todo_query_filters.md`](todo_query_filters.md)) |
+> | 34 | C# string semantics (ordinal compare, format specifiers, culture; linq2db gap G12) | **Planned** ([`todo_string_semantics.md`](todo_string_semantics.md)) |
+> | 35 | Cross-provider string / regexp function surface | **Gap** (candidate; PostgreSQL-only today) |
 >
-> Test coverage after the work is **85.4% line / 74.6% branch** (CI threshold 75%); the full test run is
-> 2441 passed / 0 failed / 30 capability-based skips. Benchmarks and the performance optimizations that
+> Test coverage after the section 1–26 work is **85.4% line / 74.6% branch** (CI threshold 75%); that run
+> was **2441 passed / 0 failed / 30 capability-based skips** (the later CTAS, bulk-insert, row-value and
+> transaction work adds its own tests on top). Benchmarks and the performance optimizations that
 > followed are documented in
 > [Iteration 6 of `benchmark-report.md`](https://github.com/AlexeyShirshov/nextorm/blob/main/docs/specs/performance/benchmark-report.md):
 > prepared nextorm wins every new feature against compiled EF Core/linq2db/Dapper, and the warm-path
@@ -127,6 +139,11 @@ These are fully implemented and covered by SQL-generation or integration tests:
   `DateTime.Add*` methods, each provider emitting its native form. Arbitrary parts are exposed as
   `SqlFunctions.Sql.extract(part, value)` (`quarter`/`week` ISO/`dow`/`isodow`, validated by
   `SupportsDatePart`) and the numeric `SqlFunctions.Sql.date_part("epoch", value)`.
+* **Provider string / regexp library** — the native PostgreSQL string functions (`split_part`, `strpos`,
+  `left`/`right`, `lpad`/`rpad`, `repeat`, `reverse`, `initcap`, `translate`, `overlay`, `concat_ws`,
+  `format`) and the POSIX `regexp_like`/`regexp_replace`/`regexp_count`/`regexp_instr`/
+  `regexp_split_to_array` family via `SqlFunctions.Postgres`, gated by `SupportsExtendedScalarFunctions`;
+  the portable surface is the CLR `string` methods. See [Scalar functions](../../guide/11-scalar-functions.md#string-and-regular-expression-extensions-postgresql).
 * **Crypto hashes** — `SqlFunctions.Postgres.md5`, `digest(data, type)` (requires the `pgcrypto`
   extension) and `sha256(bytes)`, gated by `SupportsCryptoFunctions` (PostgreSQL only; SQL
   Server/MySQL/ClickHouse expose native SHA-256 under different names/return types, so a
@@ -140,7 +157,8 @@ These are fully implemented and covered by SQL-generation or integration tests:
 ---
 
 ## 4. Remaining gaps, in order of significance
-> Unresolved gaps only, ordered by impact on real query authoring; every item links its `todo_*.md`.
+> Unresolved gaps only, ordered by impact on real query authoring; every item links its `todo_*.md`,
+> or states explicitly that no RFC is opened yet.
 > Shipped, closed-by-decision and out-of-scope gaps are in
 > [Resolved and out-of-scope gaps](#5-resolved-and-out-of-scope-gaps-ledger). Item numbers are stable
 > IDs carried over from the original ledger, so they are not contiguous here.
@@ -161,61 +179,45 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
     PostgreSQL `jsonb_to_record(set)`.
     Todo: [`todo_dynamic_result_schema.md`](todo_dynamic_result_schema.md).
     Shipped: [Table-valued functions](../../guide/13-table-valued-functions.md#built-in-table-functions).
-18. **DML complete: `INSERT`, key upsert, full `MERGE`, `DELETE` and `UPDATE` shipped.** `INSERT ... VALUES` (single row, entity,
-    batch) and `INSERT ... SELECT` (a server-side `Values(source, mapping)` source), the generated key
-    (`ReturningIdentity`/`ReturningKey`, with the provider identity function for the column-less form) and
-    returning the written rows (`Returning`/`Returning(projection)`, PostgreSQL/SQLite/SQL Server) ship
-    through [`InsertInto`](../../guide/19-insert-statement.md) on every SQL provider.
-    PostgreSQL additionally supports **data-modifying CTEs** (`With(name, insert)` →
-    [`MutationCteQuery<T>`](../../guide/19-insert-statement.md#data-modifying-cte-postgresql)): a `VALUES` insert or an
-    `INSERT ... SELECT` as the CTE body whose `RETURNING` rows are read typed, mixed with read CTEs, or fed
-    into a main `INSERT ... SELECT` (the `WITH` is hoisted before `INSERT`).
-    **Key upsert** (`MergeInto` → `MergeBuilder<T>`) ships as the provider's native form: `ON CONFLICT ...
-    DO UPDATE` (PostgreSQL, SQLite), `ON DUPLICATE KEY UPDATE` (MySQL, MariaDB) or `MERGE ... USING
-    (VALUES ...)` (SQL Server); ClickHouse rejects it, while the in-memory provider applies the key upsert
-    to the registered sequence.     A **full `MERGE`** with `WHEN MATCHED`/`WHEN NOT MATCHED [BY TARGET]`/
-    `WHEN NOT MATCHED BY SOURCE` branches, arbitrary search conditions (`On(...)` /
-    `WhenMatched(condition)` → `ON <condition>` / `WHEN ... AND <condition>`), the PostgreSQL-only
-    `THEN DO NOTHING` action and
-    `MERGE ... RETURNING`/`OUTPUT` (see
-    [Full MERGE](../../guide/23-merge-statement.md#full-merge)) ships on SQL Server (every branch), and
-    PostgreSQL 15+ (no `BY SOURCE`, `RETURNING` 17+); the other SQL providers reject it. **`DELETE`**
-    (`DeleteFrom` → `DeleteBuilder<T>`, plus `Delete<T>(entity)` by key) ships a parameterised
-    `DELETE FROM <table> [WHERE ...]` on every provider; `Returning()` returns the removed rows
-    (PostgreSQL/SQLite `RETURNING`, SQL Server `OUTPUT deleted.<col>`), `Truncate<T>()` renders native
-    `TRUNCATE TABLE` (SQLite rejects it), and
-    ClickHouse deletes through `ALTER TABLE ... DELETE ... SETTINGS mutations_sync = 1`, and a multi-table
-    `DELETE` (`From<T>().Join(...).Delete()`, INNER joins, target is the first table) renders the native
-    form on PostgreSQL (`USING`), SQL Server, MySQL and MariaDB and throws on SQLite and ClickHouse.
-    The in-memory provider is query-only: `INSERT`/`DELETE`/`TRUNCATE`/`UPDATE` and the full `MERGE` are out of scope and throw
-    `NotSupportedException` (only the key-upsert merge is applied to the registered sequence). **`UPDATE`** ([`Update`](../../guide/21-update-statement.md) → [`UpdateBuilder<T>`](xref:NextORM.Core.UpdateBuilder`1),
-    `Update<T>(entity)`) renders a parameterised `UPDATE <table> SET ... [WHERE ...]` on every SQL provider,
-    with `Returning()` returning the updated rows (PostgreSQL/SQLite `RETURNING`, SQL Server `OUTPUT`),
-    a multi-table `UPDATE` (`From<T>().Join(...).UpdateJoin()`, INNER joins, target is the first table)
-    rendering the native form on PostgreSQL/SQLite (`FROM`), SQL Server, MySQL and MariaDB and throwing
-    on ClickHouse, and ClickHouse updating through
-    `ALTER TABLE ... UPDATE ... SETTINGS mutations_sync = 1`; the in-memory provider rejects it.
-    Change tracking/`SaveChanges` and
-    navigation properties remain out of scope for the query-builder, no-change-tracking mapper.
-    Shipped: [Data modification (INSERT)](../../guide/19-insert-statement.md), [Upsert (key merge)](../../guide/23-merge-statement.md#upsert-key-merge), [Full MERGE](../../guide/23-merge-statement.md#full-merge), [Delete](../../guide/20-delete-statement.md), [Update](../../guide/21-update-statement.md).
-21. **`CREATE [TEMPORARY] TABLE ... AS SELECT` (CTAS) — done (PostgreSQL, SQLite, MySQL, MariaDB).**
-     Materialize a built `SELECT` into a (session-scoped or persistent) table for cross-statement reuse;
-     the intra-statement case is already covered by materialized CTEs. The shared `CREATE ... TABLE ...
-     AS SELECT` form works on PostgreSQL, SQLite, MySQL and MariaDB; SQL Server needs the different
-     `SELECT ... INTO #t` shape (phase 2) and ClickHouse cannot express the temporary form
-     (`CREATE TEMPORARY TABLE` has no `AS SELECT`), so both are gated with a clear
-     `NotSupportedException`. The optional parts (`IfNotExists`, `Columns`, `WITH NO DATA`, `ON COMMIT`)
-     are capability-gated per provider. Shipped:
-     [Materializing a query into a table](../../guide/22-create-table-as.md) (`ToTempTable`/`ToTable`).
-23. **Bulk insert / bulk copy — planned, hybrid native + portable fallback.** `BulkInsert`
-    (`BulkInsertInto<T>()`) writes a large set through the provider's native API where one exists —
-    PostgreSQL `COPY BINARY`, SQL Server `SqlBulkCopy`, MySQL/MariaDB `MySqlBulkCopy`, ClickHouse
-    binary insert — and otherwise falls back to a chunked multi-row `INSERT ... VALUES` (SQLite, which
-    has no bulk API in `Microsoft.Data.Sqlite`). The native path is gated by a new
-    `ISqlDialect.SupportsBulkCopy` flag and an `IBulkInsertExecutor` role; the fallback closes the
-    current "no chunking of a large batch" limitation of [`InsertInto`](../../guide/19-insert-statement.md).
-    Generated keys are not returned by the bulk path; in-memory rejects it.
-    Todo: [`todo_bulk_insert.md`](todo_bulk_insert.md).
+24. **DDL/DML + reading query in one SQL batch (pgbouncer-safe CTAS) — planned.** `ToTempTable`/`ToTable`
+    and a later `From("<name>")` are two separate commands, so under a connection-level pooler
+    (PgBouncer in `transaction` mode) they may be routed to different backends and the session-scoped
+    temporary table is lost. Phase 1 adds a continuation that emits `CREATE ... AS SELECT; <query>` as
+    **one batch**: ADO.NET `DbBatch` where the driver has one (`NpgsqlBatch`, `SqlBatch`, `MySqlBatch`)
+    and a single `;`-joined `DbCommand` on SQLite; ClickHouse and the in-memory context are gated off
+    with `NotSupportedException`. Gated by a new `ISqlDialect.SupportsBatch`.
+    Todo: [`todo_sql_batch.md`](todo_sql_batch.md).
+32. **Row-locking wait modes (`NOWAIT`/`SKIP LOCKED`) — done.** `ForUpdate`/`ForShare` accept a
+    `LockWaitMode` (`Wait`/`NoWait`/`SkipLocked`): PostgreSQL/MySQL/MariaDB append `NOWAIT`/`SKIP LOCKED`
+    (MySQL switches a shared lock to `FOR SHARE`, because `LOCK IN SHARE MODE` takes no lock option;
+    MariaDB appends the mode to `LOCK IN SHARE MODE`), SQL Server adds `NOWAIT`/`READPAST` to the locking
+    table hint, and SQLite/ClickHouse/in-memory keep rejecting any row lock. Version floors and the
+    `READPAST` approximation are documented in [Limitations](../../advanced/limitations.md).
+    Shipped: [Row locking](../../guide/01-querying-and-projections.md#row-locking-for-update--for-share).
+33. **Global query filters (soft-delete / multi-tenancy) — planned.** A per-entity predicate is
+    auto-injected into every query over the entity (primary `FROM`, joins, subqueries), can read the
+    `IDataContext` (soft-delete flag, tenant) and is disabled per query via `IgnoreFilters()`. Requires
+    the filter identity in the plan-cache key and per-context scoping (see
+    [`todo_interceptors.md`](todo_interceptors.md), Phase 2).
+    Todo: [`todo_query_filters.md`](todo_query_filters.md).
+34. **C# string semantics (ordinal compare, format specifiers, culture) — planned (linq2db gap G12).**
+    Workstream 4 covers the *rendering* of the portable `string` methods; the semantic fidelity of the C#
+    forms is a separate residue: `string.Compare`/`CompareOrdinal` and the `StringComparison`/`CultureInfo`
+    overloads currently throw rather than translate, `string.Format`/`$"{x:N2}"`/`ToString(fmt)` are not
+    translated, and there is no collation primitive (`==`/`string.Equals` inherit the database collation).
+    The contract is "never silently wrong": translate a documented subset or throw. Depends on the shared
+    collation primitive (nextorm `#28`), tracked as G12 in
+    [`linq2db-backlog-gap-analysis.md`](../comparison/linq2db-backlog-gap-analysis.md).
+    Todo: [`todo_string_semantics.md`](todo_string_semantics.md).
+35. **Cross-provider string / regexp function surface — gap candidate (PostgreSQL-only today).** The native
+    string/`regexp_*` library is exposed only on `SqlFunctions.Postgres`
+    ([Scalar functions](../../guide/11-scalar-functions.md#string-and-regular-expression-extensions-postgresql));
+    SQL Server/MySQL/MariaDB/SQLite/ClickHouse have no `SqlFunctions.Sql` equivalents, so `CHARINDEX`/
+    `PATINDEX`/`LEFT`/`RIGHT`/`REPLICATE`/`REVERSE`/`STUFF`/`CONCAT`/`FORMAT` and the MySQL `REGEXP_*` family
+    are reachable only through the portable CLR methods, a raw fragment or a `[SqlFunction]` UDF. Recorded
+    as a real gap; not scheduled — the full per-provider inventory is in
+    [`sql-function-coverage-gap.md`](sql-function-coverage-gap.md).
+    Todo: none yet — candidate; see [Scalar functions](../../guide/11-scalar-functions.md).
 
 ---
 
@@ -364,6 +366,21 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
     `NotSupportedException`. Gated by [`ISqlDialect.IndexHints`](xref:NextORM.Core.ISqlDialect.IndexHints) /
     [`IIndexHintRenderer`](xref:NextORM.Core.IIndexHintRenderer) and carried on the plan key.
     Shipped: [Query hints](../../guide/17-query-hints.md#index-hints).
+18. **DML — shipped in full (`INSERT`/`UPDATE`/`DELETE`/`MERGE`).** `INSERT ... VALUES` (single row, entity,
+    batch) and `INSERT ... SELECT`, the generated key (`ReturningIdentity`/`ReturningKey`) and returned written
+    rows (`Returning`/`Returning(projection)`, PostgreSQL/SQLite/SQL Server) ship through
+    [`InsertInto`](../../guide/19-insert-statement.md) on every SQL provider; PostgreSQL additionally supports
+    **data-modifying CTEs** (`With(name, insert)` →
+    [`MutationCteQuery<T>`](../../guide/19-insert-statement.md#data-modifying-cte-postgresql)). **Key upsert**
+    (`MergeInto` → `MergeBuilder<T>`) ships as the provider's native form (`ON CONFLICT ... DO UPDATE`,
+    `ON DUPLICATE KEY UPDATE`, `MERGE ... USING (VALUES ...)`); a **full `MERGE`** with `WHEN MATCHED`/
+    `WHEN NOT MATCHED [BY TARGET]`/`WHEN NOT MATCHED BY SOURCE` branches, arbitrary conditions and
+    `MERGE ... RETURNING`/`OUTPUT` ships on SQL Server (every branch) and PostgreSQL 15+ (no `BY SOURCE`);
+    **`DELETE`** (predicate/key/`All()`/`Returning()`/`Truncate()`/join, ClickHouse mutation) and **`UPDATE`**
+    (predicate/key/`Returning()`/join, ClickHouse mutation) ship on every SQL provider. The in-memory provider
+    is query-only (only the key upsert), and change tracking/`SaveChanges` and navigation properties stay out
+    of scope by design.
+    Shipped: [Data modification (INSERT)](../../guide/19-insert-statement.md), [Upsert (key merge)](../../guide/23-merge-statement.md#upsert-key-merge), [Full MERGE](../../guide/23-merge-statement.md#full-merge), [Delete](../../guide/20-delete-statement.md), [Update](../../guide/21-update-statement.md).
 19. **Server/engine limits** (not fixable in nextorm): SQL Server has no `INTERSECT ALL`/`EXCEPT ALL`
     (the dialect correctly throws `NotSupportedException`); the ClickHouse `Memory` engine does not
     support `FINAL`/`PREWHERE`/`SAMPLE` (an integration-test limitation, not missing functionality).
@@ -380,6 +397,15 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
     the implicit plan cache stays as the safe per-thread default. See `performance-findings.md` M12
     (Решение).
     Closed: [`performance-findings.md` M12](../performance/performance-findings.md).
+21. **CTAS — shipped on PostgreSQL, SQLite, MySQL, MariaDB, SQL Server and ClickHouse.** `ToTable`/`ToTempTable`
+    materialize a built `SELECT` into a table for cross-statement reuse (the intra-statement case is covered by
+    materialized CTEs): `ToTable` renders `CREATE TABLE ... AS SELECT` (PostgreSQL, SQLite, MySQL, MariaDB),
+    `SELECT ... INTO` (SQL Server) or `CREATE TABLE ... ENGINE = MergeTree ORDER BY tuple() AS SELECT`
+    (ClickHouse). The temporary `ToTempTable` form exists on PostgreSQL, SQLite, MySQL and MariaDB only: SQL
+    Server has no `CREATE TEMPORARY TABLE ... AS SELECT` (a session-scoped table is `ToTable("#name")`) and
+    ClickHouse cannot express a temporary `AS SELECT`. The optional parts (`IfNotExists`, `Columns`, `OnCommit`,
+    `WithData`) are capability-gated per provider. Shipped:
+    [Materializing a query into a table](../../guide/22-create-table-as.md) (`ToTable`/`ToTempTable`).
 22. **PostgreSQL row values — shipped (PostgreSQL + ClickHouse), with phase-2/4 remainders.** The tuple
     surface moved to the cross-provider capability object [`ISqlDialect.Tuple`](xref:NextORM.Core.ISqlDialect.Tuple)
     ([`ITupleRenderer`](xref:NextORM.Core.ITupleRenderer)): PostgreSQL renders `ROW(a, b)` and `(row).fN`,
@@ -388,6 +414,17 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
     reinterpreted as a row-value comparison. Still open: tuple `IN`/`Contains`, raw `ROW(...)`
     materialisation on PostgreSQL (`EnableRecords()`), and the `(a, b)` constructor on MySQL/MariaDB/SQLite.
     Shipped: [Scalar functions](../../guide/11-scalar-functions.md).
+23. **Bulk insert / bulk copy — shipped, hybrid native + portable fallback.** `BulkInsertInto<T>()` writes a
+    large set through the provider's native API where one exists (PostgreSQL `COPY BINARY`, SQL Server
+    `SqlBulkCopy`) and otherwise falls back to a chunked multi-row `INSERT ... VALUES` (SQLite, and
+    MySQL/MariaDB/ClickHouse, where the native path is disabled by design: `MySqlBulkCopy` needs
+    `AllowLoadLocalInfile` and the ClickHouse driver's bulk API is obsolete). Gated by
+    `ISqlDialect.SupportsBulkCopy` and the `IBulkInsertExecutor` role; writes are configured with a
+    `BulkInsertOptions` record or the fluent `BulkInsertOptionsBuilder` (`MaxBatchSize`/`MaxParameters`/
+    `MaxSqlLength` chunking, `IgnoreDuplicates`, `KeepIdentity`, `Timeout`, `NotifyAfter` progress with a
+    `ProgressCancellationTokenSource`); generated keys are returned on the portable `RETURNING`/`OUTPUT` path
+    (`ReturningKey`/`Returning`). In-memory rejects it.
+    Shipped: [Bulk insert](../../guide/24-bulk-insert.md).
 
 ## 6. Implementation plan
 
@@ -420,13 +457,18 @@ developed in parallel on the same working tree.
 | 21 | `STRING_AGG` / `ARRAY_AGG` | **Done** | `SqlFunctions.cs`, `BuiltinFunctionTranslator.cs`, `ISqlDialect.cs`, `SqlDialectBase.cs`, dialects | SQL-generation tests (+ ClickHouse integration) |
 | 22 | `ROLLUP` / `CUBE` / `GROUPING SETS` | **Done** | `EntityBuilder.cs`, `QueryCommand.cs`, `SqlBuilder.cs`, dialects | SQL-generation tests |
 | 23 | Date arithmetic parity (MySQL/MariaDB, SQLite) | **Done** | `BuiltinFunctionTranslator.cs`, dialects | SQL-generation tests + provider integration tests |
-| 24 | Locking table hints (+ cross-provider index hints) | **Done** | `EntityBuilder.cs`, `SqlSourceRenderer.cs`, `SqlBuilder.cs`, provider dialects | SQL-generation tests |
+| 24 | Locking table hints + row locking (+ cross-provider index hints) | **Done** | `EntityBuilder.cs`, `SqlSourceRenderer.cs`, `SqlBuilder.cs`, provider dialects | SQL-generation tests |
 | 25 | PostgreSQL extended scalar functions | **Done** | `SqlFunctions.cs`, `ExtendedScalarFunctionTranslator.cs`, Postgres dialect | SQL-generation tests |
 | 26 | Warm-path plan-build (CTE / recursive CTE / `Join4` / `IN`-list) | **Closed (decision)** | `QueryCommand*.cs`, `SqlBuilder.cs`, `SqlSourceRenderer.cs`, `Visitors/`, `EntityBuilder.cs`, `JoinedEntityBuilder.cs` | `SqliteBenchmarkFeaturesFairCached`, SQL-generation tests |
-| 27 | `CREATE [TEMPORARY] TABLE ... AS SELECT` (PostgreSQL/SQLite/MySQL/MariaDB; SQL Server phase 2) | **Done** ([Materializing a query](../../guide/22-create-table-as.md)) | `Query/Mutations/CreateTableAsCommand.cs`, `Query/CreateTableAsClause.cs`, `Builders/{CreateTableAsOptions,TempTableExtensions}.cs`, `DataContext/SqlMutationBuilder.cs`, `DataContext/Dialect/*`, provider dialects, `DataContext/DataContext.cs` | `CommonTestSuite.CreateTableAs.cs`, SQL-generation tests |
-| 28 | Bulk insert / bulk copy (native `COPY`/`SqlBulkCopy`/`MySqlBulkCopy`/ClickHouse binary; chunked `VALUES` fallback) | **Planned** (`todo_bulk_insert.md`) | `Builders/BulkInsertBuilder.cs`, `Query/Mutations/BulkInsertCommand.cs`, `DataContext/Roles/IBulkInsertExecutor.cs`, `DataContext/{DataContext,QueryExecutor}.cs`, `DataContext/Dialect/*`, provider dialects/contexts | `CommonTestSuite.BulkInsert.cs`, SQL-generation tests |
+| 27 | Materialize a query into a table (`ToTable`/`ToTempTable`; `CREATE TABLE ... AS SELECT` / SQL Server `SELECT ... INTO` / ClickHouse `ENGINE = MergeTree`) | **Done** ([Materializing a query](../../guide/22-create-table-as.md)) | `Query/Mutations/CreateTableAsCommand.cs`, `Query/CreateTableAsClause.cs`, `Builders/{CreateTableAsOptions,TempTableExtensions}.cs`, `DataContext/SqlMutationBuilder.cs`, `DataContext/SqlBuilder.cs`, `DataContext/QueryPlanner.cs`, `DataContext/Dialect/*`, provider dialects, `DataContext/DataContext.cs` | `CommonTestSuite.CreateTableAs.cs`, SQL-generation tests |
+| 28 | Bulk insert / bulk copy (native `COPY`/`SqlBulkCopy`; chunked `VALUES` fallback + G5 returning/ignore/identity) | **Done** ([Bulk insert](../../guide/24-bulk-insert.md)) | `Builders/BulkInsertBuilder.cs`, `Builders/BulkInsertReturningBuilder.cs`, `Query/Mutations/BulkInsertCommand.cs`, `DataContext/{DataContext,PortableBulkInsertExecutor,SyncToAsyncEnumerable}.cs`, `DataContext/Dialect/*`, `DataContext/SqlMutationBuilder.cs`, provider dialects/contexts | `CommonTestSuite.BulkInsert.cs`, SQL-generation tests |
 | 29 | Row values (`System.Tuple`) cross-provider: PostgreSQL `ROW`/`(row).fN`, ClickHouse `tuple`/`tupleElement`, constructor fold, row comparison | **Done (PostgreSQL + ClickHouse)** | `Visitors/TupleSqlTranslator.cs`, `Visitors/BaseExpressionVisitor.cs`, `Visitors/TypeFacts.cs`, `Dialect/DialectCapabilities.cs`, `PostgresDialect.cs`, `ClickHouseDialect.cs` | SQL-generation tests |
-| 30 | EF Core integration (`nextorm.entityframeworkcore`): shared connection/transaction + `IModel` mapping (MVP), then `IQueryable` translation and opt-in DML bridge | **Planned** (`todo_efcore_integration.md`) | new `src/nextorm.entityframeworkcore/**`; core metadata seam `DataContext/Meta/EntityMetadataBuilder.cs`; prerequisite `DataContext/Roles/ITransactionManager.cs` (`todo_transactions.md`) | new `tests/nextorm.entityframeworkcore.tests/**`; `CommonTestSuite` shared-EF-transaction |
+| 30 | EF Core integration (`nextorm.entityframeworkcore`): shared connection/transaction + `IModel` mapping (MVP), then `IQueryable` translation and opt-in DML bridge | **Planned** (`todo_efcore_integration.md`) | new `src/nextorm.entityframeworkcore/**`; core metadata seam `DataContext/Meta/EntityMetadataBuilder.cs`; prerequisite `DataContext/Roles/ITransactionManager.cs` — **Done** ([Transactions](../../guide/25-transactions.md)) | new `tests/nextorm.entityframeworkcore.tests/**`; `CommonTestSuite` shared-EF-transaction |
+| 31 | Transactions (`ITransactionManager`): nextorm-owned and enlisted (EF Core / Dapper / ADO.NET) transaction, `DbCommand.Transaction` on every execution path | **Done** ([Transactions](../../guide/25-transactions.md)) | `DataContext/Roles/ITransactionManager.cs`, `DataContext/DbConnectionManager.cs`, `DataContext/{DataContext,QueryExecutor,ResultSetEnumerator}.cs`, `DataContext/Cache/DbPreparedQueryCommand.cs`, `DataContext/Dialect/*` | `TransactionTests.cs` (SQLite core + ClickHouse), `CommonTestSuite.Transactions.cs`, `EfCoreSharedTransactionTests.cs` |
+| 32 | Row-locking wait modes (`NOWAIT`/`SKIP LOCKED`) | **Done** ([Row locking](../../guide/01-querying-and-projections.md#row-locking-for-update--for-share)) | `DataContext/Dialect/DialectCapabilities.cs`, `DataContext/SqlBuilder.cs`, `Query/QueryPlanEqualityComparer.cs`, `Builders/EntityBuilder.cs`, `Query/{LockClause,LockWaitMode}.cs`, `nextorm.{postgres,mysql,mariadb,sqlserver}/*Dialect.cs` | SQL-generation tests; `CommonTestSuite.Locking.cs` two-transaction `SKIP LOCKED` |
+| 33 | Global query filters (soft-delete / multi-tenancy) | **Planned** ([`todo_query_filters.md`](todo_query_filters.md)) | new `Meta/QueryFilterAttribute.cs`, `Meta/IQueryFilterMetadata.cs`; edits `Meta/{IEntityMetadata,EntityMetadataBuilder}.cs`, `DataContext/DataContextExtensions.cs`, `Query/QueryCommand.QueryPreparer.cs`, `DataContext/QueryPlanner.cs`, `Query/QueryPlanEqualityComparer.cs`, `Builders/EntityBuilder.cs`, `DataContext/InMemoryDataContext.cs` | new `tests/nextorm.core.tests/QueryFilterTests.cs`; `CommonTestSuite` (soft-delete/multi-tenant) |
+| 34 | C# string semantics (ordinal compare, format specifiers, culture; G12) | **Planned** ([`todo_string_semantics.md`](todo_string_semantics.md)) | `Visitors/StringFunctionTranslator.cs`, `Visitors/ScalarFunctionTranslator.cs`, `Visitors/BaseExpressionVisitor.cs`, `DataContext/Dialect/ISqlDialect.cs`/`SqlDialectBase.cs`, `Query/QueryPlanEqualityComparer.cs`, `Query/SqlFunctions.cs`; new `Visitors/StringFormatTranslator.cs`, `DataContext/Meta/CollateAttribute.cs` | SQL-generation + `CommonTestSuite` ordinal/format; InMemory semantics |
+| 35 | Cross-provider string / regexp function surface | **Gap (candidate)** | new `SqlFunctions.Sql` string/regexp translators + `ISqlDialect.Supports*`/`Make*`; provider dialects | SQL-generation tests; provider integration |
 
 Workstream 17–25 extended provider parity.
 

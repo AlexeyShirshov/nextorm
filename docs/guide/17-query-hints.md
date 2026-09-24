@@ -126,15 +126,14 @@ builder rejects a command that carries hints on a dialect that reports `false`.
 
 ## ClickHouse query modifiers
 
-ClickHouse exposes four query-level modifiers that are not hints but dedicated builder methods:
-`Final()`, `Sample(ratio[, offset])`, `PreWhere(predicate)` and `Settings(("key", "value"), ...)`. They
-are only valid on ClickHouse; every other provider and the in-memory context throw
-`NotSupportedException`.
+ClickHouse exposes four query-level modifiers that are not hints: `Final()`, `PreWhere(predicate)` and
+`Settings(("key", "value"), ...)` are dedicated builder methods, while the `Sample(ratio[, offset])`
+modifier is a per-query source option set in `From`. They are only valid on ClickHouse; every other
+provider and the in-memory context throw `NotSupportedException`.
 
 ```csharp
-var rows = dataContext.From<IComplexEntity>()
+var rows = dataContext.From<IComplexEntity>(o => o.Sample(0.1, 0.5))
     .Final()
-    .Sample(0.1, 0.5)
     .PreWhere(c => c.Int > 0)
     .Where(c => c.Boolean == true)
     .Select(c => new { c.Id, c.Int })

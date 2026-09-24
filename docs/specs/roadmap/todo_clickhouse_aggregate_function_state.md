@@ -1,4 +1,5 @@
 # TODO: ClickHouse `AggregateFunction(...)` state type (`-State`/`-Merge`, `runningAccumulate`)
+> Tracking issue: [#62](https://github.com/AlexeyShirshov/nextorm/issues/62).
 
 > Рабочий план (design RFC). Источник: `docs/specs/roadmap/sql-capabilities-gap-analysis.md` §4 п.6.
 > **Статус: заблокировано драйвером `ClickHouse.Driver` 1.4.0** (проверено 22.09.2026).

@@ -1,4 +1,5 @@
 # TODO: Mapping scope — scope-зависимый маппинг сущности (базовый слой)
+> Tracking issue: [#65](https://github.com/AlexeyShirshov/nextorm/issues/65).
 
 > Рабочий план (design RFC). Базовый слой без знания о шардировании. Продвинутый слой —
 > [`todo_sharding.md`](todo_sharding.md) — реализует этот seam.

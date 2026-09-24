@@ -141,11 +141,14 @@ XQuery — строковым литералом).
 ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock),
 [`ILockRenderer.UsesTableHints`](xref:NextORM.Core.ILockRenderer.UsesTableHints)) привязывают
 `with (updlock)`/`with (holdlock)` к основной таблице вместо завершающего предложения
-`FOR UPDATE`/`FOR SHARE`.
-`QueryCommand.ForJson(...)` ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson)) добавляет завершающее предложение
-`FOR JSON PATH`/`FOR JSON AUTO` (с необязательными `ROOT('...')` и `INCLUDE_NULL_VALUES`), а
-`QueryCommand.ForXml(...)` ([`SupportsForXml`](xref:NextORM.Core.ISqlDialect.SupportsForXml)) — `FOR XML RAW/AUTO/EXPLICIT/PATH` (с необязательными
-именем элемента строки, `ROOT('...')` и `ELEMENTS`).
+`FOR UPDATE`/`FOR SHARE`. Режим [`LockWaitMode`](xref:NextORM.Core.LockWaitMode) добавляет `nowait` или
+`readpast` в тот же хинт (`with (updlock, nowait)` / `with (updlock, readpast)`); `readpast` приближает `SKIP LOCKED`.
+`QueryCommand.ForJson(...)` ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson)) — терминал: выполняет
+запрос и возвращает весь набор результатов одним JSON-документом (`FOR JSON PATH`/`FOR JSON AUTO`, с
+необязательными `ROOT('...')` и `INCLUDE_NULL_VALUES`), а `QueryCommand.ForXml(...)`
+([`SupportsForXml`](xref:NextORM.Core.ISqlDialect.SupportsForXml)) делает то же для `FOR XML RAW/AUTO/EXPLICIT/PATH` (с
+необязательными именем элемента строки, `ROOT('...')` и `ELEMENTS`). `QueryCommand.WithForJson(...)`/
+`WithForXml(...)` присоединяют предложение без выполнения.
 
 ## Рекурсивные CTE и `maxRecursion`
 
@@ -222,9 +225,9 @@ join complex_entity as [t2] on t1.id = t2.id
 | Предикаты полнотекстового поиска | `contains(...)` / `freetext(...)` (колонка должна быть полнотекстово проиндексирована) |
 | Полнотекстовое ранжирование | табличные функции `containstable(table, column, search)` / `freetexttable(...)` возвращают `KEY`/`RANK` ([`SqlFunctions.SqlServer`](xref:NextORM.Core.SqlFunctions.SqlServer), [`IKeyRankRow<TKey>`](xref:NextORM.Core.SqlFunctions.IKeyRankRow`1)) |
 | Блокирующие табличные хинты | `with (hint, ...)` после основной таблицы ([`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[]))) |
-| Блокировка строк | `ForUpdate`/`ForShare` рендерят `with (updlock)`/`with (holdlock)` на основной таблице ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock), [`ILockRenderer.UsesTableHints`](xref:NextORM.Core.ILockRenderer.UsesTableHints)) |
-| JSON-вывод | завершающие `for json path` / `for json auto` ([`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean))) |
-| XML-вывод | завершающие `for xml raw/auto/explicit/path` ([`ForXml`](xref:NextORM.Core.QueryCommand`1.ForXml(NextORM.Core.ForXmlMode,System.String,System.String,System.Boolean))) |
+| Блокировка строк | `ForUpdate`/`ForShare` рендерят `with (updlock)`/`with (holdlock)` на основной таблице ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock), [`ILockRenderer.UsesTableHints`](xref:NextORM.Core.ILockRenderer.UsesTableHints)); [`LockWaitMode`](xref:NextORM.Core.LockWaitMode) добавляет `nowait`/`readpast` (`with (updlock, nowait)`/`with (updlock, readpast)`) |
+| JSON-вывод | весь набор одним JSON-документом, терминальные `for json path` / `for json auto` ([`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean,System.Object[]))) |
+| XML-вывод | весь набор одним XML-документом, терминальные `for xml raw/auto/explicit/path` ([`ForXml`](xref:NextORM.Core.QueryCommand`1.ForXml(NextORM.Core.ForXmlMode,System.String,System.String,System.Boolean,System.Object[]))) |
 | Методы типа XML | `xml.value('xpath', 'type')` / `xml.query('xpath')` / `xml.exist('xpath')` / `xml.nodes('xpath') as [alias]([value])` ([`XmlFunctions`](xref:NextORM.Core.ISqlDialect.XmlFunctions)) |
 | `AVG` по целочисленному столбцу | усекается до целого |
 | Размещение null при `ORDER BY … DESC` | null сортируются последними по умолчанию |

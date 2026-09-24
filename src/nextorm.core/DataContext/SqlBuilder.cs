@@ -30,7 +30,7 @@ internal readonly struct SqlBuilder
 
     public ILogger? Logger => _ctx.Logger;
 
-    public string? MakeSelect(QueryCommand cmd)
+    public string? MakeSelect(QueryCommand cmd, string? selectInto = null)
     {
 #if DEBUG
         if (!cmd.IsPrepared)
@@ -91,7 +91,7 @@ internal readonly struct SqlBuilder
 
                 var tableHints = cmd.TableHints;
                 if (cmd.RowLock is { } lockClause && _ctx.Dialect.Lock is { UsesTableHints: true } lockHint)
-                    tableHints = AppendHint(tableHints, lockHint.Render(lockClause.Mode, _ctx.KeywordCase));
+                    tableHints = AppendHint(tableHints, lockHint.Render(lockClause.Mode, lockClause.Wait, _ctx.KeywordCase));
 
                 var fromStr = SqlSourceRenderer.MakeFrom(in _ctx, from, new FromRenderOptions(needAlias, entityType, hasJoins, tableHints, cmd.Temporal, cmd.IndexHints, cmd.IndexHintKind));
                 if (!_ctx.ParamMode)
@@ -392,7 +392,7 @@ internal readonly struct SqlBuilder
 
                 // Table-hint dialects already rendered the lock on the primary source.
                 if (!lockRenderer.UsesTableHints)
-                    sqlBuilder!.AppendLine().Append(lockRenderer.Render(rowLock.Mode, _ctx.KeywordCase));
+                    sqlBuilder!.AppendLine().Append(lockRenderer.Render(rowLock.Mode, rowLock.Wait, _ctx.KeywordCase));
             }
 
 
@@ -461,6 +461,9 @@ internal readonly struct SqlBuilder
             if (!_ctx.ParamMode)
             {
                 selectBuilder!.Length -= 2;
+                if (selectInto is not null)
+                    selectBuilder.Append(selectInto);
+
                 sqlBuilder!.Insert(0, selectBuilder!.ToString());
 
                 if (withClause is not null)

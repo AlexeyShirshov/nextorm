@@ -492,4 +492,373 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
 
         rows.Select(r => r.n).OrderBy(n => n).Should().Equal(1, 2, 3, 4, 5);
     }
+
+    [Fact]
+    public void JsonBuildObject_ShouldProduceObject()
+    {
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.Postgres.json_build_object("id", x.Id, "s", x.String))
+            .First();
+
+        r.Should().Contain("\"id\"").And.Contain("dadfasd");
+    }
+
+    [Fact]
+    public void JsonbBuildObject_ShouldProduceObject()
+    {
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.Postgres.jsonb_build_object("id", x.Id))
+            .First();
+
+        r.Should().Contain("\"id\"");
+    }
+
+    [Fact]
+    public void JsonBuildArray_ShouldProduceArray()
+    {
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.Postgres.json_build_array(x.Id, x.String))
+            .First();
+
+        r.Should().StartWith("[").And.Contain("dadfasd");
+    }
+
+    [Fact]
+    public void JsonbBuildArray_ShouldProduceArray()
+    {
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.Postgres.jsonb_build_array(x.Id))
+            .First();
+
+        r.Should().StartWith("[");
+    }
+
+    [Fact]
+    public void ToJsonAndToJsonb_ShouldConvertScalar()
+    {
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                J = SqlFunctions.Postgres.to_json(x.Id),
+                B = SqlFunctions.Postgres.to_jsonb(x.String)
+            })
+            .First();
+
+        r.J.Should().Be("1");
+        r.B.Should().Be("\"dadfasd\"");
+    }
+
+    [Fact]
+    public void JsonCast_ShouldParseText()
+    {
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.Postgres.jsonb_typeof(SqlFunctions.Postgres.json_cast("{\"a\":1}")))
+            .First();
+
+        r.Should().Be("object");
+    }
+
+    [Fact]
+    public void JsonAgg_ShouldAggregateRows()
+    {
+        var r = _sut.ComplexEntity
+            .Select(x => SqlFunctions.Postgres.json_agg(x.Id))
+            .First();
+
+        r.Should().StartWith("[").And.Contain("1");
+    }
+
+    [Fact]
+    public void JsonbAgg_ShouldAggregateRows()
+    {
+        var r = _sut.ComplexEntity
+            .Select(x => SqlFunctions.Postgres.jsonb_agg(x.Id))
+            .First();
+
+        r.Should().StartWith("[");
+    }
+
+    [Fact]
+    public void JsonObjectAgg_ShouldAggregatePairs()
+    {
+        var r = _sut.ComplexEntity
+            .Select(x => SqlFunctions.Postgres.json_object_agg(x.Id, x.String))
+            .First();
+
+        r.Should().Contain("\"1\"");
+    }
+
+    [Fact]
+    public void JsonbObjectAgg_ShouldAggregatePairs()
+    {
+        var r = _sut.ComplexEntity
+            .Select(x => SqlFunctions.Postgres.jsonb_object_agg(x.Id, x.String))
+            .First();
+
+        r.Should().Contain("dadfasd");
+    }
+
+    [Fact]
+    public void JsonGet_ShouldIndexObject()
+    {
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Raw = SqlFunctions.Postgres.json_get(SqlFunctions.Postgres.jsonb_build_object("a", x.Id), "a"),
+                Text = SqlFunctions.Postgres.json_get_text(SqlFunctions.Postgres.jsonb_build_object("a", x.Id), "a")
+            })
+            .First();
+
+        r.Raw.Should().Be("1");
+        r.Text.Should().Be("1");
+    }
+
+    [Fact]
+    public void JsonGetPath_ShouldIndexByPath()
+    {
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.Postgres.json_get_path_text(
+                SqlFunctions.Postgres.jsonb_build_object("a", x.Id), new[] { "a" }))
+            .First();
+
+        r.Should().Be("1");
+    }
+
+    [Fact]
+    public void JsonContains_ShouldDetectContainment()
+    {
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.Postgres.json_contains(
+                SqlFunctions.Postgres.jsonb_build_object("a", 1, "b", 2),
+                SqlFunctions.Postgres.jsonb_build_object("a", 1)))
+            .First();
+
+        r.Should().BeTrue();
+    }
+
+    [Fact]
+    public void JsonExists_ShouldDetectKey()
+    {
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Has = SqlFunctions.Postgres.json_exists(SqlFunctions.Postgres.jsonb_build_object("a", x.Id), "a"),
+                Any = SqlFunctions.Postgres.json_exists_any(SqlFunctions.Postgres.jsonb_build_object("a", x.Id), new[] { "a", "b" }),
+                All = SqlFunctions.Postgres.json_exists_all(SqlFunctions.Postgres.jsonb_build_object("a", x.Id), new[] { "a" })
+            })
+            .First();
+
+        r.Has.Should().BeTrue();
+        r.Any.Should().BeTrue();
+        r.All.Should().BeTrue();
+    }
+
+    [Fact]
+    public void JsonArrayLength_ShouldReturnCount()
+    {
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                J = SqlFunctions.Postgres.json_array_length(SqlFunctions.Postgres.json_build_array(1, 2, 3)),
+                B = SqlFunctions.Postgres.jsonb_array_length(SqlFunctions.Postgres.jsonb_build_array(1, 2))
+            })
+            .First();
+
+        r.J.Should().Be(3);
+        r.B.Should().Be(2);
+    }
+
+    [Fact]
+    public void JsonTypeof_ShouldReturnKind()
+    {
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Num = SqlFunctions.Postgres.json_typeof(SqlFunctions.Postgres.to_json(x.Id)),
+                BNum = SqlFunctions.Postgres.jsonb_typeof(SqlFunctions.Postgres.to_jsonb(x.Id)),
+                Str = SqlFunctions.Postgres.jsonb_typeof(SqlFunctions.Postgres.to_jsonb(x.String))
+            })
+            .First();
+
+        r.Num.Should().Be("number");
+        r.BNum.Should().Be("number");
+        r.Str.Should().Be("string");
+    }
+
+    [Fact]
+    public void JsonbSetAndInsert_ShouldModifyDocument()
+    {
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Set = SqlFunctions.Postgres.jsonb_set(
+                    SqlFunctions.Postgres.jsonb_build_object("a", 1), new[] { "a" }, "2"),
+                Insert = SqlFunctions.Postgres.jsonb_insert(
+                    SqlFunctions.Postgres.jsonb_build_object("a", 1), new[] { "b" }, "3")
+            })
+            .First();
+
+        r.Set.Should().Contain("2");
+        r.Insert.Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public void JsonbStripNullsAndPretty_ShouldTransform()
+    {
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Strip = SqlFunctions.Postgres.jsonb_strip_nulls(
+                    SqlFunctions.Postgres.jsonb_build_object("a", 1, "b", x.Int)),
+                Pretty = SqlFunctions.Postgres.jsonb_pretty(SqlFunctions.Postgres.jsonb_build_object("a", 1))
+            })
+            .First();
+
+        r.Strip.Should().NotContain("\"b\"");
+        r.Pretty.Should().Contain("\"a\"");
+    }
+
+    [Fact]
+    public void JsonbDeleteAndConcat_ShouldCombine()
+    {
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Del = SqlFunctions.Postgres.jsonb_delete(SqlFunctions.Postgres.jsonb_build_object("a", 1, "b", 2), "b"),
+                Cat = SqlFunctions.Postgres.json_concat(
+                    SqlFunctions.Postgres.jsonb_build_object("a", 1),
+                    SqlFunctions.Postgres.jsonb_build_object("b", 2))
+            })
+            .First();
+
+        r.Del.Should().NotContain("\"b\"");
+        r.Cat.Should().Contain("\"a\"").And.Contain("\"b\"");
+    }
+
+    [Fact]
+    public void JsonPathFunctions_ShouldEvaluate()
+    {
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Exists = SqlFunctions.Postgres.jsonb_path_exists(SqlFunctions.Postgres.jsonb_build_object("a", x.Id), "$.a"),
+                Match = SqlFunctions.Postgres.jsonb_path_match(SqlFunctions.Postgres.jsonb_build_object("a", 1), "$.a == 1"),
+                First = SqlFunctions.Postgres.jsonb_path_query_first(SqlFunctions.Postgres.jsonb_build_object("a", 7), "$.a"),
+                Arr = SqlFunctions.Postgres.jsonb_path_query_array(SqlFunctions.Postgres.jsonb_build_object("a", 7), "$.a"),
+                ViaJsonpath = SqlFunctions.Postgres.jsonb_path_exists(
+                    SqlFunctions.Postgres.jsonb_build_object("a", x.Id), SqlFunctions.Postgres.jsonpath("$.a"))
+            })
+            .First();
+
+        r.Exists.Should().BeTrue();
+        r.Match.Should().BeTrue();
+        r.First.Should().Contain("7");
+        r.Arr.Should().Contain("7");
+        r.ViaJsonpath.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ArrayFunctions_ShouldComputeOverLiterals()
+    {
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Card = SqlFunctions.Postgres.cardinality(new[] { 1, 2, 3 }),
+                Len = SqlFunctions.Postgres.array_length(new[] { 1, 2, 3 }, 1),
+                Ndim = SqlFunctions.Postgres.array_ndims(new[] { 1, 2, 3 }),
+                Low = SqlFunctions.Postgres.array_lower(new[] { 1, 2, 3 }, 1),
+                Up = SqlFunctions.Postgres.array_upper(new[] { 1, 2, 3 }, 1),
+                Pos = SqlFunctions.Postgres.array_position(new[] { 5, 6, 7 }, 6)
+            })
+            .First();
+
+        r.Card.Should().Be(3);
+        r.Len.Should().Be(3);
+        r.Ndim.Should().Be(1);
+        r.Low.Should().Be(1);
+        r.Up.Should().Be(3);
+        r.Pos.Should().Be(2);
+    }
+
+    [Fact]
+    public void ArrayPredicates_ShouldCompareArrays()
+    {
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Contains = SqlFunctions.Postgres.array_contains(new[] { 1, 2, 3 }, new[] { 1, 2 }),
+                Overlaps = SqlFunctions.Postgres.array_overlaps(new[] { 1, 2 }, new[] { 2, 3 }),
+                ContainedBy = SqlFunctions.Postgres.array_contained_by(new[] { 1, 2 }, new[] { 1, 2, 3 })
+            })
+            .First();
+
+        r.Contains.Should().BeTrue();
+        r.Overlaps.Should().BeTrue();
+        r.ContainedBy.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ArrayManipulation_ShouldTransformArrays()
+    {
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                App = SqlFunctions.Postgres.array_append(new[] { 1, 2 }, 3),
+                Pre = SqlFunctions.Postgres.array_prepend(0, new[] { 1, 2 }),
+                Cat = SqlFunctions.Postgres.array_cat(new[] { 1 }, new[] { 2 }),
+                Rem = SqlFunctions.Postgres.array_remove(new[] { 1, 2, 1 }, 1),
+                Rep = SqlFunctions.Postgres.array_replace(new[] { 1, 2, 1 }, 1, 9)
+            })
+            .First();
+
+        r.App.Should().Equal(1, 2, 3);
+        r.Pre.Should().Equal(0, 1, 2);
+        r.Cat.Should().Equal(1, 2);
+        r.Rem.Should().Equal(2);
+        r.Rep.Should().Equal(9, 2, 9);
+    }
+
+    [Fact]
+    public void ArrayStringAndPositions_ShouldConvert()
+    {
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Join = SqlFunctions.Postgres.array_to_string(new[] { "a", "b", "c" }, ","),
+                Split = SqlFunctions.Postgres.string_to_array("a,b,c", ","),
+                Positions = SqlFunctions.Postgres.array_positions(new[] { 1, 2, 1 }, 1),
+                Dims = SqlFunctions.Postgres.array_dims(new[] { 1, 2, 3 })
+            })
+            .First();
+
+        r.Join.Should().Be("a,b,c");
+        r.Split.Should().Equal("a", "b", "c");
+        r.Positions.Should().Equal(1, 3);
+        r.Dims.Should().Be("[1:3]");
+    }
+
+    [Fact]
+    public void ArrayFillAndQuantifiers_ShouldWork()
+    {
+        var ones = _sut.SimpleEntity
+            .Where(x => SqlFunctions.Postgres.any(x.Id, new[] { 1, 2, 3 }))
+            .Select(x => x.Id)
+            .ToList();
+
+        ones.Should().Equal(1, 2, 3);
+
+        var literals = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Fill = SqlFunctions.Postgres.array_fill(7, 3),
+                AnyValue = 1 == SqlFunctions.Postgres.any(new[] { 1, 2 }),
+                AllValue = 2 == SqlFunctions.Postgres.all(new[] { 2, 2 })
+            })
+            .First();
+
+        literals.Fill.Should().Equal(7, 7, 7);
+        literals.AnyValue.Should().BeTrue();
+        literals.AllValue.Should().BeTrue();
+    }
+
 }

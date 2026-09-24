@@ -44,6 +44,10 @@
   href: 22-create-table-as.md
 - name: Data modification (MERGE)
   href: 23-merge-statement.md
+- name: Bulk insert
+  href: 24-bulk-insert.md
+- name: Transactions
+  href: 25-transactions.md
 - name: Provider-specific SQL
   items:
     - name: Overview

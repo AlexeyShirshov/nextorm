@@ -1,4 +1,5 @@
 # TODO: C# string-семантика (ordinal-сравнения, format-спецификаторы, culture)
+> Tracking issue: [#71](https://github.com/AlexeyShirshov/nextorm/issues/71).
 
 > Рабочий план (design RFC). Gap-анализ: **G12** из
 > [`linq2db-backlog-gap-analysis.md`](../comparison/linq2db-backlog-gap-analysis.md); linq2db

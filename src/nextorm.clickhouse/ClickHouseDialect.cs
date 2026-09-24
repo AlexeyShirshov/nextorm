@@ -34,6 +34,23 @@ public sealed class ClickHouseDialect : SqlDialectBase
     /// <summary>ClickHouse supports a raw SQL derived table (<c>FROM (&lt;sql&gt;) AS alias</c>).</summary>
     public override bool SupportsRawSqlSource => true;
 
+    /// <summary>
+    /// ClickHouse is not marked as having a native bulk path: the driver's <c>ClickHouseBulkCopy</c> is
+    /// obsolete in favour of <c>ClickHouseClient.InsertBinaryAsync</c>, which needs a client built from
+    /// the connection string rather than the context's connection, so the portable
+    /// <c>INSERT ... VALUES</c> path is used instead (bound large sets with <c>MaxBatchSize</c>).
+    /// </summary>
+    public override bool SupportsBulkCopy => false;
+
+    /// <summary>
+    /// ClickHouse has no unique constraints, so skipping duplicates is a no-op: the head stays a plain
+    /// <c>INSERT INTO</c> and every row is written.
+    /// </summary>
+    public override bool SupportsInsertIgnore => true;
+
+    /// <inheritdoc/>
+    public override string MakeInsertIgnoreInto(KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, "insert into ");
+
     /// <summary>ClickHouse deletes through the synchronous <c>ALTER TABLE ... DELETE</c> mutation with <c>SETTINGS mutations_sync = 1</c>.</summary>
     public override string MakeDeleteHead(string table, KeywordCase keywordCase = KeywordCase.Lower) => $"{Kw(keywordCase, "alter table ")}{table}{Kw(keywordCase, " delete")}";
 
@@ -57,6 +74,23 @@ public sealed class ClickHouseDialect : SqlDialectBase
 
     /// <summary>ClickHouse implements the <c>INTERSECT ALL</c>/<c>EXCEPT ALL</c> set-operation variants.</summary>
     public override bool SupportsIntersectExceptAll => true;
+
+    /// <summary>ClickHouse materialises a query into a persistent table with <c>CREATE TABLE ... ENGINE = ... AS SELECT</c>.</summary>
+    public override bool SupportsCreateTableAsSelect => true;
+
+    /// <summary>ClickHouse accepts <c>IF NOT EXISTS</c> on <c>CREATE TABLE ... AS SELECT</c>.</summary>
+    public override bool SupportsCreateTableAsSelectIfNotExists => true;
+
+    /// <summary>ClickHouse temporary tables take an explicit column list and no <c>AS SELECT</c>, so only a persistent <c>ToTable</c> is supported.</summary>
+    public override bool SupportsTemporaryCreateTableAsSelect => false;
+
+    /// <summary>Renders the ClickHouse <c>CREATE TABLE ... ENGINE = MergeTree ORDER BY tuple() AS SELECT</c> form (an explicit engine is required).</summary>
+    public override string MakeCreateTableAsSelect(CreateTableAsClause clause, string selectSql, KeywordCase keywordCase = KeywordCase.Lower)
+        => MakeCreateTableAsHead(clause, keywordCase)
+            + Kw(keywordCase, " engine = ")
+            + "MergeTree"
+            + Kw(keywordCase, " order by tuple() as ")
+            + selectSql;
 
     /// <summary>ClickHouse concatenates with the <c>concat(part, ...)</c> function rather than the <c>+</c> operator.</summary>
     public override string MakeConcat(IReadOnlyList<string> parts) => $"concat({string.Join(", ", parts)})";
@@ -315,6 +349,10 @@ public sealed class ClickHouseDialect : SqlDialectBase
     // duplicate the limit the dialect already renders for single-row commands.
     /// <summary>ClickHouse is <c>false</c> because the driver would append a duplicate <c>LIMIT 1</c> to the one the dialect already renders.</summary>
     public override bool SupportsCommandBehaviorSingleRow => false;
+
+    // ClickHouse speaks HTTP and has no ADO.NET transaction in the driver (BeginDbTransaction throws).
+    /// <summary>ClickHouse is <c>false</c> because its HTTP protocol has no ADO.NET transaction.</summary>
+    public override bool SupportsTransactions => false;
 
     // ClickHouse spells the super-aggregate as a trailing modifier (GROUP BY a, b WITH ROLLUP/CUBE).
     /// <summary>ClickHouse spells <c>ROLLUP</c> as the trailing modifier <c>GROUP BY ... WITH ROLLUP</c>.</summary>

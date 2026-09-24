@@ -1,4 +1,5 @@
 # TODO: хранимые процедуры и функции (вызов, output-параметры, несколько result-set)
+> Tracking issue: [#70](https://github.com/AlexeyShirshov/nextorm/issues/70).
 
 > Рабочий план (design RFC). Отдельный workstream (не нумерованный gap из linq2db-разбора, но
 > связан с **G8**/TVP: [`todo_tvp.md`](todo_tvp.md)). Сейчас вызов процедур **явно вне scope** —

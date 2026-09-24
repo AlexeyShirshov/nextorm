@@ -40,19 +40,34 @@ internal static class SqlMutationBuilder
 
         try
         {
-            writer.Append(SqlKeywords.Of(keywordCase, "insert into "));
-            AppendIdentifier(writer, dialect, quoteIdentifiers, ResolveTableName(command.TableName, command.IsTableNameAuto, command.EntityType, namingConvention));
+            var table = ResolveTableName(command.TableName, command.IsTableNameAuto, command.EntityType, namingConvention);
+
+            var ignoreViaPrefix = command.IgnoreConflicts && dialect.SupportsInsertIgnore;
+            if (command.IgnoreConflicts && !ignoreViaPrefix && !dialect.SupportsOnConflictDoNothing)
+                throw new NotSupportedException(
+                    $"{dialect.GetType().Name} cannot skip conflicting rows: it has neither an INSERT OR IGNORE/INSERT IGNORE form nor ON CONFLICT DO NOTHING.");
+
+            var emitConflictDoNothing = command.IgnoreConflicts && !ignoreViaPrefix;
+            var overrideIdentity = command.KeepIdentity ? dialect.MakeOverridingSystemValue(keywordCase) : string.Empty;
+
+            writer.Append(ignoreViaPrefix ? dialect.MakeInsertIgnoreInto(keywordCase) : SqlKeywords.Of(keywordCase, "insert into "));
+            AppendIdentifier(writer, dialect, quoteIdentifiers, table);
 
             var returningColumns = RenderReturningColumns(dialect, quoteIdentifiers, namingConvention, command);
 
             if (command.Source is not null)
-                RenderSourceInsert(writer, dialect, quoteIdentifiers, namingConvention, command, returningColumns, sourceSql, sourceParameters, parameters, keywordCase);
+                RenderSourceInsert(writer, dialect, quoteIdentifiers, namingConvention, command, returningColumns, sourceSql, sourceParameters, parameters, keywordCase, overrideIdentity, emitConflictDoNothing);
             else if (command.Columns.Count == 0)
                 RenderDefaultValuesInsert(writer, dialect, returningColumns, keywordCase);
             else
-                RenderValuesInsert(writer, dialect, quoteIdentifiers, namingConvention, command, returningColumns, parameters, keywordCase, parameterProvider);
+                RenderValuesInsert(writer, dialect, quoteIdentifiers, namingConvention, command, returningColumns, parameters, keywordCase, parameterProvider, overrideIdentity, emitConflictDoNothing);
 
-            return (writer.ToString(), parameters);
+            var sql = writer.ToString();
+
+            if (command.KeepIdentity && dialect.RequiresIdentityInsertToggle)
+                sql = dialect.MakeIdentityInsertOn(table, keywordCase) + "; " + sql + "; " + dialect.MakeIdentityInsertOff(table, keywordCase);
+
+            return (sql, parameters);
         }
         finally
         {
@@ -73,17 +88,25 @@ internal static class SqlMutationBuilder
         string? sourceSql,
         IReadOnlyList<Parameter>? sourceParameters,
         List<Parameter> parameters,
-        KeywordCase keywordCase)
+        KeywordCase keywordCase,
+        string overrideIdentity,
+        bool emitConflictDoNothing)
     {
         if (sourceSql is null || sourceParameters is null)
             throw new BuildSqlCommandException("An INSERT ... SELECT command is missing its rendered source SQL.");
 
         AppendColumnList(writer, dialect, quoteIdentifiers, namingConvention, command.SourceColumns!);
 
+        if (overrideIdentity.Length > 0)
+            writer.Append(overrideIdentity);
+
         if (returningColumns is not null && dialect.SupportsOutput)
             writer.Append(dialect.MakeOutput(returningColumns, keywordCase));
 
         writer.Append(' ').Append(sourceSql);
+
+        if (emitConflictDoNothing)
+            writer.Append(dialect.MakeOnConflictDoNothing(keywordCase));
 
         if (returningColumns is not null && dialect.SupportsReturning)
             writer.Append(dialect.MakeReturning(returningColumns, keywordCase));
@@ -121,11 +144,16 @@ internal static class SqlMutationBuilder
         IReadOnlyList<string>? returningColumns,
         List<Parameter> parameters,
         KeywordCase keywordCase,
-        IParameterProvider? parameterProvider)
+        IParameterProvider? parameterProvider,
+        string overrideIdentity,
+        bool emitConflictDoNothing)
     {
         parameterProvider ??= new DefaultParameterProvider();
 
         AppendColumnList(writer, dialect, quoteIdentifiers, namingConvention, ColumnProperties(command.Columns));
+
+        if (overrideIdentity.Length > 0)
+            writer.Append(overrideIdentity);
 
         // T-SQL places OUTPUT between the column list and VALUES; the ANSI RETURNING clause is
         // appended after VALUES (below). The returned column set is either the explicit
@@ -137,6 +165,9 @@ internal static class SqlMutationBuilder
         writer.Append(SqlKeywords.Of(keywordCase, " values "));
 
         AppendValuesRows(writer, dialect, quoteIdentifiers, namingConvention, command.Columns, command.RowCount, parameters, keywordCase, parameterProvider);
+
+        if (emitConflictDoNothing)
+            writer.Append(dialect.MakeOnConflictDoNothing(keywordCase));
 
         if (returningColumns is not null && dialect.SupportsReturning)
             writer.Append(dialect.MakeReturning(returningColumns, keywordCase));
@@ -384,46 +415,95 @@ internal static class SqlMutationBuilder
     }
 
     /// <summary>
-    /// Renders a <c>CREATE [TEMPORARY] TABLE ... AS SELECT</c> statement for <paramref name="command"/>:
-    /// the already-rendered body query is wrapped in the dialect's native form over the raw,
-    /// optionally quoted target table. The body carries its own <c>WITH</c> clause (a CTAS places
-    /// <c>WITH</c> inside the query, after <c>AS</c>). The optional parts are rejected up front on a
-    /// dialect whose capability flag is off, so the user gets an actionable error instead of invalid SQL.
+    /// Validates a materialisation command against the dialect's capability flags, resolves the quoted
+    /// target and column list, and — for a dialect that renders <c>SELECT ... INTO</c> — returns the
+    /// <c>INTO</c> clause to inject into the top-level select list (otherwise <see langword="null"/>).
+    /// The optional parts are rejected up front so the user gets an actionable error instead of invalid SQL.
     /// </summary>
     /// <param name="dialect">The active SQL dialect.</param>
     /// <param name="quoteIdentifiers">Whether physical identifiers must be quoted.</param>
-    /// <param name="bodySql">The rendered body query, including its own <c>WITH</c> clause when it declares CTEs.</param>
+    /// <param name="command">The materialisation command to render.</param>
+    /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
+    /// <returns>The <c>INTO</c> clause for a <c>SELECT ... INTO</c> dialect, or <see langword="null"/>.</returns>
+    /// <exception cref="NotSupportedException">The dialect cannot express the materialisation or one of the requested options.</exception>
+    internal static string? ResolveCreateTableAsInto(
+        ISqlDialect dialect,
+        bool quoteIdentifiers,
+        CreateTableAsCommand command,
+        KeywordCase keywordCase = KeywordCase.Lower)
+    {
+        ValidateCreateTableAs(dialect, command);
+        if (!dialect.CreateTableAsSelectUsesSelectInto)
+            return null;
+
+        return dialect.MakeCreateTableAsSelectInto(BuildCreateTableAsClause(dialect, quoteIdentifiers, command), keywordCase);
+    }
+
+    /// <summary>
+    /// Renders a materialisation statement for <paramref name="command"/>: the body query — its own
+    /// <c>WITH</c> clause placed before it — is wrapped in the dialect's native form over the raw,
+    /// optionally quoted target table. A dialect that renders <c>SELECT ... INTO</c> has already had the
+    /// clause injected into the body by <see cref="ResolveCreateTableAsInto"/>, so its body is returned
+    /// as is.
+    /// </summary>
+    /// <param name="dialect">The active SQL dialect.</param>
+    /// <param name="quoteIdentifiers">Whether physical identifiers must be quoted.</param>
+    /// <param name="withSql">The body's <c>WITH</c> clause, or <see langword="null"/> when it declares no CTEs.</param>
+    /// <param name="sourceSql">The rendered body query.</param>
     /// <param name="sourceParameters">The parameters referenced by the body query.</param>
     /// <param name="command">The materialisation command to render.</param>
     /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
     /// <returns>The rendered SQL and the parameters it references.</returns>
-    /// <exception cref="NotSupportedException">The dialect cannot express <c>CREATE TABLE ... AS SELECT</c> or one of the requested options.</exception>
+    /// <exception cref="NotSupportedException">The dialect cannot express the materialisation or one of the requested options.</exception>
     internal static (string Sql, List<Parameter> Parameters) MakeCreateTableAsSelect(
         ISqlDialect dialect,
         bool quoteIdentifiers,
-        string bodySql,
+        string? withSql,
+        string sourceSql,
         IReadOnlyList<Parameter> sourceParameters,
         CreateTableAsCommand command,
         KeywordCase keywordCase = KeywordCase.Lower)
     {
+        ValidateCreateTableAs(dialect, command);
+
+        if (dialect.CreateTableAsSelectUsesSelectInto)
+            return ((withSql ?? string.Empty) + sourceSql, new List<Parameter>(sourceParameters));
+
+        var body = withSql is null ? sourceSql : withSql + sourceSql;
+        var sql = dialect.MakeCreateTableAsSelect(BuildCreateTableAsClause(dialect, quoteIdentifiers, command), body, keywordCase);
+        return (sql, new List<Parameter>(sourceParameters));
+    }
+
+    private static void ValidateCreateTableAs(ISqlDialect dialect, CreateTableAsCommand command)
+    {
         if (!dialect.SupportsCreateTableAsSelect)
             throw new NotSupportedException(
-                $"{dialect.GetType().Name} cannot materialise a query into a table: it has no CREATE TABLE ... AS SELECT form.");
+                $"{dialect.GetType().Name} cannot materialise a query into a table.");
 
         var options = command.Options;
+        if (command.Temporary && !dialect.SupportsTemporaryCreateTableAsSelect)
+            throw new NotSupportedException(
+                $"{dialect.GetType().Name} cannot materialise a query into a temporary table; only a persistent ToTable is supported.");
         if (options.Columns is { Count: > 0 } && !dialect.SupportsCreateTableAsSelectColumnList)
             throw new NotSupportedException(
-                $"{dialect.GetType().Name} cannot declare a column list on CREATE TABLE ... AS SELECT.");
+                $"{dialect.GetType().Name} cannot declare a column list on a materialised table.");
+        if (options.IfNotExists && !dialect.SupportsCreateTableAsSelectIfNotExists)
+            throw new NotSupportedException(
+                $"{dialect.GetType().Name} cannot render IF NOT EXISTS on a materialised table.");
         if (options.OnCommit is not TempTableOnCommit.PreserveRows && !command.Temporary)
             throw new NotSupportedException(
                 "ON COMMIT applies only to a temporary table; use ToTempTable instead of ToTable.");
         if (options.OnCommit is not TempTableOnCommit.PreserveRows && !dialect.SupportsCreateTableAsSelectOnCommit)
             throw new NotSupportedException(
-                $"{dialect.GetType().Name} cannot use ON COMMIT on CREATE TABLE ... AS SELECT.");
+                $"{dialect.GetType().Name} cannot use ON COMMIT on a materialised table.");
         if (!options.WithData && !dialect.SupportsCreateTableAsSelectWithNoData)
             throw new NotSupportedException(
-                $"{dialect.GetType().Name} cannot render WITH NO DATA on CREATE TABLE ... AS SELECT.");
+                $"{dialect.GetType().Name} cannot render WITH NO DATA on a materialised table.");
+    }
 
+    private static CreateTableAsClause BuildCreateTableAsClause(ISqlDialect dialect, bool quoteIdentifiers, CreateTableAsCommand command)
+    {
+        var options = command.Options;
         var table = quoteIdentifiers ? dialect.QuoteIdentifier(command.TargetName) : command.TargetName;
 
         IReadOnlyList<string>? columns = null;
@@ -436,9 +516,7 @@ internal static class SqlMutationBuilder
             columns = rendered;
         }
 
-        var clause = new CreateTableAsClause(table, command.Temporary, options.IfNotExists, columns, options.OnCommit, options.WithData);
-        var sql = dialect.MakeCreateTableAsSelect(clause, bodySql, keywordCase);
-        return (sql, new List<Parameter>(sourceParameters));
+        return new CreateTableAsClause(table, command.Temporary, options.IfNotExists, columns, options.OnCommit, options.WithData);
     }
 
     // INSERT ... VALUES ... <ON CONFLICT ... DO UPDATE SET> | <ON DUPLICATE KEY UPDATE>, sharing the
@@ -747,7 +825,7 @@ internal static class SqlMutationBuilder
         return properties;
     }
 
-    private static string[] RenderColumns(ISqlDialect dialect, bool quoteIdentifiers, INamingConvention? namingConvention, IReadOnlyList<IPropertyMetadata> columns)
+    internal static string[] RenderColumns(ISqlDialect dialect, bool quoteIdentifiers, INamingConvention? namingConvention, IReadOnlyList<IPropertyMetadata> columns)
     {
         var rendered = new string[columns.Count];
         for (var i = 0; i < rendered.Length; i++)
@@ -805,7 +883,7 @@ internal static class SqlMutationBuilder
         }
     }
 
-    private static string ResolveTableName(string tableName, bool isTableNameAuto, Type entityType, INamingConvention? namingConvention)
+    internal static string ResolveTableName(string tableName, bool isTableNameAuto, Type entityType, INamingConvention? namingConvention)
         => isTableNameAuto && namingConvention is not null
             ? namingConvention.TableName(tableName, entityType.IsInterface)
             : tableName;
@@ -826,7 +904,7 @@ internal static class SqlMutationBuilder
             : null;
     }
 
-    private static string ResolveColumnName(IPropertyMetadata property, INamingConvention? namingConvention)
+    internal static string ResolveColumnName(IPropertyMetadata property, INamingConvention? namingConvention)
         => property.IsColumnNameAuto && namingConvention is not null
             ? namingConvention.ColumnName(property.ColumnName)
             : property.ColumnName;

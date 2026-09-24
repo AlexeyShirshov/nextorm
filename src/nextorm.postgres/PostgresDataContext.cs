@@ -65,4 +65,90 @@ public class PostgresDataContext : DataContext
 
         return parameter;
     }
+
+    /// <summary>
+    /// Writes <paramref name="rows"/> through <c>COPY &lt;table&gt; (&lt;cols&gt;) FROM STDIN (FORMAT
+    /// BINARY)</c> with <c>NpgsqlBinaryImporter</c>, streaming each row without buffering the set.
+    /// </summary>
+    /// <param name="tableName">The convention-resolved (unquoted) target table name.</param>
+    /// <param name="columnNames">The convention-resolved (unquoted) written column names, in row order.</param>
+    /// <param name="columns">The mapped columns, in row order.</param>
+    /// <param name="rows">The rows to write; each array matches <paramref name="columnNames"/> by ordinal.</param>
+    /// <param name="commandTimeoutSeconds">The command timeout in seconds; rejected because <c>COPY</c> has none.</param>
+    /// <param name="maxBatchSize">Ignored: the binary importer streams one row at a time.</param>
+    /// <param name="progress">Called with the cumulative written-row count every <paramref name="notifyEvery"/> rows, or <see langword="null"/>.</param>
+    /// <param name="notifyEvery">The progress reporting interval in rows.</param>
+    /// <returns>The number of rows written.</returns>
+    protected override int BulkInsertRows(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IEnumerable<object?[]> rows, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery)
+    {
+        EnsureCopyTimeoutSupported(commandTimeoutSeconds);
+        EnsureConnectionOpen();
+        var connection = (NpgsqlConnection)GetConnection();
+
+        using var enumerator = rows.GetEnumerator();
+        if (!enumerator.MoveNext())
+            return 0;
+
+        using var writer = connection.BeginBinaryImport(BuildCopyCommand(tableName, columnNames));
+        var written = 0;
+
+        do
+        {
+            writer.WriteRow(enumerator.Current);
+            written++;
+            if (progress is not null && written % notifyEvery == 0)
+                progress(written);
+        }
+        while (enumerator.MoveNext());
+
+        return (int)writer.Complete();
+    }
+
+    /// <summary>Asynchronously writes <paramref name="rows"/> through a binary <c>COPY</c>.</summary>
+    /// <param name="tableName">The convention-resolved (unquoted) target table name.</param>
+    /// <param name="columnNames">The convention-resolved (unquoted) written column names, in row order.</param>
+    /// <param name="columns">The mapped columns, in row order.</param>
+    /// <param name="rows">The rows to write; each array matches <paramref name="columnNames"/> by ordinal.</param>
+    /// <param name="commandTimeoutSeconds">The command timeout in seconds; rejected because <c>COPY</c> has none.</param>
+    /// <param name="maxBatchSize">Ignored: the binary importer streams one row at a time.</param>
+    /// <param name="progress">Called with the cumulative written-row count every <paramref name="notifyEvery"/> rows, or <see langword="null"/>.</param>
+    /// <param name="notifyEvery">The progress reporting interval in rows.</param>
+    /// <param name="cancellationToken">Cancels execution.</param>
+    /// <returns>A task producing the number of rows written.</returns>
+    protected override async Task<int> BulkInsertRowsAsync(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IAsyncEnumerable<object?[]> rows, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery, CancellationToken cancellationToken)
+    {
+        EnsureCopyTimeoutSupported(commandTimeoutSeconds);
+        await EnsureConnectionOpenAsync(cancellationToken).ConfigureAwait(false);
+        var connection = (NpgsqlConnection)GetConnection();
+
+        await using var enumerator = rows.GetAsyncEnumerator(cancellationToken);
+        if (!await enumerator.MoveNextAsync().ConfigureAwait(false))
+            return 0;
+
+        using var writer = await connection.BeginBinaryImportAsync(BuildCopyCommand(tableName, columnNames), cancellationToken).ConfigureAwait(false);
+        var written = 0;
+
+        do
+        {
+            await writer.WriteRowAsync(cancellationToken, enumerator.Current).ConfigureAwait(false);
+            written++;
+            if (progress is not null && written % notifyEvery == 0)
+                progress(written);
+        }
+        while (await enumerator.MoveNextAsync().ConfigureAwait(false));
+
+        return (int)await writer.CompleteAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static void EnsureCopyTimeoutSupported(int? commandTimeoutSeconds)
+    {
+        if (commandTimeoutSeconds is not null)
+            throw new NotSupportedException("A bulk-insert Timeout is not supported by the PostgreSQL COPY path; omit Timeout or use a provider whose native bulk API supports it.");
+    }
+
+    private string BuildCopyCommand(string tableName, IReadOnlyList<string> columnNames)
+    {
+        var quotedColumns = string.Join(", ", columnNames.Select(Dialect.QuoteIdentifier));
+        return $"COPY {Dialect.QuoteIdentifier(tableName)} ({quotedColumns}) FROM STDIN (FORMAT BINARY)";
+    }
 }

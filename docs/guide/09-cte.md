@@ -150,6 +150,30 @@ with l as (select id from complex_entity), r as (select id from simple_entity) s
 > `t["id"].AsInt`) and the names must match the CTE body's output aliases. Name the projection members
 > after the SQL aliases (lower-case `snake_case`) so the outer references stay exact.
 
+A CTE scope also drives a multi-table `UPDATE`/`DELETE`. Put the CTE on the **joined** side and keep the
+physical table as the target; the declaration is hoisted before the mutation:
+
+```csharp
+var recent = dataContext
+    .With("recent", dataContext.From<IOrder>().Where(o => o.Id > 1000).Select(o => new { o.Id }));
+
+dataContext.From<IOrder>()
+    .Join(recent.From("recent"), (o, r) => o.Id == r.GetInt64("id"))
+    .UpdateJoin()
+    .Set(p => p.Item1.Status, "archived")
+    .Update();
+```
+
+```sql
+-- PostgreSQL
+with recent as (select id from orders where (id > 1000)) update orders as "t1" set status = @p0 from recent as "t2" where t1.id = t2.id
+```
+
+This works on every provider that supports `UPDATE ... FROM`/`JOIN` (and `DELETE ... USING`/join), at any
+join position, and for recursive CTEs. See
+[Data modification (UPDATE)](21-update-statement.md#updating-from-a-join) and
+[Data modification (DELETE)](20-delete-statement.md#delete-based-on-a-join).
+
 ## Recursive CTE: a number series
 
 A recursive CTE is a `union all` of an **anchor** (a non-recursive query) and a **step** that reads the

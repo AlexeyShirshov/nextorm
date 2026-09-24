@@ -127,7 +127,9 @@ internal sealed class InsertCommand : MutationCommand
     /// <param name="returningColumns">The columns to return through <c>RETURNING</c>/<c>OUTPUT</c>, or <see langword="null"/> for a plain insert.</param>
     /// <param name="source">The server-side <c>SELECT</c> the rows are read from, or <see langword="null"/> for a <c>VALUES</c> insert.</param>
     /// <param name="sourceColumns">The target columns written from <paramref name="source"/>, or <see langword="null"/> for a <c>VALUES</c> insert.</param>
-    public InsertCommand(Type entityType, string tableName, bool isTableNameAuto, IReadOnlyList<InsertColumn> columns, int rowCount, IPropertyMetadata? identityColumn, IReadOnlyList<IPropertyMetadata>? returningColumns = null, QueryCommand? source = null, IReadOnlyList<IPropertyMetadata>? sourceColumns = null)
+    /// <param name="ignoreConflicts">Whether rows that violate a unique constraint should be skipped through the dialect's ignore form.</param>
+    /// <param name="keepIdentity">Whether explicit values are written to identity columns.</param>
+    public InsertCommand(Type entityType, string tableName, bool isTableNameAuto, IReadOnlyList<InsertColumn> columns, int rowCount, IPropertyMetadata? identityColumn, IReadOnlyList<IPropertyMetadata>? returningColumns = null, QueryCommand? source = null, IReadOnlyList<IPropertyMetadata>? sourceColumns = null, bool ignoreConflicts = false, bool keepIdentity = false)
         : base(SqlStatementType.Insert, entityType)
     {
         TableName = tableName;
@@ -138,6 +140,8 @@ internal sealed class InsertCommand : MutationCommand
         ReturningColumns = returningColumns;
         Source = source;
         SourceColumns = sourceColumns;
+        IgnoreConflicts = ignoreConflicts;
+        KeepIdentity = keepIdentity;
     }
 
     /// <summary>The mapped table name, before the naming convention and identifier quoting are applied.</summary>
@@ -167,4 +171,18 @@ internal sealed class InsertCommand : MutationCommand
 
     /// <summary>The written columns of an <see cref="Source"/> insert, in select-list order; otherwise <see langword="null"/>.</summary>
     public IReadOnlyList<IPropertyMetadata>? SourceColumns { get; }
+
+    /// <summary>
+    /// Whether rows that violate a unique constraint should be skipped through the dialect's ignore
+    /// form (<c>INSERT OR IGNORE</c>, <c>INSERT IGNORE</c>, <c>ON CONFLICT DO NOTHING</c>). Used by the
+    /// bulk-insert portable path; a plain insert leaves it <see langword="false"/>.
+    /// </summary>
+    public bool IgnoreConflicts { get; }
+
+    /// <summary>
+    /// Whether explicit values are written to identity columns (<c>SET IDENTITY_INSERT</c>,
+    /// <c>OVERRIDING SYSTEM VALUE</c>). Used by the bulk-insert portable path; a plain insert leaves it
+    /// <see langword="false"/> because identity columns are excluded from the written set.
+    /// </summary>
+    public bool KeepIdentity { get; }
 }

@@ -21,16 +21,20 @@ internal sealed class DbConnectionManager : IConnectionManager
     private readonly DbConnection? _providedConnection;
     private readonly ILogger? _logger;
     private readonly bool _logSensitiveData;
+    private readonly Func<bool> _supportsTransactions;
 
     private DbConnection? _conn;
     private bool _connWasCreatedByMe;
+    private DbTransaction? _transaction;
+    private bool _transactionOwnedByMe;
 
     internal DbConnectionManager(
         IDataContext owner,
         ConnectionHooks hooks,
         string? connectionString,
         DbConnection? providedConnection,
-        LoggingOptions logging)
+        LoggingOptions logging,
+        Func<bool> supportsTransactions)
     {
         _owner = owner;
         _createDbConnection = hooks.CreateDbConnection;
@@ -39,6 +43,7 @@ internal sealed class DbConnectionManager : IConnectionManager
         _providedConnection = providedConnection;
         _logger = logging.Logger;
         _logSensitiveData = logging.LogSensitiveData;
+        _supportsTransactions = supportsTransactions;
     }
 
     public void EnsureConnectionOpen()
@@ -59,6 +64,129 @@ internal sealed class DbConnectionManager : IConnectionManager
             if (_logger?.IsEnabled(LogLevel.Debug) ?? false) _logger.LogDebug("Opening connection");
             await conn.OpenAsync(cancellationToken);
         }
+    }
+
+    /// <summary>
+    /// The active transaction, or <see langword="null"/> when none is enlisted. A transaction that has
+    /// already been committed, rolled back or disposed (its <see cref="DbTransaction.Connection"/> is
+    /// gone) is dropped lazily so it is no longer bound to subsequent commands.
+    /// </summary>
+    public DbTransaction? CurrentTransaction
+    {
+        get
+        {
+            if (_transaction is not null && IsTransactionCompleted(_transaction))
+                DisposeTransaction();
+
+            return _transaction;
+        }
+    }
+
+    // Providers disagree on how a completed transaction reports itself: most expose a null Connection,
+    // while Npgsql throws ObjectDisposedException from the getter. Both mean "no longer usable".
+    private static bool IsTransactionCompleted(DbTransaction transaction)
+    {
+        try
+        {
+            return transaction.Connection is null;
+        }
+        catch (ObjectDisposedException)
+        {
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            return true;
+        }
+    }
+
+    /// <summary>Starts a transaction on the context's connection with the provider's default isolation level.</summary>
+    /// <returns>The started transaction.</returns>
+    public DbTransaction BeginTransaction() => BeginTransaction(IsolationLevel.Unspecified);
+
+    /// <summary>Starts a transaction on the context's connection with the given isolation level.</summary>
+    /// <param name="isolationLevel">The isolation level to request from the provider; <see cref="IsolationLevel.Unspecified"/> uses the provider default.</param>
+    /// <returns>The started transaction.</returns>
+    public DbTransaction BeginTransaction(IsolationLevel isolationLevel)
+    {
+        EnsureTransactionsSupported();
+        EnsureNoActiveTransaction();
+
+        EnsureConnectionOpen();
+        var conn = GetConnection();
+        _transaction = isolationLevel == IsolationLevel.Unspecified
+            ? conn.BeginTransaction()
+            : conn.BeginTransaction(isolationLevel);
+        _transactionOwnedByMe = true;
+        return _transaction;
+    }
+
+    /// <summary>Asynchronously starts a transaction on the context's connection with the provider's default isolation level.</summary>
+    /// <param name="cancellationToken">Token used to cancel the operation.</param>
+    /// <returns>A task producing the started transaction.</returns>
+    public Task<DbTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default)
+        => BeginTransactionAsync(IsolationLevel.Unspecified, cancellationToken);
+
+    /// <summary>Asynchronously starts a transaction on the context's connection with the given isolation level.</summary>
+    /// <param name="isolationLevel">The isolation level to request from the provider; <see cref="IsolationLevel.Unspecified"/> uses the provider default.</param>
+    /// <param name="cancellationToken">Token used to cancel the operation.</param>
+    /// <returns>A task producing the started transaction.</returns>
+    public async Task<DbTransaction> BeginTransactionAsync(IsolationLevel isolationLevel, CancellationToken cancellationToken = default)
+    {
+        EnsureTransactionsSupported();
+        EnsureNoActiveTransaction();
+
+        await EnsureConnectionOpenAsync(cancellationToken).ConfigureAwait(false);
+        var conn = GetConnection();
+        _transaction = isolationLevel == IsolationLevel.Unspecified
+            ? await conn.BeginTransactionAsync(cancellationToken).ConfigureAwait(false)
+            : await conn.BeginTransactionAsync(isolationLevel, cancellationToken).ConfigureAwait(false);
+        _transactionOwnedByMe = true;
+        return _transaction;
+    }
+
+    /// <summary>
+    /// Enlists an externally owned transaction (the context only binds it and never commits, rolls back
+    /// or disposes it); pass <see langword="null"/> to detach. The transaction must belong to this
+    /// context's connection.
+    /// </summary>
+    /// <param name="transaction">The transaction to enlist, or <see langword="null"/> to detach.</param>
+    public void UseTransaction(DbTransaction? transaction)
+    {
+        if (transaction is null)
+        {
+            // Detaching is only meaningful for a caller-supplied transaction. A context-owned one must
+            // be finished by the caller (commit/rollback/dispose); silently dropping it would leave the
+            // connection in a pending transaction and make the next command fail (issue #32).
+            if (CurrentTransaction is not null && _transactionOwnedByMe)
+                throw new InvalidOperationException("The active transaction was started by this context; commit, roll back or dispose it instead of detaching it with UseTransaction(null).");
+
+            _transaction = null;
+            _transactionOwnedByMe = false;
+            return;
+        }
+
+        EnsureTransactionsSupported();
+        EnsureNoActiveTransaction();
+
+        var conn = GetConnection();
+        if (!ReferenceEquals(transaction.Connection, conn))
+            throw new InvalidOperationException("The transaction belongs to a different connection than this context.");
+
+        _transaction = transaction;
+        _transactionOwnedByMe = false;
+    }
+
+    private void EnsureTransactionsSupported()
+    {
+        if (!_supportsTransactions())
+            throw new NotSupportedException("This provider does not support transactions: its connection has no ADO.NET transaction.");
+    }
+
+    private void EnsureNoActiveTransaction()
+    {
+        if (CurrentTransaction is not null)
+            throw new InvalidOperationException("A transaction is already in progress on this context. Nested transactions are not supported; use the active transaction instead.");
     }
 
     public DbConnection GetConnection()
@@ -111,6 +239,12 @@ internal sealed class DbConnectionManager : IConnectionManager
         {
             conn.Disposed -= ConnDisposed;
 
+            // The connection is gone, so the transaction bound to it is dead: drop the reference
+            // without disposing. Disposing it here would touch a disposed connection, and the provider
+            // has already aborted the transaction when its connection went away.
+            _transaction = null;
+            _transactionOwnedByMe = false;
+
             foreach (var cached in QueryPlanStore.Values)
             {
                 cached.ResetConnection(conn, _owner);
@@ -133,6 +267,10 @@ internal sealed class DbConnectionManager : IConnectionManager
         if (_conn is null)
             return;
 
+        // A context-owned transaction is rolled back by Dispose before the connection goes away; a
+        // caller-supplied one is only unbound (the caller owns its lifetime).
+        DisposeTransaction();
+
         foreach (var cached in QueryPlanStore.Values)
         {
             cached.ResetConnection(_conn, _owner);
@@ -152,5 +290,14 @@ internal sealed class DbConnectionManager : IConnectionManager
         }
 
         _conn = null;
+    }
+
+    private void DisposeTransaction()
+    {
+        if (_transaction is not null && _transactionOwnedByMe)
+            _transaction.Dispose();
+
+        _transaction = null;
+        _transactionOwnedByMe = false;
     }
 }

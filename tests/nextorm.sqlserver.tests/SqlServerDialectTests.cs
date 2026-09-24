@@ -189,6 +189,8 @@ public class SqlServerDialectTests
         Dialect.Lock!.UsesTableHints.Should().BeTrue();
         Dialect.Lock!.Render(LockMode.Update).Should().Be("updlock");
         Dialect.Lock!.Render(LockMode.Share).Should().Be("holdlock");
+        Dialect.Lock!.Render(LockMode.Update, LockWaitMode.NoWait).Should().Be("updlock, nowait");
+        Dialect.Lock!.Render(LockMode.Share, LockWaitMode.SkipLocked).Should().Be("holdlock, readpast");
     }
 
     [Fact]

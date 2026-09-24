@@ -42,6 +42,7 @@ change.
 |---|---|---|---|---|---|---|---|
 | Package | `nextorm.sqlite` | `nextorm.sqlserver` | `nextorm.postgres` | `nextorm.mysql` | `nextorm.mariadb` | `nextorm.clickhouse` | built into `nextorm` |
 | Parameter placeholder | `$name` | `@name` | `@name` | `@name` | `@name` | `@name` | not applicable |
+| Transactions (`ITransactionManager`) | supported | supported | supported | supported | supported | throws `NotSupportedException` | not applicable (no connection) |
 | `INSERT ... VALUES` | supported | supported | supported | supported | supported | supported (small batches) | throws `NotSupportedException` |
 | Key upsert (`MergeInto`) | `ON CONFLICT ... DO UPDATE` | `MERGE ... USING (VALUES ...)` | `ON CONFLICT ... DO UPDATE` | `ON DUPLICATE KEY UPDATE` | `ON DUPLICATE KEY UPDATE` | throws `NotSupportedException` | applied in the context (upsert) |
 | Full `MERGE` (`WhenMatched`/`WhenNotMatched`, branches) | throws `NotSupportedException` | `MERGE ... WHEN MATCHED THEN ...` | `MERGE ... WHEN MATCHED THEN ...` (15+) | throws `NotSupportedException` | throws `NotSupportedException` | throws `NotSupportedException` | throws `NotSupportedException` |
@@ -53,7 +54,7 @@ change.
 | `UPDATE ... FROM` (`UpdateJoin`) | `UPDATE ... FROM` | `UPDATE <alias> ... FROM ... JOIN` | `UPDATE ... FROM` | `UPDATE ... JOIN ... SET` | `UPDATE ... JOIN ... SET` | throws `NotSupportedException` | throws `NotSupportedException` |
 | `DELETE ... RETURNING` (`Returning`) | `RETURNING` | `OUTPUT deleted.<col>` | `RETURNING` | throws `NotSupportedException` | throws `NotSupportedException` | throws `NotSupportedException` | throws `NotSupportedException` |
 | `TRUNCATE` (`Truncate`) | throws `NotSupportedException` | supported | supported | supported | supported | supported | throws `NotSupportedException` |
-| Materialize a query (`ToTempTable`/`ToTable`) | `CREATE TEMPORARY TABLE ... AS SELECT` | throws `NotSupportedException` | `CREATE [TEMPORARY] TABLE ... AS SELECT` | `CREATE TEMPORARY TABLE ... AS SELECT` | `CREATE TEMPORARY TABLE ... AS SELECT` | throws `NotSupportedException` | throws `NotSupportedException` |
+| Materialize a query (`ToTempTable`/`ToTable`) | `CREATE [TEMPORARY] TABLE ... AS SELECT` | `SELECT ... INTO` (`ToTable`; session-scoped via `#name`) | `CREATE [TEMPORARY] TABLE ... AS SELECT` | `CREATE [TEMPORARY] TABLE ... AS SELECT` | `CREATE [TEMPORARY] TABLE ... AS SELECT` | `CREATE TABLE ... ENGINE = MergeTree ... AS SELECT` (`ToTable`) | throws `NotSupportedException` |
 | `DELETE ... USING`/join (`From<T>().Join(...).Delete()`, INNER) | throws `NotSupportedException` | `DELETE <a> FROM ... JOIN ...` | `DELETE FROM ... USING ...` | `DELETE <a> FROM ... JOIN ...` | `DELETE <a> FROM ... JOIN ...` | throws `NotSupportedException` | throws `NotSupportedException` |
 | Generated key (`ReturningIdentity`/`ReturningKey`) | `RETURNING` | `OUTPUT inserted.<col>` | `RETURNING` | `LAST_INSERT_ID()` fallback | `LAST_INSERT_ID()` fallback | throws `NotSupportedException` | throws `NotSupportedException` |
 | Identity function (`ReturningIdentity<TKey>()`) | `last_insert_rowid()` | `SCOPE_IDENTITY()` | `lastval()` | `LAST_INSERT_ID()` | `LAST_INSERT_ID()` | throws `NotSupportedException` | throws `NotSupportedException` |
@@ -101,6 +102,7 @@ provider-specific. The decision for every known divergence:
 | `FOR JSON` / `FOR XML` | **Gated (SQL Server)** | `SupportsForJson`/`SupportsForXml`. |
 | Statement-level query hints | **Unified** | SQL Server `OPTION (...)`, PostgreSQL/MySQL/MariaDB inline `/*+ ... */`; SQLite/ClickHouse have no syntax and stay gated (see [Query hints](../guide/17-query-hints.md)). |
 | Locking table hints vs index hints | **Leave provider-specific** | `WITH (NOLOCK)` has no equivalent in MySQL/MariaDB/SQLite index hints (`USE INDEX`/`INDEXED BY` change the plan, not locking), so only SQL Server is wired (`SupportsTableHints`). |
+| Row-locking wait modes (`NOWAIT`/`SKIP LOCKED`) | **Unified** | [`ILockRenderer.Render`](xref:NextORM.Core.ILockRenderer.Render(NextORM.Core.LockMode,NextORM.Core.LockWaitMode,NextORM.Core.KeywordCase)) emits each capable provider's native form: PostgreSQL/MySQL/MariaDB append `NOWAIT`/`SKIP LOCKED` (MySQL switches a shared lock to `FOR SHARE`), SQL Server adds `NOWAIT`/`READPAST` to the locking table hint (`READPAST` approximates `SKIP LOCKED`); SQLite/ClickHouse/in-memory reject any row lock. |
 | Raw SQL as a composable `FROM` source | **Unified** | `FromSql` + `SupportsRawSqlSource` on every SQL provider (see [Raw SQL](../guide/14-raw-sql.md#compositing-raw-sql-as-a-from-source)). |
 | `INTERSECT ALL`/`EXCEPT ALL` | **Gated** | PostgreSQL and MariaDB support them; SQL Server/SQLite/MySQL reject via `SupportsIntersectExceptAll`. |
 

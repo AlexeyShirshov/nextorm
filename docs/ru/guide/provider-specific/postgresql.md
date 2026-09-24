@@ -160,15 +160,14 @@ PostgreSQL заменяет единственную колонку скаляр
 
 ## `TABLESAMPLE`
 
-[`TableSample`](xref:NextORM.Core.EntityBuilder`1.TableSample(System.Double,NextORM.Core.TableSampleMethod,System.Nullable{System.Double})) добавляет модификатор `TABLESAMPLE` к
+[`FromOptions.TableSample`](xref:NextORM.Core.FromOptions.TableSample(System.Double,NextORM.Core.TableSampleMethod,System.Nullable{System.Double})) добавляет модификатор `TABLESAMPLE` к
 основной таблице запроса ([`TableSample`](xref:NextORM.Core.ISqlDialect.TableSample)).
 PostgreSQL поддерживает оба метода сэмплирования и необязательное повторяемое зерно (seed)
 (`TableSample`,
 `ITableSampleMethods.Render`):
 
 ```csharp
-var rows = dataContext.From<ISimpleEntity>()
-    .TableSample(10, TableSampleMethod.System, seed: 42)
+var rows = dataContext.From<ISimpleEntity>(o => o.TableSample(10, TableSampleMethod.System, seed: 42))
     .Select(e => e.Id)
     .ToList();
 ```
@@ -201,7 +200,9 @@ var rows = dataContext.From<ISimpleEntity>()
 select id from simple_entity where (id > 5) for update
 ```
 
-`LockMode.Update` генерирует `for update`, а `LockMode.Share` — `for share`. См.
+`LockMode.Update` генерирует `for update`, а `LockMode.Share` — `for share`. Оба принимают
+[`LockWaitMode`](xref:NextORM.Core.LockWaitMode): `ForUpdate(LockWaitMode.SkipLocked)` генерирует
+`for update skip locked`, а `ForShare(LockWaitMode.NoWait)` — `for share nowait` (PostgreSQL 9.5+). См.
 [Блокировку строк](../01-querying-and-projections.md#блокировка-строк-for-update--for-share).
 
 ## Модифицирующие CTE

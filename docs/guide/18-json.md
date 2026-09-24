@@ -10,9 +10,8 @@ nextorm deliberately has no cross-provider JSON method. "Working with JSON" mean
 different providers, and the engine keeps those mechanisms separate instead of pretending they are one
 feature:
 
-* **SQL Server** has two independent surfaces. [`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean)) appends a
-  trailing `FOR JSON PATH`/`FOR JSON AUTO` clause so the whole result set comes back as one JSON
-  document, and [`SqlServer`](xref:NextORM.Core.SqlFunctions.SqlServer) provides the JSON-as-text scalar functions
+* **SQL Server** has two independent surfaces. [`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean,System.Object[])) executes the query and returns the
+  whole result set as one JSON document (`FOR JSON PATH`/`FOR JSON AUTO`), and [`SqlServer`](xref:NextORM.Core.SqlFunctions.SqlServer) provides the JSON-as-text scalar functions
   (`json_value`, `json_query`, `json_modify`, `isjson`) plus the `openjson` table function.
 * **PostgreSQL** has native `json`/`jsonb` types (the only provider with them) and a function/operator
   surface on `SqlFunctions.Postgres`: construction, aggregation, access, containment and JSONPath.
@@ -56,42 +55,42 @@ database lacks JSON support.
 
 ### Return the whole result set as one JSON document
 
-[`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean)) adds a trailing `FOR JSON` clause. The database then returns a
-single-row, single-column result, so project a single column and read it as a string with
-`First()`/`FirstOrDefault()`:
+[`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean,System.Object[])) is a **terminal operator**: it executes the query and returns the whole
+result set as one JSON document (the projection drives the document shape; the query element type is
+irrelevant because the database returns a single document column):
 
 ```csharp
-var json = dataContext.From<IComplexEntity>()
-    .Select(e => e.String)
-    .ForJson(ForJsonMode.Path, root: "items", includeNullValues: true)
-    .First();
+string? json = dataContext.From<IComplexEntity>()
+    .Select(e => new { e.Id, e.String })
+    .ForJson(ForJsonMode.Path, root: "items", includeNullValues: true);
 ```
 
 ```sql
-select somestring from complex_entity for json path, root('items'), include_null_values
+select id, somestring from complex_entity for json path, root('items'), include_null_values
 ```
 
 [`Path`](xref:NextORM.Core.ForJsonMode.Path) shapes the document from the projection aliases (the default) and
 [`Auto`](xref:NextORM.Core.ForJsonMode.Auto) from the table structure:
 
 ```csharp
-var json = dataContext.From<IComplexEntity>()
-    .Select(e => e.String)
-    .ForJson(ForJsonMode.Auto)
-    .First();
+string? json = dataContext.From<IComplexEntity>()
+    .Select(e => new { e.Id, e.String })
+    .ForJson(ForJsonMode.Auto);
 ```
 
 ```sql
-select somestring from complex_entity for json auto
+select id, somestring from complex_entity for json auto
 ```
 
 The optional `root` wraps the document in `ROOT('name')` and `includeNullValues` adds
-`INCLUDE_NULL_VALUES`. The clause is placed after `ORDER BY` and before a trailing `OPTION (...)`, so it
-composes with [`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[])): a `for json path option (recompile)`
-query is valid. (Table hints, [`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[])), attach to the
-`FROM` table and are independent of the JSON clause.) A dialect that does not support the
-clause rejects the command, and combining `ForJson` with `ForXml` throws
-`NotSupportedException("FOR JSON and FOR XML cannot be combined.")`.
+`INCLUDE_NULL_VALUES`. `ForJson` returns `null` when the query produces no rows (SQL Server returns SQL
+NULL for an empty `FOR JSON` result). The clause is placed after `ORDER BY` and before a trailing
+`OPTION (...)`, so it composes with [`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[])) (apply the hint first, then the
+terminal): a `for json path option (recompile)` query is valid. Use
+[`WithForJson`](xref:NextORM.Core.QueryCommand`1.WithForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean)) to only attach the clause and keep the command composable. (Table hints,
+[`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[])), attach to the `FROM` table and are independent of the
+JSON clause.) A dialect that does not support the clause rejects the command, and combining `ForJson`
+with `ForXml` throws `NotSupportedException("FOR JSON and FOR XML cannot be combined.")`.
 
 ### Read JSON stored in a text column
 
@@ -310,8 +309,8 @@ The construction and aggregation functions return `string?`; deserialize with
   JSON through a `String` column or cast it in SQL.
 * SQLite has JSON features in the database, but nextorm does not expose them yet; SQLite's JSON1
   extension is likewise not mapped.
-* The in-memory provider produces no SQL, so `ForJson`/`ForXml` and the JSON function surfaces do not
-  apply to it.
+* The in-memory provider produces no SQL, so `ForJson`/`ForXml` throw `NotSupportedException` and the
+  JSON function surfaces do not apply to it.
 * PostgreSQL is the only provider whose columns are mapped as a native JSON type in the parameter path;
   SQL Server and MySQL/MariaDB JSON is always text.
 

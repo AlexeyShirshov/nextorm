@@ -44,6 +44,17 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void ForUpdate_ShouldThrowBecauseClickHouseHasNoRowLocking()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var act = () => SqlOf(ctx, e.ForUpdate(LockWaitMode.SkipLocked).Select(x => x.Id));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*FOR UPDATE*");
+    }
+
+    [Fact]
     public void CrossApply_ToCorrelatedSubquery_ShouldThrowBecauseNoLateral()
     {
         using var ctx = ClickHouseTestContext.Create();
@@ -1514,7 +1525,7 @@ public class SqlGenerationTests
     {
         using var ctx = ClickHouseTestContext.Create();
 
-        SqlOf(ctx, ctx.From<IComplexEntity>().Sample(0.1, 0.5).Select(x => new { x.Id }))
+        SqlOf(ctx, ctx.From<IComplexEntity>(o => o.Sample(0.1, 0.5)).Select(x => new { x.Id }))
             .Should().Contain("from complex_entity sample 0.1 offset 0.5");
     }
 
@@ -1528,7 +1539,7 @@ public class SqlGenerationTests
         SqlOf(ctx, e.Final().Select(x => new { x.Id }))
             .Should().Contain("FROM complex_entity FINAL");
 
-        SqlOf(ctx, e.Sample(0.1, 0.5).Select(x => new { x.Id }))
+        SqlOf(ctx, ctx.From<IComplexEntity>(o => o.Sample(0.1, 0.5)).Select(x => new { x.Id }))
             .Should().Contain("FROM complex_entity SAMPLE 0.1 OFFSET 0.5");
 
         SqlOf(ctx, e.Settings(("max_threads", "2")).Select(x => new { x.Id }))
@@ -2487,9 +2498,7 @@ public class SqlGenerationTests
     public void TableSample_ShouldThrowBecauseClickHouseUsesSample()
     {
         using var ctx = ClickHouseTestContext.Create();
-        var e = ctx.From<ISimpleEntity>();
-
-        var act = () => SqlOf(ctx, e.TableSample(10).Select(x => x.Id));
+        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.TableSample(10)).Select(x => x.Id));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*TABLESAMPLE*");
     }

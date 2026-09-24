@@ -39,6 +39,12 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <summary>SQL Server accepts <c>DEFAULT</c> as a value in the <c>VALUES</c> list.</summary>
     public override bool SupportsColumnDefault => true;
 
+    /// <summary>SQL Server has a native bulk path (<c>SqlBulkCopy</c>).</summary>
+    public override bool SupportsBulkCopy => true;
+
+    /// <summary>SQL Server writes explicit identity values only inside <c>SET IDENTITY_INSERT ... ON/OFF</c>.</summary>
+    public override bool RequiresIdentityInsertToggle => true;
+
     /// <summary>SQL Server has a native <c>TRUNCATE TABLE</c>.</summary>
     public override bool SupportsTruncate => true;
 
@@ -47,6 +53,22 @@ public sealed class SqlServerDialect : SqlDialectBase
 
     /// <summary>SQL Server updates rows based on a join through the <c>UPDATE &lt;alias&gt; ... FROM ... JOIN</c> extension.</summary>
     public override bool SupportsUpdateJoin => true;
+
+    /// <summary>SQL Server materialises a query into a table through <c>SELECT ... INTO</c>.</summary>
+    public override bool SupportsCreateTableAsSelect => true;
+
+    /// <summary>SQL Server has no <c>CREATE TEMPORARY TABLE ... AS SELECT</c>; a session-scoped table is <c>ToTable("#name")</c>.</summary>
+    public override bool SupportsTemporaryCreateTableAsSelect => false;
+
+    /// <summary>SQL Server's <c>SELECT ... INTO</c> has no <c>IF NOT EXISTS</c> clause.</summary>
+    public override bool SupportsCreateTableAsSelectIfNotExists => false;
+
+    /// <summary>SQL Server renders the materialisation as <c>SELECT ... INTO</c> rather than <c>CREATE TABLE ... AS SELECT</c>.</summary>
+    public override bool CreateTableAsSelectUsesSelectInto => true;
+
+    /// <summary>Renders the SQL Server <c>INTO &lt;table&gt;</c> clause inserted into the top-level select list.</summary>
+    public override string MakeCreateTableAsSelectInto(CreateTableAsClause clause, KeywordCase keywordCase = KeywordCase.Lower)
+        => Kw(keywordCase, " into ") + clause.Table;
 
     /// <summary>
     /// Renders the SQL Server multi-table update: the <c>SET</c> list is qualified by the target alias and
@@ -131,6 +153,9 @@ public sealed class SqlServerDialect : SqlDialectBase
 
     /// <summary>SQL Server spells a lateral source as <c>CROSS APPLY</c>/<c>OUTER APPLY</c>.</summary>
     public override bool SupportsApply => true;
+
+    /// <summary><c>CROSS APPLY</c>/<c>OUTER APPLY</c> accept a plain table name, unlike a <c>LATERAL</c> reference.</summary>
+    public override bool SupportsApplyOnPlainTable => true;
 
     /// <summary>SQL Server supports <c>GROUP BY ROLLUP (...)</c> and <c>GROUP BY CUBE (...)</c>.</summary>
     public override bool SupportsRollup => true;
@@ -648,7 +673,16 @@ internal sealed class SqlServerLockRenderer : ILockRenderer
     public bool UsesTableHints => true;
 
     public string Render(LockMode mode, KeywordCase keywordCase = KeywordCase.Lower) =>
-        SqlKeywords.Of(keywordCase, mode == LockMode.Share ? "holdlock" : "updlock");
+        Render(mode, LockWaitMode.Wait, keywordCase);
+
+    public string Render(LockMode mode, LockWaitMode wait, KeywordCase keywordCase = KeywordCase.Lower) =>
+        SqlKeywords.Of(keywordCase, (mode == LockMode.Share ? "holdlock" : "updlock") + wait switch
+        {
+            LockWaitMode.Wait => "",
+            LockWaitMode.NoWait => ", nowait",
+            LockWaitMode.SkipLocked => ", readpast",
+            _ => throw new ArgumentOutOfRangeException(nameof(wait), wait, "Unknown locking wait mode.")
+        });
 }
 
 internal sealed class SqlServerIndexHintRenderer : IIndexHintRenderer

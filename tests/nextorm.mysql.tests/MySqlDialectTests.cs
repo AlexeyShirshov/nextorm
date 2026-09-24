@@ -20,6 +20,18 @@ public class MySqlDialectTests
     }
 
     [Fact]
+    public void LockingHooks_ShouldSupportWaitModes()
+    {
+        Dialect.Lock.Should().NotBeNull();
+        Dialect.Lock!.Render(LockMode.Update).Should().Be(" for update");
+        Dialect.Lock!.Render(LockMode.Share).Should().Be(" lock in share mode");
+        Dialect.Lock!.Render(LockMode.Update, LockWaitMode.NoWait).Should().Be(" for update nowait");
+        Dialect.Lock!.Render(LockMode.Update, LockWaitMode.SkipLocked).Should().Be(" for update skip locked");
+        Dialect.Lock!.Render(LockMode.Share, LockWaitMode.NoWait).Should().Be(" for share nowait");
+        Dialect.Lock!.Render(LockMode.Share, LockWaitMode.SkipLocked).Should().Be(" for share skip locked");
+    }
+
+    [Fact]
     public void QuoteIdentifier_ShouldUseBackticks()
     {
         Dialect.QuoteIdentifier("id").Should().Be("`id`");

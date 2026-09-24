@@ -1,4 +1,5 @@
 # TODO: Шардирование (consistent hashing) поверх mapping scope
+> Tracking issue: [#69](https://github.com/AlexeyShirshov/nextorm/issues/69).
 
 > Рабочий план (design RFC). Продвинутый слой: опирается на базовый
 > [`todo_mapping_scope.md`](todo_mapping_scope.md) и не дублирует его механику кэшей/подмены имён.

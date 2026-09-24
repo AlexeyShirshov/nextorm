@@ -163,4 +163,97 @@ public abstract partial class CommonTestSuite
         ctx.From<IDeleteEntity>().Where(x => x.Id == remove).Select(x => x.Id).ToList().Should().BeEmpty();
         ctx.From<IDeleteEntity>().Where(x => x.Id == keep).Select(x => x.Id).ToList().Should().ContainSingle();
     }
+
+    [Fact]
+    public void DeleteJoin_FromCte_ShouldRemoveRowsFromCte()
+    {
+        Assert.SkipUnless(Provider.SupportsDeleteJoin, "This provider has no native multi-table DELETE.");
+        var ctx = _sut.DataProvider;
+        var remove = DeleteKey();
+        var keep = remove + 1;
+
+        ctx.InsertInto<IDeleteEntity>().Values([
+            new DeleteEntity { Id = remove, Name = "remove", Age = 1 },
+            new DeleteEntity { Id = keep, Name = "keep", Age = 2 },
+        ]).Insert();
+
+        var e = ctx.From<IDeleteEntity>();
+        var scope = ctx.With("c", e.Where(x => x.Id == remove).Select(x => new { x.Id }));
+
+        var affected = e
+            .Join(scope.From("c"), (t, c) => t.Id == c["id"].AsInt)
+            .Delete();
+
+        affected.Should().Be(1);
+        ctx.From<IDeleteEntity>().Where(x => x.Id == remove).Select(x => x.Id).ToList().Should().BeEmpty();
+        ctx.From<IDeleteEntity>().Where(x => x.Id == keep).Select(x => x.Id).ToList().Should().ContainSingle();
+    }
+
+    [Fact]
+    public void Delete_ToSql_ShouldRenderDelete()
+    {
+        var sql = _sut.DataProvider.DeleteFrom<IDeleteEntity>().Where(x => x.Id == 1).ToSql();
+
+        sql.Should().ContainEquivalentOf("delete");
+    }
+
+    [Fact]
+    public async Task DeleteAsync_Builder_ShouldRemoveRow()
+    {
+        var ctx = _sut.DataProvider;
+        var id = DeleteKey();
+
+        await ctx.InsertInto<IDeleteEntity>()
+            .Values(new DeleteEntity { Id = id, Name = "async", Age = 1 })
+            .InsertAsync(TestContext.Current.CancellationToken);
+
+        var affected = await ctx.DeleteFrom<IDeleteEntity>()
+            .Where(x => x.Id == id)
+            .DeleteAsync(TestContext.Current.CancellationToken);
+
+        affected.Should().Be(1);
+    }
+
+    [Fact]
+    public void Delete_ReturningWholeEntity_ShouldReturnRow()
+    {
+        Assert.SkipUnless(Provider.SupportsInsertReturning, "This provider cannot return removed rows.");
+
+        var ctx = _sut.DataProvider;
+        var id = DeleteKey();
+
+        ctx.InsertInto<IDeleteEntity>()
+            .Values(new DeleteEntity { Id = id, Name = "whole", Age = 5 })
+            .Insert();
+
+        var rows = ctx.DeleteFrom<DeleteEntity>().Where(x => x.Id == id).Returning().ToList();
+
+        rows.Should().ContainSingle();
+        rows[0].Id.Should().Be(id);
+        rows[0].Name.Should().Be("whole");
+    }
+
+    [Fact]
+    public void Delete_WithoutFilter_ShouldThrow()
+    {
+        var act = () => _sut.DataProvider.DeleteFrom<IDeleteEntity>().Delete();
+
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void Delete_AllThenWhere_ShouldThrow()
+    {
+        var act = () => _sut.DataProvider.DeleteFrom<IDeleteEntity>().All().Where(x => x.Id == 1).Delete();
+
+        act.Should().Throw<InvalidOperationException>();
+    }
+
+    [Fact]
+    public void Delete_WhereThenAll_ShouldThrow()
+    {
+        var act = () => _sut.DataProvider.DeleteFrom<IDeleteEntity>().Where(x => x.Id == 1).All().Delete();
+
+        act.Should().Throw<InvalidOperationException>();
+    }
 }

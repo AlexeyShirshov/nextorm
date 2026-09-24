@@ -37,6 +37,70 @@ public static class DataContextExtensions
     }
 
     /// <summary>
+    /// Starts a bulk insert over the mapping of <typeparamref name="TEntity"/> and returns its fluent
+    /// builder. The type's metadata is resolved lazily and cached per process, exactly like
+    /// <see cref="InsertInto{TEntity}"/>; <paramref name="configEntity"/> therefore runs only on the first
+    /// call for <typeparamref name="TEntity"/>. The write uses the provider's native bulk API where one
+    /// exists and a chunked parameterised <c>INSERT ... VALUES</c> otherwise.
+    /// </summary>
+    /// <typeparam name="TEntity">The mapped entity type to write.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="configEntity">Optional mapping configuration, run only when the type is first mapped.</param>
+    /// <returns>A builder for the bulk insert.</returns>
+    public static BulkInsertBuilder<TEntity> BulkInsertInto<TEntity>(this IDataContext dataContext, Action<EntityMetadataBuilder<TEntity>>? configEntity = null)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+
+        return new(dataContext, ResolveMetadata(configEntity), new BulkInsertOptions());
+    }
+
+    /// <summary>
+    /// Starts a bulk insert with explicit <see cref="BulkInsertOptions"/>. The type's metadata is resolved
+    /// lazily and cached per process, exactly like <see cref="InsertInto{TEntity}"/>; the write uses the
+    /// provider's native bulk API where one exists and a chunked parameterised <c>INSERT ... VALUES</c>
+    /// otherwise. The options shape the statement (batch limits, identity, conflict handling, timeout and
+    /// progress).
+    /// </summary>
+    /// <typeparam name="TEntity">The mapped entity type to write.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="options">The write options.</param>
+    /// <param name="configEntity">Optional mapping configuration, run only when the type is first mapped.</param>
+    /// <returns>A builder for the bulk insert.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="options"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">An option value is not positive.</exception>
+    public static BulkInsertBuilder<TEntity> BulkInsertInto<TEntity>(this IDataContext dataContext, BulkInsertOptions options, Action<EntityMetadataBuilder<TEntity>>? configEntity = null)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+        ArgumentNullException.ThrowIfNull(options);
+
+        return new(dataContext, ResolveMetadata(configEntity), options);
+    }
+
+    /// <summary>
+    /// Starts a bulk insert configured with the fluent <see cref="BulkInsertOptionsBuilder"/>. The type's
+    /// metadata is resolved lazily and cached per process, exactly like <see cref="InsertInto{TEntity}"/>.
+    /// The callback must be an expression lambda that returns the builder (for example
+    /// <c>o =&gt; o.MaxBatchSize(1_000)</c>), which keeps it distinct from the
+    /// <see cref="EntityMetadataBuilder{TEntity}"/> overload.
+    /// </summary>
+    /// <typeparam name="TEntity">The mapped entity type to write.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="configure">Configures the write options; the returned builder is ignored.</param>
+    /// <param name="configEntity">Optional mapping configuration, run only when the type is first mapped.</param>
+    /// <returns>A builder for the bulk insert.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="configure"/> is <see langword="null"/>.</exception>
+    public static BulkInsertBuilder<TEntity> BulkInsertInto<TEntity>(this IDataContext dataContext, Func<BulkInsertOptionsBuilder, BulkInsertOptionsBuilder> configure, Action<EntityMetadataBuilder<TEntity>>? configEntity = null)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+        ArgumentNullException.ThrowIfNull(configure);
+
+        var options = new BulkInsertOptionsBuilder();
+        configure(options);
+
+        return new(dataContext, ResolveMetadata(configEntity), options.Build());
+    }
+
+    /// <summary>
     /// Starts a key upsert over the mapping of <typeparamref name="TEntity"/> and returns its fluent
     /// builder. The source row set is supplied with <c>Using</c> and the match key with <c>OnKeys</c>;
     /// the statement is rendered as <c>INSERT ... ON CONFLICT ... DO UPDATE</c>,
@@ -111,7 +175,7 @@ public static class DataContextExtensions
         return new UpdateBuilder<TEntity>(dataContext, ResolveMetadata<TEntity>(null)).UpdateEntityAsync(entity, cancellationToken);
     }
 
-    private static IEntityMetadata ResolveMetadata<TEntity>(Action<EntityMetadataBuilder<TEntity>>? configEntity)
+    internal static IEntityMetadata ResolveMetadata<TEntity>(Action<EntityMetadataBuilder<TEntity>>? configEntity)
     {
         if (!DataContextCache.Metadata.TryGetValue(typeof(TEntity), out var metadata) || string.IsNullOrEmpty(metadata.TableName))
         {
@@ -664,13 +728,39 @@ public static class DataContextExtensions
     /// </summary>
     public static EntityBuilder<T> From<T>(this IDataContext dataContext, Action<EntityMetadataBuilder<T>>? configEntity = null)
     {
-        if (!DataContextCache.Metadata.ContainsKey(typeof(T)))
-        {
-            var eb = new EntityMetadataBuilder<T>();
-            configEntity?.Invoke(eb);
-            DataContextCache.Metadata[typeof(T)] = eb.Build();
-        }
+        _ = ResolveMetadata(configEntity);
+
         return new(dataContext) { Logger = dataContext.CommandLogger };
+    }
+
+    /// <summary>
+    /// Starts a query over the mapping of <typeparamref name="T"/> with per-query source options. The
+    /// values set on <paramref name="options"/> (a <c>TABLESAMPLE</c> percentage or a ClickHouse
+    /// <c>SAMPLE</c> ratio) are copied into the returned builder; the options object is not retained.
+    /// The type's metadata is resolved exactly like <see cref="From{T}(IDataContext, Action{EntityMetadataBuilder{T}}?)"/>.
+    /// </summary>
+    /// <typeparam name="T">The mapped entity type.</typeparam>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="options">Configures the primary source, for example <c>o =&gt; o.TableSample(10)</c>.</param>
+    /// <param name="configEntity">Optional mapping configuration, run only when the type is first mapped.</param>
+    /// <returns>A builder for composing the query.</returns>
+    public static EntityBuilder<T> From<T>(this IDataContext dataContext, Action<FromOptions> options, Action<EntityMetadataBuilder<T>>? configEntity = null)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+        ArgumentNullException.ThrowIfNull(options);
+
+        var fromOptions = new FromOptions();
+        options(fromOptions);
+
+        _ = ResolveMetadata(configEntity);
+
+        return new(dataContext)
+        {
+            Logger = dataContext.CommandLogger,
+            TableSampleClause = fromOptions.TableSampleClause,
+            SampleRatio = fromOptions.SampleRatio,
+            SampleOffset = fromOptions.SampleOffset,
+        };
     }
 
     /// <summary>
@@ -808,6 +898,33 @@ public static class DataContextExtensions
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static EntityBuilder<TableAlias> From(this IDataContext dataContext, string table)
         => new(dataContext, table) { Logger = dataContext.CommandLogger };
+
+    /// <summary>
+    /// Starts a query against a raw table (or CTE) name with per-query source options (a
+    /// <c>TABLESAMPLE</c> percentage or a ClickHouse <c>SAMPLE</c> ratio). Columns are read through
+    /// <see cref="TableAlias"/> accessors.
+    /// </summary>
+    /// <param name="dataContext">The context to execute against.</param>
+    /// <param name="table">The table or CTE name.</param>
+    /// <param name="options">Configures the primary source, for example <c>o =&gt; o.TableSample(10)</c>.</param>
+    /// <returns>A builder for composing the query.</returns>
+    public static EntityBuilder<TableAlias> From(this IDataContext dataContext, string table, Action<FromOptions> options)
+    {
+        ArgumentNullException.ThrowIfNull(dataContext);
+        ArgumentNullException.ThrowIfNull(table);
+        ArgumentNullException.ThrowIfNull(options);
+
+        var fromOptions = new FromOptions();
+        options(fromOptions);
+
+        return new(dataContext, table)
+        {
+            Logger = dataContext.CommandLogger,
+            TableSampleClause = fromOptions.TableSampleClause,
+            SampleRatio = fromOptions.SampleRatio,
+            SampleOffset = fromOptions.SampleOffset,
+        };
+    }
 
     /// <summary>
     /// Starts a query from a raw SQL fragment used as a composable <c>FROM</c> source: it is rendered as

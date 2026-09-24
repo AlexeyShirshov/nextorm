@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Runtime.CompilerServices;
 
 namespace NextORM.Core;
@@ -16,7 +15,7 @@ public static class TypeExtensions
     /// <returns><see langword="true"/> for an anonymous type; otherwise <see langword="false"/>.</returns>
     public static bool IsAnonymous(this Type type) => type.IsSealed
         && type.IsGenericType
-        && (type.Attributes & TypeAttributes.NotPublic) != 0
+        && !type.IsVisible
         && Attribute.IsDefined(type, typeof(CompilerGeneratedAttribute), false)
         && type.Name.StartsWith("<>f__AnonymousType", StringComparison.Ordinal);
     /// <summary>
@@ -26,18 +25,19 @@ public static class TypeExtensions
     /// <param name="type">The type to test.</param>
     /// <returns><see langword="true"/> for a closure type; otherwise <see langword="false"/>.</returns>
     public static bool IsClosure(this Type type) => type.IsSealed
-        && (type.Attributes & TypeAttributes.NotPublic) != 0
+        && !type.IsVisible
         && Attribute.IsDefined(type, typeof(CompilerGeneratedAttribute), false)
         && type.Name.StartsWith("<>c__DisplayClass", StringComparison.Ordinal);
     /// <summary>
-    /// Determines whether the type is a tuple type, identified by a generic name starting with
-    /// <c>Tuple`</c>.
+    /// Determines whether the type is a tuple type, identified by a generic <c>System.Tuple</c> or
+    /// <c>System.ValueTuple</c> name.
     /// </summary>
     /// <param name="type">The type to test.</param>
     /// <returns><see langword="true"/> for a tuple type; otherwise <see langword="false"/>.</returns>
     public static bool IsTuple(this Type type) => type.IsGenericType
-        && (type.Attributes & TypeAttributes.NotPublic) != 0
-        && type.Name.StartsWith("Tuple`", StringComparison.Ordinal);
+        && type.Namespace == "System"
+        && (type.Name.StartsWith("Tuple`", StringComparison.Ordinal)
+            || type.Name.StartsWith("ValueTuple`", StringComparison.Ordinal));
 
     /// <summary>
     /// Tries to get the number of columns a projection type materializes. A projection is a generic

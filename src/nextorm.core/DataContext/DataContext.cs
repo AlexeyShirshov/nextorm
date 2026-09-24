@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using System.Data;
 using System.Data.Common;
 using System.Linq.Expressions;
 
@@ -10,7 +11,7 @@ namespace NextORM.Core;
 /// commands. Providers derive from it and supply the SQL dialect, the connection factory and
 /// parameter creation.
 /// </summary>
-public abstract class DataContext : IDataContext, IConnectionManager, IMutationExecutor
+public abstract class DataContext : IDataContext, IConnectionManager, ITransactionManager, IMutationExecutor, IBulkInsertExecutor
 {
     private bool _disposed;
     private readonly ContextEnvironment _environment;
@@ -63,7 +64,8 @@ public abstract class DataContext : IDataContext, IConnectionManager, IMutationE
             new ConnectionHooks(CreateDbConnection, OnConnectionCreated),
             connectionString,
             providedConnection,
-            new LoggingOptions(_environment.Logger, LogSensitiveData: _environment.LogSensitiveData));
+            new LoggingOptions(_environment.Logger, LogSensitiveData: _environment.LogSensitiveData),
+            () => Dialect.SupportsTransactions);
 
         // Bound once: parameter creation is handed to the execution/planning layers as a delegate
         // instead of passing the context itself, so they no longer depend on the concrete DataContext
@@ -77,7 +79,8 @@ public abstract class DataContext : IDataContext, IConnectionManager, IMutationE
             _connectionManager,
             _createParam,
             new LoggingOptions(_environment.Logger, LogSensitiveData: _environment.LogSensitiveData, LogParams: _environment.LogParams),
-            () => _disposed);
+            () => _disposed,
+            () => _connectionManager.CurrentTransaction);
 
         // The planning axis gets the provider hooks as delegates and invokes them lazily: calling the
         // abstract/virtual members here would run derived code before the derived constructor.
@@ -161,6 +164,20 @@ public abstract class DataContext : IDataContext, IConnectionManager, IMutationE
     /// <returns>The underlying database connection.</returns>
     public DbConnection GetConnection() => _connectionManager.GetConnection();
 
+    // Transaction axis (ITransactionManager). Implemented explicitly so the concrete context does not
+    // grow six public members; callers reach them through the ITransactionManager role, as documented.
+    DbTransaction? ITransactionManager.CurrentTransaction => _connectionManager.CurrentTransaction;
+
+    DbTransaction ITransactionManager.BeginTransaction() => _connectionManager.BeginTransaction();
+
+    DbTransaction ITransactionManager.BeginTransaction(IsolationLevel isolationLevel) => _connectionManager.BeginTransaction(isolationLevel);
+
+    Task<DbTransaction> ITransactionManager.BeginTransactionAsync(CancellationToken cancellationToken) => _connectionManager.BeginTransactionAsync(cancellationToken);
+
+    Task<DbTransaction> ITransactionManager.BeginTransactionAsync(IsolationLevel isolationLevel, CancellationToken cancellationToken) => _connectionManager.BeginTransactionAsync(isolationLevel, cancellationToken);
+
+    void ITransactionManager.UseTransaction(DbTransaction? transaction) => _connectionManager.UseTransaction(transaction);
+
     /// <summary>Creates the provider-specific connection. Called only when no connection was supplied.</summary>
     protected abstract DbConnection CreateDbConnection(string? connectionString);
 
@@ -177,11 +194,13 @@ public abstract class DataContext : IDataContext, IConnectionManager, IMutationE
 
     /// <summary>Creates a command bound to the current connection with <paramref name="sql"/> as its text. The caller owns the returned command.</summary>
     /// <param name="sql">The SQL text to execute.</param>
-    /// <returns>A new command on the current connection.</returns>
+    /// <returns>A new command on the current connection, bound to the active transaction when one is enlisted.</returns>
     public DbCommand CreateCommand(string sql)
     {
         var cmd = _connectionManager.GetConnection().CreateCommand();
         cmd.CommandText = sql;
+        if (_connectionManager.CurrentTransaction is { } transaction)
+            cmd.Transaction = transaction;
         return cmd;
     }
 
@@ -334,6 +353,84 @@ public abstract class DataContext : IDataContext, IConnectionManager, IMutationE
         return await _executor.ExecuteReaderAsync(sql, parameters, mapper, cancellationToken).ConfigureAwait(false);
     }
 
+    // Bulk insert (IBulkInsertExecutor). The native path is provider-supplied through the
+    // BulkInsertRows hooks; the portable path is the shared INSERT ... VALUES loop and is chosen by the
+    // builder when the request needs RETURNING/OUTPUT, conflict handling or an identity-insert form, or
+    // when the provider has no native bulk API.
+    int IBulkInsertExecutor.BulkInsert(BulkInsertCommand command)
+    {
+        var rows = command.SyncRows
+            ?? throw new InvalidOperationException("BulkInsert is synchronous but the source is async; use BulkInsertAsync instead.");
+
+        return BulkInsertRows(
+            SqlMutationBuilder.ResolveTableName(command.TableName, command.IsTableNameAuto, command.EntityType, NamingConvention),
+            ResolveBulkColumnNames(command.Columns),
+            command.Columns,
+            rows,
+            command.TimeoutSeconds,
+            command.Batch?.MaxBatchSize,
+            command.Progress,
+            command.NotifyEvery);
+    }
+
+    async Task<int> IBulkInsertExecutor.BulkInsertAsync(BulkInsertCommand command, CancellationToken cancellationToken)
+    {
+        var rows = command.AsyncRows ?? new SyncToAsyncEnumerable<object?[]>(command.SyncRows!);
+
+        return await BulkInsertRowsAsync(
+            SqlMutationBuilder.ResolveTableName(command.TableName, command.IsTableNameAuto, command.EntityType, NamingConvention),
+            ResolveBulkColumnNames(command.Columns),
+            command.Columns,
+            rows,
+            command.TimeoutSeconds,
+            command.Batch?.MaxBatchSize,
+            command.Progress,
+            command.NotifyEvery,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private string[] ResolveBulkColumnNames(IReadOnlyList<IPropertyMetadata> columns)
+    {
+        var names = new string[columns.Count];
+        for (var i = 0; i < names.Length; i++)
+            names[i] = SqlMutationBuilder.ResolveColumnName(columns[i], NamingConvention);
+
+        return names;
+    }
+
+    /// <summary>
+    /// Writes <paramref name="rows"/> through the provider's native bulk API. The default throws: a
+    /// provider opts in by setting <c>ISqlDialect.SupportsBulkCopy</c> and overriding this method (and
+    /// <see cref="BulkInsertRowsAsync"/>). The names are already convention-resolved and quoted.
+    /// </summary>
+    /// <param name="tableName">The convention-resolved (unquoted) target table name.</param>
+    /// <param name="columnNames">The convention-resolved (unquoted) written column names, in row order.</param>
+    /// <param name="columns">The mapped columns, in row order (for CLR types and identity flags).</param>
+    /// <param name="rows">The rows to write; each array matches <paramref name="columnNames"/> by ordinal.</param>
+    /// <param name="commandTimeoutSeconds">The command timeout in seconds, or <see langword="null"/> for the provider default.</param>
+    /// <param name="maxBatchSize">The maximum rows per batch, or <see langword="null"/> for the provider default.</param>
+    /// <param name="progress">The progress callback, called with the cumulative written-row count, or <see langword="null"/>.</param>
+    /// <param name="notifyEvery">The progress reporting interval in rows; the provider drives its cadence from it.</param>
+    /// <returns>The number of rows written.</returns>
+    /// <exception cref="NotSupportedException">The provider has no native bulk implementation.</exception>
+    protected virtual int BulkInsertRows(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IEnumerable<object?[]> rows, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery)
+        => throw new NotSupportedException($"{GetType().Name} declares ISqlDialect.SupportsBulkCopy but does not implement the native bulk path.");
+
+    /// <summary>Asynchronously writes <paramref name="rows"/> through the provider's native bulk API.</summary>
+    /// <param name="tableName">The convention-resolved (unquoted) target table name.</param>
+    /// <param name="columnNames">The convention-resolved (unquoted) written column names, in row order.</param>
+    /// <param name="columns">The mapped columns, in row order (for CLR types and identity flags).</param>
+    /// <param name="rows">The rows to write; each array matches <paramref name="columnNames"/> by ordinal.</param>
+    /// <param name="commandTimeoutSeconds">The command timeout in seconds, or <see langword="null"/> for the provider default.</param>
+    /// <param name="maxBatchSize">The maximum rows per batch, or <see langword="null"/> for the provider default.</param>
+    /// <param name="progress">The progress callback, called with the cumulative written-row count, or <see langword="null"/>.</param>
+    /// <param name="notifyEvery">The progress reporting interval in rows; the provider drives its cadence from it.</param>
+    /// <param name="cancellationToken">Cancels execution.</param>
+    /// <returns>A task producing the number of rows written.</returns>
+    /// <exception cref="NotSupportedException">The provider has no native bulk implementation.</exception>
+    protected virtual Task<int> BulkInsertRowsAsync(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IAsyncEnumerable<object?[]> rows, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery, CancellationToken cancellationToken)
+        => throw new NotSupportedException($"{GetType().Name} declares ISqlDialect.SupportsBulkCopy but does not implement the native bulk path.");
+
     private (string Sql, List<Parameter> Parameters) BuildReturningSql(MutationCommand command)
         => command switch
         {
@@ -452,10 +549,15 @@ public abstract class DataContext : IDataContext, IConnectionManager, IMutationE
 
     private (string Sql, List<Parameter> Parameters) BuildCreateTableAsSql(CreateTableAsCommand command)
     {
-        var (withSql, sourceSql, sourceParameters) = _planner.RenderSource(command.Source);
-        // A CTAS keeps the WITH clause inside the query (after AS), not before CREATE.
-        var body = withSql is null ? sourceSql : withSql + sourceSql;
-        return SqlMutationBuilder.MakeCreateTableAsSelect(Dialect, QuoteIdentifiers, body, sourceParameters, command, KeywordCase);
+        // A SELECT ... INTO dialect (SQL Server) injects the target into the top-level select list; the
+        // other dialects wrap the body (WITH kept inside the query, after AS) in CREATE TABLE ... AS SELECT.
+        // Identifier quoting and keyword casing follow the source command (its override, else the context
+        // default) so a per-command override applies to the target exactly as it does to the body.
+        var quoteIdentifiers = command.Source.QuoteIdentifiers ?? QuoteIdentifiers;
+        var keywordCase = command.Source.KeywordCase ?? KeywordCase;
+        var selectInto = SqlMutationBuilder.ResolveCreateTableAsInto(Dialect, quoteIdentifiers, command, keywordCase);
+        var (withSql, sourceSql, sourceParameters) = _planner.RenderSource(command.Source, selectInto);
+        return SqlMutationBuilder.MakeCreateTableAsSelect(Dialect, quoteIdentifiers, withSql, sourceSql, sourceParameters, command, keywordCase);
     }
 
     private (string Sql, List<Parameter> Parameters) BuildDeleteSql(DeleteCommand command)

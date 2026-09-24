@@ -1,16 +1,18 @@
 namespace NextORM.Core;
 
 /// <summary>
-/// Materialises a query into a table with <c>CREATE [TEMPORARY] TABLE ... AS SELECT</c>. The row shape
-/// is taken from the query's projection; the created table is addressed later with
-/// <see cref="DataContextExtensions.From(IDataContext, string)"/>. Unlike a common table expression,
+/// Materialises a query into a table: <c>CREATE TABLE ... AS SELECT</c> (PostgreSQL, SQLite, MySQL, MariaDB),
+/// <c>SELECT ... INTO</c> (SQL Server) or <c>CREATE TABLE ... ENGINE = MergeTree ... AS SELECT</c>
+/// (ClickHouse). The row shape is taken from the query's projection; the created table is addressed later
+/// with <see cref="DataContextExtensions.From(IDataContext, string)"/>. Unlike a common table expression,
 /// which is reusable only within one statement, the materialised table is reusable across subsequent
 /// queries on the same connection.
 /// <para>
-/// A temporary table is session-scoped: create and read it on one context (one connection). The
-/// terminal issues exactly one command and returns no row count — <c>CREATE TABLE AS SELECT</c> reports
-/// no meaningful affected rows. Providers without the form (SQL Server, ClickHouse) and the in-memory
-/// context reject it with <see cref="NotSupportedException"/>.
+/// The temporary form (<c>ToTempTable</c>) is session-scoped: create and read it on one context (one
+/// connection). It is available on PostgreSQL, SQLite, MySQL and MariaDB only — SQL Server has no
+/// <c>CREATE TEMPORARY TABLE ... AS SELECT</c> (a session-scoped table is <c>ToTable("#name")</c>) and
+/// ClickHouse cannot express a temporary <c>AS SELECT</c>. The terminal issues exactly one command and
+/// returns no row count; the in-memory context rejects it with <see cref="NotSupportedException"/>.
 /// </para>
 /// <para>
 /// Every terminal is offered both on a query builder (before a projection) and on a built

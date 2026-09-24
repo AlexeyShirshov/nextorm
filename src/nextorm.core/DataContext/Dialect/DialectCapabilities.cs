@@ -238,9 +238,12 @@ public interface IStringSplitRenderer
 
 /// <summary>
 /// A dialect's renderer for row locking. <see cref="UsesTableHints"/> selects the shape of the token
-/// <see cref="Render"/> returns: a trailing <c>FOR UPDATE</c>/<c>FOR SHARE</c> clause, or a bare table
+/// <see cref="Render(LockMode, KeywordCase)"/> returns: a trailing <c>FOR UPDATE</c>/<c>FOR SHARE</c> clause, or a bare table
 /// hint (the caller wraps it in <c>WITH (...)</c>). The object's presence is the capability, and since
 /// one shape is selected by <see cref="UsesTableHints"/> the renderer never has an unreachable method.
+/// A dialect that can express <c>NOWAIT</c>/<c>SKIP LOCKED</c> additionally overrides
+/// <see cref="Render(LockMode, LockWaitMode, KeywordCase)"/>; the inherited default only supports
+/// <see cref="LockWaitMode.Wait"/> and throws <see cref="NotSupportedException"/> for the other modes.
 /// </summary>
 public interface ILockRenderer
 {
@@ -253,6 +256,21 @@ public interface ILockRenderer
     /// </summary>
     /// <paramref name="keywordCase"/> selects the letter case of the emitted SQL keywords.
     string Render(LockMode mode, KeywordCase keywordCase = KeywordCase.Lower);
+
+    /// <summary>
+    /// Renders the locking token for <paramref name="mode"/> with the requested <paramref name="wait"/>
+    /// behaviour for rows already locked by another transaction. The default implementation supports only
+    /// <see cref="LockWaitMode.Wait"/> (delegating to <see cref="Render(LockMode, KeywordCase)"/>) and rejects
+    /// a non-blocking mode with <see cref="NotSupportedException"/>; a dialect whose provider can express
+    /// <c>NOWAIT</c>/<c>SKIP LOCKED</c> overrides it.
+    /// </summary>
+    /// <param name="mode">The row-locking strength.</param>
+    /// <param name="wait">How to react to a row already locked by another transaction.</param>
+    /// <param name="keywordCase">Selects the letter case of the emitted SQL keywords.</param>
+    string Render(LockMode mode, LockWaitMode wait, KeywordCase keywordCase = KeywordCase.Lower) =>
+        wait == LockWaitMode.Wait
+            ? Render(mode, keywordCase)
+            : throw new NotSupportedException("The locking wait mode is not supported by this SQL dialect.");
 }
 
 /// <summary>

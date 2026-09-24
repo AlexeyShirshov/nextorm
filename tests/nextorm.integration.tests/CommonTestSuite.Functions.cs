@@ -236,4 +236,27 @@ public abstract partial class CommonTestSuite
                 86400.0);
         }
     }
+
+    [Fact]
+    public void NullIf_ShouldReturnNullWhenEqual()
+    {
+        var rows = _sut.ComplexEntity
+            .Where(e => e.Id <= 2)
+            .Select(e => new { e.Id, Value = SqlFunctions.Sql.nullif(e.String, "xxx") })
+            .ToList();
+
+        rows.Single(r => r.Id == 2).Value.Should().BeNull();
+        rows.Single(r => r.Id == 1).Value.Should().Be("dadfasd");
+    }
+
+    [Fact]
+    public void LikeFunction_ShouldMatchPattern()
+    {
+        var ids = _sut.ComplexEntity
+            .Where(e => SqlFunctions.Sql.like(e.String, "dad%"))
+            .Select(e => e.Id)
+            .ToList();
+
+        ids.Should().Equal(1L);
+    }
 }

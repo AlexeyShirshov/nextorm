@@ -56,9 +56,11 @@ renders `with (rowlock, updlock)`. See
 
 ## `FOR JSON` and `FOR XML`
 
-`ForJson`/`ForXml` shape the result as JSON or XML
+`ForJson`/`ForXml` are terminals that execute the query and return the whole result set as one JSON or
+XML document
 ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson)/[`SupportsForXml`](xref:NextORM.Core.ISqlDialect.SupportsForXml));
-they are mutually exclusive. See [JSON support across providers](../18-json.md).
+`WithForJson`/`WithForXml` attach the clause without executing; the two clause kinds are mutually
+exclusive. See [JSON support across providers](../18-json.md).
 
 ## XML data-type methods
 
@@ -199,15 +201,14 @@ order by CategoryName
 
 ## `TABLESAMPLE`
 
-[`TableSample`](xref:NextORM.Core.EntityBuilder`1.TableSample(System.Double,NextORM.Core.TableSampleMethod,System.Nullable{System.Double})) adds a `TABLESAMPLE` modifier to the
+[`FromOptions.TableSample`](xref:NextORM.Core.FromOptions.TableSample(System.Double,NextORM.Core.TableSampleMethod,System.Nullable{System.Double})) adds a `TABLESAMPLE` modifier to the
 query's primary table ([`TableSample`](xref:NextORM.Core.ISqlDialect.TableSample)); an
 optional seed makes the sample repeatable. SQL Server renders `tablesample (10 percent)` /
 `tablesample (10 percent) repeatable (3)`
 (`ITableSampleMethods.Render`).
 
 ```csharp
-var rows = await dataContext.From<ISimpleEntity>()
-    .TableSample(10, TableSampleMethod.System, seed: 3)
+var rows = await dataContext.From<ISimpleEntity>(o => o.TableSample(10, TableSampleMethod.System, seed: 3))
     .Select(x => x.Id)
     .ToListAsync();
 ```

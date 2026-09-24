@@ -1,4 +1,5 @@
 # TODO: трансляция `Regex` в запросах (`Regex.IsMatch`/`Regex.Replace`)
+> Tracking issue: [#68](https://github.com/AlexeyShirshov/nextorm/issues/68).
 
 > Рабочий план (design RFC). Источник — **G7** из
 > [`linq2db-backlog-gap-analysis.md`](../comparison/linq2db-backlog-gap-analysis.md):

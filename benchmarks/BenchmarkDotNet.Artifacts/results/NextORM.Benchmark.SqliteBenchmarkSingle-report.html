@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>NextORM.Benchmark.SqliteBenchmarkSingle-20260924-135037</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.15.8, Linux Ubuntu 22.04.5 LTS (Jammy Jellyfish)
+AMD Ryzen 7 5800HS with Radeon Graphics 3.19GHz, 1 CPU, 8 logical and 4 physical cores
+.NET SDK 10.0.401
+  [Host]     : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+  DefaultJob : .NET 10.0.12 (10.0.12, 10.0.1226.42308), X64 RyuJIT x86-64-v3
+</code></pre>
+<pre><code></code></pre>
+
+<table>
+<thead><tr><th>Method                    </th><th>Mean</th><th>Error</th><th>StdDev</th><th>Ratio</th><th>RatioSD</th><th>Gen0</th><th>Gen1</th><th>Allocated</th><th>Alloc Ratio</th>
+</tr>
+</thead><tbody><tr><td>Nextorm_Prepared_SingleOrDefault</td><td>93.45 &mu;s</td><td>1.503 &mu;s</td><td>1.332 &mu;s</td><td>1.00</td><td>0.02</td><td>0.9766</td><td>-</td><td>8.36 KB</td><td>1.00</td>
+</tr><tr><td>Dapper_SingleOrDefault</td><td>142.91 &mu;s</td><td>1.918 &mu;s</td><td>1.794 &mu;s</td><td>1.53</td><td>0.03</td><td>1.9531</td><td>-</td><td>16.4 KB</td><td>1.96</td>
+</tr><tr><td>Nextorm_Cached_SingleOrDefault</td><td>164.10 &mu;s</td><td>2.231 &mu;s</td><td>2.087 &mu;s</td><td>1.76</td><td>0.03</td><td>7.8125</td><td>-</td><td>64.77 KB</td><td>7.75</td>
+</tr><tr><td>EFCore_Compiled_SingleOrDefault</td><td>356.16 &mu;s</td><td>6.745 &mu;s</td><td>11.454 &mu;s</td><td>3.81</td><td>0.13</td><td>9.7656</td><td>4.8828</td><td>80.4 KB</td><td>9.62</td>
+</tr><tr><td>Linq2Db_Compiled_SingleOrDefault</td><td>369.17 &mu;s</td><td>5.505 &mu;s</td><td>5.150 &mu;s</td><td>3.95</td><td>0.08</td><td>22.9492</td><td>-</td><td>187.58 KB</td><td>22.44</td>
+</tr><tr><td>Linq2Db_SingleOrDefault</td><td>591.50 &mu;s</td><td>4.677 &mu;s</td><td>3.905 &mu;s</td><td>6.33</td><td>0.10</td><td>23.4375</td><td>-</td><td>222.41 KB</td><td>26.61</td>
+</tr><tr><td>EFCore_SingleOrDefault</td><td>679.25 &mu;s</td><td>8.021 &mu;s</td><td>7.110 &mu;s</td><td>7.27</td><td>0.12</td><td>17.5781</td><td>5.8594</td><td>149.64 KB</td><td>17.90</td>
+</tr></tbody></table>
+</body>
+</html>

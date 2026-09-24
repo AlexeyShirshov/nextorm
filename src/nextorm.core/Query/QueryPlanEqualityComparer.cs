@@ -113,6 +113,12 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
         if (x.ForXmlClause != y.ForXmlClause) return false;
 
+        // The document terminals (ForJson/ForXml) read the result as a scalar with no row mapper while
+        // a WithForJson/WithForXml command built for the same SQL keeps its mapper. Both can project
+        // the same result type, so the flag must be part of the key or a cached null-mapper plan would
+        // be reused by a ToList/First call (and vice versa).
+        if (x.DocumentMode != y.DocumentMode) return false;
+
         if (x.Paging.Limit != y.Paging.Limit || x.Paging.Offset != y.Paging.Offset || x.Paging.HasWithTies != y.Paging.HasWithTies) return false;
 
         // First vs FirstOrDefault (and Single vs SingleOrDefault) share SQL and Paging.Limit, so the
@@ -359,6 +365,8 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
             if (obj.ForXmlClause is { } forXml)
                 hash.Add(forXml);
 
+            hash.Add(obj.DocumentMode);
+
             if (obj.WherePlanHash != 0)
                 hash.Add(obj.WherePlanHash);
 
@@ -412,6 +420,7 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
             if (obj.RowLock is { } rowLock)
             {
                 hash.Add(rowLock.Mode);
+                hash.Add(rowLock.Wait);
             }
 
             hash.Add(obj.Final);

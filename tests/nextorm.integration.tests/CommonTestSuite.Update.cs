@@ -161,6 +161,29 @@ public abstract partial class CommonTestSuite
     }
 
     [Fact]
+    public void UpdateJoin_FromCte_ShouldChangeTargetFromCte()
+    {
+        var ctx = _sut.DataProvider;
+        var key = UpdateKey();
+
+        ctx.InsertInto<IDeleteEntity>()
+            .Values(new DeleteEntity { Id = key, Name = "before", Age = 1 })
+            .Insert();
+
+        var e = ctx.From<IDeleteEntity>();
+        var scope = ctx.With("c", e.Where(x => x.Id == key).Select(x => new { x.Id }));
+
+        var affected = e
+            .Join(scope.From("c"), (t, c) => t.Id == c["id"].AsInt)
+            .UpdateJoin()
+            .Set(p => p.Item1.Name, "after")
+            .Update();
+
+        affected.Should().Be(1);
+        ctx.From<IDeleteEntity>().Where(x => x.Id == key).Select(x => x.Name).Single().Should().Be("after");
+    }
+
+    [Fact]
     public async Task UpdateJoinAsync_ShouldChangeTargetFromJoinedRow()
     {
         var ctx = _sut.DataProvider;
@@ -180,5 +203,59 @@ public abstract partial class CommonTestSuite
 
         affected.Should().Be(1);
         ctx.From<IDeleteEntity>().Where(x => x.Id == target).Select(x => x.Name).Single().Should().Be("asrc");
+    }
+
+    [Fact]
+    public void Update_ToSql_ShouldRenderUpdate()
+    {
+        var sql = _sut.DataProvider
+            .Update<IDeleteEntity>()
+            .Set(x => x.Name, "x")
+            .Where(x => x.Id == 1)
+            .ToSql();
+
+        sql.Should().ContainEquivalentOf("update");
+    }
+
+    [Fact]
+    public async Task UpdateAsync_Builder_ShouldChangeRow()
+    {
+        var ctx = _sut.DataProvider;
+        var id = UpdateKey();
+
+        await ctx.InsertInto<IDeleteEntity>()
+            .Values(new DeleteEntity { Id = id, Name = "before", Age = 1 })
+            .InsertAsync(TestContext.Current.CancellationToken);
+
+        var affected = await ctx.Update<IDeleteEntity>()
+            .Set(x => x.Name, "after")
+            .Where(x => x.Id == id)
+            .UpdateAsync(TestContext.Current.CancellationToken);
+
+        affected.Should().Be(1);
+        ctx.From<IDeleteEntity>().Where(x => x.Id == id).Select(x => x.Name).Single().Should().Be("after");
+    }
+
+    [Fact]
+    public void Update_ReturningWholeEntity_ShouldReturnRow()
+    {
+        Assert.SkipUnless(Provider.SupportsInsertReturning, "This provider cannot return updated rows.");
+
+        var ctx = _sut.DataProvider;
+        var id = UpdateKey();
+
+        ctx.InsertInto<IDeleteEntity>()
+            .Values(new DeleteEntity { Id = id, Name = "before", Age = 1 })
+            .Insert();
+
+        var rows = ctx.Update<DeleteEntity>()
+            .Set(x => x.Name, "after")
+            .Where(x => x.Id == id)
+            .Returning()
+            .ToList();
+
+        rows.Should().ContainSingle();
+        rows[0].Name.Should().Be("after");
+        rows[0].Id.Should().Be(id);
     }
 }

@@ -409,6 +409,11 @@ var rows = ctx.InsertInto<Order>()
 (`Returning(x => new { x.Id, x.Name })`), либо используйте класс, реализующий интерфейс;
 `Returning()` на самом интерфейсе бросает `NotSupportedException` при исполнении.
 
+## Массовая вставка (bulk)
+
+Запись целого набора — нативные bulk-пути, чанкинг, `Returning`, `IgnoreDuplicates` и `KeepIdentity` —
+описана в отдельном гайде: [Массовая вставка](24-bulk-insert.md).
+
 ## Upsert и MERGE
 
 Тот же билдер пишет строки и через `MERGE`: переносимый **key upsert** (`OnKeys()` + `WhenMatchedUpdate()` + `WhenNotMatchedInsert()`, рендерится как `INSERT ... ON CONFLICT` / `ON DUPLICATE KEY` / `MERGE`) и общий **полный `MERGE`** с ветками `WHEN MATCHED`/`WHEN NOT MATCHED`, произвольными условиями, `THEN DELETE`/`THEN DO NOTHING` и `RETURNING`/`OUTPUT`. Оба стартуют с `ctx.MergeInto<TEntity>()` и описаны в отдельном гайде:
@@ -434,7 +439,7 @@ var sql = ctx.InsertInto<ISimpleEntity>().Value(x => x.Name, "a").ToSql();
 | SQL Server | да | `OUTPUT inserted.<col>` | да | |
 | MySQL | да | `LAST_INSERT_ID()` | — | общего `RETURNING` нет |
 | MariaDB | да | `LAST_INSERT_ID()` | — | `RETURNING` (10.5+) не используется |
-| ClickHouse | да (малые батчи) | — | — | массовая загрузка — бинарный API драйвера |
+| ClickHouse | да (малые батчи) | — | — | массовая вставка — портируемый `INSERT ... VALUES`; ограничивайте `MaxBatchSize` |
 | In-memory | — | — | — | контекст только для чтения; `NotSupportedException` |
 
 Сам `INSERT ... VALUES` кросс-провайдерный и не гейтится: одно и то же API `InsertInto<T>()` работает
@@ -458,13 +463,15 @@ var sql = ctx.InsertInto<ISimpleEntity>().Value(x => x.Name, "a").ToSql();
 * **Число затронутых строк.** `Insert()`/`InsertAsync()` возвращают число строк, которое сообщает
   провайдер. ClickHouse для `INSERT ... VALUES` его не сообщает и возвращает `0`, хотя строка
   записана — не используйте счётчик для подтверждения вставки в ClickHouse.
-* **Нет разбиения большого батча на чанки**; тысячи строк могут упереться в лимит на утверждение.
-  Для массовой загрузки используйте bulk-copy/бинарный API провайдера.
+* **Дробление большого батча.** `InsertInto<T>()` пишет одно утверждение; для всего набора используйте
+  [Массовая вставка](24-bulk-insert.md), включая необязательное дробление
+  (`MaxBatchSize`/`MaxParameters`/`MaxSqlLength`) и нативные bulk-пути.
 * In-memory-провайдер только для чтения: `INSERT`/`UPDATE`/`DELETE` и полный `MERGE` бросают `NotSupportedException`; только key-upsert merge применяется к зарегистрированной последовательности в контексте.
 
 ## См. также
 
 - [Слияние данных (MERGE / upsert)](23-merge-statement.md)
+- [Массовая вставка (bulk)](24-bulk-insert.md)
 - [Ограничения и что вне области](../advanced/limitations.md)
 - [Обзор провайдеров](../providers/overview.md)
 - [Краткий справочник API](../advanced/api-reference.md)

@@ -5,9 +5,10 @@ using Xunit;
 namespace NextORM.Integration.Tests;
 
 /// <summary>
-/// Owns the disposable database containers for the whole test run. Container start is lazy (a
-/// container is only created when a test actually needs that provider), so there is nothing to do
-/// on initialization; the containers are released here at the end of the run.
+/// Owns the database containers for the whole test run. Container start is lazy (a container is
+/// only created when a test actually needs that provider), so there is nothing to do on
+/// initialization; at the end of the run the containers are stopped here, and because reuse is
+/// enabled they are kept on disk and started again on the next run.
 /// </summary>
 /// <remarks>
 /// Disposal deliberately does not happen in a <see cref="AppDomain.ProcessExit"/> handler: the

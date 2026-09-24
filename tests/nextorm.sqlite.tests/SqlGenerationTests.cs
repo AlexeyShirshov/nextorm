@@ -2463,23 +2463,34 @@ public class SqlGenerationTests
     }
 
     [Fact]
-    public void ForJson_ShouldThrowBecauseSqliteHasNoForJson()
+    public void ForUpdate_SkipLocked_ShouldThrowBecauseSqliteHasNoRowLocking()
     {
         using var ctx = SqliteTestContext.Create();
         var e = ctx.From<ISimpleEntity>();
 
-        var act = () => SqlOf(ctx, e.Select(x => new { x.Id }).ForJson());
+        var act = () => SqlOf(ctx, e.ForUpdate(LockWaitMode.SkipLocked).Select(x => x.Id));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*FOR UPDATE*");
+    }
+
+    [Fact]
+    public void WithForJson_ShouldThrowBecauseSqliteHasNoForJson()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new { x.Id }).WithForJson());
 
         act.Should().Throw<NotSupportedException>().WithMessage("*FOR JSON*");
     }
 
     [Fact]
-    public void ForXml_ShouldThrowBecauseSqliteHasNoForXml()
+    public void WithForXml_ShouldThrowBecauseSqliteHasNoForXml()
     {
         using var ctx = SqliteTestContext.Create();
         var e = ctx.From<ISimpleEntity>();
 
-        var act = () => SqlOf(ctx, e.Select(x => new { x.Id }).ForXml());
+        var act = () => SqlOf(ctx, e.Select(x => new { x.Id }).WithForXml());
 
         act.Should().Throw<NotSupportedException>().WithMessage("*FOR XML*");
     }
@@ -2639,9 +2650,7 @@ public class SqlGenerationTests
     public void TableSample_ShouldThrowBecauseSqliteHasNoTableSample()
     {
         using var ctx = SqliteTestContext.Create();
-        var e = ctx.From<ISimpleEntity>();
-
-        var act = () => SqlOf(ctx, e.TableSample(10).Select(x => x.Id));
+        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.TableSample(10)).Select(x => x.Id));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*TABLESAMPLE*");
     }

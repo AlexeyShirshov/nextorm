@@ -37,9 +37,12 @@ internal sealed class SqlServerTestProvider : ITestProvider
     public bool EnforcesScalarSubqueryCardinality => true;
     public bool SupportsApply => true;
     public bool SupportsInsertReturning => true;
+    public bool SupportsIgnoreDuplicates => false;
     public bool SupportsTruncate => true;
     public bool SupportsDeleteJoin => true;
-    public bool SupportsCreateTableAsSelect => false;
+    public bool SupportsCreateTableAsSelect => true;
+    public bool SupportsTemporaryCreateTableAsSelect => false;
+    public bool SupportsTransactions => true;
     public string TableValuedFunctionSkipReason => "The shared table-valued function test uses SQLite's json_each; SQL Server exposes row-returning JSON through CROSS APPLY OPENJSON instead.";
 
     public string SkipReason => SqlServerContainer.Failure ?? "SQL Server is not available.";

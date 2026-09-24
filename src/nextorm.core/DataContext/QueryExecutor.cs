@@ -21,12 +21,14 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     private readonly bool _logParams;
     private readonly bool _logSensitiveData;
     private readonly Func<bool> _isDisposed;
+    private readonly Func<DbTransaction?> _currentTransaction;
 
     internal QueryExecutor(
         IConnectionManager connectionManager,
         Func<string, object?, DbParameter> createParam,
         LoggingOptions logging,
-        Func<bool> isDisposed)
+        Func<bool> isDisposed,
+        Func<DbTransaction?> currentTransaction)
     {
         _connectionManager = connectionManager;
         _createParam = createParam;
@@ -34,6 +36,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         _logParams = logging.LogParams;
         _logSensitiveData = logging.LogSensitiveData;
         _isDisposed = isDisposed;
+        _currentTransaction = currentTransaction;
     }
 
     private void LogParams(DbCommand sqlCommand)
@@ -61,7 +64,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         _connectionManager.EnsureConnectionOpen();
         var conn = _connectionManager.GetConnection();
 
-        var cmd = compiledQuery.GetDbCommand(@params, _createParam, conn);
+        var cmd = compiledQuery.GetDbCommand(@params, _createParam, conn, _currentTransaction());
 
         if (_logParams) LogParams(cmd);
 
@@ -74,7 +77,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         await _connectionManager.EnsureConnectionOpenAsync(cancellationToken).ConfigureAwait(false);
         var conn = _connectionManager.GetConnection();
 
-        var cmd = compiledQuery.GetDbCommand(@params, _createParam, conn);
+        var cmd = compiledQuery.GetDbCommand(@params, _createParam, conn, _currentTransaction());
 
         if (_logParams) LogParams(cmd);
 
@@ -93,6 +96,9 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
 
         var cmd = conn.CreateCommand();
         cmd.CommandText = sql;
+
+        if (_currentTransaction() is { } transaction)
+            cmd.Transaction = transaction;
 
         for (var i = 0; i < parameters.Count; i++)
             cmd.Parameters.Add(_createParam(parameters[i].Name, parameters[i].Value));
@@ -219,7 +225,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         var compiledQuery = AsDbCommand(preparedQueryCommand);
 
         var sqlEnumerator = RequireEnumerator(compiledQuery);
-        sqlEnumerator.InitEnumerator(_connectionManager, _createParam, @params, cancellationToken);
+        sqlEnumerator.InitEnumerator(_connectionManager, _createParam, @params, cancellationToken, _currentTransaction);
         return sqlEnumerator;
     }
 
@@ -228,7 +234,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         var compiledQuery = AsDbCommand(preparedQueryCommand);
 
         var sqlEnumerator = RequireEnumerator(compiledQuery);
-        sqlEnumerator.InitEnumerator(_connectionManager, _createParam, @params, CancellationToken.None);
+        sqlEnumerator.InitEnumerator(_connectionManager, _createParam, @params, CancellationToken.None, _currentTransaction);
         sqlEnumerator.InitReader(@params);
 
         return sqlEnumerator;

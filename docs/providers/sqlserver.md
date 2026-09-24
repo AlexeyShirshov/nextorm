@@ -118,11 +118,15 @@ primary table name: `ctx.From<IComplexEntity>().WithTableHint("nolock")` emits
 `from complex_entity with (nolock)`. Row locking reuses the same mechanism:
 `ForUpdate`/`ForShare` ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock),
 [`ILockRenderer.UsesTableHints`](xref:NextORM.Core.ILockRenderer.UsesTableHints)) attach `with (updlock)`/
-`with (holdlock)` to the primary table instead of a trailing `FOR UPDATE`/`FOR SHARE` clause.
-`QueryCommand.ForJson(...)` ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson)) appends a trailing
-`FOR JSON PATH`/`FOR JSON AUTO` clause (with optional `ROOT('...')` and `INCLUDE_NULL_VALUES`), and
-`QueryCommand.ForXml(...)` ([`SupportsForXml`](xref:NextORM.Core.ISqlDialect.SupportsForXml)) a `FOR XML RAW/AUTO/EXPLICIT/PATH` one (with optional row
-element, `ROOT('...')` and `ELEMENTS`). The session/information family
+`with (holdlock)` to the primary table instead of a trailing `FOR UPDATE`/`FOR SHARE` clause. A
+[`LockWaitMode`](xref:NextORM.Core.LockWaitMode) adds `nowait` or `readpast` to the same hint
+(`with (updlock, nowait)` / `with (updlock, readpast)`); `readpast` approximates `SKIP LOCKED`.
+`QueryCommand.ForJson(...)` ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson)) is a terminal that executes
+the query and returns the whole result set as one JSON document (`FOR JSON PATH`/`FOR JSON AUTO`, with
+optional `ROOT('...')` and `INCLUDE_NULL_VALUES`), and `QueryCommand.ForXml(...)`
+([`SupportsForXml`](xref:NextORM.Core.ISqlDialect.SupportsForXml)) does the same for `FOR XML RAW/AUTO/EXPLICIT/PATH` (with
+optional row element, `ROOT('...')` and `ELEMENTS`). `QueryCommand.WithForJson(...)`/`WithForXml(...)`
+attach the clause without executing. The session/information family
 ([`SessionInfoFunctions`](xref:NextORM.Core.ISqlDialect.SessionInfoFunctions)) renders `SqlFunctions.Sql.current_user()`/`session_user()` as the
 ANSI key words and `current_schema()`/`current_database()`/`version()` as `schema_name()`/`db_name()`/`@@version`.
 SQL Server renders the window percentiles `SqlFunctions.Sql.percentile_cont(fraction, property).Over()` and
@@ -212,12 +216,12 @@ join complex_entity as [t2] on t1.id = t2.id
 | Full-text predicates | `contains(...)` / `freetext(...)` (column must be full-text indexed) |
 | Full-text ranking | `containstable(table, column, search)` / `freetexttable(...)` table functions return `KEY`/`RANK` ([`SqlFunctions.SqlServer`](xref:NextORM.Core.SqlFunctions.SqlServer), [`IKeyRankRow<TKey>`](xref:NextORM.Core.SqlFunctions.IKeyRankRow`1)) |
 | Locking table hints | `with (hint, ...)` after the primary table ([`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[]))) |
-| Row locking | `ForUpdate`/`ForShare` render `with (updlock)`/`with (holdlock)` on the primary table ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock), [`ILockRenderer.UsesTableHints`](xref:NextORM.Core.ILockRenderer.UsesTableHints)) |
+| Row locking | `ForUpdate`/`ForShare` render `with (updlock)`/`with (holdlock)` on the primary table ([`Lock`](xref:NextORM.Core.ISqlDialect.Lock), [`ILockRenderer.UsesTableHints`](xref:NextORM.Core.ILockRenderer.UsesTableHints)); a [`LockWaitMode`](xref:NextORM.Core.LockWaitMode) adds `nowait`/`readpast` (`with (updlock, nowait)`/`with (updlock, readpast)`) |
 | Session/info functions | `current_user`, `session_user`, `schema_name()`, `db_name()`, `@@version` |
 | Window percentiles | `percentile_cont`/`percentile_disc` as `... within group (order by x) over (...)` (SQL Server 2012+) |
 | Arbitrary-value aggregate | not supported (`ANY_VALUE` is SQL Server 2025 / Fabric only) |
-| JSON output | trailing `for json path` / `for json auto` ([`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean))) |
-| XML output | trailing `for xml raw/auto/explicit/path` ([`ForXml`](xref:NextORM.Core.QueryCommand`1.ForXml(NextORM.Core.ForXmlMode,System.String,System.String,System.Boolean))) |
+| JSON output | whole result set as one JSON document, terminal `for json path` / `for json auto` ([`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean,System.Object[]))) |
+| XML output | whole result set as one XML document, terminal `for xml raw/auto/explicit/path` ([`ForXml`](xref:NextORM.Core.QueryCommand`1.ForXml(NextORM.Core.ForXmlMode,System.String,System.String,System.Boolean,System.Object[]))) |
 | XML data-type methods | `xml.value('xpath', 'type')` / `xml.query('xpath')` / `xml.exist('xpath')` / `xml.nodes('xpath') as [alias]([value])` ([`XmlFunctions`](xref:NextORM.Core.ISqlDialect.XmlFunctions)) |
 | `AVG` over an integer column | truncated to an integer |
 | `ORDER BY … DESC` null placement | nulls sort last by default |

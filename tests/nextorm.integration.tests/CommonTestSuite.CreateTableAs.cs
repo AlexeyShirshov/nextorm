@@ -10,7 +10,7 @@ public abstract partial class CommonTestSuite
     [Fact]
     public void CreateTableAs_TempTable_ShouldBeReadableOnTheSameContext()
     {
-        Assert.SkipUnless(Provider.SupportsCreateTableAsSelect, "This provider cannot materialise a query into a temporary table.");
+        Assert.SkipUnless(Provider.SupportsTemporaryCreateTableAsSelect, "This provider cannot materialise a query into a temporary table.");
         var ctx = _sut.DataProvider;
         var marker = "ctas-" + Guid.NewGuid().ToString("N");
         var keep = Random.Shared.Next(1_000_000, int.MaxValue);
@@ -39,7 +39,7 @@ public abstract partial class CommonTestSuite
     [Fact]
     public void CreateTableAs_TempTableIfNotExists_ShouldBeRepeatable()
     {
-        Assert.SkipUnless(Provider.SupportsCreateTableAsSelect, "This provider cannot materialise a query into a temporary table.");
+        Assert.SkipUnless(Provider.SupportsTemporaryCreateTableAsSelect, "This provider cannot materialise a query into a temporary table.");
         var ctx = _sut.DataProvider;
         var id = Random.Shared.Next(1_000_000, int.MaxValue);
         var name = CreateTableAsName(id);
@@ -58,7 +58,7 @@ public abstract partial class CommonTestSuite
     [Fact]
     public void CreateTableAs_WithCteBody_ShouldBeReadableOnTheSameContext()
     {
-        Assert.SkipUnless(Provider.SupportsCreateTableAsSelect, "This provider cannot materialise a query into a temporary table.");
+        Assert.SkipUnless(Provider.SupportsTemporaryCreateTableAsSelect, "This provider cannot materialise a query into a temporary table.");
         var ctx = _sut.DataProvider;
         var id = Random.Shared.Next(1_000_000, int.MaxValue);
         var name = CreateTableAsName(id);
@@ -77,9 +77,47 @@ public abstract partial class CommonTestSuite
     }
 
     [Fact]
+    public void CreateTableAs_Table_ShouldBeReadableOnTheSameContext()
+    {
+        Assert.SkipUnless(Provider.SupportsCreateTableAsSelect, "This provider cannot materialise a query into a table.");
+        var ctx = _sut.DataProvider;
+        var marker = "ctas-" + Guid.NewGuid().ToString("N");
+        var keep = Random.Shared.Next(1_000_000, int.MaxValue);
+        var name = CreateTableAsName(keep);
+
+        ctx.InsertInto<IDeleteEntity>()
+            .Values(new DeleteEntity { Id = keep, Name = marker, Age = 1 })
+            .Insert();
+
+        try
+        {
+            ctx.From<IDeleteEntity>()
+                .Where(x => x.Id == keep)
+                .Select(x => new { x.Id, x.Name })
+                .ToTable(name);
+
+            var rows = ctx.From(name)
+                .Select(t => new { Id = t.GetInt32("id"), Name = t.GetString("name") })
+                .ToList();
+
+            rows.Should().ContainSingle();
+            rows[0].Id.Should().Be(keep);
+            rows[0].Name.Should().Be(marker);
+        }
+        finally
+        {
+            var connections = (IConnectionManager)ctx;
+            connections.EnsureConnectionOpen();
+            using var cmd = connections.GetConnection().CreateCommand();
+            cmd.CommandText = "drop table if exists " + name;
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    [Fact]
     public void CreateTableAs_UnsupportedProvider_ShouldThrow()
     {
-        Assert.SkipUnless(!Provider.SupportsCreateTableAsSelect, "This provider materialises a query into a temporary table.");
+        Assert.SkipUnless(!Provider.SupportsTemporaryCreateTableAsSelect, "This provider materialises a query into a temporary table.");
         var ctx = _sut.DataProvider;
 
         var act = () => ctx.From<IDeleteEntity>().Select(x => new { x.Id }).ToTempTable(CreateTableAsName(1));

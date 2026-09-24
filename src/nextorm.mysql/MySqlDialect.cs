@@ -36,6 +36,20 @@ public class MySqlDialect : SqlDialectBase
     /// <inheritdoc/>
     public override bool SupportsColumnDefault => true;
 
+    /// <summary>
+    /// MySQL is not marked as having a native bulk path: <c>MySqlBulkCopy</c> goes through
+    /// <c>LOAD DATA LOCAL INFILE</c>, which requires <c>AllowLoadLocalInfile=true</c> on the connection
+    /// and a matching server setting, so the portable <c>INSERT ... VALUES</c> path is used instead (it
+    /// also returns keys and supports <c>INSERT IGNORE</c>).
+    /// </summary>
+    public override bool SupportsBulkCopy => false;
+
+    /// <summary>MySQL skips conflicting rows with the <c>INSERT IGNORE</c> head.</summary>
+    public override bool SupportsInsertIgnore => true;
+
+    /// <inheritdoc/>
+    public override string MakeInsertIgnoreInto(KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, "insert ignore into ");
+
     /// <summary>MySQL and MariaDB have a native <c>TRUNCATE TABLE</c>.</summary>
     public override bool SupportsTruncate => true;
 
@@ -400,6 +414,9 @@ public class MySqlDialect : SqlDialectBase
     /// <summary>MySQL/MariaDB support <c>CREATE [TEMPORARY] TABLE ... AS SELECT</c>.</summary>
     public override bool SupportsCreateTableAsSelect => true;
 
+    /// <summary>MySQL/MariaDB accept <c>IF NOT EXISTS</c> on <c>CREATE TABLE ... AS SELECT</c>.</summary>
+    public override bool SupportsCreateTableAsSelectIfNotExists => true;
+
     /// <summary>MySQL/MariaDB accept a column list on <c>CREATE TABLE ... AS SELECT</c>.</summary>
     public override bool SupportsCreateTableAsSelectColumnList => true;
 }
@@ -437,7 +454,31 @@ internal sealed class MySqlLockRenderer : ILockRenderer
     public bool UsesTableHints => false;
 
     public string Render(LockMode mode, KeywordCase keywordCase = KeywordCase.Lower) =>
-        SqlKeywords.Of(keywordCase, mode == LockMode.Share ? " lock in share mode" : " for update");
+        Render(mode, LockWaitMode.Wait, keywordCase);
+
+    public string Render(LockMode mode, LockWaitMode wait, KeywordCase keywordCase = KeywordCase.Lower) =>
+        SqlKeywords.Of(keywordCase, MySqlLockRenderer.RenderToken(mode, wait));
+
+    private static string RenderToken(LockMode mode, LockWaitMode wait)
+    {
+        if (mode == LockMode.Share)
+        {
+            if (wait == LockWaitMode.Wait)
+                return " lock in share mode";
+
+            return " for share" + LockWaitSuffix(wait);
+        }
+
+        return " for update" + LockWaitSuffix(wait);
+    }
+
+    private static string LockWaitSuffix(LockWaitMode wait) => wait switch
+    {
+        LockWaitMode.Wait => "",
+        LockWaitMode.NoWait => " nowait",
+        LockWaitMode.SkipLocked => " skip locked",
+        _ => throw new ArgumentOutOfRangeException(nameof(wait), wait, "Unknown locking wait mode.")
+    };
 }
 
 internal sealed class MySqlIndexHintRenderer : IIndexHintRenderer

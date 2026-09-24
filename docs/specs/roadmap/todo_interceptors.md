@@ -164,7 +164,8 @@ var ctx = builder.CreateDataContext();
   регистрация на `DataContextBuilder`/`DataContext`, zero-cost при пустом наборе. Закрывает
   observability, provider-опции, трансляцию ошибок.
 - **Фаза 2:** `IDataContextInterceptor.OnClosing/OnClosed` (дёшево) и query filters /
-  `IQueryExpressionInterceptor` — с идентичностью фильтра в ключе плана и per-context scoping.
+  `IQueryExpressionInterceptor` — с идентичностью фильтра в ключе плана и per-context scoping
+  (вынесено в отдельный RFC: [`todo_query_filters.md`](todo_query_filters.md)).
 - **Вне области:** entity lifecycle (нет сущностей), unwrap-обёртки (конфликт с план-кэшем),
   DML-интерцепторы (read-only).
 

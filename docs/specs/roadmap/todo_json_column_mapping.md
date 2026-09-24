@@ -1,4 +1,5 @@
 # TODO: JSON-колонка ↔ CLR-объект (авто-сериализация свойства)
+> Tracking issue: [#64](https://github.com/AlexeyShirshov/nextorm/issues/64).
 
 > Рабочий план (design RFC). Gap-анализ: **G2** из
 > [`linq2db-backlog-gap-analysis.md`](../comparison/linq2db-backlog-gap-analysis.md); аналог linq2db

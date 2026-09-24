@@ -50,9 +50,30 @@ public class InMemoryTests
     [Fact]
     public void TestTableSample_ShouldThrow()
     {
-        var act = () => _sut.SimpleEntity.TableSample(10).Select(it => new { it.Id }).ToList();
+        var act = () => _sut.DataProvider.From<SimpleEntity>(o => o.TableSample(10)).Select(it => new { it.Id }).ToList();
 
         act.Should().Throw<NotSupportedException>().WithMessage("*TABLESAMPLE*");
+    }
+    [Fact]
+    public void TestForJson_ShouldThrow()
+    {
+        var act = () => _sut.SimpleEntity.Select(it => new { it.Id }).ForJson();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*relational*");
+    }
+    [Fact]
+    public void TestForXml_ShouldThrow()
+    {
+        var act = () => _sut.SimpleEntity.Select(it => new { it.Id }).ForXml();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*relational*");
+    }
+    [Fact]
+    public async Task TestForJsonAsync_ShouldThrow()
+    {
+        var act = () => _sut.SimpleEntity.Select(it => new { it.Id }).ForJsonAsync(cancellationToken: TestContext.Current.CancellationToken);
+
+        await act.Should().ThrowAsync<NotSupportedException>().WithMessage("*relational*");
     }
     [Fact]
     public void TestPivot_ShouldThrow()
@@ -75,6 +96,13 @@ public class InMemoryTests
     public void TestForUpdate_ShouldThrow()
     {
         var act = () => _sut.SimpleEntity.ForUpdate().Select(it => new { it.Id }).ToList();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*FOR UPDATE*");
+    }
+    [Fact]
+    public void TestForUpdate_SkipLocked_ShouldThrow()
+    {
+        var act = () => _sut.SimpleEntity.ForUpdate(LockWaitMode.SkipLocked).Select(it => new { it.Id }).ToList();
 
         act.Should().Throw<NotSupportedException>().WithMessage("*FOR UPDATE*");
     }
@@ -606,10 +634,10 @@ public class InMemoryTests
     [Fact]
     public void Sample_WithNonFiniteRatio_ShouldThrow()
     {
-        ((Action)(() => _sut.SimpleEntity.Sample(double.NaN)))
+        ((Action)(() => _sut.DataProvider.From<SimpleEntity>(o => o.Sample(double.NaN))))
             .Should().Throw<ArgumentOutOfRangeException>();
 
-        ((Action)(() => _sut.SimpleEntity.Sample(double.PositiveInfinity)))
+        ((Action)(() => _sut.DataProvider.From<SimpleEntity>(o => o.Sample(double.PositiveInfinity))))
             .Should().Throw<ArgumentOutOfRangeException>();
     }
     [Fact]

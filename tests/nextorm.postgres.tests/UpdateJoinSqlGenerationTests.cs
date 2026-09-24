@@ -24,6 +24,24 @@ public class UpdateJoinSqlGenerationTests
     }
 
     [Fact]
+    public void UpdateJoin_FromCte_ShouldHoistWith()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var e = ctx.From<ISimpleEntity>();
+        var scope = ctx.With("c", e.Where(x => x.Id > 0).Select(x => new { x.Id }));
+
+        var sql = e
+            .Join(scope.From("c"), (t, c) => t.Id == c["id"].AsInt)
+            .UpdateJoin()
+            .Set(p => p.Item1.Id, 0)
+            .ToSql();
+
+        sql.Should().StartWith("with c as (select id from simple_entity");
+        sql.Should().Contain("update simple_entity as \"t1\" set id = @p0 from c as \"t2\" where t1.id = t2.id");
+    }
+
+    [Fact]
     public void UpdateJoin_SetJoinedColumn_ShouldQualifyBothSides()
     {
         using var ctx = PostgresTestContext.Create();

@@ -325,8 +325,25 @@ internal static class SqlSourceRenderer
 
         var source = MakeFrom(in ctx, join.From, new FromRenderOptions(true, join.EntityType ?? join.From.SourceType, false));
 
-        return ctx.ParamMode ? null : ctx.Dialect.MakeApply(join.JoinType, source, ctx.KeywordCase);
+        if (ctx.ParamMode)
+            return null;
+
+        if (!string.IsNullOrEmpty(join.From.Table) && !ctx.Dialect.SupportsApplyOnPlainTable)
+            return MakePlainTableApply(in ctx, join.JoinType, source);
+
+        return ctx.Dialect.MakeApply(join.JoinType, source, ctx.KeywordCase);
     }
+
+    // A plain table cannot reference the left-hand row, so CROSS/OUTER APPLY over it is an ordinary
+    // CROSS/LEFT join. Required for dialects whose apply spelling uses LATERAL, because LATERAL is
+    // only valid before a subquery, function or composite expression, never a bare table name.
+    private static string MakePlainTableApply(in SqlBuildContext ctx, JoinType applyType, string source) => applyType switch
+    {
+        JoinType.CrossApply => SqlKeywords.Of(ctx.KeywordCase, " cross join ") + source,
+        JoinType.OuterApply => SqlKeywords.Of(ctx.KeywordCase, " left join ") + source + SqlKeywords.Of(ctx.KeywordCase, " on true"),
+        _ => throw new ArgumentOutOfRangeException(nameof(applyType), applyType, "Not an APPLY join type")
+    };
+
 
     internal static string MakeFrom(in SqlBuildContext ctx, FromExpression from, FromRenderOptions options)
         => MakeFrom(in ctx, from, options, out _);

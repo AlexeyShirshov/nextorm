@@ -1,4 +1,5 @@
 # TODO: `TimeSpan`/interval-колонки и точность дат (`[Duration]`)
+> Tracking issue: [#72](https://github.com/AlexeyShirshov/nextorm/issues/72).
 
 > Рабочий план (design RFC). Источник — **G9** из
 > [`linq2db-backlog-gap-analysis.md`](../comparison/linq2db-backlog-gap-analysis.md):

@@ -462,7 +462,7 @@ public class SqlGenerationTests
     }
 
     [Fact]
-    public void CrossApply_ShouldEmitCrossJoinLateral()
+    public void CrossApply_OnPlainTable_ShouldEmitCrossJoinWithoutLateral()
     {
         using var ctx = PostgresTestContext.Create();
         var simple = ctx.From<ISimpleEntity>();
@@ -470,12 +470,13 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, simple.CrossApply(complex).Select(p => new { p.Item1.Id, p.Item2.String }));
 
-        sql.Should().Contain(" cross join lateral complex_entity as \"t2\"");
+        sql.Should().Contain(" cross join complex_entity as \"t2\"");
+        sql.Should().NotContain("lateral");
         sql.Should().NotContain(" on true");
     }
 
     [Fact]
-    public void OuterApply_ShouldEmitLeftJoinLateralOnTrue()
+    public void OuterApply_OnPlainTable_ShouldEmitLeftJoinOnTrueWithoutLateral()
     {
         using var ctx = PostgresTestContext.Create();
         var simple = ctx.From<ISimpleEntity>();
@@ -483,7 +484,8 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, simple.OuterApply(complex).Select(p => new { p.Item1.Id, p.Item2.String }));
 
-        sql.Should().Contain(" left join lateral complex_entity as \"t2\" on true");
+        sql.Should().Contain(" left join complex_entity as \"t2\" on true");
+        sql.Should().NotContain("lateral");
     }
 
     [Fact]
@@ -523,6 +525,22 @@ public class SqlGenerationTests
 
         sql.Should().Be("select t1.id, t3.\"String\" from simple_entity as \"t1\" left join lateral (select t2.id, t2.somestring as \"String\" from complex_entity as \"t2\"\n"
             + " where t2.id = cast(t1.id as bigint)) as \"t3\" on true");
+    }
+
+    [Fact]
+    public void CrossApply_ToCorrelatedBuilderSource_ShouldReferenceProjectedAlias()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<ISimpleEntity>()
+            .CrossApply(s => ctx.From<IComplexEntity>().Where(c => c.Id == s.Id))
+            .Select(p => new { p.Item1.Id, p.Item2.String }));
+
+        // The derived table exposes the entity's columns under their projected names, so the
+        // outer reference must use the alias ("String"), not the physical column (somestring).
+        sql.Should().Contain("select t1.id, t3.\"String\" from");
+        sql.Should().Contain("cross join lateral (select t2.id, t2.nullableint as \"Int\", t2.somestring as \"String\"");
+        sql.Should().NotContain("t3.somestring");
     }
 
     [Fact]
@@ -2145,7 +2163,7 @@ public class SqlGenerationTests
         ((Action)(() => SqlOf(ctx, e.Final().Select(x => new { x.Id }))))
             .Should().Throw<NotSupportedException>().WithMessage("*FINAL*");
 
-        ((Action)(() => SqlOf(ctx, e.Sample(0.1).Select(x => new { x.Id }))))
+        ((Action)(() => SqlOf(ctx, ctx.From<IComplexEntity>(o => o.Sample(0.1)).Select(x => new { x.Id }))))
             .Should().Throw<NotSupportedException>().WithMessage("*SAMPLE*");
 
         ((Action)(() => SqlOf(ctx, e.PreWhere(x => x.Id > 0L).Select(x => new { x.Id }))))
@@ -3255,9 +3273,9 @@ public class SqlGenerationTests
     public void TableSample_ShouldEmitSystemSample()
     {
         using var ctx = PostgresTestContext.Create();
-        var e = ctx.From<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>(o => o.TableSample(10));
 
-        SqlOf(ctx, e.TableSample(10).Select(x => x.Id))
+        SqlOf(ctx, e.Select(x => x.Id))
             .Should().Be("select id from simple_entity tablesample system (10)");
     }
 
@@ -3265,9 +3283,9 @@ public class SqlGenerationTests
     public void TableSample_WithSeed_ShouldEmitRepeatable()
     {
         using var ctx = PostgresTestContext.Create();
-        var e = ctx.From<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>(o => o.TableSample(10, TableSampleMethod.System, 42));
 
-        SqlOf(ctx, e.TableSample(10, TableSampleMethod.System, 42).Select(x => x.Id))
+        SqlOf(ctx, e.Select(x => x.Id))
             .Should().EndWith("tablesample system (10) repeatable (42)");
     }
 
@@ -3275,9 +3293,9 @@ public class SqlGenerationTests
     public void TableSample_Bernoulli_ShouldEmitBernoulliMethod()
     {
         using var ctx = PostgresTestContext.Create();
-        var e = ctx.From<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>(o => o.TableSample(5, TableSampleMethod.Bernoulli));
 
-        SqlOf(ctx, e.TableSample(5, TableSampleMethod.Bernoulli).Select(x => x.Id))
+        SqlOf(ctx, e.Select(x => x.Id))
             .Should().EndWith("tablesample bernoulli (5)");
     }
 
@@ -3285,9 +3303,7 @@ public class SqlGenerationTests
     public void TableSample_WithInvalidPercent_ShouldThrow()
     {
         using var ctx = PostgresTestContext.Create();
-        var e = ctx.From<ISimpleEntity>();
-
-        var act = () => e.TableSample(0);
+        var act = () => ctx.From<ISimpleEntity>(o => o.TableSample(0));
 
         act.Should().Throw<ArgumentOutOfRangeException>();
     }
@@ -3342,6 +3358,24 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void ForUpdate_NoWait_ShouldEmitNowait()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.ForUpdate(LockWaitMode.NoWait).Select(x => x.Id)).Should().EndWith("for update nowait");
+    }
+
+    [Fact]
+    public void ForShare_SkipLocked_ShouldEmitSkipLocked()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.ForShare(LockWaitMode.SkipLocked).Select(x => x.Id)).Should().EndWith("for share skip locked");
+    }
+
+    [Fact]
     public void KeywordCase_Upper_ShouldUppercaseDialectClauses()
     {
         using var ctx = PostgresTestContext.CreateUppercase();
@@ -3350,11 +3384,12 @@ public class SqlGenerationTests
         SqlOf(ctx, e.DistinctOn(x => x.Int).Select(x => new { x.Int }))
             .Should().Contain("SELECT DISTINCT ON (nullableint)");
 
-        SqlOf(ctx, e.TableSample(10, TableSampleMethod.System, 3).Select(x => x.Int))
+        SqlOf(ctx, ctx.From<IComplexEntity>(o => o.TableSample(10, TableSampleMethod.System, 3)).Select(x => x.Int))
             .Should().Contain(" TABLESAMPLE system (10) REPEATABLE (3)");
 
         SqlOf(ctx, e.ForUpdate().Select(x => x.Int)).Should().EndWith("FOR UPDATE");
         SqlOf(ctx, e.ForShare().Select(x => x.Int)).Should().EndWith("FOR SHARE");
+        SqlOf(ctx, e.ForUpdate(LockWaitMode.SkipLocked).Select(x => x.Int)).Should().EndWith("FOR UPDATE SKIP LOCKED");
     }
 
     [Fact]

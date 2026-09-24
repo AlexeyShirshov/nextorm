@@ -217,6 +217,12 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     }
     internal QueryCommand? FromQuery => From?.SubQuery;
     internal bool OneColumn { get; set; }
+    /// <summary>
+    /// When <c>true</c>, the planner compiles no row mapper: the command is read as a single scalar
+    /// value. Set by the <c>ForJson</c>/<c>ForXml</c> terminals, whose whole result set collapses into
+    /// one document column.
+    /// </summary>
+    internal bool DocumentMode { get; set; }
     /// <summary>Whether the command is shaped to return at most a single row (set by the <c>First</c>/<c>Single</c> terminals).</summary>
     public bool SingleRow { get; set; }
     /// <summary>

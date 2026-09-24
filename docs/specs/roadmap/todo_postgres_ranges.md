@@ -1,4 +1,5 @@
 # TODO: PostgreSQL range-типы и `Overlaps` (`&&`)
+> Tracking issue: [#66](https://github.com/AlexeyShirshov/nextorm/issues/66).
 
 > Рабочий план (design RFC). Источник — **G11** из
 > [`linq2db-backlog-gap-analysis.md`](../comparison/linq2db-backlog-gap-analysis.md):

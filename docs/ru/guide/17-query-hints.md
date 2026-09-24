@@ -129,15 +129,14 @@ var my = dataContext.From<ISimpleEntity>()
 
 ## Модификаторы запроса ClickHouse
 
-ClickHouse имеет четыре модификатора уровня запроса — не хинты, а отдельные методы построителя:
-`Final()`, `Sample(ratio[, offset])`, `PreWhere(predicate)` и `Settings(("key", "value"), ...)`. Они
-допустимы только в ClickHouse; остальные провайдеры и контекст in-memory бросают
-`NotSupportedException`.
+ClickHouse имеет четыре модификатора уровня запроса — не хинты: `Final()`, `PreWhere(predicate)` и
+`Settings(("key", "value"), ...)` — отдельные методы построителя, а модификатор `Sample(ratio[, offset])`
+— это опция источника на время запроса, задаваемая в `From`. Они допустимы только в ClickHouse;
+остальные провайдеры и контекст in-memory бросают `NotSupportedException`.
 
 ```csharp
-var rows = dataContext.From<IComplexEntity>()
+var rows = dataContext.From<IComplexEntity>(o => o.Sample(0.1, 0.5))
     .Final()
-    .Sample(0.1, 0.5)
     .PreWhere(c => c.Int > 0)
     .Where(c => c.Boolean == true)
     .Select(c => new { c.Id, c.Int })

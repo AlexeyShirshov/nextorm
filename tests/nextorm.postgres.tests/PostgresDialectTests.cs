@@ -54,6 +54,8 @@ public class PostgresDialectTests
         Dialect.Lock.Should().NotBeNull();
         Dialect.Lock!.Render(LockMode.Update).Should().Be(" for update");
         Dialect.Lock!.Render(LockMode.Share).Should().Be(" for share");
+        Dialect.Lock!.Render(LockMode.Update, LockWaitMode.NoWait).Should().Be(" for update nowait");
+        Dialect.Lock!.Render(LockMode.Share, LockWaitMode.SkipLocked).Should().Be(" for share skip locked");
 
         Dialect.SupportsTextSearchFunctions.Should().BeTrue();
     }

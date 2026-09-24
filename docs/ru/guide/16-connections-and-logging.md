@@ -110,6 +110,15 @@ using var ctx = new SqliteDataContext("Data Source=app.db", new DataContextBuild
 bool same = ReferenceEquals(((IConnectionManager)ctx).GetConnection(), ctx.GetConnection()); // true
 ```
 
+## Транзакции
+
+Транзакция — тоже отдельная роль, поэтому контекст без соединения (in-memory) её не реализует.
+[`DataContext`](xref:NextORM.Core.DataContext) реализует
+[`ITransactionManager`](xref:NextORM.Core.ITransactionManager): начните транзакцию через
+`BeginTransaction*` или встройтесь в чужую (EF Core, Dapper, сырой ADO.NET) через `UseTransaction`.
+Её поддерживают SQLite, PostgreSQL, SQL Server и MySQL/MariaDB; ClickHouse её отклоняет, а провайдер
+in-memory её не реализует. Полный гайд — [Транзакции](25-transactions.md).
+
 ## Логирование
 
 ### Подключение `ILoggerFactory`

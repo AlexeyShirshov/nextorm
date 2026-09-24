@@ -239,6 +239,22 @@ public class MergeSqlGenerationTests
     }
 
     [Fact]
+    public void KeyUpsert_Returning_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var act = () => ctx.MergeInto<IMergeEntity>()
+            .Using(new MergeEntity { Id = 1, Name = "a", Age = 5 })
+            .OnKeys()
+            .WhenMatchedUpdate()
+            .WhenNotMatchedInsert()
+            .Returning()
+            .ToList();
+
+        act.Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
     public void FullMerge_ReturningProjection_ShouldRenderReturning()
     {
         using var ctx = PostgresTestContext.Create();

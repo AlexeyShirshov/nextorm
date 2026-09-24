@@ -158,15 +158,14 @@ See [Table-valued functions](../13-table-valued-functions.md).
 
 ## `TABLESAMPLE`
 
-[`TableSample`](xref:NextORM.Core.EntityBuilder`1.TableSample(System.Double,NextORM.Core.TableSampleMethod,System.Nullable{System.Double})) appends a `TABLESAMPLE` modifier to the
+[`FromOptions.TableSample`](xref:NextORM.Core.FromOptions.TableSample(System.Double,NextORM.Core.TableSampleMethod,System.Nullable{System.Double})) appends a `TABLESAMPLE` modifier to the
 query's primary table ([`TableSample`](xref:NextORM.Core.ISqlDialect.TableSample)).
 PostgreSQL supports both sampling methods and an optional repeatable seed
 (`TableSample`,
 `ITableSampleMethods.Render`):
 
 ```csharp
-var rows = dataContext.From<ISimpleEntity>()
-    .TableSample(10, TableSampleMethod.System, seed: 42)
+var rows = dataContext.From<ISimpleEntity>(o => o.TableSample(10, TableSampleMethod.System, seed: 42))
     .Select(e => e.Id)
     .ToList();
 ```
@@ -198,8 +197,10 @@ var rows = dataContext.From<ISimpleEntity>()
 select id from simple_entity where (id > 5) for update
 ```
 
-`LockMode.Update` renders `for update` and `LockMode.Share` renders `for share`. See
-[Row locking](../01-querying-and-projections.md#row-locking-for-update--for-share).
+`LockMode.Update` renders `for update` and `LockMode.Share` renders `for share`. Both accept a
+[`LockWaitMode`](xref:NextORM.Core.LockWaitMode): `ForUpdate(LockWaitMode.SkipLocked)` renders
+`for update skip locked` and `ForShare(LockWaitMode.NoWait)` renders `for share nowait` (PostgreSQL 9.5+).
+See [Row locking](../01-querying-and-projections.md#row-locking-for-update--for-share).
 
 ## Data-modifying CTEs
 

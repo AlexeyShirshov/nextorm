@@ -38,9 +38,12 @@ internal sealed class MySqlTestProvider : ITestProvider
     public bool EnforcesScalarSubqueryCardinality => true;
     public bool SupportsApply => true;
     public bool SupportsInsertReturning => false;
+    public bool SupportsIgnoreDuplicates => true;
     public bool SupportsTruncate => true;
     public bool SupportsDeleteJoin => true;
     public bool SupportsCreateTableAsSelect => true;
+    public bool SupportsTemporaryCreateTableAsSelect => true;
+    public bool SupportsTransactions => true;
     public string TableValuedFunctionSkipReason => "The shared table-valued function test uses SQLite's json_each; MySQL exposes JSON rows through JSON_TABLE with a different shape.";
 
     public string SkipReason => MySqlContainer.Failure ?? "MySQL is not available.";

@@ -37,6 +37,8 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <inheritdoc/>
     public virtual bool SupportsApply => false;
     /// <inheritdoc/>
+    public virtual bool SupportsApplyOnPlainTable => false;
+    /// <inheritdoc/>
     public virtual bool SupportsJoinStrictness => false;
     /// <inheritdoc/>
     public virtual bool SupportsGlobalJoin => false;
@@ -184,6 +186,8 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual bool SupportsOrderedAggregates => false;
     /// <inheritdoc/>
     public virtual bool SupportsCommandBehaviorSingleRow => true;
+    /// <inheritdoc/>
+    public virtual bool SupportsTransactions => true;
 
     /// <summary>Defaults to <c>null</c>; ClickHouse exposes the <c>LIMIT n BY expr</c> renderer.</summary>
     public virtual ILimitByRenderer? LimitBy => null;
@@ -708,6 +712,25 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <summary>Renders the scalar query for the last generated identity without naming the column; only reached through a dialect that set <see cref="SupportsIdentityFunction"/>.</summary>
     public virtual string MakeIdentityFunction(KeywordCase keywordCase = KeywordCase.Lower) => MakeLastInsertId(keywordCase);
 
+    /// <summary>Defaults to <c>false</c>; PostgreSQL, SQL Server, MySQL/MariaDB and ClickHouse opt into a native bulk API.</summary>
+    public virtual bool SupportsBulkCopy => false;
+    /// <summary>Defaults to <c>false</c>; SQLite, MySQL, MariaDB and ClickHouse opt into an <c>INSERT ... IGNORE</c> head.</summary>
+    public virtual bool SupportsInsertIgnore => false;
+    /// <summary>Renders the <c>INSERT</c> head that skips conflicting rows; MySQL/MariaDB override it with <c>insert ignore into </c>.</summary>
+    public virtual string MakeInsertIgnoreInto(KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, "insert or ignore into ");
+    /// <summary>Defaults to <c>false</c>; PostgreSQL and SQLite opt into a trailing <c>ON CONFLICT DO NOTHING</c>.</summary>
+    public virtual bool SupportsOnConflictDoNothing => false;
+    /// <summary>Renders the trailing <c> ON CONFLICT DO NOTHING</c>; only reached through a dialect that set <see cref="SupportsOnConflictDoNothing"/>.</summary>
+    public virtual string MakeOnConflictDoNothing(KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, " on conflict do nothing");
+    /// <summary>Renders the PostgreSQL <c> OVERRIDING SYSTEM VALUE</c> clause; the empty string on dialects that need no clause.</summary>
+    public virtual string MakeOverridingSystemValue(KeywordCase keywordCase = KeywordCase.Lower) => string.Empty;
+    /// <summary>Defaults to <c>false</c>; SQL Server wraps explicit-identity inserts with <c>SET IDENTITY_INSERT</c>.</summary>
+    public virtual bool RequiresIdentityInsertToggle => false;
+    /// <summary>Renders the statement that enables explicit identity values for a table; only reached through a dialect that set <see cref="RequiresIdentityInsertToggle"/>.</summary>
+    public virtual string MakeIdentityInsertOn(string table, KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, "set identity_insert ") + table + Kw(keywordCase, " on");
+    /// <summary>Renders the statement that disables explicit identity values for a table; only reached through a dialect that set <see cref="RequiresIdentityInsertToggle"/>.</summary>
+    public virtual string MakeIdentityInsertOff(string table, KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, "set identity_insert ") + table + Kw(keywordCase, " off");
+
     /// <summary>Defaults to <c>false</c>; PostgreSQL and SQLite 3.24+ opt into <c>ON CONFLICT ... DO UPDATE</c>.</summary>
     public virtual bool SupportsOnConflict => false;
     /// <summary>Renders <c> ON CONFLICT (&lt;keys&gt;) DO UPDATE SET </c>; only reached through a dialect that set <see cref="SupportsOnConflict"/>.</summary>
@@ -863,10 +886,19 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <summary>Renders the <c>DEFAULT</c> keyword as a value; only reached through a dialect that set <see cref="SupportsColumnDefault"/>.</summary>
     public virtual string MakeColumnDefault(KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, "default");
 
-    /// <summary>Defaults to <c>false</c>; PostgreSQL, SQLite, MySQL and MariaDB opt into a temporary <c>CREATE TABLE ... AS SELECT</c>.</summary>
+    /// <summary>Defaults to <c>false</c>; PostgreSQL, SQLite, MySQL, MariaDB, ClickHouse and SQL Server can materialise a query into a table.</summary>
     public virtual bool SupportsCreateTableAsSelect => false;
 
-    /// <summary>Defaults to <c>false</c>; PostgreSQL, MySQL and MariaDB accept a column list with <c>AS SELECT</c>, SQLite does not.</summary>
+    /// <summary>Defaults to <see cref="SupportsCreateTableAsSelect"/>; only PostgreSQL, SQLite, MySQL and MariaDB keep a temporary form.</summary>
+    public virtual bool SupportsTemporaryCreateTableAsSelect => SupportsCreateTableAsSelect;
+
+    /// <summary>Defaults to <c>false</c>; PostgreSQL, SQLite, MySQL, MariaDB and ClickHouse accept <c>IF NOT EXISTS</c>, SQL Server's <c>SELECT ... INTO</c> does not.</summary>
+    public virtual bool SupportsCreateTableAsSelectIfNotExists => false;
+
+    /// <summary>Defaults to <c>false</c>; SQL Server materialises through <c>SELECT ... INTO</c> instead of <c>CREATE TABLE ... AS SELECT</c>.</summary>
+    public virtual bool CreateTableAsSelectUsesSelectInto => false;
+
+    /// <summary>Defaults to <c>false</c>; PostgreSQL, MySQL and MariaDB accept a column list with <c>AS SELECT</c>; SQLite, SQL Server and ClickHouse do not.</summary>
     public virtual bool SupportsCreateTableAsSelectColumnList => false;
 
     /// <summary>Defaults to <c>false</c>; only PostgreSQL accepts <c>ON COMMIT</c> on a temporary table.</summary>
@@ -874,6 +906,14 @@ public abstract class SqlDialectBase : ISqlDialect
 
     /// <summary>Defaults to <c>false</c>; only PostgreSQL accepts <c>WITH [NO] DATA</c>.</summary>
     public virtual bool SupportsCreateTableAsSelectWithNoData => false;
+
+    /// <summary>
+    /// Renders the clause that introduces the target of a <c>SELECT ... INTO</c> materialisation, inserted
+    /// into the select list by the statement builder. Only reached through a dialect that set
+    /// <see cref="CreateTableAsSelectUsesSelectInto"/>.
+    /// </summary>
+    public virtual string MakeCreateTableAsSelectInto(CreateTableAsClause clause, KeywordCase keywordCase = KeywordCase.Lower)
+        => throw new NotSupportedException($"{GetType().Name} cannot render a SELECT ... INTO materialisation.");
 
     /// <summary>
     /// Renders the ANSI/CLI <c>CREATE [TEMPORARY] TABLE [IF NOT EXISTS] &lt;t&gt; [(cols)] AS &lt;select&gt;</c>

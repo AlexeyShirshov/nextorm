@@ -152,6 +152,29 @@ with l as (select id from complex_entity), r as (select id from simple_entity) s
 > `t["id"].AsInt`), и имена должны совпадать с выходными алиасами тела CTE. Называйте элементы проекции
 > по SQL-алиасам (нижний `snake_case`), чтобы внешние ссылки оставались точными.
 
+Скоуп CTE также управляет multi-table `UPDATE`/`DELETE`. Разместите CTE на **присоединяемой** стороне,
+а целью оставьте физическую таблицу; объявление поднимается перед мутацией:
+
+```csharp
+var recent = dataContext
+    .With("recent", dataContext.From<IOrder>().Where(o => o.Id > 1000).Select(o => new { o.Id }));
+
+dataContext.From<IOrder>()
+    .Join(recent.From("recent"), (o, r) => o.Id == r.GetInt64("id"))
+    .UpdateJoin()
+    .Set(p => p.Item1.Status, "archived")
+    .Update();
+```
+
+```sql
+-- PostgreSQL
+with recent as (select id from orders where (id > 1000)) update orders as "t1" set status = @p0 from recent as "t2" where t1.id = t2.id
+```
+
+Это работает на каждом провайдере с `UPDATE ... FROM`/`JOIN` (и `DELETE ... USING`/join), на любой
+позиции join, и для рекурсивных CTE. См. [Data modification (UPDATE)](21-update-statement.md#обновление-из-join)
+и [Data modification (DELETE)](20-delete-statement.md#удаление-по-соединению).
+
 ## Рекурсивный CTE: числовая последовательность
 
 Рекурсивный CTE — это `union all` **якоря** (нерекурсивного запроса) и **шага**, который читает CTE по

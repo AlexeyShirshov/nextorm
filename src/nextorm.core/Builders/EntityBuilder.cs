@@ -318,30 +318,6 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         return b;
     }
     /// <summary>
-    /// Adds the ClickHouse <c>SAMPLE ratio</c> modifier: reads roughly <paramref name="ratio"/> of the
-    /// rows (a value in <c>[0, 1]</c>). Requires a dialect that supports it (see
-    /// <see cref="ISqlDialect.SupportsSample"/>).
-    /// </summary>
-    public EntityBuilder<TEntity> Sample(double ratio) => Sample(ratio, 0);
-    /// <summary>
-    /// Adds the ClickHouse <c>SAMPLE ratio OFFSET offset</c> modifier: reads roughly
-    /// <paramref name="ratio"/> of the rows starting at <paramref name="offset"/> (both in <c>[0, 1]</c>).
-    /// Requires a dialect that supports it (see <see cref="ISqlDialect.SupportsSample"/>).
-    /// </summary>
-    public EntityBuilder<TEntity> Sample(double ratio, double offset)
-    {
-        if (!double.IsFinite(ratio) || ratio is < 0 or > 1)
-            throw new ArgumentOutOfRangeException(nameof(ratio), ratio, "Sample ratio must be a finite value in [0, 1].");
-
-        if (!double.IsFinite(offset) || offset is < 0 or > 1)
-            throw new ArgumentOutOfRangeException(nameof(offset), offset, "Sample offset must be a finite value in [0, 1].");
-
-        var b = Clone();
-        b.SampleRatio = ratio;
-        b.SampleOffset = offset;
-        return b;
-    }
-    /// <summary>
     /// Adds a trailing ClickHouse <c>SETTINGS key = value, ...</c> clause. The values are rendered
     /// verbatim, so only pass trusted literals (for example <c>max_threads = "2"</c>). Requires a dialect
     /// that supports it (see <see cref="ISqlDialect.SupportsSettings"/>).
@@ -638,24 +614,6 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         return new NamedWindowOrderKey(expression, OrderDirection.Desc);
     }
     /// <summary>
-    /// Adds a <c>TABLESAMPLE</c> modifier to the primary table: reads only <paramref name="percent"/>
-    /// percent of the table using <paramref name="method"/>. <paramref name="seed"/> makes the sample
-    /// repeatable. Requires a dialect that supports it (see <see cref="ISqlDialect.TableSample"/>).
-    /// </summary>
-    /// <param name="percent">The percentage of the table to sample; must be in <c>(0, 100]</c>.</param>
-    /// <param name="method">The sampling algorithm.</param>
-    /// <param name="seed">An optional seed that makes the sample repeatable.</param>
-    public EntityBuilder<TEntity> TableSample(double percent, TableSampleMethod method = TableSampleMethod.System, double? seed = null)
-    {
-        if (percent <= 0 || percent > 100)
-            throw new ArgumentOutOfRangeException(nameof(percent), percent, "TABLESAMPLE percent must be in (0, 100].");
-
-        var b = Clone();
-        b._tablesample = new TableSampleClause(method, percent, seed);
-
-        return b;
-    }
-    /// <summary>
     /// Adds a <c>FOR SYSTEM_TIME</c> clause to the primary table, querying a system-versioned (temporal)
     /// table as of a point in time or over a range. Requires a dialect that supports it (see
     /// <see cref="ISqlDialect.SupportsTemporalTable"/>).
@@ -761,25 +719,45 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     }
 
     /// <summary>
-    /// Locks the selected rows exclusively until the transaction ends. Renders a trailing <c>FOR UPDATE</c>
-    /// clause on dialects that support it, or a table hint on the primary source (<c>with (updlock)</c> on
-    /// SQL Server). Requires a dialect that supports row locking (see
-    /// <see cref="ISqlDialect.Lock"/>).
+    /// Locks the selected rows exclusively until the transaction ends, blocking while a locked row is held
+    /// by another transaction. Renders a trailing <c>FOR UPDATE</c> clause on dialects that support it, or a
+    /// table hint on the primary source (<c>with (updlock)</c> on SQL Server). Requires a dialect that
+    /// supports row locking (see <see cref="ISqlDialect.Lock"/>).
     /// </summary>
-    public EntityBuilder<TEntity> ForUpdate() => WithRowLock(LockMode.Update);
+    public EntityBuilder<TEntity> ForUpdate() => WithRowLock(LockMode.Update, LockWaitMode.Wait);
 
     /// <summary>
-    /// Locks the selected rows in shared mode until the transaction ends. Renders a trailing <c>FOR SHARE</c>
-    /// clause on dialects that support it, or a table hint on the primary source (<c>with (holdlock)</c> on
-    /// SQL Server). Requires a dialect that supports row locking (see
-    /// <see cref="ISqlDialect.Lock"/>).
+    /// Locks the selected rows exclusively until the transaction ends, with the requested wait behaviour for
+    /// rows already locked by another transaction. Renders a trailing <c>FOR UPDATE [NOWAIT | SKIP LOCKED]</c>
+    /// clause on dialects that support it, or the matching table hint on the primary source
+    /// (<c>with (updlock, nowait)</c>/<c>with (updlock, readpast)</c> on SQL Server). Requires a dialect that
+    /// supports row locking (see <see cref="ISqlDialect.Lock"/>).
     /// </summary>
-    public EntityBuilder<TEntity> ForShare() => WithRowLock(LockMode.Share);
+    /// <param name="wait">How to react to a row already locked by another transaction.</param>
+    public EntityBuilder<TEntity> ForUpdate(LockWaitMode wait) => WithRowLock(LockMode.Update, wait);
 
-    private EntityBuilder<TEntity> WithRowLock(LockMode mode)
+    /// <summary>
+    /// Locks the selected rows in shared mode until the transaction ends, blocking while a locked row is held
+    /// by another transaction. Renders a trailing <c>FOR SHARE</c> clause on dialects that support it, or a
+    /// table hint on the primary source (<c>with (holdlock)</c> on SQL Server). Requires a dialect that
+    /// supports row locking (see <see cref="ISqlDialect.Lock"/>).
+    /// </summary>
+    public EntityBuilder<TEntity> ForShare() => WithRowLock(LockMode.Share, LockWaitMode.Wait);
+
+    /// <summary>
+    /// Locks the selected rows in shared mode until the transaction ends, with the requested wait behaviour
+    /// for rows already locked by another transaction. Renders a trailing <c>FOR SHARE [NOWAIT | SKIP LOCKED]</c>
+    /// clause on dialects that support it, or the matching table hint on the primary source
+    /// (<c>with (holdlock, nowait)</c>/<c>with (holdlock, readpast)</c> on SQL Server). Requires a dialect that
+    /// supports row locking (see <see cref="ISqlDialect.Lock"/>).
+    /// </summary>
+    /// <param name="wait">How to react to a row already locked by another transaction.</param>
+    public EntityBuilder<TEntity> ForShare(LockWaitMode wait) => WithRowLock(LockMode.Share, wait);
+
+    private EntityBuilder<TEntity> WithRowLock(LockMode mode, LockWaitMode wait)
     {
         var b = Clone();
-        b._rowLock = new LockClause(mode);
+        b._rowLock = new LockClause(mode, wait);
         return b;
     }
     /// <summary>Sets the maximum number of rows to return; zero means no limit.</summary>
@@ -1156,6 +1134,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         // A TVF (or other explicit source) on either side is carried as a FromExpression: the right
         // side keeps the joined entity's own source, the left side keeps the one propagated below.
         var joined = CreateJoined<TJoinEntity>(new JoinExpression(joinCondition, joinType) { From = GetJoinSource(_), EntityType = joinCondition is null ? typeof(TJoinEntity) : null }, ResolveJoinBase());
+        joined.Ctes = CteMerge.Merge(Ctes, _.Ctes);
         ApplyWhereToJoined(joined);
         return joined;
     }
@@ -1167,8 +1146,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// join would fall back to entity metadata that does not exist for <see cref="TableAlias"/>.
     /// </summary>
     private FromExpression GetJoinSource<TJoinEntity>(EntityBuilder<TJoinEntity> builder)
-        => builder.SourceFrom
-           ?? (builder.Table is not null ? new FromExpression(builder.Table) : _dataProvider.GetFrom(typeof(TJoinEntity), null)!);
+        => JoinSourceResolver.Resolve(_dataProvider, builder);
 
     /// <summary>
     /// Adds an inner join to the derived <paramref name="query"/>, using
@@ -1891,7 +1869,7 @@ public class EntityBuilder : ICloneable
     }
     private JoinedEntityBuilder<TableAlias, TableAlias> JoinCore(EntityBuilder from, JoinType joinType, LambdaExpression? joinCondition)
     {
-        var cb = new JoinedEntityBuilder<TableAlias, TableAlias>(_dataProvider, new JoinExpression(joinCondition, joinType) { From = new FromExpression(from._table!), EntityType = joinCondition is null ? typeof(TableAlias) : null }) { Logger = Logger, Table = _table, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, KeywordCase = KeywordCase };
+        var cb = new JoinedEntityBuilder<TableAlias, TableAlias>(_dataProvider, new JoinExpression(joinCondition, joinType) { From = new FromExpression(from._table!), EntityType = joinCondition is null ? typeof(TableAlias) : null }) { Logger = Logger, Table = _table, Ctes = CteMerge.Merge(Ctes, from.Ctes), QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, KeywordCase = KeywordCase };
         return cb;
     }
     /// <summary>
@@ -1966,7 +1944,7 @@ public class EntityBuilder : ICloneable
         => JoinCore(_, JoinType.Paste, null);
     private JoinedEntityBuilder<TableAlias, TJoinEntity> JoinCore<TJoinEntity>(EntityBuilder<TJoinEntity> _, JoinType joinType, LambdaExpression? joinCondition)
     {
-        var cb = new JoinedEntityBuilder<TableAlias, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition, joinType) { From = _dataProvider.GetFrom(typeof(TJoinEntity), null)!, EntityType = joinCondition is null ? typeof(TJoinEntity) : null }) { Logger = Logger, Table = _table, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, KeywordCase = KeywordCase };
+        var cb = new JoinedEntityBuilder<TableAlias, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition, joinType) { From = _dataProvider.GetFrom(typeof(TJoinEntity), null)!, EntityType = joinCondition is null ? typeof(TJoinEntity) : null }) { Logger = Logger, Table = _table, Ctes = CteMerge.Merge(Ctes, _.Ctes), QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, KeywordCase = KeywordCase };
         return cb;
     }
 }

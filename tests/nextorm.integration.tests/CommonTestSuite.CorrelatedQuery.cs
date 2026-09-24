@@ -370,6 +370,80 @@ public abstract partial class CommonTestSuite
         r.Where(x => x.cid is not null).Select(x => x.Id).Should().BeEquivalentTo(new[] { 1, 2, 3 });
     }
 
+    /// <summary>
+    /// A plain table applied with <c>CROSS APPLY</c>/<c>OUTER APPLY</c> cannot be correlated, so it is
+    /// rendered as an ordinary <c>CROSS</c>/<c>LEFT</c> join. PostgreSQL/MySQL only allow <c>LATERAL</c>
+    /// before a subquery or function, so emitting <c>CROSS JOIN LATERAL &lt;table&gt;</c> would be invalid.
+    /// </summary>
+    [Fact]
+    public void CrossApply_OnPlainTable_ShouldCrossJoin()
+    {
+        Assert.SkipUnless(Provider.SupportsApply, ApplySkipReason);
+
+        var r = _sut.SimpleEntity
+            .CrossApply(_sut.ComplexEntity)
+            .Select(p => new { OuterId = p.Item1.Id, InnerId = p.Item2.Id })
+            .ToList();
+
+        r.Should().HaveCount(30);
+    }
+
+    /// <summary>
+    /// <c>OUTER APPLY</c> over a plain table becomes a <c>LEFT JOIN ... ON true</c>, so every left-hand
+    /// row survives even when the right table is unrelated.
+    /// </summary>
+    [Fact]
+    public void OuterApply_OnPlainTable_ShouldKeepEveryLeftRow()
+    {
+        Assert.SkipUnless(Provider.SupportsApply, ApplySkipReason);
+
+        var r = _sut.SimpleEntity
+            .OuterApply(_sut.ComplexEntity)
+            .Select(p => new { OuterId = p.Item1.Id, InnerId = p.Item2.Id })
+            .ToList();
+
+        r.Should().HaveCount(30);
+    }
+
+    /// <summary>
+    /// The whole-entity (<c>EntityBuilder&lt;T&gt;</c>) apply source is projected as a derived table that
+    /// exposes the entity's columns under their projected names (<c>somestring as "String"</c>). The
+    /// enclosing projection must reference that projected name, not the physical column, or the query
+    /// fails with "column ... does not exist".
+    /// </summary>
+    [Fact]
+    public void CorrelatedCrossApply_BuilderSource_ShouldProjectEntityMembers()
+    {
+        Assert.SkipUnless(Provider.SupportsApply, ApplySkipReason);
+
+        var r = _sut.SimpleEntity
+            .CrossApply(s => _sut.ComplexEntity.Where(c => c.Id == s.Id))
+            .Select(p => new { p.Item1.Id, p.Item2.String })
+            .ToList();
+
+        r.Should().HaveCount(3);
+        r.Select(x => x.Id).Should().BeEquivalentTo(new[] { 1, 2, 3 });
+    }
+
+    /// <summary>
+    /// <c>OUTER APPLY</c> over the whole-entity builder source keeps left-hand rows with no match and
+    /// must resolve the derived entity's members through the projected alias as well.
+    /// </summary>
+    [Fact]
+    public void CorrelatedOuterApply_BuilderSource_ShouldPreserveUnmatchedRows()
+    {
+        Assert.SkipUnless(Provider.SupportsApply, ApplySkipReason);
+
+        var r = _sut.SimpleEntity
+            .OuterApply(s => _sut.ComplexEntity.Where(c => c.Id == s.Id))
+            .Select(p => new { p.Item1.Id, InnerId = (long?)p.Item2.Id })
+            .ToList();
+
+        r.Should().HaveCount(10);
+        r.Count(x => x.InnerId is null).Should().Be(7);
+        r.Where(x => x.InnerId is not null).Select(x => x.Id).Should().BeEquivalentTo(new[] { 1, 2, 3 });
+    }
+
     private static string ApplySkipReason =>
         "This provider has no lateral/APPLY source, so a correlated APPLY cannot be rendered.";
 }

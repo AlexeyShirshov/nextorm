@@ -71,6 +71,14 @@ public interface ITestProvider
     bool SupportsInsertReturning { get; }
 
     /// <summary>
+    /// True when the provider can skip conflicting rows with an <c>INSERT OR IGNORE</c>/<c>INSERT IGNORE</c>
+    /// head or an <c>ON CONFLICT DO NOTHING</c> suffix. PostgreSQL, SQLite, MySQL, MariaDB and
+    /// ClickHouse (where it is a no-op) do; SQL Server has no such form, so the shared ignore test is
+    /// skipped there.
+    /// </summary>
+    bool SupportsIgnoreDuplicates { get; }
+
+    /// <summary>
     /// True when the provider has a native <c>TRUNCATE TABLE</c>. SQL Server, PostgreSQL, MySQL and
     /// MariaDB do; SQLite has no <c>TRUNCATE</c>, so the shared truncate test is skipped there.
     /// </summary>
@@ -84,12 +92,26 @@ public interface ITestProvider
     bool SupportsDeleteJoin { get; }
 
     /// <summary>
-    /// True when the provider can materialise a query into a temporary table with
-    /// <c>CREATE TEMPORARY TABLE ... AS SELECT</c>. PostgreSQL, SQLite, MySQL and MariaDB can; SQL Server
-    /// uses a different <c>SELECT ... INTO #t</c> form and ClickHouse cannot express a temporary
-    /// <c>AS SELECT</c>, so the shared test is skipped there and the rejection test runs instead.
+    /// True when the provider can materialise a query into a persistent table (<c>ToTable</c>).
+    /// PostgreSQL, SQLite, MySQL, MariaDB, SQL Server and ClickHouse can.
     /// </summary>
     bool SupportsCreateTableAsSelect { get; }
+
+    /// <summary>
+    /// True when the provider can materialise a query into a <em>temporary</em> table
+    /// (<c>ToTempTable</c>). PostgreSQL, SQLite, MySQL and MariaDB can; SQL Server has no
+    /// <c>CREATE TEMPORARY TABLE ... AS SELECT</c> (a session-scoped table is <c>ToTable("#name")</c>) and
+    /// ClickHouse cannot express a temporary <c>AS SELECT</c>, so the shared temp test is skipped there
+    /// and the rejection test runs instead.
+    /// </summary>
+    bool SupportsTemporaryCreateTableAsSelect { get; }
+
+    /// <summary>
+    /// True when the provider supports ADO.NET transactions on its connection. SQLite, PostgreSQL,
+    /// SQL Server and MySQL/MariaDB do; ClickHouse speaks HTTP and has no transaction, so the shared
+    /// transaction tests are skipped there.
+    /// </summary>
+    bool SupportsTransactions { get; }
 
     void EnsureSeeded();
 
