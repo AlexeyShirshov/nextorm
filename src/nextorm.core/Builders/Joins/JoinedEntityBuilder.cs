@@ -82,9 +82,10 @@ public class JoinedEntityBuilder<T1, T2> : EntityBuilder<Projection<T1, T2>>
         if (Condition is not null)
             throw new NotImplementedException();
 
-        var cb = new JoinedEntityBuilder<T1, T2, T3>(DataProvider) { Logger = Logger, Query = Query, Table = Table, SourceFrom = SourceFrom, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention };
+        var cb = new JoinedEntityBuilder<T1, T2, T3>(DataProvider) { Logger = Logger, Query = Query, Table = Table, SourceFrom = SourceFrom, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, IndexHints = IndexHints, IndexHintKind = IndexHintKind, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, KeywordCase = KeywordCase };
         if (Joins is not null) cb.Joins!.AddRange(Joins);
-        cb.Joins!.Add(new JoinExpression(joinCondition, joinType) { From = _dataProvider.GetFrom(typeof(T3), null)!, EntityType = joinCondition is null ? typeof(T3) : null });
+        cb.Joins!.Add(new JoinExpression(joinCondition, joinType) { From = JoinSourceResolver.Resolve(_dataProvider, _), EntityType = joinCondition is null ? typeof(T3) : null });
+        cb.Ctes = CteMerge.Merge(Ctes, _.Ctes);
         return cb;
     }
     // protected override void OnCommandCreated<TResult>(QueryCommand<TResult> cmd)
@@ -116,6 +117,11 @@ public class JoinedEntityBuilder<T1, T2> : EntityBuilder<Projection<T1, T2>>
         => (JoinedEntityBuilder<T1, T2>)base.LeftArrayJoin(array);
     /// <inheritdoc/>
     protected override void OnLastJoinReplaced(JoinExpression join) => JoinCondition = join;
+    /// <summary>Adds a <c>WHERE</c> condition while keeping the joined builder type, so the chain can end in a multi-table <c>Delete()</c>.</summary>
+    /// <param name="condition">The predicate each row must satisfy.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public new JoinedEntityBuilder<T1, T2> Where(Expression<Func<Projection<T1, T2>, bool>> condition)
+        => (JoinedEntityBuilder<T1, T2>)base.Where(condition);
     /// <summary>Creates an independent copy of this builder over the same projection.</summary>
     public new JoinedEntityBuilder<T1, T2> Clone()
     {
@@ -194,9 +200,10 @@ public class JoinedEntityBuilder<T1, T2, T3> : EntityBuilder<Projection<T1, T2, 
         => JoinCore(_, JoinType.Paste, null);
     private JoinedEntityBuilder<T1, T2, T3, T4> JoinCore<T4>(EntityBuilder<T4> _, JoinType joinType, LambdaExpression? joinCondition)
     {
-        var cb = new JoinedEntityBuilder<T1, T2, T3, T4>(DataProvider) { Logger = Logger, Query = Query, Table = Table, SourceFrom = SourceFrom, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention };
+        var cb = new JoinedEntityBuilder<T1, T2, T3, T4>(DataProvider) { Logger = Logger, Query = Query, Table = Table, SourceFrom = SourceFrom, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, IndexHints = IndexHints, IndexHintKind = IndexHintKind, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, KeywordCase = KeywordCase };
         if (Joins is not null) cb.Joins!.AddRange(Joins);
-        cb.Joins!.Add(new JoinExpression(joinCondition, joinType) { From = _dataProvider.GetFrom(typeof(T4), null)!, EntityType = joinCondition is null ? typeof(T4) : null });
+        cb.Joins!.Add(new JoinExpression(joinCondition, joinType) { From = JoinSourceResolver.Resolve(_dataProvider, _), EntityType = joinCondition is null ? typeof(T4) : null });
+        cb.Ctes = CteMerge.Merge(Ctes, _.Ctes);
         return cb;
     }
     /// <inheritdoc/>
@@ -219,6 +226,11 @@ public class JoinedEntityBuilder<T1, T2, T3> : EntityBuilder<Projection<T1, T2, 
     /// <inheritdoc/>
     public new JoinedEntityBuilder<T1, T2, T3> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3>)base.LeftArrayJoin(array);
+    /// <summary>Adds a <c>WHERE</c> condition while keeping the joined builder type, so the chain can end in a multi-table <c>Delete()</c>.</summary>
+    /// <param name="condition">The predicate each row must satisfy.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public new JoinedEntityBuilder<T1, T2, T3> Where(Expression<Func<Projection<T1, T2, T3>, bool>> condition)
+        => (JoinedEntityBuilder<T1, T2, T3>)base.Where(condition);
     /// <summary>Creates an independent copy of this builder over the same projection.</summary>
     public new JoinedEntityBuilder<T1, T2, T3> Clone()
     {
@@ -291,9 +303,10 @@ public class JoinedEntityBuilder<T1, T2, T3, T4> : EntityBuilder<Projection<T1, 
         => JoinCore(_, JoinType.Paste, null);
     private JoinedEntityBuilder<T1, T2, T3, T4, T5> JoinCore<T5>(EntityBuilder<T5> _, JoinType joinType, LambdaExpression? joinCondition)
     {
-        var cb = new JoinedEntityBuilder<T1, T2, T3, T4, T5>(DataProvider) { Logger = Logger, Query = Query, Table = Table, SourceFrom = SourceFrom, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention };
+        var cb = new JoinedEntityBuilder<T1, T2, T3, T4, T5>(DataProvider) { Logger = Logger, Query = Query, Table = Table, SourceFrom = SourceFrom, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, IndexHints = IndexHints, IndexHintKind = IndexHintKind, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, KeywordCase = KeywordCase };
         if (Joins is not null) cb.Joins!.AddRange(Joins);
-        cb.Joins!.Add(new JoinExpression(joinCondition, joinType) { From = _dataProvider.GetFrom(typeof(T5), null)!, EntityType = joinCondition is null ? typeof(T5) : null });
+        cb.Joins!.Add(new JoinExpression(joinCondition, joinType) { From = JoinSourceResolver.Resolve(_dataProvider, _), EntityType = joinCondition is null ? typeof(T5) : null });
+        cb.Ctes = CteMerge.Merge(Ctes, _.Ctes);
         return cb;
     }
     /// <inheritdoc/>
@@ -316,6 +329,11 @@ public class JoinedEntityBuilder<T1, T2, T3, T4> : EntityBuilder<Projection<T1, 
     /// <inheritdoc/>
     public new JoinedEntityBuilder<T1, T2, T3, T4> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4>)base.LeftArrayJoin(array);
+    /// <summary>Adds a <c>WHERE</c> condition while keeping the joined builder type, so the chain can end in a multi-table <c>Delete()</c>.</summary>
+    /// <param name="condition">The predicate each row must satisfy.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public new JoinedEntityBuilder<T1, T2, T3, T4> Where(Expression<Func<Projection<T1, T2, T3, T4>, bool>> condition)
+        => (JoinedEntityBuilder<T1, T2, T3, T4>)base.Where(condition);
     /// <summary>Creates an independent copy of this builder over the same projection.</summary>
     public new JoinedEntityBuilder<T1, T2, T3, T4> Clone()
     {
@@ -388,9 +406,10 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5> : EntityBuilder<Projection<
         => JoinCore(_, JoinType.Paste, null);
     private JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> JoinCore<T6>(EntityBuilder<T6> _, JoinType joinType, LambdaExpression? joinCondition)
     {
-        var cb = new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>(DataProvider) { Logger = Logger, Query = Query, Table = Table, SourceFrom = SourceFrom, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention };
+        var cb = new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>(DataProvider) { Logger = Logger, Query = Query, Table = Table, SourceFrom = SourceFrom, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, IndexHints = IndexHints, IndexHintKind = IndexHintKind, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, KeywordCase = KeywordCase };
         if (Joins is not null) cb.Joins!.AddRange(Joins);
-        cb.Joins!.Add(new JoinExpression(joinCondition, joinType) { From = _dataProvider.GetFrom(typeof(T6), null)!, EntityType = joinCondition is null ? typeof(T6) : null });
+        cb.Joins!.Add(new JoinExpression(joinCondition, joinType) { From = JoinSourceResolver.Resolve(_dataProvider, _), EntityType = joinCondition is null ? typeof(T6) : null });
+        cb.Ctes = CteMerge.Merge(Ctes, _.Ctes);
         return cb;
     }
     /// <inheritdoc/>
@@ -413,6 +432,11 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5> : EntityBuilder<Projection<
     /// <inheritdoc/>
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5>)base.LeftArrayJoin(array);
+    /// <summary>Adds a <c>WHERE</c> condition while keeping the joined builder type, so the chain can end in a multi-table <c>Delete()</c>.</summary>
+    /// <param name="condition">The predicate each row must satisfy.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5> Where(Expression<Func<Projection<T1, T2, T3, T4, T5>, bool>> condition)
+        => (JoinedEntityBuilder<T1, T2, T3, T4, T5>)base.Where(condition);
     /// <summary>Creates an independent copy of this builder over the same projection.</summary>
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5> Clone()
     {
@@ -485,9 +509,10 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> : EntityBuilder<Project
         => JoinCore(_, JoinType.Paste, null);
     private JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> JoinCore<T7>(EntityBuilder<T7> _, JoinType joinType, LambdaExpression? joinCondition)
     {
-        var cb = new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>(DataProvider) { Logger = Logger, Query = Query, Table = Table, SourceFrom = SourceFrom, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention };
+        var cb = new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>(DataProvider) { Logger = Logger, Query = Query, Table = Table, SourceFrom = SourceFrom, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, IndexHints = IndexHints, IndexHintKind = IndexHintKind, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, KeywordCase = KeywordCase };
         if (Joins is not null) cb.Joins!.AddRange(Joins);
-        cb.Joins!.Add(new JoinExpression(joinCondition, joinType) { From = _dataProvider.GetFrom(typeof(T7), null)!, EntityType = joinCondition is null ? typeof(T7) : null });
+        cb.Joins!.Add(new JoinExpression(joinCondition, joinType) { From = JoinSourceResolver.Resolve(_dataProvider, _), EntityType = joinCondition is null ? typeof(T7) : null });
+        cb.Ctes = CteMerge.Merge(Ctes, _.Ctes);
         return cb;
     }
     /// <inheritdoc/>
@@ -510,6 +535,11 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> : EntityBuilder<Project
     /// <inheritdoc/>
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>)base.LeftArrayJoin(array);
+    /// <summary>Adds a <c>WHERE</c> condition while keeping the joined builder type, so the chain can end in a multi-table <c>Delete()</c>.</summary>
+    /// <param name="condition">The predicate each row must satisfy.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> Where(Expression<Func<Projection<T1, T2, T3, T4, T5, T6>, bool>> condition)
+        => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6>)base.Where(condition);
     /// <summary>Creates an independent copy of this builder over the same projection.</summary>
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6> Clone()
     {
@@ -582,9 +612,10 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> : EntityBuilder<Pro
         => JoinCore(_, JoinType.Paste, null);
     private JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> JoinCore<T8>(EntityBuilder<T8> _, JoinType joinType, LambdaExpression? joinCondition)
     {
-        var cb = new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8>(DataProvider) { Logger = Logger, Query = Query, Table = Table, SourceFrom = SourceFrom, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention };
+        var cb = new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8>(DataProvider) { Logger = Logger, Query = Query, Table = Table, SourceFrom = SourceFrom, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, IndexHints = IndexHints, IndexHintKind = IndexHintKind, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, KeywordCase = KeywordCase };
         if (Joins is not null) cb.Joins!.AddRange(Joins);
-        cb.Joins!.Add(new JoinExpression(joinCondition, joinType) { From = _dataProvider.GetFrom(typeof(T8), null)!, EntityType = joinCondition is null ? typeof(T8) : null });
+        cb.Joins!.Add(new JoinExpression(joinCondition, joinType) { From = JoinSourceResolver.Resolve(_dataProvider, _), EntityType = joinCondition is null ? typeof(T8) : null });
+        cb.Ctes = CteMerge.Merge(Ctes, _.Ctes);
         return cb;
     }
     /// <inheritdoc/>
@@ -607,6 +638,11 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> : EntityBuilder<Pro
     /// <inheritdoc/>
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>)base.LeftArrayJoin(array);
+    /// <summary>Adds a <c>WHERE</c> condition while keeping the joined builder type, so the chain can end in a multi-table <c>Delete()</c>.</summary>
+    /// <param name="condition">The predicate each row must satisfy.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> Where(Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7>, bool>> condition)
+        => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7>)base.Where(condition);
     /// <summary>Creates an independent copy of this builder over the same projection.</summary>
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7> Clone()
     {
@@ -651,6 +687,11 @@ public class JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> : EntityBuilder
     /// <inheritdoc/>
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> LeftArrayJoin<TArray>(Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7, T8>, TArray>> array)
         => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8>)base.LeftArrayJoin(array);
+    /// <summary>Adds a <c>WHERE</c> condition while keeping the joined builder type, so the chain can end in a multi-table <c>Delete()</c>.</summary>
+    /// <param name="condition">The predicate each row must satisfy.</param>
+    /// <returns>This builder, for chaining.</returns>
+    public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> Where(Expression<Func<Projection<T1, T2, T3, T4, T5, T6, T7, T8>, bool>> condition)
+        => (JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8>)base.Where(condition);
     /// <summary>Creates an independent copy of this builder over the same projection.</summary>
     public new JoinedEntityBuilder<T1, T2, T3, T4, T5, T6, T7, T8> Clone()
     {

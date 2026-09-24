@@ -36,6 +36,13 @@ internal sealed class SqlServerTestProvider : ITestProvider
     public bool SupportsTableValuedFunctions => false;
     public bool EnforcesScalarSubqueryCardinality => true;
     public bool SupportsApply => true;
+    public bool SupportsInsertReturning => true;
+    public bool SupportsIgnoreDuplicates => false;
+    public bool SupportsTruncate => true;
+    public bool SupportsDeleteJoin => true;
+    public bool SupportsCreateTableAsSelect => true;
+    public bool SupportsTemporaryCreateTableAsSelect => false;
+    public bool SupportsTransactions => true;
     public string TableValuedFunctionSkipReason => "The shared table-valued function test uses SQLite's json_each; SQL Server exposes row-returning JSON through CROSS APPLY OPENJSON instead.";
 
     public string SkipReason => SqlServerContainer.Failure ?? "SQL Server is not available.";
@@ -70,6 +77,9 @@ internal sealed class SqlServerTestProvider : ITestProvider
         drop table if exists binary_entity;
         drop table if exists xml_entity;
         drop table if exists simple_entity;
+        drop table if exists insert_entity;
+        drop table if exists merge_entity;
+        drop table if exists delete_entity;
 
         create table simple_entity (id int not null primary key);
 
@@ -118,5 +128,26 @@ internal sealed class SqlServerTestProvider : ITestProvider
 
         insert into xml_entity (id, payload) values
             (1, N'<root><item id="1">alpha</item><item id="2">beta</item></root>');
+
+        create table insert_entity
+        (
+            id bigint identity(1,1) primary key,
+            name nvarchar(100) null,
+            age int null
+        );
+
+        create table merge_entity
+        (
+            id int not null primary key,
+            name nvarchar(100) null,
+            age int null
+        );
+
+        create table delete_entity
+        (
+            id int not null primary key,
+            name nvarchar(100) null,
+            age int null
+        );
         """;
 }

@@ -109,9 +109,9 @@ internal static class WindowFunctionTranslator
         {
             visitor.Builder!.Append(functionName).Append('(');
             visitor.Visit(functionArgs[0]);
-            visitor.Builder!.Append(") within group (order by ");
+            visitor.Builder!.Append(visitor.Kw(") within group (order by "));
             visitor.Visit(functionArgs[1]);
-            visitor.Builder!.Append(named ? ") over " : ") over (");
+            visitor.Builder!.Append(named ? visitor.Kw(") over ") : visitor.Kw(") over ("));
         }
         else
         {
@@ -140,7 +140,7 @@ internal static class WindowFunctionTranslator
                 }
             }
 
-            visitor.Builder!.Append(named ? ") over " : ") over (");
+            visitor.Builder!.Append(named ? visitor.Kw(") over ") : visitor.Kw(") over ("));
         }
 
         if (named)
@@ -151,7 +151,7 @@ internal static class WindowFunctionTranslator
         {
             if (partitions.Count > 0)
             {
-                visitor.Builder!.Append("partition by ");
+                visitor.Builder!.Append(visitor.Kw("partition by "));
                 for (var (i, cnt) = (0, partitions.Count); i < cnt; i++)
                 {
                     if (i > 0) visitor.Builder!.Append(", ");
@@ -163,20 +163,20 @@ internal static class WindowFunctionTranslator
             {
                 if (partitions.Count > 0) visitor.Builder!.Append(' ');
 
-                visitor.Builder!.Append("order by ");
+                visitor.Builder!.Append(visitor.Kw("order by "));
                 for (var (i, cnt) = (0, orders.Count); i < cnt; i++)
                 {
                     if (i > 0) visitor.Builder!.Append(", ");
                     visitor.Visit(orders[i].Body);
                     if (orders[i].Direction == OrderDirection.Desc)
-                        visitor.Builder!.Append(" desc");
+                        visitor.Builder!.Append(visitor.Kw(" desc"));
                 }
             }
 
             if (frame is not null)
             {
                 if (partitions.Count > 0 || orders.Count > 0) visitor.Builder!.Append(' ');
-                visitor.Builder!.Append(WindowSql.RenderWindowFrame(frame));
+                visitor.Builder!.Append(WindowSql.RenderWindowFrame(frame, visitor.KeywordCase));
             }
 
             visitor.Builder!.Append(')');

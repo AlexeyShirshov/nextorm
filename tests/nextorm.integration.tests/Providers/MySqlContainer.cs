@@ -5,8 +5,10 @@ namespace NextORM.Integration.Tests;
 /// <summary>
 /// Owns the MySQL instance the integration suite runs against. A connection string provided
 /// through <see cref="ConnectionStringVariable"/> always wins (pointing the suite at an already
-/// running server); otherwise a throwaway <see cref="MySqlBuilder"/> instance is started once per
-/// test process. The container runtime is discovered the standard Testcontainers way (the
+/// running server); otherwise a reusable <see cref="MySqlBuilder"/> instance is started once per
+/// test process and kept between runs (Testcontainers reuse), so the database initialization cost
+/// is paid only on the first run. The container runtime is discovered the standard Testcontainers
+/// way (the
 /// <c>DOCKER_HOST</c> environment variable or the default Docker socket). Resolution is lazy and
 /// cached, so a container is only started when a MySQL test actually runs.
 /// </summary>
@@ -15,6 +17,8 @@ internal static class MySqlContainer
     public const string ConnectionStringVariable = "NEXTORM_MYSQL_CONNECTION";
 
     private const string DefaultImage = "mysql:8.4";
+
+    private const string ReuseLabel = "reuse-id";
 
     private static readonly object Gate = new();
 
@@ -79,6 +83,8 @@ internal static class MySqlContainer
                 }
 
                 var container = new MySqlBuilder(DefaultImage)
+                    .WithReuse(true)
+                    .WithLabel(ReuseLabel, "nextorm-mysql")
                     .Build();
 
                 container.StartAsync().GetAwaiter().GetResult();
@@ -102,7 +108,8 @@ internal static class MySqlContainer
     }
 
     /// <summary>
-    /// Releases the container at the end of the test run. Disposal happens through
+    /// Releases the container at the end of the test run. With reuse enabled this only stops the
+    /// container; it is retained and started again on the next run. Disposal happens through
     /// <see cref="DatabaseContainers"/> rather than a ProcessExit handler: the container modules
     /// leave background threads behind, and blocking on them while the process exits makes the
     /// test host report leftover foreground threads (a non-zero exit code).

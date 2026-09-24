@@ -3,6 +3,8 @@ using NextORM.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Data.Sqlite;
 using Dapper;
+using LinqToDB;
+using IDataContext = NextORM.Core.IDataContext;
 using Microsoft.Extensions.Logging;
 using BenchmarkDotNet.Jobs;
 using NextORM.Core;
@@ -93,4 +95,17 @@ public class SqliteBenchmarkSingle
         for (int i = 0; i < 10; i++)
             await _linq2Db.SingleOrDefaultScalarAsync(i);
     }
+    [Benchmark]
+    public long Linq2Db_Compiled_SingleOrDefault()
+    {
+        long n = 0;
+        for (int i = 0; i < 10; i++)
+            n += _l2dbSingleScalar(_linq2Db.Db, i);
+        _sink = n;
+        return n;
+    }
+
+    private long _sink;
+    private static readonly Func<LinqToDB.IDataContext, int, int> _l2dbSingleScalar = LinqToDB.CompiledQuery.Compile(
+        (LinqToDB.IDataContext db, int id) => db.GetTable<Linq2DbSimpleEntity>().Where(it => it.Id == id).Select(it => it.Id).SingleOrDefault());
 }

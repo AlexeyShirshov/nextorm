@@ -91,6 +91,129 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void KeywordCase_CommandOverride_ShouldPreserveCteSource()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+        var cte = e.Where(x => x.Id > 1).Select(x => new { x.Id });
+
+        var cmd = ctx.With("recent", cte).From("recent").Select(t => new { id = t["id"].AsInt });
+        var sql = SqlOf(ctx, cmd.WithKeywordCase());
+
+        sql.Should().StartWith("WITH ");
+        sql.Should().Contain("FROM recent");
+    }
+
+    [Fact]
+    public void IndexHint_WithIndex_ShouldEmitIndexedBy()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.WithIndex("idx_id").Select(x => new { x.Id }))
+            .Should().Be("select id from simple_entity indexed by idx_id");
+    }
+
+    [Fact]
+    public void IndexHint_WithoutIndex_ShouldEmitNotIndexed()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.WithoutIndex().Select(x => new { x.Id }))
+            .Should().Be("select id from simple_entity not indexed");
+    }
+
+    [Fact]
+    public void IndexHint_ShouldRespectKeywordCase()
+    {
+        using var ctx = SqliteTestContext.CreateUppercase();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.WithIndex("idx_id").Select(x => new { x.Id }))
+            .Should().Contain("INDEXED BY idx_id");
+    }
+
+    [Fact]
+    public void KeywordCase_Upper_ShouldUppercaseCoreKeywords()
+    {
+        using var ctx = SqliteTestContext.CreateUppercase();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.Where(x => x.Id > 1).Select(x => new { x.Id }))
+            .Should().Be("SELECT id FROM simple_entity\n WHERE (id > 1)");
+    }
+
+    [Fact]
+    public void KeywordCase_Upper_ShouldUppercaseLogicalAndConditional()
+    {
+        using var ctx = SqliteTestContext.CreateUppercase();
+        var e = ctx.From<ISimpleEntity>();
+
+        var sql = SqlOf(ctx, e
+            .Where(x => x.Id > 1 && x.Id < 5)
+            .Select(x => x.Id == 1 ? 10 : 20));
+
+        sql.Should().Contain("WHERE ((id > 1) AND (id < 5))");
+        sql.Should().Contain("CASE WHEN");
+        sql.Should().Contain(" THEN ");
+        sql.Should().Contain(" ELSE ");
+        sql.Should().Contain(" END");
+    }
+
+    [Fact]
+    public void KeywordCase_Upper_ShouldNotTouchIdentifiersLiteralsOrFunctions()
+    {
+        using var ctx = SqliteTestContext.CreateUppercaseQuoted();
+        var e = ctx.From<IKeywordEntity>();
+
+        var sql = SqlOf(ctx, e.Where(x => x.Value == 1).Select(x => new { x.Value }));
+
+        sql.Should().Contain("\"select\"");
+        sql.Should().Contain("\"order\"");
+        sql.Should().NotContain("\"SELECT\"");
+        sql.Should().NotContain("\"ORDER\"");
+    }
+
+    [Fact]
+    public void KeywordCase_Upper_ShouldNotRewriteStringLiteral()
+    {
+        using var ctx = SqliteTestContext.CreateUppercase();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Where(x => x.String == "select from where").Select(x => new { x.Id }));
+
+        sql.Should().Contain("'select from where'");
+    }
+
+    [Fact]
+    public void KeywordCase_Lower_IsDefaultAndCommandOverride_ShouldWin()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var lower = SqlOf(ctx, e.Select(x => new { x.Id }));
+        lower.Should().StartWith("select ");
+
+        var upper = SqlOf(ctx, e.WithKeywordCase().Select(x => new { x.Id }));
+        upper.Should().StartWith("SELECT ");
+        upper.Should().NotBe(lower);
+    }
+
+    [Fact]
+    public void KeywordCase_Upper_ShouldUppercaseAliasesAndPaging()
+    {
+        using var ctx = SqliteTestContext.CreateUppercase();
+        var e = ctx.From<ISimpleEntity>();
+
+        var sql = SqlOf(ctx, e.Limit(3).Offset(2).Select(x => new { X = x.Id }));
+
+        sql.Should().Contain("SELECT id AS 'X'");
+        sql.Should().Contain("LIMIT 3");
+        sql.Should().Contain("OFFSET 2");
+    }
+
+    [Fact]
     public void QuotedIdentifiers_Join_ShouldQuoteTablesAndColumns()
     {
         using var ctx = SqliteTestContext.CreateQuoted();
@@ -1814,6 +1937,25 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void Cte_Recursive_WithDistinctUnion_ShouldEmitUnionNotUnionAll()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var anchor = e.Where(s => s.Id == 1).Select(s => new CteNumberRow { n = s.Id });
+        var step = ctx.From("nums").Where(t => t["n"].AsInt < 5).Select(t => new CteNumberRow { n = t["n"].AsInt + 1 });
+        var body = anchor.Union(step);
+
+        var sql = SqlOf(ctx, ctx.WithRecursive("nums", body).From("nums").Select(t => new CteNumberRow { n = t["n"].AsInt * 2 }));
+
+        sql.Should().StartWith("with recursive nums as (");
+        sql.Should().Contain(" union ");
+        sql.Should().NotContain("union all");
+        sql.Should().Contain("(n * 2)");
+        sql.Should().NotContain("from (select");
+    }
+
+    [Fact]
     public void RowNumber_ShouldEmitOverWithPartitionAndOrder()
     {
         using var ctx = SqliteTestContext.Create();
@@ -2321,23 +2463,34 @@ public class SqlGenerationTests
     }
 
     [Fact]
-    public void ForJson_ShouldThrowBecauseSqliteHasNoForJson()
+    public void ForUpdate_SkipLocked_ShouldThrowBecauseSqliteHasNoRowLocking()
     {
         using var ctx = SqliteTestContext.Create();
         var e = ctx.From<ISimpleEntity>();
 
-        var act = () => SqlOf(ctx, e.Select(x => new { x.Id }).ForJson());
+        var act = () => SqlOf(ctx, e.ForUpdate(LockWaitMode.SkipLocked).Select(x => x.Id));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*FOR UPDATE*");
+    }
+
+    [Fact]
+    public void WithForJson_ShouldThrowBecauseSqliteHasNoForJson()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new { x.Id }).WithForJson());
 
         act.Should().Throw<NotSupportedException>().WithMessage("*FOR JSON*");
     }
 
     [Fact]
-    public void ForXml_ShouldThrowBecauseSqliteHasNoForXml()
+    public void WithForXml_ShouldThrowBecauseSqliteHasNoForXml()
     {
         using var ctx = SqliteTestContext.Create();
         var e = ctx.From<ISimpleEntity>();
 
-        var act = () => SqlOf(ctx, e.Select(x => new { x.Id }).ForXml());
+        var act = () => SqlOf(ctx, e.Select(x => new { x.Id }).WithForXml());
 
         act.Should().Throw<NotSupportedException>().WithMessage("*FOR XML*");
     }
@@ -2497,9 +2650,7 @@ public class SqlGenerationTests
     public void TableSample_ShouldThrowBecauseSqliteHasNoTableSample()
     {
         using var ctx = SqliteTestContext.Create();
-        var e = ctx.From<ISimpleEntity>();
-
-        var act = () => SqlOf(ctx, e.TableSample(10).Select(x => x.Id));
+        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.TableSample(10)).Select(x => x.Id));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*TABLESAMPLE*");
     }

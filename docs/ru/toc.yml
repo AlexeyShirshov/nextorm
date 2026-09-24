@@ -50,6 +50,20 @@
       href: guide/17-query-hints.md
     - name: Поддержка JSON в разных провайдерах
       href: guide/18-json.md
+    - name: Изменение данных (INSERT)
+      href: guide/19-insert-statement.md
+    - name: Изменение данных (DELETE)
+      href: guide/20-delete-statement.md
+    - name: Изменение данных (UPDATE)
+      href: guide/21-update-statement.md
+    - name: Материализация запроса в таблицу
+      href: guide/22-create-table-as.md
+    - name: Изменение данных (MERGE)
+      href: guide/23-merge-statement.md
+    - name: Массовая вставка (bulk)
+      href: guide/24-bulk-insert.md
+    - name: Транзакции
+      href: guide/25-transactions.md
     - name: Специфичный для провайдеров SQL
       items:
         - name: Обзор

@@ -119,6 +119,10 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     internal ArrayJoinKind ArrayJoinKind { get => _arrayJoinKind; set => _arrayJoinKind = value; }
     /// <summary>Table-level hints applied to the primary physical table (for example SQL Server <c>nolock</c>).</summary>
     internal IReadOnlyList<string>? TableHints { get; set; }
+    /// <summary>Index-hint index names applied to the primary physical table, or <c>null</c> when there are none.</summary>
+    internal IReadOnlyList<string>? IndexHints { get; set; }
+    /// <summary>The intent of <see cref="IndexHints"/> (<c>USE</c>, <c>FORCE</c> or <c>IGNORE</c>).</summary>
+    internal IndexHintKind IndexHintKind { get; set; }
     /// <summary>
     /// Per-query override of identifier quoting (<c>null</c> inherits the context default). Set through
     /// <see cref="WithQuotedIdentifiers"/>.
@@ -129,6 +133,11 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// inherits the context default). Set through <see cref="WithNamingConvention"/>.
     /// </summary>
     internal INamingConvention? NamingConvention { get; set; }
+    /// <summary>
+    /// Per-query override of the SQL keyword case (<c>null</c> inherits the context default). Set
+    /// through <see cref="WithKeywordCase"/>.
+    /// </summary>
+    internal KeywordCase? KeywordCase { get; set; }
     internal string? Table { get => _table; set => _table = value; }
     /// <summary>
     /// Explicit FROM source, used for table-valued functions (and any other source that is neither a
@@ -195,8 +204,11 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 
         cmd.GroupingType = GroupingType;
         cmd.TableHints = TableHints;
+        cmd.IndexHints = IndexHints;
+        cmd.IndexHintKind = IndexHintKind;
         cmd.QuoteIdentifiers = QuoteIdentifiers;
         cmd.NamingConvention = NamingConvention;
+        cmd.KeywordCase = KeywordCase;
         cmd.GroupingSets = GroupingSets;
         cmd.GroupByWithTotals = GroupByWithTotals;
         cmd.LimitBy = LimitByClause;
@@ -250,8 +262,11 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 
         cmd.GroupingType = GroupingType;
         cmd.TableHints = TableHints;
+        cmd.IndexHints = IndexHints;
+        cmd.IndexHintKind = IndexHintKind;
         cmd.QuoteIdentifiers = QuoteIdentifiers;
         cmd.NamingConvention = NamingConvention;
+        cmd.KeywordCase = KeywordCase;
         cmd.GroupingSets = GroupingSets;
         cmd.GroupByWithTotals = GroupByWithTotals;
         cmd.LimitBy = LimitByClause;
@@ -300,30 +315,6 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     {
         var b = Clone();
         b.IsFinal = true;
-        return b;
-    }
-    /// <summary>
-    /// Adds the ClickHouse <c>SAMPLE ratio</c> modifier: reads roughly <paramref name="ratio"/> of the
-    /// rows (a value in <c>[0, 1]</c>). Requires a dialect that supports it (see
-    /// <see cref="ISqlDialect.SupportsSample"/>).
-    /// </summary>
-    public EntityBuilder<TEntity> Sample(double ratio) => Sample(ratio, 0);
-    /// <summary>
-    /// Adds the ClickHouse <c>SAMPLE ratio OFFSET offset</c> modifier: reads roughly
-    /// <paramref name="ratio"/> of the rows starting at <paramref name="offset"/> (both in <c>[0, 1]</c>).
-    /// Requires a dialect that supports it (see <see cref="ISqlDialect.SupportsSample"/>).
-    /// </summary>
-    public EntityBuilder<TEntity> Sample(double ratio, double offset)
-    {
-        if (!double.IsFinite(ratio) || ratio is < 0 or > 1)
-            throw new ArgumentOutOfRangeException(nameof(ratio), ratio, "Sample ratio must be a finite value in [0, 1].");
-
-        if (!double.IsFinite(offset) || offset is < 0 or > 1)
-            throw new ArgumentOutOfRangeException(nameof(offset), offset, "Sample offset must be a finite value in [0, 1].");
-
-        var b = Clone();
-        b.SampleRatio = ratio;
-        b.SampleOffset = offset;
         return b;
     }
     /// <summary>
@@ -623,24 +614,6 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         return new NamedWindowOrderKey(expression, OrderDirection.Desc);
     }
     /// <summary>
-    /// Adds a <c>TABLESAMPLE</c> modifier to the primary table: reads only <paramref name="percent"/>
-    /// percent of the table using <paramref name="method"/>. <paramref name="seed"/> makes the sample
-    /// repeatable. Requires a dialect that supports it (see <see cref="ISqlDialect.TableSample"/>).
-    /// </summary>
-    /// <param name="percent">The percentage of the table to sample; must be in <c>(0, 100]</c>.</param>
-    /// <param name="method">The sampling algorithm.</param>
-    /// <param name="seed">An optional seed that makes the sample repeatable.</param>
-    public EntityBuilder<TEntity> TableSample(double percent, TableSampleMethod method = TableSampleMethod.System, double? seed = null)
-    {
-        if (percent <= 0 || percent > 100)
-            throw new ArgumentOutOfRangeException(nameof(percent), percent, "TABLESAMPLE percent must be in (0, 100].");
-
-        var b = Clone();
-        b._tablesample = new TableSampleClause(method, percent, seed);
-
-        return b;
-    }
-    /// <summary>
     /// Adds a <c>FOR SYSTEM_TIME</c> clause to the primary table, querying a system-versioned (temporal)
     /// table as of a point in time or over a range. Requires a dialect that supports it (see
     /// <see cref="ISqlDialect.SupportsTemporalTable"/>).
@@ -727,7 +700,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
             || _tablesample is not null || _temporal is not null || _rowLock is not null || _preWhere is not null
             || _arrayJoins is { Count: > 0 } || _settings is { Count: > 0 } || _limitBy is not null
             || _distinctOn is not null || _windows is { Count: > 0 } || IsFinal || SampleRatio is not null
-            || TableHints is { Count: > 0 } || Ctes is { Count: > 0 })
+            || TableHints is { Count: > 0 } || IndexHints is not null || Ctes is { Count: > 0 })
             throw new NotSupportedException(_query is not null
                 ? "PIVOT/UNPIVOT over a derived query accepts no modifiers on the pivot builder; apply filters, joins, grouping, ordering, paging and table modifiers inside the derived query or to the reshaped result."
                 : "PIVOT/UNPIVOT can only be applied to a plain table/entity source, a table-valued function or a derived query; apply filters, joins, grouping, ordering, paging and table modifiers to the reshaped result.");
@@ -746,25 +719,45 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     }
 
     /// <summary>
-    /// Locks the selected rows exclusively until the transaction ends. Renders a trailing <c>FOR UPDATE</c>
-    /// clause on dialects that support it, or a table hint on the primary source (<c>with (updlock)</c> on
-    /// SQL Server). Requires a dialect that supports row locking (see
-    /// <see cref="ISqlDialect.Lock"/>).
+    /// Locks the selected rows exclusively until the transaction ends, blocking while a locked row is held
+    /// by another transaction. Renders a trailing <c>FOR UPDATE</c> clause on dialects that support it, or a
+    /// table hint on the primary source (<c>with (updlock)</c> on SQL Server). Requires a dialect that
+    /// supports row locking (see <see cref="ISqlDialect.Lock"/>).
     /// </summary>
-    public EntityBuilder<TEntity> ForUpdate() => WithRowLock(LockMode.Update);
+    public EntityBuilder<TEntity> ForUpdate() => WithRowLock(LockMode.Update, LockWaitMode.Wait);
 
     /// <summary>
-    /// Locks the selected rows in shared mode until the transaction ends. Renders a trailing <c>FOR SHARE</c>
-    /// clause on dialects that support it, or a table hint on the primary source (<c>with (holdlock)</c> on
-    /// SQL Server). Requires a dialect that supports row locking (see
-    /// <see cref="ISqlDialect.Lock"/>).
+    /// Locks the selected rows exclusively until the transaction ends, with the requested wait behaviour for
+    /// rows already locked by another transaction. Renders a trailing <c>FOR UPDATE [NOWAIT | SKIP LOCKED]</c>
+    /// clause on dialects that support it, or the matching table hint on the primary source
+    /// (<c>with (updlock, nowait)</c>/<c>with (updlock, readpast)</c> on SQL Server). Requires a dialect that
+    /// supports row locking (see <see cref="ISqlDialect.Lock"/>).
     /// </summary>
-    public EntityBuilder<TEntity> ForShare() => WithRowLock(LockMode.Share);
+    /// <param name="wait">How to react to a row already locked by another transaction.</param>
+    public EntityBuilder<TEntity> ForUpdate(LockWaitMode wait) => WithRowLock(LockMode.Update, wait);
 
-    private EntityBuilder<TEntity> WithRowLock(LockMode mode)
+    /// <summary>
+    /// Locks the selected rows in shared mode until the transaction ends, blocking while a locked row is held
+    /// by another transaction. Renders a trailing <c>FOR SHARE</c> clause on dialects that support it, or a
+    /// table hint on the primary source (<c>with (holdlock)</c> on SQL Server). Requires a dialect that
+    /// supports row locking (see <see cref="ISqlDialect.Lock"/>).
+    /// </summary>
+    public EntityBuilder<TEntity> ForShare() => WithRowLock(LockMode.Share, LockWaitMode.Wait);
+
+    /// <summary>
+    /// Locks the selected rows in shared mode until the transaction ends, with the requested wait behaviour
+    /// for rows already locked by another transaction. Renders a trailing <c>FOR SHARE [NOWAIT | SKIP LOCKED]</c>
+    /// clause on dialects that support it, or the matching table hint on the primary source
+    /// (<c>with (holdlock, nowait)</c>/<c>with (holdlock, readpast)</c> on SQL Server). Requires a dialect that
+    /// supports row locking (see <see cref="ISqlDialect.Lock"/>).
+    /// </summary>
+    /// <param name="wait">How to react to a row already locked by another transaction.</param>
+    public EntityBuilder<TEntity> ForShare(LockWaitMode wait) => WithRowLock(LockMode.Share, wait);
+
+    private EntityBuilder<TEntity> WithRowLock(LockMode mode, LockWaitMode wait)
     {
         var b = Clone();
-        b._rowLock = new LockClause(mode);
+        b._rowLock = new LockClause(mode, wait);
         return b;
     }
     /// <summary>Sets the maximum number of rows to return; zero means no limit.</summary>
@@ -896,8 +889,11 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         dst.SettingsList = _settings is null ? null : [.. _settings];
         dst.PreWhereCondition = _preWhere;
         dst.TableHints = TableHints;
+        dst.IndexHints = IndexHints;
+        dst.IndexHintKind = IndexHintKind;
         dst.QuoteIdentifiers = QuoteIdentifiers;
         dst.NamingConvention = NamingConvention;
+        dst.KeywordCase = KeywordCase;
         dst.Ctes = Ctes;
     }
     /// <summary>
@@ -1138,6 +1134,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         // A TVF (or other explicit source) on either side is carried as a FromExpression: the right
         // side keeps the joined entity's own source, the left side keeps the one propagated below.
         var joined = CreateJoined<TJoinEntity>(new JoinExpression(joinCondition, joinType) { From = GetJoinSource(_), EntityType = joinCondition is null ? typeof(TJoinEntity) : null }, ResolveJoinBase());
+        joined.Ctes = CteMerge.Merge(Ctes, _.Ctes);
         ApplyWhereToJoined(joined);
         return joined;
     }
@@ -1149,8 +1146,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// join would fall back to entity metadata that does not exist for <see cref="TableAlias"/>.
     /// </summary>
     private FromExpression GetJoinSource<TJoinEntity>(EntityBuilder<TJoinEntity> builder)
-        => builder.SourceFrom
-           ?? (builder.Table is not null ? new FromExpression(builder.Table) : _dataProvider.GetFrom(typeof(TJoinEntity), null)!);
+        => JoinSourceResolver.Resolve(_dataProvider, builder);
 
     /// <summary>
     /// Adds an inner join to the derived <paramref name="query"/>, using
@@ -1245,7 +1241,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 
         if (_dataProvider is InMemoryDataContext)
             throw new NotSupportedException(
-                "A correlated CROSS/OUTER APPLY source is not supported by the in-memory provider; see docs/specs/roadmap/todo_correlated_inmemory.md.");
+                "A correlated CROSS/OUTER APPLY source is not supported by the in-memory provider; run the query against a SQL provider.");
 
         if (_windows is not null)
             throw new InvalidOperationException("Named windows must be declared after joins; Window cannot be combined with a later Join.");
@@ -1271,7 +1267,7 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
     /// </summary>
     private JoinedEntityBuilder<TEntity, TJoinEntity> CreateJoined<TJoinEntity>(JoinExpression join, QueryCommand? query)
     {
-        var cb = new JoinedEntityBuilder<TEntity, TJoinEntity>(_dataProvider, join) { Logger = Logger, Table = Table, _query = query, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention };
+        var cb = new JoinedEntityBuilder<TEntity, TJoinEntity>(_dataProvider, join) { Logger = Logger, Table = Table, _query = query, IsDistinct = IsDistinct, GroupingType = GroupingType, GroupingSets = GroupingSets, GroupByWithTotals = GroupByWithTotals, LimitByClause = LimitByClause, DistinctOnClause = DistinctOnClause, TableSampleClause = TableSampleClause, TemporalClause = TemporalClause, RowLockClause = RowLockClause, IsFinal = IsFinal, SampleRatio = SampleRatio, SampleOffset = SampleOffset, SettingsList = SettingsList, PreWhereCondition = PreWhereCondition, ArrayJoins = ArrayJoins, ArrayJoinKind = ArrayJoinKind, TableHints = TableHints, IndexHints = IndexHints, IndexHintKind = IndexHintKind, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, KeywordCase = KeywordCase };
         cb.SourceFrom = SourceFrom;
         return cb;
     }
@@ -1440,6 +1436,46 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
         return b;
     }
     /// <summary>
+    /// Attaches an index hint to the primary physical table, asking the planner to consider
+    /// <paramref name="indexes"/> (<c>USE INDEX</c> on MySQL/MariaDB, <c>INDEXED BY</c> on SQLite,
+    /// <c>WITH (INDEX(...))</c> on SQL Server). Requires a dialect that supports index hints (see
+    /// <see cref="ISqlDialect.IndexHints"/>); a dialect without a native form rejects the command with
+    /// <see cref="NotSupportedException"/>. The names are emitted verbatim, so only use trusted values.
+    /// Use the overload taking an <see cref="IndexHintKind"/> to force or ignore the indexes.
+    /// </summary>
+    /// <param name="indexes">The index names to hint; never empty.</param>
+    /// <returns>A builder with the index hint applied.</returns>
+    public EntityBuilder<TEntity> WithIndex(params string[] indexes)
+        => WithIndex(IndexHintKind.Use, indexes);
+    /// <summary>
+    /// Attaches an index hint with an explicit <paramref name="kind"/> to the primary physical table.
+    /// With <see cref="IndexHintKind.Ignore"/> and no names, SQLite renders <c>NOT INDEXED</c>. Requires
+    /// a dialect that supports index hints (see <see cref="ISqlDialect.IndexHints"/>).
+    /// </summary>
+    /// <param name="kind">Whether to use, force or ignore the indexes.</param>
+    /// <param name="indexes">The index names to hint; may be empty for <see cref="IndexHintKind.Ignore"/>.</param>
+    /// <returns>A builder with the index hint applied.</returns>
+    public EntityBuilder<TEntity> WithIndex(IndexHintKind kind, params string[] indexes)
+    {
+        var b = Clone();
+
+        var names = indexes is { Length: > 0 }
+            ? indexes.Where(i => !string.IsNullOrWhiteSpace(i)).ToArray()
+            : [];
+        b.IndexHints = names.Length > 0 ? names : (kind == IndexHintKind.Ignore ? [] : null);
+        b.IndexHintKind = kind;
+
+        return b;
+    }
+    /// <summary>
+    /// Tells the SQLite planner not to use any index (<c>NOT INDEXED</c>), or asks other dialects to
+    /// ignore every named index. Requires a dialect that supports index hints (see
+    /// <see cref="ISqlDialect.IndexHints"/>).
+    /// </summary>
+    /// <returns>A builder with the index suppression applied.</returns>
+    public EntityBuilder<TEntity> WithoutIndex()
+        => WithIndex(IndexHintKind.Ignore);
+    /// <summary>
     /// Overrides identifier quoting for the commands this builder creates: when
     /// <paramref name="value"/> is <c>true</c>, physical table and column names are quoted with the
     /// provider's delimiter (<c>"id"</c> on PostgreSQL/SQLite, <c>[id]</c> on SQL Server,
@@ -1467,6 +1503,30 @@ public class EntityBuilder<TEntity> : ICloneable //IAsyncEnumerable<TEntity>
 
         return b;
     }
+    /// <summary>
+    /// Overrides the letter case in which the SQL keywords of the commands this builder creates are
+    /// emitted (see <c>DataContextBuilder.UseKeywordCase</c> for the context default).
+    /// <see cref="KeywordCase.Upper"/> renders <c>SELECT ... FROM ...</c>; identifiers, string literals,
+    /// function names, type names and raw SQL are never affected.
+    /// </summary>
+    /// <param name="keywordCase">The keyword case to apply.</param>
+    /// <returns>A builder with the override applied.</returns>
+    public EntityBuilder<TEntity> WithKeywordCase(KeywordCase keywordCase = global::NextORM.Core.KeywordCase.Upper)
+    {
+        var b = Clone();
+
+        b.KeywordCase = keywordCase;
+
+        return b;
+    }
+    /// <summary>
+    /// Convenience form of <see cref="WithKeywordCase"/>: enables (<paramref name="value"/> is
+    /// <see langword="true"/>) or disables upper-case SQL keywords for the commands this builder creates.
+    /// </summary>
+    /// <param name="value"><see langword="true"/> to emit keywords in upper case; otherwise lower case.</param>
+    /// <returns>A builder with the override applied.</returns>
+    public EntityBuilder<TEntity> WithUppercaseKeywords(bool value = true)
+        => WithKeywordCase(value ? global::NextORM.Core.KeywordCase.Upper : global::NextORM.Core.KeywordCase.Lower);
     /// <summary>
     /// Adds <paramref name="condition"/> to the HAVING clause, which filters grouped rows. A repeated
     /// call combines the predicates with <c>and</c>.
@@ -1560,6 +1620,11 @@ public class EntityBuilder : ICloneable
     /// </summary>
     internal bool? QuoteIdentifiers { get; set; }
     /// <summary>
+    /// Per-query override of the SQL keyword case (<c>null</c> inherits the context default). Set
+    /// through <see cref="WithKeywordCase"/>.
+    /// </summary>
+    internal KeywordCase? KeywordCase { get; set; }
+    /// <summary>
     /// Per-query override of the naming convention for auto-derived table/column names (<c>null</c>
     /// inherits the context default). Set through <see cref="WithNamingConvention"/>.
     /// </summary>
@@ -1602,6 +1667,7 @@ public class EntityBuilder : ICloneable
 
         cmd.QuoteIdentifiers = QuoteIdentifiers;
         cmd.NamingConvention = NamingConvention;
+        cmd.KeywordCase = KeywordCase;
 
         return cmd;
     }
@@ -1630,6 +1696,7 @@ public class EntityBuilder : ICloneable
         dst.Ctes = Ctes;
         dst.QuoteIdentifiers = QuoteIdentifiers;
         dst.NamingConvention = NamingConvention;
+        dst.KeywordCase = KeywordCase;
     }
     /// <summary>
     /// Creates the copy returned by <see cref="Clone"/> and the explicit <c>ICloneable.Clone</c> call.
@@ -1690,6 +1757,28 @@ public class EntityBuilder : ICloneable
 
         return b;
     }
+    /// <summary>
+    /// Overrides the SQL keyword case for the commands this builder creates (see
+    /// <see cref="EntityBuilder{TEntity}.WithKeywordCase"/>).
+    /// </summary>
+    /// <param name="keywordCase">The keyword case to apply.</param>
+    /// <returns>A builder with the override applied.</returns>
+    public EntityBuilder WithKeywordCase(KeywordCase keywordCase = global::NextORM.Core.KeywordCase.Upper)
+    {
+        var b = Clone();
+
+        b.KeywordCase = keywordCase;
+
+        return b;
+    }
+    /// <summary>
+    /// Convenience form of <see cref="WithKeywordCase"/>: enables (<paramref name="value"/> is
+    /// <see langword="true"/>) or disables upper-case SQL keywords for the commands this builder creates.
+    /// </summary>
+    /// <param name="value"><see langword="true"/> to emit keywords in upper case; otherwise lower case.</param>
+    /// <returns>A builder with the override applied.</returns>
+    public EntityBuilder WithUppercaseKeywords(bool value = true)
+        => WithKeywordCase(value ? global::NextORM.Core.KeywordCase.Upper : global::NextORM.Core.KeywordCase.Lower);
     /// <summary>
     /// Adds an inner join to <paramref name="from"/>, using <paramref name="joinCondition"/> as the
     /// <c>ON</c> predicate; only matching pairs survive.
@@ -1780,7 +1869,7 @@ public class EntityBuilder : ICloneable
     }
     private JoinedEntityBuilder<TableAlias, TableAlias> JoinCore(EntityBuilder from, JoinType joinType, LambdaExpression? joinCondition)
     {
-        var cb = new JoinedEntityBuilder<TableAlias, TableAlias>(_dataProvider, new JoinExpression(joinCondition, joinType) { From = new FromExpression(from._table!), EntityType = joinCondition is null ? typeof(TableAlias) : null }) { Logger = Logger, Table = _table, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention };
+        var cb = new JoinedEntityBuilder<TableAlias, TableAlias>(_dataProvider, new JoinExpression(joinCondition, joinType) { From = new FromExpression(from._table!), EntityType = joinCondition is null ? typeof(TableAlias) : null }) { Logger = Logger, Table = _table, Ctes = CteMerge.Merge(Ctes, from.Ctes), QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, KeywordCase = KeywordCase };
         return cb;
     }
     /// <summary>
@@ -1855,7 +1944,7 @@ public class EntityBuilder : ICloneable
         => JoinCore(_, JoinType.Paste, null);
     private JoinedEntityBuilder<TableAlias, TJoinEntity> JoinCore<TJoinEntity>(EntityBuilder<TJoinEntity> _, JoinType joinType, LambdaExpression? joinCondition)
     {
-        var cb = new JoinedEntityBuilder<TableAlias, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition, joinType) { From = _dataProvider.GetFrom(typeof(TJoinEntity), null)!, EntityType = joinCondition is null ? typeof(TJoinEntity) : null }) { Logger = Logger, Table = _table, Ctes = Ctes, QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention };
+        var cb = new JoinedEntityBuilder<TableAlias, TJoinEntity>(_dataProvider, new JoinExpression(joinCondition, joinType) { From = _dataProvider.GetFrom(typeof(TJoinEntity), null)!, EntityType = joinCondition is null ? typeof(TJoinEntity) : null }) { Logger = Logger, Table = _table, Ctes = CteMerge.Merge(Ctes, _.Ctes), QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, KeywordCase = KeywordCase };
         return cb;
     }
 }

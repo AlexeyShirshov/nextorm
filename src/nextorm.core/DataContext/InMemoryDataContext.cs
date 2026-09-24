@@ -43,6 +43,9 @@ public partial class InMemoryDataContext : IDataContext
     // Compiled SelectMany/GroupJoin selectors. Without this, Expression.Compile runs on every call and
     // dominates the operator cost (it is far more expensive than evaluating the flatten itself).
     private readonly IDictionary<ExpressionKey, Delegate> _linqSelectorCache = new ExpressionCache<Delegate>();
+    // Built correlated-subquery plans, keyed by the inner command (identity): a plan compiles the
+    // inner condition/projection once and re-binds the outer values through its runtime parameters.
+    private readonly Dictionary<QueryCommand, InMemoryCorrelatedPlan> _correlatedPlans = [];
     private readonly IDictionary<Type, object?> _data = new Dictionary<Type, object?>();
     private bool _disposedValue;
     private readonly Dictionary<QueryPlan, object> _cmdIdx = [];
@@ -111,6 +114,21 @@ public partial class InMemoryDataContext : IDataContext
     internal IDictionary<ExpressionKey, Delegate> ConditionFactoryCache => _conditionFactoryCache;
     internal IDictionary<ExpressionKey, Delegate> ConditionDirectCache => _conditionDirectCache;
     internal IDictionary<ExpressionKey, Delegate> LinqSelectorCache => _linqSelectorCache;
+
+    /// <summary>
+    /// Returns (building once) the execution plan for a correlated subquery command. The plan binds
+    /// the outer row's values to the inner query's outer-reference markers at execution time.
+    /// </summary>
+    internal InMemoryCorrelatedPlan GetCorrelatedPlan(QueryCommand cmd)
+    {
+        if (!_correlatedPlans.TryGetValue(cmd, out var plan))
+        {
+            plan = InMemoryCorrelatedEvaluator.Build(this, cmd);
+            _correlatedPlans[cmd] = plan;
+        }
+
+        return plan;
+    }
 
     private InMemoryPreparedQueryCommand<TResult> GetCacheEntry<TResult>(QueryCommand<TResult> queryCommand, CancellationToken cancellationToken)
     {
@@ -183,13 +201,13 @@ public partial class InMemoryDataContext : IDataContext
         => InMemorySetOperations.CreateSetOperationEnumerator(this, queryCommand, @params, cancellationToken);
 
     private IEnumerable<TEntity> ApplyOrdering<TEntity>(IEnumerable<TEntity> data, QueryCommand queryCommand)
-        => InMemoryOrdering.ApplyOrdering(data, queryCommand, _sortingSelectorCache);
+        => InMemoryOrdering.ApplyOrdering(this, data, queryCommand, _sortingSelectorCache);
 
     private IAsyncEnumerable<TEntity> OrderAsyncEnumerable<TEntity>(
         IAsyncEnumerable<TEntity> source,
         QueryCommand queryCommand,
         CancellationToken cancellationToken)
-        => InMemoryOrdering.OrderAsyncEnumerable(source, queryCommand, cancellationToken, _sortingSelectorCache);
+        => InMemoryOrdering.OrderAsyncEnumerable(this, source, queryCommand, cancellationToken, _sortingSelectorCache);
 #if !PARAM_CONDITION
     private Func<TEntity, bool>? GetCondition<TEntity>(Expression? condition, object[] @params)
     {
@@ -336,7 +354,7 @@ public partial class InMemoryDataContext : IDataContext
         => CreateCompiledQuery<TResult, TEntity>(queryCommand);
 
     private (Func<object[]?, Func<TEntity, bool>>? Factory, Func<TEntity, bool>? Direct) GetConditionPredicates<TResult, TEntity>(QueryCommand<TResult> query, Expression<Func<TEntity, bool>> condition)
-        => InMemoryConditionFactory.GetConditionPredicates(query, condition, _conditionFactoryCache, _conditionDirectCache);
+        => InMemoryConditionFactory.GetConditionPredicates(this, query, condition, _conditionFactoryCache, _conditionDirectCache);
 
     // public Task<IEnumerator<TResult>> CreateEnumeratorAsync<TResult>(QueryCommand<TResult> queryCommand, object[]? @params, CancellationToken cancellationToken)
     // {
@@ -490,5 +508,9 @@ public partial class InMemoryDataContext : IDataContext
         => _executor.SingleOrDefaultAsync(preparedQueryCommand, @params, cancellationToken);
 
     /// <summary>Clears all cached query plans held by this context.</summary>
-    public void PurgeQueryCache() => _queryCache.PurgeQueryCache();
+    public void PurgeQueryCache()
+    {
+        _correlatedPlans.Clear();
+        _queryCache.PurgeQueryCache();
+    }
 }

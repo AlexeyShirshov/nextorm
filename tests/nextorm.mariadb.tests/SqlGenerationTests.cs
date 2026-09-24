@@ -19,6 +19,39 @@ public class SqlGenerationTests
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd) => Normalize(Prepare(ctx, cmd).DbCommand.CommandText);
 
     [Fact]
+    public void KeywordCase_Upper_ShouldUppercaseDialectClauses()
+    {
+        using var ctx = MariaDbTestContext.CreateUppercase();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e
+            .GroupByRollup(x => new { x.Int, x.Boolean })
+            .Select(x => new { x.Int, x.Boolean }))
+            .Should().Contain("GROUP BY nullableint, b WITH ROLLUP");
+
+        SqlOf(ctx, e.ForUpdate().Select(x => x.Int)).Should().EndWith("FOR UPDATE");
+        SqlOf(ctx, e.ForShare(LockWaitMode.SkipLocked).Select(x => x.Int)).Should().EndWith("LOCK IN SHARE MODE SKIP LOCKED");
+    }
+
+    [Fact]
+    public void ForUpdate_SkipLocked_ShouldEmitSkipLocked()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.ForUpdate(LockWaitMode.SkipLocked).Select(x => x.Id)).Should().EndWith("for update skip locked");
+    }
+
+    [Fact]
+    public void ForShare_NoWait_ShouldEmitLockInShareModeNowait()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.ForShare(LockWaitMode.NoWait).Select(x => x.Id)).Should().EndWith("lock in share mode nowait");
+    }
+
+    [Fact]
     public void Pivot_ShouldThrowBecauseNotSupported()
     {
         using var ctx = MariaDbTestContext.Create();

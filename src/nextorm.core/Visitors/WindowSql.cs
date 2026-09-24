@@ -170,7 +170,7 @@ internal static class WindowSql
             frameArgument = args[index];
     }
 
-    internal static string RenderWindowFrame(WindowFrame frame)
+    internal static string RenderWindowFrame(WindowFrame frame, KeywordCase keywordCase)
     {
         var unit = frame.Type switch
         {
@@ -180,30 +180,30 @@ internal static class WindowSql
             _ => throw new NotSupportedException(frame.Type.ToString())
         };
 
-        var result = $"{unit} between {RenderWindowFrameBound(frame.Start)} and {RenderWindowFrameBound(frame.End)}";
+        var result = $"{SqlKeywords.Of(keywordCase, unit)} {SqlKeywords.Of(keywordCase, "between")} {RenderWindowFrameBound(frame.Start, keywordCase)} {SqlKeywords.Of(keywordCase, "and")} {RenderWindowFrameBound(frame.End, keywordCase)}";
 
         if (frame.Exclusion is { } exclusion)
-            result += " " + RenderWindowFrameExclusion(exclusion);
+            result += " " + RenderWindowFrameExclusion(exclusion, keywordCase);
 
         return result;
     }
 
-    internal static string RenderWindowFrameExclusion(WindowFrameExclusion exclusion) => exclusion switch
+    internal static string RenderWindowFrameExclusion(WindowFrameExclusion exclusion, KeywordCase keywordCase) => exclusion switch
     {
-        WindowFrameExclusion.NoOthers => "exclude no others",
-        WindowFrameExclusion.CurrentRow => "exclude current row",
-        WindowFrameExclusion.Group => "exclude group",
-        WindowFrameExclusion.Ties => "exclude ties",
+        WindowFrameExclusion.NoOthers => SqlKeywords.Of(keywordCase, "exclude no others"),
+        WindowFrameExclusion.CurrentRow => SqlKeywords.Of(keywordCase, "exclude current row"),
+        WindowFrameExclusion.Group => SqlKeywords.Of(keywordCase, "exclude group"),
+        WindowFrameExclusion.Ties => SqlKeywords.Of(keywordCase, "exclude ties"),
         _ => throw new NotSupportedException(exclusion.ToString())
     };
 
-    private static string RenderWindowFrameBound(WindowFrameBound bound) => bound.Kind switch
+    private static string RenderWindowFrameBound(WindowFrameBound bound, KeywordCase keywordCase) => bound.Kind switch
     {
-        WindowFrameBoundKind.UnboundedPreceding => "unbounded preceding",
-        WindowFrameBoundKind.Preceding => $"{bound.Offset} preceding",
-        WindowFrameBoundKind.CurrentRow => "current row",
-        WindowFrameBoundKind.Following => $"{bound.Offset} following",
-        WindowFrameBoundKind.UnboundedFollowing => "unbounded following",
+        WindowFrameBoundKind.UnboundedPreceding => SqlKeywords.Of(keywordCase, "unbounded preceding"),
+        WindowFrameBoundKind.Preceding => $"{bound.Offset} {SqlKeywords.Of(keywordCase, "preceding")}",
+        WindowFrameBoundKind.CurrentRow => SqlKeywords.Of(keywordCase, "current row"),
+        WindowFrameBoundKind.Following => $"{bound.Offset} {SqlKeywords.Of(keywordCase, "following")}",
+        WindowFrameBoundKind.UnboundedFollowing => SqlKeywords.Of(keywordCase, "unbounded following"),
         _ => throw new NotSupportedException(bound.Kind.ToString())
     };
 }

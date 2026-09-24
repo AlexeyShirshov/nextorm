@@ -17,6 +17,9 @@ internal static class ClickHouseTestContext
     public static IDataContext CreateQuoted() =>
         new ClickHouseDataContext(PlaceholderConnectionString, new DataContextBuilder().UseQuotedIdentifiers());
 
+    public static IDataContext CreateUppercase() =>
+        new ClickHouseDataContext(PlaceholderConnectionString, new DataContextBuilder().UseUppercaseKeywords());
+
     public static ClickHouseDataContext CreateClickHouse() =>
         new(PlaceholderConnectionString, new DataContextBuilder());
 }

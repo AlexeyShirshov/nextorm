@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using System.Data;
 using System.Data.Common;
 using System.Linq.Expressions;
 
@@ -10,7 +11,7 @@ namespace NextORM.Core;
 /// commands. Providers derive from it and supply the SQL dialect, the connection factory and
 /// parameter creation.
 /// </summary>
-public abstract class DataContext : IDataContext, IConnectionManager
+public abstract class DataContext : IDataContext, IConnectionManager, ITransactionManager, IMutationExecutor, IBulkInsertExecutor
 {
     private bool _disposed;
     private readonly ContextEnvironment _environment;
@@ -49,7 +50,8 @@ public abstract class DataContext : IDataContext, IConnectionManager
             needMapping: true,
             optionsBuilder.ShouldLogSensitiveData,
             optionsBuilder.QuoteIdentifiers,
-            optionsBuilder.NamingConvention);
+            optionsBuilder.NamingConvention,
+            optionsBuilder.KeywordCase);
 
         _queryCache = new QueryCache(QueryPlanStore.Clear);
 
@@ -62,7 +64,8 @@ public abstract class DataContext : IDataContext, IConnectionManager
             new ConnectionHooks(CreateDbConnection, OnConnectionCreated),
             connectionString,
             providedConnection,
-            new LoggingOptions(_environment.Logger, LogSensitiveData: _environment.LogSensitiveData));
+            new LoggingOptions(_environment.Logger, LogSensitiveData: _environment.LogSensitiveData),
+            () => Dialect.SupportsTransactions);
 
         // Bound once: parameter creation is handed to the execution/planning layers as a delegate
         // instead of passing the context itself, so they no longer depend on the concrete DataContext
@@ -76,7 +79,8 @@ public abstract class DataContext : IDataContext, IConnectionManager
             _connectionManager,
             _createParam,
             new LoggingOptions(_environment.Logger, LogSensitiveData: _environment.LogSensitiveData, LogParams: _environment.LogParams),
-            () => _disposed);
+            () => _disposed,
+            () => _connectionManager.CurrentTransaction);
 
         // The planning axis gets the provider hooks as delegates and invokes them lazily: calling the
         // abstract/virtual members here would run derived code before the derived constructor.
@@ -118,6 +122,12 @@ public abstract class DataContext : IDataContext, IConnectionManager
     /// verbatim. A command can override it with <c>WithNamingConvention</c>.
     /// </summary>
     public INamingConvention? NamingConvention => _environment.NamingConvention;
+    /// <summary>
+    /// The letter case in which this context emits SQL keywords by default (set with
+    /// <c>DataContextBuilder.UseKeywordCase</c>). A command can override it with
+    /// <c>WithKeywordCase</c>.
+    /// </summary>
+    public KeywordCase KeywordCase => _environment.KeywordCase;
     /// <summary>User-owned bag of arbitrary state attached to this context.</summary>
     public Dictionary<string, object> Properties => _environment.Properties;
     /// <summary>
@@ -154,6 +164,20 @@ public abstract class DataContext : IDataContext, IConnectionManager
     /// <returns>The underlying database connection.</returns>
     public DbConnection GetConnection() => _connectionManager.GetConnection();
 
+    // Transaction axis (ITransactionManager). Implemented explicitly so the concrete context does not
+    // grow six public members; callers reach them through the ITransactionManager role, as documented.
+    DbTransaction? ITransactionManager.CurrentTransaction => _connectionManager.CurrentTransaction;
+
+    DbTransaction ITransactionManager.BeginTransaction() => _connectionManager.BeginTransaction();
+
+    DbTransaction ITransactionManager.BeginTransaction(IsolationLevel isolationLevel) => _connectionManager.BeginTransaction(isolationLevel);
+
+    Task<DbTransaction> ITransactionManager.BeginTransactionAsync(CancellationToken cancellationToken) => _connectionManager.BeginTransactionAsync(cancellationToken);
+
+    Task<DbTransaction> ITransactionManager.BeginTransactionAsync(IsolationLevel isolationLevel, CancellationToken cancellationToken) => _connectionManager.BeginTransactionAsync(isolationLevel, cancellationToken);
+
+    void ITransactionManager.UseTransaction(DbTransaction? transaction) => _connectionManager.UseTransaction(transaction);
+
     /// <summary>Creates the provider-specific connection. Called only when no connection was supplied.</summary>
     protected abstract DbConnection CreateDbConnection(string? connectionString);
 
@@ -170,11 +194,13 @@ public abstract class DataContext : IDataContext, IConnectionManager
 
     /// <summary>Creates a command bound to the current connection with <paramref name="sql"/> as its text. The caller owns the returned command.</summary>
     /// <param name="sql">The SQL text to execute.</param>
-    /// <returns>A new command on the current connection.</returns>
+    /// <returns>A new command on the current connection, bound to the active transaction when one is enlisted.</returns>
     public DbCommand CreateCommand(string sql)
     {
         var cmd = _connectionManager.GetConnection().CreateCommand();
         cmd.CommandText = sql;
+        if (_connectionManager.CurrentTransaction is { } transaction)
+            cmd.Transaction = transaction;
         return cmd;
     }
 
@@ -219,6 +245,392 @@ public abstract class DataContext : IDataContext, IConnectionManager
     /// <returns>The resolved FROM expression, or <see langword="null"/> when the type is not mapped.</returns>
     public FromExpression? GetFrom(Type srcType, QueryCommand? queryCommand)
         => _planner.GetFrom(srcType, queryCommand);
+
+    // DML execution (IMutationExecutor). Kept as explicit implementations so the mutation axis does
+    // not widen the context's public surface; the public entry points live on the InsertBuilder.
+    string IMutationExecutor.Render(MutationCommand command)
+    {
+        EnsureReturningSupportedIfNeeded(command);
+        return BuildMutationSql(command).Sql;
+    }
+
+    bool IMutationExecutor.SupportsGeneratedColumns => Dialect.SupportsReturning || Dialect.SupportsOutput;
+
+    string IMutationExecutor.RenderIdentityFunction(MutationCommand command)
+    {
+        EnsureIdentityFunctionSupported();
+        // Mirror execution: a non-identity key cannot be read through the identity function.
+        if (command is InsertCommand { IdentityColumn: not null })
+            EnsureIdentityColumn(command);
+
+        var (sql, _) = BuildInsertSql((InsertCommand)command);
+        return sql + "; " + Dialect.MakeIdentityFunction(KeywordCase);
+    }
+
+    object? IMutationExecutor.ExecuteIdentityFunction(MutationCommand command)
+    {
+        EnsureIdentityFunctionSupported();
+        var (sql, parameters) = BuildInsertSql((InsertCommand)command);
+        // The identity function runs in the same batch as the insert: SCOPE_IDENTITY() is scoped to the
+        // batch, so issuing it as a separate command would return NULL on SQL Server.
+        return _executor.ExecuteScalar(sql + "; " + Dialect.MakeIdentityFunction(KeywordCase), parameters);
+    }
+
+    async Task<object?> IMutationExecutor.ExecuteIdentityFunction(MutationCommand command, CancellationToken cancellationToken)
+    {
+        EnsureIdentityFunctionSupported();
+        var (sql, parameters) = BuildInsertSql((InsertCommand)command);
+        return await _executor.ExecuteScalarAsync(sql + "; " + Dialect.MakeIdentityFunction(KeywordCase), parameters, cancellationToken).ConfigureAwait(false);
+    }
+
+    int IMutationExecutor.Execute(MutationCommand command)
+    {
+        var (sql, parameters) = BuildMutationSql(command);
+        return _executor.ExecuteNonQuery(sql, parameters);
+    }
+
+    async Task<int> IMutationExecutor.Execute(MutationCommand command, CancellationToken cancellationToken)
+    {
+        var (sql, parameters) = BuildMutationSql(command);
+        return await _executor.ExecuteNonQueryAsync(sql, parameters, cancellationToken).ConfigureAwait(false);
+    }
+
+    object? IMutationExecutor.ExecuteIdentity(MutationCommand command)
+    {
+        if (Dialect.SupportsReturning || Dialect.SupportsOutput)
+        {
+            var (sql, parameters) = BuildInsertSql((InsertCommand)command);
+            return _executor.ExecuteScalar(sql, parameters);
+        }
+
+        if (Dialect.SupportsLastInsertId)
+        {
+            EnsureIdentityColumn(command);
+            var (sql, parameters) = BuildInsertSql((InsertCommand)command);
+            _executor.ExecuteNonQuery(sql, parameters);
+            return _executor.ExecuteScalar(Dialect.MakeLastInsertId(KeywordCase), []);
+        }
+
+        throw new NotSupportedException(
+            $"{GetType().Name} cannot return a generated identity: the provider has no RETURNING, OUTPUT or LAST_INSERT_ID form. Use Insert() instead.");
+    }
+
+    async Task<object?> IMutationExecutor.ExecuteIdentity(MutationCommand command, CancellationToken cancellationToken)
+    {
+        if (Dialect.SupportsReturning || Dialect.SupportsOutput)
+        {
+            var (sql, parameters) = BuildInsertSql((InsertCommand)command);
+            return await _executor.ExecuteScalarAsync(sql, parameters, cancellationToken).ConfigureAwait(false);
+        }
+
+        if (Dialect.SupportsLastInsertId)
+        {
+            EnsureIdentityColumn(command);
+            var (sql, parameters) = BuildInsertSql((InsertCommand)command);
+            await _executor.ExecuteNonQueryAsync(sql, parameters, cancellationToken).ConfigureAwait(false);
+            return await _executor.ExecuteScalarAsync(Dialect.MakeLastInsertId(KeywordCase), [], cancellationToken).ConfigureAwait(false);
+        }
+
+        throw new NotSupportedException(
+            $"{GetType().Name} cannot return a generated identity: the provider has no RETURNING, OUTPUT or LAST_INSERT_ID form. Use Insert() instead.");
+    }
+
+    IReadOnlyList<TResult> IMutationExecutor.ExecuteReturning<TResult>(MutationCommand command, SelectExpression[] selectList, bool oneColumn)
+    {
+        EnsureReturningSupported();
+        EnsureReturningMaterializable<TResult>(oneColumn);
+        var (sql, parameters) = BuildReturningSql(command);
+        var mapper = RowMapperFactory.GetOrBuild<TResult>(sql, GetType(), selectList, oneColumn, MapColumnExpression);
+        return _executor.ExecuteReader(sql, parameters, mapper);
+    }
+
+    async Task<IReadOnlyList<TResult>> IMutationExecutor.ExecuteReturning<TResult>(MutationCommand command, SelectExpression[] selectList, bool oneColumn, CancellationToken cancellationToken)
+    {
+        EnsureReturningSupported();
+        EnsureReturningMaterializable<TResult>(oneColumn);
+        var (sql, parameters) = BuildReturningSql(command);
+        var mapper = RowMapperFactory.GetOrBuild<TResult>(sql, GetType(), selectList, oneColumn, MapColumnExpression);
+        return await _executor.ExecuteReaderAsync(sql, parameters, mapper, cancellationToken).ConfigureAwait(false);
+    }
+
+    // Bulk insert (IBulkInsertExecutor). The native path is provider-supplied through the
+    // BulkInsertRows hooks; the portable path is the shared INSERT ... VALUES loop and is chosen by the
+    // builder when the request needs RETURNING/OUTPUT, conflict handling or an identity-insert form, or
+    // when the provider has no native bulk API.
+    int IBulkInsertExecutor.BulkInsert(BulkInsertCommand command)
+    {
+        var rows = command.SyncRows
+            ?? throw new InvalidOperationException("BulkInsert is synchronous but the source is async; use BulkInsertAsync instead.");
+
+        return BulkInsertRows(
+            SqlMutationBuilder.ResolveTableName(command.TableName, command.IsTableNameAuto, command.EntityType, NamingConvention),
+            ResolveBulkColumnNames(command.Columns),
+            command.Columns,
+            rows,
+            command.TimeoutSeconds,
+            command.Batch?.MaxBatchSize,
+            command.Progress,
+            command.NotifyEvery);
+    }
+
+    async Task<int> IBulkInsertExecutor.BulkInsertAsync(BulkInsertCommand command, CancellationToken cancellationToken)
+    {
+        var rows = command.AsyncRows ?? new SyncToAsyncEnumerable<object?[]>(command.SyncRows!);
+
+        return await BulkInsertRowsAsync(
+            SqlMutationBuilder.ResolveTableName(command.TableName, command.IsTableNameAuto, command.EntityType, NamingConvention),
+            ResolveBulkColumnNames(command.Columns),
+            command.Columns,
+            rows,
+            command.TimeoutSeconds,
+            command.Batch?.MaxBatchSize,
+            command.Progress,
+            command.NotifyEvery,
+            cancellationToken).ConfigureAwait(false);
+    }
+
+    private string[] ResolveBulkColumnNames(IReadOnlyList<IPropertyMetadata> columns)
+    {
+        var names = new string[columns.Count];
+        for (var i = 0; i < names.Length; i++)
+            names[i] = SqlMutationBuilder.ResolveColumnName(columns[i], NamingConvention);
+
+        return names;
+    }
+
+    /// <summary>
+    /// Writes <paramref name="rows"/> through the provider's native bulk API. The default throws: a
+    /// provider opts in by setting <c>ISqlDialect.SupportsBulkCopy</c> and overriding this method (and
+    /// <see cref="BulkInsertRowsAsync"/>). The names are already convention-resolved and quoted.
+    /// </summary>
+    /// <param name="tableName">The convention-resolved (unquoted) target table name.</param>
+    /// <param name="columnNames">The convention-resolved (unquoted) written column names, in row order.</param>
+    /// <param name="columns">The mapped columns, in row order (for CLR types and identity flags).</param>
+    /// <param name="rows">The rows to write; each array matches <paramref name="columnNames"/> by ordinal.</param>
+    /// <param name="commandTimeoutSeconds">The command timeout in seconds, or <see langword="null"/> for the provider default.</param>
+    /// <param name="maxBatchSize">The maximum rows per batch, or <see langword="null"/> for the provider default.</param>
+    /// <param name="progress">The progress callback, called with the cumulative written-row count, or <see langword="null"/>.</param>
+    /// <param name="notifyEvery">The progress reporting interval in rows; the provider drives its cadence from it.</param>
+    /// <returns>The number of rows written.</returns>
+    /// <exception cref="NotSupportedException">The provider has no native bulk implementation.</exception>
+    protected virtual int BulkInsertRows(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IEnumerable<object?[]> rows, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery)
+        => throw new NotSupportedException($"{GetType().Name} declares ISqlDialect.SupportsBulkCopy but does not implement the native bulk path.");
+
+    /// <summary>Asynchronously writes <paramref name="rows"/> through the provider's native bulk API.</summary>
+    /// <param name="tableName">The convention-resolved (unquoted) target table name.</param>
+    /// <param name="columnNames">The convention-resolved (unquoted) written column names, in row order.</param>
+    /// <param name="columns">The mapped columns, in row order (for CLR types and identity flags).</param>
+    /// <param name="rows">The rows to write; each array matches <paramref name="columnNames"/> by ordinal.</param>
+    /// <param name="commandTimeoutSeconds">The command timeout in seconds, or <see langword="null"/> for the provider default.</param>
+    /// <param name="maxBatchSize">The maximum rows per batch, or <see langword="null"/> for the provider default.</param>
+    /// <param name="progress">The progress callback, called with the cumulative written-row count, or <see langword="null"/>.</param>
+    /// <param name="notifyEvery">The progress reporting interval in rows; the provider drives its cadence from it.</param>
+    /// <param name="cancellationToken">Cancels execution.</param>
+    /// <returns>A task producing the number of rows written.</returns>
+    /// <exception cref="NotSupportedException">The provider has no native bulk implementation.</exception>
+    protected virtual Task<int> BulkInsertRowsAsync(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IAsyncEnumerable<object?[]> rows, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery, CancellationToken cancellationToken)
+        => throw new NotSupportedException($"{GetType().Name} declares ISqlDialect.SupportsBulkCopy but does not implement the native bulk path.");
+
+    private (string Sql, List<Parameter> Parameters) BuildReturningSql(MutationCommand command)
+        => command switch
+        {
+            InsertCommand insert => BuildInsertSql(insert),
+            UpdateCommand update => BuildUpdateSql(update),
+            DeleteCommand delete => BuildDeleteSql(delete),
+            MergeCommand merge => BuildMergeSql(merge),
+            _ => throw new NotSupportedException($"Unsupported returning mutation command {command.GetType().Name}."),
+        };
+
+    private (string Sql, List<Parameter> Parameters) BuildInsertSql(InsertCommand command)
+    {
+        if (command.Source is null)
+            return SqlMutationBuilder.MakeInsert(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase);
+
+        var (withSql, sourceSql, sourceParameters) = _planner.RenderSource(command.Source);
+        var (insertSql, parameters) = SqlMutationBuilder.MakeInsert(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, sourceSql, sourceParameters);
+
+        // A data-modifying CTE (or a hoisted read CTE) must precede INSERT, not sit inside the SELECT.
+        return (withSql is null ? insertSql : withSql + insertSql, parameters);
+    }
+
+    private (string Sql, List<Parameter> Parameters) BuildUpdateSql(UpdateCommand command)
+    {
+        if (!Dialect.SupportsUpdate)
+            throw new NotSupportedException(
+                $"{GetType().Name} does not support UPDATE: the provider has no synchronous single-statement UPDATE form.");
+
+        // One parameter provider for the whole statement: the SET list, the predicate and the key
+        // values must not restart parameter numbering, or their names would collide.
+        var provider = new DefaultParameterProvider();
+        var parameters = new List<Parameter>();
+
+        var (setSql, _) = _planner.RenderAssignments(command, provider, parameters);
+
+        string? whereSql = null;
+        if (command.Keys is not { Count: > 0 })
+        {
+            var (rendered, _) = _planner.RenderPredicate(command.Source, provider, parameters);
+            whereSql = rendered;
+        }
+
+        return SqlMutationBuilder.MakeUpdate(Dialect, QuoteIdentifiers, NamingConvention, command, setSql, parameters, whereSql, provider, KeywordCase);
+    }
+
+    private (string Sql, List<Parameter> Parameters) BuildMutationSql(MutationCommand command)
+        => command switch
+        {
+            InsertCommand insert => BuildInsertSql(insert),
+            UpdateCommand update => BuildUpdateSql(update),
+            UpdateJoinCommand updateJoin => BuildUpdateJoinSql(updateJoin),
+            MergeCommand merge => BuildMergeSql(merge),
+            DeleteCommand delete => BuildDeleteSql(delete),
+            DeleteJoinCommand deleteJoin => BuildDeleteJoinSql(deleteJoin),
+            TruncateCommand truncate => BuildTruncateSql(truncate),
+            CreateTableAsCommand createTableAs => BuildCreateTableAsSql(createTableAs),
+            _ => throw new NotSupportedException($"Unsupported mutation command {command.GetType().Name}."),
+        };
+
+    private (string Sql, List<Parameter> Parameters) BuildMergeSql(MergeCommand command)
+    {
+        if (command.Branches is null)
+        {
+            if (command.Source is null)
+                return SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase);
+
+            var (withInsert, sourceInsert, sourceInsertParameters) = _planner.RenderSource(command.Source);
+            var (insertSql, insertParameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, null, sourceInsert, sourceInsertParameters);
+            return (withInsert is null ? insertSql : withInsert + insertSql, insertParameters);
+        }
+
+        // Full MERGE: render the search conditions into the same accumulator the VALUES rows use, so their
+        // autogenerated @pN names do not collide. Conditions are rendered first; the rows continue the sequence.
+        var provider = new DefaultParameterProvider();
+        var accumulator = new List<Parameter>();
+        var quoteIdentifiers = command.Source?.ResolvedQuoteIdentifiers ?? QuoteIdentifiers;
+        var namingConvention = command.Source?.ResolvedNamingConvention ?? NamingConvention;
+        var keywordCase = command.Source?.ResolvedKeywordCase ?? KeywordCase;
+        var registry = command.Registry!;
+
+        string? matchConditionSql = null;
+        if (command.MatchCondition is not null)
+            matchConditionSql = _planner.RenderMergeCondition(command.MatchCondition, command.EntityType, registry, provider, accumulator, quoteIdentifiers, namingConvention, keywordCase);
+
+        string?[]? branchConditions = null;
+        for (var i = 0; i < command.Branches.Count; i++)
+        {
+            if (command.Branches[i].Condition is not { } condition)
+                continue;
+
+            branchConditions ??= new string?[command.Branches.Count];
+            branchConditions[i] = _planner.RenderMergeCondition(condition, command.EntityType, registry, provider, accumulator, quoteIdentifiers, namingConvention, keywordCase);
+        }
+
+        if (command.Source is null)
+        {
+            var (sql, parameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, provider, null, null, accumulator, matchConditionSql, branchConditions);
+            return (sql, parameters);
+        }
+
+        var (withSql, sourceSql, _) = _planner.RenderSource(command.Source, provider, accumulator);
+        // The source parameters already sit in the shared accumulator, so MakeMerge must not re-add them;
+        // passing them again would duplicate every @pN.
+        var (fullSql, fullParameters) = SqlMutationBuilder.MakeMerge(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase, provider, sourceSql, null, accumulator, matchConditionSql, branchConditions);
+        return (withSql is null ? fullSql : withSql + fullSql, fullParameters);
+    }
+
+    private (string Sql, List<Parameter> Parameters) BuildTruncateSql(TruncateCommand command)
+    {
+        if (!Dialect.SupportsTruncate)
+            throw new NotSupportedException(
+                $"{GetType().Name} does not support TRUNCATE; remove every row with DeleteFrom<T>().All() instead.");
+
+        return (SqlMutationBuilder.MakeTruncate(Dialect, QuoteIdentifiers, NamingConvention, command, KeywordCase), []);
+    }
+
+    private (string Sql, List<Parameter> Parameters) BuildCreateTableAsSql(CreateTableAsCommand command)
+    {
+        // A SELECT ... INTO dialect (SQL Server) injects the target into the top-level select list; the
+        // other dialects wrap the body (WITH kept inside the query, after AS) in CREATE TABLE ... AS SELECT.
+        // Identifier quoting and keyword casing follow the source command (its override, else the context
+        // default) so a per-command override applies to the target exactly as it does to the body.
+        var quoteIdentifiers = command.Source.QuoteIdentifiers ?? QuoteIdentifiers;
+        var keywordCase = command.Source.KeywordCase ?? KeywordCase;
+        var selectInto = SqlMutationBuilder.ResolveCreateTableAsInto(Dialect, quoteIdentifiers, command, keywordCase);
+        var (withSql, sourceSql, sourceParameters) = _planner.RenderSource(command.Source, selectInto);
+        return SqlMutationBuilder.MakeCreateTableAsSelect(Dialect, quoteIdentifiers, withSql, sourceSql, sourceParameters, command, keywordCase);
+    }
+
+    private (string Sql, List<Parameter> Parameters) BuildDeleteSql(DeleteCommand command)
+    {
+        if (!Dialect.SupportsDelete)
+            throw new NotSupportedException(
+                $"{GetType().Name} does not support DELETE: the provider has no synchronous single-statement DELETE form (use its ALTER TABLE ... DELETE mutation directly).");
+
+        if (command.Condition is null)
+            return SqlMutationBuilder.MakeDelete(Dialect, QuoteIdentifiers, NamingConvention, command, null, [], KeywordCase);
+
+        var (whereSql, parameters) = _planner.RenderPredicate(command.Condition);
+        return SqlMutationBuilder.MakeDelete(Dialect, QuoteIdentifiers, NamingConvention, command, whereSql, parameters, KeywordCase);
+    }
+
+    private (string Sql, List<Parameter> Parameters) BuildDeleteJoinSql(DeleteJoinCommand command)
+    {
+        if (!Dialect.SupportsDeleteJoin)
+            throw new NotSupportedException(
+                $"{GetType().Name} does not support deleting from a joined table: the provider has no native multi-table DELETE.");
+
+        return _planner.RenderDeleteJoin(command);
+    }
+
+    private (string Sql, List<Parameter> Parameters) BuildUpdateJoinSql(UpdateJoinCommand command)
+    {
+        if (!Dialect.SupportsUpdateJoin)
+            throw new NotSupportedException(
+                $"{GetType().Name} does not support updating from a joined table: the provider has no native multi-table UPDATE.");
+
+        return _planner.RenderUpdateJoin(command);
+    }
+
+    private void EnsureReturningSupported()
+    {
+        if (!Dialect.SupportsReturning && !Dialect.SupportsOutput)
+            throw new NotSupportedException(
+                $"{GetType().Name} cannot return written rows: the provider has no RETURNING or OUTPUT form.");
+    }
+
+    // An interface/abstract TResult cannot be materialized as a whole (no constructor). Reject it with a
+    // clear message at execution time rather than letting RowMaterializerBuilder surface an opaque
+    // QueryPreparationException; SQL generation (ToSql) stays provider- and provider-shape-agnostic.
+    private static void EnsureReturningMaterializable<TResult>(bool oneColumn)
+    {
+        var resultType = typeof(TResult);
+
+        if (!oneColumn && (resultType.IsInterface || resultType.IsAbstract))
+            throw new NotSupportedException(
+                $"Cannot materialize the returned rows into {resultType.Name}: it is an interface or abstract. Project the mapped columns instead, e.g. Returning(x => new {{ x.Id, x.Name }}).");
+    }
+
+    private void EnsureReturningSupportedIfNeeded(MutationCommand command)
+    {
+        if (command.ReturningColumns is { Count: > 0 })
+            EnsureReturningSupported();
+    }
+
+    private void EnsureIdentityFunctionSupported()
+    {
+        if (!Dialect.SupportsIdentityFunction)
+            throw new NotSupportedException(
+                $"{GetType().Name} cannot return a generated identity without naming the column: the provider has no identity function (SCOPE_IDENTITY, lastval, LAST_INSERT_ID or last_insert_rowid). Project the key column instead, e.g. ReturningIdentity(x => x.Id).");
+    }
+
+    // LAST_INSERT_ID()/last_insert_rowid() return the auto-increment value regardless of the requested
+    // column, so the fallback is only sound when the resolved column is the declared identity.
+    private static void EnsureIdentityColumn(MutationCommand command)
+    {
+        if (command is not InsertCommand { IdentityColumn: { IsIdentity: true } })
+            throw new NotSupportedException(
+                "The provider returns the auto-increment value through LAST_INSERT_ID()/last_insert_rowid(), but the selected column is not declared as an identity. Use a provider with RETURNING/OUTPUT or select the identity column.");
+    }
 
     /// <summary>
     /// Releases the connection owned by the context and raises <see cref="Disposed"/>. Called from

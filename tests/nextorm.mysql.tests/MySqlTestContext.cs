@@ -17,6 +17,9 @@ internal static class MySqlTestContext
     public static IDataContext CreateQuoted() =>
         new MySqlDataContext(PlaceholderConnectionString, new DataContextBuilder().UseQuotedIdentifiers());
 
+    public static IDataContext CreateUppercase() =>
+        new MySqlDataContext(PlaceholderConnectionString, new DataContextBuilder().UseUppercaseKeywords());
+
     public static MySqlDataContext CreateMySql() =>
         new(PlaceholderConnectionString, new DataContextBuilder());
 }

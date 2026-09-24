@@ -3,6 +3,8 @@ using NextORM.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Data.Sqlite;
 using Dapper;
+using LinqToDB;
+using IDataContext = NextORM.Core.IDataContext;
 using Microsoft.Extensions.Logging;
 using BenchmarkDotNet.Jobs;
 using BenchmarkDotNet.Columns;
@@ -230,4 +232,17 @@ public class SqliteBenchmarkWhere
             {
             }
     }
+    [Benchmark]
+    public long Linq2Db_Compiled_ToList()
+    {
+        long n = 0;
+        for (var i = 0; i < Iterations; i++)
+            n += _l2dbWhere(_linq2Db.Db, i).Count;
+        _sink = n;
+        return n;
+    }
+
+    private long _sink;
+    private static readonly Func<LinqToDB.IDataContext, int, List<int>> _l2dbWhere = LinqToDB.CompiledQuery.Compile(
+        (LinqToDB.IDataContext db, int id) => db.GetTable<Linq2DbSimpleEntity>().Where(it => it.Id == id).Select(it => it.Id).ToList());
 }

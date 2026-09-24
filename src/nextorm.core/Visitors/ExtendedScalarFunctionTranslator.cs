@@ -156,8 +156,8 @@ internal static class ExtendedScalarFunctionTranslator
         }
 
         visitor.NeedAliasForColumn = true;
-        visitor.Builder!.Append("cast(pg_typeof(").Append(visitor.VisitToString(args[0]))
-            .Append(") as ").Append(visitor.Dialect.MakeTypeName(typeof(string))).Append(')');
+        visitor.Builder!.Append(visitor.Kw("cast(pg_typeof(")).Append(visitor.VisitToString(args[0]))
+            .Append(visitor.Kw(") as ")).Append(visitor.Dialect.MakeTypeName(typeof(string))).Append(')');
     }
 
     /// <summary>

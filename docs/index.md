@@ -29,6 +29,13 @@
 - [Connections and logging](guide/16-connections-and-logging.md)
 - [Query hints](guide/17-query-hints.md)
 - [JSON support across providers](guide/18-json.md)
+- [Data modification (INSERT)](guide/19-insert-statement.md)
+- [Data modification (DELETE)](guide/20-delete-statement.md)
+- [Data modification (UPDATE)](guide/21-update-statement.md)
+- [Materializing a query into a table](guide/22-create-table-as.md)
+- [Data merging (MERGE / upsert)](guide/23-merge-statement.md)
+- [Bulk insert](guide/24-bulk-insert.md)
+- [Transactions](guide/25-transactions.md)
 
 ### Providers
 
@@ -63,7 +70,7 @@ Nextorm uses protocol-level libraries (for example, SqlClient for Microsoft SQL 
 
 ## Status
 
-The current status (1.0.4-alpha) is a prof of concept.
+The current status (1.0.5-alpha) is a prof of concept.
 
 ## Roadmap
 
@@ -118,6 +125,17 @@ They differ in cost, lifetime and thread-safety rules. Which one to use, what ea
 its limitations are covered in the [Query reuse guide](guide/15-query-reuse.md).
 
 ## Releases
+
+### 1.0.5-alpha
+
+- [INSERT: одиночная и многострочная вставка значений и сущностей, возврат сгенерированного ключа](https://github.com/AlexeyShirshov/nextorm/issues/3)
+- [UPDATE: присваивания по колонкам, фильтр WHERE и обновление сущности по ключу](https://github.com/AlexeyShirshov/nextorm/issues/4)
+- [DELETE: удаление по предикату и по объявленному ключу](https://github.com/AlexeyShirshov/nextorm/issues/5)
+- [MERGE: key upsert (ON CONFLICT / ON DUPLICATE KEY) и полный MERGE с WHEN MATCHED / WHEN NOT MATCHED](https://github.com/AlexeyShirshov/nextorm/issues/6)
+- [Транзакции: созданные nextorm и переданные извне (ADO.NET / EF Core)](https://github.com/AlexeyShirshov/nextorm/issues/32)
+- [CREATE TABLE ... AS SELECT (CTAS) и временные таблицы](https://github.com/AlexeyShirshov/nextorm/issues/60)
+- Массовая вставка (bulk): values / сущности / DataTable, пакетами, с RETURNING / OUTPUT
+- Новые главы руководства EN + RU: INSERT/DELETE/UPDATE/MERGE, CTAS, bulk insert, транзакции
 
 ### 1.0.4-alpha
 

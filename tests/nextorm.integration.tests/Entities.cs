@@ -71,3 +71,63 @@ public interface IArrayEntity
     [Column("nums")]
     int[] Nums { get; set; }
 }
+
+[SqlTable("insert_entity")]
+public interface IInsertEntity
+{
+    [Key]
+    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+    [Column("id")]
+    long Id { get; set; }
+    [Column("name")]
+    string? Name { get; set; }
+    [Column("age")]
+    int Age { get; set; }
+}
+
+public sealed class InsertEntity : IInsertEntity
+{
+    public long Id { get; set; }
+    public string? Name { get; set; }
+    public int Age { get; set; }
+}
+
+public sealed record InsertSource(string Name, int Age);
+
+[SqlTable("merge_entity")]
+public interface IMergeEntity
+{
+    [Key]
+    [Column("id")]
+    int Id { get; set; }
+    [Column("name")]
+    string? Name { get; set; }
+    [Column("age")]
+    int Age { get; set; }
+}
+
+public sealed class MergeEntity : IMergeEntity
+{
+    public int Id { get; set; }
+    public string? Name { get; set; }
+    public int Age { get; set; }
+}
+
+[SqlTable("delete_entity")]
+public interface IDeleteEntity
+{
+    [Key]
+    [Column("id")]
+    int Id { get; set; }
+    [Column("name")]
+    string? Name { get; set; }
+    [Column("age")]
+    int Age { get; set; }
+}
+
+public sealed class DeleteEntity : IDeleteEntity
+{
+    public int Id { get; set; }
+    public string? Name { get; set; }
+    public int Age { get; set; }
+}

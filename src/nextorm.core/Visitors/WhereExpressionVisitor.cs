@@ -43,13 +43,13 @@ public class WhereExpressionVisitor(VisitorOptions options)
             var left = leftVisitor.ToString();
             var right = rightVisitor.ToString();
 
-            var hasNull = left == "null" || right == "null";
+            var hasNull = left == Kw("null") || right == Kw("null");
 
             _builder!.Append(left).Append(hasNull
                 ? node.NodeType switch
                 {
-                    ExpressionType.Equal => " is ",
-                    _ => " is not "
+                    ExpressionType.Equal => Kw(" is "),
+                    _ => Kw(" is not ")
                 }
                 : node.NodeType switch
                 {

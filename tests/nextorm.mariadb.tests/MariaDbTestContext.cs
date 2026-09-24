@@ -17,6 +17,9 @@ internal static class MariaDbTestContext
     public static IDataContext CreateQuoted() =>
         new MariaDbDataContext(PlaceholderConnectionString, new DataContextBuilder().UseQuotedIdentifiers());
 
+    public static IDataContext CreateUppercase() =>
+        new MariaDbDataContext(PlaceholderConnectionString, new DataContextBuilder().UseUppercaseKeywords());
+
     public static MariaDbDataContext CreateMariaDb() =>
         new(PlaceholderConnectionString, new DataContextBuilder());
 }

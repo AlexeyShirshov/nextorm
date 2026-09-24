@@ -58,7 +58,7 @@ select jsonb_agg(somestring) from complex_entity
 
 * `percentile_cont`/`percentile_disc` — упорядоченные агрегаты, рендерятся как
   `percentile_cont(f) within group (order by x)` ([`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates),
-  [`MakeWithinGroup`](xref:NextORM.Core.ISqlDialect.MakeWithinGroup(System.String,System.String))); `mode()` — упорядоченный агрегат mode;
+  [`MakeWithinGroup`](xref:NextORM.Core.ISqlDialect.MakeWithinGroup(System.String,System.String,NextORM.Core.KeywordCase))); `mode()` — упорядоченный агрегат mode;
 * `bool_and`/`bool_or`/`every`, семейство регрессии `regr_*` и `bit_and`/`bit_or`/`bit_xor` есть только
   у PostgreSQL, и остальные диалекты их отклоняют;
 * `array_agg` и поверхность строковых/массивных агрегатов гейтятся
@@ -160,15 +160,14 @@ PostgreSQL заменяет единственную колонку скаляр
 
 ## `TABLESAMPLE`
 
-[`TableSample`](xref:NextORM.Core.EntityBuilder`1.TableSample(System.Double,NextORM.Core.TableSampleMethod,System.Nullable{System.Double})) добавляет модификатор `TABLESAMPLE` к
+[`FromOptions.TableSample`](xref:NextORM.Core.FromOptions.TableSample(System.Double,NextORM.Core.TableSampleMethod,System.Nullable{System.Double})) добавляет модификатор `TABLESAMPLE` к
 основной таблице запроса ([`TableSample`](xref:NextORM.Core.ISqlDialect.TableSample)).
 PostgreSQL поддерживает оба метода сэмплирования и необязательное повторяемое зерно (seed)
 (`TableSample`,
 `ITableSampleMethods.Render`):
 
 ```csharp
-var rows = dataContext.From<ISimpleEntity>()
-    .TableSample(10, TableSampleMethod.System, seed: 42)
+var rows = dataContext.From<ISimpleEntity>(o => o.TableSample(10, TableSampleMethod.System, seed: 42))
     .Select(e => e.Id)
     .ToList();
 ```
@@ -201,8 +200,41 @@ var rows = dataContext.From<ISimpleEntity>()
 select id from simple_entity where (id > 5) for update
 ```
 
-`LockMode.Update` генерирует `for update`, а `LockMode.Share` — `for share`. См.
+`LockMode.Update` генерирует `for update`, а `LockMode.Share` — `for share`. Оба принимают
+[`LockWaitMode`](xref:NextORM.Core.LockWaitMode): `ForUpdate(LockWaitMode.SkipLocked)` генерирует
+`for update skip locked`, а `ForShare(LockWaitMode.NoWait)` — `for share nowait` (PostgreSQL 9.5+). См.
 [Блокировку строк](../01-querying-and-projections.md#блокировка-строк-for-update--for-share).
+
+## Модифицирующие CTE
+
+PostgreSQL — единственный провайдер, принимающий модифицирующую инструкцию как тело CTE
+(`WITH <имя> AS (INSERT ... RETURNING ...)`); гейтится
+[`SupportsDataModifyingCtes`](xref:NextORM.Core.ISqlDialect.SupportsDataModifyingCtes). Начните scope с
+перегрузки `With(имя, insert)`: она возвращает [`MutationCteQuery<TResult>`](xref:NextORM.Core.MutationCteQuery`1),
+типизированный по проекции `RETURNING`, а `From(имя)` читает эти строки полным набором операторов:
+
+```csharp
+var rows = dataContext
+    .With("ins", dataContext.InsertInto<IOrder>()
+        .Value(x => x.CustomerId, 7)
+        .Returning(x => new { x.Id, x.Total }))
+    .From("ins")
+    .Where(r => r.Total > 0)
+    .Select(r => new { r.Id })
+    .ToList();
+```
+
+```sql
+with ins as (insert into orders (customer_id) values (@p0) returning id, total) select id from ins as "t1"
+ where (t1.total > 0)
+```
+
+Тело может быть `VALUES`-insert или `INSERT ... SELECT`, а мутация может читать более ранний read-CTE
+(объявите его первым и используйте `CteQuery.With(имя, insert)`) либо питать главный `INSERT ... SELECT`.
+Полный набор форм — в разделе
+[Изменение данных (INSERT): Модифицирующий CTE](../19-insert-statement.md#модифицирующий-cte-postgresql);
+общие (read) CTE — в [Общих табличных выражениях](../09-cte.md). Остальные провайдеры отклоняют
+`With(имя, insert)` на этапе построения SQL с `NotSupportedException`.
 
 ## Пока не поддерживается
 

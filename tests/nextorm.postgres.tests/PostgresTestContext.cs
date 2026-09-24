@@ -19,6 +19,9 @@ internal static class PostgresTestContext
     public static IDataContext CreateQuoted() =>
         new PostgresDataContext(PlaceholderConnectionString, new DataContextBuilder().UseQuotedIdentifiers());
 
+    public static IDataContext CreateUppercase() =>
+        new PostgresDataContext(PlaceholderConnectionString, new DataContextBuilder().UseKeywordCase());
+
     public static IDataContext CreateSnakeCaseQuoted() =>
         new PostgresDataContext(PlaceholderConnectionString, new DataContextBuilder().UseNamingConvention(SnakeCaseNamingConvention.Instance).UseQuotedIdentifiers());
 

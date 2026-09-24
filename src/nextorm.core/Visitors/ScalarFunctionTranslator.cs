@@ -110,10 +110,10 @@ internal static class ScalarFunctionTranslator
             if (!SqlLiteral.TryGetConstantString(args[2], out var escapeChar))
                 throw new NotSupportedException("The SqlFunctions.Sql.like escape character must be a constant string or char.");
 
-            escapeClause = visitor.Dialect.MakeLikeEscape(escapeChar);
+            escapeClause = visitor.Dialect.MakeLikeEscape(escapeChar, visitor.KeywordCase);
         }
 
-        visitor.Builder!.Append(visitor.Dialect.MakeBooleanPredicate($"{value} like {pattern}{escapeClause}", visitor.IsPredicateContext));
+        visitor.Builder!.Append(visitor.Dialect.MakeBooleanPredicate($"{value} {visitor.Kw("like")} {pattern}{escapeClause}", visitor.IsPredicateContext));
         return true;
     }
 

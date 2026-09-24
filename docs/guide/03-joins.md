@@ -162,9 +162,11 @@ set of sources that a regular join accepts — a typed entity, a `QueryCommand<T
 table or a table-valued function — but there is no `ON` condition:
 
 * [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0})) keeps only the left-hand rows for which the applied source returns at least one row
-  (SQL Server `CROSS APPLY`, PostgreSQL/MySQL/MariaDB `CROSS JOIN LATERAL`);
+  (SQL Server `CROSS APPLY`; PostgreSQL/MySQL/MariaDB `CROSS JOIN LATERAL`, or a plain `CROSS JOIN`
+  when the applied source is a plain table — `LATERAL` is only valid before a subquery or function);
 * [`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0})) also keeps left-hand rows whose applied source is empty, filling the right side with
-  `NULL` (SQL Server `OUTER APPLY`, PostgreSQL/MySQL/MariaDB `LEFT JOIN LATERAL ... ON true`).
+  `NULL` (SQL Server `OUTER APPLY`; PostgreSQL/MySQL/MariaDB `LEFT JOIN LATERAL ... ON true`, or a
+  plain `LEFT JOIN ... ON true` for a plain table).
 
 ```csharp
 var rows = await dataContext.From<ISimpleEntity>()
@@ -177,7 +179,7 @@ var rows = await dataContext.From<ISimpleEntity>()
 -- SQL Server
 select t1.id, t2.somestring from simple_entity as [t1] cross apply complex_entity as [t2]
 -- PostgreSQL / MySQL / MariaDB
-select t1.id, t2.somestring from simple_entity as t1 cross join lateral complex_entity as t2
+select t1.id, t2.somestring from simple_entity as t1 cross join complex_entity as t2
 ```
 
 An `OUTER APPLY` over a derived table:
@@ -449,8 +451,8 @@ every other provider and the in-memory context reject them with `NotSupportedExc
 |---|---|---|---|---|
 | SQLite | `as 't1'` | optional | left/right/full supported | not supported (`NotSupportedException`) |
 | SQL Server | `as [t1]` | required | left/right/full supported | `CROSS APPLY` / `OUTER APPLY` |
-| PostgreSQL | `as "t1"` | required | left/right/full supported | `CROSS JOIN LATERAL` / `LEFT JOIN LATERAL ... ON true` |
-| MySQL / MariaDB | `as \`t1\`` | required | left/right supported (no full) | `CROSS JOIN LATERAL` / `LEFT JOIN LATERAL ... ON true` |
+| PostgreSQL | `as "t1"` | required | left/right/full supported | `CROSS JOIN LATERAL` / `LEFT JOIN LATERAL ... ON true` (plain tables: `CROSS JOIN` / `LEFT JOIN ... ON true`) |
+| MySQL / MariaDB | `as \`t1\`` | required | left/right supported (no full) | `CROSS JOIN LATERAL` / `LEFT JOIN LATERAL ... ON true` (plain tables: `CROSS JOIN` / `LEFT JOIN ... ON true`) |
 | ClickHouse | `as \`t1\`` | required | left/right/full supported | not supported (`NotSupportedException`) |
 | In-memory | not applicable (delegate execution) | not applicable | inner/left/right/full/cross supported; APPLY and table-valued function sources are not | not supported (correlated apply included) |
 

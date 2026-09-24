@@ -256,6 +256,24 @@ public sealed class MySqlSpecificTests : ProviderTestSuite
         rows[1].Maybe.Should().BeNull();
         rows[2].Maybe.Should().Be(7UL);
     }
+
+    [Fact]
+    public void Cte_Recursive_WithDistinctUnion_ShouldProduceNumberSeries()
+    {
+        var ctx = _sut.DataProvider;
+
+        var anchor = _sut.SimpleEntity.Where(s => s.Id == 1).Select(s => new CommonTestSuite.CteNumberRow { n = s.Id });
+        var step = ctx.From("nums").Where(t => t["n"].AsInt < 5).Select(t => new CommonTestSuite.CteNumberRow { n = t["n"].AsInt + 1 });
+        var body = anchor.Union(step);
+
+        var rows = ctx
+            .WithRecursive("nums", body)
+            .From("nums")
+            .Select(t => new CommonTestSuite.CteNumberRow { n = t["n"].AsInt })
+            .ToList();
+
+        rows.Select(r => r.n).OrderBy(n => n).Should().Equal(1, 2, 3, 4, 5);
+    }
 }
 
 [SqlTable("uint64_entity")]

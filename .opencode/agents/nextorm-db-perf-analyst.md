@@ -91,7 +91,7 @@ Do not reopen a settled finding without a new measurement.
 
 ## Measuring and verifying
 
-- Build: `dotnet build nextorm.sln -c Release` (warnings are errors; CRLF).
+- Build: `dotnet build nextorm.slnx -c Release` (warnings are errors; CRLF).
 - No-DB tests: `dotnet test tests/nextorm.core.tests -c Debug` and
   `dotnet test tests/nextorm.sqlite.tests -c Debug` (SQL generation).
 - Real databases: see `.opencode/skills/running-integration-tests/SKILL.md`.
@@ -122,7 +122,7 @@ in Russian.
 ## Boundaries
 
 - You may modify code: keep the change minimal, scoped to the hot path, and
-  build clean (`dotnet build nextorm.sln -c Release`, warnings are errors).
+  build clean (`dotnet build nextorm.slnx -c Release`, warnings are errors).
 - Do not reintroduce known regressions (cache disable; short-run conclusions on
   sub-ns effects).
 - Stay on the database/ADO path; for `InMemoryDataContext` issues defer to

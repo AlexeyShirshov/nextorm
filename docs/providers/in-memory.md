@@ -131,9 +131,11 @@ The provider fails loudly instead of returning wrong results:
 - **Aggregates over an async subquery source** throw `NotSupportedException`; buffered subquery sources
   are folded.
 - **Correlated subqueries** (a subquery referencing the outer row, for example
-  `SqlFunctions.Sql.exists(inner.Where(i => i.Id == outer.Id))`) throw `NotSupportedException`: the provider has
-  no per-row outer-row binding, and dropping the correlation would silently return wrong rows. Use a SQL
-  provider for correlated queries.
+  `SqlFunctions.Sql.exists(inner.Where(i => i.Id == outer.Id))`) are evaluated once per outer row for
+  depth-one correlation: scalar subqueries, aggregate terminals, `EXISTS` and `IN` work in `SELECT`,
+  `WHERE` and `ORDER BY` (see [Subqueries](../guide/06-subqueries.md#correlated-scalar-subquery)).
+  Correlation depth greater than one, an outer reference inside the inner projection or `ORDER BY`, a
+  correlated `GROUP BY`/`HAVING` and an async inner source throw `NotSupportedException`.
 
 ## Provider differences
 

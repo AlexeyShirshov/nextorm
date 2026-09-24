@@ -18,7 +18,7 @@ NextORM is split into a small, driver-free core package and one package per rela
   [`ClickHouseDataContext`](xref:NextORM.ClickHouse.ClickHouseDataContext)) and a `Use…` registration extension.
   The provider packages depend on `nextorm` transitively.
 
-All current releases are prereleases (`1.0.1-alpha` line), so every install command must opt in to
+All current releases are prereleases, so every install command must opt in to
 prerelease versions.
 
 ## Install the core package
@@ -62,13 +62,12 @@ The in-memory provider lives in the core package, so it is available without ins
 ## Target framework
 
 The packages target `net10.0` and enable implicit usings and nullable reference types. A
-`PackageReference` looks like this (versions are illustrative; use the latest `1.0.1-alpha`
-prerelease):
+`PackageReference` looks like this (`*-*` floats to the latest prerelease):
 
 ```xml
 <ItemGroup>
-  <PackageReference Include="nextorm" Version="1.0.1-alpha" />
-  <PackageReference Include="nextorm.sqlite" Version="1.0.1-alpha" />
+  <PackageReference Include="nextorm" Version="*-*" />
+  <PackageReference Include="nextorm.sqlite" Version="*-*" />
 </ItemGroup>
 ```
 

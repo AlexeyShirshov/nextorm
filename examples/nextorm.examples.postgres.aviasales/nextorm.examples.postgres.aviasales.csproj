@@ -8,12 +8,9 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Logging.Console" />
+    <PackageReference Include="nextorm" />
+    <PackageReference Include="nextorm.postgres" />
     <PackageReference Include="Testcontainers.PostgreSql" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\..\src\nextorm.core\nextorm.core.csproj" />
-    <ProjectReference Include="..\..\src\nextorm.postgres\nextorm.postgres.csproj" />
   </ItemGroup>
 
 </Project>

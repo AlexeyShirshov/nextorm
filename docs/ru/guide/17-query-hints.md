@@ -62,9 +62,42 @@ select id from complex_entity with (nolock)
 ```
 
 Хинты рендерятся дословно, поэтому передавайте только доверенные значения. Провайдер включается через
-[`SupportsTableHints`](xref:NextORM.Core.ISqlDialect.SupportsTableHints) и [`MakeTableHints`](xref:NextORM.Core.ISqlDialect.MakeTableHints(System.Collections.Generic.IReadOnlyList{System.String})) (SQL Server); остальные диалекты
+[`SupportsTableHints`](xref:NextORM.Core.ISqlDialect.SupportsTableHints) и [`MakeTableHints`](xref:NextORM.Core.ISqlDialect.MakeTableHints(System.Collections.Generic.IReadOnlyList{System.String},NextORM.Core.KeywordCase)) (SQL Server); остальные диалекты
 отклоняют команду с табличными хинтами через `NotSupportedException`. Покрыта только основная
 таблица; хинты на присоединённых таблицах пока не входят в API.
+
+## Index-хинты
+
+`EntityBuilder<T>.WithIndex(params string[] indexes)` просит планировщик рассмотреть именованный индекс
+основной физической таблицы. Перегрузка `WithIndex(IndexHintKind kind, params string[] indexes)` задаёт
+намерение ([`IndexHintKind`](xref:NextORM.Core.IndexHintKind).`Use`/`Force`/`Ignore`), а `WithoutIndex()`
+подавляет использование индексов. Каждый диалект рендерит свою нативную форму после имени таблицы и до
+её псевдонима:
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .WithIndex("ix_complex_id")
+    .Select(c => new { c.Id })
+    .ToList();
+```
+
+```sql
+-- MySQL/MariaDB  (также `force index (...)` / `ignore index (...)`):
+select id from complex_entity use index (ix_complex_id)
+-- SQLite  (ровно один индекс; `WithoutIndex()` рендерит `not indexed`):
+select id from complex_entity indexed by ix_complex_id
+-- SQL Server  (сливается в единственное предложение табличного хинта):
+select id from complex_entity with (index(ix_complex_id))
+```
+
+Провайдер включается через [`ISqlDialect.IndexHints`](xref:NextORM.Core.ISqlDialect.IndexHints) и
+[`IIndexHintRenderer`](xref:NextORM.Core.IIndexHintRenderer) (MySQL/MariaDB, SQLite, SQL Server).
+PostgreSQL (без `pg_hint_plan`), ClickHouse и провайдер in-memory не имеют нативного index-хинта и
+отклоняют команду с ним через `NotSupportedException`. В SQL Server index-хинт сливается с блокирующим
+`WithTableHint` в одно предложение `with (nolock, index(...))`, а `Ignore` отклоняется (хинта
+«игнорировать индекс» там нет); SQLite принимает ровно одно имя индекса (его `INDEXED BY` берёт один).
+Имена рендерятся дословно, поэтому передавайте только доверенные значения, а список хинтов входит в
+ключ плана.
 
 ## Провайдеры
 
@@ -91,20 +124,19 @@ var my = dataContext.From<ISimpleEntity>()
     .Hint("MAX_EXECUTION_TIME(1000)");
 ```
 
-Провайдер включается через [`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints) и [`RenderQueryHints`](xref:NextORM.Core.ISqlDialect.RenderQueryHints(System.String,System.Collections.Generic.IReadOnlyList{System.String},System.String));
+Провайдер включается через [`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints) и [`RenderQueryHints`](xref:NextORM.Core.ISqlDialect.RenderQueryHints(System.String,System.Collections.Generic.IReadOnlyList{System.String},System.String,NextORM.Core.KeywordCase));
 построитель отклоняет команду с хинтами у диалекта, который сообщает `false`.
 
 ## Модификаторы запроса ClickHouse
 
-ClickHouse имеет четыре модификатора уровня запроса — не хинты, а отдельные методы построителя:
-`Final()`, `Sample(ratio[, offset])`, `PreWhere(predicate)` и `Settings(("key", "value"), ...)`. Они
-допустимы только в ClickHouse; остальные провайдеры и контекст in-memory бросают
-`NotSupportedException`.
+ClickHouse имеет четыре модификатора уровня запроса — не хинты: `Final()`, `PreWhere(predicate)` и
+`Settings(("key", "value"), ...)` — отдельные методы построителя, а модификатор `Sample(ratio[, offset])`
+— это опция источника на время запроса, задаваемая в `From`. Они допустимы только в ClickHouse;
+остальные провайдеры и контекст in-memory бросают `NotSupportedException`.
 
 ```csharp
-var rows = dataContext.From<IComplexEntity>()
+var rows = dataContext.From<IComplexEntity>(o => o.Sample(0.1, 0.5))
     .Final()
-    .Sample(0.1, 0.5)
     .PreWhere(c => c.Int > 0)
     .Where(c => c.Boolean == true)
     .Select(c => new { c.Id, c.Int })
@@ -141,6 +173,6 @@ settings max_threads = 2
 ---
 
 Source: `src/nextorm.core/Query/QueryCommand.TResult.cs` ([`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[]))),
-`src/nextorm.core/DataContext/Dialect/ISqlDialect.cs` ([`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints) / [`RenderQueryHints`](xref:NextORM.Core.ISqlDialect.RenderQueryHints(System.String,System.Collections.Generic.IReadOnlyList{System.String},System.String))),
+`src/nextorm.core/DataContext/Dialect/ISqlDialect.cs` ([`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints) / [`RenderQueryHints`](xref:NextORM.Core.ISqlDialect.RenderQueryHints(System.String,System.Collections.Generic.IReadOnlyList{System.String},System.String,NextORM.Core.KeywordCase))),
 `src/nextorm.sqlserver/SqlServerDialect.cs`, `src/nextorm.postgres/PostgresDialect.cs`,
 `src/nextorm.mysql/MySqlDialect.cs` (MariaDB наследует).

@@ -80,7 +80,7 @@ InMemory (Compiled); read the **Ratio** column.
 
 ## Measuring and verifying
 
-- Build: `dotnet build nextorm.sln -c Release` (warnings are errors; CRLF).
+- Build: `dotnet build nextorm.slnx -c Release` (warnings are errors; CRLF).
 - In-memory tests are in `tests/nextorm.core.tests` (`InMemoryTests`,
   `InMemoryJoinTests`, `InMemorySelectManyTests`):
   `dotnet test tests/nextorm.core.tests -c Debug` — no database needed.
@@ -108,7 +108,7 @@ allocations) / **Verification** (exact command). Answer in Russian.
 ## Boundaries
 
 - You may modify code: keep the change minimal, scoped to the hot path, and
-  build clean (`dotnet build nextorm.sln -c Release`, warnings are errors).
+  build clean (`dotnet build nextorm.slnx -c Release`, warnings are errors).
 - Stay on the in-memory path; for ADO/plan-cache/SQL-builder issues defer to
   `nextorm-db-perf-analyst`.
 - Do not reopen a settled finding without a fresh measurement.

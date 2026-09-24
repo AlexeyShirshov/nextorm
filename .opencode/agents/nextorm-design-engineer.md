@@ -112,7 +112,7 @@ constrain the **fix**, not just the review:
 - **One axis per step**, then build + test — do not batch unrelated refactors.
 - **CRLF always.** After editing any file: `perl -pi -e 's/\r?\n/\r\n/g' <file>`
   and confirm with `file <file>` (never leave LF-only or mixed).
-- **Build is the gate:** `dotnet build nextorm.sln -c Debug` must be `0 Warning(s)
+- **Build is the gate:** `dotnet build nextorm.slnx -c Debug` must be `0 Warning(s)
   0 Error(s)`.
 - **Tests before claiming done:** `dotnet test tests/<project> -c Debug`
   (e.g. `tests/nextorm.core.tests`, `tests/nextorm.sqlite.tests`); real databases

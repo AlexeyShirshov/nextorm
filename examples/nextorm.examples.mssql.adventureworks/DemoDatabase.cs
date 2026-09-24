@@ -1,4 +1,5 @@
 using System.Net.Http;
+using DotNet.Testcontainers.Builders;
 using Microsoft.Data.SqlClient;
 using Testcontainers.MsSql;
 
@@ -6,8 +7,9 @@ namespace NextORM.Examples.SqlServer.AdventureWorks;
 
 /// <summary>
 /// Provisions the AdventureWorks 2022 database: either an already running server (the
-/// <c>ADVENTUREWORKS_CONNECTION</c> environment variable or <c>--connection</c>) or a throwaway
-/// Testcontainers instance restored from the official <c>.bak</c> (downloaded once and cached).
+/// <c>ADVENTUREWORKS_CONNECTION</c> environment variable or <c>--connection</c>) or a Testcontainers
+/// instance whose data directory is a named volume restored from the official <c>.bak</c> (downloaded
+/// once and cached); later runs reuse the restored volume.
 /// </summary>
 public sealed class DemoDatabase : IAsyncDisposable
 {
@@ -21,6 +23,9 @@ public sealed class DemoDatabase : IAsyncDisposable
     private const string BackupFile = "AdventureWorks2022.bak";
     private const string DatabaseName = "AdventureWorks";
     private const string SqlCmd = "/opt/mssql-tools18/bin/sqlcmd";
+    private const string VolumeName = "nextorm-examples-adventureworks-data";
+    private const string DataDirectory = "/var/opt/mssql";
+    private const string ReloadVariable = "NEXTORM_EXAMPLES_RELOAD";
 
     private static readonly string CacheDirectory = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cache", "nextorm", "adventureworks");
@@ -48,19 +53,35 @@ public sealed class DemoDatabase : IAsyncDisposable
         }
 
         var backup = await EnsureBackup(ct).ConfigureAwait(false);
-        var container = new MsSqlBuilder(DefaultImage).Build();
+
+        if (IsReloadRequested())
+            await DeleteVolume(ct).ConfigureAwait(false);
+
+        // The database files live in a named volume: the examples are read-only, so the restored
+        // database is reused across runs and the multi-minute restore only happens on a cold volume.
+        var container = new MsSqlBuilder(DefaultImage)
+            .WithVolumeMount(VolumeName, DataDirectory)
+            .Build();
 
         Console.WriteLine($"[adventureworks] starting {DefaultImage} ...");
         await container.StartAsync(ct).ConfigureAwait(false);
 
         var password = new SqlConnectionStringBuilder(container.GetConnectionString()).Password;
-        await container.CopyAsync(backup, "/tmp/", ct: ct).ConfigureAwait(false);
-        await Restore(container, password, ct).ConfigureAwait(false);
-
         var connectionString = new SqlConnectionStringBuilder(container.GetConnectionString())
         {
             InitialCatalog = DatabaseName
         }.ConnectionString;
+
+        if (await IsLoaded(connectionString, ct).ConfigureAwait(false))
+        {
+            Console.WriteLine($"[adventureworks] reusing the restored database from volume '{VolumeName}'");
+        }
+        else
+        {
+            Console.WriteLine("[adventureworks] restoring the database (first run, this takes several minutes) ...");
+            await container.CopyAsync(backup, "/tmp/", ct: ct).ConfigureAwait(false);
+            await Restore(container, password, ct).ConfigureAwait(false);
+        }
 
         await WaitForReady(connectionString, ct).ConfigureAwait(false);
         return new DemoDatabase(connectionString, container);
@@ -91,10 +112,34 @@ public sealed class DemoDatabase : IAsyncDisposable
         return target;
     }
 
+    private static bool IsReloadRequested() =>
+        bool.TryParse(Environment.GetEnvironmentVariable(ReloadVariable), out var reload) && reload;
+
+    private static async Task DeleteVolume(CancellationToken ct)
+    {
+        var volume = new VolumeBuilder().WithName(VolumeName).Build();
+        await volume.CreateAsync(ct).ConfigureAwait(false);
+        await volume.DeleteAsync(ct).ConfigureAwait(false);
+    }
+
+    private static async Task<bool> IsLoaded(string connectionString, CancellationToken ct)
+    {
+        try
+        {
+            await using var connection = new SqlConnection(connectionString);
+            await connection.OpenAsync(ct).ConfigureAwait(false);
+            await using var command = connection.CreateCommand();
+            command.CommandText = "select count(*) from Sales.SalesOrderHeader";
+            return Convert.ToInt64(await command.ExecuteScalarAsync(ct).ConfigureAwait(false)) > 0;
+        }
+        catch (Exception exception) when (exception is SqlException or IOException)
+        {
+            return false;
+        }
+    }
+
     private static async Task Restore(MsSqlContainer container, string password, CancellationToken ct)
     {
-        Console.WriteLine("[adventureworks] restoring the database (this takes several minutes) ...");
-
         var query =
             $"RESTORE DATABASE {DatabaseName} FROM DISK = '/tmp/{BackupFile}' " +
             $"WITH MOVE 'AdventureWorks2022' TO '/var/opt/mssql/data/AdventureWorks.mdf', " +

@@ -23,6 +23,47 @@ public class SqlGenerationTests
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd) => Normalize(Prepare(ctx, cmd).DbCommand.CommandText);
 
     [Fact]
+    public void IndexHint_WithIndex_ShouldEmitWithIndex()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.WithIndex("idx_id").Select(x => new { x.Id }))
+            .Should().Be("select id from simple_entity with (index(idx_id))");
+    }
+
+    [Fact]
+    public void IndexHint_ShouldMergeWithTableHintIntoSingleWithClause()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.WithTableHint("nolock").WithIndex("idx_id").Select(x => new { x.Id }))
+            .Should().Be("select id from simple_entity with (nolock, index(idx_id))");
+    }
+
+    [Fact]
+    public void KeywordCase_Upper_ShouldUppercaseTableHintsAndIndexHint()
+    {
+        using var ctx = SqlServerTestContext.CreateUppercase();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.WithTableHint("nolock").WithIndex("idx_id").Select(x => new { x.Id }))
+            .Should().Contain("WITH (nolock, INDEX(idx_id))");
+    }
+
+    [Fact]
+    public void KeywordCase_Upper_ShouldUppercaseSkeletonAndAlias()
+    {
+        using var ctx = SqlServerTestContext.CreateUppercase();
+        var e = ctx.From<ISimpleEntity>();
+
+        var sql = SqlOf(ctx, e.Limit(3).Select(x => new { X = x.Id }));
+
+        sql.Should().Contain("SELECT TOP(3) id AS [X] FROM simple_entity");
+    }
+
+    [Fact]
     public void SelectDistinct_ShouldEmitDistinct()
     {
         using var ctx = SqlServerTestContext.Create();
@@ -608,6 +649,8 @@ public class SqlGenerationTests
 
         sql.Should().Contain("cross apply (select t2.id, t2.nullableint as [Int], t2.somestring as [String]");
         sql.Should().Contain("where t2.id = cast(t1.id as bigint)) as [t3]");
+        sql.Should().Contain("select t1.id, t3.[String] from");
+        sql.Should().NotContain("t3.somestring");
     }
 
     [Fact]
@@ -662,48 +705,48 @@ public class SqlGenerationTests
     }
 
     [Fact]
-    public void ForJson_ShouldEmitClause()
+    public void WithForJson_ShouldEmitClause()
     {
         using var ctx = SqlServerTestContext.Create();
         var e = ctx.From<ISimpleEntity>();
 
-        SqlOf(ctx, e.Select(x => new { x.Id }).ForJson())
+        SqlOf(ctx, e.Select(x => new { x.Id }).WithForJson())
             .Should().EndWith("for json path");
 
-        SqlOf(ctx, e.Select(x => new { x.Id }).ForJson(ForJsonMode.Auto, "root", includeNullValues: true))
+        SqlOf(ctx, e.Select(x => new { x.Id }).WithForJson(ForJsonMode.Auto, "root", includeNullValues: true))
             .Should().EndWith("for json auto, root('root'), include_null_values");
     }
 
     [Fact]
-    public void ForJson_WithHint_ShouldPlaceOptionAfterJson()
+    public void WithForJson_WithHint_ShouldPlaceOptionAfterJson()
     {
         using var ctx = SqlServerTestContext.Create();
         var e = ctx.From<ISimpleEntity>();
 
-        SqlOf(ctx, e.Select(x => new { x.Id }).ForJson().Hint("recompile"))
+        SqlOf(ctx, e.Select(x => new { x.Id }).WithForJson().Hint("recompile"))
             .Should().EndWith("for json path option (recompile)");
     }
 
     [Fact]
-    public void ForXml_ShouldEmitClause()
+    public void WithForXml_ShouldEmitClause()
     {
         using var ctx = SqlServerTestContext.Create();
         var e = ctx.From<ISimpleEntity>();
 
-        SqlOf(ctx, e.Select(x => new { x.Id }).ForXml())
+        SqlOf(ctx, e.Select(x => new { x.Id }).WithForXml())
             .Should().EndWith("for xml path");
 
-        SqlOf(ctx, e.Select(x => new { x.Id }).ForXml(ForXmlMode.Raw, "row", "root", elements: true))
+        SqlOf(ctx, e.Select(x => new { x.Id }).WithForXml(ForXmlMode.Raw, "row", "root", elements: true))
             .Should().EndWith("for xml raw('row'), root('root'), elements");
     }
 
     [Fact]
-    public void ForXmlAndForJson_ShouldThrow()
+    public void WithForXmlAndWithForJson_ShouldThrow()
     {
         using var ctx = SqlServerTestContext.Create();
         var e = ctx.From<ISimpleEntity>();
 
-        var act = () => SqlOf(ctx, e.Select(x => new { x.Id }).ForJson().ForXml());
+        var act = () => SqlOf(ctx, e.Select(x => new { x.Id }).WithForJson().WithForXml());
 
         act.Should().Throw<NotSupportedException>().WithMessage("*cannot be combined*");
     }
@@ -2077,9 +2120,9 @@ public class SqlGenerationTests
     public void TableSample_ShouldEmitPercent()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.From<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>(o => o.TableSample(10));
 
-        SqlOf(ctx, e.TableSample(10).Select(x => x.Id))
+        SqlOf(ctx, e.Select(x => x.Id))
             .Should().EndWith("tablesample (10 percent)");
     }
 
@@ -2087,9 +2130,9 @@ public class SqlGenerationTests
     public void TableSample_WithSeed_ShouldEmitRepeatable()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.From<ISimpleEntity>();
+        var e = ctx.From<ISimpleEntity>(o => o.TableSample(10, TableSampleMethod.System, 3));
 
-        SqlOf(ctx, e.TableSample(10, TableSampleMethod.System, 3).Select(x => x.Id))
+        SqlOf(ctx, e.Select(x => x.Id))
             .Should().EndWith("tablesample (10 percent) repeatable (3)");
     }
 
@@ -2097,9 +2140,7 @@ public class SqlGenerationTests
     public void TableSample_Bernoulli_ShouldThrowBecauseSqlServerHasNoBernoulli()
     {
         using var ctx = SqlServerTestContext.Create();
-        var e = ctx.From<ISimpleEntity>();
-
-        var act = () => SqlOf(ctx, e.TableSample(10, TableSampleMethod.Bernoulli).Select(x => x.Id));
+        var act = () => SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.TableSample(10, TableSampleMethod.Bernoulli)).Select(x => x.Id));
 
         act.Should().Throw<NotSupportedException>().WithMessage("*BERNOULLI*");
     }
@@ -2164,6 +2205,79 @@ public class SqlGenerationTests
 
         SqlOf(ctx, e.ForShare().Select(x => x.Id))
             .Should().Be("select id from simple_entity with (holdlock)");
+    }
+
+    [Fact]
+    public void ForUpdate_NoWait_ShouldEmitNowaitHint()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.ForUpdate(LockWaitMode.NoWait).Select(x => x.Id))
+            .Should().Be("select id from simple_entity with (updlock, nowait)");
+    }
+
+    [Fact]
+    public void ForUpdate_SkipLocked_ShouldEmitReadpastHint()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.ForUpdate(LockWaitMode.SkipLocked).Select(x => x.Id))
+            .Should().Be("select id from simple_entity with (updlock, readpast)");
+    }
+
+    [Fact]
+    public void ForShare_NoWait_ShouldEmitHoldlockNowaitHint()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.ForShare(LockWaitMode.NoWait).Select(x => x.Id))
+            .Should().Be("select id from simple_entity with (holdlock, nowait)");
+    }
+
+    [Fact]
+    public void ForUpdate_SkipLocked_WithTableHint_ShouldCombineHints()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.WithTableHint("rowlock").ForUpdate(LockWaitMode.SkipLocked).Select(x => x.Id))
+            .Should().Be("select id from simple_entity with (rowlock, updlock, readpast)");
+    }
+
+    [Fact]
+    public void KeywordCase_Upper_ShouldUppercaseDialectClauses()
+    {
+        using var ctx = SqlServerTestContext.CreateUppercase();
+        var e = ctx.From<ISimpleEntity>();
+
+        SqlOf(ctx, e.Select(x => new { x.Id }).WithForJson())
+            .Should().EndWith("FOR JSON PATH");
+
+        SqlOf(ctx, e.Select(x => new { x.Id }).WithForXml(ForXmlMode.Raw, "row", "root", elements: true))
+            .Should().EndWith("FOR XML RAW('row'), ROOT('root'), ELEMENTS");
+
+        SqlOf(ctx, e.Select(x => new { x.Id }).Hint("recompile"))
+            .Should().EndWith("OPTION (recompile)");
+
+        SqlOf(ctx, ctx.From<ISimpleEntity>(o => o.TableSample(10, TableSampleMethod.System, 3)).Select(x => x.Id))
+            .Should().EndWith("TABLESAMPLE (10 PERCENT) REPEATABLE (3)");
+
+        SqlOf(ctx, e.ForSystemTime(TemporalClause.All()).Select(x => x.Id))
+            .Should().EndWith("FOR SYSTEM_TIME ALL");
+
+        SqlOf(ctx, e.ForUpdate().Select(x => x.Id))
+            .Should().EndWith("WITH (UPDLOCK)");
+
+        SqlOf(ctx, e.ForUpdate(LockWaitMode.SkipLocked).Select(x => x.Id))
+            .Should().EndWith("WITH (UPDLOCK, READPAST)");
+
+        var anchor = e.Where(s => s.Id == 1).Select(s => new CteNumberRow { n = s.Id });
+        var step = ctx.From("nums").Where(t => t["n"].AsInt < 5).Select(t => new CteNumberRow { n = t["n"].AsInt + 1 });
+        SqlOf(ctx, ctx.WithRecursive("nums", anchor.UnionAll(step), 100).From("nums").Select(t => new CteNumberRow { n = t["n"].AsInt }))
+            .Should().Contain("OPTION (MAXRECURSION 100)");
     }
 
     [Fact]
@@ -2534,7 +2648,7 @@ public class SqlGenerationTests
         var limited = () => e.Limit(1).Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter, PivotValue.Create("1"));
         limited.Should().Throw<NotSupportedException>().WithMessage("*plain table*");
 
-        var sampled = () => e.TableSample(10).Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter, PivotValue.Create("1"));
+        var sampled = () => ctx.From<ISalesEntity>(o => o.TableSample(10)).Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter, PivotValue.Create("1"));
         sampled.Should().Throw<NotSupportedException>().WithMessage("*plain table*");
 
         var ordered = () => e.OrderBy(x => x.Id).Pivot(PivotAggregate.Sum, s => s.Margin, s => s.Quarter, PivotValue.Create("1"));

@@ -26,6 +26,7 @@ public partial class QueryCommand
             if (cmd._dataContext is null) throw new InvalidOperationException("Cannot prepare command in cache");
             cmd.ResolvedQuoteIdentifiers = cmd.QuoteIdentifiers ?? cmd._dataContext.QuoteIdentifiers;
             cmd.ResolvedNamingConvention = cmd.NamingConvention ?? cmd._dataContext.NamingConvention;
+            cmd.ResolvedKeywordCase = cmd.KeywordCase ?? cmd._dataContext.KeywordCase;
 #if DEBUG
             if (cmd.Logger?.IsEnabled(LogLevel.Debug) ?? false) cmd.Logger.LogDebug("Preparing command");
 #endif
@@ -162,9 +163,19 @@ public partial class QueryCommand
 
             for (var (i, cnt) = (0, cmd._ctes.Count); i < cnt; i++)
             {
-                var query = cmd._ctes[i].Query;
-                if (!query.IsPrepared)
-                    query.PrepareCommand(noHash, cancellationToken);
+                var cte = cmd._ctes[i];
+                if (!cte.Query.IsPrepared)
+                    cte.Query.PrepareCommand(noHash, cancellationToken);
+
+                // An INSERT ... SELECT used as a data-modifying CTE body renders its source select in
+                // the enclosing statement, so the source must be prepared like any other command.
+                if (cte.Mutation is { Source: { IsPrepared: false } mutationSource })
+                    mutationSource.PrepareCommand(noHash, cancellationToken);
+
+                // A data-modifying CTE is a side-effecting statement: never share its plan, because the
+                // mutation's shape (row count, target columns) is not fully captured by the CTE query.
+                if (cte.IsDataModifying)
+                    cmd.Cache = false;
             }
 
             if (!cmd._dontCache && !noHash)

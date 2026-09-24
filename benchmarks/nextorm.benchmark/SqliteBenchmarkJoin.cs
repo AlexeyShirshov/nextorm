@@ -3,6 +3,8 @@ using NextORM.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Data.Sqlite;
 using Dapper;
+using LinqToDB;
+using IDataContext = NextORM.Core.IDataContext;
 using Microsoft.Extensions.Logging;
 using BenchmarkDotNet.Jobs;
 using NextORM.Core;
@@ -110,4 +112,20 @@ public class SqliteBenchmarkJoin
         for (int i = 0; i < 10; i++)
             await _linq2Db.JoinAsync(i);
     }
+    [Benchmark]
+    public long Linq2Db_Compiled()
+    {
+        long n = 0;
+        for (int i = 0; i < 10; i++)
+            n += _l2dbJoin(_linq2Db.Db, i).Count;
+        _sink = n;
+        return n;
+    }
+
+    private long _sink;
+    private static readonly Func<LinqToDB.IDataContext, int, List<Linq2DbLargeEntity>> _l2dbJoin = LinqToDB.CompiledQuery.Compile(
+        (LinqToDB.IDataContext db, int id) => (from t1 in db.GetTable<Linq2DbLargeEntity>()
+                                               join t2 in db.GetTable<Linq2DbSimpleEntity>() on t1.Id equals t2.Id
+                                               where t2.Id == id
+                                               select new Linq2DbLargeEntity { Id = t1.Id, Str = t1.Str, Dt = t1.Dt }).ToList());
 }

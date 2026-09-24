@@ -37,6 +37,13 @@ internal sealed class MySqlTestProvider : ITestProvider
     public bool SupportsTableValuedFunctions => false;
     public bool EnforcesScalarSubqueryCardinality => true;
     public bool SupportsApply => true;
+    public bool SupportsInsertReturning => false;
+    public bool SupportsIgnoreDuplicates => true;
+    public bool SupportsTruncate => true;
+    public bool SupportsDeleteJoin => true;
+    public bool SupportsCreateTableAsSelect => true;
+    public bool SupportsTemporaryCreateTableAsSelect => true;
+    public bool SupportsTransactions => true;
     public string TableValuedFunctionSkipReason => "The shared table-valued function test uses SQLite's json_each; MySQL exposes JSON rows through JSON_TABLE with a different shape.";
 
     public string SkipReason => MySqlContainer.Failure ?? "MySQL is not available.";
@@ -75,6 +82,9 @@ internal sealed class MySqlTestProvider : ITestProvider
         "drop table if exists binary_entity",
         "drop table if exists complex_entity",
         "drop table if exists simple_entity",
+        "drop table if exists insert_entity",
+        "drop table if exists merge_entity",
+        "drop table if exists delete_entity",
 
         "create table simple_entity (id int not null primary key)",
 
@@ -123,6 +133,33 @@ internal sealed class MySqlTestProvider : ITestProvider
             (1, 18446744073709551615, 18446744073709551615),
             (2, 0, null),
             (3, 42, 7)
+        """,
+
+        """
+        create table insert_entity
+        (
+            id bigint not null auto_increment primary key,
+            name varchar(100) null,
+            age int null
+        )
+        """,
+
+        """
+        create table merge_entity
+        (
+            id int not null primary key,
+            name varchar(100) null,
+            age int null
+        )
+        """,
+
+        """
+        create table delete_entity
+        (
+            id int not null primary key,
+            name varchar(100) null,
+            age int null
+        )
         """
     ];
 }

@@ -333,4 +333,62 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
         rows.Should().Contain(r => r.Id == 1 && r.Qtr == "q1" && r.Val == 10);
         rows.Should().Contain(r => r.Id == 2 && r.Qtr == "q2" && r.Val == 40);
     }
+
+    private static int MergeTestKey() => Random.Shared.Next(1_000_000, int.MaxValue);
+
+    [Fact]
+    public void FullMerge_MatchedDelete_ShouldDeleteMatchedRow()
+    {
+        var ctx = _sut.DataProvider;
+        var deleteId = MergeTestKey();
+
+        ctx.InsertInto<IMergeEntity>()
+            .Values(new MergeEntity { Id = deleteId, Name = "old", Age = 1 })
+            .Insert();
+
+        ctx.MergeInto<IMergeEntity>()
+            .Using(new MergeEntity { Id = deleteId, Name = "ignored", Age = 0 })
+            .OnKeys()
+            .WhenMatched().ThenDelete()
+            .WhenNotMatched().ThenInsert()
+            .Merge();
+
+        ctx.From<IMergeEntity>().Where(x => x.Id == deleteId).Select(x => x.Id).ToList().Should().BeEmpty();
+    }
+
+    [Fact]
+    public void FullMerge_NotMatchedBySource_ShouldDeleteOrphan()
+    {
+        var ctx = _sut.DataProvider;
+        var orphanId = MergeTestKey();
+        var matchedId = orphanId + 1;
+
+        ctx.InsertInto<IMergeEntity>().Values(new MergeEntity { Id = orphanId, Name = "orphan", Age = 1 }).Insert();
+        ctx.InsertInto<IMergeEntity>().Values(new MergeEntity { Id = matchedId, Name = "keep", Age = 1 }).Insert();
+
+        ctx.MergeInto<IMergeEntity>()
+            .Using(new MergeEntity { Id = matchedId, Name = "updated", Age = 9 })
+            .OnKeys()
+            .WhenMatched().ThenUpdate()
+            .WhenNotMatchedBySource().ThenDelete()
+            .Merge();
+
+        ctx.From<IMergeEntity>().Where(x => x.Id == orphanId).Select(x => x.Id).ToList().Should().BeEmpty();
+        ctx.From<IMergeEntity>().Where(x => x.Id == matchedId).Select(x => x.Age).ToList().Should().ContainSingle().Which.Should().Be(9);
+    }
+
+    [Fact]
+    public void BulkInsert_InsideTransaction_ShouldRollBack()
+    {
+        var ctx = _sut.DataProvider;
+        var marker = "bulktx_" + Guid.NewGuid().ToString("N");
+
+        using (var transaction = ((ITransactionManager)ctx).BeginTransaction())
+        {
+            ctx.BulkInsertInto<IInsertEntity>().Values([new InsertEntity { Name = marker, Age = 1 }]).BulkInsert();
+            transaction.Rollback();
+        }
+
+        ctx.From<IInsertEntity>().Where(x => x.Name == marker).Select(x => x.Age).ToList().Should().BeEmpty();
+    }
 }

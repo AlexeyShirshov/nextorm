@@ -9,9 +9,8 @@
 В nextorm намеренно нет кросс-провайдерного метода для JSON. «Работа с JSON» означает разное у разных
 провайдеров, и движок держит эти механизмы раздельно, а не делает вид, что это одна функция:
 
-* **SQL Server** имеет две независимые поверхности. [`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean)) добавляет
-  завершающее предложение `FOR JSON PATH`/`FOR JSON AUTO`, поэтому весь набор строк возвращается одним
-  JSON-документом, а [`SqlServer`](xref:NextORM.Core.SqlFunctions.SqlServer) предоставляет текстовые JSON-функции
+* **SQL Server** имеет две независимые поверхности. [`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean,System.Object[])) выполняет запрос и
+  возвращает весь набор строк одним JSON-документом (`FOR JSON PATH`/`FOR JSON AUTO`), а [`SqlServer`](xref:NextORM.Core.SqlFunctions.SqlServer) предоставляет текстовые JSON-функции
   (`json_value`, `json_query`, `json_modify`, `isjson`) и табличную функцию `openjson`.
 * **PostgreSQL** имеет нативные типы `json`/`jsonb` (единственный провайдер с ними) и поверхность
   функций/операторов на `SqlFunctions.Postgres`: конструирование, агрегация, доступ, вложенность и
@@ -56,39 +55,40 @@
 
 ### Вернуть весь набор строк одним JSON-документом
 
-[`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean)) добавляет завершающее предложение `FOR JSON`. Тогда СУБД
-возвращает результат из одной строки и одной колонки, поэтому проецируйте одну колонку и читайте её
-как строку через `First()`/`FirstOrDefault()`:
+[`ForJson`](xref:NextORM.Core.QueryCommand`1.ForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean,System.Object[])) — **терминальный оператор**: он выполняет запрос и возвращает весь
+набор результатов одним JSON-документом (форму документа задаёт проекция; тип элемента запроса не
+важен, так как база возвращает одну колонку-документ):
 
 ```csharp
-var json = dataContext.From<IComplexEntity>()
-    .Select(e => e.String)
-    .ForJson(ForJsonMode.Path, root: "items", includeNullValues: true)
-    .First();
+string? json = dataContext.From<IComplexEntity>()
+    .Select(e => new { e.Id, e.String })
+    .ForJson(ForJsonMode.Path, root: "items", includeNullValues: true);
 ```
 
 ```sql
-select somestring from complex_entity for json path, root('items'), include_null_values
+select id, somestring from complex_entity for json path, root('items'), include_null_values
 ```
 
 [`Path`](xref:NextORM.Core.ForJsonMode.Path) формирует документ по псевдонимам проекции (по умолчанию), а
 [`Auto`](xref:NextORM.Core.ForJsonMode.Auto) — по структуре таблицы:
 
 ```csharp
-var json = dataContext.From<IComplexEntity>()
-    .Select(e => e.String)
-    .ForJson(ForJsonMode.Auto)
-    .First();
+string? json = dataContext.From<IComplexEntity>()
+    .Select(e => new { e.Id, e.String })
+    .ForJson(ForJsonMode.Auto);
 ```
 
 ```sql
-select somestring from complex_entity for json auto
+select id, somestring from complex_entity for json auto
 ```
 
 Необязательный `root` оборачивает документ в `ROOT('name')`, а `includeNullValues` добавляет
-`INCLUDE_NULL_VALUES`. Предложение размещается после `ORDER BY` и перед завершающим `OPTION (...)`,
-поэтому сочетается с [`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[])): запрос
-`for json path option (recompile)` корректен. (Табличные хинты,
+`INCLUDE_NULL_VALUES`. `ForJson` возвращает `null`, если запрос не вернул строк (SQL Server отдаёт SQL
+NULL для пустого результата `FOR JSON`). Предложение размещается после `ORDER BY` и перед завершающим
+`OPTION (...)`, поэтому сочетается с [`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[])) (сначала хинт, затем
+терминал): запрос `for json path option (recompile)` корректен. Используйте
+[`WithForJson`](xref:NextORM.Core.QueryCommand`1.WithForJson(NextORM.Core.ForJsonMode,System.String,System.Boolean)), чтобы только присоединить предложение и сохранить
+команду композируемой. (Табличные хинты,
 [`WithTableHint`](xref:NextORM.Core.EntityBuilder`1.WithTableHint(System.String[])), прикрепляются к таблице `FROM` и не
 зависят от JSON-предложения.) Диалект без
 поддержки предложения отклоняет команду, а совмещение `ForJson` с `ForXml` бросает
@@ -314,8 +314,8 @@ select id from complex_entity where (@norm_p0 @> @norm_p1) and (@norm_p2 ? 'key'
   в SQL.
 * В SQLite есть JSON-возможности в СУБД, но nextorm их пока не отображает; расширение JSON1 в SQLite
   тоже не отображено.
-* Провайдер in-memory не генерирует SQL, поэтому `ForJson`/`ForXml` и JSON-поверхности к нему не
-  применимы.
+* Провайдер in-memory не генерирует SQL, поэтому `ForJson`/`ForXml` бросают `NotSupportedException`, а
+  JSON-поверхности к нему не применимы.
 * PostgreSQL — единственный провайдер, чьи параметры отображаются на нативный JSON-тип; JSON в
   SQL Server и MySQL/MariaDB всегда текст.
 

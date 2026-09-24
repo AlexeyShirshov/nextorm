@@ -22,6 +22,7 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
     // context type (F6). The delegate is handed over once per enumeration, not built per call.
     private IConnectionManager? _connectionManager;
     private Func<string, object?, DbParameter>? _createParam;
+    private Func<DbTransaction?>? _currentTransaction;
     private readonly DbPreparedQueryCommand<TResult> _compiledQuery;
     private CancellationToken _cancellationToken;
     private object[]? _params;
@@ -184,12 +185,13 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
 
         return false;
     }
-    internal void InitEnumerator(IConnectionManager connectionManager, Func<string, object?, DbParameter> createParam, object[]? @params, CancellationToken cancellationToken)
+    internal void InitEnumerator(IConnectionManager connectionManager, Func<string, object?, DbParameter> createParam, object[]? @params, CancellationToken cancellationToken, Func<DbTransaction?> currentTransaction)
     {
         _cancellationToken = cancellationToken;
         _params = @params;
         _connectionManager = connectionManager;
         _createParam = createParam;
+        _currentTransaction = currentTransaction;
         _conn = connectionManager.GetConnection();
     }
     /// <summary>
@@ -208,7 +210,7 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
         // DataContext.EnsureConnectionOpen.
         _connectionManager.EnsureConnectionOpen();
 
-        var sqlCommand = _compiledQuery.GetDbCommand(@params, _createParam!, _conn);
+        var sqlCommand = _compiledQuery.GetDbCommand(@params, _createParam!, _conn, _currentTransaction?.Invoke());
 
         if (_logDebug) LogCommand(sqlCommand);
 
@@ -230,7 +232,7 @@ public sealed class ResultSetEnumerator<TResult> : IAsyncEnumerator<TResult>, IA
 
         await _connectionManager.EnsureConnectionOpenAsync(cancellationToken).ConfigureAwait(false);
 
-        var sqlCommand = _compiledQuery.GetDbCommand(@params, _createParam!, _conn);
+        var sqlCommand = _compiledQuery.GetDbCommand(@params, _createParam!, _conn, _currentTransaction?.Invoke());
 
         if (_logDebug) LogCommand(sqlCommand);
 

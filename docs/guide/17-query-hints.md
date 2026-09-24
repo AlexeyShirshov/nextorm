@@ -61,9 +61,40 @@ select id from complex_entity with (nolock)
 ```
 
 The hints are rendered verbatim, so only pass trusted values. A provider opts in through
-[`SupportsTableHints`](xref:NextORM.Core.ISqlDialect.SupportsTableHints) and [`MakeTableHints`](xref:NextORM.Core.ISqlDialect.MakeTableHints(System.Collections.Generic.IReadOnlyList{System.String})) (SQL Server); other dialects reject a
+[`SupportsTableHints`](xref:NextORM.Core.ISqlDialect.SupportsTableHints) and [`MakeTableHints`](xref:NextORM.Core.ISqlDialect.MakeTableHints(System.Collections.Generic.IReadOnlyList{System.String},NextORM.Core.KeywordCase)) (SQL Server); other dialects reject a
 command that carries table hints with `NotSupportedException`. Only the primary table is covered; hints
 on joined tables are not part of the API yet.
+
+## Index hints
+
+`EntityBuilder<T>.WithIndex(params string[] indexes)` asks the planner to consider a named index on the
+primary physical table. The overload `WithIndex(IndexHintKind kind, params string[] indexes)` selects the
+intent ([`IndexHintKind`](xref:NextORM.Core.IndexHintKind).`Use`/`Force`/`Ignore`), and `WithoutIndex()`
+suppresses index use. Each dialect renders its native form after the table name and before its alias:
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .WithIndex("ix_complex_id")
+    .Select(c => new { c.Id })
+    .ToList();
+```
+
+```sql
+-- MySQL/MariaDB  (also `force index (...)` / `ignore index (...)`):
+select id from complex_entity use index (ix_complex_id)
+-- SQLite  (exactly one index; `WithoutIndex()` renders `not indexed`):
+select id from complex_entity indexed by ix_complex_id
+-- SQL Server  (merged into the single table-hint clause):
+select id from complex_entity with (index(ix_complex_id))
+```
+
+A provider opts in through [`ISqlDialect.IndexHints`](xref:NextORM.Core.ISqlDialect.IndexHints) and
+[`IIndexHintRenderer`](xref:NextORM.Core.IIndexHintRenderer) (MySQL/MariaDB, SQLite, SQL Server).
+PostgreSQL (without `pg_hint_plan`), ClickHouse and the in-memory provider have no native index hint and
+reject a command that carries one with `NotSupportedException`. On SQL Server an index hint is merged with
+a locking `WithTableHint` into a single `with (nolock, index(...))` clause, and an `Ignore` hint is rejected
+(there is no index-ignore hint); SQLite accepts exactly one index name (its `INDEXED BY` takes one). The
+names are rendered verbatim, so only pass trusted values, and the hint list is part of the plan key.
 
 ## Providers
 
@@ -90,20 +121,19 @@ var my = dataContext.From<ISimpleEntity>()
     .Hint("MAX_EXECUTION_TIME(1000)");
 ```
 
-A provider opts in through [`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints) and [`RenderQueryHints`](xref:NextORM.Core.ISqlDialect.RenderQueryHints(System.String,System.Collections.Generic.IReadOnlyList{System.String},System.String)); the
+A provider opts in through [`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints) and [`RenderQueryHints`](xref:NextORM.Core.ISqlDialect.RenderQueryHints(System.String,System.Collections.Generic.IReadOnlyList{System.String},System.String,NextORM.Core.KeywordCase)); the
 builder rejects a command that carries hints on a dialect that reports `false`.
 
 ## ClickHouse query modifiers
 
-ClickHouse exposes four query-level modifiers that are not hints but dedicated builder methods:
-`Final()`, `Sample(ratio[, offset])`, `PreWhere(predicate)` and `Settings(("key", "value"), ...)`. They
-are only valid on ClickHouse; every other provider and the in-memory context throw
-`NotSupportedException`.
+ClickHouse exposes four query-level modifiers that are not hints: `Final()`, `PreWhere(predicate)` and
+`Settings(("key", "value"), ...)` are dedicated builder methods, while the `Sample(ratio[, offset])`
+modifier is a per-query source option set in `From`. They are only valid on ClickHouse; every other
+provider and the in-memory context throw `NotSupportedException`.
 
 ```csharp
-var rows = dataContext.From<IComplexEntity>()
+var rows = dataContext.From<IComplexEntity>(o => o.Sample(0.1, 0.5))
     .Final()
-    .Sample(0.1, 0.5)
     .PreWhere(c => c.Int > 0)
     .Where(c => c.Boolean == true)
     .Select(c => new { c.Id, c.Int })
@@ -140,6 +170,6 @@ both.
 ---
 
 Source: `src/nextorm.core/Query/QueryCommand.TResult.cs` ([`Hint`](xref:NextORM.Core.QueryCommand`1.Hint(System.String[]))),
-`src/nextorm.core/DataContext/Dialect/ISqlDialect.cs` ([`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints) / [`RenderQueryHints`](xref:NextORM.Core.ISqlDialect.RenderQueryHints(System.String,System.Collections.Generic.IReadOnlyList{System.String},System.String))),
+`src/nextorm.core/DataContext/Dialect/ISqlDialect.cs` ([`SupportsQueryHints`](xref:NextORM.Core.ISqlDialect.SupportsQueryHints) / [`RenderQueryHints`](xref:NextORM.Core.ISqlDialect.RenderQueryHints(System.String,System.Collections.Generic.IReadOnlyList{System.String},System.String,NextORM.Core.KeywordCase))),
 `src/nextorm.sqlserver/SqlServerDialect.cs`, `src/nextorm.postgres/PostgresDialect.cs`,
 `src/nextorm.mysql/MySqlDialect.cs` (MariaDB inherits).

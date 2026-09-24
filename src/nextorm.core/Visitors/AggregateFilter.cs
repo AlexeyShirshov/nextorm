@@ -26,7 +26,7 @@ internal static class AggregateFilter
     internal static void Append(BaseExpressionVisitor visitor, Expression filterExpression)
     {
         if (!visitor.IsParamMode)
-            visitor.Builder!.Append(" filter (where ");
+            visitor.Builder!.Append(visitor.Kw(" filter (where "));
 
         AppendPredicate(visitor, filterExpression);
 

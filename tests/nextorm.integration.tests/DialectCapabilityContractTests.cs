@@ -151,7 +151,11 @@ public sealed class DialectCapabilityContractTests
                 arrayJoin.Render(ArrayJoinKind.Left, ["[x]"]).Should().NotBeNullOrEmpty();
 
             if (dialect.Lock is { } lockRenderer)
-                lockRenderer.Render(LockMode.Share).Should().NotBeNullOrEmpty();
+            {
+                foreach (var mode in Enum.GetValues<LockMode>())
+                    foreach (var wait in Enum.GetValues<LockWaitMode>())
+                        lockRenderer.Render(mode, wait).Should().NotBeNullOrEmpty();
+            }
 
             if (dialect.Pivot is { } pivotRenderer)
             {

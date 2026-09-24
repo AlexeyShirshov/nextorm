@@ -81,10 +81,10 @@ namespace NextORM.Core;
         /// <summary>All 1-based positions of <paramref name="element"/> in <paramref name="array"/>.</summary>
         public int[]? array_positions<T>(T[] array, T element) => default!;
 
-        /// <summary>Reverses the elements of <paramref name="array"/>.</summary>
+        /// <summary>Reverses the elements of <paramref name="array"/> (<c>array_reverse</c>, PostgreSQL 18+).</summary>
         public T[] array_reverse<T>(T[] array) => default!;
 
-        /// <summary>Sorts the elements of <paramref name="array"/>.</summary>
+        /// <summary>Sorts the elements of <paramref name="array"/> (<c>array_sort</c>, PostgreSQL 18+).</summary>
         public T[] array_sort<T>(T[] array) => default!;
 
         /// <summary>Returns a randomly shuffled copy of <paramref name="array"/> (<c>array_shuffle</c>, PostgreSQL 16+).</summary>

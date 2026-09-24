@@ -63,6 +63,56 @@ public interface ITestProvider
     /// </summary>
     bool SupportsApply { get; }
 
+    /// <summary>
+    /// True when the provider can return the written rows from an <c>INSERT</c> through its
+    /// <c>RETURNING</c>/<c>OUTPUT</c> form. PostgreSQL, SQLite and SQL Server can; MySQL/MariaDB,
+    /// ClickHouse and the in-memory provider cannot, so the shared returning tests are skipped there.
+    /// </summary>
+    bool SupportsInsertReturning { get; }
+
+    /// <summary>
+    /// True when the provider can skip conflicting rows with an <c>INSERT OR IGNORE</c>/<c>INSERT IGNORE</c>
+    /// head or an <c>ON CONFLICT DO NOTHING</c> suffix. PostgreSQL, SQLite, MySQL, MariaDB and
+    /// ClickHouse (where it is a no-op) do; SQL Server has no such form, so the shared ignore test is
+    /// skipped there.
+    /// </summary>
+    bool SupportsIgnoreDuplicates { get; }
+
+    /// <summary>
+    /// True when the provider has a native <c>TRUNCATE TABLE</c>. SQL Server, PostgreSQL, MySQL and
+    /// MariaDB do; SQLite has no <c>TRUNCATE</c>, so the shared truncate test is skipped there.
+    /// </summary>
+    bool SupportsTruncate { get; }
+
+    /// <summary>
+    /// True when the provider has a native multi-table <c>DELETE</c> (delete from a table based on a
+    /// join). PostgreSQL, SQL Server, MySQL and MariaDB do; SQLite and ClickHouse have no join delete,
+    /// so the shared delete-join test is skipped there.
+    /// </summary>
+    bool SupportsDeleteJoin { get; }
+
+    /// <summary>
+    /// True when the provider can materialise a query into a persistent table (<c>ToTable</c>).
+    /// PostgreSQL, SQLite, MySQL, MariaDB, SQL Server and ClickHouse can.
+    /// </summary>
+    bool SupportsCreateTableAsSelect { get; }
+
+    /// <summary>
+    /// True when the provider can materialise a query into a <em>temporary</em> table
+    /// (<c>ToTempTable</c>). PostgreSQL, SQLite, MySQL and MariaDB can; SQL Server has no
+    /// <c>CREATE TEMPORARY TABLE ... AS SELECT</c> (a session-scoped table is <c>ToTable("#name")</c>) and
+    /// ClickHouse cannot express a temporary <c>AS SELECT</c>, so the shared temp test is skipped there
+    /// and the rejection test runs instead.
+    /// </summary>
+    bool SupportsTemporaryCreateTableAsSelect { get; }
+
+    /// <summary>
+    /// True when the provider supports ADO.NET transactions on its connection. SQLite, PostgreSQL,
+    /// SQL Server and MySQL/MariaDB do; ClickHouse speaks HTTP and has no transaction, so the shared
+    /// transaction tests are skipped there.
+    /// </summary>
+    bool SupportsTransactions { get; }
+
     void EnsureSeeded();
 
     IDataContext CreateContext();

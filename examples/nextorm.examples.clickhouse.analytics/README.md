@@ -9,7 +9,9 @@ portable LINQ surface stops. Every method in [`ClickHouseQueries.cs`](ClickHouse
 exactly one query file in [`Sql/`](Sql); the method comment names it, states whether it is `WORKING`,
 and — when it is `NOT WORKING` — why (with the roadmap document that tracks the gap). Missing capabilities
 are **not** worked around: the affected method throws `NotSupportedException` instead of falling back to
-raw SQL. The tables below map each SQL construct to the nextorm construct that replaces it.
+raw SQL. Only `Incremental` (`uniqMerge` over an `AggregateFunction` state) still throws; the array,
+higher-order-lambda and `groupArray`/tuple surfaces are expressed in LINQ. The tables below map each SQL
+construct to the nextorm construct that replaces it.
 
 ## Layout
 
@@ -61,7 +63,12 @@ clause order: `From().Where().GroupBy().Having().OrderBy().Limit().Select()`.
 | `Date - Date` (difference) | `SqlFunctions.Sql.date_diff("second", a, b)` |
 | `windowFunnel(1800)(ts, c1, c2, …)` | `SqlFunctions.ClickHouse.window_funnel(1800, ts, c1, c2, …)` |
 | `multiIf(c1, r1, c2, r2, …)` | `SqlFunctions.ClickHouse.multi_if(when(c1, r1), …, otherwise(rLast))` |
-| `arrayMap`/`arrayFilter` (higher-order lambdas), `uniqMerge` (`-Merge`/`-State`), `groupArray`/tuple results | no LINQ surface yet ; the query is **NOT WORKING** and throws instead of falling back to raw SQL |
+| `splitByChar(sep, s)` | `SqlFunctions.ClickHouse.split_by_char(sep, s)` |
+| `arrayMap(x -> lower(x), a)` | `SqlFunctions.ClickHouse.array_map(x => x.ToLower(), a)` |
+| `arrayFilter(x -> length(x) > 3, a)` | `SqlFunctions.ClickHouse.array_filter(x => x.ToLower().Length > 3, a)` |
+| `length(s)` (string) | `x.ToLower().Length` inside the lambda — member access on the lambda parameter itself (`x.Length`) is rejected by the translator, so `length` is reached through the `lower()` call |
+| `groupArray((a, b))` | `SqlFunctions.ClickHouse.group_array(Tuple.Create(a, b))`, materialised as a CLR `Tuple<…>[]` |
+| `uniqMerge(users_state)` (`-Merge`/`-State`) | no LINQ surface yet on the released packages; the query is **NOT WORKING** and throws instead of falling back to raw SQL |
 
 > **Unsigned types.** `hits_v1` stores `UserID`/`WatchID` as `UInt64`, and ClickHouse returns `UInt64`
 > from `count()`/`uniq()`/`sum()` over unsigned inputs. The dialect casts the aggregate/function results
@@ -78,10 +85,10 @@ throws (documented in the method comment).
 
 | # | SQL | Method | Coverage | Notes |
 |---|---|---|---|---|
-| 1 | [`clickhouse_array_analytics.sql`](Sql/clickhouse_array_analytics.sql) | `ClickHouseQueries.ArrayAnalytics` | FAIL | `arrayMap`/`arrayFilter` (higher-order lambdas) and grouping by an array have no LINQ surface (`split_by_char` and `length` over arrays exist, but the higher-order functions do not); throws instead of falling back to `WithSql` |
+| 1 | [`clickhouse_array_analytics.sql`](Sql/clickhouse_array_analytics.sql) | `ClickHouseQueries.ArrayAnalytics` | OK | `splitByChar` → `split_by_char`; `arrayMap`/`arrayFilter` → `array_map`/`array_filter`; the result is grouped by the array expression |
 | 2 | [`clickhouse_funnel.sql`](Sql/clickhouse_funnel.sql) | `ClickHouseQueries.Funnel` | OK | `windowFunnel` → `window_funnel(...)`; inner `GROUP BY UserID` + outer `GROUP BY level` → two derived queries |
-| 3 | [`clickhouse_incremental.sql`](Sql/clickhouse_incremental.sql) | `ClickHouseQueries.Incremental` | FAIL | `uniqMerge` over `AggregatingMergeTree` has no LINQ surface; throws instead of falling back to `WithSql` |
-| 4 | [`clickhouse_retention.sql`](Sql/clickhouse_retention.sql) | `ClickHouseQueries.Retention` | FAIL | the reference has `WITH first_visits, cohort_sizes` CTEs, but `groupArray((…))` returns an array/tuple (no LINQ surface); throws instead of falling back to `WithSql` |
+| 3 | [`clickhouse_incremental.sql`](Sql/clickhouse_incremental.sql) | `ClickHouseQueries.Incremental` | FAIL | `uniqMerge` (`-Merge` over an `AggregateFunction` state) has no LINQ surface on the released packages; throws instead of falling back to `WithSql` |
+| 4 | [`clickhouse_retention.sql`](Sql/clickhouse_retention.sql) | `ClickHouseQueries.Retention` | OK | the `WITH first_visits, cohort_sizes` CTEs → `ctx.With(...)`; the inner join + `groupArray((…))` → `group_array(Tuple.Create(…))` |
 | 5 | [`clickhouse_sessions.sql`](Sql/clickhouse_sessions.sql) | `ClickHouseQueries.Sessions` | OK | three chained CTEs (`sessions`, `session_flags`, `session_counts`); `lagInFrame` → `lag_in_frame(...).Over(...)`; `runningAccumulate(if(…))` → cumulative `sum_over(c ? 1 : 0)`; `quantile(0.99)(…)` → `SqlFunctions.ClickHouse.quantile(0.99, …)` |
 
 > The retention query in `Sql/clickhouse_retention.sql` was corrected on porting: the original

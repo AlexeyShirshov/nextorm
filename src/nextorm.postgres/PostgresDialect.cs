@@ -15,6 +15,99 @@ public sealed class PostgresDialect : SqlDialectBase
     /// <inheritdoc/>
     public override string ConcatStringOperator => "||";
 
+    /// <summary>PostgreSQL has a native row-value type: <c>ROW(a, b)</c> with <c>(row).fN</c> access.</summary>
+    public override ITupleRenderer? Tuple => PostgresTupleRenderer.Instance;
+
+    /// <summary>PostgreSQL supports <c>INSERT ... RETURNING &lt;column&gt;</c>.</summary>
+    public override bool SupportsReturning => true;
+
+    /// <summary>PostgreSQL allows a data-modifying statement (<c>INSERT ... RETURNING</c>) as a CTE body.</summary>
+    public override bool SupportsDataModifyingCtes => true;
+
+    /// <summary>PostgreSQL expresses a key upsert as <c>INSERT ... ON CONFLICT (&lt;keys&gt;) DO UPDATE SET ...</c> (9.5+).</summary>
+    public override bool SupportsOnConflict => true;
+
+    /// <summary>PostgreSQL has a native bulk path (<c>COPY ... FROM STDIN (FORMAT BINARY)</c>).</summary>
+    public override bool SupportsBulkCopy => true;
+
+    /// <summary>PostgreSQL skips conflicting rows with a trailing <c>ON CONFLICT DO NOTHING</c>.</summary>
+    public override bool SupportsOnConflictDoNothing => true;
+
+    /// <summary>PostgreSQL writes an explicit value to a <c>GENERATED ALWAYS AS IDENTITY</c> column with <c>OVERRIDING SYSTEM VALUE</c>.</summary>
+    public override string MakeOverridingSystemValue(KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, " overriding system value");
+
+    /// <summary>PostgreSQL 15+ renders a general <c>MERGE</c>; the server version is a documented requirement.</summary>
+    public override bool SupportsMergeStatement => true;
+
+    /// <summary>PostgreSQL <c>MERGE</c> supports a <c>WHEN MATCHED THEN DELETE</c> branch.</summary>
+    public override bool SupportsMergeDelete => true;
+
+    /// <summary>PostgreSQL <c>MERGE</c> supports a <c>THEN DO NOTHING</c> branch.</summary>
+    public override bool SupportsMergeDoNothing => true;
+
+    /// <summary>PostgreSQL <c>MERGE</c> supports an explicit <c>ON &lt;condition&gt;</c> and <c>WHEN ... AND &lt;condition&gt;</c>.</summary>
+    public override bool SupportsMergeConditionalBranches => true;
+
+    /// <summary>PostgreSQL <c>MERGE</c> forbids qualifying a target column in the <c>UPDATE SET</c> list.</summary>
+    public override bool SupportsMergeTargetQualification => false;
+
+    /// <summary>PostgreSQL <c>MERGE ... RETURNING</c> must qualify target columns, otherwise they are ambiguous with the source.</summary>
+    public override string MakeMergeReturning(IReadOnlyList<string> columns, KeywordCase keywordCase = KeywordCase.Lower)
+        => Kw(keywordCase, " returning ") + string.Join(", ", columns.Select(static c => "target." + c));
+
+    /// <summary>PostgreSQL reads the last generated identity of the session through the <c>lastval()</c> function.</summary>
+    public override bool SupportsIdentityFunction => true;
+
+    /// <summary>PostgreSQL supports <c>INSERT ... DEFAULT VALUES</c> for an all-defaults row.</summary>
+    public override bool SupportsDefaultValues => true;
+
+    /// <summary>PostgreSQL accepts <c>DEFAULT</c> as a value in the <c>VALUES</c> list.</summary>
+    public override bool SupportsColumnDefault => true;
+
+    /// <summary>PostgreSQL has a native <c>TRUNCATE TABLE</c>.</summary>
+    public override bool SupportsTruncate => true;
+
+    /// <summary>PostgreSQL deletes rows based on a join through the <c>USING</c> clause.</summary>
+    public override bool SupportsDeleteJoin => true;
+
+    /// <summary>PostgreSQL renders the <c>USING</c> spelling of <see cref="MakeDeleteJoin"/>.</summary>
+    public override bool DeleteJoinRequiresUsing => true;
+
+    /// <summary>
+    /// Renders the PostgreSQL <c>USING</c> form of a multi-table delete. The joined tables are listed in
+    /// <c>USING</c> and the join conditions are folded into the <c>WHERE</c>, because a <c>USING</c> join
+    /// condition cannot reference the delete target (the target is aliased in <c>DELETE FROM</c>).
+    /// </summary>
+    public override string MakeDeleteJoin(
+        string target,
+        string targetAlias,
+        string fromAndJoins,
+        string usingSources,
+        string joinConditions,
+        string? whereSql,
+        KeywordCase keywordCase = KeywordCase.Lower)
+    {
+        var where = string.IsNullOrEmpty(joinConditions)
+            ? whereSql
+            : string.IsNullOrEmpty(whereSql)
+                ? joinConditions
+                : joinConditions + Kw(keywordCase, " and ") + whereSql;
+
+        var sql = Kw(keywordCase, "delete from ") + target + Kw(keywordCase, " as ") + targetAlias
+            + Kw(keywordCase, " using ") + usingSources;
+
+        return string.IsNullOrEmpty(where) ? sql : sql + Kw(keywordCase, " where ") + where;
+    }
+
+    /// <summary>PostgreSQL updates rows based on a join through the <c>FROM</c> clause.</summary>
+    public override bool SupportsUpdateJoin => true;
+
+    /// <summary>PostgreSQL renders the <c>FROM</c> spelling of the multi-table update (the target stays out of <c>FROM</c>).</summary>
+    public override bool UpdateJoinRequiresFrom => true;
+
+    /// <summary>Renders the identity-function query <c>select lastval()</c>.</summary>
+    public override string MakeIdentityFunction(KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, "select lastval()");
+
     /// <inheritdoc/>
     public override string MakeParam(string name) => $"@{name}";
 
@@ -58,7 +151,7 @@ public sealed class PostgresDialect : SqlDialectBase
     /// skipped). PostgreSQL has no <c>maxrecursion</c> option, so <paramref name="maxRecursionOption"/>
     /// is ignored.
     /// </summary>
-    public override string RenderQueryHints(string sql, IReadOnlyList<string> hints, string? maxRecursionOption)
+    public override string RenderQueryHints(string sql, IReadOnlyList<string> hints, string? maxRecursionOption, KeywordCase keywordCase = KeywordCase.Lower)
     {
         var depth = 0;
         for (var i = 0; i < sql.Length; i++)
@@ -278,28 +371,28 @@ public sealed class PostgresDialect : SqlDialectBase
             : $"overlay({value} placing {newValue} from {start} + 1 for {count})";
 
     /// <inheritdoc/>
-    public override void MakePage(Paging paging, StringBuilder sqlBuilder)
+    public override void MakePage(Paging paging, StringBuilder sqlBuilder, KeywordCase keywordCase = KeywordCase.Lower)
     {
         // WITH TIES is only expressible through the FETCH form (LIMIT has no WITH TIES variant).
         if (paging.HasWithTies)
         {
             if (paging.Offset > 0)
-                sqlBuilder.Append("offset ").Append(paging.Offset).Append(' ');
+                sqlBuilder.Append(Kw(keywordCase, "offset ")).Append(paging.Offset).Append(' ');
 
-            sqlBuilder.Append("fetch first ").Append(paging.Limit).Append(" rows with ties");
+            sqlBuilder.Append(Kw(keywordCase, "fetch first ")).Append(paging.Limit).Append(Kw(keywordCase, " rows with ties"));
             return;
         }
 
         // PostgreSQL uses "limit N offset M"; OFFSET may appear on its own, but LIMIT must come first.
         if (paging.Limit > 0)
-            sqlBuilder.Append("limit ").Append(paging.Limit);
+            sqlBuilder.Append(Kw(keywordCase, "limit ")).Append(paging.Limit);
 
         if (paging.Offset > 0)
         {
             if (paging.Limit > 0)
                 sqlBuilder.Append(' ');
 
-            sqlBuilder.Append("offset ").Append(paging.Offset);
+            sqlBuilder.Append(Kw(keywordCase, "offset ")).Append(paging.Offset);
         }
     }
 
@@ -308,6 +401,40 @@ public sealed class PostgresDialect : SqlDialectBase
 
     /// <summary>PostgreSQL supports the trailing <c>FOR UPDATE</c>/<c>FOR SHARE</c> row-locking clause.</summary>
     public override ILockRenderer Lock => PostgresLockRenderer.Instance;
+
+    /// <summary>PostgreSQL supports <c>CREATE [TEMPORARY] TABLE ... AS SELECT</c>.</summary>
+    public override bool SupportsCreateTableAsSelect => true;
+
+    /// <summary>PostgreSQL accepts <c>IF NOT EXISTS</c> on <c>CREATE TABLE ... AS SELECT</c>.</summary>
+    public override bool SupportsCreateTableAsSelectIfNotExists => true;
+
+    /// <summary>PostgreSQL accepts a column list on <c>CREATE TABLE ... AS SELECT</c>.</summary>
+    public override bool SupportsCreateTableAsSelectColumnList => true;
+
+    /// <summary>PostgreSQL supports <c>ON COMMIT { PRESERVE ROWS | DELETE ROWS | DROP }</c> on a temporary table.</summary>
+    public override bool SupportsCreateTableAsSelectOnCommit => true;
+
+    /// <summary>PostgreSQL supports <c>WITH [NO] DATA</c> on <c>CREATE TABLE ... AS SELECT</c>.</summary>
+    public override bool SupportsCreateTableAsSelectWithNoData => true;
+
+    /// <summary>Adds the PostgreSQL <c>ON COMMIT { PRESERVE ROWS | DELETE ROWS | DROP }</c> clause of a temporary table.</summary>
+    protected override string MakeCreateTableAsHead(CreateTableAsClause clause, KeywordCase keywordCase)
+    {
+        var head = base.MakeCreateTableAsHead(clause, keywordCase);
+        if (clause.OnCommit is TempTableOnCommit.PreserveRows)
+            return head;
+
+        return head + Kw(keywordCase, " on commit ") + Kw(keywordCase, clause.OnCommit switch
+        {
+            TempTableOnCommit.DeleteRows => "delete rows",
+            TempTableOnCommit.Drop => "drop",
+            _ => "preserve rows",
+        });
+    }
+
+    /// <summary>Appends the PostgreSQL <c>WITH NO DATA</c> clause.</summary>
+    protected override string MakeCreateTableAsTail(CreateTableAsClause clause, KeywordCase keywordCase)
+        => clause.WithData ? string.Empty : Kw(keywordCase, " with no data");
 }
 
 internal sealed class PostgresIifRenderer : IIifRenderer
@@ -352,8 +479,8 @@ internal sealed class PostgresDistinctOnRenderer : IDistinctOnRenderer
 {
     public static readonly PostgresDistinctOnRenderer Instance = new();
 
-    public string Render(IReadOnlyList<string> columns) =>
-        "distinct on (" + string.Join(", ", columns) + ") ";
+    public string Render(IReadOnlyList<string> columns, KeywordCase keywordCase = KeywordCase.Lower) =>
+        SqlKeywords.Of(keywordCase, "distinct on (") + string.Join(", ", columns) + ") ";
 }
 
 internal sealed class PostgresTableSampleMethods : ITableSampleMethods
@@ -362,12 +489,12 @@ internal sealed class PostgresTableSampleMethods : ITableSampleMethods
 
     public bool Supports(TableSampleMethod method) => true;
 
-    public string Render(TableSampleMethod method, double percent, double? seed)
+    public string Render(TableSampleMethod method, double percent, double? seed, KeywordCase keywordCase = KeywordCase.Lower)
     {
-        var text = " tablesample " + method.ToString().ToLowerInvariant()
+        var text = SqlKeywords.Of(keywordCase, " tablesample ") + method.ToString().ToLowerInvariant()
             + " (" + percent.ToString(System.Globalization.CultureInfo.InvariantCulture) + ")";
         return seed is { } value
-            ? text + " repeatable (" + value.ToString(System.Globalization.CultureInfo.InvariantCulture) + ")"
+            ? text + SqlKeywords.Of(keywordCase, " repeatable (") + value.ToString(System.Globalization.CultureInfo.InvariantCulture) + ")"
             : text;
     }
 }
@@ -378,6 +505,26 @@ internal sealed class PostgresLockRenderer : ILockRenderer
 
     public bool UsesTableHints => false;
 
-    public string Render(LockMode mode) =>
-        mode == LockMode.Share ? " for share" : " for update";
+    public string Render(LockMode mode, KeywordCase keywordCase = KeywordCase.Lower) =>
+        Render(mode, LockWaitMode.Wait, keywordCase);
+
+    public string Render(LockMode mode, LockWaitMode wait, KeywordCase keywordCase = KeywordCase.Lower) =>
+        SqlKeywords.Of(keywordCase, (mode == LockMode.Share ? " for share" : " for update") + LockWaitSuffix(wait));
+
+    private static string LockWaitSuffix(LockWaitMode wait) => wait switch
+    {
+        LockWaitMode.Wait => "",
+        LockWaitMode.NoWait => " nowait",
+        LockWaitMode.SkipLocked => " skip locked",
+        _ => throw new ArgumentOutOfRangeException(nameof(wait), wait, "Unknown locking wait mode.")
+    };
+}
+
+internal sealed class PostgresTupleRenderer : ITupleRenderer
+{
+    public static readonly PostgresTupleRenderer Instance = new();
+
+    public string RenderConstructor(IReadOnlyList<string> fields) => "ROW(" + string.Join(", ", fields) + ")";
+
+    public string? RenderElement(string row, int oneBasedIndex) => "(" + row + ").f" + oneBasedIndex;
 }

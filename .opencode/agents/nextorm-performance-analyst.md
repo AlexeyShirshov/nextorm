@@ -37,7 +37,7 @@ on the hot path and state the assumption.
 - Benchmarks: `dotnet run --project benchmarks/nextorm.benchmark -c Release -- --filter *<Class>*`
   (ShortRun by default; `NEXTORM_BENCH_FULL=1` for the full out-of-process job).
   Artifacts: `benchmarks/BenchmarkDotNet.Artifacts`.
-- Build `dotnet build nextorm.sln -c Release` (warnings are errors, CRLF).
+- Build `dotnet build nextorm.slnx -c Release` (warnings are errors, CRLF).
 
 ## Preloaded skills (load with the `skill` tool before starting)
 

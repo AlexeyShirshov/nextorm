@@ -1,4 +1,5 @@
 # TODO: Динамическая схема результата (ClickHouse `values()`, PostgreSQL `jsonb_to_record(set)`)
+> Tracking issue: [#63](https://github.com/AlexeyShirshov/nextorm/issues/63).
 
 > Рабочий план (design RFC). Источник: `docs/specs/roadmap/sql-capabilities-gap-analysis.md` §4 п.11.
 

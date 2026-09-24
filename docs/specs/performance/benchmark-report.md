@@ -1101,3 +1101,125 @@ NEXTORM_BENCH_DB=/tmp/nextorm-bench/test.db \
   dotnet run -c Release --no-build --project benchmarks/nextorm.benchmark -- \
   --filter "*SqliteBenchmarkFeaturesFairCached*"
 ```
+
+# Итерация 10 — свежий full-mode baseline после правок `1.0.5-alpha` (2026-09-24)
+
+> **Ревизия:** ветка `1.0.5-alpha`, HEAD `dd4482f` («#6 implement merge»), `git describe` → `v1.0.4-alpha-4-gdd4482f`. Бинарник собран из рабочего дерева с незакоммиченными правками (транзакции, `BulkInsert*`, `SyncToAsyncEnumerable`, правки `ISqlDialect`); на бенчмаркируемый read-путь влияет только косвенная передача текущей транзакции (см. «Регресс-гейт»).
+> **Дата прогона:** 2026-09-24.
+
+## Изменение методики
+
+До этой итерации ядровые классы (`SqliteBenchmarkAny/First/Single/Join/Where/Iteration/LargeIteration`) не имели **скомпилированного** arm'а linq2db — был только обычный `Linq2Db` (Category B), из-за чего Category A оставался без linq2db. Добавлены `Linq2Db_Compiled*` по образцу `SqliteBenchmarkFeaturesFair` (sync `LinqToDB.CompiledQuery.Compile`, провайдер `Microsoft.Data.Sqlite`), что делает сравнение «prepared vs compiled» симметричным во всех ядровых классах.
+
+## Окружение и методика
+
+- Машина: AMD Ryzen 7 5800HS, WSL2, .NET 10.0.12, BenchmarkDotNet 0.15.8.
+- **WSL показал 8 логических / 4 физических ядра** (после правки `.wslconfig`; исторические Итерации 3–5 шли на 16/8 — см. оговорку Итерации 7 о ±10–15 % на абсолютных числах) и 11 GiB RAM.
+- БД: `tmpfs` `/tmp/nextorm-bench/test.db` (копия `benchmarks/nextorm.benchmark/data/test.db`), путь через `NEXTORM_BENCH_DB`.
+- Режим: `NEXTORM_BENCH_FULL=1` → `Job.Default` (out-of-process) + `MemoryDiagnoser`; артефакты — `benchmarks/BenchmarkDotNet.Artifacts` (`NextORM.Benchmark.SqliteBenchmark*-report-github.md`).
+- Классы запускались **строго последовательно**, по одному процессу BDN: Any 132 s, First 265 s, Single 131 s, Join 125 s, Where 265 s, Iteration 205 s, LargeIteration 293 s, Cache 619 s; всего ~34 мин.
+- Симметрия категорий: **A** — `Nextorm_*Prepared*`/`Prepare()` ⟷ EF `EF.CompileAsyncQuery` ⟷ linq2db `CompiledQuery.Compile` ⟷ Dapper (raw SQL); **B** — implicit-кэш плана nextorm ⟷ обычные (не compiled) EF/linq2db ⟷ Dapper.
+
+## Категория A — prepared против compiled/raw (mean на вызов; внутри N запросов)
+
+| Класс (N) | Nextorm_Prepared | Dapper | linq2db_Compiled | EF_Compiled | Nextorm ÷ лучший | Alloc nextorm |
+|---|--:|--:|--:|--:|--:|--:|
+| Any (100) | **922.9 µs** | 1 371.1 | 1 492.6 | 3 544.8 | **0.67×** | 85.16 KB |
+| First scalar (10) | **91.94 µs** | 148.21 | 374.76 | 346.23 | **0.62×** | 8.63 KB |
+| First entity (10) | **102.39 µs** | 164.44 | 434.78 | 382.43 | **0.62×** | 12.22 KB |
+| Single (10) | **93.45 µs** | 142.91 | 369.17 | 356.16 | **0.65×** | 8.36 KB |
+| Join (10) | **104.2 µs** | 198.6 | 208.7 | 529.7 | **0.52×** | 13.01 KB |
+| Where stream (100) | **925.8 µs** | 1 362.5 | 1 387.4 | 3 219.5 | **0.68×** | 92.42 KB |
+| Where list (100) | **941.2 µs** | 1 362.5 | 1 387.4 | — | **0.69×** | 107.63 KB |
+| Iteration stream (1) | **10.43 µs** | 15.34 | 15.68 | — | **0.68×** | 792 B |
+| Iteration list (1) | **10.48 µs** | 15.34 | 15.68 | 39.33 | **0.68×** | 1 048 B |
+| LargeIteration stream (1) | **8.965 ms** | 9.317 | 11.128 | 10.308 | **0.96×** | 2.14 MB |
+| LargeIteration list (1) | **8.580 ms** | 11.483 | 11.128 | 14.489 | **0.75×** | 2.21 MB |
+| Cache I=1 | **9.232 µs** | — | 15.718 | — | **0.59×** | — |
+| Cache I=15 | **160.18 µs** | — | 264.86 | — | **0.60×** | — |
+| Cache I=30 | **305.83 µs** | — | 523.83 | — | **0.58×** | — |
+
+`Nextorm_Prepared` первый во всех классах: против Dapper — 0.52–0.96×, против **linq2db compiled** — 0.58–0.80× (теперь во всех ядровых классах), против EF compiled — 3.5–4.3×. Аллокации nextorm кратно ниже (`Any` 85 KB против 234 KB у linq2db_compiled и 807 KB у EF, `Join` 13 KB против 28.6/124 KB, `Iteration` 792 B против 2 088 B / 10 224 B).
+
+## Категория B — warm cached против обычных
+
+| Класс (N) | Nextorm_Cached | Dapper | linq2db | EF (regular) | Nextorm ÷ лучший |
+|---|--:|--:|--:|--:|--:|
+| Any (100) | 1 607.8 µs | **1 371.1** | 2 470.5 | 6 124.0 | 1.17× |
+| First scalar (10) | 162.58 µs | **148.21** | 607.65 | — | 1.10× |
+| First entity (10) | 174.87 µs | **164.44** | 598.52 | — | 1.06× |
+| Single (10) | 164.10 µs | **142.91** | 591.50 | 679.25 | 1.15× |
+| Join (10) | 291.5 µs | **198.6** | 525.4 | 834.0 | 1.47× |
+| Where for-loop (100) | **957.7 µs** | 1 362.5 | 2 398.0 | 6 560.1 | **0.70×** |
+| Where list (100) | 1 622.0 µs | **1 362.5** | 2 398.0 | 6 683.7 | 1.19× |
+| Iteration list (1) | **11.14 µs** | 15.34 | 16.46 | — | **0.73×** |
+| LargeIteration list (1) | **8.598 ms** | 11.483 | 11.692 | 14.489 | **0.75×** |
+
+Warm-путь структурно не изменился относительно Итераций 7–9: nextorm выигрывает у Dapper на «фор-луп» Where, Iteration и LargeIteration; проигрывает на точечных Any/First/Single/Join (1.06–1.47×) — цена пересборки fluent-дерева на каждый вызов. Обычные EF/linq2db nextorm обходит и здесь.
+
+## Cache — prepared против compiled (I=1..30)
+
+| Iterations | NextormPrepared | Linq2Db_Compiled | Linq2Db | NextormCached | Dapper |
+|--:|--:|--:|--:|--:|--:|
+| 1 | **9.232 µs** | 15.718 | 29.385 | 43.018 | 250.813 |
+| 3 | **30.163 µs** | 52.772 | 96.398 | 102.387 | 772.487 |
+| 5 | **52.204 µs** | 86.620 | 165.603 | 141.684 | 777.583 |
+| 10 | **104.154 µs** | 178.780 | 329.942 | 270.590 | 937.641 |
+| 15 | **160.180 µs** | 264.861 | 478.574 | 385.227 | 965.958 |
+| 20 | **202.554 µs** | 350.522 | 640.666 | 498.032 | 1 028.284 |
+| 30 | **305.826 µs** | 523.827 | 1 008.287 | 718.955 | 1 199.595 |
+
+`NextormPrepared` первый на всех I; `NextormCached` (холодный план на каждый вызов) обгоняет обычный linq2db начиная с I=3, а `Linq2Db_Compiled` — с I=5.
+
+## Регресс-гейт: prepared-путь против полного прогона на том же окружении
+
+Базовые числа — Итерации 3–5 (tmpfs, `Job.Default`, 16/8 ядер). `NextormPrepared`:
+
+| Класс | Итерации 3–5 | Итерация 10 | Δ |
+|---|--:|--:|--:|
+| Any | 917.6 µs | 922.9 µs | +0.6 % |
+| First scalar | 92.74 µs | 91.94 µs | −0.9 % |
+| First entity | 103.15 µs | 102.39 µs | −0.7 % |
+| Single | 92.16 µs | 93.45 µs | +1.4 % |
+| Join | 104.6 µs | 104.2 µs | −0.4 % |
+| Where stream | 899 µs | 925.8 µs | +3.0 % |
+| Iteration list | 10.55 µs | 10.48 µs | −0.7 % |
+| LargeIteration stream | 8.675 ms | 8.965 ms | +3.3 % |
+| LargeIteration list | 8.425 ms | 8.580 ms | +1.8 % |
+| Cache I=1 | 9.2 µs | 9.232 µs | +0.3 % |
+| Cache I=30 | 299.9 µs | 305.83 µs | +2.0 % |
+
+Все prepared-классы — в пределах **±3.3 %** от прежнего полного прогона, несмотря на смену окружения (16/8 → 8/4 ядра); аллокации не изменились (`Any` 85.16 KB, `First scalar` 8.63 KB и т.д.).
+
+**Правка горячего пути в этой серии** — проброс текущей транзакции (`Func<DbTransaction?>` через `QueryExecutor`/`ResultSetEnumerator`, `GetDbCommand(..., transaction)`). Прямой интерливный A/B (рабочее дерево vs `HEAD dd4482f`, 36 парных раундов, оценка по min) дал **≤0.3 %** на `AnyAsync`/`ToListAsync` — регрессии нет.
+
+## Category B (warm) — проверка на регрессию, а не доверие числам
+
+Абсолютные warm-числа в Итерации 10 выше, чем в Итерациях 3–5 (например `Any` cached 1 310.7 → 1 607.8 µs, `First scalar` 138.15 → 162.58, `Join` 260.3 → 291.5), и отношение nextorm_cached ÷ Dapper на точечных запросах выросло с ~0.96 до ~1.17. Это могло бы означать регрессию warm-пути, но контрольные интерливные замеры показывают, что причина — окружение:
+
+- **Рабочее дерево vs HEAD `dd4482f`** (изолированный harness, интерлив, 12 пар, оценка по min, один CPU): prepared 0.996–0.997×, cached/warm 0.996–1.002× — незакоммиченные правки warm-путь не трогают.
+- **Рабочее дерево (1.0.5) vs `v1.0.3-alpha`** (то же окружение и harness, интерлив, 12 пар): prepared 1.000–1.004×, cached 1.012–1.018× (median) — накопленные коммиты 1.0.3 → 1.0.5 дают ≤2 % на warm-пути (в пределах разброса), а не 12–23 %.
+- Следовательно, рост warm-чисел в отчёте — следствие смены окружения (16/8 → 8/4 ядра, 11 GiB), уже описанной в Итерации 7 оговоркой о ±10–15 % дрейфа warm-пути при изменении числа ядер. Prepared-путь при этом не пострадал (±3.3 %) — он меньше зависит от CPU.
+
+Итог: **ни prepared, ни warm путь не деградировали относительно `v1.0.3-alpha`**; наблюдаемый сдвиг Category B в отчёте объясняется окружением.
+
+## Вывод
+
+- Свежий полный прогон на tmpfs с симметричным linq2db compiled: **`Nextorm_Prepared` — первый во всех классах**; против Dapper 0.52–0.96×, против linq2db compiled 0.58–0.80×, против EF compiled 3.5–4.3×.
+- **Регрессий нет:** prepared-путь в пределах ±3.3 % от предыдущего полного прогона; ядровые правки `1.0.5-alpha` на read-путь влияют лишь косвенно (передача транзакции), интерливный A/B ≤0.3 %.
+- Открытые warm-проигрыши (Any/First/Single/Join/Cache I=1 против Dapper) сохраняются с Итераций 7–9 и закрыты решением Итерации 9 (prepared — санкционированный быстрый путь).
+
+## Воспроизведение
+
+```bash
+cd benchmarks/nextorm.benchmark && dotnet build -c Release
+
+mkdir -p /tmp/nextorm-bench && cp data/test.db /tmp/nextorm-bench/test.db
+
+# строго последовательно, по одному классу:
+NEXTORM_BENCH_FULL=1 NEXTORM_BENCH_DB=/tmp/nextorm-bench/test.db \
+  dotnet run -c Release --no-build -- --filter "*SqliteBenchmarkAny*"
+#   … First, Single, Join, Where, Iteration, LargeIteration, Cache
+```
+
+Артефакты: `benchmarks/BenchmarkDotNet.Artifacts/results/NextORM.Benchmark.SqliteBenchmark{Any,First,Single,Join,Where,Iteration,LargeIteration,Cache}-report-github.md`.

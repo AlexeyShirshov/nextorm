@@ -1,4 +1,5 @@
 # TODO: ClickHouse `AggregateFunction(...)` state type (`-State`/`-Merge`, `runningAccumulate`)
+> Tracking issue: [#62](https://github.com/AlexeyShirshov/nextorm/issues/62).
 
 > Рабочий план (design RFC). Источник: `docs/specs/roadmap/sql-capabilities-gap-analysis.md` §4 п.6.
 > **Статус: заблокировано драйвером `ClickHouse.Driver` 1.4.0** (проверено 22.09.2026).
@@ -36,7 +37,10 @@
 ## Текущее состояние
 
 - `uniqExact`/`count_distinct` есть; `uniqState`/`uniqMerge` не выражаются.
-- Пример `examples/nextorm.examples.clickhouse.analytics` (`Incremental`) обходит это сырым SQL.
+- Пример `examples/nextorm.examples.clickhouse.analytics` (`Incremental`) попадает сюда явно: запрос
+  выражается естественно и бросает `NotSupportedException` (сырым SQL не заменяется). Остальные
+  array/tuple-запросы примера (`ArrayAnalytics`, `Retention`) после перехода на пакеты `1.0.4-alpha`
+  теперь выражаются через `array_map`/`array_filter`/`group_array`.
 
 ## Дизайн (черновик)
 

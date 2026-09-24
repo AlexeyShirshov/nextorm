@@ -39,4 +39,11 @@ public interface IContextEnvironment
     /// are emitted verbatim) so existing external implementations keep compiling.
     /// </summary>
     INamingConvention? NamingConvention => null;
+
+    /// <summary>
+    /// The context-wide default case for SQL keywords (see <c>DataContextBuilder.UseKeywordCase</c>).
+    /// A command can override it with <c>WithKeywordCase</c>. The default implementation returns
+    /// <see cref="NextORM.Core.KeywordCase.Lower"/> so existing external implementations keep compiling.
+    /// </summary>
+    KeywordCase KeywordCase => NextORM.Core.KeywordCase.Lower;
 }

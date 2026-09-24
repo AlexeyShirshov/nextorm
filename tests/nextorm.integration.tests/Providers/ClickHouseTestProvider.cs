@@ -35,6 +35,13 @@ internal sealed class ClickHouseTestProvider : ITestProvider
     public bool SupportsTableValuedFunctions => false;
     public bool EnforcesScalarSubqueryCardinality => true;
     public bool SupportsApply => false;
+    public bool SupportsInsertReturning => false;
+    public bool SupportsIgnoreDuplicates => false;
+    public bool SupportsTruncate => true;
+    public bool SupportsDeleteJoin => false;
+    public bool SupportsCreateTableAsSelect => true;
+    public bool SupportsTemporaryCreateTableAsSelect => false;
+    public bool SupportsTransactions => false;
     public string TableValuedFunctionSkipReason => "The shared table-valued function test uses SQLite's json_each; no portable equivalent is configured for ClickHouse.";
 
     public string SkipReason => ClickHouseContainer.Failure ?? "ClickHouse is not available.";
@@ -182,6 +189,16 @@ internal sealed class ClickHouseTestProvider : ITestProvider
         insert into tuple_entity (id, pair) values
             (1, (7, 'seven')),
             (2, (9, 'nine'))
+        """,
+
+        "drop table if exists insert_entity",
+        """
+        create table insert_entity
+        (
+            id Int64 DEFAULT 0,
+            name Nullable(String),
+            age Int32
+        ) engine = Memory
         """
     ];
 }

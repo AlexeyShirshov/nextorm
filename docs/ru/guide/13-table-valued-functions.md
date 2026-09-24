@@ -487,6 +487,7 @@ select id as `Id`, name as `Name` from url(@url, @format, @structure) as `t1`
 
 * [Соединения](03-joins.md) — соединение TVF с таблицей или другим TVF.
 * [Пользовательские функции](12-user-defined-functions.md) — скалярный эквивалент.
+* [Инструкция INSERT](19-insert-statement.md) — TVF (`unnest`, `generate_series`) как источник `INSERT ... SELECT`.
 * [Обзор провайдеров](../providers/overview.md) — требование псевдонима TVF для каждого провайдера.
 
 ---

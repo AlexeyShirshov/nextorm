@@ -57,9 +57,11 @@ select id from simple_entity with (updlock)
 
 ## `FOR JSON` и `FOR XML`
 
-`ForJson`/`ForXml` формируют результат как JSON или XML
+`ForJson`/`ForXml` — терминалы: выполняют запрос и возвращают весь набор одним JSON- или
+XML-документом
 ([`SupportsForJson`](xref:NextORM.Core.ISqlDialect.SupportsForJson)/[`SupportsForXml`](xref:NextORM.Core.ISqlDialect.SupportsForXml));
-они взаимоисключающи. См. [Поддержка JSON в разных провайдерах](../18-json.md).
+`WithForJson`/`WithForXml` присоединяют предложение без выполнения; два вида предложений
+взаимоисключающи. См. [Поддержка JSON в разных провайдерах](../18-json.md).
 
 ## Методы типа XML
 
@@ -200,15 +202,14 @@ order by CategoryName
 
 ## `TABLESAMPLE`
 
-[`TableSample`](xref:NextORM.Core.EntityBuilder`1.TableSample(System.Double,NextORM.Core.TableSampleMethod,System.Nullable{System.Double})) добавляет модификатор `TABLESAMPLE` к
+[`FromOptions.TableSample`](xref:NextORM.Core.FromOptions.TableSample(System.Double,NextORM.Core.TableSampleMethod,System.Nullable{System.Double})) добавляет модификатор `TABLESAMPLE` к
 основной таблице запроса ([`TableSample`](xref:NextORM.Core.ISqlDialect.TableSample));
 необязательный seed делает выборку воспроизводимой. SQL Server рендерит
 `tablesample (10 percent)` / `tablesample (10 percent) repeatable (3)`
 (`ITableSampleMethods.Render`).
 
 ```csharp
-var rows = await dataContext.From<ISimpleEntity>()
-    .TableSample(10, TableSampleMethod.System, seed: 3)
+var rows = await dataContext.From<ISimpleEntity>(o => o.TableSample(10, TableSampleMethod.System, seed: 3))
     .Select(x => x.Id)
     .ToListAsync();
 ```

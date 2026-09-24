@@ -163,10 +163,11 @@ select count(*) from simple_entity as 't1' cross join complex_entity as 't2'
 таблица `QueryCommand<T>`, необработанная таблица или табличная функция, — но без условия `ON`:
 
 * [`CrossApply`](xref:NextORM.Core.EntityBuilder`1.CrossApply``1(NextORM.Core.EntityBuilder{``0})) оставляет только те строки левой стороны, для которых применяемый источник возвращает
-  хотя бы одну строку (SQL Server `CROSS APPLY`, PostgreSQL/MySQL/MariaDB `CROSS JOIN LATERAL`);
+  хотя бы одну строку (SQL Server `CROSS APPLY`, PostgreSQL/MySQL/MariaDB `CROSS JOIN LATERAL`, либо
+  обычный `CROSS JOIN` для простой таблицы — `LATERAL` допустим только перед подзапросом или функцией);
 * [`OuterApply`](xref:NextORM.Core.EntityBuilder`1.OuterApply``1(NextORM.Core.EntityBuilder{``0})) дополнительно сохраняет строки левой стороны с пустым применяемым источником, заполняя
   правую сторону значением `NULL` (SQL Server `OUTER APPLY`, PostgreSQL/MySQL/MariaDB
-  `LEFT JOIN LATERAL ... ON true`).
+  `LEFT JOIN LATERAL ... ON true`, либо обычный `LEFT JOIN ... ON true` для простой таблицы).
 
 ```csharp
 var rows = await dataContext.From<ISimpleEntity>()
@@ -179,7 +180,7 @@ var rows = await dataContext.From<ISimpleEntity>()
 -- SQL Server
 select t1.id, t2.somestring from simple_entity as [t1] cross apply complex_entity as [t2]
 -- PostgreSQL / MySQL / MariaDB
-select t1.id, t2.somestring from simple_entity as t1 cross join lateral complex_entity as t2
+select t1.id, t2.somestring from simple_entity as t1 cross join complex_entity as t2
 ```
 
 `OUTER APPLY` по производной таблице:
@@ -455,8 +456,8 @@ select t1.id from simple_entity as `t1` left semi join complex_entity as `t2` on
 |---|---|---|---|---|
 | SQLite | `as 't1'` | необязателен | поддержаны left/right/full | не поддерживается (`NotSupportedException`) |
 | SQL Server | `as [t1]` | обязателен | поддержаны left/right/full | `CROSS APPLY` / `OUTER APPLY` |
-| PostgreSQL | `as "t1"` | обязателен | поддержаны left/right/full | `CROSS JOIN LATERAL` / `LEFT JOIN LATERAL ... ON true` |
-| MySQL / MariaDB | `as \`t1\`` | обязателен | поддержаны left/right (без full) | `CROSS JOIN LATERAL` / `LEFT JOIN LATERAL ... ON true` |
+| PostgreSQL | `as "t1"` | обязателен | поддержаны left/right/full | `CROSS JOIN LATERAL` / `LEFT JOIN LATERAL ... ON true` (простые таблицы: `CROSS JOIN` / `LEFT JOIN ... ON true`) |
+| MySQL / MariaDB | `as \`t1\`` | обязателен | поддержаны left/right (без full) | `CROSS JOIN LATERAL` / `LEFT JOIN LATERAL ... ON true` (простые таблицы: `CROSS JOIN` / `LEFT JOIN ... ON true`) |
 | ClickHouse | `as \`t1\`` | обязателен | поддержаны left/right/full | не поддерживается (`NotSupportedException`) |
 | In-memory | неприменимо (выполнение через делегаты) | неприменимо | поддержаны inner/left/right/full/cross; APPLY и источники в виде табличных функций — нет | не поддерживается (включая коррелированный apply) |
 

@@ -3,6 +3,8 @@ using NextORM.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Data.Sqlite;
 using Dapper;
+using LinqToDB;
+using IDataContext = NextORM.Core.IDataContext;
 using Microsoft.Extensions.Logging;
 using BenchmarkDotNet.Jobs;
 using NextORM.Core;
@@ -152,4 +154,28 @@ public class SqliteBenchmarkFirst
         for (int i = 0; i < 10; i++)
             await _linq2Db.FirstScalarAsync(i);
     }
+    [Benchmark]
+    public long Linq2Db_Compiled_Entity_FirstOrDefault()
+    {
+        long n = 0;
+        for (int i = 0; i < 10; i++)
+            n += _l2dbFirstLarge(_linq2Db.Db, i)?.Id ?? 0;
+        _sink = n;
+        return n;
+    }
+    [Benchmark]
+    public long Linq2Db_Compiled_Scalar_FirstOrDefault()
+    {
+        long n = 0;
+        for (int i = 0; i < 10; i++)
+            n += _l2dbFirstScalar(_linq2Db.Db, i);
+        _sink = n;
+        return n;
+    }
+
+    private long _sink;
+    private static readonly Func<LinqToDB.IDataContext, int, Linq2DbLargeEntity?> _l2dbFirstLarge = LinqToDB.CompiledQuery.Compile(
+        (LinqToDB.IDataContext db, int id) => db.GetTable<Linq2DbLargeEntity>().FirstOrDefault(it => it.Id == id));
+    private static readonly Func<LinqToDB.IDataContext, int, int> _l2dbFirstScalar = LinqToDB.CompiledQuery.Compile(
+        (LinqToDB.IDataContext db, int id) => db.GetTable<Linq2DbSimpleEntity>().Where(it => it.Id == id).Select(it => it.Id).FirstOrDefault());
 }

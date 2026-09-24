@@ -3,6 +3,8 @@ using NextORM.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Data.Sqlite;
 using Dapper;
+using LinqToDB;
+using IDataContext = NextORM.Core.IDataContext;
 using Microsoft.Extensions.Logging;
 using System.Data;
 using System.Linq.Expressions;
@@ -192,6 +194,16 @@ public class SqliteBenchmarkLargeIteration
         {
         }
     }
+    [Benchmark]
+    public long Linq2Db_Compiled_ToList()
+    {
+        _sink = _l2dbAllLarge(_linq2Db.Db).Count;
+        return _sink;
+    }
+
+    private long _sink;
+    private static readonly Func<LinqToDB.IDataContext, List<Linq2DbLargeEntity>> _l2dbAllLarge = LinqToDB.CompiledQuery.Compile(
+        (LinqToDB.IDataContext db) => db.GetTable<Linq2DbLargeEntity>().Select(it => new Linq2DbLargeEntity { Id = it.Id, Str = it.Str, Dt = it.Dt }).ToList());
     // [Benchmark]
     // public async Task IterateManual()
     // {

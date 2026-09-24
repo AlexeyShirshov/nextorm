@@ -3,6 +3,8 @@ using NextORM.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Data.Sqlite;
 using Dapper;
+using LinqToDB;
+using IDataContext = NextORM.Core.IDataContext;
 using Microsoft.Extensions.Logging;
 using BenchmarkDotNet.Jobs;
 using NextORM.Core;
@@ -150,6 +152,20 @@ public class SqliteBenchmarkAny
         for (var i = 0; i < Iterations; i++)
             await _linq2Db.AnyAsync(i);
     }
+    [Benchmark]
+    public long Linq2Db_Compiled()
+    {
+        long n = 0;
+        for (var i = 0; i < Iterations; i++)
+            if (_l2dbAny(_linq2Db.Db, i)) n++;
+        _sink = n;
+        return n;
+    }
+
+    private long _sink;
+    private static readonly Func<LinqToDB.IDataContext, int, bool> _l2dbAny = LinqToDB.CompiledQuery.Compile(
+        (LinqToDB.IDataContext db, int id) => db.GetTable<Linq2DbSimpleEntity>().Any(it => it.Id == id));
+
     // [Benchmark()]
     // [BenchmarkCategory("Filter")]
     // public async Task NextormFilterCompiled()

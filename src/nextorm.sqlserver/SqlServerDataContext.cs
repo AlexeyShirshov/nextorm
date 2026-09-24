@@ -2,6 +2,7 @@
 using System.Data.Common;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.ExceptionServices;
 using Microsoft.Data.SqlClient;
 using NextORM.Core;
 
@@ -106,4 +107,120 @@ public class SqlServerDataContext : DataContext
     private static bool IsNumeric(Type type) => type == typeof(byte) || type == typeof(short)
         || type == typeof(int) || type == typeof(long) || type == typeof(float)
         || type == typeof(double) || type == typeof(decimal);
+
+    /// <summary>
+    /// Writes <paramref name="rows"/> through <c>SqlBulkCopy</c>. The rows are buffered in a
+    /// <see cref="DataTable"/> because <c>SqlBulkCopy</c> needs column type metadata; the whole set is
+    /// held in memory before the copy starts.
+    /// </summary>
+    /// <param name="tableName">The convention-resolved (unquoted) target table name.</param>
+    /// <param name="columnNames">The convention-resolved (unquoted) written column names, in row order.</param>
+    /// <param name="columns">The mapped columns, in row order.</param>
+    /// <param name="rows">The rows to write; each array matches <paramref name="columnNames"/> by ordinal.</param>
+    /// <param name="commandTimeoutSeconds">The <c>SqlBulkCopy</c> timeout in seconds, or <see langword="null"/> for the 30s default.</param>
+    /// <param name="maxBatchSize">The <c>SqlBulkCopy.BatchSize</c> in rows, or <see langword="null"/> for one batch.</param>
+    /// <param name="progress">Called with the cumulative written-row count on each native progress tick, or <see langword="null"/>.</param>
+    /// <param name="notifyEvery">The progress reporting interval in rows.</param>
+    /// <returns>The number of rows written.</returns>
+    protected override int BulkInsertRows(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IEnumerable<object?[]> rows, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery)
+    {
+        EnsureConnectionOpen();
+        var table = BuildTable(columnNames, columns);
+        var count = 0;
+
+        foreach (var row in rows)
+        {
+            table.Rows.Add(row);
+            count++;
+        }
+
+        using (table)
+        {
+            using var bulk = CreateBulkCopy(tableName, columnNames, commandTimeoutSeconds, maxBatchSize, progress, notifyEvery);
+
+            try
+            {
+                bulk.WriteToServer(table);
+            }
+            catch (Microsoft.Data.OperationAbortedException ex) when (ex.InnerException is OperationCanceledException)
+            {
+                ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+            }
+        }
+
+        return count;
+    }
+
+    /// <summary>Asynchronously writes <paramref name="rows"/> through <c>SqlBulkCopy</c>.</summary>
+    /// <param name="tableName">The convention-resolved (unquoted) target table name.</param>
+    /// <param name="columnNames">The convention-resolved (unquoted) written column names, in row order.</param>
+    /// <param name="columns">The mapped columns, in row order.</param>
+    /// <param name="rows">The rows to write; each array matches <paramref name="columnNames"/> by ordinal.</param>
+    /// <param name="commandTimeoutSeconds">The <c>SqlBulkCopy</c> timeout in seconds, or <see langword="null"/> for the 30s default.</param>
+    /// <param name="maxBatchSize">The <c>SqlBulkCopy.BatchSize</c> in rows, or <see langword="null"/> for one batch.</param>
+    /// <param name="progress">Called with the cumulative written-row count on each native progress tick, or <see langword="null"/>.</param>
+    /// <param name="notifyEvery">The progress reporting interval in rows.</param>
+    /// <param name="cancellationToken">Cancels execution.</param>
+    /// <returns>A task producing the number of rows written.</returns>
+    protected override async Task<int> BulkInsertRowsAsync(string tableName, IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns, IAsyncEnumerable<object?[]> rows, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery, CancellationToken cancellationToken)
+    {
+        await EnsureConnectionOpenAsync(cancellationToken).ConfigureAwait(false);
+        var table = BuildTable(columnNames, columns);
+        var count = 0;
+
+        await foreach (var row in rows.WithCancellation(cancellationToken).ConfigureAwait(false))
+        {
+            table.Rows.Add(row);
+            count++;
+        }
+
+        using (table)
+        {
+            using var bulk = CreateBulkCopy(tableName, columnNames, commandTimeoutSeconds, maxBatchSize, progress, notifyEvery);
+
+            try
+            {
+                await bulk.WriteToServerAsync(table, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Microsoft.Data.OperationAbortedException ex) when (ex.InnerException is OperationCanceledException)
+            {
+                ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+            }
+        }
+
+        return count;
+    }
+
+    private SqlBulkCopy CreateBulkCopy(string tableName, IReadOnlyList<string> columnNames, int? commandTimeoutSeconds, int? maxBatchSize, Action<int>? progress, int notifyEvery)
+    {
+        var connection = (SqlConnection)GetConnection();
+        var transaction = (this as ITransactionManager)?.CurrentTransaction as SqlTransaction;
+
+        var bulk = new SqlBulkCopy(connection, SqlBulkCopyOptions.Default, transaction)
+        {
+            DestinationTableName = tableName,
+            BulkCopyTimeout = commandTimeoutSeconds ?? 30,
+            BatchSize = maxBatchSize ?? 0
+        };
+
+        for (var i = 0; i < columnNames.Count; i++)
+            bulk.ColumnMappings.Add(columnNames[i], columnNames[i]);
+
+        if (progress is not null)
+        {
+            bulk.NotifyAfter = notifyEvery;
+            bulk.SqlRowsCopied += (_, e) => progress((int)e.RowsCopied);
+        }
+
+        return bulk;
+    }
+
+    private static DataTable BuildTable(IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns)
+    {
+        var table = new DataTable();
+        for (var i = 0; i < columnNames.Count; i++)
+            table.Columns.Add(columnNames[i], Nullable.GetUnderlyingType(columns[i].PropertyInfo.PropertyType) ?? columns[i].PropertyInfo.PropertyType);
+
+        return table;
+    }
 }

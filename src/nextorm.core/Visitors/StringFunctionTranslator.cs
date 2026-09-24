@@ -378,8 +378,8 @@ internal static class StringFunctionTranslator
         var value = visitor.VisitToString(node.Object);
         var pattern = BuildLikePattern(visitor, args[0], position, out var escaped);
         var predicate = escaped
-            ? $"{value} like {pattern}{visitor.Dialect.MakeLikeEscape("\\")}"
-            : $"{value} like {pattern}";
+            ? $"{value} {visitor.Kw("like")} {pattern}{visitor.Dialect.MakeLikeEscape("\\", visitor.KeywordCase)}"
+            : $"{value} {visitor.Kw("like")} {pattern}";
         visitor.Builder!.Append(visitor.Dialect.MakeBooleanPredicate(predicate, visitor.IsPredicateContext));
         return true;
     }
@@ -398,7 +398,7 @@ internal static class StringFunctionTranslator
 
         visitor.NeedAliasForColumn = true;
         var value = visitor.VisitToString(args[0]);
-        visitor.Builder!.Append(visitor.Dialect.MakeBooleanPredicate($"({value} is null or {value} = {visitor.Dialect.EmptyString})", visitor.IsPredicateContext));
+        visitor.Builder!.Append(visitor.Dialect.MakeBooleanPredicate($"({value} {visitor.Kw("is null")} {visitor.Kw("or")} {value} = {visitor.Dialect.EmptyString})", visitor.IsPredicateContext));
         return true;
     }
 

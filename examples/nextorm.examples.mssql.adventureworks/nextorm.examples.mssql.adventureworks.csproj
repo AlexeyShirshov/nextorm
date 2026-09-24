@@ -9,12 +9,9 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.SqlClient" />
     <PackageReference Include="Microsoft.Extensions.Logging.Console" />
+    <PackageReference Include="nextorm" />
+    <PackageReference Include="nextorm.sqlserver" />
     <PackageReference Include="Testcontainers.MsSql" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\..\src\nextorm.core\nextorm.core.csproj" />
-    <ProjectReference Include="..\..\src\nextorm.sqlserver\nextorm.sqlserver.csproj" />
   </ItemGroup>
 
 </Project>

@@ -42,6 +42,23 @@ nextorm состоит из нейтрального к провайдеру я�
 |---|---|---|---|---|---|---|---|
 | Пакет | `nextorm.sqlite` | `nextorm.sqlserver` | `nextorm.postgres` | `nextorm.mysql` | `nextorm.mariadb` | `nextorm.clickhouse` | встроен в `nextorm` |
 | Плейсхолдер параметра | `$name` | `@name` | `@name` | `@name` | `@name` | `@name` | не применимо |
+| Транзакции (`ITransactionManager`) | поддерживается | поддерживается | поддерживается | поддерживается | поддерживается | бросает `NotSupportedException` | не применимо (нет соединения) |
+| `INSERT ... VALUES` | поддерживается | поддерживается | поддерживается | поддерживается | поддерживается | поддерживается (малые батчи) | бросает `NotSupportedException` |
+| Key upsert (`MergeInto`) | `ON CONFLICT ... DO UPDATE` | `MERGE ... USING (VALUES ...)` | `ON CONFLICT ... DO UPDATE` | `ON DUPLICATE KEY UPDATE` | `ON DUPLICATE KEY UPDATE` | бросает `NotSupportedException` | применяется в контексте (upsert) |
+| Полный `MERGE` (`WhenMatched`/`WhenNotMatched`, ветки) | бросает `NotSupportedException` | `MERGE ... WHEN MATCHED THEN ...` | `MERGE ... WHEN MATCHED THEN ...` (15+) | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` |
+| Условие совпадения merge (`On`/`WhenMatched(condition)`) | бросает `NotSupportedException` | `ON <condition>` / `WHEN ... AND <condition>` | `ON <condition>` / `WHEN ... AND <condition>` | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` |
+| `MERGE ... RETURNING`/`OUTPUT` (`Returning`) | бросает `NotSupportedException` | `OUTPUT inserted.<col>` | `RETURNING target.<col>` (17+) | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` |
+| `DELETE` (`DeleteFrom`/`Delete`) | поддерживается | поддерживается | поддерживается | поддерживается | поддерживается | `ALTER TABLE ... DELETE ... SETTINGS mutations_sync = 1` | бросает `NotSupportedException` |
+| `UPDATE` (`Update`/`Update(entity)`) | поддерживается | поддерживается | поддерживается | поддерживается | поддерживается | `ALTER TABLE ... UPDATE ... SETTINGS mutations_sync = 1` | бросает `NotSupportedException` |
+| `UPDATE ... RETURNING` (`Returning`) | `RETURNING` | `OUTPUT inserted.<col>` | `RETURNING` | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` |
+| `UPDATE ... FROM` (`UpdateJoin`) | `UPDATE ... FROM` | `UPDATE <alias> ... FROM ... JOIN` | `UPDATE ... FROM` | `UPDATE ... JOIN ... SET` | `UPDATE ... JOIN ... SET` | бросает `NotSupportedException` | бросает `NotSupportedException` |
+| `DELETE ... RETURNING` (`Returning`) | `RETURNING` | `OUTPUT deleted.<col>` | `RETURNING` | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` |
+| `TRUNCATE` (`Truncate`) | бросает `NotSupportedException` | поддерживается | поддерживается | поддерживается | поддерживается | поддерживается | бросает `NotSupportedException` |
+| Материализация запроса (`ToTempTable`/`ToTable`) | `CREATE [TEMPORARY] TABLE ... AS SELECT` | `SELECT ... INTO` (`ToTable`; уровня сессии через `#name`) | `CREATE [TEMPORARY] TABLE ... AS SELECT` | `CREATE [TEMPORARY] TABLE ... AS SELECT` | `CREATE [TEMPORARY] TABLE ... AS SELECT` | `CREATE TABLE ... ENGINE = MergeTree ... AS SELECT` (`ToTable`) | бросает `NotSupportedException` |
+| `DELETE ... USING`/join (`From<T>().Join(...).Delete()`, INNER) | бросает `NotSupportedException` | `DELETE <a> FROM ... JOIN ...` | `DELETE FROM ... USING ...` | `DELETE <a> FROM ... JOIN ...` | `DELETE <a> FROM ... JOIN ...` | бросает `NotSupportedException` | бросает `NotSupportedException` |
+| Сгенерированный ключ (`ReturningIdentity`/`ReturningKey`) | `RETURNING` | `OUTPUT inserted.<col>` | `RETURNING` | фолбэк `LAST_INSERT_ID()` | фолбэк `LAST_INSERT_ID()` | бросает `NotSupportedException` | бросает `NotSupportedException` |
+| Identity-функция (`ReturningIdentity<TKey>()`) | `last_insert_rowid()` | `SCOPE_IDENTITY()` | `lastval()` | `LAST_INSERT_ID()` | `LAST_INSERT_ID()` | бросает `NotSupportedException` | бросает `NotSupportedException` |
+| Возврат вставленных строк (`Returning`) | `RETURNING` | `OUTPUT inserted.<cols>` | `RETURNING` | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` | бросает `NotSupportedException` |
 | Только limit | `limit n` | `top(n)` | `limit n` | `limit n` | `limit n` | `limit n` | take в процессе |
 | Limit + offset | `limit n offset m` | `offset m rows fetch next n rows only` | `limit n offset m` | `limit n offset m` | `limit n offset m` | `limit n offset m` | skip/take в процессе |
 | Только offset | `limit -1 offset m` | `offset m rows` | `offset m` | `limit 18446744073709551615 offset m` | `limit 18446744073709551615 offset m` | `limit 18446744073709551615 offset m` | skip в процессе |
@@ -85,6 +102,7 @@ nextorm состоит из нейтрального к провайдеру я�
 | `FOR JSON` / `FOR XML` | **Гейт (SQL Server)** | `SupportsForJson`/`SupportsForXml`. |
 | Хинты уровня инструкции | **Унифицировано** | SQL Server `OPTION (...)`, PostgreSQL/MySQL/MariaDB встроенный `/*+ ... */`; SQLite/ClickHouse без синтаксиса и остаются под гейтом (см. [Хинты запросов](../guide/17-query-hints.md)). |
 | Блокирующие табличные хинты vs index hints | **Оставить провайдерным** | У `WITH (NOLOCK)` нет аналога среди index hints MySQL/MariaDB/SQLite (`USE INDEX`/`INDEXED BY` меняют план, а не блокировки), поэтому подключён только SQL Server (`SupportsTableHints`). |
+| Режимы ожидания блокировки строк (`NOWAIT`/`SKIP LOCKED`) | **Унифицировано** | [`ILockRenderer.Render`](xref:NextORM.Core.ILockRenderer.Render(NextORM.Core.LockMode,NextORM.Core.LockWaitMode,NextORM.Core.KeywordCase)) рендерит родную форму каждого способного провайдера: PostgreSQL/MySQL/MariaDB дописывают `NOWAIT`/`SKIP LOCKED` (MySQL переключает разделяемую блокировку на `FOR SHARE`), SQL Server добавляет `NOWAIT`/`READPAST` в блокирующий табличный хинт (`READPAST` приближает `SKIP LOCKED`); SQLite/ClickHouse/in-memory отклоняют любую блокировку строк. |
 | Сырой SQL как композируемый источник `FROM` | **Унифицировано** | `FromSql` + `SupportsRawSqlSource` у всех SQL-провайдеров (см. [Сырой SQL](../guide/14-raw-sql.md)). |
 | `INTERSECT ALL`/`EXCEPT ALL` | **Гейт** | PostgreSQL и MariaDB поддерживают; SQL Server/SQLite/MySQL отклоняют через `SupportsIntersectExceptAll`. |
 
@@ -93,7 +111,7 @@ nextorm состоит из нейтрального к провайдеру я�
 ## Как подключается диалект
 
 Диалект реализует [`ISqlDialect`](xref:NextORM.Core.ISqlDialect) или наследуется от [`SqlDialectBase`](xref:NextORM.Core.SqlDialectBase). В [`SqlDialectBase`](xref:NextORM.Core.SqlDialectBase) абстрактными являются только
-[`MakeParam`](xref:NextORM.Core.ISqlDialect.MakeParam(System.String)) и [`MakePage`](xref:NextORM.Core.ISqlDialect.MakePage(NextORM.Core.Paging,System.Text.StringBuilder)); у всех остальных членов есть рабочее значение по умолчанию ANSI, поэтому диалект
+[`MakeParam`](xref:NextORM.Core.ISqlDialect.MakeParam(System.String)) и [`MakePage`](xref:NextORM.Core.ISqlDialect.MakePage(NextORM.Core.Paging,System.Text.StringBuilder,NextORM.Core.KeywordCase)); у всех остальных членов есть рабочее значение по умолчанию ANSI, поэтому диалект
 переопределяет только то, что отличается. Различия возможностей (разбиение на страницы, требующее `ORDER BY`, обязательные
 псевдонимы подзапросов, `INTERSECT ALL`/`EXCEPT ALL`) выражаются свойствами, а не особыми случаями в
 построителе SQL.

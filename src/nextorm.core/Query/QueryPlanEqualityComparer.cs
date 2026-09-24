@@ -105,9 +105,19 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
 
         if (!StringListsEqual(x.TableHints, y.TableHints)) return false;
 
+        if (!StringListsEqual(x.IndexHints, y.IndexHints)) return false;
+
+        if (x.IndexHintKind != y.IndexHintKind) return false;
+
         if (x.ForJsonClause != y.ForJsonClause) return false;
 
         if (x.ForXmlClause != y.ForXmlClause) return false;
+
+        // The document terminals (ForJson/ForXml) read the result as a scalar with no row mapper while
+        // a WithForJson/WithForXml command built for the same SQL keeps its mapper. Both can project
+        // the same result type, so the flag must be part of the key or a cached null-mapper plan would
+        // be reused by a ToList/First call (and vice versa).
+        if (x.DocumentMode != y.DocumentMode) return false;
 
         if (x.Paging.Limit != y.Paging.Limit || x.Paging.Offset != y.Paging.Offset || x.Paging.HasWithTies != y.Paging.HasWithTies) return false;
 
@@ -148,6 +158,8 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
         if (x.ResolvedQuoteIdentifiers != y.ResolvedQuoteIdentifiers) return false;
 
         if (!ReferenceEquals(x.ResolvedNamingConvention, y.ResolvedNamingConvention)) return false;
+
+        if (x.ResolvedKeywordCase != y.ResolvedKeywordCase) return false;
 
         if (!IEqualityComparerExtensions.Equals(this, x.ReferencedQueries, y.ReferencedQueries)) return false;
 
@@ -276,6 +288,14 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
             if (a.Name != b.Name) return false;
             if (a.Recursive != b.Recursive) return false;
             if (a.MaxRecursion != b.MaxRecursion) return false;
+            // A data-modifying CTE's plan is never cached (its insert body is not part of the query
+            // shape), so compare the bodies by reference and the read CTE queries structurally.
+            if (a.IsDataModifying || b.IsDataModifying)
+            {
+                if (!ReferenceEquals(a.Mutation, b.Mutation)) return false;
+                continue;
+            }
+
             if (!Equals(a.Query, b.Query)) return false;
         }
 
@@ -333,11 +353,19 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
                 foreach (var hint in obj.TableHints)
                     hash.Add(hint);
 
+            if (obj.IndexHints is { Count: > 0 })
+                foreach (var index in obj.IndexHints)
+                    hash.Add(index);
+
+            hash.Add(obj.IndexHintKind);
+
             if (obj.ForJsonClause is { } forJson)
                 hash.Add(forJson);
 
             if (obj.ForXmlClause is { } forXml)
                 hash.Add(forXml);
+
+            hash.Add(obj.DocumentMode);
 
             if (obj.WherePlanHash != 0)
                 hash.Add(obj.WherePlanHash);
@@ -392,6 +420,7 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
             if (obj.RowLock is { } rowLock)
             {
                 hash.Add(rowLock.Mode);
+                hash.Add(rowLock.Wait);
             }
 
             hash.Add(obj.Final);
@@ -441,6 +470,8 @@ public sealed class QueryPlanEqualityComparer : IEqualityComparer<QueryCommand?>
             hash.Add(obj.ResolvedQuoteIdentifiers);
 
             hash.Add(obj.ResolvedNamingConvention);
+
+            hash.Add(obj.ResolvedKeywordCase);
 
             if (obj.WindowsPlanHash != 0)
                 hash.Add(obj.WindowsPlanHash);

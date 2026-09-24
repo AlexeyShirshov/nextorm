@@ -19,6 +19,72 @@ public class MySqlDialect : SqlDialectBase
     /// <summary>A MySQL derived table (subquery in FROM) must have an alias.</summary>
     public override bool RequireSubqueryAlias => true;
 
+    /// <summary>
+    /// MySQL has no <c>RETURNING</c>; the generated identity is read back with a separate
+    /// <c>SELECT LAST_INSERT_ID()</c>.
+    /// </summary>
+    public override bool SupportsLastInsertId => true;
+    /// <inheritdoc/>
+    public override string MakeLastInsertId(KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, "select last_insert_id()");
+
+    // MySQL/MariaDB insert an all-defaults row with the empty-column-list form and accept DEFAULT as a
+    // value in the VALUES list.
+    /// <inheritdoc/>
+    public override bool SupportsDefaultValues => true;
+    /// <inheritdoc/>
+    public override string MakeDefaultValues(KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, " () values ()");
+    /// <inheritdoc/>
+    public override bool SupportsColumnDefault => true;
+
+    /// <summary>
+    /// MySQL is not marked as having a native bulk path: <c>MySqlBulkCopy</c> goes through
+    /// <c>LOAD DATA LOCAL INFILE</c>, which requires <c>AllowLoadLocalInfile=true</c> on the connection
+    /// and a matching server setting, so the portable <c>INSERT ... VALUES</c> path is used instead (it
+    /// also returns keys and supports <c>INSERT IGNORE</c>).
+    /// </summary>
+    public override bool SupportsBulkCopy => false;
+
+    /// <summary>MySQL skips conflicting rows with the <c>INSERT IGNORE</c> head.</summary>
+    public override bool SupportsInsertIgnore => true;
+
+    /// <inheritdoc/>
+    public override string MakeInsertIgnoreInto(KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, "insert ignore into ");
+
+    /// <summary>MySQL and MariaDB have a native <c>TRUNCATE TABLE</c>.</summary>
+    public override bool SupportsTruncate => true;
+
+    /// <summary>MySQL and MariaDB delete rows based on a join through the multi-table <c>DELETE &lt;alias&gt; FROM ... JOIN</c> form.</summary>
+    public override bool SupportsDeleteJoin => true;
+
+    /// <summary>MySQL and MariaDB update rows based on a join through the multi-table <c>UPDATE ... JOIN ... SET</c> form.</summary>
+    public override bool SupportsUpdateJoin => true;
+
+    /// <summary>
+    /// Renders the MySQL/MariaDB multi-table update: the join specification sits between <c>UPDATE</c> and
+    /// <c>SET</c>, and any filter follows the <c>SET</c> list. The <c>SET</c> list names the target through
+    /// its alias.
+    /// </summary>
+    public override string MakeUpdateJoin(
+        string target,
+        string targetAlias,
+        string assignments,
+        string fromAndJoins,
+        string usingSources,
+        string joinConditions,
+        string? whereSql,
+        KeywordCase keywordCase = KeywordCase.Lower)
+    {
+        var sql = Kw(keywordCase, "update ") + fromAndJoins + Kw(keywordCase, " set ") + assignments;
+        return string.IsNullOrEmpty(whereSql) ? sql : sql + Kw(keywordCase, " where ") + whereSql;
+    }
+
+    // MySQL/MariaDB express a key upsert as INSERT ... ON DUPLICATE KEY UPDATE, assigning the incoming
+    // value through the VALUES(<column>) function (MariaDB has no `AS new` row alias).
+    /// <inheritdoc/>
+    public override bool SupportsOnDuplicateKey => true;
+    /// <inheritdoc/>
+    public override string MakeUpsertValueReference(string column, KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, "values(") + column + ")";
+
     // MySQL 8.0.14+ (and MariaDB 10.3+) spell the APPLY surface as an ANSI lateral join, which is
     // the SqlDialectBase default.
     /// <inheritdoc/>
@@ -36,7 +102,7 @@ public class MySqlDialect : SqlDialectBase
     /// subqueries are skipped). Neither has a <c>maxrecursion</c> option, so
     /// <paramref name="maxRecursionOption"/> is ignored.
     /// </summary>
-    public override string RenderQueryHints(string sql, IReadOnlyList<string> hints, string? maxRecursionOption)
+    public override string RenderQueryHints(string sql, IReadOnlyList<string> hints, string? maxRecursionOption, KeywordCase keywordCase = KeywordCase.Lower)
     {
         var depth = 0;
         for (var i = 0; i < sql.Length; i++)
@@ -210,9 +276,9 @@ public class MySqlDialect : SqlDialectBase
     public override bool SupportsRollup => true;
 
     /// <inheritdoc/>
-    public override string MakeGrouping(string columns, GroupingType groupingType) => groupingType switch
+    public override string MakeGrouping(string columns, GroupingType groupingType, KeywordCase keywordCase = KeywordCase.Lower) => groupingType switch
     {
-        GroupingType.Rollup => $"{columns} with rollup",
+        GroupingType.Rollup => columns + Kw(keywordCase, " with rollup"),
         _ => columns
     };
 
@@ -317,8 +383,8 @@ public class MySqlDialect : SqlDialectBase
     // MySQL treats the backslash as a string-literal escape too, so the escape character of a LIKE
     // predicate has to be written as a doubled backslash ('\\' rather than '\').
     /// <inheritdoc/>
-    public override string MakeLikeEscape(string escapeChar) =>
-        " escape '" + escapeChar.Replace("\\", "\\\\").Replace("'", "''") + "'";
+    public override string MakeLikeEscape(string escapeChar, KeywordCase keywordCase = KeywordCase.Lower) =>
+        Kw(keywordCase, " escape '") + escapeChar.Replace("\\", "\\\\").Replace("'", "''") + "'";
 
     // MySQL's ~ yields an unsigned 64-bit value, which overflows the signed CLR integer the
     // projection expects; -(x) - 1 keeps the two's-complement result signed.
@@ -326,21 +392,33 @@ public class MySqlDialect : SqlDialectBase
     public override string MakeOnesComplement(string operand) => $"(-({operand}) - 1)";
 
     /// <inheritdoc/>
-    public override void MakePage(Paging paging, StringBuilder sqlBuilder)
+    public override void MakePage(Paging paging, StringBuilder sqlBuilder, KeywordCase keywordCase = KeywordCase.Lower)
     {
         // MySQL requires LIMIT before OFFSET, and OFFSET is only valid together with LIMIT, so an
         // offset-only page uses the maximum unsigned bigint as the limit.
         if (paging.Limit > 0)
-            sqlBuilder.Append("limit ").Append(paging.Limit);
+            sqlBuilder.Append(Kw(keywordCase, "limit ")).Append(paging.Limit);
         else if (paging.Offset > 0)
-            sqlBuilder.Append("limit 18446744073709551615");
+            sqlBuilder.Append(Kw(keywordCase, "limit 18446744073709551615"));
 
         if (paging.Offset > 0)
-            sqlBuilder.Append(" offset ").Append(paging.Offset);
+            sqlBuilder.Append(Kw(keywordCase, " offset ")).Append(paging.Offset);
     }
+
+    /// <summary>MySQL/MariaDB support <c>USE INDEX</c>/<c>FORCE INDEX</c>/<c>IGNORE INDEX</c>.</summary>
+    public override IIndexHintRenderer? IndexHints => MySqlIndexHintRenderer.Instance;
 
     /// <summary>MySQL/MariaDB support the trailing row-locking clause.</summary>
     public override ILockRenderer Lock => MySqlLockRenderer.Instance;
+
+    /// <summary>MySQL/MariaDB support <c>CREATE [TEMPORARY] TABLE ... AS SELECT</c>.</summary>
+    public override bool SupportsCreateTableAsSelect => true;
+
+    /// <summary>MySQL/MariaDB accept <c>IF NOT EXISTS</c> on <c>CREATE TABLE ... AS SELECT</c>.</summary>
+    public override bool SupportsCreateTableAsSelectIfNotExists => true;
+
+    /// <summary>MySQL/MariaDB accept a column list on <c>CREATE TABLE ... AS SELECT</c>.</summary>
+    public override bool SupportsCreateTableAsSelectColumnList => true;
 }
 
 internal sealed class MySqlIifRenderer : IIifRenderer
@@ -375,6 +453,50 @@ internal sealed class MySqlLockRenderer : ILockRenderer
 
     public bool UsesTableHints => false;
 
-    public string Render(LockMode mode) =>
-        mode == LockMode.Share ? " lock in share mode" : " for update";
+    public string Render(LockMode mode, KeywordCase keywordCase = KeywordCase.Lower) =>
+        Render(mode, LockWaitMode.Wait, keywordCase);
+
+    public string Render(LockMode mode, LockWaitMode wait, KeywordCase keywordCase = KeywordCase.Lower) =>
+        SqlKeywords.Of(keywordCase, MySqlLockRenderer.RenderToken(mode, wait));
+
+    private static string RenderToken(LockMode mode, LockWaitMode wait)
+    {
+        if (mode == LockMode.Share)
+        {
+            if (wait == LockWaitMode.Wait)
+                return " lock in share mode";
+
+            return " for share" + LockWaitSuffix(wait);
+        }
+
+        return " for update" + LockWaitSuffix(wait);
+    }
+
+    private static string LockWaitSuffix(LockWaitMode wait) => wait switch
+    {
+        LockWaitMode.Wait => "",
+        LockWaitMode.NoWait => " nowait",
+        LockWaitMode.SkipLocked => " skip locked",
+        _ => throw new ArgumentOutOfRangeException(nameof(wait), wait, "Unknown locking wait mode.")
+    };
+}
+
+internal sealed class MySqlIndexHintRenderer : IIndexHintRenderer
+{
+    public static readonly MySqlIndexHintRenderer Instance = new();
+
+    public bool MergesWithTableHints => false;
+
+    public string? RenderIndexHint(IReadOnlyList<string> indexes, IndexHintKind kind, KeywordCase keywordCase = KeywordCase.Lower)
+    {
+        if (indexes.Count == 0)
+            throw new NotSupportedException("MySQL/MariaDB index hints require at least one index name.");
+
+        return SqlKeywords.Of(keywordCase, kind switch
+        {
+            IndexHintKind.Force => " force index (",
+            IndexHintKind.Ignore => " ignore index (",
+            _ => " use index ("
+        }) + string.Join(", ", indexes) + ")";
+    }
 }

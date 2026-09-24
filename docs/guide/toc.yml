@@ -34,6 +34,20 @@
   href: 17-query-hints.md
 - name: JSON support across providers
   href: 18-json.md
+- name: Data modification (INSERT)
+  href: 19-insert-statement.md
+- name: Data modification (DELETE)
+  href: 20-delete-statement.md
+- name: Data modification (UPDATE)
+  href: 21-update-statement.md
+- name: Materializing a query into a table
+  href: 22-create-table-as.md
+- name: Data modification (MERGE)
+  href: 23-merge-statement.md
+- name: Bulk insert
+  href: 24-bulk-insert.md
+- name: Transactions
+  href: 25-transactions.md
 - name: Provider-specific SQL
   items:
     - name: Overview

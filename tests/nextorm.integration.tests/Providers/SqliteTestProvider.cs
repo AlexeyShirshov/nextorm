@@ -29,6 +29,13 @@ internal sealed class SqliteTestProvider : ITestProvider
     public bool SupportsTableValuedFunctions => true;
     public bool EnforcesScalarSubqueryCardinality => false;
     public bool SupportsApply => false;
+    public bool SupportsInsertReturning => true;
+    public bool SupportsIgnoreDuplicates => true;
+    public bool SupportsTruncate => false;
+    public bool SupportsDeleteJoin => false;
+    public bool SupportsCreateTableAsSelect => true;
+    public bool SupportsTemporaryCreateTableAsSelect => true;
+    public bool SupportsTransactions => true;
     public string TableValuedFunctionSkipReason => string.Empty;
     public string SkipReason => string.Empty;
 
@@ -84,5 +91,11 @@ internal sealed class SqliteTestProvider : ITestProvider
 
         create table binary_entity (id integer primary key, data blob);
         insert into binary_entity (id, data) values (1, X'01020304'), (2, null);
+
+        create table insert_entity (id integer primary key autoincrement, name text, age int);
+
+        create table merge_entity (id integer primary key, name text, age int);
+
+        create table delete_entity (id integer primary key, name text, age int);
         """;
 }

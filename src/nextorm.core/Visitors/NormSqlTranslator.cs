@@ -128,9 +128,9 @@ internal static class NormSqlTranslator
 
             var predicateKeyword = node.Method.Name switch
             {
-                nameof(CommonFunctions.exists) => "exists",
-                nameof(CommonFunctions.all) => "all",
-                nameof(CommonFunctions.any) => "any",
+                nameof(CommonFunctions.exists) => visitor.Kw("exists"),
+                nameof(CommonFunctions.all) => visitor.Kw("all"),
+                nameof(CommonFunctions.any) => visitor.Kw("any"),
                 _ => throw new NotImplementedException()
             };
 
@@ -372,7 +372,7 @@ internal static class NormSqlTranslator
                 visitor.NeedAliasForColumn = true;
                 visitor.Builder!.Append(visitor.Dialect.MakeAggregate(node.Method.Name.Replace("_distinct", string.Empty))).Append('(');
                 if (node.Method.Name.EndsWith("distinct", StringComparison.Ordinal))
-                    visitor.Builder!.Append("distinct ");
+                    visitor.Builder!.Append(visitor.Kw("distinct "));
             }
 
             var last = aggregateFilter is null ? args.Count : args.Count - 1;

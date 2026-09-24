@@ -152,6 +152,29 @@ with l as (select id from complex_entity), r as (select id from simple_entity) s
 > `t["id"].AsInt`), и имена должны совпадать с выходными алиасами тела CTE. Называйте элементы проекции
 > по SQL-алиасам (нижний `snake_case`), чтобы внешние ссылки оставались точными.
 
+Скоуп CTE также управляет multi-table `UPDATE`/`DELETE`. Разместите CTE на **присоединяемой** стороне,
+а целью оставьте физическую таблицу; объявление поднимается перед мутацией:
+
+```csharp
+var recent = dataContext
+    .With("recent", dataContext.From<IOrder>().Where(o => o.Id > 1000).Select(o => new { o.Id }));
+
+dataContext.From<IOrder>()
+    .Join(recent.From("recent"), (o, r) => o.Id == r.GetInt64("id"))
+    .UpdateJoin()
+    .Set(p => p.Item1.Status, "archived")
+    .Update();
+```
+
+```sql
+-- PostgreSQL
+with recent as (select id from orders where (id > 1000)) update orders as "t1" set status = @p0 from recent as "t2" where t1.id = t2.id
+```
+
+Это работает на каждом провайдере с `UPDATE ... FROM`/`JOIN` (и `DELETE ... USING`/join), на любой
+позиции join, и для рекурсивных CTE. См. [Data modification (UPDATE)](21-update-statement.md#обновление-из-join)
+и [Data modification (DELETE)](20-delete-statement.md#удаление-по-соединению).
+
 ## Рекурсивный CTE: числовая последовательность
 
 Рекурсивный CTE — это `union all` **якоря** (нерекурсивного запроса) и **шага**, который читает CTE по
@@ -254,6 +277,21 @@ with recent as (select id from complex_entity where (id > $threshold)) select id
 
 См. [Переиспользование запросов: кэш против Prepare](15-query-reuse.md) о времени жизни и правилах
 инвалидации кэша планов.
+
+## Модифицирующий CTE (PostgreSQL)
+
+PostgreSQL — единственный поддерживаемый провайдер, принимающий модифицирующую инструкцию как тело CTE
+(`WITH <имя> AS (INSERT ... RETURNING ...)`); гейтится
+[`SupportsDataModifyingCtes`](xref:NextORM.Core.ISqlDialect.SupportsDataModifyingCtes). nextorm открывает
+её перегрузкой `With(имя, insert)` у `IDataContext`/`CteQuery`, возвращающей
+[`MutationCteQuery<TResult>`](xref:NextORM.Core.MutationCteQuery`1), типизированный проекцией `RETURNING`;
+остальные провайдеры отклоняют её с `NotSupportedException`.
+
+Write-CTE документируется вместе с поверхностью записи, к которой принадлежит — типизированное чтение через
+`From`/`FromTable`, тело `VALUES` или `INSERT ... SELECT`, чтение более раннего read-CTE и питание
+главного `INSERT ... SELECT` — в разделе
+[Изменение данных (INSERT): Модифицирующий CTE](19-insert-statement.md#модифицирующий-cte-postgresql).
+Тела `UPDATE` и `DELETE` в качестве тела CTE не поддерживаются (только `INSERT`). Общая поверхность `UPDATE` — в [Изменении данных (UPDATE)](21-update-statement.md).
 
 ## Различия между провайдерами
 

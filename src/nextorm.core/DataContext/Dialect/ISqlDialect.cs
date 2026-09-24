@@ -50,7 +50,17 @@ public interface ISqlDialect
     /// Server emits <c>cross apply</c>/<c>outer apply</c>; providers that spell it as an ANSI lateral
     /// join emit <c>cross join lateral</c>/<c>left join lateral ... on true</c>.
     /// </summary>
-    string MakeApply(JoinType applyType, string source);
+    string MakeApply(JoinType applyType, string source, KeywordCase keywordCase = KeywordCase.Lower);
+    /// <summary>
+    /// True when <see cref="MakeApply"/> is valid over a plain physical table source. PostgreSQL and
+    /// MySQL spell an applied source as <c>... LATERAL ...</c>, and <c>LATERAL</c> is only allowed
+    /// before a subquery, function or composite expression — not a bare table name — so they return
+    /// <see langword="false"/> and a plain table is rendered as an ordinary <c>CROSS</c>/<c>LEFT</c>
+    /// join instead. SQL Server spells it <c>CROSS APPLY</c>/<c>OUTER APPLY</c>, which accepts a table
+    /// name, so it returns <see langword="true"/>. The default is <see langword="false"/> so a dialect
+    /// without an opt-in never emits an invalid lateral reference.
+    /// </summary>
+    bool SupportsApplyOnPlainTable => false;
     /// <summary>
     /// True when the provider understands the join strictness/kind modifiers in
     /// <see cref="JoinStrictness"/> (<c>ANY</c>/<c>ALL</c>/<c>ASOF</c>). The safe default is
@@ -85,7 +95,7 @@ public interface ISqlDialect
     /// only requested from a dialect that opted in with
     /// <see cref="SupportsSemiAntiJoin"/>/<see cref="SupportsPasteJoin"/>.
     /// </summary>
-    string MakeJoinKeyword(JoinType joinType, JoinStrictness strictness, bool isGlobal);
+    string MakeJoinKeyword(JoinType joinType, JoinStrictness strictness, bool isGlobal, KeywordCase keywordCase = KeywordCase.Lower);
     /// <summary>
     /// True when the provider can render the <c>* ALL</c> variants of INTERSECT and EXCEPT
     /// (<c>intersect all</c> / <c>except all</c>). UNION ALL is not covered by this flag because it is
@@ -115,12 +125,12 @@ public interface ISqlDialect
     /// <c>rollup (columns)</c>/<c>cube (columns)</c> form; a provider that spells it
     /// <c>columns WITH ROLLUP</c> overrides this.
     /// </summary>
-    string MakeGrouping(string columns, GroupingType groupingType);
+    string MakeGrouping(string columns, GroupingType groupingType, KeywordCase keywordCase = KeywordCase.Lower);
     /// <summary>
     /// Renders <c>GROUPING SETS (...)</c> over the already-rendered, parenthesised
     /// <paramref name="groupingSets"/> (each entry is a returned <c>(a, b)</c>/<c>()</c> string).
     /// </summary>
-    string MakeGroupingSets(IReadOnlyList<string> groupingSets);
+    string MakeGroupingSets(IReadOnlyList<string> groupingSets, KeywordCase keywordCase = KeywordCase.Lower);
     /// <summary>
     /// True when the provider can render statement-level query hints (see <see cref="QueryCommand.Hints"/>).
     /// The safe default is <c>false</c>; a command that carries hints is rejected by the SQL builder
@@ -170,13 +180,20 @@ public interface ISqlDialect
     bool SupportsHigherOrderArrayFunctions { get; }
 
     /// <summary>
-    /// True when the provider has a native tuple type and renders the tuple surface: the
-    /// <c>tuple(...)</c> constructor (from <c>Tuple.Create</c>) and element access
-    /// (from <c>System.Tuple&lt;...&gt;.ItemN</c> as <c>tupleElement(tuple, n)</c>). Declared as a
-    /// default interface method returning <c>false</c> so existing external implementations keep
-    /// compiling; only ClickHouse opts in today.
+    /// True when the provider exposes the row-value surface: the constructor (PostgreSQL <c>ROW(a, b)</c>,
+    /// ClickHouse <c>tuple(a, b)</c>) built from <c>Tuple.Create</c>/<c>new Tuple&lt;...&gt;</c>/
+    /// <c>new ValueTuple&lt;...&gt;</c> and element access (from <c>.ItemN</c>). Equivalent to
+    /// <see cref="Tuple"/> being non-<see langword="null"/>; declared as a default interface method so
+    /// existing external implementations keep compiling.
     /// </summary>
-    bool SupportsTupleFunctions => false;
+    bool SupportsTupleFunctions => Tuple is not null;
+
+    /// <summary>
+    /// The provider's renderer for row values / composite tuples, or <see langword="null"/> when the
+    /// provider has no row-value type (SQL Server) or does not expose it yet. Declared as a default
+    /// interface method so existing external implementations keep compiling.
+    /// </summary>
+    ITupleRenderer? Tuple => null;
 
     /// <summary>
     /// The provider's renderer for a scalar <c>string.Split</c>; <c>null</c> means the provider cannot
@@ -478,7 +495,7 @@ public interface ISqlDialect
     /// <see cref="SupportsGroupByWithTotals"/> is <c>true</c>. The default returns
     /// <paramref name="grouping"/> unchanged; ClickHouse appends <c> with totals</c>.
     /// </summary>
-    string MakeGroupByTotals(string grouping);
+    string MakeGroupByTotals(string grouping, KeywordCase keywordCase = KeywordCase.Lower);
 
     /// <summary>
     /// The provider's renderer for the conditional <c>iif(condition, whenTrue, whenFalse)</c>. <c>null</c>
@@ -528,6 +545,13 @@ public interface ISqlDialect
     /// </summary>
     bool SupportsCommandBehaviorSingleRow { get; }
     /// <summary>
+    /// True when the provider supports ADO.NET transactions on its connection
+    /// (<c>BEGIN</c>/<c>COMMIT</c>/<c>ROLLBACK</c>). Declared as a default interface method returning
+    /// <c>true</c> so existing external implementations keep compiling; only ClickHouse opts out,
+    /// because its HTTP protocol has no transaction in the ADO.NET sense.
+    /// </summary>
+    bool SupportsTransactions => true;
+    /// <summary>
     /// Applies the statement-level <paramref name="hints"/> to an already-rendered <paramref name="sql"/>
     /// statement. <paramref name="maxRecursionOption"/> is the trailing option produced by
     /// <see cref="MakeMaxRecursion"/> (or <c>null</c>); a dialect that must coalesce it into a single
@@ -537,26 +561,34 @@ public interface ISqlDialect
     /// the SQL unchanged and is expected to be overridden by an opting-in dialect.
     /// </para>
     /// </summary>
-    string RenderQueryHints(string sql, IReadOnlyList<string> hints, string? maxRecursionOption);
+    string RenderQueryHints(string sql, IReadOnlyList<string> hints, string? maxRecursionOption, KeywordCase keywordCase = KeywordCase.Lower);
 
     /// <summary>
     /// Renders the table-level hint clause appended to a physical table name, or an empty string when
     /// the dialect has no table hints. Only called when <see cref="SupportsTableHints"/> is <c>true</c>
     /// and <paramref name="hints"/> is non-empty.
     /// </summary>
-    string MakeTableHints(IReadOnlyList<string> hints);
+    string MakeTableHints(IReadOnlyList<string> hints, KeywordCase keywordCase = KeywordCase.Lower);
+
+    /// <summary>
+    /// The provider's renderer for table index hints, or <see langword="null"/> when the provider has no
+    /// native index-hint syntax (PostgreSQL without <c>pg_hint_plan</c>, ClickHouse). Declared as a
+    /// default interface method so existing external implementations keep compiling; a dialect that
+    /// returns <see langword="null"/> rejects a command carrying an index hint.
+    /// </summary>
+    IIndexHintRenderer? IndexHints => null;
 
     /// <summary>
     /// Renders the trailing <c>FOR JSON</c> clause for <paramref name="clause"/>. Only called when
     /// <see cref="SupportsForJson"/> is <c>true</c>.
     /// </summary>
-    string MakeForJson(ForJsonClause clause);
+    string MakeForJson(ForJsonClause clause, KeywordCase keywordCase = KeywordCase.Lower);
 
     /// <summary>
     /// Renders the trailing <c>FOR XML</c> clause for <paramref name="clause"/>. Only called when
     /// <see cref="SupportsForXml"/> is <c>true</c>.
     /// </summary>
-    string MakeForXml(ForXmlClause clause);
+    string MakeForXml(ForXmlClause clause, KeywordCase keywordCase = KeywordCase.Lower);
 
     /// <summary>
     /// Renders the full-text predicate <paramref name="functionName"/> (<c>contains</c>/<c>freetext</c>)
@@ -600,13 +632,13 @@ public interface ISqlDialect
     /// emit <c>with recursive</c>; SQL Server declares a recursive CTE with <c>with</c> alone, so the
     /// flag is ignored there. Keeping this on the dialect avoids provider names in <see cref="SqlBuilder"/>.
     /// </summary>
-    string MakeWith(bool recursive);
+    string MakeWith(bool recursive, KeywordCase keywordCase = KeywordCase.Lower);
     /// <summary>
     /// Renders the statement-level option that raises the recursion limit (SQL Server
     /// <c>option (maxrecursion n)</c>), or <c>null</c> when the dialect has no such option and relies
     /// on its own default (SQLite, PostgreSQL).
     /// </summary>
-    string? MakeMaxRecursion(int maxRecursion);
+    string? MakeMaxRecursion(int maxRecursion, KeywordCase keywordCase = KeywordCase.Lower);
 
     /// <summary>
     /// Renders a string concatenation over the already-rendered operands. Dialects whose infix
@@ -636,9 +668,9 @@ public interface ISqlDialect
     /// </summary>
     string MakeColumnReference(string name);
     /// <summary>Renders the alias clause for a table source (<c>AS alias</c>).</summary>
-    string MakeTableAlias(string tableAlias);
+    string MakeTableAlias(string tableAlias, KeywordCase keywordCase = KeywordCase.Lower);
     /// <summary>Renders the alias clause for a projected column (<c>AS alias</c>); a null or empty <paramref name="colAlias"/> renders nothing.</summary>
-    string MakeColumnAlias(string? colAlias);
+    string MakeColumnAlias(string? colAlias, KeywordCase keywordCase = KeywordCase.Lower);
     /// <summary>Renders a parameter placeholder, e.g. <c>@name</c> or <c>$name</c>.</summary>
     string MakeParam(string name);
     /// <summary>SQL type name used when a CLR conversion has to be rendered as a database cast.</summary>
@@ -660,7 +692,7 @@ public interface ISqlDialect
     /// (SQL Server) has to materialise the integer result as a bit scalar and, in a condition
     /// context, compare it with 1 so that it stays valid both as a value and as a predicate.
     /// </summary>
-    string MakeCase(string caseExpression, bool isBooleanResult, bool asPredicate);
+    string MakeCase(string caseExpression, bool isBooleanResult, bool asPredicate, KeywordCase keywordCase = KeywordCase.Lower);
     /// <summary>
     /// Maps an aggregate function name to the provider specific one, e.g. stdev -> stddev.
     /// </summary>
@@ -719,7 +751,7 @@ public interface ISqlDialect
     /// literal form differs per provider (MySQL requires a doubled backslash to escape the string
     /// delimiter), so the escaping is delegated to the dialect.
     /// </summary>
-    string MakeLikeEscape(string escapeChar);
+    string MakeLikeEscape(string escapeChar, KeywordCase keywordCase = KeywordCase.Lower);
     /// <summary>
     /// Renders the integer ones-complement (<c>~</c>) over the already-rendered <paramref name="operand"/>.
     /// MySQL's <c>~</c> yields an unsigned 64-bit result, so a dialect whose integer complement must
@@ -814,7 +846,7 @@ public interface ISqlDialect
     /// <paramref name="aggregate"/> is the already-rendered call (for example <c>percentile_cont(0.5)</c>)
     /// and <paramref name="orderBy"/> the already-rendered key list.
     /// </summary>
-    string MakeWithinGroup(string aggregate, string orderBy);
+    string MakeWithinGroup(string aggregate, string orderBy, KeywordCase keywordCase = KeywordCase.Lower);
     /// <summary>
     /// Renders a user-defined scalar function name (<see cref="SqlFunctionAttribute"/>), optionally
     /// schema/owner qualified. The default is the verbatim name; a dialect may override it to quote or
@@ -870,7 +902,7 @@ public interface ISqlDialect
     bool SupportsGlobalPredicates { get; }
 
     /// <summary>Appends the provider's paging clause (LIMIT/OFFSET, OFFSET/FETCH or TOP) for <paramref name="paging"/> to <paramref name="sqlBuilder"/>.</summary>
-    void MakePage(Paging paging, StringBuilder sqlBuilder);
+    void MakePage(Paging paging, StringBuilder sqlBuilder, KeywordCase keywordCase = KeywordCase.Lower);
     /// <summary>
     /// The provider's renderer for <c>LIMIT [offset, ]n BY expr</c> (ClickHouse). <c>null</c> means the
     /// modifier is unavailable and a command that carries one is rejected when its SQL is built.
@@ -896,13 +928,13 @@ public interface ISqlDialect
     /// </summary>
     bool SupportsFinal { get; }
     /// <summary>Renders the <c>FINAL</c> modifier. Only reached through a dialect that set <see cref="SupportsFinal"/>.</summary>
-    string MakeFinal();
+    string MakeFinal(KeywordCase keywordCase = KeywordCase.Lower);
     /// <summary>
     /// Whether the dialect supports the <c>SAMPLE ratio [OFFSET offset]</c> table modifier (ClickHouse).
     /// </summary>
     bool SupportsSample { get; }
     /// <summary>Renders the <c>SAMPLE</c> modifier. Only reached through a dialect that set <see cref="SupportsSample"/>.</summary>
-    string MakeSample(double ratio, double offset);
+    string MakeSample(double ratio, double offset, KeywordCase keywordCase = KeywordCase.Lower);
 
     /// <summary>
     /// The provider's renderer for <c>TABLESAMPLE</c>; <c>null</c> means the provider cannot express it.
@@ -926,7 +958,7 @@ public interface ISqlDialect
     /// Renders the <c>FOR SYSTEM_TIME</c> clause. The standard SQL:2011 syntax is shared by SQL Server
     /// and MariaDB; only reached through a dialect that set <see cref="SupportsTemporalTable"/>.
     /// </summary>
-    string MakeTemporalTable(TemporalClause clause);
+    string MakeTemporalTable(TemporalClause clause, KeywordCase keywordCase = KeywordCase.Lower);
 
     /// <summary>
     /// The provider's renderer for the native <c>PIVOT</c>/<c>UNPIVOT</c> pair; <c>null</c> means the
@@ -954,7 +986,7 @@ public interface ISqlDialect
     /// </summary>
     bool SupportsSettings { get; }
     /// <summary>Renders the trailing <c>SETTINGS</c> clause. Only reached through a dialect that set <see cref="SupportsSettings"/>.</summary>
-    string MakeSettings(IReadOnlyList<KeyValuePair<string, string>> settings);
+    string MakeSettings(IReadOnlyList<KeyValuePair<string, string>> settings, KeywordCase keywordCase = KeywordCase.Lower);
     /// <summary>
     /// Renders a <c>TOP(n)</c>-style limit clause. Returns false when the dialect cannot express the
     /// limit inline and paging must be rendered by <see cref="MakePage"/> instead.
@@ -962,8 +994,9 @@ public interface ISqlDialect
     /// <param name="limit">The maximum number of rows to return.</param>
     /// <param name="withTies">Requests the <c>WITH TIES</c> variant where the dialect supports it.</param>
     /// <param name="topStmt">The inline limit fragment, or <c>null</c> when the dialect returns false.</param>
+    /// <param name="keywordCase">The letter case in which the emitted SQL keywords are written.</param>
     /// <returns><c>true</c> when <paramref name="topStmt"/> carries the limit; otherwise <c>false</c>.</returns>
-    bool MakeTop(int limit, bool withTies, out string? topStmt);
+    bool MakeTop(int limit, bool withTies, out string? topStmt, KeywordCase keywordCase = KeywordCase.Lower);
 
     /// <summary>
     /// The provider's renderer for row locking; <c>null</c> means the provider cannot express it.
@@ -983,6 +1016,535 @@ public interface ISqlDialect
     /// result keeps the two pieces of the decision together and avoids a throwing default.
     /// </summary>
     string? GetPagingOrderBy(QueryCommand queryCommand);
+
+    /// <summary>
+    /// Whether the dialect can append <c>RETURNING &lt;columns&gt;</c> to an <c>INSERT</c> so the
+    /// statement returns the generated column (PostgreSQL, SQLite 3.35+). Declared as a default
+    /// interface method returning <c>false</c> so existing external implementations keep compiling; a
+    /// dialect that opts in also overrides <see cref="MakeReturning"/>.
+    /// </summary>
+    bool SupportsReturning => false;
+    /// <summary>
+    /// Whether the dialect can place an <c>OUTPUT inserted.&lt;column&gt;</c> clause on an
+    /// <c>INSERT</c> so the statement returns the generated column (SQL Server). Declared as a default
+    /// interface method returning <c>false</c> so existing external implementations keep compiling; a
+    /// dialect that opts in also overrides <see cref="MakeOutput"/>.
+    /// </summary>
+    bool SupportsOutput => false;
+    /// <summary>
+    /// Whether the dialect can return the last generated identity through a separate scalar query
+    /// (<c>LAST_INSERT_ID()</c>) rather than a clause on the insert (MySQL, MariaDB). Declared as a
+    /// default interface method returning <c>false</c> so existing external implementations keep
+    /// compiling; a dialect that opts in also overrides <see cref="MakeLastInsertId"/>.
+    /// </summary>
+    bool SupportsLastInsertId => false;
+
+    /// <summary>
+    /// Whether the dialect can return the last generated identity of the current session through a
+    /// separate scalar query (<c>SCOPE_IDENTITY()</c>, <c>lastval()</c>, <c>LAST_INSERT_ID()</c>,
+    /// <c>last_insert_rowid()</c>) without naming the identity column. Declared as a default interface
+    /// method delegating to <see cref="SupportsLastInsertId"/>, so a dialect that already exposes the
+    /// scalar identity form needs no extra override; SQL Server and PostgreSQL opt in explicitly.
+    /// </summary>
+    bool SupportsIdentityFunction => SupportsLastInsertId;
+
+    /// <summary>
+    /// Whether the dialect can place a data-modifying statement as the body of a common table
+    /// expression (<c>WITH &lt;name&gt; AS (INSERT ... RETURNING ...) ...</c>, PostgreSQL only). Declared as
+    /// a default interface method returning <c>false</c> so existing external implementations keep
+    /// compiling: every other provider requires a CTE body to be a <c>SELECT</c>.
+    /// </summary>
+    bool SupportsDataModifyingCtes => false;
+
+    /// <summary>
+    /// Whether the dialect can insert a row that writes only column defaults
+    /// (<c>INSERT ... DEFAULT VALUES</c>, or <c>INSERT ... () VALUES ()</c> where the dialect overrides
+    /// <see cref="MakeDefaultValues"/>). Declared as a default interface method returning <c>false</c> so
+    /// existing external implementations keep compiling.
+    /// </summary>
+    bool SupportsDefaultValues => false;
+
+    /// <summary>
+    /// Renders the all-defaults row form that follows the quoted table name: the ANSI
+    /// <c> DEFAULT VALUES</c> by default, or the MySQL/MariaDB <c> () VALUES ()</c> where the dialect
+    /// overrides it. Only called when <see cref="SupportsDefaultValues"/> is <c>true</c>.
+    /// </summary>
+    string MakeDefaultValues(KeywordCase keywordCase = KeywordCase.Lower) => SqlKeywords.Of(keywordCase, " default values");
+
+    /// <summary>
+    /// Whether the dialect can write the <c>DEFAULT</c> keyword as a value in the <c>VALUES</c> list
+    /// (PostgreSQL, SQL Server, MySQL, MariaDB), selecting the column default per row. Declared as a
+    /// default interface method returning <c>false</c> so existing external implementations keep
+    /// compiling.
+    /// </summary>
+    bool SupportsColumnDefault => false;
+
+    /// <summary>
+    /// Renders the <c>DEFAULT</c> keyword as a value in the <c>VALUES</c> list. Only called when
+    /// <see cref="SupportsColumnDefault"/> is <c>true</c>.
+    /// </summary>
+    string MakeColumnDefault(KeywordCase keywordCase = KeywordCase.Lower) => SqlKeywords.Of(keywordCase, "default");
+
+    /// <summary>
+    /// Renders the <c>RETURNING</c> clause of an <c>INSERT</c> over the already-rendered
+    /// <paramref name="columns"/>. Only called when <see cref="SupportsReturning"/> is <c>true</c>.
+    /// </summary>
+    string MakeReturning(IReadOnlyList<string> columns, KeywordCase keywordCase = KeywordCase.Lower) => SqlKeywords.Of(keywordCase, " returning ") + string.Join(", ", columns);
+    /// <summary>
+    /// Renders the <c>OUTPUT</c> clause of an <c>INSERT</c> over the already-rendered
+    /// <paramref name="columns"/>. Only called when <see cref="SupportsOutput"/> is <c>true</c>.
+    /// </summary>
+    string MakeOutput(IReadOnlyList<string> columns, KeywordCase keywordCase = KeywordCase.Lower) => SqlKeywords.Of(keywordCase, " output ") + string.Join(", ", columns.Select(static c => "inserted." + c));
+    /// <summary>
+    /// Renders <c>OUTPUT deleted.&lt;column&gt; ...</c> for a <c>DELETE</c> (SQL Server reads the removed
+    /// row through <c>deleted</c>). Only called when <see cref="SupportsOutput"/> is <c>true</c>.
+    /// </summary>
+    string MakeDeletedOutput(IReadOnlyList<string> columns, KeywordCase keywordCase = KeywordCase.Lower) => SqlKeywords.Of(keywordCase, " output ") + string.Join(", ", columns.Select(static c => "deleted." + c));
+    /// <summary>
+    /// Renders the scalar query that returns the last generated identity of the current session. Only
+    /// called when <see cref="SupportsLastInsertId"/> is <c>true</c>.
+    /// </summary>
+    string MakeLastInsertId(KeywordCase keywordCase = KeywordCase.Lower) => SqlKeywords.Of(keywordCase, "select last_insert_rowid()");
+    /// <summary>
+    /// Renders the scalar query that returns the last generated identity of the current session without
+    /// naming the identity column. Only called when <see cref="SupportsIdentityFunction"/> is
+    /// <c>true</c>; defaults to <see cref="MakeLastInsertId"/>.
+    /// </summary>
+    string MakeIdentityFunction(KeywordCase keywordCase = KeywordCase.Lower) => MakeLastInsertId(keywordCase);
+
+    /// <summary>
+    /// Whether the provider has a native bulk-copy API (PostgreSQL <c>COPY BINARY</c>, SQL Server
+    /// <c>SqlBulkCopy</c>, MySQL/MariaDB <c>MySqlBulkCopy</c>, ClickHouse binary insert). Declared as a
+    /// default interface method returning <c>false</c> so existing external implementations keep
+    /// compiling; a dialect that opts in is paired with a context overriding the native bulk hook.
+    /// </summary>
+    bool SupportsBulkCopy => false;
+
+    /// <summary>
+    /// Whether the dialect can skip conflicting rows with its <c>INSERT OR IGNORE</c>/<c>INSERT IGNORE</c>
+    /// head (SQLite, MySQL, MariaDB; ClickHouse opts in as a no-op because it has no uniqueness).
+    /// Declared as a default interface method returning <c>false</c> so existing external implementations
+    /// keep compiling; a dialect that opts in also overrides <see cref="MakeInsertIgnoreInto"/>.
+    /// </summary>
+    bool SupportsInsertIgnore => false;
+
+    /// <summary>
+    /// Renders the <c>INSERT</c> head that skips conflicting rows: <c>insert or ignore into </c> by
+    /// default, overridden with <c>insert ignore into </c> by MySQL/MariaDB and with a plain
+    /// <c>insert into </c> by ClickHouse (no uniqueness, so every row is written). Only called when
+    /// <see cref="SupportsInsertIgnore"/> is <c>true</c>.
+    /// </summary>
+    string MakeInsertIgnoreInto(KeywordCase keywordCase = KeywordCase.Lower) => SqlKeywords.Of(keywordCase, "insert or ignore into ");
+
+    /// <summary>
+    /// Whether the dialect can skip conflicting rows with a trailing <c>ON CONFLICT DO NOTHING</c>
+    /// (PostgreSQL, SQLite 3.24+). Declared as a default interface method returning <c>false</c> so
+    /// existing external implementations keep compiling; a dialect that opts in also overrides
+    /// <see cref="MakeOnConflictDoNothing"/>.
+    /// </summary>
+    bool SupportsOnConflictDoNothing => false;
+
+    /// <summary>
+    /// Renders the trailing <c> ON CONFLICT DO NOTHING</c> that skips conflicting rows when the dialect
+    /// has no <c>INSERT OR IGNORE</c> head. Only called when <see cref="SupportsOnConflictDoNothing"/>
+    /// is <c>true</c>.
+    /// </summary>
+    string MakeOnConflictDoNothing(KeywordCase keywordCase = KeywordCase.Lower) => SqlKeywords.Of(keywordCase, " on conflict do nothing");
+
+    /// <summary>
+    /// Renders the <c> OVERRIDING SYSTEM VALUE</c> clause PostgreSQL needs to write an explicit value to
+    /// a <c>GENERATED ALWAYS AS IDENTITY</c> column; the empty string when the dialect needs no clause
+    /// (SQLite/MySQL/MariaDB accept explicit identity values as-is, SQL Server uses a session toggle).
+    /// Only emitted when the insert writes identity columns.
+    /// </summary>
+    string MakeOverridingSystemValue(KeywordCase keywordCase = KeywordCase.Lower) => string.Empty;
+
+    /// <summary>
+    /// Whether writing explicit identity values requires wrapping the insert with a session toggle
+    /// (SQL Server <c>SET IDENTITY_INSERT &lt;table&gt; ON/OFF</c>). Declared as a default interface
+    /// method returning <c>false</c> so existing external implementations keep compiling; a dialect that
+    /// opts in also overrides <see cref="MakeIdentityInsertOn"/> and <see cref="MakeIdentityInsertOff"/>.
+    /// </summary>
+    bool RequiresIdentityInsertToggle => false;
+
+    /// <summary>
+    /// Renders the statement that enables explicit identity values for <paramref name="table"/>. Only
+    /// called when <see cref="RequiresIdentityInsertToggle"/> is <c>true</c>.
+    /// </summary>
+    string MakeIdentityInsertOn(string table, KeywordCase keywordCase = KeywordCase.Lower) => SqlKeywords.Of(keywordCase, "set identity_insert ") + table + SqlKeywords.Of(keywordCase, " on");
+
+    /// <summary>
+    /// Renders the statement that disables explicit identity values for <paramref name="table"/>. Only
+    /// called when <see cref="RequiresIdentityInsertToggle"/> is <c>true</c>.
+    /// </summary>
+    string MakeIdentityInsertOff(string table, KeywordCase keywordCase = KeywordCase.Lower) => SqlKeywords.Of(keywordCase, "set identity_insert ") + table + SqlKeywords.Of(keywordCase, " off");
+
+    /// <summary>
+    /// Whether the dialect expresses a key upsert as
+    /// <c>INSERT ... ON CONFLICT (&lt;keys&gt;) DO UPDATE SET ...</c> (PostgreSQL, SQLite 3.24+).
+    /// Declared as a default interface method returning <c>false</c> so existing external
+    /// implementations keep compiling.
+    /// </summary>
+    bool SupportsOnConflict => false;
+
+    /// <summary>
+    /// Renders the conflict target and the start of the update list:
+    /// <c> ON CONFLICT (&lt;keys&gt;) DO UPDATE SET </c>. Only called when
+    /// <see cref="SupportsOnConflict"/> is <c>true</c>.
+    /// </summary>
+    string MakeOnConflict(IReadOnlyList<string> keys, KeywordCase keywordCase = KeywordCase.Lower)
+        => SqlKeywords.Of(keywordCase, " on conflict (") + string.Join(", ", keys) + SqlKeywords.Of(keywordCase, ") do update set ");
+
+    /// <summary>
+    /// Whether the dialect expresses a key upsert as
+    /// <c>INSERT ... ON DUPLICATE KEY UPDATE ...</c> (MySQL, MariaDB). Declared as a default interface
+    /// method returning <c>false</c> so existing external implementations keep compiling.
+    /// </summary>
+    bool SupportsOnDuplicateKey => false;
+
+    /// <summary>
+    /// Renders the duplicate-key clause start <c> ON DUPLICATE KEY UPDATE </c>. Only called when
+    /// <see cref="SupportsOnDuplicateKey"/> is <c>true</c>.
+    /// </summary>
+    string MakeOnDuplicateKey(KeywordCase keywordCase = KeywordCase.Lower)
+        => SqlKeywords.Of(keywordCase, " on duplicate key update ");
+
+    /// <summary>
+    /// Renders the right-hand side of an upsert assignment: the incoming (would-be inserted) value of
+    /// <paramref name="column"/> as seen by the matched branch. Defaults to the ANSI
+    /// <c>excluded.&lt;column&gt;</c> form used by <c>ON CONFLICT</c>; MySQL and MariaDB override it with
+    /// <c>VALUES(&lt;column&gt;)</c>. The <c>excluded</c>/<c>values</c> qualifier is an identifier or
+    /// function name, so it is not affected by <paramref name="keywordCase"/>.
+    /// </summary>
+    string MakeUpsertValueReference(string column, KeywordCase keywordCase = KeywordCase.Lower)
+        => "excluded." + column;
+
+    /// <summary>
+    /// Whether the dialect expresses a key upsert as a full <c>MERGE</c> statement (SQL Server).
+    /// Declared as a default interface method returning <c>false</c> so existing external
+    /// implementations keep compiling; a dialect that opts in also overrides <see cref="MakeMerge"/>.
+    /// </summary>
+    bool SupportsMerge => false;
+
+    /// <summary>
+    /// Renders a key-upsert <c>MERGE</c> statement over the already-rendered pieces. Only called when
+    /// <see cref="SupportsMerge"/> is <c>true</c>.
+    /// </summary>
+    /// <param name="target">The quoted target table.</param>
+    /// <param name="columns">The quoted written columns, in insert order.</param>
+    /// <param name="keys">The quoted match-key columns.</param>
+    /// <param name="updateColumns">The quoted non-key columns updated on a match.</param>
+    /// <param name="valuesRows">The rendered <c>(&lt;values&gt;), (&lt;values&gt;)</c> rows of the derived source.</param>
+    /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
+    /// <returns>The rendered <c>MERGE</c> statement, terminated by a semicolon.</returns>
+    string MakeMerge(
+        string target,
+        IReadOnlyList<string> columns,
+        IReadOnlyList<string> keys,
+        IReadOnlyList<string> updateColumns,
+        string valuesRows,
+        KeywordCase keywordCase = KeywordCase.Lower)
+        => throw new NotSupportedException($"{GetType().Name} cannot render a MERGE upsert.");
+
+    /// <summary>
+    /// Whether the dialect renders a general, multi-branch <c>MERGE</c> statement (SQL Server,
+    /// PostgreSQL 15+). Declared as a default interface method returning <c>false</c> so existing
+    /// external implementations keep compiling.
+    /// </summary>
+    bool SupportsMergeStatement => false;
+
+    /// <summary>
+    /// Whether the dialect accepts a <c>WHEN MATCHED THEN DELETE</c> branch in a general <c>MERGE</c>
+    /// (SQL Server, PostgreSQL). Declared as a default interface method returning <c>false</c>.
+    /// </summary>
+    bool SupportsMergeDelete => false;
+
+    /// <summary>
+    /// Whether the dialect accepts a <c>WHEN NOT MATCHED BY SOURCE</c> branch (SQL Server only).
+    /// Declared as a default interface method returning <c>false</c>.
+    /// </summary>
+    bool SupportsMergeBySourceDelete => false;
+
+    /// <summary>
+    /// Whether a general <c>MERGE</c> accepts a <c>THEN DO NOTHING</c> branch (PostgreSQL only; SQL
+    /// Server has no <c>DO NOTHING</c> action). Declared as a default interface method returning
+    /// <c>false</c>.
+    /// </summary>
+    bool SupportsMergeDoNothing => false;
+
+    /// <summary>
+    /// Whether a general <c>MERGE</c> accepts a search condition: an explicit <c>ON &lt;condition&gt;</c>
+    /// and/or a <c>WHEN ... AND &lt;condition&gt;</c> branch condition (SQL Server, PostgreSQL).
+    /// Declared as a default interface method returning <c>false</c>.
+    /// </summary>
+    bool SupportsMergeConditionalBranches => false;
+
+    /// <summary>
+    /// Whether a general <c>MERGE</c> qualifies its target columns with the target alias in the
+    /// <c>UPDATE SET</c> list. Defaults to <c>true</c> (SQL Server); PostgreSQL overrides it to
+    /// <c>false</c> because its <c>MERGE</c> forbids qualifying a target column.
+    /// </summary>
+    bool SupportsMergeTargetQualification => true;
+
+    /// <summary>
+    /// Renders the terminator of a general <c>MERGE</c>. Defaults to none; SQL Server requires a
+    /// terminating semicolon.
+    /// </summary>
+    string MakeMergeStatementTerminator(KeywordCase keywordCase = KeywordCase.Lower) => string.Empty;
+
+    /// <summary>
+    /// Renders the <c>RETURNING</c> clause of a general <c>MERGE</c>. Defaults to the ANSI form; PostgreSQL
+    /// overrides it to qualify the target columns, whose names would otherwise be ambiguous with the source.
+    /// </summary>
+    string MakeMergeReturning(IReadOnlyList<string> columns, KeywordCase keywordCase = KeywordCase.Lower)
+        => MakeReturning(columns, keywordCase);
+
+    /// <summary>
+    /// Whether the dialect can execute a <c>DELETE</c> and report the affected-row count. Declared as a
+    /// default interface method returning <c>true</c>; the native statement is rendered by
+    /// <see cref="MakeDeleteHead"/> (ClickHouse renders its <c>ALTER TABLE ... DELETE</c> mutation).
+    /// </summary>
+    bool SupportsDelete => true;
+
+    /// <summary>
+    /// Whether the dialect has a native <c>TRUNCATE TABLE</c> statement. Declared as a default interface
+    /// method returning <c>false</c>; SQLite has no <c>TRUNCATE</c> (use <c>DELETE</c>), so it keeps the
+    /// default.
+    /// </summary>
+    bool SupportsTruncate => false;
+
+    /// <summary>
+    /// Renders the native full-table truncation over the already-resolved, quoted target table. Only
+    /// called when <see cref="SupportsTruncate"/> is <c>true</c>.
+    /// </summary>
+    /// <param name="table">The quoted target table.</param>
+    /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
+    /// <returns>The rendered <c>TRUNCATE TABLE</c> statement.</returns>
+    string MakeTruncate(string table, KeywordCase keywordCase = KeywordCase.Lower) => SqlKeywords.Of(keywordCase, "truncate table ") + table;
+
+    /// <summary>
+    /// Renders the head of a <c>DELETE</c> statement up to (but not including) its filter, over the
+    /// already-resolved, quoted target table. Defaults to the ANSI <c>DELETE FROM &lt;table&gt;</c>;
+    /// ClickHouse overrides it with the <c>ALTER TABLE &lt;table&gt; DELETE</c> mutation head.
+    /// </summary>
+    /// <param name="table">The quoted target table.</param>
+    /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
+    /// <returns>The rendered delete head.</returns>
+    string MakeDeleteHead(string table, KeywordCase keywordCase = KeywordCase.Lower) => SqlKeywords.Of(keywordCase, "delete from ") + table;
+
+    /// <summary>
+    /// Whether the dialect requires a <c>WHERE</c> clause on every delete (ClickHouse's
+    /// <c>ALTER TABLE ... DELETE</c> does). A delete without a predicate then renders a trivially true
+    /// filter (<c>WHERE 1</c>). Defaults to <c>false</c>.
+    /// </summary>
+    bool DeleteRequiresWhere => false;
+
+    /// <summary>
+    /// Renders a dialect suffix appended after the delete's filter (ClickHouse's
+    /// <c>SETTINGS mutations_sync = 1</c>), or <see langword="null"/> when there is none. Defaults to
+    /// <see langword="null"/>.
+    /// </summary>
+    /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
+    /// <returns>The suffix, or <see langword="null"/>.</returns>
+    string? MakeDeleteSuffix(KeywordCase keywordCase = KeywordCase.Lower) => null;
+
+    /// <summary>
+    /// Whether the dialect can delete rows of one table based on a join (a native multi-table
+    /// <c>DELETE</c>). Declared as a default interface method returning <c>false</c>; PostgreSQL, SQL
+    /// Server, MySQL and MariaDB override it. SQLite has no join-<c>DELETE</c>, and ClickHouse's
+    /// <c>ALTER TABLE ... DELETE</c> mutation cannot reference other tables, so both keep the default.
+    /// </summary>
+    bool SupportsDeleteJoin => false;
+
+    /// <summary>
+    /// Renders a multi-table <c>DELETE</c>. Only called when <see cref="SupportsDeleteJoin"/> is
+    /// <c>true</c>. The renderer supplies both spellings so the dialect can pick its native form: the
+    /// alias style (<c>DELETE &lt;alias&gt; FROM &lt;fromAndJoins&gt;</c>, SQL Server/MySQL/MariaDB) and
+    /// the <c>USING</c> style (<c>DELETE FROM ... USING ...</c>, PostgreSQL), where the join conditions
+    /// are folded into the <c>WHERE</c> so they can reference the target alias.
+    /// </summary>
+    /// <param name="target">The target table with literal identifiers (already quoted), without an alias.</param>
+    /// <param name="targetAlias">The alias assigned to the target table, already escaped for the dialect.</param>
+    /// <param name="fromAndJoins">The alias-style source: <c>&lt;target&gt; AS a JOIN &lt;b&gt; AS b ON ...</c>.</param>
+    /// <param name="usingSources">The <c>USING</c>-style source list: <c>&lt;b&gt; AS b[, &lt;c&gt; AS c ...]</c>.</param>
+    /// <param name="joinConditions">The rendered join <c>ON</c> conditions, combined with <c>and</c>, without a leading <c>WHERE</c>.</param>
+    /// <param name="whereSql">The rendered user <c>WHERE</c> condition, or <see langword="null"/> when there is none.</param>
+    /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
+    /// <returns>The rendered multi-table <c>DELETE</c>.</returns>
+    /// <exception cref="NotSupportedException">The dialect has no native multi-table <c>DELETE</c>.</exception>
+    string MakeDeleteJoin(
+        string target,
+        string targetAlias,
+        string fromAndJoins,
+        string usingSources,
+        string joinConditions,
+        string? whereSql,
+        KeywordCase keywordCase = KeywordCase.Lower)
+        => throw new NotSupportedException($"{GetType().Name} cannot render a multi-table DELETE.");
+
+    /// <summary>
+    /// Whether <see cref="MakeDeleteJoin"/> must be given the <c>USING</c> spelling (PostgreSQL) rather
+    /// than the alias spelling. Defaults to <c>false</c>.
+    /// </summary>
+    bool DeleteJoinRequiresUsing => false;
+
+    /// <summary>
+    /// Whether the dialect can execute an <c>UPDATE</c> and report the affected-row count. Declared as a
+    /// default interface method returning <c>true</c>; ClickHouse keeps it <c>true</c> but renders its
+    /// <c>ALTER TABLE ... UPDATE</c> mutation, which waits for the mutation
+    /// (<c>SETTINGS mutations_sync = 1</c>) yet reports no affected-row count. The native head is rendered
+    /// by <see cref="MakeUpdateHead"/>.
+    /// </summary>
+    bool SupportsUpdate => true;
+
+    /// <summary>
+    /// Renders the head of an <c>UPDATE</c> statement up to (but not including) its <c>SET</c> list, over
+    /// the already-resolved, quoted target table. Defaults to the ANSI <c>UPDATE &lt;table&gt; SET </c>;
+    /// ClickHouse overrides it with <c>ALTER TABLE &lt;table&gt; UPDATE </c>. Only reached through a
+    /// dialect that kept <see cref="SupportsUpdate"/> <c>true</c>.
+    /// </summary>
+    /// <param name="table">The quoted target table.</param>
+    /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
+    /// <returns>The rendered update head.</returns>
+    string MakeUpdateHead(string table, KeywordCase keywordCase = KeywordCase.Lower) => SqlKeywords.Of(keywordCase, "update ") + table + SqlKeywords.Of(keywordCase, " set ");
+
+    /// <summary>
+    /// Whether the dialect requires a <c>WHERE</c> clause on every update (ClickHouse's
+    /// <c>ALTER TABLE ... UPDATE</c> does). An update without a predicate then renders a trivially true
+    /// filter (<c>WHERE 1</c>). Defaults to <c>false</c>.
+    /// </summary>
+    bool UpdateRequiresWhere => false;
+
+    /// <summary>
+    /// Renders a dialect suffix appended after the update's filter (ClickHouse's
+    /// <c>SETTINGS mutations_sync = 1</c>), or <see langword="null"/> when there is none. Defaults to
+    /// <see langword="null"/>.
+    /// </summary>
+    /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
+    /// <returns>The suffix, or <see langword="null"/>.</returns>
+    string? MakeUpdateSuffix(KeywordCase keywordCase = KeywordCase.Lower) => null;
+
+    /// <summary>
+    /// Whether the dialect can update rows of one table based on a join (a native multi-table
+    /// <c>UPDATE</c>). Declared as a default interface method returning <c>false</c>; PostgreSQL, SQLite,
+    /// SQL Server, MySQL and MariaDB override it. ClickHouse's <c>ALTER TABLE ... UPDATE</c> mutation
+    /// cannot reference other tables, so it keeps the default.
+    /// </summary>
+    bool SupportsUpdateJoin => false;
+
+    /// <summary>
+    /// Whether <see cref="MakeUpdateJoin"/> must be given the <c>FROM</c> spelling (PostgreSQL and
+    /// SQLite): the target stays out of the source list, the joined tables are listed separately and the
+    /// join conditions are folded into the <c>WHERE</c> so they can reference the target alias. When
+    /// <c>false</c>, the alias spelling is used (SQL Server <c>UPDATE &lt;alias&gt; ... FROM</c>,
+    /// MySQL/MariaDB <c>UPDATE ... JOIN ... SET</c>). Defaults to <c>false</c>.
+    /// </summary>
+    bool UpdateJoinRequiresFrom => false;
+
+    /// <summary>
+    /// Renders a multi-table <c>UPDATE</c>. Only called when <see cref="SupportsUpdateJoin"/> is
+    /// <c>true</c>. The renderer supplies both spellings so the dialect can pick its native form: the
+    /// alias style (<c>&lt;target&gt; AS a JOIN &lt;b&gt; AS b ON ...</c>, SQL Server/MySQL/MariaDB) and
+    /// the <c>FROM</c> style (<c>&lt;b&gt; AS b, ...</c> plus join conditions, PostgreSQL/SQLite). The
+    /// <c>SET</c> list is rendered once and references the target through its alias.
+    /// </summary>
+    /// <param name="target">The target table with literal identifiers (already quoted), without an alias.</param>
+    /// <param name="targetAlias">The alias assigned to the target table, already escaped for the dialect.</param>
+    /// <param name="assignments">The rendered <c>&lt;column&gt; = &lt;value&gt;</c> list, without the <c>SET</c> keyword.</param>
+    /// <param name="fromAndJoins">The alias-style source: <c>&lt;target&gt; AS a JOIN &lt;b&gt; AS b ON ...</c>.</param>
+    /// <param name="usingSources">The <c>FROM</c>-style source list: <c>&lt;b&gt; AS b[, &lt;c&gt; AS c ...]</c>.</param>
+    /// <param name="joinConditions">The rendered join <c>ON</c> conditions, combined with <c>and</c>, without a leading <c>WHERE</c>.</param>
+    /// <param name="whereSql">The rendered user <c>WHERE</c> condition, or <see langword="null"/> when there is none.</param>
+    /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
+    /// <returns>The rendered multi-table <c>UPDATE</c>.</returns>
+    /// <exception cref="NotSupportedException">The dialect has no native multi-table <c>UPDATE</c>.</exception>
+    string MakeUpdateJoin(
+        string target,
+        string targetAlias,
+        string assignments,
+        string fromAndJoins,
+        string usingSources,
+        string joinConditions,
+        string? whereSql,
+        KeywordCase keywordCase = KeywordCase.Lower)
+        => throw new NotSupportedException($"{GetType().Name} cannot render a multi-table UPDATE.");
+
+    /// <summary>
+    /// Whether the dialect can materialise a query into a persistent table. Declared as a default
+    /// interface method returning <c>false</c> so existing external implementations keep compiling;
+    /// PostgreSQL, SQLite, MySQL, MariaDB, ClickHouse and SQL Server opt in. SQL Server uses the
+    /// <c>SELECT ... INTO</c> form (see <see cref="CreateTableAsSelectUsesSelectInto"/>), the others
+    /// <c>CREATE TABLE ... AS SELECT</c>.
+    /// </summary>
+    bool SupportsCreateTableAsSelect => false;
+
+    /// <summary>
+    /// Whether the dialect can materialise a query into a <em>temporary</em> table (<c>ToTempTable</c>).
+    /// Declared as a default interface method returning <see cref="SupportsCreateTableAsSelect"/>;
+    /// PostgreSQL, SQLite, MySQL and MariaDB keep it, while SQL Server (a temporary table is
+    /// <c>ToTable("#name")</c>) and ClickHouse (a temporary table accepts no <c>AS SELECT</c>) opt out.
+    /// </summary>
+    bool SupportsTemporaryCreateTableAsSelect => SupportsCreateTableAsSelect;
+
+    /// <summary>
+    /// Whether the dialect accepts <c>IF NOT EXISTS</c> on the materialisation. Declared as a default
+    /// interface method returning <c>false</c>; PostgreSQL, SQLite, MySQL, MariaDB and ClickHouse opt in,
+    /// while SQL Server's <c>SELECT ... INTO</c> cannot express it, so the option is rejected there.
+    /// </summary>
+    bool SupportsCreateTableAsSelectIfNotExists => false;
+
+    /// <summary>
+    /// Whether the dialect renders the materialisation as <c>SELECT ... INTO</c> (SQL Server) rather than
+    /// <c>CREATE TABLE ... AS SELECT</c>. Declared as a default interface method returning <c>false</c>.
+    /// </summary>
+    bool CreateTableAsSelectUsesSelectInto => false;
+
+    /// <summary>
+    /// Whether the dialect accepts a column list on <c>CREATE TABLE ... AS SELECT</c> (PostgreSQL,
+    /// MySQL, MariaDB). SQLite derives every column from the query and accepts no list; SQL Server takes
+    /// the names from the select list; ClickHouse needs <c>name type</c> pairs. All three keep the
+    /// default. Declared as a default interface method returning <c>false</c>.
+    /// </summary>
+    bool SupportsCreateTableAsSelectColumnList => false;
+
+    /// <summary>
+    /// Whether the dialect accepts <c>ON COMMIT { PRESERVE ROWS | DELETE ROWS | DROP }</c> on a
+    /// temporary table (PostgreSQL only). Declared as a default interface method returning <c>false</c>.
+    /// </summary>
+    bool SupportsCreateTableAsSelectOnCommit => false;
+
+    /// <summary>
+    /// Whether the dialect accepts <c>WITH [NO] DATA</c> after the query of a
+    /// <c>CREATE TABLE ... AS SELECT</c> (PostgreSQL only). Declared as a default interface method
+    /// returning <c>false</c>.
+    /// </summary>
+    bool SupportsCreateTableAsSelectWithNoData => false;
+
+    /// <summary>
+    /// Renders the clause that introduces the target of a <c>SELECT ... INTO</c> materialisation (for
+    /// example <c> into [target]</c>), which the statement builder inserts into the select list. Only
+    /// called through a dialect that set <see cref="CreateTableAsSelectUsesSelectInto"/>; the default
+    /// throws.
+    /// </summary>
+    /// <param name="clause">The resolved clause options.</param>
+    /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
+    /// <returns>The rendered <c>INTO</c> clause.</returns>
+    string MakeCreateTableAsSelectInto(CreateTableAsClause clause, KeywordCase keywordCase = KeywordCase.Lower)
+        => throw new NotSupportedException($"{GetType().Name} cannot render a SELECT ... INTO materialisation.");
+
+    /// <summary>
+    /// Renders a <c>CREATE [TEMPORARY] TABLE ... AS SELECT</c> statement over the already-resolved,
+    /// optionally quoted <paramref name="clause"/> and the already-rendered <paramref name="selectSql"/>
+    /// body. Only called through a dialect that set <see cref="SupportsCreateTableAsSelect"/>; the
+    /// optional parts (column list, <c>ON COMMIT</c>, <c>WITH NO DATA</c>) are gated by their own flags
+    /// before this is reached.
+    /// </summary>
+    /// <param name="clause">The resolved clause options.</param>
+    /// <param name="selectSql">The rendered body query.</param>
+    /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
+    /// <returns>The rendered statement.</returns>
+    string MakeCreateTableAsSelect(CreateTableAsClause clause, string selectSql, KeywordCase keywordCase = KeywordCase.Lower)
+        => throw new NotSupportedException($"{GetType().Name} cannot render CREATE TABLE ... AS SELECT.");
 }
 
 /// <summary>Which side of a string <see cref="string.Trim()"/> removes whitespace from.</summary>

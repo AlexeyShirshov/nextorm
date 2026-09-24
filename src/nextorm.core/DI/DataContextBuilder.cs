@@ -36,6 +36,13 @@ public class DataContextBuilder
     /// verbatim; can be overridden per command with <c>WithNamingConvention</c>.
     /// </summary>
     public INamingConvention? NamingConvention { get; private set; }
+
+    /// <summary>
+    /// The letter case in which SQL keywords are emitted by default. Defaults to
+    /// <see cref="NextORM.Core.KeywordCase.Lower"/> (unchanged historical output); can be overridden per
+    /// command with <c>WithKeywordCase</c>. Set through <see cref="UseKeywordCase"/>.
+    /// </summary>
+    public KeywordCase KeywordCase { get; private set; }
     //internal IDataProvider? DataProvider => _dataProvider;
     internal ILoggerFactory? LoggerFactory => _loggerFactory;
     // public bool CacheQueryCommand { get; set; } = true;
@@ -107,6 +114,29 @@ public class DataContextBuilder
         NamingConvention = convention;
         return this;
     }
+
+    /// <summary>
+    /// Sets the letter case in which SQL keywords are emitted. <see cref="KeywordCase.Lower"/> (the
+    /// default) emits <c>select ... from ...</c>; <see cref="KeywordCase.Upper"/> emits
+    /// <c>SELECT ... FROM ...</c>. Identifiers, string literals, function names, type names and raw SQL
+    /// are never affected. A single command can override the setting with <c>WithKeywordCase</c>.
+    /// </summary>
+    /// <param name="keywordCase">The keyword case to apply.</param>
+    /// <returns>This builder, to allow chaining.</returns>
+    public DataContextBuilder UseKeywordCase(KeywordCase keywordCase = KeywordCase.Upper)
+    {
+        KeywordCase = keywordCase;
+        return this;
+    }
+
+    /// <summary>
+    /// Convenience form of <see cref="UseKeywordCase"/>: enables (<paramref name="value"/> is
+    /// <see langword="true"/>) or disables upper-case SQL keywords.
+    /// </summary>
+    /// <param name="value"><see langword="true"/> to emit keywords in upper case; otherwise lower case.</param>
+    /// <returns>This builder, to allow chaining.</returns>
+    public DataContextBuilder UseUppercaseKeywords(bool value = true)
+        => UseKeywordCase(value ? KeywordCase.Upper : KeywordCase.Lower);
 
     /// <summary>
     /// Creates a data context from the current configuration by invoking <see cref="Factory"/>.
