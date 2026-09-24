@@ -269,14 +269,34 @@ internal static class NormSqlTranslator
             var countFilter = node.Arguments is [Expression filterCandidate] && AggregateFilter.IsFilterExpression(filterCandidate)
                 ? filterCandidate
                 : null;
-            RequireFilter(visitor, countFilter);
+            AggregateFilter.RequireSupport(visitor, countFilter);
 
             // A count projected into a select list is referenced from outer queries by its property
             // name, so it must carry an alias (the scalar aggregate translators set this too).
             if (!visitor.IsParamMode) visitor.NeedAliasForColumn = true;
 
-            var countStart = visitor.IsParamMode ? 0 : visitor.Builder!.Length;
             var countBig = node.Method.Name.Contains("big", StringComparison.Ordinal);
+
+            // ClickHouse renders the filtered count as countIf(predicate); the generic count filter
+            // always counts rows, so there is no value argument.
+            if (countFilter is not null
+                && visitor.Dialect.AggregateFilterStyle == AggregateFilterStyle.IfCombinator)
+            {
+                var combinatorStart = visitor.IsParamMode ? 0 : visitor.Builder!.Length;
+                AggregateFilter.AppendCombinator(visitor, AggregateFilter.CombinatorName(visitor.Dialect, "count"), value: null, countFilter);
+
+                if (!visitor.IsParamMode && visitor.Dialect.WrapsCountResult)
+                {
+                    var builder = visitor.Builder!;
+                    var rendered = builder.ToString(combinatorStart, builder.Length - combinatorStart);
+                    builder.Length = combinatorStart;
+                    builder.Append(visitor.Dialect.WrapCount(rendered, countBig));
+                }
+
+                return;
+            }
+
+            var countStart = visitor.IsParamMode ? 0 : visitor.Builder!.Length;
 
             if (!visitor.IsParamMode) visitor.Builder!.Append(visitor.Dialect.MakeCount(node.Method.Name.EndsWith("distinct", StringComparison.Ordinal), countBig));
 
@@ -325,9 +345,18 @@ internal static class NormSqlTranslator
         {
             var args = node.Arguments;
             var minMaxFilter = GetTrailingFilter(args, 2);
-            RequireFilter(visitor, minMaxFilter);
+            AggregateFilter.RequireSupport(visitor, minMaxFilter);
 
             if (!visitor.IsParamMode) visitor.NeedAliasForColumn = true;
+
+            // ClickHouse renders the filtered min/max as minIf(value, predicate)/maxIf(value, predicate).
+            if (minMaxFilter is not null
+                && visitor.Dialect.AggregateFilterStyle == AggregateFilterStyle.IfCombinator)
+            {
+                AggregateFilter.AppendCombinator(visitor, AggregateFilter.CombinatorName(visitor.Dialect, node.Method.Name), args[0], minMaxFilter);
+                return;
+            }
+
             if (!visitor.IsParamMode) visitor.Builder!.Append(node.Method.Name).Append('(');
 
             var last = minMaxFilter is null ? args.Count : args.Count - 1;
@@ -365,7 +394,17 @@ internal static class NormSqlTranslator
         {
             var args = node.Arguments;
             var aggregateFilter = GetTrailingFilter(args, 2);
-            RequireFilter(visitor, aggregateFilter);
+            AggregateFilter.RequireSupport(visitor, aggregateFilter);
+
+            // ClickHouse renders the filtered avg/sum as avgIf(value, predicate)/sumIf(value, predicate).
+            if (aggregateFilter is not null
+                && visitor.Dialect.AggregateFilterStyle == AggregateFilterStyle.IfCombinator)
+            {
+                if (!visitor.IsParamMode) visitor.NeedAliasForColumn = true;
+                var combinatorName = node.Method.Name.Replace("_distinct", string.Empty);
+                AggregateFilter.AppendCombinator(visitor, AggregateFilter.CombinatorName(visitor.Dialect, combinatorName), args[0], aggregateFilter);
+                return;
+            }
 
             if (!visitor.IsParamMode)
             {
@@ -442,10 +481,4 @@ internal static class NormSqlTranslator
         => args.Count == withFilterCount && AggregateFilter.IsFilterExpression(args[args.Count - 1])
             ? args[args.Count - 1]
             : null;
-
-    private static void RequireFilter(BaseExpressionVisitor visitor, Expression? filter)
-    {
-        if (filter is not null && !visitor.Dialect.SupportsFilter)
-            throw new NotSupportedException("The FILTER clause is not supported by this provider.");
-    }
 }

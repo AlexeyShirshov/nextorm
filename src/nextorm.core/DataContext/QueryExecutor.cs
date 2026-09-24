@@ -15,6 +15,7 @@ namespace NextORM.Core;
 /// </summary>
 internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
 {
+    private readonly IDataContext _context;
     private readonly IConnectionManager _connectionManager;
     private readonly Func<string, object?, DbParameter> _createParam;
     private readonly ILogger? _logger;
@@ -22,14 +23,18 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     private readonly bool _logSensitiveData;
     private readonly Func<bool> _isDisposed;
     private readonly Func<DbTransaction?> _currentTransaction;
+    private readonly InterceptorHooks _interceptors;
 
     internal QueryExecutor(
+        IDataContext context,
         IConnectionManager connectionManager,
         Func<string, object?, DbParameter> createParam,
         LoggingOptions logging,
         Func<bool> isDisposed,
-        Func<DbTransaction?> currentTransaction)
+        Func<DbTransaction?> currentTransaction,
+        InterceptorHooks interceptors)
     {
+        _context = context;
         _connectionManager = connectionManager;
         _createParam = createParam;
         _logger = logging.Logger;
@@ -37,6 +42,174 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         _logSensitiveData = logging.LogSensitiveData;
         _isDisposed = isDisposed;
         _currentTransaction = currentTransaction;
+        _interceptors = interceptors;
+    }
+
+    // The interception helpers below are the single place the command lifecycle events are raised.
+    // Each wrapper checks the interceptor count first, so with none registered the call is a branch
+    // and an inlined direct execute — no delegates, closures, timestamps or async state machines.
+    // The event loops themselves live on InterceptorHooks, shared with the streaming and planning paths.
+
+    private void RaiseCommandInitialized(DbCommand command)
+    {
+        var interceptors = _interceptors.QueryInterceptors;
+        if (interceptors.Length == 0)
+            return;
+
+        InterceptorHooks.RaiseCommandInitialized(interceptors, _context, command);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private long BeginCommand(DbCommand command, IQueryInterceptor[] interceptors)
+    {
+        InterceptorHooks.RaiseCommandExecuting(interceptors, _context, command);
+        return Stopwatch.GetTimestamp();
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void EndCommand(DbCommand command, IQueryInterceptor[] interceptors, long started)
+        => InterceptorHooks.RaiseCommandExecuted(interceptors, _context, command, Stopwatch.GetElapsedTime(started));
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void FailCommand(DbCommand command, IQueryInterceptor[] interceptors, Exception exception)
+        => InterceptorHooks.RaiseCommandFailed(interceptors, _context, command, exception);
+
+    private int RunNonQuery(DbCommand command)
+    {
+        var interceptors = _interceptors.QueryInterceptors;
+        return interceptors.Length == 0 ? command.ExecuteNonQuery() : RunNonQueryCore(command, interceptors);
+    }
+
+    private int RunNonQueryCore(DbCommand command, IQueryInterceptor[] interceptors)
+    {
+        var started = BeginCommand(command, interceptors);
+        try
+        {
+            var result = command.ExecuteNonQuery();
+            EndCommand(command, interceptors, started);
+            return result;
+        }
+        catch (Exception exception)
+        {
+            FailCommand(command, interceptors, exception);
+            throw;
+        }
+    }
+
+    private Task<int> RunNonQueryAsync(DbCommand command, CancellationToken cancellationToken)
+    {
+        var interceptors = _interceptors.QueryInterceptors;
+        return interceptors.Length == 0
+            ? command.ExecuteNonQueryAsync(cancellationToken)
+            : RunNonQueryCoreAsync(command, cancellationToken, interceptors);
+    }
+
+    private async Task<int> RunNonQueryCoreAsync(DbCommand command, CancellationToken cancellationToken, IQueryInterceptor[] interceptors)
+    {
+        var started = BeginCommand(command, interceptors);
+        try
+        {
+            var result = await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            EndCommand(command, interceptors, started);
+            return result;
+        }
+        catch (Exception exception)
+        {
+            FailCommand(command, interceptors, exception);
+            throw;
+        }
+    }
+
+    private object? RunScalar(DbCommand command)
+    {
+        var interceptors = _interceptors.QueryInterceptors;
+        return interceptors.Length == 0 ? command.ExecuteScalar() : RunScalarCore(command, interceptors);
+    }
+
+    private object? RunScalarCore(DbCommand command, IQueryInterceptor[] interceptors)
+    {
+        var started = BeginCommand(command, interceptors);
+        try
+        {
+            var result = command.ExecuteScalar();
+            EndCommand(command, interceptors, started);
+            return result;
+        }
+        catch (Exception exception)
+        {
+            FailCommand(command, interceptors, exception);
+            throw;
+        }
+    }
+
+    private Task<object?> RunScalarAsync(DbCommand command, CancellationToken cancellationToken)
+    {
+        var interceptors = _interceptors.QueryInterceptors;
+        return interceptors.Length == 0
+            ? command.ExecuteScalarAsync(cancellationToken)
+            : RunScalarCoreAsync(command, cancellationToken, interceptors);
+    }
+
+    private async Task<object?> RunScalarCoreAsync(DbCommand command, CancellationToken cancellationToken, IQueryInterceptor[] interceptors)
+    {
+        var started = BeginCommand(command, interceptors);
+        try
+        {
+            var result = await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+            EndCommand(command, interceptors, started);
+            return result;
+        }
+        catch (Exception exception)
+        {
+            FailCommand(command, interceptors, exception);
+            throw;
+        }
+    }
+
+    private DbDataReader RunReader(DbCommand command, CommandBehavior behavior)
+    {
+        var interceptors = _interceptors.QueryInterceptors;
+        return interceptors.Length == 0 ? command.ExecuteReader(behavior) : RunReaderCore(command, behavior, interceptors);
+    }
+
+    private DbDataReader RunReaderCore(DbCommand command, CommandBehavior behavior, IQueryInterceptor[] interceptors)
+    {
+        var started = BeginCommand(command, interceptors);
+        try
+        {
+            var reader = command.ExecuteReader(behavior);
+            EndCommand(command, interceptors, started);
+            return reader;
+        }
+        catch (Exception exception)
+        {
+            FailCommand(command, interceptors, exception);
+            throw;
+        }
+    }
+
+    private Task<DbDataReader> RunReaderAsync(DbCommand command, CommandBehavior behavior, CancellationToken cancellationToken)
+    {
+        var interceptors = _interceptors.QueryInterceptors;
+        return interceptors.Length == 0
+            ? command.ExecuteReaderAsync(behavior, cancellationToken)
+            : RunReaderCoreAsync(command, behavior, cancellationToken, interceptors);
+    }
+
+    private async Task<DbDataReader> RunReaderCoreAsync(DbCommand command, CommandBehavior behavior, CancellationToken cancellationToken, IQueryInterceptor[] interceptors)
+    {
+        var started = BeginCommand(command, interceptors);
+        try
+        {
+            var reader = await command.ExecuteReaderAsync(behavior, cancellationToken).ConfigureAwait(false);
+            EndCommand(command, interceptors, started);
+            return reader;
+        }
+        catch (Exception exception)
+        {
+            FailCommand(command, interceptors, exception);
+            throw;
+        }
     }
 
     private void LogParams(DbCommand sqlCommand)
@@ -103,6 +276,8 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         for (var i = 0; i < parameters.Count; i++)
             cmd.Parameters.Add(_createParam(parameters[i].Name, parameters[i].Value));
 
+        RaiseCommandInitialized(cmd);
+
         if (_logParams) LogParams(cmd);
 
         return cmd;
@@ -116,7 +291,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     {
         CheckDisposed();
         using var cmd = CreateMutationCommand(sql, parameters);
-        return cmd.ExecuteNonQuery();
+        return RunNonQuery(cmd);
     }
 
     /// <summary>Asynchronously executes a mutation and returns the number of affected rows.</summary>
@@ -128,7 +303,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     {
         CheckDisposed();
         using var cmd = CreateMutationCommand(sql, parameters);
-        return await cmd.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        return await RunNonQueryAsync(cmd, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Executes a mutation and returns the first column of its first row, or <see langword="null"/>.</summary>
@@ -139,7 +314,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     {
         CheckDisposed();
         using var cmd = CreateMutationCommand(sql, parameters);
-        var result = cmd.ExecuteScalar();
+        var result = RunScalar(cmd);
         return result is DBNull ? null : result;
     }
 
@@ -152,7 +327,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     {
         CheckDisposed();
         using var cmd = CreateMutationCommand(sql, parameters);
-        var result = await cmd.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+        var result = await RunScalarAsync(cmd, cancellationToken).ConfigureAwait(false);
         return result is DBNull ? null : result;
     }
 
@@ -169,7 +344,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     {
         CheckDisposed();
         using var cmd = CreateMutationCommand(sql, parameters);
-        using var reader = cmd.ExecuteReader();
+        using var reader = RunReader(cmd, CommandBehavior.Default);
 
         var list = new List<TResult>();
         while (reader.Read())
@@ -189,7 +364,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     {
         CheckDisposed();
         using var cmd = CreateMutationCommand(sql, parameters);
-        using var reader = await cmd.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        using var reader = await RunReaderAsync(cmd, CommandBehavior.Default, cancellationToken).ConfigureAwait(false);
 
         var list = new List<TResult>();
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
@@ -225,7 +400,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         var compiledQuery = AsDbCommand(preparedQueryCommand);
 
         var sqlEnumerator = RequireEnumerator(compiledQuery);
-        sqlEnumerator.InitEnumerator(_connectionManager, _createParam, @params, cancellationToken, _currentTransaction);
+        sqlEnumerator.InitEnumerator(_connectionManager, _createParam, @params, cancellationToken, _currentTransaction, _interceptors, _context);
         return sqlEnumerator;
     }
 
@@ -234,7 +409,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         var compiledQuery = AsDbCommand(preparedQueryCommand);
 
         var sqlEnumerator = RequireEnumerator(compiledQuery);
-        sqlEnumerator.InitEnumerator(_connectionManager, _createParam, @params, CancellationToken.None, _currentTransaction);
+        sqlEnumerator.InitEnumerator(_connectionManager, _createParam, @params, CancellationToken.None, _currentTransaction, _interceptors, _context);
         sqlEnumerator.InitReader(@params);
 
         return sqlEnumerator;
@@ -245,7 +420,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         var compiledQuery = AsDbCommand(preparedQueryCommand);
 
         var sqlCommand = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
-        var reader = await sqlCommand.ExecuteReaderAsync(compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
+        var reader = await RunReaderAsync(sqlCommand, compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
         using (reader)
         {
             var l = new List<TResult>(compiledQuery.LastRowCount);
@@ -265,7 +440,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         var compiledQuery = AsDbCommand(preparedQueryCommand);
 
         var sqlCommand = GetDbCommand(compiledQuery, @params);
-        var reader = sqlCommand.ExecuteReader(compiledQuery.Behavior);
+        var reader = RunReader(sqlCommand, compiledQuery.Behavior);
         using (reader)
         {
             var l = new List<TResult>(compiledQuery.LastRowCount);
@@ -353,7 +528,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
 
         var sqlCommand = GetDbCommand(compiledQuery, @params);
 
-        var r = sqlCommand.ExecuteScalar();
+        var r = RunScalar(sqlCommand);
 
         if (r is TResult res) return res;
         if (r is null or DBNull)
@@ -372,7 +547,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
 
         var sqlCommand = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
 
-        var r = await sqlCommand.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
+        var r = await RunScalarAsync(sqlCommand, cancellationToken).ConfigureAwait(false);
 
         if (r is TResult res) return res;
         if (r is null or DBNull)
@@ -399,7 +574,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
             return ExecuteScalar<TResult>(preparedQueryCommand, @params, true)!;
 
         var sqlCommand = GetDbCommand(compiledQuery, @params);
-        var reader = sqlCommand.ExecuteReader(compiledQuery.Behavior);
+        var reader = RunReader(sqlCommand, compiledQuery.Behavior);
         var mapper = compiledQuery.MapDelegate!;
         using (reader)
         {
@@ -419,7 +594,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
             return (await ExecuteScalar<TResult>(preparedQueryCommand, @params, true, cancellationToken))!;
 
         var sqlCommand = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
-        var reader = await sqlCommand.ExecuteReaderAsync(compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
+        var reader = await RunReaderAsync(sqlCommand, compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
         var mapper = compiledQuery.MapDelegate!;
         using (reader)
         {
@@ -439,7 +614,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
             return ExecuteScalar<TResult>(preparedQueryCommand, @params, false);
 
         var sqlCommand = GetDbCommand(compiledQuery, @params);
-        var reader = sqlCommand.ExecuteReader(compiledQuery.Behavior);
+        var reader = RunReader(sqlCommand, compiledQuery.Behavior);
         var mapper = compiledQuery.MapDelegate!;
         using (reader)
         {
@@ -459,7 +634,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
             return await ExecuteScalar<TResult>(preparedQueryCommand, @params, false, cancellationToken);
 
         var sqlCommand = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
-        var reader = await sqlCommand.ExecuteReaderAsync(compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
+        var reader = await RunReaderAsync(sqlCommand, compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
         var mapper = compiledQuery.MapDelegate!;
         using (reader)
         {
@@ -475,7 +650,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         var compiledQuery = AsDbCommand(preparedQueryCommand);
 
         var sqlCommand = GetDbCommand(compiledQuery, @params);
-        var reader = sqlCommand.ExecuteReader(compiledQuery.Behavior);
+        var reader = RunReader(sqlCommand, compiledQuery.Behavior);
         using (reader)
         {
             TResult r = default!;
@@ -502,7 +677,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         var compiledQuery = AsDbCommand(preparedQueryCommand);
 
         var sqlCommand = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
-        var reader = await sqlCommand.ExecuteReaderAsync(compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
+        var reader = await RunReaderAsync(sqlCommand, compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
         using (reader)
         {
             TResult r = default!;
@@ -529,7 +704,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         var compiledQuery = AsDbCommand(preparedQueryCommand);
 
         var sqlCommand = GetDbCommand(compiledQuery, @params);
-        var reader = sqlCommand.ExecuteReader(compiledQuery.Behavior);
+        var reader = RunReader(sqlCommand, compiledQuery.Behavior);
 
         using (reader)
         {
@@ -554,7 +729,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         var compiledQuery = AsDbCommand(preparedQueryCommand);
 
         var sqlCommand = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
-        var reader = await sqlCommand.ExecuteReaderAsync(compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
+        var reader = await RunReaderAsync(sqlCommand, compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
         using (reader)
         {
             TResult? r = default;

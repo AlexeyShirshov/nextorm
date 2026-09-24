@@ -25,8 +25,8 @@
 - JSON/JSONB поддерживается ([`SupportsJson`](xref:NextORM.Core.ISqlDialect.SupportsJson) равно `true`): агрегаты `json_agg`/`jsonb_agg`, функции
   построения/доступа и операторы `->`/`->>`/`@>`/`?`, а параметры `JsonDocument`/`JsonElement`/`JsonNode`
   привязываются как `jsonb`;
-- `greatest`/`least` и предложение `FILTER (WHERE ...)` у агрегатов включены ([`SupportsGreatestLeast`](xref:NextORM.Core.ISqlDialect.SupportsGreatestLeast) и
-  [`SupportsFilter`](xref:NextORM.Core.ISqlDialect.SupportsFilter) равны `true`);
+- `greatest`/`least` и предложение `FILTER (WHERE ...)` у агрегатов включены ([`SupportsGreatestLeast`](xref:NextORM.Core.ISqlDialect.SupportsGreatestLeast) равно `true`, а
+  [`AggregateFilterStyle`](xref:NextORM.Core.ISqlDialect.AggregateFilterStyle) — `AnsiFilter`);
 - `date_trunc` включён ([`SupportsDateTrunc`](xref:NextORM.Core.ISqlDialect.SupportsDateTrunc) равно `true`);
 - арифметика дат включена ([`SupportsDateArithmetic`](xref:NextORM.Core.ISqlDialect.SupportsDateArithmetic) равно `true`): `SqlFunctions.Sql.date_add`/`end_of_month`
   и методы `DateTime.Add*` отрисовывают интервальную арифметику PostgreSQL

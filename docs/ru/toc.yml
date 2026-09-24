@@ -64,6 +64,10 @@
       href: guide/24-bulk-insert.md
     - name: Транзакции
       href: guide/25-transactions.md
+    - name: Колонки-длительности (TimeSpan)
+      href: guide/26-duration-columns.md
+    - name: Интерцепторы
+      href: guide/27-interceptors.md
     - name: Специфичный для провайдеров SQL
       items:
         - name: Обзор

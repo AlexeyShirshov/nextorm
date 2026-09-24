@@ -44,25 +44,6 @@ namespace NextORM.Core;
         public TValue? arg_max<TValue, TBy>(TValue? value, TBy? by) => default!;
 
         /// <summary>
-        /// <c>countIf(predicate)</c>: the number of rows for which the predicate is true. Requires a
-        /// provider that renders the <c>-If</c> combinator (see
-        /// <see cref="ISqlDialect.SupportsIfAggregates"/>; ClickHouse).
-        /// </summary>
-        public int count_if(Expression<Func<bool>> filter) => default!;
-
-        /// <summary><c>sumIf(value, predicate)</c>: the sum of <paramref name="value"/> over the rows for which the predicate is true.</summary>
-        public T? sum_if<T>(T? value, Expression<Func<bool>> filter) => default!;
-
-        /// <summary><c>avgIf(value, predicate)</c>: the average of <paramref name="value"/> over the rows for which the predicate is true.</summary>
-        public T? avg_if<T>(T? value, Expression<Func<bool>> filter) => default!;
-
-        /// <summary><c>minIf(value, predicate)</c>: the minimum of <paramref name="value"/> over the rows for which the predicate is true.</summary>
-        public T? min_if<T>(T? value, Expression<Func<bool>> filter) => default!;
-
-        /// <summary><c>maxIf(value, predicate)</c>: the maximum of <paramref name="value"/> over the rows for which the predicate is true.</summary>
-        public T? max_if<T>(T? value, Expression<Func<bool>> filter) => default!;
-
-        /// <summary>
         /// <c>uniq(value)</c>: the approximate number of distinct values. Requires a provider that
         /// supports the distinct-count family (see <see cref="ISqlDialect.UniqAggregates"/>; ClickHouse).
         /// </summary>

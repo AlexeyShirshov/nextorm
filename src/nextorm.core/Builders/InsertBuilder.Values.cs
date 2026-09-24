@@ -47,7 +47,8 @@ public sealed partial class InsertBuilder<TEntity>
     }
 
     /// <summary>
-    /// Adds a column and copies the value of another mapped column of the same entity into it.
+    /// Adds a column and copies the value of another mapped column of the same entity into it, or writes
+    /// a parameter-free expression (for example <c>x =&gt; DateTime.Now</c>) folded into a parameter.
     /// </summary>
     /// <typeparam name="TValue">The column's CLR type.</typeparam>
     /// <param name="column">Selects the mapped column to write.</param>
@@ -63,11 +64,15 @@ public sealed partial class InsertBuilder<TEntity>
 
         var body = UnwrapConvert(value.Body);
 
-        if (body is MemberExpression { Member: PropertyInfo valueProperty })
+        // Only a member read off the lambda parameter is a column reference. A static property
+        // (x => DateTime.Now) or a member read off a captured object (x => holder.Name) happens to be a
+        // MemberExpression too, but it is a value, not the entity's column; it is constant-folded below.
+        if (body is MemberExpression { Expression: ParameterExpression source, Member: PropertyInfo valueProperty }
+            && source == value.Parameters[0])
         {
-            var source = FindProperty(valueProperty)
+            var mapped = FindProperty(valueProperty)
                 ?? throw new BuildSqlCommandException($"Property {valueProperty.Name} of {typeof(TEntity)} is not mapped.");
-            GetOrAddColumn(ResolveWritableColumn(column, nameof(column))).Values.Add(InsertValue.FromColumn(source));
+            GetOrAddColumn(ResolveWritableColumn(column, nameof(column))).Values.Add(InsertValue.FromColumn(mapped));
         }
         else if (!body.Has<ParameterExpression>())
         {

@@ -95,22 +95,6 @@ internal static class AdvancedAggregateTranslator
                 EmitOrdered(visitor, node, hasFraction: false);
                 return true;
 
-            case nameof(ClickHouseFunctions.count_if) when node.Arguments.Count == 1:
-                EmitIfAggregate(visitor, node, "count_if", valueArgument: null);
-                return true;
-            case nameof(ClickHouseFunctions.sum_if) when node.Arguments.Count == 2:
-                EmitIfAggregate(visitor, node, "sum_if", node.Arguments[0]);
-                return true;
-            case nameof(ClickHouseFunctions.avg_if) when node.Arguments.Count == 2:
-                EmitIfAggregate(visitor, node, "avg_if", node.Arguments[0]);
-                return true;
-            case nameof(ClickHouseFunctions.min_if) when node.Arguments.Count == 2:
-                EmitIfAggregate(visitor, node, "min_if", node.Arguments[0]);
-                return true;
-            case nameof(ClickHouseFunctions.max_if) when node.Arguments.Count == 2:
-                EmitIfAggregate(visitor, node, "max_if", node.Arguments[0]);
-                return true;
-
             case nameof(ClickHouseFunctions.uniq) when node.Arguments.Count == 1:
                 EmitUniq(visitor, node, "uniq");
                 return true;
@@ -344,50 +328,6 @@ internal static class AdvancedAggregateTranslator
         visitor.Builder!.Append(visitor.Dialect.MakeAggregate(name)).Append('(')
             .Append(visitor.VisitToString(node.Arguments[0])).Append(", ")
             .Append(visitor.VisitToString(node.Arguments[1])).Append(')');
-    }
-
-    /// <summary>
-    /// Renders a ClickHouse-style filtered aggregate combinator,
-    /// <c>countIf(predicate)</c>/<c>sumIf(value, predicate)</c>/<c>avgIf(...)</c>/<c>minIf(...)</c>/<c>maxIf(...)</c>.
-    /// The aggregate name is mapped by <see cref="ISqlDialect.MakeAggregate"/>; the predicate is
-    /// rendered without the ANSI <c>filter (where ...)</c> wrapper.
-    /// </summary>
-    private static void EmitIfAggregate(
-        BaseExpressionVisitor visitor,
-        MethodCallExpression node,
-        string name,
-        Expression? valueArgument)
-    {
-        if (!visitor.Dialect.SupportsIfAggregates)
-            throw new NotSupportedException("The countIf/sumIf/avgIf/minIf/maxIf aggregates are not supported by this provider.");
-
-        if (visitor.IsParamMode)
-        {
-            if (valueArgument is not null)
-                visitor.Visit(valueArgument);
-
-            AggregateFilter.AppendPredicate(visitor, node.Arguments[^1]);
-            return;
-        }
-
-        visitor.NeedAliasForColumn = true;
-        var aggregateStart = visitor.Builder!.Length;
-        visitor.Builder!.Append(visitor.Dialect.MakeAggregate(name)).Append('(');
-
-        if (valueArgument is not null)
-            visitor.Builder!.Append(visitor.VisitToString(valueArgument)).Append(", ");
-
-        AggregateFilter.AppendPredicate(visitor, node.Arguments[^1]);
-        visitor.Builder!.Append(')');
-
-        // countIf returns UInt64 like count(); sumIf/avgIf/minIf/maxIf keep the value's CLR type.
-        if (name == "count_if" && visitor.Dialect.WrapsCountResult)
-        {
-            var builder = visitor.Builder!;
-            var rendered = builder.ToString(aggregateStart, builder.Length - aggregateStart);
-            builder.Length = aggregateStart;
-            builder.Append(visitor.Dialect.WrapCount(rendered, big: false));
-        }
     }
 
     /// <summary>

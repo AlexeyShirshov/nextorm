@@ -48,6 +48,10 @@
   href: 24-bulk-insert.md
 - name: Transactions
   href: 25-transactions.md
+- name: Duration (TimeSpan) columns
+  href: 26-duration-columns.md
+- name: Interceptors
+  href: 27-interceptors.md
 - name: Provider-specific SQL
   items:
     - name: Overview

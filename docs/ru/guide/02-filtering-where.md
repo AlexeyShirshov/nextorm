@@ -366,6 +366,11 @@ select id from complex_entity where global in (@p0, @p1)
 `websearch_to_tsquery` для `freetext`), MySQL/MariaDB — `match(col) against(search in boolean mode) > 0`
 (режим natural language для `freetext`).
 
+Скалярный подзапрос также допустим в `WHERE`: одно-строчный терминал в правой части (`First`,
+`Single`, их формы `*OrDefault` или агрегат, например `Count`) отрисовывается как `select` в
+скобках и может ссылаться на внешнюю строку (коррелированный). Эти формы, а также все позиции
+подзапросов и ограничения in-memory провайдера описаны в [Подзапросы](06-subqueries.md).
+
 Для захваченного шаблона подстановочные знаки конкатенируются вокруг параметра во время построения,
 например `somestring like '%' || $needle || '%'` в SQLite. `any` и `all` не поддерживаются движком
 SQLite и завершаются ошибкой при выполнении оператора. Для **массива** они требуют PostgreSQL, где

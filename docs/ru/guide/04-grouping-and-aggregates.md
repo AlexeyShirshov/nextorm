@@ -295,7 +295,7 @@ select count(distinct nullableint) from complex_entity
 генерирует `count_big(...)`; SQLite и PostgreSQL и так возвращают 64-битное целое из `count(...)`,
 поэтому диалект генерирует `count(...)` для обоих. Агрегаты ClickHouse возвращают беззнаковый
 `UInt64`, который построитель строк не может материализовать, поэтому диалект оборачивает
-`count`/`count_distinct`/`count_if` в `toInt32(...)`, а `count_big`/`count_big_distinct` — в
+`count`/`count_distinct` (и фильтрованный `countIf`) в `toInt32(...)`, а `count_big`/`count_big_distinct` — в
 `toInt64(...)`.
 
 Сокращение уровня построителя `EntityBuilder<T>.Count()` эквивалентно
@@ -423,7 +423,7 @@ var variance = dataContext.From<ISimpleEntity>().Select(x => SqlFunctions.Sql.va
 упорядоченные) и [`ClickHouse`](xref:NextORM.Core.SqlFunctions.ClickHouse) (`arg_min`/`arg_max`, агрегаты числа уникальных
 `uniq`/`uniq_exact`/`uniq_combined`/`uniq_hll12`, параметрическое семейство квантилей
 `quantile`/`quantile_exact`/`quantile_timing`/`quantiles`/`median`, агрегаты наиболее частых значений
-`top_k`/`top_k_weighted`, комбинатор `-If` и агрегаты
+`top_k`/`top_k_weighted` и агрегаты
 последовательностей/воронки `window_funnel`/`sequence_match`/`retention`). Каждое семейство включается
 своим флагом диалекта; PostgreSQL и ClickHouse включают разные подмножества.
 
@@ -439,7 +439,7 @@ var variance = dataContext.From<ISimpleEntity>().Select(x => SqlFunctions.Sql.va
 | Наиболее частые (top-K) | `SqlFunctions.ClickHouse.top_k(3, x)`, `top_k_weighted(2, x, w)` | `topK(3)(x)`, `topKWeighted(2)(x, w)` | [`TopKAggregates`](xref:NextORM.Core.ISqlDialect.TopKAggregates) | ClickHouse |
 | Произвольное значение | `SqlFunctions.Sql.any_agg(x)` | `ANY_VALUE(x)` / `any(x)` | [`SupportsAnyValueAggregate`](xref:NextORM.Core.ISqlDialect.SupportsAnyValueAggregate) | MySQL, ClickHouse |
 | Последняя строка | `SqlFunctions.ClickHouse.any_last(x)` | `anyLast(x)` | [`SupportsAnyAggregates`](xref:NextORM.Core.ISqlDialect.SupportsAnyAggregates) | ClickHouse |
-| С фильтром (`-If`) | `SqlFunctions.ClickHouse.count_if(() => p)`, `sum_if(x, () => p)`, `avg_if(x, () => p)`, `min_if(x, () => p)`, `max_if(x, () => p)` | `countIf(p)`, `sumIf(x, p)`, ... | [`SupportsIfAggregates`](xref:NextORM.Core.ISqlDialect.SupportsIfAggregates) | ClickHouse |
+| С фильтром | `SqlFunctions.Sql.count(() => p)`, `sum(x, () => p)`, `avg(x, () => p)`, `min(x, () => p)`, `max(x, () => p)` | `count(*) filter (where p)`, ... / `countIf(p)`, `sumIf(x, p)`, ... | [`AggregateFilterStyle`](xref:NextORM.Core.ISqlDialect.AggregateFilterStyle) | PostgreSQL, SQLite (ANSI `FILTER`), ClickHouse (`-If`) |
 | Последовательности / воронка | `SqlFunctions.ClickHouse.window_funnel(window, ts, c1, c2)`, `sequence_match(pattern, ts, c1, c2)`, `retention(c1, c2)` | `toInt32(windowFunnel(window)(ts, c1, c2))`, `toInt32(sequenceMatch(pattern)(ts, c1, c2))`, `retention(c1, c2)` | [`SequenceAggregates`](xref:NextORM.Core.ISqlDialect.SequenceAggregates) | ClickHouse |
 | Упорядоченные | `SqlFunctions.Postgres.percentile_cont(fraction, () => x)`, `percentile_disc(fraction, () => x)`, `mode(() => x)` | `percentile_cont(f) within group (order by x)`, ... | [`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates) | PostgreSQL |
 
@@ -462,8 +462,8 @@ var stats = dataContext.From<IComplexEntity>()
 select bool_and(b), bit_xor(id), corr(id, nullableint), percentile_cont(0.5) within group (order by id) from complex_entity
 ```
 
-В ClickHouse те же семейства рендерятся по-своему — `groupBitAnd`, `covarPop`, `argMin`/`argMax` и
-комбинаторы `-If` — а логические агрегаты и семейство `regr_*` недоступны (в ClickHouse нет ни
+В ClickHouse те же семейства рендерятся по-своему — `groupBitAnd`, `covarPop`, `argMin`/`argMax` — а
+логические агрегаты и семейство `regr_*` недоступны (в ClickHouse нет ни
 `bool_and`, ни `regr_*`, и диалект отклоняет их через `NotSupportedException`):
 
 ```csharp
@@ -472,9 +472,7 @@ var rows = dataContext.From<IComplexEntity>()
     {
         Bits = SqlFunctions.Postgres.bit_and(e.Id),
         Cov = SqlFunctions.Sql.covar_pop(e.Id, e.Int),
-        FirstByMax = SqlFunctions.ClickHouse.arg_max(e.String, e.Id),
-        Positives = SqlFunctions.ClickHouse.count_if(() => e.Id > 0L),
-        PositiveSum = SqlFunctions.ClickHouse.sum_if(e.Id, () => e.Id > 0L)
+        FirstByMax = SqlFunctions.ClickHouse.arg_max(e.String, e.Id)
     })
     .First();
 ```
@@ -516,9 +514,11 @@ from event_entity
 
 ## Агрегаты с FILTER
 
-Агрегат может нести предложение `filter (where ...)`, если передать предикат дополнительным аргументом.
-Предложение включается флагом [`SupportsFilter`](xref:NextORM.Core.ISqlDialect.SupportsFilter) (его включают PostgreSQL и SQLite);
-MySQL/MariaDB и SQL Server отклоняют его через `NotSupportedException`.
+Агрегат может нести фильтр строк, если передать предикат дополнительным аргументом. Один и тот же API
+работает у всех провайдеров; способ записи выбирает
+[`AggregateFilterStyle`](xref:NextORM.Core.ISqlDialect.AggregateFilterStyle). PostgreSQL и SQLite
+генерируют ANSI-предложение `filter (where ...)`, ClickHouse — комбинатор `-If`; MySQL/MariaDB и
+SQL Server отклоняют вызов через `NotSupportedException`, потому что у них нет ни того, ни другого.
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -537,10 +537,17 @@ select nullableint, count(*) filter (where (id > 10)) as "Big", sum(id) filter (
 from complex_entity group by nullableint
 ```
 
-В ClickHouse аналог фильтрованного агрегата — комбинатор `-If` (`countIf`, `sumIf`, `avgIf`, `minIf`,
-`maxIf`), доступный как `SqlFunctions.ClickHouse.count_if`/`sum_if`/`avg_if`/`min_if`/`max_if` ([`SupportsIfAggregates`](xref:NextORM.Core.ISqlDialect.SupportsIfAggregates)).
-ClickHouse не принимает ANSI-предложение `filter (where ...)`, поэтому обобщённый API фильтрованных
-агрегатов там отклоняется.
+Тот же запрос в ClickHouse генерирует комбинатор `-If`:
+
+```sql
+-- ClickHouse
+select nullableint, toInt32(countIf((id > 10))) as `Big`, sumIf(id, (b = true)) as `Total`
+from complex_entity group by nullableint
+```
+
+Фильтр принимают `count`/`count_big`/`min`/`max`/`avg`/`sum` и `string_agg`. В ClickHouse `string_agg`
+становится `arrayStringConcat(groupArrayIf(value, predicate), delimiter)`. У MySQL/MariaDB, SQL Server
+и in-memory провайдера фильтрованной формы нет.
 
 `string_agg`/`array_agg` тоже принимают фильтр; `string_agg` доступен в PostgreSQL, SQL Server
 2017+ и ClickHouse (как `arrayStringConcat(groupArray(x), delimiter)`), а `array_agg` — только в
@@ -558,7 +565,7 @@ reader'ом как CLR `T[]`. В ClickHouse дополнительно дост�
 | PostgreSQL | генерирует `count(*)` (уже 64-битный) | `stdev` → `stddev`, `stdevp` → `stddev_pop`, `var` → `variance`, `varp` → `var_pop` | дробный | встроенные |
 | MySQL | генерирует `count(*)` (уже 64-битный) | `stdev` → `stddev_samp`, `stdevp` → `stddev_pop`, `var` → `var_samp`, `varp` → `var_pop` | дробный | встроенные (`var_samp` / `var_pop`) |
 | MariaDB | генерирует `count(*)` (уже 64-битный) | то же отображение, что в MySQL (`stddev_samp` / `stddev_pop` / `var_samp` / `var_pop`) | дробный | встроенные (`var_samp` / `var_pop`) |
-| ClickHouse | оборачивает `count`/`count_distinct`/`count_if` в `toInt32(...)`, а `count_big`/`count_big_distinct` — в `toInt64(...)` (нативный `UInt64` не материализуется) | `stdev` → `stddevSamp`, `stdevp` → `stddevPop`, `var` → `varSamp`, `varp` → `varPop`, `covar_*` → `covarPop`/`covarSamp`, `bit_*` → `groupBit*`, `*_if` → `*If` | дробный | `varSamp` / `varPop` |
+| ClickHouse | оборачивает `count`/`count_distinct` (и фильтрованный `countIf`) в `toInt32(...)`, а `count_big`/`count_big_distinct` — в `toInt64(...)` (нативный `UInt64` не материализуется) | `stdev` → `stddevSamp`, `stdevp` → `stddevPop`, `var` → `varSamp`, `varp` → `varPop`, `covar_*` → `covarPop`/`covarSamp`, `bit_*` → `groupBit*`, фильтр агрегата → комбинатор `<fn>If` (`sumIf`, `countIf`) | дробный | `varSamp` / `varPop` |
 | In-memory | не покрыто набором тестов in-memory | не покрыто | не покрыто | не покрыто |
 
 Порядок групп не определён стандартом SQL; проверяйте по ключу группы, а не по позиции. PostgreSQL и

@@ -22,6 +22,7 @@ internal sealed class DbConnectionManager : IConnectionManager
     private readonly ILogger? _logger;
     private readonly bool _logSensitiveData;
     private readonly Func<bool> _supportsTransactions;
+    private readonly InterceptorHooks _interceptors;
 
     private DbConnection? _conn;
     private bool _connWasCreatedByMe;
@@ -34,7 +35,8 @@ internal sealed class DbConnectionManager : IConnectionManager
         string? connectionString,
         DbConnection? providedConnection,
         LoggingOptions logging,
-        Func<bool> supportsTransactions)
+        Func<bool> supportsTransactions,
+        InterceptorHooks interceptors)
     {
         _owner = owner;
         _createDbConnection = hooks.CreateDbConnection;
@@ -44,6 +46,7 @@ internal sealed class DbConnectionManager : IConnectionManager
         _logger = logging.Logger;
         _logSensitiveData = logging.LogSensitiveData;
         _supportsTransactions = supportsTransactions;
+        _interceptors = interceptors;
     }
 
     public void EnsureConnectionOpen()
@@ -51,8 +54,19 @@ internal sealed class DbConnectionManager : IConnectionManager
         var conn = GetConnection();
         if (conn.State == ConnectionState.Closed)
         {
+            var interceptors = _interceptors.ConnectionInterceptors;
+            var eventData = default(ConnectionEventData);
+            if (interceptors.Length != 0)
+            {
+                eventData = new ConnectionEventData(_owner, conn);
+                InterceptorHooks.RaiseConnectionOpening(interceptors, eventData);
+            }
+
             if (_logger?.IsEnabled(LogLevel.Debug) ?? false) _logger.LogDebug("Opening connection");
             conn.Open();
+
+            if (interceptors.Length != 0)
+                InterceptorHooks.RaiseConnectionOpened(interceptors, eventData);
         }
     }
 
@@ -61,8 +75,19 @@ internal sealed class DbConnectionManager : IConnectionManager
         var conn = GetConnection();
         if (conn.State == ConnectionState.Closed)
         {
+            var interceptors = _interceptors.ConnectionInterceptors;
+            var eventData = default(ConnectionEventData);
+            if (interceptors.Length != 0)
+            {
+                eventData = new ConnectionEventData(_owner, conn);
+                InterceptorHooks.RaiseConnectionOpening(interceptors, eventData);
+            }
+
             if (_logger?.IsEnabled(LogLevel.Debug) ?? false) _logger.LogDebug("Opening connection");
             await conn.OpenAsync(cancellationToken);
+
+            if (interceptors.Length != 0)
+                InterceptorHooks.RaiseConnectionOpened(interceptors, eventData);
         }
     }
 

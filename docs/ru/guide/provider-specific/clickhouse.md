@@ -155,7 +155,7 @@ select id from simple_entity where global in (@p0, @p1)
 * агрегат последнего произвольного значения `any_last` (`anyLast`);
 * возвращающие массивы агрегаты `group_array`/`group_uniq_array` (`groupArray`/`groupUniqArray`, материализуются как CLR `T[]`; `groupArray` над array-колонкой даёт вложенный `T[][]`);
 * агрегаты последовательностей/воронки `window_funnel`/`sequence_match`/`retention` (`windowFunnel`/`sequenceMatch` с `toInt32(...)`; `retention` возвращает массив, проецируется напрямую);
-* комбинаторы `-If`: `count_if`/`sum_if`/`avg_if`/`min_if`/`max_if`;
+* общий API фильтрации агрегатов, рендерящий комбинаторы `-If`: `countIf`/`sumIf`/`avgIf`/`minIf`/`maxIf`;
 * `arg_min`/`arg_max`.
 
 Переносимые агрегаты — в том числе `count`, произвольное значение `any_agg` (рендерится `ANY_VALUE` в

@@ -260,7 +260,7 @@ public static class ClickHouseQueries
     }
 
     // 8. device_split
-    // WORKING: if(IsMobile = 1, …) → ternary; countIf → count_if; uniq → uniq; ROUND → Math.Round.
+    // WORKING: if(IsMobile = 1, …) → ternary; countIf → Sql.count(() => c); uniq → uniq; ROUND → Math.Round.
     public static async Task DeviceSplit(IDataContext ctx, CancellationToken ct)
     {
         var rows = await ctx.From<IHit>()
@@ -273,9 +273,9 @@ public static class ClickHouseQueries
                 Hits = SqlFunctions.Sql.count(),
                 Users = SqlFunctions.ClickHouse.uniq(h.UserId),
                 SearchShare = Math.Round(
-                    (double)SqlFunctions.ClickHouse.count_if(() => h.SearchPhrase != "") / SqlFunctions.Sql.count(), 4),
+                    (double)SqlFunctions.Sql.count(() => h.SearchPhrase != "") / SqlFunctions.Sql.count(), 4),
                 BounceShare = Math.Round(
-                    (double)SqlFunctions.ClickHouse.count_if(() => h.IsNotBounce == 0) / SqlFunctions.Sql.count(), 4)
+                    (double)SqlFunctions.Sql.count(() => h.IsNotBounce == 0) / SqlFunctions.Sql.count(), 4)
             })
             .ToListAsync(ct);
 

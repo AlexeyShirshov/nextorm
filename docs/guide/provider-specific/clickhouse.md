@@ -154,7 +154,7 @@ declares:
 * the last-row arbitrary-value aggregate `any_last` (`anyLast`);
 * the array-returning aggregates `group_array`/`group_uniq_array` (`groupArray`/`groupUniqArray`, materialised as a CLR `T[]`; `groupArray` of an array column yields a nested `T[][]`);
 * the sequence/funnel aggregates `window_funnel`/`sequence_match`/`retention` (`windowFunnel`/`sequenceMatch` with `toInt32(...)`; `retention` returns an array, projected directly);
-* the `-If` combinators `count_if`/`sum_if`/`avg_if`/`min_if`/`max_if`;
+* the shared filtered-aggregate API rendered as the `-If` combinators `countIf`/`sumIf`/`avgIf`/`minIf`/`maxIf`;
 * `arg_min`/`arg_max`.
 
 Portable aggregates — including `count`, the arbitrary-value `any_agg` (rendered `ANY_VALUE` on MySQL and

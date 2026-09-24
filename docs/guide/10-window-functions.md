@@ -14,35 +14,6 @@ inside the query expression it reads as the value type of the function (`int` fo
 value/aggregate functions). The marker types and their methods are only ever interpreted by the
 expression visitor - they are never executed.
 
-```csharp
-public static class SqlFunctions
-{
-    public static CommonFunctions SQL { get; }
-}
-
-public sealed class WindowFunction<T>
-{
-    // partition-only / partition+order+frame; every argument is optional
-    public T Over(Expression<Func<object?>>? partitionBy = null,
-                  Expression<Func<object?>>? orderBy = null,
-                  WindowFrame? frame = null);
-
-    // order-only or a single ordered key
-    public T Over(WindowOrder orderBy, WindowFrame? frame = null);
-
-    // several ordered keys
-    public T Over(WindowOrder[] orderBy, WindowFrame? frame = null);
-
-    // several partitions plus ordered keys (mixed asc/desc)
-    public T Over(Expression<Func<object?>>[]? partitionBy,
-                  WindowOrder[]? orderBy = null,
-                  WindowFrame? frame = null);
-
-    // reference a named window declared on the query (see "Named windows")
-    public T Over(string windowName);
-}
-```
-
 [`Over`](xref:NextORM.Core.WindowFunction`1.Over(NextORM.Core.WindowOrder,NextORM.Core.WindowFrame)) with no arguments renders an empty specification (`over ()`). Because C# expression trees
 reject named arguments that skip a preceding defaulted parameter, an **order-only** specification must
 use the [`WindowOrder`](xref:NextORM.Core.WindowOrder) overload - `Over(SqlFunctions.Sql.asc(() => e.Id))` - rather than `Over(orderBy: ...)`.

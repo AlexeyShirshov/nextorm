@@ -53,7 +53,7 @@ clause order: `From().Where().GroupBy().Having().OrderBy().Limit().Select()`.
 | `ORDER BY a, b DESC` | `.OrderBy(h => h.A).OrderByDescending(h => h.B)` |
 | `LIMIT n` | `.Limit(n)` |
 | `count()` | `SqlFunctions.Sql.count()` |
-| `countIf(c)` | `SqlFunctions.ClickHouse.count_if(() => c)` |
+| `countIf(c)` | `SqlFunctions.Sql.count(() => c)` (the shared filter API renders `countIf`) |
 | `uniqExact(x)` | `SqlFunctions.ClickHouse.uniq_exact(x)` (bound by the ClickHouse dialect) |
 | `uniq(x)` | `SqlFunctions.ClickHouse.uniq(x)` |
 | `quantile(0.99)(x)` | `SqlFunctions.ClickHouse.quantile(0.99, x)` |

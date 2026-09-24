@@ -1,4 +1,5 @@
 # TODO: DDL/DML + читающий запрос в одном SQL-батче (`CREATE TEMP TABLE ... AS SELECT` → `SELECT`)
+> Tracking issue: [#75](https://github.com/AlexeyShirshov/nextorm/issues/75).
 
 > Рабочий план (RFC). Источник — обсуждение необходимости отправить **создание таблицы и запрос с её
 > использованием в рамках одного SQL-батча**. Мотивация: temp-таблица session-scoped (backend), а

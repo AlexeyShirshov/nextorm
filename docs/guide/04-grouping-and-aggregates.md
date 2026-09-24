@@ -292,8 +292,8 @@ Output:
 `count_big()` returns a 64-bit count. SQL Server has a distinct `count_big` function and emits
 `count_big(...)`; SQLite and PostgreSQL already return a 64-bit integer from `count(...)`, so the
 dialect emits `count(...)` for both. ClickHouse count aggregates return an unsigned `UInt64`, which
-the row reader cannot materialise, so the dialect casts `count`/`count_distinct`/`count_if` to
-`toInt32(...)` and `count_big`/`count_big_distinct` to `toInt64(...)`.
+the row reader cannot materialise, so the dialect casts `count`/`count_distinct` (and the filtered
+`countIf`) to `toInt32(...)` and `count_big`/`count_big_distinct` to `toInt64(...)`.
 
 The builder-level shortcut `EntityBuilder<T>.Count()` is equivalent to
 `Select(e => SqlFunctions.Sql.count())` followed by [`First`](xref:NextORM.Core.EntityBuilderExtensions.First``1(NextORM.Core.EntityBuilder{``0})):
@@ -420,7 +420,7 @@ with the provider-only ones on [`Postgres`](xref:NextORM.Core.SqlFunctions.Postg
 [`ClickHouse`](xref:NextORM.Core.SqlFunctions.ClickHouse) (`arg_min`/`arg_max`, the distinct-count
 `uniq`/`uniq_exact`/`uniq_combined`/`uniq_hll12`, the parameterised quantile family
 `quantile`/`quantile_exact`/`quantile_timing`/`quantiles`/`median`, the most-frequent `top_k`/`top_k_weighted`,
-the `-If` combinator and the sequence/funnel
+and the sequence/funnel
 `window_funnel`/`sequence_match`/`retention`). Each family is gated by
 its own dialect capability; PostgreSQL and ClickHouse opt into different subsets.
 
@@ -436,7 +436,7 @@ its own dialect capability; PostgreSQL and ClickHouse opt into different subsets
 | Most frequent (top-K) | `SqlFunctions.ClickHouse.top_k(3, x)`, `top_k_weighted(2, x, w)` | `topK(3)(x)`, `topKWeighted(2)(x, w)` | [`TopKAggregates`](xref:NextORM.Core.ISqlDialect.TopKAggregates) | ClickHouse |
 | Arbitrary value | `SqlFunctions.Sql.any_agg(x)` | `ANY_VALUE(x)` / `any(x)` | [`SupportsAnyValueAggregate`](xref:NextORM.Core.ISqlDialect.SupportsAnyValueAggregate) | MySQL, ClickHouse |
 | Last row | `SqlFunctions.ClickHouse.any_last(x)` | `anyLast(x)` | [`SupportsAnyAggregates`](xref:NextORM.Core.ISqlDialect.SupportsAnyAggregates) | ClickHouse |
-| Filtered (`-If`) | `SqlFunctions.ClickHouse.count_if(() => p)`, `sum_if(x, () => p)`, `avg_if(x, () => p)`, `min_if(x, () => p)`, `max_if(x, () => p)` | `countIf(p)`, `sumIf(x, p)`, ... | [`SupportsIfAggregates`](xref:NextORM.Core.ISqlDialect.SupportsIfAggregates) | ClickHouse |
+| Filtered aggregate | `SqlFunctions.Sql.count(() => p)`, `sum(x, () => p)`, `avg(x, () => p)`, `min(x, () => p)`, `max(x, () => p)` | `count(*) filter (where p)`, ... / `countIf(p)`, `sumIf(x, p)`, ... | [`AggregateFilterStyle`](xref:NextORM.Core.ISqlDialect.AggregateFilterStyle) | PostgreSQL, SQLite (ANSI `FILTER`), ClickHouse (`-If`) |
 | Sequence / funnel | `SqlFunctions.ClickHouse.window_funnel(window, ts, c1, c2)` , `sequence_match(pattern, ts, c1, c2)`, `retention(c1, c2)` | `toInt32(windowFunnel(window)(ts, c1, c2))`, `toInt32(sequenceMatch(pattern)(ts, c1, c2))`, `retention(c1, c2)` | [`SequenceAggregates`](xref:NextORM.Core.ISqlDialect.SequenceAggregates) | ClickHouse |
 | Ordered-set | `SqlFunctions.Postgres.percentile_cont(fraction, () => x)`, `percentile_disc(fraction, () => x)`, `mode(() => x)` | `percentile_cont(f) within group (order by x)`, ... | [`SupportsOrderedAggregates`](xref:NextORM.Core.ISqlDialect.SupportsOrderedAggregates) | PostgreSQL |
 
@@ -460,7 +460,7 @@ select bool_and(b), bit_xor(id), corr(id, nullableint), percentile_cont(0.5) wit
 ```
 
 On ClickHouse the same families render with their own spellings — `groupBitAnd`, `covarPop`,
-`argMin`/`argMax` and the `-If` combinators — while the boolean aggregates and the `regr_*` family
+`argMin`/`argMax` — while the boolean aggregates and the `regr_*` family
 are not available (ClickHouse has neither `bool_and` nor `regr_*`, and the dialect rejects them with
 `NotSupportedException`):
 
@@ -470,16 +470,14 @@ var rows = dataContext.From<IComplexEntity>()
     {
         Bits = SqlFunctions.Postgres.bit_and(e.Id),
         Cov = SqlFunctions.Sql.covar_pop(e.Id, e.Int),
-        FirstByMax = SqlFunctions.ClickHouse.arg_max(e.String, e.Id),
-        Positives = SqlFunctions.ClickHouse.count_if(() => e.Id > 0L),
-        PositiveSum = SqlFunctions.ClickHouse.sum_if(e.Id, () => e.Id > 0L)
+        FirstByMax = SqlFunctions.ClickHouse.arg_max(e.String, e.Id)
     })
     .First();
 ```
 
 ```sql
 -- ClickHouse
-select groupBitAnd(id), covarPop(id, nullableint), argMax(somestring, id), countIf((id > 0)), sumIf(id, (id > 0)) from complex_entity
+select groupBitAnd(id), covarPop(id, nullableint), argMax(somestring, id) from complex_entity
 ```
 
 The ordered-set aggregates take the ordering key as a quoted lambda that closes over the query
@@ -512,11 +510,13 @@ select toInt32(windowFunnel(600)(ts, (event = 1), (event = 2))) as `Level`,
 from event_entity
 ```
 
-## Filtered aggregates (FILTER)
+## Filtered aggregates
 
-An aggregate can carry a `filter (where ...)` clause by passing a predicate as an extra argument. The
-clause is gated by [`SupportsFilter`](xref:NextORM.Core.ISqlDialect.SupportsFilter) (PostgreSQL and SQLite opt in); MySQL/MariaDB and
-SQL Server reject it with `NotSupportedException`.
+An aggregate can carry a row filter by passing a predicate as an extra argument. The same API works
+across providers; the dialect picks the spelling through
+[`AggregateFilterStyle`](xref:NextORM.Core.ISqlDialect.AggregateFilterStyle). PostgreSQL and SQLite
+render the ANSI `filter (where ...)` clause, ClickHouse renders its `-If` combinator; MySQL/MariaDB
+and SQL Server reject the call with `NotSupportedException` because they have neither.
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -535,10 +535,17 @@ select nullableint, count(*) filter (where (id > 10)) as "Big", sum(id) filter (
 from complex_entity group by nullableint
 ```
 
-On ClickHouse the equivalent of a filtered aggregate is the `-If` combinator — `countIf`, `sumIf`,
-`avgIf`, `minIf`, `maxIf` — exposed as `SqlFunctions.ClickHouse.count_if`/`sum_if`/`avg_if`/`min_if`/`max_if`
-([`SupportsIfAggregates`](xref:NextORM.Core.ISqlDialect.SupportsIfAggregates)). ClickHouse does not accept the ANSI `filter (where ...)` clause, so the
-generic filtered-aggregate API rejects it there.
+The same query on ClickHouse renders the `-If` combinator instead:
+
+```sql
+-- ClickHouse
+select nullableint, toInt32(countIf((id > 10))) as `Big`, sumIf(id, (b = true)) as `Total`
+from complex_entity group by nullableint
+```
+
+`count`/`count_big`/`min`/`max`/`avg`/`sum` and `string_agg` take the filter. On ClickHouse
+`string_agg` becomes `arrayStringConcat(groupArrayIf(value, predicate), delimiter)`. MySQL/MariaDB,
+SQL Server and the in-memory provider have no filtered-aggregate form.
 
 `string_agg`/`array_agg` take a filter as well; `string_agg` is available on PostgreSQL, SQL Server
 2017+ and ClickHouse (as `arrayStringConcat(groupArray(x), delimiter)`), while `array_agg` is
@@ -556,7 +563,7 @@ See [Scalar functions](11-scalar-functions.md#aggregate-filter) for the full sur
 | PostgreSQL | emits `count(*)` (already 64-bit) | `stdev` → `stddev`, `stdevp` → `stddev_pop`, `var` → `variance`, `varp` → `var_pop` | fractional | native |
 | MySQL | emits `count(*)` (already 64-bit) | `stdev` → `stddev_samp`, `stdevp` → `stddev_pop`, `var` → `var_samp`, `varp` → `var_pop` | fractional | native (`var_samp` / `var_pop`) |
 | MariaDB | emits `count(*)` (already 64-bit) | same mapping as MySQL (`stddev_samp` / `stddev_pop` / `var_samp` / `var_pop`) | fractional | native (`var_samp` / `var_pop`) |
-| ClickHouse | casts `count`/`count_distinct`/`count_if` to `toInt32(...)` and `count_big`/`count_big_distinct` to `toInt64(...)` (native `UInt64` is not materialisable) | `stdev` → `stddevSamp`, `stdevp` → `stddevPop`, `var` → `varSamp`, `varp` → `varPop`, `covar_*` → `covarPop`/`covarSamp`, `bit_*` → `groupBit*`, `*_if` → `*If` | fractional | `varSamp` / `varPop` |
+| ClickHouse | casts `count`/`count_distinct` (and the filtered `countIf`) to `toInt32(...)` and `count_big`/`count_big_distinct` to `toInt64(...)` (native `UInt64` is not materialisable) | `stdev` → `stddevSamp`, `stdevp` → `stddevPop`, `var` → `varSamp`, `varp` → `varPop`, `covar_*` → `covarPop`/`covarSamp`, `bit_*` → `groupBit*`, an aggregate filter → the `<fn>If` combinator (`sumIf`, `countIf`) | fractional | `varSamp` / `varPop` |
 | In-memory | not covered by the in-memory test suite | not covered | not covered | not covered |
 
 Group ordering is not defined by SQL; assert by group key, not by position. PostgreSQL and SQLite
