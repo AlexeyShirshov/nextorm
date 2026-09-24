@@ -1,5 +1,6 @@
 using FluentAssertions;
 using NextORM.Core;
+using System.Text.RegularExpressions;
 
 namespace NextORM.MariaDb.Tests;
 
@@ -37,5 +38,45 @@ public class StringSemanticsSqlGenerationTests
 
         SqlOf(ctx, e.Where(x => string.CompareOrdinal(x.String, "a") > 0).Select(x => new { x.Id }))
             .Should().Contain("somestring collate utf8mb4_bin < 'a'");
+    }
+
+    [Fact]
+    public void RegexIsMatch_ShouldUseRegexpOperatorWithCaseSensitiveFlag()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Where(x => Regex.IsMatch(x.String!, "^a")).Select(x => new { x.Id }))
+            .Should().Contain("somestring regexp '(?-i)^a'");
+    }
+
+    [Fact]
+    public void RegexIsMatchIgnoreCase_ShouldUseRegexpOperatorWithIgnoreCaseFlag()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Where(x => Regex.IsMatch(x.String!, "^a", RegexOptions.IgnoreCase)).Select(x => new { x.Id }))
+            .Should().Contain("somestring regexp '(?i)^a'");
+    }
+
+    [Fact]
+    public void RegexReplace_ShouldUseRegexpReplace()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { F = Regex.Replace(x.String!, "[0-9]+", "#") }))
+            .Should().Contain("regexp_replace(somestring, '(?-i)[0-9]+', '#')");
+    }
+
+    [Fact]
+    public void RegexReplaceIgnoreCase_ShouldUseIgnoreCaseFlag()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { F = Regex.Replace(x.String!, "a", "#", RegexOptions.IgnoreCase) }))
+            .Should().Contain("regexp_replace(somestring, '(?i)a', '#')");
     }
 }

@@ -1,11 +1,13 @@
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
 
 namespace NextORM.Sqlite;
 
 /// <summary>
-/// Registers the custom SQLite aggregate functions (stdev, stdevp, var, varp) on a connection.
+/// Registers the custom SQLite aggregate functions (stdev, stdevp, var, varp) and the regular-expression
+/// functions (<c>regexp</c>/<c>regexp_replace</c>) on a connection.
 /// Microsoft.Data.Sqlite has no attribute-based auto-registration (unlike System.Data.SQLite),
 /// so functions are attached explicitly and only once per connection.
 /// </summary>
@@ -33,6 +35,15 @@ internal static class SQLiteFunctions
         connection.CreateAggregate<object?, VarianceAccumulator, double?>("varp", default,
             static (acc, value) => VarianceAccumulator.Step(acc, value),
             static acc => acc.FinalVariance(population: true));
+
+        // `x REGEXP pattern` is sugar for regexp(pattern, x); regexp_replace follows the SQL emission
+        // order (value, pattern, replacement). Both run the CLR Regex, so the inline (?i)/(?m) flags and
+        // the full .NET syntax apply on SQLite.
+        connection.CreateFunction<string?, string?, bool?>("regexp", static (pattern, value) =>
+            pattern is null || value is null ? null : Regex.IsMatch(value, pattern));
+
+        connection.CreateFunction<string?, string?, string?, string?>("regexp_replace", static (value, pattern, replacement) =>
+            pattern is null || value is null || replacement is null ? null : Regex.Replace(value, pattern, replacement));
     }
 
     private struct VarianceAccumulator

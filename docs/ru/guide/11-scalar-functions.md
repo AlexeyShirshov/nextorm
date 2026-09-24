@@ -86,6 +86,7 @@ var rows = dataContext.From<IComplexEntity>()
 | `SqlFunctions.Sql.like(s, pattern)` | `s like pattern` | Явный `LIKE`. |
 | `SqlFunctions.Sql.like(s, pattern, escape)` | `s like pattern escape escape` | |
 | `SqlFunctions.Sql.collate(s, name)` | `s collate name` | Коллация на уровне выражения. |
+| `[Collation("name")]` / `.Collation("name")` | `s collate name` | Коллация на уровне столбца; см. [Коллация на уровне столбца](#коллация-на-уровне-столбца). |
 
 `SqlFunctions.Sql.like` — это запасной вариант, когда шаблон не является простым
 `Contains`/`StartsWith`/`EndsWith`:
@@ -180,6 +181,90 @@ select id from complex_entity where somestring collate "C" = 'x' collate "C"
 
 `collate` принимает родное для провайдера имя коллации; оно должно быть константой. У in-memory
 провайдера коллаций нет, и вызов трактуется как ordinal-тождество.
+
+#### Коллация на уровне столбца
+
+Вместо обёртки каждого выражения коллацию можно объявить на свойстве сущности через
+[`CollationAttribute`](xref:NextORM.Core.CollationAttribute) или fluent-метод
+[`EntityPropertyBuilder<T>.Collation`](xref:NextORM.Core.EntityPropertyBuilder`1.Collation(System.String)). Тогда она применяется к
+столбцу во всех collation-чувствительных операциях (сравнение, `LIKE`, `ORDER BY`, `GROUP BY`), и
+столбец следует объявленной коллации, а не дефолту БД:
+
+```csharp
+[SqlTable("complex_entity")]
+public interface IComplexEntity
+{
+    [Column("somestring")]
+    [Collation("C")]
+    string? String { get; set; }
+}
+
+// эквивалентный fluent-маппинг
+var e = dataContext.From<IComplexEntity>(b => b.Property(x => x.String!).Collation("C"));
+
+var rows = e
+    .Where(x => x.String == "x")   // somestring collate "C" = 'x'
+    .OrderBy(x => x.String)        // order by somestring collate "C"
+    .Select(x => new { x.String })
+    .ToList();
+```
+
+```sql
+-- PostgreSQL
+select somestring collate "C" as "String" from complex_entity
+ where somestring collate "C" = 'x' order by somestring collate "C"
+```
+
+Имя коллации — родное для провайдера (квотируется там, где требует провайдер, см.
+[`MakeCollate`](xref:NextORM.Core.ISqlDialect.MakeCollate(System.String,System.String,NextORM.Core.KeywordCase))), и провайдер должен
+поддерживать коллацию на уровне выражения ([`SupportsCollation`](xref:NextORM.Core.ISqlDialect.SupportsCollation)):
+PostgreSQL, SQL Server, MySQL/MariaDB и SQLite поддерживают, у ClickHouse `COLLATE` нет — колонка с
+объявленной коллацией бросает `NotSupportedException`. Явные ordinal-перегрузки (`string.Equals`,
+`string.CompareOrdinal`, `StringComparison`) по-прежнему переопределяют коллацию столбца бинарной.
+nextorm не генерирует DDL, поэтому объявление описывает коллацию **существующего** столбца, а не
+создаёт её; in-memory провайдер его игнорирует (его сравнения и так ordinal).
+
+### Регулярные выражения
+
+`Regex.IsMatch(value, pattern[, options])` и `Regex.Replace(value, pattern, replacement[, options])`
+транслируются в родные регулярные выражения провайдера. Экземплярные формы `regex.IsMatch(value)` и
+`regex.Replace(value, replacement)` читают шаблон и опции из константного `Regex` (литерал,
+`new Regex(...)` или захваченная локальная переменная). Гейт провайдера —
+[`SupportsRegex`](xref:NextORM.Core.ISqlDialect.SupportsRegex).
+
+```csharp
+using System.Text.RegularExpressions;
+
+var rows = dataContext.From<IComplexEntity>()
+    .Where(e => Regex.IsMatch(e.String!, "^d"))
+    .Select(e => new { e.Id, Cleaned = Regex.Replace(e.String!, "[0-9]+", "#") })
+    .ToList();
+```
+
+Шаблон, замена и опции должны быть **константами времени компиляции**: шаблон-значение невозможно
+скомпилировать средствами CLR в собственный диалект регулярных выражений провайдера, поэтому такой
+вызов бросает `NotSupportedException`. SQL меняет только `RegexOptions.IgnoreCase`;
+`RegexOptions.Compiled` и `RegexOptions.CultureInvariant` принимаются как no-op, а любая другая опция
+(например, `Multiline`) отклоняется. `Regex.Replace`, как и метод CLR, заменяет все совпадения.
+
+| Провайдер | `Regex.IsMatch` | `Regex.Replace` | `RegexOptions.IgnoreCase` |
+|---|---|---|---|
+| PostgreSQL | `s ~ 'p'` | `regexp_replace(s, 'p', 'r', 'g')` | `s ~* 'p'` / `'gi'` |
+| MySQL | `regexp_like(s, 'p', 'c')` | `regexp_replace(s, 'p', 'r', 1, 0, 'c')` | match type `'i'` |
+| MariaDB | `s regexp '(?-i)p'` | `regexp_replace(s, '(?-i)p', 'r')` | флаг `(?i)` |
+| ClickHouse | `match(s, 'p')` | `replaceRegexpAll(s, 'p', 'r')` | флаг `(?i)` |
+| SQLite | `s regexp 'p'` | `regexp_replace(s, 'p', 'r')` | флаг `(?i)` |
+| SQL Server | `NotSupportedException` | `NotSupportedException` | — |
+
+Как и метод CLR, совпадение ищется в любом месте значения, поэтому `^`/`$` привязывают всё значение, а
+шаблон не анкорится неявно. Шаблон исполняет **собственный** движок провайдера (POSIX/ARE в PostgreSQL,
+ICU в MySQL, PCRE в MariaDB, RE2 в ClickHouse, .NET в SQLite), поэтому сложный шаблон — lookaround,
+обратные ссылки, именованные группы — в общем случае непереносим; также различаются правила
+экранирования C# и SQL и синтаксис ссылок на группы в замене (C# `$1` против SQL `\1`). SQLite
+сопоставляет через CLR-функции `regexp`/`regexp_replace`, регистрируемые на каждом соединении, поэтому
+сохраняет синтаксис .NET. В SQL Server движка регулярных выражений нет, поэтому вызов отклоняется:
+используйте [`SqlFunctions.Sql.like`](xref:NextORM.Core.CommonFunctions.like(System.String,System.String))
+для простых шаблонов. In-memory провайдер выполняет `System.Text.RegularExpressions` нативно.
 
 ## Расширения строк и регулярных выражений (PostgreSQL)
 
@@ -981,6 +1066,10 @@ SQL Server отрисовывает `dateadd(field, amount, value)` и `eomonth(
 `SqlFunctions.Sql.date_diff(field, start, end)` возвращает число границ `<field>` между двумя отметками
 времени (SQL Server `datediff`, ClickHouse `dateDiff`, MySQL/MariaDB `timestampdiff`); резервные
 реализации PostgreSQL и SQLite считают части даты границами, а части времени — целыми единицами.
+`SqlFunctions.Sql.date_diff_big(field, start, end)` — 64-битный вариант (SQL Server `datediff_big`;
+остальные расширяют результат) для промежутка в `millisecond`/`microsecond`, который переполнил бы
+32-битный `date_diff`. Sub-day `date_add`/`DateTime.Add*` продвигает `date`-операнд к дробному
+timestamp (SQL Server `datetime2`, ClickHouse `DateTime`/`DateTime64`), чтобы время суток не терялось.
 `SqlFunctions.Sql.date_from_parts(year, month, day)` строит дату. `DateTime.AddDays`/`AddMonths`/… внутри
 проекции или предиката идут через тот же хук:
 
@@ -1013,6 +1102,7 @@ select datetime(dt, (1) || ' days') as 'NextDay', date(dt, 'start of month', '+1
 | `SqlFunctions.Sql.date_add("decade", n, x)` | `dateadd(year, (n) * 10, x)` | `x + (n * interval '10 years')` | `addYears(x, (n) * 10)` | `date_add(x, interval (n) * 10 year)` | `datetime(x, ((n) * 10) \|\| ' years')` |
 | `SqlFunctions.Sql.end_of_month(x)` | `eomonth(x)` | `date_trunc('month', x) + interval '1 month - 1 day'` | `toLastDayOfMonth(x)` | `last_day(x)` | `date(x, 'start of month', '+1 month', '-1 day')` |
 | `SqlFunctions.Sql.date_diff("day", a, b)` | `datediff(day, a, b)` | `cast(b as date) - cast(a as date)` | `dateDiff('day', a, b)` | `timestampdiff(day, a, b)` | `(strftime('%s', b) - strftime('%s', a)) / 86400` |
+| `SqlFunctions.Sql.date_diff_big("milliseconds", a, b)` | `datediff_big(millisecond, a, b)` | `cast(trunc(extract(epoch from (b - a)) * 1000) as bigint)` | `dateDiff('millisecond', a, b)` | `cast((timestampdiff(microsecond, a, b) / 1000) as signed)` | `((strftime('%s', b) - strftime('%s', a)) * 1000)` |
 | `SqlFunctions.Sql.date_from_parts(y, m, d)` | `datefromparts(y, m, d)` | `make_date(y, m, d)` | `makeDate(y, m, d)` | `str_to_date(concat_ws('-', y, m, d), '%Y-%m-%d')` | `date(printf('%04d-%02d-%02d', y, m, d))` |
 | `x.AddDays(7)` | `dateadd(day, 7, x)` | `x + (7 * interval '1 day')` | `addDays(x, 7)` | `date_add(x, interval 7 day)` | `datetime(x, (7) \|\| ' days')` |
 | `x.AddMonths(2)` | `dateadd(month, 2, x)` | `x + (2 * interval '1 month')` | `addMonths(x, 2)` | `date_add(x, interval 2 month)` | `datetime(x, (2) \|\| ' months')` |
@@ -1081,9 +1171,11 @@ select group_concat(somestring, ',') from complex_entity
 ## Фильтр агрегатов (FILTER)
 
 `count`/`count_big`/`min`/`max`/`avg`/`sum` и строковые/массивные агрегаты принимают дополнительный
-аргумент `Expression<Func<bool>>`, который рендерит предложение `filter (where ...)`. Предикат фильтра —
-обычный предикат запроса и может ссылаться на колонки и параметры. Предложение включается флагом
-[`SupportsFilter`](xref:NextORM.Core.ISqlDialect.SupportsFilter) (его включают PostgreSQL и SQLite):
+аргумент `Expression<Func<bool>>`, который фильтрует строки, видимые агрегату. Предикат фильтра —
+обычный предикат запроса и может ссылаться на колонки и параметры. Способ записи выбирает
+[`AggregateFilterStyle`](xref:NextORM.Core.ISqlDialect.AggregateFilterStyle): PostgreSQL и SQLite
+генерируют ANSI-предложение `filter (where ...)`, ClickHouse — комбинатор `-If` (`countIf`/`sumIf`/...),
+а MySQL/MariaDB и SQL Server отклоняют вызов:
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
@@ -1102,10 +1194,7 @@ select nullableint, count(*) filter (where (id > 10)) as "Big", sum(id) filter (
 from complex_entity group by nullableint
 ```
 
-В ClickHouse аналог фильтрованного агрегата — комбинатор `-If` (`countIf`, `sumIf`, `avgIf`, `minIf`,
-`maxIf`), доступный как `SqlFunctions.ClickHouse.count_if`/`sum_if`/`avg_if`/`min_if`/`max_if` ([`SupportsIfAggregates`](xref:NextORM.Core.ISqlDialect.SupportsIfAggregates)).
-ClickHouse не принимает ANSI-предложение `filter (where ...)`, поэтому обобщённый API фильтрованных
-агрегатов там отклоняется.
+В ClickHouse тот же запрос генерирует `toInt32(countIf((id > 10)))` и `sumIf(id, (b = true))`.
 
 ## Функции, возвращающие наборы (PostgreSQL)
 
@@ -1141,6 +1230,8 @@ var elements = dataContext
 | `string.Format` / `ToString(format)` | `printf` / `strftime` | `format` | `to_char` |
 | Ordinal `Equals` / `CompareOrdinal` | `collate binary` | `collate Latin1_General_100_BIN2` | `collate "C"` |
 | `collate(s, name)` | `s collate name` | `s collate name` | `s collate "name"` |
+| Столбец с `[Collation]` | `s collate name` | `s collate name` | `s collate "name"` |
+| Regex (`IsMatch` / `Replace`) | `s regexp ...` / `regexp_replace(...)` | `NotSupportedException` | `s ~ ...` / `regexp_replace(...)` |
 | `Abs` | `abs` | `abs` | `abs` |
 | `Round` | `round(x)` | `round(x, 0)` | `round(x)` |
 | `Truncate` | `trunc` | `round(x, 0, 1)` | `trunc` |
@@ -1201,6 +1292,11 @@ ClickHouse рендерит `dateTrunc('part', x)`, `addDays`/`addMonths`/.../`a
 * Спецификаторы `string.Format`/`ToString(format)` вне документированного подмножества в
   [Форматировании дат и чисел в строки](#форматирование-дат-и-чисел-в-строки) — никогда не
   отбрасываются.
+* `Regex` в SQL Server — движка регулярных выражений нет; используйте `SqlFunctions.Sql.like` для
+  простых шаблонов (см. [Регулярные выражения](#регулярные-выражения)).
+* `Regex`-шаблон, замена или `RegexOptions`, не являющиеся константой времени компиляции; опция
+  `RegexOptions`, отличная от `IgnoreCase` (при этом `Compiled`/`CultureInvariant` — no-op); прочие
+  члены `Regex`, кроме `IsMatch`/`Replace` (например, `Match`, `Split`, группы захвата).
 
 ## См. также
 

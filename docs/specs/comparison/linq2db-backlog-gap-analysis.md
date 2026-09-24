@@ -79,7 +79,7 @@ output, композируемый DML `RETURNING` (data-modifying CTE), CTAS, �
 
 | linq2db | Тема | Статус nextorm |
 |---|---|---|
-| `#698` | `Regex` внутри запроса (трансляция `Regex.IsMatch`/…) | **Gap** (G7) → [`todo_regex.md`](../roadmap/todo_regex.md) |
+| `#698` | `Regex` внутри запроса (трансляция `Regex.IsMatch`/…) | **<span style="color:green">реализовано</span>** (~~G7~~): [Регулярные выражения](../../guide/11-scalar-functions.md#регулярные-выражения) |
 | `#1645` | table-valued **parameters** для хранимых процедур (TVP) | **Gap** (G8) → [`todo_tvp.md`](../roadmap/todo_tvp.md); смежно [`todo_stored_procedures.md`](../roadmap/todo_stored_procedures.md) |
 | `#1994` | open-generic `TypeConverter` | **Gap** (G1) |
 | `#3009` | ограничение размера кэша запросов | **Gap** (G10) |
@@ -156,9 +156,13 @@ data-modifying CTE кидают `NotSupportedException`. Тесты: SQL-gen
 
 ### P1 — расширение паритета
 
-**G7. `Regex` в запросе.** `linq2db#698` (`area: extensions`, `area: sql`). nextorm умеет `LIKE`-семейство,
-но не `Regex.IsMatch`/`Regex.Replace`. Действие: [`todo_regex.md`](../roadmap/todo_regex.md) (per-provider: PG `~`, MySQL `REGEXP`,
-SQL Server — без native (CLR/`LIKE`-rewrite), SQLite `REGEXP`, ClickHouse `match`).
+**G7. `Regex` в запросе.** `linq2db#698` (`area: extensions`, `area: sql`). **<span style="color:green">Реализовано</span>**:
+`Regex.IsMatch`/`Regex.Replace` с константным шаблоном транслируются на PostgreSQL (`~`/`~*`,
+`regexp_replace` с `'g'`), MySQL (`REGEXP_LIKE`/`REGEXP_REPLACE` с match type), MariaDB (`REGEXP`/
+`REGEXP_REPLACE` с `(?i)`/`(?-i)`), ClickHouse (`match`/`replaceRegexpAll` с `(?i)`) и SQLite
+(регистрируемые CLR-функции `regexp`/`regexp_replace`); SQL Server гейтится off — движка регулярных
+выражений нет. См. [Регулярные выражения](../../guide/11-scalar-functions.md#регулярные-выражения) и
+[Limitations и out-of-scope](../../advanced/limitations.md).
 
 **G8. Table-valued parameters (TVP).** `linq2db#1645`. nextorm умеет TVF как **источник**, но не
 передачу таблицы **параметром** (SQL Server `SqlParameter` с structured type; PG — array/`unnest`).
@@ -166,7 +170,11 @@ SQL Server — без native (CLR/`LIKE`-rewrite), SQLite `REGEXP`, ClickHouse `
 
 **G9. `TimeSpan`/interval-колонки (`[Duration]`).** `linq2db#5759`, `#4306`, `#2950`. nextorm делает
 date arithmetic, но не хранит/сравнивает `TimeSpan` как interval с объявленной единицей.
-Действие: [`todo_timespan_columns.md`](../roadmap/todo_timespan_columns.md).
+**Частично реализовано (1.0.6-alpha):** `DurationUnit`/`DurationAttribute`/fluent `Duration(...)`,
+read/write/сравнения, native `interval` (PG) и `TIME` (MySQL/MariaDB), целочисленная форма для
+SQL Server/SQLite/ClickHouse; публичная страница — [`docs/guide/26-duration-columns.md`](../../guide/26-duration-columns.md)
+(+RU). Остаток (sub-day promotion §8.2, ширина `date_diff` §8.3) — **<span style="color:green">реализовано (1.0.6-alpha)</span>**, см.
+[`todo_timespan_columns.md`](../roadmap/todo_timespan_columns.md) §9.4.
 
 **G10. Ограничение кэша планов + логирование параметров.** `linq2db#3009` (cache size), `#4039`
 (parameter logging). Первое — риск неограниченного роста process-wide кэшей (`MapperCache`,
@@ -182,10 +190,11 @@ date arithmetic, но не хранит/сравнивает `TimeSpan` как i
 `IndexOf`/`LastIndexOf` с константным `StringComparison` переводятся через бинарную коллацию
 (`Ordinal`) или её свёртку (`OrdinalIgnoreCase`), а `string.Format`/интерполяция/`ToString(format)` — в
 родную функцию провайдера для culture-invariant подмножества спецификаторов. Ни одна неподдержанная
-форма не даёт молча неверный SQL: она бросает `NotSupportedException`. Корректный ordinal-вариант
-`#5927` использует тот же примитив `MakeCollate`, что нужен колонковой коллации (nextorm issue `#28`
-«column collation»), которая остаётся единственным follow-up. Связанные, но **разные** задачи: G12 —
-верность трансляции C#-семантики (сделано), `#28` — схема/маппинг (открыто).
+форма не даёт молча неверный SQL: она бросает `NotSupportedException`. Колонковая коллация (nextorm
+issue `#28` «column collation») на том же примитиве `MakeCollate` тоже **сделана**: коллация
+объявляется на свойстве сущности (`CollationAttribute`/`EntityPropertyBuilder<T>.Collation`) и
+применяется в collation-чувствительных операциях запроса (ClickHouse без `COLLATE` отклоняет).
+Связанные задачи G12 — верность трансляции C#-семантики, `#28` — объявление/маппинг: обе закрыты.
 См. [Ordinal-сравнение и коллация](../../guide/11-scalar-functions.md#ordinal-сравнение-и-коллация) и
 [Ограничения](../../advanced/limitations.md).
 
@@ -252,10 +261,10 @@ DELETE). См. [CTE](../guide/09-cte.md), [UPDATE](../guide/21-update-statement.
 `dateDiff('unit', …)` → **Int64**, а `SelectExpression.GetDataRecordMethod()` читает его как `GetInt32`.
 Для `seconds`/`milliseconds`/`microseconds` значение легко превышает Int32 (~24,8 дня для мс, ~35,8 мин
 для мкс). SQL Server/PG base отдают `int` (PG кастит `… as integer` явно) — там расхождения нет;
-MySQL/MariaDB `timestampdiff` — тот же класс (ширину проверить). Это не gap фичи, а багфикс: либо
-расширить декларацию до `long?` (публичный API → `API-NAMING-REVIEW` + доки EN/RU), либо явно ограничить
-набор полей/сузить вывод на ClickHouse. Нужен тест ClickHouse `date_diff` (сейчас отсутствует —
-покрыты только PG/MySQL/SQL Server/SQLite SQL-gen и `day`-интеграция). Общий план — [`todo_timespan_columns.md`](../roadmap/todo_timespan_columns.md) §8.3.
+**✅ Реализовано аддитивно (24.09.2026).** `date_diff` остаётся `int?`; добавлен `date_diff_big → long?`
+с хуком `ISqlDialect.MakeDateDiffBig` (SQL Server `datediff_big`, PostgreSQL `bigint`, остальные
+делегируют `MakeDateDiff`). Добавлены ClickHouse SQL-gen `date_diff`/`date_diff_big` и common
+integration-тест. Подробности — [`todo_timespan_columns.md`](../roadmap/todo_timespan_columns.md) §8.3/§9.4.
 
 ## 4. Осознанно вне scope (не считать пробелами)
 
@@ -291,10 +300,10 @@ MySQL/MariaDB `timestampdiff` — тот же класс (ширину пров�
 | P0 | [`todo_output_into.md`](../roadmap/todo_output_into.md): `OUTPUT INTO`/multi-result/upsert-with-output (G4). Композируемый `INSERT ... RETURNING` (~~G3~~, PostgreSQL) — **<span style="color:green">реализовано</span>**: `MutationCteQuery` + [guide 09](../../guide/09-cte.md#data-modifying-cte-postgresql)/[guide 19](../../guide/19-insert-statement.md#data-modifying-cte-postgresql) |
 | P0 | Bulk insert + ~~G5~~ (returning/ignore/identity/chunking) — **<span style="color:green">реализовано</span>**: [Массовая вставка](../../guide/24-bulk-insert.md) |
 | P0 | Завести `todo_optimistic_concurrency.md` (G6) |
-| P1 | [`todo_regex.md`](../roadmap/todo_regex.md) (G7), [`todo_tvp.md`](../roadmap/todo_tvp.md) (G8), [`todo_timespan_columns.md`](../roadmap/todo_timespan_columns.md) (G9), [`todo_postgres_ranges.md`](../roadmap/todo_postgres_ranges.md) (G11) |
+| P1 | ~~G7 Regex~~ — **<span style="color:green">реализовано</span>**: [Регулярные выражения](../../guide/11-scalar-functions.md#регулярные-выражения); [`todo_tvp.md`](../roadmap/todo_tvp.md) (G8), [`todo_timespan_columns.md`](../roadmap/todo_timespan_columns.md) (G9), [`todo_postgres_ranges.md`](../roadmap/todo_postgres_ranges.md) (G11) |
 | P1 | Хранимые процедуры/функции + `OUT`/несколько result-set (снять `limitations.md`, туда же сырые параметризованные команды) → [`todo_stored_procedures.md`](../roadmap/todo_stored_procedures.md) |
 | P1 | LRU/размер кэшей + логирование параметров (G10); version-gates MariaDB13/PG9.2-9.3 (G13); ~~string-семантика (G12)~~ — **<span style="color:green">реализовано</span>**: [Ordinal-сравнение и коллация](../../guide/11-scalar-functions.md#ordinal-сравнение-и-коллация) |
-| P1 | Багфикс `date_diff` (G20): ClickHouse Int64 читается как Int32 — решить `long?` vs явное сужение |
+| P1 | ~~Багфикс `date_diff` (G20)~~ — **<span style="color:green">реализовано</span>** аддитивно: `date_diff_big → long?` + `ISqlDialect.MakeDateDiffBig` (см. G20) |
 | P2 | ~~G16~~ — не подтвердилось (уже было реализовано), регресс-тесты добавлены (SQL-gen SQLite/PG; интеграция SQLite/PG/MySQL; SQL Server требует `UNION ALL`); G17 — точечный багфикс (IndexExpression); ~~G18~~ — багфикс `WITH … UPDATE`/`DELETE` закрыт (CTE хойстится перед мутацией, любой join, рекурсивный CTE); G14/G15 — проверить |
 | — | Принять явное решение по **DDL** (оставить out-of-scope или новый workstream) |
 

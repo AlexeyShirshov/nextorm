@@ -1,5 +1,6 @@
 using FluentAssertions;
 using NextORM.Core;
+using System.Text.RegularExpressions;
 
 namespace NextORM.Sqlite.Tests;
 
@@ -77,5 +78,35 @@ public class StringSemanticsSqlGenerationTests
 
         SqlOf(ctx, e.Where(x => x.String!.Contains("X", StringComparison.OrdinalIgnoreCase)).Select(x => new { x.Id }))
             .Should().Contain("lower(somestring) collate binary like lower('%X%')");
+    }
+
+    [Fact]
+    public void RegexIsMatch_ShouldUseRegexpOperator()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Where(x => Regex.IsMatch(x.String!, "^a")).Select(x => new { x.Id }))
+            .Should().Contain("somestring regexp '^a'");
+    }
+
+    [Fact]
+    public void RegexIsMatchIgnoreCase_ShouldPrefixIgnoreCaseFlag()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Where(x => Regex.IsMatch(x.String!, "^a", RegexOptions.IgnoreCase)).Select(x => new { x.Id }))
+            .Should().Contain("somestring regexp '(?i)^a'");
+    }
+
+    [Fact]
+    public void RegexReplace_ShouldUseRegexpReplace()
+    {
+        using var ctx = SqliteTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { F = Regex.Replace(x.String!, "[0-9]+", "#") }))
+            .Should().Contain("regexp_replace(somestring, '[0-9]+', '#')");
     }
 }

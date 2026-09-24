@@ -54,7 +54,7 @@ public sealed class SqliteDialect : SqlDialectBase
 
     // SQLite 3.30+ accepts the FILTER (WHERE ...) aggregate clause.
     /// <inheritdoc/>
-    public override bool SupportsFilter => true;
+    public override AggregateFilterStyle AggregateFilterStyle => AggregateFilterStyle.AnsiFilter;
 
     // SQLite 3.33+ accepts the ANSI GROUP BY ROLLUP (...)/CUBE (...) form.
     /// <inheritdoc/>
@@ -137,6 +137,17 @@ public sealed class SqliteDialect : SqlDialectBase
     /// <inheritdoc/>
     public override string MakeOrdinal(string value, bool ignoreCase) =>
         ignoreCase ? $"lower({value}) collate binary" : $"{value} collate binary";
+
+    /// <summary>SQLite expresses a match with the registered <c>regexp</c> function (the <c>REGEXP</c> operator) and a registered <c>regexp_replace</c>.</summary>
+    public override bool SupportsRegex => true;
+
+    /// <inheritdoc/>
+    public override string MakeRegexMatch(string value, string pattern, bool ignoreCase) =>
+        $"{value} regexp {QuoteStringLiteral((ignoreCase ? "(?i)" : string.Empty) + pattern)}";
+
+    /// <inheritdoc/>
+    public override string MakeRegexReplace(string value, string pattern, string replacement, bool ignoreCase) =>
+        $"regexp_replace({value}, {QuoteStringLiteral((ignoreCase ? "(?i)" : string.Empty) + pattern)}, {QuoteStringLiteral(replacement)})";
 
     // SQLite has no dateadd/datediff; it adjusts a date through a modifier string and measures
     // differences in seconds (or months for calendar parts).

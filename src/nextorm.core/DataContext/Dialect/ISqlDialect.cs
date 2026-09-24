@@ -227,11 +227,13 @@ public interface ISqlDialect
     /// </summary>
     bool SupportsFullText { get; }
     /// <summary>
-    /// True when the provider can attach an aggregate filter (<c>FILTER (WHERE ...)</c>). The safe
-    /// default is <c>false</c>; the standard clause is rendered by the expression translators and is
-    /// accepted by PostgreSQL and SQLite, but not by MySQL/MariaDB or SQL Server.
+    /// How the provider attaches a filter to an aggregate. The safe default is
+    /// <see cref="AggregateFilterStyle.None"/>, which rejects the filtering overloads; PostgreSQL and
+    /// SQLite return <see cref="AggregateFilterStyle.AnsiFilter"/> and ClickHouse returns
+    /// <see cref="AggregateFilterStyle.IfCombinator"/>. Declared as a default interface method so that
+    /// existing external implementations keep compiling.
     /// </summary>
-    bool SupportsFilter { get; }
+    AggregateFilterStyle AggregateFilterStyle => AggregateFilterStyle.None;
     /// <summary>
     /// True when the provider can render <c>greatest(...)</c>/<c>least(...)</c>. The safe default is
     /// <c>false</c>; PostgreSQL, MySQL/MariaDB, ClickHouse, SQL Server 2022+ and SQLite (through the
@@ -322,6 +324,18 @@ public interface ISqlDialect
     /// <param name="precision">The fractional-second precision of the native type; zero for the provider default.</param>
     /// <returns>The SQL type name.</returns>
     string MakeDurationType(DurationUnit? unit, int precision = 0) => "bigint";
+
+    /// <summary>
+    /// Renders the column type of a <em>nullable</em> <see cref="System.TimeSpan"/> property. The
+    /// default returns <see cref="MakeDurationType(DurationUnit?, int)"/> because the native types and
+    /// the integer columns of most providers already admit SQL NULL; ClickHouse, whose <c>Int64</c> is
+    /// not nullable, overrides it with <c>Nullable(...)</c>. Declared as a default interface method so
+    /// that existing external implementations keep compiling.
+    /// </summary>
+    /// <param name="unit">The declared storage unit, or <c>null</c>.</param>
+    /// <param name="precision">The fractional-second precision of the native type; zero for the provider default.</param>
+    /// <returns>The SQL type name.</returns>
+    string MakeNullableDurationType(DurationUnit? unit, int precision = 0) => MakeDurationType(unit, precision);
 
     /// <summary>
     /// The provider's renderer for the ClickHouse date-conversion surface; <c>null</c> means the provider
@@ -428,12 +442,6 @@ public interface ISqlDialect
     /// aggregates. The safe default is <c>false</c>; ClickHouse opts in today.
     /// </summary>
     bool SupportsArgMinMax { get; }
-    /// <summary>
-    /// True when the provider renders a filtered aggregate as the ClickHouse combinator
-    /// <c>countIf</c>/<c>sumIf</c>/<c>avgIf</c>/<c>minIf</c>/<c>maxIf</c> instead of the ANSI
-    /// <c>FILTER (WHERE ...)</c> clause. The safe default is <c>false</c>; ClickHouse opts in today.
-    /// </summary>
-    bool SupportsIfAggregates { get; }
 
     /// <summary>
     /// The provider's renderer for the ClickHouse distinct-count family; <c>null</c> means the provider
@@ -761,6 +769,41 @@ public interface ISqlDialect
     /// </summary>
     string MakeStringLastIndexOf(string value, string substring);
     /// <summary>
+    /// True when the provider can translate a <see cref="System.Text.RegularExpressions.Regex"/> call with
+    /// a constant pattern into native SQL (<c>Regex.IsMatch</c>/<c>Regex.Replace</c>). The safe default is
+    /// <c>false</c>; PostgreSQL, MySQL/MariaDB, ClickHouse and SQLite opt in while SQL Server has no
+    /// regular-expression engine and stays off. Declared as a default interface method so that existing
+    /// external implementations keep compiling.
+    /// <para>
+    /// The compiled pattern follows the provider's own engine (RE2 on ClickHouse, POSIX/ARE on
+    /// PostgreSQL, ICU on MySQL, PCRE on MariaDB, .NET on SQLite), so a pattern is not portable in
+    /// general: lookaround and backreferences are rejected by RE2, and the C# and SQL escaping rules
+    /// differ. The CLR syntactic knowledge is not translated, only the operator/function choice.
+    /// </para>
+    /// </summary>
+    bool SupportsRegex => false;
+    /// <summary>
+    /// Renders a regular-expression match predicate over the already-rendered <paramref name="value"/>.
+    /// <paramref name="pattern"/> is the raw pattern text (the dialect renders and escapes the string
+    /// literal itself) and <paramref name="ignoreCase"/> selects
+    /// <see cref="System.Text.RegularExpressions.RegexOptions.IgnoreCase"/>. Reached only when
+    /// <see cref="SupportsRegex"/> is <c>true</c>.
+    /// </summary>
+    string MakeRegexMatch(string value, string pattern, bool ignoreCase) =>
+        throw new NotSupportedException("Regular-expression matching is not supported by this SQL dialect.");
+    /// <summary>
+    /// Renders a regular-expression replace over the already-rendered <paramref name="value"/>,
+    /// replacing every match as <see cref="System.Text.RegularExpressions.Regex.Replace(string, string, string)"/>
+    /// does. <paramref name="pattern"/> and <paramref name="replacement"/> are raw text (the dialect renders
+    /// and escapes the literals). Reached only when <see cref="SupportsRegex"/> is <c>true</c>.
+    /// <para>
+    /// A replacement backreference uses the provider's group syntax (C# <c>$1</c>, SQL <c>\1</c>); it is
+    /// not rewritten, so a replacement with a group reference is not portable as written.
+    /// </para>
+    /// </summary>
+    string MakeRegexReplace(string value, string pattern, string replacement, bool ignoreCase) =>
+        throw new NotSupportedException("Regular-expression replacement is not supported by this SQL dialect.");
+    /// <summary>
     /// The provider's formatting surface for the culture-invariant CLR format specifiers of
     /// <c>string.Format</c>/<c>ToString(format)</c>; <c>null</c> means the provider cannot render them.
     /// Declared as a default interface method so that existing external implementations keep compiling.
@@ -882,6 +925,23 @@ public interface ISqlDialect
     /// <paramref name="field"/> is a validated date-part name.
     /// </summary>
     string MakeDateDiff(string field, string start, string end);
+    /// <summary>
+    /// Renders the same difference as <see cref="MakeDateDiff(string, string, string)"/> through a
+    /// 64-bit result, so a <c>millisecond</c>/<c>microsecond</c> span does not overflow (the
+    /// <c>date_diff_big</c> function). The default delegates to
+    /// <see cref="MakeDateDiff(string, string, string)"/>, whose result is already 64-bit on most
+    /// providers; SQL Server overrides it with <c>datediff_big</c>.
+    /// </summary>
+    string MakeDateDiffBig(string field, string start, string end) => MakeDateDiff(field, start, end);
+    /// <summary>
+    /// Promotes the already-rendered <paramref name="value"/> operand of a sub-day date function so its
+    /// time-of-day part is representable. A provider that applies <c>date_add</c> to a <c>date</c>-only
+    /// operand can otherwise truncate or reject <c>hour</c>/<c>minute</c>/<c>second</c>/<c>millisecond</c>/
+    /// <c>microsecond</c> arithmetic (SQL Server <c>dateadd</c> on a <c>date</c>, ClickHouse <c>add*</c>
+    /// on a <c>Date</c>). The default returns <paramref name="value"/> unchanged, so providers with full
+    /// timestamps or interval arithmetic are unaffected. <paramref name="field"/> is a validated part name.
+    /// </summary>
+    string PromoteDateOperand(string field, string value) => value;
     /// <summary>Renders the last day of the month of the already-rendered <paramref name="value"/>.</summary>
     string MakeEndOfMonth(string value);
     /// <summary>
@@ -898,6 +958,14 @@ public interface ISqlDialect
     bool SupportsDateDiffField(string field);
     /// <summary>Renders the <c>string_agg(value, delimiter)</c> aggregate over the already-rendered arguments.</summary>
     string MakeStringAgg(string value, string delimiter);
+    /// <summary>
+    /// Renders a filtered <c>string_agg</c> for a dialect whose <see cref="AggregateFilterStyle"/> is
+    /// <see cref="AggregateFilterStyle.IfCombinator"/>, composing the already-rendered
+    /// <paramref name="predicate"/> into the aggregate. The default throws; a dialect that expresses
+    /// the ANSI clause handles the filter through the shared filter helper instead.
+    /// </summary>
+    string MakeFilteredStringAgg(string value, string delimiter, string predicate) =>
+        throw new NotSupportedException("The filtered string_agg is not supported by this SQL dialect.");
     /// <summary>Renders the <c>array_agg(value)</c> aggregate over the already-rendered argument.</summary>
     string MakeArrayAgg(string value);
     /// <summary>

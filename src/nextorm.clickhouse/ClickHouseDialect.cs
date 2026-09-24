@@ -226,8 +226,8 @@ public sealed class ClickHouseDialect : SqlDialectBase
     public override bool SupportsStatisticalAggregates => true;
     /// <summary>ClickHouse implements the <c>argMin</c>/<c>argMax</c> aggregates.</summary>
     public override bool SupportsArgMinMax => true;
-    /// <summary>ClickHouse implements the filtered <c>-If</c> aggregate combinators.</summary>
-    public override bool SupportsIfAggregates => true;
+    /// <summary>ClickHouse renders an aggregate filter as the <c>-If</c> combinator (<c>sumIf</c>, <c>countIf</c>).</summary>
+    public override AggregateFilterStyle AggregateFilterStyle => AggregateFilterStyle.IfCombinator;
     /// <summary>ClickHouse implements the distinct-count <c>uniq*</c> aggregates.</summary>
     public override IUniqAggregateRenderer UniqAggregates => _uniqAggregates;
 
@@ -491,6 +491,17 @@ public sealed class ClickHouseDialect : SqlDialectBase
     /// <inheritdoc/>
     public override string MakeOrdinal(string value, bool ignoreCase) => ignoreCase ? $"lower({value})" : value;
 
+    /// <summary>ClickHouse matches with the RE2-based <c>match</c> and replaces with <c>replaceRegexpAll</c>.</summary>
+    public override bool SupportsRegex => true;
+
+    /// <inheritdoc/>
+    public override string MakeRegexMatch(string value, string pattern, bool ignoreCase) =>
+        $"match({value}, {QuoteStringLiteral((ignoreCase ? "(?i)" : string.Empty) + pattern, escapeBackslash: true)})";
+
+    /// <inheritdoc/>
+    public override string MakeRegexReplace(string value, string pattern, string replacement, bool ignoreCase) =>
+        $"replaceRegexpAll({value}, {QuoteStringLiteral((ignoreCase ? "(?i)" : string.Empty) + pattern, escapeBackslash: true)}, {QuoteStringLiteral(replacement, escapeBackslash: true)})";
+
     // now() uses the server time zone; the optional argument selects a zone.
     /// <summary>Renders <c>now('UTC')</c> for UTC or the server-timezone <c>now()</c> for local time.</summary>
     public override string MakeNow(bool utc) => utc ? "now('UTC')" : "now()";
@@ -548,11 +559,6 @@ public sealed class ClickHouseDialect : SqlDialectBase
         "any_last" => "anyLast",
         "group_array" => "groupArray",
         "group_uniq_array" => "groupUniqArray",
-        "count_if" => "countIf",
-        "sum_if" => "sumIf",
-        "avg_if" => "avgIf",
-        "min_if" => "minIf",
-        "max_if" => "maxIf",
         _ => name
     };
 
@@ -616,6 +622,18 @@ public sealed class ClickHouseDialect : SqlDialectBase
         return $"dateDiff('{unit}', {start}, {end})";
     }
 
+    /// <summary>
+    /// ClickHouse <c>add*</c> on a <c>Date</c> operand truncates the time of day, so a sub-day operand is
+    /// promoted to <c>DateTime</c> (or <c>DateTime64</c> for the sub-second parts).
+    /// </summary>
+    public override string PromoteDateOperand(string field, string value) => field switch
+    {
+        "milliseconds" => $"toDateTime64({value}, 3)",
+        "microseconds" => $"toDateTime64({value}, 6)",
+        "hour" or "minute" or "second" => $"toDateTime({value})",
+        _ => value
+    };
+
     /// <summary>Renders <c>toLastDayOfMonth(value)</c>.</summary>
     public override string MakeEndOfMonth(string value) => $"toLastDayOfMonth({value})";
 
@@ -626,6 +644,10 @@ public sealed class ClickHouseDialect : SqlDialectBase
     /// <summary>Renders <c>arrayStringConcat(groupArray(value), delimiter)</c>.</summary>
     public override string MakeStringAgg(string value, string delimiter) =>
         $"arrayStringConcat(groupArray({value}), {delimiter})";
+
+    /// <summary>Renders the filtered <c>string_agg</c> as <c>arrayStringConcat(groupArrayIf(value, predicate), delimiter)</c>.</summary>
+    public override string MakeFilteredStringAgg(string value, string delimiter, string predicate) =>
+        $"arrayStringConcat(groupArrayIf({value}, {predicate}), {delimiter})";
 
     /// <summary>Maps the CLR type to its ClickHouse type name (<c>UInt8</c>, <c>Int16</c>, <c>Int32</c>, <c>Int64</c>, <c>Float32</c>, <c>Float64</c>, <c>Decimal</c>).</summary>
     public override string MakeTypeName(Type type) => type switch
@@ -641,6 +663,13 @@ public sealed class ClickHouseDialect : SqlDialectBase
         _ when type == typeof(DateTimeOffset) => "DateTime64(6)",
         _ => base.MakeTypeName(type)
     };
+
+    /// <summary>ClickHouse has no native duration type read back as <see cref="TimeSpan"/>; the value is stored in an <c>Int64</c>.</summary>
+    public override string MakeDurationType(DurationUnit? unit, int precision = 0) => "Int64";
+
+    /// <summary>ClickHouse's <c>Int64</c> is not nullable, so a nullable duration column uses <c>Nullable(Int64)</c>.</summary>
+    public override string MakeNullableDurationType(DurationUnit? unit, int precision = 0) =>
+        $"Nullable({MakeDurationType(unit, precision)})";
 
     // ClickHouse declares every CTE with `with`; there is no RECURSIVE keyword.
     /// <summary>ClickHouse declares every CTE with <c>with</c>; there is no <c>RECURSIVE</c> keyword.</summary>

@@ -1,5 +1,6 @@
 using FluentAssertions;
 using NextORM.Core;
+using System.Text.RegularExpressions;
 
 namespace NextORM.ClickHouse.Tests;
 
@@ -47,5 +48,45 @@ public class StringSemanticsSqlGenerationTests
 
         var act = () => SqlOf(ctx, e.Select(x => new { F = SqlFunctions.Sql.collate(x.String, "C") }));
         act.Should().Throw<NotSupportedException>().WithMessage("*collation*");
+    }
+
+    [Fact]
+    public void RegexIsMatch_ShouldUseMatch()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Where(x => Regex.IsMatch(x.String!, "^a")).Select(x => new { x.Id }))
+            .Should().Contain("match(somestring, '^a')");
+    }
+
+    [Fact]
+    public void RegexIsMatchIgnoreCase_ShouldPrefixIgnoreCaseFlag()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Where(x => Regex.IsMatch(x.String!, "^a", RegexOptions.IgnoreCase)).Select(x => new { x.Id }))
+            .Should().Contain("match(somestring, '(?i)^a')");
+    }
+
+    [Fact]
+    public void RegexReplace_ShouldUseReplaceRegexpAll()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { F = Regex.Replace(x.String!, "[0-9]+", "#") }))
+            .Should().Contain("replaceRegexpAll(somestring, '[0-9]+', '#')");
+    }
+
+    [Fact]
+    public void RegexReplaceIgnoreCase_ShouldPrefixIgnoreCaseFlag()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { F = Regex.Replace(x.String!, "a", "#", RegexOptions.IgnoreCase) }))
+            .Should().Contain("replaceRegexpAll(somestring, '(?i)a', '#')");
     }
 }

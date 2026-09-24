@@ -388,6 +388,17 @@ public class MySqlDialect : SqlDialectBase
         return ignoreCase ? $"lower({value}) collate {Binary}" : $"{value} collate {Binary}";
     }
 
+    /// <summary>MySQL 8.0.4+ matches with <c>REGEXP_LIKE</c> and replaces with <c>REGEXP_REPLACE</c>.</summary>
+    public override bool SupportsRegex => true;
+
+    /// <inheritdoc/>
+    public override string MakeRegexMatch(string value, string pattern, bool ignoreCase) =>
+        $"regexp_like({value}, {QuoteStringLiteral(pattern, escapeBackslash: true)}, {(ignoreCase ? "'i'" : "'c'")})";
+
+    /// <inheritdoc/>
+    public override string MakeRegexReplace(string value, string pattern, string replacement, bool ignoreCase) =>
+        $"regexp_replace({value}, {QuoteStringLiteral(pattern, escapeBackslash: true)}, {QuoteStringLiteral(replacement, escapeBackslash: true)}, 1, 0, {(ignoreCase ? "'i'" : "'c'")})";
+
     /// <inheritdoc/>
     public override string MakeStuff(string value, string start, string? count, string newValue) =>
         count is null

@@ -1,4 +1,5 @@
 using FluentAssertions;
+using System.Text.RegularExpressions;
 
 namespace NextORM.Core.Tests;
 
@@ -61,5 +62,37 @@ public class InMemoryStringSemanticsTests
         var r = _sut.SimpleEntity.Select(it => new { F = it.Id.ToString().ToUpperInvariant() }).ToList();
 
         r.Should().Contain(x => x.F == "1");
+    }
+
+    [Fact]
+    public void RegexIsMatch_ShouldExecuteNatively()
+    {
+        var r = _sut.SimpleEntity
+            .Where(it => Regex.IsMatch(it.Id.ToString(), "^1$"))
+            .Select(it => new { it.Id })
+            .ToList();
+
+        r.Should().ContainSingle();
+        r[0].Id.Should().Be(1);
+    }
+
+    [Fact]
+    public void RegexIsMatchIgnoreCase_ShouldExecuteNatively()
+    {
+        var r = _sut.SimpleEntity
+            .Where(it => Regex.IsMatch("A", "^a$", RegexOptions.IgnoreCase) && it.Id == 2)
+            .Select(it => new { it.Id })
+            .ToList();
+
+        r.Should().ContainSingle();
+        r[0].Id.Should().Be(2);
+    }
+
+    [Fact]
+    public void RegexReplace_ShouldExecuteNatively()
+    {
+        var r = _sut.SimpleEntity.Select(it => new { F = Regex.Replace(it.Id.ToString(), "\\d", "#") }).ToList();
+
+        r.Should().Contain(x => x.F == "#");
     }
 }

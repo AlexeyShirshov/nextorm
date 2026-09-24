@@ -250,7 +250,7 @@ public sealed class PostgresDialect : SqlDialectBase
     // PostgreSQL accepts the FILTER (WHERE ...) aggregate clause, greatest/least, date_trunc and the
     // string_agg/array_agg aggregate surface.
     /// <inheritdoc/>
-    public override bool SupportsFilter => true;
+    public override AggregateFilterStyle AggregateFilterStyle => AggregateFilterStyle.AnsiFilter;
     /// <inheritdoc/>
     public override bool SupportsGreatestLeast => true;
 
@@ -285,6 +285,13 @@ public sealed class PostgresDialect : SqlDialectBase
     /// <summary>PostgreSQL's <c>extract(epoch ...)</c> returns numeric, so it is cast to double precision.</summary>
     public override string MakeDatePart(string part, string value) =>
         part == "epoch" ? $"cast(extract(epoch from {value}) as double precision)" : base.MakeDatePart(part, value);
+
+    /// <summary>
+    /// The ANSI <c>date_diff</c> casts a sub-day span to <c>integer</c>; the 64-bit variant widens that
+    /// cast to <c>bigint</c> so milliseconds/microseconds over a long range do not overflow.
+    /// </summary>
+    public override string MakeDateDiffBig(string field, string start, string end) =>
+        MakeDateDiffCore(field, start, end, big: true);
 
     // PostgreSQL full-text search matches a tsvector against a tsquery; contains/freetext differ in
     // how the search string is parsed (plain terms vs. web-search syntax).
@@ -398,6 +405,17 @@ public sealed class PostgresDialect : SqlDialectBase
     /// <inheritdoc/>
     public override string MakeOrdinal(string value, bool ignoreCase) =>
         MakeCollate(ignoreCase ? $"lower({value})" : value, "C");
+
+    /// <summary>PostgreSQL matches with the <c>~</c>/<c>~*</c> operators and replaces with <c>regexp_replace</c>.</summary>
+    public override bool SupportsRegex => true;
+
+    /// <inheritdoc/>
+    public override string MakeRegexMatch(string value, string pattern, bool ignoreCase) =>
+        $"{value} {(ignoreCase ? "~*" : "~")} {QuoteStringLiteral(pattern)}";
+
+    /// <inheritdoc/>
+    public override string MakeRegexReplace(string value, string pattern, string replacement, bool ignoreCase) =>
+        $"regexp_replace({value}, {QuoteStringLiteral(pattern)}, {QuoteStringLiteral(replacement)}, {(ignoreCase ? "'gi'" : "'g'")})";
 
     /// <inheritdoc/>
     public override void MakePage(Paging paging, StringBuilder sqlBuilder, KeywordCase keywordCase = KeywordCase.Lower)

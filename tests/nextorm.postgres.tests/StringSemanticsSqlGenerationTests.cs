@@ -1,5 +1,6 @@
 using FluentAssertions;
 using NextORM.Core;
+using System.Text.RegularExpressions;
 
 namespace NextORM.Postgres.Tests;
 
@@ -167,5 +168,120 @@ public class StringSemanticsSqlGenerationTests
         var e = ctx.From<IComplexEntity>();
 
         AssertUnsupported(ctx, e.Where(x => x.String!.IndexOf("a", 1, 2) > 0).Select(x => new { x.Id }), "IndexOf");
+    }
+
+    [Fact]
+    public void RegexIsMatch_ShouldUseMatchOperator()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Where(x => Regex.IsMatch(x.String!, "^a")).Select(x => new { x.Id }))
+            .Should().Contain("somestring ~ '^a'");
+    }
+
+    [Fact]
+    public void RegexIsMatchIgnoreCase_ShouldUseCaseInsensitiveOperator()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Where(x => Regex.IsMatch(x.String!, "^a", RegexOptions.IgnoreCase)).Select(x => new { x.Id }))
+            .Should().Contain("somestring ~* '^a'");
+    }
+
+    [Fact]
+    public void RegexReplace_ShouldUseRegexpReplace()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { F = Regex.Replace(x.String!, "[0-9]+", "#") }))
+            .Should().Contain("regexp_replace(somestring, '[0-9]+', '#', 'g')");
+    }
+
+    [Fact]
+    public void RegexReplaceIgnoreCase_ShouldUseGlobalCaseInsensitiveFlags()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { F = Regex.Replace(x.String!, "a", "#", RegexOptions.IgnoreCase) }))
+            .Should().Contain("regexp_replace(somestring, 'a', '#', 'gi')");
+    }
+
+    [Fact]
+    public void RegexInstance_ShouldUseReceiverPattern()
+    {
+        var regex = new Regex("^a", RegexOptions.IgnoreCase);
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Where(x => regex.IsMatch(x.String!)).Select(x => new { x.Id }))
+            .Should().Contain("somestring ~* '^a'");
+    }
+
+    [Fact]
+    public void RegexNewInstance_ShouldUseConstructorPattern()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Where(x => new Regex("^a").IsMatch(x.String!)).Select(x => new { x.Id }))
+            .Should().Contain("somestring ~ '^a'");
+    }
+
+    [Fact]
+    public void RegexInstanceReplace_ShouldUseReceiverPatternAndOptions()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { F = new Regex("^a", RegexOptions.IgnoreCase).Replace(x.String!, "#") }))
+            .Should().Contain("regexp_replace(somestring, '^a', '#', 'gi')");
+    }
+
+    [Fact]
+    public void RegexConstantInput_ShouldRenderInline()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { F = Regex.IsMatch("abc", "b"), x.Id }))
+            .Should().Contain("'abc' ~ 'b'");
+    }
+
+    [Fact]
+    public void RegexUnsupportedMethod_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        AssertUnsupported(
+            ctx,
+            e.Where(x => Regex.Escape(x.String!) == "a").Select(x => new { x.Id }),
+            "only Regex.IsMatch and Regex.Replace");
+    }
+
+    [Fact]
+    public void RegexNonConstantPattern_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        var pattern = "^a";
+
+        AssertUnsupported(ctx, e.Where(x => Regex.IsMatch(x.String!, pattern)).Select(x => new { x.Id }), "compile-time constant");
+    }
+
+    [Fact]
+    public void RegexUnsupportedOptions_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        AssertUnsupported(
+            ctx,
+            e.Where(x => Regex.IsMatch(x.String!, "^a", RegexOptions.Multiline)).Select(x => new { x.Id }),
+            "RegexOptions");
     }
 }

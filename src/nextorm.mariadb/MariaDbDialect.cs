@@ -13,8 +13,18 @@ public sealed class MariaDbDialect : MySqlDialect
     /// <summary>Gets the shared MariaDB dialect instance.</summary>
     public static new readonly MariaDbDialect Instance = new();
 
-    /// <summary>
-    /// MariaDB has no native bulk path enabled: <c>MySqlBulkCopy</c> requires a server-side
+    /// <summary>MariaDB has no <c>REGEXP_LIKE</c>; it matches with the <c>REGEXP</c> operator and replaces with <c>REGEXP_REPLACE</c>.</summary>
+    public override bool SupportsRegex => true;
+
+    /// <inheritdoc/>
+    public override string MakeRegexMatch(string value, string pattern, bool ignoreCase) =>
+        $"{value} regexp {QuoteStringLiteral((ignoreCase ? "(?i)" : "(?-i)") + pattern, escapeBackslash: true)}";
+
+    /// <inheritdoc/>
+    public override string MakeRegexReplace(string value, string pattern, string replacement, bool ignoreCase) =>
+        $"regexp_replace({value}, {QuoteStringLiteral((ignoreCase ? "(?i)" : "(?-i)") + pattern, escapeBackslash: true)}, {QuoteStringLiteral(replacement, escapeBackslash: true)})";
+
+    /// <summary>MariaDB has no native bulk path enabled: <c>MySqlBulkCopy</c> requires a server-side
     /// <c>local_infile</c> setting that is commonly disabled, so the portable
     /// <c>INSERT ... VALUES</c> path is used instead (it also returns keys on request).
     /// </summary>

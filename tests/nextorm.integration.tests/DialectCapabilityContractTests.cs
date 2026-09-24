@@ -190,6 +190,12 @@ public sealed class DialectCapabilityContractTests
 
             if (dialect.SupportsOrdinalComparison)
                 dialect.MakeOrdinal("[x]", false).Should().NotBeNullOrEmpty();
+
+            if (dialect.SupportsRegex)
+            {
+                dialect.MakeRegexMatch("[x]", "p", false).Should().NotBeNullOrEmpty();
+                dialect.MakeRegexReplace("[x]", "p", "r", false).Should().NotBeNullOrEmpty();
+            }
         }
     }
 
@@ -218,5 +224,6 @@ public sealed class DialectCapabilityContractTests
         dialects.Should().Contain(d => d.StringFormats != null);
         dialects.Should().Contain(d => d.SupportsCollation);
         dialects.Should().Contain(d => d.SupportsOrdinalComparison);
+        dialects.Should().Contain(d => d.SupportsRegex);
     }
 }

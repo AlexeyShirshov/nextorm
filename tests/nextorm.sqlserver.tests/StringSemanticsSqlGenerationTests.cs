@@ -1,5 +1,6 @@
 using FluentAssertions;
 using NextORM.Core;
+using System.Text.RegularExpressions;
 
 namespace NextORM.SqlServer.Tests;
 
@@ -57,5 +58,15 @@ public class StringSemanticsSqlGenerationTests
 
         SqlOf(ctx, e.Where(x => x.String!.Contains("a", StringComparison.Ordinal)).Select(x => new { x.Id }))
             .Should().Contain("somestring collate Latin1_General_100_BIN2 like '%a%'");
+    }
+
+    [Fact]
+    public void RegexIsMatch_ShouldThrowBecauseNoRegexEngine()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Where(x => Regex.IsMatch(x.String!, "^a")).Select(x => new { x.Id }));
+        act.Should().Throw<NotSupportedException>().WithMessage("*Regular expressions*");
     }
 }

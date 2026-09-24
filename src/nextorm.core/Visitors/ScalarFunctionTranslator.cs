@@ -44,6 +44,9 @@ internal static class ScalarFunctionTranslator
         if (declaringType == typeof(DateTime))
             return DateTimeFunctionTranslator.TryTranslate(visitor, node);
 
+        if (declaringType == typeof(System.Text.RegularExpressions.Regex))
+            return RegexSqlTranslator.TryTranslate(visitor, node);
+
         if (declaringType == typeof(CommonFunctions) && node.Method.Name == nameof(CommonFunctions.like))
             return TryTranslateLikeFunction(visitor, node);
 
@@ -128,7 +131,7 @@ internal static class ScalarFunctionTranslator
         }
 
         visitor.NeedAliasForColumn = true;
-        visitor.Builder!.Append(visitor.Dialect.MakeCollate(visitor.VisitToString(args[0]), collation, visitor.KeywordCase));
+        visitor.Builder!.Append(visitor.Dialect.MakeCollate(visitor.VisitToStringSuppressingColumnCollation(args[0]), collation, visitor.KeywordCase));
         return true;
     }
 

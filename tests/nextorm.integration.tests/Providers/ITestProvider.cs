@@ -113,6 +113,13 @@ public interface ITestProvider
     /// </summary>
     bool SupportsTransactions { get; }
 
+    /// <summary>
+    /// True when the provider can translate a constant-pattern <c>Regex.IsMatch</c>/<c>Regex.Replace</c>
+    /// into native SQL. PostgreSQL, MySQL/MariaDB, ClickHouse and SQLite can; SQL Server has no
+    /// regular-expression engine, so the shared regex tests are skipped there.
+    /// </summary>
+    bool SupportsRegex { get; }
+
     void EnsureSeeded();
 
     IDataContext CreateContext();
