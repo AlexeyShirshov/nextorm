@@ -55,4 +55,32 @@ public interface IPropertyMetadata
     /// returns <see langword="false"/> so existing external implementations keep compiling.
     /// </summary>
     bool IsComputed => false;
+
+    /// <summary>
+    /// The unit in which a <see cref="System.TimeSpan"/> property is stored on a provider without a
+    /// native duration type, or <see langword="null"/> when the property is not a duration or uses the
+    /// provider's native type. Declared with <see cref="DurationAttribute"/> or set fluently with
+    /// <see cref="EntityPropertyBuilder{T}.Duration(DurationUnit, int)"/>. The default implementation
+    /// returns <see langword="null"/> so existing external implementations keep compiling.
+    /// </summary>
+    DurationUnit? DurationUnit => null;
+
+    /// <summary>
+    /// The fractional-second precision of a native duration type (for example <c>TIME(3)</c>), or zero
+    /// for the provider default. Declared with <see cref="DurationAttribute.Precision"/> or the fluent
+    /// duration mapping. The default implementation returns zero so existing external implementations
+    /// keep compiling.
+    /// </summary>
+    int DurationPrecision => 0;
+
+    /// <summary>
+    /// The provider-native collation declared for the property's column, or <see langword="null"/>
+    /// when the column follows the database default. Declared with <see cref="CollationAttribute"/> or
+    /// set fluently with <see cref="EntityPropertyBuilder{T}.Collation(string)"/>. The value is applied
+    /// to the column in collation-sensitive query operations;
+    /// <see cref="ISqlDialect.SupportsCollation"/> must be <see langword="true"/>. The default
+    /// implementation returns <see langword="null"/> so existing external implementations keep
+    /// compiling.
+    /// </summary>
+    string? Collation => null;
 }

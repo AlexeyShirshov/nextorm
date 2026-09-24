@@ -200,8 +200,8 @@ internal static class StringFunctionTranslator
         }
 
         visitor.NeedAliasForColumn = true;
-        var leftSql = visitor.Dialect.MakeOrdinal(visitor.VisitToString(left), ignoreCase);
-        var rightSql = visitor.Dialect.MakeOrdinal(visitor.VisitToString(right), ignoreCase);
+        var leftSql = visitor.Dialect.MakeOrdinal(visitor.VisitToStringSuppressingColumnCollation(left), ignoreCase);
+        var rightSql = visitor.Dialect.MakeOrdinal(visitor.VisitToStringSuppressingColumnCollation(right), ignoreCase);
         visitor.Builder!.Append(visitor.Dialect.MakeBooleanPredicate($"({leftSql} = {rightSql})", visitor.IsPredicateContext));
         return true;
     }
@@ -249,8 +249,8 @@ internal static class StringFunctionTranslator
         }
 
         visitor.NeedAliasForColumn = true;
-        var left = visitor.Dialect.MakeOrdinal(visitor.VisitToString(args[0]), ignoreCase);
-        var right = visitor.Dialect.MakeOrdinal(visitor.VisitToString(args[1]), ignoreCase);
+        var left = visitor.Dialect.MakeOrdinal(visitor.VisitToStringSuppressingColumnCollation(args[0]), ignoreCase);
+        var right = visitor.Dialect.MakeOrdinal(visitor.VisitToStringSuppressingColumnCollation(args[1]), ignoreCase);
         visitor.Builder!.Append($"case when {left} < {right} then -1 when {left} > {right} then 1 else 0 end");
         return true;
     }
@@ -437,10 +437,11 @@ internal static class StringFunctionTranslator
         }
 
         visitor.NeedAliasForColumn = true;
-        var value = visitor.VisitToString(node.Object);
-        var substring = visitor.VisitToString(args[0]);
+        var ordinal = comparisonIndex >= 0;
+        var value = ordinal ? visitor.VisitToStringSuppressingColumnCollation(node.Object) : visitor.VisitToString(node.Object);
+        var substring = ordinal ? visitor.VisitToStringSuppressingColumnCollation(args[0]) : visitor.VisitToString(args[0]);
 
-        if (comparisonIndex >= 0)
+        if (ordinal)
         {
             value = visitor.Dialect.MakeOrdinal(value, ignoreCase);
             substring = visitor.Dialect.MakeOrdinal(substring, ignoreCase);
@@ -473,10 +474,11 @@ internal static class StringFunctionTranslator
         }
 
         visitor.NeedAliasForColumn = true;
-        var value = visitor.VisitToString(node.Object);
-        var substring = visitor.VisitToString(args[0]);
+        var ordinal = args.Count == 2;
+        var value = ordinal ? visitor.VisitToStringSuppressingColumnCollation(node.Object) : visitor.VisitToString(node.Object);
+        var substring = ordinal ? visitor.VisitToStringSuppressingColumnCollation(args[0]) : visitor.VisitToString(args[0]);
 
-        if (args.Count == 2)
+        if (ordinal)
         {
             value = visitor.Dialect.MakeOrdinal(value, ignoreCase);
             substring = visitor.Dialect.MakeOrdinal(substring, ignoreCase);
@@ -601,7 +603,9 @@ internal static class StringFunctionTranslator
         }
 
         visitor.NeedAliasForColumn = true;
-        var value = visitor.VisitToString(node.Object);
+        var value = hasComparison
+            ? visitor.VisitToStringSuppressingColumnCollation(node.Object)
+            : visitor.VisitToString(node.Object);
         var pattern = BuildLikePattern(visitor, args[0], position, out var escaped);
 
         if (hasComparison)

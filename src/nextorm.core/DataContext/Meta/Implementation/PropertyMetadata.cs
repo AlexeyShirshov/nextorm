@@ -10,4 +10,7 @@ internal class PropertyMetadata : IPropertyMetadata
     public bool IsKey { get; set; }
     public bool IsIdentity { get; init; }
     public bool IsComputed { get; init; }
+    public DurationUnit? DurationUnit { get; init; }
+    public int DurationPrecision { get; init; }
+    public string? Collation { get; init; }
 }

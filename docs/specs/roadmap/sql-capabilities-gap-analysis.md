@@ -208,9 +208,11 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
     [`SupportsCollation`](xref:NextORM.Core.ISqlDialect.SupportsCollation)) are implemented with a
     fail-fast contract: an unsupported specifier, comparison or culture throws `NotSupportedException`
     instead of silently producing culture-dependent SQL. The `==` operator deliberately keeps the database
-    collation. See [Scalar functions](../../guide/11-scalar-functions.md#ordinal-comparison-and-collation)
-    and [Limitations](../../advanced/limitations.md). Column-level collation (nextorm `#28`) remains the
-    only follow-up, built on the same `MakeCollate` foundation; tracked as G12 in
+    collation. Column-level collation (nextorm `#28`) is also **done**: a collation declared on a mapped
+    property (`CollationAttribute`/`EntityPropertyBuilder<T>.Collation`) is applied in collation-sensitive
+    query operations through the same `MakeCollate` foundation, gated by `SupportsCollation` (ClickHouse
+    rejects it). See [Scalar functions](../../guide/11-scalar-functions.md#ordinal-comparison-and-collation)
+    and [Limitations](../../advanced/limitations.md); tracked as G12 in
     [`linq2db-backlog-gap-analysis.md`](../comparison/linq2db-backlog-gap-analysis.md).
 35. **Cross-provider string / regexp function surface — gap candidate (PostgreSQL-only today).** The native
     string/`regexp_*` library is exposed only on `SqlFunctions.Postgres`
@@ -472,6 +474,7 @@ developed in parallel on the same working tree.
 | 33 | Global query filters (soft-delete / multi-tenancy) | **Planned** ([`todo_query_filters.md`](todo_query_filters.md)) | new `Meta/QueryFilterAttribute.cs`, `Meta/IQueryFilterMetadata.cs`; edits `Meta/{IEntityMetadata,EntityMetadataBuilder}.cs`, `DataContext/DataContextExtensions.cs`, `Query/QueryCommand.QueryPreparer.cs`, `DataContext/QueryPlanner.cs`, `Query/QueryPlanEqualityComparer.cs`, `Builders/EntityBuilder.cs`, `DataContext/InMemoryDataContext.cs` | new `tests/nextorm.core.tests/QueryFilterTests.cs`; `CommonTestSuite` (soft-delete/multi-tenant) |
 | 34 | C# string semantics (ordinal compare, format specifiers, culture; G12) | **Done** ([Ordinal comparison and collation](../../guide/11-scalar-functions.md#ordinal-comparison-and-collation)) | `Visitors/StringFunctionTranslator.cs`, `Visitors/ScalarFunctionTranslator.cs`, `Visitors/BaseExpressionVisitor.cs`, `DataContext/Dialect/{ISqlDialect,SqlDialectBase,DialectCapabilities}.cs`, `Query/SqlFunctions.cs`, new `Visitors/StringFormatTranslator.cs`, `Visitors/CompositeFormat.cs`, `DataContext/InMemoryStringFunctionRewriter.cs`, provider `*Dialect.cs` | SQL-generation tests per provider; `CommonTestSuite.StringSemantics.cs` ordinal/format; `InMemoryStringSemanticsTests.cs` |
 | 35 | Cross-provider string / regexp function surface | **Gap (candidate)** | new `SqlFunctions.Sql` string/regexp translators + `ISqlDialect.Supports*`/`Make*`; provider dialects | SQL-generation tests; provider integration |
+| 36 | Join projection into a user type (`As`) and arity beyond 8 (derived-table sugar; inline mapping optional) | **Planned** ([`todo_join_projection_mapping.md`](todo_join_projection_mapping.md)) | `Builders/EntityBuilder.cs` (`As`); reuses `DataContext/DataContextExtensions.cs` (`From(QueryCommand)`), `DataContext/SqlSourceRenderer.cs`; optional inline phase: `Builders/Projection.cs`, `Builders/Joins/JoinedEntityBuilder.cs`, `Visitors/*`, `DataContext/QueryPlanner.cs`, `DataContext/InMemory*`, `Query/QueryPlanEqualityComparer.cs` | SQL-generation tests per provider; `CommonTestSuite.Join.cs`; in-memory `NotSupportedException` |
 
 Workstream 17–25 extended provider parity.
 

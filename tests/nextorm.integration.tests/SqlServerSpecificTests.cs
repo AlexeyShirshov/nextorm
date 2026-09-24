@@ -391,4 +391,43 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
 
         ctx.From<IInsertEntity>().Where(x => x.Name == marker).Select(x => x.Age).ToList().Should().BeEmpty();
     }
+
+    [SqlTable("collation_probe")]
+    internal interface ICollationProbe
+    {
+        [Key]
+        [Column("id")]
+        long Id { get; set; }
+        [Column("name")]
+        [Collation("Latin1_General_100_BIN2")]
+        string? Name { get; set; }
+    }
+
+    [Fact]
+    public void ColumnCollation_ShouldApplyDeclaredBinaryCollation()
+    {
+        var ctx = _sut.DataProvider;
+        Execute(ctx, "drop table if exists collation_probe");
+        Execute(ctx, "create table collation_probe (id bigint, name varchar(50))");
+
+        try
+        {
+            Execute(ctx, "insert into collation_probe (id, name) values (1, 'abc')");
+            Execute(ctx, "insert into collation_probe (id, name) values (2, 'ABC')");
+
+            ctx.From<ICollationProbe>().Where(x => x.Name == "abc").Select(x => x.Id).ToList()
+                .Should().Equal(1L);
+        }
+        finally
+        {
+            Execute(ctx, "drop table if exists collation_probe");
+        }
+    }
+
+    private static void Execute(IDataContext ctx, string sql)
+    {
+        ((DataContext)ctx).EnsureConnectionOpen();
+        using var cmd = ((DataContext)ctx).CreateCommand(sql);
+        cmd.ExecuteNonQuery();
+    }
 }

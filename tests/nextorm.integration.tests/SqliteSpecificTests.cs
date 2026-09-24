@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 using FluentAssertions;
 using Microsoft.Data.Sqlite;
 using NextORM.Core;
@@ -232,5 +234,44 @@ public sealed class SqliteSpecificTests : ProviderTestSuite
             .ToList();
 
         rows.Select(r => r.n).OrderBy(n => n).Should().Equal(1, 2, 3, 4, 5);
+    }
+
+    [SqlTable("collation_probe")]
+    internal interface ICollationProbe
+    {
+        [Key]
+        [Column("id")]
+        long Id { get; set; }
+        [Column("name")]
+        [Collation("binary")]
+        string? Name { get; set; }
+    }
+
+    [Fact]
+    public void ColumnCollation_ShouldApplyDeclaredBinaryCollation()
+    {
+        var ctx = _sut.DataProvider;
+        Execute(ctx, "drop table if exists collation_probe");
+        Execute(ctx, "create table collation_probe (id bigint, name varchar(50))");
+
+        try
+        {
+            Execute(ctx, "insert into collation_probe (id, name) values (1, 'abc')");
+            Execute(ctx, "insert into collation_probe (id, name) values (2, 'ABC')");
+
+            ctx.From<ICollationProbe>().Where(x => x.Name == "abc").Select(x => x.Id).ToList()
+                .Should().Equal(1L);
+        }
+        finally
+        {
+            Execute(ctx, "drop table if exists collation_probe");
+        }
+    }
+
+    private static void Execute(IDataContext ctx, string sql)
+    {
+        ((DataContext)ctx).EnsureConnectionOpen();
+        using var cmd = ((DataContext)ctx).CreateCommand(sql);
+        cmd.ExecuteNonQuery();
     }
 }
