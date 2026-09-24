@@ -57,6 +57,32 @@ public interface IUuidGenerators
 }
 
 /// <summary>
+/// A dialect's formatting surface for the culture-invariant subset of CLR format specifiers used by
+/// <c>string.Format</c>/<c>$"...{x:fmt}"</c>/<c>x.ToString(fmt)</c>. The object also answers whether a
+/// given specifier is expressible exactly, so a provider that can render <c>F</c>/<c>D</c> but not
+/// <c>N</c> rejects the latter instead of dropping the group separators. The object's presence is the
+/// capability; <see langword="null"/> means the provider cannot render CLR format specifiers at all.
+/// </summary>
+public interface IStringFormatFunctions
+{
+    /// <summary>True when the numeric standard specifier <paramref name="specifier"/> (<c>N</c>, <c>F</c>, <c>D</c>, <c>X</c>) can be rendered exactly.</summary>
+    bool SupportsNumber(char specifier);
+
+    /// <summary>
+    /// Renders the numeric standard specifier <paramref name="specifier"/> with
+    /// <paramref name="precision"/> fractional (or minimum integral) digits over the already-rendered
+    /// <paramref name="value"/>.
+    /// </summary>
+    string RenderNumber(string value, char specifier, int precision);
+
+    /// <summary>True when the CLR custom date/time format <paramref name="clrFormat"/> can be rendered exactly.</summary>
+    bool SupportsDateFormat(string clrFormat);
+
+    /// <summary>Renders the CLR custom date/time format <paramref name="clrFormat"/> over the already-rendered <paramref name="value"/>.</summary>
+    string RenderDate(string value, string clrFormat);
+}
+
+/// <summary>
 /// A dialect's renderer for the ClickHouse <c>LIMIT [offset, ]n BY expr, ...</c> modifier that keeps
 /// the first <c>n</c> rows per group. The object's presence is the capability; only ClickHouse exposes
 /// it today.

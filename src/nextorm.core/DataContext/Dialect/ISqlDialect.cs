@@ -302,6 +302,28 @@ public interface ISqlDialect
     bool SupportsDateArithmetic { get; }
 
     /// <summary>
+    /// True when the provider has a native duration/time-of-day type that the driver exposes as
+    /// <see cref="System.TimeSpan"/> (PostgreSQL <c>interval</c>, MySQL/MariaDB <c>TIME</c>). When
+    /// <see langword="false"/>, a <see cref="System.TimeSpan"/> column is stored in an integer column
+    /// in the unit declared by <see cref="DurationAttribute"/> (<see cref="DurationUnit.Ticks"/> by
+    /// default) and read back through a conversion. Declared as a default interface method so that
+    /// existing external implementations keep compiling and keep their previous (native) behaviour.
+    /// </summary>
+    bool SupportsNativeDuration => false;
+
+    /// <summary>
+    /// Renders the column type of a <see cref="System.TimeSpan"/> property: the native type when
+    /// <see cref="SupportsNativeDuration"/> is true, otherwise an integer type wide enough for
+    /// <paramref name="unit"/>. <paramref name="unit"/> is <c>null</c> when the property does not
+    /// declare one. Declared as a default interface method so that existing external implementations
+    /// keep compiling.
+    /// </summary>
+    /// <param name="unit">The declared storage unit, or <c>null</c>.</param>
+    /// <param name="precision">The fractional-second precision of the native type; zero for the provider default.</param>
+    /// <returns>The SQL type name.</returns>
+    string MakeDurationType(DurationUnit? unit, int precision = 0) => "bigint";
+
+    /// <summary>
     /// The provider's renderer for the ClickHouse date-conversion surface; <c>null</c> means the provider
     /// cannot express it. Declared as a default interface method so that existing external
     /// implementations keep compiling.
@@ -738,6 +760,52 @@ public interface ISqlDialect
     /// with a clear message.
     /// </summary>
     string MakeStringLastIndexOf(string value, string substring);
+    /// <summary>
+    /// The provider's formatting surface for the culture-invariant CLR format specifiers of
+    /// <c>string.Format</c>/<c>ToString(format)</c>; <c>null</c> means the provider cannot render them.
+    /// Declared as a default interface method so that existing external implementations keep compiling.
+    /// </summary>
+    IStringFormatFunctions? StringFormats => null;
+    /// <summary>
+    /// True when the provider can attach a per-expression <c>COLLATE</c> clause
+    /// (<see cref="CommonFunctions.collate"/>). The safe default is <c>false</c>; SQL Server,
+    /// PostgreSQL, MySQL/MariaDB and SQLite opt in, while ClickHouse has no <c>COLLATE</c>.
+    /// Declared as a default interface method so that existing external implementations keep compiling.
+    /// </summary>
+    bool SupportsCollation => false;
+    /// <summary>
+    /// Renders <c>value COLLATE collation</c> over the already-rendered <paramref name="value"/>.
+    /// <paramref name="collation"/> is the provider-native collation name, quoted where the provider
+    /// requires it (PostgreSQL). Only called when <see cref="SupportsCollation"/> is <c>true</c>.
+    /// </summary>
+    string MakeCollate(string value, string collation, KeywordCase keywordCase = KeywordCase.Lower) =>
+        throw new NotSupportedException("Per-expression collation is not supported by this SQL dialect.");
+    /// <summary>
+    /// True when the provider can express an ordinal (byte-order/binary) string comparison. The safe
+    /// default is <c>false</c>; SQL Server, PostgreSQL, MySQL/MariaDB, SQLite and ClickHouse opt in.
+    /// Declared as a default interface method so that existing external implementations keep compiling.
+    /// </summary>
+    bool SupportsOrdinalComparison => false;
+    /// <summary>
+    /// Renders a string operand normalised for ordinal comparison. A provider with a per-expression
+    /// binary collation emits <c>value COLLATE &lt;binary&gt;</c>; a provider whose native <c>String</c>
+    /// order is already ordinal (ClickHouse) returns the value unchanged. <paramref name="ignoreCase"/>
+    /// additionally case-folds the operand. Only called when <see cref="SupportsOrdinalComparison"/> is
+    /// <c>true</c>.
+    /// </summary>
+    string MakeOrdinal(string value, bool ignoreCase) =>
+        throw new NotSupportedException("Ordinal string comparison is not supported by this SQL dialect.");
+    /// <summary>
+    /// True when the provider can make the case-sensitive ordinal overloads of the LIKE-family string
+    /// methods (<c>Contains</c>/<c>StartsWith</c>/<c>EndsWith</c> with
+    /// <see cref="System.StringComparison.Ordinal"/>) behave byte-wise. It defaults to
+    /// <see cref="SupportsOrdinalComparison"/>; SQLite overrides it to <c>false</c> because its
+    /// <c>LIKE</c> is always case-insensitive for ASCII regardless of the operand's collation, so a
+    /// byte-order match cannot be expressed there and the call is rejected instead of being silently
+    /// case-insensitive. The <c>OrdinalIgnoreCase</c> overloads are unaffected (they case-fold both
+    /// operands).
+    /// </summary>
+    bool SupportsOrdinalLike => SupportsOrdinalComparison;
     /// <summary>
     /// Renders <see cref="string.Remove(int)"/>/<see cref="string.Remove(int, int)"/> and
     /// <see cref="string.Insert(int, string)"/> as one <c>stuff</c>/<c>overlay</c>-style expression over

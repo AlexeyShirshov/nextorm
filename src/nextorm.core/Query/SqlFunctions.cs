@@ -18,7 +18,11 @@ namespace NextORM.Core;
 /// </remarks>
 public static partial class SqlFunctions
 {
-    /// <summary>Cross-provider SQL function surface.</summary>
+    /// <summary>
+    /// Cross-provider SQL function surface. The reference is only a marker inside a query expression:
+    /// the SQL providers translate the call, and the in-memory provider rewrites the few members it
+    /// can evaluate (<see cref="CommonFunctions.collate"/>) before compiling the expression.
+    /// </summary>
     public static CommonFunctions Sql => default!;
 
     /// <summary>
@@ -296,8 +300,9 @@ public static partial class SqlFunctions
 }
 
 /// <summary>
-/// Surface of SQL functions and predicates that can be used inside query expressions. The members
-    /// are only ever evaluated by the expression translator, never at runtime.
+    /// Surface of SQL functions and predicates that can be used inside query expressions. The SQL
+    /// providers evaluate the members through the expression translator; the in-memory provider
+    /// rewrites the small subset that has a native CLR equivalent.
     /// </summary>
     /// <remarks>
     /// Renamed from <c>NORM_SQL</c>. The <see cref="System.Reflection.MethodInfo"/> fields and
@@ -370,6 +375,22 @@ public static partial class SqlFunctions
         /// <param name="pattern">The pattern to match against.</param>
         /// <param name="escapeChar">The character that escapes a literal <c>%</c> or <c>_</c>.</param>
         public bool like(string? column, string? pattern, string? escapeChar) => default!;
+
+        /// <summary>
+        /// <c>value collate collation</c>: applies a provider-native collation to a string operand,
+        /// which determines how it compares and orders. <paramref name="collation"/> must be a constant
+        /// string naming a collation the provider understands (for example <c>"C"</c> on PostgreSQL,
+        /// <c>"Latin1_General_100_BIN2"</c> on SQL Server). Requires a provider that supports
+        /// per-expression collation (see <see cref="ISqlDialect.SupportsCollation"/>); ClickHouse has no
+        /// <c>COLLATE</c> clause.
+        /// </summary>
+        /// <param name="value">The string operand to collate.</param>
+        /// <param name="collation">The provider-native collation name (a constant).</param>
+        /// <remarks>
+        /// The in-memory provider executes the call natively and returns the value unchanged, because
+        /// its comparisons are already ordinal (the <c>collation</c> argument is ignored).
+        /// </remarks>
+        public string? collate(string? value, string? collation) => value;
 
         /// <summary>
         /// <c>contains(column, search)</c>: true when the full-text-indexed <paramref name="column"/>

@@ -63,8 +63,8 @@ output, композируемый DML `RETURNING` (data-modifying CTE), CTAS, �
 | `#5933` | диалект MariaDB 13 | **Gap** (G13) |
 | `#5948`, `#5952` | PG 9.2/9.3: `FILTER`-агрегаты синтаксически недоступны | **Gap** (G13, version-gate) |
 | `#5961`, `#5914` | ClickHouse date/`DateTimeOffset` типы в SQL противоречат декларации | **Проверено, не gap.** `#5961`: у nextorm нет per-node `DbDataType`, а части даты уже приведены к объявленному CLR-типу (`toInt32(toISOWeek(toDateTime64(…)))`, `toInt32(toYear(…))`, `toFloat64(toUnixTimestamp(…))`); `to_unix_timestamp` объявлен `long` и обёрнут `toInt64` — «type lie» не воспроизводится. `#5914`: `DateTimeOffset` в nextorm не маппится вовсе (`SelectExpression.GetDataRecordMethod` бросает), поэтому расхождение Date/DateTime64 отсутствует — **N/A**. Однотипный хвост — ширина `date_diff`, см. G20; общий план — [`todo_timespan_columns.md`](../roadmap/todo_timespan_columns.md) §8 |
-| `#5921` | `string.Format`/интерполяция: format-спецификаторы молча теряются | **Gap** (G12) → [`todo_string_semantics.md`](../roadmap/todo_string_semantics.md) |
-| `#5927` | `string.CompareOrdinal`/ordinal `Compare` маппятся в culture-sensitive | **Gap** (G12) → [`todo_string_semantics.md`](../roadmap/todo_string_semantics.md) |
+| `#5921` | `string.Format`/интерполяция: format-спецификаторы молча теряются | **Реализовано** (G12) → [Ordinal-сравнение и коллация](../../guide/11-scalar-functions.md#ordinal-сравнение-и-коллация) |
+| `#5927` | `string.CompareOrdinal`/ordinal `Compare` маппятся в culture-sensitive | **Реализовано** (G12): ordinal `Compare`/`CompareOrdinal`/`Equals`/`Contains` переводятся в бинарную коллацию, неподдержанные формы бросают `NotSupportedException` → [Ordinal-сравнение и коллация](../../guide/11-scalar-functions.md#ordinal-сравнение-и-коллация) |
 | `#5965` | sub-day date-функции над date-only операндами | **Gap (мелкий).** nextorm не хранит SQL-тип/точность колонки (везде CLR `DateTime`) и не продвигает операнд: `date_add`/`DateTime.Add*` и `.Hour/.Minute/.Second` рендерятся прямо на колонке (`SqlServerDialect.cs:351` → `dateadd(millisecond, n, value)`, `ClickHouseDialect.cs:531` → `addMilliseconds(value, n)`). На SQL Server `date`-колонка даёт 9810 (замер linq2db), на ClickHouse `Date` sub-day часть, вероятно, молча теряется — класс `#5955`/`#5959`; PG/MySQL/SQLite через interval/`datetime()` безопасны. `DateTime.Millisecond` вообще не маппится. Фикс в духе linq2db — продвинуть операнд к дробному timestamp (`datetime2`/`toDateTime64`) перед sub-day функцией, но нужно знать precision → смежно с G9; вынесено в [`todo_timespan_columns.md`](../roadmap/todo_timespan_columns.md) §8.2 |
 | `#5837`, `#5838`, `#5852` | inheritance/TPH write, shadowing-член | **Out-of-scope** (нет TPH) |
 | `#5904`, `#5937`, `#5941`, `#5940`, `#5865` | eager-load ordering/strategy | **Out-of-scope** |
@@ -177,14 +177,17 @@ date arithmetic, но не хранит/сравнивает `TimeSpan` как i
 имеет range-типов (`tsrange`, `daterange`, `&&`). Действие: [`todo_postgres_ranges.md`](../roadmap/todo_postgres_ranges.md) (PG-only surface).
 
 **G12. C# string-семантика.** `linq2db#5921` (format-спецификаторы в `string.Format`/`$"…"`),
-`#5927` (ordinal `Compare`/`CompareOrdinal` сворачиваются в culture-sensitive `CompareTo`). В nextorm
-`string.Compare*`/`string.Format`/интерполяция **не транслируются вовсе** (`StringFunctionTranslator.cs:30-75`
-их не содержит), поэтому сегодня это не «тихо неверно», а «не поддержано» — нужен явный тест-контракт.
-Важно: корректный ordinal-вариант `#5927` требует явной binary/ordinal-коллации на сравнении — тот же
-примитив, что нужен колонковой коллации (nextorm issue `#28` «column collation»; в nextorm коллаций нет
-вообще). Связанные, но **разные** задачи: G12 — верность трансляции C#-семантики, `#28` — схема/маппинг.
-Действие: RFC — [`todo_string_semantics.md`](../roadmap/todo_string_semantics.md); реализовывать с общим
-collation-примитивом (nextorm `#28`).
+`#5927` (ordinal `Compare`/`CompareOrdinal` сворачиваются в culture-sensitive `CompareTo`). В nextorm это
+**реализовано** (G12): `string.Compare`/`CompareOrdinal`/`Equals`/`Contains`/`StartsWith`/`EndsWith`/
+`IndexOf`/`LastIndexOf` с константным `StringComparison` переводятся через бинарную коллацию
+(`Ordinal`) или её свёртку (`OrdinalIgnoreCase`), а `string.Format`/интерполяция/`ToString(format)` — в
+родную функцию провайдера для culture-invariant подмножества спецификаторов. Ни одна неподдержанная
+форма не даёт молча неверный SQL: она бросает `NotSupportedException`. Корректный ordinal-вариант
+`#5927` использует тот же примитив `MakeCollate`, что нужен колонковой коллации (nextorm issue `#28`
+«column collation»), которая остаётся единственным follow-up. Связанные, но **разные** задачи: G12 —
+верность трансляции C#-семантики (сделано), `#28` — схема/маппинг (открыто).
+См. [Ordinal-сравнение и коллация](../../guide/11-scalar-functions.md#ordinal-сравнение-и-коллация) и
+[Ограничения](../../advanced/limitations.md).
 
 **G13. Версионные диалекты и version-gates.** `linq2db#5933` (MariaDB 13), `#5948`/`#5952`
 (PG 9.2/9.3 не поддерживают `FILTER` в агрегатах). nextorm генерирует `FILTER`-агрегаты на PG и
@@ -290,7 +293,7 @@ MySQL/MariaDB `timestampdiff` — тот же класс (ширину пров�
 | P0 | Завести `todo_optimistic_concurrency.md` (G6) |
 | P1 | [`todo_regex.md`](../roadmap/todo_regex.md) (G7), [`todo_tvp.md`](../roadmap/todo_tvp.md) (G8), [`todo_timespan_columns.md`](../roadmap/todo_timespan_columns.md) (G9), [`todo_postgres_ranges.md`](../roadmap/todo_postgres_ranges.md) (G11) |
 | P1 | Хранимые процедуры/функции + `OUT`/несколько result-set (снять `limitations.md`, туда же сырые параметризованные команды) → [`todo_stored_procedures.md`](../roadmap/todo_stored_procedures.md) |
-| P1 | LRU/размер кэшей + логирование параметров (G10); version-gates MariaDB13/PG9.2-9.3 (G13); string-семантика (G12) → [`todo_string_semantics.md`](../roadmap/todo_string_semantics.md) |
+| P1 | LRU/размер кэшей + логирование параметров (G10); version-gates MariaDB13/PG9.2-9.3 (G13); ~~string-семантика (G12)~~ — **<span style="color:green">реализовано</span>**: [Ordinal-сравнение и коллация](../../guide/11-scalar-functions.md#ordinal-сравнение-и-коллация) |
 | P1 | Багфикс `date_diff` (G20): ClickHouse Int64 читается как Int32 — решить `long?` vs явное сужение |
 | P2 | ~~G16~~ — не подтвердилось (уже было реализовано), регресс-тесты добавлены (SQL-gen SQLite/PG; интеграция SQLite/PG/MySQL; SQL Server требует `UNION ALL`); G17 — точечный багфикс (IndexExpression); ~~G18~~ — багфикс `WITH … UPDATE`/`DELETE` закрыт (CTE хойстится перед мутацией, любой join, рекурсивный CTE); G14/G15 — проверить |
 | — | Принять явное решение по **DDL** (оставить out-of-scope или новый workstream) |

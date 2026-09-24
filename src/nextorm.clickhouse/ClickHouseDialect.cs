@@ -478,6 +478,19 @@ public sealed class ClickHouseDialect : SqlDialectBase
         _ => $"trimBoth({value})"
     };
 
+    /// <summary>ClickHouse renders CLR format specifiers through <c>format</c>/<c>formatDateTime</c>.</summary>
+    public override IStringFormatFunctions? StringFormats => ClickHouseStringFormats.Instance;
+
+    // ClickHouse has no COLLATE clause; the native String order is already byte-order.
+    /// <summary>ClickHouse has no <c>COLLATE</c> clause.</summary>
+    public override bool SupportsCollation => false;
+
+    /// <summary>ClickHouse's native <c>String</c> order is byte-order, so ordinal comparison is native.</summary>
+    public override bool SupportsOrdinalComparison => true;
+
+    /// <inheritdoc/>
+    public override string MakeOrdinal(string value, bool ignoreCase) => ignoreCase ? $"lower({value})" : value;
+
     // now() uses the server time zone; the optional argument selects a zone.
     /// <summary>Renders <c>now('UTC')</c> for UTC or the server-timezone <c>now()</c> for local time.</summary>
     public override string MakeNow(bool utc) => utc ? "now('UTC')" : "now()";
@@ -624,6 +637,8 @@ public sealed class ClickHouseDialect : SqlDialectBase
         _ when type == typeof(float) => "Float32",
         _ when type == typeof(double) => "Float64",
         _ when type == typeof(decimal) => "Decimal(38, 10)",
+        _ when type == typeof(TimeSpan) => "Int64",
+        _ when type == typeof(DateTimeOffset) => "DateTime64(6)",
         _ => base.MakeTypeName(type)
     };
 
@@ -826,4 +841,57 @@ internal sealed class ClickHouseTupleRenderer : ITupleRenderer
     public string RenderConstructor(IReadOnlyList<string> fields) => "tuple(" + string.Join(", ", fields) + ")";
 
     public string? RenderElement(string row, int oneBasedIndex) => "tupleElement(" + row + ", " + oneBasedIndex + ")";
+}
+
+/// <summary>
+/// ClickHouse rendering of the culture-invariant CLR format specifiers: <c>F</c> through <c>format</c>,
+/// <c>D</c>/<c>X</c> through <c>toString</c>/<c>leftPad</c>/<c>hex</c>, and date/time through
+/// <c>formatDateTime</c>. The group separator (<c>N</c>) is not offered because ClickHouse's
+/// <c>format</c> grouping is not the invariant one.
+/// </summary>
+internal sealed class ClickHouseStringFormats : IStringFormatFunctions
+{
+    internal static readonly ClickHouseStringFormats Instance = new();
+
+    public bool SupportsNumber(char specifier) => specifier is 'F' or 'D' or 'X';
+
+    public string RenderNumber(string value, char specifier, int precision) => specifier switch
+    {
+        'F' => precision <= 0 ? $"format('{{:.0f}}', {value})" : $"format('{{:.{precision}f}}', {value})",
+        'D' => precision <= 0 ? $"toString({value})" : $"leftPad(toString({value}), {precision}, '0')",
+        'X' => precision <= 0 ? $"hex({value})" : $"leftPad(hex({value}), {precision}, '0')",
+        _ => throw new NotSupportedException($"The numeric format specifier '{specifier}' is not supported by ClickHouse.")
+    };
+
+    public bool SupportsDateFormat(string clrFormat) => TryMapDate(clrFormat, out _);
+
+    public string RenderDate(string value, string clrFormat) =>
+        TryMapDate(clrFormat, out var native)
+            ? $"formatDateTime({value}, '{native}')"
+            : throw new NotSupportedException($"The date/time format string '{clrFormat}' is not supported by ClickHouse.");
+
+    private static bool TryMapDate(string format, out string native)
+    {
+        var sb = new StringBuilder(format.Length + 6);
+        var i = 0;
+
+        while (i < format.Length)
+        {
+            if (Match(format, i, "yyyy")) { sb.Append("%Y"); i += 4; }
+            else if (Match(format, i, "yy")) { sb.Append("%y"); i += 2; }
+            else if (Match(format, i, "MM")) { sb.Append("%m"); i += 2; }
+            else if (Match(format, i, "dd")) { sb.Append("%d"); i += 2; }
+            else if (Match(format, i, "HH")) { sb.Append("%H"); i += 2; }
+            else if (Match(format, i, "mm")) { sb.Append("%M"); i += 2; }
+            else if (Match(format, i, "ss")) { sb.Append("%S"); i += 2; }
+            else if (format[i] is '-' or '/' or '.' or ':' or ' ') { sb.Append(format[i]); i++; }
+            else { native = string.Empty; return false; }
+        }
+
+        native = sb.ToString();
+        return true;
+    }
+
+    private static bool Match(string value, int index, string token) =>
+        index + token.Length <= value.Length && string.CompareOrdinal(value, index, token, 0, token.Length) == 0;
 }

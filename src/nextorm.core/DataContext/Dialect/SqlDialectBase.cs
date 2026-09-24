@@ -101,6 +101,10 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual bool SupportsDateTrunc => false;
     /// <inheritdoc/>
     public virtual bool SupportsDateArithmetic => false;
+    /// <summary>Defaults to <c>false</c>; PostgreSQL, MySQL and MariaDB opt into a native duration type.</summary>
+    public virtual bool SupportsNativeDuration => false;
+    /// <summary>Non-native providers store a duration in a <c>bigint</c>; a native provider overrides this with its interval/time type.</summary>
+    public virtual string MakeDurationType(DurationUnit? unit, int precision = 0) => "bigint";
     /// <inheritdoc/>
     public virtual IDateConversionRenderer? DateConversion => null;
 
@@ -366,6 +370,8 @@ public abstract class SqlDialectBase : ISqlDialect
         _ when type == typeof(float) => "real",
         _ when type == typeof(double) => "double precision",
         _ when type == typeof(decimal) => "numeric",
+        _ when type == typeof(TimeSpan) => "bigint",
+        _ when type == typeof(DateTimeOffset) => "timestamp with time zone",
         _ => type.Name
     };
 
@@ -481,6 +487,27 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <summary>Renders a character-wise reversal of <paramref name="value"/>.</summary>
     protected virtual string MakeStringReverse(string value) =>
         throw new NotSupportedException("String reversal is not supported by this provider.");
+
+    // Reached only through a dialect that opts into formatting; a provider that cannot render CLR
+    // format specifiers returns null and the translator rejects the call before this is asked.
+    /// <inheritdoc/>
+    public virtual IStringFormatFunctions? StringFormats => null;
+    /// <inheritdoc/>
+    public virtual bool SupportsCollation => false;
+    // Reached only through a dialect that set SupportsCollation; the ANSI form is `value collate name`,
+    // which the capable providers either reuse or override to quote the name (PostgreSQL).
+    /// <inheritdoc/>
+    public virtual string MakeCollate(string value, string collation, KeywordCase keywordCase = KeywordCase.Lower) =>
+        value + Kw(keywordCase, " collate ") + collation;
+    /// <inheritdoc/>
+    public virtual bool SupportsOrdinalComparison => false;
+    // Reached only through a dialect that set SupportsOrdinalComparison; a dialect that opts in
+    // overrides this with its binary-collation rendering.
+    /// <inheritdoc/>
+    public virtual string MakeOrdinal(string value, bool ignoreCase) =>
+        throw new NotSupportedException("Ordinal string comparison is not supported by this provider.");
+    /// <inheritdoc/>
+    public virtual bool SupportsOrdinalLike => SupportsOrdinalComparison;
     /// <inheritdoc/>
     public virtual string MakeLikeEscape(string escapeChar, KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, " escape ") + SqlLiteral.ToSqlStringLiteral(escapeChar);
     /// <inheritdoc/>

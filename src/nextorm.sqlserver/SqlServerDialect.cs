@@ -294,6 +294,7 @@ public sealed class SqlServerDialect : SqlDialectBase
         _ when type == typeof(float) => "real",
         _ when type == typeof(double) => "float",
         _ when type == typeof(decimal) => "decimal(38, 10)",
+        _ when type == typeof(DateTimeOffset) => "datetimeoffset",
         _ => base.MakeTypeName(type)
     };
 
@@ -314,6 +315,26 @@ public sealed class SqlServerDialect : SqlDialectBase
 
     /// <summary>Renders <c>reverse(value)</c>.</summary>
     protected override string MakeStringReverse(string value) => $"reverse({value})";
+
+    /// <summary>SQL Server renders CLR format specifiers through <c>FORMAT</c> (a .NET formatter).</summary>
+    public override IStringFormatFunctions? StringFormats => SqlServerStringFormats.Instance;
+
+    /// <summary>SQL Server supports a per-expression <c>COLLATE</c> clause.</summary>
+    public override bool SupportsCollation => true;
+
+    /// <inheritdoc/>
+    public override string MakeCollate(string value, string collation, KeywordCase keywordCase = KeywordCase.Lower) =>
+        value + Kw(keywordCase, " collate ") + collation;
+
+    /// <summary>SQL Server can express ordinal comparison through the <c>Latin1_General_100_BIN2</c> collation.</summary>
+    public override bool SupportsOrdinalComparison => true;
+
+    /// <inheritdoc/>
+    public override string MakeOrdinal(string value, bool ignoreCase)
+    {
+        const string Binary = "Latin1_General_100_BIN2";
+        return ignoreCase ? $"lower({value}) collate {Binary}" : $"{value} collate {Binary}";
+    }
 
     /// <summary>Renders <c>stuff(value, start + 1, count, newValue)</c>, or the truncated prefix when the count is <c>null</c>.</summary>
     public override string MakeStuff(string value, string start, string? count, string newValue) =>
@@ -701,4 +722,55 @@ internal sealed class SqlServerIndexHintRenderer : IIndexHintRenderer
 
         return SqlKeywords.Of(keywordCase, "index(") + string.Join(", ", indexes) + ")";
     }
+}
+
+/// <summary>
+/// SQL Server rendering of the culture-invariant CLR format specifiers through the CLR-based
+/// <c>FORMAT</c> function, which accepts the same <c>N</c>/<c>F</c>/<c>D</c>/<c>X</c> specifiers and
+/// custom date/time format strings. The current language is assumed to be invariant (see the
+/// limitations guide); only the portable token subset is validated.
+/// </summary>
+internal sealed class SqlServerStringFormats : IStringFormatFunctions
+{
+    internal static readonly SqlServerStringFormats Instance = new();
+
+    public bool SupportsNumber(char specifier) => specifier is 'N' or 'F' or 'D' or 'X';
+
+    public string RenderNumber(string value, char specifier, int precision)
+    {
+        var clr = precision < 0 ? specifier.ToString() : $"{specifier}{precision}";
+        return $"format({value}, '{clr}')";
+    }
+
+    public bool SupportsDateFormat(string clrFormat) => TryMapDate(clrFormat, out _);
+
+    public string RenderDate(string value, string clrFormat) =>
+        TryMapDate(clrFormat, out var native)
+            ? $"format({value}, '{native}')"
+            : throw new NotSupportedException($"The date/time format string '{clrFormat}' is not supported by SQL Server.");
+
+    private static bool TryMapDate(string format, out string native)
+    {
+        var sb = new StringBuilder(format.Length);
+        var i = 0;
+
+        while (i < format.Length)
+        {
+            if (Match(format, i, "yyyy")) { sb.Append("yyyy"); i += 4; }
+            else if (Match(format, i, "yy")) { sb.Append("yy"); i += 2; }
+            else if (Match(format, i, "MM")) { sb.Append("MM"); i += 2; }
+            else if (Match(format, i, "dd")) { sb.Append("dd"); i += 2; }
+            else if (Match(format, i, "HH")) { sb.Append("HH"); i += 2; }
+            else if (Match(format, i, "mm")) { sb.Append("mm"); i += 2; }
+            else if (Match(format, i, "ss")) { sb.Append("ss"); i += 2; }
+            else if (format[i] is '-' or '/' or '.' or ':' or ' ') { sb.Append(format[i]); i++; }
+            else { native = string.Empty; return false; }
+        }
+
+        native = sb.ToString();
+        return true;
+    }
+
+    private static bool Match(string value, int index, string token) =>
+        index + token.Length <= value.Length && string.CompareOrdinal(value, index, token, 0, token.Length) == 0;
 }

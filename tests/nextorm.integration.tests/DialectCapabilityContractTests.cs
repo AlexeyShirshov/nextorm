@@ -165,6 +165,31 @@ public sealed class DialectCapabilityContractTests
                 var unpivot = CreateUnpivot();
                 pivotRenderer.RenderUnpivot(unpivot, "[src]", "t1").Should().NotBeNullOrEmpty();
             }
+
+            if (dialect.StringFormats is { } formats)
+            {
+                foreach (var specifier in new[] { 'N', 'F', 'D', 'X' })
+                {
+                    if (!formats.SupportsNumber(specifier))
+                        continue;
+
+                    formats.RenderNumber("[x]", specifier, 2).Should().NotBeNullOrEmpty();
+                }
+
+                foreach (var dateFormat in new[] { "yyyy", "yyyy-MM-dd", "HH:mm:ss" })
+                {
+                    if (!formats.SupportsDateFormat(dateFormat))
+                        continue;
+
+                    formats.RenderDate("[x]", dateFormat).Should().NotBeNullOrEmpty();
+                }
+            }
+
+            if (dialect.SupportsCollation)
+                dialect.MakeCollate("[x]", "C").Should().NotBeNullOrEmpty();
+
+            if (dialect.SupportsOrdinalComparison)
+                dialect.MakeOrdinal("[x]", false).Should().NotBeNullOrEmpty();
         }
     }
 
@@ -190,5 +215,8 @@ public sealed class DialectCapabilityContractTests
         dialects.Should().Contain(d => d.Pivot != null);
         dialects.Should().Contain(d => d.ArrayJoinClause != null);
         dialects.Should().Contain(d => d.Lock != null);
+        dialects.Should().Contain(d => d.StringFormats != null);
+        dialects.Should().Contain(d => d.SupportsCollation);
+        dialects.Should().Contain(d => d.SupportsOrdinalComparison);
     }
 }

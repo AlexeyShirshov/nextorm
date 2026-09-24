@@ -48,7 +48,7 @@ in [`sql-function-coverage-gap.md`](sql-function-coverage-gap.md).
 > | 31 | Transactions (`ITransactionManager`): nextorm-owned and enlisted (EF Core/Dapper/ADO.NET) transaction | **Done** on SQLite/PostgreSQL/SQL Server/MySQL/MariaDB; ClickHouse and in-memory reject |
 > | 32 | Row-locking wait modes (`NOWAIT`/`SKIP LOCKED`) | **Done** (PostgreSQL/MySQL/MariaDB/SQL Server; SQLite/ClickHouse/in-memory reject) |
 > | 33 | Global query filters (soft-delete / multi-tenancy) | **Planned** ([`todo_query_filters.md`](todo_query_filters.md)) |
-> | 34 | C# string semantics (ordinal compare, format specifiers, culture; linq2db gap G12) | **Planned** ([`todo_string_semantics.md`](todo_string_semantics.md)) |
+> | 34 | C# string semantics (ordinal compare, format specifiers, culture; linq2db gap G12) | **Done** ([Ordinal comparison and collation](../../guide/11-scalar-functions.md#ordinal-comparison-and-collation)) |
 > | 35 | Cross-provider string / regexp function surface | **Gap** (candidate; PostgreSQL-only today) |
 >
 > Test coverage after the section 1–26 work is **85.4% line / 74.6% branch** (CI threshold 75%); that run
@@ -200,15 +200,18 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
     the filter identity in the plan-cache key and per-context scoping (see
     [`todo_interceptors.md`](todo_interceptors.md), Phase 2).
     Todo: [`todo_query_filters.md`](todo_query_filters.md).
-34. **C# string semantics (ordinal compare, format specifiers, culture) — planned (linq2db gap G12).**
-    Workstream 4 covers the *rendering* of the portable `string` methods; the semantic fidelity of the C#
-    forms is a separate residue: `string.Compare`/`CompareOrdinal` and the `StringComparison`/`CultureInfo`
-    overloads currently throw rather than translate, `string.Format`/`$"{x:N2}"`/`ToString(fmt)` are not
-    translated, and there is no collation primitive (`==`/`string.Equals` inherit the database collation).
-    The contract is "never silently wrong": translate a documented subset or throw. Depends on the shared
-    collation primitive (nextorm `#28`), tracked as G12 in
+34. **C# string semantics (ordinal compare, format specifiers, culture) — done (linq2db gap G12).**
+    The culture-invariant format subset (`string.Format`/interpolation/`ToString(format)`), the ordinal
+    `StringComparison` overloads (`Equals`/`Compare`/`CompareOrdinal`/`Contains`/`StartsWith`/`EndsWith`/
+    `IndexOf`/`LastIndexOf`), the culture overloads (`ToUpperInvariant`/`ToLowerInvariant`/invariant
+    `CultureInfo`) and the per-expression collation primitive (`SqlFunctions.Sql.collate`,
+    [`SupportsCollation`](xref:NextORM.Core.ISqlDialect.SupportsCollation)) are implemented with a
+    fail-fast contract: an unsupported specifier, comparison or culture throws `NotSupportedException`
+    instead of silently producing culture-dependent SQL. The `==` operator deliberately keeps the database
+    collation. See [Scalar functions](../../guide/11-scalar-functions.md#ordinal-comparison-and-collation)
+    and [Limitations](../../advanced/limitations.md). Column-level collation (nextorm `#28`) remains the
+    only follow-up, built on the same `MakeCollate` foundation; tracked as G12 in
     [`linq2db-backlog-gap-analysis.md`](../comparison/linq2db-backlog-gap-analysis.md).
-    Todo: [`todo_string_semantics.md`](todo_string_semantics.md).
 35. **Cross-provider string / regexp function surface — gap candidate (PostgreSQL-only today).** The native
     string/`regexp_*` library is exposed only on `SqlFunctions.Postgres`
     ([Scalar functions](../../guide/11-scalar-functions.md#string-and-regular-expression-extensions-postgresql));
@@ -467,7 +470,7 @@ developed in parallel on the same working tree.
 | 31 | Transactions (`ITransactionManager`): nextorm-owned and enlisted (EF Core / Dapper / ADO.NET) transaction, `DbCommand.Transaction` on every execution path | **Done** ([Transactions](../../guide/25-transactions.md)) | `DataContext/Roles/ITransactionManager.cs`, `DataContext/DbConnectionManager.cs`, `DataContext/{DataContext,QueryExecutor,ResultSetEnumerator}.cs`, `DataContext/Cache/DbPreparedQueryCommand.cs`, `DataContext/Dialect/*` | `TransactionTests.cs` (SQLite core + ClickHouse), `CommonTestSuite.Transactions.cs`, `EfCoreSharedTransactionTests.cs` |
 | 32 | Row-locking wait modes (`NOWAIT`/`SKIP LOCKED`) | **Done** ([Row locking](../../guide/01-querying-and-projections.md#row-locking-for-update--for-share)) | `DataContext/Dialect/DialectCapabilities.cs`, `DataContext/SqlBuilder.cs`, `Query/QueryPlanEqualityComparer.cs`, `Builders/EntityBuilder.cs`, `Query/{LockClause,LockWaitMode}.cs`, `nextorm.{postgres,mysql,mariadb,sqlserver}/*Dialect.cs` | SQL-generation tests; `CommonTestSuite.Locking.cs` two-transaction `SKIP LOCKED` |
 | 33 | Global query filters (soft-delete / multi-tenancy) | **Planned** ([`todo_query_filters.md`](todo_query_filters.md)) | new `Meta/QueryFilterAttribute.cs`, `Meta/IQueryFilterMetadata.cs`; edits `Meta/{IEntityMetadata,EntityMetadataBuilder}.cs`, `DataContext/DataContextExtensions.cs`, `Query/QueryCommand.QueryPreparer.cs`, `DataContext/QueryPlanner.cs`, `Query/QueryPlanEqualityComparer.cs`, `Builders/EntityBuilder.cs`, `DataContext/InMemoryDataContext.cs` | new `tests/nextorm.core.tests/QueryFilterTests.cs`; `CommonTestSuite` (soft-delete/multi-tenant) |
-| 34 | C# string semantics (ordinal compare, format specifiers, culture; G12) | **Planned** ([`todo_string_semantics.md`](todo_string_semantics.md)) | `Visitors/StringFunctionTranslator.cs`, `Visitors/ScalarFunctionTranslator.cs`, `Visitors/BaseExpressionVisitor.cs`, `DataContext/Dialect/ISqlDialect.cs`/`SqlDialectBase.cs`, `Query/QueryPlanEqualityComparer.cs`, `Query/SqlFunctions.cs`; new `Visitors/StringFormatTranslator.cs`, `DataContext/Meta/CollateAttribute.cs` | SQL-generation + `CommonTestSuite` ordinal/format; InMemory semantics |
+| 34 | C# string semantics (ordinal compare, format specifiers, culture; G12) | **Done** ([Ordinal comparison and collation](../../guide/11-scalar-functions.md#ordinal-comparison-and-collation)) | `Visitors/StringFunctionTranslator.cs`, `Visitors/ScalarFunctionTranslator.cs`, `Visitors/BaseExpressionVisitor.cs`, `DataContext/Dialect/{ISqlDialect,SqlDialectBase,DialectCapabilities}.cs`, `Query/SqlFunctions.cs`, new `Visitors/StringFormatTranslator.cs`, `Visitors/CompositeFormat.cs`, `DataContext/InMemoryStringFunctionRewriter.cs`, provider `*Dialect.cs` | SQL-generation tests per provider; `CommonTestSuite.StringSemantics.cs` ordinal/format; `InMemoryStringSemanticsTests.cs` |
 | 35 | Cross-provider string / regexp function surface | **Gap (candidate)** | new `SqlFunctions.Sql` string/regexp translators + `ISqlDialect.Supports*`/`Make*`; provider dialects | SQL-generation tests; provider integration |
 
 Workstream 17–25 extended provider parity.

@@ -116,6 +116,28 @@ public sealed class SqliteDialect : SqlDialectBase
     public override string MakeRepeat(string value, string count) =>
         $"replace(hex(zeroblob({count})), '00', {value})";
 
+    /// <summary>SQLite renders CLR format specifiers through <c>printf</c>/<c>strftime</c>.</summary>
+    public override IStringFormatFunctions? StringFormats => SqliteStringFormats.Instance;
+
+    /// <summary>SQLite supports a per-expression <c>COLLATE</c> clause (built-in collations only).</summary>
+    public override bool SupportsCollation => true;
+
+    /// <inheritdoc/>
+    public override string MakeCollate(string value, string collation, KeywordCase keywordCase = KeywordCase.Lower) =>
+        value + Kw(keywordCase, " collate ") + collation;
+
+    /// <summary>SQLite can express ordinal comparison through the built-in <c>BINARY</c> collation.</summary>
+    public override bool SupportsOrdinalComparison => true;
+
+    // SQLite's LIKE is case-insensitive for ASCII no matter the operand's COLLATE, so a byte-order
+    // LIKE cannot be expressed; the case-sensitive ordinal Contains/StartsWith/EndsWith are rejected.
+    /// <summary>SQLite's <c>LIKE</c> cannot be made byte-wise.</summary>
+    public override bool SupportsOrdinalLike => false;
+
+    /// <inheritdoc/>
+    public override string MakeOrdinal(string value, bool ignoreCase) =>
+        ignoreCase ? $"lower({value}) collate binary" : $"{value} collate binary";
+
     // SQLite has no dateadd/datediff; it adjusts a date through a modifier string and measures
     // differences in seconds (or months for calendar parts).
     /// <inheritdoc/>
@@ -289,4 +311,56 @@ internal sealed class SqliteIndexHintRenderer : IIndexHintRenderer
 
         return SqlKeywords.Of(keywordCase, " indexed by ") + indexes[0];
     }
+}
+
+/// <summary>
+/// SQLite rendering of the culture-invariant CLR format specifiers: <c>F</c>/<c>D</c>/<c>X</c> through
+/// <c>printf</c> and date/time through <c>strftime</c>. The group separator (<c>N</c>) is not offered
+/// because <c>printf</c> has no portable thousands grouping.
+/// </summary>
+internal sealed class SqliteStringFormats : IStringFormatFunctions
+{
+    internal static readonly SqliteStringFormats Instance = new();
+
+    public bool SupportsNumber(char specifier) => specifier is 'F' or 'D' or 'X';
+
+    public string RenderNumber(string value, char specifier, int precision) => specifier switch
+    {
+        'F' => $"printf('%.{Math.Max(precision, 0)}f', {value})",
+        'D' => precision <= 0 ? $"printf('%d', {value})" : $"printf('%0{precision}d', {value})",
+        'X' => precision <= 0 ? $"printf('%x', {value})" : $"printf('%0{precision}x', {value})",
+        _ => throw new NotSupportedException($"The numeric format specifier '{specifier}' is not supported by SQLite.")
+    };
+
+    public bool SupportsDateFormat(string clrFormat) => TryMapDate(clrFormat, out _);
+
+    public string RenderDate(string value, string clrFormat) =>
+        TryMapDate(clrFormat, out var native)
+            ? $"strftime('{native}', {value})"
+            : throw new NotSupportedException($"The date/time format string '{clrFormat}' is not supported by SQLite.");
+
+    private static bool TryMapDate(string format, out string native)
+    {
+        var sb = new StringBuilder(format.Length + 6);
+        var i = 0;
+
+        while (i < format.Length)
+        {
+            if (Match(format, i, "yyyy")) { sb.Append("%Y"); i += 4; }
+            else if (Match(format, i, "yy")) { sb.Append("%y"); i += 2; }
+            else if (Match(format, i, "MM")) { sb.Append("%m"); i += 2; }
+            else if (Match(format, i, "dd")) { sb.Append("%d"); i += 2; }
+            else if (Match(format, i, "HH")) { sb.Append("%H"); i += 2; }
+            else if (Match(format, i, "mm")) { sb.Append("%M"); i += 2; }
+            else if (Match(format, i, "ss")) { sb.Append("%S"); i += 2; }
+            else if (format[i] is '-' or '/' or '.' or ':' or ' ') { sb.Append(format[i]); i++; }
+            else { native = string.Empty; return false; }
+        }
+
+        native = sb.ToString();
+        return true;
+    }
+
+    private static bool Match(string value, int index, string token) =>
+        index + token.Length <= value.Length && string.CompareOrdinal(value, index, token, 0, token.Length) == 0;
 }

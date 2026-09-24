@@ -74,8 +74,16 @@ var rows = dataContext.From<IComplexEntity>()
 | `s.StartsWith(x)` | `s like 'x%'` | |
 | `s.EndsWith(x)` | `s like '%x'` | |
 | `string.IsNullOrEmpty(s)` | `(s is null or s = '')` | |
+| `s.ToUpperInvariant()` / `s.ToLowerInvariant()` | `upper(s)` / `lower(s)` | Same as `ToUpper`/`ToLower`; see the invariant note below. |
+| `s.ToUpper(CultureInfo.InvariantCulture)` | `upper(s)` | Any other `CultureInfo` is rejected. |
+| `s.Equals(t)` / `string.Equals(s, t)` | `s collate <binary> = t collate <binary>` | `string.Equals` is ordinal in C#. |
+| `s.Equals(t, StringComparison.OrdinalIgnoreCase)` | case-folded ordinal equality | See [Ordinal comparison and collation](#ordinal-comparison-and-collation). |
+| `string.CompareOrdinal(s, t)` / `string.Compare(s, t, StringComparison.Ordinal)` | a signed `CASE` returning `-1`/`0`/`1` | Keeps the enclosing `< 0` / `> 0` comparison. |
+| `s.Contains(x, comparison)` / `StartsWith` / `EndsWith` | collation/case-folded `LIKE` | |
+| `s.IndexOf(x, comparison)` / `LastIndexOf(x, comparison)` | collation/case-folded position | |
 | `SqlFunctions.Sql.like(s, pattern)` | `s like pattern` | Explicit `LIKE`. |
 | `SqlFunctions.Sql.like(s, pattern, escape)` | `s like pattern escape escape` | |
+| `SqlFunctions.Sql.collate(s, name)` | `s collate name` | Per-expression collation. |
 
 `SqlFunctions.Sql.like` is the escape hatch when the pattern is not a simple `Contains`/`StartsWith`/`EndsWith`:
 
@@ -109,6 +117,64 @@ select id from complex_entity where somestring like '%'||$needle||'%'
 > On SQL Server there is no boolean scalar type, so a **projected** predicate (for example
 > `Select(e => e.String!.Contains("df"))`) is materialised with a `CASE`:
 > `cast(case when somestring like '%df%' then 1 else 0 end as bit)`.
+
+### Ordinal comparison and collation
+
+C# `string` comparisons are **ordinal** (byte order), while a SQL `=`/`LIKE` uses the column's database
+collation — on SQL Server the default is case-insensitive. nextorm makes the ordinal overloads explicit
+and honest: `string.Equals`, `string.Compare`/`CompareOrdinal`, `Contains`/`StartsWith`/`EndsWith` and
+`IndexOf`/`LastIndexOf` accept a constant `StringComparison`, and only `Ordinal` and `OrdinalIgnoreCase`
+have a portable SQL form. `Ordinal` uses the provider's binary collation, `OrdinalIgnoreCase` additionally
+case-folds both operands; `InvariantCulture`/`CurrentCulture` (and the culture-sensitive
+`string.Compare(s, t)` overload without a comparison) throw `NotSupportedException`
+([`SupportsOrdinalComparison`](xref:NextORM.Core.ISqlDialect.SupportsOrdinalComparison)).
+
+```csharp
+var strict = dataContext.From<IComplexEntity>()
+    .Where(e => e.String!.Contains("X", StringComparison.Ordinal))       // case-sensitive
+    .Select(e => new { e.Id })
+    .ToList();
+
+var loose = dataContext.From<IComplexEntity>()
+    .Where(e => e.String!.StartsWith("x", StringComparison.OrdinalIgnoreCase))
+    .Select(e => new { e.Id })
+    .ToList();
+```
+
+| Provider | `Ordinal` | `OrdinalIgnoreCase` |
+|---|---|---|
+| PostgreSQL | `s collate "C"` | `lower(s) collate "C"` |
+| SQL Server | `s collate Latin1_General_100_BIN2` | `lower(s) collate Latin1_General_100_BIN2` |
+| MySQL/MariaDB | `s collate utf8mb4_bin` | `lower(s) collate utf8mb4_bin` |
+| SQLite | `s collate binary` | `lower(s) collate binary` |
+| ClickHouse | `s` (native byte order) | `lower(s)` |
+
+The plain `==` operator is intentionally left as the provider's `=`; it follows the database collation,
+not C#. Use `string.Equals`/`string.CompareOrdinal` when byte order is required.
+
+SQLite's `LIKE` is always case-insensitive for ASCII regardless of the operand's collation, so the
+**case-sensitive** ordinal `Contains`/`StartsWith`/`EndsWith` are rejected there
+([`SupportsOrdinalLike`](xref:NextORM.Core.ISqlDialect.SupportsOrdinalLike)); `CompareOrdinal`,
+`Equals` and `OrdinalIgnoreCase` work.
+
+Apply any provider collation explicitly with `SqlFunctions.Sql.collate` (requires
+[`SupportsCollation`](xref:NextORM.Core.ISqlDialect.SupportsCollation), so every SQL provider except
+ClickHouse):
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Where(e => SqlFunctions.Sql.collate(e.String, "C") == SqlFunctions.Sql.collate("x", "C"))
+    .Select(e => new { e.Id })
+    .ToList();
+```
+
+```sql
+-- PostgreSQL
+select id from complex_entity where somestring collate "C" = 'x' collate "C"
+```
+
+`collate` takes the provider-native collation name; it must be a constant. The in-memory provider has no
+collations and treats the call as the ordinal identity.
 
 ## String and regular-expression extensions (PostgreSQL)
 
@@ -284,15 +350,49 @@ Date construction and arithmetic use the portable surface instead: `date_from_pa
 
 ### Formatting dates and numbers to strings
 
-nextorm deliberately does **not** add a cross-provider `format_date`/`FORMAT` method. The template
-languages are mutually incompatible: SQL Server `FORMAT(value, format)` follows the .NET custom format
-strings (`'yyyy-MM-dd'`) and depends on the CLR (available on SQL Server 2012+), PostgreSQL
-`to_char(value, format)` follows its own PG patterns (`'YYYY-MM-DD'`), and MySQL/MariaDB `DATE_FORMAT`,
-SQLite `strftime` and ClickHouse `formatDateTime` each use their own `%`-patterns (they also disagree on
-`%y`/minute/second tokens). A single `template` argument would therefore silently produce different —
-and mostly wrong — SQL on each provider.
+nextorm translates the culture-invariant subset of the CLR formatting API — `string.Format`,
+interpolated strings with a format specifier (`$"{e.Created:yyyy-MM-dd}"`) and
+`value.ToString(format)` — into the provider's native formatting function. Because the template
+languages are mutually incompatible (SQL Server `FORMAT` follows .NET custom format strings,
+PostgreSQL `to_char`, and the `%`-style `DATE_FORMAT`/`strftime`/`formatDateTime`), nextorm accepts only
+a documented portable subset and rejects anything else instead of emitting SQL that formats differently:
 
-Format through a provider-specific user-defined function instead. On SQL Server declare a `format` UDF:
+* **Numbers** — the standard specifiers `N`, `F`, `D` and `X` with an optional precision
+  (`$"{amount:N2}"`, `value.ToString("D8")`). A provider that cannot render a specifier exactly
+  (MySQL/MariaDB have no grouping-free `F`; SQLite and ClickHouse have no invariant `N`) throws
+  `NotSupportedException`.
+* **Dates** — the custom tokens `yyyy`, `yy`, `MM`, `dd`, `HH`, `mm`, `ss` with the separators `-`, `/`,
+  `.`, `:`, `T` and space (`$"{e.Created:yyyy-MM-dd}"`). Everything else is rejected.
+* **Culture** — invariant only: `string.Format` with no provider or with
+  `CultureInfo.InvariantCulture`. Any other `IFormatProvider` throws.
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        e.Id,
+        Total = string.Format("Total: {0:N2}", e.Numeric),
+        Month = e.Datetime!.Value.ToString("yyyy-MM")
+    })
+    .ToList();
+```
+
+```sql
+-- PostgreSQL
+select id, ('Total: '||to_char(m, 'FM9999999999999990.' || repeat('0', 2))) as total, to_char(dt, 'YYYY-MM') as month
+from complex_entity
+```
+
+| C# | PostgreSQL | SQL Server | MySQL/MariaDB | SQLite | ClickHouse |
+|---|---|---|---|---|---|
+| `N{p}` | — | `format(v, 'N{p}')` | `format(v, p)` | — | — |
+| `F{p}` | `to_char(v, 'FM…0.{p}')` | `format(v, 'F{p}')` | — | `printf('%.{p}f', v)` | `format('{:.{p}f}', v)` |
+| `D{p}` | `to_char(v, 'FM' \|\| repeat('0', {p}))` | `format(v, 'D{p}')` | `lpad(v, {p}, '0')` | `printf('%0{p}d', v)` | `leftPad(toString(v), {p}, '0')` |
+| `X{p}` | `to_hex(v)` | `format(v, 'X{p}')` | `hex(v)` | `printf('%0{p}x', v)` | `hex(v)` |
+| `yyyy-MM-dd` | `to_char(v, 'YYYY-MM-DD')` | `format(v, 'yyyy-MM-dd')` | `date_format(v, '%Y-%m-%d')` | `strftime('%Y-%m-%d', v)` | `formatDateTime(v, '%Y-%m-%d')` |
+
+For a format outside this subset, declare a provider-specific user-defined function instead. On SQL
+Server, a `format` UDF, for example:
 
 ```csharp
 public static class DemoUdf
@@ -302,16 +402,8 @@ public static class DemoUdf
 }
 ```
 
-```csharp
-var rows = dataContext.From<IComplexEntity>()
-    .Select(e => new { e.Id, Month = DemoUdf.Format(e.Datetime, "yyyy-MM") });
-// select id as [Id], format(dt, 'yyyy-MM') as [Month] from complex_entity
-```
-
 On PostgreSQL the same job is done by `SqlFunctions.Postgres.to_char(value, 'YYYY-MM')`
 ([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions)).
-The `%`-style providers (`DATE_FORMAT`, `strftime`, `formatDateTime`) are declared the same way through
-`[SqlFunction]`; there is no built-in surface for them either.
 
 ### Session and server information
 
@@ -1029,6 +1121,9 @@ var elements = dataContext
 | `Replace` | `replace` | `replace` | `replace` |
 | `Contains` / `StartsWith` / `EndsWith` / `like` | `like` (escape `\`) | `like` (escape `\`) | `like` (escape `\`) |
 | `string.IsNullOrEmpty` | `(x is null or x = '')` | `(x is null or x = '')` | `(x is null or x = '')` |
+| `string.Format` / `ToString(format)` | `printf` / `strftime` | `format` | `to_char` |
+| Ordinal `Equals` / `CompareOrdinal` | `collate binary` | `collate Latin1_General_100_BIN2` | `collate "C"` |
+| `collate(s, name)` | `s collate name` | `s collate name` | `s collate "name"` |
 | `Abs` | `abs` | `abs` | `abs` |
 | `Round` | `round(x)` | `round(x, 0)` | `round(x)` |
 | `Truncate` | `trunc` | `round(x, 0, 1)` | `trunc` |
@@ -1079,6 +1174,15 @@ These throw `NotSupportedException` rather than emitting SQL with different sema
   as `SqlFunctions.Postgres.log(base, x)` in the extended scalar library instead.
 * `Math.Round` overloads that take a `MidpointRounding` (more than two arguments) - not portable.
 * `string.Substring(Range)` - no SQL equivalent.
+* `string.Trim(c)`/`TrimStart(c)`/`TrimEnd(c)` - SQL trims whitespace only, not an arbitrary character
+  set.
+* `string.ToUpper(CultureInfo)`/`ToLower(CultureInfo)` with a culture other than
+  `CultureInfo.InvariantCulture` - only the invariant upper/lower has a portable form.
+* `string.Compare(a, b)` and `string.Compare(a, b, bool)` without a `StringComparison` - culture-sensitive;
+  use `string.Compare(a, b, StringComparison.Ordinal)` or `CompareOrdinal`.
+* `StringComparison.InvariantCulture`/`CurrentCulture` (with or without `IgnoreCase`) - no portable form.
+* `string.Format`/`ToString(format)` specifiers outside the documented subset in
+  [Formatting dates and numbers to strings](#formatting-dates-and-numbers-to-strings) - never dropped.
 
 ## See also
 
