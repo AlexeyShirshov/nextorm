@@ -35,7 +35,7 @@ internal static class ExtendedScalarFunctionTranslator
         nameof(PostgresFunctions.translate), nameof(PostgresFunctions.overlay), nameof(PostgresFunctions.md5),
         nameof(PostgresFunctions.regexp_replace), nameof(PostgresFunctions.regexp_like),
         nameof(PostgresFunctions.regexp_split_to_array), nameof(PostgresFunctions.regexp_count),
-        nameof(PostgresFunctions.regexp_instr), nameof(PostgresFunctions.make_interval), nameof(PostgresFunctions.justify_days),
+        nameof(PostgresFunctions.regexp_instr), nameof(PostgresFunctions.justify_days),
         nameof(PostgresFunctions.justify_hours), nameof(PostgresFunctions.to_char), nameof(PostgresFunctions.to_date),
         nameof(PostgresFunctions.to_number), nameof(PostgresFunctions.to_timestamp), nameof(PostgresFunctions.timezone)
     };
@@ -99,6 +99,13 @@ internal static class ExtendedScalarFunctionTranslator
             return true;
         }
 
+        if (name == nameof(PostgresFunctions.make_interval))
+        {
+            RequireExtended(visitor);
+            EmitMakeInterval(visitor, node.Arguments);
+            return true;
+        }
+
         if (DirectFunctions.Contains(name))
         {
             RequireExtended(visitor);
@@ -158,6 +165,39 @@ internal static class ExtendedScalarFunctionTranslator
         visitor.NeedAliasForColumn = true;
         visitor.Builder!.Append(visitor.Kw("cast(pg_typeof(")).Append(visitor.VisitToString(args[0]))
             .Append(visitor.Kw(") as ")).Append(visitor.Dialect.MakeTypeName(typeof(string))).Append(')');
+    }
+
+    /// <summary>
+    /// Renders <c>make_interval(years, months, weeks, days, hours, mins, secs)</c>. The C# surface has no
+    /// <c>weeks</c> parameter, so a literal <c>0</c> is inserted in its position; otherwise the remaining
+    /// arguments would shift and denote different units.
+    /// </summary>
+    private static void EmitMakeInterval(BaseExpressionVisitor visitor, IReadOnlyList<Expression> args)
+    {
+        if (visitor.IsParamMode)
+        {
+            for (var (i, cnt) = (0, args.Count); i < cnt; i++)
+                visitor.Visit(args[i]);
+
+            return;
+        }
+
+        visitor.NeedAliasForColumn = true;
+        var builder = visitor.Builder!;
+        builder.Append("make_interval(");
+
+        for (var (i, cnt) = (0, args.Count); i < cnt; i++)
+        {
+            if (i == 2)
+                builder.Append(", 0");
+
+            if (i > 0)
+                builder.Append(", ");
+
+            builder.Append(visitor.VisitToString(args[i]));
+        }
+
+        builder.Append(')');
     }
 
     /// <summary>

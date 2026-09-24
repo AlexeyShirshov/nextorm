@@ -12,6 +12,15 @@ public class SqliteDialectTests
 {
     private static readonly ISqlDialect Dialect = SqliteDialect.Instance;
 
+    [Fact]
+    public void DurationHooks_ShouldUseIntegerStorage()
+    {
+        Dialect.SupportsNativeDuration.Should().BeFalse();
+        Dialect.MakeDurationType(DurationUnit.Ticks).Should().Be("bigint");
+        Dialect.MakeNullableDurationType(DurationUnit.Ticks).Should().Be("bigint");
+        Dialect.MakeTypeName(typeof(TimeSpan)).Should().Be("bigint");
+    }
+
     [Theory]
     [InlineData("year", "cast(strftime('%Y', dt) as integer)")]
     [InlineData("month", "cast(strftime('%m', dt) as integer)")]

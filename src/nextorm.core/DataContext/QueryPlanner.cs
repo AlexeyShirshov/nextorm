@@ -19,6 +19,7 @@ namespace NextORM.Core;
 /// </summary>
 internal sealed class QueryPlanner : IQueryPlanner
 {
+    private readonly IDataContext _context;
     private readonly Func<ISqlDialect> _dialect;
     private readonly ILogger? _logger;
     private readonly Type _contextType;
@@ -27,13 +28,17 @@ internal sealed class QueryPlanner : IQueryPlanner
     private readonly Func<string, DbCommand> _createCommand;
     private readonly ILogger? _resultSetEnumeratorLogger;
     private readonly bool _logSensitiveData;
+    private readonly InterceptorHooks _interceptors;
 
     internal QueryPlanner(
+        IDataContext context,
         Func<ISqlDialect> dialect,
         Type contextType,
         ProviderHooks hooks,
-        LoggingOptions logging)
+        LoggingOptions logging,
+        InterceptorHooks interceptors)
     {
+        _context = context;
         _dialect = dialect;
         _logger = logging.Logger;
         _contextType = contextType;
@@ -42,6 +47,7 @@ internal sealed class QueryPlanner : IQueryPlanner
         _createCommand = hooks.CreateCommand;
         _resultSetEnumeratorLogger = logging.ResultSetEnumeratorLogger;
         _logSensitiveData = logging.LogSensitiveData;
+        _interceptors = interceptors;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -248,7 +254,7 @@ internal sealed class QueryPlanner : IQueryPlanner
             {
                 case UpdateValueKind.Constant:
                     var name = parameterProvider.GetParamName();
-                    parameters.Add(new Parameter(name, assignment.Constant));
+                    parameters.Add(new Parameter(name, DurationStorage.ToParameterValue(assignment.Constant, assignment.Property, ctx.Dialect)));
                     builder.Append(ctx.Dialect.MakeParam(name));
                     break;
                 case UpdateValueKind.Column:
@@ -419,6 +425,8 @@ internal sealed class QueryPlanner : IQueryPlanner
                 }
             }
 
+            RaiseCommandInitialized(dbCommand);
+
             // Some drivers (ClickHouse) turn CommandBehavior.SingleRow into an extra LIMIT 1. The
             // dialect already renders a limit for a single-row command, so the hint must be dropped
             // there to avoid a duplicated clause.
@@ -537,6 +545,20 @@ internal sealed class QueryPlanner : IQueryPlanner
     private Func<IDataRecord, TResult> GetMapCached<TResult>(QueryCommand<TResult> queryCommand, string? sql)
     {
         return RowMapperFactory.GetOrBuild(queryCommand, sql, _contextType, _logger, _mapColumn);
+    }
+
+    /// <summary>
+    /// Notifies the registered query interceptors that a plan's command has been created and its
+    /// parameters bound. A cached plan is only initialised once, so the event does not fire again when
+    /// the plan is reused.
+    /// </summary>
+    private void RaiseCommandInitialized(DbCommand command)
+    {
+        var interceptors = _interceptors.QueryInterceptors;
+        if (interceptors.Length == 0)
+            return;
+
+        InterceptorHooks.RaiseCommandInitialized(interceptors, _context, command);
     }
 
     /// <summary>

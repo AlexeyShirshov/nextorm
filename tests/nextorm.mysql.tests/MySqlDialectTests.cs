@@ -13,6 +13,16 @@ public class MySqlDialectTests
     private static readonly ISqlDialect Dialect = MySqlDialect.Instance;
 
     [Fact]
+    public void DurationHooks_ShouldUseNativeTime()
+    {
+        Dialect.SupportsNativeDuration.Should().BeTrue();
+        Dialect.MakeDurationType(null).Should().Be("time");
+        Dialect.MakeDurationType(DurationUnit.Seconds, 6).Should().Be("time(6)");
+        Dialect.MakeNullableDurationType(DurationUnit.Seconds, 6).Should().Be("time(6)");
+        Dialect.MakeTypeName(typeof(TimeSpan)).Should().Be("time");
+    }
+
+    [Fact]
     public void MakeConcat_ShouldUseConcatFunction()
     {
         Dialect.MakeConcat(["a", "b"]).Should().Be("concat(a, b)");

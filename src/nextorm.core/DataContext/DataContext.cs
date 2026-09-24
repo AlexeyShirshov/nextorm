@@ -19,6 +19,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     private readonly DbConnectionManager _connectionManager;
     private readonly QueryExecutor _executor;
     private readonly QueryPlanner _planner;
+    private readonly InterceptorHooks _interceptors;
 
     /// <summary>
     /// Creates a context from builder options (logger factory, mapping mode, naming convention and
@@ -55,6 +56,10 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
         _queryCache = new QueryCache(QueryPlanStore.Clear);
 
+        // Interceptors are created once and shared with every axis, so a per-instance
+        // AddInterceptor is visible to the connection, planning and execution paths alike.
+        _interceptors = new InterceptorHooks(optionsBuilder.QueryInterceptors, optionsBuilder.ConnectionInterceptors);
+
         // The connection axis owns the connection state machine; the provider keeps its two hooks on
         // the context and they are passed in as delegates (bound here, never invoked during
         // construction). `connectionString`/`providedConnection` differ in ownership: the context
@@ -65,7 +70,8 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             connectionString,
             providedConnection,
             new LoggingOptions(_environment.Logger, LogSensitiveData: _environment.LogSensitiveData),
-            () => Dialect.SupportsTransactions);
+            () => Dialect.SupportsTransactions,
+            _interceptors);
 
         // Bound once: parameter creation is handed to the execution/planning layers as a delegate
         // instead of passing the context itself, so they no longer depend on the concrete DataContext
@@ -76,19 +82,23 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         // The execution axis receives everything through its constructor (connection role, parameter
         // factory, logging config, disposal state) so it never sees the concrete context.
         _executor = new QueryExecutor(
+            this,
             _connectionManager,
             _createParam,
             new LoggingOptions(_environment.Logger, LogSensitiveData: _environment.LogSensitiveData, LogParams: _environment.LogParams),
             () => _disposed,
-            () => _connectionManager.CurrentTransaction);
+            () => _connectionManager.CurrentTransaction,
+            _interceptors);
 
         // The planning axis gets the provider hooks as delegates and invokes them lazily: calling the
         // abstract/virtual members here would run derived code before the derived constructor.
         _planner = new QueryPlanner(
+            this,
             GetDialect,
             GetType(),
             new ProviderHooks(MapColumn, _createParam, CreateCommand),
-            new LoggingOptions(_environment.Logger, _environment.ResultSetEnumeratorLogger, _environment.LogSensitiveData));
+            new LoggingOptions(_environment.Logger, _environment.ResultSetEnumeratorLogger, _environment.LogSensitiveData),
+            _interceptors);
     }
 
     private readonly Func<string, object?, DbParameter> _createParam;
@@ -150,6 +160,30 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
     /// <summary>Raised after the context has released its connection during disposal.</summary>
     public event EventHandler? Disposed;
+
+    /// <summary>
+    /// Registers a query interceptor on this context instance, after the ones configured on the
+    /// builder. See <see cref="IQueryInterceptor"/> for the lifecycle it observes.
+    /// </summary>
+    /// <param name="interceptor">The interceptor to register; must not be <see langword="null"/>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="interceptor"/> is <see langword="null"/>.</exception>
+    public void AddInterceptor(IQueryInterceptor interceptor)
+    {
+        ArgumentNullException.ThrowIfNull(interceptor);
+        _interceptors.Add(interceptor);
+    }
+
+    /// <summary>
+    /// Registers a connection interceptor on this context instance, after the ones configured on the
+    /// builder. See <see cref="IConnectionInterceptor"/> for the lifecycle it observes.
+    /// </summary>
+    /// <param name="interceptor">The interceptor to register; must not be <see langword="null"/>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="interceptor"/> is <see langword="null"/>.</exception>
+    public void AddInterceptor(IConnectionInterceptor interceptor)
+    {
+        ArgumentNullException.ThrowIfNull(interceptor);
+        _interceptors.Add(interceptor);
+    }
 
     /// <summary>Opens the connection if it is not already open.</summary>
     public void EnsureConnectionOpen() => _connectionManager.EnsureConnectionOpen();
@@ -232,7 +266,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// types (SqlClient throws when a typed getter does not match the field type, for example an
     /// int column projected as long) can override this to read the value and convert it.
     /// </summary>
-    public virtual Expression MapColumnExpression(SelectExpression column, Expression param) => RowMapperFactory.MapColumn(column, param);
+    public virtual Expression MapColumnExpression(SelectExpression column, Expression param) => RowMapperFactory.MapColumn(column, param, Dialect.SupportsNativeDuration);
 
     /// <summary>Resets the cached execution plan of <paramref name="queryCommand"/> so it is rebuilt on next use.</summary>
     /// <param name="queryCommand">The command whose plan should be discarded.</param>

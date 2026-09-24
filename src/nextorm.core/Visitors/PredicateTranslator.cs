@@ -342,6 +342,19 @@ internal static class PredicateTranslator
             return node;
         }
 
+        // A comparison against a duration column must convert a folded TimeSpan parameter to the
+        // column's storage unit. Resolve the unit before visiting either operand so the operand order
+        // does not matter (the constant may be on the left), then restore the previous context so the
+        // unit cannot leak into a later, unrelated TimeSpan parameter.
+        var previousDurationUnit = visitor.DurationUnitContext;
+        if (!visitor.Dialect.SupportsNativeDuration)
+        {
+            var durationUnit = MemberTranslator.ResolveDurationUnit(visitor, node.Left)
+                ?? MemberTranslator.ResolveDurationUnit(visitor, node.Right);
+            if (durationUnit is not null)
+                visitor.DurationUnitContext = durationUnit;
+        }
+
         if (!visitor.IsParamMode)
             visitor.Builder!.Append('(');
 
@@ -405,6 +418,8 @@ internal static class PredicateTranslator
 
         if (!visitor.IsParamMode)
             visitor.Builder!.Append(')');
+
+        visitor.DurationUnitContext = previousDurationUnit;
 
         return node;
     }

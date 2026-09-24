@@ -2864,7 +2864,7 @@ public class SqlGenerationTests
             .Where(x => SqlFunctions.Postgres.justify_hours(SqlFunctions.Parameter<TimeSpan>(1)) != null)
             .Select(x => new { x.Id }));
 
-        sql.Should().Contain("make_interval(0, 1, 2, 3, 4, 5)");
+        sql.Should().Contain("make_interval(0, 1, 0, 2, 3, 4, 5)");
         sql.Should().Contain("justify_hours(@norm_p1)");
     }
 

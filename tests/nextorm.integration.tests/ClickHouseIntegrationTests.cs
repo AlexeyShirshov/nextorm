@@ -55,7 +55,7 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
                 N = SqlFunctions.Sql.count(),
                 Big = SqlFunctions.Sql.count_big(),
                 D = SqlFunctions.Sql.count_distinct(x.Id),
-                F = SqlFunctions.ClickHouse.count_if(() => x.Id <= 2)
+                F = SqlFunctions.Sql.count(() => x.Id <= 2)
             })
             .First();
 
@@ -398,6 +398,33 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     }
 
     [Fact]
+    public void DateAddHour_ShouldKeepTimeOfDay()
+    {
+        var r = _sut.ComplexEntity
+            .Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.Sql.date_add("hour", 2, x.Datetime))
+            .First();
+
+        // A sub-day part is promoted to DateTime so the time of day is kept.
+        r.Should().Be(new DateTime(2023, 1, 1, 12, 0, 0));
+    }
+
+    [Fact]
+    public void DateDiffBig_ShouldReturn64BitSpan()
+    {
+        var r = _sut.ComplexEntity
+            .Where(x => x.Id == 1)
+            .Select(x => SqlFunctions.Sql.date_diff_big("milliseconds", new DateTime(1970, 1, 1), x.Datetime))
+            .First();
+
+        // ~53 years of milliseconds exceed the 32-bit date_diff.
+        r.Should().BeGreaterThan((long)int.MaxValue);
+    }
+
+    [Fact]
+    public void DurationColumns_ShouldRoundTrip() => CommonTestSuite.DurationRoundTrip(_sut.DataProvider);
+
+    [Fact]
     public void EndOfMonth_ShouldReturnLastDay()
     {
         var r = _sut.ComplexEntity
@@ -536,7 +563,7 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     public void CountIf_ShouldReturnCount()
     {
         _sut.SimpleEntity
-            .Select(x => SqlFunctions.ClickHouse.count_if(() => x.Id <= 2))
+            .Select(x => SqlFunctions.Sql.count(() => x.Id <= 2))
             .First()
             .Should().Be(2);
     }
@@ -653,10 +680,10 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
         var r = _sut.SimpleEntity
             .Select(x => new
             {
-                Sum = SqlFunctions.ClickHouse.sum_if((long)x.Id, () => x.Id <= 2),
-                Avg = SqlFunctions.ClickHouse.avg_if((double)x.Id, () => x.Id <= 2),
-                Min = SqlFunctions.ClickHouse.min_if((long)x.Id, () => x.Id <= 2),
-                Max = SqlFunctions.ClickHouse.max_if((long)x.Id, () => x.Id <= 2)
+                Sum = SqlFunctions.Sql.sum((long)x.Id, () => x.Id <= 2),
+                Avg = SqlFunctions.Sql.avg((double)x.Id, () => x.Id <= 2),
+                Min = SqlFunctions.Sql.min((long)x.Id, () => x.Id <= 2),
+                Max = SqlFunctions.Sql.max((long)x.Id, () => x.Id <= 2)
             })
             .First();
 

@@ -27,6 +27,19 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
     internal PropertyInfo? PropertyInfo { get; set; }
 
     /// <summary>
+    /// The declared storage unit of a <see cref="TimeSpan"/> column on a provider without a native
+    /// duration type, or <c>null</c> for a native column. Populated from the entity property metadata;
+    /// the provider's column mapper decides whether it applies (see
+    /// <see cref="ISqlDialect.SupportsNativeDuration"/>).
+    /// </summary>
+    public DurationUnit? DurationUnit { get; set; }
+
+    /// <summary>
+    /// The fractional-second precision of a native duration type, or zero for the provider default.
+    /// </summary>
+    public int DurationPrecision { get; set; }
+
+    /// <summary>
     /// True when a SQL NULL in this column means "no row" (the projection came from a
     /// <c>*OrDefault</c> scalar terminal) and the column is a non-nullable value type, so the reader
     /// must substitute <c>default</c> instead of throwing. Set while the projection is prepared;
@@ -90,6 +103,18 @@ public sealed class SelectExpression //: IEquatable<SelectExpression>
         else if (_realType == typeof(DateTime))
         {
             return GetDateTimeMI;
+        }
+        else if (_realType == typeof(TimeSpan))
+        {
+            // Native durations/intervals are exposed by the provider driver as System.TimeSpan.
+            // Providers without a native type store the value in an integer column and are read by a
+            // provider-specific override instead (RowMapperFactory.MapColumn with
+            // supportsNativeDuration == false).
+            return GetFieldValueMI.MakeGenericMethod(typeof(TimeSpan));
+        }
+        else if (_realType == typeof(DateTimeOffset))
+        {
+            return GetFieldValueMI.MakeGenericMethod(typeof(DateTimeOffset));
         }
         else if (_realType == typeof(string))
         {

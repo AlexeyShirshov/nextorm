@@ -414,18 +414,27 @@ public sealed class SqlServerDialect : SqlDialectBase
     }
 
     /// <summary>Renders <c>datediff(part, start, end)</c> with the singular T-SQL part names.</summary>
-    public override string MakeDateDiff(string field, string start, string end)
-    {
-        // T-SQL datediff uses the singular part names; plural ANSI parts map onto them.
-        var part = field switch
-        {
-            "microseconds" => "microsecond",
-            "milliseconds" => "millisecond",
-            _ => field
-        };
+    public override string MakeDateDiff(string field, string start, string end) =>
+        $"datediff({TSqlDatePart(field)}, {start}, {end})";
 
-        return $"datediff({part}, {start}, {end})";
-    }
+    /// <summary>Renders the 64-bit <c>datediff_big(part, start, end)</c> with the singular T-SQL part names.</summary>
+    public override string MakeDateDiffBig(string field, string start, string end) =>
+        $"datediff_big({TSqlDatePart(field)}, {start}, {end})";
+
+    // T-SQL datediff uses the singular part names; plural ANSI parts map onto them.
+    private static string TSqlDatePart(string field) => field switch
+    {
+        "microseconds" => "microsecond",
+        "milliseconds" => "millisecond",
+        _ => field
+    };
+
+    /// <summary>
+    /// T-SQL <c>dateadd</c> on a <c>date</c> operand for a sub-day part drops the time of day (and
+    /// <c>datediff</c> cannot see it), so a sub-day operand is promoted to <c>datetime2</c>.
+    /// </summary>
+    public override string PromoteDateOperand(string field, string value) =>
+        IsSubDayField(field) ? $"cast({value} as datetime2)" : value;
 
     /// <summary>Renders <c>eomonth(value)</c>.</summary>
     public override string MakeEndOfMonth(string value) => $"eomonth({value})";

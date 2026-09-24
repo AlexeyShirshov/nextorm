@@ -264,12 +264,15 @@ public partial class QueryCommand
                             SelectExpression selExp;
                             var arg = args[idx];
                             var ctorParam = ctor.Constructor!.GetParameters()[idx];
+                            var (durationUnit, durationPrecision) = ResolveDuration(srcType, arg);
 
                             selExp = new SelectExpression(ctorParam.ParameterType)
                             {
                                 Index = idx,
                                 PropertyName = ctorParam.Name!,
-                                Expression = innerQueryVisitor.Visit(arg)
+                                Expression = innerQueryVisitor.Visit(arg),
+                                DurationUnit = durationUnit,
+                                DurationPrecision = durationPrecision,
                             };
                             selExp.DefaultOnNull = !selExp.Nullable && CorrelatedQueryExpressionVisitor.IsOrDefaultScalar(arg);
                             if (!cmd._dontCache && !noHash)
@@ -293,10 +296,13 @@ public partial class QueryCommand
                         cmd.OneColumn = true;
                         var innerQueryVisitor = new CorrelatedQueryExpressionVisitor(cmd._dataContext!, cmd, cancellationToken, cmd._dataContext!.Logger);
                         var selectExp = innerQueryVisitor.Visit(cmd._exp);
+                        var (scalarDurationUnit, scalarDurationPrecision) = ResolveDuration(srcType, cmd._exp.Body);
 
                         var selExp = new SelectExpression(cmd._exp.Body.Type)
                         {
                             Expression = selectExp,
+                            DurationUnit = scalarDurationUnit,
+                            DurationPrecision = scalarDurationPrecision,
                         };
                         // A dialect that does not enforce scalar-subquery cardinality (SQLite) would
                         // silently return the first row for Single/SingleOrDefault, so wrap the
@@ -330,12 +336,15 @@ public partial class QueryCommand
                                 return (selectList, columnsPlanHash);
 
                             var binding = bindings[idx] as MemberAssignment;
+                            var (bindingDurationUnit, bindingDurationPrecision) = ResolveDuration(srcType, binding!.Expression);
 
                             var selExp = new SelectExpression(((PropertyInfo)binding!.Member).PropertyType)
                             {
                                 Index = idx,
                                 PropertyName = binding.Member.Name!,
-                                Expression = innerQueryVisitor.Visit(binding.Expression)
+                                Expression = innerQueryVisitor.Visit(binding.Expression),
+                                DurationUnit = bindingDurationUnit,
+                                DurationPrecision = bindingDurationPrecision,
                             };
                             selExp.DefaultOnNull = !selExp.Nullable && CorrelatedQueryExpressionVisitor.IsOrDefaultScalar(binding.Expression);
                             if (!cmd._dontCache && !noHash)
@@ -387,7 +396,9 @@ public partial class QueryCommand
                                         Index = idx,
                                         PropertyName = pi.Name,
                                         Expression = exp,
-                                        PropertyInfo = pi
+                                        PropertyInfo = pi,
+                                        DurationUnit = prop.DurationUnit,
+                                        DurationPrecision = prop.DurationPrecision,
                                     };
 
                                     if (!cmd._dontCache && !noHash)
@@ -420,6 +431,20 @@ public partial class QueryCommand
             }
 
             return (selectList, columnsPlanHash);
+        }
+
+        // Resolves the declared duration storage unit of a directly projected entity property, so a
+        // projection of a duration column (`Select(x => x.Dur)`) reads it back in the declared unit on
+        // a provider without a native duration type. A non-duration or computed expression stays null.
+        private static (DurationUnit? Unit, int Precision) ResolveDuration(Type? srcType, Expression expression)
+        {
+            if (srcType is not null
+                && expression is MemberExpression { Member: PropertyInfo pi }
+                && DataContextCache.Metadata.TryGetValue(srcType, out var metadata)
+                && metadata.Properties.FirstOrDefault(p => p.PropertyInfo == pi) is { } property)
+                return (property.DurationUnit, property.DurationPrecision);
+
+            return (null, 0);
         }
 
         private static int PrepareJoin(QueryCommand cmd, bool noHash, CancellationToken cancellationToken)

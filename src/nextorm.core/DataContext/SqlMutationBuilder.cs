@@ -280,7 +280,7 @@ internal static class SqlMutationBuilder
 
                     var column = RenderColumnReference(dialect, quoteIdentifiers, keys[i].Property, namingConvention);
                     var name = provider.GetParamName();
-                    parameters.Add(new Parameter(name, keys[i].Value));
+                    parameters.Add(new Parameter(name, DurationStorage.ToParameterValue(keys[i].Value, keys[i].Property, dialect)));
                     writer.Append(column).Append(" = ").Append(dialect.MakeParam(name));
                 }
             }
@@ -364,7 +364,7 @@ internal static class SqlMutationBuilder
 
                     var column = RenderColumnReference(dialect, quoteIdentifiers, keys[i].Property, namingConvention);
                     var name = parameterProvider.GetParamName();
-                    parameters.Add(new Parameter(name, keys[i].Value));
+                    parameters.Add(new Parameter(name, DurationStorage.ToParameterValue(keys[i].Value, keys[i].Property, dialect)));
                     writer.Append(column).Append(" = ").Append(dialect.MakeParam(name));
                 }
             }
@@ -875,7 +875,7 @@ internal static class SqlMutationBuilder
                 else
                 {
                     var name = parameterProvider.GetParamName();
-                    parameters.Add(new Parameter(name, value.Constant));
+                    parameters.Add(new Parameter(name, DurationStorage.ToParameterValue(value.Constant, columns[c].Property, dialect)));
                     writer.Append(dialect.MakeParam(name));
                 }
             }

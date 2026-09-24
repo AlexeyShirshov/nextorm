@@ -1934,9 +1934,10 @@ public class SqlGenerationTests
         SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.date_add("day", 1, x.Datetime) }))
             .Should().Contain("dateadd(day, 1, dt) as [D]");
 
-        // ANSI plural parts are folded onto the singular T-SQL spellings.
+        // ANSI plural parts are folded onto the singular T-SQL spellings; a sub-day part promotes the
+        // operand to datetime2 so a date-only column keeps its time of day.
         SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.date_add("milliseconds", 5, x.Datetime) }))
-            .Should().Contain("dateadd(millisecond, 5, dt)");
+            .Should().Contain("dateadd(millisecond, 5, cast(dt as datetime2))");
     }
 
     [Fact]
@@ -1975,6 +1976,17 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void DateDiffBig_ShouldEmitDatediffBigFunction()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // The 64-bit variant uses datediff_big so a millisecond span does not overflow.
+        SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.date_diff_big("milliseconds", x.Datetime, x.Datetime) }))
+            .Should().Contain("datediff_big(millisecond, dt, dt) as [D]");
+    }
+
+    [Fact]
     public void DateFromParts_ShouldEmitDatefromparts()
     {
         using var ctx = SqlServerTestContext.Create();
@@ -1996,9 +2008,9 @@ public class SqlGenerationTests
         SqlOf(ctx, e.Select(x => new { M = x.Datetime!.Value.AddMonths(2) }))
             .Should().Contain("dateadd(month, 2, dt) as [M]");
 
-        // AddMilliseconds maps to the singular T-SQL millisecond part.
+        // AddMilliseconds maps to the singular T-SQL millisecond part and promotes the operand.
         SqlOf(ctx, e.Select(x => new { S = x.Datetime!.Value.AddMilliseconds(500) }))
-            .Should().Contain("dateadd(millisecond, 500, dt) as [S]");
+            .Should().Contain("dateadd(millisecond, 500, cast(dt as datetime2)) as [S]");
     }
 
     [Fact]

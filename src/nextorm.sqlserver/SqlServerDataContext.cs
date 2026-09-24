@@ -215,11 +215,19 @@ public class SqlServerDataContext : DataContext
         return bulk;
     }
 
-    private static DataTable BuildTable(IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns)
+    private DataTable BuildTable(IReadOnlyList<string> columnNames, IReadOnlyList<IPropertyMetadata> columns)
     {
         var table = new DataTable();
         for (var i = 0; i < columnNames.Count; i++)
-            table.Columns.Add(columnNames[i], Nullable.GetUnderlyingType(columns[i].PropertyInfo.PropertyType) ?? columns[i].PropertyInfo.PropertyType);
+        {
+            var type = Nullable.GetUnderlyingType(columns[i].PropertyInfo.PropertyType) ?? columns[i].PropertyInfo.PropertyType;
+            // SQL Server has no native duration type, so a TimeSpan column is written as a bigint in
+            // the declared unit; the value array (and therefore the DataTable column) holds the long.
+            if (type == typeof(TimeSpan) && !Dialect.SupportsNativeDuration)
+                type = typeof(long);
+
+            table.Columns.Add(columnNames[i], type);
+        }
 
         return table;
     }

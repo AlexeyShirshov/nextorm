@@ -139,6 +139,24 @@ public class SqlGenerationTests
 
         SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.date_add("decade", 2, x.Datetime) }))
             .Should().Contain("addYears(dt, (2) * 10)");
+
+        // A sub-day part promotes the operand to DateTime64 so a Date-only value keeps its time.
+        SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.date_add("milliseconds", 5, x.Datetime) }))
+            .Should().Contain("addMilliseconds(toDateTime64(dt, 3), 5)");
+    }
+
+    [Fact]
+    public void DateDiff_ShouldUseClickHouseDateDiff()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.date_diff("milliseconds", x.Datetime, x.Datetime) }))
+            .Should().Contain("dateDiff('millisecond', dt, dt)");
+
+        // The 64-bit variant keeps the same SQL; the result is read as Int64.
+        SqlOf(ctx, e.Select(x => new { D = SqlFunctions.Sql.date_diff_big("milliseconds", x.Datetime, x.Datetime) }))
+            .Should().Contain("dateDiff('millisecond', dt, dt)");
     }
 
     [Fact]
@@ -159,6 +177,10 @@ public class SqlGenerationTests
 
         SqlOf(ctx, e.Select(x => new { D = x.Datetime!.Value.AddMonths(2) }))
             .Should().Contain("addMonths(dt, 2)");
+
+        // AddMilliseconds promotes the operand through the timestamp-promotion hook.
+        SqlOf(ctx, e.Select(x => new { D = x.Datetime!.Value.AddMilliseconds(500) }))
+            .Should().Contain("addMilliseconds(toDateTime64(dt, 3), 500)");
     }
 
     [Fact]
@@ -548,6 +570,16 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void FilteredStringAgg_ShouldUseGroupArrayIf()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        SqlOf(ctx, e.Select(x => SqlFunctions.Sql.string_agg(x.String, ",", () => x.Id > 0L)))
+            .Should().Contain("arrayStringConcat(groupArrayIf(somestring, (id > 0)), ',')");
+    }
+
+    [Fact]
     public void GroupArray_ShouldRenderGroupArray()
     {
         using var ctx = ClickHouseTestContext.Create();
@@ -844,7 +876,7 @@ public class SqlGenerationTests
             Big = SqlFunctions.Sql.count_big(),
             D = SqlFunctions.Sql.count_distinct(x.Int),
             BigD = SqlFunctions.Sql.count_big_distinct(x.Int),
-            F = SqlFunctions.ClickHouse.count_if(() => x.Id > 0L)
+            F = SqlFunctions.Sql.count(() => x.Id > 0L)
         }));
 
         sql.Should().Contain("toInt32(count(*))");
@@ -1235,14 +1267,16 @@ public class SqlGenerationTests
 
         var sql = SqlOf(ctx, e.Select(x => new
         {
-            C = SqlFunctions.ClickHouse.count_if(() => x.Id > 0L),
-            S = SqlFunctions.ClickHouse.sum_if(x.Id, () => x.Id > 0L),
-            A = SqlFunctions.ClickHouse.avg_if(x.Id, () => x.Id > 0L),
-            Mi = SqlFunctions.ClickHouse.min_if(x.Id, () => x.Id > 0L),
-            Ma = SqlFunctions.ClickHouse.max_if(x.Id, () => x.Id > 0L)
+            C = SqlFunctions.Sql.count(() => x.Id > 0L),
+            Big = SqlFunctions.Sql.count_big(() => x.Id > 0L),
+            S = SqlFunctions.Sql.sum(x.Id, () => x.Id > 0L),
+            A = SqlFunctions.Sql.avg(x.Id, () => x.Id > 0L),
+            Mi = SqlFunctions.Sql.min(x.Id, () => x.Id > 0L),
+            Ma = SqlFunctions.Sql.max(x.Id, () => x.Id > 0L)
         }));
 
         sql.Should().Contain("toInt32(countIf((id > 0)))");
+        sql.Should().Contain("toInt64(countIf((id > 0)))");
         sql.Should().Contain("sumIf(id, (id > 0))");
         sql.Should().Contain("avgIf(id, (id > 0))");
         sql.Should().Contain("minIf(id, (id > 0))");

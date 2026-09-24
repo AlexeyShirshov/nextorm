@@ -459,6 +459,31 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
     }
 
     [Fact]
+    public void IntervalFunctions_ShouldMaterialiseTimeSpan()
+    {
+        // `current_time()` is deliberately absent: PostgreSQL returns `time with time zone`, which the
+        // Npgsql driver cannot read as a TimeSpan (its declared return type). See the work plan §10.
+        var r = _sut.ComplexEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Built = SqlFunctions.Postgres.make_interval(0, 0, 1, 2, 3, 4.0),
+                JustifiedHours = SqlFunctions.Postgres.justify_hours(
+                    SqlFunctions.Postgres.make_interval(0, 0, 0, 30, 0, 0.0)),
+                JustifiedDays = SqlFunctions.Postgres.justify_days(
+                    SqlFunctions.Postgres.make_interval(0, 0, 20, 0, 0, 0.0)),
+                Time = SqlFunctions.Postgres.localtime()
+            })
+            .First();
+
+        // A PostgreSQL interval materialises through the TimeSpan read path.
+        r.Built.Should().Be(new TimeSpan(1, 2, 3, 4));
+        // justify_hours/justify_days only re-format the interval, so the duration is unchanged.
+        r.JustifiedHours.Should().Be(TimeSpan.FromHours(30));
+        r.JustifiedDays.Should().Be(TimeSpan.FromDays(20));
+        r.Time.Should().NotBeNull();
+    }
+
+    [Fact]
     public void TimezoneAndLikeEscape_ShouldWork()
     {
         var r = _sut.ComplexEntity.Where(x => x.Id == 1)

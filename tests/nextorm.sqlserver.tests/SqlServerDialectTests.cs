@@ -13,6 +13,15 @@ public class SqlServerDialectTests
 {
     private static readonly ISqlDialect Dialect = SqlServerDialect.Instance;
 
+    [Fact]
+    public void DurationHooks_ShouldUseIntegerStorage()
+    {
+        Dialect.SupportsNativeDuration.Should().BeFalse();
+        Dialect.MakeDurationType(DurationUnit.Seconds).Should().Be("bigint");
+        Dialect.MakeNullableDurationType(DurationUnit.Seconds).Should().Be("bigint");
+        Dialect.MakeTypeName(typeof(TimeSpan)).Should().Be("bigint");
+    }
+
     [Theory]
     [InlineData(typeof(byte), "tinyint")]
     [InlineData(typeof(short), "smallint")]
@@ -251,6 +260,9 @@ public class SqlServerDialectTests
         Dialect.MakeDateAdd("century", "n", "d").Should().Be("dateadd(year, (n) * 100, d)");
         Dialect.MakeDateDiff("day", "a", "b").Should().Be("datediff(day, a, b)");
         Dialect.MakeDateDiff("milliseconds", "a", "b").Should().Be("datediff(millisecond, a, b)");
+        Dialect.MakeDateDiffBig("milliseconds", "a", "b").Should().Be("datediff_big(millisecond, a, b)");
+        Dialect.PromoteDateOperand("day", "d").Should().Be("d");
+        Dialect.PromoteDateOperand("milliseconds", "d").Should().Be("cast(d as datetime2)");
         Dialect.MakeEndOfMonth("d").Should().Be("eomonth(d)");
         Dialect.MakeDateFromParts("y", "m", "d").Should().Be("datefromparts(y, m, d)");
     }

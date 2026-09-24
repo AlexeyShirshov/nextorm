@@ -57,7 +57,7 @@ public static partial class SqlFunctions
     /// <c>arrayStringConcat</c>, <c>splitByChar</c>, <c>arraySort</c>, <c>arrayReverse</c>,
     /// <c>arrayDistinct</c>). Every member is
     /// gated by a capability flag
-    /// (<see cref="ISqlDialect.SupportsArgMinMax"/>, <see cref="ISqlDialect.SupportsIfAggregates"/>, …);
+    /// (<see cref="ISqlDialect.SupportsArgMinMax"/>, <see cref="ISqlDialect.AggregateFilterStyle"/>, …);
     /// other providers reject it with a clear message.
     /// </summary>
     public static ClickHouseFunctions ClickHouse => default!;
@@ -546,6 +546,14 @@ public static partial class SqlFunctions
         public int? date_diff(string field, DateTime? start, DateTime? end) => default!;
 
         /// <summary>
+        /// <c>datediff_big(field, start, end)</c>: like <see cref="date_diff"/>, but the difference is
+        /// returned as a 64-bit value so a <c>millisecond</c>/<c>microsecond</c> span over a long range
+        /// does not overflow the 32-bit <c>date_diff</c>. The field must be a constant string. Requires
+        /// a provider that supports it (see <see cref="ISqlDialect.SupportsDateArithmetic"/>).
+        /// </summary>
+        public long? date_diff_big(string field, DateTime? start, DateTime? end) => default!;
+
+        /// <summary>
         /// <c>eomonth(value)</c>: the last day of the month of <paramref name="value"/>. Requires a
         /// provider that supports it (see <see cref="ISqlDialect.SupportsDateArithmetic"/>).
         /// </summary>
@@ -692,24 +700,26 @@ public static partial class SqlFunctions
         public T? any_agg<T>(T? property) => default!;
 
         /// <summary>
-        /// Filtered <c>count(*) filter (where ...)</c>. Requires a provider that supports the FILTER
-        /// clause (see <see cref="ISqlDialect.SupportsFilter"/>).
+        /// Filtered <c>count(*)</c>. Requires a provider that can filter an aggregate (see
+        /// <see cref="ISqlDialect.AggregateFilterStyle"/>): the ANSI <c>filter (where ...)</c> clause or,
+        /// on ClickHouse, the <c>-If</c> combinator (<c>countIf(...)</c>). PostgreSQL, SQLite and
+        /// ClickHouse opt in.
         /// </summary>
         public int count(Expression<Func<bool>> filter) => default!;
 
-        /// <summary>Filtered 64-bit <c>count(*) filter (where ...)</c>.</summary>
+        /// <summary>Filtered 64-bit <c>count(*)</c> (<c>count_big ... filter (where ...)</c>, or the ClickHouse <c>countIf</c>).</summary>
         public long count_big(Expression<Func<bool>> filter) => default!;
 
-        /// <summary>Filtered <c>min(property) filter (where ...)</c>.</summary>
+        /// <summary>Filtered <c>min(property)</c> (the ANSI <c>filter (where ...)</c> clause or the ClickHouse <c>minIf</c>).</summary>
         public T? min<T>(T? property, Expression<Func<bool>> filter) => default!;
 
-        /// <summary>Filtered <c>max(property) filter (where ...)</c>.</summary>
+        /// <summary>Filtered <c>max(property)</c> (the ANSI <c>filter (where ...)</c> clause or the ClickHouse <c>maxIf</c>).</summary>
         public T? max<T>(T? property, Expression<Func<bool>> filter) => default!;
 
-        /// <summary>Filtered <c>avg(property) filter (where ...)</c>.</summary>
+        /// <summary>Filtered <c>avg(property)</c> (the ANSI <c>filter (where ...)</c> clause or the ClickHouse <c>avgIf</c>).</summary>
         public T? avg<T>(T? property, Expression<Func<bool>> filter) => default!;
 
-        /// <summary>Filtered <c>sum(property) filter (where ...)</c>.</summary>
+        /// <summary>Filtered <c>sum(property)</c> (the ANSI <c>filter (where ...)</c> clause or the ClickHouse <c>sumIf</c>).</summary>
         public T? sum<T>(T? property, Expression<Func<bool>> filter) => default!;
 
         /// <summary><c>corr(Y, X)</c>: the correlation coefficient of a set of (Y, X) pairs.</summary>

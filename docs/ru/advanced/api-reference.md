@@ -113,11 +113,20 @@
 | [`TemporalKind`](xref:NextORM.Core.TemporalKind) / [`TemporalClause`](xref:NextORM.Core.TemporalClause) | Клауза `FOR SYSTEM_TIME` для [`EntityBuilder.ForSystemTime`](xref:NextORM.Core.EntityBuilder`1.ForSystemTime(NextORM.Core.TemporalClause)): [`AsOf`](xref:NextORM.Core.TemporalKind.AsOf)/[`Between`](xref:NextORM.Core.TemporalKind.Between)/[`FromTo`](xref:NextORM.Core.TemporalKind.FromTo)/[`ContainedIn`](xref:NextORM.Core.TemporalKind.ContainedIn)/[`All`](xref:NextORM.Core.TemporalKind.All), создаётся статическими фабричными методами. |
 | [`UnionType`](xref:NextORM.Core.UnionType) | `None`, [`Distinct`](xref:NextORM.Core.EntityBuilder`1.Distinct), [`All`](xref:NextORM.Core.UnionType.All), [`Intersect`](xref:NextORM.Core.QueryCommand`1.Intersect``1(NextORM.Core.QueryCommand{``0})), [`IntersectAll`](xref:NextORM.Core.QueryCommand`1.IntersectAll``1(NextORM.Core.QueryCommand{``0})), [`Except`](xref:NextORM.Core.QueryCommand`1.Except``1(NextORM.Core.QueryCommand{``0})), [`ExceptAll`](xref:NextORM.Core.QueryCommand`1.ExceptAll``1(NextORM.Core.QueryCommand{``0})). |
 
+### Интерцепторы
+
+| Тип | Описание |
+|---|---|
+| [`IQueryInterceptor`](xref:NextORM.Core.IQueryInterceptor) | Наблюдает жизненный цикл выполнения команд: `CommandInitialized`, `CommandExecuting`, `CommandExecuted`, `CommandFailed`. Поднимается execution axis контекста; регистрируется через [`DataContextBuilder.AddInterceptor`](xref:NextORM.Core.DataContextBuilder.AddInterceptor(NextORM.Core.IQueryInterceptor)) или [`DataContext.AddInterceptor`](xref:NextORM.Core.DataContext.AddInterceptor(NextORM.Core.IQueryInterceptor)). См. [Интерцепторы](../guide/27-interceptors.md). |
+| [`IConnectionInterceptor`](xref:NextORM.Core.IConnectionInterceptor) | Наблюдает жизненный цикл открытия соединения: `ConnectionOpening`, `ConnectionOpened`; регистрируется через [`DataContextBuilder.AddInterceptor`](xref:NextORM.Core.DataContextBuilder.AddInterceptor(NextORM.Core.IConnectionInterceptor)) или [`DataContext.AddInterceptor`](xref:NextORM.Core.DataContext.AddInterceptor(NextORM.Core.IConnectionInterceptor)). |
+| [`CommandEventData`](xref:NextORM.Core.CommandEventData) | Read-only payload для колбэков интерцептора запросов: контекст и текст команды. |
+| [`ConnectionEventData`](xref:NextORM.Core.ConnectionEventData) | Read-only payload для колбэков интерцептора соединения: контекст и открываемое соединение. |
+
 ### Внедрение зависимостей
 
 | Тип | Описание |
 |---|---|
-| [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) | Построитель параметров провайдера: [`UseLoggerFactory`](xref:NextORM.Core.DataContextBuilder.UseLoggerFactory(Microsoft.Extensions.Logging.ILoggerFactory)), [`LogSensitiveData`](xref:NextORM.Core.DataContextBuilder.LogSensitiveData(System.Boolean)), [`Factory`](xref:NextORM.Core.DataContextBuilder.Factory), [`UseQuotedIdentifiers`](xref:NextORM.Core.DataContextBuilder.UseQuotedIdentifiers(System.Boolean)), [`UseNamingConvention`](xref:NextORM.Core.DataContextBuilder.UseNamingConvention(NextORM.Core.INamingConvention)). |
+| [`DataContextBuilder`](xref:NextORM.Core.DataContextBuilder) | Построитель параметров провайдера: [`UseLoggerFactory`](xref:NextORM.Core.DataContextBuilder.UseLoggerFactory(Microsoft.Extensions.Logging.ILoggerFactory)), [`LogSensitiveData`](xref:NextORM.Core.DataContextBuilder.LogSensitiveData(System.Boolean)), [`Factory`](xref:NextORM.Core.DataContextBuilder.Factory), [`UseQuotedIdentifiers`](xref:NextORM.Core.DataContextBuilder.UseQuotedIdentifiers(System.Boolean)), [`UseNamingConvention`](xref:NextORM.Core.DataContextBuilder.UseNamingConvention(NextORM.Core.INamingConvention)), а также `AddInterceptor(IQueryInterceptor)`/`AddInterceptor(IConnectionInterceptor)`. |
 | [`ServiceCollectionExtensions`](xref:NextORM.Core.ServiceCollectionExtensions) | [`AddNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions.AddNextOrmContext(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{NextORM.Core.DataContextBuilder})) / [`AddKeyedNextOrmContext`](xref:NextORM.Core.ServiceCollectionExtensions.AddKeyedNextOrmContext(Microsoft.Extensions.DependencyInjection.IServiceCollection,System.Action{NextORM.Core.DataContextBuilder},System.Object)) (универсальные и управляемые options). |
 
 ## Пространство имён `nextorm.sqlite`
