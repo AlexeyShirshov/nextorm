@@ -54,7 +54,7 @@ You audit and maintain the two registers. You never edit code or config — the
   5.9.0 is referenced.
 - Severities are pinned in `.editorconfig` via `dotnet_diagnostic.<ID>.severity`;
   `TreatWarningsAsErrors=true`, so an enabled rule fails the build — that is the
-  acceptance gate (`dotnet build nextorm.sln -c Release` must be 0/0).
+  acceptance gate (`dotnet build nextorm.slnx -c Release` must be 0/0).
 - SDK analyzers (`CA*`) run by default. **Watch for inert config:** `.editorconfig`
   silences Sonar-style `S*` rules (`S125`, `S108`, `S3060`, …) but no
   `SonarAnalyzer` package is referenced — dead entries worth a finding.
@@ -76,7 +76,7 @@ You audit and maintain the two registers. You never edit code or config — the
    re-report a fixed item, a listed deviation
    (`Отмечено, но менять не рекомендуется`, `Исключения (по решению автора)`) or a
    "Чистые категории" entry.
-3. Establish the analyzer baseline: run `dotnet build nextorm.sln -c Release`
+3. Establish the analyzer baseline: run `dotnet build nextorm.slnx -c Release`
    (0 warnings is the gate) and enumerate the active `dotnet_diagnostic.*`
    severities in `.editorconfig`.
 4. Suppression/slop scan ([skill:dotnet-csharp-code-smells] §2, [skill:slopwatch]):

@@ -170,7 +170,7 @@ Hard constraints:
 ## 5. Build
 
 ```bash
-dotnet build nextorm.sln -c Release
+dotnet build nextorm.slnx -c Release
 ```
 
 Must be 0 warnings / 0 errors before the audit.
@@ -187,7 +187,7 @@ Then apply its findings:
   in-memory, `nextorm-db-perf-analyst` for SQL providers, `nextorm-performance-analyst` to triage.
 - Persist the register entries so the next audit does not re-report them.
 
-Re-run `dotnet build nextorm.sln -c Release`; 0 warnings is the acceptance gate.
+Re-run `dotnet build nextorm.slnx -c Release`; 0 warnings is the acceptance gate.
 
 ## 7. Tests + coverage
 
@@ -258,7 +258,7 @@ SQL-generation tests.
       matches more than the origin dialect, or the single match is explained by the matrix.
 - [ ] Implementation tier chosen by the ladder (native CLR -> `CommonFunctions` -> `[SqlFunction]`),
       with the dialect hook wired in every case.
-- [ ] Public surface has XML docs; `dotnet build nextorm.sln -c Release` is 0/0.
+- [ ] Public surface has XML docs; `dotnet build nextorm.slnx -c Release` is 0/0.
 - [ ] `nextorm-code-auditor` run; findings applied and persisted in the registers.
 - [ ] SQL-generation tests + integration/core tests added and green.
 - [ ] Coverage before/after reported; line coverage did not drop below the previous value / 75.

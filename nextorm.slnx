@@ -1,0 +1,33 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Folder Name="/examples/">
+    <Project Path="examples/nextorm.examples.clickhouse.analytics/nextorm.examples.clickhouse.analytics.csproj" />
+    <Project Path="examples/nextorm.examples.mssql.adventureworks/nextorm.examples.mssql.adventureworks.csproj" />
+    <Project Path="examples/nextorm.examples.postgres.aviasales/nextorm.examples.postgres.aviasales.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/nextorm.clickhouse/nextorm.clickhouse.csproj" />
+    <Project Path="src/nextorm.mariadb/nextorm.mariadb.csproj" />
+    <Project Path="src/nextorm.mysql/nextorm.mysql.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/nextorm.clickhouse.tests/nextorm.clickhouse.tests.csproj" />
+    <Project Path="tests/nextorm.mariadb.tests/nextorm.mariadb.tests.csproj" />
+    <Project Path="tests/nextorm.mysql.tests/nextorm.mysql.tests.csproj" />
+    <Project Path="tests/nextorm.sqlserver.tests/nextorm.sqlserver.tests.csproj" />
+  </Folder>
+  <Project Path="benchmarks/nextorm.benchmark/nextorm.benchmark.csproj" />
+  <Project Path="src/nextorm.core.sourcegenerator/nextorm.core.sourcegenerator.csproj" />
+  <Project Path="src/nextorm.core/nextorm.core.csproj" />
+  <Project Path="src/nextorm.postgres/nextorm.postgres.csproj" />
+  <Project Path="src/nextorm.sqlite/nextorm.sqlite.csproj" />
+  <Project Path="src/nextorm.sqlserver/nextorm.sqlserver.csproj" />
+  <Project Path="tests/nextorm.core.tests/nextorm.core.tests.csproj" />
+  <Project Path="tests/nextorm.integration.tests/nextorm.integration.tests.csproj" />
+  <Project Path="tests/nextorm.postgres.tests/nextorm.postgres.tests.csproj" />
+  <Project Path="tests/nextorm.sqlite.tests/nextorm.sqlite.tests.csproj" />
+</Solution>
