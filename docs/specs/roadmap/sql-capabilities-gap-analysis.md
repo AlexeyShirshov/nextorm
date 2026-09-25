@@ -185,11 +185,14 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
    Todo: [`todo_clickhouse_aggregate_function_state.md`](todo_clickhouse_aggregate_function_state.md).
 11. **Dynamic-schema and server-scoped table sources.** The ClickHouse server/cluster table functions
     `url`/`s3`/`file`/`remote`/`remoteSecure`/`cluster`/`clusterAllReplicas` are shipped on
-    `SqlFunctions.ClickHouse.*` with a generic caller-declared `TRow` row interface; the dynamic-schema
-    `format`/`merge`/`input` remain on this item. Still open: ClickHouse `values()` (dynamic schema) and
-    PostgreSQL `jsonb_to_record(set)`.
+    `SqlFunctions.ClickHouse.*` with a generic caller-declared `TRow` row interface. **Shipped:** the
+    caller-declared result schema (`TableFunctionSchema`/`ResultSchema`) and its two native forms —
+    ClickHouse `values('a UInt8, b String', ...)` and PostgreSQL
+    `jsonb_to_record`/`jsonb_to_recordset(json) AS x(a int, b text)`; other providers reject them with
+    `NotSupportedException`. Remaining on this item: the dynamic-schema `format`/`merge`/`input` and
+    PostgreSQL `json_populate_record(set)`.
     Todo: [`todo_dynamic_result_schema.md`](todo_dynamic_result_schema.md).
-    Shipped: [Table-valued functions](../../guide/13-table-valued-functions.md#built-in-table-functions).
+    Shipped: [Dynamic result schema](../../guide/13-table-valued-functions.md#dynamic-result-schema).
 24. **DDL/DML + reading query in one SQL batch (pgbouncer-safe CTAS) — done.** `ToTempTableThen`/
     `ToTableThen` (and the general `BatchBuilder`) send a materialisation and the reading query as **one
     batch**, so the session-scoped table is visible to the read under a connection-level pooler
@@ -301,9 +304,18 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
     `Dictionary`/`List`/array by a query expression (jube's
     `y.ScheduleDate > tenants[y.TenantRegistryId.Value]`) now translates to a portable
     `CASE WHEN key = @k THEN @v … END`; a constant key folds to a parameter, and the in-memory context
-    evaluates the indexer natively. Previously the collection object was sent as a parameter and every
-    driver failed. The entry count is part of the plan key.
-    Docs: [Filtering](../../guide/02-filtering-where.md).
+     evaluates the indexer natively. Previously the collection object was sent as a parameter and every
+     driver failed. The entry count is part of the plan key.
+     Docs: [Filtering](../../guide/02-filtering-where.md).
+51. **PostgreSQL range types and `Overlaps` (`&&`) — shipped (`1.0-b.1`).** A provider-agnostic
+    `NextORM.Core.Range<T>` (`Lower`/`Upper`, bound inclusivity, unbounded sides, `IsEmpty`, `Empty`)
+    maps to `int4range`/`int8range`/`numrange`/`tsrange`/`tstzrange`/`daterange`; the PostgreSQL provider
+    binds it through Npgsql and reads it back with a typed `GetFieldValue<NpgsqlRange<T>>`. The
+    PostgreSQL-only surface on `SqlFunctions.Postgres` (`overlaps`, `range_contains`/`range_contained_by`,
+    the positional/adjacency/union/intersection/difference operators, `lower`/`upper`/`isempty` and the
+    constructors) is gated by `ISqlDialect.SupportsRanges`; the in-memory provider evaluates the
+    predicates with PostgreSQL semantics. Docs:
+    [PostgreSQL-specific SQL](../../guide/provider-specific/postgresql.md#range-types) (EN+RU).
 
 ---
 
@@ -484,6 +496,13 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
     is query-only (only the key upsert), and change tracking/`SaveChanges` and navigation properties stay out
     of scope by design.
     Shipped: [Data modification (INSERT)](../../guide/19-insert-statement.md), [Upsert (key merge)](../../guide/23-merge-statement.md#upsert-key-merge), [Full MERGE](../../guide/23-merge-statement.md#full-merge), [Delete](../../guide/20-delete-statement.md), [Update](../../guide/21-update-statement.md).
+    Phases 1 and 3 of [`todo_output_into.md`](todo_output_into.md) also shipped: SQL Server
+    `OUTPUT ... INTO` (`Returning(...).OutputInto(target)` writes the modified rows into an existing table;
+    `OutputIntoThenOutput(target)` also returns them) and key-upsert `Returning()`
+    (`ON CONFLICT ... RETURNING` on PostgreSQL/SQLite, `MERGE ... OUTPUT` on SQL Server; MySQL/MariaDB
+    reject it). Phase 2 (several result sets from one command) stays deferred: the batch executor already
+    navigates past the side-effecting statements' empty sets but exposes only the single reading query.
+    Shipped: [Writing the modified rows into a table](../../guide/19-insert-statement.md#writing-the-modified-rows-into-a-table-output-into), [Returning the merged rows](../../guide/23-merge-statement.md#returning-the-merged-rows).
 19. **Server/engine limits** (not fixable in nextorm): SQL Server has no `INTERSECT ALL`/`EXCEPT ALL`
     (the dialect correctly throws `NotSupportedException`); the ClickHouse `Memory` engine does not
     support `FINAL`/`PREWHERE`/`SAMPLE` (an integration-test limitation, not missing functionality).

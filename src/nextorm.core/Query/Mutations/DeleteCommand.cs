@@ -15,7 +15,8 @@ internal sealed class DeleteCommand : MutationCommand
     /// <param name="condition">The predicate command whose condition is rendered as the <c>WHERE</c>, or <see langword="null"/> for the key/all-rows forms.</param>
     /// <param name="keys">The declared key values of the key form, or <see langword="null"/> for the predicate/all-rows forms.</param>
     /// <param name="returningColumns">The mapped columns to return through <c>RETURNING</c>/<c>OUTPUT</c>, or <see langword="null"/> for a plain delete.</param>
-    public DeleteCommand(Type entityType, string tableName, bool isTableNameAuto, QueryCommand? condition, IReadOnlyList<KeyValue>? keys, IReadOnlyList<IPropertyMetadata>? returningColumns = null)
+    /// <param name="outputInto">The <c>OUTPUT ... INTO</c> target, or <see langword="null"/>.</param>
+    public DeleteCommand(Type entityType, string tableName, bool isTableNameAuto, QueryCommand? condition, IReadOnlyList<KeyValue>? keys, IReadOnlyList<IPropertyMetadata>? returningColumns = null, OutputIntoClause? outputInto = null)
         : base(SqlStatementType.Delete, entityType)
     {
         TableName = tableName;
@@ -23,6 +24,7 @@ internal sealed class DeleteCommand : MutationCommand
         Condition = condition;
         Keys = keys;
         ReturningColumns = returningColumns;
+        OutputInto = outputInto;
     }
 
     /// <summary>The mapped table name, before the naming convention and identifier quoting are applied.</summary>
@@ -42,4 +44,10 @@ internal sealed class DeleteCommand : MutationCommand
     /// <see langword="null"/> for a plain delete that only reports the affected-row count.
     /// </summary>
     public override IReadOnlyList<IPropertyMetadata>? ReturningColumns { get; }
+
+    /// <summary>
+    /// The <c>OUTPUT ... INTO</c> target whose rows receive the removed values, or <see langword="null"/>
+    /// for a plain delete. Independent of <see cref="ReturningColumns"/>.
+    /// </summary>
+    public override OutputIntoClause? OutputInto { get; }
 }

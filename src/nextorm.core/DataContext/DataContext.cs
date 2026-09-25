@@ -342,7 +342,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// types (SqlClient throws when a typed getter does not match the field type, for example an
     /// int column projected as long) can override this to read the value and convert it.
     /// </summary>
-    public virtual Expression MapColumnExpression(SelectExpression column, Expression param) => RowMapperFactory.MapColumn(column, param, Dialect.SupportsNativeDuration);
+    public virtual Expression MapColumnExpression(SelectExpression column, Expression param) => RowMapperFactory.MapColumn(column, param, Dialect.SupportsNativeDuration, Dialect);
 
     /// <summary>Resets the cached execution plan of <paramref name="queryCommand"/> so it is rebuilt on next use.</summary>
     /// <param name="queryCommand">The command whose plan should be discarded.</param>
@@ -360,7 +360,6 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     // not widen the context's public surface; the public entry points live on the InsertBuilder.
     string IMutationExecutor.Render(MutationCommand command)
     {
-        EnsureReturningSupportedIfNeeded(command);
         return BuildMutationSql(command).Sql;
     }
 
@@ -591,7 +590,9 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     }
 
     private (string Sql, List<Parameter> Parameters) BuildMutationSql(MutationCommand command)
-        => command switch
+    {
+        EnsureReturningSupportedIfNeeded(command);
+        return command switch
         {
             InsertCommand insert => BuildInsertSql(insert),
             UpdateCommand update => BuildUpdateSql(update),
@@ -604,6 +605,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             DropTableCommand dropTable => BuildDropTableSql(dropTable),
             _ => throw new NotSupportedException($"Unsupported mutation command {command.GetType().Name}."),
         };
+    }
 
     private (string Sql, List<Parameter> Parameters) BuildMergeSql(MergeCommand command)
     {
@@ -865,8 +867,17 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
     private void EnsureReturningSupportedIfNeeded(MutationCommand command)
     {
+        if (command.OutputInto is not null)
+            EnsureOutputIntoSupported();
         if (command.ReturningColumns is { Count: > 0 })
             EnsureReturningSupported();
+    }
+
+    private void EnsureOutputIntoSupported()
+    {
+        if (!Dialect.SupportsOutputInto)
+            throw new NotSupportedException(
+                $"{GetType().Name} cannot write modified rows into a table through OUTPUT ... INTO: the provider has no OUTPUT INTO form (SQL Server only).");
     }
 
     private void EnsureIdentityFunctionSupported()

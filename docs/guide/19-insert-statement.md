@@ -406,6 +406,43 @@ interface-mapped entity either project the columns (`Returning(x => new { x.Id, 
 class that implements the interface; `Returning()` on the interface itself throws a
 `NotSupportedException` at execution.
 
+## Writing the modified rows into a table (`OUTPUT INTO`)
+
+SQL Server can write the modified rows into an existing table instead of (or in addition to) returning
+them to the client, through the `OUTPUT ... INTO <target>(columns)` form. Start from a returning
+builder and call `OutputInto(targetTable)`:
+
+```csharp
+// write the inserted rows into audit_log; nothing is returned to the client
+var written = ctx.InsertInto<Order>()
+    .Value(x => x.Name, "a")
+    .Returning(x => new { x.Id, x.Name })
+    .OutputInto("audit_log")
+    .Execute();                       // int: affected-row count
+
+// write into audit_log and also return the same rows to the client (second OUTPUT)
+var rows = ctx.InsertInto<Order>()
+    .Value(x => x.Name, "a")
+    .Returning(x => new { x.Id, x.Name })
+    .OutputIntoThenOutput("audit_log")
+    .ToList();                        // IReadOnlyList<{ Id, Name }>
+```
+
+* `OutputInto(...)` returns an [`OutputIntoBuilder`](xref:NextORM.Core.OutputIntoBuilder)
+  whose only terminals are `Execute()`/`ExecuteAsync()` (affected-row count) and `ToSql()`. It has no row
+  terminals, because nothing reaches the client.
+* `OutputIntoThenOutput(...)` returns the ordinary returning builder, so `Single()`/`ToList()` still work;
+  the statement carries both the `INTO` and the client `OUTPUT` clauses.
+* The target is an explicit table name — nextorm does not declare a table variable (`DECLARE @t TABLE ...`)
+  in this phase. The target must already exist with columns that have the same names as the selected output
+  columns (the selected column list is reused as the target column list); the target name and columns are
+  quoted like any other identifier.
+* The same two methods are available on the `UPDATE` and `DELETE` returning builders (a `DELETE` reads the
+  removed row through the `deleted` alias). A target name that is null or empty, or the identity-function
+  form (`ReturningIdentity<TKey>()`, which selects no column), throws.
+* Only SQL Server implements `ISqlDialect.SupportsOutputInto`; every other provider throws
+  `NotSupportedException` when the statement renders.
+
 ## Bulk insert
 
 Writing a whole set — native bulk paths, chunking, `Returning`, `IgnoreDuplicates` and `KeepIdentity` —
@@ -443,6 +480,8 @@ var sql = ctx.InsertInto<ISimpleEntity>().Value(x => x.Name, "a").ToSql();
 `INSERT ... VALUES` itself is cross-provider and ungated: the same `InsertInto<T>()` API works on every
 SQL provider. Only the generated-key form differs, and a provider that cannot express it rejects
 `ReturningIdentity`/`ReturningKey` with `NotSupportedException` instead of emitting invalid SQL.
+SQL Server additionally writes the modified rows into an existing table with `OUTPUT INTO`; see
+[Writing the modified rows into a table](#writing-the-modified-rows-into-a-table-output-into).
 
 ## Notes and phase-1 limits
 

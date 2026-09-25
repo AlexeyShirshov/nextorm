@@ -377,4 +377,56 @@ public class InsertSqlGenerationTests
             .ToSql()
             .Should().Be("insert into insert_entity (name) values (default)");
     }
+
+    [Fact]
+    public void OutputInto_ShouldRenderIntoClause()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        ctx.InsertInto<IInsertEntity>()
+            .Value(x => x.Name, "a")
+            .Returning(x => new { x.Id, x.Name })
+            .OutputInto("audit_log")
+            .ToSql()
+            .Should().Be("insert into insert_entity (name) output inserted.id, inserted.name into audit_log (id, name) values (@p0)");
+    }
+
+    [Fact]
+    public void OutputIntoThenOutput_ShouldRenderIntoAndClientOutput()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        ctx.InsertInto<IInsertEntity>()
+            .Value(x => x.Name, "a")
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoThenOutput("audit_log")
+            .ToSql()
+            .Should().Be("insert into insert_entity (name) output inserted.id, inserted.name into audit_log (id, name) output inserted.id, inserted.name values (@p0)");
+    }
+
+    [Fact]
+    public void OutputInto_QuotedIdentifiers_ShouldQuoteTarget()
+    {
+        using var ctx = SqlServerTestContext.CreateQuoted();
+
+        ctx.InsertInto<IInsertEntity>()
+            .Value(x => x.Name, "a")
+            .Returning(x => x.Id)
+            .OutputInto("audit_log")
+            .ToSql()
+            .Should().Be("insert into [insert_entity] ([name]) output inserted.[id] into [audit_log] ([id]) values (@p0)");
+    }
+
+    [Fact]
+    public void OutputInto_IdentityFunction_ShouldThrow()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var act = () => ctx.InsertInto<IInsertEntity>()
+            .Value(x => x.Name, "a")
+            .ReturningIdentity<long>()
+            .OutputInto("audit_log");
+
+        act.Should().Throw<NotSupportedException>();
+    }
 }

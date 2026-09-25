@@ -68,7 +68,7 @@ ctx.MergeInto<IDest>()
 
 ### Returning the merged rows
 
-[`Returning()`](xref:NextORM.Core.MergeBuilder`1.Returning) and [`Returning(x => new { ... })`](xref:NextORM.Core.MergeBuilder`1.Returning``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) materialise the merged rows through the provider's output clause — SQL Server `OUTPUT inserted.<col>`, PostgreSQL `RETURNING target.<col>` (17+). Read them with `Single()`/`SingleAsync()`/`ToList()`/`ToListAsync()`:
+[`Returning()`](xref:NextORM.Core.MergeBuilder`1.Returning) and [`Returning(x => new { ... })`](xref:NextORM.Core.MergeBuilder`1.Returning``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) materialise the merged rows through the provider's output clause. Read them with `Single()`/`SingleAsync()`/`ToList()`/`ToListAsync()`:
 
 ```csharp
 var rows = ctx.MergeInto<IDest>()
@@ -80,7 +80,12 @@ var rows = ctx.MergeInto<IDest>()
     .ToList();
 ```
 
-The key-upsert form (`WhenMatchedUpdate()`/`WhenNotMatchedInsert()`) does not return rows; use the branch form. SQLite/MySQL/MariaDB and ClickHouse reject the full `MERGE` (and therefore returning) with `NotSupportedException`.
+Returning is available on **both** forms. SQL Server renders the portable key upsert as a
+`MERGE ... OUTPUT inserted.<col>`, while PostgreSQL and SQLite append `RETURNING` to their
+`ON CONFLICT ... DO UPDATE` form; the full `MERGE` returns through SQL Server `OUTPUT inserted.<col>`
+and PostgreSQL 17+ `RETURNING target.<col>`. MySQL/MariaDB have no row-returning key-upsert form, so
+`.Returning()` there throws `NotSupportedException`; SQLite and ClickHouse still reject the full
+`MERGE` (and PostgreSQL 15+ only gained the statement itself).
 
 ## Inspecting the SQL
 
@@ -99,11 +104,11 @@ var sql = ctx.MergeInto<ISimpleEntity>()
 
 | Provider | Key upsert | Full `MERGE` | `RETURNING`/`OUTPUT` | Notes |
 |---|---|---|---|---|
-| SQL Server | `MERGE ... USING (VALUES ...)` | yes | `OUTPUT inserted.<col>` | every branch, including `WHEN NOT MATCHED BY SOURCE` |
-| PostgreSQL | `ON CONFLICT ... DO UPDATE` | yes (15+) | `RETURNING target.<col>` (17+) | `DO NOTHING`; no `BY SOURCE` |
-| SQLite | `ON CONFLICT ... DO UPDATE` | — | — | key upsert only |
-| MySQL | `ON DUPLICATE KEY UPDATE` | — | — | key upsert only |
-| MariaDB | `ON DUPLICATE KEY UPDATE` | — | — | key upsert only |
+| SQL Server | `MERGE ... USING (VALUES ...)` | yes | `OUTPUT inserted.<col>` (key upsert and full) | every branch, including `WHEN NOT MATCHED BY SOURCE` |
+| PostgreSQL | `ON CONFLICT ... DO UPDATE` | yes (15+) | `RETURNING` (key upsert 9.5+, full 17+) | `DO NOTHING`; no `BY SOURCE` |
+| SQLite | `ON CONFLICT ... DO UPDATE` | — | `RETURNING` (key upsert, 3.35+) | key upsert only |
+| MySQL | `ON DUPLICATE KEY UPDATE` | — | — | key upsert only; no `RETURNING` |
+| MariaDB | `ON DUPLICATE KEY UPDATE` | — | — | key upsert only; `RETURNING` is not used for `ON DUPLICATE KEY` |
 | In-memory | applied to the registered sequence | — | — | key upsert only, no SQL |
 | ClickHouse | `NotSupportedException` | `NotSupportedException` | `NotSupportedException` | no engine-level upsert |
 

@@ -66,6 +66,8 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <inheritdoc/>
     public virtual bool SupportsHigherOrderArrayFunctions => false;
     /// <inheritdoc/>
+    public virtual bool SupportsRanges => false;
+    /// <inheritdoc/>
     public virtual bool SupportsArrayJoin => false;
     /// <inheritdoc/>
     public virtual IStringSplitRenderer? StringSplit => null;
@@ -698,6 +700,17 @@ public abstract class SqlDialectBase : ISqlDialect
     /// <inheritdoc/>
     public virtual bool SupportsTableFunction(string name) => false;
 
+    /// <summary>Defaults to <c>false</c>; ClickHouse and PostgreSQL opt into a row-derived result schema for their native placement.</summary>
+    public virtual bool SupportsResultSchema(TableFunctionSchema placement) => false;
+
+    /// <summary>Renders a result-schema column type by unwrapping the nullable CLR type and delegating to <see cref="MakeTypeName"/>.</summary>
+    public virtual string MakeResultColumnType(Type clrType, bool nullable)
+        => MakeTypeName(Nullable.GetUnderlyingType(clrType) ?? clrType);
+
+    /// <summary>Defaults to the plain table alias; PostgreSQL appends the column-definition list.</summary>
+    public virtual string MakeTableFunctionAlias(string tableAlias, string? columnDefinitionList, KeywordCase keywordCase = KeywordCase.Lower)
+        => MakeTableAlias(tableAlias, keywordCase);
+
     /// <summary>Defaults to <c>false</c>; every SQL provider overrides it to <c>true</c> (derived tables).</summary>
     public virtual bool SupportsRawSqlSource => false;
 
@@ -785,6 +798,16 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual string MakeOutput(IReadOnlyList<string> columns, KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, " output ") + string.Join(", ", columns.Select(static c => "inserted." + c));
     /// <summary>Renders <c>OUTPUT deleted.&lt;column&gt; ...</c> for a <c>DELETE</c>; only reached through a dialect that set <see cref="SupportsOutput"/>.</summary>
     public virtual string MakeDeletedOutput(IReadOnlyList<string> columns, KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, " output ") + string.Join(", ", columns.Select(static c => "deleted." + c));
+    /// <summary>Defaults to <c>false</c>; only SQL Server opts into <c>OUTPUT ... INTO</c>.</summary>
+    public virtual bool SupportsOutputInto => false;
+    /// <summary>Renders the <c>OUTPUT inserted.&lt;columns&gt; INTO &lt;target&gt;(columns)</c> clause; only reached through a dialect that set <see cref="SupportsOutputInto"/>.</summary>
+    public virtual string MakeOutputInto(IReadOnlyList<string> columns, string target, IReadOnlyList<string> targetColumns, KeywordCase keywordCase = KeywordCase.Lower)
+        => Kw(keywordCase, " output ") + string.Join(", ", columns.Select(static c => "inserted." + c))
+            + Kw(keywordCase, " into ") + target + " (" + string.Join(", ", targetColumns) + ")";
+    /// <summary>Renders the <c>OUTPUT deleted.&lt;columns&gt; INTO &lt;target&gt;(columns)</c> clause of a DELETE; only reached through a dialect that set <see cref="SupportsOutputInto"/>.</summary>
+    public virtual string MakeDeletedOutputInto(IReadOnlyList<string> columns, string target, IReadOnlyList<string> targetColumns, KeywordCase keywordCase = KeywordCase.Lower)
+        => Kw(keywordCase, " output ") + string.Join(", ", columns.Select(static c => "deleted." + c))
+            + Kw(keywordCase, " into ") + target + " (" + string.Join(", ", targetColumns) + ")";
     /// <summary>Renders the scalar query for the last generated identity; only reached through a dialect that set <see cref="SupportsLastInsertId"/>.</summary>
     public virtual string MakeLastInsertId(KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, "select last_insert_rowid()");
     /// <summary>Defaults to <see cref="SupportsLastInsertId"/>; SQL Server and PostgreSQL opt in explicitly.</summary>
@@ -834,7 +857,8 @@ public abstract class SqlDialectBase : ISqlDialect
         IReadOnlyList<string> keys,
         IReadOnlyList<string> updateColumns,
         string valuesRows,
-        KeywordCase keywordCase = KeywordCase.Lower)
+        KeywordCase keywordCase = KeywordCase.Lower,
+        IReadOnlyList<string>? returningColumns = null)
         => throw new NotSupportedException($"{GetType().Name} cannot render a MERGE upsert.");
 
     /// <summary>Defaults to <c>false</c>; SQL Server and PostgreSQL 15+ opt into the general, multi-branch <c>MERGE</c>.</summary>

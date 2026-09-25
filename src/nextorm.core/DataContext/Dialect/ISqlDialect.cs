@@ -180,6 +180,15 @@ public interface ISqlDialect
     bool SupportsHigherOrderArrayFunctions { get; }
 
     /// <summary>
+    /// True when the provider has a native range type and can render the range surface: the
+    /// <see cref="Range{T}"/> constructors/functions/operators on <see cref="PostgresFunctions"/>
+    /// (<c>overlaps</c>, <c>range_contains</c>/<c>range_contained_by</c>, <c>range_union</c>, …). The
+    /// safe default is <c>false</c>; only PostgreSQL opts in today. Declared as a default interface
+    /// method so existing external implementations keep compiling.
+    /// </summary>
+    bool SupportsRanges => false;
+
+    /// <summary>
     /// True when the provider exposes the row-value surface: the constructor (PostgreSQL <c>ROW(a, b)</c>,
     /// ClickHouse <c>tuple(a, b)</c>) built from <c>Tuple.Create</c>/<c>new Tuple&lt;...&gt;</c>/
     /// <c>new ValueTuple&lt;...&gt;</c> and element access (from <c>.ItemN</c>). Equivalent to
@@ -1036,6 +1045,46 @@ public interface ISqlDialect
     /// </summary>
     bool SupportsTableFunction(string name);
     /// <summary>
+    /// True when the provider can render a table-function result schema derived from the mapped row
+    /// type in the requested <paramref name="placement"/> form: as a leading structure argument
+    /// (ClickHouse <c>values</c>, <see cref="TableFunctionSchema.LeadingArgument"/>) or as an alias
+    /// column-definition list (PostgreSQL <c>jsonb_to_record</c>,
+    /// <see cref="TableFunctionSchema.AliasColumnList"/>). The safe default is <c>false</c>; a provider
+    /// that returns <c>false</c> for the declared form rejects such a source with a clear
+    /// <see cref="System.NotSupportedException"/>. Declared as a default interface method so existing
+    /// external implementations keep compiling.
+    /// </summary>
+    /// <param name="placement">The declared result-schema form to render.</param>
+    /// <returns><see langword="true"/> when the provider supports that form.</returns>
+    bool SupportsResultSchema(TableFunctionSchema placement) => false;
+    /// <summary>
+    /// Renders the native type of a result-schema column from its CLR type, using the provider's type
+    /// mapping. <paramref name="nullable"/> is <see langword="true"/> when the CLR type is a nullable
+    /// value type (<c>Nullable&lt;T&gt;</c>), so a provider whose native type is not nullable by
+    /// default (ClickHouse) can wrap it. Only called when the provider supports the declared result
+    /// schema (see <see cref="SupportsResultSchema(TableFunctionSchema)"/>). The default unwraps the
+    /// nullable CLR type and delegates to <see cref="MakeTypeName"/>.
+    /// </summary>
+    /// <param name="clrType">The CLR type of the result column.</param>
+    /// <param name="nullable">Whether the CLR type is a nullable value type.</param>
+    /// <returns>The provider type name.</returns>
+    string MakeResultColumnType(Type clrType, bool nullable)
+        => MakeTypeName(Nullable.GetUnderlyingType(clrType) ?? clrType);
+    /// <summary>
+    /// Renders the alias clause of a table-valued function source. When
+    /// <paramref name="columnDefinitionList"/> is not <see langword="null"/>, the alias carries the
+    /// declared result schema (<c>as x(a int, b text)</c>, PostgreSQL); the default ignores it and
+    /// delegates to <see cref="MakeTableAlias"/>. Only called when the provider supports
+    /// <see cref="TableFunctionSchema.AliasColumnList"/> (see
+    /// <see cref="SupportsResultSchema(TableFunctionSchema)"/>) and the function declares that form.
+    /// </summary>
+    /// <param name="tableAlias">The generated source alias.</param>
+    /// <param name="columnDefinitionList">The rendered column-definition list, or <see langword="null"/>.</param>
+    /// <param name="keywordCase">The keyword casing.</param>
+    /// <returns>The alias clause text.</returns>
+    string MakeTableFunctionAlias(string tableAlias, string? columnDefinitionList, KeywordCase keywordCase = KeywordCase.Lower)
+        => MakeTableAlias(tableAlias, keywordCase);
+    /// <summary>
     /// True when the provider can use a raw SQL fragment as a composable <c>FROM</c> source rendered as a
     /// derived table (<c>(&lt;sql&gt;) AS alias</c>; see <see cref="DataContextExtensions.FromSql"/>). The
     /// safe default is <c>false</c>; a provider that leaves it <c>false</c> rejects such a source with a
@@ -1273,6 +1322,31 @@ public interface ISqlDialect
     /// </summary>
     string MakeDeletedOutput(IReadOnlyList<string> columns, KeywordCase keywordCase = KeywordCase.Lower) => SqlKeywords.Of(keywordCase, " output ") + string.Join(", ", columns.Select(static c => "deleted." + c));
     /// <summary>
+    /// Whether the dialect can place an <c>OUTPUT inserted.&lt;column&gt; ... INTO &lt;target&gt;(columns)</c>
+    /// clause on a data-modifying statement so the written rows land in an existing table instead of the
+    /// client (SQL Server). Declared as a default interface method returning <c>false</c> so existing
+    /// external implementations keep compiling; a dialect that opts in also uses <see cref="MakeOutputInto"/>.
+    /// </summary>
+    bool SupportsOutputInto => false;
+    /// <summary>
+    /// Renders the <c>OUTPUT inserted.&lt;columns&gt; INTO &lt;target&gt;(targetColumns)</c> clause of a
+    /// data-modifying statement, using the write-side <c>inserted</c> alias (insert, update). Only called
+    /// when <see cref="SupportsOutputInto"/> is <c>true</c>. The columns are the already-rendered output
+    /// columns; <paramref name="target"/> and <paramref name="targetColumns"/> are the target table and the
+    /// target columns they map to by position.
+    /// </summary>
+    string MakeOutputInto(IReadOnlyList<string> columns, string target, IReadOnlyList<string> targetColumns, KeywordCase keywordCase = KeywordCase.Lower)
+        => SqlKeywords.Of(keywordCase, " output ") + string.Join(", ", columns.Select(static c => "inserted." + c))
+            + SqlKeywords.Of(keywordCase, " into ") + target + " (" + string.Join(", ", targetColumns) + ")";
+    /// <summary>
+    /// Renders the <c>OUTPUT deleted.&lt;columns&gt; INTO &lt;target&gt;(targetColumns)</c> clause of a
+    /// <c>DELETE</c> (SQL Server reads the removed row through the <c>deleted</c> alias). Only called when
+    /// <see cref="SupportsOutputInto"/> is <c>true</c>.
+    /// </summary>
+    string MakeDeletedOutputInto(IReadOnlyList<string> columns, string target, IReadOnlyList<string> targetColumns, KeywordCase keywordCase = KeywordCase.Lower)
+        => SqlKeywords.Of(keywordCase, " output ") + string.Join(", ", columns.Select(static c => "deleted." + c))
+            + SqlKeywords.Of(keywordCase, " into ") + target + " (" + string.Join(", ", targetColumns) + ")";
+    /// <summary>
     /// Renders the scalar query that returns the last generated identity of the current session. Only
     /// called when <see cref="SupportsLastInsertId"/> is <c>true</c>.
     /// </summary>
@@ -1430,6 +1504,7 @@ public interface ISqlDialect
     /// <param name="updateColumns">The quoted non-key columns updated on a match.</param>
     /// <param name="valuesRows">The rendered <c>(&lt;values&gt;), (&lt;values&gt;)</c> rows of the derived source.</param>
     /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
+    /// <param name="returningColumns">The quoted columns to return through <c>OUTPUT</c> (SQL Server), or <see langword="null"/> when the key upsert returns no rows.</param>
     /// <returns>The rendered <c>MERGE</c> statement, terminated by a semicolon.</returns>
     string MakeMerge(
         string target,
@@ -1437,7 +1512,8 @@ public interface ISqlDialect
         IReadOnlyList<string> keys,
         IReadOnlyList<string> updateColumns,
         string valuesRows,
-        KeywordCase keywordCase = KeywordCase.Lower)
+        KeywordCase keywordCase = KeywordCase.Lower,
+        IReadOnlyList<string>? returningColumns = null)
         => throw new NotSupportedException($"{GetType().Name} cannot render a MERGE upsert.");
 
     /// <summary>

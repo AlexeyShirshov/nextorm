@@ -58,7 +58,7 @@ internal static class SqlMutationBuilder
             if (command.Source is not null)
                 RenderSourceInsert(writer, dialect, quoteIdentifiers, namingConvention, command, returningColumns, sourceSql, sourceParameters, parameters, keywordCase, overrideIdentity, emitConflictDoNothing);
             else if (command.Columns.Count == 0)
-                RenderDefaultValuesInsert(writer, dialect, returningColumns, keywordCase);
+                RenderDefaultValuesInsert(writer, dialect, quoteIdentifiers, namingConvention, command, returningColumns, keywordCase);
             else
                 RenderValuesInsert(writer, dialect, quoteIdentifiers, namingConvention, command, returningColumns, parameters, keywordCase, parameterProvider, overrideIdentity, emitConflictDoNothing);
 
@@ -100,8 +100,7 @@ internal static class SqlMutationBuilder
         if (overrideIdentity.Length > 0)
             writer.Append(overrideIdentity);
 
-        if (returningColumns is not null && dialect.SupportsOutput)
-            writer.Append(dialect.MakeOutput(returningColumns, keywordCase));
+        AppendOutputClauses(writer, dialect, quoteIdentifiers, namingConvention, command.OutputInto, returningColumns, deleted: false, keywordCase);
 
         writer.Append(' ').Append(sourceSql);
 
@@ -120,14 +119,16 @@ internal static class SqlMutationBuilder
     private static void RenderDefaultValuesInsert(
         StringBuilder writer,
         ISqlDialect dialect,
+        bool quoteIdentifiers,
+        INamingConvention? namingConvention,
+        InsertCommand command,
         IReadOnlyList<string>? returningColumns,
         KeywordCase keywordCase)
     {
         if (!dialect.SupportsDefaultValues)
             throw new NotSupportedException($"{dialect.GetType().Name} cannot insert a row that writes only column defaults.");
 
-        if (returningColumns is not null && dialect.SupportsOutput)
-            writer.Append(dialect.MakeOutput(returningColumns, keywordCase));
+        AppendOutputClauses(writer, dialect, quoteIdentifiers, namingConvention, command.OutputInto, returningColumns, deleted: false, keywordCase);
 
         writer.Append(dialect.MakeDefaultValues(keywordCase));
 
@@ -158,9 +159,9 @@ internal static class SqlMutationBuilder
         // T-SQL places OUTPUT between the column list and VALUES; the ANSI RETURNING clause is
         // appended after VALUES (below). The returned column set is either the explicit
         // ReturningColumns of a Returning()/Returning(projection) terminal, or the single
-        // identity/key column of the ReturningIdentity/ReturningKey terminals.
-        if (returningColumns is not null && dialect.SupportsOutput)
-            writer.Append(dialect.MakeOutput(returningColumns, keywordCase));
+        // identity/key column of the ReturningIdentity/ReturningKey terminals. An OUTPUT INTO
+        // target is emitted first, followed by the client OUTPUT when both are requested.
+        AppendOutputClauses(writer, dialect, quoteIdentifiers, namingConvention, command.OutputInto, returningColumns, deleted: false, keywordCase);
 
         writer.Append(SqlKeywords.Of(keywordCase, " values "));
 
@@ -266,9 +267,9 @@ internal static class SqlMutationBuilder
             var returningColumns = RenderColumnsOrNull(dialect, quoteIdentifiers, namingConvention, command.ReturningColumns);
 
             // T-SQL places OUTPUT between the target and the filter; the ANSI RETURNING clause is appended
-            // after the filter (below). MySQL/MariaDB have neither.
-            if (returningColumns is not null && dialect.SupportsOutput)
-                writer.Append(dialect.MakeDeletedOutput(returningColumns, keywordCase));
+            // after the filter (below). MySQL/MariaDB have neither. DELETE reads the removed row through
+            // the deleted alias.
+            AppendOutputClauses(writer, dialect, quoteIdentifiers, namingConvention, command.OutputInto, returningColumns, deleted: true, keywordCase);
 
             if (command.Keys is { Count: > 0 } keys)
             {
@@ -352,8 +353,7 @@ internal static class SqlMutationBuilder
 
             // T-SQL places OUTPUT between the SET list and the filter; the ANSI RETURNING clause is
             // appended at the very end (below). MySQL/MariaDB have neither.
-            if (returningColumns is not null && dialect.SupportsOutput)
-                writer.Append(dialect.MakeOutput(returningColumns, keywordCase));
+            AppendOutputClauses(writer, dialect, quoteIdentifiers, namingConvention, command.OutputInto, returningColumns, deleted: false, keywordCase);
 
             if (command.Keys is { Count: > 0 } keys)
             {
@@ -572,6 +572,19 @@ internal static class SqlMutationBuilder
 
             writer.Append(updates[i]).Append(" = ").Append(dialect.MakeUpsertValueReference(updates[i], keywordCase));
         }
+
+        // A key upsert returns the written rows through the provider's RETURNING form (PostgreSQL, SQLite
+        // 3.35+) where it has one. MySQL/MariaDB's ON DUPLICATE KEY UPDATE has no row-returning form, so a
+        // requested return is rejected instead of silently returning nothing.
+        var returningColumns = RenderColumnsOrNull(dialect, quoteIdentifiers, namingConvention, command.ReturningColumns);
+        if (returningColumns is not null)
+        {
+            if (!dialect.SupportsReturning)
+                throw new NotSupportedException(
+                    $"{dialect.GetType().Name} cannot return rows from a key upsert: its ON CONFLICT/ON DUPLICATE KEY form has no RETURNING clause. Use the full-MERGE branch form where the provider supports it.");
+
+            writer.Append(dialect.MakeReturning(returningColumns, keywordCase));
+        }
     }
 
     // MERGE INTO <target> USING (VALUES ...) AS source (<cols>) ON ... WHEN MATCHED THEN UPDATE SET ...
@@ -594,11 +607,16 @@ internal static class SqlMutationBuilder
         var keys = RenderColumns(dialect, quoteIdentifiers, namingConvention, command.Keys);
         var updates = RenderColumns(dialect, quoteIdentifiers, namingConvention, command.UpdateColumns);
 
+        var returningColumns = RenderColumnsOrNull(dialect, quoteIdentifiers, namingConvention, command.ReturningColumns);
+        if (returningColumns is not null && !dialect.SupportsOutput)
+            throw new NotSupportedException(
+                $"{dialect.GetType().Name} cannot return rows from a key upsert: its MERGE form has no OUTPUT clause.");
+
         var rows = StringBuilderPool.Shared.Get();
         try
         {
             AppendValuesRows(rows, dialect, quoteIdentifiers, namingConvention, command.Columns, command.RowCount, parameters, keywordCase, parameterProvider);
-            writer.Append(dialect.MakeMerge(table, columns, keys, updates, rows.ToString(), keywordCase));
+            writer.Append(dialect.MakeMerge(table, columns, keys, updates, rows.ToString(), keywordCase, returningColumns));
         }
         finally
         {
@@ -858,6 +876,45 @@ internal static class SqlMutationBuilder
 
     private static string[]? RenderColumnsOrNull(ISqlDialect dialect, bool quoteIdentifiers, INamingConvention? namingConvention, IReadOnlyList<IPropertyMetadata>? columns)
         => columns is { Count: > 0 } ? RenderColumns(dialect, quoteIdentifiers, namingConvention, columns) : null;
+
+    // The write-side output clauses of an INSERT/UPDATE/DELETE. SQL Server places them before the
+    // source/values/filter; an OUTPUT INTO target is emitted first, then the optional client OUTPUT over
+    // the same rows. A dialect without SupportsOutput silently renders nothing for a plain RETURNING-style
+    // output (the builder-level guard has already accepted the provider), but a requested OUTPUT INTO on a
+    // provider without the form is rejected here.
+    private static void AppendOutputClauses(
+        StringBuilder writer,
+        ISqlDialect dialect,
+        bool quoteIdentifiers,
+        INamingConvention? namingConvention,
+        OutputIntoClause? outputInto,
+        IReadOnlyList<string>? returningColumns,
+        bool deleted,
+        KeywordCase keywordCase)
+    {
+        if (outputInto is not null)
+        {
+            if (!dialect.SupportsOutputInto)
+                throw new NotSupportedException(
+                    $"{dialect.GetType().Name} cannot write modified rows into a table through OUTPUT ... INTO: the provider has no OUTPUT INTO form (SQL Server only).");
+
+            if (outputInto.Columns.Count == 0)
+                throw new NotSupportedException("OUTPUT ... INTO needs at least one output column.");
+
+            var intoColumns = RenderColumns(dialect, quoteIdentifiers, namingConvention, outputInto.Columns);
+            var target = quoteIdentifiers ? dialect.QuoteIdentifier(outputInto.TableName) : outputInto.TableName;
+            writer.Append(deleted
+                ? dialect.MakeDeletedOutputInto(intoColumns, target, intoColumns, keywordCase)
+                : dialect.MakeOutputInto(intoColumns, target, intoColumns, keywordCase));
+        }
+
+        if (returningColumns is not null && dialect.SupportsOutput)
+        {
+            writer.Append(deleted
+                ? dialect.MakeDeletedOutput(returningColumns, keywordCase)
+                : dialect.MakeOutput(returningColumns, keywordCase));
+        }
+    }
 
     // One "(<values>)" tuple per row, separated by ", " (without the leading VALUES keyword).
     private static void AppendValuesRows(

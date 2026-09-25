@@ -175,14 +175,28 @@ public sealed class DeleteBuilder<TEntity>
 
     /// <summary>Builds the delete command carrying the columns to return through <c>RETURNING</c>/<c>OUTPUT</c>.</summary>
     /// <param name="returningColumns">The mapped columns to return.</param>
+    /// <param name="outputInto">The <c>OUTPUT ... INTO</c> target, or <see langword="null"/>.</param>
     /// <returns>The delete command carrying the returned columns.</returns>
-    internal DeleteCommand BuildReturningCommand(IReadOnlyList<IPropertyMetadata> returningColumns)
+    internal DeleteCommand BuildReturningCommand(IReadOnlyList<IPropertyMetadata> returningColumns, OutputIntoClause? outputInto = null)
     {
         if (_filter is null && !_all)
             throw new InvalidOperationException("A delete needs a predicate; call Where(...) or All() to delete every row.");
 
         var condition = _filter?.ToCommand();
-        return new DeleteCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, condition, null, returningColumns);
+        return new DeleteCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, condition, null, returningColumns, outputInto);
+    }
+
+    /// <summary>Builds the delete command for an <c>OUTPUT ... INTO</c>-only terminal: the removed rows are written into the target and nothing is returned to the client.</summary>
+    /// <param name="outputColumns">The mapped columns written into the target.</param>
+    /// <param name="targetTable">The raw (unquoted) target table name.</param>
+    /// <returns>The delete command carrying the output-into target.</returns>
+    internal DeleteCommand BuildOutputIntoCommand(IReadOnlyList<IPropertyMetadata> outputColumns, string targetTable)
+    {
+        if (_filter is null && !_all)
+            throw new InvalidOperationException("A delete needs a predicate; call Where(...) or All() to delete every row.");
+
+        var condition = _filter?.ToCommand();
+        return new DeleteCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, condition, null, null, new OutputIntoClause(targetTable, outputColumns));
     }
 
     private IPropertyMetadata? FindProperty(PropertyInfo property)

@@ -148,19 +148,18 @@ public class MergeSqlGenerationTests
     }
 
     [Fact]
-    public void Returning_WithoutBranches_ShouldThrow()
+    public void KeyUpsert_Returning_ShouldRenderOutput()
     {
         using var ctx = SqlServerTestContext.Create();
 
-        var act = () => ctx.MergeInto<IMergeEntity>()
+        ctx.MergeInto<IMergeEntity>()
             .Using(new MergeEntity { Id = 1, Name = "a", Age = 5 })
             .OnKeys()
             .WhenMatchedUpdate()
             .WhenNotMatchedInsert()
-            .Returning(x => new { x.Id })
-            .ToSql();
-
-        act.Should().Throw<NotSupportedException>();
+            .Returning(x => new { x.Id, x.Name })
+            .ToSql()
+            .Should().Be("merge into merge_entity as target using (values (@p0, @p1, @p2)) as source (id, name, age) on target.id = source.id when matched then update set target.name = source.name, target.age = source.age when not matched then insert (id, name, age) values (source.id, source.name, source.age) output inserted.id, inserted.name;");
     }
 
     [Fact]

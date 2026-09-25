@@ -217,14 +217,28 @@ public sealed class UpdateBuilder<TEntity>
 
     /// <summary>Builds the update command carrying the columns to return through <c>RETURNING</c>/<c>OUTPUT</c>.</summary>
     /// <param name="returningColumns">The mapped columns to return.</param>
+    /// <param name="outputInto">The <c>OUTPUT ... INTO</c> target, or <see langword="null"/>.</param>
     /// <returns>The update command carrying the returned columns.</returns>
-    internal UpdateCommand BuildReturningCommand(IReadOnlyList<IPropertyMetadata> returningColumns)
+    internal UpdateCommand BuildReturningCommand(IReadOnlyList<IPropertyMetadata> returningColumns, OutputIntoClause? outputInto = null)
     {
         if (_assignments.Count == 0)
             throw new InvalidOperationException("An update needs at least one assignment; call Set(...) or Set(entity).");
 
         var source = (_filter ?? _dataContext.From<TEntity>()).ToCommand();
-        return new UpdateCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, _assignments, source, null, returningColumns);
+        return new UpdateCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, _assignments, source, null, returningColumns, outputInto);
+    }
+
+    /// <summary>Builds the update command for an <c>OUTPUT ... INTO</c>-only terminal: the updated rows are written into the target and nothing is returned to the client.</summary>
+    /// <param name="outputColumns">The mapped columns written into the target.</param>
+    /// <param name="targetTable">The raw (unquoted) target table name.</param>
+    /// <returns>The update command carrying the output-into target.</returns>
+    internal UpdateCommand BuildOutputIntoCommand(IReadOnlyList<IPropertyMetadata> outputColumns, string targetTable)
+    {
+        if (_assignments.Count == 0)
+            throw new InvalidOperationException("An update needs at least one assignment; call Set(...) or Set(entity).");
+
+        var source = (_filter ?? _dataContext.From<TEntity>()).ToCommand();
+        return new UpdateCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, _assignments, source, null, null, new OutputIntoClause(targetTable, outputColumns));
     }
 
     private void SetAssignment(UpdateAssignment assignment)

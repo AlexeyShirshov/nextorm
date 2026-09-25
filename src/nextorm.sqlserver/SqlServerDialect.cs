@@ -27,6 +27,12 @@ public sealed class SqlServerDialect : SqlDialectBase
     public override bool SupportsOutput => true;
 
     /// <summary>
+    /// SQL Server writes the modified rows into an existing table through the
+    /// <c>OUTPUT ... INTO &lt;target&gt;(columns)</c> form of a data-modifying statement.
+    /// </summary>
+    public override bool SupportsOutputInto => true;
+
+    /// <summary>
     /// SQL Server reads the last generated identity through the batch-scoped <c>SCOPE_IDENTITY()</c>.
     /// The identity-function terminal appends it to the insert as a single batch, which keeps
     /// <c>SCOPE_IDENTITY()</c> in scope and unaffected by triggers.
@@ -112,19 +118,23 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <summary>SQL Server requires a terminating semicolon after <c>MERGE</c>.</summary>
     public override string MakeMergeStatementTerminator(KeywordCase keywordCase = KeywordCase.Lower) => ";";
 
-    /// <summary>Renders the key-upsert <c>MERGE ... USING (VALUES ...) AS source (...) ON ...</c> statement (T-SQL requires the terminating semicolon).</summary>
+    /// <summary>Renders the key-upsert <c>MERGE ... USING (VALUES ...) AS source (...) ON ...</c> statement, optionally followed by an <c>OUTPUT inserted.&lt;column&gt;</c> clause (T-SQL requires the terminating semicolon).</summary>
     public override string MakeMerge(
         string target,
         IReadOnlyList<string> columns,
         IReadOnlyList<string> keys,
         IReadOnlyList<string> updateColumns,
         string valuesRows,
-        KeywordCase keywordCase = KeywordCase.Lower)
+        KeywordCase keywordCase = KeywordCase.Lower,
+        IReadOnlyList<string>? returningColumns = null)
     {
         var columnList = string.Join(", ", columns);
         var match = string.Join(Kw(keywordCase, " and "), keys.Select(static k => "target." + k + " = source." + k));
         var updates = string.Join(", ", updateColumns.Select(static c => "target." + c + " = source." + c));
         var insertValues = string.Join(", ", columns.Select(static c => "source." + c));
+        var output = returningColumns is { Count: > 0 }
+            ? MakeOutput(returningColumns, keywordCase)
+            : string.Empty;
 
         return Kw(keywordCase, "merge into ") + target
             + Kw(keywordCase, " as target using (values ") + valuesRows
@@ -133,7 +143,7 @@ public sealed class SqlServerDialect : SqlDialectBase
             + Kw(keywordCase, " when matched then update set ") + updates
             + Kw(keywordCase, " when not matched then insert (") + columnList
             + Kw(keywordCase, ") values (") + insertValues
-            + ");";
+            + ")" + output + ";";
     }
 
     /// <summary>Renders the identity-function query <c>select scope_identity()</c>.</summary>
