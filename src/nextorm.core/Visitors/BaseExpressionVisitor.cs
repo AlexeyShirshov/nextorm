@@ -199,6 +199,9 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         if (InValuesTranslator.TryTranslateCollectionContains(this, node))
             return node;
 
+        if (DictionaryLookupTranslator.TryTranslate(this, node))
+            return node;
+
         if (node.Object?.Type == typeof(TableAlias))
         {
             if (!_paramMode)
@@ -354,7 +357,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     /// <c>new DateTime(2014, 3, 20)</c>) into a constant and emits it as a query parameter, caching
     /// the compiled delegate by expression key.
     /// </summary>
-    private void EmitFoldedParameter(Expression node)
+    internal void EmitFoldedParameter(Expression node)
     {
         object? value;
         var keyCmd = new ExpressionKey(node, _queryProvider);
@@ -469,7 +472,12 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 
     /// <inheritdoc/>
     protected override Expression VisitIndex(IndexExpression node)
-        => MemberTranslator.VisitIndex(this, node) ?? base.VisitIndex(node);
+    {
+        if (DictionaryLookupTranslator.TryTranslate(this, node))
+            return node;
+
+        return MemberTranslator.VisitIndex(this, node) ?? base.VisitIndex(node);
+    }
 
     /// <inheritdoc/>
     protected override Expression VisitConstant(ConstantExpression node)
@@ -539,7 +547,13 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     /// <inheritdoc/>
     protected override Expression VisitSwitch(SwitchExpression node) => PredicateTranslator.VisitSwitch(this, node);
     /// <inheritdoc/>
-    protected override Expression VisitBinary(BinaryExpression node) => PredicateTranslator.VisitBinary(this, node);
+    protected override Expression VisitBinary(BinaryExpression node)
+    {
+        if (node.NodeType == ExpressionType.ArrayIndex && DictionaryLookupTranslator.TryTranslate(this, node))
+            return node;
+
+        return PredicateTranslator.VisitBinary(this, node);
+    }
     /// <summary>Returns the SQL emitted into this visitor's builder.</summary>
     /// <returns>The rendered SQL text.</returns>
     public override string ToString()

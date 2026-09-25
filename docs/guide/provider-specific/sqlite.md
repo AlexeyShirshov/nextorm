@@ -141,7 +141,7 @@ var rows = dataContext.From<IComplexEntity>()
 The math functions map to SQLite's math extension (`SQLITE_ENABLE_MATH_FUNCTIONS`), available in the
 SQLite build shipped with `nextorm.sqlite`. The surface exposes `acos`, `acosh`, `asin`, `asinh`,
 `atan`, `atan2`, `atanh`, `cosh`, `degrees`, `log10`, `log2`, `mod`, `pi`, `radians`, `sinh` and
-`tanh`; the portable [`Math.*`](../../guide/11-scalar-functions.md) mappings (`Math.Sqrt`, `Math.Log10`,
+`tanh`; the portable [`Math.*`](../../scalar-functions/index.md) mappings (`Math.Sqrt`, `Math.Log10`,
 `Math.Sign`, …) also render on SQLite.
 
 ```csharp

@@ -190,15 +190,23 @@ internal static class InValues
     }
 
     /// <summary>
-    /// Evaluates every value-list node of <paramref name="condition"/> and returns a hash of their
-    /// shapes, or <c>0</c> when the condition has none. The evaluated partitions are stored on
-    /// <paramref name="command"/> for the renderer to reuse.
+    /// Evaluates every shape-dependent captured collection of <paramref name="condition"/> and returns
+    /// a hash of their shapes, or <c>0</c> when the condition has none. This covers both value-list
+    /// (<c>in</c>/<c>Contains</c>) nodes and captured collections indexed by a query expression
+    /// (<c>dict[column]</c>); the evaluated value-list partitions are returned and the evaluated
+    /// lookups are stored on <paramref name="command"/> for the renderer to reuse.
     /// </summary>
-    public static int ComputeShapeHash(Expression condition, QueryCommand command, out Dictionary<Expression, InValuesPartition>? partitions)
+    /// <param name="condition">The prepared condition to scan.</param>
+    /// <param name="command">The command whose plan key the shape belongs to.</param>
+    /// <param name="partitions">The evaluated value-list partitions, or <c>null</c>.</param>
+    /// <param name="hasMatch">Whether the condition contained any value-list or lookup node.</param>
+    /// <returns>The shape hash, or <c>0</c> when nothing matched.</returns>
+    public static int ComputeShapeHash(Expression condition, QueryCommand command, out Dictionary<Expression, InValuesPartition>? partitions, out bool hasMatch)
     {
         var visitor = new ShapeVisitor(command);
         visitor.Visit(condition);
         partitions = visitor.Partitions;
+        hasMatch = visitor.HasMatch;
         return visitor.HasMatch ? visitor.Hash : 0;
     }
 
@@ -221,7 +229,39 @@ internal static class InValues
                 HasMatch = true;
             }
 
+            CheckLookup(node);
             return base.VisitMethodCall(node);
+        }
+
+        protected override Expression VisitIndex(IndexExpression node)
+        {
+            CheckLookup(node);
+            return base.VisitIndex(node);
+        }
+
+        protected override Expression VisitBinary(BinaryExpression node)
+        {
+            if (node.NodeType == ExpressionType.ArrayIndex)
+                CheckLookup(node);
+
+            return base.VisitBinary(node);
+        }
+
+        // A captured collection indexed by a query expression (dict[column]) is rendered as a CASE whose
+        // branch count depends on the collection, so its entry count has to travel in the plan key
+        // exactly like an in-list length. Only a query-dependent key needs this: a constant key is
+        // folded to a parameter and its shape is already in the expression tree.
+        private void CheckLookup(Expression node)
+        {
+            if (!DictionaryLookup.TryGetLookup(node, out var collectionExp, out var keyExp)
+                || !keyExp.Has<ParameterExpression>())
+                return;
+
+            var entries = DictionaryLookup.Evaluate(collectionExp, command);
+            command.LookupPartitions ??= new Dictionary<Expression, List<LookupEntry>>(ReferenceEqualityComparer.Instance);
+            command.LookupPartitions[node] = entries;
+            _hash.Add(entries.Count);
+            HasMatch = true;
         }
     }
 

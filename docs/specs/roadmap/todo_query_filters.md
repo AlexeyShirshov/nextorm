@@ -4,8 +4,8 @@
 > Рабочий план (design RFC). Источники: **G? (extensibility)** из
 > [`linq2db-comparison.md`](../comparison/linq2db-comparison.md:96) («Extensibility (interceptors,
 > custom SQL, query filters): extensive vs minimal»), out-of-scope-строка `linq2db#4543` в
-> [`linq2db-backlog-gap-analysis.md`](../comparison/linq2db-backlog-gap-analysis.md:73) и Фаза 2
-> [`todo_interceptors.md`](todo_interceptors.md:166). Публичный API → `docs/specs/design/API-NAMING-REVIEW.md`.
+> [`linq2db-backlog-gap-analysis.md`](../comparison/linq2db-backlog-gap-analysis.md:73) и фаза 2
+> расширяемости (этот план). Публичный API → `docs/specs/design/API-NAMING-REVIEW.md`.
 
 ## 1. Пункт и цель
 
@@ -28,7 +28,7 @@
 2. linq2db (`HasQueryFilter`/`[QueryFilter]`, `IgnoreFilters`) и EF Core (`HasQueryFilter`,
    `IgnoreQueryFilters`, keyed-фильтры в EF10) это умеют — у nextorm нет.
 3. Разрыв по расширяемости уже зафиксирован в сравнении; query filters — последний крупный элемент
-   extensibility-блока (после интерцепторов, Фаза 1 которых в `todo_interceptors.md`).
+   extensibility-блока (после [интерцепторов](../../guide/27-interceptors.md), фаза 1 которых отгружена).
 
 ## 3. Текущее состояние (проверено по коду)
 
@@ -97,7 +97,7 @@ public EntityBuilder<T> IgnoreFilters(IEnumerable<string> filterKeys, params Typ
 
 ## 6. Критично: план-кэш и per-context scoping
 
-Это главный риск (и причина, по которой фича отложена в `todo_interceptors.md` на Фазу 2):
+Это главный риск (и причина, по которой фича вынесена из [интерцепторов](../../guide/27-interceptors.md) в отдельный план):
 
 1. **Идентичность фильтра в ключе плана.** `QueryPlanEqualityComparer` должен включать набор активных
    фильтров (ключи/хэши лямбд) и набор `IgnoreFilters`. Иначе запрос из контекста A переиспользует
@@ -109,7 +109,7 @@ public EntityBuilder<T> IgnoreFilters(IEnumerable<string> filterKeys, params Typ
    поэтому хранить в них нужно **лямбду**, а не вычисленные значения; привязка к контексту —
    на построении плана.
 4. **Нулевая цена.** Пустой список фильтров не должен добавлять ветвлений/аллокаций в горячий путь
-   (см. требования интерцепторов, `todo_interceptors.md`).
+   (см. требования интерцепторов, [гайд 27](../../guide/27-interceptors.md)).
 
 ## 7. Этапы внедрения
 

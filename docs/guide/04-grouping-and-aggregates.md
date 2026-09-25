@@ -552,7 +552,7 @@ SQL Server and the in-memory provider have no filtered-aggregate form.
 PostgreSQL-only (SQL Server has no array type). Both results are array columns, materialised by the
 row reader as a CLR `T[]`. ClickHouse additionally exposes its native array-returning aggregates
 `group_array`/`group_uniq_array` (`groupArray`/`groupUniqArray`).
-See [Scalar functions](11-scalar-functions.md#aggregate-filter) for the full surface.
+See [Scalar functions](../scalar-functions/05-aggregates.md#aggregate-filter) for the full surface.
 
 ## Provider differences
 

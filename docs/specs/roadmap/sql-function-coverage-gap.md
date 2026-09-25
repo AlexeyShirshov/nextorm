@@ -16,7 +16,7 @@ provider-vs-provider matrix): here the unit is the individual function.
   `SqlFunctions.SqlServer`, `SqlFunctions.ClickHouse`, the SQLite custom aggregates, plus the built-in
   CLR-member translation (`StringFunctionTranslator`, `MathFunctionTranslator`,
   `DateTimeFunctionTranslator`, `ScalarFunctionTranslator`, ...). See
-  [Scalar functions](../../guide/11-scalar-functions.md) for the documented surface.
+  [Scalar functions](../../scalar-functions/index.md) for the documented surface.
 * **Definition of a gap:** a function is a gap when **neither** a `SqlFunctions.*` member **nor** a
   built-in CLR-member translation emits it. A gap can still be reached with a `[SqlFunction]` UDF or a
   raw fragment; that escape hatch is deliberately **not** counted as coverage.
@@ -43,20 +43,20 @@ provider-vs-provider matrix): here the unit is the individual function.
 | **MySQL** | **Shipped ([#80](https://github.com/AlexeyShirshov/nextorm/issues/80)):** `FIND_IN_SET`, `FIELD`, `ELT`, `SUBSTRING_INDEX`, `FORMAT`, `STR_TO_DATE`, `DATE_FORMAT`, `FROM_UNIXTIME`, `UNIX_TIMESTAMP`, `MD5`/`SHA1`/`SHA2`, `INET_ATON`/`INET_NTOA`, the `JSON_*` mutation family, `UUID_TO_BIN`/`BIN_TO_UUID` (MariaDB inherits all but the UUID pair); `LAST_DAY` via `end_of_month` |
 | **MariaDB** | **Shipped ([#79](https://github.com/AlexeyShirshov/nextorm/issues/79)):** everything MySQL lacks plus `REGEXP_INSTR`/`REGEXP_REPLACE`/`REGEXP_SUBSTR`, `NVL`/`NVL2`, `ADD_MONTHS`, `MONTHS_BETWEEN`, `TO_CHAR`/`TO_DATE`/`TO_NUMBER`, `KDF`, `XXH3`/`XXH32`, `JSON_DETAILED`/`JSON_COMPACT`, `NEXT VALUE FOR`/`NEXTVAL`/`SETVAL`/`LASTVAL` sequences |
 | **SQLite** | ~~the whole JSON1 family …, `printf`/`format`, `hex`/`unhex`, `random`/`randomblob`, `quote`, `typeof`, `glob`, `unicode`/`char`, `timediff`, most `Math.*`~~ **Shipped** — `SqlFunctions.Sqlite`; remaining: `changes`, `last_insert_rowid`, `sqlite_source_id` and the aggregate percentiles |
-| **ClickHouse** | `lowerUTF8`/`upperUTF8`, `trim*`, `replaceRegexp*`, `match`/`extract`, `splitByString`, `formatDateTime`/`parseDateTime`, `now`/`today`/`yesterday`, the `map*` family, `arrayConcat`/`arrayFlatten`/`arrayUniq`/`arrayIntersect`, the `groupBitmap`/`groupBit*`/`sumMap` aggregates, hash functions, `generateULID` |
+| **ClickHouse** | **Shipped ([#78](https://github.com/AlexeyShirshov/nextorm/issues/78)):** `lowerUTF8`/`upperUTF8`, `trim*`, `replaceRegexp*`, `match`/`extract`, `splitByString`, `formatDateTime`/`parseDateTime`, `now`/`today`/`yesterday`, the `map*` family, `arrayConcat`/`arrayFlatten`/`arrayUniq`/`arrayIntersect`, the `groupBitmap`/`groupBit*`/`sumMap` aggregates, hash functions, `generateULID` |
 
-Every row above is tracked as a work plan (design RFC with the provider × form matrix and the
-implementation tier):
+Every row above has shipped; the per-provider guides are the reference (the design-RFC work plans were
+folded into them and deleted):
 
-| Summary row | Work plan |
+| Summary row | Shipped surface |
 |---|---|
-| Cross-provider | **Shipped** — [Scalar functions](../../guide/11-scalar-functions.md#cross-provider-scalar-functions) (gap-analysis §4.36; regex translation shipped earlier, §5.35) |
-| PostgreSQL | **Shipped** — [Scalar functions](../../guide/11-scalar-functions.md#string-and-regular-expression-extensions-postgresql) / [JSON and JSONB](../../guide/18-json.md) (gap-analysis §4.37; plan [`todo_postgres_function_gaps.md`](todo_postgres_function_gaps.md)) |
-| SQL Server | **Shipped** — [`todo_sqlserver_function_gaps.md`](todo_sqlserver_function_gaps.md) (gap-analysis §4.38); `ISqlServerFunctions` + `SqlServerFunctions` T-SQL scalar library |
-| MySQL | **Shipped** — [MySQL and MariaDB-specific SQL](../../guide/provider-specific/mysql.md) (gap-analysis §4.39, #80); [`todo_mysql_function_gaps.md`](todo_mysql_function_gaps.md) (RFC) |
-| MariaDB | **Shipped** — [MySQL and MariaDB-specific SQL](../../guide/provider-specific/mysql.md#mariadb) (gap-analysis §4.40, #79); [`todo_mariadb_function_gaps.md`](todo_mariadb_function_gaps.md) (RFC) |
+| Cross-provider | **Shipped** — [Scalar functions](../../scalar-functions/01-string-functions.md#cross-provider-scalar-functions) (gap-analysis §4.36; regex translation shipped earlier, §5.35) |
+| PostgreSQL | **Shipped** — [Scalar functions](../../scalar-functions/01-string-functions.md#string-and-regular-expression-extensions-postgresql) / [JSON and JSONB](../../guide/18-json.md) (gap-analysis §4.37) |
+| SQL Server | **Shipped** — [SQL Server-specific SQL](../../guide/provider-specific/sqlserver.md#t-sql-scalar-functions) (gap-analysis §4.38); `ISqlServerFunctions` + `SqlServerFunctions` T-SQL scalar library |
+| MySQL | **Shipped** — [MySQL and MariaDB-specific SQL](../../guide/provider-specific/mysql.md) (gap-analysis §4.39, #80) |
+| MariaDB | **Shipped** — [MySQL and MariaDB-specific SQL](../../guide/provider-specific/mysql.md#mariadb) (gap-analysis §4.40, #79) |
 | SQLite | **Shipped** — [SQLite-specific SQL](../../guide/provider-specific/sqlite.md) (gap-analysis §4.41) |
-| ClickHouse | [`todo_clickhouse_function_gaps.md`](todo_clickhouse_function_gaps.md) (gap-analysis §4.42) |
+| ClickHouse | **Shipped** — [ClickHouse-specific SQL](../../guide/provider-specific/clickhouse.md) (gap-analysis §4.42, #78) |
 
 ---
 
@@ -312,7 +312,20 @@ aggregates (`argMin`/`argMax`, `uniq*`, `quantile*`/`median`, `topK`/`topKWeight
 `retention`, `windowFunnel`, `sequenceMatch`), the `-If` combinators, `global_in`, the `to*`
 date-conversion/parts surface, the table functions `numbers`/`numbers_mt`/`zeros`/`zeros_mt`/
 `generateRandom`/`generate_series`/`url`/`s3`/`file`/`remote`/`remoteSecure`/`cluster`/`clusterAllReplicas`,
-and `lagInFrame`/`leadInFrame`/`multi_if`.
+  and `lagInFrame`/`leadInFrame`/`multi_if`.
+
+**Native surface (shipped, [#78](https://github.com/AlexeyShirshov/nextorm/issues/78)):**
+`SqlFunctions.ClickHouse` renders the UTF-8 case/trim/regexp/search strings (`lowerUTF8`/`upperUTF8`,
+`trimLeft`/`trimRight`/`trimBoth`, `replaceRegexpOne`/`replaceRegexpAll`, `match`/`extract`/`extractAll`,
+`splitByString`/`splitByRegexp`/`splitByWhitespace`), the date helpers (`formatDateTime`, `parseDateTime*`,
+`now`/`today`/`yesterday`), the array set operations (`arrayConcat`/`arrayFlatten`/`arrayUniq`/
+`arrayIntersect`/`arrayUnion`/`arrayExcept`/`arraySymmetricDifference`), the `Map` family (`map`/`map_keys`/
+`map_values`/`map_contains_key`/`map_contains_value`/`map_add`/`map_concat`/`map_filter`/`map_apply`/
+`map_all`/`map_exists`/`map_sort`), the bitmap aggregates (`groupBitmap`/`groupBitmapAnd`/`groupBitmapOr`/
+`groupBitmapXor`, `sumMap`/`sumMapFiltered`), the hash family (`md5`/`sha1`/`sha256`/`sha512`, `xxHash32`/
+`xxHash64`/`xxh3`, `cityHash64`, `sipHash64`/`sipHash128`, `murmurHash*`) and `generateULID`. See
+[ClickHouse-specific SQL](../../guide/provider-specific/clickhouse.md). The lists below are the
+still-missing remainder of the full ClickHouse catalogue.
 
 **Missing:**
 

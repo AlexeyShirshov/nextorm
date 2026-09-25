@@ -29,6 +29,8 @@ public partial class QueryCommand
         dst.PreparedCondition = PreparedCondition;
         dst.PreparedHaving = PreparedHaving;
         dst.InValuesShapeHash = InValuesShapeHash;
+        dst.LookupPartitions = LookupPartitions;
+        dst.ShapeScanned = ShapeScanned;
         dst.ResultPlanHash = ResultPlanHash;
         dst.GroupingPlanHash = GroupingPlanHash;
         // From/Union/ReferencedQueries hashes must travel with the clone too: QueryPlanEqualityComparer

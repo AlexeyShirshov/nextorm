@@ -34,8 +34,6 @@
       href: guide/09-cte.md
     - name: Оконные функции
       href: guide/10-window-functions.md
-    - name: Скалярные функции
-      href: guide/11-scalar-functions.md
     - name: Пользовательские функции
       href: guide/12-user-defined-functions.md
     - name: Табличные функции
@@ -86,6 +84,26 @@
           href: guide/provider-specific/mysql.md
         - name: SQLite
           href: guide/provider-specific/sqlite.md
+- name: Скалярные функции
+  items:
+    - name: Обзор
+      href: scalar-functions/index.md
+    - name: Строковые функции
+      href: scalar-functions/01-string-functions.md
+    - name: Математические функции
+      href: scalar-functions/02-math-functions.md
+    - name: Дата и время
+      href: scalar-functions/03-date-and-time.md
+    - name: Условные функции и приведение
+      href: scalar-functions/04-conditionals-and-conversion.md
+    - name: Агрегаты
+      href: scalar-functions/05-aggregates.md
+    - name: Массивы
+      href: scalar-functions/06-arrays.md
+    - name: JSON и XML
+      href: scalar-functions/07-json-and-xml.md
+    - name: Справочник по провайдерам
+      href: scalar-functions/08-reference.md
 - name: Провайдеры
   items:
     - name: Обзор провайдеров

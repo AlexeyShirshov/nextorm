@@ -1,0 +1,18 @@
+- name: Overview
+  href: index.md
+- name: String functions
+  href: 01-string-functions.md
+- name: Math functions
+  href: 02-math-functions.md
+- name: Date and time
+  href: 03-date-and-time.md
+- name: Conditional and conversion helpers
+  href: 04-conditionals-and-conversion.md
+- name: Aggregates
+  href: 05-aggregates.md
+- name: Arrays
+  href: 06-arrays.md
+- name: JSON and XML
+  href: 07-json-and-xml.md
+- name: Provider reference
+  href: 08-reference.md

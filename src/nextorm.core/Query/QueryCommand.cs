@@ -83,9 +83,10 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// </summary>
     internal Expression? PreparedHaving;
     /// <summary>
-    /// Hash of the value-list (<c>in</c>/<c>Contains</c>) shapes found in <see cref="PreparedCondition"/>.
-    /// A captured collection's member access contributes nothing to the expression plan hash, so this
-    /// folds the element count / null-presence into the plan key. Zero when there are no such nodes.
+    /// Hash of the captured-collection shapes found in <see cref="PreparedCondition"/>: value-list
+    /// (<c>in</c>/<c>Contains</c>) element counts / null-presence and lookup (<c>dict[column]</c>) entry
+    /// counts. A captured collection's member access contributes nothing to the expression plan hash, so
+    /// this folds its shape into the plan key. Zero when there are no such nodes.
     /// </summary>
     internal int InValuesShapeHash;
     /// <summary>
@@ -94,8 +95,8 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// </summary>
     private int _whereBasePlanHash;
     /// <summary>
-    /// Whether <see cref="PreparedCondition"/> contains a top-level value-list node whose shape must be
-    /// re-checked on every execution of an already-prepared command.
+    /// Whether <see cref="PreparedCondition"/> contains a top-level captured-collection node (a value
+    /// list or a lookup) whose shape must be re-checked on every execution of an already-prepared command.
     /// </summary>
     internal bool HasTopLevelInValues;
     /// <summary>
@@ -104,6 +105,20 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
     /// the command participates in the plan cache.
     /// </summary>
     internal Dictionary<Expression, InValuesPartition>? InValuesPartitions;
+    /// <summary>
+    /// The captured-collection lookups (<c>dict[column]</c>) evaluated while preparing the condition,
+    /// keyed by the index expression, so the SQL and parameter passes reuse one evaluation and a cached
+    /// plan only lives while the collection shape is unchanged. Only populated when the command
+    /// participates in the plan cache.
+    /// </summary>
+    internal Dictionary<Expression, List<LookupEntry>>? LookupPartitions;
+    /// <summary>
+    /// Whether the shape of captured collections (value lists and lookups) was folded into the plan key
+    /// during preparation. When it was and a lookup is not among <see cref="LookupPartitions"/>, the
+    /// lookup sits in a clause whose shape is not part of the key and is refused instead of risking a
+    /// stale cached plan.
+    /// </summary>
+    internal bool ShapeScanned;
     private QueryPlanEqualityComparer? _queryPlanComparer;
     private ExpressionPlanEqualityComparer? _expressionPlanComparer;
     private SelectExpressionPlanEqualityComparer? _selectExpressionPlanComparer;
@@ -481,6 +496,8 @@ public partial class QueryCommand : IQueryRegistry, ICloneable
         InValuesShapeHash = 0;
         InValuesPartitions = null;
         HasTopLevelInValues = false;
+        LookupPartitions = null;
+        ShapeScanned = false;
         _whereBasePlanHash = 0;
 
         _dataContext?.ResetPreparation(this);

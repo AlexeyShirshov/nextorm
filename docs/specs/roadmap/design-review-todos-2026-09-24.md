@@ -47,13 +47,13 @@
 
 | # | Файл | Вердикт | Находок | Блокеров |
 |---|---|---|---|---|
-| 1 | `todo_sqlserver_function_gaps.md` | нужен пересмотр | 7 | 2 |
-| 2 | `todo_postgres_function_gaps.md` | нужен пересмотр | 7 | 1 |
-| 3 | `todo_sqlite_function_gaps.md` | нужен пересмотр | 10 | 3 |
-| 4 | `todo_cross_provider_scalar_functions.md` | дизайн-здоров (shipped) | 4 | 0 |
-| 5 | `todo_mysql_function_gaps.md` | нужен пересмотр | 6 | 2 (+1 контракт) |
-| 6 | `todo_mariadb_function_gaps.md` | нужен пересмотр §5 | 5 | 1 (+1 контракт) |
-| 7 | `todo_clickhouse_function_gaps.md` | нужен пересмотр | 8 | 2 (+1 тип) |
+| 1 | `todo_sqlserver_function_gaps.md` | **файл удалён (shipped)** | — | — |
+| 2 | `todo_postgres_function_gaps.md` | **файл удалён (shipped)** | — | — |
+| 3 | `todo_sqlite_function_gaps.md` | **файл удалён (shipped)** | — | — |
+| 4 | `todo_cross_provider_scalar_functions.md` | **файл удалён (shipped)** | — | — |
+| 5 | `todo_mysql_function_gaps.md` | **файл удалён (shipped)** | — | — |
+| 6 | `todo_mariadb_function_gaps.md` | **файл удалён (shipped)** | — | — |
+| 7 | `todo_clickhouse_function_gaps.md` | **файл удалён (shipped)** | — | — |
 | 8 | `todo_clickhouse_aggregate_function_state.md` | не готов к ревью | 5 | 1 (полнота) |
 | 9 | `todo_query_filters.md` | нужен пересмотр | 9 | 3 |
 | 10 | `todo_batch_dml.md` | **файл удалён** | — | — |
@@ -66,12 +66,12 @@
 | 17 | `todo_interface_poco.md` | дизайн-здоров | 5 | 0 |
 | 18 | `todo_mapping_scope.md` | нужен пересмотр | 12 | 1 |
 | 19 | `todo_join_projection_mapping.md` | дизайн-здоров | 4 | 0 |
-| 20 | `todo_timespan_columns.md` | 0 блокеров, ресинхронизация | 4 | 0 |
+| 20 | `todo_timespan_columns.md` | **файл удалён (shipped)** | — | — |
 | 21 | `todo_value_converters.md` | пересмотр до реализации | 6 | 0 |
 | 22 | `todo_streaming_lob.md` | нужен пересмотр | 9 | 1 |
 | 23 | `todo_json_streaming.md` | нужен пересмотр | 9 | 1 (корректность) |
 | 24 | `todo_efcore_integration.md` | пересмотр | 8 | 1 (архитектура) |
-| 25 | `todo_interceptors.md` | дизайн-здоров | 5 | 0 |
+| 25 | `todo_interceptors.md` | **файл удалён (shipped)** | — | — |
 | 26 | `todo_postgres_ranges.md` | дизайн-нездоров | 13 | 2 |
 | 27 | `todo_public_api_freeze.md` | пересмотр шагов 2/4 | 10 | 2 |
 | | **Итого** | | **~197** | **~30** |
@@ -80,28 +80,8 @@
 
 ### Функции провайдеров
 
-- `todo_sqlserver_function_gaps.md`
-  - `:104` новый `ISqlServerFunctions` дублирует отгруженный `IScalarFunctions` (`DialectCapabilities.cs:340`);
-  - `:77-94` члены объявлены `static`, а отгруженная форма — instance (`SqlFunctions.SqlServer.cs:21`).
-- `todo_postgres_function_gaps.md`
-  - `:117` `json_exists(object?, string?)` совпадает по сигнатуре с существующим (`SqlFunctions.Postgres.cs:165`) → CS0111; нужно `json_path_exists`.
-- `todo_sqlite_function_gaps.md`
-  - `:94`/`:16` `typeof`/`if` — ключевые слова C#, нужен `@`-эскейп;
-  - `:82-86` `public static class SqliteFunctions` + `static` маркер — CS0723, не наследует `CommonFunctions`;
-  - `:130-132` `Supports(name)` на stateless singleton требует runtime-состояния без названного seam.
-- `todo_mysql_function_gaps.md`
-  - `:79` `public static class MySqlFunctions` (CS0718);
-  - диспетчер перехватит `format`/`md5` до провайдерного транслятора.
-- `todo_mariadb_function_gaps.md`
-  - диспетчер перехватит `regexp_instr`/`regexp_replace`/`to_char`/`to_date`/`to_number` (`:72,73,78,79,80`);
-  - контракт-блокер: MariaDB-only имена на поверхности `SqlFunctions.MySql`.
-- `todo_clickhouse_function_gaps.md`
-  - `:99` `extract` перехватывается `BuiltinFunctionTranslator` (`:72`);
-  - `:123,125` `md5`/`sha256` перехватываются `ExtendedScalarFunctionTranslator`;
-  - тип-блокер: `today()`/`yesterday()` → `DateOnly?` (типа нет в проекте).
 - `todo_clickhouse_aggregate_function_state.md`
   - `:45-49` публичный API не определён (нет сигнатур/capability/типа материализации/тест-плана).
-
 ### Запросы / DML / результат
 
 - `todo_query_filters.md`

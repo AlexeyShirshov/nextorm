@@ -25,7 +25,7 @@ var rows = dataContext.From<IComplexEntity>()
 select choose(2, 'a', 'b', 'c') as [Label] from complex_entity
 ```
 
-См. [Скалярные функции](../11-scalar-functions.md#условные-функции).
+См. [Скалярные функции](../../scalar-functions/04-conditionals-and-conversion.md#условные-функции).
 
 ## Хинты
 
@@ -107,7 +107,7 @@ select t2.value.value('(.)[1]/@id', 'int') as [Id]
 from xml_entity as [t1] cross apply t1.payload.nodes('/root/item') as [t2](value)
 ```
 
-См. [Скалярные функции](../11-scalar-functions.md#методы-типа-xml-sql-server).
+См. [Скалярные функции](../../scalar-functions/07-json-and-xml.md#методы-типа-xml-sql-server).
 
 ## Табличные функции
 
@@ -240,7 +240,7 @@ SQL Server поддерживает только метод `System`
 ([`ISqlServerFunctions`](xref:NextORM.Core.ISqlServerFunctions)); SQL Server — единственный
 провайдер, который её реализует, поэтому все остальные провайдеры для этих членов бросают
 `NotSupportedException`. Переносимых аналогов у них нет: кросс-провайдерные `ascii`/`char`/`translate`
-живут в [`SqlFunctions.Sql`](../11-scalar-functions.md#кросс-провайдерные-скалярные-функции), а
+живут в [`SqlFunctions.Sql`](../../scalar-functions/01-string-functions.md#кросс-провайдерные-скалярные-функции), а
 `Math.Log10` и так рендерит T-SQL `LOG10`.
 
 Функции можно использовать как обычные значения (и как предикаты там, где форма T-SQL — условие):

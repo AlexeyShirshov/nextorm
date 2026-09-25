@@ -3,7 +3,7 @@
 > Вызывайте скалярную функцию базы данных из выражения LINQ, сопоставив метод-заглушку CLR с помощью
 > `[SqlFunction]`.
 
-**Предварительные требования:** [Сущности и метаданные](../getting-started/03-entities-and-metadata.md) · [Запросы и проекции](01-querying-and-projections.md) · [Скалярные функции](11-scalar-functions.md)
+**Предварительные требования:** [Сущности и метаданные](../getting-started/03-entities-and-metadata.md) · [Запросы и проекции](01-querying-and-projections.md) · [Скалярные функции](../scalar-functions/index.md)
 
 ## Обзор
 
@@ -176,7 +176,7 @@ public sealed class Formatter
 
 ## См. также
 
-* [Скалярные функции](11-scalar-functions.md) — встроенные преобразования, имеющие приоритет.
+* [Скалярные функции](../scalar-functions/index.md) — встроенные преобразования, имеющие приоритет.
 * [Табличные функции](13-table-valued-functions.md) — эквивалент для источника `FROM`.
 * [Обзор провайдеров](../providers/overview.md) — кавычки и флаги возможностей.
 

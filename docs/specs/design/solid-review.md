@@ -1318,3 +1318,82 @@ dbCtx.ToList((IPreparedQueryCommand<int>)prepared, ReadOnlySpan<object?>.Empty);
 ```
 
 Проверено вручную на связке «in-memory команда → `SqliteDataContext`».
+
+---
+
+## Приложение B. Точечное ревью 25.09.2026 — трансляция `dict[column]` (design / type / perf; uncommitted working tree)
+
+**Область.** `src/nextorm.core/Query/DictionaryLookup.cs`, `src/nextorm.core/Visitors/DictionaryLookupTranslator.cs`,
+`Query/InValues.cs` (`ShapeVisitor`/`CheckLookup`/`ComputeShapeHash`), `Query/QueryCommand.cs`
+(`LookupPartitions`/`ShapeScanned`), `Query/QueryCommand.Clone.cs`, `Query/QueryCommand.QueryPreparer.cs`,
+`Visitors/BaseExpressionVisitor.cs`. Публичной поверхности фича не добавляет (все новые типы/члены —
+`internal`; `EmitFoldedParameter` — `private`→`internal`); запись по API — в `API-NAMING-REVIEW.md`.
+
+**Метод.** Сканы `analyzing-dotnet-performance` по трём фокус-файлам и местам правки: `.Substring` 0,
+`.IndexOf("…")` 0, `.StartsWith/.EndsWith("…")` 0, `.Contains("…")` 0, `.ToLower/.ToUpper` 0, `.Replace(` 0,
+`params` 0, LINQ (`Select/Where/OrderBy/GroupBy`) 0, `string.Format` 0; `new List<` 2 (`DictionaryLookup.cs:109,117`),
+`new Dictionary<` 2 (`InValues.cs:225,261`); `foreach (DictionaryEntry …)` 1 (`DictionaryLookup.cs:110`).
+Обратная проверка типов ниже (F-DL2).
+
+### 🟡 F-DL1 (DRY, исправлено) — порядок key/value-параметров дублировался в `BuildCase` и `AddParameters`
+
+**Место (до).** `Visitors/DictionaryLookupTranslator.cs:90-99` и `:113-117` независимо вызывали
+`GetParamName()` в одном и том же порядке; рассинхрон этих двух циклов — структурная первопричина
+P1-дефекта (Находка 191 в `code-smells-review.md`).
+**Стало.** Единый источник порядка — `EmitBranches` (`Visitors/DictionaryLookupTranslator.cs:101-116`);
+`BuildCase` (`:82-98`) передаёт построитель, param-проход (`:45`) — `null`. Имена, порядок и текст SQL
+не изменились (регресс-тесты sqlite `Dictionary_IndexedByExpressionKey_ShouldKeepParametersAligned`,
+`Dictionary_IndexedByColumn_ShouldBindKeyValueParameters`).
+
+### ✅ F-DL2 (TYPE, нарушений нет) — типы спроектированы верно
+
+`LookupEntry` — `internal readonly struct` с readonly-полями (`Query/DictionaryLookup.cs:10-25`);
+`DictionaryLookup` / `DictionaryLookupTranslator` — `internal static`; `InValues.ShapeVisitor` — `private sealed`.
+Новых интерфейсов и пар `IFoo`/`Foo` нет (invariant 1: второго потребителя нет, seam не наблюдается).
+Возврат `List<LookupEntry>` — из `internal`-методов, публичный контракт не затронут. `ValueTask`/`Span`/`Memory`
+в фиче не используются (синхронный build-путь). Новых `ValueTask`-злоупотреблений и `Span` в async нет.
+
+### ℹ️ F-DL3 (PERF, отложено) — переоценка коллекции и боксинг на каждом исполнении
+
+`RefreshInValuesShape` на каждое исполнение уже подготовленной кэшируемой команды строит новый
+`Dictionary<Expression, List<LookupEntry>>` (`Query/InValues.cs:261`) и `List<LookupEntry>`
+(`Query/DictionaryLookup.cs:109,117`); `ToEntries` перечисляет необобщённый `IDictionary`/`IList`
+(боксинг `DictionaryEntry` на элемент, `:110`). Осознанно (shape и значения коллекции могут меняться
+между исполнениями) и структурно идентично IN-пути (`InValues.Partition`). Двойной переоценки нет:
+SQL-проход и param-проход кэш-хита переиспользуют `LookupPartitions`
+(`Visitors/DictionaryLookupTranslator.cs:70-71`); `Has<ParameterExpression>` в `TryGetLookup` отрабатывает
+только на `get_Item`/`ArrayIndex`-узлах. Замер — `nextorm-db-perf-analyst`/`nextorm-inmemory-perf-analyst`;
+без замера micro-оптимизация не вносится (invariant 3).
+
+### ℹ️ F-DL4 (PERF/Design, подтверждено — не чистить) — `LookupPartitions` в cache-клоне load-bearing
+
+`Query/QueryCommand.Clone.cs:32-33` копирует `LookupPartitions`/`ShapeScanned` в clone, тогда как
+`InValuesPartitions` не копируется. Это **не** мёртвое состояние кэш-ключа: `CloneForCache()` — ещё и вход
+рендера source-мутаций — `QueryPlanner.RenderSource` (`DataContext/QueryPlanner.cs:111`,
+`ctx = ctx with { QueryProvider = body }`, затем `MakeSelect(body)`) и `SqlSourceRenderer.RenderMutation`
+(`DataContext/SqlSourceRenderer.cs:122-134`). В `DictionaryLookupTranslator.ResolveEntries`
+(`Visitors/DictionaryLookupTranslator.cs:68-78`) отсутствие партиции при `Cache && ShapeScanned` бросает
+`NotSupportedException`, поэтому снятие копии сломало бы легитимный `dict[column]` в WHERE такого source.
+IN-путь деградирует мягко (`Visitors/InValuesTranslator.cs:52-55` отключает кэш и считает на месте),
+поэтому асимметрия обоснована. Кандидат на будущее — разделить clone-для-ключа и clone-для-рендера;
+триггер: третий потребитель `CloneForCache()`. Снимает ℹ️-наблюдение B из `code-smells-review.md`.
+
+### ℹ️ F-DL5 (PERF, benign) — `_whereBasePlanHash` в ветке `!ShapeScanned` равен 0
+
+`Query/QueryCommand.QueryPreparer.cs:147` делает `WherePlanHash = _whereBasePlanHash * 13 + InValuesShapeHash`,
+но при первой подготовке с `dontCalculateHash=true` база не вычисляется (`:653`, под `!noHash`) и остаётся 0 —
+множитель вырожден. Наблюдаемого дефекта нет: при no-hash подготовке обнулены и остальные part-хэши
+(`:76-81`), а равенство планов обеспечивает `QueryPlanEqualityComparer.Equals` по `PreparedCondition`.
+Не чинилось: наблюдаемого эффекта и тест-поверхности нет (`WherePlanHash` — `internal`, `InternalsVisibleTo` нет).
+
+### ✅ F-DL6 — регрессии 191/192 и EOL 194 закрыты
+
+`tests/nextorm.sqlite.tests/DictionaryLookupSqlGenerationTests.cs`:
+`Dictionary_IndexedByExpressionKey_ShouldKeepParametersAligned` (191) и
+`Dictionary_PreparedWithoutHashThenCached_ShouldTranslate` (192). EOL-находка 194 закрыта: 9/9 новых `.cs`
+(2 `src` + 7 tests) переведены в CRLF.
+
+**Проверка (25.09.2026).** `dotnet build nextorm.slnx -c Release` — **0 warnings / 0 errors**.
+`dotnet test tests/nextorm.sqlite.tests -c Debug --filter "FullyQualifiedName~DictionaryLookup"` — **9/9**;
+полный `nextorm.sqlite.tests` — **463/463**; `nextorm.core.tests` — **327/327**; `~DictionaryLookup` по
+postgres/sqlserver/mysql/mariadb/clickhouse — по **2/2**, core — **1/1**. Контейнерная интеграция не перезапускалась.

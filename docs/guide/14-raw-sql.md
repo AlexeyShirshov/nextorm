@@ -235,7 +235,7 @@ and SQLite omits the derived-table alias when the source is not joined.
 ## See also
 
 * [Query reuse: cache vs Prepare](15-query-reuse.md) - the `nonStreamUsing` / `storeInCache` trade-offs.
-* [Scalar functions](11-scalar-functions.md) - stay in LINQ instead of dropping to raw SQL.
+* [Scalar functions](../scalar-functions/index.md) - stay in LINQ instead of dropping to raw SQL.
 * [Provider overview](../providers/overview.md) - parameter placeholder per provider.
 
 ---

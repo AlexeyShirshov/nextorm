@@ -18,8 +18,6 @@
   href: 09-cte.md
 - name: Window functions
   href: 10-window-functions.md
-- name: Scalar functions
-  href: 11-scalar-functions.md
 - name: User-defined functions
   href: 12-user-defined-functions.md
 - name: Table-valued functions

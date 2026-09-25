@@ -29,7 +29,7 @@ var rows = dataContext.From<IComplexEntity>()
 select id from complex_entity where (id = any(@p0))
 ```
 
-See [Arrays (PostgreSQL)](../11-scalar-functions.md#arrays-postgresql). Functions that return an array
+See [Arrays (PostgreSQL)](../../scalar-functions/06-arrays.md#arrays-postgresql). Functions that return an array
 can be used inside a query or projected directly: the row reader materialises an `Array(T)` result as
 a CLR `T[]`.
 
@@ -50,7 +50,7 @@ var json = dataContext.From<IComplexEntity>()
 select jsonb_agg(somestring) from complex_entity
 ```
 
-See [JSON and JSONB (PostgreSQL)](../11-scalar-functions.md) and
+See [JSON and JSONB (PostgreSQL)](../../scalar-functions/index.md) and
 [JSON support across providers](../18-json.md).
 
 ## Ordered-set, regression and boolean aggregates
@@ -107,7 +107,7 @@ The [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) surface adds `pg_typeo
 `to_number`/`to_timestamp`/`timezone`/`make_interval`/`justify_*`) and the array constructors, all gated
 by `SupportsExtendedScalarFunctions`.
 
-See [Scalar functions](../11-scalar-functions.md).
+See [Scalar functions](../../scalar-functions/index.md).
 
 ## `DISTINCT ON`
 

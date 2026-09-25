@@ -95,7 +95,7 @@ package adds a context, a dialect and a [`DataContextBuilder`](xref:NextORM.Core
 | [`SqlFunctionAttribute`](xref:NextORM.Core.SqlFunctionAttribute) | Maps a CLR method (or its declaring type) to a scalar database function; optional `Name`/`Schema`. |
 | [`SqlTableFunctionAttribute`](xref:NextORM.Core.SqlTableFunctionAttribute) | Maps a static method (or its declaring type) to a table-valued function used as a `FROM` source. |
 | [`DurationAttribute`](xref:NextORM.Core.DurationAttribute) | Declares how a `TimeSpan` property is stored (`[Duration(DurationUnit.Seconds)]`), plus the native `Precision`; ignored where the provider has a native duration type. See [Duration columns](../guide/26-duration-columns.md). |
-| [`CollationAttribute`](xref:NextORM.Core.CollationAttribute) | Declares the database collation of a mapped property (`[Collation("C")]`); applied to the column in collation-sensitive query operations on providers with [`SupportsCollation`](xref:NextORM.Core.ISqlDialect.SupportsCollation). See [Column collation](../guide/11-scalar-functions.md#column-collation). |
+| [`CollationAttribute`](xref:NextORM.Core.CollationAttribute) | Declares the database collation of a mapped property (`[Collation("C")]`); applied to the column in collation-sensitive query operations on providers with [`SupportsCollation`](xref:NextORM.Core.ISqlDialect.SupportsCollation). See [Column collation](../scalar-functions/01-string-functions.md#column-collation). |
 | [`DurationUnit`](xref:NextORM.Core.DurationUnit) | Storage unit of a `TimeSpan` column on a provider without a native type: `Ticks`, `Microseconds`, `Milliseconds`, `Seconds`, `Minutes`, `Hours`, `Days`. |
 
 ### Supporting expression types

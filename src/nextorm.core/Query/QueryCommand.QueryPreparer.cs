@@ -27,6 +27,12 @@ public partial class QueryCommand
             cmd.ResolvedQuoteIdentifiers = cmd.QuoteIdentifiers ?? cmd._dataContext.QuoteIdentifiers;
             cmd.ResolvedNamingConvention = cmd.NamingConvention ?? cmd._dataContext.NamingConvention;
             cmd.ResolvedKeywordCase = cmd.KeywordCase ?? cmd._dataContext.KeywordCase;
+
+            // The shape of captured collections (value lists, dictionary lookups) is folded into the plan
+            // key only when the command participates in the plan cache; otherwise a lookup may be rendered
+            // without a shape entry, so it must be evaluated on the fly instead of reusing a stale form.
+            cmd.ShapeScanned = !dontCalculateHash && !cmd._dontCache;
+            cmd.LookupPartitions = null;
 #if DEBUG
             if (cmd.Logger?.IsEnabled(LogLevel.Debug) ?? false) cmd.Logger.LogDebug("Preparing command");
 #endif
@@ -111,20 +117,64 @@ public partial class QueryCommand
         }
 
         /// <summary>
-        /// Re-evaluates the value-list shape of an already-prepared command. An implicit-cache command can
-        /// be reused with a captured collection that was grown or reassigned between executions, so the
-        /// plan key must follow the current shape or a stale (wrong parameter count) plan would be reused.
+        /// Re-evaluates the captured-collection shape (value lists and dictionary lookups) of an
+        /// already-prepared command. An implicit-cache command can be reused with a collection that was
+        /// grown or reassigned between executions, so the plan key must follow the current shape or a
+        /// stale (wrong parameter count) plan would be reused. When the command was first prepared
+        /// without hashing, the shape is folded in here for the first time.
         /// </summary>
         internal static void RefreshInValuesShape(QueryCommand cmd)
         {
             if (!cmd.Cache || (cmd.PreparedCondition is null && cmd.PreparedPreWhere is null))
                 return;
 
+            if (!cmd.ShapeScanned)
+            {
+                // The command was first prepared without hashing (storeInCache:false) and is now reused
+                // through the cache, so its shape was never folded in. Do it now, once, before the normal
+                // refresh path: otherwise a captured-collection lookup inside the condition would not be
+                // in LookupPartitions and would be refused as sitting outside the condition.
+                cmd.LookupPartitions = null;
+                Dictionary<Expression, InValuesPartition>? initial = null;
+
+                if (cmd.PreparedCondition is not null)
+                {
+                    cmd.InValuesShapeHash = InValues.ComputeShapeHash(cmd.PreparedCondition, cmd, out var wherePartitions, out var hasWhere);
+                    cmd.HasTopLevelInValues = hasWhere;
+                    initial = wherePartitions;
+                    unchecked
+                    {
+                        cmd.WherePlanHash = cmd._whereBasePlanHash * 13 + cmd.InValuesShapeHash;
+                    }
+                }
+
+                if (cmd.PreparedPreWhere is not null)
+                {
+                    cmd.PreWhereShapeHash = InValues.ComputeShapeHash(cmd.PreparedPreWhere, cmd, out var preWherePartitions, out var hasPreWhere);
+                    cmd.HasPreWhereInValues = hasPreWhere;
+
+                    if (preWherePartitions is { Count: > 0 })
+                    {
+                        initial ??= new Dictionary<Expression, InValuesPartition>(ReferenceEqualityComparer.Instance);
+
+                        foreach (var (key, value) in preWherePartitions)
+                            initial[key] = value;
+                    }
+                }
+
+                cmd.InValuesPartitions = initial;
+                cmd.ShapeScanned = true;
+                return;
+            }
+
+            // The shapes are recomputed from scratch: a captured collection or dictionary may have been
+            // grown or reassigned between executions of the cached plan.
+            cmd.LookupPartitions = null;
             Dictionary<Expression, InValuesPartition>? merged = null;
 
             if (cmd.HasTopLevelInValues && cmd.PreparedCondition is not null)
             {
-                cmd.InValuesShapeHash = InValues.ComputeShapeHash(cmd.PreparedCondition, cmd, out var wherePartitions);
+                cmd.InValuesShapeHash = InValues.ComputeShapeHash(cmd.PreparedCondition, cmd, out var wherePartitions, out _);
                 merged = wherePartitions;
                 unchecked
                 {
@@ -134,7 +184,7 @@ public partial class QueryCommand
 
             if (cmd.HasPreWhereInValues && cmd.PreparedPreWhere is not null)
             {
-                cmd.PreWhereShapeHash = InValues.ComputeShapeHash(cmd.PreparedPreWhere, cmd, out var preWherePartitions);
+                cmd.PreWhereShapeHash = InValues.ComputeShapeHash(cmd.PreparedPreWhere, cmd, out var preWherePartitions, out _);
 
                 if (preWherePartitions is { Count: > 0 })
                 {
@@ -603,11 +653,12 @@ public partial class QueryCommand
                         cmd._whereBasePlanHash = wherePlanHash;
 
                         // A captured collection contributes no shape to the expression hash, so fold the
-                        // evaluated value-list shape in as well; otherwise a plan built for one list length
-                        // would be reused for another. The renderer reuses the evaluated partitions.
-                        cmd.InValuesShapeHash = InValues.ComputeShapeHash(cmd.PreparedCondition, cmd, out var partitions);
+                        // evaluated value-list and lookup shape in as well; otherwise a plan built for one
+                        // list length (or dictionary size) would be reused for another. The renderer
+                        // reuses the evaluated partitions.
+                        cmd.InValuesShapeHash = InValues.ComputeShapeHash(cmd.PreparedCondition, cmd, out var partitions, out var hasMatch);
                         cmd.InValuesPartitions = partitions;
-                        cmd.HasTopLevelInValues = partitions is not null;
+                        cmd.HasTopLevelInValues = hasMatch;
                         if (cmd.HasTopLevelInValues)
                             wherePlanHash = wherePlanHash * 13 + cmd.InValuesShapeHash;
                     }
@@ -626,8 +677,8 @@ public partial class QueryCommand
 
             if (!cmd._dontCache && !noHash)
             {
-                cmd.PreWhereShapeHash = InValues.ComputeShapeHash(cmd.PreparedPreWhere, cmd, out var partitions);
-                cmd.HasPreWhereInValues = partitions is not null;
+                cmd.PreWhereShapeHash = InValues.ComputeShapeHash(cmd.PreparedPreWhere, cmd, out var partitions, out var hasMatch);
+                cmd.HasPreWhereInValues = hasMatch;
 
                 if (partitions is { Count: > 0 })
                 {

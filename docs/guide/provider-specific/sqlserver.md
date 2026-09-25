@@ -25,7 +25,7 @@ var rows = dataContext.From<IComplexEntity>()
 select choose(2, 'a', 'b', 'c') as [Label] from complex_entity
 ```
 
-See [Scalar functions](../11-scalar-functions.md#conditional-helpers).
+See [Scalar functions](../../scalar-functions/04-conditionals-and-conversion.md#conditional-helpers).
 
 ## Hints
 
@@ -106,7 +106,7 @@ select t2.value.value('(.)[1]/@id', 'int') as [Id]
 from xml_entity as [t1] cross apply t1.payload.nodes('/root/item') as [t2](value)
 ```
 
-See [Scalar functions](../11-scalar-functions.md#xml-data-type-methods-sql-server).
+See [Scalar functions](../../scalar-functions/07-json-and-xml.md#xml-data-type-methods-sql-server).
 
 ## Table-valued functions
 
@@ -239,7 +239,7 @@ The cross-provider boolean predicates `contains`/`freetext` render `CONTAINS`/`F
 ([`ISqlServerFunctions`](xref:NextORM.Core.ISqlServerFunctions)); SQL Server is the only provider that
 implements it, so every other provider throws `NotSupportedException` for these members. The members
 have no portable equivalent: the cross-provider `ascii`/`char`/`translate` live on
-[`SqlFunctions.Sql`](../11-scalar-functions.md#cross-provider-scalar-functions) instead, and
+[`SqlFunctions.Sql`](../../scalar-functions/01-string-functions.md#cross-provider-scalar-functions) instead, and
 `Math.Log10` already renders T-SQL `LOG10`.
 
 The functions are usable as ordinary values (and as predicates where the T-SQL form is a condition):

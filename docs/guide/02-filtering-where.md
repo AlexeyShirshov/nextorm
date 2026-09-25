@@ -353,6 +353,39 @@ Negate it with C# `!` to render `GLOBAL NOT IN`. The predicate requires
 only on ClickHouse; every other provider and the in-memory context throw `NotSupportedException`.
 See [Provider-specific SQL](provider-specific/overview.md) for the full catalogue.
 
+## Captured collection lookup (`dict[column]`)
+
+A captured `Dictionary`, `List` or array indexed by a query expression
+(`dict[s.TenantRegistryId]`) is translated to a portable `CASE` over the collection's entries, so every
+relational provider emits the same predicate. The in-memory context needs no translation: it evaluates
+the indexer as ordinary C#.
+
+```csharp
+var synchronised = new Dictionary<int, DateTime> { [1] = firstSync, [2] = secondSync };
+var due = await dataContext.From<Schedule>()
+    .Where(s => synchronised[s.TenantRegistryId] > s.ScheduleDate)
+    .Select(s => s.Id)
+    .ToListAsync();
+```
+
+```sql
+-- SQLite
+select id from schedule
+ where (case when tenant_registry_id = $p0 then $p1 when tenant_registry_id = $p2 then $p3 end > schedule_date)
+```
+
+The collection is read on the client, so every key and value is bound as a parameter (the parameter
+count follows the number of entries, and that shape is part of the plan key, so a grown or reassigned
+collection rebuilds the command instead of reusing a stale plan).
+
+| Case | Behaviour |
+|---|---|
+| Key is a query expression | `case when key = @k then @v … end` |
+| Key is a constant (`dict[5]`) | evaluated on the client and bound as a single parameter |
+| Key absent at runtime | the `CASE` has no matching branch and yields `NULL` (C# would throw) |
+| Empty collection | `NotSupportedException` |
+| Lookup outside `Where`/pre-where | `NotSupportedException` |
+
 ## Pattern and subquery predicates
 
 `SqlFunctions.Sql.like`, `SqlFunctions.Sql.exists`, `SqlFunctions.Sql.any` and `SqlFunctions.Sql.all` are the remaining predicate
@@ -388,7 +421,7 @@ subquery positions and the in-memory limits, are covered in [Subqueries](06-subq
 For a captured pattern the wildcards are concatenated around the parameter at build time, for example
 `somestring like '%' || $needle || '%'` on SQLite. `any` and `all` are not supported by the SQLite
 engine and fail when the statement runs. Over an **array** they require PostgreSQL, where the whole
-array is bound as one parameter; see [Arrays](11-scalar-functions.md#arrays-postgresql).
+array is bound as one parameter; see [Arrays](../scalar-functions/06-arrays.md#arrays-postgresql).
 
 ## Function and operator mapping
 
@@ -427,7 +460,7 @@ array is bound as one parameter; see [Arrays](11-scalar-functions.md#arrays-post
 
 * [Querying and projections](01-querying-and-projections.md)
 * [Sorting and paging](05-sorting-and-paging.md)
-* [Scalar functions](11-scalar-functions.md)
+* [Scalar functions](../scalar-functions/index.md)
 * [Subqueries](06-subqueries.md)
 * [Provider-specific SQL](provider-specific/overview.md)
 * [Limitations and out-of-scope features](../advanced/limitations.md)

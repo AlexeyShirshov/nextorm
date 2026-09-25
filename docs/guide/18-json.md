@@ -2,7 +2,7 @@
 
 > There is no single portable JSON API: PostgreSQL exposes a native `json`/`jsonb` surface, SQL Server returns a document with a trailing `FOR JSON` clause and offers JSON-as-text functions, MySQL/MariaDB offer the same JSON-as-text functions over the `JSON_EXTRACT`/`JSON_SET` family, and the remaining providers reject JSON constructs.
 
-**Prerequisites:** [Querying and projections](01-querying-and-projections.md) · [Scalar functions](11-scalar-functions.md#json-and-jsonb-postgresql) · [Table-valued functions](13-table-valued-functions.md#built-in-table-functions) · [Provider overview](../providers/overview.md)
+**Prerequisites:** [Querying and projections](01-querying-and-projections.md) · [Scalar functions](../scalar-functions/07-json-and-xml.md#json-and-jsonb-postgresql) · [Table-valued functions](13-table-valued-functions.md#built-in-table-functions) · [Provider overview](../providers/overview.md)
 
 ## Overview
 
@@ -351,7 +351,7 @@ The construction and aggregation functions return `string?`; deserialize with
 ## See also
 
 - [Querying and projections](01-querying-and-projections.md) - `ForJson`/`ForXml` for SQL Server.
-- [Scalar functions](11-scalar-functions.md#json-and-jsonb-postgresql) - the full PostgreSQL JSON/JSONB surface and the SQL Server / MySQL/MariaDB text-JSON functions.
+- [Scalar functions](../scalar-functions/07-json-and-xml.md#json-and-jsonb-postgresql) - the full PostgreSQL JSON/JSONB surface and the SQL Server / MySQL/MariaDB text-JSON functions.
 - [Table-valued functions](13-table-valued-functions.md#built-in-table-functions) - `openjson` and `string_split`.
 - [PostgreSQL provider](../providers/postgres.md) - JSON parameter binding and arrays.
 - [SQL Server provider](../providers/sqlserver.md) - `FOR JSON`, `FOR XML` and text JSON.

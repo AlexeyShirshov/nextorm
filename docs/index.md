@@ -21,7 +21,6 @@
 - [SELECT DISTINCT](guide/08-distinct.md)
 - [Common table expressions (CTE)](guide/09-cte.md)
 - [Window functions](guide/10-window-functions.md)
-- [Scalar functions](guide/11-scalar-functions.md)
 - [User-defined functions](guide/12-user-defined-functions.md)
 - [Table-valued functions](guide/13-table-valued-functions.md)
 - [Raw SQL](guide/14-raw-sql.md)
@@ -40,6 +39,18 @@
 - [Interceptors](guide/27-interceptors.md)
 - [Executing statements in one batch](guide/28-sql-batch.md)
 - [Optimistic concurrency and change tracking](guide/29-optimistic-concurrency.md)
+
+### Scalar functions
+
+- [Overview](scalar-functions/index.md)
+- [String functions](scalar-functions/01-string-functions.md)
+- [Math functions](scalar-functions/02-math-functions.md)
+- [Date and time](scalar-functions/03-date-and-time.md)
+- [Conditional and conversion helpers](scalar-functions/04-conditionals-and-conversion.md)
+- [Aggregates](scalar-functions/05-aggregates.md)
+- [Arrays](scalar-functions/06-arrays.md)
+- [JSON and XML](scalar-functions/07-json-and-xml.md)
+- [Provider reference](scalar-functions/08-reference.md)
 
 ### Providers
 

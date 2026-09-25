@@ -29,7 +29,7 @@ var rows = dataContext.From<IComplexEntity>()
 select id from complex_entity where (id = any(@p0))
 ```
 
-См. [Массивы (PostgreSQL)](../11-scalar-functions.md#массивы-postgresql). Функции, возвращающие
+См. [Массивы (PostgreSQL)](../../scalar-functions/06-arrays.md#массивы-postgresql). Функции, возвращающие
 массив, можно использовать внутри запроса или проецировать напрямую: row reader материализует
 результат `Array(T)` как CLR `T[]`.
 
@@ -51,7 +51,7 @@ var json = dataContext.From<IComplexEntity>()
 select jsonb_agg(somestring) from complex_entity
 ```
 
-См. [JSON и JSONB (PostgreSQL)](../11-scalar-functions.md) и
+См. [JSON и JSONB (PostgreSQL)](../../scalar-functions/index.md) и
 [Поддержка JSON в разных провайдерах](../18-json.md).
 
 ## Упорядоченные, регрессионные и логические агрегаты
@@ -109,7 +109,7 @@ Native-поверхность реализована только в PostgreSQL;
 (`to_char`/`to_date`/`to_number`/`to_timestamp`/`timezone`/`make_interval`/`justify_*`) и
 конструкторы массивов, всё гейтится `SupportsExtendedScalarFunctions`.
 
-См. [Скалярные функции](../11-scalar-functions.md).
+См. [Скалярные функции](../../scalar-functions/index.md).
 
 ## `DISTINCT ON`
 

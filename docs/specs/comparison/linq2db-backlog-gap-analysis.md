@@ -62,13 +62,13 @@ output, композируемый DML `RETURNING` (data-modifying CTE), CTAS, �
 
 | linq2db | Тема | Статус nextorm |
 |---|---|---|
-| `#5759` | `TimeSpan`-члены и сравнения на native interval-колонках (`[Duration]`) | **<span style="color:green">Реализовано</span> (1.0.6-alpha, ~~G9~~)**: `DurationUnit`/`DurationAttribute`/fluent `Duration(...)`, native `interval`/`TIME` → [Duration-колонки](../../guide/26-duration-columns.md), [`todo_timespan_columns.md`](../roadmap/todo_timespan_columns.md) |
+| `#5759` | `TimeSpan`-члены и сравнения на native interval-колонках (`[Duration]`) | **<span style="color:green">Реализовано</span> (1.0.6-alpha, ~~G9~~)**: `DurationUnit`/`DurationAttribute`/fluent `Duration(...)`, native `interval`/`TIME` → [Duration-колонки](../../guide/26-duration-columns.md), [Duration columns](../../guide/26-duration-columns.md) |
 | `#5933` | диалект MariaDB 13 | **Gap** (G13) |
 | `#5948`, `#5952` | PG 9.2/9.3: `FILTER`-агрегаты синтаксически недоступны | **Gap** (G13, version-gate) |
-| `#5961`, `#5914` | ClickHouse date/`DateTimeOffset` типы в SQL противоречат декларации | **Проверено, не gap.** `#5961`: у nextorm нет per-node `DbDataType`, а части даты уже приведены к объявленному CLR-типу (`toInt32(toISOWeek(toDateTime64(…)))`, `toInt32(toYear(…))`, `toFloat64(toUnixTimestamp(…))`); `to_unix_timestamp` объявлен `long` и обёрнут `toInt64` — «type lie» не воспроизводится. `#5914`: `DateTimeOffset` получил read-ветку (`GetFieldValue<DateTimeOffset>`; см. [`todo_timespan_columns.md`](../roadmap/todo_timespan_columns.md) §9.1), но расхождение Date/DateTime64 не воспроизводится — **N/A**. Однотипный хвост — ширина `date_diff`, см. G20; общий план — [`todo_timespan_columns.md`](../roadmap/todo_timespan_columns.md) §8 |
-| `#5921` | `string.Format`/интерполяция: format-спецификаторы молча теряются | **Реализовано** (G12) → [Ordinal-сравнение и коллация](../../guide/11-scalar-functions.md#ordinal-сравнение-и-коллация) |
-| `#5927` | `string.CompareOrdinal`/ordinal `Compare` маппятся в culture-sensitive | **Реализовано** (G12): ordinal `Compare`/`CompareOrdinal`/`Equals`/`Contains` переводятся в бинарную коллацию, неподдержанные формы бросают `NotSupportedException` → [Ordinal-сравнение и коллация](../../guide/11-scalar-functions.md#ordinal-сравнение-и-коллация) |
-| `#5965` | sub-day date-функции над date-only операндами | **<span style="color:green">Реализовано</span> (1.0.6-alpha).** Ранее nextorm не продвигал date-only операнд: `date_add`/`DateTime.Add*` и `.Hour/.Minute/.Second` рендерились на колонке (SQL Server `date`-колонка → 9810, ClickHouse `Date` теряет sub-day). Теперь хук `ISqlDialect.PromoteDateOperand(field, value)` продвигает операнд перед sub-day функцией: SQL Server `cast(value as datetime2)`, ClickHouse `toDateTime` (hour..second) и `toDateTime64(value, 3 или 6)` (milliseconds/microseconds), PG/MySQL/SQLite — без изменений. Полноценные precision-метаданные колонки (§8.5) остаются открытыми. См. [`todo_timespan_columns.md`](../roadmap/todo_timespan_columns.md) §8.2/§9.4 |
+| `#5961`, `#5914` | ClickHouse date/`DateTimeOffset` типы в SQL противоречат декларации | **Проверено, не gap.** `#5961`: у nextorm нет per-node `DbDataType`, а части даты уже приведены к объявленному CLR-типу (`toInt32(toISOWeek(toDateTime64(…)))`, `toInt32(toYear(…))`, `toFloat64(toUnixTimestamp(…))`); `to_unix_timestamp` объявлен `long` и обёрнут `toInt64` — «type lie» не воспроизводится. `#5914`: `DateTimeOffset` получил read-ветку (`GetFieldValue<DateTimeOffset>`; см. [Duration columns](../../guide/26-duration-columns.md)), но расхождение Date/DateTime64 не воспроизводится — **N/A**. Однотипный хвост — ширина `date_diff`, см. G20; общий план — [Duration columns](../../guide/26-duration-columns.md) |
+| `#5921` | `string.Format`/интерполяция: format-спецификаторы молча теряются | **Реализовано** (G12) → [Ordinal-сравнение и коллация](../../ru/scalar-functions/01-string-functions.md#ordinal-сравнение-и-коллация) |
+| `#5927` | `string.CompareOrdinal`/ordinal `Compare` маппятся в culture-sensitive | **Реализовано** (G12): ordinal `Compare`/`CompareOrdinal`/`Equals`/`Contains` переводятся в бинарную коллацию, неподдержанные формы бросают `NotSupportedException` → [Ordinal-сравнение и коллация](../../ru/scalar-functions/01-string-functions.md#ordinal-сравнение-и-коллация) |
+| `#5965` | sub-day date-функции над date-only операндами | **<span style="color:green">Реализовано</span> (1.0.6-alpha).** Ранее nextorm не продвигал date-only операнд: `date_add`/`DateTime.Add*` и `.Hour/.Minute/.Second` рендерились на колонке (SQL Server `date`-колонка → 9810, ClickHouse `Date` теряет sub-day). Теперь хук `ISqlDialect.PromoteDateOperand(field, value)` продвигает операнд перед sub-day функцией: SQL Server `cast(value as datetime2)`, ClickHouse `toDateTime` (hour..second) и `toDateTime64(value, 3 или 6)` (milliseconds/microseconds), PG/MySQL/SQLite — без изменений. Полноценные precision-метаданные колонки (§8.5) остаются открытыми. См. [Duration columns](../../guide/26-duration-columns.md)§9.4 |
 | `#5837`, `#5838`, `#5852` | inheritance/TPH write, shadowing-член | **Out-of-scope** (нет TPH) |
 | `#5904`, `#5937`, `#5941`, `#5940`, `#5865` | eager-load ordering/strategy | **Out-of-scope** |
 | `#5717` | DML `RETURNING`/`OUTPUT` как **композируемый** `IQueryable`-источник | **Частично <span style="color:green">Done</span>** (~~G3~~): PG `INSERT ... RETURNING` как data-modifying CTE |
@@ -82,7 +82,7 @@ output, композируемый DML `RETURNING` (data-modifying CTE), CTAS, �
 
 | linq2db | Тема | Статус nextorm |
 |---|---|---|
-| `#698` | `Regex` внутри запроса (трансляция `Regex.IsMatch`/…) | **<span style="color:green">реализовано</span>** (~~G7~~): [Регулярные выражения](../../guide/11-scalar-functions.md#регулярные-выражения) |
+| `#698` | `Regex` внутри запроса (трансляция `Regex.IsMatch`/…) | **<span style="color:green">реализовано</span>** (~~G7~~): [Регулярные выражения](../../ru/scalar-functions/01-string-functions.md#регулярные-выражения) |
 | `#1645` | table-valued **parameters** для хранимых процедур (TVP) | **Gap** (G8) → [`todo_tvp.md`](../roadmap/todo_tvp.md); смежно [`todo_stored_procedures.md`](../roadmap/todo_stored_procedures.md) |
 | `#1994` | open-generic `TypeConverter` | **Gap** (G1) |
 | `#3009` | ограничение размера кэша запросов | **Gap** (G10) |
@@ -171,7 +171,7 @@ shipped `UpdateOptimisticWithRefresh` (6.5.0). При отсутствии chang
 `regexp_replace` с `'g'`), MySQL (`REGEXP_LIKE`/`REGEXP_REPLACE` с match type), MariaDB (`REGEXP`/
 `REGEXP_REPLACE` с `(?i)`/`(?-i)`), ClickHouse (`match`/`replaceRegexpAll` с `(?i)`) и SQLite
 (регистрируемые CLR-функции `regexp`/`regexp_replace`); SQL Server гейтится off — движка регулярных
-выражений нет. См. [Регулярные выражения](../../guide/11-scalar-functions.md#регулярные-выражения) и
+выражений нет. См. [Регулярные выражения](../../ru/scalar-functions/01-string-functions.md#регулярные-выражения) и
 [Limitations и out-of-scope](../../advanced/limitations.md).
 
 **G8. Table-valued parameters (TVP).** `linq2db#1645`. nextorm умеет TVF как **источник**, но не
@@ -183,7 +183,7 @@ shipped `UpdateOptimisticWithRefresh` (6.5.0). При отсутствии chang
 read/write/сравнения, native `interval` (PG) и `TIME` (MySQL/MariaDB), целочисленная форма для
 SQL Server/SQLite/ClickHouse; публичная страница — [`docs/guide/26-duration-columns.md`](../../guide/26-duration-columns.md)
 (+RU). Остаток (sub-day promotion §8.2, ширина `date_diff` §8.3) — **<span style="color:green">реализовано (1.0.6-alpha)</span>**, см.
-[`todo_timespan_columns.md`](../roadmap/todo_timespan_columns.md) §9.4.
+[Duration columns](../../guide/26-duration-columns.md)
 
 **G10. Ограничение кэша планов + логирование параметров — <span style="color:green">частично Done</span>.** `linq2db#3009` (cache size), `#4039`
 (parameter logging). **<span style="color:green">Реализовано</span>** логирование параметров: фаза 1 интерцепторов (1.0.6-alpha)
@@ -206,7 +206,7 @@ issue `#28` «column collation») на том же примитиве `MakeColla
 объявляется на свойстве сущности (`CollationAttribute`/`EntityPropertyBuilder<T>.Collation`) и
 применяется в collation-чувствительных операциях запроса (ClickHouse без `COLLATE` отклоняет).
 Связанные задачи G12 — верность трансляции C#-семантики, `#28` — объявление/маппинг: обе закрыты.
-См. [Ordinal-сравнение и коллация](../../guide/11-scalar-functions.md#ordinal-сравнение-и-коллация) и
+См. [Ordinal-сравнение и коллация](../../ru/scalar-functions/01-string-functions.md#ordinal-сравнение-и-коллация) и
 [Ограничения](../../advanced/limitations.md).
 
 **G13. Версионные диалекты и version-gates.** `linq2db#5933` (MariaDB 13), `#5948`/`#5952`
@@ -283,7 +283,7 @@ DELETE). См. [CTE](../../guide/09-cte.md), [UPDATE](../../guide/21-update-stat
 **✅ Реализовано аддитивно (24.09.2026).** `date_diff` остаётся `int?`; добавлен `date_diff_big → long?`
 с хуком `ISqlDialect.MakeDateDiffBig` (SQL Server `datediff_big`, PostgreSQL `bigint`, остальные
 делегируют `MakeDateDiff`). Добавлены ClickHouse SQL-gen `date_diff`/`date_diff_big` и common
-integration-тест. Подробности — [`todo_timespan_columns.md`](../roadmap/todo_timespan_columns.md) §8.3/§9.4.
+integration-тест. Подробности — [Duration columns](../../guide/26-duration-columns.md)§9.4.
 
 ## 4. Осознанно вне scope (не считать пробелами)
 
@@ -319,9 +319,9 @@ integration-тест. Подробности — [`todo_timespan_columns.md`](..
 | P0 | [`todo_output_into.md`](../roadmap/todo_output_into.md): `OUTPUT INTO`/multi-result/upsert-with-output (G4). Композируемый `INSERT ... RETURNING` (~~G3~~, PostgreSQL) — **<span style="color:green">реализовано</span>**: `MutationCteQuery` + [guide 09](../../guide/09-cte.md#data-modifying-cte-postgresql)/[guide 19](../../guide/19-insert-statement.md#data-modifying-cte-postgresql) |
 | P0 | Bulk insert + ~~G5~~ (returning/ignore/identity/chunking) — **<span style="color:green">реализовано</span>**: [Массовая вставка](../../guide/24-bulk-insert.md) |
 | — | ~~G6~~ — **By design**: паттерн оптимистичной конкурентности задокументирован ([гайд](../../guide/29-optimistic-concurrency.md)); `todo_optimistic_concurrency.md` не заводится |
-| P1 | ~~G7 Regex~~ — **<span style="color:green">реализовано</span>**: [Регулярные выражения](../../guide/11-scalar-functions.md#регулярные-выражения); ~~G9 Duration~~ — **<span style="color:green">реализовано</span>** (1.0.6-alpha): [Duration-колонки](../../guide/26-duration-columns.md); [`todo_tvp.md`](../roadmap/todo_tvp.md) (G8), [`todo_postgres_ranges.md`](../roadmap/todo_postgres_ranges.md) (G11) |
+| P1 | ~~G7 Regex~~ — **<span style="color:green">реализовано</span>**: [Регулярные выражения](../../ru/scalar-functions/01-string-functions.md#регулярные-выражения); ~~G9 Duration~~ — **<span style="color:green">реализовано</span>** (1.0.6-alpha): [Duration-колонки](../../guide/26-duration-columns.md); [`todo_tvp.md`](../roadmap/todo_tvp.md) (G8), [`todo_postgres_ranges.md`](../roadmap/todo_postgres_ranges.md) (G11) |
 | P1 | Хранимые процедуры/функции + `OUT`/несколько result-set (снять `limitations.md`, туда же сырые параметризованные команды) → [`todo_stored_procedures.md`](../roadmap/todo_stored_procedures.md) |
-| P1 | ~~Логирование параметров~~ (G10) — **<span style="color:green">реализовано</span>** через интерцепторы ([гайд 27](../../guide/27-interceptors.md)); остаётся LRU/размер `DataContextCache` (`MapperCache` уже ограничен); version-gates MariaDB13/PG9.2-9.3 (G13); ~~string-семантика (G12)~~ — **<span style="color:green">реализовано</span>**: [Ordinal-сравнение и коллация](../../guide/11-scalar-functions.md#ordinal-сравнение-и-коллация) |
+| P1 | ~~Логирование параметров~~ (G10) — **<span style="color:green">реализовано</span>** через интерцепторы ([гайд 27](../../guide/27-interceptors.md)); остаётся LRU/размер `DataContextCache` (`MapperCache` уже ограничен); version-gates MariaDB13/PG9.2-9.3 (G13); ~~string-семантика (G12)~~ — **<span style="color:green">реализовано</span>**: [Ordinal-сравнение и коллация](../../ru/scalar-functions/01-string-functions.md#ordinal-сравнение-и-коллация) |
 | P1 | ~~Багфикс `date_diff` (G20)~~ — **<span style="color:green">реализовано</span>** аддитивно: `date_diff_big → long?` + `ISqlDialect.MakeDateDiffBig` (см. G20) |
 | P2 | ~~G16~~ — не подтвердилось (уже было реализовано), регресс-тесты добавлены (SQL-gen SQLite/PG; интеграция SQLite/PG/MySQL; SQL Server требует `UNION ALL`); G17 — точечный багфикс (IndexExpression); ~~G18~~ — багфикс `WITH … UPDATE`/`DELETE` закрыт (CTE хойстится перед мутацией, любой join, рекурсивный CTE); ~~G15~~ — проверено, реализовано (PG JSONPath); G14 — проверить |
 | — | Принять явное решение по **DDL** (оставить out-of-scope или новый workstream) |
@@ -344,7 +344,7 @@ PostgreSQL (`MutationCteQuery<TResult>`); **~~G5~~** — массовая вст
 ([Duration-колонки](../../guide/26-duration-columns.md)); **~~G15~~** — PG JSONPath уже реализован
 (`jsonb_path_*`, `jsonpath(cast)`, TVF); **~~G10~~** (логирование параметров) — через интерцепторы
 (фаза 1, [гайд 27](../../guide/27-interceptors.md)); **~~linq2db#5965~~** — sub-day-операнд продвигается
-`ISqlDialect.PromoteDateOperand` ([`todo_timespan_columns.md`](../roadmap/todo_timespan_columns.md) §8.2/§9.4).
+`ISqlDialect.PromoteDateOperand` ([Duration columns](../../guide/26-duration-columns.md)§9.4).
 
 ## See also
 

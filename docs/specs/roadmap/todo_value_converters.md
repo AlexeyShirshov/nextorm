@@ -29,7 +29,7 @@
    enum и `DateTimeOffset` там отсутствуют (и `DateTimeOffset` в `src/` нет вовсе). Без конвертера такие
    свойства требуют ручных проекций и ручного `JsonSerializer`/`Parse` в коде (`docs/guide/18-json.md:280`).
 3. **База для G2 и соседей.** enum-as-string, `DateTimeOffset`, JSON-колонка, `TimeSpan`-юниты
-   ([`todo_timespan_columns.md`](todo_timespan_columns.md)) — всё это частные случаи одного механизма.
+   ([Duration-колонки](../../guide/26-duration-columns.md)) — всё это частные случаи одного механизма.
 
 ## Текущее состояние и разрыв
 
@@ -154,7 +154,7 @@ MySQL/MariaDB (`JSON`, `varchar`), ClickHouse (`String`, `DateTime64`), SQLite (
 > Прогон сабагента `nextorm-design-engineer` по плану (read-only). `file:line` — по дереву на момент ревью.
 > Вердикт: **пересмотр до реализации — 4 🟡**; API закрыт корректно, но нужна «единая точка» конвертации и решение о границе с duration.
 
-- **[DRY]/[OCP] 🟡** Два параллельных слоя конвертации CLR↔provider: `:12-20,31-32` + `todo_timespan_columns.md:164-167`. Duration уже реализован частной конвертацией: read `SelectExpression.cs:107-114`, материализация `RowMapperFactory.cs:39-46`, write `DurationStorage.ToParameterValue`, поправки констант `BaseExpressionVisitor.cs:90,484-489`. Fix: зафиксировать границу — либо (a) `[Duration]` как встроенный `ValueConverter<TimeSpan,TProvider>` и свернуть спец-ветки, либо (b) обосновать, что native-типизация duration не пересекается с G1.
+- **[DRY]/[OCP] 🟡** Два параллельных слоя конвертации CLR↔provider: `:12-20,31-32` + duration-конвертация ([Duration-колонки](../../guide/26-duration-columns.md)). Duration уже реализован частной конвертацией: read `SelectExpression.cs:107-114`, материализация `RowMapperFactory.cs:39-46`, write `DurationStorage.ToParameterValue`, поправки констант `BaseExpressionVisitor.cs:90,484-489`. Fix: зафиксировать границу — либо (a) `[Duration]` как встроенный `ValueConverter<TimeSpan,TProvider>` и свернуть спец-ветки, либо (b) обосновать, что native-типизация duration не пересекается с G1.
 - **[DRY] 🟡** Write-шов недописан: план называет одну точку (`:43,111`, `SqlMutationBuilder.cs:801` — сейчас это `AppendMergeAssignments`), а в дереве 6+ сайтов `new Parameter` + `DurationStorage.ToParameterValue`: `SqlMutationBuilder.cs:285,369,880`, `SqlSourceRenderer.cs:795`, `QueryPlanner.cs:261`, `BulkInsertBuilder.cs:206`; плюс нормализация констант `MemberTranslator.cs:263,371`, `SqlOperandTranslator.cs:72`, `BaseExpressionVisitor.cs:354,489`, `InValuesTranslator.cs:72,96`. Fix: единый хелпер формы `ToProviderValue(value, property, dialect)` и перечислить все сайты.
 - **[PERF]/[TYPE] 🟡** `:53-65,127` `IValueConverter.ConvertToProvider/ConvertFromProvider(object?)` боксят value-типы на каждой строке/константе, а `ValueConverter<TModel,TProvider>` объявляет `abstract`-методы, но не реализует `object?`-члены интерфейса (сниппет не удовлетворяет `IValueConverter`). Fix: определить мост и кэшировать типизированный инвокер (`Func<TModel,TProvider>`), вызывать делегат, а не `object?`-метод; бюджет упаковки — в тест «Память» (`:127`).
 - **[DRY] 🟡** `ConvertsNulls` — три источника истины (`:57` интерфейс, `:64` virtual в базе, `:71` set-свойство атрибута). Fix: политика только на экземпляре конвертера.

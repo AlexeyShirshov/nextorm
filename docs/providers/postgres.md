@@ -150,7 +150,7 @@ select id from complex_entity where (id = any(@p0))
 ```
 
 The array functions (`cardinality`, `array_length`, `array_position`, ...) and the `@>`/`&&` operators
-are documented in [Scalar functions](../guide/11-scalar-functions.md#arrays-postgresql). Other
+are documented in [Scalar functions](../scalar-functions/06-arrays.md#arrays-postgresql). Other
 providers reject them with `NotSupportedException`.
 
 ## JSON and JSONB
@@ -175,7 +175,7 @@ ctx.From<IComplexEntity>()
 
 A plain JSON string is bound as `text`; use `SqlFunctions.Postgres.json_cast(value)` to parse it as `jsonb`. The full
 surface (`json_agg`, `jsonb_build_object`, `->`, `->>`, `#>`, `@>`, `?`, `?|`, `?&`, ...) is documented
-in [Scalar functions](../guide/11-scalar-functions.md#json-and-jsonb-postgresql). Other providers
+in [Scalar functions](../scalar-functions/07-json-and-xml.md#json-and-jsonb-postgresql). Other providers
 reject it with `NotSupportedException`.
 
 ## Additional function surface
@@ -199,7 +199,7 @@ ctx.From<IComplexEntity>()
 ```
 
 These are documented in
-[Scalar functions](../guide/11-scalar-functions.md#string-and-array-aggregates). SQLite also
+[Scalar functions](../scalar-functions/05-aggregates.md#string-and-array-aggregates). SQLite also
 accepts the `FILTER` clause; the other functions are PostgreSQL-only.
 
 ## `*ALL` set operations and null ordering

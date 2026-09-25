@@ -26,7 +26,7 @@ select id from array_entity left array join tags where id > 0
 
 The scalar `array_join` (one row per element, projectable) and the clause methods
 `ArrayJoin`/`LeftArrayJoin`/`ArrayJoinElement`/`LeftArrayJoinElement` are covered in
-[Arrays (ClickHouse)](../11-scalar-functions.md#arrays-clickhouse); the array functions are gated by
+[Arrays (ClickHouse)](../../scalar-functions/06-arrays.md#arrays-clickhouse); the array functions are gated by
 `SupportsArrayFunctions`, the clause by `ArrayJoinClause`.
 
 ## `LIMIT n BY expr`
@@ -207,7 +207,7 @@ var rows = dataContext.From<Event>()
     .ToList();
 ```
 
-See [Scalar functions](../11-scalar-functions.md).
+See [Scalar functions](../../scalar-functions/index.md).
 
 ## JSON, dictionaries and array functions
 
@@ -230,7 +230,7 @@ See [Scalar functions](../11-scalar-functions.md).
   `System.Tuple<...>.ItemN` renders `tupleElement(t, n)` (a whole `Tuple(...)` projects as
   `System.Tuple<...>`); `untuple` is not supported.
 
-See [Scalar functions](../11-scalar-functions.md) and [JSON support](../18-json.md)
+See [Scalar functions](../../scalar-functions/index.md) and [JSON support](../18-json.md)
 ([`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract)/[`SupportsDictionaries`](xref:NextORM.Core.ISqlDialect.SupportsDictionaries)).
 
 ## Table functions

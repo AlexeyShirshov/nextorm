@@ -27,7 +27,7 @@ select id from array_entity left array join tags where id > 0
 
 Скалярный `array_join` (одна строка на элемент, проекция) и методы-клаузы
 `ArrayJoin`/`LeftArrayJoin`/`ArrayJoinElement`/`LeftArrayJoinElement` описаны в разделе
-[Массивы (ClickHouse)](../11-scalar-functions.md#массивы-clickhouse); функции массивов гейтятся
+[Массивы (ClickHouse)](../../scalar-functions/06-arrays.md#массивы-clickhouse); функции массивов гейтятся
 `SupportsArrayFunctions`, клауза — `ArrayJoinClause`.
 
 ## `LIMIT n BY expr`
@@ -208,7 +208,7 @@ var rows = dataContext.From<Event>()
     .ToList();
 ```
 
-См. [Скалярные функции](../11-scalar-functions.md).
+См. [Скалярные функции](../../scalar-functions/index.md).
 
 ## JSON, словари и функции массивов
 
@@ -234,7 +234,7 @@ var rows = dataContext.From<Event>()
   а `System.Tuple<...>.ItemN` — как `tupleElement(t, n)` (целый `Tuple(...)` проецируется как
   `System.Tuple<...>`); `untuple` не поддерживается.
 
-См. [Скалярные функции](../11-scalar-functions.md) и [Поддержка JSON](../18-json.md)
+См. [Скалярные функции](../../scalar-functions/index.md) и [Поддержка JSON](../18-json.md)
 ([`SupportsJsonExtract`](xref:NextORM.Core.ISqlDialect.SupportsJsonExtract)/[`SupportsDictionaries`](xref:NextORM.Core.ISqlDialect.SupportsDictionaries)).
 
 ## Табличные функции

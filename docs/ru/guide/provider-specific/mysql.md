@@ -7,7 +7,7 @@
 > [`ISqlDialect.MySqlFunctions`](xref:NextORM.Core.ISqlDialect.MySqlFunctions); прочие провайдеры
 > отклоняют вызов с `NotSupportedException`.
 
-**Что нужно знать:** [Скалярные функции](../11-scalar-functions.md) · [Провайдер MySQL](../../providers/mysql.md) · [Провайдер MariaDB](../../providers/mariadb.md)
+**Что нужно знать:** [Скалярные функции](../../scalar-functions/index.md) · [Провайдер MySQL](../../providers/mysql.md) · [Провайдер MariaDB](../../providers/mariadb.md)
 
 ## Нативные функции
 
@@ -115,4 +115,4 @@ var rows = dataContext.From<IOrderEntity>()
 In-memory-провайдер не умеет вычислять эти нативные функции и отклоняет их с
 `NotSupportedException`; PostgreSQL, SQL Server, SQLite и ClickHouse отклоняют всю поверхность
 `SqlFunctions.MySql` так же. Кросс-провайдерные функции с совпадающей семантикой живут на
-[`SqlFunctions.Sql`](../11-scalar-functions.md); эксклюзивные имена остаются здесь.
+[`SqlFunctions.Sql`](../../scalar-functions/index.md); эксклюзивные имена остаются здесь.

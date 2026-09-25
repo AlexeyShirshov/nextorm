@@ -150,7 +150,7 @@ select id from complex_entity where (id = any(@p0))
 ```
 
 Функции для массивов (`cardinality`, `array_length`, `array_position`, ...) и операторы `@>`/`&&`
-описаны в разделе [Скалярные функции](../guide/11-scalar-functions.md#массивы-postgresql). Остальные
+описаны в разделе [Скалярные функции](../scalar-functions/06-arrays.md#массивы-postgresql). Остальные
 провайдеры отклоняют их с `NotSupportedException`.
 
 ## JSON и JSONB
@@ -176,7 +176,7 @@ ctx.From<IComplexEntity>()
 
 Обычная строка с JSON привязывается как `text`; для разбора используйте `SqlFunctions.Postgres.json_cast(value)`.
 Полная поверхность (`json_agg`, `jsonb_build_object`, `->`, `->>`, `#>`, `@>`, `?`, `?|`, `?&`, ...)
-описана в разделе [Скалярные функции](../guide/11-scalar-functions.md#json-и-jsonb-postgresql).
+описана в разделе [Скалярные функции](../scalar-functions/07-json-and-xml.md#json-и-jsonb-postgresql).
 Остальные провайдеры отклоняют её с `NotSupportedException`.
 
 ## Дополнительная поверхность функций
@@ -199,7 +199,7 @@ ctx.From<IComplexEntity>()
 ```
 
 Они описаны в разделе
-[Скалярные функции](../guide/11-scalar-functions.md#строковые-и-массивные-агрегаты). SQLite
+[Скалярные функции](../scalar-functions/05-aggregates.md#строковые-и-массивные-агрегаты). SQLite
 также принимает предложение `FILTER`; остальные функции доступны только в PostgreSQL.
 
 ## Операции над множествами `*ALL` и порядок null

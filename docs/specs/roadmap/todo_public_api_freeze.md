@@ -2,7 +2,7 @@
 
 > Рабочий план (design RFC). Источник: GitHub issue
 > [#53 «IF6: Заморозка и трекинг публичного API»](https://github.com/AlexeyShirshov/nextorm/issues/53),
-> реестр [`docs/specs/design/API-NAMING-REVIEW.md`](design/API-NAMING-REVIEW.md) (находки
+> реестр [`docs/specs/design/API-NAMING-REVIEW.md`](../design/API-NAMING-REVIEW.md) (находки
 > IF6/DC3/DC8, «Список заморозки»). Это **единственный незакрытый пункт закрытой фичи
 > «capability-объекты диалекта» (Фазы 1–3)**: поверхность сформирована (capability-объекты),
 > но её состав в `PublicAPI.*.txt` не зафиксирован.
