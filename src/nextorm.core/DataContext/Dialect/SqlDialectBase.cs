@@ -67,6 +67,13 @@ public abstract class SqlDialectBase : ISqlDialect
     public virtual bool SupportsHigherOrderArrayFunctions => false;
     /// <inheritdoc/>
     public virtual bool SupportsRanges => false;
+
+    /// <summary>
+    /// True when the provider can store a <see cref="Range{T}"/> as a pair of scalar columns declared
+    /// with <see cref="RangeColumnsAttribute"/>; false by default. See
+    /// <see cref="ISqlDialect.SupportsRangeColumns"/>.
+    /// </summary>
+    public virtual bool SupportsRangeColumns => false;
     /// <inheritdoc/>
     public virtual bool SupportsArrayJoin => false;
     /// <inheritdoc/>

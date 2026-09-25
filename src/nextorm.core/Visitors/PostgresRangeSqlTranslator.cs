@@ -38,7 +38,8 @@ internal static class PostgresRangeSqlTranslator
         nameof(PostgresFunctions.lower_inf), nameof(PostgresFunctions.upper_inf),
         nameof(PostgresFunctions.int4range), nameof(PostgresFunctions.int8range),
         nameof(PostgresFunctions.numrange), nameof(PostgresFunctions.tsrange),
-        nameof(PostgresFunctions.tstzrange), nameof(PostgresFunctions.daterange)
+        nameof(PostgresFunctions.tstzrange), nameof(PostgresFunctions.daterange),
+        nameof(PostgresFunctions.range_merge), nameof(PostgresFunctions.multirange)
     };
 
     /// <summary>Translates a range call; returns <c>false</c> when it is not one of them.</summary>

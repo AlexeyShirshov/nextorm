@@ -15,8 +15,8 @@ internal sealed class SqliteFunctionRenderer : ISqliteFunctions
     {
         "printf", "format", "hex", "unhex", "random", "randomblob", "quote", "typeof", "glob",
         "unicode", "char", "soundex", "octet_length", "ifnull", "if",
-        "acos", "acosh", "asin", "asinh", "atan", "atan2", "atanh", "cosh", "degrees",
-        "log10", "log2", "mod", "pi", "radians", "sinh", "tanh",
+        "acos", "acosh", "asin", "asinh", "atan", "atan2", "atanh", "cosh",
+        "log10", "log2", "mod", "sinh", "tanh",
         "timediff", "unixepoch", "julianday",
         "json", "jsonb", "json_extract", "json_get", "json_get_text", "json_array",
         "json_array_insert", "json_insert", "json_replace", "json_set", "json_object",

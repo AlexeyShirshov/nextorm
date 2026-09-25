@@ -181,7 +181,7 @@ internal static class StringFunctionTranslator
             if (args.Count is < 1 or > 2)
                 return false;
 
-            right = UnwrapConvert(args[0]);
+            right = TypeFacts.UnwrapConvert(args[0]);
             if (right.Type != typeof(string))
                 return false;
 
@@ -280,11 +280,6 @@ internal static class StringFunctionTranslator
         if (!visitor.Dialect.SupportsOrdinalComparison)
             throw new NotSupportedException("Ordinal string comparison (StringComparison.Ordinal/OrdinalIgnoreCase) is not supported by this provider.");
     }
-
-    private static Expression UnwrapConvert(Expression expression) =>
-        expression is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } unary
-            ? unary.Operand
-            : expression;
 
     private static bool TryTranslateSubstring(BaseExpressionVisitor visitor, MethodCallExpression node)
     {

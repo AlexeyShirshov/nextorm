@@ -36,10 +36,38 @@ internal static class PostgresRangeTypes
     /// <exception cref="NotSupportedException">The bound type has no PostgreSQL range type.</exception>
     public static NpgsqlDbType DbTypeFor(Type boundType) => Resolve(boundType).DbType;
 
+    private static readonly FrozenDictionary<Type, (string Name, NpgsqlDbType DbType)> MultirangeTypes =
+        new Dictionary<Type, (string Name, NpgsqlDbType DbType)>
+        {
+            [typeof(int)] = ("int4multirange", NpgsqlDbType.IntegerMultirange),
+            [typeof(long)] = ("int8multirange", NpgsqlDbType.BigIntMultirange),
+            [typeof(decimal)] = ("nummultirange", NpgsqlDbType.NumericMultirange),
+            [typeof(DateTime)] = ("tsmultirange", NpgsqlDbType.TimestampMultirange),
+            [typeof(DateTimeOffset)] = ("tstzmultirange", NpgsqlDbType.TimestampTzMultirange),
+            [typeof(DateOnly)] = ("datemultirange", NpgsqlDbType.DateMultirange)
+        }.ToFrozenDictionary();
+
+    /// <summary>Returns the PostgreSQL multirange type name for the given bound type.</summary>
+    /// <param name="boundType">The CLR bound type of the multirange.</param>
+    /// <returns>The PostgreSQL type name (for example <c>int4multirange</c>).</returns>
+    /// <exception cref="NotSupportedException">The bound type has no PostgreSQL multirange type.</exception>
+    public static string MultirangeNameFor(Type boundType) => ResolveMultirange(boundType).Name;
+
+    /// <summary>Returns the Npgsql parameter type of the multirange over the given bound type.</summary>
+    /// <param name="boundType">The CLR bound type of the multirange.</param>
+    /// <returns>The matching <c>NpgsqlDbType</c>.</returns>
+    /// <exception cref="NotSupportedException">The bound type has no PostgreSQL multirange type.</exception>
+    public static NpgsqlDbType MultirangeDbTypeFor(Type boundType) => ResolveMultirange(boundType).DbType;
+
     private static (string Name, NpgsqlDbType DbType) Resolve(Type boundType) =>
         Types.TryGetValue(boundType, out var entry)
             ? entry
             : throw new NotSupportedException($"The CLR type {boundType} has no PostgreSQL range type.");
+
+    private static (string Name, NpgsqlDbType DbType) ResolveMultirange(Type boundType) =>
+        MultirangeTypes.TryGetValue(boundType, out var entry)
+            ? entry
+            : throw new NotSupportedException($"The CLR type {boundType} has no PostgreSQL multirange type.");
 }
 
 /// <summary>
@@ -49,6 +77,7 @@ internal static class PostgresRangeTypes
 internal static class PostgresRange
 {
     private static readonly ConcurrentDictionary<Type, Func<object, object>> Converters = new();
+    private static readonly ConcurrentDictionary<Type, Func<object, object>> MultirangeConverters = new();
 
     /// <summary>Converts a boxed <see cref="Range{T}"/> to the matching boxed <c>NpgsqlRange&lt;T&gt;</c>.</summary>
     /// <param name="range">The boxed provider-agnostic range.</param>
@@ -59,6 +88,30 @@ internal static class PostgresRange
         var converter = Converters.GetOrAdd(boundType, static type => BuildConverter(type));
         return converter(range);
     }
+
+    /// <summary>Converts a boxed <see cref="Range{T}"/> array to the matching boxed <c>NpgsqlRange&lt;T&gt;</c> array.</summary>
+    /// <param name="ranges">The boxed provider-agnostic range array.</param>
+    /// <returns>The boxed driver range array.</returns>
+    public static object ToDriverMultirange(object ranges)
+    {
+        var boundType = ranges.GetType().GetElementType()!.GetGenericArguments()[0];
+        var converter = MultirangeConverters.GetOrAdd(boundType, static type => BuildMultirangeConverter(type));
+        return converter(ranges);
+    }
+
+    /// <summary>Converts a provider-agnostic multirange to the driver range array.</summary>
+    /// <typeparam name="T">The bound type.</typeparam>
+    /// <param name="ranges">The provider-agnostic ranges.</param>
+    /// <returns>The driver range array.</returns>
+    public static NpgsqlRange<T>[] ToDriver<T>(Range<T>[] ranges) where T : struct, IComparable<T>
+        => Array.ConvertAll(ranges, ToDriver);
+
+    /// <summary>Materializes a driver range array as the provider-agnostic <see cref="Range{T}"/> array.</summary>
+    /// <typeparam name="T">The bound type.</typeparam>
+    /// <param name="ranges">The driver range array.</param>
+    /// <returns>The provider-agnostic ranges.</returns>
+    public static Range<T>[] ToRanges<T>(NpgsqlRange<T>[] ranges) where T : struct, IComparable<T>
+        => Array.ConvertAll(ranges, ToRange);
 
     /// <summary>Materializes a driver range as the provider-agnostic <see cref="Range{T}"/>.</summary>
     /// <typeparam name="T">The bound type.</typeparam>
@@ -100,12 +153,27 @@ internal static class PostgresRange
     private static Func<object, object> BuildConverter(Type boundType)
     {
         var generic = typeof(PostgresRange).GetMethods(BindingFlags.Static | BindingFlags.Public)
-            .Single(method => method.Name == nameof(ToDriver) && method.IsGenericMethodDefinition)
+            .Single(method => method.Name == nameof(ToDriver) && method.IsGenericMethodDefinition
+                && !method.GetParameters()[0].ParameterType.IsArray)
             .MakeGenericMethod(boundType);
         var rangeType = typeof(Range<>).MakeGenericType(boundType);
 
         var parameter = Expression.Parameter(typeof(object));
         var call = Expression.Call(generic, Expression.Convert(parameter, rangeType));
+        var body = Expression.Convert(call, typeof(object));
+        return Expression.Lambda<Func<object, object>>(body, parameter).Compile();
+    }
+
+    private static Func<object, object> BuildMultirangeConverter(Type boundType)
+    {
+        var generic = typeof(PostgresRange).GetMethods(BindingFlags.Static | BindingFlags.Public)
+            .Single(method => method.Name == nameof(ToDriver) && method.IsGenericMethodDefinition
+                && method.GetParameters()[0].ParameterType.IsArray)
+            .MakeGenericMethod(boundType);
+        var arrayType = typeof(Range<>).MakeGenericType(boundType).MakeArrayType();
+
+        var parameter = Expression.Parameter(typeof(object));
+        var call = Expression.Call(generic, Expression.Convert(parameter, arrayType));
         var body = Expression.Convert(call, typeof(object));
         return Expression.Lambda<Func<object, object>>(body, parameter).Compile();
     }

@@ -19,6 +19,7 @@ public class PostgresDataContext : DataContext
     private static readonly MethodInfo GetFieldValueMI = typeof(DbDataReader).GetMethod(nameof(DbDataReader.GetFieldValue))!;
     private static readonly MethodInfo IsDBNullMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.IsDBNull))!;
     private static readonly MethodInfo ToRangeMI = typeof(PostgresRange).GetMethod(nameof(PostgresRange.ToRange), BindingFlags.Static | BindingFlags.Public)!;
+    private static readonly MethodInfo ToRangesMI = typeof(PostgresRange).GetMethod(nameof(PostgresRange.ToRanges), BindingFlags.Static | BindingFlags.Public)!;
 
     /// <summary>
     /// Creates a PostgreSQL context that owns a connection built lazily from
@@ -69,6 +70,14 @@ public class PostgresDataContext : DataContext
             return new NpgsqlParameter(name, PostgresRange.ToDriver(value)) { NpgsqlDbType = PostgresRangeTypes.DbTypeFor(boundType) };
         }
 
+        // A provider-agnostic Range<T>[] is bound as the matching Npgsql multirange type.
+        if (value is Array && value.GetType().GetElementType() is { } elementType
+            && elementType.IsGenericType && elementType.GetGenericTypeDefinition() == typeof(Range<>))
+        {
+            var boundType = elementType.GetGenericArguments()[0];
+            return new NpgsqlParameter(name, PostgresRange.ToDriverMultirange(value)) { NpgsqlDbType = PostgresRangeTypes.MultirangeDbTypeFor(boundType) };
+        }
+
         // Npgsql rejects a null parameter value, so unset/null values must be passed as DBNull.
         var parameter = new NpgsqlParameter(name, value ?? DBNull.Value);
 
@@ -95,7 +104,45 @@ public class PostgresDataContext : DataContext
         if (realType.IsGenericType && realType.GetGenericTypeDefinition() == typeof(Range<>))
             return MapRangeColumn(column, param, realType);
 
+        if (realType.IsArray && realType.GetElementType() is { } element
+            && element.IsGenericType && element.GetGenericTypeDefinition() == typeof(Range<>))
+            return MapMultirangeColumn(column, param, element.GetGenericArguments()[0]);
+
         return base.MapColumnExpression(column, param);
+    }
+
+    private static Expression MapMultirangeColumn(SelectExpression column, Expression param, Type boundType)
+    {
+        var driverType = typeof(NpgsqlRange<>).MakeGenericType(boundType).MakeArrayType();
+        var index = Expression.Constant(column.Index);
+
+        var getter = Expression.Call(
+            Expression.Convert(param, typeof(NpgsqlDataReader)),
+            GetFieldValueMI.MakeGenericMethod(driverType),
+            index);
+        var converted = Expression.Call(ToRangesMI.MakeGenericMethod(boundType), getter);
+
+        if (column.Nullable)
+        {
+            Expression value = converted.Type == column.PropertyType
+                ? converted
+                : Expression.Convert(converted, column.PropertyType);
+
+            return Expression.Condition(
+                Expression.Call(param, IsDBNullMI, index),
+                Expression.Constant(null, column.PropertyType),
+                value);
+        }
+
+        if (column.DefaultOnNull)
+        {
+            return Expression.Condition(
+                Expression.Call(param, IsDBNullMI, index),
+                Expression.Default(column.PropertyType),
+                converted);
+        }
+
+        return converted;
     }
 
     private static Expression MapRangeColumn(SelectExpression column, Expression param, Type realType)

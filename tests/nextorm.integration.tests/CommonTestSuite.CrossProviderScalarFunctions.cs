@@ -55,4 +55,30 @@ public abstract partial class CommonTestSuite
 
         r.Should().Be("a-b");
     }
+
+    [Fact]
+    public void CrossProviderScalarFunctions_NumericAndLength_ShouldCompute()
+    {
+        var r = _sut.ComplexEntity
+            .Where(e => e.Id == 1)
+            .Select(e => new
+            {
+                Bl = SqlFunctions.Sql.bit_length("abc"),
+                Ol = SqlFunctions.Sql.octet_length("abc"),
+                Deg = SqlFunctions.Sql.degrees(Math.PI),
+                Rad = SqlFunctions.Sql.radians(180.0),
+                Pi = SqlFunctions.Sql.pi(),
+                Acos = Math.Acos(1.0),
+                Atan2 = Math.Atan2(1.0, 1.0)
+            })
+            .First();
+
+        r.Bl.Should().Be(24);
+        r.Ol.Should().Be(3);
+        ((double?)r.Deg).GetValueOrDefault().Should().BeApproximately(180.0, 1e-6);
+        ((double?)r.Rad).GetValueOrDefault().Should().BeApproximately(Math.PI, 1e-6);
+        ((double?)r.Pi).GetValueOrDefault().Should().BeApproximately(Math.PI, 1e-6);
+        ((double?)r.Acos).GetValueOrDefault().Should().BeApproximately(0.0, 1e-6);
+        ((double?)r.Atan2).GetValueOrDefault().Should().BeApproximately(Math.PI / 4, 1e-6);
+    }
 }

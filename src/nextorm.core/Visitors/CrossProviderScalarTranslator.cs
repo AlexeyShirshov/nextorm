@@ -16,7 +16,10 @@ internal static class CrossProviderScalarTranslator
         nameof(CommonFunctions.left), nameof(CommonFunctions.right), nameof(CommonFunctions.lpad),
         nameof(CommonFunctions.rpad), nameof(CommonFunctions.repeat), nameof(CommonFunctions.reverse),
         nameof(CommonFunctions.space), nameof(CommonFunctions.concat_ws), nameof(CommonFunctions.translate),
-        nameof(CommonFunctions.ascii), nameof(CommonFunctions.@char)
+        nameof(CommonFunctions.ascii), nameof(CommonFunctions.@char),
+        nameof(CommonFunctions.bit_length), nameof(CommonFunctions.octet_length),
+        nameof(CommonFunctions.cot), nameof(CommonFunctions.degrees), nameof(CommonFunctions.radians),
+        nameof(CommonFunctions.pi)
     };
 
     /// <summary>Translates a cross-provider scalar call; returns <c>false</c> when it is not one.</summary>

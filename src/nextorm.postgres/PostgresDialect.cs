@@ -120,13 +120,17 @@ public sealed class PostgresDialect : SqlDialectBase
     /// <inheritdoc/>
     public override string MakeBool(bool v) => v ? "true" : "false";
 
-    /// <summary>PostgreSQL's text type is <c>text</c>, its duration type is <c>interval</c>, and a <see cref="Range{T}"/> maps to the native range type selected by its bound type.</summary>
+    /// <summary>PostgreSQL's text type is <c>text</c>, its duration type is <c>interval</c>, a <see cref="Range{T}"/> maps to the native range type selected by its bound type and a <see cref="Range{T}"/> array maps to the matching multirange.</summary>
     /// <param name="type">The CLR type to name.</param>
     /// <returns>The PostgreSQL type name.</returns>
     public override string MakeTypeName(Type type)
     {
         if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Range<>))
             return PostgresRangeTypes.NameFor(type.GetGenericArguments()[0]);
+
+        if (type.IsArray && type.GetElementType() is { } element
+            && element.IsGenericType && element.GetGenericTypeDefinition() == typeof(Range<>))
+            return PostgresRangeTypes.MultirangeNameFor(element.GetGenericArguments()[0]);
 
         return type switch
         {
@@ -234,6 +238,9 @@ public sealed class PostgresDialect : SqlDialectBase
     // PostgreSQL has native range types (int4range/int8range/numrange/tsrange/tstzrange/daterange).
     /// <inheritdoc/>
     public override bool SupportsRanges => true;
+
+    /// <inheritdoc/>
+    public override bool SupportsRangeColumns => true;
 
     /// <inheritdoc/>
     public override bool SupportsTableFunction(string name) =>
@@ -679,7 +686,8 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
     /// <inheritdoc/>
     public bool Supports(string name) => name is
         "left" or "right" or "lpad" or "rpad" or "repeat" or "reverse" or "space" or
-        "concat_ws" or "translate" or "ascii" or "char";
+        "concat_ws" or "translate" or "ascii" or "char" or
+        "bit_length" or "octet_length" or "cot" or "degrees" or "radians" or "pi";
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
@@ -695,6 +703,12 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
         "translate" => $"translate({args[0]}, {args[1]}, {args[2]})",
         "ascii" => $"ascii({args[0]})",
         "char" => $"chr({args[0]})",
+        "bit_length" => $"bit_length({args[0]})",
+        "octet_length" => $"octet_length({args[0]})",
+        "cot" => $"cot({args[0]})",
+        "degrees" => $"degrees({args[0]})",
+        "radians" => $"radians({args[0]})",
+        "pi" => "pi()",
         _ => throw new NotSupportedException($"The {name} function is not supported by PostgreSQL.")
     };
 

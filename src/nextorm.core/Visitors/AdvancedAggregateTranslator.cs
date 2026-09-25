@@ -38,6 +38,13 @@ internal static class AdvancedAggregateTranslator
                 EmitSimple(visitor, node, "every", () => visitor.Dialect.SupportsBooleanAggregates, "bool_and/bool_or/every");
                 return true;
 
+            case nameof(PostgresFunctions.range_agg) when node.Arguments.Count == 1:
+                EmitSimple(visitor, node, "range_agg", () => visitor.Dialect.SupportsRanges, "range_agg/range_intersect_agg");
+                return true;
+            case nameof(PostgresFunctions.range_intersect_agg) when node.Arguments.Count == 1:
+                EmitSimple(visitor, node, "range_intersect_agg", () => visitor.Dialect.SupportsRanges, "range_agg/range_intersect_agg");
+                return true;
+
             case nameof(PostgresFunctions.bit_and) when node.Arguments.Count == 1:
                 EmitSimple(visitor, node, "bit_and", () => visitor.Dialect.SupportsBitAggregates, "bit_and/bit_or/bit_xor");
                 return true;

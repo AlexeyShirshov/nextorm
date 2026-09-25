@@ -4008,4 +4008,53 @@ public class SqlGenerationTests
         sql.Should().Contain("lower_inf(@");
         sql.Should().Contain("upper_inf(@");
     }
+
+    [Fact]
+    public void MultirangeOperators_ShouldEmitNativeOperators()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IRangeEntity>();
+
+        var command = Prepare(ctx, e.Select(x => new
+        {
+            Overlap = SqlFunctions.Postgres.overlaps(
+                new[] { new Range<int>(1, 5) },
+                new[] { new Range<int>(4, 8) }),
+            Union = SqlFunctions.Postgres.range_union(
+                new[] { new Range<int>(1, 5) },
+                new[] { new Range<int>(4, 8) }),
+            Intersection = SqlFunctions.Postgres.range_intersection(
+                new[] { new Range<int>(1, 5) },
+                new[] { new Range<int>(4, 8) }),
+            Difference = SqlFunctions.Postgres.range_difference(
+                new[] { new Range<int>(1, 5) },
+                new[] { new Range<int>(4, 8) }),
+            Adjacent = SqlFunctions.Postgres.range_adjacent(
+                new[] { new Range<int>(1, 2) },
+                new[] { new Range<int>(2, 3) })
+        }));
+
+        var sql = Normalize(command.DbCommand.CommandText);
+        sql.Should().Contain("&& @");
+        sql.Should().Contain(" + @");
+        sql.Should().Contain(" * @");
+        sql.Should().Contain(" - @");
+        sql.Should().Contain("-|- @");
+    }
+
+    [Fact]
+    public void MultirangeFunctionsAndAggregates_ShouldEmitNativeCalls()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IRangeEntity>();
+
+        SqlOf(ctx, e.Select(x => new { R = SqlFunctions.Postgres.multirange(new Range<int>(1, 5)) }))
+            .Should().Contain("multirange(@");
+        SqlOf(ctx, e.Select(x => new { R = SqlFunctions.Postgres.range_merge(new[] { new Range<int>(1, 2), new Range<int>(5, 6) }) }))
+            .Should().Contain("range_merge(@");
+        SqlOf(ctx, e.Select(x => new { R = SqlFunctions.Postgres.range_agg(x.During) }))
+            .Should().Contain("range_agg(during)");
+        SqlOf(ctx, e.Select(x => new { R = SqlFunctions.Postgres.range_intersect_agg(x.During) }))
+            .Should().Contain("range_intersect_agg(during)");
+    }
 }

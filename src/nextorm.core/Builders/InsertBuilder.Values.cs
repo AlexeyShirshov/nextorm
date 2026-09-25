@@ -62,7 +62,7 @@ public sealed partial class InsertBuilder<TEntity>
         ArgumentNullException.ThrowIfNull(value);
         EnterSingleValueMode();
 
-        var body = UnwrapConvert(value.Body);
+        var body = TypeFacts.UnwrapConvert(value.Body);
 
         // Only a member read off the lambda parameter is a column reference. A static property
         // (x => DateTime.Now) or a member read off a captured object (x => holder.Name) happens to be a
@@ -72,6 +72,8 @@ public sealed partial class InsertBuilder<TEntity>
         {
             var mapped = FindProperty(valueProperty)
                 ?? throw new BuildSqlCommandException($"Property {valueProperty.Name} of {typeof(TEntity)} is not mapped.");
+            if (mapped.RangeColumns is not null)
+                throw RangeColumnPairs.NotSingleColumn(mapped);
             GetOrAddColumn(ResolveWritableColumn(column, nameof(column))).Values.Add(InsertValue.FromColumn(mapped));
         }
         else if (!body.Has<ParameterExpression>())
@@ -123,6 +125,22 @@ public sealed partial class InsertBuilder<TEntity>
         {
             if (property.IsIdentity || property.IsComputed)
                 continue;
+
+            if (property.RangeColumns is not null)
+            {
+                var lower = new ColumnAccumulator { Property = RangeColumnPairs.Lower(property) };
+                var upper = new ColumnAccumulator { Property = RangeColumnPairs.Upper(property) };
+                for (var i = 0; i < list.Count; i++)
+                {
+                    var (lowerValue, upperValue) = RangeColumnPairs.Extract(property, property.PropertyInfo.GetValue(list[i]));
+                    lower.Values.Add(InsertValue.FromConstant(lowerValue));
+                    upper.Values.Add(InsertValue.FromConstant(upperValue));
+                }
+
+                _columns.Add(lower);
+                _columns.Add(upper);
+                continue;
+            }
 
             var accumulator = new ColumnAccumulator { Property = property };
             for (var i = 0; i < list.Count; i++)

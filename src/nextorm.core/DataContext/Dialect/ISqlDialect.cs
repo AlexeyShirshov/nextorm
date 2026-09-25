@@ -189,6 +189,16 @@ public interface ISqlDialect
     bool SupportsRanges => false;
 
     /// <summary>
+    /// True when the provider can store a <see cref="Range{T}"/> as a pair of scalar columns declared
+    /// with <see cref="RangeColumnsAttribute"/> and translate the range surface over that pair. The
+    /// safe default is <see langword="false"/>; PostgreSQL stores ranges natively
+    /// (<see cref="SupportsRanges"/>) and does not need the pair, while the providers without a native
+    /// range type opt in. Declared as a default interface method so existing external implementations
+    /// keep compiling.
+    /// </summary>
+    bool SupportsRangeColumns => false;
+
+    /// <summary>
     /// True when the provider exposes the row-value surface: the constructor (PostgreSQL <c>ROW(a, b)</c>,
     /// ClickHouse <c>tuple(a, b)</c>) built from <c>Tuple.Create</c>/<c>new Tuple&lt;...&gt;</c>/
     /// <c>new ValueTuple&lt;...&gt;</c> and element access (from <c>.ItemN</c>). Equivalent to
@@ -816,14 +826,16 @@ public interface ISqlDialect
     /// <summary>
     /// True when the provider can translate a <see cref="System.Text.RegularExpressions.Regex"/> call with
     /// a constant pattern into native SQL (<c>Regex.IsMatch</c>/<c>Regex.Replace</c>). The safe default is
-    /// <c>false</c>; PostgreSQL, MySQL/MariaDB, ClickHouse and SQLite opt in while SQL Server has no
-    /// regular-expression engine and stays off. Declared as a default interface method so that existing
-    /// external implementations keep compiling.
+    /// <c>false</c>; PostgreSQL, MySQL/MariaDB, ClickHouse, SQLite and SQL Server 2025+ opt in. On
+    /// SQL Server the match renders as <c>REGEXP_LIKE</c>, which requires database compatibility level
+    /// 170; <c>REGEXP_REPLACE</c> is available at every level. Declared as a default interface method
+    /// so that existing external implementations keep compiling.
     /// <para>
-    /// The compiled pattern follows the provider's own engine (RE2 on ClickHouse, POSIX/ARE on
-    /// PostgreSQL, ICU on MySQL, PCRE on MariaDB, .NET on SQLite), so a pattern is not portable in
-    /// general: lookaround and backreferences are rejected by RE2, and the C# and SQL escaping rules
-    /// differ. The CLR syntactic knowledge is not translated, only the operator/function choice.
+    /// The compiled pattern follows the provider's own engine (RE2 on ClickHouse and SQL Server 2025,
+    /// POSIX/ARE on PostgreSQL, ICU on MySQL, PCRE on MariaDB, .NET on SQLite), so a pattern is not
+    /// portable in general: lookaround and backreferences are rejected by RE2, and the C# and SQL
+    /// escaping rules differ. The CLR syntactic knowledge is not translated, only the operator/function
+    /// choice.
     /// </para>
     /// </summary>
     bool SupportsRegex => false;

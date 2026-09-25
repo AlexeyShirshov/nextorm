@@ -425,6 +425,9 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     public void DurationColumns_ShouldRoundTrip() => CommonTestSuite.DurationRoundTrip(_sut.DataProvider);
 
     [Fact]
+    public void RangeColumns_ShouldRoundTripAndFilter() => CommonTestSuite.RangeColumnsRoundTrip(_sut.DataProvider);
+
+    [Fact]
     public void EndOfMonth_ShouldReturnLastDay()
     {
         var r = _sut.ComplexEntity

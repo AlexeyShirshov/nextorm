@@ -28,9 +28,13 @@ public class WhereExpressionVisitor(VisitorOptions options)
             // which is the shape of every join condition and most WHERE predicates.
             if (node.Left is not ConstantExpression { Value: null } && node.Right is not ConstantExpression { Value: null })
             {
-                Visit(node.Left);
+                var leftConverter = MemberTranslator.ResolveConverter(this, node.Left);
+                var rightConverter = leftConverter is null ? MemberTranslator.ResolveConverter(this, node.Right) : null;
+
+                VisitComparisonOperand(node.Left, rightConverter);
                 _builder!.Append(node.NodeType == ExpressionType.Equal ? " = " : " != ");
-                Visit(node.Right);
+                VisitComparisonOperand(node.Right, leftConverter);
+
                 return node;
             }
 

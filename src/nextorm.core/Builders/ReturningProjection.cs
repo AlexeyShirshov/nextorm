@@ -23,7 +23,7 @@ internal static class ReturningProjection
         IReadOnlyList<IPropertyMetadata> allProperties,
         Func<PropertyInfo, IPropertyMetadata?> find)
     {
-        var body = UnwrapConvert(projection.Body);
+        var body = TypeFacts.UnwrapConvert(projection.Body);
 
         if (body is ParameterExpression)
         {
@@ -82,6 +82,9 @@ internal static class ReturningProjection
         for (var i = 0; i < columns.Count; i++)
         {
             var column = columns[i];
+            if (column.RangeColumns is not null)
+                throw RangeColumnPairs.NotReturnable(column);
+
             var target = targets[i];
             selectList[i] = new SelectExpression(column.PropertyInfo.PropertyType)
             {
@@ -102,8 +105,4 @@ internal static class ReturningProjection
         => find(property)
            ?? throw new BuildSqlCommandException($"Property {property.Name} is not mapped.");
 
-    private static Expression UnwrapConvert(Expression expression)
-        => expression is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } unary
-            ? UnwrapConvert(unary.Operand)
-            : expression;
 }

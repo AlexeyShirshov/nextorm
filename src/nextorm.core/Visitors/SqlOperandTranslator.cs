@@ -17,7 +17,7 @@ namespace NextORM.Core;
 internal static class SqlOperandTranslator
 {
     /// <summary>True when the operand is an array (after unwrapping a boxing/conversion node).</summary>
-    internal static bool IsArray(Expression expression) => UnwrapConvert(expression).Type.IsArray;
+    internal static bool IsArray(Expression expression) => TypeFacts.UnwrapConvert(expression).Type.IsArray;
 
     /// <summary>
     /// Renders one argument: an array becomes a single array parameter, anything else is emitted by
@@ -27,6 +27,18 @@ internal static class SqlOperandTranslator
     {
         if (IsArray(argument))
         {
+            // A multirange column (an array of Range<T>) is an SQL value, not an array parameter, so it
+            // is rendered; only a captured/inline Range<T>[] is bound as one multirange parameter.
+            if (RangeTypeFacts.IsRangeArray(argument) && !IsCapturedArray(argument))
+            {
+                if (visitor.IsParamMode)
+                    visitor.Visit(argument);
+                else
+                    visitor.Builder!.Append(visitor.VisitToString(argument));
+
+                return;
+            }
+
             AppendArrayOperand(visitor, argument);
             return;
         }
@@ -47,7 +59,7 @@ internal static class SqlOperandTranslator
     /// </summary>
     internal static void AppendArrayOperand(BaseExpressionVisitor visitor, Expression arrayExp)
     {
-        arrayExp = UnwrapConvert(arrayExp);
+        arrayExp = TypeFacts.UnwrapConvert(arrayExp);
 
         if (arrayExp is MethodCallExpression { Method.DeclaringType: var declaring } paramCall
             && declaring == typeof(SqlFunctions))
@@ -168,7 +180,7 @@ internal static class SqlOperandTranslator
     /// </summary>
     internal static bool IsCapturedArray(Expression expression)
     {
-        expression = UnwrapConvert(expression);
+        expression = TypeFacts.UnwrapConvert(expression);
 
         switch (expression)
         {
@@ -230,8 +242,4 @@ internal static class SqlOperandTranslator
             visitor.Builder!.Append(')');
     }
 
-    private static Expression UnwrapConvert(Expression expression)
-        => expression is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } unary
-            ? unary.Operand
-            : expression;
 }

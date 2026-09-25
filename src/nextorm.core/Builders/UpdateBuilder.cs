@@ -87,6 +87,14 @@ public sealed class UpdateBuilder<TEntity>
             if (property.IsKey || property.IsIdentity || property.IsComputed)
                 continue;
 
+            if (property.RangeColumns is not null)
+            {
+                var (lowerValue, upperValue) = RangeColumnPairs.Extract(property, property.PropertyInfo.GetValue(entity));
+                SetAssignment(UpdateAssignment.FromConstant(RangeColumnPairs.Lower(property), lowerValue));
+                SetAssignment(UpdateAssignment.FromConstant(RangeColumnPairs.Upper(property), upperValue));
+                continue;
+            }
+
             SetAssignment(UpdateAssignment.FromConstant(property, property.PropertyInfo.GetValue(entity)));
         }
 
@@ -257,7 +265,7 @@ public sealed class UpdateBuilder<TEntity>
 
     private UpdateAssignment BuildAssignment<TValue>(IPropertyMetadata property, Expression<Func<TEntity, TValue>> value)
     {
-        var body = UnwrapConvert(value.Body);
+        var body = TypeFacts.UnwrapConvert(value.Body);
 
         // Only a member read off the lambda parameter is a column reference. A member read off a captured
         // object (x => holder.Name) or a static property (x => Config.Default) happens to be a
@@ -267,6 +275,8 @@ public sealed class UpdateBuilder<TEntity>
         {
             var mapped = FindProperty(valueProperty)
                 ?? throw new BuildSqlCommandException($"Property {valueProperty.Name} of {typeof(TEntity)} is not mapped.");
+            if (mapped.RangeColumns is not null)
+                throw RangeColumnPairs.NotSingleColumn(mapped);
             return UpdateAssignment.FromColumn(property, mapped);
         }
 
@@ -281,7 +291,7 @@ public sealed class UpdateBuilder<TEntity>
 
     private IPropertyMetadata ResolveWritableProperty(LambdaExpression column, string parameterName)
     {
-        var body = UnwrapConvert(column.Body);
+        var body = TypeFacts.UnwrapConvert(column.Body);
 
         if (body is not MemberExpression { Member: PropertyInfo property })
             throw new ArgumentException("The column selector must select a mapped property.", parameterName);
@@ -291,6 +301,9 @@ public sealed class UpdateBuilder<TEntity>
 
         if (mapped.IsComputed)
             throw new NotSupportedException($"Property {property.Name} of {typeof(TEntity)} is computed and cannot be written.");
+
+        if (mapped.RangeColumns is not null)
+            throw RangeColumnPairs.NotWritableBySelector(mapped, "Set(entity)");
 
         return mapped;
     }
@@ -305,11 +318,6 @@ public sealed class UpdateBuilder<TEntity>
 
         return null;
     }
-
-    private static Expression UnwrapConvert(Expression expression)
-        => expression is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } unary
-            ? UnwrapConvert(unary.Operand)
-            : expression;
 
     private int Execute(UpdateCommand command)
     {

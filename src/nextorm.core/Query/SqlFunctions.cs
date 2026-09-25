@@ -618,6 +618,50 @@ public static partial class SqlFunctions
         public string? @char(int code) => default!;
 
         /// <summary>
+        /// <c>bit_length(value)</c>: the number of bits in the string's octets (8 ×
+        /// <see cref="octet_length"/>). Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.ScalarFunctions"/> and <see cref="IScalarFunctions.Supports"/>).
+        /// </summary>
+        public int? bit_length(string? value) => default!;
+
+        /// <summary>
+        /// <c>octet_length(value)</c>: the number of octets (bytes) in the encoded value. Requires a
+        /// provider that supports it (see <see cref="ISqlDialect.ScalarFunctions"/> and
+        /// <see cref="IScalarFunctions.Supports"/>); SQLite requires 3.43+ for its native
+        /// <c>octet_length()</c>.
+        /// </summary>
+        public int? octet_length(string? value) => default!;
+
+        /// <summary>
+        /// <c>cot(x)</c>: the cotangent of <paramref name="value"/> (in radians). PostgreSQL, SQL Server
+        /// and MySQL/MariaDB have a native <c>cot</c>; ClickHouse and SQLite do not, and reject the call.
+        /// Requires a provider that supports it (see <see cref="ISqlDialect.ScalarFunctions"/> and
+        /// <see cref="IScalarFunctions.Supports"/>).
+        /// </summary>
+        public double? cot(double? value) => default!;
+
+        /// <summary>
+        /// <c>degrees(x)</c>: converts <paramref name="value"/> from radians to degrees. Requires a provider
+        /// that supports it (see <see cref="ISqlDialect.ScalarFunctions"/> and
+        /// <see cref="IScalarFunctions.Supports"/>).
+        /// </summary>
+        public double? degrees(double? value) => default!;
+
+        /// <summary>
+        /// <c>radians(x)</c>: converts <paramref name="value"/> from degrees to radians. Requires a provider
+        /// that supports it (see <see cref="ISqlDialect.ScalarFunctions"/> and
+        /// <see cref="IScalarFunctions.Supports"/>).
+        /// </summary>
+        public double? radians(double? value) => default!;
+
+        /// <summary>
+        /// <c>pi()</c>: the constant π. Requires a provider that supports it (see
+        /// <see cref="ISqlDialect.ScalarFunctions"/> and <see cref="IScalarFunctions.Supports"/>); the
+        /// trigonometric <c>Math.Acos</c>/<c>Asin</c>/<c>Atan</c>/<c>Atan2</c> are reachable directly.
+        /// </summary>
+        public double? pi() => default!;
+
+        /// <summary>
         /// <c>date_trunc(field, value)</c>: truncates a timestamp to <paramref name="field"/>
         /// (for example <c>"month"</c>). Requires a provider that supports it (see
         /// <see cref="ISqlDialect.SupportsDateTrunc"/>).

@@ -4,7 +4,7 @@ namespace NextORM.Core;
 
 /// <summary>
 /// Translates the extended scalar function library of <see cref="CommonFunctions"/>: the additional
-/// math functions (<c>asin</c>, <c>cbrt</c>, <c>degrees</c>, <c>pi</c>, <c>mod</c>, ...), the string
+/// math functions (<c>asin</c>, <c>cbrt</c>, <c>mod</c>, ...), the string
 /// functions (<c>split_part</c>, <c>lpad</c>, <c>initcap</c>, ...), the POSIX regular-expression
 /// functions (<c>regexp_replace</c>/<c>regexp_like</c>/<c>regexp_substr</c>/...), the date/time
 /// functions (<c>age</c>, <c>make_time</c>/<c>make_timestamp</c>, <c>date_bin</c>, <c>to_char</c>,
@@ -25,8 +25,7 @@ internal static class ExtendedScalarFunctionTranslator
         nameof(PostgresFunctions.asin), nameof(PostgresFunctions.acos), nameof(PostgresFunctions.atan),
         nameof(PostgresFunctions.atan2), nameof(PostgresFunctions.cbrt), nameof(PostgresFunctions.sinh),
         nameof(PostgresFunctions.cosh), nameof(PostgresFunctions.tanh), nameof(PostgresFunctions.asinh),
-        nameof(PostgresFunctions.acosh), nameof(PostgresFunctions.atanh), nameof(PostgresFunctions.degrees),
-        nameof(PostgresFunctions.radians), nameof(PostgresFunctions.pi), nameof(PostgresFunctions.random),
+        nameof(PostgresFunctions.acosh), nameof(PostgresFunctions.atanh), nameof(PostgresFunctions.random),
         nameof(PostgresFunctions.log), nameof(PostgresFunctions.gcd),
         nameof(PostgresFunctions.lcm), nameof(PostgresFunctions.factorial), nameof(PostgresFunctions.width_bucket)
     };

@@ -174,7 +174,7 @@ public sealed class UpdateJoinBuilder<TProjection>
 
     private static Expression ResolveTarget(LambdaExpression column)
     {
-        var body = UnwrapConvert(column.Body);
+        var body = TypeFacts.UnwrapConvert(column.Body);
 
         // The selector must read a column off the projection's first item (the target table).
         if (body is MemberExpression { Member: PropertyInfo, Expression: MemberExpression { Member: PropertyInfo item } } && item.Name == "Item1")
@@ -186,7 +186,7 @@ public sealed class UpdateJoinBuilder<TProjection>
 
     private static UpdateJoinAssignment BuildExpression(Expression target, LambdaExpression value)
     {
-        var body = UnwrapConvert(value.Body);
+        var body = TypeFacts.UnwrapConvert(value.Body);
 
         // A value expression with no projection parameter is a captured constant (a local, a captured
         // object's member, a static property); fold it into a parameter, mirroring the single-table Set.
@@ -198,11 +198,6 @@ public sealed class UpdateJoinBuilder<TProjection>
 
         return UpdateJoinAssignment.FromExpression(target, body);
     }
-
-    private static Expression UnwrapConvert(Expression expression)
-        => expression is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } unary
-            ? UnwrapConvert(unary.Operand)
-            : expression;
 
     private static bool SameTarget(Expression left, Expression right)
         => left is MemberExpression { Member: PropertyInfo leftProperty, Expression: MemberExpression leftItem }

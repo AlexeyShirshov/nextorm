@@ -193,7 +193,7 @@ public sealed partial class InsertBuilder<TEntity>
             EnsureUniqueColumn(seen, name);
             var property = ResolveWritableTarget(name);
 
-            if (UnwrapConvert(valueExpression).Type == typeof(SqlDefault))
+            if (TypeFacts.UnwrapConvert(valueExpression).Type == typeof(SqlDefault))
             {
                 bindings[i] = (property, null);
                 continue;
@@ -218,7 +218,7 @@ public sealed partial class InsertBuilder<TEntity>
             var (name, valueExpression) = members[i];
             EnsureUniqueColumn(seen, name);
 
-            if (UnwrapConvert(valueExpression).Type == typeof(SqlDefault))
+            if (TypeFacts.UnwrapConvert(valueExpression).Type == typeof(SqlDefault))
                 throw new NotSupportedException("DEFAULT is not valid in an INSERT ... SELECT source; select a value instead.");
 
             columns[i] = ResolveWritableTarget(name);
@@ -241,12 +241,15 @@ public sealed partial class InsertBuilder<TEntity>
         if (property.IsComputed)
             throw new NotSupportedException($"Property {name} of {typeof(TEntity)} is computed and cannot be written.");
 
+        if (property.RangeColumns is not null)
+            throw RangeColumnPairs.NotWritableBySelector(property, "Values(entity)");
+
         return property;
     }
 
     private static List<(string Name, Expression Value)> ExtractMappingMembers(LambdaExpression mapping)
     {
-        var body = UnwrapConvert(mapping.Body);
+        var body = TypeFacts.UnwrapConvert(mapping.Body);
         var members = new List<(string Name, Expression Value)>();
 
         if (body is NewExpression { Members: { } newMembers } newExpression)
@@ -289,7 +292,7 @@ public sealed partial class InsertBuilder<TEntity>
             count++;
         }
 
-        return count switch
+        var resolved = count switch
         {
             0 => throw new InvalidOperationException(
                 $"Entity {typeof(TEntity)} has no writable column; insert the all-defaults row with Insert() instead of a scalar value."),
@@ -297,6 +300,11 @@ public sealed partial class InsertBuilder<TEntity>
                 $"Entity {typeof(TEntity)} has {count} writable columns; pass a mapping, e.g. Values(source, s => new {{ s.Column }}), or name the column, e.g. Values(x => x.Column, values)."),
             _ => writable!,
         };
+
+        if (resolved.RangeColumns is not null)
+            throw RangeColumnPairs.NotWritableBySelector(resolved, "Values(entity)");
+
+        return resolved;
     }
 
     private IPropertyMetadata? FindPropertyByName(string name)
@@ -312,7 +320,7 @@ public sealed partial class InsertBuilder<TEntity>
 
     private IPropertyMetadata ResolveProperty(LambdaExpression column, string parameterName)
     {
-        var body = UnwrapConvert(column.Body);
+        var body = TypeFacts.UnwrapConvert(column.Body);
 
         if (body is not MemberExpression { Member: PropertyInfo property })
             throw new ArgumentException("The column selector must select a mapped property.", parameterName);
@@ -327,6 +335,9 @@ public sealed partial class InsertBuilder<TEntity>
 
         if (property.IsComputed)
             throw new NotSupportedException($"Property {property.PropertyInfo.Name} of {typeof(TEntity)} is computed and cannot be written.");
+
+        if (property.RangeColumns is not null)
+            throw RangeColumnPairs.NotWritableBySelector(property, "Values(entity)");
 
         return property;
     }
@@ -474,11 +485,6 @@ public sealed partial class InsertBuilder<TEntity>
         throw new NotSupportedException(
             $"{_dataContext.GetType().Name} does not support data modification. Use a database-backed context (SQLite, PostgreSQL, SQL Server, MySQL, MariaDB or ClickHouse); the in-memory provider is read-only.");
     }
-
-    private static Expression UnwrapConvert(Expression expression)
-        => expression is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } unary
-            ? UnwrapConvert(unary.Operand)
-            : expression;
 
     /// <summary>Converts a boxed identity value to <typeparamref name="TKey"/>, tolerating <see langword="null"/>.</summary>
     /// <typeparam name="TKey">The target CLR type.</typeparam>

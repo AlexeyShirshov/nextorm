@@ -701,4 +701,21 @@ public sealed class PostgresFunctionsTests : ProviderTestSuite
         r.Query.Should().Be("1");
         r.Exists.Should().BeTrue();
     }
+
+    [Fact]
+    public void PortableCotAndLength_ShouldCompute()
+    {
+        var r = _sut.SimpleEntity.Where(x => x.Id == 1)
+            .Select(x => new
+            {
+                Cot = SqlFunctions.Sql.cot(1.0),
+                Bl = SqlFunctions.Sql.bit_length("abc"),
+                Ol = SqlFunctions.Sql.octet_length("abc")
+            })
+            .First();
+
+        ((double?)r.Cot).GetValueOrDefault().Should().BeApproximately(1.0 / Math.Tan(1.0), 1e-9);
+        r.Bl.Should().Be(24);
+        r.Ol.Should().Be(3);
+    }
 }

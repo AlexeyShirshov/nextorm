@@ -159,9 +159,6 @@ public class SqliteFunctions : CommonFunctions
     /// <summary>Hyperbolic cosine. Requires the math extension.</summary>
     public double? cosh(double? x) => default!;
 
-    /// <summary>Converts radians to degrees. Requires the math extension.</summary>
-    public double? degrees(double? x) => default!;
-
     /// <summary>The base-10 logarithm. Requires the math extension.</summary>
     public double? log10(double? x) => default!;
 
@@ -170,12 +167,6 @@ public class SqliteFunctions : CommonFunctions
 
     /// <summary>The remainder of <paramref name="x"/>/<paramref name="y"/>, also for non-integer operands. Requires the math extension.</summary>
     public double? mod(double? x, double? y) => default!;
-
-    /// <summary>An approximation of pi. Requires the math extension.</summary>
-    public double? pi() => default!;
-
-    /// <summary>Converts degrees to radians. Requires the math extension.</summary>
-    public double? radians(double? x) => default!;
 
     /// <summary>Hyperbolic sine. Requires the math extension.</summary>
     public double? sinh(double? x) => default!;

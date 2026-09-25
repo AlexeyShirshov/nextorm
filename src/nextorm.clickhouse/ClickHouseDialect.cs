@@ -34,6 +34,9 @@ public sealed class ClickHouseDialect : SqlDialectBase
     /// <summary>ClickHouse supports a raw SQL derived table (<c>FROM (&lt;sql&gt;) AS alias</c>).</summary>
     public override bool SupportsRawSqlSource => true;
 
+    /// <inheritdoc/>
+    public override bool SupportsRangeColumns => true;
+
     /// <summary>
     /// ClickHouse is not marked as having a native bulk path: the driver's <c>ClickHouseBulkCopy</c> is
     /// obsolete in favour of <c>ClickHouseClient.InsertBinaryAsync</c>, which needs a client built from
@@ -969,7 +972,8 @@ internal sealed class ClickHouseScalarFunctions : IScalarFunctions
         "xx_hash32" or "xx_hash64" or "xxh3" or "city_hash64" or
         "sip_hash64" or "sip_hash128" or
         "murmur_hash2_32" or "murmur_hash2_64" or "murmur_hash3_32" or "murmur_hash3_64" or
-        "murmur_hash3_128" or "generate_ulid";
+        "murmur_hash3_128" or "generate_ulid" or
+        "bit_length" or "octet_length" or "degrees" or "radians" or "pi";
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
@@ -1047,6 +1051,13 @@ internal sealed class ClickHouseScalarFunctions : IScalarFunctions
         "murmur_hash3_64" => $"toInt64(murmurHash3_64({args[0]}))",
         "murmur_hash3_128" => $"murmurHash3_128({args[0]})",
         "generate_ulid" => "generateULID()",
+
+        // ClickHouse length(String) is the byte count; bit_length is eight times it. There is no cot.
+        "bit_length" => $"length({args[0]}) * 8",
+        "octet_length" => $"length({args[0]})",
+        "degrees" => $"degrees({args[0]})",
+        "radians" => $"radians({args[0]})",
+        "pi" => "pi()",
         _ => throw new NotSupportedException($"The {name} function is not supported by ClickHouse.")
     };
 

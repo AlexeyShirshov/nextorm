@@ -14,6 +14,15 @@ internal static class TypeFacts
     internal static bool IsBoolean(Type type) => type == typeof(bool) || type == typeof(bool?);
 
     /// <summary>
+    /// Strips <see cref="ExpressionType.Convert"/>/<see cref="ExpressionType.ConvertChecked"/> wrappers
+    /// (the compiler's enum-comparison and boxing lowering) so the underlying operand is inspected.
+    /// </summary>
+    internal static Expression UnwrapConvert(Expression expression)
+        => expression is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } unary
+            ? UnwrapConvert(unary.Operand)
+            : expression;
+
+    /// <summary>
     /// True when the expression already renders as a predicate. Comparison/logical operators,
     /// boolean CASE/COALESCE and the recognised predicate methods produce a condition directly;
     /// anything else (a column, a constant, an arithmetic result) is a boolean value that the

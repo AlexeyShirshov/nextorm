@@ -311,15 +311,6 @@ namespace NextORM.Core;
         /// <summary>Inverse hyperbolic tangent.</summary>
         public double? atanh(double? x) => default!;
 
-        /// <summary>Converts radians to degrees.</summary>
-        public double? degrees(double? x) => default!;
-
-        /// <summary>Converts degrees to radians.</summary>
-        public double? radians(double? x) => default!;
-
-        /// <summary>The constant pi.</summary>
-        public double? pi() => default!;
-
         /// <summary>A pseudo-random value in the range 0.0 &lt;= x &lt; 1.0.</summary>
         public double? random() => default!;
 
@@ -956,4 +947,203 @@ namespace NextORM.Core;
         /// <param name="bounds">The bound characters, for example <c>[)</c>, <c>[]</c>, <c>()</c> or <c>(]</c>.</param>
         /// <returns>The <c>daterange</c> value.</returns>
         public Range<DateOnly> daterange(DateOnly? lower, DateOnly? upper, string bounds) => default!;
+
+        /// <summary><c>multirange(range)</c>: a multirange containing just the given range.</summary>
+        /// <typeparam name="T">The bound type of the range.</typeparam>
+        /// <param name="range">The range to wrap.</param>
+        /// <returns>The multirange with a single element.</returns>
+        public Range<T>[] multirange<T>(Range<T> range) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>range_merge(a, b)</c>: the smallest range that includes both ranges.</summary>
+        /// <typeparam name="T">The bound type of the ranges.</typeparam>
+        /// <param name="a">The left range.</param>
+        /// <param name="b">The right range.</param>
+        /// <returns>The smallest range covering both operands.</returns>
+        public Range<T> range_merge<T>(Range<T> a, Range<T> b) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>range_merge(multirange)</c>: the smallest range that includes the whole multirange.</summary>
+        /// <typeparam name="T">The bound type of the multirange.</typeparam>
+        /// <param name="multirange">The multirange to merge.</param>
+        /// <returns>The smallest range covering the multirange.</returns>
+        public Range<T> range_merge<T>(Range<T>[] multirange) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>range_agg(value)</c>: the multirange of all ranges in the group.</summary>
+        /// <typeparam name="T">The bound type of the ranges.</typeparam>
+        /// <param name="value">The range to aggregate.</param>
+        /// <returns>The aggregated multirange.</returns>
+        public Range<T>[] range_agg<T>(Range<T> value) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>range_intersect_agg(value)</c>: the intersection of all ranges in the group.</summary>
+        /// <typeparam name="T">The bound type of the ranges.</typeparam>
+        /// <param name="value">The range to aggregate.</param>
+        /// <returns>The intersection of every range in the group.</returns>
+        public Range<T> range_intersect_agg<T>(Range<T> value) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>a &amp;&amp; b</c>: true when the two multiranges share at least one point.</summary>
+        /// <typeparam name="T">The bound type of the ranges.</typeparam>
+        /// <param name="a">The left multirange.</param>
+        /// <param name="b">The right multirange.</param>
+        /// <returns><see langword="true"/> when the multiranges overlap.</returns>
+        public bool overlaps<T>(Range<T>[] a, Range<T>[] b) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>multirange &amp;&amp; range</c>: true when the multirange overlaps the range.</summary>
+        /// <typeparam name="T">The bound type of the ranges.</typeparam>
+        /// <param name="a">The multirange.</param>
+        /// <param name="b">The range.</param>
+        /// <returns><see langword="true"/> when the multirange overlaps the range.</returns>
+        public bool overlaps<T>(Range<T>[] a, Range<T> b) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>range &amp;&amp; multirange</c>: true when the range overlaps the multirange.</summary>
+        /// <typeparam name="T">The bound type of the ranges.</typeparam>
+        /// <param name="a">The range.</param>
+        /// <param name="b">The multirange.</param>
+        /// <returns><see langword="true"/> when the range overlaps the multirange.</returns>
+        public bool overlaps<T>(Range<T> a, Range<T>[] b) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>multirange @&gt; multirange</c>: true when the first multirange contains the second.</summary>
+        /// <typeparam name="T">The bound type of the ranges.</typeparam>
+        /// <param name="outer">The containing multirange.</param>
+        /// <param name="inner">The contained multirange.</param>
+        /// <returns><see langword="true"/> when the outer multirange contains the inner one.</returns>
+        public bool range_contains<T>(Range<T>[] outer, Range<T>[] inner) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>multirange @&gt; range</c>: true when the multirange contains the range.</summary>
+        /// <typeparam name="T">The bound type of the ranges.</typeparam>
+        /// <param name="outer">The containing multirange.</param>
+        /// <param name="inner">The contained range.</param>
+        /// <returns><see langword="true"/> when the multirange contains the range.</returns>
+        public bool range_contains<T>(Range<T>[] outer, Range<T> inner) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>range @&gt; multirange</c>: true when the range contains the multirange.</summary>
+        /// <typeparam name="T">The bound type of the ranges.</typeparam>
+        /// <param name="outer">The containing range.</param>
+        /// <param name="inner">The contained multirange.</param>
+        /// <returns><see langword="true"/> when the range contains the multirange.</returns>
+        public bool range_contains<T>(Range<T> outer, Range<T>[] inner) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>multirange @&gt; value</c>: true when the multirange contains the element.</summary>
+        /// <typeparam name="T">The bound type of the ranges.</typeparam>
+        /// <param name="multirange">The multirange to test.</param>
+        /// <param name="value">The point to look for.</param>
+        /// <returns><see langword="true"/> when the multirange contains the value.</returns>
+        public bool range_contains<T>(Range<T>[] multirange, T value) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>multirange &lt;@ multirange</c>: true when the first multirange is contained by the second.</summary>
+        /// <typeparam name="T">The bound type of the ranges.</typeparam>
+        /// <param name="inner">The contained multirange.</param>
+        /// <param name="outer">The containing multirange.</param>
+        /// <returns><see langword="true"/> when the inner multirange is contained by the outer one.</returns>
+        public bool range_contained_by<T>(Range<T>[] inner, Range<T>[] outer) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>multirange &lt;@ range</c>: true when the multirange is contained by the range.</summary>
+        /// <typeparam name="T">The bound type of the ranges.</typeparam>
+        /// <param name="inner">The contained multirange.</param>
+        /// <param name="outer">The containing range.</param>
+        /// <returns><see langword="true"/> when the multirange is contained by the range.</returns>
+        public bool range_contained_by<T>(Range<T>[] inner, Range<T> outer) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>range &lt;@ multirange</c>: true when the range is contained by the multirange.</summary>
+        /// <typeparam name="T">The bound type of the ranges.</typeparam>
+        /// <param name="inner">The contained range.</param>
+        /// <param name="outer">The containing multirange.</param>
+        /// <returns><see langword="true"/> when the range is contained by the multirange.</returns>
+        public bool range_contained_by<T>(Range<T> inner, Range<T>[] outer) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>a + b</c>: the multirange union (the operands need not overlap).</summary>
+        /// <typeparam name="T">The bound type of the ranges.</typeparam>
+        /// <param name="a">The left multirange.</param>
+        /// <param name="b">The right multirange.</param>
+        /// <returns>The union multirange.</returns>
+        public Range<T>[] range_union<T>(Range<T>[] a, Range<T>[] b) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>a * b</c>: the multirange intersection.</summary>
+        /// <typeparam name="T">The bound type of the ranges.</typeparam>
+        /// <param name="a">The left multirange.</param>
+        /// <param name="b">The right multirange.</param>
+        /// <returns>The intersection multirange.</returns>
+        public Range<T>[] range_intersection<T>(Range<T>[] a, Range<T>[] b) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>a - b</c>: the multirange difference.</summary>
+        /// <typeparam name="T">The bound type of the ranges.</typeparam>
+        /// <param name="a">The multirange to subtract from.</param>
+        /// <param name="b">The multirange to subtract.</param>
+        /// <returns>The difference multirange.</returns>
+        public Range<T>[] range_difference<T>(Range<T>[] a, Range<T>[] b) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>a &lt;&lt; b</c>: true when the first multirange is strictly left of the second.</summary>
+        /// <typeparam name="T">The bound type of the ranges.</typeparam>
+        /// <param name="a">The left multirange.</param>
+        /// <param name="b">The right multirange.</param>
+        /// <returns><see langword="true"/> when the first multirange is strictly to the left.</returns>
+        public bool range_strictly_left_of<T>(Range<T>[] a, Range<T>[] b) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>a &gt;&gt; b</c>: true when the first multirange is strictly right of the second.</summary>
+        /// <typeparam name="T">The bound type of the ranges.</typeparam>
+        /// <param name="a">The left multirange.</param>
+        /// <param name="b">The right multirange.</param>
+        /// <returns><see langword="true"/> when the first multirange is strictly to the right.</returns>
+        public bool range_strictly_right_of<T>(Range<T>[] a, Range<T>[] b) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>a &amp;&lt; b</c>: true when the first multirange does not extend to the right of the second.</summary>
+        /// <typeparam name="T">The bound type of the ranges.</typeparam>
+        /// <param name="a">The left multirange.</param>
+        /// <param name="b">The right multirange.</param>
+        /// <returns><see langword="true"/> when the first multirange does not extend past the right end of the second.</returns>
+        public bool range_not_extend_right_of<T>(Range<T>[] a, Range<T>[] b) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>a &amp;&gt; b</c>: true when the first multirange does not extend to the left of the second.</summary>
+        /// <typeparam name="T">The bound type of the ranges.</typeparam>
+        /// <param name="a">The left multirange.</param>
+        /// <param name="b">The right multirange.</param>
+        /// <returns><see langword="true"/> when the first multirange does not extend past the left end of the second.</returns>
+        public bool range_not_extend_left_of<T>(Range<T>[] a, Range<T>[] b) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>a -|- b</c>: true when the multiranges are adjacent.</summary>
+        /// <typeparam name="T">The bound type of the ranges.</typeparam>
+        /// <param name="a">The left multirange.</param>
+        /// <param name="b">The right multirange.</param>
+        /// <returns><see langword="true"/> when the multiranges are adjacent.</returns>
+        public bool range_adjacent<T>(Range<T>[] a, Range<T>[] b) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>isempty(multirange)</c>: true when the multirange contains no range.</summary>
+        /// <typeparam name="T">The bound type of the multirange.</typeparam>
+        /// <param name="multirange">The multirange to test.</param>
+        /// <returns><see langword="true"/> when the multirange is empty.</returns>
+        public bool isempty<T>(Range<T>[] multirange) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>lower(multirange)</c>: the lower bound, or <see langword="null"/> when it is unbounded.</summary>
+        /// <typeparam name="T">The bound type of the multirange.</typeparam>
+        /// <param name="multirange">The multirange to inspect.</param>
+        /// <returns>The lower bound, or <see langword="null"/>.</returns>
+        public T? lower<T>(Range<T>[] multirange) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>upper(multirange)</c>: the upper bound, or <see langword="null"/> when it is unbounded.</summary>
+        /// <typeparam name="T">The bound type of the multirange.</typeparam>
+        /// <param name="multirange">The multirange to inspect.</param>
+        /// <returns>The upper bound, or <see langword="null"/>.</returns>
+        public T? upper<T>(Range<T>[] multirange) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>lower_inc(multirange)</c>: true when the lower bound is inclusive.</summary>
+        /// <typeparam name="T">The bound type of the multirange.</typeparam>
+        /// <param name="multirange">The multirange to inspect.</param>
+        /// <returns><see langword="true"/> when the lower bound is inclusive.</returns>
+        public bool lower_inc<T>(Range<T>[] multirange) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>upper_inc(multirange)</c>: true when the upper bound is inclusive.</summary>
+        /// <typeparam name="T">The bound type of the multirange.</typeparam>
+        /// <param name="multirange">The multirange to inspect.</param>
+        /// <returns><see langword="true"/> when the upper bound is inclusive.</returns>
+        public bool upper_inc<T>(Range<T>[] multirange) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>lower_inf(multirange)</c>: true when the lower side is unbounded.</summary>
+        /// <typeparam name="T">The bound type of the multirange.</typeparam>
+        /// <param name="multirange">The multirange to inspect.</param>
+        /// <returns><see langword="true"/> when the lower side is unbounded.</returns>
+        public bool lower_inf<T>(Range<T>[] multirange) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>upper_inf(multirange)</c>: true when the upper side is unbounded.</summary>
+        /// <typeparam name="T">The bound type of the multirange.</typeparam>
+        /// <param name="multirange">The multirange to inspect.</param>
+        /// <returns><see langword="true"/> when the upper side is unbounded.</returns>
+        public bool upper_inf<T>(Range<T>[] multirange) where T : struct, IComparable<T> => default!;
     }
