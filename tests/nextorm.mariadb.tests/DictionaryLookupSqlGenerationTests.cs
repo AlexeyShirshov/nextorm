@@ -37,4 +37,31 @@ public class DictionaryLookupSqlGenerationTests
         prepared.DbCommand.CommandText.Should().NotContain("case");
         prepared.DbCommandParams[0].Value.Should().Be(new DateTime(2024, 2, 1));
     }
+
+    [Fact]
+    public void ReadOnlyList_IndexedByColumn_ShouldEmitCase()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        IReadOnlyList<int> lookup = [10, 20, 30];
+
+        var prepared = (DbPreparedQueryCommand<long>)ctx.GetPreparedQueryCommand(
+            e.Where(x => lookup[x.Int!.Value] == 20).Select(x => x.Id), false, false, CancellationToken.None);
+
+        prepared.DbCommand.CommandText.Replace("\r\n", "\n").Should().Contain("case when");
+    }
+
+    [Fact]
+    public void ReadOnlyList_IndexedByConstant_ShouldFoldToParameter()
+    {
+        using var ctx = MariaDbTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+        IReadOnlyList<int> lookup = [10, 20, 30];
+
+        var prepared = (DbPreparedQueryCommand<long>)ctx.GetPreparedQueryCommand(
+            e.Where(x => lookup[0] == 10).Select(x => x.Id), false, false, CancellationToken.None);
+
+        prepared.DbCommand.CommandText.Should().NotContain("case");
+        prepared.DbCommandParams[0].Value.Should().Be(10);
+    }
 }

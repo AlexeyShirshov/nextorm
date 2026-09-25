@@ -130,10 +130,19 @@ internal static class InValues
         else
         {
             // Arrays bind to the span overload (MemoryExtensions.Contains) on modern runtimes and to
-            // Enumerable.Contains otherwise; both are the same membership test here.
+            // Enumerable.Contains otherwise; both are the same membership test here. A three-argument
+            // span overload carries an IEqualityComparer and is accepted only when it is a constant null
+            // (the default equality), which is the same membership test.
             var declaringType = node.Method.DeclaringType;
-            if (declaringType != typeof(Enumerable) && declaringType != typeof(MemoryExtensions)
-                || node.Arguments.Count != 2)
+            if (declaringType != typeof(Enumerable) && declaringType != typeof(MemoryExtensions))
+                return false;
+
+            Expression source;
+            if (node.Arguments.Count == 2)
+                source = node.Arguments[0];
+            else if (node.Arguments.Count == 3 && node.Arguments[2] is ConstantExpression { Value: null })
+                source = node.Arguments[0];
+            else
                 return false;
 
             var genericArgs = node.Method.GetGenericArguments();
@@ -141,7 +150,7 @@ internal static class InValues
                 return false;
 
             elementType = genericArgs[0];
-            valuesExp = UnwrapSpanConversion(node.Arguments[0]);
+            valuesExp = UnwrapSpanConversion(source);
             columnExp = node.Arguments[1];
         }
 

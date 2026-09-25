@@ -56,4 +56,30 @@ public abstract partial class CommonTestSuite
 
         ids.OrderBy(x => x).Should().Equal(1L, 2L, 3L);
     }
+
+    [Fact]
+    public void ReadOnlyList_IndexedByColumn_ShouldTranslateToCase()
+    {
+        IReadOnlyList<int> lookup = [10, 20];
+
+        var ids = _sut.ComplexEntity
+            .Where(e => lookup[e.Int!.Value] == 20)
+            .Select(e => e.Id)
+            .ToList();
+
+        ids.OrderBy(x => x).Should().Equal(2L, 3L);
+    }
+
+    [Fact]
+    public void ReadOnlyDictionary_IndexedByColumn_ShouldTranslateToCase()
+    {
+        IReadOnlyDictionary<int, int> lookup = new Dictionary<int, int> { [1] = 10 };
+
+        var ids = _sut.ComplexEntity
+            .Where(e => lookup[e.Int!.Value] == 10)
+            .Select(e => e.Id)
+            .ToList();
+
+        ids.OrderBy(x => x).Should().Equal(2L, 3L);
+    }
 }

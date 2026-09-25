@@ -23,7 +23,8 @@ internal sealed class InMemoryGroupAggregateVisitor<TEntity> : ExpressionVisitor
 
     protected override Expression VisitMethodCall(MethodCallExpression node)
     {
-        if (node.Method.DeclaringType != typeof(CommonFunctions) || !InMemoryAggregates.IsAggregate(node.Method.Name))
+        if ((node.Method.DeclaringType != typeof(CommonFunctions) && node.Method.DeclaringType != typeof(PostgresFunctions))
+            || !InMemoryAggregates.IsAggregate(node.Method.Name))
             return base.VisitMethodCall(node);
 
         if (node.Arguments.Count > 0 && node.Arguments[^1] is LambdaExpression { Parameters.Count: 0 })
@@ -50,6 +51,9 @@ internal sealed class InMemoryGroupAggregateVisitor<TEntity> : ExpressionVisitor
         var boxed = InMemoryAggregates.Compute(_group, node.Method.Name, selector, new AggregateTypeInfo(typeof(TEntity), node.Type, valueType));
         if (boxed is null)
             return Expression.Default(node.Type);
+
+        if (boxed is not IConvertible)
+            return Expression.Constant(boxed, node.Type);
 
         var targetType = Nullable.GetUnderlyingType(node.Type) ?? node.Type;
         var value = Convert.ChangeType(boxed, targetType, CultureInfo.InvariantCulture);

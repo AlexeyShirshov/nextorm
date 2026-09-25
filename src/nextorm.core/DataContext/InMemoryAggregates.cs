@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 
@@ -42,6 +43,8 @@ internal static class InMemoryAggregates
         nameof(CommonFunctions.stdevp),
         nameof(CommonFunctions.var),
         nameof(CommonFunctions.varp),
+        nameof(PostgresFunctions.range_agg),
+        nameof(PostgresFunctions.range_intersect_agg),
         "min_distinct",
         "max_distinct",
         "sum_distinct",
@@ -57,6 +60,8 @@ internal static class InMemoryAggregates
         typeof(InMemoryAggregates).GetMethod(nameof(ComputeTyped), BindingFlags.Public | BindingFlags.Static)!;
 
     private static readonly ConcurrentDictionary<(Type Entity, Type Result, Type Value), MethodInfo> MethodCache = new();
+
+    private static readonly ConcurrentDictionary<(bool Intersect, Type Bound), MethodInfo> RangeAggregateCache = new();
 
     public static bool IsAggregate(string name) => AggregateNames.Contains(name);
 
@@ -121,6 +126,24 @@ internal static class InMemoryAggregates
 
         if (selector is null)
             throw new NotSupportedException($"Aggregate '{name}' requires a value selector in the in-memory provider.");
+
+        if (normalized is nameof(PostgresFunctions.range_agg) or nameof(PostgresFunctions.range_intersect_agg))
+        {
+            if (!RangeTypeFacts.TryGetRangeBoundType(typeof(TValue), out var elementType))
+                throw new NotSupportedException($"Aggregate '{name}' requires range values in the in-memory provider.");
+
+            var helper = RangeAggregateCache.GetOrAdd(
+                (normalized == nameof(PostgresFunctions.range_intersect_agg), elementType),
+                static key => typeof(InMemoryScalarFunctions)
+                    .GetMethod(
+                        key.Intersect
+                            ? nameof(InMemoryScalarFunctions.RangeIntersectAgg)
+                            : nameof(InMemoryScalarFunctions.RangeAgg),
+                        BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public)!
+                    .MakeGenericMethod(key.Bound));
+
+            return (TResult)helper.Invoke(null, [Enumerable.Select(data, selector)])!;
+        }
 
         if (normalized is nameof(CommonFunctions.min) or nameof(CommonFunctions.max))
         {
