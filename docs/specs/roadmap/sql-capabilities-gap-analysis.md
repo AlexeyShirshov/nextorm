@@ -261,6 +261,33 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
     `map*` family, `arrayConcat`/`arrayFlatten`/`arrayUniq`/`arrayIntersect`, the `groupBitmap`/`sumMap`
     aggregates, the hash family and `generateULID` are missing from `SqlFunctions.ClickHouse`.
     Todo: [`todo_clickhouse_function_gaps.md`](todo_clickhouse_function_gaps.md).
+43. **Captured-local parameter binding — planned.** A captured local referenced more than once in a
+    `Where` over a join, or living only inside a joined derived subquery, is rendered into the SQL but
+    never registered with the prepared command (`Must add values for the following parameters`); the
+    ports had to give each local a single reference or move the filter to the outer query.
+    Todo: [`todo_captured_local_parameter_binding.md`](todo_captured_local_parameter_binding.md).
+44. **Derived-table alias resolution — planned.** Joining a builder that carries a `Where` renders the
+    primary source as a derived table with renamed columns while the `ON` still references the raw
+    column (`no such column: t1.product_id`); ordering over a derived table built from a projected query
+    emits a non-existent alias (`order by t3.OrderTotal` while the derived table is `t1`). Both share the
+    alias-identity root.
+    Todo: [`todo_derived_table_alias_resolution.md`](todo_derived_table_alias_resolution.md).
+45. **Correlated `EXISTS` on the right of `||` — planned.** Preparation throws
+    `The binary operator OrElse is not defined for the types 'System.Boolean' and 'System.Func<…>'` when
+    a correlated `EXISTS` follows `||`; the port resolves the subquery first and applies `Contains`.
+    Todo: [`todo_correlated_exists_orelse.md`](todo_correlated_exists_orelse.md).
+46. **Paging and expression ordering on a projected `QueryCommand<T>` — planned.** After terminal
+    `Select` there is no `Page`/`Limit`/`Offset` and no expression `OrderByDescending` (only ordinal
+    `OrderBy*`), so grouped + ordered + paged queries must sort/page on the builder before `Select`.
+    Todo: [`todo_projected_query_paging_ordering.md`](todo_projected_query_paging_ordering.md).
+47. **Runtime bulk-insert destination-table override — planned.** The target table is fixed by
+    `[SqlTable]`, so linq2db's `BulkCopyOptions { TableName = "…" }` has no equivalent and a dedicated
+    type mapping the destination is needed.
+    Todo: [`todo_bulk_insert_destination_table.md`](todo_bulk_insert_destination_table.md).
+48. **`KeepIdentity()` on a non-identity table — planned.** On SQL Server `SET IDENTITY_INSERT` fails
+    with error 8106, while linq2db accepts `BulkCopyOptions { KeepIdentity = true }` unconditionally;
+    the semantics (silent ignore vs prepare-time error) must be defined.
+    Todo: [`todo_bulk_insert_keep_identity.md`](todo_bulk_insert_keep_identity.md).
 
 ---
 
@@ -447,8 +474,10 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
     (ClickHouse). The temporary `ToTempTable` form exists on PostgreSQL, SQLite, MySQL and MariaDB only: SQL
     Server has no `CREATE TEMPORARY TABLE ... AS SELECT` (a session-scoped table is `ToTable("#name")`) and
     ClickHouse cannot express a temporary `AS SELECT`. The optional parts (`IfNotExists`, `Columns`, `OnCommit`,
-    `WithData`) are capability-gated per provider. Shipped:
-    [Materializing a query into a table](../../guide/22-create-table-as.md) (`ToTable`/`ToTempTable`).
+    `WithData`) are capability-gated per provider. The lazy `AsTempTable` source materialises on every read as
+    one batch (`DROP TABLE IF EXISTS` + `CREATE TEMPORARY TABLE ... AS SELECT` + read) on the providers above
+    that support a temporary form; `From(source)` reads it through `TableAlias`. Shipped:
+    [Materializing a query into a table](../../guide/22-create-table-as.md) (`ToTable`/`ToTempTable`/`AsTempTable`).
 22. **PostgreSQL row values — shipped (PostgreSQL + ClickHouse), with phase-2/4 remainders.** The tuple
     surface moved to the cross-provider capability object [`ISqlDialect.Tuple`](xref:NextORM.Core.ISqlDialect.Tuple)
     ([`ITupleRenderer`](xref:NextORM.Core.ITupleRenderer)): PostgreSQL renders `ROW(a, b)` and `(row).fN`,
@@ -534,7 +563,7 @@ developed in parallel on the same working tree.
 | 24 | Locking table hints + row locking (+ cross-provider index hints) | **Done** | `EntityBuilder.cs`, `SqlSourceRenderer.cs`, `SqlBuilder.cs`, provider dialects | SQL-generation tests |
 | 25 | PostgreSQL extended scalar functions | **Done** | `SqlFunctions.cs`, `ExtendedScalarFunctionTranslator.cs`, Postgres dialect | SQL-generation tests |
 | 26 | Warm-path plan-build (CTE / recursive CTE / `Join4` / `IN`-list) | **Closed (decision)** | `QueryCommand*.cs`, `SqlBuilder.cs`, `SqlSourceRenderer.cs`, `Visitors/`, `EntityBuilder.cs`, `JoinedEntityBuilder.cs` | `SqliteBenchmarkFeaturesFairCached`, SQL-generation tests |
-| 27 | Materialize a query into a table (`ToTable`/`ToTempTable`; `CREATE TABLE ... AS SELECT` / SQL Server `SELECT ... INTO` / ClickHouse `ENGINE = MergeTree`) | **Done** ([Materializing a query](../../guide/22-create-table-as.md)) | `Query/Mutations/CreateTableAsCommand.cs`, `Query/CreateTableAsClause.cs`, `Builders/{CreateTableAsOptions,TempTableExtensions}.cs`, `DataContext/SqlMutationBuilder.cs`, `DataContext/SqlBuilder.cs`, `DataContext/QueryPlanner.cs`, `DataContext/Dialect/*`, provider dialects, `DataContext/DataContext.cs` | `CommonTestSuite.CreateTableAs.cs`, SQL-generation tests |
+| 27 | Materialize a query into a table (`ToTable`/`ToTempTable`; `CREATE TABLE ... AS SELECT` / SQL Server `SELECT ... INTO` / ClickHouse `ENGINE = MergeTree`) | **Done** ([Materializing a query](../../guide/22-create-table-as.md)) | `Query/Mutations/CreateTableAsCommand.cs`, `Query/CreateTableAsClause.cs`, `Builders/{CreateTableOptions,TempTableExtensions}.cs`, `DataContext/SqlMutationBuilder.cs`, `DataContext/SqlBuilder.cs`, `DataContext/QueryPlanner.cs`, `DataContext/Dialect/*`, provider dialects, `DataContext/DataContext.cs` | `CommonTestSuite.CreateTableAs.cs`, SQL-generation tests |
 | 28 | Bulk insert / bulk copy (native `COPY`/`SqlBulkCopy`; chunked `VALUES` fallback + G5 returning/ignore/identity) | **Done** ([Bulk insert](../../guide/24-bulk-insert.md)) | `Builders/BulkInsertBuilder.cs`, `Builders/BulkInsertReturningBuilder.cs`, `Query/Mutations/BulkInsertCommand.cs`, `DataContext/{DataContext,PortableBulkInsertExecutor,SyncToAsyncEnumerable}.cs`, `DataContext/Dialect/*`, `DataContext/SqlMutationBuilder.cs`, provider dialects/contexts | `CommonTestSuite.BulkInsert.cs`, SQL-generation tests |
 | 29 | Row values (`System.Tuple`) cross-provider: PostgreSQL `ROW`/`(row).fN`, ClickHouse `tuple`/`tupleElement`, constructor fold, row comparison | **Done (PostgreSQL + ClickHouse)** | `Visitors/TupleSqlTranslator.cs`, `Visitors/BaseExpressionVisitor.cs`, `Visitors/TypeFacts.cs`, `Dialect/DialectCapabilities.cs`, `PostgresDialect.cs`, `ClickHouseDialect.cs` | SQL-generation tests |
 | 30 | EF Core integration (`nextorm.entityframeworkcore`): shared connection/transaction + `IModel` mapping (MVP), then `IQueryable` translation and opt-in DML bridge | **Planned** (`todo_efcore_integration.md`) | new `src/nextorm.entityframeworkcore/**`; core metadata seam `DataContext/Meta/EntityMetadataBuilder.cs`; prerequisite `DataContext/Roles/ITransactionManager.cs` — **Done** ([Transactions](../../guide/25-transactions.md)) | new `tests/nextorm.entityframeworkcore.tests/**`; `CommonTestSuite` shared-EF-transaction |

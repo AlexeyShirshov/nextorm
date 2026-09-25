@@ -37,25 +37,23 @@ public abstract partial class CommonTestSuite
     }
 
     [Fact]
-    public void CreateTableAs_TempTableWithGeneratedName_ShouldBeReadableOnTheSameContext()
+    public void TempTableSource_ShouldMaterialiseOnRead()
     {
-        Assert.SkipUnless(Provider.SupportsTemporaryCreateTableAsSelect, "This provider cannot materialise a query into a temporary table.");
+        Assert.SkipUnless(Provider.SupportsTemporaryCreateTableAsSelect && Provider.SupportsBatch, "This provider cannot run a CTAS batch.");
         var ctx = _sut.DataProvider;
-        var marker = "ctas-auto-" + Guid.NewGuid().ToString("N");
+        var marker = "lazy-" + Guid.NewGuid().ToString("N");
         var id = Random.Shared.Next(1_000_000, int.MaxValue);
 
         ctx.InsertInto<IDeleteEntity>()
             .Values(new DeleteEntity { Id = id, Name = marker, Age = 1 })
             .Insert();
 
-        var name = ctx.From<IDeleteEntity>()
+        var source = ctx.From<IDeleteEntity>()
             .Where(x => x.Id == id)
             .Select(x => new { x.Id, x.Name })
-            .ToTempTable();
+            .AsTempTable();
 
-        name.Should().StartWith("__nextorm_temp_");
-
-        var rows = ctx.From(name)
+        var rows = ctx.From(source)
             .Select(t => new { Id = t.GetInt32("id"), Name = t.GetString("name") })
             .ToList();
 
@@ -65,13 +63,144 @@ public abstract partial class CommonTestSuite
     }
 
     [Fact]
+    public void TempTableSource_ShouldRematerialiseOnEachExecution()
+    {
+        Assert.SkipUnless(Provider.SupportsTemporaryCreateTableAsSelect && Provider.SupportsBatch, "This provider cannot run a CTAS batch.");
+        var ctx = _sut.DataProvider;
+        var marker = "lazy-repeat-" + Guid.NewGuid().ToString("N");
+        var id = Random.Shared.Next(1_000_000, int.MaxValue);
+
+        ctx.InsertInto<IDeleteEntity>()
+            .Values(new DeleteEntity { Id = id, Name = marker, Age = 1 })
+            .Insert();
+
+        var source = ctx.From<IDeleteEntity>()
+            .Where(x => x.Name == marker)
+            .Select(x => new { x.Id })
+            .AsTempTable();
+
+        ctx.From(source).Select(t => new { Id = t.GetInt32("id") }).ToList().Should().ContainSingle();
+
+        // A second read must not fail with "table already exists": each read drops and re-creates it.
+        ctx.InsertInto<IDeleteEntity>()
+            .Values(new DeleteEntity { Id = id + 1, Name = marker, Age = 2 })
+            .Insert();
+
+        ctx.From(source).Select(t => new { Id = t.GetInt32("id") }).ToList().Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void TempTableSource_NestedTempTables_ShouldWork()
+    {
+        Assert.SkipUnless(Provider.SupportsTemporaryCreateTableAsSelect && Provider.SupportsBatch, "This provider cannot run a CTAS batch.");
+        var ctx = _sut.DataProvider;
+        var marker = "lazy-nested-" + Guid.NewGuid().ToString("N");
+        var id = Random.Shared.Next(1_000_000, int.MaxValue);
+
+        ctx.InsertInto<IDeleteEntity>()
+            .Values(new DeleteEntity { Id = id, Name = marker, Age = 1 })
+            .Insert();
+
+        var first = ctx.From<IDeleteEntity>().Where(x => x.Name == marker).Select(x => new { x.Id }).AsTempTable();
+        var second = ctx.From(first).Select(t => new { Id = t.GetInt32("id") }).AsTempTable();
+
+        var rows = ctx.From(second).Select(t => new { Id = t.GetInt32("id") }).ToList();
+
+        rows.Should().ContainSingle();
+        rows[0].Id.Should().Be(id);
+    }
+
+    [Fact]
+    public void TempTableSource_Any_ShouldSeeTheMaterialisedRows()
+    {
+        Assert.SkipUnless(Provider.SupportsTemporaryCreateTableAsSelect && Provider.SupportsBatch, "This provider cannot run a CTAS batch.");
+        var ctx = _sut.DataProvider;
+        var marker = "lazy-any-" + Guid.NewGuid().ToString("N");
+        var id = Random.Shared.Next(1_000_000, int.MaxValue);
+
+        ctx.InsertInto<IDeleteEntity>()
+            .Values(new DeleteEntity { Id = id, Name = marker, Age = 1 })
+            .Insert();
+
+        var source = ctx.From<IDeleteEntity>()
+            .Where(x => x.Name == marker)
+            .Select(x => new { x.Id })
+            .AsTempTable();
+
+        ctx.From(source).Where(t => t.GetInt32("id") == id).Any().Should().BeTrue();
+        ctx.From(source).Where(t => t.GetInt32("id") == id + 1).Any().Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task TempTableSource_ShouldStreamTheRows()
+    {
+        Assert.SkipUnless(Provider.SupportsTemporaryCreateTableAsSelect && Provider.SupportsBatch, "This provider cannot run a CTAS batch.");
+        var ctx = _sut.DataProvider;
+        var marker = "lazy-stream-" + Guid.NewGuid().ToString("N");
+        var id = Random.Shared.Next(1_000_000, int.MaxValue);
+
+        ctx.InsertInto<IDeleteEntity>()
+            .Values(new DeleteEntity { Id = id, Name = marker, Age = 1 })
+            .Insert();
+
+        var source = ctx.From<IDeleteEntity>()
+            .Where(x => x.Name == marker)
+            .Select(x => new { x.Id })
+            .AsTempTable();
+
+        var ids = new List<int>();
+        await foreach (var row in ctx.From(source).Select(t => new { Id = t.GetInt32("id") }).ToAsyncEnumerable(TestContext.Current.CancellationToken))
+            ids.Add(row.Id);
+
+        ids.Should().ContainSingle().Which.Should().Be(id);
+    }
+
+    [Fact]
+    public void TempTableSource_ScalarTerminals_ShouldWork()
+    {
+        Assert.SkipUnless(Provider.SupportsTemporaryCreateTableAsSelect && Provider.SupportsBatch, "This provider cannot run a CTAS batch.");
+        var ctx = _sut.DataProvider;
+        var marker = "lazy-scalar-" + Guid.NewGuid().ToString("N");
+        var id = Random.Shared.Next(1_000_000, int.MaxValue);
+
+        ctx.InsertInto<IDeleteEntity>()
+            .Values([
+                new DeleteEntity { Id = id, Name = marker, Age = 1 },
+                new DeleteEntity { Id = id + 1, Name = marker, Age = 2 },
+            ])
+            .Insert();
+
+        var source = ctx.From<IDeleteEntity>()
+            .Where(x => x.Name == marker)
+            .Select(x => new { x.Id })
+            .AsTempTable();
+
+        ctx.From(source).Where(t => t.GetInt32("id") >= id).Select(t => new { Id = t.GetInt32("id") }).First().Id.Should().Be(id);
+        ctx.From(source).Count().Should().Be(2);
+    }
+
+    [Fact]
+    public void TempTableSource_UnsupportedProvider_ShouldThrow()
+    {
+        Assert.SkipUnless(!Provider.SupportsTemporaryCreateTableAsSelect, "This provider materialises a query into a temporary table.");
+        var ctx = _sut.DataProvider;
+        var id = Random.Shared.Next(1_000_000, int.MaxValue);
+
+        var source = ctx.From<IDeleteEntity>().Where(x => x.Id == id).Select(x => new { x.Id }).AsTempTable();
+
+        var act = () => ctx.From(source).Select(t => new { Id = t.GetInt32("id") }).ToList();
+
+        act.Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
     public void CreateTableAs_TempTableIfNotExists_ShouldBeRepeatable()
     {
         Assert.SkipUnless(Provider.SupportsTemporaryCreateTableAsSelect, "This provider cannot materialise a query into a temporary table.");
         var ctx = _sut.DataProvider;
         var id = Random.Shared.Next(1_000_000, int.MaxValue);
         var name = CreateTableAsName(id);
-        var options = new CreateTableAsOptions { IfNotExists = true };
+        var options = new CreateTableOptions { IfNotExists = true };
 
         ctx.InsertInto<IDeleteEntity>()
             .Values(new DeleteEntity { Id = id, Name = "ctas-repeat", Age = 1 })
@@ -143,6 +272,42 @@ public abstract partial class CommonTestSuite
     }
 
     [Fact]
+    public void CreateTableAs_TableDropExisting_ShouldReplaceTheTable()
+    {
+        Assert.SkipUnless(Provider.SupportsCreateTableAsSelect, "This provider cannot materialise a query into a table.");
+        var ctx = _sut.DataProvider;
+        var marker = "ctas-drop-" + Guid.NewGuid().ToString("N");
+        var first = Random.Shared.Next(1_000_000, int.MaxValue);
+        var second = first + 1;
+        var name = CreateTableAsName(first);
+
+        ctx.InsertInto<IDeleteEntity>().Values([
+            new DeleteEntity { Id = first, Name = marker, Age = 1 },
+            new DeleteEntity { Id = second, Name = marker, Age = 2 },
+        ]).Insert();
+
+        try
+        {
+            ctx.From<IDeleteEntity>().Where(x => x.Id == first).Select(x => new { x.Id })
+                .ToTable(name, new CreateTableOptions { DropExisting = true });
+            ctx.From(name).Select(t => new { Id = t.GetInt32("id") }).ToList().Should().ContainSingle().Which.Id.Should().Be(first);
+
+            // Re-running with a different query drops the existing table and replaces its rows.
+            ctx.From<IDeleteEntity>().Where(x => x.Id == second).Select(x => new { x.Id })
+                .ToTable(name, new CreateTableOptions { DropExisting = true });
+            ctx.From(name).Select(t => new { Id = t.GetInt32("id") }).ToList().Should().ContainSingle().Which.Id.Should().Be(second);
+        }
+        finally
+        {
+            var connections = (IConnectionManager)ctx;
+            connections.EnsureConnectionOpen();
+            using var cmd = connections.GetConnection().CreateCommand();
+            cmd.CommandText = "drop table if exists " + name;
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    [Fact]
     public void CreateTableAs_UnsupportedProvider_ShouldThrow()
     {
         Assert.SkipUnless(!Provider.SupportsTemporaryCreateTableAsSelect, "This provider materialises a query into a temporary table.");
@@ -167,7 +332,7 @@ public abstract partial class CommonTestSuite
             .Insert();
 
         var rows = ctx.Batch()
-            .CreateTempTableAs(name, ctx.From<IDeleteEntity>()
+            .CreateTempTable(name, ctx.From<IDeleteEntity>()
                 .Where(x => x.Id == id)
                 .Select(x => new { x.Id, x.Name }))
             .Query(ctx.From(name).Select(t => new { Id = t.GetInt32("id"), Name = t.GetString("name") }))
@@ -192,7 +357,7 @@ public abstract partial class CommonTestSuite
             .Insert();
 
         var rows = await ctx.Batch()
-            .CreateTempTableAs(name, ctx.From<IDeleteEntity>()
+            .CreateTempTable(name, ctx.From<IDeleteEntity>()
                 .Where(x => x.Id == id)
                 .Select(x => new { x.Id, x.Name }))
             .Query(ctx.From(name).Select(t => new { Id = t.GetInt32("id"), Name = t.GetString("name") }))
@@ -217,7 +382,7 @@ public abstract partial class CommonTestSuite
 
         var rows = new List<int>();
         await foreach (var row in ctx.Batch()
-            .CreateTempTableAs(name, ctx.From<IDeleteEntity>().Where(x => x.Id == id).Select(x => new { x.Id }))
+            .CreateTempTable(name, ctx.From<IDeleteEntity>().Where(x => x.Id == id).Select(x => new { x.Id }))
             .Query(ctx.From(name).Select(t => new { Id = t.GetInt32("id") }))
             .ToAsyncEnumerable(TestContext.Current.CancellationToken))
         {
@@ -244,7 +409,7 @@ public abstract partial class CommonTestSuite
 
         var limit = id;
         var rows = ctx.Batch()
-            .CreateTempTableAs(name, ctx.From<IDeleteEntity>().Where(x => x.Id >= limit).Select(x => new { x.Id }))
+            .CreateTempTable(name, ctx.From<IDeleteEntity>().Where(x => x.Id >= limit).Select(x => new { x.Id }))
             .Query(ctx.From<IDeleteEntity>().Where(x => x.Id == limit).Select(x => new { x.Id }))
             .ToList();
 
@@ -367,7 +532,7 @@ public abstract partial class CommonTestSuite
         var name = CreateTableAsName(1);
 
         var act = () => ctx.Batch()
-            .CreateTableAs(name, ctx.From<IDeleteEntity>().Select(x => new { x.Id }))
+            .CreateTable(name, ctx.From<IDeleteEntity>().Select(x => new { x.Id }))
             .Query(ctx.From<IDeleteEntity>().Select(x => new { x.Id }))
             .ToSql();
 

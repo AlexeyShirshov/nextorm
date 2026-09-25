@@ -26,7 +26,7 @@ public class CreateTableAsSqlGenerationTests
         using var ctx = ClickHouseTestContext.Create();
 
         ctx.From<ISimpleEntity>()
-            .ToTableSql("archive_ids", new CreateTableAsOptions { IfNotExists = true })
+            .ToTableSql("archive_ids", new CreateTableOptions { IfNotExists = true })
             .Should().Be("create table if not exists archive_ids engine = MergeTree order by tuple() as select id from simple_entity");
     }
 
@@ -51,12 +51,24 @@ public class CreateTableAsSqlGenerationTests
     }
 
     [Fact]
+    public void TempTableSource_ShouldThrow()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var source = ctx.From<ISimpleEntity>().Select(x => new { x.Id }).AsTempTable();
+
+        var act = () => ctx.From(source).Select(t => new { Id = t.GetInt32("id") }).ToBatchSql();
+
+        act.Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
     public void Table_WithColumns_ShouldThrow()
     {
         using var ctx = ClickHouseTestContext.Create();
 
         var act = () => ctx.From<ISimpleEntity>()
-            .ToTableSql("archive_ids", new CreateTableAsOptions { Columns = ["a"] });
+            .ToTableSql("archive_ids", new CreateTableOptions { Columns = ["a"] });
 
         act.Should().Throw<NotSupportedException>().WithMessage("*column list*");
     }

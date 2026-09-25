@@ -36,7 +36,7 @@ public class CreateTableAsSqlGenerationTests
         using var ctx = PostgresTestContext.Create();
 
         ctx.From<ISimpleEntity>()
-            .ToTempTableSql("recent_ids", new CreateTableAsOptions
+            .ToTempTableSql("recent_ids", new CreateTableOptions
             {
                 IfNotExists = true,
                 Columns = ["a", "b"],
@@ -44,6 +44,21 @@ public class CreateTableAsSqlGenerationTests
                 WithData = false,
             })
             .Should().Be("create temporary table if not exists recent_ids (a, b) on commit drop as select id from simple_entity with no data");
+    }
+
+    [Fact]
+    public void TempTable_WithBuilderOptions_ShouldMatchRecordOptions()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = ctx.From<ISimpleEntity>()
+            .ToTempTableSql("recent_ids", o => o
+                .IfNotExists()
+                .Columns("a", "b")
+                .OnCommit(TempTableOnCommit.Drop)
+                .WithData(false));
+
+        sql.Should().Be("create temporary table if not exists recent_ids (a, b) on commit drop as select id from simple_entity with no data");
     }
 
     [Fact]

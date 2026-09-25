@@ -29,6 +29,53 @@ public class BatchSqlGenerationTests
     }
 
     [Fact]
+    public void Batch_CreateTableDropExisting_ShouldRenderDropThenCreate()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var sql = ctx.Batch()
+            .CreateTable("archive", ctx.From<ISimpleEntity>().Select(x => new { x.Id }), new CreateTableOptions { DropExisting = true })
+            .Query(ctx.From<ISimpleEntity>().Select(x => new { x.Id }))
+            .ToSql();
+
+        var statements = sql.Split("; ");
+        statements.Should().HaveCount(3);
+        statements[0].Should().Be("drop table if exists archive");
+        statements[1].Should().Be("create table archive as select id from simple_entity");
+        statements[2].Should().Be("select id from simple_entity");
+    }
+
+    [Fact]
+    public void Batch_CreateTableDropExistingViaBuilder_ShouldRenderDropThenCreate()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var sql = ctx.Batch()
+            .CreateTable("archive", ctx.From<ISimpleEntity>().Select(x => new { x.Id }), o => o.DropExisting())
+            .Query(ctx.From<ISimpleEntity>().Select(x => new { x.Id }))
+            .ToSql();
+
+        var statements = sql.Split("; ");
+        statements.Should().HaveCount(3);
+        statements[0].Should().Be("drop table if exists archive");
+        statements[1].Should().Be("create table archive as select id from simple_entity");
+        statements[2].Should().Be("select id from simple_entity");
+    }
+
+    [Fact]
+    public void Batch_CreateTempTableDropExisting_ShouldThrow()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var act = () => ctx.Batch()
+            .CreateTempTable("t", ctx.From<ISimpleEntity>().Select(x => new { x.Id }), new CreateTableOptions { DropExisting = true })
+            .Query(ctx.From<ISimpleEntity>().Select(x => new { x.Id }))
+            .ToSql();
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*persistent*");
+    }
+
+    [Fact]
     public void Batch_TruncateThenQuery_ShouldThrow()
     {
         using var ctx = SqliteTestContext.Create();

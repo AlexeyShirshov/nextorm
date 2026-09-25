@@ -23,6 +23,17 @@ internal interface IBatchExecutor
     /// <exception cref="NotSupportedException">The dialect has no batch form, or a materialisation option is unsupported.</exception>
     BatchPlan RenderBatch(IReadOnlyList<BatchStepSpec> steps);
 
+    /// <summary>
+    /// Renders the batch that materialises every temporary table <paramref name="command"/> reads
+    /// (drop and re-create each), followed by the command itself. Used by the lazy
+    /// <c>AsTempTable</c> read path and by its <c>ToBatchSql</c> inspection form.
+    /// </summary>
+    /// <param name="command">The command that reads the temporary table(s).</param>
+    /// <returns>The rendered batch.</returns>
+    /// <exception cref="InvalidOperationException">The command reads no temporary table.</exception>
+    /// <exception cref="NotSupportedException">The dialect has no batch form or cannot express a temporary materialisation.</exception>
+    BatchPlan RenderTemporaryTableBatch(QueryCommand command);
+
     /// <summary>Builds the row mapper for the plan's result-bearing query.</summary>
     /// <typeparam name="TResult">The projected row type.</typeparam>
     /// <param name="plan">The rendered plan.</param>
@@ -60,36 +71,45 @@ internal interface IBatchExecutor
 /// </summary>
 internal sealed class BatchStepSpec
 {
-    private BatchStepSpec(QueryCommand? query, CreateTableAsCommand? createTableAs, MutationCommand? mutation)
+    private BatchStepSpec(QueryCommand? query, CreateTableAsCommand? createTableAs, MutationCommand? mutation, string? rawSql)
     {
         Query = query;
         CreateTableAs = createTableAs;
         Mutation = mutation;
+        RawSql = rawSql;
     }
 
     /// <summary>The result-bearing read query, or <see langword="null"/> for a non-result step.</summary>
     public QueryCommand? Query { get; }
 
-    /// <summary>The materialisation command of the step, or <see langword="null"/> for a result or DML step.</summary>
+    /// <summary>The materialisation command of the step, or <see langword="null"/> for a result, DML or raw step.</summary>
     public CreateTableAsCommand? CreateTableAs { get; }
 
-    /// <summary>The side-effecting DML command of the step, or <see langword="null"/> for a result or materialisation step.</summary>
+    /// <summary>The side-effecting DML command of the step, or <see langword="null"/> for a result, materialisation or raw step.</summary>
     public MutationCommand? Mutation { get; }
+
+    /// <summary>The verbatim SQL of a raw side-effecting step (for example <c>DROP TABLE IF EXISTS</c>), or <see langword="null"/> for the other step kinds.</summary>
+    public string? RawSql { get; }
 
     /// <summary>Creates the result-bearing read-query step.</summary>
     /// <param name="query">The query whose rows form the batch result.</param>
     /// <returns>The step.</returns>
-    public static BatchStepSpec ForResult(QueryCommand query) => new(query, null, null);
+    public static BatchStepSpec ForResult(QueryCommand query) => new(query, null, null, null);
 
     /// <summary>Creates a materialisation step.</summary>
     /// <param name="command">The materialisation command.</param>
     /// <returns>The step.</returns>
-    public static BatchStepSpec ForCreateTableAs(CreateTableAsCommand command) => new(null, command, null);
+    public static BatchStepSpec ForCreateTableAs(CreateTableAsCommand command) => new(null, command, null, null);
 
     /// <summary>Creates a side-effecting DML step.</summary>
     /// <param name="command">The DML command.</param>
     /// <returns>The step.</returns>
-    public static BatchStepSpec ForMutation(MutationCommand command) => new(null, null, command);
+    public static BatchStepSpec ForMutation(MutationCommand command) => new(null, null, command, null);
+
+    /// <summary>Creates a verbatim side-effecting SQL step. The SQL carries no parameters.</summary>
+    /// <param name="sql">The statement text.</param>
+    /// <returns>The step.</returns>
+    public static BatchStepSpec ForRaw(string sql) => new(null, null, null, sql);
 }
 
 /// <summary>

@@ -260,7 +260,76 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <param name="cancellationToken">Token used to cancel preparation.</param>
     /// <returns>The prepared command, ready to execute.</returns>
     public IPreparedQueryCommand<TResult> GetPreparedQueryCommand<TResult>(QueryCommand<TResult> queryCommand, bool createEnumerator, bool storeInCache, CancellationToken cancellationToken)
-        => _planner.GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache, cancellationToken);
+    {
+        // The check is allocation-free and false for every ordinary query, so the common preparation
+        // path only pays a few branches.
+        if (queryCommand.HasTemporaryTableSource())
+        {
+            var tempTables = new List<ITempTableSource>();
+            queryCommand.CollectTempTableSources(tempTables);
+            return GetPreparedTemporaryTableCommand(queryCommand, tempTables, createEnumerator, cancellationToken);
+        }
+
+        return _planner.GetPreparedQueryCommand(queryCommand, createEnumerator, storeInCache, cancellationToken);
+    }
+
+    // A query that reads a lazy temporary table is not a single statement: the table must be created on
+    // the same session as the read. The command is prepared normally (for its mapper and result shape)
+    // and a batch plan is attached, so the execution terminals run DROP + CREATE TEMPORARY TABLE + read
+    // in one round trip. The plan is rebuilt on every preparation because the source query's captured
+    // parameters may differ between executions; the read command is therefore never cached.
+    private IPreparedQueryCommand<TResult> GetPreparedTemporaryTableCommand<TResult>(
+        QueryCommand<TResult> queryCommand,
+        List<ITempTableSource> tempTables,
+        bool createEnumerator,
+        CancellationToken cancellationToken)
+    {
+        // storeInCache: false is what keeps the read plan out of the plan cache (the source query's
+        // captured parameters must be re-rendered on every execution). Setting Cache = false here
+        // would leak: for `Any` the command is the context-shared AnyCommand, so it would disable
+        // plan caching for every later query on that context.
+        var prepared = (DbPreparedQueryCommand<TResult>)_planner.GetPreparedQueryCommand(queryCommand, createEnumerator, false, cancellationToken);
+
+        prepared.PendingBatch = BuildTemporaryTableBatch(queryCommand, tempTables);
+        return prepared;
+    }
+
+    BatchPlan IBatchExecutor.RenderTemporaryTableBatch(QueryCommand command)
+    {
+        var tempTables = new List<ITempTableSource>();
+        command.CollectTempTableSources(tempTables);
+
+        if (tempTables.Count == 0)
+            throw new InvalidOperationException("The command does not read a temporary table; the batch form is only available for a source created with AsTempTable.");
+
+        return BuildTemporaryTableBatch(command, tempTables);
+    }
+
+    private BatchPlan BuildTemporaryTableBatch(QueryCommand command, List<ITempTableSource> tempTables)
+    {
+        // The command's resolved quoting/case flags are set during preparation; ToBatchSql may be the
+        // first to look at them, so prepare the command before rendering the DROP.
+        if (!command.IsPrepared)
+            command.PrepareCommand(false, CancellationToken.None);
+
+        var steps = new BatchStepSpec[tempTables.Count * 2 + 1];
+        var index = 0;
+        foreach (var tempTable in tempTables)
+        {
+            steps[index++] = BatchStepSpec.ForRaw(RenderDropTemporaryTable(command, tempTable.Name));
+            steps[index++] = BatchStepSpec.ForCreateTableAs(
+                new CreateTableAsCommand(tempTable.Source.ResultType ?? typeof(object), tempTable.Name, temporary: true, tempTable.Source, tempTable.Options));
+        }
+
+        steps[index] = BatchStepSpec.ForResult(command);
+        return ((IBatchExecutor)this).RenderBatch(steps);
+    }
+
+    private string RenderDropTemporaryTable(QueryCommand command, string name)
+    {
+        var quoted = command.ResolvedQuoteIdentifiers ? Dialect.QuoteIdentifier(name) : name;
+        return SqlKeywords.Of(command.ResolvedKeywordCase, "drop table if exists ") + quoted;
+    }
 
     /// <summary>Creates a provider-specific parameter with the given name and value.</summary>
     /// <param name="name">The parameter name, without the provider's prefix.</param>
@@ -531,6 +600,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             DeleteJoinCommand deleteJoin => BuildDeleteJoinSql(deleteJoin),
             TruncateCommand truncate => BuildTruncateSql(truncate),
             CreateTableAsCommand createTableAs => BuildCreateTableAsSql(createTableAs),
+            DropTableCommand dropTable => BuildDropTableSql(dropTable),
             _ => throw new NotSupportedException($"Unsupported mutation command {command.GetType().Name}."),
         };
 
@@ -604,6 +674,9 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         return SqlMutationBuilder.MakeCreateTableAsSelect(Dialect, quoteIdentifiers, withSql, sourceSql, sourceParameters, command, keywordCase);
     }
 
+    private (string Sql, List<Parameter> Parameters) BuildDropTableSql(DropTableCommand command)
+        => (SqlMutationBuilder.MakeDropTableIfExists(Dialect, command.QuoteIdentifiers ?? QuoteIdentifiers, command.TargetName, command.KeywordCase ?? KeywordCase), []);
+
     // A per-statement placeholder prefix for captured members: the shared parameter provider already
     // keeps inline values unique, but a member (closure variable) is named after the member, so two
     // statements capturing the same variable would otherwise collide in the ;-joined fallback.
@@ -634,10 +707,19 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             var start = accumulator.Count;
             string sql;
 
-            if (step.CreateTableAs is { } createTableAs)
+            if (step.RawSql is { } rawSql)
+            {
+                sql = rawSql;
+            }
+            else if (step.CreateTableAs is { } createTableAs)
             {
                 var quoteIdentifiers = createTableAs.Source.QuoteIdentifiers ?? QuoteIdentifiers;
                 var keywordCase = createTableAs.Source.KeywordCase ?? KeywordCase;
+                if (createTableAs.Options.DropExisting)
+                    statements.Add(new BatchStatement(
+                        SqlMutationBuilder.MakeDropTableIfExists(Dialect, quoteIdentifiers, createTableAs.TargetName, keywordCase),
+                        Array.Empty<Parameter>()));
+
                 var selectInto = SqlMutationBuilder.ResolveCreateTableAsInto(Dialect, quoteIdentifiers, createTableAs, keywordCase);
                 var (withSql, sourceSql, _) = _planner.RenderSource(createTableAs.Source, provider, accumulator, selectInto, BatchParameterPrefix(i));
                 (sql, _) = SqlMutationBuilder.MakeCreateTableAsSelect(Dialect, quoteIdentifiers, withSql, sourceSql, accumulator, createTableAs, keywordCase);

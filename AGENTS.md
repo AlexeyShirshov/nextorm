@@ -23,6 +23,11 @@
 - `src/nextorm.core.sourcegenerator` is an empty `IIncrementalGenerator` stub — in the solution but referenced by no project, so it generates nothing today.
 - `tests/nextorm.<provider>.tests` are dialect/SQL-generation tests using placeholder connection strings; they need no database. Only `tests/nextorm.integration.tests` talks to real databases, through `ProviderTestSuite` + `CommonTestSuite.*.cs` (a test added there runs against every provider; provider-only behavior belongs in `*SpecificTests.cs`).
 
+## Shared query commands & plan cache
+- `.Any()`/`.Count()`/`.All()` and similar reuse **one** `QueryCommand` per `DataContext` (`EntityBuilderExtensions.GetAnyCommand` → `QueryCache.AnyCommand`; `ReplaceCommand` only swaps the referenced subquery, it does not reset command state).
+- Never mutate that command on behalf of a single call — in particular `queryCommand.Cache = false`, which is backed by the sticky `_dontCache` field. The flag persists across calls, so it leaks to every later query on the context and silently disables the plan cache for the whole context (green tests, production regression).
+- To prepare without caching, pass `storeInCache: false` to `_planner.GetPreparedQueryCommand(...)` — it is local to the call and does not touch the command. The lazy temp-table path (`DataContext.GetPreparedTemporaryTableCommand`, `DataContext.cs`) is the reference example.
+
 ## Git
 - Never run `git push`; the user pushes manually.
 - Do not create commits unless explicitly asked — **this includes work in separate git worktrees**.

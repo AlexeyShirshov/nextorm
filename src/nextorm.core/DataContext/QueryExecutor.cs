@@ -413,6 +413,9 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     {
         var compiledQuery = AsDbCommand(preparedQueryCommand);
 
+        if (compiledQuery.PendingBatch is { } batch)
+            return _batchRunner.RunStream(batch, BeginBatch(compiledQuery, @params), cancellationToken).GetAsyncEnumerator(cancellationToken);
+
         var sqlEnumerator = RequireEnumerator(compiledQuery);
         sqlEnumerator.InitEnumerator(_connectionManager, _createParam, @params, cancellationToken, _currentTransaction, _interceptors, _context);
         return sqlEnumerator;
@@ -422,6 +425,9 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     {
         var compiledQuery = AsDbCommand(preparedQueryCommand);
 
+        if (compiledQuery.PendingBatch is { } batch)
+            return _batchRunner.Run(batch, BeginBatch(compiledQuery, @params)).GetEnumerator();
+
         var sqlEnumerator = RequireEnumerator(compiledQuery);
         sqlEnumerator.InitEnumerator(_connectionManager, _createParam, @params, CancellationToken.None, _currentTransaction, _interceptors, _context);
         sqlEnumerator.InitReader(@params);
@@ -429,9 +435,61 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         return sqlEnumerator;
     }
 
+    async Task<IEnumerator<TResult>> IRowReaderFactory.CreateEnumeratorAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
+    {
+        var compiledQuery = AsDbCommand(preparedQueryCommand);
+
+        if (compiledQuery.PendingBatch is { } batch)
+        {
+            var rows = await _batchRunner.RunAsync(batch, BeginBatch(compiledQuery, @params), cancellationToken).ConfigureAwait(false);
+            return rows.GetEnumerator();
+        }
+
+        var enumerator = CreateAsyncEnumerator(preparedQueryCommand, @params, cancellationToken);
+        await ((IAsyncInit<TResult>)enumerator).InitReaderAsync(@params, cancellationToken).ConfigureAwait(false);
+        return (IEnumerator<TResult>)enumerator;
+    }
+
+    // A batch has no way to bind positional runtime parameters (@params): its parameters are baked
+    // into the plan when it is rendered, and the render already happens per execution with the source
+    // query's current captured values. Reject a non-empty @params instead of silently ignoring it.
+    private static Func<IDataRecord, TResult> BeginBatch<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, ReadOnlySpan<object?> @params)
+    {
+        RequireNoRuntimeParameters(@params);
+        return BuildBatchMapper(compiledQuery);
+    }
+
+    private static Func<IDataRecord, TResult> BeginBatch<TResult>(DbPreparedQueryCommand<TResult> compiledQuery, object[]? @params)
+    {
+        if (@params is { Length: > 0 })
+            throw new NotSupportedException(RuntimeParametersNotSupported);
+
+        return BuildBatchMapper(compiledQuery);
+    }
+
+    private static void RequireNoRuntimeParameters(ReadOnlySpan<object?> @params)
+    {
+        if (!@params.IsEmpty)
+            throw new NotSupportedException(RuntimeParametersNotSupported);
+    }
+
+    private static Func<IDataRecord, TResult> BuildBatchMapper<TResult>(DbPreparedQueryCommand<TResult> compiledQuery)
+        => compiledQuery.MapDelegate
+           ?? throw new NotSupportedException("A temporary-table read has no row projection to materialise.");
+
+    private const string RuntimeParametersNotSupported =
+        "A temporary-table read does not support positional runtime parameters; capture the value in a local variable in the source query instead.";
+
     public async Task<List<TResult>> ToListAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
     {
         var compiledQuery = AsDbCommand(preparedQueryCommand);
+
+        if (compiledQuery.PendingBatch is { } batch)
+        {
+            var rows = await _batchRunner.RunAsync(batch, BeginBatch(compiledQuery, @params), cancellationToken).ConfigureAwait(false);
+            compiledQuery.LastRowCount = rows.Count;
+            return rows;
+        }
 
         var sqlCommand = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
         var reader = await RunReaderAsync(sqlCommand, compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
@@ -452,6 +510,13 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     public List<TResult> ToList<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, ReadOnlySpan<object?> @params)
     {
         var compiledQuery = AsDbCommand(preparedQueryCommand);
+
+        if (compiledQuery.PendingBatch is { } batch)
+        {
+            var rows = _batchRunner.Run(batch, BeginBatch(compiledQuery, @params));
+            compiledQuery.LastRowCount = rows.Count;
+            return rows;
+        }
 
         var sqlCommand = GetDbCommand(compiledQuery, @params);
         var reader = RunReader(sqlCommand, compiledQuery.Behavior);
@@ -540,9 +605,16 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     {
         var compiledQuery = AsDbCommand(preparedQueryCommand);
 
-        var sqlCommand = GetDbCommand(compiledQuery, @params);
-
-        var r = RunScalar(sqlCommand);
+        object? r;
+        if (compiledQuery.PendingBatch is { } batch)
+        {
+            r = _batchRunner.RunScalar(batch);
+        }
+        else
+        {
+            var sqlCommand = GetDbCommand(compiledQuery, @params);
+            r = RunScalar(sqlCommand);
+        }
 
         if (r is TResult res) return res;
         if (r is null or DBNull)
@@ -559,9 +631,16 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         CheckDisposed();
         var compiledQuery = AsDbCommand(preparedQueryCommand);
 
-        var sqlCommand = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
-
-        var r = await RunScalarAsync(sqlCommand, cancellationToken).ConfigureAwait(false);
+        object? r;
+        if (compiledQuery.PendingBatch is { } batch)
+        {
+            r = await _batchRunner.RunScalarAsync(batch, cancellationToken).ConfigureAwait(false);
+        }
+        else
+        {
+            var sqlCommand = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
+            r = await RunScalarAsync(sqlCommand, cancellationToken).ConfigureAwait(false);
+        }
 
         if (r is TResult res) return res;
         if (r is null or DBNull)
@@ -587,6 +666,15 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         if (compiledQuery.MapDelegate is null)
             return ExecuteScalar<TResult>(preparedQueryCommand, @params, true)!;
 
+        if (compiledQuery.PendingBatch is { } batch)
+        {
+            var rows = _batchRunner.Run(batch, BeginBatch(compiledQuery, @params));
+            if (rows.Count > 0)
+                return rows[0];
+
+            throw new InvalidOperationException();
+        }
+
         var sqlCommand = GetDbCommand(compiledQuery, @params);
         var reader = RunReader(sqlCommand, compiledQuery.Behavior);
         var mapper = compiledQuery.MapDelegate!;
@@ -606,6 +694,15 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         // Scalar mode: no row mapper was compiled, read the value directly.
         if (compiledQuery.MapDelegate is null)
             return (await ExecuteScalar<TResult>(preparedQueryCommand, @params, true, cancellationToken))!;
+
+        if (compiledQuery.PendingBatch is { } batch)
+        {
+            var rows = await _batchRunner.RunAsync(batch, BeginBatch(compiledQuery, @params), cancellationToken).ConfigureAwait(false);
+            if (rows.Count > 0)
+                return rows[0];
+
+            throw new InvalidOperationException();
+        }
 
         var sqlCommand = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
         var reader = await RunReaderAsync(sqlCommand, compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
@@ -627,6 +724,12 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         if (compiledQuery.MapDelegate is null)
             return ExecuteScalar<TResult>(preparedQueryCommand, @params, false);
 
+        if (compiledQuery.PendingBatch is { } batch)
+        {
+            var rows = _batchRunner.Run(batch, BeginBatch(compiledQuery, @params));
+            return rows.Count > 0 ? rows[0] : default;
+        }
+
         var sqlCommand = GetDbCommand(compiledQuery, @params);
         var reader = RunReader(sqlCommand, compiledQuery.Behavior);
         var mapper = compiledQuery.MapDelegate!;
@@ -647,6 +750,12 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         if (compiledQuery.MapDelegate is null)
             return await ExecuteScalar<TResult>(preparedQueryCommand, @params, false, cancellationToken);
 
+        if (compiledQuery.PendingBatch is { } batch)
+        {
+            var rows = await _batchRunner.RunAsync(batch, BeginBatch(compiledQuery, @params), cancellationToken).ConfigureAwait(false);
+            return rows.Count > 0 ? rows[0] : default;
+        }
+
         var sqlCommand = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
         var reader = await RunReaderAsync(sqlCommand, compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
         var mapper = compiledQuery.MapDelegate!;
@@ -662,6 +771,15 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     public TResult Single<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, ReadOnlySpan<object?> @params)
     {
         var compiledQuery = AsDbCommand(preparedQueryCommand);
+
+        if (compiledQuery.PendingBatch is { } batch)
+        {
+            var rows = _batchRunner.Run(batch, BeginBatch(compiledQuery, @params));
+            if (rows.Count != 1)
+                throw new InvalidOperationException();
+
+            return rows[0];
+        }
 
         var sqlCommand = GetDbCommand(compiledQuery, @params);
         var reader = RunReader(sqlCommand, compiledQuery.Behavior);
@@ -690,6 +808,15 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     {
         var compiledQuery = AsDbCommand(preparedQueryCommand);
 
+        if (compiledQuery.PendingBatch is { } batch)
+        {
+            var rows = await _batchRunner.RunAsync(batch, BeginBatch(compiledQuery, @params), cancellationToken).ConfigureAwait(false);
+            if (rows.Count != 1)
+                throw new InvalidOperationException();
+
+            return rows[0];
+        }
+
         var sqlCommand = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
         var reader = await RunReaderAsync(sqlCommand, compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);
         using (reader)
@@ -717,6 +844,15 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     {
         var compiledQuery = AsDbCommand(preparedQueryCommand);
 
+        if (compiledQuery.PendingBatch is { } batch)
+        {
+            var rows = _batchRunner.Run(batch, BeginBatch(compiledQuery, @params));
+            if (rows.Count > 1)
+                throw new InvalidOperationException();
+
+            return rows.Count == 1 ? rows[0] : default;
+        }
+
         var sqlCommand = GetDbCommand(compiledQuery, @params);
         var reader = RunReader(sqlCommand, compiledQuery.Behavior);
 
@@ -741,6 +877,15 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     public async Task<TResult?> SingleOrDefaultAsync<TResult>(IPreparedQueryCommand<TResult> preparedQueryCommand, object[]? @params, CancellationToken cancellationToken)
     {
         var compiledQuery = AsDbCommand(preparedQueryCommand);
+
+        if (compiledQuery.PendingBatch is { } batch)
+        {
+            var rows = await _batchRunner.RunAsync(batch, BeginBatch(compiledQuery, @params), cancellationToken).ConfigureAwait(false);
+            if (rows.Count > 1)
+                throw new InvalidOperationException();
+
+            return rows.Count == 1 ? rows[0] : default;
+        }
 
         var sqlCommand = await GetDbCommand(compiledQuery, @params, cancellationToken).ConfigureAwait(false);
         var reader = await RunReaderAsync(sqlCommand, compiledQuery.Behavior, cancellationToken).ConfigureAwait(false);

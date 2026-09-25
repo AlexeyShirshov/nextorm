@@ -72,8 +72,22 @@ public sealed class BatchBuilder
     /// <returns>This builder, for chaining.</returns>
     /// <exception cref="InvalidOperationException">The result-bearing query has already been added.</exception>
     /// <exception cref="NotSupportedException">The dialect cannot express the materialisation or one of the requested options.</exception>
-    public BatchBuilder CreateTableAs(string name, QueryCommand source, CreateTableAsOptions? options = null)
-        => AddCreateTableAs(name, source, temporary: false, options);
+    public BatchBuilder CreateTable(string name, QueryCommand source, CreateTableOptions? options = null)
+        => AddCreateTable(name, source, temporary: false, options);
+
+    /// <summary>
+    /// Adds a persistent <c>CREATE TABLE ... AS SELECT</c> materialisation to the batch, configuring the
+    /// options fluently.
+    /// </summary>
+    /// <param name="name">The raw (unquoted) target table name; the naming convention is not applied.</param>
+    /// <param name="source">The query whose rows fill the table.</param>
+    /// <param name="configure">Configures the statement options through <see cref="CreateTableOptionsBuilder"/>; its return value is ignored.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="configure"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The result-bearing query has already been added.</exception>
+    /// <exception cref="NotSupportedException">The dialect cannot express the materialisation or one of the requested options.</exception>
+    public BatchBuilder CreateTable(string name, QueryCommand source, Func<CreateTableOptionsBuilder, CreateTableOptionsBuilder> configure)
+        => AddCreateTable(name, source, temporary: false, CreateTableOptionsBuilder.Build(configure));
 
     /// <summary>
     /// Adds a temporary <c>CREATE TEMPORARY TABLE ... AS SELECT</c> materialisation to the batch. The
@@ -85,8 +99,22 @@ public sealed class BatchBuilder
     /// <returns>This builder, for chaining.</returns>
     /// <exception cref="InvalidOperationException">The result-bearing query has already been added.</exception>
     /// <exception cref="NotSupportedException">The dialect cannot express a temporary materialisation or one of the requested options.</exception>
-    public BatchBuilder CreateTempTableAs(string name, QueryCommand source, CreateTableAsOptions? options = null)
-        => AddCreateTableAs(name, source, temporary: true, options);
+    public BatchBuilder CreateTempTable(string name, QueryCommand source, CreateTableOptions? options = null)
+        => AddCreateTable(name, source, temporary: true, options);
+
+    /// <summary>
+    /// Adds a temporary <c>CREATE TEMPORARY TABLE ... AS SELECT</c> materialisation to the batch,
+    /// configuring the options fluently.
+    /// </summary>
+    /// <param name="name">The raw (unquoted) target table name; the naming convention is not applied.</param>
+    /// <param name="source">The query whose rows fill the table.</param>
+    /// <param name="configure">Configures the statement options through <see cref="CreateTableOptionsBuilder"/>; its return value is ignored.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="configure"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The result-bearing query has already been added.</exception>
+    /// <exception cref="NotSupportedException">The dialect cannot express a temporary materialisation or one of the requested options.</exception>
+    public BatchBuilder CreateTempTable(string name, QueryCommand source, Func<CreateTableOptionsBuilder, CreateTableOptionsBuilder> configure)
+        => AddCreateTable(name, source, temporary: true, CreateTableOptionsBuilder.Build(configure));
 
     /// <summary>
     /// Adds a side-effecting <c>INSERT</c> to the batch. It runs before the result-bearing query, on the
@@ -172,7 +200,7 @@ public sealed class BatchBuilder
         return new BatchQuery<TResult>(_executor, _steps.ToArray());
     }
 
-    private BatchBuilder AddCreateTableAs(string name, QueryCommand source, bool temporary, CreateTableAsOptions? options)
+    private BatchBuilder AddCreateTable(string name, QueryCommand source, bool temporary, CreateTableOptions? options)
     {
         ArgumentException.ThrowIfNullOrEmpty(name);
         ArgumentNullException.ThrowIfNull(source);
@@ -180,7 +208,7 @@ public sealed class BatchBuilder
             throw new InvalidOperationException("A batch has exactly one result-bearing query, and it must be the last statement; add materialisations before Query().");
 
         RequireSameContext(source);
-        var command = new CreateTableAsCommand(source.ResultType ?? typeof(object), name, temporary, source, options ?? new CreateTableAsOptions());
+        var command = new CreateTableAsCommand(source.ResultType ?? typeof(object), name, temporary, source, options ?? new CreateTableOptions());
         _steps.Add(BatchStepSpec.ForCreateTableAs(command));
         return this;
     }

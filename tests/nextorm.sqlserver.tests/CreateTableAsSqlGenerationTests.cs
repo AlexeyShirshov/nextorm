@@ -94,12 +94,24 @@ public class CreateTableAsSqlGenerationTests
     }
 
     [Fact]
+    public void TempTableSource_ShouldThrow()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var source = ctx.From<ISimpleEntity>().Select(x => new { x.Id }).AsTempTable();
+
+        var act = () => ctx.From(source).Select(t => new { Id = t.GetInt32("id") }).ToBatchSql();
+
+        act.Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
     public void Table_WithIfNotExists_ShouldThrow()
     {
         using var ctx = SqlServerTestContext.Create();
 
         var act = () => ctx.From<ISimpleEntity>()
-            .ToTableSql("archive_ids", new CreateTableAsOptions { IfNotExists = true });
+            .ToTableSql("archive_ids", new CreateTableOptions { IfNotExists = true });
 
         act.Should().Throw<NotSupportedException>().WithMessage("*IF NOT EXISTS*");
     }
@@ -110,7 +122,7 @@ public class CreateTableAsSqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
 
         var act = () => ctx.From<ISimpleEntity>()
-            .ToTableSql("archive_ids", new CreateTableAsOptions { Columns = ["a"] });
+            .ToTableSql("archive_ids", new CreateTableOptions { Columns = ["a"] });
 
         act.Should().Throw<NotSupportedException>().WithMessage("*column list*");
     }

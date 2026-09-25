@@ -15,7 +15,7 @@ public class BatchSqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
 
         var sql = ctx.Batch()
-            .CreateTableAs("archive_ids", ctx.From<ISimpleEntity>().Select(x => new { x.Id }))
+            .CreateTable("archive_ids", ctx.From<ISimpleEntity>().Select(x => new { x.Id }))
             .Query(ctx.From("archive_ids").Select(t => new { Id = t["id"].AsInt }))
             .ToSql();
 
@@ -28,7 +28,7 @@ public class BatchSqlGenerationTests
         using var ctx = SqlServerTestContext.Create();
 
         var act = () => ctx.Batch()
-            .CreateTempTableAs("recent_ids", ctx.From<ISimpleEntity>().Select(x => new { x.Id }))
+            .CreateTempTable("recent_ids", ctx.From<ISimpleEntity>().Select(x => new { x.Id }))
             .Query(ctx.From("recent_ids").Select(t => new { Id = t["id"].AsInt }))
             .ToSql();
 

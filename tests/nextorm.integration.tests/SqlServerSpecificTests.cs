@@ -433,7 +433,7 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
         var ctx = _sut.DataProvider;
 
         var rows = ctx.Batch()
-            .CreateTableAs(name, _sut.SimpleEntity.Where(x => x.Id == 1).Select(x => new { x.Id }))
+            .CreateTable(name, _sut.SimpleEntity.Where(x => x.Id == 1).Select(x => new { x.Id }))
             .Query(ctx.From(name).Select(t => new { Id = t.GetInt32("id") }))
             .ToList();
 

@@ -79,6 +79,49 @@ internal sealed class BatchRunner
         return await ReadAsync(joinedReader, mapper, cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>Executes a rendered batch in one round trip and returns the first column of the result-bearing query's first row.</summary>
+    /// <param name="plan">The rendered batch.</param>
+    /// <returns>The scalar value, with <see cref="DBNull"/> normalized to <see langword="null"/>, or <see langword="null"/> when the query returns no rows.</returns>
+    public object? RunScalar(BatchPlan plan)
+    {
+        CheckDisposed();
+        _connectionManager.EnsureConnectionOpen();
+        var conn = _connectionManager.GetConnection();
+
+        if (!plan.UseJoinedCommand && conn.CanCreateBatch)
+        {
+            using var batch = CreateBatch(conn, plan);
+            using var reader = batch.ExecuteReader();
+            return ReadScalar(reader);
+        }
+
+        using var command = CreateJoinedCommand(conn, plan);
+        using var joinedReader = command.ExecuteReader();
+        return ReadScalar(joinedReader);
+    }
+
+    /// <summary>Asynchronously executes a rendered batch in one round trip and returns the first column of the result-bearing query's first row.</summary>
+    /// <param name="plan">The rendered batch.</param>
+    /// <param name="cancellationToken">Cancels execution.</param>
+    /// <returns>The scalar value, with <see cref="DBNull"/> normalized to <see langword="null"/>, or <see langword="null"/> when the query returns no rows.</returns>
+    public async Task<object?> RunScalarAsync(BatchPlan plan, CancellationToken cancellationToken)
+    {
+        CheckDisposed();
+        await _connectionManager.EnsureConnectionOpenAsync(cancellationToken).ConfigureAwait(false);
+        var conn = _connectionManager.GetConnection();
+
+        if (!plan.UseJoinedCommand && conn.CanCreateBatch)
+        {
+            await using var batch = CreateBatch(conn, plan);
+            await using var reader = await batch.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            return await ReadScalarAsync(reader, cancellationToken).ConfigureAwait(false);
+        }
+
+        await using var command = CreateJoinedCommand(conn, plan);
+        await using var joinedReader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        return await ReadScalarAsync(joinedReader, cancellationToken).ConfigureAwait(false);
+    }
+
     /// <summary>Streams a rendered batch's result rows; the reader stays open for the whole batch.</summary>
     public async IAsyncEnumerable<TResult> RunStream<TResult>(BatchPlan plan, Func<IDataRecord, TResult> mapper, [EnumeratorCancellation] CancellationToken cancellationToken)
     {
@@ -190,6 +233,28 @@ internal sealed class BatchRunner
             list.Add(mapper(reader));
 
         return list;
+    }
+
+    private static object? ReadScalar(DbDataReader reader)
+    {
+        AdvanceToResultSet(reader);
+
+        if (!reader.Read())
+            return null;
+
+        var value = reader.GetValue(0);
+        return value is DBNull ? null : value;
+    }
+
+    private static async Task<object?> ReadScalarAsync(DbDataReader reader, CancellationToken cancellationToken)
+    {
+        await AdvanceToResultSetAsync(reader, cancellationToken).ConfigureAwait(false);
+
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+            return null;
+
+        var value = reader.GetValue(0);
+        return value is DBNull ? null : value;
     }
 
     // The result-bearing query is the last statement and only it returns columns; the preceding

@@ -21,12 +21,26 @@ public class CreateTableAsSqlGenerationTests
     }
 
     [Fact]
+    public void TempTableSource_ShouldRenderDropCreateAndSelectAsOneBatch()
+    {
+        using var ctx = MariaDbTestContext.Create();
+
+        var source = ctx.From<ISimpleEntity>().Select(x => new { x.Id }).AsTempTable();
+
+        var sql = ctx.From(source).Select(t => new { Id = t.GetInt32("id") }).ToBatchSql();
+
+        sql.Should().Contain("drop table if exists " + source.Name);
+        sql.Should().Contain("create temporary table " + source.Name + " as select id from simple_entity");
+        sql.Should().Contain("select id from " + source.Name);
+    }
+
+    [Fact]
     public void TempTable_WithColumnList_ShouldRenderColumnList()
     {
         using var ctx = MariaDbTestContext.Create();
 
         ctx.From<ISimpleEntity>()
-            .ToTempTableSql("recent_ids", new CreateTableAsOptions { Columns = ["a"] })
+            .ToTempTableSql("recent_ids", new CreateTableOptions { Columns = ["a"] })
             .Should().Be("create temporary table recent_ids (a) as select id from simple_entity");
     }
 
@@ -36,7 +50,7 @@ public class CreateTableAsSqlGenerationTests
         using var ctx = MariaDbTestContext.Create();
 
         var act = () => ctx.From<ISimpleEntity>()
-            .ToTempTableSql("recent_ids", new CreateTableAsOptions { OnCommit = TempTableOnCommit.Drop });
+            .ToTempTableSql("recent_ids", new CreateTableOptions { OnCommit = TempTableOnCommit.Drop });
 
         act.Should().Throw<NotSupportedException>().WithMessage("*ON COMMIT*");
     }
@@ -47,7 +61,7 @@ public class CreateTableAsSqlGenerationTests
         using var ctx = MariaDbTestContext.Create();
 
         var act = () => ctx.From<ISimpleEntity>()
-            .ToTempTableSql("recent_ids", new CreateTableAsOptions { WithData = false });
+            .ToTempTableSql("recent_ids", new CreateTableOptions { WithData = false });
 
         act.Should().Throw<NotSupportedException>().WithMessage("*WITH NO DATA*");
     }

@@ -32,6 +32,13 @@ public sealed class DbPreparedQueryCommand<TResult> : PreparedQueryCommand<TResu
     /// </summary>
     public ResultSetEnumerator<TResult>? Enumerator;
     /// <summary>
+    /// The batch that must run before this command's rows can be read (a lazy temporary-table
+    /// materialisation). When set, the execution terminals route through the batch runner instead of
+    /// this command's <see cref="DbCommand"/>; the batch's result-bearing query is this command, so
+    /// <see cref="PreparedQueryCommand{TResult, IDataRecord}.MapDelegate"/> maps its rows.
+    /// </summary>
+    internal BatchPlan? PendingBatch { get; set; }
+    /// <summary>
     /// Number of rows returned by the most recent execution of the compiled query.
     /// </summary>
     public int LastRowCount;

@@ -417,6 +417,25 @@ internal static class SqlMutationBuilder
     }
 
     /// <summary>
+    /// Renders a <c>DROP TABLE IF EXISTS</c> statement over the raw, optionally quoted target table.
+    /// Emitted only as the first half of a materialisation whose <c>DropExisting</c> option is set.
+    /// </summary>
+    /// <param name="dialect">The active SQL dialect.</param>
+    /// <param name="quoteIdentifiers">Whether the target identifier must be quoted.</param>
+    /// <param name="name">The raw (unquoted) target table name.</param>
+    /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
+    /// <returns>The rendered SQL text.</returns>
+    internal static string MakeDropTableIfExists(
+        ISqlDialect dialect,
+        bool quoteIdentifiers,
+        string name,
+        KeywordCase keywordCase = KeywordCase.Lower)
+    {
+        var table = quoteIdentifiers ? dialect.QuoteIdentifier(name) : name;
+        return SqlKeywords.Of(keywordCase, "drop table if exists ") + table;
+    }
+
+    /// <summary>
     /// Validates a materialisation command against the dialect's capability flags, resolves the quoted
     /// target and column list, and — for a dialect that renders <c>SELECT ... INTO</c> — returns the
     /// <c>INTO</c> clause to inject into the top-level select list (otherwise <see langword="null"/>).
@@ -483,6 +502,7 @@ internal static class SqlMutationBuilder
                 $"{dialect.GetType().Name} cannot materialise a query into a table.");
 
         var options = command.Options;
+        options.Validate(command.Temporary);
         if (command.Temporary && !dialect.SupportsTemporaryCreateTableAsSelect)
             throw new NotSupportedException(
                 $"{dialect.GetType().Name} cannot materialise a query into a temporary table; only a persistent ToTable is supported.");
