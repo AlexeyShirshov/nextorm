@@ -1,4 +1,5 @@
 # TODO: `OUTPUT INTO`, несколько result-set'ов, upsert-with-output
+> Tracking issue: [#15](https://github.com/AlexeyShirshov/nextorm/issues/15).
 
 > Рабочий план (design RFC). Gap-анализ: **G4** из
 > [`linq2db-backlog-gap-analysis.md`](../comparison/linq2db-backlog-gap-analysis.md); linq2db
@@ -138,3 +139,16 @@ public IAsyncEnumerable<IReadOnlyList<T>> ReadAll<T>(...);   // или MultiResu
 - Документация: `docs/advanced/limitations.md` (гигантский DML-абзац, `:15`; +RU),
   `docs/guide/19-insert-statement.md` (+RU), `docs/advanced/api-reference.md` (+RU),
   `docs/specs/design/API-NAMING-REVIEW.md`.
+
+## Дизайн-ревью (nextorm-design-engineer, 2026-09-24)
+
+> Прогон сабагента `nextorm-design-engineer` по плану (read-only). `file:line` — по дереву на момент ревью.
+> Вердикт: **нужен пересмотр — 2 блокера** (контракт `Into`, устаревший/дублирующий multi-result).
+
+- **[LSP] 🔴** `Into()` возвращает `InsertReturningBuilder<TEntity, TResult>` (`:78`), но при `alsoReturnToClient=false` клиентского набора нет: `ToList()` пуст, `Single()` бросает (`Builders/InsertReturningBuilder.cs:22,67,102,185`), `TResult` нечем заполнить (Q1 `:122`). Fix: отдельный `OutputIntoBuilder` без row-терминалов либо non-returning билдер; `INTO`+второй `OUTPUT` — отдельным методом.
+- **[DRY] 🔴** «multi-result отсутствует» (`:46-47`) устарело: навигация `NextResult` уже есть для батча (`DataContext/BatchRunner.cs:199-219`, `AdvanceToResultSet`, вызывается из `RunBatch*`); предлагаемые `ReadAll<T>`/`MultiResult` (`:89-98`) её дублируют. Fix: переиспользовать существующий обход; `ResultSetEnumerator.cs` — не место навигации (`:136`).
+- **[DIP] 🟡** `SupportsOutputInto`/`SupportsMultipleResultSets` (`:68-70,134`) — делать DIM `=> false` (+ `SqlDialectBase virtual`), не abstract, иначе source-разрыв (инварианты 5/7).
+- **[TYPE] 🟡** `Expression<Func<TTarget, object>>` (`:78-88`) боксит value-колонки на планировании и не даёт имя таблицы/`[SqlTable]` для `TTarget`. Fix: явное имя целевой таблицы либо резолв через `IEntityMetadata` (как `From<T>`).
+- **[SRP] 🟡** upsert-with-output не сведён по провайдерам: `MergeBuilder.Returning()` документирует «key-upsert не возвращает строк» (`Builders/MergeBuilder.cs:253-259`), план оставляет MariaDB «проверить»/SQL Server «уточнить» (`:60,64,128`). Deferred: после фиксации матрицы.
+- **[DRY] ℹ️** Устаревшие якоря: `ISqlDialect.cs:1007-1016/1075/1080` → `:1172/1179/1238/1243`; `DataContext.cs:319-335` → `:372-388`; `MergeBuilder.cs:253-266` → `:260-282`.
+- **[DIP] ℹ️** `alsoReturnToClient` — boolean blindness; согласовать имя с API-NAMING (`Into` vs linq2db `...WithOutputIntoOutput`).

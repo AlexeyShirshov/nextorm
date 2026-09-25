@@ -276,3 +276,14 @@ zone'`). `localtime()` (тип `time`) материализуется корре
 - Доки: `docs/guide/11-scalar-functions.md` (+RU), `docs/providers/overview.md` (+RU),
   `docs/advanced/api-reference.md` (+RU), `docs/advanced/limitations.md` (+RU),
   `docs/specs/design/API-NAMING-REVIEW.md`.
+
+## Дизайн-ревью (nextorm-design-engineer, 2026-09-24)
+
+> Прогон сабагента `nextorm-design-engineer` по плану (read-only). `file:line` — по дереву на момент ревью.
+> Вердикт: **0 блокеров**; 1 открытая реализованная деградация (бокс) с триггером; нужна ресинхронизация §5/§7 плана с кодом.
+
+- **[PERF] 🟡** Non-native чтение duration боксует на каждой строке×колонке: `RowMapperFactory.cs:44-45` `GetValueMI` → `object`, затем `Convert.ToInt64(object)`. Для non-native провайдеров колонка всегда целочисленная (`SqlDialectBase.cs:107` → `bigint`; ClickHouse `Int64`), доступен типизированный `GetInt64`. Deferred с триггером (замер аллокаций материализации, `:231-232`): эмитить `GetInt64(index)` + `DurationStorage.FromStorage`.
+- **[DRY]/[TYPE] ℹ️** План рассинхронизирован с реализованным API (§5 `:82-90`, §7 `:112-121`): обещаны `SupportsDurationColumns` + `SupportsDurationUnit(unit)` + `MakeDurationLiteral(...)`, фактически `SupportsNativeDuration` (один bool) + `MakeDurationType`/`MakeNullableDurationType` (`ISqlDialect.cs:314-338`, `SqlDialectBase.cs:105-111`); per-unit гейта и literal-хука нет, промис про `NotSupportedException` для неподдержанных комбинаций не реализован (напр. PG `interval` с месяцами). Fix: привести §5/§7 к фактическому API.
+- **[TYPE]/[SRP] ℹ️** `DurationUnitContext` — скрытое изменяемое состояние визитора (`BaseExpressionVisitor.cs:75`; save/restore вручную `PredicateTranslator.cs:349-422`); unit «протекает» при любом новом пути, забывшем восстановить контекст. Deferred с триггером (новый путь, эмитящий `TimeSpan`-константу): передавать unit явно либо добавить assert/регресс.
+- **[ISP] ℹ️** `IPropertyMetadata` — 9 ортогональных опциональных капабилити (`IPropertyMetadata.cs:17-85`; план добавил `DurationUnit`/`DurationPrecision`). DIM-дефолты сохраняют source-compat; дробление по F7/F12 не оправдано (единый потребитель) — не переоткрывать. Fix: сохранить DIM-паттерн для будущего `Converter`.
+- **ℹ️** Позитив: `DurationAttribute` — `sealed` (`DurationAttribute.cs:16`), `DurationUnit` — enum, `DurationStorage` — `internal static` (`DurationStorage.cs:9`); `MakeNullableDurationType` — DIM → `MakeDurationType`, без роста числа capability-интерфейсов.

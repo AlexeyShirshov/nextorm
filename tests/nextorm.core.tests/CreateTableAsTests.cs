@@ -21,6 +21,16 @@ public class CreateTableAsTests
     }
 
     [Fact]
+    public void InMemory_ToTempTable_WithoutName_ShouldThrow()
+    {
+        using var ctx = new InMemoryDataContext();
+
+        var act = () => ctx.From<ConventionalEntity>().Where(x => x.Id > 0).Select(x => new { x.Id }).ToTempTable();
+
+        act.Should().Throw<NotSupportedException>();
+    }
+
+    [Fact]
     public void InMemory_ToTable_ShouldThrow()
     {
         using var ctx = new InMemoryDataContext();

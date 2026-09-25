@@ -45,6 +45,14 @@ public class DataContextBuilder
     /// command with <c>WithKeywordCase</c>. Set through <see cref="UseKeywordCase"/>.
     /// </summary>
     public KeywordCase KeywordCase { get; private set; }
+
+    /// <summary>
+    /// Whether a rendered batch places each statement on its own line. Defaults to
+    /// <see langword="false"/> (statements joined on one line with <c>"; "</c>). Set through
+    /// <see cref="UseMultilineBatchSql"/>; affects the batch SQL produced by <c>BatchQuery.ToSql()</c>
+    /// and the joined command text only, not the per-command <c>DbBatch</c> form.
+    /// </summary>
+    public bool MultilineBatchSql { get; private set; }
     //internal IDataProvider? DataProvider => _dataProvider;
     internal ILoggerFactory? LoggerFactory => _loggerFactory;
     // public bool CacheQueryCommand { get; set; } = true;
@@ -139,6 +147,20 @@ public class DataContextBuilder
     /// <returns>This builder, to allow chaining.</returns>
     public DataContextBuilder UseUppercaseKeywords(bool value = true)
         => UseKeywordCase(value ? KeywordCase.Upper : KeywordCase.Lower);
+
+    /// <summary>
+    /// Enables rendering of batch SQL with one statement per line: each statement is terminated with
+    /// <c>;</c> followed by a newline instead of a space. Intended for readable logs and inspection;
+    /// the executed SQL is unaffected (providers using <c>DbBatch</c> never run the joined text, and
+    /// SQLite/SQL Server accept the newline).
+    /// </summary>
+    /// <param name="value"><see langword="true"/> to place each batch statement on its own line; otherwise <see langword="false"/>.</param>
+    /// <returns>This builder, to allow chaining.</returns>
+    public DataContextBuilder UseMultilineBatchSql(bool value = true)
+    {
+        MultilineBatchSql = value;
+        return this;
+    }
 
     /// <summary>
     /// Registers a query interceptor that observes the command execution lifecycle of every context

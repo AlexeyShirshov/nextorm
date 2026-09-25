@@ -180,7 +180,10 @@ distinct CTE declarations sharing a name on the two sides of a join are rejected
 * ClickHouse updates through `ALTER TABLE ... UPDATE`; the mutation is applied synchronously
   (`SETTINGS mutations_sync = 1`) but reports no affected-row count, so `Update()`/`UpdateAsync()` return
   `0`. A predicate is required by the engine, so an update without `Where` renders `WHERE 1`.
-* Optimistic concurrency (`rowversion`) and global query filters are **not** part of this surface.
+* Optimistic concurrency (`rowversion`) is a pattern on top of this surface, not a built-in API: put the
+  expected token in `Where` and read `0` affected rows as a conflict. See
+  [Optimistic concurrency and change tracking](29-optimistic-concurrency.md). Global query filters are
+  **not** part of this surface.
 * The in-memory context is query-only: `Update`/`UpdateAsync` (like every other write) throw
   `NotSupportedException`; query your own collections instead.
 * `UPDATE` is not prepared or plan-cached — optimisation in nextorm targets read-only queries only
@@ -192,6 +195,7 @@ distinct CTE declarations sharing a name on the two sides of a join are rejected
 - [Data modification (INSERT)](19-insert-statement.md)
 - [Data modification (DELETE)](20-delete-statement.md)
 - [Data merging (MERGE / upsert)](23-merge-statement.md)
+- [Optimistic concurrency and change tracking](29-optimistic-concurrency.md)
 - [Filtering (WHERE)](02-filtering-where.md)
 - [Limitations and out-of-scope features](../advanced/limitations.md)
 - [Provider overview](../providers/overview.md)

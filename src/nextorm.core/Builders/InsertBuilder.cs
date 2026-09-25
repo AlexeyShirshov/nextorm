@@ -390,6 +390,10 @@ public sealed partial class InsertBuilder<TEntity>
         return null;
     }
 
+    /// <summary>Builds the insert command for use as a side-effecting step of a batch.</summary>
+    /// <returns>The insert command.</returns>
+    internal MutationCommand BuildBatchCommand() => BuildCommand(null);
+
     /// <summary>Builds the command for a <see cref="Returning()"/> terminal. Internal so the returning builder can reach the parent's state.</summary>
     /// <param name="returningColumns">The mapped columns to return through <c>RETURNING</c>/<c>OUTPUT</c>.</param>
     /// <returns>The insert command carrying the returned columns.</returns>

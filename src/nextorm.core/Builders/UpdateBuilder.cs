@@ -211,6 +211,10 @@ public sealed class UpdateBuilder<TEntity>
         return new UpdateCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, _assignments, source, keys);
     }
 
+    /// <summary>Builds the update command for use as a side-effecting step of a batch.</summary>
+    /// <returns>The update command.</returns>
+    internal MutationCommand BuildBatchCommand() => BuildCommand();
+
     /// <summary>Builds the update command carrying the columns to return through <c>RETURNING</c>/<c>OUTPUT</c>.</summary>
     /// <param name="returningColumns">The mapped columns to return.</param>
     /// <returns>The update command carrying the returned columns.</returns>

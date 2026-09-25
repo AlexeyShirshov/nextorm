@@ -24,6 +24,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
     private readonly Func<bool> _isDisposed;
     private readonly Func<DbTransaction?> _currentTransaction;
     private readonly InterceptorHooks _interceptors;
+    private readonly BatchRunner _batchRunner;
 
     internal QueryExecutor(
         IDataContext context,
@@ -43,6 +44,7 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
         _isDisposed = isDisposed;
         _currentTransaction = currentTransaction;
         _interceptors = interceptors;
+        _batchRunner = new BatchRunner(connectionManager, createParam, currentTransaction, isDisposed, logging);
     }
 
     // The interception helpers below are the single place the command lifecycle events are raised.
@@ -372,6 +374,18 @@ internal sealed class QueryExecutor : IQueryExecutor, IRowReaderFactory
 
         return list;
     }
+
+    /// <summary>Executes a rendered batch in one round trip and materialises its result rows.</summary>
+    public List<TResult> RunBatch<TResult>(BatchPlan plan, Func<IDataRecord, TResult> mapper)
+        => _batchRunner.Run(plan, mapper);
+
+    /// <summary>Asynchronously executes a rendered batch in one round trip and materialises its result rows.</summary>
+    public Task<List<TResult>> RunBatchAsync<TResult>(BatchPlan plan, Func<IDataRecord, TResult> mapper, CancellationToken cancellationToken)
+        => _batchRunner.RunAsync(plan, mapper, cancellationToken);
+
+    /// <summary>Streams a rendered batch's result rows; the reader stays open for the whole batch.</summary>
+    public IAsyncEnumerable<TResult> RunBatchStream<TResult>(BatchPlan plan, Func<IDataRecord, TResult> mapper, CancellationToken cancellationToken)
+        => _batchRunner.RunStream(plan, mapper, cancellationToken);
 
     /// <summary>
     /// Single entry guard for the public execution overloads: a context only executes the command

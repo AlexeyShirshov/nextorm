@@ -43,6 +43,7 @@ internal sealed class MySqlTestProvider : ITestProvider
     public bool SupportsDeleteJoin => true;
     public bool SupportsCreateTableAsSelect => true;
     public bool SupportsTemporaryCreateTableAsSelect => true;
+    public bool SupportsBatch => true;
     public bool SupportsTransactions => true;
     public bool SupportsRegex => true;
     public string TableValuedFunctionSkipReason => "The shared table-valued function test uses SQLite's json_each; MySQL exposes JSON rows through JSON_TABLE with a different shape.";

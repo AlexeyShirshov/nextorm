@@ -86,7 +86,7 @@ internal static class InMemoryRowMaterializer
                 }
             }
 
-            lambda = (Expression<Func<TEntity, TResult>>)InMemoryStringFunctionRewriter.Rewrite(lambda);
+            lambda = (Expression<Func<TEntity, TResult>>)InMemoryScalarFunctionRewriter.Rewrite(lambda);
 
             if (context.Logger?.IsEnabled(LogLevel.Debug) ?? false) context.Logger.LogDebug("Get instance of {type} as: {exp}", resultType, lambda);
             var key = new ExpressionKey(lambda, queryCommand);

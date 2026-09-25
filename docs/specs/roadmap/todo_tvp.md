@@ -114,3 +114,17 @@ public sealed class TableValuedParameter<T>
   и `SqlFunctions.*`.
 - Доки: `docs/providers/sqlserver.md` (+RU), `docs/advanced/api-reference.md` (+RU),
   `docs/advanced/limitations.md` (+RU), `docs/specs/design/API-NAMING-REVIEW.md`.
+
+## Дизайн-ревью (nextorm-design-engineer, 2026-09-24)
+
+> Прогон сабагента `nextorm-design-engineer` по плану (read-only). `file:line` — по дереву на момент ревью.
+> Вердикт: **нужен пересмотр — 2 блокера**.
+
+- **[DIP]/[OCP] 🔴** §6 (`:74-76`) предлагает core-перегрузку `ctx.ExecuteRawAsync(…, TableValuedParameter<T>)`, но `TableValuedParameter<T>` — в `src/nextorm.sqlserver/` (`:111`), а core не может ссылаться на провайдерскую сборку. Fix: провайдерский extension в `nextorm.sqlserver` (не core-метод) либо core-интерфейс (2-го потребителя пока нет → extension, инвариант 1).
+- **[TYPE]/[SRP] 🔴** `TableValuedParameter<T>(string sqlTypeName, IEnumerable<T> rows)` (`:68-71`) не описывает деривацию колоночной схемы из `T`; `SqlDbType.Structured` требует колонок, а образец строит их из `IPropertyMetadata` (`src/nextorm.sqlserver/SqlServerDataContext.cs:218-232`). Fix: добавить источник схемы в сигнатуру либо зафиксировать reflection-конвенцию.
+- **[TYPE] 🟡** `IEnumerable<T> rows` (ленивый enumerable) без контракта владения/одноразовости → двойное перечисление/использование после dispose. Fix: `IReadOnlyList<T>`/`IAsyncEnumerable<T>` с явным контрактом.
+- **[DRY] 🟡** §3/§6 ссылаются на `ctx.Parameter<T>("jsonb", rows)` (`:34,77`) — такого члена нет; существующий `SqlFunctions.Parameter<T>(int idx)` (`src/nextorm.core/Query/SqlFunctions.cs:72`) — placeholder внутри LINQ. Fix: убрать ссылку или явно пометить как новое API.
+- **[DRY] ℹ️** Пересечение с `@in`-набором (`SqlFunctions.cs:473,479`). Deferred: зафиксировать разграничение (TVP — табличный параметр, `@in` — скалярный набор).
+- **[OCP] 🟡** `SupportsTableValuedParameters` (`:55-56`) без носителя гейта. Fix: явный DIM на `ISqlDialect`/`DialectCapabilities`.
+- **[DRY] 🟡** Устаревшие якоря: `SqlFunctions.Postgres.cs:578-592` → `:552,556`; `SqlFunctions.cs:452-458` → `:473,479`. Fix.
+- **[PERF] ℹ️** `IEnumerable<T>` → per-row `SqlDataRecord`/`DataTable` (SQL Server умеет `DbDataReader`-streaming). Deferred (профиль переноса ≥ 10⁴ строк).

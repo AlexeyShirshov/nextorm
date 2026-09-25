@@ -30,6 +30,9 @@ public sealed class PostgresDialect : SqlDialectBase
     /// <summary>PostgreSQL has a native bulk path (<c>COPY ... FROM STDIN (FORMAT BINARY)</c>).</summary>
     public override bool SupportsBulkCopy => true;
 
+    /// <summary>PostgreSQL batches through <c>NpgsqlBatch</c>, which wraps the commands in an implicit transaction so they share one backend.</summary>
+    public override bool SupportsBatch => true;
+
     /// <summary>PostgreSQL skips conflicting rows with a trailing <c>ON CONFLICT DO NOTHING</c>.</summary>
     public override bool SupportsOnConflictDoNothing => true;
 
@@ -329,6 +332,9 @@ public sealed class PostgresDialect : SqlDialectBase
 
     /// <summary>PostgreSQL renders both UUID generators through the core functions.</summary>
     public override IUuidGenerators UuidGenerators => PostgresUuidGenerators.Instance;
+
+    /// <summary>PostgreSQL renders every cross-provider scalar function natively (<c>space</c> as <c>repeat(' ', n)</c>).</summary>
+    public override IScalarFunctions ScalarFunctions => PostgresScalarFunctions.Instance;
 
     /// <inheritdoc/>
     public override bool SupportsBooleanAggregates => true;
@@ -633,4 +639,39 @@ internal sealed class PostgresStringFormats : IStringFormatFunctions
 
     private static bool Match(string value, int index, string token) =>
         index + token.Length <= value.Length && string.CompareOrdinal(value, index, token, 0, token.Length) == 0;
+}
+
+/// <summary>
+/// Renders the cross-provider scalar functions of <see cref="CommonFunctions"/> on PostgreSQL, where
+/// every name has a native spelling (<c>left</c>/<c>right</c>, <c>lpad</c>/<c>rpad</c>, <c>repeat</c>/
+/// <c>reverse</c>, <c>concat_ws</c>, <c>translate</c>, <c>ascii</c>, <c>chr</c>). <c>space</c> has no
+/// native function and is rendered as <c>repeat(' ', n)</c>.
+/// </summary>
+internal sealed class PostgresScalarFunctions : IScalarFunctions
+{
+    internal static readonly PostgresScalarFunctions Instance = new();
+
+    /// <inheritdoc/>
+    public bool Supports(string name) => name is
+        "left" or "right" or "lpad" or "rpad" or "repeat" or "reverse" or "space" or
+        "concat_ws" or "translate" or "ascii" or "char";
+
+    /// <inheritdoc/>
+    public string Render(string name, IReadOnlyList<string> args) => name switch
+    {
+        "left" => $"left({args[0]}, {args[1]})",
+        "right" => $"right({args[0]}, {args[1]})",
+        "lpad" => $"lpad({args[0]}, {args[1]}, {Pad(args)})",
+        "rpad" => $"rpad({args[0]}, {args[1]}, {Pad(args)})",
+        "repeat" => $"repeat({args[0]}, {args[1]})",
+        "reverse" => $"reverse({args[0]})",
+        "space" => $"repeat(' ', {args[0]})",
+        "concat_ws" => $"concat_ws({string.Join(", ", args)})",
+        "translate" => $"translate({args[0]}, {args[1]}, {args[2]})",
+        "ascii" => $"ascii({args[0]})",
+        "char" => $"chr({args[0]})",
+        _ => throw new NotSupportedException($"The {name} function is not supported by PostgreSQL.")
+    };
+
+    private static string Pad(IReadOnlyList<string> args) => args.Count == 3 ? args[2] : "' '";
 }

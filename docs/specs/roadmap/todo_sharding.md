@@ -229,3 +229,19 @@ public EntityBuilder<T> AcrossShards(ShardSelection sel);
 - Документация: новый гайд по шардированию (+RU), `docs/providers/overview.md` (+RU),
   `docs/advanced/limitations.md` (+RU), `docs/specs/design/API-NAMING-REVIEW.md`,
   `docs/specs/design/code-smells-review.md`.
+
+## Дизайн-ревью (nextorm-design-engineer, 2026-09-24)
+
+> Прогон сабагента `nextorm-design-engineer` по плану (read-only). `file:line` — по дереву на момент ревью.
+> Вердикт: **нужен пересмотр — 1 блокер** (форма `AcrossShards` нереализуема как единый `EntityBuilder` без scope-aware fan-out).
+
+- **[OCP]/[SRP] 🔴** `AcrossShards()` возвращает `EntityBuilder<T>` (`:141-143`), но scope фиксируется в команду на build-time, `QueryCommand` несёт один `FROM`/один scope; `FromExpression` хранит один `Table`/`SourceType` (`Expressions/FromExpression.cs:16-21,67`), FROM рендерится одной веткой (`DataContext/QueryPlanner.cs:518`). Fix: зафиксировать fan-out-абстракцию (N `QueryCommand` + merge в исполнителе, `ShardFanOut`) либо scope-aware UNION-рендер — до фазы 3.
+- **[SRP/DRY] 🟡** `IShardRouter.ResolveShardScope(Type, IReadOnlyList<object?>)` (`:106`) дублирует унаследованный `IEntityScopeResolver.Resolve(Type, IReadOnlyList<object?>)` (mapping_scope §4.2). Fix: убрать, переопределить базовый `Resolve`, оставить `IsSharded` (инвариант 1).
+- **[DRY] 🟡** Дублирование «bucket → shard»: `IConsistentHashRing.GetShard(int bucket)` (`:68`) и `IShardTopology.GetShard(Type, int bucket)` (`:90`). Fix: одно владение (ring даёт bucket→shard, topology — shard→placement).
+- **[SRP/DIP] 🟡** `IEntityMetadata.ShardKey => []` (`:48-49`) вносит знание о шардинге в базовые метаданные, тогда как `todo_mapping_scope.md` §1 требует «базовый слой без знания о шардировании». Fix: отдельный provider (`IShardKeyProvider`), не расширять `IEntityMetadata` (инварианты 1/7).
+- **[PERF] 🟡** Компилируемый экстрактор `Func<T, object?[]>` (`:50`) аллоцирует `object?[]` + боксы ключей на каждый вызов; на INSERT пачки из N сущностей — N массивов. Fix: инкрементальный хэш (`XxHash64`/`HashCode`) без промежуточного массива либо буфер в пуле (INSERT — заявленный hot-path критерия).
+- **[TYPE/PERF] 🟡** `ShardKeyPredicateExtractor.TryGetValues(…, out object?[] values)` (`:128-130`) аллоцирует массив без переиспользования буфера; `ShardAddress` несёт `Version` (`:80`) при авторитете `IShardTopology.Version` (`:86-93`). Fix: `TryGetValues(…, Span<object?> dest)`; убрать `Version` из `ShardAddress`.
+- **[TYPE] ℹ️** `IConsistentHashRing.GetShard(int bucket)` возвращает `string` shard-id на lookup-пути (`:68`). Deferred: вернуть `int` индекс, строковый id резолвить в `ShardPlacement`.
+- **[DRY] 🟡** Устаревшие якоря: `DataContextExtensions.cs:114/665` → `:729`; `:87` (`Update`) → `:151`; `:153` (`Delete`) → `:217`; `QueryPlanner.cs:479-481` → `:518`; `DI/DataContextBuilder.cs:146` → `:166` (методов `UseScopeResolver`/`UseEntityMetadataProvider`/`UseShardTopology` нет); `Cache/QueryPlanStore.cs:18` → `DataContext/Cache/QueryPlanStore.cs`. Fix.
+- **[DRY/TYPE] ℹ️** `ShardSelection` (`:142`) не определён ни здесь, ни в базовом плане. Fix: определить форму или убрать перегрузку из v1.
+- **[DIP] ℹ️** `Query/PrefixedParameterProvider.cs` (`:34,161`) ещё не существует — зависимость `todo_mapping_scope.md` Фазы 2. Deferred с триггером: зафиксировать, что маршрутизация Фазы 1 от префикса не зависит.

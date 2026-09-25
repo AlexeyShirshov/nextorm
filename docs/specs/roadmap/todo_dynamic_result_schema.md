@@ -38,3 +38,16 @@
   провайдерные `*Dialect.cs`.
 - Тесты: SQL-gen + integration.
 - Доки EN+RU, gap-analysis.
+
+## Дизайн-ревью (nextorm-design-engineer, 2026-09-24)
+
+> Прогон сабагента `nextorm-design-engineer` по плану (read-only, ветка `1.0.6-alpha`, dirty worktree).
+> `file:line` — по дереву на момент ревью, перепроверять перед реализацией. Правок в код не вносилось.
+> Вердикт: **нужен пересмотр — 2 блокера**; черновик слишком ваг (нет API и контракта ридера).
+
+- **[DRY]/[OCP] 🔴** Третий механизм декларации схемы (TableAlias-подобный builder / `DefineColumns`): `:24-27,31`. Уже есть `TRow`-generic TVF (`Query/SqlFunctions.ClickHouse.cs:392-420`) и `SqlTableFunctionAttribute` c `WithClause`/`CallClause` (`SqlTableFunctionAttribute.cs:54-65`). Fix: расширить атрибут рендером column-definition-list из метаданных `TRow`, а не плодить параллельный builder (инвариант 1).
+- **[DIP] 🔴** Нет контракта ридера/`TResult`: `:27,31` не говорит, во что материализуются строки (`object[]`? `IDataRecord`? `[Column]`-DTO?) и как схема доходит до `RowMapperFactory.GetOrBuild` (`DataContext/RowMapperFactory.cs:87`). Fix: зафиксировать носитель схемы до реализации.
+- **[PERF] 🟡** План-кэш не закрыт (Q2, `:32`): схема обязана входить в ключ `From`/колонок (`Query/QueryPlanEqualityComparer.cs:133-135`, `FromExpressionPlanEqualityComparer`). Fix: включить схему в хеш.
+- **[TYPE] 🟡** Незапечатанная accessor-поверхность: `TableAlias`/`TableColumn` — `public class` (`Builders/TableAlias.cs:8,101`). Fix: переиспользовать `TableAlias`, запечатать при расширении.
+- **[DRY] 🟡** Неверный указатель файлов `:37`: TVF-источник живёт в `SqlTableFunctionAttribute.cs` + `DataContextExtensions.FromTableFunction:37`, а не в `Query/SqlFunctions.*.cs`. Fix.
+- **ℹ️** Не хватает: формы аргумента CH `values('a UInt8, b String', …)`, рендера PG `AS x(col type, …)` и провайдерной матрицы гейтов — без них план не рецензируем до реализации.

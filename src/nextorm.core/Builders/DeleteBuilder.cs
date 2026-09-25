@@ -169,6 +169,10 @@ public sealed class DeleteBuilder<TEntity>
         return new DeleteCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, null, keys);
     }
 
+    /// <summary>Builds the delete command for use as a side-effecting step of a batch.</summary>
+    /// <returns>The delete command.</returns>
+    internal MutationCommand BuildBatchCommand() => BuildCommand();
+
     /// <summary>Builds the delete command carrying the columns to return through <c>RETURNING</c>/<c>OUTPUT</c>.</summary>
     /// <param name="returningColumns">The mapped columns to return.</param>
     /// <returns>The delete command carrying the returned columns.</returns>

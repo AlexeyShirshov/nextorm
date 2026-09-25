@@ -20,6 +20,19 @@ await ctx.From<IOrder>()
     .ToTempTableAsync("recent_orders", cancellationToken: cancellationToken);
 ```
 
+Call `ToTempTable()` without a name to have one generated; the terminal returns it so the table can be read back. Generated names look like `__nextorm_temp_xxxxxxxx`, and the naming convention is not applied to them either:
+
+```csharp
+var name = ctx.From<IOrder>()
+    .Where(x => x.Total > minTotal)
+    .Select(x => new { x.Id, x.Total })
+    .ToTempTable();
+
+var orders = ctx.From(name)
+    .Select(t => new { Id = t.GetInt32("id"), Total = t.GetDecimal("total") })
+    .ToList();
+```
+
 The target name is used verbatim (only identifier quoting applies); the naming convention is **not** applied, because a raw name is not an entity. Values captured in the query become parameters and travel with the body, exactly as in a standalone query.
 
 A temporary table is session-scoped. Create and read it on the **same context** (the context keeps one connection open), then read it back through `From("name")` with the [`TableAlias`](xref:NextORM.Core.TableAlias) accessors. A connection pooler that reassigns the backend per transaction needs one transaction around both steps — see [Session affinity and connection poolers](#session-affinity-and-connection-poolers):
@@ -58,6 +71,29 @@ await tx.CommitAsync();
 * The table does **not** survive the transaction. After `COMMIT` the pooler may hand the next transaction to a different backend, where the table does not exist; do not rely on it across transactions.
 * With PgBouncer in `session` mode the backend is pinned for the whole client session, so no transaction is needed; in `statement` mode a transaction is not enough.
 * Prepared statements are a separate concern of `transaction` mode: a statement prepared on one backend cannot be executed on another, so prepared statements may need `max_prepared_statements=0` on PgBouncer or provider-side prepared statements disabled.
+
+## Creating and reading in one batch
+
+A materialisation and the query that reads it can be sent as one batch — one round trip on one server session, which keeps a session-scoped table visible under a connection-level pooler. Use the general [`BatchBuilder`](xref:NextORM.Core.BatchBuilder); it is covered in [Executing statements in one batch](28-sql-batch.md).
+
+```csharp
+var orders = ctx.Batch()
+    .CreateTempTableAs("recent_orders", ctx.From<IOrder>()
+        .Where(x => x.Total > minTotal)
+        .Select(x => new { x.Id, x.Total }))
+    .Query(ctx.From("recent_orders")
+        .Select(t => new { Id = t.GetInt32("id") }))
+    .ToList();
+```
+
+The materialisation and the read go to the database as one batch; `.ToSql()` returns the `;`-joined text it sends:
+
+```sql
+create temporary table recent_orders as select id, total from orders
+ where (total > @b0_minTotal); select id from recent_orders
+```
+
+The captured `minTotal` becomes a parameter, and its name is prefixed per statement (`b0_minTotal`) so it cannot collide with a same-named variable in another statement of the batch.
 
 ## Creating a persistent table
 
@@ -123,5 +159,6 @@ On a provider without the requested form, and on the in-memory context, the term
 
 - [Common table expressions](09-cte.md)
 - [Data modification (INSERT)](19-insert-statement.md)
+- [Executing statements in one batch](28-sql-batch.md)
 - [Transactions](25-transactions.md)
 - [Provider overview](../providers/overview.md)

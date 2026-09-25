@@ -60,3 +60,14 @@
   `src/nextorm.core/Query/SqlFunctions.ClickHouse.cs`.
 - Тесты: `tests/nextorm.clickhouse.tests`, `tests/nextorm.integration.tests`.
 - Доки EN+RU, gap-analysis.
+
+## Дизайн-ревью (nextorm-design-engineer, 2026-09-24)
+
+> Прогон сабагента `nextorm-design-engineer` по плану (read-only). `file:line` — по дереву на момент ревью.
+> Вердикт: **план не готов к дизайн-ревью — 1 блокер-полнота**; статус «заблокировано драйвером» подтверждён.
+
+- **[TYPE]/[KISS] 🔴** Публичный API не определён (`:45-49` — 3 bullet-черновика, ни одной сигнатуры): нет имён/сигнатур (`uniq_state`, `uniq_merge`, …) и поверхности; нет имени/формы capability-объекта + свойства `ISqlDialect`; нет типа материализации `AggregateFunction` и его маппинга в row reader; не решено, как колонка состояния типизируется в `[Column]`/проекции (Q §53-54); нет тест-плана. Fix: довести §«Дизайн» до уровня `todo_clickhouse_function_gaps.md` §5–§6.
+- **[TYPE] 🟡** `byte[]` vs именованный `AggregateFunctionState` не решён (`:47,53`) — влияет на всю публичную поверхность. Deferred (driver-blocked); при именованном типе он должен быть `sealed`/`readonly`.
+- **[LSP]/[TYPE] ℹ️** `SimpleAggregateFunction` частично работает, но `sumMerge(...)` по нему нет (`:20-22`). Fix: заложить явный guard/`Supports` до реализации.
+- **[OCP] ℹ️** `runningAccumulate` устарел (CH 25.8, `:18-19`) — не заводить публичный член, оставить оконную форму (`sum_over`).
+- **ℹ️** Блокер актуален: `Directory.Packages.props:19` — `ClickHouse.Driver 1.4.0` (ровно версия из плана). Разблокировка — только апгрейд драйвера.

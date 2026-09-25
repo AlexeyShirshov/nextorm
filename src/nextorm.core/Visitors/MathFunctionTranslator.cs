@@ -20,6 +20,7 @@ internal static class MathFunctionTranslator
             nameof(Math.Pow) => "pow",
             nameof(Math.Exp) => "exp",
             nameof(Math.Log) => "log",
+            nameof(Math.Log10) => "log10",
             nameof(Math.Sin) => "sin",
             nameof(Math.Cos) => "cos",
             nameof(Math.Tan) => "tan",

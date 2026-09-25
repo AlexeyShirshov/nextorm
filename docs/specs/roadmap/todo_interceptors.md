@@ -1,4 +1,5 @@
 # TODO: Интерцепторы (hooks) по образцу linq2db
+> Tracking issue: [#30](https://github.com/AlexeyShirshov/nextorm/issues/30) (закрыт — фаза 1 отгружена).
 
 > Рабочий план (design RFC). Источник: `comparison/linq2db-comparison.md:54,81` — разрыв в расширяемости
 > («Extensibility (interceptors, custom SQL, query filters): extensive vs minimal»).
@@ -238,3 +239,15 @@ var ctx = builder.CreateDataContext();
   `docs/guide/toc.yml` (+ `docs/ru/toc.yml`), `docs/advanced/api-reference.md` (+RU),
   `docs/advanced/limitations.md` (+RU); регистр `docs/specs/design/API-NAMING-REVIEW.md` (раздел
   «Interceptors Phase 1»).
+
+## Дизайн-ревью (nextorm-design-engineer, 2026-09-24)
+
+> Прогон сабагента `nextorm-design-engineer` по плану (read-only). `file:line` — по дереву на момент ревью.
+> Вердикт: **план дизайн-здоров**; 1 отложенное решение (I1) + 1 правка контракта до заморозки (I2).
+> Фаза 1 реализована и уже разобрана аудитом (INT1–INT4, code-smells 171–173) — ниже без дублей.
+
+- **[DRY]/[ISP] 🟡** I1 — фаза 2 `IDataContextInterceptor.OnClosing/OnClosed` (`:196`) дублирует существующее публичное событие `DataContext.Disposed` (`src/nextorm.core/DataContext/DataContext.cs:162,839`) при одном потребителе; у `InMemoryDataContext` события Dispose нет (`InMemoryDataContext.cs:271-315`). Deferred с триггером (2-й потребитель) либо расширить существующее событие (инвариант 1).
+- **[ISP] 🟡** I2 — `CommandEventData` несёт полный композит `IDataContext` (`src/nextorm.core/Interceptors/IQueryInterceptor.cs:11`); метрик/трейсингу нужны только `Sql`/`elapsed`, широкий payload удерживает контекст. Fix: сузить payload или убрать `DataContext` до заморозки.
+- **[OCP] ℹ️** I3 — таблица точек встраивания (`:150-157`) не учитывает новые пути LOB-ридера и JSON-writer; без общей обвязки обещание «события на стриминге/всех путях» ломается (см. L8/J9). Fix: добавить строки и провести события через общий helper.
+- **[ISP] ℹ️** I4 — INT1–INT4 и 171–173 не переоткрывать; сверять статус регистров (`API-NAMING-REVIEW.md:4546-4563`, `code-smells-review.md:6520-6554`) перед правками.
+- **[TYPE] ℹ️** I5 — `CommandEventData`/`ConnectionEventData` — `readonly record struct` (позитив).

@@ -259,10 +259,11 @@ internal static class MemberTranslator
                 else if (visitor.Logger?.IsEnabled(LogLevel.Debug) ?? false) visitor.Logger.LogDebug("Expression cache miss on visit where");
             }
 
-            visitor.Params.Add(new Parameter(node.Member.Name, visitor.NormalizeDurationValue(((Func<object>)del)())));
+            var parameterName = visitor.Options.ParameterNamePrefix + node.Member.Name;
+            visitor.Params.Add(new Parameter(parameterName, visitor.NormalizeDurationValue(((Func<object>)del)())));
 
             if (!visitor.IsParamMode)
-                visitor.Builder!.Append(visitor.Dialect.MakeParam(node.Member.Name));
+                visitor.Builder!.Append(visitor.Dialect.MakeParam(parameterName));
 
             return node;
         }
@@ -366,10 +367,11 @@ internal static class MemberTranslator
                         else if (visitor.Logger?.IsEnabled(LogLevel.Debug) ?? false) visitor.Logger.LogDebug("Expression cache miss on visit where");
                     }
                     // var value = 1;
-                    visitor.Params.Add(new Parameter(node.Member.Name, visitor.NormalizeDurationValue(((Func<object?, object>)del)(twoTypeVisitor.Target2!.Value))));
+                    var parameterName = visitor.Options.ParameterNamePrefix + node.Member.Name;
+                    visitor.Params.Add(new Parameter(parameterName, visitor.NormalizeDurationValue(((Func<object?, object>)del)(twoTypeVisitor.Target2!.Value))));
 
                     if (!visitor.IsParamMode)
-                        visitor.Builder!.Append(visitor.Dialect.MakeParam(node.Member.Name));
+                        visitor.Builder!.Append(visitor.Dialect.MakeParam(parameterName));
 
                     return node;
                 }

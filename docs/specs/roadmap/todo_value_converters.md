@@ -1,4 +1,5 @@
 # TODO: Value converters (кастомный маппинг типов свойств)
+> Tracking issue: [#31](https://github.com/AlexeyShirshov/nextorm/issues/31).
 
 > Рабочий план (design RFC). Gap-анализ: **G1** из
 > [`linq2db-backlog-gap-analysis.md`](../comparison/linq2db-backlog-gap-analysis.md); аналог linq2db
@@ -147,3 +148,15 @@ MySQL/MariaDB (`JSON`, `varchar`), ClickHouse (`String`, `DateTime64`), SQLite (
   фаза 2 — `Visitors/BaseExpressionVisitor.cs`/`SqlOperandTranslator.cs`.
 - Документация: `docs/guide/` (новый раздел «Value converters», +RU + `toc.yml`),
   `docs/advanced/api-reference.md` (+RU), `docs/specs/design/API-NAMING-REVIEW.md`.
+
+## Дизайн-ревью (nextorm-design-engineer, 2026-09-24)
+
+> Прогон сабагента `nextorm-design-engineer` по плану (read-only). `file:line` — по дереву на момент ревью.
+> Вердикт: **пересмотр до реализации — 4 🟡**; API закрыт корректно, но нужна «единая точка» конвертации и решение о границе с duration.
+
+- **[DRY]/[OCP] 🟡** Два параллельных слоя конвертации CLR↔provider: `:12-20,31-32` + `todo_timespan_columns.md:164-167`. Duration уже реализован частной конвертацией: read `SelectExpression.cs:107-114`, материализация `RowMapperFactory.cs:39-46`, write `DurationStorage.ToParameterValue`, поправки констант `BaseExpressionVisitor.cs:90,484-489`. Fix: зафиксировать границу — либо (a) `[Duration]` как встроенный `ValueConverter<TimeSpan,TProvider>` и свернуть спец-ветки, либо (b) обосновать, что native-типизация duration не пересекается с G1.
+- **[DRY] 🟡** Write-шов недописан: план называет одну точку (`:43,111`, `SqlMutationBuilder.cs:801` — сейчас это `AppendMergeAssignments`), а в дереве 6+ сайтов `new Parameter` + `DurationStorage.ToParameterValue`: `SqlMutationBuilder.cs:285,369,880`, `SqlSourceRenderer.cs:795`, `QueryPlanner.cs:261`, `BulkInsertBuilder.cs:206`; плюс нормализация констант `MemberTranslator.cs:263,371`, `SqlOperandTranslator.cs:72`, `BaseExpressionVisitor.cs:354,489`, `InValuesTranslator.cs:72,96`. Fix: единый хелпер формы `ToProviderValue(value, property, dialect)` и перечислить все сайты.
+- **[PERF]/[TYPE] 🟡** `:53-65,127` `IValueConverter.ConvertToProvider/ConvertFromProvider(object?)` боксят value-типы на каждой строке/константе, а `ValueConverter<TModel,TProvider>` объявляет `abstract`-методы, но не реализует `object?`-члены интерфейса (сниппет не удовлетворяет `IValueConverter`). Fix: определить мост и кэшировать типизированный инвокер (`Func<TModel,TProvider>`), вызывать делегат, а не `object?`-метод; бюджет упаковки — в тест «Память» (`:127`).
+- **[DRY] 🟡** `ConvertsNulls` — три источника истины (`:57` интерфейс, `:64` virtual в базе, `:71` set-свойство атрибута). Fix: политика только на экземпляре конвертера.
+- **[DIP] ℹ️** Назвать 2-го потребителя публичного шва (инвариант 1, прецедент F3/F7): `IPropertyMetadata.Converter` (type-erased хранение) + `[ValueConverter(typeof(...))]` (рефлексия) + G2 (`JsonConverter<,>`). Fix: добавить абзац до реализации.
+- **[TYPE]/[DRY] ℹ️** Двойственность типа чтения в `SelectExpression`: getter читается из `_realType` (`SelectExpression.cs:15,55-68,91`), маппер выводит из `PropertyType` (`RowMapperFactory.cs:36`), для конвертера нужен третий — `TProvider`. Fix: ввести `SelectExpression.ProviderType` и включить в `BuildSignature` (`RowMapperFactory.cs:200-221`), как требует `:87`.

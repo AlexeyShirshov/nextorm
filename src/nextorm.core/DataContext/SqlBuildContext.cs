@@ -26,6 +26,7 @@ internal readonly record struct SqlBuildContext
         NamingConvention = options.NamingConvention;
         IncludeNestedSources = options.IncludeNestedSources;
         this.KeywordCase = options.KeywordCase;
+        ParameterNamePrefix = options.ParameterNamePrefix;
     }
 
     internal ISqlDialect Dialect { get; init; }
@@ -40,10 +41,11 @@ internal readonly record struct SqlBuildContext
     internal INamingConvention? NamingConvention { get; init; }
     internal bool IncludeNestedSources { get; init; }
     internal KeywordCase KeywordCase { get; init; }
+    internal string ParameterNamePrefix { get; init; }
 
     internal WhereExpressionVisitor CreateWhereVisitor(Type entityType, int dim, bool dontNeedAlias = false)
-        => new(new VisitorOptions(entityType, Dialect, ColumnsProvider, dim, AliasProvider, ParameterProvider, QueryProvider, dontNeedAlias, ParamMode, Params, Logger) { QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, IncludeNestedSources = IncludeNestedSources, KeywordCase = KeywordCase });
+        => new(new VisitorOptions(entityType, Dialect, ColumnsProvider, dim, AliasProvider, ParameterProvider, QueryProvider, dontNeedAlias, ParamMode, Params, Logger) { QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, IncludeNestedSources = IncludeNestedSources, KeywordCase = KeywordCase, ParameterNamePrefix = ParameterNamePrefix });
 
     internal BaseExpressionVisitor CreateColumnVisitor(Type entityType, int dim, bool dontNeedAlias)
-        => new(new VisitorOptions(entityType, Dialect, ColumnsProvider, dim, AliasProvider, ParameterProvider, QueryProvider, dontNeedAlias, ParamMode, Params, Logger) { QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, IncludeNestedSources = IncludeNestedSources, KeywordCase = KeywordCase });
+        => new(new VisitorOptions(entityType, Dialect, ColumnsProvider, dim, AliasProvider, ParameterProvider, QueryProvider, dontNeedAlias, ParamMode, Params, Logger) { QuoteIdentifiers = QuoteIdentifiers, NamingConvention = NamingConvention, IncludeNestedSources = IncludeNestedSources, KeywordCase = KeywordCase, ParameterNamePrefix = ParameterNamePrefix });
 }

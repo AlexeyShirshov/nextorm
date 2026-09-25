@@ -107,6 +107,13 @@ public interface ITestProvider
     bool SupportsTemporaryCreateTableAsSelect { get; }
 
     /// <summary>
+    /// True when the provider can execute a multi-statement batch (see <c>BatchExtensions.Batch</c>) in
+    /// one round trip on one session. PostgreSQL, SQLite, MySQL, MariaDB and SQL Server can; ClickHouse
+    /// has no single-round-trip multi-statement guarantee, so the shared batch tests are skipped there.
+    /// </summary>
+    bool SupportsBatch { get; }
+
+    /// <summary>
     /// True when the provider supports ADO.NET transactions on its connection. SQLite, PostgreSQL,
     /// SQL Server and MySQL/MariaDB do; ClickHouse speaks HTTP and has no transaction, so the shared
     /// transaction tests are skipped there.

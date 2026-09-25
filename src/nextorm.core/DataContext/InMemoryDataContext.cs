@@ -255,7 +255,7 @@ public partial class InMemoryDataContext : IDataContext
     public Expression MapColumn(SelectExpression column, Expression param)
     {
         var replace = new ReplaceParameterExpressionVisitor(param);
-        return InMemoryStringFunctionRewriter.Rewrite(replace.Visit(column.Expression)!);
+        return InMemoryScalarFunctionRewriter.Rewrite(replace.Visit(column.Expression)!);
         //return Expression.PropertyOrField(param, column.PropertyName!);
     }
 

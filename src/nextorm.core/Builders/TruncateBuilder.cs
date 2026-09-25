@@ -20,6 +20,9 @@ public sealed class TruncateBuilder<TEntity>
         _metadata = metadata;
     }
 
+    /// <summary>The context the truncate executes on.</summary>
+    internal IDataContext DataContext => _dataContext;
+
     /// <summary>Renders the parameterised SQL this builder would execute, without executing it.</summary>
     /// <returns>The rendered SQL text.</returns>
     /// <exception cref="NotSupportedException">The context is not database-backed, or the provider has no <c>TRUNCATE</c>.</exception>
@@ -57,6 +60,10 @@ public sealed class TruncateBuilder<TEntity>
 
         throw Unsupported();
     }
+
+    /// <summary>Builds the truncate command for use as a side-effecting step of a batch.</summary>
+    /// <returns>The truncate command.</returns>
+    internal MutationCommand BuildBatchCommand() => BuildCommand();
 
     private TruncateCommand BuildCommand()
         => new(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto);

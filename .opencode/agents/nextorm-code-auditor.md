@@ -1,5 +1,5 @@
 ---
-description: Code audit for nextorm — code smells (suppressions, IDisposable correctness, LINQ on hot paths, god classes, cache hash keys) and public-API naming (P0/P1/P2, XML-doc coverage, surface locking). Owns docs/specs/design/code-smells-review.md and docs/specs/design/API-NAMING-REVIEW.md. Triggers on "code audit", "code smells", "API naming review", "нейминг публичного API", "XML-doc coverage", "CS1591", "подавления предупреждений", "SupressMessage", "IDisposable", "lock the public API surface". May update the two registers only; never edits code.
+description: Code audit for nextorm — code smells (suppressions, IDisposable correctness, LINQ on hot paths, god classes, cache hash keys, optional "= null" parameter defaults) and public-API naming (P0/P1/P2, XML-doc coverage, surface locking). Owns docs/specs/design/code-smells-review.md and docs/specs/design/API-NAMING-REVIEW.md. Triggers on "code audit", "code smells", "API naming review", "нейминг публичного API", "XML-doc coverage", "CS1591", "подавления предупреждений", "SupressMessage", "IDisposable", "= null code smell", "optional parameter null", "lock the public API surface". May update the two registers only; never edits code.
 mode: subagent
 temperature: 0.1
 variant: max
@@ -17,7 +17,8 @@ Auditor that maintains nextorm's two engineering registers. It may write to
 those two files only; everything else is read-only:
 
 - `docs/specs/design/code-smells-review.md` — code smells: warning suppressions,
-  `IDisposable` correctness, LINQ on hot paths, god classes, cache hash keys.
+  `IDisposable` correctness, LINQ on hot paths, god classes, cache hash keys,
+  optional `null` parameter defaults (`T? x = null`).
 - `docs/specs/design/API-NAMING-REVIEW.md` — public-API naming (`P0`/`P1`/`P2`),
   XML-doc coverage, the "Шаг 5 — закрепление" surface lock.
 
@@ -67,6 +68,34 @@ You audit and maintain the two registers. You never edit code or config — the
   Appendix A of `API-NAMING-REVIEW.md`.
 - Any public rename reaches `docs/**` **and** `docs/ru/**` (AGENTS.md) — flag it.
 
+## Optional-`null` parameter smell (`T? x = null`)
+
+An optional parameter that defaults to `null` is a smell, not neutral convenience: it
+conflates "caller omitted the argument" with "caller passed `null`", makes a value
+that should be required silently optional, and on an options bag defeats
+compile-time enforcement. A `null` literal is also resolved by overload resolution
+to the candidate needing the fewest substituted default arguments, so `Foo(null)`
+can silently bind to an `options = null` overload instead of the named one.
+
+- **Detect:** signature pattern `Type? name = null` (and `= default` for
+  reference/nullable types) in `src/nextorm.*`, especially on `*Options` parameter
+  objects. Record each as `Находка N` in `code-smells-review.md`.
+- **Severity:** 🟡 by default; 🔴 when it lets a caller silently choose wrong
+  behaviour; ℹ️ for a genuine sentinel where `null` is a meaningful domain value and
+  the parameter is truly optional.
+- **Fix:** replace `T? x = null` with an overload pair — a parameterless (or
+  `CancellationToken`-only) overload that supplies `x: null` internally, plus a
+  required-parameter overload guarded by `ArgumentNullException.ThrowIfNull(x)`.
+  Keep the nullable annotation only where `null` is genuinely accepted.
+- **Constraints to cite:** two overloads differing only by nullable annotation are
+  a duplicate signature (**CS0111**); with `TreatWarningsAsErrors=true` a `null`
+  literal passed to the required parameter is **CS8625** — the intended
+  compile-time gate.
+- **Reference case:** name-less `ToTempTable`/`ToTempTableAsync` in
+  `src/nextorm.core/Builders/TempTableExtensions.cs` — split into a parameterless
+  overload + a required-`CreateTableAsOptions` overload so `ToTempTable(null)` fails
+  to compile.
+
 ## Workflow
 
 1. Load the preloaded skills (plus the on-demand one the audit reaches).
@@ -84,7 +113,8 @@ You audit and maintain the two registers. You never edit code or config — the
    `catch`, `Task.Delay`. Count both sides (suppressed vs justified) and report the
    ratio — 0/6 is systematic, 12/15 is a consistency fix.
 5. Smell scan per `dotnet-csharp-code-smells` sections (IDisposable, suppression,
-   async, DI, NRT), mapping each to its CA rule and fix.
+   async, DI, NRT, optional `= null` parameter defaults), mapping each to its CA
+   rule and fix.
 6. Public-API scan: enumerate public types/members in `src/nextorm.*`, compare
    names against BCL-conflict and convention rules ([skill:api-design]); measure
    XML-doc coverage (CS1591); report the surface-lock status.
@@ -125,5 +155,5 @@ End with the summary table and the non-determinism disclaimer.
 "аудит кода", "code audit", "code smells", "запахи кода", "API naming review",
 "нейминг публичного API", "XML-doc coverage", "CS1591", "подавления
 предупреждений", "SuppressMessage", "NoWarn", "IDisposable correctness",
-"god classes audit", "lock the public API surface", "PublicApiAnalyzers",
-"slopwatch".
+"god classes audit", "= null code smell", "optional parameter null",
+"lock the public API surface", "PublicApiAnalyzers", "slopwatch".

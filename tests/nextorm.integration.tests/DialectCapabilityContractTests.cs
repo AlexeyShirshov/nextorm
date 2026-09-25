@@ -19,6 +19,17 @@ public sealed class DialectCapabilityContractTests
 
     private static readonly string[] XmlNames = ["value", "query", "exist"];
 
+    private static readonly string[] ScalarNames =
+        ["left", "right", "lpad", "rpad", "repeat", "reverse", "space", "concat_ws", "translate", "ascii", "char"];
+
+    private static IReadOnlyList<string> ScalarArgs(string name) => name switch
+    {
+        "left" or "right" or "repeat" => ["[s]", "3"],
+        "lpad" or "rpad" or "translate" => ["[s]", "3", "' '"],
+        "concat_ws" => ["','", "[s]"],
+        _ => ["[s]"]
+    };
+
     private static PivotExpression CreatePivot()
     {
         var factory = typeof(PivotExpression).GetMethod("ForPivot", BindingFlags.NonPublic | BindingFlags.Static)!;
@@ -102,6 +113,17 @@ public sealed class DialectCapabilityContractTests
                         continue;
 
                     xml.Render(name, "[x]", ["'a'"]).Should().NotBeNullOrEmpty();
+                }
+            }
+
+            if (dialect.ScalarFunctions is { } scalar)
+            {
+                foreach (var name in ScalarNames)
+                {
+                    if (!scalar.Supports(name))
+                        continue;
+
+                    scalar.Render(name, ScalarArgs(name)).Should().NotBeNullOrEmpty();
                 }
             }
 
@@ -209,6 +231,7 @@ public sealed class DialectCapabilityContractTests
         dialects.Should().Contain(d => d.UuidGenerators != null);
         dialects.Should().Contain(d => d.LimitBy != null);
         dialects.Should().Contain(d => d.XmlFunctions != null);
+        dialects.Should().Contain(d => d.ScalarFunctions != null);
         dialects.Should().Contain(d => d.StringSplit != null);
         dialects.Should().Contain(d => d.DateConversion != null);
         dialects.Should().Contain(d => d.SequenceAggregates != null);

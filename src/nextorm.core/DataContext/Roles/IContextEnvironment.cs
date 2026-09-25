@@ -46,4 +46,12 @@ public interface IContextEnvironment
     /// <see cref="NextORM.Core.KeywordCase.Lower"/> so existing external implementations keep compiling.
     /// </summary>
     KeywordCase KeywordCase => NextORM.Core.KeywordCase.Lower;
+
+    /// <summary>
+    /// Whether rendered batch SQL places each statement on its own line (see
+    /// <c>DataContextBuilder.UseMultilineBatchSql</c>). The default implementation returns
+    /// <see langword="false"/> so existing external implementations keep compiling and batch SQL stays
+    /// on a single line.
+    /// </summary>
+    bool MultilineBatchSql => false;
 }

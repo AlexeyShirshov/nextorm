@@ -558,7 +558,7 @@ internal static class SqlSourceRenderer
                 if (IsVerbatimArgument(function, i))
                     continue;
 
-                using var visitor = new BaseExpressionVisitor(new VisitorOptions(entityType ?? typeof(object), ctx.Dialect, ctx.ColumnsProvider, 0, ctx.AliasProvider, ctx.ParameterProvider, ctx.QueryProvider, true, true, ctx.Params, ctx.Logger) { QuoteIdentifiers = ctx.QuoteIdentifiers, NamingConvention = ctx.NamingConvention, KeywordCase = ctx.KeywordCase });
+                using var visitor = new BaseExpressionVisitor(new VisitorOptions(entityType ?? typeof(object), ctx.Dialect, ctx.ColumnsProvider, 0, ctx.AliasProvider, ctx.ParameterProvider, ctx.QueryProvider, true, true, ctx.Params, ctx.Logger) { QuoteIdentifiers = ctx.QuoteIdentifiers, NamingConvention = ctx.NamingConvention, KeywordCase = ctx.KeywordCase, ParameterNamePrefix = ctx.ParameterNamePrefix });
                 visitor.Visit(arguments[i]);
             }
 
@@ -581,7 +581,7 @@ internal static class SqlSourceRenderer
                     continue;
                 }
 
-                using var visitor = new BaseExpressionVisitor(new VisitorOptions(entityType ?? typeof(object), ctx.Dialect, ctx.ColumnsProvider, 0, ctx.AliasProvider, ctx.ParameterProvider, ctx.QueryProvider, true, false, ctx.Params, ctx.Logger) { QuoteIdentifiers = ctx.QuoteIdentifiers, NamingConvention = ctx.NamingConvention, KeywordCase = ctx.KeywordCase });
+                using var visitor = new BaseExpressionVisitor(new VisitorOptions(entityType ?? typeof(object), ctx.Dialect, ctx.ColumnsProvider, 0, ctx.AliasProvider, ctx.ParameterProvider, ctx.QueryProvider, true, false, ctx.Params, ctx.Logger) { QuoteIdentifiers = ctx.QuoteIdentifiers, NamingConvention = ctx.NamingConvention, KeywordCase = ctx.KeywordCase, ParameterNamePrefix = ctx.ParameterNamePrefix });
                 visitor.Visit(arguments[i]);
                 sqlBuilder.Append(visitor.ToString());
             }

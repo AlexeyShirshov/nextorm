@@ -25,6 +25,9 @@ internal static class BuiltinFunctionTranslator
     /// <summary>Translates a built-in call; returns <c>false</c> when the call is not one of them.</summary>
     internal static bool TryTranslate(BaseExpressionVisitor visitor, MethodCallExpression node)
     {
+        if (CrossProviderScalarTranslator.TryTranslate(visitor, node))
+            return true;
+
         switch (node.Method.Name)
         {
             case nameof(CommonFunctions.nullif) when node.Arguments.Count == 2:

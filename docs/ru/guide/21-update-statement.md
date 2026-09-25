@@ -181,8 +181,10 @@ with recent as (select id from orders where (id > 1000)) update orders as "t1" s
   (`SETTINGS mutations_sync = 1`), но число затронутых строк не возвращает, поэтому
   `Update()`/`UpdateAsync()` возвращают `0`. Движок требует предикат, поэтому `UPDATE` без `Where`
   рендерит `WHERE 1`.
-* Оптимистичная конкурентность (`rowversion`) и глобальные фильтры запросов в эту поверхность **не**
-  входят.
+* Оптимистичная конкурентность (`rowversion`) — это паттерн поверх этой поверхности, а не встроенный API:
+  положите ожидаемый токен в `Where` и считайте `0` затронутых строк конфликтом. См.
+  [Оптимистичная конкурентность и отслеживание изменений](29-optimistic-concurrency.md). Глобальные
+  фильтры запросов в эту поверхность **не** входят.
 * Контекст in-memory — только запросы: `Update`/`UpdateAsync` (как и любая другая запись) бросают
   `NotSupportedException`; запрашивайте собственные коллекции.
 * `UPDATE` не подготавливается и не кэшируется планом — оптимизация nextorm нацелена только на
@@ -194,6 +196,7 @@ with recent as (select id from orders where (id > 1000)) update orders as "t1" s
 - [Изменение данных (INSERT)](19-insert-statement.md)
 - [Изменение данных (DELETE)](20-delete-statement.md)
 - [Слияние данных (MERGE / upsert)](23-merge-statement.md)
+- [Оптимистичная конкурентность и отслеживание изменений](29-optimistic-concurrency.md)
 - [Фильтрация (WHERE)](02-filtering-where.md)
 - [Ограничения и вне области](../advanced/limitations.md)
 - [Обзор провайдеров](../providers/overview.md)

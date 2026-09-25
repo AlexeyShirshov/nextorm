@@ -186,3 +186,14 @@
 - Документация: `docs/guide/` (раздел об интерфейсных сущностях, +RU),
   `docs/advanced/api-reference.md` (+RU), `docs/advanced/limitations.md` (снять «project the
   columns», +RU), `docs/specs/design/API-NAMING-REVIEW.md`.
+
+## Дизайн-ревью (nextorm-design-engineer, 2026-09-24)
+
+> Прогон сабагента `nextorm-design-engineer` по плану (read-only). `file:line` — по дереву на момент ревью.
+> Вердикт: **дизайн-здоров, блокеров нет**; 3 🟡 закрыть в тексте плана до реализации.
+
+- **[TYPE]/[LSP] 🟡** Публичный `IEntityMetadata.MaterializationType` (`:96-103,165-166`) протекает динамическим прокси-типом: в фазе 3 (source-gen) он сменится, а пользователь может начать на него опираться — leaky contract и помеха заморозке (`todo_public_api_freeze.md`). Fix: держать прокси в `DataContextCache`, публично не раскрывать тип (или `internal` + документированная нестабильность).
+- **[DRY] 🟡** Объявление кэша самопротиворечиво (`:78-80`: `ConcurrentDictionary<Type, Type>` со `Lazy<Type>`, «рядом с `DataContextCache.Metadata`» без нового поля — `DataContextCache.cs:22,30` это `IDictionary<Type, IEntityMetadata>`). Fix: отдельный `static ConcurrentDictionary<Type, Lazy<Type>>` с явным именем владельца.
+- **[OCP]/[TYPE] 🟡** Bind-члены «по имени на прокси» (`:89` `proxyType.GetProperty(name)`) повторяет reflection-by-name (`RowMaterializerBuilder.cs:49`); при замыкании интерфейсов/explicit-implementation возможен неверный член. Fix: один раз построить `name → PropertyInfo` карту по прокси-типу (или interface map), не звать `GetProperty` в цикле материализации.
+- **[OCP] ℹ️** Две стратегии сбора свойств в одном методе (`:65-71` добавляет обход замыкания интерфейсов рядом с классовым `Where(CanWrite)` `EntityMetadataBuilder.cs:52`). Deferred с триггером (третье правило формы); до этого вынести интерфейсный обход в приватный хелпер.
+- **ℹ️** Позитив: один `Expression.Compile` на тип, per-row регресса нет (`:139-140`); `AutoBuildProperties` исключает индексаторы/события (`:69-70`) — верно.

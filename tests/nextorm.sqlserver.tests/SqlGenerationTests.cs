@@ -1096,6 +1096,16 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void MathPow_ShouldUsePower()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        // T-SQL has no POW; Math.Pow must render as POWER.
+        SqlOf(ctx, e.Select(x => new { V = Math.Pow(x.Id + 0.0, 2.0) })).Should().Contain("power(");
+    }
+
+    [Fact]
     public void DateTimeNow_ShouldUseGetDateFunctions()
     {
         using var ctx = SqlServerTestContext.Create();

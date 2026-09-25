@@ -241,6 +241,7 @@ internal static class SqlMutationBuilder
     /// <param name="whereSql">The rendered condition of the predicate form, or <see langword="null"/>; its parameters are already in <paramref name="parameters"/>.</param>
     /// <param name="parameters">The parameters of <paramref name="whereSql"/>; key values are appended to it.</param>
     /// <param name="keywordCase">The letter case in which SQL keywords are emitted.</param>
+    /// <param name="parameterProvider">The provider that names the key parameters, or <see langword="null"/> to start a fresh sequence. A batch passes the shared provider so its parameters do not collide with the other statements'.</param>
     /// <returns>The rendered SQL and the parameters it references.</returns>
     internal static (string Sql, List<Parameter> Parameters) MakeDelete(
         ISqlDialect dialect,
@@ -249,7 +250,8 @@ internal static class SqlMutationBuilder
         DeleteCommand command,
         string? whereSql,
         List<Parameter> parameters,
-        KeywordCase keywordCase = KeywordCase.Lower)
+        KeywordCase keywordCase = KeywordCase.Lower,
+        IParameterProvider? parameterProvider = null)
     {
         var writer = StringBuilderPool.Shared.Get();
 
@@ -270,7 +272,7 @@ internal static class SqlMutationBuilder
 
             if (command.Keys is { Count: > 0 } keys)
             {
-                var provider = new DefaultParameterProvider();
+                var provider = parameterProvider ?? new DefaultParameterProvider();
                 writer.Append(SqlKeywords.Of(keywordCase, " where "));
 
                 for (var i = 0; i < keys.Count; i++)

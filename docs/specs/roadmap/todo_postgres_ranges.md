@@ -124,3 +124,22 @@ public readonly struct Range<T>
   `SelectExpression`/`RowMapperFactory` (provider-хук).
 - Доки: `docs/guide/provider-specific/postgresql.md` (+RU), `docs/providers/postgres.md` (+RU),
   `docs/advanced/api-reference.md` (+RU), `docs/specs/design/API-NAMING-REVIEW.md`.
+
+## Дизайн-ревью (nextorm-design-engineer, 2026-09-24)
+
+> Прогон сабагента `nextorm-design-engineer` по плану (read-only). `file:line` — по дереву на момент ревью.
+> Вердикт: **дизайн-нездоров — 2 блокера** (невыразимость unbounded; «PG-only гейт vs InMemory»).
+
+- **[TYPE] 🔴** `Range<T>` не выражает unbounded: `:73` `Range(T? lower, T? upper, …)`, `:76-77` `T? Lower/Upper`. Для `int` `T?`==`int`, `default(T)`=0 неотличим от реальной границы → критерий `:18` («unbounded/empty … сохраняются») недостижим. Fix: `T Lower/Upper` + explicit `bool LowerInfinite`/`UpperInfinite` + `IsEmpty` (как `NpgsqlRange<T>`), инвариант в конструкторе.
+- **[LSP] 🔴** Гейт PG-only противоречит InMemory: `:57` `SupportsRanges => false` + `NotSupportedException`, но `:93,108` и критерий `:18` требуют in-memory `Overlaps`/`Contains`. Fix: либо явно объявить поддержку `Range<T>` в InMemory (тогда он не гейтится), либо убрать in-memory из критерия.
+- **[DIP]/[ISP] 🟡** Развилка «`MakeRange*` в диалекте vs PG-визитор» (`:89-90`): единственный потребитель — PostgreSQL, значит инвариант 1 и долг F12 запрещают новые `MakeRangeConstructor`/`MakeRangeOperator` в `ISqlDialect`. Fix: PG-only рендер; `SupportsRanges` — DIM `=> false` (образец `ISqlDialect.cs:314`), не abstract.
+- **[LSP]/[TYPE] 🟡** Неверный шов для read-хука: `:35,124` называют core `SelectExpression.GetDataRecordMethod` (`:91-176`), но core не знает `NpgsqlRange<T>`; провайдерский шов — `DataContext.MapColumnExpression` (`DataContext.cs:269`, override `SqlServerDataContext.cs:72`). Fix: переопределить `PostgresDataContext.MapColumnExpression`.
+- **[PERF] 🟡** Если PG-хук пойдёт через `IDataRecord.GetValue` + `Convert` (как `SqlServerDataContext.cs:83-85`) — боксинг `NpgsqlRange<T>` на каждую строку. Fix: `GetFieldValue<NpgsqlRange<T>>` + явная конвертация.
+- **[OCP]/[DRY] 🟡** Имена расходятся с конвенцией файла: `:84-86` `Overlaps`/`Contains`/`ContainedBy` (PascalCase) vs SQL-токены (`array_overlaps` `SqlFunctions.Postgres.cs:55`, `json_contains` `:162`); голый `Contains` сталкивается с full-text (`SqlFunctions.cs:400`). Fix: `overlaps`, `range_contains`, `range_contained_by`.
+- **[SRP] 🟡** Static vs instance не сведены: критерий `:17` требует `x.During.Overlaps(range)` (instance), §6 `:84` — static `Overlaps<T>(Range<T>, Range<T>)`. Fix: зафиксировать один путь (рекомендуется static).
+- **[TYPE] 🟡** Вариант не-generic `Range` (`:64`) даст `CS0104` с `System.Range` + boxing. Fix: только generic `Range<T>`.
+- **[DRY] 🟡** Сигнатуры §6 некомпилируемы: `:88` `bool isempty(Span)` (нет типа-аргумента), `T? lower<T>(Range<T>)` повторяет unbounded-проблему. Fix.
+- **[TYPE] ℹ️** Value-семантика `Range<T>`: нужен `IEquatable<Range<T>>` + `==`/`GetHashCode` (или `readonly record struct`) и `in`-параметры. Deferred.
+- **[SRP] ℹ️** `:121` ссылается на несуществующий `AdvancedScalarFunctionTranslator`; есть `ExtendedScalarFunctionTranslator`/`ScalarFunctionTranslator`/`CrossProviderScalarTranslator`. Fix.
+- **[TYPE] ℹ️** `PostgresFunctions` — лист, но `public class` (`SqlFunctions.Postgres.cs:12`). Fix: `sealed` при добавлении членов. Ratio по `src`: 164 sealed / 68 unsealed (~71 %).
+- **[BUILD] ℹ️** XML-doc обязателен для новых публичных членов: `CS1591` теперь ошибка (`src/Directory.Build.props:11`, `Directory.Build.props:40`). Fix: внести в критерий приёмки.

@@ -24,6 +24,19 @@ await ctx.From<IOrder>()
     .ToTempTableAsync("recent_orders", cancellationToken: cancellationToken);
 ```
 
+Вызовите `ToTempTable()` без имени — имя сгенерируется, а терминал вернёт его, чтобы таблицу можно было прочитать обратно. Сгенерированные имена выглядят как `__nextorm_temp_xxxxxxxx`, и соглашение об именовании к ним тоже не применяется:
+
+```csharp
+var name = ctx.From<IOrder>()
+    .Where(x => x.Total > minTotal)
+    .Select(x => new { x.Id, x.Total })
+    .ToTempTable();
+
+var orders = ctx.From(name)
+    .Select(t => new { Id = t.GetInt32("id"), Total = t.GetDecimal("total") })
+    .ToList();
+```
+
 Имя цели используется дословно (применяется только кавычение идентификатора); соглашение об именовании
 **не** применяется, потому что сырое имя — не сущность. Захваченные в запросе значения становятся
 параметрами и переносятся вместе с телом запроса, как в обычном запросе.
@@ -67,6 +80,29 @@ await tx.CommitAsync();
 * Таблица **не** переживает транзакцию. После `COMMIT` пулер может отдать следующую транзакцию другому backend'у, где таблицы нет; не рассчитывайте на неё между транзакциями.
 * В режиме PgBouncer `session` backend закреплён на всю клиентскую сессию, и транзакция не нужна; в режиме `statement` транзакции недостаточно.
 * Prepared statements — отдельная проблема режима `transaction`: подготовленный на одном backend'е запрос нельзя выполнить на другом, поэтому может понадобиться `max_prepared_statements=0` на PgBouncer или отключённые prepared statements на стороне провайдера.
+
+## Создание и чтение за один батч
+
+Материализацию и читающий её запрос можно отправить одним батчем — один round trip на одной серверной сессии, поэтому session-scoped таблица видна за пулером уровня соединения. Используйте общий [`BatchBuilder`](xref:NextORM.Core.BatchBuilder); он описан в [Выполнение утверждений одним батчем](28-sql-batch.md).
+
+```csharp
+var orders = ctx.Batch()
+    .CreateTempTableAs("recent_orders", ctx.From<IOrder>()
+        .Where(x => x.Total > minTotal)
+        .Select(x => new { x.Id, x.Total }))
+    .Query(ctx.From("recent_orders")
+        .Select(t => new { Id = t.GetInt32("id") }))
+    .ToList();
+```
+
+Материализация и чтение уходят в базу одним батчем; `.ToSql()` возвращает `;`-склеенный текст, который отправляется:
+
+```sql
+create temporary table recent_orders as select id, total from orders
+ where (total > @b0_minTotal); select id from recent_orders
+```
+
+Захваченный `minTotal` становится параметром, а его имя получает префикс на утверждение (`b0_minTotal`), поэтому оно не может совпасть с одноимённой переменной в другом утверждении батча.
 
 ## Создание постоянной таблицы
 
@@ -134,5 +170,6 @@ ctx.From<IOrder>()
 
 - [Обобщённые табличные выражения](09-cte.md)
 - [Изменение данных (INSERT)](19-insert-statement.md)
+- [Выполнение утверждений одним батчем](28-sql-batch.md)
 - [Транзакции](25-transactions.md)
 - [Обзор провайдеров](../providers/overview.md)

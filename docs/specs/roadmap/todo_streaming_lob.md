@@ -221,3 +221,18 @@ public static Task<TextReader> ToTextReaderAsync<TResult>(this EntityBuilder<TRe
   `docs/advanced/api-reference.md` (+RU), `docs/guide/` (раздел о больших значениях, +RU),
   `docs/providers/*` (+RU), `todo_*`/`sql-capabilities-gap-analysis.md` (если потребуется),
   `docs/specs/design/API-NAMING-REVIEW.md`.
+
+## Дизайн-ревью (nextorm-design-engineer, 2026-09-24)
+
+> Прогон сабагента `nextorm-design-engineer` по плану (read-only). `file:line` — по дереву на момент ревью.
+> Вердикт: **нужен пересмотр — 1 блокер (L1)** + обязательные решения L2/L3/L4.
+
+- **[TYPE]/[KISS] 🔴** Терминал повешен на `EntityBuilder<TResult>` (`:86-92`), но `EntityBuilder.Select` возвращает `QueryCommand<TResult>` (`src/nextorm.core/Builders/EntityBuilder.cs:170`), поэтому пример `...Select(x => x.Data).ToStream()` (`:67-70`) на этом ресивере не разрешается, а `EntityBuilder<TResult>`-перегрузка бессмысленна (сущность не бывает `byte[]`/`string`). Fix: терминалы только на `QueryCommand<T>` с compile-time-ограничением — `ToStream(this QueryCommand<byte[]>, …)`, `ToTextReader(this QueryCommand<string>, …)`.
+- **[TYPE]/[LSP] 🟡** «поток владеет `DbCommand`» (`:104-105`) конфликтует с кэшированным планом: `DbPreparedQueryCommand.DbCommand` (`DataContext/Cache/DbPreparedQueryCommand.cs:21`) — один на форму запроса; держать открытой до `Dispose` = блокировать повторное исполнение формы на контексте. Fix: per-call команда для LOB-терминала либо явно задокументировать эксклюзивность владения.
+- **[OCP]/[PERF] 🟡** `Behavior` — `public readonly`, выставляется только в ctor (`DbPreparedQueryCommand.cs:16,68-69`), «дополнить» после нельзя (`:132-134`); переиспользуя план-кэш, тот же SQL-shape может быть закэширован буферизованным (`Behavior=0`), и LOB-терминал получит буфер. Fix: дискриминатор стриминга в ключе плана, `Behavior` строится в `QueryPlanner` (`QueryPlanner.cs:437-439`).
+- **[DRY]/[PERF] 🟡** «терминал не идёт через `RowMapperFactory`» (`:102`), но `GetPreparedQueryCommand` всё равно компилирует `Func<IDataRecord,TResult>` для любого не-`DocumentMode`/не-`SingleRow&&OneColumn` (`QueryPlanner.cs:401-403`) → лишний `Expression.Compile()` + запись в `MapperCache`. Fix: no-mapper режим (аналог `DocumentMode`).
+- **[OCP]/[ISP] 🟡** `SupportsSequentialAccess` (+`SupportsGetStream`/`SupportsGetTextReader`) — поведение ADO.NET-драйвера, не SQL-диалекта; F12 уже помечал `SupportsCommandBehaviorSingleRow` кандидатом на переезд в ось исполнения (`docs/specs/design/solid-review.md:743-746`); evidence F12 устарел (1727 строк, ~103 метода, ≥63 свойства в `ISqlDialect.cs`). Deferred с триггером (ревизия F12 / driver-behavior seam).
+- **[ISP]/[KISS] 🟡** Новый публичный `ILobReader` «если нужна отдельная роль» (`:210`) при одном потребителе — нарушение инварианта 1. Fix: не заводить (или `internal`).
+- **[PERF] ℹ️** Sync-перегрузка `ToStream(..., params object[] @params)` (`:86-87`) аллоцирует массив; sync-терминалы проекта используют `params ReadOnlySpan<object?>` (`src/nextorm.core/Builders/EntityBuilderExtensions.cs:181`). Fix: `params ReadOnlySpan<object?>`.
+- **[OCP] ℹ️** LOB-чтение идёт напрямую, минуя `ResultSetEnumerator`, поэтому `IQueryInterceptor.CommandExecuting/Executed/Failed` не поднимутся, хотя гайд обещает покрытие (`docs/guide/27-interceptors.md`). Fix: поднимать события через `InterceptorHooks` (`DataContext/DataContextDependencies.cs:86-124`).
+- **ℹ️** Устаревшие якоря: `SelectExpression.cs:79-82` → `:119-122`; `:111-116` → `:155-162`; `QueryPlanner.cs:132-137` → `:437-439`.

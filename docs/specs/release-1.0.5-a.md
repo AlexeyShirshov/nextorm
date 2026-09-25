@@ -115,5 +115,5 @@
 
 - После публикации перепроверить, что все 7 пакетов `1.0.5-alpha` видны на nuget.org (индексация — от минут до часов).
 - `todo_clickhouse_aggregate_function_state.md` (§4.6) — заблокирован драйвером `ClickHouse.Driver` 1.4.0.
-- Открытые `todo_*.md` следующего скоупа: `todo_query_filters.md`, `todo_sql_batch.md`,
+- Открытые `todo_*.md` следующего скоупа: `todo_query_filters.md`,
   `todo_efcore_integration.md`, `todo_json_*`, `todo_sharding.md` и др.

@@ -57,4 +57,12 @@ public sealed record VisitorOptions(
     /// command's resolved <c>KeywordCase</c>.
     /// </summary>
     public KeywordCase KeywordCase { get; init; }
+
+    /// <summary>
+    /// A prefix prepended to the name of a parameter produced for a captured member (a closure
+    /// variable/field), so a batch can render several statements that capture variables of the same
+    /// name without their placeholders colliding. Empty for a standalone statement. Declared as an
+    /// init-only property so the record's primary constructor stays source-compatible.
+    /// </summary>
+    public string ParameterNamePrefix { get; init; } = string.Empty;
 }
