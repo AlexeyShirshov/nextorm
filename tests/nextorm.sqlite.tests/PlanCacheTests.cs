@@ -369,4 +369,37 @@ public class PlanCacheTests
             File.Delete(path);
         }
     }
+
+    /// <summary>
+    /// Alias identity of a derived table is part of the plan key through the projected
+    /// <c>PropertyName</c>s. Two projected derived sources that differ only in the exposed column name
+    /// must not share a cached plan, otherwise the second would reuse SQL aliased for the first and the
+    /// row mapper would read the wrong column.
+    /// </summary>
+    [Fact]
+    public void DerivedProjectionWithDifferentAlias_ShouldNotReuseCachedPlan()
+    {
+        var (ctx, path) = CreateDb();
+        try
+        {
+            ctx.PurgeQueryCache();
+
+            var first = ctx.From(ctx.From<ISimpleEntity>().Select(x => new { A = x.Id }))
+                .OrderByDescending(x => x.A)
+                .Select(x => new { x.A })
+                .ToList();
+            first.Should().ContainSingle().Which.A.Should().Be(42);
+
+            var second = ctx.From(ctx.From<ISimpleEntity>().Select(x => new { B = x.Id }))
+                .OrderByDescending(x => x.B)
+                .Select(x => new { x.B })
+                .ToList();
+            second.Should().ContainSingle().Which.B.Should().Be(42);
+        }
+        finally
+        {
+            ctx.Dispose();
+            File.Delete(path);
+        }
+    }
 }

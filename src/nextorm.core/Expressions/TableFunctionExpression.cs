@@ -24,6 +24,11 @@ public sealed class TableFunctionExpression
 
     /// <summary>Creates a table-function source with an in-call clause and verbatim identifier arguments.</summary>
     internal TableFunctionExpression(string name, string? schema, string? withClause, string? callClause, IReadOnlyList<int>? verbatimArguments, MethodCallExpression call)
+        : this(name, schema, withClause, callClause, verbatimArguments, call, null, TableFunctionSchema.None)
+    {
+    }
+
+    private TableFunctionExpression(string name, string? schema, string? withClause, string? callClause, IReadOnlyList<int>? verbatimArguments, MethodCallExpression call, Type? resultType, TableFunctionSchema resultSchema)
     {
         Name = name;
         Schema = schema;
@@ -31,6 +36,8 @@ public sealed class TableFunctionExpression
         CallClause = callClause;
         VerbatimArguments = verbatimArguments;
         Call = call;
+        ResultType = resultType;
+        ResultSchema = resultSchema;
     }
 
     /// <summary>SQL function name (after applying <see cref="SqlTableFunctionAttribute.Name"/>).</summary>
@@ -60,6 +67,19 @@ public sealed class TableFunctionExpression
     /// <summary>The CLR method call the FROM source was created from; its arguments are the TVF arguments.</summary>
     public MethodCallExpression Call { get; }
 
+    /// <summary>
+    /// The mapped row type (the <c>T</c> of the placeholder method's <c>IQueryable&lt;T&gt;</c> return
+    /// type) whose metadata supplies the result schema when
+    /// <see cref="ResultSchema"/> is not <see cref="TableFunctionSchema.None"/>.
+    /// </summary>
+    public Type? ResultType { get; }
+
+    /// <summary>
+    /// Where the caller-declared result schema is rendered, or <see cref="TableFunctionSchema.None"/>
+    /// when the function supplies its own result shape. See <see cref="SqlTableFunctionAttribute.ResultSchema"/>.
+    /// </summary>
+    public TableFunctionSchema ResultSchema { get; }
+
     /// <summary>The TVF argument expressions, in declaration order.</summary>
     public IReadOnlyList<Expression> Arguments => Call.Arguments;
 
@@ -78,7 +98,21 @@ public sealed class TableFunctionExpression
                 $"Method '{method.DeclaringType?.Name}.{method.Name}' is not mapped as a table-valued function. Apply [SqlTableFunction] to the method or its declaring type.");
 
         var name = string.IsNullOrEmpty(attribute.Name) ? method.Name : attribute.Name;
+        var resultType = attribute.ResultSchema == TableFunctionSchema.None ? null : ResolveResultType(method);
 
-        return new TableFunctionExpression(name, attribute.Schema, attribute.WithClause, attribute.CallClause, attribute.VerbatimArguments, call);
+        return new TableFunctionExpression(name, attribute.Schema, attribute.WithClause, attribute.CallClause, attribute.VerbatimArguments, call, resultType, attribute.ResultSchema);
+    }
+
+    // The row type is the sole generic argument of the IQueryable<T> return type. A closed generic
+    // method call and a plain IQueryable<T> return both expose it; anything else is a programming
+    // error in the placeholder declaration.
+    private static Type ResolveResultType(MethodInfo method)
+    {
+        var returnType = method.ReturnType;
+        if (returnType.IsGenericType && returnType.GetGenericTypeDefinition() == typeof(IQueryable<>))
+            return returnType.GetGenericArguments()[0];
+
+        throw new NotSupportedException(
+            $"The table function '{method.DeclaringType?.Name}.{method.Name}' declares a result schema but does not return IQueryable<T>.");
     }
 }

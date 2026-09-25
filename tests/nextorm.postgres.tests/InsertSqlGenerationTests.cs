@@ -609,6 +609,32 @@ public class InsertSqlGenerationTests
             .Should().Be("with ins as (insert into insert_entity (name, age) values (@p0, @p1) returning id, name, age, total) select id, name from ins as \"t1\"");
     }
 
+    [Fact]
+    public void Value_Range_ShouldRenderRangeParameter()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        ctx.InsertInto<IRangeEntity>()
+            .Value(x => x.Id, 1)
+            .Value(x => x.During, new Range<int>(1, 10))
+            .ToSql()
+            .Should().Be("insert into reservation (id, during) values (@p0, @p1)");
+    }
+
+    [Fact]
+    public void OutputInto_OnPostgres_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var act = () => ctx.InsertInto<IInsertEntity>()
+            .Value(x => x.Name, "a")
+            .Returning(x => new { x.Id })
+            .OutputInto("audit_log")
+            .ToSql();
+
+        act.Should().Throw<NotSupportedException>();
+    }
+
     private static string SqlOf<T>(IDataContext ctx, QueryCommand<T> cmd)
         => Normalize(((DbPreparedQueryCommand<T>)ctx.GetPreparedQueryCommand(cmd, false, false, CancellationToken.None)).DbCommand.CommandText);
 

@@ -7,7 +7,7 @@
 > [`ISqlDialect.MySqlFunctions`](xref:NextORM.Core.ISqlDialect.MySqlFunctions); other providers reject a
 > call with `NotSupportedException`.
 
-**Prerequisites:** [Scalar functions](../11-scalar-functions.md) · [MySQL provider](../../providers/mysql.md) · [MariaDB provider](../../providers/mariadb.md)
+**Prerequisites:** [Scalar functions](../../scalar-functions/index.md) · [MySQL provider](../../providers/mysql.md) · [MariaDB provider](../../providers/mariadb.md)
 
 ## Native functions
 
@@ -116,4 +116,4 @@ var rows = dataContext.From<IOrderEntity>()
 The in-memory provider cannot evaluate these native functions and rejects them with
 `NotSupportedException`; PostgreSQL, SQL Server, SQLite and ClickHouse reject the whole
 `SqlFunctions.MySql` surface the same way. Cross-provider functions with matching semantics live on
-[`SqlFunctions.Sql`](../11-scalar-functions.md); the provider-exclusive names stay here.
+[`SqlFunctions.Sql`](../../scalar-functions/index.md); the provider-exclusive names stay here.

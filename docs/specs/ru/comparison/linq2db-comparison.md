@@ -4,6 +4,7 @@
 > и [матрицу возможностей](../../comparison/capability-matrix.md) (там же рассматривается EF Core). По текущему
 > дереву видно, что на аналитической поверхности запросов nextorm не уступает linq2db, а местами превосходит
 > её — типы соединений, `APPLY`/`LATERAL`, full-text/JSON/массивы, кросс-провайдерные кортежи/row values,
+> нативные range-типы (и range поверх пары скаляров), трансляция CLR `Regex`,
 > `ROLLUP`/`CUBE`/`GROUPING SETS`, арифметика дат, временные таблицы, блокировки строк, хинты
 > запросов/таблиц/индексов, настраиваемый регистр ключевых слов, TVF и корреляция in-memory на глубине
 > один — и добавляет полную явную поверхность записи
@@ -66,6 +67,7 @@ linq2db или превосходит её — и расходятся в *мо�
 | Оконные функции (`OVER`, ranking, framed aggregates, `lag`/`lead`) | partial — нет именованных окон и кадров `GROUPS`/`EXCLUDE` | **yes** | `Visitors/WindowFunctionTranslator.cs`, `WindowDefinition`, `SupportsNamedWindows`/`SupportsWindowFrameGroups`/`SupportsWindowFrameExclusion` |
 | `CASE WHEN` / тернарный / `switch`, `COALESCE`, числовой `CAST` | yes | yes | `BaseExpressionVisitor.cs` |
 | Строковые / математические / date скалярные функции, `LIKE` | yes | **yes** — портируемые CLR-методы `string` на всех провайдерах плюс нативная библиотека строк/`regexp_*` на PostgreSQL (`SqlFunctions.Postgres`) | `Visitors/ScalarFunctionTranslator.cs`, диалектные `Make*`, `SqlFunctions.Postgres` |
+| CLR `Regex` (`IsMatch`/`Replace`, константный шаблон) | partial — открытый `linq2db#698` (трансляции `Regex.IsMatch` нет) | **yes** — PostgreSQL, MySQL/MariaDB, ClickHouse, SQLite и SQL Server 2025+ (`REGEXP_LIKE`/`REGEXP_REPLACE`; 2019/2022 отклоняют) | `Visitors/RegexSqlTranslator.cs`, `ISqlDialect.SupportsRegex`/`MakeRegexMatch`/`MakeRegexReplace` |
 | Арифметика дат (`date_add`/`date_diff`/`date_trunc`/`end_of_month`/`date_from_parts`, `DateTime.Add*`) | yes | **yes** | `CommonFunctions`, `SupportsDateTruncField`/`SupportsDateAddField`/`SupportsDateDiffField` |
 | Полнотекстовый поиск | yes (провайдер) | **yes** на SQL Server, PostgreSQL и MySQL/MariaDB | `contains`/`freetext`, `ISqlDialect.SupportsFullText`/`MakeFullText` |
 | Нативные JSON-документы | yes | **yes на PostgreSQL** | `SupportsJson`, `JsonSqlTranslator` |
@@ -73,6 +75,7 @@ linq2db или превосходит её — и расходятся в *мо�
 | Строковый JSON + функции словарей (ClickHouse) | no | **yes на ClickHouse** | `SupportsJsonExtract`, `SupportsDictionaries`, `MakeJsonExtract`/`MakeDictionaryFunction` |
 | Массивы (`cardinality`/`array_*`/`@>`/`&&`, `Array(T)` в ClickHouse, `ARRAY JOIN`) | no | **yes** на PostgreSQL и ClickHouse | `SupportsArrayFunctions`/`SupportsHigherOrderArrayFunctions`/`SupportsArrayJoin`, `ArraySqlTranslator`, `ArrayJoinClause`/`IArrayJoinRenderer.Render` |
 | Row values / кортежи (`ROW`/`(a, b)`, доступ к элементу, сравнение строк) | yes (`Sql.Row`; эмулируется там, где у провайдера нет нативного row) | **yes** на PostgreSQL и ClickHouse | `ISqlDialect.Tuple`/`ITupleRenderer`, `Visitors/TupleSqlTranslator.cs` |
+| Нативные range-типы + range поверх пары скаляров (`Range<T>`, `Overlaps`, `range_contains`, инспекция границ) | partial — только `Sql.Row.Overlaps` (нет полноценного маппинга `Range<T>`) | **yes** — нативные range/multirange-типы на PostgreSQL; **пара скалярных колонок** (`[RangeColumns]`) на SQL Server/MySQL/MariaDB/SQLite/ClickHouse | `Query/Range.cs`, `RangeColumnsAttribute`, `ISqlDialect.SupportsRanges`/`SupportsRangeColumns`, `SqlFunctions.Postgres` |
 | Условные функции (`iif`/`choose`/`multi_if`) | no | **yes** | `CommonFunctions.iif`, `SupportsChoose`, `MultiIf`/`IMultiIfRenderer.Render` |
 | `FOR JSON` / `FOR XML` | yes (провайдер) | **yes на SQL Server** | `QueryCommand.ForJson/ForXml`, `SupportsForJson`/`SupportsForXml` |
 | Методы типа XML (`.value`/`.query`/`.exist`/`.nodes`) | yes (провайдер) | **partial** — только SQL Server | `SqlServerFunctions.xml_value`/`xml_query`/`xml_exist`/`xml_nodes` |
@@ -125,17 +128,25 @@ linq2db или превосходит её — и расходятся в *мо�
 * Кросс-провайдерные row values: конструкторы `System.Tuple`/`ValueTuple`, доступ к элементу и сравнение
   строк рендерятся как `ROW(a, b)`/`(row).fN` в PostgreSQL и `tuple(a, b)`/`tupleElement` в ClickHouse,
   через `ISqlDialect.Tuple`.
+* Range-типы без нативной range-колонки: в PostgreSQL `Range<T>` маппится нативно, а у остальных
+  провайдеров хранится как пара скалярных границ (`[RangeColumns]`), и вся поверхность предикатов и
+  инспекции (`overlaps`, `range_contains`/`range_contained_by`, позиционные/смежные предикаты,
+  `lower`/`upper`/`isempty`) транслируется поверх пары — такого маппинга у linq2db нет.
 * Хинты индексов (`WithIndex`/`WithoutIndex`) в MySQL/MariaDB, SQLite и SQL Server и настраиваемый
   регистр ключевых слов SQL (`KeywordCase.Upper`) — оба включаются явно и участвуют в ключе плана.
 * Коррелированные подзапросы вычисляются построчно и у in-memory-провайдера (scalar/aggregate/`EXISTS`/`IN`
   на глубине один) в дополнение к произвольной глубине у SQL-провайдеров.
 * Переносимость между провайдерами: один и тот же C# рендерит `CROSS APPLY` в SQL Server и
   `CROSS JOIN LATERAL` в PostgreSQL/MySQL/MariaDB — через возможности `ISqlDialect`.
-* Провайдерные поверхности за тем же гейтом возможностей: нативные JSON и массивы, расширенная скалярная
-  библиотека PostgreSQL; `FOR JSON`/`FOR XML`, JSON-как-текст и `string_split`/`openjson` в SQL Server;
+* Провайдерные поверхности за тем же гейтом возможностей: нативные JSON и массивы, range/multirange-типы
+  и расширенная скалярная библиотека PostgreSQL; `FOR JSON`/`FOR XML`, JSON-как-текст и
+  `string_split`/`openjson` в SQL Server;
   `Array(T)`/`ARRAY JOIN`, `JSONExtract*`, словари, семейства quantile/`uniq`/`argMin`-`argMax`,
   `LIMIT BY`, `PREWHERE`/`FINAL`/`SETTINGS` и многофункциональный `multiIf` в ClickHouse.
 * Полнотекстовый поиск (`contains`/`freetext`) на SQL Server, PostgreSQL и MySQL/MariaDB.
+* Трансляция CLR `Regex` (`Regex.IsMatch`/`Regex.Replace`) с константным шаблоном на PostgreSQL,
+  MySQL/MariaDB, ClickHouse, SQLite и SQL Server 2025+ (`REGEXP_LIKE`/`REGEXP_REPLACE`) — открытый
+  запрос функционала в linq2db (`linq2db#698`).
 * Два пути переиспользования (неявный кэш планов и явный `Prepare()`), параметризация запросов и
   малоаллоцирующий дизайн, подтверждённый бенчмарками.
 * Производительность по бенчмаркам: на быстром (tmpfs) полном прогоне prepared-путь выигрывает все
@@ -169,9 +180,10 @@ linq2db или превосходит её — и расходятся в *мо�
   хинтами SQL Server и хинтами индексов в MySQL/MariaDB, SQLite и SQL Server.
 * **Кодогенерация под существующую БД**: linq2db поставляет CLI/T4-цепочку кодогенерации, которая
   скаффолдит маппинги сущностей и табличных функций из живой базы; nextorm объявляет маппинги в коде.
-  Источники с динамической схемой, которых у nextorm всё ещё нет (ClickHouse `values()`, PostgreSQL
-  `jsonb_to_record(set)`), не поддерживает и linq2db — это общий пробел, отслеживаемый в
-  [`todo_dynamic_result_schema.md`](../../roadmap/todo_dynamic_result_schema.md).
+  Источники с динамической схемой, которые nextorm поддерживает через объявляемую вызывающим схему
+  `TRow` (ClickHouse `values()`, PostgreSQL `jsonb_to_record(set)`,
+  [динамическая схема результата](../../../guide/13-table-valued-functions.md#dynamic-result-schema)),
+  не поддерживает и linq2db.
 * **Широта провайдеров**: linq2db добавляет Oracle, Firebird, DB2, SAP HANA, Informix, Sybase и SQL CE;
   nextorm сосредоточен на SQL Server, PostgreSQL, MySQL/MariaDB, SQLite и ClickHouse.
 * **Пакет интеграции с EF Core** и более крупная экосистема (у nextorm интеграция
@@ -212,9 +224,11 @@ linq2db квотирует по умолчанию и фиксирует име�
 ## См. также
 
 - [Матрица возможностей: nextorm vs EF Core и linq2db](../../comparison/capability-matrix.md) — исчерпывающая матрица по конструкциям.
+- [Gap-анализ открытого backlog linq2db](../../comparison/linq2db-backlog-gap-analysis.md) — что linq2db *планирует добавить* и чего из этого не хватает nextorm.
 - [SQL capabilities gap analysis](../../roadmap/sql-capabilities-gap-analysis.md) — nextorm vs EF Core и linq2db, по конструкциям.
 - [Ограничения и возможности вне области охвата](../../../advanced/limitations.md)
 - [Соединения](../../../guide/03-joins.md) — `CrossApply`/`OuterApply`.
+- [Range-колонки](../../../guide/31-range-columns.md) — `Range<T>`, хранимый как пара скалярных колонок.
 - [Хинты запросов](../../../guide/17-query-hints.md)
 - [Обзор провайдеров](../../../providers/overview.md)
 

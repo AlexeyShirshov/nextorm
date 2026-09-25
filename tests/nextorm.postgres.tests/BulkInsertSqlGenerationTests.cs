@@ -69,4 +69,44 @@ public class BulkInsertSqlGenerationTests
 
         sql.Should().Be("insert into insert_entity (name, age) values (@p0, @p1) on conflict do nothing returning id");
     }
+
+    [Fact]
+    public void BulkInsert_TableOverride_ShouldTargetOverriddenTable()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = ctx.BulkInsertInto<IInsertEntity>(o => o.Table("bulk_target")).Values([Row("a", 1)]).ToSql();
+
+        sql.Should().Be("insert into bulk_target (name, age) values (@p0, @p1)");
+    }
+
+    [Fact]
+    public void BulkInsert_TableOverrideWithSchema_ShouldQualifyTarget()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = ctx.BulkInsertInto<IInsertEntity>(o => o.Table("staging", "bulk_target")).Values([Row("a", 1)]).ToSql();
+
+        sql.Should().Be("insert into staging.bulk_target (name, age) values (@p0, @p1)");
+    }
+
+    [Fact]
+    public void BulkInsert_TableOverride_WithReturningKey_ShouldUseOverriddenTarget()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = ctx.BulkInsertInto<IInsertEntity>(o => o.Table("staging", "bulk_target")).Values([Row("a", 1)]).ReturningKey<long>().ToSql();
+
+        sql.Should().Be("insert into staging.bulk_target (name, age) values (@p0, @p1) returning id");
+    }
+
+    [Fact]
+    public void BulkInsert_KeepIdentity_OnNonIdentityEntity_ShouldNotAddOverridingSystemValue()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = ctx.BulkInsertInto<ISimpleEntity>(o => o.KeepIdentity()).Values([new SimpleEntity { Id = 7 }]).ToSql();
+
+        sql.Should().Be("insert into simple_entity (id) values (@p0)");
+    }
 }

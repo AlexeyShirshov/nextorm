@@ -48,9 +48,9 @@ in [`sql-function-coverage-gap.md`](sql-function-coverage-gap.md).
 > | 31 | Transactions (`ITransactionManager`): nextorm-owned and enlisted (EF Core/Dapper/ADO.NET) transaction | **Done** on SQLite/PostgreSQL/SQL Server/MySQL/MariaDB; ClickHouse and in-memory reject |
 > | 32 | Row-locking wait modes (`NOWAIT`/`SKIP LOCKED`) | **Done** (PostgreSQL/MySQL/MariaDB/SQL Server; SQLite/ClickHouse/in-memory reject) |
 > | 33 | Global query filters (soft-delete / multi-tenancy) | **Planned** ([`todo_query_filters.md`](todo_query_filters.md)) |
-> | 34 | C# string semantics (ordinal compare, format specifiers, culture; linq2db gap G12) | **Done** ([Ordinal comparison and collation](../../guide/11-scalar-functions.md#ordinal-comparison-and-collation)) |
-> | 35 | CLR `Regex` (`IsMatch`/`Replace`) → provider-native regex | **Done on PostgreSQL, MySQL/MariaDB, ClickHouse and SQLite**; SQL Server has no regex engine and rejects ([`SupportsRegex`](xref:NextORM.Core.ISqlDialect.SupportsRegex), [Regular expressions](../../guide/11-scalar-functions.md#regular-expressions)) |
-> | 36 | Cross-provider string / numeric scalar wrappers (`left`/`right`, `lpad`/`rpad`, `repeat`, `reverse`, `space`, `translate`, `concat_ws`, `ascii`/`char`, `mod`, `log10`, `power`) | **Done** ([Scalar functions](../../guide/11-scalar-functions.md#cross-provider-scalar-functions), [`IScalarFunctions`](xref:NextORM.Core.IScalarFunctions)) |
+> | 34 | C# string semantics (ordinal compare, format specifiers, culture; linq2db gap G12) | **Done** ([Ordinal comparison and collation](../../scalar-functions/01-string-functions.md#ordinal-comparison-and-collation)) |
+> | 35 | CLR `Regex` (`IsMatch`/`Replace`) → provider-native regex | **Done on PostgreSQL, MySQL/MariaDB, ClickHouse, SQLite and SQL Server 2025+** (`REGEXP_LIKE`/`REGEXP_REPLACE`; the match needs database compatibility level 170) ([`SupportsRegex`](xref:NextORM.Core.ISqlDialect.SupportsRegex), [Regular expressions](../../scalar-functions/01-string-functions.md#regular-expressions)) |
+> | 36 | Cross-provider string / numeric scalar wrappers (`left`/`right`, `lpad`/`rpad`, `repeat`, `reverse`, `space`, `translate`, `concat_ws`, `ascii`/`char`, `mod`, `log10`, `power`) | **Done** ([Scalar functions](../../scalar-functions/01-string-functions.md#cross-provider-scalar-functions), [`IScalarFunctions`](xref:NextORM.Core.IScalarFunctions)) |
 > | 37 | Per-provider built-in function gaps (PostgreSQL / SQL Server / MySQL / MariaDB / SQLite / ClickHouse) | **Partly done** — SQLite shipped (`SqlFunctions.Sqlite`, item 41); the PostgreSQL / SQL Server / MySQL / MariaDB / ClickHouse todos remain (items 37–42 in [Remaining gaps](#4-remaining-gaps-in-order-of-significance)) |
 >
 > Test coverage after the section 1–26 work is **85.4% line / 74.6% branch** (CI threshold 75%); that run
@@ -145,16 +145,16 @@ These are fully implemented and covered by SQL-generation or integration tests:
   `left`/`right`, `lpad`/`rpad`, `repeat`, `reverse`, `initcap`, `translate`, `overlay`, `concat_ws`,
   `format`) and the POSIX `regexp_like`/`regexp_replace`/`regexp_count`/`regexp_instr`/
   `regexp_split_to_array` family via `SqlFunctions.Postgres`, gated by `SupportsExtendedScalarFunctions`;
-  the portable surface is the CLR `string` methods. See [Scalar functions](../../guide/11-scalar-functions.md#string-and-regular-expression-extensions-postgresql).
+  the portable surface is the CLR `string` methods. See [Scalar functions](../../scalar-functions/01-string-functions.md#string-and-regular-expression-extensions-postgresql).
 * **Regular expressions from the CLR API** — `Regex.IsMatch`/`Regex.Replace` with a compile-time
   constant pattern translate to the provider's native regex on PostgreSQL (`~`/`~*`,
   `regexp_replace`), MySQL (`regexp_like`/`regexp_replace`), MariaDB (`REGEXP`, `regexp_replace`),
-  ClickHouse (`match`/`replaceRegexpAll`) and SQLite (`regexp`/`regexp_replace`); SQL Server has no
-  regex engine and rejects the call. Gated by
+  ClickHouse (`match`/`replaceRegexpAll`), SQLite (`regexp`/`regexp_replace`) and SQL Server 2025+
+  (`REGEXP_LIKE`, `REGEXP_REPLACE`; the match needs database compatibility level 170). Gated by
   [`SupportsRegex`](xref:NextORM.Core.ISqlDialect.SupportsRegex) with the
   `MakeRegexMatch`/`MakeRegexReplace` hooks; only `RegexOptions.IgnoreCase` changes the SQL and the
   pattern itself follows each engine's dialect. See
-  [Regular expressions](../../guide/11-scalar-functions.md#regular-expressions).
+  [Regular expressions](../../scalar-functions/01-string-functions.md#regular-expressions).
 * **Crypto hashes** — `SqlFunctions.Postgres.md5`, `digest(data, type)` (requires the `pgcrypto`
   extension) and `sha256(bytes)`, gated by `SupportsCryptoFunctions` (PostgreSQL only; SQL
   Server/MySQL/ClickHouse expose native SHA-256 under different names/return types, so a
@@ -185,11 +185,13 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
    Todo: [`todo_clickhouse_aggregate_function_state.md`](todo_clickhouse_aggregate_function_state.md).
 11. **Dynamic-schema and server-scoped table sources.** The ClickHouse server/cluster table functions
     `url`/`s3`/`file`/`remote`/`remoteSecure`/`cluster`/`clusterAllReplicas` are shipped on
-    `SqlFunctions.ClickHouse.*` with a generic caller-declared `TRow` row interface; the dynamic-schema
-    `format`/`merge`/`input` remain on this item. Still open: ClickHouse `values()` (dynamic schema) and
-    PostgreSQL `jsonb_to_record(set)`.
-    Todo: [`todo_dynamic_result_schema.md`](todo_dynamic_result_schema.md).
-    Shipped: [Table-valued functions](../../guide/13-table-valued-functions.md#built-in-table-functions).
+    `SqlFunctions.ClickHouse.*` with a generic caller-declared `TRow` row interface. **Shipped:** the
+    caller-declared result schema (`TableFunctionSchema`/`ResultSchema`) and its two native forms —
+    ClickHouse `values('a UInt8, b String', ...)` and PostgreSQL
+    `jsonb_to_record`/`jsonb_to_recordset(json) AS x(a int, b text)`; other providers reject them with
+    `NotSupportedException`. Remaining on this item: the dynamic-schema `format`/`merge`/`input` and
+    PostgreSQL `json_populate_record(set)`.
+    Shipped: [Dynamic result schema](../../guide/13-table-valued-functions.md#dynamic-result-schema).
 24. **DDL/DML + reading query in one SQL batch (pgbouncer-safe CTAS) — done.** `ToTempTableThen`/
     `ToTableThen` (and the general `BatchBuilder`) send a materialisation and the reading query as **one
     batch**, so the session-scoped table is visible to the read under a connection-level pooler
@@ -203,8 +205,7 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
 33. **Global query filters (soft-delete / multi-tenancy) — planned.** A per-entity predicate is
     auto-injected into every query over the entity (primary `FROM`, joins, subqueries), can read the
     `IDataContext` (soft-delete flag, tenant) and is disabled per query via `IgnoreFilters()`. Requires
-    the filter identity in the plan-cache key and per-context scoping (see
-    [`todo_interceptors.md`](todo_interceptors.md), Phase 2).
+    the filter identity in the plan-cache key and per-context scoping.
     Todo: [`todo_query_filters.md`](todo_query_filters.md).
 36. **Cross-provider string / numeric scalar wrappers — shipped.** Regular expressions are already
     translated from the CLR API across providers and were moved to the
@@ -217,16 +218,15 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
     and the in-memory provider evaluates the calls through CLR equivalents. `format` and the native
     PostgreSQL `regexp_*` library stay provider-specific. The full per-provider inventory is in
     [`sql-function-coverage-gap.md`](sql-function-coverage-gap.md).
-    Shipped: [Scalar functions](../../guide/11-scalar-functions.md#cross-provider-scalar-functions) (+RU).
+    Shipped: [Scalar functions](../../scalar-functions/01-string-functions.md#cross-provider-scalar-functions) (+RU).
 37. **PostgreSQL built-in function gaps — done.** Hash extensions (`sha224`/`sha384`/`sha512`),
     `regexp_substr`, `make_time`/`make_timestamp` (with `make_date` already covered by the portable
     `date_from_parts`), `age`/`date_bin`, `current_setting`/`set_config`, sequences
     (`nextval`/`setval`/`currval`/`lastval`) and the SQL/JSON scalars/constructors
     (`json_array`/`jsonb_array`, `json_value`/`json_query`/`json_exists(json, path, fromJsonPath)`) are
     now on `SqlFunctions.Postgres`, gated by the existing PostgreSQL-only capability flags.
-    Shipped: [Scalar functions](../../guide/11-scalar-functions.md#string-and-regular-expression-extensions-postgresql)
+    Shipped: [Scalar functions](../../scalar-functions/01-string-functions.md#string-and-regular-expression-extensions-postgresql)
     and [JSON and JSONB](../../guide/18-json.md) (+RU).
-    Plan: [`todo_postgres_function_gaps.md`](todo_postgres_function_gaps.md).
 38. **SQL Server built-in function gaps — shipped.** `PATINDEX`, `QUOTENAME`, `SOUNDEX`, `DIFFERENCE`,
     `STRING_ESCAPE`, `FORMAT`, `DATENAME`, `DATE_BUCKET`, `HASHBYTES`, `NEWSEQUENTIALID`, `UNICODE`/`NCHAR`,
     `SQUARE`, the trigonometric functions and the SQL Server JSON constructors/aggregates
@@ -234,21 +234,18 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
     exposed through `SqlServerFunctions` / `ISqlServerFunctions`; `ASCII`/`CHAR`/`TRANSLATE` inherit from
     `CommonFunctions` (item 36), and `LOG10` stays on `Math.Log10`. Shipped:
     [`guide/provider-specific/sqlserver.md`](../../guide/provider-specific/sqlserver.md#t-sql-scalar-functions) (+RU).
-    Todo: [`todo_sqlserver_function_gaps.md`](todo_sqlserver_function_gaps.md).
 39. **MySQL built-in function gaps — done.** `SqlFunctions.MySql` (`MySqlFunctions`) is new;
     `FIND_IN_SET`, `FIELD`, `ELT`, `SUBSTRING_INDEX`, `FORMAT`, `STR_TO_DATE`, `DATE_FORMAT`,
     `FROM_UNIXTIME`, `UNIX_TIMESTAMP`, `MD5`/`SHA1`/`SHA2`, `INET_ATON`/`INET_NTOA`, the JSON mutation
     family and `UUID_TO_BIN`/`BIN_TO_UUID` render natively, gated per name by `ISqlDialect.MySqlFunctions`;
     MariaDB inherits the surface except `UUID_TO_BIN`/`BIN_TO_UUID`. See
     [MySQL and MariaDB-specific SQL](../../guide/provider-specific/mysql.md).
-    Todo: [`todo_mysql_function_gaps.md`](todo_mysql_function_gaps.md) (shipped).
 40. **MariaDB built-in function gaps — done.** On top of the MySQL set: `REGEXP_INSTR`/`REGEXP_REPLACE`/
     `REGEXP_SUBSTR`, `NVL`/`NVL2`, `ADD_MONTHS`, `MONTHS_BETWEEN`, `TO_CHAR`/`TO_DATE`/`TO_NUMBER`, `KDF`,
     `XXH3`/`XXH32`, `JSON_DETAILED`/`JSON_COMPACT` and the sequence functions (`NEXT VALUE FOR`/`NEXTVAL`/
     `SETVAL`/`LASTVAL`) are members of `SqlFunctions.MySql`, supported per name by
     `MariaDbDialect.MySqlFunctions` and rejected by MySQL. See
     [MySQL and MariaDB-specific SQL](../../guide/provider-specific/mysql.md#mariadb).
-    Todo: [`todo_mariadb_function_gaps.md`](todo_mariadb_function_gaps.md) (shipped).
 41. **SQLite built-in function gaps — shipped.** `SqlFunctions.Sqlite` (`SqliteFunctions`) plus
     `ISqlDialect.SqliteFunctions` cover the core scalars (`printf`/`format`, `hex`/`unhex`,
     `random`/`randomblob`, `quote`, `typeof`, `glob`, `unicode`/`char`, `soundex`, `octet_length`,
@@ -256,38 +253,74 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
     `json_each`, `json_tree` and the rest), the date helpers (`timediff`, `unixepoch`, `julianday`) and
     the math-extension functions; other providers reject with `NotSupportedException`.
     Docs: [SQLite-specific SQL](../../guide/provider-specific/sqlite.md) (EN+RU).
-42. **ClickHouse built-in function gaps — planned.** `lowerUTF8`/`upperUTF8`, `trim*`, `replaceRegexp*`,
+42. **ClickHouse built-in function gaps — done.** `lowerUTF8`/`upperUTF8`, `trim*`, `replaceRegexp*`,
     `match`/`extract`, `splitByString`, `formatDateTime`/`parseDateTime`, `now`/`today`/`yesterday`, the
     `map*` family, `arrayConcat`/`arrayFlatten`/`arrayUniq`/`arrayIntersect`, the `groupBitmap`/`sumMap`
-    aggregates, the hash family and `generateULID` are missing from `SqlFunctions.ClickHouse`.
-    Todo: [`todo_clickhouse_function_gaps.md`](todo_clickhouse_function_gaps.md).
-43. **Captured-local parameter binding — planned.** A captured local referenced more than once in a
-    `Where` over a join, or living only inside a joined derived subquery, is rendered into the SQL but
-    never registered with the prepared command (`Must add values for the following parameters`); the
-    ports had to give each local a single reference or move the filter to the outer query.
-    Todo: [`todo_captured_local_parameter_binding.md`](todo_captured_local_parameter_binding.md).
-44. **Derived-table alias resolution — planned.** Joining a builder that carries a `Where` renders the
-    primary source as a derived table with renamed columns while the `ON` still references the raw
-    column (`no such column: t1.product_id`); ordering over a derived table built from a projected query
-    emits a non-existent alias (`order by t3.OrderTotal` while the derived table is `t1`). Both share the
-    alias-identity root.
-    Todo: [`todo_derived_table_alias_resolution.md`](todo_derived_table_alias_resolution.md).
-45. **Correlated `EXISTS` on the right of `||` — planned.** Preparation throws
-    `The binary operator OrElse is not defined for the types 'System.Boolean' and 'System.Func<…>'` when
-    a correlated `EXISTS` follows `||`; the port resolves the subquery first and applies `Contains`.
-    Todo: [`todo_correlated_exists_orelse.md`](todo_correlated_exists_orelse.md).
-46. **Paging and expression ordering on a projected `QueryCommand<T>` — planned.** After terminal
-    `Select` there is no `Page`/`Limit`/`Offset` and no expression `OrderByDescending` (only ordinal
-    `OrderBy*`), so grouped + ordered + paged queries must sort/page on the builder before `Select`.
-    Todo: [`todo_projected_query_paging_ordering.md`](todo_projected_query_paging_ordering.md).
-47. **Runtime bulk-insert destination-table override — planned.** The target table is fixed by
-    `[SqlTable]`, so linq2db's `BulkCopyOptions { TableName = "…" }` has no equivalent and a dedicated
-    type mapping the destination is needed.
-    Todo: [`todo_bulk_insert_destination_table.md`](todo_bulk_insert_destination_table.md).
-48. **`KeepIdentity()` on a non-identity table — planned.** On SQL Server `SET IDENTITY_INSERT` fails
-    with error 8106, while linq2db accepts `BulkCopyOptions { KeepIdentity = true }` unconditionally;
-    the semantics (silent ignore vs prepare-time error) must be defined.
-    Todo: [`todo_bulk_insert_keep_identity.md`](todo_bulk_insert_keep_identity.md).
+    aggregates, the hash family and `generateULID` are now on `SqlFunctions.ClickHouse` (gated by the
+    ClickHouse-only capability flags). Docs:
+    [ClickHouse-specific SQL](../../guide/provider-specific/clickhouse.md) (EN+RU, #78).
+43. **Captured-local parameter binding (repeated references) — Done (`1.0-b.1`).** A captured local
+    reachable from the final SQL is now registered exactly once — repeated occurrences reuse the same
+    `@pN`, and a local living only inside a joined derived subquery binds too. Previously the command
+    failed (`Must add values for the following parameters`) or declared the same `@pN` twice
+    (MySQL/SQL Server); PostgreSQL passed; verified on SQLite/MySQL/SQL Server. The sibling case (local
+    only inside a joined derived subquery) was fixed in `1.0.6-alpha`. Docs:
+    [Filtering](../../guide/02-filtering-where.md), [Subqueries](../../guide/06-subqueries.md).
+44. **Derived-table alias resolution — Done (`1.0-b.1`).** A derived source is now always aliased and its
+    exposed column names are the single source of truth, so
+    `From(projected).OrderByDescending(x => x.Count)` references the real alias; previously it emitted a
+    non-existent column (`no such column: t1.Count`) on SQLite while PostgreSQL/MySQL/SQL Server rendered
+    the same plan correctly. Alias identity is part of the plan key. The sibling case (joining a builder
+    that carries a `Where`) was fixed in `1.0.6-alpha`. Docs: [Joins](../../guide/03-joins.md),
+    [Sorting and paging](../../guide/05-sorting-and-paging.md).
+45. **Correlated `EXISTS` on the right of `||` — Done (`1.0-b.1`).** `x.Any(...) || y.Any(...)`,
+    `A && B.Any(...)` and `!A.Any(...)` now translate to `EXISTS ... OR EXISTS ...` / `AND` /
+    `NOT EXISTS`; previously preparation threw `The binary operator OrElse is not defined for the types
+    'System.Boolean' and 'System.Func<…>'`. In-memory supports depth one.
+    Docs: [Subqueries](../../guide/06-subqueries.md).
+46. **Paging and expression ordering on a projected `QueryCommand<T>` — Done (`1.0-b.1`).**
+    `QueryCommand<T>` now exposes expression `OrderBy`/`OrderByDescending` plus `Limit`/`Offset`/`Page`
+    over the already-selected columns, on every SQL provider; grouped + ordered + paged queries no longer
+    have to sort/page on the builder before `Select`.
+    Docs: [Sorting and paging](../../guide/05-sorting-and-paging.md).
+47. **Runtime bulk-insert destination-table override — Done (`1.0-b.1`).**
+    `BulkInsertOptions.TableName`/`TableSchema` and `BulkInsertOptionsBuilder.Table(...)` retarget the
+    destination at runtime (native `COPY`/`SqlBulkCopy` and portable `INSERT ... VALUES`); the override is
+    part of the plan key, so a dedicated type mapping the destination is no longer required.
+    Docs: [Bulk insert](../../guide/24-bulk-insert.md).
+48. **`KeepIdentity()` on a non-identity table — Done (`1.0-b.1`).** `KeepIdentity()` is effective only
+    when the mapping declares an identity column (silent ignore, matching linq2db); `SET IDENTITY_INSERT`
+    / `OVERRIDING SYSTEM VALUE` is not emitted for a non-identity table, so SQL Server no longer raises
+    error 8106 (previously verified on SQL Server; other providers tolerated the call).
+    Docs: [Bulk insert](../../guide/24-bulk-insert.md).
+49. **Eager loading of a graph (`LoadWith`/`Include`) — out of scope, tracked.** nextorm has no
+    navigation properties (workstream 13), so linq2db's `LoadWith(x => x.Children)` and EF's `Include`
+    have no equivalent and a graph is loaded one level per query and stitched in memory (verified: the
+    API is absent on every provider). Either a minimal level-one `LoadWith` is added, or the out-of-scope
+    decision is recorded.
+    Todo: [`todo_eager_loading.md`](todo_eager_loading.md).
+50. **Captured collection lookup (`dict[column]`) — Done (`1.0-b.1`).** Indexing a closed-over
+    `Dictionary`/`List`/array by a query expression (jube's
+    `y.ScheduleDate > tenants[y.TenantRegistryId.Value]`) now translates to a portable
+    `CASE WHEN key = @k THEN @v … END`; a constant key folds to a parameter, and the in-memory context
+    evaluates the indexer natively. The collection may be declared as an interface (`IReadOnlyList<T>`,
+    `IReadOnlyDictionary<TKey,TValue>`, `IList<T>`, `IDictionary<TKey,TValue>` and the immutable
+    collections), recognised by its static type whether or not it is also a non-generic `IList`/`IDictionary`.
+    An unsupported indexer (server-side array/JSON element access, a custom indexer) now throws
+    `NotSupportedException` instead of binding the whole collection as a parameter (the previous silent
+    wrong SQL, G17 in the [linq2db backlog gap analysis](../comparison/linq2db-backlog-gap-analysis.md)).
+    The entry count is part of the plan key.
+    Docs: [Filtering](../../guide/02-filtering-where.md#captured-collection-lookup-dictcolumn),
+    [Limitations](../../advanced/limitations.md).
+51. **PostgreSQL range types and `Overlaps` (`&&`) — shipped (`1.0-b.1`).** A provider-agnostic
+    `NextORM.Core.Range<T>` (`Lower`/`Upper`, bound inclusivity, unbounded sides, `IsEmpty`, `Empty`)
+    maps to `int4range`/`int8range`/`numrange`/`tsrange`/`tstzrange`/`daterange`; the PostgreSQL provider
+    binds it through Npgsql and reads it back with a typed `GetFieldValue<NpgsqlRange<T>>`. The
+    PostgreSQL-only surface on `SqlFunctions.Postgres` (`overlaps`, `range_contains`/`range_contained_by`,
+    the positional/adjacency/union/intersection/difference operators, `lower`/`upper`/`isempty` and the
+    constructors) is gated by `ISqlDialect.SupportsRanges`; the in-memory provider evaluates the
+    predicates with PostgreSQL semantics. Docs:
+    [PostgreSQL-specific SQL](../../guide/provider-specific/postgresql.md#range-types) (EN+RU).
 
 ---
 
@@ -296,6 +329,23 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
 > Shipped, closed-by-decision and out-of-scope gaps, kept as a status ledger (not action items). Item
 > numbers are stable IDs carried over from the original list; the live gaps are in
 > [Remaining gaps](#4-remaining-gaps-in-order-of-significance).
+>
+> **Fixed in `nextorm 1.0.6-alpha`** (verified by the `Gaps/` harness in `~/sources/linq2db-apps-nextorm`;
+> the README workarounds were removed and these now run as written):
+>
+> * **§4 п.43, sibling case** — a captured local living only inside a joined derived subquery now binds.
+> * **§4 п.44, sibling case** — joining a builder that carries a `Where` now aliases its `ON` correctly.
+> * **Correlated collection predicate** (OData `Items/any`, a correlated `EXISTS` over a collection
+>   navigation) now translates; the resolve-ids + `Contains` rewrite is gone.
+>
+> **Fixed in `nextorm 1.0-b.1`** (remaining cases of §4 п.43–48 and п.50; see the linked guide pages):
+>
+> * **§4 п.43** — repeated captured-local references bind once (same `@pN`).
+> * **§4 п.44** — derived sources are always aliased; projected ordering/paging resolves the real alias.
+> * **§4 п.45** — a correlated `EXISTS` combines with `||`/`&&`/`!`.
+> * **§4 п.46** — expression ordering and paging on a projected `QueryCommand<T>`.
+> * **§4 п.47/48** — runtime bulk destination override; `KeepIdentity()` on a non-identity table.
+> * **§4 п.50** — a captured collection indexed by a query expression (`dict[column]`) translates to a portable `CASE`.
 
 1. **Correlated subqueries — shipped, including the in-memory provider (depth one).** Correlation works
    at any nesting depth for scalar subqueries, aggregate terminals and `EXISTS`/`IN`/`ANY`/`ALL` in
@@ -346,14 +396,14 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
    Shipped: [ClickHouse provider](../../providers/clickhouse.md),
    [Provider-specific SQL](../../guide/provider-specific/clickhouse.md#aggregates),
    [Grouping and aggregates](../../guide/04-grouping-and-aggregates.md),
-   [Scalar functions](../../guide/11-scalar-functions.md#arrays-clickhouse).
+   [Scalar functions](../../scalar-functions/06-arrays.md#arrays-clickhouse).
 5. **ClickHouse higher-order array functions — shipped.** `arrayMap`/`arrayFilter`/`arrayExists`/
    `arrayAll`/`arrayCount`/`arrayFirst*`/`arrayLast*` translate an inline lambda argument
    (`ClickHouseFunctions.array_map`/`array_filter`/`array_exists`/`array_all`/`array_count`/
    `array_first`/`array_first_index`/`array_last`/`array_last_index`) under
    [`SupportsHigherOrderArrayFunctions`](xref:NextORM.Core.ISqlDialect.SupportsHigherOrderArrayFunctions);
    other providers throw `NotSupportedException`.
-   Shipped: [Scalar functions](../../guide/11-scalar-functions.md#arrays-clickhouse),
+   Shipped: [Scalar functions](../../scalar-functions/06-arrays.md#arrays-clickhouse),
    [Provider-specific SQL](../../guide/provider-specific/clickhouse.md).
 7. **ClickHouse native `JSON` type — shipped.** The JSONPath scalars `JSON_VALUE`/`JSON_QUERY`/
    `JSON_EXISTS` and the native-JSON functions `JSONAllPaths`/`JSONAllPathsWithTypes`/`toJSONString` are
@@ -374,7 +424,7 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
     under `SupportsArrayFunctions`; `length`/`position` over arrays map to `length`/`indexOf`
     ([`ClickHouseFunctions.length`](xref:NextORM.Core.ClickHouseFunctions.length)/`index_of`). Other
     providers throw `NotSupportedException`.
-    Shipped: [Scalar functions](../../guide/11-scalar-functions.md#arrays-clickhouse),
+    Shipped: [Scalar functions](../../scalar-functions/06-arrays.md#arrays-clickhouse),
     [Provider-specific SQL](../../guide/provider-specific/clickhouse.md).
 10. **Typed column access by name — shipped.** `SqlFunctions.Column<T>(entity, "name")` projects a
     column of a mapped entity that has no property (wide ClickHouse tables such as `hits_v1`); the
@@ -451,6 +501,13 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
     is query-only (only the key upsert), and change tracking/`SaveChanges` and navigation properties stay out
     of scope by design.
     Shipped: [Data modification (INSERT)](../../guide/19-insert-statement.md), [Upsert (key merge)](../../guide/23-merge-statement.md#upsert-key-merge), [Full MERGE](../../guide/23-merge-statement.md#full-merge), [Delete](../../guide/20-delete-statement.md), [Update](../../guide/21-update-statement.md).
+    Phases 1 and 3 of [`todo_output_into.md`](todo_output_into.md) also shipped: SQL Server
+    `OUTPUT ... INTO` (`Returning(...).OutputInto(target)` writes the modified rows into an existing table;
+    `OutputIntoThenOutput(target)` also returns them) and key-upsert `Returning()`
+    (`ON CONFLICT ... RETURNING` on PostgreSQL/SQLite, `MERGE ... OUTPUT` on SQL Server; MySQL/MariaDB
+    reject it). Phase 2 (several result sets from one command) stays deferred: the batch executor already
+    navigates past the side-effecting statements' empty sets but exposes only the single reading query.
+    Shipped: [Writing the modified rows into a table](../../guide/19-insert-statement.md#writing-the-modified-rows-into-a-table-output-into), [Returning the merged rows](../../guide/23-merge-statement.md#returning-the-merged-rows).
 19. **Server/engine limits** (not fixable in nextorm): SQL Server has no `INTERSECT ALL`/`EXCEPT ALL`
     (the dialect correctly throws `NotSupportedException`); the ClickHouse `Memory` engine does not
     support `FINAL`/`PREWHERE`/`SAMPLE` (an integration-test limitation, not missing functionality).
@@ -485,7 +542,7 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
     construct, an inline constructor's `.ItemN` folds to the argument, and `System.Tuple<,> ==` is
     reinterpreted as a row-value comparison. Still open: tuple `IN`/`Contains`, raw `ROW(...)`
     materialisation on PostgreSQL (`EnableRecords()`), and the `(a, b)` constructor on MySQL/MariaDB/SQLite.
-    Shipped: [Scalar functions](../../guide/11-scalar-functions.md).
+    Shipped: [Scalar functions](../../scalar-functions/index.md).
 23. **Bulk insert / bulk copy — shipped, hybrid native + portable fallback.** `BulkInsertInto<T>()` writes a
     large set through the provider's native API where one exists (PostgreSQL `COPY BINARY`, SQL Server
     `SqlBulkCopy`) and otherwise falls back to a chunked multi-row `INSERT ... VALUES` (SQLite, and
@@ -515,19 +572,19 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
     collation. Column-level collation (nextorm `#28`) also shipped: a collation declared on a mapped
     property (`CollationAttribute`/`EntityPropertyBuilder<T>.Collation`) is applied in collation-sensitive
     query operations through the same `MakeCollate` foundation, gated by `SupportsCollation` (ClickHouse
-    rejects it). See [Scalar functions](../../guide/11-scalar-functions.md#ordinal-comparison-and-collation)
+    rejects it). See [Scalar functions](../../scalar-functions/01-string-functions.md#ordinal-comparison-and-collation)
     and [Limitations](../../advanced/limitations.md); tracked as G12 in
     [`linq2db-backlog-gap-analysis.md`](../comparison/linq2db-backlog-gap-analysis.md).
 35. **Cross-provider regular-expression translation — shipped.** `Regex.IsMatch`/`Regex.Replace` with a
     compile-time constant pattern translate to the provider's native regex on PostgreSQL (`~`/`~*`,
     `regexp_replace`), MySQL (`regexp_like`/`regexp_replace`), MariaDB (`REGEXP`, `regexp_replace`),
-    ClickHouse (`match`/`replaceRegexpAll`) and SQLite (`regexp`/`regexp_replace`); SQL Server has no
-    regex engine and rejects the call. Gated by
+    ClickHouse (`match`/`replaceRegexpAll`), SQLite (`regexp`/`regexp_replace`) and SQL Server 2025+
+    (`REGEXP_LIKE`, `REGEXP_REPLACE`; the match needs database compatibility level 170). Gated by
     [`SupportsRegex`](xref:NextORM.Core.ISqlDialect.SupportsRegex) with the
     `MakeRegexMatch`/`MakeRegexReplace` hooks. Only `RegexOptions.IgnoreCase` changes the SQL; the
     pattern itself follows each engine's dialect (RE2/ARE/ICU/PCRE/.NET) and is therefore not portable
     as written.
-    Shipped: [Regular expressions](../../guide/11-scalar-functions.md#regular-expressions).
+    Shipped: [Regular expressions](../../scalar-functions/01-string-functions.md#regular-expressions).
 
 ## 6. Implementation plan
 
@@ -570,9 +627,9 @@ developed in parallel on the same working tree.
 | 31 | Transactions (`ITransactionManager`): nextorm-owned and enlisted (EF Core / Dapper / ADO.NET) transaction, `DbCommand.Transaction` on every execution path | **Done** ([Transactions](../../guide/25-transactions.md)) | `DataContext/Roles/ITransactionManager.cs`, `DataContext/DbConnectionManager.cs`, `DataContext/{DataContext,QueryExecutor,ResultSetEnumerator}.cs`, `DataContext/Cache/DbPreparedQueryCommand.cs`, `DataContext/Dialect/*` | `TransactionTests.cs` (SQLite core + ClickHouse), `CommonTestSuite.Transactions.cs`, `EfCoreSharedTransactionTests.cs` |
 | 32 | Row-locking wait modes (`NOWAIT`/`SKIP LOCKED`) | **Done** ([Row locking](../../guide/01-querying-and-projections.md#row-locking-for-update--for-share)) | `DataContext/Dialect/DialectCapabilities.cs`, `DataContext/SqlBuilder.cs`, `Query/QueryPlanEqualityComparer.cs`, `Builders/EntityBuilder.cs`, `Query/{LockClause,LockWaitMode}.cs`, `nextorm.{postgres,mysql,mariadb,sqlserver}/*Dialect.cs` | SQL-generation tests; `CommonTestSuite.Locking.cs` two-transaction `SKIP LOCKED` |
 | 33 | Global query filters (soft-delete / multi-tenancy) | **Planned** ([`todo_query_filters.md`](todo_query_filters.md)) | new `Meta/QueryFilterAttribute.cs`, `Meta/IQueryFilterMetadata.cs`; edits `Meta/{IEntityMetadata,EntityMetadataBuilder}.cs`, `DataContext/DataContextExtensions.cs`, `Query/QueryCommand.QueryPreparer.cs`, `DataContext/QueryPlanner.cs`, `Query/QueryPlanEqualityComparer.cs`, `Builders/EntityBuilder.cs`, `DataContext/InMemoryDataContext.cs` | new `tests/nextorm.core.tests/QueryFilterTests.cs`; `CommonTestSuite` (soft-delete/multi-tenant) |
-| 34 | C# string semantics (ordinal compare, format specifiers, culture; G12) | **Done** ([Ordinal comparison and collation](../../guide/11-scalar-functions.md#ordinal-comparison-and-collation)) | `Visitors/StringFunctionTranslator.cs`, `Visitors/ScalarFunctionTranslator.cs`, `Visitors/BaseExpressionVisitor.cs`, `DataContext/Dialect/{ISqlDialect,SqlDialectBase,DialectCapabilities}.cs`, `Query/SqlFunctions.cs`, new `Visitors/StringFormatTranslator.cs`, `Visitors/CompositeFormat.cs`, `DataContext/InMemoryStringFunctionRewriter.cs`, provider `*Dialect.cs` | SQL-generation tests per provider; `CommonTestSuite.StringSemantics.cs` ordinal/format; `InMemoryStringSemanticsTests.cs` |
-| 35 | CLR `Regex` (`IsMatch`/`Replace`) → provider-native regex | **Done** on PostgreSQL/MySQL/MariaDB/ClickHouse/SQLite; SQL Server rejects ([Regular expressions](../../guide/11-scalar-functions.md#regular-expressions)) | `Visitors/RegexSqlTranslator.cs`, `DataContext/Dialect/{ISqlDialect,SqlDialectBase}.cs`, `Visitors/ScalarFunctionTranslator.cs`, provider `*Dialect.cs` | per-provider `StringSemanticsSqlGenerationTests.cs`, `CommonTestSuite.Functions.cs`, `InMemoryStringSemanticsTests.cs` |
-| 36 | Cross-provider string / numeric scalar wrappers (`left`/`right`, `lpad`/`rpad`, `repeat`, `reverse`, `space`, `translate`, `concat_ws`, `ascii`/`char`, `mod`, `log10`, `power`) | **Done** ([Scalar functions](../../guide/11-scalar-functions.md#cross-provider-scalar-functions)) | `Query/SqlFunctions.cs`, `DataContext/Dialect/{ISqlDialect,SqlDialectBase,DialectCapabilities}.cs` (`IScalarFunctions`), `Visitors/BuiltinFunctionTranslator.cs`, `Visitors/MathFunctionTranslator.cs`, `DataContext/{InMemoryScalarFunctions,InMemoryScalarFunctionRewriter}.cs`, provider `*Dialect.cs` | per-provider `CrossProviderScalarSqlGenerationTests.cs`; `CommonTestSuite.CrossProviderScalarFunctions.cs`; `InMemoryScalarFunctionsTests.cs` |
+| 34 | C# string semantics (ordinal compare, format specifiers, culture; G12) | **Done** ([Ordinal comparison and collation](../../scalar-functions/01-string-functions.md#ordinal-comparison-and-collation)) | `Visitors/StringFunctionTranslator.cs`, `Visitors/ScalarFunctionTranslator.cs`, `Visitors/BaseExpressionVisitor.cs`, `DataContext/Dialect/{ISqlDialect,SqlDialectBase,DialectCapabilities}.cs`, `Query/SqlFunctions.cs`, new `Visitors/StringFormatTranslator.cs`, `Visitors/CompositeFormat.cs`, `DataContext/InMemoryStringFunctionRewriter.cs`, provider `*Dialect.cs` | SQL-generation tests per provider; `CommonTestSuite.StringSemantics.cs` ordinal/format; `InMemoryStringSemanticsTests.cs` |
+| 35 | CLR `Regex` (`IsMatch`/`Replace`) → provider-native regex | **Done** on PostgreSQL/MySQL/MariaDB/ClickHouse/SQLite and SQL Server 2025+ (`REGEXP_LIKE`/`REGEXP_REPLACE`; the match needs compatibility level 170) ([Regular expressions](../../scalar-functions/01-string-functions.md#regular-expressions)) | `Visitors/RegexSqlTranslator.cs`, `DataContext/Dialect/{ISqlDialect,SqlDialectBase}.cs`, `Visitors/ScalarFunctionTranslator.cs`, provider `*Dialect.cs` | per-provider `StringSemanticsSqlGenerationTests.cs`, `CommonTestSuite.Functions.cs`, `InMemoryStringSemanticsTests.cs` |
+| 36 | Cross-provider string / numeric scalar wrappers (`left`/`right`, `lpad`/`rpad`, `repeat`, `reverse`, `space`, `translate`, `concat_ws`, `ascii`/`char`, `mod`, `log10`, `power`) | **Done** ([Scalar functions](../../scalar-functions/01-string-functions.md#cross-provider-scalar-functions)) | `Query/SqlFunctions.cs`, `DataContext/Dialect/{ISqlDialect,SqlDialectBase,DialectCapabilities}.cs` (`IScalarFunctions`), `Visitors/BuiltinFunctionTranslator.cs`, `Visitors/MathFunctionTranslator.cs`, `DataContext/{InMemoryScalarFunctions,InMemoryScalarFunctionRewriter}.cs`, provider `*Dialect.cs` | per-provider `CrossProviderScalarSqlGenerationTests.cs`; `CommonTestSuite.CrossProviderScalarFunctions.cs`; `InMemoryScalarFunctionsTests.cs` |
 | 37 | Per-provider built-in function gaps (PostgreSQL / SQL Server / MySQL / MariaDB / SQLite / ClickHouse) | **Planned** (six provider todos) | `Query/SqlFunctions.{Postgres,SqlServer,MySql,Sqlite}.cs`, per-name capability objects, provider `*Dialect.cs` | per-provider SQL-generation tests; provider integration |
 | 38 | Join projection into a user type (`As`) and arity beyond 8 (derived-table sugar; inline mapping optional) | **Planned** ([`todo_join_projection_mapping.md`](todo_join_projection_mapping.md)) | `Builders/EntityBuilder.cs` (`As`); reuses `DataContext/DataContextExtensions.cs` (`From(QueryCommand)`), `DataContext/SqlSourceRenderer.cs`; optional inline phase: `Builders/Projection.cs`, `Builders/Joins/JoinedEntityBuilder.cs`, `Visitors/*`, `DataContext/QueryPlanner.cs`, `DataContext/InMemory*`, `Query/QueryPlanEqualityComparer.cs` | SQL-generation tests per provider; `CommonTestSuite.Join.cs`; in-memory `NotSupportedException` |
 

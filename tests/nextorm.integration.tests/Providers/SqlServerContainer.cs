@@ -15,7 +15,7 @@ internal static class SqlServerContainer
 {
     public const string ConnectionStringVariable = "NEXTORM_SQLSERVER_CONNECTION";
 
-    private const string DefaultImage = "mcr.microsoft.com/mssql/server:2022-latest";
+    private const string DefaultImage = "mcr.microsoft.com/mssql/server:2025-latest";
 
     private const string ReuseLabel = "reuse-id";
 

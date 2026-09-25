@@ -78,7 +78,7 @@ change.
 | `string_agg` | `group_concat(x, delimiter)` | supported (2017+) | supported | `group_concat(x separator delimiter)` | `group_concat(x separator delimiter)` | `arrayStringConcat(groupArray(...), ...)` | throws |
 | Full-text `contains` / `freetext` | throws | `contains` / `freetext` | `to_tsvector(...) @@ ...tsquery(...)` | `match(...) against(...)` | `match(...) against(...)` | throws | throws |
 | Full-text ranking / score | throws | `containstable` / `freetexttable` (`RANK`, table function) | `ts_rank` / `ts_rank_cd` | throws | throws | throws | throws |
-| Regular expressions (`Regex.IsMatch` / `Regex.Replace`, constant pattern) | `s regexp ...` / `regexp_replace(...)` (registered) | throws `NotSupportedException` | `s ~ ...` / `regexp_replace(...)` | `regexp_like(...)` / `regexp_replace(...)` | `s regexp ...` / `regexp_replace(...)` | `match(...)` / `replaceRegexpAll(...)` | native `System.Text.RegularExpressions` |
+| Regular expressions (`Regex.IsMatch` / `Regex.Replace`, constant pattern) | `s regexp ...` / `regexp_replace(...)` (registered) | `regexp_like(...)` / `regexp_replace(...)` (2025+) | `s ~ ...` / `regexp_replace(...)` | `regexp_like(...)` / `regexp_replace(...)` | `s regexp ...` / `regexp_replace(...)` | `match(...)` / `replaceRegexpAll(...)` | native `System.Text.RegularExpressions` |
 | Bit / statistical / `-If` aggregates | throws | throws | supported | throws | throws | `groupBit*`, `corr`/`covarPop`, `countIf`/… | throws |
 | `multi_if` (multi-branch) | throws | throws | throws | throws | throws | `multiIf(c1, v1, …, else)` | not applicable |
 | `lag_in_frame` / `lead_in_frame` | throws | throws | throws | throws | throws | `lagInFrame` / `leadInFrame` | not applicable |

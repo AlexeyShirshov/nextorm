@@ -1185,6 +1185,14 @@ public class SqlGenerationTests
         var split = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.Postgres.regexp_split_to_table(source, pattern))
             .Select(r => new { r.Value }));
         split.Should().Throw<NotSupportedException>().WithMessage("*regexp_split_to_table*");
+
+        var record = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.Postgres.jsonb_to_record<int>(json))
+            .Select(r => new { V = r }));
+        record.Should().Throw<NotSupportedException>().WithMessage("*jsonb_to_record*");
+
+        var values = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.ClickHouse.values<int>("(1)"))
+            .Select(r => new { V = r }));
+        values.Should().Throw<NotSupportedException>().WithMessage("*values*");
     }
 
     [Fact]
@@ -2814,5 +2822,37 @@ public class SqlGenerationTests
 
         sql.Should().Contain("join (select id from complex_entity) as [t2]");
         sql.Should().Contain("on t1.id = t2.id");
+    }
+
+    [Fact]
+    public void DerivedSource_JoinOnFilteredPrimary_ShouldReferenceExposedColumnName()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<IComplexEntity>()
+            .Where(c => c.Int > 0)
+            .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Int == (int?)s.Id)
+            .Select(p => new { A = p.Item1.Id, B = p.Item2.Id }));
+
+        sql.Should().Contain("nullableint as [Int]");
+        sql.Should().Contain("on t1.[Int] = ");
+        sql.Should().NotContain("t1.nullableint");
+    }
+
+    [Fact]
+    public void ProjectedCommand_OrderByDescendingAndPage_ShouldResolveProjectionExpression()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var grouped = ctx.From<IComplexEntity>()
+            .GroupBy(x => x.Int)
+            .Select(x => new { x.Int, Cnt = SqlFunctions.Sql.count() });
+
+        var sql = SqlOf(ctx, grouped.OrderByDescending(x => x.Cnt).Page(20, 1));
+
+        sql.Should().Contain("group by nullableint");
+        sql.Should().Contain("order by count(*) desc");
+        sql.Should().Contain("offset 1 rows");
+        sql.Should().Contain("fetch next 20 rows only");
     }
 }

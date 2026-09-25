@@ -103,4 +103,19 @@ public class MergeSqlGenerationTests
 
         act.Should().Throw<NotSupportedException>();
     }
+
+    [Fact]
+    public void KeyUpsert_Returning_ShouldRenderReturning()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        ctx.MergeInto<IMergeEntity>()
+            .Using(new MergeEntity { Id = 1, Name = "a", Age = 5 })
+            .OnKeys()
+            .WhenMatchedUpdate()
+            .WhenNotMatchedInsert()
+            .Returning(x => new { x.Id, x.Name })
+            .ToSql()
+            .Should().Be("insert into merge_entity (id, name, age) values ($p0, $p1, $p2) on conflict (id) do update set name = excluded.name, age = excluded.age returning id, name");
+    }
 }

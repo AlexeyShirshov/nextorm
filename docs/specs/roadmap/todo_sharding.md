@@ -212,7 +212,8 @@ public EntityBuilder<T> AcrossShards(ShardSelection sel);
    исполнителе) — что поддержать первым.
 5. **Где хранить топологию** (in-memory конфиг vs провайдер с runtime-refresh) и как триггерить
    version-bump.
-6. **Совместимость с `todo_dynamic_result_schema.md`** — не конфликтуют ли понятия «динамическая схема».
+6. **Совместимость с динамической схемой результата** (`TableFunctionSchema`/`ResultSchema`, см.
+   [Dynamic result schema](../../guide/13-table-valued-functions.md#dynamic-result-schema)) — не конфликтуют ли понятия «динамическая схема».
 7. **Канонизация ключа хэша** для смешанных типов (десятичные `decimal`, `DateTimeOffset`, enum).
 
 ## 10. Файлы к изменению

@@ -87,6 +87,14 @@ public sealed class UpdateBuilder<TEntity>
             if (property.IsKey || property.IsIdentity || property.IsComputed)
                 continue;
 
+            if (property.RangeColumns is not null)
+            {
+                var (lowerValue, upperValue) = RangeColumnPairs.Extract(property, property.PropertyInfo.GetValue(entity));
+                SetAssignment(UpdateAssignment.FromConstant(RangeColumnPairs.Lower(property), lowerValue));
+                SetAssignment(UpdateAssignment.FromConstant(RangeColumnPairs.Upper(property), upperValue));
+                continue;
+            }
+
             SetAssignment(UpdateAssignment.FromConstant(property, property.PropertyInfo.GetValue(entity)));
         }
 
@@ -217,14 +225,28 @@ public sealed class UpdateBuilder<TEntity>
 
     /// <summary>Builds the update command carrying the columns to return through <c>RETURNING</c>/<c>OUTPUT</c>.</summary>
     /// <param name="returningColumns">The mapped columns to return.</param>
+    /// <param name="outputInto">The <c>OUTPUT ... INTO</c> target, or <see langword="null"/>.</param>
     /// <returns>The update command carrying the returned columns.</returns>
-    internal UpdateCommand BuildReturningCommand(IReadOnlyList<IPropertyMetadata> returningColumns)
+    internal UpdateCommand BuildReturningCommand(IReadOnlyList<IPropertyMetadata> returningColumns, OutputIntoClause? outputInto = null)
     {
         if (_assignments.Count == 0)
             throw new InvalidOperationException("An update needs at least one assignment; call Set(...) or Set(entity).");
 
         var source = (_filter ?? _dataContext.From<TEntity>()).ToCommand();
-        return new UpdateCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, _assignments, source, null, returningColumns);
+        return new UpdateCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, _assignments, source, null, returningColumns, outputInto);
+    }
+
+    /// <summary>Builds the update command for an <c>OUTPUT ... INTO</c>-only terminal: the updated rows are written into the target and nothing is returned to the client.</summary>
+    /// <param name="outputColumns">The mapped columns written into the target.</param>
+    /// <param name="targetTable">The raw (unquoted) target table name.</param>
+    /// <returns>The update command carrying the output-into target.</returns>
+    internal UpdateCommand BuildOutputIntoCommand(IReadOnlyList<IPropertyMetadata> outputColumns, string targetTable)
+    {
+        if (_assignments.Count == 0)
+            throw new InvalidOperationException("An update needs at least one assignment; call Set(...) or Set(entity).");
+
+        var source = (_filter ?? _dataContext.From<TEntity>()).ToCommand();
+        return new UpdateCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, _assignments, source, null, null, new OutputIntoClause(targetTable, outputColumns));
     }
 
     private void SetAssignment(UpdateAssignment assignment)
@@ -243,7 +265,7 @@ public sealed class UpdateBuilder<TEntity>
 
     private UpdateAssignment BuildAssignment<TValue>(IPropertyMetadata property, Expression<Func<TEntity, TValue>> value)
     {
-        var body = UnwrapConvert(value.Body);
+        var body = TypeFacts.UnwrapConvert(value.Body);
 
         // Only a member read off the lambda parameter is a column reference. A member read off a captured
         // object (x => holder.Name) or a static property (x => Config.Default) happens to be a
@@ -253,6 +275,8 @@ public sealed class UpdateBuilder<TEntity>
         {
             var mapped = FindProperty(valueProperty)
                 ?? throw new BuildSqlCommandException($"Property {valueProperty.Name} of {typeof(TEntity)} is not mapped.");
+            if (mapped.RangeColumns is not null)
+                throw RangeColumnPairs.NotSingleColumn(mapped);
             return UpdateAssignment.FromColumn(property, mapped);
         }
 
@@ -267,7 +291,7 @@ public sealed class UpdateBuilder<TEntity>
 
     private IPropertyMetadata ResolveWritableProperty(LambdaExpression column, string parameterName)
     {
-        var body = UnwrapConvert(column.Body);
+        var body = TypeFacts.UnwrapConvert(column.Body);
 
         if (body is not MemberExpression { Member: PropertyInfo property })
             throw new ArgumentException("The column selector must select a mapped property.", parameterName);
@@ -277,6 +301,9 @@ public sealed class UpdateBuilder<TEntity>
 
         if (mapped.IsComputed)
             throw new NotSupportedException($"Property {property.Name} of {typeof(TEntity)} is computed and cannot be written.");
+
+        if (mapped.RangeColumns is not null)
+            throw RangeColumnPairs.NotWritableBySelector(mapped, "Set(entity)");
 
         return mapped;
     }
@@ -291,11 +318,6 @@ public sealed class UpdateBuilder<TEntity>
 
         return null;
     }
-
-    private static Expression UnwrapConvert(Expression expression)
-        => expression is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } unary
-            ? UnwrapConvert(unary.Operand)
-            : expression;
 
     private int Execute(UpdateCommand command)
     {

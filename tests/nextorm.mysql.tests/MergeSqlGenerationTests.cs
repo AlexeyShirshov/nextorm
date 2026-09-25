@@ -105,4 +105,20 @@ public class MergeSqlGenerationTests
 
         act.Should().Throw<NotSupportedException>();
     }
+
+    [Fact]
+    public void KeyUpsert_Returning_ShouldThrowBecauseMySQLHasNoReturning()
+    {
+        using var ctx = MySqlTestContext.Create();
+
+        var act = () => ctx.MergeInto<IMergeEntity>()
+            .Using(new MergeEntity { Id = 1, Name = "a", Age = 5 })
+            .OnKeys()
+            .WhenMatchedUpdate()
+            .WhenNotMatchedInsert()
+            .Returning(x => new { x.Id })
+            .ToList();
+
+        act.Should().Throw<NotSupportedException>();
+    }
 }

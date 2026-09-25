@@ -209,6 +209,8 @@ id in ($p0, $p1)
 
 `values.Contains(c.Id)` is handled the same way. A `null` element adds an `is null` branch (for example `(nullableint in ($p0) or nullableint is null)`), and an empty or all-null collection folds to a constant (`1 = 0` / `is null`) with no parameters.
 
+A captured collection indexed by a query expression (`dict[column]`) folds the same way: the entry count is part of the plan key, so the generated `CASE` is rebuilt when the collection changes. See [Filtering (WHERE)](02-filtering-where.md).
+
 ## Provider differences
 
 | Provider | Behaviour |

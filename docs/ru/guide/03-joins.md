@@ -236,7 +236,11 @@ var rows = await dataContext.From<ISimpleEntity>()
 ## Соединение с подзапросом
 
 `QueryCommand<T>` можно присоединить напрямую. Он заключается в скобки и получает псевдоним как
-производная таблица (псевдоним необязателен в SQLite и обязателен в SQL Server и PostgreSQL):
+производная таблица; псевдоним теперь выдаётся всегда (даже в SQLite, где он необязателен), чтобы все
+ссылки на производный источник — условие `ON`, `WHERE`, `ORDER BY` и проекция — разрешались через одну
+идентичность псевдонима. Член, который проекция производной таблицы переименовывает (`c.String`,
+отображённый на `requiredstring`), экспонируется под именем проекции (`requiredstring as 'String'`) и
+снаружи указывается по этому имени (`t1.'String'`), а не по физическому имени колонки:
 
 ```csharp
 var subQuery = dataContext.From<IComplexEntity>()
@@ -454,7 +458,7 @@ select t1.id from simple_entity as `t1` left semi join complex_entity as `t2` on
 
 | Провайдер | Псевдонимы соединений | Псевдоним производной таблицы | Внешние соединения | APPLY / LATERAL |
 |---|---|---|---|---|
-| SQLite | `as 't1'` | необязателен | поддержаны left/right/full | не поддерживается (`NotSupportedException`) |
+| SQLite | `as 't1'` | выдаётся всегда (в самом SQLite необязателен) | поддержаны left/right/full | не поддерживается (`NotSupportedException`) |
 | SQL Server | `as [t1]` | обязателен | поддержаны left/right/full | `CROSS APPLY` / `OUTER APPLY` |
 | PostgreSQL | `as "t1"` | обязателен | поддержаны left/right/full | `CROSS JOIN LATERAL` / `LEFT JOIN LATERAL ... ON true` (простые таблицы: `CROSS JOIN` / `LEFT JOIN ... ON true`) |
 | MySQL / MariaDB | `as \`t1\`` | обязателен | поддержаны left/right (без full) | `CROSS JOIN LATERAL` / `LEFT JOIN LATERAL ... ON true` (простые таблицы: `CROSS JOIN` / `LEFT JOIN ... ON true`) |

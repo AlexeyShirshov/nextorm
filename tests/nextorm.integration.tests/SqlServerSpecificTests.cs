@@ -11,6 +11,7 @@ namespace NextORM.Integration.Tests;
 /// Tests that assert Microsoft SQL Server specific behaviour, backed by a Testcontainers instance
 /// unless NEXTORM_SQLSERVER_CONNECTION points at an existing server.
 /// </summary>
+[Collection("SqlServer")]
 public sealed class SqlServerSpecificTests : ProviderTestSuite
 {
     protected override ITestProvider Provider => SqlServerTestProvider.Instance;
@@ -546,6 +547,73 @@ public sealed class SqlServerSpecificTests : ProviderTestSuite
         r.Arr.Should().Be("[\"a\",1,\"b\"]");
         r.Obj.Should().Be("{\"k\":1}");
         r.Exists.Should().BeTrue();
+    }
+
+    [Fact]
+    public void OutputInto_ShouldWriteModifiedRowsIntoTable()
+    {
+        var ctx = _sut.DataProvider;
+        var id = MergeTestKey();
+        var marker = "audit_" + Guid.NewGuid().ToString("N");
+
+        Execute(ctx, "drop table if exists output_audit");
+        Execute(ctx, "create table output_audit (id int, name nvarchar(100))");
+
+        try
+        {
+            ctx.InsertInto<IMergeEntity>()
+                .Values(new MergeEntity { Id = id, Name = marker, Age = 1 })
+                .Returning(x => new { x.Id, x.Name })
+                .OutputInto("output_audit")
+                .Execute()
+                .Should().Be(1);
+
+            var audited = ctx.From("output_audit")
+                .Select(t => new { Id = t.GetInt32("id"), Name = t.GetString("name") })
+                .ToList();
+
+            audited.Should().ContainSingle();
+            audited[0].Id.Should().Be(id);
+            audited[0].Name.Should().Be(marker);
+        }
+        finally
+        {
+            Execute(ctx, "drop table if exists output_audit");
+        }
+    }
+
+    [Fact]
+    public void OutputIntoThenOutput_ShouldWriteAndReturnRows()
+    {
+        var ctx = _sut.DataProvider;
+        var id = MergeTestKey();
+        var marker = "audit_" + Guid.NewGuid().ToString("N");
+
+        Execute(ctx, "drop table if exists output_audit");
+        Execute(ctx, "create table output_audit (id int, name nvarchar(100))");
+
+        try
+        {
+            var returned = ctx.InsertInto<IMergeEntity>()
+                .Values(new MergeEntity { Id = id, Name = marker, Age = 1 })
+                .Returning(x => new { x.Id, x.Name })
+                .OutputIntoThenOutput("output_audit")
+                .ToList();
+
+            returned.Should().ContainSingle();
+            returned[0].Id.Should().Be(id);
+            returned[0].Name.Should().Be(marker);
+
+            ctx.From("output_audit")
+                .Select(t => new { Id = t.GetInt32("id") })
+                .ToList()
+                .Should().ContainSingle()
+                .Which.Id.Should().Be(id);
+        }
+        finally
+        {
+            Execute(ctx, "drop table if exists output_audit");
+        }
     }
 
     private static void Execute(IDataContext ctx, string sql)

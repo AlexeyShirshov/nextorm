@@ -81,12 +81,9 @@ public class SqliteFunctionsSqlGenerationTests
             At2 = SqlFunctions.Sqlite.atan2(1.0, 2.0),
             Ath = SqlFunctions.Sqlite.atanh(0.5),
             Csh = SqlFunctions.Sqlite.cosh(0.5),
-            D = SqlFunctions.Sqlite.degrees(0.5),
             L10 = SqlFunctions.Sqlite.log10(100.0),
             L2 = SqlFunctions.Sqlite.log2(8.0),
             M = SqlFunctions.Sqlite.mod(5.0, 2.0),
-            Pi = SqlFunctions.Sqlite.pi(),
-            Rad = SqlFunctions.Sqlite.radians(180.0),
             Sh = SqlFunctions.Sqlite.sinh(0.5),
             Th = SqlFunctions.Sqlite.tanh(0.5)
         }));
@@ -99,12 +96,9 @@ public class SqliteFunctionsSqlGenerationTests
         sql.Should().Contain("atan2(1, 2)");
         sql.Should().Contain("atanh(0.5)");
         sql.Should().Contain("cosh(0.5)");
-        sql.Should().Contain("degrees(0.5)");
         sql.Should().Contain("log10(100)");
         sql.Should().Contain("log2(8)");
         sql.Should().Contain("mod(5, 2)");
-        sql.Should().Contain("pi()");
-        sql.Should().Contain("radians(180)");
         sql.Should().Contain("sinh(0.5)");
         sql.Should().Contain("tanh(0.5)");
     }

@@ -122,7 +122,7 @@ ctx.From<IComplexEntity>()
     {
         Json = SqlFunctions.Sqlite.json_extract<string>(x.String, "$.name"),
         Kind = SqlFunctions.Sqlite.@typeof(x.String),
-        Pi = SqlFunctions.Sqlite.pi()
+        Pi = SqlFunctions.Sql.pi()
     });
 ```
 

@@ -57,7 +57,7 @@ full, provider-neutral walkthrough:
 * [Joins](../03-joins.md) — join types, APPLY/LATERAL, ClickHouse strictness and `GLOBAL JOIN`;
 * [Grouping and aggregates](../04-grouping-and-aggregates.md) — `ROLLUP`/`CUBE`, the aggregate families;
 * [Sorting and paging](../05-sorting-and-paging.md) — `Limit`/`Offset`, `LIMIT n BY expr`;
-* [Scalar functions](../11-scalar-functions.md) — arrays, JSON, UUID, session/info, provider surfaces;
+* [Scalar functions](../../scalar-functions/index.md) — arrays, JSON, UUID, session/info, provider surfaces;
 * [Table-valued functions](../13-table-valued-functions.md) — `generate_series`, `string_split`, `numbers`, `zeros`;
 * [Query hints](../17-query-hints.md) — table hints, `OPTION (RECOMPILE)`, ClickHouse query modifiers;
 * [JSON support across providers](../18-json.md) — every JSON surface side by side.

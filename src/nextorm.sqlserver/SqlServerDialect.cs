@@ -26,6 +26,15 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// </summary>
     public override bool SupportsOutput => true;
 
+    /// <inheritdoc/>
+    public override bool SupportsRangeColumns => true;
+
+    /// <summary>
+    /// SQL Server writes the modified rows into an existing table through the
+    /// <c>OUTPUT ... INTO &lt;target&gt;(columns)</c> form of a data-modifying statement.
+    /// </summary>
+    public override bool SupportsOutputInto => true;
+
     /// <summary>
     /// SQL Server reads the last generated identity through the batch-scoped <c>SCOPE_IDENTITY()</c>.
     /// The identity-function terminal appends it to the insert as a single batch, which keeps
@@ -112,19 +121,23 @@ public sealed class SqlServerDialect : SqlDialectBase
     /// <summary>SQL Server requires a terminating semicolon after <c>MERGE</c>.</summary>
     public override string MakeMergeStatementTerminator(KeywordCase keywordCase = KeywordCase.Lower) => ";";
 
-    /// <summary>Renders the key-upsert <c>MERGE ... USING (VALUES ...) AS source (...) ON ...</c> statement (T-SQL requires the terminating semicolon).</summary>
+    /// <summary>Renders the key-upsert <c>MERGE ... USING (VALUES ...) AS source (...) ON ...</c> statement, optionally followed by an <c>OUTPUT inserted.&lt;column&gt;</c> clause (T-SQL requires the terminating semicolon).</summary>
     public override string MakeMerge(
         string target,
         IReadOnlyList<string> columns,
         IReadOnlyList<string> keys,
         IReadOnlyList<string> updateColumns,
         string valuesRows,
-        KeywordCase keywordCase = KeywordCase.Lower)
+        KeywordCase keywordCase = KeywordCase.Lower,
+        IReadOnlyList<string>? returningColumns = null)
     {
         var columnList = string.Join(", ", columns);
         var match = string.Join(Kw(keywordCase, " and "), keys.Select(static k => "target." + k + " = source." + k));
         var updates = string.Join(", ", updateColumns.Select(static c => "target." + c + " = source." + c));
         var insertValues = string.Join(", ", columns.Select(static c => "source." + c));
+        var output = returningColumns is { Count: > 0 }
+            ? MakeOutput(returningColumns, keywordCase)
+            : string.Empty;
 
         return Kw(keywordCase, "merge into ") + target
             + Kw(keywordCase, " as target using (values ") + valuesRows
@@ -133,7 +146,7 @@ public sealed class SqlServerDialect : SqlDialectBase
             + Kw(keywordCase, " when matched then update set ") + updates
             + Kw(keywordCase, " when not matched then insert (") + columnList
             + Kw(keywordCase, ") values (") + insertValues
-            + ");";
+            + ")" + output + ";";
     }
 
     /// <summary>Renders the identity-function query <c>select scope_identity()</c>.</summary>
@@ -342,6 +355,24 @@ public sealed class SqlServerDialect : SqlDialectBase
         return ignoreCase ? $"lower({value}) collate {Binary}" : $"{value} collate {Binary}";
     }
 
+    /// <summary>
+    /// SQL Server 2025 matches with the RE2-based <c>REGEXP_LIKE</c>/<c>REGEXP_REPLACE</c>. The capability
+    /// is unconditional: the static dialect cannot see the server version or
+    /// <c>sys.databases.compatibility_level</c>, so translation targets 2025+ and SQL Server 2019/2022
+    /// rejects the emitted call at execution. On 2025 the match additionally requires database
+    /// compatibility level 170, while <c>REGEXP_REPLACE</c> is available at every level. Flags: <c>c</c>
+    /// (case-sensitive, the default) or <c>i</c>.
+    /// </summary>
+    public override bool SupportsRegex => true;
+
+    /// <inheritdoc/>
+    public override string MakeRegexMatch(string value, string pattern, bool ignoreCase) =>
+        $"regexp_like({value}, {QuoteStringLiteral(pattern)}, {(ignoreCase ? "'i'" : "'c'")})";
+
+    /// <inheritdoc/>
+    public override string MakeRegexReplace(string value, string pattern, string replacement, bool ignoreCase) =>
+        $"regexp_replace({value}, {QuoteStringLiteral(pattern)}, {QuoteStringLiteral(replacement)}, 1, 0, {(ignoreCase ? "'i'" : "'c'")})";
+
     /// <summary>Renders <c>stuff(value, start + 1, count, newValue)</c>, or the truncated prefix when the count is <c>null</c>.</summary>
     public override string MakeStuff(string value, string start, string? count, string newValue) =>
         count is null
@@ -461,6 +492,8 @@ public sealed class SqlServerDialect : SqlDialectBase
         ("round", 1) => $"round({args[0]}, 0)",
         // T-SQL has no POW; Math.Pow must render as POWER.
         ("pow", 2) => $"power({args[0]}, {args[1]})",
+        // T-SQL names the two-argument arctangent ATN2, not ATAN2.
+        ("atan2", 2) => $"atn2({args[0]}, {args[1]})",
         _ => base.MakeMathFunction(name, args)
     };
 
@@ -811,7 +844,8 @@ internal sealed class SqlServerScalarFunctions : IScalarFunctions
     /// <inheritdoc/>
     public bool Supports(string name) => name is
         "left" or "right" or "lpad" or "rpad" or "repeat" or "reverse" or "space" or
-        "concat_ws" or "translate" or "ascii" or "char";
+        "concat_ws" or "translate" or "ascii" or "char" or
+        "bit_length" or "octet_length" or "cot" or "degrees" or "radians" or "pi";
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
@@ -830,6 +864,16 @@ internal sealed class SqlServerScalarFunctions : IScalarFunctions
         "translate" => $"translate({args[0]}, {args[1]}, {args[2]})",
         "ascii" => $"ascii({args[0]})",
         "char" => $"char({args[0]})",
+
+        // T-SQL has no bit_length/octet_length; DATALENGTH returns the byte count.
+        "bit_length" => $"datalength({args[0]}) * 8",
+        "octet_length" => $"datalength({args[0]})",
+        "cot" => $"cot({args[0]})",
+        // T-SQL DEGREES/RADIANS return the argument's own type, so an integer literal would truncate
+        // (radians(180) is 3); cast to float to keep the fractional result.
+        "degrees" => $"degrees(cast({args[0]} as float))",
+        "radians" => $"radians(cast({args[0]} as float))",
+        "pi" => "pi()",
         _ => throw new NotSupportedException($"The {name} function is not supported by SQL Server.")
     };
 
@@ -852,8 +896,8 @@ internal sealed class SqlServerSpecificFunctions : ISqlServerFunctions
     /// <inheritdoc/>
     public bool Supports(string name) => name is
         "patindex" or "quotename" or "soundex" or "difference" or "string_escape" or "unicode" or
-        "nchar" or "format" or "acos" or "asin" or "atan" or "atn2" or "cot" or "degrees" or
-        "radians" or "pi" or "square" or "datename" or "date_bucket" or "hashbytes" or
+        "nchar" or "format" or "acos" or "asin" or "atan" or "atn2" or
+        "square" or "datename" or "date_bucket" or "hashbytes" or
         "newsequentialid" or "json_array" or "json_object" or "json_arrayagg" or "json_objectagg" or
         "json_contains" or "json_path_exists";
 
@@ -870,10 +914,9 @@ internal sealed class SqlServerSpecificFunctions : ISqlServerFunctions
         "format" => args.Count == 3
             ? $"format({args[0]}, {args[1]}, {args[2]})"
             : $"format({args[0]}, {args[1]})",
-        "acos" or "asin" or "atan" or "cot" or "degrees" or "radians" or "square" =>
+        "acos" or "asin" or "atan" or "square" =>
             $"{name}({args[0]})",
         "atn2" => $"atn2({args[0]}, {args[1]})",
-        "pi" => "pi()",
         "datename" => $"datename({DatePart(args[0])}, {args[1]})",
         "date_bucket" => args.Count == 4
             ? $"date_bucket({DatePart(args[0])}, {args[1]}, {args[2]}, {args[3]})"

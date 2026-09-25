@@ -25,6 +25,7 @@ public sealed class BulkInsertBuilder<TEntity>
     private readonly IDataContext _dataContext;
     private readonly IEntityMetadata _metadata;
     private readonly BulkInsertOptions _options;
+    private readonly bool _keepIdentity;
 
     private IEnumerable<TEntity>? _syncSource;
     private IAsyncEnumerable<TEntity>? _asyncSource;
@@ -35,6 +36,7 @@ public sealed class BulkInsertBuilder<TEntity>
         _dataContext = dataContext;
         _metadata = metadata;
         _options = options;
+        _keepIdentity = options.KeepIdentity && HasIdentityColumn(metadata);
     }
 
     /// <summary>The context the bulk insert executes on; used by <see cref="BulkInsertReturningBuilder{TEntity, TResult}"/>.</summary>
@@ -174,7 +176,7 @@ public sealed class BulkInsertBuilder<TEntity>
         return new BulkInsertReturningBuilder<TEntity, TResult>(this, columns, selectList, oneColumn);
     }
 
-    /// <summary>The mapped columns written by default: every property except computed ones and, unless <see cref="BulkInsertOptions.KeepIdentity"/> is set, identity ones.</summary>
+    /// <summary>The mapped columns written by default: every property except computed ones and, unless identity values are kept, identity ones.</summary>
     /// <returns>The written columns, in declaration order.</returns>
     internal IReadOnlyList<IPropertyMetadata> WritableColumns()
     {
@@ -185,7 +187,7 @@ public sealed class BulkInsertBuilder<TEntity>
             if (property.IsComputed)
                 continue;
 
-            if (property.IsIdentity && !_options.KeepIdentity)
+            if (property.IsIdentity && !_keepIdentity)
                 continue;
 
             columns.Add(property);
@@ -231,19 +233,23 @@ public sealed class BulkInsertBuilder<TEntity>
             ? null
             : new BulkBatchOptions(_options.MaxBatchSize, _options.MaxParameters, _options.MaxSqlLength);
 
+        var tableName = _options.TableName ?? _metadata.TableName!;
+        var isTableNameAuto = _options.TableName is null && _metadata.IsTableNameAuto;
+
         return new BulkInsertCommand(
             typeof(TEntity),
-            _metadata.TableName!,
-            _metadata.IsTableNameAuto,
+            tableName,
+            isTableNameAuto,
             columns,
             syncRows,
             asyncRows,
-            _options.KeepIdentity,
+            _keepIdentity,
             _options.IgnoreDuplicates,
             batch,
             CreateProgressCallback(),
             _options.NotifyEvery,
-            _options.TimeoutSeconds);
+            _options.TimeoutSeconds,
+            _options.TableSchema);
     }
 
     /// <summary>Resolves the executor that can satisfy a returning terminal (the mutation executor).</summary>
@@ -285,7 +291,18 @@ public sealed class BulkInsertBuilder<TEntity>
     }
 
     private bool UseNative(DataContext? db)
-        => db is not null && db.Dialect.SupportsBulkCopy && !_options.IgnoreDuplicates && !_options.KeepIdentity;
+        => db is not null && db.Dialect.SupportsBulkCopy && !_options.IgnoreDuplicates && !_keepIdentity;
+
+    private static bool HasIdentityColumn(IEntityMetadata metadata)
+    {
+        foreach (var property in metadata.Properties)
+        {
+            if (property.IsIdentity && !property.IsComputed)
+                return true;
+        }
+
+        return false;
+    }
 
     private IEnumerable<object?[]> ProjectSync(IEnumerable<TEntity> source)
     {

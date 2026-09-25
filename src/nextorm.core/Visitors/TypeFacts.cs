@@ -14,6 +14,15 @@ internal static class TypeFacts
     internal static bool IsBoolean(Type type) => type == typeof(bool) || type == typeof(bool?);
 
     /// <summary>
+    /// Strips <see cref="ExpressionType.Convert"/>/<see cref="ExpressionType.ConvertChecked"/> wrappers
+    /// (the compiler's enum-comparison and boxing lowering) so the underlying operand is inspected.
+    /// </summary>
+    internal static Expression UnwrapConvert(Expression expression)
+        => expression is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } unary
+            ? UnwrapConvert(unary.Operand)
+            : expression;
+
+    /// <summary>
     /// True when the expression already renders as a predicate. Comparison/logical operators,
     /// boolean CASE/COALESCE and the recognised predicate methods produce a condition directly;
     /// anything else (a column, a constant, an arithmetic result) is a boolean value that the
@@ -41,7 +50,9 @@ internal static class TypeFacts
         if (call.Method.DeclaringType == typeof(System.Text.RegularExpressions.Regex))
             return call.Method.Name is nameof(System.Text.RegularExpressions.Regex.IsMatch);
 
-        return call.Method.Name is "exists" or "any" or "all" or "Contains"
+        return call.Method.Name is nameof(CommonFunctions.exists) or nameof(CommonFunctions.any)
+            or nameof(CommonFunctions.all) or nameof(CommonFunctions.@in) or nameof(ClickHouseFunctions.global_in)
+            or "Contains"
             or nameof(CommonFunctions.contains) or nameof(CommonFunctions.freetext)
             or nameof(SqlServerFunctions.isjson)
             or nameof(SqlServerFunctions.json_contains) or nameof(SqlServerFunctions.json_path_exists);

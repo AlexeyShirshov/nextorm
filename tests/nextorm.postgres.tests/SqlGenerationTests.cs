@@ -4,6 +4,7 @@ using System.Linq.Expressions;
 using System.Text.Json;
 using FluentAssertions;
 using NextORM.Core;
+using NpgsqlTypes;
 
 namespace NextORM.Postgres.Tests;
 
@@ -1548,6 +1549,56 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void TableFunction_JsonbToRecord_ShouldRenderAliasColumnList()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_to_record<IDynamicRecordRow>(SqlFunctions.Parameter<JsonDocument>(0)))
+            .Select(r => new { r.A, r.B }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select a, b from jsonb_to_record(@norm_p0) as \"t1\"(a integer, b text)");
+    }
+
+    [Fact]
+    public void TableFunction_JsonbToRecordset_ShouldRenderAliasColumnList()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_to_recordset<IDynamicRecordRow>(SqlFunctions.Parameter<JsonDocument>(0)))
+            .Select(r => new { r.A, r.B }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Be("select a, b from jsonb_to_recordset(@norm_p0) as \"t1\"(a integer, b text)");
+    }
+
+    [Fact]
+    public void TableFunction_WithUnsupportedLeadingArgument_ShouldThrow()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var act = () => SqlOf(ctx, ctx
+            .FromTableFunction(() => MismatchedTvf.Values("a integer", "(1)"))
+            .Select(r => new { r.A }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*LeadingArgument*");
+    }
+
+    [Fact]
+    public void ClickHouseValuesFunction_ShouldThrowBecauseOnlyClickHouseHasIt()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var act = () => SqlOf(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.ClickHouse.values<IDynamicRecordRow>("(1, 'x')"))
+            .Select(r => new { r.A }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*values*");
+    }
+
+    [Fact]
     public void TableFunction_JsonbObjectKeys_ShouldEmitCall()
     {
         using var ctx = PostgresTestContext.Create();
@@ -2524,6 +2575,14 @@ public class SqlGenerationTests
         string? Value { get; set; }
     }
 
+    public interface IDynamicRecordRow
+    {
+        [Column("a")]
+        int A { get; set; }
+        [Column("b")]
+        string? B { get; set; }
+    }
+
     private static class Tvf
     {
         [SqlTableFunction("all_rows")]
@@ -2534,6 +2593,12 @@ public class SqlGenerationTests
 
         [SqlTableFunction("rows_between", Schema = "app")]
         public static IQueryable<ITvfRow> Between(long lo, long hi) => throw new NotSupportedException();
+    }
+
+    private static class MismatchedTvf
+    {
+        [SqlTableFunction("user_values", ResultSchema = TableFunctionSchema.LeadingArgument)]
+        public static IQueryable<IDynamicRecordRow> Values(string structure, string tuples) => throw new NotSupportedException();
     }
 
     [Fact]
@@ -3682,6 +3747,65 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void DerivedSource_JoinOnFilteredPrimary_ShouldReferenceExposedColumnName()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<IComplexEntity>()
+            .Where(c => c.Int > 0)
+            .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Int == (int?)s.Id)
+            .Select(p => new { A = p.Item1.Id, B = p.Item2.Id }));
+
+        sql.Should().Contain("nullableint as \"Int\"");
+        sql.Should().Contain("on t1.\"Int\" = ");
+        sql.Should().NotContain("t1.nullableint");
+    }
+
+    [Fact]
+    public void DerivedSourceAndPhysicalSourceOfSameType_ShouldResolveTheirOwnColumns()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var derived = ctx.From<IComplexEntity>().Where(c => c.Id > 1).ToCommand();
+
+        var sql = SqlOf(ctx, ctx.From(derived)
+            .Join(ctx.From<IComplexEntity>(), (d, c) => d.Int == c.Int)
+            .Select(p => new { A = p.Item1.Id, B = p.Item2.Id }));
+
+        sql.Should().Contain("nullableint as \"Int\"");
+        sql.Should().Contain("on t1.\"Int\" = t2.nullableint");
+    }
+
+    [Fact]
+    public void ProjectedCommand_OrderByDescendingAndPage_ShouldResolveProjectionExpression()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var grouped = ctx.From<IComplexEntity>()
+            .GroupBy(x => x.Int)
+            .Select(x => new { x.Int, Cnt = SqlFunctions.Sql.count() });
+
+        var sql = SqlOf(ctx, grouped.OrderByDescending(x => x.Cnt).Page(20, 1));
+
+        sql.Should().Contain("group by nullableint");
+        sql.Should().Contain("order by count(*) desc");
+        sql.Should().Contain("limit 20 offset 1");
+    }
+
+    [Fact]
+    public void ProjectedCommand_OrderByAndLimit_ShouldResolveSourceColumn()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var projected = ctx.From<IComplexEntity>().Select(x => new { x.Id, Name = x.String });
+
+        var sql = SqlOf(ctx, projected.OrderBy(x => x.Name).Limit(5).Offset(2));
+
+        sql.Should().Contain("order by somestring");
+        sql.Should().Contain("limit 5 offset 2");
+    }
+
+    [Fact]
     public void DerivedSourceWhereThenJoin_ShouldPushTheFilterOntoTheProjection()
     {
         using var ctx = PostgresTestContext.Create();
@@ -3777,4 +3901,160 @@ public class SqlGenerationTests
         act.Should().Throw<BuildSqlCommandException>().WithMessage("*two parameters named 'min'*");
     }
 
+    [Fact]
+    public void RangeOverlaps_ColumnAndCapturedRange_ShouldEmitAndOperator()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IRangeEntity>();
+        var window = new Range<int>(1, 10);
+
+        var command = Prepare(ctx, e.Where(x => SqlFunctions.Postgres.overlaps(x.During, window)).Select(x => new { x.Id }));
+
+        Normalize(command.DbCommand.CommandText).Should().Contain("(during && @");
+        command.DbCommandParams.Cast<DbParameter>().Should().ContainSingle()
+            .Which.Value.Should().BeOfType<NpgsqlRange<int>>();
+    }
+
+    [Fact]
+    public void RangeContains_ValueAndRangeAndContainedBy_ShouldEmitContainmentOperators()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IRangeEntity>();
+        var other = new Range<int>(5, 20);
+
+        var command = Prepare(ctx, e
+            .Where(x => SqlFunctions.Postgres.range_contains(x.During, 3))
+            .Where(x => SqlFunctions.Postgres.range_contains(x.During, other))
+            .Where(x => SqlFunctions.Postgres.range_contained_by(x.During, other))
+            .Select(x => new { x.Id }));
+
+        var sql = Normalize(command.DbCommand.CommandText);
+        sql.Should().Contain("(during @> 3)");
+        sql.Should().Contain("(during @> @");
+        sql.Should().Contain("(during <@ @");
+    }
+
+    [Fact]
+    public void RangeOperators_ShouldEmitNativeOperators()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IRangeEntity>();
+        var a = new Range<int>(1, 10);
+        var b = new Range<int>(5, 20);
+
+        var command = Prepare(ctx, e.Select(x => new
+        {
+            U = SqlFunctions.Postgres.range_union(a, b),
+            I = SqlFunctions.Postgres.range_intersection(a, b),
+            D = SqlFunctions.Postgres.range_difference(a, b),
+            Adj = SqlFunctions.Postgres.range_adjacent(a, b),
+            L = SqlFunctions.Postgres.range_strictly_left_of(a, b),
+            R = SqlFunctions.Postgres.range_strictly_right_of(a, b),
+            Nr = SqlFunctions.Postgres.range_not_extend_right_of(a, b),
+            Nl = SqlFunctions.Postgres.range_not_extend_left_of(a, b)
+        }));
+
+        var sql = Normalize(command.DbCommand.CommandText);
+        sql.Should().Contain("+ @");
+        sql.Should().Contain("* @");
+        sql.Should().Contain(" - @");
+        sql.Should().Contain("-|- @");
+        sql.Should().Contain("<< @");
+        sql.Should().Contain(">> @");
+        sql.Should().Contain("&< @");
+        sql.Should().Contain("&> @");
+    }
+
+    [Fact]
+    public void RangeConstructors_ShouldEmitNativeCalls()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IRangeEntity>();
+
+        SqlOf(ctx, e.Select(x => new { R = SqlFunctions.Postgres.int4range(1, 10) }))
+            .Should().Contain("int4range(1, 10)");
+        SqlOf(ctx, e.Select(x => new { R = SqlFunctions.Postgres.int4range(1, 10, "[]") }))
+            .Should().Contain("int4range(1, 10, '[]')");
+        SqlOf(ctx, e.Select(x => new { R = SqlFunctions.Postgres.int4range(null, null) }))
+            .Should().Contain("int4range(null, null)");
+        SqlOf(ctx, e.Select(x => new { R = SqlFunctions.Postgres.empty_range<int>() }))
+            .Should().Contain("'empty'::int4range");
+    }
+
+    [Fact]
+    public void RangeFunctions_ShouldEmitNativeCalls()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IRangeEntity>();
+        var window = new Range<int>(1, 10);
+
+        var command = Prepare(ctx, e.Select(x => new
+        {
+            E = SqlFunctions.Postgres.isempty(x.During),
+            L = SqlFunctions.Postgres.lower(window),
+            U = SqlFunctions.Postgres.upper(window),
+            Li = SqlFunctions.Postgres.lower_inc(window),
+            Ui = SqlFunctions.Postgres.upper_inc(window),
+            Lf = SqlFunctions.Postgres.lower_inf(window),
+            Uf = SqlFunctions.Postgres.upper_inf(window)
+        }));
+
+        var sql = Normalize(command.DbCommand.CommandText);
+        sql.Should().Contain("isempty(during)");
+        sql.Should().Contain("lower(@");
+        sql.Should().Contain("upper(@");
+        sql.Should().Contain("lower_inc(@");
+        sql.Should().Contain("upper_inc(@");
+        sql.Should().Contain("lower_inf(@");
+        sql.Should().Contain("upper_inf(@");
+    }
+
+    [Fact]
+    public void MultirangeOperators_ShouldEmitNativeOperators()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IRangeEntity>();
+
+        var command = Prepare(ctx, e.Select(x => new
+        {
+            Overlap = SqlFunctions.Postgres.overlaps(
+                new[] { new Range<int>(1, 5) },
+                new[] { new Range<int>(4, 8) }),
+            Union = SqlFunctions.Postgres.range_union(
+                new[] { new Range<int>(1, 5) },
+                new[] { new Range<int>(4, 8) }),
+            Intersection = SqlFunctions.Postgres.range_intersection(
+                new[] { new Range<int>(1, 5) },
+                new[] { new Range<int>(4, 8) }),
+            Difference = SqlFunctions.Postgres.range_difference(
+                new[] { new Range<int>(1, 5) },
+                new[] { new Range<int>(4, 8) }),
+            Adjacent = SqlFunctions.Postgres.range_adjacent(
+                new[] { new Range<int>(1, 2) },
+                new[] { new Range<int>(2, 3) })
+        }));
+
+        var sql = Normalize(command.DbCommand.CommandText);
+        sql.Should().Contain("&& @");
+        sql.Should().Contain(" + @");
+        sql.Should().Contain(" * @");
+        sql.Should().Contain(" - @");
+        sql.Should().Contain("-|- @");
+    }
+
+    [Fact]
+    public void MultirangeFunctionsAndAggregates_ShouldEmitNativeCalls()
+    {
+        using var ctx = PostgresTestContext.Create();
+        var e = ctx.From<IRangeEntity>();
+
+        SqlOf(ctx, e.Select(x => new { R = SqlFunctions.Postgres.multirange(new Range<int>(1, 5)) }))
+            .Should().Contain("multirange(@");
+        SqlOf(ctx, e.Select(x => new { R = SqlFunctions.Postgres.range_merge(new[] { new Range<int>(1, 2), new Range<int>(5, 6) }) }))
+            .Should().Contain("range_merge(@");
+        SqlOf(ctx, e.Select(x => new { R = SqlFunctions.Postgres.range_agg(x.During) }))
+            .Should().Contain("range_agg(during)");
+        SqlOf(ctx, e.Select(x => new { R = SqlFunctions.Postgres.range_intersect_agg(x.During) }))
+            .Should().Contain("range_intersect_agg(during)");
+    }
 }

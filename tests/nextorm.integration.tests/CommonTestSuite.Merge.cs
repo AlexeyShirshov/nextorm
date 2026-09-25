@@ -337,4 +337,52 @@ public abstract partial class CommonTestSuite
 
         sql.Should().ContainEquivalentOf("insert");
     }
+
+    [Fact]
+    public void Merge_Returning_ShouldReturnWrittenRow()
+    {
+        var ctx = _sut.DataProvider;
+        var dialect = ((DataContext)ctx).Dialect;
+        var id = MergeKey();
+        var marker = "mrg_" + Guid.NewGuid().ToString("N");
+
+        if (!dialect.SupportsReturning && !dialect.SupportsOutput)
+        {
+            var unsupported = () => ctx.MergeInto<IMergeEntity>()
+                .Using(new MergeEntity { Id = id, Name = "x", Age = 1 })
+                .OnKeys()
+                .WhenMatchedUpdate()
+                .WhenNotMatchedInsert()
+                .Returning(x => new { x.Id, x.Name })
+                .ToList();
+
+            unsupported.Should().Throw<NotSupportedException>();
+            return;
+        }
+
+        var inserted = ctx.MergeInto<IMergeEntity>()
+            .Using(new MergeEntity { Id = id, Name = marker, Age = 1 })
+            .OnKeys()
+            .WhenMatchedUpdate()
+            .WhenNotMatchedInsert()
+            .Returning(x => new { x.Id, x.Name })
+            .ToList();
+
+        inserted.Should().ContainSingle();
+        inserted[0].Id.Should().Be(id);
+        inserted[0].Name.Should().Be(marker);
+
+        var updatedName = marker + "_2";
+        var updated = ctx.MergeInto<IMergeEntity>()
+            .Using(new MergeEntity { Id = id, Name = updatedName, Age = 2 })
+            .OnKeys()
+            .WhenMatchedUpdate()
+            .WhenNotMatchedInsert()
+            .Returning(x => new { x.Id, x.Name })
+            .ToList();
+
+        updated.Should().ContainSingle();
+        updated[0].Id.Should().Be(id);
+        updated[0].Name.Should().Be(updatedName);
+    }
 }

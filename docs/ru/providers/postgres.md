@@ -37,7 +37,7 @@
   ранжирование доступно через native `SqlFunctions.Postgres.ts_rank`/`ts_rank_cd`/`ts_headline` (гейтится
   [`SupportsTextSearchFunctions`](xref:NextORM.Core.ISqlDialect.SupportsTextSearchFunctions));
 - расширенная библиотека скалярных функций включена ([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions) равно `true`):
-  дополнительные математические (`asin`, `cbrt`, `degrees`, `pi`, `mod`, ...), строковые (`split_part`,
+  дополнительные математические (`asin`, `cbrt`, `mod`, ...), строковые (`split_part`,
   `lpad`, `initcap`, ...), POSIX-регулярные выражения (`regexp_replace`, `regexp_like`, ...), дата/время
   (`make_interval`, `justify_days`, `justify_hours`, `to_char`, `to_date`, ...), `num_nulls`/`num_nonnulls`
   и помощник типа `pg_typeof`;
@@ -150,8 +150,37 @@ select id from complex_entity where (id = any(@p0))
 ```
 
 Функции для массивов (`cardinality`, `array_length`, `array_position`, ...) и операторы `@>`/`&&`
-описаны в разделе [Скалярные функции](../guide/11-scalar-functions.md#массивы-postgresql). Остальные
+описаны в разделе [Скалярные функции](../scalar-functions/06-arrays.md#массивы-postgresql). Остальные
 провайдеры отклоняют их с `NotSupportedException`.
+
+## Range-типы
+
+PostgreSQL — единственный поддерживаемый провайдер с нативными range-типами (`int4range`, `int8range`,
+`numrange`, `tsrange`, `tstzrange`, `daterange`). Для колонки или параметра используйте
+provider-agnostic [`Range<T>`](xref:NextORM.Core.Range`1); провайдер биндит его через Npgsql и читает
+обратно, сохраняя unbounded стороны и пустой диапазон. PostgreSQL-only range-поверхность
+(`overlaps`, `range_contains`/`range_contained_by`, `range_union`, `lower`/`upper`/`isempty`,
+конструкторы и `empty_range<T>()`) находится в
+[`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) и гейтится
+[`SupportsRanges`](xref:NextORM.Core.ISqlDialect.SupportsRanges):
+
+```csharp
+var window = new Range<int>(15, 25);   // [15,25)
+
+ctx.From<IReservation>()
+    .Where(e => SqlFunctions.Postgres.overlaps(e.During, window))
+    .Select(e => e.Id)
+    .ToList();                          // (during && @p0)
+```
+
+Multirange-типы (`int4multirange`…`datemultirange`) мапятся на `Range<T>[]` и используют те же имена
+операторов, перегруженные для multirange, плюс `multirange`, `range_merge` и агрегаты
+`range_agg`/`range_intersect_agg`. Полная поверхность —
+[Специфичный для PostgreSQL SQL](../guide/provider-specific/postgresql.md#multirange).
+
+In-memory провайдер вычисляет всю поверхность range/multirange с той же семантикой; все остальные
+провайдеры отклоняют её с `NotSupportedException`. Полная таблица — в разделе
+[Специфичный для PostgreSQL SQL](../guide/provider-specific/postgresql.md#range-типы).
 
 ## JSON и JSONB
 
@@ -176,7 +205,7 @@ ctx.From<IComplexEntity>()
 
 Обычная строка с JSON привязывается как `text`; для разбора используйте `SqlFunctions.Postgres.json_cast(value)`.
 Полная поверхность (`json_agg`, `jsonb_build_object`, `->`, `->>`, `#>`, `@>`, `?`, `?|`, `?&`, ...)
-описана в разделе [Скалярные функции](../guide/11-scalar-functions.md#json-и-jsonb-postgresql).
+описана в разделе [Скалярные функции](../scalar-functions/07-json-and-xml.md#json-и-jsonb-postgresql).
 Остальные провайдеры отклоняют её с `NotSupportedException`.
 
 ## Дополнительная поверхность функций
@@ -185,7 +214,11 @@ PostgreSQL также включает `greatest`/`least`, `date_trunc`, агр�
 `FILTER (WHERE ...)` у агрегатов, переносимый `iif` (рендерится как `case when ... then ... else ... end`),
 оконные функции `percent_rank`/`cume_dist`/`nth_value` и встроенные наборные табличные функции
 `generate_series`, `unnest`, `regexp_matches`, `regexp_split_to_table`, `jsonb_array_elements(_text)`,
-`jsonb_each(_text)`, `jsonb_object_keys`, `jsonb_path_query` и `ts_stat`:
+`jsonb_each(_text)`, `jsonb_object_keys`, `jsonb_path_query`, `ts_stat` и record-функции
+`jsonb_to_record`/`jsonb_to_recordset`
+([`SqlFunctions.Postgres.jsonb_to_record<TRow>(json)`](xref:NextORM.Core.PostgresFunctions), схема
+результата которых рендерится как список определений колонок в псевдониме из `TRow` вызывающего под
+[`SupportsResultSchema(TableFunctionSchema)`](xref:NextORM.Core.ISqlDialect.SupportsResultSchema(NextORM.Core.TableFunctionSchema))):
 
 ```csharp
 ctx.From<IComplexEntity>()
@@ -199,7 +232,7 @@ ctx.From<IComplexEntity>()
 ```
 
 Они описаны в разделе
-[Скалярные функции](../guide/11-scalar-functions.md#строковые-и-массивные-агрегаты). SQLite
+[Скалярные функции](../scalar-functions/05-aggregates.md#строковые-и-массивные-агрегаты). SQLite
 также принимает предложение `FILTER`; остальные функции доступны только в PostgreSQL.
 
 ## Операции над множествами `*ALL` и порядок null
@@ -253,7 +286,7 @@ join complex_entity as "t2" on t1.id = t2.id
 | `date_add` / `end_of_month` / `DateTime.Add*` | интервальная арифметика (`x + (n * interval '1 day')`) |
 | `string_agg` / `array_agg` / `filter` у агрегатов | поддерживаются |
 | Session/info-функции | `current_user`, `session_user`, `current_schema`, `current_database()`, `version()` |
-| Табличные функции | `generate_series`, `unnest`, `regexp_matches`, `regexp_split_to_table`, `jsonb_array_elements(_text)`, `jsonb_each(_text)`, `jsonb_object_keys`, `jsonb_path_query`, `ts_stat` |
+| Табличные функции | `generate_series`, `unnest`, `regexp_matches`, `regexp_split_to_table`, `jsonb_array_elements(_text)`, `jsonb_each(_text)`, `jsonb_object_keys`, `jsonb_path_query`, `ts_stat`, `jsonb_to_record`/`jsonb_to_recordset` (схема из `TRow`) |
 | Рекурсивный CTE | `with recursive` (без опции max-recursion) |
 | `stdev` / `stdevp` | `stddev` / `stddev_pop` |
 | `var` / `varp` | `variance` / `var_pop` |

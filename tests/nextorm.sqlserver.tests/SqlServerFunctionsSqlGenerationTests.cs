@@ -55,10 +55,6 @@ public class SqlServerFunctionsSqlGenerationTests
             As = SqlFunctions.SqlServer.asin(0.5),
             At = SqlFunctions.SqlServer.atan(0.5),
             A2 = SqlFunctions.SqlServer.atn2(1.0, 2.0),
-            C = SqlFunctions.SqlServer.cot(0.5),
-            D = SqlFunctions.SqlServer.degrees(1.0),
-            R = SqlFunctions.SqlServer.radians(180.0),
-            P = SqlFunctions.SqlServer.pi(),
             Sq = SqlFunctions.SqlServer.square((double)x.Int!)
         }));
 
@@ -66,10 +62,6 @@ public class SqlServerFunctionsSqlGenerationTests
         sql.Should().Contain("asin(0.5)");
         sql.Should().Contain("atan(0.5)");
         sql.Should().Contain("atn2(1, 2)");
-        sql.Should().Contain("cot(0.5)");
-        sql.Should().Contain("degrees(1)");
-        sql.Should().Contain("radians(180)");
-        sql.Should().Contain("pi()");
         sql.Should().Contain("square(cast(nullableint as float))");
     }
 

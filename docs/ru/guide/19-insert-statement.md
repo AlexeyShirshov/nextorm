@@ -409,6 +409,43 @@ var rows = ctx.InsertInto<Order>()
 (`Returning(x => new { x.Id, x.Name })`), либо используйте класс, реализующий интерфейс;
 `Returning()` на самом интерфейсе бросает `NotSupportedException` при исполнении.
 
+## Запись изменённых строк в таблицу (`OUTPUT INTO`)
+
+SQL Server умеет записывать изменённые строки в существующую таблицу вместо (или в дополнение к)
+возврату клиенту, через форму `OUTPUT ... INTO <target>(columns)`. Начните с returning-билдера и
+вызовите `OutputInto(targetTable)`:
+
+```csharp
+// записать вставленные строки в audit_log; клиенту ничего не возвращается
+var written = ctx.InsertInto<Order>()
+    .Value(x => x.Name, "a")
+    .Returning(x => new { x.Id, x.Name })
+    .OutputInto("audit_log")
+    .Execute();                       // int: число затронутых строк
+
+// записать в audit_log и вернуть те же строки клиенту (второй OUTPUT)
+var rows = ctx.InsertInto<Order>()
+    .Value(x => x.Name, "a")
+    .Returning(x => new { x.Id, x.Name })
+    .OutputIntoThenOutput("audit_log")
+    .ToList();                        // IReadOnlyList<{ Id, Name }>
+```
+
+* `OutputInto(...)` возвращает [`OutputIntoBuilder`](xref:NextORM.Core.OutputIntoBuilder),
+  у которого единственные терминалы — `Execute()`/`ExecuteAsync()` (число затронутых строк) и `ToSql()`.
+  Строковых терминалов нет, так как клиенту ничего не приходит.
+* `OutputIntoThenOutput(...)` возвращает обычный returning-билдер, поэтому `Single()`/`ToList()` работают:
+  инструкция несёт и клаузу `INTO`, и клиентский `OUTPUT`.
+* Цель — явное имя таблицы: nextorm не объявляет табличную переменную (`DECLARE @t TABLE ...`) в этой фазе.
+  Целевая таблица должна уже существовать, а её колонки — иметь те же имена, что и выбранные выходные
+  колонки (список выбранных колонок переиспользуется как список колонок цели); имя цели и колонки
+  квотируются как любые другие идентификаторы.
+* Те же два метода доступны на returning-билдерах `UPDATE` и `DELETE` (для `DELETE` удалённая строка
+  читается через алиас `deleted`). Пустое имя цели или форма identity-функции (`ReturningIdentity<TKey>()`,
+  не выбирающая колонку) бросают исключение.
+* Только SQL Server реализует `ISqlDialect.SupportsOutputInto`; остальные провайдеры бросают
+  `NotSupportedException` при рендере инструкции.
+
 ## Массовая вставка (bulk)
 
 Запись целого набора — нативные bulk-пути, чанкинг, `Returning`, `IgnoreDuplicates` и `KeepIdentity` —
@@ -445,6 +482,8 @@ var sql = ctx.InsertInto<ISimpleEntity>().Value(x => x.Name, "a").ToSql();
 Сам `INSERT ... VALUES` кросс-провайдерный и не гейтится: одно и то же API `InsertInto<T>()` работает
 на всех SQL-провайдерах. Отличается лишь форма возврата ключа, и провайдер, который её не выражает,
 отклоняет `ReturningIdentity`/`ReturningKey` через `NotSupportedException`, а не генерирует некорректный SQL.
+SQL Server дополнительно записывает изменённые строки в существующую таблицу через `OUTPUT INTO`; см.
+[Запись изменённых строк в таблицу](#запись-изменённых-строк-в-таблицу-output-into).
 
 ## Примечания и ограничения фазы 1
 

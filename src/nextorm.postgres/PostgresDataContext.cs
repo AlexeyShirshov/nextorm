@@ -1,4 +1,7 @@
+using System.Data;
 using System.Data.Common;
+using System.Linq.Expressions;
+using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using NextORM.Core;
@@ -13,6 +16,11 @@ namespace NextORM.Postgres;
 /// </summary>
 public class PostgresDataContext : DataContext
 {
+    private static readonly MethodInfo GetFieldValueMI = typeof(DbDataReader).GetMethod(nameof(DbDataReader.GetFieldValue))!;
+    private static readonly MethodInfo IsDBNullMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.IsDBNull))!;
+    private static readonly MethodInfo ToRangeMI = typeof(PostgresRange).GetMethod(nameof(PostgresRange.ToRange), BindingFlags.Static | BindingFlags.Public)!;
+    private static readonly MethodInfo ToRangesMI = typeof(PostgresRange).GetMethod(nameof(PostgresRange.ToRanges), BindingFlags.Static | BindingFlags.Public)!;
+
     /// <summary>
     /// Creates a PostgreSQL context that owns a connection built lazily from
     /// <paramref name="connectionString"/>.
@@ -54,11 +62,27 @@ public class PostgresDataContext : DataContext
     /// <returns>A new PostgreSQL parameter.</returns>
     public override DbParameter CreateParam(string name, object? value)
     {
+        // A provider-agnostic Range<T> is bound as the matching Npgsql range type so that the range
+        // operators and columns accept it without a cast.
+        if (value is not null && value.GetType().IsGenericType && value.GetType().GetGenericTypeDefinition() == typeof(Range<>))
+        {
+            var boundType = value.GetType().GetGenericArguments()[0];
+            return new NpgsqlParameter(name, PostgresRange.ToDriver(value)) { NpgsqlDbType = PostgresRangeTypes.DbTypeFor(boundType) };
+        }
+
+        // A provider-agnostic Range<T>[] is bound as the matching Npgsql multirange type.
+        if (value is Array && value.GetType().GetElementType() is { } elementType
+            && elementType.IsGenericType && elementType.GetGenericTypeDefinition() == typeof(Range<>))
+        {
+            var boundType = elementType.GetGenericArguments()[0];
+            return new NpgsqlParameter(name, PostgresRange.ToDriverMultirange(value)) { NpgsqlDbType = PostgresRangeTypes.MultirangeDbTypeFor(boundType) };
+        }
+
         // Npgsql rejects a null parameter value, so unset/null values must be passed as DBNull.
         var parameter = new NpgsqlParameter(name, value ?? DBNull.Value);
 
         // A JSON document/element/node is bound as jsonb so that the json/jsonb operators and
-        // functions accept it without an explicit cast. A plain string is left as text and can be
+        // functions accept them without an explicit cast. A plain string is left as text and can be
         // parsed on demand with SqlFunctions.Postgres.json_cast(...).
         if (value is JsonDocument or JsonElement or JsonNode)
             parameter.NpgsqlDbType = NpgsqlDbType.Jsonb;
@@ -67,10 +91,100 @@ public class PostgresDataContext : DataContext
     }
 
     /// <summary>
+    /// Materializes a projected <see cref="Range{T}"/> column from the driver's
+    /// <c>NpgsqlRange&lt;T&gt;</c> through the typed <c>GetFieldValue</c> accessor, converting it to the
+    /// provider-agnostic range. Every other column is mapped by the base implementation.
+    /// </summary>
+    /// <param name="column">The projected column being read.</param>
+    /// <param name="param">The data-reader expression the accessor is built from.</param>
+    /// <returns>An expression that reads the column value.</returns>
+    public override Expression MapColumnExpression(SelectExpression column, Expression param)
+    {
+        var realType = Nullable.GetUnderlyingType(column.PropertyType) ?? column.PropertyType;
+        if (realType.IsGenericType && realType.GetGenericTypeDefinition() == typeof(Range<>))
+            return MapRangeColumn(column, param, realType);
+
+        if (realType.IsArray && realType.GetElementType() is { } element
+            && element.IsGenericType && element.GetGenericTypeDefinition() == typeof(Range<>))
+            return MapMultirangeColumn(column, param, element.GetGenericArguments()[0]);
+
+        return base.MapColumnExpression(column, param);
+    }
+
+    private static Expression MapMultirangeColumn(SelectExpression column, Expression param, Type boundType)
+    {
+        var driverType = typeof(NpgsqlRange<>).MakeGenericType(boundType).MakeArrayType();
+        var index = Expression.Constant(column.Index);
+
+        var getter = Expression.Call(
+            Expression.Convert(param, typeof(NpgsqlDataReader)),
+            GetFieldValueMI.MakeGenericMethod(driverType),
+            index);
+        var converted = Expression.Call(ToRangesMI.MakeGenericMethod(boundType), getter);
+
+        if (column.Nullable)
+        {
+            Expression value = converted.Type == column.PropertyType
+                ? converted
+                : Expression.Convert(converted, column.PropertyType);
+
+            return Expression.Condition(
+                Expression.Call(param, IsDBNullMI, index),
+                Expression.Constant(null, column.PropertyType),
+                value);
+        }
+
+        if (column.DefaultOnNull)
+        {
+            return Expression.Condition(
+                Expression.Call(param, IsDBNullMI, index),
+                Expression.Default(column.PropertyType),
+                converted);
+        }
+
+        return converted;
+    }
+
+    private static Expression MapRangeColumn(SelectExpression column, Expression param, Type realType)
+    {
+        var boundType = realType.GetGenericArguments()[0];
+        var driverType = typeof(NpgsqlRange<>).MakeGenericType(boundType);
+        var index = Expression.Constant(column.Index);
+
+        var getter = Expression.Call(
+            Expression.Convert(param, typeof(NpgsqlDataReader)),
+            GetFieldValueMI.MakeGenericMethod(driverType),
+            index);
+        var converted = Expression.Call(ToRangeMI.MakeGenericMethod(boundType), getter);
+
+        if (column.Nullable)
+        {
+            Expression value = converted.Type == column.PropertyType
+                ? converted
+                : Expression.Convert(converted, column.PropertyType);
+
+            return Expression.Condition(
+                Expression.Call(param, IsDBNullMI, index),
+                Expression.Constant(null, column.PropertyType),
+                value);
+        }
+
+        if (column.DefaultOnNull)
+        {
+            return Expression.Condition(
+                Expression.Call(param, IsDBNullMI, index),
+                Expression.Default(column.PropertyType),
+                converted);
+        }
+
+        return converted;
+    }
+
+    /// <summary>
     /// Writes <paramref name="rows"/> through <c>COPY &lt;table&gt; (&lt;cols&gt;) FROM STDIN (FORMAT
     /// BINARY)</c> with <c>NpgsqlBinaryImporter</c>, streaming each row without buffering the set.
     /// </summary>
-    /// <param name="tableName">The convention-resolved (unquoted) target table name.</param>
+    /// <param name="tableName">The rendered target table reference (schema-qualified, quoted when configured).</param>
     /// <param name="columnNames">The convention-resolved (unquoted) written column names, in row order.</param>
     /// <param name="columns">The mapped columns, in row order.</param>
     /// <param name="rows">The rows to write; each array matches <paramref name="columnNames"/> by ordinal.</param>
@@ -105,7 +219,7 @@ public class PostgresDataContext : DataContext
     }
 
     /// <summary>Asynchronously writes <paramref name="rows"/> through a binary <c>COPY</c>.</summary>
-    /// <param name="tableName">The convention-resolved (unquoted) target table name.</param>
+    /// <param name="tableName">The rendered target table reference (schema-qualified, quoted when configured).</param>
     /// <param name="columnNames">The convention-resolved (unquoted) written column names, in row order.</param>
     /// <param name="columns">The mapped columns, in row order.</param>
     /// <param name="rows">The rows to write; each array matches <paramref name="columnNames"/> by ordinal.</param>
@@ -149,6 +263,6 @@ public class PostgresDataContext : DataContext
     private string BuildCopyCommand(string tableName, IReadOnlyList<string> columnNames)
     {
         var quotedColumns = string.Join(", ", columnNames.Select(Dialect.QuoteIdentifier));
-        return $"COPY {Dialect.QuoteIdentifier(tableName)} ({quotedColumns}) FROM STDIN (FORMAT BINARY)";
+        return $"COPY {tableName} ({quotedColumns}) FROM STDIN (FORMAT BINARY)";
     }
 }

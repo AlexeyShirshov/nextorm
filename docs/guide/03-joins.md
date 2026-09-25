@@ -236,7 +236,11 @@ reference a join projection; apply it to a single-entity source instead.
 ## Joining a subquery
 
 A `QueryCommand<T>` can be joined directly. It is wrapped in parentheses and aliased as a derived
-table (the alias is optional on SQLite and required on SQL Server and PostgreSQL):
+table; the alias is always emitted (even on SQLite, where it is optional) so every reference to the
+derived source — the `ON` condition, `WHERE`, `ORDER BY` and the projection — resolves through the same
+alias identity. A member that the derived projection renames (`c.String` mapped to `requiredstring`)
+is exposed under the projected name (`requiredstring as 'String'`) and is referenced outside by that
+exposed name (`t1.'String'`), not by the physical column name.
 
 ```csharp
 var subQuery = dataContext.From<IComplexEntity>()
@@ -449,7 +453,7 @@ every other provider and the in-memory context reject them with `NotSupportedExc
 
 | Provider | Join aliases | Derived-table alias | Outer joins | APPLY / LATERAL |
 |---|---|---|---|---|
-| SQLite | `as 't1'` | optional | left/right/full supported | not supported (`NotSupportedException`) |
+| SQLite | `as 't1'` | always emitted (optional in SQLite itself) | left/right/full supported | not supported (`NotSupportedException`) |
 | SQL Server | `as [t1]` | required | left/right/full supported | `CROSS APPLY` / `OUTER APPLY` |
 | PostgreSQL | `as "t1"` | required | left/right/full supported | `CROSS JOIN LATERAL` / `LEFT JOIN LATERAL ... ON true` (plain tables: `CROSS JOIN` / `LEFT JOIN ... ON true`) |
 | MySQL / MariaDB | `as \`t1\`` | required | left/right supported (no full) | `CROSS JOIN LATERAL` / `LEFT JOIN LATERAL ... ON true` (plain tables: `CROSS JOIN` / `LEFT JOIN ... ON true`) |

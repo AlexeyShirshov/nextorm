@@ -98,10 +98,52 @@ internal static class MemberTranslator
     {
         if (expression is MemberExpression { Member: PropertyInfo pi }
             && DataContextCache.Metadata.TryGetValue(visitor.EntityType, out var metadata)
-            && metadata.Properties.FirstOrDefault(p => p.PropertyInfo == pi) is { } property)
+            && FindProperty(metadata, pi) is { } property)
             return DurationStorage.ResolveStorageUnit(property, visitor.Dialect);
 
         return null;
+    }
+
+    // Closure-free lookup of a mapped property: a query is prepared once per plan, but the lookups run
+    // per projected column and per comparison operand, so a first-class indexed scan avoids capturing
+    // the PropertyInfo in a delegate and boxing the IReadOnlyList enumerator.
+    internal static IPropertyMetadata? FindProperty(IEntityMetadata metadata, PropertyInfo property)
+    {
+        var properties = metadata.Properties;
+        for (var i = 0; i < properties.Count; i++)
+        {
+            if (properties[i].PropertyInfo == property)
+                return properties[i];
+        }
+
+        return null;
+    }
+
+    // Resolves the value converter of an entity member access, if the mapped property declares one.
+    // Used so a constant compared with a converted column is bound as the provider representation, and
+    // the same converter is applied to the elements of an IN/Contains value list. The metadata is keyed
+    // by the member's declaring type (the entity type in a simple query, or the joined entity type in a
+    // projection), falling back to the visitor's entity type. A boxed comparison operands wraps the
+    // member in a Convert (the C# lowering of an enum comparison), so the wrapper is unwrapped first.
+    internal readonly record struct ResolvedConverter(IPropertyValueConverter Converter, Type ModelType);
+
+    internal static ResolvedConverter? ResolveConverter(BaseExpressionVisitor visitor, Expression expression)
+    {
+        expression = TypeFacts.UnwrapConvert(expression);
+        if (expression is not MemberExpression { Member: PropertyInfo pi })
+            return null;
+
+        IEntityMetadata? metadata = null;
+        if (pi.DeclaringType is not null && DataContextCache.Metadata.TryGetValue(pi.DeclaringType, out var byDeclaring))
+            metadata = byDeclaring;
+        else if (DataContextCache.Metadata.TryGetValue(visitor.EntityType, out var byEntity))
+            metadata = byEntity;
+
+        if (metadata is null || FindProperty(metadata, pi)?.Converter is not { } converter)
+            return null;
+
+        var resolved = converter is IJsonColumnConverter json ? json.Resolve(visitor.Dialect) : converter;
+        return new ResolvedConverter(resolved, Nullable.GetUnderlyingType(pi.PropertyType) ?? pi.PropertyType);
     }
 
     internal static string? ResolveCollation(BaseExpressionVisitor visitor, Type entityType, MemberInfo member)
@@ -110,14 +152,27 @@ internal static class MemberTranslator
             || !DataContextCache.Metadata.TryGetValue(entityType, out var metadata))
             return null;
 
-        var props = metadata.Properties;
-        for (var i = 0; i < props.Count; i++)
-        {
-            if (props[i].PropertyInfo == pi)
-                return props[i].Collation is { Length: > 0 } collation ? collation : null;
-        }
+        return FindProperty(metadata, pi)?.Collation is { Length: > 0 } collation ? collation : null;
+    }
 
-        return null;
+    private static string? ResolveRangeColumnsMember(BaseExpressionVisitor visitor, MemberInfo member)
+    {
+        if (member is not PropertyInfo pi || visitor.EntityType is null)
+            return null;
+
+        if (!DataContextCache.Metadata.TryGetValue(visitor.EntityType, out var metadata))
+            return null;
+
+        var rangeColumns = FindProperty(metadata, pi)?.RangeColumns;
+        if (rangeColumns is null)
+            return null;
+
+        return visitor.RangeColumnRole switch
+        {
+            RangeColumnRole.Lower => rangeColumns.LowerColumn,
+            RangeColumnRole.Upper => rangeColumns.UpperColumn,
+            _ => throw new NotSupportedException($"The property '{pi.Name}' is stored as a pair of columns and cannot be used as a single value; use a range function or operator over it.")
+        };
     }
 
     internal static void AppendColumn(BaseExpressionVisitor visitor, string colName, string? collation)
@@ -174,9 +229,13 @@ internal static class MemberTranslator
             {
                 if (!visitor.IsParamMode)
                 {
-                    var colName = node.Member.GetPropertyColumnName(visitor.Options.NamingConvention);
+                    var colName = ResolveRangeColumnsMember(visitor, node.Member)
+                        ?? node.Member.GetPropertyColumnName(visitor.Options.NamingConvention);
                     if (!string.IsNullOrEmpty(colName))
                     {
+                        if (TryTranslateDerivedProjectionMember(visitor, node, hasTableAliasForColumn: false))
+                            return node;
+
                         if (!visitor.DontNeedAlias && visitor.ColumnsProvider.HasAliases)
                         {
                             string? tableAliasForColumn = null;
@@ -260,7 +319,7 @@ internal static class MemberTranslator
             }
 
             var parameterName = visitor.Options.ParameterNamePrefix + node.Member.Name;
-            visitor.Params.Add(new Parameter(parameterName, visitor.NormalizeDurationValue(((Func<object>)del)())));
+            visitor.TryAddCapturedParameter(parameterName, ((Func<object>)del)(), node);
 
             if (!visitor.IsParamMode)
                 visitor.Builder!.Append(visitor.Dialect.MakeParam(parameterName));
@@ -368,7 +427,7 @@ internal static class MemberTranslator
                     }
                     // var value = 1;
                     var parameterName = visitor.Options.ParameterNamePrefix + node.Member.Name;
-                    visitor.Params.Add(new Parameter(parameterName, visitor.NormalizeDurationValue(((Func<object?, object>)del)(twoTypeVisitor.Target2!.Value))));
+                    visitor.TryAddCapturedParameter(parameterName, ((Func<object?, object>)del)(twoTypeVisitor.Target2!.Value), node);
 
                     if (!visitor.IsParamMode)
                         visitor.Builder!.Append(visitor.Dialect.MakeParam(parameterName));
@@ -425,10 +484,11 @@ internal static class MemberTranslator
 
                 if (!visitor.IsParamMode)
                 {
-                    var colName = node.Member.GetPropertyColumnName(visitor.Options.NamingConvention);
+                    var colName = ResolveRangeColumnsMember(visitor, node.Member)
+                        ?? node.Member.GetPropertyColumnName(visitor.Options.NamingConvention);
                     if (!string.IsNullOrEmpty(colName))
                     {
-                        if (TryTranslateDerivedProjectionMember(visitor, node, lambdaParameter, hasTableAliasForColumn))
+                        if (TryTranslateDerivedProjectionMember(visitor, node, hasTableAliasForColumn))
                             return node;
 
                         var collation = lambdaParameter.Type!.IsAssignableTo(typeof(IProjection))
@@ -483,36 +543,52 @@ internal static class MemberTranslator
     }
 
     /// <summary>
-    /// Resolves a member of a join-projection item whose source is a derived table rather than a
-    /// physical table. The whole-entity source of <c>CrossApply</c>/<c>OuterApply</c> is projected as
-    /// <c>somestring as "String"</c>, so a pass-through member must be referenced by the projected
-    /// name, not the physical column name. The lookup is deliberately confined to projection items:
-    /// a plain entity parameter inside a subquery must keep its physical column name.
+    /// Resolves a member of a source whose actual <c>FROM</c> is a derived table rather than a physical
+    /// table. A derived table exposes its projection under the projected (property) names, so a member
+    /// access must reference the exposed name, not the physical column name. The lookup is confined to
+    /// the command currently being rendered: an out-of-scope (already popped) derived source must not
+    /// change how a physical column of the current scope is rendered.
     /// </summary>
     private static bool TryTranslateDerivedProjectionMember(
         BaseExpressionVisitor visitor,
         MemberExpression node,
-        ParameterExpression lambdaParameter,
         bool hasTableAliasForColumn)
     {
-        if (!lambdaParameter.Type!.IsAssignableTo(typeof(IProjection)))
+        var found = node.Expression is ParameterExpression parameter
+            ? visitor.ColumnsProvider.FindInScopeQueryCommand(parameter, fromProjection: false)
+            : visitor.ColumnsProvider.FindInScopeQueryCommand(node.Expression!.Type);
+        if (found is not { Command: { } innerQuery } || innerQuery.SelectList is null)
             return false;
 
-        var (idx, innerQuery) = visitor.ColumnsProvider.FindQueryCommand(node.Expression!.Type, visitor.IncludeNestedSources);
-        var innerCol = innerQuery?.SelectList?.SingleOrDefault(col => col.PropertyName == node.Member.Name);
+        var innerCol = innerQuery.SelectList.SingleOrDefault(col => col.PropertyName == node.Member.Name);
         if (innerCol is null)
             return false;
 
-        var sqlBuilder = new SqlBuilder(visitor.Options with { IncludeNestedSources = true });
-        var col = sqlBuilder.MakeColumn(innerCol, innerQuery!.EntityType!, true, renameAware: true);
+        visitor.ColumnsProvider.PushSourceScope();
+        string column;
+        bool needAliasForColumn;
+        try
+        {
+            var sqlBuilder = new SqlBuilder(visitor.Options with { IncludeNestedSources = true });
+            var col = sqlBuilder.MakeColumn(innerCol, innerQuery.EntityType!, true, renameAware: true);
+            column = col.Column;
+            needAliasForColumn = col.NeedAliasForColumn;
+        }
+        finally
+        {
+            visitor.ColumnsProvider.PopSourceScope();
+        }
 
-        if (!hasTableAliasForColumn)
-            visitor.Builder!.Append(visitor.AliasProvider!.FindAlias(idx)).Append('.');
+        if (!visitor.IsParamMode)
+        {
+            if (!hasTableAliasForColumn && !visitor.DontNeedAlias)
+                visitor.Builder!.Append(visitor.AliasProvider!.FindAlias(found.Value.Index)).Append('.');
 
-        if (col.NeedAliasForColumn)
-            visitor.Builder!.Append(visitor.Dialect.MakeColumnReference(innerCol.PropertyName!));
-        else
-            visitor.Builder!.Append(col.Column);
+            if (needAliasForColumn)
+                visitor.Builder!.Append(visitor.Dialect.MakeColumnReference(innerCol.PropertyName!));
+            else
+                visitor.Builder!.Append(column);
+        }
 
         return true;
     }

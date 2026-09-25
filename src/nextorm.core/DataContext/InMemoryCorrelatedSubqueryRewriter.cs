@@ -39,8 +39,14 @@ internal sealed class InMemoryCorrelatedSubqueryRewriter : ExpressionVisitor
             && lambda.Parameters.Count == 1
             && lambda.Parameters[0].Type == typeof(IQueryRegistry))
         {
-            return RewriteSubquery(lambda);
+            return RewriteTerminal(lambda.Body);
         }
+
+        // A subquery combined with a logical operator is normalised by the preparation visitor to a
+        // direct predicate bound to a free registry parameter, so it no longer appears as a lambda but
+        // still has to be evaluated once per outer row.
+        if (node is not null && IsRegistrySubquery(node))
+            return RewriteTerminal(node);
 
         return base.Visit(node);
     }
@@ -107,9 +113,8 @@ internal sealed class InMemoryCorrelatedSubqueryRewriter : ExpressionVisitor
         return ReferenceEquals(body, node.Body) ? node : Expression.Lambda(body, node.Parameters);
     }
 
-    private Expression RewriteSubquery(LambdaExpression lambda)
+    private Expression RewriteTerminal(Expression body)
     {
-        var body = lambda.Body;
         CorrelatedTerminal terminal;
         Expression? inValue = null;
         int index;
@@ -273,24 +278,58 @@ internal sealed class InMemoryCorrelatedSubqueryRewriter : ExpressionVisitor
     }
 
     private static int GetReferencedQueryIndex(Expression expression)
+        => TryGetReferencedQueryIndex(expression, out var index)
+            ? index
+            : throw new NotSupportedException("Could not resolve the referenced query of a correlated subquery in the in-memory provider.");
+
+    /// <summary>
+    /// True when <paramref name="node"/> is a subquery predicate/quantifier (or a scalar subquery) whose
+    /// command is read from the registry, i.e. the normalised form of a subquery combined with a
+    /// logical operator. A node that does not reference <c>ReferencedQueries</c> is not touched.
+    /// </summary>
+    private static bool IsRegistrySubquery(Expression node)
+    {
+        if (node is MethodCallExpression call && call.Method.DeclaringType == typeof(CommonFunctions))
+        {
+            if (call.Method.Name is (nameof(CommonFunctions.exists)
+                or nameof(CommonFunctions.all)
+                or nameof(CommonFunctions.any))
+                && call.Arguments is [Expression arg])
+                return IsReferencedQueryIndex(arg);
+
+            if (call.Method.Name is (nameof(CommonFunctions.@in) or nameof(ClickHouseFunctions.global_in))
+                && call.Arguments is [_, Expression cmdArg])
+                return IsReferencedQueryIndex(cmdArg);
+        }
+        else if (node.Type.IsAssignableTo(typeof(QueryCommand)))
+        {
+            return IsReferencedQueryIndex(node);
+        }
+
+        return false;
+    }
+
+    private static bool IsReferencedQueryIndex(Expression expression)
+        => TryGetReferencedQueryIndex(expression, out _);
+
+    private static bool TryGetReferencedQueryIndex(Expression expression, out int index)
     {
         var current = UnwrapObjectConversion(expression);
 
         if (current is IndexExpression
             {
                 Object: MemberExpression { Member.Name: nameof(IQueryRegistry.ReferencedQueries) },
-                Arguments: [ConstantExpression { Value: int index }],
+                Arguments: [ConstantExpression { Value: int directIndex }],
             })
         {
-            return index;
+            index = directIndex;
+            return true;
         }
 
         var finder = new ReferencedQueryIndexFinder();
         finder.Visit(current);
-        if (finder.Found)
-            return finder.Index;
-
-        throw new NotSupportedException("Could not resolve the referenced query of a correlated subquery in the in-memory provider.");
+        index = finder.Index;
+        return finder.Found;
     }
 
     private sealed class ReferencedQueryIndexFinder : ExpressionVisitor

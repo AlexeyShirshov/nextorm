@@ -29,9 +29,81 @@ var rows = dataContext.From<IComplexEntity>()
 select id from complex_entity where (id = any(@p0))
 ```
 
-See [Arrays (PostgreSQL)](../11-scalar-functions.md#arrays-postgresql). Functions that return an array
+See [Arrays (PostgreSQL)](../../scalar-functions/06-arrays.md#arrays-postgresql). Functions that return an array
 can be used inside a query or projected directly: the row reader materialises an `Array(T)` result as
 a CLR `T[]`.
+
+## Range types
+
+PostgreSQL has native range types (`int4range`, `int8range`, `numrange`, `tsrange`, `tstzrange`,
+`daterange`). nextorm represents them with the provider-agnostic
+[`Range<T>`](xref:NextORM.Core.Range`1) value type — `Lower`/`Upper`, `LowerInclusive`/`UpperInclusive`,
+`LowerInfinite`/`UpperInfinite`, `IsEmpty` and [`Range<T>.Empty`](xref:NextORM.Core.Range`1.Empty) — which
+the PostgreSQL provider binds through Npgsql, preserving unbounded sides and the `empty` range. The
+surface is gated by [`SupportsRanges`](xref:NextORM.Core.ISqlDialect.SupportsRanges) and lives on
+[`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres). The operators are exposed as static methods named
+after the SQL tokens, so no range member collides with a CLR operator or the full-text `Contains`:
+
+On a database without a native range type, map a `Range<T>` property to a pair of scalar columns with [`RangeColumns`](../31-range-columns.md); the same operators are then translated over the pair.
+
+| Member | SQL |
+|---|---|
+| `overlaps(a, b)` | `a && b` |
+| `range_contains(range, value)` / `range_contains(outer, inner)` | `range @> value` / `outer @> inner` |
+| `range_contained_by(inner, outer)` | `inner <@ outer` |
+| `range_union(a, b)` / `range_intersection(a, b)` / `range_difference(a, b)` | `a + b` / `a * b` / `a - b` |
+| `range_adjacent(a, b)` | `a -|- b` |
+| `range_strictly_left_of(a, b)` / `range_strictly_right_of(a, b)` | `a << b` / `a >> b` |
+| `range_not_extend_right_of(a, b)` / `range_not_extend_left_of(a, b)` | `a &< b` / `a &> b` |
+| `lower(range)` / `upper(range)` / `isempty(range)` | `lower(range)` / `upper(range)` / `isempty(range)` |
+| `lower_inc` / `upper_inc` / `lower_inf` / `upper_inf` | `lower_inc(range)` / … |
+| `int4range` / `int8range` / `numrange` / `tsrange` / `tstzrange` / `daterange` | native constructor, optionally with a bounds literal (`'[)'`, `'[]'`, `'()'`, `'(]'`) |
+| `empty_range<T>()` | `'empty'::<range type>` |
+
+```csharp
+var window = new Range<int>(15, 25);   // [15,25)
+
+var rows = dataContext.From<IReservation>()
+    .Where(e => SqlFunctions.Postgres.overlaps(e.During, window))
+    .Select(e => new { e.Id })
+    .ToList();
+```
+
+```sql
+select id from reservation where (during && @p0)
+```
+
+`Range<T>` is a `readonly struct` and compares by its PostgreSQL characteristics, so `Range<int>.Empty`
+and a `default(Range<int>)` value are both the empty range. The in-memory provider evaluates the whole
+surface above — `overlaps`, `range_contains`/`range_contained_by`, `range_union`/`range_intersection`/
+`range_difference`, the positional and adjacency operators, the inspection functions and the
+constructors — with the same semantics as PostgreSQL (including the `result of range union/difference
+would not be contiguous` failure). Timestamp ranges use `DateTime` for `tsrange` and
+`DateTimeOffset` for `tstzrange`; `daterange` uses `DateOnly`.
+
+### Multiranges
+
+PostgreSQL multirange types (`int4multirange`, `int8multirange`, `nummultirange`, `tsmultirange`,
+`tstzmultirange`, `datemultirange`) are represented as a `Range<T>[]` — bound and read as a
+`NpgsqlRange<T>[]`. The array is canonical: sorted by the lower bound with overlapping and adjacent
+ranges merged. Map a property or parameter directly to `Range<T>[]`; the operator names above are
+overloaded for multiranges (`overlaps`, `range_contains`, `range_contained_by`, `range_union`,
+`range_intersection`, `range_difference`, `range_adjacent` and the positional operators), alongside
+`multirange(range)`, `range_merge`, the inspection functions and the `range_agg` /
+`range_intersect_agg` aggregates:
+
+```csharp
+var window = new[] { new Range<int>(15, 25), new Range<int>(40, 50) };
+
+var rows = dataContext.From<IReservation>()
+    .Where(e => SqlFunctions.Postgres.overlaps(e.During, window))
+    .Select(e => new
+    {
+        All = SqlFunctions.Postgres.range_agg(e.During),
+        Common = SqlFunctions.Postgres.range_intersect_agg(e.During)
+    })
+    .ToList();
+```
 
 ## `json` and `jsonb`
 
@@ -50,7 +122,7 @@ var json = dataContext.From<IComplexEntity>()
 select jsonb_agg(somestring) from complex_entity
 ```
 
-See [JSON and JSONB (PostgreSQL)](../11-scalar-functions.md) and
+See [JSON and JSONB (PostgreSQL)](../../scalar-functions/index.md) and
 [JSON support across providers](../18-json.md).
 
 ## Ordered-set, regression and boolean aggregates
@@ -107,7 +179,7 @@ The [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) surface adds `pg_typeo
 `to_number`/`to_timestamp`/`timezone`/`make_interval`/`justify_*`) and the array constructors, all gated
 by `SupportsExtendedScalarFunctions`.
 
-See [Scalar functions](../11-scalar-functions.md).
+See [Scalar functions](../../scalar-functions/index.md).
 
 ## `DISTINCT ON`
 
@@ -233,10 +305,14 @@ for the full set of forms; general read CTEs are in
 [Common table expressions](../09-cte.md). Every
 other provider rejects `With(name, insert)` at build time with `NotSupportedException`.
 
-## Not yet supported
+## Dynamic record schema
 
-`jsonb_to_record`/`json_populate_record` need a dynamic record schema and are not part of the current
-surface. See [Limitations and out-of-scope features](../../advanced/limitations.md).
+`jsonb_to_record`/`jsonb_to_recordset` are exposed as table-valued functions whose result schema is
+declared by the caller's row type and rendered as the alias column-definition list
+(`AS x(a int, b text)`). See [Dynamic result schema](../13-table-valued-functions.md#dynamic-result-schema).
+The `json_populate_record(set)` variants (which populate a caller-supplied base record instead of a
+free-form column list) remain out of scope. See
+[Limitations and out-of-scope features](../../advanced/limitations.md).
 
 ## See also
 

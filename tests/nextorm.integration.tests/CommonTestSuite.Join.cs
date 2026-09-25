@@ -206,6 +206,22 @@ public abstract partial class CommonTestSuite
     }
 
     [Fact]
+    public void FilteredPrimaryJoin_ShouldReferenceDerivedProjectionColumns()
+    {
+        // The primary builder carries a Where, so it is rendered as a derived table whose renamed
+        // columns ('Int' from nullableint) must be the ones the ON condition references.
+        var rows = _sut.ComplexEntity
+            .Where(c => c.Id > 1)
+            .Join(_sut.SimpleEntity, (c, s) => c.Int == (int?)s.Id)
+            .Select(p => new { LeftId = p.Item1.Id, RightId = p.Item2.Id, p.Item1.String })
+            .ToList();
+
+        // complex_entity ids 2 and 3 both have nullableint = 1, matching simple_entity id 1.
+        rows.Should().HaveCount(2);
+        rows.Should().OnlyContain(r => r.LeftId > 1 && r.RightId == 1);
+    }
+
+    [Fact]
     public void DerivedSourceThenJoin_ShouldReturnData()
     {
         var derived = _sut.ComplexEntity.Select(c => new { c.Id, c.RequiredString });

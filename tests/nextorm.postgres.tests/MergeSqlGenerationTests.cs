@@ -239,19 +239,18 @@ public class MergeSqlGenerationTests
     }
 
     [Fact]
-    public void KeyUpsert_Returning_ShouldThrow()
+    public void KeyUpsert_Returning_ShouldRenderReturning()
     {
         using var ctx = PostgresTestContext.Create();
 
-        var act = () => ctx.MergeInto<IMergeEntity>()
+        ctx.MergeInto<IMergeEntity>()
             .Using(new MergeEntity { Id = 1, Name = "a", Age = 5 })
             .OnKeys()
             .WhenMatchedUpdate()
             .WhenNotMatchedInsert()
-            .Returning()
-            .ToList();
-
-        act.Should().Throw<NotSupportedException>();
+            .Returning(x => new { x.Id, x.Name })
+            .ToSql()
+            .Should().Be("insert into merge_entity (id, name, age) values (@p0, @p1, @p2) on conflict (id) do update set name = excluded.name, age = excluded.age returning id, name");
     }
 
     [Fact]

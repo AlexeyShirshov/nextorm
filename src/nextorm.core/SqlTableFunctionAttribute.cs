@@ -1,6 +1,28 @@
 namespace NextORM.Core;
 
 /// <summary>
+/// Where the result-schema of a table function is rendered, when it is derived from the mapped row
+/// type (<see cref="SqlTableFunctionAttribute.ResultSchema"/>). The listed providers recognize the
+/// corresponding native form; a provider that cannot express it rejects the source with a
+/// <see cref="System.NotSupportedException"/>.
+/// </summary>
+public enum TableFunctionSchema
+{
+    /// <summary>The schema is not rendered (the default; the function supplies its own result shape).</summary>
+    None = 0,
+    /// <summary>
+    /// A quoted structure string is emitted as the leading call argument, before the arguments declared
+    /// on the placeholder method. ClickHouse <c>values('a UInt8, b String', (1,'x'), ...)</c>.
+    /// </summary>
+    LeadingArgument = 1,
+    /// <summary>
+    /// A column-definition list is emitted after the source alias, as
+    /// <c>as x(col type, ...)</c>. PostgreSQL <c>jsonb_to_record(json) AS x(a int, b text)</c>.
+    /// </summary>
+    AliasColumnList = 2,
+}
+
+/// <summary>
 /// Maps a CLR method to a database table-valued function used as a FROM source. Apply it to a
 /// placeholder static method that returns <see cref="IQueryable{T}"/> and is only ever referenced
 /// inside an expression passed to <see cref="DataContextExtensions.FromTableFunction{T}"/> (its body
@@ -71,4 +93,16 @@ public sealed class SqlTableFunctionAttribute : Attribute
     /// is rendered unquoted; only pass trusted values.
     /// </summary>
     public int[]? VerbatimArguments { get; set; }
+
+    /// <summary>
+    /// When not <see cref="TableFunctionSchema.None"/>, the function's result schema is derived from
+    /// the mapped row type (the <c>T</c> of the placeholder method's <c>IQueryable&lt;T&gt;</c> return
+    /// type) and rendered as a column-definition list. Every readable property must be mapped with
+    /// <see cref="System.ComponentModel.DataAnnotations.Schema.ColumnAttribute"/> (or a fluent mapping)
+    /// and its CLR type is translated to the
+    /// provider's native type. The rows themselves still materialize into that same row type, exactly
+    /// like any other table function. The schema is part of the query plan key, so two row shapes never
+    /// share a cached plan. See <see cref="TableFunctionSchema"/>.
+    /// </summary>
+    public TableFunctionSchema ResultSchema { get; set; }
 }

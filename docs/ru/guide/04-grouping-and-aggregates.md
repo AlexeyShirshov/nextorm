@@ -554,7 +554,7 @@ from complex_entity group by nullableint
 PostgreSQL (в SQL Server нет типа-массива). Оба результата — колонки-массивы, материализуемые row
 reader'ом как CLR `T[]`. В ClickHouse дополнительно доступны нативные возвращающие массивы агрегаты
 `group_array`/`group_uniq_array` (`groupArray`/`groupUniqArray`). Полная
-поверхность — в разделе [Скалярные функции](11-scalar-functions.md#фильтр-агрегатов-filter).
+поверхность — в разделе [Скалярные функции](../scalar-functions/05-aggregates.md#фильтр-агрегатов-filter).
 
 ## Различия между провайдерами
 

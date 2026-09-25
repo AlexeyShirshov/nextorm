@@ -386,6 +386,21 @@ namespace NextORM.Core;
         public IQueryable<SqlFunctions.IGenerateRandomRow> generate_random(long seed) => throw new NotSupportedException();
 
         /// <summary>
+        /// <c>values(structure, values...)</c> as a FROM source: a temporary table whose result schema is
+        /// derived from <typeparamref name="TRow"/>. The structure string (for example
+        /// <c>'a UInt8, b String'</c>) is rendered from <typeparamref name="TRow"/>'s mapped properties
+        /// and types; <paramref name="tuples"/> is the verbatim row list, for example
+        /// <c>"(1, 'x'), (2, 'y')"</c>, emitted after it. Only trusted developer-authored SQL may be
+        /// passed as <paramref name="tuples"/>. Requires a provider that supports a typed result schema
+        /// (see <see cref="ISqlDialect.SupportsResultSchema(TableFunctionSchema)"/>; ClickHouse). Use through
+        /// <see cref="DataContextExtensions.FromTableFunction{T}(IDataContext, System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{T}}})"/>.
+        /// </summary>
+        /// <typeparam name="TRow">The caller-declared row shape; its <c>[Column]</c> names/types form the structure.</typeparam>
+        /// <param name="tuples">The verbatim tuple list, for example <c>"(1, 'x'), (2, 'y')"</c>.</param>
+        [SqlTableFunction("values", ResultSchema = TableFunctionSchema.LeadingArgument, VerbatimArguments = new[] { 0 })]
+        public IQueryable<TRow> values<TRow>(string tuples) => throw new NotSupportedException();
+
+        /// <summary>
         /// <c>url(url, format, structure)</c> as a FROM source: reads the resource at
         /// <paramref name="url"/> in <paramref name="format"/> with the column layout
         /// <paramref name="structure"/> (for example <c>'id UInt64, name String'</c>). The row shape is

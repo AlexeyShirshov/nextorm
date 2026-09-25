@@ -59,7 +59,7 @@
 * [Соединения](../03-joins.md) — типы соединений, APPLY/LATERAL, строгость ClickHouse и `GLOBAL JOIN`;
 * [Группировка и агрегаты](../04-grouping-and-aggregates.md) — `ROLLUP`/`CUBE`, семейства агрегатов;
 * [Сортировка и постраничная выборка](../05-sorting-and-paging.md) — `Limit`/`Offset`, `LIMIT n BY expr`;
-* [Скалярные функции](../11-scalar-functions.md) — массивы, JSON, UUID, session/info, поверхности провайдеров;
+* [Скалярные функции](../../scalar-functions/index.md) — массивы, JSON, UUID, session/info, поверхности провайдеров;
 * [Табличные функции](../13-table-valued-functions.md) — `generate_series`, `string_split`, `numbers`, `zeros`;
 * [Хинты запросов](../17-query-hints.md) — табличные хинты, `OPTION (RECOMPILE)`, модификаторы ClickHouse;
 * [Поддержка JSON в разных провайдерах](../18-json.md) — все поверхности JSON рядом.

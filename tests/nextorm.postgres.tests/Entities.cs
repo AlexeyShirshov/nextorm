@@ -53,6 +53,16 @@ public interface ITupleEntity
     Tuple<int, string> Pair { get; set; }
 }
 
+[SqlTable("reservation")]
+public interface IRangeEntity
+{
+    [Key]
+    [Column("id")]
+    int Id { get; set; }
+    [Column("during")]
+    Range<int> During { get; set; }
+}
+
 public class BareEntity
 {
     public int Id { get; set; }

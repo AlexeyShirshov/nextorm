@@ -425,6 +425,9 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
     public void DurationColumns_ShouldRoundTrip() => CommonTestSuite.DurationRoundTrip(_sut.DataProvider);
 
     [Fact]
+    public void RangeColumns_ShouldRoundTripAndFilter() => CommonTestSuite.RangeColumnsRoundTrip(_sut.DataProvider);
+
+    [Fact]
     public void EndOfMonth_ShouldReturnLastDay()
     {
         var r = _sut.ComplexEntity
@@ -1252,6 +1255,18 @@ public sealed class ClickHouseIntegrationTests : ProviderTestSuite
 
         act.Should().Throw<NotSupportedException>();
     }
+
+    [Fact]
+    public void Values_WithDeclaredSchema_ShouldReturnRows()
+    {
+        var rows = _sut.DataProvider
+            .FromTableFunction(() => SqlFunctions.ClickHouse.values<IDynamicValuesRow>("(1, 'x'), (2, 'y')"))
+            .OrderBy(r => r.A)
+            .Select(r => new { r.A, r.B })
+            .ToList();
+
+        rows.Select(r => (r.A, r.B)).Should().Equal(((byte)1, "x"), ((byte)2, "y"));
+    }
 }
 
 [SqlTable("uint64_entity")]
@@ -1304,4 +1319,12 @@ public interface IWideEntity
     [Key]
     [Column("id")]
     int Id { get; set; }
+}
+
+public interface IDynamicValuesRow
+{
+    [Column("a")]
+    byte A { get; set; }
+    [Column("b")]
+    string? B { get; set; }
 }

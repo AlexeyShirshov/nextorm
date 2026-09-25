@@ -55,20 +55,16 @@ public class InMemorySqliteFunctionsTests
             .Select(it => new
             {
                 A = SqlFunctions.Sqlite.acos(1.0),
-                D = SqlFunctions.Sqlite.degrees(SqlFunctions.Sqlite.pi()),
                 L2 = SqlFunctions.Sqlite.log2(8.0),
                 M = SqlFunctions.Sqlite.mod(5.0, 2.0),
-                R = SqlFunctions.Sqlite.radians(180.0),
                 T = SqlFunctions.Sqlite.tanh(0.0)
             })
             .ToList();
 
         r.Should().OnlyContain(x =>
             Math.Abs(x.A!.Value) < 1e-9 &&
-            Math.Abs(x.D!.Value - 180.0) < 1e-9 &&
             Math.Abs(x.L2!.Value - 3.0) < 1e-9 &&
             Math.Abs(x.M!.Value - 1.0) < 1e-9 &&
-            Math.Abs(x.R!.Value - Math.PI) < 1e-9 &&
             Math.Abs(x.T!.Value) < 1e-9);
     }
 }

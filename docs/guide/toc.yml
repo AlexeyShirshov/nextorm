@@ -18,8 +18,6 @@
   href: 09-cte.md
 - name: Window functions
   href: 10-window-functions.md
-- name: Scalar functions
-  href: 11-scalar-functions.md
 - name: User-defined functions
   href: 12-user-defined-functions.md
 - name: Table-valued functions
@@ -56,6 +54,10 @@
   href: 28-sql-batch.md
 - name: Optimistic concurrency and change tracking
   href: 29-optimistic-concurrency.md
+- name: Value converters and JSON columns
+  href: 30-value-converters.md
+- name: Range columns (pair of scalar columns)
+  href: 31-range-columns.md
 - name: Provider-specific SQL
   items:
     - name: Overview

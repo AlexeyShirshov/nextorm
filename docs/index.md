@@ -21,7 +21,6 @@
 - [SELECT DISTINCT](guide/08-distinct.md)
 - [Common table expressions (CTE)](guide/09-cte.md)
 - [Window functions](guide/10-window-functions.md)
-- [Scalar functions](guide/11-scalar-functions.md)
 - [User-defined functions](guide/12-user-defined-functions.md)
 - [Table-valued functions](guide/13-table-valued-functions.md)
 - [Raw SQL](guide/14-raw-sql.md)
@@ -40,6 +39,20 @@
 - [Interceptors](guide/27-interceptors.md)
 - [Executing statements in one batch](guide/28-sql-batch.md)
 - [Optimistic concurrency and change tracking](guide/29-optimistic-concurrency.md)
+- [Value converters and JSON columns](guide/30-value-converters.md)
+- [Range columns (pair of scalar columns)](guide/31-range-columns.md)
+
+### Scalar functions
+
+- [Overview](scalar-functions/index.md)
+- [String functions](scalar-functions/01-string-functions.md)
+- [Math functions](scalar-functions/02-math-functions.md)
+- [Date and time](scalar-functions/03-date-and-time.md)
+- [Conditional and conversion helpers](scalar-functions/04-conditionals-and-conversion.md)
+- [Aggregates](scalar-functions/05-aggregates.md)
+- [Arrays](scalar-functions/06-arrays.md)
+- [JSON and XML](scalar-functions/07-json-and-xml.md)
+- [Provider reference](scalar-functions/08-reference.md)
 
 ### Providers
 
@@ -48,6 +61,10 @@
 - [SQL Server](providers/sqlserver.md)
 - [PostgreSQL](providers/postgres.md)
 - [In-memory](providers/in-memory.md)
+
+### Comparisons
+
+- [Nextorm vs Dapper, linq2db and EF Core](comparisons/index.md)
 
 ### Advanced
 
@@ -74,7 +91,7 @@ Nextorm uses protocol-level libraries (for example, SqlClient for Microsoft SQL 
 
 ## Status
 
-The current status (1.0.6-alpha) is a prof of concept.
+The current status (1.0.7-beta) is a prof of concept.
 
 ## Roadmap
 
@@ -83,7 +100,7 @@ The current status (1.0.6-alpha) is a prof of concept.
 - [1.0.4-alpha](https://github.com/AlexeyShirshov/nextorm/milestones/1.0-a.4)
 - [1.0.5-alpha](https://github.com/AlexeyShirshov/nextorm/milestones/1.0-a.5)
 - [1.0.6-alpha](https://github.com/AlexeyShirshov/nextorm/milestones/1.0-a.6)
-- [1.0-beta](https://github.com/AlexeyShirshov/nextorm/milestones/1.0-b.1)
+- [1.0.7-beta](https://github.com/AlexeyShirshov/nextorm/milestones/1.0-b.1)
 - [1.0-rc](https://github.com/AlexeyShirshov/nextorm/milestones/1.0-rc.1)
 - [1.0](https://github.com/AlexeyShirshov/nextorm/milestones/1.0)
 - [1.1.1-alpha](https://github.com/AlexeyShirshov/nextorm/milestones/1.1-a.1)
@@ -130,6 +147,21 @@ They differ in cost, lifetime and thread-safety rules. Which one to use, what ea
 its limitations are covered in the [Query reuse guide](guide/15-query-reuse.md).
 
 ## Releases
+
+### 1.0.7-beta
+
+- [`OUTPUT INTO`, несколько result-set'ов, upsert-with-output](https://github.com/AlexeyShirshov/nextorm/issues/15)
+- [Value converters — `EnumToStringConverter`, конвертеры в предикатах и проекциях](https://github.com/AlexeyShirshov/nextorm/issues/31)
+- [Динамическая схема результата (ClickHouse `values()`, PostgreSQL `jsonb_to_record(set)`)](https://github.com/AlexeyShirshov/nextorm/issues/63)
+- [JSON-колонка ↔ CLR-объект (авто-сериализация свойства)](https://github.com/AlexeyShirshov/nextorm/issues/64)
+- [PostgreSQL range-типы и `Overlaps` (`&&`)](https://github.com/AlexeyShirshov/nextorm/issues/66)
+- [SQL Server 2025 — `regexp_like` / `regexp_replace`](https://github.com/AlexeyShirshov/nextorm/issues/85)
+- [Портативный range как пара колонок — `[RangeColumns]`](https://github.com/AlexeyShirshov/nextorm/issues/86)
+- [Скалярные функции: кросс-провайдерный фасад `SqlFunctions.Sql` и пробелы по провайдерам](https://github.com/AlexeyShirshov/nextorm/issues/87)
+- [Value converters — фаза 2 и JSON-колонки](https://github.com/AlexeyShirshov/nextorm/issues/88)
+- [In-memory функции, структурный ключ плана запроса, dictionary lookup](https://github.com/AlexeyShirshov/nextorm/issues/89)
+- Новые главы руководства EN + RU: конвертеры значений и JSON-колонки, range-колонки
+- [Спеки, регистры аудита, документация EN + RU](https://github.com/AlexeyShirshov/nextorm/issues/90)
 
 ### 1.0.6-alpha
 

@@ -13,8 +13,10 @@ generated statement rather than a client-side operation:
   `OrderBy(expr)`, `OrderByDescending(expr)` and the ordinal overloads `OrderBy(int)`,
   `OrderBy(int, OrderDirection)`, `OrderByDescending(int)`.
 * [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1) also exposes `Limit(int)`, `Offset(int)` and `Page(int limit, int offset)`.
-* After [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), the returned [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) has the ordinal overloads only:
-  `OrderBy(int columnIndex, OrderDirection direction)`, `OrderBy(int)` and `OrderByDescending(int)`.
+* After [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})), the returned [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) mirrors the builder surface: the expression
+  overloads `OrderBy(expr)`, `OrderBy(expr, OrderDirection)` and `OrderByDescending(expr)`, the ordinal
+  overloads `OrderBy(int columnIndex, OrderDirection direction)`, `OrderBy(int)` and `OrderByDescending(int)`,
+  and `Limit(int)`, `Offset(int)` and `Page(int limit, int offset)` (see [Ordering and paging a projected command](#ordering-and-paging-a-projected-command)).
 
 Each call appends to an immutable builder, so a second [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)) adds a tie-break key and leaves the
 first one in place. The terminal method ([`ToListAsync`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])), [`FirstAsync`](xref:NextORM.Core.EntityBuilderExtensions.FirstAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])), [`AnyAsync`](xref:NextORM.Core.EntityBuilderExtensions.AnyAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])), ...) executes the
@@ -83,6 +85,36 @@ Output:
 
 The entity builder accepts an ordinal with an explicit direction as well, for example
 `.OrderBy(2, OrderDirection.Asc)`.
+
+## Ordering and paging a projected command
+
+A projected [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) supports ordering by an expression over
+`TResult` and paging, so a grouped/aggregated query does not have to repeat the aggregate in an
+outer query. Each member of the sort expression is resolved to the projection expression that produced
+the corresponding output column, so the `ORDER BY` re-emits the underlying expression rather than the
+output alias:
+
+```csharp
+var rows = await dataContext.From<ComplexEntity>()
+    .GroupBy(it => it.Int)
+    .Select(it => new { it.Int, Count = SqlFunctions.Sql.count() })
+    .OrderByDescending(it => it.Count)
+    .Page(10, 0)
+    .ToListAsync();
+```
+
+```sql
+-- SQLite
+select nullableint as 'Int', count(*) as 'Count' from complex_entity
+ group by nullableint
+ order by count(*) desc
+limit 10 offset 0
+```
+
+`Limit(int)` sets only the page size and `Offset(int)` only the leading rows skipped; both accept the
+same bounds as the builder methods (non-negative). `OrderBy(int)`/`OrderByDescending(int)` still take the
+1-based ordinal of an output column, so `.Select(it => it.Id).OrderByDescending(1)` continues to work. A
+sort member that is not part of the projection is rejected while the query is prepared.
 
 ## NULL ordering
 

@@ -64,6 +64,32 @@ public class DeleteSqlGenerationTests
     }
 
     [Fact]
+    public void Delete_OutputInto_ShouldRenderDeletedInto()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        ctx.DeleteFrom<IMergeEntity>()
+            .Where(x => x.Id == 1)
+            .Returning(x => new { x.Id, x.Name })
+            .OutputInto("audit_log")
+            .ToSql()
+            .Should().Be("delete from merge_entity output deleted.id, deleted.name into audit_log (id, name) where id = 1");
+    }
+
+    [Fact]
+    public void Delete_OutputIntoThenOutput_ShouldRenderBoth()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        ctx.DeleteFrom<IMergeEntity>()
+            .Where(x => x.Id == 1)
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoThenOutput("audit_log")
+            .ToSql()
+            .Should().Be("delete from merge_entity output deleted.id, deleted.name into audit_log (id, name) output deleted.id, deleted.name where id = 1");
+    }
+
+    [Fact]
     public void Truncate_ShouldRenderTruncateTable()
     {
         using var ctx = SqlServerTestContext.Create();

@@ -118,6 +118,44 @@ public abstract partial class CommonTestSuite
     }
 
     [Fact]
+    public void BulkInsert_DestinationOverride_ShouldWriteToOverriddenTable()
+    {
+        var ctx = _sut.DataProvider;
+        var marker = InsertMarker();
+        var rows = Enumerable.Range(0, 5).Select(i => new BulkDestinationEntity { Name = marker, Age = i }).ToList();
+
+        var written = ctx.BulkInsertInto<IBulkDestinationEntity>(o => o.Table("insert_entity")).Values(rows).BulkInsert();
+
+        written.Should().Be(5);
+
+        var read = ctx.From<IInsertEntity>().Where(x => x.Name == marker).Select(x => new { x.Age }).ToList();
+        read.Should().HaveCount(5);
+    }
+
+    [Fact]
+    public void BulkInsert_KeepIdentity_OnNonIdentityTable_ShouldNotEmitIdentityInsert()
+    {
+        var ctx = _sut.DataProvider;
+        var first = Random.Shared.Next(1_000_000, 2_000_000_000);
+        int[] ids = [first, first + 1];
+        var rows = ids.Select(id => new DeleteEntity { Id = id, Name = "keep_identity", Age = id % 100 }).ToList();
+
+        try
+        {
+            var written = ctx.BulkInsertInto<IDeleteEntity>(o => o.KeepIdentity()).Values(rows).BulkInsert();
+
+            written.Should().Be(2);
+
+            var read = ctx.From<IDeleteEntity>().Where(x => ids.Contains(x.Id)).Select(x => new { x.Id }).ToList();
+            read.Should().HaveCount(2);
+        }
+        finally
+        {
+            ctx.DeleteFrom<IDeleteEntity>().Where(x => ids.Contains(x.Id)).Delete();
+        }
+    }
+
+    [Fact]
     public void BulkInsert_IgnoreDuplicates_ShouldSkipConflictingKeys()
     {
         Assert.SkipUnless(Provider.SupportsIgnoreDuplicates, "This provider cannot skip conflicting rows.");

@@ -50,6 +50,7 @@ internal sealed class BulkInsertCommand
     /// <param name="progress">Called with the cumulative written-row count while the write proceeds, or <see langword="null"/>.</param>
     /// <param name="notifyEvery">The reporting interval in rows; the native path uses it to set its own progress cadence.</param>
     /// <param name="timeoutSeconds">The command timeout in seconds, or <see langword="null"/> for the provider default.</param>
+    /// <param name="tableSchema">The schema (or database) that qualifies <paramref name="tableName"/>, or <see langword="null"/>.</param>
     public BulkInsertCommand(
         Type entityType,
         string tableName,
@@ -62,7 +63,8 @@ internal sealed class BulkInsertCommand
         BulkBatchOptions? batch,
         Action<int>? progress,
         int notifyEvery,
-        int? timeoutSeconds)
+        int? timeoutSeconds,
+        string? tableSchema = null)
     {
         EntityType = entityType;
         TableName = tableName;
@@ -76,6 +78,7 @@ internal sealed class BulkInsertCommand
         Progress = progress;
         NotifyEvery = notifyEvery;
         TimeoutSeconds = timeoutSeconds;
+        TableSchema = tableSchema;
     }
 
     /// <summary>The CLR entity type written.</summary>
@@ -86,6 +89,9 @@ internal sealed class BulkInsertCommand
 
     /// <summary>Whether <see cref="TableName"/> was auto-derived and the naming convention applies to it.</summary>
     public bool IsTableNameAuto { get; }
+
+    /// <summary>The schema (or database) that qualifies <see cref="TableName"/>, or <see langword="null"/>.</summary>
+    public string? TableSchema { get; }
 
     /// <summary>The written columns, in parameter order.</summary>
     public IReadOnlyList<IPropertyMetadata> Columns { get; }

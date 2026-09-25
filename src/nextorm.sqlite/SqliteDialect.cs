@@ -16,6 +16,9 @@ public sealed class SqliteDialect : SqlDialectBase
     // available as a fallback but RETURNING is preferred because it is scoped to the statement.
     /// <inheritdoc/>
     public override bool SupportsReturning => true;
+
+    /// <inheritdoc/>
+    public override bool SupportsRangeColumns => true;
     /// <inheritdoc/>
     public override bool SupportsLastInsertId => true;
 
@@ -400,7 +403,8 @@ internal sealed class SqliteScalarFunctions : IScalarFunctions
 
     /// <inheritdoc/>
     public bool Supports(string name) => name is
-        "left" or "right" or "concat_ws" or "ascii" or "char";
+        "left" or "right" or "concat_ws" or "ascii" or "char" or
+        "bit_length" or "octet_length" or "degrees" or "radians" or "pi";
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
@@ -413,6 +417,13 @@ internal sealed class SqliteScalarFunctions : IScalarFunctions
         "concat_ws" => $"concat_ws({string.Join(", ", args)})",
         "ascii" => $"unicode({args[0]})",
         "char" => $"char({args[0]})",
+
+        // SQLite 3.43+ has octet_length(); bit_length is eight times it. There is no cot.
+        "bit_length" => $"octet_length({args[0]}) * 8",
+        "octet_length" => $"octet_length({args[0]})",
+        "degrees" => $"degrees({args[0]})",
+        "radians" => $"radians({args[0]})",
+        "pi" => "pi()",
         _ => throw new NotSupportedException($"The {name} function is not supported by SQLite.")
     };
 }

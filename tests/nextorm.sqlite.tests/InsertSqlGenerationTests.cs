@@ -585,4 +585,18 @@ public class InsertSqlGenerationTests
 
         act.Should().Throw<NotSupportedException>();
     }
+
+    [Fact]
+    public void OutputInto_OnSqlite_ShouldThrow()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var act = () => ctx.InsertInto<IInsertEntity>()
+            .Value(x => x.Name, "a")
+            .Returning(x => new { x.Id })
+            .OutputInto("audit_log")
+            .ToSql();
+
+        act.Should().Throw<NotSupportedException>();
+    }
 }

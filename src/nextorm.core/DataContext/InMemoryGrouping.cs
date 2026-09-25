@@ -43,7 +43,7 @@ internal static class InMemoryGrouping
         if (queryCommand.SelectList is not [var column]) return false;
         if (column.Expression is not LambdaExpression lambda) return false;
         if (lambda.Body is not MethodCallExpression call) return false;
-        if (call.Method.DeclaringType != typeof(CommonFunctions)) return false;
+        if (call.Method.DeclaringType != typeof(CommonFunctions) && call.Method.DeclaringType != typeof(PostgresFunctions)) return false;
         if (!InMemoryAggregates.IsAggregate(call.Method.Name)) return false;
 
         name = call.Method.Name;

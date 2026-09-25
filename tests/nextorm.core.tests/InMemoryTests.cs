@@ -32,6 +32,41 @@ public class InMemoryTests
         r.Should().Contain(x => x.Id == 2);
     }
     [Fact]
+    public void TestDictionaryLookup()
+    {
+        // The in-memory provider compiles the predicate, so a captured collection indexed by a column
+        // runs as ordinary C# and needs no SQL translation.
+        var lookup = new Dictionary<int, string> { [1] = "one", [2] = "two" };
+
+        var r = _sut.SimpleEntity.Where(it => lookup[it.Id] == "one").Select(it => new { it.Id }).ToList();
+
+        r.Should().HaveCount(1);
+        r[0].Id.Should().Be(1);
+    }
+
+    [Fact]
+    public void TestReadOnlyListLookup()
+    {
+        IReadOnlyList<string> lookup = ["zero", "one", "two"];
+
+        var r = _sut.SimpleEntity.Where(it => lookup[it.Id] == "one").Select(it => new { it.Id }).ToList();
+
+        r.Should().HaveCount(1);
+        r[0].Id.Should().Be(1);
+    }
+
+    [Fact]
+    public void TestReadOnlyDictionaryLookup()
+    {
+        IReadOnlyDictionary<int, string> lookup = new Dictionary<int, string> { [1] = "one", [2] = "two" };
+
+        var r = _sut.SimpleEntity.Where(it => lookup[it.Id] == "two").Select(it => new { it.Id }).ToList();
+
+        r.Should().HaveCount(1);
+        r[0].Id.Should().Be(2);
+    }
+
+    [Fact]
     public void TestDistinct_ReferenceTypeWithoutValueEquality_ShouldThrow()
     {
         // SimpleEntity is a plain reference type without an Equals/GetHashCode override, so the

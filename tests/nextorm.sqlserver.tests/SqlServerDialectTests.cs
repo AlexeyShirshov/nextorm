@@ -338,7 +338,6 @@ public class SqlServerDialectTests
         functions.Render("format", ["[v]", "'N'"]).Should().Be("format([v], 'N')");
         functions.Render("format", ["[v]", "'N'", "'en-US'"]).Should().Be("format([v], 'N', 'en-US')");
         functions.Render("atn2", ["[y]", "[x]"]).Should().Be("atn2([y], [x])");
-        functions.Render("pi", []).Should().Be("pi()");
         functions.Render("square", ["[x]"]).Should().Be("square([x])");
         functions.Render("datename", ["'month'", "[d]"]).Should().Be("datename(month, [d])");
         functions.Render("date_bucket", ["'day'", "1", "[d]"]).Should().Be("date_bucket(day, 1, [d])");
@@ -358,5 +357,15 @@ public class SqlServerDialectTests
 
         var unknown = () => functions.Render("unknown", ["[s]"]);
         unknown.Should().Throw<NotSupportedException>().WithMessage("*unknown*not supported*");
+    }
+
+    [Fact]
+    public void Regex_ShouldUseRegexpLikeAndRegexpReplace()
+    {
+        Dialect.SupportsRegex.Should().BeTrue();
+        Dialect.MakeRegexMatch("[s]", "^a", false).Should().Be("regexp_like([s], '^a', 'c')");
+        Dialect.MakeRegexMatch("[s]", "^a", true).Should().Be("regexp_like([s], '^a', 'i')");
+        Dialect.MakeRegexReplace("[s]", "[0-9]+", "#", false).Should().Be("regexp_replace([s], '[0-9]+', '#', 1, 0, 'c')");
+        Dialect.MakeRegexReplace("[s]", "a", "#", true).Should().Be("regexp_replace([s], 'a', '#', 1, 0, 'i')");
     }
 }

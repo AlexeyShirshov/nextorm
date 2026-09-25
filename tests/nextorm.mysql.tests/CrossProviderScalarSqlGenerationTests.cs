@@ -53,4 +53,32 @@ public class CrossProviderScalarSqlGenerationTests
 
         act.Should().Throw<NotSupportedException>().WithMessage("*translate*not supported*");
     }
+
+    [Fact]
+    public void NumericAndLengthFunctions_ShouldEmitNativeSpellings()
+    {
+        using var ctx = MySqlTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Bl = SqlFunctions.Sql.bit_length(x.String),
+            Ol = SqlFunctions.Sql.octet_length(x.String),
+            Cot = SqlFunctions.Sql.cot(1.5),
+            Deg = SqlFunctions.Sql.degrees(1.5),
+            Rad = SqlFunctions.Sql.radians(1.5),
+            Pi = SqlFunctions.Sql.pi(),
+            Acos = Math.Acos(0.5),
+            Atan2 = Math.Atan2(1.5, 2.5)
+        }));
+
+        sql.Should().Contain("bit_length(somestring)");
+        sql.Should().Contain("octet_length(somestring)");
+        sql.Should().Contain("cot(1.5)");
+        sql.Should().Contain("degrees(1.5)");
+        sql.Should().Contain("radians(1.5)");
+        sql.Should().Contain("pi()");
+        sql.Should().Contain("acos(0.5)");
+        sql.Should().Contain("atan2(1.5, 2.5)");
+    }
 }

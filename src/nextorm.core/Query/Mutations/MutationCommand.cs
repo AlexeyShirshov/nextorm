@@ -55,6 +55,37 @@ internal abstract class MutationCommand
     /// commands whose builders expose a <c>Returning</c> terminal.
     /// </summary>
     public virtual IReadOnlyList<IPropertyMetadata>? ReturningColumns => null;
+
+    /// <summary>
+    /// The target of an <c>OUTPUT ... INTO &lt;target&gt;</c> clause, or <see langword="null"/> when the
+    /// statement writes no output rows into a table. Overridden by the insert, update and delete commands
+    /// whose builders expose an output-into terminal.
+    /// </summary>
+    public virtual OutputIntoClause? OutputInto => null;
+}
+
+/// <summary>
+/// The target of an <c>OUTPUT ... INTO &lt;target&gt;(columns)</c> clause (SQL Server): an existing table
+/// plus the mapped columns written into it by position. nextorm does not declare a table variable from
+/// its own text in phase 1, so the target must already exist with a compatible column shape; emitting a
+/// <c>DECLARE @t TABLE (...)</c> batch is deferred to phase 2.
+/// </summary>
+internal sealed class OutputIntoClause
+{
+    /// <summary>Creates an output-into target.</summary>
+    /// <param name="tableName">The raw (unquoted) target table name.</param>
+    /// <param name="columns">The mapped columns written into the target, in output order.</param>
+    public OutputIntoClause(string tableName, IReadOnlyList<IPropertyMetadata> columns)
+    {
+        TableName = tableName;
+        Columns = columns;
+    }
+
+    /// <summary>The raw (unquoted) target table name.</summary>
+    public string TableName { get; }
+
+    /// <summary>The mapped columns written into the target, in output order.</summary>
+    public IReadOnlyList<IPropertyMetadata> Columns { get; }
 }
 
 /// <summary>One column written by an <see cref="InsertCommand"/>: its mapping plus the value of each row.</summary>
@@ -131,7 +162,9 @@ internal sealed class InsertCommand : MutationCommand
     /// <param name="sourceColumns">The target columns written from <paramref name="source"/>, or <see langword="null"/> for a <c>VALUES</c> insert.</param>
     /// <param name="ignoreConflicts">Whether rows that violate a unique constraint should be skipped through the dialect's ignore form.</param>
     /// <param name="keepIdentity">Whether explicit values are written to identity columns.</param>
-    public InsertCommand(Type entityType, string tableName, bool isTableNameAuto, IReadOnlyList<InsertColumn> columns, int rowCount, IPropertyMetadata? identityColumn, IReadOnlyList<IPropertyMetadata>? returningColumns = null, QueryCommand? source = null, IReadOnlyList<IPropertyMetadata>? sourceColumns = null, bool ignoreConflicts = false, bool keepIdentity = false)
+    /// <param name="tableSchema">The schema (or database) that qualifies <paramref name="tableName"/>, or <see langword="null"/>.</param>
+    /// <param name="outputInto">The <c>OUTPUT ... INTO</c> target, or <see langword="null"/>.</param>
+    public InsertCommand(Type entityType, string tableName, bool isTableNameAuto, IReadOnlyList<InsertColumn> columns, int rowCount, IPropertyMetadata? identityColumn, IReadOnlyList<IPropertyMetadata>? returningColumns = null, QueryCommand? source = null, IReadOnlyList<IPropertyMetadata>? sourceColumns = null, bool ignoreConflicts = false, bool keepIdentity = false, string? tableSchema = null, OutputIntoClause? outputInto = null)
         : base(SqlStatementType.Insert, entityType)
     {
         TableName = tableName;
@@ -144,12 +177,16 @@ internal sealed class InsertCommand : MutationCommand
         SourceColumns = sourceColumns;
         IgnoreConflicts = ignoreConflicts;
         KeepIdentity = keepIdentity;
+        TableSchema = tableSchema;
+        OutputInto = outputInto;
     }
 
     /// <summary>The mapped table name, before the naming convention and identifier quoting are applied.</summary>
     public string TableName { get; }
     /// <summary>Whether <see cref="TableName"/> was auto-derived and the naming convention applies to it.</summary>
     public bool IsTableNameAuto { get; }
+    /// <summary>The schema (or database) that qualifies <see cref="TableName"/>, or <see langword="null"/>.</summary>
+    public string? TableSchema { get; }
     /// <summary>The written columns.</summary>
     public IReadOnlyList<InsertColumn> Columns { get; }
     /// <summary>The number of inserted rows.</summary>
@@ -163,6 +200,13 @@ internal sealed class InsertCommand : MutationCommand
     /// in practice: they are produced by different terminals.
     /// </summary>
     public override IReadOnlyList<IPropertyMetadata>? ReturningColumns { get; }
+
+    /// <summary>
+    /// The <c>OUTPUT ... INTO</c> target whose rows receive the written values, or <see langword="null"/>
+    /// for a plain insert. Mutually independent of <see cref="ReturningColumns"/>: an insert may write
+    /// into the target only, or into the target and return the same rows to the client.
+    /// </summary>
+    public override OutputIntoClause? OutputInto { get; }
 
     /// <summary>
     /// The server-side <c>SELECT</c> whose rows are inserted (<c>INSERT ... SELECT</c>), or

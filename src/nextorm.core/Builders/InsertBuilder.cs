@@ -193,7 +193,7 @@ public sealed partial class InsertBuilder<TEntity>
             EnsureUniqueColumn(seen, name);
             var property = ResolveWritableTarget(name);
 
-            if (UnwrapConvert(valueExpression).Type == typeof(SqlDefault))
+            if (TypeFacts.UnwrapConvert(valueExpression).Type == typeof(SqlDefault))
             {
                 bindings[i] = (property, null);
                 continue;
@@ -218,7 +218,7 @@ public sealed partial class InsertBuilder<TEntity>
             var (name, valueExpression) = members[i];
             EnsureUniqueColumn(seen, name);
 
-            if (UnwrapConvert(valueExpression).Type == typeof(SqlDefault))
+            if (TypeFacts.UnwrapConvert(valueExpression).Type == typeof(SqlDefault))
                 throw new NotSupportedException("DEFAULT is not valid in an INSERT ... SELECT source; select a value instead.");
 
             columns[i] = ResolveWritableTarget(name);
@@ -241,12 +241,15 @@ public sealed partial class InsertBuilder<TEntity>
         if (property.IsComputed)
             throw new NotSupportedException($"Property {name} of {typeof(TEntity)} is computed and cannot be written.");
 
+        if (property.RangeColumns is not null)
+            throw RangeColumnPairs.NotWritableBySelector(property, "Values(entity)");
+
         return property;
     }
 
     private static List<(string Name, Expression Value)> ExtractMappingMembers(LambdaExpression mapping)
     {
-        var body = UnwrapConvert(mapping.Body);
+        var body = TypeFacts.UnwrapConvert(mapping.Body);
         var members = new List<(string Name, Expression Value)>();
 
         if (body is NewExpression { Members: { } newMembers } newExpression)
@@ -289,7 +292,7 @@ public sealed partial class InsertBuilder<TEntity>
             count++;
         }
 
-        return count switch
+        var resolved = count switch
         {
             0 => throw new InvalidOperationException(
                 $"Entity {typeof(TEntity)} has no writable column; insert the all-defaults row with Insert() instead of a scalar value."),
@@ -297,6 +300,11 @@ public sealed partial class InsertBuilder<TEntity>
                 $"Entity {typeof(TEntity)} has {count} writable columns; pass a mapping, e.g. Values(source, s => new {{ s.Column }}), or name the column, e.g. Values(x => x.Column, values)."),
             _ => writable!,
         };
+
+        if (resolved.RangeColumns is not null)
+            throw RangeColumnPairs.NotWritableBySelector(resolved, "Values(entity)");
+
+        return resolved;
     }
 
     private IPropertyMetadata? FindPropertyByName(string name)
@@ -312,7 +320,7 @@ public sealed partial class InsertBuilder<TEntity>
 
     private IPropertyMetadata ResolveProperty(LambdaExpression column, string parameterName)
     {
-        var body = UnwrapConvert(column.Body);
+        var body = TypeFacts.UnwrapConvert(column.Body);
 
         if (body is not MemberExpression { Member: PropertyInfo property })
             throw new ArgumentException("The column selector must select a mapped property.", parameterName);
@@ -327,6 +335,9 @@ public sealed partial class InsertBuilder<TEntity>
 
         if (property.IsComputed)
             throw new NotSupportedException($"Property {property.PropertyInfo.Name} of {typeof(TEntity)} is computed and cannot be written.");
+
+        if (property.RangeColumns is not null)
+            throw RangeColumnPairs.NotWritableBySelector(property, "Values(entity)");
 
         return property;
     }
@@ -396,9 +407,17 @@ public sealed partial class InsertBuilder<TEntity>
 
     /// <summary>Builds the command for a <see cref="Returning()"/> terminal. Internal so the returning builder can reach the parent's state.</summary>
     /// <param name="returningColumns">The mapped columns to return through <c>RETURNING</c>/<c>OUTPUT</c>.</param>
+    /// <param name="outputInto">The <c>OUTPUT ... INTO</c> target, or <see langword="null"/>.</param>
     /// <returns>The insert command carrying the returned columns.</returns>
-    internal InsertCommand BuildReturningCommand(IReadOnlyList<IPropertyMetadata> returningColumns)
-        => BuildCommand(null, returningColumns);
+    internal InsertCommand BuildReturningCommand(IReadOnlyList<IPropertyMetadata> returningColumns, OutputIntoClause? outputInto = null)
+        => BuildCommand(null, returningColumns, outputInto);
+
+    /// <summary>Builds the command for an <c>OUTPUT ... INTO</c>-only terminal: the rows are written into the target and nothing is returned to the client.</summary>
+    /// <param name="outputColumns">The mapped columns written into the target.</param>
+    /// <param name="targetTable">The raw (unquoted) target table name.</param>
+    /// <returns>The insert command carrying the output-into target.</returns>
+    internal InsertCommand BuildOutputIntoCommand(IReadOnlyList<IPropertyMetadata> outputColumns, string targetTable)
+        => BuildCommand(null, null, new OutputIntoClause(targetTable, outputColumns));
 
     /// <summary>Builds the command carrying a single generated column for the identity/key terminals.</summary>
     /// <param name="identityColumn">The identity/key column to return.</param>
@@ -419,10 +438,10 @@ public sealed partial class InsertBuilder<TEntity>
         return accumulator;
     }
 
-    private InsertCommand BuildCommand(IPropertyMetadata? identityColumn, IReadOnlyList<IPropertyMetadata>? returningColumns = null)
+    private InsertCommand BuildCommand(IPropertyMetadata? identityColumn, IReadOnlyList<IPropertyMetadata>? returningColumns = null, OutputIntoClause? outputInto = null)
     {
         if (_source is not null)
-            return new InsertCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, [], 1, identityColumn, returningColumns, _source, _selectColumns);
+            return new InsertCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, [], 1, identityColumn, returningColumns, _source, _selectColumns, outputInto: outputInto);
 
         if (_columns.Count == 0)
         {
@@ -431,7 +450,7 @@ public sealed partial class InsertBuilder<TEntity>
             if (HasWritableColumns())
                 throw new InvalidOperationException("No values were specified for the insert.");
 
-            return new InsertCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, [], 1, identityColumn, returningColumns);
+            return new InsertCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, [], 1, identityColumn, returningColumns, outputInto: outputInto);
         }
 
         foreach (var column in _columns)
@@ -444,7 +463,7 @@ public sealed partial class InsertBuilder<TEntity>
         for (var i = 0; i < columns.Length; i++)
             columns[i] = new InsertColumn(_columns[i].Property, _columns[i].Values);
 
-        return new InsertCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, columns, _rowCount, identityColumn, returningColumns);
+        return new InsertCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, columns, _rowCount, identityColumn, returningColumns, outputInto: outputInto);
     }
 
     private bool HasWritableColumns()
@@ -466,11 +485,6 @@ public sealed partial class InsertBuilder<TEntity>
         throw new NotSupportedException(
             $"{_dataContext.GetType().Name} does not support data modification. Use a database-backed context (SQLite, PostgreSQL, SQL Server, MySQL, MariaDB or ClickHouse); the in-memory provider is read-only.");
     }
-
-    private static Expression UnwrapConvert(Expression expression)
-        => expression is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } unary
-            ? UnwrapConvert(unary.Operand)
-            : expression;
 
     /// <summary>Converts a boxed identity value to <typeparamref name="TKey"/>, tolerating <see langword="null"/>.</summary>
     /// <typeparam name="TKey">The target CLR type.</typeparam>

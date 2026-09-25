@@ -330,4 +330,18 @@ public class InsertSqlGenerationTests
             .ToSql()
             .Should().Be("insert into insert_entity (name) values (default)");
     }
+
+    [Fact]
+    public void OutputInto_OnMySql_ShouldThrow()
+    {
+        using var ctx = MySqlTestContext.Create();
+
+        var act = () => ctx.InsertInto<IInsertEntity>()
+            .Value(x => x.Name, "a")
+            .Returning(x => new { x.Id })
+            .OutputInto("audit_log")
+            .ToSql();
+
+        act.Should().Throw<NotSupportedException>();
+    }
 }

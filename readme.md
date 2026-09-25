@@ -101,9 +101,12 @@ physical cores), .NET 10.0.12, BenchmarkDotNet 0.15.8 (`ShortRun` + `InProcessEm
 | [FirstOrDefault](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/nextorm.benchmark.SqliteBenchmarkFirst-report-github.md) | 94.77 μs | 146.92 μs | 674.83 μs | 359.09 μs |
 | [SingleOrDefault](https://github.com/AlexeyShirshov/nextorm/blob/main/benchmarks/BenchmarkDotNet.Artifacts/results/nextorm.benchmark.SqliteBenchmarkSingle-report-github.md) | 95.10 μs | 148.47 μs | 686.56 μs | 370.82 μs |
 
+The full comparison — capabilities and benchmarks, with methodology — is in the
+[docs](https://alexeyshirshov.github.io/nextorm/comparisons/).
+
 ## Status
 
-Alpha — the public API is still changing and backward compatibility is not preserved between
+Beta — the public API is still changing and backward compatibility is not preserved between
 prereleases. See the [roadmap](https://github.com/AlexeyShirshov/nextorm/milestones) and the
 [documentation](https://alexeyshirshov.github.io/nextorm/) for details.
 

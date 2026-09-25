@@ -1,6 +1,23 @@
 # TODO: `OUTPUT INTO`, несколько result-set'ов, upsert-with-output
 > Tracking issue: [#15](https://github.com/AlexeyShirshov/nextorm/issues/15).
 
+## Статус реализации (25.09.2026)
+
+- ✅ **Фаза 1 — `OUTPUT ... INTO` (SQL Server):** `ISqlDialect.SupportsOutputInto` (DIM `=> false`) +
+  `MakeOutputInto`/`MakeDeletedOutputInto`; новый `OutputIntoBuilder` (без строковых
+  терминалов) и методы `OutputInto(`target`)` / `OutputIntoThenOutput(`target`)` на returning-билдерах
+  Insert/Update/Delete. Цель — явное имя существующей таблицы (боксинг-`Expression<Func<TTarget,object>>`
+  отвергнут). `DECLARE @t TABLE` — фаза 2, отложено.
+- ✅ **Фаза 3 — key-upsert `Returning()`:** PostgreSQL/SQLite `ON CONFLICT ... DO UPDATE ... RETURNING`,
+  SQL Server `MERGE ... OUTPUT inserted.<col>`; MySQL/MariaDB/ClickHouse — `NotSupportedException`.
+  Существующий `Returning()` на full-MERGE не изменён.
+- ⏸️ **Фаза 2 — несколько result-set'ов:** отложено. Обход уже есть в
+  `DataContext/BatchRunner.cs` (`AdvanceToResultSet`), но публично выставляется только один читающий
+  запрос; дублировать поверхность (`ReadAll<T>`) не стали — см. `docs/advanced/limitations.md`.
+- Блокеры дизайн-ревью сняты: контракт `Into` (LSP), устаревший multi-result (DRY — подтверждено,
+  поверхность не дублируется), DIM-флаги, типизация цели, матрица upsert-with-output. P2-трекинг
+  `PublicAPI.*.txt` (Шаг 5) — журнал `API-NAMING-REVIEW.md` (DOI1).
+
 > Рабочий план (design RFC). Gap-анализ: **G4** из
 > [`linq2db-backlog-gap-analysis.md`](../comparison/linq2db-backlog-gap-analysis.md); linq2db
 > [#3832](https://github.com/linq2db/linq2db/issues/3832) (`...WithOutputIntoOutput`),

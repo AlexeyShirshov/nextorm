@@ -663,7 +663,7 @@ public class SqlGenerationTests
     }
 
     [Fact]
-    public void Subquery_ShouldNotRequireAlias()
+    public void Subquery_ShouldAlwaysAliasForStableAliasIdentity()
     {
         using var ctx = SqliteTestContext.Create();
         var e = ctx.From<IComplexEntity>();
@@ -671,8 +671,9 @@ public class SqlGenerationTests
         var nested = e.Select(x => new { x.Id });
         var sql = SqlOf(ctx, ctx.From(nested).Select(t => new { t.Id }));
 
-        // Unlike PostgreSQL, SQLite does not require a derived table to be aliased.
-        sql.Should().NotContain(") as '");
+        // SQLite does not require a derived table alias, but nextorm always emits one so every
+        // reference to the derived source resolves through the same alias identity.
+        sql.Should().Be("select id from (select id from complex_entity) as 't1'");
     }
 
     [Fact]
@@ -1605,6 +1606,14 @@ public class SqlGenerationTests
         var split = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.Postgres.regexp_split_to_table(source, pattern))
             .Select(r => new { r.Value }));
         split.Should().Throw<NotSupportedException>().WithMessage("*regexp_split_to_table*");
+
+        var record = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.Postgres.jsonb_to_record<int>(json))
+            .Select(r => new { V = r }));
+        record.Should().Throw<NotSupportedException>().WithMessage("*jsonb_to_record*");
+
+        var values = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.ClickHouse.values<int>("(1)"))
+            .Select(r => new { V = r }));
+        values.Should().Throw<NotSupportedException>().WithMessage("*values*");
     }
 
     [Fact]
@@ -2763,6 +2772,80 @@ public class SqlGenerationTests
             .Select(p => new { p.Item1.OrderId, p.Item1.CustomerName, Third = p.Item2.Id }));
 
         sql.Should().Be("select t3.OrderId, t3.CustomerName, t4.id as 'Third' from (select t1.id as 'OrderId', t2.somestring as 'CustomerName' from simple_entity as 't1' join complex_entity as 't2' on cast(t1.id as bigint) = t2.id) as 't3' join complex_entity as 't4' on cast(t3.OrderId as bigint) = t4.id");
+    }
+
+    [Fact]
+    public void DerivedSource_JoinOnFilteredPrimary_ShouldReferenceExposedColumnName()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<IComplexEntity>()
+            .Where(c => c.Int > 0)
+            .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Int == (int?)s.Id)
+            .Select(p => new { A = p.Item1.Id, B = p.Item2.Id }));
+
+        // The derived table exposes the renamed column as 'Int', so the ON must use that name.
+        sql.Should().Contain("nullableint as 'Int'");
+        sql.Should().Contain("on t1.Int = ");
+        sql.Should().NotContain("t1.nullableint");
+    }
+
+    [Fact]
+    public void DerivedSourceAndPhysicalSourceOfSameType_ShouldResolveTheirOwnColumns()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var derived = ctx.From<IComplexEntity>().Where(c => c.Id > 1).ToCommand();
+
+        var sql = SqlOf(ctx, ctx.From(derived)
+            .Join(ctx.From<IComplexEntity>(), (d, c) => d.Int == c.Int)
+            .Select(p => new { A = p.Item1.Id, B = p.Item2.Id }));
+
+        sql.Should().Contain("nullableint as 'Int'");
+        sql.Should().Contain("on t1.Int = t2.nullableint");
+    }
+
+    [Fact]
+    public void ProjectedCommand_OrderByDescending_ShouldResolveProjectionExpression()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var grouped = ctx.From<IComplexEntity>()
+            .GroupBy(x => x.Int)
+            .Select(x => new { x.Int, Cnt = SqlFunctions.Sql.count() });
+
+        var sql = SqlOf(ctx, grouped.OrderByDescending(x => x.Cnt));
+
+        sql.Should().Contain("group by nullableint");
+        sql.Should().Contain("order by count(*) desc");
+    }
+
+    [Fact]
+    public void ProjectedCommand_PageAndOrder_ShouldEmitProviderPaging()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var grouped = ctx.From<IComplexEntity>()
+            .GroupBy(x => x.Int)
+            .Select(x => new { x.Int, Cnt = SqlFunctions.Sql.count() });
+
+        var sql = SqlOf(ctx, grouped.OrderByDescending(x => x.Cnt).Page(20, 1));
+
+        sql.Should().Contain("order by count(*) desc");
+        sql.Should().Contain("limit 20 offset 1");
+    }
+
+    [Fact]
+    public void ProjectedCommand_OrderByAndLimit_ShouldResolveSourceColumn()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var projected = ctx.From<IComplexEntity>().Select(x => new { x.Id, Name = x.String });
+
+        var sql = SqlOf(ctx, projected.OrderBy(x => x.Name).Limit(5).Offset(2));
+
+        sql.Should().Contain("order by somestring");
+        sql.Should().Contain("limit 5 offset 2");
     }
 
     [Fact]

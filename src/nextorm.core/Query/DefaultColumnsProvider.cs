@@ -127,6 +127,28 @@ public class DefaultColumnsProvider : IColumnsProvider
         return FindQueryCommandInScope(entityType, onlyNested: false);
     }
 
+    /// <inheritdoc/>
+    public (int Index, QueryCommand? Command)? FindInScopeQueryCommand(Type entityType)
+    {
+        for (var (i, cnt) = (SourceScopeStart, _list.Count); i < cnt; i++)
+        {
+            var item = _list[i];
+            if (item.Item4 || item.Item1 != entityType)
+                continue;
+
+            return (i, item.Item2);
+        }
+
+        return null;
+    }
+
+    /// <inheritdoc/>
+    public (int Index, QueryCommand? Command)? FindInScopeQueryCommand(ParameterExpression param, bool fromProjection)
+    {
+        var idx = FindAliasInScope(param, fromProjection, includeOuterScopes: false, onlyNested: false);
+        return idx.HasValue ? (idx.Value, _list[idx.Value].Item2) : null;
+    }
+
     private (int, QueryCommand?) FindQueryCommandInScope(Type entityType, bool onlyNested)
     {
         // Prefer an in-scope source, but fall back to the most recently added out-of-scope one.

@@ -64,20 +64,44 @@ public class EntityMetadataBuilder<T>
             var generatedAttr = prop.GetCustomAttribute<DatabaseGeneratedAttribute>(true) ?? intProp?.GetCustomAttribute<DatabaseGeneratedAttribute>(true);
             var durationAttr = prop.GetCustomAttribute<DurationAttribute>(true) ?? intProp?.GetCustomAttribute<DurationAttribute>(true);
             var collationAttr = prop.GetCustomAttribute<CollationAttribute>(true) ?? intProp?.GetCustomAttribute<CollationAttribute>(true);
+            var valueConverterAttr = prop.GetCustomAttribute<ValueConverterAttribute>(true) ?? intProp?.GetCustomAttribute<ValueConverterAttribute>(true);
+            var jsonColumnAttr = prop.GetCustomAttribute<JsonColumnAttribute>(true) ?? intProp?.GetCustomAttribute<JsonColumnAttribute>(true);
+            var rangeColumnsAttr = prop.GetCustomAttribute<RangeColumnsAttribute>(true) ?? intProp?.GetCustomAttribute<RangeColumnsAttribute>(true);
             var generated = generatedAttr?.DatabaseGeneratedOption ?? DatabaseGeneratedOption.None;
 
-            var columnName = !string.IsNullOrEmpty(colAttr?.Name) ? colAttr!.Name! : prop.Name;
+            if (valueConverterAttr is not null && jsonColumnAttr is not null)
+                throw new InvalidOperationException($"Property '{prop.Name}' of {entityType.Name} cannot be mapped with both {nameof(ValueConverterAttribute)} and {nameof(JsonColumnAttribute)}.");
+
+            if (rangeColumnsAttr is not null)
+            {
+                if (valueConverterAttr is not null || jsonColumnAttr is not null)
+                    throw new InvalidOperationException($"Property '{prop.Name}' of {entityType.Name} cannot be mapped with both {nameof(RangeColumnsAttribute)} and a value/JSON converter.");
+
+                if (!RangeTypeFacts.IsRange(prop.PropertyType))
+                    throw new InvalidOperationException($"Property '{prop.Name}' of {entityType.Name} is mapped with {nameof(RangeColumnsAttribute)} but its type {prop.PropertyType} is not Range<T>.");
+
+                if (!string.IsNullOrEmpty(colAttr?.Name))
+                    throw new InvalidOperationException($"Property '{prop.Name}' of {entityType.Name} cannot be mapped with both {nameof(ColumnAttribute)} and {nameof(RangeColumnsAttribute)}; the range pair declares its own column names.");
+            }
+
+            var columnName = rangeColumnsAttr is not null
+                ? rangeColumnsAttr.LowerColumn
+                : !string.IsNullOrEmpty(colAttr?.Name) ? colAttr!.Name! : prop.Name;
             propsMeta.Add(new PropertyMetadata
             {
                 ColumnName = columnName,
                 PropertyInfo = prop,
-                IsColumnNameAuto = string.IsNullOrEmpty(colAttr?.Name),
+                IsColumnNameAuto = rangeColumnsAttr is null && string.IsNullOrEmpty(colAttr?.Name),
                 IsKey = keyAttr is not null,
                 IsIdentity = generated == DatabaseGeneratedOption.Identity,
                 IsComputed = generated == DatabaseGeneratedOption.Computed,
                 DurationUnit = durationAttr?.Unit,
                 DurationPrecision = durationAttr?.Precision ?? 0,
                 Collation = collationAttr?.Name,
+                Converter = jsonColumnAttr is not null
+                    ? JsonColumnConverterFactory.Create(prop.PropertyType, jsonColumnAttr.Storage)
+                    : valueConverterAttr?.Create(prop.PropertyType),
+                RangeColumns = rangeColumnsAttr?.ToMetadata(),
             });
         }
 

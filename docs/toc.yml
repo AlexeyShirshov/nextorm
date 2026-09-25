@@ -4,8 +4,12 @@
   href: getting-started/
 - name: Guide
   href: guide/
+- name: Scalar functions
+  href: scalar-functions/
 - name: Providers
   href: providers/
+- name: Comparisons
+  href: comparisons/
 - name: Advanced
   href: advanced/
 - name: API reference

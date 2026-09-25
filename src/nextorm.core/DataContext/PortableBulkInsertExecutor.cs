@@ -175,6 +175,7 @@ internal sealed class PortableBulkInsertExecutor(IMutationExecutor mutation) : I
             source: null,
             sourceColumns: null,
             ignoreConflicts: command.IgnoreConflicts,
-            keepIdentity: command.KeepIdentity);
+            keepIdentity: command.KeepIdentity,
+            tableSchema: command.TableSchema);
     }
 }

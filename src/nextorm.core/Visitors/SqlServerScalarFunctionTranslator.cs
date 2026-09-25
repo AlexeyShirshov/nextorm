@@ -26,8 +26,6 @@ internal static class SqlServerScalarFunctionTranslator
         nameof(SqlServerFunctions.nchar), nameof(SqlServerFunctions.format),
         nameof(SqlServerFunctions.acos), nameof(SqlServerFunctions.asin),
         nameof(SqlServerFunctions.atan), nameof(SqlServerFunctions.atn2),
-        nameof(SqlServerFunctions.cot), nameof(SqlServerFunctions.degrees),
-        nameof(SqlServerFunctions.radians), nameof(SqlServerFunctions.pi),
         nameof(SqlServerFunctions.square), nameof(SqlServerFunctions.datename),
         nameof(SqlServerFunctions.date_bucket), nameof(SqlServerFunctions.hashbytes),
         nameof(SqlServerFunctions.newsequentialid), nameof(SqlServerFunctions.json_array),

@@ -1,0 +1,6 @@
+- name: Обзор
+  href: index.md
+- name: Возможности
+  href: capabilities.md
+- name: Бенчмарки
+  href: benchmarks.md

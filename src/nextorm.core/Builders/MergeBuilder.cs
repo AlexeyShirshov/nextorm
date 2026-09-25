@@ -252,8 +252,9 @@ public sealed partial class MergeBuilder<TEntity>
 
     /// <summary>
     /// Switches the builder to a row-returning terminal that materialises the whole merged row through the
-    /// provider's <c>OUTPUT</c>/<c>RETURNING</c> form. Requires the full-<c>MERGE</c> branch form; the
-    /// key-upsert form does not return rows.
+    /// provider's <c>OUTPUT</c>/<c>RETURNING</c> form. Both the full-<c>MERGE</c> branch form and the
+    /// key-upsert form (<c>ON CONFLICT ... DO UPDATE</c>, <c>MERGE</c>) are supported where the provider
+    /// has a row-returning clause; MySQL/MariaDB reject the key-upsert form.
     /// </summary>
     /// <returns>A returning builder whose terminals produce <typeparamref name="TEntity"/>.</returns>
     /// <exception cref="NotSupportedException">A mapped property of <typeparamref name="TEntity"/> cannot be projected.</exception>
@@ -267,8 +268,8 @@ public sealed partial class MergeBuilder<TEntity>
 
     /// <summary>
     /// Switches the builder to a row-returning terminal that materialises a projection of the merged row
-    /// through the provider's <c>OUTPUT</c>/<c>RETURNING</c> form. Requires the full-<c>MERGE</c> branch
-    /// form.
+    /// through the provider's <c>OUTPUT</c>/<c>RETURNING</c> form. Both the full-<c>MERGE</c> branch form
+    /// and the key-upsert form are supported where the provider has a row-returning clause.
     /// </summary>
     /// <typeparam name="TResult">The projected row shape.</typeparam>
     /// <param name="projection">Selects the mapped columns to return.</param>
@@ -378,9 +379,6 @@ public sealed partial class MergeBuilder<TEntity>
         if (_source is not null)
             throw new NotSupportedException("A query source requires the full-MERGE branch form (WhenMatched()/WhenNotMatched()); the key-upsert form only accepts an entity or batch.");
 
-        if (returningColumns is { Count: > 0 })
-            throw new NotSupportedException("Returning rows requires the full-MERGE branch form (WhenMatched()/WhenNotMatched()); use those branches to return rows.");
-
         if (!_whenMatchedUpdate || !_whenNotMatchedInsert)
             throw new InvalidOperationException("A key upsert requires both WhenMatchedUpdate() and WhenNotMatchedInsert().");
 
@@ -394,7 +392,7 @@ public sealed partial class MergeBuilder<TEntity>
         if (updateColumns.Count == 0)
             throw new NotSupportedException($"Entity {typeof(TEntity)} has only key columns; a key upsert needs at least one non-key column to update.");
 
-        return new MergeCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, columns, _rowCount, _keys!, updateColumns);
+        return new MergeCommand(typeof(TEntity), _metadata.TableName!, _metadata.IsTableNameAuto, columns, _rowCount, _keys!, updateColumns, returningColumns: returningColumns);
     }
 
     /// <summary>Builds the command whose <c>RETURNING</c>/<c>OUTPUT</c> clause returns <paramref name="returningColumns"/>.</summary>

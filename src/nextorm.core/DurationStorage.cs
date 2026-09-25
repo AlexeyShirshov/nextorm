@@ -47,8 +47,11 @@ internal static class DurationStorage
     };
 
     /// <summary>
-    /// Normalizes a write value: a <see cref="TimeSpan"/> stored natively is left untouched, an
-    /// integer-stored one is converted to its declared unit. Every other value passes through.
+    /// Normalizes a write value through the mapped property's converter and, for a provider without a
+    /// native duration type, its declared storage unit. This is the single write seam: every mutation
+    /// builder (insert, update, merge, bulk, delete keys) routes parameter values through it, so a
+    /// converter declared once is applied wherever the property is written. A property with a converter
+    /// owns its provider representation; the duration normalization then does not apply.
     /// </summary>
     /// <param name="value">The value being written.</param>
     /// <param name="property">The mapped property the value targets, or <c>null</c>.</param>
@@ -56,6 +59,18 @@ internal static class DurationStorage
     /// <returns>The value to pass to the provider parameter.</returns>
     internal static object? ToParameterValue(object? value, IPropertyMetadata? property, ISqlDialect dialect)
     {
+        var converter = property?.Converter;
+        if (converter is IJsonColumnConverter json)
+            converter = json.Resolve(dialect);
+
+        if (converter is not null)
+        {
+            if (value is null && !converter.ConvertsNulls)
+                return null;
+
+            return converter.ConvertToProvider(value);
+        }
+
         if (value is TimeSpan duration && ResolveStorageUnit(property, dialect) is { } unit)
             return ToStorage(duration, unit);
 

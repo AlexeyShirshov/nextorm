@@ -19,7 +19,7 @@ namespace NextORM.Core;
 /// </summary>
 /// <typeparam name="TEntity">The mapped entity type inserted.</typeparam>
 /// <typeparam name="TResult">The materialized row type (the entity, a scalar member or a projection).</typeparam>
-public sealed class InsertReturningBuilder<TEntity, TResult>
+public sealed class InsertReturningBuilder<TEntity, TResult> : IOutputIntoMutation
 {
     private readonly InsertBuilder<TEntity> _insert;
     private readonly IReadOnlyList<IPropertyMetadata> _returningColumns;
@@ -27,6 +27,7 @@ public sealed class InsertReturningBuilder<TEntity, TResult>
     private readonly bool _oneColumn;
     private readonly IPropertyMetadata? _identityColumn;
     private readonly bool _identityFunction;
+    private readonly string? _outputIntoTable;
 
     internal InsertReturningBuilder(
         InsertBuilder<TEntity> insert,
@@ -35,7 +36,8 @@ public sealed class InsertReturningBuilder<TEntity, TResult>
         bool oneColumn,
         IPropertyMetadata? identityColumn = null,
         bool identityFunction = false,
-        LambdaExpression? projection = null)
+        LambdaExpression? projection = null,
+        string? outputIntoTable = null)
     {
         _insert = insert;
         _returningColumns = returningColumns;
@@ -44,6 +46,7 @@ public sealed class InsertReturningBuilder<TEntity, TResult>
         _identityColumn = identityColumn;
         _identityFunction = identityFunction;
         Projection = projection;
+        _outputIntoTable = outputIntoTable;
     }
 
     /// <summary>
@@ -134,6 +137,46 @@ public sealed class InsertReturningBuilder<TEntity, TResult>
     }
 
     /// <summary>
+    /// Writes the inserted rows into <paramref name="targetTable"/> through SQL Server's
+    /// <c>OUTPUT ... INTO</c> clause instead of returning them to the client. The target must already
+    /// exist with columns whose names match the selected output columns. Providers without
+    /// <c>OUTPUT INTO</c> reject the statement with <see cref="NotSupportedException"/> when it renders.
+    /// </summary>
+    /// <param name="targetTable">The raw (unquoted) target table name.</param>
+    /// <returns>An output-into terminal whose <c>Execute</c> writes the rows and returns the affected-row count.</returns>
+    /// <exception cref="ArgumentException"><paramref name="targetTable"/> is null or empty.</exception>
+    /// <exception cref="NotSupportedException">The builder has no explicit output columns (the identity-function form).</exception>
+    public OutputIntoBuilder OutputInto(string targetTable)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(targetTable);
+        EnsureOutputColumns();
+        return new OutputIntoBuilder(this, targetTable);
+    }
+
+    /// <summary>
+    /// Writes the inserted rows into <paramref name="targetTable"/> and also returns them to the client
+    /// through a second <c>OUTPUT</c> clause (SQL Server). Chain a row terminal such as
+    /// <see cref="ToList"/> on the returned builder.
+    /// </summary>
+    /// <param name="targetTable">The raw (unquoted) target table name.</param>
+    /// <returns>A returning builder that writes into the target and returns the same rows to the client.</returns>
+    /// <exception cref="ArgumentException"><paramref name="targetTable"/> is null or empty.</exception>
+    /// <exception cref="NotSupportedException">The builder has no explicit output columns (the identity-function form).</exception>
+    public InsertReturningBuilder<TEntity, TResult> OutputIntoThenOutput(string targetTable)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(targetTable);
+        EnsureOutputColumns();
+        return new InsertReturningBuilder<TEntity, TResult>(_insert, _returningColumns, _selectList, _oneColumn, _identityColumn, _identityFunction, Projection, targetTable);
+    }
+
+    private void EnsureOutputColumns()
+    {
+        if (_returningColumns.Count == 0)
+            throw new NotSupportedException(
+                "OUTPUT ... INTO needs explicit output columns; use Returning()/ReturningKey()/Returning(projection) instead of the identity-function form.");
+    }
+
+    /// <summary>
     /// Renders the parameterised SQL this builder would execute, without executing it. Useful for
     /// diagnostics and for verifying SQL generation without a database.
     /// </summary>
@@ -167,7 +210,16 @@ public sealed class InsertReturningBuilder<TEntity, TResult>
         return FirstOrThrow(executor.ExecuteReturning<TResult>(BuildCommand(), _selectList, _oneColumn));
     }
 
-    private InsertCommand BuildCommand() => _insert.BuildReturningCommand(_returningColumns);
+    private InsertCommand BuildCommand()
+    {
+        var outputInto = _outputIntoTable is null ? null : new OutputIntoClause(_outputIntoTable, _returningColumns);
+        return _insert.BuildReturningCommand(_returningColumns, outputInto);
+    }
+
+    MutationCommand IOutputIntoMutation.BuildOutputIntoCommand(string targetTable)
+        => _insert.BuildOutputIntoCommand(_returningColumns, targetTable);
+
+    IDataContext IOutputIntoMutation.DataContext => _insert.DataContext;
 
     private InsertCommand BuildIdentityCommand() => _insert.BuildIdentityCommand(_identityColumn!);
 

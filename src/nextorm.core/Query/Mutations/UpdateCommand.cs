@@ -76,7 +76,8 @@ internal sealed class UpdateCommand : MutationCommand
     /// <param name="source">The command whose prepared condition forms the <c>WHERE</c> (the <c>Where(...)</c> form) and whose mapping/parameters drive the assignments.</param>
     /// <param name="keys">The declared key values of the <c>Update(entity)</c> form, or <see langword="null"/> for the predicate form.</param>
     /// <param name="returningColumns">The mapped columns to return through <c>RETURNING</c>/<c>OUTPUT</c>, or <see langword="null"/> for a plain update.</param>
-    public UpdateCommand(Type entityType, string tableName, bool isTableNameAuto, IReadOnlyList<UpdateAssignment> assignments, QueryCommand source, IReadOnlyList<KeyValue>? keys, IReadOnlyList<IPropertyMetadata>? returningColumns = null)
+    /// <param name="outputInto">The <c>OUTPUT ... INTO</c> target, or <see langword="null"/>.</param>
+    public UpdateCommand(Type entityType, string tableName, bool isTableNameAuto, IReadOnlyList<UpdateAssignment> assignments, QueryCommand source, IReadOnlyList<KeyValue>? keys, IReadOnlyList<IPropertyMetadata>? returningColumns = null, OutputIntoClause? outputInto = null)
         : base(SqlStatementType.Update, entityType)
     {
         TableName = tableName;
@@ -85,6 +86,7 @@ internal sealed class UpdateCommand : MutationCommand
         Source = source;
         Keys = keys;
         ReturningColumns = returningColumns;
+        OutputInto = outputInto;
     }
 
     /// <summary>The mapped table name, before the naming convention and identifier quoting are applied.</summary>
@@ -107,4 +109,10 @@ internal sealed class UpdateCommand : MutationCommand
     /// <see langword="null"/> for a plain update that only reports the affected-row count.
     /// </summary>
     public override IReadOnlyList<IPropertyMetadata>? ReturningColumns { get; }
+
+    /// <summary>
+    /// The <c>OUTPUT ... INTO</c> target whose rows receive the updated values, or <see langword="null"/>
+    /// for a plain update. Independent of <see cref="ReturningColumns"/>.
+    /// </summary>
+    public override OutputIntoClause? OutputInto { get; }
 }

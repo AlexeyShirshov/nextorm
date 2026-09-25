@@ -100,7 +100,7 @@
   - `## Releases` — добавлен раздел `### 1.0.6-alpha` (#28–#83 + строка про новые главы).
 - **`docs/specs/release-1.0.6-a.md`** — этот план.
 - **4 тест-файла** (`tests/nextorm.{sqlserver,postgres,mysql,clickhouse}.tests/SqlGenerationTests.cs`) — §2.1.
-- **6 docs-файлов** (EN+RU `limitations.md`, `11-scalar-functions.md`, `26-duration-columns.md`) — §2.1.
+- **6 docs-файлов** (EN+RU `limitations.md`, `scalar-functions/index.md`, `26-duration-columns.md`) — §2.1.
 - **Регистры аудита** — `docs/specs/design/code-smells-review.md`, `docs/specs/design/API-NAMING-REVIEW.md`.
 
 ## 4. Публикация (шаги владельца)

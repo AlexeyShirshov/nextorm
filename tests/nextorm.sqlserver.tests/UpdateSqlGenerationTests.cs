@@ -102,4 +102,32 @@ public class UpdateSqlGenerationTests
             .ToSql()
             .Should().Be("update merge_entity set name = @p0 output inserted.id, inserted.name where id = 1");
     }
+
+    [Fact]
+    public void Update_OutputInto_ShouldRenderInto()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        ctx.Update<IMergeEntity>()
+            .Set(x => x.Name, "a")
+            .Where(x => x.Id == 1)
+            .Returning(x => new { x.Id, x.Name })
+            .OutputInto("audit_log")
+            .ToSql()
+            .Should().Be("update merge_entity set name = @p0 output inserted.id, inserted.name into audit_log (id, name) where id = 1");
+    }
+
+    [Fact]
+    public void Update_OutputIntoThenOutput_ShouldRenderBoth()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        ctx.Update<IMergeEntity>()
+            .Set(x => x.Name, "a")
+            .Where(x => x.Id == 1)
+            .Returning(x => new { x.Id, x.Name })
+            .OutputIntoThenOutput("audit_log")
+            .ToSql()
+            .Should().Be("update merge_entity set name = @p0 output inserted.id, inserted.name into audit_log (id, name) output inserted.id, inserted.name where id = 1");
+    }
 }

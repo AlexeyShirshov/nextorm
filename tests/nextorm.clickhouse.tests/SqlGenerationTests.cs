@@ -1516,6 +1516,56 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void TableFunction_Values_ShouldRenderStructureFromRowType()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.ClickHouse.values<IDynamicValuesRow>("(1, 'x'), (2, 'y')"))
+            .Select(r => new { r.A, r.B }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Contain("from values('a UInt8, b String', (1, 'x'), (2, 'y')) as `t1`");
+    }
+
+    [Fact]
+    public void TableFunction_Values_WithNullableColumn_ShouldWrapInNullable()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var command = Prepare(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.ClickHouse.values<IDynamicNullableValuesRow>("(1, 2)"))
+            .Select(r => new { r.A, r.C }));
+
+        Normalize(command.DbCommand.CommandText)
+            .Should().Contain("from values('a UInt8, c Nullable(Int32)', (1, 2)) as `t1`");
+    }
+
+    [Fact]
+    public void TableFunction_WithUnsupportedAliasColumnList_ShouldThrow()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var act = () => SqlOf(ctx, ctx
+            .FromTableFunction(() => UnsupportedAliasColumnListTvf.Record("{}"))
+            .Select(r => new { r.A }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*AliasColumnList*");
+    }
+
+    [Fact]
+    public void PostgresRecordFunctions_ShouldThrowBecauseOnlyPostgresHasThem()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var act = () => SqlOf(ctx, ctx
+            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_to_recordset<IDynamicValuesRow>(SqlFunctions.Parameter<System.Text.Json.JsonDocument>(0)))
+            .Select(r => new { r.A }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*jsonb_to_recordset*");
+    }
+
+    [Fact]
     public void GlobalIn_Subquery_ShouldRenderGlobalIn()
     {
         using var ctx = ClickHouseTestContext.Create();
@@ -2677,6 +2727,37 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void DerivedSource_JoinOnFilteredPrimary_ShouldReferenceExposedColumnName()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<IComplexEntity>()
+            .Where(c => c.Int > 0)
+            .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Int == (int?)s.Id)
+            .Select(p => new { A = p.Item1.Id, B = p.Item2.Id }));
+
+        sql.Should().Contain("nullableint as `Int`");
+        sql.Should().Contain("on t1.`Int` = ");
+        sql.Should().NotContain("t1.nullableint");
+    }
+
+    [Fact]
+    public void ProjectedCommand_OrderByDescendingAndPage_ShouldResolveProjectionExpression()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+
+        var grouped = ctx.From<IComplexEntity>()
+            .GroupBy(x => x.Int)
+            .Select(x => new { x.Int, Cnt = SqlFunctions.Sql.count() });
+
+        var sql = SqlOf(ctx, grouped.OrderByDescending(x => x.Cnt).Page(20, 1));
+
+        sql.Should().Contain("group by nullableint");
+        sql.Should().Contain("order by toInt32(count(*)) desc");
+        sql.Should().Contain("limit 20 offset 1");
+    }
+
+    [Fact]
     public void ColumnByName_ShouldRenderColumnIdentifierAndRenameAlias()
     {
         using var ctx = ClickHouseTestContext.Create();
@@ -2733,6 +2814,30 @@ public interface IUnsignedCastEntity
     ulong Big { get; set; }
 
 
+}
+
+public interface IDynamicValuesRow
+{
+    [System.ComponentModel.DataAnnotations.Schema.Column("a")]
+    byte A { get; set; }
+
+    [System.ComponentModel.DataAnnotations.Schema.Column("b")]
+    string? B { get; set; }
+}
+
+internal static class UnsupportedAliasColumnListTvf
+{
+    [SqlTableFunction("user_record", ResultSchema = TableFunctionSchema.AliasColumnList)]
+    public static IQueryable<IDynamicValuesRow> Record(string json) => throw new NotSupportedException();
+}
+
+public interface IDynamicNullableValuesRow
+{
+    [System.ComponentModel.DataAnnotations.Schema.Column("a")]
+    byte A { get; set; }
+
+    [System.ComponentModel.DataAnnotations.Schema.Column("c")]
+    int? C { get; set; }
 }
 
 public interface IServerTableRow

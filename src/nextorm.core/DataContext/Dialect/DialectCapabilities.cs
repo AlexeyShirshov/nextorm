@@ -327,7 +327,8 @@ public interface IIndexHintRenderer
 /// A dialect's renderer for the cross-provider scalar string/number functions of
 /// <see cref="CommonFunctions"/> (<c>left</c>/<c>right</c>, <c>lpad</c>/<c>rpad</c>,
 /// <c>repeat</c>/<c>reverse</c>/<c>space</c>, <c>concat_ws</c>, <c>translate</c>, <c>ascii</c>/<c>char</c>,
-/// <c>mod</c>, <c>log10</c>, <c>power</c>). The predicate and the renderer live on one object, so a name
+/// <c>bit_length</c>/<c>octet_length</c>, <c>cot</c>/<c>degrees</c>/<c>radians</c>/<c>pi</c>). The
+/// predicate and the renderer live on one object, so a name
 /// the dialect reports as supported always has a rendering; a provider that can express only part of
 /// the family answers <see cref="Supports"/> per name, and a provider that can express none returns
 /// <see langword="null"/> from <see cref="ISqlDialect.ScalarFunctions"/>.

@@ -164,24 +164,42 @@ internal static class PredicateTranslator
         // A CASE is a computed column and has to be aliased when it appears in a select list.
         visitor.NeedAliasForColumn = true;
 
+        // A pending converter (this CASE being the value side of a comparison against a converted
+        // column) applies to the branch values only, never to the test. Both passes clear the context
+        // around the test and render the branches through VisitComparisonOperand, so the parameter-only
+        // pass used by the cache refresh collects exactly the same names and provider values as SQL.
+        var branchConverter = visitor.ConverterContext;
+
         if (visitor.IsParamMode)
         {
             // The parameter-extraction pass emits no SQL, but the whole tree still has to be walked
             // so that captured constants/parameters inside the test and the branches are collected.
+            visitor.ConverterContext = null;
             visitor.Visit(node.Test);
-            visitor.Visit(node.IfTrue);
-            visitor.Visit(node.IfFalse);
+            visitor.ConverterContext = branchConverter;
+            visitor.VisitComparisonOperand(node.IfTrue, branchConverter);
+            visitor.VisitComparisonOperand(node.IfFalse, branchConverter);
             return node;
         }
 
-        // The test is a condition, so it is rendered as a predicate (the branches are scalars).
-        var test = RenderPredicate(visitor, node.Test);
+        visitor.ConverterContext = null;
+        string test;
+        try
+        {
+            test = RenderPredicate(visitor, node.Test);
+        }
+        finally
+        {
+            visitor.ConverterContext = branchConverter;
+        }
 
         using var trueVisitor = visitor.Clone();
-        trueVisitor.Visit(node.IfTrue);
+        trueVisitor.ConverterContext = null;
+        trueVisitor.VisitComparisonOperand(node.IfTrue, branchConverter);
 
         using var falseVisitor = visitor.Clone();
-        falseVisitor.Visit(node.IfFalse);
+        falseVisitor.ConverterContext = null;
+        falseVisitor.VisitComparisonOperand(node.IfFalse, branchConverter);
 
         var caseBuilder = visitor.BuilderPool.Get();
         try
@@ -210,21 +228,30 @@ internal static class PredicateTranslator
 
         visitor.NeedAliasForColumn = true;
 
+        // A pending converter means this SWITCH is the value side of a comparison against a converted
+        // column: only its branch values are converted, not the selector or the test values.
+        var branchConverter = visitor.ConverterContext;
+
         if (visitor.IsParamMode)
         {
+            // Mirror the SQL pass exactly: the selector and test values are not converted, the bodies are.
+            visitor.ConverterContext = null;
             visitor.Visit(node.SwitchValue);
 
             for (var (i, cnt) = (0, node.Cases.Count); i < cnt; i++)
             {
                 var @case = node.Cases[i];
+
+                visitor.VisitComparisonOperand(@case.Body, branchConverter);
+                visitor.ConverterContext = null;
+
                 for (var (j, tvCnt) = (0, @case.TestValues.Count); j < tvCnt; j++)
                     visitor.Visit(@case.TestValues[j]);
-
-                visitor.Visit(@case.Body);
             }
 
+            visitor.ConverterContext = branchConverter;
             if (node.DefaultBody is not null)
-                visitor.Visit(node.DefaultBody);
+                visitor.VisitComparisonOperand(node.DefaultBody, branchConverter);
 
             return node;
         }
@@ -235,7 +262,7 @@ internal static class PredicateTranslator
             if (node.DefaultBody is null)
                 visitor.Builder!.Append(visitor.Kw("null"));
             else
-                visitor.Visit(node.DefaultBody);
+                visitor.VisitComparisonOperand(node.DefaultBody, branchConverter);
 
             return node;
         }
@@ -244,6 +271,7 @@ internal static class PredicateTranslator
         var switchValueVisitor = visitor.Clone();
         try
         {
+            switchValueVisitor.ConverterContext = null;
             switchValueVisitor.Visit(node.SwitchValue);
             var switchValue = switchValueVisitor.ToString();
 
@@ -254,13 +282,15 @@ internal static class PredicateTranslator
                 var @case = node.Cases[i];
 
                 using var bodyVisitor = visitor.Clone();
-                bodyVisitor.Visit(@case.Body);
+                bodyVisitor.ConverterContext = null;
+                bodyVisitor.VisitComparisonOperand(@case.Body, branchConverter);
                 var body = bodyVisitor.ToString();
 
                 // Several test values share one body (case 1: case 2:), so the body is rendered once.
                 for (var (j, tvCnt) = (0, @case.TestValues.Count); j < tvCnt; j++)
                 {
                     using var testVisitor = visitor.Clone();
+                    testVisitor.ConverterContext = null;
                     testVisitor.Visit(@case.TestValues[j]);
 
                     caseBuilder.Append(visitor.Kw(" when ")).Append(switchValue)
@@ -276,7 +306,8 @@ internal static class PredicateTranslator
             else
             {
                 using var defaultVisitor = visitor.Clone();
-                defaultVisitor.Visit(node.DefaultBody);
+                defaultVisitor.ConverterContext = null;
+                defaultVisitor.VisitComparisonOperand(node.DefaultBody, branchConverter);
                 caseBuilder.Append(defaultVisitor.ToString());
             }
 
@@ -295,6 +326,12 @@ internal static class PredicateTranslator
 
     internal static Expression VisitBinary(BaseExpressionVisitor visitor, BinaryExpression node)
     {
+        // An array index reaches this point only after DictionaryLookupTranslator declined it, so the
+        // array is not a captured collection (server-side array or an array-returning expression).
+        if (node.NodeType == ExpressionType.ArrayIndex)
+            throw new NotSupportedException(
+                "An array index is supported only on a captured array (arr[i]); server-side array element access has no portable SQL form.");
+
         visitor.NeedAliasForColumn = true;
 
         switch (node.NodeType)
@@ -355,10 +392,21 @@ internal static class PredicateTranslator
                 visitor.DurationUnitContext = durationUnit;
         }
 
+        // A comparison against a value-converted column binds a folded constant/captured value as the
+        // column's provider representation. Resolve the converter before visiting either operand so the
+        // operand order does not matter (the constant may be on the left); each operand is rendered
+        // through VisitComparisonOperand, which applies the converter only to the opposite (value)
+        // operand and restores the context afterwards.
+        var isComparison = node.NodeType is ExpressionType.Equal or ExpressionType.NotEqual
+            or ExpressionType.LessThan or ExpressionType.LessThanOrEqual
+            or ExpressionType.GreaterThan or ExpressionType.GreaterThanOrEqual;
+        var leftConverter = isComparison ? MemberTranslator.ResolveConverter(visitor, node.Left) : null;
+        var rightConverter = isComparison && leftConverter is null ? MemberTranslator.ResolveConverter(visitor, node.Right) : null;
+
         if (!visitor.IsParamMode)
             visitor.Builder!.Append('(');
 
-        visitor.Visit(node.Left);
+        visitor.VisitComparisonOperand(node.Left, rightConverter);
 
         if (!visitor.IsParamMode)
         {
@@ -414,7 +462,7 @@ internal static class PredicateTranslator
             }
         }
 
-        visitor.Visit(node.Right);
+        visitor.VisitComparisonOperand(node.Right, leftConverter);
 
         if (!visitor.IsParamMode)
             visitor.Builder!.Append(')');

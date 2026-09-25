@@ -250,6 +250,27 @@ select id from simple_entity where id = $norm_p0
 Runtime parameters are named `norm_p{index}`; the value `42` is bound to `norm_p0` by the terminal.
 See [Query reuse: cache vs Prepare](15-query-reuse.md) for the lifetime rules.
 
+A captured local is registered **once per statement**, no matter how many times it appears or which
+source it lives in. A local referenced twice in a `WHERE` over a join projection shares a single
+placeholder, and a local that lives only inside a joined derived subquery is bound on the enclosing
+command:
+
+```csharp
+var v = 5;
+var derived = dataContext.From<ComplexEntity>()
+    .Where(c => c.Int == v)
+    .Select(c => new { c.Id });
+
+var rows = await dataContext.From<SimpleEntity>()
+    .Join(derived, (s, d) => s.Id == d.Id)
+    .Where(p => p.Item1.Id != v || p.Item2.Id != v)   // one parameter, `@v`, reused
+    .Select(p => new { p.Item1.Id })
+    .ToListAsync();
+```
+
+There is no need to alias a captured local into several variables to give each reference its own
+parameter.
+
 ## `IN` and `Contains`
 
 `SqlFunctions.Sql.@in` takes a column plus a `QueryCommand<T>`, an `IEnumerable<T>` or a `params T[]`:
@@ -332,6 +353,59 @@ Negate it with C# `!` to render `GLOBAL NOT IN`. The predicate requires
 only on ClickHouse; every other provider and the in-memory context throw `NotSupportedException`.
 See [Provider-specific SQL](provider-specific/overview.md) for the full catalogue.
 
+## Captured collection lookup (`dict[column]`)
+
+A captured `Dictionary`, `List` or array indexed by a query expression
+(`dict[s.TenantRegistryId]`) is translated to a portable `CASE` over the collection's entries, so every
+relational provider emits the same predicate. A collection declared as an interface
+(`IReadOnlyList<T>`, `IReadOnlyDictionary<TKey,TValue>`, `IList<T>`, `IDictionary<TKey,TValue>` and the
+immutable collections) is recognised the same way. The in-memory context needs no translation: it
+evaluates the indexer as ordinary C#.
+
+```csharp
+var synchronised = new Dictionary<int, DateTime> { [1] = firstSync, [2] = secondSync };
+var due = await dataContext.From<Schedule>()
+    .Where(s => synchronised[s.TenantRegistryId] > s.ScheduleDate)
+    .Select(s => s.Id)
+    .ToListAsync();
+```
+
+```sql
+-- SQLite
+select id from schedule
+ where (case when tenant_registry_id = $p0 then $p1 when tenant_registry_id = $p2 then $p3 end > schedule_date)
+```
+
+The collection is read on the client, so every key and value is bound as a parameter (the parameter
+count follows the number of entries, and that shape is part of the plan key, so a grown or reassigned
+collection rebuilds the command instead of reusing a stale plan).
+
+| Case | Behaviour |
+|---|---|
+| Key is a query expression | `case when key = @k then @v … end` |
+| Key is a constant (`dict[5]`) | evaluated on the client and bound as a single parameter |
+| Key absent at runtime | the `CASE` has no matching branch and yields `NULL` (C# would throw) |
+| Empty collection | `NotSupportedException` |
+| Lookup outside `Where`/pre-where | `NotSupportedException` |
+| Interface-typed collection (`IReadOnlyList<T>`, `IReadOnlyDictionary<TKey,TValue>`, …) | recognised like the concrete types |
+| Server-side array/JSON element access, custom indexer | `NotSupportedException` (no portable SQL form) |
+
+A lookup whose key references a query column needs the collection's **shape** to be part of the plan
+key: the number of `CASE` branches — and the bound parameters that go with them — follows the number of
+entries, and the expression tree itself does not carry that count. The engine folds the shape in while
+preparing the condition (the `Where`/`Having` clause and the pre-where filter), so an indexed lookup is
+supported there. Used anywhere else (a projection, `OrderBy`, `GroupBy`, …) on a **cacheable** command,
+the shape would not be in the plan key, so the command is rejected with `NotSupportedException` instead
+of risking a stale cached plan that binds the wrong number of parameters. Two cases stay allowed
+everywhere:
+
+- a **constant key** (`dict[5]`) folds to a single parameter, so it has no shape dependency;
+- a command prepared **without caching** (`GetPreparedQueryCommand(..., storeInCache: false)`) has no
+  plan to protect, so the lookup is simply evaluated.
+
+If you need a lookup value in a projection, move the condition into `Where`, prepare the command without
+caching, or evaluate the lookup on the client after the query.
+
 ## Pattern and subquery predicates
 
 `SqlFunctions.Sql.like`, `SqlFunctions.Sql.exists`, `SqlFunctions.Sql.any` and `SqlFunctions.Sql.all` are the remaining predicate
@@ -367,7 +441,7 @@ subquery positions and the in-memory limits, are covered in [Subqueries](06-subq
 For a captured pattern the wildcards are concatenated around the parameter at build time, for example
 `somestring like '%' || $needle || '%'` on SQLite. `any` and `all` are not supported by the SQLite
 engine and fail when the statement runs. Over an **array** they require PostgreSQL, where the whole
-array is bound as one parameter; see [Arrays](11-scalar-functions.md#arrays-postgresql).
+array is bound as one parameter; see [Arrays](../scalar-functions/06-arrays.md#arrays-postgresql).
 
 ## Function and operator mapping
 
@@ -406,7 +480,7 @@ array is bound as one parameter; see [Arrays](11-scalar-functions.md#arrays-post
 
 * [Querying and projections](01-querying-and-projections.md)
 * [Sorting and paging](05-sorting-and-paging.md)
-* [Scalar functions](11-scalar-functions.md)
+* [Scalar functions](../scalar-functions/index.md)
 * [Subqueries](06-subqueries.md)
 * [Provider-specific SQL](provider-specific/overview.md)
 * [Limitations and out-of-scope features](../advanced/limitations.md)

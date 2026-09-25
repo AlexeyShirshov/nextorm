@@ -120,13 +120,25 @@ public sealed class PostgresDialect : SqlDialectBase
     /// <inheritdoc/>
     public override string MakeBool(bool v) => v ? "true" : "false";
 
-    /// <summary>PostgreSQL's text type is <c>text</c> (the base maps <see cref="string"/> to the CLR name).</summary>
-    public override string MakeTypeName(Type type) => type switch
+    /// <summary>PostgreSQL's text type is <c>text</c>, its duration type is <c>interval</c>, a <see cref="Range{T}"/> maps to the native range type selected by its bound type and a <see cref="Range{T}"/> array maps to the matching multirange.</summary>
+    /// <param name="type">The CLR type to name.</param>
+    /// <returns>The PostgreSQL type name.</returns>
+    public override string MakeTypeName(Type type)
     {
-        _ when type == typeof(string) => "text",
-        _ when type == typeof(TimeSpan) => "interval",
-        _ => base.MakeTypeName(type)
-    };
+        if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Range<>))
+            return PostgresRangeTypes.NameFor(type.GetGenericArguments()[0]);
+
+        if (type.IsArray && type.GetElementType() is { } element
+            && element.IsGenericType && element.GetGenericTypeDefinition() == typeof(Range<>))
+            return PostgresRangeTypes.MultirangeNameFor(element.GetGenericArguments()[0]);
+
+        return type switch
+        {
+            _ when type == typeof(string) => "text",
+            _ when type == typeof(TimeSpan) => "interval",
+            _ => base.MakeTypeName(type)
+        };
+    }
 
     /// <summary>PostgreSQL has a native duration type (<c>interval</c>), so a <see cref="TimeSpan"/> is stored natively.</summary>
     public override bool SupportsNativeDuration => true;
@@ -223,13 +235,33 @@ public sealed class PostgresDialect : SqlDialectBase
     /// <inheritdoc/>
     public override bool SupportsArrays => true;
 
+    // PostgreSQL has native range types (int4range/int8range/numrange/tsrange/tstzrange/daterange).
+    /// <inheritdoc/>
+    public override bool SupportsRanges => true;
+
+    /// <inheritdoc/>
+    public override bool SupportsRangeColumns => true;
+
     /// <inheritdoc/>
     public override bool SupportsTableFunction(string name) =>
         name is "generate_series" or "unnest"
             or "regexp_matches" or "regexp_split_to_table"
             or "jsonb_array_elements" or "jsonb_array_elements_text"
             or "jsonb_each" or "jsonb_each_text" or "jsonb_object_keys"
-            or "jsonb_path_query" or "ts_stat";
+            or "jsonb_path_query" or "ts_stat"
+            or "jsonb_to_record" or "jsonb_to_recordset";
+
+    /// <summary>PostgreSQL renders the row-derived schema as the alias column-definition list of the record function.</summary>
+    public override bool SupportsResultSchema(TableFunctionSchema placement) => placement == TableFunctionSchema.AliasColumnList;
+
+    /// <summary>
+    /// PostgreSQL's record set-returning functions take their result schema as an alias
+    /// column-definition list: <c>jsonb_to_record(json) as "t1"(a integer, b text)</c>.
+    /// </summary>
+    public override string MakeTableFunctionAlias(string tableAlias, string? columnDefinitionList, KeywordCase keywordCase = KeywordCase.Lower)
+        => columnDefinitionList is null
+            ? MakeTableAlias(tableAlias, keywordCase)
+            : MakeTableAlias(tableAlias, keywordCase) + "(" + columnDefinitionList + ")";
 
     /// <summary>
     /// PostgreSQL names the only output column of a scalar set-returning function after the function,
@@ -654,7 +686,8 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
     /// <inheritdoc/>
     public bool Supports(string name) => name is
         "left" or "right" or "lpad" or "rpad" or "repeat" or "reverse" or "space" or
-        "concat_ws" or "translate" or "ascii" or "char";
+        "concat_ws" or "translate" or "ascii" or "char" or
+        "bit_length" or "octet_length" or "cot" or "degrees" or "radians" or "pi";
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
@@ -670,6 +703,12 @@ internal sealed class PostgresScalarFunctions : IScalarFunctions
         "translate" => $"translate({args[0]}, {args[1]}, {args[2]})",
         "ascii" => $"ascii({args[0]})",
         "char" => $"chr({args[0]})",
+        "bit_length" => $"bit_length({args[0]})",
+        "octet_length" => $"octet_length({args[0]})",
+        "cot" => $"cot({args[0]})",
+        "degrees" => $"degrees({args[0]})",
+        "radians" => $"radians({args[0]})",
+        "pi" => "pi()",
         _ => throw new NotSupportedException($"The {name} function is not supported by PostgreSQL.")
     };
 

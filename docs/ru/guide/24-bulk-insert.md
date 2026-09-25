@@ -60,6 +60,23 @@ await ctx.BulkInsertInto<IOrder>().Values(ordersStream).BulkInsertAsync(cancella
 
 Пустой набор ничего не пишет и возвращает `0`.
 
+## Перенацеливание целевой таблицы
+
+`Table(name)` / `Table(schema, name)` переопределяет таблицу, замапленную на сущность, для одной
+записи — так один замапленный набор можно скопировать в таблицу с другим именем без второго
+`[SqlTable]`-маппинга:
+
+```csharp
+var written = ctx.BulkInsertInto<IOrder>(o => o.Table("archive", "orders_2024"))
+    .Values(orders)
+    .BulkInsert();
+```
+
+Override имеет приоритет над маппингом `[SqlTable]`/`Table(...)`, naming convention к нему не
+применяется, а необязательная схема квотируется отдельно от таблицы. Работает и на нативном пути
+(`COPY`/`SqlBulkCopy`), и на портируемом `INSERT ... VALUES`, и сочетается с `Returning*` и
+`KeepIdentity`.
+
 ## Получение сгенерированных ключей
 
 Нативные bulk API не возвращают строки, поэтому `Returning*` переключает на портируемый путь и пишет
@@ -185,6 +202,13 @@ var written = ctx.BulkInsertInto<IOrder>(o => o.KeepIdentity().IgnoreDuplicates(
 MySQL/MariaDB (`INSERT IGNORE`); на SQL Server он отклоняется, а в ClickHouse это no-op (уникальности
 нет, поэтому пишутся все строки).
 
+> `KeepIdentity()` игнорируется, если в маппинге сущности нет identity-колонки (как в linq2db):
+> явные значения для не-identity ключей всё равно пишутся, но форма включения identity
+> (`SET IDENTITY_INSERT`, `OVERRIDING SYSTEM VALUE`) не эмитится — поэтому таблица без identity
+> никогда не падает с ошибкой SQL Server 8106. Проверка идёт по метаданным сущности-донора, а не по
+> фактической целевой таблице: при перенацеливании через `Table(...)` ответственность за identity-форму
+> целевой таблицы лежит на вызывающем.
+
 ## Просмотр SQL
 
 `ToSql()` рендерит параметризованный SQL, который выполнил бы портируемый путь для первого батча, не
@@ -213,7 +237,8 @@ ctx.BulkInsertInto<IOrder>(o => o.MaxBatchSize(1_000).IgnoreDuplicates());
 | `MaxBatchSize` | `MaxBatchSize(rows)` | дробление портируемого пути (по умолчанию — одно утверждение) |
 | `MaxParameters` | `MaxParameters(count)` | параметров на утверждение |
 | `MaxSqlLength` | `MaxSqlLength(chars)` | примерная длина SQL на утверждение |
-| `KeepIdentity` | `KeepIdentity()` | запись явных значений identity (`OVERRIDING SYSTEM VALUE` в PostgreSQL, `SET IDENTITY_INSERT ... ON/OFF` в SQL Server) |
+| `TableName` / `TableSchema` | `Table(name)` / `Table(schema, name)` | переопределение целевой таблицы, при желании schema-квалифицированной |
+| `KeepIdentity` | `KeepIdentity()` | запись явных значений identity (`OVERRIDING SYSTEM VALUE` в PostgreSQL, `SET IDENTITY_INSERT ... ON/OFF` в SQL Server); игнорируется, если у сущности нет identity-колонки |
 | `IgnoreDuplicates` | `IgnoreDuplicates()` | пропуск строк, нарушающих уникальность |
 | `TimeoutSeconds` | `Timeout(seconds)` | таймаут команды; только нативный путь SQL Server |
 | `Progress` / `NotifyEvery` | `NotifyAfter(rows, onRows)` | прогресс с накопленным числом записанных строк |
@@ -230,15 +255,15 @@ ctx.BulkInsertInto<IOrder>(o => o.MaxBatchSize(1_000).IgnoreDuplicates());
 
 ## Поддержка провайдеров
 
-| Провайдер | Нативный bulk | `Returning` | `IgnoreDuplicates` | `KeepIdentity` |
-|---|---|---|---|---|
-| PostgreSQL | бинарный `COPY` | `RETURNING` (портируемо) | `ON CONFLICT DO NOTHING` | `OVERRIDING SYSTEM VALUE` |
-| SQL Server | `SqlBulkCopy` | `OUTPUT` (портируемо) | — (отклоняется) | `SET IDENTITY_INSERT` |
-| MySQL | — (портируемо) | — | `INSERT IGNORE` | явные значения |
-| MariaDB | — (портируемо) | — | `INSERT IGNORE` | явные значения |
-| SQLite | — (портируемо) | `RETURNING` (портируемо) | `INSERT OR IGNORE` | явные значения |
-| ClickHouse | — (портируемо) | — | no-op (нет уникальности) | — |
-| In-memory | — | — | — | `NotSupportedException` (только чтение) |
+| Провайдер | Нативный bulk | Override цели | `Returning` | `IgnoreDuplicates` | `KeepIdentity` |
+|---|---|---|---|---|---|
+| PostgreSQL | бинарный `COPY` | `schema.table` | `RETURNING` (портируемо) | `ON CONFLICT DO NOTHING` | `OVERRIDING SYSTEM VALUE` |
+| SQL Server | `SqlBulkCopy` | `schema.table` | `OUTPUT` (портируемо) | — (отклоняется) | `SET IDENTITY_INSERT` |
+| MySQL | — (портируемо) | `db.table` | — | `INSERT IGNORE` | явные значения |
+| MariaDB | — (портируемо) | `db.table` | — | `INSERT IGNORE` | явные значения |
+| SQLite | — (портируемо) | `schema.table` | `RETURNING` (портируемо) | `INSERT OR IGNORE` | явные значения |
+| ClickHouse | — (портируемо) | `db.table` | — | no-op (нет уникальности) | — |
+| In-memory | — | — | — | — | `NotSupportedException` (только чтение) |
 
 ## См. также
 

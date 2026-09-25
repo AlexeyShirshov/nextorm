@@ -12,6 +12,16 @@ namespace NextORM.Core;
 public interface IPropertyMetadata
 {
     /// <summary>
+    /// The column-pair descriptor of a <see cref="Range{T}"/> property stored as two scalar columns,
+    /// or <see langword="null"/> when the property maps to a single column. Declared with
+    /// <see cref="RangeColumnsAttribute"/> or set fluently with
+    /// <see cref="EntityPropertyBuilder{T}.RangeColumns(string, string, bool, bool)"/>. The default
+    /// implementation returns <see langword="null"/> so existing external implementations keep
+    /// compiling.
+    /// </summary>
+    RangeColumnsMetadata? RangeColumns => null;
+
+    /// <summary>
     /// The CLR property this mapping describes.
     /// </summary>
     PropertyInfo PropertyInfo { get; }
@@ -83,4 +93,15 @@ public interface IPropertyMetadata
     /// compiling.
     /// </summary>
     string? Collation => null;
+
+    /// <summary>
+    /// The value converter that maps the property between its CLR model type and the provider
+    /// representation, or <see langword="null"/> when the property is stored as its model type.
+    /// Declared with <see cref="ValueConverterAttribute"/> or <see cref="JsonColumnAttribute"/>, or set
+    /// fluently with <see cref="EntityPropertyBuilder{T}.HasConversion(IPropertyValueConverter)"/> or
+    /// <see cref="EntityPropertyBuilder{T}.JsonColumn(Action{JsonColumnOptions}?)"/>. The default
+    /// implementation returns <see langword="null"/> so existing external implementations keep
+    /// compiling.
+    /// </summary>
+    IPropertyValueConverter? Converter => null;
 }

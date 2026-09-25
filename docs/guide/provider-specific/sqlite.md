@@ -4,7 +4,7 @@
 > `quote`, `typeof`, `glob`, `unicode`/`char`, `soundex`, `octet_length`, `if`/`ifnull`), the JSON1
 > functions/operators/aggregates and the `json_each`/`json_tree` table-valued functions, the date
 > helpers (`timediff`, `unixepoch`, `julianday`) and the math-extension functions
-> (`acos` … `tanh`, `degrees`, `log2`/`log10`, `mod`, `pi`, `radians`).
+> (`acos`/`asin`/`atan`/`atan2`, the hyperbolics, `log2`/`log10`, `mod`).
 
 **Prerequisites:** [Querying and projections](../01-querying-and-projections.md) · [SQLite provider](../../providers/sqlite.md)
 
@@ -140,16 +140,17 @@ var rows = dataContext.From<IComplexEntity>()
 
 The math functions map to SQLite's math extension (`SQLITE_ENABLE_MATH_FUNCTIONS`), available in the
 SQLite build shipped with `nextorm.sqlite`. The surface exposes `acos`, `acosh`, `asin`, `asinh`,
-`atan`, `atan2`, `atanh`, `cosh`, `degrees`, `log10`, `log2`, `mod`, `pi`, `radians`, `sinh` and
-`tanh`; the portable [`Math.*`](../../guide/11-scalar-functions.md) mappings (`Math.Sqrt`, `Math.Log10`,
-`Math.Sign`, …) also render on SQLite.
+`atan`, `atan2`, `atanh`, `cosh`, `log10`, `log2`, `mod`, `sinh` and
+`tanh`; the portable [`Math.*`](../../scalar-functions/index.md) mappings (`Math.Sqrt`, `Math.Log10`,
+`Math.Sign`, …) also render on SQLite. `degrees`/`radians`/`pi` are portable
+([`SqlFunctions.Sql`](../../scalar-functions/02-math-functions.md)) rather than SQLite-only.
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
     .Select(c => new
     {
-        Pi = SqlFunctions.Sqlite.pi(),
-        Degrees = SqlFunctions.Sqlite.degrees(SqlFunctions.Sqlite.pi()),
+        Pi = SqlFunctions.Sql.pi(),
+        Degrees = SqlFunctions.Sql.degrees(SqlFunctions.Sql.pi()),
         Log2 = SqlFunctions.Sqlite.log2(8.0)
     })
     .ToList();

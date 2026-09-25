@@ -122,8 +122,7 @@ public interface ITestProvider
 
     /// <summary>
     /// True when the provider can translate a constant-pattern <c>Regex.IsMatch</c>/<c>Regex.Replace</c>
-    /// into native SQL. PostgreSQL, MySQL/MariaDB, ClickHouse and SQLite can; SQL Server has no
-    /// regular-expression engine, so the shared regex tests are skipped there.
+    /// into native SQL. PostgreSQL, MySQL/MariaDB, ClickHouse, SQLite and SQL Server 2025+ can.
     /// </summary>
     bool SupportsRegex { get; }
 

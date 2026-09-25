@@ -236,30 +236,6 @@ namespace NextORM.Core;
         public double? atn2(double? y, double? x) => default!;
 
         /// <summary>
-        /// <c>cot(value)</c>: the cotangent. Requires a provider that supports it (see
-        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
-        /// </summary>
-        public double? cot(double? value) => default!;
-
-        /// <summary>
-        /// <c>degrees(value)</c>: converts radians to degrees. Requires a provider that supports it (see
-        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
-        /// </summary>
-        public double? degrees(double? value) => default!;
-
-        /// <summary>
-        /// <c>radians(value)</c>: converts degrees to radians. Requires a provider that supports it (see
-        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
-        /// </summary>
-        public double? radians(double? value) => default!;
-
-        /// <summary>
-        /// <c>pi()</c>: the constant π. Requires a provider that supports it (see
-        /// <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).
-        /// </summary>
-        public double? pi() => default!;
-
-        /// <summary>
         /// <c>square(value)</c>: the square of <paramref name="value"/>. The portable alternative is
         /// <c>value * value</c> or <see cref="Math.Pow(double, double)"/>. Requires a provider that
         /// supports it (see <see cref="ISqlDialect.SqlServerFunctions"/>; SQL Server).

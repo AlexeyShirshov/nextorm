@@ -70,6 +70,23 @@ public sealed class FluentDurationEntity
     public TimeSpan Span { get; set; }
 }
 
+public sealed class RangeColumnEntity
+{
+    public int Id { get; set; }
+
+    [RangeColumns("during_lower", "during_upper")]
+    public Range<int> During { get; set; }
+}
+
+public sealed class ColumnAndRangeColumnEntity
+{
+    public int Id { get; set; }
+
+    [Column("r")]
+    [RangeColumns("during_lower", "during_upper")]
+    public Range<int> During { get; set; }
+}
+
 /// <summary>
 /// Unit tests for the DML metadata flags (<see cref="IPropertyMetadata.IsKey"/>/<c>IsIdentity</c>/
 /// <c>IsComputed</c>), their attribute/fluent/convention sources, and the in-memory rejection of
@@ -298,5 +315,49 @@ public class InsertMetadataTests
             .Returning();
 
         builder.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void RangeColumnsAttribute_ShouldMarkColumnNameDeclared()
+    {
+        var metadata = new EntityMetadataBuilder<RangeColumnEntity>().Build();
+
+        var during = metadata.Properties.Single(p => p.PropertyInfo.Name == nameof(RangeColumnEntity.During));
+
+        // The pair declares its own column names, so a naming convention must not rewrite them.
+        during.ColumnName.Should().Be("during_lower");
+        during.IsColumnNameAuto.Should().BeFalse();
+        during.RangeColumns!.LowerColumn.Should().Be("during_lower");
+        during.RangeColumns!.UpperColumn.Should().Be("during_upper");
+    }
+
+    [Fact]
+    public void ColumnAndRangeColumnsAttributes_ShouldThrow()
+    {
+        var act = () => new EntityMetadataBuilder<ColumnAndRangeColumnEntity>().Build();
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*RangeColumns*");
+    }
+
+    [Fact]
+    public void FluentColumnNameThenRangeColumns_ShouldThrow()
+    {
+        var property = new EntityMetadataBuilder<RangeColumnEntity>().Property(x => x.During);
+        property.HasColumnName("r");
+
+        Action act = () => property.RangeColumns("l", "u");
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*RangeColumns*");
+    }
+
+    [Fact]
+    public void FluentRangeColumnsThenColumnName_ShouldThrow()
+    {
+        var property = new EntityMetadataBuilder<RangeColumnEntity>().Property(x => x.During);
+        property.RangeColumns("l", "u");
+
+        Action act = () => property.HasColumnName("r");
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*RangeColumns*");
     }
 }

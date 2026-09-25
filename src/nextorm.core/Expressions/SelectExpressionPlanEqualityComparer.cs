@@ -53,6 +53,10 @@ public sealed class SelectExpressionPlanEqualityComparer : IEqualityComparer<Sel
 
         if (x.DurationUnit != y.DurationUnit) return false;
 
+        if (x.ProviderType != y.ProviderType) return false;
+
+        if (!ReferenceEquals(x.Converter, y.Converter)) return false;
+
         //_expComparer ??= new ExpressionPlanEqualityComparer(_cache, _queryProvider);
         if (!_queryProvider.GetExpressionPlanEqualityComparer().Equals(x.Expression, y.Expression))
             return false;
@@ -80,6 +84,11 @@ public sealed class SelectExpressionPlanEqualityComparer : IEqualityComparer<Sel
             hash.Add(obj.DefaultOnNull);
 
             hash.Add(obj.DurationUnit);
+
+            hash.Add(obj.ProviderType);
+
+            if (obj.Converter is not null)
+                hash.Add(System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj.Converter));
 
             //_expComparer ??= new ExpressionPlanEqualityComparer(_cache, _queryProvider);
             hash.Add(obj.Expression, _queryProvider.GetExpressionPlanEqualityComparer());

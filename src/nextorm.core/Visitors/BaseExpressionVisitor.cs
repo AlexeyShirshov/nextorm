@@ -67,12 +67,26 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     /// <summary>The name of the column currently being rendered, if any.</summary>
     public string? ColumnName { get => _colName; internal set => _colName = value; }
     /// <summary>
+    /// Which column of a <see cref="Range{T}"/> pair is currently being rendered, so a
+    /// <see cref="RangeColumnsAttribute"/> member is emitted as its lower or upper physical column
+    /// rather than as a single column. <see cref="RangeColumnRole.None"/> outside a pair projection.
+    /// </summary>
+    internal RangeColumnRole RangeColumnRole { get; set; }
+    /// <summary>
     /// The storage unit of the duration column currently being rendered on a provider without a native
     /// duration type, or <c>null</c> for a native/absent duration. A <see cref="TimeSpan"/> value that is
     /// folded into a parameter while this is set is converted to the unit, so a comparison against a
     /// duration column keeps matching the stored integer form.
     /// </summary>
     internal DurationUnit? DurationUnitContext { get; set; }
+
+    /// <summary>
+    /// The value converter of the mapped column currently being compared, or <c>null</c>. A constant
+    /// or captured value that is folded into a parameter while this is set is converted to the column's
+    /// provider representation (the same <see cref="IPropertyValueConverter.ConvertToProvider"/> the
+    /// write seam uses), so a comparison against a converted column binds the converted value.
+    /// </summary>
+    internal MemberTranslator.ResolvedConverter? ConverterContext { get; set; }
 
     /// <summary>
     /// When set, a mapped column's declared collation (see <see cref="CollationAttribute"/>) is not
@@ -90,6 +104,151 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         => value is TimeSpan duration && DurationUnitContext is { } unit
             ? DurationStorage.ToStorage(duration, unit)
             : value;
+
+    /// <summary>
+    /// Converts a value folded into a parameter through the compared column's converter (when
+    /// <see cref="ConverterContext"/> is set) and otherwise through the duration storage unit. A SQL
+    /// <c>NULL</c> follows the converter's <see cref="IPropertyValueConverter.ConvertsNulls"/> policy.
+    /// A comparison over an enum is lowered by the compiler to its integer underlying type, so a folded
+    /// underlying value is first coerced back to the enum model.
+    /// </summary>
+    internal object? NormalizeParameterValue(object? value)
+    {
+        // The converter path shares its ConvertsNulls policy with the value-list translator through
+        // ConvertToProviderValue, so the null handling has a single implementation.
+        if (ConverterContext is { } scope)
+            return ConvertToProviderValue(scope.Converter, CoerceToModel(value, scope.ModelType));
+
+        return NormalizeDurationValue(value);
+    }
+
+    /// <summary>
+    /// Converts a value to the provider representation of an explicit <paramref name="converter"/>,
+    /// honouring its <see cref="IPropertyValueConverter.ConvertsNulls"/> policy. Shared by the
+    /// value-list translator, whose elements are already model-typed.
+    /// </summary>
+    internal static object? ConvertToProviderValue(IPropertyValueConverter? converter, object? value)
+    {
+        if (converter is null)
+            return value;
+
+        if (value is null && !converter.ConvertsNulls)
+            return null;
+
+        return converter.ConvertToProvider(value);
+    }
+
+    private static object? CoerceToModel(object? value, Type modelType)
+    {
+        if (value is null)
+            return null;
+
+        if (modelType.IsEnum && !value.GetType().IsEnum)
+            return Enum.ToObject(modelType, value);
+
+        return value;
+    }
+
+    private static bool IsConvertibleConstant(Type constantType, Type modelType)
+    {
+        var constant = Nullable.GetUnderlyingType(constantType) ?? constantType;
+        return constant == modelType
+            || (modelType.IsEnum && constant == Enum.GetUnderlyingType(modelType));
+    }
+
+    /// <summary>
+    /// Renders one operand of a comparison whose opposite operand is a value-converted column. The
+    /// operand is converted through the column's converter only when it is a value expression (a
+    /// constant, a captured local or a foldable call); an operand that references a query column keeps
+    /// its normal rendering, so a nested arithmetic expression such as <c>x.State == x.Id + 1</c> is
+    /// not converted.
+    /// </summary>
+    /// <param name="operand">The operand to render.</param>
+    /// <param name="converter">The converter of the opposite operand, or <c>null</c>.</param>
+    internal void VisitComparisonOperand(Expression operand, MemberTranslator.ResolvedConverter? converter)
+    {
+        if (converter is not { } scope)
+        {
+            Visit(operand);
+            return;
+        }
+
+        // A column-referencing operand is ordinary SQL: its own constants must not be converted. The
+        // exception is a CASE/SWITCH, which is still a value of the compared column: its branches are
+        // converted while its test/selector is left alone (see the conditional/switch translator).
+        // Has<T> walks the whole operand with a freshly allocated visitor, so the answer is computed
+        // once for both decisions below.
+        var hasParameter = operand.Has<ParameterExpression>();
+        if (hasParameter && !IsConditionalValue(operand))
+        {
+            Visit(operand);
+            return;
+        }
+
+        var previous = ConverterContext;
+        ConverterContext = scope;
+        try
+        {
+            // A compound parameter-free value (a + b, a ?? b, a ? b : c) is a single value: fold the
+            // whole expression to one parameter so the converter runs once on the result. Visiting it
+            // would convert each leaf on its own and bind raw arithmetic/concat over provider values
+            // (e.g. a string converter: '001' + '002' instead of ConvertToProvider(3) == '003').
+            if (!hasParameter && IsCompoundValue(operand))
+                EmitFoldedParameter(operand);
+            else
+                Visit(operand);
+        }
+        finally
+        {
+            ConverterContext = previous;
+        }
+    }
+
+    // Distinguishes a compound value expression from a single constant/captured value. A Convert
+    // wrapper (the compiler's enum-comparison lowering) is transparent, so a compound operand under a
+    // cast is still folded as a whole. C# lowers a string a + b to string.Concat(a, b), so that call is
+    // compound too (the individual leaves must not be converted and concatenated in their provider form).
+    private static bool IsCompoundValue(Expression operand) => TypeFacts.UnwrapConvert(operand) switch
+    {
+        BinaryExpression => true,
+        ConditionalExpression => true,
+        SwitchExpression => true,
+        UnaryExpression => true,
+        MethodCallExpression { Object: null } call
+            when call.Method.DeclaringType == typeof(string) && call.Method.Name == nameof(string.Concat) => true,
+        _ => false,
+    };
+
+    // True for a conditional/switch expression (possibly under a Convert), whose branch values are
+    // converted while its test/selector is not.
+    private static bool IsConditionalValue(Expression operand)
+        => TypeFacts.UnwrapConvert(operand) is ConditionalExpression or SwitchExpression;
+
+    /// <summary>
+    /// Registers a captured local (a closure member access) as a query parameter exactly once per
+    /// rendered statement. A repeat occurrence of the same expression does not append a second
+    /// <see cref="Parameter"/> (which would emit two identically named placeholders and leave one of
+    /// them unbound); the caller still emits the placeholder so every occurrence shares the position.
+    /// </summary>
+    /// <param name="name">The placeholder name the caller emits.</param>
+    /// <param name="value">The evaluated value of the captured local.</param>
+    /// <param name="source">The captured member-access expression.</param>
+    /// <returns><see langword="true"/> when a new parameter was added.</returns>
+    internal bool TryAddCapturedParameter(string name, object? value, Expression source)
+    {
+        var key = new ExpressionKey(source, _queryProvider);
+        for (var i = 0; i < _params.Count; i++)
+        {
+            // The name is part of the identity: a batch renders several statements that share one
+            // parameter list with a per-statement prefix, so the same captured source has to stay a
+            // distinct parameter in each statement.
+            if (_params[i].Name == name && _params[i].CapturedKey is { } existing && existing.Equals(key))
+                return false;
+        }
+
+        _params.Add(new Parameter(name, NormalizeParameterValue(value)) { CapturedKey = key });
+        return true;
+    }
     /// <summary>
     /// True when the built expression is used as a condition (WHERE/HAVING) instead of a value.
     /// </summary>
@@ -173,6 +332,9 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         if (InValuesTranslator.TryTranslateCollectionContains(this, node))
             return node;
 
+        if (DictionaryLookupTranslator.TryTranslate(this, node))
+            return node;
+
         if (node.Object?.Type == typeof(TableAlias))
         {
             if (!_paramMode)
@@ -218,6 +380,14 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
                 || node.Method.DeclaringType == typeof(DateTime)))
             throw new NotSupportedException($"The method {node.Method.DeclaringType.Name}.{node.Method.Name} is not supported.");
 
+        // An indexer (get_Item) that reached this point is not a captured lookup (handled by
+        // DictionaryLookupTranslator above) and must not fall through: base.VisitMethodCall would emit
+        // the collection object as a parameter and silently drop the key.
+        if (node.Object is not null && node.Method.Name == "get_Item")
+            throw new NotSupportedException(
+                "The indexer is supported only on a captured Dictionary/List/array indexed inside the query " +
+                "(dict[key], list[column], arr[i]); server-side array or JSON element access has no portable SQL form.");
+
         return base.VisitMethodCall(node);
     }
 
@@ -249,7 +419,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     /// </summary>
     internal void AppendColumnReference(Expression source, string columnName)
     {
-        var unwrapped = UnwrapConvert(source);
+        var unwrapped = TypeFacts.UnwrapConvert(source);
         var target = ResolveColumnSource(unwrapped)
             ?? throw new BuildSqlCommandException(
                 $"SqlFunctions.Column requires an entity source parameter (got '{source}').");
@@ -318,17 +488,12 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         return v.Has ? v.Target : null;
     }
 
-    private static Expression UnwrapConvert(Expression exp)
-        => exp is UnaryExpression { NodeType: ExpressionType.Convert or ExpressionType.ConvertChecked } unary
-            ? UnwrapConvert(unary.Operand)
-            : exp;
-
     /// <summary>
     /// Folds an expression with no lambda parameters (a call or a value-type constructor such as
     /// <c>new DateTime(2014, 3, 20)</c>) into a constant and emits it as a query parameter, caching
     /// the compiled delegate by expression key.
     /// </summary>
-    private void EmitFoldedParameter(Expression node)
+    internal void EmitFoldedParameter(Expression node)
     {
         object? value;
         var keyCmd = new ExpressionKey(node, _queryProvider);
@@ -351,7 +516,7 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
             value = ((Func<object>)d)();
 
         var paramName = _parameterProvider.GetParamName();
-        var p = new Parameter(paramName, NormalizeDurationValue(value)) { Stable = InValues.IsStableValueExpression(node) };
+        var p = new Parameter(paramName, NormalizeParameterValue(value)) { Stable = InValues.IsStableValueExpression(node) };
         _params.Add(p);
 
         if (!_paramMode)
@@ -443,11 +608,29 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
 
     /// <inheritdoc/>
     protected override Expression VisitIndex(IndexExpression node)
-        => MemberTranslator.VisitIndex(this, node) ?? base.VisitIndex(node);
+    {
+        if (DictionaryLookupTranslator.TryTranslate(this, node))
+            return node;
+
+        if (MemberTranslator.VisitIndex(this, node) is { } translated)
+            return translated;
+
+        throw new NotSupportedException(
+            "An index expression is supported only on a captured Dictionary/List/array indexed inside the query " +
+            "(dict[key], list[column], arr[i]); server-side array or JSON element access has no portable SQL form.");
+    }
 
     /// <inheritdoc/>
     protected override Expression VisitConstant(ConstantExpression node)
     {
+        // A constant compared with a value-converted column is bound as a parameter carrying the
+        // provider representation, not inlined as its raw model/underlying value.
+        if (ConverterContext is { } scope && IsConvertibleConstant(node.Type, scope.ModelType))
+        {
+            EmitFoldedParameter(node);
+            return node;
+        }
+
         if (!_paramMode)
             TryEmitValue(node.Type, node.Value);
 
@@ -513,7 +696,13 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     /// <inheritdoc/>
     protected override Expression VisitSwitch(SwitchExpression node) => PredicateTranslator.VisitSwitch(this, node);
     /// <inheritdoc/>
-    protected override Expression VisitBinary(BinaryExpression node) => PredicateTranslator.VisitBinary(this, node);
+    protected override Expression VisitBinary(BinaryExpression node)
+    {
+        if (node.NodeType == ExpressionType.ArrayIndex && DictionaryLookupTranslator.TryTranslate(this, node))
+            return node;
+
+        return PredicateTranslator.VisitBinary(this, node);
+    }
     /// <summary>Returns the SQL emitted into this visitor's builder.</summary>
     /// <returns>The rendered SQL text.</returns>
     public override string ToString()
@@ -543,7 +732,11 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
     {
         if (_paramMode) throw new NotSupportedException("Cannot clone in param mode");
 
-        return new BaseExpressionVisitor(_options) { SuppressColumnCollation = SuppressColumnCollation };
+        return new BaseExpressionVisitor(_options)
+        {
+            SuppressColumnCollation = SuppressColumnCollation,
+            ConverterContext = ConverterContext,
+        };
     }
 
     /// <summary>

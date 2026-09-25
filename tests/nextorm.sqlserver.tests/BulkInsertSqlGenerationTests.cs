@@ -49,4 +49,44 @@ public class BulkInsertSqlGenerationTests
 
         sql.Should().Be("insert into insert_entity (name, age) output inserted.id values (@p0, @p1)");
     }
+
+    [Fact]
+    public void BulkInsert_TableOverride_ShouldTargetOverriddenTable()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = ctx.BulkInsertInto<IInsertEntity>(o => o.Table("bulk_target")).Values([Row("a", 1)]).ToSql();
+
+        sql.Should().Be("insert into bulk_target (name, age) values (@p0, @p1)");
+    }
+
+    [Fact]
+    public void BulkInsert_TableOverrideWithSchema_ShouldQualifyTarget()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = ctx.BulkInsertInto<IInsertEntity>(o => o.Table("staging", "bulk_target")).Values([Row("a", 1)]).ToSql();
+
+        sql.Should().Be("insert into staging.bulk_target (name, age) values (@p0, @p1)");
+    }
+
+    [Fact]
+    public void BulkInsert_TableOverride_KeepIdentity_ShouldWrapOverriddenTable()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = ctx.BulkInsertInto<IInsertEntity>(o => o.Table("staging", "bulk_target").KeepIdentity()).Values([Row("a", 1)]).ToSql();
+
+        sql.Should().Be("set identity_insert staging.bulk_target on; insert into staging.bulk_target (id, name, age) values (@p0, @p1, @p2); set identity_insert staging.bulk_target off");
+    }
+
+    [Fact]
+    public void BulkInsert_KeepIdentity_OnNonIdentityEntity_ShouldNotWrapWithIdentityInsert()
+    {
+        using var ctx = SqlServerTestContext.Create();
+
+        var sql = ctx.BulkInsertInto<ISimpleEntity>(o => o.KeepIdentity()).Values([new SimpleEntity { Id = 7 }]).ToSql();
+
+        sql.Should().Be("insert into simple_entity (id) values (@p0)");
+    }
 }

@@ -444,6 +444,90 @@ public abstract partial class CommonTestSuite
         r.Where(x => x.InnerId is not null).Select(x => x.Id).Should().BeEquivalentTo(new[] { 1, 2, 3 });
     }
 
+    /// <summary>
+    /// A captured local referenced more than once in a <c>Where</c> over a join projection must be
+    /// registered as a single parameter; before the de-duplication it produced two equally named
+    /// placeholders and the command failed with <c>Must add values for the following parameters</c>.
+    /// </summary>
+    [Fact]
+    public void CapturedLocalRepeatedInJoinWhere_ShouldEvaluatePerRow()
+    {
+        var threshold = 0;
+
+        var r = _sut.SimpleEntity
+            .Join(_sut.ComplexEntity, (s, c) => s.Id == c.Id)
+            .Where(p => p.Item1.Id > threshold && p.Item2.Id > threshold)
+            .Select(p => new { p.Item1.Id })
+            .ToList();
+
+        r.Should().HaveCount(3);
+        r.Select(x => x.Id).Should().BeEquivalentTo(new[] { 1, 2, 3 });
+    }
+
+    /// <summary>
+    /// A captured local that lives only inside a joined derived subquery is bound on the enclosing
+    /// command, so the filter the subquery carries is applied before the join.
+    /// </summary>
+    [Fact]
+    public void CapturedLocalInJoinedDerivedSubquery_ShouldEvaluatePerRow()
+    {
+        var min = 1;
+
+        var derived = _sut.ComplexEntity
+            .Where(c => c.Id >= min)
+            .Select(c => new { c.Id });
+
+        var r = _sut.SimpleEntity
+            .Join(derived, (s, d) => s.Id == d.Id)
+            .Select(p => new { p.Item1.Id })
+            .ToList();
+
+        r.Should().HaveCount(3);
+        r.Select(x => x.Id).Should().BeEquivalentTo(new[] { 1, 2, 3 });
+    }
+
+    /// <summary>
+    /// A correlated <c>EXISTS</c> on the left/right of <c>||</c> must combine with a predicate instead
+    /// of failing preparation with <c>The binary operator OrElse is not defined ...</c>.
+    /// </summary>
+    [Fact]
+    public void CorrelatedExistsCombinedWithOr_ShouldEvaluatePerRow()
+    {
+        var r = _sut.SimpleEntity
+            .Where(s => s.Id <= 3)
+            .Where(s => SqlFunctions.Sql.exists(_sut.ComplexEntity.Where(c => c.Id == s.Id)) || s.Id == 1)
+            .Select(s => s.Id)
+            .ToList();
+
+        r.Should().BeEquivalentTo(new[] { 1, 2, 3 });
+    }
+
+    /// <summary>A correlated <c>EXISTS</c> combined with <c>&amp;&amp;</c> keeps the surrounding predicate.</summary>
+    [Fact]
+    public void CorrelatedExistsCombinedWithAnd_ShouldEvaluatePerRow()
+    {
+        var r = _sut.SimpleEntity
+            .Where(s => s.Id <= 3)
+            .Where(s => s.Id >= 1 && SqlFunctions.Sql.exists(_sut.ComplexEntity.Where(c => c.Id == s.Id)))
+            .Select(s => s.Id)
+            .ToList();
+
+        r.Should().BeEquivalentTo(new[] { 1, 2, 3 });
+    }
+
+    /// <summary>A negated correlated <c>EXISTS</c> renders and evaluates as the complement of the subquery.</summary>
+    [Fact]
+    public void NegatedCorrelatedExists_ShouldEvaluatePerRow()
+    {
+        var r = _sut.SimpleEntity
+            .Where(s => s.Id == 1)
+            .Where(s => !SqlFunctions.Sql.exists(_sut.ComplexEntity.Where(c => c.Id == s.Id + 100)))
+            .Select(s => s.Id)
+            .ToList();
+
+        r.Should().BeEquivalentTo(new[] { 1 });
+    }
+
     private static string ApplySkipReason =>
         "This provider has no lateral/APPLY source, so a correlated APPLY cannot be rendered.";
 }

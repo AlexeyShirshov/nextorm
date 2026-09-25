@@ -68,7 +68,7 @@ ctx.MergeInto<IDest>()
 
 ### Возврат слитых строк
 
-[`Returning()`](xref:NextORM.Core.MergeBuilder`1.Returning) и [`Returning(x => new { ... })`](xref:NextORM.Core.MergeBuilder`1.Returning``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) материализуют слитые строки через выходную клаузу провайдера — SQL Server `OUTPUT inserted.<col>`, PostgreSQL `RETURNING target.<col>` (17+). Читаются через `Single()`/`SingleAsync()`/`ToList()`/`ToListAsync()`:
+[`Returning()`](xref:NextORM.Core.MergeBuilder`1.Returning) и [`Returning(x => new { ... })`](xref:NextORM.Core.MergeBuilder`1.Returning``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) материализуют слитые строки через выходную клаузу провайдера. Читаются через `Single()`/`SingleAsync()`/`ToList()`/`ToListAsync()`:
 
 ```csharp
 var rows = ctx.MergeInto<IDest>()
@@ -80,7 +80,12 @@ var rows = ctx.MergeInto<IDest>()
     .ToList();
 ```
 
-Форма key upsert (`WhenMatchedUpdate()`/`WhenNotMatchedInsert()`) строк не возвращает — используйте веточную форму. SQLite/MySQL/MariaDB и ClickHouse отклоняют полный `MERGE` (а значит и возврат) с `NotSupportedException`.
+Возврат доступен для **обеих** форм. SQL Server рендерит переносимый key upsert как
+`MERGE ... OUTPUT inserted.<col>`, а PostgreSQL и SQLite добавляют `RETURNING` к своей форме
+`ON CONFLICT ... DO UPDATE`; полный `MERGE` возвращает строки через SQL Server `OUTPUT inserted.<col>`
+и PostgreSQL 17+ `RETURNING target.<col>`. MySQL/MariaDB не имеют возвращающей формы для key upsert,
+поэтому `.Returning()` там бросает `NotSupportedException`; SQLite и ClickHouse по-прежнему отклоняют
+полный `MERGE`.
 
 ## Просмотр SQL
 
@@ -99,11 +104,11 @@ var sql = ctx.MergeInto<ISimpleEntity>()
 
 | Провайдер | Key upsert | Полный `MERGE` | `RETURNING`/`OUTPUT` | Примечание |
 |---|---|---|---|---|
-| SQL Server | `MERGE ... USING (VALUES ...)` | да | `OUTPUT inserted.<col>` | все ветки, включая `WHEN NOT MATCHED BY SOURCE` |
-| PostgreSQL | `ON CONFLICT ... DO UPDATE` | да (15+) | `RETURNING target.<col>` (17+) | `DO NOTHING`; без `BY SOURCE` |
-| SQLite | `ON CONFLICT ... DO UPDATE` | — | — | только key upsert |
-| MySQL | `ON DUPLICATE KEY UPDATE` | — | — | только key upsert |
-| MariaDB | `ON DUPLICATE KEY UPDATE` | — | — | только key upsert |
+| SQL Server | `MERGE ... USING (VALUES ...)` | да | `OUTPUT inserted.<col>` (key upsert и полный) | все ветки, включая `WHEN NOT MATCHED BY SOURCE` |
+| PostgreSQL | `ON CONFLICT ... DO UPDATE` | да (15+) | `RETURNING` (key upsert 9.5+, полный 17+) | `DO NOTHING`; без `BY SOURCE` |
+| SQLite | `ON CONFLICT ... DO UPDATE` | — | `RETURNING` (key upsert, 3.35+) | только key upsert |
+| MySQL | `ON DUPLICATE KEY UPDATE` | — | — | только key upsert; нет `RETURNING` |
+| MariaDB | `ON DUPLICATE KEY UPDATE` | — | — | только key upsert; `RETURNING` не используется для `ON DUPLICATE KEY` |
 | In-memory | применяется к зарегистрированной последовательности | — | — | только key upsert, без SQL |
 | ClickHouse | `NotSupportedException` | `NotSupportedException` | `NotSupportedException` | движкового upsert нет |
 

@@ -256,6 +256,27 @@ select id from simple_entity where id = $norm_p0
 терминальным методом. См. [Повторное использование запросов: cache и Prepare](15-query-reuse.md)
 для правил времени жизни.
 
+Захваченная локальная переменная регистрируется **один раз на утверждение**, сколько бы раз она ни
+встречалась и в каком бы источнике ни находилась. Переменная, использованная дважды в `WHERE` поверх
+join-проекции, получает один placeholder, а переменная, живущая только внутри присоединённого
+derived-подзапроса, привязывается на окружающей команде:
+
+```csharp
+var v = 5;
+var derived = dataContext.From<ComplexEntity>()
+    .Where(c => c.Int == v)
+    .Select(c => new { c.Id });
+
+var rows = await dataContext.From<SimpleEntity>()
+    .Join(derived, (s, d) => s.Id == d.Id)
+    .Where(p => p.Item1.Id != v || p.Item2.Id != v)   // один параметр `@v`, переиспользуется
+    .Select(p => new { p.Item1.Id })
+    .ToListAsync();
+```
+
+Не нужно заводить отдельную локальную переменную на каждое обращение, чтобы каждая ссылка получила
+собственный параметр.
+
 ## `IN` и `Contains`
 
 `SqlFunctions.Sql.@in` принимает колонку плюс `QueryCommand<T>`, `IEnumerable<T>` или `params T[]`:
@@ -338,6 +359,58 @@ select id from complex_entity where global in (@p0, @p1)
 в ClickHouse; остальные провайдеры и контекст in-memory выбрасывают `NotSupportedException`.
 Полный каталог — в разделе [Специфичный для провайдеров SQL](provider-specific/overview.md).
 
+## Lookup по захваченной коллекции (`dict[column]`)
+
+Захваченные `Dictionary`, `List` или массив, индексируемые выражением запроса
+(`dict[s.TenantRegistryId]`), транслируются в переносимый `CASE` по записям коллекции, поэтому все
+реляционные провайдеры дают один и тот же предикат. Коллекция, объявленная интерфейсом
+(`IReadOnlyList<T>`, `IReadOnlyDictionary<TKey,TValue>`, `IList<T>`, `IDictionary<TKey,TValue>` и
+immutable-коллекции), распознаётся так же. Контексту in-memory трансляция не нужна: индексер
+вычисляется как обычный C#.
+
+```csharp
+var synchronised = new Dictionary<int, DateTime> { [1] = firstSync, [2] = secondSync };
+var due = await dataContext.From<Schedule>()
+    .Where(s => synchronised[s.TenantRegistryId] > s.ScheduleDate)
+    .Select(s => s.Id)
+    .ToListAsync();
+```
+
+```sql
+-- SQLite
+select id from schedule
+ where (case when tenant_registry_id = $p0 then $p1 when tenant_registry_id = $p2 then $p3 end > schedule_date)
+```
+
+Коллекция читается на клиенте, поэтому каждый ключ и значение передаются параметрами (число
+параметров зависит от числа записей, и эта форма входит в ключ плана, так что выросшая или
+переназначенная коллекция перестраивает команду, а не переиспользует устаревший план).
+
+| Случай | Поведение |
+|---|---|
+| Ключ — выражение запроса | `case when key = @k then @v … end` |
+| Ключ — константа (`dict[5]`) | вычисляется на клиенте и передаётся одним параметром |
+| Ключа нет во время выполнения | в `CASE` нет подходящей ветки, результат `NULL` (в C# был бы `KeyNotFoundException`) |
+| Пустая коллекция | `NotSupportedException` |
+| Lookup вне `Where`/pre-where | `NotSupportedException` |
+| Коллекция, объявленная интерфейсом (`IReadOnlyList<T>`, `IReadOnlyDictionary<TKey,TValue>`, …) | распознаётся так же, как конкретные типы |
+| Поэлементный доступ к серверному массиву/JSON, кастомный индексер | `NotSupportedException` (нет переносимой SQL-формы) |
+
+Lookup, ключ которого ссылается на колонку запроса, требует, чтобы **форма** коллекции входила в ключ
+плана: число ветвей `CASE` — и связанных с ними параметров — равно числу записей, а дерево выражения
+это число не несёт. Движок сворачивает форму при подготовке условия (клоз `Where`/`Having` и pre-where),
+поэтому индексируемый lookup поддерживается именно там. В любом другом месте (проекция, `OrderBy`,
+`GroupBy`, ...) на **кэшируемой** команде форма не попадёт в ключ плана, и команда отклоняется с
+`NotSupportedException` — вместо риска получить устаревший план с неверным числом параметров. Два
+случая остаются допустимыми везде:
+
+- **ключ-константа** (`dict[5]`) сворачивается в один параметр, поэтому формы не требует;
+- команда, подготовленная **без кэша** (`GetPreparedQueryCommand(..., storeInCache: false)`), не имеет
+  плана, который надо защищать, поэтому lookup просто вычисляется.
+
+Если значение lookup нужно в проекции — перенесите условие в `Where`, подготовьте команду без кэша или
+вычислите lookup на клиенте после запроса.
+
 ## Предикаты шаблонов и подзапросов
 
 `SqlFunctions.Sql.like`, `SqlFunctions.Sql.exists`, `SqlFunctions.Sql.any` и `SqlFunctions.Sql.all` - оставшиеся вспомогательные
@@ -375,7 +448,7 @@ select id from complex_entity where global in (@p0, @p1)
 например `somestring like '%' || $needle || '%'` в SQLite. `any` и `all` не поддерживаются движком
 SQLite и завершаются ошибкой при выполнении оператора. Для **массива** они требуют PostgreSQL, где
 массив целиком привязывается как один параметр; см.
-[Массивы](11-scalar-functions.md#массивы-postgresql).
+[Массивы](../scalar-functions/06-arrays.md#массивы-postgresql).
 
 ## Отображение функций и операторов
 
@@ -414,7 +487,7 @@ SQLite и завершаются ошибкой при выполнении оп
 
 * [Запросы и проекции](01-querying-and-projections.md)
 * [Сортировка и постраничная выборка](05-sorting-and-paging.md)
-* [Скалярные функции](11-scalar-functions.md)
+* [Скалярные функции](../scalar-functions/index.md)
 * [Подзапросы](06-subqueries.md)
 * [Специфичный для провайдеров SQL](provider-specific/overview.md)
 * [Ограничения и возможности вне области охвата](../advanced/limitations.md)

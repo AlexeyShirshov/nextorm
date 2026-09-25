@@ -413,6 +413,12 @@ internal static class InMemoryQueryBuilder
 
         if (query.PreparedCondition is Expression<Func<TEntity, bool>> condition)
         {
+            // A combined correlated subquery (`exists(...) || predicate`) is prepared as a real
+            // boolean predicate carrying a free registry parameter, so the correlated evaluator has to
+            // replace it before the raw delegate is compiled or the registry parameter stays unbound.
+            if (InMemoryCorrelatedSubqueryRewriter.IsNeeded(query))
+                condition = (Expression<Func<TEntity, bool>>)new InMemoryCorrelatedSubqueryRewriter(context, query).Rewrite(condition);
+
             var key = new ExpressionKey(condition, query);
             if (!context.ExpressionsCache.TryGetValue(key, out var d))
             {

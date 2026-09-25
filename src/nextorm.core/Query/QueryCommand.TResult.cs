@@ -555,6 +555,80 @@ public sealed partial class QueryCommand<TResult> : QueryCommand
     /// <returns>A new command carrying the added sort.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public QueryCommand<TResult> OrderByDescending(int columnIndex) => OrderBy(columnIndex, OrderDirection.Desc);
+    /// <summary>
+    /// Returns a clone of this command with <paramref name="orderExp"/> added to its sort order. The
+    /// expression is written over the projected result type (<typeparamref name="TResult"/>); each
+    /// member is resolved to the projection expression that produced the corresponding output column.
+    /// Repeated calls append keys, so the existing order is preserved.
+    /// </summary>
+    /// <param name="orderExp">The key selector over the projected result.</param>
+    /// <param name="direction">The sort direction.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    public QueryCommand<TResult> OrderBy(Expression<Func<TResult, object?>> orderExp, OrderDirection direction)
+    {
+        ArgumentNullException.ThrowIfNull(orderExp);
+
+        var sorting = new Sorting(orderExp) { Direction = direction };
+        var cmd = new QueryCommand<TResult>(_dataContext, Definition with
+        {
+            Sorting = _sorting is null ? [sorting] : [.. _sorting, sorting],
+        });
+
+        CopyTo(cmd, true);
+        cmd.ResetPreparation();
+        return cmd;
+    }
+    /// <summary>Returns a clone of this command with <paramref name="orderExp"/> added to its sort order in ascending direction.</summary>
+    /// <param name="orderExp">The key selector over the projected result.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public QueryCommand<TResult> OrderBy(Expression<Func<TResult, object?>> orderExp) => OrderBy(orderExp, OrderDirection.Asc);
+    /// <summary>Returns a clone of this command with <paramref name="orderExp"/> added to its sort order in descending direction.</summary>
+    /// <param name="orderExp">The key selector over the projected result.</param>
+    /// <returns>A new command carrying the added sort.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public QueryCommand<TResult> OrderByDescending(Expression<Func<TResult, object?>> orderExp) => OrderBy(orderExp, OrderDirection.Desc);
+    /// <summary>
+    /// Returns a clone of this command with the maximum number of returned rows set. Unlike the
+    /// builder-level limit this applies after the projection, so a grouped/aggregated query does not
+    /// need the aggregate repeated in an outer query.
+    /// </summary>
+    /// <param name="limit">The maximum number of rows to return; zero means no limit.</param>
+    /// <returns>A new command carrying the limit.</returns>
+    public QueryCommand<TResult> Limit(int limit)
+    {
+        var paging = Paging;
+        paging.Limit = limit;
+        return WithPaging(paging);
+    }
+    /// <summary>Returns a clone of this command with the number of leading rows to skip set.</summary>
+    /// <param name="offset">The number of leading rows to skip; zero starts from the first row.</param>
+    /// <returns>A new command carrying the offset.</returns>
+    public QueryCommand<TResult> Offset(int offset)
+    {
+        var paging = Paging;
+        paging.Offset = offset;
+        return WithPaging(paging);
+    }
+    /// <summary>Returns a clone of this command with both the page size and the start position set.</summary>
+    /// <param name="limit">The maximum number of rows to return; zero means no limit.</param>
+    /// <param name="offset">The number of leading rows to skip; zero starts from the first row.</param>
+    /// <returns>A new command carrying the limit and offset.</returns>
+    public QueryCommand<TResult> Page(int limit, int offset)
+    {
+        var paging = Paging;
+        paging.Limit = limit;
+        paging.Offset = offset;
+        return WithPaging(paging);
+    }
+    private QueryCommand<TResult> WithPaging(Paging paging)
+    {
+        var cmd = new QueryCommand<TResult>(_dataContext, Definition);
+        CopyTo(cmd, true);
+        cmd.Paging = paging;
+        cmd.ResetPreparation();
+        return cmd;
+    }
     /// <summary>Returns a clone of this command that emits <c>DISTINCT</c>, removing duplicate rows from the result.</summary>
     /// <returns>A new command marked distinct.</returns>
     public QueryCommand<TResult> Distinct()

@@ -37,7 +37,7 @@
   available through the native `SqlFunctions.Postgres.ts_rank`/`ts_rank_cd`/`ts_headline` (gated by
   [`SupportsTextSearchFunctions`](xref:NextORM.Core.ISqlDialect.SupportsTextSearchFunctions));
 - the extended scalar function library is enabled ([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions) is `true`):
-  additional math (`asin`, `cbrt`, `degrees`, `pi`, `mod`, ...), string (`split_part`, `lpad`,
+  additional math (`asin`, `cbrt`, `mod`, ...), string (`split_part`, `lpad`,
   `initcap`, ...), POSIX regular expression (`regexp_replace`, `regexp_like`, ...), date/time
   (`make_interval`, `justify_days`, `justify_hours`, `to_char`, `to_date`, ...), `num_nulls`/`num_nonnulls`
   and the type helper `pg_typeof`;
@@ -150,8 +150,37 @@ select id from complex_entity where (id = any(@p0))
 ```
 
 The array functions (`cardinality`, `array_length`, `array_position`, ...) and the `@>`/`&&` operators
-are documented in [Scalar functions](../guide/11-scalar-functions.md#arrays-postgresql). Other
+are documented in [Scalar functions](../scalar-functions/06-arrays.md#arrays-postgresql). Other
 providers reject them with `NotSupportedException`.
+
+## Range types
+
+PostgreSQL is the only supported provider with native range types (`int4range`, `int8range`,
+`numrange`, `tsrange`, `tstzrange`, `daterange`). Use the provider-agnostic
+[`Range<T>`](xref:NextORM.Core.Range`1) for a column or parameter; the provider binds it through Npgsql
+and reads it back preserving unbounded sides and the `empty` range. The PostgreSQL-only range surface
+(`overlaps`, `range_contains`/`range_contained_by`, `range_union`, `lower`/`upper`/`isempty`, the
+constructors and `empty_range<T>()`) lives on
+[`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) and is gated by
+[`SupportsRanges`](xref:NextORM.Core.ISqlDialect.SupportsRanges):
+
+```csharp
+var window = new Range<int>(15, 25);   // [15,25)
+
+ctx.From<IReservation>()
+    .Where(e => SqlFunctions.Postgres.overlaps(e.During, window))
+    .Select(e => e.Id)
+    .ToList();                          // (during && @p0)
+```
+
+Multirange types (`int4multirange`…`datemultirange`) map to `Range<T>[]` and use the same operator names
+overloaded for multiranges, plus `multirange`, `range_merge` and the `range_agg`/`range_intersect_agg`
+aggregates. See [PostgreSQL-specific SQL](../guide/provider-specific/postgresql.md#multiranges) for the
+full surface.
+
+The in-memory provider evaluates the whole range and multirange surface with the same semantics; every
+other provider rejects it with `NotSupportedException`.
+See [PostgreSQL-specific SQL](../guide/provider-specific/postgresql.md#range-types) for the full table.
 
 ## JSON and JSONB
 
@@ -175,7 +204,7 @@ ctx.From<IComplexEntity>()
 
 A plain JSON string is bound as `text`; use `SqlFunctions.Postgres.json_cast(value)` to parse it as `jsonb`. The full
 surface (`json_agg`, `jsonb_build_object`, `->`, `->>`, `#>`, `@>`, `?`, `?|`, `?&`, ...) is documented
-in [Scalar functions](../guide/11-scalar-functions.md#json-and-jsonb-postgresql). Other providers
+in [Scalar functions](../scalar-functions/07-json-and-xml.md#json-and-jsonb-postgresql). Other providers
 reject it with `NotSupportedException`.
 
 ## Additional function surface
@@ -184,8 +213,11 @@ PostgreSQL also opts into `greatest`/`least`, `date_trunc`, the `string_agg`/`ar
 aggregate `FILTER (WHERE ...)` clause, the portable `iif` (rendered `case when ... then ... else ... end`),
 the `percent_rank`/`cume_dist`/`nth_value` window functions and the built-in set-returning table
 functions `generate_series`, `unnest`, `regexp_matches`, `regexp_split_to_table`,
-`jsonb_array_elements(_text)`, `jsonb_each(_text)`, `jsonb_object_keys`, `jsonb_path_query` and
-`ts_stat`:
+`jsonb_array_elements(_text)`, `jsonb_each(_text)`, `jsonb_object_keys`, `jsonb_path_query`,
+`ts_stat` and the record functions `jsonb_to_record`/`jsonb_to_recordset`
+([`SqlFunctions.Postgres.jsonb_to_record<TRow>(json)`](xref:NextORM.Core.PostgresFunctions), whose
+result schema is rendered as the alias column-definition list from the caller's `TRow` under
+[`SupportsResultSchema(TableFunctionSchema)`](xref:NextORM.Core.ISqlDialect.SupportsResultSchema(NextORM.Core.TableFunctionSchema))):
 
 ```csharp
 ctx.From<IComplexEntity>()
@@ -199,7 +231,7 @@ ctx.From<IComplexEntity>()
 ```
 
 These are documented in
-[Scalar functions](../guide/11-scalar-functions.md#string-and-array-aggregates). SQLite also
+[Scalar functions](../scalar-functions/05-aggregates.md#string-and-array-aggregates). SQLite also
 accepts the `FILTER` clause; the other functions are PostgreSQL-only.
 
 ## `*ALL` set operations and null ordering

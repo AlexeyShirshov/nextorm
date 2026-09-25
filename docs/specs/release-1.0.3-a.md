@@ -56,7 +56,7 @@
       26 `InvalidFileLink` на `~/specs/**` (спеки исключены из сборки — by design), 16 `UidNotFound`
       (неоднозначные короткие xref: `WindowFrame.Groups`/`WithExclusion`, `IIifRenderer.Render`,
       `EntityBuilder`1.DistinctOn`, `percentile_cont`, …), 4 `InvalidBookmark` в
-      `guide/11-scalar-functions.md` (EN+RU зеркальны). Предупреждения не блокируют релиз, но xref/якоря
+      `scalar-functions/index.md` (EN+RU зеркальны). Предупреждения не блокируют релиз, но xref/якоря
       стоит поправить (не сделано).
 - [x] `nextorm-code-auditor`: **release-blocking P0/P1 нет**. Регистры обновлены
       (`docs/specs/design/code-smells-review.md`, `docs/specs/design/API-NAMING-REVIEW.md`).
@@ -142,6 +142,6 @@
 - Через несколько часов перепроверить, что все 7 пакетов `1.0.3-alpha` видны на nuget.org
   (после индексации), в т.ч. впервые публикуемые `nextorm.postgres/mysql/mariadb/clickhouse`.
 - Почистить 20 docfx-предупреждений: 16 неоднозначных xref (указать полные сигнатуры) и 4 `InvalidBookmark`
-  в `guide/11-scalar-functions.md` (EN+RU).
+  в `scalar-functions/index.md` (EN+RU).
 - Рассмотреть фикс `concurrency` в `dotnet.yml`, чтобы двойной tag-push (`release` + `push`) не отменял
   первую публикацию (например, группировать publish отдельно или `cancel-in-progress: false` для тегов).

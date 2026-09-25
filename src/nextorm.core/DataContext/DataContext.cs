@@ -342,7 +342,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// types (SqlClient throws when a typed getter does not match the field type, for example an
     /// int column projected as long) can override this to read the value and convert it.
     /// </summary>
-    public virtual Expression MapColumnExpression(SelectExpression column, Expression param) => RowMapperFactory.MapColumn(column, param, Dialect.SupportsNativeDuration);
+    public virtual Expression MapColumnExpression(SelectExpression column, Expression param) => RowMapperFactory.MapColumn(column, param, Dialect.SupportsNativeDuration, Dialect);
 
     /// <summary>Resets the cached execution plan of <paramref name="queryCommand"/> so it is rebuilt on next use.</summary>
     /// <param name="queryCommand">The command whose plan should be discarded.</param>
@@ -360,7 +360,6 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     // not widen the context's public surface; the public entry points live on the InsertBuilder.
     string IMutationExecutor.Render(MutationCommand command)
     {
-        EnsureReturningSupportedIfNeeded(command);
         return BuildMutationSql(command).Sql;
     }
 
@@ -473,7 +472,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             ?? throw new InvalidOperationException("BulkInsert is synchronous but the source is async; use BulkInsertAsync instead.");
 
         return BulkInsertRows(
-            SqlMutationBuilder.ResolveTableName(command.TableName, command.IsTableNameAuto, command.EntityType, NamingConvention),
+            SqlMutationBuilder.RenderTableReference(Dialect, QuoteIdentifiers, command.TableName, command.TableSchema, command.IsTableNameAuto, command.EntityType, NamingConvention),
             ResolveBulkColumnNames(command.Columns),
             command.Columns,
             rows,
@@ -488,7 +487,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         var rows = command.AsyncRows ?? new SyncToAsyncEnumerable<object?[]>(command.SyncRows!);
 
         return await BulkInsertRowsAsync(
-            SqlMutationBuilder.ResolveTableName(command.TableName, command.IsTableNameAuto, command.EntityType, NamingConvention),
+            SqlMutationBuilder.RenderTableReference(Dialect, QuoteIdentifiers, command.TableName, command.TableSchema, command.IsTableNameAuto, command.EntityType, NamingConvention),
             ResolveBulkColumnNames(command.Columns),
             command.Columns,
             rows,
@@ -511,9 +510,10 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <summary>
     /// Writes <paramref name="rows"/> through the provider's native bulk API. The default throws: a
     /// provider opts in by setting <c>ISqlDialect.SupportsBulkCopy</c> and overriding this method (and
-    /// <see cref="BulkInsertRowsAsync"/>). The names are already convention-resolved and quoted.
+    /// <see cref="BulkInsertRowsAsync"/>). The column names are already convention-resolved (unquoted); the
+    /// table reference is already convention-resolved, schema-qualified and quoted when configured.
     /// </summary>
-    /// <param name="tableName">The convention-resolved (unquoted) target table name.</param>
+    /// <param name="tableName">The rendered target table reference (schema-qualified, quoted when configured).</param>
     /// <param name="columnNames">The convention-resolved (unquoted) written column names, in row order.</param>
     /// <param name="columns">The mapped columns, in row order (for CLR types and identity flags).</param>
     /// <param name="rows">The rows to write; each array matches <paramref name="columnNames"/> by ordinal.</param>
@@ -527,7 +527,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         => throw new NotSupportedException($"{GetType().Name} declares ISqlDialect.SupportsBulkCopy but does not implement the native bulk path.");
 
     /// <summary>Asynchronously writes <paramref name="rows"/> through the provider's native bulk API.</summary>
-    /// <param name="tableName">The convention-resolved (unquoted) target table name.</param>
+    /// <param name="tableName">The rendered target table reference (schema-qualified, quoted when configured).</param>
     /// <param name="columnNames">The convention-resolved (unquoted) written column names, in row order.</param>
     /// <param name="columns">The mapped columns, in row order (for CLR types and identity flags).</param>
     /// <param name="rows">The rows to write; each array matches <paramref name="columnNames"/> by ordinal.</param>
@@ -590,7 +590,9 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     }
 
     private (string Sql, List<Parameter> Parameters) BuildMutationSql(MutationCommand command)
-        => command switch
+    {
+        EnsureReturningSupportedIfNeeded(command);
+        return command switch
         {
             InsertCommand insert => BuildInsertSql(insert),
             UpdateCommand update => BuildUpdateSql(update),
@@ -603,6 +605,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             DropTableCommand dropTable => BuildDropTableSql(dropTable),
             _ => throw new NotSupportedException($"Unsupported mutation command {command.GetType().Name}."),
         };
+    }
 
     private (string Sql, List<Parameter> Parameters) BuildMergeSql(MergeCommand command)
     {
@@ -864,8 +867,17 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
 
     private void EnsureReturningSupportedIfNeeded(MutationCommand command)
     {
+        if (command.OutputInto is not null)
+            EnsureOutputIntoSupported();
         if (command.ReturningColumns is { Count: > 0 })
             EnsureReturningSupported();
+    }
+
+    private void EnsureOutputIntoSupported()
+    {
+        if (!Dialect.SupportsOutputInto)
+            throw new NotSupportedException(
+                $"{GetType().Name} cannot write modified rows into a table through OUTPUT ... INTO: the provider has no OUTPUT INTO form (SQL Server only).");
     }
 
     private void EnsureIdentityFunctionSupported()

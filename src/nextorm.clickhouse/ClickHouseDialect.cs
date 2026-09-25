@@ -34,6 +34,9 @@ public sealed class ClickHouseDialect : SqlDialectBase
     /// <summary>ClickHouse supports a raw SQL derived table (<c>FROM (&lt;sql&gt;) AS alias</c>).</summary>
     public override bool SupportsRawSqlSource => true;
 
+    /// <inheritdoc/>
+    public override bool SupportsRangeColumns => true;
+
     /// <summary>
     /// ClickHouse is not marked as having a native bulk path: the driver's <c>ClickHouseBulkCopy</c> is
     /// obsolete in favour of <c>ClickHouseClient.InsertBinaryAsync</c>, which needs a client built from
@@ -378,8 +381,18 @@ public sealed class ClickHouseDialect : SqlDialectBase
     /// <c>clusterAllReplicas</c>.
     /// </summary>
     public override bool SupportsTableFunction(string name) =>
-        name is "numbers" or "numbers_mt" or "zeros" or "zeros_mt" or "generateRandom"
+        name is "numbers" or "numbers_mt" or "zeros" or "zeros_mt" or "generateRandom" or "values"
             or "url" or "s3" or "file" or "remote" or "remoteSecure" or "cluster" or "clusterAllReplicas";
+
+    /// <summary>ClickHouse renders the row-derived structure as the leading argument of <c>values</c>.</summary>
+    public override bool SupportsResultSchema(TableFunctionSchema placement) => placement == TableFunctionSchema.LeadingArgument;
+
+    /// <summary>ClickHouse's types are not nullable by default, so a <c>Nullable&lt;T&gt;</c> result column is wrapped in <c>Nullable(...)</c>.</summary>
+    public override string MakeResultColumnType(Type clrType, bool nullable)
+    {
+        var underlying = Nullable.GetUnderlyingType(clrType);
+        return underlying is not null ? $"Nullable({MakeTypeName(underlying)})" : MakeTypeName(clrType);
+    }
 
     // The fixed structure the built-in generate_random()/generate_random(seed) map to
     // (ClickHouse's own no-argument generateRandom has a dynamic, random schema).
@@ -959,7 +972,8 @@ internal sealed class ClickHouseScalarFunctions : IScalarFunctions
         "xx_hash32" or "xx_hash64" or "xxh3" or "city_hash64" or
         "sip_hash64" or "sip_hash128" or
         "murmur_hash2_32" or "murmur_hash2_64" or "murmur_hash3_32" or "murmur_hash3_64" or
-        "murmur_hash3_128" or "generate_ulid";
+        "murmur_hash3_128" or "generate_ulid" or
+        "bit_length" or "octet_length" or "degrees" or "radians" or "pi";
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
@@ -1037,6 +1051,13 @@ internal sealed class ClickHouseScalarFunctions : IScalarFunctions
         "murmur_hash3_64" => $"toInt64(murmurHash3_64({args[0]}))",
         "murmur_hash3_128" => $"murmurHash3_128({args[0]})",
         "generate_ulid" => "generateULID()",
+
+        // ClickHouse length(String) is the byte count; bit_length is eight times it. There is no cot.
+        "bit_length" => $"length({args[0]}) * 8",
+        "octet_length" => $"length({args[0]})",
+        "degrees" => $"degrees({args[0]})",
+        "radians" => $"radians({args[0]})",
+        "pi" => "pi()",
         _ => throw new NotSupportedException($"The {name} function is not supported by ClickHouse.")
     };
 

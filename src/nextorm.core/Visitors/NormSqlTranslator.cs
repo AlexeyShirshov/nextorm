@@ -469,6 +469,12 @@ internal static class NormSqlTranslator
         if (ArraySqlTranslator.TryTranslateFunction(visitor, node))
             return;
 
+        if (RangeColumnsSqlTranslator.TryTranslate(visitor, node))
+            return;
+
+        if (PostgresRangeSqlTranslator.TryTranslate(visitor, node))
+            return;
+
         if (JsonSqlTranslator.TryTranslate(visitor, node))
             return;
 

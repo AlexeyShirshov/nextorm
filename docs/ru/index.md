@@ -21,7 +21,6 @@
 - [SELECT DISTINCT](guide/08-distinct.md)
 - [Обобщённые табличные выражения (CTE)](guide/09-cte.md)
 - [Оконные функции](guide/10-window-functions.md)
-- [Скалярные функции](guide/11-scalar-functions.md)
 - [Пользовательские функции](guide/12-user-defined-functions.md)
 - [Табличные функции](guide/13-table-valued-functions.md)
 - [Сырой SQL](guide/14-raw-sql.md)
@@ -30,6 +29,18 @@
 - [Хинты запросов](guide/17-query-hints.md)
 - [Поддержка JSON в разных провайдерах](guide/18-json.md)
 
+### Скалярные функции
+
+- [Обзор](scalar-functions/index.md)
+- [Строковые функции](scalar-functions/01-string-functions.md)
+- [Математические функции](scalar-functions/02-math-functions.md)
+- [Дата и время](scalar-functions/03-date-and-time.md)
+- [Условные функции и приведение](scalar-functions/04-conditionals-and-conversion.md)
+- [Агрегаты](scalar-functions/05-aggregates.md)
+- [Массивы](scalar-functions/06-arrays.md)
+- [JSON и XML](scalar-functions/07-json-and-xml.md)
+- [Справочник по провайдерам](scalar-functions/08-reference.md)
+
 ### Провайдеры
 
 - [Обзор провайдеров](providers/overview.md)
@@ -37,6 +48,10 @@
 - [SQL Server](providers/sqlserver.md)
 - [PostgreSQL](providers/postgres.md)
 - [In-memory](providers/in-memory.md)
+
+### Сравнения
+
+- [Nextorm против Dapper, linq2db и EF Core](comparisons/index.md)
 
 ### Продвинутое
 

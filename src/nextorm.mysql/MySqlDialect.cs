@@ -24,6 +24,9 @@ public class MySqlDialect : SqlDialectBase
     /// <c>SELECT LAST_INSERT_ID()</c>.
     /// </summary>
     public override bool SupportsLastInsertId => true;
+
+    /// <inheritdoc/>
+    public override bool SupportsRangeColumns => true;
     /// <inheritdoc/>
     public override string MakeLastInsertId(KeywordCase keywordCase = KeywordCase.Lower) => Kw(keywordCase, "select last_insert_id()");
 
@@ -616,7 +619,8 @@ internal sealed class MySqlScalarFunctions : IScalarFunctions
     /// <inheritdoc/>
     public bool Supports(string name) => name is
         "left" or "right" or "lpad" or "rpad" or "repeat" or "reverse" or "space" or
-        "concat_ws" or "ascii" or "char";
+        "concat_ws" or "ascii" or "char" or
+        "bit_length" or "octet_length" or "cot" or "degrees" or "radians" or "pi";
 
     /// <inheritdoc/>
     public string Render(string name, IReadOnlyList<string> args) => name switch
@@ -634,6 +638,12 @@ internal sealed class MySqlScalarFunctions : IScalarFunctions
         // MySQL's CHAR() returns a binary string (VARBINARY), which the driver exposes as byte[];
         // the cast makes it the text value the CLR string return type expects.
         "char" => $"cast(char({args[0]}) as char)",
+        "bit_length" => $"bit_length({args[0]})",
+        "octet_length" => $"octet_length({args[0]})",
+        "cot" => $"cot({args[0]})",
+        "degrees" => $"degrees({args[0]})",
+        "radians" => $"radians({args[0]})",
+        "pi" => "pi()",
         _ => throw new NotSupportedException($"The {name} function is not supported by MySQL/MariaDB.")
     };
 

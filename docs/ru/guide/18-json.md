@@ -2,7 +2,7 @@
 
 > Единого переносимого API для JSON нет: PostgreSQL предоставляет нативную поверхность `json`/`jsonb`, SQL Server возвращает документ завершающим предложением `FOR JSON` и предлагает текстовые JSON-функции, MySQL/MariaDB предоставляют те же текстовые JSON-функции через семейство `JSON_EXTRACT`/`JSON_SET`, а остальные провайдеры отклоняют JSON-конструкции.
 
-**Предварительные требования:** [Запросы и проекции](01-querying-and-projections.md) · [Скалярные функции](11-scalar-functions.md#json-и-jsonb-postgresql) · [Табличные функции](13-table-valued-functions.md#встроенные-табличные-функции) · [Обзор провайдеров](../providers/overview.md)
+**Предварительные требования:** [Запросы и проекции](01-querying-and-projections.md) · [Скалярные функции](../scalar-functions/07-json-and-xml.md#json-и-jsonb-postgresql) · [Табличные функции](13-table-valued-functions.md#встроенные-табличные-функции) · [Обзор провайдеров](../providers/overview.md)
 
 ## Обзор
 
@@ -356,7 +356,7 @@ from complex_entity
 ## См. также
 
 - [Запросы и проекции](01-querying-and-projections.md) — `ForJson`/`ForXml` для SQL Server.
-- [Скалярные функции](11-scalar-functions.md#json-и-jsonb-postgresql) — полная поверхность JSON/JSONB в PostgreSQL и текстовые JSON-функции SQL Server и MySQL/MariaDB.
+- [Скалярные функции](../scalar-functions/07-json-and-xml.md#json-и-jsonb-postgresql) — полная поверхность JSON/JSONB в PostgreSQL и текстовые JSON-функции SQL Server и MySQL/MariaDB.
 - [Табличные функции](13-table-valued-functions.md#встроенные-табличные-функции) — `openjson` и `string_split`.
 - [Провайдер PostgreSQL](../providers/postgres.md) — привязка JSON-параметров и массивы.
 - [Провайдер SQL Server](../providers/sqlserver.md) — `FOR JSON`, `FOR XML` и текстовый JSON.

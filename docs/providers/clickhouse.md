@@ -84,7 +84,10 @@ and returns [`Instance`](xref:NextORM.ClickHouse.ClickHouseDialect.Instance) fro
   (`IZerosRow`, the `zero UInt8` column materialises directly as `byte`); the server/cluster table
   functions `url`/`s3`/`file`/`remote`/`remote_secure`/`cluster`/`cluster_all_replicas` are also
   pre-declared (the row shape is declared by the caller's generic `TRow` interface, which must match the
-  `structure` argument or the target table);
+  `structure` argument or the target table); the `values` table function
+  (`SqlFunctions.ClickHouse.values<TRow>(tuples)`) renders its `structure` from `TRow`
+  ([`SupportsResultSchema(TableFunctionSchema)`](xref:NextORM.Core.ISqlDialect.SupportsResultSchema(NextORM.Core.TableFunctionSchema))) and takes the
+  verbatim tuple list as its argument;
 - the query modifiers `FINAL`/`SAMPLE`/`PREWHERE`/`SETTINGS` via `Final()`, `Sample(ratio[, offset])`,
   `PreWhere(predicate)` and `Settings(("key", "value"), ...)`
   ([`SupportsFinal`](xref:NextORM.Core.ISqlDialect.SupportsFinal)/[`SupportsSample`](xref:NextORM.Core.ISqlDialect.SupportsSample)/[`SupportsPreWhere`](xref:NextORM.Core.ISqlDialect.SupportsPreWhere)/[`SupportsSettings`](xref:NextORM.Core.ISqlDialect.SupportsSettings));

@@ -44,4 +44,41 @@ public class CrossProviderScalarSqlGenerationTests
         sql.Should().Contain("ascii(somestring)");
         sql.Should().Contain("char(65)");
     }
+
+    [Fact]
+    public void NumericAndLengthFunctions_ShouldEmitNativeSpellings()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Bl = SqlFunctions.Sql.bit_length(x.String),
+            Ol = SqlFunctions.Sql.octet_length(x.String),
+            Deg = SqlFunctions.Sql.degrees(1.5),
+            Rad = SqlFunctions.Sql.radians(1.5),
+            Pi = SqlFunctions.Sql.pi(),
+            Acos = Math.Acos(0.5),
+            Atan2 = Math.Atan2(1.5, 2.5)
+        }));
+
+        sql.Should().Contain("length(somestring) * 8");
+        sql.Should().Contain("length(somestring)");
+        sql.Should().Contain("degrees(1.5)");
+        sql.Should().Contain("radians(1.5)");
+        sql.Should().Contain("pi()");
+        sql.Should().Contain("acos(0.5)");
+        sql.Should().Contain("atan2(1.5, 2.5)");
+    }
+
+    [Fact]
+    public void Cot_ShouldThrowBecauseNotSupported()
+    {
+        using var ctx = ClickHouseTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var act = () => SqlOf(ctx, e.Select(x => new { C = SqlFunctions.Sql.cot(1.5) }));
+
+        act.Should().Throw<NotSupportedException>().WithMessage("*cot*not supported*");
+    }
 }

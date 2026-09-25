@@ -60,7 +60,16 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
             return ReferenceEquals(x.LinqSource, y.LinqSource);
 
         if (x.TableFunction is not null || y.TableFunction is not null)
-            return _expComparer.Equals(x.TableFunction?.Call, y.TableFunction?.Call);
+        {
+            if (x.TableFunction is null || y.TableFunction is null) return false;
+
+            // The declared result schema is rendered into the SQL, so its row type and placement must
+            // be part of the key: two calls that differ only in that schema must not share a plan.
+            if (x.TableFunction.ResultType != y.TableFunction.ResultType) return false;
+            if (x.TableFunction.ResultSchema != y.TableFunction.ResultSchema) return false;
+
+            return _expComparer.Equals(x.TableFunction.Call, y.TableFunction.Call);
+        }
 
         if (x.Pivot is not null || y.Pivot is not null)
             return PivotEquals(x.Pivot, y.Pivot);
@@ -145,7 +154,13 @@ public sealed class FromExpressionPlanEqualityComparer : IEqualityComparer<FromE
             return System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj.LinqSource);
 
         if (obj.TableFunction is not null)
-            return _expComparer.GetHashCode(obj.TableFunction.Call);
+        {
+            var tableFunctionHash = new System.HashCode();
+            tableFunctionHash.Add(obj.TableFunction.ResultType is null ? 0 : System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj.TableFunction.ResultType));
+            tableFunctionHash.Add((int)obj.TableFunction.ResultSchema);
+            tableFunctionHash.Add(_expComparer.GetHashCode(obj.TableFunction.Call));
+            return tableFunctionHash.ToHashCode();
+        }
 
         if (obj.Pivot is not null)
             return PivotHash(obj.Pivot);

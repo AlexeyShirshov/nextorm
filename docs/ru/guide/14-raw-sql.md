@@ -237,7 +237,7 @@ select t1.id, t2.id from simple_entity as "t1" join (select id from complex_enti
 ## См. также
 
 * [Переиспользование запросов: кэш против Prepare](15-query-reuse.md) — компромиссы `nonStreamUsing` / `storeInCache`.
-* [Скалярные функции](11-scalar-functions.md) — оставайтесь в LINQ вместо перехода к необработанному SQL.
+* [Скалярные функции](../scalar-functions/index.md) — оставайтесь в LINQ вместо перехода к необработанному SQL.
 * [Обзор провайдеров](../providers/overview.md) — заполнитель параметра для каждого провайдера.
 
 ---

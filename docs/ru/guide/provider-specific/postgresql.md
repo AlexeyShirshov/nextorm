@@ -29,9 +29,80 @@ var rows = dataContext.From<IComplexEntity>()
 select id from complex_entity where (id = any(@p0))
 ```
 
-См. [Массивы (PostgreSQL)](../11-scalar-functions.md#массивы-postgresql). Функции, возвращающие
+См. [Массивы (PostgreSQL)](../../scalar-functions/06-arrays.md#массивы-postgresql). Функции, возвращающие
 массив, можно использовать внутри запроса или проецировать напрямую: row reader материализует
 результат `Array(T)` как CLR `T[]`.
+
+## Range-типы
+
+У PostgreSQL есть нативные range-типы (`int4range`, `int8range`, `numrange`, `tsrange`, `tstzrange`,
+`daterange`). nextorm представляет их provider-agnostic value-типом
+[`Range<T>`](xref:NextORM.Core.Range`1) — `Lower`/`Upper`, `LowerInclusive`/`UpperInclusive`,
+`LowerInfinite`/`UpperInfinite`, `IsEmpty` и [`Range<T>.Empty`](xref:NextORM.Core.Range`1.Empty) — который
+провайдер PostgreSQL биндит через Npgsql, сохраняя unbounded стороны и пустой диапазон. Поверхность
+гейтится [`SupportsRanges`](xref:NextORM.Core.ISqlDialect.SupportsRanges) и живёт на
+[`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres). Операторы вынесены в статические методы с именами
+SQL-токенов, поэтому ни один член не конфликтует с CLR-оператором или полнотекстовым `Contains`:
+
+На базе без нативного range-типа отобразите свойство `Range<T>` на пару скалярных колонок через [`RangeColumns`](../31-range-columns.md); те же операторы транслируются поверх пары.
+
+| Член | SQL |
+|---|---|
+| `overlaps(a, b)` | `a && b` |
+| `range_contains(range, value)` / `range_contains(outer, inner)` | `range @> value` / `outer @> inner` |
+| `range_contained_by(inner, outer)` | `inner <@ outer` |
+| `range_union(a, b)` / `range_intersection(a, b)` / `range_difference(a, b)` | `a + b` / `a * b` / `a - b` |
+| `range_adjacent(a, b)` | `a -|- b` |
+| `range_strictly_left_of(a, b)` / `range_strictly_right_of(a, b)` | `a << b` / `a >> b` |
+| `range_not_extend_right_of(a, b)` / `range_not_extend_left_of(a, b)` | `a &< b` / `a &> b` |
+| `lower(range)` / `upper(range)` / `isempty(range)` | `lower(range)` / `upper(range)` / `isempty(range)` |
+| `lower_inc` / `upper_inc` / `lower_inf` / `upper_inf` | `lower_inc(range)` / … |
+| `int4range` / `int8range` / `numrange` / `tsrange` / `tstzrange` / `daterange` | нативный конструктор, при необходимости с литералом границ (`'[)'`, `'[]'`, `'()'`, `'(]'`) |
+| `empty_range<T>()` | `'empty'::<range type>` |
+
+```csharp
+var window = new Range<int>(15, 25);   // [15,25)
+
+var rows = dataContext.From<IReservation>()
+    .Where(e => SqlFunctions.Postgres.overlaps(e.During, window))
+    .Select(e => new { e.Id })
+    .ToList();
+```
+
+```sql
+select id from reservation where (during && @p0)
+```
+
+`Range<T>` — `readonly struct` и сравнивается по своим PostgreSQL-характеристикам, поэтому
+`Range<int>.Empty` и `default(Range<int>)` оба являются пустым диапазоном. In-memory провайдер
+вычисляет всю поверхность выше — `overlaps`, `range_contains`/`range_contained_by`,
+`range_union`/`range_intersection`/`range_difference`, позиционные и смежные операторы, функции
+проверки и конструкторы — с той же семантикой, что PostgreSQL (включая ошибку
+`result of range union/difference would not be contiguous`). Timestamp-диапазоны используют
+`DateTime` для `tsrange` и `DateTimeOffset` для `tstzrange`; `daterange` использует `DateOnly`.
+
+### Multirange
+
+Multirange-типы PostgreSQL (`int4multirange`, `int8multirange`, `nummultirange`, `tsmultirange`,
+`tstzmultirange`, `datemultirange`) представляются как `Range<T>[]` — биндятся и читаются как
+`NpgsqlRange<T>[]`. Массив канонический: отсортирован по нижней границе, перекрывающиеся и смежные
+диапазоны объединены. Сопоставьте свойство или параметр напрямую с `Range<T>[]`; имена операторов выше
+перегружены для multirange (`overlaps`, `range_contains`, `range_contained_by`, `range_union`,
+`range_intersection`, `range_difference`, `range_adjacent` и позиционные), плюс `multirange(range)`,
+`range_merge`, функции проверки и агрегаты `range_agg` / `range_intersect_agg`:
+
+```csharp
+var window = new[] { new Range<int>(15, 25), new Range<int>(40, 50) };
+
+var rows = dataContext.From<IReservation>()
+    .Where(e => SqlFunctions.Postgres.overlaps(e.During, window))
+    .Select(e => new
+    {
+        All = SqlFunctions.Postgres.range_agg(e.During),
+        Common = SqlFunctions.Postgres.range_intersect_agg(e.During)
+    })
+    .ToList();
+```
 
 ## `json` и `jsonb`
 
@@ -51,7 +122,7 @@ var json = dataContext.From<IComplexEntity>()
 select jsonb_agg(somestring) from complex_entity
 ```
 
-См. [JSON и JSONB (PostgreSQL)](../11-scalar-functions.md) и
+См. [JSON и JSONB (PostgreSQL)](../../scalar-functions/index.md) и
 [Поддержка JSON в разных провайдерах](../18-json.md).
 
 ## Упорядоченные, регрессионные и логические агрегаты
@@ -109,7 +180,7 @@ Native-поверхность реализована только в PostgreSQL;
 (`to_char`/`to_date`/`to_number`/`to_timestamp`/`timezone`/`make_interval`/`justify_*`) и
 конструкторы массивов, всё гейтится `SupportsExtendedScalarFunctions`.
 
-См. [Скалярные функции](../11-scalar-functions.md).
+См. [Скалярные функции](../../scalar-functions/index.md).
 
 ## `DISTINCT ON`
 
@@ -236,10 +307,14 @@ with ins as (insert into orders (customer_id) values (@p0) returning id, total) 
 общие (read) CTE — в [Общих табличных выражениях](../09-cte.md). Остальные провайдеры отклоняют
 `With(имя, insert)` на этапе построения SQL с `NotSupportedException`.
 
-## Пока не поддерживается
+## Динамическая схема записи
 
-`jsonb_to_record`/`json_populate_record` требуют динамической схемы записи и не входят в текущую
-поверхность. См. [Ограничения и возможности вне области охвата](../../advanced/limitations.md).
+`jsonb_to_record`/`jsonb_to_recordset` доступны как табличные функции, схема результата которых
+объявляется типом строки вызывающего и рендерится списком определений колонок в псевдониме
+(`AS x(a int, b text)`). См. [Динамическая схема результата](../13-table-valued-functions.md#dynamic-result-schema).
+Варианты `json_populate_record(set)` (заполняющие переданную вызывающим базовую запись, а не
+свободный список колонок) остаются вне области охвата. См.
+[Ограничения и возможности вне области охвата](../../advanced/limitations.md).
 
 ## См. также
 

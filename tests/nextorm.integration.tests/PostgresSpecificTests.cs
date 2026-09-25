@@ -233,6 +233,33 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    public void JsonbToRecord_WithDeclaredSchema_ShouldReturnRow()
+    {
+        using var json = JsonDocument.Parse("""{"a":1,"b":"x"}""");
+
+        var row = _sut.DataProvider
+            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_to_record<IDynamicRecordRow>(json))
+            .Select(r => new { r.A, r.B })
+            .First();
+
+        (row.A, row.B).Should().Be((1, "x"));
+    }
+
+    [Fact]
+    public void JsonbToRecordset_WithDeclaredSchema_ShouldReturnRows()
+    {
+        using var json = JsonDocument.Parse("""[{"a":1,"b":"x"},{"a":2,"b":"y"}]""");
+
+        var rows = _sut.DataProvider
+            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_to_recordset<IDynamicRecordRow>(json))
+            .OrderBy(r => r.A)
+            .Select(r => new { r.A, r.B })
+            .ToList();
+
+        rows.Select(r => (r.A, r.B)).Should().Equal((1, "x"), (2, "y"));
+    }
+
+    [Fact]
     public void JsonbObjectKeys_ShouldReturnKeys()
     {
         using var json = JsonDocument.Parse("""{"a":1,"b":2}""");
@@ -893,6 +920,276 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         {
             Execute(ctx, "drop table if exists collation_probe");
         }
+    }
+
+    [SqlTable("pg_range_entity")]
+    internal interface IPgRangeEntity
+    {
+        [Key]
+        [Column("id")]
+        int Id { get; set; }
+        [Column("during")]
+        Range<int> During { get; set; }
+    }
+
+    [Fact]
+    public void Range_RoundTripAndOverlaps_ShouldPreserveBounds()
+    {
+        var ctx = _sut.DataProvider;
+        Execute(ctx, "drop table if exists pg_range_entity");
+        Execute(ctx, "create table pg_range_entity (id integer primary key, during int4range)");
+
+        try
+        {
+            ctx.InsertInto<IPgRangeEntity>()
+                .Value(x => x.Id, 1)
+                .Value(x => x.During, new Range<int>(10, 20))
+                .Insert();
+            ctx.InsertInto<IPgRangeEntity>()
+                .Value(x => x.Id, 2)
+                .Value(x => x.During, Range<int>.Empty)
+                .Insert();
+            ctx.InsertInto<IPgRangeEntity>()
+                .Value(x => x.Id, 3)
+                .Value(x => x.During, new Range<int>(0, 15, lowerInclusive: true, upperInclusive: false, lowerInfinite: true, upperInfinite: false))
+                .Insert();
+
+            var rows = ctx.From<IPgRangeEntity>().OrderBy(x => x.Id).Select(x => new { x.Id, x.During }).ToList();
+
+            rows.Should().HaveCount(3);
+            rows[0].During.Should().Be(new Range<int>(10, 20));
+            rows[1].During.IsEmpty.Should().BeTrue();
+            rows[2].During.LowerInfinite.Should().BeTrue();
+            rows[2].During.Upper.Should().Be(15);
+            rows[2].During.UpperInclusive.Should().BeFalse();
+
+            var emptyInspection = ctx.From<IPgRangeEntity>()
+                .Where(x => x.Id == 2)
+                .Select(x => new
+                {
+                    E = SqlFunctions.Postgres.isempty(x.During),
+                    Lf = SqlFunctions.Postgres.lower_inf(x.During),
+                    Uf = SqlFunctions.Postgres.upper_inf(x.During)
+                })
+                .ToList();
+
+            emptyInspection.Should().ContainSingle();
+            emptyInspection[0].E.Should().BeTrue();
+            emptyInspection[0].Lf.Should().BeFalse();
+            emptyInspection[0].Uf.Should().BeFalse();
+
+            var window = new Range<int>(15, 25);
+            var overlapping = ctx.From<IPgRangeEntity>()
+                .Where(x => SqlFunctions.Postgres.overlaps(x.During, window))
+                .Select(x => x.Id)
+                .ToList();
+
+            overlapping.Should().BeEquivalentTo(new[] { rows[0].Id });
+
+            var containing35 = ctx.From<IPgRangeEntity>()
+                .Where(x => SqlFunctions.Postgres.range_contains(x.During, 35))
+                .Select(x => x.Id)
+                .ToList();
+
+            containing35.Should().BeEmpty();
+        }
+        finally
+        {
+            Execute(ctx, "drop table if exists pg_range_entity");
+        }
+    }
+
+    [SqlTable("pg_range_types")]
+    internal interface IPgRangeTypes
+    {
+        [Key]
+        [Column("id")]
+        int Id { get; set; }
+        [Column("r_i4")]
+        Range<int> I4 { get; set; }
+        [Column("r_i8")]
+        Range<long> I8 { get; set; }
+        [Column("r_num")]
+        Range<decimal> Num { get; set; }
+        [Column("r_ts")]
+        Range<DateTime> Ts { get; set; }
+        [Column("r_tstz")]
+        Range<DateTimeOffset> Tstz { get; set; }
+        [Column("r_date")]
+        Range<DateOnly> Dt { get; set; }
+    }
+
+    [Fact]
+    public void Range_AllTypes_RoundTrip()
+    {
+        var ctx = _sut.DataProvider;
+        Execute(ctx, "drop table if exists pg_range_types");
+        Execute(ctx, "create table pg_range_types (id integer primary key, r_i4 int4range, r_i8 int8range, r_num numrange, r_ts tsrange, r_tstz tstzrange, r_date daterange)");
+
+        var tsLower = new DateTime(2023, 1, 1, 0, 0, 0, DateTimeKind.Unspecified);
+        var tsUpper = new DateTime(2023, 1, 2, 0, 0, 0, DateTimeKind.Unspecified);
+        var tstzLower = new DateTimeOffset(2023, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        var tstzUpper = new DateTimeOffset(2023, 1, 2, 0, 0, 0, TimeSpan.Zero);
+
+        try
+        {
+            ctx.InsertInto<IPgRangeTypes>()
+                .Value(x => x.Id, 1)
+                .Value(x => x.I4, new Range<int>(10, 20))
+                .Value(x => x.I8, new Range<long>(1_000_000_000_000L, 2_000_000_000_000L))
+                .Value(x => x.Num, new Range<decimal>(1.5m, 2.5m))
+                .Value(x => x.Ts, new Range<DateTime>(tsLower, tsUpper))
+                .Value(x => x.Tstz, new Range<DateTimeOffset>(tstzLower, tstzUpper))
+                .Value(x => x.Dt, new Range<DateOnly>(new DateOnly(2023, 1, 1), new DateOnly(2023, 2, 1)))
+                .Insert();
+
+            ctx.InsertInto<IPgRangeTypes>()
+                .Value(x => x.Id, 2)
+                .Value(x => x.I4, Range<int>.Empty)
+                .Value(x => x.I8, Range<long>.Empty)
+                .Value(x => x.Num, Range<decimal>.Empty)
+                .Value(x => x.Ts, Range<DateTime>.Empty)
+                .Value(x => x.Tstz, Range<DateTimeOffset>.Empty)
+                .Value(x => x.Dt, Range<DateOnly>.Empty)
+                .Insert();
+
+            var rows = ctx.From<IPgRangeTypes>()
+                .OrderBy(x => x.Id)
+                .Select(x => new { x.I4, x.I8, x.Num, x.Ts, x.Tstz, x.Dt })
+                .ToList();
+
+            rows.Should().HaveCount(2);
+
+            rows[0].I4.Should().Be(new Range<int>(10, 20));
+            rows[0].I8.Should().Be(new Range<long>(1_000_000_000_000L, 2_000_000_000_000L));
+            rows[0].Num.Should().Be(new Range<decimal>(1.5m, 2.5m));
+            rows[0].Ts.Should().Be(new Range<DateTime>(tsLower, tsUpper));
+            rows[0].Tstz.Should().Be(new Range<DateTimeOffset>(tstzLower, tstzUpper));
+            rows[0].Dt.Should().Be(new Range<DateOnly>(new DateOnly(2023, 1, 1), new DateOnly(2023, 2, 1)));
+
+            rows[1].I4.IsEmpty.Should().BeTrue();
+            rows[1].I8.IsEmpty.Should().BeTrue();
+            rows[1].Num.IsEmpty.Should().BeTrue();
+            rows[1].Ts.IsEmpty.Should().BeTrue();
+            rows[1].Tstz.IsEmpty.Should().BeTrue();
+            rows[1].Dt.IsEmpty.Should().BeTrue();
+        }
+        finally
+        {
+            Execute(ctx, "drop table if exists pg_range_types");
+        }
+    }
+
+    [SqlTable("pg_multirange_entity")]
+    internal interface IPgMultirangeEntity
+    {
+        [Key]
+        [Column("id")]
+        int Id { get; set; }
+        [Column("during")]
+        Range<int>[] During { get; set; }
+    }
+
+    [SqlTable("pg_range_agg_entity")]
+    internal interface IPgRangeAggEntity
+    {
+        [Key]
+        [Column("id")]
+        int Id { get; set; }
+        [Column("during")]
+        Range<int> During { get; set; }
+    }
+
+    [Fact]
+    public void Multirange_RoundTripAndOperators()
+    {
+        var ctx = _sut.DataProvider;
+        Execute(ctx, "drop table if exists pg_multirange_entity");
+        Execute(ctx, "create table pg_multirange_entity (id integer primary key, during int4multirange)");
+
+        try
+        {
+            ctx.InsertInto<IPgMultirangeEntity>()
+                .Value(x => x.Id, 1)
+                .Value(x => x.During, new[] { new Range<int>(1, 5), new Range<int>(10, 20) })
+                .Insert();
+
+            var row = ctx.From<IPgMultirangeEntity>()
+                .Where(x => x.Id == 1)
+                .Select(x => new { x.During })
+                .First();
+
+            row.During.Should().HaveCount(2);
+            row.During[0].Should().Be(new Range<int>(1, 5));
+            row.During[1].Should().Be(new Range<int>(10, 20));
+
+            var probe = ctx.From<IPgMultirangeEntity>()
+                .Where(x => x.Id == 1)
+                .Select(x => new
+                {
+                    Overlaps = SqlFunctions.Postgres.overlaps(x.During, new[] { new Range<int>(4, 6) }),
+                    Contains = SqlFunctions.Postgres.range_contains(x.During, new Range<int>(2, 3)),
+                    Merged = SqlFunctions.Postgres.range_merge(x.During)
+                })
+                .First();
+
+            probe.Overlaps.Should().BeTrue();
+            probe.Contains.Should().BeTrue();
+            probe.Merged.Should().Be(new Range<int>(1, 20));
+        }
+        finally
+        {
+            Execute(ctx, "drop table if exists pg_multirange_entity");
+        }
+    }
+
+    [Fact]
+    public void RangeAggregates_ShouldAggregateRanges()
+    {
+        var ctx = _sut.DataProvider;
+        Execute(ctx, "drop table if exists pg_range_agg_entity");
+        Execute(ctx, "create table pg_range_agg_entity (id integer primary key, during int4range)");
+
+        try
+        {
+            foreach (var (id, range) in new[]
+            {
+                (1, new Range<int>(1, 5)),
+                (2, new Range<int>(3, 8)),
+                (3, new Range<int>(10, 20))
+            })
+            {
+                ctx.InsertInto<IPgRangeAggEntity>()
+                    .Value(x => x.Id, id)
+                    .Value(x => x.During, range)
+                    .Insert();
+            }
+
+            var result = ctx.From<IPgRangeAggEntity>()
+                .Select(x => new
+                {
+                    Agg = SqlFunctions.Postgres.range_agg(x.During),
+                    Inter = SqlFunctions.Postgres.range_intersect_agg(x.During)
+                })
+                .First();
+
+            result.Agg.Should().HaveCount(2);
+            result.Agg[0].Should().Be(new Range<int>(1, 8));
+            result.Agg[1].Should().Be(new Range<int>(10, 20));
+            result.Inter.IsEmpty.Should().BeTrue();
+        }
+        finally
+        {
+            Execute(ctx, "drop table if exists pg_range_agg_entity");
+        }
+    }
+
+    public interface IDynamicRecordRow
+    {
+        [Column("a")]
+        int A { get; set; }
+        [Column("b")]
+        string? B { get; set; }
     }
 
     private static void Execute(IDataContext ctx, string sql)

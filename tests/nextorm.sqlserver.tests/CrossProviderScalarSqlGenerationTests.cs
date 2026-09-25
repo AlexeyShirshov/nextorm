@@ -44,4 +44,32 @@ public class CrossProviderScalarSqlGenerationTests
         sql.Should().Contain("ascii(somestring)");
         sql.Should().Contain("char(65)");
     }
+
+    [Fact]
+    public void NumericAndLengthFunctions_ShouldEmitNativeSpellings()
+    {
+        using var ctx = SqlServerTestContext.Create();
+        var e = ctx.From<IComplexEntity>();
+
+        var sql = SqlOf(ctx, e.Select(x => new
+        {
+            Bl = SqlFunctions.Sql.bit_length(x.String),
+            Ol = SqlFunctions.Sql.octet_length(x.String),
+            Cot = SqlFunctions.Sql.cot(1.5),
+            Deg = SqlFunctions.Sql.degrees(1.5),
+            Rad = SqlFunctions.Sql.radians(1.5),
+            Pi = SqlFunctions.Sql.pi(),
+            Acos = Math.Acos(0.5),
+            Atan2 = Math.Atan2(1.5, 2.5)
+        }));
+
+        sql.Should().Contain("datalength(somestring) * 8");
+        sql.Should().Contain("datalength(somestring)");
+        sql.Should().Contain("cot(1.5)");
+        sql.Should().Contain("degrees(cast(1.5 as float))");
+        sql.Should().Contain("radians(cast(1.5 as float))");
+        sql.Should().Contain("pi()");
+        sql.Should().Contain("acos(0.5)");
+        sql.Should().Contain("atn2(1.5, 2.5)");
+    }
 }
