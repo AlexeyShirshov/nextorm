@@ -9,6 +9,7 @@ public sealed class JsonColumnProbePoco
 {
     public string? Name { get; set; }
     public List<int> Values { get; set; } = [];
+    public DateTimeOffset UpdatedAt { get; set; }
 }
 
 public abstract partial class CommonTestSuite
@@ -49,9 +50,10 @@ public abstract partial class CommonTestSuite
 
         try
         {
-            var withNull = new JsonColumnProbePoco { Name = "second", Values = [4, 5] };
+            var updatedAt = new DateTimeOffset(2026, 9, 25, 12, 34, 56, TimeSpan.Zero);
+            var withNull = new JsonColumnProbePoco { Name = "second", Values = [4, 5], UpdatedAt = updatedAt };
             ctx.InsertInto<IJsonColumnProbe>()
-                .Values(new JsonColumnProbe { Id = 1, Data = new JsonColumnProbePoco { Name = "first", Values = [1, 2, 3] }, DataNull = null })
+                .Values(new JsonColumnProbe { Id = 1, Data = new JsonColumnProbePoco { Name = "first", Values = [1, 2, 3], UpdatedAt = updatedAt }, DataNull = null })
                 .Insert();
             ctx.InsertInto<IJsonColumnProbe>()
                 .Values(new JsonColumnProbe { Id = 2, Data = withNull, DataNull = withNull })
@@ -60,22 +62,25 @@ public abstract partial class CommonTestSuite
             var first = ctx.From<JsonColumnProbe>().Where(x => x.Id == 1).ToList().Single();
             first.Data.Name.Should().Be("first");
             first.Data.Values.Should().Equal(1, 2, 3);
+            first.Data.UpdatedAt.Should().Be(updatedAt);
             first.DataNull.Should().BeNull();
 
             var second = ctx.From<JsonColumnProbe>().Where(x => x.Id == 2).ToList().Single();
             second.Data.Name.Should().Be("second");
+            second.Data.UpdatedAt.Should().Be(updatedAt);
             second.DataNull.Should().NotBeNull();
             second.DataNull!.Values.Should().Equal(4, 5);
 
             // A JSON value in a SET list goes through the same converter.
             ctx.Update<IJsonColumnProbe>()
-                .Set(x => x.Data, new JsonColumnProbePoco { Name = "updated", Values = [9] })
+                .Set(x => x.Data, new JsonColumnProbePoco { Name = "updated", Values = [9], UpdatedAt = updatedAt })
                 .Where(x => x.Id == 1)
                 .Update();
 
             var updated = ctx.From<JsonColumnProbe>().Where(x => x.Id == 1).ToList().Single();
             updated.Data.Name.Should().Be("updated");
             updated.Data.Values.Should().Equal(9);
+            updated.Data.UpdatedAt.Should().Be(updatedAt);
         }
         finally
         {
@@ -105,6 +110,43 @@ public abstract partial class CommonTestSuite
 
             row.Data.Name.Should().Be("returned");
             row.Data.Values.Should().Equal(7);
+        }
+        finally
+        {
+            ExecuteJsonColumn(ctx, "drop table if exists json_column_probe");
+        }
+    }
+
+    [Fact]
+    public void JsonColumn_Queries_ShouldConvertConstantsAndProjections()
+    {
+        var ctx = _sut.DataProvider;
+        var dialect = ((DataContext)ctx).Dialect;
+        var dataType = dialect.SupportsJson ? "jsonb" : ProbeTextType(dialect);
+        var engine = dialect.GetType().Name.Contains("ClickHouse", StringComparison.Ordinal) ? " engine = Memory" : string.Empty;
+
+        ExecuteJsonColumn(ctx, "drop table if exists json_column_probe");
+        ExecuteJsonColumn(ctx, $"create table json_column_probe (id bigint, data {dataType}, data_null {dataType}){engine}");
+
+        try
+        {
+            var updatedAt = new DateTimeOffset(2026, 9, 25, 12, 34, 56, TimeSpan.Zero);
+            var data = new JsonColumnProbePoco { Name = "first", Values = [1, 2, 3], UpdatedAt = updatedAt };
+            ctx.InsertInto<IJsonColumnProbe>()
+                .Values(new JsonColumnProbe { Id = 1, Data = data, DataNull = null })
+                .Insert();
+
+            // A scalar projection materializes the CLR model, not the provider representation.
+            ctx.From<JsonColumnProbe>().Where(x => x.Id == 1).Select(x => x.Data).ToList()
+                .Should().ContainSingle().Which.Name.Should().Be("first");
+
+            // An anonymous projection carries the same conversion.
+            ctx.From<JsonColumnProbe>().Where(x => x.Id == 1).Select(x => new { x.Data }).ToList()
+                .Should().ContainSingle().Which.Data.Values.Should().Equal(1, 2, 3);
+
+            // A constant compared against a JSON column is serialized to its provider representation.
+            ctx.From<JsonColumnProbe>().Where(x => x.Data == data).ToList()
+                .Should().ContainSingle().Which.Id.Should().Be(1);
         }
         finally
         {

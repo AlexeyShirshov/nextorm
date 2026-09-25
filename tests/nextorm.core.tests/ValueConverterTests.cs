@@ -170,6 +170,27 @@ public class ValueConverterTests
     }
 
     [Fact]
+    public void InMemory_ConvertedProperty_ShouldApplyPredicateAndProjectionAsClr()
+    {
+        using var ctx = new InMemoryDataContext();
+        var data = new[]
+        {
+            new AttributedConverterEntity { Id = 1, Status = ProbeStatus.Active },
+            new AttributedConverterEntity { Id = 2, Status = ProbeStatus.Closed },
+        };
+
+        // The in-memory provider stores the CLR model and compiles the predicate, so no conversion is
+        // involved: the captured-constant comparison and the scalar projection are plain C#.
+        var active = ctx.From<AttributedConverterEntity>()
+            .WithData(data)
+            .Where(x => x.Status == ProbeStatus.Active)
+            .Select(x => x.Status)
+            .ToList();
+
+        active.Should().Equal(ProbeStatus.Active);
+    }
+
+    [Fact]
     public void PlanComparer_ShouldDistinguishConverterInstances()
     {
         var comparer = new SelectExpressionPlanEqualityComparer(new QueryProvider());

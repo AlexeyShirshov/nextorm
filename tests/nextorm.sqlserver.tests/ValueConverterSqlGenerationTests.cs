@@ -13,13 +13,6 @@ public enum SqlGenState
     Closed,
 }
 
-public sealed class SqlGenStateConverter : ValueConverter<SqlGenState, string>
-{
-    public override string? ConvertToProvider(SqlGenState model) => model.ToString();
-
-    public override SqlGenState ConvertFromProvider(string? provider) => Enum.Parse<SqlGenState>(provider!);
-}
-
 [SqlTable("converter_entity")]
 public interface IConverterEntity
 {
@@ -28,7 +21,7 @@ public interface IConverterEntity
     int Id { get; set; }
 
     [Column("state")]
-    [ValueConverter(typeof(SqlGenStateConverter))]
+    [ValueConverter(typeof(EnumToStringConverter<SqlGenState>))]
     SqlGenState State { get; set; }
 }
 
