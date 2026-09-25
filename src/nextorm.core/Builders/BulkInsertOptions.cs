@@ -24,7 +24,9 @@ public sealed record BulkInsertOptions
     /// <summary>
     /// Whether explicit values are written to identity columns. Forces the portable path: SQL Server wraps
     /// the insert with <c>SET IDENTITY_INSERT</c> and PostgreSQL adds <c>OVERRIDING SYSTEM VALUE</c>.
-    /// Defaults to <see langword="false"/>.
+    /// Silently ignored when the entity's mapping declares no identity column (matching linq2db), so it
+    /// never surfaces SQL Server error 8106 on a non-identity table and does not force the portable path
+    /// there. Defaults to <see langword="false"/>.
     /// </summary>
     public bool KeepIdentity { get; init; }
 
@@ -34,6 +36,19 @@ public sealed record BulkInsertOptions
     /// <c>INSERT OR IGNORE</c>, <c>INSERT IGNORE</c>). Defaults to <see langword="false"/>.
     /// </summary>
     public bool IgnoreDuplicates { get; init; }
+
+    /// <summary>
+    /// Overrides the entity's mapped table for this write, without requiring a second <c>[SqlTable]</c>
+    /// mapping. When set, the naming convention is not applied to the target; <see cref="TableSchema"/>
+    /// optionally qualifies it. Defaults to <see langword="null"/> (the mapped table name is used).
+    /// </summary>
+    public string? TableName { get; init; }
+
+    /// <summary>
+    /// The schema (or database) that qualifies <see cref="TableName"/>, or <see langword="null"/> for an
+    /// unqualified target. Only meaningful together with <see cref="TableName"/>.
+    /// </summary>
+    public string? TableSchema { get; init; }
 
     /// <summary>
     /// The command timeout in seconds. Only SQL Server's native <c>SqlBulkCopy</c> path honours it; the
@@ -66,8 +81,9 @@ public sealed record BulkInsertOptions
     /// <summary>The progress reporting interval in rows. Defaults to <c>1</c>.</summary>
     public int NotifyEvery { get; init; } = 1;
 
-    /// <summary>Validates the option values, throwing for a non-positive bound or interval.</summary>
+    /// <summary>Validates the option values, throwing for a non-positive bound, an empty table target or an invalid interval.</summary>
     /// <exception cref="ArgumentOutOfRangeException">A size, timeout or interval is not positive.</exception>
+    /// <exception cref="ArgumentException">A table target is empty, or a schema was given without a table.</exception>
     internal void Validate()
     {
         ThrowIfNonPositive(MaxBatchSize, nameof(MaxBatchSize));
@@ -77,6 +93,15 @@ public sealed record BulkInsertOptions
 
         if (NotifyEvery <= 0)
             throw new ArgumentOutOfRangeException(nameof(NotifyEvery), NotifyEvery, "NotifyEvery must be positive.");
+
+        if (TableName is not null && string.IsNullOrWhiteSpace(TableName))
+            throw new ArgumentException("TableName must not be empty.", nameof(TableName));
+
+        if (TableSchema is not null && string.IsNullOrWhiteSpace(TableSchema))
+            throw new ArgumentException("TableSchema must not be empty.", nameof(TableSchema));
+
+        if (TableSchema is not null && TableName is null)
+            throw new ArgumentException("TableSchema requires TableName to be set.", nameof(TableSchema));
     }
 
     private static void ThrowIfNonPositive(int? value, string name)
@@ -97,6 +122,8 @@ public sealed class BulkInsertOptionsBuilder
     private int? _maxSqlLength;
     private bool _keepIdentity;
     private bool _ignoreDuplicates;
+    private string? _tableName;
+    private string? _tableSchema;
     private int? _timeoutSeconds;
     private Action<int, CancellationToken>? _progress;
     private int _notifyEvery = 1;
@@ -153,6 +180,35 @@ public sealed class BulkInsertOptionsBuilder
         return this;
     }
 
+    /// <summary>
+    /// Overrides the target table for this write. The naming convention is not applied to an explicit
+    /// target; use the two-argument <see cref="Table(string, string)"/> overload to qualify it with a schema.
+    /// </summary>
+    /// <param name="table">The destination table name; must not be empty.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="ArgumentException"><paramref name="table"/> is <see langword="null"/> or empty.</exception>
+    public BulkInsertOptionsBuilder Table(string table)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(table);
+        _tableName = table;
+        _tableSchema = null;
+        return this;
+    }
+
+    /// <summary>Overrides the target table for this write and qualifies it with a schema (or database).</summary>
+    /// <param name="schema">The schema (or database) name; must not be empty.</param>
+    /// <param name="table">The destination table name; must not be empty.</param>
+    /// <returns>This builder, for chaining.</returns>
+    /// <exception cref="ArgumentException"><paramref name="schema"/> or <paramref name="table"/> is <see langword="null"/> or empty.</exception>
+    public BulkInsertOptionsBuilder Table(string schema, string table)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(schema);
+        ArgumentException.ThrowIfNullOrEmpty(table);
+        _tableSchema = schema;
+        _tableName = table;
+        return this;
+    }
+
     /// <summary>Sets the command timeout in seconds (only SQL Server's native path honours it).</summary>
     /// <param name="seconds">The timeout in seconds; must be positive.</param>
     /// <returns>This builder, for chaining.</returns>
@@ -203,6 +259,8 @@ public sealed class BulkInsertOptionsBuilder
         MaxSqlLength = _maxSqlLength,
         KeepIdentity = _keepIdentity,
         IgnoreDuplicates = _ignoreDuplicates,
+        TableName = _tableName,
+        TableSchema = _tableSchema,
         TimeoutSeconds = _timeoutSeconds,
         Progress = _progress,
         NotifyEvery = _notifyEvery,

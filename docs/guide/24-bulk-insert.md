@@ -60,6 +60,22 @@ await ctx.BulkInsertInto<IOrder>().Values(ordersStream).BulkInsertAsync(cancella
 
 An empty source writes nothing and returns `0`.
 
+## Retargeting the destination table
+
+`Table(name)` / `Table(schema, name)` overrides the entity's mapped table for one write, so a mapped
+shape can be copied into a differently named table without a second `[SqlTable]` mapping:
+
+```csharp
+var written = ctx.BulkInsertInto<IOrder>(o => o.Table("archive", "orders_2024"))
+    .Values(orders)
+    .BulkInsert();
+```
+
+The override has priority over the `[SqlTable]`/`Table(...)` mapping, the naming convention is not
+applied to it, and the optional schema is quoted separately from the table. It works on both the native
+(`COPY`/`SqlBulkCopy`) and the portable `INSERT ... VALUES` paths, and combines with `Returning*` and
+`KeepIdentity`.
+
 ## Reading the generated keys
 
 The native bulk APIs cannot return rows, so `Returning*` switches to the portable path and writes the
@@ -184,6 +200,13 @@ var written = ctx.BulkInsertInto<IOrder>(o => o.KeepIdentity().IgnoreDuplicates(
 and MySQL/MariaDB (`INSERT IGNORE`); it is rejected on SQL Server, and on ClickHouse it is a no-op
 (there is no uniqueness, so every row is written).
 
+> `KeepIdentity()` is ignored when the entity's mapping declares no identity column (matching linq2db):
+> explicit values are still written for non-identity keys, but the provider's identity-insert form
+> (`SET IDENTITY_INSERT`, `OVERRIDING SYSTEM VALUE`) is not emitted, so a non-identity table never
+> fails with SQL Server error 8106. The check uses the donor entity's metadata, not the actual target
+> table — when `Table(...)` retargets a write, the caller is responsible for the target's identity
+> shape.
+
 ## Inspecting the SQL
 
 `ToSql()` renders the parameterised SQL the portable path would execute for the first batch, without
@@ -212,7 +235,8 @@ ctx.BulkInsertInto<IOrder>(o => o.MaxBatchSize(1_000).IgnoreDuplicates());
 | `MaxBatchSize` | `MaxBatchSize(rows)` | chunk the portable path (default: one statement) |
 | `MaxParameters` | `MaxParameters(count)` | bound parameters per statement |
 | `MaxSqlLength` | `MaxSqlLength(chars)` | approximate SQL length per statement |
-| `KeepIdentity` | `KeepIdentity()` | write explicit identity values (`OVERRIDING SYSTEM VALUE` on PostgreSQL, `SET IDENTITY_INSERT ... ON/OFF` on SQL Server) |
+| `TableName` / `TableSchema` | `Table(name)` / `Table(schema, name)` | override the mapped destination table, optionally schema-qualified |
+| `KeepIdentity` | `KeepIdentity()` | write explicit identity values (`OVERRIDING SYSTEM VALUE` on PostgreSQL, `SET IDENTITY_INSERT ... ON/OFF` on SQL Server); ignored when the entity has no identity column |
 | `IgnoreDuplicates` | `IgnoreDuplicates()` | skip rows that violate a unique constraint |
 | `TimeoutSeconds` | `Timeout(seconds)` | command timeout; SQL Server native only |
 | `Progress` / `NotifyEvery` | `NotifyAfter(rows, onRows)` | progress with the cumulative written-row count |
@@ -229,15 +253,15 @@ On the returned builder:
 
 ## Provider support
 
-| Provider | Native bulk | `Returning` | `IgnoreDuplicates` | `KeepIdentity` |
-|---|---|---|---|---|
-| PostgreSQL | binary `COPY` | `RETURNING` (portable) | `ON CONFLICT DO NOTHING` | `OVERRIDING SYSTEM VALUE` |
-| SQL Server | `SqlBulkCopy` | `OUTPUT` (portable) | — (rejected) | `SET IDENTITY_INSERT` |
-| MySQL | — (portable) | — | `INSERT IGNORE` | explicit values |
-| MariaDB | — (portable) | — | `INSERT IGNORE` | explicit values |
-| SQLite | — (portable) | `RETURNING` (portable) | `INSERT OR IGNORE` | explicit values |
-| ClickHouse | — (portable) | — | no-op (no uniqueness) | — |
-| In-memory | — | — | — | `NotSupportedException` (read-only) |
+| Provider | Native bulk | Target override | `Returning` | `IgnoreDuplicates` | `KeepIdentity` |
+|---|---|---|---|---|---|
+| PostgreSQL | binary `COPY` | `schema.table` | `RETURNING` (portable) | `ON CONFLICT DO NOTHING` | `OVERRIDING SYSTEM VALUE` |
+| SQL Server | `SqlBulkCopy` | `schema.table` | `OUTPUT` (portable) | — (rejected) | `SET IDENTITY_INSERT` |
+| MySQL | — (portable) | `db.table` | — | `INSERT IGNORE` | explicit values |
+| MariaDB | — (portable) | `db.table` | — | `INSERT IGNORE` | explicit values |
+| SQLite | — (portable) | `schema.table` | `RETURNING` (portable) | `INSERT OR IGNORE` | explicit values |
+| ClickHouse | — (portable) | `db.table` | — | no-op (no uniqueness) | — |
+| In-memory | — | — | — | — | `NotSupportedException` (read-only) |
 
 ## See also
 

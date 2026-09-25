@@ -29,6 +29,17 @@ public class CorrelatedQueryInMemoryTests
     }
 
     [Fact]
+    public void CorrelatedExistsInWhere_ShouldFilterOutNonMatchingRows()
+    {
+        var r = _sut.SimpleEntity
+            .Where(it => SqlFunctions.Sql.exists(_sut.SimpleEntity.Where(s => s.Id == it.Id + 100)))
+            .Select(it => it.Id)
+            .ToList();
+
+        r.Should().BeEmpty();
+    }
+
+    [Fact]
     public void CorrelatedExistsInProjection_ShouldEvaluatePerRow()
     {
         var r = _sut.SimpleEntity
@@ -136,5 +147,38 @@ public class CorrelatedQueryInMemoryTests
 
         r.Should().HaveCount(2);
         r.Should().OnlyContain(row => row.sid == 1);
+    }
+
+    [Fact]
+    public void CorrelatedExistsCombinedWithOr_ShouldFilterPerRow()
+    {
+        var r = _sut.SimpleEntity
+            .Where(it => SqlFunctions.Sql.exists(_sut.SimpleEntity.Where(s => s.Id == it.Id)) || it.Id == 1)
+            .Select(it => it.Id)
+            .ToList();
+
+        r.Should().BeEquivalentTo(new[] { 1, 2 });
+    }
+
+    [Fact]
+    public void CorrelatedExistsCombinedWithAnd_ShouldFilterPerRow()
+    {
+        var r = _sut.SimpleEntity
+            .Where(it => it.Id > 0 && SqlFunctions.Sql.exists(_sut.SimpleEntity.Where(s => s.Id == it.Id)))
+            .Select(it => it.Id)
+            .ToList();
+
+        r.Should().BeEquivalentTo(new[] { 1, 2 });
+    }
+
+    [Fact]
+    public void NegatedCorrelatedExists_ShouldFilterPerRow()
+    {
+        var r = _sut.SimpleEntity
+            .Where(it => !SqlFunctions.Sql.exists(_sut.SimpleEntity.Where(s => s.Id == it.Id)))
+            .Select(it => it.Id)
+            .ToList();
+
+        r.Should().BeEmpty();
     }
 }

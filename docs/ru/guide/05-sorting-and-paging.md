@@ -13,8 +13,10 @@
   `OrderBy(expr)`, `OrderByDescending(expr)` и перегрузки с порядковым номером `OrderBy(int)`,
   `OrderBy(int, OrderDirection)`, `OrderByDescending(int)`.
 * [`EntityBuilder<TEntity>`](xref:NextORM.Core.EntityBuilder`1) также предоставляет `Limit(int)`, `Offset(int)` и `Page(int limit, int offset)`.
-* После [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) возвращаемый [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) имеет только перегрузки с порядковым номером:
-  `OrderBy(int columnIndex, OrderDirection direction)`, `OrderBy(int)` и `OrderByDescending(int)`.
+* После [`Select`](xref:NextORM.Core.EntityBuilder`1.Select``1(System.Linq.Expressions.Expression{System.Func{`0,``0}})) возвращаемый [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) повторяет поверхность построителя: перегрузки по выражению
+  `OrderBy(expr)`, `OrderBy(expr, OrderDirection)` и `OrderByDescending(expr)`, перегрузки с порядковым номером
+  `OrderBy(int columnIndex, OrderDirection direction)`, `OrderBy(int)` и `OrderByDescending(int)`, а также
+  `Limit(int)`, `Offset(int)` и `Page(int limit, int offset)` (см. [Сортировка и пейджинг спроецированной команды](#сортировка-и-пейджинг-спроецированной-команды)).
 
 Каждый вызов добавляется к неизменяемому построителю, поэтому второй [`OrderBy`](xref:NextORM.Core.EntityBuilder`1.OrderBy(System.Int32)) добавляет ключ
 дополнительной сортировки и оставляет первый на месте. Терминальный метод ([`ToListAsync`](xref:NextORM.Core.EntityBuilderExtensions.ToListAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])), [`FirstAsync`](xref:NextORM.Core.EntityBuilderExtensions.FirstAsync``1(NextORM.Core.EntityBuilder{``0},System.Object[])),
@@ -83,6 +85,35 @@ select id from simple_entity order by 1 desc limit 1
 
 Построитель сущности также принимает порядковый номер с явным направлением, например
 `.OrderBy(2, OrderDirection.Asc)`.
+
+## Сортировка и пейджинг спроецированной команды
+
+Спроецированный [`QueryCommand<TResult>`](xref:NextORM.Core.QueryCommand`1) поддерживает сортировку по выражению над
+`TResult` и пейджинг, поэтому сгруппированный/агрегированный запрос не обязан повторять агрегат во
+внешнем запросе. Каждый член выражения сортировки разрешается в выражение проекции, которое произвело
+соответствующую выходную колонку, поэтому в `ORDER BY` попадает исходное выражение, а не алиас:
+
+```csharp
+var rows = await dataContext.From<ComplexEntity>()
+    .GroupBy(it => it.Int)
+    .Select(it => new { it.Int, Count = SqlFunctions.Sql.count() })
+    .OrderByDescending(it => it.Count)
+    .Page(10, 0)
+    .ToListAsync();
+```
+
+```sql
+-- SQLite
+select nullableint as 'Int', count(*) as 'Count' from complex_entity
+ group by nullableint
+ order by count(*) desc
+limit 10 offset 0
+```
+
+`Limit(int)` задаёт только размер страницы, `Offset(int)` — только число пропускаемых строк; границы
+те же, что и у методов построителя (неотрицательные). `OrderBy(int)`/`OrderByDescending(int)` по-прежнему
+принимают порядковый номер выходной колонки (счёт с 1), поэтому `.Select(it => it.Id).OrderByDescending(1)`
+продолжает работать. Член сортировки, отсутствующий в проекции, отклоняется на этапе подготовки запроса.
 
 ## Упорядочивание NULL
 

@@ -41,7 +41,9 @@ internal static class TypeFacts
         if (call.Method.DeclaringType == typeof(System.Text.RegularExpressions.Regex))
             return call.Method.Name is nameof(System.Text.RegularExpressions.Regex.IsMatch);
 
-        return call.Method.Name is "exists" or "any" or "all" or "Contains"
+        return call.Method.Name is nameof(CommonFunctions.exists) or nameof(CommonFunctions.any)
+            or nameof(CommonFunctions.all) or nameof(CommonFunctions.@in) or nameof(ClickHouseFunctions.global_in)
+            or "Contains"
             or nameof(CommonFunctions.contains) or nameof(CommonFunctions.freetext)
             or nameof(SqlServerFunctions.isjson)
             or nameof(SqlServerFunctions.json_contains) or nameof(SqlServerFunctions.json_path_exists);

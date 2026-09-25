@@ -38,6 +38,8 @@ postgres 150, mysql 31, mariadb 7, clickhouse 47, integration 833/0 failed)
 
 **Обновление 25.09.2026 (uncommitted worktree — ленивый временный источник `AsTempTable`/`TempTableSource<TResult>`/`From(TempTableSource)`/`ToBatchSql`).** Новый публичный тип `TempTableSource<TResult>` (`src/nextorm.core/Builders/TempTableSource.cs:16`, `sealed`, ctor `internal`, 2 публичных свойства `Name`/`Options`; реализует internal `ITempTableSource` `:41`), 2 extension-метода `TempTableExtensions.AsTempTable<TResult>` (`:294` на `QueryCommand<TResult>`, `:311` на `EntityBuilder<TResult>`) и `ToBatchSql<TResult>` (`:329`), overload `DataContextExtensions.From<TResult>(IDataContext, TempTableSource<TResult>)` (`:981`). P0/P1 по **именам** нет. Открыты P2: **TT4** (`ToBatchSql` расходится с `BatchQuery<TResult>.ToSql()`), **TT5** (`AsTempTable` ×2 сохраняют `CreateTableOptions? = null` — расширение Находки 188 / решения 24.09.2026), **TT6** (строка `TempTableExtensions` в api-reference EN+RU не упоминает ленивую форму), **TT7** (трекинг `PublicAPI.*.txt`, Шаг 5). XML-doc 100 %, crefs резолвятся. Замена удалённого continuation-сахара TT2 уточнена: `AsTempTable` + `From(source)` + `ToBatchSql`. Публичные доки EN+RU `guide/22` §«Lazy temporary tables» обновлены.
 
+**Обновление 25.09.2026 (uncommitted worktree — alias производной таблицы и пейджинг/сортировка спроецированного `QueryCommand<T>`).** Добавлены **6** публичных методов `QueryCommand<TResult>` (`src/nextorm.core/Query/QueryCommand.TResult.cs`): `OrderBy(Expression<Func<TResult, object?>>, OrderDirection)`, `OrderBy(Expression<Func<TResult, object?>>)`, `OrderByDescending(Expression<Func<TResult, object?>>)`, `Limit(int)`, `Offset(int)`, `Page(int, int)`; **2** публичных члена интерфейса `IColumnsProvider.FindInScopeQueryCommand(Type)`/`FindInScopeQueryCommand(ParameterExpression, bool)` с default-реализацией (`src/nextorm.core/Query/IColumnsProvider.cs`). Новых публичных **типов** нет → Приложение A без изменений, покрытие методов +8 (арифметически). P0/P1 по **именам** нет (имена зеркалят `EntityBuilder`; `FindInScopeQueryCommand` следует `FindQueryCommand`). Открыт P2 **PA1** (трекинг `PublicAPI.*.txt`, Шаг 5). XML-doc 100 %, build Release `0/0`. Доки EN+RU: `guide/05-sorting-and-paging.md` (§«Ordering and paging a projected command»), `guide/03-joins.md` (§«Joining a subquery», таблица провайдеров), `specs/roadmap/sql-capabilities-gap-analysis.md` §4 п.44/46 → shipped.
+
 **Область:** `src/nextorm.core`, `src/nextorm.postgres`, `src/nextorm.sqlite`, `src/nextorm.sqlserver`, `src/nextorm.mysql`, `src/nextorm.mariadb`, `src/nextorm.clickhouse`, `src/nextorm.core.sourcegenerator`
 **Методика:** скилл `api-design` (Framework Design Guidelines) + `dotnet-xml-docs` (XML-документация). Основание для вывода — XML-комментарий (`<summary>`/`<param>`, если есть) либо тело метода/свойства. Проект в стадии **alpha**: обратная совместимость не поддерживается, имена меняются напрямую.
 
@@ -4814,3 +4816,42 @@ P2-трекинг: `ITupleRenderer` / `ISqlDialect.Tuple` внести в `Publi
 **Проверка (25.09.2026).** `dotnet build nextorm.slnx -c Release` — **0 warnings / 0 errors**; `roslyn members NextORM.Core.CreateTableOptions` — **5** public init-свойств (`DropExisting` `:33`) + internal `Validate(bool)` `:58` / `ValidateCombination()` `:69`; `roslyn members NextORM.Core.CreateTableOptionsBuilder` — **6** public (`:93,106,115,124,135,156`) + 1 internal static (`:175`); `roslyn members NextORM.Core.TempTableExtensions` — **29** public (14 configure); `roslyn members NextORM.Core.BatchBuilder` — **9** public (`CreateTable` `:75`/`:89`, `CreateTempTable` `:102`/`:116`); `rg 'CreateTableAsOptions|TempTableOptions' src/` — **0**; `find -name 'PublicAPI*.txt'` — **0**; подавления `src/` — **11/11** (0 неоправданных), новых в файлах фичи — **0**; `NoWarn` — 0 эффективно; `Skip=`/пустых `catch`/новых `Task.Delay` — 0. Тесты — по отчёту автора зелёные (build `0/0`, tests green); контейнерная интеграция аудитом не перезапускалась.
 
 **Итог.** 🔴 — 0 (по API); P0/P1 по именам — нет; 🟡 P2 — CTAS8 (трекинг Шага 5), CTAS9 (контракт/форма, принято); TT1 в части 8 name-less **superseded**. `TempTableExtensions` **29** public, `CreateTableOptionsBuilder` **6** public, **16** configure-перегрузок. Поверхность uncommitted/alpha, заморозка (Шаг 5, issue #53) открыта.
+
+## Аудит 25.09.2026 — Bulk insert: destination-table override + `KeepIdentity()` на non-identity (uncommitted worktree; P0 — нет, P1 — нет, P2 — BK9/BK10)
+
+**Область.** `BulkInsertOptions` (+`TableName`/`TableSchema` init-свойства), `BulkInsertOptionsBuilder`
+(+`Table(string)`/`Table(string,string)`), internal `BulkInsertCommand.TableSchema`, internal
+`InsertCommand.TableSchema` (trailing optional ctor-параметр), новый internal
+`SqlMutationBuilder.RenderTableReference(...)`, `DataContext.IBulkInsertExecutor.BulkInsert(Async)`
+передаёт нативному хуку уже отрендеренную цель, `PostgresDataContext.BuildCopyCommand` больше не
+квотирует таблицу повторно, `BulkInsertBuilder` вычисляет эффективный `KeepIdentity` по наличию
+identity-колонки в метаданных.
+
+- **`BulkInsertOptions`** — теперь **11** public init-свойств (`TableName`/`TableSchema` добавлены);
+  `Validate()` дополнен проверками пустого table/schema и «schema без table» (`ArgumentException`).
+- **`BulkInsertOptionsBuilder`** — теперь **11** public-методов (`Table(string)`, `Table(string, string)`).
+- Изменён **контракт** (не сигнатура) protected `DataContext.BulkInsertRows(Async)`: `tableName` теперь
+  «уже отрендеренная цель» (schema-qualified, quoted when configured); XML-doc и оба override обновлены.
+
+**Именование — P0/P1 нет.** `Table`/`TableName`/`TableSchema` согласованы с
+`EntityMetadataBuilder<T>.Table(string)` и `[SqlTable]`; BCL-конфликтов нет. `RenderTableReference` —
+internal. CA1068/`Async`-суффикс не затронуты. XML-doc полный (build `0/0`, CS1591 гейтится).
+
+| # | Ур. | Место | Проблема | Рекомендация |
+|---|-----|-------|----------|--------------|
+| BK9 | P2 (трекинг Шага 5) | `PublicAPI.*.txt` — **0** | Новые 2 init-свойства и 2 метода не трекаются (продолжение BK4/CTAS8). | При заморозке внести подписи. |
+| BK10 | P2 (контракт protected API) | `DataContext.cs` `BulkInsertRows`/`BulkInsertRowsAsync` | Семантика `tableName` изменена (unquoted → rendered) без смены сигнатуры; внешний override, рассчитывавший на unquoted имя, заквотирует его дважды. | Не breaking по компиляции; поведение задокументировано в XML-doc. При заморозке зафиксировать в PublicAPI/гайде. |
+
+**Проверка.** `dotnet build nextorm.slnx -c Release` — **0 warnings / 0 errors**. Fast: SQL-gen bulk —
+postgres **10**, sqlserver **8**, sqlite **8**, mysql **5**, mariadb **3**, clickhouse **3**; core **322**.
+Интеграция (`DOCKER_HOST`, фильтр `~Insert`) — **118** passed / **12** skipped (capability-гейты:
+PG/SQLite returning, MySQL/SQL Server ignoreduplicates), провайдеры PostgreSQL, SQL Server, MySQL,
+SQLite; ClickHouse в общий `CommonTestSuite` не входит (by design) и покрыт SQL-generation. EOL — CRLF.
+
+## Аудит 25.09.2026 — captured-local binding + correlated `EXISTS` на `||`/`&&` (uncommitted worktree; публичной поверхности нет; P0/P1/P2 — нет)
+
+**Область.** Workstream 2 merged-изменения: `src/nextorm.core/Parameter.cs` (+`internal CapturedKey`), `Visitors/BaseExpressionVisitor.cs` (+`internal TryAddCapturedParameter`), `Visitors/MemberTranslator.cs` (call-site'ы `TryAddCapturedParameter`), `Visitors/CorrelatedQueryExpressionVisitor.cs` (+private `NormalizePredicateOperand`, ветки `AndAlso`/`OrElse`/`Not`), `Visitors/TypeFacts.cs` (internal), `DataContext/InMemoryCorrelatedSubqueryRewriter.cs`/`InMemoryQueryBuilder.cs`/`InMemoryCorrelatedPlan.cs`.
+
+**P0/P1/P2 по публичному API — нет.** Новых публичных типов/членов workstream **не добавляет**: `Parameter.CapturedKey` — `internal`; `BaseExpressionVisitor.TryAddCapturedParameter`/`QueryProvider` — `internal`; `CorrelatedQueryExpressionVisitor.NormalizePredicateOperand` — `private`; `InMemoryCorrelatedSubqueryRewriter`/`InMemoryQueryBuilder`/`InMemoryCorrelatedPlan`/`TypeFacts` — `internal`; ветки в `CorrelatedQueryExpressionVisitor.VisitBinary`/`VisitUnary` — `protected override` существующих методов. Именование/`Async`-суффикс/CA1068 не затрагиваются. Публичная поверхность двух других workstream — записи выше (PA1) и ниже (BK9/BK10) этой страницы.
+
+**Проверка (25.09.2026).** `dotnet build nextorm.slnx -c Release` — **0 warnings / 0 errors** (CS1591 гейтится, `NoWarn` — 0); `roslyn members NextORM.Core.BulkInsertOptions` — **11** public init-свойств (включая `TableName`/`TableSchema`); `roslyn members NextORM.Core.BulkInsertOptionsBuilder` — **11** public-методов (включая `Table(string)`/`Table(string,string)`); `roslyn members NextORM.Core.IColumnsProvider` — **17** public-членов, из них **2** новых `FindInScopeQueryCommand` (DIM, source/binary-совместимо); `QueryCommand<TResult>` — **6** новых public-методов (`OrderBy`×2, `OrderByDescending`, `Limit`, `Offset`, `Page`). `find -name 'PublicAPI*.txt'` — **0** (Шаг 5/PA1/BK9 открыт).

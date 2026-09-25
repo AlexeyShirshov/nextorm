@@ -1,8 +1,20 @@
 # TODO: `KeepIdentity()` на таблице без identity-колонки (SQL Server error 8106)
 
+> **Статус: реализовано (SHIPPED) в `1.0-b.1`.** `KeepIdentity()` эффективен только когда маппинг
+> объявляет identity-колонку (silent ignore, совместимо с linq2db); `SET IDENTITY_INSERT` /
+> `OVERRIDING SYSTEM VALUE` на не-identity таблицах не эмитятся. Доки: `docs/guide/24-bulk-insert.md`
+> (+RU); gap-analysis §4 п.48.
+
 > Рабочий план (design RFC). Источник: README репозитория примеров `~/sources/linq2db-apps-nextorm`,
 > раздел «Engine gaps surfaced in `nextorm 1.0.5-alpha`», пункт 8. Связано:
 > [`sql-capabilities-gap-analysis.md`](sql-capabilities-gap-analysis.md) §4 п.48.
+
+## Статус верификации (`nextorm 1.0.6-alpha`)
+
+Валиден только на SQL Server (харнесс `Gaps/`: `KeepIdentity() on a table without identity`):
+`SqlException: Table 'gap_nonidentity' does not have the identity property. Cannot perform SET
+operation.` SQLite/PostgreSQL/MySQL тот же вызов переносят. Падающая форма — Bitwarden scenario 1/2
+(`CipherRepository.CreateAsync`, `DefaultBulkCopyOptions` с `KeepIdentity = true`).
 
 ## Пункт и цель
 

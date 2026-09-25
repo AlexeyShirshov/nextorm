@@ -509,6 +509,42 @@ public abstract partial class CommonTestSuite
     }
 
     [Fact]
+    public void ProjectedCommand_OrderByDescendingAndPage_ShouldReturnOrderedPage()
+    {
+        var rows = _sut.ComplexEntity
+            .GroupBy(x => x.Int)
+            .Select(x => new { x.Int, Cnt = SqlFunctions.Sql.count() })
+            .OrderByDescending(x => x.Cnt)
+            .Page(1, 0)
+            .ToList();
+
+        rows.Should().HaveCount(1);
+        rows[0].Cnt.Should().Be(2);
+
+        var second = _sut.ComplexEntity
+            .GroupBy(x => x.Int)
+            .Select(x => new { x.Int, Cnt = SqlFunctions.Sql.count() })
+            .OrderByDescending(x => x.Cnt)
+            .Page(1, 1)
+            .ToList();
+
+        second.Should().HaveCount(1);
+        second[0].Cnt.Should().Be(1);
+    }
+
+    [Fact]
+    public void ProjectedCommand_OrderByAscending_ShouldResolveProjectionMember()
+    {
+        var ids = _sut.SimpleEntity
+            .Select(x => new { x.Id })
+            .OrderBy(x => x.Id)
+            .Limit(3)
+            .ToList();
+
+        ids.Select(x => x.Id).Should().Equal(1, 2, 3);
+    }
+
+    [Fact]
     public void First_ShouldReturnFirst()
     {
         // Given

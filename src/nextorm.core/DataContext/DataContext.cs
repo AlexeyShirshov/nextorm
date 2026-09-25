@@ -473,7 +473,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
             ?? throw new InvalidOperationException("BulkInsert is synchronous but the source is async; use BulkInsertAsync instead.");
 
         return BulkInsertRows(
-            SqlMutationBuilder.ResolveTableName(command.TableName, command.IsTableNameAuto, command.EntityType, NamingConvention),
+            SqlMutationBuilder.RenderTableReference(Dialect, QuoteIdentifiers, command.TableName, command.TableSchema, command.IsTableNameAuto, command.EntityType, NamingConvention),
             ResolveBulkColumnNames(command.Columns),
             command.Columns,
             rows,
@@ -488,7 +488,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         var rows = command.AsyncRows ?? new SyncToAsyncEnumerable<object?[]>(command.SyncRows!);
 
         return await BulkInsertRowsAsync(
-            SqlMutationBuilder.ResolveTableName(command.TableName, command.IsTableNameAuto, command.EntityType, NamingConvention),
+            SqlMutationBuilder.RenderTableReference(Dialect, QuoteIdentifiers, command.TableName, command.TableSchema, command.IsTableNameAuto, command.EntityType, NamingConvention),
             ResolveBulkColumnNames(command.Columns),
             command.Columns,
             rows,
@@ -511,9 +511,10 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
     /// <summary>
     /// Writes <paramref name="rows"/> through the provider's native bulk API. The default throws: a
     /// provider opts in by setting <c>ISqlDialect.SupportsBulkCopy</c> and overriding this method (and
-    /// <see cref="BulkInsertRowsAsync"/>). The names are already convention-resolved and quoted.
+    /// <see cref="BulkInsertRowsAsync"/>). The column names are already convention-resolved (unquoted); the
+    /// table reference is already convention-resolved, schema-qualified and quoted when configured.
     /// </summary>
-    /// <param name="tableName">The convention-resolved (unquoted) target table name.</param>
+    /// <param name="tableName">The rendered target table reference (schema-qualified, quoted when configured).</param>
     /// <param name="columnNames">The convention-resolved (unquoted) written column names, in row order.</param>
     /// <param name="columns">The mapped columns, in row order (for CLR types and identity flags).</param>
     /// <param name="rows">The rows to write; each array matches <paramref name="columnNames"/> by ordinal.</param>
@@ -527,7 +528,7 @@ public abstract class DataContext : IDataContext, IConnectionManager, ITransacti
         => throw new NotSupportedException($"{GetType().Name} declares ISqlDialect.SupportsBulkCopy but does not implement the native bulk path.");
 
     /// <summary>Asynchronously writes <paramref name="rows"/> through the provider's native bulk API.</summary>
-    /// <param name="tableName">The convention-resolved (unquoted) target table name.</param>
+    /// <param name="tableName">The rendered target table reference (schema-qualified, quoted when configured).</param>
     /// <param name="columnNames">The convention-resolved (unquoted) written column names, in row order.</param>
     /// <param name="columns">The mapped columns, in row order (for CLR types and identity flags).</param>
     /// <param name="rows">The rows to write; each array matches <paramref name="columnNames"/> by ordinal.</param>

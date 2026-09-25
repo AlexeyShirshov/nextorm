@@ -70,4 +70,24 @@ public class BulkInsertSqlGenerationTests
 
         sql.Should().Be("insert or ignore into insert_entity (name, age, description) values ($p0, $p1, $p2) returning id");
     }
+
+    [Fact]
+    public void BulkInsert_TableOverrideWithSchema_ShouldQualifyTarget()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var sql = ctx.BulkInsertInto<IInsertEntity>(o => o.Table("staging", "bulk_target")).Values([Row("a", 1, "d")]).ToSql();
+
+        sql.Should().Be("insert into staging.bulk_target (name, age, description) values ($p0, $p1, $p2)");
+    }
+
+    [Fact]
+    public void BulkInsert_KeepIdentity_OnNonIdentityEntity_ShouldIncludeExplicitColumnOnly()
+    {
+        using var ctx = SqliteTestContext.Create();
+
+        var sql = ctx.BulkInsertInto<ISimpleEntity>(o => o.KeepIdentity()).Values([new SimpleEntity { Id = 7 }]).ToSql();
+
+        sql.Should().Be("insert into simple_entity (id) values ($p0)");
+    }
 }

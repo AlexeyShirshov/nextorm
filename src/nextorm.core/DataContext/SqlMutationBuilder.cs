@@ -40,7 +40,7 @@ internal static class SqlMutationBuilder
 
         try
         {
-            var table = ResolveTableName(command.TableName, command.IsTableNameAuto, command.EntityType, namingConvention);
+            var table = RenderTableReference(dialect, quoteIdentifiers, command.TableName, command.TableSchema, command.IsTableNameAuto, command.EntityType, namingConvention);
 
             var ignoreViaPrefix = command.IgnoreConflicts && dialect.SupportsInsertIgnore;
             if (command.IgnoreConflicts && !ignoreViaPrefix && !dialect.SupportsOnConflictDoNothing)
@@ -51,7 +51,7 @@ internal static class SqlMutationBuilder
             var overrideIdentity = command.KeepIdentity ? dialect.MakeOverridingSystemValue(keywordCase) : string.Empty;
 
             writer.Append(ignoreViaPrefix ? dialect.MakeInsertIgnoreInto(keywordCase) : SqlKeywords.Of(keywordCase, "insert into "));
-            AppendIdentifier(writer, dialect, quoteIdentifiers, table);
+            writer.Append(table);
 
             var returningColumns = RenderReturningColumns(dialect, quoteIdentifiers, namingConvention, command);
 
@@ -909,6 +909,39 @@ internal static class SqlMutationBuilder
         => isTableNameAuto && namingConvention is not null
             ? namingConvention.TableName(tableName, entityType.IsInterface)
             : tableName;
+
+    /// <summary>
+    /// Renders a (possibly schema-qualified) target table reference, applying the naming convention to an
+    /// auto-derived name and quoting the name and the schema as separate identifiers. Used by the insert and
+    /// the native bulk-insert paths so an explicit target (<see cref="BulkInsertOptions.TableName"/> /
+    /// <see cref="BulkInsertOptions.TableSchema"/>) is addressed identically everywhere.
+    /// </summary>
+    /// <param name="dialect">The active SQL dialect.</param>
+    /// <param name="quoteIdentifiers">Whether physical identifiers must be quoted.</param>
+    /// <param name="tableName">The table name, before the naming convention and identifier quoting are applied.</param>
+    /// <param name="schema">The schema (or database) that qualifies the table, or <see langword="null"/>.</param>
+    /// <param name="isTableNameAuto">Whether <paramref name="tableName"/> was auto-derived and the naming convention applies.</param>
+    /// <param name="entityType">The entity type whose interface-ness selects the naming convention form.</param>
+    /// <param name="namingConvention">Convention applied to an auto-derived table name, or <see langword="null"/>.</param>
+    /// <returns>The rendered table reference.</returns>
+    internal static string RenderTableReference(
+        ISqlDialect dialect,
+        bool quoteIdentifiers,
+        string tableName,
+        string? schema,
+        bool isTableNameAuto,
+        Type entityType,
+        INamingConvention? namingConvention)
+    {
+        var name = ResolveTableName(tableName, isTableNameAuto, entityType, namingConvention);
+        var renderedName = quoteIdentifiers ? dialect.QuoteIdentifier(name) : name;
+
+        if (string.IsNullOrEmpty(schema))
+            return renderedName;
+
+        var renderedSchema = quoteIdentifiers ? dialect.QuoteIdentifier(schema) : schema;
+        return renderedSchema + "." + renderedName;
+    }
 
     private static IReadOnlyList<string>? RenderReturningColumns(ISqlDialect dialect, bool quoteIdentifiers, INamingConvention? namingConvention, InsertCommand command)
     {

@@ -244,6 +244,26 @@ var all = await dataContext.From<IComplexEntity>().Select(it => new { it.Id, exi
 var none = await dataContext.From<IComplexEntity>().Select(it => new { it.Id, exists = SqlFunctions.Sql.exists(dataContext.From<ISimpleEntity>().Where(it => it.Id == 100)) }).ToListAsync();
 ```
 
+A correlated `exists` (like `@in`, `any` and `all`) is a boolean predicate, so it combines with the
+logical operators `&&`, `||` and `!` and renders as the matching `exists`/`and`/`or`/`not` SQL:
+
+```csharp
+var rows = await dataContext.From<ISimpleEntity>()
+    .Where(s => SqlFunctions.Sql.exists(dataContext.From<IComplexEntity>().Where(c => c.Id == s.Id))
+                || s.Id == 100)
+    .Select(s => s.Id)
+    .ToListAsync();
+```
+
+```sql
+-- SQLite
+select t1.id from simple_entity as 't1'
+where (exists(select * from complex_entity as 't2' where (t2.id = cast(t1.id as bigint))) or (t1.id = 100))
+```
+
+Negating a subquery predicate (`!SqlFunctions.Sql.exists(...)`) renders `not (exists(...))`. The
+in-memory provider evaluates these combinations once per outer row for depth-one correlation.
+
 ## IN with a subquery
 
 `SqlFunctions.Sql.@in(column, query)` emits `IN (SELECT ...)`:

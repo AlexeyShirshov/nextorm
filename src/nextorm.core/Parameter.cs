@@ -26,4 +26,12 @@ public class Parameter(string name, object? value)
     /// stays the same. Internal: this is an engine optimization, not part of the public contract.
     /// </summary>
     internal bool Stable { get; set; }
+
+    /// <summary>
+    /// The captured expression this parameter was produced from (a closure member access), or
+    /// <see langword="null"/> for a parameter that does not bound a captured value. Used to register a
+    /// captured local once per rendered statement, so every occurrence reuses the same placeholder.
+    /// Internal: an engine bookkeeping detail, not part of the public contract.
+    /// </summary>
+    internal ExpressionKey? CapturedKey { get; set; }
 }

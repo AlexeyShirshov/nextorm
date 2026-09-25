@@ -113,7 +113,7 @@ public class SqlServerDataContext : DataContext
     /// <see cref="DataTable"/> because <c>SqlBulkCopy</c> needs column type metadata; the whole set is
     /// held in memory before the copy starts.
     /// </summary>
-    /// <param name="tableName">The convention-resolved (unquoted) target table name.</param>
+    /// <param name="tableName">The rendered target table reference (schema-qualified, quoted when configured).</param>
     /// <param name="columnNames">The convention-resolved (unquoted) written column names, in row order.</param>
     /// <param name="columns">The mapped columns, in row order.</param>
     /// <param name="rows">The rows to write; each array matches <paramref name="columnNames"/> by ordinal.</param>
@@ -152,7 +152,7 @@ public class SqlServerDataContext : DataContext
     }
 
     /// <summary>Asynchronously writes <paramref name="rows"/> through <c>SqlBulkCopy</c>.</summary>
-    /// <param name="tableName">The convention-resolved (unquoted) target table name.</param>
+    /// <param name="tableName">The rendered target table reference (schema-qualified, quoted when configured).</param>
     /// <param name="columnNames">The convention-resolved (unquoted) written column names, in row order.</param>
     /// <param name="columns">The mapped columns, in row order.</param>
     /// <param name="rows">The rows to write; each array matches <paramref name="columnNames"/> by ordinal.</param>

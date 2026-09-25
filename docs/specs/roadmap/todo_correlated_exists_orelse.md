@@ -1,8 +1,19 @@
 # TODO: Коррелированный EXISTS справа от логических операторов (`||`, `&&`)
 
+> **Статус: реализовано (SHIPPED) в `1.0-b.1`.** `x.Any(...) || y.Any(...)`, `A && B.Any(...)`,
+> `!A.Any(...)` транслируются в `EXISTS ... OR EXISTS ...` / `AND` / `NOT EXISTS`; in-memory
+> поддерживает глубину 1. Доки: `docs/guide/06-subqueries.md` (+RU); gap-analysis §4 п.45.
+
 > Рабочий план (design RFC). Источник: README репозитория примеров `~/sources/linq2db-apps-nextorm`,
 > раздел «Engine gaps surfaced in `nextorm 1.0.5-alpha`», пункт 4. Связано:
 > [`sql-capabilities-gap-analysis.md`](sql-capabilities-gap-analysis.md) §4 п.45.
+
+## Статус верификации (`nextorm 1.0.6-alpha`)
+
+Валиден на всех четырёх провайдерах (харнесс `Gaps/`: `correlated EXISTS on the right of ||`):
+подготовка бросает `InvalidOperationException: The binary operator OrElse is not defined for the types
+'System.Boolean' and 'System.Func<2[NextORM.Core.IQueryRegistry,System.Boolean]>'`. Падающая форма —
+nopCommerce query 7 (`AclService.ApplyAcl`).
 
 ## Пункт и цель
 

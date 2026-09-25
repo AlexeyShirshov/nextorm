@@ -279,6 +279,16 @@ internal static class InMemoryCorrelatedEvaluator
 
             return Found ? node : base.VisitLambda(node);
         }
+
+        protected override Expression VisitParameter(ParameterExpression node)
+        {
+            // A subquery combined with a logical operator carries the registry as a free parameter
+            // instead of a lambda; it is still a nested subquery that depth-one evaluation cannot bind.
+            if (node.Type == typeof(IQueryRegistry))
+                Found = true;
+
+            return Found ? node : base.VisitParameter(node);
+        }
     }
 }
 

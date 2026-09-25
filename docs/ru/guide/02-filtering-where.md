@@ -256,6 +256,27 @@ select id from simple_entity where id = $norm_p0
 терминальным методом. См. [Повторное использование запросов: cache и Prepare](15-query-reuse.md)
 для правил времени жизни.
 
+Захваченная локальная переменная регистрируется **один раз на утверждение**, сколько бы раз она ни
+встречалась и в каком бы источнике ни находилась. Переменная, использованная дважды в `WHERE` поверх
+join-проекции, получает один placeholder, а переменная, живущая только внутри присоединённого
+derived-подзапроса, привязывается на окружающей команде:
+
+```csharp
+var v = 5;
+var derived = dataContext.From<ComplexEntity>()
+    .Where(c => c.Int == v)
+    .Select(c => new { c.Id });
+
+var rows = await dataContext.From<SimpleEntity>()
+    .Join(derived, (s, d) => s.Id == d.Id)
+    .Where(p => p.Item1.Id != v || p.Item2.Id != v)   // один параметр `@v`, переиспользуется
+    .Select(p => new { p.Item1.Id })
+    .ToListAsync();
+```
+
+Не нужно заводить отдельную локальную переменную на каждое обращение, чтобы каждая ссылка получила
+собственный параметр.
+
 ## `IN` и `Contains`
 
 `SqlFunctions.Sql.@in` принимает колонку плюс `QueryCommand<T>`, `IEnumerable<T>` или `params T[]`:

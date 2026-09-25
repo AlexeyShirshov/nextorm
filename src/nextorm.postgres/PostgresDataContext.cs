@@ -70,7 +70,7 @@ public class PostgresDataContext : DataContext
     /// Writes <paramref name="rows"/> through <c>COPY &lt;table&gt; (&lt;cols&gt;) FROM STDIN (FORMAT
     /// BINARY)</c> with <c>NpgsqlBinaryImporter</c>, streaming each row without buffering the set.
     /// </summary>
-    /// <param name="tableName">The convention-resolved (unquoted) target table name.</param>
+    /// <param name="tableName">The rendered target table reference (schema-qualified, quoted when configured).</param>
     /// <param name="columnNames">The convention-resolved (unquoted) written column names, in row order.</param>
     /// <param name="columns">The mapped columns, in row order.</param>
     /// <param name="rows">The rows to write; each array matches <paramref name="columnNames"/> by ordinal.</param>
@@ -105,7 +105,7 @@ public class PostgresDataContext : DataContext
     }
 
     /// <summary>Asynchronously writes <paramref name="rows"/> through a binary <c>COPY</c>.</summary>
-    /// <param name="tableName">The convention-resolved (unquoted) target table name.</param>
+    /// <param name="tableName">The rendered target table reference (schema-qualified, quoted when configured).</param>
     /// <param name="columnNames">The convention-resolved (unquoted) written column names, in row order.</param>
     /// <param name="columns">The mapped columns, in row order.</param>
     /// <param name="rows">The rows to write; each array matches <paramref name="columnNames"/> by ordinal.</param>
@@ -149,6 +149,6 @@ public class PostgresDataContext : DataContext
     private string BuildCopyCommand(string tableName, IReadOnlyList<string> columnNames)
     {
         var quotedColumns = string.Join(", ", columnNames.Select(Dialect.QuoteIdentifier));
-        return $"COPY {Dialect.QuoteIdentifier(tableName)} ({quotedColumns}) FROM STDIN (FORMAT BINARY)";
+        return $"COPY {tableName} ({quotedColumns}) FROM STDIN (FORMAT BINARY)";
     }
 }

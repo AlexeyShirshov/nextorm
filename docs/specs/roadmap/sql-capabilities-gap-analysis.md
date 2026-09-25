@@ -261,33 +261,58 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
     `map*` family, `arrayConcat`/`arrayFlatten`/`arrayUniq`/`arrayIntersect`, the `groupBitmap`/`sumMap`
     aggregates, the hash family and `generateULID` are missing from `SqlFunctions.ClickHouse`.
     Todo: [`todo_clickhouse_function_gaps.md`](todo_clickhouse_function_gaps.md).
-43. **Captured-local parameter binding — planned.** A captured local referenced more than once in a
-    `Where` over a join, or living only inside a joined derived subquery, is rendered into the SQL but
-    never registered with the prepared command (`Must add values for the following parameters`); the
-    ports had to give each local a single reference or move the filter to the outer query.
-    Todo: [`todo_captured_local_parameter_binding.md`](todo_captured_local_parameter_binding.md).
-44. **Derived-table alias resolution — planned.** Joining a builder that carries a `Where` renders the
-    primary source as a derived table with renamed columns while the `ON` still references the raw
-    column (`no such column: t1.product_id`); ordering over a derived table built from a projected query
-    emits a non-existent alias (`order by t3.OrderTotal` while the derived table is `t1`). Both share the
-    alias-identity root.
-    Todo: [`todo_derived_table_alias_resolution.md`](todo_derived_table_alias_resolution.md).
-45. **Correlated `EXISTS` on the right of `||` — planned.** Preparation throws
-    `The binary operator OrElse is not defined for the types 'System.Boolean' and 'System.Func<…>'` when
-    a correlated `EXISTS` follows `||`; the port resolves the subquery first and applies `Contains`.
-    Todo: [`todo_correlated_exists_orelse.md`](todo_correlated_exists_orelse.md).
-46. **Paging and expression ordering on a projected `QueryCommand<T>` — planned.** After terminal
-    `Select` there is no `Page`/`Limit`/`Offset` and no expression `OrderByDescending` (only ordinal
-    `OrderBy*`), so grouped + ordered + paged queries must sort/page on the builder before `Select`.
-    Todo: [`todo_projected_query_paging_ordering.md`](todo_projected_query_paging_ordering.md).
-47. **Runtime bulk-insert destination-table override — planned.** The target table is fixed by
-    `[SqlTable]`, so linq2db's `BulkCopyOptions { TableName = "…" }` has no equivalent and a dedicated
-    type mapping the destination is needed.
-    Todo: [`todo_bulk_insert_destination_table.md`](todo_bulk_insert_destination_table.md).
-48. **`KeepIdentity()` on a non-identity table — planned.** On SQL Server `SET IDENTITY_INSERT` fails
-    with error 8106, while linq2db accepts `BulkCopyOptions { KeepIdentity = true }` unconditionally;
-    the semantics (silent ignore vs prepare-time error) must be defined.
-    Todo: [`todo_bulk_insert_keep_identity.md`](todo_bulk_insert_keep_identity.md).
+43. **Captured-local parameter binding (repeated references) — Done (`1.0-b.1`).** A captured local
+    reachable from the final SQL is now registered exactly once — repeated occurrences reuse the same
+    `@pN`, and a local living only inside a joined derived subquery binds too. Previously the command
+    failed (`Must add values for the following parameters`) or declared the same `@pN` twice
+    (MySQL/SQL Server); PostgreSQL passed; verified on SQLite/MySQL/SQL Server. The sibling case (local
+    only inside a joined derived subquery) was fixed in `1.0.6-alpha`. Docs:
+    [Filtering](../../guide/02-filtering-where.md), [Subqueries](../../guide/06-subqueries.md).
+    Plan: [`todo_captured_local_parameter_binding.md`](todo_captured_local_parameter_binding.md).
+44. **Derived-table alias resolution — Done (`1.0-b.1`).** A derived source is now always aliased and its
+    exposed column names are the single source of truth, so
+    `From(projected).OrderByDescending(x => x.Count)` references the real alias; previously it emitted a
+    non-existent column (`no such column: t1.Count`) on SQLite while PostgreSQL/MySQL/SQL Server rendered
+    the same plan correctly. Alias identity is part of the plan key. The sibling case (joining a builder
+    that carries a `Where`) was fixed in `1.0.6-alpha`. Docs: [Joins](../../guide/03-joins.md),
+    [Sorting and paging](../../guide/05-sorting-and-paging.md).
+    Plan: [`todo_derived_table_alias_resolution.md`](todo_derived_table_alias_resolution.md).
+45. **Correlated `EXISTS` on the right of `||` — Done (`1.0-b.1`).** `x.Any(...) || y.Any(...)`,
+    `A && B.Any(...)` and `!A.Any(...)` now translate to `EXISTS ... OR EXISTS ...` / `AND` /
+    `NOT EXISTS`; previously preparation threw `The binary operator OrElse is not defined for the types
+    'System.Boolean' and 'System.Func<…>'`. In-memory supports depth one.
+    Docs: [Subqueries](../../guide/06-subqueries.md).
+    Plan: [`todo_correlated_exists_orelse.md`](todo_correlated_exists_orelse.md).
+46. **Paging and expression ordering on a projected `QueryCommand<T>` — Done (`1.0-b.1`).**
+    `QueryCommand<T>` now exposes expression `OrderBy`/`OrderByDescending` plus `Limit`/`Offset`/`Page`
+    over the already-selected columns, on every SQL provider; grouped + ordered + paged queries no longer
+    have to sort/page on the builder before `Select`.
+    Docs: [Sorting and paging](../../guide/05-sorting-and-paging.md).
+    Plan: [`todo_projected_query_paging_ordering.md`](todo_projected_query_paging_ordering.md).
+47. **Runtime bulk-insert destination-table override — Done (`1.0-b.1`).**
+    `BulkInsertOptions.TableName`/`TableSchema` and `BulkInsertOptionsBuilder.Table(...)` retarget the
+    destination at runtime (native `COPY`/`SqlBulkCopy` and portable `INSERT ... VALUES`); the override is
+    part of the plan key, so a dedicated type mapping the destination is no longer required.
+    Docs: [Bulk insert](../../guide/24-bulk-insert.md).
+    Plan: [`todo_bulk_insert_destination_table.md`](todo_bulk_insert_destination_table.md).
+48. **`KeepIdentity()` on a non-identity table — Done (`1.0-b.1`).** `KeepIdentity()` is effective only
+    when the mapping declares an identity column (silent ignore, matching linq2db); `SET IDENTITY_INSERT`
+    / `OVERRIDING SYSTEM VALUE` is not emitted for a non-identity table, so SQL Server no longer raises
+    error 8106 (previously verified on SQL Server; other providers tolerated the call).
+    Docs: [Bulk insert](../../guide/24-bulk-insert.md).
+    Plan: [`todo_bulk_insert_keep_identity.md`](todo_bulk_insert_keep_identity.md).
+49. **Eager loading of a graph (`LoadWith`/`Include`) — out of scope, tracked.** nextorm has no
+    navigation properties (workstream 13), so linq2db's `LoadWith(x => x.Children)` and EF's `Include`
+    have no equivalent and a graph is loaded one level per query and stitched in memory (verified: the
+    API is absent on every provider). Either a minimal level-one `LoadWith` is added, or the out-of-scope
+    decision is recorded.
+    Todo: [`todo_eager_loading.md`](todo_eager_loading.md).
+50. **Translation of a local collection lookup (`dict[column]`) — planned.** Indexing a closed-over
+    `Dictionary`/list/array by a query column (jube's
+    `y.ScheduleDate > tenants[y.TenantRegistryId.Value]`) is not translated: the collection object is
+    sent as a parameter and every driver fails (verified on all four providers). Either translate the
+    lookup (derived `VALUES`/`CASE`) or fail fast during preparation.
+    Todo: [`todo_dictionary_lookup_translation.md`](todo_dictionary_lookup_translation.md).
 
 ---
 
@@ -296,6 +321,22 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
 > Shipped, closed-by-decision and out-of-scope gaps, kept as a status ledger (not action items). Item
 > numbers are stable IDs carried over from the original list; the live gaps are in
 > [Remaining gaps](#4-remaining-gaps-in-order-of-significance).
+>
+> **Fixed in `nextorm 1.0.6-alpha`** (verified by the `Gaps/` harness in `~/sources/linq2db-apps-nextorm`;
+> the README workarounds were removed and these now run as written):
+>
+> * **§4 п.43, sibling case** — a captured local living only inside a joined derived subquery now binds.
+> * **§4 п.44, sibling case** — joining a builder that carries a `Where` now aliases its `ON` correctly.
+> * **Correlated collection predicate** (OData `Items/any`, a correlated `EXISTS` over a collection
+>   navigation) now translates; the resolve-ids + `Contains` rewrite is gone.
+>
+> **Fixed in `nextorm 1.0-b.1`** (remaining cases of §4 п.43–48; see the linked guide pages):
+>
+> * **§4 п.43** — repeated captured-local references bind once (same `@pN`).
+> * **§4 п.44** — derived sources are always aliased; projected ordering/paging resolves the real alias.
+> * **§4 п.45** — a correlated `EXISTS` combines with `||`/`&&`/`!`.
+> * **§4 п.46** — expression ordering and paging on a projected `QueryCommand<T>`.
+> * **§4 п.47/48** — runtime bulk destination override; `KeepIdentity()` on a non-identity table.
 
 1. **Correlated subqueries — shipped, including the in-memory provider (depth one).** Correlation works
    at any nesting depth for scalar subqueries, aggregate terminals and `EXISTS`/`IN`/`ANY`/`ALL` in

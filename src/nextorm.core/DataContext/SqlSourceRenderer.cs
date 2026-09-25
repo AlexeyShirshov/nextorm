@@ -454,10 +454,7 @@ internal static class SqlSourceRenderer
                 try
                 {
                     sqlBuilder.Append('(').Append(sql).Append(')');
-                    if (needAlias || ctx.Dialect.RequireSubqueryAlias)
-                    {
-                        sqlBuilder.Append(ctx.Dialect.MakeTableAlias(ctx.AliasProvider!.GetNextAlias(from), ctx.KeywordCase));
-                    }
+                    sqlBuilder.Append(ctx.Dialect.MakeTableAlias(ctx.AliasProvider!.GetNextAlias(from), ctx.KeywordCase));
 
                     return sqlBuilder.ToString();
                 }

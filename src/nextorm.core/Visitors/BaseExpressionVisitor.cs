@@ -90,6 +90,32 @@ public class BaseExpressionVisitor : ExpressionVisitor, ICloneable, IDisposable
         => value is TimeSpan duration && DurationUnitContext is { } unit
             ? DurationStorage.ToStorage(duration, unit)
             : value;
+
+    /// <summary>
+    /// Registers a captured local (a closure member access) as a query parameter exactly once per
+    /// rendered statement. A repeat occurrence of the same expression does not append a second
+    /// <see cref="Parameter"/> (which would emit two identically named placeholders and leave one of
+    /// them unbound); the caller still emits the placeholder so every occurrence shares the position.
+    /// </summary>
+    /// <param name="name">The placeholder name the caller emits.</param>
+    /// <param name="value">The evaluated value of the captured local.</param>
+    /// <param name="source">The captured member-access expression.</param>
+    /// <returns><see langword="true"/> when a new parameter was added.</returns>
+    internal bool TryAddCapturedParameter(string name, object? value, Expression source)
+    {
+        var key = new ExpressionKey(source, _queryProvider);
+        for (var i = 0; i < _params.Count; i++)
+        {
+            // The name is part of the identity: a batch renders several statements that share one
+            // parameter list with a per-statement prefix, so the same captured source has to stay a
+            // distinct parameter in each statement.
+            if (_params[i].Name == name && _params[i].CapturedKey is { } existing && existing.Equals(key))
+                return false;
+        }
+
+        _params.Add(new Parameter(name, NormalizeDurationValue(value)) { CapturedKey = key });
+        return true;
+    }
     /// <summary>
     /// True when the built expression is used as a condition (WHERE/HAVING) instead of a value.
     /// </summary>

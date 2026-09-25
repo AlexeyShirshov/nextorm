@@ -90,6 +90,36 @@ public class BulkInsertBuilderTests
     }
 
     [Fact]
+    public void TableOverride_EmptyTable_ShouldThrow()
+    {
+        using var ctx = new InMemoryDataContext();
+
+        var act = () => ctx.BulkInsertInto<BulkEntity>(o => o.Table(string.Empty));
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void TableOverride_SchemaWithoutTable_ShouldThrow()
+    {
+        using var ctx = new InMemoryDataContext();
+
+        var act = () => ctx.BulkInsertInto<BulkEntity>(new BulkInsertOptions { TableSchema = "staging" });
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void TableOverride_TwoArg_EmptySchema_ShouldThrow()
+    {
+        using var ctx = new InMemoryDataContext();
+
+        var act = () => ctx.BulkInsertInto<BulkEntity>(o => o.Table(string.Empty, "bulk_target"));
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
     public void InMemory_ReturningKey_ShouldThrow()
     {
         using var ctx = new InMemoryDataContext();

@@ -94,6 +94,26 @@ public sealed class InsertEntity : IInsertEntity
 
 public sealed record InsertSource(string Name, int Age);
 
+[SqlTable("bulk_destination_stub")]
+public interface IBulkDestinationEntity
+{
+    [Key]
+    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
+    [Column("id")]
+    long Id { get; set; }
+    [Column("name")]
+    string? Name { get; set; }
+    [Column("age")]
+    int Age { get; set; }
+}
+
+public sealed class BulkDestinationEntity : IBulkDestinationEntity
+{
+    public long Id { get; set; }
+    public string? Name { get; set; }
+    public int Age { get; set; }
+}
+
 [SqlTable("merge_entity")]
 public interface IMergeEntity
 {

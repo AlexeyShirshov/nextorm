@@ -1,8 +1,19 @@
 # TODO: Runtime-override целевой таблицы для bulk insert (`BulkCopyOptions.TableName`)
 
+> **Статус: реализовано (SHIPPED) в `1.0-b.1`.** Добавлены `BulkInsertOptions.TableName`/`TableSchema` и
+> `BulkInsertOptionsBuilder.Table(string)` / `Table(string schema, string table)`; override действует на
+> native (`COPY`/`SqlBulkCopy`) и portable (`INSERT ... VALUES`) путях и входит в ключ plan-кэша.
+> Доки: `docs/guide/24-bulk-insert.md` (+RU); gap-analysis §4 п.47.
+
 > Рабочий план (design RFC). Источник: README репозитория примеров `~/sources/linq2db-apps-nextorm`,
 > раздел «Engine gaps surfaced in `nextorm 1.0.5-alpha`», пункт 7. Связано:
 > [`sql-capabilities-gap-analysis.md`](sql-capabilities-gap-analysis.md) §4 п.47.
+
+## Статус верификации (`nextorm 1.0.6-alpha`)
+
+Валиден на всех провайдерах, compile-time (харнесс `Gaps/`: рефлексия по `BulkInsertOptions`): свойства
+`TableName` нет. Падающая форма — Bitwarden scenario 4 (`Util/Seeder/Recipes/CollectionsRecipe`):
+bulk copy в явную destination-таблицу выразить нечем.
 
 ## Пункт и цель
 

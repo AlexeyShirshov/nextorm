@@ -3682,6 +3682,65 @@ public class SqlGenerationTests
     }
 
     [Fact]
+    public void DerivedSource_JoinOnFilteredPrimary_ShouldReferenceExposedColumnName()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var sql = SqlOf(ctx, ctx.From<IComplexEntity>()
+            .Where(c => c.Int > 0)
+            .Join(ctx.From<ISimpleEntity>(), (c, s) => c.Int == (int?)s.Id)
+            .Select(p => new { A = p.Item1.Id, B = p.Item2.Id }));
+
+        sql.Should().Contain("nullableint as \"Int\"");
+        sql.Should().Contain("on t1.\"Int\" = ");
+        sql.Should().NotContain("t1.nullableint");
+    }
+
+    [Fact]
+    public void DerivedSourceAndPhysicalSourceOfSameType_ShouldResolveTheirOwnColumns()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var derived = ctx.From<IComplexEntity>().Where(c => c.Id > 1).ToCommand();
+
+        var sql = SqlOf(ctx, ctx.From(derived)
+            .Join(ctx.From<IComplexEntity>(), (d, c) => d.Int == c.Int)
+            .Select(p => new { A = p.Item1.Id, B = p.Item2.Id }));
+
+        sql.Should().Contain("nullableint as \"Int\"");
+        sql.Should().Contain("on t1.\"Int\" = t2.nullableint");
+    }
+
+    [Fact]
+    public void ProjectedCommand_OrderByDescendingAndPage_ShouldResolveProjectionExpression()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var grouped = ctx.From<IComplexEntity>()
+            .GroupBy(x => x.Int)
+            .Select(x => new { x.Int, Cnt = SqlFunctions.Sql.count() });
+
+        var sql = SqlOf(ctx, grouped.OrderByDescending(x => x.Cnt).Page(20, 1));
+
+        sql.Should().Contain("group by nullableint");
+        sql.Should().Contain("order by count(*) desc");
+        sql.Should().Contain("limit 20 offset 1");
+    }
+
+    [Fact]
+    public void ProjectedCommand_OrderByAndLimit_ShouldResolveSourceColumn()
+    {
+        using var ctx = PostgresTestContext.Create();
+
+        var projected = ctx.From<IComplexEntity>().Select(x => new { x.Id, Name = x.String });
+
+        var sql = SqlOf(ctx, projected.OrderBy(x => x.Name).Limit(5).Offset(2));
+
+        sql.Should().Contain("order by somestring");
+        sql.Should().Contain("limit 5 offset 2");
+    }
+
+    [Fact]
     public void DerivedSourceWhereThenJoin_ShouldPushTheFilterOntoTheProjection()
     {
         using var ctx = PostgresTestContext.Create();

@@ -90,6 +90,26 @@ public interface IColumnsProvider
     (int, QueryCommand?) FindQueryCommand(Type entityType, bool includeNestedSources)
         => FindQueryCommand(entityType);
 
+    /// <summary>
+    /// Returns the alias index and nested command of the source of <paramref name="entityType"/> that
+    /// belongs to the command currently being rendered, or <c>null</c> when that type is not a source
+    /// of the current scope. Unlike <see cref="FindQueryCommand(Type, bool)"/> this never falls back to
+    /// an out-of-scope source, so a derived-table reference is only resolved where the derived source is
+    /// actually in scope.
+    /// </summary>
+    /// <param name="entityType">The source entity type.</param>
+    (int Index, QueryCommand? Command)? FindInScopeQueryCommand(Type entityType) => null;
+
+    /// <summary>
+    /// Returns the alias index and nested command of the in-scope source that
+    /// <paramref name="param"/> resolves to, or <c>null</c> when the parameter does not map to a source
+    /// of the current scope. Unlike <see cref="FindInScopeQueryCommand(Type)"/> this uses the
+    /// parameter's identity, so two same-typed sources in one command are told apart.
+    /// </summary>
+    /// <param name="param">The lambda parameter whose source is resolved.</param>
+    /// <param name="fromProjection">Whether to match projection sources.</param>
+    (int Index, QueryCommand? Command)? FindInScopeQueryCommand(ParameterExpression param, bool fromProjection) => null;
+
     /// <summary>Pops the most recently pushed parameter scope.</summary>
     void PopScope();
     /// <summary>Pushes a parameter scope that disambiguates same-typed sources from the enclosing scope.</summary>

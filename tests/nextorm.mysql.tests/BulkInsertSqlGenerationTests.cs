@@ -50,4 +50,14 @@ public class BulkInsertSqlGenerationTests
 
         act.Should().Throw<NotSupportedException>();
     }
+
+    [Fact]
+    public void BulkInsert_TableOverrideWithSchema_ShouldQualifyTarget()
+    {
+        using var ctx = MySqlTestContext.Create();
+
+        var sql = ctx.BulkInsertInto<IInsertEntity>(o => o.Table("staging", "bulk_target")).Values([Row("a", 1)]).ToSql();
+
+        sql.Should().Be("insert into staging.bulk_target (name, age) values (@p0, @p1)");
+    }
 }

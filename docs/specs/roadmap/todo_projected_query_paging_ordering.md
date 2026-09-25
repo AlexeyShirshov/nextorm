@@ -1,8 +1,20 @@
 # TODO: Пейджинг и expression-сортировка у спроецированного `QueryCommand<T>`
 
+> **Статус: реализовано (SHIPPED) в `1.0-b.1`.** `QueryCommand<T>` получил expression-перегрузки
+> `OrderBy`/`OrderByDescending`, а также `Limit`/`Offset`/`Page` поверх уже выбранных колонок, на всех
+> SQL-провайдерах. Доки: `docs/guide/05-sorting-and-paging.md` (+RU); gap-analysis §4 п.46.
+
 > Рабочий план (design RFC). Источник: README репозитория примеров `~/sources/linq2db-apps-nextorm`,
 > раздел «Engine gaps surfaced in `nextorm 1.0.5-alpha`», пункт 5. Связано:
 > [`sql-capabilities-gap-analysis.md`](sql-capabilities-gap-analysis.md) §4 п.46.
+
+## Статус верификации (`nextorm 1.0.6-alpha`)
+
+Валиден на всех провайдерах, compile-time (харнесс `Gaps/`: рефлексия по `QueryCommand<>`): нет
+`Page`/`Limit`/`Offset`, из `OrderBy*` есть только ordinal-перегрузки `OrderBy(int)`/
+`OrderByDescending(int)` — expression-сортировки нет. Поэтому grouped + ordered + paged запросы
+(nopCommerce query 1/2/3) не компилируются в «естественном» виде и вынуждены сортировать/страничить на
+builder'е до `Select`.
 
 ## Пункт и цель
 

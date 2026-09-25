@@ -25,6 +25,7 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
     private static readonly PropertyInfo ItemPI = typeof(IReadOnlyList<QueryCommand>).GetProperty("Item")!;
     private static readonly PropertyInfo SQLPI = typeof(SqlFunctions).GetProperty(nameof(SqlFunctions.Sql))!;
     private Stack<ParameterExpression>? _outerParams;
+    private ParameterExpression? _registryParameter;
 
     //private ParameterExpression? _p;
 
@@ -617,6 +618,27 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
         }
     }
 
+    /// <summary>
+    /// Converts a boolean subquery placeholder (a lambda over <see cref="IQueryRegistry"/>) into the
+    /// equivalent predicate bound to this visitor's shared registry parameter, so the subquery can be
+    /// combined with logical operators (<c>&amp;&amp;</c>, <c>||</c>, <c>!</c>) instead of failing when
+    /// <c>Expression.MakeBinary</c> sees a <c>Func</c> operand. A
+    /// boolean subquery is the only shape that can appear inside a logical operator, so every other
+    /// expression passes through unchanged.
+    /// </summary>
+    private Expression NormalizePredicateOperand(Expression expression)
+    {
+        if (expression is LambdaExpression { Parameters: [ParameterExpression parameter], ReturnType: var returnType } lambda
+            && parameter.Type == typeof(IQueryRegistry)
+            && returnType == typeof(bool))
+        {
+            _registryParameter ??= Expression.Parameter(typeof(IQueryRegistry));
+            return new ReplaceParameterExpressionVisitor(_registryParameter).Visit(lambda.Body);
+        }
+
+        return expression;
+    }
+
     /// <inheritdoc/>
     protected override Expression VisitLambda<T>(Expression<T> node)
     {
@@ -638,7 +660,10 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
                 _outerParams.Push(exp);
                 try
                 {
-                    return Expression.Lambda(Visit(lambdaExpression.Body), exp);
+                    // A predicate lambda whose whole body is a correlated subquery (`Where(exists(...))`)
+                    // is normalised to a real boolean predicate as well, so the in-memory condition path
+                    // binds the subquery instead of ignoring the condition.
+                    return Expression.Lambda(NormalizePredicateOperand(Visit(lambdaExpression.Body)!), exp);
                 }
                 finally
                 {
@@ -660,6 +685,16 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
             leftNode = Visit(node.Left);
             rightNode = Visit(node.Right);
             return Expression.Call(ConcatMI, leftNode, rightNode);
+        }
+
+        if (node.NodeType is ExpressionType.AndAlso or ExpressionType.OrElse)
+        {
+            // A correlated EXISTS/IN is rewritten to a lambda over the registry, which cannot take
+            // part in a logical operator until it is bound back to a boolean predicate. Normalise both
+            // operands first so `exists(...) || predicate` and `predicate && exists(...)` rebuild.
+            var logicalLeft = NormalizePredicateOperand(Visit(node.Left)!);
+            var logicalRight = NormalizePredicateOperand(Visit(node.Right)!);
+            return Expression.MakeBinary(node.NodeType, logicalLeft, logicalRight);
         }
         // else if (!node.Left.Type.Similar(node.Right.Type))
         // {
@@ -698,6 +733,15 @@ public class CorrelatedQueryExpressionVisitor : ExpressionVisitor
     /// </summary>
     protected override Expression VisitUnary(UnaryExpression node)
     {
+        if (node.NodeType == ExpressionType.Not)
+        {
+            var operand = NormalizePredicateOperand(Visit(node.Operand)!);
+            if (operand.Type == typeof(bool))
+                return Expression.Not(operand);
+
+            return Expression.MakeUnary(node.NodeType, operand, node.Type, node.Method);
+        }
+
         if (node.NodeType == ExpressionType.Convert)
         {
             var r = Visit(node.Operand);

@@ -53,7 +53,7 @@ public partial class QueryCommand
             var limitByColumns = PrepareLimitBy(cmd, cancellationToken);
             var distinctOnColumns = PrepareDistinctOn(cmd, cancellationToken);
             PrepareWindows(cmd, dontCalculateHash);
-            var sortingPlanHash = PrepareSorting(cmd, dontCalculateHash, cancellationToken);
+            var sortingPlanHash = PrepareSorting(cmd, selectList, dontCalculateHash, cancellationToken);
 
             cmd._union?.PrepareCommand(dontCalculateHash, cancellationToken);
             PrepareCtes(cmd, dontCalculateHash, cancellationToken);
@@ -498,7 +498,7 @@ public partial class QueryCommand
             return joinPlanHash;
         }
 
-        private static int PrepareSorting(QueryCommand cmd, bool noHash, CancellationToken cancellationToken)
+        private static int PrepareSorting(QueryCommand cmd, SelectExpression[]? selectList, bool noHash, CancellationToken cancellationToken)
         {
             int sortingPlanHash = 7;
             if (cmd._sorting is not null)
@@ -515,13 +515,14 @@ public partial class QueryCommand
 
                     if (sort.SortExpression is not null)
                     {
-                        sort.PreparedExpression = innerQueryVisitor.Visit(sort.SortExpression);
+                        var sortExpression = RewriteProjectionSort(cmd, selectList, sort.SortExpression);
+                        sort.PreparedExpression = innerQueryVisitor.Visit(sortExpression);
 
                         if (!cmd._dontCache && !noHash) unchecked
-                            {
+                        {
 
-                                sortingPlanHash = sortingPlanHash * 13 + cmd.GetSortingExpressionPlanEqualityComparer().GetHashCodeRef(in sort);
-                            }
+                            sortingPlanHash = sortingPlanHash * 13 + cmd.GetSortingExpressionPlanEqualityComparer().GetHashCodeRef(in sort);
+                        }
                     }
                     else if (sort.ColumnIndex.HasValue)
                     {
@@ -537,6 +538,54 @@ public partial class QueryCommand
             }
 
             return sortingPlanHash;
+        }
+
+        /// <summary>
+        /// Rewrites an <c>ORDER BY</c> expression written over the projected result type into one over
+        /// the source type, so a member of the projection resolves to the expression that produced the
+        /// already-selected column (for example <c>x.Cnt</c> becomes the aggregate call). An expression
+        /// already over the source type is returned unchanged, as is any expression when the command has
+        /// no projection or the projection is not available.
+        /// </summary>
+        private static Expression RewriteProjectionSort(QueryCommand cmd, SelectExpression[]? selectList, Expression sortExpression)
+        {
+            if (cmd._exp is not { Parameters.Count: 1 } projection || selectList is null)
+                return sortExpression;
+
+            if (sortExpression is not LambdaExpression { Parameters.Count: 1 } lambda)
+                return sortExpression;
+
+            var sortParam = lambda.Parameters[0];
+            if (sortParam.Type == projection.Parameters[0].Type)
+                return sortExpression;
+
+            var body = new ProjectionSortRewriter(sortParam, selectList).Visit(lambda.Body);
+            return Expression.Lambda(body, projection.Parameters[0]);
+        }
+
+        /// <summary>
+        /// Replaces a member access on the projected result parameter by the projection expression that
+        /// produces the same column. A member that is not part of the projection is rejected, because it
+        /// cannot be rendered against the source.
+        /// </summary>
+        private sealed class ProjectionSortRewriter(ParameterExpression sortParameter, SelectExpression[] selectList) : ExpressionVisitor
+        {
+            protected override Expression VisitMember(MemberExpression node)
+            {
+                if (ReferenceEquals(node.Expression, sortParameter))
+                {
+                    for (var (i, cnt) = (0, selectList.Length); i < cnt; i++)
+                    {
+                        var item = selectList[i];
+                        if (string.Equals(item.PropertyName, node.Member.Name, StringComparison.Ordinal) && item.Expression is not null)
+                            return item.Expression is LambdaExpression projection ? projection.Body : item.Expression;
+                    }
+
+                    throw new QueryPreparationException($"The ORDER BY member '{node.Member.Name}' is not part of the projection.");
+                }
+
+                return base.VisitMember(node);
+            }
         }
 
         private static int PrepareWhere(QueryCommand cmd, bool noHash, CancellationToken cancellationToken)

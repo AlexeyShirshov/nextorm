@@ -177,6 +177,9 @@ internal static class MemberTranslator
                     var colName = node.Member.GetPropertyColumnName(visitor.Options.NamingConvention);
                     if (!string.IsNullOrEmpty(colName))
                     {
+                        if (TryTranslateDerivedProjectionMember(visitor, node, hasTableAliasForColumn: false))
+                            return node;
+
                         if (!visitor.DontNeedAlias && visitor.ColumnsProvider.HasAliases)
                         {
                             string? tableAliasForColumn = null;
@@ -260,7 +263,7 @@ internal static class MemberTranslator
             }
 
             var parameterName = visitor.Options.ParameterNamePrefix + node.Member.Name;
-            visitor.Params.Add(new Parameter(parameterName, visitor.NormalizeDurationValue(((Func<object>)del)())));
+            visitor.TryAddCapturedParameter(parameterName, ((Func<object>)del)(), node);
 
             if (!visitor.IsParamMode)
                 visitor.Builder!.Append(visitor.Dialect.MakeParam(parameterName));
@@ -368,7 +371,7 @@ internal static class MemberTranslator
                     }
                     // var value = 1;
                     var parameterName = visitor.Options.ParameterNamePrefix + node.Member.Name;
-                    visitor.Params.Add(new Parameter(parameterName, visitor.NormalizeDurationValue(((Func<object?, object>)del)(twoTypeVisitor.Target2!.Value))));
+                    visitor.TryAddCapturedParameter(parameterName, ((Func<object?, object>)del)(twoTypeVisitor.Target2!.Value), node);
 
                     if (!visitor.IsParamMode)
                         visitor.Builder!.Append(visitor.Dialect.MakeParam(parameterName));
@@ -428,7 +431,7 @@ internal static class MemberTranslator
                     var colName = node.Member.GetPropertyColumnName(visitor.Options.NamingConvention);
                     if (!string.IsNullOrEmpty(colName))
                     {
-                        if (TryTranslateDerivedProjectionMember(visitor, node, lambdaParameter, hasTableAliasForColumn))
+                        if (TryTranslateDerivedProjectionMember(visitor, node, hasTableAliasForColumn))
                             return node;
 
                         var collation = lambdaParameter.Type!.IsAssignableTo(typeof(IProjection))
@@ -483,36 +486,52 @@ internal static class MemberTranslator
     }
 
     /// <summary>
-    /// Resolves a member of a join-projection item whose source is a derived table rather than a
-    /// physical table. The whole-entity source of <c>CrossApply</c>/<c>OuterApply</c> is projected as
-    /// <c>somestring as "String"</c>, so a pass-through member must be referenced by the projected
-    /// name, not the physical column name. The lookup is deliberately confined to projection items:
-    /// a plain entity parameter inside a subquery must keep its physical column name.
+    /// Resolves a member of a source whose actual <c>FROM</c> is a derived table rather than a physical
+    /// table. A derived table exposes its projection under the projected (property) names, so a member
+    /// access must reference the exposed name, not the physical column name. The lookup is confined to
+    /// the command currently being rendered: an out-of-scope (already popped) derived source must not
+    /// change how a physical column of the current scope is rendered.
     /// </summary>
     private static bool TryTranslateDerivedProjectionMember(
         BaseExpressionVisitor visitor,
         MemberExpression node,
-        ParameterExpression lambdaParameter,
         bool hasTableAliasForColumn)
     {
-        if (!lambdaParameter.Type!.IsAssignableTo(typeof(IProjection)))
+        var found = node.Expression is ParameterExpression parameter
+            ? visitor.ColumnsProvider.FindInScopeQueryCommand(parameter, fromProjection: false)
+            : visitor.ColumnsProvider.FindInScopeQueryCommand(node.Expression!.Type);
+        if (found is not { Command: { } innerQuery } || innerQuery.SelectList is null)
             return false;
 
-        var (idx, innerQuery) = visitor.ColumnsProvider.FindQueryCommand(node.Expression!.Type, visitor.IncludeNestedSources);
-        var innerCol = innerQuery?.SelectList?.SingleOrDefault(col => col.PropertyName == node.Member.Name);
+        var innerCol = innerQuery.SelectList.SingleOrDefault(col => col.PropertyName == node.Member.Name);
         if (innerCol is null)
             return false;
 
-        var sqlBuilder = new SqlBuilder(visitor.Options with { IncludeNestedSources = true });
-        var col = sqlBuilder.MakeColumn(innerCol, innerQuery!.EntityType!, true, renameAware: true);
+        visitor.ColumnsProvider.PushSourceScope();
+        string column;
+        bool needAliasForColumn;
+        try
+        {
+            var sqlBuilder = new SqlBuilder(visitor.Options with { IncludeNestedSources = true });
+            var col = sqlBuilder.MakeColumn(innerCol, innerQuery.EntityType!, true, renameAware: true);
+            column = col.Column;
+            needAliasForColumn = col.NeedAliasForColumn;
+        }
+        finally
+        {
+            visitor.ColumnsProvider.PopSourceScope();
+        }
 
-        if (!hasTableAliasForColumn)
-            visitor.Builder!.Append(visitor.AliasProvider!.FindAlias(idx)).Append('.');
+        if (!visitor.IsParamMode)
+        {
+            if (!hasTableAliasForColumn && !visitor.DontNeedAlias)
+                visitor.Builder!.Append(visitor.AliasProvider!.FindAlias(found.Value.Index)).Append('.');
 
-        if (col.NeedAliasForColumn)
-            visitor.Builder!.Append(visitor.Dialect.MakeColumnReference(innerCol.PropertyName!));
-        else
-            visitor.Builder!.Append(col.Column);
+            if (needAliasForColumn)
+                visitor.Builder!.Append(visitor.Dialect.MakeColumnReference(innerCol.PropertyName!));
+            else
+                visitor.Builder!.Append(column);
+        }
 
         return true;
     }

@@ -1,36 +1,52 @@
-# TODO: Биндинг captured local в SQL-параметры (повторные ссылки и вложенные подзапросы)
+# TODO: Биндинг captured local в SQL-параметры (повторные ссылки)
+
+> **Статус: реализовано (SHIPPED) в `1.0-b.1`.** Captured local, достижимый из финального SQL,
+> регистрируется ровно один раз — включая повторные вхождения одного local и locals, живущие только
+> внутри joined derived/subquery. Доки: `docs/guide/02-filtering-where.md`, `docs/guide/06-subqueries.md`
+> (+RU); gap-analysis §4 п.43.
 
 > Рабочий план (design RFC). Источник: README репозитория примеров `~/sources/linq2db-apps-nextorm`,
-> раздел «Engine gaps surfaced in `nextorm 1.0.5-alpha`», пункты 1–2. Каждый пункт воспроизводится в
-> портированном запросе. Связано: [`sql-capabilities-gap-analysis.md`](sql-capabilities-gap-analysis.md)
-> §4 п.43.
+> раздел «Engine gaps — verified on `nextorm 1.0.6-alpha`», пункт 1. Связано:
+> [`sql-capabilities-gap-analysis.md`](sql-capabilities-gap-analysis.md) §4 п.43.
+
+## Статус верификации (`nextorm 1.0.6-alpha`)
+
+Воспроизводится харнессом `Gaps/` в `~/sources/linq2db-apps-nextorm` (`dotnet run --project Gaps`).
+
+| Провайдер | Пункт 1 (повторная ссылка) | Пункт 2 (только в joined derived) |
+|---|---|---|
+| SQLite | **падает** (`Must add values for the following parameters: $needle`) | — |
+| PostgreSQL | работает | — |
+| MySQL | **падает** (`Parameter 'needle' has already been defined`) | — |
+| SQL Server | **падает** (`The variable name '@needle' has already been declared`) | — |
+
+- **Пункт 2/проблема B исправлен в 1.0.6-alpha** (captured local внутри join-подзапроса биндится) —
+  отдельная работа не нужна. См. также §5 ledger.
+- Остаётся **проблема A**, и только на SQLite/MySQL/SQL Server; PostgreSQL принимает повторное имя.
 
 ## Пункт и цель
 
-- **Проблема A (пункт 1 README):** captured local, использованный более одного раза в `Where` поверх
-  join-проекции, попадает в SQL несколько раз, но значение не передаётся; команда падает с
-  `Must add values for the following parameters`.
-- **Проблема B (пункт 2 README):** captured local, живущий **только** внутри join-подзапроса
-  (grouped derived subquery), не биндится вообще.
+- **Проблема A:** captured local, использованный более одного раза в `Where` (в т.ч. поверх
+  join-проекции), попадает в SQL несколько раз, но значение не передаётся; команда падает с
+  `Must add values for the following parameters`, либо (MySQL/SQL Server) повторный `@pN` объявляется
+  дважды. На PostgreSQL тот же запрос проходит.
 - **Цель:** любой captured local, достижимый из финального SQL, регистрируется как параметр ровно один
-  раз (при повторе — одна и та же позиция), независимо от того, в каком источнике/подзапросе он
-  встречается.
-- **Критерий приёмки:** SQL-generation тест: один local, использованный ≥2 раз в `Where` поверх
-  `Join`, и local, живущий только в joined derived subquery, дают корректные `@pN`; параметры
-  зарегистрированы; один и тот же SQL на всех SQL-провайдерах; `CommonTestSuite` на контейнерах
-  воспроизводит оригинальные запросы nopCommerce 3/5/6 и WoW 6.
+  раз (при повторе — одна и та же позиция), на всех SQL-провайдерах.
+- **Критерий приёмки:** SQL-generation тест: один local, использованный ≥2 раз в `Where` (в т.ч. поверх
+  `Join`), даёт корректные `@pN`; параметры зарегистрированы; один и тот же SQL на всех SQL-провайдерах;
+  `CommonTestSuite` на контейнерах воспроизводит оригинальные запросы nopCommerce 5/6 и WoW 6.
 
 ## Падающие формы
 
 - nopCommerce query 5 (`OrderService.GetOrderItemsAsync`) и query 6
   (`ProductService.GetCategoryFeaturedProductsAsync`) — фильтры по аргументу, использованному более
-  одного раза поверх join-проекции (проблема A).
+  одного раза поверх join-проекции.
+- jube query 3/5/8 (`ActivationWatcherRepository.GetByDateRangeAscendingAsync`,
+  `ApplicationLogEntryRepository.GetLastAsync`, `UserLogoutRepository.GetLastAsync`) — `.ToLower().Contains`
+  по одному local в нескольких плечах предиката.
 - WoW query 6 (`GetLinesCallingSmartTimedActionList`, `OR` + диапазонные предикаты) — тот же класс.
-- nopCommerce query 3 (`SearchTermService.GetSearchTermsAsync`, grouped derived subquery joined back,
-  order, paging) — проблема B.
 
-Обход в примерах: каждому captured local дают ровно одно обращение; во втором случае опциональный
-фильтр переносят на внешний запрос.
+Обход в примерах: каждому captured local дают ровно одно обращение.
 
 ## Гипотеза и область
 
@@ -38,9 +54,8 @@
   `DataContext/ParamNameCache.cs`, `Query/DefaultParameterProvider.cs`) регистрирует параметр для
   первого узла, а повторное вхождение того же `Expression`/имени не доходит до набора `Parameter`
   либо перетирается при подготовке (`Query/QueryCommand.QueryPreparer.cs`).
-- Для проблемы B visitor, вероятно, не обходит замыкания вложенного `QueryCommand`/derived-источника
-  при join-проекции (`Visitors/CorrelatedQueryExpressionVisitor.cs`, `DataContext/SqlSourceRenderer.cs`).
-- Два случая чинить одним заходом: общий конвейер «выражение → параметр → SQL».
+- Провайдерная разница (только PostgreSQL проходит) указывает на рендер имени параметра: PostgreSQL
+  дедуплицирует по имени, SQLite/MySQL/SQL Server — нет.
 
 ## Файлы к изменению
 
@@ -55,9 +70,8 @@
 
 1. Один параметр на все вхождения одного local (reuse позиции) или отдельная позиция на вхождение —
    что предпочтительнее для план-кэша и драйверов?
-2. Обход `Where` внутри derived-источников — общий механизм для скалярных/`EXISTS`-подзапросов или
-   отдельный путь для grouped derived source?
+2. Почему PostgreSQL уже проходит: полагаться на это нельзя (разные провайдеры должны давать один SQL).
 
 ## Источник
 
-README портов, пункты 1–2; после закрытия — убрать/пометить их в README примеров.
+README портов, пункт 1; после закрытия — убрать/пометить его в README примеров.

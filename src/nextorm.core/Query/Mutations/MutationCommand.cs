@@ -131,7 +131,8 @@ internal sealed class InsertCommand : MutationCommand
     /// <param name="sourceColumns">The target columns written from <paramref name="source"/>, or <see langword="null"/> for a <c>VALUES</c> insert.</param>
     /// <param name="ignoreConflicts">Whether rows that violate a unique constraint should be skipped through the dialect's ignore form.</param>
     /// <param name="keepIdentity">Whether explicit values are written to identity columns.</param>
-    public InsertCommand(Type entityType, string tableName, bool isTableNameAuto, IReadOnlyList<InsertColumn> columns, int rowCount, IPropertyMetadata? identityColumn, IReadOnlyList<IPropertyMetadata>? returningColumns = null, QueryCommand? source = null, IReadOnlyList<IPropertyMetadata>? sourceColumns = null, bool ignoreConflicts = false, bool keepIdentity = false)
+    /// <param name="tableSchema">The schema (or database) that qualifies <paramref name="tableName"/>, or <see langword="null"/>.</param>
+    public InsertCommand(Type entityType, string tableName, bool isTableNameAuto, IReadOnlyList<InsertColumn> columns, int rowCount, IPropertyMetadata? identityColumn, IReadOnlyList<IPropertyMetadata>? returningColumns = null, QueryCommand? source = null, IReadOnlyList<IPropertyMetadata>? sourceColumns = null, bool ignoreConflicts = false, bool keepIdentity = false, string? tableSchema = null)
         : base(SqlStatementType.Insert, entityType)
     {
         TableName = tableName;
@@ -144,12 +145,15 @@ internal sealed class InsertCommand : MutationCommand
         SourceColumns = sourceColumns;
         IgnoreConflicts = ignoreConflicts;
         KeepIdentity = keepIdentity;
+        TableSchema = tableSchema;
     }
 
     /// <summary>The mapped table name, before the naming convention and identifier quoting are applied.</summary>
     public string TableName { get; }
     /// <summary>Whether <see cref="TableName"/> was auto-derived and the naming convention applies to it.</summary>
     public bool IsTableNameAuto { get; }
+    /// <summary>The schema (or database) that qualifies <see cref="TableName"/>, or <see langword="null"/>.</summary>
+    public string? TableSchema { get; }
     /// <summary>The written columns.</summary>
     public IReadOnlyList<InsertColumn> Columns { get; }
     /// <summary>The number of inserted rows.</summary>

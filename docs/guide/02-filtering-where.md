@@ -250,6 +250,27 @@ select id from simple_entity where id = $norm_p0
 Runtime parameters are named `norm_p{index}`; the value `42` is bound to `norm_p0` by the terminal.
 See [Query reuse: cache vs Prepare](15-query-reuse.md) for the lifetime rules.
 
+A captured local is registered **once per statement**, no matter how many times it appears or which
+source it lives in. A local referenced twice in a `WHERE` over a join projection shares a single
+placeholder, and a local that lives only inside a joined derived subquery is bound on the enclosing
+command:
+
+```csharp
+var v = 5;
+var derived = dataContext.From<ComplexEntity>()
+    .Where(c => c.Int == v)
+    .Select(c => new { c.Id });
+
+var rows = await dataContext.From<SimpleEntity>()
+    .Join(derived, (s, d) => s.Id == d.Id)
+    .Where(p => p.Item1.Id != v || p.Item2.Id != v)   // one parameter, `@v`, reused
+    .Select(p => new { p.Item1.Id })
+    .ToListAsync();
+```
+
+There is no need to alias a captured local into several variables to give each reference its own
+parameter.
+
 ## `IN` and `Contains`
 
 `SqlFunctions.Sql.@in` takes a column plus a `QueryCommand<T>`, an `IEnumerable<T>` or a `params T[]`:

@@ -246,6 +246,27 @@ var all = await dataContext.From<IComplexEntity>().Select(it => new { it.Id, exi
 var none = await dataContext.From<IComplexEntity>().Select(it => new { it.Id, exists = SqlFunctions.Sql.exists(dataContext.From<ISimpleEntity>().Where(it => it.Id == 100)) }).ToListAsync();
 ```
 
+Коррелированный `exists` (как и `@in`, `any`, `all`) — это булев предикат, поэтому он свободно
+комбинируется логическими операторами `&&`, `||` и `!` и рендерится в соответствующий SQL
+`exists`/`and`/`or`/`not`:
+
+```csharp
+var rows = await dataContext.From<ISimpleEntity>()
+    .Where(s => SqlFunctions.Sql.exists(dataContext.From<IComplexEntity>().Where(c => c.Id == s.Id))
+                || s.Id == 100)
+    .Select(s => s.Id)
+    .ToListAsync();
+```
+
+```sql
+-- SQLite
+select t1.id from simple_entity as 't1'
+where (exists(select * from complex_entity as 't2' where (t2.id = cast(t1.id as bigint))) or (t1.id = 100))
+```
+
+Отрицание предиката-подзапроса (`!SqlFunctions.Sql.exists(...)`) рендерится как `not (exists(...))`.
+In-memory провайдер вычисляет такие комбинации по одной внешней строке для корреляции глубины один.
+
 ## IN с подзапросом
 
 `SqlFunctions.Sql.@in(column, query)` генерирует `IN (SELECT ...)`:
