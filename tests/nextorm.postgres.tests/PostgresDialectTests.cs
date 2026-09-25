@@ -257,4 +257,50 @@ public class PostgresDialectTests
 
         parameter.NpgsqlDbType.Should().NotBe(NpgsqlDbType.Jsonb);
     }
+
+    [Fact]
+    public void RangeHooks_ShouldUseNativeTypes()
+    {
+        Dialect.SupportsRanges.Should().BeTrue();
+        Dialect.MakeTypeName(typeof(Range<int>)).Should().Be("int4range");
+        Dialect.MakeTypeName(typeof(Range<long>)).Should().Be("int8range");
+        Dialect.MakeTypeName(typeof(Range<decimal>)).Should().Be("numrange");
+        Dialect.MakeTypeName(typeof(Range<DateTime>)).Should().Be("tsrange");
+        Dialect.MakeTypeName(typeof(Range<DateTimeOffset>)).Should().Be("tstzrange");
+        Dialect.MakeTypeName(typeof(Range<DateOnly>)).Should().Be("daterange");
+    }
+
+    [Fact]
+    public void CreateParam_RangeTypes_ShouldBindToNativeRange()
+    {
+        using var ctx = PostgresTestContext.CreatePostgres();
+
+        (object Value, NpgsqlDbType Type)[] cases =
+        [
+            (new Range<int>(1, 10), NpgsqlDbType.IntegerRange),
+            (new Range<long>(1, 10), NpgsqlDbType.BigIntRange),
+            (new Range<decimal>(1, 10), NpgsqlDbType.NumericRange),
+            (new Range<DateTime>(new DateTime(2023, 1, 1), new DateTime(2023, 1, 2)), NpgsqlDbType.TimestampRange),
+            (new Range<DateTimeOffset>(new DateTimeOffset(2023, 1, 1, 0, 0, 0, TimeSpan.Zero), new DateTimeOffset(2023, 1, 2, 0, 0, 0, TimeSpan.Zero)), NpgsqlDbType.TimestampTzRange),
+            (new Range<DateOnly>(new DateOnly(2023, 1, 1), new DateOnly(2023, 1, 2)), NpgsqlDbType.DateRange)
+        ];
+
+        foreach (var (value, type) in cases)
+        {
+            var parameter = (NpgsqlParameter)ctx.CreateParam("p", value);
+
+            parameter.NpgsqlDbType.Should().Be(type);
+        }
+    }
+
+    [Fact]
+    public void CreateParam_EmptyRange_ShouldBindAsEmpty()
+    {
+        using var ctx = PostgresTestContext.CreatePostgres();
+
+        var parameter = (NpgsqlParameter)ctx.CreateParam("p", Range<int>.Empty);
+
+        parameter.NpgsqlDbType.Should().Be(NpgsqlDbType.IntegerRange);
+        ((NpgsqlRange<int>)parameter.Value!).IsEmpty.Should().BeTrue();
+    }
 }

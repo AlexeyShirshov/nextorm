@@ -1,6 +1,23 @@
 # TODO: PostgreSQL range-типы и `Overlaps` (`&&`)
 > Tracking issue: [#66](https://github.com/AlexeyShirshov/nextorm/issues/66).
 
+> **Статус: реализовано (1.0-b.1, 25.09.2026).** Дизайн-ревью ниже разобран полностью:
+> `Range<T>` выражает unbounded/empty через `LowerInfinite`/`UpperInfinite`/`IsEmpty` (+ `default` ==
+> empty); PG-only рендер в `PostgresRangeSqlTranslator` без новых `MakeRange*` в `ISqlDialect`,
+> `SupportsRanges` — DIM `=> false`; read-хук — `PostgresDataContext.MapColumnExpression` с
+> `GetFieldValue<NpgsqlRange<T>>` и явной конвертацией; имена — SQL-токены (`overlaps`,
+> `range_contains`, `range_contained_by`), поверхность static; `PostgresFunctions` запечатан; in-memory
+> поддерживает `overlaps`/`range_contains`/`range_contained_by` + `lower`/`upper`/`isempty`/
+> `lower_inc`/`upper_inc`/`lower_inf`/`upper_inf` (остальные операторы и конструкторы — только SQL);
+> round-trip `Range<T>` ↔ `NpgsqlRange<T>` для int4/int8/num/ts/tstz/date.
+> **Отложено (фаза 2):** in-memory вычисление `range_union`/`range_intersection`/`range_difference`/
+> `range_adjacent`/позиционных операторов и конструкторов; multirange; эмуляция парой колонок на
+> не-PG провайдерах. Документация: `docs/guide/provider-specific/postgresql.md` (+RU),
+> `docs/providers/postgres.md` (+RU), `docs/advanced/api-reference.md` (+RU). Реализация:
+> `src/nextorm.core/Query/Range.cs`, `src/nextorm.core/Query/SqlFunctions.Postgres.cs`,
+> `src/nextorm.core/Visitors/PostgresRangeSqlTranslator.cs`,
+> `src/nextorm.postgres/{PostgresDialect,PostgresDataContext,PostgresRange}.cs`.
+
 > Рабочий план (design RFC). Источник — **G11** из
 > [`linq2db-backlog-gap-analysis.md`](../comparison/linq2db-backlog-gap-analysis.md):
 > `linq2db#4562` (PG `Overlaps`, range `&&`) и shipped `Sql.Row.Overlaps` (6.5.0).
@@ -14,8 +31,9 @@
   intersection `*`, difference `-`, плюс функции (`lower`/`upper`/`isempty`/`lower_inc`/`upper_inc`/
   `lower_inf`/`upper_inf`) и конструкторы.
 - **Критерий приёмки:** `From<T>()` читает range-колонку, `InsertInto`/`Update` пишут range-параметр;
-  `Where(x => x.During.Overlaps(range))` и предикаты containment транслируются в корректный SQL;
-  unbounded/empty и inclusive/exclusive границы сохраняются; in-memory ведёт себя как PG-семантика.
+  `Where(x => SqlFunctions.Postgres.overlaps(x.During, range))` и предикаты containment транслируются
+  в корректный SQL; unbounded/empty и inclusive/exclusive границы сохраняются; in-memory ведёт себя как
+  PG-семантика (для `overlaps`/`range_contains`/`range_contained_by` и функций проверки).
 
 ## 2. Почему это нужно
 
@@ -32,7 +50,7 @@
 |---|---|---|
 | Публичная поверхность | `src/nextorm.core/Query/SqlFunctions.Postgres.cs` | range-функций/типов нет |
 | Диалект | `src/nextorm.postgres/PostgresDialect.cs` | range-хуков нет |
-| Тип-маппинг | `Expressions/SelectExpression.GetDataRecordMethod` | нет ветки для range-типа |
+| Тип-маппинг | `PostgresDataContext.MapColumnExpression` (PG-провайдерский шов) | нет ветки для range-типа; core `SelectExpression.GetDataRecordMethod` не меняется |
 | Зависимости | `nextorm.core.csproj` | Npgsql **не** подключён (только в `nextorm.postgres`) |
 | Моделирование | — | ближайшее — `TemporalKind`/`TemporalClause` (system-time, SQL Server/PG), но это про `FOR SYSTEM_TIME`, не про range-типы |
 
@@ -54,66 +72,83 @@
 | SQLite | — | нет range-типа | sqlite.org |
 | InMemory | — | нет нативного типа; можно моделировать `NextORM.Core.Range<T>` в памяти | — |
 
-**Единообразие:** фича **PG-only**, остальные гейтятся `SupportsRanges => false` с понятным
-`NotSupportedException`. Эмуляция парой колонок на прочих провайдерах — отдельный, более крупный
-workstream, вне этого todo.
+**Единообразие:** поверхность **PG-only**; SQL-провайдеры кроме PostgreSQL гейтятся
+`SupportsRanges => false` с понятным `NotSupportedException`, а **InMemory поддерживает подмножество**
+(`overlaps`/`range_contains`/`range_contained_by` и `lower`/`upper`/`isempty`/`lower_inc`/`upper_inc`/
+`lower_inf`/`upper_inf`) в CLR — поэтому гейт `SupportsRanges` его не отключает. Эмуляция парой колонок
+на прочих провайдерах — отдельный, более крупный workstream, вне этого todo; multirange — фаза 2.
 
 ## 5. Ближайший CLR-аналог и тир
 
 - Ближайший аналог — `NpgsqlRange<T>` (Npgsql), но он недоступен в core.
-- Тир **(b)**: новый provider-agnostic value-type `NextORM.Core.Range<T>` (или не-generic `Range`
-  с `object`-границами) + `PostgresFunctions` методы + PG-диалект-хуки; `[SqlFunction]` не подходит
-  (нужны операторы/границы).
+- Тир **(b)**: новый provider-agnostic value-type `NextORM.Core.Range<T>` (только generic — не-generic
+  `Range` дал бы `CS0104` с `System.Range` и боксинг) + `PostgresFunctions` методы + PG-only рендер в
+  `PostgresRangeSqlTranslator`; `[SqlFunction]` не подходит (нужны операторы/границы).
 
 ## 6. Дизайн и публичный API
 
 ```csharp
-public readonly struct Range<T>
+public readonly struct Range<T> where T : struct, IComparable<T>
 {
-    public Range(T? lower, T? upper, bool lowerInclusive = true, bool upperInclusive = false);
-    public T? Lower { get; }
+    public Range(T lower, T upper);                                                        // [lower, upper)
+    public Range(T lower, T upper, bool lowerInclusive, bool upperInclusive);
+    public Range(T lower, T upper, bool lowerInclusive, bool upperInclusive, bool lowerInfinite, bool upperInfinite);
+    public T? Lower { get; }              // null при unbounded/empty
     public T? Upper { get; }
-    public bool LowerInclusive { get; }
+    public bool LowerInclusive { get; }   // false при unbounded/empty
     public bool UpperInclusive { get; }
+    public bool LowerInfinite { get; }    // default(Range<T>) == Empty
+    public bool UpperInfinite { get; }
     public bool IsEmpty { get; }
     public static Range<T> Empty { get; }
 }
 ```
 
-- `PostgresFunctions`:
-  - `bool Overlaps<T>(Range<T> a, Range<T> b)` → `a && b`;
-  - `bool Contains<T>(Range<T> range, T value)` → `range @> value`;
-  - `bool Contains<T>(Range<T> outer, Range<T> inner)`, `bool ContainedBy<T>(...)` → `@>`/`<@`;
-  - конструкторы `int4range`/`int8range`/`numrange`/`tsrange`/`tstzrange`/`daterange`;
-  - `T? lower<T>(Range<T>)`, `T? upper<T>(Range<T>)`, `bool isempty(Span)` и т.д.
-- Диалект: `SupportsRanges` (default `false`), `MakeRangeConstructor`/`MakeRangeOperator` либо рендер
-  прямо в PG-визиторе (PG-only можно держать в `PostgresFunctions` без общего `Make*`).
-- Тип-маппинг: `nextorm.postgres` конвертирует `Range<T>` ↔ `NpgsqlRange<T>` на параметре и на чтении
-  (новый PG-специфичный read-хук), `int4range`/`tsrange` — по типу `T`.
-- In-memory: сравнение пересечения границ в CLR.
+- `PostgresFunctions` (static-поверхность; имена — SQL-токены в lower_snake, чтобы не конфликтовать с
+  полнотекстовым `contains`): `overlaps`, `range_contains(range, value)` / `range_contains(outer, inner)`,
+  `range_contained_by`, `range_union`/`range_intersection`/`range_difference`, `range_adjacent`,
+  `range_strictly_left_of`/`range_strictly_right_of`, `range_not_extend_right_of`/`range_not_extend_left_of`,
+  `lower`/`upper`/`isempty`/`lower_inc`/`upper_inc`/`lower_inf`/`upper_inf`, конструкторы
+  `int4range`/`int8range`/`numrange`/`tsrange`/`tstzrange`/`daterange` (с перегрузкой `string bounds`),
+  `empty_range<T>()`. Класс `sealed`.
+- Диалект: DIM `ISqlDialect.SupportsRanges => false` (+ `SqlDialectBase` virtual); **никаких**
+  `MakeRangeConstructor`/`MakeRangeOperator` — весь PG-рендер в `PostgresRangeSqlTranslator`.
+- Тип-маппинг: `nextorm.postgres` конвертирует `Range<T>` ↔ `NpgsqlRange<T>` на параметре
+  (`CreateParam`, явный `NpgsqlDbType`) и на чтении (`PostgresDataContext.MapColumnExpression`,
+  `GetFieldValue<NpgsqlRange<T>>` + явная конвертация, без `GetValue`/`Convert`).
+- In-memory: CLR-семантика пересечения/включения/проверок границ (union/intersection/difference,
+  позиционные и смежные операторы, конструкторы — только SQL; `NotSupportedException`).
 
 ## 7. Этапы внедрения
 
-1. `Range<T>` в ядре + `PostgresFunctions.Overlaps`/`Contains` + SQL-gen тесты.
-2. Read/write range-колонки в `nextorm.postgres` (`NpgsqlRange<T>` ↔ `Range<T>`), конструкторы и функции.
-3. Остальные операторы/функции (`<<`/`>>`/`min`/`max`/union/intersection/difference), multirange — при спросе.
+1. ✅ `Range<T>` в ядре + `PostgresFunctions.overlaps`/`range_contains`/`range_contained_by` + SQL-gen тесты.
+2. ✅ Read/write range-колонки в `nextorm.postgres` (`NpgsqlRange<T>` ↔ `Range<T>`), конструкторы, функции
+   и полный набор операторов.
+3. ⏳ Фаза 2: in-memory для union/intersection/difference, позиционных и смежных операторов и
+   конструкторов; multirange; `min`/`max`; эмуляция парой колонок на не-PG провайдерах.
 
 ## 8. План тестов
 
-- SQL-gen (`tests/nextorm.postgres.tests/SqlGenerationTests.cs`): `Overlaps` → `&&`, `@>`/`<@`,
-  конструкторы с `[)`/`[]`/unbounded/empty.
-- Диалект: `PostgresDialectTests` — gate и рендер операторов.
-- Интеграция `PostgresSpecificTests.cs`: round-trip `Range<T>`↔range-колонка; `&&`-фильтр на таблице
+- SQL-gen (`tests/nextorm.postgres.tests/SqlGenerationTests.cs`): `overlaps` → `&&`, `@>`/`<@`,
+  `insert` с range-параметром, конструкторы с `[)`/`[]`/unbounded/empty.
+- Диалект: `PostgresDialectTests` — `SupportsRanges`, `MakeTypeName` для шести типов, `CreateParam`.
+- Gate: `tests/nextorm.sqlite.tests/PostgresRangeRejectionTests.cs` — не-PG SQL-провайдер бросает
+  `NotSupportedException`.
+- Интеграция `PostgresSpecificTests.cs`: round-trip `Range<T>`↔range-колонка; `overlaps`-фильтр на таблице
   резервирований; empty/unbounded/inclusive-границы.
-- In-memory: `Overlaps`/`Contains` в CLR.
+- Core/in-memory: `tests/nextorm.core.tests/RangeTests.cs` (value-семантика) и
+  `InMemoryScalarFunctionsTests` (`overlaps`/`range_contains`/проверки границ в CLR).
 
-## 9. Открытые вопросы
+## 9. Открытые вопросы (решены)
 
-1. `Range<T>` generic в ядре vs PG-only тип в `nextorm.postgres` (и не тянем ли Npgsql в core).
-2. Multirange включать сразу или фаза 2.
-3. Как называть: `Overlaps` (linq2db/`Sql.Row`) vs `Overlapping`/`Intersects`.
-4. Поддержать ли `Contains(value)` и `Contains(range)` перегрузками или разными именами.
-5. Нужна ли эмуляция «пара from/to» на других провайдерах (сейчас — нет).
+1. `Range<T>` — **generic в ядре** (`NextORM.Core`); Npgsql в core не тянется (конвертация — в
+   `nextorm.postgres`).
+2. Multirange — **фаза 2** (в этот инкремент не входит).
+3. Имя — `overlaps` (SQL-токен `&&`); `Overlapping`/`Intersects` отклонены, `Contains` отклонён из-за
+   коллизии с полнотекстовым `contains`. Форма API — **static**.
+4. `range_contains(value)` и `range_contains(Range)` — **перегрузки одного имени**; containment наружу —
+   `range_contained_by`.
+5. Эмуляция «пара from/to» — **по-прежнему нет**; только PG + in-memory-подмножество.
 
 ## 10. Файлы к изменению
 

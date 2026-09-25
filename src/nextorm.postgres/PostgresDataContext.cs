@@ -1,4 +1,7 @@
+using System.Data;
 using System.Data.Common;
+using System.Linq.Expressions;
+using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using NextORM.Core;
@@ -13,6 +16,10 @@ namespace NextORM.Postgres;
 /// </summary>
 public class PostgresDataContext : DataContext
 {
+    private static readonly MethodInfo GetFieldValueMI = typeof(DbDataReader).GetMethod(nameof(DbDataReader.GetFieldValue))!;
+    private static readonly MethodInfo IsDBNullMI = typeof(IDataRecord).GetMethod(nameof(IDataRecord.IsDBNull))!;
+    private static readonly MethodInfo ToRangeMI = typeof(PostgresRange).GetMethod(nameof(PostgresRange.ToRange), BindingFlags.Static | BindingFlags.Public)!;
+
     /// <summary>
     /// Creates a PostgreSQL context that owns a connection built lazily from
     /// <paramref name="connectionString"/>.
@@ -54,16 +61,76 @@ public class PostgresDataContext : DataContext
     /// <returns>A new PostgreSQL parameter.</returns>
     public override DbParameter CreateParam(string name, object? value)
     {
+        // A provider-agnostic Range<T> is bound as the matching Npgsql range type so that the range
+        // operators and columns accept it without a cast.
+        if (value is not null && value.GetType().IsGenericType && value.GetType().GetGenericTypeDefinition() == typeof(Range<>))
+        {
+            var boundType = value.GetType().GetGenericArguments()[0];
+            return new NpgsqlParameter(name, PostgresRange.ToDriver(value)) { NpgsqlDbType = PostgresRangeTypes.DbTypeFor(boundType) };
+        }
+
         // Npgsql rejects a null parameter value, so unset/null values must be passed as DBNull.
         var parameter = new NpgsqlParameter(name, value ?? DBNull.Value);
 
         // A JSON document/element/node is bound as jsonb so that the json/jsonb operators and
-        // functions accept it without an explicit cast. A plain string is left as text and can be
+        // functions accept them without an explicit cast. A plain string is left as text and can be
         // parsed on demand with SqlFunctions.Postgres.json_cast(...).
         if (value is JsonDocument or JsonElement or JsonNode)
             parameter.NpgsqlDbType = NpgsqlDbType.Jsonb;
 
         return parameter;
+    }
+
+    /// <summary>
+    /// Materializes a projected <see cref="Range{T}"/> column from the driver's
+    /// <c>NpgsqlRange&lt;T&gt;</c> through the typed <c>GetFieldValue</c> accessor, converting it to the
+    /// provider-agnostic range. Every other column is mapped by the base implementation.
+    /// </summary>
+    /// <param name="column">The projected column being read.</param>
+    /// <param name="param">The data-reader expression the accessor is built from.</param>
+    /// <returns>An expression that reads the column value.</returns>
+    public override Expression MapColumnExpression(SelectExpression column, Expression param)
+    {
+        var realType = Nullable.GetUnderlyingType(column.PropertyType) ?? column.PropertyType;
+        if (realType.IsGenericType && realType.GetGenericTypeDefinition() == typeof(Range<>))
+            return MapRangeColumn(column, param, realType);
+
+        return base.MapColumnExpression(column, param);
+    }
+
+    private static Expression MapRangeColumn(SelectExpression column, Expression param, Type realType)
+    {
+        var boundType = realType.GetGenericArguments()[0];
+        var driverType = typeof(NpgsqlRange<>).MakeGenericType(boundType);
+        var index = Expression.Constant(column.Index);
+
+        var getter = Expression.Call(
+            Expression.Convert(param, typeof(NpgsqlDataReader)),
+            GetFieldValueMI.MakeGenericMethod(driverType),
+            index);
+        var converted = Expression.Call(ToRangeMI.MakeGenericMethod(boundType), getter);
+
+        if (column.Nullable)
+        {
+            Expression value = converted.Type == column.PropertyType
+                ? converted
+                : Expression.Convert(converted, column.PropertyType);
+
+            return Expression.Condition(
+                Expression.Call(param, IsDBNullMI, index),
+                Expression.Constant(null, column.PropertyType),
+                value);
+        }
+
+        if (column.DefaultOnNull)
+        {
+            return Expression.Condition(
+                Expression.Call(param, IsDBNullMI, index),
+                Expression.Default(column.PropertyType),
+                converted);
+        }
+
+        return converted;
     }
 
     /// <summary>

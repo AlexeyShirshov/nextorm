@@ -217,6 +217,108 @@ internal static class InMemoryScalarFunctions
     /// <summary>SQLite <c>tanh(X)</c>.</summary>
     internal static double? Tanh(double? x) => x is null ? null : Math.Tanh(x.Value);
 
+    /// <summary><c>isempty(range)</c>.</summary>
+    internal static bool RangeIsEmpty<T>(Range<T> range) where T : struct, IComparable<T> => range.IsEmpty;
+
+    /// <summary><c>lower(range)</c>: the lower bound, or null when unbounded.</summary>
+    internal static T? RangeLower<T>(Range<T> range) where T : struct, IComparable<T>
+        => range.LowerInfinite ? null : range.Lower;
+
+    /// <summary><c>upper(range)</c>: the upper bound, or null when unbounded.</summary>
+    internal static T? RangeUpper<T>(Range<T> range) where T : struct, IComparable<T>
+        => range.UpperInfinite ? null : range.Upper;
+
+    /// <summary><c>lower_inc(range)</c>.</summary>
+    internal static bool RangeLowerInc<T>(Range<T> range) where T : struct, IComparable<T> => range.LowerInclusive;
+
+    /// <summary><c>upper_inc(range)</c>.</summary>
+    internal static bool RangeUpperInc<T>(Range<T> range) where T : struct, IComparable<T> => range.UpperInclusive;
+
+    /// <summary><c>lower_inf(range)</c>.</summary>
+    internal static bool RangeLowerInf<T>(Range<T> range) where T : struct, IComparable<T> => range.LowerInfinite;
+
+    /// <summary><c>upper_inf(range)</c>.</summary>
+    internal static bool RangeUpperInf<T>(Range<T> range) where T : struct, IComparable<T> => range.UpperInfinite;
+
+    /// <summary><c>range @&gt; value</c>.</summary>
+    internal static bool RangeContainsValue<T>(Range<T> range, T value) where T : struct, IComparable<T>
+    {
+        if (range.IsEmpty)
+            return false;
+
+        if (!range.LowerInfinite)
+        {
+            var lower = Comparer<T>.Default.Compare(value, range.Lower!.Value);
+            if (lower < 0 || (lower == 0 && !range.LowerInclusive))
+                return false;
+        }
+
+        if (!range.UpperInfinite)
+        {
+            var upper = Comparer<T>.Default.Compare(value, range.Upper!.Value);
+            if (upper > 0 || (upper == 0 && !range.UpperInclusive))
+                return false;
+        }
+
+        return true;
+    }
+
+    /// <summary><c>a &amp;&amp; b</c>: whether the ranges share at least one point.</summary>
+    internal static bool RangeOverlaps<T>(Range<T> a, Range<T> b) where T : struct, IComparable<T>
+    {
+        if (a.IsEmpty || b.IsEmpty)
+            return false;
+
+        if (!a.UpperInfinite && !b.LowerInfinite)
+        {
+            var upperLower = Comparer<T>.Default.Compare(a.Upper!.Value, b.Lower!.Value);
+            if (upperLower < 0 || (upperLower == 0 && !(a.UpperInclusive && b.LowerInclusive)))
+                return false;
+        }
+
+        if (!b.UpperInfinite && !a.LowerInfinite)
+        {
+            var upperLower = Comparer<T>.Default.Compare(b.Upper!.Value, a.Lower!.Value);
+            if (upperLower < 0 || (upperLower == 0 && !(b.UpperInclusive && a.LowerInclusive)))
+                return false;
+        }
+
+        return true;
+    }
+
+    /// <summary><c>outer @&gt; inner</c>: whether <paramref name="outer"/> contains every point of <paramref name="inner"/>.</summary>
+    internal static bool RangeContainsRange<T>(Range<T> outer, Range<T> inner) where T : struct, IComparable<T>
+    {
+        if (inner.IsEmpty)
+            return true;
+
+        if (outer.IsEmpty)
+            return false;
+
+        if ((inner.LowerInfinite && !outer.LowerInfinite) || (inner.UpperInfinite && !outer.UpperInfinite))
+            return false;
+
+        if (!inner.LowerInfinite && !outer.LowerInfinite)
+        {
+            var lower = Comparer<T>.Default.Compare(outer.Lower!.Value, inner.Lower!.Value);
+            if (lower > 0 || (lower == 0 && !outer.LowerInclusive && inner.LowerInclusive))
+                return false;
+        }
+
+        if (!inner.UpperInfinite && !outer.UpperInfinite)
+        {
+            var upper = Comparer<T>.Default.Compare(outer.Upper!.Value, inner.Upper!.Value);
+            if (upper < 0 || (upper == 0 && !outer.UpperInclusive && inner.UpperInclusive))
+                return false;
+        }
+
+        return true;
+    }
+
+    /// <summary><c>inner &lt;@ outer</c>.</summary>
+    internal static bool RangeContainedBy<T>(Range<T> inner, Range<T> outer) where T : struct, IComparable<T>
+        => RangeContainsRange(outer, inner);
+
     private static string? Pad(string? value, int length, string? pad, bool left)
     {
         if (value is null || pad is null)

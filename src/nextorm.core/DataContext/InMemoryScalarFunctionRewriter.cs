@@ -54,6 +54,31 @@ internal sealed class InMemoryScalarFunctionRewriter : ExpressionVisitor
         ["tanh"] = Helper(nameof(InMemoryScalarFunctions.Tanh))
     };
 
+    private static readonly Dictionary<string, MethodInfo> PostgresRangeHelpers = new(StringComparer.Ordinal)
+    {
+        [nameof(PostgresFunctions.overlaps)] = Helper(nameof(InMemoryScalarFunctions.RangeOverlaps)),
+        [nameof(PostgresFunctions.range_contained_by)] = Helper(nameof(InMemoryScalarFunctions.RangeContainedBy)),
+        [nameof(PostgresFunctions.isempty)] = Helper(nameof(InMemoryScalarFunctions.RangeIsEmpty)),
+        [nameof(PostgresFunctions.lower)] = Helper(nameof(InMemoryScalarFunctions.RangeLower)),
+        [nameof(PostgresFunctions.upper)] = Helper(nameof(InMemoryScalarFunctions.RangeUpper)),
+        [nameof(PostgresFunctions.lower_inc)] = Helper(nameof(InMemoryScalarFunctions.RangeLowerInc)),
+        [nameof(PostgresFunctions.upper_inc)] = Helper(nameof(InMemoryScalarFunctions.RangeUpperInc)),
+        [nameof(PostgresFunctions.lower_inf)] = Helper(nameof(InMemoryScalarFunctions.RangeLowerInf)),
+        [nameof(PostgresFunctions.upper_inf)] = Helper(nameof(InMemoryScalarFunctions.RangeUpperInf))
+    };
+
+    private static readonly HashSet<string> UnsupportedPostgresRangeFunctions = new(StringComparer.Ordinal)
+    {
+        nameof(PostgresFunctions.range_union), nameof(PostgresFunctions.range_intersection),
+        nameof(PostgresFunctions.range_difference), nameof(PostgresFunctions.range_adjacent),
+        nameof(PostgresFunctions.range_strictly_left_of), nameof(PostgresFunctions.range_strictly_right_of),
+        nameof(PostgresFunctions.range_not_extend_right_of), nameof(PostgresFunctions.range_not_extend_left_of),
+        nameof(PostgresFunctions.empty_range),
+        nameof(PostgresFunctions.int4range), nameof(PostgresFunctions.int8range),
+        nameof(PostgresFunctions.numrange), nameof(PostgresFunctions.tsrange),
+        nameof(PostgresFunctions.tstzrange), nameof(PostgresFunctions.daterange)
+    };
+
     internal static Expression Rewrite(Expression expression) => new InMemoryScalarFunctionRewriter().Visit(expression)!;
 
     protected override Expression VisitMethodCall(MethodCallExpression node)
@@ -87,12 +112,35 @@ internal sealed class InMemoryScalarFunctionRewriter : ExpressionVisitor
             if (SqliteHelpers.TryGetValue(node.Method.Name, out var sqliteHelper))
                 return Call(sqliteHelper, node);
         }
+        else if (node.Method.DeclaringType == typeof(PostgresFunctions))
+        {
+            if (node.Method.Name == nameof(PostgresFunctions.range_contains))
+                return CallRangeContains(node);
+
+            if (PostgresRangeHelpers.TryGetValue(node.Method.Name, out var rangeHelper))
+                return Call(rangeHelper, node);
+
+            if (UnsupportedPostgresRangeFunctions.Contains(node.Method.Name))
+                throw new NotSupportedException(
+                    $"The {node.Method.Name} range function is not supported by the in-memory provider; only overlaps, range_contains/range_contained_by and the range inspection functions are.");
+        }
 
         return base.VisitMethodCall(node);
     }
 
+    private Expression CallRangeContains(MethodCallExpression node)
+    {
+        var secondParameter = node.Method.GetParameters()[1].ParameterType;
+        var isRange = secondParameter.IsGenericType && secondParameter.GetGenericTypeDefinition() == typeof(Range<>);
+        var helper = Helper(isRange ? nameof(InMemoryScalarFunctions.RangeContainsRange) : nameof(InMemoryScalarFunctions.RangeContainsValue));
+        return Call(helper, node);
+    }
+
     private Expression Call(MethodInfo helper, MethodCallExpression node)
     {
+        if (helper.IsGenericMethodDefinition)
+            helper = helper.MakeGenericMethod(node.Method.GetGenericArguments());
+
         var parameters = helper.GetParameters();
         var arguments = new Expression[node.Arguments.Count];
         for (var (i, cnt) = (0, node.Arguments.Count); i < cnt; i++)
