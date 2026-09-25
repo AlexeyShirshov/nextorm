@@ -378,8 +378,18 @@ public sealed class ClickHouseDialect : SqlDialectBase
     /// <c>clusterAllReplicas</c>.
     /// </summary>
     public override bool SupportsTableFunction(string name) =>
-        name is "numbers" or "numbers_mt" or "zeros" or "zeros_mt" or "generateRandom"
+        name is "numbers" or "numbers_mt" or "zeros" or "zeros_mt" or "generateRandom" or "values"
             or "url" or "s3" or "file" or "remote" or "remoteSecure" or "cluster" or "clusterAllReplicas";
+
+    /// <summary>ClickHouse renders the row-derived structure as the leading argument of <c>values</c>.</summary>
+    public override bool SupportsResultSchema(TableFunctionSchema placement) => placement == TableFunctionSchema.LeadingArgument;
+
+    /// <summary>ClickHouse's types are not nullable by default, so a <c>Nullable&lt;T&gt;</c> result column is wrapped in <c>Nullable(...)</c>.</summary>
+    public override string MakeResultColumnType(Type clrType, bool nullable)
+    {
+        var underlying = Nullable.GetUnderlyingType(clrType);
+        return underlying is not null ? $"Nullable({MakeTypeName(underlying)})" : MakeTypeName(clrType);
+    }
 
     // The fixed structure the built-in generate_random()/generate_random(seed) map to
     // (ClickHouse's own no-argument generateRandom has a dynamic, random schema).

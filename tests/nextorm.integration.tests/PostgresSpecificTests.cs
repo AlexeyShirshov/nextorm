@@ -233,6 +233,33 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
     }
 
     [Fact]
+    public void JsonbToRecord_WithDeclaredSchema_ShouldReturnRow()
+    {
+        using var json = JsonDocument.Parse("""{"a":1,"b":"x"}""");
+
+        var row = _sut.DataProvider
+            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_to_record<IDynamicRecordRow>(json))
+            .Select(r => new { r.A, r.B })
+            .First();
+
+        (row.A, row.B).Should().Be((1, "x"));
+    }
+
+    [Fact]
+    public void JsonbToRecordset_WithDeclaredSchema_ShouldReturnRows()
+    {
+        using var json = JsonDocument.Parse("""[{"a":1,"b":"x"},{"a":2,"b":"y"}]""");
+
+        var rows = _sut.DataProvider
+            .FromTableFunction(() => SqlFunctions.Postgres.jsonb_to_recordset<IDynamicRecordRow>(json))
+            .OrderBy(r => r.A)
+            .Select(r => new { r.A, r.B })
+            .ToList();
+
+        rows.Select(r => (r.A, r.B)).Should().Equal((1, "x"), (2, "y"));
+    }
+
+    [Fact]
     public void JsonbObjectKeys_ShouldReturnKeys()
     {
         using var json = JsonDocument.Parse("""{"a":1,"b":2}""");
@@ -893,6 +920,91 @@ public sealed class PostgresSpecificTests : ProviderTestSuite
         {
             Execute(ctx, "drop table if exists collation_probe");
         }
+    }
+
+    [SqlTable("pg_range_entity")]
+    internal interface IPgRangeEntity
+    {
+        [Key]
+        [Column("id")]
+        int Id { get; set; }
+        [Column("during")]
+        Range<int> During { get; set; }
+    }
+
+    [Fact]
+    public void Range_RoundTripAndOverlaps_ShouldPreserveBounds()
+    {
+        var ctx = _sut.DataProvider;
+        Execute(ctx, "drop table if exists pg_range_entity");
+        Execute(ctx, "create table pg_range_entity (id integer primary key, during int4range)");
+
+        try
+        {
+            ctx.InsertInto<IPgRangeEntity>()
+                .Value(x => x.Id, 1)
+                .Value(x => x.During, new Range<int>(10, 20))
+                .Insert();
+            ctx.InsertInto<IPgRangeEntity>()
+                .Value(x => x.Id, 2)
+                .Value(x => x.During, Range<int>.Empty)
+                .Insert();
+            ctx.InsertInto<IPgRangeEntity>()
+                .Value(x => x.Id, 3)
+                .Value(x => x.During, new Range<int>(0, 15, lowerInclusive: true, upperInclusive: false, lowerInfinite: true, upperInfinite: false))
+                .Insert();
+
+            var rows = ctx.From<IPgRangeEntity>().OrderBy(x => x.Id).Select(x => new { x.Id, x.During }).ToList();
+
+            rows.Should().HaveCount(3);
+            rows[0].During.Should().Be(new Range<int>(10, 20));
+            rows[1].During.IsEmpty.Should().BeTrue();
+            rows[2].During.LowerInfinite.Should().BeTrue();
+            rows[2].During.Upper.Should().Be(15);
+            rows[2].During.UpperInclusive.Should().BeFalse();
+
+            var emptyInspection = ctx.From<IPgRangeEntity>()
+                .Where(x => x.Id == 2)
+                .Select(x => new
+                {
+                    E = SqlFunctions.Postgres.isempty(x.During),
+                    Lf = SqlFunctions.Postgres.lower_inf(x.During),
+                    Uf = SqlFunctions.Postgres.upper_inf(x.During)
+                })
+                .ToList();
+
+            emptyInspection.Should().ContainSingle();
+            emptyInspection[0].E.Should().BeTrue();
+            emptyInspection[0].Lf.Should().BeFalse();
+            emptyInspection[0].Uf.Should().BeFalse();
+
+            var window = new Range<int>(15, 25);
+            var overlapping = ctx.From<IPgRangeEntity>()
+                .Where(x => SqlFunctions.Postgres.overlaps(x.During, window))
+                .Select(x => x.Id)
+                .ToList();
+
+            overlapping.Should().BeEquivalentTo(new[] { rows[0].Id });
+
+            var containing35 = ctx.From<IPgRangeEntity>()
+                .Where(x => SqlFunctions.Postgres.range_contains(x.During, 35))
+                .Select(x => x.Id)
+                .ToList();
+
+            containing35.Should().BeEmpty();
+        }
+        finally
+        {
+            Execute(ctx, "drop table if exists pg_range_entity");
+        }
+    }
+
+    public interface IDynamicRecordRow
+    {
+        [Column("a")]
+        int A { get; set; }
+        [Column("b")]
+        string? B { get; set; }
     }
 
     private static void Execute(IDataContext ctx, string sql)

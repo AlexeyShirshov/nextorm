@@ -20,6 +20,9 @@ public sealed class SqlTableFunctionAttribute : Attribute
     public string? Name { get; set; }       // defaults to the CLR method name
     public string? Schema { get; set; }     // optional schema/owner prefix
     public string? WithClause { get; set; } // optional trailing WITH (...) body
+    public string? CallClause { get; set; } // optional verbatim SQL inside the call parentheses
+    public int[]? VerbatimArguments { get; set; } // argument indices emitted as raw identifiers
+    public TableFunctionSchema ResultSchema { get; set; } // render the row type's schema (None by default)
 }
 ```
 
@@ -213,6 +216,7 @@ PostgreSQL также предоставляет наборные функции
 | `jsonb_object_keys(json)` | `jsonb_object_keys` | `IJsonObjectKeysRow` (`.Key`) |
 | `jsonb_path_query(json, jsonpath)` | `jsonb_path_query` | `IJsonPathQueryRow` (`.Value`) |
 | `ts_stat(query)` | `word`, `ndoc`, `nentry` | `ITsStatRow` (`.Word`, `.Ndoc`, `.Nentry`) |
+| `jsonb_to_record(json)` / `jsonb_to_recordset(json)` | объявляется через `TRow` | `TRow` (см. [Динамическая схема результата](#dynamic-result-schema)) |
 
 ```csharp
 var json = JsonDocument.Parse("""{"a":1,"b":2}""");
@@ -426,6 +430,7 @@ limit 3
 | `remote_secure<TRow>(addresses, database, table)` | `remoteSecure(addresses, database, table)` |
 | `cluster<TRow>(cluster, database, table)` | `cluster(cluster, database, table)` |
 | `cluster_all_replicas<TRow>(cluster, database, table)` | `clusterAllReplicas(cluster, database, table)` |
+| `values<TRow>(tuples)` | `values('<структура из TRow>', tuples...)` |
 
 ```csharp
 public interface IHitsRow
@@ -460,11 +465,87 @@ select id as `Id`, name as `Name` from url(@url, @format, @structure) as `t1`
 поэтому используйте хелпер только на провайдере, где она определена. Встроенные хелперы гейтятся
 [`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect.SupportsTableFunction(System.String)): PostgreSQL разрешает `generate_series`, `unnest`,
 `regexp_matches`, `regexp_split_to_table`, `jsonb_array_elements(_text)`, `jsonb_each(_text)`,
-`jsonb_object_keys`, `jsonb_path_query` и `ts_stat`; SQL Server —
-`string_split`/`openjson`, ClickHouse — `numbers`/`numbers_mt`, `zeros`/`zeros_mt`, `generateRandom` и
-серверные/кластерные `url`/`s3`/`file`/`remote`/`remoteSecure`/`cluster`/`clusterAllReplicas`, а любой
-другой провайдер отклоняет их с `NotSupportedException` (пользовательская `[SqlTableFunction]` не
-гейтится).
+`jsonb_object_keys`, `jsonb_path_query`, `ts_stat` и record-функции
+`jsonb_to_record`/`jsonb_to_recordset`; SQL Server — `string_split`/`openjson`, ClickHouse —
+`numbers`/`numbers_mt`, `zeros`/`zeros_mt`, `generateRandom`, `values` и серверные/кластерные
+`url`/`s3`/`file`/`remote`/`remoteSecure`/`cluster`/`clusterAllReplicas`, а любой другой провайдер
+отклоняет их с `NotSupportedException` (пользовательская `[SqlTableFunction]` не гейтится, но
+объявленная вызывающим `ResultSchema` гейтится через
+[`SupportsResultSchema(TableFunctionSchema)`](xref:NextORM.Core.ISqlDialect.SupportsResultSchema(NextORM.Core.TableFunctionSchema))).
+
+## Динамическая схема результата <a name="dynamic-result-schema"></a>
+
+Некоторые табличные функции не объявляют выходные колонки в самом вызове — схему задаёт вызывающий.
+Объявите её один раз на mapped-типе строки (это `T` в `IQueryable<T>` возвращаемого типа
+placeholder-метода) и установите [`ResultSchema`](xref:NextORM.Core.SqlTableFunctionAttribute.ResultSchema)
+у `[SqlTableFunction]`: nextorm отрендерит соответствующую нативную форму из `[Column]`-метаданных и
+CLR-типов свойств этого типа. Строки по-прежнему материализуются в тот же `[Column]`-DTO, что и у любой
+другой табличной функции — отдельного динамического ридера нет, — а объявленная схема входит в ключ
+плана, поэтому две разные формы строк никогда не разделят кэшированный план.
+
+[`TableFunctionSchema`](xref:NextORM.Core.TableFunctionSchema) выбирает, куда рендерится схема:
+
+| `ResultSchema` | Форма | Провайдер |
+|---|---|---|
+| `LeadingArgument` | строка структуры в кавычках первым аргументом: `values('a UInt8, b String', (1,'x'))` | ClickHouse |
+| `AliasColumnList` | список определений колонок в псевдониме: `jsonb_to_record(@json) as "t1"(a integer, b text)` | PostgreSQL |
+
+ClickHouse `values` читает литеральную таблицу из списка кортежей:
+
+```csharp
+public interface IPairRow
+{
+    [Column("a")]
+    byte A { get; set; }
+    [Column("b")]
+    string? B { get; set; }
+}
+
+var rows = dataContext
+    .FromTableFunction(() => SqlFunctions.ClickHouse.values<IPairRow>("(1, 'x'), (2, 'y')"))
+    .Select(r => new { r.A, r.B })
+    .ToList();
+```
+
+```sql
+select a, b from values('a UInt8, b String', (1, 'x'), (2, 'y')) as `t1`
+```
+
+Аргумент `tuples` передаётся verbatim (см. `VerbatimArguments`), поэтому это SQL, написанный
+разработчиком, — никогда не собирайте его из пользовательского ввода.
+
+PostgreSQL-функции `jsonb_to_record`/`jsonb_to_recordset` разворачивают JSON-объект/массив в запись,
+колонки которой объявляет `TRow`:
+
+```csharp
+public interface IPairRow
+{
+    [Column("a")]
+    int A { get; set; }
+    [Column("b")]
+    string? B { get; set; }
+}
+
+using var json = JsonDocument.Parse("""[{"a":1,"b":"x"},{"a":2,"b":"y"}]""");
+
+var rows = dataContext
+    .FromTableFunction(() => SqlFunctions.Postgres.jsonb_to_recordset<IPairRow>(json))
+    .Select(r => new { r.A, r.B })
+    .ToList();
+```
+
+```sql
+select a, b from jsonb_to_recordset(@json) as "t1"(a integer, b text)
+```
+
+Типы колонок берутся из CLR→SQL-мэппинга провайдера (`byte`→`UInt8`, `int`→`integer`,
+`string`→`text`/`String`); nullable value-тип становится `Nullable(T)` в ClickHouse. Распознаются
+только `LeadingArgument` и `AliasColumnList`, и каждый провайдер включается только для той формы,
+которую рендерит
+([`SupportsResultSchema(TableFunctionSchema)`](xref:NextORM.Core.ISqlDialect.SupportsResultSchema(NextORM.Core.TableFunctionSchema)):
+ClickHouse — только `LeadingArgument`, PostgreSQL — только `AliasColumnList`). Объявленная форма,
+которую провайдер не реализует, отклоняется с `NotSupportedException` — она никогда не рендерится как
+SQL без списка колонок, — а все остальные провайдеры также бросают исключение.
 
 ## Различия между провайдерами
 

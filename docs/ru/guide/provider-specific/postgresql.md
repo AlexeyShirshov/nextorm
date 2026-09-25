@@ -33,6 +33,50 @@ select id from complex_entity where (id = any(@p0))
 массив, можно использовать внутри запроса или проецировать напрямую: row reader материализует
 результат `Array(T)` как CLR `T[]`.
 
+## Range-типы
+
+У PostgreSQL есть нативные range-типы (`int4range`, `int8range`, `numrange`, `tsrange`, `tstzrange`,
+`daterange`). nextorm представляет их provider-agnostic value-типом
+[`Range<T>`](xref:NextORM.Core.Range`1) — `Lower`/`Upper`, `LowerInclusive`/`UpperInclusive`,
+`LowerInfinite`/`UpperInfinite`, `IsEmpty` и [`Range<T>.Empty`](xref:NextORM.Core.Range`1.Empty) — который
+провайдер PostgreSQL биндит через Npgsql, сохраняя unbounded стороны и пустой диапазон. Поверхность
+гейтится [`SupportsRanges`](xref:NextORM.Core.ISqlDialect.SupportsRanges) и живёт на
+[`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres). Операторы вынесены в статические методы с именами
+SQL-токенов, поэтому ни один член не конфликтует с CLR-оператором или полнотекстовым `Contains`:
+
+| Член | SQL |
+|---|---|
+| `overlaps(a, b)` | `a && b` |
+| `range_contains(range, value)` / `range_contains(outer, inner)` | `range @> value` / `outer @> inner` |
+| `range_contained_by(inner, outer)` | `inner <@ outer` |
+| `range_union(a, b)` / `range_intersection(a, b)` / `range_difference(a, b)` | `a + b` / `a * b` / `a - b` |
+| `range_adjacent(a, b)` | `a -|- b` |
+| `range_strictly_left_of(a, b)` / `range_strictly_right_of(a, b)` | `a << b` / `a >> b` |
+| `range_not_extend_right_of(a, b)` / `range_not_extend_left_of(a, b)` | `a &< b` / `a &> b` |
+| `lower(range)` / `upper(range)` / `isempty(range)` | `lower(range)` / `upper(range)` / `isempty(range)` |
+| `lower_inc` / `upper_inc` / `lower_inf` / `upper_inf` | `lower_inc(range)` / … |
+| `int4range` / `int8range` / `numrange` / `tsrange` / `tstzrange` / `daterange` | нативный конструктор, при необходимости с литералом границ (`'[)'`, `'[]'`, `'()'`, `'(]'`) |
+| `empty_range<T>()` | `'empty'::<range type>` |
+
+```csharp
+var window = new Range<int>(15, 25);   // [15,25)
+
+var rows = dataContext.From<IReservation>()
+    .Where(e => SqlFunctions.Postgres.overlaps(e.During, window))
+    .Select(e => new { e.Id })
+    .ToList();
+```
+
+```sql
+select id from reservation where (during && @p0)
+```
+
+`Range<T>` — `readonly struct` и сравнивается по своим PostgreSQL-характеристикам, поэтому
+`Range<int>.Empty` и `default(Range<int>)` оба являются пустым диапазоном. In-memory провайдер
+вычисляет `overlaps`, `range_contains`/`range_contained_by` и функции проверки с той же семантикой;
+остальные операторы и конструкторы требуют PostgreSQL. Timestamp-диапазоны используют `DateTime` для
+`tsrange` и `DateTimeOffset` для `tstzrange`; `daterange` использует `DateOnly`.
+
 ## `json` и `jsonb`
 
 PostgreSQL — единственный провайдер с нативными типами `json`/`jsonb`. JSON-операнды — это
@@ -236,10 +280,14 @@ with ins as (insert into orders (customer_id) values (@p0) returning id, total) 
 общие (read) CTE — в [Общих табличных выражениях](../09-cte.md). Остальные провайдеры отклоняют
 `With(имя, insert)` на этапе построения SQL с `NotSupportedException`.
 
-## Пока не поддерживается
+## Динамическая схема записи
 
-`jsonb_to_record`/`json_populate_record` требуют динамической схемы записи и не входят в текущую
-поверхность. См. [Ограничения и возможности вне области охвата](../../advanced/limitations.md).
+`jsonb_to_record`/`jsonb_to_recordset` доступны как табличные функции, схема результата которых
+объявляется типом строки вызывающего и рендерится списком определений колонок в псевдониме
+(`AS x(a int, b text)`). См. [Динамическая схема результата](../13-table-valued-functions.md#dynamic-result-schema).
+Варианты `json_populate_record(set)` (заполняющие переданную вызывающим базовую запись, а не
+свободный список колонок) остаются вне области охвата. См.
+[Ограничения и возможности вне области охвата](../../advanced/limitations.md).
 
 ## См. также
 

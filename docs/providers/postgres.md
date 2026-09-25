@@ -153,6 +153,30 @@ The array functions (`cardinality`, `array_length`, `array_position`, ...) and t
 are documented in [Scalar functions](../scalar-functions/06-arrays.md#arrays-postgresql). Other
 providers reject them with `NotSupportedException`.
 
+## Range types
+
+PostgreSQL is the only supported provider with native range types (`int4range`, `int8range`,
+`numrange`, `tsrange`, `tstzrange`, `daterange`). Use the provider-agnostic
+[`Range<T>`](xref:NextORM.Core.Range`1) for a column or parameter; the provider binds it through Npgsql
+and reads it back preserving unbounded sides and the `empty` range. The PostgreSQL-only range surface
+(`overlaps`, `range_contains`/`range_contained_by`, `range_union`, `lower`/`upper`/`isempty`, the
+constructors and `empty_range<T>()`) lives on
+[`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres) and is gated by
+[`SupportsRanges`](xref:NextORM.Core.ISqlDialect.SupportsRanges):
+
+```csharp
+var window = new Range<int>(15, 25);   // [15,25)
+
+ctx.From<IReservation>()
+    .Where(e => SqlFunctions.Postgres.overlaps(e.During, window))
+    .Select(e => e.Id)
+    .ToList();                          // (during && @p0)
+```
+
+The in-memory provider evaluates `overlaps`, `range_contains`/`range_contained_by` and the inspection
+functions with the same semantics; every other provider rejects the surface with `NotSupportedException`.
+See [PostgreSQL-specific SQL](../guide/provider-specific/postgresql.md#range-types) for the full table.
+
 ## JSON and JSONB
 
 PostgreSQL is the only supported provider with `json`/`jsonb`. Passing a `JsonDocument`, `JsonElement`
@@ -184,8 +208,11 @@ PostgreSQL also opts into `greatest`/`least`, `date_trunc`, the `string_agg`/`ar
 aggregate `FILTER (WHERE ...)` clause, the portable `iif` (rendered `case when ... then ... else ... end`),
 the `percent_rank`/`cume_dist`/`nth_value` window functions and the built-in set-returning table
 functions `generate_series`, `unnest`, `regexp_matches`, `regexp_split_to_table`,
-`jsonb_array_elements(_text)`, `jsonb_each(_text)`, `jsonb_object_keys`, `jsonb_path_query` and
-`ts_stat`:
+`jsonb_array_elements(_text)`, `jsonb_each(_text)`, `jsonb_object_keys`, `jsonb_path_query`,
+`ts_stat` and the record functions `jsonb_to_record`/`jsonb_to_recordset`
+([`SqlFunctions.Postgres.jsonb_to_record<TRow>(json)`](xref:NextORM.Core.SqlFunctions.PostgresFunctions), whose
+result schema is rendered as the alias column-definition list from the caller's `TRow` under
+[`SupportsResultSchema(TableFunctionSchema)`](xref:NextORM.Core.ISqlDialect.SupportsResultSchema(NextORM.Core.TableFunctionSchema))):
 
 ```csharp
 ctx.From<IComplexEntity>()

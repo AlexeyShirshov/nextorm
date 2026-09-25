@@ -22,6 +22,7 @@ public sealed class SqlTableFunctionAttribute : Attribute
     public string? WithClause { get; set; } // optional trailing WITH (...) body
     public string? CallClause { get; set; } // optional verbatim SQL inside the call parentheses
     public int[]? VerbatimArguments { get; set; } // argument indices emitted as raw identifiers
+    public TableFunctionSchema ResultSchema { get; set; } // render the row type's schema (None by default)
 }
 ```
 
@@ -215,6 +216,7 @@ PostgreSQL also ships the regexp, JSON and text-search set-returning functions:
 | `jsonb_object_keys(json)` | `jsonb_object_keys` | `IJsonObjectKeysRow` (`.Key`) |
 | `jsonb_path_query(json, jsonpath)` | `jsonb_path_query` | `IJsonPathQueryRow` (`.Value`) |
 | `ts_stat(query)` | `word`, `ndoc`, `nentry` | `ITsStatRow` (`.Word`, `.Ndoc`, `.Nentry`) |
+| `jsonb_to_record(json)` / `jsonb_to_recordset(json)` | declared by `TRow` | `TRow` (see [Dynamic result schema](#dynamic-result-schema)) |
 
 ```csharp
 var json = JsonDocument.Parse("""{"a":1,"b":2}""");
@@ -427,6 +429,7 @@ argument (`url`/`s3`/`file`) or the target table (`remote`/`remoteSecure`/`clust
 | `remote_secure<TRow>(addresses, database, table)` | `remoteSecure(addresses, database, table)` |
 | `cluster<TRow>(cluster, database, table)` | `cluster(cluster, database, table)` |
 | `cluster_all_replicas<TRow>(cluster, database, table)` | `clusterAllReplicas(cluster, database, table)` |
+| `values<TRow>(tuples)` | `values('<structure from TRow>', tuples...)` |
 
 ```csharp
 public interface IHitsRow
@@ -460,11 +463,72 @@ The mapped function must exist in the database — nextorm only emits the call, 
 function — so use the helper only on the provider that defines it. The built-in helpers are gated by
 [`SupportsTableFunction`](xref:NextORM.Core.ISqlDialect.SupportsTableFunction(System.String)): PostgreSQL enables `generate_series`, `unnest`,
 `regexp_matches`, `regexp_split_to_table`, `jsonb_array_elements(_text)`, `jsonb_each(_text)`,
-`jsonb_object_keys`, `jsonb_path_query` and `ts_stat`; SQL Server enables
-`string_split`/`openjson`, ClickHouse enables `numbers`/`numbers_mt`, `zeros`/`zeros_mt`,
-`generateRandom` and the server/cluster functions `url`/`s3`/`file`/`remote`/`remoteSecure`/`cluster`/
-`clusterAllReplicas`, and any other provider rejects them with `NotSupportedException` (a user-defined
-`[SqlTableFunction]` is never gated).
+`jsonb_object_keys`, `jsonb_path_query`, `ts_stat` and the record functions `jsonb_to_record`/`jsonb_to_recordset`; SQL
+Server enables `string_split`/`openjson`, ClickHouse enables `numbers`/`numbers_mt`,
+`zeros`/`zeros_mt`, `generateRandom`, `values` and the server/cluster functions
+`url`/`s3`/`file`/`remote`/`remoteSecure`/`cluster`/`clusterAllReplicas`, and any other provider
+rejects them with `NotSupportedException` (a user-defined `[SqlTableFunction]` is never gated, but a
+caller-declared `ResultSchema` is gated by
+[`SupportsResultSchema(TableFunctionSchema)`](xref:NextORM.Core.ISqlDialect.SupportsResultSchema(NextORM.Core.TableFunctionSchema))).
+
+## Dynamic result schema
+
+Some table functions do not declare their output columns in the call: the schema is supplied by the caller. Declare it once on the mapped row type (the `T` of the placeholder method's `IQueryable<T>` return type) and set [`ResultSchema`](xref:NextORM.Core.SqlTableFunctionAttribute.ResultSchema) on `[SqlTableFunction]`; nextorm renders the matching native form from that type's `[Column]` metadata and CLR property types. The rows still materialize into the same `[Column]`-annotated DTO as any other table function — there is no separate dynamic reader — and the declared schema is part of the query plan key, so two row shapes never share a cached plan.
+
+[`TableFunctionSchema`](xref:NextORM.Core.TableFunctionSchema) selects where the schema is rendered:
+
+| `ResultSchema` | Rendered form | Provider |
+|---|---|---|
+| `LeadingArgument` | a quoted structure string as the first call argument: `values('a UInt8, b String', (1,'x'))` | ClickHouse |
+| `AliasColumnList` | an alias column-definition list: `jsonb_to_record(@json) as "t1"(a integer, b text)` | PostgreSQL |
+
+ClickHouse `values` reads a literal table from a tuple list:
+
+```csharp
+public interface IPairRow
+{
+    [Column("a")]
+    byte A { get; set; }
+    [Column("b")]
+    string? B { get; set; }
+}
+
+var rows = dataContext
+    .FromTableFunction(() => SqlFunctions.ClickHouse.values<IPairRow>("(1, 'x'), (2, 'y')"))
+    .Select(r => new { r.A, r.B })
+    .ToList();
+```
+
+```sql
+select a, b from values('a UInt8, b String', (1, 'x'), (2, 'y')) as `t1`
+```
+
+The `tuples` argument is emitted verbatim (see `VerbatimArguments`), so it is developer-authored SQL only — never build it from user input.
+
+PostgreSQL's `jsonb_to_record`/`jsonb_to_recordset` expand a JSON object/array into a record whose columns are declared by `TRow`:
+
+```csharp
+public interface IPairRow
+{
+    [Column("a")]
+    int A { get; set; }
+    [Column("b")]
+    string? B { get; set; }
+}
+
+using var json = JsonDocument.Parse("""[{"a":1,"b":"x"},{"a":2,"b":"y"}]""");
+
+var rows = dataContext
+    .FromTableFunction(() => SqlFunctions.Postgres.jsonb_to_recordset<IPairRow>(json))
+    .Select(r => new { r.A, r.B })
+    .ToList();
+```
+
+```sql
+select a, b from jsonb_to_recordset(@json) as "t1"(a integer, b text)
+```
+
+The column types come from the provider's CLR-to-SQL type mapping (`byte`→`UInt8`, `int`→`integer`, `string`→`text`/`String`); a nullable value type becomes `Nullable(T)` on ClickHouse. Only `LeadingArgument` and `AliasColumnList` are recognized, and each provider opts into the specific form it renders ([`SupportsResultSchema(TableFunctionSchema)`](xref:NextORM.Core.ISqlDialect.SupportsResultSchema(NextORM.Core.TableFunctionSchema))): ClickHouse renders only `LeadingArgument` and PostgreSQL only `AliasColumnList`. A declared form the provider does not implement is rejected with `NotSupportedException` — it is never emitted as SQL without the column list — and every other provider throws as well.
 
 ## Provider differences
 

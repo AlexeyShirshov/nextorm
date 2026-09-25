@@ -9,7 +9,7 @@ namespace NextORM.Core;
 /// Exposed through <see cref="SqlFunctions.Postgres"/>; every member is gated by a capability flag and
 /// rejected by providers that do not opt in.
 /// </summary>
-    public class PostgresFunctions : CommonFunctions
+    public sealed class PostgresFunctions : CommonFunctions
     {
         /// <summary>
         /// <c>column = any(array)</c>: true when <paramref name="column"/> equals any element of
@@ -713,9 +713,247 @@ namespace NextORM.Core;
         public IQueryable<SqlFunctions.IJsonPathQueryRow> jsonb_path_query(object? json, string? path) => throw new NotSupportedException();
 
         /// <summary>
+        /// <c>jsonb_to_record(json) AS x(col type, ...)</c> as a FROM source: one row from a single JSON
+        /// object, with the result schema derived from <typeparamref name="TRow"/>'s mapped properties
+        /// and rendered as the alias column-definition list. Requires a provider that supports a typed
+        /// result schema (see <see cref="ISqlDialect.SupportsResultSchema(TableFunctionSchema)"/>; PostgreSQL). Use
+        /// through
+        /// <see cref="DataContextExtensions.FromTableFunction{T}(IDataContext, System.Linq.Expressions.Expression{System.Func{System.Linq.IQueryable{T}}})"/>.
+        /// </summary>
+        /// <typeparam name="TRow">The caller-declared row shape; its <c>[Column]</c> names/types form the column list.</typeparam>
+        /// <param name="json">The JSON object to expand.</param>
+        [SqlTableFunction("jsonb_to_record", ResultSchema = TableFunctionSchema.AliasColumnList)]
+        public IQueryable<TRow> jsonb_to_record<TRow>(object? json) => throw new NotSupportedException();
+
+        /// <summary>
+        /// <c>jsonb_to_recordset(json) AS x(col type, ...)</c> as a FROM source: one row per element of a
+        /// JSON array, with the result schema derived from <typeparamref name="TRow"/>'s mapped
+        /// properties. This is the set form of <see cref="jsonb_to_record{TRow}(object?)"/>. Requires a
+        /// provider that supports a typed result schema (see
+        /// <see cref="ISqlDialect.SupportsResultSchema(TableFunctionSchema)"/>; PostgreSQL).
+        /// </summary>
+        /// <typeparam name="TRow">The caller-declared row shape; its <c>[Column]</c> names/types form the column list.</typeparam>
+        /// <param name="json">The JSON array to expand.</param>
+        [SqlTableFunction("jsonb_to_recordset", ResultSchema = TableFunctionSchema.AliasColumnList)]
+        public IQueryable<TRow> jsonb_to_recordset<TRow>(object? json) => throw new NotSupportedException();
+
+        /// <summary>
         /// <c>ts_stat(query)</c> as a FROM source: one row per lexeme of a <c>tsvector</c> query, the
         /// <c>word</c>/<c>ndoc</c>/<c>nentry</c> columns (see <see cref="SqlFunctions.ITsStatRow"/>).
         /// </summary>
         [SqlTableFunction("ts_stat")]
         public IQueryable<SqlFunctions.ITsStatRow> ts_stat(string? query) => throw new NotSupportedException();
+
+        /// <summary><c>a &amp;&amp; b</c>: true when the two ranges overlap (share at least one point).</summary>
+        /// <typeparam name="T">The bound type of the ranges.</typeparam>
+        /// <param name="a">The left range.</param>
+        /// <param name="b">The right range.</param>
+        /// <returns><see langword="true"/> when the ranges overlap.</returns>
+        public bool overlaps<T>(Range<T> a, Range<T> b) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>range @&gt; value</c>: true when <paramref name="value"/> is inside <paramref name="range"/>.</summary>
+        /// <typeparam name="T">The bound type of the range.</typeparam>
+        /// <param name="range">The range to test.</param>
+        /// <param name="value">The point to look for.</param>
+        /// <returns><see langword="true"/> when the range contains the value.</returns>
+        public bool range_contains<T>(Range<T> range, T value) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>outer @&gt; inner</c>: true when <paramref name="outer"/> contains every point of <paramref name="inner"/>.</summary>
+        /// <typeparam name="T">The bound type of the ranges.</typeparam>
+        /// <param name="outer">The containing range.</param>
+        /// <param name="inner">The contained range.</param>
+        /// <returns><see langword="true"/> when the outer range contains the inner one.</returns>
+        public bool range_contains<T>(Range<T> outer, Range<T> inner) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>inner &lt;@ outer</c>: true when every point of <paramref name="inner"/> is inside <paramref name="outer"/>.</summary>
+        /// <typeparam name="T">The bound type of the ranges.</typeparam>
+        /// <param name="inner">The contained range.</param>
+        /// <param name="outer">The containing range.</param>
+        /// <returns><see langword="true"/> when the inner range is contained by the outer one.</returns>
+        public bool range_contained_by<T>(Range<T> inner, Range<T> outer) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>a + b</c>: the smallest range covering both operands (they must overlap or be adjacent).</summary>
+        /// <typeparam name="T">The bound type of the ranges.</typeparam>
+        /// <param name="a">The left range.</param>
+        /// <param name="b">The right range.</param>
+        /// <returns>The union range.</returns>
+        public Range<T> range_union<T>(Range<T> a, Range<T> b) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>a * b</c>: the common part of the two ranges, or the empty range.</summary>
+        /// <typeparam name="T">The bound type of the ranges.</typeparam>
+        /// <param name="a">The left range.</param>
+        /// <param name="b">The right range.</param>
+        /// <returns>The intersection range.</returns>
+        public Range<T> range_intersection<T>(Range<T> a, Range<T> b) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>a - b</c>: the part of <paramref name="a"/> not covered by <paramref name="b"/>.</summary>
+        /// <typeparam name="T">The bound type of the ranges.</typeparam>
+        /// <param name="a">The range to subtract from.</param>
+        /// <param name="b">The range to subtract.</param>
+        /// <returns>The difference range.</returns>
+        public Range<T> range_difference<T>(Range<T> a, Range<T> b) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>a -|- b</c>: true when the ranges are adjacent (they touch but do not overlap).</summary>
+        /// <typeparam name="T">The bound type of the ranges.</typeparam>
+        /// <param name="a">The left range.</param>
+        /// <param name="b">The right range.</param>
+        /// <returns><see langword="true"/> when the ranges are adjacent.</returns>
+        public bool range_adjacent<T>(Range<T> a, Range<T> b) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>a &lt;&lt; b</c>: true when <paramref name="a"/> ends before <paramref name="b"/> starts.</summary>
+        /// <typeparam name="T">The bound type of the ranges.</typeparam>
+        /// <param name="a">The left range.</param>
+        /// <param name="b">The right range.</param>
+        /// <returns><see langword="true"/> when the left range is strictly to the left.</returns>
+        public bool range_strictly_left_of<T>(Range<T> a, Range<T> b) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>a &gt;&gt; b</c>: true when <paramref name="a"/> starts after <paramref name="b"/> ends.</summary>
+        /// <typeparam name="T">The bound type of the ranges.</typeparam>
+        /// <param name="a">The left range.</param>
+        /// <param name="b">The right range.</param>
+        /// <returns><see langword="true"/> when the left range is strictly to the right.</returns>
+        public bool range_strictly_right_of<T>(Range<T> a, Range<T> b) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>a &amp;&lt; b</c>: true when <paramref name="a"/> does not extend to the right of <paramref name="b"/>.</summary>
+        /// <typeparam name="T">The bound type of the ranges.</typeparam>
+        /// <param name="a">The left range.</param>
+        /// <param name="b">The right range.</param>
+        /// <returns><see langword="true"/> when <paramref name="a"/> does not extend past the right end of <paramref name="b"/>.</returns>
+        public bool range_not_extend_right_of<T>(Range<T> a, Range<T> b) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>a &amp;&gt; b</c>: true when <paramref name="a"/> does not extend to the left of <paramref name="b"/>.</summary>
+        /// <typeparam name="T">The bound type of the ranges.</typeparam>
+        /// <param name="a">The left range.</param>
+        /// <param name="b">The right range.</param>
+        /// <returns><see langword="true"/> when <paramref name="a"/> does not extend past the left end of <paramref name="b"/>.</returns>
+        public bool range_not_extend_left_of<T>(Range<T> a, Range<T> b) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>isempty(range)</c>: true when the range contains no point.</summary>
+        /// <typeparam name="T">The bound type of the range.</typeparam>
+        /// <param name="range">The range to test.</param>
+        /// <returns><see langword="true"/> when the range is empty.</returns>
+        public bool isempty<T>(Range<T> range) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>lower(range)</c>: the lower bound, or <see langword="null"/> when it is unbounded.</summary>
+        /// <typeparam name="T">The bound type of the range.</typeparam>
+        /// <param name="range">The range to inspect.</param>
+        /// <returns>The lower bound, or <see langword="null"/>.</returns>
+        public T? lower<T>(Range<T> range) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>upper(range)</c>: the upper bound, or <see langword="null"/> when it is unbounded.</summary>
+        /// <typeparam name="T">The bound type of the range.</typeparam>
+        /// <param name="range">The range to inspect.</param>
+        /// <returns>The upper bound, or <see langword="null"/>.</returns>
+        public T? upper<T>(Range<T> range) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>lower_inc(range)</c>: true when the lower bound is inclusive.</summary>
+        /// <typeparam name="T">The bound type of the range.</typeparam>
+        /// <param name="range">The range to inspect.</param>
+        /// <returns><see langword="true"/> when the lower bound is inclusive.</returns>
+        public bool lower_inc<T>(Range<T> range) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>upper_inc(range)</c>: true when the upper bound is inclusive.</summary>
+        /// <typeparam name="T">The bound type of the range.</typeparam>
+        /// <param name="range">The range to inspect.</param>
+        /// <returns><see langword="true"/> when the upper bound is inclusive.</returns>
+        public bool upper_inc<T>(Range<T> range) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>lower_inf(range)</c>: true when the lower side is unbounded.</summary>
+        /// <typeparam name="T">The bound type of the range.</typeparam>
+        /// <param name="range">The range to inspect.</param>
+        /// <returns><see langword="true"/> when the lower side is unbounded.</returns>
+        public bool lower_inf<T>(Range<T> range) where T : struct, IComparable<T> => default!;
+
+        /// <summary><c>upper_inf(range)</c>: true when the upper side is unbounded.</summary>
+        /// <typeparam name="T">The bound type of the range.</typeparam>
+        /// <param name="range">The range to inspect.</param>
+        /// <returns><see langword="true"/> when the upper side is unbounded.</returns>
+        public bool upper_inf<T>(Range<T> range) where T : struct, IComparable<T> => default!;
+
+        /// <summary>
+        /// The empty range of <typeparamref name="T"/>, rendered as the PostgreSQL
+        /// <c>'empty'::&lt;range type&gt;</c> literal. When the value is supplied as a parameter, use
+        /// <see cref="Range{T}.Empty"/> instead.
+        /// </summary>
+        /// <typeparam name="T">The bound type that selects the PostgreSQL range type.</typeparam>
+        /// <returns>The empty range.</returns>
+        public Range<T> empty_range<T>() where T : struct, IComparable<T> => default!;
+
+        /// <summary>Builds <c>int4range(lower, upper)</c> with the default <c>[)</c> bounds.</summary>
+        /// <param name="lower">The lower bound, or <see langword="null"/> for an unbounded side.</param>
+        /// <param name="upper">The upper bound, or <see langword="null"/> for an unbounded side.</param>
+        /// <returns>The <c>int4range</c> value.</returns>
+        public Range<int> int4range(int? lower, int? upper) => default!;
+
+        /// <summary>Builds <c>int4range(lower, upper, bounds)</c>.</summary>
+        /// <param name="lower">The lower bound, or <see langword="null"/> for an unbounded side.</param>
+        /// <param name="upper">The upper bound, or <see langword="null"/> for an unbounded side.</param>
+        /// <param name="bounds">The bound characters, for example <c>[)</c>, <c>[]</c>, <c>()</c> or <c>(]</c>.</param>
+        /// <returns>The <c>int4range</c> value.</returns>
+        public Range<int> int4range(int? lower, int? upper, string bounds) => default!;
+
+        /// <summary>Builds <c>int8range(lower, upper)</c> with the default <c>[)</c> bounds.</summary>
+        /// <param name="lower">The lower bound, or <see langword="null"/> for an unbounded side.</param>
+        /// <param name="upper">The upper bound, or <see langword="null"/> for an unbounded side.</param>
+        /// <returns>The <c>int8range</c> value.</returns>
+        public Range<long> int8range(long? lower, long? upper) => default!;
+
+        /// <summary>Builds <c>int8range(lower, upper, bounds)</c>.</summary>
+        /// <param name="lower">The lower bound, or <see langword="null"/> for an unbounded side.</param>
+        /// <param name="upper">The upper bound, or <see langword="null"/> for an unbounded side.</param>
+        /// <param name="bounds">The bound characters, for example <c>[)</c>, <c>[]</c>, <c>()</c> or <c>(]</c>.</param>
+        /// <returns>The <c>int8range</c> value.</returns>
+        public Range<long> int8range(long? lower, long? upper, string bounds) => default!;
+
+        /// <summary>Builds <c>numrange(lower, upper)</c> with the default <c>[)</c> bounds.</summary>
+        /// <param name="lower">The lower bound, or <see langword="null"/> for an unbounded side.</param>
+        /// <param name="upper">The upper bound, or <see langword="null"/> for an unbounded side.</param>
+        /// <returns>The <c>numrange</c> value.</returns>
+        public Range<decimal> numrange(decimal? lower, decimal? upper) => default!;
+
+        /// <summary>Builds <c>numrange(lower, upper, bounds)</c>.</summary>
+        /// <param name="lower">The lower bound, or <see langword="null"/> for an unbounded side.</param>
+        /// <param name="upper">The upper bound, or <see langword="null"/> for an unbounded side.</param>
+        /// <param name="bounds">The bound characters, for example <c>[)</c>, <c>[]</c>, <c>()</c> or <c>(]</c>.</param>
+        /// <returns>The <c>numrange</c> value.</returns>
+        public Range<decimal> numrange(decimal? lower, decimal? upper, string bounds) => default!;
+
+        /// <summary>Builds <c>tsrange(lower, upper)</c> with the default <c>[)</c> bounds.</summary>
+        /// <param name="lower">The lower bound, or <see langword="null"/> for an unbounded side.</param>
+        /// <param name="upper">The upper bound, or <see langword="null"/> for an unbounded side.</param>
+        /// <returns>The <c>tsrange</c> value.</returns>
+        public Range<DateTime> tsrange(DateTime? lower, DateTime? upper) => default!;
+
+        /// <summary>Builds <c>tsrange(lower, upper, bounds)</c>.</summary>
+        /// <param name="lower">The lower bound, or <see langword="null"/> for an unbounded side.</param>
+        /// <param name="upper">The upper bound, or <see langword="null"/> for an unbounded side.</param>
+        /// <param name="bounds">The bound characters, for example <c>[)</c>, <c>[]</c>, <c>()</c> or <c>(]</c>.</param>
+        /// <returns>The <c>tsrange</c> value.</returns>
+        public Range<DateTime> tsrange(DateTime? lower, DateTime? upper, string bounds) => default!;
+
+        /// <summary>Builds <c>tstzrange(lower, upper)</c> with the default <c>[)</c> bounds.</summary>
+        /// <param name="lower">The lower bound, or <see langword="null"/> for an unbounded side.</param>
+        /// <param name="upper">The upper bound, or <see langword="null"/> for an unbounded side.</param>
+        /// <returns>The <c>tstzrange</c> value.</returns>
+        public Range<DateTimeOffset> tstzrange(DateTimeOffset? lower, DateTimeOffset? upper) => default!;
+
+        /// <summary>Builds <c>tstzrange(lower, upper, bounds)</c>.</summary>
+        /// <param name="lower">The lower bound, or <see langword="null"/> for an unbounded side.</param>
+        /// <param name="upper">The upper bound, or <see langword="null"/> for an unbounded side.</param>
+        /// <param name="bounds">The bound characters, for example <c>[)</c>, <c>[]</c>, <c>()</c> or <c>(]</c>.</param>
+        /// <returns>The <c>tstzrange</c> value.</returns>
+        public Range<DateTimeOffset> tstzrange(DateTimeOffset? lower, DateTimeOffset? upper, string bounds) => default!;
+
+        /// <summary>Builds <c>daterange(lower, upper)</c> with the default <c>[)</c> bounds.</summary>
+        /// <param name="lower">The lower bound, or <see langword="null"/> for an unbounded side.</param>
+        /// <param name="upper">The upper bound, or <see langword="null"/> for an unbounded side.</param>
+        /// <returns>The <c>daterange</c> value.</returns>
+        public Range<DateOnly> daterange(DateOnly? lower, DateOnly? upper) => default!;
+
+        /// <summary>Builds <c>daterange(lower, upper, bounds)</c>.</summary>
+        /// <param name="lower">The lower bound, or <see langword="null"/> for an unbounded side.</param>
+        /// <param name="upper">The upper bound, or <see langword="null"/> for an unbounded side.</param>
+        /// <param name="bounds">The bound characters, for example <c>[)</c>, <c>[]</c>, <c>()</c> or <c>(]</c>.</param>
+        /// <returns>The <c>daterange</c> value.</returns>
+        public Range<DateOnly> daterange(DateOnly? lower, DateOnly? upper, string bounds) => default!;
     }

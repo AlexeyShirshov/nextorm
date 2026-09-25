@@ -1185,6 +1185,14 @@ public class SqlGenerationTests
         var split = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.Postgres.regexp_split_to_table(source, pattern))
             .Select(r => new { r.Value }));
         split.Should().Throw<NotSupportedException>().WithMessage("*regexp_split_to_table*");
+
+        var record = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.Postgres.jsonb_to_record<int>(json))
+            .Select(r => new { V = r }));
+        record.Should().Throw<NotSupportedException>().WithMessage("*jsonb_to_record*");
+
+        var values = () => SqlOf(ctx, ctx.FromTableFunction(() => SqlFunctions.ClickHouse.values<int>("(1)"))
+            .Select(r => new { V = r }));
+        values.Should().Throw<NotSupportedException>().WithMessage("*values*");
     }
 
     [Fact]

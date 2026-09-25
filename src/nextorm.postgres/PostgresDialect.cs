@@ -120,13 +120,21 @@ public sealed class PostgresDialect : SqlDialectBase
     /// <inheritdoc/>
     public override string MakeBool(bool v) => v ? "true" : "false";
 
-    /// <summary>PostgreSQL's text type is <c>text</c> (the base maps <see cref="string"/> to the CLR name).</summary>
-    public override string MakeTypeName(Type type) => type switch
+    /// <summary>PostgreSQL's text type is <c>text</c>, its duration type is <c>interval</c>, and a <see cref="Range{T}"/> maps to the native range type selected by its bound type.</summary>
+    /// <param name="type">The CLR type to name.</param>
+    /// <returns>The PostgreSQL type name.</returns>
+    public override string MakeTypeName(Type type)
     {
-        _ when type == typeof(string) => "text",
-        _ when type == typeof(TimeSpan) => "interval",
-        _ => base.MakeTypeName(type)
-    };
+        if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Range<>))
+            return PostgresRangeTypes.NameFor(type.GetGenericArguments()[0]);
+
+        return type switch
+        {
+            _ when type == typeof(string) => "text",
+            _ when type == typeof(TimeSpan) => "interval",
+            _ => base.MakeTypeName(type)
+        };
+    }
 
     /// <summary>PostgreSQL has a native duration type (<c>interval</c>), so a <see cref="TimeSpan"/> is stored natively.</summary>
     public override bool SupportsNativeDuration => true;
@@ -223,13 +231,30 @@ public sealed class PostgresDialect : SqlDialectBase
     /// <inheritdoc/>
     public override bool SupportsArrays => true;
 
+    // PostgreSQL has native range types (int4range/int8range/numrange/tsrange/tstzrange/daterange).
+    /// <inheritdoc/>
+    public override bool SupportsRanges => true;
+
     /// <inheritdoc/>
     public override bool SupportsTableFunction(string name) =>
         name is "generate_series" or "unnest"
             or "regexp_matches" or "regexp_split_to_table"
             or "jsonb_array_elements" or "jsonb_array_elements_text"
             or "jsonb_each" or "jsonb_each_text" or "jsonb_object_keys"
-            or "jsonb_path_query" or "ts_stat";
+            or "jsonb_path_query" or "ts_stat"
+            or "jsonb_to_record" or "jsonb_to_recordset";
+
+    /// <summary>PostgreSQL renders the row-derived schema as the alias column-definition list of the record function.</summary>
+    public override bool SupportsResultSchema(TableFunctionSchema placement) => placement == TableFunctionSchema.AliasColumnList;
+
+    /// <summary>
+    /// PostgreSQL's record set-returning functions take their result schema as an alias
+    /// column-definition list: <c>jsonb_to_record(json) as "t1"(a integer, b text)</c>.
+    /// </summary>
+    public override string MakeTableFunctionAlias(string tableAlias, string? columnDefinitionList, KeywordCase keywordCase = KeywordCase.Lower)
+        => columnDefinitionList is null
+            ? MakeTableAlias(tableAlias, keywordCase)
+            : MakeTableAlias(tableAlias, keywordCase) + "(" + columnDefinitionList + ")";
 
     /// <summary>
     /// PostgreSQL names the only output column of a scalar set-returning function after the function,

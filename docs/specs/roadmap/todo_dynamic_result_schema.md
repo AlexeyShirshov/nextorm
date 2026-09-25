@@ -51,3 +51,49 @@
 - **[TYPE] 🟡** Незапечатанная accessor-поверхность: `TableAlias`/`TableColumn` — `public class` (`Builders/TableAlias.cs:8,101`). Fix: переиспользовать `TableAlias`, запечатать при расширении.
 - **[DRY] 🟡** Неверный указатель файлов `:37`: TVF-источник живёт в `SqlTableFunctionAttribute.cs` + `DataContextExtensions.FromTableFunction:37`, а не в `Query/SqlFunctions.*.cs`. Fix.
 - **ℹ️** Не хватает: формы аргумента CH `values('a UInt8, b String', …)`, рендера PG `AS x(col type, …)` и провайдерной матрицы гейтов — без них план не рецензируем до реализации.
+
+## Реализация (финальный дизайн, 2026-09-25) — SHIPPED (ClickHouse `values`, PostgreSQL `jsonb_to_record(set)`)
+
+Все блокеры дизайн-ревью закрыты **без** третьего builder'а: механизм — расширение существующего
+`[SqlTableFunction]`/`TRow`-пути.
+
+- **Blocker [DRY]/[OCP] 🔴 — третий механизм декларации схемы.** Не заводится. Добавлен enum
+  `TableFunctionSchema { None, LeadingArgument, AliasColumnList }` и свойство
+  `SqlTableFunctionAttribute.ResultSchema`; `TableFunctionExpression` несёт `ResultType` (generic-аргумент
+  `IQueryable<T>` placeholder-метода) и `ResultSchema`. Список колонок рендерится из `[Column]`-метаданных
+  `TRow` (`DataContextCache.Metadata`) и `ISqlDialect.MakeResultColumnType` (CLR→SQL). `TableAlias`/
+  `TableColumn` не расширялись, поэтому не запечатывались.
+- **Blocker [DIP] 🔴 — контракт ридера/`TResult`.** Носитель схемы — тот же `[Column]`-DTO `TRow`, что и у
+  любой TVF: строки материализуются существующим путём `From<T>()` → `EntityMetadata` → `SelectList` →
+  `RowMapperFactory.GetOrBuild<TResult>` (нового ридера нет). Схема влияет только на текст SQL.
+- **[PERF] 🟡 — план-кэш.** `FromExpressionPlanEqualityComparer` теперь сравнивает и хеширует
+  `TableFunction.ResultType`/`ResultSchema` вместе с `Call`; две разные формы строк не делят план.
+- **[TYPE] 🟡 — accessor-поверхность.** `TableAlias`/`TableColumn` не менялись (см. выше).
+- **[DRY] 🟡 — указатели файлов.** Рендер — `SqlSourceRenderer.MakeTableFunction`/`RenderResultSchema`;
+  объявление — `SqlTableFunctionAttribute.cs` + `DataContextExtensions.FromTableFunction`.
+- **ℹ️ формы и гейты.** CH: `values('<структура из TRow>', tuples…)` (`LeadingArgument`, tuples —
+  verbatim). PG: `jsonb_to_record(json) AS "t1"(a integer, b text)` (`AliasColumnList`, диалектный
+  `MakeTableFunctionAlias`). Гейт `ISqlDialect.SupportsResultSchema(TableFunctionSchema)` (DIM `=> false`,
+  `SqlDialectBase virtual false`, override по размещению у ClickHouse (`LeadingArgument`) и PostgreSQL
+  (`AliasColumnList`)); прочие комбинации/провайдеры — `NotSupportedException`.
+
+### Матрица провайдеров
+
+| Провайдер | `values(...)` | `jsonb_to_record(set)` | Источник |
+|---|---|---|---|
+| ClickHouse | **да** (`values`) | — (нет jsonb) | ClickHouse docs, `values` |
+| PostgreSQL | — | **да** (`jsonb_to_record`/`jsonb_to_recordset`) | PG docs, record SRF |
+| SQL Server / MySQL / MariaDB / SQLite | — | — | нет `values`/record-SRF; гейт + `NotSupportedException` |
+| InMemory | — | — | TVF как источник не поддержан |
+
+### Тесты
+
+SQL-gen: `tests/nextorm.clickhouse.tests` (`TableFunction_Values_*`), `tests/nextorm.postgres.tests`
+(`TableFunction_JsonbToRecord*`), core (`DynamicResultSchemaTests`). Интеграция:
+`ClickHouseIntegrationTests.Values_WithDeclaredSchema_ShouldReturnRows`,
+`PostgresSpecificTests.JsonbToRecord(set)_WithDeclaredSchema_ShouldReturn*`.
+
+### Осталось вне области
+
+`format`/`merge`/`input` (CH) и `json_populate_record(set)` (PG — заполняет переданную базовую запись, а не
+свободный список колонок). В `docs/advanced/limitations.md`.

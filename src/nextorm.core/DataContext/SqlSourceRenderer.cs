@@ -562,14 +562,22 @@ internal static class SqlSourceRenderer
             return string.Empty;
         }
 
+        // A caller-declared result schema is rendered into the SQL; a provider that cannot express the
+        // form rejects it even for a user-defined function, which is otherwise emitted verbatim.
+        var columnDefinitions = function.ResultSchema == TableFunctionSchema.None ? null : RenderResultSchema(in ctx, function);
+        var leadsWithSchema = columnDefinitions is not null && function.ResultSchema == TableFunctionSchema.LeadingArgument;
+
         var sqlBuilder = StringBuilderPool.Shared.Get();
         try
         {
             sqlBuilder.Append(ctx.Dialect.MakeFunction(function.Name, function.Schema)).Append('(');
 
+            if (leadsWithSchema)
+                sqlBuilder.Append(SqlLiteral.ToSqlStringLiteral(columnDefinitions!));
+
             for (var (i, cnt) = (0, arguments.Count); i < cnt; i++)
             {
-                if (i > 0)
+                if (i > 0 || leadsWithSchema)
                     sqlBuilder.Append(", ");
 
                 if (IsVerbatimArgument(function, i))
@@ -604,7 +612,10 @@ internal static class SqlSourceRenderer
                 if (entityType is not null)
                     ctx.ColumnsProvider.Add(hasJoins && typeof(IProjection).IsAssignableFrom(entityType) ? entityType.GetGenericArguments()[0] : entityType, false);
 
-                sqlBuilder.Append(ctx.Dialect.MakeTableAlias(ctx.AliasProvider!.GetNextAlias(from), ctx.KeywordCase));
+                sqlBuilder.Append(ctx.Dialect.MakeTableFunctionAlias(
+                    ctx.AliasProvider!.GetNextAlias(from),
+                    function.ResultSchema == TableFunctionSchema.AliasColumnList ? columnDefinitions : null,
+                    ctx.KeywordCase));
             }
 
             return sqlBuilder.ToString();
@@ -612,6 +623,50 @@ internal static class SqlSourceRenderer
         finally
         {
             StringBuilderPool.Shared.Return(sqlBuilder);
+        }
+    }
+
+    /// <summary>
+    /// Renders the column-definition list of a table function whose result schema is derived from its
+    /// mapped row type: <c>name type, name type</c> over the row type's readable properties. The column
+    /// name follows the active naming convention (or the declared <c>[Column]</c> name) and the type is
+    /// the dialect's native mapping of the property's CLR type. A provider that cannot render the
+    /// declared form (<see cref="ISqlDialect.SupportsResultSchema(TableFunctionSchema)"/>) rejects the
+    /// source.
+    /// </summary>
+    private static string RenderResultSchema(in SqlBuildContext ctx, TableFunctionExpression function)
+    {
+        if (!ctx.Dialect.SupportsResultSchema(function.ResultSchema))
+            throw new NotSupportedException(
+                $"The table function '{function.Name}' declares a result schema in the '{function.ResultSchema}' form, which is not supported by this provider.");
+
+        if (function.ResultType is null || !DataContextCache.Metadata.TryGetValue(function.ResultType, out var metadata) || metadata.Properties.Count == 0)
+            throw new BuildSqlCommandException(
+                $"The table function '{function.Name}' declares a result schema but its row type '{function.ResultType?.Name}' has no mapped properties.");
+
+        var builder = StringBuilderPool.Shared.Get();
+        try
+        {
+            var properties = metadata.Properties;
+            for (var (i, cnt) = (0, properties.Count); i < cnt; i++)
+            {
+                if (i > 0)
+                    builder.Append(", ");
+
+                var property = properties[i];
+                var name = SqlMutationBuilder.RenderColumnReference(ctx.Dialect, ctx.QuoteIdentifiers, property, ctx.NamingConvention);
+
+                var propertyType = property.PropertyInfo.PropertyType;
+                builder.Append(name)
+                       .Append(' ')
+                       .Append(ctx.Dialect.MakeResultColumnType(propertyType, Nullable.GetUnderlyingType(propertyType) is not null));
+            }
+
+            return builder.ToString();
+        }
+        finally
+        {
+            StringBuilderPool.Shared.Return(builder);
         }
     }
 
