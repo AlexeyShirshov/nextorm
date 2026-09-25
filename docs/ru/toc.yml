@@ -72,6 +72,8 @@
       href: guide/29-optimistic-concurrency.md
     - name: Конвертеры значений и JSON-колонки
       href: guide/30-value-converters.md
+    - name: Range-колонки (пара скалярных колонок)
+      href: guide/31-range-columns.md
     - name: Специфичный для провайдеров SQL
       items:
         - name: Обзор
@@ -124,6 +126,8 @@
       href: providers/clickhouse.md
     - name: In-memory
       href: providers/in-memory.md
+- name: Сравнения
+  href: comparisons/
 - name: Продвинутое
   items:
     - name: Ограничения и что вне области

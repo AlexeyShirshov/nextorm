@@ -357,8 +357,10 @@ See [Provider-specific SQL](provider-specific/overview.md) for the full catalogu
 
 A captured `Dictionary`, `List` or array indexed by a query expression
 (`dict[s.TenantRegistryId]`) is translated to a portable `CASE` over the collection's entries, so every
-relational provider emits the same predicate. The in-memory context needs no translation: it evaluates
-the indexer as ordinary C#.
+relational provider emits the same predicate. A collection declared as an interface
+(`IReadOnlyList<T>`, `IReadOnlyDictionary<TKey,TValue>`, `IList<T>`, `IDictionary<TKey,TValue>` and the
+immutable collections) is recognised the same way. The in-memory context needs no translation: it
+evaluates the indexer as ordinary C#.
 
 ```csharp
 var synchronised = new Dictionary<int, DateTime> { [1] = firstSync, [2] = secondSync };
@@ -385,6 +387,24 @@ collection rebuilds the command instead of reusing a stale plan).
 | Key absent at runtime | the `CASE` has no matching branch and yields `NULL` (C# would throw) |
 | Empty collection | `NotSupportedException` |
 | Lookup outside `Where`/pre-where | `NotSupportedException` |
+| Interface-typed collection (`IReadOnlyList<T>`, `IReadOnlyDictionary<TKey,TValue>`, …) | recognised like the concrete types |
+| Server-side array/JSON element access, custom indexer | `NotSupportedException` (no portable SQL form) |
+
+A lookup whose key references a query column needs the collection's **shape** to be part of the plan
+key: the number of `CASE` branches — and the bound parameters that go with them — follows the number of
+entries, and the expression tree itself does not carry that count. The engine folds the shape in while
+preparing the condition (the `Where`/`Having` clause and the pre-where filter), so an indexed lookup is
+supported there. Used anywhere else (a projection, `OrderBy`, `GroupBy`, …) on a **cacheable** command,
+the shape would not be in the plan key, so the command is rejected with `NotSupportedException` instead
+of risking a stale cached plan that binds the wrong number of parameters. Two cases stay allowed
+everywhere:
+
+- a **constant key** (`dict[5]`) folds to a single parameter, so it has no shape dependency;
+- a command prepared **without caching** (`GetPreparedQueryCommand(..., storeInCache: false)`) has no
+  plan to protect, so the lookup is simply evaluated.
+
+If you need a lookup value in a projection, move the condition into `Where`, prepare the command without
+caching, or evaluate the lookup on the client after the query.
 
 ## Pattern and subquery predicates
 

@@ -49,7 +49,7 @@ in [`sql-function-coverage-gap.md`](sql-function-coverage-gap.md).
 > | 32 | Row-locking wait modes (`NOWAIT`/`SKIP LOCKED`) | **Done** (PostgreSQL/MySQL/MariaDB/SQL Server; SQLite/ClickHouse/in-memory reject) |
 > | 33 | Global query filters (soft-delete / multi-tenancy) | **Planned** ([`todo_query_filters.md`](todo_query_filters.md)) |
 > | 34 | C# string semantics (ordinal compare, format specifiers, culture; linq2db gap G12) | **Done** ([Ordinal comparison and collation](../../scalar-functions/01-string-functions.md#ordinal-comparison-and-collation)) |
-> | 35 | CLR `Regex` (`IsMatch`/`Replace`) → provider-native regex | **Done on PostgreSQL, MySQL/MariaDB, ClickHouse and SQLite**; SQL Server has no regex engine and rejects ([`SupportsRegex`](xref:NextORM.Core.ISqlDialect.SupportsRegex), [Regular expressions](../../scalar-functions/01-string-functions.md#regular-expressions)) |
+> | 35 | CLR `Regex` (`IsMatch`/`Replace`) → provider-native regex | **Done on PostgreSQL, MySQL/MariaDB, ClickHouse, SQLite and SQL Server 2025+** (`REGEXP_LIKE`/`REGEXP_REPLACE`; the match needs database compatibility level 170) ([`SupportsRegex`](xref:NextORM.Core.ISqlDialect.SupportsRegex), [Regular expressions](../../scalar-functions/01-string-functions.md#regular-expressions)) |
 > | 36 | Cross-provider string / numeric scalar wrappers (`left`/`right`, `lpad`/`rpad`, `repeat`, `reverse`, `space`, `translate`, `concat_ws`, `ascii`/`char`, `mod`, `log10`, `power`) | **Done** ([Scalar functions](../../scalar-functions/01-string-functions.md#cross-provider-scalar-functions), [`IScalarFunctions`](xref:NextORM.Core.IScalarFunctions)) |
 > | 37 | Per-provider built-in function gaps (PostgreSQL / SQL Server / MySQL / MariaDB / SQLite / ClickHouse) | **Partly done** — SQLite shipped (`SqlFunctions.Sqlite`, item 41); the PostgreSQL / SQL Server / MySQL / MariaDB / ClickHouse todos remain (items 37–42 in [Remaining gaps](#4-remaining-gaps-in-order-of-significance)) |
 >
@@ -149,8 +149,8 @@ These are fully implemented and covered by SQL-generation or integration tests:
 * **Regular expressions from the CLR API** — `Regex.IsMatch`/`Regex.Replace` with a compile-time
   constant pattern translate to the provider's native regex on PostgreSQL (`~`/`~*`,
   `regexp_replace`), MySQL (`regexp_like`/`regexp_replace`), MariaDB (`REGEXP`, `regexp_replace`),
-  ClickHouse (`match`/`replaceRegexpAll`) and SQLite (`regexp`/`regexp_replace`); SQL Server has no
-  regex engine and rejects the call. Gated by
+  ClickHouse (`match`/`replaceRegexpAll`), SQLite (`regexp`/`regexp_replace`) and SQL Server 2025+
+  (`REGEXP_LIKE`, `REGEXP_REPLACE`; the match needs database compatibility level 170). Gated by
   [`SupportsRegex`](xref:NextORM.Core.ISqlDialect.SupportsRegex) with the
   `MakeRegexMatch`/`MakeRegexReplace` hooks; only `RegexOptions.IgnoreCase` changes the SQL and the
   pattern itself follows each engine's dialect. See
@@ -191,7 +191,6 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
     `jsonb_to_record`/`jsonb_to_recordset(json) AS x(a int, b text)`; other providers reject them with
     `NotSupportedException`. Remaining on this item: the dynamic-schema `format`/`merge`/`input` and
     PostgreSQL `json_populate_record(set)`.
-    Todo: [`todo_dynamic_result_schema.md`](todo_dynamic_result_schema.md).
     Shipped: [Dynamic result schema](../../guide/13-table-valued-functions.md#dynamic-result-schema).
 24. **DDL/DML + reading query in one SQL batch (pgbouncer-safe CTAS) — done.** `ToTempTableThen`/
     `ToTableThen` (and the general `BatchBuilder`) send a materialisation and the reading query as **one
@@ -304,9 +303,15 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
     `Dictionary`/`List`/array by a query expression (jube's
     `y.ScheduleDate > tenants[y.TenantRegistryId.Value]`) now translates to a portable
     `CASE WHEN key = @k THEN @v … END`; a constant key folds to a parameter, and the in-memory context
-     evaluates the indexer natively. Previously the collection object was sent as a parameter and every
-     driver failed. The entry count is part of the plan key.
-     Docs: [Filtering](../../guide/02-filtering-where.md).
+    evaluates the indexer natively. The collection may be declared as an interface (`IReadOnlyList<T>`,
+    `IReadOnlyDictionary<TKey,TValue>`, `IList<T>`, `IDictionary<TKey,TValue>` and the immutable
+    collections), recognised by its static type whether or not it is also a non-generic `IList`/`IDictionary`.
+    An unsupported indexer (server-side array/JSON element access, a custom indexer) now throws
+    `NotSupportedException` instead of binding the whole collection as a parameter (the previous silent
+    wrong SQL, G17 in the [linq2db backlog gap analysis](../comparison/linq2db-backlog-gap-analysis.md)).
+    The entry count is part of the plan key.
+    Docs: [Filtering](../../guide/02-filtering-where.md#captured-collection-lookup-dictcolumn),
+    [Limitations](../../advanced/limitations.md).
 51. **PostgreSQL range types and `Overlaps` (`&&`) — shipped (`1.0-b.1`).** A provider-agnostic
     `NextORM.Core.Range<T>` (`Lower`/`Upper`, bound inclusivity, unbounded sides, `IsEmpty`, `Empty`)
     maps to `int4range`/`int8range`/`numrange`/`tsrange`/`tstzrange`/`daterange`; the PostgreSQL provider
@@ -573,8 +578,8 @@ is in [`comparison/capability-matrix.md`](../comparison/capability-matrix.md).
 35. **Cross-provider regular-expression translation — shipped.** `Regex.IsMatch`/`Regex.Replace` with a
     compile-time constant pattern translate to the provider's native regex on PostgreSQL (`~`/`~*`,
     `regexp_replace`), MySQL (`regexp_like`/`regexp_replace`), MariaDB (`REGEXP`, `regexp_replace`),
-    ClickHouse (`match`/`replaceRegexpAll`) and SQLite (`regexp`/`regexp_replace`); SQL Server has no
-    regex engine and rejects the call. Gated by
+    ClickHouse (`match`/`replaceRegexpAll`), SQLite (`regexp`/`regexp_replace`) and SQL Server 2025+
+    (`REGEXP_LIKE`, `REGEXP_REPLACE`; the match needs database compatibility level 170). Gated by
     [`SupportsRegex`](xref:NextORM.Core.ISqlDialect.SupportsRegex) with the
     `MakeRegexMatch`/`MakeRegexReplace` hooks. Only `RegexOptions.IgnoreCase` changes the SQL; the
     pattern itself follows each engine's dialect (RE2/ARE/ICU/PCRE/.NET) and is therefore not portable
@@ -623,7 +628,7 @@ developed in parallel on the same working tree.
 | 32 | Row-locking wait modes (`NOWAIT`/`SKIP LOCKED`) | **Done** ([Row locking](../../guide/01-querying-and-projections.md#row-locking-for-update--for-share)) | `DataContext/Dialect/DialectCapabilities.cs`, `DataContext/SqlBuilder.cs`, `Query/QueryPlanEqualityComparer.cs`, `Builders/EntityBuilder.cs`, `Query/{LockClause,LockWaitMode}.cs`, `nextorm.{postgres,mysql,mariadb,sqlserver}/*Dialect.cs` | SQL-generation tests; `CommonTestSuite.Locking.cs` two-transaction `SKIP LOCKED` |
 | 33 | Global query filters (soft-delete / multi-tenancy) | **Planned** ([`todo_query_filters.md`](todo_query_filters.md)) | new `Meta/QueryFilterAttribute.cs`, `Meta/IQueryFilterMetadata.cs`; edits `Meta/{IEntityMetadata,EntityMetadataBuilder}.cs`, `DataContext/DataContextExtensions.cs`, `Query/QueryCommand.QueryPreparer.cs`, `DataContext/QueryPlanner.cs`, `Query/QueryPlanEqualityComparer.cs`, `Builders/EntityBuilder.cs`, `DataContext/InMemoryDataContext.cs` | new `tests/nextorm.core.tests/QueryFilterTests.cs`; `CommonTestSuite` (soft-delete/multi-tenant) |
 | 34 | C# string semantics (ordinal compare, format specifiers, culture; G12) | **Done** ([Ordinal comparison and collation](../../scalar-functions/01-string-functions.md#ordinal-comparison-and-collation)) | `Visitors/StringFunctionTranslator.cs`, `Visitors/ScalarFunctionTranslator.cs`, `Visitors/BaseExpressionVisitor.cs`, `DataContext/Dialect/{ISqlDialect,SqlDialectBase,DialectCapabilities}.cs`, `Query/SqlFunctions.cs`, new `Visitors/StringFormatTranslator.cs`, `Visitors/CompositeFormat.cs`, `DataContext/InMemoryStringFunctionRewriter.cs`, provider `*Dialect.cs` | SQL-generation tests per provider; `CommonTestSuite.StringSemantics.cs` ordinal/format; `InMemoryStringSemanticsTests.cs` |
-| 35 | CLR `Regex` (`IsMatch`/`Replace`) → provider-native regex | **Done** on PostgreSQL/MySQL/MariaDB/ClickHouse/SQLite; SQL Server rejects ([Regular expressions](../../scalar-functions/01-string-functions.md#regular-expressions)) | `Visitors/RegexSqlTranslator.cs`, `DataContext/Dialect/{ISqlDialect,SqlDialectBase}.cs`, `Visitors/ScalarFunctionTranslator.cs`, provider `*Dialect.cs` | per-provider `StringSemanticsSqlGenerationTests.cs`, `CommonTestSuite.Functions.cs`, `InMemoryStringSemanticsTests.cs` |
+| 35 | CLR `Regex` (`IsMatch`/`Replace`) → provider-native regex | **Done** on PostgreSQL/MySQL/MariaDB/ClickHouse/SQLite and SQL Server 2025+ (`REGEXP_LIKE`/`REGEXP_REPLACE`; the match needs compatibility level 170) ([Regular expressions](../../scalar-functions/01-string-functions.md#regular-expressions)) | `Visitors/RegexSqlTranslator.cs`, `DataContext/Dialect/{ISqlDialect,SqlDialectBase}.cs`, `Visitors/ScalarFunctionTranslator.cs`, provider `*Dialect.cs` | per-provider `StringSemanticsSqlGenerationTests.cs`, `CommonTestSuite.Functions.cs`, `InMemoryStringSemanticsTests.cs` |
 | 36 | Cross-provider string / numeric scalar wrappers (`left`/`right`, `lpad`/`rpad`, `repeat`, `reverse`, `space`, `translate`, `concat_ws`, `ascii`/`char`, `mod`, `log10`, `power`) | **Done** ([Scalar functions](../../scalar-functions/01-string-functions.md#cross-provider-scalar-functions)) | `Query/SqlFunctions.cs`, `DataContext/Dialect/{ISqlDialect,SqlDialectBase,DialectCapabilities}.cs` (`IScalarFunctions`), `Visitors/BuiltinFunctionTranslator.cs`, `Visitors/MathFunctionTranslator.cs`, `DataContext/{InMemoryScalarFunctions,InMemoryScalarFunctionRewriter}.cs`, provider `*Dialect.cs` | per-provider `CrossProviderScalarSqlGenerationTests.cs`; `CommonTestSuite.CrossProviderScalarFunctions.cs`; `InMemoryScalarFunctionsTests.cs` |
 | 37 | Per-provider built-in function gaps (PostgreSQL / SQL Server / MySQL / MariaDB / SQLite / ClickHouse) | **Planned** (six provider todos) | `Query/SqlFunctions.{Postgres,SqlServer,MySql,Sqlite}.cs`, per-name capability objects, provider `*Dialect.cs` | per-provider SQL-generation tests; provider integration |
 | 38 | Join projection into a user type (`As`) and arity beyond 8 (derived-table sugar; inline mapping optional) | **Planned** ([`todo_join_projection_mapping.md`](todo_join_projection_mapping.md)) | `Builders/EntityBuilder.cs` (`As`); reuses `DataContext/DataContextExtensions.cs` (`From(QueryCommand)`), `DataContext/SqlSourceRenderer.cs`; optional inline phase: `Builders/Projection.cs`, `Builders/Joins/JoinedEntityBuilder.cs`, `Visitors/*`, `DataContext/QueryPlanner.cs`, `DataContext/InMemory*`, `Query/QueryPlanEqualityComparer.cs` | SQL-generation tests per provider; `CommonTestSuite.Join.cs`; in-memory `NotSupportedException` |

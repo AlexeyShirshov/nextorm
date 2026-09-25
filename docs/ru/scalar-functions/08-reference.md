@@ -13,7 +13,7 @@
 | Ordinal `Equals` / `CompareOrdinal` | `collate binary` | `collate Latin1_General_100_BIN2` | `collate "C"` |
 | `collate(s, name)` | `s collate name` | `s collate name` | `s collate "name"` |
 | Столбец с `[Collation]` | `s collate name` | `s collate name` | `s collate "name"` |
-| Regex (`IsMatch` / `Replace`) | `s regexp ...` / `regexp_replace(...)` | `NotSupportedException` | `s ~ ...` / `regexp_replace(...)` |
+| Regex (`IsMatch` / `Replace`) | `s regexp ...` / `regexp_replace(...)` | `regexp_like(...)` / `regexp_replace(...)` (2025+) | `s ~ ...` / `regexp_replace(...)` |
 | `Abs` | `abs` | `abs` | `abs` |
 | `Round` | `round(x)` | `round(x, 0)` | `round(x)` |
 | `Truncate` | `trunc` | `round(x, 0, 1)` | `trunc` |
@@ -74,8 +74,10 @@ ClickHouse рендерит `dateTrunc('part', x)`, `addDays`/`addMonths`/.../`a
 * Спецификаторы `string.Format`/`ToString(format)` вне документированного подмножества в
   [Форматировании дат и чисел в строки](03-date-and-time.md#форматирование-дат-и-чисел-в-строки) — никогда не
   отбрасываются.
-* `Regex` в SQL Server — движка регулярных выражений нет; используйте `SqlFunctions.Sql.like` для
-  простых шаблонов (см. [Регулярные выражения](01-string-functions.md#регулярные-выражения)).
+* `Regex` в SQL Server 2022 и раньше — функции `REGEXP_*` есть только в SQL Server 2025 (а `REGEXP_LIKE`
+  дополнительно требует уровень совместимости БД 170); на 2025+ трансляция работает, а
+  `SqlFunctions.Sql.like` остаётся запасным вариантом для простых шаблонов (см.
+  [Регулярные выражения](01-string-functions.md#регулярные-выражения)).
 * `Regex`-шаблон, замена или `RegexOptions`, не являющиеся константой времени компиляции; опция
   `RegexOptions`, отличная от `IgnoreCase` (при этом `Compiled`/`CultureInvariant` — no-op); прочие
   члены `Regex`, кроме `IsMatch`/`Replace` (например, `Match`, `Split`, группы захвата).

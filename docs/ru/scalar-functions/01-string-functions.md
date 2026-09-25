@@ -219,17 +219,20 @@ var rows = dataContext.From<IComplexEntity>()
 | MariaDB | `s regexp '(?-i)p'` | `regexp_replace(s, '(?-i)p', 'r')` | флаг `(?i)` |
 | ClickHouse | `match(s, 'p')` | `replaceRegexpAll(s, 'p', 'r')` | флаг `(?i)` |
 | SQLite | `s regexp 'p'` | `regexp_replace(s, 'p', 'r')` | флаг `(?i)` |
-| SQL Server | `NotSupportedException` | `NotSupportedException` | — |
+| SQL Server | `regexp_like(s, 'p', 'c')` | `regexp_replace(s, 'p', 'r', 1, 0, 'c')` | флаг `'i'` |
 
 Как и метод CLR, совпадение ищется в любом месте значения, поэтому `^`/`$` привязывают всё значение, а
 шаблон не анкорится неявно. Шаблон исполняет **собственный** движок провайдера (POSIX/ARE в PostgreSQL,
-ICU в MySQL, PCRE в MariaDB, RE2 в ClickHouse, .NET в SQLite), поэтому сложный шаблон — lookaround,
-обратные ссылки, именованные группы — в общем случае непереносим; также различаются правила
+ICU в MySQL, PCRE в MariaDB, RE2 в ClickHouse и SQL Server 2025, .NET в SQLite), поэтому сложный шаблон —
+lookaround, обратные ссылки, именованные группы — в общем случае непереносим; также различаются правила
 экранирования C# и SQL и синтаксис ссылок на группы в замене (C# `$1` против SQL `\1`). SQLite
 сопоставляет через CLR-функции `regexp`/`regexp_replace`, регистрируемые на каждом соединении, поэтому
-сохраняет синтаксис .NET. В SQL Server движка регулярных выражений нет, поэтому вызов отклоняется:
-используйте [`SqlFunctions.Sql.like`](xref:NextORM.Core.CommonFunctions.like(System.String,System.String))
-для простых шаблонов. In-memory провайдер выполняет `System.Text.RegularExpressions` нативно.
+сохраняет синтаксис .NET. В SQL Server функции `REGEXP_*` есть **только с SQL Server 2025**: совпадение
+рендерится как `REGEXP_LIKE` (ему дополнительно нужен уровень совместимости БД 170), а замена — как
+`REGEXP_REPLACE` (доступна на любом уровне совместимости); в SQL Server 2022 и раньше нет ни одной из
+них, поэтому там для простых шаблонов остаётся
+[`SqlFunctions.Sql.like`](xref:NextORM.Core.CommonFunctions.like(System.String,System.String)). In-memory
+провайдер выполняет `System.Text.RegularExpressions` нативно.
 
 ## Кросс-провайдерные скалярные функции
 
@@ -252,6 +255,8 @@ ICU в MySQL, PCRE в MariaDB, RE2 в ClickHouse, .NET в SQLite), поэтом�
 | `SqlFunctions.Sql.translate(s, from, to)` | `translate` | `TRANSLATE` | — | `translate` | — |
 | `SqlFunctions.Sql.ascii(s)` | `ascii` | `ASCII` | `ASCII` | `ascii` | `unicode` |
 | `SqlFunctions.Sql.@char(n)` | `chr` | `CHAR` | `CAST(CHAR(..) AS CHAR)` | `char` | `char` |
+| `SqlFunctions.Sql.octet_length(s)` | `octet_length` | `DATALENGTH` | `OCTET_LENGTH` | `length` | `octet_length` |
+| `SqlFunctions.Sql.bit_length(s)` | `bit_length` | `DATALENGTH(s) * 8` | `BIT_LENGTH` | `length(s) * 8` | `octet_length(s) * 8` |
 
 - `left`/`right`/`lpad`/`rpad` считают **символы**, а не байты (ClickHouse использует варианты `*UTF8`).
   Отрицательный `n` зависит от провайдера: PostgreSQL читает его как «всё, кроме последних |n|», остальные — нет.
@@ -264,6 +269,8 @@ ICU в MySQL, PCRE в MariaDB, RE2 в ClickHouse, .NET в SQLite), поэтом�
 - Остаток, десятичный логарифм и возведение в степень остаются на переносимых CLR-методах (`%`,
   `Math.Log10`, `Math.Pow`), которые уже транслируются у каждого провайдера — отдельной формы
   `SqlFunctions.Sql` для них нет.
+- `octet_length`/`bit_length` считают октеты значения, поэтому многобайтовый `nvarchar` в SQL Server
+  даёт два байта на символ (через `DATALENGTH`); SQLite требует 3.43+ для нативного `octet_length()`.
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()

@@ -44,6 +44,8 @@ select id from complex_entity where (id = any(@p0))
 [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres). Операторы вынесены в статические методы с именами
 SQL-токенов, поэтому ни один член не конфликтует с CLR-оператором или полнотекстовым `Contains`:
 
+На базе без нативного range-типа отобразите свойство `Range<T>` на пару скалярных колонок через [`RangeColumns`](../31-range-columns.md); те же операторы транслируются поверх пары.
+
 | Член | SQL |
 |---|---|
 | `overlaps(a, b)` | `a && b` |
@@ -73,9 +75,34 @@ select id from reservation where (during && @p0)
 
 `Range<T>` — `readonly struct` и сравнивается по своим PostgreSQL-характеристикам, поэтому
 `Range<int>.Empty` и `default(Range<int>)` оба являются пустым диапазоном. In-memory провайдер
-вычисляет `overlaps`, `range_contains`/`range_contained_by` и функции проверки с той же семантикой;
-остальные операторы и конструкторы требуют PostgreSQL. Timestamp-диапазоны используют `DateTime` для
-`tsrange` и `DateTimeOffset` для `tstzrange`; `daterange` использует `DateOnly`.
+вычисляет всю поверхность выше — `overlaps`, `range_contains`/`range_contained_by`,
+`range_union`/`range_intersection`/`range_difference`, позиционные и смежные операторы, функции
+проверки и конструкторы — с той же семантикой, что PostgreSQL (включая ошибку
+`result of range union/difference would not be contiguous`). Timestamp-диапазоны используют
+`DateTime` для `tsrange` и `DateTimeOffset` для `tstzrange`; `daterange` использует `DateOnly`.
+
+### Multirange
+
+Multirange-типы PostgreSQL (`int4multirange`, `int8multirange`, `nummultirange`, `tsmultirange`,
+`tstzmultirange`, `datemultirange`) представляются как `Range<T>[]` — биндятся и читаются как
+`NpgsqlRange<T>[]`. Массив канонический: отсортирован по нижней границе, перекрывающиеся и смежные
+диапазоны объединены. Сопоставьте свойство или параметр напрямую с `Range<T>[]`; имена операторов выше
+перегружены для multirange (`overlaps`, `range_contains`, `range_contained_by`, `range_union`,
+`range_intersection`, `range_difference`, `range_adjacent` и позиционные), плюс `multirange(range)`,
+`range_merge`, функции проверки и агрегаты `range_agg` / `range_intersect_agg`:
+
+```csharp
+var window = new[] { new Range<int>(15, 25), new Range<int>(40, 50) };
+
+var rows = dataContext.From<IReservation>()
+    .Where(e => SqlFunctions.Postgres.overlaps(e.During, window))
+    .Select(e => new
+    {
+        All = SqlFunctions.Postgres.range_agg(e.During),
+        Common = SqlFunctions.Postgres.range_intersect_agg(e.During)
+    })
+    .ToList();
+```
 
 ## `json` и `jsonb`
 

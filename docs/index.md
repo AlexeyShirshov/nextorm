@@ -60,6 +60,10 @@
 - [PostgreSQL](providers/postgres.md)
 - [In-memory](providers/in-memory.md)
 
+### Comparisons
+
+- [Nextorm vs Dapper, linq2db and EF Core](comparisons/index.md)
+
 ### Advanced
 
 - [Limitations and out-of-scope features](advanced/limitations.md)

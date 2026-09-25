@@ -8,6 +8,8 @@
 | `Math.Truncate(x)` | `trunc(x)` / `round(x, 0, 1)` | SQL Server has no `trunc`. |
 | `Math.Log(x)` | natural logarithm: `ln(x)` (SQLite, PostgreSQL) / `log(x)` (SQL Server) | Single-argument form only. |
 | `Math.Log10(x)` | `log10(x)` | |
+| `Math.Acos(x)` / `Math.Asin(x)` / `Math.Atan(x)` | `acos(x)` / `asin(x)` / `atan(x)` | |
+| `Math.Atan2(y, x)` | `atan2(y, x)` (SQL Server: `atn2(y, x)`) | |
 
 ```csharp
 var values = dataContext.From<IComplexEntity>()
@@ -30,10 +32,38 @@ Output:
 | 3   |
 | 2   |
 
+## Portable trigonometric and angle functions
+
+Besides the `Math.*` translation above, [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql) exposes
+the angle functions that have no BCL member. They render natively where the provider has them (gated
+per name by [`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports(System.String))):
+
+| C# | SQL | Notes |
+|---|---|---|
+| `SqlFunctions.Sql.cot(x)` | `cot(x)` | PostgreSQL, SQL Server and MySQL/MariaDB; ClickHouse and SQLite have no `cot` and reject it. |
+| `SqlFunctions.Sql.degrees(x)` | `degrees(x)` | All providers (SQL Server casts the argument to `float`). |
+| `SqlFunctions.Sql.radians(x)` | `radians(x)` | All providers (SQL Server casts the argument to `float`). |
+| `SqlFunctions.Sql.pi()` | `pi()` | All providers. |
+
+`Math.Acos`/`Asin`/`Atan`/`Atan2` need no wrapper — they translate directly, with SQL Server emitting
+its `atn2` spelling for the two-argument form.
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        Angle = SqlFunctions.Sql.degrees(SqlFunctions.Sql.pi()),
+        Cot = SqlFunctions.Sql.cot(1.0)
+    })
+    .ToList();
+```
+
 ## PostgreSQL extended math
 
 The remaining math functions are part of the extended scalar library
-([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions), PostgreSQL only):
+([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions), PostgreSQL only).
+`degrees`/`radians`/`pi` are no longer provider-specific — use the portable
+[`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql) spellings above:
 
 | C# | SQL |
 |---|---|
@@ -42,8 +72,7 @@ The remaining math functions are part of the extended scalar library
 | `SqlFunctions.Postgres.cbrt(x)` | `cbrt(x)` |
 | `SqlFunctions.Postgres.sinh(x)` / `cosh(x)` / `tanh(x)` | `sinh(x)` / `cosh(x)` / `tanh(x)` |
 | `SqlFunctions.Postgres.asinh(x)` / `acosh(x)` / `atanh(x)` | `asinh(x)` / `acosh(x)` / `atanh(x)` |
-| `SqlFunctions.Postgres.degrees(x)` / `SqlFunctions.Postgres.radians(x)` | `degrees(x)` / `radians(x)` |
-| `SqlFunctions.Postgres.pi()` / `SqlFunctions.Postgres.random()` | `pi()` / `random()` |
+| `SqlFunctions.Postgres.random()` | `random()` |
 | `SqlFunctions.Postgres.log(base, x)` | `log(base, x)` |
 | `SqlFunctions.Postgres.gcd(a, b)` / `lcm(a, b)` | `gcd(a, b)` / `lcm(a, b)` |
 | `SqlFunctions.Postgres.factorial(n)` | `factorial(n)` |

@@ -4,7 +4,8 @@
 > Рабочий план (design RFC). Источник — **G8** из
 > [`linq2db-backlog-gap-analysis.md`](../comparison/linq2db-backlog-gap-analysis.md):
 > `linq2db#1645`. Тесно связано с [`todo_stored_procedures.md`](todo_stored_procedures.md) (TVP чаще
-> всего передаётся в процедуру) и с `todo_dynamic_result_schema.md` (серверные `values()`).
+> всего передаётся в процедуру) и с динамической схемой результата (серверные `values()`, см.
+> [Dynamic result schema](../../guide/13-table-valued-functions.md#dynamic-result-schema)).
 > Публичный API → `docs/specs/design/API-NAMING-REVIEW.md`.
 
 ## 1. Пункт и цель
@@ -47,7 +48,7 @@ JSON1 (`json_each`); ClickHouse `values()`/`input()`.
 | PostgreSQL | — | эмуляция: массив + `unnest(arr)` / `= ANY(arr)`, либо `jsonb_to_recordset($1)` | PG 18 |
 | MySQL | — | эмуляция: `JSON_TABLE` (8.0) / derived table (`UNION ALL`) | MySQL ref |
 | MariaDB | — | эмуляция: `JSON_TABLE` (10.6+) / derived table | MariaDB KB |
-| ClickHouse | — | `values('name Type, …', …)` / `input()`; связано с `todo_dynamic_result_schema.md` | ClickHouse |
+| ClickHouse | — | `values('name Type, …', …)` / `input()`; связано с динамической схемой результата (`TableFunctionSchema.LeadingArgument`) | ClickHouse |
 | SQLite | — | эмуляция: `json_each` (JSON1) / temp table | sqlite.org |
 | InMemory | — | CLR-коллекция напрямую | — |
 

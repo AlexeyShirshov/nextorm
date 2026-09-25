@@ -4,7 +4,8 @@
 > [SQL capabilities gap analysis](../roadmap/sql-capabilities-gap-analysis.md) and the
 > [capability matrix](capability-matrix.md) (which also cover EF Core). Based on the current tree, it shows
 > nextorm matching or exceeding linq2db across the analytic query surface — join types, `APPLY`/`LATERAL`,
-> full-text/JSON/arrays, cross-provider row values, `ROLLUP`/`CUBE`/`GROUPING SETS`, date arithmetic,
+> full-text/JSON/arrays, cross-provider row values, native range types (and range-over-scalar-pairs),
+> CLR `Regex` translation, `ROLLUP`/`CUBE`/`GROUPING SETS`, date arithmetic,
 > temporal tables, row locking, statement/table/index hints, configurable keyword casing, TVFs and
 > depth-one in-memory correlation — and adding a complete explicit write surface
 > (`INSERT`/`UPDATE`/`DELETE`/full `MERGE`, PostgreSQL data-modifying CTEs), bulk insert, `CREATE TABLE AS
@@ -65,6 +66,7 @@ named. Evidence for nextorm points at the source that owns the behaviour.
 | Window functions (`OVER`, ranking, framed aggregates, `lag`/`lead`) | partial — no named windows or frame `GROUPS`/`EXCLUDE` | **yes** | `Visitors/WindowFunctionTranslator.cs`, `WindowDefinition`, `SupportsNamedWindows`/`SupportsWindowFrameGroups`/`SupportsWindowFrameExclusion` |
 | `CASE WHEN` / ternary / `switch`, `COALESCE`, numeric `CAST` | yes | yes | `BaseExpressionVisitor.cs` |
 | String / math / date scalar functions, `LIKE` | yes | **yes** — portable CLR `string` methods on every provider, plus the native string/`regexp_*` library on PostgreSQL (`SqlFunctions.Postgres`) | `Visitors/ScalarFunctionTranslator.cs`, dialect `Make*` hooks, `SqlFunctions.Postgres` |
+| CLR `Regex` (`IsMatch`/`Replace`, constant pattern) | partial — open `linq2db#698` (no `Regex.IsMatch` translation) | **yes** — PostgreSQL, MySQL/MariaDB, ClickHouse, SQLite and SQL Server 2025+ (`REGEXP_LIKE`/`REGEXP_REPLACE`; 2019/2022 reject) | `Visitors/RegexSqlTranslator.cs`, `ISqlDialect.SupportsRegex`/`MakeRegexMatch`/`MakeRegexReplace` |
 | Date arithmetic (`date_add`/`date_diff`/`date_trunc`/`end_of_month`/`date_from_parts`, `DateTime.Add*`) | yes | **yes** | `CommonFunctions`, `SupportsDateTruncField`/`SupportsDateAddField`/`SupportsDateDiffField` |
 | Full-text search | yes (provider) | **yes** on SQL Server, PostgreSQL and MySQL/MariaDB | `contains`/`freetext`, `ISqlDialect.SupportsFullText`/`MakeFullText` |
 | Native JSON documents | yes | **yes on PostgreSQL** | `SupportsJson`, `JsonSqlTranslator` |
@@ -72,6 +74,7 @@ named. Evidence for nextorm points at the source that owns the behaviour.
 | String JSON + dictionary functions (ClickHouse) | no | **yes on ClickHouse** | `SupportsJsonExtract`, `SupportsDictionaries`, `MakeJsonExtract`/`MakeDictionaryFunction` |
 | Arrays (`cardinality`/`array_*`/`@>`/`&&`, ClickHouse `Array(T)`, `ARRAY JOIN`) | no | **yes** on PostgreSQL and ClickHouse | `SupportsArrayFunctions`/`SupportsHigherOrderArrayFunctions`/`SupportsArrayJoin`, `ArraySqlTranslator`, `ArrayJoinClause`/`IArrayJoinRenderer.Render` |
 | Row values / tuples (`ROW`/`(a, b)`, element access, row comparison) | yes (`Sql.Row`; emulated where the provider has no native row) | **yes** on PostgreSQL and ClickHouse | `ISqlDialect.Tuple`/`ITupleRenderer`, `Visitors/TupleSqlTranslator.cs` |
+| Native range types + range-over-scalar-pairs (`Range<T>`, `Overlaps`, `range_contains`, bound inspection) | partial — `Sql.Row.Overlaps` only (no first-class `Range<T>` mapping) | **yes** — native range/multirange types on PostgreSQL; a mapped **pair of scalar columns** (`[RangeColumns]`) on SQL Server/MySQL/MariaDB/SQLite/ClickHouse | `Query/Range.cs`, `RangeColumnsAttribute`, `ISqlDialect.SupportsRanges`/`SupportsRangeColumns`, `SqlFunctions.Postgres` |
 | Conditional functions (`iif`/`choose`/`multi_if`) | no | **yes** | `CommonFunctions.iif`, `SupportsChoose`, `MultiIf`/`IMultiIfRenderer.Render` |
 | `FOR JSON` / `FOR XML` | yes (provider) | **yes on SQL Server** | `QueryCommand.ForJson/ForXml`, `SupportsForJson`/`SupportsForXml` |
 | XML data-type methods (`.value`/`.query`/`.exist`/`.nodes`) | yes (provider) | **partial** — SQL Server only | `SqlServerFunctions.xml_value`/`xml_query`/`xml_exist`/`xml_nodes` |
@@ -122,17 +125,25 @@ Against the shared surface nextorm matches or exceeds linq2db; on top of that it
 * Cross-provider row values: `System.Tuple`/`ValueTuple` constructors, element access and row comparison
   render as `ROW(a, b)`/`(row).fN` on PostgreSQL and `tuple(a, b)`/`tupleElement` on ClickHouse, driven by
   `ISqlDialect.Tuple`.
+* Range types without a native range column: PostgreSQL maps `Range<T>` natively, while the other
+  providers store it as a pair of scalar bounds (`[RangeColumns]`) and translate the whole predicate and
+  inspection surface (`overlaps`, `range_contains`/`range_contained_by`, the positional and adjacency
+  predicates, `lower`/`upper`/`isempty`) over the pair — a mapping linq2db lacks.
 * Index hints (`WithIndex`/`WithoutIndex`) across MySQL/MariaDB, SQLite and SQL Server, and configurable
   SQL keyword casing (`KeywordCase.Upper`) — both opt-in and both part of the plan key.
 * Correlated subqueries evaluate once per outer row on the in-memory provider too (depth-one scalar,
   aggregate, `EXISTS` and `IN`), in addition to the SQL providers' arbitrary nesting depth.
 * Provider-portable rendering: the same C# renders `CROSS APPLY` on SQL Server and
   `CROSS JOIN LATERAL` on PostgreSQL/MySQL/MariaDB, driven by `ISqlDialect` capabilities.
-* Provider-only surfaces behind the same capability gate — PostgreSQL native JSON, arrays and the
-  extended scalar library; SQL Server `FOR JSON`/`FOR XML`, JSON-as-text and `string_split`/`openjson`;
+* Provider-only surfaces behind the same capability gate — PostgreSQL native JSON, arrays, the
+  range/multirange types and the extended scalar library; SQL Server `FOR JSON`/`FOR XML`, JSON-as-text
+  and `string_split`/`openjson`;
   ClickHouse `Array(T)`/`ARRAY JOIN`, `JSONExtract*`, dictionaries, the quantile/`uniq`/`argMin`-`argMax`
   families, `LIMIT BY`, `PREWHERE`/`FINAL`/`SETTINGS` and multi-branch `multiIf`.
 * Full-text search (`contains`/`freetext`) on SQL Server, PostgreSQL and MySQL/MariaDB.
+* CLR `Regex` translation (`Regex.IsMatch`/`Regex.Replace`) with a constant pattern on PostgreSQL,
+  MySQL/MariaDB, ClickHouse, SQLite and SQL Server 2025+ (`REGEXP_LIKE`/`REGEXP_REPLACE`) — an open
+  feature request in linq2db (`linq2db#698`).
 * Two reuse paths (implicit plan cache and explicit `Prepare()`), query parametrisation and a
   benchmarked low-allocation design.
 * Benchmarked performance: on the fast (tmpfs) full run the prepared path wins every measured class
@@ -166,9 +177,9 @@ surface, which nextorm matches or exceeds. linq2db covers them:
   SQLite and SQL Server.
 * **Database-first tooling**: linq2db ships a CLI/T4 code-generation toolchain that scaffolds entity and
   table-function mappings from a live database; nextorm declares mappings in code. The dynamic-schema
-  sources nextorm still lacks (ClickHouse `values()`, PostgreSQL `jsonb_to_record(set)`) are unsupported by
-  linq2db as well, so they are a shared gap tracked in
-  [`todo_dynamic_result_schema.md`](../roadmap/todo_dynamic_result_schema.md).
+  sources nextorm supports through a caller-declared `TRow` schema (ClickHouse `values()`, PostgreSQL
+  `jsonb_to_record(set)`, [dynamic result schema](../../guide/13-table-valued-functions.md#dynamic-result-schema))
+  are unsupported by linq2db as well.
 * **Provider breadth**: linq2db adds Oracle, Firebird, DB2, SAP HANA, Informix, Sybase and SQL CE; nextorm
   focuses on SQL Server, PostgreSQL, MySQL/MariaDB, SQLite and ClickHouse.
 * **EF Core integration** package and a larger ecosystem (nextorm's integration is
@@ -212,6 +223,7 @@ leaves out.
 - [SQL capabilities gap analysis](../roadmap/sql-capabilities-gap-analysis.md) — nextorm vs EF Core and linq2db, per construct.
 - [Limitations and out-of-scope features](../../advanced/limitations.md)
 - [Joins](../../guide/03-joins.md) — `CrossApply`/`OuterApply`.
+- [Range columns](../../guide/31-range-columns.md) — a `Range<T>` stored as a pair of scalar columns.
 - [Query hints](../../guide/17-query-hints.md)
 - [Provider overview](../../providers/overview.md)
 

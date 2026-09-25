@@ -44,6 +44,8 @@ surface is gated by [`SupportsRanges`](xref:NextORM.Core.ISqlDialect.SupportsRan
 [`Postgres`](xref:NextORM.Core.SqlFunctions.Postgres). The operators are exposed as static methods named
 after the SQL tokens, so no range member collides with a CLR operator or the full-text `Contains`:
 
+On a database without a native range type, map a `Range<T>` property to a pair of scalar columns with [`RangeColumns`](../31-range-columns.md); the same operators are then translated over the pair.
+
 | Member | SQL |
 |---|---|
 | `overlaps(a, b)` | `a && b` |
@@ -72,10 +74,36 @@ select id from reservation where (during && @p0)
 ```
 
 `Range<T>` is a `readonly struct` and compares by its PostgreSQL characteristics, so `Range<int>.Empty`
-and a `default(Range<int>)` value are both the empty range. The in-memory provider evaluates `overlaps`,
-`range_contains`/`range_contained_by` and the inspection functions with the same semantics; the remaining
-operators and the constructors require PostgreSQL. Timestamp ranges use `DateTime` for `tsrange` and
+and a `default(Range<int>)` value are both the empty range. The in-memory provider evaluates the whole
+surface above — `overlaps`, `range_contains`/`range_contained_by`, `range_union`/`range_intersection`/
+`range_difference`, the positional and adjacency operators, the inspection functions and the
+constructors — with the same semantics as PostgreSQL (including the `result of range union/difference
+would not be contiguous` failure). Timestamp ranges use `DateTime` for `tsrange` and
 `DateTimeOffset` for `tstzrange`; `daterange` uses `DateOnly`.
+
+### Multiranges
+
+PostgreSQL multirange types (`int4multirange`, `int8multirange`, `nummultirange`, `tsmultirange`,
+`tstzmultirange`, `datemultirange`) are represented as a `Range<T>[]` — bound and read as a
+`NpgsqlRange<T>[]`. The array is canonical: sorted by the lower bound with overlapping and adjacent
+ranges merged. Map a property or parameter directly to `Range<T>[]`; the operator names above are
+overloaded for multiranges (`overlaps`, `range_contains`, `range_contained_by`, `range_union`,
+`range_intersection`, `range_difference`, `range_adjacent` and the positional operators), alongside
+`multirange(range)`, `range_merge`, the inspection functions and the `range_agg` /
+`range_intersect_agg` aggregates:
+
+```csharp
+var window = new[] { new Range<int>(15, 25), new Range<int>(40, 50) };
+
+var rows = dataContext.From<IReservation>()
+    .Where(e => SqlFunctions.Postgres.overlaps(e.During, window))
+    .Select(e => new
+    {
+        All = SqlFunctions.Postgres.range_agg(e.During),
+        Common = SqlFunctions.Postgres.range_intersect_agg(e.During)
+    })
+    .ToList();
+```
 
 ## `json` and `jsonb`
 

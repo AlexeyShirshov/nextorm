@@ -49,6 +49,10 @@
 - [PostgreSQL](providers/postgres.md)
 - [In-memory](providers/in-memory.md)
 
+### Сравнения
+
+- [Nextorm против Dapper, linq2db и EF Core](comparisons/index.md)
+
 ### Продвинутое
 
 - [Ограничения и что вне области](advanced/limitations.md)

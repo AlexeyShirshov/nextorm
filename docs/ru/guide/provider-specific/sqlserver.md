@@ -293,7 +293,7 @@ from complex_entity
   `soundex(value)`, `difference(first, second)`, `string_escape(value, type)`, `unicode(value)`,
   `nchar(code)`, `format(value, format)` / `format(value, format, culture)`. `format` — нативный
   T-SQL `FORMAT`, не путать с трансляцией CLR `string.Format`.
-* **Числовые:** `acos`, `asin`, `atan`, `atn2(y, x)`, `cot`, `degrees`, `radians`, `pi()`, `square`.
+* **Числовые:** `acos`, `asin`, `atan`, `atn2(y, x)`, `square` (`cot`/`degrees`/`radians`/`pi` переносимы — см. [`SqlFunctions.Sql`](../../scalar-functions/02-math-functions.md)).
 * **Дата/время:** `datename(datepart, date)` (часть — константа) и
   `date_bucket(datepart, width, date[, origin])` (SQL Server 2022+).
 * **Бинарные/системные:** `hashbytes(algorithm, data)` (алгоритм — константа, например `SHA2_256`) и

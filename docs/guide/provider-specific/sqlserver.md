@@ -292,7 +292,7 @@ from complex_entity
   `soundex(value)`, `difference(first, second)`, `string_escape(value, type)`, `unicode(value)`,
   `nchar(code)`, `format(value, format)` / `format(value, format, culture)`. `format` is the native
   T-SQL `FORMAT`, distinct from the CLR `string.Format` translation.
-* **Numeric:** `acos`, `asin`, `atan`, `atn2(y, x)`, `cot`, `degrees`, `radians`, `pi()`, `square`.
+* **Numeric:** `acos`, `asin`, `atan`, `atn2(y, x)`, `square` (`cot`/`degrees`/`radians`/`pi` are portable — see [`SqlFunctions.Sql`](../../scalar-functions/02-math-functions.md)).
 * **Date/time:** `datename(datepart, date)` (the part is a constant) and
   `date_bucket(datepart, width, date[, origin])` (SQL Server 2022+).
 * **Binary/system:** `hashbytes(algorithm, data)` (the algorithm is a constant such as `SHA2_256`) and

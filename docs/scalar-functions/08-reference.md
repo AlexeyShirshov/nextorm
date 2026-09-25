@@ -13,7 +13,7 @@
 | Ordinal `Equals` / `CompareOrdinal` | `collate binary` | `collate Latin1_General_100_BIN2` | `collate "C"` |
 | `collate(s, name)` | `s collate name` | `s collate name` | `s collate "name"` |
 | `[Collation]` column | `s collate name` | `s collate name` | `s collate "name"` |
-| Regex (`IsMatch` / `Replace`) | `s regexp ...` / `regexp_replace(...)` | `NotSupportedException` | `s ~ ...` / `regexp_replace(...)` |
+| Regex (`IsMatch` / `Replace`) | `s regexp ...` / `regexp_replace(...)` | `regexp_like(...)` / `regexp_replace(...)` (2025+) | `s ~ ...` / `regexp_replace(...)` |
 | `Abs` | `abs` | `abs` | `abs` |
 | `Round` | `round(x)` | `round(x, 0)` | `round(x)` |
 | `Truncate` | `trunc` | `round(x, 0, 1)` | `trunc` |
@@ -73,8 +73,10 @@ These throw `NotSupportedException` rather than emitting SQL with different sema
 * `StringComparison.InvariantCulture`/`CurrentCulture` (with or without `IgnoreCase`) - no portable form.
 * `string.Format`/`ToString(format)` specifiers outside the documented subset in
   [Formatting dates and numbers to strings](03-date-and-time.md#formatting-dates-and-numbers-to-strings) - never dropped.
-* `Regex` on SQL Server - there is no regular-expression engine; use `SqlFunctions.Sql.like` for simple
-  patterns (see [Regular expressions](01-string-functions.md#regular-expressions)).
+* `Regex` on SQL Server 2022 and earlier - the `REGEXP_*` functions are SQL Server 2025-only (`REGEXP_LIKE`
+  additionally needs database compatibility level 170); on 2025+ the translation works, and
+  `SqlFunctions.Sql.like` remains the fallback for simple patterns (see
+  [Regular expressions](01-string-functions.md#regular-expressions)).
 * A `Regex` pattern, replacement or `RegexOptions` that is not a compile-time constant, a `RegexOptions`
   other than `IgnoreCase` (with `Compiled`/`CultureInvariant` as no-ops), and the `Regex` members other
   than `IsMatch`/`Replace` (for example `Match`, `Split`, capture groups).

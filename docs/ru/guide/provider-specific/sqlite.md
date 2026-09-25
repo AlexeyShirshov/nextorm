@@ -3,8 +3,8 @@
 > SQLite даёт функции ядра (`printf`/`format`, `hex`/`unhex`, `random`/`randomblob`, `quote`,
 > `typeof`, `glob`, `unicode`/`char`, `soundex`, `octet_length`, `if`/`ifnull`), функции/операторы/
 > агрегаты JSON1 и табличные функции `json_each`/`json_tree`, функции дат (`timediff`, `unixepoch`,
-> `julianday`) и функции математического расширения (`acos` … `tanh`, `degrees`, `log2`/`log10`,
-> `mod`, `pi`, `radians`).
+> `julianday`) и функции математического расширения (`acos`/`asin`/`atan`/`atan2`, гиперболические,
+> `log2`/`log10`, `mod`).
 
 **Что нужно знать:** [Запросы и проекции](../01-querying-and-projections.md) · [Провайдер SQLite](../../providers/sqlite.md)
 
@@ -139,16 +139,17 @@ var rows = dataContext.From<IComplexEntity>()
 
 Математические функции соответствуют расширению SQLite (`SQLITE_ENABLE_MATH_FUNCTIONS`), доступному
 в сборке SQLite, поставляемой с `nextorm.sqlite`. Поверхность даёт `acos`, `acosh`, `asin`, `asinh`,
-`atan`, `atan2`, `atanh`, `cosh`, `degrees`, `log10`, `log2`, `mod`, `pi`, `radians`, `sinh` и
+`atan`, `atan2`, `atanh`, `cosh`, `log10`, `log2`, `mod`, `sinh` и
 `tanh`; переносимые отображения [`Math.*`](../../scalar-functions/index.md) (`Math.Sqrt`,
-`Math.Log10`, `Math.Sign`, …) также рендерятся на SQLite.
+`Math.Log10`, `Math.Sign`, …) также рендерятся на SQLite. `degrees`/`radians`/`pi` переносимы
+([`SqlFunctions.Sql`](../../scalar-functions/02-math-functions.md)), а не специфичны для SQLite.
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()
     .Select(c => new
     {
-        Pi = SqlFunctions.Sqlite.pi(),
-        Degrees = SqlFunctions.Sqlite.degrees(SqlFunctions.Sqlite.pi()),
+        Pi = SqlFunctions.Sql.pi(),
+        Degrees = SqlFunctions.Sql.degrees(SqlFunctions.Sql.pi()),
         Log2 = SqlFunctions.Sqlite.log2(8.0)
     })
     .ToList();

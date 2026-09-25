@@ -37,7 +37,7 @@
   ранжирование доступно через native `SqlFunctions.Postgres.ts_rank`/`ts_rank_cd`/`ts_headline` (гейтится
   [`SupportsTextSearchFunctions`](xref:NextORM.Core.ISqlDialect.SupportsTextSearchFunctions));
 - расширенная библиотека скалярных функций включена ([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions) равно `true`):
-  дополнительные математические (`asin`, `cbrt`, `degrees`, `pi`, `mod`, ...), строковые (`split_part`,
+  дополнительные математические (`asin`, `cbrt`, `mod`, ...), строковые (`split_part`,
   `lpad`, `initcap`, ...), POSIX-регулярные выражения (`regexp_replace`, `regexp_like`, ...), дата/время
   (`make_interval`, `justify_days`, `justify_hours`, `to_char`, `to_date`, ...), `num_nulls`/`num_nonnulls`
   и помощник типа `pg_typeof`;
@@ -173,9 +173,13 @@ ctx.From<IReservation>()
     .ToList();                          // (during && @p0)
 ```
 
-In-memory провайдер вычисляет `overlaps`, `range_contains`/`range_contained_by` и функции проверки с
-той же семантикой; все остальные провайдеры отклоняют поверхность с `NotSupportedException`.
-Полная таблица — в разделе
+Multirange-типы (`int4multirange`…`datemultirange`) мапятся на `Range<T>[]` и используют те же имена
+операторов, перегруженные для multirange, плюс `multirange`, `range_merge` и агрегаты
+`range_agg`/`range_intersect_agg`. Полная поверхность —
+[Специфичный для PostgreSQL SQL](../guide/provider-specific/postgresql.md#multirange).
+
+In-memory провайдер вычисляет всю поверхность range/multirange с той же семантикой; все остальные
+провайдеры отклоняют её с `NotSupportedException`. Полная таблица — в разделе
 [Специфичный для PostgreSQL SQL](../guide/provider-specific/postgresql.md#range-типы).
 
 ## JSON и JSONB

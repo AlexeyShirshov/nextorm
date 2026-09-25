@@ -8,6 +8,8 @@
 | `Math.Truncate(x)` | `trunc(x)` / `round(x, 0, 1)` | В SQL Server нет `trunc`. |
 | `Math.Log(x)` | натуральный логарифм: `ln(x)` (SQLite, PostgreSQL) / `log(x)` (SQL Server) | Только одноаргументная форма. |
 | `Math.Log10(x)` | `log10(x)` | |
+| `Math.Acos(x)` / `Math.Asin(x)` / `Math.Atan(x)` | `acos(x)` / `asin(x)` / `atan(x)` | |
+| `Math.Atan2(y, x)` | `atan2(y, x)` (SQL Server: `atn2(y, x)`) | |
 
 ```csharp
 var values = dataContext.From<IComplexEntity>()
@@ -30,10 +32,38 @@ select abs((id - 5)) from complex_entity
 | 3   |
 | 2   |
 
+## Переносимые тригонометрические и угловые функции
+
+Помимо трансляции `Math.*` выше, [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql) предоставляет
+угловые функции, у которых нет BCL-аналога. Они рендерятся нативно там, где провайдер умеет (гейтинг
+по имени через [`IScalarFunctions.Supports`](xref:NextORM.Core.IScalarFunctions.Supports(System.String))):
+
+| C# | SQL | Примечания |
+|---|---|---|
+| `SqlFunctions.Sql.cot(x)` | `cot(x)` | PostgreSQL, SQL Server и MySQL/MariaDB; в ClickHouse и SQLite нет `cot`, вызов отклоняется. |
+| `SqlFunctions.Sql.degrees(x)` | `degrees(x)` | Все провайдеры (SQL Server приводит аргумент к `float`). |
+| `SqlFunctions.Sql.radians(x)` | `radians(x)` | Все провайдеры (SQL Server приводит аргумент к `float`). |
+| `SqlFunctions.Sql.pi()` | `pi()` | Все провайдеры. |
+
+`Math.Acos`/`Asin`/`Atan`/`Atan2` отдельной обёртки не требуют — они транслируются напрямую, а SQL Server
+для двухаргументной формы использует своё написание `atn2`.
+
+```csharp
+var rows = dataContext.From<IComplexEntity>()
+    .Select(e => new
+    {
+        Angle = SqlFunctions.Sql.degrees(SqlFunctions.Sql.pi()),
+        Cot = SqlFunctions.Sql.cot(1.0)
+    })
+    .ToList();
+```
+
 ## Расширенная математика PostgreSQL
 
 Остальные математические функции входят в расширенную библиотеку скалярных функций
-([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions), только PostgreSQL):
+([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions), только PostgreSQL).
+Функции `degrees`/`radians`/`pi` больше не специфичны для PostgreSQL — используйте переносимые
+написания [`SqlFunctions.Sql`](xref:NextORM.Core.SqlFunctions.Sql) выше:
 
 | C# | SQL |
 |---|---|
@@ -42,8 +72,7 @@ select abs((id - 5)) from complex_entity
 | `SqlFunctions.Postgres.cbrt(x)` | `cbrt(x)` |
 | `SqlFunctions.Postgres.sinh(x)` / `cosh(x)` / `tanh(x)` | `sinh(x)` / `cosh(x)` / `tanh(x)` |
 | `SqlFunctions.Postgres.asinh(x)` / `acosh(x)` / `atanh(x)` | `asinh(x)` / `acosh(x)` / `atanh(x)` |
-| `SqlFunctions.Postgres.degrees(x)` / `SqlFunctions.Postgres.radians(x)` | `degrees(x)` / `radians(x)` |
-| `SqlFunctions.Postgres.pi()` / `SqlFunctions.Postgres.random()` | `pi()` / `random()` |
+| `SqlFunctions.Postgres.random()` | `random()` |
 | `SqlFunctions.Postgres.log(base, x)` | `log(base, x)` |
 | `SqlFunctions.Postgres.gcd(a, b)` / `lcm(a, b)` | `gcd(a, b)` / `lcm(a, b)` |
 | `SqlFunctions.Postgres.factorial(n)` | `factorial(n)` |

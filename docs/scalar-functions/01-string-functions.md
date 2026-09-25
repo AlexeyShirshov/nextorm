@@ -216,17 +216,19 @@ every match, like the CLR method.
 | MariaDB | `s regexp '(?-i)p'` | `regexp_replace(s, '(?-i)p', 'r')` | the `(?i)` flag |
 | ClickHouse | `match(s, 'p')` | `replaceRegexpAll(s, 'p', 'r')` | the `(?i)` flag |
 | SQLite | `s regexp 'p'` | `regexp_replace(s, 'p', 'r')` | the `(?i)` flag |
-| SQL Server | `NotSupportedException` | `NotSupportedException` | — |
+| SQL Server | `regexp_like(s, 'p', 'c')` | `regexp_replace(s, 'p', 'r', 1, 0, 'c')` | the `'i'` flag |
 
 Like the CLR method, a match is a search anywhere in the value, so `^`/`$` anchor the whole value and the
 pattern is not implicitly anchored. The pattern follows the provider's **own** engine (POSIX/ARE on
-PostgreSQL, ICU on MySQL, PCRE on MariaDB, RE2 on ClickHouse, .NET on SQLite), so a complex pattern —
-lookaround, backreferences, named groups — is not portable in general; the C# and SQL escaping rules and
-the replacement group syntax (C# `$1` versus SQL `\1`) also differ. SQLite matches through a CLR-backed
-`regexp`/`regexp_replace` function registered on every connection, so it keeps the .NET syntax. On SQL
-Server there is no regular-expression engine, so the call is rejected: use
-[`SqlFunctions.Sql.like`](xref:NextORM.Core.CommonFunctions.like(System.String,System.String)) for simple
-patterns. The in-memory provider runs `System.Text.RegularExpressions` natively.
+PostgreSQL, ICU on MySQL, PCRE on MariaDB, RE2 on ClickHouse and SQL Server 2025, .NET on SQLite), so a
+complex pattern — lookaround, backreferences, named groups — is not portable in general; the C# and SQL
+escaping rules and the replacement group syntax (C# `$1` versus SQL `\1`) also differ. SQLite matches
+through a CLR-backed `regexp`/`regexp_replace` function registered on every connection, so it keeps the
+.NET syntax. On SQL Server the `REGEXP_*` functions are **SQL Server 2025+ only**: the match renders as
+`REGEXP_LIKE`, which additionally requires database compatibility level 170, and the replace as
+`REGEXP_REPLACE` (available at every compatibility level); SQL Server 2022 and earlier have neither, so
+there [`SqlFunctions.Sql.like`](xref:NextORM.Core.CommonFunctions.like(System.String,System.String)) is
+the fallback for simple patterns. The in-memory provider runs `System.Text.RegularExpressions` natively.
 
 ## Cross-provider scalar functions
 
@@ -249,6 +251,8 @@ form rejects the call with a clear `NotSupportedException` instead of emitting S
 | `SqlFunctions.Sql.translate(s, from, to)` | `translate` | `TRANSLATE` | — | `translate` | — |
 | `SqlFunctions.Sql.ascii(s)` | `ascii` | `ASCII` | `ASCII` | `ascii` | `unicode` |
 | `SqlFunctions.Sql.@char(n)` | `chr` | `CHAR` | `CAST(CHAR(..) AS CHAR)` | `char` | `char` |
+| `SqlFunctions.Sql.octet_length(s)` | `octet_length` | `DATALENGTH` | `OCTET_LENGTH` | `length` | `octet_length` |
+| `SqlFunctions.Sql.bit_length(s)` | `bit_length` | `DATALENGTH(s) * 8` | `BIT_LENGTH` | `length(s) * 8` | `octet_length(s) * 8` |
 
 - `left`/`right`/`lpad`/`rpad` count **characters**, not bytes (ClickHouse uses its `*UTF8` variants).
   A negative `n` is provider-specific: PostgreSQL reads it as "all but the last |n|", the others do not.
@@ -260,6 +264,8 @@ form rejects the call with a clear `NotSupportedException` instead of emitting S
   `translate`. Those calls are rejected on the respective provider.
 - Remainder, base-10 logarithm and power stay on the portable CLR methods (`%`, `Math.Log10`,
   `Math.Pow`), which already translate per provider — there is no `SqlFunctions.Sql` spelling for them.
+- `octet_length`/`bit_length` count the value's octets, so a multi-byte SQL Server `nvarchar` value
+  reports two bytes per character (via `DATALENGTH`); SQLite needs 3.43+ for its native `octet_length()`.
 
 ```csharp
 var rows = dataContext.From<IComplexEntity>()

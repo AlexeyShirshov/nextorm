@@ -37,7 +37,7 @@
   available through the native `SqlFunctions.Postgres.ts_rank`/`ts_rank_cd`/`ts_headline` (gated by
   [`SupportsTextSearchFunctions`](xref:NextORM.Core.ISqlDialect.SupportsTextSearchFunctions));
 - the extended scalar function library is enabled ([`SupportsExtendedScalarFunctions`](xref:NextORM.Core.ISqlDialect.SupportsExtendedScalarFunctions) is `true`):
-  additional math (`asin`, `cbrt`, `degrees`, `pi`, `mod`, ...), string (`split_part`, `lpad`,
+  additional math (`asin`, `cbrt`, `mod`, ...), string (`split_part`, `lpad`,
   `initcap`, ...), POSIX regular expression (`regexp_replace`, `regexp_like`, ...), date/time
   (`make_interval`, `justify_days`, `justify_hours`, `to_char`, `to_date`, ...), `num_nulls`/`num_nonnulls`
   and the type helper `pg_typeof`;
@@ -173,8 +173,13 @@ ctx.From<IReservation>()
     .ToList();                          // (during && @p0)
 ```
 
-The in-memory provider evaluates `overlaps`, `range_contains`/`range_contained_by` and the inspection
-functions with the same semantics; every other provider rejects the surface with `NotSupportedException`.
+Multirange types (`int4multirange`…`datemultirange`) map to `Range<T>[]` and use the same operator names
+overloaded for multiranges, plus `multirange`, `range_merge` and the `range_agg`/`range_intersect_agg`
+aggregates. See [PostgreSQL-specific SQL](../guide/provider-specific/postgresql.md#multiranges) for the
+full surface.
+
+The in-memory provider evaluates the whole range and multirange surface with the same semantics; every
+other provider rejects it with `NotSupportedException`.
 See [PostgreSQL-specific SQL](../guide/provider-specific/postgresql.md#range-types) for the full table.
 
 ## JSON and JSONB
